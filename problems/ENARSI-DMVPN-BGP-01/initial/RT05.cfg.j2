@@ -1,0 +1,22 @@
+! ENARSI-DMVPN-BGP-01 初期状態 (RT05 = データセンタ(DC) コア / eBGP) ★変更禁止★
+!   links[0] = RT01(Hub) 向け (eBGP 65000 <-> 65001)
+!   DC LAN = Loopback10 172.20.20.0/24 を BGP で広告。
+!   役割: 拠点(スポーク)へ提供する DC プレフィックスの出元。スポーク Lo は
+!         ハブの再配送(EIGRP->BGP)経由で BGP 学習する(static 不要)。
+interface Loopback0
+ ip address 5.5.5.5 255.255.255.255
+!
+interface Loopback10
+ description === DC LAN (simulated) ===
+ ip address 172.20.20.1 255.255.255.0
+!
+interface {{ links[0] }}
+ description === to RT01 (Hub / eBGP peer) ===
+ ip address 10.0.15.2 255.255.255.252
+ no shutdown
+!
+router bgp 65000
+ bgp log-neighbor-changes
+ neighbor 10.0.15.1 remote-as 65001
+ network 172.20.20.0 mask 255.255.255.0
+!

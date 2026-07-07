@@ -1,0 +1,117 @@
+#!/bin/bash
+# Zabbix 7.0 自動構築（生成: gen_snmpv3_ts.py / 手順は PoC 検証済み）
+set -e
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[$(date -Is)] $*"; }
+
+log "in-band NIC / 監視対象への経路"
+ip addr add 10.99.0.2/30 dev ens3 || true
+ip link set ens3 up
+ip route add 6.6.6.6/32 via 10.99.0.1 || true
+ip route add 27.27.27.27/32 via 10.99.0.1 || true
+ip route add 95.95.95.95/32 via 10.99.0.1 || true
+
+log "Zabbix リポジトリ・パッケージ"
+wget -q https://repo.zabbix.com/zabbix/7.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_7.0+ubuntu24.04_all.deb -O /tmp/zbx.deb
+dpkg -i /tmp/zbx.deb >/dev/null
+apt-get update -qq
+apt-get install -y -qq zabbix-server-pgsql zabbix-frontend-php php8.3-pgsql \
+  zabbix-nginx-conf zabbix-sql-scripts zabbix-agent2 postgresql >/dev/null
+
+log "DB 作成・スキーマ投入（zabbix ロールで）"
+sudo -u postgres psql -qc "CREATE USER zabbix WITH PASSWORD 'zabbix';" || true
+sudo -u postgres createdb -O zabbix zabbix || true
+zcat /usr/share/zabbix-sql-scripts/postgresql/server.sql.gz | sudo -u zabbix psql -q zabbix >/dev/null
+
+log "設定・起動"
+sed -i 's/^# DBPassword=.*/DBPassword=zabbix/' /etc/zabbix/zabbix_server.conf
+sed -i 's/^#\s*listen\s\+8080;/        listen 8080;/; s/^#\s*server_name\s\+example.com;/        server_name _;/' /etc/zabbix/nginx.conf
+cat > /etc/zabbix/web/zabbix.conf.php <<'EOF'
+<?php
+$DB["TYPE"]      = "POSTGRESQL";
+$DB["SERVER"]    = "localhost";
+$DB["PORT"]      = "0";
+$DB["DATABASE"]  = "zabbix";
+$DB["USER"]      = "zabbix";
+$DB["PASSWORD"]  = "zabbix";
+$DB["SCHEMA"]    = "";
+$DB["ENCRYPTION"] = false;
+$DB["DOUBLE_IEEE754"] = true;
+$ZBX_SERVER_NAME = "CCNP-LAB-ZBX";
+$IMAGE_FORMAT_DEFAULT = IMAGE_FORMAT_PNG;
+EOF
+chown www-data:www-data /etc/zabbix/web/zabbix.conf.php
+systemctl restart zabbix-server zabbix-agent2 nginx php8.3-fpm
+systemctl enable -q zabbix-server zabbix-agent2 nginx php8.3-fpm
+
+log "採点/確認ヘルパー zbx_check.py"
+cat > /opt/ccnp/zbx_check.py <<'EOF'
+#!/usr/bin/env python3
+# usage: zbx_check.py availability <HOST> | problems | hostinfo <HOST> | fresh <HOST> [限度秒]
+import json, sys, time, urllib.request
+URL = "http://127.0.0.1:8080/api_jsonrpc.php"
+_i = [0]
+def rpc(m, p, t=None):
+    _i[0] += 1
+    r = urllib.request.Request(URL, json.dumps(
+        {"jsonrpc": "2.0", "method": m, "params": p, "id": _i[0]}).encode(),
+        {"Content-Type": "application/json-rpc"})
+    if t:
+        r.add_header("Authorization", "Bearer " + t)
+    d = json.load(urllib.request.urlopen(r, timeout=20))
+    if "error" in d:
+        sys.exit("API error: " + str(d["error"]))
+    return d["result"]
+t = rpc("user.login", {"username": "Admin", "password": "zabbix"})
+cmd = sys.argv[1]
+if cmd == "availability":
+    hs = rpc("host.get", {"filter": {"host": [sys.argv[2]]},
+                           "selectInterfaces": ["available", "error"]}, t)
+    if not hs:
+        sys.exit("HOST_NOT_FOUND")
+    i = hs[0]["interfaces"][0]
+    print(f"HOST={sys.argv[2]} SNMP_AVAILABLE={i['available']} ERROR={i['error']!r}")
+elif cmd == "problems":
+    for p in rpc("problem.get", {"output": ["name", "severity"]}, t):
+        print("PROBLEM:", p["name"])
+    print("(end)")
+elif cmd == "hostinfo":
+    # 監視ホストの登録内容を 1 行に整形（採点は raw regex で属性ごとに判定）
+    hs = rpc("host.get", {"filter": {"host": [sys.argv[2]]},
+                           "selectParentTemplates": ["host"],
+                           "selectHostGroups": ["name"],
+                           "selectInterfaces": ["ip", "port", "type", "details"]}, t)
+    if not hs:
+        sys.exit("HOST_NOT_FOUND")
+    h = hs[0]
+    SEC = {"0": "noAuthNoPriv", "1": "authNoPriv", "2": "authPriv"}
+    AUTH = {"0": "MD5", "1": "SHA", "2": "SHA224", "3": "SHA256", "4": "SHA384", "5": "SHA512"}
+    PRIV = {"0": "DES", "1": "AES128", "2": "AES192", "3": "AES256", "4": "AES192C", "5": "AES256C"}
+    for i in h["interfaces"]:
+        d = i.get("details") or {}
+        if isinstance(d, list):
+            d = {}
+        print("HOST=%s TYPE=%s IF=%s:%s GROUP=%s TEMPLATE=%s V3USER=%s SECLEVEL=%s AUTH=%s PRIV=%s" % (
+            h["host"], i["type"], i["ip"], i["port"],
+            ",".join(g["name"] for g in h.get("hostgroups", [])),
+            ",".join(x["host"] for x in h.get("parentTemplates", [])),
+            d.get("securityname", "-"),
+            SEC.get(str(d.get("securitylevel", "")), "-"),
+            AUTH.get(str(d.get("authprotocol", "")), "-"),
+            PRIV.get(str(d.get("privprotocol", "")), "-")))
+elif cmd == "fresh":
+    # 監視データの鮮度＝実際にポーリングできている事の通し証明
+    # (availability の緑はエージェント応答のみで、データ取得の保証にならない)
+    hs = rpc("host.get", {"filter": {"host": [sys.argv[2]]}}, t)
+    if not hs:
+        sys.exit("HOST_NOT_FOUND")
+    items = rpc("item.get", {"hostids": hs[0]["hostid"],
+                              "output": ["lastclock"], "filter": {"status": "0"}}, t)
+    last = max((int(i["lastclock"]) for i in items if i["lastclock"] != "0"), default=0)
+    age = int(time.time()) - last if last else -1
+    limit = int(sys.argv[3]) if len(sys.argv) > 3 else 120
+    ok = "true" if 0 <= age <= limit else "false"
+    print(f"HOST={sys.argv[2]} FRESH={ok} AGE={age} LIMIT={limit}")
+EOF
+chmod 755 /opt/ccnp/zbx_check.py
+log "DONE"

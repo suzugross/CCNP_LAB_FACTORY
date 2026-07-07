@@ -1,0 +1,50 @@
+---
+# 自動生成 OSPF 問題(GEN-OSPF-*)の模範解答を投入する（自己検品・auto-solve 用）。
+# 使い方: ansible-playbook playbooks/solve_generated.yml -e problem=GEN-OSPF-100
+# solution.json(各ルータの network 文) と _generated/<id>/mgmt_map.yml を読んで投入する。
+
+- name: 解答と接続先を読み込む
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+  tasks:
+    - ansible.builtin.include_vars: { file: "{{ repo }}/problems/{{ problem }}/solution.json", name: sol }
+    - ansible.builtin.include_vars: { file: "{{ repo }}/topologies/_generated/{{ problem }}/mgmt_map.yml", name: mgmt_map }
+    - ansible.builtin.add_host:
+        name: "{{ item.key }}"
+        groups: _gsol
+        ansible_host: "{{ mgmt_map[item.key] }}"
+        ospf_networks: "{{ item.value }}"
+        ospf_pid: "{{ sol.pid }}"
+      loop: "{{ sol.nodes | dict2items }}"
+      loop_control: { label: "{{ item.key }}" }
+
+    - name: フィルタ解答ノードを登録（filters があれば。ひねり問題=GEN-TWIST 等）
+      ansible.builtin.add_host:
+        name: "{{ item.node }}"
+        groups: _gfilter
+        ansible_host: "{{ mgmt_map[item.node] }}"
+        filter_blocks: "{{ item.blocks }}"
+      loop: "{{ sol.filters | default([]) }}"
+      loop_control: { label: "{{ item.node }}" }
+
+- name: OSPF 解答を投入
+  hosts: _gsol
+  gather_facts: false
+  tasks:
+    - cisco.ios.ios_config:
+        parents: "router ospf {{ ospf_pid }}"
+        lines: "{{ ospf_networks }}"
+
+# ひねり（フィルタ等）の解答を投入。_gfilter が空（filters 無し）なら自動スキップ＝従来問題は無影響。
+# OSPF 投入（上の Play）の後に走るので router ospf 配下への distribute-list も成立する。
+- name: フィルタ解答を投入（filters があれば）
+  hosts: _gfilter
+  gather_facts: false
+  tasks:
+    - cisco.ios.ios_config:
+        parents: "{{ omit if item.parents is none else item.parents }}"
+        lines: "{{ item.lines }}"
+      loop: "{{ filter_blocks }}"
+      loop_control: { label: "{{ item.parents | default('(global)') }}" }

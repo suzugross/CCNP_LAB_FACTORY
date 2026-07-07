@@ -1,0 +1,25 @@
+! RT04 (AS 65019 / RR client)
+interface Loopback0
+ ip address 64.64.64.64 255.255.255.255
+!
+interface Loopback1
+ ip address 36.36.36.36 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.121.118.2 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network 64.64.64.64 0.0.0.0 area 0
+ network 10.121.118.0 0.0.0.3 area 0
+!
+router bgp 65019
+ bgp router-id 64.64.64.64
+ no bgp default ipv4-unicast
+ neighbor 27.27.27.27 remote-as 65019
+ neighbor 27.27.27.27 update-source Loopback0
+ address-family ipv4 unicast
+  neighbor 27.27.27.27 activate
+  network 36.36.36.36 mask 255.255.255.255
+ exit-address-family
+!

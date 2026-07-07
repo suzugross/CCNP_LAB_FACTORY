@@ -1,0 +1,28 @@
+! ENCOR-EIGRP-VARIANCE-01 初期 (RT05) — 非FS 経路の中継（RT05-RT04 が高遅延で RD>=FD）。
+!   links[0]=RT01 / links[1]=RT04
+interface Loopback0
+ ip address 10.5.5.5 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 (10.15.15.0/30) ===
+ ip address 10.15.15.2 255.255.255.252
+ delay 10
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT04 (10.54.54.0/30) ===
+ ip address 10.54.54.1 255.255.255.252
+ delay 25
+ no shutdown
+!
+router eigrp VAR
+ address-family ipv4 unicast autonomous-system 100
+  af-interface Loopback0
+   passive-interface
+  exit-af-interface
+  eigrp router-id 10.5.5.5
+  network 10.5.5.5 0.0.0.0
+  network 10.15.15.0 0.0.0.3
+  network 10.54.54.0 0.0.0.3
+ exit-address-family
+!

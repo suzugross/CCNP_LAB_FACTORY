@@ -1,0 +1,35 @@
+---
+# 全RT共通の baseline 投入。
+# 前提: MGMT VRF 経由で SSH 到達済み（day0でmgmt IP/SSHを起動 — DESIGN.md §2参照）。
+# CML結合(Phase 1)前は --check / モックで構文確認に使う。
+
+- name: baseline config を生成して投入（role別テンプレート）
+  cisco.ios.ios_config:
+    src: "baseline_{{ node_role }}.cfg.j2"
+  register: baseline_result
+  tags: [baseline]
+
+# crypto鍵が未生成の場合のブートストラップ（初回のみ想定）。
+# day0で鍵生成できればこのタスクは不要になる。【要検証: Phase 1で方式確定】
+- name: SSH 用 RSA 鍵が無ければ生成
+  cisco.ios.ios_command:
+    commands:
+      - command: "show crypto key mypubkey rsa"
+  register: rsa_key
+  changed_when: false
+  failed_when: false
+  tags: [baseline, bootstrap]
+
+- name: RSA 鍵生成 (鍵が存在しない場合)
+  cisco.ios.ios_command:
+    commands:
+      - command: "crypto key generate rsa modulus 2048"
+        prompt: "How many bits in the modulus"
+        answer: "2048"
+  when: "'Key Data' not in (rsa_key.stdout[0] | default(''))"
+  tags: [baseline, bootstrap]
+
+- name: 設定を保存
+  cisco.ios.ios_config:
+    save_when: modified
+  tags: [baseline]

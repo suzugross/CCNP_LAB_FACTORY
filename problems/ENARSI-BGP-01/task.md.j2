@@ -1,0 +1,76 @@
+{% if params.peer_mode | default('connected') == 'loopback' %}
+# 問題 ENARSI-BGP-01 (variant: mh-auth) : Loopbackピア + multihop + 認証
+
+## シナリオ
+エッジルータ **RT01 (AS {{ params.as1 }})** は、上流 **RT02 (AS {{ params.as2 }})** と
+**RT03 (AS {{ params.as3 }})** に eBGP 接続します。ただし運用ポリシーにより、
+**ピアリングは対向の物理IPではなく Loopback0 同士で張り、ネイバー認証(MD5)を必須**とします。
+その先の **RT04 (AS {{ params.as4 }})** が `{{ params.rt04_lo }}/32` を広告しています。
+上流(RT02/03/04)は構築済み・変更不可。**設定するのは RT01 のみ。**
+
+## 構成（初期状態で投入済み）
+| ルータ | Loopback0 | RT01との直結IF(/30) |
+|--------|-----------|---------------------|
+| RT01 | {{ params.rt01_lo }}/32 | — |
+| RT02 | {{ params.rt02_lo }}/32 | {{ params.seg12 }}.2 |
+| RT03 | {{ params.rt03_lo }}/32 | {{ params.seg13 }}.2 |
+| RT04 | {{ params.rt04_lo }}/32 | （RT02/RT03 の先） |
+
+- RT01–RT02 直結: {{ params.seg12 }}.1 (RT01) / {{ params.seg12 }}.2 (RT02)
+- RT01–RT03 直結: {{ params.seg13 }}.1 (RT01) / {{ params.seg13 }}.2 (RT03)
+
+## 到達目標 — RT01 のみ
+1. RT02・RT03 と eBGP を、**互いの Loopback0 をピアアドレスにして**確立する。
+   これに伴い必要になる設定（ピアセッションの送信元IFの固定、直結でない相手との eBGP を許可する設定、
+   相手の Loopback への到達性確保）も RT01 側で行うこと。
+2. 各ピアに **認証パスワード `{{ params.bgp_password }}`** を設定する
+   （上流と一致しないとセッションが上がりません）。
+3. RT01 の `{{ params.rt01_lo }}/32` を BGP で広告する。
+4. 結果として、RT01 が `{{ params.rt04_lo }}/32` を BGP 経路で学習している状態にする。
+
+## ヒント / 制約
+- 上流(RT02/RT03/RT04)は変更しない。
+- **ピア Loopback への到達性確保のためのスタティックルートは RT01 に設定してよい**（この用途に限る）。
+- IGP は使わない。物理リンク断・帯域変更などの手段も不可。
+
+## アクセス（SSH, SUZUKI / CCNP）
+RT01={{ params.seg12 }}系 / 管理IPは出題時に提示
+
+## 採点
+```
+ansible-playbook playbooks/grade.yml -e problem=ENARSI-BGP-01 -e variant={{ variant | default('base') }} --vault-password-file <(printf 'CCNP\n')
+```
+{% else %}
+# 問題 ENARSI-BGP-01 : eBGP デュアルホームの経路制御
+
+## シナリオ
+エッジルータ **RT01 (AS {{ params.as1 }})** は、上流 **RT02 (AS {{ params.as2 }})** と
+**RT03 (AS {{ params.as3 }})** にデュアルホーム接続。両者の先の **RT04 (AS {{ params.as4 }})** が
+`{{ params.rt04_lo }}/32` を広告しています。上流(RT02/03/04)の BGP は構築済み・変更不可。
+**設定するのは RT01 のみ。**
+
+## 構成（初期状態で投入済み）
+| リンク | RT01側 | 対向 |
+|--------|--------|------|
+| RT01–RT02 | {{ params.seg12 }}.1 | {{ params.seg12 }}.2 (RT02) |
+| RT01–RT03 | {{ params.seg13 }}.1 | {{ params.seg13 }}.2 (RT03) |
+
+| ルータ | Loopback0 |
+|--------|-----------|
+| RT01 | {{ params.rt01_lo }}/32 |
+| RT04 | {{ params.rt04_lo }}/32 |
+
+## 到達目標 — RT01 のみ
+1. RT02・RT03 と eBGP を確立する。
+2. RT01 の `{{ params.rt01_lo }}/32` を BGP で広告する。
+3. RT01 から `{{ params.rt04_lo }}/32` への経路は **RT02 経由を優先**する（RT03 は冗長で残す）。
+4. RT04 から `{{ params.rt01_lo }}/32` への戻り経路も **RT02 経由が選ばれる**ように RT01 側で誘導する。
+
+## 制約
+- RT02 / RT03 / RT04 は変更しない。スタティック・デフォルト禁止。リンク断や帯域変更などの物理的手段も不可。
+
+## 採点
+```
+ansible-playbook playbooks/grade.yml -e problem=ENARSI-BGP-01 -e variant={{ variant | default('base') }} --vault-password-file <(printf 'CCNP\n')
+```
+{% endif %}

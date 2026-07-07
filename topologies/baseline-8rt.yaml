@@ -1,0 +1,35 @@
+# =============================================================
+# baseline-8rt : 汎用ベーストポロジ (CML 2.x ラボ YAML)  ※PLACEHOLDER
+# =============================================================
+# このファイルは Phase 1 で実機イメージ確定後に正式記述する。
+# CML の正確なスキーマ（lab / nodes / links / node_definition /
+# image_definition / interface のスロット表記）は使用する CML バージョンと
+# 導入イメージ(IOL: iol-xe / IOSv: iosv 等)に依存するため、ここでは記述方針のみ。【要検証】
+#
+# 記述方針:
+#   - nodes: RT01..RT08。node_definition は導入イメージに合わせる。
+#       各ノードの configuration: に baseline.cfg.j2 をレンダリングした
+#       day0 startup-config を埋め込む（MGMT IP / user / SSH を起動時に有効化）。
+#   - 各ノードに tag を付与し、cisco.cml.cml_inventory の group_tags で
+#     Ansible グループ(routers)に自動振り分けする。
+#   - links: §5 のリンク採番表に従い Gi0/0..Gi0/3 を相互接続。Gi0/15 は MGMT。
+#   - MGMT 到達: 管理セグメント(10.1.10.0/26)を External Connector で
+#     Ansible 実行ホスト側へブリッジするか、CML 管理ネットに載せる。
+#
+# 生成方法(案): topologies/baseline-8rt.yaml.j2 を作り、host_vars(mgmt_ip)と
+#   baseline.cfg.j2 を取り込んで `ansible` でレンダリング → cisco.cml.build へ。
+#
+# 例(スキーマは要確定):
+# lab:
+#   title: baseline-8rt
+# nodes:
+#   - id: n0
+#     label: RT01
+#     node_definition: iosv          # ← 実環境に合わせる
+#     configuration: |
+#       <baseline.cfg.j2 をRT01でレンダリングした内容>
+#     tags: [routers]
+#   ...
+# links:
+#   - { i1: RT01, n1: GigabitEthernet0/0, i2: RT02, n2: GigabitEthernet0/0 }
+#   ...

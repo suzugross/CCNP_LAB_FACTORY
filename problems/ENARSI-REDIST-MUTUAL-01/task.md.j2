@@ -1,0 +1,36 @@
+# 問題 ENARSI-REDIST-MUTUAL-01 : OSPF⇄EIGRP 2点相互再配送
+
+## シナリオ
+社内ネットワークが 2 つのルーティングドメインに分かれている。
+
+- **OSPF area 0**: RT01 — RT02 — RT03（相互に接続）
+- **EIGRP AS 100**: RT04 — RT02 / RT04 — RT03
+
+RT02 と RT03 は **両ドメインに接続する 2 つの境界ルータ**で、各プロトコルにネイティブ参加済み。
+各ドメイン内のルーティングは正しく収束している（OSPF 内・EIGRP 内はそれぞれ到達可能）。
+しかし 2 つのドメインは未接続で、互いの経路を知らない。
+
+## ゴール
+**境界 RT02・RT03 のみ**を設定し、ネットワーク内の **すべてのルータが、他の全ルータの
+Loopback0（{{ params.rt01_lo }} / {{ params.rt02_lo }} / {{ params.rt03_lo }} / {{ params.rt04_lo }}）に到達**できるようにせよ。
+
+- RT01・RT04 は **変更不可**（既存のネイティブ設定のまま）。
+- 2 つの境界で再配送するため、**ドメイン間でのフィードバック（再注入）が起きない**よう
+  健全性にも配慮すること。
+
+## 前提（設定済み・変更不可）
+| ルータ | 役割 | Loopback0 |
+|--------|------|-----------|
+| RT01 | OSPF 内部 | {{ params.rt01_lo }}/32 |
+| RT02 | 境界 (OSPF/EIGRP) | {{ params.rt02_lo }}/32 |
+| RT03 | 境界 (OSPF/EIGRP) | {{ params.rt03_lo }}/32 |
+| RT04 | EIGRP 内部 | {{ params.rt04_lo }}/32 |
+
+## リンク
+- OSPF: RT01-RT02 ({{ params.seg12 }}.0/30) / RT01-RT03 ({{ params.seg13 }}.0/30) / RT02-RT03 ({{ params.seg23 }}.0/30)
+- EIGRP: RT02-RT04 ({{ params.seg24 }}.0/30) / RT03-RT04 ({{ params.seg34 }}.0/30)
+
+## 採点
+```
+ansible-playbook playbooks/grade.yml -e problem=ENARSI-REDIST-MUTUAL-01 [-e variant=<name>] --vault-password-file <(printf 'CCNP\n')
+```

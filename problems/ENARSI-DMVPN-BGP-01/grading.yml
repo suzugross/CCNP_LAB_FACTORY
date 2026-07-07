@@ -1,0 +1,113 @@
+---
+# 採点基準 (ENARSI-DMVPN-BGP-01 / DMVPN Phase2 + BGPコア相互再配送, 暗号なし)。
+#  DMVPN: ハブに両スポーク登録UP / 各スポークでハブUP / Phase2署名(対向スポークnext-hop)
+#  BGP境界: ハブ-DC eBGP確立 / DCが支店Loを学習(B) / 支店がDC LANを学習(D EX)
+#  データプレーン: 支店間ダイレクトping / 支店<->DC 双方向ping
+# RT04(WAN)/RT05(DC)は変更禁止。RT05 のチェックは「再配送が効いたか」の結果のみ見る。
+# 収集は CML コンソール経由。
+problem: ENARSI-DMVPN-BGP-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # ---- DMVPN セッション ----
+  - name: "RT01(Hub): 両スポークが登録され DMVPN セッションが UP"
+    node: RT01
+    command: "show dmvpn"
+    raw:
+      - contains: "Type:Hub"
+      - regex: "10\\.0\\.24\\.1\\s+10\\.255\\.0\\.2\\s+UP"
+      - regex: "10\\.0\\.34\\.1\\s+10\\.255\\.0\\.3\\s+UP"
+    points: 10
+
+  - name: "RT02(Spoke1): DMVPN セッションが Spoke として確立しハブが UP"
+    node: RT02
+    command: "show dmvpn"
+    raw:
+      - contains: "Type:Spoke"
+      - regex: "10\\.0\\.14\\.1\\s+10\\.255\\.0\\.1\\s+UP"
+    points: 5
+
+  - name: "RT03(Spoke2): DMVPN セッションが Spoke として確立しハブが UP"
+    node: RT03
+    command: "show dmvpn"
+    raw:
+      - contains: "Type:Spoke"
+      - regex: "10\\.0\\.14\\.1\\s+10\\.255\\.0\\.1\\s+UP"
+    points: 5
+
+  # ---- Phase 2 署名: 対向スポーク経路の next-hop が対向スポーク ----
+  - name: "RT02(Spoke1): 3.3.3.3/32 を EIGRP 学習し next-hop が対向スポーク(10.255.0.3)"
+    node: RT02
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "3.3.3.3/32"
+      source_protocol: eigrp
+      next_hop.next_hop_list.*.next_hop: "10.255.0.3"
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel0
+    points: 10
+
+  - name: "RT03(Spoke2): 2.2.2.2/32 を EIGRP 学習し next-hop が対向スポーク(10.255.0.2)"
+    node: RT03
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "2.2.2.2/32"
+      source_protocol: eigrp
+      next_hop.next_hop_list.*.next_hop: "10.255.0.2"
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel0
+    points: 10
+
+  # ---- BGP 境界 ----
+  - name: "RT01(Hub): DC(10.0.15.2)との eBGP セッションが Established"
+    node: RT01
+    command: "show ip bgp neighbors 10.0.15.2"
+    raw:
+      - regex: "BGP state = Established"
+    points: 10
+
+  - name: "RT05(DC): 支店1 Loopback 2.2.2.2/32 を BGP で学習(上り再配送 EIGRP->BGP)"
+    node: RT05
+    command: "show ip route bgp"
+    raw:
+      - regex: "B\\s+2\\.2\\.2\\.2"
+    points: 10
+
+  - name: "RT05(DC): 支店2 Loopback 3.3.3.3/32 を BGP で学習(上り再配送 EIGRP->BGP)"
+    node: RT05
+    command: "show ip route bgp"
+    raw:
+      - regex: "B\\s+3\\.3\\.3\\.3"
+    points: 10
+
+  # ---- 下り再配送: 支店が DC LAN を学習 (BGP->EIGRP, D EX) ----
+  - name: "RT02(Spoke1): DC LAN 172.20.20.0/24 を EIGRP(再配送)で学習し Tunnel0 経由"
+    node: RT02
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "172.20.20.0/24"
+      source_protocol: eigrp
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel0
+    points: 10
+
+  # ---- データプレーン e2e ----
+  - name: "RT02(Spoke1): DC LAN へ疎通 (支店->DC, 能動)"
+    node: RT02
+    command: "ping 172.20.20.1 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 10
+
+  - name: "RT05(DC): 支店1 Loopback へ疎通 (DC->支店, 能動)"
+    node: RT05
+    command: "ping 2.2.2.2 source 172.20.20.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 10

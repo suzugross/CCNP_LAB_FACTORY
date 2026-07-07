@@ -1,0 +1,17 @@
+! ENCOR-INTEGRATED-01 初期 (RT04, ISP AS{{ params.as_ext }}) : eBGP 構築済み(変更不可)。
+! 企業エッジ(RT02)へ default-originate で 0.0.0.0/0 を広告。
+! Loopback0({{ params.rt04_lo }}) = インターネット上のホスト想定（社内からの到達対象）。
+! links[0]=RT02
+interface Loopback0
+ ip address {{ params.rt04_lo }} 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 (eBGP AS{{ params.as_internal }}) ===
+ ip address {{ params.seg24 }}.2 255.255.255.252
+ no shutdown
+!
+router bgp {{ params.as_ext }}
+ bgp log-neighbor-changes
+ neighbor {{ params.seg24 }}.1 remote-as {{ params.as_internal }}
+ neighbor {{ params.seg24 }}.1 default-originate
+!

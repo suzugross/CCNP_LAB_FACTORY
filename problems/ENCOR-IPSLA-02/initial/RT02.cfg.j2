@@ -1,0 +1,28 @@
+! ENCOR-IPSLA-02 初期状態 (RT02 = primary ISP, 変更禁止)
+!   links[0]=RT01(primary access)10.0.12 / links[1]=RT03(inter-ISP)10.0.23 / links[2]=RT04(Internet)10.0.24
+!   ★RT02 は Internet(8.8.8.8)/ビーコン(100.64.0.1)へ RT04 直結のみ（inter-ISP 迂回なし）。
+!     → RT02-RT04 が切れると RT02 は Internet/ビーコンを失う＝奥障害が track に伝わる。
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 (customer / primary access) ===
+ ip address 10.0.12.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (peer ISP) ===
+ ip address 10.0.23.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT04 (Internet core / primary uplink) ===
+ ip address 10.0.24.1 255.255.255.252
+ no shutdown
+!
+! Internet と ヘルスビーコンは RT04 経由のみ（迂回路を持たない）
+ip route 8.8.8.8 255.255.255.255 10.0.24.2
+ip route 100.64.0.1 255.255.255.255 10.0.24.2
+! 顧客 RT01(1.1.1.1) への直結戻り
+ip route 1.1.1.1 255.255.255.255 10.0.12.1
+!

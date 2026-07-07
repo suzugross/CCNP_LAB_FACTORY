@@ -1,0 +1,27 @@
+! ENCOR-ACL-NAMED-01 初期状態 (RT02) : OSPF 既設。
+! ★既存 ACL WEB-FILTER が Eth0/0 inbound に適用済み(seq10 = permit ip any any のみ)。
+!   受験者はこの ACL を作り直さず、deny を permit より前(seq<10)に挿入する。
+! links[0] = RT01 向け / links[1] = RT03 向け
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 ===
+ ip address 10.0.12.2 255.255.255.252
+ ip access-group WEB-FILTER in
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (server) ===
+ ip address 10.0.23.1 255.255.255.252
+ no shutdown
+!
+ip access-list extended WEB-FILTER
+ 10 permit ip any any
+!
+router ospf 1
+ router-id 2.2.2.2
+ network 2.2.2.2 0.0.0.0 area 0
+ network 10.0.12.0 0.0.0.3 area 0
+ network 10.0.23.0 0.0.0.3 area 0
+!

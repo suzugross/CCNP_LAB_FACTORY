@@ -1,0 +1,31 @@
+---
+# 採点基準（pyATS Genie 構造化 + フィールドアサート）。
+# CoPP の核心 = control-plane 入力ポリシーに ICMP を絞るクラスがあり、police で
+# 8000bps・超過 drop・適合 transmit になっていること。クラス/ポリシー/ACL 名は任意。
+problem: ENCOR-COPP-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: control-plane 入力に police(8000bps/超過drop/適合transmit) のクラスがある"
+    node: RT01
+    command: "show policy-map control-plane"
+    parser: "show policy-map control-plane"
+    find: "Control Plane.service_policy.input.policy_name.*.class_map.*"
+    match:
+      police.cir_bps: 8000
+      police.exceeded.actions.drop: true
+      police.conformed.actions.transmit: true
+    points: 60
+
+  - name: "RT01: ICMP を許可する ACL が存在（制限対象を ICMP に限定）"
+    node: RT01
+    command: "show ip access-lists"
+    parser: "show ip access-lists"
+    find: "*.aces.*"
+    match:
+      actions.forwarding: permit
+      matches.l3.ipv4.protocol: icmp
+    points: 40

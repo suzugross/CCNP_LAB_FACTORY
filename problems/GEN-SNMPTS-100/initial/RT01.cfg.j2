@@ -1,0 +1,21 @@
+! --- data plane ---
+interface Loopback0
+ ip address 19.19.19.19 255.255.255.255
+interface Ethernet0/0
+ description === to ZBX01(poller) ===
+ ip address 10.99.0.1 255.255.255.252
+ no shutdown
+interface Ethernet0/1
+ description === to RT02 ===
+ ip address 10.1.12.1 255.255.255.252
+ no shutdown
+router ospf 1
+ router-id 19.19.19.19
+ network 19.19.19.19 0.0.0.0 area 0
+ network 10.99.0.0 0.0.0.3 area 0
+ network 10.1.12.0 0.0.0.3 area 0
+! --- SNMPv3 (NOC 監視標準) ---
+snmp-server view MONVIEW iso included
+snmp-server group MONGRP v3 priv read MONVIEW
+snmp-server location CCNP-LAB
+snmp-server user MONUSER MONGRP v3 auth sha CCNP-Auth-2026 priv aes 128 CCNP-Priv-2026

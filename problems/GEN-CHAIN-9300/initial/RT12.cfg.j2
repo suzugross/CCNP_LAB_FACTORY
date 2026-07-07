@@ -1,0 +1,35 @@
+! GEN-CHAIN-9300 初期 (RT12) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 76.76.76.76 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT03 ===
+ ip address 10.175.162.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT04 ===
+ ip address 10.28.85.2 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 76.76.76.76
+ network 76.76.76.76 0.0.0.0 area 0
+ network 10.175.162.0 0.0.0.3 area 0
+ network 10.28.85.0 0.0.0.3 area 0
+!
+router bgp 65001
+ bgp router-id 76.76.76.76
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 54.54.54.54 remote-as 65001
+ neighbor 54.54.54.54 update-source Loopback0
+ neighbor 57.57.57.57 remote-as 65001
+ neighbor 57.57.57.57 update-source Loopback0
+ address-family ipv4
+  neighbor 54.54.54.54 activate
+  neighbor 54.54.54.54 send-community
+  neighbor 57.57.57.57 activate
+  neighbor 57.57.57.57 send-community
+ exit-address-family
+!

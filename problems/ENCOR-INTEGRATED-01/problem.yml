@@ -1,0 +1,25 @@
+---
+# 問題メタデータ
+id: ENCOR-INTEGRATED-01
+title: "統合シナリオ: 実運用エッジ（ISPデフォルト注入 + PAT + エッジACL）"
+exam: ENCOR
+topics: [ospf, bgp, nat, pat, default-route, acl, integration]
+difficulty: 6
+topology: ad-hoc
+target_nodes: [RT01, RT02, RT03, RT04]
+points: 100
+
+# === トポロジ（各ルータ次数<=3, iol-xe links[0..2] に収まる）===========
+#        RT01(Core) ─ RT02(Edge/ASBR/NAT) ─ RT04(ISP AS65100)
+#           \         /
+#            RT03 (内部)
+#   OSPF area0: RT01-RT02-RT03 の三角。  eBGP: RT02(AS65001)-RT04(AS65100)。
+#   RT04(ISP) は default-originate で 0.0.0.0/0 を広告、Loopback0 = インターネット上のホスト想定。
+#   受験者は RT02 で「ISPデフォルトのOSPF注入 / PAT(overload) / エッジACL」を構成する。
+#   NAT inside = RT01/RT03 側(links[0..1]), outside = RT04 側(links[2])。
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # 10.0.12.0/30 (OSPF / inside)
+    - { a: RT01, a_if: 1, b: RT03, b_if: 0 }   # 10.0.13.0/30 (OSPF)
+    - { a: RT02, a_if: 1, b: RT03, b_if: 1 }   # 10.0.23.0/30 (OSPF / inside)
+    - { a: RT02, a_if: 2, b: RT04, b_if: 0 }   # 10.0.24.0/30 (eBGP / outside)

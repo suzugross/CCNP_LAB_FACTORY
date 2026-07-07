@@ -1,0 +1,68 @@
+---
+# 採点基準。IP SLA 1 + Track 1 で primary default route を監視し、
+# フローティング backup (AD=200) を装備していることを確認する。
+# さらに「実際に 8.8.8.8 へトラフィックが届くか（能動プローブ）」も採点する。
+#   - RT01 から 8.8.8.8 への end-to-end 疎通 = primary 経路の forward+return が成立
+#   - RT03(backup ISP) から 8.8.8.8 への疎通 = backup 側インフラが Internet まで配送可能
+#     ＝ フェイルオーバー後も RT01 が 8.8.8.8 に到達できる土台があることを担保
+# RT02 / RT03 / RT04 は変更禁止 (ISP / Internet) のため設定チェックの対象外。
+problem: ENCOR-IPSLA-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: IP SLA 1 が ICMP-echo 10.0.12.2 で設定されている"
+    node: RT01
+    command: "show running-config | section ip sla 1"
+    raw:
+      - regex: "ip sla 1"
+      - regex: "icmp-echo 10\\.0\\.12\\.2"
+    points: 15
+
+  - name: "RT01: Track 1 が IP SLA 1 reachability を監視している"
+    node: RT01
+    command: "show running-config | section track 1"
+    raw:
+      - regex: "track 1 ip sla 1 reachability"
+    points: 10
+
+  - name: "RT01: Track 1 状態が Up (SLA が起動し reachable)"
+    node: RT01
+    command: "show track 1"
+    raw:
+      - regex: "Reachability is Up"
+    points: 10
+
+  - name: "RT01: default route が primary 10.0.12.2 経由で RIB にある"
+    node: RT01
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "0.0.0.0/0"
+      source_protocol: static
+      next_hop.next_hop_list.*.next_hop: "10.0.12.2"
+    points: 20
+
+  - name: "RT01: フローティング backup (ip route 0.0.0.0 0.0.0.0 10.0.13.2 200) が設定されている"
+    node: RT01
+    command: "show running-config | include ip route 0.0.0.0"
+    raw:
+      - regex: "ip route 0\\.0\\.0\\.0 0\\.0\\.0\\.0 10\\.0\\.13\\.2 200"
+    points: 15
+
+  - name: "RT01: 8.8.8.8 へ実際に到達できる (primary 経路で forward+return が成立)"
+    node: RT01
+    command: "ping 8.8.8.8 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 15
+
+  - name: "RT03(backup ISP): 8.8.8.8 へ到達できる (backup 側インフラが Internet まで配送可能)"
+    node: RT03
+    command: "ping 8.8.8.8 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 15

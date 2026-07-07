@@ -1,0 +1,36 @@
+ip prefix-list BAD-IN seq 5 permit 10.0.0.0/8 le 32
+ip prefix-list BAD-IN seq 10 permit 172.16.0.0/12 le 32
+ip prefix-list BAD-IN seq 15 permit 192.168.0.0/16 le 32
+ip prefix-list BAD-IN seq 20 permit 0.0.0.0/0 ge 25
+ip prefix-list EXC seq 5 permit {{ params.beacon_b }}.0/24
+route-map FROM-ISPA2 deny 5
+ match ip address prefix-list BAD-IN
+route-map FROM-ISPA2 permit 10
+ set community {{ params.comm_a }}
+route-map FROM-ISPB deny 5
+ match ip address prefix-list BAD-IN
+route-map FROM-ISPB permit 10
+ match ip address prefix-list EXC
+ set community {{ params.comm_b }}
+ set local-preference 300
+route-map FROM-ISPB permit 20
+ set community {{ params.comm_b }}
+route-map TO-ISPA permit 10
+ set metric 200
+router bgp {{ params.as_cust }}
+ neighbor {{ params.rt01_lo }} remote-as {{ params.as_cust }}
+ neighbor {{ params.rt01_lo }} update-source Loopback0
+ neighbor {{ params.rt03_lo }} remote-as {{ params.as_cust }}
+ neighbor {{ params.rt03_lo }} update-source Loopback0
+ address-family ipv4
+  neighbor {{ params.rt01_lo }} activate
+  neighbor {{ params.rt01_lo }} next-hop-self
+  neighbor {{ params.rt01_lo }} send-community
+  neighbor {{ params.rt03_lo }} activate
+  neighbor {{ params.rt03_lo }} next-hop-self
+  neighbor {{ params.rt03_lo }} send-community
+  neighbor {{ params.seg24 }}.2 route-map FROM-ISPA2 in
+  neighbor {{ params.seg24 }}.2 route-map TO-ISPA out
+  neighbor {{ params.seg25 }}.2 route-map FROM-ISPB in
+  aggregate-address {{ params.cust_net }}.0 255.255.255.0 summary-only
+ exit-address-family

@@ -1,0 +1,164 @@
+---
+# 生成済み lab.yaml を CML にインポートして起動する。
+# 前提: playbooks/build_topology.yml 実行済み。
+# 使い方: ansible-playbook playbooks/lab_up.yml -e problem=ENCOR-OSPF-01
+#         停止/削除: -e lab_state=stopped / -e lab_state=absent
+
+- name: CML にラボを構築・起動
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+    lab_file: "{{ repo }}/topologies/_generated/{{ problem }}/lab.yaml"
+    # ラボ名は問題ID(技術名を含む)を md5 で不透明化＝受験者に解法がバレないように。
+    # gen_cml_lab.py の lab_title() と一致させること。
+    lab_name: "CCNP-LAB-{{ (problem | hash('md5'))[:8] }}"
+    lab_state: started
+  tasks:
+    - name: lab.yaml の存在確認
+      ansible.builtin.stat: { path: "{{ lab_file }}" }
+      register: st
+    - ansible.builtin.assert:
+        that: [st.stat.exists]
+        msg: "先に build_topology.yml を実行してください: {{ lab_file }}"
+
+    # 起動前プリフライト: 割当 MGMT IP が既に応答しないか物理検知（台帳バグ/
+    # teardown 漏れ/旧方式ラボとの衝突を import 前に止める）。自ラボの再upはスキップ。
+    # 緊急回避: -e force_up=true
+    - name: 起動前プリフライト（割当 IP の生存確認）
+      when:
+        - lab_state == 'started'
+        - not (force_up | default(false) | bool)
+      ansible.builtin.command:
+        argv:
+          - "{{ repo }}/.venv/bin/python3"
+          - "{{ repo }}/topologies/lab_preflight.py"
+          - "--host={{ cml_host }}"
+          - "--lab-title={{ lab_name }}"
+          - "--mgmt-map={{ repo }}/topologies/_generated/{{ problem }}/mgmt_map.yml"
+      environment:
+        CML_USER: "{{ cml_username }}"
+        CML_PASSWORD: "{{ cml_password }}"
+      register: pf
+      changed_when: false
+    - ansible.builtin.debug: { var: pf.stdout_lines }
+      when: pf is not skipped
+
+    - name: ラボを {{ lab_state }} に
+      cisco.cml.cml_lab:
+        host: "{{ cml_host }}"
+        user: "{{ cml_username }}"
+        password: "{{ cml_password }}"
+        validate_certs: "{{ cml_verify_cert | default(false) }}"
+        lab: "{{ lab_name }}"
+        file: "{{ lab_file }}"
+        state: "{{ lab_state }}"
+        wait: true
+      register: r
+    - ansible.builtin.debug: { var: r }
+
+    # 撤去時は MGMT IP のリースを解放（他ラボが同時稼働できるように空きを返す）
+    - name: MGMT リースを解放（lab_state=absent 時）
+      when: lab_state == 'absent'
+      ansible.builtin.command:
+        argv:
+          - "{{ repo }}/.venv/bin/python3"
+          - "{{ repo }}/topologies/mgmt_alloc.py"
+          - release
+          - "--repo={{ repo }}"
+          - "--problem={{ problem }}"
+      register: rel
+      changed_when: "'released' in rel.stdout"
+      failed_when: false
+    - ansible.builtin.debug: { var: rel.stdout_lines }
+      when: lab_state == 'absent'
+
+    # CML 2.8 は lab 一括 start で ubuntu 等が DEFINED_ON_CORE のまま取り残される
+    # ことがある（2026-07-03 PoC 実証）→ 全ノード BOOTED を確認し、未起動は個別 start。
+    - name: 未起動ノードのフォロー（全ノード BOOTED 待ち）
+      when: lab_state == 'started'
+      ansible.builtin.command:
+        argv:
+          - "{{ repo }}/.venv/bin/python3"
+          - "{{ repo }}/topologies/cml_fix_stragglers.py"
+          - "--host={{ cml_host }}"
+          - "--lab-title={{ lab_name }}"
+          - "--timeout=300"
+      environment:
+        CML_USER: "{{ cml_username }}"
+        CML_PASSWORD: "{{ cml_password }}"
+      register: fix
+      changed_when: "'kick start' in fix.stdout"
+    - ansible.builtin.debug: { var: fix.stdout_lines }
+      when: lab_state == 'started'
+
+    # ラボ再作成で各RTのSSHホスト鍵が変わるため、起動時に既知ホスト鍵を掃除する
+    # （paramiko 接続での host key mismatch を防ぐ）
+    - name: 対象ノードの古い known_hosts エントリを削除
+      when: lab_state == 'started'
+      block:
+        - ansible.builtin.include_vars: { file: "{{ repo }}/topologies/_generated/{{ problem }}/mgmt_map.yml", name: mgmt_map }
+        - ansible.builtin.command:
+            argv: ["ssh-keygen", "-R", "{{ item }}"]
+          loop: "{{ mgmt_map.values() | list }}"
+          changed_when: false
+          failed_when: false
+
+    # data IF 起動（gated）: IOL の IPv6-only IF が day0 で admin-down になるクセの対策。
+    # problem.yml に bringup_data_ifs: true がある問題のみ（既定オフ＝他問題は無影響）。
+    - name: bringup 対象ノードを登録（problem.yml の bringup_data_ifs フラグ）
+      when: lab_state == 'started'
+      block:
+        - ansible.builtin.include_vars: { file: "{{ repo }}/problems/{{ problem }}/problem.yml", name: pmeta }
+        - ansible.builtin.include_vars: { file: "{{ repo }}/topologies/_generated/{{ problem }}/mgmt_map.yml", name: mm2 }
+        - name: bringup ノード登録
+          ansible.builtin.add_host:
+            name: "{{ item }}"
+            groups: _bringup
+            ansible_host: "{{ mm2[item] }}"
+          loop: "{{ pmeta.target_nodes }}"
+          when: pmeta.bringup_data_ifs | default(false)
+
+- name: data IF を no shutdown（bringup_data_ifs 問題のみ）
+  hosts: _bringup
+  gather_facts: false
+  tasks:
+    - name: SSH ポート待ち
+      ansible.builtin.wait_for: { host: "{{ ansible_host }}", port: 22, timeout: 200 }
+      delegate_to: localhost
+    - name: data IF(Ethernet0/0-0/2) を no shutdown（SSH鍵生成待ちでリトライ）
+      cisco.ios.ios_config:
+        parents: "interface Ethernet0/{{ item }}"
+        lines: ["no shutdown"]
+      loop: [0, 1, 2]
+      register: bu
+      until: bu is succeeded
+      retries: 10
+      delay: 10
+
+# === 監視サービス（problem.yml に monitoring がある問題のみ） ==============
+# ZBX ノードは cloud-init が Zabbix を自動構築する（initial/<node>.sh.j2）。
+# ここでは API が応答するまで待ち、監視対象ホストを SNMPv3 で登録する。
+- name: Zabbix 監視ホスト登録（monitoring 問題のみ）
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+  tasks:
+    - ansible.builtin.include_vars: { file: "{{ repo }}/problems/{{ problem }}/problem.yml", name: pmeta3 }
+      when: lab_state | default('started') == 'started'
+    - name: zbx_setup.py（API 待ち → ホスト登録、冪等）
+      ansible.builtin.command:
+        argv:
+          - "{{ repo }}/.venv/bin/python3"
+          - "{{ repo }}/topologies/zbx_setup.py"
+          - "--problem-yml={{ repo }}/problems/{{ problem }}/problem.yml"
+          - "--mgmt-map={{ repo }}/topologies/_generated/{{ problem }}/mgmt_map.yml"
+          - "--wait=600"
+      register: zbx
+      changed_when: "'登録 (' in zbx.stdout"
+      when:
+        - lab_state | default('started') == 'started'
+        - pmeta3.monitoring is defined
+    - ansible.builtin.debug: { var: zbx.stdout_lines }
+      when: zbx is not skipped

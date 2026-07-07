@@ -1,0 +1,34 @@
+! ENCOR-IPSLA-02 初期状態 (RT04 = Internet core, 変更禁止)
+!   links[0]=RT02(primary ISP)10.0.24 / links[1]=RT03(backup ISP)10.0.34
+!   Lo10 = 8.8.8.8/32 (擬似Internet・両ISPから到達可)
+!   Lo20 = 100.64.0.1/32 (ヘルスビーコン・primary 経路の死活監視専用)
+interface Loopback0
+ ip address 4.4.4.4 255.255.255.255
+!
+interface Loopback10
+ description === Simulated Internet Service (8.8.8.8) ===
+ ip address 8.8.8.8 255.255.255.255
+!
+interface Loopback20
+ description === Primary-path Health Beacon ===
+ ip address 100.64.0.1 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 (primary ISP) ===
+ ip address 10.0.24.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (backup ISP) ===
+ ip address 10.0.34.2 255.255.255.252
+ no shutdown
+!
+! データ(8.8.8.8)の送信元 1.1.1.1 への戻り：
+!   IOL のリンクダウン非伝播対策で、常に生きている backup ISP(RT03)経由を primary、
+!   RT03 ダウン時のみ RT02 経由へフォールバック（IPSLA-01 と同方針）。
+ip route 1.1.1.1 255.255.255.255 10.0.34.1
+ip route 1.1.1.1 255.255.255.255 10.0.24.1 200
+! プローブの送信元 10.0.12.1(RT01 primary IF) への戻りは primary(RT02)経由のみ。
+!   → ビーコンプローブの応答も primary 限定＝対称・確実。RT02-RT04 断時はこの戻りも消える。
+ip route 10.0.12.0 255.255.255.252 10.0.24.1
+!

@@ -1,0 +1,62 @@
+---
+# 採点基準 (ENCOR-PBR-01)。RT01 のみ変更対象。
+# 開発部(Lo2 10.2.2.1)発の 3.3.3.3 宛を PBR(ip local policy + route-map + set ip next-hop)
+# で RT02(10.0.12.2)経由に分離。営業部(Lo1 10.1.1.1)発は最短(RT03直結 10.0.13.2)のまま。
+# 実経路は traceroute の実プローブ(能動採点)で検証する=設定だけでなく効果を確認。
+problem: ENCOR-PBR-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # --- 能動プローブ(先に実行してトラフィックを流す) -----------------
+  - name: "RT01: 開発部(Lo2)発の 3.3.3.3 宛が RT02(10.0.12.2)経由になっている"
+    node: RT01
+    command: "traceroute 3.3.3.3 source Loopback2 numeric"
+    raw:
+      - contains: "10.0.12.2"
+      - not_contains: "10.0.13.2"
+    points: 30
+
+  - name: "RT01: 営業部(Lo1)発の 3.3.3.3 宛は最短(RT03直結 10.0.13.2)のまま"
+    node: RT01
+    command: "traceroute 3.3.3.3 source Loopback1 numeric"
+    raw:
+      - contains: "10.0.13.2"
+      - not_contains: "10.0.12.2"
+    points: 15
+
+  # --- 設定の確認 ---------------------------------------------------
+  - name: "RT01: route-map が ACL マッチ + set ip next-hop 10.0.12.2 を持つ"
+    node: RT01
+    command: "show route-map"
+    raw:
+      - regex: "ip address \\(access-lists\\)"
+      - regex: "ip next-hop 10\\.0\\.12\\.2"
+    points: 20
+
+  - name: "RT01: ローカル生成トラフィックに policy が適用されている (ip local policy)"
+    node: RT01
+    command: "show running-config | include ip local policy"
+    raw:
+      - regex: "ip local policy route-map \\S+"
+    points: 15
+
+  - name: "RT01: マッチ用 ACL が開発部 10.2.2.x を対象にしている"
+    node: RT01
+    command: "show ip access-lists"
+    raw:
+      - regex: "permit .*10\\.2\\.2\\."
+    points: 10
+
+  # --- ベースライン非破壊 -------------------------------------------
+  - name: "RT01: 3.3.3.3/32 を OSPF で学習している (到達性維持)"
+    node: RT01
+    command: "show ip route ospf"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "3.3.3.3/32"
+      source_protocol: "ospf"
+    points: 10

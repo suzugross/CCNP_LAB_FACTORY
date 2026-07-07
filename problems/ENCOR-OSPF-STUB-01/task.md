@@ -1,0 +1,46 @@
+# 問題 ENCOR-OSPF-STUB-01 : 支店ルータの RIB を最小化する
+
+## シナリオ
+HQ ネットワークでは ASBR (RT01) が大量の外部経路を OSPF に再配送しており、
+ABR (RT02) を経由する複数の支店ルータが「不要な経路で RIB を太らせている」と
+運用チームから不満が出ている。支店側の area 1 内部ルータ (RT03) について、
+**area 1 外を見るのに必要な情報を最小限まで絞り込む**設定を行え。
+
+## トポロジ
+```
+[Lo0=1.1.1.1]       [Lo0=2.2.2.2]       [Lo0=3.3.3.3]
+RT01 (ASBR) ──── RT02 (ABR) ──────── RT03
+       10.0.12.0/30      10.0.23.0/30
+        area 0             area 1
+```
+
+- RT01 ↔ RT02: `10.0.12.0/30` (RT01=.1 / RT02=.2) **area 0**
+- RT02 ↔ RT03: `10.0.23.0/30` (RT02=.1 / RT03=.2) **area 1**
+- RT01 は ASBR：`192.0.2.0/24` を static で持ち OSPF に redistribute している。
+
+## 初期状態 (確認用)
+RT03 の RIB には現在、以下がすべて見える:
+- `O IA 1.1.1.1/32` (RT01 の Lo0, area 0 由来の inter-area)
+- `O IA 2.2.2.2/32` (RT02 の Lo0, area 0 由来の inter-area)
+- `O E2 192.0.2.0/24` (RT01 の ASBR 由来 external)
+
+## 到達目標
+- RT03 が **area 1 の外** を見るために RIB に持つ OSPF 経路は、
+  **デフォルトルート 1 本だけ** にする。
+- 上記初期状態に挙げた個別の inter-area 経路 (`1.1.1.1/32` 等) や
+  external 経路 (`192.0.2.0/24`) は **RT03 の RIB に存在しないこと**。
+- RT03 ↔ RT02 の OSPF 隣接 (Full) は維持する。
+
+## 制約
+- RT01 (ASBR) は変更不可。
+- 変更してよいのは **RT02 (ABR) と RT03 のみ**。
+- area 番号 (area 0 / area 1) や OSPF プロセス ID (1) は変更しない。
+- スタティックルートやデフォルトルートの手動注入で「見せかけ」を作らないこと。
+
+## アクセス
+- RT01: `10.1.10.11` / RT02: `10.1.10.12` / RT03: `10.1.10.13`（SSH, admin/CCNP）
+
+## 採点
+```
+ansible-playbook playbooks/grade.yml -e problem=ENCOR-OSPF-STUB-01 --vault-password-file <(printf 'CCNP\n')
+```

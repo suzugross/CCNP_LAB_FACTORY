@@ -1,0 +1,25 @@
+---
+# IP SLA + Track の発展：奥の専用ビーコンを /32 で primary に固定して
+# primary 経路を end-to-end で監視する（near 監視の限界を克服）。
+# RT02-RT04(奥)の障害でも track が落ち backup へ切替わるのが IPSLA-01 との違い。
+id: ENCOR-IPSLA-02
+title: "IP SLA 発展：奥のビーコン+/32ピンで primary 全経路を監視 (deep failover)"
+exam: ENCOR
+topics: [ip-sla, track, static-route, failover, path-monitoring]
+difficulty: 5
+topology: baseline-8rt
+target_nodes: [RT01, RT02, RT03, RT04]
+points: 100
+
+# RT01(client) ─10.0.12/30─ RT02(primary ISP) ─10.0.24/30─ RT04(Internet)
+#             ╲─10.0.13/30─ RT03(backup ISP)  ─10.0.34/30─┘
+#               RT02 ─10.0.23/30─ RT03 (inter-ISP)
+#   RT04: 8.8.8.8/32 (両ISPから到達可) ＋ 100.64.0.1/32 (ヘルスビーコン)
+#   ビーコンは primary 全経路の死活専用。RT02 は Internet/ビーコンへ RT04 直結のみ。
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # 10.0.12.0/30 primary access
+    - { a: RT01, a_if: 1, b: RT03, b_if: 0 }   # 10.0.13.0/30 backup access
+    - { a: RT02, a_if: 1, b: RT03, b_if: 1 }   # 10.0.23.0/30 inter-ISP
+    - { a: RT02, a_if: 2, b: RT04, b_if: 0 }   # 10.0.24.0/30 RT02-Internet (primary uplink)
+    - { a: RT03, a_if: 2, b: RT04, b_if: 1 }   # 10.0.34.0/30 RT03-Internet (backup uplink)

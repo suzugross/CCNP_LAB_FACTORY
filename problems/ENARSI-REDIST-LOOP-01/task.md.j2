@@ -1,0 +1,42 @@
+# 問題 ENARSI-REDIST-LOOP-01 : 相互再配送のフィードバック制御
+
+## シナリオ
+社内ネットワークが 2 つのルーティングドメインに分かれている。
+
+- **OSPF area 0**: RT01 — RT02 / RT01 — RT03
+- **EIGRP AS 100**: RT02 — RT03 — RT04（RT02・RT03・RT04 が相互に接続）
+
+RT02 と RT03 は **両ドメインに接続する 2 つの境界ルータ**で、各プロトコルにネイティブ参加済み。
+2 つのドメインを相互再配送でつなぎ、全ルータが全 Loopback に到達できるようにしたい。
+
+### 会社ポリシー（変更不可）
+- 境界 RT02・RT03 の **EIGRP の管理距離は internal 90 / external 95 に固定**されている
+  （`distance eigrp 90 95`）。**この設定は変更しないこと。**
+- RT01・RT04 は**変更不可**。設定するのは **RT02・RT03 のみ**。
+
+## ゴール
+1. すべてのルータが、他の全ルータの Loopback0
+   （{{ params.rt01_lo }} / {{ params.rt02_lo }} / {{ params.rt03_lo }} / {{ params.rt04_lo }}）に到達できること。
+2. **各ルータから「相手ドメイン内部の宛先」へは、最短経路で転送されること。**
+   - ヒント無しで素直に双方向再配送だけを入れると、ある宛先が**直結や自ドメイン内に
+     より短い経路があるのに、わざわざ相手ドメインを経由する遠回り**になってしまう。
+     なぜそうなるかを `show ip route <宛先>` の学習元（プロトコル/AD）から読み解き、
+     **自ドメイン発の経路が相手ドメイン経由で優先されない**ように制御すること。
+
+## 前提（設定済み・変更不可）
+| ルータ | 役割 | Loopback0 |
+|--------|------|-----------|
+| RT01 | OSPF 内部 | {{ params.rt01_lo }}/32 |
+| RT02 | 境界 (OSPF/EIGRP, AD固定) | {{ params.rt02_lo }}/32 |
+| RT03 | 境界 (OSPF/EIGRP, AD固定) | {{ params.rt03_lo }}/32 |
+| RT04 | EIGRP 内部 | {{ params.rt04_lo }}/32 |
+
+## リンク
+- OSPF: RT01-RT02 ({{ params.seg12 }}.0/30) / RT01-RT03 ({{ params.seg13 }}.0/30)
+- EIGRP: RT02-RT03 ({{ params.seg23 }}.0/30) / RT02-RT04 ({{ params.seg24 }}.0/30) / RT03-RT04 ({{ params.seg34 }}.0/30)
+
+## 採点
+```
+ansible-playbook playbooks/grade.yml -e problem=ENARSI-REDIST-LOOP-01 [-e variant=<name>] --vault-password-file <(printf 'CCNP\n')
+```
+採点は **効果のみ**で行う（到達性・最短転送・再配送が双方向に機能しているか）。手段は問わない。

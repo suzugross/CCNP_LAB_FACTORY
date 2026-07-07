@@ -1,0 +1,138 @@
+---
+# 採点: grading.yml の checks を実行し、合否とスコアを出力する。
+# 使い方: ansible-playbook playbooks/grade.yml -e problem=ENCOR-OSPF-01
+#         [-e max_attempts=10] [-e settle_delay=9]
+#
+# 収束待ち（アサート再試行型）:
+#   show 取得 → topologies/grade.py で構造化判定 を、全チェック PASS になるか
+#   max_attempts に達するまで settle_delay 秒間隔で繰り返す（OSPF/HSRP の収束待ち）。
+#   判定は pyATS Genie 構造化 + フィールドアサート（部分文字列一致ではない）。
+
+- name: 採点準備（基準読込・接続先解決）
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+    problem_dir: "{{ repo }}/problems/{{ problem }}"
+  tasks:
+    - ansible.builtin.include_vars: { file: "{{ problem_dir }}/problem.yml", name: pmeta }
+
+    - name: variant パラメータを読み込む（params/<variant>.yml。無ければ未定義＝従来問題はparams不使用）
+      ansible.builtin.include_vars:
+        file: "{{ problem_dir }}/params/{{ variant | default('base') }}.yml"
+        name: params
+      when: (problem_dir ~ '/params/' ~ (variant | default('base')) ~ '.yml') is exists
+
+    - name: grading をレンダリング（grading.yml.j2 があれば params で描画、無ければ静的 grading.yml）
+      ansible.builtin.template:
+        src: "{{ problem_dir }}/grading.yml.j2"
+        dest: "{{ repo }}/topologies/_generated/{{ problem }}/grading.rendered.yml"
+      when: (problem_dir ~ '/grading.yml.j2') is exists
+
+    - ansible.builtin.include_vars:
+        file: "{{ (problem_dir ~ '/grading.yml.j2') is exists | ternary(repo ~ '/topologies/_generated/' ~ problem ~ '/grading.rendered.yml', problem_dir ~ '/grading.yml') }}"
+        name: grading
+    - ansible.builtin.include_vars: { file: "{{ repo }}/topologies/_generated/{{ problem }}/mgmt_map.yml", name: mgmt_map }
+
+    - name: 収集方式を決定（problem.yml の access。既定 ssh / telnet・console=SSH不可ノード）
+      ansible.builtin.set_fact:
+        access: "{{ pmeta.access | default('ssh') }}"
+
+    - name: 各チェックに既定(genie_os 等)と接続先を併合した checks を作る
+      ansible.builtin.set_fact:
+        checks: >-
+          {{ checks | default([]) + [
+               (grading.defaults | default({})) | combine(item) | combine({'ansible_host': mgmt_map[item.node]})
+             ] }}
+      loop: "{{ grading.checks | default([]) }}"
+      loop_control: { label: "{{ item.node }}: {{ item.name }}" }
+
+    - name: 大域不変条件（軸1）= model / invariants / 採点対象ノードを確定
+      ansible.builtin.set_fact:
+        invariants: "{{ grading.invariants | default([]) }}"
+        gmodel: "{{ grading.model | default({}) }}"
+        genie_os: "{{ (grading.defaults | default({})).genie_os | default('iosxe') }}"
+        rib_nodes: "{{ (grading.model | default({})).loopbacks | default({}) | dict2items | map(attribute='key') | list }}"
+
+    - name: shell 採点ノード(Linux)を特定（指紋照合の取得方式振分け用）
+      ansible.builtin.set_fact:
+        shell_nodes: "{{ grading.checks | default([]) | selectattr('exec', 'defined')
+                         | selectattr('exec', 'equalto', 'shell')
+                         | map(attribute='node') | unique | list }}"
+
+    - name: 採点対象ノードに ansible_host を付与（delegate 接続用・ssh のみ。checks＋invariant の全 RIB ノード）
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups: _graded
+        ansible_host: "{{ mgmt_map[item] }}"
+        labid_exec: "{{ 'shell' if item in shell_nodes else 'ios' }}"
+      loop: "{{ (checks | default([]) | map(attribute='node') | list) + rib_nodes | unique | list }}"
+      loop_control: { label: "{{ item }} -> {{ mgmt_map[item] }}" }
+      when: access == 'ssh'
+
+# === ラボ指紋の照合（誤ラボ採点の決定的防御） ================================
+# baseline が焼き込んだ labid（IOS: alias exec labid / Linux: /etc/ccnp-lab-id）を
+# 採点前に照合する。MGMT IP が別ラボに当たっていれば別ラボの labid が返り即中止＝
+# 台帳バグ・teardown 漏れがあっても「別問題を静かに誤採点」は構造的に起きない。
+# 指紋が無い(台帳導入前の旧build/到達不能)場合は警告のみで続行（後方互換）。
+- name: ラボ指紋の照合（ssh のみ。telnet は collect_telnet.py 内 / console はラボ名解決で対象外）
+  hosts: _graded
+  gather_facts: false
+  any_errors_fatal: true   # 1台でも別ラボ検知 → プレイブック全体を中止（採点に進まない）
+  vars:
+    expected_labid: "CCNP-LAB-{{ (problem | hash('md5'))[:8] }}"
+  tasks:
+    - name: labid を取得（IOS）
+      cisco.ios.ios_command:
+        commands: ["show running-config | include alias exec labid"]
+      register: fp_ios
+      changed_when: false
+      failed_when: false
+      when: labid_exec == 'ios'
+    - name: labid を取得（Linux）
+      ansible.builtin.command: cat /etc/ccnp-lab-id
+      register: fp_sh
+      changed_when: false
+      failed_when: false
+      when: labid_exec == 'shell'
+    - name: 照合（別ラボの labid が返ったら採点中止）
+      vars:
+        fp_text: "{{ (fp_ios.stdout[0] if (fp_ios.stdout | default([])) | length > 0
+                      else (fp_sh.stdout | default(''))) | default('') }}"
+      ansible.builtin.assert:
+        that: "(expected_labid in fp_text) or ('CCNP-LAB-' not in fp_text)"
+        fail_msg: >-
+          ★誤ラボ検知: {{ inventory_hostname }}({{ ansible_host }}) の labid は
+          「{{ fp_text | trim }}」・期待は {{ expected_labid }}。MGMT IP が別ラボに
+          当たっています。mgmt_alloc.py status / gc で台帳と CML を突合してください（採点を中止）。
+        success_msg: >-
+          {{ ('labid OK: ' ~ expected_labid) if expected_labid in fp_text
+             else '指紋なし(台帳導入前の旧build or 到達不能)→照合スキップ' }}
+
+- name: 収束待ち付き採点
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+    gen_dir: "{{ repo }}/topologies/_generated/{{ problem }}"
+    max_attempts: 10
+    settle_delay: 9
+  tasks:
+    - name: 全チェック PASS まで（または最大試行まで）採点を繰り返す
+      ansible.builtin.include_tasks:
+        file: "{{ ('_grade_attempt_' ~ access ~ '.yml') if access in ['telnet', 'console'] else '_grade_attempt.yml' }}"
+      loop: "{{ range(max_attempts | int) | list }}"
+      loop_control:
+        loop_var: attempt
+        label: "attempt {{ attempt + 1 }}/{{ max_attempts }}"
+      when: not (converged | default(false))
+
+    - name: 最終結果
+      ansible.builtin.debug:
+        msg: "{{ last_report | default(['(採点未実行)']) }}"
+
+    - name: 収束したか
+      ansible.builtin.debug:
+        msg: >-
+          {{ '✅ 全チェック PASS で収束' if (converged | default(false))
+             else '⚠ ' ~ (max_attempts | string) ~ ' 回試行しても全 PASS に至らず（上の未充足を参照）' }}

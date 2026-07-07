@@ -1,0 +1,55 @@
+---
+# 採点基準（パラメータ化テンプレート）。値は params/<variant>.yml 由来。
+# 再配送の核心 = 相手ドメインの経路が外部経路コード(O E2 / D EX)で現れること。
+problem: ENCOR-REDIST-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: {{ params.rt03_lo }}/32 を OSPF 外部経路(O E2)で学習 (EIGRP→OSPF 再配送, via {{ params.seg12 }}.2)"
+    node: RT01
+    command: "show ip route ospf"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.rt03_lo }}/32"
+      source_protocol: "ospf"
+      source_protocol_codes: { contains: "E" }
+      next_hop.next_hop_list.*.next_hop: "{{ params.seg12 }}.2"
+    points: 30
+
+  - name: "RT03: {{ params.rt01_lo }}/32 を EIGRP 外部経路(D EX)で学習 (OSPF→EIGRP 再配送, via {{ params.seg23 }}.1)"
+    node: RT03
+    command: "show ip route eigrp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.rt01_lo }}/32"
+      source_protocol: "eigrp"
+      source_protocol_codes: { contains: "EX" }
+      next_hop.next_hop_list.*.next_hop: "{{ params.seg23 }}.1"
+    points: 30
+
+  - name: "RT01: {{ params.rt02_lo }}/32 を OSPF で学習 (RT02 ループバック, via {{ params.seg12 }}.2)"
+    node: RT01
+    command: "show ip route ospf"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.rt02_lo }}/32"
+      source_protocol: "ospf"
+      next_hop.next_hop_list.*.next_hop: "{{ params.seg12 }}.2"
+    points: 20
+
+  - name: "RT03: {{ params.rt02_lo }}/32 を EIGRP で学習 (RT02 ループバック, via {{ params.seg23 }}.1)"
+    node: RT03
+    command: "show ip route eigrp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.rt02_lo }}/32"
+      source_protocol: "eigrp"
+      next_hop.next_hop_list.*.next_hop: "{{ params.seg23 }}.1"
+    points: 20

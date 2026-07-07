@@ -1,0 +1,32 @@
+{
+  "_comment": "模範解答。境界RT02/RT03で双方向再配送。OSPF発経路に tag 110 を付け(SET_TAG)、境界のEIGRP inboundで tag 110 を遮断(BLOCK_TAG)することで、境界が自ドメイン発経路をEIGRP外部(AD95)で拾わずOSPFネイティブを使う＝次善経路を除去。ADは変更不可(会社ポリシー)。route-mapを先に作ってからrouter配下で参照する順序。",
+  "nodes": {},
+  "filters": [
+    {
+      "node": "RT02",
+      "blocks": [
+        { "parents": null, "lines": [
+          "route-map SET_TAG permit 10", " set tag 110",
+          "route-map BLOCK_TAG deny 10", " match tag 110",
+          "route-map BLOCK_TAG permit 20" ] },
+        { "parents": "router ospf 1", "lines": ["redistribute eigrp 100 subnets"] },
+        { "parents": "router eigrp 100", "lines": [
+          "redistribute ospf 1 metric 100000 100 255 1 1500 route-map SET_TAG",
+          "distribute-list route-map BLOCK_TAG in" ] }
+      ]
+    },
+    {
+      "node": "RT03",
+      "blocks": [
+        { "parents": null, "lines": [
+          "route-map SET_TAG permit 10", " set tag 110",
+          "route-map BLOCK_TAG deny 10", " match tag 110",
+          "route-map BLOCK_TAG permit 20" ] },
+        { "parents": "router ospf 1", "lines": ["redistribute eigrp 100 subnets"] },
+        { "parents": "router eigrp 100", "lines": [
+          "redistribute ospf 1 metric 100000 100 255 1 1500 route-map SET_TAG",
+          "distribute-list route-map BLOCK_TAG in" ] }
+      ]
+    }
+  ]
+}

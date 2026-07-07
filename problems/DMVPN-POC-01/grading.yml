@@ -1,0 +1,77 @@
+---
+# 採点基準 (DMVPN-POC-01 / Phase 2 マルチスポーク, 暗号なし)。
+#  ・ハブに両スポークが登録され UP            … show dmvpn を raw 判定
+#  ・各スポークでハブが UP                      … show dmvpn raw
+#  ・Phase 2 署名: 対向スポーク経路の next-hop が「ハブでなく対向スポーク」
+#                                              … show ip route を Genie 構造化
+#  ・支店間ダイレクト通信(データプレーン)       … 能動 ping (Lo0→対向Lo0)
+# RT04(WAN transit) は変更禁止のため採点対象外。収集は CML コンソール経由。
+problem: DMVPN-POC-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01(Hub): 両スポークが登録され DMVPN セッションが UP"
+    node: RT01
+    command: "show dmvpn"
+    raw:
+      - contains: "Type:Hub"
+      - regex: "10\\.0\\.24\\.1\\s+10\\.255\\.0\\.2\\s+UP"
+      - regex: "10\\.0\\.34\\.1\\s+10\\.255\\.0\\.3\\s+UP"
+    points: 20
+
+  - name: "RT02(Spoke1): DMVPN セッションが Spoke として確立しハブが UP"
+    node: RT02
+    command: "show dmvpn"
+    raw:
+      - contains: "Type:Spoke"
+      - regex: "10\\.0\\.14\\.1\\s+10\\.255\\.0\\.1\\s+UP"
+    points: 10
+
+  - name: "RT03(Spoke2): DMVPN セッションが Spoke として確立しハブが UP"
+    node: RT03
+    command: "show dmvpn"
+    raw:
+      - contains: "Type:Spoke"
+      - regex: "10\\.0\\.14\\.1\\s+10\\.255\\.0\\.1\\s+UP"
+    points: 10
+
+  - name: "RT02(Spoke1): 3.3.3.3/32 を EIGRP 学習し next-hop が対向スポーク(10.255.0.3)"
+    node: RT02
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "3.3.3.3/32"
+      source_protocol: eigrp
+      next_hop.next_hop_list.*.next_hop: "10.255.0.3"
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel0
+    points: 15
+
+  - name: "RT03(Spoke2): 2.2.2.2/32 を EIGRP 学習し next-hop が対向スポーク(10.255.0.2)"
+    node: RT03
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "2.2.2.2/32"
+      source_protocol: eigrp
+      next_hop.next_hop_list.*.next_hop: "10.255.0.2"
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel0
+    points: 15
+
+  - name: "RT02(Spoke1): 支店間ダイレクトで RT03 の Loopback0 に疎通 (能動)"
+    node: RT02
+    command: "ping 3.3.3.3 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 15
+
+  - name: "RT03(Spoke2): 支店間ダイレクトで RT02 の Loopback0 に疎通 (能動)"
+    node: RT03
+    command: "ping 2.2.2.2 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 15

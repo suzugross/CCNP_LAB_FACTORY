@@ -1,0 +1,48 @@
+---
+# 問題デプロイ: baseline + 問題別 initial config を投入する。
+# 使い方: ansible-playbook playbooks/deploy.yml -e problem=ENCOR-OSPF-01
+#
+# Phase 1 で CML 構築フェーズ(cisco.cml.build)を前段に追加する。
+# 現状は「CMLは構築済み・MGMT到達済み」を前提に config 投入のみを行う骨子。
+
+- name: 問題メタを読み込む
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+    problem_dir: "{{ repo }}/problems/{{ problem }}"
+  tasks:
+    - name: problem.yml を読み込む
+      ansible.builtin.include_vars:
+        file: "{{ problem_dir }}/problem.yml"
+        name: pmeta
+    - ansible.builtin.include_vars:
+        file: "{{ repo }}/topologies/_generated/{{ problem }}/mgmt_map.yml"
+        name: mgmt_map
+    - name: 対象ノードを表示
+      ansible.builtin.debug:
+        msg: "deploy {{ pmeta.id }} -> {{ pmeta.target_nodes | join(', ') }}"
+    - name: 対象ノードだけの一時グループを作成（mgmt_map と image_family を付与）
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups: _target
+        ansible_host: "{{ mgmt_map[item] }}"
+        image_family: "{{ pmeta.image_family | default(omit) }}"
+      loop: "{{ pmeta.target_nodes }}"
+
+- name: baseline を投入
+  hosts: _target
+  gather_facts: false
+  roles:
+    - baseline
+
+- name: 問題別 initial config を投入
+  hosts: _target
+  gather_facts: false
+  vars:
+    problem_dir: "{{ playbook_dir }}/../problems/{{ problem }}"
+  tasks:
+    - name: initial/<host>.cfg.j2 を投入（インタフェース名は image_family で解決）
+      cisco.ios.ios_config:
+        src: "{{ problem_dir }}/initial/{{ inventory_hostname }}.cfg.j2"
+      when: (problem_dir ~ '/initial/' ~ inventory_hostname ~ '.cfg.j2') is exists

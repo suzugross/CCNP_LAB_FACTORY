@@ -1,0 +1,35 @@
+! ENCOR-EIGRP-VARIANCE-01 初期 (RT01) — 源ルータ。EIGRP構成済み・単一経路で到達済み。
+!   links[0]=RT02(successor) / links[1]=RT03(FS・高遅延) / links[2]=RT05(非FS)
+interface Loopback0
+ ip address 10.1.1.1 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 (10.12.12.0/30) ===
+ ip address 10.12.12.1 255.255.255.252
+ delay 10
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (10.13.13.0/30) high-latency ===
+ ip address 10.13.13.1 255.255.255.252
+ delay 3000
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT05 (10.15.15.0/30) ===
+ ip address 10.15.15.1 255.255.255.252
+ delay 10
+ no shutdown
+!
+router eigrp VAR
+ address-family ipv4 unicast autonomous-system 100
+  af-interface Loopback0
+   passive-interface
+  exit-af-interface
+  eigrp router-id 10.1.1.1
+  network 10.1.1.1 0.0.0.0
+  network 10.12.12.0 0.0.0.3
+  network 10.13.13.0 0.0.0.3
+  network 10.15.15.0 0.0.0.3
+ exit-address-family
+!

@@ -1,0 +1,43 @@
+---
+problem: ENARSI-BGP-MED-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: eBGP ネイバー RT02 primary (10.1.12.2) が Established"
+    node: RT01
+    command: "show ip bgp neighbors 10.1.12.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "10.1.12.2"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 15
+
+  - name: "RT01: eBGP ネイバー RT02 backup (10.1.122.2) が Established"
+    node: RT01
+    command: "show ip bgp neighbors 10.1.122.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "10.1.122.2"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 15
+
+  - name: "RT02: 10.100.0.0/24 の best path に metric 10 (=MED) が乗っている"
+    node: RT02
+    command: "show ip bgp 10.100.0.0/24"
+    raw:
+      - regex: "metric 10,.+best"
+    points: 35
+
+  - name: "RT02: 10.100.0.0/24 の RIB best path が primary 経由 (next-hop=10.1.12.1)"
+    node: RT02
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "10.100.0.0/24"
+      source_protocol: "bgp"
+      next_hop.next_hop_list.*.next_hop: "10.1.12.1"
+    points: 35

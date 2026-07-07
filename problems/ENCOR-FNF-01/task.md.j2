@@ -1,0 +1,53 @@
+# 問題 ENCOR-FNF-01 : Flexible NetFlow の基本構成
+
+## シナリオ
+ネットワークの可視化のため、中継ルータ **RT02** で通過トラフィックを
+**Flexible NetFlow (FNF)** で計測したい。RT02 に入ってくる（RT01 側からの）
+トラフィックのフローを採取し、コレクタへエクスポートできるよう構成せよ。
+
+```
+RT01({{ params.rt01_lo }}) ──{{ params.seg12 }}.0/30── RT02(FNF) ──{{ params.seg23 }}.0/30── RT03({{ params.rt03_lo }})
+                                 監視: RT01 向け IF の ingress
+```
+
+## 既設構成（変更しないこと）
+- OSPF area 0 が全ルータに設定済みで、Loopback0 同士は到達可能。
+  - Loopback0: RT01=`{{ params.rt01_lo }}` / RT02=`{{ params.rt02_lo }}` / RT03=`{{ params.rt03_lo }}`
+- RT02 の IF: **`Ethernet0/0` = RT01 向け**（ここの ingress を監視する）/ `Ethernet0/1` = RT03 向け。
+
+## 到達目標（RT02 にのみ設定）
+Flexible NetFlow の 3 要素を構成し、インタフェースへ適用する:
+
+1. **フローレコード** … キーに**少なくとも 送信元 IPv4 アドレスと宛先 IPv4 アドレス**を含め、
+   さらに以下も match すること: {% for k in params.extra_match_keys %}`{{ k }}`{% if not loop.last %}, {% endif %}{% endfor %}。
+   収集(collect)する項目: {% for c in params.collect_fields %}`{{ c }}`{% if not loop.last %}, {% endif %}{% endfor %}。
+2. **フローエクスポータ** … コレクタへ UDP でエクスポートする。
+3. **フローモニタ** … 上記レコードとエクスポータを束ねる。
+{% if params.sampler.enabled %}
+4. **サンプラー** … `{{ params.sampler.mode }}` のサンプラーを作成し、フローモニタ適用時に併用する。
+5. **適用** … RT02 の **RT01 向け IF (`Ethernet0/0`) の ingress** にフローモニタ（サンプラー付き）を適用する。
+{% else %}
+4. **適用** … RT02 の **RT01 向け IF (`Ethernet0/0`) の ingress** にフローモニタを適用する。
+{% endif %}
+
+設定後、RT01→RT03 のトラフィックを流すと、RT02 のフローモニタの**キャッシュに
+該当フロー（送信元 {{ params.rt01_lo }} / 宛先 {{ params.rt03_lo }}）が現れる**こと。
+
+## 指定値（採点が固定値で判定するため必ず従うこと）
+- フローレコード名: **`{{ params.rec_name }}`**
+- フローエクスポータ名: **`{{ params.exp_name }}`** / コレクタ宛先: **`{{ params.collector_ip }}`** / **UDP `{{ params.udp_port }}`**
+- フローモニタ名: **`{{ params.mon_name }}`**
+{% if params.sampler.enabled %}- サンプラー名: **`{{ params.sampler.name }}`** / モード: **`{{ params.sampler.mode }}`**
+{% endif %}- 監視対象: **`Ethernet0/0`** の **ingress (input)**
+
+## 制約
+- OSPF / アドレッシングは変更しない。設定するのは RT02 の FNF のみ。
+- コレクタ `{{ params.collector_ip }}` は実在しなくてよい（エクスポート先の指定のみ。
+  動作確認はキャッシュで行う）。
+
+## 採点
+```
+ansible-playbook playbooks/grade.yml -e problem=ENCOR-FNF-01{% if (variant | default('base')) != 'base' %} -e variant={{ variant }}{% endif %} --vault-password-file <(printf 'CCNP\n')
+```
+> 採点では RT01→RT03 の能動 ping を流し、RT02 のフローモニタ cache に
+> 該当フローが採取されることまで確認する。

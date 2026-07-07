@@ -1,0 +1,41 @@
+! GEN-CHAIN-9000 初期 (RT06) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 19.19.19.19 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT04 ===
+ ip address 10.52.217.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT02 ===
+ ip address 10.141.104.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT09 ===
+ ip address 10.14.210.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 19.19.19.19
+ network 19.19.19.19 0.0.0.0 area 0
+ network 10.52.217.0 0.0.0.3 area 0
+ network 10.141.104.0 0.0.0.3 area 0
+ network 10.14.210.0 0.0.0.3 area 0
+!
+router bgp 65001
+ bgp router-id 19.19.19.19
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 77.77.77.77 remote-as 65001
+ neighbor 77.77.77.77 update-source Loopback0
+ neighbor 5.5.5.5 remote-as 65001
+ neighbor 5.5.5.5 update-source Loopback0
+ address-family ipv4
+  neighbor 77.77.77.77 activate
+  neighbor 77.77.77.77 send-community
+  neighbor 5.5.5.5 activate
+  neighbor 5.5.5.5 send-community
+ exit-address-family
+!

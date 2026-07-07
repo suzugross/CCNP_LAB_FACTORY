@@ -1,0 +1,59 @@
+! GEN-CHAIN-9600 初期 (RT09) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 83.83.83.83 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT06 ===
+ ip address 10.216.162.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT08 ===
+ ip address 172.30.67.5 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT07 ===
+ ip address 172.30.233.2 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 83.83.83.83
+ network 83.83.83.83 0.0.0.0 area 0
+ network 10.216.162.0 0.0.0.3 area 0
+!
+router ospf 2
+ router-id 2.83.83.83
+ network 172.30.67.4 0.0.0.3 area 0
+ network 172.30.233.0 0.0.0.3 area 0
+ redistribute bgp 65001 subnets route-map RM-B2E
+!
+ip prefix-list PL-EAST seq 5 permit 172.21.0.0/24
+ip prefix-list PL-EAST seq 10 permit 172.21.1.0/24
+ip prefix-list PL-EAST seq 15 permit 12.12.12.12/32
+route-map RM-E2B deny 5
+ match tag 65001
+route-map RM-E2B permit 10
+ match ip address prefix-list PL-EAST
+ set community 65001:200
+ set ip next-hop 83.83.83.83
+route-map RM-B2E permit 10
+ set tag 65001
+!
+router bgp 65001
+ bgp router-id 83.83.83.83
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 68.68.68.68 remote-as 65001
+ neighbor 68.68.68.68 update-source Loopback0
+ neighbor 35.35.35.35 remote-as 65001
+ neighbor 35.35.35.35 update-source Loopback0
+ address-family ipv4
+  neighbor 68.68.68.68 activate
+  neighbor 68.68.68.68 send-community
+  neighbor 35.35.35.35 activate
+  neighbor 35.35.35.35 send-community
+  redistribute ospf 2 route-map RM-E2B
+  bgp redistribute-internal
+ exit-address-family
+!

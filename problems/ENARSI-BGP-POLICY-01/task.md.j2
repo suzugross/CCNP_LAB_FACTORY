@@ -1,0 +1,71 @@
+# 問題 ENARSI-BGP-POLICY-01 : デュアルISPの BGP 経路ポリシー設計
+
+## シナリオ
+あなたは **AS{{ params.as_cust }}**（RT01/RT02/RT03）の運用者である。
+ISP-A **RT04 (AS{{ params.as_ispa }})**・ISP-B **RT05 (AS{{ params.as_ispb }})**・
+上流 **RT06 (AS{{ params.as_up }})** の機器にはログインできない。
+経営判断により「通常のインターネット通信は ISP-A 優先・特定サービスのみ ISP-B」
+という経路ポリシーを **AS{{ params.as_cust }} 側の設定だけで**実現することになった。
+
+```
+                RT06 (AS{{ params.as_up }} 上流)  ← 192.0.2.0/24, 203.0.113.0/24, 198.18.100.0/24 を広告
+               /    \
+   (ISP-A) RT04     RT05 (ISP-B)
+           /  \        \
+       RT01    RT02 ----+
+（edge-A 主系）  \ （edge-B: ISP-A待機 + ISP-B）
+          \     /
+           RT03  （内部コア・eBGPなし）      ← AS{{ params.as_cust }}
+```
+
+## 構成（初期状態で投入済み）
+| ルータ | 役割 | Loopback0 | 備考 |
+|--------|------|-----------|------|
+| RT01 | edge-A | {{ params.rt01_lo }}/32 | ISP-A と eBGP **確立済み**（ポリシーなし） |
+| RT02 | edge-B | {{ params.rt02_lo }}/32 | ISP-A / ISP-B と eBGP **確立済み**（ポリシーなし） |
+| RT03 | 内部コア | {{ params.rt03_lo }}/32 | BGP 未設定。顧客セグメント Lo10=**{{ params.cust_net }}.1/25**・Lo11=**{{ params.cust_net }}.129/25** を保持 |
+| RT04 | ISP-A | {{ params.rt04_lo }}/32 | **変更不可** |
+| RT05 | ISP-B | {{ params.rt05_lo }}/32 | **変更不可** |
+| RT06 | 上流 | {{ params.rt06_lo }}/32 | **変更不可** |
+
+- AS内 IGP（OSPF area 0）は Lo0 と内部リンクで**構成済み**。
+- 外部リンク: RT01–RT04 {{ params.seg14 }}.0/30 ・ RT02–RT04 {{ params.seg24 }}.0/30 ・
+  RT02–RT05 {{ params.seg25 }}.0/30（各 .1=顧客側 / .2=ISP側）
+- 内部リンク: RT01–RT03 {{ params.seg13 }}.0/30 ・ RT02–RT03 {{ params.seg23 }}.0/30
+
+## 要件 — AS{{ params.as_cust }} の3台のみ設定
+1. AS{{ params.as_cust }} 内の BGP を完成させること。内部ピアリングは **Loopback0 間**で行い、
+   物理リンク1本の障害でセッションが失われない構成とすること。
+   eBGP を持たない RT03 からもインターネット経路が利用できること。
+2. 外部から学習した経路には、学習元 ISP が判別できるよう community を付与すること:
+   **ISP-A 由来 = {{ params.comm_a }} / ISP-B 由来 = {{ params.comm_b }}**。
+   この community は AS 内の**全ルータ**で確認できる状態にすること。
+3. インターネット向きトラフィックは、**AS 内のどのルータから発しても**
+   RT01–ISP-A リンクから外に出ること（RT02–ISP-A リンクは待機系とする）。
+4. ただし **{{ params.beacon_b }}.0/24 宛だけ**は、AS 内のどのルータから発しても
+   RT02–ISP-B リンクから外に出ること。
+5. 自社プレフィックスは **{{ params.cust_net }}.0/24 の集約のみ**を外部へ広告すること
+   （/25 が外部に見えてはならない）。集約は**両エッジ**から行い、どちらのエッジ経由でも
+   外部から自社に到達できるようにすること。
+6. インターネット側から自社宛のトラフィックが、**ISP-A 網内では RT01 側リンクに入る**よう
+   AS{{ params.as_cust }} から制御すること。ただし **AS-path 長を変える手段は禁止**。
+7. ISP から受信する経路のうち、**RFC1918 と、/24 より長いプレフィックス**は
+   BGP テーブルに載せないこと（正当なインターネット経路まで消さないこと）。
+8. 完了時、RT03 の顧客セグメント（Lo10/Lo11 発）から RT06 の各サービス
+   （192.0.2.1 / 203.0.113.1 / 198.18.100.1）へ到達できること。
+
+## 制約
+- 社内標準により、BGP 設定は **AF方式**（セッション定義は `router bgp` 直下、
+  経路交換・ポリシーは `address-family ipv4` 配下）で行うこと。既存設定もこの方式である。
+- RT04 / RT05 / RT06 は**変更不可**（読み取りは自由）。
+- AS{{ params.as_cust }} 側でも**スタティックルートの追加は禁止**。
+- 既存の eBGP セッション・IGP・インタフェースは削除しないこと。
+- ポリシー変更を既存セッションへ反映させる操作は各自で行うこと。
+
+## アクセス
+SSH `SUZUKI / CCNP`（管理IPは出題時に提示）。CML コンソールでも可。
+
+## 採点
+```
+ansible-playbook playbooks/grade.yml -e problem=ENARSI-BGP-POLICY-01 --vault-password-file <(printf 'CCNP\n')
+```

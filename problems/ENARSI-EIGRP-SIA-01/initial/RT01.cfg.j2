@@ -1,0 +1,31 @@
+! RT01 — E0/1(→RT03) 受信方向に EIGRP ユニキャスト遮断 ACL（マルチキャストHelloのみ許可）
+ip access-list extended EIGRP-MCAST-ONLY
+ permit eigrp any host 224.0.0.10
+ deny   eigrp any any
+ permit ip any any
+!
+interface Loopback0
+ ip address 10.1.1.1 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 (healthy) ===
+ ip address 10.12.12.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 ===
+ ip address 10.13.13.1 255.255.255.252
+ ip access-group EIGRP-MCAST-ONLY in
+ no shutdown
+!
+router eigrp SIA
+ address-family ipv4 unicast autonomous-system 100
+  af-interface Loopback0
+   passive-interface
+  exit-af-interface
+  eigrp router-id 10.1.1.1
+  network 10.1.1.1 0.0.0.0
+  network 10.12.12.0 0.0.0.3
+  network 10.13.13.0 0.0.0.3
+ exit-address-family
+!

@@ -1,0 +1,25 @@
+! ENCOR-REDIST-01 初期状態 (RT02) : 境界ルータ(ASBR)。OSPF と EIGRP の両方が構築済み。
+! ★再配送は未設定 = 受験者が解く部分（RT02 のみ）。値は params/<variant>.yml 由来。
+!   links[0] = RT01 向け (OSPF) / links[1] = RT03 向け (EIGRP)
+interface Loopback0
+ ip address {{ params.rt02_lo }} 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 (OSPF) ===
+ ip address {{ params.seg12 }}.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (EIGRP) ===
+ ip address {{ params.seg23 }}.1 255.255.255.252
+ no shutdown
+!
+router ospf {{ params.ospf_pid }}
+ network {{ params.seg12 }}.0 0.0.0.3 area {{ params.area }}
+ network {{ params.rt02_lo }} 0.0.0.0 area {{ params.area }}
+!
+router eigrp {{ params.eigrp_as }}
+ no auto-summary
+ network {{ params.seg23 }}.0 0.0.0.3
+ network {{ params.rt02_lo }} 0.0.0.0
+!

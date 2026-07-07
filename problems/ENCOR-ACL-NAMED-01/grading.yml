@@ -1,0 +1,50 @@
+---
+# 採点基準 (ENCOR-ACL-NAMED-01)。
+# 既存 WEB-FILTER(seq10 permit ip any any, Eth0/0 inbound) に対し、
+# deny tcp any host 3.3.3.3 eq telnet を seq<10 で挿入させる(first-match)。
+# 末尾に追加(seq20)すると permit が先にマッチして deny が効かない=順序チェックでFAIL。
+problem: ENCOR-ACL-NAMED-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT02: WEB-FILTER が Eth0/0 に inbound 適用されたまま"
+    node: RT02
+    command: "show running-config interface Ethernet0/0"
+    raw:
+      - regex: "ip access-group +WEB-FILTER +in"
+    points: 15
+
+  - name: "RT02: WEB-FILTER に Telnet(tcp 23) を deny する ACE がある"
+    node: RT02
+    command: "show ip access-lists WEB-FILTER"
+    parser: "show ip access-lists"
+    find: "*.aces.*"
+    match:
+      actions.forwarding: deny
+      matches.l3.ipv4.protocol: tcp
+      matches.l4.tcp.destination_port.operator.port: 23
+    points: 25
+
+  - name: "RT02: deny の宛先が host 3.3.3.3"
+    node: RT02
+    command: "show ip access-lists WEB-FILTER"
+    raw:
+      - regex: "deny +tcp .*host +3\\.3\\.3\\.3 +eq +(23|telnet)"
+    points: 15
+
+  - name: "RT02: deny が permit ip any any より前に並んでいる (first-match)"
+    node: RT02
+    command: "show ip access-lists WEB-FILTER"
+    raw:
+      - regex: "deny +tcp[^\\n]*host +3\\.3\\.3\\.3[^\\n]*eq +(?:23|telnet)[\\s\\S]*permit +ip +any +any"
+    points: 30
+
+  - name: "RT02: 既存の permit ip any any が残っている (作り直していない)"
+    node: RT02
+    command: "show ip access-lists WEB-FILTER"
+    raw:
+      - regex: "permit +ip +any +any"
+    points: 15

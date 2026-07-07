@@ -1,0 +1,38 @@
+#!/bin/bash
+# SRV01 (DNS/DHCP サーバ素体) 初期化 — 生成: gen_dnsdhcp_build.py
+set -e
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[$(date -Is)] $*"; }
+
+log "in-band NIC / 社内への経路を netplan で永続化（reboot 耐性）"
+rm -f /etc/netplan/50-cloud-init.yaml
+cat > /etc/netplan/60-ccnp.yaml <<'EOF'
+network:
+  version: 2
+  ethernets:
+    ens2:
+      addresses: [{{ mgmt_ip }}/{{ mgmt_prefixlen }}]
+      routes:
+        - to: default
+          via: {{ mgmt_gw }}
+      nameservers:
+        addresses: {{ mgmt_dns | to_json }}
+    ens3:
+      addresses: [10.99.0.2/30]
+      routes:
+        - to: 10.1.12.0/30
+          via: 10.99.0.1
+        - to: 192.168.38.0/24
+          via: 10.99.0.1
+EOF
+chmod 600 /etc/netplan/60-ccnp.yaml
+netplan apply
+
+log "パッケージ導入 (bind9 / isc-dhcp-server / dnsutils)"
+for i in 1 2 3; do
+  apt-get update -qq && \
+  apt-get install -y -qq bind9 bind9utils isc-dhcp-server dnsutils && break
+  sleep 10
+done
+# isc-dhcp-server は未設定のため起動失敗のまま = 正常（構築は受験者の課題）
+log "DONE"

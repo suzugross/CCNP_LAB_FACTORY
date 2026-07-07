@@ -1,0 +1,88 @@
+---
+# 採点基準 (ENCOR-VRF-TS-01)。収集=ssh(iol-xe ルータ)。RT01=変更対象 / RT02=固定CE。
+# 効果ベース: VRF存在 + リーク後の各VRF RIB(genie) + 分離(not in table) + 能動ping(到達/分離)。
+problem: ENCOR-VRF-TS-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # --- VRF の存在 ---
+  - name: "RT01: VRF RED / BLUE / SHARED が定義されている"
+    node: RT01
+    command: "show vrf"
+    raw:
+      - regex: "\\bRED\\b"
+      - regex: "\\bBLUE\\b"
+      - regex: "\\bSHARED\\b"
+    points: 10
+
+  # --- リーク成立: 共有サービス(100.64.0.1)が RED/BLUE に入る ---
+  - name: "RT01: VRF RED の RIB に共有サービス 100.64.0.1/32 がリークされている"
+    node: RT01
+    command: "show ip route vrf RED"
+    parser: "show ip route"
+    find: "vrf.RED.address_family.*.routes.*"
+    match:
+      route: "100.64.0.1/32"
+    points: 12
+
+  - name: "RT01: VRF BLUE の RIB に共有サービス 100.64.0.1/32 がリークされている"
+    node: RT01
+    command: "show ip route vrf BLUE"
+    parser: "show ip route"
+    find: "vrf.BLUE.address_family.*.routes.*"
+    match:
+      route: "100.64.0.1/32"
+    points: 12
+
+  # --- リーク成立: 両顧客拠点が SHARED に入る(戻り経路) ---
+  - name: "RT01: VRF SHARED の RIB に RED 顧客 172.16.1.0/24 がリークされている"
+    node: RT01
+    command: "show ip route vrf SHARED"
+    parser: "show ip route"
+    find: "vrf.SHARED.address_family.*.routes.*"
+    match:
+      route: "172.16.1.0/24"
+    points: 8
+
+  - name: "RT01: VRF SHARED の RIB に BLUE 顧客 172.16.2.0/24 がリークされている"
+    node: RT01
+    command: "show ip route vrf SHARED"
+    parser: "show ip route"
+    find: "vrf.SHARED.address_family.*.routes.*"
+    match:
+      route: "172.16.2.0/24"
+    points: 8
+
+  # --- 分離: RED は BLUE 顧客経路を持たない ---
+  - name: "RT01: VRF RED は BLUE 顧客 172.16.2.0/24 を学習していない(RED⇄BLUE分離)"
+    node: RT01
+    command: "show ip route vrf RED 172.16.2.0 255.255.255.0"
+    raw:
+      - regex: "not in table"
+    points: 14
+
+  # --- 能動プローブ: 両拠点 → 共有サービス 到達 ---
+  - name: "RT02: RED 拠点(Lo1)から共有サービス 100.64.0.1 へ到達できる"
+    node: RT02
+    command: "ping vrf RED 100.64.0.1 source Loopback1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 15
+
+  - name: "RT02: BLUE 拠点(Lo2)から共有サービス 100.64.0.1 へ到達できる"
+    node: RT02
+    command: "ping vrf BLUE 100.64.0.1 source Loopback2 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 15
+
+  # --- 能動プローブ: RED → BLUE は遮断(分離の実効確認) ---
+  - name: "RT02: RED 拠点(Lo1)から BLUE 顧客 172.16.2.1 へは到達できない(分離)"
+    node: RT02
+    command: "ping vrf RED 172.16.2.1 source Loopback1 repeat 2"
+    raw:
+      - regex: "Success rate is 0"
+    points: 6

@@ -1,0 +1,38 @@
+# ENARSI-REDIST-LOOP-01 採点（軸1 大域グレーダ＝次善経路の除去が主役）。値は params で可変。
+problem: ENARSI-REDIST-LOOP-01
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks: { RT01: {{ params.rt01_lo }}, RT02: {{ params.rt02_lo }}, RT03: {{ params.rt03_lo }}, RT04: {{ params.rt04_lo }} }
+  links:
+    - { a: RT01, a_ip: {{ params.seg12 }}.1, b: RT02, b_ip: {{ params.seg12 }}.2 }
+    - { a: RT01, a_ip: {{ params.seg13 }}.1, b: RT03, b_ip: {{ params.seg13 }}.2 }
+    - { a: RT02, a_ip: {{ params.seg23 }}.1, b: RT03, b_ip: {{ params.seg23 }}.2 }
+    - { a: RT02, a_ip: {{ params.seg24 }}.1, b: RT04, b_ip: {{ params.seg24 }}.2 }
+    - { a: RT03, a_ip: {{ params.seg34 }}.1, b: RT04, b_ip: {{ params.seg34 }}.2 }
+invariants:
+  # 素の双方向再配送は、EIGRP外部AD(95)<OSPF(110)のため OSPF発経路を境界が
+  # 相手ドメイン経由(EIGRP外部)で優先し、直結があるのに遠回り(次善)になる。
+  # タグで OSPF発経路に印を付け、境界の EIGRP inbound でそれを遮断すると最短に戻る。
+  # optimal は純ドメイン内宛先(RT01/RT04)への到達のみ判定（境界同士は直結EIGRPで
+  # ホップ最短がプロトコル依存になるため除外。到達性のみ別途確認）。
+  - type: optimal
+    name: "ドメイン内宛先(RT01/RT04)への最短転送（再配送由来の次善が無い）"
+    points: 50
+    pairs: [[RT02, RT01], [RT03, RT01], [RT04, RT01],
+            [RT01, RT04], [RT02, RT04], [RT03, RT04]]
+  - { type: reachability_all, name: "全ルータ間 Loopback 到達性", points: 30 }
+checks:
+  - name: "RT04: {{ params.rt01_lo }}/32 を EIGRP 外部(D EX)で学習（OSPF→EIGRP 再配送が機能）"
+    node: RT04
+    command: "show ip route eigrp"
+    raw:
+      - { regex: "D EX\\s+{{ params.rt01_lo }}" }
+    points: 10
+  - name: "RT01: {{ params.rt04_lo }}/32 を OSPF 外部(O E2)で学習（EIGRP→OSPF 再配送が機能）"
+    node: RT01
+    command: "show ip route ospf"
+    raw:
+      - { regex: "O E2\\s+{{ params.rt04_lo }}" }
+    points: 10

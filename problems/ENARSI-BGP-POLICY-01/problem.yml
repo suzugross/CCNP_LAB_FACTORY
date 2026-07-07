@@ -1,0 +1,31 @@
+---
+# 問題メタデータ
+id: ENARSI-BGP-POLICY-01
+title: "BGP経路ポリシー設計: デュアルISP (community/LP/MED/集約/受信フィルタ複合)"
+exam: ENARSI          # BGP属性ドリル10問の統合・複合問（設計書: problems/_drafts/ENARSI-BGP-POLICY-01.design.md）
+topics: [bgp, path-control, community, local-preference, med, aggregation, prefix-list, ibgp, next-hop-self]
+difficulty: 5
+topology: custom-6rt
+target_nodes: [RT01, RT02, RT03, RT04, RT05, RT06]
+points: 100
+access: ssh
+
+# === トポロジ配線 =============================================
+#                 RT06 (AS65099 上流・beacon発生源, 変更不可)
+#                /    \
+#     (ISP-A) RT04    RT05 (ISP-B)     ← 変更不可
+#             /  \       \
+#          RT01  RT02 ----+
+#  (edge-A 主系)  \  (edge-B: ISP-A待機 + ISP-B)
+#            \    /
+#             RT03  (内部コア・eBGPなし)   AS65010=設定対象
+# RT01-RT02 直結リンクは意図的に置かない（内部経由=RT03の経路選択が採点の急所）
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT04, b_if: 0 }   # 100.64.14.0/30 (eBGP 主系)
+    - { a: RT01, a_if: 1, b: RT03, b_if: 0 }   # 10.10.13.0/30  (AS内)
+    - { a: RT02, a_if: 0, b: RT04, b_if: 1 }   # 100.64.24.0/30 (eBGP ISP-A 待機系)
+    - { a: RT02, a_if: 1, b: RT05, b_if: 0 }   # 100.64.25.0/30 (eBGP ISP-B)
+    - { a: RT02, a_if: 2, b: RT03, b_if: 1 }   # 10.10.23.0/30  (AS内)
+    - { a: RT04, a_if: 2, b: RT06, b_if: 0 }   # 100.64.46.0/30 (ISP-A 上流)
+    - { a: RT05, a_if: 1, b: RT06, b_if: 1 }   # 100.64.56.0/30 (ISP-B 上流)

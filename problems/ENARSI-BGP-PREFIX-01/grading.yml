@@ -1,0 +1,45 @@
+---
+problem: ENARSI-BGP-PREFIX-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: eBGP ネイバー RT02(10.1.12.2) が Established"
+    node: RT01
+    command: "show ip bgp neighbors 10.1.12.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "10.1.12.2"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 15
+
+  - name: "RT01: prefix-list が ge 表記で 10.10.0.0/16 を permit している"
+    node: RT01
+    command: "show running-config | include ip prefix-list"
+    raw:
+      - regex: "ip prefix-list +\\S+ +.*permit +10\\.10\\.0\\.0/16 +ge +24"
+    points: 20
+
+  - name: "RT01: prefix-list が RT02 ピアに inbound 適用されている"
+    node: RT01
+    command: "show running-config | section router bgp"
+    raw:
+      - regex: "neighbor +10\\.1\\.12\\.2 +prefix-list +\\S+ +in"
+    points: 15
+
+  - name: "RT01: 10.10.0.0/24 と 10.10.1.0/24 が BGP テーブルに残っている (許可)"
+    node: RT01
+    command: "show ip bgp"
+    raw:
+      - regex: "10\\.10\\.0\\.0"
+      - regex: "10\\.10\\.1\\.0"
+    points: 30
+
+  - name: "RT01: 192.168.0.0/24 が BGP テーブルから消えている (拒否)"
+    node: RT01
+    command: "show ip bgp"
+    raw:
+      - not_contains: "192.168.0.0"
+    points: 20

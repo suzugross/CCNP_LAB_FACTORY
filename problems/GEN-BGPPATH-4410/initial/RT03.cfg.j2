@@ -1,0 +1,25 @@
+! RT03 (AS 64876)
+interface Loopback0
+ ip address 29.29.29.29 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.250.64.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.199.114.1 255.255.255.252
+ no shutdown
+!
+router bgp 64876
+ bgp router-id 29.29.29.29
+ no bgp default ipv4-unicast
+ bgp bestpath compare-routerid
+ neighbor 10.250.64.1 remote-as 64685
+ neighbor 10.199.114.2 remote-as 65325
+ ! legacy policy note - review later
+ address-family ipv4 unicast
+  neighbor 10.250.64.1 activate
+  neighbor 10.199.114.2 activate
+  network 29.29.29.29 mask 255.255.255.255
+ exit-address-family
+!

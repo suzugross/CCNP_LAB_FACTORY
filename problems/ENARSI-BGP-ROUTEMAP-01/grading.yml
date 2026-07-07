@@ -1,0 +1,44 @@
+---
+problem: ENARSI-BGP-ROUTEMAP-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: eBGP ネイバー RT02(10.1.12.2) が Established"
+    node: RT01
+    command: "show ip bgp neighbors 10.1.12.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "10.1.12.2"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 15
+
+  - name: "RT01: route-map が RT02 ピアに inbound 適用されている"
+    node: RT01
+    command: "show running-config | section router bgp"
+    raw:
+      - regex: "neighbor +10\\.1\\.12\\.2 +route-map +\\S+ +in"
+    points: 15
+
+  - name: "RT01: 10.10.0.0/24 の best path で localpref 200 が適用 (seq 1: prefix match + set)"
+    node: RT01
+    command: "show ip bgp 10.10.0.0/24"
+    raw:
+      - regex: "localpref 200,.+best"
+    points: 25
+
+  - name: "RT01: 10.20.0.0/24 が BGP テーブルに残存 (seq 3: その他 permit)"
+    node: RT01
+    command: "show ip bgp"
+    raw:
+      - regex: "10\\.20\\.0\\.0"
+    points: 20
+
+  - name: "RT01: 172.16.0.0/24 が BGP テーブルから消えている (seq 2: as-path 65003 deny)"
+    node: RT01
+    command: "show ip bgp"
+    raw:
+      - not_contains: "172.16.0.0"
+    points: 25

@@ -1,0 +1,20 @@
+{
+  "note": "RT01 のみ変更。2つの route-target 故障。どちらも症状は『共有サービス 100.64.0.1 に到達できない』だが原因の層(forward経路/戻り経路)が異なる。BGPは router-id 明示済みで稼働している。",
+  "faults": [
+    {
+      "id": "red_import_typo",
+      "symptom": "RED→SHARED が不通(BLUEは別原因)。RED の route-target import が 65000:101 と誤り(正:65000:100)で SHARED の export RT(65000:100)を取り込めず、RED RIB に 100.64.0.1/32 が入らない=forward経路欠落。",
+      "node": "RT01",
+      "parents": ["vrf definition RED", "address-family ipv4"],
+      "lines": ["no route-target import 65000:101", "route-target import 65000:100"]
+    },
+    {
+      "id": "shared_missing_import_blue",
+      "symptom": "BLUE→SHARED が不通(戻り経路欠落)。SHARED が import 65000:2 を欠き、BLUE顧客 172.16.2.0/24 を取り込めない。BLUEは 100.64.0.1 へ行けるが SHARED から BLUE への戻り経路が無く ping 失敗。",
+      "node": "RT01",
+      "parents": ["vrf definition SHARED", "address-family ipv4"],
+      "lines": ["route-target import 65000:2"]
+    }
+  ],
+  "post_fix": ["clear ip bgp *"]
+}

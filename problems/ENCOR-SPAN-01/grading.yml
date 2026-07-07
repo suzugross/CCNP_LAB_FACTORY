@@ -1,0 +1,39 @@
+---
+# 採点基準 (ENCOR-SPAN-01)。収集=telnet(SSH不可 iosvl2)。
+# SPAN は genie 構造化対象外のため raw 正規表現で判定（show monitor session の表示を解析）。
+# ローカル SPAN: source Gi0/1=both / Gi0/2=rx only を destination Gi0/3 へミラー。
+# インタフェース表記は show monitor で省略形(Gi0/1) → "Gi(gabitEthernet)?0/N" で吸収。
+problem: ENCOR-SPAN-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "SW01: monitor session 1 がローカル SPAN として存在する"
+    node: SW01
+    command: "show monitor session 1"
+    raw:
+      - regex: "Type +: +Local Session"
+    points: 20
+
+  - name: "SW01: 営業端末(Gi0/1) を送受信両方(Both)で source にしている"
+    node: SW01
+    command: "show monitor session 1"
+    raw:
+      - regex: "Both +: .*Gi(gabitEthernet)?0/1"
+    points: 25
+
+  - name: "SW01: サーバ上り(Gi0/2) を受信のみ(Rx Only) で source にしている"
+    node: SW01
+    command: "show monitor session 1"
+    raw:
+      - regex: "RX +Only +: .*Gi(gabitEthernet)?0/2"
+    points: 25
+
+  - name: "SW01: アナライザ(Gi0/3) を destination(ミラー先) にしている"
+    node: SW01
+    command: "show monitor session 1"
+    raw:
+      - regex: "Destination Ports +: .*Gi(gabitEthernet)?0/3"
+    points: 30

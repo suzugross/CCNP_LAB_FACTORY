@@ -1,0 +1,39 @@
+! GEN-CHAIN-9000 初期 (RT05) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 70.70.70.70 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT03 ===
+ ip address 10.139.19.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT02 ===
+ ip address 10.50.80.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 70.70.70.70
+ network 70.70.70.70 0.0.0.0 area 0
+ network 10.139.19.0 0.0.0.3 area 0
+ network 10.50.80.0 0.0.0.3 area 0
+!
+router bgp 65001
+ bgp router-id 70.70.70.70
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 77.77.77.77 remote-as 65001
+ neighbor 77.77.77.77 update-source Loopback0
+ neighbor 5.5.5.5 remote-as 65001
+ neighbor 5.5.5.5 update-source Loopback0
+ address-family ipv4
+  neighbor 77.77.77.77 activate
+  neighbor 77.77.77.77 send-community
+  neighbor 5.5.5.5 activate
+  neighbor 5.5.5.5 send-community
+ exit-address-family
+!
+access-list 199 remark ### LEGACY BLOCK ticket NOC-4711 (keep until 2025Q4) ###
+access-list 199 deny ip 172.20.0.0 0.0.1.255 any
+access-list 199 permit ip any any
+!

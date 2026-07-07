@@ -1,0 +1,25 @@
+! ENARSI-BGP-ASPATH-01 初期 (RT02 = AS65002 transit, 変更不要)
+! 自分の経路 10.2.0.0/24 と RT03 (AS65003) の経路 10.3.0.0/24 を RT01 へ流す。
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+!
+interface Loopback102
+ description === Service AS65002 ===
+ ip address 10.2.0.1 255.255.255.0
+!
+interface {{ links[0] }}
+ description === to RT01 (eBGP) ===
+ ip address 10.1.12.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (eBGP) ===
+ ip address 10.1.23.1 255.255.255.252
+ no shutdown
+!
+router bgp 65002
+ bgp router-id 2.2.2.2
+ neighbor 10.1.12.1 remote-as 65001
+ neighbor 10.1.23.2 remote-as 65003
+ network 10.2.0.0 mask 255.255.255.0
+!

@@ -1,0 +1,64 @@
+---
+# 採点基準 (ENCOR-IPSLA-02 / 奥のビーコン + /32ピンで primary 全経路監視)。
+# RT01 のみ設定。RT02/RT03/RT04 は変更不可。
+problem: ENCOR-IPSLA-02
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: IP SLA 1 が ICMP-echo でビーコン 100.64.0.1 を source 10.0.12.1 で監視"
+    node: RT01
+    command: "show running-config | section ip sla"
+    raw:
+      - regex: "ip sla 1"
+      - regex: "icmp-echo 100\\.64\\.0\\.1"
+      - regex: "source-ip 10\\.0\\.12\\.1"
+    points: 15
+
+  - name: "RT01: ★ビーコン宛 /32 を primary next-hop に固定 (100.64.0.1/32 -> 10.0.12.2)"
+    node: RT01
+    command: "show running-config | include ip route 100.64.0.1"
+    raw:
+      - regex: "ip route 100\\.64\\.0\\.1 255\\.255\\.255\\.255 10\\.0\\.12\\.2"
+    points: 20
+
+  - name: "RT01: Track 1 が IP SLA 1 reachability を監視し Up"
+    node: RT01
+    command: "show track 1"
+    raw:
+      - regex: "IP SLA 1 reachability"
+      - regex: "Reachability is Up"
+    points: 15
+
+  - name: "RT01: primary default route が 10.0.12.2 経由で RIB にある (Track 連動・Up時)"
+    node: RT01
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "0.0.0.0/0"
+      next_hop.next_hop_list.*.next_hop: "10.0.12.2"
+    points: 15
+
+  - name: "RT01: フローティング backup default (ip route 0.0.0.0 0.0.0.0 10.0.13.2 200)"
+    node: RT01
+    command: "show running-config | include ip route 0.0.0.0"
+    raw:
+      - regex: "ip route 0\\.0\\.0\\.0 0\\.0\\.0\\.0 10\\.0\\.13\\.2 200"
+    points: 10
+
+  - name: "RT01: ビーコン 100.64.0.1 へ primary 経由で実到達 (プローブ経路が成立)"
+    node: RT01
+    command: "ping 100.64.0.1 source 10.0.12.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 10
+
+  - name: "RT01: 8.8.8.8 へ実到達 (通常時=primary で forward+return 成立)"
+    node: RT01
+    command: "ping 8.8.8.8 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 15

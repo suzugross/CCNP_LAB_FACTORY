@@ -1,0 +1,50 @@
+---
+# 自動生成トラブルシュート問題(GEN-TS-*)の修正(fix.json)を投入する（自己検品・解答開示用）。
+# 使い方: ansible-playbook playbooks/fix_generated.yml -e problem=GEN-TS-100
+#
+# fix.json 形式:
+#   新: {"fixes": [{node,parents,lines}, ...]}（多重故障対応）
+#   旧: {node,parents,lines}（単一故障・後方互換）
+# fix エントリは config 系 {node,parents,lines} のほか、exec 系 {node,exec:[cmds]} も可
+#   （例: router-id 変更後の `clear ip ospf process`。config 投入後にまとめて実行）。
+- name: fix を読み込む
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+  tasks:
+    # fix.json は採点者専用 solution/ に隔離（旧版は problems/<id>/fix.json）
+    - ansible.builtin.set_fact:
+        fix_path: "{{ (repo ~ '/problems/' ~ problem ~ '/solution/fix.json') if (repo ~ '/problems/' ~ problem ~ '/solution/fix.json') is exists else (repo ~ '/problems/' ~ problem ~ '/fix.json') }}"
+    - ansible.builtin.include_vars: { file: "{{ fix_path }}", name: fixdoc }
+    - name: fix をリストへ正規化（新=fixes キー / 旧=単一オブジェクト）
+      ansible.builtin.set_fact:
+        fixes: "{{ fixdoc.fixes if (fixdoc.fixes is defined) else [fixdoc] }}"
+    - ansible.builtin.include_vars: { file: "{{ repo }}/topologies/_generated/{{ problem }}/mgmt_map.yml", name: mgmt_map }
+    - name: 修正対象ノードを登録（同一ノードに複数 fix があればまとめて付与）
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups: _gfix
+        ansible_host: "{{ mgmt_map[item] }}"
+        node_fixes: "{{ fixes | selectattr('node', 'equalto', item) | list }}"
+      loop: "{{ fixes | map(attribute='node') | unique | list }}"
+      loop_control: { label: "{{ item }}" }
+
+- name: 修正を投入
+  hosts: _gfix
+  gather_facts: false
+  tasks:
+    - name: config 系 fix（ios_config）
+      cisco.ios.ios_config:
+        parents: "{{ item.parents | default(omit) }}"     # parents 省略=グローバル config
+        lines: "{{ item.lines }}"
+      loop: "{{ node_fixes | selectattr('lines', 'defined') | list }}"
+      loop_control: { label: "{{ item.parents | default('(global)') }}" }
+
+    - name: "exec 系 fix（ios_command・config 投入後に実行。例 clear ip ospf process）"
+      cisco.ios.ios_command:
+        commands: "{{ item.exec }}"
+      loop: "{{ node_fixes | selectattr('exec', 'defined') | list }}"
+      loop_control:
+        label: "{{ item.node }} exec"
+      changed_when: true

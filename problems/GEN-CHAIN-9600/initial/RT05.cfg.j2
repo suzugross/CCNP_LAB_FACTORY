@@ -1,0 +1,39 @@
+! GEN-CHAIN-9600 初期 (RT05) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 62.62.62.62 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT03 ===
+ ip address 10.47.40.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT02 ===
+ ip address 10.92.21.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 62.62.62.62
+ network 62.62.62.62 0.0.0.0 area 0
+ network 10.47.40.0 0.0.0.3 area 0
+ network 10.92.21.0 0.0.0.3 area 0
+!
+router bgp 65001
+ bgp router-id 62.62.62.62
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 68.68.68.68 remote-as 65001
+ neighbor 68.68.68.68 update-source Loopback0
+ neighbor 35.35.35.35 remote-as 65001
+ neighbor 35.35.35.35 update-source Loopback0
+ address-family ipv4
+  neighbor 68.68.68.68 activate
+  neighbor 68.68.68.68 send-community
+  neighbor 35.35.35.35 activate
+  neighbor 35.35.35.35 send-community
+ exit-address-family
+!
+access-list 199 remark ### LEGACY BLOCK ticket NOC-4711 (keep until 2025Q4) ###
+access-list 199 deny ip 172.20.0.0 0.0.1.255 any
+access-list 199 permit ip any any
+!

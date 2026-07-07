@@ -1,0 +1,45 @@
+! RT05 (role=be, AS=65001) 初期構成
+interface Loopback0
+ ip address 10.0.96.96 255.255.255.255
+ ip ospf 1 area 0
+!
+interface {{ links[0] }}
+ ip address 10.131.131.2 255.255.255.252
+ ip ospf 1 area 0
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.177.177.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.111.111.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 10.0.96.96
+!
+router bgp 65001
+ bgp router-id 10.0.96.96
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.0.91.91 remote-as 65001
+ neighbor 10.0.91.91 update-source Loopback0
+ neighbor 10.177.177.2 remote-as 65100
+ neighbor 10.111.111.2 remote-as 65300
+ address-family ipv4 unicast
+  neighbor 10.0.91.91 activate
+  neighbor 10.0.91.91 send-community
+  neighbor 10.0.91.91 next-hop-self
+  neighbor 10.177.177.2 activate
+  neighbor 10.111.111.2 activate
+  neighbor 10.111.111.2 default-originate
+  aggregate-address 172.31.0.0 255.255.252.0 summary-only
+ exit-address-family
+!
+! --- SNMPv3 (NOC 監視標準) ---
+snmp-server view MONVIEW iso included
+snmp-server group MONGRP v3 priv read MONVIEW
+snmp-server location CCNP-LAB
+snmp-server user MONUSER MONGRP v3 auth sha CCNP-Auth-2026 priv aes 128 CCNP-Priv-2026
+!

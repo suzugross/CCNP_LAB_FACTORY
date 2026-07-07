@@ -1,0 +1,34 @@
+# 問題 ENCOR-OSPF-IF-01 : OSPF インタフェースモードでの近隣構築
+
+## シナリオ
+RT01・RT02・RT03 の小規模ネットワークです。各リンクと Loopback には IP 設定済みですが、
+動的ルーティングが未構成です。OSPF で IGP を構成してください。
+
+## 構成（初期状態で投入済み）
+| リンク | セグメント | RT01 側 | RT02/03 側 |
+|--------|------------|---------|------------|
+| RT01–RT02 | {{ params.seg12 }}.0/30 | {{ params.seg12 }}.1 | {{ params.seg12 }}.2 |
+| RT01–RT03 | {{ params.seg13 }}.0/30 | {{ params.seg13 }}.1 | {{ params.seg13 }}.2 |
+
+| ルータ | Loopback0 |
+|--------|-----------|
+| RT01 | {{ params.rt01_lo }}/32 |
+| RT02 | {{ params.rt02_lo }}/32 |
+| RT03 | {{ params.rt03_lo }}/32 |
+
+## 到達目標
+1. プロセス ID {{ params.ospf_pid }}・エリア {{ params.area }} で OSPF を構成する。
+2. **各インタフェースで直接 OSPF を有効化する方式（インタフェースモード）で構成すること。**
+   `router ospf` 配下の `network` 文による方式は使わないこと。
+3. 全 L3 リンクと Loopback0 を参加させ、近隣をすべて **FULL** にする。
+4. RT01 に RT02・RT03 の Loopback (`{{ params.rt02_lo }}/32`, `{{ params.rt03_lo }}/32`)、
+   RT02 に RT01 の `{{ params.rt01_lo }}/32` が OSPF 経路として現れること。
+
+## 制約
+- スタティックルートは使用しないこと。
+- 構成方式は**インタフェースモードに限定**する。
+
+## 採点
+```
+ansible-playbook playbooks/grade.yml -e problem=ENCOR-OSPF-IF-01 -e variant={{ variant | default('base') }} --vault-password-file <(printf 'CCNP\n')
+```

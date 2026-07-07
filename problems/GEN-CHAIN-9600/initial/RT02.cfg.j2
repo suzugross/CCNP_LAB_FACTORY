@@ -1,0 +1,41 @@
+! GEN-CHAIN-9600 初期 (RT02) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 60.60.60.60 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT05 ===
+ ip address 10.92.21.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT06 ===
+ ip address 10.110.204.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT07 ===
+ ip address 10.68.210.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 60.60.60.60
+ network 60.60.60.60 0.0.0.0 area 0
+ network 10.92.21.0 0.0.0.3 area 0
+ network 10.110.204.0 0.0.0.3 area 0
+ network 10.68.210.0 0.0.0.3 area 0
+!
+router bgp 65001
+ bgp router-id 60.60.60.60
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 68.68.68.68 remote-as 65001
+ neighbor 68.68.68.68 update-source Loopback0
+ neighbor 35.35.35.35 remote-as 65001
+ neighbor 35.35.35.35 update-source Loopback0
+ address-family ipv4
+  neighbor 68.68.68.68 activate
+  neighbor 68.68.68.68 send-community
+  neighbor 35.35.35.35 activate
+  neighbor 35.35.35.35 send-community
+ exit-address-family
+!

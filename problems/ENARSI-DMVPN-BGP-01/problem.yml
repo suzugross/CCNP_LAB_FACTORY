@@ -1,0 +1,33 @@
+---
+# DMVPN Phase 2 マルチスポーク + BGP コア + 相互再配送（暗号なし・複合問題）。
+# RT04=WAN/NBMAトランジット(固定)、RT05=データセンタ(DC)コア=eBGP(固定)。
+# 受験者は RT01(Hub) に DMVPN + eBGP(→RT05) + EIGRP⇄BGP 相互再配送を、
+# RT02/RT03(Spoke) に DMVPN を構築する。
+# 学習核心 = ①Phase2(no split-horizon + no next-hop-self でスポーク間ダイレクト)
+#           ②DMVPN境界(ハブ)での EIGRP overlay ⇄ BGP 相互再配送(単一境界=ループ無)。
+id: ENARSI-DMVPN-BGP-01
+title: "DMVPN Phase 2 + BGP コア 相互再配送 (mGRE/NHRP/EIGRP × eBGP, 暗号なし)"
+exam: ENARSI
+topics: [dmvpn, mgre, nhrp, eigrp, phase2, bgp, redistribution]
+difficulty: 5
+topology: ad-hoc
+image_family: iosv
+target_nodes: [RT01, RT02, RT03, RT04, RT05]
+points: 100
+
+# IOSv は network_cli(SSH) 不可 → 採点は CML コンソール経由で show を収集。
+access: console
+
+# Underlay(NBMA) = 各エッジ↔RT04 の /30 + Hub↔DC の /30。
+#   RT01(Hub) Gi0/0 10.0.14.1/30 -- 10.0.14.2 RT04 Gi0/0   (underlay/tunnel source)
+#   RT02(Sp1) Gi0/0 10.0.24.1/30 -- 10.0.24.2 RT04 Gi0/1
+#   RT03(Sp2) Gi0/0 10.0.34.1/30 -- 10.0.34.2 RT04 Gi0/2
+#   RT01(Hub) Gi0/1 10.0.15.1/30 -- 10.0.15.2 RT05 Gi0/0   (eBGP 65001<->65000)
+# overlay = Tunnel0 mGRE 10.255.0.0/24 (Hub.1/Sp1.2/Sp2.3), EIGRP AS100。
+# DC LAN = 172.20.20.0/24 (RT05 が BGP で広告)。
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT04, b_if: 0 }   # Hub  underlay
+    - { a: RT02, a_if: 0, b: RT04, b_if: 1 }   # Spoke1 underlay
+    - { a: RT03, a_if: 0, b: RT04, b_if: 2 }   # Spoke2 underlay
+    - { a: RT01, a_if: 1, b: RT05, b_if: 0 }   # Hub <-> DC core (eBGP)

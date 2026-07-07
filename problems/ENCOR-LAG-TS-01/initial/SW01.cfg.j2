@@ -1,0 +1,35 @@
+! ENCOR-LAG-TS-01 初期状態 (SW01) : baseline(switch) の後に重ねて投入。
+!   links[0] / links[1] = いずれも SW02 向け
+! データ VLAN 30 とその SVI（採点で SW02 SVI への疎通を確認する）。
+vlan 30
+ name DATA30
+!
+interface Vlan30
+ description === DATA30 SVI (test) ===
+ ip address 10.30.30.1 255.255.255.0
+ no shutdown
+!
+! 既に作りかけの Port-channel1（access / VLAN30）。
+interface Port-channel1
+ description === bundle to SW02 ===
+ switchport
+ switchport mode access
+ switchport access vlan 30
+!
+! 2 本の物理リンク。いずれも channel-group 1 に投入済みだが mode が passive。
+interface {{ links[0] }}
+ description === to SW02 (member 1) ===
+ switchport
+ switchport mode access
+ switchport access vlan 30
+ channel-group 1 mode passive
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to SW02 (member 2) ===
+ switchport
+ switchport mode access
+ switchport access vlan 30
+ channel-group 1 mode passive
+ no shutdown
+!

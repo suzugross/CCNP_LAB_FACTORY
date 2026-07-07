@@ -1,0 +1,39 @@
+! GEN-CHAIN-9711 初期 (RT05) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 35.35.35.35 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT03 ===
+ ip address 10.141.191.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT02 ===
+ ip address 10.248.126.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 35.35.35.35
+ network 35.35.35.35 0.0.0.0 area 0
+ network 10.141.191.0 0.0.0.3 area 0
+ network 10.248.126.0 0.0.0.3 area 0
+!
+router bgp 65001
+ bgp router-id 35.35.35.35
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 20.20.20.20 remote-as 65001
+ neighbor 20.20.20.20 update-source Loopback0
+ neighbor 33.33.33.33 remote-as 65001
+ neighbor 33.33.33.33 update-source Loopback0
+ address-family ipv4
+  neighbor 20.20.20.20 activate
+  neighbor 20.20.20.20 send-community
+  neighbor 33.33.33.33 activate
+  neighbor 33.33.33.33 send-community
+ exit-address-family
+!
+access-list 199 remark ### LEGACY BLOCK ticket NOC-4711 (keep until 2025Q4) ###
+access-list 199 deny ip 172.20.0.0 0.0.1.255 any
+access-list 199 permit ip any any
+!

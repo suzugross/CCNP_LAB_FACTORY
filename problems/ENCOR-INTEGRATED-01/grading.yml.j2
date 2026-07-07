@@ -1,0 +1,93 @@
+---
+# 採点基準（パラメータ化テンプレート）。値は params/<variant>.yml 由来。
+# 実運用エッジ版: 既設OSPF/eBGP維持 + (1)ISPデフォルトのIGP注入 (2)PAT(overload) (3)エッジACL。
+# ★NATは「能動プローブ」で実効検証: RT03から外部ホストへ ping を生成し、成功＋NAT変換エントリを確認する。
+#   ping(プローブ)は translations より前に置くこと（採点は checks 順に収集するため、先にトラフィックを流す）。
+problem: ENCOR-INTEGRATED-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # --- 既設レイヤが壊れていないこと（OSPF / eBGP）---
+  - name: "RT01: OSPF 近隣 RT02({{ params.seg12 }}.2) が FULL（内部IGP維持）"
+    node: RT01
+    command: "show ip ospf neighbor"
+    parser: "show ip ospf neighbor"
+    find: "interfaces.*.neighbors.*"
+    match: { address: "{{ params.seg12 }}.2", state: { startswith: "FULL" } }
+    points: 10
+
+  - name: "RT02: eBGP ネイバー RT04({{ params.seg24 }}.2) が Established（ISP接続維持）"
+    node: RT02
+    command: "show ip bgp neighbors {{ params.seg24 }}.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "{{ params.seg24 }}.2"]
+    match: { session_state: { startswith: "Establ" } }
+    points: 10
+
+  # --- タスク1: ISP デフォルト経路を OSPF へ注入 ---
+  - name: "RT01: デフォルト 0.0.0.0/0 を OSPF外部(O*E2)で学習（デフォルト注入の効果）"
+    node: RT01
+    command: "show ip route ospf"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "0.0.0.0/0"
+      source_protocol: "ospf"
+      source_protocol_codes: { contains: "E" }
+    points: 12
+
+  - name: "RT03: デフォルト 0.0.0.0/0 を OSPF外部(O*E2)で学習（全内部へ波及）"
+    node: RT03
+    command: "show ip route ospf"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "0.0.0.0/0"
+      source_protocol: "ospf"
+      source_protocol_codes: { contains: "E" }
+    points: 8
+
+  # --- タスク2: PAT(overload) 設定 ---
+  - name: "RT02: PAT(overload) が設定されている（inside source list ... interface ... overload）"
+    node: RT02
+    command: "show running-config | include ip nat inside source"
+    raw:
+      - regex: "ip nat inside source list +\\S+ +interface +\\S+ +overload"
+    points: 10
+
+  # --- タスク2の実効検証（能動プローブ）: ping を生成 → 成功 → 変換エントリ ---
+  - name: "RT03: 社内ホスト(Lo0)から外部ホスト({{ params.rt04_lo }})へ到達（既定経路+NATの実効疎通）"
+    node: RT03
+    command: "ping {{ params.rt04_lo }} source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 15
+
+  - name: "RT02: NAT変換テーブルに PAT エントリ（inside-global={{ params.seg24 }}.1 ← inside-local={{ params.rt03_lo }}）"
+    node: RT02
+    command: "show ip nat translations"
+    raw:
+      - regex: "{{ params.seg24 }}\\.1.*{{ params.rt03_lo }}"
+    points: 15
+
+  # --- タスク3: エッジ ACL（outside に inbound・機能する位置）---
+  - name: "RT02: エッジACL が outside(Ethernet0/2) に inbound 適用されている（適用・方向）"
+    node: RT02
+    command: "show ip interface Ethernet0/2"
+    raw:
+      - regex: "Inbound +access list is (?!not set)\\S+"
+    points: 10
+
+  - name: "RT02: エッジACL に外部からの Telnet(tcp 23) を deny する ACE がある（定義）"
+    node: RT02
+    command: "show ip access-lists"
+    parser: "show ip access-lists"
+    find: "*.aces.*"
+    match:
+      actions.forwarding: deny
+      matches.l3.ipv4.protocol: tcp
+      matches.l4.tcp.destination_port.operator.port: 23
+    points: 10

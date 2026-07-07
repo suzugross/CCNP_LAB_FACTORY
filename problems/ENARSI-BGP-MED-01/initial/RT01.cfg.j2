@@ -1,0 +1,26 @@
+! ENARSI-BGP-MED-01 初期 (RT01 = AS65001 advertiser)
+! BGP は既に2セッション張られ、10.100.0.0/24 を両ピアに広告中（MED 未設定 = 0）。
+! 受験者は outbound 方向に MED 差を入れて RT02 の best path を誘導する。
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+!
+interface Loopback100
+ description === Service ===
+ ip address 10.100.0.1 255.255.255.0
+!
+interface {{ links[0] }}
+ description === to RT02 (primary link) ===
+ ip address 10.1.12.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT02 (backup link) ===
+ ip address 10.1.122.1 255.255.255.252
+ no shutdown
+!
+router bgp 65001
+ bgp router-id 1.1.1.1
+ neighbor 10.1.12.2 remote-as 65002
+ neighbor 10.1.122.2 remote-as 65002
+ network 10.100.0.0 mask 255.255.255.0
+!

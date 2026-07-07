@@ -1,0 +1,44 @@
+# Ansible道場 03 : Playbookの構造
+
+> 題材は固定（Loopback3 を作るだけ）。学ぶのは **Playbook の書き方（構造）**です。
+
+## 今回学ぶこと：Playbook の骨組み
+アドホック（1コマンド）は単発向き。複数の操作を**再実行できる形**にまとめたのが Playbook。
+YAML で「どの機器に・何を」を書きます。最小の構造：
+
+```yaml
+- name: <このプレイの説明>
+  hosts: <対象グループ>        # インベントリの [グループ名]
+  gather_facts: false
+  tasks:
+    - name: <このタスクの説明>
+      cisco.ios.ios_config:    # 使うモジュール
+        parents: <設定階層>     # 例: interface Loopback3
+        lines:                  # 流し込む設定行
+          - <行1>
+          - <行2>
+```
+
+- **`hosts:`** は playbook が操作する対象。インベントリのグループ名と一致させる。
+- **`tasks:`** は上から順に実行される操作の並び。各 task に `name`（説明）を付ける習慣を。
+- **`ios_config` の `parents`/`lines`** … `parents` で設定モード（階層）に入り、`lines` をそこに入れる。
+  例：`parents: interface Loopback3` ＋ `lines: [ip address ..., description ...]`。
+
+## 課題
+ワークスペースの **`pb.yml`** の `__FILL_n__`（対象グループ／モジュール／階層）を埋め、
+全ルータに **`interface Loopback3`（`ip address 3.3.3.3/32` ＋ `description DOJO-03`）** を作ってください。
+
+> 穴の一覧・ヒントは `穴.md` を参照。
+
+## 実行・採点
+```bash
+cd lab/ANSIBLE-03-PLAYBOOK
+ansible-playbook pb.yml
+ansible-playbook playbooks/grade.yml -e problem=ANSIBLE-03-PLAYBOOK --vault-password-file <(printf 'CCNP\n')
+```
+
+## 到達点
+- Playbook の最小構造（play / hosts / tasks / name / module）を書ける。
+- `ios_config` の `parents`（階層）と `lines`（行）の関係を理解する。
+
+次回 **04：変数の優先順位**（同じ設定値を group_vars / host_vars / -e のどこに置くか）。

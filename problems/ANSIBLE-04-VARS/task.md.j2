@@ -1,0 +1,43 @@
+# Ansible道場 04 : 変数の優先順位
+
+> 題材は固定（snmp contact を入れるだけ）。学ぶのは **変数をどこに置くか＝優先順位**です。
+
+## 今回学ぶこと：変数の置き場所と上書き順
+同じ変数名でも、**どこに書くか**で「誰に効くか」「どれが勝つか」が決まります。代表的な順（弱→強）：
+
+```
+group_vars/all.yml      … 全ホスト共通（最も弱い）
+group_vars/<group>.yml  … そのグループ共通
+host_vars/<host>.yml    … その1台だけ（強い）
+-e で渡す extra-vars     … 最強（今回は使わない）
+```
+**より具体的な場所が勝つ**（host_vars は group_vars に勝つ）。これが分かると「全体は◯◯、この1台だけ××」が綺麗に書けます。
+
+## 構成と狙い
+完成品 playbook `pb.yml` は `snmp-server contact` を変数 {% raw %}`{{ dojo_team }}`{% endraw %} の値で設定します（編集不要）。
+`dojo_team` の値を**置く場所**で結果を作ります。
+
+- `group_vars/all.yml` … `dojo_team: DEFAULT-NOC`（記入済み・**これだけだと全台 DEFAULT**）
+
+## 課題
+**全ルータを `TOKYO-NOC`、ただし RT03 だけ `OSAKA-NOC`** にしてください。
+そのために2つのファイルの `__FILL_n__` を埋めます：
+
+- `group_vars/routers.yml` → routers 共通を **TOKYO-NOC**（all を上書き）
+- `host_vars/RT03.yml` → RT03 だけ **OSAKA-NOC**（group_vars を上書き＝host_vars が勝つ）
+
+> 穴の一覧・ヒントは `穴.md` を参照。
+
+## 実行・採点
+```bash
+cd lab/ANSIBLE-04-VARS
+ansible-playbook pb.yml
+ansible-playbook playbooks/grade.yml -e problem=ANSIBLE-04-VARS --vault-password-file <(printf 'CCNP\n')
+```
+> 確認: `ansible RT03 -i hosts.ini -m ansible.builtin.debug -a "var=dojo_team"` で RT03 の最終値を見られる。
+
+## 到達点
+- group_vars/all → group_vars/group → host_vars の **上書き順**を理解する。
+- 「全体は共通、一部だけ例外」を変数の置き場所で表現できる。
+
+次回 **05：冪等性と --check/--diff**（2回流して changed=0、流す前に差分を見る）。

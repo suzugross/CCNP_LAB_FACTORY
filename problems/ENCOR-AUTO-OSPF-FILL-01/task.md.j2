@@ -1,0 +1,64 @@
+# 問題 ENCOR-AUTO-OSPF-FILL-01 : Ansible 穴埋めで OSPF を自動構成する（自動化・レベル1）
+
+## ねらい
+これは **自動化ラボの入門**です。ルータに 1 台ずつ SSH してコマンドを手打ちするのではなく、
+**用意された Ansible 一式の空欄を埋めて 1 回実行**し、RT01〜RT03 へ OSPF をまとめて構成します。
+「設定」そのものではなく「設定を流し込む自動化」を完成させるのが回答です。
+
+## 構成（初期状態で投入済み）
+各リンク・Loopback には IP 設定済み。**OSPF は未構成**で相互の Loopback に到達できません。
+
+| リンク | セグメント | RT01 側 | RT02/03 側 |
+|--------|------------|---------|------------|
+| RT01–RT02 | {{ params.seg12 }}.0/30 | {{ params.seg12 }}.1 | {{ params.seg12 }}.2 |
+| RT01–RT03 | {{ params.seg13 }}.0/30 | {{ params.seg13 }}.1 | {{ params.seg13 }}.2 |
+
+| ルータ | Loopback0 | 管理IP(SSH) |
+|--------|-----------|-------------|
+| RT01 | {{ params.rt01_lo }}/32 | 10.1.10.11 |
+| RT02 | {{ params.rt02_lo }}/32 | 10.1.10.12 |
+| RT03 | {{ params.rt03_lo }}/32 | 10.1.10.13 |
+
+ログイン: `SUZUKI / CCNP`（特権15）。各ルータは管理IPで SSH 到達できます。
+
+## 用意されている Ansible 一式（`controller/`）
+作業ディレクトリに、次の 3 ファイルが置かれています（**コピーして編集**してください）:
+
+- `ansible.cfg` … 記入不要（接続設定済み）
+- `hosts.ini` … 対象ルータと接続情報。穴あり
+- `ospf.yml` … OSPF を構成する Playbook。穴あり
+
+各ファイルの `__FILL_n__`（位置・数は seed で変動）を埋めるのが回答です。
+
+## 穴について（seed でランダム化）
+このワークスペースの **`穴.md`** に、今回の穴の一覧（番号・ファイル・ヒント）があります。
+出題のたびに **穴の位置・数が変わります**。各ファイル内の `__FILL_n__` を、`穴.md` のヒントを頼りに埋めてください。
+
+
+> ヒント控えめ：値そのものは書きません。`cisco.ios` コレクションの「設定モジュール」と
+> 「ネットワーク機器向け接続プラグイン」の名前、OSPF の標準的なエリア設計を思い出してください。
+
+## 到達目標（＝採点される最終状態）
+1. **OSPF プロセス {{ params.ospf_pid }} / エリア {{ params.area }}** で全リンク・Loopback を構成。
+2. RT01 の OSPF ネイバー（RT02/RT03）が **FULL**。
+3. RT01 が `{{ params.rt02_lo }}/32` `{{ params.rt03_lo }}/32` を、RT02 が `{{ params.rt01_lo }}/32` を
+   OSPF 経路として学習している。
+
+## 実行手順（回答者）
+```bash
+# 1) ワークスペースをコピー
+cp -r problems/ENCOR-AUTO-OSPF-FILL-01/controller ~/lab && cd ~/lab
+# 2) hosts.ini と ospf.yml の __FILL_n__ を埋める（エディタで編集）
+# 3) Playbook を実行（=これが「解答」）
+ansible-playbook -i hosts.ini ospf.yml
+```
+うまくいけば 3 台に OSPF が入り、`ansible-playbook` の結果が `changed` になります。
+
+## 制約
+- ルータへ **手作業でCLIを打たない**（Ansible で構成すること）。
+- スタティックルートは使用しないこと。
+
+## 採点
+```
+ansible-playbook playbooks/grade.yml -e problem=ENCOR-AUTO-OSPF-FILL-01 -e variant={{ variant | default('base') }} --vault-password-file <(printf 'CCNP\n')
+```

@@ -1,0 +1,22 @@
+! --- data plane ---
+interface Loopback0
+ ip address 37.37.37.37 255.255.255.255
+interface Ethernet0/0
+ description === to SRV01 (server segment) ===
+ ip address 10.99.0.1 255.255.255.252
+ no shutdown
+interface Ethernet0/1
+ description === to RT02 ===
+ ip address 10.1.12.1 255.255.255.252
+ no shutdown
+ip access-list extended DNSBLOCK
+ deny udp any host 10.99.0.2 eq domain
+ permit ip any any
+interface Ethernet0/1
+ ip access-group DNSBLOCK in
+router ospf 1
+ router-id 37.37.37.37
+ network 37.37.37.37 0.0.0.0 area 0
+ network 10.99.0.0 0.0.0.3 area 0
+ network 10.1.12.0 0.0.0.3 area 0
+ip name-server 10.99.0.2

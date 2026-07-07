@@ -1,0 +1,41 @@
+! GEN-CHAIN-9300 初期 (RT06) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 68.68.68.68 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT04 ===
+ ip address 10.171.161.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT02 ===
+ ip address 10.49.143.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT09 ===
+ ip address 10.87.169.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 68.68.68.68
+ network 68.68.68.68 0.0.0.0 area 0
+ network 10.171.161.0 0.0.0.3 area 0
+ network 10.49.143.0 0.0.0.3 area 0
+ network 10.87.169.0 0.0.0.3 area 0
+!
+router bgp 65001
+ bgp router-id 68.68.68.68
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 54.54.54.54 remote-as 65001
+ neighbor 54.54.54.54 update-source Loopback0
+ neighbor 57.57.57.57 remote-as 65001
+ neighbor 57.57.57.57 update-source Loopback0
+ address-family ipv4
+  neighbor 54.54.54.54 activate
+  neighbor 54.54.54.54 send-community
+  neighbor 57.57.57.57 activate
+  neighbor 57.57.57.57 send-community
+ exit-address-family
+!

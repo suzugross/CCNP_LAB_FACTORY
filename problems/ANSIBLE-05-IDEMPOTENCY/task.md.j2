@@ -1,0 +1,49 @@
+# Ansible道場 05 : 冪等性と --check / --diff
+
+> 題材は固定（NTPサーバを入れるだけ）。学ぶのは **冪等性（idempotency）** と **ドライラン**です。
+
+## 今回学ぶこと：冪等性とは
+Ansible の肝は「**何回流しても、あるべき状態に収束する**」こと。
+- 1回目：設定が無い → 入れる（**changed**）
+- 2回目：もう同じ設定がある → **触らない（changed=0）**
+
+この「2回目が changed=0」が冪等性。`ios_config` は既にある行を入れ直さないので、安心して何度でも流せます。
+（逆に毎回 changed になる playbook は“冪等でない”＝設計が怪しい、というサイン。）
+
+## ドライラン：流す前に確認する
+- **`--check`** … 実際には変更せず「変更するつもり」を表示（リハーサル）。
+- **`--diff`** … 何が変わるか（差分）を表示。
+
+本番投入前に `--check --diff` で確認するのが実務の定石です。
+
+## 課題
+`pb.yml` の `__FILL_1__` に NTPサーバ **`10.123.45.6`** を入れて全ルータに設定してください。
+そのうえで、**冪等性とドライランを自分の目で確認**します。
+
+> 穴の一覧・ヒントは `穴.md` を参照。
+
+## 実行（ここが学習の本体）
+```bash
+cd lab/ANSIBLE-05-IDEMPOTENCY
+
+# (A) ドライラン：まだ入っていないので「入れる予定」が diff で見える
+ansible-playbook pb.yml --check --diff
+
+# (B) 本番1回目：changed になる
+ansible-playbook pb.yml
+
+# (C) もう一度：今度は changed=0（=冪等。既にあるので触らない）
+ansible-playbook pb.yml
+```
+**(C) で changed=0 になることを必ず確認**してください。これがこのレッスンの到達点です。
+
+## 採点（最終状態＝NTPが入っていること）
+```bash
+ansible-playbook playbooks/grade.yml -e problem=ANSIBLE-05-IDEMPOTENCY --vault-password-file <(printf 'CCNP\n')
+```
+
+## 到達点
+- 「2回目 changed=0」で冪等性を体感する。
+- `--check`/`--diff` で投入前に変更内容を確認できる。
+
+これで **T1（基礎）修了**。次は T2（loop / when / Jinja2 / リソースモジュールの state など）へ。

@@ -1,0 +1,99 @@
+---
+# 採点 1 回分（grade.yml から include される）。localhost で実行し、
+# 各チェックのコマンドを delegate_to で対象ノードへ送って show を集め、
+# grade.py(--gate) で判定する。全 PASS なら converged=true をセット。
+
+# チェックは exec で収集方法が分かれる（既定 ios = show コマンド）。
+#   exec: ios   … cisco.ios.ios_command を対象ノードで実行
+#   exec: shell … Linux ノード(ZBX*/SRV*/PC*)で shell 実行（snmpget / dig / Zabbix API 照会など）。
+#                 失敗コマンド(タイムアウト等)も stdout+stderr を採点対象にする。
+- name: 各チェックの show を対象ノードから取得 (exec=ios)
+  cisco.ios.ios_command:
+    commands: ["{{ item.command }}"]
+  delegate_to: "{{ item.node }}"
+  loop: "{{ checks | default([]) }}"
+  loop_control: { label: "{{ item.node }}: {{ item.command }}" }
+  register: collected
+  changed_when: false
+  # 機器が % エラーを返す show(例: SNMP未設定での `show snmp user` →
+  # `%SNMP agent not enabled`)は ios_command がタスク失敗になる。
+  # 採点はクラッシュでなく「そのチェックが0点」に落とすべきなので失敗を握り、
+  # 下の payload 組み立てで msg(エラーテキスト)を stdout として採点に回す。
+  failed_when: false
+  when: (item.exec | default('ios')) == 'ios'
+
+- name: 各チェックのコマンドを Linux ノードで実行 (exec=shell)
+  ansible.builtin.shell: "{{ item.command }}"
+  delegate_to: "{{ item.node }}"
+  loop: "{{ checks | default([]) }}"
+  loop_control: { label: "{{ item.node }}: {{ item.command | truncate(60) }}" }
+  register: collected_sh
+  changed_when: false
+  failed_when: false
+  when: (item.exec | default('ios')) == 'shell'
+
+- name: 結果 JSON を組み立て（checks にこの試行の stdout を併合）
+  vars:
+    nl: "\n"   # Jinja の '\n' リテラルは実改行にならない(バックスラッシュ+n の2文字)ため YAML 側で定義
+  ansible.builtin.set_fact:
+    payload: >-
+      {{ (payload | default([])) + [ checks[res_idx] | combine({'stdout':
+           ((collected_sh.results[res_idx].stdout | default('')) ~ nl
+              ~ (collected_sh.results[res_idx].stderr | default(''))
+            if (res.skipped | default(false))
+            else (res.stdout[0] if res.stdout is defined
+                  else (res.msg | default('') | string))) }) ] }}
+  loop: "{{ collected.results }}"
+  loop_control: { loop_var: res, index_var: res_idx, label: "{{ checks[res_idx].name }}" }
+  when: collected.results is defined
+
+- name: 大域不変条件用に各ノードの全 RIB を収集（invariants がある時のみ）
+  cisco.ios.ios_command:
+    commands: ["show ip route"]
+  delegate_to: "{{ item }}"
+  loop: "{{ rib_nodes | default([]) }}"
+  loop_control: { label: "{{ item }}: show ip route" }
+  register: ribs_collected
+  changed_when: false
+  when: (invariants | default([])) | length > 0
+
+- name: ribs 辞書（node -> show ip route テキスト）を組み立て
+  ansible.builtin.set_fact:
+    ribs: "{{ dict((rib_nodes | default([])) | zip(ribs_collected.results | map(attribute='stdout') | map('first'))) }}"
+  when: (invariants | default([])) | length > 0
+
+- name: grade_input.json を書き出し（invariants 有=dict / 無=従来 list）
+  ansible.builtin.copy:
+    dest: "{{ gen_dir }}/grade_input.json"
+    content: >-
+      {{ ({'checks': (payload | default([])),
+           'model': (gmodel | default({})),
+           'ribs': (ribs | default({})),
+           'invariants': (invariants | default([])),
+           'genie_os': (genie_os | default('iosxe'))}
+          if (invariants | default([])) | length > 0
+          else (payload | default([]))) | to_nice_json }}
+
+- name: "採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）"
+  ansible.builtin.command:
+    argv:
+      - "{{ repo }}/.venv/bin/python3"
+      - "{{ repo }}/topologies/grade.py"
+      - "{{ gen_dir }}/grade_input.json"
+      - "--gate"
+  register: gr
+  changed_when: false
+  failed_when: false
+
+- name: この試行の結果を記録
+  ansible.builtin.set_fact:
+    payload: []
+    last_report: "{{ gr.stdout_lines }}"
+    converged: "{{ gr.rc == 0 }}"
+
+- name: 未収束なら次の試行まで待機（最終試行では待たない）
+  ansible.builtin.pause:
+    seconds: "{{ settle_delay | int }}"
+  when:
+    - not converged
+    - (attempt | int) < (max_attempts | int) - 1

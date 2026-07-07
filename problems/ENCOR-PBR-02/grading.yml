@@ -1,0 +1,64 @@
+---
+# 採点基準 (ENCOR-PBR-02)。RT01 のみ変更対象。
+# RT04(拠点LAN)発の通過トラフィックを、RT01 の入力IF に適用した PBR(ip policy route-map)で
+# 送信元別に振り分ける。開発部(10.2.2.1)発の 3.3.3.3 宛 → WAN-A(RT02 10.0.12.2)経由、
+# 営業部(10.1.1.1)発 → 既定の最短(WAN-B / RT03直結 10.0.13.2)のまま。
+# 実経路は RT04 からの traceroute 実プローブ(能動採点)で検証する。
+problem: ENCOR-PBR-02
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # --- 能動プローブ(クライアント RT04 から実際に流す) -----------------
+  - name: "RT04: 開発部(Lo2)発の 3.3.3.3 宛が WAN-A(RT02 10.0.12.2)経由になっている"
+    node: RT04
+    command: "traceroute 3.3.3.3 source Loopback2 numeric"
+    raw:
+      - contains: "10.0.12.2"
+      - not_contains: "10.0.13.2"
+    points: 30
+
+  - name: "RT04: 営業部(Lo1)発の 3.3.3.3 宛は最短(WAN-B / RT03直結 10.0.13.2)のまま"
+    node: RT04
+    command: "traceroute 3.3.3.3 source Loopback1 numeric"
+    raw:
+      - contains: "10.0.13.2"
+      - not_contains: "10.0.12.2"
+    points: 15
+
+  # --- 設定の確認 (RT01) -------------------------------------------
+  - name: "RT01: route-map が ACL マッチ + set ip next-hop 10.0.12.2 を持つ"
+    node: RT01
+    command: "show route-map"
+    raw:
+      - regex: "ip address \\(access-lists\\)"
+      - regex: "ip next-hop 10\\.0\\.12\\.2"
+    points: 20
+
+  - name: "RT01: 通過トラフィックの入力IFに PBR が適用されている (interface ip policy)"
+    node: RT01
+    command: "show running-config | include ip policy"
+    raw:
+      - regex: "ip policy route-map \\S+"
+      - not_regex: "ip local policy"
+    points: 15
+
+  - name: "RT01: マッチ用 ACL が開発部 10.2.2.x を対象にしている"
+    node: RT01
+    command: "show ip access-lists"
+    raw:
+      - regex: "permit .*10\\.2\\.2\\."
+    points: 10
+
+  # --- ベースライン非破壊 -------------------------------------------
+  - name: "RT04: 3.3.3.3/32 を OSPF で学習している (到達性維持)"
+    node: RT04
+    command: "show ip route ospf"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "3.3.3.3/32"
+      source_protocol: "ospf"
+    points: 10

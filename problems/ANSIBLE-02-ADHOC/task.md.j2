@@ -1,0 +1,48 @@
+# Ansible道場 02 : アドホックコマンドとモジュール
+
+> 題材は固定（今回は snmp location を入れるだけ）。学ぶのは **Ansible の使い方**です。
+
+## 今回学ぶこと：アドホックコマンド
+Playbook（ファイル）を書かずに、**ターミナルで1コマンド**だけ機器を操作する方法です。
+ちょっとした確認・単発の変更に使います。書式：
+
+```
+ansible <対象> -i hosts.ini -m <モジュール> -a "<引数>"
+```
+- **`<対象>`** … インベントリのグループ名（`routers`）。
+- **`-m <モジュール>`** … 使う「モジュール」。Ansible の操作は全てモジュール単位。
+  - 状態を**読む**：`cisco.ios.ios_command`（show 系）
+  - 設定を**入れる**：`cisco.ios.ios_config`
+- **`-a "<引数>"`** … モジュールへの引数（`ios_config` なら `lines='...'`）。
+
+> モジュールは「機器に何をするか」の部品。アドホックでも Playbook でも、結局は同じモジュールを呼ぶ。
+
+## 構成
+RT01〜RT03（接続情報は `hosts.ini` に記入済み＝Lesson01の成果）。
+
+## 課題
+ワークスペースの **`run.sh`** に、アドホックコマンドが穴あきで入っています。
+`__FILL_n__`（モジュール名／設定値）を埋めて、全ルータに
+**`snmp-server location ANSIBLE-DOJO-02`** を設定してください。
+
+> 穴の一覧・ヒントは `穴.md` を参照。
+
+## 実行
+```bash
+cd lab/ANSIBLE-02-ADHOC
+# まず読み取り系を試す（任意・採点対象外）:
+ansible routers -i hosts.ini -m cisco.ios.ios_command -a "commands='show clock'"
+# 課題（run.sh を埋めてから）:
+bash run.sh
+```
+
+## 採点
+```bash
+ansible-playbook playbooks/grade.yml -e problem=ANSIBLE-02-ADHOC --vault-password-file <(printf 'CCNP\n')
+```
+
+## 到達点
+- アドホックの書式（`-m` モジュール / `-a` 引数）を使える。
+- 読み取り(`ios_command`)と設定(`ios_config`)のモジュールの違いを理解する。
+
+次回 **03：Playbookの構造**（複数の操作をファイルにまとめ、再実行できる形にする）。

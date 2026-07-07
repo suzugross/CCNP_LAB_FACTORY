@@ -1,0 +1,30 @@
+! ENCOR-IPSLA-01 初期状態 (RT04 = Internet core, 変更禁止)
+!   links[0] = RT02 (primary ISP) 10.0.24.0/30
+!   links[1] = RT03 (backup ISP)  10.0.34.0/30
+!   Lo10 = 8.8.8.8/32 ＝ 擬似インターネットサービス（両 ISP から到達可）
+interface Loopback0
+ ip address 4.4.4.4 255.255.255.255
+!
+interface Loopback10
+ description === Simulated Internet Service (8.8.8.8) ===
+ ip address 8.8.8.8 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 (primary ISP) ===
+ ip address 10.0.24.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (backup ISP) ===
+ ip address 10.0.34.2 255.255.255.252
+ no shutdown
+!
+! 顧客 RT01(Lo0=1.1.1.1) への戻り:
+!   IOL では RT01 が primary IF を shut しても対向(RT02/RT03)のリンクは up のままで
+!   リンクダウンが伝播しない。よって ISP 側のフローティングは発火しない。
+!   そこで戻りは「常に生きている backup ISP(RT03) の顧客直結リンク経由」を primary とし、
+!   RT03 自体がダウンした場合のみ RT02 経由へフォールバック。
+!   これで primary 障害検知に依存せず、forward が RT02/RT03 どちらでも往復が成立する。
+ip route 1.1.1.1 255.255.255.255 10.0.34.1
+ip route 1.1.1.1 255.255.255.255 10.0.24.1 200
+!

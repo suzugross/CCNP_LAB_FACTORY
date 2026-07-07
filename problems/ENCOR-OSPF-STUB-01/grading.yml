@@ -1,0 +1,52 @@
+---
+# 採点基準。area 1 を Totally Stubby にしたうえで RT03 の RIB が
+# 「O*IA デフォルト 1 本のみ」になっていることを確認する。
+# RT01 (ASBR) は変更禁止のため採点対象外。
+problem: ENCOR-OSPF-STUB-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT02: ABR 側で area 1 が Totally Stubby (area 1 stub no-summary)"
+    node: RT02
+    command: "show running-config | section router ospf"
+    raw:
+      - regex: "area +1 +stub +no-summary"
+    points: 20
+
+  - name: "RT03: 内部側で area 1 stub が設定されている"
+    node: RT03
+    command: "show running-config | section router ospf"
+    raw:
+      - regex: "area +1 +stub"
+    points: 15
+
+  - name: "RT03: OSPF 隣接 (RT02) が Full"
+    node: RT03
+    command: "show ip ospf neighbor"
+    parser: "show ip ospf neighbor"
+    find: "interfaces.*.neighbors.*"
+    match:
+      state: { startswith: "FULL" }
+    points: 20
+
+  - name: "RT03: O*IA デフォルト (0.0.0.0/0) が RT02 経由で RIB にある"
+    node: RT03
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "0.0.0.0/0"
+      source_protocol: ospf
+      next_hop.next_hop_list.*.next_hop: "10.0.23.1"
+    points: 25
+
+  - name: "RT03: 個別の inter-area (1.1.1.1) と external (192.0.2.0) を学習していない"
+    node: RT03
+    command: "show ip route ospf"
+    raw:
+      - not_contains: "1.1.1.1"
+      - not_contains: "192.0.2.0"
+    points: 20

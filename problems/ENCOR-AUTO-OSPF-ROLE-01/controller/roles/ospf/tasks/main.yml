@@ -1,0 +1,33 @@
+---
+# roles/ospf/tasks/main.yml
+# OSPF を「リソースモジュール（宣言的）＋host_vars データ駆動」で構成する。
+# __FILL_1__〜__FILL_4__ を埋めること。データ（process_id/router_id/interfaces）は
+# host_vars/<host>.yml に入っているので、ここでは構造を回すだけ。
+
+- name: OSPF プロセス（router-id）を構成
+  # TODO①: OSPFv2 プロセスを宣言的に構成する cisco.ios の「リソースモジュール」名。
+  cisco.ios.__FILL_1__:
+    config:
+      processes:
+        - process_id: "{{ ospf.process_id }}"
+          router_id: "{{ ospf.router_id }}"
+    # TODO②: 既存設定を消さず“あるべき状態に足し込む”宣言的ステート。
+    state: __FILL_2__
+  notify: save ospf config
+
+- name: 各インタフェースを OSPF エリアに参加させる
+  cisco.ios.ios_ospf_interfaces:
+    config:
+      - name: "{{ item.name }}"
+        address_family:
+          - afi: ipv4
+            process:
+              id: "{{ ospf.process_id }}"
+              area_id: "{{ item.area }}"
+    state: merged
+  # TODO③: host_vars の「インタフェース一覧」を回す。loop に渡す変数名を入れる。
+  loop: "{{ __FILL_3__ }}"
+  loop_control:
+    label: "{{ inventory_hostname }} {{ item.name }} area {{ item.area }}"
+  # TODO④: 設定が変わったとき発火させるハンドラ名（handlers/main.yml の name と一致させる）。
+  notify: __FILL_4__

@@ -1,0 +1,48 @@
+# 問題 ENCOR-AUTO-OSPF-SCRATCH-01 : Ansible で OSPF role をゼロから書く（自動化・レベル3）
+
+## ねらい
+ROLE-01 の発展。**穴埋めではなく**、`roles/ospf/` の tasks と handlers を **自分でゼロから書いて**
+OSPF を構成します。設計データ（host_vars）は与えられているので、それを使うコードを書きます。
+
+## 与えられるデータ（`controller/host_vars/RT0X.yml`・記入済み）
+各ホストに以下が定義済み：
+```yaml
+ospf:
+  process_id: {{ params.ospf_pid }}
+  router_id: <各ルータのLoopback>
+interfaces:
+  - { name: <IF名>, area: {{ params.area }} }
+  ...
+```
+
+## 構成（初期状態で投入済み）
+各リンク・Loopback は IP 設定済み・**OSPF 未構成**。トポロジは ROLE-01 と同一。
+
+| ルータ | Loopback0 | router-id | 管理IP |
+|--------|-----------|-----------|--------|
+| RT01 | {{ params.rt01_lo }}/32 | 1.1.1.1 | 10.1.10.11 |
+| RT02 | {{ params.rt02_lo }}/32 | 2.2.2.2 | 10.1.10.12 |
+| RT03 | {{ params.rt03_lo }}/32 | 3.3.3.3 | 10.1.10.13 |
+
+## 書くもの（`roles/ospf/`）
+1. **tasks/main.yml** — host_vars を使って:
+   - OSPF プロセス {{ params.ospf_pid }} を作り `router-id` を `ospf.router_id` に設定
+   - `interfaces` の各 IF を area {{ params.area }} に参加させる（`loop`）
+   - 設定変更時に handler を `notify`
+2. **handlers/main.yml** — `notify` される handler を定義し、変更時に running を保存
+
+## 到達目標（採点される最終状態・ROLE-01と同じ）
+1. OSPF プロセス {{ params.ospf_pid }} / エリア {{ params.area }} で全リンク・Loopback を構成。
+2. RT01 の OSPF ネイバー（RT02/RT03）が **FULL**。
+3. RT01 が `{{ params.rt02_lo }}/32` `{{ params.rt03_lo }}/32` を、RT02 が `{{ params.rt01_lo }}/32` を学習。
+
+## 制約・ヒント
+- 手段は自由（リソースモジュール推奨。`ios_config` 生 lines でも可）。最終状態のみ採点。
+- スタティックルート禁止。
+- 行き詰まったら ROLE-01 の `controller_solution/` の考え方を思い出す（が、丸写しでなく自分で組む）。
+
+## 実行・採点
+```bash
+cd lab/ENCOR-AUTO-OSPF-SCRATCH-01 && ansible-playbook site.yml
+ansible-playbook playbooks/grade.yml -e problem=ENCOR-AUTO-OSPF-SCRATCH-01 -e variant={{ variant | default('base') }} --vault-password-file <(printf 'CCNP\n')
+```

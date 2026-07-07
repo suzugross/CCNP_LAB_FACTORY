@@ -1,0 +1,40 @@
+! RT02 (AS 65019 / Route Reflector)
+interface Loopback0
+ ip address 27.27.27.27 255.255.255.255
+!
+interface Loopback1
+ ip address 46.46.46.46 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.182.106.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.192.157.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.121.118.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network 27.27.27.27 0.0.0.0 area 0
+ network 10.192.157.0 0.0.0.3 area 0
+!
+router bgp 65019
+ bgp router-id 27.27.27.27
+ no bgp default ipv4-unicast
+ neighbor 10.182.106.1 remote-as 65044
+ neighbor 9.9.9.9 remote-as 65019
+ neighbor 9.9.9.9 update-source Loopback0
+ neighbor 64.64.64.64 remote-as 65019
+ neighbor 64.64.64.64 update-source Loopback0
+ address-family ipv4 unicast
+  neighbor 10.182.106.1 activate
+  neighbor 9.9.9.9 activate
+  neighbor 9.9.9.9 next-hop-self
+  neighbor 64.64.64.64 activate
+  neighbor 64.64.64.64 next-hop-self
+  network 46.46.46.46 mask 255.255.255.255
+ exit-address-family
+!

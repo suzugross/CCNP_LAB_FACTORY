@@ -1,0 +1,25 @@
+! RT02 初期構成 (相互再配送 RIP⇄OSPF TS・故障注入済)
+interface Loopback0
+ ip address 25.25.25.25 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.129.54.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 172.16.234.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 25.25.25.25
+ network 25.25.25.25 0.0.0.0 area 0
+ network 172.16.234.0 0.0.0.3 area 0
+ redistribute rip subnets
+!
+router rip
+ version 2
+ network 10.0.0.0
+ network 25.0.0.0
+ no auto-summary
+ redistribute ospf 1 metric 1
+!

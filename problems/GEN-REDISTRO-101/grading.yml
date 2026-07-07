@@ -1,0 +1,116 @@
+# 自動生成 (gen_redist_ripospf_ts.py) seed=101 fault=seed_loop
+problem: GEN-REDISTRO-101
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT01: 75.75.75.75
+    RT02: 25.25.25.25
+    RT03: 70.70.70.70
+    RT04: 46.46.46.46
+    RT05: 60.60.60.60
+    RT06: 10.0.0.1
+  links:
+  - a: RT06
+    a_ip: 10.13.169.2
+    b: RT01
+    b_ip: 10.13.169.1
+  - a: RT01
+    a_ip: 10.129.54.1
+    b: RT02
+    b_ip: 10.129.54.2
+  - a: RT01
+    a_ip: 10.155.56.1
+    b: RT03
+    b_ip: 10.155.56.2
+  - a: RT02
+    a_ip: 172.16.234.1
+    b: RT04
+    b_ip: 172.16.234.2
+  - a: RT04
+    a_ip: 172.16.73.1
+    b: RT05
+    b_ip: 172.16.73.2
+  - a: RT03
+    a_ip: 172.16.124.1
+    b: RT05
+    b_ip: 172.16.124.2
+invariants:
+- type: reachability_all
+  name: 全ルータ間 Loopback 到達性
+  points: 30
+- type: optimal
+  name: 最短転送(再配送由来の遠回りが無い・境界Lo宛は除外)
+  points: 25
+  pairs:
+  - - RT01
+    - RT06
+  - - RT02
+    - RT06
+  - - RT03
+    - RT06
+  - - RT04
+    - RT06
+  - - RT05
+    - RT06
+  - - RT02
+    - RT01
+  - - RT03
+    - RT01
+  - - RT04
+    - RT01
+  - - RT05
+    - RT01
+  - - RT06
+    - RT01
+  - - RT01
+    - RT04
+  - - RT02
+    - RT04
+  - - RT03
+    - RT04
+  - - RT05
+    - RT04
+  - - RT06
+    - RT04
+  - - RT01
+    - RT05
+  - - RT02
+    - RT05
+  - - RT03
+    - RT05
+  - - RT04
+    - RT05
+  - - RT06
+    - RT05
+- type: loop_free
+  name: 転送ループ無し
+  points: 15
+checks:
+- name: 'OSPF: RIP 側経路の LSA5 を両境界(RT02/RT03)が生成(相互再配送の冗長維持)'
+  node: RT04
+  command: show ip ospf database external
+  raw:
+  - regex: Advertising Router:\s+25\.25\.25\.25
+  - regex: Advertising Router:\s+70\.70\.70\.70
+  points: 10
+- name: 'RT01: OSPF 側 Loopback(46.46.46.46) を両境界経由の等コストで保持(OSPF→RIP 再配送の対称性)'
+  node: RT01
+  command: show ip route 46.46.46.46
+  raw:
+  - regex: 10\.129\.54\.2
+  - regex: 10\.155\.56\.2
+  points: 10
+- name: 'RT05: 静的経路なし(暫定対処の残置禁止)'
+  node: RT05
+  command: show ip route static
+  raw:
+  - not_regex: (?m)^S
+  points: 5
+- name: 'RT01: 静的経路なし(暫定対処の残置禁止)'
+  node: RT01
+  command: show ip route static
+  raw:
+  - not_regex: (?m)^S
+  points: 5

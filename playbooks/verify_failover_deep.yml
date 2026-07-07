@@ -1,0 +1,93 @@
+---
+# ENCOR-IPSLA-02 専用: 「奥」の障害(RT02↔RT04 リンク)を注入し、deep 監視(ビーコン)が
+# それを検知して backup へ切替え、8.8.8.8 への通信が継続することを能動的に確認する。
+# IPSLA-01 の near 監視ではこの奥障害を検知できない（その差を実証する）。
+#
+#   ansible-playbook playbooks/verify_failover_deep.yml -e problem=ENCOR-IPSLA-02 \
+#       --vault-password-file <(printf 'CCNP\n')
+#
+# 手順: 定常確認 → RT02 の RT04 向け IF を shut(奥障害) → 収束待ち →
+#       track Down / 既定が backup(10.0.13.2) / 8.8.8.8 疎通 → 復旧 → 復帰確認。
+
+- name: 奥障害フェイルオーバー検証（準備）
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+    gen_dir: "{{ repo }}/topologies/_generated/{{ problem }}"
+  tasks:
+    - ansible.builtin.include_vars: { file: "{{ gen_dir }}/mgmt_map.yml", name: mgmt_map }
+    - ansible.builtin.add_host: { name: RT01, groups: _fod, ansible_host: "{{ mgmt_map.RT01 }}" }
+    - ansible.builtin.add_host: { name: RT02, groups: _fod, ansible_host: "{{ mgmt_map.RT02 }}" }
+
+- name: 奥障害フェイルオーバー検証（実行）
+  hosts: _fod
+  gather_facts: false
+  vars:
+    deep_if: "Ethernet0/2"     # RT02 の RT04(Internet)向けアップリンク
+    settle: 30
+  tasks:
+    - name: "[1/6] 定常状態（RT01: track Up / 8.8.8.8 疎通）"
+      cisco.ios.ios_command:
+        commands:
+          - "show track 1"
+          - "ping 8.8.8.8 source Loopback0 repeat 5"
+      when: inventory_hostname == 'RT01'
+      register: pre
+
+    - ansible.builtin.debug: { msg: "{{ pre.stdout_lines }}" }
+      when: inventory_hostname == 'RT01'
+
+    - name: "[2/6] 奥障害注入：RT02 の {{ deep_if }}(→RT04) を shut"
+      cisco.ios.ios_config:
+        lines: ["shutdown"]
+        parents: "interface {{ deep_if }}"
+      when: inventory_hostname == 'RT02'
+
+    - name: "[3/6] 収束待ち（{{ settle }}s）"
+      ansible.builtin.pause: { seconds: "{{ settle }}" }
+      run_once: true
+
+    - name: "[4/6] 切替後（RT01: track Down / 既定 10.0.13.2 / 8.8.8.8 疎通）"
+      cisco.ios.ios_command:
+        commands:
+          - "show track 1"
+          - "show ip route 0.0.0.0"
+          - "ping 8.8.8.8 source Loopback0 repeat 10"
+      when: inventory_hostname == 'RT01'
+      register: failover
+
+    - ansible.builtin.debug: { msg: "{{ failover.stdout_lines }}" }
+      when: inventory_hostname == 'RT01'
+
+    - name: "[5/6] 障害復旧：RT02 の {{ deep_if }} を no shutdown"
+      cisco.ios.ios_config:
+        lines: ["no shutdown"]
+        parents: "interface {{ deep_if }}"
+      when: inventory_hostname == 'RT02'
+
+    - name: "収束待ち（{{ settle }}s）"
+      ansible.builtin.pause: { seconds: "{{ settle }}" }
+      run_once: true
+
+    - name: "[6/6] 復帰後（RT01: track Up / 既定 10.0.12.2 / 8.8.8.8 疎通）"
+      cisco.ios.ios_command:
+        commands:
+          - "show track 1"
+          - "show ip route 0.0.0.0"
+          - "ping 8.8.8.8 source Loopback0 repeat 5"
+      when: inventory_hostname == 'RT01'
+      register: post
+
+    - ansible.builtin.debug: { msg: "{{ post.stdout_lines }}" }
+      when: inventory_hostname == 'RT01'
+
+    - name: 判定サマリ（奥障害でも track Down→backup で 8.8.8.8 継続）
+      ansible.builtin.assert:
+        that:
+          - "'Reachability is Down' in (failover.stdout[0] | default(''))"
+          - "failover.stdout[2] is search('Success rate is [1-9]')"
+          - "post.stdout[2] is search('Success rate is [1-9]')"
+        success_msg: "✅ 奥障害(RT02-RT04)を deep 監視が検知→backup で 8.8.8.8 継続→復旧も確認"
+        fail_msg: "❌ 奥障害の検知/切替/復旧のいずれかに失敗（上の出力を確認）"
+      when: inventory_hostname == 'RT01'

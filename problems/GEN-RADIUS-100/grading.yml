@@ -1,0 +1,81 @@
+# 自動生成 (gen_radius_build.py) seed=100
+problem: GEN-RADIUS-100
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'SRV01: freeradius が稼働'
+  node: SRV01
+  exec: shell
+  command: systemctl is-active freeradius
+  raw:
+  - regex: ^active
+  points: 6
+- name: 'SRV01: noc-hanako 認証OK＋priv15 属性'
+  node: SRV01
+  exec: shell
+  command: echo "User-Name=noc-hanako,User-Password=Noc-3863" | radclient -x 127.0.0.1 auth testing123
+  raw:
+  - regex: Received Access-Accept
+  - contains: priv-lvl=15
+  points: 12
+- name: 'SRV01: monitor-op 認証OK＋priv1 属性'
+  node: SRV01
+  exec: shell
+  command: echo "User-Name=monitor-op,User-Password=Desk-6730" | radclient -x 127.0.0.1 auth testing123
+  raw:
+  - regex: Received Access-Accept
+  - regex: priv-lvl=1\b
+  points: 10
+- name: 'SRV01: SUZUKI(自動化用) 認証OK'
+  node: SRV01
+  exec: shell
+  command: echo "User-Name=SUZUKI,User-Password=CCNP" | radclient -x 127.0.0.1 auth testing123
+  raw:
+  - regex: Received Access-Accept
+  points: 8
+- name: 'SRV01: noc-hanako 誤パスワードは Reject'
+  node: SRV01
+  exec: shell
+  command: echo "User-Name=noc-hanako,User-Password=WrongPass999" | radclient -x 127.0.0.1 auth testing123
+  raw:
+  - regex: Received Access-Reject
+  points: 6
+- name: 'RT01: test aaa で noc-hanako 認証成功'
+  node: RT01
+  command: test aaa group radius noc-hanako Noc-3863 legacy
+  raw:
+  - contains: successfully authenticated
+  points: 15
+- name: 'RT01: RADIUS サーバ定義が実効'
+  node: RT01
+  command: show aaa servers
+  raw:
+  - contains: 10.99.0.2
+  - contains: auth-port 1812
+  points: 7
+- name: 'RT01: ログイン認証が RADIUS優先+local予備'
+  node: RT01
+  command: show running-config | include aaa authentication
+  raw:
+  - regex: aaa authentication login default group radius local
+  points: 7
+- name: 'RT02: test aaa で noc-hanako 認証成功'
+  node: RT02
+  command: test aaa group radius noc-hanako Noc-3863 legacy
+  raw:
+  - contains: successfully authenticated
+  points: 15
+- name: 'RT02: RADIUS サーバ定義が実効'
+  node: RT02
+  command: show aaa servers
+  raw:
+  - contains: 10.99.0.2
+  - contains: auth-port 1812
+  points: 7
+- name: 'RT02: ログイン認証が RADIUS優先+local予備'
+  node: RT02
+  command: show running-config | include aaa authentication
+  raw:
+  - regex: aaa authentication login default group radius local
+  points: 7

@@ -1,0 +1,65 @@
+! GEN-CHAIN-9300 初期 (RT07) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 52.52.52.52 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 ===
+ ip address 10.147.227.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT08 ===
+ ip address 172.30.177.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT09 ===
+ ip address 172.30.20.13 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 52.52.52.52
+ network 52.52.52.52 0.0.0.0 area 0
+ passive-interface {{ links[1] }}
+ passive-interface {{ links[2] }}
+ network 10.147.227.0 0.0.0.3 area 0
+ network 172.30.177.0 0.0.0.3 area 0
+ network 172.30.20.12 0.0.0.3 area 0
+!
+router eigrp 65100
+ network 172.30.177.0 0.0.0.3
+ network 172.30.20.12 0.0.0.3
+ redistribute bgp 65001 route-map RM-B2E
+ default-metric 100000 100 255 1 1500
+ no auto-summary
+!
+ip prefix-list PL-EAST seq 5 permit 172.21.0.0/24
+ip prefix-list PL-EAST seq 10 permit 172.21.1.0/24
+ip prefix-list PL-EAST seq 15 permit 77.77.77.77/32
+route-map RM-E2B deny 5
+ match tag 65001
+route-map RM-E2B permit 10
+ match ip address prefix-list PL-EAST
+ set community 65001:200
+route-map RM-B2E permit 10
+ set tag 65001
+!
+router bgp 65001
+ bgp router-id 52.52.52.52
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 54.54.54.54 remote-as 65001
+ neighbor 54.54.54.54 update-source Loopback0
+ neighbor 54.54.54.54 password BADAUTH
+ neighbor 57.57.57.57 remote-as 65001
+ neighbor 57.57.57.57 update-source Loopback0
+ neighbor 57.57.57.57 password BADAUTH
+ address-family ipv4
+  neighbor 54.54.54.54 activate
+  neighbor 54.54.54.54 send-community
+  neighbor 57.57.57.57 activate
+  neighbor 57.57.57.57 send-community
+  redistribute eigrp 65100 route-map RM-E2B
+  bgp redistribute-internal
+ exit-address-family
+!

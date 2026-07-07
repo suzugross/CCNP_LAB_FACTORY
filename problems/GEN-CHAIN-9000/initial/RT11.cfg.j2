@@ -1,0 +1,23 @@
+! GEN-CHAIN-9000 初期 (RT11) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 59.59.59.59 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT10 ===
+ ip address 10.127.109.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT01 ===
+ ip address 10.18.246.1 255.255.255.252
+ ip ospf authentication message-digest
+ ip ospf message-digest-key 1 md5 CHAIN
+ no shutdown
+!
+router ospf 1
+ router-id 59.59.59.59
+ area 1 stub
+ network 59.59.59.59 0.0.0.0 area 1
+ network 10.127.109.0 0.0.0.3 area 1
+ network 10.18.246.0 0.0.0.3 area 1
+!

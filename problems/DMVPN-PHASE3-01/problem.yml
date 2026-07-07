@@ -1,0 +1,30 @@
+---
+# DMVPN Phase 3 マルチスポーク（暗号なし）。トポロジは DMVPN-POC-01(Phase2)と同一。
+# 違いは制御方式: ハブは next-hop-self を既定のまま使い(対向スポーク経路の next-hop は
+# ハブ)、NHRP redirect でスポークに直接解決を促す。スポークは NHRP shortcut で
+# オンデマンドにスポーク間ダイレクトトンネルを張る。
+# 学習核心 = Phase2(no next-hop-self で経路の next-hop を対向スポークにする)との対比。
+#   Phase3 は経路上は常にハブ経由に見えるが、データは NHRP shortcut で直接流れる。
+id: DMVPN-PHASE3-01
+title: "DMVPN Phase 3 マルチスポーク (NHRP redirect/shortcut, 暗号なし)"
+exam: ENARSI
+topics: [dmvpn, mgre, nhrp, eigrp, phase3, shortcut, redirect]
+difficulty: 5
+topology: ad-hoc
+image_family: iosv
+target_nodes: [RT01, RT02, RT03, RT04]
+points: 100
+
+# IOSv は network_cli(SSH) 不可 → 採点は CML コンソール経由で show を収集。
+access: console
+
+# Underlay(NBMA) = 各エッジ↔RT04 の /30（DMVPN-POC-01 と同一アドレス）。
+#   RT01(Hub) Gi0/0 10.0.14.1/30 -- 10.0.14.2 RT04 Gi0/0
+#   RT02(Sp1) Gi0/0 10.0.24.1/30 -- 10.0.24.2 RT04 Gi0/1
+#   RT03(Sp2) Gi0/0 10.0.34.1/30 -- 10.0.34.2 RT04 Gi0/2
+# overlay = Tunnel0 mGRE 10.255.0.0/24 (Hub.1/Sp1.2/Sp2.3), EIGRP AS100。
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT04, b_if: 0 }   # Hub  underlay
+    - { a: RT02, a_if: 0, b: RT04, b_if: 1 }   # Spoke1 underlay
+    - { a: RT03, a_if: 0, b: RT04, b_if: 2 }   # Spoke2 underlay

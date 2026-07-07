@@ -1,0 +1,27 @@
+! ENARSI-BGP-PREFIX-01 初期 (RT02 = AS65002 advertiser, 変更不要)
+! 3 プレフィックスを RT01 に広告。受験者は prefix-list で 10.10.x.x/24 のみを
+! 残し、192.168.0.0/24 は捨てる。
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+!
+interface Loopback10
+ ip address 10.10.0.1 255.255.255.0
+!
+interface Loopback11
+ ip address 10.10.1.1 255.255.255.0
+!
+interface Loopback192
+ ip address 192.168.0.1 255.255.255.0
+!
+interface {{ links[0] }}
+ description === to RT01 (eBGP) ===
+ ip address 10.1.12.2 255.255.255.252
+ no shutdown
+!
+router bgp 65002
+ bgp router-id 2.2.2.2
+ neighbor 10.1.12.1 remote-as 65001
+ network 10.10.0.0 mask 255.255.255.0
+ network 10.10.1.0 mask 255.255.255.0
+ network 192.168.0.0 mask 255.255.255.0
+!

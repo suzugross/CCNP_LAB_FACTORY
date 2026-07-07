@@ -1,0 +1,65 @@
+---
+# 採点基準（pyATS Genie 構造化 + フィールドアサート）。
+# 各 check = 1 コマンド = 配点単位。find で対象オブジェクトを glob 選択し、
+# match の全フィールドを「同一オブジェクト上で」満たせば PASS（フィールド相関）。
+# `*` は任意の dict キー / list 添字にマッチ（IF名 Ethernet0/0 等の環境差を吸収）。
+#
+# 注: iosxe の "show standby" パーサは "Preemption disabled" でも preempt=True を
+#     返すバグがあるため、preempt の判定のみ raw（生出力の精密句）で行う。
+#     "show standby brief" は IOL の Et0/0(スラッシュ) を解析できず使えない。
+problem: ENCOR-FHRP-01
+total_points: 100
+
+# 全 check 共通の既定（problem.yml の image_family=iol → genie_os=iosxe）
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: HSRP グループ10 が Active・仮想IP 192.168.10.1"
+    node: RT01
+    command: "show standby"
+    parser: "show standby all"
+    find: "*.address_family.*.version.*.groups.*"
+    match:
+      group_number: 10
+      hsrp_router_state: active
+      primary_ipv4_address.address: "192.168.10.1"
+    points: 30
+
+  - name: "RT01: priority 110 で構成"
+    node: RT01
+    command: "show standby"
+    parser: "show standby all"
+    find: "*.address_family.*.version.*.groups.*"
+    match:
+      group_number: 10
+      priority: 110
+    points: 15
+
+  - name: "RT01: preempt 有効"
+    node: RT01
+    command: "show standby"
+    raw:
+      - contains: "Preemption enabled"
+    points: 15
+
+  - name: "RT02: HSRP グループ10 が Standby・仮想IP 192.168.10.1"
+    node: RT02
+    command: "show standby"
+    parser: "show standby all"
+    find: "*.address_family.*.version.*.groups.*"
+    match:
+      group_number: 10
+      hsrp_router_state: standby
+      primary_ipv4_address.address: "192.168.10.1"
+    points: 25
+
+  - name: "RT02: Active ルータとして RT01(192.168.10.2) を認識"
+    node: RT02
+    command: "show standby"
+    parser: "show standby all"
+    find: "*.address_family.*.version.*.groups.*"
+    match:
+      group_number: 10
+      active_router: "192.168.10.2"
+    points: 15

@@ -1,0 +1,37 @@
+---
+# roles/bgp/tasks/main.yml
+# eBGP を「リソースモジュール＋host_vars データ駆動」で構成する。
+# データ(host_vars)はモジュール準拠のキーで定義済みなので、リストをそのまま渡せる。
+# __FILL_1__〜__FILL_4__ を埋める。
+
+- name: BGP プロセス(AS)とネイバーを構成
+  # TODO①: BGP のグローバル設定(AS/neighbor)用リソースモジュール名。
+  cisco.ios.__FILL_1__:
+    config:
+      as_number: "{{ bgp.as_number }}"
+      neighbors: "{{ bgp.neighbors }}"
+    state: merged
+  notify: save bgp config
+
+- name: router-id を設定（cisco.ios 11.x の ios_bgp_global は router-id 直書きが不安定なため ios_config で補う）
+  cisco.ios.ios_config:
+    parents: "router bgp {{ bgp.as_number }}"
+    lines:
+      - "bgp router-id {{ bgp.router_id }}"
+  notify: save bgp config
+
+- name: address-family ipv4 unicast（広告network＋ネイバー有効化）
+  # TODO②: BGP の address-family 用リソースモジュール名。
+  cisco.ios.__FILL_2__:
+    config:
+      as_number: "{{ bgp.as_number }}"
+      address_family:
+        - afi: ipv4
+          # TODO③: ユニキャストの safi 名。
+          safi: __FILL_3__
+          networks: "{{ bgp.af_networks }}"
+          # ↓ no bgp default ipv4-unicast 環境では、ここで neighbor を有効化しないと
+          #   経路交換されない（BGP の重要ポイント）。af_neighbors は activate:true を持つ。
+          neighbors: "{{ bgp.af_neighbors }}"
+    state: merged
+  notify: save bgp config

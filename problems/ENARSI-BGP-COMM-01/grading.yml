@@ -1,0 +1,30 @@
+---
+problem: ENARSI-BGP-COMM-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT02: eBGP ネイバー RT01(10.1.12.1) が Established"
+    node: RT02
+    command: "show ip bgp neighbors 10.1.12.1"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "10.1.12.1"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 20
+
+  - name: "RT02: 10.100.0.0/24 の path に Community 65002:100 が乗っている (送出側で set+send-community が機能)"
+    node: RT02
+    command: "show ip bgp 10.100.0.0/24"
+    raw:
+      - regex: "Community:.+65002:100"
+    points: 40
+
+  - name: "RT02: 10.100.0.0/24 の best path で localpref 200 が適用されている (受信側で match+set が機能)"
+    node: RT02
+    command: "show ip bgp 10.100.0.0/24"
+    raw:
+      - regex: "localpref 200,.+best"
+    points: 40

@@ -1,0 +1,20 @@
+! ENCOR-OSPF-NSSA-01 初期状態 (RT03 = area 1 内部ルータ 兼 支店ローカル外部の保有者)
+!   links[0] = RT02 向け (area 1)
+!   支店ローカルの外部ネット 198.51.100.0/24 を static で保有しているが、
+!   まだ OSPF へは出していない（受験者が再配送と area タイプを設定する）。
+!   初期は area 1 通常エリア。
+interface Loopback0
+ ip address 3.3.3.3 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 (area 1) ===
+ ip address 10.0.23.2 255.255.255.252
+ no shutdown
+!
+ip route 198.51.100.0 255.255.255.0 Null0
+!
+router ospf 1
+ router-id 3.3.3.3
+ network 3.3.3.3 0.0.0.0 area 1
+ network 10.0.23.0 0.0.0.3 area 1
+!

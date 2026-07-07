@@ -1,0 +1,104 @@
+---
+# 採点基準 (ENCOR-WANHA-01)。デュアルGRE + IP SLA/Track 自動フェイルオーバ（両端対称）。
+# 通常時(steady state)を採点。障害切替は solution.md の手順で手動確認。
+# ★両端(HQ/Branch)に IP SLA/Track を置き、相手の Tunnel1 先を監視＝非対称ブラックホールを防ぐ。
+problem: ENCOR-WANHA-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # --- HQ(RT01) 側 ---
+  - name: "RT01: Tunnel1 (primary, →Transit-A) が up/up かつ GRE モード"
+    node: RT01
+    command: "show interfaces tunnel 1"
+    raw:
+      - regex: "Tunnel1 is up, line protocol is up"
+      - regex: "Tunnel protocol/transport GRE"
+    points: 8
+
+  - name: "RT01: Tunnel2 (backup, →Transit-B) が up/up かつ GRE モード"
+    node: RT01
+    command: "show interfaces tunnel 2"
+    raw:
+      - regex: "Tunnel2 is up, line protocol is up"
+      - regex: "Tunnel protocol/transport GRE"
+    points: 8
+
+  - name: "RT01: IP SLA 1 が primary トンネル先(172.16.1.2)を ICMP-echo 監視"
+    node: RT01
+    command: "show running-config | section ip sla 1"
+    raw:
+      - regex: "ip sla 1"
+      - regex: "icmp-echo 172\\.16\\.1\\.2"
+    points: 8
+
+  - name: "RT01: Track 1 が IP SLA 1 を監視し状態 Up"
+    node: RT01
+    command: "show track 1"
+    raw:
+      - regex: "IP SLA 1 reachability"
+      - regex: "Reachability is Up"
+    points: 8
+
+  - name: "RT01: Branch LAN 10.10.4.1/32 が primary(Tunnel1)経由でアクティブ（next-hop IP/IF 記法どちらも可）"
+    node: RT01
+    command: "show ip route 10.10.4.1"
+    raw:
+      - regex: "(Tunnel1|172\\.16\\.1\\.2)"
+    points: 12
+
+  - name: "RT01: フローティング backup (10.10.4.1 を Tunnel2/172.16.2.2 経由・高AD)が設定されている"
+    node: RT01
+    command: "show running-config | include ip route 10.10.4.1"
+    raw:
+      - regex: "ip route 10\\.10\\.4\\.1 255\\.255\\.255\\.255 (Tunnel2|172\\.16\\.2\\.2) \\d+"
+    points: 8
+
+  # --- Branch(RT04) 側（対称: 戻りも primary 監視で自動切替）---
+  - name: "RT04: Tunnel1 (primary) が up/up かつ GRE モード"
+    node: RT04
+    command: "show interfaces tunnel 1"
+    raw:
+      - regex: "Tunnel1 is up, line protocol is up"
+      - regex: "Tunnel protocol/transport GRE"
+    points: 6
+
+  - name: "RT04: IP SLA 1 が primary トンネル先(172.16.1.1)を ICMP-echo 監視"
+    node: RT04
+    command: "show running-config | section ip sla 1"
+    raw:
+      - regex: "ip sla 1"
+      - regex: "icmp-echo 172\\.16\\.1\\.1"
+    points: 8
+
+  - name: "RT04: Track 1 が IP SLA 1 を監視し状態 Up"
+    node: RT04
+    command: "show track 1"
+    raw:
+      - regex: "IP SLA 1 reachability"
+      - regex: "Reachability is Up"
+    points: 8
+
+  - name: "RT04: HQ LAN 10.10.1.1/32 が primary(Tunnel1)経由でアクティブ（戻り・記法どちらも可）"
+    node: RT04
+    command: "show ip route 10.10.1.1"
+    raw:
+      - regex: "(Tunnel1|172\\.16\\.1\\.1)"
+    points: 10
+
+  - name: "RT04: フローティング backup (10.10.1.1 を Tunnel2/172.16.2.1 経由・高AD)が設定されている"
+    node: RT04
+    command: "show running-config | include ip route 10.10.1.1"
+    raw:
+      - regex: "ip route 10\\.10\\.1\\.1 255\\.255\\.255\\.255 (Tunnel2|172\\.16\\.2\\.1) \\d+"
+    points: 8
+
+  # --- 実効疎通 ---
+  - name: "RT01: HQ LAN から Branch LAN(10.10.4.1)へ実疎通（overlay primary 経由）"
+    node: RT01
+    command: "ping 10.10.4.1 source 10.10.1.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 8

@@ -1,0 +1,38 @@
+! ENCOR-VRF-LEAK-01 初期状態 (RT02 = 顧客拠点 CE / 変更不可) : baseline(router) の後に重ねる。
+! RED / BLUE の 2 顧客拠点を VRF で収容。各拠点 Loopback とRT01向けデフォルトを事前設定。
+! RT01(PE)側の VRF/リーク設定が正しければ、両拠点から共有サービスに到達できる。
+!
+vrf definition RED
+ rd 65000:1
+ address-family ipv4
+ exit-address-family
+!
+vrf definition BLUE
+ rd 65000:2
+ address-family ipv4
+ exit-address-family
+!
+interface Ethernet0/0
+ description === RED transit to RT01 ===
+ vrf forwarding RED
+ ip address 10.1.12.2 255.255.255.252
+ no shutdown
+!
+interface Ethernet0/1
+ description === BLUE transit to RT01 ===
+ vrf forwarding BLUE
+ ip address 10.2.12.2 255.255.255.252
+ no shutdown
+!
+interface Loopback1
+ description === RED 顧客拠点 ===
+ vrf forwarding RED
+ ip address 172.16.1.1 255.255.255.0
+!
+interface Loopback2
+ description === BLUE 顧客拠点 ===
+ vrf forwarding BLUE
+ ip address 172.16.2.1 255.255.255.0
+!
+ip route vrf RED 0.0.0.0 0.0.0.0 10.1.12.1
+ip route vrf BLUE 0.0.0.0 0.0.0.0 10.2.12.1

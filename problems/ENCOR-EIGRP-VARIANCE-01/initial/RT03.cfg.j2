@@ -1,0 +1,28 @@
+! ENCOR-EIGRP-VARIANCE-01 初期 (RT03) — FS 経路の中継（RT01-RT03 が高遅延）。
+!   links[0]=RT01 / links[1]=RT04
+interface Loopback0
+ ip address 10.3.3.3 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 (10.13.13.0/30) high-latency ===
+ ip address 10.13.13.2 255.255.255.252
+ delay 3000
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT04 (10.34.34.0/30) ===
+ ip address 10.34.34.1 255.255.255.252
+ delay 10
+ no shutdown
+!
+router eigrp VAR
+ address-family ipv4 unicast autonomous-system 100
+  af-interface Loopback0
+   passive-interface
+  exit-af-interface
+  eigrp router-id 10.3.3.3
+  network 10.3.3.3 0.0.0.0
+  network 10.13.13.0 0.0.0.3
+  network 10.34.34.0 0.0.0.3
+ exit-address-family
+!

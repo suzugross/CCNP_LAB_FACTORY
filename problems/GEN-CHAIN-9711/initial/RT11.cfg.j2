@@ -1,0 +1,23 @@
+! GEN-CHAIN-9711 初期 (RT11) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 70.70.70.70 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT10 ===
+ ip address 10.186.222.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT01 ===
+ ip address 10.235.21.1 255.255.255.252
+ ip ospf authentication message-digest
+ ip ospf message-digest-key 1 md5 CHAIN
+ no shutdown
+!
+router ospf 1
+ router-id 70.70.70.70
+ area 1 stub
+ network 70.70.70.70 0.0.0.0 area 1
+ network 10.186.222.0 0.0.0.3 area 1
+ network 10.235.21.0 0.0.0.3 area 1
+!

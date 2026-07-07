@@ -1,0 +1,25 @@
+! ENARSI-REDIST-MUTUAL-01 初期 RT02 (境界: OSPF/EIGRP ネイティブ参加済・相互再配送は受験者)
+interface Loopback0
+ ip address {{ params.rt02_lo }} 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address {{ params.seg12 }}.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address {{ params.seg23 }}.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address {{ params.seg24 }}.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network {{ params.rt02_lo }} 0.0.0.0 area 0
+ network {{ params.seg12 }}.0 0.0.0.3 area 0
+ network {{ params.seg23 }}.0 0.0.0.3 area 0
+!
+router eigrp 100
+ network {{ params.seg24 }}.0 0.0.0.3
+ no auto-summary
+!

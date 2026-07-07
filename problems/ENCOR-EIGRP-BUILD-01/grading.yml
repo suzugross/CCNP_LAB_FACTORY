@@ -1,0 +1,141 @@
+---
+# ENCOR-EIGRP-BUILD-01 採点基準（実機 IOL で想定解=100 を確認済み）。
+# 方針: 到達性・2経路(variance)・集約・フィルタは「結果」を採点。named/認証/スタブは
+#       隣接成立や detail/config の証跡で確認。next-hop 厳密一致は variance 確認のみ。
+problem: ENCOR-EIGRP-BUILD-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # ---- 仕組み確認（named mode / 認証で隣接 / スタブ）= 29 点 -----------------
+  - name: "RT01: named mode（address-family ... autonomous-system 100）で構成"
+    node: RT01
+    command: "show running-config | section ^router eigrp"
+    raw:
+      - regex: "address-family +ipv4 +unicast +autonomous-system +100"
+    points: 5
+
+  - name: "RT01: RT02(10.1.12.2) と EIGRP 隣接（RT01-RT02 認証一致の証跡）"
+    node: RT01
+    command: "show ip eigrp neighbors"
+    raw:
+      - regex: "10\\.1\\.12\\.2"
+    points: 6
+
+  - name: "RT01: RT03(10.1.13.2) と EIGRP 隣接"
+    node: RT01
+    command: "show ip eigrp neighbors"
+    raw:
+      - regex: "10\\.1\\.13\\.2"
+    points: 6
+
+  - name: "RT02: RT04 がスタブ（Stub Peer Advertising）として隣接"
+    node: RT02
+    command: "show ip eigrp neighbors detail"
+    raw:
+      - regex: "Stub Peer Advertising"
+    points: 6
+
+  - name: "RT03: RT05 がスタブ（Stub Peer Advertising）として隣接"
+    node: RT03
+    command: "show ip eigrp neighbors detail"
+    raw:
+      - regex: "Stub Peer Advertising"
+    points: 6
+
+  # ---- 到達性（集約の相互学習）= 26 点 --------------------------------------
+  - name: "RT04: 10.5.0.0/22（RT05 ブロック集約）を学習"
+    node: RT04
+    command: "show ip route eigrp"
+    raw:
+      - regex: "10\\.5\\.0\\.0/22"
+    points: 7
+
+  - name: "RT05: 10.4.0.0/22（RT04 ブロック集約）を学習"
+    node: RT05
+    command: "show ip route eigrp"
+    raw:
+      - regex: "10\\.4\\.0\\.0/22"
+    points: 7
+
+  - name: "RT02: 10.5.0.0/22 を学習"
+    node: RT02
+    command: "show ip route eigrp"
+    raw:
+      - regex: "10\\.5\\.0\\.0/22"
+    points: 6
+
+  - name: "RT03: 10.4.0.0/22 を学習"
+    node: RT03
+    command: "show ip route eigrp"
+    raw:
+      - regex: "10\\.4\\.0\\.0/22"
+    points: 6
+
+  # ---- 不等コストLB（variance）= RT01 の 10.5.0.0/22 が 2 next-hop = 16 点 ---
+  - name: "RT01: 10.5.0.0/22 が RT02 経由(10.1.12.2)でインストール（successor）"
+    node: RT01
+    command: "show ip route eigrp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "10.5.0.0/22"
+      source_protocol: "eigrp"
+      next_hop.next_hop_list.*.next_hop: "10.1.12.2"
+    points: 8
+
+  - name: "RT01: 10.5.0.0/22 が RT03 直行(10.1.13.2)でもインストール（FS+variance）"
+    node: RT01
+    command: "show ip route eigrp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "10.5.0.0/22"
+      source_protocol: "eigrp"
+      next_hop.next_hop_list.*.next_hop: "10.1.13.2"
+    points: 8
+
+  # ---- 集約の正しさ（構成要素 /32 をコアへ漏らさない）= 14 点 ----------------
+  - name: "RT01: RT04 ブロックの構成要素(10.4.1.1)が個別に現れない（集約済み）"
+    node: RT01
+    command: "show ip route eigrp"
+    raw:
+      - regex: "10\\.4\\.0\\.0/22"     # 集約は学習している前提（空config誤合格を防ぐ）
+      - not_regex: "10\\.4\\.1\\.1"
+    points: 7
+
+  - name: "RT01: RT05 ブロックの構成要素(10.5.1.1)が個別に現れない（集約済み）"
+    node: RT01
+    command: "show ip route eigrp"
+    raw:
+      - regex: "10\\.5\\.0\\.0/22"
+      - not_regex: "10\\.5\\.1\\.1"
+    points: 7
+
+  # ---- フィルタ（管理 10.99.5.1 は RT03 のみ到達可・RT01/RT02 へ伝播させない）= 15 点 ----
+  # 「EIGRP に載せない」逃げを塞ぐ: RT03 では到達を要求 → RT05 で広告し中継点 RT03 で
+  # 出力フィルタする以外に成立しない設計。
+  - name: "RT03: 管理 10.99.5.1 に到達（RT05 が広告し RT03 が学習）"
+    node: RT03
+    command: "show ip route"
+    raw:
+      - regex: "10\\.99\\.5\\.1"
+    points: 5
+
+  - name: "RT01: 管理 10.99.5.1 が RIB に無い（RT03 でコア向けフィルタ成功）"
+    node: RT01
+    command: "show ip route"
+    raw:
+      - regex: "10\\.5\\.0\\.0/22"     # EIGRP 学習済み前提（空config誤合格を防ぐ）
+      - not_regex: "10\\.99\\.5\\.1"
+    points: 5
+
+  - name: "RT02: 管理 10.99.5.1 が RIB に無い"
+    node: RT02
+    command: "show ip route"
+    raw:
+      - regex: "10\\.5\\.0\\.0/22"
+      - not_regex: "10\\.99\\.5\\.1"
+    points: 5

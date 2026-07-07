@@ -1,0 +1,52 @@
+---
+# ENARSI-EIGRP-SIA-01 採点（実機で broken→fix→到達 確認済み）。
+# 症状: RT01-RT03 の片方向 EIGRP ユニキャスト遮断で、RT03 の先(RT04=T)が RT01 で学習できない
+#       ＋ RT03 隣接が周期リセット。修復で全到達。RT02 経路は健全な対照（常時 PASS）。
+problem: ENARSI-EIGRP-SIA-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: 目的地 T(10.100.100.100/32) を EIGRP で学習（RT03 経由で到達）"
+    node: RT01
+    command: "show ip route eigrp"
+    raw:
+      - regex: "10\\.100\\.100\\.100/32"
+    points: 30
+
+  - name: "RT01: RT04 の 10.4.4.4/32 を学習（RT03 の先が見える）"
+    node: RT01
+    command: "show ip route eigrp"
+    raw:
+      - regex: "10\\.4\\.4\\.4/32"
+    points: 15
+
+  - name: "RT01: RT03 の Loopback 10.3.3.3/32 を学習"
+    node: RT01
+    command: "show ip route eigrp"
+    raw:
+      - regex: "10\\.3\\.3\\.3/32"
+    points: 15
+
+  - name: "RT04: RT01 の 10.1.1.1/32 に到達（双方向・RT03 隣接が安定）"
+    node: RT04
+    command: "show ip route eigrp"
+    raw:
+      - regex: "10\\.1\\.1\\.1/32"
+    points: 20
+
+  - name: "RT04: RT02 の 10.2.2.2/32 に到達（網全体が疎通）"
+    node: RT04
+    command: "show ip route eigrp"
+    raw:
+      - regex: "10\\.2\\.2\\.2/32"
+    points: 15
+
+  - name: "RT01: RT02 の 10.2.2.2/32 を学習（健全な対照リンク）"
+    node: RT01
+    command: "show ip route eigrp"
+    raw:
+      - regex: "10\\.2\\.2\\.2/32"
+    points: 5

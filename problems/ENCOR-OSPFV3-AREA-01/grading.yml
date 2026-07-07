@@ -1,0 +1,66 @@
+---
+# 採点基準 (ENCOR-OSPFV3-AREA-01)。収集=ssh(iol-xe)。IPv6 only マルチエリア OSPFv3。
+# area0=RT01-RT02 / area1(Totally Stubby)=RT02(ABR)-RT03-RT04。
+# ABR(RT02) で area1 を 2001:DB8:A1::/48 に集約 / area1 は totally stubby(個別inter-area抑止・default注入)。
+# 効果ベース: route(集約/抑止/デフォルト) の raw + 能動 ping(集約経由/デフォルト経由 end-to-end)。
+problem: ENCOR-OSPFV3-AREA-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # --- ABR 集約: backbone は /48 集約 1 本のみ(個別 /128 は抑止) ---
+  - name: "RT01: area1 が 2001:DB8:A1::/48 に集約され、個別 Loopback(/128) は抑止されている"
+    node: RT01
+    command: "show ipv6 route ospf"
+    raw:
+      - regex: "2001:DB8:A1::/48"
+      - not_regex: "2001:DB8:A1:3::3/128"
+      - not_regex: "2001:DB8:A1:4::4/128"
+    points: 20
+
+  # --- Totally Stubby: area1 は default のみ・個別 backbone 経路は抑止 ---
+  - name: "RT03: Totally Stubby = デフォルト(::/0)を学習し、backbone 個別経路(2001:DB8:1::1/128)は持たない"
+    node: RT03
+    command: "show ipv6 route ospf"
+    raw:
+      - regex: "::/0"
+      - not_regex: "2001:DB8:1::1/128"
+    points: 18
+
+  - name: "RT04: Totally Stubby のデフォルト(::/0)を学習している(最深ノード)"
+    node: RT04
+    command: "show ipv6 route ospf"
+    raw:
+      - regex: "::/0"
+    points: 12
+
+  # --- 能動プローブ: 集約/デフォルト経由の end-to-end 到達 ---
+  - name: "RT01: backbone から area1 最深 RT04 Loopback(2001:DB8:A1:4::4) へ到達(集約経由)"
+    node: RT01
+    command: "ping 2001:DB8:A1:4::4 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 16
+
+  - name: "RT04: area1 から backbone RT01 Loopback(2001:DB8:1::1) へ到達(デフォルト経由)"
+    node: RT04
+    command: "ping 2001:DB8:1::1 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 16
+
+  - name: "RT01: RT03 Loopback(2001:DB8:A1:3::3) へ到達"
+    node: RT01
+    command: "ping 2001:DB8:A1:3::3 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 9
+
+  - name: "RT02(ABR): area1 最深 RT04 Loopback(2001:DB8:A1:4::4) へ到達"
+    node: RT02
+    command: "ping 2001:DB8:A1:4::4 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 9

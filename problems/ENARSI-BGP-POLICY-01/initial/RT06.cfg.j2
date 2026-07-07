@@ -1,0 +1,41 @@
+! ENARSI-BGP-POLICY-01 初期 (RT06, 上流 AS{{ params.as_up }}) : 変更不可。
+! インターネット上のサービス群を模した beacon /24 ×3 を両ISPへ広告する。
+! links[0] = RT04(ISP-A) / links[1] = RT05(ISP-B)
+interface Loopback0
+ ip address {{ params.rt06_lo }} 255.255.255.255
+!
+interface Loopback20
+ description === beacon-A (通常サービス) ===
+ ip address {{ params.beacon_a }}.1 255.255.255.0
+!
+interface Loopback21
+ description === beacon-B (例外ポリシー対象サービス) ===
+ ip address {{ params.beacon_b }}.1 255.255.255.0
+!
+interface Loopback22
+ description === beacon-C (通常サービス2) ===
+ ip address {{ params.beacon_c }}.1 255.255.255.0
+!
+interface {{ links[0] }}
+ description === to RT04 ISP-A (eBGP AS{{ params.as_ispa }}) ===
+ ip address {{ params.seg46 }}.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT05 ISP-B (eBGP AS{{ params.as_ispb }}) ===
+ ip address {{ params.seg56 }}.2 255.255.255.252
+ no shutdown
+!
+router bgp {{ params.as_up }}
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor {{ params.seg46 }}.1 remote-as {{ params.as_ispa }}
+ neighbor {{ params.seg56 }}.1 remote-as {{ params.as_ispb }}
+ address-family ipv4
+  neighbor {{ params.seg46 }}.1 activate
+  neighbor {{ params.seg56 }}.1 activate
+  network {{ params.beacon_a }}.0 mask 255.255.255.0
+  network {{ params.beacon_b }}.0 mask 255.255.255.0
+  network {{ params.beacon_c }}.0 mask 255.255.255.0
+ exit-address-family
+!

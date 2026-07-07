@@ -1,0 +1,44 @@
+---
+# 採点 1 回分（telnet 収集版・grade.yml から include）。
+# SSH 不可ノード(IOL L2 等)向け。collect_telnet.py で show を集めて grade.py で判定する。
+
+- name: checks.json を書き出し（telnet 収集の入力）
+  ansible.builtin.copy:
+    dest: "{{ gen_dir }}/checks.json"
+    content: "{{ checks | to_nice_json }}"
+
+- name: telnet で show を収集し grade_input.json を生成
+  ansible.builtin.command:
+    argv:
+      - "{{ repo }}/.venv/bin/python3"
+      - "{{ repo }}/topologies/collect_telnet.py"
+      - "{{ gen_dir }}/checks.json"
+      - "{{ gen_dir }}/grade_input.json"
+  environment:
+    CCNP_USER: "{{ ansible_user }}"
+    CCNP_PASS: "{{ ansible_ssh_pass }}"
+    LAB_ID: "CCNP-LAB-{{ (problem | hash('md5'))[:8] }}"   # ラボ指紋(誤ラボ検知)
+  changed_when: false
+
+- name: "採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）"
+  ansible.builtin.command:
+    argv:
+      - "{{ repo }}/.venv/bin/python3"
+      - "{{ repo }}/topologies/grade.py"
+      - "{{ gen_dir }}/grade_input.json"
+      - "--gate"
+  register: gr
+  changed_when: false
+  failed_when: false
+
+- name: この試行の結果を記録
+  ansible.builtin.set_fact:
+    last_report: "{{ gr.stdout_lines }}"
+    converged: "{{ gr.rc == 0 }}"
+
+- name: 未収束なら次の試行まで待機（最終試行では待たない）
+  ansible.builtin.pause:
+    seconds: "{{ settle_delay | int }}"
+  when:
+    - not converged
+    - (attempt | int) < (max_attempts | int) - 1

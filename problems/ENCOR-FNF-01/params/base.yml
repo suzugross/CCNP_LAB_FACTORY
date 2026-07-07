@@ -1,0 +1,38 @@
+---
+# ENCOR-FNF-01 バリアント "base"（実機100点検証済みの現行値）。
+# これらを差し替えるだけで値違い/機能違いの変形問題になる
+# （initial / task.md.j2 / grading.yml.j2 が {{ params.xxx }} で参照）。
+
+# --- トポロジ・アドレッシング ---
+rt01_lo: 1.1.1.1
+rt02_lo: 2.2.2.2
+rt03_lo: 3.3.3.3
+seg12: 10.0.12          # RT01-RT02 (/30): .1=RT01 / .2=RT02
+seg23: 10.0.23          # RT02-RT03 (/30): .1=RT02 / .2=RT03
+
+# --- Flexible NetFlow の名前 ---
+rec_name: FNF-REC
+exp_name: FNF-EXP
+mon_name: FNF-MON
+
+# --- エクスポータ ---
+collector_ip: 198.51.100.100
+udp_port: 2055
+exp_source: Loopback0
+
+# --- フローレコード ---
+# 送信元/宛先 IPv4 アドレスは動作確認(cache)のため常にキー（テンプレ側で固定）。
+# ここには「追加で match させるキー」を列挙する。
+extra_match_keys:
+  - ipv4 protocol
+  - transport source-port
+  - transport destination-port
+collect_fields:
+  - counter bytes
+  - counter packets
+
+# --- サンプラー（有無を切替可能） ---
+sampler:
+  enabled: false
+  name: FNF-SAMP
+  mode: random 1 out-of 2

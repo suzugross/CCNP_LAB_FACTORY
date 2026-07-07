@@ -1,0 +1,39 @@
+! ENARSI-BGP-POLICY-01 初期 (RT04, ISP-A AS{{ params.as_ispa }}) : 変更不可。
+! 顧客の2エッジ(RT01/RT02)と上流RT06を接続。運用ミスを模した経路リーク
+! (RFC1918 /24 と /28) を意図的に広告する = 受験者の受信フィルタ課題の素材。
+! links[0] = RT01 / links[1] = RT02 / links[2] = RT06
+interface Loopback0
+ ip address {{ params.rt04_lo }} 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 customer (eBGP AS{{ params.as_cust }}) ===
+ ip address {{ params.seg14 }}.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT02 customer (eBGP AS{{ params.as_cust }}) ===
+ ip address {{ params.seg24 }}.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT06 upstream (eBGP AS{{ params.as_up }}) ===
+ ip address {{ params.seg46 }}.1 255.255.255.252
+ no shutdown
+!
+! 意図的リーク（ISP運用ミスの再現・変更不可）
+ip route {{ params.leak_rfc }}.0 255.255.255.0 Null0
+ip route {{ params.leak_long }} 255.255.255.240 Null0
+!
+router bgp {{ params.as_ispa }}
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor {{ params.seg14 }}.1 remote-as {{ params.as_cust }}
+ neighbor {{ params.seg24 }}.1 remote-as {{ params.as_cust }}
+ neighbor {{ params.seg46 }}.2 remote-as {{ params.as_up }}
+ address-family ipv4
+  neighbor {{ params.seg14 }}.1 activate
+  neighbor {{ params.seg24 }}.1 activate
+  neighbor {{ params.seg46 }}.2 activate
+  redistribute static
+ exit-address-family
+!

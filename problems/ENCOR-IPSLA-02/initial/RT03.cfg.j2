@@ -1,0 +1,27 @@
+! ENCOR-IPSLA-02 初期状態 (RT03 = backup ISP, 変更禁止)
+!   links[0]=RT01(backup access)10.0.13 / links[1]=RT02(inter-ISP)10.0.23 / links[2]=RT04(Internet)10.0.34
+!   ★RT03 は 8.8.8.8 へは到達できる（データの backup 経路）が、ビーコン 100.64.0.1 への
+!     経路は持たない＝ビーコンは primary 専用。これでプローブが backup に逃げずフラップしない。
+interface Loopback0
+ ip address 3.3.3.3 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 (customer / backup access) ===
+ ip address 10.0.13.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT02 (peer ISP) ===
+ ip address 10.0.23.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT04 (Internet core / backup uplink) ===
+ ip address 10.0.34.1 255.255.255.252
+ no shutdown
+!
+! Internet(8.8.8.8) は RT04 経由（ビーコン経路は持たない＝primary 専用）
+ip route 8.8.8.8 255.255.255.255 10.0.34.2
+! 顧客 RT01(1.1.1.1) への直結戻り
+ip route 1.1.1.1 255.255.255.255 10.0.13.1
+!

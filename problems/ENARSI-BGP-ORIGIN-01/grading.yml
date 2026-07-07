@@ -1,0 +1,55 @@
+---
+# 採点基準 (ENARSI-BGP-ORIGIN-01)。
+# RT02/RT03 が同一 203.0.113.0/24 を redistribute static (origin incomplete) で広告。
+# weight/LP/AS-path長/MED が同条件のため origin コード(IGP < incomplete)が決め手。
+# 受験者は RT01 で RT02 経由の origin を IGP に書き換え RT02 を勝たせる。
+# 効果(ベストパス next-hop=RT02) + 手段(set origin igp / route-map in) で判定。
+problem: ENARSI-BGP-ORIGIN-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: eBGP ネイバー RT02(10.1.12.2) が Established"
+    node: RT01
+    command: "show ip bgp neighbors 10.1.12.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "10.1.12.2"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 20
+
+  - name: "RT01: eBGP ネイバー RT03(10.1.13.2) が Established"
+    node: RT01
+    command: "show ip bgp neighbors 10.1.13.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "10.1.13.2"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 20
+
+  - name: "RT01: 203.0.113.0/24 のベストパスが RT02 経由 (origin で誘導, via 10.1.12.2)"
+    node: RT01
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "203.0.113.0/24"
+      source_protocol: "bgp"
+      next_hop.next_hop_list.*.next_hop: "10.1.12.2"
+    points: 30
+
+  - name: "RT01: route-map で origin を IGP に設定している"
+    node: RT01
+    command: "show running-config | section route-map"
+    raw:
+      - regex: "set origin igp"
+    points: 15
+
+  - name: "RT01: RT02 ピアの inbound に route-map を適用している"
+    node: RT01
+    command: "show running-config | section router bgp"
+    raw:
+      - regex: "neighbor +10\\.1\\.12\\.2 +route-map +\\S+ +in"
+    points: 15

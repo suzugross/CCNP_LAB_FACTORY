@@ -1,0 +1,74 @@
+# 自動生成 (gen_bgp_pathts.py) seed=4410
+problem: GEN-BGPPATH-4410
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT01: 34.34.34.34
+    RT02: 52.52.52.52
+    RT03: 29.29.29.29
+    RT04: 24.24.24.24
+  links:
+  - a: RT01
+    a_ip: 10.97.74.1
+    b: RT02
+    b_ip: 10.97.74.2
+  - a: RT01
+    a_ip: 10.250.64.1
+    b: RT03
+    b_ip: 10.250.64.2
+  - a: RT02
+    a_ip: 10.149.3.1
+    b: RT04
+    b_ip: 10.149.3.2
+  - a: RT03
+    a_ip: 10.199.114.1
+    b: RT04
+    b_ip: 10.199.114.2
+invariants:
+- type: reachability_all
+  name: 全Loopback到達
+  points: 20
+- type: loop_free
+  name: 転送ループ不在
+  points: 10
+checks:
+- name: '往き: RT01→24.24.24.24 は PRIMARY(RT02)経由（予備RT03を使わない）'
+  node: RT01
+  command: show ip route 24.24.24.24
+  raw:
+  - contains: 10.97.74.2
+  - not_contains: 10.250.64.2
+  points: 25
+- name: '帰り: RT04→34.34.34.34 は PRIMARY(RT02)経由（予備RT03を使わない）'
+  node: RT04
+  command: show ip route 34.34.34.34
+  raw:
+  - contains: 10.149.3.1
+  - not_contains: 10.199.114.1
+  points: 25
+- name: 'eBGP RT01-RT02: Established'
+  node: RT01
+  command: show ip bgp neighbors 10.97.74.2
+  raw:
+  - regex: BGP state += +Established
+  points: 5
+- name: 'eBGP RT01-RT03: Established'
+  node: RT01
+  command: show ip bgp neighbors 10.250.64.2
+  raw:
+  - regex: BGP state += +Established
+  points: 5
+- name: 'eBGP RT02-RT04: Established'
+  node: RT04
+  command: show ip bgp neighbors 10.149.3.1
+  raw:
+  - regex: BGP state += +Established
+  points: 5
+- name: 'eBGP RT03-RT04: Established'
+  node: RT04
+  command: show ip bgp neighbors 10.199.114.1
+  raw:
+  - regex: BGP state += +Established
+  points: 5

@@ -1,0 +1,32 @@
+! ENARSI-BGP-01 初期状態 (RT03, AS{{ params.as3 }}) : 上流トランジット。BGP 構築済み(変更不要)。
+! 値は params/<variant>.yml 由来。  links[0] = RT01 向け / links[1] = RT04 向け
+interface Loopback0
+ ip address {{ params.rt03_lo }} 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 (eBGP AS{{ params.as1 }}) ===
+ ip address {{ params.seg13 }}.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT04 (eBGP AS{{ params.as4 }}) ===
+ ip address {{ params.seg34 }}.1 255.255.255.252
+ no shutdown
+!
+{% if params.peer_mode | default('connected') == 'loopback' %}
+ip route {{ params.rt01_lo }} 255.255.255.255 {{ params.seg13 }}.1
+{% endif %}
+router bgp {{ params.as3 }}
+ bgp log-neighbor-changes
+{% if params.peer_mode | default('connected') == 'loopback' %}
+ neighbor {{ params.rt01_lo }} remote-as {{ params.as1 }}
+ neighbor {{ params.rt01_lo }} update-source Loopback0
+ neighbor {{ params.rt01_lo }} ebgp-multihop 2
+{% if params.bgp_password is defined %}
+ neighbor {{ params.rt01_lo }} password {{ params.bgp_password }}
+{% endif %}
+{% else %}
+ neighbor {{ params.seg13 }}.1 remote-as {{ params.as1 }}
+{% endif %}
+ neighbor {{ params.seg34 }}.2 remote-as {{ params.as4 }}
+!

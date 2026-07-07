@@ -1,0 +1,70 @@
+{
+ "chain": [
+  {
+   "layer": "L1",
+   "id": "l1_mtu_mismatch",
+   "desc": "RT01 側 West アクセスIF に ip mtu 1400 (EXSTART 固着)",
+   "flag": {
+    "kind": "mtu"
+   }
+  },
+  {
+   "layer": "L1",
+   "id": "l1_area_mismatch",
+   "desc": "RT01 の West アクセスIF が area 2 で設定されている(正: area 1)",
+   "flag": {
+    "kind": "area",
+    "net": "10.79.240.0"
+   }
+  },
+  {
+   "layer": "L2",
+   "id": "l2_rr_client_break",
+   "desc": "両RRで RT01/RT07/RT09 の route-reflector-client が外されている(非client同士は反射されず West↔East の経路交換が途絶)",
+   "flag": {
+    "kind": "rrclient",
+    "victims": [
+     "RT01",
+     "RT07",
+     "RT09"
+    ]
+   }
+  },
+  {
+   "layer": "L2",
+   "id": "l2_password_mismatch",
+   "desc": "RT01 の急所ピア(RT03/RT04)にだけ MD5 パスワード(相手側は無し→セッション不成立)",
+   "flag": {
+    "kind": "bgppass",
+    "victim": "RT01",
+    "excl": "rt01sess"
+   }
+  },
+  {
+   "layer": "L3",
+   "id": "l3_redist_internal_missing",
+   "desc": "両境界の BGP に bgp redistribute-internal が無い(IOS既定=iBGP経路はIGPへ再配送されない→East に West の戻り経路が皆無)",
+   "flag": {
+    "kind": "b2einternal"
+   }
+  },
+  {
+   "layer": "L3",
+   "id": "l3_nh_passive_missing",
+   "desc": "両境界の EIGRP側リンク(172.30.x)が OSPF に広告されていない(E2B経路の BGP next-hop が解決不能→RRで no best・East経路が配られない)",
+   "flag": {
+    "kind": "nhpassive"
+   }
+  }
+ ],
+ "decoys": [
+  {
+   "id": "dc_legacy_acl",
+   "node": "RT05"
+  },
+  {
+   "id": "dc_snmp_note",
+   "node": "RT11"
+  }
+ ]
+}

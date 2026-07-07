@@ -1,0 +1,91 @@
+---
+# 採点基準（パラメータ化）。効果ベース判定: クラス名/ポリシー名/ACL名は任意。
+# 学習核心 = 「制御プレーンを守りつつ、守るべきもの(ルーティング/SSH)を壊さない」。
+#  - ルーティング保護は効果(OSPF隣接 FULL 維持)＋ ACL に OSPF 明示許可で判定
+#  - ICMP は police(適合transmit/超過drop)、Telnet は完全drop、SSH は許可
+#  - 実トラフィック(RT02→RT01 への ICMP)が rate-limit されつつ通ることを能動確認
+problem: ENCOR-COPP-03
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: OSPF 隣接 RT02({{ params.seg12 }}.2) が FULL (CoPP がルーティングを壊していない)"
+    node: RT01
+    command: "show ip ospf neighbor"
+    parser: "show ip ospf neighbor"
+    find: "interfaces.*.neighbors.*"
+    match:
+      address: "{{ params.seg12 }}.2"
+      state: { startswith: "FULL" }
+    points: 20
+
+  - name: "RT01: control-plane 入力に ICMPクラス(police {{ params.icmp_bps }} / 適合transmit / 超過drop) が存在"
+    node: RT01
+    command: "show policy-map control-plane"
+    parser: "show policy-map control-plane"
+    find: "Control Plane.service_policy.input.policy_name.*.class_map.*"
+    match:
+      police.cir_bps: {{ params.icmp_bps }}
+      police.conformed.actions.transmit: true
+      police.exceeded.actions.drop: true
+    points: 20
+
+  - name: "RT01: control-plane 入力に Telnet遮断クラス(適合drop+超過drop=完全遮断) が存在"
+    node: RT01
+    command: "show policy-map control-plane"
+    parser: "show policy-map control-plane"
+    find: "Control Plane.service_policy.input.policy_name.*.class_map.*"
+    match:
+      police.conformed.actions.drop: true
+      police.exceeded.actions.drop: true
+    points: 15
+
+  - name: "RT01: control-plane 入力に class-default 相当(police {{ params.default_bps }} / 超過drop) が存在"
+    node: RT01
+    command: "show policy-map control-plane"
+    parser: "show policy-map control-plane"
+    find: "Control Plane.service_policy.input.policy_name.*.class_map.*"
+    match:
+      police.cir_bps: {{ params.default_bps }}
+      police.exceeded.actions.drop: true
+    points: 10
+
+  - name: "RT01: ICMP を許可する ACL ACE が存在"
+    node: RT01
+    command: "show ip access-lists"
+    parser: "show ip access-lists"
+    find: "*.aces.*"
+    match:
+      actions.forwarding: permit
+      matches.l3.ipv4.protocol: icmp
+    points: 5
+
+  - name: "RT01: OSPF を許可する ACL ACE が存在 (ルーティングを CoPP で明示的に保護)"
+    node: RT01
+    command: "show ip access-lists"
+    raw:
+      - regex: "permit +(ospf|89)\\b"
+    points: 10
+
+  - name: "RT01: Telnet(TCP宛先=23) を分類する ACL ACE が存在"
+    node: RT01
+    command: "show ip access-lists"
+    raw:
+      - regex: "permit +tcp\\b.*\\beq +(23|telnet)\\b"
+    points: 5
+
+  - name: "RT01: SSH(TCP宛先=22) を許可する ACL ACE が存在 (管理を保護)"
+    node: RT01
+    command: "show ip access-lists"
+    raw:
+      - regex: "permit +tcp\\b.*\\beq +(22|ssh)\\b"
+    points: 5
+
+  - name: "RT02→RT01({{ params.seg12 }}.1) への ICMP が通る (制限はしても完全遮断はしない)"
+    node: RT02
+    command: "ping {{ params.seg12 }}.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 10

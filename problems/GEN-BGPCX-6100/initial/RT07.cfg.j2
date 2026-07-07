@@ -1,0 +1,58 @@
+! RT07 (role=bw, AS=65001) 初期構成
+interface Loopback0
+ ip address 10.0.32.32 255.255.255.255
+ ip ospf 1 area 0
+!
+interface {{ links[0] }}
+ ip address 10.143.143.2 255.255.255.252
+ ip ospf 1 area 0
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.118.118.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.194.194.1 255.255.255.252
+ no shutdown
+!
+ip route 10.0.66.66 255.255.255.255 10.194.194.2
+!
+router ospf 1
+ router-id 10.0.32.32
+!
+route-map RM-TAG-MHOP permit 10
+ set community 65001:600
+!
+route-map RM-PREPEND-IN permit 10
+ set as-path prepend 65100 65100
+!
+route-map RM-PREPEND-BACKUP permit 10
+ set as-path prepend 65001 65001
+!
+router bgp 65001
+ bgp router-id 10.0.32.32
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.0.91.91 remote-as 65001
+ neighbor 10.118.118.2 remote-as 65100
+ neighbor 10.0.66.66 remote-as 65200
+ neighbor 10.0.66.66 update-source Loopback0
+ neighbor 10.0.66.66 ebgp-multihop 2
+ address-family ipv4 unicast
+  neighbor 10.0.91.91 activate
+  neighbor 10.0.91.91 send-community
+  neighbor 10.0.91.91 next-hop-self
+  neighbor 10.118.118.2 activate
+  neighbor 10.118.118.2 route-map RM-PREPEND-IN in
+  neighbor 10.118.118.2 route-map RM-PREPEND-BACKUP out
+  neighbor 10.0.66.66 activate
+  neighbor 10.0.66.66 route-map RM-TAG-MHOP in
+ exit-address-family
+!
+! --- SNMPv3 (NOC 監視標準) ---
+snmp-server view MONVIEW iso included
+snmp-server group MONGRP v3 priv read MONVIEW
+snmp-server location CCNP-LAB
+snmp-server user MONUSER MONGRP v3 auth sha CCNP-Auth-2026 priv aes 128 CCNP-Priv-2026
+!

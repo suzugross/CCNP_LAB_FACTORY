@@ -1,0 +1,31 @@
+# 問題 ENCOR-REDIST-01 : OSPF と EIGRP の相互再配送
+
+## シナリオ
+2 つのルーティングドメインが RT02 で接続されています。
+- **OSPF area {{ params.area }}** : RT01 ⇔ RT02（{{ params.seg12 }}.0/30）
+- **EIGRP AS {{ params.eigrp_as }}** : RT02 ⇔ RT03（{{ params.seg23 }}.0/30）
+
+各ドメイン内の OSPF / EIGRP は構築済み（変更不可）。**設定するのは RT02 のみ**です。
+現状 RT01 は RT03 のループバックを知らず、RT03 も RT01 のループバックを知りません。
+
+## 構成（初期状態で投入済み）
+| ルータ | Loopback0 | 接続 |
+|--------|-----------|------|
+| RT01 | {{ params.rt01_lo }}/32 | OSPF: {{ params.seg12 }}.1 |
+| RT02 | {{ params.rt02_lo }}/32 | OSPF: {{ params.seg12 }}.2 / EIGRP: {{ params.seg23 }}.1 |
+| RT03 | {{ params.rt03_lo }}/32 | EIGRP: {{ params.seg23 }}.2 |
+
+## 到達目標 — 設定するのは RT02 のみ
+1. RT02 で EIGRP の経路を OSPF へ相互に伝え、OSPF の経路を EIGRP へ伝える。
+2. 結果として:
+   - **RT01** に `{{ params.rt03_lo }}/32` が **OSPF 外部経路 (`O E2`)** で現れる。
+   - **RT03** に `{{ params.rt01_lo }}/32` が **EIGRP 外部経路 (`D EX`)** で現れる。
+
+## 制約
+- RT01 / RT03 の設定は変更しないこと。
+- スタティック・デフォルトルートで代替しないこと。
+
+## 採点
+```
+ansible-playbook playbooks/grade.yml -e problem=ENCOR-REDIST-01 -e variant={{ variant | default('base') }} --vault-password-file <(printf 'CCNP\n')
+```

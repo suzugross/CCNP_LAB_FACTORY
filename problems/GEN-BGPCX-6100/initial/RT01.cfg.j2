@@ -1,0 +1,30 @@
+! RT01 (role=mhop, AS=65200) 初期構成
+interface Loopback0
+ ip address 10.0.66.66 255.255.255.255
+!
+interface Loopback1
+ ip address 198.51.100.1 255.255.255.0
+!
+interface {{ links[0] }}
+ ip address 10.194.194.2 255.255.255.252
+ no shutdown
+!
+ip route 10.0.32.32 255.255.255.255 10.194.194.1
+!
+router bgp 65200
+ bgp router-id 10.0.66.66
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.0.32.32 remote-as 65001
+ neighbor 10.0.32.32 update-source Loopback0
+ address-family ipv4 unicast
+  neighbor 10.0.32.32 activate
+  network 198.51.100.0 mask 255.255.255.0
+ exit-address-family
+!
+! --- SNMPv3 (NOC 監視標準) ---
+snmp-server view MONVIEW iso included
+snmp-server group MONGRP v3 priv read MONVIEW
+snmp-server location CCNP-LAB
+snmp-server user MONUSER MONGRP v3 auth sha CCNP-Auth-2026 priv aes 128 CCNP-Priv-2026
+!

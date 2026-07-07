@@ -1,0 +1,85 @@
+---
+# ENCOR-IPSLA-01 専用: フェイルオーバーの「実データプレーン」検証。
+# grade.yml は定常状態＋実疎通を採点するが、こちらは primary 障害を実際に注入し、
+# 切替後も RT01 が 8.8.8.8 へ到達できる（戻り経路まで成立する）ことを能動的に確認する。
+#
+# 使い方:
+#   ansible-playbook playbooks/verify_failover.yml -e problem=ENCOR-IPSLA-01 \
+#     --vault-password-file <(printf 'CCNP\n')
+# 任意: -e primary_if=Ethernet0/0 -e settle=25
+#
+# 手順: 定常確認 → primary IF を shut → 収束待ち → 切替後の track Down / 経路 / 8.8.8.8 疎通
+#       → no shut で復旧 → 復旧後の track Up / 経路 / 8.8.8.8 疎通。
+
+- name: フェイルオーバー実データプレーン検証
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+    gen_dir: "{{ repo }}/topologies/_generated/{{ problem }}"
+    primary_if: "Ethernet0/0"     # RT01 の primary(=RT02向き) リンク。iol router の links[0]
+    settle: 25                    # 収束待ち秒（SLA frequency + track 反映）
+  tasks:
+    - ansible.builtin.include_vars: { file: "{{ gen_dir }}/mgmt_map.yml", name: mgmt_map }
+    - ansible.builtin.add_host: { name: RT01, groups: _fo, ansible_host: "{{ mgmt_map.RT01 }}" }
+
+    - name: "[1/6] 定常状態を確認（track Up / 8.8.8.8 疎通）"
+      cisco.ios.ios_command:
+        commands:
+          - "show track 1"
+          - "show ip route 0.0.0.0"
+          - "ping 8.8.8.8 source Loopback0 repeat 5"
+      delegate_to: RT01
+      register: before
+      changed_when: false
+    - ansible.builtin.debug: { msg: "{{ before.stdout_lines }}" }
+
+    - name: "[2/6] primary リンク({{ primary_if }})を shut（障害注入）"
+      cisco.ios.ios_config:
+        lines: ["shutdown"]
+        parents: "interface {{ primary_if }}"
+      delegate_to: RT01
+
+    - name: "[3/6] 収束待ち（{{ settle }}s）"
+      ansible.builtin.pause: { seconds: "{{ settle | int }}" }
+
+    - name: "[4/6] 切替後を確認（track Down / 経路が 10.0.13.2 / 8.8.8.8 疎通）"
+      cisco.ios.ios_command:
+        commands:
+          - "show track 1"
+          - "show ip route 0.0.0.0"
+          - "ping 8.8.8.8 source Loopback0 repeat 10"
+      delegate_to: RT01
+      register: failover
+      changed_when: false
+    - ansible.builtin.debug: { msg: "{{ failover.stdout_lines }}" }
+
+    - name: "[5/6] primary リンクを復旧（no shutdown）"
+      cisco.ios.ios_config:
+        lines: ["no shutdown"]
+        parents: "interface {{ primary_if }}"
+      delegate_to: RT01
+
+    - name: "収束待ち（{{ settle }}s）"
+      ansible.builtin.pause: { seconds: "{{ settle | int }}" }
+
+    - name: "[6/6] 復旧後を確認（track Up / 経路が 10.0.12.2 / 8.8.8.8 疎通）"
+      cisco.ios.ios_command:
+        commands:
+          - "show track 1"
+          - "show ip route 0.0.0.0"
+          - "ping 8.8.8.8 source Loopback0 repeat 5"
+      delegate_to: RT01
+      register: after
+      changed_when: false
+    - ansible.builtin.debug: { msg: "{{ after.stdout_lines }}" }
+
+    - name: 判定サマリ
+      ansible.builtin.assert:
+        that:
+          - "'Reachability is Down' in (failover.stdout[0] | default(''))"
+          - "failover.stdout[2] is search('Success rate is [1-9]')"
+          - "'Reachability is Up' in (after.stdout[0] | default(''))"
+          - "after.stdout[2] is search('Success rate is [1-9]')"
+        success_msg: "✅ フェイルオーバー実証: 切替後も backup 経由で 8.8.8.8 に疎通・復旧も確認"
+        fail_msg: "❌ フェイルオーバー後の疎通または復旧に失敗（出力を確認）"

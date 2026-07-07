@@ -1,0 +1,96 @@
+#!/bin/bash
+# SRV01 (DNS/DHCP サーバ・稼働中設定) 初期化 — 生成: gen_dnsdhcp_ts.py
+set -e
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[$(date -Is)] $*"; }
+
+log "in-band NIC / 社内への経路を netplan で永続化"
+rm -f /etc/netplan/50-cloud-init.yaml
+cat > /etc/netplan/60-ccnp.yaml <<'EOF'
+network:
+  version: 2
+  ethernets:
+    ens2:
+      addresses: [{{ mgmt_ip }}/{{ mgmt_prefixlen }}]
+      routes:
+        - to: default
+          via: {{ mgmt_gw }}
+      nameservers:
+        addresses: {{ mgmt_dns | to_json }}
+    ens3:
+      addresses: [10.99.0.2/30]
+      routes:
+        - to: 10.1.12.0/30
+          via: 10.99.0.1
+        - to: 192.168.90.0/24
+          via: 10.99.0.1
+EOF
+chmod 600 /etc/netplan/60-ccnp.yaml
+netplan apply
+
+log "パッケージ導入 (bind9 / isc-dhcp-server / dnsutils)"
+for i in 1 2 3; do
+  apt-get update -qq && \
+  apt-get install -y -qq bind9 bind9utils isc-dhcp-server dnsutils && break
+  sleep 10
+done
+
+log "稼働中サービスの設定を投入（TS: この中に故障が仕込まれている）"
+cat > /etc/bind/db.ccnp.local <<'CCNP_EOF'
+$TTL 300
+@       IN SOA srv01.ccnp.local. admin.ccnp.local. ( 2026070401 3600 600 86400 60 )
+@       IN NS  srv01.ccnp.local.
+srv01   IN A   10.99.0.2
+rt01    IN A   37.37.37.37
+rt02    IN A   98.98.98.98
+gw      IN A   192.168.90.1
+portal  IN CNAME srv01.ccnp.local.
+CCNP_EOF
+
+cat > /etc/bind/db.192.168.90 <<'CCNP_EOF'
+$TTL 300
+@       IN SOA srv01.ccnp.local. admin.ccnp.local. ( 2026070401 3600 600 86400 60 )
+@       IN NS  srv01.ccnp.local.
+1       IN PTR gw.ccnp.local.
+CCNP_EOF
+
+cat > /etc/bind/named.conf.local <<'CCNP_EOF'
+zone "ccnp.local" { type master; file "/etc/bind/db.ccnp.local"; };
+zone "90.168.192.in-addr.arpa" { type master; file "/etc/bind/db.192.168.90"; };
+CCNP_EOF
+
+cat > /etc/bind/named.conf.options <<'CCNP_EOF'
+acl internal { 127.0.0.0/8; 10.0.0.0/8; };
+options {
+        directory "/var/cache/bind";
+        recursion yes;
+        allow-query { internal; };
+        allow-recursion { internal; };
+        dnssec-validation no;
+        listen-on { any; };
+        listen-on-v6 { any; };
+};
+CCNP_EOF
+
+cat > /etc/dhcp/dhcpd.conf <<'CCNP_EOF'
+default-lease-time 600;
+max-lease-time 7200;
+authoritative;
+
+# 待受IF(ens3)自身のサブネット宣言（無いと dhcpd が起動しない）
+subnet 10.99.0.0 netmask 255.255.255.252 { }
+
+subnet 192.168.90.0 netmask 255.255.255.0 {
+  range 192.168.90.101 192.168.90.150;
+  option routers 192.168.90.1;
+  option domain-name-servers 10.99.0.2;
+  option domain-name "ccnp.local";
+}
+CCNP_EOF
+
+sed -i 's/^INTERFACESv4=.*/INTERFACESv4="ens3"/' /etc/default/isc-dhcp-server
+
+systemctl restart named || true
+systemctl restart isc-dhcp-server || true
+systemctl enable -q named isc-dhcp-server || true
+log "DONE"

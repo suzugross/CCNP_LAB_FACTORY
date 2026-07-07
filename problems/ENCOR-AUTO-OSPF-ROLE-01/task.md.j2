@@ -1,0 +1,62 @@
+# 問題 ENCOR-AUTO-OSPF-ROLE-01 : Ansible モダン記法で OSPF を構成する（自動化・レベル2）
+
+## ねらい
+FILL-01 と同じ OSPF 課題を、**今どきの書き方**で解きます。`ios_config` に生 CLI を
+並べるのではなく、次の 3 要素を統合した **role 型プロジェクト**の穴を埋めて完成させます。
+
+1. **リソースモジュール**（`ios_ospfv2` / `ios_ospf_interfaces`）＋ `state: merged`
+   … 生 CLI ではなく「あるべき状態」を宣言する。
+2. **データ駆動**（`host_vars`）＋ `loop`
+   … 設定値はデータ（host_vars）に、処理はロジック（tasks）に分離。
+3. **role 化＋handlers/notify**
+   … 変更があった回だけ `save` を発火させる。
+
+## 構成（初期状態で投入済み）
+各リンク・Loopback は IP 設定済み・**OSPF 未構成**。トポロジは FILL-01 と同一。
+
+| ルータ | Loopback0 | router-id | 管理IP(SSH) |
+|--------|-----------|-----------|-------------|
+| RT01 | {{ params.rt01_lo }}/32 | 1.1.1.1 | 10.1.10.11 |
+| RT02 | {{ params.rt02_lo }}/32 | 2.2.2.2 | 10.1.10.12 |
+| RT03 | {{ params.rt03_lo }}/32 | 3.3.3.3 | 10.1.10.13 |
+
+ログイン: `SUZUKI / CCNP`（特権15）。
+
+## 用意されている role 型ワークスペース（`controller/`）
+```
+controller/
+├── ansible.cfg / hosts.ini   … 記入不要
+├── site.yml                  … routers に role 'ospf' を適用
+├── host_vars/RT0X.yml        … OSPF 設計データ（★記入済み・読んで活用する）
+└── roles/ospf/
+    ├── tasks/main.yml        … 穴あり(__FILL_n__)
+    └── handlers/main.yml     … 穴あり(__FILL_n__)
+```
+
+## 穴について（seed でランダム化）
+このワークスペースの **`穴.md`** に、今回の穴の一覧（番号・ファイル・ヒント）があります。
+出題のたびに **穴の位置・数が変わります**。各ファイル内の `__FILL_n__` を、`穴.md` のヒントを頼りに埋めてください。
+
+
+> ヒント控えめ：値そのものは書きません。「リソースモジュールの命名規則」「冪等に
+> 足し込むステート名」「`host_vars` に定義したキー名」「handler の name と notify の対応」
+> 「`ios_config` の保存タイミング指定」を思い出してください。
+
+## 到達目標（＝採点される最終状態・FILL-01 と同じ）
+1. OSPF プロセス {{ params.ospf_pid }} / エリア {{ params.area }} で全リンク・Loopback を構成。
+2. RT01 の OSPF ネイバー（RT02/RT03）が **FULL**。
+3. RT01 が `{{ params.rt02_lo }}/32` `{{ params.rt03_lo }}/32` を、RT02 が `{{ params.rt01_lo }}/32` を
+   OSPF 経路として学習している。
+
+## 実行手順
+```bash
+cp -r problems/ENCOR-AUTO-OSPF-ROLE-01/controller ~/lab-role && cd ~/lab-role
+# roles/ospf/tasks/main.yml と handlers/main.yml の __FILL_n__ を埋める
+ansible-playbook site.yml          # 1回目: changed・"save ospf config" handler が走る
+ansible-playbook site.yml          # 2回目: changed=0・handler は走らない（冪等の確認）
+```
+
+## 採点
+```
+ansible-playbook playbooks/grade.yml -e problem=ENCOR-AUTO-OSPF-ROLE-01 -e variant={{ variant | default('base') }} --vault-password-file <(printf 'CCNP\n')
+```

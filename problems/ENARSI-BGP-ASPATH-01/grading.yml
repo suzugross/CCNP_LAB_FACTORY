@@ -1,0 +1,44 @@
+---
+problem: ENARSI-BGP-ASPATH-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: eBGP ネイバー RT02(10.1.12.2) が Established"
+    node: RT01
+    command: "show ip bgp neighbors 10.1.12.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "10.1.12.2"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 15
+
+  - name: "RT01: AS-path access-list 10 で 65003 を含む経路を deny している"
+    node: RT01
+    command: "show running-config | include ip as-path access-list 10"
+    raw:
+      - regex: "ip as-path access-list 10 deny .+65003"
+    points: 20
+
+  - name: "RT01: filter-list 10 in が RT02 ピアに適用されている"
+    node: RT01
+    command: "show running-config | section router bgp"
+    raw:
+      - regex: "neighbor +10\\.1\\.12\\.2 +filter-list +10 +in"
+    points: 15
+
+  - name: "RT01: 10.2.0.0/24 が BGP テーブルに残っている (許可された)"
+    node: RT01
+    command: "show ip bgp"
+    raw:
+      - regex: "10\\.2\\.0\\.0"
+    points: 25
+
+  - name: "RT01: 10.3.0.0/24 が BGP テーブルから消えている (deny された)"
+    node: RT01
+    command: "show ip bgp"
+    raw:
+      - not_contains: "10.3.0.0"
+    points: 25

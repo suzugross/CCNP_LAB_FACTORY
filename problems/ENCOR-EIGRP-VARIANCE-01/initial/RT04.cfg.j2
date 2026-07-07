@@ -1,0 +1,44 @@
+! ENCOR-EIGRP-VARIANCE-01 初期 (RT04) — 宛先。Lo0=D(10.44.44.44) / Lo1=E(10.66.66.66)。
+!   links[0]=RT02 / links[1]=RT03 / links[2]=RT05
+interface Loopback0
+ description === D ===
+ ip address 10.44.44.44 255.255.255.255
+!
+interface Loopback1
+ description === E ===
+ ip address 10.66.66.66 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 (10.24.24.0/30) ===
+ ip address 10.24.24.2 255.255.255.252
+ delay 10
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (10.34.34.0/30) ===
+ ip address 10.34.34.2 255.255.255.252
+ delay 10
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT05 (10.54.54.0/30) ===
+ ip address 10.54.54.2 255.255.255.252
+ delay 25
+ no shutdown
+!
+router eigrp VAR
+ address-family ipv4 unicast autonomous-system 100
+  af-interface Loopback0
+   passive-interface
+  exit-af-interface
+  af-interface Loopback1
+   passive-interface
+  exit-af-interface
+  eigrp router-id 10.44.44.44
+  network 10.44.44.44 0.0.0.0
+  network 10.66.66.66 0.0.0.0
+  network 10.24.24.0 0.0.0.3
+  network 10.34.34.0 0.0.0.3
+  network 10.54.54.0 0.0.0.3
+ exit-address-family
+!

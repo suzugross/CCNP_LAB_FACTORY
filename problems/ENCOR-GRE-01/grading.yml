@@ -1,0 +1,47 @@
+---
+# 採点基準。GRE Tunnel100 up/up + EIGRP で対向 Lo10 を Tunnel100 経由で学習。
+# RT02 は変更禁止 (transit) のため採点対象外。
+problem: ENCOR-GRE-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: Tunnel100 が up/up かつ GRE モード"
+    node: RT01
+    command: "show interfaces tunnel 100"
+    raw:
+      - regex: "Tunnel100 is up, line protocol is up"
+      - regex: "Tunnel protocol/transport GRE"
+    points: 10
+
+  - name: "RT03: Tunnel100 が up/up かつ GRE モード"
+    node: RT03
+    command: "show interfaces tunnel 100"
+    raw:
+      - regex: "Tunnel100 is up, line protocol is up"
+      - regex: "Tunnel protocol/transport GRE"
+    points: 10
+
+  - name: "RT01: 10.10.3.1/32 を EIGRP で学習し outgoing が Tunnel100"
+    node: RT01
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "10.10.3.1/32"
+      source_protocol: eigrp
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel100
+    points: 40
+
+  - name: "RT03: 10.10.1.1/32 を EIGRP で学習し outgoing が Tunnel100"
+    node: RT03
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "10.10.1.1/32"
+      source_protocol: eigrp
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel100
+    points: 40

@@ -1,0 +1,50 @@
+# 問題 ENARSI-AUTO-BGP-01 : Ansible リソースモジュールで eBGP を構成する（自動化・技術拡張: BGP）
+
+## ねらい
+OSPF で身につけた「リソースモジュール＋データ駆動」を **BGP** に広げます。
+2 台のルータ間で eBGP を張り、互いの Loopback を交換する構成を、両側まとめて Ansible で作ります。
+
+## トポロジ
+```
+RT01 (AS {{ params.as1 }}, Lo {{ params.rt01_lo }})
+   │  {{ params.seg12 }}.1
+   │ ───────────────── {{ params.seg12 }}.0/30
+   │  {{ params.seg12 }}.2
+RT02 (AS {{ params.as2 }}, Lo {{ params.rt02_lo }})
+```
+各リンク・Loopback は IP 設定済み・**BGP 未構成**。管理IP: RT01=10.1.10.11 / RT02=10.1.10.12。
+
+## 与えられるデータ（`controller/host_vars/RT0X.yml`・記入済み）
+```yaml
+bgp:
+  as_number: <AS>
+  router_id: <Lo0>
+  neighbors:    [ { neighbor_address, remote_as } ]   # ios_bgp_global 用
+  af_networks:  [ { address, mask } ]                 # 広告 prefix
+  af_neighbors: [ { neighbor_address, activate } ]    # AFで有効化
+```
+
+## 用意されている role 型ワークスペース（`controller/`）
+`roles/bgp/tasks/main.yml`の `__FILL_n__`を埋める。
+
+## 穴について（seed でランダム化）
+このワークスペースの **`穴.md`** に、今回の穴の一覧（番号・ファイル・ヒント）があります。
+出題のたびに **穴の位置・数が変わります**。各ファイル内の `__FILL_n__` を、`穴.md` のヒントを頼りに埋めてください。
+
+
+> 補足：router-id は cisco.ios 11.x の都合で ios_config で補っています（記入済み）。
+> また `no bgp default ipv4-unicast` 環境では address-family で neighbor を activate しないと
+> 経路交換されません（host_vars の af_neighbors が activate:true を持つ）。
+>
+> ヒント控えめ：BGPのリソースモジュールは「グローバル設定」と「アドレスファミリ」で
+> 2つに分かれています。命名規則（`ios_bgp_...`）と、ネイバー/ユニキャストの標準用語を思い出して。
+
+## 到達目標（採点される最終状態）
+1. RT01⇔RT02 の eBGP セッションが **Established**（両方向）。
+2. RT01 が `{{ params.rt02_lo }}/32` を、RT02 が `{{ params.rt01_lo }}/32` を **BGP 経路で学習**。
+
+## 実行・採点
+```bash
+cd lab/ENARSI-AUTO-BGP-01 && ansible-playbook site.yml
+ansible-playbook playbooks/grade.yml -e problem=ENARSI-AUTO-BGP-01 -e variant={{ variant | default('base') }} --vault-password-file <(printf 'CCNP\n')
+```

@@ -1,0 +1,41 @@
+---
+# 採点基準 (ENCOR-VACL-02)。収集=telnet(SW01 iosvl2はSSH不可、RTはiol-xeでSSH可だが
+# 混在のためVACL判定はSW01のみ。RTは受験者の疎通テスト用で採点には使わない)。
+# VACL は genie 非対応 → raw。RT01(192.168.10.1) と RT03(192.168.10.3) 間の通信を
+# SW01 の VACL で drop、他ペアは forward させる設計。名前は任意なので名前非依存に判定。
+problem: ENCOR-VACL-02
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "SW01: マッチ用ACLが 192.168.10.1 と 192.168.10.3 の間を対象にしている"
+    node: SW01
+    command: "show ip access-lists"
+    raw:
+      - regex: "192\\.168\\.10\\.1\\b"
+      - regex: "192\\.168\\.10\\.3\\b"
+    points: 25
+
+  - name: "SW01: vlan access-map に「ACLマッチ→drop」のエントリがある"
+    node: SW01
+    command: "show vlan access-map"
+    raw:
+      - regex: "ip +address:"
+      - regex: "drop"
+    points: 25
+
+  - name: "SW01: vlan access-map に「その他→forward」のエントリがある"
+    node: SW01
+    command: "show vlan access-map"
+    raw:
+      - regex: "forward"
+    points: 20
+
+  - name: "SW01: VACL が VLAN 10 に適用(vlan filter)されている"
+    node: SW01
+    command: "show vlan filter"
+    raw:
+      - regex: "filtering VLANs:[\\s\\S]*\\b10\\b"
+    points: 30

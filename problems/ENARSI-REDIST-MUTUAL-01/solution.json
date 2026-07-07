@@ -1,0 +1,28 @@
+{
+  "_comment": "模範解答。境界 RT02/RT03 で OSPF⇄EIGRP 双方向再配送。OSPF→EIGRP は seed metric 必須・EIGRP→OSPF は subnets 必須。2点境界のフィードバック防止に route-map tag(deny match tag / permit set tag) を併用。route-map を先に作ってから redistribute で参照する順序。",
+  "nodes": {},
+  "filters": [
+    {
+      "node": "RT02",
+      "blocks": [
+        { "parents": "route-map EIGRP_TO_OSPF deny 10", "lines": ["match tag 110"] },
+        { "parents": "route-map EIGRP_TO_OSPF permit 20", "lines": ["set tag 90"] },
+        { "parents": "route-map OSPF_TO_EIGRP deny 10", "lines": ["match tag 90"] },
+        { "parents": "route-map OSPF_TO_EIGRP permit 20", "lines": ["set tag 110"] },
+        { "parents": "router ospf 1", "lines": ["redistribute eigrp 100 subnets route-map EIGRP_TO_OSPF"] },
+        { "parents": "router eigrp 100", "lines": ["redistribute ospf 1 metric 1000000 100 255 1 1500 route-map OSPF_TO_EIGRP"] }
+      ]
+    },
+    {
+      "node": "RT03",
+      "blocks": [
+        { "parents": "route-map EIGRP_TO_OSPF deny 10", "lines": ["match tag 110"] },
+        { "parents": "route-map EIGRP_TO_OSPF permit 20", "lines": ["set tag 90"] },
+        { "parents": "route-map OSPF_TO_EIGRP deny 10", "lines": ["match tag 90"] },
+        { "parents": "route-map OSPF_TO_EIGRP permit 20", "lines": ["set tag 110"] },
+        { "parents": "router ospf 1", "lines": ["redistribute eigrp 100 subnets route-map EIGRP_TO_OSPF"] },
+        { "parents": "router eigrp 100", "lines": ["redistribute ospf 1 metric 1000000 100 255 1 1500 route-map OSPF_TO_EIGRP"] }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,117 @@
+---
+# 採点基準 (ENCOR-IPV6-STATIC-01)。収集=ssh(iol-xe)。IPv6 only チェーン RT01-RT02-RT03。
+# 静的経路のみ(動的ルーティング無し)で全 Loopback 相互到達。
+#
+# この問題は「リンクローカルをネクストホップにした静的経路」を必ず使わせるのが核心。
+# 純粋な効果(ping)採点だと GUA ネクストホップだけで全部通せてしまい link-local を
+# 練習しないので、(1)到達性 ping に加えて (2)経路の「方式」を running-config の raw 正規表現で強制する。
+#   - 出口IF+リンクローカル: ipv6 route <dst> <IF> FE80::x
+#   - 再帰(GUA のみ)        : ipv6 route <dst> <GUA>
+#   - デフォルト経路        : ipv6 route ::/0 <IF> FE80::x
+# IOS は IPv6 を大文字・圧縮表記で表示する(例 2001:DB8:C::3/128 / FE80::2)。
+problem: ENCOR-IPV6-STATIC-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # ============ アドレッシング: 手動リンクローカル(FE80::x)が該当IFに載っているか ============
+  # 手動設定しないと EUI-64 自動生成(FE80::A8BB:CCFF:...)になり、下の静的経路(FE80::x)が解決できない。
+  - name: "RT01: Et0/0 に手動リンクローカル FE80::1 が設定されている"
+    node: RT01
+    command: "show ipv6 interface brief"
+    raw:
+      - regex: "FE80::1(\\s|$)"
+    points: 6
+
+  - name: "RT02: リンクローカル FE80::2 が設定されている(両リンクで使用)"
+    node: RT02
+    command: "show ipv6 interface brief"
+    raw:
+      - regex: "FE80::2(\\s|$)"
+    points: 6
+
+  - name: "RT03: Et0/0 に手動リンクローカル FE80::3 が設定されている"
+    node: RT03
+    command: "show ipv6 interface brief"
+    raw:
+      - regex: "FE80::3(\\s|$)"
+    points: 6
+
+  # ============ 静的経路の方式(running-config の raw で強制) ============
+  # --- RT01 -> RT02 Lo : 再帰静的(GUA ネクストホップのみ・出口IF無し) ---
+  - name: "RT01: RT02 Lo(2001:DB8:B::2/128) へ再帰静的(GUA 2001:DB8:12::2)"
+    node: RT01
+    command: "show running-config | include ipv6 route"
+    raw:
+      - regex: "ipv6 route 2001:DB8:B::2/128 2001:DB8:12::2"
+    points: 8
+
+  # --- RT01 -> RT03 Lo : 出口IF + リンクローカル(完全指定) ---
+  - name: "RT01: RT03 Lo(2001:DB8:C::3/128) へ 出口IF+リンクローカル(Et0/0 FE80::2)"
+    node: RT01
+    command: "show running-config | include ipv6 route"
+    raw:
+      - regex: "ipv6 route 2001:DB8:C::3/128 Ethernet0/0 FE80::2"
+    points: 10
+
+  # --- RT02 -> RT01 Lo : 出口IF + リンクローカル(完全指定) ---
+  - name: "RT02: RT01 Lo(2001:DB8:A::1/128) へ 出口IF+リンクローカル(Et0/0 FE80::1)"
+    node: RT02
+    command: "show running-config | include ipv6 route"
+    raw:
+      - regex: "ipv6 route 2001:DB8:A::1/128 Ethernet0/0 FE80::1"
+    points: 10
+
+  # --- RT02 -> RT03 Lo : 再帰静的(GUA ネクストホップのみ) ---
+  - name: "RT02: RT03 Lo(2001:DB8:C::3/128) へ再帰静的(GUA 2001:DB8:23::3)"
+    node: RT02
+    command: "show running-config | include ipv6 route"
+    raw:
+      - regex: "ipv6 route 2001:DB8:C::3/128 2001:DB8:23::3"
+    points: 8
+
+  # --- RT03 : デフォルト経路 ::/0 を 出口IF+リンクローカルで RT02 へ ---
+  - name: "RT03: デフォルト経路 ::/0 を 出口IF+リンクローカル(Et0/0 FE80::2)で"
+    node: RT03
+    command: "show running-config | include ipv6 route"
+    raw:
+      - regex: "ipv6 route ::/0 Ethernet0/0 FE80::2"
+    points: 10
+
+  # ============ 到達性(能動 ping): GUA アドレッシング + unicast-routing + 経路の総合効果 ============
+  - name: "RT02: RT01 Lo へ到達(直結+リンクローカル静的が機能)"
+    node: RT02
+    command: "ping 2001:DB8:A::1 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 6
+
+  - name: "RT02: RT03 Lo へ到達(直結+再帰静的が機能)"
+    node: RT02
+    command: "ping 2001:DB8:C::3 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 6
+
+  - name: "RT01: RT02 Lo へ到達(再帰静的 + 戻り経路)"
+    node: RT01
+    command: "ping 2001:DB8:B::2 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 8
+
+  - name: "RT03: RT01 Lo へ到達(デフォルト経路 + 多段 + 戻り経路)"
+    node: RT03
+    command: "ping 2001:DB8:A::1 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 10
+
+  - name: "RT01: RT03 Lo へ到達(リンクローカル静的 + 多段 + 戻りはデフォルト経路)"
+    node: RT01
+    command: "ping 2001:DB8:C::3 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 6

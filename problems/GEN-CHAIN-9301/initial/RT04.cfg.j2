@@ -1,0 +1,68 @@
+! GEN-CHAIN-9301 初期 (RT04) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 76.76.76.76 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 ===
+ ip address 10.34.101.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT06 ===
+ ip address 10.99.161.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT12 ===
+ ip address 10.250.227.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 76.76.76.76
+ network 76.76.76.76 0.0.0.0 area 0
+ network 10.34.101.0 0.0.0.3 area 0
+ network 10.99.161.0 0.0.0.3 area 0
+ network 10.250.227.0 0.0.0.3 area 0
+!
+router bgp 65001
+ bgp router-id 76.76.76.76
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 42.42.42.42 remote-as 65001
+ neighbor 42.42.42.42 update-source Loopback0
+ neighbor 46.46.46.46 remote-as 65001
+ neighbor 46.46.46.46 update-source Loopback0
+ neighbor 65.65.65.65 remote-as 65001
+ neighbor 65.65.65.65 update-source Loopback0
+ neighbor 96.96.96.96 remote-as 65001
+ neighbor 96.96.96.96 update-source Loopback0
+ neighbor 75.75.75.75 remote-as 65001
+ neighbor 75.75.75.75 update-source Loopback0
+ neighbor 24.24.24.24 remote-as 65001
+ neighbor 24.24.24.24 update-source Loopback0
+ neighbor 50.50.50.50 remote-as 65001
+ neighbor 50.50.50.50 update-source Loopback0
+ neighbor 9.9.9.9 remote-as 65001
+ neighbor 9.9.9.9 update-source Loopback0
+ address-family ipv4
+  neighbor 42.42.42.42 activate
+  neighbor 42.42.42.42 send-community
+  neighbor 46.46.46.46 activate
+  neighbor 46.46.46.46 send-community
+  neighbor 46.46.46.46 route-reflector-client
+  neighbor 65.65.65.65 activate
+  neighbor 65.65.65.65 send-community
+  neighbor 65.65.65.65 route-reflector-client
+  neighbor 96.96.96.96 activate
+  neighbor 96.96.96.96 send-community
+  neighbor 96.96.96.96 route-reflector-client
+  neighbor 75.75.75.75 activate
+  neighbor 75.75.75.75 send-community
+  neighbor 24.24.24.24 activate
+  neighbor 24.24.24.24 send-community
+  neighbor 50.50.50.50 activate
+  neighbor 50.50.50.50 send-community
+  neighbor 9.9.9.9 activate
+  neighbor 9.9.9.9 send-community
+ exit-address-family
+!

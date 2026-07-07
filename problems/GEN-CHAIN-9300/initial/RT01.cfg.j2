@@ -1,0 +1,51 @@
+! GEN-CHAIN-9300 初期 (RT01) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 33.33.33.33 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT11 ===
+ ip address 10.7.209.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 ===
+ ip address 10.212.100.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT04 ===
+ ip address 10.253.113.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 33.33.33.33
+ area 1 stub no-summary
+ area 1 range 172.20.0.0 255.255.254.0 not-advertise
+ network 33.33.33.33 0.0.0.0 area 0
+ network 10.7.209.0 0.0.0.3 area 2
+ network 10.212.100.0 0.0.0.3 area 0
+ network 10.253.113.0 0.0.0.3 area 0
+!
+ip prefix-list PL-WEST seq 5 permit 172.20.0.0/23 ge 24 le 24
+route-map RM-W2B permit 10
+ match ip address prefix-list PL-WEST
+ set community 65001:100
+!
+router bgp 65001
+ bgp router-id 33.33.33.33
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 54.54.54.54 remote-as 65001
+ neighbor 54.54.54.54 update-source Loopback0
+ neighbor 54.54.54.54 password BADAUTH
+ neighbor 57.57.57.57 remote-as 65001
+ neighbor 57.57.57.57 update-source Loopback0
+ neighbor 57.57.57.57 password BADAUTH
+ address-family ipv4
+  neighbor 54.54.54.54 activate
+  neighbor 54.54.54.54 send-community
+  neighbor 57.57.57.57 activate
+  neighbor 57.57.57.57 send-community
+  redistribute ospf 1 route-map RM-W2B
+ exit-address-family
+!

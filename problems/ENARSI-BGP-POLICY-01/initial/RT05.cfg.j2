@@ -1,0 +1,25 @@
+! ENARSI-BGP-POLICY-01 初期 (RT05, ISP-B AS{{ params.as_ispb }}) : 変更不可。
+! links[0] = RT02 / links[1] = RT06
+interface Loopback0
+ ip address {{ params.rt05_lo }} 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 customer (eBGP AS{{ params.as_cust }}) ===
+ ip address {{ params.seg25 }}.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT06 upstream (eBGP AS{{ params.as_up }}) ===
+ ip address {{ params.seg56 }}.1 255.255.255.252
+ no shutdown
+!
+router bgp {{ params.as_ispb }}
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor {{ params.seg25 }}.1 remote-as {{ params.as_cust }}
+ neighbor {{ params.seg56 }}.2 remote-as {{ params.as_up }}
+ address-family ipv4
+  neighbor {{ params.seg25 }}.1 activate
+  neighbor {{ params.seg56 }}.2 activate
+ exit-address-family
+!

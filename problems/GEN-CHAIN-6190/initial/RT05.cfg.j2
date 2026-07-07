@@ -1,0 +1,39 @@
+! GEN-CHAIN-6190 初期 (RT05) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 36.36.36.36 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT03 ===
+ ip address 10.25.208.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT02 ===
+ ip address 10.217.190.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 36.36.36.36
+ network 36.36.36.36 0.0.0.0 area 0
+ network 10.25.208.0 0.0.0.3 area 0
+ network 10.217.190.0 0.0.0.3 area 0
+!
+router bgp 65001
+ bgp router-id 36.36.36.36
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 41.41.41.41 remote-as 65001
+ neighbor 41.41.41.41 update-source Loopback0
+ neighbor 49.49.49.49 remote-as 65001
+ neighbor 49.49.49.49 update-source Loopback0
+ address-family ipv4
+  neighbor 41.41.41.41 activate
+  neighbor 41.41.41.41 send-community
+  neighbor 49.49.49.49 activate
+  neighbor 49.49.49.49 send-community
+ exit-address-family
+!
+access-list 199 remark ### LEGACY BLOCK ticket NOC-4711 (keep until 2025Q4) ###
+access-list 199 deny ip 172.20.0.0 0.0.1.255 any
+access-list 199 permit ip any any
+!

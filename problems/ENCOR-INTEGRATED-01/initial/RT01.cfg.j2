@@ -1,0 +1,21 @@
+! ENCOR-INTEGRATED-01 初期 (RT01, Core) : OSPF area0 構築済み。ACL は受験者が追加。
+! 値は params/<variant>.yml 由来。  links[0]=RT02(OSPF) / links[1]=RT03(OSPF)
+interface Loopback0
+ ip address {{ params.rt01_lo }} 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 (OSPF) ===
+ ip address {{ params.seg12 }}.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (OSPF) ===
+ ip address {{ params.seg13 }}.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id {{ params.rt01_lo }}
+ network {{ params.rt01_lo }} 0.0.0.0 area 0
+ network {{ params.seg12 }}.0 0.0.0.3 area 0
+ network {{ params.seg13 }}.0 0.0.0.3 area 0
+!

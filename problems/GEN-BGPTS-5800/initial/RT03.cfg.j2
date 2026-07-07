@@ -1,0 +1,24 @@
+! RT03 (AS 64934 / AS-b transit / BGP=classic)
+interface Loopback0
+ ip address 68.68.68.68 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.79.95.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.130.253.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network 68.68.68.68 0.0.0.0 area 0
+ network 10.79.95.0 0.0.0.3 area 0
+!
+router bgp 64934
+ bgp router-id 68.68.68.68
+ neighbor 10.130.253.2 remote-as 64743
+ neighbor 94.94.94.94 remote-as 64934
+ neighbor 94.94.94.94 update-source Loopback0
+ neighbor 94.94.94.94 next-hop-self
+ network 68.68.68.68 mask 255.255.255.255
+!

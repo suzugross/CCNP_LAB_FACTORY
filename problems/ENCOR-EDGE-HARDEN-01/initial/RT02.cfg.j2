@@ -1,0 +1,21 @@
+! ENCOR-EDGE-HARDEN-01 初期 (RT02, 隣接ルータ / NTPマスター) : 変更不可。
+! links[0]=RT01
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 ===
+ ip address 10.0.12.2 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 2.2.2.2
+ network 2.2.2.2 0.0.0.0 area 0
+ network 10.0.12.0 0.0.0.3 area 0
+!
+! NTP マスター（RT01 の同期先）
+ntp authentication-key 1 md5 CCNP-NTP
+ntp authenticate
+ntp trusted-key 1
+ntp master 3
+!

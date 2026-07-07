@@ -1,0 +1,55 @@
+#cloud-config
+# ============================================================
+# baseline (server) -- Linux(ubuntu) ノードの cloud-init day0。
+# ★user-data 1 枚に全てを収める（cisco.cml モジュール経由の import は
+#   複数 config ファイル(list)を壊して連結するため、network-config は使わない）。
+#   静的 IP は write_files で netplan を置き runcmd 冒頭で netplan apply。
+#   （既定の network-config は ens2 DHCP のまま＝DHCP サーバ不在で失敗するだけ。
+#     boot が DHCP 待ちで 1〜2 分延びるのは許容）
+# 問題固有の構築処理は problems/<id>/initial/<node>.sh.j2 （あれば）を
+# /opt/ccnp/init.sh として埋め込み、runcmd で 1 回実行する。
+# パッケージ導入はネットワーク確立後の init.sh 側で行うこと（packages: は
+# netplan apply より先に走って失敗するため使わない）。
+# ※ initial/<node>.cfg.j2 (IOS用の連結対象) はサーバでは空スタブにすること。
+# ============================================================
+hostname: {{ inventory_hostname }}
+manage_etc_hosts: true
+system_info:
+  default_user:
+    name: {{ ansible_user }}
+password: {{ ansible_ssh_pass }}
+chpasswd: { expire: false }
+ssh_pwauth: true
+write_files:
+  # ラボ指紋: grade が採点前に照合し「MGMT IP が別ラボに当たる」誤採点を防ぐ
+  - path: /etc/ccnp-lab-id
+    permissions: '0644'
+    content: "CCNP-LAB-{{ (problem | hash('md5'))[:8] }}\n"
+  - path: /etc/netplan/60-ccnp.yaml
+    permissions: '0600'
+    content: |
+      network:
+        version: 2
+        ethernets:
+          {{ dev_prof.mgmt }}:
+            dhcp4: false
+            addresses: [{{ mgmt_ip }}/{{ mgmt_prefixlen }}]
+            routes:
+              - to: default
+                via: {{ mgmt_gw }}
+            nameservers:
+              addresses: {{ mgmt_dns | to_json }}
+{% set init_tpl = problem_dir ~ '/initial/' ~ inventory_hostname ~ '.sh.j2' %}
+{% if init_tpl is exists %}
+  - path: /opt/ccnp/init.sh
+    permissions: '0755'
+    content: |
+{{ lookup('template', init_tpl) | indent(6, true) }}
+{% endif %}
+runcmd:
+  - netplan apply
+  - apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq snmp
+{% if init_tpl is exists %}
+  - /opt/ccnp/init.sh > /var/log/ccnp-init.log 2>&1
+{% endif %}
+  - date -Is > /var/tmp/ccnp-cloudinit-done

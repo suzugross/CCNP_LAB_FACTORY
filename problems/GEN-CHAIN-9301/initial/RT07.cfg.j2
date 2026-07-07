@@ -1,0 +1,58 @@
+! GEN-CHAIN-9301 初期 (RT07) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 75.75.75.75 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 ===
+ ip address 10.200.1.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT08 ===
+ ip address 172.30.36.5 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT09 ===
+ ip address 172.30.233.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 75.75.75.75
+ network 75.75.75.75 0.0.0.0 area 0
+ network 10.200.1.0 0.0.0.3 area 0
+!
+router eigrp 65100
+ network 172.30.36.4 0.0.0.3
+ network 172.30.233.0 0.0.0.3
+ redistribute bgp 65001 route-map RM-B2E
+ default-metric 100000 100 255 1 1500
+ no auto-summary
+!
+ip prefix-list PL-EAST seq 5 permit 172.21.0.0/24
+ip prefix-list PL-EAST seq 10 permit 172.21.1.0/24
+ip prefix-list PL-EAST seq 15 permit 72.72.72.72/32
+route-map RM-E2B deny 5
+ match tag 65001
+route-map RM-E2B permit 10
+ match ip address prefix-list PL-EAST
+ set community 65001:200
+route-map RM-B2E permit 10
+ set tag 65001
+!
+router bgp 65001
+ bgp router-id 75.75.75.75
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 50.50.50.50 remote-as 65001
+ neighbor 50.50.50.50 update-source Loopback0
+ neighbor 76.76.76.76 remote-as 65001
+ neighbor 76.76.76.76 update-source Loopback0
+ address-family ipv4
+  neighbor 50.50.50.50 activate
+  neighbor 50.50.50.50 send-community
+  neighbor 76.76.76.76 activate
+  neighbor 76.76.76.76 send-community
+  redistribute eigrp 65100 route-map RM-E2B
+ exit-address-family
+!

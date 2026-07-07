@@ -1,0 +1,33 @@
+# 問題 ENCOR-OSPF-01 : OSPF シングルエリアの確立
+
+## シナリオ
+RT01・RT02・RT03 から成る小規模ネットワークです。各リンクと Loopback には IP 設定済みですが、
+動的ルーティングが未構成で相互のループバックに到達できません。OSPF で IGP を構成してください。
+
+## 構成（初期状態で投入済み）
+| リンク | セグメント | RT01 側 | RT02/03 側 |
+|--------|------------|---------|------------|
+| RT01–RT02 | {{ params.seg12 }}.0/30 | {{ params.seg12 }}.1 | {{ params.seg12 }}.2 |
+| RT01–RT03 | {{ params.seg13 }}.0/30 | {{ params.seg13 }}.1 | {{ params.seg13 }}.2 |
+
+| ルータ | Loopback0 |
+|--------|-----------|
+| RT01 | {{ params.rt01_lo }}/32 |
+| RT02 | {{ params.rt02_lo }}/32 |
+| RT03 | {{ params.rt03_lo }}/32 |
+
+## 到達目標
+1. **OSPF プロセス ID {{ params.ospf_pid }} / エリア {{ params.area }}** で構成する。
+2. 全 L3 リンクと Loopback0 を OSPF に参加させる。
+3. すべての OSPF ネイバーが **FULL** であること。
+4. RT01 のルーティングテーブルに RT02・RT03 の Loopback
+   (`{{ params.rt02_lo }}/32`, `{{ params.rt03_lo }}/32`) が、RT02 に RT01 の `{{ params.rt01_lo }}/32` が
+   OSPF 経路として現れること。
+
+## 制約
+- スタティックルートは使用しないこと。
+
+## 採点
+```
+ansible-playbook playbooks/grade.yml -e problem=ENCOR-OSPF-01 -e variant={{ variant | default('base') }} --vault-password-file <(printf 'CCNP\n')
+```

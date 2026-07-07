@@ -1,0 +1,23 @@
+---
+# Flexible NetFlow(FNF) の基本構成を体験する LAB。
+# RT01 ─ RT02(FNF監視) ─ RT03 の一直線。OSPF area0 で到達性は既設。
+# 受験者は RT02 にだけ FNF(flow record / exporter / monitor + IF適用)を構成する。
+# 動作確認 = 採点時に能動 ping でトラフィックを生成し、RT02 の flow monitor cache に
+#            該当フロー(送信元/宛先)が採取されることを確認する。
+id: ENCOR-FNF-01
+title: "Flexible NetFlow 基本構成 (flow record/exporter/monitor)"
+exam: ENCOR
+topics: [netflow, flexible-netflow, telemetry, assurance]
+difficulty: 2
+topology: ad-hoc
+# image_family 未指定 → 既定 iol(iol-xe)。SSH 採点(network_cli)を使用。
+target_nodes: [RT01, RT02, RT03]
+points: 100
+
+# RT01 ─10.0.12.0/30─ RT02 ─10.0.23.0/30─ RT03 (OSPF area0 既設)
+#   RT02 Et0/0 = RT01 向け(監視対象の ingress IF) / Et0/1 = RT03 向け
+#   Loopback0: RT01=1.1.1.1 / RT02=2.2.2.2 / RT03=3.3.3.3
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # 10.0.12.0/30
+    - { a: RT02, a_if: 1, b: RT03, b_if: 0 }   # 10.0.23.0/30

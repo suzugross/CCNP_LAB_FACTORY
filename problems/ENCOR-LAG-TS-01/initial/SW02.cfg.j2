@@ -1,0 +1,38 @@
+! ENCOR-LAG-TS-01 初期状態 (SW02)
+!   links[0] / links[1] = いずれも SW01 向け
+! データ VLAN 30 とダミー VLAN 40。SVI は VLAN30 側に置く。
+vlan 30
+ name DATA30
+!
+vlan 40
+ name BOGUS40
+!
+interface Vlan30
+ description === DATA30 SVI (test) ===
+ ip address 10.30.30.2 255.255.255.0
+ no shutdown
+!
+! Port-channel1 が誤って access VLAN 40 に入っている。
+interface Port-channel1
+ description === bundle to SW01 ===
+ switchport
+ switchport mode access
+ switchport access vlan 40
+!
+! 物理リンク1 は channel-group 1(passive) 投入済み。
+interface {{ links[0] }}
+ description === to SW01 (member 1) ===
+ switchport
+ switchport mode access
+ switchport access vlan 40
+ channel-group 1 mode passive
+ no shutdown
+!
+! 物理リンク2 は channel-group へ未投入（束に参加していない）。
+interface {{ links[1] }}
+ description === to SW01 (member 2) ===
+ switchport
+ switchport mode access
+ switchport access vlan 40
+ no shutdown
+!

@@ -1,0 +1,55 @@
+# 問題 ENCOR-INTEGRATED-01 : 実運用エッジ（ISPデフォルト注入 + PAT + エッジACL）
+
+## シナリオ
+あなたの会社は内部を **OSPF** で運用し、**RT02** を境界ルータとして **ISP(RT04 / AS{{ params.as_ext }})** に
+**eBGP** で接続しています。社内はプライベート運用で、インターネット側（ISP の先）へ出るには
+**境界での NAT(PAT)** が必要です。これからインターネット接続を有効化する作業を行います。
+
+既存の OSPF と eBGP は構築済みで、それらは **壊さずに維持** してください。
+
+## トポロジ
+```
+        RT01 (Core) ───── RT02 (Edge / ASBR / NAT) ═════ RT04 (ISP AS{{ params.as_ext }})
+          \               /              eBGP
+           \             /        inside │ outside
+            RT03 (内部)
+   ── OSPF area0 (RT01-RT02-RT03) ──        ── eBGP (RT02 AS{{ params.as_internal }} ⇔ RT04) ──
+```
+
+| ルータ | 役割 | Loopback0 | 管理IP (SSH) |
+|--------|------|-----------|--------------|
+| RT01 | Core（社内） | {{ params.rt01_lo }}/32 | `10.1.10.11` |
+| RT02 | Edge / ASBR / **NAT境界** | {{ params.rt02_lo }}/32 | `10.1.10.12` |
+| RT03 | 内部（社内ホスト想定） | {{ params.rt03_lo }}/32 | `10.1.10.13` |
+| RT04 | **ISP** AS{{ params.as_ext }}（**変更不可**） | {{ params.rt04_lo }}/32 ＝インターネット上のホスト | `10.1.10.14` |
+
+- OSPF area0：RT01-RT02-RT03（既設・全相互到達済み）
+- eBGP：RT02(AS{{ params.as_internal }}) ⇔ RT04(AS{{ params.as_ext }})（既設・Established）
+- **ISP(RT04) は `0.0.0.0/0`（デフォルト）を eBGP で広告**しています（RT02 で受信済み）
+- RT04 の Loopback0 `{{ params.rt04_lo }}` を「インターネット上のホスト」として扱います
+
+## 到達目標（すべて RT02 で構成）
+1. **ISP デフォルト経路を社内へ配る。**
+   - ISP から受け取った `0.0.0.0/0` を **OSPF に注入**し、RT01・RT03 が
+     デフォルト経路（OSPF外部）を学習する状態にすること。
+2. **PAT(オーバーロード) を構成する。**
+   - 社内（RT01/RT03 側）を **inside**、ISP（RT04 側）を **outside** とし、
+     社内ホストの送信元を境界の公開アドレスへ変換して **インターネットへ出られる**ようにすること。
+   - 目標は、**RT03 が自身の Loopback0 を送信元に `{{ params.rt04_lo }}` へ到達できる**こと。
+3. **エッジにフィルタを追加する。**
+   - 外部（インターネット側）から入ってくる **Telnet (TCP 23) を遮断**する ACL を、
+     **適切なインタフェース・方向**で適用すること（社内の通常通信や戻り通信は妨げないこと）。
+
+## 制約
+- 既存の OSPF / eBGP（インタフェースIP・network文・neighbor 設定）は **変更しない**。設定の **追加** で実現すること。
+- RT04（ISP）は変更不可。
+- スタティックの「見せかけ」到達性で誤魔化さない（NAT を実際に機能させること）。
+
+## アクセス
+SSH `SUZUKI / CCNP`（例: `ssh SUZUKI@10.1.10.12`）
+
+## 採点
+```
+ansible-playbook playbooks/grade.yml -e problem=ENCOR-INTEGRATED-01 -e variant={{ variant | default('base') }} --vault-password-file <(printf 'CCNP\n')
+```
+※ 採点では RT03 から `{{ params.rt04_lo }}` へ実際に ping を送り、疎通成功と NAT 変換エントリを確認します。

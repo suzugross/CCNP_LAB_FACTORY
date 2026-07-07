@@ -1,0 +1,80 @@
+---
+# 採点基準 (ENCOR-VRF-NAT-01)。収集=ssh(iol-xe)。RT01=変更対象 / RT02-04=固定。
+# VRF対応 PAT: 重複アドレス(10.0.0.1)の RED/BLUE 顧客を、共有グローバルISP回線へ vrf 修飾付きで PAT。
+# 効果ベース: NAT設定(raw) + inside/outside(raw) + 両顧客→Internet 能動ping + vrf別 translations。
+# ★ping(トラフィック生成)チェックを translations チェックより前に置く(checksは順に収集)。
+problem: ENCOR-VRF-NAT-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # --- NAT ルール(VRF対応 PAT) ---
+  - name: "RT01: RED 用 VRF対応PAT (inside source list ... interface Et0/2 vrf RED overload)"
+    node: RT01
+    command: "show running-config | include ip nat inside source"
+    raw:
+      - regex: "vrf RED overload"
+    points: 12
+
+  - name: "RT01: BLUE 用 VRF対応PAT (inside source list ... interface Et0/2 vrf BLUE overload)"
+    node: RT01
+    command: "show running-config | include ip nat inside source"
+    raw:
+      - regex: "vrf BLUE overload"
+    points: 12
+
+  # --- inside / outside の割当 ---
+  - name: "RT01: RED 顧客IF(Et0/0) が ip nat inside"
+    node: RT01
+    command: "show running-config interface Ethernet0/0"
+    raw:
+      - regex: "ip nat inside"
+    points: 8
+
+  - name: "RT01: BLUE 顧客IF(Et0/1) が ip nat inside"
+    node: RT01
+    command: "show running-config interface Ethernet0/1"
+    raw:
+      - regex: "ip nat inside"
+    points: 8
+
+  - name: "RT01: ISP IF(Et0/2) が ip nat outside"
+    node: RT01
+    command: "show running-config interface Ethernet0/2"
+    raw:
+      - regex: "ip nat outside"
+    points: 8
+
+  # --- 能動プローブ: 両顧客 → Internet(8.8.8.8) 到達(NAT実効) ---
+  - name: "RT03: RED 顧客(10.0.0.1)から Internet 8.8.8.8 へ到達できる"
+    node: RT03
+    command: "ping 8.8.8.8 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 17
+
+  - name: "RT04: BLUE 顧客(10.0.0.1)から Internet 8.8.8.8 へ到達できる"
+    node: RT04
+    command: "ping 8.8.8.8 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 17
+
+  # --- VRF対応の証明: vrf 別に重複アドレスが別エントリで変換されている ---
+  - name: "RT01: VRF RED の NAT変換に 10.0.0.1 → 8.8.8.8 のエントリがある"
+    node: RT01
+    command: "show ip nat translations vrf RED"
+    raw:
+      - regex: "10\\.0\\.0\\.1"
+      - regex: "8\\.8\\.8\\.8"
+    points: 9
+
+  - name: "RT01: VRF BLUE の NAT変換に 10.0.0.1 → 8.8.8.8 のエントリがある(重複アドレスを別管理)"
+    node: RT01
+    command: "show ip nat translations vrf BLUE"
+    raw:
+      - regex: "10\\.0\\.0\\.1"
+      - regex: "8\\.8\\.8\\.8"
+    points: 9

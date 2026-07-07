@@ -1,0 +1,69 @@
+---
+# 採点基準 (ENCOR-RSPAN-01)。収集=console(SSH/telnet 不可 iosvl2)。2 ノード(SW01/SW02)。
+# RSPAN は genie 非対応のため raw 正規表現で判定。
+# SW01(送信元): 監視ポート→destination remote vlan 199 / SW02(宛先): source remote vlan 199→アナライザポート。
+# RSPAN VLAN 199 は両 SW で remote-span 指定。インタフェース表記は省略形(Gi0/N)を吸収。
+problem: ENCOR-RSPAN-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # ---------- SW01 = 送信元スイッチ ----------
+  - name: "SW01: RSPAN 用 VLAN 199 が remote-span として定義されている"
+    node: SW01
+    command: "show vlan remote-span"
+    raw:
+      - regex: "\\b199\\b"
+    points: 12
+
+  - name: "SW01: monitor session 1 が Remote Source Session として存在する"
+    node: SW01
+    command: "show monitor session 1"
+    raw:
+      - regex: "Type +: +Remote Source Session"
+    points: 13
+
+  - name: "SW01: 監視対象ユーザポート(Gi0/1) を source にしている"
+    node: SW01
+    command: "show monitor session 1"
+    raw:
+      - regex: "(Both|RX +Only|TX +Only) +: .*Gi(gabitEthernet)?0/1"
+    points: 12
+
+  - name: "SW01: ミラー先を RSPAN VLAN 199(Dest RSPAN VLAN) にしている"
+    node: SW01
+    command: "show monitor session 1"
+    raw:
+      - regex: "Dest RSPAN VLAN +: .*\\b199\\b"
+    points: 13
+
+  # ---------- SW02 = 宛先スイッチ ----------
+  - name: "SW02: RSPAN 用 VLAN 199 が remote-span として定義されている"
+    node: SW02
+    command: "show vlan remote-span"
+    raw:
+      - regex: "\\b199\\b"
+    points: 12
+
+  - name: "SW02: monitor session 1 が Remote Destination Session として存在する"
+    node: SW02
+    command: "show monitor session 1"
+    raw:
+      - regex: "Type +: +Remote Destination Session"
+    points: 13
+
+  - name: "SW02: source を RSPAN VLAN 199(Source RSPAN VLAN) にしている"
+    node: SW02
+    command: "show monitor session 1"
+    raw:
+      - regex: "Source RSPAN VLAN +: .*\\b199\\b"
+    points: 12
+
+  - name: "SW02: アナライザ(Gi0/1) を destination(ミラー先) にしている"
+    node: SW02
+    command: "show monitor session 1"
+    raw:
+      - regex: "Destination Ports +: .*Gi(gabitEthernet)?0/1"
+    points: 13

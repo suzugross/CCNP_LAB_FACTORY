@@ -1,0 +1,28 @@
+#!/bin/bash
+# PC01 (利用者端末) 初期化 — 生成: gen_dnsdhcp_ts.py
+set -e
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[$(date -Is)] $*"; }
+
+log "採点用ツール導入 (dnsutils)"
+for i in 1 2 3; do
+  apt-get update -qq && apt-get install -y -qq dnsutils && break
+  sleep 10
+done
+
+log "netplan 差替え: ens2=mgmt静的(defaultなし) / ens3=DHCPクライアント"
+rm -f /etc/netplan/50-cloud-init.yaml
+cat > /etc/netplan/60-ccnp.yaml <<'EOF'
+network:
+  version: 2
+  ethernets:
+    ens2:
+      addresses: [{{ mgmt_ip }}/{{ mgmt_prefixlen }}]
+    ens3:
+      dhcp4: true
+      dhcp4-overrides:
+        use-domains: true
+EOF
+chmod 600 /etc/netplan/60-ccnp.yaml
+netplan apply
+log "DONE"

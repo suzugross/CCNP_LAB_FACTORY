@@ -1,0 +1,112 @@
+---
+# 採点基準（パラメータ化テンプレート）。値は params/<variant>.yml 由来。
+# peer_mode=loopback の variant(mh-auth) では「Loopbackピア + ebgp-multihop + MD5認証」を採点。
+# それ以外(従来 base)は接続IF eBGP + 経路制御(LP/prepend)を採点。
+# ネイバー状態は show ip bgp neighbors の session_state。近隣IPは dict キーのため find をリスト形式で。
+problem: ENARSI-BGP-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+{% if params.peer_mode | default('connected') == 'loopback' %}
+  - name: "RT01: eBGP ネイバー RT02 (Loopback {{ params.rt02_lo }}) が Established"
+    node: RT01
+    command: "show ip bgp neighbors {{ params.rt02_lo }}"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "{{ params.rt02_lo }}"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 20
+
+  - name: "RT01: eBGP ネイバー RT03 (Loopback {{ params.rt03_lo }}) が Established"
+    node: RT01
+    command: "show ip bgp neighbors {{ params.rt03_lo }}"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "{{ params.rt03_lo }}"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 20
+
+  - name: "RT01: ピアに update-source Loopback0 が設定されている"
+    node: RT01
+    command: "show running-config | section router bgp"
+    raw:
+      - regex: "neighbor +{{ params.rt02_lo }} +update-source +[Ll]oopback0"
+    points: 15
+
+  - name: "RT01: ピアに ebgp-multihop が設定されている"
+    node: RT01
+    command: "show running-config | section router bgp"
+    raw:
+      - regex: "neighbor +{{ params.rt02_lo }} +ebgp-multihop"
+    points: 15
+
+  - name: "RT01: BGPネイバー認証(password)が設定されている"
+    node: RT01
+    command: "show running-config | section router bgp"
+    raw:
+      - regex: "neighbor +{{ params.rt02_lo }} +password"
+    points: 15
+
+  - name: "RT01: {{ params.rt04_lo }}/32 を BGP で学習 (multihop loopbackピア越しに到達)"
+    node: RT01
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.rt04_lo }}/32"
+      source_protocol: "bgp"
+    points: 15
+{% else %}
+  - name: "RT01: eBGP ネイバー RT02({{ params.seg12 }}.2) が Established"
+    node: RT01
+    command: "show ip bgp neighbors {{ params.seg12 }}.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "{{ params.seg12 }}.2"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 15
+
+  - name: "RT01: eBGP ネイバー RT03({{ params.seg13 }}.2) が Established"
+    node: RT01
+    command: "show ip bgp neighbors {{ params.seg13 }}.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "{{ params.seg13 }}.2"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 15
+
+  - name: "RT01: {{ params.rt04_lo }}/32 を BGP 経路で学習している"
+    node: RT01
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.rt04_lo }}/32"
+      source_protocol: "bgp"
+    points: 10
+
+  - name: "RT01: {{ params.rt04_lo }}/32 のベストパスが RT02 経由 (行きの誘導, via {{ params.seg12 }}.2)"
+    node: RT01
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.rt04_lo }}/32"
+      source_protocol: "bgp"
+      next_hop.next_hop_list.*.next_hop: "{{ params.seg12 }}.2"
+    points: 30
+
+  - name: "RT04: {{ params.rt01_lo }}/32 のベストパスが RT02 経由 (帰りの誘導, via {{ params.seg24 }}.1)"
+    node: RT04
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.rt01_lo }}/32"
+      source_protocol: "bgp"
+      next_hop.next_hop_list.*.next_hop: "{{ params.seg24 }}.1"
+    points: 30
+{% endif %}

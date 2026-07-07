@@ -1,0 +1,39 @@
+! RT06 (role=agg, AS=65300) 初期構成
+interface Loopback0
+ ip address 10.0.41.41 255.255.255.255
+!
+interface Loopback1
+ ip address 172.31.0.1 255.255.255.0
+!
+interface Loopback2
+ ip address 172.31.1.1 255.255.255.0
+!
+interface Loopback3
+ ip address 172.31.2.1 255.255.255.0
+!
+interface Loopback4
+ ip address 172.31.3.1 255.255.255.0
+!
+interface {{ links[0] }}
+ ip address 10.111.111.2 255.255.255.252
+ no shutdown
+!
+router bgp 65300
+ bgp router-id 10.0.41.41
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.111.111.1 remote-as 65001
+ address-family ipv4 unicast
+  neighbor 10.111.111.1 activate
+  network 172.31.0.0 mask 255.255.255.0
+  network 172.31.1.0 mask 255.255.255.0
+  network 172.31.2.0 mask 255.255.255.0
+  network 172.31.3.0 mask 255.255.255.0
+ exit-address-family
+!
+! --- SNMPv3 (NOC 監視標準) ---
+snmp-server view MONVIEW iso included
+snmp-server group MONGRP v3 priv read MONVIEW
+snmp-server location CCNP-LAB
+snmp-server user MONUSER MONGRP v3 auth sha CCNP-Auth-2026 priv aes 128 CCNP-Priv-2026
+!

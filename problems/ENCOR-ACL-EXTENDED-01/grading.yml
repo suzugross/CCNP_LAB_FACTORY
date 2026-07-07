@@ -1,0 +1,56 @@
+---
+# 採点基準 (ENCOR-ACL-EXTENDED-01)。
+# RT02 の RT01向けIF(Ethernet0/0) に拡張ACLをinbound適用。
+# サーバ3.3.3.3宛の Telnet(tcp 23) と ICMP を deny、他は permit(=OSPF維持)。
+# ACL内容は genie(show ip access-lists) でACE単位に判定、適用はraw、OSPF非破壊は経路存在で確認。
+problem: ENCOR-ACL-EXTENDED-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT02: Eth0/0(RT01向け) に ACL が inbound 適用されている"
+    node: RT02
+    command: "show running-config interface Ethernet0/0"
+    raw:
+      - regex: "ip access-group +\\S+ +in"
+    points: 15
+
+  - name: "RT02: 拡張ACLに「サーバ3.3.3.3宛 Telnet を deny」ACE がある"
+    node: RT02
+    command: "show ip access-lists"
+    parser: "show ip access-lists"
+    find: "*.aces.*"
+    match:
+      actions.forwarding: deny
+      matches.l3.ipv4.protocol: tcp
+      matches.l4.tcp.destination_port.operator.port: 23
+    points: 30
+
+  - name: "RT02: ACL の Telnet deny が宛先 host 3.3.3.3 を対象にしている"
+    node: RT02
+    command: "show ip access-lists"
+    raw:
+      - regex: "deny +tcp .*host +3\\.3\\.3\\.3 +eq +(23|telnet)"
+    points: 15
+
+  - name: "RT02: 拡張ACLに「サーバ3.3.3.3宛 ICMP を deny」ACE がある"
+    node: RT02
+    command: "show ip access-lists"
+    parser: "show ip access-lists"
+    find: "*.aces.*"
+    match:
+      actions.forwarding: deny
+      matches.l3.ipv4.protocol: icmp
+    points: 15
+
+  - name: "RT01: 3.3.3.3/32 を OSPF で学習している (ACLで制御プレーンを壊していない)"
+    node: RT01
+    command: "show ip route ospf"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "3.3.3.3/32"
+      source_protocol: "ospf"
+    points: 25

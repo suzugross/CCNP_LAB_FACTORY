@@ -1,0 +1,78 @@
+! ============================================================
+! baseline (router)  -- config 断片 / Jinja2 テンプレート
+! hostname / 管理IP(VRF MGMT) / ユーザ / SSH を host_vars + vault から差込み。
+! ※末尾に 'end' を置かない（day0 で initial を後ろに連結するため）
+! ============================================================
+hostname {{ inventory_hostname }}
+!
+! ラボ指紋: grade が採点前に照合し「MGMT IP が別ラボに当たる」誤採点を防ぐ。
+! alias exec は running-config に残留し、どの出題テーマにも干渉しない。
+alias exec labid CCNP-LAB-{{ (problem | hash('md5'))[:8] }}
+!
+ip domain name {{ ccnp_domain | default('ccnp.local') }}
+ip cef
+no ipv6 cef
+no ip http server
+no ip http secure-server
+!
+! BGP community を asn:value 形式で表示 (display only / 採点と人間の可読性のため)
+ip bgp-community new-format
+!
+! --- 認証（Ansible のログイン情報と一致させる）---
+enable secret {{ ansible_become_pass }}
+username {{ ansible_user }} privilege 15 secret {{ ansible_ssh_pass }}
+!
+! --- 管理 VRF / 管理インタフェース ---
+vrf definition MGMT
+ rd {{ mgmt_rd | default('65001:1') }}
+ address-family ipv4
+ exit-address-family
+!
+interface {{ mgmt_if }}
+ description === MGMT (Ansible) ===
+ vrf forwarding MGMT
+ ip address {{ mgmt_ip }} {{ mgmt_mask | default('255.255.255.192') }}
+ no shutdown
+{% if image_family == 'iosv' %}
+ duplex auto
+ speed auto
+ media-type rj45
+{% endif %}
+!
+ip ssh version 2
+!
+! SSH鍵は exec コマンドのため startup に書けない → EEM で起動後に自動生成。
+{% if image_family | default('iol') == 'iosv' %}
+! iosv はブートが遅く 30s ワンショットだと早すぎて失敗→リトライしない。
+! watchdog でリトライし、SSH が上がったら applet を自己削除（鍵の再生成を防ぐ）。
+event manager applet GEN-SSH-KEY authorization bypass
+ event timer watchdog time 90
+ action 1.0 cli command "enable"
+ action 2.0 cli command "show ip ssh"
+ action 3.0 regexp "SSH Enabled" "$_cli_result"
+ action 4.0 if $_regexp_result eq "1"
+ action 4.1  cli command "configure terminal"
+ action 4.2  cli command "no event manager applet GEN-SSH-KEY"
+ action 4.3  syslog msg "EEM GEN-SSH-KEY: SSH up, applet removed"
+ action 5.0 else
+ action 5.1  cli command "configure terminal"
+ action 5.2  cli command "crypto key generate rsa modulus 2048"
+ action 5.3  syslog msg "EEM GEN-SSH-KEY: RSA key generated"
+ action 6.0 end
+{% else %}
+event manager applet GEN-SSH-KEY authorization bypass
+ event timer countdown time 30
+ action 1.0 cli command "enable"
+ action 2.0 cli command "configure terminal"
+ action 3.0 cli command "crypto key generate rsa modulus 2048"
+ action 4.0 syslog msg "EEM GEN-SSH-KEY: RSA key generated"
+{% endif %}
+!
+line con 0
+ exec-timeout 0 0
+ logging synchronous
+line vty 0 4
+ exec-timeout 0 0
+ login local
+ transport input ssh
+!

@@ -1,0 +1,29 @@
+---
+# サイト間 IPsec VPN 組み立て問題 (sVTI + IPsec Profile + IKEv1)。
+# 3ノード: RT01(本社) / RT02(支店) / RT04(WANトランジット・変更禁止)。
+# underlay は DMVPN-POC-01 と同一規約 (各エッジ↔RT04 /30 + default route)。
+# 学習核心 = crypto map を使わないルーテッドVPN(VTI)の組み立て:
+#   isakmp policy / PSK / DPD(periodic) / transform-set / ipsec profile /
+#   tunnel mode ipsec ipv4 + tunnel protection / MTU・MSS / OSPF over VTI。
+# 隠しひねり = Loopback LAN を /24 のまま OSPF 広告 (ip ospf network point-to-point)。
+id: ENARSI-IPSEC-VTI-01
+title: "サイト間 IPsec VPN (sVTI + IPsec Profile, IKEv1)"
+exam: ENARSI
+topics: [ipsec, svti, ikev1, isakmp, vpn, ospf]
+difficulty: 3
+topology: ad-hoc
+image_family: iosv
+target_nodes: [RT01, RT02, RT04]
+points: 100
+
+# IOSv は network_cli(SSH) 不可 → 採点は CML コンソール経由。
+access: console
+
+# Underlay:
+#   RT01 Gi0/0 10.0.14.1/30 -- 10.0.14.2 RT04 Gi0/0
+#   RT02 Gi0/0 10.0.24.1/30 -- 10.0.24.2 RT04 Gi0/1
+# overlay = Tunnel0 (sVTI) 10.255.12.0/30 (HQ .1 / Br .2), OSPF area 0。
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT04, b_if: 0 }   # HQ underlay
+    - { a: RT02, a_if: 0, b: RT04, b_if: 1 }   # Branch underlay

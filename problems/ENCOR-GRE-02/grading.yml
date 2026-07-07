@@ -1,0 +1,69 @@
+---
+# 採点基準 (ENCOR-GRE-02)。デュアルGRE + overlay OSPF。
+# Tunnel up/up & GRE は raw、overlay 経路は genie(show ip route)で outgoing=Tunnel を判定。
+problem: ENCOR-GRE-02
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: Tunnel100 (→Branch1) が up/up かつ GRE モード"
+    node: RT01
+    command: "show interfaces tunnel 100"
+    raw:
+      - regex: "Tunnel100 is up, line protocol is up"
+      - regex: "Tunnel protocol/transport GRE"
+    points: 10
+
+  - name: "RT01: Tunnel200 (→Branch2) が up/up かつ GRE モード"
+    node: RT01
+    command: "show interfaces tunnel 200"
+    raw:
+      - regex: "Tunnel200 is up, line protocol is up"
+      - regex: "Tunnel protocol/transport GRE"
+    points: 10
+
+  - name: "RT01: Branch1 LAN 10.10.3.1/32 を OSPF で学習し outgoing が Tunnel100"
+    node: RT01
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "10.10.3.1/32"
+      source_protocol: ospf
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel100
+    points: 20
+
+  - name: "RT01: Branch2 LAN 10.10.4.1/32 を OSPF で学習し outgoing が Tunnel200"
+    node: RT01
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "10.10.4.1/32"
+      source_protocol: ospf
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel200
+    points: 20
+
+  - name: "RT03: HQ LAN 10.10.1.1/32 を OSPF で学習し outgoing が Tunnel100"
+    node: RT03
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "10.10.1.1/32"
+      source_protocol: ospf
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel100
+    points: 20
+
+  - name: "RT04: HQ LAN 10.10.1.1/32 を OSPF で学習し outgoing が Tunnel200"
+    node: RT04
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "10.10.1.1/32"
+      source_protocol: ospf
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel200
+    points: 20

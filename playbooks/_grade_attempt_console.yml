@@ -1,0 +1,50 @@
+---
+# 採点 1 回分（CML コンソール収集版・grade.yml から include）。
+# SSH(network_cli)不可ノード(IOSv 等)向け。collect_console.py で show を
+# コンソール経由で集めて grade.py で判定する。ラボは title で特定する。
+
+- name: checks.json を書き出し（コンソール収集の入力）
+  ansible.builtin.copy:
+    dest: "{{ gen_dir }}/checks.json"
+    content: "{{ checks | to_nice_json }}"
+
+- name: コンソール経由で show を収集し grade_input.json を生成
+  ansible.builtin.command:
+    argv:
+      - "{{ repo }}/.venv/bin/python3"
+      - "{{ repo }}/topologies/collect_console.py"
+      - "{{ gen_dir }}/checks.json"
+      - "{{ gen_dir }}/grade_input.json"
+  environment:
+    CML_HOST: "{{ cml_host }}"
+    CML_USER: "{{ cml_username }}"
+    CML_PASS: "{{ cml_password }}"
+    CML_VERIFY: "{{ cml_verify_cert | default(false) | string }}"
+    LAB_TITLE: "CCNP-LAB-{{ (problem | hash('md5'))[:8] }}"
+    NODE_USER: "{{ ansible_user }}"
+    NODE_PASS: "{{ ansible_ssh_pass }}"
+    NODE_ENABLE: "{{ ansible_become_pass | default(ansible_ssh_pass) }}"
+  changed_when: false
+
+- name: "採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）"
+  ansible.builtin.command:
+    argv:
+      - "{{ repo }}/.venv/bin/python3"
+      - "{{ repo }}/topologies/grade.py"
+      - "{{ gen_dir }}/grade_input.json"
+      - "--gate"
+  register: gr
+  changed_when: false
+  failed_when: false
+
+- name: この試行の結果を記録
+  ansible.builtin.set_fact:
+    last_report: "{{ gr.stdout_lines }}"
+    converged: "{{ gr.rc == 0 }}"
+
+- name: 未収束なら次の試行まで待機（最終試行では待たない）
+  ansible.builtin.pause:
+    seconds: "{{ settle_delay | int }}"
+  when:
+    - not converged
+    - (attempt | int) < (max_attempts | int) - 1

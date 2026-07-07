@@ -1,0 +1,80 @@
+---
+# 採点基準（パラメータ化テンプレート）。値は params/<variant>.yml 由来。
+# 近隣FULL/経路に加え、★インタフェースモード(ip ospf <pid> area <area>)を raw で確認。
+problem: ENCOR-OSPF-IF-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: OSPF 近隣 RT02({{ params.seg12 }}.2) が FULL"
+    node: RT01
+    command: "show ip ospf neighbor"
+    parser: "show ip ospf neighbor"
+    find: "interfaces.*.neighbors.*"
+    match: { address: "{{ params.seg12 }}.2", state: { startswith: "FULL" } }
+    points: 15
+
+  - name: "RT01: OSPF 近隣 RT03({{ params.seg13 }}.2) が FULL"
+    node: RT01
+    command: "show ip ospf neighbor"
+    parser: "show ip ospf neighbor"
+    find: "interfaces.*.neighbors.*"
+    match: { address: "{{ params.seg13 }}.2", state: { startswith: "FULL" } }
+    points: 15
+
+  - name: "RT01: {{ params.rt02_lo }}/32 を OSPF 経路で学習 (via {{ params.seg12 }}.2)"
+    node: RT01
+    command: "show ip route ospf"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.rt02_lo }}/32"
+      source_protocol: "ospf"
+      next_hop.next_hop_list.*.next_hop: "{{ params.seg12 }}.2"
+    points: 10
+
+  - name: "RT01: {{ params.rt03_lo }}/32 を OSPF 経路で学習 (via {{ params.seg13 }}.2)"
+    node: RT01
+    command: "show ip route ospf"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.rt03_lo }}/32"
+      source_protocol: "ospf"
+      next_hop.next_hop_list.*.next_hop: "{{ params.seg13 }}.2"
+    points: 10
+
+  - name: "RT02: {{ params.rt01_lo }}/32 を OSPF 経路で学習（双方向性確認, via {{ params.seg12 }}.1）"
+    node: RT02
+    command: "show ip route ospf"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.rt01_lo }}/32"
+      source_protocol: "ospf"
+      next_hop.next_hop_list.*.next_hop: "{{ params.seg12 }}.1"
+    points: 10
+
+  # --- 方式の確認: インタフェースモード(ip ospf <pid> area <area>) を使ったか ---
+  - name: "RT01: インタフェースモードで構成 (ip ospf {{ params.ospf_pid }} area {{ params.area }})"
+    node: RT01
+    command: "show running-config | include ip ospf"
+    raw:
+      - regex: 'ip ospf +{{ params.ospf_pid }} +area +{{ params.area }}'
+    points: 14
+
+  - name: "RT02: インタフェースモードで構成 (ip ospf {{ params.ospf_pid }} area {{ params.area }})"
+    node: RT02
+    command: "show running-config | include ip ospf"
+    raw:
+      - regex: 'ip ospf +{{ params.ospf_pid }} +area +{{ params.area }}'
+    points: 13
+
+  - name: "RT03: インタフェースモードで構成 (ip ospf {{ params.ospf_pid }} area {{ params.area }})"
+    node: RT03
+    command: "show running-config | include ip ospf"
+    raw:
+      - regex: 'ip ospf +{{ params.ospf_pid }} +area +{{ params.area }}'
+    points: 13

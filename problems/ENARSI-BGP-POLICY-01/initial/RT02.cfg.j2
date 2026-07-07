@@ -1,0 +1,36 @@
+! ENARSI-BGP-POLICY-01 初期 (RT02, AS{{ params.as_cust }} edge-B: ISP-A待機系 + ISP-B接続)
+! eBGP セッションのみ確立済み（ポリシー皆無）。iBGP・全ポリシーは受験者が設定する。
+! links[0] = RT04(ISP-A) / links[1] = RT05(ISP-B) / links[2] = RT03(内部)
+interface Loopback0
+ ip address {{ params.rt02_lo }} 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT04 ISP-A (eBGP AS{{ params.as_ispa }}) ===
+ ip address {{ params.seg24 }}.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT05 ISP-B (eBGP AS{{ params.as_ispb }}) ===
+ ip address {{ params.seg25 }}.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT03 (internal) ===
+ ip address {{ params.seg23 }}.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id {{ params.rt02_lo }}
+ network {{ params.rt02_lo }} 0.0.0.0 area 0
+ network {{ params.seg23 }}.0 0.0.0.3 area 0
+!
+router bgp {{ params.as_cust }}
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor {{ params.seg24 }}.2 remote-as {{ params.as_ispa }}
+ neighbor {{ params.seg25 }}.2 remote-as {{ params.as_ispb }}
+ address-family ipv4
+  neighbor {{ params.seg24 }}.2 activate
+  neighbor {{ params.seg25 }}.2 activate
+ exit-address-family
+!

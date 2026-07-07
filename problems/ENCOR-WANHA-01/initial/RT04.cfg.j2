@@ -1,0 +1,23 @@
+! ENCOR-WANHA-01 初期 (RT04, Branch) : underlay スタティック既設。GRE/経路は受験者が設定。
+! links[0]=RT02(Transit-A/primary) / links[1]=RT03(Transit-B/backup)
+interface Loopback0
+ ip address 4.4.4.4 255.255.255.255
+!
+interface Loopback10
+ description === Branch LAN (simulated) ===
+ ip address 10.10.4.1 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 (Transit-A / primary) ===
+ ip address 10.0.24.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (Transit-B / backup) ===
+ ip address 10.0.34.2 255.255.255.252
+ no shutdown
+!
+! underlay（既設）: HQ 側トンネル終端へ各トランジット経由で到達
+ip route 10.0.12.0 255.255.255.252 10.0.24.1
+ip route 10.0.13.0 255.255.255.252 10.0.34.1
+!

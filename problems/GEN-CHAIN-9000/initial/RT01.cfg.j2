@@ -1,0 +1,51 @@
+! GEN-CHAIN-9000 初期 (RT01) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 45.45.45.45 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT11 ===
+ ip address 10.18.246.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 ===
+ ip address 10.243.16.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT04 ===
+ ip address 10.46.228.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 45.45.45.45
+ area 1 stub no-summary
+ area 1 range 172.20.0.0 255.255.254.0 not-advertise
+ network 45.45.45.45 0.0.0.0 area 0
+ network 10.18.246.0 0.0.0.3 area 1
+ network 10.243.16.0 0.0.0.3 area 0
+ network 10.46.228.0 0.0.0.3 area 0
+!
+ip prefix-list PL-WEST seq 5 permit 172.20.0.0/23 ge 24 le 24
+route-map RM-W2B permit 10
+ match ip address prefix-list PL-WEST
+ set community 65001:100
+!
+router bgp 65001
+ bgp router-id 45.45.45.45
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 77.77.77.77 remote-as 65001
+ neighbor 77.77.77.77 update-source Loopback0
+ neighbor 77.77.77.77 password BADAUTH
+ neighbor 5.5.5.5 remote-as 65001
+ neighbor 5.5.5.5 update-source Loopback0
+ neighbor 5.5.5.5 password BADAUTH
+ address-family ipv4
+  neighbor 77.77.77.77 activate
+  neighbor 77.77.77.77 send-community
+  neighbor 5.5.5.5 activate
+  neighbor 5.5.5.5 send-community
+  redistribute ospf 1 route-map RM-W2B
+ exit-address-family
+!

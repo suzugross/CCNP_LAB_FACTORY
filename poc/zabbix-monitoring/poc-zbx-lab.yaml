@@ -1,0 +1,184 @@
+lab:
+  title: POC-ZBX-SNMPV3
+  description: 'PoC: ubuntu cloud-init + IOL SNMPv3 (Zabbix監視TS構想の検証用)'
+  notes: |
+    PoC lab (Claude 2026-07-03):
+    - UB01 ens2=10.1.10.20/27 (MGMT, gw .30), ens3=10.99.0.2/30 (in-band to RT01)
+    - RT01 E0/3=10.1.10.19/27 (VRF MGMT), E0/0=10.99.0.1/30 (global) + SNMPv3
+    確認項目: cloud-init静的IP / apt到達 / IOL SNMPv3応答(in-band & VRF)
+  version: 0.3.0
+nodes:
+- id: UB01
+  label: UB01
+  node_definition: ubuntu
+  image_definition: ubuntu-24-04-20241004
+  ram: 4096
+  configuration:
+  - name: user-data
+    content: |
+      #cloud-config
+      hostname: UB01
+      manage_etc_hosts: true
+      system_info:
+        default_user:
+          name: suzuki
+      password: CCNP
+      chpasswd: { expire: false }
+      ssh_pwauth: true
+      packages:
+        - snmp
+      runcmd:
+        - date -Is > /var/tmp/poc_cloudinit_done
+        - curl -sI -m 10 https://repo.zabbix.com/zabbix/7.0/ubuntu/dists/noble/Release -o /dev/null -w '%{http_code}' > /var/tmp/poc_zbx_reach 2>&1 || true
+  - name: network-config
+    content: |
+      #network-config
+      network:
+        version: 2
+        ethernets:
+          ens2:
+            addresses: [10.1.10.20/27]
+            routes:
+              - to: default
+                via: 10.1.10.30
+            nameservers:
+              addresses: [8.8.8.8, 8.8.4.4]
+          ens3:
+            addresses: [10.99.0.2/30]
+  x: -350
+  y: -200
+  tags: [servers]
+  interfaces:
+  - id: UB01-i0
+    label: ens2
+    type: physical
+    slot: 0
+  - id: UB01-i1
+    label: ens3
+    type: physical
+    slot: 1
+- id: RT01
+  label: RT01
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT01
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface Ethernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.19 255.255.255.224
+     no shutdown
+    !
+    interface Ethernet0/0
+     description === in-band to UB01 ===
+     ip address 10.99.0.1 255.255.255.252
+     no shutdown
+    !
+    interface Loopback0
+     ip address 9.9.9.9 255.255.255.255
+    !
+    snmp-server view POCVIEW iso included
+    snmp-server group POCGRP v3 priv read POCVIEW
+    snmp-server user POCUSER POCGRP v3 auth sha AuthPass123 priv aes 128 PrivPass123
+    snmp-server location POC-LAB
+    !
+    ip ssh version 2
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+     transport input ssh
+  x: -130
+  y: -200
+  tags: [routers]
+  interfaces:
+  - id: RT01-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RT01-i3
+    label: Ethernet0/3
+    type: physical
+    slot: 3
+- id: MGMTSW
+  label: MGMT-SW
+  node_definition: unmanaged_switch
+  image_definition: null
+  configuration: ''
+  x: -350
+  y: 50
+  tags: []
+  interfaces:
+  - id: MGMTSW-i0
+    label: port0
+    type: physical
+    slot: 0
+  - id: MGMTSW-i1
+    label: port1
+    type: physical
+    slot: 1
+  - id: MGMTSW-i2
+    label: port2
+    type: physical
+    slot: 2
+- id: EXTC
+  label: to-MGMT-net
+  node_definition: external_connector
+  image_definition: null
+  configuration: System Bridge
+  x: -150
+  y: 50
+  tags: []
+  interfaces:
+  - id: EXTC-i0
+    label: port
+    type: physical
+    slot: 0
+links:
+- id: l0
+  n1: UB01
+  i1: UB01-i1
+  n2: RT01
+  i2: RT01-i0
+  conditioning: {}
+  label: UB01<->RT01
+- id: l1
+  n1: UB01
+  i1: UB01-i0
+  n2: MGMTSW
+  i2: MGMTSW-i0
+  conditioning: {}
+  label: UB01-mgmt
+- id: l2
+  n1: RT01
+  i1: RT01-i3
+  n2: MGMTSW
+  i2: MGMTSW-i1
+  conditioning: {}
+  label: RT01-mgmt
+- id: l3
+  n1: MGMTSW
+  i1: MGMTSW-i2
+  n2: EXTC
+  i2: EXTC-i0
+  conditioning: {}
+  label: mgmt-uplink
+annotations: []
+smart_annotations: []

@@ -1,0 +1,40 @@
+---
+# 採点基準 (ENCOR-VACL-01)。収集=telnet(SSH不可 iosvl2)。
+# VACL は genie 非対応のため raw 正規表現で判定。名前は任意なので名前非依存に判定。
+# VLAN10 に VACL を適用し「Telnet を drop / 他は forward」を実現させる。
+problem: ENCOR-VACL-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "SW01: マッチ用ACLが Telnet(tcp eq 23) を permit している"
+    node: SW01
+    command: "show ip access-lists"
+    raw:
+      - regex: "permit +tcp .*eq +(23|telnet)"
+    points: 20
+
+  - name: "SW01: vlan access-map に「ACLマッチ→drop」のエントリがある"
+    node: SW01
+    command: "show vlan access-map"
+    raw:
+      # 実機表記: "    ip   address: <ACL>" と "Action:" 次行に "    drop"
+      - regex: "ip +address:"
+      - regex: "drop"
+    points: 30
+
+  - name: "SW01: vlan access-map に「その他→forward」のエントリがある"
+    node: SW01
+    command: "show vlan access-map"
+    raw:
+      - regex: "forward"
+    points: 20
+
+  - name: "SW01: VACL が VLAN 10 に適用(vlan filter)されている"
+    node: SW01
+    command: "show vlan filter"
+    raw:
+      - regex: "filtering VLANs:[\\s\\S]*\\b10\\b"
+    points: 30

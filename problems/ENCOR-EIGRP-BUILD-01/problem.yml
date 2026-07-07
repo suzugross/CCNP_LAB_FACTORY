@@ -1,0 +1,28 @@
+---
+# 問題メタデータ
+id: ENCOR-EIGRP-BUILD-01
+title: "named-mode EIGRP を要件どおり構築する"
+exam: ENCOR
+topics: [eigrp, igp, summarization, filtering, build]
+difficulty: 4
+topology: core-triangle-2spoke
+target_nodes: [RT01, RT02, RT03, RT04, RT05]
+points: 100
+
+# === トポロジ配線 =============================================
+#        RT01
+#       /    \           コア3角(冗長経路=FS/variance の土台)
+#     RT02 — RT03
+#      |       |
+#     RT04    RT05       スポーク(eigrp stub)
+#
+# a_if/b_if は intf_profiles[node_image].links のインデックス(IOL=E0/0..0/2)。
+# RT01-RT03 リンクは「広域・高遅延」設計（initial で delay 投入）→ 直行経路を
+# 劣後させ、RT02 経由を successor / RT03 直行を Feasible Successor にする。
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # 10.1.12.0/30  RT01=.1 RT02=.2
+    - { a: RT01, a_if: 1, b: RT03, b_if: 0 }   # 10.1.13.0/30  RT01=.1 RT03=.2 (高遅延)
+    - { a: RT02, a_if: 1, b: RT03, b_if: 1 }   # 10.1.23.0/30  RT02=.1 RT03=.2
+    - { a: RT02, a_if: 2, b: RT04, b_if: 0 }   # 10.2.24.0/30  RT02=.1 RT04=.2
+    - { a: RT03, a_if: 2, b: RT05, b_if: 0 }   # 10.3.35.0/30  RT03=.1 RT05=.2

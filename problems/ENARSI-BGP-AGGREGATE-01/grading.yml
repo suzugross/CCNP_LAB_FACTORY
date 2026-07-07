@@ -1,0 +1,61 @@
+---
+# 採点基準 (ENARSI-BGP-AGGREGATE-01)。
+# RT02 が 172.16.0.0/24..3.0/24 を広告 → RT01 が /22 に集約(summary-only + as-set)
+# → 下流 RT03 は /22 のみ学習・個別 /24 は抑止・as-set で 65002 が path に残る。
+problem: ENARSI-BGP-AGGREGATE-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: eBGP ネイバー RT02(10.1.12.2) が Established"
+    node: RT01
+    command: "show ip bgp neighbors 10.1.12.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "10.1.12.2"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 15
+
+  - name: "RT01: eBGP ネイバー RT03(10.1.13.2) が Established"
+    node: RT01
+    command: "show ip bgp neighbors 10.1.13.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "10.1.13.2"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 15
+
+  - name: "RT01: aggregate-address 172.16.0.0/22 が summary-only で設定されている"
+    node: RT01
+    command: "show running-config | section router bgp"
+    raw:
+      # IOS はオプションの語順を as-set summary-only に並べ替えるため、行存在と summary-only を分けて確認
+      - regex: "aggregate-address +172\\.16\\.0\\.0 +255\\.255\\.252\\.0"
+      - regex: "aggregate-address +172\\.16\\.0\\.0[^\\n]*summary-only"
+    points: 15
+
+  - name: "RT03: 集約 172.16.0.0/22 を BGP 経路で学習している"
+    node: RT03
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "172.16.0.0/22"
+      source_protocol: "bgp"
+    points: 25
+
+  - name: "RT03: 個別 172.16.1.0/24 は抑止されている (summary-only の効果)"
+    node: RT03
+    command: "show ip bgp 172.16.1.0 255.255.255.0"
+    raw:
+      - regex: "Network not in table"
+    points: 15
+
+  - name: "RT03: 集約経路の AS-path に 65002 が残っている (as-set の効果)"
+    node: RT03
+    command: "show ip bgp 172.16.0.0 255.255.252.0"
+    raw:
+      - regex: "65002"
+    points: 15

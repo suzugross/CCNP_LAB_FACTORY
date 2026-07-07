@@ -1,0 +1,63 @@
+---
+# 採点基準（パラメータ化テンプレート）。値は params/<variant>.yml 由来。
+# grade.yml が params で描画 → _generated/<problem>/grading.rendered.yml を採点に使用。
+# FNF は genie パーサ不安定のため全て raw 判定。送信元/宛先アドレスは常にキーなので
+# cache の動作確認(該当フロー採取)は変種に依らず安定する。
+problem: ENCOR-FNF-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT02: フローレコード {{ params.rec_name }} のキー/コレクトが要件どおり"
+    node: RT02
+    command: "show flow record {{ params.rec_name }}"
+    raw:
+      - regex: "match ipv4 source address"
+      - regex: "match ipv4 destination address"
+{% for k in params.extra_match_keys %}
+      - regex: "match {{ k }}"
+{% endfor %}
+{% for c in params.collect_fields %}
+      - regex: "collect {{ c }}"
+{% endfor %}
+    points: 15
+
+  - name: "RT02: フローエクスポータ {{ params.exp_name }} がコレクタ {{ params.collector_ip }}/UDP{{ params.udp_port }} を指定"
+    node: RT02
+    command: "show flow exporter {{ params.exp_name }}"
+    raw:
+      - contains: "{{ params.collector_ip }}"
+      - contains: "{{ params.udp_port }}"
+    points: 15
+
+  - name: "RT02: フローモニタ {{ params.mon_name }} が {{ params.rec_name }} と {{ params.exp_name }} を束ねる"
+    node: RT02
+    command: "show flow monitor {{ params.mon_name }}"
+    raw:
+      - regex: "[Rr]ecord.*{{ params.rec_name }}"
+      - regex: "[Ee]xporter.*{{ params.exp_name }}"
+    points: 15
+
+  - name: "RT02: Ethernet0/0 の ingress にフローモニタ{% if params.sampler.enabled %}(サンプラー {{ params.sampler.name }} 付き){% endif %}を適用"
+    node: RT02
+    command: "show running-config interface Ethernet0/0"
+    raw:
+      - regex: "ip flow monitor {{ params.mon_name }}{% if params.sampler.enabled %} sampler {{ params.sampler.name }}{% endif %} input"
+    points: 15
+
+  - name: "RT01→RT03 の能動トラフィックが疎通 (フロー生成)"
+    node: RT01
+    command: "ping {{ params.rt03_lo }} source {{ params.rt01_lo }} repeat {{ 60 if params.sampler.enabled else 10 }}"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 15
+
+  - name: "RT02: フローモニタ cache に該当フロー(送信元{{ params.rt01_lo }}/宛先{{ params.rt03_lo }})が採取される"
+    node: RT02
+    command: "show flow monitor {{ params.mon_name }} cache"
+    raw:
+      - contains: "{{ params.rt01_lo }}"
+      - contains: "{{ params.rt03_lo }}"
+    points: 25

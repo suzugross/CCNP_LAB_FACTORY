@@ -1,0 +1,46 @@
+---
+# 採点: 両側を Ansible で構成し eBGP が確立＋互いの Loopback を学習しているか（最終状態のみ）。
+problem: ENARSI-AUTO-BGP-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: eBGP ネイバー RT02 ({{ params.seg12 }}.2) が Established"
+    node: RT01
+    command: "show ip bgp neighbors {{ params.seg12 }}.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "{{ params.seg12 }}.2"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 25
+
+  - name: "RT02: eBGP ネイバー RT01 ({{ params.seg12 }}.1) が Established"
+    node: RT02
+    command: "show ip bgp neighbors {{ params.seg12 }}.1"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "{{ params.seg12 }}.1"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 25
+
+  - name: "RT01: {{ params.rt02_lo }}/32 を BGP で学習 (via RT02)"
+    node: RT01
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.rt02_lo }}/32"
+      source_protocol: "bgp"
+    points: 25
+
+  - name: "RT02: {{ params.rt01_lo }}/32 を BGP で学習 (via RT01)"
+    node: RT02
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.rt01_lo }}/32"
+      source_protocol: "bgp"
+    points: 25

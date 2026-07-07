@@ -1,0 +1,35 @@
+! GEN-CHAIN-9600 初期 (RT12) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 40.40.40.40 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT03 ===
+ ip address 10.100.80.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT04 ===
+ ip address 10.46.7.2 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 40.40.40.40
+ network 40.40.40.40 0.0.0.0 area 0
+ network 10.100.80.0 0.0.0.3 area 0
+ network 10.46.7.0 0.0.0.3 area 0
+!
+router bgp 65001
+ bgp router-id 40.40.40.40
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 68.68.68.68 remote-as 65001
+ neighbor 68.68.68.68 update-source Loopback0
+ neighbor 35.35.35.35 remote-as 65001
+ neighbor 35.35.35.35 update-source Loopback0
+ address-family ipv4
+  neighbor 68.68.68.68 activate
+  neighbor 68.68.68.68 send-community
+  neighbor 35.35.35.35 activate
+  neighbor 35.35.35.35 send-community
+ exit-address-family
+!

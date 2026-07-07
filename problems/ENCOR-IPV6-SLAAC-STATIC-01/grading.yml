@@ -1,0 +1,124 @@
+---
+# 採点基準 (ENCOR-IPV6-SLAAC-STATIC-01)。収集=ssh(iol-xe)。IPv6 only 三角形(冗長)。
+# ENCOR-IPV6-STATIC-01 の発展: 自動アドレッシング(EUI-64/SLAAC)と静的経路の発展形
+# (直結指定 / フローティング(AD) / Null0 破棄) を扱う。
+#
+# 方式の強制は running-config / show ipv6 route の raw 正規表現で行う。
+#   - 直結指定: ipv6 route <dst> <IF>            (ネクストホップ無し)
+#   - フローティング: 主経路(AD既定) + 予備経路(末尾に AD 200)。RIB には主経路だけ。
+#   - Null0破棄: ipv6 route <agg> Null0
+#   - EUI-64 : ipv6 address <prefix>/64 eui-64
+#   - SLAAC  : ipv6 address autoconfig (default) → ND 由来のデフォルト経路を自動取得
+problem: ENCOR-IPV6-SLAAC-STATIC-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # ============ 自動アドレッシング (EUI-64 / SLAAC) ============
+  - name: "RT02: Et0/1 を EUI-64 で自動生成(2001:DB8:23::/64 eui-64)"
+    node: RT02
+    command: "show running-config | include eui"
+    raw:
+      - regex: "2001:DB8:23::/64 eui-64"
+    points: 8
+
+  - name: "RT03: Et0/0 を SLAAC(autoconfig)でアドレス取得する設定"
+    node: RT03
+    command: "show running-config | include autoconfig"
+    raw:
+      - regex: "ipv6 address autoconfig"
+    points: 8
+
+  - name: "RT03: SLAAC で 2001:DB8:23::/64 のGUAを実際に取得している"
+    node: RT03
+    command: "show ipv6 interface brief"
+    raw:
+      - regex: "2001:DB8:23:"
+    points: 6
+
+  - name: "RT03: SLAAC 由来(ND)のデフォルト経路 ::/0 を取得している(手動 ::/0 ではない)"
+    node: RT03
+    command: "show ipv6 route ::/0"
+    raw:
+      - regex: 'Known via "ND"'
+    points: 8
+
+  # ============ 静的経路の発展形 (running-config / RIB の raw) ============
+  # --- RT01 -> RT02 Lo : 再帰静的(GUA ネクストホップ) ---
+  # 注: 全Ethernet(マルチアクセス)構成のため、出口IFのみの「直結指定」は宛先/128を
+  #     当該リンク上でND解決しようとして失敗する(直結指定は真のP2P専用)。ここは再帰静的。
+  - name: "RT01: RT02 Lo(2001:DB8:B::2/128) へ 再帰静的(GUA 2001:DB8:12::2)"
+    node: RT01
+    command: "show running-config | include ipv6 route"
+    raw:
+      - regex: "ipv6 route 2001:DB8:B::2/128 2001:DB8:12::2"
+    points: 10
+
+  # --- RT01 -> RT03 Lo : フローティング(主=Et0/0経由 / 予備=Et0/1直結 AD200) ---
+  - name: "RT01: RT03 Lo への主経路(Et0/0 経由・AD既定)"
+    node: RT01
+    command: "show running-config | include ipv6 route"
+    raw:
+      - regex: "ipv6 route 2001:DB8:C::3/128 Ethernet0/0 FE80::2"
+    points: 6
+
+  - name: "RT01: RT03 Lo への予備経路(Et0/1 直結・フローティング AD 200)"
+    node: RT01
+    command: "show running-config | include ipv6 route"
+    raw:
+      - regex: "ipv6 route 2001:DB8:C::3/128 Ethernet0/1 FE80::3 200"
+    points: 8
+
+  - name: "RT01: フローティングが機能(RIB は主経路 Et0/0 のみ・予備 Et0/1 は不在)"
+    node: RT01
+    command: "show ipv6 route 2001:DB8:C::3/128"
+    raw:
+      - regex: "Ethernet0/0"
+      - not_regex: "Ethernet0/1"
+    points: 10
+
+  # --- RT01 : Null0 破棄経路(集約ブロックの未使用分をブラックホール) ---
+  - name: "RT01: 2001:DB8:A::/48 の破棄経路(Null0)"
+    node: RT01
+    command: "show running-config | include ipv6 route"
+    raw:
+      - regex: "ipv6 route 2001:DB8:A::/48 Null0"
+    points: 6
+
+  # ============ 到達性(能動 ping): 全 Loopback 相互到達 ============
+  - name: "RT01: RT02 Lo へ到達(再帰静的 + 戻り経路)"
+    node: RT01
+    command: "ping 2001:DB8:B::2 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 6
+
+  - name: "RT01: RT03 Lo へ到達(フローティング主経路 + 多段 + 戻り)"
+    node: RT01
+    command: "ping 2001:DB8:C::3 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 8
+
+  - name: "RT03: RT01 Lo へ到達(SLAAC デフォルト経路 + 多段 + 戻り)"
+    node: RT03
+    command: "ping 2001:DB8:A::1 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 8
+
+  - name: "RT02: RT03 Lo へ到達(リンクローカル静的)"
+    node: RT02
+    command: "ping 2001:DB8:C::3 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 4
+
+  - name: "RT02: RT01 Lo へ到達(リンクローカル静的)"
+    node: RT02
+    command: "ping 2001:DB8:A::1 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 4

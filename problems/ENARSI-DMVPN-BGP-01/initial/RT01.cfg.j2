@@ -1,0 +1,21 @@
+! ENARSI-DMVPN-BGP-01 初期状態 (RT01 = Hub / NHS / 再配送境界)
+!   links[0] = RT04(WAN transit) 向け underlay (NBMA / tunnel source)
+!   links[1] = RT05(DC core) 向け (eBGP 用・IP のみ設定済み)
+!   Lo0 = 1.1.1.1
+!   ※ オーバーレイ(Tunnel0/NHRP/EIGRP) と BGP/再配送は未設定。受験者が構築する。
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+!
+interface {{ links[0] }}
+ description === underlay to RT04 (WAN transit) ===
+ ip address 10.0.14.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT05 (DC core / eBGP peer) ===
+ ip address 10.0.15.1 255.255.255.252
+ no shutdown
+!
+! underlay: 他エッジの NBMA へは RT04 経由(デフォルトルート)
+ip route 0.0.0.0 0.0.0.0 10.0.14.2
+!

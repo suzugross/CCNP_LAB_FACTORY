@@ -1,0 +1,31 @@
+! ENCOR-INTEGRATED-01 初期 (RT02, Edge/ASBR/NAT) : OSPF area0 + eBGP(AS{{ params.as_internal }}) 構築済み。
+! 受験者タスク = (1)ISPデフォルトをOSPFへ注入 (2)PAT(overload) (3)エッジACL。値は params/<variant>.yml 由来。
+! links[0]=RT01(OSPF,inside) / links[1]=RT03(OSPF,inside) / links[2]=RT04(eBGP,outside)
+interface Loopback0
+ ip address {{ params.rt02_lo }} 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 (OSPF / NAT inside) ===
+ ip address {{ params.seg12 }}.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (OSPF / NAT inside) ===
+ ip address {{ params.seg23 }}.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT04 (eBGP AS{{ params.as_ext }} / NAT outside) ===
+ ip address {{ params.seg24 }}.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id {{ params.rt02_lo }}
+ network {{ params.rt02_lo }} 0.0.0.0 area 0
+ network {{ params.seg12 }}.0 0.0.0.3 area 0
+ network {{ params.seg23 }}.0 0.0.0.3 area 0
+!
+router bgp {{ params.as_internal }}
+ bgp log-neighbor-changes
+ neighbor {{ params.seg24 }}.2 remote-as {{ params.as_ext }}
+!

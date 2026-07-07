@@ -1,0 +1,138 @@
+---
+# 採点基準 (ENARSI-IPSEC-IKEV2-01 / sVTI + IPsec Profile + IKEv2, ハブ+2支店)
+#  ・ハブで2本の IKEv2 SA が READY                        … show crypto ikev2 sa raw
+#  ・IKE SA 実効スイート (AES-GCM-256/PRF SHA384/DH19)    … show crypto ikev2 sa detailed raw
+#  ・各支店 IPsec セッション UP-ACTIVE                    … show crypto session raw
+#  ・Child SA 実効 (esp-gcm, カウンタ>0)                  … show crypto ipsec sa raw
+#  ・PFS / DPD / MTU / MSS / tunnel mode・protection      … show run 抜粋 raw (名前非依存)
+#  ・支店間 LAN 経路がハブ経由 (EIGRP, 2トンネル縦断)     … genie
+#  ・LAN間の実疎通 (支店間＋ハブ)                         … 能動 ping (Lo10→対向Lo10)
+# ★収集はノード毎に sorted 順 → "ping..." < "show..." で能動pingが先に走り
+#   同一ノードの ipsec sa カウンタが確実に加算される (DMVPN と同イディオム)。
+# RT04 は変更禁止のため採点対象外。
+problem: ENARSI-IPSEC-IKEV2-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01(HQ): 両支店との IKEv2 SA が READY"
+    node: RT01
+    command: "show crypto ikev2 sa"
+    raw:
+      - regex: "10\\.0\\.24\\.1/500\\s+\\S+\\s+READY"
+      - regex: "10\\.0\\.34\\.1/500\\s+\\S+\\s+READY"
+    points: 10
+
+  # ---- IKE SA 実効スイート (NGE 準拠で確立していること) ----
+  - name: "RT01: IKEv2 SA が AES-GCM-256 / PRF SHA384 / DH group19 / PSK"
+    node: RT01
+    command: "show crypto ikev2 sa detailed"
+    raw:
+      - regex: "Encr: AES-GCM, keysize: 256"
+      - regex: "PRF: SHA384"
+      - regex: "DH Grp:19"
+      - regex: "Auth sign: PSK"
+    points: 15
+
+  - name: "RT02(Branch1): IPsec セッションが本社と UP-ACTIVE"
+    node: RT02
+    command: "show crypto session"
+    raw:
+      - contains: "Session status: UP-ACTIVE"
+      - regex: "Peer: 10\\.0\\.14\\.1"
+    points: 5
+
+  - name: "RT03(Branch2): IPsec セッションが本社と UP-ACTIVE"
+    node: RT03
+    command: "show crypto session"
+    raw:
+      - contains: "Session status: UP-ACTIVE"
+      - regex: "Peer: 10\\.0\\.14\\.1"
+    points: 5
+
+  # ---- Child SA 実効 (AEAD transform と暗号化トラフィック実績) ----
+  - name: "RT01: ESP が AES-GCM-256 で暗号化/復号カウンタが加算"
+    node: RT01
+    command: "show crypto ipsec sa"
+    raw:
+      - regex: "transform: esp-gcm"
+      - regex: "#pkts encaps: [1-9]"
+      - regex: "#pkts decaps: [1-9]"
+    points: 10
+
+  # ---- 仕様書コンプライアンス (オブジェクト名非依存の run 抜粋) ----
+  - name: "RT01: PFS group19 が有効"
+    node: RT01
+    command: "show running-config | include set pfs"
+    raw:
+      - contains: "set pfs group19"
+    points: 5
+
+  - name: "RT01: IKEv2 DPD が 10秒/3秒/on-demand"
+    node: RT01
+    command: "show running-config | include dpd"
+    raw:
+      - contains: "dpd 10 3 on-demand"
+    points: 5
+
+  - name: "RT01: Tunnel1 が VTI(ipsec ipv4)+protection+MTU1400+MSS1360"
+    node: RT01
+    command: "show running-config interface Tunnel1"
+    raw:
+      - contains: "ip mtu 1400"
+      - contains: "ip tcp adjust-mss 1360"
+      - contains: "tunnel mode ipsec ipv4"
+      - regex: "tunnel protection ipsec profile \\S+"
+    points: 5
+
+  - name: "RT02: Tunnel1 が VTI(ipsec ipv4)+protection+MTU1400+MSS1360"
+    node: RT02
+    command: "show running-config interface Tunnel1"
+    raw:
+      - contains: "ip mtu 1400"
+      - contains: "ip tcp adjust-mss 1360"
+      - contains: "tunnel mode ipsec ipv4"
+      - regex: "tunnel protection ipsec profile \\S+"
+    points: 5
+
+  # ---- ルーティング: 支店間 LAN 経路がハブ経由 (2トンネル縦断の EIGRP) ----
+  - name: "RT02(Branch1): 192.168.3.0/24 を EIGRP でハブ経由 (Tunnel1) 学習"
+    node: RT02
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "192.168.3.0/24"
+      source_protocol: eigrp
+      next_hop.next_hop_list.*.next_hop: "10.255.12.1"
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel1
+    points: 10
+
+  - name: "RT03(Branch2): 192.168.2.0/24 を EIGRP でハブ経由 (Tunnel1) 学習"
+    node: RT03
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "192.168.2.0/24"
+      source_protocol: eigrp
+      next_hop.next_hop_list.*.next_hop: "10.255.13.1"
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel1
+    points: 10
+
+  # ---- データプレーン: LAN間の実疎通 (能動・暗号カウンタも駆動) ----
+  - name: "RT02(Branch1): 支店2 LAN 192.168.3.1 へ本社経由で疎通"
+    node: RT02
+    command: "ping 192.168.3.1 source Loopback10 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 10
+
+  - name: "RT01(HQ): 支店1 LAN 192.168.2.1 へ VPN 経由で疎通"
+    node: RT01
+    command: "ping 192.168.2.1 source Loopback10 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 5

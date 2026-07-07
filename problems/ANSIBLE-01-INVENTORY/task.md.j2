@@ -1,0 +1,49 @@
+# Ansible道場 01 : インベントリと接続
+
+> このコースは「OSPF/BGP などの題材」ではなく **Ansible そのもの**を段階的に学びます。
+> 題材は毎回ごく簡単（今回は各ルータの Loopback0 に説明文を付けるだけ）。**変わるのは
+> Ansible の技術**です。
+
+## 今回学ぶこと：インベントリ（接続先と接続情報）
+Ansible は「**どの機器へ**」「**どうやって接続するか**」を **インベントリ**に書きます。
+ネットワーク機器は Linux サーバと接続方法が違う、という最初の勘所を押さえます。
+
+- **`[グループ名]`** … 機器をまとめる箱（playbook の `hosts:` がこの名前を指す）。今回は `routers`。
+- **`ansible_host`** … 実際に接続する管理IP。
+- **`ansible_connection`** … 接続方式。ネットワーク機器は機器側で Python を実行できないので、
+  サーバ用の `ssh`（リモートで Python 実行）ではなく、**制御機から SSH してコマンドを送る方式**を使う。
+- **`ansible_network_os`** … 対象プラットフォーム（IOS なら `cisco.ios.ios`）。CLIの解釈に使う。
+
+## 構成（初期状態で投入済み）
+RT01〜RT03（IP・Loopback 設定済み）。管理IPで SSH 到達可（`SUZUKI / CCNP`、特権15）。
+
+| ルータ | 管理IP |
+|--------|--------|
+| RT01 | 10.1.10.11 |
+| RT02 | 10.1.10.12 |
+| RT03 | 10.1.10.13 |
+
+## 課題
+ワークスペースには **完成品の playbook `set_desc.yml`**（各 Loopback0 に description を付ける）と、
+**穴あきの `hosts.ini`** があります。`set_desc.yml` は**触りません**。
+`hosts.ini` の `__FILL_n__`（接続方式・プラットフォーム）を埋めて、3台に到達できるようにします。
+
+> 穴の一覧・ヒントは同フォルダの **`穴.md`** を参照（穴は seed で変わることがあります）。
+
+## 実行
+```bash
+cd lab/ANSIBLE-01-INVENTORY
+ansible-playbook set_desc.yml          # インベントリが正しければ3台とも changed/ok
+```
+うまくいけば、Ansible が3台へ接続して Loopback0 に description を設定します。
+
+## 採点（＝3台に到達して設定できたか）
+```bash
+ansible-playbook playbooks/grade.yml -e problem=ANSIBLE-01-INVENTORY --vault-password-file <(printf 'CCNP\n')
+```
+
+## このレッスンの到達点
+- インベントリの最小要素（グループ／`ansible_host`／接続方式／network_os）を書ける。
+- ネットワーク機器向け接続（`network_cli`）が、サーバ向け（`ssh`）と別物だと理解する。
+
+次回 **02：アドホックコマンドとモジュール**（playbook を書かずに1コマンドで機器を操作）。

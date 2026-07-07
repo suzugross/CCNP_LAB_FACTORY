@@ -1,0 +1,19 @@
+# ENARSI-REDIST-LOOP-01 : 相互再配送のフィードバック制御（軸2 発展・タグ/フィルタ必須）
+# RT02-RT03 は EIGRP 直結。境界の EIGRP 外部 AD を 95(<OSPF110) に固定（会社ポリシー・変更不可）。
+# → 素の双方向再配送だと、OSPF発経路を境界が EIGRP外部(95) で優先し、直結があるのに
+#   相手ドメイン経由の遠回り(次善経路)になる。タグで自ドメイン発を識別し EIGRP inbound で遮断して除去。
+id: ENARSI-REDIST-LOOP-01
+title: "相互再配送のフィードバック制御（OSPF⇄EIGRP・タグで次善経路を除去）"
+exam: ENARSI
+topics: [redistribution, ospf, eigrp, loop-prevention, route-map, tag]
+difficulty: 5
+topology: ad-hoc
+target_nodes: [RT01, RT02, RT03, RT04]
+points: 100
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # OSPF  10.0.12.0/30
+    - { a: RT01, a_if: 1, b: RT03, b_if: 0 }   # OSPF  10.0.13.0/30
+    - { a: RT02, a_if: 1, b: RT03, b_if: 1 }   # EIGRP 10.0.23.0/30 (境界間=EIGRP)
+    - { a: RT02, a_if: 2, b: RT04, b_if: 0 }   # EIGRP 10.0.24.0/30
+    - { a: RT03, a_if: 2, b: RT04, b_if: 1 }   # EIGRP 10.0.34.0/30

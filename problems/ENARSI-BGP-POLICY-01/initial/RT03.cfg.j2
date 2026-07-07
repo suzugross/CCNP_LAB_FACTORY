@@ -1,0 +1,32 @@
+! ENARSI-BGP-POLICY-01 初期 (RT03, AS{{ params.as_cust }} 内部コア・eBGPなし)
+! BGP は完全に未設定 = 受験者が iBGP と顧客プレフィックス投入を行う。
+! Lo10/Lo11 = 顧客セグメント(/25×2)。意図的に OSPF へは入れていない
+! （外部広告は BGP 経由の集約のみ、という要件の素材）。
+! links[0] = RT01 向け / links[1] = RT02 向け
+interface Loopback0
+ ip address {{ params.rt03_lo }} 255.255.255.255
+!
+interface Loopback10
+ description === 顧客セグメントA (simulated) ===
+ ip address {{ params.cust_net }}.1 255.255.255.128
+!
+interface Loopback11
+ description === 顧客セグメントB (simulated) ===
+ ip address {{ params.cust_net }}.129 255.255.255.128
+!
+interface {{ links[0] }}
+ description === to RT01 (internal) ===
+ ip address {{ params.seg13 }}.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT02 (internal) ===
+ ip address {{ params.seg23 }}.2 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id {{ params.rt03_lo }}
+ network {{ params.rt03_lo }} 0.0.0.0 area 0
+ network {{ params.seg13 }}.0 0.0.0.3 area 0
+ network {{ params.seg23 }}.0 0.0.0.3 area 0
+!

@@ -1,0 +1,58 @@
+---
+# 採点基準 (ENCOR-OSPFV3-01)。収集=ssh(iol-xe)。IPv6 only チェーン RT01-RT02-RT03。
+# OSPFv3 で全 Loopback 到達 + IPv6 ACL で RT01lo→RT03lo のみ遮断(OSPFv3/他到達は維持)。
+# route 系は `show ipv6 route ospf`(OSPF経路のみ表示)に該当プレフィクスが出るかを raw 判定。
+problem: ENCOR-OSPFV3-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # --- OSPFv3 到達(経路学習) ---
+  - name: "RT01: RT02 Loopback(2001:DB8:2::2/128) を OSPFv3 で学習"
+    node: RT01
+    command: "show ipv6 route ospf"
+    raw:
+      - regex: "2001:DB8:2::2/128"
+    points: 14
+
+  - name: "RT01: RT03 Loopback(2001:DB8:3::3/128) を OSPFv3 で学習(多段)"
+    node: RT01
+    command: "show ipv6 route ospf"
+    raw:
+      - regex: "2001:DB8:3::3/128"
+    points: 14
+
+  - name: "RT03: RT01 Loopback(2001:DB8:1::1/128) を OSPFv3 で学習(多段)"
+    node: RT03
+    command: "show ipv6 route ospf"
+    raw:
+      - regex: "2001:DB8:1::1/128"
+    points: 14
+
+  # --- 能動プローブ: 到達(OSPFv3隣接が生き、ACLが過剰遮断していない) ---
+  # ACL の「設定の存在」はノード固定で縛らない(RT01/RT02/RT03 どこに置いてもよい)。
+  # 代わりに「効果」を能動 ping で厳密採点する: 同一宛先 RT03lo に対し
+  # RT01発=遮断 / RT02発=許可 を両立できるのは送信元判別フィルタ(=ACL/PBR)のみ。
+  - name: "RT02: RT03 Loopback へ到達できる(隣接FULL/ACLがOSPFv3を壊していない/過剰遮断なし)"
+    node: RT02
+    command: "ping 2001:DB8:3::3 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 18
+
+  - name: "RT01: RT02 Loopback へ到達できる(一般到達性は維持)"
+    node: RT01
+    command: "ping 2001:DB8:2::2 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 16
+
+  # --- IPv6 ACL の効果: RT01lo→RT03lo は遮断(同宛先で RT02 は通る=送信元判別の証明) ---
+  - name: "RT01: RT03 Loopback へは到達できない(IPv6 ACL で送信元判別遮断)"
+    node: RT01
+    command: "ping 2001:DB8:3::3 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is 0"
+    points: 24

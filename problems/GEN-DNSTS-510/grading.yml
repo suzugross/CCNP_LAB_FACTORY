@@ -1,0 +1,121 @@
+# 自動生成 (gen_dnsdhcp_ts.py) seed=510
+problem: GEN-DNSTS-510
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'SRV01: named が稼働'
+  node: SRV01
+  exec: shell
+  command: systemctl is-active named
+  raw:
+  - regex: ^active
+  points: 5
+- name: 'SRV01: 正引き srv01.ccnp.local'
+  node: SRV01
+  exec: shell
+  command: dig +short @127.0.0.1 srv01.ccnp.local A
+  raw:
+  - contains: 10.99.0.2
+  points: 8
+- name: 'SRV01: 正引き rt01.ccnp.local'
+  node: SRV01
+  exec: shell
+  command: dig +short @127.0.0.1 rt01.ccnp.local A
+  raw:
+  - contains: 37.37.37.37
+  points: 4
+- name: 'SRV01: 正引き rt02.ccnp.local'
+  node: SRV01
+  exec: shell
+  command: dig +short @127.0.0.1 rt02.ccnp.local A
+  raw:
+  - contains: 98.98.98.98
+  points: 4
+- name: 'SRV01: CNAME portal.ccnp.local → srv01 (正確なFQDN)'
+  node: SRV01
+  exec: shell
+  command: dig +short @127.0.0.1 portal.ccnp.local CNAME
+  raw:
+  - regex: (^|\n)srv01\.ccnp\.local\.(\n|$)
+  points: 7
+- name: 'SRV01: 逆引き 192.168.90.1 → gw'
+  node: SRV01
+  exec: shell
+  command: dig +short @127.0.0.1 -x 192.168.90.1
+  raw:
+  - contains: gw.ccnp.local
+  points: 8
+- name: 'SRV01: isc-dhcp-server が稼働'
+  node: SRV01
+  exec: shell
+  command: systemctl is-active isc-dhcp-server
+  raw:
+  - regex: ^active
+  points: 5
+- name: 'PC01: DHCP で 192.168.90.0/24 のアドレスを取得'
+  node: PC01
+  exec: shell
+  command: ip -4 addr show ens3
+  raw:
+  - regex: inet 192\.168\.90\.\d+/24
+  points: 13
+- name: 'PC01: DHCP 配布の DNS が SRV01'
+  node: PC01
+  exec: shell
+  command: resolvectl dns ens3
+  raw:
+  - contains: 10.99.0.2
+  points: 5
+- name: 'PC01: DHCP 配布の検索ドメインが ccnp.local'
+  node: PC01
+  exec: shell
+  command: resolvectl domain ens3
+  raw:
+  - contains: ccnp.local
+  points: 4
+- name: 'PC01: portal.ccnp.local を名前解決'
+  node: PC01
+  exec: shell
+  command: dig +short portal.ccnp.local
+  raw:
+  - contains: 10.99.0.2
+  points: 7
+- name: 'PC01: portal.ccnp.local へ ping'
+  node: PC01
+  exec: shell
+  command: ping -c 2 -W 1 portal.ccnp.local
+  raw:
+  - regex: ' 0% packet loss'
+  points: 5
+- name: 'RT02: ユーザLAN IF に DHCP リレー実効'
+  node: RT02
+  command: show ip interface Ethernet0/1
+  raw:
+  - regex: Helper address
+  - contains: 10.99.0.2
+  points: 8
+- name: 'RT01: 実効ネームサーバが SRV01'
+  node: RT01
+  command: show hosts summary
+  raw:
+  - regex: Name servers are.*10\.99\.0\.2
+  points: 3
+- name: 'RT02: 実効ネームサーバが SRV01'
+  node: RT02
+  command: show hosts summary
+  raw:
+  - regex: Name servers are.*10\.99\.0\.2
+  points: 3
+- name: 'RT01: 名前で ping (srv01.ccnp.local)'
+  node: RT01
+  command: ping srv01.ccnp.local
+  raw:
+  - contains: '!!!!'
+  points: 5
+- name: 'RT02: 名前で ping (srv01.ccnp.local)'
+  node: RT02
+  command: ping srv01.ccnp.local
+  raw:
+  - contains: '!!!!'
+  points: 6

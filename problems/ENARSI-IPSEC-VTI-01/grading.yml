@@ -1,0 +1,138 @@
+---
+# 採点基準 (ENARSI-IPSEC-VTI-01 / sVTI + IPsec Profile + IKEv1)
+#  ・IPsec セッション UP-ACTIVE (両側)                    … show crypto session raw
+#  ・フェーズ1 実効パラメータ (aes-256/sha256/psk/DH14)   … show crypto isakmp sa detail raw
+#  ・フェーズ2 実効 (esp-aes256+sha256hmac, カウンタ>0)   … show crypto ipsec sa raw
+#  ・PFS / DPD / MTU / MSS / tunnel mode・protection      … show run 抜粋 raw (名前非依存)
+#  ・LAN経路を /24 のまま OSPF 学習 (Lo10 の network type がひねり) … genie
+#  ・LAN間の実疎通                                        … 能動 ping (Lo10→対向Lo10)
+# ★収集はノード毎に sorted 順 → "ping..." < "show..." で能動pingが先に走り
+#   ipsec sa のカウンタが同一ノード内で確実に加算される (DMVPN と同イディオム)。
+# RT04 は変更禁止のため採点対象外。
+problem: ENARSI-IPSEC-VTI-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01(HQ): IPsec セッションが対向 10.0.24.1 と UP-ACTIVE"
+    node: RT01
+    command: "show crypto session"
+    raw:
+      - contains: "Session status: UP-ACTIVE"
+      - regex: "Peer: 10\\.0\\.24\\.1"
+    points: 10
+
+  - name: "RT02(Branch): IPsec セッションが UP-ACTIVE"
+    node: RT02
+    command: "show crypto session"
+    raw:
+      - contains: "Session status: UP-ACTIVE"
+      - regex: "Peer: 10\\.0\\.14\\.1"
+    points: 5
+
+  # ---- フェーズ1 実効パラメータ (指定スイートで確立していること) ----
+  # IOSv の sa detail 表は Encr を鍵長なし "aes" で表示 → 鍵長(256bit)は policy 側で確認。
+  - name: "RT01: IKEv1 SA が aes / sha256 / psk / DH14 で ACTIVE"
+    node: RT01
+    command: "show crypto isakmp sa detail"
+    raw:
+      - regex: "ACTIVE\\s+aes\\s+sha256\\s+psk\\s+14\\b"
+    points: 5
+
+  - name: "RT01: ISAKMP ポリシーが AES-256 / SHA-256 / PSK / DH group14"
+    node: RT01
+    command: "show crypto isakmp policy"
+    raw:
+      - contains: "(256 bit keys)"
+      - contains: "Secure Hash Standard 2 (256 bit)"
+      - contains: "Pre-Shared Key"
+      - contains: "#14"
+    points: 5
+
+  # ---- フェーズ2 実効 (transform と暗号化トラフィック実績) ----
+  - name: "RT01: ESP が AES-256 + HMAC-SHA-256 で暗号化/復号カウンタが加算"
+    node: RT01
+    command: "show crypto ipsec sa"
+    raw:
+      - regex: "transform: esp-(256-aes|aes 256)"
+      - regex: "esp-sha256"
+      - regex: "#pkts encaps: [1-9]"
+      - regex: "#pkts decaps: [1-9]"
+    points: 15
+
+  # ---- 仕様書コンプライアンス (オブジェクト名非依存の run 抜粋) ----
+  - name: "RT01: PFS group14 が有効"
+    node: RT01
+    command: "show running-config | include set pfs"
+    raw:
+      - contains: "set pfs group14"
+    points: 5
+
+  - name: "RT01: DPD が 10秒/3秒/periodic"
+    node: RT01
+    command: "show running-config | include crypto isakmp keepalive"
+    raw:
+      - contains: "crypto isakmp keepalive 10 3 periodic"
+    points: 5
+
+  - name: "RT01: Tunnel0 が VTI(ipsec ipv4)+protection+MTU1400+MSS1360"
+    node: RT01
+    command: "show running-config interface Tunnel0"
+    raw:
+      - contains: "ip mtu 1400"
+      - contains: "ip tcp adjust-mss 1360"
+      - contains: "tunnel mode ipsec ipv4"
+      - regex: "tunnel protection ipsec profile \\S+"
+    points: 5
+
+  - name: "RT02: Tunnel0 が VTI(ipsec ipv4)+protection+MTU1400+MSS1360"
+    node: RT02
+    command: "show running-config interface Tunnel0"
+    raw:
+      - contains: "ip mtu 1400"
+      - contains: "ip tcp adjust-mss 1360"
+      - contains: "tunnel mode ipsec ipv4"
+      - regex: "tunnel protection ipsec profile \\S+"
+    points: 5
+
+  # ---- ルーティング: 対向LANを /24 のまま OSPF 学習 (Lo の network type がひねり) ----
+  - name: "RT01: 192.168.2.0/24 を OSPF で /24 のまま Tunnel0 経由学習"
+    node: RT01
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "192.168.2.0/24"
+      source_protocol: ospf
+      next_hop.next_hop_list.*.next_hop: "10.255.12.2"
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel0
+    points: 10
+
+  - name: "RT02: 192.168.1.0/24 を OSPF で /24 のまま Tunnel0 経由学習"
+    node: RT02
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "192.168.1.0/24"
+      source_protocol: ospf
+      next_hop.next_hop_list.*.next_hop: "10.255.12.1"
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel0
+    points: 10
+
+  # ---- データプレーン: LAN間の実疎通 (能動・暗号カウンタも駆動) ----
+  - name: "RT01(HQ): 支店LAN 192.168.2.1 へ VPN 経由で疎通"
+    node: RT01
+    command: "ping 192.168.2.1 source Loopback10 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 10
+
+  - name: "RT02(Branch): 本社LAN 192.168.1.1 へ VPN 経由で疎通"
+    node: RT02
+    command: "ping 192.168.1.1 source Loopback10 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 10

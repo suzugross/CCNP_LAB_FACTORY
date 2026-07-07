@@ -1,0 +1,35 @@
+---
+# 採点基準（pyATS Genie 構造化 + フィールドアサート）。
+# 収集は telnet（SSH不可の IOL L2 スイッチ）。判定は通常どおり Genie。
+# 1 チェックで「Port-channel が 動的(LACP/PAgP) で up、かつ両メンバが bundled」を相関判定する。
+# protocol が lacp/pagp であることで静的(mode on, protocol="-")を弾く＝動的ネゴシエーション要件。
+problem: ENCOR-LAG-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "SW01: Po が動的(LACP/PAgP)で up・Et0/0 と Et0/1 が bundled"
+    node: SW01
+    command: "show etherchannel summary"
+    parser: "show etherchannel summary"
+    find: "interfaces.*"
+    match:
+      protocol: { in: [lacp, pagp] }
+      oper_status: up
+      members.Ethernet0/0.bundled: true
+      members.Ethernet0/1.bundled: true
+    points: 50
+
+  - name: "SW02: Po が動的(LACP/PAgP)で up・Et0/0 と Et0/1 が bundled"
+    node: SW02
+    command: "show etherchannel summary"
+    parser: "show etherchannel summary"
+    find: "interfaces.*"
+    match:
+      protocol: { in: [lacp, pagp] }
+      oper_status: up
+      members.Ethernet0/0.bundled: true
+      members.Ethernet0/1.bundled: true
+    points: 50

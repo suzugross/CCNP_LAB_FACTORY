@@ -1,0 +1,47 @@
+---
+# 採点基準 (pyATS Genie 構造化 + raw 併用)。
+# 効果ベース判定: 名前は任意、ICMP/Telnet がそれぞれ独立したクラスで意図通りに扱われていること。
+problem: ENCOR-COPP-02
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: control-plane 入力に ICMPクラス(police 8000 / 適合transmit / 超過drop) が存在"
+    node: RT01
+    command: "show policy-map control-plane"
+    parser: "show policy-map control-plane"
+    find: "Control Plane.service_policy.input.policy_name.*.class_map.*"
+    match:
+      police.cir_bps: 8000
+      police.conformed.actions.transmit: true
+      police.exceeded.actions.drop: true
+    points: 50
+
+  - name: "RT01: control-plane 入力に Telnet遮断クラス(police 適合drop+超過drop) が存在"
+    node: RT01
+    command: "show policy-map control-plane"
+    parser: "show policy-map control-plane"
+    find: "Control Plane.service_policy.input.policy_name.*.class_map.*"
+    match:
+      police.conformed.actions.drop: true
+      police.exceeded.actions.drop: true
+    points: 30
+
+  - name: "RT01: ICMP を許可する ACL ACE が存在"
+    node: RT01
+    command: "show ip access-lists"
+    parser: "show ip access-lists"
+    find: "*.aces.*"
+    match:
+      actions.forwarding: permit
+      matches.l3.ipv4.protocol: icmp
+    points: 10
+
+  - name: "RT01: Telnet(TCP宛先=23) を許可する ACL ACE が存在"
+    node: RT01
+    command: "show ip access-lists"
+    raw:
+      - regex: "permit +tcp\\b.*\\beq +(23|telnet)\\b"
+    points: 10

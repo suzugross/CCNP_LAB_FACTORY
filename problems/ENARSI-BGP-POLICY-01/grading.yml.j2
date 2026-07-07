@@ -1,0 +1,216 @@
+---
+# 採点基準: 状態ベース（config 文字列マッチ不使用・実装スタイルは自由）。
+# 設計書: problems/_drafts/ENARSI-BGP-POLICY-01.design.md
+# 要件3/4 の「全ルータで」が weight 手抜きを構造的に検出する（iBGPで伝搬しないため）。
+# BGP 収束待ちは grade.yml の attempt ループに任せる（ポリシー反映漏れは受験者の責務）。
+problem: ENARSI-BGP-POLICY-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # === 要件1: iBGP (Lo0ピア・フルメッシュ) + next-hop-self ==================
+  - name: "RT01: iBGP ネイバー RT02 (Loopback {{ params.rt02_lo }}) が Established"
+    node: RT01
+    command: "show ip bgp neighbors {{ params.rt02_lo }}"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "{{ params.rt02_lo }}"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 3
+
+  - name: "RT01: iBGP ネイバー RT03 (Loopback {{ params.rt03_lo }}) が Established"
+    node: RT01
+    command: "show ip bgp neighbors {{ params.rt03_lo }}"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "{{ params.rt03_lo }}"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 3
+
+  - name: "RT03: iBGP ネイバー RT02 (Loopback {{ params.rt02_lo }}) が Established"
+    node: RT03
+    command: "show ip bgp neighbors {{ params.rt02_lo }}"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "{{ params.rt02_lo }}"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 3
+
+  - name: "RT03: 外部経路 {{ params.beacon_c }}.0/24 の next-hop が AS内 Loopback（next-hop-self 実効）"
+    node: RT03
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.beacon_c }}.0/24"
+      source_protocol: "bgp"
+      next_hop.next_hop_list.*.next_hop: { in: ["{{ params.rt01_lo }}", "{{ params.rt02_lo }}"] }
+    points: 6
+
+  # === 要件2: 学習元 community が AS内全ルータで見える =======================
+  - name: "RT03: {{ params.beacon_a }}.0/24 に ISP-A 由来 community {{ params.comm_a }} が付着"
+    node: RT03
+    command: "show ip bgp {{ params.beacon_a }}.0"
+    raw:
+      - regex: "{{ params.comm_a }}"
+    points: 8
+
+  - name: "RT03: {{ params.beacon_b }}.0/24 に ISP-B 由来 community {{ params.comm_b }} が付着"
+    node: RT03
+    command: "show ip bgp {{ params.beacon_b }}.0"
+    raw:
+      - regex: "{{ params.comm_b }}"
+    points: 7
+
+  # === 要件3: 通常トラフィックは全ルータで RT01–ISP-A リンクから ==============
+  - name: "RT01: {{ params.beacon_a }}.0/24 のベストパスが自身の ISP-A リンク ({{ params.seg14 }}.2)"
+    node: RT01
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.beacon_a }}.0/24"
+      source_protocol: "bgp"
+      next_hop.next_hop_list.*.next_hop: "{{ params.seg14 }}.2"
+    points: 5
+
+  - name: "RT02: {{ params.beacon_a }}.0/24 のベストパスが RT01 経由（自身の eBGP より優先= ASポリシーが伝搬）"
+    node: RT02
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.beacon_a }}.0/24"
+      source_protocol: "bgp"
+      # NHS方式(NH=RT01のLo)と外部/30広告方式(NH=RT01側ISP-AリンクIP)の両別解を許容
+      next_hop.next_hop_list.*.next_hop: { in: ["{{ params.rt01_lo }}", "{{ params.seg14 }}.2"] }
+    points: 5
+
+  - name: "RT03: {{ params.beacon_a }}.0/24 のベストパスが RT01 経由"
+    node: RT03
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.beacon_a }}.0/24"
+      source_protocol: "bgp"
+      # NHS方式(NH=RT01のLo)と外部/30広告方式(NH=RT01側ISP-AリンクIP)の両別解を許容
+      next_hop.next_hop_list.*.next_hop: { in: ["{{ params.rt01_lo }}", "{{ params.seg14 }}.2"] }
+    points: 5
+
+  # === 要件4: 例外 {{ params.beacon_b }}.0/24 は全ルータで RT02–ISP-B から ===
+  - name: "RT02: {{ params.beacon_b }}.0/24 のベストパスが自身の ISP-B リンク ({{ params.seg25 }}.2)"
+    node: RT02
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.beacon_b }}.0/24"
+      source_protocol: "bgp"
+      next_hop.next_hop_list.*.next_hop: "{{ params.seg25 }}.2"
+    points: 5
+
+  - name: "RT01: {{ params.beacon_b }}.0/24 のベストパスが RT02 経由（例外ポリシーが AS全体に伝搬）"
+    node: RT01
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.beacon_b }}.0/24"
+      source_protocol: "bgp"
+      # NHS方式(NH=RT02のLo)と外部/30広告方式(NH=RT02側ISP-BリンクIP)の両別解を許容
+      next_hop.next_hop_list.*.next_hop: { in: ["{{ params.rt02_lo }}", "{{ params.seg25 }}.2"] }
+    points: 5
+
+  - name: "RT03: {{ params.beacon_b }}.0/24 のベストパスが RT02 経由"
+    node: RT03
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.beacon_b }}.0/24"
+      source_protocol: "bgp"
+      # NHS方式(NH=RT02のLo)と外部/30広告方式(NH=RT02側ISP-BリンクIP)の両別解を許容
+      next_hop.next_hop_list.*.next_hop: { in: ["{{ params.rt02_lo }}", "{{ params.seg25 }}.2"] }
+    points: 5
+
+  # === 要件5: /24 集約のみ外部広告・両エッジ発 ================================
+  - name: "RT06: 顧客経路は {{ params.cust_net }}.0/24 集約のみ（/25 が漏れていない）"
+    node: RT06
+    command: "show ip bgp | include {{ params.cust_net }}"
+    raw:
+      # /24 はクラスC自然マスクのため IOS は「198.51.100.0」とマスク省略表示する
+      - regex: '{{ params.cust_net | replace(".", "\.") }}\.0(/24)?\s'
+      - not_regex: '{{ params.cust_net | replace(".", "\.") }}\.(0|128)/25'
+    points: 5
+
+  - name: "RT04: {{ params.cust_net }}.0/24 を両エッジ ({{ params.seg14 }}.1 と {{ params.seg24 }}.1) から受信"
+    node: RT04
+    command: "show ip bgp {{ params.cust_net }}.0 255.255.255.0"
+    raw:
+      - contains: "{{ params.seg14 }}.1"
+      - contains: "{{ params.seg24 }}.1"
+    points: 5
+
+  # === 要件6: inbound 誘導 (MED)・AS-path 長改変禁止 ==========================
+  - name: "RT04: {{ params.cust_net }}.0/24 のベストパスが RT01 側リンク ({{ params.seg14 }}.1)"
+    node: RT04
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "{{ params.cust_net }}.0/24"
+      source_protocol: "bgp"
+      next_hop.next_hop_list.*.next_hop: "{{ params.seg14 }}.1"
+    points: 5
+
+  - name: "RT04: 顧客経路の AS-path に prepend なし（{{ params.as_cust }} の繰り返しが無い・経路存在が前提）"
+    node: RT04
+    command: "show ip bgp {{ params.cust_net }}.0 255.255.255.0"
+    raw:
+      - contains: "{{ params.as_cust }}"
+      - not_regex: "{{ params.as_cust }} +{{ params.as_cust }}"
+    points: 5
+
+  # === 要件7: 受信フィルタ（リーク遮断・正当経路は残す）======================
+  - name: "RT01: リーク経路(RFC1918 {{ params.leak_rfc }}.0/24, {{ params.leak_long }}/28)が不在・beacon は健在"
+    node: RT01
+    command: "show ip bgp"
+    raw:
+      - not_contains: "{{ params.leak_rfc }}.0"
+      - not_contains: "{{ params.leak_long }}"
+      - contains: "{{ params.beacon_a }}.0"
+    points: 5
+
+  - name: "RT02: リーク経路が不在・beacon は健在"
+    node: RT02
+    command: "show ip bgp"
+    raw:
+      - not_contains: "{{ params.leak_rfc }}.0"
+      - not_contains: "{{ params.leak_long }}"
+      - contains: "{{ params.beacon_a }}.0"
+    points: 5
+
+  # === 要件8: 実効到達性（顧客セグメント発・集約の戻り経路も同時検証）=========
+  - name: "RT03: 顧客セグメントA(Lo10)発 → beacon-A {{ params.beacon_a }}.1 へ到達"
+    node: RT03
+    command: "ping {{ params.beacon_a }}.1 source Loopback10 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 3
+
+  - name: "RT03: 顧客セグメントB(Lo11)発 → beacon-B {{ params.beacon_b }}.1 へ到達"
+    node: RT03
+    command: "ping {{ params.beacon_b }}.1 source Loopback11 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 3
+
+  - name: "RT03: {{ params.beacon_b }}.1 への traceroute が ISP-B リンク ({{ params.seg25 }}) を経由"
+    node: RT03
+    command: "traceroute {{ params.beacon_b }}.1 source Loopback10 numeric timeout 1"
+    raw:
+      - regex: '{{ params.seg25 | replace(".", "\.") }}\.'
+    points: 4

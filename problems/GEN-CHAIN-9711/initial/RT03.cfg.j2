@@ -1,0 +1,68 @@
+! GEN-CHAIN-9711 初期 (RT03) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 20.20.20.20 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 ===
+ ip address 10.180.36.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT05 ===
+ ip address 10.141.191.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT12 ===
+ ip address 10.131.225.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 20.20.20.20
+ network 20.20.20.20 0.0.0.0 area 0
+ network 10.180.36.0 0.0.0.3 area 0
+ network 10.141.191.0 0.0.0.3 area 0
+ network 10.131.225.0 0.0.0.3 area 0
+!
+router bgp 65001
+ bgp router-id 20.20.20.20
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 58.58.58.58 remote-as 65001
+ neighbor 58.58.58.58 update-source Loopback0
+ neighbor 46.46.46.46 remote-as 65001
+ neighbor 46.46.46.46 update-source Loopback0
+ neighbor 35.35.35.35 remote-as 65001
+ neighbor 35.35.35.35 update-source Loopback0
+ neighbor 51.51.51.51 remote-as 65001
+ neighbor 51.51.51.51 update-source Loopback0
+ neighbor 99.99.99.99 remote-as 65001
+ neighbor 99.99.99.99 update-source Loopback0
+ neighbor 68.68.68.68 remote-as 65001
+ neighbor 68.68.68.68 update-source Loopback0
+ neighbor 33.33.33.33 remote-as 65001
+ neighbor 33.33.33.33 update-source Loopback0
+ neighbor 34.34.34.34 remote-as 65001
+ neighbor 34.34.34.34 update-source Loopback0
+ address-family ipv4
+  neighbor 58.58.58.58 activate
+  neighbor 58.58.58.58 send-community
+  neighbor 46.46.46.46 activate
+  neighbor 46.46.46.46 send-community
+  neighbor 46.46.46.46 route-reflector-client
+  neighbor 35.35.35.35 activate
+  neighbor 35.35.35.35 send-community
+  neighbor 35.35.35.35 route-reflector-client
+  neighbor 51.51.51.51 activate
+  neighbor 51.51.51.51 send-community
+  neighbor 51.51.51.51 route-reflector-client
+  neighbor 99.99.99.99 activate
+  neighbor 99.99.99.99 send-community
+  neighbor 68.68.68.68 activate
+  neighbor 68.68.68.68 send-community
+  neighbor 33.33.33.33 activate
+  neighbor 33.33.33.33 send-community
+  neighbor 34.34.34.34 activate
+  neighbor 34.34.34.34 send-community
+ exit-address-family
+!

@@ -1,0 +1,45 @@
+---
+# 採点基準。RT01 から両 eBGP ネイバーが Established、weight 200 が
+# RT02 ピアに設定済み、10.100.0.0/24 のベストパスが RT02 経由であることを判定。
+problem: ENARSI-BGP-WEIGHT-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: eBGP ネイバー RT02(10.1.12.2) が Established"
+    node: RT01
+    command: "show ip bgp neighbors 10.1.12.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "10.1.12.2"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 20
+
+  - name: "RT01: eBGP ネイバー RT03(10.1.13.2) が Established"
+    node: RT01
+    command: "show ip bgp neighbors 10.1.13.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "10.1.13.2"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 20
+
+  - name: "RT01: RT02 ピアに weight 200 が設定されている"
+    node: RT01
+    command: "show running-config | section router bgp"
+    raw:
+      - regex: "neighbor +10\\.1\\.12\\.2 +weight +200"
+    points: 20
+
+  - name: "RT01: 10.100.0.0/24 のベストパスが RT02 経由 (next-hop=10.1.12.2)"
+    node: RT01
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "10.100.0.0/24"
+      source_protocol: "bgp"
+      next_hop.next_hop_list.*.next_hop: "10.1.12.2"
+    points: 40

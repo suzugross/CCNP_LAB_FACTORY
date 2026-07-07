@@ -1,0 +1,46 @@
+! GEN-CHAIN-9200 初期 (RT02) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 16.16.16.16 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT05 ===
+ ip address 10.123.117.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT06 ===
+ ip address 10.146.215.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT07 ===
+ ip address 10.93.221.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 16.16.16.16
+ network 16.16.16.16 0.0.0.0 area 0
+ network 10.123.117.0 0.0.0.3 area 0
+ network 10.146.215.0 0.0.0.3 area 0
+ network 10.93.221.0 0.0.0.3 area 0
+!
+router bgp 65001
+ bgp router-id 16.16.16.16
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 9.9.9.9 remote-as 65001
+ neighbor 9.9.9.9 update-source Loopback0
+ neighbor 98.98.98.98 remote-as 65001
+ neighbor 98.98.98.98 update-source Loopback0
+ address-family ipv4
+  neighbor 9.9.9.9 activate
+  neighbor 9.9.9.9 send-community
+  neighbor 98.98.98.98 activate
+  neighbor 98.98.98.98 send-community
+ exit-address-family
+!
+ip prefix-list QUARANTINE seq 5 deny 0.0.0.0/0 le 32
+!
+router bgp 65001
+ neighbor 9.9.9.9 description !! FLAPPING? under investigation NOC-1123 !!
+!

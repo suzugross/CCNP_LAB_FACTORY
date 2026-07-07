@@ -1,0 +1,47 @@
+---
+# 採点基準 (ENARSI-BGP-NHSELF-01)。
+# RT03(eBGP) が 203.0.113.0/24 を広告 → RT01 が iBGP で RT02 に渡す。
+# next-hop-self が無いと RT02 は next-hop=10.1.13.2(外部・未到達) で RIB に入らない。
+# RT01 で next-hop-self を設定 → RT02 が next-hop=10.1.12.1 で学習する。
+problem: ENARSI-BGP-NHSELF-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: eBGP ネイバー RT03(10.1.13.2) が Established"
+    node: RT01
+    command: "show ip bgp neighbors 10.1.13.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "10.1.13.2"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 20
+
+  - name: "RT01: iBGP ネイバー RT02(10.1.12.2) が Established"
+    node: RT01
+    command: "show ip bgp neighbors 10.1.12.2"
+    parser: "show ip bgp neighbors"
+    find: ["vrf", "default", "neighbor", "10.1.12.2"]
+    match:
+      session_state: { startswith: "Establ" }
+    points: 20
+
+  - name: "RT01: iBGP ピアに next-hop-self を設定している"
+    node: RT01
+    command: "show running-config | section router bgp"
+    raw:
+      - regex: "neighbor +10\\.1\\.12\\.2 +next-hop-self"
+    points: 20
+
+  - name: "RT02: 203.0.113.0/24 を BGP で学習し next-hop が RT01 (10.1.12.1)"
+    node: RT02
+    command: "show ip route bgp"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "203.0.113.0/24"
+      source_protocol: "bgp"
+      next_hop.next_hop_list.*.next_hop: "10.1.12.1"
+    points: 40

@@ -1,0 +1,24 @@
+! ENARSI-BGP-AGGREGATE-01 初期状態 (RT02, AS65002) : 個別 /24 の発信元。BGP 構築済み(変更不要)。
+! 172.16.0.0/24 .. 172.16.3.0/24 を network 文で広告 (origin IGP)。
+! links[0] = RT01 向け
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 (eBGP AS65001) ===
+ ip address 10.1.12.2 255.255.255.252
+ no shutdown
+!
+ip route 172.16.0.0 255.255.255.0 Null0
+ip route 172.16.1.0 255.255.255.0 Null0
+ip route 172.16.2.0 255.255.255.0 Null0
+ip route 172.16.3.0 255.255.255.0 Null0
+!
+router bgp 65002
+ bgp log-neighbor-changes
+ neighbor 10.1.12.1 remote-as 65001
+ network 172.16.0.0 mask 255.255.255.0
+ network 172.16.1.0 mask 255.255.255.0
+ network 172.16.2.0 mask 255.255.255.0
+ network 172.16.3.0 mask 255.255.255.0
+!

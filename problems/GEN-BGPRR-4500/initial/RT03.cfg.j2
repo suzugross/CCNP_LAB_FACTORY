@@ -1,0 +1,26 @@
+! RT03 (AS 65019 / RR client)
+interface Loopback0
+ ip address 9.9.9.9 255.255.255.255
+!
+interface Loopback1
+ ip address 40.40.40.40 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.192.157.2 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network 9.9.9.9 0.0.0.0 area 0
+ network 10.192.157.0 0.0.0.3 area 0
+!
+router bgp 65019
+ bgp router-id 9.9.9.9
+ no bgp default ipv4-unicast
+ neighbor 27.27.27.27 remote-as 65019
+ neighbor 27.27.27.27 update-source Loopback0
+ neighbor 192.0.2.92 remote-as 65000
+ address-family ipv4 unicast
+  neighbor 27.27.27.27 activate
+  network 40.40.40.40 mask 255.255.255.255
+ exit-address-family
+!

@@ -1,0 +1,83 @@
+---
+# 採点基準 (ENCOR-EDGE-HARDEN-01)。エッジ装置の多層ハードニング。
+# AAA / CoPP(genie) / インフラACL(genie+raw) / 認証NTP(raw) / 制御プレーン無事(OSPF維持)。
+problem: ENCOR-EDGE-HARDEN-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # --- 管理プレーン: AAA ---
+  - name: "RT01: AAA (new-model + login default local) が有効"
+    node: RT01
+    command: "show running-config | include aaa"
+    raw:
+      - regex: "aaa new-model"
+      - regex: "aaa authentication login default local"
+    points: 12
+
+  # --- 制御プレーン保護: CoPP ---
+  - name: "RT01: CoPP に ICMPクラス(police / 適合transmit / 超過drop) が control-plane 入力で存在"
+    node: RT01
+    command: "show policy-map control-plane"
+    parser: "show policy-map control-plane"
+    find: "Control Plane.service_policy.input.policy_name.*.class_map.*"
+    match:
+      police.conformed.actions.transmit: true
+      police.exceeded.actions.drop: true
+    points: 18
+
+  - name: "RT01: CoPP に Telnet遮断クラス(police 適合drop+超過drop) が control-plane 入力で存在"
+    node: RT01
+    command: "show policy-map control-plane"
+    parser: "show policy-map control-plane"
+    find: "Control Plane.service_policy.input.policy_name.*.class_map.*"
+    match:
+      police.conformed.actions.drop: true
+      police.exceeded.actions.drop: true
+    points: 14
+
+  # --- データプレーン: インフラ ACL ---
+  - name: "RT01: インフラACL に 自装置宛 SSH/Telnet(tcp 22/23) を deny する ACE がある"
+    node: RT01
+    command: "show ip access-lists"
+    parser: "show ip access-lists"
+    find: "*.aces.*"
+    match:
+      actions.forwarding: deny
+      matches.l3.ipv4.protocol: tcp
+      matches.l4.tcp.destination_port.operator.port: { in: [22, 23] }
+    points: 14
+
+  - name: "RT01: インフラACL がインタフェースに inbound 適用されている"
+    node: RT01
+    command: "show running-config | include ip access-group"
+    raw:
+      - regex: "ip access-group +\\S+ +in"
+    points: 10
+
+  - name: "RT01: インフラACL が OSPF を壊していない（RT02 隣接 10.0.12.2 が FULL）"
+    node: RT01
+    command: "show ip ospf neighbor"
+    parser: "show ip ospf neighbor"
+    find: "interfaces.*.neighbors.*"
+    match: { address: "10.0.12.2", state: { startswith: "FULL" } }
+    points: 10
+
+  # --- サービス: 認証 NTP ---
+  - name: "RT01: NTP サーバ(RT02: 10.0.12.2 または Lo0 2.2.2.2)が鍵付きで設定されている"
+    node: RT01
+    command: "show running-config | include ntp"
+    raw:
+      - regex: "ntp server (10\\.0\\.12\\.2|2\\.2\\.2\\.2) key 1"
+    points: 10
+
+  - name: "RT01: NTP 認証(authenticate + authentication-key + trusted-key)が設定されている"
+    node: RT01
+    command: "show running-config | include ntp"
+    raw:
+      - regex: "ntp authenticate"
+      - regex: "ntp authentication-key 1 md5"
+      - regex: "ntp trusted-key 1"
+    points: 12

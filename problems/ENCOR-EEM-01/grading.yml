@@ -1,0 +1,34 @@
+---
+# 採点基準（EEM は Genie パーサが無いため running-config の raw 判定）。
+# `show running-config | section event manager` セクションに、設定変更契機・自動保存・
+# 指定メッセージの 3 要素が揃っているかを正規表現で判定する。アプレット名/ラベルは任意。
+problem: ENCOR-EEM-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: 設定変更(%SYS-5-CONFIG_I)を契機にする syslog イベントがある"
+    node: RT01
+    command: "show running-config | section event manager"
+    raw:
+      - regex: 'event +syslog +pattern +"?[^"\n]*CONFIG_I'
+    points: 40
+
+  - name: "RT01: running-config を保存するアクションがある (write memory / copy run start)"
+    node: RT01
+    command: "show running-config | section event manager"
+    raw:
+      # IOS の省略形を広く許容: write/wr [mem...]、cop[y] r[unning..] st[artup..]
+      #   （"cop ru st" / "copy run start" いずれも有効。各語は最短省略形でも可）。
+      # configモード経由(conf t の中)で実行する正当な別解として、先頭の "do " も許容する。
+      - regex: 'action +\S+ +cli command +"?(do +)?(wr(ite)?( +mem[\w-]*)?|cop[\w-]* +r[\w-]* +st[\w-]*)'
+    points: 35
+
+  - name: "RT01: 'Config saved by EEM' を含むログメッセージを記録するアクションがある"
+    node: RT01
+    command: "show running-config | section event manager"
+    raw:
+      - regex: 'action +\S+ +syslog msg +"?[^"\n]*Config saved by EEM'
+    points: 25

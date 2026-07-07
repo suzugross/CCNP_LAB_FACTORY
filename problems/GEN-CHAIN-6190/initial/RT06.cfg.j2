@@ -1,0 +1,41 @@
+! GEN-CHAIN-6190 初期 (RT06) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 69.69.69.69 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT04 ===
+ ip address 10.112.179.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT02 ===
+ ip address 10.169.55.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT09 ===
+ ip address 10.115.72.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 69.69.69.69
+ network 69.69.69.69 0.0.0.0 area 0
+ network 10.112.179.0 0.0.0.3 area 0
+ network 10.169.55.0 0.0.0.3 area 0
+ network 10.115.72.0 0.0.0.3 area 0
+!
+router bgp 65001
+ bgp router-id 69.69.69.69
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 41.41.41.41 remote-as 65001
+ neighbor 41.41.41.41 update-source Loopback0
+ neighbor 49.49.49.49 remote-as 65001
+ neighbor 49.49.49.49 update-source Loopback0
+ address-family ipv4
+  neighbor 41.41.41.41 activate
+  neighbor 41.41.41.41 send-community
+  neighbor 49.49.49.49 activate
+  neighbor 49.49.49.49 send-community
+ exit-address-family
+!

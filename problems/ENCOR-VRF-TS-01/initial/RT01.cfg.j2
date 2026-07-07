@@ -1,0 +1,60 @@
+! ENCOR-VRF-TS-01 初期状態 (RT01 = PE / 変更対象) : baseline(router) の後に重ねる。
+! VRF / アドレス / PE-CE 経路 / BGP リークは「構成済み」だが複数の故障が紛れている。
+! 受験者は RT01 のみを切り分けて恒久修正する（RT02 は変更不可）。
+!
+! --- VRF 定義 + ルートターゲット(hub-spoke リーク) ---
+vrf definition RED
+ rd 65000:1
+ address-family ipv4
+  route-target export 65000:1
+  route-target import 65000:101
+ exit-address-family
+!
+vrf definition BLUE
+ rd 65000:2
+ address-family ipv4
+  route-target export 65000:2
+  route-target import 65000:100
+ exit-address-family
+!
+vrf definition SHARED
+ rd 65000:100
+ address-family ipv4
+  route-target export 65000:100
+  route-target import 65000:1
+ exit-address-family
+!
+! --- インタフェース割当 ---
+interface Ethernet0/0
+ vrf forwarding RED
+ ip address 10.1.12.1 255.255.255.252
+ no shutdown
+!
+interface Ethernet0/1
+ vrf forwarding BLUE
+ ip address 10.2.12.1 255.255.255.252
+ no shutdown
+!
+interface Loopback100
+ vrf forwarding SHARED
+ ip address 100.64.0.1 255.255.255.255
+!
+! --- PE-CE 経路(顧客拠点を学習) ---
+ip route vrf RED 172.16.1.0 255.255.255.0 10.1.12.2
+ip route vrf BLUE 172.16.2.0 255.255.255.0 10.2.12.2
+!
+! --- BGP で VRF 間リーク(RT で制御) ---
+router bgp 65000
+ bgp router-id 10.255.255.1
+ address-family ipv4 vrf RED
+  redistribute connected
+  redistribute static
+ exit-address-family
+ address-family ipv4 vrf BLUE
+  redistribute connected
+  redistribute static
+ exit-address-family
+ address-family ipv4 vrf SHARED
+  redistribute connected
+ exit-address-family
+!

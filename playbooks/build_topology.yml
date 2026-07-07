@@ -1,0 +1,111 @@
+---
+# 問題定義(problem.yml)から CML ラボ YAML を生成する。
+# 使い方: ansible-playbook playbooks/build_topology.yml -e problem=ENCOR-FHRP-01
+#         （ファミリ切替: -e image_family=iosv）
+# 出力  : topologies/_generated/<problem>/{day0/<node>.cfg, lab.yaml}
+
+- name: 問題メタ読込み・対象ノード展開
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+    problem_dir: "{{ repo }}/problems/{{ problem }}"
+    gen_dir: "{{ repo }}/topologies/_generated/{{ problem }}"
+  tasks:
+    - ansible.builtin.include_vars: { file: "{{ problem_dir }}/problem.yml", name: pmeta }
+    - ansible.builtin.file: { path: "{{ gen_dir }}/day0", state: directory }
+
+    - name: variant パラメータを読み込む（task.md.j2 描画用。無ければ未定義）
+      ansible.builtin.include_vars:
+        file: "{{ problem_dir }}/params/{{ variant | default('base') }}.yml"
+        name: params
+      when: (problem_dir ~ '/params/' ~ (variant | default('base')) ~ '.yml') is exists
+
+    - name: task.md.j2 があれば variant の値で描画（→ _generated/<id>/task.md）
+      ansible.builtin.template:
+        src: "{{ problem_dir }}/task.md.j2"
+        dest: "{{ gen_dir }}/task.md"
+      when: (problem_dir ~ '/task.md.j2') is exists
+    - name: MGMT IP をリース台帳から割当（mgmt_alloc.py → mgmt_map.yml）
+      # 同時稼働中の他ラボと重複しない空きIPを first-fit で確保する（旧 mgmt_offset は廃止）。
+      # プール不足時は「誰が何個使用中か＋対処」を表示して rc=2 で停止（CMLには触らない）。
+      # 同一 problem の再 build は既存リースを再利用＝割当が安定。
+      # ★grade/fix 等の下流は従来どおり mgmt_map.yml を読むだけ（無改修）。
+      ansible.builtin.command:
+        argv:
+          - "{{ repo }}/.venv/bin/python3"
+          - "{{ repo }}/topologies/mgmt_alloc.py"
+          - allocate
+          - "--repo={{ repo }}"
+          - "--problem={{ problem }}"
+          - "--nodes={{ pmeta.target_nodes | join(',') }}"
+          - "--out={{ gen_dir }}/mgmt_map.yml"
+      register: alloc
+    - ansible.builtin.debug: { var: alloc.stdout_lines }
+    - name: 割当結果(mgmt_map.yml)を読み込む
+      ansible.builtin.include_vars:
+        file: "{{ gen_dir }}/mgmt_map.yml"
+        name: mgmt_map
+    - name: 対象ノードを _gen グループへ（mgmt_ip と image_family を付与）
+      # image_family の決定: problem.yml の node_image_families[node] があればそれを最優先で
+      # ノード単位に上書き（混在トポロジ用）。無ければ従来どおり全体の image_family。
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups: _gen
+        ansible_host: "{{ mgmt_map[item] }}"
+        mgmt_ip: "{{ mgmt_map[item] }}"
+        image_family: "{{ (pmeta.node_image_families | default({}))[item]
+                          | default(pmeta.image_family | default(omit), true) }}"
+      loop: "{{ pmeta.target_nodes }}"
+
+- name: 各ノードの day0 config(baseline+initial) を描画
+  hosts: _gen
+  gather_facts: false
+  connection: local
+  vars:
+    # ローカル描画専用プレイ。group_vars の ansible_connection(サーバ=paramiko 等)が
+    # play keyword の connection: local より優先されてしまうため、play vars で明示上書き。
+    ansible_connection: local
+    repo: "{{ playbook_dir }}/.."
+    problem_dir: "{{ repo }}/problems/{{ problem }}"
+    gen_dir: "{{ repo }}/topologies/_generated/{{ problem }}"
+  tasks:
+    - name: variant パラメータを読み込む（problems/<id>/params/<variant>.yml。無ければ未定義）
+      ansible.builtin.include_vars:
+        file: "{{ problem_dir }}/params/{{ variant | default('base') }}.yml"
+        name: params
+      when: (problem_dir ~ '/params/' ~ (variant | default('base')) ~ '.yml') is exists
+
+    - name: baseline(role別) + initial を結合して day0 を生成（params をテンプレ文脈に渡す）
+      ansible.builtin.copy:
+        dest: "{{ gen_dir }}/day0/{{ inventory_hostname }}.cfg"
+        content: |
+          {{ lookup('template', repo ~ '/roles/baseline/templates/baseline_' ~ node_role ~ '.cfg.j2') }}
+          {{ lookup('template', problem_dir ~ '/initial/' ~ inventory_hostname ~ '.cfg.j2') }}
+
+- name: lab.yaml を生成
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+    problem_dir: "{{ repo }}/problems/{{ problem }}"
+    gen_dir: "{{ repo }}/topologies/_generated/{{ problem }}"
+  tasks:
+    - ansible.builtin.include_vars: { file: "{{ problem_dir }}/problem.yml", name: pmeta }
+    # --image-family は「node_image_families に無いノードのフォールバック既定」。
+    # 従来踏襲: problem.yml の image_family を優先、無ければ group_vars/CLI の image_family(既定 iol)。
+    # 混在は node_image_families でノード個別指定（こちらが最優先）。
+    - ansible.builtin.set_fact:
+        eff_family: "{{ pmeta.image_family | default(image_family) }}"
+    - name: gen_cml_lab.py で組み立て
+      ansible.builtin.command:
+        argv:
+          - "{{ repo }}/.venv/bin/python3"
+          - "{{ repo }}/topologies/gen_cml_lab.py"
+          - "--repo={{ repo }}"
+          - "--problem={{ problem }}"
+          - "--image-family={{ eff_family }}"
+          - "--day0-dir={{ gen_dir }}/day0"
+          - "--out={{ gen_dir }}/lab.yaml"
+      register: gen
+    - ansible.builtin.debug: { var: gen.stdout }

@@ -1,0 +1,43 @@
+---
+# 採点基準（pyATS Genie 構造化 + 効果ベース）。収集は telnet（IOL L2）。
+# 学習核心 = EtherChannel が「組めない/疎通しない」を多層で切り分ける:
+#   1) 動的(LACP)で両メンバが bundled になっていること（passive/passive・メンバ欠落を解消）
+#   2) その上で L2(access VLAN) が一致し、SVI 間が実際に疎通すること
+# protocol が lacp であることで静的(mode on)や未ネゴシエーションを弾く。
+problem: ENCOR-LAG-TS-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "SW01: Po1 が LACP で up・Et0/0 と Et0/1 が両方 bundled"
+    node: SW01
+    command: "show etherchannel summary"
+    parser: "show etherchannel summary"
+    find: "interfaces.*"
+    match:
+      protocol: lacp
+      oper_status: up
+      members.Ethernet0/0.bundled: true
+      members.Ethernet0/1.bundled: true
+    points: 30
+
+  - name: "SW02: Po1 が LACP で up・Et0/0 と Et0/1 が両方 bundled"
+    node: SW02
+    command: "show etherchannel summary"
+    parser: "show etherchannel summary"
+    find: "interfaces.*"
+    match:
+      protocol: lacp
+      oper_status: up
+      members.Ethernet0/0.bundled: true
+      members.Ethernet0/1.bundled: true
+    points: 30
+
+  - name: "SW01: VLAN30 SVI から SW02 SVI(10.30.30.2) へ疎通する（束＋VLAN一致の効果確認）"
+    node: SW01
+    command: "ping 10.30.30.2 source Vlan30 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 40

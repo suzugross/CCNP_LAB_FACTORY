@@ -1,0 +1,26 @@
+! ENCOR-PBR-02 初期状態 (RT04 = 拠点LANクライアント) : OSPF 既設・変更禁止。
+!   Lo1 = 営業部セグメント / Lo2 = 開発部セグメント。RT01 を経由して DC(3.3.3.3) と通信する。
+!   links[0] = RT01 向け
+interface Loopback0
+ ip address 4.4.4.4 255.255.255.255
+!
+interface Loopback1
+ description === 営業部セグメント ===
+ ip address 10.1.1.1 255.255.255.255
+!
+interface Loopback2
+ description === 開発部セグメント ===
+ ip address 10.2.2.1 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 (拠点エッジ) ===
+ ip address 10.0.14.2 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 4.4.4.4
+ network 4.4.4.4 0.0.0.0 area 0
+ network 10.1.1.1 0.0.0.0 area 0
+ network 10.2.2.1 0.0.0.0 area 0
+ network 10.0.14.0 0.0.0.3 area 0
+!
