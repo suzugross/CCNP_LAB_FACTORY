@@ -85,6 +85,7 @@
 | IGP 複合 TS | `gen_eigrp_complex_ts.py` / `gen_ospf_complex_ts.py` / `gen_ospfv3_complex_ts.py` | EIGRP / OSPF / OSPFv3 の複合故障 |
 | 再配送 TS | `gen_redist_mutual_ts.py` / `gen_redist_ripospf_ts.py` | 相互再配送 / RIP⇄OSPF 再配送ループ |
 | 連鎖故障 | `gen_chain_ts.py` | 12台規模でレイヤをまたぐ連鎖故障を生成 |
+| MPLS L3VPN TS | `gen_mpls_ts.py` | 12台 (3PE×Pリング×2顧客) の L3VPN に L1〜L5 の故障を注入 |
 | L2 TS | `gen_l2_troubleshoot.py` | EtherChannel など L2 の故障 |
 | サーバ / 監視 | `gen_dnsdhcp_*.py` / `gen_radius_build.py` / `gen_snmpv3_ts.py` / `gen_zbx*`(SNMP/Zabbix) | Linux サーバ（BIND/DHCP/FreeRADIUS）構築・TS、SNMPv3/Zabbix 監視 |
 
