@@ -1,0 +1,61 @@
+! GEN-CHAIN-9800 初期 (RT01) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT11 ===
+ ip address 10.237.195.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 ===
+ ip address 10.57.236.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT04 ===
+ ip address 10.107.93.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 2.2.2.2
+ network 2.2.2.2 0.0.0.0 area 0
+ network 10.57.236.0 0.0.0.3 area 0
+ network 10.107.93.0 0.0.0.3 area 0
+!
+router eigrp 65100
+ passive-interface Ethernet0/0
+ network 10.237.195.0 0.0.0.3
+ redistribute bgp 65001 route-map RM-B2E-W
+ default-metric 100000 100 255 1 1500
+ no auto-summary
+!
+ip prefix-list PL-WEST seq 5 permit 172.20.0.0/23 ge 24 le 24
+ip prefix-list PL-WEST seq 10 permit 28.28.28.28/32
+ip prefix-list PL-WEST seq 15 permit 1.1.1.1/32
+route-map RM-W2B deny 5
+ match tag 65001
+route-map RM-W2B permit 10
+ match ip address prefix-list PL-WEST
+ set community 65001:100
+ set ip next-hop 2.2.2.2
+route-map RM-B2E-W permit 10
+ set tag 65001
+!
+router bgp 65001
+ bgp router-id 2.2.2.2
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 9.9.9.9 remote-as 65001
+ neighbor 9.9.9.9 update-source Loopback0
+ neighbor 11.11.11.11 remote-as 65001
+ neighbor 11.11.11.11 update-source Loopback0
+ address-family ipv4
+  neighbor 9.9.9.9 activate
+  neighbor 9.9.9.9 send-community
+  neighbor 11.11.11.11 activate
+  neighbor 11.11.11.11 send-community
+  redistribute eigrp 65100 route-map RM-W2B
+  bgp redistribute-internal
+ exit-address-family
+!

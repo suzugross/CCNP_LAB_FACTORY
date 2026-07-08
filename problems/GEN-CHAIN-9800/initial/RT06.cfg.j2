@@ -1,0 +1,46 @@
+! GEN-CHAIN-9800 初期 (RT06) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 57.57.57.57 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT04 ===
+ ip address 10.210.149.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT02 ===
+ ip address 10.47.187.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT09 ===
+ ip address 10.20.14.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 57.57.57.57
+ network 57.57.57.57 0.0.0.0 area 0
+ network 10.210.149.0 0.0.0.3 area 0
+ network 10.47.187.0 0.0.0.3 area 0
+ network 10.20.14.0 0.0.0.3 area 0
+!
+router bgp 65001
+ bgp router-id 57.57.57.57
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 9.9.9.9 remote-as 65001
+ neighbor 9.9.9.9 update-source Loopback0
+ neighbor 11.11.11.11 remote-as 65001
+ neighbor 11.11.11.11 update-source Loopback0
+ address-family ipv4
+  neighbor 9.9.9.9 activate
+  neighbor 9.9.9.9 send-community
+  neighbor 11.11.11.11 activate
+  neighbor 11.11.11.11 send-community
+ exit-address-family
+!
+ip prefix-list OLD-BLOCK seq 5 permit 172.21.0.0/16 le 24
+route-map LEGACY-POLICY deny 10
+ match ip address prefix-list OLD-BLOCK
+route-map LEGACY-POLICY permit 20
+!

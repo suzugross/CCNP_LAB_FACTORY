@@ -1,0 +1,81 @@
+! GEN-CHAIN-9700 初期 (RT01) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 15.15.15.15 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT11 ===
+ ip address 10.224.19.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 ===
+ ip address 10.12.140.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT04 ===
+ ip address 10.162.19.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 15.15.15.15
+ network 15.15.15.15 0.0.0.0 area 0
+ network 10.12.140.0 0.0.0.3 area 0
+ network 10.162.19.0 0.0.0.3 area 0
+!
+router eigrp 65100
+ passive-interface Ethernet0/0
+ network 10.224.19.0 0.0.0.3
+ redistribute bgp 65001 route-map RM-B2E-W
+ default-metric 100000 100 255 1 1500
+ no auto-summary
+!
+ip prefix-list PL-WEST seq 5 permit 172.20.0.0/23 ge 24 le 24
+ip prefix-list PL-WEST seq 10 permit 97.97.97.97/32
+ip prefix-list PL-WEST seq 15 permit 70.70.70.70/32
+route-map RM-W2B deny 5
+ match tag 65001
+route-map RM-W2B permit 10
+ match ip address prefix-list PL-WEST
+ set community 65001:100
+ set ip next-hop 15.15.15.15
+route-map RM-B2E-W permit 10
+ set tag 65001
+!
+router bgp 65001
+ bgp router-id 15.15.15.15
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 4.4.4.4 remote-as 65001
+ neighbor 4.4.4.4 update-source Loopback0
+ neighbor 69.69.69.69 remote-as 65001
+ neighbor 69.69.69.69 update-source Loopback0
+ neighbor 13.13.13.13 remote-as 65001
+ neighbor 13.13.13.13 update-source Loopback0
+ neighbor 93.93.93.93 remote-as 65001
+ neighbor 93.93.93.93 update-source Loopback0
+ neighbor 51.51.51.51 remote-as 65001
+ neighbor 51.51.51.51 update-source Loopback0
+ neighbor 75.75.75.75 remote-as 65001
+ neighbor 75.75.75.75 update-source Loopback0
+ neighbor 63.63.63.63 remote-as 65001
+ neighbor 63.63.63.63 update-source Loopback0
+ neighbor 20.20.20.20 remote-as 65001
+ neighbor 20.20.20.20 update-source Loopback0
+ address-family ipv4
+  neighbor 4.4.4.4 activate
+  neighbor 4.4.4.4 send-community
+  neighbor 69.69.69.69 activate
+  neighbor 69.69.69.69 send-community
+  neighbor 13.13.13.13 activate
+  neighbor 13.13.13.13 send-community
+  neighbor 93.93.93.93 activate
+  neighbor 93.93.93.93 send-community
+  neighbor 51.51.51.51 activate
+  neighbor 51.51.51.51 send-community
+  neighbor 20.20.20.20 activate
+  neighbor 20.20.20.20 send-community
+  redistribute eigrp 65100 route-map RM-W2B
+  bgp redistribute-internal
+ exit-address-family
+!

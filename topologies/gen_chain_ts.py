@@ -307,11 +307,15 @@ def catalog(m):
          [_fx("RT01", [f"no neighbor {m['lo'][cp]} maximum-prefix 2" for cp in CP],
               [f"router bgp {AS_CORE}", "address-family ipv4"]),
           {"node": "RT01", "exec": [f"clear ip bgp {m['lo'][cp]}" for cp in CP]}]),
+        # ★fix は activate だけでなく send-community も復元(day0 render は activate
+        #   skip 時に send-community 行も落とすため。rr では全経路がRR経由なので
+        #   これが欠けると West community が全域で消える。3002 実機で発見)
         ("l2_activate_missing",
          f"RT01 の急所ピア({'/'.join(CP)})が address-family ipv4 で activate されていない"
          "(セッションUPなのに経路ゼロ)",
          {"kind": "activate", "victim": "RT01", "excl": "rt01sess"},
-         [_fx("RT01", [f"neighbor {m['lo'][cp]} activate" for cp in CP],
+         [_fx("RT01", sum([[f"neighbor {m['lo'][cp]} activate",
+                            f"neighbor {m['lo'][cp]} send-community"] for cp in CP], []),
               [f"router bgp {AS_CORE}", "address-family ipv4"])]),
     ]
 
@@ -369,6 +373,13 @@ def catalog(m):
                   ["router ospf 1"]) for b in E_BOUNDARY]),
         ]
 
+    # L4 のモード追随: sendcomm は rr=両RRピア / fullmesh=全ピア(全ピアに無いと
+    # RT12 が直結で community を受け取れてしまい故障が実効しない)。
+    # retdlist の親は oe=EIGRP / eo=OSPF2(OSPF の distribute-list in は RIB 抑止として実効)
+    def sc_targets(b):
+        return RRS if m["ibgp"] == "rr" else [x for x in BGP_NODES if x != b]
+    ret_proto, ret_parent = (("EIGRP", f"router eigrp {AS_EIGRP}") if m["igp"] == "oe"
+                             else ("OSPF2", "router ospf 2"))
     C["L4"] = [
         ("l4_static_shadow",
          "RT08 に誤った static (172.20.0.0/25 → Null0) が残置され West LAN1 の戻りを黒穴化",
@@ -377,15 +388,20 @@ def catalog(m):
         ("l4_send_community_missing",
          "両境界の iBGP ピアに send-community が無い(到達性は無傷だが運用タグが消える設計逸脱)",
          {"kind": "sendcomm"},
-         [_fx(b, sum([[f"neighbor {m['lo'][r]} send-community"] for r in RRS], []),
+         [_fx(b, [f"neighbor {m['lo'][r]} send-community" for r in sc_targets(b)],
               [f"router bgp {AS_CORE}", "address-family ipv4"]) for b in E_BOUNDARY] +
          [{"node": b, "exec": ["clear ip bgp * soft"]} for b in E_BOUNDARY]),
         ("l4_return_dlist",
-         "RT08 の EIGRP で West LAN1 を distribute-list が遮断(行きOK・戻りNG)",
+         f"RT08 の {ret_proto} で West LAN1 を distribute-list が遮断(行きOK・戻りNG)",
          {"kind": "retdlist"},
          [_fx("RT08", ["no distribute-list prefix BLOCK-W in"],
-              [f"router eigrp {AS_EIGRP}"])]),
+              [ret_parent])]),
     ]
+    # ※l4_b2e_oneside_missing(片側B2E欠落→RIB乗っ取り)は実機検証の結果**不採用**:
+    #   境界間直結IGPリンクがある本トポロジでは West 経路の還流により健全構成でも
+    #   常に片側境界が D EX/O E2 に固着(bistableラチェット)し、「両境界BGP保持」が
+    #   採点不変条件として成立しない(2026-07-08 LOOPPOC+GEN-CHAIN-2000/3002 実機)。
+    #   詳細は設計書「真の再配送ループ検証」節。
     return C, rt01_if
 
 
@@ -438,7 +454,18 @@ def branch_catalog(m):
                 {"kind": f"breigrp_{b}", "victim": b},
                 [_fx(b, ["no router eigrp 65101"]),
                  _fx(b, healthy_eigrp_block(m, b), [f"router eigrp {AS_EIGRP}"])])
-    return {"bgppass": bgppass, "eigrp_as": eigrp_as}
+    def ospf2_area(b):
+        # swap(eo)用: OSPF の process 番号は hello に乗らないため process 誤りでは
+        # 隣接が切れない。area 不一致なら hello 段で拒否= b 系統が確実に全滅する
+        e_nets = [lk["net"] for _s, _ip, lk in links_of(m, b) if lk["kind"] == "e"]
+        return ("br_ospf2_area_mismatch",
+                f"{b} の East リンクが OSPF2 で area 2 に設定(正: area 0。"
+                f"hello の area 不一致で隣接不成立={b}系統がOSPF2から消える)",
+                {"kind": f"brospf2_{b}", "victim": b},
+                [_fx(b, sum([[f"no network {net} 0.0.0.3 area 2",
+                              f"network {net} 0.0.0.3 area 0"] for net in e_nets], []),
+                     ["router ospf 2"])])
+    return {"bgppass": bgppass, "eigrp_as": eigrp_as, "ospf2_area": ospf2_area}
 
 
 def inject(m, depth, rnd, decoys=0, width=1, branch=False):
@@ -457,7 +484,8 @@ def inject(m, depth, rnd, decoys=0, width=1, branch=False):
                 "--branch-fault は rr モード限定(v1)。fullmesh では境界のbrpassが" \
                 "他ピア経由で迂回され実効しないため(要・全ピア殺し版の設計)"
             bc = branch_catalog(m)
-            kinds = ["bgppass", "eigrp_as"]
+            kinds = ["bgppass",
+                     "eigrp_as" if m["igp"] == "oe" else "ospf2_area"]
             rnd.shuffle(kinds)   # どちらの境界にどちらの殺し方を当てるかも seed 変動
             for b, k in zip(E_BOUNDARY, kinds):
                 fid, desc, flag, fixes = bc[k](b)
@@ -606,9 +634,10 @@ def render_node(m, n):
         # 同一ルータ内の別OSPFプロセスは RID 重複不可 → ospf2 は Lo0 の第4オクテットを
         # 2.x.x.x 側に振った専用 RID を使う（設定値であり実在アドレス不要）
         L.append(f" router-id 2.{lo.split('.')[1]}.{lo.split('.')[2]}.{lo.split('.')[3]}")
+        e_area = "2" if F.get(f"brospf2_{n}") else "0"
         for slot, ip, lk in links_of(m, n):
             if lk["kind"] == "e":
-                L.append(f" network {lk['net']} 0.0.0.3 area 0")
+                L.append(f" network {lk['net']} 0.0.0.3 area {e_area}")
         if n == "RT08":
             L.append(f" network {lo} 0.0.0.0 area 0")
             for lan in E_LAN:
@@ -725,7 +754,8 @@ def render_node(m, n):
                 continue
             pa = peer_addr(p)
             L.append(f"  neighbor {pa} activate")
-            skip_sc = (F.get("sendcomm") and n in E_BOUNDARY and p in RRS)
+            skip_sc = (F.get("sendcomm") and n in E_BOUNDARY
+                       and (m["ibgp"] != "rr" or p in RRS))
             if not skip_sc:
                 L.append(f"  neighbor {pa} send-community")
             if (F.get("maxpfx") and n == F["maxpfx"]["victim"]
@@ -913,6 +943,8 @@ def write_grading(m, pdir, pid):
         add(f"RT08: West LAN1 が OSPF2 外部経路で管理タグ {TAG_LOOP} 付き（B2O再配送の設計適合）",
             "RT08", "show ip route 172.20.0.0 255.255.255.0", 6,
             raw=[{"regex": "ospf 2"}, {"regex": f"[Tt]ag {TAG_LOOP}"}])
+    # ※「境界が West 経路を BGP で保持」チェックは実機検証の結果不採用(健全構成でも
+    #   境界間直結リンク経由の還流で片側が必ず D EX/O E2 固着=不変条件にならない)
     add("RT08: static 残置なし（暫定対処の残置禁止）", "RT08",
         "show ip route static", 6, raw=[{"not_regex": "(?m)^S"}])
 
@@ -927,11 +959,20 @@ def write_grading(m, pdir, pid):
     else:
         add("RT01: OSPF 隣接 FULL (RT03/RT04)", "RT01", "show ip ospf neighbor", 3,
             raw=[_full(lo["RT03"]), _full(lo["RT04"])])
-    add("RT03(RR1): iBGP セッション成立 (RT01/RT07/RT12 が Established)", "RT03",
-        "show ip bgp summary", 5,
-        raw=[{"regex": rf"(?m)^{lo['RT01'].replace('.', chr(92) + '.')}\s.*\d$"},
-             {"regex": rf"(?m)^{lo['RT07'].replace('.', chr(92) + '.')}\s.*\d$"},
-             {"regex": rf"(?m)^{lo['RT12'].replace('.', chr(92) + '.')}\s.*\d$"}])
+    if m["ibgp"] == "rr":
+        add("RT03(RR1): iBGP セッション成立 (RT01/RT07/RT12 が Established)", "RT03",
+            "show ip bgp summary", 5,
+            raw=[{"regex": rf"(?m)^{lo['RT01'].replace('.', chr(92) + '.')}\s.*\d$"},
+                 {"regex": rf"(?m)^{lo['RT07'].replace('.', chr(92) + '.')}\s.*\d$"},
+                 {"regex": rf"(?m)^{lo['RT12'].replace('.', chr(92) + '.')}\s.*\d$"}])
+    else:
+        # fullmesh の生命線は RT01↔両East境界の直結セッション。RT01 側で直接確認
+        # (9500 実機サイクルで判明した採点盲点の解消)
+        add("RT01: iBGP セッション成立 (RT07/RT09/RT12 が Established)", "RT01",
+            "show ip bgp summary", 5,
+            raw=[{"regex": rf"(?m)^{lo['RT07'].replace('.', chr(92) + '.')}\s.*\d$"},
+                 {"regex": rf"(?m)^{lo['RT09'].replace('.', chr(92) + '.')}\s.*\d$"},
+                 {"regex": rf"(?m)^{lo['RT12'].replace('.', chr(92) + '.')}\s.*\d$"}])
     east_ips = []
     for lk in m["links"]:
         if lk["kind"] == "e" and "RT08" in (lk["a"], lk["b"]):
@@ -999,8 +1040,8 @@ def write_task(m, pdir, pid, depth):
 
 ```
  West {'OSPF area1  ' if m['igp'] == 'oe' else 'EIGRP 65100'}      コア AS{AS_CORE} (OSPF area0 + iBGP)       East {'EIGRP ' + str(AS_EIGRP) if m['igp'] == 'oe' else 'OSPF proc2'}
- RT10 ─ RT11 ─ RT01 ─┬─ RT03(RR1) ─ RT05 ─┬─ RT02 ─ RT07 ─┬─ RT08
-(User LAN)     (ABR)  └─ RT04(RR2) ─ RT06 ─┴─(RT06─RT09)───┴─(RT07─RT09)
+ RT10 ─ RT11 ─ RT01 ─┬─ RT03{'(RR1)' if m['ibgp'] == 'rr' else '     '} ─ RT05 ─┬─ RT02 ─ RT07 ─┬─ RT08
+(User LAN)     {'(ABR)' if m['igp'] == 'oe' else '(境W)'}  └─ RT04{'(RR2)' if m['ibgp'] == 'rr' else '     '} ─ RT06 ─┴─(RT06─RT09)───┴─(RT07─RT09)
                           └RT12(観測点)┘                    (Server LAN)
 ```
 
@@ -1019,14 +1060,18 @@ def write_task(m, pdir, pid, depth):
 |--------|-----|------|
 """ + "\n".join(
         f"| {n} | {lo[n]}/32 | " + {
-            "RT01": "境界W (ABR・OSPF→BGP)",
+            "RT01": ("境界W (ABR・OSPF→BGP)" if m["igp"] == "oe"
+                     else "境界W (EIGRP⇄BGP)"),
             "RT02": "コア" + (" client" if m["ibgp"] == "rr" else ""),
             "RT03": ("RR1" if m["ibgp"] == "rr" else "コア"),
             "RT04": ("RR2" if m["ibgp"] == "rr" else "コア"),
             "RT05": "コア" + (" client" if m["ibgp"] == "rr" else ""),
             "RT06": "コア" + (" client" if m["ibgp"] == "rr" else ""),
-            "RT07": "境界E1 (EIGRP⇄BGP)",
-            "RT08": "East内部 (Server LAN)", "RT09": "境界E2 (EIGRP⇄BGP)",
+            "RT07": ("境界E1 (EIGRP⇄BGP)" if m["igp"] == "oe"
+                     else "境界E1 (OSPF2⇄BGP)"),
+            "RT08": "East内部 (Server LAN)",
+            "RT09": ("境界E2 (EIGRP⇄BGP)" if m["igp"] == "oe"
+                     else "境界E2 (OSPF2⇄BGP)"),
             "RT10": "West端末 (User LAN)", "RT11": "Westアグリゲーション",
             "RT12": ("観測点 (非client)" if m["ibgp"] == "rr" else "コア (観測点)")}[n]
         + " |" for n in NODES) + f"""
@@ -1090,10 +1135,11 @@ def main():
     a = ap.parse_args()
 
     igp = "oe" if a.igp_layout == "ospf-eigrp" else "eo"
-    # v1 組合せガード: 新構造は単独軸ずつ実機検証する方針
-    if igp == "eo" and (a.ibgp != "rr" or a.branch_fault):
-        ap.error("--igp-layout eigrp-ospf は v1 では --ibgp rr かつ --branch-fault なし限定"
-                 "(組合せは各々 baseline 実機検証後に解禁)")
+    # v2(2026-07-07): fullmesh×eigrp-ospf / branch×eigrp-ospf は baseline 実機検証済み解禁。
+    # fullmesh×branch のみ構造的に不成立(brpass が他ピア経由で迂回)のため恒久ブロック
+    if a.branch_fault and a.ibgp != "rr":
+        ap.error("--branch-fault は rr モード限定"
+                 "(fullmesh では境界のRRピアpasswordが他ピア経由で迂回され実効しない)")
     m = build_model(a.seed, ibgp=a.ibgp, igp=igp)
     rnd = random.Random(a.seed + 991)
     inject(m, a.chain_depth, rnd, decoys=a.decoys,

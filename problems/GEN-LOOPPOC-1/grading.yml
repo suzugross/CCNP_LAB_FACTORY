@@ -1,0 +1,39 @@
+# GEN-LOOPPOC-1 — ループ検出の netmodel 検証用（PoC・配点は便宜値）
+problem: GEN-LOOPPOC-1
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT01: 1.1.1.1
+    RT02: 2.2.2.2
+    RT03: 3.3.3.3
+    RT04: 4.4.4.4
+  links:
+  - a: RT01
+    a_ip: 10.0.12.1
+    b: RT02
+    b_ip: 10.0.12.2
+  - a: RT01
+    a_ip: 10.0.13.1
+    b: RT03
+    b_ip: 10.0.13.2
+  - a: RT02
+    a_ip: 172.30.24.1
+    b: RT04
+    b_ip: 172.30.24.2
+  - a: RT03
+    a_ip: 172.30.34.1
+    b: RT04
+    b_ip: 172.30.34.2
+invariants:
+- type: loop_free
+  name: 転送ループ無し(再配送還流の検出)
+  points: 50
+checks:
+- name: 'RT04: East LAN 発 → West LAN (172.20.0.1) 到達'
+  node: RT04
+  command: ping 172.20.0.1 source Loopback10 repeat 5
+  points: 50
+  raw:
+  - regex: Success rate is [1-9]

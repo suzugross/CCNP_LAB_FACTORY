@@ -1,0 +1,82 @@
+! GEN-CHAIN-9700 初期 (RT09) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 63.63.63.63 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT06 ===
+ ip address 10.170.73.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT08 ===
+ ip address 172.30.251.5 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT07 ===
+ ip address 172.30.39.6 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 63.63.63.63
+ network 63.63.63.63 0.0.0.0 area 0
+ network 10.170.73.0 0.0.0.3 area 0
+!
+router ospf 2
+ router-id 2.63.63.63
+ network 172.30.251.4 0.0.0.3 area 0
+ network 172.30.39.4 0.0.0.3 area 0
+ redistribute bgp 65001 subnets route-map RM-B2E
+!
+ip prefix-list PL-EAST seq 5 permit 172.21.0.0/24
+ip prefix-list PL-EAST seq 15 permit 87.87.87.87/32
+route-map RM-E2B deny 5
+ match tag 65001
+route-map RM-E2B permit 10
+ match ip address prefix-list PL-EAST
+ set community 65001:200
+ set ip next-hop 63.63.63.63
+route-map RM-B2E permit 10
+ set tag 65001
+!
+router bgp 65001
+ bgp router-id 63.63.63.63
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 4.4.4.4 remote-as 65001
+ neighbor 4.4.4.4 update-source Loopback0
+ neighbor 69.69.69.69 remote-as 65001
+ neighbor 69.69.69.69 update-source Loopback0
+ neighbor 15.15.15.15 remote-as 65001
+ neighbor 15.15.15.15 update-source Loopback0
+ neighbor 13.13.13.13 remote-as 65001
+ neighbor 13.13.13.13 update-source Loopback0
+ neighbor 93.93.93.93 remote-as 65001
+ neighbor 93.93.93.93 update-source Loopback0
+ neighbor 51.51.51.51 remote-as 65001
+ neighbor 51.51.51.51 update-source Loopback0
+ neighbor 75.75.75.75 remote-as 65001
+ neighbor 75.75.75.75 update-source Loopback0
+ neighbor 20.20.20.20 remote-as 65001
+ neighbor 20.20.20.20 update-source Loopback0
+ address-family ipv4
+  neighbor 4.4.4.4 activate
+  neighbor 4.4.4.4 send-community
+  neighbor 69.69.69.69 activate
+  neighbor 69.69.69.69 send-community
+  neighbor 15.15.15.15 activate
+  neighbor 15.15.15.15 send-community
+  neighbor 13.13.13.13 activate
+  neighbor 13.13.13.13 send-community
+  neighbor 93.93.93.93 activate
+  neighbor 93.93.93.93 send-community
+  neighbor 51.51.51.51 activate
+  neighbor 51.51.51.51 send-community
+  neighbor 75.75.75.75 activate
+  neighbor 75.75.75.75 send-community
+  neighbor 20.20.20.20 activate
+  neighbor 20.20.20.20 send-community
+  redistribute ospf 2 route-map RM-E2B
+  bgp redistribute-internal
+ exit-address-family
+!

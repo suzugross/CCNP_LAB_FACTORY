@@ -1,0 +1,41 @@
+! GEN-LOOPPOC-1 (RT03) — 境界2 (iBGP⇄EIGRP 相互再配送)
+interface Loopback0
+ ip address 3.3.3.3 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 ===
+ ip address 10.0.13.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT04 ===
+ ip address 172.30.34.1 255.255.255.252
+ no shutdown
+!
+router eigrp 65100
+ network 172.30.34.0 0.0.0.3
+ redistribute bgp 65001 route-map RM-B2E
+ default-metric 100000 100 255 1 1500
+ no auto-summary
+!
+router bgp 65001
+ bgp router-id 3.3.3.3
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.0.13.1 remote-as 65001
+ address-family ipv4
+  neighbor 10.0.13.1 activate
+  redistribute eigrp 65100 route-map RM-E2B
+  bgp redistribute-internal
+ exit-address-family
+!
+ip prefix-list PL-EAST seq 5 permit 172.21.0.0/24
+ip prefix-list PL-EAST seq 10 permit 4.4.4.4/32
+route-map RM-E2B deny 5
+ match tag 65001
+route-map RM-E2B permit 10
+ match ip address prefix-list PL-EAST
+ set ip next-hop 10.0.13.2
+route-map RM-B2E permit 10
+ set tag 65001
+!
