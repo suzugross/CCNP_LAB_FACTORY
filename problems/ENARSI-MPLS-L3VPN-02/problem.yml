@@ -1,0 +1,46 @@
+---
+# MPLS L3VPN 応用 (PE-CE OSPF + 再配布制御 route-map + MSS 調整)。
+# ENARSI-MPLS-L3VPN-01 の完成形コア (OSPF/LDP/MP-BGP VPNv4/VRF収容) を初期状態とし、
+# 「契約変更チケット」対応を出題:
+#   (1) PE-CE を static から OSPF 化 (VRF 別 OSPF プロセス + BGP⇄OSPF 相互再配布)
+#   (2) CE 機器管理プレフィックス 10.99.0.0/16 を VPN へ流さない
+#       = route-map + prefix-list で「必要最低限の広告」(172.16.0.0/16 の LAN のみ)
+#   (3) MPLS 網の PMTUD 不全対策 = PE の CE 向け IF で ip tcp adjust-mss 1452
+#       (1500 - ラベル2枚8B - IP/TCP 40B)
+# 隠しひねり (task では明かさない):
+#   - PE の OSPF は `router ospf <id> vrf <name>` (vrf を忘れるとグローバルに立つ)
+#   - BGP→OSPF は `redistribute bgp 65000 subnets` (subnets 忘れでクラスフルのみ)
+#   - OSPF→BGP に route-map を噛ませないと 10.99 が VPNv4 へ漏れて減点
+#   - CE Lo0 は ip ospf network point-to-point 済 (/24 のまま広告される・CE 側で対処済)
+#   - 両 PE で同一プロセス番号 → OSPF ドメイン ID 一致で対向経路は O IA で現れる
+#     (O E2 でない。採点は Known via "ospf" で吸収)
+id: ENARSI-MPLS-L3VPN-02
+title: "MPLS L3VPN 応用 (PE-CE OSPF 化 + route-map 広告制御 + MSS 調整)"
+exam: ENARSI
+topics: [mpls, l3vpn, vpnv4, mp-bgp, vrf, ospf, pe-ce, redistribution, route-map, prefix-list, mss]
+difficulty: 4
+topology: ad-hoc
+image_family: iol
+target_nodes: [RT01, RT02, RT03, RT04, RT05, RT06, RT07]
+points: 100
+
+# アドレス計画: ENARSI-MPLS-L3VPN-01 と同一 + CE 機器管理 Loopback9 を追加:
+#   RT04=10.99.4.1/32 / RT05=10.99.5.1/32 / RT06=10.99.6.1/32 / RT07=10.99.7.1/32
+#   CE OSPF: process 1, router-id = <n>.<n>.<n>.<n> (RT04=4.4.4.4 ...)。
+#   PE OSPF (受験者構成): CUST_A=process 10 / CUST_B=process 20, area 0。
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # コア PE1-P   10.1.12.0/30
+    - { a: RT02, a_if: 1, b: RT03, b_if: 0 }   # コア P-PE2   10.1.23.0/30
+    - { a: RT01, a_if: 1, b: RT04, b_if: 0 }   # CUST_A site1 192.168.1.0/30
+    - { a: RT01, a_if: 2, b: RT06, b_if: 0 }   # CUST_B site1 192.168.11.0/30
+    - { a: RT03, a_if: 1, b: RT05, b_if: 0 }   # CUST_A site2 192.168.2.0/30
+    - { a: RT03, a_if: 2, b: RT07, b_if: 0 }   # CUST_B site2 192.168.12.0/30
+  positions:
+    RT04: [-450, -330]
+    RT06: [-450, -70]
+    RT01: [-230, -200]
+    RT02: [0, -200]
+    RT03: [230, -200]
+    RT05: [450, -330]
+    RT07: [450, -70]
