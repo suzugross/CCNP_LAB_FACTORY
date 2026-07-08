@@ -388,19 +388,25 @@
    ]
   },
   {
-   "id": "l5_subnets_missing",
+   "id": "l5_redist_ospf_missing",
    "layer": "L5",
-   "desc": "RT02 の OSPF 20 の redistribute bgp 65000 に subnets が無い (クラスフル境界のみ再配布 = /24 が CE に落ちない)",
-   "symptom": "CUST_B site2 で対向 /24 だけが CE に無い (隣接 FULL・設定は一見ある)",
+   "desc": "RT02 の BGP address-family ipv4 vrf CUST_B に redistribute ospf 20 が無い (この site の LAN が VPNv4 に出ない)",
+   "symptom": "CUST_B の site2 が対向サイトから見えない (PE-CE 隣接 FULL・LDP/BGP セッション正常)",
    "breaks": [
     {
      "node": "RT02",
      "lines": [
-      "no redistribute bgp 65000",
-      "redistribute bgp 65000"
+      "no redistribute ospf 20"
      ],
      "parents": [
-      "router ospf 20 vrf CUST_B"
+      "router bgp 65000",
+      "address-family ipv4 vrf CUST_B"
+     ]
+    },
+    {
+     "node": "RT02",
+     "exec": [
+      "clear ip bgp * soft"
      ]
     }
    ],
@@ -408,10 +414,17 @@
     {
      "node": "RT02",
      "lines": [
-      "redistribute bgp 65000 subnets"
+      "redistribute ospf 20 route-map RM-OSPF2VPN"
      ],
      "parents": [
-      "router ospf 20 vrf CUST_B"
+      "router bgp 65000",
+      "address-family ipv4 vrf CUST_B"
+     ]
+    },
+    {
+     "node": "RT02",
+     "exec": [
+      "clear ip bgp * soft"
      ]
     }
    ]

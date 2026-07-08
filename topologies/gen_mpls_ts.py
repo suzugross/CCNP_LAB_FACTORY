@@ -375,20 +375,29 @@ def catalog(m, rnd):
               [f"router ospf {dproc} vrf {dvrf}"])],
         f"CUST_{dcust} site{dsite} の CE に対向サイトの経路が無い (隣接は FULL)")
 
+    # ※旧 l5_subnets_missing は廃止: iol-xe 17.15 では redistribute の subnets が
+    #   暗黙定で故障にならない (GEN-MPLSTS-7100 実機で確認)。乱数消費は同一
+    #   (choice(PES)+choice(A/B)) にして既存 seed の再現性を維持。
     spe = rnd.choice(PES)
     scust = rnd.choice(["A", "B"])
     ssite = next(s for s, p in PE_OF_SITE.items() if p == spe)
     sproc = CUST[scust]["proc"]
-    add("l5_subnets_missing", "L5",
-        f"{spe} の OSPF {sproc} の redistribute bgp {AS} に subnets が無い"
-        " (クラスフル境界のみ再配布 = /24 が CE に落ちない)",
+    svrf = CUST[scust]["vrf"]
+    add("l5_redist_ospf_missing", "L5",
+        f"{spe} の BGP address-family ipv4 vrf {svrf} に"
+        f" redistribute ospf {sproc} が無い (この site の LAN が VPNv4 に出ない)",
         {"victim": spe, "cust": scust},
-        [_cfg(spe, [f"no redistribute bgp {AS}",
-                    f"redistribute bgp {AS}"],
-              [f"router ospf {sproc} vrf {CUST[scust]['vrf']}"])],
-        [_cfg(spe, [f"redistribute bgp {AS} subnets"],
-              [f"router ospf {sproc} vrf {CUST[scust]['vrf']}"])],
-        f"CUST_{scust} site{ssite} で対向 /24 だけが CE に無い (隣接 FULL・設定は一見ある)")
+        # ★break は bare の "no redistribute ospf N" にする: route-map まで付けて
+        #   negate すると route-map オプションだけ外れて「フィルタ無し再配布」=
+        #   漏えい故障に化ける (実機で確認)
+        [_cfg(spe, [f"no redistribute ospf {sproc}"],
+              [f"router bgp {AS}", f"address-family ipv4 vrf {svrf}"]),
+         _clear_bgp(spe)],
+        [_cfg(spe, [f"redistribute ospf {sproc} route-map RM-OSPF2VPN"],
+              [f"router bgp {AS}", f"address-family ipv4 vrf {svrf}"]),
+         _clear_bgp(spe)],
+        f"CUST_{scust} の site{ssite} が対向サイトから見えない"
+        " (PE-CE 隣接 FULL・LDP/BGP セッション正常)")
 
     tpe = rnd.choice(PES)
     tsite = next(s for s, p in PE_OF_SITE.items() if p == tpe)
@@ -545,7 +554,7 @@ def render_pe(m, n):
     f_rti = fault(m, "l4_rt_import_wrong")
     f_vrf = fault(m, "l4_wrong_vrf_membership")
     f_red = fault(m, "l5_redist_bgp_missing")
-    f_sub = fault(m, "l5_subnets_missing")
+    f_ros = fault(m, "l5_redist_ospf_missing")
     f_str = fault(m, "l5_routemap_strict")
     f_lek = fault(m, "l5_routemap_leak")
     f_pce = fault(m, "l5_pece_area_mismatch")
@@ -599,8 +608,6 @@ def render_pe(m, n):
         L.append(f" router-id {lo[n]}")
         if f_red and f_red["params"]["victim"] == n and f_red["params"]["cust"] == cu:
             pass
-        elif f_sub and f_sub["params"]["victim"] == n and f_sub["params"]["cust"] == cu:
-            L.append(f" redistribute bgp {AS}")
         else:
             L.append(f" redistribute bgp {AS} subnets")
         area = "0"
@@ -645,9 +652,11 @@ def render_pe(m, n):
     L.append(" exit-address-family")
     for cu in ("A", "B"):
         c = CUST[cu]
-        L += [f" address-family ipv4 vrf {c['vrf']}",
-              f"  redistribute ospf {c['proc']} route-map RM-OSPF2VPN",
-              " exit-address-family"]
+        L.append(f" address-family ipv4 vrf {c['vrf']}")
+        if not (f_ros and f_ros["params"]["victim"] == n
+                and f_ros["params"]["cust"] == cu):
+            L.append(f"  redistribute ospf {c['proc']} route-map RM-OSPF2VPN")
+        L.append(" exit-address-family")
     L.append("!")
     return "\n".join(L) + "\n"
 
