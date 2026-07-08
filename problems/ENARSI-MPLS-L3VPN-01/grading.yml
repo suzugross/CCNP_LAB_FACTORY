@@ -1,0 +1,227 @@
+---
+# 採点基準 (ENARSI-MPLS-L3VPN-01)。収集=ssh(iol-xe)。RT01=PE1 / RT02=P / RT03=PE2。
+# レイヤ順に効果ベースで採点: IGP → LDP/LSP → MP-BGP(VPNv4) → VRF → VPNv4経路/VRF RIB
+# → 分離(not in table) → E2E ping (顧客内到達 + 顧客間分離)。
+# 重複プレフィックス (172.16.1.0/24, 172.16.2.0/24 を両顧客が使用) のため
+# VPNv4 経路は `show bgp vpnv4 unicast rd <RD> <prefix>` で RD 単位に確認する。
+problem: ENARSI-MPLS-L3VPN-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # === L1: コア IGP (OSPF) ===
+  - name: "RT02(P): OSPF 隣接 RT01(1.1.1.1) が FULL"
+    node: RT02
+    command: "show ip ospf neighbor"
+    raw:
+      - regex: "1\\.1\\.1\\.1\\s+\\d+\\s+FULL"
+    points: 4
+
+  - name: "RT02(P): OSPF 隣接 RT03(3.3.3.3) が FULL"
+    node: RT02
+    command: "show ip ospf neighbor"
+    raw:
+      - regex: "3\\.3\\.3\\.3\\s+\\d+\\s+FULL"
+    points: 4
+
+  - name: "RT01(PE1): Loopback 発着で PE2 の Loopback へ疎通 (MP-BGP の土台)"
+    node: RT01
+    command: "ping 3.3.3.3 source 1.1.1.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 4
+
+  # === L2: MPLS / LDP ===
+  - name: "RT01(PE1): P との LDP セッションが Oper (LDP ID = Loopback)"
+    node: RT01
+    command: "show mpls ldp neighbor"
+    raw:
+      - regex: "Peer LDP Ident: 2\\.2\\.2\\.2:0"
+      - regex: "State: Oper"
+    points: 4
+
+  - name: "RT03(PE2): P との LDP セッションが Oper (LDP ID = Loopback)"
+    node: RT03
+    command: "show mpls ldp neighbor"
+    raw:
+      - regex: "Peer LDP Ident: 2\\.2\\.2\\.2:0"
+      - regex: "State: Oper"
+    points: 4
+
+  - name: "RT01(PE1): 対向 PE Loopback (3.3.3.3/32) へのラベルが LFIB にある"
+    node: RT01
+    command: "show mpls forwarding-table 3.3.3.3 32"
+    raw:
+      - regex: "3\\.3\\.3\\.3/32"
+    points: 2
+
+  - name: "RT03(PE2): 対向 PE Loopback (1.1.1.1/32) へのラベルが LFIB にある"
+    node: RT03
+    command: "show mpls forwarding-table 1.1.1.1 32"
+    raw:
+      - regex: "1\\.1\\.1\\.1/32"
+    points: 2
+
+  - name: "RT01(PE1): PE 間の転送がラベルスイッチされている (traceroute にラベル表示)"
+    node: RT01
+    command: "traceroute 3.3.3.3 source 1.1.1.1 numeric timeout 1"
+    raw:
+      - regex: "MPLS: Label"
+    points: 4
+
+  # === L3: MP-BGP (VPNv4) ===
+  # VPNv4-only ネイバーは Genie の show ip bgp neighbors パーサが解釈できない
+  # (実機確認済) → raw で vpnv4 summary の State/PfxRcd が数値 = Established を判定。
+  - name: "RT01(PE1): PE2(3.3.3.3) との iBGP VPNv4 セッションが Established"
+    node: RT01
+    command: "show bgp vpnv4 unicast all summary"
+    raw:
+      - regex: "3\\.3\\.3\\.3\\s+4\\s+65000(\\s+\\d+){5}\\s+\\S+\\s+\\d+"
+    points: 8
+
+  - name: "RT02(P): BGP を持たない (コアは顧客経路を知らない = MPLS の本質)"
+    node: RT02
+    command: "show running-config | section router bgp"
+    raw:
+      - not_contains: "router bgp"
+    points: 3
+
+  # === L4: VRF (RD / IF 収容) ===
+  - name: "RT01(PE1): VRF CUST_A(RD 65000:100) / CUST_B(RD 65000:200) が定義されている"
+    node: RT01
+    command: "show vrf"
+    raw:
+      - regex: "CUST_A\\s+65000:100"
+      - regex: "CUST_B\\s+65000:200"
+    points: 4
+
+  - name: "RT03(PE2): VRF CUST_A(RD 65000:100) / CUST_B(RD 65000:200) が定義されている"
+    node: RT03
+    command: "show vrf"
+    raw:
+      - regex: "CUST_A\\s+65000:100"
+      - regex: "CUST_B\\s+65000:200"
+    points: 4
+
+  - name: "RT01(PE1): VRF CUST_A から CE RT04(192.168.1.1) へ疎通 (IF収容+IP)"
+    node: RT01
+    command: "ping vrf CUST_A 192.168.1.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 2
+
+  - name: "RT01(PE1): VRF CUST_B から CE RT06(192.168.11.1) へ疎通 (IF収容+IP)"
+    node: RT01
+    command: "ping vrf CUST_B 192.168.11.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 2
+
+  - name: "RT03(PE2): VRF CUST_A から CE RT05(192.168.2.1) へ疎通 (IF収容+IP)"
+    node: RT03
+    command: "ping vrf CUST_A 192.168.2.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 2
+
+  - name: "RT03(PE2): VRF CUST_B から CE RT07(192.168.12.1) へ疎通 (IF収容+IP)"
+    node: RT03
+    command: "ping vrf CUST_B 192.168.12.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 2
+
+  # === L5: VPNv4 経路 (RD 単位で重複プレフィックスを確認) ===
+  - name: "RT01(PE1): RD 65000:100 の VPNv4 経路として 172.16.2.0/24 (CUST_A site2) が届く"
+    node: RT01
+    command: "show bgp vpnv4 unicast rd 65000:100 172.16.2.0"
+    raw:
+      - regex: "65000:100:172\\.16\\.2\\.0"
+    points: 4
+
+  - name: "RT01(PE1): RD 65000:200 の VPNv4 経路として 172.16.2.0/24 (CUST_B site2) が届く"
+    node: RT01
+    command: "show bgp vpnv4 unicast rd 65000:200 172.16.2.0"
+    raw:
+      - regex: "65000:200:172\\.16\\.2\\.0"
+    points: 4
+
+  # === L5: VRF RIB への取り込み (RT import) ===
+  - name: "RT01(PE1): VRF CUST_A の RIB に 172.16.2.0/24 が BGP で載る"
+    node: RT01
+    command: "show ip route vrf CUST_A"
+    parser: "show ip route"
+    find: "vrf.CUST_A.address_family.*.routes.*"
+    match:
+      route: "172.16.2.0/24"
+      source_protocol: "bgp"
+    points: 3
+
+  - name: "RT01(PE1): VRF CUST_B の RIB に 172.16.2.0/24 が BGP で載る"
+    node: RT01
+    command: "show ip route vrf CUST_B"
+    parser: "show ip route"
+    find: "vrf.CUST_B.address_family.*.routes.*"
+    match:
+      route: "172.16.2.0/24"
+      source_protocol: "bgp"
+    points: 3
+
+  - name: "RT03(PE2): VRF CUST_A の RIB に 172.16.1.0/24 が BGP で載る"
+    node: RT03
+    command: "show ip route vrf CUST_A"
+    parser: "show ip route"
+    find: "vrf.CUST_A.address_family.*.routes.*"
+    match:
+      route: "172.16.1.0/24"
+      source_protocol: "bgp"
+    points: 3
+
+  - name: "RT03(PE2): VRF CUST_B の RIB に 172.16.1.0/24 が BGP で載る"
+    node: RT03
+    command: "show ip route vrf CUST_B"
+    parser: "show ip route"
+    find: "vrf.CUST_B.address_family.*.routes.*"
+    match:
+      route: "172.16.1.0/24"
+      source_protocol: "bgp"
+    points: 3
+
+  # === 分離: 他顧客の経路が VRF に混入していない (RT の仕分け) ===
+  - name: "RT01(PE1): VRF CUST_A に CUST_B の PE-CE リンク 192.168.11.0/30 が漏れていない"
+    node: RT01
+    command: "show ip route vrf CUST_A 192.168.11.0 255.255.255.252"
+    raw:
+      - regex: "not in table"
+    points: 3
+
+  - name: "RT01(PE1): VRF CUST_B に CUST_A の PE-CE リンク 192.168.1.0/30 が漏れていない"
+    node: RT01
+    command: "show ip route vrf CUST_B 192.168.1.0 255.255.255.252"
+    raw:
+      - regex: "not in table"
+    points: 3
+
+  # === E2E: 顧客内到達 + 顧客間分離 ===
+  - name: "RT04(CUST_A CE1): サイト間 E2E 疎通 172.16.1.1 → 172.16.2.1"
+    node: RT04
+    command: "ping 172.16.2.1 source 172.16.1.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 8
+
+  - name: "RT06(CUST_B CE1): サイト間 E2E 疎通 172.16.1.9 → 172.16.2.9"
+    node: RT06
+    command: "ping 172.16.2.9 source 172.16.1.9 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 8
+
+  - name: "RT04(CUST_A CE1): CUST_B のホスト 172.16.2.9 へは到達できない (顧客間分離)"
+    node: RT04
+    command: "ping 172.16.2.9 source 172.16.1.1 repeat 2"
+    raw:
+      - regex: "Success rate is 0"
+    points: 3

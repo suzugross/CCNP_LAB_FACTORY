@@ -1,0 +1,24 @@
+! ENARSI-MPLS-L3VPN-01 初期状態 (RT01 = PE1 / 変更対象)
+!   links[0] = RT02(P) コアリンク / links[1] = RT04(CUST_A CE1) / links[2] = RT06(CUST_B CE1)
+!   CE 向け IF は IP 設定済みだが VRF 未収容 (受験者が VRF 収容する。
+!   vrf forwarding 投入で IP が消える → 入れ直しに気づけるか、が隠しひねり)。
+!   ★IOL day0 癖: IP の無い IF 節は no shutdown が効かず shutdown で起動する。
+!     day0 で up にしたい IF には必ず IP まで入れること (検証で確認済)。
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 P (10.1.12.0/30) ===
+ ip address 10.1.12.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT04 CUST_A-CE1 (192.168.1.0/30) ===
+ ip address 192.168.1.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT06 CUST_B-CE1 (192.168.11.0/30) ===
+ ip address 192.168.11.2 255.255.255.252
+ no shutdown
+!

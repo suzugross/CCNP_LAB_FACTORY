@@ -1,0 +1,50 @@
+---
+# MPLS L3VPN 基礎構築 (マルチカスタマー, P/PE/CE)。7ノード:
+#   RT01=PE1 / RT02=P / RT03=PE2 (SPコア。受験者が構成)
+#   RT04=CUST_A CE1 / RT05=CUST_A CE2 / RT06=CUST_B CE1 / RT07=CUST_B CE2
+#   (CE は顧客管理機器 = 事前設定済・変更不可)
+# 学習核心 = 下から積む: L1 IGP(OSPF) → L2 LDP → L3 MP-BGP(VPNv4)
+#   → L4 VRF(RD/RT+IF収容) → L5 PE-CE static + VPNv4 再配布。
+# マルチカスタマー: CUST_A / CUST_B が「同一プレフィックス」172.16.1.0/24,
+#   172.16.2.0/24 を重複使用 (ホスト部は A=.1 / B=.9 で区別)
+#   → RD の一意化 / RT の仕分けが実際に効いていないと採点が通らない。
+# 隠しひねり (task では明かさない):
+#   - IF を vrf forwarding へ収容すると既存 IP が消える (vrf → ip address の順)
+#   - update-source Loopback0 が無いと VPNv4 セッション不成立
+#   - CE 向け IF を IGP/LDP に入れると顧客経路がコアへ漏れる (仕様で禁止のみ提示)
+#   - P(RT02) は BGP フリー = コアはラベル転送だけで顧客経路を知らない (MPLS の本質)
+id: ENARSI-MPLS-L3VPN-01
+title: "MPLS L3VPN 基礎構築 (マルチカスタマー, LDP + MP-BGP VPNv4)"
+exam: ENARSI
+topics: [mpls, ldp, l3vpn, vpnv4, mp-bgp, vrf, rd, route-target, ospf]
+difficulty: 3
+topology: ad-hoc
+image_family: iol
+target_nodes: [RT01, RT02, RT03, RT04, RT05, RT06, RT07]
+points: 100
+
+# アドレス計画:
+#   コア: RT01 Lo0=1.1.1.1/32, RT02 Lo0=2.2.2.2/32, RT03 Lo0=3.3.3.3/32
+#         RT01-RT02 10.1.12.0/30 (.1/.2) / RT02-RT03 10.1.23.0/30 (.1/.2)
+#   CUST_A: RT01-RT04 192.168.1.0/30 (CE=.1/PE=.2) / RT03-RT05 192.168.2.0/30
+#           LAN: RT04 Lo0=172.16.1.1/24 / RT05 Lo0=172.16.2.1/24
+#   CUST_B: RT01-RT06 192.168.11.0/30 (CE=.1/PE=.2) / RT03-RT07 192.168.12.0/30
+#           LAN: RT06 Lo0=172.16.1.9/24 / RT07 Lo0=172.16.2.9/24  ← A と同一 /24
+#   VRF: CUST_A rd 65000:100 rt 65000:100 / CUST_B rd 65000:200 rt 65000:200
+#   BGP: AS 65000 iBGP (PE Lo0 間, VPNv4 のみ)
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # コア PE1-P   10.1.12.0/30
+    - { a: RT02, a_if: 1, b: RT03, b_if: 0 }   # コア P-PE2   10.1.23.0/30
+    - { a: RT01, a_if: 1, b: RT04, b_if: 0 }   # CUST_A site1 192.168.1.0/30
+    - { a: RT01, a_if: 2, b: RT06, b_if: 0 }   # CUST_B site1 192.168.11.0/30
+    - { a: RT03, a_if: 1, b: RT05, b_if: 0 }   # CUST_A site2 192.168.2.0/30
+    - { a: RT03, a_if: 2, b: RT07, b_if: 0 }   # CUST_B site2 192.168.12.0/30
+  positions:
+    RT04: [-450, -330]
+    RT06: [-450, -70]
+    RT01: [-230, -200]
+    RT02: [0, -200]
+    RT03: [230, -200]
+    RT05: [450, -330]
+    RT07: [450, -70]
