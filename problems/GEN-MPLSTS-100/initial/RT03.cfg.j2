@@ -1,0 +1,81 @@
+! GEN-MPLSTS-100 初期状態 (RT03 = PE / 変更対象)
+vrf definition CUST_A
+ rd 65000:100
+ address-family ipv4
+  route-target export 65000:100
+  route-target import 65000:100
+ exit-address-family
+!
+vrf definition CUST_B
+ rd 65000:200
+ address-family ipv4
+  route-target export 65000:200
+  route-target import 65000:200
+ exit-address-family
+!
+interface Loopback0
+ ip address 99.99.99.99 255.255.255.255
+!
+interface Loopback9
+ description === local mgmt (IGP/LDP 対象外) ===
+ ip address 10.255.3.1 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT06 (10.204.28.0/30) ===
+ ip address 10.204.28.1 255.255.255.252
+ mpls ip
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT11 CUST_A-CE (site3, 192.168.243.0/30) ===
+ vrf forwarding CUST_A
+ ip address 192.168.243.2 255.255.255.252
+ ip tcp adjust-mss 1452
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT12 CUST_B-CE (site3, 192.168.53.0/30) ===
+ vrf forwarding CUST_B
+ ip address 192.168.53.2 255.255.255.252
+ ip tcp adjust-mss 1452
+ no shutdown
+!
+mpls ldp router-id Loopback0 force
+!
+router ospf 1
+ router-id 99.99.99.99
+ network 99.99.99.99 0.0.0.0 area 0
+ network 10.204.28.0 0.0.0.3 area 0
+!
+router ospf 10 vrf CUST_A
+ router-id 99.99.99.99
+ redistribute bgp 65000 subnets
+ network 192.168.243.0 0.0.0.3 area 0
+!
+router ospf 20 vrf CUST_B
+ router-id 99.99.99.99
+ redistribute bgp 65000 subnets
+ network 192.168.53.0 0.0.0.3 area 0
+!
+ip prefix-list PL-CUST-LAN seq 5 permit 172.16.0.0/16 le 24
+route-map RM-OSPF2VPN permit 10
+ match ip address prefix-list PL-CUST-LAN
+!
+router bgp 65000
+ bgp router-id 99.99.99.99
+ no bgp default ipv4-unicast
+ neighbor 19.19.19.19 remote-as 65000
+ neighbor 19.19.19.19 update-source Loopback0
+ neighbor 59.59.59.59 remote-as 65000
+ neighbor 59.59.59.59 update-source Loopback0
+ address-family vpnv4
+  neighbor 19.19.19.19 activate
+  neighbor 59.59.59.59 activate
+ exit-address-family
+ address-family ipv4 vrf CUST_A
+  redistribute ospf 10 route-map RM-OSPF2VPN
+ exit-address-family
+ address-family ipv4 vrf CUST_B
+  redistribute ospf 20 route-map RM-OSPF2VPN
+ exit-address-family
+!

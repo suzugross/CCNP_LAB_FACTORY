@@ -1,0 +1,520 @@
+{
+ "catalog": [
+  {
+   "id": "l1_pe_uplink_area",
+   "layer": "L1",
+   "desc": "RT01 のコアアップリンクの OSPF が area 1 で設定 (正: area 0。隣接不成立)",
+   "symptom": "site1 が両顧客とも全断 (コア隣接ダウン警報あり)",
+   "breaks": [
+    {
+     "node": "RT01",
+     "lines": [
+      "no network 10.18.78.0 0.0.0.3 area 0",
+      "network 10.18.78.0 0.0.0.3 area 1"
+     ],
+     "parents": [
+      "router ospf 1"
+     ]
+    }
+   ],
+   "fixes": [
+    {
+     "node": "RT01",
+     "lines": [
+      "no network 10.18.78.0 0.0.0.3 area 1",
+      "network 10.18.78.0 0.0.0.3 area 0"
+     ],
+     "parents": [
+      "router ospf 1"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l1_ring_ospf_missing",
+   "layer": "L1",
+   "desc": "RT04 のリングIF(10.24.172.0/30)が OSPF に入っていない (冗長で救済されユーザ影響なし = 片肺運転)",
+   "symptom": "監視: RT04-RT06 間の OSPF 隣接ダウン警報 (ユーザ影響の報告なし)",
+   "breaks": [
+    {
+     "node": "RT04",
+     "lines": [
+      "no network 10.24.172.0 0.0.0.3 area 0"
+     ],
+     "parents": [
+      "router ospf 1"
+     ]
+    }
+   ],
+   "fixes": [
+    {
+     "node": "RT04",
+     "lines": [
+      "network 10.24.172.0 0.0.0.3 area 0"
+     ],
+     "parents": [
+      "router ospf 1"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l2_ldp_missing_ring",
+   "layer": "L2",
+   "desc": "RT06 の Ethernet0/1(RT05-RT06 リング) に mpls ip が無い (IGP最適経路上の LSP 穴 → RT02-RT03 間の VPN のみブラックホール。IGP/ping は正常)",
+   "symptom": "両顧客とも site2↔site3 のみ不通 (他ペア正常・コア警報なし)",
+   "breaks": [
+    {
+     "node": "RT06",
+     "lines": [
+      "no mpls ip"
+     ],
+     "parents": [
+      "interface Ethernet0/1"
+     ]
+    }
+   ],
+   "fixes": [
+    {
+     "node": "RT06",
+     "lines": [
+      "mpls ip"
+     ],
+     "parents": [
+      "interface Ethernet0/1"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l2_ldp_rid_unadvertised",
+   "layer": "L2",
+   "desc": "RT05 の LDP router-id が IGP 外の Loopback9(10.255.5.1) を指す (トランスポートアドレス解決不能 → 全LDPセッション断。IGP は正常)",
+   "symptom": "site2 収容 PE 経由の VPN が全断 (PE 間 ping は正常)",
+   "breaks": [
+    {
+     "node": "RT05",
+     "lines": [
+      "mpls ldp router-id Loopback9 force"
+     ]
+    },
+    {
+     "node": "RT05",
+     "exec": [
+      "clear mpls ldp neighbor *"
+     ]
+    }
+   ],
+   "fixes": [
+    {
+     "node": "RT05",
+     "lines": [
+      "mpls ldp router-id Loopback0 force"
+     ]
+    },
+    {
+     "node": "RT05",
+     "exec": [
+      "clear mpls ldp neighbor *"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l3_wrong_neighbor_ip",
+   "layer": "L3",
+   "desc": "RT01 の iBGP ピアが RT03 の Loopback でなく物理IP(10.86.114.1) を指す (双方向とも不一致でセッション不成立)",
+   "symptom": "両顧客とも site1↔site3 のみ不通 (コア警報なし)",
+   "breaks": [
+    {
+     "node": "RT01",
+     "lines": [
+      "no neighbor 92.92.92.92",
+      "neighbor 10.86.114.1 remote-as 65000"
+     ],
+     "parents": [
+      "router bgp 65000"
+     ]
+    },
+    {
+     "node": "RT01",
+     "lines": [
+      "neighbor 10.86.114.1 activate"
+     ],
+     "parents": [
+      "router bgp 65000",
+      "address-family vpnv4"
+     ]
+    },
+    {
+     "node": "RT01",
+     "exec": [
+      "clear ip bgp * soft"
+     ]
+    }
+   ],
+   "fixes": [
+    {
+     "node": "RT01",
+     "lines": [
+      "no neighbor 10.86.114.1",
+      "neighbor 92.92.92.92 remote-as 65000",
+      "neighbor 92.92.92.92 update-source Loopback0"
+     ],
+     "parents": [
+      "router bgp 65000"
+     ]
+    },
+    {
+     "node": "RT01",
+     "lines": [
+      "neighbor 92.92.92.92 activate"
+     ],
+     "parents": [
+      "router bgp 65000",
+      "address-family vpnv4"
+     ]
+    },
+    {
+     "node": "RT01",
+     "exec": [
+      "clear ip bgp * soft"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l3_vpnv4_activate_missing",
+   "layer": "L3",
+   "desc": "RT03 で RT02 が address-family vpnv4 で activate されていない",
+   "symptom": "両顧客とも site3↔site2 のみ不通",
+   "breaks": [
+    {
+     "node": "RT03",
+     "lines": [
+      "no neighbor 75.75.75.75 activate"
+     ],
+     "parents": [
+      "router bgp 65000",
+      "address-family vpnv4"
+     ]
+    },
+    {
+     "node": "RT03",
+     "exec": [
+      "clear ip bgp * soft"
+     ]
+    }
+   ],
+   "fixes": [
+    {
+     "node": "RT03",
+     "lines": [
+      "neighbor 75.75.75.75 activate"
+     ],
+     "parents": [
+      "router bgp 65000",
+      "address-family vpnv4"
+     ]
+    },
+    {
+     "node": "RT03",
+     "exec": [
+      "clear ip bgp * soft"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l4_rt_export_wrong",
+   "layer": "L4",
+   "desc": "RT02 の VRF CUST_A の route-target export が 65000:1001 (正: 65000:100。この site の経路がどの PE にも import されない)",
+   "symptom": "CUST_A の site2 だけ孤立 (他顧客は正常)",
+   "breaks": [
+    {
+     "node": "RT02",
+     "lines": [
+      "no route-target export 65000:100",
+      "route-target export 65000:1001"
+     ],
+     "parents": [
+      "vrf definition CUST_A",
+      "address-family ipv4"
+     ]
+    },
+    {
+     "node": "RT02",
+     "exec": [
+      "clear ip bgp * soft"
+     ]
+    }
+   ],
+   "fixes": [
+    {
+     "node": "RT02",
+     "lines": [
+      "no route-target export 65000:1001",
+      "route-target export 65000:100"
+     ],
+     "parents": [
+      "vrf definition CUST_A",
+      "address-family ipv4"
+     ]
+    },
+    {
+     "node": "RT02",
+     "exec": [
+      "clear ip bgp * soft"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l4_rt_import_wrong",
+   "layer": "L4",
+   "desc": "RT01 の VRF CUST_B の route-target import が 65000:2009 (正: 65000:200。この PE の VRF が対向経路を取り込めない)",
+   "symptom": "CUST_B の site1 から対向サイトへ出られない (他顧客は正常)",
+   "breaks": [
+    {
+     "node": "RT01",
+     "lines": [
+      "no route-target import 65000:200",
+      "route-target import 65000:2009"
+     ],
+     "parents": [
+      "vrf definition CUST_B",
+      "address-family ipv4"
+     ]
+    },
+    {
+     "node": "RT01",
+     "exec": [
+      "clear ip bgp * soft"
+     ]
+    }
+   ],
+   "fixes": [
+    {
+     "node": "RT01",
+     "lines": [
+      "no route-target import 65000:2009",
+      "route-target import 65000:200"
+     ],
+     "parents": [
+      "vrf definition CUST_B",
+      "address-family ipv4"
+     ]
+    },
+    {
+     "node": "RT01",
+     "exec": [
+      "clear ip bgp * soft"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l4_wrong_vrf_membership",
+   "layer": "L4",
+   "desc": "RT03 の RT12 向けIF(Ethernet0/2) が誤って VRF CUST_A に収容 (正: CUST_B。PE-CE OSPF 隣接不成立)",
+   "symptom": "CUST_B の site3 が全断 (PE-CE の IGP 隣接ダウン)",
+   "breaks": [
+    {
+     "node": "RT03",
+     "lines": [
+      "vrf forwarding CUST_A"
+     ],
+     "parents": [
+      "interface Ethernet0/2"
+     ]
+    },
+    {
+     "node": "RT03",
+     "lines": [
+      "ip address 192.168.95.2 255.255.255.252"
+     ],
+     "parents": [
+      "interface Ethernet0/2"
+     ]
+    }
+   ],
+   "fixes": [
+    {
+     "node": "RT03",
+     "lines": [
+      "vrf forwarding CUST_B"
+     ],
+     "parents": [
+      "interface Ethernet0/2"
+     ]
+    },
+    {
+     "node": "RT03",
+     "lines": [
+      "ip address 192.168.95.2 255.255.255.252"
+     ],
+     "parents": [
+      "interface Ethernet0/2"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l5_redist_bgp_missing",
+   "layer": "L5",
+   "desc": "RT01 の OSPF 20(VRF CUST_B) に redistribute bgp が無い (対向経路が CE に届かない)",
+   "symptom": "CUST_B site1 の CE に対向サイトの経路が無い (隣接は FULL)",
+   "breaks": [
+    {
+     "node": "RT01",
+     "lines": [
+      "no redistribute bgp 65000"
+     ],
+     "parents": [
+      "router ospf 20 vrf CUST_B"
+     ]
+    }
+   ],
+   "fixes": [
+    {
+     "node": "RT01",
+     "lines": [
+      "redistribute bgp 65000 subnets"
+     ],
+     "parents": [
+      "router ospf 20 vrf CUST_B"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l5_subnets_missing",
+   "layer": "L5",
+   "desc": "RT02 の OSPF 20 の redistribute bgp 65000 に subnets が無い (クラスフル境界のみ再配布 = /24 が CE に落ちない)",
+   "symptom": "CUST_B site2 で対向 /24 だけが CE に無い (隣接 FULL・設定は一見ある)",
+   "breaks": [
+    {
+     "node": "RT02",
+     "lines": [
+      "no redistribute bgp 65000",
+      "redistribute bgp 65000"
+     ],
+     "parents": [
+      "router ospf 20 vrf CUST_B"
+     ]
+    }
+   ],
+   "fixes": [
+    {
+     "node": "RT02",
+     "lines": [
+      "redistribute bgp 65000 subnets"
+     ],
+     "parents": [
+      "router ospf 20 vrf CUST_B"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l5_routemap_strict",
+   "layer": "L5",
+   "desc": "RT01 の prefix-list PL-CUST-LAN が le 23 (LAN /24 が VPNv4 に出ない)",
+   "symptom": "両顧客とも site1 の LAN が対向から見えない (IGP/LDP/BGP 全て正常)",
+   "breaks": [
+    {
+     "node": "RT01",
+     "lines": [
+      "no ip prefix-list PL-CUST-LAN seq 5 permit 172.16.0.0/16 le 24",
+      "ip prefix-list PL-CUST-LAN seq 5 permit 172.16.0.0/16 le 23"
+     ]
+    },
+    {
+     "node": "RT01",
+     "exec": [
+      "clear ip bgp * soft"
+     ]
+    }
+   ],
+   "fixes": [
+    {
+     "node": "RT01",
+     "lines": [
+      "no ip prefix-list PL-CUST-LAN seq 5 permit 172.16.0.0/16 le 23",
+      "ip prefix-list PL-CUST-LAN seq 5 permit 172.16.0.0/16 le 24"
+     ]
+    },
+    {
+     "node": "RT01",
+     "exec": [
+      "clear ip bgp * soft"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l5_routemap_leak",
+   "layer": "L5",
+   "desc": "RT01 の PL-CUST-LAN に seq 10 permit 10.99.0.0/16 le 32 が混入 (機器管理 /32 が VPN をまたいで漏えい)",
+   "symptom": "監査指摘: site1 収容 CE の管理アドレスが対向サイトから見える (疎通は全て正常)",
+   "breaks": [
+    {
+     "node": "RT01",
+     "lines": [
+      "ip prefix-list PL-CUST-LAN seq 10 permit 10.99.0.0/16 le 32"
+     ]
+    },
+    {
+     "node": "RT01",
+     "exec": [
+      "clear ip bgp * soft"
+     ]
+    }
+   ],
+   "fixes": [
+    {
+     "node": "RT01",
+     "lines": [
+      "no ip prefix-list PL-CUST-LAN seq 10 permit 10.99.0.0/16 le 32"
+     ]
+    },
+    {
+     "node": "RT01",
+     "exec": [
+      "clear ip bgp * soft"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "l5_pece_area_mismatch",
+   "layer": "L5",
+   "desc": "RT02 の OSPF 10 の PE-CE 収容が area 1 (正: area 0。隣接不成立)",
+   "symptom": "CUST_A の site2 が全断 (PE-CE の IGP 隣接ダウン)",
+   "breaks": [
+    {
+     "node": "RT02",
+     "lines": [
+      "no network 192.168.234.0 0.0.0.3 area 0",
+      "network 192.168.234.0 0.0.0.3 area 1"
+     ],
+     "parents": [
+      "router ospf 10 vrf CUST_A"
+     ]
+    }
+   ],
+   "fixes": [
+    {
+     "node": "RT02",
+     "lines": [
+      "no network 192.168.234.0 0.0.0.3 area 1",
+      "network 192.168.234.0 0.0.0.3 area 0"
+     ],
+     "parents": [
+      "router ospf 10 vrf CUST_A"
+     ]
+    }
+   ]
+  }
+ ]
+}
