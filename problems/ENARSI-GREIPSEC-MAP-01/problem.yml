@@ -1,0 +1,36 @@
+---
+# GRE over IPsec 組み立て問題 (crypto map レガシー方式, IKEv1, ハブ+2支店)。
+# 4ノード: RT01(本社ハブ) / RT02(支店1) / RT03(支店2) / RT04(WANトランジット・変更禁止)。
+# underlay は DMVPN-POC-01 / ENARSI-IPSEC-IKEV2-01 と完全同一。
+# 学習核心 = VTI/tunnel protection を使わないレガシー crypto map の組み立て:
+#   GRE トンネル(既定 gre ip) + 物理IFに crypto map (1 IF = 1 map, 複数 seq でピア毎エントリ)
+#   + match address ACL (permit gre host A host B) + transform-set mode transport
+#   + DPD(on-demand) + ピア毎 PSK + MTU/MSS + OSPF over GRE。
+# 隠しひねり:
+#   - GRE keepalive は IPsec 併用不可 → 死活監視は DPD (task は DPD 値のみ提示)
+#   - Loopback LAN を /24 のまま OSPF 広告 (ip ospf network point-to-point, VTI-01 の復習)
+#   - tunnel protection で解くと Tunnel IF チェックの not_contains で失点 (方式強制)
+id: ENARSI-GREIPSEC-MAP-01
+title: "GRE over IPsec (crypto map 方式, IKEv1, ハブ+2支店)"
+exam: ENARSI
+topics: [ipsec, gre, crypto-map, ikev1, transport-mode, vpn, ospf]
+difficulty: 4
+topology: ad-hoc
+image_family: iosv
+target_nodes: [RT01, RT02, RT03, RT04]
+points: 100
+
+# IOSv は network_cli(SSH) 不可 → 採点は CML コンソール経由。
+access: console
+
+# Underlay (DMVPN-POC-01 / IKEV2-01 と同一アドレス):
+#   RT01 Gi0/0 10.0.14.1/30 -- 10.0.14.2 RT04 Gi0/0
+#   RT02 Gi0/0 10.0.24.1/30 -- 10.0.24.2 RT04 Gi0/1
+#   RT03 Gi0/0 10.0.34.1/30 -- 10.0.34.2 RT04 Gi0/2
+# overlay = GRE 2本: HQ Tunnel1(→Br1) 10.255.12.0/30 / HQ Tunnel2(→Br2) 10.255.13.0/30
+# (支店側はどちらも Tunnel1)。OSPF area 0。
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT04, b_if: 0 }   # HQ underlay
+    - { a: RT02, a_if: 0, b: RT04, b_if: 1 }   # Branch1 underlay
+    - { a: RT03, a_if: 0, b: RT04, b_if: 2 }   # Branch2 underlay

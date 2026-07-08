@@ -1,0 +1,187 @@
+---
+# 採点基準 (ENARSI-GREIPSEC-MAP-01 / GRE over IPsec + crypto map + IKEv1, ハブ+2支店)
+#  ・IPsec セッション UP-ACTIVE (ハブ×2ピア / 各支店)     … show crypto session raw
+#  ・フェーズ1 実効パラメータ (aes-256/sha256/psk/DH14)   … show crypto isakmp sa detail raw
+#  ・フェーズ2 実効 (esp-aes256+sha256hmac, ★Transport モード, カウンタ>0)
+#                                                         … show crypto ipsec sa raw
+#  ・crypto map が物理IFに適用 (VTI/tunnel protection 禁止の方式強制)
+#                                                         … show run interface raw (名前非依存)
+#  ・ACL が「拠点間 GRE のみ」                             … show run | include permit gre
+#  ・PFS / DPD(on-demand) / MTU / MSS                     … show run 抜粋 raw
+#  ・LAN経路を /24 のまま OSPF 学習・支店間はハブ経由      … genie
+#  ・LAN間の実疎通 (支店間含む)                            … 能動 ping (Lo10→対向Lo10)
+# ★収集はノード毎に sorted 順 → "ping..." < "show..." で能動pingが先に走り
+#   ipsec sa のカウンタが同一ノード内で確実に加算される (DMVPN と同イディオム)。
+# RT04 は変更禁止のため採点対象外。
+problem: ENARSI-GREIPSEC-MAP-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01(HQ): 両支店との IPsec セッションが UP-ACTIVE"
+    node: RT01
+    command: "show crypto session"
+    raw:
+      - contains: "Session status: UP-ACTIVE"
+      - regex: "Peer: 10\\.0\\.24\\.1"
+      - regex: "Peer: 10\\.0\\.34\\.1"
+    points: 8
+
+  - name: "RT02(Branch1): IPsec セッションが本社と UP-ACTIVE"
+    node: RT02
+    command: "show crypto session"
+    raw:
+      - contains: "Session status: UP-ACTIVE"
+      - regex: "Peer: 10\\.0\\.14\\.1"
+    points: 4
+
+  - name: "RT03(Branch2): IPsec セッションが本社と UP-ACTIVE"
+    node: RT03
+    command: "show crypto session"
+    raw:
+      - contains: "Session status: UP-ACTIVE"
+      - regex: "Peer: 10\\.0\\.14\\.1"
+    points: 4
+
+  # ---- フェーズ1 実効パラメータ (指定スイートで確立していること) ----
+  # IOSv の sa detail 表は Encr を鍵長なし "aes" で表示 → 鍵長(256bit)は policy 側で確認。
+  - name: "RT01: IKEv1 SA が aes / sha256 / psk / DH14 で ACTIVE"
+    node: RT01
+    command: "show crypto isakmp sa detail"
+    raw:
+      - regex: "ACTIVE\\s+aes\\s+sha256\\s+psk\\s+14\\b"
+    points: 5
+
+  - name: "RT01: ISAKMP ポリシーが AES-256 / SHA-256 / PSK / DH group14"
+    node: RT01
+    command: "show crypto isakmp policy"
+    raw:
+      - contains: "(256 bit keys)"
+      - contains: "Secure Hash Standard 2 (256 bit)"
+      - contains: "Pre-Shared Key"
+      - contains: "#14"
+    points: 5
+
+  # ---- フェーズ2 実効 (transform / ★transport モード / 暗号化トラフィック実績) ----
+  - name: "RT01: ESP が AES-256 + HMAC-SHA-256 / transport モード / カウンタ加算"
+    node: RT01
+    command: "show crypto ipsec sa"
+    raw:
+      - regex: "transform: esp-(256-aes|aes 256)"
+      - regex: "esp-sha256"
+      - regex: "in use settings =\\{Transport,"
+      - regex: "#pkts encaps: [1-9]"
+      - regex: "#pkts decaps: [1-9]"
+    points: 10
+
+  # ---- 方式強制: crypto map が物理IFに適用されていること (名前非依存) ----
+  - name: "RT01: WAN物理IF(Gi0/0) に crypto map が適用"
+    node: RT01
+    command: "show running-config interface GigabitEthernet0/0"
+    raw:
+      - regex: "crypto map \\S+"
+    points: 6
+
+  - name: "RT02: WAN物理IF(Gi0/0) に crypto map が適用"
+    node: RT02
+    command: "show running-config interface GigabitEthernet0/0"
+    raw:
+      - regex: "crypto map \\S+"
+    points: 4
+
+  # ---- 暗号化対象: 拠点間 GRE のみ (ハブは2支店分) ----
+  - name: "RT01: 暗号化対象 ACL が両支店向け GRE 限定"
+    node: RT01
+    command: "show running-config | include permit gre"
+    raw:
+      - contains: "permit gre host 10.0.14.1 host 10.0.24.1"
+      - contains: "permit gre host 10.0.14.1 host 10.0.34.1"
+    points: 6
+
+  # ---- 仕様書コンプライアンス (オブジェクト名非依存の run 抜粋) ----
+  - name: "RT01: PFS group14 が有効"
+    node: RT01
+    command: "show running-config | include set pfs"
+    raw:
+      - contains: "set pfs group14"
+    points: 4
+
+  - name: "RT01: DPD が 10秒/3秒/on-demand"
+    node: RT01
+    command: "show running-config | include crypto isakmp keepalive"
+    raw:
+      - contains: "crypto isakmp keepalive 10 3"
+      - not_contains: "periodic"
+    points: 4
+
+  # ---- トンネルIF: 純GRE(既定モード) + MTU/MSS。tunnel protection は方式違反 ----
+  - name: "RT01: Tunnel1 が 純GRE+MTU1400+MSS1360 (tunnel protection 不使用)"
+    node: RT01
+    command: "show running-config interface Tunnel1"
+    raw:
+      - contains: "ip mtu 1400"
+      - contains: "ip tcp adjust-mss 1360"
+      - contains: "tunnel destination 10.0.24.1"
+      - not_contains: "tunnel protection"
+      - not_contains: "tunnel mode ipsec"
+    points: 5
+
+  - name: "RT02: Tunnel1 が 純GRE+MTU1400+MSS1360 (tunnel protection 不使用)"
+    node: RT02
+    command: "show running-config interface Tunnel1"
+    raw:
+      - contains: "ip mtu 1400"
+      - contains: "ip tcp adjust-mss 1360"
+      - contains: "tunnel destination 10.0.14.1"
+      - not_contains: "tunnel protection"
+      - not_contains: "tunnel mode ipsec"
+    points: 5
+
+  # ---- ルーティング: 支店間 LAN 経路がハブ経由 /24 のまま (Lo10 network type がひねり) ----
+  - name: "RT02(Branch1): 192.168.3.0/24 を OSPF でハブ経由 (Tunnel1) 学習"
+    node: RT02
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "192.168.3.0/24"
+      source_protocol: ospf
+      next_hop.next_hop_list.*.next_hop: "10.255.12.1"
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel1
+    points: 8
+
+  - name: "RT03(Branch2): 192.168.2.0/24 を OSPF でハブ経由 (Tunnel1) 学習"
+    node: RT03
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "192.168.2.0/24"
+      source_protocol: ospf
+      next_hop.next_hop_list.*.next_hop: "10.255.13.1"
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel1
+    points: 8
+
+  # ---- データプレーン: LAN間の実疎通 (能動・暗号カウンタも駆動) ----
+  - name: "RT02(Branch1): 支店2 LAN 192.168.3.1 へ本社経由で疎通"
+    node: RT02
+    command: "ping 192.168.3.1 source Loopback10 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 6
+
+  - name: "RT01(HQ): 支店1 LAN 192.168.2.1 へ VPN 経由で疎通"
+    node: RT01
+    command: "ping 192.168.2.1 source Loopback10 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 4
+
+  - name: "RT01(HQ): 支店2 LAN 192.168.3.1 へ VPN 経由で疎通"
+    node: RT01
+    command: "ping 192.168.3.1 source Loopback10 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 4
