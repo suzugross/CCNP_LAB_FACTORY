@@ -1,0 +1,98 @@
+# ネット自動化道場 03 : RESTCONF入門（curl → Python requests）
+
+> このコースは「OSPF/BGP などの題材」ではなく **ネットワーク自動化の技術そのもの**を
+> 段階的に学びます。題材は毎回ごく簡単（今回は Loopback を1本作るだけ）。
+> **変わるのは自動化の技術**です。
+
+## 今回学ぶこと：RESTCONF（HTTPS で機器を読み書きする標準API）
+
+CLI（show / configure）の代わりに、**HTTPS + JSON** で機器を操作するのが RESTCONF です。
+
+- **URL がリソースを指す** … `https://<機器>/restconf/data/<YANGモジュール>:<コンテナ>`
+  例: `.../restconf/data/ietf-interfaces:interfaces` = 全インタフェースの設定。
+  この「データの形の定義」が **YANG モデル**（今回は標準の `ietf-interfaces`）。
+- **HTTP メソッドが操作を表す** … GET=読む（show相当）/ PUT=丸ごと作成・置換 /
+  PATCH=一部変更 / DELETE=削除（no相当）。
+- **ヘッダで形式を伝える** … `Accept: application/yang-data+json`（応答は JSON で）、
+  書き込み時はさらに `Content-Type: application/yang-data+json`（payload は JSON です）。
+- **認証は Basic認証** … 機器のローカルユーザ（特権15）をそのまま使う。
+
+## 構成（初期状態で投入済み）
+
+RT01 1台（**Catalyst 8000v / IOS XE**。RESTCONF対応のため、いつもの IOL ではありません）。
+Loopback0（GET 練習用サンプル）設定済み。管理IPは **10.1.10.11**（SUZUKI / CCNP）。
+
+※ 他のラボを同時稼働しているとIPがずれることがあります。その場合は
+`topologies/_generated/NETAUTO-03-RESTCONF/mgmt_map.yml` で確認してください。
+
+## 課題
+
+### STEP 0（機器側の準備・CMLコンソールで）
+
+RESTCONF は初期状態では無効です。RT01 のコンソールから有効化してください。
+
+```
+configure terminal
+ ip http secure-server
+ ip http authentication local
+ restconf
+end
+```
+
+- `ip http secure-server` … HTTPS サーバ（RESTCONF は 443/TCP に同居）
+- `ip http authentication local` … Basic認証をローカルユーザで行う
+- `restconf` … RESTCONF 本体の有効化
+
+> ★有効化直後は内部デーモンの起動に **1分ほど**かかります。その間 curl は
+> HTML のエラーページ（An error occurred）を返しますが故障ではありません。
+> 少し待って再実行してください。
+
+### STEP 1（curl で GET）— `01_get.sh`
+
+まず curl で「読むだけ」。RESTCONF ルートと全インタフェースを GET し、
+**JSON がどんな形で返るか**を目で見ます。`__FILL_n__` があれば埋めてから実行。
+
+```bash
+cd lab/NETAUTO-03-RESTCONF
+bash 01_get.sh
+```
+
+### STEP 2（Python で GET）— `02_get_interfaces.py`
+
+同じ GET を Python requests で行い、JSON（dict）から名前/IP/description を取り出して
+表にします。**curl=見る、Python=加工する** の使い分けが狙いです。
+
+```bash
+../../.venv/bin/python3 02_get_interfaces.py
+```
+
+### STEP 3（Python で PUT）— `03_create_loopback.py`
+
+いよいよ書き込み。RESTCONF の PUT で **Loopback100** を作成します（採点対象）:
+
+- IP: **172.16.100.1/32**
+- description: **CONFIGURED-BY-RESTCONF**
+
+```bash
+../../.venv/bin/python3 03_create_loopback.py
+```
+
+`HTTP 201` が返れば作成成功。STEP1/2 の GET を再実行すると Loopback100 が増えているはず。
+コンソールで `show running-config interface Loopback100` を見ると、**CLI を1行も打っていないのに
+設定が入っている**ことが確認できます。
+
+> 穴の一覧・ヒントは同フォルダの **`穴.md`** を参照（穴は seed で変わることがあります）。
+
+## 採点
+
+```bash
+ansible-playbook playbooks/grade.yml -e problem=NETAUTO-03-RESTCONF --vault-password-file <(printf 'CCNP\n')
+```
+
+## このレッスンの到達点
+
+- RESTCONF の4点セット（URL=リソース / メソッド=操作 / ヘッダ=形式 / Basic認証）を説明できる。
+- `ietf-interfaces` の GET 結果を Python で加工できる。
+- PUT で設定を「作る」ことができ、CLI と同じ running-config に反映されると理解する。
+
+次回 **04：NETCONF**（同じ YANG モデルを XML + SSH(830) で操作。ncclient を使用）。

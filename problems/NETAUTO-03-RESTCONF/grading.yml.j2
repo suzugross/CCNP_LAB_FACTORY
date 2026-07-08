@@ -1,0 +1,29 @@
+---
+# NETAUTO-03採点: RESTCONF を機器側で有効化できたか(2チェック)と、
+# RESTCONF 経由で Loopback100 を作れたか(最終状態2チェック)。
+# ※「no ip http secure-server」も contains に引っかかるため、行頭アンカー regex で判定。
+problem: NETAUTO-03-RESTCONF
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+  - name: "RESTCONF が有効 (restconf)"
+    node: RT01
+    command: "show running-config | include restconf"
+    raw: [ { regex: "(?m)^restconf" } ]
+    points: 20
+  - name: "HTTPS サーバが有効 (ip http secure-server)"
+    node: RT01
+    command: "show running-config | include ip http"
+    raw: [ { regex: "(?m)^ip http secure-server" } ]
+    points: 20
+  - name: "Loopback100 が作成され IP 172.16.100.1/32"
+    node: RT01
+    command: "show running-config interface Loopback100"
+    raw: [ { contains: "ip address 172.16.100.1 255.255.255.255" } ]
+    points: 30
+  - name: "Loopback100 の description が CONFIGURED-BY-RESTCONF"
+    node: RT01
+    command: "show running-config interface Loopback100"
+    raw: [ { contains: "description CONFIGURED-BY-RESTCONF" } ]
+    points: 30
