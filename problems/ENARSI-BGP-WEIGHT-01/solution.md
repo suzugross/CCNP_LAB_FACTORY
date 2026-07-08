@@ -35,3 +35,19 @@ nexthop が `10.1.12.2` になっていれば成功。
 
 > 採点: RT01 から両 eBGP ネイバーが Established、`neighbor 10.1.12.2 weight 200` が
 > 設定済み、10.100.0.0/24 のベストパス nexthop=10.1.12.2 になっていることを判定。
+
+## 変種 "bfd"（-e variant=bfd）の追加解答
+ISP 側（RT02/RT03）は BFD 対応済み。RT01 の両リンクにタイマと fall-over bfd を設定する。
+
+```
+! RT01
+interface Ethernet0/0
+ bfd interval 500 min_rx 500 multiplier 3
+interface Ethernet0/1
+ bfd interval 500 min_rx 500 multiplier 3
+router bgp 65001
+ neighbor 10.1.12.2 fall-over bfd
+ neighbor 10.1.13.2 fall-over bfd
+```
+
+> 確認: `show bfd neighbors details`（2 セッション Up / Registered protocols: BGP）

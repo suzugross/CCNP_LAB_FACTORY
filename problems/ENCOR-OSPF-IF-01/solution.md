@@ -42,3 +42,18 @@ show ip route ospf
 - network 文方式と最終的なネイバー／経路は同じになるが、本問は方式をインタフェースモードに限定。
   採点は `show running-config` にインタフェース配下の `ip ospf 1 area 0` があることも確認する。
 - Loopback も忘れず参加させること（参加しないと 1.1.1.1 等が広告されない）。
+
+## 変種 "bfd"（-e variant=bfd）の追加解答
+各ルータ間リンクの IF に BFD を設定し OSPF と連動させる（インタフェースモード問題なので IF 配下で完結する `ip ospf bfd` が自然）。
+
+```
+! RT01（両リンク。RT02/RT03 は自リンク側 IF のみ）
+interface Ethernet0/0
+ bfd interval 500 min_rx 500 multiplier 3
+ ip ospf bfd
+interface Ethernet0/1
+ bfd interval 500 min_rx 500 multiplier 3
+ ip ospf bfd
+```
+
+> 確認: `show bfd neighbors details`（State Up / Registered protocols: OSPF）

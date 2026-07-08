@@ -23,3 +23,13 @@ router bgp {{ params.as_ispb }}
   neighbor {{ params.seg56 }}.2 activate
  exit-address-family
 !
+
+{% if params.bfd | default(false) %}
+! BFD（bfd 変種のみ）: ISP-B は顧客向けリンクで BFD 対応済み
+interface {{ links[0] }}
+ bfd interval {{ params.bfd_interval }} min_rx {{ params.bfd_interval }} multiplier {{ params.bfd_multiplier }}
+!
+router bgp {{ params.as_ispb }}
+ neighbor {{ params.seg25 }}.1 fall-over bfd
+!
+{% endif %}

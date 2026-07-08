@@ -27,3 +27,22 @@ show ip route eigrp     → D EX  1.1.1.1/32 [170/...] via 10.1.23.1
 
 > 採点は最終状態（外部経路コード O E2 / D EX を含む経路の学習）で判定する。
 > `redistribute connected` を併用するなど別解でも、上記の到達状態に達していれば合格。
+
+## 変種 "bfd"（-e variant=bfd）の追加解答
+対向（RT01/RT03）は BFD 対応済み。RT02 の両リンクにタイマを設定し、
+OSPF 側・EIGRP 側それぞれのプロトコルと連動させる。
+
+```
+! RT02
+interface Ethernet0/0
+ bfd interval 500 min_rx 500 multiplier 3
+ ip ospf bfd
+interface Ethernet0/1
+ bfd interval 500 min_rx 500 multiplier 3
+router eigrp 100
+ bfd all-interfaces
+```
+
+> 同じ BFD でも連動コマンドはプロトコルごとに違う点が本変種の学習ポイント
+> （OSPF=IF 配下 `ip ospf bfd` / EIGRP=ルーティングプロセス配下 `bfd all-interfaces`）。
+> 確認: `show bfd neighbors details`（2 セッション・Registered protocols が OSPF / EIGRP）

@@ -55,3 +55,19 @@ show running-config interface Ethernet0/0 | section ospf
 > 採点: RT02 の 2 つのリンク IF に `ip ospf authentication message-digest` と
 > `message-digest-key 1 md5` が存在し、両隣接が FULL であることを判定。
 > RT01 / RT03 側も同じ設定が無いと隣接が落ちるので、間接的に検証される。
+
+## 変種 "bfd"（-e variant=bfd）の追加解答
+MD5 認証に加え、両リンクの IF に BFD を設定し OSPF と連動させる。
+
+```
+! RT02（両リンク。RT01/RT03 は自リンク側 IF のみ）
+interface Ethernet0/0
+ bfd interval 500 min_rx 500 multiplier 3
+ ip ospf bfd
+interface Ethernet0/1
+ bfd interval 500 min_rx 500 multiplier 3
+ ip ospf bfd
+```
+
+> `router ospf 1` 配下 `bfd all-interfaces` でも可（採点は効果ベース）。
+> 確認: `show bfd neighbors details`（State Up / Registered protocols: OSPF）

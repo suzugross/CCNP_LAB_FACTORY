@@ -24,6 +24,10 @@ RT01 (AS65001) ── eBGP ─ RT02 (AS65002, primary)
 ## 到達目標
 - RT01 が両 ISP と eBGP セッション (Established) を確立。
 - RT01 の RIB における `10.100.0.0/24` のベストパスが **RT02 経由** (next-hop=10.1.12.2) になる。
+{% if params.bfd | default(false) %}
+- 両 eBGP セッションを **BFD**（送信/受信間隔 {{ params.bfd_interval }} ms・乗数 {{ params.bfd_multiplier }}）と連動させ、
+  リンク障害時に高速でセッション断を検知できること。※ISP 側（RT02/RT03）は BFD 対応済み（変更不可のまま）。
+{% endif %}
 
 ## 制約
 - 変更は **RT01 のみ**。RT02 / RT03 は変更不可。
@@ -36,5 +40,5 @@ RT01 (AS65001) ── eBGP ─ RT02 (AS65002, primary)
 
 ## 採点
 ```
-ansible-playbook playbooks/grade.yml -e problem=ENARSI-BGP-WEIGHT-01 --vault-password-file <(printf 'CCNP\n')
+ansible-playbook playbooks/grade.yml -e problem=ENARSI-BGP-WEIGHT-01 -e variant={{ variant | default('base') }} --vault-password-file <(printf 'CCNP\n')
 ```

@@ -84,3 +84,44 @@ mgmt IP は固定でなく **動的プール**（`target_nodes` 順に割当。g
   明記し、レビューで講評する
 - 既存 BGP 問題（ENARSI-BGP-01系ドリル・DMVPN+BGP・gen_bgp_complex_ts.py 等）は
   順次 AF 化（変更時は実機1サイクル検証を必須とする）
+
+## BFD 規約（2026-07-08〜, SPIKE-BFD-01 実機スパイクで確立）
+ルーティングプロトコル問題に「BFD 設定」要件を載せる際の標準。**bfd 変種（variant）として
+追加**し、既存の検証済ベースライン（base 等）は変更しない。
+
+### タイマ・設定スタイル
+- 標準タイマ: `bfd interval 500 min_rx 500 multiplier 3`（対象IFに設定）。
+  IOL/IOSv とも echo モード 500ms で安定動作（フラップなし・実機検証済）。
+  仮想環境のため 500ms 未満は使わない（タイマ値は params の bfd_interval/bfd_multiplier）。
+- プロトコル連動（受験者はどちらの方式でも可・採点は効果ベース）:
+  - OSPF: IF `ip ospf bfd` または `router ospf` 配下 `bfd all-interfaces`（相互運用も実証済）
+  - EIGRP classic: `router eigrp <AS>` 配下 `bfd all-interfaces` / named: `af-interface <IF>` 配下 `bfd`
+  - BGP: `neighbor <ip> fall-over bfd`（直結 eBGP。マルチホップ/Loopbackピアは対象外＝BFD不適）
+- IOL は片端 shutdown の link-down が対向へ伝播しないが、**BFD なら ECHO FAILURE で
+  約1.5秒検知**し OSPF/EIGRP/BGP を即断できる（フェイルオーバ問題の改善にも利用可）。
+
+### 採点チェック雛形（Genie 実証済・IOL/IOSv 共通）
+`show bfd neighbors details` は iosxe パーサで IOL/IOSv とも構造化可。ネイバーIP は
+dict キーなので **find はリスト形式**で書く（ドット入りキー対応）:
+```yaml
+- name: "RTxx: BFD セッション (<peer_ip>) Up・OSPFクライアント登録"
+  node: RTxx
+  command: "show bfd neighbors details"
+  parser: "show bfd neighbors details"
+  find: ["our_address", "*", "neighbor_address", "<peer_ip>"]
+  match:
+    state: "Up"
+    registered_protocols.*: "OSPF"     # EIGRP / BGP も同様
+    multiplier: 3                       # 乗数は構造化採点可
+  points: 5
+```
+- interval の厳密採点はしない（echo モード時に MinTxInt が 1s へ退避し、echo/制御どちらの
+  値かが構成依存のため）。要求値は task.md に明記し、乗数＋セッションUp＋クライアント登録で判定。
+- ネガティブ実証済: 片側の連動設定を外すと両側 Down/セッション消滅 → 両側 FAIL（偽陽性なし）。
+
+### 変種の作り方（ENCOR-OSPF-01 がパイロット）
+- `params/bfd.yml` = base のコピー ＋ `bfd: true`（＋ bfd_interval/bfd_multiplier）。
+- `task.md.j2` に `{% if params.bfd | default(false) %}` で要件を1項追加
+  （ヒント控えめ: 対象リンク・タイマ値・「プロトコルと連動」のみ。コマンドは書かない）。
+- `grading.yml.j2` は既存チェックの配点を bfd 時のみ圧縮し、BFD チェックを追加して**合計100点を維持**。
+- 模範解答は solution.md に BFD 節を追記。実機検証は bfd 変種で1サイクル（base は再検証不要）。

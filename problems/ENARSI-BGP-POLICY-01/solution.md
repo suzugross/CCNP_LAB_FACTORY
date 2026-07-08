@@ -151,3 +151,26 @@ ansible-playbook playbooks/grade.yml -e problem=ENARSI-BGP-POLICY-01 -e variant=
 - 実機100点検証済み seed: **base(固定値), s4242, s7777**。新しい seed は出題前に実機1サイクル推奨。
 - 固定のまま残す値: beacon_* / cust_net / leak_* / 外部 seg (100.64.x)
   （公開風アドレスの可読性と採点 regex の安定を優先。ランダム化は _gen.yml に追記すれば拡張可）
+
+## 変種 "bfd"（-e variant=bfd）の追加解答
+ISP 側（RT04/RT05）は BFD 対応済み。顧客側エッジ（RT01/RT02）の eBGP 直結リンクに
+タイマと fall-over bfd を設定する（iBGP Loopback ピアは対象外）。
+
+```
+! RT01（ISP-A 向き）
+interface Ethernet0/0
+ bfd interval 500 min_rx 500 multiplier 3
+router bgp 65010
+ neighbor 100.64.14.2 fall-over bfd
+! RT02（ISP-A 待機系・ISP-B 向き）
+interface Ethernet0/0
+ bfd interval 500 min_rx 500 multiplier 3
+interface Ethernet0/1
+ bfd interval 500 min_rx 500 multiplier 3
+router bgp 65010
+ neighbor 100.64.24.2 fall-over bfd
+ neighbor 100.64.25.2 fall-over bfd
+```
+
+> fall-over bfd はセッションパラメータなので `router bgp` 直下（AF 配下ではない）。
+> 確認: `show bfd neighbors details`（3 セッション Up / Registered protocols: BGP）

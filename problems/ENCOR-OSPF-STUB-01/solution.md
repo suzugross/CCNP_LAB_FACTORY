@@ -52,3 +52,19 @@ show ip ospf | section "It is a stub"   ! 自身が stub area メンバである
 > 採点: 両側の `area 1 stub[ no-summary]` 設定 / OSPF 隣接 FULL / O*IA デフォルト
 > ルートが RT03 RIB に存在 / RT03 RIB から個別の inter-area / external が消えている
 > ことを判定。
+
+## 変種 "bfd"（-e variant=bfd）の追加解答
+支店リンク（RT02–RT03, Ethernet0/1@RT02 / Ethernet0/0@RT03）に BFD を設定し OSPF と連動させる。
+
+```
+! RT02
+interface Ethernet0/1
+ bfd interval 500 min_rx 500 multiplier 3
+ ip ospf bfd
+! RT03
+interface Ethernet0/0
+ bfd interval 500 min_rx 500 multiplier 3
+ ip ospf bfd
+```
+
+> 確認: `show bfd neighbors details`（State Up / Registered protocols: OSPF）

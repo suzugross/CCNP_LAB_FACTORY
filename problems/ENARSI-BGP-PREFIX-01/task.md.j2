@@ -21,6 +21,10 @@ RT01 (AS65001) ─── eBGP ─── RT02 (AS65002)
 - RT01 ↔ RT02 の eBGP は Established で維持。
 - 受信後の RT01 BGP テーブルには `10.10.0.0/24` と `10.10.1.0/24` が残る。
 - `192.168.0.0/24` は **BGP テーブルから消える**。
+{% if params.bfd | default(false) %}
+- eBGP セッションを **BFD**（送信/受信間隔 {{ params.bfd_interval }} ms・乗数 {{ params.bfd_multiplier }}）と連動させ、
+  リンク障害時に高速でセッション断を検知できること。※RT02 側は BFD 対応済み（変更不可のまま）。
+{% endif %}
 
 ## 制約
 - 変更は **RT01 のみ**。RT02 は変更不可。
@@ -34,5 +38,5 @@ RT01 (AS65001) ─── eBGP ─── RT02 (AS65002)
 
 ## 採点
 ```
-ansible-playbook playbooks/grade.yml -e problem=ENARSI-BGP-PREFIX-01 --vault-password-file <(printf 'CCNP\n')
+ansible-playbook playbooks/grade.yml -e problem=ENARSI-BGP-PREFIX-01 -e variant={{ variant | default('base') }} --vault-password-file <(printf 'CCNP\n')
 ```

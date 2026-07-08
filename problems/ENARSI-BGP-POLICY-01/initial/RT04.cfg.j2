@@ -37,3 +37,17 @@ router bgp {{ params.as_ispa }}
   redistribute static
  exit-address-family
 !
+
+{% if params.bfd | default(false) %}
+! BFD（bfd 変種のみ）: ISP-A は顧客向け両リンクで BFD 対応済み
+interface {{ links[0] }}
+ bfd interval {{ params.bfd_interval }} min_rx {{ params.bfd_interval }} multiplier {{ params.bfd_multiplier }}
+!
+interface {{ links[1] }}
+ bfd interval {{ params.bfd_interval }} min_rx {{ params.bfd_interval }} multiplier {{ params.bfd_multiplier }}
+!
+router bgp {{ params.as_ispa }}
+ neighbor {{ params.seg14 }}.1 fall-over bfd
+ neighbor {{ params.seg24 }}.1 fall-over bfd
+!
+{% endif %}

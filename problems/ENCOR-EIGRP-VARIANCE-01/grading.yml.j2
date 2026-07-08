@@ -4,6 +4,7 @@
 # next-hop 判定は `show ip route <dst>` の生出力を raw 正規表現で見る（Descriptor Blocks の
 # next-hop IP の有無）。絶対不在(not_regex)は presence 条件でガードし空/未収束の誤合格を防ぐ。
 problem: ENCOR-EIGRP-VARIANCE-01
+{% set bfd = params.bfd | default(false) %}
 total_points: 100
 
 defaults:
@@ -16,14 +17,14 @@ checks:
     command: "show ip route 10.44.44.44"
     raw:
       - regex: "10\\.12\\.12\\.2"
-    points: 6
+    points: {{ 5 if bfd else 6 }}
 
   - name: "RT01: D が FS 経由 via RT03(10.13.13.2) でもロードバランス（variance 導入）"
     node: RT01
     command: "show ip route 10.44.44.44"
     raw:
       - regex: "10\\.13\\.13\\.2"
-    points: 26
+    points: {{ 22 if bfd else 26 }}
 
   - name: "RT01: D は非FS の via RT05(10.15.15.2) を使っていない（FC で除外）"
     node: RT01
@@ -31,7 +32,7 @@ checks:
     raw:
       - regex: "10\\.12\\.12\\.2"       # D の経路が学習済み（ガード）
       - not_regex: "10\\.15\\.15\\.2"
-    points: 12
+    points: {{ 10 if bfd else 12 }}
 
   # ---- E(10.66.66.66): variance はグローバル→prefix個別に単一へ抑止 = 32 点 ----
   - name: "RT01: E への経路 via RT02(10.12.12.2) が有る（到達）"
@@ -39,7 +40,7 @@ checks:
     command: "show ip route 10.66.66.66"
     raw:
       - regex: "10\\.12\\.12\\.2"
-    points: 6
+    points: {{ 5 if bfd else 6 }}
 
   - name: "RT01: E は単一経路（via RT03(10.13.13.2) を含まない＝offset-list等で抑止）"
     node: RT01
@@ -47,7 +48,7 @@ checks:
     raw:
       - regex: "10\\.12\\.12\\.2"       # E が via RT02 で学習済み（ガード）
       - not_regex: "10\\.13\\.13\\.2"
-    points: 26
+    points: {{ 22 if bfd else 26 }}
 
   # ---- 手段確認: 不等コストLB は variance 以外に無い（method固有だが唯一解）= 8 点 ----
   - name: "RT01: variance が設定されている（不等コストLBの唯一の手段）"
@@ -55,7 +56,7 @@ checks:
     command: "show running-config | section ^router eigrp"
     raw:
       - regex: "variance +[2-9][0-9]*"   # 2 以上（既定1では多重化しない）
-    points: 8
+    points: {{ 7 if bfd else 8 }}
 
   # ---- 基本到達性 = 16 点 ----
   - name: "RT04: RT01 の Loopback(10.1.1.1) に到達（双方向性）"
@@ -63,11 +64,46 @@ checks:
     command: "show ip route eigrp"
     raw:
       - regex: "10\\.1\\.1\\.1/32"
-    points: 8
+    points: {{ 7 if bfd else 8 }}
 
   - name: "RT03: E(10.66.66.66) に到達（網全体で E は生きている）"
     node: RT03
     command: "show ip route eigrp"
     raw:
       - regex: "10\\.66\\.66\\.66/32"
-    points: 8
+    points: {{ 7 if bfd else 8 }}
+{% if bfd %}
+
+  - name: "RT01: BFD セッション (10.12.12.2) Up・EIGRP連動"
+    node: RT01
+    command: "show bfd neighbors details"
+    parser: "show bfd neighbors details"
+    find: ["our_address", "*", "neighbor_address", "10.12.12.2"]
+    match:
+      state: "Up"
+      registered_protocols.*: "EIGRP"
+      multiplier: {{ params.bfd_multiplier | default(3) }}
+    points: 5
+
+  - name: "RT01: BFD セッション (10.13.13.2) Up・EIGRP連動"
+    node: RT01
+    command: "show bfd neighbors details"
+    parser: "show bfd neighbors details"
+    find: ["our_address", "*", "neighbor_address", "10.13.13.2"]
+    match:
+      state: "Up"
+      registered_protocols.*: "EIGRP"
+      multiplier: {{ params.bfd_multiplier | default(3) }}
+    points: 5
+
+  - name: "RT01: BFD セッション (10.15.15.2) Up・EIGRP連動"
+    node: RT01
+    command: "show bfd neighbors details"
+    parser: "show bfd neighbors details"
+    find: ["our_address", "*", "neighbor_address", "10.15.15.2"]
+    match:
+      state: "Up"
+      registered_protocols.*: "EIGRP"
+      multiplier: {{ params.bfd_multiplier | default(3) }}
+    points: 5
+{% endif %}

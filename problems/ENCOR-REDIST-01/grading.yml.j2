@@ -2,6 +2,7 @@
 # 採点基準（パラメータ化テンプレート）。値は params/<variant>.yml 由来。
 # 再配送の核心 = 相手ドメインの経路が外部経路コード(O E2 / D EX)で現れること。
 problem: ENCOR-REDIST-01
+{% set bfd = params.bfd | default(false) %}
 total_points: 100
 
 defaults:
@@ -18,7 +19,7 @@ checks:
       source_protocol: "ospf"
       source_protocol_codes: { contains: "E" }
       next_hop.next_hop_list.*.next_hop: "{{ params.seg12 }}.2"
-    points: 30
+    points: {{ 27 if bfd else 30 }}
 
   - name: "RT03: {{ params.rt01_lo }}/32 を EIGRP 外部経路(D EX)で学習 (OSPF→EIGRP 再配送, via {{ params.seg23 }}.1)"
     node: RT03
@@ -30,7 +31,7 @@ checks:
       source_protocol: "eigrp"
       source_protocol_codes: { contains: "EX" }
       next_hop.next_hop_list.*.next_hop: "{{ params.seg23 }}.1"
-    points: 30
+    points: {{ 27 if bfd else 30 }}
 
   - name: "RT01: {{ params.rt02_lo }}/32 を OSPF で学習 (RT02 ループバック, via {{ params.seg12 }}.2)"
     node: RT01
@@ -41,7 +42,7 @@ checks:
       route: "{{ params.rt02_lo }}/32"
       source_protocol: "ospf"
       next_hop.next_hop_list.*.next_hop: "{{ params.seg12 }}.2"
-    points: 20
+    points: {{ 18 if bfd else 20 }}
 
   - name: "RT03: {{ params.rt02_lo }}/32 を EIGRP で学習 (RT02 ループバック, via {{ params.seg23 }}.1)"
     node: RT03
@@ -52,4 +53,28 @@ checks:
       route: "{{ params.rt02_lo }}/32"
       source_protocol: "eigrp"
       next_hop.next_hop_list.*.next_hop: "{{ params.seg23 }}.1"
-    points: 20
+    points: {{ 18 if bfd else 20 }}
+{% if bfd %}
+
+  - name: "RT02: BFD セッション ({{ params.seg12 }}.1) Up・OSPF連動"
+    node: RT02
+    command: "show bfd neighbors details"
+    parser: "show bfd neighbors details"
+    find: ["our_address", "*", "neighbor_address", "{{ params.seg12 }}.1"]
+    match:
+      state: "Up"
+      registered_protocols.*: "OSPF"
+      multiplier: {{ params.bfd_multiplier | default(3) }}
+    points: 5
+
+  - name: "RT02: BFD セッション ({{ params.seg23 }}.2) Up・EIGRP連動"
+    node: RT02
+    command: "show bfd neighbors details"
+    parser: "show bfd neighbors details"
+    find: ["our_address", "*", "neighbor_address", "{{ params.seg23 }}.2"]
+    match:
+      state: "Up"
+      registered_protocols.*: "EIGRP"
+      multiplier: {{ params.bfd_multiplier | default(3) }}
+    points: 5
+{% endif %}

@@ -30,6 +30,10 @@ RT03 の RIB には現在、以下がすべて見える:
 - 上記初期状態に挙げた個別の inter-area 経路 (`1.1.1.1/32` 等) や
   external 経路 (`192.0.2.0/24`) は **RT03 の RIB に存在しないこと**。
 - RT03 ↔ RT02 の OSPF 隣接 (Full) は維持する。
+{% if params.bfd | default(false) %}
+- 支店リンク（RT02 ↔ RT03）で **BFD**（送信/受信間隔 {{ params.bfd_interval }} ms・乗数 {{ params.bfd_multiplier }}）
+  を有効にし、OSPF が BFD と連動してネイバー断を高速検知できること（RT01 は変更不可のまま）。
+{% endif %}
 
 ## 制約
 - RT01 (ASBR) は変更不可。
@@ -42,5 +46,5 @@ RT03 の RIB には現在、以下がすべて見える:
 
 ## 採点
 ```
-ansible-playbook playbooks/grade.yml -e problem=ENCOR-OSPF-STUB-01 --vault-password-file <(printf 'CCNP\n')
+ansible-playbook playbooks/grade.yml -e problem=ENCOR-OSPF-STUB-01 -e variant={{ variant | default('base') }} --vault-password-file <(printf 'CCNP\n')
 ```

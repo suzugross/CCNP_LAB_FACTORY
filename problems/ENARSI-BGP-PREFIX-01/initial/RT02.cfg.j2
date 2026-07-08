@@ -25,3 +25,12 @@ router bgp 65002
  network 10.10.1.0 mask 255.255.255.0
  network 192.168.0.0 mask 255.255.255.0
 !
+{% if params.bfd | default(false) %}
+! BFD（bfd 変種のみ）: ISP 側は BFD 対応済み（受験者は RT01 側を設定する）
+interface {{ links[0] }}
+ bfd interval {{ params.bfd_interval }} min_rx {{ params.bfd_interval }} multiplier {{ params.bfd_multiplier }}
+!
+router bgp 65002
+ neighbor 10.1.12.1 fall-over bfd
+!
+{% endif %}

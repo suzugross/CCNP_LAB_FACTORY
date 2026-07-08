@@ -12,3 +12,11 @@ router ospf {{ params.ospf_pid }}
  network {{ params.seg12 }}.0 0.0.0.3 area {{ params.area }}
  network {{ params.rt01_lo }} 0.0.0.0 area {{ params.area }}
 !
+
+{% if params.bfd | default(false) %}
+! BFD（bfd 変種のみ）: RT01 側は BFD 対応済み（受験者は RT02 側を設定する）
+interface {{ links[0] }}
+ bfd interval {{ params.bfd_interval }} min_rx {{ params.bfd_interval }} multiplier {{ params.bfd_multiplier }}
+ ip ospf bfd
+!
+{% endif %}

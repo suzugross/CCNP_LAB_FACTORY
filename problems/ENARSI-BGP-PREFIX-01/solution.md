@@ -37,3 +37,16 @@ show ip bgp 192.168.0.0/24       ! "Network not in table"
 
 > 採点: prefix-list の `ge` 表記 / neighbor 適用 / 10.10.x.x/24 が残り、
 > 192.168.0.0/24 が消えていることを判定。
+
+## 変種 "bfd"（-e variant=bfd）の追加解答
+RT02 側は BFD 対応済み。RT01 側にタイマと BGP 連動（fall-over bfd）を設定する。
+
+```
+! RT01
+interface Ethernet0/0
+ bfd interval 500 min_rx 500 multiplier 3
+router bgp 65001
+ neighbor 10.1.12.2 fall-over bfd
+```
+
+> 確認: `show bfd neighbors details`（State Up / Registered protocols: BGP）

@@ -13,3 +13,13 @@ router eigrp {{ params.eigrp_as }}
  network {{ params.seg23 }}.0 0.0.0.3
  network {{ params.rt03_lo }} 0.0.0.0
 !
+
+{% if params.bfd | default(false) %}
+! BFD（bfd 変種のみ）: RT03 側は BFD 対応済み（受験者は RT02 側を設定する）
+interface {{ links[0] }}
+ bfd interval {{ params.bfd_interval }} min_rx {{ params.bfd_interval }} multiplier {{ params.bfd_multiplier }}
+!
+router eigrp {{ params.eigrp_as }}
+ bfd all-interfaces
+!
+{% endif %}

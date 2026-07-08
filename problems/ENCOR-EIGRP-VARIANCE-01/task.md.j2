@@ -31,6 +31,11 @@ RT01 ── RT03 ── RT04  = D(Lo0 10.44.44.44) / E(Lo1 10.66.66.66)
    - D と E は同じ RT04 上にあり経路構造が同じ点に注意。**1 の設定は網全体に効く**。
    - E だけを単一に保つ工夫が要る。
 3. 既存の全到達性は維持すること（他ノードから D/E への到達も含む）。
+{% if params.bfd | default(false) %}
+4. RT01 の 3 本の物理リンクで **BFD**（送信/受信間隔 {{ params.bfd_interval }} ms・乗数 {{ params.bfd_multiplier }}）
+   を有効にし、EIGRP が BFD と連動してネイバー断を高速検知できること。
+   ※対向ルータ（RT02/RT03/RT05）側は **BFD 対応済み**（変更不要）。
+{% endif %}
 
 ## 切り分け・観点
 - `show ip eigrp topology <prefix>` の各エントリ `(FD/RD)` を読む。
@@ -41,5 +46,5 @@ RT01 ── RT03 ── RT04  = D(Lo0 10.44.44.44) / E(Lo1 10.66.66.66)
 
 ## 採点
 ```
-ansible-playbook playbooks/grade.yml -e problem=ENCOR-EIGRP-VARIANCE-01 --vault-password-file <(printf 'CCNP\n')
+ansible-playbook playbooks/grade.yml -e problem=ENCOR-EIGRP-VARIANCE-01 -e variant={{ variant | default('base') }} --vault-password-file <(printf 'CCNP\n')
 ```

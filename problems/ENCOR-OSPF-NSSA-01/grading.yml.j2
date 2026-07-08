@@ -5,6 +5,7 @@
 #   - 同時に RT03 の RIB は area 1 外向きが O*IA デフォルト 1 本のみ（Totally NSSA）
 # を確認する。RT01 (変更禁止) は学習側として効果のみ採点。
 problem: ENCOR-OSPF-NSSA-01
+{% set bfd = params.bfd | default(false) %}
 total_points: 100
 
 defaults:
@@ -16,21 +17,21 @@ checks:
     command: "show running-config | section router ospf"
     raw:
       - regex: "area +1 +nssa +no-summary"
-    points: 15
+    points: {{ 13 if bfd else 15 }}
 
   - name: "RT03: 内部側で area 1 が NSSA (area 1 nssa)"
     node: RT03
     command: "show running-config | section router ospf"
     raw:
       - regex: "area +1 +nssa"
-    points: 10
+    points: {{ 9 if bfd else 10 }}
 
   - name: "RT03: 支店ローカル外部を OSPF へ再配送 (ASBR 化 = redistribute static)"
     node: RT03
     command: "show running-config | section router ospf"
     raw:
       - regex: "redistribute +static"
-    points: 15
+    points: {{ 13 if bfd else 15 }}
 
   - name: "RT03: OSPF 隣接 (RT02) が Full（両端で area タイプ一致）"
     node: RT03
@@ -39,14 +40,14 @@ checks:
     find: "interfaces.*.neighbors.*"
     match:
       state: { startswith: "FULL" }
-    points: 15
+    points: {{ 13 if bfd else 15 }}
 
   - name: "RT01(HQ): 支店外部 198.51.100.0/24 を OSPF外部(O E2)で学習（NSSA が Type-7→Type-5 で運んだ効果）"
     node: RT01
     command: "show ip route ospf"
     raw:
       - regex: "O +E2 +198\\.51\\.100\\.0"
-    points: 25
+    points: {{ 23 if bfd else 25 }}
 
   - name: "RT03: area 1 外向きは O*IA デフォルト (0.0.0.0/0) が RT02 経由で RIB にある"
     node: RT03
@@ -57,7 +58,7 @@ checks:
       route: "0.0.0.0/0"
       source_protocol: ospf
       next_hop.next_hop_list.*.next_hop: "10.0.23.1"
-    points: 12
+    points: {{ 11 if bfd else 12 }}
 
   - name: "RT03: 個別の inter-area (1.1.1.1 / 2.2.2.2) を RIB に学習していない（Totally NSSA の絞り込み効果）"
     node: RT03
@@ -65,4 +66,28 @@ checks:
     raw:
       - not_contains: "1.1.1.1"
       - not_contains: "2.2.2.2"
-    points: 8
+    points: {{ 8 if bfd else 8 }}
+{% if bfd %}
+
+  - name: "RT02: BFD セッション (10.0.23.2) Up・OSPF連動"
+    node: RT02
+    command: "show bfd neighbors details"
+    parser: "show bfd neighbors details"
+    find: ["our_address", "*", "neighbor_address", "10.0.23.2"]
+    match:
+      state: "Up"
+      registered_protocols.*: "OSPF"
+      multiplier: {{ params.bfd_multiplier | default(3) }}
+    points: 5
+
+  - name: "RT03: BFD セッション (10.0.23.1) Up・OSPF連動"
+    node: RT03
+    command: "show bfd neighbors details"
+    parser: "show bfd neighbors details"
+    find: ["our_address", "*", "neighbor_address", "10.0.23.1"]
+    match:
+      state: "Up"
+      registered_protocols.*: "OSPF"
+      multiplier: {{ params.bfd_multiplier | default(3) }}
+    points: 5
+{% endif %}

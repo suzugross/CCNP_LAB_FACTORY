@@ -1,0 +1,93 @@
+---
+# 採点基準。RT02 の 2 つの link IF に MD5 認証が設定され、
+# 両方向の隣接 (RT01/RT03) が FULL になっていることを判定する。
+# RT01/RT03 側の認証設定は、隣接が FULL になっていれば一致しているはず（間接検証）。
+problem: ENCOR-OSPF-AUTH-01
+{% set bfd = params.bfd | default(false) %}
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT02 Eth0/0 (to RT01): MD5 認証が設定 (message-digest + key 1)"
+    node: RT02
+    command: "show running-config interface Ethernet0/0"
+    raw:
+      - regex: "ip ospf authentication message-digest"
+      - regex: "ip ospf message-digest-key 1 md5"
+    points: {{ 20 if bfd else 25 }}
+
+  - name: "RT02 Eth0/1 (to RT03): MD5 認証が設定 (message-digest + key 1)"
+    node: RT02
+    command: "show running-config interface Ethernet0/1"
+    raw:
+      - regex: "ip ospf authentication message-digest"
+      - regex: "ip ospf message-digest-key 1 md5"
+    points: {{ 20 if bfd else 25 }}
+
+  - name: "RT02-RT01 OSPF 隣接が FULL (認証一致の証拠)"
+    node: RT02
+    command: "show ip ospf neighbor"
+    parser: "show ip ospf neighbor"
+    find: "interfaces.*.neighbors.*"
+    match:
+      address: "10.0.12.1"
+      state: { startswith: "FULL" }
+    points: {{ 20 if bfd else 25 }}
+
+  - name: "RT02-RT03 OSPF 隣接が FULL (認証一致の証拠)"
+    node: RT02
+    command: "show ip ospf neighbor"
+    parser: "show ip ospf neighbor"
+    find: "interfaces.*.neighbors.*"
+    match:
+      address: "10.0.23.2"
+      state: { startswith: "FULL" }
+    points: {{ 20 if bfd else 25 }}
+{% if bfd %}
+
+  - name: "RT02: BFD セッション (10.0.12.1) Up・OSPF連動"
+    node: RT02
+    command: "show bfd neighbors details"
+    parser: "show bfd neighbors details"
+    find: ["our_address", "*", "neighbor_address", "10.0.12.1"]
+    match:
+      state: "Up"
+      registered_protocols.*: "OSPF"
+      multiplier: {{ params.bfd_multiplier | default(3) }}
+    points: 5
+
+  - name: "RT02: BFD セッション (10.0.23.2) Up・OSPF連動"
+    node: RT02
+    command: "show bfd neighbors details"
+    parser: "show bfd neighbors details"
+    find: ["our_address", "*", "neighbor_address", "10.0.23.2"]
+    match:
+      state: "Up"
+      registered_protocols.*: "OSPF"
+      multiplier: {{ params.bfd_multiplier | default(3) }}
+    points: 5
+
+  - name: "RT01: BFD セッション (10.0.12.2) Up・OSPF連動"
+    node: RT01
+    command: "show bfd neighbors details"
+    parser: "show bfd neighbors details"
+    find: ["our_address", "*", "neighbor_address", "10.0.12.2"]
+    match:
+      state: "Up"
+      registered_protocols.*: "OSPF"
+      multiplier: {{ params.bfd_multiplier | default(3) }}
+    points: 5
+
+  - name: "RT03: BFD セッション (10.0.23.1) Up・OSPF連動"
+    node: RT03
+    command: "show bfd neighbors details"
+    parser: "show bfd neighbors details"
+    find: ["our_address", "*", "neighbor_address", "10.0.23.1"]
+    match:
+      state: "Up"
+      registered_protocols.*: "OSPF"
+      multiplier: {{ params.bfd_multiplier | default(3) }}
+    points: 5
+{% endif %}

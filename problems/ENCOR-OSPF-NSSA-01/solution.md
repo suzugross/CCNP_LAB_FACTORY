@@ -56,3 +56,19 @@ show ip route 198.51.100.0
 > 採点: RT02 `area 1 nssa no-summary` / RT03 `area 1 nssa` + `redistribute static` /
 > RT02-RT03 隣接 FULL / RT01 が `O E2 198.51.100.0/24` を学習 / RT03 が O*IA デフォルトを保持 /
 > RT03 RIB から個別 inter-area が消えている、ことを判定。
+
+## 変種 "bfd"（-e variant=bfd）の追加解答
+支店リンク（RT02–RT03, Ethernet0/1@RT02 / Ethernet0/0@RT03）に BFD を設定し OSPF と連動させる。
+
+```
+! RT02
+interface Ethernet0/1
+ bfd interval 500 min_rx 500 multiplier 3
+ ip ospf bfd
+! RT03
+interface Ethernet0/0
+ bfd interval 500 min_rx 500 multiplier 3
+ ip ospf bfd
+```
+
+> 確認: `show bfd neighbors details`（State Up / Registered protocols: OSPF）

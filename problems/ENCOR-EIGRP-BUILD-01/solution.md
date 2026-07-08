@@ -159,3 +159,27 @@ show ip route 10.5.0.0 255.255.252.0    ! 集約・構成要素抑制の確認
   が落ちる。中継点フィルタでしか成立しない（本問の狙い）。
 - summary-address は集約 Null0 ルートを生む（ループ防止の正常動作）。
 - 認証を誤って全 IF に付けると他リンクの隣接が落ちる（要件 3 の罠）。
+
+## 変種 "bfd"（-e variant=bfd）の追加解答
+全ルータ間リンクの IF に BFD タイマを設定し、named mode の af-interface で連動させる。
+
+```
+! 例: RT01（リンクIFごと）
+interface Ethernet0/0
+ bfd interval 500 min_rx 500 multiplier 3
+interface Ethernet0/1
+ bfd interval 500 min_rx 500 multiplier 3
+router eigrp CORP
+ address-family ipv4 unicast autonomous-system 100
+  af-interface Ethernet0/0
+   bfd
+  exit-af-interface
+  af-interface Ethernet0/1
+   bfd
+  exit-af-interface
+ exit-address-family
+```
+
+> af-interface default で `bfd` を入れると Loopback にも掛かるが実害なし（相手不在で
+> セッションは張られない）。採点は各リンクのセッション Up＋EIGRP 登録＋乗数。
+> 確認: `show bfd neighbors details`

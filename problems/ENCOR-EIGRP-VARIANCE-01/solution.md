@@ -67,3 +67,30 @@ show ip eigrp topology 10.44.44.44/32   ! FD/RD と FS の確認
 - variance は **FS しか導入しない**（非FS はループ防止で不可）。RT05 がその教材。
 - 最小 variance は FD と FS 合計メトリックから**計算**する（勘で 2 などとしない）。
 - variance は **AF 全体**に効くグローバル設定。**prefix 単位の制御は offset-list / distribute-list** で行う。
+
+## 変種 "bfd"（-e variant=bfd）の追加解答
+対向（RT02/RT03/RT05）は initial で BFD 対応済み。RT01 側の3リンクを設定する。
+
+```
+! RT01
+interface Ethernet0/0
+ bfd interval 500 min_rx 500 multiplier 3
+interface Ethernet0/1
+ bfd interval 500 min_rx 500 multiplier 3
+interface Ethernet0/2
+ bfd interval 500 min_rx 500 multiplier 3
+router eigrp VAR
+ address-family ipv4 unicast autonomous-system 100
+  af-interface Ethernet0/0
+   bfd
+  exit-af-interface
+  af-interface Ethernet0/1
+   bfd
+  exit-af-interface
+  af-interface Ethernet0/2
+   bfd
+  exit-af-interface
+ exit-address-family
+```
+
+> 確認: `show bfd neighbors details`（3 セッション Up / Registered protocols: EIGRP）
