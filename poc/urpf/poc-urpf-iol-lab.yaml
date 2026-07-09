@@ -1,0 +1,359 @@
+lab:
+  title: POC-URPF
+  description: '{"ccnp_lease":{"p64":"UE9DLVVSUEY=","nodes":{"RT01":"10.1.10.11","RT02":"10.1.10.12","RT03":"10.1.10.13"}}}'
+  notes: |
+    PoC lab (Claude 2026-07-09): BL-027 uRPF 実効性検証 (IOL)
+    - トライアングル: RT01(edge/被験) - RT02(ISP-A) - RT03(ISP-B+顧客ホスト群)
+    - 非対称の作り: 顧客B 192.168.100.0/24 は RT03 が実体保持(未広告)、
+      広告は RT02 の static 再配布のみ → RT01 の経路は e0/0 向き、着信は e0/1
+    - スプーフ源: RT03 Lo2 203.0.113.1(完全未広告) / RT02 Lo2 192.168.201.99
+      (実体は RT03 の顧客C 192.168.201.0/24 側 → e0/0 着信で RPF IF 不一致)
+    - MGMT: RT01=.11 RT02=.12 RT03=.13 (10.1.10.0/26, gw .30)
+  version: 0.3.0
+nodes:
+- id: RT01
+  label: RT01
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT01
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface Ethernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.11 255.255.255.192
+     no shutdown
+    !
+    interface Loopback0
+     ip address 1.1.1.1 255.255.255.255
+    !
+    interface Ethernet0/0
+     description === to RT02 (ISP-A) ===
+     ip address 10.1.12.1 255.255.255.252
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to RT03 (ISP-B) ===
+     ip address 10.1.13.1 255.255.255.252
+     no shutdown
+    !
+    router ospf 1
+     router-id 1.1.1.1
+     network 1.1.1.1 0.0.0.0 area 0
+     network 10.1.12.0 0.0.0.3 area 0
+     network 10.1.13.0 0.0.0.3 area 0
+    !
+    ip ssh version 2
+    !
+    event manager applet GEN-SSH-KEY authorization bypass
+     event timer countdown time 30
+     action 1.0 cli command "enable"
+     action 2.0 cli command "configure terminal"
+     action 3.0 cli command "crypto key generate rsa modulus 2048"
+     action 4.0 syslog msg "EEM GEN-SSH-KEY: RSA key generated"
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+     transport input ssh
+  x: 0
+  y: -300
+  tags: [routers]
+  interfaces:
+  - id: RT01-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RT01-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+  - id: RT01-i3
+    label: Ethernet0/3
+    type: physical
+    slot: 3
+- id: RT02
+  label: RT02
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT02
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface Ethernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.12 255.255.255.192
+     no shutdown
+    !
+    interface Loopback0
+     ip address 2.2.2.2 255.255.255.255
+    !
+    interface Loopback2
+     description === spoof-test src (実体は顧客C=RT03側・未広告) ===
+     ip address 192.168.201.99 255.255.255.255
+    !
+    interface Ethernet0/0
+     description === to RT01 ===
+     ip address 10.1.12.2 255.255.255.252
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to RT03 ===
+     ip address 10.1.23.1 255.255.255.252
+     no shutdown
+    !
+    ip route 192.168.100.0 255.255.255.0 10.1.23.2
+    !
+    router ospf 1
+     router-id 2.2.2.2
+     redistribute static subnets
+     network 2.2.2.2 0.0.0.0 area 0
+     network 10.1.12.0 0.0.0.3 area 0
+     ! 10.1.23.0/30 は意図的に OSPF 外 (FA=0.0.0.0 化。README「FA罠」参照)
+    !
+    ip ssh version 2
+    !
+    event manager applet GEN-SSH-KEY authorization bypass
+     event timer countdown time 30
+     action 1.0 cli command "enable"
+     action 2.0 cli command "configure terminal"
+     action 3.0 cli command "crypto key generate rsa modulus 2048"
+     action 4.0 syslog msg "EEM GEN-SSH-KEY: RSA key generated"
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+     transport input ssh
+  x: -300
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: RT02-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RT02-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+  - id: RT02-i3
+    label: Ethernet0/3
+    type: physical
+    slot: 3
+- id: RT03
+  label: RT03
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT03
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface Ethernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.13 255.255.255.192
+     no shutdown
+    !
+    interface Loopback0
+     ip address 3.3.3.3 255.255.255.255
+    !
+    interface Loopback1
+     description === 顧客B ホスト (dual-home・OSPF未広告=出口非対称) ===
+     ip address 192.168.100.1 255.255.255.0
+    !
+    interface Loopback2
+     description === 完全スプーフ源 (どこにも経路なし) ===
+     ip address 203.0.113.1 255.255.255.255
+    !
+    interface Loopback3
+     description === 顧客C (OSPF広告・対称) ===
+     ip address 192.168.201.1 255.255.255.0
+     ip ospf network point-to-point
+    !
+    interface Ethernet0/0
+     description === to RT01 ===
+     ip address 10.1.13.2 255.255.255.252
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to RT02 ===
+     ip address 10.1.23.2 255.255.255.252
+     no shutdown
+    !
+    router ospf 1
+     router-id 3.3.3.3
+     network 3.3.3.3 0.0.0.0 area 0
+     network 192.168.201.0 0.0.0.255 area 0
+     network 10.1.13.0 0.0.0.3 area 0
+     ! 10.1.23.0/30 は意図的に OSPF 外 (FA=0.0.0.0 化。README「FA罠」参照)
+    !
+    ip ssh version 2
+    !
+    event manager applet GEN-SSH-KEY authorization bypass
+     event timer countdown time 30
+     action 1.0 cli command "enable"
+     action 2.0 cli command "configure terminal"
+     action 3.0 cli command "crypto key generate rsa modulus 2048"
+     action 4.0 syslog msg "EEM GEN-SSH-KEY: RSA key generated"
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+     transport input ssh
+  x: 300
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: RT03-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RT03-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+  - id: RT03-i3
+    label: Ethernet0/3
+    type: physical
+    slot: 3
+- id: MGMTSW
+  label: MGMT-SW
+  node_definition: unmanaged_switch
+  image_definition: null
+  configuration: ''
+  x: 0
+  y: 300
+  tags: []
+  interfaces:
+  - id: MGMTSW-i0
+    label: port0
+    type: physical
+    slot: 0
+  - id: MGMTSW-i1
+    label: port1
+    type: physical
+    slot: 1
+  - id: MGMTSW-i2
+    label: port2
+    type: physical
+    slot: 2
+  - id: MGMTSW-i3
+    label: port3
+    type: physical
+    slot: 3
+  - id: MGMTSW-i4
+    label: port4
+    type: physical
+    slot: 4
+- id: EXTC
+  label: to-MGMT-net
+  node_definition: external_connector
+  image_definition: null
+  configuration: System Bridge
+  x: 0
+  y: 450
+  tags: []
+  interfaces:
+  - id: EXTC-i0
+    label: port
+    type: physical
+    slot: 0
+links:
+- id: l0
+  n1: RT01
+  i1: RT01-i0
+  n2: RT02
+  i2: RT02-i0
+  conditioning: {}
+  label: RT01<->RT02
+- id: l1
+  n1: RT01
+  i1: RT01-i1
+  n2: RT03
+  i2: RT03-i0
+  conditioning: {}
+  label: RT01<->RT03
+- id: l2
+  n1: RT02
+  i1: RT02-i1
+  n2: RT03
+  i2: RT03-i1
+  conditioning: {}
+  label: RT02<->RT03
+- id: l3
+  n1: RT01
+  i1: RT01-i3
+  n2: MGMTSW
+  i2: MGMTSW-i0
+  conditioning: {}
+  label: RT01-mgmt
+- id: l4
+  n1: RT02
+  i1: RT02-i3
+  n2: MGMTSW
+  i2: MGMTSW-i1
+  conditioning: {}
+  label: RT02-mgmt
+- id: l5
+  n1: RT03
+  i1: RT03-i3
+  n2: MGMTSW
+  i2: MGMTSW-i2
+  conditioning: {}
+  label: RT03-mgmt
+- id: l6
+  n1: MGMTSW
+  i1: MGMTSW-i4
+  n2: EXTC
+  i2: EXTC-i0
+  conditioning: {}
+  label: mgmt-uplink
+annotations: []
+smart_annotations: []

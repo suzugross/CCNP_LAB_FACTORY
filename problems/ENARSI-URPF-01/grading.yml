@@ -1,0 +1,82 @@
+---
+# 採点: 構成(raw regex) + 効果(正規ping成功 / verification drops カウンタ)。
+# ★偽装 ping の「失敗」は採点しない — uRPF 無しでも反射経路が無く必ず失敗する
+#   （偽陽性）。ドロップの証拠は per-IF の verification drops カウンタのみを使う。
+#   （実機実証: poc/urpf/README.md。Genie は uRPF 行を構造化しないため raw regex）
+# ★チェックは記載順に実行される。0点の「発射」チェック(トラフィック発生)を
+#   カウンタ判定より前に置くことで同一試行内で収束する。順序を変えないこと。
+problem: ENARSI-URPF-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # === 構成 ===
+  - name: "RT01: Uplink-A (E0/0) が strict uRPF (reachable-via rx)"
+    node: RT01
+    command: "show ip interface Ethernet0/0"
+    raw:
+      - regex: "IP verify source reachable-via RX"
+    points: 10
+
+  - name: "RT01: Uplink-B (E0/1) に uRPF が有効 (rx または any)"
+    node: RT01
+    command: "show ip interface Ethernet0/1"
+    raw:
+      - regex: "IP verify source reachable-via (RX|ANY)"
+    points: 5
+
+  # === 前提ガード（要件4: 経路の変更・追加をしていない） ===
+  - name: "RT01: 192.168.100.0/24 の経路が OSPF(E2)・Uplink-A 向きのまま"
+    node: RT01
+    command: "show ip route 192.168.100.0 255.255.255.0"
+    raw:
+      - regex: "Known via \"ospf 1\""
+      - regex: "10\\.1\\.12\\.2"
+    points: 5
+
+  # === 効果: 正規フロー維持（要件3） ===
+  - name: "正規フロー維持: ISP-A NOC 死活監視 (RT02発 src 2.2.2.2)"
+    node: RT02
+    command: "ping 1.1.1.1 source 2.2.2.2 repeat 10"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 5
+
+  - name: "★正規フロー維持: 顧客B(非対称着信) (RT03発 src 192.168.100.1)"
+    node: RT03
+    command: "ping 1.1.1.1 source 192.168.100.1 repeat 10"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 25
+
+  # === 発射(0点・常にPASS): カウンタ判定用のトラフィック発生。位置を動かさない ===
+  - name: "(発射) 経路なし送信元からの到達試行 (RT03発 src 203.0.113.1)"
+    node: RT03
+    command: "ping 1.1.1.1 source 203.0.113.1 repeat 10 timeout 1"
+    raw:
+      - regex: "Success rate is"
+    points: 0
+
+  - name: "(発射) RPF不一致送信元からの到達試行 (RT02発 src 192.168.201.99)"
+    node: RT02
+    command: "ping 1.1.1.1 source 192.168.201.99 repeat 10 timeout 1"
+    raw:
+      - regex: "Success rate is"
+    points: 0
+
+  # === 効果: ドロップ実証（カウンタ。suppressed 行には誤マッチしない書式） ===
+  - name: "効果: Uplink-B が経路なし送信元をドロップ (verification drops 非0)"
+    node: RT01
+    command: "show ip interface Ethernet0/1"
+    raw:
+      - regex: "[1-9][0-9]* verification drops"
+    points: 25
+
+  - name: "効果: Uplink-A の strict が RPF不一致送信元をドロップ (verification drops 非0)"
+    node: RT01
+    command: "show ip interface Ethernet0/0"
+    raw:
+      - regex: "[1-9][0-9]* verification drops"
+    points: 25

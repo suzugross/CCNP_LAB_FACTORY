@@ -1,0 +1,24 @@
+! RT01 初期構成 (uRPF TS・昨日 anti-spoofing を導入した直後の状態)
+interface Loopback0
+ ip address 54.54.54.54 255.255.255.255
+!
+access-list 70 permit 192.168.137.0 0.0.0.255
+!
+interface {{ links[0] }}
+ description === Uplink-A: to ISP (RT02) ===
+ ip address 10.157.99.1 255.255.255.252
+ ip verify unicast source reachable-via rx 70
+ no shutdown
+!
+interface {{ links[1] }}
+ description === Uplink-B: to ISP (RT03) ===
+ ip address 10.97.82.1 255.255.255.252
+ ip verify unicast source reachable-via rx
+ no shutdown
+!
+router ospf 1
+ router-id 54.54.54.54
+ network 54.54.54.54 0.0.0.0 area 0
+ network 10.157.99.0 0.0.0.3 area 0
+ network 10.97.82.0 0.0.0.3 area 0
+!

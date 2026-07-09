@@ -1,0 +1,33 @@
+! RT03 (ISP設備・変更禁止)
+interface Loopback0
+ ip address 42.42.42.42 255.255.255.255
+!
+interface Loopback1
+ description === Customer-B LAN (dual-homed) ===
+ ip address 192.168.144.1 255.255.255.0
+!
+interface Loopback2
+ description === ISP NOC test source (do not modify) ===
+ ip address 203.0.113.129 255.255.255.255
+!
+interface Loopback3
+ description === Customer-C LAN ===
+ ip address 192.168.147.1 255.255.255.0
+ ip ospf network point-to-point
+!
+interface {{ links[0] }}
+ description === to RT01 (customer edge) ===
+ ip address 10.16.107.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === ISP peering ===
+ ip address 10.107.138.2 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 42.42.42.42
+ network 192.168.147.0 0.0.0.255 area 0
+ network 42.42.42.42 0.0.0.0 area 0
+ network 10.16.107.0 0.0.0.3 area 0
+!

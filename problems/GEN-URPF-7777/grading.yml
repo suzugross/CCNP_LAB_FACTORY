@@ -1,0 +1,62 @@
+# 自動生成 (gen_urpf_ts.py) seed=7777 fault=loose_on_strict_side
+# ★偽装pingの成否は採点しない(偽陽性)。0点「発射」→カウンタの順序を変えないこと。
+problem: GEN-URPF-7777
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'RT01: Ethernet0/0 (RT02側・対称) が strict uRPF'
+  node: RT01
+  command: show ip interface Ethernet0/0
+  raw:
+  - regex: IP verify source reachable-via RX
+  points: 10
+- name: 'RT01: Ethernet0/1 (RT03側) に uRPF が有効 (rx または any)'
+  node: RT01
+  command: show ip interface Ethernet0/1
+  raw:
+  - regex: IP verify source reachable-via (RX|ANY)
+  points: 5
+- name: 'RT01: 192.168.144.0/24 の経路が OSPF(E2)・RT02側のまま(経路変更なし)'
+  node: RT01
+  command: show ip route 192.168.144.0 255.255.255.0
+  raw:
+  - regex: Known via "ospf 1"
+  - regex: 10\.119\.99\.2
+  points: 5
+- name: '正規フロー維持: ISP NOC 死活監視 (RT02発 src 68.68.68.68)'
+  node: RT02
+  command: ping 18.18.18.18 source 68.68.68.68 repeat 10
+  raw:
+  - regex: Success rate is [1-9]
+  points: 5
+- name: '★正規フロー維持: 顧客B(非対称着信) (RT03発 src 192.168.144.1)'
+  node: RT03
+  command: ping 18.18.18.18 source 192.168.144.1 repeat 10
+  raw:
+  - regex: Success rate is [1-9]
+  points: 25
+- name: (発射) 経路なし送信元からの到達試行 (RT03発 src 203.0.113.129)
+  node: RT03
+  command: ping 18.18.18.18 source 203.0.113.129 repeat 10 timeout 1
+  raw:
+  - regex: Success rate is
+  points: 0
+- name: (発射) RPF不一致送信元からの到達試行 (RT02発 src 192.168.147.99)
+  node: RT02
+  command: ping 18.18.18.18 source 192.168.147.99 repeat 10 timeout 1
+  raw:
+  - regex: Success rate is
+  points: 0
+- name: '効果: Ethernet0/1 が経路なし送信元をドロップ (verification drops 非0)'
+  node: RT01
+  command: show ip interface Ethernet0/1
+  raw:
+  - regex: '[1-9][0-9]* verification drops'
+  points: 25
+- name: '効果: Ethernet0/0 の strict が RPF不一致送信元をドロップ (verification drops 非0)'
+  node: RT01
+  command: show ip interface Ethernet0/0
+  raw:
+  - regex: '[1-9][0-9]* verification drops'
+  points: 25

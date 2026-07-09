@@ -61,6 +61,7 @@
 | **セグメンテーション** | VRF-Lite、VRF ルートリーク、VRF + NAT |
 | **セキュリティ / L2** | 標準/拡張/名前付き ACL、VACL、SPAN / RSPAN、CoPP、エッジ機器ハードニング |
 | **可視化 / 運用** | Flexible NetFlow、EEM |
+| **QoS** | 分類・マーキング / ポリシング / 階層シェーピング + LLQ（効果を iperf3/ping で実測採点する体感シリーズ3問） |
 | **その他** | LAG（EtherChannel）、IPv6 静的 / SLAAC、NAT/PAT 複合 |
 
 ### ENARSI（300-410）系
@@ -82,11 +83,12 @@
 | ひねり | `gen_twist.py` / `gen_aggregate.py` / `gen_pathctrl.py` | ルートフィルタ / 経路集約・マルチエリア / 経路制御・冗長 |
 | トラブルシュート | `gen_troubleshoot.py` | OSPF に故障を注入（多重故障・おとり・段差故障に対応） |
 | BGP TS | `gen_bgp_troubleshoot.py` / `gen_bgp_pathts.py` / `gen_bgp_rrts.py` / `gen_bgp_complex_ts.py` | 到達性 / 経路選択 / RR 伝播 / 複合故障 |
-| IGP 複合 TS | `gen_eigrp_complex_ts.py` / `gen_ospf_complex_ts.py` / `gen_ospfv3_complex_ts.py` | EIGRP / OSPF / OSPFv3 の複合故障 |
+| IGP 複合 TS | `gen_eigrp_complex_ts.py` / `gen_ospf_complex_ts.py` / `gen_ospfv3_complex_ts.py` / `gen_eigrpv6_complex_ts.py` | EIGRP / OSPF / OSPFv3 / EIGRPv6 の複合故障 |
 | 再配送 TS | `gen_redist_mutual_ts.py` / `gen_redist_ripospf_ts.py` | 相互再配送 / RIP⇄OSPF 再配送ループ |
 | 連鎖故障 | `gen_chain_ts.py` | 12台規模でレイヤをまたぐ連鎖故障を生成 |
 | MPLS L3VPN TS | `gen_mpls_ts.py` | 12台 (3PE×Pリング×2顧客) の L3VPN に L1〜L5 の故障を注入 |
 | L2 TS | `gen_l2_troubleshoot.py` | EtherChannel など L2 の故障 |
+| セキュリティ TS | `gen_urpf_ts.py` | uRPF anti-spoofing の故障（strict過剰/ACL例外誤り/未設定/loose過緩の4種・非対称ルーティング題材） |
 | サーバ / 監視 | `gen_dnsdhcp_*.py` / `gen_radius_build.py` / `gen_snmpv3_ts.py` / `gen_zbx*`(SNMP/Zabbix) | Linux サーバ（BIND/DHCP/FreeRADIUS）構築・TS、SNMPv3/Zabbix 監視 |
 
 ### Ansible 自動化ラボ（`ANSIBLE-01〜05`）
