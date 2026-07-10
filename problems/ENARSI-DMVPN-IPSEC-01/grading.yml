@@ -1,0 +1,145 @@
+---
+# 採点基準 (ENARSI-DMVPN-IPSEC-01 / DMVPN Phase 3 + IKEv2 tunnel protection)。
+#  ・ハブに両スポーク登録UP                                 … show dmvpn raw
+#  ・ハブの IKEv2 SA ×2 READY ＋ 実効スイート(NGE)          … show crypto ikev2 sa raw
+#    (PoC 実証: Encr/PRF/DH は detailed 不要・素の出力に出る)
+#  ・ESP transport mode ＋ esp-gcm ＋ 暗号カウンタ>0        … show crypto ipsec sa raw
+#    (EIGRP hello が定常的に暗号化されるためハブは ping 不要でカウンタ>0)
+#  ・Phase 3 署名: 対向スポーク経路 next-hop=ハブのまま     … show ip route genie
+#  ・能動 ping で直結誘発 → 動的エントリ / スポーク間 IKEv2 SA / スポーク間
+#    IPsec カウンタ (直行データが暗号化されている証明)      … raw
+#  ・仕様書コンプライアンス (MTU/MSS/mGRE/key/protection)   … show run 抜粋 raw
+# ★収集はノード毎に sorted 順 → "ping..." < "show..." で能動 ping が先に走る
+#   (DMVPN-PHASE3-01 / IPSEC-IKEV2-01 と同イディオム)。
+# ★mode 検査は not_contains "={Tunnel," も併用 (transport/tunnel 齟齬は不通に
+#   ならず Tunnel mode で上がってしまう — PoC 実証済のため状態で検出する)。
+# RT04 は変更禁止のため採点対象外。収集は CML コンソール経由。
+problem: ENARSI-DMVPN-IPSEC-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # ---- コントロールプレーン: NHRP 登録と IKE ----
+  - name: "RT01(Hub): 両スポークが登録され DMVPN セッションが UP"
+    node: RT01
+    command: "show dmvpn"
+    raw:
+      - contains: "Type:Hub"
+      - regex: "10\\.0\\.24\\.1\\s+10\\.255\\.0\\.2\\s+UP\\s+\\S+\\s+D(T[12])?(?!\\w)"
+      - regex: "10\\.0\\.34\\.1\\s+10\\.255\\.0\\.3\\s+UP\\s+\\S+\\s+D(T[12])?(?!\\w)"
+    points: 10
+
+  - name: "RT01(Hub): 両スポークとの IKEv2 SA が READY"
+    node: RT01
+    command: "show crypto ikev2 sa"
+    raw:
+      - regex: "10\\.0\\.24\\.1/500\\s+\\S+\\s+READY"
+      - regex: "10\\.0\\.34\\.1/500\\s+\\S+\\s+READY"
+    points: 10
+
+  - name: "RT01(Hub): IKEv2 SA が AES-GCM-256 / PRF SHA384 / DH group19 / PSK"
+    node: RT01
+    command: "show crypto ikev2 sa"
+    raw:
+      - regex: "Encr: AES-GCM, keysize: 256"
+      - regex: "PRF: SHA384"
+      - regex: "DH Grp:19"
+      - regex: "Auth sign: PSK"
+    points: 10
+
+  # ---- Child SA 実効: transport mode + AEAD + 暗号トラフィック実績 ----
+  - name: "RT01(Hub): ESP が transport mode / esp-gcm で暗号化カウンタが加算"
+    node: RT01
+    command: "show crypto ipsec sa"
+    raw:
+      - regex: "transform: esp-gcm"
+      - regex: "in use settings =\\{Transport,"
+      - not_contains: "={Tunnel,"
+      - regex: "#pkts encaps: [1-9]"
+      - regex: "#pkts decaps: [1-9]"
+    points: 10
+
+  # ---- Phase 3 署名: 対向スポーク経路の next-hop は「ハブ」のまま ----
+  - name: "RT02(Spoke1): 3.3.3.3/32 を EIGRP 学習し next-hop がハブ(10.255.0.1)のまま"
+    node: RT02
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "3.3.3.3/32"
+      source_protocol: eigrp
+      next_hop.next_hop_list.*.next_hop: "10.255.0.1"
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel0
+    points: 10
+
+  - name: "RT03(Spoke2): 2.2.2.2/32 を EIGRP 学習し next-hop がハブ(10.255.0.1)のまま"
+    node: RT03
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "2.2.2.2/32"
+      source_protocol: eigrp
+      next_hop.next_hop_list.*.next_hop: "10.255.0.1"
+      next_hop.next_hop_list.*.outgoing_interface: Tunnel0
+    points: 5
+
+  # ---- データプレーン: 支店間 ping (直結とスポーク間 IKE を誘発) ----
+  - name: "RT02(Spoke1): スポーク間疎通 3.3.3.3 (能動・直結誘発)"
+    node: RT02
+    command: "ping 3.3.3.3 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 5
+
+  - name: "RT03(Spoke2): スポーク間疎通 2.2.2.2 (能動・直結誘発)"
+    node: RT03
+    command: "ping 2.2.2.2 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 5
+
+  # ---- Phase 3 の肝: 直結が「暗号化されて」上がる ----
+  - name: "RT02(Spoke1): スポーク2への動的(直結)トンネルが UP"
+    node: RT02
+    command: "show dmvpn"
+    raw:
+      - regex: "10\\.0\\.34\\.1\\s+10\\.255\\.0\\.3\\s+UP\\s+\\S+\\s+D(T[12])?(?!\\w)"
+    points: 10
+
+  - name: "RT03(Spoke2): スポーク1への動的(直結)トンネルが UP"
+    node: RT03
+    command: "show dmvpn"
+    raw:
+      - regex: "10\\.0\\.24\\.1\\s+10\\.255\\.0\\.2\\s+UP\\s+\\S+\\s+D(T[12])?(?!\\w)"
+    points: 5
+
+  - name: "RT02(Spoke1): スポーク間の IKEv2 SA が動的に確立 (直行暗号の証明1)"
+    node: RT02
+    command: "show crypto ikev2 sa"
+    raw:
+      - regex: "10\\.0\\.34\\.1/500\\s+\\S+\\s+READY"
+    points: 10
+
+  - name: "RT02(Spoke1): スポーク間 IPsec SA で暗号化カウンタ加算 (直行暗号の証明2)"
+    node: RT02
+    command: "show crypto ipsec sa peer 10.0.34.1"
+    raw:
+      - regex: "in use settings =\\{Transport,"
+      - regex: "#pkts encaps: [1-9]"
+    points: 5
+
+  # ---- 仕様書コンプライアンス (オブジェクト名非依存の run 抜粋) ----
+  - name: "RT01: Tunnel0 が mGRE+key100+protection+MTU1400+MSS1360"
+    node: RT01
+    command: "show running-config interface Tunnel0"
+    raw:
+      - contains: "ip mtu 1400"
+      - contains: "ip tcp adjust-mss 1360"
+      - contains: "tunnel mode gre multipoint"
+      - contains: "tunnel key 100"
+      - regex: "tunnel protection ipsec profile \\S+"
+      - contains: "ip nhrp authentication DMVPNKEY"
+    points: 5

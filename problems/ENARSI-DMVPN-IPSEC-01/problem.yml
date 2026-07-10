@@ -1,0 +1,33 @@
+---
+# DMVPN 完全版 (Phase 3 + IKEv2 tunnel protection)。トポロジは DMVPN-PHASE3-01 と同一。
+# 学習核心:
+#   ・IKEv2 オブジェクト連鎖 (proposal→policy→keyring→ikev2 profile→ipsec profile
+#     →tunnel protection) を mGRE に載せる (ENARSI-IPSEC-IKEV2-01 の発展)
+#   ・★wildcard keyring (address 0.0.0.0 0.0.0.0): spoke-spoke の対向 NBMA は事前不定。
+#     ピア毎 keyring だと hub-spoke は上がるのに spoke間直行だけ沈黙する (最大の罠)
+#   ・ESP transport mode (GRE 済みトンネルに tunnel mode は+20Bの無駄・OCG 準拠)
+#   ・Phase 3: 経路はハブ向きのまま、データは NHRP shortcut で直行 (直行も暗号化)
+# PoC 実証済 (poc/dmvpn-ipsec/README.md): baseline day0 一発成立・全採点シグネチャ確定。
+id: ENARSI-DMVPN-IPSEC-01
+title: "DMVPN 完全版 (Phase 3 + IKEv2 IPsec tunnel protection)"
+exam: ENARSI
+topics: [dmvpn, mgre, nhrp, ipsec, ikev2, nge, phase3, eigrp]
+difficulty: 5
+topology: ad-hoc
+image_family: iosv
+target_nodes: [RT01, RT02, RT03, RT04]
+points: 100
+
+# IOSv は network_cli(SSH) 不可 → 採点は CML コンソール経由で show を収集。
+access: console
+
+# Underlay(NBMA) = 各エッジ↔RT04 の /30（DMVPN-PHASE3-01 と同一アドレス）。
+#   RT01(Hub) Gi0/0 10.0.14.1/30 -- 10.0.14.2 RT04 Gi0/0
+#   RT02(Sp1) Gi0/0 10.0.24.1/30 -- 10.0.24.2 RT04 Gi0/1
+#   RT03(Sp2) Gi0/0 10.0.34.1/30 -- 10.0.34.2 RT04 Gi0/2
+# overlay = Tunnel0 mGRE 10.255.0.0/24 (Hub.1/Sp1.2/Sp2.3), EIGRP AS100, IKEv2+IPsec。
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT04, b_if: 0 }   # Hub  underlay
+    - { a: RT02, a_if: 0, b: RT04, b_if: 1 }   # Spoke1 underlay
+    - { a: RT03, a_if: 0, b: RT04, b_if: 2 }   # Spoke2 underlay

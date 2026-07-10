@@ -1,0 +1,488 @@
+lab:
+  title: POC-DMVPN-IPSEC
+  description: '{"ccnp_lease":{"p64":"UE9DLURNVlBOLUlQU0VD","nodes":{"RT01":"10.1.10.18","RT02":"10.1.10.19","RT03":"10.1.10.20","RT04":"10.1.10.31"}}}'
+  notes: |
+    PoC lab (Claude 2026-07-09): BL-006 DMVPN Phase3 + IKEv2 tunnel protection (IOSv)
+    - day0 = 模範解答ベースライン(全解済み)。ここから故障注入して症状を確定する。
+    - RT01=Hub(NHS) / RT02=Spoke1 / RT03=Spoke2 / RT04=WAN transit
+    - underlay: 各エッジ<->RT04 /30 (10.0.14/24/34.0)。overlay: Tunnel0 10.255.0.0/24
+    - IKEv2 NGE (AES-GCM-256/PRF SHA384/DH19) + wildcard keyring + transport mode
+    - MGMT: RT01=.18 RT02=.19 RT03=.20 RT04=.31 (10.1.10.0/26, mgmt_alloc 台帳リース)
+  version: 0.3.0
+nodes:
+- id: RT01
+  label: RT01
+  node_definition: iosv
+  image_definition: iosv-159-3-m9
+  configuration: |
+    hostname RT01
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ipv6 cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface GigabitEthernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.18 255.255.255.192
+     no shutdown
+    !
+    interface Loopback0
+     ip address 1.1.1.1 255.255.255.255
+    !
+    interface GigabitEthernet0/0
+     description === underlay to RT04 (WAN transit) ===
+     ip address 10.0.14.1 255.255.255.252
+     no shutdown
+    !
+    ip route 0.0.0.0 0.0.0.0 10.0.14.2
+    !
+    crypto ikev2 proposal PROP-NGE
+     encryption aes-gcm-256
+     prf sha384
+     group 19
+    !
+    crypto ikev2 policy POL-NGE
+     proposal PROP-NGE
+    !
+    crypto ikev2 keyring KR-DMVPN
+     peer ANY
+      address 0.0.0.0 0.0.0.0
+      pre-shared-key Ss2026#Dmvpn
+    !
+    crypto ikev2 profile IKEV2-DMVPN
+     match identity remote address 0.0.0.0
+     authentication remote pre-share
+     authentication local pre-share
+     keyring local KR-DMVPN
+     dpd 30 5 on-demand
+    !
+    crypto ipsec transform-set TS-GCM esp-gcm 256
+     mode transport
+    !
+    crypto ipsec profile IPSEC-DMVPN
+     set transform-set TS-GCM
+     set pfs group19
+     set ikev2-profile IKEV2-DMVPN
+    !
+    interface Tunnel0
+     description === DMVPN hub (mGRE) ===
+     ip address 10.255.0.1 255.255.255.0
+     no ip redirects
+     ip mtu 1400
+     ip tcp adjust-mss 1360
+     ip nhrp authentication DMVPNKEY
+     ip nhrp map multicast dynamic
+     ip nhrp network-id 1
+     ip nhrp redirect
+     no ip split-horizon eigrp 100
+     tunnel source GigabitEthernet0/0
+     tunnel mode gre multipoint
+     tunnel key 100
+     tunnel protection ipsec profile IPSEC-DMVPN
+    !
+    router eigrp 100
+     network 1.1.1.1 0.0.0.0
+     network 10.255.0.0 0.0.0.255
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+  x: -350
+  y: -200
+  tags: [routers]
+  interfaces:
+  - id: RT01-i0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 0
+  - id: RT01-i3
+    label: GigabitEthernet0/3
+    type: physical
+    slot: 3
+- id: RT02
+  label: RT02
+  node_definition: iosv
+  image_definition: iosv-159-3-m9
+  configuration: |
+    hostname RT02
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ipv6 cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface GigabitEthernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.19 255.255.255.192
+     no shutdown
+    !
+    interface Loopback0
+     ip address 2.2.2.2 255.255.255.255
+    !
+    interface GigabitEthernet0/0
+     description === underlay to RT04 (WAN transit) ===
+     ip address 10.0.24.1 255.255.255.252
+     no shutdown
+    !
+    ip route 0.0.0.0 0.0.0.0 10.0.24.2
+    !
+    crypto ikev2 proposal PROP-NGE
+     encryption aes-gcm-256
+     prf sha384
+     group 19
+    !
+    crypto ikev2 policy POL-NGE
+     proposal PROP-NGE
+    !
+    crypto ikev2 keyring KR-DMVPN
+     peer ANY
+      address 0.0.0.0 0.0.0.0
+      pre-shared-key Ss2026#Dmvpn
+    !
+    crypto ikev2 profile IKEV2-DMVPN
+     match identity remote address 0.0.0.0
+     authentication remote pre-share
+     authentication local pre-share
+     keyring local KR-DMVPN
+     dpd 30 5 on-demand
+    !
+    crypto ipsec transform-set TS-GCM esp-gcm 256
+     mode transport
+    !
+    crypto ipsec profile IPSEC-DMVPN
+     set transform-set TS-GCM
+     set pfs group19
+     set ikev2-profile IKEV2-DMVPN
+    !
+    interface Tunnel0
+     description === DMVPN spoke1 (mGRE) ===
+     ip address 10.255.0.2 255.255.255.0
+     no ip redirects
+     ip mtu 1400
+     ip tcp adjust-mss 1360
+     ip nhrp authentication DMVPNKEY
+     ip nhrp network-id 1
+     ip nhrp nhs 10.255.0.1 nbma 10.0.14.1 multicast
+     ip nhrp shortcut
+     tunnel source GigabitEthernet0/0
+     tunnel mode gre multipoint
+     tunnel key 100
+     tunnel protection ipsec profile IPSEC-DMVPN
+    !
+    router eigrp 100
+     network 2.2.2.2 0.0.0.0
+     network 10.255.0.0 0.0.0.255
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+  x: -130
+  y: -200
+  tags: [routers]
+  interfaces:
+  - id: RT02-i0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 0
+  - id: RT02-i3
+    label: GigabitEthernet0/3
+    type: physical
+    slot: 3
+- id: RT03
+  label: RT03
+  node_definition: iosv
+  image_definition: iosv-159-3-m9
+  configuration: |
+    hostname RT03
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ipv6 cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface GigabitEthernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.20 255.255.255.192
+     no shutdown
+    !
+    interface Loopback0
+     ip address 3.3.3.3 255.255.255.255
+    !
+    interface GigabitEthernet0/0
+     description === underlay to RT04 (WAN transit) ===
+     ip address 10.0.34.1 255.255.255.252
+     no shutdown
+    !
+    ip route 0.0.0.0 0.0.0.0 10.0.34.2
+    !
+    crypto ikev2 proposal PROP-NGE
+     encryption aes-gcm-256
+     prf sha384
+     group 19
+    !
+    crypto ikev2 policy POL-NGE
+     proposal PROP-NGE
+    !
+    crypto ikev2 keyring KR-DMVPN
+     peer ANY
+      address 0.0.0.0 0.0.0.0
+      pre-shared-key Ss2026#Dmvpn
+    !
+    crypto ikev2 profile IKEV2-DMVPN
+     match identity remote address 0.0.0.0
+     authentication remote pre-share
+     authentication local pre-share
+     keyring local KR-DMVPN
+     dpd 30 5 on-demand
+    !
+    crypto ipsec transform-set TS-GCM esp-gcm 256
+     mode transport
+    !
+    crypto ipsec profile IPSEC-DMVPN
+     set transform-set TS-GCM
+     set pfs group19
+     set ikev2-profile IKEV2-DMVPN
+    !
+    interface Tunnel0
+     description === DMVPN spoke2 (mGRE) ===
+     ip address 10.255.0.3 255.255.255.0
+     no ip redirects
+     ip mtu 1400
+     ip tcp adjust-mss 1360
+     ip nhrp authentication DMVPNKEY
+     ip nhrp network-id 1
+     ip nhrp nhs 10.255.0.1 nbma 10.0.14.1 multicast
+     ip nhrp shortcut
+     tunnel source GigabitEthernet0/0
+     tunnel mode gre multipoint
+     tunnel key 100
+     tunnel protection ipsec profile IPSEC-DMVPN
+    !
+    router eigrp 100
+     network 3.3.3.3 0.0.0.0
+     network 10.255.0.0 0.0.0.255
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+  x: 90
+  y: -200
+  tags: [routers]
+  interfaces:
+  - id: RT03-i0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 0
+  - id: RT03-i3
+    label: GigabitEthernet0/3
+    type: physical
+    slot: 3
+- id: RT04
+  label: RT04
+  node_definition: iosv
+  image_definition: iosv-159-3-m9
+  configuration: |
+    hostname RT04
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ipv6 cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface GigabitEthernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.31 255.255.255.192
+     no shutdown
+    !
+    interface GigabitEthernet0/0
+     description === underlay to RT01 (Hub) ===
+     ip address 10.0.14.2 255.255.255.252
+     no shutdown
+    !
+    interface GigabitEthernet0/1
+     description === underlay to RT02 (Spoke1) ===
+     ip address 10.0.24.2 255.255.255.252
+     no shutdown
+    !
+    interface GigabitEthernet0/2
+     description === underlay to RT03 (Spoke2) ===
+     ip address 10.0.34.2 255.255.255.252
+     no shutdown
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+  x: 310
+  y: -200
+  tags: [routers]
+  interfaces:
+  - id: RT04-i0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 0
+  - id: RT04-i1
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 1
+  - id: RT04-i2
+    label: GigabitEthernet0/2
+    type: physical
+    slot: 2
+  - id: RT04-i3
+    label: GigabitEthernet0/3
+    type: physical
+    slot: 3
+- id: MGMTSW
+  label: MGMT-SW
+  node_definition: unmanaged_switch
+  image_definition: null
+  configuration: ''
+  x: -350
+  y: 250
+  tags: []
+  interfaces:
+  - id: MGMTSW-i0
+    label: port0
+    type: physical
+    slot: 0
+  - id: MGMTSW-i1
+    label: port1
+    type: physical
+    slot: 1
+  - id: MGMTSW-i2
+    label: port2
+    type: physical
+    slot: 2
+  - id: MGMTSW-i3
+    label: port3
+    type: physical
+    slot: 3
+  - id: MGMTSW-i4
+    label: port4
+    type: physical
+    slot: 4
+- id: EXTC
+  label: to-MGMT-net
+  node_definition: external_connector
+  image_definition: null
+  configuration: System Bridge
+  x: -150
+  y: 250
+  tags: []
+  interfaces:
+  - id: EXTC-i0
+    label: port
+    type: physical
+    slot: 0
+links:
+- id: l0
+  n1: RT01
+  i1: RT01-i0
+  n2: RT04
+  i2: RT04-i0
+  conditioning: {}
+  label: RT01<->RT04
+- id: l1
+  n1: RT02
+  i1: RT02-i0
+  n2: RT04
+  i2: RT04-i1
+  conditioning: {}
+  label: RT02<->RT04
+- id: l2
+  n1: RT03
+  i1: RT03-i0
+  n2: RT04
+  i2: RT04-i2
+  conditioning: {}
+  label: RT03<->RT04
+- id: l3
+  n1: RT01
+  i1: RT01-i3
+  n2: MGMTSW
+  i2: MGMTSW-i0
+  conditioning: {}
+  label: RT01-mgmt
+- id: l4
+  n1: RT02
+  i1: RT02-i3
+  n2: MGMTSW
+  i2: MGMTSW-i1
+  conditioning: {}
+  label: RT02-mgmt
+- id: l5
+  n1: RT03
+  i1: RT03-i3
+  n2: MGMTSW
+  i2: MGMTSW-i2
+  conditioning: {}
+  label: RT03-mgmt
+- id: l6
+  n1: RT04
+  i1: RT04-i3
+  n2: MGMTSW
+  i2: MGMTSW-i3
+  conditioning: {}
+  label: RT04-mgmt
+- id: l7
+  n1: MGMTSW
+  i1: MGMTSW-i4
+  n2: EXTC
+  i2: EXTC-i0
+  conditioning: {}
+  label: mgmt-uplink
+annotations: []
+smart_annotations: []
