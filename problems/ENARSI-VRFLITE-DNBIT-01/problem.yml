@@ -1,0 +1,23 @@
+---
+# VRF-Lite + DNビット/ドメインタグ ブラックホール (BL-023・PoC兼用)。
+# RT01(Site A起点/eBGP) → RT02(eBGP受信→OSPF再配布=DNビット/タグ付与) → RT03(VRF-OSPF被害者)。
+# RT03 は VRF 内 OSPF なので、再配布由来の外部LSAをループ防止で破棄→Site A へ不通(ブラックホール)。
+# 修正 = RT03 の `router ospf 10 vrf RED` に `capability vrf-lite`。
+id: ENARSI-VRFLITE-DNBIT-01
+title: "VRF-Lite で対向網に届かない (capability vrf-lite / DNビット)"
+exam: ENARSI
+topics: [vrf-lite, ospf, redistribution, dn-bit, loop-prevention, capability-vrf-lite, bgp]
+difficulty: 4
+topology: ad-hoc
+image_family: iol
+target_nodes: [RT01, RT02, RT03]
+points: 100
+
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # RED eBGP  10.0.12.0/30
+    - { a: RT02, a_if: 1, b: RT03, b_if: 0 }   # RED OSPF   10.0.23.0/30
+  positions:
+    RT01: [-230, -120]
+    RT02: [0, -120]
+    RT03: [230, -120]

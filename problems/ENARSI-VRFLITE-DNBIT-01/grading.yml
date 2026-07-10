@@ -1,0 +1,62 @@
+---
+# 採点基準 (ENARSI-VRFLITE-DNBIT-01)。収集=ssh(iol-xe)。
+# 効果ベース: RT03 が Site A 経路を OSPF で RIB に載せる(=DNビット防護を capability vrf-lite で解除)
+#   → Site B→Site A E2E → 既存(隣接/逆方向/RT02 再配布)を壊していない。
+# 初期状態は DNビット(Downward)付き外部LSAを RT03 が破棄する「ブラックホール」。
+problem: ENARSI-VRFLITE-DNBIT-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # === 本丸: RT03 が Site A 経路を OSPF で RIB に載せる ===
+  - name: "RT03(Site B): Site A 網 172.20.20.0/24 が VRF RED の RIB に OSPF で載る"
+    node: RT03
+    command: "show ip route vrf RED 172.20.20.0 255.255.255.0"
+    raw:
+      - regex: "Known via \"ospf"
+    points: 18
+
+  - name: "RT03(Site B): Site A へ E2E 疎通 (172.30.30.30 → 172.20.20.20)"
+    node: RT03
+    command: "ping vrf RED 172.20.20.20 source 172.30.30.30 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 22
+
+  - name: "RT03(Site B): capability vrf-lite が設定されている (DNビット防護の解除)"
+    node: RT03
+    command: "show running-config | include capability vrf-lite"
+    raw:
+      - contains: "capability vrf-lite"
+    points: 12
+
+  # === 既存の正常部分を壊していない ===
+  - name: "RT03(Site B): RT02(2.2.2.2) との OSPF 隣接が FULL のまま"
+    node: RT03
+    command: "show ip ospf 10 neighbor"
+    raw:
+      - regex: "2\\.2\\.2\\.2\\s+\\d+\\s+FULL"
+    points: 12
+
+  - name: "RT03(Site B): VRF RED にスタティックを使っていない"
+    node: RT03
+    command: "show running-config | include ip route vrf RED"
+    raw:
+      - not_contains: "ip route vrf RED"
+    points: 12
+
+  - name: "RT02(中継): Site A 網 172.20.20.0/24 を eBGP で保持 (再配布元を壊していない)"
+    node: RT02
+    command: "show ip route vrf RED 172.20.20.0 255.255.255.0"
+    raw:
+      - regex: "Known via \"bgp"
+    points: 12
+
+  - name: "RT02(中継): Site B 網 172.30.30.0/24 を OSPF で保持 (逆方向/トポロジ健在)"
+    node: RT02
+    command: "show ip route vrf RED 172.30.30.0 255.255.255.0"
+    raw:
+      - regex: "Known via \"ospf"
+    points: 12

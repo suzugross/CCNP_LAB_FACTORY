@@ -1,0 +1,27 @@
+! ENARSI-VRFLITE-DNBIT-01 初期 (RT03 = Site B 収容・VRF RED OSPF・被害者/操作対象)
+!   links[0] = RT02(OSPF)
+vrf definition RED
+ rd 65000:3
+ address-family ipv4
+ exit-address-family
+!
+interface Loopback0
+ ip address 3.3.3.3 255.255.255.255
+!
+interface Loopback1
+ description === Site B サーバ網 172.30.30.0/24 (VRF RED) ===
+ vrf forwarding RED
+ ip address 172.30.30.30 255.255.255.0
+ ip ospf network point-to-point
+ ip ospf 10 area 0
+!
+interface {{ links[0] }}
+ description === to RT02 (VRF RED, OSPF) ===
+ vrf forwarding RED
+ ip address 10.0.23.2 255.255.255.252
+ ip ospf 10 area 0
+ no shutdown
+!
+router ospf 10 vrf RED
+ router-id 3.3.3.3
+!

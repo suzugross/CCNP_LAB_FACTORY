@@ -1,0 +1,81 @@
+! ENARSI-MPLS-L3VPN-03 初期状態 (RT03 = PE2 / 変更対象)
+!   L3VPN-02 の完成形(稼働中)。RT01 のミラー。sham-link を足すのが本問。
+!   links[0]=RT02(P) / links[1]=RT05(CUST_A CE2) / links[2]=RT07(CUST_B CE2)
+vrf definition CUST_A
+ rd 65000:100
+ address-family ipv4
+  route-target export 65000:100
+  route-target import 65000:100
+ exit-address-family
+!
+vrf definition CUST_B
+ rd 65000:200
+ address-family ipv4
+  route-target export 65000:200
+  route-target import 65000:200
+ exit-address-family
+!
+interface Loopback0
+ ip address 3.3.3.3 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 P (10.1.23.0/30) ===
+ ip address 10.1.23.2 255.255.255.252
+ mpls ip
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT05 CUST_A-CE2 (192.168.2.0/30) ===
+ vrf forwarding CUST_A
+ ip address 192.168.2.2 255.255.255.252
+ ip ospf 10 area 0
+ ip tcp adjust-mss 1452
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT07 CUST_B-CE2 (192.168.12.0/30) ===
+ vrf forwarding CUST_B
+ ip address 192.168.12.2 255.255.255.252
+ ip ospf 20 area 0
+ ip tcp adjust-mss 1452
+ no shutdown
+!
+mpls ldp router-id Loopback0 force
+!
+ip prefix-list PL01 seq 5 permit 172.16.0.0/16 le 24
+!
+route-map MAPA_01 permit 10
+ match ip address prefix-list PL01
+!
+route-map MAPB_01 permit 10
+ match ip address prefix-list PL01
+!
+router ospf 10 vrf CUST_A
+ router-id 3.3.3.3
+ redistribute bgp 65000
+!
+router ospf 20 vrf CUST_B
+ router-id 3.3.3.3
+ redistribute bgp 65000
+!
+router ospf 1
+ router-id 3.3.3.3
+ network 3.3.3.3 0.0.0.0 area 0
+ network 10.1.23.0 0.0.0.3 area 0
+!
+router bgp 65000
+ bgp router-id 3.3.3.3
+ no bgp default ipv4-unicast
+ neighbor 1.1.1.1 remote-as 65000
+ neighbor 1.1.1.1 update-source Loopback0
+ address-family vpnv4
+  neighbor 1.1.1.1 activate
+  neighbor 1.1.1.1 send-community extended
+ exit-address-family
+ address-family ipv4 vrf CUST_A
+  redistribute ospf 10 route-map MAPA_01
+ exit-address-family
+ address-family ipv4 vrf CUST_B
+  redistribute ospf 20 route-map MAPB_01
+ exit-address-family
+!

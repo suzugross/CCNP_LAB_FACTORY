@@ -1,0 +1,29 @@
+! ENARSI-VRFLITE-DNBIT-01 初期 (RT01 = RED境界・Site A 網の起点/eBGP・変更不可)
+!   links[0] = RT02
+vrf definition RED
+ rd 65000:1
+ address-family ipv4
+ exit-address-family
+!
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+!
+interface Loopback1
+ description === Site A サーバ網 172.20.20.0/24 (VRF RED) ===
+ vrf forwarding RED
+ ip address 172.20.20.20 255.255.255.0
+!
+interface {{ links[0] }}
+ description === to RT02 (VRF RED, eBGP) ===
+ vrf forwarding RED
+ ip address 10.0.12.1 255.255.255.252
+ no shutdown
+!
+router bgp 65001
+ bgp router-id 1.1.1.1
+ bgp log-neighbor-changes
+ address-family ipv4 vrf RED
+  network 172.20.20.0 mask 255.255.255.0
+  neighbor 10.0.12.2 remote-as 65000
+ exit-address-family
+!

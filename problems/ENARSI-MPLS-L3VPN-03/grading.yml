@@ -1,0 +1,134 @@
+---
+# 採点基準 (ENARSI-MPLS-L3VPN-03)。収集=ssh(iol-xe)。RT01=PE1 / RT02=P / RT03=PE2。
+# 効果ベース: sham-link 形成 → CUST_A の対向 LAN 経路が MPLS(PE)経由へ昇格
+# (バックドアでない) → PE の VRF RIB も MPLS 経由 → E2E → バックドアは予備で生存
+# → CUST_B(対照)は MPLS のまま → ループ防止維持(capability vrf-lite を入れない) → 制約。
+# 設計: バックドア(O intra)が MPLS(O IA)を無条件で負かす初期状態から、sham-link で
+#   MPLS を O intra に昇格し cost<500 で主経路化する。次ホップで判定(経路種別は両者intraで不可分)。
+problem: ENARSI-MPLS-L3VPN-03
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # === sham-link 形成 (両 PE の VRF CUST_A) ===
+  - name: "RT01(PE1): VRF CUST_A の sham-link が UP"
+    node: RT01
+    command: "show ip ospf 10 sham-links"
+    raw:
+      - regex: "is up"
+    points: 8
+
+  - name: "RT03(PE2): VRF CUST_A の sham-link が UP"
+    node: RT03
+    command: "show ip ospf 10 sham-links"
+    raw:
+      - regex: "is up"
+    points: 8
+
+  # === 本丸: CUST_A 対向 LAN が MPLS(PE)経由・バックドアでない ===
+  - name: "RT04(CUST_A CE1): 対向 site2 LAN 172.16.2.0/24 の経路が PE(RT01=192.168.1.2)経由"
+    node: RT04
+    command: "show ip route 172.16.2.0"
+    raw:
+      - regex: "192\\.168\\.1\\.2"
+    points: 12
+
+  - name: "RT04(CUST_A CE1): 対向 site2 LAN 経路がバックドア(172.16.9.2)経由でない"
+    node: RT04
+    command: "show ip route 172.16.2.0"
+    raw:
+      - not_contains: "172.16.9.2"
+    points: 8
+
+  - name: "RT05(CUST_A CE2): 対向 site1 LAN 172.16.1.0/24 の経路が PE(RT03=192.168.2.2)経由・バックドアでない"
+    node: RT05
+    command: "show ip route 172.16.1.0"
+    raw:
+      - regex: "192\\.168\\.2\\.2"
+      - not_contains: "172.16.9.1"
+    points: 8
+
+  # === PE の VRF RIB も MPLS(sham-link)経由 ===
+  - name: "RT01(PE1): VRF CUST_A の 172.16.2.0/24 が MPLS(遠端PE 3.3.3.3)経由"
+    node: RT01
+    command: "show ip route vrf CUST_A 172.16.2.0"
+    raw:
+      - regex: "3\\.3\\.3\\.3"
+    points: 8
+
+  - name: "RT03(PE2): VRF CUST_A の 172.16.1.0/24 が MPLS(遠端PE 1.1.1.1)経由"
+    node: RT03
+    command: "show ip route vrf CUST_A 172.16.1.0"
+    raw:
+      - regex: "1\\.1\\.1\\.1"
+    points: 8
+
+  # === E2E (CUST_A 主経路成立) ===
+  - name: "RT04(CUST_A CE1): サイト間 E2E 疎通 172.16.1.1 → 172.16.2.1"
+    node: RT04
+    command: "ping 172.16.2.1 source 172.16.1.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 12
+
+  # === バックドアは予備として生存 (撤去していない) ===
+  - name: "RT04(CUST_A CE1): バックドア OSPF 隣接 RT05(5.5.5.5) が FULL のまま(予備生存)"
+    node: RT04
+    command: "show ip ospf neighbor"
+    raw:
+      - regex: "5\\.5\\.5\\.5\\s+\\d+\\s+FULL"
+    points: 6
+
+  - name: "RT05(CUST_A CE2): バックドア OSPF 隣接 RT04(4.4.4.4) が FULL のまま(予備生存)"
+    node: RT05
+    command: "show ip ospf neighbor"
+    raw:
+      - regex: "4\\.4\\.4\\.4\\s+\\d+\\s+FULL"
+    points: 6
+
+  # === CUST_B(対照): バックドア無・常に MPLS ===
+  - name: "RT06(CUST_B CE1): サイト間 E2E 疎通 172.16.1.9 → 172.16.2.9 (対照・不変)"
+    node: RT06
+    command: "ping 172.16.2.9 source 172.16.1.9 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 6
+
+  # === ループ防止を壊していない (capability vrf-lite で DN ビット防護を無効化しない) ===
+  - name: "RT01(PE1): capability vrf-lite を入れていない (ループ防止維持)"
+    node: RT01
+    command: "show running-config | include capability vrf-lite"
+    raw:
+      - not_contains: "capability vrf-lite"
+    points: 2
+
+  - name: "RT03(PE2): capability vrf-lite を入れていない (ループ防止維持)"
+    node: RT03
+    command: "show running-config | include capability vrf-lite"
+    raw:
+      - not_contains: "capability vrf-lite"
+    points: 2
+
+  # === 制約 ===
+  - name: "RT01(PE1): 顧客 VRF にスタティックを使っていない"
+    node: RT01
+    command: "show running-config | include ip route vrf CUST"
+    raw:
+      - not_contains: "ip route vrf CUST"
+    points: 2
+
+  - name: "RT03(PE2): 顧客 VRF にスタティックを使っていない"
+    node: RT03
+    command: "show running-config | include ip route vrf CUST"
+    raw:
+      - not_contains: "ip route vrf CUST"
+    points: 2
+
+  - name: "RT02(P): BGP を持たない (コアは顧客経路を知らない)"
+    node: RT02
+    command: "show running-config | section router bgp"
+    raw:
+      - not_contains: "router bgp"
+    points: 2

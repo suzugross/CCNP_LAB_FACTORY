@@ -1,0 +1,54 @@
+---
+# MPLS L3VPN 応用2 — OSPF PE-CE バックドア + sham-link 経路選択。
+# ENARSI-MPLS-L3VPN-02 の完成形(OSPF PE-CE / MP-BGP VPNv4 / 再配布 / 広告制御)を
+# 「稼働中」の初期状態とし、CUST_A の site1(RT04)↔site2(RT05) に直結バックドア
+# (area0・高コスト=低速予備)を1本足した状態から出題する。
+#
+# 症状: バックドアが O intra、MPLS 経由が O IA になるため、OSPF は経路タイプ優先で
+#   「低速バックドアを無条件で選ぶ」(コストを下げても直らない)。しかも area0 が
+#   バックドアで連結されるため PE の VRF RIB でも OSPF(AD110) が BGP(AD200) に勝ち、
+#   コア(MPLS)が使われない。
+#
+# 正解: 両 PE の VRF CUST_A に sham-link を張り MPLS 経路を O intra に昇格させ、
+#   sham-link cost < バックドア cost にして MPLS を主・バックドアを予備にする。
+#
+# 隠しひねり (task では明かさない):
+#   - sham-link 端点 /32 は MP-BGP(VPNv4) のみで到達させる。既存の
+#     `redistribute bgp 65000`(BGP→OSPF・route-map なし)が端点を OSPF に漏らすと
+#     recursion で sham-link が張れない → 端点除外の route-map が必須
+#     (2026-07-09 IOL-XE17.15 実機PoCで挙動確認済)。
+#   - sham-link を張るだけでは不十分。cost を バックドア(500)未満にしないと優劣が
+#     変わらない(形成≠優先)。
+#   - `no area 0 sham-link A B cost N` は cost だけ剥がれ本体が残る(削除は cost 無し)。
+#   - CUST_B はバックドア無しの対照群(常に MPLS)。
+id: ENARSI-MPLS-L3VPN-03
+title: "MPLS L3VPN 応用2 (OSPF PE-CE バックドア + sham-link で経路選択)"
+exam: ENARSI
+topics: [mpls, l3vpn, vpnv4, mp-bgp, vrf, ospf, pe-ce, sham-link, backdoor, path-preference, loop-prevention, dn-bit]
+difficulty: 5
+topology: ad-hoc
+image_family: iol
+target_nodes: [RT01, RT02, RT03, RT04, RT05, RT06, RT07]
+points: 100
+
+# アドレス計画: ENARSI-MPLS-L3VPN-02 と同一 + CUST_A バックドア 172.16.9.0/30
+#   (RT04=.1 / RT05=.2, area0, ip ospf cost 500 = 低速予備)。
+#   sham-link 端点 (受験者構成): PE1=Lo110 1.1.110.1/32 / PE2=Lo110 3.3.110.1/32
+#   (いずれも VRF CUST_A・MP-BGP のみで広告)。
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # コア PE1-P   10.1.12.0/30
+    - { a: RT02, a_if: 1, b: RT03, b_if: 0 }   # コア P-PE2   10.1.23.0/30
+    - { a: RT01, a_if: 1, b: RT04, b_if: 0 }   # CUST_A site1 192.168.1.0/30
+    - { a: RT01, a_if: 2, b: RT06, b_if: 0 }   # CUST_B site1 192.168.11.0/30
+    - { a: RT03, a_if: 1, b: RT05, b_if: 0 }   # CUST_A site2 192.168.2.0/30
+    - { a: RT03, a_if: 2, b: RT07, b_if: 0 }   # CUST_B site2 192.168.12.0/30
+    - { a: RT04, a_if: 1, b: RT05, b_if: 1 }   # CUST_A バックドア 172.16.9.0/30 (低速)
+  positions:
+    RT04: [-450, -330]
+    RT06: [-450, -70]
+    RT01: [-230, -200]
+    RT02: [0, -200]
+    RT03: [230, -200]
+    RT05: [450, -330]
+    RT07: [450, -70]

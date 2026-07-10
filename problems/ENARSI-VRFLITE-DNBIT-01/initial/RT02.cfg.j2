@@ -1,0 +1,35 @@
+! ENARSI-VRFLITE-DNBIT-01 初期 (RT02 = RED中継・eBGP受信→OSPF相互再配布・変更不可)
+!   links[0] = RT01(eBGP) / links[1] = RT03(OSPF)
+vrf definition RED
+ rd 65000:2
+ address-family ipv4
+ exit-address-family
+!
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 (VRF RED, eBGP) ===
+ vrf forwarding RED
+ ip address 10.0.12.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (VRF RED, OSPF) ===
+ vrf forwarding RED
+ ip address 10.0.23.1 255.255.255.252
+ ip ospf 10 area 0
+ no shutdown
+!
+router ospf 10 vrf RED
+ router-id 2.2.2.2
+ redistribute bgp 65000
+!
+router bgp 65000
+ bgp router-id 2.2.2.2
+ bgp log-neighbor-changes
+ address-family ipv4 vrf RED
+  neighbor 10.0.12.1 remote-as 65001
+  redistribute ospf 10
+ exit-address-family
+!
