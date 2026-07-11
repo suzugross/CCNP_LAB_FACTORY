@@ -1,0 +1,265 @@
+lab:
+  title: POC-ASAHA
+  description: 'BL-041 ASAv HA + one-arm PoC (console-only, no mgmt)'
+  notes: |
+    PoC lab (Claude 2026-07-10): BL-041 ワンアーム構成 × ASAv Active/Standby HA
+    - fw1/fw2: Gi0/0 = ワンアーム(trunk VLAN100/200 サブIF) / Gi0/1 = failover+state 直結
+    - SW01(iosvl2): fw両アームをトランク収容・RT01=VLAN100アクセス・RT02=VLAN200アクセス
+    - VLAN100(outside transit): RT01 .1 / ASA .254 (standby .253)  10.100.0.0/24
+    - VLAN200(inside server):   RT02 .1 / ASA .254 (standby .253)  10.200.0.0/24
+    - fw config は yaml が正準（ASAv day0不発 → ha_tools.py bootstrap が console 投入。
+      fw2 は failover bootstrap 数行のみ＝Active からの自動複製を検証）
+  version: 0.3.0
+nodes:
+- id: fw1
+  label: fw1
+  node_definition: asav
+  image_definition: asav-9-22-1-1
+  ram: 2048
+  configuration: |
+    hostname fwha
+    enable password CCNPccnp
+    username SUZUKI password CCNPccnp privilege 15
+    !
+    interface GigabitEthernet0/0
+     no shutdown
+    !
+    interface GigabitEthernet0/0.100
+     vlan 100
+     nameif outside
+     security-level 0
+     ip address 10.100.0.254 255.255.255.0 standby 10.100.0.253
+    !
+    interface GigabitEthernet0/0.200
+     vlan 200
+     nameif inside
+     security-level 100
+     ip address 10.200.0.254 255.255.255.0 standby 10.200.0.253
+    !
+    access-list OUTSIDE_IN extended permit icmp any 10.200.0.0 255.255.255.0
+    access-list OUTSIDE_IN extended permit tcp any host 10.200.0.1 eq telnet
+    access-group OUTSIDE_IN in interface outside
+    icmp permit any outside
+    icmp permit any inside
+    !
+    interface GigabitEthernet0/1
+     no shutdown
+    !
+    failover lan unit primary
+    failover lan interface FOLINK GigabitEthernet0/1
+    failover link FOLINK GigabitEthernet0/1
+    failover interface ip FOLINK 172.16.99.1 255.255.255.252 standby 172.16.99.2
+    failover key CCNPccnp
+    failover
+  x: -150
+  y: -250
+  tags: [firewalls]
+  interfaces:
+  - id: fw1-i1
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 1
+  - id: fw1-i2
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 2
+- id: fw2
+  label: fw2
+  node_definition: asav
+  image_definition: asav-9-22-1-1
+  ram: 2048
+  configuration: |
+    enable password CCNPccnp
+    !
+    interface GigabitEthernet0/1
+     no shutdown
+    !
+    failover lan unit secondary
+    failover lan interface FOLINK GigabitEthernet0/1
+    failover link FOLINK GigabitEthernet0/1
+    failover interface ip FOLINK 172.16.99.1 255.255.255.252 standby 172.16.99.2
+    failover key CCNPccnp
+    failover
+  x: 150
+  y: -250
+  tags: [firewalls]
+  interfaces:
+  - id: fw2-i1
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 1
+  - id: fw2-i2
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 2
+- id: SW01
+  label: SW01
+  node_definition: iosvl2
+  image_definition: iosvl2-2020
+  configuration: |
+    hostname SW01
+    no ip domain lookup
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vtp mode transparent
+    !
+    vlan 100
+     name OUTSIDE-TRANSIT
+    vlan 200
+     name INSIDE-SERVER
+    !
+    interface GigabitEthernet0/0
+     description === fw1 one-arm trunk ===
+     switchport trunk encapsulation dot1q
+     switchport mode trunk
+     switchport trunk allowed vlan 100,200
+     no shutdown
+    !
+    interface GigabitEthernet0/1
+     description === fw2 one-arm trunk ===
+     switchport trunk encapsulation dot1q
+     switchport mode trunk
+     switchport trunk allowed vlan 100,200
+     no shutdown
+    !
+    interface GigabitEthernet1/0
+     description === RT01 (VLAN100) ===
+     switchport mode access
+     switchport access vlan 100
+     spanning-tree portfast
+     no shutdown
+    !
+    interface GigabitEthernet1/1
+     description === RT02 (VLAN200) ===
+     switchport mode access
+     switchport access vlan 200
+     spanning-tree portfast
+     no shutdown
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 0
+  y: -50
+  tags: [switches]
+  interfaces:
+  - id: SW01-i0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 0
+  - id: SW01-i1
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 1
+  - id: SW01-i4
+    label: GigabitEthernet1/0
+    type: physical
+    slot: 4
+  - id: SW01-i5
+    label: GigabitEthernet1/1
+    type: physical
+    slot: 5
+- id: RT01
+  label: RT01
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT01
+    no ip domain lookup
+    ip cef
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === VLAN100 access (outside transit) ===
+     ip address 10.100.0.1 255.255.255.0
+     no shutdown
+    !
+    ip route 0.0.0.0 0.0.0.0 10.100.0.254
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: -250
+  y: 100
+  tags: [routers]
+  interfaces:
+  - id: RT01-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+- id: RT02
+  label: RT02
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT02
+    no ip domain lookup
+    ip cef
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === VLAN200 access (inside server) ===
+     ip address 10.200.0.1 255.255.255.0
+     no shutdown
+    !
+    ip route 0.0.0.0 0.0.0.0 10.200.0.254
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+     transport input telnet
+  x: 250
+  y: 100
+  tags: [routers]
+  interfaces:
+  - id: RT02-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+links:
+- id: l0
+  n1: fw1
+  i1: fw1-i1
+  n2: SW01
+  i2: SW01-i0
+  conditioning: {}
+  label: fw1-arm
+- id: l1
+  n1: fw2
+  i1: fw2-i1
+  n2: SW01
+  i2: SW01-i1
+  conditioning: {}
+  label: fw2-arm
+- id: l2
+  n1: fw1
+  i1: fw1-i2
+  n2: fw2
+  i2: fw2-i2
+  conditioning: {}
+  label: failover-link
+- id: l3
+  n1: RT01
+  i1: RT01-i0
+  n2: SW01
+  i2: SW01-i4
+  conditioning: {}
+  label: RT01-vlan100
+- id: l4
+  n1: RT02
+  i1: RT02-i0
+  n2: SW01
+  i2: SW01-i5
+  conditioning: {}
+  label: RT02-vlan200
+annotations: []
+smart_annotations: []

@@ -1,0 +1,303 @@
+lab:
+  title: POC-ASAV
+  description: '{"ccnp_lease":{"p64":"UE9DLUFTQVY=","nodes":{"FW01":"10.1.10.11","RT01":"10.1.10.12","RT02":"10.1.10.13"}}}'
+  notes: |
+    PoC lab (Claude 2026-07-10): BL-038 ASAv 導入 PoC
+    - RT01(inside) -- FW01(ASAv) -- RT02(outside)
+    - inside: 10.99.1.0/30 / outside: 10.99.2.0/24
+    - RT01 Lo0=192.168.1.1(static NAT→10.99.2.100) Lo1=192.168.2.1(dynamic PAT)
+    - RT02 Lo0=198.51.100.1(疑似インターネットホスト)
+    - MGMT: FW01=.11 RT01=.12 RT02=.13 (10.1.10.0/26, gw .30)
+    検証: ①ASAv day0注入 ②console/SSH採点経路 ③NAT/ACL/inspection
+  version: 0.3.0
+nodes:
+- id: FW01
+  label: FW01
+  node_definition: asav
+  image_definition: asav-9-22-1-1
+  ram: 2048
+  # ★ASAv は day0 注入が不発（イメージが first-boot 消費済み）。この configuration は
+  #   CML には保存されるが自動適用されない。asav_bootstrap.py がここを読んで
+  #   console 経由で投入する（正準 config の置き場としてここに置く）。
+  # ★実機検証済の注意: パスワードは8文字以上必須 / ACL は実IP(8.3+) /
+  #   SSH は crypto key generate rsa + write memory + reload 後に有効化。
+  configuration: |
+    hostname FW01
+    enable password CCNPccnp
+    username SUZUKI password CCNPccnp privilege 15
+    !
+    interface Management0/0
+     management-only
+     nameif management
+     security-level 100
+     ip address 10.1.10.11 255.255.255.192
+     no shutdown
+    !
+    interface GigabitEthernet0/0
+     nameif inside
+     security-level 100
+     ip address 10.99.1.1 255.255.255.252
+     no shutdown
+    !
+    interface GigabitEthernet0/1
+     nameif outside
+     security-level 0
+     ip address 10.99.2.1 255.255.255.0
+     no shutdown
+    !
+    route outside 0.0.0.0 0.0.0.0 10.99.2.2 1
+    route inside 192.168.1.0 255.255.255.0 10.99.1.2 1
+    route inside 192.168.2.0 255.255.255.0 10.99.1.2 1
+    !
+    object network INSIDE-PAT
+     subnet 192.168.2.0 255.255.255.0
+     nat (inside,outside) dynamic interface
+    object network RT01-LO0-STATIC
+     host 192.168.1.1
+     nat (inside,outside) static 10.99.2.100
+    !
+    access-list OUTSIDE_IN extended permit icmp any host 192.168.1.1
+    access-list OUTSIDE_IN extended permit tcp any host 192.168.1.1 eq telnet
+    access-group OUTSIDE_IN in interface outside
+    !
+    class-map inspection_default
+     match default-inspection-traffic
+    policy-map global_policy
+     class inspection_default
+      inspect icmp
+    service-policy global_policy global
+    !
+    aaa authentication ssh console LOCAL
+    aaa authorization exec LOCAL auto-enable
+    ssh 10.1.10.0 255.255.255.192 management
+  x: -100
+  y: -200
+  tags: [firewalls]
+  interfaces:
+  - id: FW01-i0
+    label: Management0/0
+    type: physical
+    slot: 0
+  - id: FW01-i1
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 1
+  - id: FW01-i2
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 2
+- id: RT01
+  label: RT01
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT01
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface Ethernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.12 255.255.255.192
+     no shutdown
+    !
+    interface Ethernet0/0
+     description === to FW01 inside ===
+     ip address 10.99.1.2 255.255.255.252
+     no shutdown
+    !
+    interface Loopback0
+     description === inside host (static NAT -> 10.99.2.100) ===
+     ip address 192.168.1.1 255.255.255.0
+    !
+    interface Loopback1
+     description === inside host (dynamic PAT) ===
+     ip address 192.168.2.1 255.255.255.0
+    !
+    ip route 0.0.0.0 0.0.0.0 10.99.1.1
+    !
+    ip ssh version 2
+    !
+    event manager applet GEN-SSH-KEY authorization bypass
+     event timer countdown time 30
+     action 1.0 cli command "enable"
+     action 2.0 cli command "configure terminal"
+     action 3.0 cli command "crypto key generate rsa modulus 2048"
+     action 4.0 syslog msg "EEM GEN-SSH-KEY: RSA key generated"
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+     transport input telnet ssh
+  x: -350
+  y: -200
+  tags: [routers]
+  interfaces:
+  - id: RT01-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RT01-i3
+    label: Ethernet0/3
+    type: physical
+    slot: 3
+- id: RT02
+  label: RT02
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT02
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface Ethernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.13 255.255.255.192
+     no shutdown
+    !
+    interface Ethernet0/0
+     description === to FW01 outside ===
+     ip address 10.99.2.2 255.255.255.0
+     no shutdown
+    !
+    interface Loopback0
+     description === Internet host ===
+     ip address 198.51.100.1 255.255.255.255
+    !
+    ip ssh version 2
+    !
+    event manager applet GEN-SSH-KEY authorization bypass
+     event timer countdown time 30
+     action 1.0 cli command "enable"
+     action 2.0 cli command "configure terminal"
+     action 3.0 cli command "crypto key generate rsa modulus 2048"
+     action 4.0 syslog msg "EEM GEN-SSH-KEY: RSA key generated"
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+     transport input telnet ssh
+  x: 150
+  y: -200
+  tags: [routers]
+  interfaces:
+  - id: RT02-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RT02-i3
+    label: Ethernet0/3
+    type: physical
+    slot: 3
+- id: MGMTSW
+  label: MGMT-SW
+  node_definition: unmanaged_switch
+  image_definition: null
+  configuration: ''
+  x: -100
+  y: 50
+  tags: []
+  interfaces:
+  - id: MGMTSW-i0
+    label: port0
+    type: physical
+    slot: 0
+  - id: MGMTSW-i1
+    label: port1
+    type: physical
+    slot: 1
+  - id: MGMTSW-i2
+    label: port2
+    type: physical
+    slot: 2
+  - id: MGMTSW-i3
+    label: port3
+    type: physical
+    slot: 3
+- id: EXTC
+  label: to-MGMT-net
+  node_definition: external_connector
+  image_definition: null
+  configuration: System Bridge
+  x: -100
+  y: 200
+  tags: []
+  interfaces:
+  - id: EXTC-i0
+    label: port
+    type: physical
+    slot: 0
+links:
+- id: l0
+  n1: RT01
+  i1: RT01-i0
+  n2: FW01
+  i2: FW01-i1
+  conditioning: {}
+  label: RT01<->FW01-inside
+- id: l1
+  n1: FW01
+  i1: FW01-i2
+  n2: RT02
+  i2: RT02-i0
+  conditioning: {}
+  label: FW01-outside<->RT02
+- id: l2
+  n1: FW01
+  i1: FW01-i0
+  n2: MGMTSW
+  i2: MGMTSW-i0
+  conditioning: {}
+  label: FW01-mgmt
+- id: l3
+  n1: RT01
+  i1: RT01-i3
+  n2: MGMTSW
+  i2: MGMTSW-i1
+  conditioning: {}
+  label: RT01-mgmt
+- id: l4
+  n1: RT02
+  i1: RT02-i3
+  n2: MGMTSW
+  i2: MGMTSW-i2
+  conditioning: {}
+  label: RT02-mgmt
+- id: l5
+  n1: MGMTSW
+  i1: MGMTSW-i3
+  n2: EXTC
+  i2: EXTC-i0
+  conditioning: {}
+  label: mgmt-uplink
+annotations: []
+smart_annotations: []
