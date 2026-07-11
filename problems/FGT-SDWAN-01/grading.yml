@@ -1,0 +1,113 @@
+# FGT-SDWAN-01 採点基準（100点・3段階採点）
+# stage: normal   = 平常時に収集
+#        degraded = ops が WAN1 劣化(250ms/loss3%)を注入して35秒後に収集
+#        restored = 劣化解除後・フェイルバック完了を待って収集(最大4分リトライ)
+# ★sdwan_ops.py grade が stage を解釈する(grade.py は stdout+raw 判定のみ)
+problem: FGT-SDWAN-01
+total_points: 100
+
+checks:
+  # ---- 機能試験(平常時) ----
+  - name: "G1: USER-PC→SRV 疎通（SD-WAN 経由・SNAT）"
+    node: pcA
+    command: "ping -c 10 198.51.100.100"
+    stage: normal
+    raw:
+      - regex: "(10|[89]) packets received"
+    points: 10
+
+  - name: "G2: USER-PC→SRV HTTP 到達"
+    node: pcA
+    command: "wget -q -O - -T 8 http://198.51.100.100/"
+    stage: normal
+    raw:
+      - contains: "SDWAN LAB SERVER"
+    points: 8
+
+  # ---- SD-WAN 構成状態(平常時) ----
+  - name: "S1: SD-WAN メンバー2本（port1/port2・正しいゲートウェイ）"
+    node: fgt1
+    command: "diagnose sys sdwan member"
+    stage: normal
+    raw:
+      - contains: "interface: port1"
+      - contains: "gateway: 203.0.113.1"
+      - contains: "interface: port2"
+      - contains: "gateway: 203.0.114.1"
+    points: 8
+
+  - name: "S2: Performance SLA が両メンバーで alive（実測値あり）"
+    node: fgt1
+    command: "diagnose sys sdwan health-check status"
+    stage: normal
+    raw:
+      - regex: "Seq\\(1 port1\\): state\\(alive"
+      - regex: "Seq\\(2 port2\\): state\\(alive"
+    points: 10
+
+  - name: "S3: ヘルスチェック定義（宛先サーバ・SLA 閾値）"
+    node: fgt1
+    command: "show system sdwan"
+    stage: normal
+    raw:
+      # ★show はサーバ値を引用符付きで表示する(既定の Default_* ヘルスチェックも
+      #   混在するため SLASRV 固有の値で判定)
+      - contains: "set server \"198.51.100.100\""
+      - contains: "set latency-threshold 100"
+      - contains: "set packetloss-threshold 5"
+    points: 8
+
+  - name: "S4: SD-WAN ルール（mode sla・優先度 port1→port2）"
+    node: fgt1
+    command: "show system sdwan"
+    stage: normal
+    raw:
+      - contains: "set mode sla"
+      - contains: "set priority-members 1 2"
+    points: 8
+
+  - name: "S5: SD-WAN ゾーン静的デフォルト（両メンバーに載る）"
+    node: fgt1
+    command: "get router info routing-table all"
+    stage: normal
+    raw:
+      - contains: "via 203.0.113.1, port1"
+      - contains: "via 203.0.114.1, port2"
+    points: 6
+
+  - name: "S6: LAN→SD-WAN ゾーンのポリシー（NAT 有効）"
+    node: fgt1
+    command: "show firewall policy"
+    stage: normal
+    raw:
+      - contains: "set srcintf \"port3\""
+      - contains: "set dstintf \"virtual-wan-link\""
+      - contains: "set action accept"
+      - contains: "set nat enable"
+    points: 10
+
+  # ---- 効果採点(劣化注入下) ----
+  - name: "E1: WAN1 劣化時に SD-WAN ルールが port2 を第一選択に切替"
+    node: fgt1
+    command: "diagnose sys sdwan service4"
+    stage: degraded
+    raw:
+      - regex: "1: Seq_num\\(2 port2"
+    points: 16
+
+  - name: "E2: 劣化中もユーザ通信は継続（自動迂回の実証）"
+    node: pcA
+    command: "ping -c 10 198.51.100.100"
+    stage: degraded
+    raw:
+      - regex: "(10|[89]) packets received"
+    points: 10
+
+  # ---- 効果採点(復旧後) ----
+  - name: "E3: 回復後に port1 へ自動フェイルバック"
+    node: fgt1
+    command: "diagnose sys sdwan service4"
+    stage: restored
+    raw:
+      - regex: "1: Seq_num\\(1 port1"
+    points: 6
