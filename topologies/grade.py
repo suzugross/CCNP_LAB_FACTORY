@@ -85,8 +85,20 @@ def _device(os_name):
 
 
 def genie_parse(parser, output, os_name="iosxe"):
-    """show 出力テキストを Genie で構造化。失敗時は None。"""
+    """show 出力テキストを Genie で構造化。失敗時は None。
+
+    parser が "class:<module>.<Class>" 形式なら genie.libs.parser 配下の
+    パーサクラスを直接使う。dev.parse のコマンド解決が不適切なパーサを
+    選ぶ場合の回避（例: "show policy-map interface" は rv1 版が選ばれるが
+    rv1 の IF 名 regex が TenGigabitEthernet 固定で IOL/IOSv 出力に不整合。
+    → parser: "class:iosxe.show_policy_map.ShowPolicyMapInterface" と書く）。"""
     try:
+        if str(parser).startswith("class:"):
+            import importlib
+            modpath, clsname = str(parser)[len("class:"):].rsplit(".", 1)
+            cls = getattr(importlib.import_module(
+                f"genie.libs.parser.{modpath}"), clsname)
+            return cls(device=_device(os_name)).parse(output=output or "")
         return _device(os_name).parse(parser, output=output or "")
     except Exception:
         # SchemaEmptyParserError / ParserNotFound / 収束前の空出力など

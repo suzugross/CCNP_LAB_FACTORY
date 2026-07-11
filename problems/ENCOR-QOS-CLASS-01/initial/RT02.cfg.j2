@@ -1,0 +1,28 @@
+! --- data plane (構築済み・変更不可) ---
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+interface Ethernet0/0
+ description === LAN: Site-2 (192.168.20.0/24) ===
+ ip address 192.168.20.1 255.255.255.0
+ no shutdown
+interface Ethernet0/1
+ description === WAN to RT01 ===
+ ip address 10.1.12.2 255.255.255.252
+ no shutdown
+ip route 192.168.10.0 255.255.255.0 10.1.12.1
+!
+! --- 到着マーキング観測ポリシー (変更禁止・観測に使ってよい) ---
+! WAN から届いたパケットの DSCP を数えるだけの受け側カウンタ。
+! 確認: show policy-map interface Ethernet0/1 input
+class-map match-all OBS-EF
+ match dscp ef
+class-map match-all OBS-AF11
+ match dscp af11
+class-map match-all OBS-CS2
+ match dscp cs2
+policy-map MONITOR
+ class OBS-EF
+ class OBS-AF11
+ class OBS-CS2
+interface Ethernet0/1
+ service-policy input MONITOR

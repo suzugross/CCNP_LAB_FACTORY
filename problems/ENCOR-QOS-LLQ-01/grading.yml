@@ -1,0 +1,88 @@
+---
+# 採点基準: 構成 (Genie 構造化) + 効果の実測 (PC01 から iperf3/ping) の2層。
+# - "show policy-map interface" は dev.parse だと rv1 パーサが選ばれ IOL の IF 名に
+#   マッチしないため、parser class 直指定 (class:...) を使う (grade.py 拡張, 2026-07-09)。
+# - "Priority: 256 kbps" 行はパーサが構造化しない → raw regex で判定。
+# - カウンタ系チェックは「採点器自身が流すトラフィック」で加算される
+#   → 初回試行では FAIL でも、リトライ収束ループの2回目以降で PASS する設計。
+problem: ENCOR-QOS-LLQ-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # ---- 構成 (RT01) ----
+  - name: "RT01: WAN 出力の親クラスで 2Mbps シェーピング"
+    node: RT01
+    command: "show policy-map interface Ethernet0/1"
+    parser: "class:iosxe.show_policy_map.ShowPolicyMapInterface"
+    find: "Ethernet0/1.service_policy.output.policy_name.*.class_map.class-default"
+    match:
+      shape_cir_bps: 2000000
+    points: 15
+
+  - name: "RT01: 子ポリシーに DSCP EF マッチの音声クラス (階層 QoS)"
+    node: RT01
+    command: "show policy-map interface Ethernet0/1"
+    parser: "class:iosxe.show_policy_map.ShowPolicyMapInterface"
+    find: "Ethernet0/1.service_policy.output.policy_name.*.class_map.class-default.child_policy_name.*.class_map.*"
+    match:
+      match.*:
+        contains: "dscp ef"
+    points: 10
+
+  - name: "RT01: 音声クラスは priority 256kbps (LLQ)"
+    node: RT01
+    command: "show policy-map interface Ethernet0/1"
+    raw:
+      - regex: 'Priority: 256 kbps'
+    points: 10
+
+  # ---- 効果: RT01 のキューカウンタ (採点器のトラフィックで加算 → 2回目試行で PASS) ----
+  - name: "RT01: [実測] 優先キューは無傷 (出力あり・drops 0)"
+    node: RT01
+    command: "show policy-map interface Ethernet0/1"
+    parser: "class:iosxe.show_policy_map.ShowPolicyMapInterface"
+    find: "Ethernet0/1.service_policy.output.policy_name.*.queue_stats_for_all_priority_classes.priority_level.default"
+    match:
+      pkts_output:
+        gt: 0
+      total_drops: 0
+    points: 10
+
+  - name: "RT01: [実測] 一般クラスに輻輳ドロップ (シェーパが実際に絞っている証跡)"
+    node: RT01
+    command: "show policy-map interface Ethernet0/1"
+    parser: "class:iosxe.show_policy_map.ShowPolicyMapInterface"
+    find: "Ethernet0/1.service_policy.output.policy_name.*.class_map.class-default.child_policy_name.*.class_map.class-default"
+    match:
+      total_drops:
+        gt: 0
+    points: 10
+
+  # ---- 効果: PC01 からの実測 ----
+  - name: "PC01: [実測] TCP スループットが契約帯域に整形されている (0.7〜2.4Mbps)"
+    node: PC01
+    exec: shell
+    command: >-
+      iperf3 -c 192.168.20.20 -t 8 -J 2>/dev/null |
+      python3 -c "import sys,json;bps=json.load(sys.stdin)['end']['sum_received']['bits_per_second'];print('MEAS_TCP_BPS',int(bps));print('SHAPE_EFFECTIVE' if 700000<bps<2400000 else 'SHAPE_NG')"
+    raw:
+      - contains: SHAPE_EFFECTIVE
+    points: 15
+
+  # EF保護は「本物の輻輳の中で」証明する必要がある（QoS 未設定だと輻輳自体が起きず
+  # EF ping が綺麗に通ってしまう）→ 同一輻輳ウィンドウ内で EF 無傷 AND BE 劣化 を
+  # 両方満たしたときのみ PASS の統合チェックにする（実機ネガティブ確認で確立）。
+  - name: "PC01: [実測] 輻輳中、音声 (EF) は無傷 (loss0%・avg<60ms) かつ一般 ping は劣化 (LLQ の効果)"
+    node: PC01
+    exec: shell
+    command: >-
+      (iperf3 -c 192.168.20.20 -u -b 5M -l 1200 -t 18 >/dev/null 2>&1 &);
+      sleep 3;
+      { ping -Q 184 -c 20 -i 0.2 192.168.20.20; ping -c 20 -i 0.2 192.168.20.20; } |
+      python3 -c "import sys,re;t=sys.stdin.read();L=[int(x) for x in re.findall(r'(\d+)% packet loss',t)];A=[float(m[1]) for m in re.findall(r'= *([\d.]+)/([\d.]+)/',t)];ef_l=L[0] if L else 100;be_l=L[1] if len(L)>1 else 100;ef_a=A[0] if A else 9999.0;be_a=A[1] if len(A)>1 else 9999.0;print('EF loss%/avg:',ef_l,ef_a,' BE loss%/avg:',be_l,be_a);print('LLQ_EFFECTIVE' if ef_l==0 and ef_a<60 and (be_l>=20 or be_a>=150) else 'LLQ_NG')"
+    raw:
+      - contains: LLQ_EFFECTIVE
+    points: 30

@@ -1,0 +1,151 @@
+---
+# 採点基準 (ENARSI-DHCPV6-01)。収集=ssh(iol-xe)。IPv6 only・DHCPv6 使い分け。
+# 実機検証済みの regex 素材は poc/dhcpv6/README.md（2026-07-09 PoC）に基づく:
+#   - サーバは bare `ipv6 dhcp server`(automatic) — 行末改行アンカーで named バインドと区別
+#   - stateless プールは link-address 文が選択キー / stateful は address prefix
+#   - RA フラグ文言: O=2行 / M="Hosts use DHCP to obtain routable addresses."(M 時 O 行なし)
+#   - 動的アドレスは値が毎回変わる → プレフィクス regex のみで判定
+#   - 純 stateful の負の要件(SLAAC 併存禁止)は `| include 2001:DB8:B` + not_regex FF:FE
+#     (EUI-64 由来アドレスは FF:FE を含む・LL を含めないよう include で絞る)。
+#     QoS 教訓に従い正の条件(払い出しアドレス有り)と同一チェックで相関判定。
+problem: ENARSI-DHCPV6-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # ============ RT01: 中央サーバ (25) ============
+  - name: "RT01: stateless プール(DNS/domain 配布・LAN-A を link-address で選択・アドレス払い出し無し)"
+    node: RT01
+    command: "show ipv6 dhcp pool"
+    raw:
+      - regex: "Link-address prefix: 2001:DB8:A::/64"
+      - regex: "DNS server: 2001:DB8:1::53"
+      - regex: "Domain name: ccnp.local"
+      - not_regex: "Address allocation prefix: 2001:DB8:A"
+    points: 9
+
+  - name: "RT01: stateful プール(2001:DB8:B::/64 を払い出し)"
+    node: RT01
+    command: "show ipv6 dhcp pool"
+    raw:
+      - regex: "Address allocation prefix: 2001:DB8:B::/64"
+    points: 8
+
+  - name: "RT01: Et0/0 でサーバ有効化(automatic: プール名を固定しない bare 'ipv6 dhcp server')"
+    node: RT01
+    command: "show running-config interface Ethernet0/0"
+    raw:
+      - regex: 'ipv6 dhcp server *\r?\n'
+    points: 8
+
+  # ============ RT02: リレー + RA フラグ (28) ============
+  - name: "RT02: Et0/1 が RT01 へのリレー"
+    node: RT02
+    command: "show ipv6 dhcp interface Ethernet0/1"
+    raw:
+      - regex: "is in relay mode"
+      - regex: "2001:DB8:12::1"
+    points: 6
+
+  - name: "RT02: Et0/2 が RT01 へのリレー"
+    node: RT02
+    command: "show ipv6 dhcp interface Ethernet0/2"
+    raw:
+      - regex: "is in relay mode"
+      - regex: "2001:DB8:12::1"
+    points: 6
+
+  - name: "RT02: LAN-A の RA = stateless(アドレスは自己生成 + その他設定のみ DHCP、M は立てない)"
+    node: RT02
+    command: "show ipv6 interface Ethernet0/1"
+    raw:
+      - regex: "Hosts use stateless autoconfig for addresses"
+      - regex: "Hosts use DHCP to obtain other configuration"
+      - not_regex: "Hosts use DHCP to obtain routable addresses"
+    points: 8
+
+  - name: "RT02: LAN-B の RA = stateful(アドレスも DHCP)"
+    node: RT02
+    command: "show ipv6 interface Ethernet0/2"
+    raw:
+      - regex: "Hosts use DHCP to obtain routable addresses"
+    points: 5
+
+  - name: "RT02: LAN-B は RA prefix の自動生成を抑止(no-autoconfig)"
+    node: RT02
+    command: "show running-config interface Ethernet0/2"
+    raw:
+      - regex: "no-autoconfig"
+    points: 3
+
+  # ============ RT03: LAN-A クライアント(stateless) (19) ============
+  - name: "RT03: 2001:DB8:A::/64 の GUA を自己生成している"
+    node: RT03
+    command: "show ipv6 interface brief Ethernet0/0"
+    raw:
+      - regex: "2001:DB8:A:"
+    points: 5
+
+  - name: "RT03: DNS/ドメインを DHCPv6(stateless)で取得している"
+    node: RT03
+    command: "show ipv6 dhcp interface Ethernet0/0"
+    raw:
+      - regex: "DNS server: 2001:DB8:1::53"
+      - regex: "Domain name: ccnp.local"
+    points: 7
+
+  - name: "RT03: デフォルト経路を RA から自動取得(手動 ::/0 ではない)"
+    node: RT03
+    command: "show ipv6 route ::/0"
+    raw:
+      - regex: 'Known via "ND"'
+    points: 4
+
+  - name: "RT03: RT01 Lo0 へ到達"
+    node: RT03
+    command: "ping 2001:DB8:1::1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 3
+
+  # ============ RT04: LAN-B クライアント(stateful) (28) ============
+  - name: "RT04: DHCPv6 でアドレスを取得(state OPEN・2001:DB8:B::/64 から払い出し)"
+    node: RT04
+    command: "show ipv6 dhcp interface Ethernet0/0"
+    raw:
+      - regex: "Address State is OPEN"
+      - regex: "Address: 2001:DB8:B:"
+    points: 8
+
+  - name: "RT01: binding にリース有り(LAN-B のみ・LAN-A に払い出していない)"
+    node: RT01
+    command: "show ipv6 dhcp binding"
+    raw:
+      - regex: "IA NA"
+      - regex: "Address: 2001:DB8:B:"
+      - not_regex: "Address: 2001:DB8:A:"
+    points: 6
+
+  - name: "RT04: グローバルアドレスは払い出しの1個のみ(EUI-64 自己生成の併存なし)"
+    node: RT04
+    command: "show ipv6 interface brief Ethernet0/0 | include 2001:DB8:B"
+    raw:
+      - regex: "2001:DB8:B:"
+      - not_regex: "FF:FE"
+    points: 6
+
+  - name: "RT04: デフォルト経路を RA から自動取得(手動 ::/0 ではない)"
+    node: RT04
+    command: "show ipv6 route ::/0"
+    raw:
+      - regex: 'Known via "ND"'
+    points: 4
+
+  - name: "RT04: RT01 Lo0 へ到達"
+    node: RT04
+    command: "ping 2001:DB8:1::1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 4

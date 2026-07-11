@@ -1,0 +1,25 @@
+---
+id: ENARSI-DHCPV6-01
+title: "DHCPv6 の使い分け — stateless(O-flag) / stateful(M-flag) / リレー / 中央サーバのプール設計"
+exam: ENARSI
+topics: [ipv6, dhcpv6, slaac, nd, ra-flags, dhcp-relay, stateless, stateful]
+difficulty: 5
+topology: ad-hoc
+target_nodes: [RT01, RT02, RT03, RT04]
+points: 100
+
+# iol-xe 4台。IPv6 only。RT01=中央 DHCPv6 サーバ / RT02=GW+リレー /
+# RT03=LAN-A クライアント(stateless: SLAAC+O-flag) / RT04=LAN-B クライアント(stateful: M-flag)。
+# アドレッシング/ルーティング(静的)は健全構成で投入済み。課題は DHCPv6/RA フラグのみ。
+# PoC 知見(poc/dhcpv6/README.md): automatic サーバ+link-address 選択 / ipv6 enable 罠 /
+# no-autoconfig 要 / stateful はデフォルト経路を配らない。
+image_family: iol
+
+# IOL の IPv6-only IF day0 admin-down 対策(クライアント IF はアドレス無しで起動)
+bringup_data_ifs: true
+
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # 2001:DB8:12::/64  core (server uplink)
+    - { a: RT02, a_if: 1, b: RT03, b_if: 0 }   # LAN-A 2001:DB8:A::/64 (stateless)
+    - { a: RT02, a_if: 2, b: RT04, b_if: 0 }   # LAN-B 2001:DB8:B::/64 (stateful)

@@ -1,0 +1,28 @@
+# OSPF マルチエリア隣接 (RFC 5185, BL-028)。ABR 間の直結リンクが area 100 にあり、
+# リーフエリア間トラフィックが低速な area 0 チェーンへ迂回する。
+# 制約(virtual-link/エリア変更/スタティック禁止)下で ip ospf multi-area に解を一意化。
+# ★罠: IOL では broadcast IF のまま multi-area を入れてもサイレント故障(MA0 DOWN)。
+id: ENARSI-OSPF-MADJ-01
+title: ABR 間の直結リンクを活かせ — エリア間トラフィック最適化
+exam: ENARSI
+topics: [ospf, multi-area, abr, path-optimization, rfc5185]
+difficulty: 4
+topology: generated
+target_nodes: [RT01, RT02, RT03, RT04, RT05, RT06]
+points: 100
+access: ssh
+image_family: iol
+
+# === トポロジ配線 =============================================
+#              area 1            area 0 (cost 100 ×3)           area 2
+#   RT05 ──── RT01 ──── RT03 ──────── RT04 ──── RT02 ──── RT06
+#  (5.5.5.5)   │                                  │      (6.6.6.6)
+#              └───── 直結 10.1.12.0/30 area100 ───┘
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # 10.1.12.0/30 area 100 (直結)
+    - { a: RT01, a_if: 1, b: RT03, b_if: 0 }   # 10.1.13.0/30 area 0
+    - { a: RT03, a_if: 1, b: RT04, b_if: 0 }   # 10.1.34.0/30 area 0
+    - { a: RT04, a_if: 1, b: RT02, b_if: 1 }   # 10.1.24.0/30 area 0
+    - { a: RT01, a_if: 2, b: RT05, b_if: 0 }   # 10.1.15.0/30 area 1
+    - { a: RT02, a_if: 2, b: RT06, b_if: 0 }   # 10.1.26.0/30 area 2

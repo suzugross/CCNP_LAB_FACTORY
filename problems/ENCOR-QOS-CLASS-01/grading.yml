@@ -1,0 +1,88 @@
+---
+# 採点基準: 構成 + 効果の実測（QoS 効果採点規約 → topologies/conventions.md）。
+# - マーキング実績 ("QoS Set / dscp X / Packets marked N") は Genie が構造化しない
+#   → 複数行 raw regex（dscp 行の直後の Packets marked を対で見る）。
+# - RT02 の MONITOR (initial 焼き込み・名前固定) の到着カウンタで「伝搬」を採点。
+# - カウンタ系は採点器自身のトラフィック(PC01 shell チェック)で加算される
+#   → 2試行目で PASS が正常（受験者が体感手順を実施済みなら1試行目から PASS）。
+problem: ENCOR-QOS-CLASS-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # ---- 構成 (RT01) ----
+  - name: "RT01: LAN 入口 (E0/0) に入力方向でポリシー適用"
+    node: RT01
+    command: "show policy-map interface Ethernet0/0"
+    raw:
+      - contains: "Service-policy input"
+    points: 15
+
+  # ---- 効果: RT01 のマーキング実績 (採点器のトラフィックで加算) ----
+  - name: "RT01: [実測] 音声 (UDP5201) を EF にマーキングした実績"
+    node: RT01
+    command: "show policy-map interface Ethernet0/0"
+    raw:
+      - regex: 'dscp ef\s*\n\s*Packets marked [1-9]'
+    points: 10
+
+  - name: "RT01: [実測] バックアップ (TCP5201) を AF11 にマーキングした実績"
+    node: RT01
+    command: "show policy-map interface Ethernet0/0"
+    raw:
+      - regex: 'dscp af11\s*\n\s*Packets marked [1-9]'
+    points: 10
+
+  - name: "RT01: [実測] 死活監視 (ICMP) を CS2 にマーキングした実績"
+    node: RT01
+    command: "show policy-map interface Ethernet0/0"
+    raw:
+      - regex: 'dscp cs2\s*\n\s*Packets marked [1-9]'
+    points: 10
+
+  # ---- 効果: RT02 での到着観測 (マーキングが WAN を越えて伝搬した証拠) ----
+  - name: "RT02: [実測] EF マーキングされた音声が到着 (OBS-EF > 0)"
+    node: RT02
+    command: "show policy-map interface Ethernet0/1"
+    parser: "class:iosxe.show_policy_map.ShowPolicyMapInterface"
+    find: "Ethernet0/1.service_policy.input.policy_name.MONITOR.class_map.OBS-EF"
+    match:
+      packets:
+        gt: 0
+    points: 15
+
+  - name: "RT02: [実測] AF11 マーキングされたバックアップが到着 (OBS-AF11 > 0)"
+    node: RT02
+    command: "show policy-map interface Ethernet0/1"
+    parser: "class:iosxe.show_policy_map.ShowPolicyMapInterface"
+    find: "Ethernet0/1.service_policy.input.policy_name.MONITOR.class_map.OBS-AF11"
+    match:
+      packets:
+        gt: 0
+    points: 15
+
+  - name: "RT02: [実測] CS2 マーキングされた死活監視が到着 (OBS-CS2 > 0)"
+    node: RT02
+    command: "show policy-map interface Ethernet0/1"
+    parser: "class:iosxe.show_policy_map.ShowPolicyMapInterface"
+    find: "Ethernet0/1.service_policy.input.policy_name.MONITOR.class_map.OBS-CS2"
+    match:
+      packets:
+        gt: 0
+    points: 15
+
+  # ---- トラフィック生成 + E2E 疎通 (このチェックが上のカウンタ群のエサになる) ----
+  - name: "PC01: [実測] 3種トラフィック (UDP5201/TCP5201/ICMP) を生成し E2E 疎通"
+    node: PC01
+    exec: shell
+    command: >-
+      iperf3 -c 192.168.20.20 -u -b 500K -l 200 -t 3 >/dev/null 2>&1; U=$?;
+      iperf3 -c 192.168.20.20 -t 3 >/dev/null 2>&1; T=$?;
+      ping -c 5 -i 0.2 192.168.20.20 | tail -2;
+      [ $U -eq 0 ] && [ $T -eq 0 ] && echo TRAFFIC_OK
+    raw:
+      - contains: TRAFFIC_OK
+      - regex: ' 0% packet loss'
+    points: 10

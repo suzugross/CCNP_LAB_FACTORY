@@ -1,0 +1,33 @@
+! ENARSI-OSPF-MADJ-01 initial (RT02 = east ABR: area 0 / 2 / 100)
+!   links[0]=to RT01 direct(area100) / links[1]=to RT04(area0) / links[2]=to RT06(area2)
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+!
+interface Loopback100
+ description === NMS probe target (area 100 - DO NOT MOVE) ===
+ ip address 172.31.100.2 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 direct link (area 100 / NMS segment) ===
+ ip address 10.1.12.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT04 (area 0 backbone) ===
+ ip address 10.1.24.2 255.255.255.252
+ ip ospf cost 100
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT06 (area 2) ===
+ ip address 10.1.26.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 2.2.2.2
+ network 2.2.2.2 0.0.0.0 area 0
+ network 172.31.100.2 0.0.0.0 area 100
+ network 10.1.12.0 0.0.0.3 area 100
+ network 10.1.24.0 0.0.0.3 area 0
+ network 10.1.26.0 0.0.0.3 area 2
+!

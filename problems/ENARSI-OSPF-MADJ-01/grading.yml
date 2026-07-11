@@ -1,0 +1,121 @@
+# ENARSI-OSPF-MADJ-01 採点基準
+# 核心 = マルチエリア隣接 (OSPF_MA0) の形成と経路最適化の「効果」を状態で採点する。
+# - MADJ シグネチャ: 同一物理リンク上に 2 隣接（Et0/0=area100 / OSPF_MA0=area0）
+# - interface brief の MA0 行は Genie が黙って落とす (PoC 知見) → raw regex で採点
+# - 負の要件 (virtual-link 不在 / area100 維持) は効果チェックとペアにする方針。
+#   初期状態でも通る保全系チェック (7,10,11,12) 計 25 点は意図した設計
+#   （「壊していない」ことも要件のうち）。
+problem: ENARSI-OSPF-MADJ-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # --- MADJ 形成（シグネチャ） ---------------------------------
+  - name: "RT01: area0 マルチエリア隣接 (OSPF_MA0) が RT02 と FULL"
+    node: RT01
+    command: "show ip ospf neighbor"
+    parser: "show ip ospf neighbor"
+    find: ["interfaces", "OSPF_MA0", "neighbors", "2.2.2.2"]
+    match:
+      state: { startswith: "FULL" }
+    points: 10
+
+  - name: "RT02: area0 マルチエリア隣接 (OSPF_MA0) が RT01 と FULL"
+    node: RT02
+    command: "show ip ospf neighbor"
+    parser: "show ip ospf neighbor"
+    find: ["interfaces", "OSPF_MA0", "neighbors", "1.1.1.1"]
+    match:
+      state: { startswith: "FULL" }
+    points: 10
+
+  # --- MA0 稼働 + 物理リンクの area100 所属維持（raw・PoC知見） ---
+  - name: "RT01: MA0 が area0 で稼働(P2P 1/1) かつ 物理IFは area100 のまま"
+    node: RT01
+    command: "show ip ospf interface brief"
+    raw:
+      - regex: "MA0 +1 +0 +Unnumbered Et0/0 +\\d+ +P2P +1/1"
+      - regex: "Et0/0 +1 +100 +10\\.1\\.12\\.1"
+    points: 10
+
+  - name: "RT02: MA0 が area0 で稼働(P2P 1/1) かつ 物理IFは area100 のまま"
+    node: RT02
+    command: "show ip ospf interface brief"
+    raw:
+      - regex: "MA0 +1 +0 +Unnumbered Et0/0 +\\d+ +P2P +1/1"
+      - regex: "Et0/0 +1 +100 +10\\.1\\.12\\.2"
+    points: 10
+
+  # --- 経路最適化の効果（RIB） ---------------------------------
+  - name: "RT01: 6.6.6.6/32 の next-hop が直結リンク対向 (10.1.12.2)"
+    node: RT01
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "6.6.6.6/32"
+      source_protocol: ospf
+      next_hop.next_hop_list.*.next_hop: "10.1.12.2"
+    points: 10
+
+  - name: "RT02: 5.5.5.5/32 の next-hop が直結リンク対向 (10.1.12.1)"
+    node: RT02
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "5.5.5.5/32"
+      source_protocol: ospf
+      next_hop.next_hop_list.*.next_hop: "10.1.12.1"
+    points: 10
+
+  # --- エンドツーエンドの効果（能動プローブ。ping を先頭に置き ARP/収束を温める） ---
+  - name: "RT05: 6.6.6.6 へ end-to-end 疎通 (Lo0 発)"
+    node: RT05
+    command: "ping 6.6.6.6 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 5
+
+  - name: "RT05→RT06: 往路が直結リンク経由 (RT03 を通らない)"
+    node: RT05
+    command: "traceroute 6.6.6.6 source Loopback0 numeric timeout 1 probe 1"
+    raw:
+      - contains: "10.1.12.2"
+      - not_contains: "10.1.13.2"
+    points: 10
+
+  - name: "RT06→RT05: 復路が直結リンク経由 (RT04 を通らない)"
+    node: RT06
+    command: "traceroute 5.5.5.5 source Loopback0 numeric timeout 1 probe 1"
+    raw:
+      - contains: "10.1.12.1"
+      - not_contains: "10.1.24.1"
+    points: 10
+
+  # --- 保全系（壊していないこと。初期状態でも PASS = 意図した設計） ---
+  - name: "RT05: NMS プローブ 172.31.100.2/32 への経路を維持 (area100 の機能保全)"
+    node: RT05
+    command: "show ip route"
+    parser: "show ip route"
+    find: "vrf.*.address_family.*.routes.*"
+    match:
+      route: "172.31.100.2/32"
+      source_protocol: ospf
+    points: 5
+
+  - name: "RT01: virtual-link を使っていない (制約)"
+    node: RT01
+    command: "show ip ospf virtual-links"
+    raw:
+      - not_contains: "Virtual Link"
+    points: 5
+
+  - name: "RT02: virtual-link を使っていない (制約)"
+    node: RT02
+    command: "show ip ospf virtual-links"
+    raw:
+      - not_contains: "Virtual Link"
+    points: 5

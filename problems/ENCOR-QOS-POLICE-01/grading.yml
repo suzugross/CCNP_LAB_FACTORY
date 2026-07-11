@@ -1,0 +1,74 @@
+---
+# 採点基準: 構成 + 効果の実測（QoS 効果採点規約 → topologies/conventions.md）。
+# - police 構造は class 直指定パーサで cir/conform/exceed を構造化採点 (CoPP と同型フィールド)。
+# - 「制限対象が限定的」は効果で採点: ICMP 無傷 + UDP 素通り
+#   （class-default を丸ごと police した誤答はここで落ちる）。
+# - カウンタ系は採点器のトラフィックで加算 → 2試行目で PASS が正常。
+problem: ENCOR-QOS-POLICE-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # ---- 構成 (RT01) ----
+  - name: "RT01: WAN 出力 (E0/1) に出力方向でポリシー適用"
+    node: RT01
+    command: "show policy-map interface Ethernet0/1"
+    raw:
+      - contains: "Service-policy output"
+    points: 10
+
+  # match.*: {ne: any} = police するクラスが class-default (match any) ではないこと。
+  # class-default 丸ごと police の誤答は、TCP の輻輳制御が CIR 付近に収まるため
+  # ICMP 巻き添えでは検出できない (実機で 90点 通過を確認) → 構造で落とす。
+  - name: "RT01: バックアップに限定したクラスで police 1Mbps・適合 transmit・超過 drop"
+    node: RT01
+    command: "show policy-map interface Ethernet0/1"
+    parser: "class:iosxe.show_policy_map.ShowPolicyMapInterface"
+    find: "Ethernet0/1.service_policy.output.policy_name.*.class_map.*"
+    match:
+      police.cir_bps: 1000000
+      police.conformed.actions.transmit: true
+      police.exceeded.actions.drop: true
+      match.*:
+        ne: "any"
+    points: 25
+
+  # ---- 効果: RT01 のポリサカウンタ (採点器のトラフィックで加算) ----
+  - name: "RT01: [実測] ポリサが実働 (conformed > 0 かつ exceeded > 0)"
+    node: RT01
+    command: "show policy-map interface Ethernet0/1"
+    parser: "class:iosxe.show_policy_map.ShowPolicyMapInterface"
+    find: "Ethernet0/1.service_policy.output.policy_name.*.class_map.*"
+    match:
+      police.conformed.packets:
+        gt: 0
+      police.exceeded.packets:
+        gt: 0
+    points: 20
+
+  # ---- 効果: PC01 からの実測 ----
+  # 「巻き添えなし」は単独で採点しない (未設定でも通る負の要件 = LLQ-01 の教訓)。
+  # 同一ウィンドウで「TCP が頭打ち AND ICMP 無傷」を両立したときのみ PASS。
+  # class-default を丸ごと police した誤答は ICMP がトークンを奪われ loss → FAIL。
+  - name: "PC01: [実測] バックアップ (TCP5201) は 1Mbps に頭打ち・同時に死活監視 (ICMP) は無傷"
+    node: PC01
+    exec: shell
+    command: >-
+      iperf3 -c 192.168.20.20 -t 12 -J >/var/tmp/gr_tcp.json 2>/dev/null &
+      sleep 2; ping -c 20 -i 0.2 192.168.20.20 >/var/tmp/gr_ping.txt 2>&1; wait;
+      python3 -c "import json,re;bps=json.load(open('/var/tmp/gr_tcp.json'))['end']['sum_received']['bits_per_second'];t=open('/var/tmp/gr_ping.txt').read();m=re.search(r'(\d+)% packet loss',t);a=re.search(r'= *([\d.]+)/([\d.]+)/',t);loss=int(m.group(1)) if m else 100;avg=float(a.group(2)) if a else 9999.0;print('TCP_BPS',int(bps),'PING loss%/avg:',loss,avg);print('POLICE_TARGETED' if 400000<bps<1300000 and loss==0 and avg<60 else 'POLICE_NG')"
+    raw:
+      - contains: POLICE_TARGETED
+    points: 35
+
+  - name: "PC01: [実測] 音声 (UDP) は制限対象外 (5Mbps がほぼ素通り)"
+    node: PC01
+    exec: shell
+    command: >-
+      iperf3 -c 192.168.20.20 -u -b 5M -l 1200 -t 8 -J 2>/dev/null |
+      python3 -c "import sys,json;s=json.load(sys.stdin)['end']['sum'];eff=s['bits_per_second']*(1-s['lost_percent']/100);print('MEAS_UDP_EFF_BPS',int(eff),'lost%',round(s['lost_percent'],1));print('UDP_UNRESTRICTED' if eff>3000000 else 'UDP_RESTRICTED')"
+    raw:
+      - contains: UDP_UNRESTRICTED
+    points: 10
