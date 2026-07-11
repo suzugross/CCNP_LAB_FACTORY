@@ -1,0 +1,184 @@
+# UM2-BUILD-02 採点基準（100点・全ノード console 収集）— ワンアームLB変種
+# ★um2_ops.py grade は checks を「記載順に」逐次実行する（ノード毎にセッション再利用）。
+#   機能試験(通信)を先頭に置き、状態/設定チェックを後段に置く構成。
+problem: UM2-BUILD-02
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # ---- 機能試験（完成条件そのもの・PAT/ルーティングの実証を兼ねる） ----
+  - name: "G1: USER-PC→198.51.100.1 outbound疎通（PAT 2.2.2.10 の実証）"
+    node: USER-PC
+    command: "ping -c 10 198.51.100.1"
+    raw:
+      # コールドスタートのARP解決チェーンで先頭数発は落ち得る → 10発中7発以上
+      - regex: "(10|[789]) packets received"
+    points: 10
+
+  - name: "G2: BACKBONE→2.2.2.1 inbound疎通（FW→LB 二段NATの実証）"
+    node: BACKBONE
+    command: "ping 2.2.2.1 repeat 10"
+    raw:
+      - regex: "Success rate is (100|90|80) percent"
+    points: 10
+
+  - name: "G3: USER-PC→VIP(172.16.250.1) HTTP 到達"
+    node: USER-PC
+    command: "wget -q -O - -T 10 http://172.16.250.1/"
+    raw:
+      - contains: "UM2 DMZ SERVER"
+    points: 8
+
+  # ---- L3SW: VRF の機能実証（SVI が正しい VRF に居ないと失敗する） ----
+  - name: "L3SW1: UNTRUST VRF から BACKBONE へ疎通"
+    node: L3SW1
+    command: "ping vrf UNTRUST 1.1.1.1"
+    raw:
+      - contains: "Success rate is 100 percent"
+    points: 3
+
+  - name: "L3SW1: TRUST VRF から USER-PC へ疎通"
+    node: L3SW1
+    command: "ping vrf TRUST 172.16.100.101"
+    raw:
+      - regex: "Success rate is (100|80) percent"
+    points: 3
+
+  # ---- L3SW: FHRP 状態 ----
+  - name: "L3SW1: 全 SVI で HSRP Active（VIP 一致）"
+    node: L3SW1
+    command: "show standby brief"
+    raw:
+      - regex: "Vl10\\s+\\d+\\s+\\d+\\s+P?\\s*Active.*1\\.1\\.1\\.5"
+      - regex: "Vl243\\s+\\d+\\s+\\d+\\s+P?\\s*Active.*172\\.16\\.243\\.254"
+      - regex: "Vl244\\s+\\d+\\s+\\d+\\s+P?\\s*Active.*172\\.16\\.244\\.251"
+      - regex: "Vl100\\s+\\d+\\s+\\d+\\s+P?\\s*Active.*172\\.16\\.100\\.1"
+    points: 8
+
+  - name: "L3SW2: 全 SVI で HSRP Standby"
+    node: L3SW2
+    command: "show standby brief"
+    raw:
+      - regex: "Vl10\\s+\\d+\\s+\\d+\\s+P?\\s*Standby"
+      - regex: "Vl243\\s+\\d+\\s+\\d+\\s+P?\\s*Standby"
+      - regex: "Vl244\\s+\\d+\\s+\\d+\\s+P?\\s*Standby"
+      - regex: "Vl100\\s+\\d+\\s+\\d+\\s+P?\\s*Standby"
+    points: 6
+
+  - name: "L3SW1: Vlan243 にトラッキング連動（decrement）"
+    node: L3SW1
+    command: "show standby Vlan243"
+    raw:
+      - contains: "decrement 30"
+    points: 4
+
+  # ---- L3SW: ゾーン分離の要（245/251/254 に SVI が無い） ----
+  # ★負の要件は単独採点しない(QoS教訓): 正しい4SVIの存在とセットで複合チェック
+  - name: "L3SW1: SVI は 10/243/244/100 のみ（245/251/254 に作らない）"
+    node: L3SW1
+    command: "show ip interface brief | include Vlan"
+    raw:
+      - contains: "Vlan10"
+      - contains: "Vlan243"
+      - contains: "Vlan244"
+      - contains: "Vlan100"
+      - not_contains: "Vlan245"
+      - not_contains: "Vlan251"
+      - not_contains: "Vlan254"
+    points: 4
+
+  - name: "L3SW2: SVI は 10/243/244/100 のみ（245/251/254 に作らない）"
+    node: L3SW2
+    command: "show ip interface brief | include Vlan"
+    raw:
+      - contains: "Vlan10"
+      - contains: "Vlan243"
+      - contains: "Vlan244"
+      - contains: "Vlan100"
+      - not_contains: "Vlan245"
+      - not_contains: "Vlan251"
+      - not_contains: "Vlan254"
+    points: 4
+
+  - name: "L3SW1: UNTRUST VRF の 2.2.2.0/24 経路が FW を向く"
+    node: L3SW1
+    command: "show ip route vrf UNTRUST static"
+    raw:
+      - contains: "2.2.2.0"
+      - contains: "172.16.243.251"
+    points: 4
+
+  # ---- FW: フェールオーバー / 監視 / NAT / ポリシー ----
+  - name: "FW: Primary Active ＋ Secondary Standby Ready"
+    node: FW1
+    command: "show failover"
+    raw:
+      - regex: "This host: Primary - Active"
+      - regex: "Other host: Secondary - Standby Ready"
+    points: 10
+
+  - name: "FW: データIFがフェールオーバー監視対象（R4 自動切替の要）"
+    node: FW1
+    command: "show failover"
+    raw:
+      - contains: "(Monitored)"
+    points: 4
+
+  - name: "FW: 静的NAT 2.2.2.1⇔172.16.250.1 が xlate に存在"
+    node: FW1
+    command: "show xlate"
+    raw:
+      - regex: "172\\.16\\.250\\.1 to outside:2\\.2\\.2\\.1"
+    points: 4
+
+  - name: "FW: outside 着信 ACL は実IP(172.16.250.1) 宛で許可"
+    node: FW1
+    command: "show running-config access-list"
+    raw:
+      - regex: "permit icmp any host 172\\.16\\.250\\.1"
+      - regex: "permit tcp any host 172\\.16\\.250\\.1 eq (www|80)"
+    points: 4
+
+  # ---- LB: ワンアーム形 / FHRP / VIP 終端 NAT ----
+  # ★ワンアーム形の実証: HSRP が Gi0/0 上の 2 サブIF(254/251) で立っていること自体が
+  #   「腕1本多重」の証明になる（インライン形なら下流は Gi0/1 物理IFに立つ）
+  - name: "LB1: 上流/下流サブIF（腕1本に多重）とも HSRP Active（VIP 一致）"
+    node: LB1
+    command: "show standby brief"
+    raw:
+      - regex: "Gi0/0\\.254\\s+\\d+\\s+\\d+\\s+P?\\s*Active.*172\\.16\\.254\\.251"
+      - regex: "Gi0/0\\.251\\s+\\d+\\s+\\d+\\s+P?\\s*Active.*172\\.16\\.251\\.1"
+    points: 4
+
+  - name: "LB2: 上流/下流サブIFとも HSRP Standby"
+    node: LB2
+    command: "show standby brief"
+    raw:
+      - regex: "Gi0/0\\.254\\s+\\d+\\s+\\d+\\s+P?\\s*Standby"
+      - regex: "Gi0/0\\.251\\s+\\d+\\s+\\d+\\s+P?\\s*Standby"
+    points: 3
+
+  # ワンアーム変種の固有チェック: VLAN251 は L3SW では L2 のみ・DMZ-SV を Gi1/0 で収容
+  - name: "L3SW2: VLAN251 を L2 で作成し DMZ-SV を Gi1/0 で収容"
+    node: L3SW2
+    command: "show vlan brief | include 251"
+    raw:
+      - contains: "251"
+      - contains: "Gi1/0"
+    points: 3
+
+  - name: "LB1: VIP 終端の静的NAT"
+    node: LB1
+    command: "show running-config | include ip nat inside source"
+    raw:
+      - contains: "ip nat inside source static 172.16.251.101 172.16.250.1"
+    points: 3
+
+  - name: "LB2: VIP 終端の静的NAT（両系整合）"
+    node: LB2
+    command: "show running-config | include ip nat inside source"
+    raw:
+      - contains: "ip nat inside source static 172.16.251.101 172.16.250.1"
+    points: 1

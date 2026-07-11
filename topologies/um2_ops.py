@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
-"""UM2-BUILD-01 運用 CLI (BL-042)。
+"""UM2-BUILD 系 運用 CLI (BL-042/BL-044)。
 
   build     … スケルトン lab を CML に import + start（据付ノードのみ設定済み）
   grade     … grading.yml を記載順に console 収集して grade.py で採点(100点)
-  solve     … ★検証/模範解答提示用: golden(poc/um2/poc-um2-lab.yaml) を
-               受講者ノード6台へ console 投入（L3SW/LB=IOS push, FW=bootstrap）
+  solve     … ★検証/模範解答提示用: golden を受講者ノード6台へ console 投入
+               （L3SW/LB=IOS push, FW=bootstrap）
   status    … ノード状態
   destroy   … ラボ削除
 
-収集は全ノード CML コンソール（MGMT/リース不要）。alpine は root シェル。
+変種選択（--variant・サブコマンドの前に指定）:
+  inline (既定) = UM2-BUILD-01 … LB上流タグ254サブIF/下流Gi0/1・SRV-SW配下・11ノード
+  onearm        = UM2-BUILD-02 … LB腕1本にdot1q 254/251多重・DMZ-SV=L3SW2 Gi1/0・10ノード
+★CML Personal 20ノード上限のため両問の同時起動は不可。
+
+収集は全ノード CML コンソール（MGMT/リース不要）。alpine は root/cisco シェル。
 IOS/ASA 認証: SUZUKI/CCNPccnp（ASA 初回 enable ウィザードも処理）。
 """
 import argparse
@@ -33,12 +38,25 @@ def _cml_creds(repo):
     import os as _os
     d = _y.safe_load(open(_os.path.join(repo, "group_vars", "all", "local.yml")))
     return d["cml_host"], d["cml_username"], d["cml_password"]
-PROBLEM = "UM2-BUILD-01"
-TITLE = "UM2-BUILD-01"
-SKELETON = os.path.join(REPO, "problems", PROBLEM, "lab-skeleton.yaml")
-GOLDEN = os.path.join(REPO, "poc", "um2", "poc-um2-lab.yaml")
-GEN_DIR = os.path.join(REPO, "topologies", "_generated", PROBLEM)
+VARIANTS = {
+    "inline": {"problem": "UM2-BUILD-01", "golden": "poc-um2-lab.yaml"},
+    "onearm": {"problem": "UM2-BUILD-02", "golden": "poc-um2-onearm-lab.yaml"},
+}
+# 既定は inline。main() が --variant で set_variant() する
+PROBLEM = TITLE = SKELETON = GOLDEN = GEN_DIR = None
 PY = os.path.join(REPO, ".venv", "bin", "python3")
+
+
+def set_variant(name):
+    global PROBLEM, TITLE, SKELETON, GOLDEN, GEN_DIR
+    v = VARIANTS[name]
+    PROBLEM = TITLE = v["problem"]
+    SKELETON = os.path.join(REPO, "problems", PROBLEM, "lab-skeleton.yaml")
+    GOLDEN = os.path.join(REPO, "poc", "um2", v["golden"])
+    GEN_DIR = os.path.join(REPO, "topologies", "_generated", PROBLEM)
+
+
+set_variant("inline")
 
 CML_HOST, CML_USER, CML_PASS = _cml_creds(REPO)
 NODE_PW = "CCNPccnp"
@@ -47,7 +65,8 @@ ASA = {"FW1", "FW2"}
 STUDENT_IOS = ["L3SW1", "L3SW2", "LB1", "LB2"]
 
 P_NET = r"(\r\n|\r|\n)([\w/-]+)(\([\w./-]+\))?([>#]) ?"
-P_ALP = r"(\r\n|\r|\n)[\w-]+:[^\r\n]*# ?"
+# alpine: root(#) だけでなく受講者が cisco ユーザで放置したシェル($) も受理する
+P_ALP = r"(\r\n|\r|\n)[\w-]+:[^\r\n]*[#$] ?"
 
 
 def cml():
@@ -279,7 +298,10 @@ def cmd_destroy(_):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--variant", choices=sorted(VARIANTS), default="inline",
+                    help="inline=UM2-BUILD-01(既定) / onearm=UM2-BUILD-02(ワンアームLB)")
     sub = ap.add_subparsers(dest="verb", required=True)
     sub.add_parser("build")
     sub.add_parser("solve")
@@ -288,6 +310,8 @@ def main():
     sub.add_parser("status")
     sub.add_parser("destroy")
     a = ap.parse_args()
+    set_variant(a.variant)
+    print(f"[variant {a.variant}] problem={PROBLEM}")
     {"build": cmd_build, "solve": cmd_solve, "grade": cmd_grade,
      "status": cmd_status, "destroy": cmd_destroy}[a.verb](a)
 
