@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UM2 Untrustワンアーム構成 — CML再現ブループリント</title>
+<style>
+  :root{
+    --ink:#1f2933; --muted:#5b6b7a; --line:#8a99a8;
+    --untrust:#4a5560; --untrust-l:#6b7683;
+    --blue:#2e86ab; --blue-l:#8fc1d9; --dmz:#a8c8dc;
+    --paper:#f7f9fa; --card:#ffffff;
+  }
+  body{font-family:"Hiragino Sans","Noto Sans JP",Meiryo,sans-serif;background:var(--paper);color:var(--ink);margin:0;padding:24px;}
+  .wrap{max-width:1060px;margin:0 auto;}
+  h1{font-size:20px;border-left:6px solid var(--blue);padding-left:12px;}
+  h2{font-size:16px;margin-top:36px;color:var(--blue);border-bottom:2px solid var(--blue-l);padding-bottom:6px;}
+  .card{background:var(--card);border:1px solid #dde5ea;border-radius:10px;padding:12px;margin-top:12px;}
+  .legend{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.7;}
+  .chip{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px;}
+  svg{width:100%;height:auto;display:block;}
+  text{font-family:"Hiragino Sans","Noto Sans JP",Meiryo,sans-serif;}
+  .note{font-size:12.5px;color:var(--muted);margin-top:10px;line-height:1.8;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>UM2 Untrustワンアーム構成 — CML再現ブループリント</h1>
+<div class="note">書籍パターンUM2(ワンアーム+VRF/タグVLAN)をCMLノード(ASAv / IOSvL2 / IOSv / Alpine)へ落とし込んだ構成。LBは省略しDMZサーバを直結。</div>
+
+<h2>1. 物理構成(CMLトポロジ)</h2>
+<div class="card">
+<svg viewBox="0 0 1040 560" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="dot" markerWidth="6" markerHeight="6" refX="3" refY="3"><circle cx="3" cy="3" r="2.4" fill="#2e86ab"/></marker>
+  </defs>
+
+  <!-- DC backbone -->
+  <rect x="330" y="20" width="380" height="96" rx="14" fill="var(--untrust)"/>
+  <text x="520" y="50" text-anchor="middle" fill="#fff" font-size="15" font-weight="bold">データセンターバックボーン</text>
+  <rect x="380" y="62" width="130" height="40" rx="6" fill="#fff"/>
+  <text x="445" y="80" text-anchor="middle" font-size="12" font-weight="bold">BACKBONE</text>
+  <text x="445" y="95" text-anchor="middle" font-size="10" fill="var(--muted)">IOSv 1.1.1.1 / Lo0 198.51.100.1</text>
+  <rect x="540" y="62" width="130" height="40" rx="6" fill="#fff"/>
+  <text x="605" y="80" text-anchor="middle" font-size="12" font-weight="bold">BB-SW</text>
+  <text x="605" y="95" text-anchor="middle" font-size="10" fill="var(--muted)">unmanaged switch</text>
+  <line x1="510" y1="82" x2="540" y2="82" stroke="#fff" stroke-width="2.5"/>
+
+  <!-- uplinks -->
+  <line x1="575" y1="102" x2="380" y2="210" stroke="var(--line)" stroke-width="2.5"/>
+  <line x1="635" y1="102" x2="660" y2="210" stroke="var(--line)" stroke-width="2.5"/>
+  <text x="430" y="165" font-size="10.5" fill="var(--muted)">Gi0/0 アクセス VLAN10 (1.1.1.0/29)</text>
+
+  <!-- L3SW1 -->
+  <rect x="300" y="210" width="160" height="86" rx="10" fill="#fff" stroke="var(--ink)" stroke-width="2"/>
+  <text x="380" y="238" text-anchor="middle" font-size="14" font-weight="bold">L3SW1</text>
+  <text x="380" y="256" text-anchor="middle" font-size="10.5" fill="var(--muted)">IOSvL2(VRF-Lite)</text>
+  <text x="380" y="272" text-anchor="middle" font-size="10.5" fill="var(--blue)">回線受けVRF / Trust VRF</text>
+  <text x="380" y="288" text-anchor="middle" font-size="10" fill="var(--muted)">HSRP Active (prio110)</text>
+
+  <!-- L3SW2 -->
+  <rect x="580" y="210" width="160" height="86" rx="10" fill="#fff" stroke="var(--ink)" stroke-width="2"/>
+  <text x="660" y="238" text-anchor="middle" font-size="14" font-weight="bold">L3SW2</text>
+  <text x="660" y="256" text-anchor="middle" font-size="10.5" fill="var(--muted)">IOSvL2(VRF-Lite)</text>
+  <text x="660" y="272" text-anchor="middle" font-size="10.5" fill="var(--blue)">回線受けVRF / Trust VRF</text>
+  <text x="660" y="288" text-anchor="middle" font-size="10" fill="var(--muted)">HSRP Standby (prio100)</text>
+
+  <!-- FW1 -->
+  <rect x="40" y="210" width="150" height="86" rx="10" fill="#fff" stroke="var(--ink)" stroke-width="2"/>
+  <text x="115" y="240" text-anchor="middle" font-size="14" font-weight="bold">FW1</text>
+  <text x="115" y="258" text-anchor="middle" font-size="10.5" fill="var(--muted)">ASAv (primary)</text>
+  <text x="115" y="276" text-anchor="middle" font-size="10.5" fill="var(--blue)">Active</text>
+
+  <!-- FW2 -->
+  <rect x="850" y="210" width="150" height="86" rx="10" fill="#fff" stroke="var(--ink)" stroke-width="2"/>
+  <text x="925" y="240" text-anchor="middle" font-size="14" font-weight="bold">FW2</text>
+  <text x="925" y="258" text-anchor="middle" font-size="10.5" fill="var(--muted)">ASAv (secondary)</text>
+  <text x="925" y="276" text-anchor="middle" font-size="10.5" fill="var(--muted)">Standby</text>
+
+  <!-- one-arm trunks -->
+  <line x1="190" y1="238" x2="300" y2="238" stroke="var(--blue)" stroke-width="4"/>
+  <text x="245" y="228" text-anchor="middle" font-size="10.5" fill="var(--blue)" font-weight="bold">ワンアームトランク</text>
+  <text x="245" y="254" text-anchor="middle" font-size="9.5" fill="var(--muted)">Gi0/0⇔Gi0/1 VLAN243,244,254</text>
+  <line x1="740" y1="238" x2="850" y2="238" stroke="var(--blue)" stroke-width="4"/>
+  <text x="795" y="228" text-anchor="middle" font-size="10.5" fill="var(--blue)" font-weight="bold">ワンアームトランク</text>
+  <text x="795" y="254" text-anchor="middle" font-size="9.5" fill="var(--muted)">VLAN243,244,254</text>
+
+  <!-- HA links -->
+  <path d="M190 280 L300 280" stroke="#c2571a" stroke-width="2.5" stroke-dasharray="7 4"/>
+  <path d="M740 280 L850 280" stroke="#c2571a" stroke-width="2.5" stroke-dasharray="7 4"/>
+  <text x="245" y="295" text-anchor="middle" font-size="9.5" fill="#c2571a">HAリンク Gi0/1⇔Gi0/2 (VLAN245)</text>
+  <text x="795" y="295" text-anchor="middle" font-size="9.5" fill="#c2571a">HAリンク (VLAN245)</text>
+
+  <!-- inter-switch trunk -->
+  <line x1="460" y1="253" x2="580" y2="253" stroke="var(--ink)" stroke-width="4"/>
+  <text x="520" y="243" text-anchor="middle" font-size="10.5" font-weight="bold">L3SW間トランク Gi0/3</text>
+  <text x="520" y="270" text-anchor="middle" font-size="9.5" fill="var(--muted)">VLAN100,243,244,245,254</text>
+  <text x="520" y="284" text-anchor="middle" font-size="9.5" fill="#c2571a">(HA VLANはここを経由)</text>
+
+  <!-- hosts -->
+  <rect x="305" y="380" width="150" height="64" rx="10" fill="#eaf3f8" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="380" y="406" text-anchor="middle" font-size="12.5" font-weight="bold">USER-PC</text>
+  <text x="380" y="424" text-anchor="middle" font-size="10" fill="var(--muted)">alpine 172.16.100.101</text>
+  <text x="380" y="437" text-anchor="middle" font-size="10" fill="var(--blue)">Trustゾーン ユーザーVLAN100</text>
+  <line x1="380" y1="296" x2="380" y2="380" stroke="var(--line)" stroke-width="2.5"/>
+  <text x="392" y="345" font-size="9.5" fill="var(--muted)">Gi1/0 アクセス VLAN100</text>
+
+  <rect x="585" y="380" width="150" height="64" rx="10" fill="#dbe9f2" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="660" y="406" text-anchor="middle" font-size="12.5" font-weight="bold">DMZ-SV</text>
+  <text x="660" y="424" text-anchor="middle" font-size="10" fill="var(--muted)">alpine 172.16.254.101 (公開 2.2.2.1)</text>
+  <text x="660" y="437" text-anchor="middle" font-size="10" fill="var(--blue)">DMZゾーン FW-LB VLAN254</text>
+  <line x1="660" y1="296" x2="660" y2="380" stroke="var(--line)" stroke-width="2.5"/>
+  <text x="672" y="345" font-size="9.5" fill="var(--muted)">Gi1/0 アクセス VLAN254</text>
+
+  <!-- zone band -->
+  <rect x="40" y="480" width="960" height="52" rx="12" fill="var(--blue-l)" opacity="0.45"/>
+  <text x="520" y="512" text-anchor="middle" font-size="12.5" fill="#154c66" font-weight="bold">DMZ / Trustゾーン(LBは省略: DMZサーバをFW-LB VLANへ直結)</text>
+</svg>
+<div class="legend">
+  <span class="chip" style="background:#2e86ab"></span>ワンアームトランク(タグVLAN)
+  <span class="chip" style="background:#1f2933;margin-left:14px"></span>L3SW間トランク
+  <span class="chip" style="background:#c2571a;margin-left:14px"></span>ASAvフェールオーバーリンク(HA VLAN 245、L3SW経由 = 図2.4.3の別論理リンク方式)
+</div>
+</div>
+
+<h2>2. 論理構成(VRF / VLAN — 書籍 図2.4.2対応)</h2>
+<div class="card">
+<svg viewBox="0 0 1040 780" xmlns="http://www.w3.org/2000/svg">
+  <!-- backbone VLAN -->
+  <rect x="300" y="16" width="440" height="58" rx="14" fill="var(--untrust)"/>
+  <text x="520" y="40" text-anchor="middle" fill="#fff" font-size="13.5" font-weight="bold">データセンターバックボーン 接続VLAN 10</text>
+  <text x="520" y="60" text-anchor="middle" fill="#d7dde3" font-size="11.5">1.1.1.0/29 — BACKBONE 1.1.1.1 / HSRP VIP 1.1.1.5</text>
+
+  <!-- kaisen-uke VRFs -->
+  <line x1="420" y1="74" x2="420" y2="120" stroke="var(--line)" stroke-width="2.5"/>
+  <line x1="620" y1="74" x2="620" y2="120" stroke="var(--line)" stroke-width="2.5"/>
+  <text x="428" y="102" font-size="10" fill="var(--muted)">.6 (prio110)</text>
+  <text x="628" y="102" font-size="10" fill="var(--muted)">.4 (prio100)</text>
+
+  <rect x="320" y="120" width="200" height="56" rx="8" fill="#fff" stroke="var(--ink)" stroke-width="2"/>
+  <text x="420" y="143" text-anchor="middle" font-size="12.5" font-weight="bold">L3SW1(回線受けVRF)</text>
+  <text x="420" y="162" text-anchor="middle" font-size="10.5" fill="var(--muted)">VRF UNTRUST: Vlan10 / Vlan243</text>
+  <rect x="520" y="120" width="200" height="56" rx="8" fill="#fff" stroke="var(--ink)" stroke-width="2"/>
+  <text x="620" y="143" text-anchor="middle" font-size="12.5" font-weight="bold">L3SW2(回線受けVRF)</text>
+  <text x="620" y="162" text-anchor="middle" font-size="10.5" fill="var(--muted)">VRF UNTRUST: Vlan10 / Vlan243</text>
+
+  <!-- untrust L3-FW VLAN -->
+  <line x1="420" y1="176" x2="420" y2="222" stroke="var(--line)" stroke-width="2.5"/>
+  <line x1="620" y1="176" x2="620" y2="222" stroke="var(--line)" stroke-width="2.5"/>
+  <text x="428" y="204" font-size="10" fill="var(--muted)">.253 / VIP .254</text>
+  <text x="628" y="204" font-size="10" fill="var(--muted)">.252</text>
+
+  <rect x="300" y="222" width="440" height="58" rx="14" fill="var(--untrust)"/>
+  <text x="520" y="246" text-anchor="middle" fill="#fff" font-size="13.5" font-weight="bold">Untrustゾーン L3-FW VLAN 243</text>
+  <text x="520" y="266" text-anchor="middle" fill="#d7dde3" font-size="11.5">172.16.243.0/24 — ASA outside .251(standby .249)</text>
+
+  <!-- FWs -->
+  <line x1="420" y1="280" x2="420" y2="330" stroke="var(--line)" stroke-width="2.5"/>
+  <line x1="620" y1="280" x2="620" y2="330" stroke="var(--line)" stroke-width="2.5"/>
+
+  <rect x="300" y="330" width="200" height="88" rx="8" fill="#fff" stroke="var(--ink)" stroke-width="2"/>
+  <text x="400" y="355" text-anchor="middle" font-size="13" font-weight="bold">FW#1(ASAv Active)</text>
+  <rect x="322" y="368" width="156" height="38" rx="6" fill="var(--blue)"/>
+  <text x="400" y="384" text-anchor="middle" fill="#fff" font-size="10.5">割り当てIP 2.2.2.0/24</text>
+  <text x="400" y="399" text-anchor="middle" fill="#dff0f8" font-size="9.5">静的 2.2.2.1 / PAT 2.2.2.10</text>
+
+  <rect x="540" y="330" width="200" height="88" rx="8" fill="#fff" stroke="var(--ink)" stroke-width="2"/>
+  <text x="640" y="355" text-anchor="middle" font-size="13" font-weight="bold">FW#2(ASAv Standby)</text>
+  <rect x="562" y="368" width="156" height="38" rx="6" fill="var(--blue-l)"/>
+  <text x="640" y="384" text-anchor="middle" fill="#154c66" font-size="10.5">設定はFW#1から同期</text>
+  <text x="640" y="399" text-anchor="middle" fill="#154c66" font-size="9.5">Active IPを引き継ぎ</text>
+
+  <!-- HA VLAN -->
+  <rect x="500" y="352" width="40" height="0" fill="none"/>
+  <line x1="500" y1="374" x2="540" y2="374" stroke="#c2571a" stroke-width="3" stroke-dasharray="6 4"/>
+  <rect x="438" y="418" width="164" height="34" rx="8" fill="#c2571a" opacity="0.9"/>
+  <text x="520" y="433" text-anchor="middle" fill="#fff" font-size="10.5" font-weight="bold">HA VLAN 245</text>
+  <text x="520" y="446" text-anchor="middle" fill="#ffe4d1" font-size="9.5">172.31.245.0/24 (.254 / .253)</text>
+
+  <!-- DMZ / Trust VLANs -->
+  <line x1="360" y1="418" x2="260" y2="490" stroke="var(--line)" stroke-width="2.5"/>
+  <line x1="640" y1="418" x2="740" y2="490" stroke="var(--line)" stroke-width="2.5"/>
+  <line x1="440" y1="418" x2="700 " y2="490" stroke="var(--line)" stroke-width="2.5"/>
+  <line x1="580" y1="418" x2="300" y2="490" stroke="var(--line)" stroke-width="2.5"/>
+
+  <rect x="100" y="490" width="380" height="58" rx="14" fill="var(--dmz)"/>
+  <text x="290" y="514" text-anchor="middle" fill="#1c3a4d" font-size="13" font-weight="bold">DMZゾーン FW-LB VLAN 254</text>
+  <text x="290" y="533" text-anchor="middle" fill="#2d4a5e" font-size="11">172.16.254.0/24 — ASA dmz .254(standby .252)/ SVIなし(L2のみ)</text>
+
+  <rect x="560" y="490" width="380" height="58" rx="14" fill="var(--blue)"/>
+  <text x="750" y="514" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Trustゾーン FW-L3 VLAN 244</text>
+  <text x="750" y="533" text-anchor="middle" fill="#dff0f8" font-size="11">172.16.244.0/24 — ASA inside .254 / L3SW .250 .249 VIP .251</text>
+
+  <!-- DMZ server -->
+  <line x1="290" y1="548" x2="290" y2="600" stroke="var(--line)" stroke-width="2.5"/>
+  <rect x="200" y="600" width="180" height="56" rx="8" fill="#fff" stroke="var(--ink)" stroke-width="2"/>
+  <text x="290" y="623" text-anchor="middle" font-size="12" font-weight="bold">DMZ-SV(alpine)</text>
+  <text x="290" y="641" text-anchor="middle" font-size="10" fill="var(--muted)">.101(LB省略で直結・公開 2.2.2.1)</text>
+
+  <!-- Trust VRFs -->
+  <line x1="660" y1="548" x2="660" y2="600" stroke="var(--line)" stroke-width="2.5"/>
+  <line x1="840" y1="548" x2="840" y2="600" stroke="var(--line)" stroke-width="2.5"/>
+  <rect x="570" y="600" width="180" height="56" rx="8" fill="#fff" stroke="var(--ink)" stroke-width="2"/>
+  <text x="660" y="623" text-anchor="middle" font-size="12" font-weight="bold">L3SW1(Trust VRF)</text>
+  <text x="660" y="641" text-anchor="middle" font-size="10" fill="var(--muted)">VRF TRUST: Vlan244 / Vlan100</text>
+  <rect x="750" y="600" width="180" height="56" rx="8" fill="#fff" stroke="var(--ink)" stroke-width="2"/>
+  <text x="840" y="623" text-anchor="middle" font-size="12" font-weight="bold">L3SW2(Trust VRF)</text>
+  <text x="840" y="641" text-anchor="middle" font-size="10" fill="var(--muted)">VRF TRUST: Vlan244 / Vlan100</text>
+
+  <!-- user VLAN -->
+  <line x1="660" y1="656" x2="700" y2="700" stroke="var(--line)" stroke-width="2.5"/>
+  <line x1="840" y1="656" x2="800" y2="700" stroke="var(--line)" stroke-width="2.5"/>
+  <rect x="560" y="700" width="380" height="58" rx="14" fill="#3f6d8a"/>
+  <text x="750" y="724" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Trustゾーン ユーザーVLAN 100</text>
+  <text x="750" y="743" text-anchor="middle" fill="#d9e8f1" font-size="11">172.16.100.0/24 — VIP .1 / USER-PC .101</text>
+
+  <!-- DMZ server VLAN note -->
+  <rect x="100" y="700" width="380" height="58" rx="14" fill="#e2e8ec"/>
+  <text x="290" y="724" text-anchor="middle" fill="#42525f" font-size="12" font-weight="bold">(書籍のサーバVLAN / VIP VLAN 172.16.250.0/24)</text>
+  <text x="290" y="743" text-anchor="middle" fill="#5b6b7a" font-size="10.5">LB省略のため本ラボでは未使用 — FW-LB VLANに統合</text>
+</svg>
+<div class="legend">
+  <span class="chip" style="background:#4a5560"></span>Untrustゾーン
+  <span class="chip" style="background:#a8c8dc;margin-left:14px"></span>DMZゾーン
+  <span class="chip" style="background:#2e86ab;margin-left:14px"></span>Trustゾーン
+  <span class="chip" style="background:#c2571a;margin-left:14px"></span>HA VLAN
+</div>
+<div class="note">
+ルーティング(書籍 図2.4.8): 回線受けVRF「0/0→接続VLAN、2.2.2.0/24→FW(.251)」/ FW「0/0→回線受けVRF VIP(.254)、ユーザーVLAN→Trust VRF VIP(.251)」/ Trust VRF「0/0→FW inside(.254)」。
+正常時はL3SW1・FW1がActiveで、全トラフィックがL3SW1の腕をヘアピン折り返し(図2.4.9/2.4.10)。アップリンク障害時はtrackでVlan243のHSRPも連動フェールオーバー(図2.4.11)。
+</div>
+</div>
+</div>
+</body>
+</html>

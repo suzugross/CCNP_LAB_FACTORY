@@ -1,0 +1,565 @@
+lab:
+  title: UM2 Untrust One-Arm (VRF/VLAN)
+  description: >-
+    Network Design Pattern UM2 - Untrust zone Medium class No.2 (one-arm
+    firewall) reproduced for CML. 2x IOSvL2 (UNTRUST/TRUST VRF + HSRPv2),
+    2x ASAv (Active/Standby failover via HA VLAN 245 through the L3
+    switches), DC backbone (IOSv + unmanaged switch). LB omitted: DMZ
+    server directly on FW-LB VLAN 254.
+  notes: |-
+    # UM2 ワンアーム構成ラボ
+
+    VLAN: 10=BB接続(1.1.1.0/29) 243=Untrust L3-FW 244=Trust FW-L3
+    245=FW HA 254=DMZ FW-LB 100=ユーザー / 割り当てIP 2.2.2.0/24
+
+    起動後の手順:
+    1. FW1 で `show failover` を確認 (FW2 が Standby Ready になるまで1-2分)
+    2. alpine に day-0 が効いていない場合は手動設定:
+       USER-PC: ip addr add 172.16.100.101/24 dev eth0
+                ip route add default via 172.16.100.1
+       DMZ-SV : ip addr add 172.16.254.101/24 dev eth0
+                ip route add default via 172.16.254.254
+                mkdir -p /var/www && echo UM2 > /var/www/index.html
+                httpd -p 80 -h /var/www
+    3. 疎通試験:
+       - USER-PC: ping 198.51.100.1  (outbound, PAT 2.2.2.10)
+       - BACKBONE: ping 2.2.2.1 / telnet 2.2.2.1 80 (inbound static NAT)
+    4. 障害試験: BB-SW~L3SW1 リンク断 / L3SW1 停止 / FW1 停止
+  version: 0.1.0
+nodes:
+  - id: n0
+    label: BACKBONE
+    node_definition: iosv
+    x: 0
+    y: -440
+    configuration: |-
+      hostname BACKBONE
+      no ip domain lookup
+      !
+      interface Loopback0
+       description EXTERNAL-TEST-TARGET
+       ip address 198.51.100.1 255.255.255.255
+      !
+      interface GigabitEthernet0/0
+       description TO-BB-SW
+       ip address 1.1.1.1 255.255.255.248
+       no shutdown
+      !
+      ip route 2.2.2.0 255.255.255.0 1.1.1.5
+      !
+      line con 0
+       exec-timeout 0 0
+      end
+    interfaces:
+      - id: i0
+        label: Loopback0
+        type: loopback
+      - id: i1
+        slot: 0
+        label: GigabitEthernet0/0
+        type: physical
+  - id: n1
+    label: BB-SW
+    node_definition: unmanaged_switch
+    x: 0
+    y: -300
+    configuration: ''
+    interfaces:
+      - id: i0
+        slot: 0
+        label: port0
+        type: physical
+      - id: i1
+        slot: 1
+        label: port1
+        type: physical
+      - id: i2
+        slot: 2
+        label: port2
+        type: physical
+      - id: i3
+        slot: 3
+        label: port3
+        type: physical
+  - id: n2
+    label: L3SW1
+    node_definition: iosvl2
+    x: -180
+    y: -120
+    configuration: |-
+      hostname L3SW1
+      no ip domain lookup
+      vtp mode transparent
+      !
+      vrf definition UNTRUST
+       description KAISEN-UKE-VRF
+       address-family ipv4
+      !
+      vrf definition TRUST
+       description TRUST-CORE-VRF
+       address-family ipv4
+      !
+      vlan 10
+       name BB-CONN
+      vlan 100
+       name TRUST-USER
+      vlan 243
+       name UNTRUST-L3FW
+      vlan 244
+       name TRUST-FWL3
+      vlan 245
+       name FW-HA
+      vlan 254
+       name DMZ-FWLB
+      !
+      track 1 interface GigabitEthernet0/0 line-protocol
+      !
+      interface GigabitEthernet0/0
+       description UPLINK-DC-BACKBONE
+       switchport mode access
+       switchport access vlan 10
+       no shutdown
+      !
+      interface GigabitEthernet0/1
+       description ONE-ARM-TRUNK-TO-FW1
+       switchport trunk encapsulation dot1q
+       switchport trunk allowed vlan 243,244,254
+       switchport mode trunk
+       no shutdown
+      !
+      interface GigabitEthernet0/2
+       description FW1-HA-LINK
+       switchport mode access
+       switchport access vlan 245
+       no shutdown
+      !
+      interface GigabitEthernet0/3
+       description TRUNK-TO-L3SW2
+       switchport trunk encapsulation dot1q
+       switchport trunk allowed vlan 100,243,244,245,254
+       switchport mode trunk
+       no shutdown
+      !
+      interface GigabitEthernet1/0
+       description USER-PC
+       switchport mode access
+       switchport access vlan 100
+       spanning-tree portfast edge
+       no shutdown
+      !
+      interface Vlan10
+       description BB-CONN-VLAN
+       vrf forwarding UNTRUST
+       ip address 1.1.1.6 255.255.255.248
+       standby version 2
+       standby 10 ip 1.1.1.5
+       standby 10 priority 110
+       standby 10 preempt
+       no shutdown
+      !
+      interface Vlan243
+       description UNTRUST-L3-FW-VLAN
+       vrf forwarding UNTRUST
+       ip address 172.16.243.253 255.255.255.0
+       standby version 2
+       standby 43 ip 172.16.243.254
+       standby 43 priority 110
+       standby 43 preempt
+       standby 43 track 1 decrement 30
+       no shutdown
+      !
+      interface Vlan244
+       description TRUST-FW-L3-VLAN
+       vrf forwarding TRUST
+       ip address 172.16.244.250 255.255.255.0
+       standby version 2
+       standby 44 ip 172.16.244.251
+       standby 44 priority 110
+       standby 44 preempt
+       no shutdown
+      !
+      interface Vlan100
+       description TRUST-USER-VLAN
+       vrf forwarding TRUST
+       ip address 172.16.100.2 255.255.255.0
+       standby version 2
+       standby 1 ip 172.16.100.1
+       standby 1 priority 110
+       standby 1 preempt
+       no shutdown
+      !
+      ip route vrf UNTRUST 0.0.0.0 0.0.0.0 1.1.1.1
+      ip route vrf UNTRUST 2.2.2.0 255.255.255.0 172.16.243.251
+      ip route vrf TRUST 0.0.0.0 0.0.0.0 172.16.244.254
+      !
+      line con 0
+       exec-timeout 0 0
+      end
+    interfaces:
+      - id: i0
+        label: Loopback0
+        type: loopback
+      - id: i1
+        slot: 0
+        label: GigabitEthernet0/0
+        type: physical
+      - id: i2
+        slot: 1
+        label: GigabitEthernet0/1
+        type: physical
+      - id: i3
+        slot: 2
+        label: GigabitEthernet0/2
+        type: physical
+      - id: i4
+        slot: 3
+        label: GigabitEthernet0/3
+        type: physical
+      - id: i5
+        slot: 4
+        label: GigabitEthernet1/0
+        type: physical
+  - id: n3
+    label: L3SW2
+    node_definition: iosvl2
+    x: 180
+    y: -120
+    configuration: |-
+      hostname L3SW2
+      no ip domain lookup
+      vtp mode transparent
+      !
+      vrf definition UNTRUST
+       description KAISEN-UKE-VRF
+       address-family ipv4
+      !
+      vrf definition TRUST
+       description TRUST-CORE-VRF
+       address-family ipv4
+      !
+      vlan 10
+       name BB-CONN
+      vlan 100
+       name TRUST-USER
+      vlan 243
+       name UNTRUST-L3FW
+      vlan 244
+       name TRUST-FWL3
+      vlan 245
+       name FW-HA
+      vlan 254
+       name DMZ-FWLB
+      !
+      track 1 interface GigabitEthernet0/0 line-protocol
+      !
+      interface GigabitEthernet0/0
+       description UPLINK-DC-BACKBONE
+       switchport mode access
+       switchport access vlan 10
+       no shutdown
+      !
+      interface GigabitEthernet0/1
+       description ONE-ARM-TRUNK-TO-FW2
+       switchport trunk encapsulation dot1q
+       switchport trunk allowed vlan 243,244,254
+       switchport mode trunk
+       no shutdown
+      !
+      interface GigabitEthernet0/2
+       description FW2-HA-LINK
+       switchport mode access
+       switchport access vlan 245
+       no shutdown
+      !
+      interface GigabitEthernet0/3
+       description TRUNK-TO-L3SW1
+       switchport trunk encapsulation dot1q
+       switchport trunk allowed vlan 100,243,244,245,254
+       switchport mode trunk
+       no shutdown
+      !
+      interface GigabitEthernet1/0
+       description DMZ-SERVER
+       switchport mode access
+       switchport access vlan 254
+       spanning-tree portfast edge
+       no shutdown
+      !
+      interface Vlan10
+       description BB-CONN-VLAN
+       vrf forwarding UNTRUST
+       ip address 1.1.1.4 255.255.255.248
+       standby version 2
+       standby 10 ip 1.1.1.5
+       standby 10 priority 100
+       standby 10 preempt
+       no shutdown
+      !
+      interface Vlan243
+       description UNTRUST-L3-FW-VLAN
+       vrf forwarding UNTRUST
+       ip address 172.16.243.252 255.255.255.0
+       standby version 2
+       standby 43 ip 172.16.243.254
+       standby 43 priority 100
+       standby 43 preempt
+       standby 43 track 1 decrement 30
+       no shutdown
+      !
+      interface Vlan244
+       description TRUST-FW-L3-VLAN
+       vrf forwarding TRUST
+       ip address 172.16.244.249 255.255.255.0
+       standby version 2
+       standby 44 ip 172.16.244.251
+       standby 44 priority 100
+       standby 44 preempt
+       no shutdown
+      !
+      interface Vlan100
+       description TRUST-USER-VLAN
+       vrf forwarding TRUST
+       ip address 172.16.100.3 255.255.255.0
+       standby version 2
+       standby 1 ip 172.16.100.1
+       standby 1 priority 100
+       standby 1 preempt
+       no shutdown
+      !
+      ip route vrf UNTRUST 0.0.0.0 0.0.0.0 1.1.1.1
+      ip route vrf UNTRUST 2.2.2.0 255.255.255.0 172.16.243.251
+      ip route vrf TRUST 0.0.0.0 0.0.0.0 172.16.244.254
+      !
+      line con 0
+       exec-timeout 0 0
+      end
+    interfaces:
+      - id: i0
+        label: Loopback0
+        type: loopback
+      - id: i1
+        slot: 0
+        label: GigabitEthernet0/0
+        type: physical
+      - id: i2
+        slot: 1
+        label: GigabitEthernet0/1
+        type: physical
+      - id: i3
+        slot: 2
+        label: GigabitEthernet0/2
+        type: physical
+      - id: i4
+        slot: 3
+        label: GigabitEthernet0/3
+        type: physical
+      - id: i5
+        slot: 4
+        label: GigabitEthernet1/0
+        type: physical
+  - id: n4
+    label: FW1
+    node_definition: asav
+    x: -460
+    y: -120
+    configuration: |-
+      hostname FW1
+      !
+      interface GigabitEthernet0/0
+       description ONE-ARM-TRUNK-TO-L3SW1
+       no shutdown
+      !
+      interface GigabitEthernet0/0.243
+       vlan 243
+       nameif outside
+       security-level 0
+       ip address 172.16.243.251 255.255.255.0 standby 172.16.243.249
+      !
+      interface GigabitEthernet0/0.244
+       vlan 244
+       nameif inside
+       security-level 100
+       ip address 172.16.244.254 255.255.255.0 standby 172.16.244.252
+      !
+      interface GigabitEthernet0/0.254
+       vlan 254
+       nameif dmz
+       security-level 50
+       ip address 172.16.254.254 255.255.255.0 standby 172.16.254.252
+      !
+      interface GigabitEthernet0/1
+       description FAILOVER-LINK
+       no shutdown
+      !
+      failover lan unit primary
+      failover lan interface FOLINK GigabitEthernet0/1
+      failover link FOLINK GigabitEthernet0/1
+      failover interface ip FOLINK 172.31.245.254 255.255.255.0 standby 172.31.245.253
+      failover
+      !
+      route outside 0.0.0.0 0.0.0.0 172.16.243.254 1
+      route inside 172.16.100.0 255.255.255.0 172.16.244.251 1
+      !
+      object network OBJ-DMZ-SERVER
+       host 172.16.254.101
+       nat (dmz,outside) static 2.2.2.1
+      object network OBJ-PAT-ADDR
+       host 2.2.2.10
+      object network OBJ-TRUST-NET
+       subnet 172.16.100.0 255.255.255.0
+       nat (inside,outside) dynamic OBJ-PAT-ADDR
+      !
+      access-list OUTSIDE-IN extended permit icmp any host 172.16.254.101
+      access-list OUTSIDE-IN extended permit tcp any host 172.16.254.101 eq www
+      access-group OUTSIDE-IN in interface outside
+      !
+      class-map inspection_default
+       match default-inspection-traffic
+      policy-map global_policy
+       class inspection_default
+        inspect icmp
+        inspect dns
+      service-policy global_policy global
+    interfaces:
+      - id: i0
+        slot: 0
+        label: Management0/0
+        type: physical
+      - id: i1
+        slot: 1
+        label: GigabitEthernet0/0
+        type: physical
+      - id: i2
+        slot: 2
+        label: GigabitEthernet0/1
+        type: physical
+  - id: n5
+    label: FW2
+    node_definition: asav
+    x: 460
+    y: -120
+    configuration: |-
+      hostname FW2
+      !
+      interface GigabitEthernet0/0
+       description ONE-ARM-TRUNK-TO-L3SW2
+       no shutdown
+      !
+      interface GigabitEthernet0/1
+       description FAILOVER-LINK
+       no shutdown
+      !
+      failover lan unit secondary
+      failover lan interface FOLINK GigabitEthernet0/1
+      failover link FOLINK GigabitEthernet0/1
+      failover interface ip FOLINK 172.31.245.254 255.255.255.0 standby 172.31.245.253
+      failover
+    interfaces:
+      - id: i0
+        slot: 0
+        label: Management0/0
+        type: physical
+      - id: i1
+        slot: 1
+        label: GigabitEthernet0/0
+        type: physical
+      - id: i2
+        slot: 2
+        label: GigabitEthernet0/1
+        type: physical
+  - id: n6
+    label: USER-PC
+    node_definition: alpine
+    x: -180
+    y: 120
+    configuration: |-
+      #!/bin/sh
+      # Trust zone user (VLAN 100)
+      ip addr add 172.16.100.101/24 dev eth0
+      ip link set eth0 up
+      ip route add default via 172.16.100.1
+    interfaces:
+      - id: i0
+        slot: 0
+        label: eth0
+        type: physical
+  - id: n7
+    label: DMZ-SV
+    node_definition: alpine
+    x: 180
+    y: 120
+    configuration: |-
+      #!/bin/sh
+      # DMZ server (VLAN 254) - public 2.2.2.1 via FW static NAT
+      ip addr add 172.16.254.101/24 dev eth0
+      ip link set eth0 up
+      ip route add default via 172.16.254.254
+      mkdir -p /var/www
+      echo "UM2 DMZ SERVER" > /var/www/index.html
+      httpd -p 80 -h /var/www
+    interfaces:
+      - id: i0
+        slot: 0
+        label: eth0
+        type: physical
+links:
+  - id: l0
+    n1: n0
+    i1: i1
+    n2: n1
+    i2: i0
+    label: BACKBONE-Gi0/0<->BB-SW-port0
+  - id: l1
+    n1: n1
+    i1: i1
+    n2: n2
+    i2: i1
+    label: BB-SW-port1<->L3SW1-Gi0/0
+  - id: l2
+    n1: n1
+    i1: i2
+    n2: n3
+    i2: i1
+    label: BB-SW-port2<->L3SW2-Gi0/0
+  - id: l3
+    n1: n2
+    i1: i2
+    n2: n4
+    i2: i1
+    label: L3SW1-Gi0/1<->FW1-Gi0/0
+  - id: l4
+    n1: n3
+    i1: i2
+    n2: n5
+    i2: i1
+    label: L3SW2-Gi0/1<->FW2-Gi0/0
+  - id: l5
+    n1: n2
+    i1: i3
+    n2: n4
+    i2: i2
+    label: L3SW1-Gi0/2<->FW1-Gi0/1(HA)
+  - id: l6
+    n1: n3
+    i1: i3
+    n2: n5
+    i2: i2
+    label: L3SW2-Gi0/2<->FW2-Gi0/1(HA)
+  - id: l7
+    n1: n2
+    i1: i4
+    n2: n3
+    i2: i4
+    label: L3SW1-Gi0/3<->L3SW2-Gi0/3
+  - id: l8
+    n1: n2
+    i1: i5
+    n2: n6
+    i2: i0
+    label: L3SW1-Gi1/0<->USER-PC
+  - id: l9
+    n1: n3
+    i1: i5
+    n2: n7
+    i2: i0
+    label: L3SW2-Gi1/0<->DMZ-SV

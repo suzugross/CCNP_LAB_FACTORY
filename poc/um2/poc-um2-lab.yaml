@@ -1,0 +1,357 @@
+lab:
+  title: POC-UM2
+  description: BL-042 UM2 one-arm VRF/HSRP/FW-HA golden probe (console-only)
+  notes: "PoC lab (Claude 2026-07-10): BL-042 UM2「Untrustワンアーム構成」golden 検証\n- 原本= um2/um2_cml_lab.yaml。UM2.design.md の Must fix 4点＋Should fix を統合:\n  ASA=bootstrap方式(day0不発)/CCNPccnp認証/monitor-interface/failover key/\n  portfast(edge除去)/image_definition明示\n- プローブ: P1=IOSvL2 VRF-Lite+HSRPv2+track / P2=HAリンクL3SW経由+monitor-interface\n  (スプリットブレイン挙動含む) / P3=alpine day0 / golden試験1-3(PAT/静的NAT/ゾーン分離)\n- ★DMZ-LB は書籍準拠のインライン形(2026-07-11): LB上流=タグ254サブIF/下流=物理IF\n  タグ無しで SRV-SW 配下にサーバセグメント(172.16.251.0/24)・上下HSRPは相互track\n- FW config は yaml が正準（um2_tools.py bootstrap が console 投入）\n"
+  version: 0.3.0
+nodes:
+- id: BACKBONE
+  label: BACKBONE
+  node_definition: iosv
+  image_definition: iosv-159-3-m9
+  configuration: "hostname BACKBONE\nno ip domain lookup\n!\nenable secret CCNPccnp\nusername SUZUKI privilege 15 secret CCNPccnp\n!\ninterface Loopback0\n description EXTERNAL-TEST-TARGET\n ip address 198.51.100.1 255.255.255.255\n!\ninterface GigabitEthernet0/0\n description TO-BB-SW\n ip address 1.1.1.1 255.255.255.248\n no shutdown\n!\nip route 2.2.2.0 255.255.255.0 1.1.1.5\n!\nline con 0\n exec-timeout 0 0\n logging synchronous\n"
+  x: 0
+  y: -440
+  tags:
+  - routers
+  interfaces:
+  - id: BACKBONE-i0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 0
+- id: BBSW
+  label: BB-SW
+  node_definition: unmanaged_switch
+  image_definition: null
+  configuration: ''
+  x: 0
+  y: -300
+  tags: []
+  interfaces:
+  - id: BBSW-i0
+    label: port0
+    type: physical
+    slot: 0
+  - id: BBSW-i1
+    label: port1
+    type: physical
+    slot: 1
+  - id: BBSW-i2
+    label: port2
+    type: physical
+    slot: 2
+- id: L3SW1
+  label: L3SW1
+  node_definition: iosvl2
+  image_definition: iosvl2-2020
+  configuration: "hostname L3SW1\nno ip domain lookup\nip routing\nvtp mode transparent\n!\nenable secret CCNPccnp\nusername SUZUKI privilege 15 secret CCNPccnp\n!\nvrf definition UNTRUST\n description KAISEN-UKE-VRF\n address-family ipv4\n exit-address-family\n!\nvrf definition TRUST\n description TRUST-CORE-VRF\n address-family ipv4\n exit-address-family\n!\nvlan 10\n name BB-CONN\nvlan 100\n name TRUST-USER\nvlan 243\n name UNTRUST-L3FW\nvlan 244\n name TRUST-FWL3\nvlan 245\n name FW-HA\nvlan 254\n name DMZ-FWLB\n!\ntrack 1 interface GigabitEthernet0/0 line-protocol\n!\ninterface GigabitEthernet0/0\n description UPLINK-DC-BACKBONE\n switchport mode access\n switchport access vlan 10\n no shutdown\n!\ninterface GigabitEthernet0/1\n description ONE-ARM-TRUNK-TO-FW1\n switchport trunk encapsulation dot1q\n switchport trunk allowed vlan 243,244,254\n switchport mode trunk\n no shutdown\n!\ninterface GigabitEthernet0/2\n description FW1-HA-LINK\n switchport mode access\n switchport access vlan 245\n no shutdown\n!\ninterface GigabitEthernet0/3\n description TRUNK-TO-L3SW2\n switchport trunk encapsulation dot1q\n switchport trunk allowed vlan 100,243,244,245,254\n switchport mode trunk\n no shutdown\n!\ninterface GigabitEthernet1/0\n description USER-PC\n switchport mode access\n switchport access vlan 100\n spanning-tree portfast\n no shutdown\n!\ninterface GigabitEthernet1/1\n description ONE-ARM-TRUNK-TO-LB1\n switchport trunk encapsulation dot1q\n switchport trunk allowed vlan 254\n switchport mode trunk\n no shutdown\n!\ninterface Vlan10\n description BB-CONN-VLAN\n vrf forwarding UNTRUST\n ip address 1.1.1.6 255.255.255.248\n standby version 2\n standby 10 ip 1.1.1.5\n standby 10 priority 110\n standby 10 preempt\n no shutdown\n!\ninterface Vlan243\n description UNTRUST-L3-FW-VLAN\n vrf forwarding UNTRUST\n ip address 172.16.243.253 255.255.255.0\n standby version 2\n standby 43 ip 172.16.243.254\n standby 43 priority 110\n standby 43 preempt\n standby 43 track 1 decrement 30\n no shutdown\n!\ninterface Vlan244\n description TRUST-FW-L3-VLAN\n vrf forwarding TRUST\n ip address 172.16.244.250 255.255.255.0\n standby version 2\n standby 44 ip 172.16.244.251\n standby 44 priority 110\n standby 44 preempt\n no shutdown\n!\ninterface Vlan100\n description TRUST-USER-VLAN\n vrf forwarding TRUST\n ip address 172.16.100.2 255.255.255.0\n standby version 2\n standby 1 ip 172.16.100.1\n standby 1 priority 110\n standby 1 preempt\n no shutdown\n!\nip route vrf UNTRUST 0.0.0.0 0.0.0.0 1.1.1.1\nip route vrf UNTRUST 2.2.2.0 255.255.255.0 172.16.243.251\nip route vrf TRUST 0.0.0.0 0.0.0.0 172.16.244.254\n!\nline con 0\n exec-timeout 0 0\n logging synchronous\n"
+  x: -180
+  y: -120
+  tags:
+  - switches
+  interfaces:
+  - id: L3SW1-i0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 0
+  - id: L3SW1-i1
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 1
+  - id: L3SW1-i2
+    label: GigabitEthernet0/2
+    type: physical
+    slot: 2
+  - id: L3SW1-i3
+    label: GigabitEthernet0/3
+    type: physical
+    slot: 3
+  - id: L3SW1-i4
+    label: GigabitEthernet1/0
+    type: physical
+    slot: 4
+  - id: L3SW1-i5
+    label: GigabitEthernet1/1
+    type: physical
+    slot: 5
+- id: L3SW2
+  label: L3SW2
+  node_definition: iosvl2
+  image_definition: iosvl2-2020
+  configuration: "hostname L3SW2\nno ip domain lookup\nip routing\nvtp mode transparent\n!\nenable secret CCNPccnp\nusername SUZUKI privilege 15 secret CCNPccnp\n!\nvrf definition UNTRUST\n description KAISEN-UKE-VRF\n address-family ipv4\n exit-address-family\n!\nvrf definition TRUST\n description TRUST-CORE-VRF\n address-family ipv4\n exit-address-family\n!\nvlan 10\n name BB-CONN\nvlan 100\n name TRUST-USER\nvlan 243\n name UNTRUST-L3FW\nvlan 244\n name TRUST-FWL3\nvlan 245\n name FW-HA\nvlan 254\n name DMZ-FWLB\n!\ntrack 1 interface GigabitEthernet0/0 line-protocol\n!\ninterface GigabitEthernet0/0\n description UPLINK-DC-BACKBONE\n switchport mode access\n switchport access vlan 10\n no shutdown\n!\ninterface GigabitEthernet0/1\n description ONE-ARM-TRUNK-TO-FW2\n switchport trunk encapsulation dot1q\n switchport trunk allowed vlan 243,244,254\n switchport mode trunk\n no shutdown\n!\ninterface GigabitEthernet0/2\n description FW2-HA-LINK\n switchport mode access\n switchport access vlan 245\n no shutdown\n!\ninterface GigabitEthernet0/3\n description TRUNK-TO-L3SW1\n switchport trunk encapsulation dot1q\n switchport trunk allowed vlan 100,243,244,245,254\n switchport mode trunk\n no shutdown\n!\ninterface GigabitEthernet1/1\n description ONE-ARM-TRUNK-TO-LB2\n switchport trunk encapsulation dot1q\n switchport trunk allowed vlan 254\n switchport mode trunk\n no shutdown\n!\ninterface Vlan10\n description BB-CONN-VLAN\n vrf forwarding UNTRUST\n ip address 1.1.1.4 255.255.255.248\n standby version 2\n standby 10 ip 1.1.1.5\n standby 10 priority 100\n standby 10 preempt\n no shutdown\n!\ninterface Vlan243\n description UNTRUST-L3-FW-VLAN\n vrf forwarding UNTRUST\n ip address 172.16.243.252 255.255.255.0\n standby version 2\n standby 43 ip 172.16.243.254\n standby 43 priority 100\n standby 43 preempt\n standby 43 track 1 decrement 30\n no shutdown\n!\ninterface Vlan244\n description TRUST-FW-L3-VLAN\n vrf forwarding TRUST\n ip address 172.16.244.249 255.255.255.0\n standby version 2\n standby 44 ip 172.16.244.251\n standby 44 priority 100\n standby 44 preempt\n no shutdown\n!\ninterface Vlan100\n description TRUST-USER-VLAN\n vrf forwarding TRUST\n ip address 172.16.100.3 255.255.255.0\n standby version 2\n standby 1 ip 172.16.100.1\n standby 1 priority 100\n standby 1 preempt\n no shutdown\n!\nip route vrf UNTRUST 0.0.0.0 0.0.0.0 1.1.1.1\nip route vrf UNTRUST 2.2.2.0 255.255.255.0 172.16.243.251\nip route vrf TRUST 0.0.0.0 0.0.0.0 172.16.244.254\n!\nline con 0\n exec-timeout 0 0\n logging synchronous\n"
+  x: 180
+  y: -120
+  tags:
+  - switches
+  interfaces:
+  - id: L3SW2-i0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 0
+  - id: L3SW2-i1
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 1
+  - id: L3SW2-i2
+    label: GigabitEthernet0/2
+    type: physical
+    slot: 2
+  - id: L3SW2-i3
+    label: GigabitEthernet0/3
+    type: physical
+    slot: 3
+  - id: L3SW2-i5
+    label: GigabitEthernet1/1
+    type: physical
+    slot: 5
+- id: FW1
+  label: FW1
+  node_definition: asav
+  image_definition: asav-9-22-1-1
+  ram: 2048
+  configuration: "hostname FW1\nenable password CCNPccnp\nusername SUZUKI password CCNPccnp privilege 15\n!\ninterface GigabitEthernet0/0\n description ONE-ARM-TRUNK-TO-L3SW1\n no shutdown\n!\ninterface GigabitEthernet0/0.243\n vlan 243\n nameif outside\n security-level 0\n ip address 172.16.243.251 255.255.255.0 standby 172.16.243.249\n!\ninterface GigabitEthernet0/0.244\n vlan 244\n nameif inside\n security-level 100\n ip address 172.16.244.254 255.255.255.0 standby 172.16.244.252\n!\ninterface GigabitEthernet0/0.254\n vlan 254\n nameif dmz\n security-level 50\n ip address 172.16.254.254 255.255.255.0 standby 172.16.254.252\n!\ninterface GigabitEthernet0/1\n description FAILOVER-LINK\n no shutdown\n!\nfailover lan unit primary\nfailover lan interface FOLINK GigabitEthernet0/1\nfailover link FOLINK GigabitEthernet0/1\nfailover interface ip FOLINK 172.31.245.254 255.255.255.0 standby 172.31.245.253\nfailover key CCNPccnp\nfailover\n!\nroute outside 0.0.0.0 0.0.0.0 172.16.243.254 1\nroute inside 172.16.100.0 255.255.255.0 172.16.244.251 1\nroute dmz 172.16.250.0 255.255.255.0 172.16.254.251 1\nroute dmz 172.16.251.0 255.255.255.0 172.16.254.251 1\n!\nobject network OBJ-LB-VIP\n host 172.16.250.1\n nat (dmz,outside) static 2.2.2.1\nobject network OBJ-PAT-ADDR\n host 2.2.2.10\nobject network OBJ-TRUST-NET\n subnet 172.16.100.0 255.255.255.0\n nat (inside,outside) dynamic OBJ-PAT-ADDR\n!\naccess-list OUTSIDE-IN extended permit icmp any host 172.16.250.1\naccess-list OUTSIDE-IN extended permit tcp any host 172.16.250.1 eq www\naccess-group OUTSIDE-IN in interface outside\n!\npolicy-map global_policy\n class inspection_default\n  inspect icmp\n!\nmonitor-interface outside\nmonitor-interface inside\nmonitor-interface dmz\n!\nicmp permit any outside\nicmp permit any inside\nicmp permit any dmz\n!\nprompt hostname priority state\n"
+  x: -460
+  y: -120
+  tags:
+  - firewalls
+  interfaces:
+  - id: FW1-i1
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 1
+  - id: FW1-i2
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 2
+- id: FW2
+  label: FW2
+  node_definition: asav
+  image_definition: asav-9-22-1-1
+  ram: 2048
+  configuration: "enable password CCNPccnp\n!\ninterface GigabitEthernet0/0\n no shutdown\n!\ninterface GigabitEthernet0/1\n no shutdown\n!\nfailover lan unit secondary\nfailover lan interface FOLINK GigabitEthernet0/1\nfailover link FOLINK GigabitEthernet0/1\nfailover interface ip FOLINK 172.31.245.254 255.255.255.0 standby 172.31.245.253\nfailover key CCNPccnp\nfailover\n"
+  x: 460
+  y: -120
+  tags:
+  - firewalls
+  interfaces:
+  - id: FW2-i1
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 1
+  - id: FW2-i2
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 2
+- id: LB1
+  label: LB1
+  node_definition: iosv
+  image_definition: iosv-159-3-m9
+  configuration: "hostname LB1\nno ip domain lookup\nip cef\n!\nenable secret CCNPccnp\nusername SUZUKI privilege 15 secret CCNPccnp\n!\nip sla 1\n icmp-echo 172.16.254.254 source-ip 172.16.254.253\n frequency 5\nip sla schedule 1 life forever start-time now\nip sla 2\n icmp-echo 172.16.251.101 source-ip 172.16.251.2\n frequency 5\nip sla schedule 2 life forever start-time now\n!\ntrack 10 ip sla 1 reachability\ntrack 20 ip sla 2 reachability\n!\ninterface GigabitEthernet0/0\n description UPSTREAM-TAGGED-TO-L3SW1\n no shutdown\n!\ninterface GigabitEthernet0/0.254\n description FW-LB-VLAN (upstream)\n encapsulation dot1Q 254\n ip address 172.16.254.253 255.255.255.0\n ip nat outside\n standby version 2\n standby 54 ip 172.16.254.251\n standby 54 priority 110\n standby 54 preempt\n standby 54 track 20 decrement 30\n!\ninterface GigabitEthernet0/1\n description SERVER-SEGMENT (downstream untagged)\n ip address 172.16.251.2 255.255.255.0\n ip nat inside\n standby version 2\n standby 51 ip 172.16.251.1\n standby 51 priority 110\n standby 51 preempt\n standby 51 track 10 decrement 30\n no shutdown\n!\nip route 0.0.0.0 0.0.0.0 172.16.254.254\n!\nip nat inside source static 172.16.251.101 172.16.250.1\n!\nevent manager applet NOSHUT-PARENT authorization bypass\n event timer countdown time 45\n action 1.0 cli command \"enable\"\n action 2.0 cli command \"configure terminal\"\n action 3.0 cli command \"interface GigabitEthernet0/0\"\n action 4.0 cli command \"no shutdown\"\n action 5.0 syslog msg \"EEM: parent IF no shut applied\"\n!\nline con 0\n exec-timeout 0 0\n logging synchronous\n"
+  x: -460
+  y: 120
+  tags:
+  - routers
+  interfaces:
+  - id: LB1-i0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 0
+  - id: LB1-i1
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 1
+- id: LB2
+  label: LB2
+  node_definition: iosv
+  image_definition: iosv-159-3-m9
+  configuration: "hostname LB2\nno ip domain lookup\nip cef\n!\nenable secret CCNPccnp\nusername SUZUKI privilege 15 secret CCNPccnp\n!\nip sla 1\n icmp-echo 172.16.254.254 source-ip 172.16.254.249\n frequency 5\nip sla schedule 1 life forever start-time now\nip sla 2\n icmp-echo 172.16.251.101 source-ip 172.16.251.3\n frequency 5\nip sla schedule 2 life forever start-time now\n!\ntrack 10 ip sla 1 reachability\ntrack 20 ip sla 2 reachability\n!\ninterface GigabitEthernet0/0\n description UPSTREAM-TAGGED-TO-L3SW2\n no shutdown\n!\ninterface GigabitEthernet0/0.254\n description FW-LB-VLAN (upstream)\n encapsulation dot1Q 254\n ip address 172.16.254.249 255.255.255.0\n ip nat outside\n standby version 2\n standby 54 ip 172.16.254.251\n standby 54 priority 100\n standby 54 preempt\n standby 54 track 20 decrement 30\n!\ninterface GigabitEthernet0/1\n description SERVER-SEGMENT (downstream untagged)\n ip address 172.16.251.3 255.255.255.0\n ip nat inside\n standby version 2\n standby 51 ip 172.16.251.1\n standby 51 priority 100\n standby 51 preempt\n standby 51 track 10 decrement 30\n no shutdown\n!\nip route 0.0.0.0 0.0.0.0 172.16.254.254\n!\nip nat inside source static 172.16.251.101 172.16.250.1\n!\nevent manager applet NOSHUT-PARENT authorization bypass\n event timer countdown time 45\n action 1.0 cli command \"enable\"\n action 2.0 cli command \"configure terminal\"\n action 3.0 cli command \"interface GigabitEthernet0/0\"\n action 4.0 cli command \"no shutdown\"\n action 5.0 syslog msg \"EEM: parent IF no shut applied\"\n!\nline con 0\n exec-timeout 0 0\n logging synchronous\n"
+  x: 460
+  y: 120
+  tags:
+  - routers
+  interfaces:
+  - id: LB2-i0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 0
+  - id: LB2-i1
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 1
+- id: USERPC
+  label: USER-PC
+  node_definition: alpine
+  configuration: '#!/bin/sh
+
+    # Trust zone user (VLAN 100) - P3: alpine day0 probe
+
+    ip addr add 172.16.100.101/24 dev eth0
+
+    ip link set eth0 up
+
+    ip route add default via 172.16.100.1
+
+    touch /tmp/day0_ok
+
+    '
+  x: -180
+  y: 120
+  tags:
+  - servers
+  interfaces:
+  - id: USERPC-i0
+    label: eth0
+    type: physical
+    slot: 0
+- id: DMZSV
+  label: DMZ-SV
+  node_definition: alpine
+  configuration: '#!/bin/sh
+
+    # DMZ server (VLAN 251) - public 2.2.2.1 via FW+LB double NAT
+
+    ip addr add 172.16.251.101/24 dev eth0
+
+    ip link set eth0 up
+
+    ip route add default via 172.16.251.1
+
+    mkdir -p /var/www
+
+    echo "UM2 DMZ SERVER" > /var/www/index.html
+
+    httpd -p 80 -h /var/www
+
+    touch /tmp/day0_ok
+
+    '
+  x: 180
+  y: 120
+  tags:
+  - servers
+  interfaces:
+  - id: DMZSV-i0
+    label: eth0
+    type: physical
+    slot: 0
+- id: SRVSW
+  label: SRV-SW
+  node_definition: unmanaged_switch
+  image_definition: null
+  configuration: ''
+  x: 460
+  y: 300
+  tags: []
+  interfaces:
+  - id: SRVSW-i0
+    label: port0
+    type: physical
+    slot: 0
+  - id: SRVSW-i1
+    label: port1
+    type: physical
+    slot: 1
+  - id: SRVSW-i2
+    label: port2
+    type: physical
+    slot: 2
+links:
+- id: l0
+  n1: BACKBONE
+  i1: BACKBONE-i0
+  n2: BBSW
+  i2: BBSW-i0
+  conditioning: {}
+  label: BACKBONE<->BB-SW
+- id: l1
+  n1: BBSW
+  i1: BBSW-i1
+  n2: L3SW1
+  i2: L3SW1-i0
+  conditioning: {}
+  label: BB-SW<->L3SW1
+- id: l2
+  n1: BBSW
+  i1: BBSW-i2
+  n2: L3SW2
+  i2: L3SW2-i0
+  conditioning: {}
+  label: BB-SW<->L3SW2
+- id: l3
+  n1: L3SW1
+  i1: L3SW1-i1
+  n2: FW1
+  i2: FW1-i1
+  conditioning: {}
+  label: L3SW1<->FW1-arm
+- id: l4
+  n1: L3SW2
+  i1: L3SW2-i1
+  n2: FW2
+  i2: FW2-i1
+  conditioning: {}
+  label: L3SW2<->FW2-arm
+- id: l5
+  n1: L3SW1
+  i1: L3SW1-i2
+  n2: FW1
+  i2: FW1-i2
+  conditioning: {}
+  label: L3SW1<->FW1-HA
+- id: l6
+  n1: L3SW2
+  i1: L3SW2-i2
+  n2: FW2
+  i2: FW2-i2
+  conditioning: {}
+  label: L3SW2<->FW2-HA
+- id: l7
+  n1: L3SW1
+  i1: L3SW1-i3
+  n2: L3SW2
+  i2: L3SW2-i3
+  conditioning: {}
+  label: L3SW1<->L3SW2-trunk
+- id: l8
+  n1: L3SW1
+  i1: L3SW1-i4
+  n2: USERPC
+  i2: USERPC-i0
+  conditioning: {}
+  label: L3SW1<->USER-PC
+- id: l10
+  n1: L3SW1
+  i1: L3SW1-i5
+  n2: LB1
+  i2: LB1-i0
+  conditioning: {}
+  label: L3SW1<->LB1-arm
+- id: l11
+  n1: L3SW2
+  i1: L3SW2-i5
+  n2: LB2
+  i2: LB2-i0
+  conditioning: {}
+  label: L3SW2<->LB2-arm
+- id: l20
+  n1: LB1
+  i1: LB1-i1
+  n2: SRVSW
+  i2: SRVSW-i0
+  conditioning: {}
+  label: LB1-down<->SRV-SW
+- id: l21
+  n1: LB2
+  i1: LB2-i1
+  n2: SRVSW
+  i2: SRVSW-i1
+  conditioning: {}
+  label: LB2-down<->SRV-SW
+- id: l22
+  n1: DMZSV
+  i1: DMZSV-i0
+  n2: SRVSW
+  i2: SRVSW-i2
+  conditioning: {}
+  label: DMZ-SV<->SRV-SW
+annotations: []
+smart_annotations: []
