@@ -1,0 +1,167 @@
+# CAMPUS-TS-01 採点基準（golden=100点 / fault 注入中は対応チェックが落ちる）
+# 収集: campus_ops.py grade（IOS/ASA=console・exec:shell=SSH）
+problem: CAMPUS-TS-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # ---- L3: OSPF 隣接（F2 で core1⇔dist1 が落ちる） ----
+  - name: "core1: OSPF 隣接 4本 FULL (core2/dist1/dist2/asa1)"
+    node: core1
+    command: "show ip ospf neighbor"
+    raw:
+      - regex: "2\\.2\\.2\\.2\\s+\\d+\\s+FULL"
+      - regex: "3\\.3\\.3\\.3\\s+\\d+\\s+FULL"
+      - regex: "4\\.4\\.4\\.4\\s+\\d+\\s+FULL"
+      - regex: "5\\.5\\.5\\.5\\s+\\d+\\s+FULL"
+    points: 12
+
+  - name: "core2: OSPF 隣接 3本 FULL (core1/dist1/dist2)"
+    node: core2
+    command: "show ip ospf neighbor"
+    raw:
+      - regex: "1\\.1\\.1\\.1\\s+\\d+\\s+FULL"
+      - regex: "3\\.3\\.3\\.3\\s+\\d+\\s+FULL"
+      - regex: "4\\.4\\.4\\.4\\s+\\d+\\s+FULL"
+    points: 8
+
+  - name: "asa1: OSPF 隣接 FULL (core1)"
+    node: asa1
+    command: "show ospf neighbor"
+    raw:
+      - regex: "1\\.1\\.1\\.1\\s+\\d+\\s+FULL"
+    points: 5
+
+  # ---- FHRP: HSRP の Active/Standby が設計どおり ----
+  - name: "dist1: HSRP VLAN10/30=Active・VLAN20/40=Standby"
+    node: dist1
+    command: "show standby brief"
+    raw:
+      - regex: "Vl10\\s+10\\s+\\d+\\s+P?\\s*Active"
+      - regex: "Vl30\\s+30\\s+\\d+\\s+P?\\s*Active"
+      - regex: "Vl20\\s+20\\s+\\d+\\s+P?\\s*Standby"
+      - regex: "Vl40\\s+40\\s+\\d+\\s+P?\\s*Standby"
+    points: 8
+
+  - name: "dist2: HSRP VLAN20/40=Active・VLAN10/30=Standby"
+    node: dist2
+    command: "show standby brief"
+    raw:
+      - regex: "Vl20\\s+20\\s+\\d+\\s+P?\\s*Active"
+      - regex: "Vl40\\s+40\\s+\\d+\\s+P?\\s*Active"
+      - regex: "Vl10\\s+10\\s+\\d+\\s+P?\\s*Standby"
+      - regex: "Vl30\\s+30\\s+\\d+\\s+P?\\s*Standby"
+    points: 8
+
+  # ---- STP: root が HSRP と一致 ----
+  - name: "dist1: VLAN10 の STP root"
+    node: dist1
+    command: "show spanning-tree vlan 10"
+    raw:
+      - contains: "This bridge is the root"
+    points: 2
+
+  - name: "dist1: VLAN30 の STP root"
+    node: dist1
+    command: "show spanning-tree vlan 30"
+    raw:
+      - contains: "This bridge is the root"
+    points: 2
+
+  - name: "dist2: VLAN20 の STP root"
+    node: dist2
+    command: "show spanning-tree vlan 20"
+    raw:
+      - contains: "This bridge is the root"
+    points: 2
+
+  - name: "dist2: VLAN40 の STP root"
+    node: dist2
+    command: "show spanning-tree vlan 40"
+    raw:
+      - contains: "This bridge is the root"
+    points: 2
+
+  # ---- L2: acc2 トランクに全 VLAN（F1 で 40 が消える） ----
+  - name: "acc2: アップリンクトランクで VLAN 10,20,30,40 が許可"
+    node: acc2
+    command: "show interfaces trunk"
+    raw:
+      - contains: "10,20,30,40"
+    points: 5
+
+  # ---- 経路: サーバ網は core1→asa1 経由（F4 でバックドアに逸れる） ----
+  - name: "dist1: 10.20.0.0/24 への経路が core1(10.254.1.1) 経由"
+    node: dist1
+    command: "show ip route 10.20.0.0 255.255.255.0"
+    raw:
+      - contains: "10.254.1.1"
+      - not_contains: "10.254.4.1"
+    points: 8
+
+  # ---- DHCP リレー設定の整合（F3 で dist2 側が消える） ----
+  - name: "dist2: SVI30 に ip helper-address 10.20.0.10"
+    node: dist2
+    command: "show running-config interface Vlan30"
+    raw:
+      - contains: "ip helper-address 10.20.0.10"
+    points: 5
+
+  # ---- クライアント実測（DHCP/DNS/HTTP/大転送） ----
+  - name: "cli10: VLAN10 で DHCP リース取得"
+    node: cli10
+    exec: shell
+    command: "ip -4 addr show ens3"
+    raw:
+      - regex: "inet 10\\.10\\.10\\.1\\d\\d"
+    points: 4
+
+  - name: "cli30: VLAN30 で DHCP リース取得"
+    node: cli30
+    exec: shell
+    command: "ip -4 addr show ens3"
+    raw:
+      - regex: "inet 10\\.10\\.30\\.1\\d\\d"
+    points: 4
+
+  - name: "cli40: VLAN40 で DHCP リース取得"
+    node: cli40
+    exec: shell
+    command: "ip -4 addr show ens3"
+    raw:
+      - regex: "inet 10\\.10\\.40\\.1\\d\\d"
+    points: 4
+
+  - name: "cli10: DNS 解決 www.lab.local → 10.20.0.10"
+    node: cli10
+    exec: shell
+    command: "getent hosts www.lab.local"
+    raw:
+      - contains: "10.20.0.10"
+    points: 4
+
+  - name: "cli10: サーバ網へ ICMP 到達"
+    node: cli10
+    exec: shell
+    command: "ping -c 3 -W 2 10.20.0.10"
+    raw:
+      - contains: " 0% packet loss"
+    points: 4
+
+  - name: "cli10: HTTP(小) がステートフルに成立（F4 検知）"
+    node: cli10
+    exec: shell
+    command: "curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://10.20.0.10/"
+    raw:
+      - contains: "200"
+    points: 5
+
+  - name: "cli30: 大サイズ転送 big.bin(200KB) 完走（F5 検知）"
+    node: cli30
+    exec: shell
+    command: "curl -s -o /dev/null -w '%{http_code}:%{size_download}' --max-time 120 http://www.lab.local/big.bin"
+    raw:
+      - contains: "200:204800"
+    points: 8

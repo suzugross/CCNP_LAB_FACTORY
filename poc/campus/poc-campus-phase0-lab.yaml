@@ -1,0 +1,175 @@
+lab:
+  title: POC-CAMPUS0
+  description: 'BL-040 Phase 0 probe (console-only, no mgmt)'
+  notes: |
+    PoC lab (Claude 2026-07-10): BL-040 超大作キャンパスTS Phase 0 プローブ
+    - DIST1(iosvl2) --10.254.1.0/30-- CORE1(iosv) --10.254.2.0/30-- FW01(asav)
+    - FW01 inside 10.20.0.0/24 は DIST1 Gi1/0 (access vlan100) をダミーL2として使用
+    - 検証: ①iosvl2ルーテッドポートOSPF p2p ②ASAv OSPF参加 ③F2 MTU不一致
+      ④F5 PMTUD メカニクス。MGMT接続なし(コンソールのみ・リース不要)
+  version: 0.3.0
+nodes:
+- id: CORE1
+  label: CORE1
+  node_definition: iosv
+  image_definition: iosv-159-3-m9
+  configuration: |
+    hostname CORE1
+    no ip domain lookup
+    ip cef
+    !
+    enable secret CCNP
+    !
+    interface Loopback0
+     ip address 1.1.1.1 255.255.255.255
+    !
+    interface GigabitEthernet0/0
+     description === to DIST1 (p2p) ===
+     ip address 10.254.1.1 255.255.255.252
+     ip ospf network point-to-point
+     no shutdown
+    !
+    interface GigabitEthernet0/1
+     description === to FW01 outside ===
+     ip address 10.254.2.1 255.255.255.252
+     no shutdown
+    !
+    router ospf 1
+     router-id 1.1.1.1
+     network 10.254.1.0 0.0.0.3 area 0
+     network 10.254.2.0 0.0.0.3 area 0
+     network 1.1.1.1 0.0.0.0 area 0
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 0
+  y: -200
+  tags: [routers]
+  interfaces:
+  - id: CORE1-i0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 0
+  - id: CORE1-i1
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 1
+- id: DIST1
+  label: DIST1
+  node_definition: iosvl2
+  image_definition: iosvl2-2020
+  configuration: |
+    hostname DIST1
+    no ip domain lookup
+    ip routing
+    ip cef
+    !
+    enable secret CCNP
+    !
+    vlan 100
+     name DUMMY-INSIDE
+    !
+    interface Loopback0
+     ip address 3.3.3.3 255.255.255.255
+    !
+    interface GigabitEthernet0/0
+     description === to CORE1 (p2p routed) ===
+     no switchport
+     ip address 10.254.1.2 255.255.255.252
+     ip ospf network point-to-point
+     no shutdown
+    !
+    interface GigabitEthernet1/0
+     description === dummy L2 for FW01 inside ===
+     switchport mode access
+     switchport access vlan 100
+     spanning-tree portfast
+     no shutdown
+    !
+    router ospf 1
+     router-id 3.3.3.3
+     network 10.254.1.0 0.0.0.3 area 0
+     network 3.3.3.3 0.0.0.0 area 0
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: -300
+  y: -200
+  tags: [switches]
+  interfaces:
+  - id: DIST1-i0
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 0
+  - id: DIST1-i4
+    label: GigabitEthernet1/0
+    type: physical
+    slot: 4
+- id: FW01
+  label: FW01
+  node_definition: asav
+  image_definition: asav-9-22-1-1
+  ram: 2048
+  # ★day0不発(BL-038)。campus_bootstrap.py がこの configuration を console 投入する
+  configuration: |
+    hostname FW01
+    enable password CCNPccnp
+    username SUZUKI password CCNPccnp privilege 15
+    !
+    interface GigabitEthernet0/0
+     nameif outside
+     security-level 0
+     ip address 10.254.2.2 255.255.255.252
+     no shutdown
+    !
+    interface GigabitEthernet0/1
+     nameif inside
+     security-level 100
+     ip address 10.20.0.1 255.255.255.0
+     no shutdown
+    !
+    router ospf 1
+     router-id 5.5.5.5
+     network 10.254.2.0 255.255.255.252 area 0
+     network 10.20.0.0 255.255.255.0 area 0
+    !
+    icmp permit any outside
+    icmp permit any inside
+  x: 300
+  y: -200
+  tags: [firewalls]
+  interfaces:
+  - id: FW01-i1
+    label: GigabitEthernet0/0
+    type: physical
+    slot: 1
+  - id: FW01-i2
+    label: GigabitEthernet0/1
+    type: physical
+    slot: 2
+links:
+- id: l0
+  n1: DIST1
+  i1: DIST1-i0
+  n2: CORE1
+  i2: CORE1-i0
+  conditioning: {}
+  label: DIST1<->CORE1
+- id: l1
+  n1: CORE1
+  i1: CORE1-i1
+  n2: FW01
+  i2: FW01-i1
+  conditioning: {}
+  label: CORE1<->FW01-outside
+- id: l2
+  n1: FW01
+  i1: FW01-i2
+  n2: DIST1
+  i2: DIST1-i4
+  conditioning: {}
+  label: FW01-inside<->DIST1-dummy
+annotations: []
+smart_annotations: []

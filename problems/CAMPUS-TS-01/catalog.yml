@@ -1,0 +1,101 @@
+# CAMPUS-TS-01 フォールトカタログ（機械可読の一次ソース・受講者非公開）
+# symptom: 受講者に渡す障害チケット文 / detect: 切り分けの決定打 /
+# grading_check: grade で「期待どおり落ちる」チェック名（それ以外は green のまま）
+problem: CAMPUS-TS-01
+
+faults:
+  trunk_allowed_mismatch:
+    where: acc2 (Gi0/0・Gi0/1 アップリンクトランク)
+    inject_diff: "switchport trunk allowed vlan 10,20,30,40 → 10,20,30（40 の add 忘れ）"
+    symptom_ticket: |
+      【チケット#41】IoT端末の増設をした島（acc2配下）だけ、IoT機器(VLAN40)が
+      ネットワークに繋がりません。IPアドレスも取れていないようです。
+      別フロア（acc1側）の検証用IoT機器は問題ないとのこと。
+    detect:
+      - "acc2: show interfaces trunk（Allowed/Forwarding 列に 40 が無い）"
+      - "dist の SVI40 は up・HSRP 正常（上位は無実）"
+    root_cause: 新VLAN追加時に acc2 のトランク allowed リストへ VLAN40 を add し忘れ
+    fix: "acc2: interface range Gi0/0-1 / switchport trunk allowed vlan add 40"
+    grading_check:
+      - "acc2: アップリンクトランクで VLAN 10,20,30,40 が許可"
+      - "cli40: VLAN40 で DHCP リース取得"
+
+  ospf_mtu_mismatch:
+    where: core1 (Gi0/1 dist1向け)
+    inject_diff: "ip mtu 1400 → 1300（片側だけ変更）"
+    symptom_ticket: |
+      【チケット#42】昨夜の「転送装置更改に伴うMTU値変更作業」以降、
+      ネットワークが全体的に重い気がする、と複数ユーザから申告。
+      通信は一応できています。監視には core1-dist1 間の経路消失アラームが
+      出ていますが、疎通監視(ping)は全て green です。
+    detect:
+      - "core1/dist1: show ip ospf neighbor（EXSTART/EXCHANGE 固着）"
+      - "show interfaces / show ip interface で両端の MTU 比較"
+    root_cause: MTU変更作業で core1 側だけ ip mtu 1300 を投入（dist1 は 1400 のまま）
+    fix: "core1: interface Gi0/1 / ip mtu 1400"
+    grading_check:
+      - "core1: OSPF 隣接 4本 FULL (core2/dist1/dist2/asa1)"
+      - "dist1: 10.20.0.0/24 への経路が core1(10.254.1.1) 経由"
+
+  dhcp_relay_gap:
+    where: dist2 (interface Vlan30)
+    inject_diff: "ip helper-address 10.20.0.10 を削除（dist1 側は残る）"
+    symptom_ticket: |
+      【チケット#43】ゲストWi-Fi(VLAN30)について「普段は使えるが、たまに
+      全員一斉にIPが取れなくなる時間帯がある」という不定期な申告。
+      直近では メンテナンスで dist1 を再起動した晩に発生。今は復旧している。
+    detect:
+      - "dist1/dist2: show run interface Vlan30 の helper 有無比較"
+      - "（実機実証 2026-07-10）症状が出る条件は『dist1 の SVI30 が down の間』。
+         ★DHCPリレーは HSRP の Active/Standby と無関係に helper を持つ全 SVI が
+         中継する（standby の dist1 も中継する）ため、HSRP を dist2 に振っただけ
+         では発症しない — ここ自体が教材ポイント"
+    root_cause: dist2 の SVI30 だけ ip helper-address が無く、dist1 停止中
+      （メンテ再起動等）だけ Guest の DHCP リレーが完全に止まる（片肺冗長）
+    fix: "dist2: interface Vlan30 / ip helper-address 10.20.0.10"
+    grading_check:
+      - "dist2: SVI30 に ip helper-address 10.20.0.10"
+
+  asa_asymmetric_drop:
+    where: core2 (Gi0/3 サーバ網バックアップ接続)
+    inject_diff: "shutdown → no shutdown ＋ ip ospf cost 1000 → 5（閉塞中の予備線を開通しコストも誤設定）"
+    symptom_ticket: |
+      【チケット#44】社内サーバ(10.20.0.10)への接続が今朝からおかしい。
+      ping は 100% 通るのに、Web も共有フォルダも「接続がタイムアウトしました」
+      になります。昨夜 core2 で「バックアップ経路の整備作業」をしたそうです。
+    detect:
+      - "cli→svr の traceroute と svr→cli の経路比較（非対称）"
+      - "asa1: show conn（TCP conn が無い）/ show asp drop（tcp-not-syn 増加）"
+      - "core1/dist: show ip route 10.20.0.0（ネクストホップが core2 系）"
+    root_cause: 閉塞ルールの予備線を低コストで開通したため往路が ASA を迂回
+      （core2 の connected 経路が transit を短絡）。復路（svr1 の GW）は ASA の
+      まま → ステートフル検査で SYN-ACK 破棄（tcp-not-syn。実測でカウンタ増加）
+    fix: "core2: interface Gi0/3 / shutdown（予備線閉塞に戻す。cost 1000 も戻すのが完全）"
+    grading_check:
+      - "dist1: 10.20.0.0/24 への経路が core1(10.254.1.1) 経由"
+      - "cli10: HTTP(小) がステートフルに成立（F4 検知）"
+      - "cli30: 大サイズ転送 big.bin(200KB) 完走（F5 検知）"
+
+  pmtud_blackhole:
+    where: core1 (Gi0/1・Gi0/2 の adjust-mss / Gi0/3 の ip unreachables)
+    inject_diff: "ip tcp adjust-mss 1360 を削除 + Gi0/3 に no ip unreachables"
+    symptom_ticket: |
+      【チケット#45】社内Webサーバについて「トップページは開くのに、
+      ファイルのダウンロードだけ必ず途中で止まる」という申告が全フロアから。
+      ping も名前解決も正常。小さいページは見えています。
+      先週 core1 で「不要なICMP応答を止めるセキュリティ強化」を実施したらしい。
+    detect:
+      - "cli: curl 小=OK / big.bin=ハング の対比"
+      - "svr1 側から ping -M do -s 1400 で経路 MTU 探索（応答が無い＝黒穴）"
+      - "core1: show run interface（adjust-mss 無し・no ip unreachables）"
+    root_cause: MTU1400 区間があるのに MSS クランプを撤去し、さらに ingress 側で
+      ICMP unreachable(frag-needed) を抑止 → PMTUD が働かず大パケットだけ無言消滅
+    fix: |
+      core1: interface Gi0/1・Gi0/2 に ip tcp adjust-mss 1360 を戻す
+      （または Gi0/3 の ip unreachables 復活で PMTUD を機能させる。両方が模範）
+    grading_check:
+      - "cli30: 大サイズ転送 big.bin(200KB) 完走（F5 検知）"
+
+# CML で再現しない/対象外（指示書 §6）:
+#   デュプレックス不一致・late collision / 片方向リンク障害・UDLD /
+#   CRC・runt 等の物理層エラーカウンタ（仮想リンクの性質上再現不能）
