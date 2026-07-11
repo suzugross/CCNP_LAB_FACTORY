@@ -11,6 +11,8 @@
   (生成器 gen_*.py)  (Ansible)      (CML コンソール / SSH)          (pyATS Genie で構造化して判定)
 ```
 
+<img width="949" height="654" alt="Image" src="https://github.com/user-attachments/assets/ac9b24c9-702e-4e60-be59-5adf3a563fc6" />
+
 ---
 
 ## 特徴
