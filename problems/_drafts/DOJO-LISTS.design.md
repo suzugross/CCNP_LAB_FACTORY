@@ -107,3 +107,149 @@ Phase 1 の FEEDER 枠組みを流用。
 
 リスク: (a) local-as replace-as の IOL 挙動 (b) `show ip bgp` の classful 表示省略
 (c) `show access-lists` のポート名正規化 — いずれも各Phase冒頭のPoCで潰す。
+
+## 実装記録 — Phase 1 完了（BL-012・2026-07-12）
+
+`topologies/gen_list_dojo.py` として実装。**実機フルサイクル済**
+（seed=101 mix: 0点発射 0/100 → solve_generated → **100/100 一発収束**・
+(前提)0点チェックで battery 36経路受信も PASS 確認）。検証 seed は掃除済み。
+
+### 確定した構造（Phase 2/3 も流用する）
+
+- battery 36経路 = 35 static Null0 + network 文 ＋ `default-originate`。
+  リンクは 10.1.12.0/30（battery と衝突しない帯を厳守）。
+- 課題テンプレ10種: EXACT / LE / GE / BAND / DEFAULT / ANY / HOSTBLOCK /
+  FIX24 / EXCEPT（deny 先行の順序稽古）/ SEQ（挿入・形式チェック）。
+  tier1=EXACT,LE,GE,DEFAULT,ANY / tier2=残り。`--tier {1,2,mix}` で選抜、
+  必修テンプレ→残り抽選（テンプレ毎 cap）で多様性を担保。
+- **生成時セルフチェック**が要: 各課題で「要件述語で battery を分類した集合」==
+  「模範解答を prefix-list 意味評価器(first-match+暗黙deny+ge/le)で適用した集合」
+  を assert。`--selfcheck 300`（=900生成）で三者矛盾ゼロを常時検品できる。
+- 机上 regex 検証（モック show 出力）は「1経路欠け」「除外1経路混入」
+  「permit any 誤答」「未定義」の4誤答パターンまで通すと実機一発が狙える。
+
+### 実機知見（IOL iol-xe 17.15）
+
+1. **classful 境界の /len 省略は実在**: `10.0.0.0`(/8)・`0.0.0.0`(/0)・
+   `172.2x.0.0`(/16)・`192.168.10x.0`(/24) → 包含/除外 regex とも
+   `(/8)?` 式の両対応が必須（設計時の懸念どおり）。
+2. **Network 列 17桁超（18桁 /25 等）は折返し表示**
+   （prefix 単独行→next-hop が次行）。regex の後方境界を `\s`（改行含む）に
+   しておけば折返し/同一行の両方を吸収できる。17桁ちょうどは同一行。
+3. **未定義リストへの `show ip bgp prefix-list PL-x` は無言の空出力**
+   （%エラー文なし）。包含 regex が必ず不成立になるので 0点発射が自然成立。
+4. `show ip prefix-list PL-x` は `ip prefix-list PL-x: N entries` +
+   `   seq NN permit A/L` 形式（/len 常時明示）→ SEQ 課題の形式チェックは
+   `N entries`＋各 seq 行 regex で「再採番・余計な行」まで拒否できる。
+5. **solve_generated.yml の互換形式**: solution.json は**パック直下**・
+   filters は `[{node, blocks: [{parents, lines}]}]`（blocks 必須。
+   nodes:{} なら OSPF 投入プレイは自動スキップ＝道場はフィルタのみで可）。
+
+### Phase 2 (BL-013) への申し送り
+
+- feeder/リンク/採番/選抜/セルフチェックの骨格は gen_list_dojo.py に
+  `--dojo aspath` を足す形で流用（意味評価器を AS_PATH regex 版に差し替え）。
+- 先行PoC 必須のまま: `neighbor ... local-as X no-prepend replace-as` の
+  IOL 挙動と `show ip bgp filter-list` の表示形式。
+
+## 実装記録 — Phase 2 完了（BL-013・2026-07-12）
+
+gen_list_dojo.py を2道場対応に再構成し `--dojo aspath` を追加。**実機フルサイクル済**
+（seed=202 mix: 0点発射 0/100 → solve_generated → **100/100 収束**）。検証 seed 掃除済。
+
+### AS_PATH 合成の確定構成（設計どおり成立）
+
+- **並列 eBGP 4セッション**を RT01-RT02 間に張る: 直結（素の AS65099）＋
+  loopback 間×3（RT02 側 `local-as 65010/65020/65030 no-prepend replace-as`・
+  両側 `update-source LoX`＋`ebgp-multihop 2`・相互 /32 static）。
+- **セッション別 outbound route-map**: 担当 battery のみ permit
+  （match ip prefix-list）＋ `set as-path prepend <中間..起源>`。
+  暗黙 deny が「他セッションの battery」と「RT01 経路の折返し」を同時に遮断する。
+- battery 19経路（S0:5 / S1:5 / S2:4 / S3:5・path 先頭=セッションAS を生成器で assert）
+  ＋ RT01 ローカル2経路（`^$` 用・network 文＋Null0 static）= 21経路固定。
+- 課題9テンプレ: A_LOCAL(`^$`) / A_ORIGINDIRECT(`^X$`) / A_VIA(`_X_`) /
+  A_FROMNBR(`^X_`) / A_ORIGIN(`_X$`) / A_EITHER(`_(X|Y)$`) /
+  A_PREPEND(`^X(_X)+$`) / A_VIANOTORIGIN(deny `_X$`+permit `_X_`) /
+  A_NOTFROM(deny `^X_`+permit `.*`)。ACL 番号=課題番号。
+- 意味評価器: Cisco regex の `_` を `(?:^|$| )` に翻訳して空白区切りパス文字列に
+  first-match 適用（battery は confed 無しなので ,{}() は不要）。
+
+### 実機知見（IOL-XE 17.15・PoC 2026-07-12）
+
+1. **`local-as X no-prepend replace-as` は完全動作**。受信パスは全19経路が
+   設計値と一致（leftmost=セッションAS・実AS 65099 は完全隠蔽・prepend 合成も正確）。
+2. **未定義 ACL への `show ip bgp filter-list N` は
+   「% N is not a valid AS-path access-list number」エラー**（全表示にはならない）
+   → 包含 regex が必ず不成立で 0点発射が自然成立。
+   定義済みでマッチ0件は無言の空出力（prefix-list 道場と同じ）。
+3. **class C 空間（198.18.x.0/24 等）の /24 も classful 省略表示**
+   → disp_rx の dual regex（`(/24)?`）が battery 全域で必須。
+4. **solve 直後の filter-list 採点は1〜2試行分の一過性 FAIL がありうる**
+   （BGP filter-list cache 形成待ちとみられる。実測: 3試行目で全PASS収束
+   = grade.yml の再試行設計の範囲内・出題運用に支障なし）。
+5. 設計上の保険: aspath 道場は「全許可」課題を作らない
+   （除外集合非空を assert）。仮に未定義 ACL が全表示になる版があっても
+   誤 PASS しない。
+6. セッション確立直後（〜1分）は PfxRcd=0 のことがある（広告は確立から
+   数十秒遅れ）。(前提) 0点チェック= summary の4行 regex（AS と PfxRcd 拘束）が
+   そのまま収束シグナルになる。
+
+### Phase 3 (BL-014, ACL 道場) への申し送り
+
+- 残りは acl_model.py（テストパケットベクタ意味評価器）＋ grade.py の新チェック種
+  `acl_vectors:` ＋単体テスト（test_netmodel.py の流儀）。道場の選抜/セルフチェック/
+  出力骨格は gen_list_dojo.py に `--dojo acl` を足す形で流用可。
+- 採点は `show access-lists <name>` の正規化出力をパース（running-config 不使用）。
+  TGEN ルータ（multi-loopback）は自己確認専用でカウンタ非依存。
+
+## 実装記録 — Phase 3 完了・シリーズ完結（BL-014・2026-07-12）
+
+**実機フルサイクル済**（seed=303 mix: 0点発射 0/100 → solve_generated →
+**100/100 一発収束**）。検証 seed 掃除済。これで prefix / aspath / acl の
+**フィルタ道場3部作が全て出題可**。
+
+### 確定した構成
+
+- 新規エンジン `topologies/acl_model.py`:
+  - パーサ: `show access-lists` の正規化出力 → ACL モデル。
+    標準（裸ホスト IP・「A, wildcard bits W」）/ 拡張（host/any・eq/neq/gt/lt/range・
+    established・icmp タイプ名）・"(N matches)"/"log" 除去・**seq でソートして評価**
+    （標準 ACL のハッシュ順表示対策）。
+  - 評価器: ベクタ {proto, src, dst, sport, dport, established, icmp_type} を
+    first-match＋暗黙deny で判定。ワイルドカードは XOR&~wild のビット演算＝
+    **非連続ワイルドカード対応**。ポート名⇔番号テーブル（www/telnet/domain/
+    bootps/tftp/syslog/ntp 等）・icmp タイプ名テーブル同梱。
+  - 単体テスト `test_acl_model.py`（33 アサート・実機不要で全緑）。
+- grade.py に新チェック種 **`acl_vectors:`**（{"acl": 名前, "vectors": [ベクタ+expect]}）。
+  raw / match と AND 併用可（ODD 課題の形式チェック・APPLY 課題で使用）。
+- 道場: `--dojo acl`。RT01(TARGET)+RT02(TGEN・テスト送信元 loopback×10)。
+  **固定ベクタ battery 26本** × テンプレ11種:
+  STD_NET / STD_HOSTDENY / NAMED_STD / EXT_HTTP / NAMED_EXT_BLOCK（tier1）、
+  EST / ICMP / RANGE / **ODD（非連続 WC 奇数・偶数=名物。「1行」は
+  `A, wildcard bits 0.0.254.255` の raw regex で形式拘束）** / NEQ /
+  **APPLY（定義＋IF 適用。acl_vectors 5点＋ `show ip interface` raw 5点の
+  2チェック分割）**（tier2）。
+- ACL 識別子は課題番号から決定的に採番: 標準番号=10+k / 拡張番号=100+k /
+  named=DOJO-k（種別稽古のため課題文で種別を明示指定）。
+- セルフチェックは他道場と同型:「要件述語でベクタを分類」==「模範解答を
+  acl_model.evaluate で分類」を assert（評価器自体の正しさは単体テストが担保）。
+  机上検証は grade.py evaluate 経由で「未定義 / 先頭 action 反転 /
+  permit any 手抜き」の誤答3種が全課題 FAIL になることまで確認してから実機へ。
+
+### 実機知見（IOL-XE 17.15・2026-07-12）
+
+1. `show access-lists` の表示は**設計想定どおり一発適合**:
+   既知ポートは名前化（`eq www` / `neq domain` / `eq telnet`）、icmp タイプも
+   名前化（`echo` / `echo-reply`）、標準はサブネット「A, wildcard bits W」・
+   ホスト裸 IP、named/番号とも `10 permit ...` の seq 付き。パーサ修正ゼロ。
+2. `ip access-group <named> in` を含む模範解答ブロック（named 定義→IF 適用の
+   blocks 順序）は solve_generated.yml でそのまま投入できる。
+3. 未定義 ACL への `show access-lists <id>` は**無言の空出力** →
+   acl_vectors が「ACL が存在しない」で FAIL＝0点発射自然成立。
+
+### シリーズ総括（今後の拡張余地）
+
+- カタログ追加はテンプレ関数を1つ足すだけ（remark / resequence /
+  time-range / IPv6 ACL 等が候補）。battery を変えたら実機1サイクル再検証。
+- acl_model.py は道場専用でなく汎用（既存 ACL 問題の採点強化・TS 生成器の
+  ACL 故障注入の期待値計算にも流用可）。

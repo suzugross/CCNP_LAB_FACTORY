@@ -28,6 +28,18 @@ preempt=True を返すバグ）は、構造化の代わりに raw（生出力）
     "raw": [ {"contains": "Preemption enabled"} ], "stdout": "..." }
 raw と match を両方持つチェックは両方を満たす必要がある。
 
+ACL 意味採点（BL-014・GEN-DOJO-ACL）: チェックに `acl_vectors` を持たせると、
+stdout（show access-lists 出力）を topologies/acl_model.py でパースし、
+テストパケットベクタ群を first-match＋暗黙deny で評価して期待
+（expect: permit|deny）との全件一致で判定する:
+  { "name":..., "points":10, "node":"RT01", "command":"show access-lists DOJO-4",
+    "acl_vectors": {"acl": "DOJO-4",
+                    "vectors": [{"id":"v01","proto":"tcp","src":"10.30.1.10",
+                                 "sport":34567,"dst":"172.22.5.10","dport":80,
+                                 "expect":"permit"}, ...]},
+    "stdout": "..." }
+raw / match と併用した場合は AND。
+
 大域不変条件（軸1）: 入力が list でなく dict の場合、ノード単位 checks に加えて
 ネットワーク全体の性質（ループ不在/最適性/冗長度 等）を採点する:
   {
@@ -259,7 +271,7 @@ def eval_genie(check):
 
 
 def evaluate(check):
-    """genie(match) と raw の両モードを評価。両方ある場合は AND。
+    """genie(match) / raw / acl_vectors の各モードを評価。複数ある場合は AND。
     戻り値: (ok: bool, detail: dict)"""
     detail = {}
     ok = True
@@ -272,6 +284,12 @@ def evaluate(check):
         ok = ok and r_ok
         if r_unmet:
             detail["raw_unmet"] = r_unmet
+    if "acl_vectors" in check:
+        import acl_model
+        a_ok, a_detail = acl_model.eval_acl_vectors(
+            check["acl_vectors"], check.get("stdout", ""))
+        ok = ok and a_ok
+        detail.update(a_detail)
     return ok, detail
 
 
@@ -315,6 +333,10 @@ def main():
             if detail.get("raw_unmet"):
                 for cond in detail["raw_unmet"]:
                     print(f"        未充足(raw): {cond}")
+            if detail.get("acl_mismatch"):
+                for mm in detail["acl_mismatch"][:8]:
+                    print(f"        未充足(acl): {mm['vector']} "
+                          f"期待={mm['expected']} 実評価={mm['observed']}")
             if "reason" in detail:
                 print(f"        未充足: {detail['reason']}")
 
