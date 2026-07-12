@@ -11,7 +11,8 @@
   status    … ノード状態＋ライセンス
   stop      … ラボ停止 (destroy は提供しない: wipe でライセンス消失のため)
 
-前提: CML に lab "FGT-SDWAN-01" が存在し fgt1 が eval ライセンス済み
+前提: CML に共用ラボ "FGT-LAB" が存在し fgt1 が eval ライセンス済み
+(BL-047 で FGT-SDWAN-01 から改名・SW2/dmz1 追加。SW2 は L2 透過で本問無影響)。
 (取得手順= problems/_drafts/FGT-SDWAN.design.md / メモリ ccnp-fortigate)。
 FGT ログイン: admin/CCNPccnp。alpine=root。IOS(ISP/INET)=SUZUKI/CCNPccnp。
 """
@@ -40,20 +41,25 @@ def _cml_creds(repo):
 
 
 CML_HOST, CML_USER, CML_PASS = _cml_creds(REPO)
-PROBLEM = TITLE = "FGT-SDWAN-01"
+PROBLEM = "FGT-SDWAN-01"   # 問題ID (grading.yml / _generated の場所)
+TITLE = "FGT-LAB"          # CML 共用ラボ名 (BL-047 で改名・FGT問題シリーズ共用)
 GOLDEN_CFG = os.path.join(REPO, "poc", "fortigate", "golden-sdwan-fgt.cfg")
 GEN_DIR = os.path.join(REPO, "topologies", "_generated", PROBLEM)
 PY = os.path.join(REPO, ".venv", "bin", "python3")
 
 FGT = "fgt1"
-ALPINE = {"pcA", "pcB"}
+ALPINE = {"pcA", "pcB", "dmz1", "pcC"}
 P_FG = r"[\w-]+ (\(\S+\) )?# "
 P_ALP = r"(\r\n|\r|\n)[\w-]+:[^\r\n]*[#$] ?"
 P_IOS = r"(\r\n|\r|\n)([\w/-]+)(\([\w./-]+\))?([>#]) ?"
 
-# 受講者初期化: 模範解答の逆順(参照制約: policy→route→service→hc→members→IF)
+# 受講者初期化: 模範解答の逆順(参照制約: policy→vip/address→route→service→hc→members→IF)。
+# ★FGT-LAB 共用リセット: SD-WAN 問(本問)と FGT-FW-BASIC-01 の両方の設定を消す
+#   (fgtbasic_ops.py からも import される。存在しない delete は fgt_push が注意扱い=冪等)
 UNBUILD = [
-    "config firewall policy", "delete 1", "end",
+    "config firewall policy", "delete 1", "delete 2", "delete 3", "end",
+    "config firewall vip", "delete DMZ-SRV-HTTP", "end",
+    "config firewall address", "delete LAN-NET", "delete DMZ-SRV", "end",
     "config router static", "delete 1", "end",
     "config system sdwan",
     "config service", "delete 1", "end",
@@ -61,8 +67,10 @@ UNBUILD = [
     "config members", "delete 1", "delete 2", "end",
     "set status disable", "end",
     "config system interface",
-    "edit port1", "set ip 0.0.0.0 0.0.0.0", "unset allowaccess", "next",
-    "edit port2", "set ip 0.0.0.0 0.0.0.0", "unset allowaccess", "next", "end",
+    "edit port1", "set ip 0.0.0.0 0.0.0.0", "unset allowaccess",
+    "unset alias", "set role undefined", "next",
+    "edit port2", "set ip 0.0.0.0 0.0.0.0", "unset allowaccess",
+    "unset alias", "set role undefined", "next", "end",
 ]
 
 INJECT = dict(bandwidth=10000, latency=250, jitter=10, loss=3.0)
@@ -101,6 +109,10 @@ def _open(node):
 def console(node):
     c = _open(node)
     if node in ALPINE:
+        # ★受講者が ping 等を流しっぱなしのことがある(task.md の観察指示どおり)
+        #   → Ctrl-C で止めてからプロンプトを取りに行く
+        c.send("\x03")
+        time.sleep(1)
         c.send("\r")
         for _ in range(10):
             idx = c.expect([r"login:", P_ALP, pexpect.TIMEOUT], timeout=12)
@@ -109,6 +121,8 @@ def console(node):
             elif idx == 1:
                 return c, P_ALP
             else:
+                c.send("\x03")
+                time.sleep(1)
                 c.send("\r")
         raise RuntimeError(f"{node}: alpine シェル不達")
     if node == FGT:
@@ -124,18 +138,21 @@ def console(node):
             else:
                 c.send("\r")
         raise RuntimeError(f"{node}: FGT プロンプト不達(60秒ロックアウトの可能性)")
-    # IOS (ISP1/ISP2/INET)
+    # IOS (ISP1/ISP2/INET/RBR)。RBR は line con login local → Username: が出る
     c.send("end\r")
     time.sleep(1)
     c.send("\r")
     for _ in range(12):
-        idx = c.expect([P_IOS, r"assword:", pexpect.TIMEOUT], timeout=15)
+        idx = c.expect([P_IOS, r"assword:", r"sername:", pexpect.TIMEOUT],
+                       timeout=15)
         if idx == 0:
             if c.match.group(4) == "#":
                 return c, P_IOS
             c.send("enable\r")
         elif idx == 1:
             c.send("CCNPccnp\r")
+        elif idx == 2:
+            c.send("SUZUKI\r")
         else:
             c.send("\r")
     raise RuntimeError(f"{node}: priv exec 不達")

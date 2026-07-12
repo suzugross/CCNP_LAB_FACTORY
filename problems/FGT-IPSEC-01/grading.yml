@@ -1,0 +1,153 @@
+# FGT-IPSEC-01 採点基準（100点・単段採点）
+# 全チェック stage: normal（fgtipsec_ops.py grade が収集）
+# ★G系を先頭に置く: 端末間トラフィックで E4 の encaps/decaps カウンタを進めるため
+problem: FGT-IPSEC-01
+total_points: 100
+
+checks:
+  # ---- 機能試験（端末間・トンネル経由） ----
+  - name: "G1: 本社 USER-PC → 支社 BR-SRV 疎通（VPN 経由）"
+    node: pcA
+    command: "ping -c 10 -W 2 192.168.20.10"
+    stage: normal
+    raw:
+      - regex: "(10|[89]) packets received"
+    points: 10
+
+  - name: "G2: 本社 USER-PC → 支社 BR-SRV HTTP 到達"
+    node: pcA
+    command: "wget -q -O - -T 8 http://192.168.20.10/"
+    stage: normal
+    raw:
+      - contains: "BRANCH SERVER"
+    points: 8
+
+  - name: "G3: 支社 BR-SRV → 本社 USER-PC 疎通（逆向き）"
+    node: pcC
+    command: "ping -c 10 -W 2 10.1.10.12"
+    stage: normal
+    raw:
+      - regex: "(10|[89]) packets received"
+    points: 8
+
+  # ---- 挙動確認（IKE/IPsec SA） ----
+  - name: "E1: FGT IKEv2 ゲートウェイ確立（対向 198.51.101.2）"
+    node: fgt1
+    command: "diagnose vpn ike gateway list"
+    stage: normal
+    raw:
+      - contains: "addr: 203.0.113.2:500 -> 198.51.101.2:500"
+      - regex: "IKE SA: .*established 1/1"
+      - contains: "proposal: des-sha256"
+    points: 10
+
+  - name: "E2: FGT トンネル selectors up・実トラフィック通過"
+    node: fgt1
+    command: "get vpn ipsec tunnel summary"
+    stage: normal
+    raw:
+      - contains: "selectors(total,up): 1/1"
+      - regex: "rx\\(pkt,err\\): [1-9]\\d*/"
+    points: 6
+
+  - name: "E3: RBR IKEv2 SA READY（DES/SHA256/DH14/PSK）"
+    node: RBR
+    command: "show crypto ikev2 sa"
+    stage: normal
+    raw:
+      - contains: "READY"
+      - contains: "Encr: DES"
+      - contains: "DH Grp:14"
+    points: 10
+
+  - name: "E4: RBR IPsec SA で暗号化/復号が実際に走っている"
+    node: RBR
+    command: "show crypto ipsec sa"
+    stage: normal
+    raw:
+      - regex: "#pkts encaps: [1-9]"
+      - regex: "#pkts decaps: [1-9]"
+    points: 6
+
+  - name: "E5: RBR Tunnel0 が up/up"
+    node: RBR
+    command: "show ip interface brief | include Tunnel"
+    stage: normal
+    raw:
+      - regex: "Tunnel0\\s+172\\.16\\.255\\.2\\s+YES \\S+ up\\s+up"
+    points: 4
+
+  # ---- 設定状態（FGT） ----
+  - name: "S1: FGT phase1-interface（IKEv2・des-sha256・DH14・対向）"
+    node: fgt1
+    command: "show vpn ipsec phase1-interface TO-RBR"
+    stage: normal
+    raw:
+      - contains: "set ike-version 2"
+      - contains: "set proposal des-sha256"
+      - contains: "set dhgrp 14"
+      - contains: "set remote-gw 198.51.101.2"
+    points: 8
+
+  - name: "S2: FGT phase2-interface（des-sha256・PFS group14）"
+    node: fgt1
+    command: "show vpn ipsec phase2-interface TO-RBR-P2"
+    stage: normal
+    raw:
+      - contains: "set phase1name \"TO-RBR\""
+      - contains: "set proposal des-sha256"
+      - contains: "set dhgrp 14"
+    points: 5
+
+  - name: "S3: FGT トンネル IF の IP（172.16.255.1 ⇔ .2）"
+    node: fgt1
+    command: "show system interface TO-RBR"
+    stage: normal
+    raw:
+      - contains: "set ip 172.16.255.1 255.255.255.255"
+      - contains: "set remote-ip 172.16.255.2 255.255.255.252"
+    points: 4
+
+  - name: "S4: FGT 静的経路（支社 LAN → トンネル IF）"
+    node: fgt1
+    command: "get router info routing-table all"
+    stage: normal
+    raw:
+      - regex: "192\\.168\\.20\\.0/24 .*TO-RBR"
+    points: 5
+
+  - name: "S5: FGT ポリシー1（LAN→VPN・オブジェクト参照・NAT 無し）"
+    node: fgt1
+    command: "show firewall policy 1"
+    stage: normal
+    raw:
+      - contains: "set srcintf \"port3\""
+      - contains: "set dstintf \"TO-RBR\""
+      - contains: "set dstaddr \"BR-NET\""
+      - not_contains: "set nat enable"
+    points: 5
+
+  - name: "S6: FGT ポリシー2（VPN→LAN・オブジェクト参照・NAT 無し）"
+    node: fgt1
+    command: "show firewall policy 2"
+    stage: normal
+    raw:
+      - contains: "set srcintf \"TO-RBR\""
+      - contains: "set dstintf \"port3\""
+      - contains: "set srcaddr \"BR-NET\""
+      - not_contains: "set nat enable"
+    points: 5
+
+  # ---- 設定状態（RBR） ----
+  - name: "S7: RBR crypto 一式（des/sha256/group14・esp-des・PFS・sVTI）"
+    node: RBR
+    command: "show running-config | section crypto|interface Tunnel0"
+    stage: normal
+    raw:
+      - contains: "encryption des"
+      - contains: "integrity sha256"
+      - contains: "group 14"
+      - contains: "esp-des esp-sha256-hmac"
+      - contains: "tunnel mode ipsec ipv4"
+      - contains: "tunnel protection ipsec profile"
+    points: 6

@@ -21,7 +21,7 @@ $PY topologies/sdwan_ops.py status | stop
 - fgt1 は **eval ライセンス済み**（S/N FGVMEVS16KSRTP62・IF 3個上限・1vCPU/2GB）
 - **wipe / factoryreset / ラボ削除 = ライセンス消失**。destroy verb は意図的に無い
 - 消失時の再アクティベーション: ①FortiCloud で旧トライアル機器を削除
-  ②fgt-sdwan-lab.yaml を import・ext-conn NAT を一時接続 ③CLI で
+  ②fgt-lab.yaml を import・ext-conn NAT を一時接続 ③CLI で
   `execute vm-license-options account-id/password`（ユーザ自身が console 投入）
   ④GUI → FortiCloud 認証 → 自動アクティベート ⑤`execute vm-license-options reset`
   詳細= [problems/_drafts/FGT-SDWAN.design.md](../_drafts/FGT-SDWAN.design.md) /
@@ -29,6 +29,11 @@ $PY topologies/sdwan_ops.py status | stop
 
 ## 構成メモ
 
+- CML ラボ名= **FGT-LAB**（BL-047 で改名・FGT問題シリーズ共用。port2 経路に
+  無管理 SW2 と dmz1 を追加したが L2 透過で本問無影響 — 改修後フル回帰 100/100 済）。
+  **FGT-FW-BASIC-01 と fgt1 を共用**: どちらの build ももう一方の設定を巻き戻す
+- pcA/pcB/dmz1/pcC は day0 で IP/httpd 焼き込み済み（2026-07-12 修正）→ 再起動で自己復旧
+- BL-048 で支社サイト増設（INET Gi0/3 — RBR — pcC・FGT-IPSEC-01 用・本問無関係）
 - 6 VM + SW/bridge: fgt1 / ISP1 / ISP2 / INET (iosv) / pcA(USER-PC) / pcB(SRV)
 - LAN 兼管理= 10.1.10.0/24（mgmt_alloc リース: FGT1=.11 / PCA=.12・
   problem=FGT-SDWAN-01 で台帳登録済み）

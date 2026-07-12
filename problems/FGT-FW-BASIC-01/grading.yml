@@ -1,0 +1,130 @@
+# FGT-FW-BASIC-01 採点基準（100点・単段採点）
+# 全チェック stage: normal（劣化注入なし。fgtbasic_ops.py grade が収集）
+# ★show 出力は文字列値が引用符付き（"port1" 等）— contains はそれ前提
+problem: FGT-FW-BASIC-01
+total_points: 100
+
+checks:
+  # ---- 機能試験 ----
+  - name: "G1: USER-PC→インターネットサーバ 疎通（SNAT アウトバウンド）"
+    node: pcA
+    command: "ping -c 10 198.51.100.100"
+    stage: normal
+    raw:
+      - regex: "(10|[89]) packets received"
+    points: 10
+
+  - name: "G2: USER-PC→インターネットサーバ HTTP 到達"
+    node: pcA
+    command: "wget -q -O - -T 8 http://198.51.100.100/"
+    stage: normal
+    raw:
+      - contains: "SERVER"
+    points: 8
+
+  - name: "G3: 外部→VIP(203.0.113.2:80) で DMZ サーバ公開（DNAT）"
+    node: pcB
+    command: "wget -q -O - -T 8 http://203.0.113.2/"
+    stage: normal
+    raw:
+      - contains: "DMZ SERVER"
+    points: 12
+
+  - name: "G4: LAN→DMZ サーバ HTTP 到達（内部からの公開サーバ利用）"
+    node: pcA
+    command: "wget -q -O - -T 8 http://172.16.10.10/"
+    stage: normal
+    raw:
+      - contains: "DMZ SERVER"
+    points: 8
+
+  - name: "E1: DMZ→LAN は暗黙 deny で遮断（DMZ 生存証明との複合）"
+    node: dmz1
+    command: "ping -c 3 -W 2 172.16.10.1 ; ping -c 3 -W 2 10.1.10.12"
+    stage: normal
+    raw:
+      - regex: "172\\.16\\.10\\.1[\\s\\S]*3 packets received"
+      - regex: "10\\.1\\.10\\.12[\\s\\S]*0 packets received"
+    points: 12
+
+  # ---- 設定状態 ----
+  - name: "S1: port1=WAN（IP/alias・管理アクセス閉鎖）"
+    node: fgt1
+    command: "show system interface port1"
+    stage: normal
+    raw:
+      - contains: "set ip 203.0.113.2 255.255.255.252"
+      - contains: "set alias \"WAN\""
+      - not_contains: "set allowaccess"
+    points: 6
+
+  - name: "S2: port2=DMZ（IP/alias）"
+    node: fgt1
+    command: "show system interface port2"
+    stage: normal
+    raw:
+      - contains: "set ip 172.16.10.1 255.255.255.0"
+      - contains: "set alias \"DMZ\""
+    points: 4
+
+  - name: "S3: アドレスオブジェクト（LAN-NET / DMZ-SRV）"
+    node: fgt1
+    command: "show firewall address"
+    stage: normal
+    raw:
+      - contains: "edit \"LAN-NET\""
+      - contains: "set subnet 10.1.10.0 255.255.255.0"
+      - contains: "edit \"DMZ-SRV\""
+      - contains: "set subnet 172.16.10.10 255.255.255.255"
+    points: 8
+
+  - name: "S4: VIP（extip=port1・port-forward 80→DMZ-SRV）"
+    node: fgt1
+    command: "show firewall vip"
+    stage: normal
+    raw:
+      - contains: "set extip 203.0.113.2"
+      - contains: "set portforward enable"
+      - contains: "set mappedip \"172.16.10.10\""
+    points: 8
+
+  - name: "S5: LAN→WAN ポリシー（オブジェクト参照＋NAT 有効）"
+    node: fgt1
+    command: "show firewall policy 1"
+    stage: normal
+    raw:
+      - contains: "set srcintf \"port3\""
+      - contains: "set dstintf \"port1\""
+      - contains: "set srcaddr \"LAN-NET\""
+      - contains: "set nat enable"
+    points: 8
+
+  - name: "S6: WAN→DMZ ポリシー（dstaddr=VIP・service=HTTP）"
+    node: fgt1
+    command: "show firewall policy 2"
+    stage: normal
+    raw:
+      - contains: "set srcintf \"port1\""
+      - contains: "set dstintf \"port2\""
+      - contains: "set dstaddr \"DMZ-SRV-HTTP\""
+      - contains: "set service \"HTTP\""
+    points: 6
+
+  - name: "S7: LAN→DMZ ポリシー（オブジェクト参照）"
+    node: fgt1
+    command: "show firewall policy 3"
+    stage: normal
+    raw:
+      - contains: "set srcintf \"port3\""
+      - contains: "set dstintf \"port2\""
+      - contains: "set dstaddr \"DMZ-SRV\""
+    points: 4
+
+  - name: "S8: 静的デフォルトルート（port1 経由のみ）"
+    node: fgt1
+    command: "get router info routing-table all"
+    stage: normal
+    raw:
+      - contains: "via 203.0.113.1, port1"
+      - not_contains: "via 203.0.114.1"
+    points: 6
