@@ -53,12 +53,14 @@ P_FG = r"[\w-]+ (\(\S+\) )?# "
 P_ALP = r"(\r\n|\r|\n)[\w-]+:[^\r\n]*[#$] ?"
 P_IOS = r"(\r\n|\r|\n)([\w/-]+)(\([\w./-]+\))?([>#]) ?"
 
-# 受講者初期化: 模範解答の逆順(参照制約: policy→vip/address→route→service→hc→members→IF)。
-# ★FGT-LAB 共用リセット: SD-WAN 問(本問)と FGT-FW-BASIC-01 の両方の設定を消す
-#   (fgtbasic_ops.py からも import される。存在しない delete は fgt_push が注意扱い=冪等)
+# 受講者初期化: 模範解答の逆順(参照制約: policy→vip/ippool/address→route→service→hc→members→IF)。
+# ★FGT-LAB 共用リセット: SD-WAN 問(本問)・FGT-FW-BASIC-01・FGT-REPLACE-01 の設定を全て消す
+#   (fgtbasic_ops.py / fgtreplace_ops.py からも import される。
+#    存在しない delete は fgt_push が注意扱い=冪等)
 UNBUILD = [
     "config firewall policy", "delete 1", "delete 2", "delete 3", "end",
-    "config firewall vip", "delete DMZ-SRV-HTTP", "end",
+    "config firewall vip", "delete DMZ-SRV-HTTP", "delete SRV-VIP", "end",
+    "config firewall ippool", "delete SNAT-POOL", "end",
     "config firewall address", "delete LAN-NET", "delete DMZ-SRV", "end",
     "config router static", "delete 1", "end",
     "config system sdwan",

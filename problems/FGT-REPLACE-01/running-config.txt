@@ -1,0 +1,80 @@
+FW1/pri/act# show running-config
+: Saved
+:
+: Hardware:   ASAv, 2048 MB RAM, CPU Clarkdale 2900 MHz
+:
+ASA Version 9.22(1)1
+!
+hostname FW1
+enable password ***** pbkdf2
+!
+interface GigabitEthernet0/0
+ description ONE-ARM-TRUNK-TO-L3SW1
+ no shutdown
+!
+interface GigabitEthernet0/0.243
+ vlan 243
+ nameif outside
+ security-level 0
+ ip address 172.16.243.251 255.255.255.0 standby 172.16.243.249
+!
+interface GigabitEthernet0/0.244
+ vlan 244
+ nameif inside
+ security-level 100
+ ip address 172.16.244.254 255.255.255.0 standby 172.16.244.252
+!
+interface GigabitEthernet0/0.254
+ vlan 254
+ nameif dmz
+ security-level 50
+ ip address 172.16.254.254 255.255.255.0 standby 172.16.254.252
+!
+interface GigabitEthernet0/1
+ description FAILOVER-LINK
+ no shutdown
+!
+object network OBJ-LB-VIP
+ host 172.16.250.1
+object network OBJ-PAT-ADDR
+ host 2.2.2.10
+object network OBJ-TRUST-NET
+ subnet 172.16.100.0 255.255.255.0
+!
+access-list OUTSIDE-IN extended permit icmp any host 172.16.250.1
+access-list OUTSIDE-IN extended permit tcp any host 172.16.250.1 eq www
+!
+failover
+failover lan unit primary
+failover lan interface FOLINK GigabitEthernet0/1
+failover key *****
+failover link FOLINK GigabitEthernet0/1
+failover interface ip FOLINK 172.31.245.254 255.255.255.0 standby 172.31.245.253
+monitor-interface outside
+monitor-interface inside
+monitor-interface dmz
+!
+icmp permit any outside
+icmp permit any inside
+icmp permit any dmz
+!
+route outside 0.0.0.0 0.0.0.0 172.16.243.254 1
+route inside 172.16.100.0 255.255.255.0 172.16.244.251 1
+route dmz 172.16.250.0 255.255.255.0 172.16.254.251 1
+route dmz 172.16.251.0 255.255.255.0 172.16.254.251 1
+!
+object network OBJ-LB-VIP
+ nat (dmz,outside) static 2.2.2.1
+object network OBJ-TRUST-NET
+ nat (inside,outside) dynamic OBJ-PAT-ADDR
+!
+access-group OUTSIDE-IN in interface outside
+!
+username SUZUKI password ***** privilege 15
+!
+policy-map global_policy
+ class inspection_default
+  inspect icmp
+!
+prompt hostname priority state
+: end
