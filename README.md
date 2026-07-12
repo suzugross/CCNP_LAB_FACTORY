@@ -12,6 +12,7 @@
 ```
 
 <img width="949" height="654" alt="Image" src="https://github.com/user-attachments/assets/ac9b24c9-702e-4e60-be59-5adf3a563fc6" />
+<img width="1485" height="721" alt="Image" src="https://github.com/user-attachments/assets/caa82c17-aed6-4300-9346-2d59c8320208" />
 
 ---
 
