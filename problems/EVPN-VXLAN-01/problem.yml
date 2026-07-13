@@ -1,0 +1,25 @@
+# EVPN-VXLAN-01: EVPN-VXLAN ファブリック教育ラボ（SDA-LISP-01 続編・BL-055）
+# ★専用運用ツール: python3 topologies/evpn_ops.py build|status|solve|grade|stop|teardown
+id: EVPN-VXLAN-01
+title: ファブリックを一枚岩で組む — BGP EVPN × VXLAN 正統編
+exam: ENCOR   # 1.x/DC: VXLAN/EVPN の Describe を実機体験で底上げする教材（前作 SDA-LISP-01 の続編）
+topics: [evpn, vxlan, spine-leaf, route-reflector, l3vni, symmetric-irb, anycast-gateway, type-5, border-leaf, nxos]
+difficulty: 3
+topology: "problems/EVPN-VXLAN-01/evpn-lab.yaml（静的・8台一体型: SPINE iol-xe + nxosv9300×3 + ホスト3台 + EXT）"
+target_nodes: [SPINE, LEAF1, LEAF2, LEAF3]
+fixed_nodes: [H1, H2, H3, EXT]   # 据付・変更禁止（H1/H2=vlan100, H3=vlan200@LEAF2のみ, EXT=外部網）
+points: 100
+access: console   # 受講者は CML コンソールで解く（伴走形式）
+notes: |
+  体験型・伴走形式（ガイド付き教育ラボ・BL-055）: task.md の Phase 0-4 + 終章。
+  前作 SDA-LISP-01 の「頭の中で合流」を、BGP EVPN で実機のまま合流させる正統編。
+  SPINE=IOL の l2vpn evpn RR（PoC で NX-OS と完全 interop 確認済・RT filter 不要）。
+  採点は「軽い最終疎通確認」のみ（得点競争をしない設計）。
+  ★Phase 3 は意図的失敗の設計: 手順から `member vni 50000 associate-vrf` を
+  意図的に外してあり、H1→H3 が 0% になる。指紋= show nve vni に 50000 無し・
+  BGP テーブルには Type-2 があるのに VRF 経路表に降りない。是正して復旧。
+  ★VLAN200 は LEAF2 のみ（LEAF1 に作ると asymmetric フォールバックで
+  失敗 Phase が壊れるため task.md 末尾に「作るな」と明記済み）。
+  ★NX-OS(LEAF×3)は RAM 12GB/台=36GB・ブート約4.5分。day0 はアンダーレイまで。
+  リソース: 8台・RAM約40GB・リースは .20, .31-.37 を yaml に焼き込み
+  （SDA-LISP-01 の焼き込み .37-.45 と .37 が重なるため同時稼働不可 — RAM 的にも不可）。

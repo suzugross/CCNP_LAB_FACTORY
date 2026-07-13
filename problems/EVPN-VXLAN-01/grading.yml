@@ -1,0 +1,117 @@
+# EVPN-VXLAN-01 採点基準（100点・軽い最終疎通確認のみ）
+# 体験型ラボのため厳密グレーディングはしない（SDA-LISP-01 と同方針）。
+# 収集は topologies/evpn_ops.py grade（SSH・checks の記載順に実行）。
+# ★ping 系は repeat 10 で先頭の ARP 未学習ドロップ(1発)を吸収し 80% 以上を PASS。
+#   経路/キャッシュ確認は ping の後に置く（学習後に読む）。
+problem: EVPN-VXLAN-01
+total_points: 100
+
+checks:
+  # ==== ファブリック（コントロールプレーン） ====
+  - name: "F1: SPINE(RR) — leaf 3台の EVPN ピアが全て確立"
+    node: SPINE
+    command: "show bgp l2vpn evpn summary"
+    raw:
+      - regex: "10\\.254\\.0\\.1\\s+4\\s+65100(\\s+\\S+){6}\\s+\\d+"
+      - regex: "10\\.254\\.0\\.2\\s+4\\s+65100(\\s+\\S+){6}\\s+\\d+"
+      - regex: "10\\.254\\.0\\.3\\s+4\\s+65100(\\s+\\S+){6}\\s+\\d+"
+    points: 12
+
+  - name: "F2: LEAF1 — RR とのピア確立・経路受信あり"
+    node: LEAF1
+    command: "show bgp l2vpn evpn summary"
+    raw:
+      - regex: "10\\.254\\.0\\.254\\s+4\\s+65100(\\s+\\S+){6}\\s+[1-9]\\d*"
+    points: 8
+
+  # ==== 疎通（先に打って電話帳・ARP を温める） ====
+  - name: "P1: L2VNI — H1→H2（同一サブネット・leaf 跨ぎ）"
+    node: H1
+    command: "ping 172.16.100.12 repeat 10"
+    raw:
+      - regex: "Success rate is (80|90|100) percent"
+    points: 10
+
+  # ★P2a は採点かつ「温め」: H3 はサイレントホストのため、先に同一 leaf 内から
+  #   叩いて LEAF2 に ARP 学習させないと Type-2(MAC+IP) が生成されず P2/R2 が落ちる
+  #   （実機確認済み・EVPN の silent host 問題そのもの）。順序を変えないこと。
+  - name: "P2a: ローカル IRB — H2→H3（同一 leaf 内サブネット間・H3/GW の ARP 温め）"
+    node: H2
+    command: "ping 172.16.200.13 repeat 10"
+    raw:
+      - regex: "Success rate is (50|60|70|80|90|100) percent"
+    points: 6
+
+  - name: "P2: Symmetric IRB — H1→H3（サブネット間・leaf 跨ぎ・L3VNI 必須）"
+    node: H1
+    command: "ping 172.16.200.13 repeat 10"
+    raw:
+      - regex: "Success rate is (80|90|100) percent"
+    points: 10
+
+  - name: "P3: Type-5 — H1→外部 198.51.100.1（border 経由）"
+    node: H1
+    command: "ping 198.51.100.1 repeat 10"
+    raw:
+      - regex: "Success rate is (80|90|100) percent"
+    points: 10
+
+  - name: "P4: Type-2 戻り — EXT(Lo1)→H1（border 経由・双方向）"
+    node: EXT
+    command: "ping 172.16.100.11 source Loopback1 repeat 10"
+    raw:
+      - regex: "Success rate is (80|90|100) percent"
+    points: 8
+
+  # ==== データプレーン状態（ping 後に読む） ====
+  - name: "V1: LEAF1 — NVE ピア(LEAF2)が Up かつ Control-Plane 学習"
+    node: LEAF1
+    command: "show nve peers"
+    raw:
+      - regex: "10\\.254\\.0\\.2\\s+Up\\s+CP"
+    points: 6
+
+  - name: "V2: LEAF1 — VNI 10100(L2) と 50000(L3/TENANT-A) が Up"
+    node: LEAF1
+    command: "show nve vni"
+    raw:
+      - regex: "10100\\s+UnicastBGP\\s+Up\\s+CP\\s+L2"
+      - regex: "50000\\s+n/a\\s+Up\\s+CP\\s+L3"
+    points: 6
+
+  - name: "V3: LEAF2 — VNI 10200(L2・このleafのみ) が Up"
+    node: LEAF2
+    command: "show nve vni"
+    raw:
+      - regex: "10200\\s+UnicastBGP\\s+Up\\s+CP\\s+L2"
+    points: 6
+
+  - name: "R1: LEAF1 — 外部 /24 が Type-5 で VRF 経路表に(L3VNI encap)"
+    node: LEAF1
+    command: "show ip route vrf TENANT-A"
+    raw:
+      - regex: "198\\.51\\.100\\.0/24"
+      - regex: "segid: 50000.+encap: VXLAN"
+    points: 6
+
+  - name: "R2: LEAF1 — リモートホスト /32 (H3) が L3VNI 経由で入る(Symmetric IRB)"
+    node: LEAF1
+    command: "show ip route 172.16.200.13 vrf TENANT-A"
+    raw:
+      - regex: "172\\.16\\.200\\.13/32"
+      - regex: "segid: 50000"
+    points: 4
+
+  - name: "A1: H1 — GW MAC が Anycast (0000.2222.3333)"
+    node: H1
+    command: "show ip arp 172.16.100.1"
+    raw:
+      - regex: "172\\.16\\.100\\.1\\s+\\S+\\s+0000\\.2222\\.3333"
+    points: 4
+
+  - name: "A2: H2 — 別 leaf でも GW MAC が同一 (分散 Anycast GW の証明)"
+    node: H2
+    command: "show ip arp 172.16.100.1"
+    raw:
+      - regex: "172\\.16\\.100\\.1\\s+\\S+\\s+0000\\.2222\\.3333"
+    points: 4
