@@ -1,0 +1,35 @@
+! RT01 (role=cust, AS=65100) 初期構成
+interface Loopback0
+ ip address 10.0.24.24 255.255.255.255
+!
+interface Loopback1
+ ip address 172.16.0.1 255.255.255.0
+!
+interface Loopback2
+ ip address 172.16.1.1 255.255.255.0
+!
+interface Loopback3
+ ip address 172.16.2.1 255.255.255.0
+!
+interface {{ links[0] }}
+ ip address 10.174.174.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.154.154.2 255.255.255.252
+ no shutdown
+!
+router bgp 65100
+ bgp router-id 10.0.24.24
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.174.174.1 remote-as 65001
+ neighbor 10.154.154.1 remote-as 65001
+ address-family ipv4 unicast
+  neighbor 10.174.174.1 activate
+  neighbor 10.154.154.1 activate
+  network 172.16.0.0 mask 255.255.255.0
+  network 172.16.1.0 mask 255.255.255.0
+  network 172.16.2.0 mask 255.255.254.0
+ exit-address-family
+!

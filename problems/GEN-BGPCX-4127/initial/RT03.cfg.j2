@@ -1,0 +1,25 @@
+! RT03 (role=mhop, AS=65200) 初期構成
+interface Loopback0
+ ip address 10.0.37.37 255.255.255.255
+!
+interface Loopback1
+ ip address 198.51.100.1 255.255.255.0
+!
+interface {{ links[0] }}
+ ip address 10.191.191.2 255.255.255.252
+ no shutdown
+!
+ip route 10.0.57.57 255.255.255.255 10.191.191.1
+!
+router bgp 65200
+ bgp router-id 10.0.37.37
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.0.57.57 remote-as 65001
+ neighbor 10.0.57.57 update-source Loopback0
+ neighbor 10.0.57.57 ebgp-multihop 2
+ address-family ipv4 unicast
+  neighbor 10.0.57.57 activate
+  network 198.51.100.0 mask 255.255.255.0
+ exit-address-family
+!

@@ -1,0 +1,26 @@
+! RT07 (role=leaf, AS=65001) 初期構成
+interface Loopback0
+ ip address 10.0.92.92 255.255.255.255
+ ip ospf 1 area 0
+!
+interface Loopback1
+ ip address 192.0.2.1 255.255.255.0
+!
+interface {{ links[0] }}
+ ip address 10.169.169.2 255.255.255.252
+ ip ospf 1 area 0
+ no shutdown
+!
+router ospf 1
+ router-id 10.0.92.92
+!
+router bgp 65001
+ bgp router-id 10.0.92.92
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.0.26.26 remote-as 65001
+ neighbor 10.0.26.26 update-source Loopback0
+ address-family ipv4 unicast
+  network 192.0.2.0 mask 255.255.255.0
+ exit-address-family
+!

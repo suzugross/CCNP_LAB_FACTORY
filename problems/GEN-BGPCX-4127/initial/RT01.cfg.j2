@@ -1,0 +1,45 @@
+! RT01 (role=hub, AS=65001) 初期構成
+interface Loopback0
+ ip address 10.0.67.67 255.255.255.255
+ ip ospf 1 area 0
+!
+interface {{ links[0] }}
+ ip address 10.153.153.1 255.255.255.252
+ ip ospf 1 area 0
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.177.177.1 255.255.255.252
+ ip ospf 1 area 0
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.107.107.1 255.255.255.252
+ ip ospf 1 area 0
+ no shutdown
+!
+router ospf 1
+ router-id 10.0.67.67
+!
+router bgp 65001
+ bgp router-id 10.0.67.67
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.0.76.76 remote-as 65001
+ neighbor 10.0.76.76 update-source Loopback0
+ neighbor 10.0.57.57 remote-as 65001
+ neighbor 10.0.57.57 update-source Loopback0
+ neighbor 10.0.94.94 remote-as 65001
+ neighbor 10.0.94.94 update-source Loopback0
+ address-family ipv4 unicast
+  neighbor 10.0.76.76 activate
+  neighbor 10.0.76.76 send-community
+  neighbor 10.0.76.76 route-reflector-client
+  neighbor 10.0.57.57 activate
+  neighbor 10.0.57.57 send-community
+  neighbor 10.0.57.57 route-reflector-client
+  neighbor 10.0.94.94 activate
+  neighbor 10.0.94.94 send-community
+  neighbor 10.0.94.94 route-reflector-client
+ exit-address-family
+!
