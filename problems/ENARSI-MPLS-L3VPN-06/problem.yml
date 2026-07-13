@@ -1,0 +1,55 @@
+# MPLS L3VPN 発展 (Extranet / 共有サービス VRF・RT 設計完成形)。BL-051。
+# 初期状態 = ENARSI-MPLS-L3VPN-04 の完成形 (PE-CE eBGP・CUST_B 同一AS+as-override・
+# RM-CE-IN=172.16/16 le 24 のみ許可・10.99 遮断) + SVC-PE(RT08)/SVC-CE(RT09) を増設
+# (SVC-PE のコア=OSPF/LDP/VPNv4 メッシュ参加は焼き込み済・VRF SVCS と PE-CE は未構成)。
+# 各顧客 CE に共有サービス利用セグメント Lo2 (A=10.65.x.0/24 / B=10.66.x.0/24・非重複)
+# を焼き込み網羅告済み — ただし PE の RM-CE-IN が堰き止めている状態から開始。
+#
+# 受験者作業 (PE のみ・CE 変更禁止):
+#   (1) RT08: VRF SVCS (rd 65000:300, export 300 / import 301) 新設 + SVC-CE と eBGP
+#   (2) PE1/PE2 の顧客 VRF ×4: route-target import 65000:300 追加
+#       + export map で利用セグメントにのみ RT 65000:301 を追加付与
+#   (3) RM-CE-IN の受信許可を利用セグメントまで拡張 (10.99 は引き続き遮断)
+#
+# 隠しひねり (task では明かさない):
+#   - export map の set extcommunity rt 65000:301 に additive を忘れると既定 RT が
+#     置換されて消え、利用セグメントが「自顧客の他サイトから」消える部分故障
+#     (172.16 は map 非マッチで無傷)。指紋 = Extended Community に RT:65000:100 が無い。
+#   - RM-CE-IN を permit any で手抜きすると 10.99 が SP 網に漏れ環境保存チェックで自壊。
+#   - 素朴解 (SVCS が RT 100/200 を直 import) は重複 172.16 が衝突し片顧客が無言で負ける
+#     (チケット要件「共有 VRF に 172.16 を持ち込まない」で封じ、採点でも不在を拘束)。
+#   - PoC 済み: poc/mpls-extranet/README.md (2026-07-12)
+id: ENARSI-MPLS-L3VPN-06
+title: "MPLS L3VPN 発展 (Extranet: 共有サービス VRF と選択的 Route-Target 設計)"
+exam: ENARSI
+topics: [mpls, l3vpn, vpnv4, mp-bgp, vrf, route-target, extranet, export-map, ebgp]
+difficulty: 5
+topology: ad-hoc
+image_family: iol
+target_nodes: [RT01, RT02, RT03, RT04, RT05, RT06, RT07, RT08, RT09]
+points: 100
+
+# 役割: RT01=PE1 / RT02=P / RT03=PE2 / RT08=SVC-PE / RT09=SVC-CE (AS65300, 172.30.0.0/24)
+#       CE: RT04=A1(65101) RT05=A2(65102) RT06=B1(65200) RT07=B2(65200)
+# アドレス: 04 と同一 + コア 10.1.28.0/30 (P-RT08) + SVC PE-CE 192.168.30.0/30 (CE=.1/PE=.2)
+#   利用セグメント (CE Lo2): A1=10.65.1.1/24 A2=10.65.2.1/24 B1=10.66.1.1/24 B2=10.66.2.1/24
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # コア PE1-P    10.1.12.0/30
+    - { a: RT02, a_if: 1, b: RT03, b_if: 0 }   # コア P-PE2    10.1.23.0/30
+    - { a: RT02, a_if: 2, b: RT08, b_if: 0 }   # コア P-SVCPE  10.1.28.0/30
+    - { a: RT01, a_if: 1, b: RT04, b_if: 0 }   # CUST_A site1  192.168.1.0/30
+    - { a: RT01, a_if: 2, b: RT06, b_if: 0 }   # CUST_B site1  192.168.11.0/30
+    - { a: RT03, a_if: 1, b: RT05, b_if: 0 }   # CUST_A site2  192.168.2.0/30
+    - { a: RT03, a_if: 2, b: RT07, b_if: 0 }   # CUST_B site2  192.168.12.0/30
+    - { a: RT08, a_if: 1, b: RT09, b_if: 0 }   # SVC PE-CE     192.168.30.0/30
+  positions:
+    RT04: [-450, -330]
+    RT06: [-450, -70]
+    RT01: [-230, -200]
+    RT02: [0, -200]
+    RT03: [230, -200]
+    RT05: [450, -330]
+    RT07: [450, -70]
+    RT08: [0, 30]
+    RT09: [0, 230]

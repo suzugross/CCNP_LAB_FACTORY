@@ -1,0 +1,232 @@
+---
+# 採点基準 (ENARSI-MPLS-L3VPN-04)。収集=ssh(iol-xe)。RT01=PE1 / RT02=P / RT03=PE2。
+# 効果ベース: PE-CE eBGP 確立 → VPNv4 経路(RD単位) → VRF RIB → CE の BGP 学習
+# → as-override 指紋(AS_PATH 65000 65000) → 受信広告制御(10.99 が収容 PE にも無い)
+# → E2E → 制約(再配布・スタティック禁止)。
+# 注: VPNv4 ネイバーは Genie パーサ不可 → raw 判定 (既知)。
+problem: ENARSI-MPLS-L3VPN-04
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # === PE-CE eBGP セッション確立 (VRF 別 AF) ===
+  - name: "RT01(PE1): VRF CUST_A で CE RT04(AS65101) と eBGP Established"
+    node: RT01
+    command: "show bgp vpnv4 unicast vrf CUST_A neighbors 192.168.1.1 | include BGP state"
+    raw:
+      - contains: "Established"
+    points: 3
+
+  - name: "RT01(PE1): VRF CUST_B で CE RT06(AS65200) と eBGP Established"
+    node: RT01
+    command: "show bgp vpnv4 unicast vrf CUST_B neighbors 192.168.11.1 | include BGP state"
+    raw:
+      - contains: "Established"
+    points: 3
+
+  - name: "RT03(PE2): VRF CUST_A で CE RT05(AS65102) と eBGP Established"
+    node: RT03
+    command: "show bgp vpnv4 unicast vrf CUST_A neighbors 192.168.2.1 | include BGP state"
+    raw:
+      - contains: "Established"
+    points: 3
+
+  - name: "RT03(PE2): VRF CUST_B で CE RT07(AS65200) と eBGP Established"
+    node: RT03
+    command: "show bgp vpnv4 unicast vrf CUST_B neighbors 192.168.12.1 | include BGP state"
+    raw:
+      - contains: "Established"
+    points: 3
+
+  # === VPNv4 経路 (RD 単位・重複プレフィックス・再配布レスで直行) ===
+  - name: "RT01(PE1): RD 65000:100 の VPNv4 経路として 172.16.2.0/24 (CUST_A site2) が届く"
+    node: RT01
+    command: "show bgp vpnv4 unicast rd 65000:100 172.16.2.0"
+    raw:
+      - regex: "65000:100:172\\.16\\.2\\.0"
+    points: 3
+
+  - name: "RT01(PE1): RD 65000:200 の VPNv4 経路として 172.16.2.0/24 (CUST_B site2) が届く"
+    node: RT01
+    command: "show bgp vpnv4 unicast rd 65000:200 172.16.2.0"
+    raw:
+      - regex: "65000:200:172\\.16\\.2\\.0"
+    points: 3
+
+  - name: "RT03(PE2): RD 65000:100 の VPNv4 経路として 172.16.1.0/24 (CUST_A site1) が届く"
+    node: RT03
+    command: "show bgp vpnv4 unicast rd 65000:100 172.16.1.0"
+    raw:
+      - regex: "65000:100:172\\.16\\.1\\.0"
+    points: 3
+
+  - name: "RT03(PE2): RD 65000:200 の VPNv4 経路として 172.16.1.0/24 (CUST_B site1) が届く"
+    node: RT03
+    command: "show bgp vpnv4 unicast rd 65000:200 172.16.1.0"
+    raw:
+      - regex: "65000:200:172\\.16\\.1\\.0"
+    points: 3
+
+  # === VRF RIB への取り込み ===
+  - name: "RT01(PE1): VRF CUST_A の RIB に 172.16.2.0/24 が BGP で載る"
+    node: RT01
+    command: "show ip route vrf CUST_A"
+    parser: "show ip route"
+    find: "vrf.CUST_A.address_family.*.routes.*"
+    match:
+      route: "172.16.2.0/24"
+      source_protocol: "bgp"
+    points: 3
+
+  - name: "RT01(PE1): VRF CUST_B の RIB に 172.16.2.0/24 が BGP で載る"
+    node: RT01
+    command: "show ip route vrf CUST_B"
+    parser: "show ip route"
+    find: "vrf.CUST_B.address_family.*.routes.*"
+    match:
+      route: "172.16.2.0/24"
+      source_protocol: "bgp"
+    points: 3
+
+  - name: "RT03(PE2): VRF CUST_A の RIB に 172.16.1.0/24 が BGP で載る"
+    node: RT03
+    command: "show ip route vrf CUST_A"
+    parser: "show ip route"
+    find: "vrf.CUST_A.address_family.*.routes.*"
+    match:
+      route: "172.16.1.0/24"
+      source_protocol: "bgp"
+    points: 3
+
+  - name: "RT03(PE2): VRF CUST_B の RIB に 172.16.1.0/24 が BGP で載る"
+    node: RT03
+    command: "show ip route vrf CUST_B"
+    parser: "show ip route"
+    find: "vrf.CUST_B.address_family.*.routes.*"
+    match:
+      route: "172.16.1.0/24"
+      source_protocol: "bgp"
+    points: 3
+
+  # === CE が対向 LAN を BGP で学習 (再配布レス直行の成果) ===
+  - name: "RT04(CUST_A CE1): 対向サイト LAN 172.16.2.0/24 を BGP で学習"
+    node: RT04
+    command: "show ip route 172.16.2.0"
+    raw:
+      - regex: "Known via \"bgp 65101\""
+    points: 4
+
+  - name: "RT06(CUST_B CE1): 対向サイト LAN 172.16.2.0/24 を BGP で学習"
+    node: RT06
+    command: "show ip route 172.16.2.0"
+    raw:
+      - regex: "Known via \"bgp 65200\""
+    points: 4
+
+  # === as-override 指紋 (同一 AS 顧客: 対向 CE の AS が PE AS に置換されている) ===
+  - name: "RT06(CUST_B CE1): 172.16.2.0 の AS_PATH が 65000 65000 (as-override)"
+    node: RT06
+    command: "show ip bgp 172.16.2.0"
+    raw:
+      - regex: "65000 65000"
+    points: 5
+
+  - name: "RT07(CUST_B CE2): 172.16.1.0 の AS_PATH が 65000 65000 (as-override)"
+    node: RT07
+    command: "show ip bgp 172.16.1.0"
+    raw:
+      - regex: "65000 65000"
+    points: 5
+
+  # === 受信広告制御: 10.99 は SP 網に受け入れない (★収容 PE の VRF にも無い) ===
+  # 負の要件は単独採点しない: 「CE の LAN は受信できている」との複合チェック
+  - name: "RT01(PE1): VRF CUST_A に LAN 172.16.1.0 は在るが 10.99.4.1 が無い (受信段階で破棄)"
+    node: RT01
+    command: "show ip route vrf CUST_A"
+    raw:
+      - contains: "172.16.1.0"
+      - not_contains: "10.99.4.1"
+    points: 4
+
+  - name: "RT03(PE2): VRF CUST_B に LAN 172.16.2.0 は在るが 10.99.7.1 が無い (受信段階で破棄)"
+    node: RT03
+    command: "show ip route vrf CUST_B"
+    raw:
+      - contains: "172.16.2.0"
+      - not_contains: "10.99.7.1"
+    points: 4
+
+  - name: "RT01(PE1): VRF CUST_A に対向 LAN 172.16.2.0 は届くが 10.99.5.1 は届かない"
+    node: RT01
+    command: "show ip route vrf CUST_A"
+    raw:
+      - contains: "172.16.2.0"
+      - not_contains: "10.99.5.1"
+    points: 3
+
+  - name: "RT04(CUST_A CE1): 対向サイトの機器管理 10.99.5.1 へは到達できない (広告制御の実効)"
+    node: RT04
+    command: "ping 10.99.5.1 source 172.16.1.1 repeat 2"
+    raw:
+      - regex: "Success rate is 0"
+    points: 3
+
+  # === E2E ===
+  - name: "RT04(CUST_A CE1): サイト間 E2E 疎通 172.16.1.1 → 172.16.2.1"
+    node: RT04
+    command: "ping 172.16.2.1 source 172.16.1.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 9
+
+  - name: "RT06(CUST_B CE1): サイト間 E2E 疎通 172.16.1.9 → 172.16.2.9 (同一 AS 越し)"
+    node: RT06
+    command: "ping 172.16.2.9 source 172.16.1.9 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 9
+
+  - name: "RT04(CUST_A CE1): CUST_B のホスト 172.16.2.9 へは到達できない (顧客間分離)"
+    node: RT04
+    command: "ping 172.16.2.9 source 172.16.1.1 repeat 2"
+    raw:
+      - regex: "Success rate is 0"
+    points: 4
+
+  # === 制約 ===
+  - name: "RT01(PE1): 顧客 VRF にスタティックを使っていない"
+    node: RT01
+    command: "show running-config | include ip route vrf CUST"
+    raw:
+      - not_contains: "ip route vrf CUST"
+    points: 2
+
+  - name: "RT03(PE2): 顧客 VRF にスタティックを使っていない"
+    node: RT03
+    command: "show running-config | include ip route vrf CUST"
+    raw:
+      - not_contains: "ip route vrf CUST"
+    points: 2
+
+  - name: "RT01(PE1): 再配布を使っていない (BGP のみで完結)"
+    node: RT01
+    command: "show running-config | section router bgp"
+    raw:
+      - not_contains: "redistribute"
+    points: 2
+
+  - name: "RT03(PE2): 再配布を使っていない (BGP のみで完結)"
+    node: RT03
+    command: "show running-config | section router bgp"
+    raw:
+      - not_contains: "redistribute"
+    points: 2
+
+  - name: "RT02(P): BGP を持たない (コアは顧客経路を知らない)"
+    node: RT02
+    command: "show running-config | section router bgp"
+    raw:
+      - not_contains: "router bgp"
+    points: 2

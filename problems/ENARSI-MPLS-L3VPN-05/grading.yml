@@ -1,0 +1,173 @@
+---
+# 採点基準 (ENARSI-MPLS-L3VPN-05)。収集=ssh(iol-xe)。
+# RT01-03=PE / RT04-06=P / RT07-12=CE (A1,B1hub,A2,B2,A3,B3)。
+# 効果ベース: CUST_A 環境保存 → PE1 の 2セッション/2VRF → 折返し経路
+# (allowas-in 指紋 AS_PATH) → 拠点 PE の via-hub 化+直接経路不在 →
+# spoke CE の AS_PATH 指紋 → E2E+折返し traceroute → 仕様遵守(RT配置/制約)。
+# 負の要件は単独採点しない: 「直接経路不在」は「hub 経由経路の存在」と複合。
+# VPNv4 ネイバーは Genie パーサ不可 → raw 判定 (既知)。
+problem: ENARSI-MPLS-L3VPN-05
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # === 環境保存: CUST_A フラット契約の維持 (20点) ===
+  - name: "CUST_A: site1→site2 直接疎通維持 (RT07)"
+    node: RT07
+    command: "ping 172.16.2.1 source 172.16.1.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 4
+
+  - name: "CUST_A: site2→site3 直接疎通維持 (RT09)"
+    node: RT09
+    command: "ping 172.16.3.1 source 172.16.2.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 4
+
+  - name: "CUST_A: site3→site1 直接疎通維持 (RT11)"
+    node: RT11
+    command: "ping 172.16.1.1 source 172.16.3.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 4
+
+  - name: "CUST_B: 本社→site2 疎通維持 (RT08)"
+    node: RT08
+    command: "ping 172.16.2.9 source 172.16.1.9 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 4
+
+  - name: "CUST_B: 本社→site3 疎通維持 (RT08)"
+    node: RT08
+    command: "ping 172.16.3.9 source 172.16.1.9 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 4
+
+  # === 環境保存: CUST_A の VRF 健全性 (顧客分離・B の AS が混入しない) ===
+  - name: "PE1: VRF CUST_A に A の全サイト経路・CUST_B(6520x) 混入なし"
+    node: RT01
+    command: "show bgp vpnv4 unicast vrf CUST_A | include 172.16"
+    raw:
+      - contains: "172.16.2.0"
+      - contains: "172.16.3.0"
+      - not_regex: "6520[1-9]"
+    points: 6
+
+  # === 判別: PE1 の 2セッション移行 (VLAN10=下り / VLAN20=上り) ===
+  - name: "PE1: 下り(VLAN10) eBGP セッション Established (VRF CUST_B, 192.168.111.1)"
+    node: RT01
+    command: "show bgp vpnv4 unicast vrf CUST_B neighbors 192.168.111.1 | include BGP state"
+    raw:
+      - contains: "Established"
+    points: 6
+
+  - name: "PE1: 上り(VLAN20) eBGP セッション Established (VRF CUST_B_UP, 192.168.112.1)"
+    node: RT01
+    command: "show bgp vpnv4 unicast vrf CUST_B_UP neighbors 192.168.112.1 | include BGP state"
+    raw:
+      - contains: "Established"
+    points: 6
+
+  # === 判別: 折返しの成立 (上り VRF が本社 CE 経由の拠点経路を保持 = allowas-in の効果) ===
+  - name: "PE1: VRF CUST_B_UP に本社 CE 経由の拠点経路×2 (AS_PATH 65201 65000 6520x)"
+    node: RT01
+    command: "show bgp vpnv4 unicast vrf CUST_B_UP | include 172.16"
+    raw:
+      - regex: "65201 65000 65202"
+      - regex: "65201 65000 65203"
+    points: 12
+
+  # === 判別: 拠点 PE の via-hub 化 (hub 経由経路あり AND 直接経路なし の複合) ===
+  - name: "PE2: VRF CUST_B の site3 経路が本社経由のみ (via 1.1.1.1・直接 3.3.3.3 不在・本社 LAN あり)"
+    node: RT02
+    command: "show bgp vpnv4 unicast vrf CUST_B | include 172.16"
+    raw:
+      - regex: "172\\.16\\.3\\.0\\S*\\s+1\\.1\\.1\\.1"
+      - regex: "65201 65000 65203"
+      - not_regex: "172\\.16\\.3\\.0\\S*\\s+3\\.3\\.3\\.3"
+      - contains: "172.16.1.0"
+    points: 8
+
+  - name: "PE3: VRF CUST_B の site2 経路が本社経由のみ (via 1.1.1.1・直接 2.2.2.2 不在・本社 LAN あり)"
+    node: RT03
+    command: "show bgp vpnv4 unicast vrf CUST_B | include 172.16"
+    raw:
+      - regex: "172\\.16\\.2\\.0\\S*\\s+1\\.1\\.1\\.1"
+      - regex: "65201 65000 65202"
+      - not_regex: "172\\.16\\.2\\.0\\S*\\s+2\\.2\\.2\\.2"
+      - contains: "172.16.1.0"
+    points: 8
+
+  # === 判別: spoke CE から見た AS_PATH 指紋 (本社 AS 65201 挟み込み) ===
+  - name: "RT10(B2): 172.16.3.0 の AS_PATH が 65000 65201 65000 65203 (本社経由)"
+    node: RT10
+    command: "show ip bgp 172.16.3.0"
+    raw:
+      - regex: "65000 65201 65000 65203"
+    points: 5
+
+  - name: "RT12(B3): 172.16.2.0 の AS_PATH が 65000 65201 65000 65202 (本社経由)"
+    node: RT12
+    command: "show ip bgp 172.16.2.0"
+    raw:
+      - regex: "65000 65201 65000 65202"
+    points: 5
+
+  # === 判別: E2E + データプレーンの折返し (traceroute に本社 CE と PE1 再入が現れる) ===
+  - name: "RT10(B2): site3 への traceroute が本社 CE 折返し経由で到達"
+    node: RT10
+    command: "traceroute 172.16.3.9 source 172.16.2.9 numeric timeout 1"
+    raw:
+      - regex: "192\\.168\\.112\\.1"
+      - regex: "192\\.168\\.111\\.2"
+      - regex: "192\\.168\\.13\\.1"
+    points: 9
+
+  - name: "RT12(B3): site2 への traceroute が本社 CE 折返し経由で到達"
+    node: RT12
+    command: "traceroute 172.16.2.9 source 172.16.3.9 numeric timeout 1"
+    raw:
+      - regex: "192\\.168\\.112\\.1"
+      - regex: "192\\.168\\.111\\.2"
+      - regex: "192\\.168\\.12\\.1"
+    points: 9
+
+  # === 仕様遵守 (進捗マーカと複合し未解答での自明 PASS を防ぐ) ===
+  - name: "PE1: 制約遵守 (static/再配布なし) AND 上り VRF CUST_B_UP 新設済み"
+    node: RT01
+    command: "show running-config | include ip route vrf CUST|redistribute|vrf definition"
+    raw:
+      - not_contains: "ip route vrf CUST"
+      - not_contains: "redistribute"
+      - contains: "vrf definition CUST_B_UP"
+    points: 2
+
+  - name: "PE2: 制約遵守 AND RT 配置 (import 210 / export 220・旧 200 撤去)"
+    node: RT02
+    command: "show running-config | include ip route vrf CUST|redistribute|route-target"
+    raw:
+      - not_contains: "ip route vrf CUST"
+      - not_contains: "redistribute"
+      - contains: "route-target import 65000:210"
+      - contains: "route-target export 65000:220"
+      - not_contains: "route-target import 65000:200"
+      - not_contains: "route-target export 65000:200"
+    points: 2
+
+  - name: "PE3: 制約遵守 AND RT 配置 (import 210 / export 220・旧 200 撤去)"
+    node: RT03
+    command: "show running-config | include ip route vrf CUST|redistribute|route-target"
+    raw:
+      - not_contains: "ip route vrf CUST"
+      - not_contains: "redistribute"
+      - contains: "route-target import 65000:210"
+      - contains: "route-target export 65000:220"
+      - not_contains: "route-target import 65000:200"
+      - not_contains: "route-target export 65000:200"
+    points: 2

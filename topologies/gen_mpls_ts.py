@@ -16,8 +16,14 @@
 
 CLI:
   gen_mpls_ts.py --repo . --seed N [--faults {0,1,2,3}] [--decoys {0,1,2}]
+                 [--pece {ospf,ebgp}]
     faults=0 はベースライン(故障なし。トポロジ/採点の実機検証用)
-出力: problems/GEN-MPLSTS-<seed>/
+    --pece ebgp = PE-CE を eBGP 化 (BL-015 後半・2026-07-12 実機検証済):
+      CUST_A=サイト毎AS(65101-65103) / CUST_B=同一AS 65200 (PE で as-override)
+      広告制御は neighbor in の route-map RM-CE-IN (受信段階で破棄)
+      L5 故障は l5e_* 5種に差し替え (L1-L4/decoy は共用・既存 seed 再現性維持)
+      問題ID は GEN-MPLSEB-<seed> (従来 GEN-MPLSTS-<seed> と衝突しない)
+出力: problems/GEN-MPLSTS-<seed>/ (ebgp 軸は GEN-MPLSEB-<seed>/)
   problem.yml / initial/*.cfg.j2 / task.md / grading.yml /
   solution/{fault.json, fix.json, solution.md, catalog.json}
   catalog.json = 全故障の breaks/fixes (実機での全故障サイクル検証用)
@@ -48,6 +54,15 @@ NODES = PES + PS + CES
 CEMAP = {"RT07": ("A", 1, "RT01"), "RT08": ("B", 1, "RT01"),
          "RT09": ("A", 2, "RT02"), "RT10": ("B", 2, "RT02"),
          "RT11": ("A", 3, "RT03"), "RT12": ("B", 3, "RT03")}
+
+# --pece ebgp 軸: CE の AS 設計 (ENARSI-MPLS-L3VPN-04 の手組みと同じ思想)
+#   CUST_A = サイト毎 AS (基礎形) / CUST_B = 全サイト同一 AS (as-override 必修形)
+CE_AS_B = 65200
+
+
+def ce_as(ce):
+    cu, site, _pe = CEMAP[ce]
+    return CE_AS_B if cu == "B" else 65100 + site
 PE_OF_SITE = {1: "RT01", 2: "RT02", 3: "RT03"}
 CUST = {"A": {"vrf": "CUST_A", "rd": f"{AS}:100", "rt": f"{AS}:100",
               "host": 1, "proc": 10},
@@ -79,10 +94,10 @@ POSITIONS = {
 # ----------------------------------------------------------------------------
 # モデル構築
 # ----------------------------------------------------------------------------
-def build_model(seed, n_faults, n_decoys):
+def build_model(seed, n_faults, n_decoys, pece="ospf"):
     rnd = random.Random(seed)
-    m = {"seed": seed, "lo": {}, "lo9": {}, "links": [], "faults": [],
-         "decoys": []}
+    m = {"seed": seed, "pece": pece, "lo": {}, "lo9": {}, "links": [],
+         "faults": [], "decoys": []}
 
     # コアノード Lo0 (x.x.x.x/32) と Lo9 (IGP外ローカル管理 10.255.x.1/32)
     used = set()
@@ -343,9 +358,11 @@ def catalog(m, rnd):
     right_vrf = CUST[vcust]["vrf"]
     # ★fix は「vrf行」「IP行」を別エントリに分割 (vrf forwarding で IP が消えるが、
     #   ios_config は同一バッチを変更前 running と比較するため IP 行がスキップされる)
+    pece_rel = "OSPF 隣接" if m["pece"] == "ospf" else "eBGP セッション"
+    pece_sym = "IGP 隣接ダウン" if m["pece"] == "ospf" else "eBGP セッションダウン"
     add("l4_wrong_vrf_membership", "L4",
         f"{vpe} の {vce} 向けIF({ifname(vslot)}) が誤って VRF {other_vrf} に収容"
-        f" (正: {right_vrf}。PE-CE OSPF 隣接不成立)",
+        f" (正: {right_vrf}。PE-CE {pece_rel}不成立)",
         {"victim": vpe, "cust": vcust, "if": ifname(vslot)},
         [_cfg(vpe, [f"vrf forwarding {other_vrf}"],
               [f"interface {ifname(vslot)}"]),
@@ -355,9 +372,13 @@ def catalog(m, rnd):
               [f"interface {ifname(vslot)}"]),
          _cfg(vpe, [f"ip address {vip} 255.255.255.252"],
               [f"interface {ifname(vslot)}"])],
-        f"CUST_{vcust} の site{vsite} が全断 (PE-CE の IGP 隣接ダウン)")
+        f"CUST_{vcust} の site{vsite} が全断 (PE-CE の {pece_sym})")
 
-    # ---- L5: PE-CE 再配布 / 広告制御 ---------------------------------------
+    # ---- L5: PE-CE (ospf=再配布/広告制御, ebgp=セッション/受信広告制御) ------
+    if m["pece"] == "ebgp":
+        _l5_ebgp(m, rnd, add)
+        return faults
+
     dpe = rnd.choice(PES)
     dcust = rnd.choice(["A", "B"])
     dsite = next(s for s, p in PE_OF_SITE.items() if p == dpe)
@@ -441,6 +462,100 @@ def catalog(m, rnd):
         f"CUST_{acust} の site{asite2} が全断 (PE-CE の IGP 隣接ダウン)")
 
     return faults
+
+
+def _ce_nbr(m, pe, cust):
+    """PE から見た CE ネイバー (ce, ce_ip, vrf, 正AS)。"""
+    site = next(s for s, p in PE_OF_SITE.items() if p == pe)
+    ce = ce_of(cust, site)
+    lk = link_of(m, pe, ce)
+    _slot, ip = side(lk, ce)
+    return ce, ip, CUST[cust]["vrf"], ce_as(ce)
+
+
+def _l5_ebgp(m, rnd, add):
+    """--pece ebgp 軸の L5 故障カタログ (ENARSI-MPLS-L3VPN-04 の実機知見ベース)。"""
+    # 1) remote-as 誤り (セッション不成立)
+    rpe = rnd.choice(PES)
+    rcust = rnd.choice(["A", "B"])
+    rsite = next(s for s, p in PE_OF_SITE.items() if p == rpe)
+    rce, rip, rvrf, ras = _ce_nbr(m, rpe, rcust)
+    wrong = ras - 1
+    parents = [f"router bgp {AS}", f"address-family ipv4 vrf {rvrf}"]
+    # ★break/fix は remote-as の「直接付け替え」1行で行う (IOS-XE 17.15 実機確認済:
+    #   属性 activate/as-override/route-map は保持されセッションだけ再形成)。
+    #   `no neighbor <ip> remote-as <as>` 方式はネイバーごと消え、ios_config の
+    #   running 比較で既在の属性行がスキップ=神隠しになる (vrf forwarding と同型の罠)
+    add("l5e_remote_as_wrong", "L5",
+        f"{rpe} の {rce} 向け eBGP ネイバーの remote-as が {wrong}"
+        f" (正: {ras}。OPEN の AS 不一致でセッション不成立)",
+        {"victim": rpe, "cust": rcust},
+        [_cfg(rpe, [f"neighbor {rip} remote-as {wrong}"], parents),
+         _clear_bgp(rpe)],
+        [_cfg(rpe, [f"neighbor {rip} remote-as {ras}"], parents),
+         _clear_bgp(rpe)],
+        f"CUST_{rcust} の site{rsite} が全断 (PE-CE セッション未確立の警報)")
+
+    # 2) activate 欠落 (セッションは張れても AF 経路交換なし)
+    ape = rnd.choice(PES)
+    acust = rnd.choice(["A", "B"])
+    asite = next(s for s, p in PE_OF_SITE.items() if p == ape)
+    ace, aip, avrf, _ = _ce_nbr(m, ape, acust)
+    aparents = [f"router bgp {AS}", f"address-family ipv4 vrf {avrf}"]
+    add("l5e_activate_missing", "L5",
+        f"{ape} の {ace} 向けネイバーが activate されていない (経路交換なし)",
+        {"victim": ape, "cust": acust},
+        [_cfg(ape, [f"no neighbor {aip} activate"], aparents),
+         _clear_bgp(ape)],
+        [_cfg(ape, [f"neighbor {aip} activate"], aparents),
+         _clear_bgp(ape)],
+        f"CUST_{acust} の site{asite} が全断 (リンク/ping は正常)")
+
+    # 3) 受信フィルタ過剰 (le 23 → LAN /24 を受信段階で破棄)
+    tpe = rnd.choice(PES)
+    tsite = next(s for s, p in PE_OF_SITE.items() if p == tpe)
+    add("l5e_infilter_overbroad", "L5",
+        f"{tpe} の prefix-list PL-CUST-LAN が le 23 (CE の LAN /24 を受信段階で破棄。"
+        "★収容 PE の VRF にも LAN が無い = 再配布方式との差分指紋)",
+        {"victim": tpe},
+        [_cfg(tpe, ["no ip prefix-list PL-CUST-LAN seq 5 permit 172.16.0.0/16 le 24",
+                    "ip prefix-list PL-CUST-LAN seq 5 permit 172.16.0.0/16 le 23"]),
+         _clear_bgp(tpe)],
+        [_cfg(tpe, ["no ip prefix-list PL-CUST-LAN seq 5 permit 172.16.0.0/16 le 23",
+                    "ip prefix-list PL-CUST-LAN seq 5 permit 172.16.0.0/16 le 24"]),
+         _clear_bgp(tpe)],
+        f"両顧客とも site{tsite} の LAN が対向から見えない (セッションは全て正常)")
+
+    # 4) 受信フィルタに 10.99 混入 (機器管理 /32 が VPN をまたいで漏えい)
+    kpe = rnd.choice(PES)
+    ksite = next(s for s, p in PE_OF_SITE.items() if p == kpe)
+    add("l5e_infilter_leak", "L5",
+        f"{kpe} の PL-CUST-LAN に seq 10 permit 10.99.0.0/16 le 32 が混入"
+        " (機器管理 /32 を受信してしまい VPN をまたいで漏えい)",
+        {"victim": kpe},
+        [_cfg(kpe, ["ip prefix-list PL-CUST-LAN seq 10 permit 10.99.0.0/16 le 32"]),
+         _clear_bgp(kpe)],
+        [_cfg(kpe, ["no ip prefix-list PL-CUST-LAN seq 10 permit 10.99.0.0/16 le 32"]),
+         _clear_bgp(kpe)],
+        f"監査指摘: site{ksite} 収容 CE の管理アドレスが対向サイトから見える (疎通は全て正常)")
+
+    # 5) as-override 欠落 (同一 AS 顧客 CUST_B のみ・実機指紋 = CE が
+    #    "DENIED due to: AS-PATH contains our own AS" で破棄。PE は広告している)
+    ope = rnd.choice(PES)
+    osite = next(s for s, p in PE_OF_SITE.items() if p == ope)
+    oce, oip, ovrf, _ = _ce_nbr(m, ope, "B")
+    oparents = [f"router bgp {AS}", f"address-family ipv4 vrf {ovrf}"]
+    add("l5e_asoverride_missing", "L5",
+        f"{ope} の {oce} 向けネイバーに as-override が無い (CUST_B は全サイト同一"
+        f" AS {CE_AS_B} → CE の AS_PATH ループ検知で対向経路が破棄される。"
+        "PE の advertised-routes には在るのに CE の table に無い)",
+        {"victim": ope, "cust": "B"},
+        [_cfg(ope, [f"no neighbor {oip} as-override"], oparents),
+         _clear_bgp(ope)],
+        [_cfg(ope, [f"neighbor {oip} as-override"], oparents),
+         _clear_bgp(ope)],
+        f"CUST_B の site{osite} だけ対向サイトと不通 (CUST_A は全て正常・"
+        "PE-CE セッションは Established)")
 
 
 DECOYS = [
@@ -546,8 +661,13 @@ def render_ospf1(m, n, L):
     L.append("!")
 
 
+def _pid(m):
+    return (f"GEN-MPLSTS-{m['seed']}" if m["pece"] == "ospf"
+            else f"GEN-MPLSEB-{m['seed']}")
+
+
 def render_pe(m, n):
-    L = [f"! GEN-MPLSTS-{m['seed']} 初期状態 ({n} = PE / 変更対象)"]
+    L = [f"! {_pid(m)} 初期状態 ({n} = PE / 変更対象)"]
     lo = m["lo"]
     site = next(s for s, p in PE_OF_SITE.items() if p == n)
     f_rte = fault(m, "l4_rt_export_wrong")
@@ -599,30 +719,43 @@ def render_pe(m, n):
     L.append("!")
     render_ospf1(m, n, L)
 
-    # PE-CE OSPF (VRF 別プロセス)
-    for cu in ("A", "B"):
-        c = CUST[cu]
-        ce = ce_of(cu, site)
-        lk = link_of(m, n, ce)
-        L.append(f"router ospf {c['proc']} vrf {c['vrf']}")
-        L.append(f" router-id {lo[n]}")
-        if f_red and f_red["params"]["victim"] == n and f_red["params"]["cust"] == cu:
-            pass
-        else:
-            L.append(f" redistribute bgp {AS} subnets")
-        area = "0"
-        if f_pce and f_pce["params"]["victim"] == n and f_pce["params"]["cust"] == cu:
-            area = "1"
-        L.append(f" network {lk['net']} 0.0.0.3 area {area}")
-        L.append("!")
+    if m["pece"] == "ospf":
+        # PE-CE OSPF (VRF 別プロセス)
+        for cu in ("A", "B"):
+            c = CUST[cu]
+            ce = ce_of(cu, site)
+            lk = link_of(m, n, ce)
+            L.append(f"router ospf {c['proc']} vrf {c['vrf']}")
+            L.append(f" router-id {lo[n]}")
+            if f_red and f_red["params"]["victim"] == n \
+                    and f_red["params"]["cust"] == cu:
+                pass
+            else:
+                L.append(f" redistribute bgp {AS} subnets")
+            area = "0"
+            if f_pce and f_pce["params"]["victim"] == n \
+                    and f_pce["params"]["cust"] == cu:
+                area = "1"
+            L.append(f" network {lk['net']} 0.0.0.3 area {area}")
+            L.append("!")
 
-    # 広告制御
-    le = "23" if (f_str and f_str["params"]["victim"] == n) else "24"
-    L.append(f"ip prefix-list PL-CUST-LAN seq 5 permit 172.16.0.0/16 le {le}")
-    if f_lek and f_lek["params"]["victim"] == n:
-        L.append("ip prefix-list PL-CUST-LAN seq 10 permit 10.99.0.0/16 le 32")
-    L += ["route-map RM-OSPF2VPN permit 10",
-          " match ip address prefix-list PL-CUST-LAN", "!"]
+        # 広告制御 (OSPF→VPNv4 の再配布 route-map)
+        le = "23" if (f_str and f_str["params"]["victim"] == n) else "24"
+        L.append(f"ip prefix-list PL-CUST-LAN seq 5 permit 172.16.0.0/16 le {le}")
+        if f_lek and f_lek["params"]["victim"] == n:
+            L.append("ip prefix-list PL-CUST-LAN seq 10 permit 10.99.0.0/16 le 32")
+        L += ["route-map RM-OSPF2VPN permit 10",
+              " match ip address prefix-list PL-CUST-LAN", "!"]
+    else:
+        # 受信広告制御 (neighbor in の route-map)
+        f_ovb = fault(m, "l5e_infilter_overbroad")
+        f_ilk = fault(m, "l5e_infilter_leak")
+        le = "23" if (f_ovb and f_ovb["params"]["victim"] == n) else "24"
+        L.append(f"ip prefix-list PL-CUST-LAN seq 5 permit 172.16.0.0/16 le {le}")
+        if f_ilk and f_ilk["params"]["victim"] == n:
+            L.append("ip prefix-list PL-CUST-LAN seq 10 permit 10.99.0.0/16 le 32")
+        L += ["route-map RM-CE-IN permit 10",
+              " match ip address prefix-list PL-CUST-LAN", "!"]
 
     # BGP
     peers = [p for p in PES if p != n]
@@ -653,16 +786,32 @@ def render_pe(m, n):
     for cu in ("A", "B"):
         c = CUST[cu]
         L.append(f" address-family ipv4 vrf {c['vrf']}")
-        if not (f_ros and f_ros["params"]["victim"] == n
-                and f_ros["params"]["cust"] == cu):
-            L.append(f"  redistribute ospf {c['proc']} route-map RM-OSPF2VPN")
+        if m["pece"] == "ospf":
+            if not (f_ros and f_ros["params"]["victim"] == n
+                    and f_ros["params"]["cust"] == cu):
+                L.append(f"  redistribute ospf {c['proc']} route-map RM-OSPF2VPN")
+        else:
+            f_ras = fault(m, "l5e_remote_as_wrong")
+            f_a5 = fault(m, "l5e_activate_missing")
+            f_ovr = fault(m, "l5e_asoverride_missing")
+            ce, ce_ip, _vrf, ras = _ce_nbr(m, n, cu)
+            if f_ras and f_ras["params"]["victim"] == n \
+                    and f_ras["params"]["cust"] == cu:
+                ras = ras - 1
+            L.append(f"  neighbor {ce_ip} remote-as {ras}")
+            if not (f_a5 and f_a5["params"]["victim"] == n
+                    and f_a5["params"]["cust"] == cu):
+                L.append(f"  neighbor {ce_ip} activate")
+            if cu == "B" and not (f_ovr and f_ovr["params"]["victim"] == n):
+                L.append(f"  neighbor {ce_ip} as-override")
+            L.append(f"  neighbor {ce_ip} route-map RM-CE-IN in")
         L.append(" exit-address-family")
     L.append("!")
     return "\n".join(L) + "\n"
 
 
 def render_p(m, n):
-    L = [f"! GEN-MPLSTS-{m['seed']} 初期状態 ({n} = P / 変更対象)"]
+    L = [f"! {_pid(m)} 初期状態 ({n} = P / 変更対象)"]
     render_core_common(m, n, L)
     f_rid = fault(m, "l2_ldp_rid_unadvertised")
     if f_rid and f_rid["params"]["victim"] == n:
@@ -676,30 +825,44 @@ def render_p(m, n):
 
 def render_ce(m, n):
     cu, site, pe = CEMAP[n]
-    c = CUST[cu]
     lk = link_of(m, pe, n)
     slot, ip = side(lk, n)
-    L = [f"! GEN-MPLSTS-{m['seed']} 初期状態 ({n} = CUST_{cu} site{site} CE / 変更不可)",
+    L = [f"! {_pid(m)} 初期状態 ({n} = CUST_{cu} site{site} CE / 変更不可)",
          "interface Loopback0",
-         f" description === CUST_{cu} site{site} LAN ({lan_net(m, site)}/24) ===",
-         f" ip address {lan_ip(m, cu, site)} 255.255.255.0",
-         " ip ospf network point-to-point",
-         "!",
-         "interface Loopback9",
-         " description === CE 機器管理 (VPN へ広告禁止) ===",
-         f" ip address {m['mgmt'][n]} 255.255.255.255",
-         "!",
-         f"interface {{{{ links[{slot}] }}}}",
-         f" description === to {pe} PE (site{site}, {lk['net']}/30) ===",
-         f" ip address {ip} 255.255.255.252",
-         " no shutdown",
-         "!",
-         "router ospf 1",
-         f" router-id {m['lo'][n]}",
-         f" network {lk['net']} 0.0.0.3 area 0",
-         f" network {lan_net(m, site)} 0.0.0.255 area 0",
-         f" network {m['mgmt'][n]} 0.0.0.0 area 0",
-         "!"]
+         f" description === CUST_{cu} site{site} LAN ({lan_net(m, site)}/24) ==="]
+    L.append(f" ip address {lan_ip(m, cu, site)} 255.255.255.0")
+    if m["pece"] == "ospf":
+        L.append(" ip ospf network point-to-point")
+    L += ["!",
+          "interface Loopback9",
+          " description === CE 機器管理 (VPN へ広告禁止) ===",
+          f" ip address {m['mgmt'][n]} 255.255.255.255",
+          "!",
+          f"interface {{{{ links[{slot}] }}}}",
+          f" description === to {pe} PE (site{site}, {lk['net']}/30) ===",
+          f" ip address {ip} 255.255.255.252",
+          " no shutdown",
+          "!"]
+    if m["pece"] == "ospf":
+        L += ["router ospf 1",
+              f" router-id {m['lo'][n]}",
+              f" network {lk['net']} 0.0.0.3 area 0",
+              f" network {lan_net(m, site)} 0.0.0.255 area 0",
+              f" network {m['mgmt'][n]} 0.0.0.0 area 0",
+              "!"]
+    else:
+        _pslot, pe_ip = side(lk, pe)
+        L += [f"router bgp {ce_as(n)}",
+              f" bgp router-id {m['lo'][n]}",
+              " bgp log-neighbor-changes",
+              " no bgp default ipv4-unicast",
+              f" neighbor {pe_ip} remote-as {AS}",
+              " address-family ipv4",
+              f"  network {lan_net(m, site)} mask 255.255.255.0",
+              f"  network {m['mgmt'][n]} mask 255.255.255.255",
+              f"  neighbor {pe_ip} activate",
+              " exit-address-family",
+              "!"]
     return "\n".join(L) + "\n"
 
 
@@ -755,13 +918,23 @@ def write_grading(m, pdir, pid):
             f"show ip route vrf {CUST[cu]['vrf']} {m['mgmt'][ce]} 255.255.255.255",
             1, [{"regex": "not in table"}])
 
-    # CE が対向 LAN を OSPF で学習 (2×2=4)
-    add(f"{ce_of('A', 1)}: 対向 site2 LAN {lan_net(m, 2)}/24 を OSPF で学習",
-        ce_of("A", 1), f"show ip route {lan_net(m, 2)}",
-        2, [{"regex": 'Known via "ospf 1"'}])
-    add(f"{ce_of('B', 3)}: 対向 site1 LAN {lan_net(m, 1)}/24 を OSPF で学習",
-        ce_of("B", 3), f"show ip route {lan_net(m, 1)}",
-        2, [{"regex": 'Known via "ospf 1"'}])
+    # CE が対向 LAN を PE-CE プロトコルで学習 (2×2=4)
+    if m["pece"] == "ospf":
+        add(f"{ce_of('A', 1)}: 対向 site2 LAN {lan_net(m, 2)}/24 を OSPF で学習",
+            ce_of("A", 1), f"show ip route {lan_net(m, 2)}",
+            2, [{"regex": 'Known via "ospf 1"'}])
+        add(f"{ce_of('B', 3)}: 対向 site1 LAN {lan_net(m, 1)}/24 を OSPF で学習",
+            ce_of("B", 3), f"show ip route {lan_net(m, 1)}",
+            2, [{"regex": 'Known via "ospf 1"'}])
+    else:
+        add(f"{ce_of('A', 1)}: 対向 site2 LAN {lan_net(m, 2)}/24 を BGP で学習",
+            ce_of("A", 1), f"show ip route {lan_net(m, 2)}",
+            2, [{"regex": f'Known via "bgp {ce_as(ce_of("A", 1))}"'}])
+        # CUST_B は as-override の実効まで拘束 (AS_PATH に 65000 65000)
+        add(f"{ce_of('B', 3)}: 対向 site1 LAN {lan_net(m, 1)}/24 を BGP で学習"
+            " (as-override 済 = AS_PATH 65000 65000)",
+            ce_of("B", 3), f"show ip bgp {lan_net(m, 1)}",
+            2, [{"regex": f"{AS} {AS}"}])
 
     # LDP: PE⇔P (3×2=6) + Pリング相互 (3×1=3)
     pe_p = {"RT01": "RT04", "RT02": "RT05", "RT03": "RT06"}
@@ -788,12 +961,20 @@ def write_grading(m, pdir, pid):
             "show bgp vpnv4 unicast all summary", 3,
             [{"regex": rf"{_esc(lo[y])}\s+4\s+{AS}(\s+\d+){{5}}\s+\S+\s+\d+"}])
 
-    # PE-CE OSPF FULL (6×1=6)
+    # PE-CE 隣接/セッション (6×1=6)
     for ce in CES:
         cu, site, pe = CEMAP[ce]
-        add(f"{pe}: VRF {CUST[cu]['vrf']} で {ce}({lo[ce]}) と OSPF 隣接 FULL",
-            pe, "show ip ospf neighbor", 1,
-            [{"regex": rf"{_esc(lo[ce])}\s+\d+\s+FULL"}])
+        if m["pece"] == "ospf":
+            add(f"{pe}: VRF {CUST[cu]['vrf']} で {ce}({lo[ce]}) と OSPF 隣接 FULL",
+                pe, "show ip ospf neighbor", 1,
+                [{"regex": rf"{_esc(lo[ce])}\s+\d+\s+FULL"}])
+        else:
+            _ce, ce_ip, vrf, _ras = _ce_nbr(m, pe, cu)
+            add(f"{pe}: VRF {vrf} で {ce}({ce_ip}, AS {ce_as(ce)}) と eBGP Established",
+                pe,
+                f"show bgp vpnv4 unicast vrf {vrf} neighbors {ce_ip}"
+                " | include BGP state", 1,
+                [{"contains": "Established"}])
 
     # LSP ラベル実在 (3)
     add(f"RT01: PE 間転送がラベルスイッチされている (→{lo['RT02']})", "RT01",
@@ -820,13 +1001,44 @@ def write_grading(m, pdir, pid):
 # ----------------------------------------------------------------------------
 # task.md / solution
 # ----------------------------------------------------------------------------
+def _task_spec56(m):
+    """設計仕様 5/6 (PE-CE 方式で分岐)。"""
+    if m["pece"] == "ospf":
+        return (f"5. **PE-CE**: OSPF（PE 側プロセス CUST_A={CUST['A']['proc']} /"
+                f" CUST_B={CUST['B']['proc']},\n"
+                "   area 0, router-id=Lo0）。OSPF⇄BGP を相互再配布。\n"
+                "6. **広告制御**: VPNv4 へ出すのは 172.16.0.0/16 の LAN(/24) のみ\n"
+                "   （prefix-list PL-CUST-LAN + route-map RM-OSPF2VPN）。"
+                "**機器管理 10.99.0.0/16 は\n   VPN をまたいで広告しない**。")
+    return (f"5. **PE-CE**: eBGP（address-family ipv4 vrf。CE の AS は下表。"
+            f"CUST_B は**全サイト同一 AS {CE_AS_B}** のため\n"
+            "   PE 側で **as-override** を適用して収容する）。"
+            "**再配布・スタティックは使用しない**（eBGP 経路は VPNv4 へ直行）。\n"
+            "6. **広告制御**: CE から受信してよいのは 172.16.0.0/16 の LAN(/24) のみ\n"
+            "   （prefix-list PL-CUST-LAN 参照の route-map RM-CE-IN を"
+            "**neighbor 単位の in 方向**に適用）。\n"
+            "   **機器管理 10.99.0.0/16 は受信段階で破棄**（収容 PE の VRF にも載せない）。")
+
+
+def _ce_table_header(m):
+    if m["pece"] == "ospf":
+        return ("| CE | 顧客/サイト | 収容PE | PE-CE リンク | サイト LAN (Lo0) |"
+                " 機器管理 (Lo9) |\n|----|------------|--------|--------------|"
+                "------------------|----------------|")
+    return ("| CE | 顧客/サイト | AS | 収容PE | PE-CE リンク | サイト LAN (Lo0) |"
+            " 機器管理 (Lo9) |\n|----|------------|-----|--------|--------------|"
+            "------------------|----------------|")
+
+
 def write_task(m, pdir, pid, n_faults):
     lan = m["lan"]
+    ebgp = m["pece"] == "ebgp"
     rows = []
     for ce in CES:
         cu, site, pe = CEMAP[ce]
         lk = link_of(m, pe, ce)
-        rows.append(f"| {ce} | CUST_{cu} site{site} | {pe} | {lk['net']}/30"
+        as_col = f" {ce_as(ce)} |" if ebgp else ""
+        rows.append(f"| {ce} | CUST_{cu} site{site} |{as_col} {pe} | {lk['net']}/30"
                     f" (CE=.1/PE=.2) | {lan_ip(m, cu, site)}/24 | {m['mgmt'][ce]}/32 |")
     core_rows = []
     for lk in m["links"]:
@@ -871,11 +1083,7 @@ CE は顧客管理機器（**変更禁止**）。あなたはコア側（PE/P）
    （AF 方式）。**P(RT04-06) は BGP を持たない**。
 4. **VRF**（全 PE 共通）: CUST_A = RD {CUST["A"]["rd"]} / RT {CUST["A"]["rt"]}、
    CUST_B = RD {CUST["B"]["rd"]} / RT {CUST["B"]["rt"]}。
-5. **PE-CE**: OSPF（PE 側プロセス CUST_A={CUST["A"]["proc"]} / CUST_B={CUST["B"]["proc"]},
-   area 0, router-id=Lo0）。OSPF⇄BGP を相互再配布。
-6. **広告制御**: VPNv4 へ出すのは 172.16.0.0/16 の LAN(/24) のみ
-   （prefix-list PL-CUST-LAN + route-map RM-OSPF2VPN）。**機器管理 10.99.0.0/16 は
-   VPN をまたいで広告しない**。
+{_task_spec56(m)}
 7. **MSS**: PE の CE 向け IF は ip tcp adjust-mss 1452。
 8. スタティックルート禁止。CE（RT07-12）変更禁止。MGMT VRF / Ethernet0/3 に触れない。
 
@@ -891,8 +1099,7 @@ CE は顧客管理機器（**変更禁止**）。あなたはコア側（PE/P）
 {chr(10).join(core_rows)}
 
 ### CE / 顧客
-| CE | 顧客/サイト | 収容PE | PE-CE リンク | サイト LAN (Lo0) | 機器管理 (Lo9) |
-|----|------------|--------|--------------|------------------|----------------|
+{_ce_table_header(m)}
 {chr(10).join(rows)}
 
 ## 到達目標
@@ -932,19 +1139,29 @@ def write_solution_md(m, pdir, pid):
 
 
 def emit(m, repo, n_faults):
-    pid = f"GEN-MPLSTS-{m['seed']}"
+    pid = _pid(m)
     pdir = os.path.join(repo, "problems", pid)
     os.makedirs(os.path.join(pdir, "initial"), exist_ok=True)
     os.makedirs(os.path.join(pdir, "solution"), exist_ok=True)
 
+    if m["pece"] == "ospf":
+        # ★既存 seed のバイト再現性を維持するため ospf 軸は従来の文言/並びを変えない
+        title = (f"MPLS L3VPN 障害対応 12台 (3PE×Pリング×2顧客3サイト, "
+                 f"faults={n_faults}, seed={m['seed']})")
+        topics = ["mpls", "ldp", "l3vpn", "vpnv4", "mp-bgp", "vrf",
+                  "route-target", "ospf", "pe-ce", "redistribution",
+                  "troubleshooting", "generated"]
+    else:
+        title = (f"MPLS L3VPN 障害対応 12台 (3PE×Pリング×2顧客3サイト, "
+                 f"pe-ce=ebgp, faults={n_faults}, seed={m['seed']})")
+        topics = ["mpls", "ldp", "l3vpn", "vpnv4", "mp-bgp", "vrf",
+                  "route-target", "ebgp", "pe-ce", "as-override",
+                  "troubleshooting", "generated"]
     prob = {
         "id": pid,
-        "title": f"MPLS L3VPN 障害対応 12台 (3PE×Pリング×2顧客3サイト, "
-                 f"faults={n_faults}, seed={m['seed']})",
+        "title": title,
         "exam": "ENARSI",
-        "topics": ["mpls", "ldp", "l3vpn", "vpnv4", "mp-bgp", "vrf",
-                   "route-target", "ospf", "pe-ce", "redistribution",
-                   "troubleshooting", "generated"],
+        "topics": topics,
         "difficulty": 5,
         "topology": "generated",
         "image_family": "iol",
@@ -1002,12 +1219,14 @@ def main():
                     help="注入する故障数 (0=ベースライン)。層をまたいで選択")
     ap.add_argument("--decoys", type=int, default=1, choices=[0, 1, 2],
                     help="おとり(無害な差分)の数")
-    ap.add_argument("--pece", default="ospf", choices=["ospf"],
-                    help="PE-CE 方式 (将来軸: static/ebgp)")
+    ap.add_argument("--pece", default="ospf", choices=["ospf", "ebgp"],
+                    help="PE-CE 方式。ebgp = CUST_A サイト毎AS / CUST_B 同一AS"
+                         f"({CE_AS_B}, as-override) + neighbor in 広告制御"
+                         " (問題ID は GEN-MPLSEB-<seed>)")
     args = ap.parse_args()
 
     m = build_model(args.seed, args.faults,
-                    args.decoys if args.faults else 0)
+                    args.decoys if args.faults else 0, pece=args.pece)
     pdir = emit(m, args.repo, args.faults)
     print(f"generated: {pdir}")
     for fa in m["faults"]:

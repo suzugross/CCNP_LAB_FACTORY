@@ -1,0 +1,30 @@
+! ENARSI-MPLS-L3VPN-05 初期状態 (RT08 = CUST_B CE1 = 本社 hub CE / 顧客管理・変更禁止)
+!   links[0]=RT01(PE1)
+!   ★移行用に VLAN10(下り)/VLAN20(上り) のサブIFと BGP ネイバーを顧客側で準備済み
+!     (SP 側が未対応のため現在 Idle)。現行 untagged 接続は SP 側是正完了後に顧客が撤去する。
+interface Loopback1
+ description === CUST_B site1 LAN (hub) ===
+ ip address 172.16.1.9 255.255.255.0
+!
+interface {{ links[0] }}
+ description === to RT01 PE1 現行接続 (192.168.11.0/30) ===
+ ip address 192.168.11.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[0] }}.10
+ description === 移行用 下り: SP -> 本社 (192.168.111.0/30) ===
+ encapsulation dot1Q 10
+ ip address 192.168.111.1 255.255.255.252
+!
+interface {{ links[0] }}.20
+ description === 移行用 上り: 本社 -> SP (192.168.112.0/30) ===
+ encapsulation dot1Q 20
+ ip address 192.168.112.1 255.255.255.252
+!
+router bgp 65201
+ bgp router-id 8.8.8.8
+ bgp log-neighbor-changes
+ network 172.16.1.0 mask 255.255.255.0
+ neighbor 192.168.11.2 remote-as 65000
+ neighbor 192.168.111.2 remote-as 65000
+ neighbor 192.168.112.2 remote-as 65000

@@ -1,0 +1,301 @@
+lab:
+  title: POC-MPLSEXT
+  description: '{"ccnp_lease":{"p64":"UE9DLU1QTFNFWFQ=","nodes":{"PE1":"10.1.10.20","PE2":"10.1.10.31"}}}'
+  notes: |
+    PoC lab (Claude 2026-07-12): BL-051 Extranet/共有サービス VRF — export map/additive 実挙動検証 (IOL)
+    - 最小2台: PE1=顧客側 (CUST_A/CUST_B VRF・CE経路は VRF Loopback + redistribute connected で模擬)
+      PE2=共有側 (VRF SVCS: rd 65000:300, export 300, import 301) + 顧客 VRF CUST_A (additive 検証用)
+    - E2/E3: PE1 の vrf af に export map (match 10.65/66 → set extcommunity rt 65000:301 ±additive)
+      → PE2 の SVCS 流入と CUST_A の経路残存/消失を観測 (additive 忘れ罠の指紋採取)
+    - E5: PE2 SVCS に import 100/200 を直接追加 → 重複 172.16.1.0/24 の衝突挙動を観測
+    - E6: PE2 SVCS の 172.30.0.0/24 を export 300 → PE1 顧客 VRF が import 300 で受けるか
+    - MGMT: PE1=.20 PE2=.31 (10.1.10.0/26)
+  version: 0.3.0
+nodes:
+- id: PE1
+  label: PE1
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname PE1
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    vrf definition CUST_A
+     rd 65000:100
+     address-family ipv4
+      route-target export 65000:100
+      route-target import 65000:100
+     exit-address-family
+    !
+    vrf definition CUST_B
+     rd 65000:200
+     address-family ipv4
+      route-target export 65000:200
+      route-target import 65000:200
+     exit-address-family
+    !
+    interface Ethernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.20 255.255.255.192
+     no shutdown
+    !
+    interface Loopback0
+     ip address 1.1.1.1 255.255.255.255
+    !
+    interface Loopback11
+     description === CUST_A site LAN (重複) ===
+     vrf forwarding CUST_A
+     ip address 172.16.1.1 255.255.255.0
+    !
+    interface Loopback12
+     description === CUST_A 利用セグメント ===
+     vrf forwarding CUST_A
+     ip address 10.65.1.1 255.255.255.0
+    !
+    interface Loopback21
+     description === CUST_B site LAN (重複) ===
+     vrf forwarding CUST_B
+     ip address 172.16.1.9 255.255.255.0
+    !
+    interface Loopback22
+     description === CUST_B 利用セグメント ===
+     vrf forwarding CUST_B
+     ip address 10.66.1.1 255.255.255.0
+    !
+    interface Ethernet0/0
+     description === to PE2 (core) ===
+     ip address 10.0.12.1 255.255.255.252
+     mpls ip
+     no shutdown
+    !
+    mpls ldp router-id Loopback0 force
+    !
+    router ospf 1
+     router-id 1.1.1.1
+     network 10.0.12.0 0.0.0.3 area 0
+     network 1.1.1.1 0.0.0.0 area 0
+    !
+    router bgp 65000
+     bgp router-id 1.1.1.1
+     no bgp default ipv4-unicast
+     neighbor 2.2.2.2 remote-as 65000
+     neighbor 2.2.2.2 update-source Loopback0
+     address-family vpnv4
+      neighbor 2.2.2.2 activate
+      neighbor 2.2.2.2 send-community extended
+     exit-address-family
+     address-family ipv4 vrf CUST_A
+      redistribute connected
+     exit-address-family
+     address-family ipv4 vrf CUST_B
+      redistribute connected
+     exit-address-family
+    !
+    ip ssh version 2
+    !
+    event manager applet GEN-SSH-KEY authorization bypass
+     event timer countdown time 30
+     action 1.0 cli command "enable"
+     action 2.0 cli command "configure terminal"
+     action 3.0 cli command "crypto key generate rsa modulus 2048"
+     action 4.0 syslog msg "EEM GEN-SSH-KEY: RSA key generated"
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+     transport input ssh
+  x: -200
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: PE1-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: PE1-i3
+    label: Ethernet0/3
+    type: physical
+    slot: 3
+- id: PE2
+  label: PE2
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname PE2
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    vrf definition CUST_A
+     rd 65000:100
+     address-family ipv4
+      route-target export 65000:100
+      route-target import 65000:100
+     exit-address-family
+    !
+    vrf definition SVCS
+     rd 65000:300
+     address-family ipv4
+      route-target export 65000:300
+      route-target import 65000:301
+     exit-address-family
+    !
+    interface Ethernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.31 255.255.255.192
+     no shutdown
+    !
+    interface Loopback0
+     ip address 2.2.2.2 255.255.255.255
+    !
+    interface Loopback31
+     description === 共有サービス LAN ===
+     vrf forwarding SVCS
+     ip address 172.30.0.1 255.255.255.0
+    !
+    interface Ethernet0/0
+     description === to PE1 (core) ===
+     ip address 10.0.12.2 255.255.255.252
+     mpls ip
+     no shutdown
+    !
+    mpls ldp router-id Loopback0 force
+    !
+    router ospf 1
+     router-id 2.2.2.2
+     network 10.0.12.0 0.0.0.3 area 0
+     network 2.2.2.2 0.0.0.0 area 0
+    !
+    router bgp 65000
+     bgp router-id 2.2.2.2
+     no bgp default ipv4-unicast
+     neighbor 1.1.1.1 remote-as 65000
+     neighbor 1.1.1.1 update-source Loopback0
+     address-family vpnv4
+      neighbor 1.1.1.1 activate
+      neighbor 1.1.1.1 send-community extended
+     exit-address-family
+     address-family ipv4 vrf SVCS
+      redistribute connected
+     exit-address-family
+    !
+    ip ssh version 2
+    !
+    event manager applet GEN-SSH-KEY authorization bypass
+     event timer countdown time 30
+     action 1.0 cli command "enable"
+     action 2.0 cli command "configure terminal"
+     action 3.0 cli command "crypto key generate rsa modulus 2048"
+     action 4.0 syslog msg "EEM GEN-SSH-KEY: RSA key generated"
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+     transport input ssh
+  x: 200
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: PE2-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: PE2-i3
+    label: Ethernet0/3
+    type: physical
+    slot: 3
+- id: MGMTSW
+  label: MGMT-SW
+  node_definition: unmanaged_switch
+  image_definition: null
+  configuration: ''
+  x: 0
+  y: 250
+  tags: []
+  interfaces:
+  - id: MGMTSW-i0
+    label: port0
+    type: physical
+    slot: 0
+  - id: MGMTSW-i1
+    label: port1
+    type: physical
+    slot: 1
+  - id: MGMTSW-i2
+    label: port2
+    type: physical
+    slot: 2
+- id: EXTC
+  label: to-MGMT-net
+  node_definition: external_connector
+  image_definition: null
+  configuration: System Bridge
+  x: 0
+  y: 400
+  tags: []
+  interfaces:
+  - id: EXTC-i0
+    label: port
+    type: physical
+    slot: 0
+links:
+- id: l0
+  n1: PE1
+  i1: PE1-i0
+  n2: PE2
+  i2: PE2-i0
+  conditioning: {}
+  label: PE1<->PE2
+- id: l1
+  n1: PE1
+  i1: PE1-i3
+  n2: MGMTSW
+  i2: MGMTSW-i0
+  conditioning: {}
+  label: PE1-mgmt
+- id: l2
+  n1: PE2
+  i1: PE2-i3
+  n2: MGMTSW
+  i2: MGMTSW-i1
+  conditioning: {}
+  label: PE2-mgmt
+- id: l3
+  n1: MGMTSW
+  i1: MGMTSW-i2
+  n2: EXTC
+  i2: EXTC-i0
+  conditioning: {}
+  label: mgmt-uplink
+annotations: []
+smart_annotations: []

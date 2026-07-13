@@ -1,0 +1,27 @@
+! ENARSI-MPLS-L3VPN-04 初期状態 (RT04 = CUST_A CE1 / 変更不可)
+!   BGP 稼働済み (AS 65101 = サイト毎 AS)。LAN(Lo0) + 機器管理(Lo9) を広告。
+!   PE 側が未設定のためセッションは Idle からスタート。
+interface Loopback0
+ description === CUST_A site1 LAN (172.16.1.0/24) ===
+ ip address 172.16.1.1 255.255.255.0
+!
+interface Loopback9
+ description === CE 機器管理 (VPN へ広告禁止) ===
+ ip address 10.99.4.1 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 PE1 (192.168.1.0/30) ===
+ ip address 192.168.1.1 255.255.255.252
+ no shutdown
+!
+router bgp 65101
+ bgp router-id 4.4.4.4
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 192.168.1.2 remote-as 65000
+ address-family ipv4
+  network 172.16.1.0 mask 255.255.255.0
+  network 10.99.4.1 mask 255.255.255.255
+  neighbor 192.168.1.2 activate
+ exit-address-family
+!

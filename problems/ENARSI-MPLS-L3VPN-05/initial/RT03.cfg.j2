@@ -1,0 +1,65 @@
+! ENARSI-MPLS-L3VPN-05 初期状態 (RT03 = PE3 / spoke3 収容 / 変更対象)
+!   links[0]=RT06(P3) / links[1]=RT11(CUST_A CE3) / links[2]=RT12(CUST_B CE3=spoke)
+vrf definition CUST_A
+ rd 65000:100
+ address-family ipv4
+  route-target export 65000:100
+  route-target import 65000:100
+ exit-address-family
+!
+vrf definition CUST_B
+ rd 65000:200
+ address-family ipv4
+  route-target export 65000:200
+  route-target import 65000:200
+ exit-address-family
+!
+interface Loopback0
+ ip address 3.3.3.3 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT06 P3 (10.1.36.0/30) ===
+ ip address 10.1.36.1 255.255.255.252
+ mpls ip
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT11 CUST_A-CE3 (192.168.3.0/30) ===
+ vrf forwarding CUST_A
+ ip address 192.168.3.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT12 CUST_B-CE3 spoke (192.168.13.0/30) ===
+ vrf forwarding CUST_B
+ ip address 192.168.13.2 255.255.255.252
+ no shutdown
+!
+mpls ldp router-id Loopback0 force
+!
+router ospf 1
+ router-id 3.3.3.3
+ network 3.3.3.3 0.0.0.0 area 0
+ network 10.1.36.0 0.0.0.3 area 0
+!
+router bgp 65000
+ bgp router-id 3.3.3.3
+ no bgp default ipv4-unicast
+ neighbor 1.1.1.1 remote-as 65000
+ neighbor 1.1.1.1 update-source Loopback0
+ neighbor 2.2.2.2 remote-as 65000
+ neighbor 2.2.2.2 update-source Loopback0
+ address-family vpnv4
+  neighbor 1.1.1.1 activate
+  neighbor 1.1.1.1 send-community extended
+  neighbor 2.2.2.2 activate
+  neighbor 2.2.2.2 send-community extended
+ exit-address-family
+ address-family ipv4 vrf CUST_A
+  neighbor 192.168.3.1 remote-as 65103
+  neighbor 192.168.3.1 activate
+ exit-address-family
+ address-family ipv4 vrf CUST_B
+  neighbor 192.168.13.1 remote-as 65203
+  neighbor 192.168.13.1 activate
+ exit-address-family

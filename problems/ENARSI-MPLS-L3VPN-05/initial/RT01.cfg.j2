@@ -1,0 +1,66 @@
+! ENARSI-MPLS-L3VPN-05 初期状態 (RT01 = PE1 / hub 収容 PE / 変更対象)
+!   両顧客とも全対称 RT の「完成形」= CUST_B はポリシー違反状態 (監査是正チケット)。
+!   links[0]=RT04(P1) / links[1]=RT07(CUST_A CE1) / links[2]=RT08(CUST_B CE1=hub)
+vrf definition CUST_A
+ rd 65000:100
+ address-family ipv4
+  route-target export 65000:100
+  route-target import 65000:100
+ exit-address-family
+!
+vrf definition CUST_B
+ rd 65000:200
+ address-family ipv4
+  route-target export 65000:200
+  route-target import 65000:200
+ exit-address-family
+!
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT04 P1 (10.1.14.0/30) ===
+ ip address 10.1.14.1 255.255.255.252
+ mpls ip
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT07 CUST_A-CE1 (192.168.1.0/30) ===
+ vrf forwarding CUST_A
+ ip address 192.168.1.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT08 CUST_B-CE1 hub (192.168.11.0/30) ===
+ vrf forwarding CUST_B
+ ip address 192.168.11.2 255.255.255.252
+ no shutdown
+!
+mpls ldp router-id Loopback0 force
+!
+router ospf 1
+ router-id 1.1.1.1
+ network 1.1.1.1 0.0.0.0 area 0
+ network 10.1.14.0 0.0.0.3 area 0
+!
+router bgp 65000
+ bgp router-id 1.1.1.1
+ no bgp default ipv4-unicast
+ neighbor 2.2.2.2 remote-as 65000
+ neighbor 2.2.2.2 update-source Loopback0
+ neighbor 3.3.3.3 remote-as 65000
+ neighbor 3.3.3.3 update-source Loopback0
+ address-family vpnv4
+  neighbor 2.2.2.2 activate
+  neighbor 2.2.2.2 send-community extended
+  neighbor 3.3.3.3 activate
+  neighbor 3.3.3.3 send-community extended
+ exit-address-family
+ address-family ipv4 vrf CUST_A
+  neighbor 192.168.1.1 remote-as 65101
+  neighbor 192.168.1.1 activate
+ exit-address-family
+ address-family ipv4 vrf CUST_B
+  neighbor 192.168.11.1 remote-as 65201
+  neighbor 192.168.11.1 activate
+ exit-address-family

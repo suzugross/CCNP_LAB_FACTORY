@@ -1,0 +1,38 @@
+! ENARSI-MPLS-L3VPN-06 初期状態 (RT08 = SVC-PE / コアのみ焼き込み済 / 変更対象)
+!   links[0]=RT02(P) / links[1]=RT09(SVC-CE)
+!   ★VRF SVCS と PE-CE (BGP) は未構成 = 受験者作業。CE 向け IF は global に IP のみ
+!     (受験者が VRF 収容し IP を入れ直す)。
+interface Loopback0
+ ip address 8.8.8.8 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 P (10.1.28.0/30) ===
+ ip address 10.1.28.2 255.255.255.252
+ mpls ip
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT09 SVC-CE (192.168.30.0/30) ===
+ ip address 192.168.30.2 255.255.255.252
+ no shutdown
+!
+mpls ldp router-id Loopback0 force
+!
+router ospf 1
+ router-id 8.8.8.8
+ network 8.8.8.8 0.0.0.0 area 0
+ network 10.1.28.0 0.0.0.3 area 0
+!
+router bgp 65000
+ bgp router-id 8.8.8.8
+ no bgp default ipv4-unicast
+ neighbor 1.1.1.1 remote-as 65000
+ neighbor 1.1.1.1 update-source Loopback0
+ neighbor 3.3.3.3 remote-as 65000
+ neighbor 3.3.3.3 update-source Loopback0
+ address-family vpnv4
+  neighbor 1.1.1.1 activate
+  neighbor 1.1.1.1 send-community extended
+  neighbor 3.3.3.3 activate
+  neighbor 3.3.3.3 send-community extended
+ exit-address-family

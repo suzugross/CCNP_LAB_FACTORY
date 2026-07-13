@@ -1,0 +1,31 @@
+! ENARSI-MPLS-L3VPN-05 初期状態 (RT06 = P3 / BGPフリー / 変更禁止)
+!   links[0]=RT03(PE3) / links[1]=RT05(P2) / links[2]=RT04(P1)
+interface Loopback0
+ ip address 6.6.6.6 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT03 PE3 (10.1.36.0/30) ===
+ ip address 10.1.36.2 255.255.255.252
+ mpls ip
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT05 P2 (10.1.56.0/30) ===
+ ip address 10.1.56.2 255.255.255.252
+ mpls ip
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT04 P1 (10.1.46.0/30) ===
+ ip address 10.1.46.2 255.255.255.252
+ mpls ip
+ no shutdown
+!
+mpls ldp router-id Loopback0 force
+!
+router ospf 1
+ router-id 6.6.6.6
+ network 6.6.6.6 0.0.0.0 area 0
+ network 10.1.36.0 0.0.0.3 area 0
+ network 10.1.56.0 0.0.0.3 area 0
+ network 10.1.46.0 0.0.0.3 area 0

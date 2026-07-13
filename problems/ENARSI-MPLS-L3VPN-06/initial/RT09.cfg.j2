@@ -1,0 +1,20 @@
+! ENARSI-MPLS-L3VPN-06 初期状態 (RT09 = SVC-CE 共有サービス基盤 / SP設備・変更禁止)
+!   共有サービス LAN 172.30.0.0/24 を広告して PE (AS65000) を待ち受け中。links[0]=RT08(SVC-PE)
+interface Loopback0
+ description === 共有サービス LAN (DNS/NTP/監視 172.30.0.0/24) ===
+ ip address 172.30.0.1 255.255.255.0
+!
+interface {{ links[0] }}
+ description === to RT08 SVC-PE (192.168.30.0/30) ===
+ ip address 192.168.30.1 255.255.255.252
+ no shutdown
+!
+router bgp 65300
+ bgp router-id 9.9.9.9
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 192.168.30.2 remote-as 65000
+ address-family ipv4
+  network 172.30.0.0 mask 255.255.255.0
+  neighbor 192.168.30.2 activate
+ exit-address-family

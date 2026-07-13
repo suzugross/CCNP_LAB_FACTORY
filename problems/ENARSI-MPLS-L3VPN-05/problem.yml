@@ -1,0 +1,63 @@
+# MPLS L3VPN 発展 (VPN 内トポロジ設計: フルメッシュ × ハブ&スポークの RT 組み分け)。BL-016。
+# gen_mpls_ts と同形の 12台 (3PE + P三角リング + 2顧客×3サイト) を固定アドレスで手組み。
+# 初期状態 = 両顧客とも全対称 RT で全サイト any-to-any 疎通の「完成した」網。
+#   - CUST_A (フラット契約): このままが正 → 環境保存
+#   - CUST_B (契約改定): 「全拠点間通信は本社(site1)経由・拠点間直接ルーティング禁止」
+#     → 全対称 RT のままはポリシー違反 = 監査是正チケット
+# 受験者作業 (PE のみ・CE 変更禁止):
+#   (1) PE1 の CUST_B 収容を顧客準備済みの VLAN10/20 サブIF 2セッションへ移行
+#   (2) PE1 で下り/上りを 2 VRF に分離 (CUST_B=下り流用 / CUST_B_UP=新設 rd 65000:210)
+#   (3) RT 65000:210(本社発)/220(拠点発) の import/export 配置を要件から設計
+#       (spoke: export 220/import 210, hub下り: import 220, hub上り: export 210)
+# 隠しひねり (task では明かさない):
+#   - 仕様どおり組んでも CUST_B_UP が本社 CE からの折返し経路を AS-PATH ループ検知で
+#     破棄し spoke↔spoke 不通のまま。debug bgp all updates in の
+#     `DENIED due to: AS-PATH contains our own AS` から allowas-in 1 に到達させる。
+#   - DENIED 経路は soft-reconfig の received-routes にも現れない (格納前破棄)。
+#     CE 側 advertised-routes (show は可) との突き合わせが切り分けの芯。
+#   - 折返し成立後の spoke CE 受信 AS_PATH = `65000 65201 65000 6520x` (hub AS 挟み込み)
+#   - PoC 済み: poc/mpls-hubspoke/README.md (2026-07-12)
+id: ENARSI-MPLS-L3VPN-05
+title: "MPLS L3VPN 発展 (フルメッシュ × ハブ&スポークの RT 設計・監査是正)"
+exam: ENARSI
+topics: [mpls, l3vpn, vpnv4, mp-bgp, vrf, route-target, hub-and-spoke, ebgp, allowas-in]
+difficulty: 4
+topology: ad-hoc
+image_family: iol
+target_nodes: [RT01, RT02, RT03, RT04, RT05, RT06, RT07, RT08, RT09, RT10, RT11, RT12]
+points: 100
+
+# 役割: RT01-03=PE1-3 / RT04-06=P1-3(三角リング・BGPフリー) / CE: A1=RT07 B1=RT08(hub)
+#       A2=RT09 B2=RT10 / A3=RT11 B3=RT12
+# アドレス: Lo0=N.N.N.N / コア 10.1.14/25/36.0/30 / リング 10.1.45/56/46.0/30
+#   PE-CE: A=192.168.<site>.0/30, B=192.168.1<site>.0/30 (CE=.1/PE=.2)
+#   hub 移行用: VLAN10=192.168.111.0/30(下り) / VLAN20=192.168.112.0/30(上り)
+#   LAN: 172.16.<site>.0/24 を両顧客で重複使用 (A=.1 / B=.9, Lo1)
+#   CE AS: A=65101-65103 / B=65201-65203 (全てサイト毎 AS・as-override 非関与)
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT04, b_if: 0 }   # PE1-P1 10.1.14.0/30
+    - { a: RT02, a_if: 0, b: RT05, b_if: 0 }   # PE2-P2 10.1.25.0/30
+    - { a: RT03, a_if: 0, b: RT06, b_if: 0 }   # PE3-P3 10.1.36.0/30
+    - { a: RT04, a_if: 1, b: RT05, b_if: 1 }   # P1-P2 10.1.45.0/30
+    - { a: RT05, a_if: 2, b: RT06, b_if: 1 }   # P2-P3 10.1.56.0/30
+    - { a: RT04, a_if: 2, b: RT06, b_if: 2 }   # P1-P3 10.1.46.0/30
+    - { a: RT01, a_if: 1, b: RT07, b_if: 0 }   # PE1-CE_A1 192.168.1.0/30
+    - { a: RT01, a_if: 2, b: RT08, b_if: 0 }   # PE1-CE_B1(hub) 192.168.11.0/30 (+111/112 subif)
+    - { a: RT02, a_if: 1, b: RT09, b_if: 0 }   # PE2-CE_A2 192.168.2.0/30
+    - { a: RT02, a_if: 2, b: RT10, b_if: 0 }   # PE2-CE_B2 192.168.12.0/30
+    - { a: RT03, a_if: 1, b: RT11, b_if: 0 }   # PE3-CE_A3 192.168.3.0/30
+    - { a: RT03, a_if: 2, b: RT12, b_if: 0 }   # PE3-CE_B3 192.168.13.0/30
+  positions:
+    RT07: [-650, -330]
+    RT08: [-650, -70]
+    RT01: [-430, -200]
+    RT04: [-180, -200]
+    RT05: [60, -340]
+    RT06: [60, -60]
+    RT02: [300, -340]
+    RT09: [520, -420]
+    RT10: [520, -260]
+    RT03: [300, -60]
+    RT11: [520, -140]
+    RT12: [520, 20]

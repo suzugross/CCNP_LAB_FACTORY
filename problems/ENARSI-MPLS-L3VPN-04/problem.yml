@@ -1,0 +1,49 @@
+# MPLS L3VPN 応用 (PE-CE eBGP 化 + as-override + neighbor in 広告制御)。BL-015。
+# ENARSI-MPLS-L3VPN-01 の完成形コア (OSPF/LDP/MP-BGP VPNv4/VRF収容) を初期状態とし、
+# 「契約変更チケット」対応を出題:
+#   (1) PE-CE を eBGP 化 (address-family ipv4 vrf + neighbor)。
+#       ★02 (OSPF+相互再配布) との対比が核心: eBGP 経路は再配布ゼロで VPNv4 直行
+#   (2) CUST_A = サイト毎 AS (65101/65102) → 基礎形
+#       CUST_B = 全サイト統一 AS 65200 → ★CE の AS_PATH ループ検知で経路が届かない
+#       → CE 変更禁止が allowas-in を封じ、as-override が SP 側の唯一解
+#   (3) CE 機器管理 10.99.0.0/16 は SP 網に受け入れない
+#       = prefix-list 参照 route-map を neighbor in に適用 (02 の redistribute
+#         route-map との適用点の対比。★収容 PE の VRF にも置かない = 02 より厳しい)
+# 隠しひねり (task では明かさない):
+#   - CUST_B は neighbor/activate を正しく組んでも対向経路が CE に現れない。
+#     PE の advertised-routes には在る (advertised-routes と CE 側 table の突き合わせ
+#     で「CE が捨てている」に到達させる)。デバッグ指紋: CE の debug ip bgp updates in
+#     に DENIED due to: AS-PATH contains our own AS
+#   - as-override 後の CE 受信 AS_PATH は「65000 65000」(自AS が PE AS に置換)
+#   - 再配布・スタティック禁止 → redistribute で OSPF を経由する迂回解を封じる
+#   - in フィルタ過剰 (172.16 まで deny) は E2E 全滅で自壊
+id: ENARSI-MPLS-L3VPN-04
+title: "MPLS L3VPN 応用 (PE-CE eBGP 化 + 同一 AS 顧客の収容 + 受信広告制御)"
+exam: ENARSI
+topics: [mpls, l3vpn, vpnv4, mp-bgp, vrf, ebgp, pe-ce, as-override, route-map, prefix-list]
+difficulty: 4
+topology: ad-hoc
+image_family: iol
+target_nodes: [RT01, RT02, RT03, RT04, RT05, RT06, RT07]
+points: 100
+
+# アドレス計画: ENARSI-MPLS-L3VPN-01/02 と同一。CE 機器管理 Loopback9 も 02 と同一:
+#   RT04=10.99.4.1/32 / RT05=10.99.5.1/32 / RT06=10.99.6.1/32 / RT07=10.99.7.1/32
+#   CE BGP (設定済): RT04=AS65101 / RT05=AS65102 / RT06=AS65200 / RT07=AS65200
+#   PE (受験者構成): AS 65000 の address-family ipv4 vrf で CE と eBGP
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # コア PE1-P   10.1.12.0/30
+    - { a: RT02, a_if: 1, b: RT03, b_if: 0 }   # コア P-PE2   10.1.23.0/30
+    - { a: RT01, a_if: 1, b: RT04, b_if: 0 }   # CUST_A site1 192.168.1.0/30
+    - { a: RT01, a_if: 2, b: RT06, b_if: 0 }   # CUST_B site1 192.168.11.0/30
+    - { a: RT03, a_if: 1, b: RT05, b_if: 0 }   # CUST_A site2 192.168.2.0/30
+    - { a: RT03, a_if: 2, b: RT07, b_if: 0 }   # CUST_B site2 192.168.12.0/30
+  positions:
+    RT04: [-450, -330]
+    RT06: [-450, -70]
+    RT01: [-230, -200]
+    RT02: [0, -200]
+    RT03: [230, -200]
+    RT05: [450, -330]
+    RT07: [450, -70]

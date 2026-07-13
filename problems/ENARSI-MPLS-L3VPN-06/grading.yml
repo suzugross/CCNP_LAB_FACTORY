@@ -1,0 +1,205 @@
+---
+# 採点基準 (ENARSI-MPLS-L3VPN-06)。収集=ssh(iol-xe)。
+# RT01=PE1 / RT02=P / RT03=PE2 / RT08=SVC-PE / RT09=SVC-CE / RT04-07=顧客CE。
+# 効果ベース: 既存サービス無影響 (04 完成形の維持: 172.16 E2E・as-override・10.99 遮断)
+# → SVCS VRF/PE-CE → 利用セグメント↔共有の E2E → SVCS の収容内容 (172.16 不在複合)
+# → 顧客間分離 (相互の 10.6x 不在複合) → additive の効果 (Extended Community 併記)
+# → 仕様遵守 (制約+進捗マーカ複合)。
+# 負の要件は単独採点しない (不在チェックは必ず存在チェックと複合)。
+problem: ENARSI-MPLS-L3VPN-06
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # === 環境保存: 04 完成形の維持 (28点) ===
+  - name: "CUST_A: 172.16 サイト間疎通維持 (RT04→site2)"
+    node: RT04
+    command: "ping 172.16.2.1 source 172.16.1.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 4
+
+  - name: "CUST_B: 172.16 サイト間疎通維持 (RT06→site2, 同一AS越し)"
+    node: RT06
+    command: "ping 172.16.2.9 source 172.16.1.9 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 4
+
+  - name: "CUST_B: as-override 収容の維持 (RT06 の受信 AS_PATH 65000 65000)"
+    node: RT06
+    command: "show ip bgp 172.16.2.0"
+    raw:
+      - regex: "65000 65000"
+    points: 4
+
+  - name: "PE1: VRF CUST_A 健全 (対向 LAN あり AND 10.99 なし)"
+    node: RT01
+    command: "show ip route vrf CUST_A bgp | begin Gateway"
+    raw:
+      - contains: "172.16.2.0"
+      - not_contains: "10.99."
+    points: 4
+
+  - name: "PE2: VRF CUST_B 健全 (対向 LAN あり AND 10.99 なし)"
+    node: RT03
+    command: "show ip route vrf CUST_B bgp | begin Gateway"
+    raw:
+      - contains: "172.16.1.0"
+      - not_contains: "10.99."
+    points: 4
+
+  - name: "PE1: 顧客分離維持 (VRF CUST_A に CUST_B の経路なし AND A 経路あり)"
+    node: RT01
+    command: "show bgp vpnv4 unicast vrf CUST_A | include 172.16|10.66"
+    raw:
+      - contains: "172.16.2.0"
+      - not_contains: "10.66."
+    points: 4
+
+  - name: "SVC-PE: コア VPNv4 セッション×2 維持 (焼き込み済)"
+    node: RT08
+    command: "show bgp vpnv4 unicast all summary | begin Neighbor"
+    raw:
+      - regex: "1\\.1\\.1\\.1\\s+4\\s+65000(\\s+\\d+){5}\\s+\\S+\\s+\\d+"
+      - regex: "3\\.3\\.3\\.3\\s+4\\s+65000(\\s+\\d+){5}\\s+\\S+\\s+\\d+"
+    points: 4
+
+  # === 判別: SVCS VRF と PE-CE (6点) ===
+  - name: "SVC-PE: VRF SVCS で SVC-CE(AS65300) と eBGP Established"
+    node: RT08
+    command: "show bgp vpnv4 unicast vrf SVCS neighbors 192.168.30.1 | include BGP state"
+    raw:
+      - contains: "Established"
+    points: 6
+
+  # === 判別: 利用セグメント → 共有サービスの E2E (20点) ===
+  - name: "RT04(A1): 利用セグメント発で共有サービスへ到達"
+    node: RT04
+    command: "ping 172.30.0.1 source 10.65.1.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 5
+
+  - name: "RT05(A2): 利用セグメント発で共有サービスへ到達"
+    node: RT05
+    command: "ping 172.30.0.1 source 10.65.2.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 5
+
+  - name: "RT06(B1): 利用セグメント発で共有サービスへ到達"
+    node: RT06
+    command: "ping 172.30.0.1 source 10.66.1.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 5
+
+  - name: "RT07(B2): 利用セグメント発で共有サービスへ到達"
+    node: RT07
+    command: "ping 172.30.0.1 source 10.66.2.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 5
+
+  # === 判別: 共有サービスからの戻り (監視) (6点) ===
+  - name: "RT09(SVC-CE): CUST_A の利用セグメントへ到達"
+    node: RT09
+    command: "ping 10.65.1.1 source 172.30.0.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 3
+
+  - name: "RT09(SVC-CE): CUST_B の利用セグメントへ到達"
+    node: RT09
+    command: "ping 10.66.2.1 source 172.30.0.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 3
+
+  # === 判別: SVCS の収容内容 (利用セグメント×4 あり AND 172.16 なし の複合) (8点) ===
+  - name: "SVC-PE: VRF SVCS に利用セグメント×4 のみ (172.16 の持ち込みなし)"
+    node: RT08
+    command: "show ip route vrf SVCS bgp | begin Gateway"
+    raw:
+      - contains: "10.65.1.0"
+      - contains: "10.65.2.0"
+      - contains: "10.66.1.0"
+      - contains: "10.66.2.0"
+      - not_contains: "172.16."
+      - not_contains: "10.99."
+    points: 8
+
+  # === 判別: additive の効果 = 利用セグメントが自顧客サイト間でも生きている (12点) ===
+  - name: "CUST_A: 利用セグメントのサイト間疎通 (RT04 10.65.1.1→10.65.2.1)"
+    node: RT04
+    command: "ping 10.65.2.1 source 10.65.1.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 6
+
+  - name: "CUST_B: 利用セグメントのサイト間疎通 (RT06 10.66.1.1→10.66.2.1)"
+    node: RT06
+    command: "ping 10.66.2.1 source 10.66.1.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 6
+
+  # === 判別: 顧客間分離 (共有あり AND 相互の 10.6x なし の複合) (10点) ===
+  - name: "PE1: VRF CUST_A = 共有 172.30 あり AND CUST_B の 10.66 なし"
+    node: RT01
+    command: "show ip route vrf CUST_A bgp | begin Gateway"
+    raw:
+      - contains: "172.30.0.0"
+      - not_contains: "10.66."
+    points: 5
+
+  - name: "PE2: VRF CUST_B = 共有 172.30 あり AND CUST_A の 10.65 なし"
+    node: RT03
+    command: "show ip route vrf CUST_B bgp | begin Gateway"
+    raw:
+      - contains: "172.30.0.0"
+      - not_contains: "10.65."
+    points: 5
+
+  # === 判別: RT 併記の config/制御プレーン指紋 (2点) ===
+  - name: "利用セグメントの VPNv4 経路に既定 RT と 301 が併記 (10.65.1.0)"
+    node: RT08
+    command: "show bgp vpnv4 unicast all 10.65.1.0 | include Extended"
+    raw:
+      - regex: "RT:65000:100 RT:65000:301"
+    points: 2
+
+  # === 仕様遵守 (制約 + 進捗マーカの複合) (8点) ===
+  - name: "PE1: 制約遵守 (static/再配布なし) AND import 300 + export map 適用"
+    node: RT01
+    command: "show running-config | include ip route vrf|redistribute|route-target import 65000:300|export map"
+    raw:
+      - not_contains: "ip route vrf"
+      - not_contains: "redistribute"
+      - contains: "route-target import 65000:300"
+      - contains: "export map"
+    points: 3
+
+  - name: "PE2: 制約遵守 AND import 300 + export map 適用"
+    node: RT03
+    command: "show running-config | include ip route vrf|redistribute|route-target import 65000:300|export map"
+    raw:
+      - not_contains: "ip route vrf"
+      - not_contains: "redistribute"
+      - contains: "route-target import 65000:300"
+      - contains: "export map"
+    points: 3
+
+  - name: "SVC-PE: 制約遵守 AND VRF SVCS (rd 65000:300 / export 300 / import 301)"
+    node: RT08
+    command: "show running-config | include ip route vrf|redistribute|rd 65000:300|route-target"
+    raw:
+      - not_contains: "ip route vrf"
+      - not_contains: "redistribute"
+      - contains: "rd 65000:300"
+      - contains: "route-target export 65000:300"
+      - contains: "route-target import 65000:301"
+    points: 2
