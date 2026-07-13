@@ -1,0 +1,83 @@
+# SDA-LISP-01 採点基準（100点・軽い最終疎通確認のみ）
+# 体験型ラボのため厳密グレーディングはしない（design.md §2.5）。
+# 収集は topologies/sda_ops.py grade（SSH・checks の記載順に実行）。
+# ★ping 系は repeat 10 で先頭の map-cache/ARP 未学習ドロップ(1-2発)を吸収し
+#   80% 以上を PASS とする。map-cache 確認は ping の後に置く（学習後に読む）。
+problem: SDA-LISP-01
+total_points: 100
+
+checks:
+  # ==== 第1部 LISP編 ====
+  - name: "L1: MSMR — SITE-A/SITE-B とも Map-Register 済み(Up=yes)"
+    node: MSMR
+    command: "show lisp site"
+    raw:
+      - regex: "SITE-A\\s+\\S+\\s+yes"
+      - regex: "SITE-B\\s+\\S+\\s+yes"
+    points: 15
+
+  - name: "L2: EID間疎通 XTR1→XTR2 (source Lo1・オーバーレイ)"
+    node: XTR1
+    command: "ping 172.16.2.1 source Loopback1 repeat 10"
+    raw:
+      - regex: "Success rate is (80|90|100) percent"
+    points: 10
+
+  - name: "L3: EID間疎通 XTR2→XTR1 (source Lo1)"
+    node: XTR2
+    command: "ping 172.16.1.1 source Loopback1 repeat 10"
+    raw:
+      - regex: "Success rate is (80|90|100) percent"
+    points: 10
+
+  - name: "L4: XTR1 map-cache — XTR2 の EID を map-reply で学習済み"
+    node: XTR1
+    command: "show lisp instance-id 0 ipv4 map-cache"
+    raw:
+      - regex: "172\\.16\\.2\\.0/24.+map-reply"
+      - contains: "10.255.0.3"
+    points: 10
+
+  - name: "L5: 外部到達 XTR1→EXT (PETR 経由)"
+    node: XTR1
+    command: "ping 198.51.100.1 source Loopback1 repeat 10"
+    raw:
+      - regex: "Success rate is (80|90|100) percent"
+    points: 10
+
+  - name: "L6: 外部→EID EXT→XTR1 (PITR 経由・戻り方向)"
+    node: EXT
+    command: "ping 172.16.1.1 source Loopback1 repeat 10"
+    raw:
+      - regex: "Success rate is (80|90|100) percent"
+    points: 15
+
+  # ==== 第2部 VXLAN編 ====
+  - name: "V1: LEAF1 — NVE ピアが Up かつ Control-Plane 学習"
+    node: LEAF1
+    command: "show nve peers"
+    raw:
+      - regex: "10\\.254\\.0\\.2\\s+Up\\s+CP"
+    points: 10
+
+  - name: "V2: LEAF1 — VNI 10100 が Up / CP モード"
+    node: LEAF1
+    command: "show nve vni"
+    raw:
+      - regex: "10100\\s+UnicastBGP\\s+Up\\s+CP"
+    points: 5
+
+  - name: "V3: VXLAN 越し疎通 H1→H2"
+    node: H1
+    command: "ping 172.16.100.12 repeat 10"
+    raw:
+      - regex: "Success rate is (80|90|100) percent"
+    points: 10
+
+  - name: "V4: LEAF1 — リモート MAC が BGP(EVPN Type-2) 産で学習済み"
+    node: LEAF1
+    command: "show l2route evpn mac all"
+    raw:
+      - regex: "100\\s+[0-9a-f.]+\\s+BGP"
+      - contains: "10.254.0.2"
+    points: 5

@@ -1,0 +1,933 @@
+lab:
+  title: POC-SDALISP
+  description: '{"ccnp_lease":{"p64":"UE9DLVNEQUxJU1A=","nodes":{"MSMR":"10.1.10.37","XTR1":"10.1.10.38","XTR2":"10.1.10.39","PXTR":"10.1.10.40","EXT":"10.1.10.41","LEAF1":"10.1.10.42","LEAF2":"10.1.10.43","H1":"10.1.10.44","H2":"10.1.10.45"}}}'
+  notes: |
+    PoC lab (Claude 2026-07-13): BL-054 SD-Access 再現可否 — LISP(iol-xe) + VXLAN(nxosv9300) 実機検証
+    - Tier1: Classic LISP ファブリック 5台 (MSMR/XTR1/XTR2/PXTR/EXT, iol-xe)。
+      day0 はアンダーレイ(OSPF+RLOC Lo0)のみ。LISP 設定は SSH ライブ投入で構文受理を実測するのが PoC 目的。
+    - Tier2A: EVPN-VXLAN 最小形 2台 (LEAF1/LEAF2, nxosv9300) + ホスト H1/H2 (iol-xe)。
+      VXLAN 設定は day0 焼き込み (EVPN 構成は既知構文)。iBGP EVPN + L2VNI 10100。
+    - アドレス: LISP コア 10.0.1-3.0/30, RLOC Lo0 10.255.0.1-4/32, EID 172.16.1-2.0/24(Lo1),
+      PXTR-EXT 192.168.100.0/30, 外部 198.51.100.0/24(EXT Lo1)。
+      VXLAN: leaf 間 10.0.99.0/30, Lo0 10.254.0.1-2/32, オーバーレイ 172.16.100.0/24 (H1=.11, H2=.12)。
+    - MGMT: MSMR=.37 XTR1=.38 XTR2=.39 PXTR=.40 EXT=.41 LEAF1=.42 LEAF2=.43 H1=.44 H2=.45 (10.1.10.0/26)
+  version: 0.3.0
+nodes:
+- id: MSMR
+  label: MSMR
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname MSMR
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface Ethernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.37 255.255.255.192
+     no shutdown
+    !
+    interface Loopback0
+     description RLOC
+     ip address 10.255.0.1 255.255.255.255
+    !
+    interface Ethernet0/0
+     description === to XTR1 ===
+     ip address 10.0.1.1 255.255.255.252
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to XTR2 ===
+     ip address 10.0.2.1 255.255.255.252
+     no shutdown
+    !
+    interface Ethernet0/2
+     description === to PXTR ===
+     ip address 10.0.3.1 255.255.255.252
+     no shutdown
+    !
+    router ospf 1
+     router-id 10.255.0.1
+     network 10.0.1.0 0.0.0.3 area 0
+     network 10.0.2.0 0.0.0.3 area 0
+     network 10.0.3.0 0.0.0.3 area 0
+     network 10.255.0.1 0.0.0.0 area 0
+    !
+    ip ssh version 2
+    !
+    event manager applet GEN-SSH-KEY authorization bypass
+     event timer countdown time 30
+     action 1.0 cli command "enable"
+     action 2.0 cli command "configure terminal"
+     action 3.0 cli command "crypto key generate rsa modulus 2048"
+     action 4.0 syslog msg "EEM GEN-SSH-KEY: RSA key generated"
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+     transport input ssh
+  x: 200
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: MSMR-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: MSMR-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+  - id: MSMR-i2
+    label: Ethernet0/2
+    type: physical
+    slot: 2
+  - id: MSMR-i3
+    label: Ethernet0/3
+    type: physical
+    slot: 3
+- id: XTR1
+  label: XTR1
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname XTR1
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface Ethernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.38 255.255.255.192
+     no shutdown
+    !
+    interface Loopback0
+     description RLOC
+     ip address 10.255.0.2 255.255.255.255
+    !
+    interface Loopback1
+     description EID site-A 172.16.1.0/24
+     ip address 172.16.1.1 255.255.255.0
+    !
+    interface Ethernet0/0
+     description === to MSMR ===
+     ip address 10.0.1.2 255.255.255.252
+     no shutdown
+    !
+    router ospf 1
+     router-id 10.255.0.2
+     network 10.0.1.0 0.0.0.3 area 0
+     network 10.255.0.2 0.0.0.0 area 0
+    !
+    ip ssh version 2
+    !
+    event manager applet GEN-SSH-KEY authorization bypass
+     event timer countdown time 30
+     action 1.0 cli command "enable"
+     action 2.0 cli command "configure terminal"
+     action 3.0 cli command "crypto key generate rsa modulus 2048"
+     action 4.0 syslog msg "EEM GEN-SSH-KEY: RSA key generated"
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+     transport input ssh
+  x: 0
+  y: -150
+  tags: [routers]
+  interfaces:
+  - id: XTR1-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: XTR1-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+  - id: XTR1-i2
+    label: Ethernet0/2
+    type: physical
+    slot: 2
+  - id: XTR1-i3
+    label: Ethernet0/3
+    type: physical
+    slot: 3
+- id: XTR2
+  label: XTR2
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname XTR2
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface Ethernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.39 255.255.255.192
+     no shutdown
+    !
+    interface Loopback0
+     description RLOC
+     ip address 10.255.0.3 255.255.255.255
+    !
+    interface Loopback1
+     description EID site-B 172.16.2.0/24
+     ip address 172.16.2.1 255.255.255.0
+    !
+    interface Ethernet0/0
+     description === to MSMR ===
+     ip address 10.0.2.2 255.255.255.252
+     no shutdown
+    !
+    router ospf 1
+     router-id 10.255.0.3
+     network 10.0.2.0 0.0.0.3 area 0
+     network 10.255.0.3 0.0.0.0 area 0
+    !
+    ip ssh version 2
+    !
+    event manager applet GEN-SSH-KEY authorization bypass
+     event timer countdown time 30
+     action 1.0 cli command "enable"
+     action 2.0 cli command "configure terminal"
+     action 3.0 cli command "crypto key generate rsa modulus 2048"
+     action 4.0 syslog msg "EEM GEN-SSH-KEY: RSA key generated"
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+     transport input ssh
+  x: 400
+  y: -150
+  tags: [routers]
+  interfaces:
+  - id: XTR2-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: XTR2-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+  - id: XTR2-i2
+    label: Ethernet0/2
+    type: physical
+    slot: 2
+  - id: XTR2-i3
+    label: Ethernet0/3
+    type: physical
+    slot: 3
+- id: PXTR
+  label: PXTR
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname PXTR
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface Ethernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.40 255.255.255.192
+     no shutdown
+    !
+    interface Loopback0
+     description RLOC
+     ip address 10.255.0.4 255.255.255.255
+    !
+    interface Ethernet0/0
+     description === to MSMR ===
+     ip address 10.0.3.2 255.255.255.252
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to EXT (non-LISP) ===
+     ip address 192.168.100.1 255.255.255.252
+     no shutdown
+    !
+    router ospf 1
+     router-id 10.255.0.4
+     network 10.0.3.0 0.0.0.3 area 0
+     network 10.255.0.4 0.0.0.0 area 0
+    !
+    ip route 198.51.100.0 255.255.255.0 192.168.100.2
+    !
+    ip ssh version 2
+    !
+    event manager applet GEN-SSH-KEY authorization bypass
+     event timer countdown time 30
+     action 1.0 cli command "enable"
+     action 2.0 cli command "configure terminal"
+     action 3.0 cli command "crypto key generate rsa modulus 2048"
+     action 4.0 syslog msg "EEM GEN-SSH-KEY: RSA key generated"
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+     transport input ssh
+  x: 200
+  y: 150
+  tags: [routers]
+  interfaces:
+  - id: PXTR-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: PXTR-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+  - id: PXTR-i2
+    label: Ethernet0/2
+    type: physical
+    slot: 2
+  - id: PXTR-i3
+    label: Ethernet0/3
+    type: physical
+    slot: 3
+- id: EXT
+  label: EXT
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname EXT
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface Ethernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.41 255.255.255.192
+     no shutdown
+    !
+    interface Loopback1
+     description non-LISP LAN 198.51.100.0/24
+     ip address 198.51.100.1 255.255.255.0
+    !
+    interface Ethernet0/0
+     description === to PXTR ===
+     ip address 192.168.100.2 255.255.255.252
+     no shutdown
+    !
+    ip route 0.0.0.0 0.0.0.0 192.168.100.1
+    !
+    ip ssh version 2
+    !
+    event manager applet GEN-SSH-KEY authorization bypass
+     event timer countdown time 30
+     action 1.0 cli command "enable"
+     action 2.0 cli command "configure terminal"
+     action 3.0 cli command "crypto key generate rsa modulus 2048"
+     action 4.0 syslog msg "EEM GEN-SSH-KEY: RSA key generated"
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+     transport input ssh
+  x: 200
+  y: 300
+  tags: [routers]
+  interfaces:
+  - id: EXT-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: EXT-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+  - id: EXT-i2
+    label: Ethernet0/2
+    type: physical
+    slot: 2
+  - id: EXT-i3
+    label: Ethernet0/3
+    type: physical
+    slot: 3
+- id: LEAF1
+  label: LEAF1
+  node_definition: nxosv9000
+  image_definition: nxosv9300-10-5-1-f
+  configuration: |
+    hostname LEAF1
+    # workaround for booting to loader> prompt
+    echo 'from cli import cli' > set_boot.py
+    echo 'import json' >> set_boot.py
+    echo 'import os' >> set_boot.py
+    echo 'import time' >> set_boot.py
+    echo 'bootimage = json.loads(cli("show version | json"))["nxos_file_name"]' >> set_boot.py
+    echo 'set_boot = cli("conf t ; boot nxos {} ; no event manager applet BOOTCONFIG".format(bootimage))' >> set_boot.py
+    echo 'i = 0' >> set_boot.py
+    echo 'while i < 10:' >> set_boot.py
+    echo '    try:' >> set_boot.py
+    echo '        save_config = cli("copy running-config startup-config")' >> set_boot.py
+    echo '        break' >> set_boot.py
+    echo '    except Exception:' >> set_boot.py
+    echo '        i += 1' >> set_boot.py
+    echo '        time.sleep(1)' >> set_boot.py
+    echo 'os.remove("/bootflash/set_boot.py")' >> set_boot.py
+    event manager applet BOOTCONFIG
+     event syslog pattern "Configured from vty"
+     action 1.0 cli python bootflash:set_boot.py
+    # minimum needed config to login
+    no password strength-check
+    username admin role network-admin
+    username admin password cisco role network-admin
+    username SUZUKI role network-admin
+    username SUZUKI password CCNP role network-admin
+    vrf context management
+    interface mgmt0
+      vrf member management
+      ip address 10.1.10.42/26
+      no shutdown
+    feature ospf
+    feature bgp
+    feature interface-vlan
+    feature vn-segment-vlan-based
+    feature nv overlay
+    nv overlay evpn
+    vlan 100
+      vn-segment 10100
+    interface loopback0
+      ip address 10.254.0.1/32
+    router ospf UNDERLAY
+      router-id 10.254.0.1
+    interface Ethernet1/1
+      no switchport
+      ip address 10.0.99.1/30
+      ip router ospf UNDERLAY area 0
+      no shutdown
+    interface loopback0
+      ip router ospf UNDERLAY area 0
+    router bgp 65100
+      router-id 10.254.0.1
+      neighbor 10.254.0.2
+        remote-as 65100
+        update-source loopback0
+        address-family l2vpn evpn
+          send-community
+          send-community extended
+    evpn
+      vni 10100 l2
+        rd auto
+        route-target import auto
+        route-target export auto
+    interface nve1
+      no shutdown
+      host-reachability protocol bgp
+      source-interface loopback0
+      member vni 10100
+        ingress-replication protocol bgp
+    interface Ethernet1/2
+      switchport
+      switchport access vlan 100
+      no shutdown
+  x: 700
+  y: 450
+  tags: [switches]
+  interfaces:
+  - id: LEAF1-i0
+    label: mgmt0
+    type: physical
+    slot: 0
+  - id: LEAF1-i1
+    label: Ethernet1/1
+    type: physical
+    slot: 1
+  - id: LEAF1-i2
+    label: Ethernet1/2
+    type: physical
+    slot: 2
+  - id: LEAF1-i3
+    label: Ethernet1/3
+    type: physical
+    slot: 3
+- id: LEAF2
+  label: LEAF2
+  node_definition: nxosv9000
+  image_definition: nxosv9300-10-5-1-f
+  configuration: |
+    hostname LEAF2
+    # workaround for booting to loader> prompt
+    echo 'from cli import cli' > set_boot.py
+    echo 'import json' >> set_boot.py
+    echo 'import os' >> set_boot.py
+    echo 'import time' >> set_boot.py
+    echo 'bootimage = json.loads(cli("show version | json"))["nxos_file_name"]' >> set_boot.py
+    echo 'set_boot = cli("conf t ; boot nxos {} ; no event manager applet BOOTCONFIG".format(bootimage))' >> set_boot.py
+    echo 'i = 0' >> set_boot.py
+    echo 'while i < 10:' >> set_boot.py
+    echo '    try:' >> set_boot.py
+    echo '        save_config = cli("copy running-config startup-config")' >> set_boot.py
+    echo '        break' >> set_boot.py
+    echo '    except Exception:' >> set_boot.py
+    echo '        i += 1' >> set_boot.py
+    echo '        time.sleep(1)' >> set_boot.py
+    echo 'os.remove("/bootflash/set_boot.py")' >> set_boot.py
+    event manager applet BOOTCONFIG
+     event syslog pattern "Configured from vty"
+     action 1.0 cli python bootflash:set_boot.py
+    # minimum needed config to login
+    no password strength-check
+    username admin role network-admin
+    username admin password cisco role network-admin
+    username SUZUKI role network-admin
+    username SUZUKI password CCNP role network-admin
+    vrf context management
+    interface mgmt0
+      vrf member management
+      ip address 10.1.10.43/26
+      no shutdown
+    feature ospf
+    feature bgp
+    feature interface-vlan
+    feature vn-segment-vlan-based
+    feature nv overlay
+    nv overlay evpn
+    vlan 100
+      vn-segment 10100
+    interface loopback0
+      ip address 10.254.0.2/32
+    router ospf UNDERLAY
+      router-id 10.254.0.2
+    interface Ethernet1/1
+      no switchport
+      ip address 10.0.99.2/30
+      ip router ospf UNDERLAY area 0
+      no shutdown
+    interface loopback0
+      ip router ospf UNDERLAY area 0
+    router bgp 65100
+      router-id 10.254.0.2
+      neighbor 10.254.0.1
+        remote-as 65100
+        update-source loopback0
+        address-family l2vpn evpn
+          send-community
+          send-community extended
+    evpn
+      vni 10100 l2
+        rd auto
+        route-target import auto
+        route-target export auto
+    interface nve1
+      no shutdown
+      host-reachability protocol bgp
+      source-interface loopback0
+      member vni 10100
+        ingress-replication protocol bgp
+    interface Ethernet1/2
+      switchport
+      switchport access vlan 100
+      no shutdown
+  x: 1100
+  y: 450
+  tags: [switches]
+  interfaces:
+  - id: LEAF2-i0
+    label: mgmt0
+    type: physical
+    slot: 0
+  - id: LEAF2-i1
+    label: Ethernet1/1
+    type: physical
+    slot: 1
+  - id: LEAF2-i2
+    label: Ethernet1/2
+    type: physical
+    slot: 2
+  - id: LEAF2-i3
+    label: Ethernet1/3
+    type: physical
+    slot: 3
+- id: H1
+  label: H1
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname H1
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface Ethernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.44 255.255.255.192
+     no shutdown
+    !
+    interface Ethernet0/0
+     description === host in VLAN100 / VNI10100 ===
+     ip address 172.16.100.11 255.255.255.0
+     no shutdown
+    !
+    ip ssh version 2
+    !
+    event manager applet GEN-SSH-KEY authorization bypass
+     event timer countdown time 30
+     action 1.0 cli command "enable"
+     action 2.0 cli command "configure terminal"
+     action 3.0 cli command "crypto key generate rsa modulus 2048"
+     action 4.0 syslog msg "EEM GEN-SSH-KEY: RSA key generated"
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+     transport input ssh
+  x: 500
+  y: 600
+  tags: [routers]
+  interfaces:
+  - id: H1-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: H1-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+  - id: H1-i2
+    label: Ethernet0/2
+    type: physical
+    slot: 2
+  - id: H1-i3
+    label: Ethernet0/3
+    type: physical
+    slot: 3
+- id: H2
+  label: H2
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname H2
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    vrf definition MGMT
+     rd 65001:1
+     address-family ipv4
+     exit-address-family
+    !
+    interface Ethernet0/3
+     description === MGMT (Ansible) ===
+     vrf forwarding MGMT
+     ip address 10.1.10.45 255.255.255.192
+     no shutdown
+    !
+    interface Ethernet0/0
+     description === host in VLAN100 / VNI10100 ===
+     ip address 172.16.100.12 255.255.255.0
+     no shutdown
+    !
+    ip ssh version 2
+    !
+    event manager applet GEN-SSH-KEY authorization bypass
+     event timer countdown time 30
+     action 1.0 cli command "enable"
+     action 2.0 cli command "configure terminal"
+     action 3.0 cli command "crypto key generate rsa modulus 2048"
+     action 4.0 syslog msg "EEM GEN-SSH-KEY: RSA key generated"
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+    line vty 0 4
+     exec-timeout 0 0
+     login local
+     transport input ssh
+  x: 1300
+  y: 600
+  tags: [routers]
+  interfaces:
+  - id: H2-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: H2-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+  - id: H2-i2
+    label: Ethernet0/2
+    type: physical
+    slot: 2
+  - id: H2-i3
+    label: Ethernet0/3
+    type: physical
+    slot: 3
+- id: MGMTSW
+  label: MGMT-SW
+  node_definition: unmanaged_switch
+  image_definition: null
+  configuration: ''
+  x: 700
+  y: -300
+  tags: []
+  interfaces:
+  - id: MGMTSW-i0
+    label: port0
+    type: physical
+    slot: 0
+  - id: MGMTSW-i1
+    label: port1
+    type: physical
+    slot: 1
+  - id: MGMTSW-i2
+    label: port2
+    type: physical
+    slot: 2
+  - id: MGMTSW-i3
+    label: port3
+    type: physical
+    slot: 3
+  - id: MGMTSW-i4
+    label: port4
+    type: physical
+    slot: 4
+  - id: MGMTSW-i5
+    label: port5
+    type: physical
+    slot: 5
+  - id: MGMTSW-i6
+    label: port6
+    type: physical
+    slot: 6
+  - id: MGMTSW-i7
+    label: port7
+    type: physical
+    slot: 7
+  - id: MGMTSW-i8
+    label: port8
+    type: physical
+    slot: 8
+  - id: MGMTSW-i9
+    label: port9
+    type: physical
+    slot: 9
+- id: EXTC
+  label: to-MGMT-net
+  node_definition: external_connector
+  image_definition: null
+  configuration: System Bridge
+  x: 950
+  y: -300
+  tags: []
+  interfaces:
+  - id: EXTC-i0
+    label: port
+    type: physical
+    slot: 0
+links:
+- id: l0
+  n1: MSMR
+  i1: MSMR-i0
+  n2: XTR1
+  i2: XTR1-i0
+  conditioning: {}
+  label: MSMR<->XTR1
+- id: l1
+  n1: MSMR
+  i1: MSMR-i1
+  n2: XTR2
+  i2: XTR2-i0
+  conditioning: {}
+  label: MSMR<->XTR2
+- id: l2
+  n1: MSMR
+  i1: MSMR-i2
+  n2: PXTR
+  i2: PXTR-i0
+  conditioning: {}
+  label: MSMR<->PXTR
+- id: l3
+  n1: PXTR
+  i1: PXTR-i1
+  n2: EXT
+  i2: EXT-i0
+  conditioning: {}
+  label: PXTR<->EXT
+- id: l4
+  n1: LEAF1
+  i1: LEAF1-i1
+  n2: LEAF2
+  i2: LEAF2-i1
+  conditioning: {}
+  label: LEAF1<->LEAF2
+- id: l5
+  n1: LEAF1
+  i1: LEAF1-i2
+  n2: H1
+  i2: H1-i0
+  conditioning: {}
+  label: LEAF1<->H1
+- id: l6
+  n1: LEAF2
+  i1: LEAF2-i2
+  n2: H2
+  i2: H2-i0
+  conditioning: {}
+  label: LEAF2<->H2
+- id: l7
+  n1: MSMR
+  i1: MSMR-i3
+  n2: MGMTSW
+  i2: MGMTSW-i0
+  conditioning: {}
+  label: MSMR-mgmt
+- id: l8
+  n1: XTR1
+  i1: XTR1-i3
+  n2: MGMTSW
+  i2: MGMTSW-i1
+  conditioning: {}
+  label: XTR1-mgmt
+- id: l9
+  n1: XTR2
+  i1: XTR2-i3
+  n2: MGMTSW
+  i2: MGMTSW-i2
+  conditioning: {}
+  label: XTR2-mgmt
+- id: l10
+  n1: PXTR
+  i1: PXTR-i3
+  n2: MGMTSW
+  i2: MGMTSW-i3
+  conditioning: {}
+  label: PXTR-mgmt
+- id: l11
+  n1: EXT
+  i1: EXT-i3
+  n2: MGMTSW
+  i2: MGMTSW-i4
+  conditioning: {}
+  label: EXT-mgmt
+- id: l12
+  n1: LEAF1
+  i1: LEAF1-i0
+  n2: MGMTSW
+  i2: MGMTSW-i5
+  conditioning: {}
+  label: LEAF1-mgmt
+- id: l13
+  n1: LEAF2
+  i1: LEAF2-i0
+  n2: MGMTSW
+  i2: MGMTSW-i6
+  conditioning: {}
+  label: LEAF2-mgmt
+- id: l14
+  n1: H1
+  i1: H1-i3
+  n2: MGMTSW
+  i2: MGMTSW-i7
+  conditioning: {}
+  label: H1-mgmt
+- id: l15
+  n1: H2
+  i1: H2-i3
+  n2: MGMTSW
+  i2: MGMTSW-i8
+  conditioning: {}
+  label: H2-mgmt
+- id: l16
+  n1: MGMTSW
+  i1: MGMTSW-i9
+  n2: EXTC
+  i2: EXTC-i0
+  conditioning: {}
+  label: mgmt-uplink
+annotations: []
+smart_annotations: []
