@@ -1,0 +1,15 @@
+! ENARSI-REDIST-BGP-LOOP-01 初期 RE : BGP AS65000 起点（192.168.51.0/24 を広告）
+! RE は純BGP。RC と直結リンク上で iBGP ピアを張るだけ（設定変更対象外）。
+interface Loopback0
+ ip address {{ params.p_net }}.1 255.255.255.0
+!
+interface {{ links[0] }}
+ ip address {{ params.seg_ec }}.1 255.255.255.252
+ no shutdown
+!
+router bgp 65000
+ bgp router-id {{ params.p_net }}.1
+ bgp log-neighbor-changes
+ network {{ params.p_net }}.0 mask 255.255.255.0
+ neighbor {{ params.seg_ec }}.2 remote-as 65000
+!

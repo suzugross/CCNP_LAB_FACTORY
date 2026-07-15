@@ -1,0 +1,53 @@
+# 問題 ENARSI-REDIST-BGP-LOOP-01 : 再配送リングによる経路ループ（難易度5）
+
+## 状況
+本社の顧客網 `{{ params.p_net }}.0/24` は **BGP AS 65000** の起点ルータ **RE** が広告している。
+社内は 3 つのルーティングドメインが数珠つなぎになっている。
+
+```
+  RE ──(BGP iBGP)── RC ──(EIGRP AS100)── RA
+                     │                     │
+                     └────(OSPF area0)──── RB
+```
+
+- **RC**: 起点 RE から `{{ params.p_net }}.0/24` を **iBGP** で受け取り、それを **EIGRP** へ再配送している。
+  さらに **OSPF** にも参加している。
+- **RA**: **EIGRP** で受け取った経路を **OSPF** へ再配送している（OSPF→EIGRP も再配送）。
+- **RB**: **OSPF** 内部（`PC4` 側サイト）。
+
+## トラブルチケット（代表症状）
+> `RB`（PC4 側）や `RC` から本社顧客網 **`{{ params.p_net }}.0/24` 宛が届かない**。
+> `traceroute {{ params.p_net }}.1` すると **RC → RB → RA → RC …** と同じ3台を**ぐるぐる回って**
+> TTL 超過で落ちる。他の宛先（各ルータの Loopback）は問題なく到達する。
+
+## ルータ / 役割 / Loopback
+| ルータ | 役割 | Loopback / 広告網 |
+|--------|------|-------------------|
+| RE | BGP 起点 | `{{ params.p_net }}.1/24`（`{{ params.p_net }}.0/24` を広告）|
+| RC | iBGP/EIGRP/OSPF 収容・BGP→EIGRP 再配送 | `{{ params.rc_lo }}/32` |
+| RA | EIGRP/OSPF 境界・EIGRP⇄OSPF 再配送 | `{{ params.ra_lo }}/32` |
+| RB | OSPF 内部 | `{{ params.rb_lo }}/32` |
+
+## 到達目標
+1. すべてのルータが全 Loopback へ**到達**できること（`{{ params.p_net }}.0/24` を含む）。
+2. **転送ループが無い**こと。特に `{{ params.p_net }}.0/24` 宛が起点 RE 方向へ正しく転送されること。
+3. ドメイン配置・再配送の設計（BGP→EIGRP→OSPF の各再配送）は**維持**すること。
+   再配送そのものを止めて回避するのは不可。
+
+## 制約
+- プロトコル配置（どのルータ・リンクが BGP / EIGRP / OSPF か）は変更不可。
+- 静的経路・デフォルトルートの追加による回避は不可。
+- RE・RA・RB は変更しないこと。設定するのは **RC** のみ。
+
+## 進め方のヒント（控えめ）
+RC で `show ip route {{ params.p_net }}.0` を見て、この経路の**学習元プロトコルと管理距離**を確認せよ。
+「起点 RE から本来 iBGP で受け取っているはずの経路」を、RC が**別プロトコル経由で優先していないか**。
+既定の管理距離（eBGP 20 / OSPF 110 / EIGRP内部 90・外部 170 / **iBGP 200**）の並びが手掛かり。
+※ 設定変更後に経路が変わらない時は、既存経路の再計算が要ることがある。
+
+## アクセス・採点
+SSH `SUZUKI / CCNP`（mgmt は割当順に 10.1.10.11〜）。
+```
+ansible-playbook playbooks/grade.yml -e problem=ENARSI-REDIST-BGP-LOOP-01 [-e variant=<name>] --vault-password-file <(printf 'CCNP\n')
+```
+採点は **効果ベース**（到達性・ループ不在・最短転送・再配送設計の維持）。手段は問わない。

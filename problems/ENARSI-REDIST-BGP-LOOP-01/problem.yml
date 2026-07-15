@@ -1,0 +1,27 @@
+# ENARSI-REDIST-BGP-LOOP-01 : 3ドメイン再配送リングによる定常ルーティングループ（Ping-t #28776 派生）
+# BGP AS65000 = {RE(起点), RC} / EIGRP AS100 = {RC, RA} / OSPF area0 = {RC, RA, RB}
+# RE が 192.168.51.0/24 を BGP 起点広告 → RC が iBGP(AD200)で学習 → RC が BGP→EIGRP 再配送
+#   → RA が EIGRP→OSPF 再配送 → RC が O E2(AD110)で学習。
+# 再配送が BGP→EIGRP→OSPF の「リング」を成すため、出自が一周して RC に戻る。戻り経路の AD(110)が
+# iBGP(200)より低いので RC はそれを優先し、RC→RB→RA→RC の定常転送ループになる（起点 RE に届かない）。
+# 是正: RC で BGP の AD を OSPF(110)未満に下げる(distance bgp)。★distance 変更は clear ip route * で反映。
+id: ENARSI-REDIST-BGP-LOOP-01
+title: "3ドメイン再配送リングの定常ループ（iBGP経路が戻り再配送に負ける・BGPのAD調整で解消）"
+exam: ENARSI
+topics: [redistribution, bgp, eigrp, ospf, administrative-distance, routing-loop, troubleshooting]
+difficulty: 5
+topology: ad-hoc
+access: ssh
+target_nodes: [RE, RC, RA, RB]
+points: 100
+lab:
+  links:
+    - { a: RE, a_if: 0, b: RC, b_if: 0 }   # BGP   RE-RC (iBGP over connected)
+    - { a: RC, a_if: 1, b: RA, b_if: 0 }   # EIGRP RC-RA
+    - { a: RC, a_if: 2, b: RB, b_if: 0 }   # OSPF  RC-RB
+    - { a: RA, a_if: 1, b: RB, b_if: 1 }   # OSPF  RA-RB
+  positions:
+    RE: [-760, -160]
+    RC: [-400, -160]
+    RA: [-40, -360]
+    RB: [-40, 40]

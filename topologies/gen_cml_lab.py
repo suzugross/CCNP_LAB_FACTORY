@@ -54,8 +54,9 @@ def iface(node, slot, label, itype="physical"):
 
 def layout(nodes_in, positions, data_links):
     """ノード座標を決める。problem.yml の lab.positions({node:[x,y]}) を最優先。
-    無いノードは fallback: 3台以下=横一列 / 木(辺=節-1)=BFS階層レイアウト /
-    それ以外=円形。※座標は純粋な見た目で、出題内容には一切影響しない。"""
+    無いノードは fallback: 3台以下=横一列 / **連結グラフ(木でも閉路ありでも)=BFS階層
+    レイアウト**(直径端点を根に左→右へ層・層内はバリセンタ順で交差低減=役割ベースの
+    横流れ配置) / 非連結のみ円形。※座標は純粋な見た目で、出題内容には一切影響しない。"""
     coords = {}
     rest = [n for n in nodes_in if n not in positions]
     for n, xy in positions.items():
@@ -64,32 +65,18 @@ def layout(nodes_in, positions, data_links):
     if not rest:
         return coords
     adj = {n: [] for n in rest}
-    edges = 0
     for lk in data_links:
         if lk["a"] in adj and lk["b"] in adj:
             adj[lk["a"]].append(lk["b"]); adj[lk["b"]].append(lk["a"])
-            edges += 1
     if len(rest) <= 3:
         x = -350
         for n in rest:
             coords[n] = (x, -200); x += 220
-    elif edges == len(rest) - 1 and all(adj[n] for n in rest):
-        # 木: 直径の端点を根に BFS 階層(左→右へ層、層内は縦に展開)。
-        # 端点根ならチェーンは直線・一般の木も自然な横流れになる。
-        def farthest(start):
-            seen, cur, last = {start}, [start], start
-            while cur:
-                nxt = []
-                for u in cur:
-                    for v in adj[u]:
-                        if v not in seen:
-                            seen.add(v); nxt.append(v)
-                if nxt:
-                    last = nxt[0]
-                cur = nxt
-            return last
-        root = farthest(farthest(rest[0]))
-        layers, seen, cur = [], {root}, [root]
+        return coords
+
+    # --- BFS 階層レイアウト（木/閉路を問わず連結グラフに適用） ---
+    def bfs_layers(start):
+        seen, cur, layers = {start}, [start], []
         while cur:
             layers.append(cur)
             nxt = []
@@ -98,15 +85,37 @@ def layout(nodes_in, positions, data_links):
                     if v not in seen:
                         seen.add(v); nxt.append(v)
             cur = nxt
-        for li, layer in enumerate(layers):
-            for i, n in enumerate(layer):
-                coords[n] = (-450 + li * 240,
-                             int(-200 + (i - (len(layer) - 1) / 2) * 170))
-    else:
+        return layers, seen
+
+    def farthest(start):
+        layers, _ = bfs_layers(start)
+        return layers[-1][0] if layers else start
+
+    root = farthest(farthest(rest[0]))       # 直径の端点(周辺ノード)を根に
+    layers, seen = bfs_layers(root)
+    if len(seen) != len(rest):
+        # 非連結: 従来どおり円形フォールバック
         r = max(260, int(110 * len(rest) / math.pi))
         for i, n in enumerate(rest):
             th = 2 * math.pi * i / len(rest) - math.pi / 2
             coords[n] = (int(r * math.cos(th)), int(r * math.sin(th)) - 120)
+        return coords
+
+    # 左→右へ層を並べ、層内は「前層で確定した隣接ノードの y 重心」順に並べて交差を減らす。
+    DX, DY, CY = 240, 170, -120
+    yset = {}
+    for li, layer in enumerate(layers):
+        if li == 0:
+            order = layer
+        else:
+            def bary(n):
+                ys = [yset[v] for v in adj[n] if v in yset]
+                return sum(ys) / len(ys) if ys else 0.0
+            order = sorted(layer, key=bary)
+        for i, n in enumerate(order):
+            y = int((i - (len(order) - 1) / 2) * DY)
+            yset[n] = y
+            coords[n] = (-450 + li * DX, y + CY)
     return coords
 
 

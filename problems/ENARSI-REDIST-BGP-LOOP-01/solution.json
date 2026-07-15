@@ -1,0 +1,13 @@
+{
+  "_comment": "模範解答: RC で BGP の管理距離を OSPF(110)未満に下げる(distance bgp 20 105 105)。RC は起点 RE から 192.168.51.0/24 を iBGP(AD200)で学習しているが、再配送リング(BGP→EIGRP→OSPF)を一周して戻った O E2(AD110)を優先してしまい、RC→RB→RA→RC の定常ループになっている。iBGP を 110 未満(105)にすると RC は起点 RE 方向(iBGP)を選び、ループが解消する。★distance 変更は既存経路に即時反映されないため clear ip route * が必要(solve では clear ステップを併投)。別解=distance ospf external 205 / EIGRP再配送時の経路タグ+OSPF側 distribute-list 遮断(いずれも結果ベース採点で合格)。",
+  "nodes": {},
+  "filters": [
+    {
+      "node": "RC",
+      "blocks": [
+        { "parents": "router bgp 65000", "lines": ["distance bgp 20 105 105"] }
+      ]
+    }
+  ],
+  "post_clear": ["RC"]
+}

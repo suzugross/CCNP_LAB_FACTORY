@@ -1,0 +1,69 @@
+# 自動生成 (gen_redist_loop_ts.py) GEN-REDISTLOOP-6601 variant=filter_ospf method=filter
+# 初期: 192.168.51.0/24 が RC → RB → RA → RC で定常ループ→ reachability/loop_free が 0。
+# 是正後: RC が iBGP(起点RE方向)を選び→全到達＋ループ消失。
+problem: GEN-REDISTLOOP-6601
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RE: 192.168.51.1
+    RC: '{{ params.rc_lo }}'
+    RA: '{{ params.ra_lo }}'
+    RB: '{{ params.rb_lo }}'
+  links:
+  - a: RE
+    a_ip: '{{ params.seg_ec }}.1'
+    b: RC
+    b_ip: '{{ params.seg_ec }}.2'
+  - a: RC
+    a_ip: '{{ params.seg_ca }}.1'
+    b: RA
+    b_ip: '{{ params.seg_ca }}.2'
+  - a: RC
+    a_ip: '{{ params.seg_cb }}.1'
+    b: RB
+    b_ip: '{{ params.seg_cb }}.2'
+  - a: RA
+    a_ip: '{{ params.seg_ab }}.1'
+    b: RB
+    b_ip: '{{ params.seg_ab }}.2'
+invariants:
+  - { type: reachability_all, name: "全ルータ間 Loopback 到達性(被害プレフィクスを含む)", points: 30 }
+  - { type: loop_free, name: "転送ループ無し(RC → RB → RA → RC の再配送リングループ解消)", points: 25 }
+  - type: optimal
+    name: "被害プレフィクスへの最短転送(震源 RC でループ・遠回りが無い)"
+    points: 15
+    pairs: [["RC", "RE"], ["RA", "RE"], ["RB", "RC"], ["RC", "RB"]]
+checks:
+  - name: "RC: 192.168.51.0/24 を BGP(iBGP)で学習(戻り経路でなく起点 RE 方向を選択＝ループ解消の核心)"
+    node: RC
+    command: "show ip route 192.168.51.0"
+    raw:
+      - { regex: 'Known via "bgp 65000"' }
+    points: 5
+  - name: "RE: OSPF/EIGRP側 Loopback({{ params.rb_lo }}) を BGP(B)で学習(戻り再配送 IGP→BGP が機能)"
+    node: RE
+    command: "show ip route bgp"
+    raw:
+      - { regex: "B\\s+{{ params.rb_lo }}" }
+    points: 10
+  - name: "RB: 192.168.51.0/24 を OSPF 外部(extern 2)で学習(再配送リングの OSPF 部が機能)"
+    node: RB
+    command: "show ip route 192.168.51.0"
+    raw:
+      - { regex: 'Known via "ospf' }
+      - { regex: "extern 2" }
+    points: 5
+  - name: "RC: 静的経路なし(暫定対処の残置禁止)"
+    node: RC
+    command: "show ip route static"
+    raw:
+      - { not_regex: "(?m)^S" }
+    points: 5
+  - name: "RC: 管理距離(distance)を変更していない(監査ポリシー遵守＝フィルタで解くこと)"
+    node: RC
+    command: "show running-config | include distance"
+    raw:
+      - { not_regex: "distance" }
+    points: 5
