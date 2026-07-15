@@ -1,0 +1,25 @@
+{
+  "_comment": "RT01 で as-path ACL(1-5) + 1本の inbound route-map RM_IN(各seqでmatch as-path→set属性) を組み、neighbor 10.1.12.2 route-map RM_IN in で適用。適用後は clear ip bgp * (in) で inbound 再処理が必要。条件は互いに素なので seq 順は不問。",
+  "nodes": {},
+  "post_clear_bgp": ["RT01"],
+  "filters": [
+    {
+      "node": "RT01",
+      "blocks": [
+        { "parents": null, "lines": [
+          "ip as-path access-list 1 permit _65210$",
+          "ip as-path access-list 2 permit _65220$",
+          "ip as-path access-list 3 permit _65230$",
+          "ip as-path access-list 4 permit _65240$",
+          "ip as-path access-list 5 permit _65250_",
+          "route-map RM_IN permit 100" ] },
+        { "parents": "route-map RM_IN permit 10", "lines": ["match as-path 1", "set local-preference 200"] },
+        { "parents": "route-map RM_IN permit 20", "lines": ["match as-path 2", "set weight 100"] },
+        { "parents": "route-map RM_IN permit 30", "lines": ["match as-path 3", "set local-preference 50"] },
+        { "parents": "route-map RM_IN permit 40", "lines": ["match as-path 4", "set community 65001:444"] },
+        { "parents": "route-map RM_IN permit 50", "lines": ["match as-path 5", "set as-path prepend 65001 65001"] },
+        { "parents": "router bgp 65001", "lines": ["neighbor 10.1.12.2 route-map RM_IN in"] }
+      ]
+    }
+  ]
+}

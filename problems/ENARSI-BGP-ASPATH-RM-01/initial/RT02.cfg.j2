@@ -1,0 +1,58 @@
+! ENARSI-BGP-ASPATH-RM-01 初期 RT02 (FEEDER, AS65099) — 変更禁止
+! battery を Null0+network で起源し、outbound route-map で as-path を作り分けて RT01 へ広告。
+!   RT01 が受信する AS_PATH = 65099 + (下記 prepend)。
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.1.12.2 255.255.255.252
+ no shutdown
+!
+ip route 172.16.1.0 255.255.255.0 Null0
+ip route 172.16.2.0 255.255.255.0 Null0
+ip route 172.16.3.0 255.255.255.0 Null0
+ip route 172.16.4.0 255.255.255.0 Null0
+ip route 172.16.5.0 255.255.255.0 Null0
+ip route 172.16.6.0 255.255.255.0 Null0
+ip route 172.16.7.0 255.255.255.0 Null0
+!
+ip prefix-list P1 permit 172.16.1.0/24
+ip prefix-list P2 permit 172.16.2.0/24
+ip prefix-list P3 permit 172.16.3.0/24
+ip prefix-list P4 permit 172.16.4.0/24
+ip prefix-list P5 permit 172.16.5.0/24
+ip prefix-list P7 permit 172.16.7.0/24
+!
+route-map SYNTH permit 10
+ match ip address prefix-list P1
+ set as-path prepend 65210
+route-map SYNTH permit 20
+ match ip address prefix-list P2
+ set as-path prepend 65220
+route-map SYNTH permit 30
+ match ip address prefix-list P3
+ set as-path prepend 65230
+route-map SYNTH permit 40
+ match ip address prefix-list P4
+ set as-path prepend 65240
+route-map SYNTH permit 50
+ match ip address prefix-list P5
+ set as-path prepend 65250 65260
+route-map SYNTH permit 60
+ match ip address prefix-list P7
+ set as-path prepend 65270
+route-map SYNTH permit 100
+!
+router bgp 65099
+ bgp router-id 2.2.2.2
+ bgp log-neighbor-changes
+ network 172.16.1.0 mask 255.255.255.0
+ network 172.16.2.0 mask 255.255.255.0
+ network 172.16.3.0 mask 255.255.255.0
+ network 172.16.4.0 mask 255.255.255.0
+ network 172.16.5.0 mask 255.255.255.0
+ network 172.16.6.0 mask 255.255.255.0
+ network 172.16.7.0 mask 255.255.255.0
+ neighbor 10.1.12.1 remote-as 65001
+ neighbor 10.1.12.1 route-map SYNTH out
+!

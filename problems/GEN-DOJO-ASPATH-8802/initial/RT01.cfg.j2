@@ -1,0 +1,50 @@
+! RT01 (TARGET) 初期構成 — as-path 道場
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+!
+interface Loopback1
+ description === eBGP peering source (to 65010) ===
+ ip address 203.0.113.101 255.255.255.255
+!
+interface Loopback2
+ description === eBGP peering source (to 65020) ===
+ ip address 203.0.113.102 255.255.255.255
+!
+interface Loopback3
+ description === eBGP peering source (to 65030) ===
+ ip address 203.0.113.103 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 (FEEDER) ===
+ ip address 10.1.12.1 255.255.255.252
+ no shutdown
+!
+ip route 203.0.113.201 255.255.255.255 10.1.12.2
+ip route 203.0.113.202 255.255.255.255 10.1.12.2
+ip route 203.0.113.203 255.255.255.255 10.1.12.2
+ip route 10.255.1.0 255.255.255.0 Null0
+ip route 10.255.2.0 255.255.255.0 Null0
+!
+router bgp 65001
+ bgp router-id 1.1.1.1
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.1.12.2 remote-as 65099
+ neighbor 203.0.113.201 remote-as 65010
+ neighbor 203.0.113.201 update-source Loopback1
+ neighbor 203.0.113.201 ebgp-multihop 2
+ neighbor 203.0.113.202 remote-as 65020
+ neighbor 203.0.113.202 update-source Loopback2
+ neighbor 203.0.113.202 ebgp-multihop 2
+ neighbor 203.0.113.203 remote-as 65030
+ neighbor 203.0.113.203 update-source Loopback3
+ neighbor 203.0.113.203 ebgp-multihop 2
+ address-family ipv4
+  neighbor 10.1.12.2 activate
+  neighbor 203.0.113.201 activate
+  neighbor 203.0.113.202 activate
+  neighbor 203.0.113.203 activate
+  network 10.255.1.0 mask 255.255.255.0
+  network 10.255.2.0 mask 255.255.255.0
+ exit-address-family
+!
