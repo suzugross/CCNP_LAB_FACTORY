@@ -74,6 +74,7 @@
 | ENARSI-BGP-POLICY-01 | 5 | bgp,path-control,community | 6 | ssh | base,bfd,s4242,s7777 |  |
 | ENARSI-BGP-PREFIX-01 | 3 | bgp,filter,prefix-list | 2 | ssh | base,bfd |  |
 | ENARSI-BGP-ROUTEMAP-01 | 4 | bgp,route-map,prefix-list | 3 | ssh |  |  |
+| ENARSI-BGP-SYNC-01 | 5 | bgp,synchronization,ibgp,transit | 5 | ssh |  | レガシー同期残骸×非BGP中継ブラックホールの2段TS(sync除去は要clear) |
 | ENARSI-BGP-WEIGHT-01 | 3 | bgp,attributes,weight | 3 | ssh | base,bfd |  |
 | ENARSI-DHCPV6-01 | 5 | ipv6,dhcpv6,slaac | 4 | ssh |  |  |
 | ENARSI-DMVPN-BGP-01 | 5 | dmvpn,mgre,nhrp | 5 | console |  | DMVPN+BGP再配送 |
@@ -206,6 +207,7 @@ provision は lab.sh(通常問題と同じ)。採点前にユーザの playbook 
 | `gen_redist_mutual_ts.py` | GEN-REDIST系 | 相互再配送TS | |
 | `gen_redist_ripospf_ts.py` | GEN-REDISTRO | RIP⇄OSPF 再配送ループTS(7故障) | ★seed_loop 以外は出題前に実機1サイクル推奨 |
 | `gen_redist_loop_ts.py` | GEN-REDISTLOOP | 再配送リング BGP ループTS | `--variant ad_ospf/ad_eigrp/filter_ospf`(3変種とも実機済。filter_ospf は distance 禁止→フィルタ解法強制) |
+| `gen_redist_mp_ts.py` | GEN-REDISTMP | 多点相互再配送 定常ループTS(Ping-t#26308・6台・AD無操作) | `--solution acl/prefix/routemap/distance`(要求解法を seed 抽選し監査ポリシーで強制。4モードとも実機フルサイクル済・出題時は新seed) |
 | `gen_chain_ts.py` | GEN-CHAIN | 12台レイヤ連鎖故障(17故障) | `--chain-depth 0/2/3/4`・fullmesh/branch×IGP軸 |
 | `gen_mpls_ts.py` | GEN-MPLSTS / GEN-MPLSEB | 12台 MPLS L3VPN TS | `--pece ebgp` で PE-CE eBGP 軸 |
 | `gen_l2_troubleshoot.py` | GEN-L2TS | EtherChannel 等 L2 TS | access=telnet |

@@ -1,0 +1,25 @@
+# ENARSI-BGP-SYNC-01 : トランジットAS疎通全断（レガシー BGP synchronization の残骸×非BGP中継ブラックホールの2段TS）
+# 初期: RT02/RT04(境界・2004年設定の使い回し)に synchronization が残存・RT03(コア更改済)は BGP 非参加。
+# 症状1= iBGP 経路が「not synchronized / no best path」で RIB 不搭載・eBGP へも非広告(AS間全断)。
+# 症状2= sync を外す(要 clear ip bgp *)と経路は流れるが、RT03 がデータプレーンでサイレントドロップ。
+# 真の修正= RT03 の iBGP 参加(full-mesh or RR)。★sync が何を守っていたかを故障として追体験する設計。
+id: ENARSI-BGP-SYNC-01
+title: "トランジットAS疎通全断（レガシー同期の残骸と BGP を喋らないコア）"
+exam: ENARSI
+topics: [bgp, synchronization, ibgp, full-mesh, transit, blackhole]
+difficulty: 5
+topology: ad-hoc
+target_nodes: [RT01, RT02, RT03, RT04, RT05]
+points: 100
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # eBGP 10.0.12.0/24 (AS65100-AS65000)
+    - { a: RT02, a_if: 1, b: RT03, b_if: 0 }   # OSPF core 10.0.23.0/24
+    - { a: RT03, a_if: 1, b: RT04, b_if: 0 }   # OSPF core 10.0.34.0/24
+    - { a: RT04, a_if: 1, b: RT05, b_if: 0 }   # eBGP 10.0.45.0/24 (AS65000-AS65200)
+  positions:
+    RT01: [-760, -160]
+    RT02: [-440, -160]
+    RT03: [-120, -160]
+    RT04: [200, -160]
+    RT05: [520, -160]

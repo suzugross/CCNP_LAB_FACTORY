@@ -1,0 +1,88 @@
+# ENARSI-BGP-SYNC-01 採点
+# 初期(故障): reachability_all=0(AS間全断)・RT02/RT04 に synchronization 残存・RT03 BGP 非参加
+#   → 期待ブロークンスコア = 10(loop_free のみ)。
+# 部分解1(sync除去+clearのみ): 経路は流れるが RT03 ブラックホール → reachability/RT03 が FAIL のまま。
+# 部分解2(RT03参加のみ): 境界の not synchronized が継続 → reachability/RT01/RT05 が FAIL のまま。
+# 完全解(sync除去×両境界 + clear + RT03 iBGP 参加) → 100。
+# ★sync 除去は config 変更だけではベストパス再計算されない(実機確認済)→ clear ip bgp * が必要。
+#   これは受験者の学習ポイントであり採点リトライでは救済されない(仕様)。
+problem: ENARSI-BGP-SYNC-01
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT01: 198.51.100.1
+    RT02: 2.2.2.2
+    RT03: 3.3.3.3
+    RT04: 4.4.4.4
+    RT05: 203.0.113.1
+  links:
+    - { a: RT01, a_ip: 10.0.12.1, b: RT02, b_ip: 10.0.12.2 }
+    - { a: RT02, a_ip: 10.0.23.2, b: RT03, b_ip: 10.0.23.3 }
+    - { a: RT03, a_ip: 10.0.34.3, b: RT04, b_ip: 10.0.34.4 }
+    - { a: RT04, a_ip: 10.0.45.4, b: RT05, b_ip: 10.0.45.5 }
+invariants:
+  # 顧客(RT01/RT05)→AS65000 内部 Loopback は BGP 非広告のため構造的に到達不能(トランジット
+  # 内部の非公開=正常)。到達性は「顧客間の相互」＋「AS65000 内部発の全ペア」に限定する。
+  # ★RT03 発の2ペア(→両顧客網)が非BGP中継ブラックホールの検出器(RIB ウォークは再帰 next-hop で
+  #   RT03 を素通りするため、RT03 自身の経路保持で代理検出する設計)。
+  - type: reachability_all
+    name: "到達性(顧客間相互＋AS65000 内部発の全ペア。両顧客網 198.51.100.0/24・203.0.113.0/24 を含む)"
+    points: 30
+    pairs:
+      - [RT01, RT05]
+      - [RT05, RT01]
+      - [RT02, RT01]
+      - [RT02, RT03]
+      - [RT02, RT04]
+      - [RT02, RT05]
+      - [RT03, RT01]
+      - [RT03, RT02]
+      - [RT03, RT04]
+      - [RT03, RT05]
+      - [RT04, RT01]
+      - [RT04, RT02]
+      - [RT04, RT03]
+      - [RT04, RT05]
+  - { type: loop_free, name: "転送ループ無し", points: 10 }
+checks:
+  - name: "RT02: レガシー synchronization の除去(＋静的/BGP再配布による回避なし・BGP 設計維持)"
+    node: RT02
+    command: "show running-config | include ^router bgp|^ synchronization|^ip route |redistribute bgp"
+    raw:
+      - { regex: "(?m)^router bgp 65000" }
+      - { not_regex: "(?m)^ synchronization" }
+      - { not_regex: "(?m)^ip route " }
+      - { not_regex: "redistribute bgp" }
+    points: 12
+  - name: "RT04: レガシー synchronization の除去(＋静的/BGP再配布による回避なし・BGP 設計維持)"
+    node: RT04
+    command: "show running-config | include ^router bgp|^ synchronization|^ip route |redistribute bgp"
+    raw:
+      - { regex: "(?m)^router bgp 65000" }
+      - { not_regex: "(?m)^ synchronization" }
+      - { not_regex: "(?m)^ip route " }
+      - { not_regex: "redistribute bgp" }
+    points: 12
+  - name: "RT03: BGP 参加(両顧客網を BGP(B) で学習=コアが宛先を知っている)"
+    node: RT03
+    command: "show ip route bgp"
+    raw:
+      - { regex: 'B +198\.51\.100\.0' }
+      - { regex: 'B +203\.0\.113\.0' }
+    points: 16
+  - name: "RT01(AS65100): 203.0.113.0/24 をトランジット AS65000 経由で学習(AS_PATH 65000 65200・best)"
+    node: RT01
+    command: "show ip bgp 203.0.113.0"
+    raw:
+      - { regex: "65000 65200" }
+      - { regex: "best" }
+    points: 10
+  - name: "RT05(AS65200): 198.51.100.0/24 をトランジット AS65000 経由で学習(AS_PATH 65000 65100・best)"
+    node: RT05
+    command: "show ip bgp 198.51.100.0"
+    raw:
+      - { regex: "65000 65100" }
+      - { regex: "best" }
+    points: 10

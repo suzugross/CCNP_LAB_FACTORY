@@ -1,0 +1,28 @@
+! ENARSI-BGP-SYNC-01 初期 RT04 : AS65000 東側境界。2004年設定の使い回し=synchronization 残存(故障1)。
+interface Loopback0
+ ip address 4.4.4.4 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT03 (OSPF core) ===
+ ip address 10.0.34.4 255.255.255.0
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT05 (eBGP) ===
+ ip address 10.0.45.4 255.255.255.0
+ no shutdown
+!
+router ospf 1
+ router-id 4.4.4.4
+ network 4.4.4.4 0.0.0.0 area 0
+ network 10.0.34.0 0.0.0.255 area 0
+!
+router bgp 65000
+ bgp router-id 4.4.4.4
+ bgp log-neighbor-changes
+ synchronization
+ neighbor 10.0.45.5 remote-as 65200
+ neighbor 2.2.2.2 remote-as 65000
+ neighbor 2.2.2.2 update-source Loopback0
+ neighbor 2.2.2.2 next-hop-self
+!

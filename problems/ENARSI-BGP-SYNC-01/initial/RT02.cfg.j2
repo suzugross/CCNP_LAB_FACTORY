@@ -1,0 +1,28 @@
+! ENARSI-BGP-SYNC-01 初期 RT02 : AS65000 西側境界。2004年設定の使い回し=synchronization 残存(故障1)。
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 (eBGP) ===
+ ip address 10.0.12.2 255.255.255.0
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (OSPF core) ===
+ ip address 10.0.23.2 255.255.255.0
+ no shutdown
+!
+router ospf 1
+ router-id 2.2.2.2
+ network 2.2.2.2 0.0.0.0 area 0
+ network 10.0.23.0 0.0.0.255 area 0
+!
+router bgp 65000
+ bgp router-id 2.2.2.2
+ bgp log-neighbor-changes
+ synchronization
+ neighbor 10.0.12.1 remote-as 65100
+ neighbor 4.4.4.4 remote-as 65000
+ neighbor 4.4.4.4 update-source Loopback0
+ neighbor 4.4.4.4 next-hop-self
+!

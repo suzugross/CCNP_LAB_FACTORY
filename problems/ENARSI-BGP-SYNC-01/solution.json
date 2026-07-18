@@ -1,0 +1,51 @@
+{
+  "_comment": "完全解=①RT02/RT04 の no synchronization ②RT03 の iBGP 参加(full-mesh・borders に neighbor 3.3.3.3 追加)。★適用後に RT02/RT04 で clear ip bgp * が必須(no synchronization は既存経路のベストパス再計算を誘発しない・実機確認済)。solve_generated.yml は exec 非対応のため clear は検証時に手動/コンソールで実行する。",
+  "nodes": {},
+  "post_clear_bgp": ["RT02", "RT04"],
+  "filters": [
+    {
+      "node": "RT03",
+      "blocks": [
+        {
+          "parents": "router bgp 65000",
+          "lines": [
+            "bgp router-id 3.3.3.3",
+            "bgp log-neighbor-changes",
+            "neighbor 2.2.2.2 remote-as 65000",
+            "neighbor 2.2.2.2 update-source Loopback0",
+            "neighbor 4.4.4.4 remote-as 65000",
+            "neighbor 4.4.4.4 update-source Loopback0"
+          ]
+        }
+      ]
+    },
+    {
+      "node": "RT02",
+      "blocks": [
+        {
+          "parents": "router bgp 65000",
+          "lines": [
+            "no synchronization",
+            "neighbor 3.3.3.3 remote-as 65000",
+            "neighbor 3.3.3.3 update-source Loopback0",
+            "neighbor 3.3.3.3 next-hop-self"
+          ]
+        }
+      ]
+    },
+    {
+      "node": "RT04",
+      "blocks": [
+        {
+          "parents": "router bgp 65000",
+          "lines": [
+            "no synchronization",
+            "neighbor 3.3.3.3 remote-as 65000",
+            "neighbor 3.3.3.3 update-source Loopback0",
+            "neighbor 3.3.3.3 next-hop-self"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,290 @@
+lab:
+  title: POC-BGPSYNC5
+  description: 'PoC BL-059 (console-only / MGMT lease not used)'
+  notes: |
+    PoC lab (Claude 2026-07-18): BL-059 BGP synchronization 実効性＋非BGP中継ブラックホール
+    - AS65100(RT01) -- AS65000(RT02-RT03-RT04・transit) -- AS65200(RT05)
+    - RT02/RT04 = 境界(iBGP over lo0・next-hop-self)・day0 で synchronization ON(移行残骸=Stage A)
+    - RT03 = コア(OSPF のみ・BGP 非参加)
+    - 外部prefix: RT01 Lo1 198.51.100.0/24 / RT05 Lo1 203.0.113.0/24 (BGP network)
+    - Stage A: sync 実効確認(not synchronized/RIB抑止/広告抑止)
+    - Stage B: no sync → RT03 でデータプレーンブラックホール
+    - Stage C: RT03 iBGP 参加(full-mesh 3セッション) → 完全復旧
+  version: 0.3.0
+nodes:
+- id: RT01
+  label: RT01
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT01
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Loopback1
+     description === AS65100 顧客網 ===
+     ip address 198.51.100.1 255.255.255.0
+    !
+    interface Ethernet0/0
+     description === to RT02 (eBGP) ===
+     ip address 10.0.12.1 255.255.255.0
+     no shutdown
+    !
+    router bgp 65100
+     bgp router-id 198.51.100.1
+     bgp log-neighbor-changes
+     network 198.51.100.0 mask 255.255.255.0
+     neighbor 10.0.12.2 remote-as 65000
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: -400
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: RT01-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+- id: RT02
+  label: RT02
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT02
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Loopback0
+     ip address 2.2.2.2 255.255.255.255
+    !
+    interface Ethernet0/0
+     description === to RT01 (eBGP) ===
+     ip address 10.0.12.2 255.255.255.0
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to RT03 (OSPF core) ===
+     ip address 10.0.23.2 255.255.255.0
+     no shutdown
+    !
+    router ospf 1
+     router-id 2.2.2.2
+     network 2.2.2.2 0.0.0.0 area 0
+     network 10.0.23.0 0.0.0.255 area 0
+    !
+    router bgp 65000
+     bgp router-id 2.2.2.2
+     bgp log-neighbor-changes
+     synchronization
+     neighbor 10.0.12.1 remote-as 65100
+     neighbor 4.4.4.4 remote-as 65000
+     neighbor 4.4.4.4 update-source Loopback0
+     neighbor 4.4.4.4 next-hop-self
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: -200
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: RT02-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RT02-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+- id: RT03
+  label: RT03
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT03
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Loopback0
+     ip address 3.3.3.3 255.255.255.255
+    !
+    interface Ethernet0/0
+     description === to RT02 (OSPF core) ===
+     ip address 10.0.23.3 255.255.255.0
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to RT04 (OSPF core) ===
+     ip address 10.0.34.3 255.255.255.0
+     no shutdown
+    !
+    router ospf 1
+     router-id 3.3.3.3
+     network 3.3.3.3 0.0.0.0 area 0
+     network 10.0.23.0 0.0.0.255 area 0
+     network 10.0.34.0 0.0.0.255 area 0
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 0
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: RT03-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RT03-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+- id: RT04
+  label: RT04
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT04
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Loopback0
+     ip address 4.4.4.4 255.255.255.255
+    !
+    interface Ethernet0/0
+     description === to RT03 (OSPF core) ===
+     ip address 10.0.34.4 255.255.255.0
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to RT05 (eBGP) ===
+     ip address 10.0.45.4 255.255.255.0
+     no shutdown
+    !
+    router ospf 1
+     router-id 4.4.4.4
+     network 4.4.4.4 0.0.0.0 area 0
+     network 10.0.34.0 0.0.0.255 area 0
+    !
+    router bgp 65000
+     bgp router-id 4.4.4.4
+     bgp log-neighbor-changes
+     synchronization
+     neighbor 10.0.45.5 remote-as 65200
+     neighbor 2.2.2.2 remote-as 65000
+     neighbor 2.2.2.2 update-source Loopback0
+     neighbor 2.2.2.2 next-hop-self
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 200
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: RT04-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RT04-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+- id: RT05
+  label: RT05
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT05
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Loopback1
+     description === AS65200 顧客網 ===
+     ip address 203.0.113.1 255.255.255.0
+    !
+    interface Ethernet0/0
+     description === to RT04 (eBGP) ===
+     ip address 10.0.45.5 255.255.255.0
+     no shutdown
+    !
+    router bgp 65200
+     bgp router-id 203.0.113.1
+     bgp log-neighbor-changes
+     network 203.0.113.0 mask 255.255.255.0
+     neighbor 10.0.45.4 remote-as 65000
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 400
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: RT05-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+links:
+- id: l0
+  n1: RT01
+  i1: RT01-i0
+  n2: RT02
+  i2: RT02-i0
+  conditioning: {}
+  label: RT01<->RT02
+- id: l1
+  n1: RT02
+  i1: RT02-i1
+  n2: RT03
+  i2: RT03-i0
+  conditioning: {}
+  label: RT02<->RT03
+- id: l2
+  n1: RT03
+  i1: RT03-i1
+  n2: RT04
+  i2: RT04-i0
+  conditioning: {}
+  label: RT03<->RT04
+- id: l3
+  n1: RT04
+  i1: RT04-i1
+  n2: RT05
+  i2: RT05-i0
+  conditioning: {}
+  label: RT04<->RT05
+annotations: []
+smart_annotations: []

@@ -1,0 +1,342 @@
+lab:
+  title: POC-REDIST26308
+  description: 'PoC BL-058 (console-only / MGMT lease not used)'
+  notes: |
+    PoC lab (Claude 2026-07-16): BL-058 多点相互再配送×seed metric 定常ループ (Ping-t #26308 忠実再現)
+    - OSPF: RA-RB(172.16.1.0/24) / RA-RC(172.16.2.0/24)
+    - EIGRP AS1: RB-RD(172.16.11.0/24) / RC-RD(172.16.12.0/24) / RD-RE(172.16.31.0/24) / RE-RF(172.16.41.0/24)
+    - RIPv2: RF Lo0 192.168.1.6/24
+    - RB/RC = OSPF⇄EIGRP 2点相互再配送(タグ/フィルタ無し=故障状態)
+    - RF = RIP→EIGRP 片方向再配送 (seed 1000000 1 255 1 1500)
+    - 期待: RIP発 192.168.1.0/24 が EIGRP→OSPF→EIGRP 一周で再注入され
+      RD が近い再注入点を D EX メトリック比較で誤選択 → 定常転送ループ
+    - コンソール収集のみ (MGMT VRF/リース不使用)
+  version: 0.3.0
+nodes:
+- id: RA
+  label: RA
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RA
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === to RB (OSPF) ===
+     ip address 172.16.1.1 255.255.255.0
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to RC (OSPF) ===
+     ip address 172.16.2.1 255.255.255.0
+     no shutdown
+    !
+    router ospf 1
+     network 172.16.1.0 0.0.0.255 area 0
+     network 172.16.2.0 0.0.0.255 area 0
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: -400
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: RA-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RA-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+- id: RB
+  label: RB
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RB
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === to RA (OSPF) ===
+     ip address 172.16.1.2 255.255.255.0
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to RD (EIGRP) ===
+     ip address 172.16.11.2 255.255.255.0
+     no shutdown
+    !
+    router eigrp 1
+     network 172.16.11.0 0.0.0.255
+     redistribute ospf 1 metric 1000000 1 255 1 1500
+    !
+    router ospf 1
+     redistribute eigrp 1 subnets
+     network 172.16.1.0 0.0.0.255 area 0
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: -200
+  y: -150
+  tags: [routers]
+  interfaces:
+  - id: RB-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RB-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+- id: RC
+  label: RC
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RC
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === to RA (OSPF) ===
+     ip address 172.16.2.3 255.255.255.0
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to RD (EIGRP) ===
+     ip address 172.16.12.3 255.255.255.0
+     no shutdown
+    !
+    router eigrp 1
+     network 172.16.12.0 0.0.0.255
+     redistribute ospf 1 metric 1000000 1 255 1 1500
+    !
+    router ospf 1
+     redistribute eigrp 1 subnets
+     network 172.16.2.0 0.0.0.255 area 0
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: -200
+  y: 150
+  tags: [routers]
+  interfaces:
+  - id: RC-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RC-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+- id: RD
+  label: RD
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RD
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === to RB (EIGRP) ===
+     ip address 172.16.11.4 255.255.255.0
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to RC (EIGRP) ===
+     ip address 172.16.12.4 255.255.255.0
+     no shutdown
+    !
+    interface Ethernet0/2
+     description === to RE (EIGRP) ===
+     ip address 172.16.31.4 255.255.255.0
+     no shutdown
+    !
+    router eigrp 1
+     network 172.16.11.0 0.0.0.255
+     network 172.16.12.0 0.0.0.255
+     network 172.16.31.0 0.0.0.255
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 0
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: RD-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RD-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+  - id: RD-i2
+    label: Ethernet0/2
+    type: physical
+    slot: 2
+- id: RE
+  label: RE
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RE
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === to RD (EIGRP) ===
+     ip address 172.16.31.5 255.255.255.0
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to RF (EIGRP) ===
+     ip address 172.16.41.5 255.255.255.0
+     no shutdown
+    !
+    router eigrp 1
+     network 172.16.31.0 0.0.0.255
+     network 172.16.41.0 0.0.0.255
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 200
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: RE-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RE-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+- id: RF
+  label: RF
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RF
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === to RE (EIGRP) ===
+     ip address 172.16.41.6 255.255.255.0
+     no shutdown
+    !
+    interface Loopback0
+     description === RIPv2 LAN 192.168.1.0/24 ===
+     ip address 192.168.1.6 255.255.255.0
+    !
+    router eigrp 1
+     network 172.16.41.0 0.0.0.255
+     redistribute rip metric 1000000 1 255 1 1500
+    !
+    router rip
+     version 2
+     no auto-summary
+     network 192.168.1.0
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 400
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: RF-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+links:
+- id: l0
+  n1: RA
+  i1: RA-i0
+  n2: RB
+  i2: RB-i0
+  conditioning: {}
+  label: RA<->RB
+- id: l1
+  n1: RA
+  i1: RA-i1
+  n2: RC
+  i2: RC-i0
+  conditioning: {}
+  label: RA<->RC
+- id: l2
+  n1: RB
+  i1: RB-i1
+  n2: RD
+  i2: RD-i0
+  conditioning: {}
+  label: RB<->RD
+- id: l3
+  n1: RC
+  i1: RC-i1
+  n2: RD
+  i2: RD-i1
+  conditioning: {}
+  label: RC<->RD
+- id: l4
+  n1: RD
+  i1: RD-i2
+  n2: RE
+  i2: RE-i0
+  conditioning: {}
+  label: RD<->RE
+- id: l5
+  n1: RE
+  i1: RE-i1
+  n2: RF
+  i2: RF-i0
+  conditioning: {}
+  label: RE<->RF
+annotations: []
+smart_annotations: []
