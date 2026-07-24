@@ -39,6 +39,13 @@ FGT_UNBUILD_IPSEC = [
     "config vpn ipsec phase2-interface", "delete TO-RBR-P2", "end",
     "config vpn ipsec phase1-interface", "delete TO-RBR", "end",
     "config firewall address", "delete BR-NET", "end",
+    # ★Phase 0 課題化(2026-07-23 ユーザ発案): port3(LAN兼管理)は据え付けず
+    #   受講者が console から自己設定して GUI の足場を作る。他 FGT ラボの残骸が
+    #   残ると Phase 0 が成立しないため、ここで確実に白紙化する(console 投入なので
+    #   管理断の心配なし)。
+    "config system interface",
+    "edit port3", "unset ip", "unset allowaccess", "unset alias", "unset role", "next",
+    "end",
 ]
 # FGT: 本問の据付基盤(WAN IP + デフォルトルート。受講者スコープは VPN のみ)
 FGT_BASE = [
@@ -95,7 +102,8 @@ def cmd_build(_):
     if "Valid" not in out:
         print("★★ 警告: License が Valid でない — 出題前に要復旧(README)")
     print("[build] 完了。受講者へ task.md を提示"
-          "(FGT: WAN/LAN 据付済み・GUI https://10.1.10.11 admin/CCNPccnp / "
+          "(FGT: WAN 据付済み・★LAN(port3)は未設定=Phase 0 で受講者が console から自己設定 / "
+          "GUI は Phase 0 完了後 https://10.1.10.11 admin/CCNPccnp / "
           "RBR: WAN/LAN 据付済み・console SUZUKI/CCNPccnp)")
 
 

@@ -167,7 +167,7 @@ build/grade/teardown を各 ops スクリプトのサブコマンドで行う。
 | UM2-BUILD-02 | 5 | vrf-lite,hsrp,track | 6 | `um2_ops.py` | ワンアームLB変種(build --variant onearm)。★01と同時起動不可 |
 | FGT-SDWAN-01 | 3 | sdwan,performance-sla,health-check | 1 | `sdwan_ops.py` | 共用ラボFGT-LAB。★fgt1 wipe禁止(eval ライセンス消失)。destroy なし(stop のみ) |
 | FGT-FW-BASIC-01 | 2 | firewall-policy,address-object,snat | 1 | `fgtbasic_ops.py` | 共用ラボFGT-LAB。同上の wipe/stop 制約 |
-| FGT-IPSEC-01 | 3 | ipsec,ikev2,svti | 2 | `fgtipsec_ops.py` | FGT×IOS interop。共用ラボFGT-LAB。同上 |
+| FGT-IPSEC-01 | 3 | ipsec,ikev2,svti | 2 | `fgtipsec_ops.py` | FGT×IOS interop。共用ラボFGT-LAB。同上。★Phase 0=管理IF(port3)自己設定から始まる(2026-07-23課題化・buildがport3を白紙化) |
 | FGT-REPLACE-01 | 4 | asa-config-reading,firewall-migration,security-level | 1 | `fgtreplace_ops.py` | ASA読替の卒業試験。共用ラボFGT-LAB。同上 |
 
 ## 自動化ラボ(lab/<ID>/ の作業コピーを VSCode で編集して解く)

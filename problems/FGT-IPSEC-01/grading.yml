@@ -5,6 +5,17 @@ problem: FGT-IPSEC-01
 total_points: 100
 
 checks:
+  # ---- Phase 0（管理IF 自己設定。2026-07-23 ユーザ発案で課題化） ----
+  - name: "S0: FGT port3 = LAN兼管理を自己設定（IP 10.1.10.11/24＋管理アクセス）"
+    node: fgt1
+    command: "show system interface port3"
+    stage: normal
+    raw:
+      - contains: "set ip 10.1.10.11 255.255.255.0"
+      - contains: "https"
+      - contains: "ping"
+    points: 6
+
   # ---- 機能試験（端末間・トンネル経由） ----
   - name: "G1: 本社 USER-PC → 支社 BR-SRV 疎通（VPN 経由）"
     node: pcA
@@ -12,7 +23,7 @@ checks:
     stage: normal
     raw:
       - regex: "(10|[89]) packets received"
-    points: 10
+    points: 8
 
   - name: "G2: 本社 USER-PC → 支社 BR-SRV HTTP 到達"
     node: pcA
@@ -39,7 +50,7 @@ checks:
       - contains: "addr: 203.0.113.2:500 -> 198.51.101.2:500"
       - regex: "IKE SA: .*established 1/1"
       - contains: "proposal: des-sha256"
-    points: 10
+    points: 8
 
   - name: "E2: FGT トンネル selectors up・実トラフィック通過"
     node: fgt1
@@ -58,7 +69,7 @@ checks:
       - contains: "READY"
       - contains: "Encr: DES"
       - contains: "DH Grp:14"
-    points: 10
+    points: 8
 
   - name: "E4: RBR IPsec SA で暗号化/復号が実際に走っている"
     node: RBR

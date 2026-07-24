@@ -72,7 +72,14 @@ UNBUILD = [
     "edit port1", "set ip 0.0.0.0 0.0.0.0", "unset allowaccess",
     "unset alias", "set role undefined", "next",
     "edit port2", "set ip 0.0.0.0 0.0.0.0", "unset allowaccess",
-    "unset alias", "set role undefined", "next", "end",
+    "unset alias", "set role undefined", "next",
+    # port3(LAN兼管理)は共用リセットで必ず標準据付に戻す(2026-07-23)。
+    # FGT-IPSEC-01 だけは自分の build でこの後に白紙化して Phase 0(管理IF自己設定)
+    # 課題にする。他ラボ(FW-BASIC/SDWAN等)は port3 据付前提のため、ここで復元する
+    # ことで IPSEC-01 出題後でも安全に build できる。
+    "edit port3", "set ip 10.1.10.11 255.255.255.0",
+    "set allowaccess ping https ssh http",
+    "set alias LAN-MGMT", "set role lan", "next", "end",
 ]
 
 INJECT = dict(bandwidth=10000, latency=250, jitter=10, loss=3.0)
