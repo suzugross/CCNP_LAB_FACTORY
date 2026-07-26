@@ -1,0 +1,25 @@
+! RT04 (AS 64848 / RR client)
+interface Loopback0
+ ip address 30.30.30.30 255.255.255.255
+!
+interface Loopback1
+ ip address 89.89.89.89 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.103.149.2 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network 30.30.30.30 0.0.0.0 area 0
+ network 10.103.149.0 0.0.0.3 area 0
+!
+router bgp 64848
+ bgp router-id 30.30.30.30
+ no bgp default ipv4-unicast
+ neighbor 50.50.50.50 remote-as 64848
+ neighbor 50.50.50.50 update-source Loopback0
+ address-family ipv4 unicast
+  neighbor 50.50.50.50 activate
+  network 89.89.89.89 mask 255.255.255.255
+ exit-address-family
+!

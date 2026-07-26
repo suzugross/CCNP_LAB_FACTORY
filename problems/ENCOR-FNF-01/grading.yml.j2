@@ -29,8 +29,23 @@ checks:
     command: "show flow exporter {{ params.exp_name }}"
     raw:
       - contains: "{{ params.collector_ip }}"
-      - contains: "{{ params.udp_port }}"
-    points: 15
+      - regex: '[Dd]estination [Pp]ort:\s+{{ params.udp_port }}'
+    points: 10
+
+  # 2026-07-25 採点強化 (BL-065): source / export-protocol も要件・採点対象に
+  - name: "RT02: エクスポータ {{ params.exp_name }} の source が {{ params.exp_source }}"
+    node: RT02
+    command: "show flow exporter {{ params.exp_name }}"
+    raw:
+      - regex: '[Ss]ource [Ii]nterface:\s+{{ params.exp_source }}'
+    points: 5
+
+  - name: "RT02: エクスポータ {{ params.exp_name }} の export-protocol が {{ params.exp_proto }}"
+    node: RT02
+    command: "show flow exporter {{ params.exp_name }}"
+    raw:
+      - regex: 'Export protocol:\s+{% if params.exp_proto == "ipfix" %}IPFIX{% else %}NetFlow Version 9{% endif %}'
+    points: 5
 
   - name: "RT02: フローモニタ {{ params.mon_name }} が {{ params.rec_name }} と {{ params.exp_name }} を束ねる"
     node: RT02
@@ -52,12 +67,14 @@ checks:
     command: "ping {{ params.rt03_lo }} source {{ params.rt01_lo }} repeat {{ 60 if params.sampler.enabled else 10 }}"
     raw:
       - regex: "Success rate is [1-9]"
-    points: 15
+    points: 10
 
-  - name: "RT02: フローモニタ cache に該当フロー(送信元{{ params.rt01_lo }}/宛先{{ params.rt03_lo }})が採取される"
+  # 2026-07-25 (BL-065): format table の同一行 regex に強化
+  # (contains 2連は逆向きフローでも偽陽性になる — gen_fnf_ts.py の実機検証で確認)
+  - name: "RT02: フローモニタ cache に順方向フロー(送信元{{ params.rt01_lo }}→宛先{{ params.rt03_lo }})が採取される"
     node: RT02
-    command: "show flow monitor {{ params.mon_name }} cache"
+    command: "show flow monitor {{ params.mon_name }} cache format table"
     raw:
-      - contains: "{{ params.rt01_lo }}"
-      - contains: "{{ params.rt03_lo }}"
+      # [^\n]* = 同一行内で介在列(v2 の TOS 等)を許容しつつ src→dst の順序を強制
+      - regex: '{{ params.rt01_lo | replace(".", "\\.") }}[^\n]*{{ params.rt03_lo | replace(".", "\\.") }}'
     points: 25

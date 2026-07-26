@@ -1,0 +1,61 @@
+# 問題 ENARSI-REDIST-POLICY-01 : 選択的再配送とポリシー制御（OSPF⇄EIGRP 2点境界）
+
+## シナリオ
+A社（本社・OSPF）は B社（拠点・EIGRP）を買収し、ネットワークを相互接続することになった。
+境界ルータは RT02・RT03 の2台（冗長構成）で、両ドメインにネイティブ参加済み。
+ドメイン内のルーティングはそれぞれ収束済みだが、ドメイン間はまだ経路交換していない。
+
+情報システム部は接続にあたり、**再配送ポリシー仕様書**を発行した。あなたの仕事は
+境界2台にこの仕様を正確に実装することである。
+
+## 構成（設定済み・変更不可）
+
+| ルータ | 役割 | Loopback0 |
+|--------|------|-----------|
+| RT01 | 本社 OSPF 内部（部門セグメント収容） | {{ params.rt01_lo }}/32 |
+| RT02 | 境界 (OSPF/EIGRP) | {{ params.rt02_lo }}/32 |
+| RT03 | 境界 (OSPF/EIGRP) | {{ params.rt03_lo }}/32 |
+| RT04 | 拠点 EIGRP 内部（部門セグメント収容） | {{ params.rt04_lo }}/32 |
+
+- OSPF area 0: RT01-RT02 ({{ params.seg12 }}.0/30) / RT01-RT03 ({{ params.seg13 }}.0/30) / RT02-RT03 ({{ params.seg23 }}.0/30)
+- EIGRP AS 100: RT02-RT04 ({{ params.seg24 }}.0/30) / RT03-RT04 ({{ params.seg34 }}.0/30)
+
+### 部門セグメント（Loopback /24 で模擬・変更不可）
+
+| 収容 | ネットワーク | 用途 |
+|------|--------------|------|
+| RT01 (Lo10) | {{ params.hq_srv }}.0/24 | 本社基幹サーバ |
+| RT01 (Lo20) | {{ params.hq_cli }}.0/24 | 本社クライアント |
+| RT01 (Lo99) | {{ params.hq_lab }}.0/24 | 本社検証セグメント |
+| RT04 (Lo10) | {{ params.br_srv }}.0/24 | 拠点サーバ |
+| RT04 (Lo20) | {{ params.br_cli }}.0/24 | 拠点クライアント |
+| RT04 (Lo99) | {{ params.br_lab }}.0/24 | 拠点検証セグメント |
+
+## 再配送ポリシー仕様書 — RT02・RT03 のみを設定して全項目を実装せよ
+
+1. **相互接続**: 両境界で OSPF⇄EIGRP を相互に再配送し、検証セグメントを除く
+   全ネットワーク（各 Loopback0 含む）がドメインを越えて相互到達できること。
+   境界が2点あるため、**経路がドメイン間を往復して再注入される事故が起きない**構成とすること。
+2. **検証セグメントの分離**: {{ params.hq_lab }}.0/24 と {{ params.br_lab }}.0/24 は
+   セキュリティ上の理由により**相手ドメインへ一切広告しない**こと
+   （自ドメイン内での利用は従来どおり）。
+3. **拠点サーバ網の経路タイプ**: {{ params.br_srv }}.0/24 は OSPF 側で
+   **Type-1 外部経路（E1）**として広告すること。その他の EIGRP 由来経路は既定の E2 のままとする。
+4. **本社基幹サーバ網の優遇メトリック**: EIGRP 側へのシードメトリックは
+   - {{ params.hq_srv }}.0/24 → `{{ params.seed_srv }}`
+   - その他の OSPF 由来経路 → `{{ params.seed_def }}`
+   （bandwidth[kbps] delay[10μs単位] reliability load MTU）と、プレフィックスで差を付けること。
+5. **出自タグ（監査要件)**: 相手ドメインへ広告する経路には出自の印として経路タグを付与すること。
+   - EIGRP 由来 → OSPF へ入れる経路: タグ **{{ params.tag_eigrp }}**
+   - OSPF 由来 → EIGRP へ入れる経路: タグ **{{ params.tag_ospf }}**
+6. **実装制約**: 再配送の選択・色付けは redistribute に適用する **route-map に集約**すること。
+   静的ルート・デフォルトルートによる代替、および distribute-list による代替は監査上不可。
+
+## 制約
+- 設定変更は **RT02・RT03 のみ**。RT01・RT04 は変更不可（show 系は使用可）。
+- 既存のネイティブなプロトコル設定（network 文など）は変更しないこと。
+
+## 採点
+```
+ansible-playbook playbooks/grade.yml -e problem=ENARSI-REDIST-POLICY-01 -e variant={{ variant | default('base') }} --vault-password-file <(printf 'CCNP\n')
+```

@@ -1,0 +1,40 @@
+! RT02 (AS 64848 / Route Reflector)
+interface Loopback0
+ ip address 50.50.50.50 255.255.255.255
+!
+interface Loopback1
+ ip address 15.15.15.15 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.159.183.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.206.152.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.103.149.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network 50.50.50.50 0.0.0.0 area 0
+ network 10.206.152.0 0.0.0.3 area 0
+!
+router bgp 64848
+ bgp router-id 50.50.50.50
+ no bgp default ipv4-unicast
+ neighbor 10.159.183.1 remote-as 65130
+ neighbor 1.1.1.1 remote-as 64848
+ neighbor 1.1.1.1 update-source Loopback0
+ neighbor 30.30.30.30 remote-as 64848
+ neighbor 30.30.30.30 update-source Loopback0
+ address-family ipv4 unicast
+  neighbor 10.159.183.1 activate
+  neighbor 1.1.1.1 activate
+  neighbor 1.1.1.1 next-hop-self
+  neighbor 30.30.30.30 activate
+  neighbor 30.30.30.30 next-hop-self
+  network 15.15.15.15 mask 255.255.255.255
+ exit-address-family
+!

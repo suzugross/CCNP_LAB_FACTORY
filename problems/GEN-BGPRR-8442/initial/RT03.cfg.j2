@@ -1,0 +1,26 @@
+! RT03 (AS 64848 / RR client)
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+!
+interface Loopback1
+ ip address 31.31.31.31 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.206.152.2 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network 1.1.1.1 0.0.0.0 area 0
+ network 10.206.152.0 0.0.0.3 area 0
+!
+router bgp 64848
+ bgp router-id 1.1.1.1
+ no bgp default ipv4-unicast
+ neighbor 50.50.50.50 remote-as 64848
+ neighbor 50.50.50.50 update-source Loopback0
+ ! legacy iBGP note - review later
+ address-family ipv4 unicast
+  neighbor 50.50.50.50 activate
+  network 31.31.31.31 mask 255.255.255.255
+ exit-address-family
+!

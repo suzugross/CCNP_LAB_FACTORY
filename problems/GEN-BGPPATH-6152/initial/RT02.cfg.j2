@@ -1,0 +1,25 @@
+! RT02 (AS 64902)
+interface Loopback0
+ ip address 55.55.55.55 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.232.17.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.127.14.1 255.255.255.252
+ no shutdown
+!
+router bgp 64902
+ bgp router-id 55.55.55.55
+ no bgp default ipv4-unicast
+ bgp bestpath compare-routerid
+ neighbor 10.232.17.1 remote-as 64881
+ neighbor 10.127.14.2 remote-as 64851
+ ! legacy policy note - review later
+ address-family ipv4 unicast
+  neighbor 10.232.17.1 activate
+  neighbor 10.127.14.2 activate
+  network 55.55.55.55 mask 255.255.255.255
+ exit-address-family
+!

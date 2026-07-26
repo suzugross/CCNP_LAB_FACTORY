@@ -49,7 +49,7 @@
 
 ## 何ができる / どんな問題が出せるか
 
-現在 **problems/ に 100 問超**（ENCOR 系 58・ENARSI 系 44・Ansible 自動化 5）。難易度は 1〜6 で、3〜4 が中心。加えて **生成器から無限にバリエーション**を作れます。
+現在 **problems/ に 165 問**（ENCOR 系 46・ENARSI 系 35・生成問題 GEN 系 67・Ansible 自動化 5・FortiGate 4・大型シナリオほか 8）。難易度は 1〜6 で、3〜4 が中心。加えて **生成器から無限にバリエーション**を作れます。出題可能な問題の正準台帳は [`problems/CATALOG.md`](problems/CATALOG.md)。
 
 ### ENCOR（350-401）系
 
@@ -65,6 +65,7 @@
 | **セキュリティ / L2** | 標準/拡張/名前付き ACL、VACL、SPAN / RSPAN、CoPP、エッジ機器ハードニング |
 | **可視化 / 運用** | Flexible NetFlow、EEM |
 | **QoS** | 分類・マーキング / ポリシング / 階層シェーピング + LLQ（効果を iperf3/ping で実測採点する体感シリーズ3問） |
+| **DHCP** | DHCPv4 一気通貫（プール配布 / MAC 固定割当 / リレー / DHCP-only ACL。採点は release/renew の実効確認込み） |
 | **その他** | LAG（EtherChannel）、IPv6 静的 / SLAAC、NAT/PAT 複合 |
 
 ### ENARSI（300-410）系
@@ -73,10 +74,26 @@
 |------|---------|
 | **BGP 属性 / 経路制御** | weight / local-preference / MED / community / AS-path / origin / next-hop-self |
 | **BGP フィルタ / 集約** | prefix-list、route-map、AS-path 正規表現、経路集約、ルートリフレクタ |
-| **BGP 複合** | 複数属性を組み合わせた総合ポリシー問題 |
-| **再配送** | 相互再配送、再配送ループの発生と抑止 |
-| **MPLS** | MPLS L3VPN 基礎構築（LDP / MP-BGP VPNv4 / VRF・マルチカスタマー） |
-| **オーバーレイ複合** | DMVPN + BGP 再配送 |
+| **BGP 複合 / 特殊** | 複数属性の総合ポリシー、IPv6 AF、レガシー synchronization 残骸×非BGP中継ブラックホールの2段TS |
+| **再配送** | 相互再配送、再配送ループの発生と抑止、3ドメインリング一周ループ（`distance bgp` 解法）、仕様書駆動の選択的再配送（遮断 / E1 / seed metric / 出自タグ / 監査） |
+| **MPLS** | MPLS L3VPN 6問（基礎構築 / マルチカスタマー / PE-CE eBGP + as-override / フルメッシュ×Hub&Spoke 組み分け / Extranet 共有サービス VRF） |
+| **オーバーレイ複合** | DMVPN + BGP 再配送、DMVPN + IPsec 完全版、GRE over IPsec（sVTI IKEv1/IKEv2・crypto map 版） |
+| **アドレッシング / セキュリティ** | DHCPv6（stateful/リレー）、uRPF anti-spoofing、VRF-Lite DN ビット |
+
+### 大型シナリオ / ファブリック
+
+| ID | 内容 |
+|----|------|
+| `CAMPUS-TS-01` | 12台・3層キャンパス（ASA 含む）の複数レイヤ連鎖トラブルシュート超大作 |
+| `SDA-LISP-01` | SD-Access の土台を素の LISP/VXLAN で組むガイド付き教育ラボ（9台・LISP編→VXLAN編） |
+| `EVPN-VXLAN-01` | EVPN-VXLAN ファブリック（IOL RR + NX-OS leaf×3・SDA-LISP-01 の続編） |
+| `UM2-BUILD-01/02` | 中規模企業網の総合構築。02 はワンアーム LB 変種（IP SLA トラッキング対比） |
+| `DMVPN-PHASE3-01` ほか | DMVPN 単体の構築問（Phase2 / Phase3） |
+| `NETAUTO-03-RESTCONF` | RESTCONF によるネットワーク自動化道場（cat8000v） |
+
+### FortiGate（マルチベンダ）
+
+FortiGate-VM（eval ライセンス）を Cisco 網に混ぜた4問: `FGT-SDWAN-01`（SD-WAN）/ `FGT-FW-BASIC-01`（FWポリシー基礎）/ `FGT-IPSEC-01`（Cisco との IPsec 相互接続・管理IF自己設定の Phase 0 付き）/ `FGT-REPLACE-01`（ASA 設定読替の卒業試験）。eval 制約（IF 3個・ポリシー3本・route 3本・DES 限定）を前提に設計。
 
 ### 生成問題（`GEN-*`）— seed で量産
 
@@ -88,11 +105,17 @@
 | BGP TS | `gen_bgp_troubleshoot.py` / `gen_bgp_pathts.py` / `gen_bgp_rrts.py` / `gen_bgp_complex_ts.py` | 到達性 / 経路選択 / RR 伝播 / 複合故障 |
 | IGP 複合 TS | `gen_eigrp_complex_ts.py` / `gen_ospf_complex_ts.py` / `gen_ospfv3_complex_ts.py` / `gen_eigrpv6_complex_ts.py` | EIGRP / OSPF / OSPFv3 / EIGRPv6 の複合故障 |
 | 再配送 TS | `gen_redist_mutual_ts.py` / `gen_redist_ripospf_ts.py` | 相互再配送 / RIP⇄OSPF 再配送ループ |
+| 再配送ループ TS | `gen_redist_loop_ts.py` / `gen_redist_mp_ts.py` | BGP→EIGRP→OSPF リングを出自が一周する定常ループ（3変種） / 多点相互再配送ループ（解法4モードを seed 抽選し監査ポリシーで強制） |
 | 連鎖故障 | `gen_chain_ts.py` | 12台規模でレイヤをまたぐ連鎖故障を生成 |
-| MPLS L3VPN TS | `gen_mpls_ts.py` | 12台 (3PE×Pリング×2顧客) の L3VPN に L1〜L5 の故障を注入 |
+| MPLS L3VPN TS | `gen_mpls_ts.py` | 12台 (3PE×Pリング×2顧客) の L3VPN に L1〜L5 の故障を注入。`--pece ebgp` 軸で PE-CE eBGP 化 |
 | L2 TS | `gen_l2_troubleshoot.py` | EtherChannel など L2 の故障 |
+| DMVPN TS | `gen_dmvpn_ts.py` | DMVPN + IPsec に14種の故障を注入 |
+| DHCP TS | `gen_dhcp_ts.py` | DHCPv4（配布/リレー/ACL）に8故障×3レイヤを注入 |
+| FNF TS | `gen_fnf_ts.py` | 仕様書突き合わせ型 Flexible NetFlow TS（10故障4レイヤ・`--faults` で複合化） |
 | セキュリティ TS | `gen_urpf_ts.py` | uRPF anti-spoofing の故障（strict過剰/ACL例外誤り/未設定/loose過緩の4種・非対称ルーティング題材） |
-| サーバ / 監視 | `gen_dnsdhcp_*.py` / `gen_radius_build.py` / `gen_snmpv3_ts.py` / `gen_zbx*`(SNMP/Zabbix) | Linux サーバ（BIND/DHCP/FreeRADIUS）構築・TS、SNMPv3/Zabbix 監視 |
+| フィルタ道場 | `gen_list_dojo.py` | prefix-list / AS-path / ACL の基本形ドリル3部作（`acl_model.py` = ACL 意味評価器で採点） |
+| S2S VPN 設計構築 | `gen_s2svpn.py` | 要件書形式・技術選定自由の設計構築問。`--day2` で運用チケット3本（支店追加/split化/重複NAT）を追加出題 |
+| サーバ / 監視 | `gen_dnsdhcp_*.py` / `gen_radius_build.py` / `gen_snmpv3_ts.py` / `zbx_setup.py` | Linux サーバ（BIND/DHCP/FreeRADIUS）構築・TS、SNMPv3/Zabbix 監視 |
 
 ### Ansible 自動化ラボ（`ANSIBLE-01〜05`）
 
@@ -195,9 +218,14 @@ CCNP01/
 │   ├── gen_cml_lab.py           # problem.yml → CML ラボ YAML
 │   ├── grade.py + netmodel.py   # 採点エンジン（Genie 構造化 / 大域不変条件）
 │   ├── mgmt_alloc.py            # 管理IPリース台帳（複数ラボ同時稼働の調停）
-│   ├── gen_*.py                 # 各種生成器
+│   ├── gen_*.py                 # 各種生成器（34本）
+│   ├── *_ops.py                 # 大型シナリオの構築/運用ヘルパ（campus/sda/evpn/um2/fgt*/sdwan/s2svpn）
 │   └── _generated/<ID>/         # build で出る中間物（mgmt_map / lab.yaml / 描画済 task.md 等・gitignore）
 ├── problems/<ID>/               # 問題パック（自己完結）
+│   ├── CATALOG.md               # 出題可問題の正準台帳（実機検証済のみ掲載）
+│   └── _drafts/                 # 未着手課題の詳細設計メモ（BACKLOG.md からリンク）
+├── poc/<テーマ>/                # 作問前の PoC 置き場（実機検証ログ・試行スクリプト）
+├── um2/                         # UM2 シリーズの設計書・構成図
 ├── scripts/lab.sh               # 出題/片付けラッパ
 └── lab/<ID>/                    # provision が作る使い捨て作業コピー（gitignore）
 ```

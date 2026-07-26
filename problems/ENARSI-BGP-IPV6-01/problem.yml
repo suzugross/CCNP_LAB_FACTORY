@@ -1,0 +1,28 @@
+---
+id: ENARSI-BGP-IPV6-01
+title: "デュアルスタック BGP のトラブルシュート（IPv6 アドレスファミリ）"
+exam: ENARSI
+topics: [bgp, ipv6, address-family, dual-stack, troubleshooting]
+difficulty: 4
+topology: ad-hoc
+access: ssh
+target_nodes: [RT01, RT02, RT03]
+points: 100
+
+# === トポロジ配線 =============================================
+# RT01(AS65001) --eBGP-- RT02(AS65002) --eBGP-- RT03(AS65003) の3ASチェーン。
+# 各リンクは dual-stack (IPv4 /30 + IPv6 /64)。各ルータの Loopback0 を
+# IPv4(/32) と IPv6(/128) の両方で BGP 広告する(MP-BGP 書式)。
+#
+# ★初期状態=IPv6 側に3故障を注入(IPv4 は完全健全=切り分けの罠):
+#   F1: RT02 の IPv6 AF で RT01(2001:DB8:12::1) の activate 欠落
+#       → RT01 の IPv6 セッションが上がらず(capability 不一致で Idle)
+#   F2: RT03 の IPv6 AF で Loopback0 の network 文欠落
+#       → RT03 の v6 Lo(2001:DB8:3::3) が広告されない
+#   F3: RT03 で ipv6 unicast-routing 欠落
+#       → RT03 が v6 を転送できない(戻りトラフィック不成立)
+# 受験者は RT01〜RT03 を是正し、v4/v6 とも全 Loopback 相互到達にする。
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # 10.1.12.0/30 + 2001:DB8:12::/64
+    - { a: RT02, a_if: 1, b: RT03, b_if: 0 }   # 10.1.23.0/30 + 2001:DB8:23::/64

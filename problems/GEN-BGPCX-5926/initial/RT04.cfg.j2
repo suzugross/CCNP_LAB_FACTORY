@@ -1,0 +1,39 @@
+! RT04 (role=bw, AS=65001) 初期構成
+interface Loopback0
+ ip address 10.0.48.48 255.255.255.255
+ ip ospf 1 area 0
+!
+interface {{ links[0] }}
+ ip address 10.197.197.2 255.255.255.252
+ ip ospf 1 area 0
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.196.196.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.128.128.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 10.0.48.48
+!
+router bgp 65001
+ bgp router-id 10.0.48.48
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.0.6.6 remote-as 65001
+ neighbor 10.0.6.6 update-source Loopback0
+ neighbor 10.196.196.2 remote-as 65100
+ neighbor 10.128.128.2 remote-as 65300
+ address-family ipv4 unicast
+  neighbor 10.0.6.6 activate
+  neighbor 10.0.6.6 send-community
+  neighbor 10.0.6.6 next-hop-self
+  neighbor 10.196.196.2 activate
+  neighbor 10.128.128.2 activate
+  neighbor 10.128.128.2 default-originate
+  aggregate-address 172.31.0.0 255.255.252.0 summary-only
+ exit-address-family
+!

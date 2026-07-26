@@ -1,0 +1,59 @@
+! GEN-CHAIN-3661 初期 (RT09) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 97.97.97.97 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT06 ===
+ ip address 10.11.65.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT08 ===
+ ip address 172.30.136.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT07 ===
+ ip address 172.30.107.14 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 97.97.97.97
+ network 97.97.97.97 0.0.0.0 area 0
+ network 10.11.65.0 0.0.0.3 area 0
+!
+router eigrp 65100
+ network 172.30.136.0 0.0.0.3
+ network 172.30.107.12 0.0.0.3
+ redistribute bgp 65001 route-map RM-B2E
+ default-metric 100000 100 255 1 1500
+ no auto-summary
+!
+ip prefix-list PL-EAST seq 5 permit 172.21.0.0/24
+ip prefix-list PL-EAST seq 10 permit 172.21.1.0/24
+ip prefix-list PL-EAST seq 15 permit 71.71.71.71/32
+route-map RM-E2B deny 5
+ match tag 65001
+route-map RM-E2B permit 10
+ match ip address prefix-list PL-EAST
+ set community 65001:200
+route-map RM-B2E permit 10
+ set tag 65001
+!
+router bgp 65001
+ bgp router-id 97.97.97.97
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 22.22.22.22 remote-as 65001
+ neighbor 22.22.22.22 update-source Loopback0
+ neighbor 7.7.7.7 remote-as 65001
+ neighbor 7.7.7.7 update-source Loopback0
+ address-family ipv4
+  neighbor 22.22.22.22 activate
+  neighbor 22.22.22.22 send-community
+  neighbor 7.7.7.7 activate
+  neighbor 7.7.7.7 send-community
+  redistribute eigrp 65100 route-map RM-E2B
+  bgp redistribute-internal
+ exit-address-family
+!

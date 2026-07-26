@@ -1,0 +1,93 @@
+# ENARSI-REDIST-POLICY-01 採点（軸1 大域グレーダ + ポリシー実装の効果/監査）。値は params で可変。
+# シードメトリック期待値の導出（IOL Ethernet: BW10000kbps/DLY1000us・classic metric）:
+#   srv: 256*(10^7/10000 + (1000+1000)/10) = 256*1200  = 307200
+#   def: 256*(10^7/1000  + (1000+1000)/10) = 256*10200 = 2611200
+problem: ENARSI-REDIST-POLICY-01
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks: { RT01: {{ params.rt01_lo }}, RT02: {{ params.rt02_lo }}, RT03: {{ params.rt03_lo }}, RT04: {{ params.rt04_lo }} }
+  links:
+    - { a: RT01, a_ip: {{ params.seg12 }}.1, b: RT02, b_ip: {{ params.seg12 }}.2 }
+    - { a: RT01, a_ip: {{ params.seg13 }}.1, b: RT03, b_ip: {{ params.seg13 }}.2 }
+    - { a: RT02, a_ip: {{ params.seg23 }}.1, b: RT03, b_ip: {{ params.seg23 }}.2 }
+    - { a: RT02, a_ip: {{ params.seg24 }}.1, b: RT04, b_ip: {{ params.seg24 }}.2 }
+    - { a: RT03, a_ip: {{ params.seg34 }}.1, b: RT04, b_ip: {{ params.seg34 }}.2 }
+invariants:
+  - { type: reachability_all, name: "全ルータ間 Loopback0 到達性（双方向再配送が機能）", points: 15 }
+  - { type: loop_free, name: "転送ループ不在（2点境界の再注入事故なし）", points: 10 }
+checks:
+  - name: "RT01: 拠点サーバ網 {{ params.br_srv }}.0/24 が O E1 かつ出自タグ {{ params.tag_eigrp }}（仕様3+5）"
+    node: RT01
+    command: "show ip route {{ params.br_srv }}.0"
+    raw:
+      - { regex: "Known via \"ospf" }
+      - { regex: "Tag {{ params.tag_eigrp }}, type extern 1" }
+    points: 10
+  - name: "RT01: 選択的再配送（{{ params.br_cli }}.0/24 は O E2 で学習・検証網 {{ params.br_lab }}.0/24 は不在）（仕様1+2+3）"
+    node: RT01
+    command: "show ip route ospf"
+    raw:
+      - { regex: "O E2\\s+{{ params.br_cli }}.0" }
+      - { not_regex: '{{ params.br_lab | replace(".", "\.") }}\.0' }
+    points: 10
+  - name: "RT04: 選択的再配送（本社サーバ/クライアント網を D EX で学習・検証網 {{ params.hq_lab }}.0/24 は不在）（仕様1+2）"
+    node: RT04
+    command: "show ip route eigrp"
+    raw:
+      - { regex: "D EX\\s+{{ params.hq_srv }}.0" }
+      - { regex: "D EX\\s+{{ params.hq_cli }}.0" }
+      - { not_regex: '{{ params.hq_lab | replace(".", "\.") }}\.0' }
+    points: 10
+  - name: "RT04: 本社基幹サーバ網 {{ params.hq_srv }}.0/24 が優遇シードメトリック(307200)かつ出自タグ {{ params.tag_ospf }}（仕様4+5）"
+    node: RT04
+    command: "show ip route {{ params.hq_srv }}.0"
+    raw:
+      - { regex: "Known via \"eigrp" }
+      - { regex: "metric 307200" }
+      - { regex: "Route tag {{ params.tag_ospf }}" }
+    points: 10
+  - name: "RT04: その他の OSPF 由来経路 {{ params.hq_cli }}.0/24 は既定シードメトリック(2611200)（仕様4のプレフィックス差別化）"
+    node: RT04
+    command: "show ip route {{ params.hq_cli }}.0"
+    raw:
+      - { regex: "Known via \"eigrp" }
+      - { regex: "metric 2611200" }
+    points: 10
+  - name: "RT01: 本社サーバ網発 → 拠点サーバ網への end-to-end 到達"
+    node: RT01
+    command: "ping {{ params.br_srv }}.1 source Loopback10 repeat 5"
+    raw:
+      - { regex: "Success rate is [1-9]" }
+    points: 5
+  - name: "RT04: 拠点サーバ網発 → 本社基幹サーバ網への end-to-end 到達"
+    node: RT04
+    command: "ping {{ params.hq_srv }}.1 source Loopback10 repeat 5"
+    raw:
+      - { regex: "Success rate is [1-9]" }
+    points: 5
+  - name: "RT02: 実装監査（route-map 集約・双方向タグ付与・静的/distribute-list 代替なし）（仕様6）"
+    node: RT02
+    command: "show running-config | include redistribute |distribute-list|^ip route |set tag|match tag"
+    raw:
+      - { regex: "redistribute eigrp 100 (subnets )?route-map \\S+" }
+      - { regex: "redistribute ospf 1 .*route-map \\S+" }
+      - { regex: "set tag {{ params.tag_eigrp }}\\b" }
+      - { regex: "set tag {{ params.tag_ospf }}\\b" }
+      - { regex: "match tag" }
+      - { not_regex: "distribute-list" }
+      - { not_regex: "(?m)^ip route " }
+    points: 8
+  - name: "RT03: 実装監査（route-map 集約・双方向タグ付与・静的/distribute-list 代替なし）（仕様6）"
+    node: RT03
+    command: "show running-config | include redistribute |distribute-list|^ip route |set tag|match tag"
+    raw:
+      - { regex: "redistribute eigrp 100 (subnets )?route-map \\S+" }
+      - { regex: "redistribute ospf 1 .*route-map \\S+" }
+      - { regex: "set tag {{ params.tag_eigrp }}\\b" }
+      - { regex: "set tag {{ params.tag_ospf }}\\b" }
+      - { regex: "match tag" }
+      - { not_regex: "distribute-list" }
+      - { not_regex: "(?m)^ip route " }
+    points: 7

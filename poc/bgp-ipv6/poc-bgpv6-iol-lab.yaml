@@ -1,0 +1,202 @@
+lab:
+  title: POC-BGPV6
+  description: 'PoC BL-002 (console-only) dual-stack BGP IPv6 AF'
+  notes: |
+    PoC lab (Claude 2026-07-24): BL-002 IPv6 AF BGP の挙動固め
+    - 3台 eBGP チェーン: RT1(AS65001) - RT2(AS65002) - RT3(AS65003)
+    - dual-stack: 各リンク v4(/30)+v6(/64)、Lo0 を v4(/32)+v6(/128) で BGP 広告
+    - MP-BGP 書式(no bgp default ipv4-unicast + AF 別 activate)
+    - 確認事項: 健全時 v4/v6 両方の経路交換 / v6 AF activate 忘れ / v6 next-hop 表示
+    - console 収集のみ(poc/redist-mp-loop/poc_console.py 流用)
+  version: 0.3.0
+nodes:
+- id: RT1
+  label: RT1
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT1
+    !
+    ip domain name ccnp.local
+    ipv6 unicast-routing
+    ip cef
+    ipv6 cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Loopback0
+     ip address 1.1.1.1 255.255.255.255
+     ipv6 address 2001:DB8:1::1/128
+    !
+    interface Ethernet0/0
+     description === to RT2 ===
+     ip address 10.12.12.1 255.255.255.252
+     ipv6 address 2001:DB8:12::1/64
+     no shutdown
+    !
+    router bgp 65001
+     bgp router-id 1.1.1.1
+     bgp log-neighbor-changes
+     no bgp default ipv4-unicast
+     neighbor 10.12.12.2 remote-as 65002
+     neighbor 2001:DB8:12::2 remote-as 65002
+     address-family ipv4 unicast
+      network 1.1.1.1 mask 255.255.255.255
+      neighbor 10.12.12.2 activate
+     exit-address-family
+     address-family ipv6 unicast
+      network 2001:DB8:1::1/128
+      neighbor 2001:DB8:12::2 activate
+     exit-address-family
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: -300
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: RT1-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+- id: RT2
+  label: RT2
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT2
+    !
+    ip domain name ccnp.local
+    ipv6 unicast-routing
+    ip cef
+    ipv6 cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Loopback0
+     ip address 2.2.2.2 255.255.255.255
+     ipv6 address 2001:DB8:2::2/128
+    !
+    interface Ethernet0/0
+     description === to RT1 ===
+     ip address 10.12.12.2 255.255.255.252
+     ipv6 address 2001:DB8:12::2/64
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to RT3 ===
+     ip address 10.23.23.2 255.255.255.252
+     ipv6 address 2001:DB8:23::2/64
+     no shutdown
+    !
+    router bgp 65002
+     bgp router-id 2.2.2.2
+     bgp log-neighbor-changes
+     no bgp default ipv4-unicast
+     neighbor 10.12.12.1 remote-as 65001
+     neighbor 10.23.23.3 remote-as 65003
+     neighbor 2001:DB8:12::1 remote-as 65001
+     neighbor 2001:DB8:23::3 remote-as 65003
+     address-family ipv4 unicast
+      network 2.2.2.2 mask 255.255.255.255
+      neighbor 10.12.12.1 activate
+      neighbor 10.23.23.3 activate
+     exit-address-family
+     address-family ipv6 unicast
+      network 2001:DB8:2::2/128
+      neighbor 2001:DB8:12::1 activate
+      neighbor 2001:DB8:23::3 activate
+     exit-address-family
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 0
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: RT2-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RT2-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+- id: RT3
+  label: RT3
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT3
+    !
+    ip domain name ccnp.local
+    ipv6 unicast-routing
+    ip cef
+    ipv6 cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Loopback0
+     ip address 3.3.3.3 255.255.255.255
+     ipv6 address 2001:DB8:3::3/128
+    !
+    interface Ethernet0/0
+     description === to RT2 ===
+     ip address 10.23.23.3 255.255.255.252
+     ipv6 address 2001:DB8:23::3/64
+     no shutdown
+    !
+    router bgp 65003
+     bgp router-id 3.3.3.3
+     bgp log-neighbor-changes
+     no bgp default ipv4-unicast
+     neighbor 10.23.23.2 remote-as 65002
+     neighbor 2001:DB8:23::2 remote-as 65002
+     address-family ipv4 unicast
+      network 3.3.3.3 mask 255.255.255.255
+      neighbor 10.23.23.2 activate
+     exit-address-family
+     address-family ipv6 unicast
+      network 2001:DB8:3::3/128
+      neighbor 2001:DB8:23::2 activate
+     exit-address-family
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 300
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: RT3-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+links:
+- id: l0
+  n1: RT1
+  i1: RT1-i0
+  n2: RT2
+  i2: RT2-i0
+  conditioning: {}
+  label: RT1<->RT2
+- id: l1
+  n1: RT2
+  i1: RT2-i1
+  n2: RT3
+  i2: RT3-i0
+  conditioning: {}
+  label: RT2<->RT3
+annotations: []
+smart_annotations: []

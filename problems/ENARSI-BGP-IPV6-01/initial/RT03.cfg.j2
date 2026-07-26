@@ -1,0 +1,30 @@
+! ENARSI-BGP-IPV6-01 initial (RT03, AS65003) : dual-stack edge
+! links[0] = to RT02 (eBGP AS65002)
+! F3: ipv6 unicast-routing is intentionally MISSING (this line absent) -> RT03 cannot forward v6.
+! F2: IPv6 AF network for Loopback0 (2001:DB8:3::3/128) is intentionally MISSING -> v6 Lo not advertised.
+ip cef
+!
+interface Loopback0
+ ip address 3.3.3.3 255.255.255.255
+ ipv6 address 2001:DB8:3::3/128
+!
+interface {{ links[0] }}
+ description to RT02 eBGP AS65002
+ ip address 10.1.23.1 255.255.255.252
+ ipv6 address 2001:DB8:23::3/64
+ no shutdown
+!
+router bgp 65003
+ bgp router-id 3.3.3.3
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.1.23.2 remote-as 65002
+ neighbor 2001:DB8:23::2 remote-as 65002
+ address-family ipv4 unicast
+  network 3.3.3.3 mask 255.255.255.255
+  neighbor 10.1.23.2 activate
+ exit-address-family
+ address-family ipv6 unicast
+  neighbor 2001:DB8:23::2 activate
+ exit-address-family
+!

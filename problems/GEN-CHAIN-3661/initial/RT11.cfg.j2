@@ -1,0 +1,23 @@
+! GEN-CHAIN-3661 初期 (RT11) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 68.68.68.68 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT10 ===
+ ip address 10.102.13.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT01 ===
+ ip address 10.211.122.1 255.255.255.252
+ ip ospf authentication message-digest
+ ip ospf message-digest-key 1 md5 CHAIN
+ no shutdown
+!
+router ospf 1
+ router-id 68.68.68.68
+ area 1 stub
+ network 68.68.68.68 0.0.0.0 area 1
+ network 10.102.13.0 0.0.0.3 area 1
+ network 10.211.122.0 0.0.0.3 area 1
+!

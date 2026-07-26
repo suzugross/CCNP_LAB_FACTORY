@@ -1,0 +1,146 @@
+---
+# ENCOR-DHCP-01 採点基準 (BL-066)。全て raw 判定。
+# ★チェック順序が仕様: 先頭の release/renew (0点) で ACL 越しの再取得を発火し、
+#   後段の実 IP チェックまでの経過時間で DORA を収束させる（順序を変えないこと）。
+# ★CL1 の 10.0.20.50 は release/renew の後に判定 = 「ACL 適用状態で初回取得(DISCOVER,
+#   送信元 0.0.0.0)が通る」ことの実効証明を兼ねる。
+problem: ENCOR-DHCP-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "(発火) CL1: release dhcp"
+    node: CL1
+    command: "release dhcp Ethernet0/0"
+    raw:
+      - regex: ".*"
+    points: 0
+
+  - name: "(発火) CL1: renew dhcp"
+    node: CL1
+    command: "renew dhcp Ethernet0/0"
+    raw:
+      - regex: ".*"
+    points: 0
+
+  # ★CL2 には release/renew を撃たない: 毎試行の連打が DORA と採点タイミングで競合し
+  #   偽 FAIL する(実機で 10 試行不収束を確認)。ACL 越し再取得の実効証明は CL1 で担保。
+  - name: "RT01: プール NET10 (LOCAL: network/GW/DNS)"
+    node: RT01
+    command: "show running-config | section ip dhcp pool NET10"
+    raw:
+      - regex: 'network 10\.0\.10\.0 255\.255\.255\.0'
+      - regex: 'default-router 10\.0\.10\.1'
+      - regex: 'dns-server 198\.51\.100\.53'
+    points: 10
+
+  - name: "RT01: プール NET20/NET30 (リモート2面: network/GW)"
+    node: RT01
+    command: "show running-config | section ip dhcp pool NET(20|30)"
+    raw:
+      - regex: 'network 10\.0\.20\.0 255\.255\.255\.0'
+      - regex: 'default-router 10\.0\.20\.1'
+      - regex: 'network 10\.0\.30\.0 255\.255\.255\.0'
+      - regex: 'default-router 10\.0\.30\.1'
+    points: 5
+
+  - name: "RT01: excluded-address (.1-.9 を3セグメントとも配布禁止)"
+    node: RT01
+    command: "show running-config | include ip dhcp excluded-address"
+    raw:
+      - regex: 'excluded-address 10\.0\.10\.1 10\.0\.10\.9'
+      - regex: 'excluded-address 10\.0\.20\.1 10\.0\.20\.9'
+      - regex: 'excluded-address 10\.0\.30\.1 10\.0\.30\.9'
+    points: 5
+
+  - name: "RT02: E0/1 (segment A) に helper 10.0.12.1"
+    node: RT02
+    command: "show running-config interface Ethernet0/1"
+    raw:
+      - regex: 'ip helper-address 10\.0\.12\.1'
+    points: 5
+
+  - name: "RT02: E0/2 (segment B) に helper 10.0.12.1"
+    node: RT02
+    command: "show running-config interface Ethernet0/2"
+    raw:
+      - regex: 'ip helper-address 10\.0\.12\.1'
+    points: 5
+
+  - name: "RT02: ACL DHCP-ONLY が E0/1 の in に適用"
+    node: RT02
+    command: "show ip interface Ethernet0/1"
+    raw:
+      - regex: 'Inbound\s+access list is DHCP-ONLY'
+    points: 5
+
+  - name: "RT02: ACL DHCP-ONLY が E0/2 の in に適用"
+    node: RT02
+    command: "show ip interface Ethernet0/2"
+    raw:
+      - regex: 'Inbound\s+access list is DHCP-ONLY'
+    points: 5
+
+  - name: "RT02: ACL DHCP-ONLY の中身 (DHCP と ICMP を許可)"
+    node: RT02
+    command: "show access-lists DHCP-ONLY"
+    raw:
+      - regex: 'permit udp .*(bootps|eq 67)'
+      - regex: 'permit icmp'
+    points: 5
+
+  - name: "効果: CL3 が LOCAL プールから取得 (excluded .1-.9 を回避)"
+    node: CL3
+    command: "show ip interface Ethernet0/0 | include Internet"
+    raw:
+      - regex: 'Internet address is 10\.0\.10\.\d+/24'
+      - not_regex: 'Internet address is 10\.0\.10\.[1-9]/'
+    points: 10
+
+  - name: "★効果: CL1 が ACL 越しの再取得で固定 10.0.20.50 を得る"
+    node: CL1
+    command: "show ip interface Ethernet0/0 | include Internet"
+    raw:
+      - regex: 'Internet address is 10\.0\.20\.50/24'
+    points: 15
+
+  - name: "RT01: 10.0.20.50 のバインディングが Manual"
+    node: RT01
+    command: "show ip dhcp binding"
+    raw:
+      - regex: '10\.0\.20\.50[^\n]*Manual'
+    points: 10
+
+  - name: "効果: CL2 が segment B プールから取得 (excluded 回避)"
+    node: CL2
+    command: "show ip interface Ethernet0/0 | include Internet"
+    raw:
+      - regex: 'Internet address is 10\.0\.30\.\d+/24'
+      - not_regex: 'Internet address is 10\.0\.30\.[1-9]/'
+    points: 10
+
+  - name: "効果: ACL 越し ICMP + DHCP 配布 GW でセグメント間疎通 (CL2→10.0.10.1)"
+    node: CL2
+    command: "ping 10.0.10.1 repeat 5"
+    raw:
+      - regex: "Success rate is [1-9]"
+    points: 5
+
+  # ★負の要件は telnet の出力文字列では採点できない: IP無し(no route)でも ACL deny でも
+  #   同じ "% Destination unreachable" が出る(フレッシュ0点発射で偽陽性を実測)。
+  #   → uRPF 問のイディオム踏襲: 明示 deny のヒットカウンタで遮断実績を採点。
+  - name: "(発火) CL2→RT01 への非許可通信の試行 (telnet)"
+    node: CL2
+    command: "telnet 10.0.12.1"
+    raw:
+      - regex: ".*"
+    points: 0
+
+  - name: "効果: 非許可通信は遮断 (DHCP-ONLY の明示 deny がヒット)"
+    node: RT02
+    command: "show access-lists DHCP-ONLY"
+    raw:
+      - regex: 'deny\s+ip any any \([1-9][0-9]* match'
+    points: 5

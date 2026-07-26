@@ -1,0 +1,75 @@
+---
+# 採点基準 (ENARSI-BGP-IPV6-01)。
+# 初期=IPv6側3故障(RT02 v6 activate欠落 / RT03 v6 network欠落 / RT03 ipv6 unicast-routing欠落)。
+# IPv4 は健全なので、v4 チェックは「壊していないこと」の担保。
+# v6 は Genie 構造化でなく raw(show bgp ipv6 / ping) で判定する。
+problem: ENARSI-BGP-IPV6-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # ---- IPv6 セッション(AFI/SAFI が両側 activate で上がる) ----
+  - name: "RT01: IPv6 BGP セッション(2001:DB8:12::2)が Established"
+    node: RT01
+    command: "show bgp ipv6 unicast summary"
+    raw:
+      - regex: "2001:DB8:12::2\\s+4\\s+65002(\\s+\\d+){5}\\s+\\S*\\s+[1-9]"
+    points: 12
+
+  # ---- IPv6 経路交換(遠端の v6 Lo が学習される) ----
+  - name: "RT01: RT02 の v6 Lo(2001:DB8:2::2/128)を BGP で学習"
+    node: RT01
+    command: "show bgp ipv6 unicast"
+    raw:
+      - regex: "2001:DB8:2::2/128"
+    points: 8
+  - name: "RT01: RT03 の v6 Lo(2001:DB8:3::3/128)を BGP で学習(RT02中継＋RT03広告)"
+    node: RT01
+    command: "show bgp ipv6 unicast"
+    raw:
+      - regex: "2001:DB8:3::3/128"
+    points: 15
+  - name: "RT03: RT01 の v6 Lo(2001:DB8:1::1/128)を BGP で学習(戻り方向)"
+    node: RT03
+    command: "show bgp ipv6 unicast"
+    raw:
+      - regex: "2001:DB8:1::1/128"
+    points: 15
+  - name: "RT02: RT03 の v6 Lo を広告受信(RT03 の network 是正の担保)"
+    node: RT02
+    command: "show bgp ipv6 unicast"
+    raw:
+      - regex: "2001:DB8:3::3/128"
+    points: 8
+
+  # ---- IPv6 転送(RIB搭載 + ipv6 unicast-routing) ----
+  - name: "RT03: ipv6 unicast-routing が有効(v6 転送可能)"
+    node: RT03
+    command: "show running-config | include ipv6 unicast-routing"
+    raw:
+      - regex: "ipv6 unicast-routing"
+    points: 6
+
+  # ---- IPv6 エンドツーエンド疎通(往き・帰り) ----
+  - name: "RT01 → RT03 v6 Lo 到達(2001:DB8:3::3)"
+    node: RT01
+    command: "ping 2001:DB8:3::3 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is (100|[6-9]\\d) percent"
+    points: 14
+  - name: "RT03 → RT01 v6 Lo 到達(戻り・2001:DB8:1::1)"
+    node: RT03
+    command: "ping 2001:DB8:1::1 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is (100|[6-9]\\d) percent"
+    points: 14
+
+  # ---- IPv4 を壊していないこと(健全維持の担保) ----
+  - name: "IPv4 健全維持: RT01 → RT03 v4 Lo 到達(3.3.3.3)"
+    node: RT01
+    command: "ping 3.3.3.3 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is (100|[6-9]\\d) percent"
+    points: 8

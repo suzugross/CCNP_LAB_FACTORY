@@ -1,0 +1,41 @@
+! ENARSI-BGP-IPV6-01 initial (RT02, AS65002) : dual-stack transit
+! links[0] = to RT01 (eBGP AS65001) / links[1] = to RT03 (eBGP AS65003)
+! F1: IPv6 AF activate for RT01 (2001:DB8:12::1) is intentionally MISSING.
+!     -> v6 session with RT01 does not come up (v4 does). v6 routes not relayed.
+ipv6 unicast-routing
+ipv6 cef
+!
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+ ipv6 address 2001:DB8:2::2/128
+!
+interface {{ links[0] }}
+ description to RT01 eBGP AS65001
+ ip address 10.1.12.2 255.255.255.252
+ ipv6 address 2001:DB8:12::2/64
+ no shutdown
+!
+interface {{ links[1] }}
+ description to RT03 eBGP AS65003
+ ip address 10.1.23.2 255.255.255.252
+ ipv6 address 2001:DB8:23::2/64
+ no shutdown
+!
+router bgp 65002
+ bgp router-id 2.2.2.2
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.1.12.1 remote-as 65001
+ neighbor 10.1.23.1 remote-as 65003
+ neighbor 2001:DB8:12::1 remote-as 65001
+ neighbor 2001:DB8:23::3 remote-as 65003
+ address-family ipv4 unicast
+  network 2.2.2.2 mask 255.255.255.255
+  neighbor 10.1.12.1 activate
+  neighbor 10.1.23.1 activate
+ exit-address-family
+ address-family ipv6 unicast
+  network 2001:DB8:2::2/128
+  neighbor 2001:DB8:23::3 activate
+ exit-address-family
+!

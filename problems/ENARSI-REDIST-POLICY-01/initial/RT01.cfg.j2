@@ -1,0 +1,36 @@
+! ENARSI-REDIST-POLICY-01 初期 RT01 (本社: OSPF 内部・変更不可)
+! 部門セグメントは Loopback の /24 で模擬。point-to-point 化で /24 のまま LSA に載せる。
+interface Loopback0
+ ip address {{ params.rt01_lo }} 255.255.255.255
+!
+interface Loopback10
+ description HQ-SERVER-SEGMENT
+ ip address {{ params.hq_srv }}.1 255.255.255.0
+ ip ospf network point-to-point
+!
+interface Loopback20
+ description HQ-CLIENT-SEGMENT
+ ip address {{ params.hq_cli }}.1 255.255.255.0
+ ip ospf network point-to-point
+!
+interface Loopback99
+ description HQ-LAB-SEGMENT
+ ip address {{ params.hq_lab }}.1 255.255.255.0
+ ip ospf network point-to-point
+!
+interface {{ links[0] }}
+ ip address {{ params.seg12 }}.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address {{ params.seg13 }}.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network {{ params.rt01_lo }} 0.0.0.0 area 0
+ network {{ params.hq_srv }}.1 0.0.0.0 area 0
+ network {{ params.hq_cli }}.1 0.0.0.0 area 0
+ network {{ params.hq_lab }}.1 0.0.0.0 area 0
+ network {{ params.seg12 }}.0 0.0.0.3 area 0
+ network {{ params.seg13 }}.0 0.0.0.3 area 0
+!

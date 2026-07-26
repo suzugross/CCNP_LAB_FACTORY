@@ -38,6 +38,10 @@
       cisco.ios.ios_config:
         parents: "{{ item.parents | default(omit) }}"     # parents 省略=グローバル config
         lines: "{{ item.lines }}"
+        # match: none = diff せず無条件投入。同一 fix 内で「外して同じ行を付け直す」場合、
+        # ループ内 diff が古い running-config を見て付け直しを no-op にする実機事故の対策
+        # (2026-07-25 BL-065 GEN-FNFTS スイープで発見)。旧 fix.json (match 無し)は従来動作。
+        match: "{{ item.match | default(omit) }}"
       loop: "{{ node_fixes | selectattr('lines', 'defined') | list }}"
       loop_control: { label: "{{ item.parents | default('(global)') }}" }
 

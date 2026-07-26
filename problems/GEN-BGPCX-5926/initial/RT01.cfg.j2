@@ -1,0 +1,24 @@
+! RT01 (role=mhop, AS=65200) 初期構成
+interface Loopback0
+ ip address 10.0.70.70 255.255.255.255
+!
+interface Loopback1
+ ip address 198.51.100.1 255.255.255.0
+!
+interface {{ links[0] }}
+ ip address 10.142.142.2 255.255.255.252
+ no shutdown
+!
+ip route 10.0.84.84 255.255.255.255 10.142.142.1
+!
+router bgp 65200
+ bgp router-id 10.0.70.70
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.0.84.84 remote-as 65001
+ neighbor 10.0.84.84 ebgp-multihop 2
+ address-family ipv4 unicast
+  neighbor 10.0.84.84 activate
+  network 198.51.100.0 mask 255.255.255.0
+ exit-address-family
+!

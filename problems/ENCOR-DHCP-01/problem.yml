@@ -1,0 +1,32 @@
+---
+# IOS DHCPv4 一気通貫ラボ (BL-066)。
+# RT01=DHCPサーバ / RT02=リレー / CL1〜CL3=IOSクライアント(ip address dhcp)。
+# 4本柱: ①ローカル配布+excluded ②MAC(識別子)指定の手動バインディング
+#        ③helper-address リレー ④DHCP(UDP67/68)+ICMPのみ許可ACLの適用と実効
+# 採点は設定+効果(実リース・release/renew 再取得・ACL越しping・非許可遮断)。
+id: ENCOR-DHCP-01
+title: "DHCPv4 サーバ/固定割当/リレー/DHCP-only ACL 一気通貫"
+exam: ENCOR
+topics: [dhcp, dhcp-relay, acl, infrastructure-services]
+difficulty: 3
+topology: ad-hoc
+target_nodes: [RT01, RT02, CL1, CL2, CL3]
+points: 100
+# IP無しIFは day0 の no shutdown が不発(UM2/IOSvで既知の癖・IOLも同様と実機確認)
+# → 起動後に E0/0-0/2 を一括 no shut するパイプライン機構を使う
+bringup_data_ifs: true
+
+#   CL3 ─ RT01(server) ─10.0.12.0/30─ RT02(relay) ┬─ CL1 (10.0.20.0/24)
+#  (10.0.10.0/24)                                  └─ CL2 (10.0.30.0/24)
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # 10.0.12.0/30
+    - { a: RT01, a_if: 1, b: CL3, b_if: 0 }    # 10.0.10.0/24 (local)
+    - { a: RT02, a_if: 1, b: CL1, b_if: 0 }    # 10.0.20.0/24 (relay+manual)
+    - { a: RT02, a_if: 2, b: CL2, b_if: 0 }    # 10.0.30.0/24 (relay)
+  positions:
+    RT01: [0, 0]
+    RT02: [300, 0]
+    CL3: [0, 200]
+    CL1: [500, -100]
+    CL2: [500, 100]

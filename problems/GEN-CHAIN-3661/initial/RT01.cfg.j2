@@ -1,0 +1,47 @@
+! GEN-CHAIN-3661 初期 (RT01) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 69.69.69.69 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT11 ===
+ ip address 10.211.122.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 ===
+ ip address 10.171.67.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT04 ===
+ ip address 10.20.104.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 69.69.69.69
+ area 1 stub no-summary
+ area 1 range 172.20.0.0 255.255.254.0 not-advertise
+ network 69.69.69.69 0.0.0.0 area 0
+ network 10.211.122.0 0.0.0.3 area 1
+ network 10.171.67.0 0.0.0.3 area 0
+ network 10.20.104.0 0.0.0.3 area 0
+!
+ip prefix-list PL-WEST seq 5 permit 172.20.0.0/23 ge 24 le 24
+route-map RM-W2B permit 10
+ match ip address prefix-list PL-WEST
+ set community 65001:100
+!
+router bgp 65001
+ bgp router-id 69.69.69.69
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.171.67.2 remote-as 65001
+ neighbor 10.20.104.2 remote-as 65001
+ address-family ipv4
+  neighbor 10.171.67.2 activate
+  neighbor 10.171.67.2 send-community
+  neighbor 10.20.104.2 activate
+  neighbor 10.20.104.2 send-community
+  redistribute ospf 1 route-map RM-W2B
+ exit-address-family
+!

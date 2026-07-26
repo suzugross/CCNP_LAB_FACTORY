@@ -1,0 +1,31 @@
+! ENARSI-BGP-IPV6-01 initial (RT01, AS65001) : dual-stack eBGP edge
+! links[0] = to RT02 (eBGP AS65002)
+! RT01 is healthy. Faults are on RT02/RT03 side.
+ipv6 unicast-routing
+ipv6 cef
+!
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+ ipv6 address 2001:DB8:1::1/128
+!
+interface {{ links[0] }}
+ description to RT02 eBGP AS65002
+ ip address 10.1.12.1 255.255.255.252
+ ipv6 address 2001:DB8:12::1/64
+ no shutdown
+!
+router bgp 65001
+ bgp router-id 1.1.1.1
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.1.12.2 remote-as 65002
+ neighbor 2001:DB8:12::2 remote-as 65002
+ address-family ipv4 unicast
+  network 1.1.1.1 mask 255.255.255.255
+  neighbor 10.1.12.2 activate
+ exit-address-family
+ address-family ipv6 unicast
+  network 2001:DB8:1::1/128
+  neighbor 2001:DB8:12::2 activate
+ exit-address-family
+!

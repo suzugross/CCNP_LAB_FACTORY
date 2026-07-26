@@ -1,0 +1,209 @@
+lab:
+  title: POC-S2SVPN
+  description: ''
+  notes: |
+    PoC lab (Claude 2026-07-24): BL-063 GEN-S2SVPN 事前検証
+    - HQ/BR1 = IOSv エッジ(DMVPN選択肢保証のため IOSv)・INET = IOL(ISP役・変更禁止想定)
+    - day0 = NAPT+default のみ(クリプト無し)。crypto/フルトンネルはコンソールから段階投入して検証する。
+    - 検証項目: ①sVTI×NAT overload同居(NAT ACL deny要否) ②crypto map版の同居(deny必須の実証)
+      ③フルトンネル(BR default→Tunnel+host route)×HQヘアピンNAT(Tunnel IF に ip nat inside)
+      ④INET の JUDGE ACL カウンタで NAPT 出口公開IP判定 ⑤alpine curl→busybox httpd
+    - コンソールのみ(MGMTリース不使用)
+  version: 0.3.0
+nodes:
+- id: INET
+  label: INET
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  x: 0
+  y: -160
+  tags: [routers]
+  interfaces:
+  - {id: INET-i0, label: Ethernet0/0, type: physical, slot: 0}
+  - {id: INET-i1, label: Ethernet0/1, type: physical, slot: 1}
+  - {id: INET-i2, label: Ethernet0/2, type: physical, slot: 2}
+  configuration: |
+    hostname INET
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === to HQ (public 203.0.113.0/30) ===
+     ip address 203.0.113.1 255.255.255.252
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to BR1 (public 203.0.113.4/30) ===
+     ip address 203.0.113.5 255.255.255.252
+     no shutdown
+    !
+    interface Ethernet0/2
+     description === SRV segment (public 198.51.100.0/24) ===
+     ip address 198.51.100.1 255.255.255.0
+     ip access-group JUDGE-SRV out
+     no shutdown
+    !
+    ip access-list extended JUDGE-SRV
+     permit ip host 203.0.113.2 host 198.51.100.80
+     permit ip host 203.0.113.6 host 198.51.100.80
+     deny   ip 10.0.0.0 0.255.255.255 any
+     deny   ip 172.16.0.0 0.15.255.255 any
+     deny   ip 192.168.0.0 0.0.255.255 any
+     permit ip any any
+    !
+    ip access-list extended CATCH-LEAK-HQ
+     deny   ip 10.0.0.0 0.255.255.255 any
+     deny   ip 172.16.0.0 0.15.255.255 any
+     deny   ip 192.168.0.0 0.0.255.255 any
+     deny   ip any 10.0.0.0 0.255.255.255
+     deny   ip any 172.16.0.0 0.15.255.255
+     deny   ip any 192.168.0.0 0.0.255.255
+     permit ip any any
+    !
+    interface Ethernet0/0
+     ip access-group CATCH-LEAK-HQ in
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+     privilege level 15
+- id: HQ
+  label: HQ
+  node_definition: iosv
+  image_definition: iosv-159-3-m9
+  x: -200
+  y: 0
+  tags: [routers]
+  interfaces:
+  - {id: HQ-i0, label: GigabitEthernet0/0, type: physical, slot: 0}
+  - {id: HQ-i1, label: GigabitEthernet0/1, type: physical, slot: 1}
+  configuration: |
+    hostname HQ
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface GigabitEthernet0/0
+     description === WAN to INET ===
+     ip address 203.0.113.2 255.255.255.252
+     ip nat outside
+     no shutdown
+    !
+    interface GigabitEthernet0/1
+     description === HQ LAN ===
+     ip address 192.168.10.1 255.255.255.0
+     ip nat inside
+     no shutdown
+    !
+    ip route 0.0.0.0 0.0.0.0 203.0.113.1
+    !
+    ip access-list standard NAT-LAN
+     permit 192.168.10.0 0.0.0.255
+    !
+    ip nat inside source list NAT-LAN interface GigabitEthernet0/0 overload
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+     privilege level 15
+- id: BR1
+  label: BR1
+  node_definition: iosv
+  image_definition: iosv-159-3-m9
+  x: 200
+  y: 0
+  tags: [routers]
+  interfaces:
+  - {id: BR1-i0, label: GigabitEthernet0/0, type: physical, slot: 0}
+  - {id: BR1-i1, label: GigabitEthernet0/1, type: physical, slot: 1}
+  configuration: |
+    hostname BR1
+    !
+    ip domain name ccnp.local
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface GigabitEthernet0/0
+     description === WAN to INET ===
+     ip address 203.0.113.6 255.255.255.252
+     ip nat outside
+     no shutdown
+    !
+    interface GigabitEthernet0/1
+     description === BR1 LAN ===
+     ip address 192.168.11.1 255.255.255.0
+     ip nat inside
+     no shutdown
+    !
+    ip route 0.0.0.0 0.0.0.0 203.0.113.5
+    !
+    ip access-list standard NAT-LAN
+     permit 192.168.11.0 0.0.0.255
+    !
+    ip nat inside source list NAT-LAN interface GigabitEthernet0/0 overload
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+     privilege level 15
+- id: SRV
+  label: SRV
+  node_definition: alpine
+  x: 0
+  y: -320
+  interfaces:
+  - {id: SRV-i0, slot: 0, label: eth0, type: physical}
+  configuration: |
+    #!/bin/sh
+    # public web server (NAPT egress judge target)
+    ip addr add 198.51.100.80/24 dev eth0
+    ip link set eth0 up
+    ip route add default via 198.51.100.1
+    mkdir -p /www
+    echo "SRV-OK" > /www/index.html
+    httpd -p 80 -h /www
+- id: H-HQ
+  label: H-HQ
+  node_definition: alpine
+  x: -200
+  y: 160
+  interfaces:
+  - {id: HHQ-i0, slot: 0, label: eth0, type: physical}
+  configuration: |
+    #!/bin/sh
+    ip addr add 192.168.10.101/24 dev eth0
+    ip link set eth0 up
+    ip route add default via 192.168.10.1
+- id: H-B1
+  label: H-B1
+  node_definition: alpine
+  x: 200
+  y: 160
+  interfaces:
+  - {id: HB1-i0, slot: 0, label: eth0, type: physical}
+  configuration: |
+    #!/bin/sh
+    ip addr add 192.168.11.101/24 dev eth0
+    ip link set eth0 up
+    ip route add default via 192.168.11.1
+links:
+- {id: l0, n1: INET, i1: INET-i0, n2: HQ, i2: HQ-i0, label: INET-e0/0<->HQ-Gi0/0}
+- {id: l1, n1: INET, i1: INET-i1, n2: BR1, i2: BR1-i0, label: INET-e0/1<->BR1-Gi0/0}
+- {id: l2, n1: INET, i1: INET-i2, n2: SRV, i2: SRV-i0, label: INET-e0/2<->SRV-eth0}
+- {id: l3, n1: HQ, i1: HQ-i1, n2: H-HQ, i2: HHQ-i0, label: HQ-Gi0/1<->H-HQ-eth0}
+- {id: l4, n1: BR1, i1: BR1-i1, n2: H-B1, i2: HB1-i0, label: BR1-Gi0/1<->H-B1-eth0}

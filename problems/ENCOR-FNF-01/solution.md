@@ -20,10 +20,13 @@ flow record FNF-REC
  collect counter packets
 !
 ! 2) フローエクスポータ: どこへ(コレクタ)どう(UDP)送るか
+!    ★2026-07-25 採点強化(BL-065): source と export-protocol も採点対象。
+!    base の netflow-v9 は既定値だが明示推奨。v2 は ipfix(IOL 受理は実機確認済)。
 flow exporter FNF-EXP
  destination 198.51.100.100
  source Loopback0
  transport udp 2055
+ export-protocol netflow-v9
 !
 ! 3) フローモニタ: レコード + エクスポータ(キャッシュは既定でよい)
 flow monitor FNF-MON

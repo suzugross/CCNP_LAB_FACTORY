@@ -11,6 +11,10 @@
 
 | 出題日 | 問題ID (variant/seed) | 難 | 状態 | 得点 | メモ |
 |--------|----------------------|----|------|------|------|
+| 2026-07-26 | ENCOR-DHCP-01 | 3 | 出題中 | - | DHCPv4一気通貫(BL-066)初出題。mgmt=RT01 .20/RT02 .31/CL1-3 .32-.34 |
+| 2026-07-26 | ENARSI-REDIST-POLICY-01 (s6127) | 4 | 撤収済 | 100 | BL-068初出題を一発満点。deny(tag)→deny(lab)→permit(個別色)→permit(包括色)の順序設計完璧・set metricのプレフィックス毎出し分けも模範同型。DENY01共用prefix-list・明示type-2は本人流 |
+| 2026-07-25 | GEN-FNFTS-7842 (faults2) | 5 | 撤収済 | 100 | FNF監視標準TS初出題を一発満点。fault=record_missing_key(transport source-port)+monitor_not_applied。record編集ロック(要参照解除)を自力突破・キー追記順から編集パス採用と推定 |
+| 2026-07-25 | ENCOR-IPSLA-01 | 4 | 撤収済 | 100 | 一発満点(全7チェックPASS)。仕様超えの丁寧解=SLA source-interface固定/timeout3000/frequency5/track delay down10 up5のダンピングまで実装。mgmt=.20/.31-.33 |
 | 2026-07-23 | GEN-BGPCX-5926 (faults1+policy2) | 5 | 撤収済 | 76→100 | BGP複合TS(policy軸初)。3故障=prepend_wrong_side@be+weight_override@RR+missing_update_source@RT01。76時点で残ったのはweight_override(LPの上位で上書き)→自力是正。★チケット乖離を発見(シミュレータ「到達不能」予測vs実機到達可)→BL-061登録(update-source片側欠落の非対称成立仮説) |
 | 2026-07-23 | GEN-BGPPATH-6152 (faults2+decoy1) | 5 | 撤収済 | 100 | BGP経路選択TS一発満点。fault=fwd_lp_wrong_nbr+ret_prepend_wrong_nbr。★ユーザ解は想定解(LP張り直し)と異なりAS_PATH操作で両方向制御の別解(効果採点で満点)。※私が修正内容をfault名から推測で誤断定→ユーザ訂正(レビューは実機の解を確認してから書く教訓) |
 | 2026-07-23 | ENARSI-MPLS-L3VPN-03 (再) | 5 | 撤収済 | 100 | +採点後にsham-link端点の再配送遮断(両PE対称route-map)の設計問答→ユーザは片側では消えない事を実測して対称化(模範解答超えの完成形) | sham-link再演を一発満点(全15PASS・定着確認成功)。今回はcost100で主経路化(前回20・500未満なら可の理解が本物)。端点/32のBGP限定広告も再現 |

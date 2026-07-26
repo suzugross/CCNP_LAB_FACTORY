@@ -1,0 +1,70 @@
+# 自動生成 (gen_fnf_ts.py) seed=7842 faults=record_missing_key,monitor_not_applied
+# ★cache 実効は format table の同一行 regex(src dst 隣接列)。
+#   contains 2連へ緩めると逆向きフローで偽陽性になり方向故障を検出できない。
+problem: GEN-FNFTS-7842
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'RT02: flow record REC-CORP の match/collect が監視標準どおり'
+  node: RT02
+  command: show flow record REC-CORP
+  raw:
+  - regex: match ipv4 source address
+  - regex: match ipv4 destination address
+  - regex: match ipv4 protocol
+  - regex: match transport source-port
+  - regex: match transport destination-port
+  - regex: collect counter bytes
+  - regex: collect counter packets
+  points: 15
+- name: 'RT02: exporter EXP-CORP の宛先 203.0.113.243 / UDP 2055'
+  node: RT02
+  command: show flow exporter EXP-CORP
+  raw:
+  - regex: '[Dd]estination.*203\.0\.113\.243'
+  - regex: '[Dd]estination [Pp]ort:\s+2055'
+  points: 10
+- name: 'RT02: exporter EXP-CORP の source が Loopback0'
+  node: RT02
+  command: show flow exporter EXP-CORP
+  raw:
+  - regex: '[Ss]ource [Ii]nterface:\s+Loopback0'
+  points: 10
+- name: 'RT02: exporter EXP-CORP の export-protocol が ipfix'
+  node: RT02
+  command: show flow exporter EXP-CORP
+  raw:
+  - regex: Export protocol:\s+IPFIX
+  points: 10
+- name: 'RT02: monitor MON-CORP が record REC-CORP を参照'
+  node: RT02
+  command: show flow monitor MON-CORP
+  raw:
+  - regex: '[Rr]ecord.*REC-CORP'
+  - not_regex: REC-OLD
+  points: 10
+- name: 'RT02: monitor MON-CORP が exporter EXP-CORP を参照'
+  node: RT02
+  command: show flow monitor MON-CORP
+  raw:
+  - regex: '[Ee]xporter.*EXP-CORP'
+  points: 10
+- name: 'RT02: Ethernet0/0 (RT01向け) の ingress に MON-CORP を適用'
+  node: RT02
+  command: show running-config interface Ethernet0/0
+  raw:
+  - regex: ip flow monitor MON-CORP input
+  points: 15
+- name: (発射) RT01→RT03 の監視対象トラフィックが疎通
+  node: RT01
+  command: ping 98.98.98.98 source 69.69.69.69 repeat 10
+  raw:
+  - regex: Success rate is [1-9]
+  points: 5
+- name: '効果: cache に順方向フロー(src 69.69.69.69 → dst 98.98.98.98)が採取される'
+  node: RT02
+  command: show flow monitor MON-CORP cache format table
+  raw:
+  - regex: 69\.69\.69\.69\s+98\.98\.98\.98
+  points: 15

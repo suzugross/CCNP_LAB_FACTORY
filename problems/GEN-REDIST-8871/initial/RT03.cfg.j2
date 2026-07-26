@@ -1,0 +1,34 @@
+! RT03 初期構成 (相互再配送TS・故障注入済)
+interface Loopback0
+ ip address 60.60.60.60 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.128.9.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.41.153.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.2.35.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network 60.60.60.60 0.0.0.0 area 0
+ network 10.128.9.0 0.0.0.3 area 0
+!
+router eigrp 64578
+ network 10.41.153.0 0.0.0.3
+ network 10.2.35.0 0.0.0.3
+ no auto-summary
+ distance eigrp 90 95
+ redistribute ospf 1 metric 100000 100 255 1 1500 route-map SET_TAG
+ distribute-list route-map BLOCK_TAG in
+!
+route-map SET_TAG permit 10
+ set tag 110
+route-map BLOCK_TAG deny 10
+ match tag 110
+route-map BLOCK_TAG permit 20
+!

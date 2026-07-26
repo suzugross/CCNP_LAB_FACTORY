@@ -1,0 +1,48 @@
+{
+  "_comment": "模範解答。RT02/RT03 同一。ポリシーは redistribute に適用する route-map に集約: deny(戻りタグ)→deny(検証網)→permit(サーバ網=色付け)→permit(その他=既定色)。prefix-list を先に作ってから route-map、route-map を作ってから redistribute で参照する順序。OSPF→EIGRP のシードメトリックは route-map の set metric で与える(redistribute 側の metric キーワードは不要)。",
+  "nodes": {},
+  "filters": [
+    {
+      "node": "RT02",
+      "blocks": [
+        { "parents": null, "lines": [
+          "ip prefix-list BR-LAB seq 5 permit 10.20.99.0/24",
+          "ip prefix-list BR-SRV seq 5 permit 10.20.10.0/24",
+          "ip prefix-list HQ-LAB seq 5 permit 172.16.99.0/24",
+          "ip prefix-list HQ-SRV seq 5 permit 172.16.10.0/24"
+        ] },
+        { "parents": "route-map EIGRP_TO_OSPF deny 10", "lines": ["match tag 110"] },
+        { "parents": "route-map EIGRP_TO_OSPF deny 15", "lines": ["match ip address prefix-list BR-LAB"] },
+        { "parents": "route-map EIGRP_TO_OSPF permit 20", "lines": ["match ip address prefix-list BR-SRV", "set metric-type type-1", "set tag 90"] },
+        { "parents": "route-map EIGRP_TO_OSPF permit 30", "lines": ["set tag 90"] },
+        { "parents": "route-map OSPF_TO_EIGRP deny 10", "lines": ["match tag 90"] },
+        { "parents": "route-map OSPF_TO_EIGRP deny 15", "lines": ["match ip address prefix-list HQ-LAB"] },
+        { "parents": "route-map OSPF_TO_EIGRP permit 20", "lines": ["match ip address prefix-list HQ-SRV", "set metric 10000 100 255 1 1500", "set tag 110"] },
+        { "parents": "route-map OSPF_TO_EIGRP permit 30", "lines": ["set metric 1000 100 255 1 1500", "set tag 110"] },
+        { "parents": "router ospf 1", "lines": ["redistribute eigrp 100 subnets route-map EIGRP_TO_OSPF"] },
+        { "parents": "router eigrp 100", "lines": ["redistribute ospf 1 route-map OSPF_TO_EIGRP"] }
+      ]
+    },
+    {
+      "node": "RT03",
+      "blocks": [
+        { "parents": null, "lines": [
+          "ip prefix-list BR-LAB seq 5 permit 10.20.99.0/24",
+          "ip prefix-list BR-SRV seq 5 permit 10.20.10.0/24",
+          "ip prefix-list HQ-LAB seq 5 permit 172.16.99.0/24",
+          "ip prefix-list HQ-SRV seq 5 permit 172.16.10.0/24"
+        ] },
+        { "parents": "route-map EIGRP_TO_OSPF deny 10", "lines": ["match tag 110"] },
+        { "parents": "route-map EIGRP_TO_OSPF deny 15", "lines": ["match ip address prefix-list BR-LAB"] },
+        { "parents": "route-map EIGRP_TO_OSPF permit 20", "lines": ["match ip address prefix-list BR-SRV", "set metric-type type-1", "set tag 90"] },
+        { "parents": "route-map EIGRP_TO_OSPF permit 30", "lines": ["set tag 90"] },
+        { "parents": "route-map OSPF_TO_EIGRP deny 10", "lines": ["match tag 90"] },
+        { "parents": "route-map OSPF_TO_EIGRP deny 15", "lines": ["match ip address prefix-list HQ-LAB"] },
+        { "parents": "route-map OSPF_TO_EIGRP permit 20", "lines": ["match ip address prefix-list HQ-SRV", "set metric 10000 100 255 1 1500", "set tag 110"] },
+        { "parents": "route-map OSPF_TO_EIGRP permit 30", "lines": ["set metric 1000 100 255 1 1500", "set tag 110"] },
+        { "parents": "router ospf 1", "lines": ["redistribute eigrp 100 subnets route-map EIGRP_TO_OSPF"] },
+        { "parents": "router eigrp 100", "lines": ["redistribute ospf 1 route-map OSPF_TO_EIGRP"] }
+      ]
+    }
+  ]
+}

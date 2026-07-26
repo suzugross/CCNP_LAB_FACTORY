@@ -1,0 +1,68 @@
+# 自動生成 (gen_redist_mutual_ts.py) seed=8871 fault=missing_e2o
+problem: GEN-REDIST-8871
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT01: 18.18.18.18
+    RT02: 9.9.9.9
+    RT03: 60.60.60.60
+    RT04: 68.68.68.68
+  links:
+  - a: RT01
+    a_ip: 10.244.244.1
+    b: RT02
+    b_ip: 10.244.244.2
+  - a: RT01
+    a_ip: 10.128.9.1
+    b: RT03
+    b_ip: 10.128.9.2
+  - a: RT02
+    a_ip: 10.41.153.1
+    b: RT03
+    b_ip: 10.41.153.2
+  - a: RT02
+    a_ip: 10.47.100.1
+    b: RT04
+    b_ip: 10.47.100.2
+  - a: RT03
+    a_ip: 10.2.35.1
+    b: RT04
+    b_ip: 10.2.35.2
+invariants:
+- type: reachability_all
+  name: 全ルータ間 Loopback 到達性
+  points: 30
+- type: optimal
+  name: ドメイン内宛先(RT01/RT04)への最短転送(再配送由来の次善が無い)
+  points: 40
+  pairs:
+  - - RT02
+    - RT01
+  - - RT03
+    - RT01
+  - - RT04
+    - RT01
+  - - RT01
+    - RT04
+  - - RT02
+    - RT04
+  - - RT03
+    - RT04
+- type: loop_free
+  name: 転送ループ無し
+  points: 10
+checks:
+- name: 'RT04: 18.18.18.18/32 を EIGRP外部(D EX)で学習(OSPF→EIGRP再配送)'
+  node: RT04
+  command: show ip route eigrp
+  raw:
+  - regex: D EX\s+18\.18\.18\.18
+  points: 10
+- name: 'RT01: 68.68.68.68/32 を OSPF外部(O E2)で学習(EIGRP→OSPF再配送)'
+  node: RT01
+  command: show ip route ospf
+  raw:
+  - regex: O E2\s+68\.68\.68\.68
+  points: 10

@@ -1,0 +1,38 @@
+! RT02 初期状態 (FNF TS・昨日 監視チームが FNF を導入した直後の状態)
+interface Loopback0
+ ip address 71.71.71.71 255.255.255.255
+!
+flow record REC-CORP
+ match ipv4 source address
+ match ipv4 destination address
+ match ipv4 protocol
+ match transport destination-port
+ collect counter bytes
+ collect counter packets
+!
+flow exporter EXP-CORP
+ destination 203.0.113.243
+ source Loopback0
+ transport udp 2055
+ export-protocol ipfix
+!
+flow monitor MON-CORP
+ record REC-CORP
+ exporter EXP-CORP
+!
+interface {{ links[0] }}
+ description === to RT01 (customer traffic in) ===
+ ip address 10.30.219.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (upstream) ===
+ ip address 10.30.220.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 71.71.71.71
+ network 71.71.71.71 0.0.0.0 area 0
+ network 10.30.219.0 0.0.0.3 area 0
+ network 10.30.220.0 0.0.0.3 area 0
+!

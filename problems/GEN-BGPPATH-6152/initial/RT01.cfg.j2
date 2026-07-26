@@ -1,0 +1,28 @@
+! RT01 (AS 64881)
+interface Loopback0
+ ip address 21.21.21.21 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.232.17.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.177.6.1 255.255.255.252
+ no shutdown
+!
+router bgp 64881
+ bgp router-id 21.21.21.21
+ no bgp default ipv4-unicast
+ bgp bestpath compare-routerid
+ neighbor 10.232.17.2 remote-as 64902
+ neighbor 10.177.6.2 remote-as 64989
+ address-family ipv4 unicast
+  neighbor 10.232.17.2 activate
+  neighbor 10.177.6.2 activate
+  neighbor 10.177.6.2 route-map PRIMARY in
+  network 21.21.21.21 mask 255.255.255.255
+ exit-address-family
+!
+route-map PRIMARY permit 10
+ set local-preference 200
+!

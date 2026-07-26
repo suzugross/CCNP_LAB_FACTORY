@@ -1,0 +1,76 @@
+{
+  "_comment": "solution=routemap: RB/RC 両方に対で投入(片側のみは鏡像ループ残存)。distance 変更も本トポロジでは clear 不要(15-20秒自然収束・実測)。",
+  "nodes": {},
+  "filters": [
+    {
+      "node": "RB",
+      "blocks": [
+        {
+          "parents": "route-map SET-TAG permit 10",
+          "lines": [
+            "set tag 894"
+          ]
+        },
+        {
+          "parents": "route-map DENY-TAG deny 10",
+          "lines": [
+            "match tag 894"
+          ]
+        },
+        {
+          "parents": null,
+          "lines": [
+            "route-map DENY-TAG permit 20"
+          ]
+        },
+        {
+          "parents": "router ospf 91",
+          "lines": [
+            "redistribute eigrp 15 subnets route-map SET-TAG"
+          ]
+        },
+        {
+          "parents": "router eigrp 15",
+          "lines": [
+            "redistribute ospf 91 metric 1000000 1 255 1 1500 route-map DENY-TAG"
+          ]
+        }
+      ]
+    },
+    {
+      "node": "RC",
+      "blocks": [
+        {
+          "parents": "route-map SET-TAG permit 10",
+          "lines": [
+            "set tag 894"
+          ]
+        },
+        {
+          "parents": "route-map DENY-TAG deny 10",
+          "lines": [
+            "match tag 894"
+          ]
+        },
+        {
+          "parents": null,
+          "lines": [
+            "route-map DENY-TAG permit 20"
+          ]
+        },
+        {
+          "parents": "router ospf 91",
+          "lines": [
+            "redistribute eigrp 15 subnets route-map SET-TAG"
+          ]
+        },
+        {
+          "parents": "router eigrp 15",
+          "lines": [
+            "redistribute ospf 91 metric 1000000 1 255 1 1500 route-map DENY-TAG"
+          ]
+        }
+      ]
+    }
+  ]
+}
