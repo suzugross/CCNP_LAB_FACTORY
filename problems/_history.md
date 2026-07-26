@@ -11,7 +11,8 @@
 
 | 出題日 | 問題ID (variant/seed) | 難 | 状態 | 得点 | メモ |
 |--------|----------------------|----|------|------|------|
-| 2026-07-26 | ENCOR-DHCP-01 | 3 | 出題中 | - | DHCPv4一気通貫(BL-066)初出題。mgmt=RT01 .20/RT02 .31/CL1-3 .32-.34 |
+| 2026-07-26 | GEN-DHCPTS-8127 (faults2) | 5 | 撤収済 | 100 | DHCP TS初出題を一発満点。fault=helper_wrong_ip+excluded_swallows(両方segment B=片方直しても症状不変の2段重ね)。helper正常化+excluded .1-.9復元の最小手×2 |
+| 2026-07-26 | ENCOR-DHCP-01 | 3 | 撤収済 | 80→100 | BL-066初出題。80=ACL未着手→自力完成。CL1固定割当は client-id 一行形(ip address dhcp client-id)で正攻法突破。★レビュー発見=ACLのDHCP permitがhost 0.0.0.0限定形でunicast renewがdeny落ち(採点盲点→BL-069)/CL1-FIXEDのdns typo 198.50/NET30 default-router行に余分な255.255.255.0 |
 | 2026-07-26 | ENARSI-REDIST-POLICY-01 (s6127) | 4 | 撤収済 | 100 | BL-068初出題を一発満点。deny(tag)→deny(lab)→permit(個別色)→permit(包括色)の順序設計完璧・set metricのプレフィックス毎出し分けも模範同型。DENY01共用prefix-list・明示type-2は本人流 |
 | 2026-07-25 | GEN-FNFTS-7842 (faults2) | 5 | 撤収済 | 100 | FNF監視標準TS初出題を一発満点。fault=record_missing_key(transport source-port)+monitor_not_applied。record編集ロック(要参照解除)を自力突破・キー追記順から編集パス採用と推定 |
 | 2026-07-25 | ENCOR-IPSLA-01 | 4 | 撤収済 | 100 | 一発満点(全7チェックPASS)。仕様超えの丁寧解=SLA source-interface固定/timeout3000/frequency5/track delay down10 up5のダンピングまで実装。mgmt=.20/.31-.33 |
