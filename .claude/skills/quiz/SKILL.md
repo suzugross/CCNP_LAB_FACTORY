@@ -18,6 +18,7 @@ description: CCNP問題の出題フロー。ユーザが「問題を出して」
 ### 1. 選定
 
 - ユーザ指定(分野・難易度・ID)があればそれに従う。指定がなければ **履歴と重複しない難3〜4** から2〜3候補を挙げて提案(難易度は全体的に難しめ好み)。
+- **出題言語**: 既定は日本語。「英語で」「in English」等の指定があれば英語出題(手順は「英語出題」節)。指定が曖昧なら日本語で進めてよい(途中からの英語切替も可)。
 - **GEN 系は新 seed で新インスタンスを生成**してから出題(既存インスタンスは既出の可能性)。生成コマンドは CATALOG の生成器一覧。
 - 台数を確認: 稼働中ラボと合計で 20 ノードを超えるなら、先に teardown を提案。
 - パラメータ化問題(params/ あり)の再出題は `gen_params.py --problem <ID> --seed <新N>` で値違いにできる。
@@ -37,6 +38,7 @@ scripts/lab.sh provision <ID> [variant]        # 通常問題
 - **task.md 全文をチャットに貼る** ＋ VSCode プレビューリンク(`lab/<ID>/問題.md`)を添える。
 - **ヒントは控えめに**: 落とし穴・使うコマンド・故障箇所のレイヤは先に明かさない。問題文にある情報だけで出題する。
 - 接続方法(CML コンソール)と採点依頼の合図(「採点して」)だけ案内する。
+- **英語出題の場合**は上記の task.md を `task.en.md` に置き換えて同じことをする(下の「英語出題」節)。
 
 ### 4. 採点(ユーザが「採点して」と言ったら)
 
@@ -57,9 +59,38 @@ scripts/lab.sh provision <ID> [variant]        # 通常問題
 
 ### 6. 記録・撤収
 
-- `_history.md` の行を更新(状態・得点・メモ)。
+- `_history.md` の行を更新(状態・得点・メモ)。**英語出題した回はメモに `en` を記録**(再出題判断・task.en.md キャッシュ有無の把握用)。
 - ユーザに確認のうえ撤収: `scripts/lab.sh teardown <ID>`(特殊ラボは ops の `teardown`/`stop`。**FGT は stop のみ・fgt1 wipe 禁止**)。
 - 撤収したら `_history.md` を `撤収済` に更新。
+
+## 英語出題(オンデマンド翻訳)
+
+英語指定の出題では、**採点系・生成器・task.md 原文には一切手を入れず**、提示物だけを英語化する。
+
+### 手順
+
+1. **翻訳元の特定**: `lab.sh provision` がコピーした task.md と同じソースを訳す
+   (優先順: `topologies/_generated/<ID>/task.md` → `problems/<ID>/task.md`。GEN 系は生成された `problems/<GEN-ID>/task.md`)。
+2. **キャッシュ確認**: 翻訳元と同じディレクトリに `task.en.md` が既にあり、かつ **task.md より新しければ再利用**。
+   task.md の方が新しい(params 再生成・問題改修後)なら訳し直す。
+3. **翻訳**: 下の翻訳規約に従い Claude が全文翻訳し、翻訳元と同じディレクトリに `task.en.md` として保存(キャッシュ)。
+4. **提示**: `task.en.md` を `lab/<ID>/Task.md` にコピーし、**全文をチャットに貼る**＋プレビューリンクは `lab/<ID>/Task.md` を案内
+   (日本語版 `問題.md` も lab.sh が置いたまま残る。混乱防止のため案内は英語版のみ)。
+   さらに **CML の Lab Notes も英語版へ差し替える**(build が日本語 task.md を埋め込むため):
+   `.venv/bin/python3 scripts/set_lab_notes.py <問題ID> <task.en.mdのパス>`(config 無変更・出題中でも安全)。
+5. **採点〜レビュー**: 採点コマンドや落ちたチェック名の扱いは通常どおり。**採点後レビュー・降参時の解説も英語**で書く
+   (solution.md は日本語のままでよい。訳して見せる)。ユーザが日本語で質問してきたら以後は日本語に切り替えてよい。
+
+### 翻訳規約
+
+- **文体は Cisco 公式に寄せる**: Config Guide / ENARSI・ENCOR OCG / 試験シム問の言い回し。
+  「〜を設定しなさい」→ "Configure ...", 「〜を確認」→ "Verify that ...", 「〜禁止」→ "Do not use ... / ... is not allowed"。
+- **見出しはシム問体裁**: シナリオ→ "Scenario" / 要件→ "Requirements" / 制約・禁止事項→ "Restrictions" / 採点→ "Scoring" / 構成情報→ "Topology"。
+- **識別子は逐語保持**: ホスト名・IP・プレフィックス・VRF名・AS番号・コマンド・インターフェース名・ACL/route-map 名は
+  原文のまま一字も変えない(採点 regex との食い違い防止)。
+- **要件は1対1対応**: 数値・条件・禁止事項の欠落/追加/意訳での弱化を禁止。訳後に原文と要件数を突き合わせる。
+- **用語は試験英語に統一**: 再配送=redistribution / 集約=summarization(BGPは aggregation) / 隣接=adjacency(EIGRPは neighbor) /
+  経路=route / 疎通=reachability / 認証=authentication / 冗長化=redundancy / 本社=HQ / 拠点=branch site / 検証網=test segment。
 
 ## 守ること
 

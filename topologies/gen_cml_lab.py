@@ -149,6 +149,12 @@ def main():
 
     nodes_in = pmeta["target_nodes"]
     data_links = pmeta.get("lab", {}).get("links", [])
+    # 外部L2接続(ext_links): データIFを external connector へ直結する。
+    # 例(containerlab 複合ラボ・BL-061): CML の LAN-IX(bridge1) ⇔ szk-cl01 br-cml。
+    #   lab:
+    #     ext_links:
+    #       - { node: RT01, if: 1, connector: "LAN-IX" }   # connector はラベル or デバイス名
+    ext_links = pmeta.get("lab", {}).get("ext_links", [])
 
     # ノード単位イメージ上書き（無ければ全ノード --image-family）。
     node_fam = pmeta.get("node_image_families", {}) or {}
@@ -163,6 +169,8 @@ def main():
     for lk in data_links:
         used[lk["a"]].add(lk["a_if"])
         used[lk["b"]].add(lk["b_if"])
+    for ex in ext_links:
+        used[ex["node"]].add(ex["if"])
     for n in nodes_in:
         used[n].add(prof_of(n)["mgmt_slot"])
 
@@ -238,6 +246,19 @@ def main():
     for lk in data_links:
         add_link(lk["a"], f"{lk['a']}-i{lk['a_if']}",
                  lk["b"], f"{lk['b']}-i{lk['b_if']}", f"{lk['a']}<->{lk['b']}")
+    # 外部L2接続(データ面): ノードの真上に ext-conn を置いて直結
+    for i, ex in enumerate(ext_links):
+        exid = f"EXTX{i}"
+        ex_x, ex_y = coords[ex["node"]]
+        nodes.append({
+            "id": exid, "label": ex.get("label", f"to-{ex['connector']}"),
+            "node_definition": "external_connector", "image_definition": None,
+            "configuration": ex["connector"], "x": ex_x, "y": ex_y - 160,
+            "tags": [],
+            "interfaces": [iface(exid, 0, "port")],
+        })
+        add_link(ex["node"], f"{ex['node']}-i{ex['if']}", exid, f"{exid}-i0",
+                 f"{ex['node']}<->{ex['connector']}")
     # 各ノードの MGMT → 管理スイッチ → 外部接続
     for idx, name in enumerate(nodes_in):
         mslot = prof_of(name)["mgmt_slot"]

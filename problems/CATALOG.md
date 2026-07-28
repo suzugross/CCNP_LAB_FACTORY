@@ -26,7 +26,7 @@
 | ENCOR-EIGRP-BUILD-01 | 4 | eigrp,igp,summarization | 5 | ssh | base,bfd | 要件7フィルタ強化の宿題あり(BL-005)。出題は可 |
 | ENCOR-EIGRP-VARIANCE-01 | 5 | eigrp,variance,feasible-successor | 5 | ssh | base,bfd |  |
 | ENCOR-FHRP-01 | 3 | fhrp,hsrp,l2 | 4 | ssh |  |  |
-| ENCOR-FNF-01 | 2 | netflow,flexible-netflow,telemetry | 3 | ssh | base,v2 | IOL は cache timeout active 不可。★2026-07-25 採点強化(BL-065): exporter source/export-protocol 追加＋cache 同一行判定・base 実機再検証済(10→100) |
+| ENCOR-FNF-01 | 2 | netflow,flexible-netflow,telemetry | 3 | ssh | base,v2 | IOL は flow monitor 配下の cache サブツリー自体が無い(entries/timeout/type 全て不可・2026-07-27 `?` 実測)。★2026-07-25 採点強化(BL-065): exporter source/export-protocol 追加＋cache 同一行判定・base 実機再検証済(10→100) |
 | ENCOR-GRE-01 | 3 | tunnel,gre,eigrp | 3 | ssh |  |  |
 | ENCOR-GRE-02 | 4 | tunnel,gre,ospf | 4 | ssh |  |  |
 | ENCOR-INTEGRATED-01 | 6 | ospf,bgp,nat | 4 | ssh | base,s58207,s72513,v2 |  |
@@ -82,6 +82,7 @@
 | ENARSI-DMVPN-BGP-01 | 5 | dmvpn,mgre,nhrp | 5 | console |  | DMVPN+BGP再配送 |
 | ENARSI-DMVPN-IPSEC-01 | 5 | dmvpn,mgre,nhrp | 4 | console |  | DMVPN+IPsec完全版。★出題済(ユーザ100点) |
 | ENARSI-EIGRP-SIA-01 | 5 | eigrp,sia,query | 4 | ssh |  |  |
+| ENARSI-EIGRP-VRF-01 | 4 | eigrp,vrf,named-mode | 4 | ssh |  | BL-070①(2026-07-27)。VRF-Lite×named mode SUZUNET・2テナント重複172.16・MD5認証・/23集約。実機0→100検証済。★罠=vrf forwardingでIP剥がれ(taskに明かさない)。値固定(params未対応・再出題は要注意) |
 | ENARSI-GREIPSEC-MAP-01 | 4 | ipsec,gre,crypto-map | 4 | console |  |  |
 | ENARSI-IPSEC-IKEV2-01 | 4 | ipsec,svti,ikev2 | 4 | console |  |  |
 | ENARSI-IPSEC-VTI-01 | 3 | ipsec,svti,ikev1 | 3 | console |  |  |
@@ -216,6 +217,7 @@ provision は lab.sh(通常問題と同じ)。採点前にユーザの playbook 
 | `gen_l2_troubleshoot.py` | GEN-L2TS | EtherChannel 等 L2 TS | access=telnet |
 | `gen_urpf_ts.py` | GEN-URPF | uRPF 4故障(データプレーン効果採点) | `--fault` 指定可 |
 | `gen_fnf_ts.py` | GEN-FNFTS | Flexible NetFlow 監視標準 適合TS(3台・故障10種・仕様書突き合わせ型) | `--fault` 指定可・`--faults 2` で別レイヤ複合(難+1)。全10故障 実機フルサイクル済(2026-07-25)。難3〜5・ENARSI シム対策 |
+| `gen_eigrp_vrf_ts.py` | GEN-EGVRF | VRF-aware EIGRP 収容標準 適合TS(4台・故障9種4レイヤ・仕様書突き合わせ型・BL-070②) | `--fault` 指定可・`--faults 2` で別レイヤ複合(難+1)。全9故障+複合1 実機フルサイクル済(2026-07-27)。難3〜5。★af-interfaceはIF非所属VRFだとday0破棄→vrf_if_swapのfixは認証再投入込み |
 | `gen_dhcp_ts.py` | GEN-DHCPTS | DHCPv4 配布標準 適合TS(5台・故障8種3レイヤ・仕様書突き合わせ型) | `--fault` 指定可・`--faults 2` で別レイヤ複合(難+1)。全8故障 実機フルサイクル済(2026-07-26)。難3〜5。★目玉=relay_service_off(リレー機 no service dhcp・helperは完璧に見える)/acl_src_narrow(DISCOVERのみ落ちる) |
 | `gen_dmvpn_ts.py` | GEN-DMVPN | DMVPN+IPsec TS(14故障) | 6種実機済。IOSv・console採点 |
 | `gen_s2svpn.py` | GEN-S2SVPN | 複数拠点 IPsec VPN 設計構築(要件書形式・技術選定自由・8台) | 運用=`s2svpn_ops.py`(console・リース不要)。seed軸=支店ごとfull/split×支店間4種×公開静的NAT。svti/cmap両模範解で実機4サイクル済(2026-07-24)・出題時は新seed・難4 |

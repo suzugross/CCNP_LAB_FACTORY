@@ -1,0 +1,29 @@
+# CML×containerlab 複合ラボ PoC (BL-061)。出題用ではなくパイプライン実証用。
+# 境界 = CML ext-conn "LAN-IX"(bridge1/ens32) ⇔ vSwitch ⇔ szk-cl01 ens160 ⇔ br-cml ⇔ JUN01 et-0/0/1。
+# JUN01(clab vJunos EVO)は既設 config (10.0.12.1/30, lo0 192.168.0.1/24, OSPF area0) を無改変で利用。
+id: POC-CLABHYB-01
+title: "[PoC] CML×containerlab OSPF interop (IOL×2 + vJunos EVO)"
+exam: POC
+topics: [ospf, multivendor, containerlab, junos]
+difficulty: 2
+topology: generated
+target_nodes: [RT01, RT02]
+points: 100
+access: ssh
+image_family: iol
+
+# clab 側ノード(採点収集用)。mgmt_map と別系統で grade.yml が参照する。
+clab_nodes:
+  JUN01: 172.20.20.2
+
+# === トポロジ =============================================
+#   RT02 ──── RT01 ──── [LAN-IX ext-conn] ══ L2 ══ JUN01(et-0/0/1)
+#  (2.2.2.2)   (1.1.1.1)   10.0.12.0/30            (192.168.0.1 = lo0)
+#   10.77.12.0/30                    全て OSPF area 0
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # 10.77.12.0/30 area 0
+  ext_links:
+    # ★connector は ext-conn の「デバイス名」(bridge1 等)。ラベル("LAN-IX")を書くと
+    #   CML 2.8 スケジューラが QUEUED→DEFINED_ON_CORE で無言差し戻しする(2026-07-28 実証)。
+    - { node: RT01, if: 1, connector: "bridge1", label: "to-LAN-IX" }   # 10.0.12.0/30 → JUN01

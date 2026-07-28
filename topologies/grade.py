@@ -103,8 +103,14 @@ def genie_parse(parser, output, os_name="iosxe"):
     パーサクラスを直接使う。dev.parse のコマンド解決が不適切なパーサを
     選ぶ場合の回避（例: "show policy-map interface" は rv1 版が選ばれるが
     rv1 の IF 名 regex が TenGigabitEthernet 固定で IOL/IOSv 出力に不整合。
-    → parser: "class:iosxe.show_policy_map.ShowPolicyMapInterface" と書く）。"""
+    → parser: "class:iosxe.show_policy_map.ShowPolicyMapInterface" と書く）。
+
+    parser が "json" なら stdout を JSON として読む（Genie 非対応 OS 向け。
+    Junos の `show ... | display json` 出力を find/match の同じ機構で採点する。
+    BL-061 containerlab 複合ラボ用）。"""
     try:
+        if str(parser) == "json":
+            return json.loads(output or "")
         if str(parser).startswith("class:"):
             import importlib
             modpath, clsname = str(parser)[len("class:"):].rsplit(".", 1)

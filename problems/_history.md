@@ -11,6 +11,15 @@
 
 | 出題日 | 問題ID (variant/seed) | 難 | 状態 | 得点 | メモ |
 |--------|----------------------|----|------|------|------|
+| 2026-07-27 | ENARSI-VRFLITE-DNBIT-01 | 4 | 撤収済 | - | **en**(task.en.md新規作成・CML Notes英語差替の初適用)。未解答のままCMLサーバ停止のため中断→撤収。**再出題可**(問題パック・task.en.mdキャッシュ保持・ネタバレなし) |
+| 2026-07-27 | ENARSI-OSPF-MADJ-01 | 4 | 撤収済 | 100 | **en**(英語出題初回・task.en.md新規作成・BL-071)。一発満点(全12チェックPASS)。P2P化+multi-area 0の2行×2台=模範解同型・broadcastサイレント罠を自力回避 |
+| 2026-07-27 | ENARSI-BGP-AGGREGATE-01 | 3 | 撤収済 | 100 | BGP集約初出題を一発満点。as-set summary-onlyの1行最小解＋旧問に自主AF方式適用(規約定着)。レビューでAS_SETループ防止/atomic-aggregate/suppress-map3段構えを補足 |
+| 2026-07-27 | GEN-EGVRF-4276 (faults2) | 5 | 撤収済 | 100 | VRF-aware EIGRP収容標準TS初出題を一発満点。fault=vrf_if_swap+missing_network_a2(3リンク全滅の初期状態)。★af-interface無言破棄のカスケード(VRF復旧後も隣接不成立→認証再投入)を初見で自力突破。運営反省=症状域重複時のチケット相互矛盾→生成器に注記追加 |
+| 2026-07-27 | ENARSI-EIGRP-VRF-01 | 4 | 撤収済 | 100 | BL-070①初出題を一発満点(全11チェックPASS)。模範解答と構造同型・network文精密絞り・af-interface認証/集約の書き分け完璧。※IP剥がれ罠は完成報告時に開示済みだったため初見切り分けは未検証(再演か②TSで確認) |
+| 2026-07-27 | ENCOR-FNF-01 (base) | 3 | 撤収済 | 100 | FNF構築問初出題を一発満点(全8チェックPASS)。仕様過不足ゼロの最小解。レビュー補足=export-protocol v9はデフォルトでconfig非表示/record編集ロックは既知(7842で経験済) |
+| 2026-07-26 | ENARSI-DMVPN-IPSEC-01 (再) | 5 | 撤収済 | 100 | DMVPN+IPsec完全版の再出題→一発満点(定着確認OK)。Phase3をredirect+next-hop-self既定維持で正しく構成・MTU/MSS先回り・EIGRP named mode採用。※採点1回目はコンソール収集10分timeout→max_attempts=1で再実行(毎回の運用) |
+| 2026-07-26 | DMVPN-POC-01 | 5 | 撤収済 | 100 | Phase2構築を一発満点。EIGRP named mode採用・af-interfaceでno next-hop-self/no split-horizon正実装(BGP-01の80点弱点が完全定着)。IPsec+tunnel key+MTU/MSSを仕様外で自主追加(全台整合・減点なし)。スポークNHRPは旧来3行構文 |
+| 2026-07-26 | GEN-DMVPN-3194 | 4 | 撤収済 | 100 | DMVPN+IPsec TS(fault=p1_redirect_missing)。一発満点(5冠目)。解=hub Tunnel0にip nhrp redirect復旧の最小手1行・模範解同型。※初回採点は収束待ちで10分timeout→max_attempts=1で再実行 |
 | 2026-07-26 | GEN-DHCPTS-8127 (faults2) | 5 | 撤収済 | 100 | DHCP TS初出題を一発満点。fault=helper_wrong_ip+excluded_swallows(両方segment B=片方直しても症状不変の2段重ね)。helper正常化+excluded .1-.9復元の最小手×2 |
 | 2026-07-26 | ENCOR-DHCP-01 | 3 | 撤収済 | 80→100 | BL-066初出題。80=ACL未着手→自力完成。CL1固定割当は client-id 一行形(ip address dhcp client-id)で正攻法突破。★レビュー発見=ACLのDHCP permitがhost 0.0.0.0限定形でunicast renewがdeny落ち(採点盲点→BL-069)/CL1-FIXEDのdns typo 198.50/NET30 default-router行に余分な255.255.255.0 |
 | 2026-07-26 | ENARSI-REDIST-POLICY-01 (s6127) | 4 | 撤収済 | 100 | BL-068初出題を一発満点。deny(tag)→deny(lab)→permit(個別色)→permit(包括色)の順序設計完璧・set metricのプレフィックス毎出し分けも模範同型。DENY01共用prefix-list・明示type-2は本人流 |

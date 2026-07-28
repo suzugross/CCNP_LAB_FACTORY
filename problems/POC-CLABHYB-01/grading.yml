@@ -1,0 +1,45 @@
+# POC-CLABHYB-01 採点基準 — 複合ラボパイプラインの実証用
+# チェック3が新設の junos 採点パス(exec: junos + parser: json)の初出。
+problem: POC-CLABHYB-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  - name: "RT01: 境界越しに JUN01(192.168.0.1) と FULL 隣接"
+    node: RT01
+    command: "show ip ospf neighbor"
+    parser: "show ip ospf neighbor"
+    find: ["interfaces", "Ethernet0/1", "neighbors", "192.168.0.1"]
+    match:
+      state: { startswith: "FULL" }
+    points: 25
+
+  # ★interop 知見(2026-07-28 実機): Junos は lo0 をマスク(/24)によらず /32 ホスト
+  #   ルートで OSPF 広告する(Cisco の ip ospf network point-to-point 相当が既定)。
+  - name: "RT02: JUN01 の lo0 (192.168.0.1/32) を OSPF 学習"
+    node: RT02
+    command: "show ip route 192.168.0.1"
+    raw:
+      - regex: 'Routing entry for 192\.168\.0\.1/32'
+      - regex: 'Known via "ospf'
+    points: 25
+
+  - name: "JUN01: RT01(10.0.12.2) と Full 隣接 (Junos JSON 採点パス)"
+    node: JUN01
+    exec: junos
+    command: "show ospf neighbor | display json"
+    parser: json
+    find: ["ospf-neighbor-information", "*", "ospf-neighbor", "*"]
+    match:
+      neighbor-address.*.data: "10.0.12.2"
+      ospf-neighbor-state.*.data: "Full"
+    points: 30
+
+  - name: "RT02→JUN01: E2E ping (lo0 発 192.168.0.1 宛)"
+    node: RT02
+    command: "ping 192.168.0.1 source Loopback0 repeat 5"
+    raw:
+      - regex: "Success rate is (80|100) percent"
+    points: 20

@@ -1,0 +1,108 @@
+# 採点基準 (ENARSI-EIGRP-VRF-01)。収集=ssh(iol-xe)。
+# VRF×重複アドレスのため netmodel(大域不変条件)は使わず raw+効果チェックのみ。
+# 負の要件(分離/明細抑止)は正の要件と同一チェックに複合(0点発射の偽陽性なし)。
+# ※regex の表記は PoC 実機出力に合わせて調整済みであること(初回は要実機確認)。
+problem: ENARSI-EIGRP-VRF-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # === L1: VRF 定義と IF 収容 ===
+  - name: "RT02: VRF TENANT-A (rd 65000:100) に Et0/0, Et0/1 を収容"
+    node: RT02
+    command: "show vrf detail TENANT-A"
+    raw:
+      - { regex: "RD 65000:100" }
+      - { regex: "Et0/0" }
+      - { regex: "Et0/1" }
+    points: 10
+
+  - name: "RT02: VRF TENANT-B (rd 65000:200) に Et0/2 を収容"
+    node: RT02
+    command: "show vrf detail TENANT-B"
+    raw:
+      - { regex: "RD 65000:200" }
+      - { regex: "Et0/2" }
+      - { not_regex: "Et0/[01]\\b" }
+    points: 10
+
+  # === L2: EIGRP named mode 隣接 ===
+  - name: "RT02: named mode SUZUNET / AS100 でテナントAの隣接2本 (RT01, RT04)"
+    node: RT02
+    command: "show ip eigrp vrf TENANT-A neighbors"
+    raw:
+      - { regex: "VR\\(SUZUNET\\)" }
+      - { regex: "AS\\(100\\)" }
+      - { regex: "10\\.10\\.1\\.1" }
+      - { regex: "10\\.10\\.2\\.1" }
+    points: 10
+
+  - name: "RT02: named mode SUZUNET / AS200 でテナントBの隣接 (RT03)"
+    node: RT02
+    command: "show ip eigrp vrf TENANT-B neighbors"
+    raw:
+      - { regex: "VR\\(SUZUNET\\)" }
+      - { regex: "AS\\(200\\)" }
+      - { regex: "10\\.20\\.1\\.1" }
+    points: 10
+
+  # === L3: 認証 (テナントA af-interface) ===
+  - name: "RT02: テナントA CE向けIFで MD5 認証 (key-chain KC-A) が有効"
+    node: RT02
+    command: "show ip eigrp vrf TENANT-A interfaces detail"
+    raw:
+      - { regex: "md5" }
+      - { regex: "KC-A" }
+    points: 10
+
+  # === L4: 重複プレフィックスの VRF 共存 (分離の実効証明) ===
+  - name: "RT02: VRF TENANT-A の 172.16.10.0/24 は RT01 (10.10.1.1) から学習"
+    node: RT02
+    command: "show ip route vrf TENANT-A 172.16.10.0 255.255.255.0"
+    raw:
+      - { regex: "Routing entry for 172\\.16\\.10\\.0/24" }
+      - { regex: "\\* 10\\.10\\.1\\.1" }
+    points: 10
+
+  - name: "RT02: VRF TENANT-B の 172.16.10.0/24 は RT03 (10.20.1.1) から学習 (重複共存)"
+    node: RT02
+    command: "show ip route vrf TENANT-B 172.16.10.0 255.255.255.0"
+    raw:
+      - { regex: "Routing entry for 172\\.16\\.10\\.0/24" }
+      - { regex: "\\* 10\\.20\\.1\\.1" }
+    points: 10
+
+  # === L5: 集約と分離 (正+負の複合チェック) ===
+  - name: "RT04: /23 集約のみ学習 (明細/24 なし・テナントB経路なし)"
+    node: RT04
+    command: "show ip route eigrp"
+    raw:
+      - { regex: "D\\s+172\\.16\\.10\\.0/23" }
+      - { not_regex: "172\\.16\\.1[01]\\.0/24" }
+      - { not_regex: "172\\.16\\.30\\.0" }
+    points: 10
+
+  - name: "RT01: site2 経路 (172.16.20.0/24) を学習・テナントB経路なし"
+    node: RT01
+    command: "show ip route eigrp"
+    raw:
+      - { regex: "172\\.16\\.20\\.0" }
+      - { not_regex: "172\\.16\\.30\\.0" }
+    points: 5
+
+  # === L6: 疎通 (実効) ===
+  - name: "RT04: site1 (172.16.10.1) へ Lo 発着で疎通 (テナントA サイト間)"
+    node: RT04
+    command: "ping 172.16.10.1 source 172.16.20.1 repeat 5"
+    raw:
+      - { regex: "Success rate is [1-9]" }
+    points: 10
+
+  - name: "RT02: VRF TENANT-B から 172.16.30.1 へ疎通"
+    node: RT02
+    command: "ping vrf TENANT-B 172.16.30.1 repeat 5"
+    raw:
+      - { regex: "Success rate is [1-9]" }
+    points: 5

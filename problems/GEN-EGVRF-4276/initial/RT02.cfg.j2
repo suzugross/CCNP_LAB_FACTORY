@@ -1,0 +1,47 @@
+! RT02 初期状態 (EIGRP×VRF TS・昨夜の収容作業直後の状態)
+key chain KC-A
+ key 6
+  key-string Ten8987Key
+!
+vrf definition TENANT-A
+ rd 65000:120
+ address-family ipv4
+ exit-address-family
+!
+vrf definition TENANT-B
+ rd 65000:240
+ address-family ipv4
+ exit-address-family
+!
+interface {{ links[0] }}
+ vrf forwarding TENANT-B
+ ip address 10.120.3.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ vrf forwarding TENANT-A
+ ip address 10.120.4.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ vrf forwarding TENANT-A
+ ip address 10.120.5.2 255.255.255.252
+ no shutdown
+!
+router eigrp AGGR01
+ address-family ipv4 unicast vrf TENANT-A autonomous-system 120
+  af-interface Ethernet0/0
+   authentication mode md5
+   authentication key-chain KC-A
+  exit-af-interface
+  af-interface Ethernet0/1
+   authentication mode md5
+   authentication key-chain KC-A
+   summary-address 172.25.164.0 255.255.254.0
+  exit-af-interface
+  network 10.120.3.0 0.0.0.3
+ exit-address-family
+ address-family ipv4 unicast vrf TENANT-B autonomous-system 240
+  network 10.120.5.0 0.0.0.3
+ exit-address-family
+!

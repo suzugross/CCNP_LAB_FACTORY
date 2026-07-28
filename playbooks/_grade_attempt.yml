@@ -32,17 +32,33 @@
   failed_when: false
   when: (item.exec | default('ios')) == 'shell'
 
+# exec: junos … clab 側 Junos ノード(BL-061 複合ラボ)。network_cli 越しの CLI 実行。
+# `| display json` 付きコマンドなら grade.py の parser: json で構造化採点できる。
+- name: 各チェックのコマンドを Junos ノードで実行 (exec=junos)
+  ansible.netcommon.cli_command:
+    command: "{{ item.command }}"
+  delegate_to: "{{ item.node }}"
+  loop: "{{ checks | default([]) }}"
+  loop_control: { label: "{{ item.node }}: {{ item.command | truncate(60) }}" }
+  register: collected_jn
+  changed_when: false
+  failed_when: false
+  when: (item.exec | default('ios')) == 'junos'
+
 - name: 結果 JSON を組み立て（checks にこの試行の stdout を併合）
   vars:
     nl: "\n"   # Jinja の '\n' リテラルは実改行にならない(バックスラッシュ+n の2文字)ため YAML 側で定義
   ansible.builtin.set_fact:
     payload: >-
       {{ (payload | default([])) + [ checks[res_idx] | combine({'stdout':
-           ((collected_sh.results[res_idx].stdout | default('')) ~ nl
-              ~ (collected_sh.results[res_idx].stderr | default(''))
-            if (res.skipped | default(false))
-            else (res.stdout[0] if res.stdout is defined
-                  else (res.msg | default('') | string))) }) ] }}
+           ((res.stdout[0] if res.stdout is defined
+             else (res.msg | default('') | string))
+            if not (res.skipped | default(false))
+            else (((collected_jn.results[res_idx].stdout
+                    | default(collected_jn.results[res_idx].msg | default('') | string)) | string)
+                  if (checks[res_idx].exec | default('ios')) == 'junos'
+                  else ((collected_sh.results[res_idx].stdout | default('')) ~ nl
+                        ~ (collected_sh.results[res_idx].stderr | default(''))))) }) ] }}
   loop: "{{ collected.results }}"
   loop_control: { loop_var: res, index_var: res_idx, label: "{{ checks[res_idx].name }}" }
   when: collected.results is defined

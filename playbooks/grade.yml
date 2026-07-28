@@ -38,11 +38,15 @@
       ansible.builtin.set_fact:
         access: "{{ pmeta.access | default('ssh') }}"
 
+    - name: 接続先マップ = mgmt_map ＋ clab ノード（problem.yml の clab_nodes。BL-061 複合ラボ）
+      ansible.builtin.set_fact:
+        hostmap: "{{ mgmt_map | combine(pmeta.clab_nodes | default({})) }}"
+
     - name: 各チェックに既定(genie_os 等)と接続先を併合した checks を作る
       ansible.builtin.set_fact:
         checks: >-
           {{ checks | default([]) + [
-               (grading.defaults | default({})) | combine(item) | combine({'ansible_host': mgmt_map[item.node]})
+               (grading.defaults | default({})) | combine(item) | combine({'ansible_host': hostmap[item.node]})
              ] }}
       loop: "{{ grading.checks | default([]) }}"
       loop_control: { label: "{{ item.node }}: {{ item.name }}" }
@@ -60,14 +64,36 @@
                          | selectattr('exec', 'equalto', 'shell')
                          | map(attribute='node') | unique | list }}"
 
+    - name: junos 採点ノード(clab)を特定（exec=junos。接続は network_cli / 指紋照合は対象外）
+      ansible.builtin.set_fact:
+        junos_nodes: "{{ grading.checks | default([]) | selectattr('exec', 'defined')
+                         | selectattr('exec', 'equalto', 'junos')
+                         | map(attribute='node') | unique | list }}"
+
     - name: 採点対象ノードに ansible_host を付与（delegate 接続用・ssh のみ。checks＋invariant の全 RIB ノード）
       ansible.builtin.add_host:
         name: "{{ item }}"
         groups: _graded
-        ansible_host: "{{ mgmt_map[item] }}"
+        ansible_host: "{{ hostmap[item] }}"
         labid_exec: "{{ 'shell' if item in shell_nodes else 'ios' }}"
       loop: "{{ (checks | default([]) | map(attribute='node') | list) + rib_nodes | unique | list }}"
-      loop_control: { label: "{{ item }} -> {{ mgmt_map[item] }}" }
+      loop_control: { label: "{{ item }} -> {{ hostmap[item] }}" }
+      when: access == 'ssh' and item not in junos_nodes
+
+    - name: junos ノードを登録（clab 側。vault の IOS 用接続変数をホスト変数で上書き）
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups: _graded
+        ansible_host: "{{ hostmap[item] }}"
+        labid_exec: junos
+        ansible_connection: ansible.netcommon.network_cli
+        ansible_network_os: junipernetworks.junos.junos
+        ansible_user: "{{ clab_node_username | default('admin') }}"
+        ansible_password: "{{ clab_node_password | default('admin@123') }}"
+        ansible_ssh_pass: "{{ clab_node_password | default('admin@123') }}"
+        ansible_become: false
+      loop: "{{ junos_nodes }}"
+      loop_control: { label: "{{ item }} -> {{ hostmap[item] }} (junos)" }
       when: access == 'ssh'
 
 # === ラボ指紋の照合（誤ラボ採点の決定的防御） ================================
