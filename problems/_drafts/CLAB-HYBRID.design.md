@@ -47,7 +47,7 @@
 | B | ~~szk-cl01 への鍵認証＋接続情報登録~~ | — | **✅完了(2026-07-28)**: id_ed25519.pub 登録・BatchMode SSH 確認済。接続情報は `group_vars/all/local.yml`(gitignored)の `clab_*` 変数に登録 |
 | C | ~~Junos 制御ツール導入~~ | — | **✅完了(2026-07-28)**: .venv に ncclient 0.7.1 + jxmlease。★`junipernetworks.junos` 11.1.1 は **deprecated(2028-04撤去)→後継 `juniper.device` 2.0.2 も導入済み。playbook は juniper.device FQCN を使うこと** |
 | D | ~~Junos 採点パス新設~~ | — | **✅完了(2026-07-28 実機100点)**: ①`grade.py` に `parser: json`(stdout を JSON として読み既存 find/match glob 機構で採点) ②`_grade_attempt.yml` に `exec: junos`(ansible.netcommon.cli_command / network_cli 収集) ③`grade.yml` に clab_nodes ホストマップ併合＋junos ノード専用 add_host(vault の IOS 接続変数をホスト変数で上書き)＋指紋照合は対象外化。grading.yml の書き方= `exec: junos` + `command: "show ... \| display json"` + `parser: json` + find/match |
-| E | ラボ資材の二枚看板化: 問題生成器が CML yaml と `.clab.yml` を対で出力 → scp して `containerlab deploy -t` を SSH 実行するラッパを lab.sh/ops に追加 | 中 | clab は sudo 不要・startup-config 焼き込み対応(vrnetlab)なので day0 方式を踏襲可。**PoC では既設稼働ラボを再利用したため未実装(次の本実装対象)** |
+| E | ~~ラボ資材の二枚看板化(clab側コード管理+deployラッパ)~~ | — | **✅完了(2026-07-29 実機フルサイクル検証)**: 実装形= パックに `clab/<name>.clab.yml`+startup-config を置き `problem.yml: clab_topology:` で参照 → **`topologies/clab_ops.py`**(deploy/destroy/status・RAMプリフライト 7500MB/EVO・healthy ポーリング・冪等ガード=healthy ならスキップ・known_hosts 自動掃除)を lab.sh provision/teardown が自動連動(未定義問題は即スキップ)。検証= 旧手動ospfラボ destroy→deploy(JUN01 1台・startup-config 焼き込み)→provision(スキップ動作✅)→**grade 100/100**→teardown(clab 連動 destroy✅)。★知見= ①vrnetlab startup-config は **init.conf への連結方式→階層(カーリー)形式必須・set形式不可** ②**redeploy ごとに SSH ホスト鍵が変わる**→grade は `ansible_host_key_checking: false`+clab_ops が `ssh-keygen -R`(初回70点の原因) ③EVO healthy は今回約2〜4分 ④単一ノード構成は eth1=et-0/0/0(2台構成の et-0/0/1 から IF 移動要) |
 | F | ~~CML 側トポロジの external connector 生成~~ | — | **✅完了(2026-07-28)**: `gen_cml_lab.py` に `lab.ext_links` 追加(`{node, if, connector, label}`)。**★罠(実証)= connector に書くのは ext-conn の「デバイス名」(bridge1)。ラベル("LAN-IX")だと import は通るが起動時に QUEUED→DEFINED_ON_CORE 無言差し戻し**(既知の invalid image ID と同型)。経路= ext-conn `bridge1`(ラベル LAN-IX・IF ens32) ↔ vSwitch ↔ szk-cl01 ens160 ↔ br-cml |
 | G | クロスリンクの多重化設計: 現状はフラット1セグメント。プラットフォーム跨ぎ P2P リンクを複数張るなら VLAN トランク化(ESXi ポートグループ VLAN4095 + vlan-aware bridge or サブブリッジ複数) | 中 | 1本目の複合問は「境界リンク1本」設計にすれば先送り可能 |
 | H | ノード認証の規約統一: EVO の startup-config で SUZUKI/CCNP を作りプロジェクト規約(vault)に合わせる | 小 | admin/admin@123 のままでも可だが inventory が二重規約になる |
@@ -79,21 +79,22 @@
   5. 手動テストラボ(iol-0=10.0.12.2)と PoC の IP 衝突が起きた→**複合ラボは境界サブネットの
      台帳管理が必要**(当面は 10.0.12.0/30 を BL-061 専用に予約)
 
-## 6. 再開手順(2026-07-28 中断時点のスナップショット)
-- **現在地**: A〜D・F 完了(PoC 100/100 フルサイクル済・§5)。**次= E(.clab.yml 出力+deploy ラッパ)→初弾 interop 問**
-- **残置状態**:
-  - CML: PoC ラボ撤収済・リース解放済(クリーン)
-  - clab(szk-cl01): **ospf ラボ(evo1=JUN01/evo2)は稼働のまま残置**(ユーザ資産のため)。
-    RAM 16GiB 消費中。落とす場合= `containerlab destroy -t ~/labs/ospf.clab.yml`
-  - 復元資材(ラボを落としても再現可能): `problems/POC-CLABHYB-01/clab/ospf.clab.yml`(トポロジ)
-    ＋ `clab/jun01.set.cfg`(JUN01 config・load set terminal で復元)
-- **PoC 再現(いつでも)**: clab側 ospf ラボ稼働中なら
-  `scripts/lab.sh provision POC-CLABHYB-01` → `ansible-playbook playbooks/grade.yml -e problem=POC-CLABHYB-01 --vault-password-file <(echo CCNP)` → `scripts/lab.sh teardown POC-CLABHYB-01` だけで回る
+## 6. 再開手順(2026-07-29 全完了)
+- **現在地**: **BL-061 全完了**。A〜F ＋ 初弾 **JUNOS-BUILD-01**(Junos 主役・難3・実機0→100・出題可・CATALOG 掲載済)。
+  ★作問方針(ユーザ指定 2026-07-29)= **マルチベンダ問は非 Cisco 機を主役に置く**(Cisco は据え付け対向/審判役)。
+  続編・他ベンダ展開は **BL-073** に分離(Junos BGP×policy → 移行チケット / FRR・VyOS・SR Linux / vEOS)
+- **残置状態**: CML=クリーン / clab(szk-cl01)=**ラボ無し・RAM 22GiB 空き**(旧手動 ospf ラボは 2026-07-29 に repo 管理へ置換済・旧2台構成の config は `clab/reference/` に保全)
+- **複合ラボの回し方(全自動・これだけ)**:
+  `scripts/lab.sh provision POC-CLABHYB-01`(CML up + clab deploy 連動・EVO ブート込み約8分)
+  → `ansible-playbook playbooks/grade.yml -e problem=POC-CLABHYB-01 --vault-password-file <(echo CCNP)`
+  → `scripts/lab.sh teardown POC-CLABHYB-01`(CML absent + clab destroy 連動)
+- **新問題の複合ラボ化**: パックに `clab/` (topo+startup-config) を置き problem.yml に
+  `clab_topology:`+`clab_nodes:` を書くだけ(採点は exec: junos + parser: json)
 - **接続情報**: group_vars/all/local.yml の `clab_*` / szk-cl01 は鍵認証済 / EVO は admin/admin@123
 
 ## 4. 未確認事項(次回確認)
-- 制御ホストからのルート追加後の実疎通(iptables は通る想定だが未実証)
-- vJunos EVO のブート所要時間・startup-config 焼き込みの実動作
+- ~~制御ホストからのルート追加後の実疎通~~ → 解決済(直達・NETCONF まで実証)
+- ~~vJunos EVO のブート所要時間・startup-config 焼き込みの実動作~~ → 解決済(§2 E行の知見参照)
 - ~~CML 側 ext-conn がどのブリッジ/NIC か~~ → **解決済(2026-07-28)**: `bridge1`(ラベル LAN-IX・ens32)。
   ユーザ提示の `ip link`(ens32 master bridge1)＋CML API `/system/external_connectors` 実照会で確定
 - ens32/ens160 両側の ESXi ポートグループの VLAN/セキュリティ設定(多重リンク化 G の前提)

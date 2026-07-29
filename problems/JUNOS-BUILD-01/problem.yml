@@ -1,0 +1,28 @@
+# Junos 主役シリーズ初弾 (BL-061)。JUN01(vJunos EVO/containerlab)をゼロから設定する
+# 基礎組み立て問。Cisco(IOL×2)は据え付け対向・変更禁止(効果採点の観測点を兼ねる)。
+# ユーザ解答動線 = VSCode ターミナルから ssh admin@172.20.20.2 (CMLコンソール不使用)。
+id: JUNOS-BUILD-01
+title: "Junos 基礎組み立て — 隣社の PTX を預かることになった"
+exam: MULTIVENDOR
+topics: [junos, ospf, routing-policy, commit, multivendor]
+difficulty: 3
+topology: generated
+target_nodes: [RT01, RT02]
+points: 100
+access: ssh
+image_family: iol
+
+# clab 側(主役)。JUN01 はブランク起動(startup-config 無し・mgmt のみ init.conf)。
+clab_nodes:
+  JUN01: 172.20.20.2
+clab_topology: clab/ccnp-junbuild.clab.yml
+
+# === トポロジ =============================================
+#   RT02 ──── RT01 ──── [LAN-IX ext-conn] ══ L2 ══ JUN01(et-0/0/0) ← 受験者が設定
+#  (2.2.2.2)  (1.1.1.1)     10.0.12.0/30          lo0 192.168.0.1/32
+#   10.77.12.0/30           全て OSPF area 0      static 172.16.10.0/24 → OSPF export
+lab:
+  links:
+    - { a: RT01, a_if: 0, b: RT02, b_if: 0 }   # 10.77.12.0/30 area 0
+  ext_links:
+    - { node: RT01, if: 1, connector: "bridge1", label: "to-LAN-IX" }   # → JUN01

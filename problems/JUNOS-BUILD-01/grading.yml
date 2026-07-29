@@ -1,0 +1,100 @@
+# JUNOS-BUILD-01 採点基準
+# 主役=JUN01(exec: junos)。設定監査(| display set raw)＋状態(JSON)＋効果(据え付けCisco側から観測)の3層。
+# ★commit confirmed 履歴チェック(要件7)は show system commit の表記に依存 → 実機検証で regex 確定済みであること。
+problem: JUNOS-BUILD-01
+total_points: 100
+
+defaults:
+  genie_os: iosxe
+
+checks:
+  # --- JUN01 設定監査(基本形) ------------------------------------
+  - name: "JUN01: ホスト名 JUN01 + et-0/0/0.0 に 10.0.12.1/30"
+    node: JUN01
+    exec: junos
+    command: "show configuration | display set"
+    raw:
+      - regex: 'set system host-name JUN01'
+      - regex: 'set interfaces et-0/0/0 unit 0 family inet address 10\.0\.12\.1/30'
+    points: 10
+
+  - name: "JUN01: lo0.0 に 192.168.0.1/32 + router-id 明示"
+    node: JUN01
+    exec: junos
+    command: "show configuration | display set"
+    raw:
+      - regex: 'set interfaces lo0 unit 0 family inet address 192\.168\.0\.1/32'
+      - regex: 'set routing-options router-id 192\.168\.0\.1'
+    points: 10
+
+  - name: "JUN01: lo0.0 が OSPF passive で area 0 収容"
+    node: JUN01
+    exec: junos
+    command: "show configuration | display set"
+    raw:
+      - regex: 'set protocols ospf area 0(\.0\.0\.0)? interface lo0\.0 passive'
+    points: 5
+
+  # --- OSPF 隣接(両面) ------------------------------------------
+  - name: "JUN01: RT01(10.0.12.2) と Full 隣接 (JSON)"
+    node: JUN01
+    exec: junos
+    command: "show ospf neighbor | display json"
+    parser: json
+    find: ["ospf-neighbor-information", "*", "ospf-neighbor", "*"]
+    match:
+      neighbor-address.*.data: "10.0.12.2"
+      ospf-neighbor-state.*.data: "Full"
+    points: 15
+
+  - name: "RT01: JUN01(192.168.0.1) と FULL 隣接 (Cisco側から)"
+    node: RT01
+    command: "show ip ospf neighbor"
+    parser: "show ip ospf neighbor"
+    find: ["interfaces", "Ethernet0/1", "neighbors", "192.168.0.1"]
+    match:
+      state: { startswith: "FULL" }
+    points: 15
+
+  # --- 経路伝搬の効果(据え付け RT02 から観測) ---------------------
+  - name: "RT02: JUN01 の lo0 (192.168.0.1/32) を OSPF 学習"
+    node: RT02
+    command: "show ip route 192.168.0.1"
+    raw:
+      - regex: 'Routing entry for 192\.168\.0\.1/32'
+      - regex: 'Known via "ospf'
+    points: 10
+
+  - name: "JUN01: static 172.16.10.0/24 + policy-statement で OSPF export"
+    node: JUN01
+    exec: junos
+    command: "show configuration | display set"
+    raw:
+      - regex: 'set routing-options static route 172\.16\.10\.0/24 discard'
+      - regex: 'set policy-options policy-statement \S+ term \S+ from protocol static|set policy-options policy-statement \S+ from protocol static'
+      - regex: 'set protocols ospf export \S+'
+    points: 10
+
+  - name: "RT02: 172.16.10.0/24 を O E2 で学習 (export 効果)"
+    node: RT02
+    command: "show ip route ospf"
+    raw:
+      - regex: 'O E2 +172\.16\.10\.0'
+    points: 10
+
+  # --- E2E ＋ 作法 -----------------------------------------------
+  - name: "JUN01→RT02: E2E ping (lo0 発 2.2.2.2 宛)"
+    node: JUN01
+    exec: junos
+    command: "ping 2.2.2.2 source 192.168.0.1 count 5 rapid"
+    raw:
+      - regex: '!!!!!|5 packets received'
+    points: 10
+
+  - name: "JUN01: commit confirmed を使った履歴が残っている (安全作法)"
+    node: JUN01
+    exec: junos
+    command: "show system commit"
+    raw:
+      - regex: 'commit confirmed'
+    points: 5

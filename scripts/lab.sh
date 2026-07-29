@@ -38,6 +38,9 @@ case "$cmd" in
     echo "== [2/3] lab_up (CML 起動) =="
     "$PY/ansible-playbook" "$REPO/playbooks/lab_up.yml" \
       -e problem="$prob" --vault-password-file <(vault)
+    # 複合ラボ(BL-061): problem.yml に clab_topology があれば containerlab 側も deploy
+    # (未定義の問題は clab_ops.py が即スキップするので常時呼んで無害)
+    "$PY/python3" "$REPO/topologies/clab_ops.py" deploy --repo "$REPO" --problem "$prob"
     # [3/3] 作業フォルダ lab/<ID> を作る: 問題用紙(task.md)＋(あれば)穴あきworkspace
     mkdir -p "$LAB_HOME"          # 親 lab/ を必ず先に作る（cp -r の親不在エラー防止）
     dest="$LAB_HOME/$prob"
@@ -72,6 +75,8 @@ case "$cmd" in
       -e problem="$prob" -e lab_state=absent --vault-password-file <(vault) || true
     # lab_up(absent) が途中で失敗しても MGMT リースは必ず返す（冪等・保険）
     "$PY/python3" "$REPO/topologies/mgmt_alloc.py" release --repo "$REPO" --problem "$prob" || true
+    # 複合ラボ(BL-061): clab 側も destroy(clab_topology 未定義なら即スキップ)
+    "$PY/python3" "$REPO/topologies/clab_ops.py" destroy --repo "$REPO" --problem "$prob" || true
     echo "== 生成物を掃除: topologies/_generated/$prob =="
     rm -rf "${REPO:?}/topologies/_generated/$prob"
     if [ -d "$LAB_HOME/$prob" ]; then

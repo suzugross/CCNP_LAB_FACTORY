@@ -84,6 +84,7 @@
 | ENARSI-EIGRP-SIA-01 | 5 | eigrp,sia,query | 4 | ssh |  |  |
 | ENARSI-EIGRP-VRF-01 | 4 | eigrp,vrf,named-mode | 4 | ssh |  | BL-070①(2026-07-27)。VRF-Lite×named mode SUZUNET・2テナント重複172.16・MD5認証・/23集約。実機0→100検証済。★罠=vrf forwardingでIP剥がれ(taskに明かさない)。値固定(params未対応・再出題は要注意) |
 | ENARSI-GREIPSEC-MAP-01 | 4 | ipsec,gre,crypto-map | 4 | console |  |  |
+| JUNOS-BUILD-01 | 3 | junos,ospf,routing-policy,commit,multivendor | 2+JUN01 | ssh |  | BL-061初弾(2026-07-29)。★Junos主役シリーズ第1弾: JUN01(vJunos EVO/containerlab)をゼロから組み立て(set/commit confirmed/policy-statement export)・Cisco据え付け対向。実機0→100検証済。解答動線=`ssh admin@172.20.20.2`(CMLコンソール不使用)。provision約5分(EVOブート込)・RAM7.3GiB(szk-cl01) |
 | ENARSI-IPSEC-IKEV2-01 | 4 | ipsec,svti,ikev2 | 4 | console |  |  |
 | ENARSI-IPSEC-VTI-01 | 3 | ipsec,svti,ikev1 | 3 | console |  |  |
 | ENARSI-MPLS-L3VPN-01 | 3 | mpls,ldp,l3vpn | 7 | ssh |  |  |
