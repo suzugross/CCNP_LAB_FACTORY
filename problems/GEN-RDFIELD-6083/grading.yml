@@ -1,0 +1,76 @@
+# 自動生成 (gen_redist_field.py) GEN-RDFIELD-6083 K=3 faults=[('BR2', 'missing')]
+problem: GEN-RDFIELD-6083
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT05: 23.23.23.23
+    RT01: 20.20.20.20
+    RT02: 2.2.2.2
+    RT04: 21.21.21.21
+    RT07: 29.29.29.29
+    RT03: 76.76.76.76
+    RT06: 50.50.50.50
+  links:
+  - a: RT05
+    a_ip: 10.38.113.1
+    b: RT02
+    b_ip: 10.38.113.2
+  - a: RT02
+    a_ip: 10.238.254.1
+    b: RT04
+    b_ip: 10.238.254.2
+  - a: RT05
+    a_ip: 10.56.18.1
+    b: RT01
+    b_ip: 10.56.18.2
+  - a: RT05
+    a_ip: 10.247.212.1
+    b: RT07
+    b_ip: 10.247.212.2
+  - a: RT01
+    a_ip: 10.167.135.1
+    b: RT03
+    b_ip: 10.167.135.2
+  - a: RT01
+    a_ip: 10.40.165.1
+    b: RT06
+    b_ip: 10.40.165.2
+invariants:
+  - { type: reachability_all, name: "全ルータ間 Loopback 相互到達", points: 40 }
+  - { type: loop_free, name: "転送ループ無し", points: 10 }
+checks:
+  - name: "RT05: 収容標準どおりの相互再配送(方向・参照ID・seed metric)"
+    node: RT05
+    command: "show running-config | include redistribute"
+    raw:
+      - { regex: 'redistribute +eigrp +189 +metric +100000 +100 +255 +1 +1500' }
+      - { regex: 'redistribute +eigrp +180 +metric +100000 +100 +255 +1 +1500' }
+    points: 10
+  - name: "RT01: 収容標準どおりの相互再配送(方向・参照ID・seed metric)"
+    node: RT01
+    command: "show running-config | include redistribute"
+    raw:
+      - { regex: 'redistribute +eigrp +329 +metric +100000 +100 +255 +1 +1500' }
+      - { regex: 'redistribute +eigrp +189 +metric +100000 +100 +255 +1 +1500' }
+    points: 10
+  - name: "RT05: 再配送にフィルタ類が残っていない(収容標準=全 Loopback 相互到達)"
+    node: RT05
+    command: "show running-config | include redistribute"
+    raw:
+      - { not_regex: "redistribute .*route-map" }
+    points: 10
+  - name: "RT01: 再配送にフィルタ類が残っていない(収容標準=全 Loopback 相互到達)"
+    node: RT01
+    command: "show running-config | include redistribute"
+    raw:
+      - { not_regex: "redistribute .*route-map" }
+    points: 10
+  - name: "RT02: 対岸 RT06 の Loopback(50.50.50.50) を外部経路として学習"
+    node: RT02
+    command: "show ip route 50.50.50.50"
+    raw:
+      - { regex: 'Known via' }
+      - { regex: "distance 170" }
+    points: 10

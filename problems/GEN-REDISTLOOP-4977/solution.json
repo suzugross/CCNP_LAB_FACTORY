@@ -1,0 +1,27 @@
+{
+  "_comment": "variant=filter_ospf(distance 禁止): RC で prefix-list distribute-list in により 戻り 192.168.51.0/24(O E2) を RIB 学習で遮断→ RC は iBGP を採用。clear ip route * で反映。",
+  "nodes": {},
+  "post_clear": [
+    "RC"
+  ],
+  "filters": [
+    {
+      "node": "RC",
+      "blocks": [
+        {
+          "parents": null,
+          "lines": [
+            "ip prefix-list DENY_FEEDBACK seq 5 deny 192.168.51.0/24",
+            "ip prefix-list DENY_FEEDBACK seq 10 permit 0.0.0.0/0 le 32"
+          ]
+        },
+        {
+          "parents": "router ospf 1",
+          "lines": [
+            "distribute-list prefix DENY_FEEDBACK in"
+          ]
+        }
+      ]
+    }
+  ]
+}

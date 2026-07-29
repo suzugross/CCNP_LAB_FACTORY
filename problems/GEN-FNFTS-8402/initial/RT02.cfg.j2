@@ -1,0 +1,40 @@
+! RT02 初期状態 (FNF TS・昨日 監視チームが FNF を導入した直後の状態)
+interface Loopback0
+ ip address 96.96.96.96 255.255.255.255
+!
+flow record REC-WAN
+ match ipv4 source address
+ match ipv4 destination address
+ match ipv4 protocol
+ match transport source-port
+ match transport destination-port
+ collect counter bytes
+ collect counter packets
+!
+flow exporter EXP-WAN
+ destination 198.51.100.135
+ source Loopback0
+ transport udp 9995
+ export-protocol ipfix
+!
+flow monitor MON-WAN
+ record REC-WAN
+ exporter EXP-WAN
+!
+interface {{ links[0] }}
+ description === to RT01 (customer traffic in) ===
+ ip address 10.38.171.2 255.255.255.252
+ ip flow monitor MON-WAN output
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (upstream) ===
+ ip address 10.38.172.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 96.96.96.96
+ network 96.96.96.96 0.0.0.0 area 0
+ network 10.38.171.0 0.0.0.3 area 0
+ network 10.38.172.0 0.0.0.3 area 0
+!

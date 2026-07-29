@@ -1,0 +1,70 @@
+# 自動生成 (gen_fnf_ts.py) seed=8402 faults=exporter_wrong_dest,apply_direction_output
+# ★cache 実効は format table の同一行 regex(src dst 隣接列)。
+#   contains 2連へ緩めると逆向きフローで偽陽性になり方向故障を検出できない。
+problem: GEN-FNFTS-8402
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'RT02: flow record REC-WAN の match/collect が監視標準どおり'
+  node: RT02
+  command: show flow record REC-WAN
+  raw:
+  - regex: match ipv4 source address
+  - regex: match ipv4 destination address
+  - regex: match ipv4 protocol
+  - regex: match transport source-port
+  - regex: match transport destination-port
+  - regex: collect counter bytes
+  - regex: collect counter packets
+  points: 15
+- name: 'RT02: exporter EXP-WAN の宛先 198.51.100.14 / UDP 9995'
+  node: RT02
+  command: show flow exporter EXP-WAN
+  raw:
+  - regex: '[Dd]estination.*198\.51\.100\.14'
+  - regex: '[Dd]estination [Pp]ort:\s+9995'
+  points: 10
+- name: 'RT02: exporter EXP-WAN の source が Loopback0'
+  node: RT02
+  command: show flow exporter EXP-WAN
+  raw:
+  - regex: '[Ss]ource [Ii]nterface:\s+Loopback0'
+  points: 10
+- name: 'RT02: exporter EXP-WAN の export-protocol が ipfix'
+  node: RT02
+  command: show flow exporter EXP-WAN
+  raw:
+  - regex: Export protocol:\s+IPFIX
+  points: 10
+- name: 'RT02: monitor MON-WAN が record REC-WAN を参照'
+  node: RT02
+  command: show flow monitor MON-WAN
+  raw:
+  - regex: '[Rr]ecord.*REC-WAN'
+  - not_regex: REC-OLD
+  points: 10
+- name: 'RT02: monitor MON-WAN が exporter EXP-WAN を参照'
+  node: RT02
+  command: show flow monitor MON-WAN
+  raw:
+  - regex: '[Ee]xporter.*EXP-WAN'
+  points: 10
+- name: 'RT02: Ethernet0/0 (RT01向け) の ingress に MON-WAN を適用'
+  node: RT02
+  command: show running-config interface Ethernet0/0
+  raw:
+  - regex: ip flow monitor MON-WAN input
+  points: 15
+- name: (発射) RT01→RT03 の監視対象トラフィックが疎通
+  node: RT01
+  command: ping 86.86.86.86 source 91.91.91.91 repeat 10
+  raw:
+  - regex: Success rate is [1-9]
+  points: 5
+- name: '効果: cache に順方向フロー(src 91.91.91.91 → dst 86.86.86.86)が採取される'
+  node: RT02
+  command: show flow monitor MON-WAN cache format table
+  raw:
+  - regex: 91\.91\.91\.91\s+86\.86\.86\.86
+  points: 15

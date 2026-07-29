@@ -11,6 +11,14 @@
 
 | 出題日 | 問題ID (variant/seed) | 難 | 状態 | 得点 | メモ |
 |--------|----------------------|----|------|------|------|
+| 2026-07-29 | GEN-RDFIELD-4471 (hard) | 5 | 撤収済 | 100 | ★--hardモード初出題(K=3・5台・EIGRP768/OSPF12/OSPF66・fault=wrong_id×2=両BRの参照ID誤り)を一発満点。config完備に見えて経路ゼロの型×2箇所・チケット範囲重複の解きほぐし込み。★wrong_id機構はこの回で実機フルサイクル検証完了(4故障型すべて実機済に)。※9418(3台missing×2)は較正不適合で引き直し・--hard実装(K=3固定+subtle保証) |
+| 2026-07-29 | GEN-RDFIELD-6083 | 4 | 撤収済 | 100 | ★フィールド初出題(抽選=全EIGRP 3ドメインAS180/189/329・7台・fault=RT01のAS329→189方向missing)を一発満点。解=欠落方向のredistribute復旧(seed metric仕様値込み)・健全BR(RT05)は無変更の最小手。曖昧チケット(「全滅」申告)の裏取り→実範囲特定も自力 |
+| 2026-07-29 | GEN-RDARENA-8351 | 5 | 撤収済 | 100 | アリーナ初出題(7台・inject_eigrp×filter)を一発満点。解=出自タグ方式(TAG01 set tag 200@BGP→EIGRP + TAG02 deny tag@OSPF distribute-list in)=4977と同型の1:1転用。★ユーザ指摘「全然違いなくない?」=正当(タイトル/チケット/ヒントがモチーフと診断手順をバラしている+単一モチーフ)→提示改修とPhase2(症状クラス抽選)へ |
+| 2026-07-29 | GEN-REDISTLOOP-4977 (filter_ospf) | 5 | 撤収済 | 95→100 | distance禁止変種を出自タグ方式で完答: TAG01(set tag 110)をBGP→EIGRP再配送に付与+OSPFに`distribute-list route-map TAG02 in`(deny tag 110)=戻り経路のRIB搭載だけ拒否・RBのO E2は温存(LSAフラッディング非停止の理解が正確)。95の-5は試行残骸のdistance行(監査検知が機能)→除去で100。★弱点メモ「タグの位置づけ定着途上(7/19)」は完全克服と判定 |
+| 2026-07-29 | GEN-FNFTS-8402 (faults2) | 4 | 撤収済 | 100 | FNF新seed TS一発満点(本日4連続)。fault=exporter_wrong_dest+apply_direction_output(エクスポート空振り×逆方向計測の2チケット)。解=destination是正+Et0/0をinput適用へ=最小手2点・模範解同型。※未出fault残り=apply_wrong_if/monitor_no_exporter/exporter_wrong_port/exporter_wrong_source/exporter_wrong_version/monitor_wrong_record |
+| 2026-07-29 | GEN-DHCPTS-5741 (faults2) | 5 | 撤収済 | 100 | DHCP TS新seed一発満点(本日3連続)。fault=helper_missing(segB)+acl_no_dhcp_permit(両リモート)の2層交錯。解=Et0/2 helper復旧+ACLへseq5行挿入(permit udp any eq bootpc any eq bootps)=最小手。★BL-069の弱点(host 0.0.0.0限定形でrenew死)を自力回避=汎用形で初回からrenew実効PASS(学習ループ完結の実証) |
+| 2026-07-29 | GEN-EGVRF-9153 (faults2) | 5 | 撤収済 | 100 | 新seed TS一発満点(EIGRP×VRF 3連覇)。fault=summary_wrong_if+auth_missing_a1(症状=site2に明細/site1不通の2チケット交錯)。解=summary-addressをaf-interface Et0/1へ移設+Et0/0へMD5認証投入=最小手2点・模範解同型。認証はmode md5+key-chainの2行構成も正確 |
+| 2026-07-29 | DMVPN-POC-01 (再) | 5 | 撤収済 | 100 | 同値再演(ユーザ選択)を再び一発満点=完全定着。前回と同型(named mode・af-interfaceのno next-hop-self/no split-horizonはハブのみ・スポーク旧来3行NHRP・MTU/MSS先回り・IPsec自主実装tunnel key込み全台整合)。レビュー=hub map multicast dynamicの15.9暗黙デフォルト裏話を補足 |
 | 2026-07-27 | ENARSI-VRFLITE-DNBIT-01 | 4 | 撤収済 | - | **en**(task.en.md新規作成・CML Notes英語差替の初適用)。未解答のままCMLサーバ停止のため中断→撤収。**再出題可**(問題パック・task.en.mdキャッシュ保持・ネタバレなし) |
 | 2026-07-27 | ENARSI-OSPF-MADJ-01 | 4 | 撤収済 | 100 | **en**(英語出題初回・task.en.md新規作成・BL-071)。一発満点(全12チェックPASS)。P2P化+multi-area 0の2行×2台=模範解同型・broadcastサイレント罠を自力回避 |
 | 2026-07-27 | ENARSI-BGP-AGGREGATE-01 | 3 | 撤収済 | 100 | BGP集約初出題を一発満点。as-set summary-onlyの1行最小解＋旧問に自主AF方式適用(規約定着)。レビューでAS_SETループ防止/atomic-aggregate/suppress-map3段構えを補足 |
