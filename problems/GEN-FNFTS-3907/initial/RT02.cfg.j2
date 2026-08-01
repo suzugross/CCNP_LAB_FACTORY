@@ -1,0 +1,45 @@
+! RT02 初期状態 (FNF TS・昨日 監視チームが FNF を導入した直後の状態)
+interface Loopback0
+ ip address 49.49.49.49 255.255.255.255
+!
+flow record REC-OLD
+ description legacy record (pre-standard)
+ match ipv4 source address
+ match ipv4 destination address
+ collect counter bytes
+!
+flow record REC-EDGE
+ match ipv4 source address
+ match ipv4 destination address
+ match ipv4 protocol
+ match transport source-port
+ match transport destination-port
+ collect counter bytes
+ collect counter packets
+!
+flow exporter EXP-EDGE
+ destination 198.51.100.193
+ source Loopback0
+ transport udp 4739
+!
+flow monitor MON-EDGE
+ record REC-OLD
+ exporter EXP-EDGE
+!
+interface {{ links[0] }}
+ description === to RT01 (customer traffic in) ===
+ ip address 10.45.248.2 255.255.255.252
+ ip flow monitor MON-EDGE input
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (upstream) ===
+ ip address 10.45.249.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 49.49.49.49
+ network 49.49.49.49 0.0.0.0 area 0
+ network 10.45.248.0 0.0.0.3 area 0
+ network 10.45.249.0 0.0.0.3 area 0
+!

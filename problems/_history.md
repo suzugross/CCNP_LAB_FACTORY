@@ -11,6 +11,16 @@
 
 | 出題日 | 問題ID (variant/seed) | 難 | 状態 | 得点 | メモ |
 |--------|----------------------|----|------|------|------|
+| 2026-07-31 | GEN-EGVRF-8072 (faults2) | 5 | 採点済 | 100 | 未出2種狙い撃ち(fault=stub_rt02+key_string_mismatch)を一発満点(10連続・EIGRP×VRF 5連覇)。目玉stub_rt02(隣接UPのまま経路消失)×認証typoの2段はがし=認証是正→隣接UP→なお経路ゼロ→stub行除去の最小手2点。※この生成器の未出fault残り1=af_passive_a1 |
+| 2026-07-31 | GEN-DMVPN-9174 (i3_keyring_perpeer) | 5 | 撤収済 | 100 | i3再挑戦(新seed)を一発満点(9連続)。両スポークのkeyringをpeer ANY(0.0.0.0)へ復旧=両側修理の必須性(responder側PSK)も正しく処理。監査型チケット(疎通正常×要件違反)からIX/DX固着→spoke間IKE不在→keyring照合の切り分け定着 |
+| 2026-07-31 | GEN-DMVPN-6521 (n2_nhrp_auth_mismatch) | 5 | 撤収済 | 100 | n2再挑戦(新seed)を一発満点(8連続)。victim=RT03のNHRP認証キー同長typoを1行差し替えの最小手で復旧(nhs detailのrepl-recv回復まで確認)。完全サイレント故障の切り分け(IKEv2 READY×登録ゼロ→NHRP層×config突合)が定着 |
+| 2026-07-31 | DMVPN-PHASE3-01 (再) | 5 | 撤収済 | 100 | 再演を一発満点(7連続)。Phase3作り分け完璧=hub redirect+af-interfaceはno split-horizonのみ(next-hop-self既定温存)・spoke shortcutは15.9暗黙既定の理解・前日Phase2(BGP-01)との対比が正確。IPsec自主実装が強化(aes256/sha256/g21/PFS/transport mode)・残骸ゼロ |
+| 2026-07-31 | GEN-RDFIELD-7719 (ring) | 5 | 撤収済 | 100 | ring(inject_ospf×想定解distance)を一発満点(6連続)。ユーザ解は想定解と別のタグ方式=TAG01(set tag 200)@BGP→OSPF注入+TAG02(deny tag)@EIGRP distribute-list in=4977/8351と同型の3回目転用だが今回は注入OSPF/遮断EIGRPの新ペア(タグのLSA→D EX伝搬理解込み)。残骸ゼロ(4977の-5教訓定着)。効果採点で満点 |
+| 2026-07-30 | ENCOR-DHCP-01 (再) | 3 | 採点済 | 100 | 再演を一発満点(本日5連続)=前回80点のACL要件を今回は最初から完走。ACLはBL-069教訓の汎用形(permit udp any eq bootpc any eq bootps)でrenew実効PASS・CL1はclient-id一行形の正攻法再現・自主lease 0 11 59付き(減点なし) |
+| 2026-07-30 | GEN-EGVRF-8841 (faults2) | 4 | 採点済 | 100 | EIGRP×VRF TS新seed一発満点(4連覇・本日4連続)。fault=vrf_missing_on_if+wrong_as_b(両方テナントB集中=チケット矛盾なし型)。IP剥がれ罠を実戦で自力突破(BL-070①開示済みの罠を初の実地検証)+named mode AF作り直しのAS是正。※未出fault残り3=af_passive_a1/stub_rt02/key_string_mismatch |
+| 2026-07-30 | ENCOR-FNF-01 (v2) | 3 | 撤収済 | 100 | v2変種初出(サンプラー/longカウンタ/タイムスタンプ/ToSキー)を一発満点=FNF 4連続満点。record過不足ゼロ・sampler併記適用(ip flow monitor+sampler一行形)も正確。構築→TS両輪完成でFNF卒業レベル |
+| 2026-07-30 | GEN-FNFTS-3907 (faults2) | 5 | 撤収済 | 100 | FNF TS新seed一発満点(3連続)。fault=exporter_wrong_version+monitor_wrong_record(チケット1:1対応の2点)。編集ロック非対称(export-protocolは参照解除要/monitor record差替はIF detach要)を突破し最終状態は仕様完全一致。※未出fault残り=apply_wrong_if/monitor_no_exporter/exporter_wrong_port/exporter_wrong_source |
+| 2026-07-30 | ENARSI-DMVPN-BGP-01 (再) | 5 | 撤収済 | 100 | 再演を一発満点=前回7/19の弱点(next-hop-self)完全克服。named mode af-interface正実装・EIGRP→BGPはprefix-list選択再配送(Lo限定)・BGP→EIGRP seed metric明示・IPsec自主実装(esp-gcm・全台整合)。※採点1回目はコンソール収集10分timeout→max_attempts=1再実行(毎回の運用) |
 | 2026-07-29 | GEN-RDFIELD-4471 (hard) | 5 | 撤収済 | 100 | ★--hardモード初出題(K=3・5台・EIGRP768/OSPF12/OSPF66・fault=wrong_id×2=両BRの参照ID誤り)を一発満点。config完備に見えて経路ゼロの型×2箇所・チケット範囲重複の解きほぐし込み。★wrong_id機構はこの回で実機フルサイクル検証完了(4故障型すべて実機済に)。※9418(3台missing×2)は較正不適合で引き直し・--hard実装(K=3固定+subtle保証) |
 | 2026-07-29 | GEN-RDFIELD-6083 | 4 | 撤収済 | 100 | ★フィールド初出題(抽選=全EIGRP 3ドメインAS180/189/329・7台・fault=RT01のAS329→189方向missing)を一発満点。解=欠落方向のredistribute復旧(seed metric仕様値込み)・健全BR(RT05)は無変更の最小手。曖昧チケット(「全滅」申告)の裏取り→実範囲特定も自力 |
 | 2026-07-29 | GEN-RDARENA-8351 | 5 | 撤収済 | 100 | アリーナ初出題(7台・inject_eigrp×filter)を一発満点。解=出自タグ方式(TAG01 set tag 200@BGP→EIGRP + TAG02 deny tag@OSPF distribute-list in)=4977と同型の1:1転用。★ユーザ指摘「全然違いなくない?」=正当(タイトル/チケット/ヒントがモチーフと診断手順をバラしている+単一モチーフ)→提示改修とPhase2(症状クラス抽選)へ |

@@ -1,0 +1,28 @@
+! GEN-RDARENA 初期 (EIGRP⇄OSPF 相互再配送・リング中継)
+interface Loopback0
+ ip address 3.3.3.3 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.167.27.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.251.45.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.111.253.1 255.255.255.252
+ no shutdown
+!
+router eigrp 614
+ network 10.167.27.0 0.0.0.3
+ no auto-summary
+ redistribute ospf 44 metric 100000 100 255 1 1500
+!
+router ospf 44
+ router-id 3.3.3.3
+ network 3.3.3.3 0.0.0.0 area 0
+ network 10.251.45.0 0.0.0.3 area 0
+ network 10.111.253.0 0.0.0.3 area 0
+ redistribute eigrp 614 subnets
+!

@@ -11,6 +11,9 @@ description: CCNP問題の出題フロー。ユーザが「問題を出して」
 2. [problems/CATALOG.md](../../../problems/CATALOG.md) — 出題可問題の一覧・variant・固有注意・生成器
 3. [problems/_history.md](../../../problems/_history.md) — 出題履歴(重複回避・出題中ラボの把握)
 
+さらに `private/` ディレクトリが存在すれば `private/CATALOG.md` と `private/_history.md`
+も読む(git管理外の非公開問題群=PVT系。選定候補に含め、出題記録は `private/_history.md` 側に付ける)。
+
 環境の前提(既知として扱ってよい): CML 10.1.10.10 / vault パスワード `CCNP` / 機器ログイン SUZUKI/CCNP / **ユーザは CML コンソールで直接解く(SSH 不使用・IOSv も出題可)** / CML Personal は同時起動 20 ノード上限。
 
 ## 手順

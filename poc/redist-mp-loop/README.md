@@ -1,10 +1,10 @@
 # 多点相互再配送×seed metric 定常ループ PoC (BL-058) — 結果 (2026-07-16)
 
-Ping-t #26308（多点相互再配送によるルーティングループ→distribute-list で防止）の
+定番題材（多点相互再配送によるルーティングループ→distribute-list で防止）の
 忠実再現 Phase 0。**全項目成立 → 出題化可**。実装形は手組み単問が素直
 （gen_redist_loop_ts.py とはトポロジ・機序が異なる）。
 
-## 検証環境（poc-redist26308-iol-lab.yaml, iol-xe-17-15-01 ×6・コンソールのみ／MGMTリース不使用）
+## 検証環境（poc-redistmp-iol-lab.yaml, iol-xe-17-15-01 ×6・コンソールのみ／MGMTリース不使用）
 
 ```
    [OSPF]          [EIGRP AS1]                  [RIPv2]

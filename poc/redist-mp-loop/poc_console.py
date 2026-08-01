@@ -5,8 +5,8 @@ CML のターミナルサーバ経由(pyATS testbed via='a')で 1 ノードに�
 show 実行(--exec)または設定投入(--config)を行う。MGMT/SSH 不要。
 
 使い方:
-  poc_console.py --title POC-REDIST26308 --node RA --exec "show ip route;;traceroute 192.168.1.6 ttl 1 12"
-  poc_console.py --title POC-REDIST26308 --node RB --config "ip access-list ...\n..."
+  poc_console.py --title POC-REDISTMP --node RA --exec "show ip route;;traceroute 192.168.1.6 ttl 1 12"
+  poc_console.py --title POC-REDISTMP --node RB --config "ip access-list ...\n..."
 コマンド区切りは ';;'。--config は改行区切りの config 行(configure terminal 配下)。
 """
 import argparse

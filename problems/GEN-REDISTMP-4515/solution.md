@@ -1,6 +1,6 @@
 # 模範解答 : GEN-REDISTMP-4515(solution=routemap)
 
-## なぜ壊れるか(多点相互再配送×seed metric の定常ループ・Ping-t #26308 型)
+## なぜ壊れるか(多点相互再配送×seed metric の定常ループ 型)
 `192.168.94.0/24` は RIP 発。RF が EIGRP へ再配送し(D EX・AD 170)、境界 RB/RC が
 EIGRP→OSPF へ再配送(O E2・AD 110)、それが**もう一方の境界で OSPF→EIGRP に再注入**される。
 

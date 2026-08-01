@@ -1,0 +1,35 @@
+! GEN-RDARENA 初期 (iBGP + EIGRP + OSPF 収容)
+interface Loopback0
+ ip address 89.89.89.89 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.16.90.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.167.27.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.10.210.1 255.255.255.252
+ no shutdown
+!
+router eigrp 614
+ network 10.167.27.0 0.0.0.3
+ no auto-summary
+!
+router ospf 44
+ router-id 89.89.89.89
+ network 89.89.89.89 0.0.0.0 area 0
+ network 10.10.210.0 0.0.0.3 area 0
+ redistribute bgp 64909 subnets
+ redistribute eigrp 614 subnets
+!
+router bgp 64909
+ bgp router-id 89.89.89.89
+ bgp log-neighbor-changes
+ bgp redistribute-internal
+ network 89.89.89.89 mask 255.255.255.255
+ neighbor 10.16.90.1 remote-as 64909
+ redistribute ospf 44
+!

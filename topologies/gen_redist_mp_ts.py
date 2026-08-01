@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""多点相互再配送×seed metric 定常ループ生成器（Ping-t #26308 ファミリ・BL-058）。
+"""多点相互再配送×seed metric 定常ループ生成器（BL-058）。
 
-正準トポロジ(6台・PDF #26308 忠実・値を seed ランダム化):
+正準トポロジ(6台・定番題材準拠・値を seed ランダム化):
   OSPF area0          EIGRP AS               RIPv2
      RB ──── segE11 ────┐
   segO1│                │
@@ -85,7 +85,7 @@ def rand_values(rnd):
 # ---------------------------------------------------------------- 初期 config
 def render_node(node):
     """initial/<node>.cfg.j2 の行リスト({{ params.* }} と {{ links[n] }} は build 時描画)。
-    故障=RB/RC の相互再配送にタグ/フィルタが無い(PDF #26308 の初期状態)。全モード共通。"""
+    故障=RB/RC の相互再配送にタグ/フィルタが無い(定番題材の初期状態)。全モード共通。"""
     h = HOST[node]
     if node == "RA":
         return [
@@ -397,7 +397,7 @@ router eigrp {asn}
  distribute-list {p['acl_no']} out ospf {pid}
 ```
 `out ospf {pid}` は「**OSPF {pid} を源とする再配送**」だけに掛かる out フィルタ。
-EIGRP ネイバーへの通常アドバタイズや他の再配送には影響しない(PDF #26308 の正解形)。""",
+EIGRP ネイバーへの通常アドバタイズや他の再配送には影響しない(定番題材の正解形)。""",
         "prefix": f"""```
 ip prefix-list {PFX_NAME} seq 5 deny {victim}.0/24
 ip prefix-list {PFX_NAME} seq 10 permit 0.0.0.0/0 le 32
@@ -436,7 +436,7 @@ EIGRP 外部(正規方向)を選ぶ。RIB が EIGRP になるため `redistribut
     }
     return f"""# 模範解答 : {prob_id}(solution={mode})
 
-## なぜ壊れるか(多点相互再配送×seed metric の定常ループ・Ping-t #26308 型)
+## なぜ壊れるか(多点相互再配送×seed metric の定常ループ 型)
 `{victim}.0/24` は RIP 発。RF が EIGRP へ再配送し(D EX・AD 170)、境界 RB/RC が
 EIGRP→OSPF へ再配送(O E2・AD 110)、それが**もう一方の境界で OSPF→EIGRP に再注入**される。
 

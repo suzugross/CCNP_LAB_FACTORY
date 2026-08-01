@@ -1,0 +1,72 @@
+# 自動生成 (gen_redist_arena.py) GEN-RDFIELD-7719 ring=inject_ospf method=distance
+# 初期: 192.168.87.0/24 が RT03 → RT02 → RT06 → RT03 で定常ループ。是正後: RT03 が iBGP を採用し全到達。
+problem: GEN-RDFIELD-7719
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT04: 192.168.87.1
+    RT03: 89.89.89.89
+    RT02: 3.3.3.3
+    RT06: 87.87.87.87
+    RT05: 74.74.74.74
+    RT01: 80.80.80.80
+  links:
+  - a: RT04
+    a_ip: 10.16.90.1
+    b: RT03
+    b_ip: 10.16.90.2
+  - a: RT03
+    a_ip: 10.167.27.1
+    b: RT02
+    b_ip: 10.167.27.2
+  - a: RT03
+    a_ip: 10.10.210.1
+    b: RT06
+    b_ip: 10.10.210.2
+  - a: RT02
+    a_ip: 10.251.45.1
+    b: RT06
+    b_ip: 10.251.45.2
+  - a: RT06
+    a_ip: 10.74.114.1
+    b: RT05
+    b_ip: 10.74.114.2
+  - a: RT02
+    a_ip: 10.111.253.1
+    b: RT01
+    b_ip: 10.111.253.2
+invariants:
+  - { type: reachability_all, name: "全ルータ間 Loopback 到達性(被害プレフィクスを含む)", points: 30 }
+  - { type: loop_free, name: "転送ループ無し(RT03 → RT02 → RT06 → RT03 の再配送リングループ解消)", points: 25 }
+  - type: optimal
+    name: "被害プレフィクスへの最短転送(震源でループ・遠回りが無い)"
+    points: 15
+    pairs: [["RT03", "RT04"], ["RT06", "RT03"], ["RT03", "RT06"]]
+checks:
+  - name: "RT03: 192.168.87.0/24 を BGP(iBGP)で学習(戻り経路でなく起点方向を選択＝ループ解消の核心)"
+    node: RT03
+    command: "show ip route 192.168.87.0"
+    raw:
+      - { regex: 'Known via "bgp 64909"' }
+    points: 10
+  - name: "RT04: IGP側 Loopback(87.87.87.87) を BGP(B)で学習(戻り再配送 IGP→BGP が機能)"
+    node: RT04
+    command: "show ip route bgp"
+    raw:
+      - { regex: "B\\s+87.87.87.87" }
+    points: 10
+  - name: "RT06: 192.168.87.0/24 を OSPF 外部(extern 2)で学習(再配送リングの OSPF 部が機能)"
+    node: RT06
+    command: "show ip route 192.168.87.0"
+    raw:
+      - { regex: 'Known via "ospf' }
+      - { regex: "extern 2" }
+    points: 5
+  - name: "RT03: 静的経路なし(暫定対処の残置禁止)"
+    node: RT03
+    command: "show ip route static"
+    raw:
+      - { not_regex: "(?m)^S" }
+    points: 5

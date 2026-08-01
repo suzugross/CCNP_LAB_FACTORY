@@ -1,0 +1,89 @@
+# 自動生成 (gen_eigrp_vrf_ts.py) seed=8841 faults=wrong_as_b,vrf_missing_on_if
+# VRF×重複アドレスのため netmodel 不使用。負の要件は正の要件と複合。
+problem: GEN-EGVRF-8841
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'RT02: VRF TENANT-A (rd 65000:120) に Et0/0, Et0/1 を収容'
+  node: RT02
+  command: show vrf detail TENANT-A
+  raw:
+  - regex: RD 65000:120
+  - regex: Et0/0
+  - regex: Et0/1
+  points: 10
+- name: 'RT02: VRF TENANT-B (rd 65000:230) に Et0/2 を収容'
+  node: RT02
+  command: show vrf detail TENANT-B
+  raw:
+  - regex: RD 65000:230
+  - regex: Et0/2
+  - not_regex: Et0/[01]\b
+  points: 10
+- name: 'RT02: named mode DCNET / AS120 でテナントA隣接2本'
+  node: RT02
+  command: show ip eigrp vrf TENANT-A neighbors
+  raw:
+  - regex: VR\(DCNET\)
+  - regex: AS\(120\)
+  - regex: 10\.225\.165\.1
+  - regex: 10\.225\.166\.1
+  points: 10
+- name: 'RT02: named mode DCNET / AS230 でテナントB隣接'
+  node: RT02
+  command: show ip eigrp vrf TENANT-B neighbors
+  raw:
+  - regex: VR\(DCNET\)
+  - regex: AS\(230\)
+  - regex: 10\.225\.167\.1
+  points: 10
+- name: 'RT02: テナントA CE向けIFで MD5 認証 (key-chain KC-EDGE) が有効'
+  node: RT02
+  command: show ip eigrp vrf TENANT-A interfaces detail
+  raw:
+  - regex: md5
+  - regex: KC-EDGE
+  points: 10
+- name: 'RT02: VRF TENANT-A の 172.21.18.0/24 は RT01 から学習'
+  node: RT02
+  command: show ip route vrf TENANT-A 172.21.18.0 255.255.255.0
+  raw:
+  - regex: Routing entry for 172\.21\.18\.0/24
+  - regex: \* 10\.225\.165\.1
+  points: 10
+- name: 'RT02: VRF TENANT-B の 172.21.18.0/24 は RT03 から学習 (重複共存)'
+  node: RT02
+  command: show ip route vrf TENANT-B 172.21.18.0 255.255.255.0
+  raw:
+  - regex: Routing entry for 172\.21\.18\.0/24
+  - regex: \* 10\.225\.167\.1
+  points: 10
+- name: 'RT04: /23 集約のみ学習 (明細/24 なし・テナントB経路なし)'
+  node: RT04
+  command: show ip route eigrp
+  raw:
+  - regex: D\s+172\.21\.18\.0/23
+  - not_regex: 172\.21\.18\.0/24
+  - not_regex: 172\.21\.19\.0/24
+  - not_regex: 172\.21\.141\.0
+  points: 10
+- name: 'RT01: site2 経路 (172.21.65.0/24) を学習・テナントB経路なし'
+  node: RT01
+  command: show ip route eigrp
+  raw:
+  - regex: 172\.21\.65\.0
+  - not_regex: 172\.21\.141\.0
+  points: 5
+- name: 'RT04: site1 (172.21.18.1) へ Lo 発着で疎通'
+  node: RT04
+  command: ping 172.21.18.1 source 172.21.65.1 repeat 5
+  raw:
+  - regex: Success rate is [1-9]
+  points: 10
+- name: 'RT02: VRF TENANT-B から 172.21.141.1 へ疎通'
+  node: RT02
+  command: ping vrf TENANT-B 172.21.141.1 repeat 5
+  raw:
+  - regex: Success rate is [1-9]
+  points: 5
