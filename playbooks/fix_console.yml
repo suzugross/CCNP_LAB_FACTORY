@@ -1,0 +1,29 @@
+---
+# console 問題(access: console)へ fix.json をコンソール経由で投入する。
+# fix_generated.yml(SSH/network_cli)の console 版。認証は vault から渡す。
+# 使い方: ansible-playbook playbooks/fix_console.yml -e problem=<ID> \
+#           --vault-password-file <(printf 'CCNP\n')
+- name: console 経由で fix を投入
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+  tasks:
+    - name: fix_console.py を実行
+      ansible.builtin.command:
+        argv:
+          - "{{ repo }}/.venv/bin/python3"
+          - "{{ repo }}/topologies/fix_console.py"
+          - "{{ repo }}/problems/{{ problem }}/solution/fix.json"
+      environment:
+        CML_HOST: "{{ cml_host }}"
+        CML_USER: "{{ cml_username }}"
+        CML_PASS: "{{ cml_password }}"
+        CML_VERIFY: "{{ cml_verify_cert | default(false) | string }}"
+        LAB_TITLE: "CCNP-LAB-{{ (problem | hash('md5'))[:8] }}"
+        NODE_USER: "{{ ansible_user }}"
+        NODE_PASS: "{{ ansible_ssh_pass }}"
+        NODE_ENABLE: "{{ ansible_become_pass | default(ansible_ssh_pass) }}"
+      register: fc
+      changed_when: true
+    - ansible.builtin.debug: { var: fc.stdout_lines }
