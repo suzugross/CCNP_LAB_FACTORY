@@ -39,6 +39,7 @@ import gen_redist_field as grf  # noqa: E402  (chain 抽選・config 描画を�
 import gen_redist_arena as gra  # noqa: E402  (ring=再配送ループ抽選・config 描画を流用)
 import gen_paper_pbr as gpp     # noqa: E402  (pbr=PBR×ワイルドカードACL・BL-081)
 import gen_paper_urpf as gpu    # noqa: E402  (urpf=uRPF×ACL・BL-084)
+import gen_paper_bgpdbg as gpb  # noqa: E402  (bgpdbg=BGP debug 読解・記述式・BL-085)
 
 KINDS = ["missing", "no_seed", "filter", "wrong_id"]
 RING_KINDS = ["distance", "filter"]   # ring(ループ)の正解法軸(=arena の method)
@@ -1724,6 +1725,107 @@ echo-reply が戻れず必ず 0% になる。ドロップの証拠は per-IF の
 
 
 # --------------------------------------------------------------------------
+# shape=bgpdbg — BGP debug 読解(★記述式・選択肢なし) BL-085
+# 採点は自動化しない(自由記述)。answers/ にルーブリックを出し、Claude が採点する。
+# --------------------------------------------------------------------------
+def question_md_bgpdbg(d, stamp, rnd):
+    A, B = d["A"], d["B"]
+    a_lines, b_lines = gpb.debug_blocks(d, rnd)
+    sa, sb = gpb.summary_block(d)
+    qs = gpb.questions(d)
+    ebgp = d["variant"] == "ebgp_multihop"
+    as_txt = (f"{A} は AS {d['as_a']}、{B} は AS {d['as_b']} に所属しています。"
+              if ebgp else f"両ルータは、同一の AS {d['as_a']} に所属しています。")
+    return f"""# 問題 {stamp} : BGP ピアの確立に関する分析(記述式)
+
+> **本問は機器に接続せずに解答すること。追加の show 実行は認めない。**
+> **本問は選択式ではありません。求められている内容を、文章で記述してください。**
+
+## トポロジ
+
+2台のルータが、1本のリンクによって直接に接続されており、そして、
+それぞれのループバック・インターフェイスを使用して、BGP のピアが構成されています。
+{as_txt}
+
+```
+  [{A}]  Lo0={d['lo_a']}          [{B}]  Lo0={d['lo_b']}
+    {d['ip_a']} ────────────────── {d['ip_b']}   ({d['link']}.0/30)
+```
+
+- 対向のループバックへの到達性は、{d['igp']}によって提供されています。
+
+## 現在の状態
+
+ネイバーの状態に関する事象が、報告されています。調査のために、両方のルータにおいて
+`debug ip bgp` が有効にされ、そして、ログが採取されました。
+
+```
+{A}# show logging | include BGP:
+{chr(10).join(a_lines)}
+```
+```
+{B}# show logging | include BGP:
+{chr(10).join(b_lines)}
+```
+```
+{sa}
+```
+```
+{sb}
+```
+```
+{gpb.extra_block(d)}
+```
+
+## 設問(記述式)
+
+{chr(10).join(qs)}
+
+---
+> 解答は、この問題文の下に追記するか、チャットに記述してください。
+> 採点は、示されているところの根拠に基づいて行われます。
+"""
+
+
+def answer_md_bgpdbg(d, stamp, master_seed, subseed):
+    rb = gpb.rubric(d)
+    items = "\n".join(f"- **{t}**" for t, _p in rb["項目"])
+    minus = "\n".join(f"- {x}" for x in rb["減点"])
+    v_note = {"addr_mismatch": "両側の neighbor 宛先が食い違う(Lo宛 vs 物理宛)",
+              "ebgp_multihop": "eBGP ループバック・ピアで ebgp-multihop 欠落",
+              "asym_up": "片側 update-source 欠けだが Established(接続レース)"}[d["variant"]]
+    return f"""# 解答・採点ルーブリック {stamp}
+
+## 出題の仕込み
+
+- variant: `{d['variant']}` — {v_note}(難易度 {gpb.DIFF[d['variant']]})
+- {d['A']}: Lo0={d['lo_a']} / 物理={d['ip_a']} / AS {d['as_a']}
+- {d['B']}: Lo0={d['lo_b']} / 物理={d['ip_b']} / AS {d['as_b']}
+- 生成: `gen_paper_mcq.py --shape bgpdbg --seed {master_seed}` (sub-seed {subseed})
+
+## 採点項目(計 {rb['総点']} 点)
+
+{items}
+
+## 減点の観点
+
+{minus}
+
+## 出題素材の根拠(実機 PoC・poc/bgpdbg/README.md)
+
+- `open active, local address <X>` … その機がどの送信元で開きに行ったか
+  = **update-source の有無**が両側それぞれについて確定する。
+- 行頭のピアアドレス … その機の **neighbor 文の宛先**(ループバック宛か物理宛か)。
+- `open failed: Connection refused by remote host` … 相手がその送信元を neighbor として
+  **持っていない**(TCP RST)。到達性の障害ではない。
+- `Active open failed - no route to peer` … eBGP の**シングルホップ検査**の失敗。
+  経路が存在していても出る(字面に釣られると誤診する)。
+- ★片側だけ update-source が欠けている場合、**セッションは確立してしまう**
+  (update-source を持つ側が開いた接続が受理されるため)。
+"""
+
+
+# --------------------------------------------------------------------------
 # 展開・収集・撤収
 # --------------------------------------------------------------------------
 def sh(repo, args, **kw):
@@ -1797,6 +1899,8 @@ def teardown(repo, prob_id):
 def rebalance_position(repo, choices):
     """正解記号の3連続を防ぐ(直近2問の answers/ から正解記号を読み、同記号が続くなら
     選択肢を1つ回転)。分布はほぼ一様のまま「迷ったらC」的なメタ読みだけ潰す。"""
+    if not choices:
+        return choices
     files = sorted(glob.glob(f"{repo}/answers/*.md"))[-2:]
     recent = []
     for fp in files:
@@ -1828,11 +1932,13 @@ def main():
     ap.add_argument("--seed", type=int, required=True)
     ap.add_argument("--count", type=int, default=1)
     ap.add_argument("--date", default=None, help="YYYYMMDD(既定=今日)")
-    ap.add_argument("--shape", choices=["chain", "ring", "pbr", "urpf", "mixed"],
+    ap.add_argument("--shape",
+                    choices=["chain", "ring", "pbr", "urpf", "bgpdbg", "mixed"],
                     default="chain",
                     help="chain=再配送欠落/誤設定系(既定) / ring=再配送リングの定常ループ(難5)"
                          " / pbr=PBR×ワイルドカードACL(BL-081)"
                          " / urpf=uRPF×ACL(BL-084・紙面専用)"
+                         " / bgpdbg=BGP debug読解(BL-085・★記述式)"
                          " / mixed=問題ごとに形・種別を抽選(ごちゃまぜ)")
     ap.add_argument("--kinds", default=None,
                     help=f"カンマ区切りで種別を明示(chain: {','.join(KINDS)} / "
@@ -1859,7 +1965,8 @@ def main():
         kinds = None   # 問題ごとに shape/種別を抽選(--kinds は無視)
     else:
         pool = {"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
-                "urpf": gpu.URPF_KINDS}.get(a.shape, KINDS)
+                "urpf": gpu.URPF_KINDS,
+                "bgpdbg": gpb.VARIANTS}.get(a.shape, KINDS)
         kinds = (a.kinds.split(",") if a.kinds
                  else random.Random(a.seed ^ 0x5EED).sample(pool, len(pool)))
         if not set(kinds) <= set(pool):
@@ -1885,6 +1992,9 @@ def main():
             subseed, d = pick_draw_pbr(qseed, kind)
         elif shape_i == "urpf":
             subseed, d = pick_draw_urpf(qseed, kind)
+        elif shape_i == "bgpdbg":
+            subseed = qseed
+            d = gpb.draw(random.Random(subseed), variant=kind)
         else:
             subseed, d = pick_draw(qseed, kind, hard=a.hard)
         prob_id = f"PAPER-RD-{subseed}"
@@ -1908,10 +2018,14 @@ def main():
         elif shape_i == "urpf":
             plan = {"checks": []}          # 紙面専用(実機展開なし)
             choices = gpu.build_choices_fix(d, rnd)
+        elif shape_i == "bgpdbg":
+            plan = {"checks": []}          # 紙面専用・記述式(選択肢なし)
+            choices = []
         else:
             plan = evidence_plan(d, rnd, hard=a.hard, exam=a.exam)
             choices = build_choices(d, rnd, plan=plan, exam=a.exam, pol=pol)
-        sites = assign_sites(d, rnd) if a.exam else None
+        sites = (assign_sites(d, rnd)
+                 if (a.exam and shape_i != "bgpdbg") else None)
         # 赤ニシン(exam): 未適用ポリシー+無害な適用行を config に混入(pbr は素で騒がしい)
         herr, decoy = None, None
         if a.exam and shape_i in ("chain", "ring"):
@@ -1929,10 +2043,11 @@ def main():
         elif a.exam and shape_i == "urpf" and rnd.random() < 0.5:
             form = "cause"
             choices = gpu.build_choices_cause(d, rnd)
-        choices = rebalance_position(repo, choices)
-        opt_style = choice_style(rnd, choices, form)
+        if choices:
+            choices = rebalance_position(repo, choices)
+        opt_style = choice_style(rnd, choices, form) if choices else "prose"
         reqs = None
-        if a.exam:
+        if a.exam and shape_i != "bgpdbg":
             if shape_i == "ring":
                 reqs = ring_requirements(d, rnd)
             elif shape_i == "pbr":
@@ -1943,10 +2058,10 @@ def main():
                 reqs = chain_requirements(
                     rnd, style=pol["style"] if pol else "inline")
         # 進行表示に故障種別・対象ルータは出さない(実行者=解答者のネタバレ防止)
-        print(f"[{i + 1}/{a.count}] sub-seed={subseed} nodes={len(d['roles'])}",
-              flush=True)
+        print(f"[{i + 1}/{a.count}] sub-seed={subseed} "
+              f"nodes={len(d.get('roles', [d.get('A'), d.get('B')]))}", flush=True)
 
-        if shape_i == "urpf":
+        if shape_i in ("urpf", "bgpdbg"):
             collected = {}                 # 紙面専用: 実機展開・収集を行わない
         elif a.no_lab:
             collected = {(c["node"], c["command"]): "(PLACEHOLDER: --no-lab)"
@@ -1989,6 +2104,10 @@ def main():
                                   herr=herr)
             # 「ループ」「RIB-failure」は要件文・show ip bgp 凡例に正当に現れるため対象外
             lint += ["ring=", "inject_eigrp", "inject_ospf", "震源"]
+        elif shape_i == "bgpdbg":
+            q_md = question_md_bgpdbg(d, stamp, rnd)
+            a_md = answer_md_bgpdbg(d, stamp, a.seed, subseed)
+            lint += list(gpb.VARIANTS) + ["variant=", "ルーブリック"]
         elif shape_i == "urpf":
             blocks, _st = urpf_evidence(d, rnd)
             q_md = question_md_urpf(d, blocks, choices, stamp, sites=sites,
