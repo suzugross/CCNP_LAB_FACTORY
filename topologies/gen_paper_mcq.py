@@ -332,6 +332,38 @@ def evidence_plan(d, rnd, hard=False, exam=False):
 # --------------------------------------------------------------------------
 # 選択肢(故障種別ごとのテンプレ+seed差し替え)
 # --------------------------------------------------------------------------
+_CLI_RE = re.compile(r"^(\S+) の (router \S+ \S+) 配下[でに]?(?:の)?.*?「([^」]+)」")
+
+
+def _with_cli(d, ch):
+    """説明形の選択肢から設定コマンド列を導出して4要素目に付ける(導出不能は None)。"""
+    if len(ch) > 3:
+        return ch
+    txt, ok, why = ch[0], ch[1], ch[2]
+    m = _CLI_RE.match(txt)
+    if m and not txt.startswith("no "):
+        node, parent, cmd = m.groups()
+        pre = []
+        # 「no <誤行>」を実行してから設定する型
+        m2 = re.search(r"「(no [^」]+)」を実行し", txt)
+        lines = ([m2.group(1)] if m2 else []) + [cmd]
+        return (txt, ok, why, [parent] + [f" {x}" for x in lines])
+    if "clear ip route" in txt:
+        return (txt, ok, why, ["clear ip route *"])
+    if "passive-interface" in txt:
+        m3 = re.match(r"^(\S+) の (router \S+ \S+) 配下", txt)
+        if m3:
+            return (txt, ok, why, [m3.group(2), " no passive-interface <上流IF>"])
+    if "route-map RM-SVC" in txt or "prefix-list PL-SVC" in txt:
+        return (txt, ok, why, None)
+    return (txt, ok, why, None)
+
+
+def _cli_lines(parent, lines, pre=None):
+    """設定コマンド列(親ブロック配下にぶら下げる)。"""
+    return (pre or []) + [parent] + [f" {x}" for x in lines]
+
+
 def build_choices(d, rnd, plan=None, exam=False, pol=None):
     """[(text, is_correct, why_wrong), ...] を正解位置シャッフル済みで返す。
     exam=True は6択: 既存4(同ジャンル)+異ジャンルの尤もらしい修正2。
@@ -421,17 +453,25 @@ def build_choices(d, rnd, plan=None, exam=False, pol=None):
               "逆方向の再配送は参照 ID も含めて正常(対比側の経路表で確認できる)。"
               "削除すればかえって逆方向の到達性を壊す。")]
     else:  # filter
+        src_word = (f"ospf {srcd['id']}" if srcd["type"] == "ospf"
+                    else f"eigrp {srcd['id']}")
         c = [(f"{br} の {tgt_p} 配下で redistribute から route-map RM-SVC を外し、"
-              "route-map / prefix-list を削除する", True, ""),
+              "route-map / prefix-list を削除する", True, "",
+              [tgt_p, f" no redistribute {src_word}", f" {good}",
+               "no route-map RM-SVC", "no ip prefix-list PL-SVC"]),
              ("route-map RM-SVC のシーケンス 10 を deny から permit に変更する", False,
               "到達性は回復する(症状は改善する)が、再配送へのフィルタ適用が残る。"
-              "要件「再配送へのフィルタ適用禁止」を満たさない。"),
+              "要件「再配送へのフィルタ適用禁止」を満たさない。",
+              ["no route-map RM-SVC deny 10", "route-map RM-SVC permit 10",
+               " match ip address prefix-list PL-SVC"]),
              ("ip prefix-list PL-SVC に「seq 10 permit 0.0.0.0/0 le 32」を追加する", False,
               "PL-SVC は deny 節の match に使われているため、permit-all を足すと"
-              "全経路が deny 10 に一致し全面遮断へ悪化する(被害の拡大)。"),
+              "全経路が deny 10 に一致し全面遮断へ悪化する(被害の拡大)。",
+              ["ip prefix-list PL-SVC seq 10 permit 0.0.0.0/0 le 32"]),
              (f"{br} の {rev_p} 配下の redistribute にも route-map RM-SVC を適用する", False,
               "フィルタの適用範囲を広げるだけで到達性は悪化しうる。"
-              "要件「再配送へのフィルタ適用禁止」にも真っ向から反する。")]
+              "要件「再配送へのフィルタ適用禁止」にも真っ向から反する。",
+              [rev_p, f" {rev.replace(' subnets', '')} route-map RM-SVC"])]
     if exam and plan:
         sym = d["m"][plan["symptom"]]
         tgt_word = "OSPF" if tgt["type"] == "ospf" else "EIGRP"
@@ -440,6 +480,7 @@ def build_choices(d, rnd, plan=None, exam=False, pol=None):
                "隣接関係は確立しており内部経路も学習済み。passive は本事象と無関係。"),
               (f"{br} で「clear ip route *」を実行する", False,
                "設定上の欠陥が原因であり、再計算しても状態は変わらない。")]
+    c = [_with_cli(d, x) for x in c]
     order = list(range(len(c)))
     rnd.shuffle(order)
     return [c[i] for i in order]
@@ -529,6 +570,28 @@ SYMPTOM_TEXT = {
 }
 
 FIXED_NOTE = "> **本問は機器に接続せずに解答すること。追加の show 実行は認めない。**"
+
+def render_options(choices, style="prose"):
+    """選択肢の提示。style='cli' は設定コマンドのみを列挙する(ユーザ要望の第2形式)。
+    choices の要素は (text, ok, why) または (text, ok, why, cli_lines)。"""
+    letters = [chr(65 + i) for i in range(len(choices))]
+    out = []
+    for l, ch in zip(letters, choices):
+        cli = ch[3] if len(ch) > 3 else None
+        if style == "cli" and cli:
+            body = "\n".join(cli)
+            out.append(f"**{l}.**\n```\n{body}\n```")
+        else:
+            out.append(f"{l}. {ch[0]}")
+    return "\n".join(out)
+
+
+def choice_style(rnd, choices, form):
+    """提示形式の抽選: fix 形かつ全候補が CLI を持つときのみ 50% で cli。"""
+    if form != "fix" or not all(len(c) > 3 and c[3] for c in choices):
+        return "prose"
+    return "cli" if rnd.random() < 0.5 else "prose"
+
 
 # --------------------------------------------------------------------------
 # 「Cisco 語」= 公式和訳の逐語訳調(conventions.md「問題文の文体規約」)。
@@ -705,7 +768,7 @@ def build_cause_choices(d, plan, rnd, decoy=None, pol=None):
 
 
 def question_md(d, plan, choices, collected, stamp, sites=None, blind=False,
-                form="fix", reqs=None):
+                form="fix", reqs=None, style="prose"):
     f = d["faults"][0]
     m = d["m"]
     dom_words = " / ".join(grf._dom_label(x) for x in d["doms"])
@@ -730,12 +793,14 @@ def question_md(d, plan, choices, collected, stamp, sites=None, blind=False,
     if form == "cause":
         q = ("この事象の原因である可能性が、最も高いものは、どれですか。"
              "(1つを選択してください)")
+    elif style == "cli":
+        q = ("示されているところのすべての要件が満たされることを確実にするために、"
+             "適用されなければならない構成は、どれですか。(1つを選択してください)")
     else:
         q = ("この問題を解決し、そして、示されているところのすべての要件が"
              "満たされることを確実にするために、必要とされる手順は、どれですか。"
              "(1つを選択してください)")
-    letters = [chr(65 + i) for i in range(len(choices))]
-    opts = "\n".join(f"{l}. {t}" for l, (t, _, _) in zip(letters, choices))
+    opts = render_options(choices, style)
     T = cisco_terms(random.Random(hash(stamp) & 0xFFFF))
     if blind:
         intro = ("あなたの会社のネットワークは、複数のルーティング・ドメインが、"
@@ -801,7 +866,7 @@ def answer_md(d, plan, choices, stamp, master_seed, subseed, kind, prob_id,
     f = d["faults"][0]
     m = d["m"]
     letters = [chr(65 + i) for i in range(len(choices))]
-    correct = [l for l, (_, ok, _) in zip(letters, choices) if ok][0]
+    correct = [l for l, c in zip(letters, choices) if c[1]][0]
     tgt = d["doms"][f["into"]]
     parent = f"router {'ospf' if tgt['type'] == 'ospf' else 'eigrp'} {tgt['id']}"
     kind_note = {
@@ -810,9 +875,8 @@ def answer_md(d, plan, choices, stamp, master_seed, subseed, kind, prob_id,
         "filter": "redistribute に route-map が付き特定 Loopback だけ deny(部分喪失)",
         "wrong_id": "redistribute の参照プロセス/AS が誤り(config は一見完備・無言で経路ゼロ)",
     }[kind]
-    wrongs = "\n".join(
-        f"- **{l}**: {'(正解)' if ok else why}"
-        for l, (t, ok, why) in zip(letters, choices))
+    wrongs = "\n".join(f"- **{l}**: {'(正解)' if c[1] else c[2]}"
+                        for l, c in zip(letters, choices))
     victim = (f"\n- フィルタ被害者: {m[f['victim']]} ({d['lo'][f['victim']]}/32)"
               if kind == "filter" else "")
     if herr:
@@ -985,6 +1049,26 @@ def build_choices_ring(d, rnd, exam=False):
     dist_line = f"distance bgp 20 {return_ad - 5} {return_ad - 5}"
     dist_choice = (f"{rc} の router bgp {bas} 配下に「{dist_line}」を設定し、"
                    "clear ip route * を実行する")
+    cli = {
+        "dist": [f"router bgp {bas}", f" {dist_line}", "end", "clear ip route *"],
+        "filt": [f"ip prefix-list PL-BLOCK seq 5 deny {p}.0/24",
+                 "ip prefix-list PL-BLOCK seq 10 permit 0.0.0.0/0 le 32",
+                 ret_p, " distribute-list prefix PL-BLOCK in"],
+        "wrong_tgt": ([f"router ospf {pid}", f" distance ospf external {return_ad + 95}"]
+                      if inj_e else
+                      [f"router eigrp {eas}", f" distance eigrp 90 {return_ad + 35}"]),
+        "no_ri": [f"router bgp {bas}", " no bgp redistribute-internal"],
+        "clear": ["clear ip bgp *", "clear ip route *"],
+        "rm_inj": [f"ip prefix-list PL-X seq 5 deny {p}.0/24",
+                   "ip prefix-list PL-X seq 10 permit 0.0.0.0/0 le 32",
+                   "route-map RM-INJ permit 10",
+                   " match ip address prefix-list PL-X",
+                   inj_p, f" redistribute bgp {bas} route-map RM-INJ"],
+        "rm_ra": ["! " + ra + " 側で両方向の redistribute に deny route-map を適用",
+                  "route-map RM-BLK deny 10",
+                  f" match ip address prefix-list PL-BLK",
+                  "route-map RM-BLK permit 20"],
+    }
     filt_choice = (f"{rc} で `{p}.0/24` のみ deny(他は permit)の prefix-list PL-BLOCK "
                    f"を作成し、{ret_p} 配下に「distribute-list prefix PL-BLOCK in」を適用する")
     # 対象違い: 戻り経路側ドメインの別ルータで AD を操作(RC の経路選択は変わらない)
@@ -1014,22 +1098,23 @@ def build_choices_ring(d, rnd, exam=False):
     rm_ra_why = (f"出自の一周は止まるが、{ra} の先のドメインの各ルータが "
                  f"`{p}.0/24` への経路を失い、要件「全拠点からの到達性」を満たさない。")
     if d["method"] == "distance":
-        c = [(dist_choice, True, ""),
-             (wrong_tgt, False, wrong_tgt_why),
-             (no_ri[0], False, no_ri[1]),
-             (clear_only[0], False, clear_only[1])]
+        c = [(dist_choice, True, "", cli["dist"]),
+             (wrong_tgt, False, wrong_tgt_why, cli["wrong_tgt"]),
+             (no_ri[0], False, no_ri[1], cli["no_ri"]),
+             (clear_only[0], False, clear_only[1], cli["clear"])]
         if exam:
-            c += [(rm_inj, False, rm_inj_why), (rm_ra, False, rm_ra_why)]
+            c += [(rm_inj, False, rm_inj_why, cli["rm_inj"]),
+                  (rm_ra, False, rm_ra_why, cli["rm_ra"])]
     else:  # filter(監査で distance 禁止)
-        c = [(filt_choice, True, ""),
+        c = [(filt_choice, True, "", cli["filt"]),
              (dist_choice, False,
               "到達性・ループとも解消する(症状は直る)が、監査要件"
-              "「管理距離(distance)の変更禁止」に違反する。"),
-             (rm_inj, False, rm_inj_why),
-             (rm_ra, False, rm_ra_why)]
+              "「管理距離(distance)の変更禁止」に違反する。", cli["dist"]),
+             (rm_inj, False, rm_inj_why, cli["rm_inj"]),
+             (rm_ra, False, rm_ra_why, cli["rm_ra"])]
         if exam:
-            c += [(no_ri[0], False, no_ri[1]),
-                  (clear_only[0], False, clear_only[1])]
+            c += [(no_ri[0], False, no_ri[1], cli["no_ri"]),
+                  (clear_only[0], False, clear_only[1], cli["clear"])]
     order = list(range(len(c)))
     rnd.shuffle(order)
     return [c[i] for i in order]
@@ -1070,7 +1155,7 @@ def ring_requirements(d, rnd):
 
 
 def question_md_ring(d, plan, choices, collected, stamp, sites=None, blind=False,
-                     reqs=None):
+                     reqs=None, style="prose"):
     m, p = d["m"], d["p_net"]
     state, cfg = [], []
     for chk in plan["checks"]:
@@ -1090,8 +1175,7 @@ def question_md_ring(d, plan, choices, collected, stamp, sites=None, blind=False
         if d["method"] == "filter":
             reqs.append("4. 管理距離(administrative distance)の変更は監査ポリシーにより"
                         "禁止されていること。")
-    letters = [chr(65 + i) for i in range(len(choices))]
-    opts = "\n".join(f"{l}. {t}" for l, (t, _, _) in zip(letters, choices))
+    opts = render_options(choices, style)
     if sites:
         hq = sites["RE"]
         intro = (f"本社({hq})の顧客のネットワークは、BGP AS {d['bgp_as']} の "
@@ -1153,7 +1237,7 @@ def answer_md_ring(d, plan, choices, stamp, master_seed, subseed, prob_id,
                    herr=None):
     m, p = d["m"], d["p_net"]
     letters = [chr(65 + i) for i in range(len(choices))]
-    correct = [l for l, (_, ok, _) in zip(letters, choices) if ok][0]
+    correct = [l for l, c in zip(letters, choices) if c[1]][0]
     inj_e = d["ring"] == "inject_eigrp"
     return_ad = 110 if inj_e else 170
     herr_note = ""
@@ -1163,8 +1247,8 @@ def answer_md_ring(d, plan, choices, stamp, master_seed, subseed, prob_id,
     victim = "O E2 (AD 110)" if inj_e else "D EX (AD 170)"
     loop_word = (f"{m['RC']} → {m['RB']} → {m['RA']} → {m['RC']}" if inj_e
                  else f"{m['RC']} → {m['RA']} → {m['RB']} → {m['RC']}")
-    wrongs = "\n".join(f"- **{l}**: {'(正解)' if ok else why}"
-                       for l, (t, ok, why) in zip(letters, choices))
+    wrongs = "\n".join(f"- **{l}**: {'(正解)' if c[1] else c[2]}"
+                        for l, c in zip(letters, choices))
     return f"""# 解答 {stamp}
 
 ## 正解
@@ -1305,7 +1389,7 @@ def mermaid_pbr(d, sites=None):
 
 
 def question_md_pbr(d, plan, choices, collected, stamp, sites=None, form="fix",
-                    reqs=None):
+                    reqs=None, style="prose"):
     m = d["m"]
     state, cfg = [], []
     for chk in plan["checks"]:
@@ -1328,8 +1412,7 @@ def question_md_pbr(d, plan, choices, collected, stamp, sites=None, form="fix",
         q = ("この問題を解決し、そして、示されているところのすべての要件が"
              "満たされることを確実にするために、必要とされる手順は、どれですか。"
              "(1つを選択してください)")
-    letters = [chr(65 + i) for i in range(len(choices))]
-    opts = "\n".join(f"{l}. {t}" for l, (t, _, _) in zip(letters, choices))
+    opts = render_options(choices, style)
     return f"""# 問題 {stamp} : ポリシーによるルーティングのための分析
 
 {FIXED_NOTE}
@@ -1370,9 +1453,9 @@ def question_md_pbr(d, plan, choices, collected, stamp, sites=None, form="fix",
 def answer_md_pbr(d, plan, choices, stamp, master_seed, subseed, prob_id):
     m = d["m"]
     letters = [chr(65 + i) for i in range(len(choices))]
-    correct = [l for l, (_, ok, _) in zip(letters, choices) if ok][0]
-    wrongs = "\n".join(f"- **{l}**: {'(正解)' if ok else why}"
-                       for l, (t, ok, why) in zip(letters, choices))
+    correct = [l for l, c in zip(letters, choices) if c[1]][0]
+    wrongs = "\n".join(f"- **{l}**: {'(正解)' if c[1] else c[2]}"
+                        for l, c in zip(letters, choices))
     kind_note = {
         "wc_narrow": "ワイルドカードが狭く対象の一部を取りこぼす(雛型ラボの 0.0.3.255 型)",
         "wc_wide": "ワイルドカードが広く隔離網まで一致(過剰転送)",
@@ -1524,7 +1607,8 @@ def urpf_requirements(d, rnd, sites):
     return [f"{i}. {t}" for i, t in enumerate(core, 1)]
 
 
-def question_md_urpf(d, blocks, choices, stamp, sites=None, form="fix", reqs=None):
+def question_md_urpf(d, blocks, choices, stamp, sites=None, form="fix", reqs=None,
+                     style="prose"):
     m = d["m"]
     e, a, b = m["EDGE"], m["ISPA"], m["ISPB"]
     state_blocks = blocks[:4]
@@ -1534,12 +1618,14 @@ def question_md_urpf(d, blocks, choices, stamp, sites=None, form="fix", reqs=Non
     if form == "cause":
         q = ("この事象の原因である可能性が、最も高いものは、どれですか。"
              "(1つを選択してください)")
+    elif style == "cli":
+        q = ("示されているところのすべての要件が満たされることを確実にするために、"
+             "適用されなければならない構成は、どれですか。(1つを選択してください)")
     else:
         q = ("この問題を解決し、そして、示されているところのすべての要件が"
              "満たされることを確実にするために、必要とされる手順は、どれですか。"
              "(1つを選択してください)")
-    letters = [chr(65 + i) for i in range(len(choices))]
-    opts = "\n".join(f"{l}. {t}" for l, (t, _, _) in zip(letters, choices))
+    opts = render_options(choices, style)
     topo = (f"```\n"
             f"          {e} (エッジ・被験のデバイス)\n"
             f"   {'Ethernet0/0'} |            | {'Ethernet0/1'}\n"
@@ -1587,9 +1673,9 @@ def question_md_urpf(d, blocks, choices, stamp, sites=None, form="fix", reqs=Non
 
 def answer_md_urpf(d, choices, stamp, master_seed, subseed):
     letters = [chr(65 + i) for i in range(len(choices))]
-    correct = [l for l, (_, ok, _) in zip(letters, choices) if ok][0]
-    wrongs = "\n".join(f"- **{l}**: {'(正解)' if ok else why}"
-                        for l, (t, ok, why) in zip(letters, choices))
+    correct = [l for l, c in zip(letters, choices) if c[1]][0]
+    wrongs = "\n".join(f"- **{l}**: {'(正解)' if c[1] else c[2]}"
+                        for l, c in zip(letters, choices))
     kind_note = {
         "strict_on_asym": "非対称に広告される網の着信 IF に rx(strict) → 正規業務断",
         "loose_everywhere": "両 IF が any → RPF IF 不一致のスプーフが素通り",
@@ -1844,6 +1930,7 @@ def main():
             form = "cause"
             choices = gpu.build_choices_cause(d, rnd)
         choices = rebalance_position(repo, choices)
+        opt_style = choice_style(rnd, choices, form)
         reqs = None
         if a.exam:
             if shape_i == "ring":
@@ -1897,7 +1984,7 @@ def main():
                 "故障", "正解", "kind=", "method="]
         if shape_i == "ring":
             q_md = question_md_ring(d, plan, choices, collected, stamp, sites=sites,
-                                    blind=a.exam, reqs=reqs)
+                                    blind=a.exam, reqs=reqs, style=opt_style)
             a_md = answer_md_ring(d, plan, choices, stamp, a.seed, subseed, prob_id,
                                   herr=herr)
             # 「ループ」「RIB-failure」は要件文・show ip bgp 凡例に正当に現れるため対象外
@@ -1905,18 +1992,18 @@ def main():
         elif shape_i == "urpf":
             blocks, _st = urpf_evidence(d, rnd)
             q_md = question_md_urpf(d, blocks, choices, stamp, sites=sites,
-                                    form=form, reqs=reqs)
+                                    form=form, reqs=reqs, style=opt_style)
             a_md = answer_md_urpf(d, choices, stamp, a.seed, subseed)
             lint += list(gpu.URPF_KINDS) + ["world=", "_works"]
         elif shape_i == "pbr":
             q_md = question_md_pbr(d, plan, choices, collected, stamp, sites=sites,
-                                   form=form, reqs=reqs)
+                                   form=form, reqs=reqs, style=opt_style)
             a_md = answer_md_pbr(d, plan, choices, stamp, a.seed, subseed, prob_id)
             lint += ["wc_narrow", "wc_wide", "wc_bits", "acl_dir", "rm_no_match",
                      "match_plist", "world=", "fixer"]
         else:
             q_md = question_md(d, plan, choices, collected, stamp, sites=sites,
-                               blind=a.exam, form=form, reqs=reqs)
+                               blind=a.exam, form=form, reqs=reqs, style=opt_style)
             a_md = answer_md(d, plan, choices, stamp, a.seed, subseed, kind, prob_id,
                              herr=herr, pol=pol)
             lint += ["missing", "no_seed", "wrong_id"]

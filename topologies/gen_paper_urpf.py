@@ -163,30 +163,45 @@ def spoof_dropped(d, st, iface):
 # ★候補は「最終状態」で定義する(kind は開始状態=何が壊れているかを決めるだけ)。
 # --------------------------------------------------------------------------
 def fix_candidates(d):
+    """(key, 説明形, CLI形) — 提示スタイルは gen_paper_mcq 側が seed で選ぶ。"""
     e = d["m"]["EDGE"]
     h1, h2 = d["exc_host"], d["exc_host2"]
     net = f"{d['cust_asym']}.0"
+    a, b = "Ethernet0/0", "Ethernet0/1"
+    n = d["acl_ok"]
     return [
         ("acl_host",
          f"{e} の両方のアップリンクのインターフェイスに "
-         f"`ip verify unicast source reachable-via rx {d['acl_ok']}` を構成し、"
-         f"`access-list {d['acl_ok']} permit {h1}` および "
-         f"`access-list {d['acl_ok']} permit {h2}` を定義する"),
+         f"`ip verify unicast source reachable-via rx {n}` を構成し、"
+         f"`access-list {n} permit {h1}` および "
+         f"`access-list {n} permit {h2}` を定義する",
+         [f"access-list {n} permit {h1}", f"access-list {n} permit {h2}",
+          f"interface {a}", f" ip verify unicast source reachable-via rx {n}",
+          f"interface {b}", f" ip verify unicast source reachable-via rx {n}"]),
         ("acl_net",
          f"{e} の両方のアップリンクのインターフェイスに "
-         f"`ip verify unicast source reachable-via rx {d['acl_ok']}` を構成し、"
-         f"`access-list {d['acl_ok']} permit {net} 0.0.0.255` を定義する"),
+         f"`ip verify unicast source reachable-via rx {n}` を構成し、"
+         f"`access-list {n} permit {net} 0.0.0.255` を定義する",
+         [f"access-list {n} permit {net} 0.0.0.255",
+          f"interface {a}", f" ip verify unicast source reachable-via rx {n}",
+          f"interface {b}", f" ip verify unicast source reachable-via rx {n}"]),
         ("b_any",
          f"{e} の ISP-A 向けを `ip verify unicast source reachable-via rx`、"
-         "ISP-B 向けを `ip verify unicast source reachable-via any` に構成する"),
+         "ISP-B 向けを `ip verify unicast source reachable-via any` に構成する",
+         [f"interface {a}", " ip verify unicast source reachable-via rx",
+          f"interface {b}", " ip verify unicast source reachable-via any"]),
         ("b_rx_only",
          f"{e} の両方のアップリンクのインターフェイスに "
-         "`ip verify unicast source reachable-via rx` を構成する"),
+         "`ip verify unicast source reachable-via rx` を構成する",
+         [f"interface {a}", " ip verify unicast source reachable-via rx",
+          f"interface {b}", " ip verify unicast source reachable-via rx"]),
         ("b_off",
-         f"{e} の ISP-B 向けインターフェイスから、送信元の検証の構成を削除する"),
+         f"{e} の ISP-B 向けインターフェイスから、送信元の検証の構成を削除する",
+         [f"interface {b}", " no ip verify unicast source reachable-via rx"]),
         ("acl_only",
-         f"`access-list {d['acl_ok']} permit {h1}` および "
-         f"`access-list {d['acl_ok']} permit {h2}` を定義する"),
+         f"`access-list {n} permit {h1}` および "
+         f"`access-list {n} permit {h2}` を定義する",
+         [f"access-list {n} permit {h1}", f"access-list {n} permit {h2}"]),
     ]
 
 
@@ -264,19 +279,19 @@ def _sig(d, st):
 def live_candidates(d):
     """意味的に重複する候補を畳んだ提示用リスト(先勝ち)。"""
     seen, out = set(), []
-    for key, txt in fix_candidates(d):
+    for key, txt, cli in fix_candidates(d):
         sig = _sig(d, apply_cand(d, key))
         if sig in seen:
             continue
         seen.add(sig)
-        out.append((key, txt))
+        out.append((key, txt, cli))
     return out
 
 
 def verify_choices(d):
     w = d["world"]
     works, ok = [], []
-    for key, _ in live_candidates(d):
+    for key, _, _cli in live_candidates(d):
         st = apply_cand(d, key)
         if _works(d, st, w):
             works.append(key)
@@ -322,8 +337,8 @@ def _why(d, key):
 
 def build_choices_fix(d, rnd):
     correct = d["_correct_key"]
-    c = [(txt, key == correct, "" if key == correct else _why(d, key))
-         for key, txt in live_candidates(d)]
+    c = [(txt, key == correct, "" if key == correct else _why(d, key), cli)
+         for key, txt, cli in live_candidates(d)]
     order = list(range(len(c)))
     rnd.shuffle(order)
     return [c[i] for i in order]

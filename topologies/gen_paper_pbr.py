@@ -106,8 +106,17 @@ def _entry_txt(d, act, b, w):
     return f"{act} ip {src} 172.16.{b}.0 0.0.{w}.255"
 
 
+def _cli_acl(d, entries):
+    """ACL 全置換の設定コマンド列(削除→再作成)。"""
+    out = ["no ip access-list extended ACL-A", "ip access-list extended ACL-A"]
+    src = f"192.168.{d['lan_a']}.0 0.0.0.255"
+    for i, (act, b, w) in enumerate(entries, 1):
+        out.append(f" {i * 10} {act} ip {src} 172.16.{b}.0 0.0.{w}.255")
+    return out
+
+
 def fix_candidates(d):
-    """[(key, entries|None, text)] を返す。entries=None は ACL 以外の操作。"""
+    """[(key, entries|None, text, cli)] を返す。entries=None は ACL 以外の操作。"""
     base, k = d["base"], d["k"]
     t1, t2 = d["T"]
     e1 = d["E"][0]
@@ -118,27 +127,38 @@ def fix_candidates(d):
     deny3 = [("deny", e1, 0), ("permit", wb, ww)]
     cands = [
         ("single", single,
-         f"ACL-A を「{_entry_txt(d, 'permit', base, k)}」の1行に置き換える"),
+         f"ACL-A を「{_entry_txt(d, 'permit', base, k)}」の1行に置き換える",
+         _cli_acl(d, single)),
         ("strict", strict,
          "ACL-A を「" + _entry_txt(d, "permit", t1, 0) + "」"
-         f"「{_entry_txt(d, 'permit', t2, 0)}」の2行に置き換える"),
+         f"「{_entry_txt(d, 'permit', t2, 0)}」の2行に置き換える",
+         _cli_acl(d, strict)),
         ("deny3", deny3,
          f"ACL-A を「{_entry_txt(d, 'deny', e1, 0)}」"
-         f"「{_entry_txt(d, 'permit', wb, ww)}」の2行(deny 先行)に置き換える"),
+         f"「{_entry_txt(d, 'permit', wb, ww)}」の2行(deny 先行)に置き換える",
+         _cli_acl(d, deny3)),
         ("narrow", [("permit", base, wc_n)],
-         f"ACL-A を「{_entry_txt(d, 'permit', base, wc_n)}」の1行に置き換える"),
+         f"ACL-A を「{_entry_txt(d, 'permit', base, wc_n)}」の1行に置き換える",
+         _cli_acl(d, [("permit", base, wc_n)])),
         ("bits", [("permit", base, 16)],
-         f"ACL-A を「{_entry_txt(d, 'permit', base, 16)}」の1行に置き換える"),
+         f"ACL-A を「{_entry_txt(d, 'permit', base, 16)}」の1行に置き換える",
+         _cli_acl(d, [("permit", base, 16)])),
         ("plist", None,
          "MAP-A の match を「match ip address prefix-list PL-A」に変更する"
-         f"(PL-A: 172.16.{t1}.0/24 と 172.16.{t2}.0/24 を permit)"),
+         f"(PL-A: 172.16.{t1}.0/24 と 172.16.{t2}.0/24 を permit)",
+         [f"ip prefix-list PL-A seq 5 permit 172.16.{t1}.0/24",
+          f"ip prefix-list PL-A seq 10 permit 172.16.{t2}.0/24",
+          "route-map MAP-A permit 10",
+          " no match ip address ACL-A",
+          " match ip address prefix-list PL-A"]),
         ("addmatch", None,
-         "MAP-A の match を「match ip address ACL-A」に設定し直す"),
+         "MAP-A の match を「match ip address ACL-A」に設定し直す",
+         ["route-map MAP-A permit 10", " match ip address ACL-A"]),
     ]
     # 展開済み故障値と同一の候補は出さない(値故障のみ。acl_dir は向きが違うので
     # 同値でも「正しい向きの書き直し」として意味がある)
     if d["kind"] in ("wc_narrow", "wc_wide", "wc_bits"):
-        cands = [(key, e, t) for key, e, t in cands
+        cands = [(key, e, t, c) for key, e, t, c in cands
                  if e is None or e != d["fault_entries"]]
     return cands
 
@@ -179,8 +199,8 @@ def _complies(d, key, entries):
 def verify_choices(d):
     """「直る候補>=2(ACL故障時)・要件適合=ちょうど1」を機械検証。"""
     cands = fix_candidates(d)
-    fixers = [k for k, e, _ in cands if _fixes(d, k, e)]
-    ok = [k for k, e, _ in cands if _fixes(d, k, e) and _complies(d, k, e)]
+    fixers = [k for k, e, _t, _c in cands if _fixes(d, k, e)]
+    ok = [k for k, e, _t, _c in cands if _fixes(d, k, e) and _complies(d, k, e)]
     map_fault = d["kind"] in ("rm_no_match", "match_plist")
     if len(ok) != 1:
         raise ValueError(f"pbr 一意性違反: kind={d['kind']} world={d['world']} "
@@ -309,10 +329,10 @@ def build_choices_fix(d, rnd):
     cands = fix_candidates(d)
     correct = d["_correct_key"]
     c = []
-    for key, e, txt in cands:
+    for key, e, txt, cli in cands:
         ok = (key == correct)
         why = "" if ok else WHY_FIX[key]
-        c.append((txt, ok, why))
+        c.append((txt, ok, why, cli))
     order = list(range(len(c)))
     rnd.shuffle(order)
     return [c[i] for i in order]
