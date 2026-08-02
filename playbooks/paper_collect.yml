@@ -1,0 +1,30 @@
+---
+# 机上4択問題ジェネレータ(BL-080 gen_paper_mcq.py)専用: 任意の {node, command} リストを
+# CML コンソール経由で収集する薄い playbook。CML/機器の認証情報(group_vars/all + vault)を
+# Python 側へ持ち出さないための配管。_grade_attempt_console.yml と同じ流儀。
+# 使い方: ansible-playbook playbooks/paper_collect.yml -e problem=<ID> \
+#           -e checks_file=/path/checks.json -e out_file=/path/out.json \
+#           --vault-password-file <(printf 'CCNP\n')
+- name: 机上問題用 show 収集（コンソール）
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+  tasks:
+    - name: collect_console.py で収集（checks に stdout を付与して out_file へ）
+      ansible.builtin.command:
+        argv:
+          - "{{ repo }}/.venv/bin/python3"
+          - "{{ repo }}/topologies/collect_console.py"
+          - "{{ checks_file }}"
+          - "{{ out_file }}"
+      environment:
+        CML_HOST: "{{ cml_host }}"
+        CML_USER: "{{ cml_username }}"
+        CML_PASS: "{{ cml_password }}"
+        CML_VERIFY: "{{ cml_verify_cert | default(false) | string }}"
+        LAB_TITLE: "CCNP-LAB-{{ (problem | hash('md5'))[:8] }}"
+        NODE_USER: "{{ ansible_user }}"
+        NODE_PASS: "{{ ansible_ssh_pass }}"
+        NODE_ENABLE: "{{ ansible_become_pass | default(ansible_ssh_pass) }}"
+      changed_when: false

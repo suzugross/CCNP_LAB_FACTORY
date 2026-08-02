@@ -1,0 +1,27 @@
+---
+# 稼働中 CML ラボの読み取り専用ダンプ(paper_dump_lab.py の認証配管)。
+# 使い方: ansible-playbook playbooks/paper_dump_lab.yml \
+#           -e lab_title='CCNPラボPBR' -e out_file=/path/dump.md \
+#           --vault-password-file <(printf 'CCNP\n')
+- name: CML ラボの読み取り専用ダンプ
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+  tasks:
+    - name: paper_dump_lab.py を実行
+      ansible.builtin.command:
+        argv:
+          - "{{ repo }}/.venv/bin/python3"
+          - "{{ repo }}/topologies/paper_dump_lab.py"
+      environment:
+        CML_HOST: "{{ cml_host }}"
+        CML_USER: "{{ cml_username }}"
+        CML_PASS: "{{ cml_password }}"
+        CML_VERIFY: "{{ cml_verify_cert | default(false) | string }}"
+        LAB_TITLE: "{{ lab_title }}"
+        NODE_USER: "{{ ansible_user }}"
+        NODE_PASS: "{{ ansible_ssh_pass }}"
+        NODE_ENABLE: "{{ ansible_become_pass | default(ansible_ssh_pass) }}"
+        OUT_FILE: "{{ out_file }}"
+      changed_when: false

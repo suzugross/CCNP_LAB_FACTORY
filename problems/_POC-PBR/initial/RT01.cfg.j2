@@ -1,0 +1,28 @@
+! POC-PBR hub (PBR適用点。172.16.x への経路は持たない=PBR不一致なら不達)
+interface {{ links[0] }}
+ ip address 192.168.0.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 192.168.10.254 255.255.255.0
+ ip policy route-map MAP-A
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 192.168.11.254 255.255.255.0
+ ip policy route-map MAP-B
+ no shutdown
+!
+ip access-list extended ACL-A
+ 10 permit ip 192.168.10.0 0.0.0.255 172.16.0.0 0.0.3.255
+!
+ip prefix-list PL-B seq 5 permit 172.16.0.0/21 le 24
+!
+route-map MAP-A permit 10
+ match ip address ACL-A
+ set ip next-hop 192.168.0.2
+!
+route-map MAP-B permit 10
+ match ip address prefix-list PL-B
+ set ip next-hop 192.168.0.2
+!
