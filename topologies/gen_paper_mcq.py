@@ -1731,7 +1731,6 @@ echo-reply が戻れず必ず 0% になる。ドロップの証拠は per-IF の
 def question_md_bgpdbg(d, stamp, rnd):
     A, B = d["A"], d["B"]
     a_lines, b_lines = gpb.debug_blocks(d, rnd)
-    sa, sb = gpb.summary_block(d)
     qs = gpb.questions(d)
     ebgp = d["variant"] == "ebgp_multihop"
     as_txt = (f"{A} は AS {d['as_a']}、{B} は AS {d['as_b']} に所属しています。"
@@ -1766,12 +1765,6 @@ def question_md_bgpdbg(d, stamp, rnd):
 ```
 {B}# show logging | include BGP:
 {chr(10).join(b_lines)}
-```
-```
-{sa}
-```
-```
-{sb}
 ```
 ```
 {gpb.extra_block(d)}

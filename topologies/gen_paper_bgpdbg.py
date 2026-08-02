@@ -15,6 +15,9 @@
   ★片側だけ update-source 欠けは **UP してしまう**(接続レースで update-source 側が勝つ)
      → 単独では故障にならない。variant='asym_up' で「なぜ UP か」を問う上級形に使う。
 
+提示する出力は **debug ログ + variant 固有の補助出力(経路表 / ping)のみ**。
+`show ip bgp summary` は出さない(上記の理由)。
+
 variant:
   addr_mismatch (既定・難4) 両側の neighbor 宛先が食い違う(Lo宛 vs 物理宛)
   ebgp_multihop (難4)       eBGP Lo ピアで multihop 欠け(no route to peer)
@@ -106,26 +109,8 @@ def debug_blocks(d, rnd):
     return a_lines, b_lines
 
 
-def summary_block(d):
-    """show ip bgp summary(状態の裏取り)。"""
-    A, B = d["A"], d["B"]
-    if d["variant"] == "asym_up":
-        pa = (f"{d['lo_b']:<16}4{d['as_b']:>12}      12      13        1    0    0 "
-              "00:08:50        0")
-        pb = (f"{d['lo_a']:<16}4{d['as_a']:>12}      13      13        1    0    0 "
-              "00:09:07        0")
-    elif d["variant"] == "ebgp_multihop":
-        pa = f"{d['lo_b']:<16}4{d['as_b']:>12}       0       0        1    0    0 never    Idle"
-        pb = f"{d['lo_a']:<16}4{d['as_a']:>12}       0       0        1    0    0 never    Idle"
-    else:
-        pa = (f"{d['lo_b']:<16}4{d['as_b']:>12}       0       0        1    0    0 "
-              "00:02:37 Idle")
-        pb = (f"{d['ip_a']:<16}4{d['as_a']:>12}       0       0        1    0    0 "
-              "never    Idle")
-    head = ("Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ "
-            "Up/Down  State/PfxRcd")
-    return (f"{A}# show ip bgp summary | begin Neighbor\n{head}\n{pa}",
-            f"{B}# show ip bgp summary | begin Neighbor\n{head}\n{pb}")
+# ★show ip bgp summary は出さない(2026-08-02 ユーザ指摘): neighbor 宛先も状態も
+#   debug の行から導けるため冗長であり、表を見るだけで答えに近づくヒントになる。
 
 
 def _route_out(node, dst, via, igp):
