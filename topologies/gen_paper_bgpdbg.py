@@ -48,51 +48,61 @@ def draw(rnd, variant=None):
 # --------------------------------------------------------------------------
 # debug 出力(PoC 実出力の書式をそのまま値差し替え)
 # --------------------------------------------------------------------------
-def _ts(rnd, base=0):
-    h, m = 9 + base // 60, base % 60
-    return f"*Aug  2 {h:02d}:{m:02d}:{rnd.randint(10,59)}.{rnd.randint(100,999)}"
+class _Clock:
+    """★debug のタイムスタンプは必ず単調増加させる(2026-08-02 出題で順不同を指摘)。
+    ノードごとに独立した時刻列を持ち、呼ぶたびに数百ms〜数秒進める。"""
+
+    def __init__(self, rnd, start_min=0):
+        self.rnd = rnd
+        self.sec = start_min * 60 + rnd.randint(0, 40)
+
+    def __call__(self, step=None):
+        self.sec += step if step is not None else self.rnd.randint(0, 3)
+        h, m, s = 9 + self.sec // 3600, (self.sec // 60) % 60, self.sec % 60
+        return f"*Aug  2 {h:02d}:{m:02d}:{s:02d}.{self.rnd.randint(100, 999)}"
 
 
 def debug_blocks(d, rnd):
     A, B = d["A"], d["B"]
     v = d["variant"]
+    ta, tb = _Clock(rnd, 0), _Clock(rnd, 1)
     if v == "ebgp_multihop":
-        a_lines = [f"{_ts(rnd, i)}: BGP: {d['lo_b']} Active open failed - no route to "
+        a_lines = [f"{ta(rnd.randint(50, 80))}: BGP: {d['lo_b']} Active open failed - no route to "
                    f"peer, open active delayed {rnd.choice([6144, 8192, 9216, 12288])}ms "
                    "(35000ms max, 60% jitter)" for i in range(4)]
-        b_lines = [f"{_ts(rnd, i)}: BGP: {d['lo_a']} Active open failed - no route to "
+        b_lines = [f"{tb(rnd.randint(50, 80))}: BGP: {d['lo_a']} Active open failed - no route to "
                    f"peer, open active delayed {rnd.choice([6144, 9216, 13312])}ms "
                    "(35000ms max, 60% jitter)" for i in range(3)]
     elif v == "asym_up":
-        a_lines = [f"{_ts(rnd, 0)}: BGP: {d['lo_b']} active went from Idle to Active",
-                   f"{_ts(rnd, 0)}: BGP: {d['lo_b']} open active, local address {d['lo_a']}",
-                   f"{_ts(rnd, 1)}: %BGP-5-ADJCHANGE: neighbor {d['lo_b']} Up "]
-        b_lines = [f"{_ts(rnd, 0)}: BGP: {d['lo_a']} active went from Idle to Active",
-                   f"{_ts(rnd, 0)}: BGP: {d['lo_a']} open active, local address {d['ip_b']}",
-                   f"{_ts(rnd, 0)}: BGP: {d['lo_a']} open failed: Connection refused by "
+        a_lines = [f"{ta()}: BGP: {d['lo_b']} active went from Idle to Active",
+                   f"{ta()}: BGP: {d['lo_b']} open active, local address {d['lo_a']}",
+                   f"{ta()}: %BGP-5-ADJCHANGE: neighbor {d['lo_b']} Up "]
+        b_lines = [f"{tb()}: BGP: {d['lo_a']} active went from Idle to Active",
+                   f"{tb()}: BGP: {d['lo_a']} open active, local address {d['ip_b']}",
+                   f"{tb()}: BGP: {d['lo_a']} open failed: Connection refused by "
                    "remote host",
-                   f"{_ts(rnd, 0)}: BGP: {d['lo_a']} Active open failed - tcb is not "
+                   f"{tb()}: BGP: {d['lo_a']} Active open failed - tcb is not "
                    "available, open active delayed 12288ms (35000ms max, 60% jitter)",
-                   f"{_ts(rnd, 1)}: %BGP-5-ADJCHANGE: neighbor {d['lo_a']} Up "]
+                   f"{tb()}: %BGP-5-ADJCHANGE: neighbor {d['lo_a']} Up "]
     else:   # addr_mismatch
-        a_lines = [f"{_ts(rnd, 0)}: BGP: {d['lo_b']} active went from Idle to Active",
-                   f"{_ts(rnd, 0)}: BGP: {d['lo_b']} open active, local address {d['lo_a']}",
-                   f"{_ts(rnd, 0)}: BGP: {d['lo_b']} open failed: Connection refused by "
+        a_lines = [f"{ta()}: BGP: {d['lo_b']} active went from Idle to Active",
+                   f"{ta()}: BGP: {d['lo_b']} open active, local address {d['lo_a']}",
+                   f"{ta()}: BGP: {d['lo_b']} open failed: Connection refused by "
                    "remote host",
-                   f"{_ts(rnd, 0)}: BGP: {d['lo_b']} Active open failed - tcb is not "
+                   f"{ta()}: BGP: {d['lo_b']} Active open failed - tcb is not "
                    "available, open active delayed 14336ms (35000ms max, 60% jitter)",
-                   f"{_ts(rnd, 0)}: BGP: ses global {d['lo_b']} (0x7352B1A93C78:0) act "
+                   f"{ta()}: BGP: ses global {d['lo_b']} (0x7352B1A93C78:0) act "
                    "Reset (Active open failed).",
-                   f"{_ts(rnd, 0)}: BGP: {d['lo_b']} active went from Active to Idle"]
-        b_lines = [f"{_ts(rnd, 1)}: BGP: {d['ip_a']} active went from Idle to Active",
-                   f"{_ts(rnd, 1)}: BGP: {d['ip_a']} open active, local address {d['ip_b']}",
-                   f"{_ts(rnd, 1)}: BGP: {d['ip_a']} open failed: Connection refused by "
+                   f"{ta()}: BGP: {d['lo_b']} active went from Active to Idle"]
+        b_lines = [f"{tb()}: BGP: {d['ip_a']} active went from Idle to Active",
+                   f"{tb()}: BGP: {d['ip_a']} open active, local address {d['ip_b']}",
+                   f"{tb()}: BGP: {d['ip_a']} open failed: Connection refused by "
                    "remote host",
-                   f"{_ts(rnd, 1)}: BGP: {d['ip_a']} Active open failed - tcb is not "
+                   f"{tb()}: BGP: {d['ip_a']} Active open failed - tcb is not "
                    "available, open active delayed 12288ms (35000ms max, 60% jitter)",
-                   f"{_ts(rnd, 1)}: BGP: ses global {d['ip_a']} (0x72F53161A0C0:0) act "
+                   f"{tb()}: BGP: ses global {d['ip_a']} (0x72F53161A0C0:0) act "
                    "Reset (Active open failed).",
-                   f"{_ts(rnd, 1)}: BGP: {d['ip_a']} active went from Active to Idle"]
+                   f"{tb()}: BGP: {d['ip_a']} active went from Active to Idle"]
     return a_lines, b_lines
 
 
