@@ -118,15 +118,22 @@ def summary_block(d):
             f"{B}# show ip bgp summary | begin Neighbor\n{head}\n{pb}")
 
 
+def _route_out(node, dst, via):
+    return (f"{node}# show ip route {dst}\n"
+            f"Routing entry for {dst}/32\n"
+            '  Known via "static", distance 1, metric 0\n'
+            "  Routing Descriptor Blocks:\n"
+            f"  * {via}\n"
+            "      Route metric is 0, traffic share count is 1")
+
+
 def extra_block(d):
-    """variant 固有の補助出力(経路の存在=誤診の罠 等)。"""
+    """variant 固有の補助出力(経路の存在=誤診の罠 等)。
+    ★ebgp_multihop では **両側の経路表**を出す(2026-08-02 出題フィードバック):
+      片側だけだと「対向に経路が無いのでは」という誤仮説を提示情報で否定できない。"""
     if d["variant"] == "ebgp_multihop":
-        return (f"{d['A']}# show ip route {d['lo_b']}\n"
-                f"Routing entry for {d['lo_b']}/32\n"
-                '  Known via "static", distance 1, metric 0\n'
-                "  Routing Descriptor Blocks:\n"
-                f"  * {d['ip_b']}\n"
-                "      Route metric is 0, traffic share count is 1")
+        return (_route_out(d["A"], d["lo_b"], d["ip_b"]) + "\n```\n```\n"
+                + _route_out(d["B"], d["lo_a"], d["ip_a"]))
     return (f"{d['A']}# ping {d['lo_b']} source {d['lo_a']} repeat 3\n"
             "Type escape sequence to abort.\n"
             f"Sending 3, 100-byte ICMP Echos to {d['lo_b']}, timeout is 2 seconds:\n"
@@ -180,12 +187,14 @@ def rubric(d):
             "総点": 100,
             "項目": [
                 (f"両側の構成の特定(30点): 双方とも対向の**ループバック**宛の "
-                 f"eBGP ピア(AS {d['as_a']} ⇔ AS {d['as_b']})で、"
-                 "`update-source` は設定されている(ピア宛の経路も存在する)", 30),
+                 f"eBGP ピア(AS {d['as_a']} ⇔ AS {d['as_b']})。"
+                 "**両側ともピア宛の静的経路を保持している**(出力で確認できる)。"
+                 "ループバック同士のピアであるため `update-source Loopback0` が"
+                 "設定されている(少なくとも必要である)ことに言及していれば加点", 30),
                 ("メッセージの解釈(35点): `Active open failed - no route to peer` は "
                  "**eBGP のシングルホップ検査(直接接続の確認)に失敗**していることを示す。"
-                 f"`show ip route {d['lo_b']}` のとおり**経路自体は存在する**ため、"
-                 "字義どおりの『経路が無い』ではない", 35),
+                 "★**両側とも経路を保持しているのに両側とも同じメッセージを出している**"
+                 "という矛盾が根拠。字義どおりの『経路が無い』ではない", 35),
                 (f"修正案(35点): 両ルータに `neighbor <対向Lo> ebgp-multihop 2` を設定する"
                  "(または `disable-connected-check`。**片側だけでは確立しない**)", 35),
             ],
