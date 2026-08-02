@@ -118,13 +118,22 @@ def summary_block(d):
             f"{B}# show ip bgp summary | begin Neighbor\n{head}\n{pb}")
 
 
-def _route_out(node, dst, via):
+def _route_out(node, dst, via, igp):
+    """★経路表の Known via は問題文の「到達性の提供元」と一致させること
+    (2026-08-02: OSPF と書きながら static を出す不整合を修正)。"""
+    if igp.strip().startswith("OSPF"):
+        pid = igp.split()[1]
+        known = f'  Known via "ospf {pid}", distance 110, metric 11, type intra area'
+        extra = "      Route metric is 11, traffic share count is 1"
+    else:
+        known = '  Known via "static", distance 1, metric 0'
+        extra = "      Route metric is 0, traffic share count is 1"
     return (f"{node}# show ip route {dst}\n"
             f"Routing entry for {dst}/32\n"
-            '  Known via "static", distance 1, metric 0\n'
+            f"{known}\n"
             "  Routing Descriptor Blocks:\n"
             f"  * {via}\n"
-            "      Route metric is 0, traffic share count is 1")
+            f"{extra}")
 
 
 def extra_block(d):
@@ -132,8 +141,8 @@ def extra_block(d):
     ★ebgp_multihop では **両側の経路表**を出す(2026-08-02 出題フィードバック):
       片側だけだと「対向に経路が無いのでは」という誤仮説を提示情報で否定できない。"""
     if d["variant"] == "ebgp_multihop":
-        return (_route_out(d["A"], d["lo_b"], d["ip_b"]) + "\n```\n```\n"
-                + _route_out(d["B"], d["lo_a"], d["ip_a"]))
+        return (_route_out(d["A"], d["lo_b"], d["ip_b"], d["igp"]) + "\n```\n```\n"
+                + _route_out(d["B"], d["lo_a"], d["ip_a"], d["igp"]))
     return (f"{d['A']}# ping {d['lo_b']} source {d['lo_a']} repeat 3\n"
             "Type escape sequence to abort.\n"
             f"Sending 3, 100-byte ICMP Echos to {d['lo_b']}, timeout is 2 seconds:\n"
