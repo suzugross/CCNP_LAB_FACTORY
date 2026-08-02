@@ -38,6 +38,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_redist_field as grf  # noqa: E402  (chain 抽選・config 描画を素材として流用)
 import gen_redist_arena as gra  # noqa: E402  (ring=再配送ループ抽選・config 描画を流用)
 import gen_paper_pbr as gpp     # noqa: E402  (pbr=PBR×ワイルドカードACL・BL-081)
+import gen_paper_urpf as gpu    # noqa: E402  (urpf=uRPF×ACL・BL-084)
 
 KINDS = ["missing", "no_seed", "filter", "wrong_id"]
 RING_KINDS = ["distance", "filter"]   # ring(ループ)の正解法軸(=arena の method)
@@ -1222,6 +1223,16 @@ def pick_draw_pbr(qseed, kind):
     raise SystemExit(f"pbr kind={kind} が成立する seed が見つかりません({qseed})")
 
 
+def pick_draw_urpf(qseed, kind):
+    for kk in range(200):
+        s = qseed + kk * 137
+        try:
+            return s, gpu.draw(random.Random(s), kind=kind)
+        except ValueError:
+            continue
+    raise SystemExit(f"urpf kind={kind} が成立する seed が見つかりません({qseed})")
+
+
 def write_pack_pbr(repo, prob_id, d, subseed):
     m = d["m"]
     pdir = f"{repo}/problems/{prob_id}"
@@ -1414,6 +1425,219 @@ policy 適用される(IOL 17.15 実測)。カウンタ(ACL matches / Policy rou
 
 
 # --------------------------------------------------------------------------
+# shape=urpf — uRPF×ACL (gen_paper_urpf 流用・BL-084)
+# ★実機展開はしない(紙面専用): 証拠は PoC 実証済みの挙動から決定的に生成する。
+#   (verification drops は「未設定なら統計行自体が無い」ため捏造でなく仕様の再現)
+# --------------------------------------------------------------------------
+def urpf_evidence(d, rnd):
+    """紙面に出す show 出力を状態から決定的に組み立てる。"""
+    st = gpu.state(d)
+    m = d["m"]
+    e, a, b = m["EDGE"], m["ISPA"], m["ISPB"]
+    ifa, ifb = "Ethernet0/0", "Ethernet0/1"
+    n_spoof, n_asym = 10, 10
+
+    def ifblock(name, ip, mode, acl, applied, drops, suppressed):
+        L = [f"{name} is up, line protocol is up",
+             f"  Internet address is {ip}/30"]
+        if applied:
+            acl_txt = f" {acl}" if acl else ""
+            L += [f"  IP verify source reachable-via {mode.upper()}{acl_txt}",
+                  f"   {drops} verification drops",
+                  f"   {suppressed} suppressed verification drops"]
+        else:
+            L.append("  IP verify source reachable-via is disabled")
+        return "\n".join(L)
+
+    # ISP-A 側: 対称のみ着信・スプーフ(IF不一致)が来る
+    a_drop = n_spoof if gpu.spoof_dropped(d, st, "a") else 0
+    # ISP-B 側: 非対称の正規フロー + 完全未広告スプーフ
+    b_drop = 0
+    b_sup = 0
+    if st["b_applied"]:
+        if gpu.spoof_dropped(d, st, "b"):
+            b_drop += n_spoof
+        if not gpu.flow_ok(d, st, "asym"):
+            b_drop += n_asym                  # 正規フローまで破棄されている
+        elif st["b_mode"] == "rx" and st["b_acl"]:
+            b_sup = n_asym                    # ACL 許可= suppressed 側に計上
+    blocks = [
+        f"```\n{e}# show ip interface {ifa}\n" +
+        ifblock(ifa, f"{d['link_a']}.1", st["a_mode"], st["a_acl"], True,
+                a_drop, 0) + "\n```",
+        f"```\n{e}# show ip interface {ifb}\n" +
+        ifblock(ifb, f"{d['link_b']}.1", st["b_mode"], st["b_acl"],
+                st["b_applied"], b_drop, b_sup) + "\n```",
+    ]
+    # 経路表(非対称の根拠: 非対称網は ISP-A 向き・実トラフィックは ISP-B 着信)
+    rt = [f"{e}# show ip route | begin Gateway", "Gateway of last resort is not set",
+          f"      {d['cust_sym']}.0/24 is subnetted, 1 subnets",
+          f"O E2     {d['cust_sym']}.0 [110/20] via {d['link_b']}.2, {ifb}",
+          f"      {d['cust_asym']}.0/24 is subnetted, 1 subnets",
+          f"O E2     {d['cust_asym']}.0 [110/20] via {d['link_a']}.2, {ifa}"]
+    blocks.append("```\n" + "\n".join(rt) + "\n```")
+    # ACL(定義されているもの・無ければ「存在しない」ことが読めるよう空出力)
+    acl_txt = "\n".join(gpu.acl_blocks(d, st)) or "(出力なし)"
+    blocks.append(f"```\n{e}# show access-lists\n{acl_txt}\n```")
+    # 構成抜粋
+    cfg = [f"interface {ifa}", f" ip address {d['link_a']}.1 255.255.255.252"]
+    if st["a_acl"]:
+        cfg.append(f" ip verify unicast source reachable-via {st['a_mode']} {st['a_acl']}")
+    else:
+        cfg.append(f" ip verify unicast source reachable-via {st['a_mode']}")
+    cfg += [f"interface {ifb}", f" ip address {d['link_b']}.1 255.255.255.252"]
+    if st["b_applied"]:
+        if st["b_acl"]:
+            cfg.append(f" ip verify unicast source reachable-via {st['b_mode']} "
+                       f"{st['b_acl']}")
+        else:
+            cfg.append(f" ip verify unicast source reachable-via {st['b_mode']}")
+    blocks.append(f"```\n{e}# show running-config | section interface\n" +
+                  "\n".join(cfg) + "\n```")
+    return blocks, st
+
+
+def urpf_requirements(d, rnd, sites):
+    m = d["m"]
+    h1, h2 = d["exc_host"], d["exc_host2"]
+    core = [
+        "エッジのルータの両方のアップリンクのインターフェイスにおいて、"
+        "送信元アドレスの検証(anti-spoofing)が、有効にされていなければなりません。",
+        f"監視のためのホストである {h1} および {h2} からの、"
+        "正規のトラフィックが、破棄されてはなりません。",
+        "着信のインターフェイスと一致しない送信元を持つところのトラフィックは、"
+        "破棄されなければなりません。",
+    ]
+    if d["world"] == "host_exception":
+        core.append("検証に対する例外は、個々のホストのアドレスに限定して、"
+                    "アクセス・リストによって明示的に許可されなければなりません"
+                    "(ネットワーク単位での許可は、認められていません)。")
+    elif d["world"] == "net_exception":
+        core.append("検証に対する例外は、当該のネットワークの単位で、"
+                    "アクセス・リストによって許可されなければなりません"
+                    "(個々のホストの列挙による運用は、認められていません)。")
+    else:
+        core.append("例外のリスト(アクセス・リスト)の運用は、"
+                    "実施されてはなりません。検証のモードの選択によって対処すること。")
+    core += rnd.sample([x for x in REQ_DECOYS if "スタティック" not in x], 1)
+    rnd.shuffle(core)
+    return [f"{i}. {t}" for i, t in enumerate(core, 1)]
+
+
+def question_md_urpf(d, blocks, choices, stamp, sites=None, form="fix", reqs=None):
+    m = d["m"]
+    e, a, b = m["EDGE"], m["ISPA"], m["ISPB"]
+    state_blocks = blocks[:4]
+    cfg_blocks = blocks[4:]
+    if reqs is None:
+        reqs = urpf_requirements(d, random.Random(0), sites)
+    if form == "cause":
+        q = ("この事象の原因である可能性が、最も高いものは、どれですか。"
+             "(1つを選択してください)")
+    else:
+        q = ("この問題を解決し、そして、示されているところのすべての要件が"
+             "満たされることを確実にするために、必要とされる手順は、どれですか。"
+             "(1つを選択してください)")
+    letters = [chr(65 + i) for i in range(len(choices))]
+    opts = "\n".join(f"{l}. {t}" for l, (t, _, _) in zip(letters, choices))
+    topo = (f"```\n"
+            f"          {e} (エッジ・被験のデバイス)\n"
+            f"   {'Ethernet0/0'} |            | {'Ethernet0/1'}\n"
+            f"  {d['link_a']}.0/30      {d['link_b']}.0/30\n"
+            f"        |                    |\n"
+            f"      {a} (ISP-A)        {b} (ISP-B)\n```")
+    return f"""# 問題 {stamp} : 送信元アドレスの検証のための分析
+
+{FIXED_NOTE}
+
+## トポロジ
+
+あなたの会社のエッジのルータは、2つのアップリンクによって、2つのサービス・プロバイダへ
+接続されている、というものです。顧客のネットワーク {d['cust_sym']}.0/24 および
+{d['cust_asym']}.0/24 は、それぞれのプロバイダを経由して、広告されています。
+
+{topo}
+
+- 監視のためのホスト: `{d['exc_host']}` および `{d['exc_host2']}`
+  ({d['cust_asym']}.0/24 の中に存在し、ISP-B 側から着信します)
+
+## 要件
+
+{chr(10).join(reqs)}
+
+## 現在の状態
+
+いくつかの事象が、報告されています。示されているところの出力を、参照してください。
+
+{chr(10).join(state_blocks)}
+
+## 設定抜粋
+
+{chr(10).join(cfg_blocks)}
+
+## 設問
+
+{q}
+
+## 選択肢
+
+{opts}
+"""
+
+
+def answer_md_urpf(d, choices, stamp, master_seed, subseed):
+    letters = [chr(65 + i) for i in range(len(choices))]
+    correct = [l for l, (_, ok, _) in zip(letters, choices) if ok][0]
+    wrongs = "\n".join(f"- **{l}**: {'(正解)' if ok else why}"
+                        for l, (t, ok, why) in zip(letters, choices))
+    kind_note = {
+        "strict_on_asym": "非対称に広告される網の着信 IF に rx(strict) → 正規業務断",
+        "loose_everywhere": "両 IF が any → RPF IF 不一致のスプーフが素通り",
+        "acl_num_mismatch": "uRPF が参照する ACL 番号と定義された ACL 番号が不一致",
+        "acl_wrong_host": "ACL の許可ホストが対象と違う",
+        "acl_extended_form": "拡張番号帯・any→host(宛先側)に一致する形",
+        "missing_on_uplink": "片側 IF に未適用",
+    }[d["kind"]]
+    world_note = {"host_exception": "例外はホスト単位の ACL のみ",
+                  "net_exception": "例外はネットワーク単位の ACL",
+                  "no_acl_ops": "例外リスト運用なし(モード選択で対処)"}[d["world"]]
+    return f"""# 解答 {stamp}
+
+## 正解
+
+**{correct}**
+
+## 仕込んだ状態
+
+- 種別: `urpf/{d['kind']}` — {kind_note}
+- 要件世界: {world_note}(「直る候補」= {', '.join(d['_works'])} のうち要件適合は1つ)
+- 生成: `gen_paper_mcq.py --shape urpf --seed {master_seed}` (sub-seed {subseed})
+
+## 各選択肢の判定
+
+{wrongs}
+
+## 検証コマンドと期待される出力
+
+- `show ip interface <IF>`: `IP verify source reachable-via` の行と、
+  **`N verification drops`** の増分。ACL で許可された分は
+  `suppressed verification drops` に計上される。
+- 正規の非対称フロー(監視ホスト発)の ping が 100% であること。
+
+## ★この分野の最重要知見(BL-027 PoC 実証)
+
+**偽装 ping の「失敗」を根拠にしてはならない。** 経路の無い送信元は uRPF が無くても
+echo-reply が戻れず必ず 0% になる。ドロップの証拠は per-IF の
+`verification drops` カウンタ一択(未設定なら統計行自体が存在しない)。
+また **非対称ルーティング下で rx を無思慮に入れると正規通信が死ぬ**。
+
+## ENARSI ブループリント
+
+- 3.0 Infrastructure Security — uRPF (strict / loose)・ACL
+"""
+
+
+# --------------------------------------------------------------------------
 # 展開・収集・撤収
 # --------------------------------------------------------------------------
 def sh(repo, args, **kw):
@@ -1518,10 +1742,11 @@ def main():
     ap.add_argument("--seed", type=int, required=True)
     ap.add_argument("--count", type=int, default=1)
     ap.add_argument("--date", default=None, help="YYYYMMDD(既定=今日)")
-    ap.add_argument("--shape", choices=["chain", "ring", "pbr", "mixed"],
+    ap.add_argument("--shape", choices=["chain", "ring", "pbr", "urpf", "mixed"],
                     default="chain",
                     help="chain=再配送欠落/誤設定系(既定) / ring=再配送リングの定常ループ(難5)"
                          " / pbr=PBR×ワイルドカードACL(BL-081)"
+                         " / urpf=uRPF×ACL(BL-084・紙面専用)"
                          " / mixed=問題ごとに形・種別を抽選(ごちゃまぜ)")
     ap.add_argument("--kinds", default=None,
                     help=f"カンマ区切りで種別を明示(chain: {','.join(KINDS)} / "
@@ -1547,7 +1772,8 @@ def main():
     if a.shape == "mixed":
         kinds = None   # 問題ごとに shape/種別を抽選(--kinds は無視)
     else:
-        pool = {"ring": RING_KINDS, "pbr": gpp.PBR_KINDS}.get(a.shape, KINDS)
+        pool = {"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
+                "urpf": gpu.URPF_KINDS}.get(a.shape, KINDS)
         kinds = (a.kinds.split(",") if a.kinds
                  else random.Random(a.seed ^ 0x5EED).sample(pool, len(pool)))
         if not set(kinds) <= set(pool):
@@ -1559,9 +1785,10 @@ def main():
         if a.shape == "mixed":
             roll = random.Random(qseed ^ 0xC0FE)
             r = roll.random()
-            shape_i = "ring" if r < 0.25 else ("pbr" if r < 0.50 else "chain")
-            kind = roll.choice({"ring": RING_KINDS,
-                                "pbr": gpp.PBR_KINDS}.get(shape_i, KINDS))
+            shape_i = ("ring" if r < 0.22 else "pbr" if r < 0.44
+                       else "urpf" if r < 0.66 else "chain")
+            kind = roll.choice({"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
+                                "urpf": gpu.URPF_KINDS}.get(shape_i, KINDS))
         else:
             shape_i = a.shape
             kind = kinds[i % len(kinds)]
@@ -1570,6 +1797,8 @@ def main():
             d = gra.draw(random.Random(subseed), method=kind)
         elif shape_i == "pbr":
             subseed, d = pick_draw_pbr(qseed, kind)
+        elif shape_i == "urpf":
+            subseed, d = pick_draw_urpf(qseed, kind)
         else:
             subseed, d = pick_draw(qseed, kind, hard=a.hard)
         prob_id = f"PAPER-RD-{subseed}"
@@ -1590,6 +1819,9 @@ def main():
         elif shape_i == "pbr":
             plan = gpp.evidence_plan(d, rnd)
             choices = gpp.build_choices_fix(d, rnd)
+        elif shape_i == "urpf":
+            plan = {"checks": []}          # 紙面専用(実機展開なし)
+            choices = gpu.build_choices_fix(d, rnd)
         else:
             plan = evidence_plan(d, rnd, hard=a.hard, exam=a.exam)
             choices = build_choices(d, rnd, plan=plan, exam=a.exam, pol=pol)
@@ -1608,6 +1840,9 @@ def main():
         elif a.exam and shape_i == "pbr" and rnd.random() < 0.5:
             form = "cause"
             choices = gpp.build_choices_cause(d, rnd)
+        elif a.exam and shape_i == "urpf" and rnd.random() < 0.5:
+            form = "cause"
+            choices = gpu.build_choices_cause(d, rnd)
         choices = rebalance_position(repo, choices)
         reqs = None
         if a.exam:
@@ -1615,6 +1850,8 @@ def main():
                 reqs = ring_requirements(d, rnd)
             elif shape_i == "pbr":
                 reqs = pbr_requirements(d, rnd, sites)
+            elif shape_i == "urpf":
+                reqs = urpf_requirements(d, rnd, sites)
             else:
                 reqs = chain_requirements(
                     rnd, style=pol["style"] if pol else "inline")
@@ -1622,7 +1859,9 @@ def main():
         print(f"[{i + 1}/{a.count}] sub-seed={subseed} nodes={len(d['roles'])}",
               flush=True)
 
-        if a.no_lab:
+        if shape_i == "urpf":
+            collected = {}                 # 紙面専用: 実機展開・収集を行わない
+        elif a.no_lab:
             collected = {(c["node"], c["command"]): "(PLACEHOLDER: --no-lab)"
                          for c in plan["checks"]}
         else:
@@ -1663,6 +1902,12 @@ def main():
                                   herr=herr)
             # 「ループ」「RIB-failure」は要件文・show ip bgp 凡例に正当に現れるため対象外
             lint += ["ring=", "inject_eigrp", "inject_ospf", "震源"]
+        elif shape_i == "urpf":
+            blocks, _st = urpf_evidence(d, rnd)
+            q_md = question_md_urpf(d, blocks, choices, stamp, sites=sites,
+                                    form=form, reqs=reqs)
+            a_md = answer_md_urpf(d, choices, stamp, a.seed, subseed)
+            lint += list(gpu.URPF_KINDS) + ["world=", "_works"]
         elif shape_i == "pbr":
             q_md = question_md_pbr(d, plan, choices, collected, stamp, sites=sites,
                                    form=form, reqs=reqs)
