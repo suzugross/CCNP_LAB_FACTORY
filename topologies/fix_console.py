@@ -18,7 +18,7 @@ from virl2_client import ClientLibrary
 from pyats.topology import loader
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from collect_console import _patch_testbed  # noqa: E402
+from collect_console import _patch_testbed, restore_console  # noqa: E402
 
 
 def main():
@@ -44,6 +44,7 @@ def main():
             dev.configure("\n".join(cfg))
         for cmd in item.get("exec") or []:
             dev.execute(cmd)
+        restore_console(dev)
         dev.disconnect()
         print(f"[fix_console] {name}: config {len(cfg)}行 / exec {len(item.get('exec') or [])}件 投入")
     print("[fix_console] done")

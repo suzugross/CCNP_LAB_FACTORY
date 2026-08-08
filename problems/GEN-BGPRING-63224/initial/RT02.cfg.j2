@@ -1,0 +1,28 @@
+! RT02
+interface Loopback0
+ ip address 55.55.55.55 255.255.255.255
+!
+interface Loopback1
+ ip address 172.16.106.1 255.255.255.0
+!
+interface {{ links[1] }}
+ ip address 10.226.46.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[0] }}
+ ip address 10.234.21.2 255.255.255.252
+ no shutdown
+!
+router bgp 64694
+ bgp router-id 55.55.55.55
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ bgp bestpath compare-routerid
+ neighbor 10.226.46.2 remote-as 65079
+ neighbor 10.234.21.1 remote-as 64553
+ address-family ipv4 unicast
+  network 172.16.106.0 mask 255.255.255.0
+  neighbor 10.226.46.2 activate
+  neighbor 10.234.21.1 activate
+ exit-address-family
+!

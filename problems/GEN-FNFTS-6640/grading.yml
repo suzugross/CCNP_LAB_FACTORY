@@ -1,0 +1,70 @@
+# 自動生成 (gen_fnf_ts.py) seed=6640 faults=monitor_no_exporter,exporter_wrong_source
+# ★cache 実効は format table の同一行 regex(src dst 隣接列)。
+#   contains 2連へ緩めると逆向きフローで偽陽性になり方向故障を検出できない。
+problem: GEN-FNFTS-6640
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'RT02: flow record REC-EDGE の match/collect が監視標準どおり'
+  node: RT02
+  command: show flow record REC-EDGE
+  raw:
+  - regex: match ipv4 source address
+  - regex: match ipv4 destination address
+  - regex: match ipv4 protocol
+  - regex: match transport source-port
+  - regex: match transport destination-port
+  - regex: collect counter bytes
+  - regex: collect counter packets
+  points: 15
+- name: 'RT02: exporter EXP-EDGE の宛先 203.0.113.236 / UDP 4739'
+  node: RT02
+  command: show flow exporter EXP-EDGE
+  raw:
+  - regex: '[Dd]estination.*203\.0\.113\.236'
+  - regex: '[Dd]estination [Pp]ort:\s+4739'
+  points: 10
+- name: 'RT02: exporter EXP-EDGE の source が Loopback0'
+  node: RT02
+  command: show flow exporter EXP-EDGE
+  raw:
+  - regex: '[Ss]ource [Ii]nterface:\s+Loopback0'
+  points: 10
+- name: 'RT02: exporter EXP-EDGE の export-protocol が netflow-v9'
+  node: RT02
+  command: show flow exporter EXP-EDGE
+  raw:
+  - regex: Export protocol:\s+NetFlow Version 9
+  points: 10
+- name: 'RT02: monitor MON-EDGE が record REC-EDGE を参照'
+  node: RT02
+  command: show flow monitor MON-EDGE
+  raw:
+  - regex: '[Rr]ecord.*REC-EDGE'
+  - not_regex: REC-OLD
+  points: 10
+- name: 'RT02: monitor MON-EDGE が exporter EXP-EDGE を参照'
+  node: RT02
+  command: show flow monitor MON-EDGE
+  raw:
+  - regex: '[Ee]xporter.*EXP-EDGE'
+  points: 10
+- name: 'RT02: Ethernet0/0 (RT01向け) の ingress に MON-EDGE を適用'
+  node: RT02
+  command: show running-config interface Ethernet0/0
+  raw:
+  - regex: ip flow monitor MON-EDGE input
+  points: 15
+- name: (発射) RT01→RT03 の監視対象トラフィックが疎通
+  node: RT01
+  command: ping 1.1.1.1 source 3.3.3.3 repeat 10
+  raw:
+  - regex: Success rate is [1-9]
+  points: 5
+- name: '効果: cache に順方向フロー(src 3.3.3.3 → dst 1.1.1.1)が採取される'
+  node: RT02
+  command: show flow monitor MON-EDGE cache format table
+  raw:
+  - regex: 3\.3\.3\.3\s+1\.1\.1\.1
+  points: 15

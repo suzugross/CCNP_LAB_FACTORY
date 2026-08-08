@@ -308,11 +308,31 @@ def main():
                    {"name": f"RT02: ACL {acl} が {IF_B} の in に適用",
                     "node": "RT02", "command": f"show ip interface {IF_B}",
                     "raw": [{"regex": f"Inbound\\s+access list is {acl}"}], "points": 5},
+                   # BL-094(2026-08-06): 書式regex→acl_vectors意味評価へ差し替え。
+                   # 汎用形以外の等価解(セグメント絞り+rebind broadcast行など)を救済
+                   # (7710でユーザの意味的等価解がregexに弾かれた実戦教訓)。
+                   # ベクタ= DISCOVER/renew単方向×2seg/rebind broadcast×2seg/
+                   #         icmp許可/非許可(telnet・DNS)遮断
                    {"name": f"RT02: ACL {acl} の中身が配布標準どおり (DHCP/ICMP許可+明示deny)",
                     "node": "RT02", "command": f"show access-lists {acl}",
-                    "raw": [{"regex": "permit udp any eq bootpc any eq bootps"},
-                            {"regex": "permit icmp any any"},
-                            {"regex": r"deny\s+ip any any"}], "points": 10},
+                    "acl_vectors": {"acl": acl, "vectors": [
+                        {"id": "discover", "proto": "udp", "src": "0.0.0.0", "sport": 68,
+                         "dst": "255.255.255.255", "dport": 67, "expect": "permit"},
+                        {"id": "renew_a", "proto": "udp", "src": f"{seg['A']}.50", "sport": 68,
+                         "dst": f"{seg['P']}.1", "dport": 67, "expect": "permit"},
+                        {"id": "renew_b", "proto": "udp", "src": f"{seg['B']}.50", "sport": 68,
+                         "dst": f"{seg['P']}.1", "dport": 67, "expect": "permit"},
+                        {"id": "rebind_a", "proto": "udp", "src": f"{seg['A']}.50", "sport": 68,
+                         "dst": "255.255.255.255", "dport": 67, "expect": "permit"},
+                        {"id": "rebind_b", "proto": "udp", "src": f"{seg['B']}.50", "sport": 68,
+                         "dst": "255.255.255.255", "dport": 67, "expect": "permit"},
+                        {"id": "icmp_ok", "proto": "icmp", "src": f"{seg['B']}.50",
+                         "dst": f"{seg['L']}.1", "expect": "permit"},
+                        {"id": "telnet_ng", "proto": "tcp", "src": f"{seg['B']}.50", "sport": 40000,
+                         "dst": f"{seg['P']}.1", "dport": 23, "expect": "deny"},
+                        {"id": "dns_ng", "proto": "udp", "src": f"{seg['B']}.50", "sport": 12345,
+                         "dst": f"{seg['P']}.1", "dport": 53, "expect": "deny"},
+                    ]}, "points": 10},
                    {"name": "効果: CL3 が LOCAL プールから取得 (excluded 回避)",
                     "node": "CL3",
                     "command": "show ip interface Ethernet0/0 | include Internet",

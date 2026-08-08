@@ -48,6 +48,26 @@ def _patch_testbed(tb_yaml, cml_user, cml_pass, node_user, node_pass, node_enabl
     return tb
 
 
+def restore_console(dev):
+    """コンソールセッションの後始末(出題状態の汚染防止・2026-08-03)。
+
+    unicon は接続初期化(HA_INIT_CONFIG_COMMANDS)で毎回 `no logging console` を
+    黙って機器に投入し、disconnect はターミナルサーバへの TCP を切るだけで
+    機器側の EXEC セッションを残す。→ 受験者がコンソールを開くと
+    「enable 済みの続き+syslog 非表示」になる。ここで logging console を復元し、
+    exit で EXEC をログアウトしてから切る。
+    (exec-timeout 0 も unicon が入れるが day0 と同値のため放置。exit は
+     execute だとプロンプト喪失待ちで例外になるので sendline で送り捨てる)"""
+    try:
+        dev.configure("logging console")
+    except Exception:
+        pass
+    try:
+        dev.sendline("exit")
+    except Exception:
+        pass
+
+
 def collect(dev, commands, timeout=90):
     """1 ノードにコンソール接続し、commands を順に実行して {cmd: 出力} を返す。"""
     out = {}
@@ -60,6 +80,7 @@ def collect(dev, commands, timeout=90):
             except Exception as e:  # 個別コマンド失敗は空扱い(採点側で FAIL)
                 out[cmd] = f"(console execute error: {e})"
     finally:
+        restore_console(dev)
         try:
             dev.disconnect()
         except Exception:

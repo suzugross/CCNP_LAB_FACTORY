@@ -42,6 +42,8 @@ import gen_redist_mp_ts as gmp  # noqa: E402  (mploop=同AD・メトリック差
 import gen_paper_pbr as gpp     # noqa: E402  (pbr=PBR×ワイルドカードACL・BL-081)
 import gen_paper_urpf as gpu    # noqa: E402  (urpf=uRPF×ACL・BL-084)
 import gen_paper_bgpdbg as gpb  # noqa: E402  (bgpdbg=BGP debug 読解・記述式・BL-085)
+import gen_paper_leakmap as gpk  # noqa: E402  (leakmap=EIGRP集約×リーク・BL-095)
+import gen_paper_ospfv3pl as gpo  # noqa: E402  (ospfv3pl=OSPFv3 prefix-list・BL-097)
 
 KINDS = ["missing", "no_seed", "filter", "wrong_id"]
 # ring(ループ)の正解法軸。arena の method をそのまま借りるが、tag は紙面専用の追加軸
@@ -605,16 +607,16 @@ def topo_tables(d, sites=None, blind=False):
         edges.append(f"  {m[a]}:E0/{sa}(.1) ── {m[b]}:E0/{sb}(.2)   "
                      f"{dom_txt}{seg}.0/30")
     if sites and blind:
-        head = ("| 拠点 | ルータ | 拠点網(代表アドレス) |\n"
+        head = ("| 拠点 | ルータ | 拠点網 |\n"
                 "|------|--------|----------------------|\n")
     elif sites:
-        head = ("| 拠点 | ルータ | 参加プロトコル | 拠点網(代表アドレス) |\n"
+        head = ("| 拠点 | ルータ | 参加プロトコル | 拠点網 |\n"
                 "|------|--------|----------------|----------------------|\n")
     else:
         head = ("| ルータ | 参加プロトコル | Loopback0 |\n"
                 "|--------|----------------|-----------|\n")
     return (head + "\n".join(sorted(rows))
-            + "\n\nリンク一覧(接続・アドレス):\n```\n"
+            + "\n\nリンク一覧:\n```\n"
             + "\n".join(edges) + "\n```")
 
 
@@ -693,6 +695,208 @@ def cisco_terms(rnd):
         t[k], t[k + "2"] = a, b
     return t
 
+# --------------------------------------------------------------------------
+# 「不親切化」(BL-088・ユーザ要望): 括弧の補足を落とし、日本語版 Cisco 試験に
+# ありがちな直訳調へ寄せる。★適用は要件文・導入文・症状文のみ。
+# show 出力 / 表 / 選択肢 / コマンドには一切触れない(採点と再現性に関わるため)。
+# --------------------------------------------------------------------------
+_JA = re.compile(r"[ぁ-んァ-ヶ一-龥]")
+_PAREN = re.compile(r"[(（]([^()（）]*)[)）]")
+# 中黒でつないだカタカナ複合語(Cisco 和訳は中黒でなく空白か無区切りが多い)
+_KATA_NAKAGURO = re.compile(r"([ァ-ヶー]{2,})・([ァ-ヶー]{2,})")
+_LONG_VOWEL = [("ルータ", "ルーター"), ("フィルタ", "フィルター"),
+               ("パラメータ", "パラメーター"), ("ヘッダ", "ヘッダー")]
+
+
+def strip_parens(s):
+    """括弧の補足を落とす。短い記法( (/32) (.254) )だけ残す。
+    ★落として良いのは「本文だけで辛うじて読み取れる」補足に限る
+      (制約の唯一の担い手になっている括弧は、事前に本文へ畳んである)。"""
+    def rep(m):
+        inner = m.group(1)
+        if len(inner) <= 4 and not _JA.search(inner):
+            return m.group(0)          # (/32) (.1) (.254) 等は残す
+        return ""
+    out = _PAREN.sub(rep, s)
+    return re.sub(r"[、。]\s*(?=[、。])", "", out).replace(" 、", "、").strip()
+
+
+def terse_jp(s, rnd=None):
+    """括弧を落としたうえで、和訳版 Cisco 試験の癖を軽く混ぜる。
+    ★揺らぎは箇所ごとに独立(文書内で不統一なのが本物の癖)。"""
+    if rnd is None:
+        rnd = random.Random(zlib.crc32(s.encode("utf-8")))
+    s = strip_parens(s)
+    if rnd.random() < 0.5:             # 中黒 → 半角スペース(問題単位で寄せる)
+        s = _KATA_NAKAGURO.sub(r"\1 \2", s)
+        s = _KATA_NAKAGURO.sub(r"\1 \2", s)      # 3語連結の2回目
+    for a, b in _LONG_VOWEL:           # 長音の揺れ(出現ごとに独立に抽選)
+        if a in s:
+            s = "".join(
+                (b if (x == a and rnd.random() < 0.35) else x)
+                for x in re.split(f"({a})", s))
+    # 述語の直訳化(受動+義務の言い回しを混ぜる)
+    if rnd.random() < 0.45:
+        s = s.replace("されなければなりません", "される必要があります")
+    if rnd.random() < 0.35:
+        # ★「が…することはできません」は主体がずれて読める(態の崩れ)。
+        #   受動を保った直訳形にする(Cisco 和訳の「〜されることはできません」)。
+        s = s.replace("されてはなりません", "されることはできません")
+    if rnd.random() < 0.3:
+        s = s.replace("しなければなりません", "する必要があります")
+    return s
+
+
+# --------------------------------------------------------------------------
+# 「道標(signpost)の除去」(BL-088・ユーザ要望「ぱっと見、何を問われているのかすら
+# 分からないレベルに」)。★情報は1ビットも減らさない — 触るのは配置と道標だけで、
+# 要件の中身・証拠・選択肢は現状維持(正解が一意に決まる性質を保つ)。
+# 完成した Markdown に対する後処理として独立させてある(将来ラボ問の task.md にも
+# 同じ関数を掛けられるように)。
+# --------------------------------------------------------------------------
+LEAD_IN = [
+    "あなたは、ネットワークの運用を担当しています。",
+    "あなたは、下記のネットワークの保守を担当する技術者です。",
+    "あなたの組織は、下記に示されているところのネットワークを運用しています。",
+]
+DIRECTIVE = [
+    "あなたは、示されているところの出力および構成に基づいて、その構成が、"
+    "下記において記述されているとおりに動作していない理由を、判断する必要があります。",
+    "あなたは、提示されているところの情報のみを使用して、要求されている状態が"
+    "満たされていない理由を、特定しなければなりません。",
+    "示されているところの出力および構成に基づいて、要求されているところの動作が"
+    "得られていない理由が、判断されなければなりません。",
+]
+VAGUE_SYMPTOM = [
+    "いくつかの宛先への通信について、報告が上がっています。",
+    "一部の通信が、意図されているとおりに動作していない、という報告があります。",
+    "ユーザーから、通信に関する事象が、報告されています。",
+    "通信の一部において、想定されていない挙動が、観測されています。",
+]
+GENERIC_ASK = "次のうち、正しいものは、どれですか。"
+# 導入から機構の名指しを抜く(config を読めば分かる=情報は失われない)
+INTRO_DENAME = [
+    ("そして、相互の再配送という手段によって、", "そして、"),
+    ("相互の再配送という手段によって、", ""),
+    ("ており、そして、境界のいずれかにおいて、再配送が実施されています。", "ています。"),
+    ("そして、それぞれの境界において、\n相互の再配送が実施されている、というものです。",
+     "そして、それらは境界において接続されています。"),
+    ("そして、それぞれの境界において、相互の再配送が実施されている、というものです。",
+     "そして、それらは境界において接続されています。"),
+    ("ポリシー・ベース・ルーティングという手段によって、", ""),
+    ("ポリシー ベース ルーティングという手段によって、", ""),
+]
+
+
+def _split_sections(md):
+    """'## 見出し' 単位に (見出し, 本文行list) へ分解。先頭は ('', 前文)。"""
+    out, cur, body = [], "", []
+    for ln in md.splitlines():
+        if ln.startswith("## "):
+            out.append((cur, body)); cur, body = ln[3:].strip(), []
+        else:
+            body.append(ln)
+    out.append((cur, body))
+    return out
+
+
+def _prose_and_rest(lines):
+    """節の本文を (先頭の散文, 残り=図/表/出力) に割る。"""
+    i = 0
+    while i < len(lines) and not (lines[i].startswith("```")
+                                  or lines[i].startswith("|")):
+        i += 1
+    return lines[:i], lines[i:]
+
+
+def _fenced_blocks(lines):
+    """``` で囲まれた塊のリストと、それ以外の行を返す。"""
+    blocks, other, buf, inside = [], [], [], False
+    for ln in lines:
+        if ln.startswith("```"):
+            buf.append(ln)
+            if inside:
+                blocks.append(buf); buf = []
+            inside = not inside
+            continue
+        (buf if inside else other).append(ln)
+    if buf:
+        blocks.append(buf)
+    return blocks, [x for x in other if x.strip()]
+
+
+def obfuscate_md(md, rnd, essay=False):
+    """①タイトル無機質化 ②設問の抽象化 ④症状の抽象化 ⑦直訳の前置き=常時 /
+    ③シナリオへの散文統合(⑤機構名の除去を含む) ⑥出力順のランダム化=50%。"""
+    md = re.sub(r"^(# 問題 \S+)\s*:.*$", r"\1", md, count=1, flags=re.M)
+    if essay:
+        return md
+    prose_mode = rnd.random() < 0.5
+    shuffle_out = rnd.random() < 0.5
+    secs = _split_sections(md)
+    get = {k: v for k, v in secs}
+    head = secs[0][1]
+
+    topo_prose, topo_rest = _prose_and_rest(get.get("トポロジ", []))
+    intro = "".join(x.strip() for x in topo_prose if x.strip())
+    for a, b in INTRO_DENAME:
+        intro = intro.replace(a.replace("\\n", "\n"), b)
+    reqs = [re.sub(r"^\d+\.\s*", "", x.strip())
+            for x in get.get("要件", []) if x.strip()]
+    st_prose, st_rest = _prose_and_rest(get.get("現在の状態", []))
+    state_blocks, state_other = _fenced_blocks(st_rest)
+    cfg_blocks, _ = _fenced_blocks(get.get("設定抜粋", []))
+    vague = rnd.choice(VAGUE_SYMPTOM)
+
+    if prose_mode:
+        scenario = (rnd.choice(LEAD_IN) + intro + vague + rnd.choice(DIRECTIVE)
+                    + "".join(reqs))
+        out = state_blocks + cfg_blocks
+        if shuffle_out:
+            rnd.shuffle(out)
+        parts = ["\n".join(head).rstrip(), "", "## シナリオ", "", scenario, ""]
+        parts += ["\n".join(topo_rest).strip(), "", "## 出力", ""]
+        parts += ["\n".join(b) for b in out]
+        parts += ["", "## 設問", "", GENERIC_ASK, "", "## 選択肢",
+                  "\n".join(get.get("選択肢", [])).strip(), ""]
+        return "\n".join(parts)
+
+    # 見出しは残すが、道標だけ抜く形
+    if shuffle_out:
+        rnd.shuffle(state_blocks)
+    rebuilt = ["\n".join(head).rstrip(), "", "## トポロジ", "",
+               rnd.choice(LEAD_IN) + intro, "",
+               "\n".join(topo_rest).strip(), "",
+               "## 要件", ""] + [f"{i}. {x}" for i, x in enumerate(reqs, 1)] + [
+               "", "## 現在の状態", "",
+               vague + rnd.choice(DIRECTIVE), ""]
+    rebuilt += state_other + [""] if state_other else []
+    rebuilt += ["\n".join(b) for b in state_blocks]
+    rebuilt += ["", "## 設定抜粋", ""] + ["\n".join(b) for b in cfg_blocks]
+    rebuilt += ["", "## 設問", "", GENERIC_ASK, "", "## 選択肢",
+                "\n".join(get.get("選択肢", [])).strip(), ""]
+    return "\n".join(rebuilt)
+
+
+PBR_INTRO = (
+    "コアのルータにおいて、ポリシー・ベース・ルーティングという手段によって、"
+    "それぞれのサイトの LAN から、本社のデータ・センターのサービスのネットワークへの"
+    "転送が、制御されています。コアは、サービスのネットワークへのルーティングの情報を"
+    "保持しておらず、そして、ポリシーに一致したトラフィックのみが、ネクスト・ホップへ"
+    "転送されます。")
+
+URPF_INTRO = (
+    "あなたの会社のエッジのルータは、2つのアップリンクによって、"
+    "2つのサービス・プロバイダへ接続されている、というものです。"
+    "顧客のネットワーク {a}.0/24 および {b}.0/24 は、"
+    "それぞれのプロバイダを経由して、広告されています。")
+
+
+def finalize_reqs(core, rnd):
+    """要件リストの仕上げ: 不親切化 → 連番付与。"""
+    return [f"{i}. {terse_jp(t, rnd)}" for i, t in enumerate(core, 1)]
+
+
 # 要件の言い換えバリアント(意味は同一=正解一意性の装置は保つ)。exam では表現・並び・
 # ダミー要件を seed で揺らし、「要件欄がいつも同じ」の暗記を封じる。{M}=seed metric。
 REQ_VARIANTS = {
@@ -756,7 +960,7 @@ def chain_requirements(rnd, style="inline"):
             for k in ("reach", seed_key, "nofilter", "idmatch")]
     reqs += rnd.sample(REQ_DECOYS, rnd.choice([1, 2]))
     rnd.shuffle(reqs)
-    return [f"{i}. {t}" for i, t in enumerate(reqs, 1)]
+    return finalize_reqs(reqs, rnd)
 
 
 def exam_symptom_chain(d, plan, sites):
@@ -905,7 +1109,7 @@ def question_md(d, plan, choices, collected, stamp, sites=None, blind=False,
 
 ## トポロジ
 
-{intro}
+{terse_jp(intro)}
 
 {messy_mermaid(mermaid(d, sites, blind))}
 
@@ -1083,7 +1287,7 @@ def topo_tables_ring(d, sites=None, blind=False):
         head = ("| ルータ | 参加プロトコル | Loopback0 / 広告網 |\n"
                 "|--------|----------------|--------------------|\n")
     return (head + "\n".join(sorted(rows))
-            + "\n\nリンク一覧(接続・アドレス):\n```\n"
+            + "\n\nリンク一覧:\n```\n"
             + "\n".join(edges) + "\n```")
 
 
@@ -1322,7 +1526,7 @@ def ring_requirements(d, rnd, form="fix"):
     core += rnd.sample([x for x in REQ_DECOYS if "静的経路" not in x],
                        rnd.choice([1, 2]))
     rnd.shuffle(core)
-    return [f"{i}. {t}" for i, t in enumerate(core, 1)]
+    return finalize_reqs(core, rnd)
 
 
 def question_md_ring(d, plan, choices, collected, stamp, sites=None, blind=False,
@@ -1381,7 +1585,7 @@ def question_md_ring(d, plan, choices, collected, stamp, sites=None, blind=False
 
 ## トポロジ
 
-{intro}
+{terse_jp(intro)}
 
 {messy_mermaid(mermaid_ring(d, sites, blind))}
 
@@ -1393,7 +1597,7 @@ def question_md_ring(d, plan, choices, collected, stamp, sites=None, blind=False
 
 ## 現在の状態
 
-{symptom}
+{terse_jp(symptom)}
 
 {chr(10).join(state)}
 
@@ -1557,7 +1761,7 @@ def topo_tables_mploop(p, names, sites=None):
              f"{names[b]}:E0/{ib}(.{gmp.HOST[b]})   {p[MPLOOP_SEG[(a, b)]]}.0/24"
              for a, ia, b, ib in MPLOOP_LINKS]
     return (head + "\n".join(sorted(rows))
-            + "\n\nリンク一覧(接続・アドレス):\n```\n" + "\n".join(edges) + "\n```")
+            + "\n\nリンク一覧:\n```\n" + "\n".join(edges) + "\n```")
 
 
 def evidence_plan_mploop(p, names, rnd):
@@ -1732,7 +1936,7 @@ def mploop_requirements(p, names, mode, rnd, form="fix"):
     core += rnd.sample([x for x in REQ_DECOYS if "静的経路" not in x],
                        rnd.choice([1, 2]))
     rnd.shuffle(core)
-    return [f"{i}. {t}" for i, t in enumerate(core, 1)]
+    return finalize_reqs(core, rnd)
 
 
 def question_md_mploop(p, names, plan, choices, collected, stamp, sites=None,
@@ -1773,7 +1977,7 @@ def question_md_mploop(p, names, plan, choices, collected, stamp, sites=None,
 
 ## トポロジ
 
-{intro}
+{terse_jp(intro)}
 
 {messy_mermaid(mermaid_mploop(p, names, sites))}
 
@@ -1785,7 +1989,7 @@ def question_md_mploop(p, names, plan, choices, collected, stamp, sites=None,
 
 ## 現在の状態
 
-{symptom}
+{terse_jp(symptom)}
 
 {chr(10).join(state)}
 
@@ -1930,7 +2134,7 @@ def pbr_requirements(d, rnd, sites):
     ]
     core += rnd.sample([x for x in REQ_DECOYS if "静的経路" not in x], 1)
     rnd.shuffle(core)
-    return [f"{i}. {t}" for i, t in enumerate(core, 1)]
+    return finalize_reqs(core, rnd)
 
 
 def mermaid_pbr(d, sites=None):
@@ -1958,7 +2162,7 @@ def topo_links_pbr(d):
     """pbr のリンク一覧。図からエッジ・ラベルを外した(BL-087)ぶん、
     配線とアドレスはここが正典になる。"""
     m = d["m"]
-    return ("リンク一覧(接続・アドレス):\n```\n"
+    return ("リンク一覧:\n```\n"
             + f"  {m['HUB']}(.1) ── {m['DST']}(.2)   192.168.{d['seg']}.0/29\n"
             + f"  {m['HUB']}(.254) ── {m['CLA']}      192.168.{d['lan_a']}.0/24\n"
             + f"  {m['HUB']}(.254) ── {m['CLB']}      192.168.{d['lan_b']}.0/24\n"
@@ -1996,10 +2200,7 @@ def question_md_pbr(d, plan, choices, collected, stamp, sites=None, form="fix",
 
 ## トポロジ
 
-コアのルータにおいて、ポリシー・ベース・ルーティング(PBR)という手段によって、
-それぞれのサイトの LAN から、本社のデータ・センターのサービスのネットワークへの転送が、
-制御されています。コアは、サービスのネットワークへのルーティングの情報を保持しておらず、
-そして、ポリシーに一致したトラフィックのみが、ネクスト・ホップへ転送されます。
+{terse_jp(PBR_INTRO)}
 
 {messy_mermaid(mermaid_pbr(d, sites))}
 
@@ -2183,7 +2384,7 @@ def urpf_requirements(d, rnd, sites):
                     "実施されてはなりません。検証のモードの選択によって対処すること。")
     core += rnd.sample([x for x in REQ_DECOYS if "スタティック" not in x], 1)
     rnd.shuffle(core)
-    return [f"{i}. {t}" for i, t in enumerate(core, 1)]
+    return finalize_reqs(core, rnd)
 
 
 def question_md_urpf(d, blocks, choices, stamp, sites=None, form="fix", reqs=None,
@@ -2217,14 +2418,11 @@ def question_md_urpf(d, blocks, choices, stamp, sites=None, form="fix", reqs=Non
 
 ## トポロジ
 
-あなたの会社のエッジのルータは、2つのアップリンクによって、2つのサービス・プロバイダへ
-接続されている、というものです。顧客のネットワーク {d['cust_sym']}.0/24 および
-{d['cust_asym']}.0/24 は、それぞれのプロバイダを経由して、広告されています。
+{terse_jp(URPF_INTRO.format(a=d['cust_sym'], b=d['cust_asym']))}
 
 {topo}
 
-- 監視のためのホスト: `{d['exc_host']}` および `{d['exc_host2']}`
-  ({d['cust_asym']}.0/24 の中に存在し、ISP-B 側から着信します)
+- 監視のためのホスト `{d['exc_host']}` および `{d['exc_host2']}` は、ISP-B を経由して着信します。
 
 ## 要件
 
@@ -2299,6 +2497,679 @@ echo-reply が戻れず必ず 0% になる。ドロップの証拠は per-IF の
 ## ENARSI ブループリント
 
 - 3.0 Infrastructure Security — uRPF (strict / loose)・ACL
+"""
+
+
+# --------------------------------------------------------------------------
+# shape=leakmap — EIGRP 集約×リーク 手段選択 (gen_paper_leakmap 流用・BL-095)
+# ★紙面専用: 挙動は実機確定表(poc/leakmap/README.md)の写像モデルから決定的に生成。
+# --------------------------------------------------------------------------
+def pick_draw_leakmap(qseed, kind):
+    for kk in range(200):
+        s = qseed + kk * 139
+        try:
+            return s, gpk.draw(random.Random(s), kind=kind)
+        except ValueError:
+            continue
+    raise SystemExit(f"leakmap kind={kind} が成立する seed が見つかりません({qseed})")
+
+
+def _lm_classful(pfx):
+    a = int(pfx.split(".")[0])
+    o = pfx.split(".")
+    if a < 128:
+        return f"{o[0]}.0.0.0", 8
+    if a < 192:
+        return f"{o[0]}.{o[1]}.0.0", 16
+    return f"{o[0]}.{o[1]}.{o[2]}.0", 24
+
+
+def _lm_v(ip):
+    a = [int(x) for x in ip.split(".")]
+    return (a[0] << 24) | (a[1] << 16) | (a[2] << 8) | a[3]
+
+
+def leakmap_table(d, recvmap, upt):
+    """RCV 側 show ip route eigrp | begin Gateway の忠実な描画(実測書式)。"""
+    lines = ["Gateway of last resort is not set"]
+    groups = {}
+    for p, (code, plen, met) in recvmap.items():
+        major, clen = _lm_classful(p)
+        groups.setdefault((major, clen), []).append((p, code, plen, met))
+    for (major, clen), ents in sorted(groups.items(),
+                                      key=lambda kv: _lm_v(kv[0][0])):
+        plens = {e[2] for e in ents}
+        if len(plens) == 1:
+            pl = plens.pop()
+            lines.append(f"      {major}/{pl} is subnetted, {len(ents)} subnets")
+            sfx = False
+        else:
+            lines.append(f"      {major}/{clen} is variably subnetted, "
+                         f"{len(ents)} subnets, {len(plens)} masks")
+            sfx = True
+        for p, code, plen, met in sorted(ents, key=lambda e: _lm_v(e[0])):
+            addr = f"{p}/{plen}" if sfx else p
+            lines.append(f"{code:<9}{addr} {met} via {d['link']}.1, "
+                         f"{upt}, {d['ifname']}")
+    return "\n".join(lines)
+
+
+def leakmap_cfg(d, st):
+    """ADV 側 running-config 抜粋(乱立リスト込み・現在状態の忠実な描画)。"""
+    a, S, w = d["asn"], d["block"], d["mask"]
+    L = []
+    for i, lo in enumerate(d["los"]):
+        L += [f"interface Loopback{i}", f" ip address {lo} 255.255.255.255"]
+    L += ["interface Loopback10",
+          f" ip address {d['ops_lo']} 255.255.255.255"]
+    L += [f"interface {d['ifname']}",
+          f" description === to {d['m']['RCV']} ===",
+          f" ip address {d['link']}.1 255.255.255.252"]
+    if st["summary"]:
+        lk = st["summary"]["leak"]
+        L.append(f" ip summary-address eigrp {a} {S} {w}"
+                 + (f" leak-map {lk}" if lk else ""))
+    L += ["!", f"router eigrp {a}"]
+    for p in st["inject"]:
+        L.append(f" network {p} 0.0.0.0")
+    L.append(f" network {d['link']}.0 0.0.0.3")
+    if st["redist_static"]:
+        L.append(" redistribute static")
+    if st["redist_conn"] is not None:
+        L.append(f" redistribute connected route-map "
+                 f"{st.get('redist_rm') or 'RM-CONN'}")
+    L.append("!")
+    if st["null0"]:
+        L += [f"ip route {S} {w} Null0", "!"]
+    for name, ents in sorted(st["pls"].items()):
+        for i, e in enumerate(ents, 1):
+            L.append(f"ip prefix-list {name} seq {i * 5} permit {e}")
+    for num, hosts in sorted(st["acls"].items()):
+        for h in hosts:
+            L.append(f"access-list {num} permit {h}")
+    L.append("!")
+    for name, ents in sorted(st["rmaps"].items()):
+        for i, ent in enumerate(ents, 1):
+            act, mtype = ent[0], ent[1]
+            ref = ent[2] if len(ent) > 2 else None
+            L.append(f"route-map {name} {act} {i * 10}")
+            if mtype == "pl":
+                L.append(f" match ip address prefix-list {ref}")
+            elif mtype == "acl":
+                L.append(f" match ip address {ref}")
+    L.append("!")
+    return "\n".join(L)
+
+
+def leakmap_evidence(d, rnd, form):
+    """紙面に出すブロック群(state=経路表 / cfg=構成)。read 形は経路表を出さない。"""
+    st = gpk.state(d)
+    adv, rcv = d["m"]["ADV"], d["m"]["RCV"]
+    upt = f"00:{rnd.randint(0, 20):02d}:{rnd.randint(10, 59):02d}"
+    state_blocks = []
+    if form != "read":
+        state_blocks.append(
+            f"```\n{rcv}# show ip route eigrp | begin Gateway\n"
+            + leakmap_table(d, gpk.recv(d, st), upt) + "\n```")
+    cfg_blocks = [f"```\n{adv}# show running-config\n"
+                  "Building configuration...\n!\n" + leakmap_cfg(d, st) + "\n```"]
+    return state_blocks, cfg_blocks
+
+
+def leakmap_requirements(d, rnd):
+    S, T = d["block"], d["target"]
+    rcv = d["m"]["RCV"]
+    world_txt = {
+        "no_redist": "ルートの再配送(redistribute)は、いかなる形においても、"
+                     "使用されてはなりません。",
+        "no_network_lo": "ブロックのループバックのインターフェイスを、network の"
+                         "ステートメントによって EIGRP へ参加させることは、"
+                         "認められていません。",
+        "internal_only": "集約のルートおよび明細のルートは、いずれも、EIGRP の"
+                         "内部のルート(アドミニストレーティブ・ディスタンス 90)"
+                         "として受信されなければなりません。",
+        "no_if_summary": "インターフェイスにおける集約"
+                         "(ip summary-address)の構成は、過去の障害の経緯という"
+                         "理由により、認められていません。",
+    }[d["world"]]
+    core = [
+        f"{rcv} に対して、ブロック {S}/{d['wid']} は、集約のルートとして"
+        "広告されなければなりません。",
+        "ブロックの内部の明細のルートは、広告されてはなりません。",
+        f"ただし、監視のためのホストである {T} (/32) の明細のルートは、"
+        "集約とともに、受信されなければなりません。",
+        f"運用のためのループバック {d['ops_lo']} (/32) は、引き続き"
+        "受信されなければなりません。",
+        world_txt,
+    ]
+    core += rnd.sample([x for x in REQ_DECOYS if "スタティック" not in x], 1)
+    rnd.shuffle(core)
+    return finalize_reqs(core, rnd)
+
+
+def build_choices_read(d, rnd):
+    """read 形: RCV の経路表そのものを選択肢にする(描画で重複排除)。"""
+    upt = f"00:{rnd.randint(0, 20):02d}:{rnd.randint(10, 59):02d}"
+    cur, alts = gpk.read_variants(d)
+    # ★設問が汎用化(obfuscate)されても自立して読めるよう、プロンプト行を含める
+    pr = f"{d['m']['RCV']}# show ip route eigrp | begin Gateway\n"
+    correct_txt = pr + leakmap_table(d, cur, upt)
+    seen = {correct_txt}
+    c = [(correct_txt, True, "")]
+    rnd.shuffle(alts)
+    for label, rm in alts:
+        txt = pr + leakmap_table(d, rm, upt)
+        if txt in seen:
+            continue
+        seen.add(txt)
+        c.append((txt, False, f"別の状態({label})の観測結果である。"))
+        if len(c) == 4:
+            break
+    if len(c) < 3:
+        raise ValueError("leakmap read: 選択肢が畳まれすぎ")
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
+LEAKMAP_INTRO = (
+    "拠点のルータ {adv} は、複数のループバック・インターフェイスによって、"
+    "サービスのためのアドレスのブロック {S}/{wid} を収容しています。"
+    "{adv} と {rcv} は、1本のリンクによって直接に接続されており、そして、"
+    "EIGRP {asn} が構成されています。")
+
+
+def question_md_leakmap(d, blocks, choices, stamp, form="fix", reqs=None,
+                        style="prose"):
+    adv, rcv = d["m"]["ADV"], d["m"]["RCV"]
+    state_blocks, cfg_blocks = blocks
+    if reqs is None:
+        reqs = leakmap_requirements(d, random.Random(0))
+    if form == "cause":
+        q = ("この事象の原因である可能性が、最も高いものは、どれですか。"
+             "(1つを選択してください)")
+        opts = render_options(choices, "prose")
+    elif form == "read":
+        q = (f"示されているところの構成に基づいて、{rcv} において観測される"
+             "ところの出力は、どれですか。(1つを選択してください)")
+        letters = [chr(65 + i) for i in range(len(choices))]
+        opts = "\n".join(f"**{l}.**\n```\n{c[0]}\n```"
+                         for l, c in zip(letters, choices))
+    elif style == "cli":
+        q = ("示されているところのすべての要件が満たされることを確実にするために、"
+             "適用されなければならない構成は、どれですか。(1つを選択してください)")
+        opts = render_options(choices, style)
+    else:
+        q = ("この問題を解決し、そして、示されているところのすべての要件が"
+             "満たされることを確実にするために、必要とされる手順は、どれですか。"
+             "(1つを選択してください)")
+        opts = render_options(choices, style)
+    topo = (f"```\n  [{adv}]  Lo: {', '.join(d['los'])} (+ {d['ops_lo']})\n"
+            f"    {d['link']}.1 ─────({d['ifname']})───── {d['link']}.2\n"
+            f"  [{rcv}]\n```")
+    fam_missing = d["kind"] in ("no_leakmap", "rmap_undefined",
+                                "pl_wrong_prefix", "not_injected",
+                                "shared_map_wrong_target")
+    if form == "read":
+        sympt = "構成の変更の適用後の、観測の結果が、確認されようとしています。"
+    elif fam_missing:
+        sympt = (f"監視のためのホスト {d['target']} の /32 の明細のルートが、"
+                 f"{rcv} の経路テーブルに存在しない、ということが、"
+                 "報告されています。")
+    else:
+        sympt = ("抑止されているはずであるところのブロックの明細のルートが、"
+                 f"{rcv} において受信されている、ということが、報告されています。")
+    intro = LEAKMAP_INTRO.format(adv=adv, rcv=rcv, S=d["block"],
+                                 wid=d["wid"], asn=d["asn"])
+    return f"""# 問題 {stamp} : EIGRP の集約とリークの分析
+
+{FIXED_NOTE}
+
+## トポロジ
+
+{terse_jp(intro)}
+
+{topo}
+
+## 要件
+
+{chr(10).join(reqs)}
+
+## 現在の状態
+
+{terse_jp(sympt)}
+
+{chr(10).join(state_blocks)}
+
+## 設定抜粋
+
+{chr(10).join(cfg_blocks)}
+
+## 設問
+
+{q}
+
+## 選択肢
+
+{opts}
+"""
+
+
+def answer_md_leakmap(d, choices, stamp, master_seed, subseed, form):
+    letters = [chr(65 + i) for i in range(len(choices))]
+    correct = [l for l, c in zip(letters, choices) if c[1]][0]
+    wrongs = "\n".join(f"- **{l}**: {'(正解)' if c[1] else c[2]}"
+                       for l, c in zip(letters, choices))
+    kind_note = {
+        "no_leakmap": "summary-address に leak-map 未指定 → リークなし",
+        "rmap_undefined": "leak-map の参照 route-map がタイポで未定義 → "
+                          "★リークなし(全リークではない・実測)",
+        "pl_undefined": "route-map は在るが参照リストが未定義 → ★全リーク(実測)",
+        "pl_wrong_prefix": "リストの許可対象が別 Lo → 対象は漏れず別明細が漏れる",
+        "permit_no_match": "permit 節に match なし → 全リーク",
+        "not_injected": "対象 Lo が EIGRP に未参加 → リークなし"
+                        "(★集約経由で ping は通る=広告と到達の乖離)",
+        "shared_map_wrong_target": "★エコ形(redistribute×leak-map が同一 RM 共用)"
+                                   "の編集副作用 → 対象は投入ごと消失・別 Lo が "
+                                   "D EX で漏れる(実測 V5)",
+    }[d["kind"]]
+    world_note = {
+        "no_redist": "再配送禁止 → network 投入+leak-map が唯一適合",
+        "no_network_lo": "Lo の network 参加禁止 → redistribute connected 投入"
+                         "+leak-map(明細は D EX で届く・実測)",
+        "internal_only": "内部ルート(AD90)限定 → network 投入+leak-map",
+        "no_if_summary": "IF 集約禁止 → static Null0+redistribute static"
+                         "(集約は D EX [170/281600]・実測)",
+    }[d["world"]]
+    return f"""# 解答 {stamp}
+
+## 正解
+
+**{correct}**
+
+## 仕込んだ状態
+
+- 種別: `leakmap/{d['kind']}` — {kind_note}
+- 要件世界: `{d['world']}` — {world_note}
+- 出題形: {form}(機能的に「直る候補」= {', '.join(d['_works'])})
+- 生成: `gen_paper_mcq.py --shape leakmap --seed {master_seed}` (sub-seed {subseed})
+
+## 各選択肢の判定
+
+{wrongs}
+
+## 検証コマンドと期待される出力
+
+- 受信側 `show ip route eigrp`: 集約 `{d['block']}/{d['wid']}` と、リークされた
+  `{d['target']}/32` の**両方**が存在すること(他の明細が存在しないこと)。
+- 広告側 `show ip eigrp topology {d['block']}/{d['wid']}`: Null0 サクセサの
+  集約エントリ(summary-address 使用時)。
+
+## ★この分野の最重要知見(BL-095 PoC 実測・poc/leakmap/README.md)
+
+**「投入・集約・リーク」は独立した3レバー**であり、リークには「成分がトポロジ・
+テーブルに存在する」かつ「leak-map の route-map が permit する」の両方が必要。
+そして挙動は非対称: **route-map ごと未定義なら「何も漏れない」が、route-map の
+器だけ在って中身が空振り(未定義リスト参照・match なし permit)だと「全部漏れる」**。
+また、network に参加していないブロック内アドレスも、集約に吸われて到達自体は
+できてしまう(広告されていない=届かない、ではない)。
+
+## ENARSI ブループリント
+
+- 1.0 Layer 3 Technologies — EIGRP summarization / route filtering
+"""
+
+
+# --------------------------------------------------------------------------
+# shape=ospfv3pl — OSPFv3 マルチエリア prefix-list (gen_paper_ospfv3pl 流用・BL-097)
+# ★紙面専用: 挙動は実機確定表(poc/ospfv3-pl/README.md)の写像モデルから決定的に生成。
+# --------------------------------------------------------------------------
+def pick_draw_ospfv3pl(qseed, kind):
+    for kk in range(200):
+        s = qseed + kk * 139
+        try:
+            return s, gpo.draw(random.Random(s), kind=kind)
+        except ValueError:
+            continue
+    raise SystemExit(f"ospfv3pl kind={kind} が成立する seed が見つかりません({qseed})")
+
+
+def _o3pl_ll(d, dev):
+    """観測ルータから見た R2 のリンクローカル(実測書式・d から決定的に導出)。"""
+    bb = 0x20 + (d["s"] * 29 + d["a1"] * 7 + d["proc"]) % 0xC0
+    port = "00" if dev == "R1" else "20"
+    return f"FE80::A8BB:CCFF:FE01:{bb:02X}{port}"
+
+
+def o3pl_table(d, rows, dev):
+    """`show ipv6 route ospf | include ^O|via` の忠実な描画(実測書式)。"""
+    ll = _o3pl_ll(d, dev)
+    lines = []
+    for (val, plen), met in sorted(rows.items()):
+        lines.append(f"OI  {gpo.fmt_v(val, plen)} [110/{met}]")
+        lines.append(f"     via {ll}, Ethernet0/0")
+    return "\n".join(lines)
+
+
+def ospfv3pl_cfg(d, st):
+    """R2 running-config 抜粋(現在状態の忠実な描画・乱立リスト込み)。"""
+    p, a1, a2 = d["proc"], d["a1"], d["a2"]
+    L = []
+    for ifn, (h3, h4), area in [("Ethernet0/0", gpo.LINK_A1, a1),
+                                ("Ethernet0/1", gpo.LINK_A0, 0),
+                                ("Ethernet0/2", gpo.LINK_A2, a2)]:
+        L += [f"interface {ifn}", " no ip address",
+              f" ipv6 address 2001:DB8:{h3:X}:{h4:X}::2/64", " ipv6 enable",
+              f" ipv6 ospf {p} area {area}", "!"]
+    L += [f"router ospfv3 {p}", " router-id 2.2.2.2", " !",
+          " address-family ipv6 unicast"]
+    if st["fl"]:
+        L.append("  " + gpo._fl_line(d, st["fl"]))
+    if st["range"]:
+        L.append("  " + gpo._range_line(d, st["range"]))
+    if st["dl"] and st["dl"][0] == "R2":
+        L.append(f"  distribute-list prefix-list {st['dl'][1]} in")
+    L += [" exit-address-family", "!"]
+    for name in sorted(st["pls"]):
+        for i, ent in enumerate(st["pls"][name], 1):
+            L.append(gpo.ent_cli(name, i * 5, ent))
+        L.append("!")
+    return "\n".join(L)
+
+
+def ospfv3pl_cfg_r1(d, st):
+    """R1 側の ospfv3 セクション(distribute-list が R1 に載る盤面のみ提示)。"""
+    L = [f"router ospfv3 {d['proc']}", " router-id 1.1.1.1", " !",
+         " address-family ipv6 unicast"]
+    if st["dl"] and st["dl"][0] == "R1":
+        L.append(f"  distribute-list prefix-list {st['dl'][1]} in")
+    L += [" exit-address-family"]
+    return "\n".join(L)
+
+
+def ospfv3pl_evidence(d, rnd, form):
+    """紙面に出すブロック群。read 形は経路表を出さない(逆引きのため)。"""
+    st = gpo.state(d)
+    m = gpo.model(d, st)
+    state_blocks = []
+    if form != "read":
+        state_blocks.append(
+            "```\nR1# show ipv6 route ospf | include ^O|via\n"
+            + o3pl_table(d, m["t1"], "R1") + "\n```")
+        state_blocks.append(
+            "```\nR3# show ipv6 route ospf | include ^O|via\n"
+            + o3pl_table(d, m["t3"], "R3") + "\n```")
+    cfg_blocks = [f"```\nR2# show running-config\n"
+                  "Building configuration...\n!\n" + ospfv3pl_cfg(d, st) + "\n```"]
+    if st["dl"] and st["dl"][0] == "R1":
+        cfg_blocks.append(
+            "```\nR1# show running-config | section router ospfv3\n"
+            + ospfv3pl_cfg_r1(d, st) + "\n```")
+    return state_blocks, cfg_blocks
+
+
+def ospfv3pl_requirements(d, rnd):
+    a1, a2 = d["a1"], d["a2"]
+    pair_t = (f"{gpo.fmt(d['pair'], d['pair'], 64)} および "
+              f"{gpo.fmt(d['pair'] + 1, d['pair'] + 1, 64)}")
+    tgt = gpo.fmt(d["target"], d["target"], 64)
+    world_reqs = {
+        "area10_only": [
+            f"エリア {a1} のルータの経路テーブルには、ループバックに由来する"
+            f"エリア間のルートとして、{pair_t} のみが存在しなければなりません。"
+            + ("リンクのネットワークのルートは、引き続き受信されなければ"
+               "なりません。" if d["keep_links"] else
+               "その他のエリア間のルートは、存在してはなりません。"),
+            f"エリア {a2} のルータの経路テーブルは、いかなる影響も"
+            "受けてはなりません。",
+            f"この制御は、エリア {a1} に今後追加されるところの、いかなる"
+            "ルータに対しても、等しく適用されなければなりません。",
+        ],
+        "hide_all": [
+            f"{tgt} のルートは、バックボーン以外のすべてのエリアから、"
+            "隠されなければなりません。",
+            "その他のルートの広告は、いかなる影響も受けてはなりません。",
+            "適用は、単一のステートメントの追加によって、実現されなければ"
+            "なりません。",
+            "R2 自身の経路テーブルは、影響を受けてはなりません。",
+        ],
+        "rib_only": [
+            f"R1 の経路テーブルから、{tgt} のルートが、除外されなければ"
+            "なりません。",
+            f"エリア {a1} へ広告される LSA(データベースの内容)は、"
+            "維持されなければなりません。",
+            "他のいかなるルータの経路テーブルにも、影響が及んでは"
+            "なりません。",
+        ],
+        "summarize": [
+            "4本のループバックのプレフィックスは、単一の集約のルートとして、"
+            "他のエリアへ広告されなければなりません。",
+            "集約は、対象を包含するところの、最長のプレフィックス長"
+            "(最小の範囲)でなければなりません。",
+            "ループバックの明細のルートは、広告されてはなりません。",
+            "リンクのネットワークの広告は、影響を受けてはなりません。",
+        ],
+        "suppress_all": [
+            "4本のループバックのプレフィックスは、集約としても、明細としても、"
+            "いかなるエリアへも広告されてはなりません。",
+            "新たなプレフィックス・リストの定義は、認められていません。",
+            "R2 自身の経路テーブルは、影響を受けてはなりません。",
+        ],
+    }[d["world"]]
+    core = list(world_reqs) + rnd.sample(REQ_DECOYS, 1)
+    rnd.shuffle(core)
+    return finalize_reqs(core, rnd)
+
+
+def build_choices_read_o3pl(d, rnd):
+    """read 形: R1 の経路表そのものを選択肢にする(描画で重複排除)。"""
+    cur, alts = gpo.read_variants(d)
+    pr = "R1# show ipv6 route ospf | include ^O|via\n"
+    correct_txt = pr + o3pl_table(d, cur, "R1")
+    seen = {correct_txt}
+    c = [(correct_txt, True, "")]
+    rnd.shuffle(alts)
+    for label, rows in alts:
+        txt = pr + o3pl_table(d, rows, "R1")
+        if txt in seen:
+            continue
+        seen.add(txt)
+        c.append((txt, False, f"別の解釈({label})に基づく出力である。"))
+        if len(c) == 4:
+            break
+    if len(c) < 3:
+        raise ValueError("ospfv3pl read: 選択肢が畳まれすぎ")
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
+O3PL_SYMPTOM = {
+    "none": "要件は、まだ実装されていません。構成の変更が、計画されています。",
+    "mask_off": {
+        "area10_only": "意図されていないところのエリア間のルートが、R1 において"
+                       "受信され続けている、ということが、報告されています。",
+        "hide_all": "対象ではないところのルートまでもが、複数のエリアにおいて"
+                    "失われている、ということが、報告されています。",
+        "rib_only": "対象ではないところのルートまでもが、R1 の経路テーブルから"
+                    "失われている、ということが、報告されています。",
+        "summarize": "一部の明細のルートが、引き続き広告されている、ということが、"
+                     "報告されています。",
+        "suppress_all": "一部の明細のルートが、引き続き広告されている、ということが、"
+                        "報告されています。",
+    },
+    "le_missing": "R1 において、すべてのエリア間のルートが、経路テーブルから"
+                  "消失している、ということが、報告されています。",
+    "le_off": "R1 において、すべてのエリア間のルートが、経路テーブルから"
+              "消失している、ということが、報告されています。",
+    "tail_default": {
+        "hide_all": "すべてのエリアにおいて、エリア間のルートが、経路テーブルから"
+                    "消失している、ということが、報告されています。",
+        "rib_only": "R1 において、すべての OSPF のルートが、経路テーブルから"
+                    "消失している、ということが、報告されています。",
+    },
+    "seq_shadow": "変更の適用の後においても、対象のルートが、受信され続けている、"
+                  "ということが、報告されています。",
+    "dir_swap": {
+        "area10_only": "エリア {a2} のルータにおいても、ルートの欠落が発生している、"
+                       "ということが、報告されています。",
+        "hide_all": "エリア {a2} のルータにおいて、対象のルートが、受信され続けて"
+                    "いる、ということが、報告されています。",
+    },
+    "dl_abr": "対象のルートが、R2 自身、および、エリア {a2} のルータからも、"
+              "消失している、ということが、報告されています。",
+}
+
+
+def _o3pl_symptom(d):
+    s = O3PL_SYMPTOM[d["kind"]]
+    if isinstance(s, dict):
+        s = s[d["world"]]
+    return s.format(a2=d["a2"])
+
+
+O3PL_INTRO = (
+    "拠点の集約ルータ Ra は、サービスのためのプレフィックスを、4つの"
+    "ループバック・インターフェイスによって収容しています。R2 は、"
+    "エリア {a1}・エリア 0・エリア {a2} を接続するところの ABR であり、"
+    "そして、すべてのルータにおいて、OSPFv3 のプロセス {p} が構成されています。")
+
+
+def question_md_ospfv3pl(d, blocks, choices, stamp, form="fix", reqs=None,
+                         style="prose"):
+    state_blocks, cfg_blocks = blocks
+    if reqs is None:
+        reqs = ospfv3pl_requirements(d, random.Random(0))
+    if form == "read":
+        q = ("示されているところの構成に基づいて、R1 において観測される"
+             "ところの出力は、どれですか。(1つを選択してください)")
+        letters = [chr(65 + i) for i in range(len(choices))]
+        opts = "\n".join(f"**{l}.**\n```\n{c[0]}\n```"
+                         for l, c in zip(letters, choices))
+    elif style == "cli":
+        q = ("示されているところのすべての要件が満たされることを確実にするために、"
+             "適用されなければならない構成は、どれですか。(1つを選択してください)")
+        opts = render_options(choices, style)
+    else:
+        q = ("この問題を解決し、そして、示されているところのすべての要件が"
+             "満たされることを確実にするために、必要とされる手順は、どれですか。"
+             "(1つを選択してください)")
+        opts = render_options(choices, style)
+    los_t = ", ".join(gpo.fmt(h, h, 64) for h in d["los"])
+    topo = (f"```\n     Area {d['a1']}                 Area 0"
+            f"                 Area {d['a2']}\n"
+            f"  [R1]--(E0/0: {gpo.fmt(*gpo.LINK_A1, 64)})--[R2]"
+            f"--(E0/1: {gpo.fmt(*gpo.LINK_A0, 64)})--[Ra]\n"
+            f"                                 └--(E0/2: "
+            f"{gpo.fmt(*gpo.LINK_A2, 64)})--[R3]\n"
+            f"  R1 E0/0 セカンダリ: {gpo.fmt(*gpo.LINK_A1B, 64)}\n"
+            f"  Ra Loopback: {los_t}\n```")
+    if form == "read":
+        sympt = "構成の適用後の、観測の結果が、確認されようとしています。"
+    else:
+        sympt = _o3pl_symptom(d)
+    intro = O3PL_INTRO.format(a1=d["a1"], a2=d["a2"], p=d["proc"])
+    return f"""# 問題 {stamp} : OSPFv3 のエリア間ルート・フィルタリング
+
+{FIXED_NOTE}
+
+## トポロジ
+
+{terse_jp(intro)}
+
+{topo}
+
+## 要件
+
+{chr(10).join(reqs)}
+
+## 現在の状態
+
+{terse_jp(sympt)}
+
+{chr(10).join(blocks[0])}
+
+## 設定抜粋
+
+{chr(10).join(cfg_blocks)}
+
+## 設問
+
+{q}
+
+## 選択肢
+
+{opts}
+"""
+
+
+def answer_md_ospfv3pl(d, choices, stamp, master_seed, subseed, form):
+    letters = [chr(65 + i) for i in range(len(choices))]
+    correct = [l for l, c in zip(letters, choices) if c[1]][0]
+    wrongs = "\n".join(f"- **{l}**: {'(正解)' if c[1] else c[2]}"
+                       for l, c in zip(letters, choices))
+    kind_note = {
+        "none": "フィルタ未適用(構築問)",
+        "mask_off": "一致範囲のマスク長違い(巻き添え/取り漏らし)",
+        "le_missing": "le 欠落 → 当該長そのものにのみ一致=全滅(実測 E5)",
+        "le_off": "le 63 → /64 を拾えず全滅(実測・追測)",
+        "tail_default": "permit ::/0 の le 128 欠落 → デフォルトのみ一致=全滅"
+                        "(実測 P9)",
+        "seq_shadow": "広い permit が先行し deny が死に文(先勝ち)",
+        "dir_swap": "in/out の取り違え(out は全他エリアに作用・実測 P1/P2)",
+        "dl_abr": "ABR への distribute-list → Type-3 生成ごと停止(実測 P4)",
+    }[d["kind"]]
+    world_note = {
+        "area10_only": "対象エリアだけに効かせる → area <a1> filter-list in"
+                       "(out は第3エリアを巻き込む・dl は単一ルータのみ)",
+        "hide_all": "全非バックボーンから1行で隠す → area 0 filter-list out",
+        "rib_only": "RIB のみ・LSDB 維持 → R1 で distribute-list in"
+                    "(ABR 適用は波及・filter-list は LSA ごと消す)",
+        "summarize": "最小範囲の集約 → area 0 range(/45 か /46 かは"
+                     "4値の並びの LCP で決まる)",
+        "suppress_all": "PL 新設禁止で全停止 → area 0 range not-advertise",
+    }[d["world"]]
+    cover = gpo.fmt(gpo.block_base(d["s"], d["minlen"]), 0, d["minlen"])
+    return f"""# 解答 {stamp}
+
+## 正解
+
+**{correct}**
+
+## 仕込んだ状態
+
+- 種別: `ospfv3pl/{d['kind']}` — {kind_note}
+- 要件世界: `{d['world']}` — {world_note}
+- 盤面: Lo 第3ヘクステット = {', '.join(f"{h:X}" for h in d['los'])}
+  (最小被覆 = {cover})
+- 出題形: {form}(機能的に成立する候補 = {', '.join(d['_works'])})
+- 生成: `gen_paper_mcq.py --shape ospfv3pl --seed {master_seed}` (sub-seed {subseed})
+
+## 各選択肢の判定
+
+{wrongs}
+
+## 検証コマンドと期待される出力
+
+- R1/R3 `show ipv6 route ospf`: 要件どおりの OI ルートのみが存在すること。
+- R2 `show ipv6 ospf database inter-area prefix`: フィルタ後に生成されている
+  Type-3 の一覧(distribute-list と filter-list の効く層の違いを確認できる)。
+
+## ★この分野の最重要知見(BL-097 PoC 実測・poc/ospfv3-pl/README.md)
+
+- `area X filter-list out` は X 発の Type-3 を**全他エリア**で遮断し、`in` は
+  当該エリアへの流入だけを遮断する(第3エリアがあると in/out は非等価)。
+- distribute-list in は内部ルータでは RIB のみ(LSDB 残存)だが、
+  **ABR に掛けると Type-3 の生成ごと止まり下流全域から消える**(生成は RIB 依存)。
+- prefix-list の ge/le は厳密に len < ge ≤ le。le を欠くエントリは当該長のみ、
+  `permit ::/0` はデフォルトのみ、`::/0 ge 1` はデフォルト以外の全部に一致する。
+- /44〜/47 のヘクステット中間マスクは、第3ヘクステットを2進展開して判定する
+  (1bit で被覆が 16/8/4/2 本と反転する)。
+
+## ENARSI ブループリント
+
+- 1.0 Layer 3 Technologies — OSPFv3 / route filtering (filter-list,
+  distribute-list, area range)
 """
 
 
@@ -2508,13 +3379,16 @@ def main():
     ap.add_argument("--count", type=int, default=1)
     ap.add_argument("--date", default=None, help="YYYYMMDD(既定=今日)")
     ap.add_argument("--shape",
-                    choices=["chain", "ring", "pbr", "urpf", "bgpdbg", "mploop", "mixed"],
+                    choices=["chain", "ring", "pbr", "urpf", "bgpdbg", "mploop",
+                             "leakmap", "ospfv3pl", "mixed"],
                     default="chain",
                     help="chain=再配送欠落/誤設定系(既定) / ring=再配送リングの定常ループ(難5)"
                          " / pbr=PBR×ワイルドカードACL(BL-081)"
                          " / urpf=uRPF×ACL(BL-084・紙面専用)"
                          " / bgpdbg=BGP debug読解(BL-085・★記述式)"
                          " / mploop=多点相互再配送の同AD・メトリック差ループ(難5)"
+                         " / leakmap=EIGRP集約×リーク手段選択(BL-095・紙面専用)"
+                         " / ospfv3pl=OSPFv3エリア間prefix-list(BL-097・紙面専用)"
                          " / mixed=問題ごとに形・種別を抽選(ごちゃまぜ)")
     ap.add_argument("--kinds", default=None,
                     help=f"カンマ区切りで種別を明示(chain: {','.join(KINDS)} / "
@@ -2542,7 +3416,8 @@ def main():
     else:
         pool = {"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
                 "urpf": gpu.URPF_KINDS, "mploop": MPLOOP_KINDS,
-                "bgpdbg": gpb.VARIANTS}.get(a.shape, KINDS)
+                "bgpdbg": gpb.VARIANTS, "leakmap": gpk.KINDS,
+                "ospfv3pl": gpo.KINDS}.get(a.shape, KINDS)
         kinds = (a.kinds.split(",") if a.kinds
                  else random.Random(a.seed ^ 0x5EED).sample(pool, len(pool)))
         if not set(kinds) <= set(pool):
@@ -2554,12 +3429,14 @@ def main():
         if a.shape == "mixed":
             roll = random.Random(qseed ^ 0xC0FE)
             r = roll.random()
-            shape_i = ("ring" if r < 0.20 else "pbr" if r < 0.40
-                       else "urpf" if r < 0.60 else "mploop" if r < 0.75
+            shape_i = ("ring" if r < 0.15 else "pbr" if r < 0.29
+                       else "urpf" if r < 0.43 else "mploop" if r < 0.54
+                       else "leakmap" if r < 0.67 else "ospfv3pl" if r < 0.81
                        else "chain")
             kind = roll.choice({"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
-                                "urpf": gpu.URPF_KINDS,
-                                "mploop": MPLOOP_KINDS}.get(shape_i, KINDS))
+                                "urpf": gpu.URPF_KINDS, "mploop": MPLOOP_KINDS,
+                                "leakmap": gpk.KINDS,
+                                "ospfv3pl": gpo.KINDS}.get(shape_i, KINDS))
         else:
             shape_i = a.shape
             kind = kinds[i % len(kinds)]
@@ -2582,6 +3459,10 @@ def main():
             subseed, d = pick_draw_pbr(qseed, kind)
         elif shape_i == "urpf":
             subseed, d = pick_draw_urpf(qseed, kind)
+        elif shape_i == "leakmap":
+            subseed, d = pick_draw_leakmap(qseed, kind)
+        elif shape_i == "ospfv3pl":
+            subseed, d = pick_draw_ospfv3pl(qseed, kind)
         elif shape_i == "bgpdbg":
             subseed = qseed
             d = gpb.draw(random.Random(subseed), variant=kind)
@@ -2611,6 +3492,12 @@ def main():
         elif shape_i == "urpf":
             plan = {"checks": []}          # 紙面専用(実機展開なし)
             choices = gpu.build_choices_fix(d, rnd)
+        elif shape_i == "leakmap":
+            plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
+            choices = gpk.build_choices_fix(d, rnd)
+        elif shape_i == "ospfv3pl":
+            plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
+            choices = gpo.build_choices_fix(d, rnd)
         elif shape_i == "bgpdbg":
             plan = {"checks": []}          # 紙面専用・記述式(選択肢なし)
             choices = []
@@ -2621,7 +3508,9 @@ def main():
             sites = dict(zip(gmp.NODES, rnd.sample(SITE_POOL, len(gmp.NODES))))
         else:
             sites = (assign_sites(d, rnd)
-                     if (a.exam and shape_i != "bgpdbg") else None)
+                     if (a.exam and shape_i not in ("bgpdbg", "leakmap",
+                                                    "ospfv3pl"))
+                     else None)
         # 赤ニシン(exam): 未適用ポリシー+無害な適用行を config に混入(pbr は素で騒がしい)
         herr, decoy = None, None
         if a.exam and shape_i in ("chain", "ring"):
@@ -2645,6 +3534,20 @@ def main():
         elif a.exam and shape_i == "urpf" and rnd.random() < 0.5:
             form = "cause"
             choices = gpu.build_choices_cause(d, rnd)
+        elif a.exam and shape_i == "leakmap":
+            r_form = rnd.random()          # fix / cause / read の3形を抽選
+            if r_form < 0.34:
+                form = "cause"
+                choices = gpk.build_choices_cause(d, rnd)
+            elif r_form < 0.62:
+                form = "read"
+                choices = build_choices_read(d, rnd)
+        elif a.exam and shape_i == "ospfv3pl" and rnd.random() < 0.45:
+            try:                           # 表が畳まれる盤面は fix に戻す
+                choices = build_choices_read_o3pl(d, rnd)
+                form = "read"
+            except ValueError:
+                pass
         if choices:
             choices = rebalance_position(repo, choices)
         opt_style = choice_style(rnd, choices, form) if choices else "prose"
@@ -2658,6 +3561,10 @@ def main():
                 reqs = pbr_requirements(d, rnd, sites)
             elif shape_i == "urpf":
                 reqs = urpf_requirements(d, rnd, sites)
+            elif shape_i == "leakmap":
+                reqs = leakmap_requirements(d, rnd)
+            elif shape_i == "ospfv3pl":
+                reqs = ospfv3pl_requirements(d, rnd)
             else:
                 reqs = chain_requirements(
                     rnd, style=pol["style"] if pol else "inline")
@@ -2665,7 +3572,7 @@ def main():
         print(f"[{i + 1}/{a.count}] sub-seed={subseed} "
               f"nodes={len(gmp.NODES) if shape_i == 'mploop' else len(d.get('roles', [d.get('A'), d.get('B')]))}", flush=True)
 
-        if shape_i in ("urpf", "bgpdbg"):
+        if shape_i in ("urpf", "bgpdbg", "leakmap", "ospfv3pl"):
             collected = {}                 # 紙面専用: 実機展開・収集を行わない
         elif a.no_lab:
             collected = {(c["node"], c["command"]): "(PLACEHOLDER: --no-lab)"
@@ -2730,6 +3637,19 @@ def main():
                                     form=form, reqs=reqs, style=opt_style)
             a_md = answer_md_urpf(d, choices, stamp, a.seed, subseed)
             lint += list(gpu.URPF_KINDS) + ["world=", "_works"]
+        elif shape_i == "leakmap":
+            blocks = leakmap_evidence(d, rnd, form)
+            q_md = question_md_leakmap(d, blocks, choices, stamp, form=form,
+                                       reqs=reqs, style=opt_style)
+            a_md = answer_md_leakmap(d, choices, stamp, a.seed, subseed, form)
+            lint += list(gpk.KINDS) + ["world=", "_works", "_correct"]
+        elif shape_i == "ospfv3pl":
+            blocks = ospfv3pl_evidence(d, rnd, form)
+            q_md = question_md_ospfv3pl(d, blocks, choices, stamp, form=form,
+                                        reqs=reqs, style=opt_style)
+            a_md = answer_md_ospfv3pl(d, choices, stamp, a.seed, subseed, form)
+            lint += [k for k in gpo.KINDS if k != "none"] \
+                + ["world=", "_works", "_correct"]
         elif shape_i == "pbr":
             q_md = question_md_pbr(d, plan, choices, collected, stamp, sites=sites,
                                    form=form, reqs=reqs, style=opt_style)
@@ -2742,6 +3662,9 @@ def main():
             a_md = answer_md(d, plan, choices, stamp, a.seed, subseed, kind, prob_id,
                              herr=herr, pol=pol)
             lint += ["missing", "no_seed", "wrong_id"]
+        # 道標の除去(BL-088)。essay(bgpdbg)はタイトルのみ触る。
+        q_md = obfuscate_md(q_md, random.Random(subseed ^ 0x0BF0),
+                            essay=(shape_i == "bgpdbg"))
         leak_lint(q_md, lint)
         with open(f"{repo}/questions/{stamp}.md", "w", encoding="utf-8") as fh:
             fh.write(q_md)

@@ -1,0 +1,31 @@
+! RT02 初期状態 (リレー+セキュリティACL・昨日 強化を実施した直後の状態)
+no service dhcp
+!
+ip access-list extended CORP-DHCP-ONLY
+ permit udp 10.162.172.0 0.0.0.255 eq bootpc any eq bootps
+ permit udp 10.162.173.0 0.0.0.255 eq bootpc any eq bootps
+ permit icmp any any
+ deny ip any any
+!
+interface {{ links[0] }}
+ description === to RT01 (DHCP server) ===
+ ip address 10.162.174.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === CLIENT segment A (CL1) ===
+ ip address 10.162.172.1 255.255.255.0
+ ip helper-address 10.162.174.1
+ ip access-group CORP-DHCP-ONLY in
+ no shutdown
+!
+interface {{ links[2] }}
+ description === CLIENT segment B (CL2) ===
+ ip address 10.162.173.1 255.255.255.0
+ ip helper-address 10.162.174.1
+ ip access-group CORP-DHCP-ONLY in
+ no shutdown
+!
+! LOCAL セグメントへの経路 (既設・変更禁止)
+ip route 10.162.171.0 255.255.255.0 10.162.174.1
+!

@@ -1,0 +1,51 @@
+! RT01 初期状態 (VRF迷路・迷路本体。各部屋=VRF)
+vrf definition ROOM-TEAL
+ rd 65000:101
+ address-family ipv4
+ exit-address-family
+!
+vrf definition ROOM-AMBER
+ rd 65000:102
+ address-family ipv4
+ exit-address-family
+!
+vrf definition ROOM-GREEN
+ rd 65000:103
+ address-family ipv4
+ exit-address-family
+!
+interface {{ links[0] }}
+ no shutdown
+!
+interface {{ links[0] }}.690
+ encapsulation dot1q 690
+ vrf forwarding ROOM-TEAL
+ ip address 10.62.1.1 255.255.255.252
+!
+interface {{ links[0] }}.377
+ encapsulation dot1q 377
+ vrf forwarding ROOM-AMBER
+ ip address 10.62.2.1 255.255.255.252
+!
+interface {{ links[0] }}.445
+ encapsulation dot1q 445
+ vrf forwarding ROOM-AMBER
+ ip address 10.62.3.1 255.255.255.252
+!
+interface {{ links[0] }}.651
+ encapsulation dot1q 651
+ vrf forwarding ROOM-GREEN
+ ip address 10.62.4.1 255.255.255.252
+!
+interface Loopback11
+ vrf forwarding ROOM-TEAL
+ ip address 172.30.235.1 255.255.255.255
+!
+interface Loopback99
+ vrf forwarding ROOM-GREEN
+ ip address 172.30.173.1 255.255.255.255
+!
+ip route vrf ROOM-TEAL 172.30.173.1 255.255.255.255 {{ links[0] }}.690 10.62.1.2
+ip route vrf ROOM-AMBER 172.30.173.1 255.255.255.255 {{ links[0] }}.377 10.62.2.2
+ip route vrf ROOM-AMBER 172.30.235.1 255.255.255.255 {{ links[0] }}.377 10.62.2.2
+ip route vrf ROOM-GREEN 172.30.235.1 255.255.255.255 {{ links[0] }}.651 10.62.4.2

@@ -1,0 +1,31 @@
+! 基線: ユーザラボ「EIGRP leak-map」の拡張版(全Loを network 投入した状態を起点にする)
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+!
+interface Loopback1
+ ip address 10.10.10.10 255.255.255.255
+!
+interface Loopback2
+ ip address 1.1.1.2 255.255.255.255
+!
+interface Loopback3
+ ip address 1.1.1.3 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 ===
+ ip address 172.16.17.1 255.255.255.252
+ ip summary-address eigrp 6571 1.1.1.0 255.255.255.252 leak-map RMAP01
+ no shutdown
+!
+router eigrp 6571
+ network 1.1.1.1 0.0.0.0
+ network 1.1.1.2 0.0.0.0
+ network 1.1.1.3 0.0.0.0
+ network 10.10.10.10 0.0.0.0
+ network 172.16.17.0 0.0.0.3
+!
+ip prefix-list PL01 seq 5 permit 1.1.1.3/32
+!
+route-map RMAP01 permit 10
+ match ip address prefix-list PL01
+!

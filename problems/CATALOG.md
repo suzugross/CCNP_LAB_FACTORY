@@ -205,7 +205,8 @@ provision は lab.sh(通常問題と同じ)。採点前にユーザの playbook 
 | `gen_pathctrl.py` | GEN-PATH | 経路制御・冗長 | |
 | `gen_troubleshoot.py` | GEN-TS | OSPF 故障TS | `--n` 台数 / `--faults` 多重・おとり・段差 |
 | `gen_bgp_troubleshoot.py` | GEN-BGPTS | BGP 到達性TS | |
-| `gen_bgp_pathts.py` | GEN-BGPPATH | BGP 経路選択TS | |
+| `gen_bgp_pathts.py` | GEN-BGPPATH | BGP 経路選択TS | 後継=gen_bgp_ring_ts(shape=path_select)。新規出題はそちら推奨 |
+| `gen_bgp_ring_ts.py` | GEN-BGPRING | ★★リングBGP=**AS設計/ポリシー層の統一生成器(BL-093完成形)**: 4台リング固定×AS配置抽選(4AS別/自社対角同一AS+ISP×2/全iBGP)×shape抽選・難4-5・4 IOL | **1つのIDから5形が出る**: ①isp_exchange=ISP越し自社AS交換不能(variant=allowas_full/partial/**override_partial**=ISP側as-override残骸で片側だけ通る) ②no_transit=非トランジット化(`--solution aspath/routemap` 解法強制・監査regex) ③path_select=対角双方向経路指定(LP/prepend欠落・誤適用/weight残骸/**MED異AS比較=always-compare-med**) ④stale=監査是正(実害weight・裏LP×無害allowas-in・as-override混在全撤去) ⑤ibgp_ring=フルメッシュ欠落(全Established対角欠け)/network欠落/OSPF Lo欠落。`--shape`/`--faults 2`指定可。task.mdはCisco語＋論理構成非提示。全shape×全解法軸×複合 実機11サイクル済(2026-08-06)・検証seed掃除済・出題時新seed |
 | `gen_bgp_rrts.py` | GEN-BGPRR | RR 伝播TS | |
 | `gen_bgp_complex_ts.py` | GEN-BGPCX | BGP 複合TS(7台4AS・26故障・48変種) | `--faults` `--policy-faults` ほか変種軸 |
 | `gen_eigrp_complex_ts.py` / `gen_ospf_complex_ts.py` / `gen_ospfv3_complex_ts.py` / `gen_eigrpv6_complex_ts.py` | GEN-EIGRPCX 等 | IGP 複合TS | |
@@ -222,11 +223,13 @@ provision は lab.sh(通常問題と同じ)。採点前にユーザの playbook 
 | `gen_fnf_ts.py` | GEN-FNFTS | Flexible NetFlow 監視標準 適合TS(3台・故障10種・仕様書突き合わせ型) | `--fault` 指定可・`--faults 2` で別レイヤ複合(難+1)。全10故障 実機フルサイクル済(2026-07-25)。難3〜5・ENARSI シム対策 |
 | `gen_eigrp_vrf_ts.py` | GEN-EGVRF | VRF-aware EIGRP 収容標準 適合TS(4台・故障9種4レイヤ・仕様書突き合わせ型・BL-070②) | `--fault` 指定可・`--faults 2` で別レイヤ複合(難+1)。全9故障+複合1 実機フルサイクル済(2026-07-27)。難3〜5。★af-interfaceはIF非所属VRFだとday0破棄→vrf_if_swapのfixは認証再投入込み |
 | `gen_dhcp_ts.py` | GEN-DHCPTS | DHCPv4 配布標準 適合TS(5台・故障8種3レイヤ・仕様書突き合わせ型) | `--fault` 指定可・`--faults 2` で別レイヤ複合(難+1)。全8故障 実機フルサイクル済(2026-07-26)。難3〜5。★目玉=relay_service_off(リレー機 no service dhcp・helperは完璧に見える)/acl_src_narrow(DISCOVERのみ落ちる) |
-| `gen_dmvpn_ts.py` | GEN-DMVPN | DMVPN+IPsec TS(14故障) | 6種実機済。IOSv・console採点 |
+| `gen_dmvpn_ts.py` | GEN-DMVPN | DMVPN+IPsec TS(**16故障**・`--faults 2`複合可) | ★**全16種実機フルサイクル済**(2026-08-05 BL-089: 新規i7=profileのset transform-set欠落=既定TSフォールバック/i8=レガシーprofile誤参照＋残8種スイープ)。★**`--faults 2`(BL-091)**=1ルータ1故障で2箇所(hub+spoke/spoke×2・i3/r2は単独専用・中立チケット2枚・難max+1)・複合2型実機済(31002/31001)。IOSv・console採点。★i7/i8のfixはclear不十分→Tunnel0 shut/no shut必須(fix.jsonに組込済)。fix投入はSSH不可(旧kex)→fix.jsonをfix_console形式へ変換しconsole経路で |
+| `gen_vrf_maze.py` | GEN-VRFMAZE | ★おまけ枠「VRF迷路」(2台IOL・物理1本×dot1qサブIF折り返し×VRFチェーニング・故障5種+healthy・難2-3) | ★**全5故障実機フルサイクル済**(2026-08-05 BL-092)。**足跡採点**=tracerouteのホップ番号×中継IPで順路を拘束+「ちょうどL歩」。`--rooms 3-5`/`--fault`指定可・SSH採点・出題時新seed。bringup_ifs は生成器が自動出力(手当不要) |
 | `gen_s2svpn.py` | GEN-S2SVPN | 複数拠点 IPsec VPN 設計構築(要件書形式・技術選定自由・8台) | 運用=`s2svpn_ops.py`(console・リース不要)。seed軸=支店ごとfull/split×支店間4種×公開静的NAT。svti/cmap両模範解で実機4サイクル済(2026-07-24)・出題時は新seed・難4 |
 | `gen_s2svpn.py --day2` | GEN-S2SVPN-\*-D2 | Day2運用チケット3本(支店追加×仕様書食い違い/full→split移行/サブネット重複×NAT overlapping・12台) | 手順=build→`solve --mode base`→`day2init`→受講者→`grade --ticket t1/t2/t3`(各100点・回帰込み)。3チケット実機済(2026-07-25)・難5・BL-063既習前提 |
 | `gen_list_dojo.py` | GEN-DOJO-* | フィルタ道場(prefix/aspath/ACL) | `--dojo prefix/aspath/acl` |
 | `gen_dnsdhcp_build.py` / `gen_dnsdhcp_ts.py` | GEN-DNSDHCP / GEN-DNSTS | BIND9+DHCP 構築/TS | Linux ノード |
 | `gen_radius_build.py` | GEN-RADIUS | FreeRADIUS 構築 | |
 | `gen_snmpv3_ts.py` | GEN-SNMPTS / GEN-ZBXBUILD(2) | SNMPv3/Zabbix 監視TS・構築 | `--mode build [--level 2]` で構築問 |
+| `gen_paper_mcq.py` | (紙面: questions/日付-連番.md) | ★紙面問題 統一生成器(shape= chain/ring/mploop/pbr/urpf/bgpdbg/**leakmap**/**ospfv3pl**/mixed) | 常用=`--shape mixed --exam` 新seed(--hard は chain 用)。urpf/bgpdbg/**leakmap**/**ospfv3pl** は紙面専用(実機展開なし・挙動は PoC 実測の写像)。**leakmap(BL-095+096③・2026-08-07)**= EIGRP 集約×リーク手段選択・故障7種(★共用route-map編集副作用=エコ形含む)・要件世界4種(再配送禁止/Lo network禁止/内部限定/IF集約禁止)で正解反転・fix/cause/read の3形・リスト乱立読解。実測表= poc/leakmap/README.md。**ospfv3pl(BL-097 P1・2026-08-08)**= OSPFv3 マルチエリア prefix-list(16進繰り上がり・/44〜47中間マスク・ge/le)・現在状態8種×要件世界5種(エリア限定/全域遮蔽/RIBのみ/最小集約/全停止)で正解反転・fix/read の2形(cause は P2)・実機5ケース突き合わせ済。実測表= poc/ospfv3-pl/README.md |
 | `gen_params.py` | (既存問題の sNNNN variant) | 値違い量産 | `--problem <ID> --seed N` → `params/sN.yml` |

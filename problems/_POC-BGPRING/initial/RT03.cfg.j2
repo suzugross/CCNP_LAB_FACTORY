@@ -1,0 +1,29 @@
+! four_as 基線: RT03 = AS65003
+interface Loopback0
+ ip address 3.3.3.3 255.255.255.255
+!
+interface Loopback1
+ ip address 172.16.3.1 255.255.255.0
+!
+interface {{ links[0] }}
+ description === to RT02 ===
+ ip address 10.0.23.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT04 ===
+ ip address 10.0.34.1 255.255.255.252
+ no shutdown
+!
+router bgp 65003
+ bgp router-id 3.3.3.3
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.0.23.1 remote-as 65002
+ neighbor 10.0.34.2 remote-as 65004
+ address-family ipv4 unicast
+  network 172.16.3.0 mask 255.255.255.0
+  neighbor 10.0.23.1 activate
+  neighbor 10.0.34.2 activate
+ exit-address-family
+!

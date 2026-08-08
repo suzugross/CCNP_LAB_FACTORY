@@ -1,0 +1,32 @@
+! RT01
+interface Loopback0
+ ip address 59.59.59.59 255.255.255.255
+!
+interface Loopback1
+ ip address 172.16.49.1 255.255.255.0
+!
+interface {{ links[0] }}
+ ip address 10.157.180.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.240.244.2 255.255.255.252
+ no shutdown
+!
+router bgp 64517
+ bgp router-id 59.59.59.59
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ bgp bestpath compare-routerid
+ neighbor 10.157.180.2 remote-as 64956
+ neighbor 10.240.244.1 remote-as 64758
+ address-family ipv4 unicast
+  network 172.16.49.0 mask 255.255.255.0
+  neighbor 10.157.180.2 activate
+  neighbor 10.240.244.1 activate
+  neighbor 10.240.244.1 route-map RM-MED-OUT out
+ exit-address-family
+!
+route-map RM-MED-OUT permit 10
+ set metric 50
+!

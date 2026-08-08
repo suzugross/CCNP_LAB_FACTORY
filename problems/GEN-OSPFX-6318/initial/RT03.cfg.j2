@@ -1,0 +1,23 @@
+! RT03 (role=s, ospf=interface) 初期構成
+interface Loopback0
+ ip address 56.56.56.56 255.255.255.255
+ ip ospf 1 area 0
+!
+interface {{ links[0] }}
+ ip address 10.44.48.1 255.255.255.252
+ ip ospf 1 area 0
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.96.161.1 255.255.255.252
+ ip ospf cost 1000
+ ip ospf 1 area 0
+ no shutdown
+!
+router ospf 1
+ router-id 56.56.56.56
+ distribute-list prefix DL-BLOCK in
+!
+ip prefix-list DL-BLOCK seq 5 deny 8.8.8.8/32
+ip prefix-list DL-BLOCK seq 100 permit 0.0.0.0/0 le 32
+!

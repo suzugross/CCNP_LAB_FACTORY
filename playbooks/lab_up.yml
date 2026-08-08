@@ -116,6 +116,7 @@
             name: "{{ item }}"
             groups: _bringup
             ansible_host: "{{ mm2[item] }}"
+            bringup_ifs: "{{ pmeta.bringup_ifs | default(omit) }}"
           loop: "{{ pmeta.target_nodes }}"
           when: pmeta.bringup_data_ifs | default(false)
 
@@ -126,15 +127,55 @@
     - name: SSH ポート待ち
       ansible.builtin.wait_for: { host: "{{ ansible_host }}", port: 22, timeout: 200 }
       delegate_to: localhost
-    - name: data IF(Ethernet0/0-0/2) を no shutdown（SSH鍵生成待ちでリトライ）
+    # 対象 IF は problem.yml の bringup_ifs で上書き可（既定は従来どおり IOL の
+    # Ethernet0/0-0/2）。day0 で admin-down が残る IF を問題側が指名する。
+    # ※IOSv(CVAC) の「IPなしIF」は CVAC 最終パスに shutdown へ戻されるため、
+    #   この SSH 経路では扱わない → 下の console 経路(bringup_console)を使うこと。
+    - name: data IF を no shutdown（SSH鍵生成待ちでリトライ）
       cisco.ios.ios_config:
-        parents: "interface Ethernet0/{{ item }}"
+        parents: "interface {{ item }}"
         lines: ["no shutdown"]
-      loop: [0, 1, 2]
+      loop: "{{ bringup_ifs | default(['Ethernet0/0', 'Ethernet0/1', 'Ethernet0/2']) }}"
       register: bu
       until: bu is succeeded
       retries: 10
       delay: 10
+
+# === console 経由の CVAC後 bringup（problem.yml に bringup_console がある問題のみ）===
+# IOSv の day0(CVAC) は最終パスで「ip address を持たない IF」を強制 shutdown する
+# (dot1q サブIF親トランク等が該当・2026-08-03 実測)。SSH で早打ちしても戻されるため、
+# console で CVAC 完了マーカーを待ってから no shut する(topologies/cvac_bringup.py)。
+- name: console 経由の CVAC後 bringup（bringup_console 問題のみ）
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+  tasks:
+    - ansible.builtin.include_vars: { file: "{{ repo }}/problems/{{ problem }}/problem.yml", name: pmeta_bc }
+      when: lab_state | default('started') == 'started'
+    - name: cvac_bringup.py（CVAC 完了待ち→no shut→up 検証）
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - "{{ repo }}/topologies/cvac_bringup.py"
+          - "{{ pmeta_bc.bringup_console.nodes | join(',') }}"
+          - "{{ pmeta_bc.bringup_console.ifs | join(',') }}"
+      environment:
+        CML_HOST: "{{ cml_host }}"
+        CML_USER: "{{ cml_username }}"
+        CML_PASS: "{{ cml_password }}"
+        CML_VERIFY: "{{ cml_verify_cert | default(false) | string }}"
+        LAB_TITLE: "CCNP-LAB-{{ (problem | hash('md5'))[:8] }}"
+        NODE_USER: "{{ ansible_user }}"
+        NODE_PASS: "{{ ansible_ssh_pass }}"
+        NODE_ENABLE: "{{ ansible_become_pass | default(ansible_ssh_pass) }}"
+      register: bc
+      changed_when: true
+      when: >
+        lab_state | default('started') == 'started'
+        and (pmeta_bc.bringup_console is defined)
+    - ansible.builtin.debug: { msg: "{{ bc.stdout_lines | default([]) }}" }
+      when: bc is not skipped
 
 # === 監視サービス（problem.yml に monitoring がある問題のみ） ==============
 # ZBX ノードは cloud-init が Zabbix を自動構築する（initial/<node>.sh.j2）。

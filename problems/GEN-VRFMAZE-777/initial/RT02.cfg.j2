@@ -1,0 +1,38 @@
+! RT02 初期状態 (VRF迷路・折り返し役)
+vrf definition TURN1
+ rd 65000:201
+ address-family ipv4
+ exit-address-family
+!
+vrf definition TURN2
+ rd 65000:202
+ address-family ipv4
+ exit-address-family
+!
+interface {{ links[0] }}
+ no shutdown
+!
+interface {{ links[0] }}.690
+ encapsulation dot1q 690
+ vrf forwarding TURN1
+ ip address 10.62.1.2 255.255.255.252
+!
+interface {{ links[0] }}.377
+ encapsulation dot1q 377
+ vrf forwarding TURN1
+ ip address 10.62.2.2 255.255.255.252
+!
+interface {{ links[0] }}.445
+ encapsulation dot1q 445
+ vrf forwarding TURN2
+ ip address 10.62.3.2 255.255.255.252
+!
+interface {{ links[0] }}.651
+ encapsulation dot1q 651
+ vrf forwarding TURN2
+ ip address 10.62.4.2 255.255.255.252
+!
+ip route vrf TURN1 172.30.173.1 255.255.255.255 {{ links[0] }}.377 10.62.2.1
+ip route vrf TURN1 172.30.235.1 255.255.255.255 {{ links[0] }}.690 10.62.1.1
+ip route vrf TURN2 172.30.173.1 255.255.255.255 {{ links[0] }}.651 10.62.4.1
+ip route vrf TURN2 172.30.235.1 255.255.255.255 {{ links[0] }}.445 10.62.3.1
