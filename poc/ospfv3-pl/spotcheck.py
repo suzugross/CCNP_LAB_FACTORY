@@ -17,7 +17,11 @@ import gen_paper_ospfv3pl as G
 
 CASES = [("dir_swap", "hide_all"), ("mask_off", "summarize"),
          ("dl_abr", "rib_only"), ("le_off", "area10_only"),
-         ("seq_shadow", "rib_only")]
+         ("seq_shadow", "rib_only"), ("mask_off", "dual_select"),
+         ("seq_shadow", "dual_select")]
+# ラボの固定リンク値(POC-OSPFV3PL 盤面)。抽選リンクをこの値へ上書きして突き合わせる
+LAB_LNK = {"a1": (0x1, 0x1), "a1b": (0x2, 0x2), "a0": (0x0, 0xA),
+           "a2": (0x3, 0x3)}
 
 
 def hunt(kind, world):
@@ -34,39 +38,30 @@ def hunt(kind, world):
 
 def live_cli(d, st):
     """state を実機投入する CLI(ghost は投入しない)。(R2行, R1行, 撤去R2, 撤去R1)"""
-    live = None
-    if st["fl"]:
-        live = st["fl"][2]
-    elif st["dl"]:
-        live = st["dl"][1]
+    lives = [fl[2] for fl in st["fl"]]
+    if st["dl"]:
+        lives.append(st["dl"][1])
     r2, r1, un2, un1 = [], [], [], []
-    if live:
+    on_r1 = st["dl"] and st["dl"][0] == "R1"
+    for live in lives:
         pls = [G.ent_cli(live, i * 5, e)
                for i, e in enumerate(st["pls"][live], 1)]
-        dev = r1 if (st["dl"] and st["dl"][0] == "R1") else r2
-        undev = un1 if (st["dl"] and st["dl"][0] == "R1") else un2
-        dev.extend(pls)
-        undev.append(f"no ipv6 prefix-list {live}")
-    af = []
-    if st["fl"]:
-        af.append(G._fl_line(d, st["fl"]))
+        (r1 if on_r1 else r2).extend(pls)
+        (un1 if on_r1 else un2).append(f"no ipv6 prefix-list {live}")
+    af, afno = [], []
+    for fl in st["fl"]:
+        af.append(G._fl_line(d, fl))
+        afno.append(G._fl_line(d, fl, no=True))
     if st["range"]:
         af.append(G._range_line(d, st["range"]))
-    if st["dl"]:
-        af.append(f"distribute-list prefix-list {st['dl'][1]} in")
-    afno = ["no " + x if not x.startswith("no ") else x.replace("no ", "", 1)
-            for x in af]
-    afno = []
-    if st["fl"]:
-        afno.append(G._fl_line(d, st["fl"], no=True))
-    if st["range"]:
         afno.append(G._range_line(d, st["range"], no=True))
     if st["dl"]:
+        af.append(f"distribute-list prefix-list {st['dl'][1]} in")
         afno.append(f"no distribute-list prefix-list {st['dl'][1]} in")
     wrap = lambda body: [f"router ospfv3 {d['proc']}",
                          "address-family ipv6 unicast"] + body + [
                              "exit-address-family", "exit"]
-    if st["dl"] and st["dl"][0] == "R1":
+    if on_r1:
         r1.extend(wrap(af))
         un1[:0] = wrap(afno)
     else:
@@ -129,9 +124,12 @@ def main():
     import sys as _sys
     want_cases = _sys.argv[1:]
     for kind, world in CASES:
-        if want_cases and kind not in want_cases:
+        if want_cases and kind not in want_cases \
+                and f"{kind}/{world}" not in want_cases:
             continue
         seed, d = hunt(kind, world)
+        d["lnk"] = dict(LAB_LNK)                 # 実機盤面のリンク値へ上書き
+        G.verify_choices(d)                      # 上書き後も一意性が保たれること
         st = G.state(d)
         m = G.model(d, st)
         r2, r1, un2, un1 = live_cli(d, st)

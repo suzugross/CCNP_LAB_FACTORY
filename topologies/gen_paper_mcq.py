@@ -2855,16 +2855,17 @@ def ospfv3pl_cfg(d, st):
     """R2 running-config 抜粋(現在状態の忠実な描画・乱立リスト込み)。"""
     p, a1, a2 = d["proc"], d["a1"], d["a2"]
     L = []
-    for ifn, (h3, h4), area in [("Ethernet0/0", gpo.LINK_A1, a1),
-                                ("Ethernet0/1", gpo.LINK_A0, 0),
-                                ("Ethernet0/2", gpo.LINK_A2, a2)]:
+    for ifn, lkey, area in [("Ethernet0/0", "a1", a1),
+                            ("Ethernet0/1", "a0", 0),
+                            ("Ethernet0/2", "a2", a2)]:
+        net = gpo.fmt(*d["lnk"][lkey], 64)[:-3]      # "…::" 形
         L += [f"interface {ifn}", " no ip address",
-              f" ipv6 address 2001:DB8:{h3:X}:{h4:X}::2/64", " ipv6 enable",
+              f" ipv6 address {net}2/64", " ipv6 enable",
               f" ipv6 ospf {p} area {area}", "!"]
     L += [f"router ospfv3 {p}", " router-id 2.2.2.2", " !",
           " address-family ipv6 unicast"]
-    if st["fl"]:
-        L.append("  " + gpo._fl_line(d, st["fl"]))
+    for fl in st["fl"]:
+        L.append("  " + gpo._fl_line(d, fl))
     if st["range"]:
         L.append("  " + gpo._range_line(d, st["range"]))
     if st["dl"] and st["dl"][0] == "R2":
@@ -2955,6 +2956,17 @@ def ospfv3pl_requirements(d, rnd):
             "新たなプレフィックス・リストの定義は、認められていません。",
             "R2 自身の経路テーブルは、影響を受けてはなりません。",
         ],
+        "dual_select": [
+            f"エリア {a1} へ配布されるループバック由来のエリア間のルートは、"
+            f"{pair_t} に限定されなければなりません。リンクのネットワークの"
+            "ルートは、引き続き受信される必要があります。",
+            f"ただし、{tgt} のルートは、障害の対応という理由により、"
+            "**すべてのエリアにおいて**、一時的に停止されなければなりません。",
+            f"エリア {a2} においては、{tgt} を除くいかなるルートの受信にも、"
+            "影響が及んではなりません。",
+            f"この制御は、エリア {a1} に今後追加されるところの、いかなる"
+            "ルータに対しても、等しく適用されなければなりません。",
+        ],
     }[d["world"]]
     core = list(world_reqs) + rnd.sample(REQ_DECOYS, 1)
     rnd.shuffle(core)
@@ -2987,6 +2999,8 @@ def build_choices_read_o3pl(d, rnd):
 O3PL_SYMPTOM = {
     "none": "要件は、まだ実装されていません。構成の変更が、計画されています。",
     "mask_off": {
+        "dual_select": "意図されていないところのエリア間のルートが、R1 において"
+                       "受信され続けている、ということが、報告されています。",
         "area10_only": "意図されていないところのエリア間のルートが、R1 において"
                        "受信され続けている、ということが、報告されています。",
         "hide_all": "対象ではないところのルートまでもが、複数のエリアにおいて"
@@ -2998,18 +3012,20 @@ O3PL_SYMPTOM = {
         "suppress_all": "一部の明細のルートが、引き続き広告されている、ということが、"
                         "報告されています。",
     },
-    "le_missing": "R1 において、すべてのエリア間のルートが、経路テーブルから"
-                  "消失している、ということが、報告されています。",
-    "le_off": "R1 において、すべてのエリア間のルートが、経路テーブルから"
-              "消失している、ということが、報告されています。",
+    "le_missing": "R1 において、ループバックに由来するエリア間のルートが、"
+                  "すべて経路テーブルから消失している、ということが、"
+                  "報告されています。",
+    "le_off": "R1 において、ループバックに由来するエリア間のルートが、"
+              "すべて経路テーブルから消失している、ということが、"
+              "報告されています。",
     "tail_default": {
         "hide_all": "すべてのエリアにおいて、エリア間のルートが、経路テーブルから"
                     "消失している、ということが、報告されています。",
         "rib_only": "R1 において、すべての OSPF のルートが、経路テーブルから"
                     "消失している、ということが、報告されています。",
     },
-    "seq_shadow": "変更の適用の後においても、対象のルートが、受信され続けている、"
-                  "ということが、報告されています。",
+    "seq_shadow": "変更の適用の後においても、停止されているはずであるところの"
+                  "ルートが、受信され続けている、ということが、報告されています。",
     "dir_swap": {
         "area10_only": "エリア {a2} のルータにおいても、ルートの欠落が発生している、"
                        "ということが、報告されています。",
@@ -3018,6 +3034,13 @@ O3PL_SYMPTOM = {
     },
     "dl_abr": "対象のルートが、R2 自身、および、エリア {a2} のルータからも、"
               "消失している、ということが、報告されています。",
+    "block_off": "期待されているところのルートが不足し、そして、対象ではない"
+                 "ところのルートが受信されている、ということが、報告されています。",
+    "mask_narrow": "配布されるべきであるところのルートの一部が、経路テーブルに"
+                   "存在しない、ということが、報告されています。",
+    "dual_swap": "エリア {a2} において、対象外のルートの欠落が発生し、そして、"
+                 "停止されているはずであるところのルートは、受信され続けている、"
+                 "ということが、報告されています。",
 }
 
 
@@ -3046,6 +3069,12 @@ def question_md_ospfv3pl(d, blocks, choices, stamp, form="fix", reqs=None,
         letters = [chr(65 + i) for i in range(len(choices))]
         opts = "\n".join(f"**{l}.**\n```\n{c[0]}\n```"
                          for l, c in zip(letters, choices))
+    elif form == "patch":
+        q = ("示されているところのすべての要件が満たされることを確実にするために、"
+             "適用されなければならない修正は、どれですか。(1つを選択してください)")
+        letters = [chr(65 + i) for i in range(len(choices))]
+        opts = "\n".join(f"**{l}.**\n```\n" + "\n".join(c[3]) + "\n```"
+                         for l, c in zip(letters, choices))
     elif style == "cli":
         q = ("示されているところのすべての要件が満たされることを確実にするために、"
              "適用されなければならない構成は、どれですか。(1つを選択してください)")
@@ -3056,14 +3085,26 @@ def question_md_ospfv3pl(d, blocks, choices, stamp, form="fix", reqs=None,
              "(1つを選択してください)")
         opts = render_options(choices, style)
     los_t = ", ".join(gpo.fmt(h, h, 64) for h in d["los"])
-    topo = (f"```\n     Area {d['a1']}                 Area 0"
-            f"                 Area {d['a2']}\n"
-            f"  [R1]--(E0/0: {gpo.fmt(*gpo.LINK_A1, 64)})--[R2]"
-            f"--(E0/1: {gpo.fmt(*gpo.LINK_A0, 64)})--[Ra]\n"
-            f"                                 └--(E0/2: "
-            f"{gpo.fmt(*gpo.LINK_A2, 64)})--[R3]\n"
-            f"  R1 E0/0 セカンダリ: {gpo.fmt(*gpo.LINK_A1B, 64)}\n"
-            f"  Ra Loopback: {los_t}\n```")
+    # エリアラベルは各リンク区間の中央に動的配置(ずれると誤読を招く)
+    main = (f"  [R1]--(E0/0: {gpo.fmt(*d['lnk']['a1'], 64)})--[R2]"
+            f"--(E0/1: {gpo.fmt(*d['lnk']['a0'], 64)})--[Ra]")
+    i_r2, i_ra = main.index("[R2]"), main.index("[Ra]")
+    hdr = [" "] * len(main)
+
+    def put(center, text):
+        s = max(0, center - len(text) // 2)
+        hdr[s:s + len(text)] = list(text)
+
+    put((6 + i_r2) // 2, f"Area {d['a1']}")
+    put((i_r2 + 4 + i_ra) // 2, "Area 0")
+    branch = (" " * (i_r2 + 2)
+              + f"└--(E0/2: {gpo.fmt(*d['lnk']['a2'], 64)})--[R3]"
+              + f"  Area {d['a2']}")
+    topo = ("```\n" + "".join(hdr).rstrip() + "\n" + main + "\n"
+            + branch + "\n"
+            f"  R1 E0/0 セカンダリ: {gpo.fmt(*d['lnk']['a1b'], 64)}"
+            f" (Area {d['a1']})\n"
+            f"  Ra Loopback: {los_t} (Area 0)\n```")
     if form == "read":
         sympt = "構成の適用後の、観測の結果が、確認されようとしています。"
     else:
@@ -3118,6 +3159,9 @@ def answer_md_ospfv3pl(d, choices, stamp, master_seed, subseed, form):
         "seq_shadow": "広い permit が先行し deny が死に文(先勝ち)",
         "dir_swap": "in/out の取り違え(out は全他エリアに作用・実測 P1/P2)",
         "dl_abr": "ABR への distribute-list → Type-3 生成ごと停止(実測 P4)",
+        "block_off": "範囲ずれ(隣の /47 ブロックを許可・16進の読み違い)",
+        "mask_narrow": "狭すぎ(/48 で片割れ欠け)",
+        "dual_swap": "方向逆(2枚のリストの in/out 取り違え)",
     }[d["kind"]]
     world_note = {
         "area10_only": "対象エリアだけに効かせる → area <a1> filter-list in"
@@ -3128,6 +3172,10 @@ def answer_md_ospfv3pl(d, choices, stamp, master_seed, subseed, form):
         "summarize": "最小範囲の集約 → area 0 range(/45 か /46 かは"
                      "4値の並びの LCP で決まる)",
         "suppress_all": "PL 新設禁止で全停止 → area 0 range not-advertise",
+        "dual_select": "★両掛け(手組ラボの主題): in=配布の限定(permit形・エリア"
+                       "単位) × out=特定ルートの全域停止(deny形)の役割分担。"
+                       "in だけでは第3エリアに停止が及ばず、out だけでは配布の"
+                       "限定ができない",
     }[d["world"]]
     cover = gpo.fmt(gpo.block_base(d["s"], d["minlen"]), 0, d["minlen"])
     return f"""# 解答 {stamp}
@@ -3542,12 +3590,19 @@ def main():
             elif r_form < 0.62:
                 form = "read"
                 choices = build_choices_read(d, rnd)
-        elif a.exam and shape_i == "ospfv3pl" and rnd.random() < 0.45:
-            try:                           # 表が畳まれる盤面は fix に戻す
-                choices = build_choices_read_o3pl(d, rnd)
-                form = "read"
-            except ValueError:
-                pass
+        elif a.exam and shape_i == "ospfv3pl":
+            r_form = rnd.random()
+            if d["world"] == "dual_select" and d["kind"] != "none" \
+                    and r_form < 0.5:
+                form = "patch"             # ★両掛けTS(最小修正の切り分け)
+                choices = gpo.build_choices_patch(d, rnd)
+            elif r_form < 0.45 or (d["world"] == "dual_select"
+                                   and d["kind"] != "none" and r_form < 0.8):
+                try:                       # 表が畳まれる盤面は fix に戻す
+                    choices = build_choices_read_o3pl(d, rnd)
+                    form = "read"
+                except ValueError:
+                    pass
         if choices:
             choices = rebalance_position(repo, choices)
         opt_style = choice_style(rnd, choices, form) if choices else "prose"

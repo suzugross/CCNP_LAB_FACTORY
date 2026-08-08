@@ -65,6 +65,14 @@ R2(ABR)ハブ: e0/0→R1(Area10・セカンダリ2:2持ち) / e0/1→Ra(Area0・
   PL_GHOST_UNDEF in` で経路変化なし)。leakmap の E1(route-map 未定義=リークなし)とは逆向きの
   デフォルト。P2 の故障種(typo参照=効かない)として使える。
 
+### dual_select 追実装時の実測 (2026-08-08)
+
+- [x] **in/out 両掛けの直列合成**: `area 0 filter-list out`(deny形)+`area <a1> filter-list in`
+  (permit形)の同時適用は**両方が独立に直列適用**される(モデルの AND 合成と実機2ケース完全一致
+  =mask_off/dual・seq_shadow/dual)。手組ラボの二重掛け(PL01 out+PL02 in)の一般化。
+- 同日: リンク網プレフィックスの毎回抽選化(第3ヘクステット 0..7 帯)と、range 被覆の
+  実機忠実化(**Area 0 range はリンク網も範囲に畳む**=/44 等でリンクが吸われる系を正しく写像)。
+
 ★ハーネス知見: virl2_client の `connect_two_nodes` は**既存の空き e0/x を使わず新規
 E1/x を勝手に作って結線する**(populate_interfaces=True でも)。IF ラベル明示の
 `create_link` を使うこと(sweep.py 修正済)。IOL は未結線でも up/up なので気づきにくい。
