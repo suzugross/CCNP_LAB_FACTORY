@@ -1,0 +1,51 @@
+! _POC-V6REDIST 基線: ユーザラボ「IPv6redistribute01」RT-C の忠実な複製。
+! ASBR。OSPFv3 544(E0/0側) ⇄ EIGRP named AS5400(E0/1側) を相互再配送するが、
+! 双方向とも route-map で「隣接トランジットリンクだけ」を通す状態(= 客先LANが落ちる)。
+ipv6 unicast-routing
+ipv6 cef
+!
+interface Ethernet0/0
+ description === to RA (OSPFv3 area 0) ===
+ no ip address
+ ipv6 address 2001:DB8:1:1::1/64
+ ipv6 enable
+ ipv6 ospf 544 area 0
+ no shutdown
+!
+interface Ethernet0/1
+ description === to RB (EIGRP AS5400) ===
+ no ip address
+ ipv6 address 2001:DB8:A:A::1/64
+ ipv6 enable
+ no shutdown
+!
+router eigrp NAMED
+ !
+ address-family ipv6 unicast autonomous-system 5400
+  !
+  af-interface Ethernet0/0
+   shutdown
+  exit-af-interface
+  !
+  topology base
+   redistribute ospf 544 match internal metric 10000 100 255 1 1500 route-map OMAP01 include-connected
+  exit-af-topology
+  eigrp router-id 1.1.1.1
+ exit-address-family
+!
+router ospfv3 544
+ router-id 2.2.2.2
+ !
+ address-family ipv6 unicast
+  redistribute eigrp 5400 route-map EMAP01 include-connected
+ exit-address-family
+!
+ipv6 prefix-list E5400 seq 5 permit 2001:DB8:A:A::/64
+ipv6 prefix-list O544 seq 5 permit 2001:DB8:1:1::/64
+!
+route-map OMAP01 permit 10
+ match ipv6 address prefix-list O544
+!
+route-map EMAP01 permit 10
+ match ipv6 address prefix-list E5400
+!

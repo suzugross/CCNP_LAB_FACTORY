@@ -1,0 +1,25 @@
+---
+# BL-098 PoC: OSPFv3 ⇄ EIGRPv6 相互再配送のエッジ挙動確定。
+# 基線 = ユーザ手組みラボ「IPv6redistribute01」の忠実な複製(ユーザラボは読み取りのみ・不触)。
+# 各項目は SSH で RT-C の設定を組み替えながら C1/C2 の経路表と到達性を観測する。
+id: _POC-V6REDIST
+title: PoC OSPFv3 <-> EIGRPv6 mutual redistribution edges
+exam: ENARSI
+topics: [poc, ipv6, ospfv3, eigrp, redistribution]
+difficulty: 0
+topology: generated
+access: ssh
+target_nodes: [RT-C, RA, RB, C1, C2]
+points: 0
+image_family: iol
+
+# IPv6 only の data IF なので day0 強制 shutdown 対策に明示 bringup(E0/0・E0/1 のみ使用)
+bringup_data_ifs: true
+bringup_ifs: [Ethernet0/0, Ethernet0/1]
+
+lab:
+  links:
+    - { a: RT-C, a_if: 0, b: RA, b_if: 0 }   # 2001:DB8:1:1::/64    OSPFv3 area 0
+    - { a: RT-C, a_if: 1, b: RB, b_if: 0 }   # 2001:DB8:A:A::/64    EIGRP AS5400
+    - { a: RA,   a_if: 1, b: C1, b_if: 0 }   # 2001:DB8:2:1::/64    OSPFv3 area 0 (C1 LAN)
+    - { a: RB,   a_if: 1, b: C2, b_if: 0 }   # 2001:DB8:1A:A::/64   EIGRP AS5400 (C2 LAN)

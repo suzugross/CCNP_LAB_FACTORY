@@ -66,6 +66,33 @@ scripts/lab.sh provision <ID> [variant]        # 通常問題
 - ユーザに確認のうえ撤収: `scripts/lab.sh teardown <ID>`(特殊ラボは ops の `teardown`/`stop`。**FGT は stop のみ・fgt1 wipe 禁止**)。
 - 撤収したら `_history.md` を `撤収済` に更新。
 
+## 問題パック(連続出題・BL-099)
+
+「5問まとめて」「明日ぶんを用意して」等、**複数問を一度に**求められたらこちらを使う
+(1問だけなら上の通常フローのまま)。想定運用は**夜間バッチ**: 就寝前に作成 → 翌朝から1日で解く。
+
+```bash
+scripts/pack.sh new [--paper 3] [--lab 2] [--budget 20]   # 作成(15〜25分・nohup 推奨)
+scripts/pack.sh serve                                     # 配信(Windows ブラウザから開く)
+scripts/pack.sh status [PACK-ID]                          # 進捗
+scripts/pack.sh grade  [PACK-ID]                          # 採点＋report.html
+scripts/pack.sh replace <PACK-ID> --no 5                  # 1問だけ差し替え
+scripts/pack.sh close  [PACK-ID]                          # 全ラボ撤収
+```
+
+- 成果物は `packs/<PACK-ID>/`(gitignore)。**問題文は HTML**、解答はページ下部の解答欄に
+  書くと `解答.md` に保存される(`serve` 経由のときのみ。`file://` では直接編集)。
+- **提示は index.html の URL を伝える**(`http://localhost:8899/<PACK-ID>/index.html`)。
+  task.md 全文貼りは不要(HTML が問題用紙そのもの)。
+- **選定方針(ユーザ指示)**: 純粋な Cisco 問題のみ・**ラボは TS 中心**。
+  他ベンダ機/Linux サーバ構築/自動化は既定で除外(`--allow-non-cisco` / `--allow-automation` /
+  `--any-lab` で解除)。外部機器が単なる観測機(Zabbix 等)なら可。
+- 台数は **CML に問い合わせて実測**する(リース台帳では手組みラボを取りこぼす)。
+- ラボ採点・レビューは通常フローと同じ(`grade.yml` を実走し、実機 config を読んでレビュー)。
+  **`_history.md` のメモ欄はパックが自動で埋めない**(空欄のときだけ定型文を入れる)。
+  レビュー内容は従来どおり Claude が書く。
+- 詳細設計: [QUIZ-PACK.design.md](../../../problems/_drafts/QUIZ-PACK.design.md)
+
 ## 英語出題(オンデマンド翻訳)
 
 英語指定の出題では、**採点系・生成器・task.md 原文には一切手を入れず**、提示物だけを英語化する。

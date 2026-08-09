@@ -44,6 +44,8 @@ import gen_paper_urpf as gpu    # noqa: E402  (urpf=uRPF×ACL・BL-084)
 import gen_paper_bgpdbg as gpb  # noqa: E402  (bgpdbg=BGP debug 読解・記述式・BL-085)
 import gen_paper_leakmap as gpk  # noqa: E402  (leakmap=EIGRP集約×リーク・BL-095)
 import gen_paper_ospfv3pl as gpo  # noqa: E402  (ospfv3pl=OSPFv3 prefix-list・BL-097)
+import gen_paper_v6redist as gpv  # noqa: E402  (v6redist=OSPFv3⇄EIGRPv6 相互再配送・BL-098)
+import gen_paper_aaa as gpa    # noqa: E402  (aaa=IOS AAA(RADIUS)読解・BL-101)
 
 KINDS = ["missing", "no_seed", "filter", "wrong_id"]
 # ring(ループ)の正解法軸。arena の method をそのまま借りるが、tag は紙面専用の追加軸
@@ -657,9 +659,16 @@ def render_options(choices, style="prose"):
         if style == "cli" and cli:
             body = "\n".join(cli)
             out.append(f"**{l}.**\n```\n{body}\n```")
+        elif "\n" in ch[0]:
+            # ★本文そのものが複数行(patch 形のコマンド列など)。素で並べると
+            #   Markdown が段落に畳んで**一列に潰れる**(2026-08-08 ユーザ指摘)。
+            #   CLI 行の配列を持たない選択肢もここで必ずコードブロックに入れる。
+            out.append(f"**{l}.**\n```\n{ch[0]}\n```")
         else:
             out.append(f"{l}. {ch[0]}")
-    return "\n".join(out)
+    # ★空行で区切る(2026-08-08): 改行1つだと Markdown が連続行を1段落に畳み、
+    # 選択肢が全部つながって表示される(VSCode プレビュー・HTML とも)。
+    return "\n\n".join(out)
 
 
 def choice_style(rnd, choices, form):
@@ -822,12 +831,28 @@ def _fenced_blocks(lines):
         (buf if inside else other).append(ln)
     if buf:
         blocks.append(buf)
-    return blocks, [x for x in other if x.strip()]
+    # ★空行を全部捨てると、表 → 見出し行 → 表 のような塊が 1 つに潰れ、
+    #   **2 つ目以降の表が表として描画されない**(aaa に全断の観測表を足して発覚)。
+    #   前後の空行だけ落とし、**内部の空行は残す**(全 shape に効く)。
+    while other and not other[0].strip():
+        other.pop(0)
+    while other and not other[-1].strip():
+        other.pop()
+    return blocks, other
 
 
-def obfuscate_md(md, rnd, essay=False):
+def obfuscate_md(md, rnd, essay=False, keep_ask=False):
     """①タイトル無機質化 ②設問の抽象化 ④症状の抽象化 ⑦直訳の前置き=常時 /
-    ③シナリオへの散文統合(⑤機構名の除去を含む) ⑥出力順のランダム化=50%。"""
+    ③シナリオへの散文統合(⑤機構名の除去を含む) ⑥出力順のランダム化=50%。
+
+    ★keep_ask: 設問文と症状本文を**そのまま残す**。BL-088 の不変条件は
+    「情報は1ビットも減らさない」であり、evidence 形(aaa)のように
+    **設問文と症状文そのものが情報の担い手**(対立する2仮説の提示)である形では、
+    設問の統一・症状の抽象化を掛けると解答不能になるため。
+    ★dbgconf 形も同様。選択肢が構成そのものなので、設問を汎用文
+    「次のうち、正しいものは、どれですか」に均すと「要件に適合する構成はどれか」
+    という**別の設問に化ける**(2026-08-08 実装時に検出)。
+    """
     md = re.sub(r"^(# 問題 \S+)\s*:.*$", r"\1", md, count=1, flags=re.M)
     if essay:
         return md
@@ -847,17 +872,27 @@ def obfuscate_md(md, rnd, essay=False):
     state_blocks, state_other = _fenced_blocks(st_rest)
     cfg_blocks, _ = _fenced_blocks(get.get("設定抜粋", []))
     vague = rnd.choice(VAGUE_SYMPTOM)
+    ask = GENERIC_ASK
+    if keep_ask:
+        ask = "\n".join(x for x in get.get("設問", []) if x.strip()).strip()
+        vague = "".join(x.strip() for x in st_prose if x.strip())
 
     if prose_mode:
-        scenario = (rnd.choice(LEAD_IN) + intro + vague + rnd.choice(DIRECTIVE)
+        scenario = (rnd.choice(LEAD_IN) + intro + vague
+                    + ("" if keep_ask else rnd.choice(DIRECTIVE))
                     + "".join(reqs))
         out = state_blocks + cfg_blocks
         if shuffle_out:
             rnd.shuffle(out)
         parts = ["\n".join(head).rstrip(), "", "## シナリオ", "", scenario, ""]
         parts += ["\n".join(topo_rest).strip(), "", "## 出力", ""]
+        # ★フェンスに入っていない状態ブロック(表など)も必ず載せる。
+        #   ここを落とすと「情報は1ビットも減らさない」(BL-088 の不変条件)に反し、
+        #   症状そのものが消えて解答不能になる(aaa の cause 形で発覚・2026-08-08)。
+        if state_other:
+            parts += state_other + [""]
         parts += ["\n".join(b) for b in out]
-        parts += ["", "## 設問", "", GENERIC_ASK, "", "## 選択肢",
+        parts += ["", "## 設問", "", ask, "", "## 選択肢",
                   "\n".join(get.get("選択肢", [])).strip(), ""]
         return "\n".join(parts)
 
@@ -869,11 +904,12 @@ def obfuscate_md(md, rnd, essay=False):
                "\n".join(topo_rest).strip(), "",
                "## 要件", ""] + [f"{i}. {x}" for i, x in enumerate(reqs, 1)] + [
                "", "## 現在の状態", "",
-               vague + rnd.choice(DIRECTIVE), ""]
+               vague + ("" if keep_ask else rnd.choice(DIRECTIVE)), ""]
     rebuilt += state_other + [""] if state_other else []
     rebuilt += ["\n".join(b) for b in state_blocks]
-    rebuilt += ["", "## 設定抜粋", ""] + ["\n".join(b) for b in cfg_blocks]
-    rebuilt += ["", "## 設問", "", GENERIC_ASK, "", "## 選択肢",
+    if cfg_blocks:                      # ★空の見出しを残さない
+        rebuilt += ["", "## 設定抜粋", ""] + ["\n".join(b) for b in cfg_blocks]
+    rebuilt += ["", "## 設問", "", ask, "", "## 選択肢",
                 "\n".join(get.get("選択肢", [])).strip(), ""]
     return "\n".join(rebuilt)
 
@@ -1079,7 +1115,7 @@ def question_md(d, plan, choices, collected, stamp, sites=None, blind=False,
              "満たされることを確実にするために、必要とされる手順は、どれですか。"
              "(1つを選択してください)")
     opts = render_options(choices, style)
-    T = cisco_terms(random.Random(hash(stamp) & 0xFFFF))
+    T = cisco_terms(random.Random(zlib.crc32(stamp.encode()) & 0xFFFF))
     if blind:
         intro = ("あなたの会社のネットワークは、複数のルーティング・ドメインが、"
                  "境界のルータによって接続され、\nそして、相互の再配送という手段によって、"
@@ -3316,6 +3352,605 @@ def answer_md_bgpdbg(d, stamp, master_seed, subseed):
 
 
 # --------------------------------------------------------------------------
+# shape=v6redist — OSPFv3 ⇄ EIGRPv6 相互再配送 手段選択 (gen_paper_v6redist・BL-098)
+# ★紙面専用: 挙動は実機確定表(poc/v6redist/README.md)の写像モデルから決定的に生成。
+# --------------------------------------------------------------------------
+def pick_draw_v6redist(qseed, kind):
+    for kk in range(200):
+        s = qseed + kk * 139
+        try:
+            return s, gpv.verify_choices(gpv.draw(random.Random(s), kind=kind))
+        except ValueError:
+            continue
+    raise SystemExit(f"v6redist kind={kind} が成立する seed が見つかりません({qseed})")
+
+
+def v6redist_evidence(d, rnd, form):
+    """紙面に出すブロック群(状態=経路表/ping・構成=ASBR の running-config)。"""
+    st = gpv.state(d)
+    state_blocks = []
+    if form == "read":
+        # 逆引き: 経路表は選択肢側にあるので、症状は ping だけを見せる
+        state_blocks.append("```\n" + gpv.trace_block(d, st) + "\n```")
+    elif form == "trace":
+        # ping の読み分けが設問なので、証拠は経路表のみ
+        for n in ("C1", "RB"):
+            state_blocks.append(f"```\n{n}# {gpv.table_cmd(n)}\n"
+                                + gpv.route_table(d, st, n) + "\n```")
+    else:
+        for n in ("C1", "RB"):
+            state_blocks.append(f"```\n{n}# {gpv.table_cmd(n)}\n"
+                                + gpv.route_table(d, st, n) + "\n```")
+        state_blocks.append("```\n" + gpv.trace_block(d, st) + "\n```")
+    cfg_blocks = [f"```\n{d['m']['ASBR']}# show running-config\n"
+                  "Building configuration...\n!\n" + gpv.cfg_block(d, st) + "\n```"]
+    return state_blocks, cfg_blocks
+
+
+def v6redist_requirements(d, rnd):
+    core = list(gpv.requirements(d))
+    core += rnd.sample([x for x in REQ_DECOYS if "スタティック" not in x], 1)
+    head, tail = core[0], core[1:]
+    rnd.shuffle(tail)
+    return finalize_reqs([head] + tail, rnd)
+
+
+def build_choices_read_v6(d, rnd):
+    """read 形: 観測ノードの経路表そのものを選択肢にする(描画で重複排除)。"""
+    node, cur, alts = gpv.read_variants(d)
+    pr = f"{node}# {gpv.table_cmd(node)}\n"
+    correct_txt = pr + cur
+    seen = {correct_txt}
+    c = [(correct_txt, True, "")]
+    rnd.shuffle(alts)
+    for label, tx in alts:
+        txt = pr + tx
+        if txt in seen:
+            continue
+        seen.add(txt)
+        c.append((txt, False, f"別の状態({label})の観測結果である。"))
+        if len(c) == 4:
+            break
+    if len(c) < 3:
+        raise ValueError("v6redist read: 選択肢が畳まれすぎ")
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
+def build_choices_trace_v6(d, rnd):
+    """trace 形(★この盤面固有): ping の 3 値の 組合せを読み分けさせる。"""
+    cur, alts = gpv.trace_variants(d)
+    seen = {cur}
+    c = [(cur, True, "")]
+    rnd.shuffle(alts)
+    for label, tx in alts:
+        if tx in seen:
+            continue
+        seen.add(tx)
+        c.append((tx, False, f"別の状態({label})において観測される結果である。"))
+        if len(c) == 4:
+            break
+    if len(c) < 3:
+        raise ValueError("v6redist trace: 選択肢が畳まれすぎ")
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
+def mermaid_v6redist(d):
+    """v6redist の構成図。house の流儀に従い**エッジにラベルを描かない**
+    (mermaid はラベルを中点固定で置くため箱と衝突する)。アドレスは直下の
+    リンク一覧(表)が正典で、図は「どこが繋がっているか」だけを負う。"""
+    a = d["m"]["ASBR"]
+    lines = ["```mermaid", f"graph {d.get('_mmdir', 'LR')}",
+             f'  C1["C1<br/>クライアント<br/>OSPFv3 {d["ospf_pid"]}"]',
+             '  RA["RA<br/>中継"]',
+             f'  RTC["{a}<br/>ASBR<br/>双方向の再配送"]',
+             '  RB["RB<br/>中継"]',
+             f'  C2["C2<br/>クライアント<br/>EIGRP AS {d["eigrp_as"]}"]',
+             '  C1 ---|"a"| RA',
+             '  RA ---|"b"| RTC',
+             '  RTC ---|"c"| RB',
+             '  RB ---|"d"| C2',
+             "```"]
+    return "\n".join(lines)
+
+
+def topo_tables_v6redist(d):
+    """Mermaid 非対応プレビューでも解ける正典のテキスト表現(表＋リンク一覧)。"""
+    a = d["m"]["ASBR"]
+    rows = [
+        f"| C1 | クライアント | OSPFv3 {d['ospf_pid']} area 0 |",
+        f"| RA | 中継 | OSPFv3 {d['ospf_pid']} area 0 |",
+        f"| {a} | **ASBR(2 つの ドメイン の 境界)** | 双方向の 再配送 |",
+        f"| RB | 中継 | EIGRP {d['eigrp_name']} AS {d['eigrp_as']} |",
+        f"| C2 | クライアント | EIGRP {d['eigrp_name']} AS {d['eigrp_as']} |",
+    ]
+    head = ("| ルータ | 位置づけ | 参加プロトコル |\n"
+            "|--------|----------|----------------|\n")
+    raw = [
+        ("(a)", "C1:Et0/0", "RA:Et0/1", d["c1lan"], f"C1 = {d['c1lan']}2"),
+        ("(b)", "RA:Et0/0", f"{a}:{d['oif']}", d["otran"], ""),
+        ("(c)", f"{a}:{d['eif']}", "RB:Et0/0", d["etran"], ""),
+        ("(d)", "RB:Et0/1", "C2:Et0/0", d["c2lan"], f"C2 = {d['c2lan']}2"),
+    ]
+    wl = max(len(x[1]) for x in raw)
+    wr = max(len(x[2]) for x in raw)
+    wp = max(len(x[3]) + 3 for x in raw)
+    edges = [f"  {tag} {lhs:<{wl}} ── {rhs:<{wr}}   "
+             f"{pfx + '/64':<{wp}}{('   ' + note) if note else ''}".rstrip()
+             for tag, lhs, rhs, pfx, note in raw]
+    return (head + "\n".join(rows)
+            + "\n\nリンク一覧:\n```\n" + "\n".join(edges) + "\n```\n"
+            + f"\nOSPFv3 の ドメイン には、RA によって注入されたところの"
+              f" 外部の ルート `{d['ext']}/64` が存在する。")
+
+
+V6R_INTRO = (
+    # ★先頭に「あなたの組織は…運用しています」を置かない: obfuscate_md が
+    #   LEAD_IN を前置するため、同一文が二重になることがある。
+    "クライアントである C1 は OSPFv3 の ドメイン に、そして、C2 は EIGRP の"
+    " ドメイン に、それぞれ収容されています。{asbr} は、2 つの ドメイン の"
+    "境界に位置しており、双方向の 再配送 が構成されています。")
+
+
+def question_md_v6redist(d, blocks, choices, stamp, form="fix", reqs=None,
+                         style="prose"):
+    asbr = d["m"]["ASBR"]
+    state_blocks, cfg_blocks = blocks
+    if reqs is None:
+        reqs = v6redist_requirements(d, random.Random(0))
+    if form == "cause":
+        q = ("この事象の原因である可能性が、最も高いものは、どれですか。"
+             "(1つを選択してください)")
+        opts = render_options(choices, "prose")
+    elif form in ("read", "trace"):
+        q = (("示されているところの構成に基づいて、観測されるところの出力は、"
+              "どれですか。(1つを選択してください)"))
+        letters = [chr(65 + i) for i in range(len(choices))]
+        opts = "\n".join(f"**{l}.**\n```\n{c[0]}\n```"
+                         for l, c in zip(letters, choices))
+    elif style == "cli":
+        q = ("示されているところのすべての要件が満たされることを確実にするために、"
+             "適用されなければならない構成は、どれですか。(1つを選択してください)")
+        opts = render_options(choices, style)
+    else:
+        q = ("この問題を解決し、そして、示されているところのすべての要件が"
+             "満たされることを確実にするために、必要とされる手順は、どれですか。"
+             "(1つを選択してください)")
+        opts = render_options(choices, style)
+    if form in ("read", "trace"):
+        sympt = "構成の変更の適用後の、観測の結果が、確認されようとしています。"
+    else:
+        sympt = ("C1 と C2 の 間の 通信 が成立しない、ということが、"
+                 "報告されています。示されているところの出力および構成に基づいて、"
+                 "要求されているところの動作が得られていない理由が、"
+                 "判断されなければなりません。")
+    return f"""# 問題 {stamp} : IPv6 の 相互 再配送 の 分析
+
+{FIXED_NOTE}
+
+## トポロジ
+
+{terse_jp(V6R_INTRO.format(asbr=asbr))}
+
+{messy_mermaid(mermaid_v6redist(d))}
+
+{topo_tables_v6redist(d)}
+
+## 要件
+
+{chr(10).join(reqs)}
+
+## 現在の状態
+
+{terse_jp(sympt)}
+
+{chr(10).join(state_blocks)}
+
+## 設定抜粋
+
+{chr(10).join(cfg_blocks)}
+
+## 設問
+
+{q}
+
+## 選択肢
+
+{opts}
+"""
+
+
+def answer_md_v6redist(d, choices, stamp, master_seed, subseed, form):
+    letters = [chr(65 + i) for i in range(len(choices))]
+    correct = [l for l, c in zip(letters, choices) if c[1]][0]
+    wrongs = "\n".join(f"- **{l}**: {'(正解)' if c[1] else c[2]}"
+                       for l, c in zip(letters, choices))
+    kind_note = {
+        "pl_transit_only": "双方の prefix-list が隣接リンクのみを許可 "
+                           "→ ★include-connected が拾ったトランジットだけが渡る"
+                           "(ユーザ手組みラボの原型)",
+        "pl_one_side": "片方向の prefix-list のみ客先 LAN を許可 → "
+                       "★NOROUTE と タイムアウト の非対称が出る",
+        "rm_typo": "redistribute の参照 route-map がタイポで未定義 → "
+                   "★全拒否(全許可ではない・実測)",
+        "no_metric": "EIGRP 側 redistribute の metric 欠落 → "
+                     "★広告ゼロ(named mode でも必要・実測)",
+        "no_incl": "include-connected 欠落 → 両ドメインとも受信ゼロ(実測 E4)",
+        "rm_deny_first": "route-map の先頭 deny が客先 LAN を先取り(seq 影)",
+    }[d["kind"]]
+    world_note = {
+        "hide_transit": "トランジット秘匿 → prefix-list の**置換**が唯一適合"
+                        "(★include-connected 由来の経路も route-map に従う・実測 E3)",
+        "filter_frozen": "フィルタ凍結＋RT-C 以外変更禁止 → "
+                         "default-information originate always + EIGRP ::/0 集約",
+        "detail_static": "フィルタ凍結＋IGP でのデフォルト生成禁止 → "
+                         "静的 + クライアント既定 GW(★中継だけでは伝播しない・実測 E13)",
+        "default_only": "明細を持たない → デフォルト配布のみが適合(実測 E12)",
+        "explicit_only": "明示許可のみ＋トランジット維持＋静的/デフォルト禁止 → "
+                         "prefix-list への**追記**",
+        "internal_ad": "トランジットを内部(AD90)で受ける → "
+                       "af-interface の shutdown 解除(実測 E9)",
+        "e1_type": "タイプ 1 の外部経路 → metric-type 1"
+                   "(★E1 はコストが経路上で累積・実測 E15)",
+        "pass_external": "OSPF 外部も渡す → match internal external"
+                         "(★match internal は外部を落とす・実測 E10)",
+    }[d["world"]]
+    return f"""# 解答 {stamp}
+
+## 正解
+
+**{correct}**
+
+## 仕込んだ状態
+
+- 種別: `v6redist/{d['kind']}` — {kind_note}
+- 要件世界: `{d['world']}` — {world_note}
+- 出題形: {form}(機能的に「直る候補」= {', '.join(d['_works'])})
+- 生成: `gen_paper_mcq.py --shape v6redist --seed {master_seed}` (sub-seed {subseed})
+
+## 各選択肢の判定
+
+{wrongs}
+
+## 検証コマンドと期待される出力
+
+- `C1# show ipv6 route ospf` に {d['c2lan']}/64(または `::/0`)が存在すること。
+- `C2# show ipv6 route eigrp` に {d['c1lan']}/64(または `::/0`)が存在すること。
+- `C1# ping {d['c2lan']}2` および `C2# ping {d['c1lan']}2` が、いずれも成功すること。
+
+## ★この分野の最重要知見(BL-098 PoC 実測・poc/v6redist/README.md)
+
+**この盤面の核心**: 再配送は両方向とも「動いて」おり、経路も 1 本ずつ渡っている。
+だが渡っているのは `include-connected` が拾った **ASBR 自身の足元のリンク**だけで、
+本来届けたい**客先 LAN は prefix-list に落ちている**。`show ipv6 protocols` には
+両方向の Redistribution 行が正常に出るため、**壊れているように見えない**。
+
+実測で確定した 4 つの非対称:
+
+1. **外したつもりが外れていない** — `redistribute` は**再発行でマージ**され、
+   `route-map` 節を省いて打ち直しても route-map は外れない。外すには
+   `no redistribute <proto> <id>` の前置が必須(`metric` / `match` も同様)。
+2. **器が無い=全拒否 / 中身が空振り=全許可** — route-map ごと未定義なら何も
+   再配送されず、route-map は在って参照 prefix-list が未定義なら全部通る。
+   BL-095(EIGRP leak-map)の非対称と**完全に同型**。
+3. **片方向だけ修理の指紋** — 未修理側からの ping は `% No valid route`、
+   修理済み側からは `..`。★`source` を指定すると `% No valid route` が
+   `..` に化けて、経路欠落の証拠が消える。
+4. **広告と到達は別** — 中継(RA/RB)だけに静的を置いてもクライアントには
+   伝播しない。「静的ルートを設定する」は置き場所を誤ると半正解にしかならない。
+
+その他: EIGRP 側は metric 省略で広告ゼロ(`default-metric` で救済可)/
+`default-information originate` は `always` 必須(→ `OE2 [110/1]`)/
+EIGRP の `summary-address ::/0` は more-specific を全抑止し ASBR 自身に
+**AD 5 の Null0** を作る(上流を持たない構成ではブラックホール)。
+
+## ENARSI ブループリント
+
+- 1.0 Layer 3 Technologies — Configure and verify redistribution between any routing protocols
+- 1.0 Layer 3 Technologies — Configure and verify routing protocol authentication / filtering (route-map, prefix-list)
+"""
+
+
+# --------------------------------------------------------------------------
+# shape=aaa — IOS AAA(RADIUS) の読解 (gen_paper_aaa・BL-101 P1a)
+# ★紙面専用: 挙動は実機確定表(poc/aaa/README.md)の写像である aaa_model.py から生成。
+# ★P1a の形は read / cause / trace / evidence(fix・patch は P1b)。
+# --------------------------------------------------------------------------
+def pick_draw_aaa(qseed, kind):
+    for kk in range(200):
+        s = qseed + kk * 149
+        try:
+            return s, gpa.verify_choices(gpa.draw(random.Random(s), kind=kind))
+        except ValueError:
+            continue
+    raise SystemExit(f"aaa kind={kind} が成立する seed が見つかりません({qseed})")
+
+
+def aaa_evidence_blocks(d, rnd, form):
+    """紙面に出すブロック群。
+
+    ★evidence 形だけは**機器の構成を出さない**。構成を見せてしまうと
+    「次に何を見るか」が自明になり、設問が成立しないため(症状とサーバ仕様のみ提示)。
+    """
+    state, cfg = [], []
+    if form == "read":
+        # 結果表そのものが選択肢なので、症状側は test aaa だけ見せる
+        state.append("```\n" + gpa.trace_block(d) + "\n```")
+    elif form == "trace":
+        state.append(gpa.render_obs(d))
+    elif form == "evidence":
+        state.append(gpa.render_obs(d))
+        state.append("```\n" + gpa.trace_block(d) + "\n```")
+    elif form == "patch":
+        # ★移行途中の構成のみを見せる(症状はまだ起きていないので出さない)
+        for site in ("A", "B"):
+            cfg.append(f"```\n{d['rt'][site]}# show running-config | section aaa\n"
+                       + gpa.patch_state_block(d, site) + "\n```")
+        return state, cfg
+    elif form == "authread":
+        # ★enable の debug と、enable 認証まわりの構成だけを見せる。
+        #   ログイン層の観測は関係しない(遍歴が出るのは service=ENABLE だけ)。
+        site = "B" if d["scope"] == "B" else "A"
+        a = d["_auth"]
+        state.append(f"```\n{d['rt'][site]}# debug aaa authentication\n"
+                     + gpa.enable_debug_block(d, site, pw_ok=a["pw_ok"],
+                                              with_list=a["with_list"],
+                                              on_console=a["on_console"])
+                     + "\n```")
+        cfg.append(f"```\n{d['rt'][site]}# show running-config | section aaa\n"
+                   + gpa.enable_cfg_block(d, site, with_list=a["with_list"])
+                   + "\n```")
+        return state, cfg
+    elif form in ("dbgread", "dbgconf"):
+        # ★debug から構成を読ませる形。症状も構成も出さない
+        #   (dbgconf は構成そのものが選択肢なので、なおさら出せない)
+        site = "B" if d["scope"] == "B" else "A"
+        state.append(f"```\n{d['rt'][site]}# debug radius authentication\n"
+                     + gpa.debug_block(d, site) + "\n```")
+    else:                                   # cause
+        state.append(gpa.render_obs(d))
+        state.append("```\n" + gpa.trace_block(d) + "\n```")
+    if form not in ("evidence", "dbgread", "dbgconf", "patch"):
+        # ★両拠点の構成を出す。片方だけだと「他拠点は健全」という前提が
+        #   問題文のどこにも無く、結果表を一意に決められない(出題前検分で検出)。
+        for site in ("A", "B"):
+            cfg.append(f"```\n{d['rt'][site]}# show running-config | section aaa\n"
+                       + gpa.cfg_block(d, site) + "\n```")
+    return state, cfg
+
+
+def aaa_requirements(d, rnd, form=None):
+    core = list(gpa.requirements(d, form))
+    head, tail = core[0], core[1:]
+    rnd.shuffle(tail)
+    return finalize_reqs([head] + tail, rnd)
+
+
+def build_choices_read_aaa(d, rnd):
+    """read 形: 「誰がどこから入れるか」の結果表そのものを選択肢にする。"""
+    cur, alts = gpa.read_variants(d)
+    seen = {cur}
+    c = [(cur, True, "")]
+    rnd.shuffle(alts)
+    for label, tx in alts:
+        if tx in seen:
+            continue
+        seen.add(tx)
+        c.append((tx, False, f"別の状態({label})において観測される結果である。"))
+        if len(c) == 4:
+            break
+    if len(c) < 3:
+        raise ValueError("aaa read: 選択肢が畳まれすぎ")
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
+def build_choices_trace_aaa(d, rnd):
+    """trace 形: `test aaa` の文言と所要時間の組合せを読み分けさせる。"""
+    cur, alts = gpa.trace_variants(d)
+    seen = {cur}
+    c = [(cur, True, "")]
+    rnd.shuffle(alts)
+    for label, tx in alts:
+        if tx in seen:
+            continue
+        seen.add(tx)
+        c.append((tx, False, f"別の状態({label})において観測される結果である。"))
+        if len(c) == 4:
+            break
+    if len(c) < 3:
+        raise ValueError("aaa trace: 選択肢が畳まれすぎ")
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
+AAA_INTRO = ("2 つの拠点のルータが、共通の認証サーバ群を用いて、"
+             "管理者の認証を行うように構成されています。"
+             "一方のルータはサーバと直結しており、"
+             "他方はそのルータを経由してサーバに到達します。")
+
+
+def mermaid_aaa(d):
+    a, b = d["rt"]["A"], d["rt"]["B"]
+    return "\n".join([
+        "```mermaid", f"graph {d.get('_mmdir', 'LR')}",
+        '  S1["SRV01<br/>認証サーバ"]', '  S2["SRV02<br/>認証サーバ"]',
+        f'  A["{a}"]', f'  B["{b}"]',
+        '  S1 ---|"a"| A', '  S2 ---|"b"| A', '  A ---|"c"| B',
+        "```",
+    ])
+
+
+def question_md_aaa(d, blocks, choices, stamp, form="read", reqs=None):
+    state_blocks, cfg_blocks = blocks
+    if reqs is None:
+        reqs = aaa_requirements(d, random.Random(0), form)
+    if form == "cause":
+        q = ("この事象の原因である可能性が、最も高いものは、どれですか。"
+             "(1つを選択してください)")
+        opts = render_options(choices, "prose")
+    elif form == "patch":
+        q = ("現在の接続が失われることなく、移行を進めるために、次に適用されなければ"
+             "ならない構成は、どれですか。(1つを選択してください)")
+        opts = render_options(choices, "cli")
+    elif form == "fix":
+        q = ("示されているところのすべての要件が満たされることを確実にするために、"
+             "適用されなければならない構成は、どれですか。(1つを選択してください)")
+        opts = render_options(choices, "cli")
+    elif form == "dbgread":
+        q = ("示されているところの出力から読み取ることができる構成は、どれですか。"
+             "(1つを選択してください)")
+        opts = render_options(choices, "prose")
+    elif form == "authread":
+        q = ("示されているところの出力について、正しい記述は、どれですか。"
+             "(2つを選択してください)")
+        opts = render_options(choices, "prose")
+    elif form == "dbgconf":
+        q = ("示されているところの出力を生じさせる構成は、どれですか。"
+             "(1つを選択してください)")
+        letters = [chr(65 + i) for i in range(len(choices))]
+        opts = "\n".join(f"**{l}.**\n```\n{c[0]}\n```"
+                         for l, c in zip(letters, choices))
+    elif form == "evidence":
+        nh = len(gpa.evidence_variants(d)[0])
+        q = (("想定されているところの原因の、いずれであるかを、判断するために、"
+              "**最も多くの候補を除外できる**出力は、どれですか。"
+              "(1つを選択してください)") if nh > 2 else
+             ("2 つの原因の、いずれであるかを、判断するために、"
+              "次に取得されなければならない出力は、どれですか。"
+              "(1つを選択してください)"))
+        opts = render_options(choices, "prose")
+    else:
+        q = ("示されているところの構成に基づいて、観測されるところの結果は、"
+             "どれですか。(1つを選択してください)")
+        letters = [chr(65 + i) for i in range(len(choices))]
+        opts = "\n".join(f"**{l}.**\n```\n{c[0]}\n```"
+                         for l, c in zip(letters, choices))
+    if form == "patch":
+        sympt = ("ローカルの認証から、認証サーバ群を用いる認証への移行が、"
+                 "実施されようとしています。作業は、遠隔からの接続によって"
+                 "行われています。")
+    elif form == "fix":
+        sympt = ("一部の利用者が、意図されたとおりに機器を操作できない、"
+                 "ということが、報告されています。")
+    elif form == "authread":
+        sympt = ("特権レベルへの昇格が試行された際の、デバッグの出力が、"
+                 "採取されました。")
+    elif form in ("dbgread", "dbgconf"):
+        sympt = ("認証の動作を確認するために、デバッグの出力が、採取されました。")
+    elif form == "evidence":
+        hyps = gpa.evidence_variants(d)[0]
+        # ★正解が先頭に来ないよう、仮説の提示順は seed で並べ替える
+        # ★hash() はプロセスごとに塩が変わり決定性を壊す(監査1) → crc32 で安定化
+        shown = sorted(hyps, key=lambda k: zlib.crc32(f"{d['kind']}/{k}".encode()))
+        joined = " と ".join(f"**{gpa.CLAIMS[k]}**" for k in shown)
+        sympt = ("利用者の認証が、意図されたとおりに行われていない、ということが、"
+                 f"報告されています。原因として、{joined} の {len(shown)} つが、"
+                 "想定されています。機器の構成は、まだ取得されていません。")
+    elif form in ("read", "trace"):
+        sympt = "構成の適用後の、観測の結果が、確認されようとしています。"
+    else:
+        sympt = ("一部の利用者が、機器にログインできない、ということが、"
+                 "報告されています。示されているところの出力および構成に基づいて、"
+                 "要求されているところの動作が得られていない理由が、"
+                 "判断されなければなりません。")
+    cfg_sec = ("\n## 設定抜粋\n\n" + chr(10).join(cfg_blocks)) if cfg_blocks else ""
+    return f"""# 問題 {stamp} : 認証 の 分析
+
+{FIXED_NOTE}
+
+## トポロジ
+
+{terse_jp(AAA_INTRO)}
+
+{messy_mermaid(mermaid_aaa(d))}
+
+### 認証サーバの仕様
+
+{gpa.server_spec(d)}
+
+### ルータのアドレス
+
+{gpa.addr_table(d)}
+
+## 要件
+
+{chr(10).join(reqs)}
+
+## 現在の状態
+
+{terse_jp(sympt)}
+
+{chr(10).join(state_blocks)}
+{cfg_sec}
+
+## 設問
+
+{q}
+
+## 選択肢
+
+{opts}
+"""
+
+
+def answer_md_aaa(d, choices, stamp, master_seed, subseed, form):
+    letters = [chr(65 + i) for i in range(len(choices))]
+    # ★複数正解(authread は 2 つ選択)に対応。単一正解のときは従来どおり 1 文字。
+    hits = [l for l, c in zip(letters, choices) if c[1]]
+    correct = "・".join(hits)
+    why = "\n".join(f"- **{l}**: {c[2]}" for l, c in zip(letters, choices) if c[2])
+    return f"""# 解答 {stamp}
+
+## 正解
+
+**{correct}**
+
+## 解説
+
+- 種別: `aaa/{d['kind']}` — 要件世界 `{d['world']}` / 故障拠点 `{d['scope']}`
+- 形式: `{form}`
+- 生成: `gen_paper_mcq.py --shape aaa --seed {master_seed}` (sub-seed {subseed})
+
+{why}
+
+## ★この分野の最重要知見(BL-101 PoC 実測・poc/aaa/README.md)
+
+**拒否(Reject)と無応答(timeout)は、まったく別のものである。**
+
+- `group <G> local` の `local` は、**サーバが応答しないときにだけ**使われる。
+  サーバが**拒否を返した場合は、後段の手段へは進まない**。
+  local に登録されている利用者であっても、サーバが拒否すればログインできない。
+- この原則は **認証・認可・特権昇格の 3 層すべて**で成立する。
+  昇格を `group <G> enable` とした場合も、サーバに `$enab15$` が無ければ拒否となり、
+  enable secret へは落ちない。
+- **権限レベルは認可が与える。** 認可の方式リストが無ければ、
+  `username X privilege 15` の利用者であっても権限レベルは 1 になる。
+- 応答が無い場合の待ち時間は
+  `timeout × (retransmit + 1) × 到達できないサーバ数` で決まる。
+- **共有鍵の不一致と、送信元アドレスの誤りは、`test aaa` と `show aaa servers`
+  では区別できない。** いずれも `No authoritative response from any server.` となり、
+  所要時間も同じになる。**区別できるのは `debug radius authentication` である。**
+  鍵の不一致では応答が届いており `Response (n) failed decrypt` が出る。
+  送信元の誤りでは `cfg_addr=0.0.0.0` と
+  `RADIUS/ENCODE: Best Local IP-Address ...` が出て、要求の送信元が
+  意図した Loopback ではないことが読み取れる。
+- **未定義の方式リストを参照した回線は、既定の方式リストで動作する。**
+  そのため「リストを適用し忘れた場合」と「未定義のリストを参照した場合」は、
+  症状がまったく同じになる。
+
+## ENARSI ブループリント
+
+- 3.0 Infrastructure Security — Troubleshoot device security using IOS AAA (TACACS+, RADIUS, local database)
+"""
+
+
+# --------------------------------------------------------------------------
 # 展開・収集・撤収
 # --------------------------------------------------------------------------
 def sh(repo, args, **kw):
@@ -3398,10 +4033,16 @@ def rebalance_position(repo, choices):
     files = sorted(glob.glob(f"{repo}/answers/*.md"))[-2:]
     recent = []
     for fp in files:
-        mt = re.search(r"## 正解\n\n\*\*([A-H])\*\*", open(fp, encoding="utf-8").read())
+        # ★複数正解(`**B・C**`)も拾えるようにする。拾えないと直近2問の窓が
+        #   欠けて 3 連続防止が効かなくなる(監査指摘)。判定には先頭の記号を使う。
+        mt = re.search(r"## 正解\n\n\*\*([A-H])(?:・[A-H])*\*\*",
+                       open(fp, encoding="utf-8").read())
         if mt:
             recent.append(mt.group(1))
-    cur = "ABCDEFGH"[[i for i, c in enumerate(choices) if c[1]][0]]
+    hits = [i for i, c in enumerate(choices) if c[1]]
+    if len(hits) != 1:
+        return choices          # ★複数正解の形(authread)では回転しない
+    cur = "ABCDEFGH"[hits[0]]
     if len(recent) == 2 and recent[0] == recent[1] == cur:
         return choices[1:] + choices[:1]
     return choices
@@ -3428,7 +4069,7 @@ def main():
     ap.add_argument("--date", default=None, help="YYYYMMDD(既定=今日)")
     ap.add_argument("--shape",
                     choices=["chain", "ring", "pbr", "urpf", "bgpdbg", "mploop",
-                             "leakmap", "ospfv3pl", "mixed"],
+                             "leakmap", "ospfv3pl", "v6redist", "aaa", "mixed"],
                     default="chain",
                     help="chain=再配送欠落/誤設定系(既定) / ring=再配送リングの定常ループ(難5)"
                          " / pbr=PBR×ワイルドカードACL(BL-081)"
@@ -3437,6 +4078,8 @@ def main():
                          " / mploop=多点相互再配送の同AD・メトリック差ループ(難5)"
                          " / leakmap=EIGRP集約×リーク手段選択(BL-095・紙面専用)"
                          " / ospfv3pl=OSPFv3エリア間prefix-list(BL-097・紙面専用)"
+                         " / v6redist=OSPFv3⇄EIGRPv6相互再配送の手段選択"
+                         "(BL-098・紙面専用)"
                          " / mixed=問題ごとに形・種別を抽選(ごちゃまぜ)")
     ap.add_argument("--kinds", default=None,
                     help=f"カンマ区切りで種別を明示(chain: {','.join(KINDS)} / "
@@ -3465,7 +4108,8 @@ def main():
         pool = {"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
                 "urpf": gpu.URPF_KINDS, "mploop": MPLOOP_KINDS,
                 "bgpdbg": gpb.VARIANTS, "leakmap": gpk.KINDS,
-                "ospfv3pl": gpo.KINDS}.get(a.shape, KINDS)
+                "ospfv3pl": gpo.KINDS, "v6redist": gpv.KINDS,
+                "aaa": gpa.KINDS}.get(a.shape, KINDS)
         kinds = (a.kinds.split(",") if a.kinds
                  else random.Random(a.seed ^ 0x5EED).sample(pool, len(pool)))
         if not set(kinds) <= set(pool):
@@ -3477,14 +4121,16 @@ def main():
         if a.shape == "mixed":
             roll = random.Random(qseed ^ 0xC0FE)
             r = roll.random()
-            shape_i = ("ring" if r < 0.15 else "pbr" if r < 0.29
-                       else "urpf" if r < 0.43 else "mploop" if r < 0.54
-                       else "leakmap" if r < 0.67 else "ospfv3pl" if r < 0.81
-                       else "chain")
+            shape_i = ("ring" if r < 0.13 else "pbr" if r < 0.25
+                       else "urpf" if r < 0.37 else "mploop" if r < 0.47
+                       else "leakmap" if r < 0.59 else "ospfv3pl" if r < 0.71
+                       else "v6redist" if r < 0.83
+                       else "aaa" if r < 0.92 else "chain")
             kind = roll.choice({"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
                                 "urpf": gpu.URPF_KINDS, "mploop": MPLOOP_KINDS,
-                                "leakmap": gpk.KINDS,
-                                "ospfv3pl": gpo.KINDS}.get(shape_i, KINDS))
+                                "leakmap": gpk.KINDS, "ospfv3pl": gpo.KINDS,
+                                "v6redist": gpv.KINDS,
+                                "aaa": gpa.KINDS}.get(shape_i, KINDS))
         else:
             shape_i = a.shape
             kind = kinds[i % len(kinds)]
@@ -3511,6 +4157,10 @@ def main():
             subseed, d = pick_draw_leakmap(qseed, kind)
         elif shape_i == "ospfv3pl":
             subseed, d = pick_draw_ospfv3pl(qseed, kind)
+        elif shape_i == "v6redist":
+            subseed, d = pick_draw_v6redist(qseed, kind)
+        elif shape_i == "aaa":
+            subseed, d = pick_draw_aaa(qseed, kind)
         elif shape_i == "bgpdbg":
             subseed = qseed
             d = gpb.draw(random.Random(subseed), variant=kind)
@@ -3546,6 +4196,12 @@ def main():
         elif shape_i == "ospfv3pl":
             plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
             choices = gpo.build_choices_fix(d, rnd)
+        elif shape_i == "v6redist":
+            plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
+            choices = gpv.build_choices_fix(d, rnd)
+        elif shape_i == "aaa":
+            plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
+            choices = build_choices_read_aaa(d, rnd)   # 既定形= read
         elif shape_i == "bgpdbg":
             plan = {"checks": []}          # 紙面専用・記述式(選択肢なし)
             choices = []
@@ -3557,7 +4213,8 @@ def main():
         else:
             sites = (assign_sites(d, rnd)
                      if (a.exam and shape_i not in ("bgpdbg", "leakmap",
-                                                    "ospfv3pl"))
+                                                    "ospfv3pl", "v6redist",
+                                                    "aaa"))
                      else None)
         # 赤ニシン(exam): 未適用ポリシー+無害な適用行を config に混入(pbr は素で騒がしい)
         herr, decoy = None, None
@@ -3603,9 +4260,91 @@ def main():
                     form = "read"
                 except ValueError:
                     pass
+        elif a.exam and shape_i == "v6redist":
+            r_form = rnd.random()      # fix / cause / read / trace の4形を抽選
+            if r_form < 0.25:
+                form = "cause"
+                choices = gpv.build_choices_cause(d, rnd)
+            elif r_form < 0.42:
+                try:                       # 表が畳まれる盤面は fix に戻す
+                    choices = build_choices_read_v6(d, rnd)
+                    form = "read"
+                except ValueError:
+                    pass
+            elif r_form < 0.57:
+                try:                   # ★trace=ping の3値の読み分け(本 shape 固有)
+                    choices = build_choices_trace_v6(d, rnd)
+                    form = "trace"
+                except ValueError:
+                    pass
+        elif a.exam and shape_i == "aaa":
+            # read / cause / trace / evidence / dbgread / dbgconf / fix / patch
+            r_form = rnd.random()
+            form = "read"
+            if r_form < 0.22:
+                form = "cause"
+                choices = gpa.build_choices_cause(d, rnd)
+            elif r_form < 0.42:
+                try:
+                    choices = build_choices_trace_aaa(d, rnd)
+                    form = "trace"
+                except ValueError:
+                    pass
+            elif r_form < 0.58:
+                try:                    # ★evidence=「次に何を見るか」(本 shape の目玉)
+                    choices = gpa.build_choices_evidence(d, rnd)
+                    form = "evidence"
+                except ValueError:
+                    pass
+            elif r_form < 0.68:
+                try:                    # ★dbgread= debug から構成値を推測(ユーザ要望)
+                    choices = gpa.build_choices_dbgread(d, rnd)
+                    form = "dbgread"
+                except ValueError:
+                    pass
+            elif r_form < 0.74:
+                try:                    # ★dbgconf= 逆問題「この出力を生む構成はどれか」
+                    choices = gpa.build_choices_dbgconf(d, rnd)
+                    form = "dbgconf"
+                except ValueError:
+                    pass
+            elif r_form < 0.84:
+                # ★authread= enable の方式リスト遍歴を読む(複数選択・BL-103 ⑥)。
+                #   到達可否は盤面の稼働状態から決まるので、リスト有りの枝では
+                #   全断を抽選して ERROR→ENABLE の遍歴も出せるようにする。
+                # ★`console × 方式リスト有り` は実測が無い(監査指摘)。
+                #   コンソールは方式リスト無しの枝に限る。
+                _wl = rnd.random() < 0.6
+                d["_auth"] = {"with_list": _wl, "pw_ok": rnd.random() < 0.5,
+                              "on_console": (not _wl) and rnd.random() < 0.4}
+                if d["_auth"]["with_list"] and rnd.random() < 0.5:
+                    d["all_down"] = True
+                try:
+                    choices = gpa.build_choices_authread(d, rnd)
+                    form = "authread"
+                except ValueError:
+                    d.pop("all_down", None)
+            elif r_form < 0.92:
+                w = gpa.fix_world(d)    # ★P1b fix= 是正手段(成立する世界を選び直す)
+                if w:
+                    d["world"] = w
+                    choices = gpa.build_choices_fix(d, rnd)
+                    form = "fix"
+            else:
+                try:                    # ★P1b patch= 切らずに移行する順序
+                    choices = gpa.build_choices_patch(d, rnd)
+                    d["world"] = "no_lockout"
+                    form = "patch"
+                except ValueError:
+                    pass
         if choices:
             choices = rebalance_position(repo, choices)
         opt_style = choice_style(rnd, choices, form) if choices else "prose"
+        if shape_i == "v6redist" and form == "fix":
+            # ★v6redist の fix は常に CLI 提示にする。手段の散文表現では
+            # 「参照やメトリックの是正も含むのか」が曖昧になり、提示と
+            # 要件適合の判定がずれるため(CLI は状態収束形で完全に explicit)。
+            opt_style = "cli"
         reqs = None
         if a.exam and shape_i != "bgpdbg":
             if shape_i == "mploop":
@@ -3620,6 +4359,10 @@ def main():
                 reqs = leakmap_requirements(d, rnd)
             elif shape_i == "ospfv3pl":
                 reqs = ospfv3pl_requirements(d, rnd)
+            elif shape_i == "v6redist":
+                reqs = v6redist_requirements(d, rnd)
+            elif shape_i == "aaa":
+                reqs = aaa_requirements(d, rnd, form)
             else:
                 reqs = chain_requirements(
                     rnd, style=pol["style"] if pol else "inline")
@@ -3627,7 +4370,8 @@ def main():
         print(f"[{i + 1}/{a.count}] sub-seed={subseed} "
               f"nodes={len(gmp.NODES) if shape_i == 'mploop' else len(d.get('roles', [d.get('A'), d.get('B')]))}", flush=True)
 
-        if shape_i in ("urpf", "bgpdbg", "leakmap", "ospfv3pl"):
+        if shape_i in ("urpf", "bgpdbg", "leakmap", "ospfv3pl", "v6redist",
+                       "aaa"):
             collected = {}                 # 紙面専用: 実機展開・収集を行わない
         elif a.no_lab:
             collected = {(c["node"], c["command"]): "(PLACEHOLDER: --no-lab)"
@@ -3705,6 +4449,17 @@ def main():
             a_md = answer_md_ospfv3pl(d, choices, stamp, a.seed, subseed, form)
             lint += [k for k in gpo.KINDS if k != "none"] \
                 + ["world=", "_works", "_correct"]
+        elif shape_i == "aaa":
+            blocks = aaa_evidence_blocks(d, rnd, form)
+            q_md = question_md_aaa(d, blocks, choices, stamp, form=form, reqs=reqs)
+            a_md = answer_md_aaa(d, choices, stamp, a.seed, subseed, form)
+            lint += list(gpa.KINDS) + ["world=", "scope="]
+        elif shape_i == "v6redist":
+            blocks = v6redist_evidence(d, rnd, form)
+            q_md = question_md_v6redist(d, blocks, choices, stamp, form=form,
+                                        reqs=reqs, style=opt_style)
+            a_md = answer_md_v6redist(d, choices, stamp, a.seed, subseed, form)
+            lint += list(gpv.KINDS) + ["world=", "_works", "_correct"]
         elif shape_i == "pbr":
             q_md = question_md_pbr(d, plan, choices, collected, stamp, sites=sites,
                                    form=form, reqs=reqs, style=opt_style)
@@ -3719,7 +4474,9 @@ def main():
             lint += ["missing", "no_seed", "wrong_id"]
         # 道標の除去(BL-088)。essay(bgpdbg)はタイトルのみ触る。
         q_md = obfuscate_md(q_md, random.Random(subseed ^ 0x0BF0),
-                            essay=(shape_i == "bgpdbg"))
+                            essay=(shape_i == "bgpdbg"),
+                            # ★patch も設問文が情報の担い手(「接続を失わずに」「移行の途中」)
+                            keep_ask=(form in ("evidence", "patch", "dbgconf", "authread")))
         leak_lint(q_md, lint)
         with open(f"{repo}/questions/{stamp}.md", "w", encoding="utf-8") as fh:
             fh.write(q_md)

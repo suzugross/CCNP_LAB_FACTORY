@@ -1,0 +1,35 @@
+! RT03 初期構成 (相互再配送 RIP⇄OSPF TS・故障注入済)
+interface Loopback0
+ ip address 99.99.99.99 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.189.179.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 172.16.76.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 99.99.99.99
+ network 99.99.99.99 0.0.0.0 area 0
+ network 172.16.76.0 0.0.0.3 area 0
+ redistribute rip subnets route-map RIP2OSPF
+ distance ospf external 180
+!
+router rip
+ version 2
+ network 10.0.0.0
+ network 99.0.0.0
+ no auto-summary
+ redistribute ospf 1 metric 5 route-map OSPF2RIP
+!
+route-map RIP2OSPF deny 10
+ match tag 110
+route-map RIP2OSPF permit 20
+ set tag 120
+route-map OSPF2RIP deny 10
+ match tag 120
+route-map OSPF2RIP permit 20
+ set tag 110
+!

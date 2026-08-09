@@ -1,0 +1,44 @@
+! ============================================================
+! _POC-AAA RT02 — サーバから1ホップ先(★送信元が egress IF になる位置)
+! RT01 と同じ AAA 基線を持つ。E3(source-interface 欠落)の症状差はここで最も明瞭になる。
+! ============================================================
+! --- data plane ---
+interface Loopback0
+ ip address 10.0.0.2 255.255.255.255
+interface Ethernet0/0
+ description === to RT01 ===
+ ip address 10.1.12.2 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 10.0.0.2
+ network 10.0.0.2 0.0.0.0 area 0
+ network 10.1.12.0 0.0.0.3 area 0
+!
+username emg-admin privilege 15 secret Emg-1234
+!
+! --- AAA 基線 B0 ---
+aaa new-model
+!
+radius server RAD1
+ address ipv4 10.99.1.2 auth-port 1812 acct-port 1813
+ key Poc-Rad-1111
+radius server RAD2
+ address ipv4 10.99.2.2 auth-port 1912 acct-port 1913
+ key Poc-Rad-1111
+!
+aaa group server radius RADGRP
+ server name RAD1
+ server name RAD2
+ deadtime 5
+ exit
+! ★day0 の "!" はサブモードを抜けない(IOL 実測 2026-08-08)。exit を明示しないと
+!   次の ip radius source-interface が **グループ配下**に入り、グローバルと二重定義になる。
+ip radius source-interface Loopback0
+radius-server timeout 3
+radius-server retransmit 1
+!
+aaa authentication login default group RADGRP local
+aaa authorization exec default group RADGRP local
+!
+ip ssh version 2

@@ -1,0 +1,42 @@
+! RT02 (AS 65482 / Route Reflector)
+interface Loopback0
+ ip address 47.47.47.47 255.255.255.255
+!
+interface Loopback1
+ ip address 25.25.25.25 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.220.7.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.43.13.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.243.254.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network 47.47.47.47 0.0.0.0 area 0
+ network 10.43.13.0 0.0.0.3 area 0
+!
+router bgp 65482
+ bgp router-id 47.47.47.47
+ no bgp default ipv4-unicast
+ neighbor 10.220.7.1 remote-as 65445
+ neighbor 63.63.63.63 remote-as 65482
+ neighbor 63.63.63.63 update-source Loopback0
+ neighbor 80.80.80.80 remote-as 65482
+ neighbor 80.80.80.80 update-source Loopback0
+ address-family ipv4 unicast
+  neighbor 10.220.7.1 activate
+  neighbor 63.63.63.63 activate
+  neighbor 63.63.63.63 next-hop-self
+  neighbor 63.63.63.63 route-reflector-client
+  neighbor 80.80.80.80 activate
+  neighbor 80.80.80.80 next-hop-self
+  neighbor 80.80.80.80 route-reflector-client
+  network 25.25.25.25 mask 255.255.255.255
+ exit-address-family
+!

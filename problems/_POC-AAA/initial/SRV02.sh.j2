@@ -1,0 +1,100 @@
+#!/bin/bash
+# SRV02 (FreeRADIUS #2 / ★非標準ポート 1912-1913) — _POC-AAA 初期化
+# BL-001 の未検証リスク「FreeRADIUS 非標準ポート待受」をここで確定させる(PoC E10)。
+set -e
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[$(date -Is)] $*"; }
+
+log "in-band NIC / ルータ側への経路を netplan で永続化"
+rm -f /etc/netplan/50-cloud-init.yaml
+cat > /etc/netplan/60-ccnp.yaml <<'EOF'
+network:
+  version: 2
+  ethernets:
+    ens2:
+      addresses: [{{ mgmt_ip }}/{{ mgmt_prefixlen }}]
+      routes:
+        - to: default
+          via: {{ mgmt_gw }}
+      nameservers:
+        addresses: {{ mgmt_dns | to_json }}
+    ens3:
+      addresses: [10.99.2.2/30]
+      routes:
+        - to: 10.0.0.0/24
+          via: 10.99.2.1
+        - to: 10.1.12.0/30
+          via: 10.99.2.1
+        - to: 10.99.1.0/30
+          via: 10.99.2.1
+EOF
+chmod 600 /etc/netplan/60-ccnp.yaml
+netplan apply
+
+log "パッケージ導入 (freeradius / freeradius-utils)"
+for i in 1 2 3; do
+  apt-get update -qq && \
+  apt-get install -y -qq freeradius freeradius-utils && break
+  sleep 10
+done
+
+log "★非標準ポートへ変更 (auth 1912 / acct 1913) — listen ブロック毎に type を見て置換"
+python3 - <<'PY'
+import re
+p = '/etc/freeradius/3.0/sites-enabled/default'
+s = open(p).read()
+
+def fix(m):
+    blk = m.group(0)
+    t = re.search(r'type\s*=\s*(auth|acct)', blk)
+    if not t:
+        return blk
+    port = '1912' if t.group(1) == 'auth' else '1913'
+    return re.sub(r'(?m)^(\s*)port\s*=\s*0\s*$', r'\g<1>port = ' + port, blk)
+
+s2 = re.sub(r'(?ms)^listen\s*\{.*?^\}', fix, s)
+open(p, 'w').write(s2)
+print("patched listen blocks:", len(re.findall(r'(?ms)^listen\s*\{.*?^\}', s2)))
+PY
+
+log "clients.conf — ★ルータの Loopback0 のみ許可"
+cat > /etc/freeradius/3.0/clients.conf <<'EOF'
+# ローカルテスト用(radclient・削除禁止)
+client localhost {
+	ipaddr = 127.0.0.1
+	secret = testing123
+}
+client rt01-lo {
+	ipaddr = 10.0.0.1
+	secret = Poc-Rad-1111
+}
+client rt02-lo {
+	ipaddr = 10.0.0.2
+	secret = Poc-Rad-1111
+}
+EOF
+
+log "ユーザ台帳 — SRV01 と同一(片系断で切替わったことを priv で判別しないため)"
+cat > /etc/freeradius/3.0/mods-config/files/authorize <<'EOF'
+SUZUKI Cleartext-Password := "CCNP"
+	Service-Type = NAS-Prompt-User,
+	Cisco-AVPair = "shell:priv-lvl=15"
+
+noc-taro Cleartext-Password := "Noc-1234"
+	Service-Type = NAS-Prompt-User,
+	Cisco-AVPair = "shell:priv-lvl=15"
+
+helpdesk Cleartext-Password := "Desk-1234"
+	Service-Type = NAS-Prompt-User,
+	Cisco-AVPair = "shell:priv-lvl=1"
+EOF
+
+log "設定検査 → 起動"
+freeradius -XC >/dev/null
+systemctl enable -q freeradius || true
+systemctl restart freeradius
+systemctl is-active freeradius
+
+log "待受ポートの実測(この行が E10 の一次証拠)"
+ss -lnup | grep -E '19(12|13)|18(12|13)' || true
+log "DONE"
