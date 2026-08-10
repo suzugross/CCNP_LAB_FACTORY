@@ -290,8 +290,8 @@ B0+E1〜E12 を全件実測。設計に反映すべき確定事項:
 |---|---|---|---|
 | P0 | PoC — B0+E1〜E18 全件実測 | 要 | **完了 2026-08-08** |
 | P1a | `aaa_model.py`(縮小版) ＋ **read / cause / trace / evidence** | 不要 | **完了 2026-08-08・出題可** |
-| P1b | **fix / patch**(CLI 生成・一意性検証・`no_lockout` の順序問題) | 不要 | 未 |
-| P2 | ラボ構築問 `GEN-AAAGRP`(BL-001 の設計を実装) | 要 | 未 |
+| P1b | **fix / patch**(CLI 生成・一意性検証・`no_lockout` の順序問題) | 不要 | **完了 2026-08-08** |
+| P2 | ラボ構築問 `GEN-AAAGRP`(BL-001 の設計を実装) | 要 | **完了 2026-08-09・出題可** |
 | P3 | ラボTS `gen_aaa_ts.py`(紙面と同一 kind) | 要 | 未 |
 | P4 | TACACS+ 拡張(コマンド認可・RADIUS との対比) | 要 | 後回し(ユーザ決定) |
 
@@ -675,3 +675,27 @@ E2E 90 問(15 故障種・`line vty 5 15` の描画・6 セッション目の観
   **Reject はフォールバックしない** / RT02 の送信元は egress IF)
 - 既存問= `problems/GEN-RADIUS-100`(構築・実機済)・`problems/ENCOR-EDGE-HARDEN-01`
 - 共通チェックリスト= PAPER-BLUEPRINT-GAP.design.md §5(11 項)
+
+
+---
+
+## 10. ★P2 実装結果(2026-08-09 完了・出題可)
+
+成果物= [`topologies/gen_aaa_build.py`](../../topologies/gen_aaa_build.py) →
+`problems/GEN-AAAGRP-<seed>/`。詳細= [GEN-AAAGRP.design.md](GEN-AAAGRP.design.md) の
+「実装結果」節、採点機構の実測= [poc/aaa/README.md](../../poc/aaa/README.md) §19。
+
+**両刀が成立した**: 紙面 `shape=aaa` と同じ 4 ノード盤面・同じ語彙(送信元 / 鍵 /
+非標準ポート / フォールバック / 締め出し)を、今度は自分の手で組む側から扱う。
+
+このファミリで新しく確定した実測は 2 つ。どちらも次のラボ(P3 の `gen_aaa_ts.py`)に
+そのまま効く。
+
+1. **3 フェーズ挙動採点の作り方**。`grade.yml` は ios を全件集めてから shell を回すので、
+   「壊してから見る」はチェックの並びでは作れない。**破壊も観測も 1 本の shell に閉じ込め、
+   そこからルータへ実ログインする**(Ubuntu → IOL は素の ssh で通る)。
+   採点は最大 10 回再試行されるので、そのスクリプトは trap で自己復旧させ、
+   かつ**前回の残り(DEAD 記録)を待ってから**測る。
+2. ★**`deadtime` は単独では無効**。`radius-server dead-criteria` を満たして初めて
+   サーバが DEAD になり、そこで初めて `deadtime` が効く。
+   紙面側の故障種にも `deadtime_only`(書いたのに効かない)を追加できる。→ BL-105。

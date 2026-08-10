@@ -345,3 +345,131 @@ RADIUS の AVPair も `username ... privilege 15` も**適用されない**。
 さらに次コマンドとバッファが混線して **E8 を「フェイルオーバー失敗」と誤記録**した。
 → **プロンプト(`#`)待ちの expect に作り直して再測**したのが本表。
 **紙面の証拠にする値は、必ずプロンプト待ちで取ること。**
+
+---
+
+# §19. P2(ラボ構築問 GEN-AAAGRP)の採点機構 — 実測 2026-08-09
+
+実測スクリプト= `poc/aaa/grade_probe.py`(G1〜G4) / `deadtime_probe.py` / `deadcrit_probe.py`。
+生ログ= `results-grade.md` / `results-deadtime.md` / `results-deadcrit.md`。
+
+## 19.1 3 フェーズ挙動採点は「1 本の shell チェック」に閉じ込めるしかない
+
+`playbooks/_grade_attempt.yml` は **exec=ios を全件集めてから exec=shell** を回す。
+つまり「サーバを止める(shell) → ルータを見る(ios)」という順序は**チェックの並びでは作れない**。
+→ 破壊と観測を 1 本のスクリプトに入れ、その中からルータへ**実ログイン**して観測する。
+
+| # | 測ったこと | 結果 |
+|---|---|---|
+| G1 | Ubuntu 24.04 → IOL 17.15 の ssh | **素の `sshpass -p … ssh` で通る**(レガシー KEX/HostKeyAlgorithms の指定は不要)。0.3s |
+| G2 | SRV01 → SRV02 の ssh | MGMT 経由・**インバンド経由とも可**(全断フェーズで対向を止められる) |
+| G4 | 破壊フェーズ 1 本の所要 | 停止・起動込みで **40〜60 秒** |
+
+## 19.2 ★deadtime の残留は起きない(懸念の否定)
+
+全断で両サーバが DEAD になっても、サーバを起こせば **0 秒**で RADIUS 認証が戻る(G3)。
+採点が最大 10 回再試行されても収束しなくなる恐れは**無い**。
+
+| deadtime | ①正常 | ②片系断 | ③全断: local | ③全断: RADIUS 利用者 | ④復旧後に戻るまで |
+|---|---|---|---|---|---|
+| 5 | 0.3s | 6.3s | 12.3s(local へ) | 失敗(14.4s) | **0s** |
+
+所要は P0 §5 の式どおり= `timeout × (retransmit+1) × 到達不能サーバ数`。
+
+## 19.3 ★★`deadtime` だけでは何も起きない — `dead-criteria` が要る
+
+片系断のまま連続ログインしても、**deadtime を 1/5/無し のどれにしても毎回 6.3〜6.4 秒**
+待たされる(`results-deadtime.md`)。P0 §5 の「RAD1 は `show aaa servers` 上 UP のまま」と整合。
+`radius-server dead-criteria` を入れて初めてサーバが「応答不能」と判定され、`deadtime` が働く。
+
+| dead-criteria | 1回目 | 2回目 | 3回目 |
+|---|---|---|---|
+| 無し | 6.3s | 6.3s | 6.4s |
+| `time 5 tries 1` | 6.4s | 3.3s | **0.3s** |
+| `time 5 tries 2` | 6.4s | 3.3s | **0.3s** |
+
+→ **判定は 3 回目で行う**(2 回目はまだ中間状態)。
+→ 構築問の要件として一級品: **書いたのに効かない**の典型。GEN-AAAGRP の挙動③はこれを見る。
+
+## 19.4 採点を再実行すると壊れる型と、その直し方
+
+破壊フェーズの直後に採点をもう一度回すと、**優先サーバがまだ DEAD 記録のまま**で、
+止めても最初から速い → 切り離しの観測が成立しない(実測: 3 連続とも 0.3s)。
+→ フェーズスクリプトの冒頭で、`show aaa servers` を見て**優先サーバが UP に戻るまで待つ**
+(`wait_primary`)。これを入れて連続 4 回の採点がすべて 100/100 で安定した。
+
+## 19.5 「ローカルで入れた」だけでは何も証明できない
+
+全断でローカル管理者がログインできることは、**AAA が未設定でも**成り立つ(素のローカル認証)。
+→ フォールバックの証明には**待ち時間**を併せて見る(サーバを試した分の秒数が乗る)。
+基線採点(AAA 未設定)で 0.3s、模範解答で 4.3s。閾値 1.5s で分離できる。
+
+## 19.6 ★★IOL は「強制終了された SSH」の VTY を解放しない(初出題で露見・2026-08-09)
+
+GEN-AAAGRP の初出題で採点が壊れた。原因は解答ではなく**採点系**にあった。
+
+- 採点プローブは SRV01 からルータへ実ログインする。ログインが失敗して長く待つ盤面だと、
+  `timeout` が ssh を **SIGTERM で殺す**。
+- このとき **IOL 側の VTY エントリが残り続ける**。しかも解放手段が無い:
+  - `clear line <n>` … `[OK]` を返すのに `show users` から消えない
+  - `clear tcp line <n>` … `%Clear TCP failed: line N doesn't exist or doesn't have TCP`
+  - `exec-timeout` を短くしても**既存セッションは刈られない**
+  - `line vty 5 15` は `% Invalid input` (**VTY は 5 本固定・増設不可**)
+- 結果、**採点 1 回で 4 本消費**し、以後そのルータへ SSH できなくなる(port 22 refused)。
+  復旧手段は**リロードのみ**。
+
+→ 対策(生成器に反映済み): ssh に **`-o ServerAliveInterval=5 -o ServerAliveCountMax=8`** を付け、
+  こちらから kill せず **ssh 自身に切断させる**。`timeout` は最後の安全網として残すが、
+  発火したら VTY が 1 本失われる前提で設計する。
+  **ルータへ実ログインして観測する採点は、すべてこの制約下にある**(gen_aaa_ts.py も同様)。
+
+## 19.7 挙動チェックは「ログイン成功」と抱き合わせる
+
+`DELAY`(遅延 ≤ N 秒)と `DEADTIME`(2 回目以降が速い)は、**ログインが失敗していると
+勝手に成立する**。失敗は速い、あるいは「1 回目だけ遅く残りは即失敗」という形になるため。
+実測でどちらも偽陽性を出した(基線 6 点・失敗盤面で挙動③が PASS)。
+→ 両方に `PHASE2=OK` を条件として抱き合わせる。
+
+## 19.8 ★★`aaa group server radius` の中に書いた `timeout` / `retransmit` は効かない
+
+GEN-AAAGRP 初出題で受験者が踏み、**片系断でログインが数十分返らない**状態になった。
+
+観測(RT02・`debug radius authentication`):
+
+```
+RADIUS(0000000E): Send Access-Request to 10.99.23.2:1812 id 1645/3
+  RADIUS: NAS-IP-Address [4] 6  10.0.0.2      ← 送信元は Loopback0。要求自体は正しい
+RADIUS(0000000E): Started 2000 sec timeout    ← 設定した 2 秒でも既定の 5 秒でもない
+（以後 82 秒、再送も failover も一切なし。%RADIUS-4-RADIUS_DEAD も出ない）
+```
+
+受験者の構成は `aaa group server radius` の中に `timeout 2` / `retransmit 1`。
+これを**グローバル**(`radius-server timeout` / `radius-server retransmit`)へ移し、
+`radius-server dead-criteria` を足したところ `%RADIUS-4-RADIUS_DEAD` が出て正常化した。
+
+### 文献調査(2026-08-10)
+
+- Cisco の RADIUS Configuration Guide は timeout / 再送回数 / キーを
+  **グローバル / サーバ個別 / その組み合わせ**で設定すると書き、**グループ単位を挙げていない**。
+- `config-sg-radius` として文書化されているのは `server` / `server name` / **`server-private`** /
+  `deadtime` / `ip radius source-interface` / `ip vrf forwarding` / `load-balance` など。
+  **素の `timeout` / `retransmit` は出てこない。**
+- ただし **`server-private` は行内に `timeout` / `retransmit` を取る**(per-VRF 用)。
+  素の形はここのパースを間借りして受理されたと見るのが自然。
+- `radius-server dead-criteria` は**グローバル専用**。グループ側にあるのは `deadtime` だけで、
+  **「判定」と「除外時間」がレイヤ違い**なのは仕様どおり。
+
+→ 結論(暫定): **バグというより「文書化されていない書き方が parser を通り、
+名前付きサーバ(`server name` で参照する `radius server` ブロック)の実効値には反映されない」**。
+値は **per-server → global** の順に解決され、グループの記述はその探索に入らない。
+
+★**未確定**: 実機 `config-sg-radius` の `?` にこの 2 つが出るか未取得(取得時にラボが不調だった)。
+出るなら「仕様(ただし名前付きサーバには効かない)」、出ないなら parser の事故寄り。→ BL-108。
+
+### 出題方針(ユーザ決定 2026-08-10)
+
+**罠は残す**(選択肢 B)。理由=「普段コンソールから触る。締め出しでもリブートで戻る」。
+実際、この締め出しは**片系断のときだけ**現れ、両サーバ生存時のログインは正常なので、
+リロードすれば必ず復帰する(恒久的な文鎮化は起きない)。
+→ 採点には**0 点の診断チェック**を追加し、落ちた理由が名前で分かるようにした
+(減点は挙動①②③が既に行うため点は動かさない)。
