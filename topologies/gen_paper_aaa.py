@@ -43,12 +43,12 @@ KINDS = ["user_not_registered", "key_mismatch", "src_iface_missing",
          "list_not_applied", "list_undefined", "enable_via_radius",
          "console_forgotten", "authz_console_missing",
          "authz_if_authenticated", "acl_block_request", "acl_block_reply",
-         "vty_range_partial"]
+         "vty_range_partial", "deadtime_only"]
 
 P1B_ONLY_KINDS = ["src_iface_group_level"]
 
 # 2 台目に頼る状況でしか現れない故障(盤面で SRV01 を停止させる)
-NEEDS_OUTAGE = {"port_mismatch", "authz_no_fallback"}
+NEEDS_OUTAGE = {"port_mismatch", "authz_no_fallback", "deadtime_only"}
 
 # ★健全な既定では console に専用の方式リストを当てる(実測 C3/C4)。
 #   これが無いと console は default に従うので、サーバ全断や Reject の巻き添えを食う(C1)。
@@ -177,6 +177,13 @@ def build(d, site, kind=None):
         #   健全な盤面はこれを持つ(持たないと要件「コンソールから操作できること」を
         #   満たせない)。欠落そのものが故障種 `authz_console_missing`。
         "authz_console": (k != "authz_console_missing"),
+        # ★実測(poc/aaa/results-deadstate.md)= `radius-server dead-criteria` は
+        #   **既定では入らない**。無いと、応答しないサーバは何回試しても
+        #   `show aaa servers` 上 `current UP` のままで、`deadtime` の出番が来ない。
+        #   健全な盤面はこれを持つ。落とした盤面が故障種 `deadtime_only`(BL-105)。
+        # ★`deadtime_only`(BL-105)= `deadtime` は書いてあるが判定条件が無い。
+        #   サーバは DEAD にならず、片系断のとき**毎回**タイムアウトを食う。
+        "dead_criteria": (k != "deadtime_only"),
         "timeout": d["timeout"], "retransmit": d["retransmit"],
     }
     if k != "console_forgotten":
@@ -253,6 +260,26 @@ def _res_ja(r):
     return "ログイン不可(応答なし)"
 
 
+def dead_criteria_lines(dev, d):
+    """`radius-server dead-criteria` の行(健全なら 1 行・落ちていれば 0 行)。
+
+    ★実測 results-deadstate.md: 既定では入らない。無ければサーバは DEAD にならず、
+      `deadtime` は永久に出番が来ない(= BL-105 の故障種 `deadtime_only`)。
+    """
+    if not dev.get("dead_criteria"):
+        return []
+    return [f"radius-server dead-criteria time {d['timeout']} tries 1"]
+
+
+def _delay_ja(pair):
+    """(1回目, 2回目以降) を日本語にする。★表示と判定で同じ文字列を使う。"""
+    first, rep = pair
+    if first == 0:
+        return "即時"
+    r = "即時" if rep == 0 else f"約 {rep} 秒"
+    return f"1 回目 約 {first} 秒 / 2 回目以降 {r}"
+
+
 def site_rows(dev, srv, d):
     """★1 拠点ぶんの観測(ユーザ, 結果)。**提示にも是正の判定にも同じものを使う**。
 
@@ -281,6 +308,11 @@ def site_rows(dev, srv, d):
     #   読者が判定できず、`console_forgotten` も観測に現れない。
     rows.append((f"{d['emg']}(コンソールから)",
                  _res_ja(am.login(dev, srv, d["emg"], line="con"))))
+    # ★所要時間の行(全故障種で一律に出す)。これが無いと `deadtime_only` は
+    #   「誰が入れるか」に一切現れず、観測からも判定からも見えない
+    #   (`authz_no_fallback` / `vty_range_partial` で起こしたのと同じ事故)。
+    rows.append((f"{d['adm']}(ログインに要する時間)",
+                 _delay_ja(am.delay_pair(dev, srv))))
     return rows
 
 
@@ -358,11 +390,7 @@ def trace_row(d, site, kind=None):
     """trace 形の 1 行: 文言 + 所要秒(★秒数は式から出す)。"""
     dev, srv = build(d, site, kind)
     txt = test_aaa_text(d, site, kind).splitlines()[-1]
-    sec = am.delay_seconds(dev, srv)
-    if sec == 0:
-        sec_s = "即時"
-    else:
-        sec_s = f"約 {sec} 秒"
+    sec_s = _delay_ja(am.delay_pair(dev, srv))
     return f"{d['site'][site]}: {txt} ({sec_s})"
 
 
@@ -379,7 +407,9 @@ def aaa_servers_block(d, site, kind=None):
         out.append(f"RADIUS: id {i}, priority {i}, host {s['ip']}, "
                    f"auth-port {s['auth_port']}, acct-port {s['auth_port'] + 1}, "
                    f"hostname {name}")
-        st = "DEAD" if why[name] else "UP"
+        # ★到達不能=DEAD ではない。**`dead-criteria` を満たして初めて** DEAD になる
+        #   (実測 results-deadstate.md: 判定条件が無いと 4 回連続で失敗しても UP のまま)。
+        st = "DEAD" if (why[name] and dev.get("dead_criteria")) else "UP"
         out.append(f"     State: current {st}, duration 4s, previous duration 0s")
     return "\n".join(out)
 
@@ -806,7 +836,9 @@ def cfg_block(d, site, kind=None):
     if sb:                       # ★行が無い場合は何も出さない(空行も残さない)
         out.append(sb)
     out += [f"radius-server timeout {d['timeout']}",
-            f"radius-server retransmit {d['retransmit']}", "!",
+            f"radius-server retransmit {d['retransmit']}"]
+    out += dead_criteria_lines(build(d, site, kind)[0], d)
+    out += ["!",
             f"username {d['emg']} privilege 15 secret 5 $1$xxxx",
             f"username {d['auto']} privilege 15 secret 5 $1$yyyy", "!"]
     al = acl_lines(d, site, kind)
@@ -1043,6 +1075,8 @@ CLAIMS = {
     "src_iface_group_level": "送信元の指定がサーバグループ配下に残っている。",
     "port_mismatch": "ルータが指定している待受ポートがサーバの実際の値と異なる。",
     "no_authz_exec": "exec の認可が構成されていない。",
+    "deadtime_only": "応答しないサーバを判定する条件が構成されていないため、"
+                     "そのサーバが問い合わせ先から外れない。",
     "authz_no_fallback": "exec の認可に代替手段が構成されていない。",
     "list_not_applied": "作成した方式リストが回線に適用されていない。",
     "list_undefined": "回線が参照している方式リストが定義されていない。",
@@ -1089,6 +1123,7 @@ def transport_cfg(d, dev, site):
         out.append("ip radius source-interface Loopback0")
     out += [f"radius-server timeout {dev['timeout']}",
             f"radius-server retransmit {dev['retransmit']}"]
+    out += dead_criteria_lines(dev, d)
     return "\n".join(out)
 
 
@@ -1248,6 +1283,10 @@ _fix("srv_key", "認証サーバ側の共有鍵を、ルータの値に合わせ
      lambda d, site: ["(認証サーバ側の設定変更)"],
      lambda dev, srv, d: _srv_all(srv, lambda s: s.update(
          key=list(dev["servers"].values())[0]["key"])), srv_side=True)
+_fix("set_dead_criteria",
+     "応答しないサーバを「応答不能」と判定する条件を構成する。",
+     lambda d, site: [f"radius-server dead-criteria time {d['timeout']} tries 1"],
+     lambda dev, srv, d: dev.update(dead_criteria=True))
 _fix("set_src", "認証要求の送信元を、Loopback0 に固定する。",
      lambda d, site: ["ip radius source-interface Loopback0"],
      lambda dev, srv, d: dev.update(

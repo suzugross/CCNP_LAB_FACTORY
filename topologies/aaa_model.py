@@ -256,6 +256,19 @@ def delay_seconds(dev, srv, gname=None):
     return unreachable * dev.get("timeout", 3) * (dev.get("retransmit", 1) + 1)
 
 
+def delay_pair(dev, srv, gname=None):
+    """(1 回目, 2 回目以降) の所要秒。★状態は持たず boolean 1 個で分岐する。
+
+    実測(poc/aaa/results-deadstate.md): `radius-server dead-criteria` が無いと
+    応答しないサーバは **DEAD にならない** ので、何回ログインしても毎回
+    タイムアウトを食う(6.3 → 6.3 → 6.3s)。有れば 1 回目の直後に DEAD となり、
+    以後はそのサーバを飛ばす(6.4 → 3.3 → 0.3s)。
+    紙面は途中経過を持たないので **2 回目以降を 0 と full の 2 値**で表す。
+    """
+    first = delay_seconds(dev, srv, gname)
+    return first, (0 if dev.get("dead_criteria") else first)
+
+
 def unreachable_reasons(dev, srv):
     """各サーバがなぜ届かないか(evidence 形で「サーバ側ログに何が出るか」を決める)。"""
     out = {}
@@ -280,6 +293,10 @@ def _base():
                     "RAD2": {"ip": "10.99.2.2", "key": "K", "auth_port": 1912}},
         "src_addr": "10.0.0.2",
         "local": {"SUZUKI": 15, "emg-admin": 15},
+        # ★`radius-server dead-criteria` の有無。既定では入らない(実測
+        #   poc/aaa/results-deadstate.md)。無いとサーバは DEAD にならず
+        #   `deadtime` の出番が来ない。健全な盤面は True。
+        "dead_criteria": True,
         "enable_secret": True, "timeout": 3, "retransmit": 1,
     }
     users = {"SUZUKI": 15, "noc-taro": 15, "helpdesk": 1}

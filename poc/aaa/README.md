@@ -463,8 +463,35 @@ RADIUS(0000000E): Started 2000 sec timeout    ← 設定した 2 秒でも既定
 名前付きサーバ(`server name` で参照する `radius server` ブロック)の実効値には反映されない」**。
 値は **per-server → global** の順に解決され、グループの記述はその探索に入らない。
 
-★**未確定**: 実機 `config-sg-radius` の `?` にこの 2 つが出るか未取得(取得時にラボが不調だった)。
-出るなら「仕様(ただし名前付きサーバには効かない)」、出ないなら parser の事故寄り。→ BL-108。
+### ★決着(2026-08-10・`grouptimer_probe.py` / `results-grouptimer.md`)
+
+**H) パーサのヘルプには出る。** `config-sg-radius` の `?` は両方を documented コマンドとして並べる。
+
+```
+  retransmit        Specify the number of retries to active server
+  timeout           Time to wait for a RADIUS server to reply
+```
+`timeout ?` = `<1-1000> Wait time (default 5 seconds)` /
+`retransmit ?` = `<1-100> Number of retries for a transaction (default is 3)`。
+**隠しコマンドでも parser の事故でもない。**
+
+**F) それでも名前付きサーバには効かない。** グローバルを消しグループ配下だけに置くと:
+
+| グループの値 | 実測 | 効いていれば |
+|---|---|---|
+| `timeout 2` / `retransmit 1` | **40.2s** | 4s |
+| `timeout 10` / `retransmit 1` | **40.2s** | 20s |
+| `timeout 2` / `retransmit 3` | **40.2s** | 8s |
+
+**値を 5 倍にしても所要は 1 秒も動かない**(グローバルに置けば 4.4s と式どおり)。
+
+→ 結論: **CLI は受け付け、ヘルプにも載るが、`server name` で参照する名前付きサーバの
+実効値にはならない**。グループ配下の値が効くのは `server-private`(グループ内に閉じた
+サーバ定義)に対してであろう、というのが最も整合する読み。
+**「書いたのに効かない」の中でも、ヘルプに載っている分たちが悪い型。**
+
+★未解明: 40.2s の内訳(既定 20s の 2 倍。2 台ぶんか 2 トランザクションぶんか未切り分け)。
+実害は無いので追わない。`server-private` 形なら効くのかの確認も未実施 → 必要になったら BL-108 を再開。
 
 ### 出題方針(ユーザ決定 2026-08-10)
 
@@ -473,3 +500,51 @@ RADIUS(0000000E): Started 2000 sec timeout    ← 設定した 2 秒でも既定
 リロードすれば必ず復帰する(恒久的な文鎮化は起きない)。
 → 採点には**0 点の診断チェック**を追加し、落ちた理由が名前で分かるようにした
 (減点は挙動①②③が既に行うため点は動かさない)。
+
+## 19.9 ★`show aaa servers` はいつ DEAD になるか（BL-105 の前提・実測 2026-08-10）
+
+実測スクリプト= `poc/aaa/deadstate_probe.py` / 生ログ= `results-deadstate.md`。
+片系断(SRV01 の freeradius 停止)のまま**連続 4 回**ログインし、毎回 State を採った。
+
+| dead-criteria | 1回目 | 2回目 | 3回目 | 4回目 | `%RADIUS-4-RADIUS_DEAD` |
+|---|---|---|---|---|---|
+| **無し** | 6.4s **UP** | 6.3s **UP** | 6.3s **UP** | 6.3s **UP** | 出ない |
+| `time 5 tries 1` | 6.4s UP | 3.3s **DEAD** | 0.3s DEAD | 0.3s DEAD | 出る |
+
+確定した事実は 2 つ。
+
+1. **`radius-server dead-criteria` は既定では入らない**
+   (`show running-config | include dead-criteria` が空)。
+2. **到達不能 ≠ DEAD**。判定条件が無ければ、応答しないサーバは
+   **何回失敗しても `current UP` のまま**で、`deadtime` の出番は永久に来ない。
+   判定条件を満たすと 1 回目の直後に DEAD へ落ち、以後は 0.3 秒でスキップされる。
+
+### 紙面への反映(実施済み 2026-08-10)
+
+- `gen_paper_aaa.aaa_servers_block()` は「到達不能なら DEAD」と描いており**誤りだった**
+  → `到達不能 かつ dead_criteria` に是正。
+- 健全な盤面は `dev["dead_criteria"] = True` を持ち、構成に
+  `radius-server dead-criteria time <timeout> tries 1` を描く
+  (これが無いと、後から作る故障種 `deadtime_only` が健全盤面と同一になり成立しない)。
+- 回帰= 既出題 4 seed の正解不変(B/A/D/D)・家族 selftest 3480/3480・authread 600/600・
+  決定性(PYTHONHASHSEED 1 vs 999 で全文一致)・全 11 shape 生成 OK。
+
+### BL-105 本体の実装(2026-08-10 完了)
+
+故障種 **`deadtime_only`** を追加(15 → **16 種**)。`deadtime` は書いてあるが
+`radius-server dead-criteria` が無い構成で、片系断のとき**毎回**タイムアウトを食う。
+
+観測は `site_rows()` に**所要時間の行を常設**して表した(全故障種一律)。
+これが無いと「誰が入れるか」に一切現れず、**観測からも判定側からも見えない**
+(`authz_no_fallback` / `vty_range_partial` で起こした事故の 3 度目になるところだった)。
+
+```
+広島 | noc-hanako(ログインに要する時間) | 1 回目 約 4 秒 / 2 回目以降 即時      ← 健全
+那覇 | noc-hanako(ログインに要する時間) | 1 回目 約 4 秒 / 2 回目以降 約 4 秒   ← deadtime_only
+```
+
+秒は `aaa_model.delay_pair()` が `(1回目, 2回目以降)` を返す。**モデルは状態を持たず**、
+`dead_criteria` の boolean 1 個で `0 / full` に分岐するだけ(方針「時間を持たせない」を維持)。
+
+検証= 家族 selftest **3720/3720**(3480 から +240)・authread **640/640**・
+既出題 4 seed の正解不変・決定性 OK・全 11 shape OK・aaa 60 問で正解欄の欠落 0。
