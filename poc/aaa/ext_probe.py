@@ -416,7 +416,8 @@ LOW_LOCAL, LOW_LOCAL_PW = "lowlocal", "Low-1234"   # ★local かつ priv 1(X10 
 
 
 def case_X10(ctx):
-    """★★Ping-t 型の再現: method1 が**到達できず** → method2(enable) へ落ちる。
+    """★★定番の対策教材で扱われる型の再現: method1 が**到達できず** →
+    method2(enable) へ落ちる。
 
     X8d/X8e が空振りした理由= 全断時は RADIUS のみの利用者(helpdesk)が
     **そもそもログインできない**ため enable まで到達しない。
