@@ -56,7 +56,45 @@ EXT_ONLY_KINDS = [
 #   どうかを確認させるものがいい」)。1〜2行の盤面では first-match をたどる作業が
 #   ほとんど発生していなかった。6〜8行の現実的な ACL を読ませる。
 DENSE_KINDS = ["dense_list"]
-FILTER_KINDS = ADDR_KINDS + EXT_ONLY_KINDS + DENSE_KINDS
+# ★適用点(BL-109 段A)。ユーザ指摘 2026-08-11「access-group の設定が問題の仕掛けとして
+#   全く機能していない」。ACL の**中身は正しい**が、適用されていない/別の ACL が
+#   適用されている、という型。実測= poc/acl/README.md §16-4。
+#   これらは `ip access-group` 行を読まないと解けない(＝適用点が主題になる)。
+APPLY_KINDS = [
+    "apply_wrong_acl",    # 正しい ACL と広い ACL が両方あり、**広いほう**が適用されている
+    "apply_missing",      # ACL は要件どおりだが、どの IF にも適用されていない
+    "apply_other_iface",  # 要件と無関係な IF(管理セグメント側)に適用されている
+    "filter_undef_ref",   # 適用行が**存在しない ACL** を指している(実測 §1= 全許可)
+    "filter_empty_acl",   # 適用されている ACL の中身が空(実測 §2= 全許可)
+]
+# ★段B(BL-109)= 向き/IF の取り違え。**往路と復路を別々に評価**しないと表現できない。
+#   実測 §16-10= 末尾に `permit any` の無い(=要件どおりの)ACL には暗黙の拒否があるので、
+#   復路に当たる位置に付けると**復路が落ちて疎通しない**(往路は素通りのまま)。
+#   §16-5 の「完全な no-op」は `permit ip any any` 付きの ACL での話であり、こことは別。
+DIRECTION_KINDS = [
+    "apply_direction",    # 同じ IF で向きだけ逆(顧客側の out)= 復路に当たる
+    "apply_iface_swap",   # 隣の IF の in(サーバ側の in)= やはり復路に当たる
+]
+# ★段B の構築系= 「このアクセス リストを**どこに・どの向きで**適用すべきか」。
+#   故障ではないので症状は出さない(ACL は書けていて、まだ適用されていない状態)。
+PLACE_KINDS = ["apply_place"]
+# ★戻り通信(論点14)。盤面に**2枚**のリストを置く=
+#   顧客側の in(往路用)＋サーバ側の in(復路用)。復路を許可する手段が主題。
+#   実測= poc/acl/README.md §17(E1)。
+EST_KINDS = [
+    "est_missing",     # 復路用リストに `established` の行が無い → 戻りが落ちる
+    "est_wrong_side",  # `established` を**往路側**に書いた → SYN が落ちる
+]
+# ★このうち4種は「フィルタが実質不在」＝**全部素通り**になり、症状では割れない。
+#   割れるのは出力(§16-4)。read 形は作らず、cause / evidence で出す。
+INERT_FILTER_KINDS = ("apply_missing", "apply_other_iface",
+                      "filter_undef_ref", "filter_empty_acl")
+# ★向きの取り違えは逆に**全断**になる(復路が落ちるため)。read 形はこちらも作れない。
+# ★全断になる種= 復路(または往路)が落ちて**どのセッションも成立しない**。
+#   read 形は作れない(対比が無い)ので cause / evidence で出す。
+BLACKOUT_FILTER_KINDS = tuple(DIRECTION_KINDS) + tuple(EST_KINDS)
+APPLY_KINDS = APPLY_KINDS + DIRECTION_KINDS + PLACE_KINDS + EST_KINDS
+FILTER_KINDS = ADDR_KINDS + EXT_ONLY_KINDS + DENSE_KINDS + APPLY_KINDS
 # routefilter ロール(distribute-list)= 実測で確定した意味論に基づく誤り
 RF_KINDS = [
     "std_len_blind",       # 標準 ACL は長さを区別できない(同一網アドレスを巻き添え)
@@ -84,11 +122,57 @@ FILTER_WORLDS = [
     "one_line",       # 1行で書く          → 過剰被覆キューブが正解
     "exact_no_deny",  # 過剰許可なし＋deny 禁止 → 厳密列挙が正解
     "exact_min",      # 過剰許可なし＋行数最小  → deny 先行が正解
+    # ★ワイルドカードの組み立てそのものを主題にする世界(ユーザ要望 2026-08-11
+    #   「送信元のアドレス定義をもう少しバリエーション豊かに。
+    #     ワイルドカードマスクを上手く使ったちょっとしたトリックなど」)。
+    #   対象の**集合の形**が変わり、1行で書くために必要なワイルドカードが変わる。
+    #   上の3世界と違い**1行の答えが厳密**(過剰被覆ではない)なので、
+    #   一意化は「1行で書く」という提示制約だけで足りる。
+    "wc_even",        # 第3オクテットが偶数の4本 → 0.0.6.255
+    "wc_odd",         # 第3オクテットが奇数の4本 → base を +1 して 0.0.6.255
+    "wc_split",       # 飛び地2ブロック          → **非連続** 0.0.5.255
+    "wc_block",       # 連続4本(/22 相当)        → 0.0.3.255
+    # ★論点4「ビット境界に載らないレンジ」(設計メモ §3 A-4)。
+    #   対象は base..base+6 の**7本**= 最小のキューブ(8本)より1本少ないので
+    #   **1行では厳密に書けない**。分解すると**大きさの違うキューブ3つ**になる
+    #   (これが集約の本題)。deny を使ってよいかで正解が反転する。
+    "nb_min",         # 行数最小(deny 可)   → 過剰被覆＋deny 先行の 2行
+    "nb_no_deny",     # deny 禁止＋行数最小 → **異なる大きさのキューブ3行**
 ]
+NB_WORLDS = ("nb_min", "nb_no_deny")
+# 対象集合の形。offs= base からの第3オクテットのずれ / ans= (base のずれ, WC の第3値)
+# near= 1行だが**成立しない**候補(いずれも過不足がある)
+SRC_PATTERNS = {
+    "wc_even":  {"offs": [0, 2, 4, 6], "ans": (0, 6),
+                 "near": [(0, 7), (0, 2), (0, 4), (1, 6)]},
+    "wc_odd":   {"offs": [1, 3, 5, 7], "ans": (1, 6),
+                 "near": [(0, 7), (1, 2), (1, 4), (0, 6)]},
+    "wc_split": {"offs": [0, 1, 4, 5], "ans": (0, 5),
+                 "near": [(0, 7), (0, 1), (0, 4), (0, 3)]},
+    "wc_block": {"offs": [0, 1, 2, 3], "ans": (0, 3),
+                 "near": [(0, 7), (0, 1), (0, 5), (0, 2)]},
+}
+WC_WORLDS = tuple(SRC_PATTERNS)
+# ★kind × world の非両立。**仕込んだ誤りがその世界では正しい**組み合わせを宣言する
+#   (wc_bits の `0.0.5.255` は wc_split の対象集合そのもの= 症状が出ない)。
+#   実行時にも draw() が同じことを検査する(将来の組み合わせを取りこぼさないため)。
+INCOMPATIBLE = {("wc_bits", "wc_split")}
 RF_WORLDS = ["prefixlen_no_rm", "prefixlen_via_rm", "by_neighbor",
              "keep_others"]
 # 追加ロールの要件世界(いずれも「何を守るか」を1つ決めるだけ。select 形は持たない)
 X_WORLDS = ["protect_mgmt", "least_change"]
+# ★apply 形の要件世界= **どちら向きの通信を絞るのか**。これで正解の IF が反転する
+#   (src_customer → 顧客側の in / src_server → サーバ側の in)。
+#   src_* の2世界では「出口側に置く解」も意味的に成立してしまうので(実測 §16-5 (iv))、
+#   「不要なトラフィックは可能なかぎり早い段階で破棄する」を1行入れて一意化する。
+# ★★deny_to_mgmt は**定石から外れる**世界(ユーザ発案 2026-08-11)=
+#   「標準 ACL で、顧客側から**管理セグメント宛だけ**を拒否し、
+#     顧客からサーバ側への通信には影響を与えない」。
+#   標準 ACL は**送信元しか見ない**ので、入口(顧客側の in)に置くと
+#   サーバ宛まで巻き添えになる。**宛先の側= 管理 IF の out** に置くしかない。
+#   → 「早い段階で破棄」の制約は**入れない**(入れると正解と矛盾する)。
+#     一意性は制約ではなく**構造**から出る(works がそもそも1つ)。
+APPLY_PLACE_WORLDS = ["src_customer", "src_server", "deny_to_mgmt"]
 
 ROLES = ["DUT", "UP", "DN"]
 
@@ -121,8 +205,9 @@ ROLE_APPLY = {
 #   「通るのはどれか」という read 形が成立しない(対比が作れない)。cause 形で出す。
 #   3種が同じ症状に化けるのは偶然ではなく、この分野の教育点そのもの
 #   (未定義=全許可 / 空=全許可 / 名前付き拡張=コマンドごと拒否)。
-NO_READ_KINDS = ("undef_ref", "empty_acl", "ext_named_rejected",
-                 "urpf_undef_exempt")
+NO_READ_KINDS = (("undef_ref", "empty_acl", "ext_named_rejected",
+                  "urpf_undef_exempt")
+                 + INERT_FILTER_KINDS + BLACKOUT_FILTER_KINDS)
 
 
 def role_of(kind):
@@ -164,8 +249,16 @@ def forms_for(d):
         if compare_ok(d):
             f.append("compare")
         return f
-    forms = ["cause"]
-    if d["role"] == "filter":
+    if d["kind"] in PLACE_KINDS:
+        return ["apply"]                # 構築系。故障ではないので他の形は無い
+    # ★apply_wrong_acl は cause 形を持たない。
+    #   症状表(到達可/不可)だけで「別の ACL が効いている」と分かってしまい、
+    #   **`ip access-group` 行を読まずに解ける**(初出題 20260811-011 で判明)。
+    #   read / counter なら「どちらの ACL が効いているか」を読まないと答えられない。
+    forms = [] if d["kind"] == "apply_wrong_acl" else ["cause"]
+    # ★適用点の故障は「これから書くべき行を選ぶ」形(select)を持たない
+    #   (中身は正しいので、書くべき行は既に存在している)。
+    if d["role"] == "filter" and d["kind"] not in APPLY_KINDS:
         forms.append("select")
     if d["kind"] not in NO_READ_KINDS:
         forms.append("read")
@@ -184,8 +277,10 @@ def forms_for(d):
 
 def worlds_for(kind):
     r = role_of(kind)
+    if kind in PLACE_KINDS:
+        return APPLY_PLACE_WORLDS
     if r == "filter":
-        return FILTER_WORLDS
+        return [w for w in FILTER_WORLDS if (kind, w) not in INCOMPATIBLE]
     if r == "routefilter":
         return RF_WORLDS
     return X_WORLDS
@@ -212,14 +307,33 @@ def draw(rnd, kind=None, world=None):
     # **広すぎる候補(0.0.7.255)と非連続候補(0.0.5.255)が機械的に失格**になる。
     base = rnd.choice([0, 8, 16, 24, 32, 40, 48, 56, 64, 96, 128, 160, 192, 224])
     d["base"] = base
-    d["target"] = [base, base + 1, base + 2]       # 通したい/受理したい3本
-    d["fourth"] = base + 3                         # キューブを完成させる4本目
-    # 4本目を「触れてはいけない網」にするか(=1行では書けなくなる)。
-    # ★one_line の世界では 4本目を許せないと正解が存在しないので必ず許容側にする。
-    d["fourth_forbidden"] = (d["world"] != "one_line") and rnd.random() < 0.5
-    d["outsider"] = base + 5                       # ★上位キューブの中に置く
-    d["excluded"] = ([d["fourth"]] if d["fourth_forbidden"] else []) \
-        + [d["outsider"]]
+    if d["world"] in NB_WORLDS:
+        # ★ビット境界に載らないレンジ= 7本(最小キューブは8本)。
+        #   除外はブロック内の1本(base+7)と、ブロックの外の1本。
+        d["target"] = [base + i for i in range(7)]
+        d["fourth"] = base + 7
+        d["outsider"] = base + 9
+        d["fourth_forbidden"] = True
+        d["excluded"] = [base + 7, base + 9]
+    elif d["world"] in WC_WORLDS:
+        # ★ワイルドカードの形が主題。対象は 8 本のブロックの中の**部分集合**で、
+        #   ブロック内の非対象は**すべて**除外対象にする(= 1行の答えが厳密になる)。
+        pat = SRC_PATTERNS[d["world"]]
+        d["target"] = [base + o for o in pat["offs"]]
+        rest = [base + o for o in range(8) if o not in pat["offs"]]
+        d["fourth"] = rest[0]
+        d["outsider"] = rest[1]
+        d["fourth_forbidden"] = True
+        d["excluded"] = rest
+    else:
+        d["target"] = [base, base + 1, base + 2]   # 通したい/受理したい3本
+        d["fourth"] = base + 3                     # キューブを完成させる4本目
+        # 4本目を「触れてはいけない網」にするか(=1行では書けなくなる)。
+        # ★one_line の世界では 4本目を許せないと正解が存在しないので必ず許容側にする。
+        d["fourth_forbidden"] = (d["world"] != "one_line") and rnd.random() < 0.5
+        d["outsider"] = base + 5                   # ★上位キューブの中に置く
+        d["excluded"] = ([d["fourth"]] if d["fourth_forbidden"] else []) \
+            + [d["outsider"]]
     d["faraway"] = 250 if base < 200 else 1        # 明確に無関係な網(read の錯乱肢用)
 
     # サーバ網(宛先側)とポート
@@ -245,6 +359,9 @@ def draw(rnd, kind=None, world=None):
     #   1行ずつ突き合わせないと消せないようにする。
     d["dense_near"] = 2            # 中核に固定で2本(行数を9に保つ)
     d["srcport_kind"] = rnd.choice(["dns", "gt"])   # ★送信元ポートの軸
+    # ★compare 形は `range` の境界を突けると密度が上がる。盤面の半分で入れる
+    #   (常に入れると特徴の多様性が落ちるため)。
+    d["_want_range"] = rnd.random() < 0.5
     # ★ACL の形式。拡張でしか起きない故障種は必ず拡張。
     #   アドレス系は標準/拡張のどちらでも成立するので抽選する。
     #   ★これを持たせる前は **要件が宛先とポートを指定しているのに標準 ACL しか
@@ -259,18 +376,48 @@ def draw(rnd, kind=None, world=None):
         d["aclform"] = "std"
     if d["kind"] in DENSE_KINDS:
         d["aclform"] = "ext"           # 多エントリ読解は拡張でしか作れない
+    if d["kind"] in EST_KINDS:
+        d["aclform"] = "ext"           # established は拡張 ACL でしか書けない
+    if d["kind"] in PLACE_KINDS:
+        # ★apply 形の ACL は送信元だけを見る標準形。番号も標準帯でなければ
+        #   `Standard IP access list 150` のような**実機にあり得ない見出し**になる。
+        d["aclform"] = "std"
     # 隣接ルータ(routefilter の src 側)
     d["nb_up"] = f"10.{a}.254.2"
     d["nb_dn"] = f"10.{a}.253.3"
     d["acl_num"] = rnd.choice([10, 20, 30, 50, 70])          # 標準帯
     d["acl_ext"] = rnd.choice([101, 110, 120, 130, 150])     # 拡張帯
     d["acl_name"] = rnd.choice(["FILTER-IN", "CUST-IN", "EDGE-IN", "RT-IN"])
+    # ★apply_wrong_acl 用の「もう1枚」。同じ帯から別番号を採る
+    #   (帯が違うと標準/拡張の別で見分けが付いてしまう)。
+    d["acl_other"] = rnd.choice([n for n in [10, 20, 30, 50, 70]
+                                 if n != d["acl_num"]]) \
+        if d["aclform"] != "ext" \
+        else rnd.choice([n for n in [101, 110, 120, 130, 150]
+                         if n != d["acl_ext"]])
+    # --- 適用点(BL-109)。被験デバイスの IF は3本 ---
+    slot = rnd.choice([0, 1, 2])
+    d["if_dn"] = f"Ethernet{slot}/0"      # 顧客の側
+    d["if_up"] = f"Ethernet{slot}/1"      # サーバの側
+    d["if_mgmt"] = f"Ethernet{slot}/2"    # 管理セグメント
+    d["mgmt_o3"] = 255                    # 管理セグメントの第3オクテット
     names = [f"RT{i:02d}" for i in range(1, len(ROLES) + 1)]
     rnd.shuffle(names)
     d["m"] = dict(zip(ROLES, names))
     d["roles"] = list(ROLES)
-    if d["role"] == "filter" and d["kind"] not in DENSE_KINDS:
+    if (d["role"] == "filter" and d["kind"] not in DENSE_KINDS
+            and d["kind"] not in APPLY_KINDS):
         verify_select(d)                # select 形の一意性を機械検証
+    if d["kind"] in PLACE_KINDS:
+        verify_apply(d)                 # apply 形の一意性を機械検証
+    # ★「症状の無い故障」を作らない。対象集合の形を世界で変えられるようにしたことで、
+    #   仕込んだはずの誤り(例: 非連続ワイルドカード)が**その世界では正しい**という
+    #   組み合わせが生まれた(wc_bits × wc_split)。機械で弾く。
+    if d["kind"] in ADDR_KINDS + EXT_ONLY_KINDS:
+        _ents, _s, _n = current_entries(d)
+        if _ents and _select_works(d, _ents):
+            raise ValueError(f"acl: 症状の無い盤面 kind={d['kind']} "
+                             f"world={d['world']}")
     return d
 
 
@@ -384,10 +531,16 @@ def dense_entries(d):
                         established=True),
     }
     # ★送信元ポートの行は必ず1本入れる(ユーザ要望 2026-08-11)
-    must = "srcport_dns" if d["srcport_kind"] == "dns" else "srcport_gt"
-    rest = [k for k in ("dns", "icmp", "range", "est") if True]
+    must = ["srcport_dns" if d["srcport_kind"] == "dns" else "srcport_gt"]
+    # ★compare 形の盤面では `range` も必ず入れる(出題 20260811-010 の反省=
+    #   `range` が無いと「どの行にも当たらない」フローが生まれ、
+    #   そのフローだけ判定が早く終わって比較の密度が落ちる)。
+    if d.get("_want_range"):
+        must.append("range")
+    rest = [k for k in ("dns", "icmp", "range", "est") if k not in must]
     pick = zlib.crc32(f"{d['base']}:{d['oct2']}:{d['hi_lo']}".encode())
-    chosen = [must] + [rest[(pick + i) % len(rest)] for i in range(2)]
+    chosen = must + [rest[(pick + i) % len(rest)]
+                     for i in range(3 - len(must))]
     seen = []
     for k in chosen:
         if k not in seen:
@@ -517,24 +670,72 @@ def select_candidates(d):
         return [_row(d, act, o, wc, (i + 1) * 10)
                 for i, (act, o, wc) in enumerate(rows)]
 
-    cands = [
-        ("cube", [("permit", b, 3)]),                       # 1行(4本目も入る)
-        ("exact3", [("permit", o, 0) for o in d["target"]]),  # 厳密3行
-        ("deny_first", [("deny", d["fourth"], 0), ("permit", b, 3)]),
-        ("narrow", [("permit", b, 1)]),                     # 狭い(2本だけ)
-        ("wide", [("permit", b, 7)]),                       # 広い(8本)
-        ("bits", [("permit", b, 5)]),                       # 非連続(飛び地)
-    ]
+    if d["world"] in NB_WORLDS:
+        # ★1行では書けないレンジ。候補は「行数」と「deny を使うか」で競わせる。
+        cands = [
+            # 過剰被覆＋deny 先行= 2行(最小)
+            ("deny1", [("deny", b + 7, 0), ("permit", b, 7)]),
+            # ★大きさの違うキューブ3つに分解= 3行(deny を使わない中では最小)
+            ("split3", [("permit", b, 3), ("permit", b + 4, 1),
+                        ("permit", b + 6, 0)]),
+            # 分解の仕方が最小でない= 4行
+            ("split4", [("permit", b, 1), ("permit", b + 2, 1),
+                        ("permit", b + 4, 1), ("permit", b + 6, 0)]),
+            # 1行で書けると思った= base+7 まで通してしまう
+            ("cube8", [("permit", b, 7)]),
+            # 狭い= 前半4本しか通らない
+            ("narrow", [("permit", b, 3)]),
+            # ★成立しない deny 候補。これが無いと**正解が「唯一 deny を含む肢」**
+            #   になり、要件に「deny 禁止」が無いことに気付くだけで
+            #   **アドレスを検証せずに当てられる**(出題 20260811-015 で判明)。
+            #   落とす網を1つずらすと、対象が1本欠けかつ除外が1本通る。
+            ("deny_off", [("deny", b + 6, 0), ("permit", b, 7)]),
+        ]
+    elif d["world"] in WC_WORLDS:
+        # ★ワイルドカードの組み立てが主題。1行の候補は**正解1つ+近い誤り3つ**にし、
+        #   さらに「動くが1行でない」候補(厳密列挙・deny 先行)を混ぜる。
+        pat = SRC_PATTERNS[d["world"]]
+        a_off, a_wc = pat["ans"]
+        # ★1本目(=ブロック全体 0.0.7.255「広すぎ」)は**常に入れる**。
+        #   最も典型的な誤りなので、抽選で落ちる回があってはならない
+        #   (WC トリック初出題 20260811-014 で実際に落ちた)。
+        wide, rest = pat["near"][0], list(pat["near"][1:])
+        pick = zlib.crc32(f"wc:{d['base']}:{d['oct2']}".encode()) % len(rest)
+        near = [wide] + [rest[(pick + i) % len(rest)] for i in range(2)]
+        cands = [("cube", [("permit", b + a_off, a_wc)])]
+        cands += [(f"near{i}", [("permit", b + o, w)])
+                  for i, (o, w) in enumerate(near)]
+        cands.append(("exactN", [("permit", o, 0) for o in d["target"]]))
+        cands.append(("deny_first",
+                      [("deny", x, 0) for x in d["excluded"]]
+                      + [("permit", b, 7)]))
+    else:
+        cands = [
+            ("cube", [("permit", b, 3)]),                   # 1行(4本目も入る)
+            ("exact3", [("permit", o, 0) for o in d["target"]]),  # 厳密3行
+            ("deny_first", [("deny", d["fourth"], 0), ("permit", b, 3)]),
+            ("narrow", [("permit", b, 1)]),                 # 狭い(2本だけ)
+            ("wide", [("permit", b, 7)]),                   # 広い(8本)
+            ("bits", [("permit", b, 5)]),                   # 非連続(飛び地)
+        ]
     for key, rows in cands:
         out.append((key, std_lines(rows), ents(rows)))
     # ★サブネットマスクを書いてしまった候補(実測 P10: 正規化されて別物になる)
     #   0.0.3.255 のつもりで 255.255.252.0 と書く。IOS は受理し、
     #   don't care 側のビットがアドレスから落ちるため「まったく別の集合」になる。
     if d["aclform"] == "std":
+        # ★正解のワイルドカードを**マスク形で書いてしまった**版にする。
+        #   固定文字列(255.255.252.0)にすると WC トリック世界では正解と対応せず、
+        #   「この選択肢だけ毛色が違う」という手掛かりになってしまう。
+        if d["world"] in WC_WORLDS:
+            _m_off, _m_wc = SRC_PATTERNS[d["world"]]["ans"]
+        else:
+            _m_off, _m_wc = 0, 3
+        mask = f"255.255.{255 - _m_wc}.0"
         out.append((
             "maskish",
-            [f"access-list {num} permit {net(d, b)} 255.255.252.0"],
-            [ac.entry("permit", None, src=net(d, b), sw="255.255.252.0",
+            [f"access-list {num} permit {net(d, b + _m_off)} {mask}"],
+            [ac.entry("permit", None, src=net(d, b + _m_off), sw=mask,
                       seq=10)]))
     else:
         # ★拡張でしか作れない錯乱肢。いずれも「対象は通るが**別の何か**まで通る/
@@ -542,21 +743,28 @@ def select_candidates(d):
         # ★3本すべて足すと9択になり多すぎる(実試験は6〜7択)。2本に絞る。
         _ext_pool = []
         out2 = _ext_pool.append
+        # ★WC 世界では「アドレス指定は正しいが別の要素で外す」錯乱肢にする
+        #   (0.0.3.255 固定のままだと、アドレスの時点で落ちて対照にならない)
+        if d["world"] in WC_WORLDS:
+            _a_off, _a_wc = SRC_PATTERNS[d["world"]]["ans"]
+        else:
+            _a_off, _a_wc = 0, 3
+        _ab, _aw = net(d, b + _a_off), f"0.0.{_a_wc}.255"
         out2((
             "portswap",
-            [f"access-list {num} permit tcp {net(d, b)} 0.0.3.255 "
+            [f"access-list {num} permit tcp {_ab} {_aw} "
              f"eq {_port_txt(d['port'])} host {d['srv_host']}"],
-            [_ext(d, "permit", b, 3, 10, sport=True)]))
+            [_ext(d, "permit", b + _a_off, _a_wc, 10, sport=True)]))
         out2((
             "ipproto",
-            [f"access-list {num} permit ip {net(d, b)} 0.0.3.255 "
+            [f"access-list {num} permit ip {_ab} {_aw} "
              f"host {d['srv_host']}"],
-            [_ext(d, "permit", b, 3, 10, proto="ip")]))
+            [_ext(d, "permit", b + _a_off, _a_wc, 10, proto="ip")]))
         out2((
             "dstany",
-            [f"access-list {num} permit tcp {net(d, b)} 0.0.3.255 "
+            [f"access-list {num} permit tcp {_ab} {_aw} "
              f"any eq {_port_txt(d['port'])}"],
-            [_ext(d, "permit", b, 3, 10, dst_any=True)]))
+            [_ext(d, "permit", b + _a_off, _a_wc, 10, dst_any=True)]))
         # 盤面から決定的に2本を選ぶ(seed 依存・再現性を保つ)
         pick = zlib.crc32(f"{d['base']}:{d['oct2']}:{d['port']}"
                           .encode()) % 3
@@ -605,7 +813,11 @@ def _select_complies(d, lines, entries):
     w = d["world"]
     exact = (ac.permits_exactly(entries, target_entries(d))
              if d["aclform"] == "std" else _exact_ext(d, entries))
-    if w == "one_line":
+    if w == "nb_min":
+        return exact               # 行数の最小性は verify_select で解く
+    if w == "nb_no_deny":
+        return exact and all(" deny " not in ln for ln in lines)
+    if w in WC_WORLDS or w == "one_line":
         return len(lines) == 1
     if w == "exact_no_deny":
         return exact and all(" deny " not in ln for ln in lines)
@@ -623,7 +835,7 @@ def verify_select(d):
     works = [(k, l, e) for k, l, e in select_candidates(d)
              if _select_works(d, e)]
     ok = [(k, l, e) for k, l, e in works if _select_complies(d, l, e)]
-    if d["world"] == "exact_min" and len(ok) > 1:
+    if d["world"] in ("exact_min",) + NB_WORLDS and len(ok) > 1:
         least = min(len(l) for _k, l, _e in ok)
         ok = [x for x in ok if len(x[1]) == least]
     if len(works) < 2:
@@ -657,21 +869,51 @@ WHY_SELECT = {
 }
 
 
+def _why_near(d, ents):
+    """★1行の錯乱肢の理由は**盤面から計算**する(WC トリック世界は候補が可変なので、
+    静的な表に書くと『広すぎる』『狭すぎる』を取り違える)。"""
+    over = any(acl_model.evaluate(ents, _vec_at(d, o)) for o in d["excluded"])
+    under = any(not acl_model.evaluate(ents, _vec_at(d, o)) for o in d["target"])
+    if over and under:
+        return ("対象としているネットワークの一部が一致の対象から外れ、"
+                "かつ対象としていないネットワークが一致の対象に含まれる。")
+    if over:
+        return "対象としていないネットワークまでが、一致の対象に含まれる。"
+    if under:
+        return "対象としているネットワークのうち、一部が一致の対象から外れる。"
+    return "示されている要件を満たさない。"
+
+
 def build_choices_select(d, rnd):
     correct = d["_select_correct"]
     out = []
     for key, lines, ents in select_candidates(d):
         txt = " / ".join(f"`{ln}`" for ln in lines)
-        why = "" if key == correct else WHY_SELECT[key]
+        if key == correct:
+            why = ""
+        elif key in WHY_SELECT:
+            why = WHY_SELECT[key]
+        elif key == "exactN":
+            why = "エントリが複数の行に分かれている。"
+        elif key in ("deny1", "split3", "split4", "cube8", "deny_off"):
+            why = _why_near(d, ents)
+        else:
+            why = _why_near(d, ents)
         # ★「直りはするが要件に合わない」候補の理由は、意味ではなく提示の軸で書く
         if key != correct and key in d["_select_works"]:
-            why = {"one_line": "エントリが1行に収まっていない。",
+            why = {w: "エントリが1行に収まっていない。" for w in WC_WORLDS}
+            why.update({"one_line": "エントリが1行に収まっていない。",
                    "exact_no_deny": ("拒否のエントリが用いられている。"
                                      if any(" deny " in ln for ln in lines)
                                      else "対象としていないネットワークまでが"
                                           "一致の対象に含まれる。"),
                    "exact_min": "より少ない行数で同じ結果が得られる。",
-                   }[d["world"]]
+                   "nb_min": "より少ない行数で同じ結果が得られる。",
+                   "nb_no_deny": ("拒否のエントリが用いられている。"
+                                  if any(" deny " in ln for ln in lines)
+                                  else "より少ない行数で同じ結果が得られる。"),
+                   })
+            why = why[d["world"]]
         out.append((txt, key == correct, why, lines))
     order = list(range(len(out)))
     rnd.shuffle(order)
@@ -720,6 +962,25 @@ def current_entries(d):
         return ([_ext(d, "permit", b, 3, 10, dst_any=True)], False, num)
     if k == "dense_list":
         return dense_entries(d), False, num
+    # --- 適用点(BL-109 段A)。返すのは「**いま効いている** ACL」 ---
+    #   盤面に定義されている ACL 全部は defined_acls() が返す。
+    if k == "apply_wrong_acl":
+        # 適用されているのは**広いほう**。対象外の網まで通ってしまう。
+        return _wrong_acl(d), not ext, str(d["acl_other"])
+    if k in EST_KINDS:
+        # ★往路に効いているのは顧客側のリスト。復路は defined_acls / apply_map 側。
+        return _fwd_acl(d, est=(k == "est_wrong_side")), False, est_refs(d)[0]
+    if k in PLACE_KINDS:
+        return None, d.get("aclform") != "ext", num   # まだ適用されていない
+    if k in ("apply_missing", "apply_other_iface") + tuple(DIRECTION_KINDS):
+        # 中身は要件どおりだが、**往路には効いていない**。
+        #   未適用/別IF → 全許可 / 向きの取り違え → 往路は素通りで**復路が落ちる**
+        #   (どちらも「効いている ACL は無い」なので None。判定は session_ok が行う)
+        return None, not ext, num
+    if k == "filter_undef_ref":
+        return None, True, d["acl_name"]           # 定義そのものが無い(実測 §1)
+    if k == "filter_empty_acl":
+        return [], True, d["acl_name"]             # 定義はあるが空(実測 §2)
     # --- routefilter 系 ---
     if k == "std_len_blind":
         return ([_std(d, "deny", d["target"][0], 0, 10),
@@ -823,6 +1084,11 @@ def vty_allowed(d, o3):
 def read_labels(d):
     """(観測列の見出し, 真の語, 偽の語, 設問の主語(真側/偽側))。"""
     r = d["role"]
+    if d["kind"] in EST_KINDS:
+        # ★戻り通信の盤面は**セッションが張れるか**が観測。到達可/不可より正確
+        #   (実測 §17= 往路で落ちたか復路で落ちたかは TCP の応答で割れる)。
+        return ("TCP セッション", "確立できる", "確立できない",
+                "セッションを確立できるもの", "セッションを確立できないもの")
     if r == "filter":
         return ("サーバへの到達", "到達可", "到達不可", "転送されるもの",
                 "破棄されるもの")
@@ -844,16 +1110,438 @@ def read_labels(d):
             "接続が受理されるもの", "接続が拒否されるもの")
 
 
+def _right_acl(d):
+    """要件どおりに書けている ACL(適用点の故障で「中身は正しい」側になるもの)。"""
+    return [_row(d, "permit", o, 0, 10 + i * 10)
+            for i, o in enumerate(d["target"])]
+
+
+def _wrong_acl(d):
+    """誤って適用されている別の ACL。
+
+    ★症状が**両方向**に出るように作る= 対象の1本を落とし(deny)、
+      対象外の網まで通す(広い permit)。
+    ★2行が重なる(deny の網は permit のキューブの中)ので counter 形も成立する。
+    """
+    return [_row(d, "deny", d["target"][1], 0, 10),
+            _row(d, "permit", d["base"], 7, 20)]
+
+
+def _fwd_acl(d, est=False):
+    """往路用リスト= 顧客網からサーバの当該ポートへ。
+
+    est=True で **`established` を付けてしまった**版(SYN に一致しなくなる)。
+    """
+    return [ac.entry("permit", "tcp", src=net(d, o), sw="0.0.0.255",
+                     dst=d["srv_host"], dw="0.0.0.0",
+                     dport=("eq", [d["port"]]), established=est,
+                     seq=10 + i * 10)
+            for i, o in enumerate(d["target"])]
+
+
+def _ret_acl(d, est=True):
+    """復路用リスト= サーバから顧客網への**戻り**だけを許可する。
+
+    est=False で `established` の行が**無い**版(戻りが暗黙の拒否で落ちる)。
+    ★est=False でも**リストは空にしない**(空だと実測 §2 のとおり全許可になり、
+      「リストはあるのに戻りが通らない」という主題が消える)。
+    """
+    if est:
+        return [ac.entry("permit", "tcp", src=d["srv_host"], sw="0.0.0.0",
+                         sport=("eq", [d["port"]]),
+                         dst=net(d, d["base"]), dw="0.0.7.255",
+                         established=True, seq=10)]
+    return [ac.entry("permit", "ip", src=d["srv_host"], sw="0.0.0.0",
+                     dst=f"{d['oct1']}.{d['oct2']}.{d['mgmt_o3']}.0",
+                     dw="0.0.0.255", seq=10)]
+
+
+def defined_acls(d):
+    """`show ip access-lists` に現れるもの**全部**。(entries, 標準か, 名前) の列。
+
+    ★通常は1枚だが、apply_wrong_acl だけは2枚出る(どちらが適用されているかを
+      `ip access-group` 行で確かめさせるのが狙い)。
+    """
+    ents, is_std, name = current_entries(d)
+    k = d["kind"]
+    if k == "apply_wrong_acl":
+        ext = d.get("aclform") == "ext"
+        prim = str(d["acl_ext"] if ext else d["acl_num"])
+        two = [(int(prim), _right_acl(d), not ext, prim),
+               (int(d["acl_other"]), _wrong_acl(d), not ext,
+                str(d["acl_other"]))]
+        two.sort(key=lambda t: t[0])       # 実機は番号順に並べる
+        return [(e, s, n) for _num, e, s, n in two]
+    if k in EST_KINDS:
+        fwd, ret = est_refs(d)
+        return [(_fwd_acl(d, est=(k == "est_wrong_side")), False, fwd),
+                (_ret_acl(d, est=(k != "est_missing")), False, ret)]
+    if k in PLACE_KINDS:
+        return [(place_acl(d), True, name)]
+    if k in ("apply_missing", "apply_other_iface") + tuple(DIRECTION_KINDS):
+        return [(_right_acl(d), is_std, name)]
+    if ents is None:
+        return []                                   # 未定義= 何も出ない
+    return [(ents, is_std, name)]
+
+
 def show_acl_text(d):
     """`show ip access-lists` の実機書式(実測 poc/acl §11 に忠実)。"""
-    ents, is_std, name = current_entries(d)
-    if ents is None:
-        return ""                                   # 未定義= 何も出ない
-    head = ("Standard IP access list " if is_std else "Extended IP access list ")
-    lines = [head + name]
-    for e in ents:
-        lines.append("    " + _render_entry(e, is_std))
-    return "\n".join(lines)
+    out = []
+    for ents, is_std, name in defined_acls(d):
+        head = ("Standard IP access list " if is_std
+                else "Extended IP access list ")
+        out.append(head + name)
+        for e in ents:
+            out.append("    " + _render_entry(e, is_std))
+    return "\n".join(out)
+
+
+# --------------------------------------------------------------------------
+# 適用点(BL-109 段A)
+# ★実測 poc/acl §16-1= 現行の `show run | section access-list|access-group|...`
+#   では**インターフェイス名が出ない**(IOS の section は子行がマッチしても親を
+#   出さない)ため、適用点を読み取る手段が盤面に存在しなかった。
+#   → filter ロールは `show run | section ^interface` に差し替える。
+# --------------------------------------------------------------------------
+def apply_binding(d):
+    """(適用先 IF or None, 方向, 参照している ACL の名前)。
+
+    ★**保存せず kind から導出する**。evidence 形は kind を差し替えた仮想の盤面を
+      作るので、保存値だと適用点だけ古いまま残る。
+    """
+    if d["role"] != "filter":
+        return (None, None, None)
+    k = d["kind"]
+    ext = d.get("aclform") == "ext"
+    prim = str(d["acl_ext"] if ext else d["acl_num"])
+    if k == "apply_missing" or k in PLACE_KINDS:
+        # ★apply 形(構築系)も**まだ適用されていない**状態で提示する。
+        #   ここを既定値(顧客側の in)のままにすると、設問「どこに適用すべきか」に
+        #   対して**すでに適用済みの構成**を見せることになり自己矛盾する。
+        return (None, "in", prim)
+    if k == "apply_other_iface":
+        return (d["if_mgmt"], "in", prim)
+    if k in ("filter_undef_ref", "filter_empty_acl"):
+        return (d["if_dn"], "in", d["acl_name"])
+    if k == "apply_wrong_acl":
+        return (d["if_dn"], "in", str(d["acl_other"]))
+    if k == "apply_direction":          # 同じ IF で向きだけ逆
+        return (d["if_dn"], "out", prim)
+    if k == "apply_iface_swap":         # 隣の IF の in
+        return (d["if_up"], "in", prim)
+    return (d["if_dn"], "in", prim)
+
+
+# --------------------------------------------------------------------------
+# 段B: 適用マップと**入口/出口の二段評価**
+# ★実測 poc/acl §16-2= 入口の in と出口の out は**両方**で評価される。
+#   §16-10= 要件どおりの ACL(末尾に permit any が無い)を復路に当たる位置へ付けると、
+#   **往路は素通りのまま復路が暗黙の拒否で落ちる**(= 疎通しないのにカウンタは 0)。
+# --------------------------------------------------------------------------
+def est_refs(d):
+    """戻り通信の盤面で使う2枚の ACL 名 (往路用, 復路用)。"""
+    ext = d.get("aclform") == "ext"
+    return (str(d["acl_ext"] if ext else d["acl_num"]), str(d["acl_other"]))
+
+
+def apply_map(d):
+    """{(IF名, "in"|"out"): 参照している ACL 名}。
+
+    ★戻り通信の盤面(EST_KINDS)だけは**2枚**を持つ
+      (顧客側の in= 往路用 / サーバ側の in= 復路用)。
+    """
+    if d["kind"] in EST_KINDS:
+        fwd, ret = est_refs(d)
+        return {(d["if_dn"], "in"): fwd, (d["if_up"], "in"): ret}
+    a_if, a_dir, a_ref = apply_binding(d)
+    return {} if a_if is None else {(a_if, a_dir): a_ref}
+
+
+def acl_by_ref(d, ref):
+    """参照名から entries を引く。未定義なら None(= 全許可・実測 §1)。"""
+    for ents, _s, name in defined_acls(d):
+        if name == ref:
+            return ents
+    return None
+
+
+def path_stages(d, direction):
+    """通過する検査点を (IF名, 方向) の順で返す。
+
+    fwd = 顧客 → サーバ / rev = サーバ → 顧客。
+    ★管理セグメントを絡めた経路は ifs_of() で明示する(fwd/rev には載らない)。
+    """
+    if direction == "fwd":
+        return ifs_of(d["if_dn"], d["if_up"])
+    return ifs_of(d["if_up"], d["if_dn"])
+
+
+def ifs_of(in_if, out_if):
+    """入口 IF と出口 IF から検査点の並びを作る。"""
+    return [(in_if, "in"), (out_if, "out")]
+
+
+def stage_pass(d, vec, direction, amap=None):
+    """★二段評価。落ちたら (False, 落ちた検査点) を返す。
+
+    direction は "fwd"/"rev" のほか、[(IF, 方向), ...] を直接渡してもよい。
+    """
+    amap = apply_map(d) if amap is None else amap
+    stages = (path_stages(d, direction) if isinstance(direction, str)
+              else direction)
+    for point in stages:
+        ref = amap.get(point)
+        if ref is None:
+            continue
+        ents = acl_by_ref(d, ref)
+        if ents is None or ents == []:
+            continue                    # 未定義・空= 全許可(実測 §1・§2)
+        if not acl_model.evaluate(ents, vec):
+            return False, point
+    return True, None
+
+
+def rev_of(v):
+    """往路のベクタから**復路**のベクタを作る(送信元と宛先・ポートを入れ替える)。
+
+    ★戻りの TCP セグメントなので established を立てる。
+    """
+    return {"proto": v["proto"], "src": v["dst"], "dst": v["src"],
+            "sport": v.get("dport"), "dport": v.get("sport"),
+            "established": True, "icmp_type": v.get("icmp_type")}
+
+
+def flow_ok(d, in_if, out_if, vec, amap=None):
+    """★1本の通信が成立するか= **行きと戻りの両方**が通ること。
+
+    ★戻りは入口と出口が入れ替わる= (出口 IF の in, 入口 IF の out)。
+    """
+    ok, _p = stage_pass(d, vec, ifs_of(in_if, out_if), amap)
+    if not ok:
+        return False
+    ok, _p = stage_pass(d, rev_of(vec), ifs_of(out_if, in_if), amap)
+    return ok
+
+
+def session_ok(d, o3=None, amap=None, vec=None):
+    """★通信が成立するか= **往路と復路の両方**が通ること。
+
+    紙面の観測「サーバへの到達」は往復の到達性なので、
+    復路だけが落ちる盤面(apply_direction / apply_iface_swap)もここで False になる
+    (実測 §16-10= 要件どおりの ACL には暗黙の拒否があるため復路で落ちる)。
+    """
+    v = vec if vec is not None else _vec_at(d, o3)
+    return flow_ok(d, d["if_dn"], d["if_up"], v, amap)
+
+
+def interface_blocks(d):
+    """`show running-config | section ^interface` の中身(実測 §16-1 の書式)。
+
+    ★実機は `!` の区切りを入れず、ブロックを続けて出す。
+    """
+    amap = apply_map(d)
+    rows = [(d["if_dn"], f"=== to {d['m']['DN']} ===",
+             f"{d['oct1']}.{d['oct2']}.253.1"),
+            (d["if_up"], f"=== to {d['m']['UP']} ===",
+             f"{d['oct1']}.{d['oct2']}.254.1"),
+            (d["if_mgmt"], "=== management ===",
+             f"{d['oct1']}.{d['oct2']}.{d['mgmt_o3']}.1")]
+    out = []
+    for ifn, desc, ip in rows:
+        out += [f"interface {ifn}", f" description {desc}",
+                f" ip address {ip} 255.255.255.0"]
+        for dr in ("in", "out"):
+            if (ifn, dr) in amap:
+                out.append(f" ip access-group {amap[(ifn, dr)]} {dr}")
+    return out
+
+
+# --------------------------------------------------------------------------
+# apply 形(段B の構築系)= 「このアクセス リストをどこに・どの向きで適用するか」
+# ★実測 §16-5 (iv)= 送信元ベースの ACL は「入口の in」でも「出口の out」でも
+#   同じ結果になるので、**素のままでは正解が2つ**。要件で一意化する。
+# ★実測 §16-11= 出口側に置くと自機の EIGRP hello が暗黙の拒否に食われて
+#   ルーティングが壊れる。これは「入口に置くべき」理由の裏付け(解説で使う)。
+# --------------------------------------------------------------------------
+def mgmt_host(d):
+    return f"{d['oct1']}.{d['oct2']}.{d['mgmt_o3']}.10"
+
+
+def place_hosts(d):
+    """apply 形で要件文に並べる送信元(世界で入れ替わる)。"""
+    if d["world"] == "src_server":
+        return [d["srv_host"], d["other_host"], d["dns"]]
+    return [net(d, o) for o in d["target"]]
+
+
+def place_acl(d):
+    """apply 形の盤面に置く ACL(要件どおりに書けている・まだ適用されていない)。"""
+    if d["world"] == "src_server":
+        return [ac.entry("permit", None, src=h, sw="0.0.0.0", seq=10 + i * 10)
+                for i, h in enumerate(place_hosts(d))]
+    if d["world"] == "deny_to_mgmt":
+        # ★拒否のリスト+ 末尾の permit any。標準なので**送信元しか見ない**。
+        ents = [_std(d, "deny", o, 0, 10 + i * 10)
+                for i, o in enumerate(d["target"])]
+        ents.append(ac.entry("permit", None, seq=10 * (len(ents) + 1)))
+        return ents
+    return _right_acl(d)
+
+
+def _mgmt_vec(d, o3):
+    return {"proto": "tcp", "src": net(d, o3, 5), "dst": mgmt_host(d),
+            "sport": 12345, "dport": 22, "established": False,
+            "icmp_type": None}
+
+
+def place_flows(d):
+    """(表示文, 入口 IF, 出口 IF, ベクタ, 許可されるべきか) の列。"""
+    out = []
+    if d["world"] == "src_server":
+        dst = net(d, d["target"][0], 5)
+        allowed = place_hosts(d)
+        probes = allowed + [f"{d['srv']}.{int(d['srv_host'].split('.')[-1]) + 1}"]
+        for h in probes:
+            out.append((f"送信元が `{h}` であるホストから、"
+                        f"顧客の側の `{net(d, d['target'][0])}/24` 宛ての通信",
+                        d["if_up"], d["if_dn"],
+                        {"proto": "tcp", "src": h, "dst": dst,
+                         "sport": 40000, "dport": 445,
+                         "established": False, "icmp_type": None},
+                        h in allowed))
+        return out + _mgmt_side_flows(d)
+    if d["world"] == "deny_to_mgmt":
+        for o in d["target"]:  # deny_to_mgmt は元から管理セグメントを含む
+            out.append((f"{net(d, o)}/24 から、管理セグメントの "
+                        f"`{mgmt_host(d)}` 宛ての通信",
+                        d["if_dn"], d["if_mgmt"], _mgmt_vec(d, o), False))
+            out.append((f"{net(d, o)}/24 から、サーバである "
+                        f"`{d['srv_host']}` 宛ての通信",
+                        d["if_dn"], d["if_up"], _vec_at(d, o), True))
+        # ★対象外の顧客網は管理セグメントにも到達できたままでなければならない
+        out.append((f"{net(d, d['outsider'])}/24 から、管理セグメントの "
+                    f"`{mgmt_host(d)}` 宛ての通信",
+                    d["if_dn"], d["if_mgmt"], _mgmt_vec(d, d["outsider"]), True))
+        return out
+    for o in list(d["target"]) + [d["outsider"]]:
+        out.append((f"送信元が {net(d, o)}/24 のネットワークにあるホストから、"
+                    f"サーバである `{d['srv_host']}` 宛ての通信",
+                    d["if_dn"], d["if_up"], _vec_at(d, o), o in d["target"]))
+    out += _mgmt_side_flows(d)
+    return out
+
+
+def _mgmt_side_flows(d):
+    """★管理セグメントを絡めた「影響を与えてはならない」通信2本。
+
+    これが無いと、管理 IF に置く2肢が「対象の通信がそこを通らない」だけで
+    自明に落ちてしまい、**出口側に置く解も意味的には成立**してしまう
+    (実質2択・出題 20260811-012 の反省)。この2本を入れると、
+    出口側に置く解は**関係のない通信を巻き添えにする**ので実質的に落ちる。
+    """
+    mh, t0 = mgmt_host(d), net(d, d["target"][0], 5)
+    srv = d["srv_host"] if d["world"] == "src_customer" else place_hosts(d)[0]
+    if d["world"] == "src_customer":
+        return [
+            (f"管理セグメントの `{mh}` から、"
+             f"顧客の側の `{net(d, d['target'][0])}/24` 宛ての通信",
+             d["if_mgmt"], d["if_dn"],
+             {"proto": "tcp", "src": mh, "dst": t0, "sport": 40000,
+              "dport": 22, "established": False, "icmp_type": None}, True),
+            (f"サーバである `{srv}` から、管理セグメントの `{mh}` 宛ての通信",
+             d["if_up"], d["if_mgmt"],
+             {"proto": "tcp", "src": srv, "dst": mh, "sport": 40001,
+              "dport": 514, "established": False, "icmp_type": None}, True),
+        ]
+    return [
+        (f"管理セグメントの `{mh}` から、サーバである `{srv}` 宛ての通信",
+         d["if_mgmt"], d["if_up"],
+         {"proto": "tcp", "src": mh, "dst": srv, "sport": 40000,
+          "dport": 22, "established": False, "icmp_type": None}, True),
+        (f"顧客の側の `{net(d, d['target'][0])}/24` から、"
+         f"管理セグメントの `{mh}` 宛ての通信",
+         d["if_dn"], d["if_mgmt"],
+         {"proto": "tcp", "src": t0, "dst": mh, "sport": 40001,
+          "dport": 514, "established": False, "icmp_type": None}, True),
+    ]
+
+
+def apply_points(d):
+    """候補となる適用点。3つの IF × in/out = 6通り。"""
+    return [(ifn, dr) for ifn in (d["if_dn"], d["if_up"], d["if_mgmt"])
+            for dr in ("in", "out")]
+
+
+def _place_map(d, pt):
+    ext = d.get("aclform") == "ext"
+    return {pt: str(d["acl_ext"] if ext else d["acl_num"])}
+
+
+def apply_works(d, pt):
+    """その適用点に置いたとき、要件のフロー集合が**過不足なく**実現するか。"""
+    amap = _place_map(d, pt)
+    for _txt, in_if, out_if, vec, want in place_flows(d):
+        if flow_ok(d, in_if, out_if, vec, amap) != want:
+            return False
+    return True
+
+
+def verify_apply(d):
+    """★一意性は**構造**から出す(文体上の制約に頼らない)。
+
+    以前は「不要なトラフィックは可能なかぎり早い段階で破棄する」という制約で
+    出口側の解を落としていたが、管理セグメントとの通信を要件に入れたことで
+    **出口側は関係のない通信を巻き添えにする**= 意味的に成立しなくなった。
+    誤答肢がすべて実質的な理由で落ちるので、消去法が効きにくくなる。
+    """
+    good = [pt for pt in apply_points(d) if apply_works(d, pt)]
+    if len(good) != 1:
+        raise ValueError(f"acl apply 一意性違反: works={good} "
+                         f"(world={d['world']})")
+    d["_apply_correct"] = good[0]
+    return good[0]
+
+
+def apply_why(d, pt):
+    """その適用点が要件を満たさない理由を**盤面から**書く。"""
+    amap = _place_map(d, pt)
+    for txt, in_if, out_if, vec, want in place_flows(d):
+        got = flow_ok(d, in_if, out_if, vec, amap)
+        if got == want:
+            continue
+        if want:
+            return f"この位置に適用すると、{txt}が破棄される。"
+        return f"この位置では、{txt}を破棄することができない。"
+    return "示されている要件を満たさない。"
+
+
+def build_choices_apply(d, rnd):
+    correct = verify_apply(d)
+    c = []
+    for pt in apply_points(d):
+        txt = f"`interface {pt[0]}` において `ip access-group " \
+              f"{_place_map(d, pt)[pt]} {pt[1]}`"
+        c.append((txt, pt == correct,
+                  "" if pt == correct else apply_why(d, pt)))
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
+def ipif_acl_text(d, ifn):
+    """`show ip interface <IF> | include access list` の実機書式(実測 §16-1)。
+
+    ★IOS-XE 17.15 は Common access list の行が挟まる。
+      `Inbound  access list` は空白2つ。
+    """
+    amap = apply_map(d)
+    inb = amap.get((ifn, "in"), "not set")
+    outb = amap.get((ifn, "out"), "not set")
+    return ("  Outgoing Common access list is not set\n"
+            f"  Outgoing access list is {outb}\n"
+            "  Inbound  Common access list is not set\n"
+            f"  Inbound  access list is {inb}")
 
 
 def _render_entry(e, is_std):
@@ -917,18 +1605,25 @@ def _port_op_txt(spec):
 # --------------------------------------------------------------------------
 # ロール写像層 — permit 集合 → 症状
 # --------------------------------------------------------------------------
-def flow_passes(d, src_o3):
-    """filter ロール: 送信元 10.a.<o3>.x の通信が通るか。
+def _flow_ok(ents, v):
+    """★フィルタが実質不在(未定義/空/未適用/別 IF)なら**全許可**。
 
-    ★未定義・空はいずれも**全許可**(実測 P1a/P12)。
+    実測= §1(未定義)・§2(空)・§16-4(未適用・別 IF)。ここを `bool(ents) and ...` に
+    すると、拡張形の追加観測だけ「落ちる」ことになり提示と判定が食い違う。
     """
-    ents, _is_std, _n = current_entries(d)
     if ents is None or ents == []:
         return True
-    return acl_model.evaluate(ents, {"proto": "tcp", "src": net(d, src_o3, 5),
-                                     "dst": d["srv_host"], "sport": 12345,
-                                     "dport": d["port"], "established": False,
-                                     "icmp_type": None})
+    return acl_model.evaluate(ents, v)
+
+
+def flow_passes(d, src_o3):
+    """filter ロール: 送信元 10.a.<o3>.x の通信が成立するか。
+
+    ★未定義・空はいずれも**全許可**(実測 P1a/P12)。
+    ★BL-109 段B 以降は**往路と復路の二段**で見る(session_ok)。
+      適用点が正常な盤面では復路に検査点が無いので、従来と同じ結果になる。
+    """
+    return session_ok(d, src_o3)
 
 
 def route_kept(d, adv_router, o3, plen=24):
@@ -976,18 +1671,15 @@ def read_items(d):
             # ★拡張形の症状は「別のポート」「別の宛先」にも出る。
             #   これを観測に出さないと proto_ip_not_tcp / dst_any_too_wide の
             #   症状が見えない(BL-103 ③ と同型の事故になる)。
-            ents, _s, _n = current_entries(d)
             t0 = d["target"][0]
             out.append(
                 (f"送信元が {net(d, t0)}/24 のネットワークにあるホストから、"
                  f"{d['srv_host']} の TCP ポート {d['other_port']} 宛ての通信",
-                 bool(ents) and acl_model.evaluate(
-                     ents, _vec_at(d, t0, dport=d["other_port"]))))
+                 session_ok(d, vec=_vec_at(d, t0, dport=d["other_port"]))))
             out.append(
                 (f"送信元が {net(d, t0)}/24 のネットワークにあるホストから、"
                  f"{d['other_host']} の TCP ポート {d['port']} 宛ての通信",
-                 bool(ents) and acl_model.evaluate(
-                     ents, _vec_at(d, t0, dst=d["other_host"]))))
+                 session_ok(d, vec=_vec_at(d, t0, dst=d["other_host"]))))
         return out
     if r == "routefilter":
         routes = [(d["nb_up"], o, 24) for o in d["target"]] + \
@@ -1016,60 +1708,115 @@ def read_items(d):
 # ★狙い= 「同じアクセス・リストでも、どの行で確定するかはフローごとに変わる」。
 #   1本ずつ判定するのではなく、**差が1フィールドしかない2本を並べて対比**させる。
 # --------------------------------------------------------------------------
-def compare_pair(d):
-    """(表示A, 表示B, 判定A, 判定B) を返す。**結果が割れる組**を優先して選ぶ。"""
+def _cmp_diff(a, b):
+    return sum(1 for k in ("proto", "src", "dst", "sport", "dport",
+                           "established", "icmp_type")
+               if a.get(k) != b.get(k))
+
+
+def compare_flows(d):
+    """見比べさせるフローの並び [(表示, 通るか), ...] を返す。
+
+    ★3本を優先する(8通りのうち真は1つ= 当てずっぽう 1/8)。
+      3本が作れなければ2本(4通り)に落とす。
+    条件:
+      - **宛先が同じ**ものから採る(比較として成立させる)
+      - 結果が**割れている**こと(全部同じだと見比べる意味が無い)
+      - 互いの差が小さい順に選ぶ(1フィールド違いを優先)
+    """
+    if d["kind"] != "dense_list":
+        return None
     ents, _s, _n = current_entries(d)
     if not ents:
         return None
-    probes = dense_probes(d) if d["kind"] == "dense_list" else None
-    if probes is None:
-        return None
-    ev = [(t, v, acl_model.evaluate(ents, v)) for t, v in probes]
+    ev = [(t, v, acl_model.evaluate(ents, v)) for t, v in dense_probes(d)]
+    by_dst = {}
+    for item in ev:
+        by_dst.setdefault(item[1]["dst"], []).append(item)
 
-    def diff_fields(a, b):
-        return sum(1 for k in ("proto", "src", "dst", "sport", "dport",
-                               "established", "icmp_type")
-                   if a.get(k) != b.get(k))
+    best = None
+    for group in by_dst.values():
+        if len(group) < 3:
+            continue
+        for a in range(len(group)):
+            for b in range(a + 1, len(group)):
+                for c in range(b + 1, len(group)):
+                    tri = [group[a], group[b], group[c]]
+                    outs = {x[2] for x in tri}
+                    if len(outs) < 2:
+                        continue          # 全部同じ= 見比べる意味が無い
+                    cost = (_cmp_diff(tri[0][1], tri[1][1])
+                            + _cmp_diff(tri[1][1], tri[2][1])
+                            + _cmp_diff(tri[0][1], tri[2][1]))
+                    if best is None or cost < best[0]:
+                        best = (cost, tri)
+    if best:
+        # 同点の中から盤面で決定的に選ぶ
+        cands = []
+        for group in by_dst.values():
+            if len(group) < 3:
+                continue
+            for a in range(len(group)):
+                for b in range(a + 1, len(group)):
+                    for c in range(b + 1, len(group)):
+                        tri = [group[a], group[b], group[c]]
+                        if len({x[2] for x in tri}) < 2:
+                            continue
+                        cost = (_cmp_diff(tri[0][1], tri[1][1])
+                                + _cmp_diff(tri[1][1], tri[2][1])
+                                + _cmp_diff(tri[0][1], tri[2][1]))
+                        if cost == best[0]:
+                            cands.append(tri)
+        pick = zlib.crc32(f"{d['base']}:{d['port']}:{d['deny_port']}"
+                          .encode()) % len(cands)
+        return [(x[0], x[2]) for x in cands[pick]]
 
-    split, same = [], []
-    for i in range(len(ev)):
-        for j in range(i + 1, len(ev)):
-            ta, va, oa = ev[i]
-            tb, vb, ob = ev[j]
-            nd = diff_fields(va, vb)
-            if nd > 2:
-                continue           # 差が大きすぎると「見比べる」にならない
-            (split if oa != ob else same).append((ta, tb, oa, ob, nd))
-    pool = split or same
+    # --- 2本に落とす ---
+    pool = []
+    for i2 in range(len(ev)):
+        for j2 in range(i2 + 1, len(ev)):
+            if ev[i2][1]["dst"] != ev[j2][1]["dst"]:
+                continue
+            if ev[i2][2] == ev[j2][2]:
+                continue
+            pool.append((_cmp_diff(ev[i2][1], ev[j2][1]), ev[i2], ev[j2]))
     if not pool:
         return None
-    pool.sort(key=lambda x: x[4])          # 差が小さい組を優先
-    top = [p for p in pool if p[4] == pool[0][4]]
-    pick = zlib.crc32(f"{d['base']}:{d['port']}:{d['deny_port']}"
-                      .encode()) % len(top)
-    return top[pick][:4]
+    pool.sort(key=lambda x: x[0])
+    top = [p for p in pool if p[0] == pool[0][0]]
+    pick = zlib.crc32(f"{d['base']}:{d['port']}".encode()) % len(top)
+    _c, x1, x2 = top[pick]
+    return [(x1[0], x1[2]), (x2[0], x2[2])]
 
 
 def compare_ok(d):
-    return d["kind"] == "dense_list" and compare_pair(d) is not None
+    return compare_flows(d) is not None
+
+
+def _cmp_label(idx, n):
+    """通るものの番号の集合 → 言い切りの文。"""
+    if not idx:
+        return "いずれも破棄される。"
+    if len(idx) == n:
+        return "いずれも転送される。"
+    nums = "、".join(str(i + 1) for i in sorted(idx))
+    return f"{nums} のみが転送される。"
 
 
 def build_choices_compare(d, rnd):
-    """4つの言い切りのうち、ちょうど1つが真になる(機械的に一意)。"""
-    pr = compare_pair(d)
-    if pr is None:
+    """★n 本のフローに対し 2^n 通りの言い切りを並べる(真はちょうど1つ)。"""
+    fl = compare_flows(d)
+    if fl is None:
         raise ValueError("acl compare: 見比べられる組が無い")
-    ta, tb, oa, ob = pr
-    d["_compare"] = {"a": ta, "b": tb}
-    opts = [
-        ("いずれも転送される。", (True, True)),
-        ("いずれも破棄される。", (False, False)),
-        ("1つ目は転送され、2つ目は破棄される。", (True, False)),
-        ("1つ目は破棄され、2つ目は転送される。", (False, True)),
-    ]
-    c = [(t, (oa, ob) == pat, "" if (oa, ob) == pat
-          else "示されているアクセス・リストでは、そのようにはならない。")
-         for t, pat in opts]
+    n = len(fl)
+    d["_compare"] = [t for t, _ok in fl]
+    truth = frozenset(i for i, (_t, ok) in enumerate(fl) if ok)
+    c = []
+    for mask in range(1 << n):
+        idx = frozenset(i for i in range(n) if mask & (1 << i))
+        c.append((_cmp_label(idx, n), idx == truth,
+                  "" if idx == truth
+                  else "示されているアクセス・リストでは、そのようにはならない。"))
     order = list(range(len(c)))
     rnd.shuffle(order)
     return [c[i] for i in order]
@@ -1189,17 +1936,34 @@ def build_choices_counter(d, rnd):
     ents, is_std, name = current_entries(d)
     d["_counter_probe"] = p
     c = []
-    for i, e in enumerate(ents):
-        txt = f"`{_render_entry(e, is_std)}` の行"
-        if i == p["first"]:
-            c.append((txt, True, ""))
-        elif i in p["hits"]:
-            # ★最大の罠= 「この行にも一致するはず」。先頭一致で既に確定している。
-            c.append((txt, False,
-                      "先行する行で一致が確定しているため、"
-                      "この行は評価されない。"))
-        else:
-            c.append((txt, False, "この行は当該のパケットに一致しない。"))
+    # ★盤面に ACL が複数あるとき(apply_wrong_acl)は**両方の行**を選択肢に並べる。
+    #   こうしないと「効いていないほうの ACL」を読む必要が消え、
+    #   `ip access-group` 行を見なくても答えられてしまう(BL-109 段A の反省)。
+    lists = defined_acls(d)
+    multi = len(lists) > 1
+
+    def label(e, std, nm):
+        head = f"アクセス リスト {nm} の " if multi else ""
+        return f"{head}`{_render_entry(e, std)}` の行"
+
+    for l_ents, l_std, l_name in lists:
+        eff = (l_name == name)
+        for i, e in enumerate(l_ents):
+            txt = label(e, l_std, l_name)
+            if eff and i == p["first"]:
+                c.append((txt, True, ""))
+            elif not eff:
+                # ★効いていない ACL の行= どれだけ一致していてもカウンタは進まない。
+                c.append((txt, False,
+                          "このアクセス リストは、いずれのインターフェイスにも"
+                          "適用されていない。"))
+            elif i in p["hits"]:
+                # ★最大の罠= 「この行にも一致するはず」。先頭一致で既に確定している。
+                c.append((txt, False,
+                          "先行する行で一致が確定しているため、"
+                          "この行は評価されない。"))
+            else:
+                c.append((txt, False, "この行は当該のパケットに一致しない。"))
     c.append(("いずれの行のカウンタも増加しない(暗黙の拒否によって処理される)",
               False, "暗黙の拒否にはカウンタが存在しないが、"
                      "本件は明示された行に一致している。"))
@@ -1450,6 +2214,46 @@ def build_choices_fix(d, rnd):
 #   に化けるので、症状(経路表)だけでは割れない。どの出力なら何通りに割れるかを機械採点する。
 # --------------------------------------------------------------------------
 EVIDENCE_HYPS = ("undef_ref", "empty_acl", "ext_named_rejected")
+# ★filter ロール版(BL-109 段A)。実測 §16-4 で「フィルタが実質不在」の類型が
+#   3種→5種に増えた。うち filter ロールに載るのはこの4種。
+#   ★4つ並べると `show ip access-lists` と `show run | section ^interface` が
+#     どちらも3分割になって**最良の出力が一意でなくなる**ので、盤面から
+#     決定的に1つ落として3仮説にする(下の filter_evidence_hyps)。
+FILTER_EVIDENCE_HYPS = ("filter_undef_ref", "filter_empty_acl",
+                        "apply_missing", "apply_other_iface")
+# ★全断系(症状が「どのセッションも成立しない」で同じ)の仮説群。
+#   ★4つ並べると `show ip access-lists` と `show run | section ^interface` が
+#     どちらも3分割になって最良が一意でなくなる。
+#     **est の2種＋apply の1種**という組にすると `show ip access-lists` だけが
+#     3分割になり一意に決まる(下の blackout_evidence_hyps)。
+BLACKOUT_EVIDENCE_HYPS = ("apply_direction", "apply_iface_swap",
+                          "est_missing", "est_wrong_side")
+
+
+def blackout_evidence_hyps(d):
+    applies = ["apply_direction", "apply_iface_swap"]
+    if d["kind"] in applies:
+        pick = d["kind"]
+    else:
+        pick = applies[zlib.crc32(f"bo:{d['base']}:{d['oct2']}".encode()) % 2]
+    keep = {pick, "est_missing", "est_wrong_side"}
+    return tuple(h for h in BLACKOUT_EVIDENCE_HYPS if h in keep)
+
+
+def filter_evidence_hyps(d):
+    others = [h for h in FILTER_EVIDENCE_HYPS if h != d["kind"]]
+    drop = zlib.crc32(f"ev:{d['base']}:{d['oct2']}:{d['acl_num']}"
+                      .encode()) % len(others)
+    keep = {d["kind"]} | {h for i, h in enumerate(others) if i != drop}
+    return tuple(h for h in FILTER_EVIDENCE_HYPS if h in keep)
+
+
+def evidence_hyps(d):
+    if d["kind"] in BLACKOUT_EVIDENCE_HYPS:
+        return blackout_evidence_hyps(d)
+    if d["role"] == "filter":
+        return filter_evidence_hyps(d)
+    return EVIDENCE_HYPS
 
 
 def _hyp_board(d, kind):
@@ -1460,8 +2264,37 @@ def _hyp_board(d, kind):
     return e
 
 
+def _filter_evidence_observations(d):
+    """filter ロールの evidence(実測 §16-4 の割れ方をそのまま写す)。"""
+    hyps = evidence_hyps(d)
+    m, ifn = d["m"], d["if_dn"]
+    obs = []
+
+    def add(text, fn):
+        obs.append((text, {k: fn(_hyp_board(d, k)) for k in hyps}))
+
+    # 3分割になり得る: 未定義=何も出ない / 空=ヘッダのみ / 定義済み=エントリあり
+    add(f"{m['DUT']} における `show ip access-lists`", show_acl_text)
+    # 3分割になり得る: 顧客側に適用 / どこにも無い / 管理側に適用
+    add(f"{m['DUT']} における "
+        "`show running-config | section ^interface`",
+        lambda e: "|".join(l for l in interface_blocks(e)
+                           if "access-group" in l) or "(none)")
+    # 2分割: 当該 IF に付いているか否か(未適用と別 IF 適用は**同じに見える**)
+    add(f"{m['DUT']} における "
+        f"`show ip interface {ifn} | include access list`",
+        lambda e: ipif_acl_text(e, ifn))
+    # 1分割(無意味): どの仮説でも全部素通りなので症状も経路表も同じ
+    add(f"{m['DUT']} における `show ip route`", lambda e: "same")
+    add(f"{m['DUT']} における `show interfaces {ifn} | include packets`",
+        lambda e: "same")
+    return obs
+
+
 def evidence_observations(d):
     """(表示文, 仮説→見え方) の列。見え方の異なり数が「何通りに割れるか」。"""
+    if d["role"] == "filter":
+        return _filter_evidence_observations(d)
     obs = []
 
     def add(text, fn):
@@ -1489,7 +2322,10 @@ def evidence_observations(d):
 
 
 def evidence_ok(d):
-    if d["role"] != "routefilter" or d["kind"] not in EVIDENCE_HYPS:
+    if d["role"] == "filter":
+        if d["kind"] not in FILTER_EVIDENCE_HYPS + BLACKOUT_EVIDENCE_HYPS:
+            return False
+    elif d["role"] != "routefilter" or d["kind"] not in EVIDENCE_HYPS:
         return False
     splits = [len(set(v.values())) for _t, v in evidence_observations(d)]
     top = max(splits)
@@ -1635,6 +2471,24 @@ CLAIMS = {
                         "ポートによる制限が行われていない",
     "dst_any_too_wide": "宛先として any が指定されているため、"
                         "当該のサーバ以外への通信までが許可されている",
+    "apply_wrong_acl": "インターフェイスに適用されているアクセス・リストが、"
+                       "意図されているものとは別のアクセス・リストである",
+    "apply_missing": "アクセス・リストが、いずれのインターフェイスにも"
+                     "適用されていない",
+    "apply_other_iface": "アクセス・リストが、管理のためのインターフェイスに"
+                         "適用されている",
+    "apply_direction": "インターフェイスに対して、アクセス・リストが in ではなく "
+                       "out の方向に適用されている",
+    "est_missing": "戻りの通信を許可するアクセス・リストに、"
+                   "established のキーワードを伴うエントリが存在しない",
+    "est_wrong_side": "established のキーワードが、戻りの側ではなく、"
+                      "通信を開始する側のアクセス・リストに記述されている",
+    "apply_iface_swap": "アクセス・リストが、顧客の側ではなくサーバの側の"
+                        "インターフェイスに、着信の方向で適用されている",
+    "filter_undef_ref": "インターフェイスから参照されているアクセス・リストが、"
+                        "定義されていない",
+    "filter_empty_acl": "インターフェイスに適用されているアクセス・リストに、"
+                        "エントリが1つも存在しない",
     "std_len_blind": "標準のアクセス・リストが用いられており、"
                      "プレフィックスの長さが区別されていない",
     "ext_named_rejected": "名前付きの拡張のアクセス・リストが指定されており、"
@@ -1663,6 +2517,21 @@ REFUTES = {
     "port_swap": "ポートの演算子は、宛先の側に記述されている。",
     "proto_ip_not_tcp": "示されているエントリのプロトコルは tcp である。",
     "dst_any_too_wide": "示されているエントリの宛先は、当該のサーバに限定されている。",
+    "apply_wrong_acl": "示されている構成において、適用されているアクセス・リストは"
+                       "1つだけである。",
+    "apply_missing": "示されている構成に、アクセス・リストを適用する"
+                     "ステートメントが存在する。",
+    "apply_other_iface": "アクセス・リストは、管理のためのインターフェイスには"
+                         "適用されていない。",
+    "apply_direction": "示されている構成では、適用の方向は in である。",
+    "est_missing": "戻りの通信のアクセス・リストには、"
+                   "established を伴うエントリが存在する。",
+    "est_wrong_side": "通信を開始する側のアクセス・リストには、"
+                      "established は記述されていない。",
+    "apply_iface_swap": "アクセス・リストは、顧客の側のインターフェイスに"
+                        "適用されている。",
+    "filter_undef_ref": "参照されているアクセス・リストは定義されている。",
+    "filter_empty_acl": "アクセス・リストにはエントリが存在する。",
     "std_len_blind": "用いられているのは標準のアクセス・リストではない。",
     "ext_named_rejected": "指定されているアクセス・リストは番号付きである。",
     "ext_src_is_network": "送信元にはネットワークのアドレスは記述されていない。",
@@ -1705,12 +2574,19 @@ MISCONCEPTION = {
     ],
 }
 
+# ★「in ではなく out に適用されている」は BL-109 段B で**実在の故障種**
+#   (apply_direction)になったので、無条件の錯乱肢としては使えない
+#   (真になる盤面があるのに常に偽として出してしまう)。CLAIMS 側へ移動済み。
+# ★3つ目の要素= 「この盤面では**実機で真になり得る**か」の判定。
+#   偽の錯乱肢として出してよいのは、真になり得ない盤面だけ
+#   (CROSS から in/out を外したのと同じ方針)。
 CROSS = [
-    ("インターフェイスに対して、アクセス・リストが in ではなく out の方向に"
-     "適用されている",
-     "示されている構成では、適用の方向は in である。"),
     ("ルーティング・プロトコルの隣接関係が確立されていない",
-     "示されている出力に、当該のネイバーから学習されたルートが存在する。"),
+     "示されている構成には、ルーティング・プロトコルの設定は含まれていない。",
+     # ★実測 G12/G11= 向きや IF を取り違えた ACL は**自機の hello も落とす**ので、
+     #   実機では隣接が本当に落ちる。紙面はその効果をモデル化していないが、
+     #   「偽である」と言い切ることはできない。
+     lambda d: d.get("kind") in BLACKOUT_FILTER_KINDS),
     ("インターフェイスが管理上シャットダウンされている",
      "示されている出力では、当該のインターフェイスは up の状態である。"),
     ("プレフィックス・リストがルート・マップから参照されていない",
@@ -1723,7 +2599,8 @@ def build_choices_cause(d, rnd):
     # ★同じロールの主張から採る(別ロールの主張は「構成が存在しない」で自明に落ち、
     #   錯乱肢として機能しないため)。足りない分は CROSS で埋める。
     pool = [k for k in KINDS
-            if role_of(k) == d["role"] and k not in DENSE_KINDS]
+            if role_of(k) == d["role"] and k not in DENSE_KINDS
+            and k in CLAIMS]
     others = [k for k in pool if k != kind]
     # ★同時に真になり得る主張は錯乱肢に採らない(cause の一意性)。
     others = [k for k in others if not _also_true(d, k)]
@@ -1741,7 +2618,10 @@ def build_choices_cause(d, rnd):
     n_mis = min(len(mis), max(0, 3 - n_kind))
     c += [(t, False, why) for t, why in rnd.sample(mis, n_mis)]
     rest = max(0, 5 - n_kind - n_mis)
-    c += [(t, False, why) for t, why in rnd.sample(CROSS, min(len(CROSS), rest))]
+    cross = [(x[0], x[1]) for x in CROSS
+             if len(x) < 3 or not x[2](d)]
+    c += [(t, False, why)
+          for t, why in rnd.sample(cross, min(len(cross), rest))]
     order = list(range(len(c)))
     rnd.shuffle(order)
     return [c[i] for i in order]
@@ -1754,6 +2634,36 @@ def _also_true(d, other_kind):
         return ents is None
     if other_kind == "empty_acl":
         return ents == []
+    # ★適用点(BL-109): 盤面の**適用の状態**から機械判定する。
+    #   ents(=効いている ACL)ではなく defined_acls / apply_binding を見ること。
+    if other_kind in APPLY_KINDS:
+        a_if, a_dir, _ref = apply_binding(d)
+        defined = defined_acls(d)
+        if other_kind == "apply_direction":
+            return a_if == d.get("if_dn") and a_dir == "out"
+        if other_kind == "apply_iface_swap":
+            return a_if == d.get("if_up") and a_dir == "in"
+        if other_kind in PLACE_KINDS:
+            return False               # 故障ではない(構築系)
+        if other_kind in EST_KINDS:
+            # ★盤面に復路用のリストがあるか / どちら側に established があるか
+            if d["kind"] not in EST_KINDS:
+                return False
+            lists = defined_acls(d)
+            if other_kind == "est_missing":
+                return not any(e.get("established")
+                               for ents, _s, _n in lists for e in ents)
+            return any(e.get("established") for e in lists[0][0])
+        if other_kind == "apply_wrong_acl":
+            return len(defined) >= 2
+        if other_kind == "apply_missing":
+            return d["role"] == "filter" and a_if is None
+        if other_kind == "apply_other_iface":
+            return a_if == d.get("if_mgmt")
+        if other_kind == "filter_undef_ref":
+            return d["role"] == "filter" and not defined
+        if other_kind == "filter_empty_acl":
+            return any(e == [] for e, _s, _n in defined)
     if ents is None or ents == []:
         return False
     if other_kind == "std_len_blind":
@@ -1812,8 +2722,9 @@ def _selftest(n=60):
     ok = ng = 0
     fails = []
     # select 形: 全 kind(filter) × 全 world × n seed で一意性
+    #   ★apply_place は要件世界が別系統(APPLY_PLACE_WORLDS)なので worlds_for に従う
     for kind in FILTER_KINDS:
-        for world in FILTER_WORLDS:
+        for world in worlds_for(kind):
             good = 0
             for s in range(n):
                 try:
@@ -1866,10 +2777,18 @@ def _selftest(n=60):
                     if rb < 4:
                         print(f"    読み戻し失敗: {kind}/{world}: {e}")
                     continue
-                ents2 = list(back.values())[0]
-                ents1, _s3, _n3 = current_entries(d)
-                for text, ok in read_items(d):
-                    pass
+                ents1, _s3, name1 = current_entries(d)
+                if ents1 is None or ents1 == []:
+                    continue        # フィルタ実質不在(適用点の故障)= 比べる先が無い
+                # ★盤面に ACL が複数出ることがある(apply_wrong_acl)。
+                #   読み戻す先は**いま効いている 1 枚**でなければならない。
+                if name1 not in back:
+                    rb += 1
+                    if rb < 4:
+                        print(f"    読み戻しに効いている ACL が無い: "
+                              f"{kind}/{world} name={name1}")
+                    continue
+                ents2 = back[name1]
                 for o3 in list(d["target"]) + [d["fourth"], d["outsider"]]:
                     v = _vec_at(d, o3)
                     if _am.evaluate(ents1, v) != _am.evaluate(ents2, v):
@@ -1946,26 +2865,28 @@ def _selftest(n=60):
     share = (act.get("permit", 0) / tot) if tot else 0
     print(f"  counter の正解の内訳: {dict(act)} (permit 率 {share:.0%})")
 
-    # ★compare 形: 4肢のうち真がちょうど1つ／結果が割れる組が選べているか
-    cp_ok = cp_ng = 0
-    split = 0
+    # ★compare 形: 2^n 肢のうち真がちょうど1つ／結果が割れていること／
+    #   3フロー(=8肢・当てずっぽう 1/8)が主であること
+    cp_ok = cp_ng = tri = 0
     for s2 in range(80):
         d = draw(random.Random(s2 * 83 + 11), kind="dense_list")
-        if not compare_ok(d):
+        fl = compare_flows(d)
+        if fl is None:
             cp_ng += 1
             continue
-        pr = compare_pair(d)
-        if pr[2] != pr[3]:
-            split += 1
+        if len(fl) == 3:
+            tri += 1
+        outs = {ok2 for _t2, ok2 in fl}
         ch = build_choices_compare(d, random.Random(1))
-        if sum(1 for _t, c2, *_r in ch if c2) == 1 and len(ch) == 4:
+        if (len(outs) == 2 and len(ch) == (1 << len(fl))
+                and sum(1 for _t2, c2, *_r in ch if c2) == 1):
             cp_ok += 1
         else:
             cp_ng += 1
-    print(f"  compare 形: OK={cp_ok} NG={cp_ng} (結果が割れる組 {split}/{cp_ok})")
+    print(f"  compare 形: OK={cp_ok} NG={cp_ng} (3フロー {tri}/{cp_ok})")
     ng += cp_ng
-    if cp_ok and split / cp_ok < 0.8:
-        print("    ★結果が同じ組ばかり(見比べる意味が薄い)")
+    if cp_ok and tri / cp_ok < 0.8:
+        print("    ★2フローに落ちる盤面が多い(当てずっぽうが 1/4 のまま)")
         ng += 1
 
     # ★送信元ポートの行が必ず1本入っているか(ユーザ要望)
@@ -1994,10 +2915,13 @@ def _selftest(n=60):
                     d = draw(rnd, kind=kind, world=world)
                 except ValueError:
                     continue
+                if "read" not in forms_for(d):
+                    # ★そもそも read を持たない種(全許可系・全断系・構築系)。
+                    #   一覧を二重管理しないよう forms_for に判断を委ねる。
+                    r_skip += 1
+                    continue
                 pol = read_polarity(d)
                 if pol is None:
-                    # ★NO_READ_KINDS は**全部通る**のが実測どおりの正解なので
-                    #   read 形は成立しない(cause 形で出す)。欠陥ではない。
                     if kind in NO_READ_KINDS:
                         r_skip += 1
                         continue
@@ -2019,22 +2943,23 @@ def _selftest(n=60):
     # cause 形: 正解1つ・錯乱肢が偽であること
     c_ok = c_ng = 0
     for kind in KINDS:
-        for s in range(12):
-            rnd = random.Random(s * 53 + 3)
-            try:
-                d = draw(rnd, kind=kind)
-                if "cause" not in forms_for(d):
-                    continue          # dense_list は cause 形を持たない
-                ch = build_choices_cause(d, rnd)
-            except ValueError as e:
-                c_ng += 1
-                if c_ng < 4:
-                    print(f"    cause NG: {kind}: {e}")
-                continue
-            if sum(1 for _t, c, _w in ch if c) == 1:
-                c_ok += 1
-            else:
-                c_ng += 1
+        for world in worlds_for(kind):
+            for s in range(4):
+                rnd = random.Random(s * 53 + 3)
+                try:
+                    d = draw(rnd, kind=kind, world=world)
+                    if "cause" not in forms_for(d):
+                        continue      # dense_list / apply 系は cause を持たない
+                    ch = build_choices_cause(d, rnd)
+                except ValueError as e:
+                    c_ng += 1
+                    if c_ng < 4:
+                        print(f"    cause NG: {kind}/{world}: {e}")
+                    continue
+                if sum(1 for _t, c, _w in ch if c) == 1:
+                    c_ok += 1
+                else:
+                    c_ng += 1
     print(f"  cause 一意性: OK={c_ok} NG={c_ng}")
 
     # 実測との整合(poc/acl/README.md)
@@ -2143,7 +3068,225 @@ def _selftest(n=60):
             cp_ng += 1
     print(f"  counter 先頭一致: OK={cp_ok} NG={cp_ng}")
 
-    total_ng = ng + r_ng + c_ng + m_ng + b_ng + cp_ng
+    # ★適用点(BL-109 段A)。ここで担保するのは3点:
+    #   (a) 提示(interface_blocks / ipif_acl_text)と apply_binding が一致すること
+    #   (b) 故障が**提示物のどこかに現れる**こと(現れないと解答不能)
+    #   (c) 「実質不在」4種が本当に全許可になっていること(実測 §16-4)
+    ap_ok = ap_ng = 0
+    for kind in APPLY_KINDS:
+        for s2 in range(30):
+            d = draw(random.Random(s2 * 31 + 5), kind=kind)
+            amap = apply_map(d)
+            blocks = interface_blocks(d)
+            bad = None
+            # (a) 提示された適用行の集合が apply_map と**過不足なく**一致すること
+            cur, seen = None, {}
+            for l in blocks:
+                if l.startswith("interface "):
+                    cur = l.split()[1]
+                elif "access-group" in l:
+                    _x, _y, ref, dr = l.split()
+                    seen[(cur, dr)] = ref
+            if seen != amap:
+                bad = f"適用行が apply_map と不一致: {seen} != {amap}"
+            a_if, a_dir, a_ref = apply_binding(d)
+            # `show ip interface` の描画も binding に追随すること
+            #   ★方向も見る(apply_direction は Outgoing 側に出る)
+            if not bad:
+                for ifn in (d["if_dn"], d["if_up"], d["if_mgmt"]):
+                    txt = ipif_acl_text(d, ifn)
+                    for dr, label in (("in", "Inbound  access list is"),
+                                      ("out", "Outgoing access list is")):
+                        want = amap.get((ifn, dr), "not set")
+                        if f"{label} {want}" not in txt:
+                            bad = (f"show ip interface {ifn} の {dr} が "
+                                   f"binding と不一致")
+                            break
+                    if bad:
+                        break
+            # (b) 健全な盤面(正しい ACL を顧客側 in)と提示物が違うこと
+            if not bad:
+                h = dict(d, kind="wc_narrow")     # 適用点は正常な kind
+                same_acl = show_acl_text(d) == show_acl_text(h)
+                same_if = interface_blocks(d) == interface_blocks(h)
+                if same_acl and same_if:
+                    bad = "健全な盤面と提示物が同一(解答不能)"
+            # (c) 実質不在の4種は全許可
+            if not bad and kind in INERT_FILTER_KINDS:
+                if not all(ok for _t, ok in read_items(d)):
+                    bad = "実質不在のはずが落ちる観測がある"
+            if not bad and kind in BLACKOUT_FILTER_KINDS:
+                if any(ok for _t, ok in read_items(d)):
+                    bad = "全断のはずが通る観測がある"
+            if bad:
+                ap_ng += 1
+                if ap_ng < 5:
+                    print(f"    ★適用点 NG: {kind}: {bad}")
+            else:
+                ap_ok += 1
+    print(f"  適用点の提示と binding: OK={ap_ok} NG={ap_ng}")
+
+    # ★filter ロールの evidence 形= 最良の出力が一意であること(実測 §16-4)
+    ev_ok = ev_ng = 0
+    for kind in FILTER_EVIDENCE_HYPS + BLACKOUT_EVIDENCE_HYPS:
+        for s2 in range(20):
+            d = draw(random.Random(s2 * 37 + 11), kind=kind)
+            if not evidence_ok(d):
+                ev_ng += 1
+                if ev_ng < 4:
+                    sp = [len(set(v.values()))
+                          for _t, v in evidence_observations(d)]
+                    print(f"    ★evidence NG: {kind} splits={sp} "
+                          f"hyps={evidence_hyps(d)}")
+                continue
+            ch = build_choices_evidence(d, random.Random(s2))
+            # ★仮説は問題文に**明示**される(gen_paper_mcq.acl_evidence_lead)ので、
+            #   すべて CLAIMS を持っていなければならない。
+            if not all(k in CLAIMS for k in evidence_hyps(d)):
+                ev_ng += 1
+                print(f"    ★evidence NG: {kind}: CLAIMS の無い仮説がある "
+                      f"{[k for k in evidence_hyps(d) if k not in CLAIMS]}")
+            elif sum(1 for _t, ok, _w in ch if ok) != 1:
+                ev_ng += 1
+            else:
+                ev_ok += 1
+    print(f"  filter evidence の一意性: OK={ev_ok} NG={ev_ng}")
+
+    # ★ワイルドカードの組み立てが主題の世界(ユーザ要望 2026-08-11)。
+    #   ①正解は**パターンが指すワイルドカード**そのものであること
+    #   ②1行の錯乱肢が3本以上あり、いずれも成立しないこと
+    #   ③対象集合がパターンどおりであること
+    wc_ok = wc_ng = 0
+    for world in WC_WORLDS:
+        pat = SRC_PATTERNS[world]
+        for kind in ("wc_narrow", "wc_wide", "order_shadow", "port_swap"):
+            if (kind, world) in INCOMPATIBLE:
+                continue
+            for s2 in range(8):
+                try:
+                    d = draw(random.Random(s2 * 61 + 5), kind=kind, world=world)
+                except ValueError as e:
+                    wc_ng += 1
+                    if wc_ng < 4:
+                        print(f"    ★WC NG: {kind}/{world}: {e}")
+                    continue
+                b0 = d["base"]
+                cands = select_candidates(d)
+                good = [k for k, l, e in cands
+                        if _select_works(d, e) and _select_complies(d, l, e)]
+                ones = [k for k, l, e in cands if len(l) == 1]
+                bad = None
+                if d["target"] != [b0 + o for o in pat["offs"]]:
+                    bad = f"対象集合がパターンと違う: {d['target']}"
+                elif good != ["cube"]:
+                    bad = f"正解が cube でない: {good}"
+                elif len(ones) < 4:
+                    bad = f"1行の候補が少ない({len(ones)})"
+                else:
+                    a_off, a_wc = pat["ans"]
+                    want = f"{net(d, b0 + a_off)} 0.0.{a_wc}.255"
+                    line = [l for k, l, _e in cands if k == "cube"][0][0]
+                    if want not in line:
+                        bad = f"正解の WC がパターンと違う: {line}"
+                if bad:
+                    wc_ng += 1
+                    if wc_ng < 4:
+                        print(f"    ★WC NG: {kind}/{world}: {bad}")
+                else:
+                    wc_ok += 1
+    print(f"  WC トリック世界: OK={wc_ok} NG={wc_ng}")
+
+    # ★1行では書けないレンジ(論点4)。
+    #   ①1行の候補が**1つも成立しない**こと(=「1行で書ける」は誤り)
+    #   ②nb_min の正解は deny 先行2行・nb_no_deny の正解は**大きさの違う3つ**
+    #   ③2世界で正解が反転すること
+    nb_ok = nb_ng = 0
+    nb_correct = {}
+    for world in NB_WORLDS:
+        for kind in ("wc_narrow", "wc_wide", "order_shadow", "port_swap"):
+            for s2 in range(8):
+                try:
+                    d = draw(random.Random(s2 * 67 + 9), kind=kind, world=world)
+                except ValueError as e:
+                    nb_ng += 1
+                    if nb_ng < 4:
+                        print(f"    ★NB NG: {kind}/{world}: {e}")
+                    continue
+                cands = select_candidates(d)
+                bad = None
+                if len(d["target"]) != 7:
+                    bad = f"対象が7本でない: {len(d['target'])}"
+                elif any(len(l) == 1 and _select_works(d, e)
+                         for _k, l, e in cands):
+                    bad = "1行で成立する候補がある(レンジが境界に載っている)"
+                elif sum(1 for _k, l, _e in cands
+                         if any(" deny " in ln for ln in l)) < 2:
+                    # ★正解が「唯一 deny を含む肢」だと見た目で当てられる
+                    bad = "deny を含む候補が1本しかない"
+                else:
+                    nb_correct.setdefault(world, set()).add(
+                        d["_select_correct"])
+                    if d["_select_correct"] != ("deny1" if world == "nb_min"
+                                                else "split3"):
+                        bad = f"正解が想定と違う: {d['_select_correct']}"
+                if bad:
+                    nb_ng += 1
+                    if nb_ng < 4:
+                        print(f"    ★NB NG: {kind}/{world}: {bad}")
+                else:
+                    nb_ok += 1
+    if nb_correct.get("nb_min") == nb_correct.get("nb_no_deny"):
+        nb_ng += 1
+        print(f"    ★NB NG: 2世界で正解が反転していない {nb_correct}")
+    print(f"  1行で書けないレンジ: OK={nb_ok} NG={nb_ng} "
+          f"(正解: {[(w, sorted(v)) for w, v in sorted(nb_correct.items())]})")
+
+    # ★apply 形(段B の構築系)= 「意味的に成立する候補≥2・制約適合=ちょうど1」
+    #   ＋世界で**正解の IF が反転する**こと(被覆エンジンの狙いが機能しているか)。
+    pl_ok = pl_ng = 0
+    seen_correct = {}
+    for world in APPLY_PLACE_WORLDS:
+        for s2 in range(30):
+            d = draw(random.Random(s2 * 43 + 3), kind="apply_place", world=world)
+            pt = d["_apply_correct"]
+            seen_correct.setdefault(world, set()).add(
+                "dn" if pt[0] == d["if_dn"] else
+                "up" if pt[0] == d["if_up"] else "mgmt")
+            ch = build_choices_apply(d, random.Random(s2))
+            bad = None
+            blocks = interface_blocks(d)
+            names = {n for _e, _s, n in defined_acls(d)}
+            if any("access-group" in l for l in blocks):
+                # ★「どこに適用すべきか」を問うのに適用済みの構成を見せない
+                bad = "構築系なのに提示の構成に適用行がある"
+            elif not all(any(f"access-group {n} " in txt
+                             for n in names) for txt, _o, _w in ch):
+                bad = "選択肢が提示された ACL を参照していない"
+            elif len(ch) != 6:
+                bad = f"選択肢が6つでない({len(ch)})"
+            elif sum(1 for _t, o, _w in ch if o) != 1:
+                bad = "正解が1つでない"
+            elif len([q for q in apply_points(d) if apply_works(d, q)]) != 1:
+                bad = "意味的に成立する候補が1つでない(構造で一意になっていない)"
+            elif any(not w for _t, _o, w in ch if not _o):
+                bad = "誤答肢に理由が付いていない"
+            if bad:
+                pl_ng += 1
+                if pl_ng < 4:
+                    print(f"    ★apply NG: {world}: {bad}")
+            else:
+                pl_ok += 1
+    if seen_correct.get("src_customer") != {"dn"} or \
+            seen_correct.get("src_server") != {"up"} or \
+            seen_correct.get("deny_to_mgmt") != {"mgmt"}:
+        pl_ng += 1
+        print(f"    ★apply NG: 世界で正解の IF が反転していない {seen_correct}")
+    print(f"  apply 形の一意性: OK={pl_ok} NG={pl_ng} "
+          f"(正解IF: {[(w, sorted(v)) for w, v in sorted(seen_correct.items())]})")
+
+    total_ng = (ng + r_ng + c_ng + m_ng + b_ng + cp_ng + ap_ng + ev_ng
+                + pl_ng + wc_ng + nb_ng)
+
     print(f"gen_paper_acl selftest: NG合計={total_ng}")
     return total_ng == 0
 

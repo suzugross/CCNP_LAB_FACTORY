@@ -1503,7 +1503,561 @@ def check_P13_empty_vs_undef(devs, log):
     time.sleep(12)
 
 
+# ==================== G系: 適用点(BL-109 段A/段B の前提) ====================
+# 紙面 shape=acl は「ACL の中身」だけを主題にしており、`ip access-group` 行は
+# 常に正しく・常に同じ向きで描かれている(= 読む価値が無い)。
+# 適用点そのものを主題にするために、以下を対照つきで確定させる。
+#   G1 適用点はどの show にどう出るか(紙面の忠実性)
+#   G2 入口 in と出口 out の**両方**で評価されるか
+#   G3 同一 IF の in / out は別のトラフィックに当たるか(方向の非対称)
+#   G4 「定義済みだが効いていない」の見え方(未適用 / 無関係な IF)
+#   G5 方向を間違えたときの症状(往路と復路のどちらが落ちるか)
+#   G6 uRPF の `reachable-via rx` と `any` の差
+#   G7 NAT の `ip nat inside/outside` を付け忘れたとき
+#   G8 distribute-list の in / out とインターフェイス指定
+#   G9 CoPP の `service-policy input` を付け忘れたとき
+
+MATCH_RX = re.compile(r"\((\d+) match(?:es)?\)")
+
+
+def _acl_clean(dev, names=(), binds=()):
+    """★作法4: 冒頭で対象 ACL と適用を消す(前回の異常終了で残骸が出る)。
+
+    binds は (IF名, 方向, ACL名/番号) のタプル列。
+    """
+    lines = []
+    for ifn, direc, n in binds:
+        lines += [f"interface {ifn}", f"no ip access-group {n} {direc}", "exit"]
+    for n in names:
+        lines.append(f"no access-list {n}")
+    if lines:
+        dev.configure(lines, error_pattern=[], timeout=120)
+
+
+def _hits(dev, acl, seq=10):
+    """`show ip access-lists <acl>` の seq 行のカウンタ。行が無ければ -1。"""
+    for ln in (sh(dev, f"show ip access-lists {acl}") or "").splitlines():
+        s = ln.strip()
+        if s.startswith(f"{seq} "):
+            m = MATCH_RX.search(s)
+            return int(m.group(1)) if m else 0
+    return -1
+
+
+def _ipif_acl(dev, ifn):
+    """`show ip interface <IF>` の適用点表示(Inbound / Outgoing)。"""
+    return sh(dev, f"show ip interface {ifn} | include access list")
+
+
+
+def _require_acl(dev, acl, log):
+    """★仕込みが実際に入ったかを確かめる。
+
+    入っていないのに観測すると「ACL 無し」の値を「no-op を確認した」と
+    読み違える(G10/G11 の1回目で実際にやった= 158/159 は**拡張帯の番号**なのに
+    標準構文で書いており `% Invalid input` で作られていなかった)。
+    """
+    if _hits(dev, acl) < 0:
+        log.append(f"- ★**測定不成立**: ACL {acl} が作られていない(構文誤り)")
+        return False
+    return True
+
+def check_G1_apply_show(devs, log):
+    """★段A の前提: 適用点はどの show にどう出るか。
+
+    現行の紙面は `show run | section access-list|access-group|...` を使っており、
+    子行だけが出る(= **インターフェイス名が出ない**)。適用点を主題にするなら
+    どの出力に差し替えるべきかを、実出力を採って決める。
+    """
+    r1 = devs["RT01"]
+    binds = [("Ethernet0/0", "in", 150), ("Ethernet0/1", "out", 150)]
+    _acl_clean(r1, [150], binds)
+    log.append("\n#### G1 適用点の表示書式")
+    conf(r1, ["access-list 150 permit ip any any",
+              "interface Ethernet0/0", "ip access-group 150 in", "exit"], log)
+    for title, cmd in [
+        ("現行の紙面が使っている形 `show run | section access-list|access-group`",
+         "show running-config | section access-list|access-group"),
+        ("★`show run | section ^interface`",
+         "show running-config | section ^interface"),
+        ("★`show run interface Ethernet0/0`",
+         "show running-config interface Ethernet0/0"),
+        ("★`show ip interface Ethernet0/0 | include access list`",
+         "show ip interface Ethernet0/0 | include access list"),
+        ("★`show ip interface | include line protocol|access list`(全IF一覧)",
+         "show ip interface | include line protocol|access list"),
+        ("`show ip interface brief`", "show ip interface brief"),
+    ]:
+        block(log, title, sh(r1, cmd) or "(空)")
+    _acl_clean(r1, [150], binds)
+
+
+def check_G2_two_stage(devs, log):
+    """★入口 in と出口 out の**両方**で評価されるか(段B の土台)。"""
+    r1, r3 = devs["RT01"], devs["RT03"]
+    binds = [("Ethernet0/0", "in", 151), ("Ethernet0/1", "out", 152)]
+    _acl_clean(r1, [151, 152], binds)
+    log.append("\n#### G2 入口 in ＋ 出口 out の二段評価")
+    conf(r1, ["access-list 151 permit ip any any",
+              "access-list 152 permit ip any any",
+              "interface Ethernet0/0", "ip access-group 151 in", "exit",
+              "interface Ethernet0/1", "ip access-group 152 out", "exit"], log)
+    time.sleep(2)
+    b = (_hits(r1, 151), _hits(r1, 152))
+    pct, _ = ping(r3, "10.0.12.2", repeat=5)
+    a = (_hits(r1, 151), _hits(r1, 152))
+    log.append(f"- (i) 両方 permit: RT03→RT02 **{pct}%** / "
+               f"入口151 {b[0]}→**{a[0]}** / 出口152 {b[1]}→**{a[1]}**")
+    # 出口だけ deny に差し替える(入口は permit のまま)
+    conf(r1, ["no access-list 152", "access-list 152 deny icmp any any",
+              "access-list 152 permit ip any any"], log)
+    time.sleep(2)
+    b2 = (_hits(r1, 151), _hits(r1, 152, seq=10), _hits(r1, 152, seq=20))
+    pct2, _ = ping(r3, "10.0.12.2", repeat=5)
+    a2 = (_hits(r1, 151), _hits(r1, 152, seq=10), _hits(r1, 152, seq=20))
+    log.append(f"- (ii) ★出口だけ deny icmp: RT03→RT02 **{pct2}%** / "
+               f"入口151 {b2[0]}→**{a2[0]}** / "
+               f"出口152 deny {b2[1]}→**{a2[1]}** / permit {b2[2]}→**{a2[2]}**")
+    log.append("  → 入口のカウンタが進んでいれば「**入口で許可され出口で落ちた**」"
+               "＝二段で評価されている。")
+    block(log, "  `show ip interface Ethernet0/1 | include access list`",
+          _ipif_acl(r1, "Ethernet0/1"))
+    _acl_clean(r1, [151, 152], binds)
+
+
+def check_G3_direction(devs, log):
+    """★方向の非対称: 同一 IF の in と out は別のトラフィックに当たる。
+
+    ping は往復するので通常のプローブでは in / out の両方が進んでしまう。
+    **応答が返らない宛先**(同一セグメント上の不在ホスト)へ撃って片道に限定する。
+    """
+    r1, r2, r3 = devs["RT01"], devs["RT02"], devs["RT03"]
+    binds = [("Ethernet0/0", "in", 153), ("Ethernet0/0", "out", 154)]
+    _acl_clean(r1, [153, 154], binds)
+    log.append("\n#### G3 同一 IF の in / out（方向の非対称）")
+    conf(r1, ["access-list 153 permit ip any any",
+              "access-list 154 permit ip any any",
+              "interface Ethernet0/0",
+              "ip access-group 153 in", "ip access-group 154 out", "exit"], log)
+    time.sleep(2)
+    for label, dev, dst in [
+        ("RT03→10.0.12.99(不在・片道)", r3, "10.0.12.99"),
+        ("RT02→10.0.13.99(不在・片道)", r2, "10.0.13.99"),
+        ("RT03→RT02(往復する通常の ping)", r3, "10.0.12.2"),
+    ]:
+        b = (_hits(r1, 153), _hits(r1, 154))
+        pct, _ = ping(dev, dst, repeat=5)
+        a = (_hits(r1, 153), _hits(r1, 154))
+        log.append(f"- {label}: 通過率 {pct}% / "
+                   f"e0/0 **in** 153 {b[0]}→**{a[0]}** / "
+                   f"e0/0 **out** 154 {b[1]}→**{a[1]}**")
+    _acl_clean(r1, [153, 154], binds)
+
+
+def check_G4_unapplied(devs, log):
+    """★段A の根拠: 「定義済みだが効いていない」の見え方。
+
+    未定義(§1)・空(§2)・名前付き拡張(§4-1)と**同じ全素通り**になるが、
+    `show ip access-lists` に**エントリが出てカウンタが 0 のまま**という点で割れるはず。
+    """
+    r1, r3 = devs["RT01"], devs["RT03"]
+    binds = [("Ethernet0/0", "in", 155), ("Loopback0", "in", 155)]
+    _acl_clean(r1, [155], binds)
+    log.append("\n#### G4 定義済みだが効いていない（未適用 / 無関係な IF）")
+    conf(r1, ["access-list 155 deny ip 10.0.13.0 0.0.0.255 any",
+              "access-list 155 permit ip any any"], log)
+    time.sleep(2)
+    for label, setup in [
+        ("(a) 未適用", []),
+        ("(b) 無関係な IF(Loopback0)に適用",
+         ["interface Loopback0", "ip access-group 155 in", "exit"]),
+        ("(c) 対照= 正しい IF(Ethernet0/0 in)に適用",
+         ["interface Loopback0", "no ip access-group 155 in", "exit",
+          "interface Ethernet0/0", "ip access-group 155 in", "exit"]),
+    ]:
+        if setup:
+            conf(r1, setup, log)
+            time.sleep(2)
+        pct, _ = ping(r3, "10.0.12.2", repeat=5)
+        log.append(f"- **{label}**: RT03→RT02 通過率 **{pct}%**")
+        block(log, "  `show ip access-lists 155`", sh(r1, "show ip access-lists 155"))
+        block(log, "  `show ip interface Ethernet0/0 | include access list`",
+              _ipif_acl(r1, "Ethernet0/0") or "(空)")
+    _acl_clean(r1, [155], binds)
+
+
+def check_G5_wrong_direction(devs, log):
+    """★方向を間違えたときの症状。
+
+    紙面で「顧客側 IF に out で付けてしまった」を出すなら、
+    **往路と復路のどちらが落ちるか**と、**ping の成否だけで区別できるか**を確定させる。
+    """
+    r1, r3 = devs["RT01"], devs["RT03"]
+    binds = [("Ethernet0/0", "in", 156), ("Ethernet0/0", "out", 156),
+             ("Ethernet0/1", "in", 156), ("Ethernet0/1", "out", 156),
+             ("Ethernet0/0", "out", 157)]
+    _acl_clean(r1, [156, 157], binds)
+    log.append("\n#### G5 方向の誤り（往路と復路のどちらが落ちるか）")
+    # 156 = 送信元ベース(顧客網を拒否)= 実務でいちばん多い形
+    conf(r1, ["access-list 156 deny ip 10.0.13.0 0.0.0.255 any",
+              "access-list 156 permit ip any any"], log)
+    for label, on, off in [
+        ("(i) 正= e0/0 in", ["interface Ethernet0/0", "ip access-group 156 in", "exit"],
+         ["interface Ethernet0/0", "no ip access-group 156 in", "exit"]),
+        ("(ii) 誤= e0/0 **out**(同じ IF で向きだけ逆)",
+         ["interface Ethernet0/0", "ip access-group 156 out", "exit"],
+         ["interface Ethernet0/0", "no ip access-group 156 out", "exit"]),
+        ("(iii) 誤= e0/1 in(隣の IF)",
+         ["interface Ethernet0/1", "ip access-group 156 in", "exit"],
+         ["interface Ethernet0/1", "no ip access-group 156 in", "exit"]),
+        ("(iv) 正の別解= e0/1 **out**(出口側で同じ送信元を落とす)",
+         ["interface Ethernet0/1", "ip access-group 156 out", "exit"],
+         ["interface Ethernet0/1", "no ip access-group 156 out", "exit"]),
+    ]:
+        conf(r1, on, log)
+        time.sleep(2)
+        b = (_hits(r1, 156, 10), _hits(r1, 156, 20))
+        pct, _ = ping(r3, "10.0.12.2", repeat=5)
+        a = (_hits(r1, 156, 10), _hits(r1, 156, 20))
+        log.append(f"- **{label}**: RT03→RT02 **{pct}%** / "
+                   f"deny {b[0]}→**{a[0]}** / permit {b[1]}→**{a[1]}**")
+        conf(r1, off)
+    # 157 = 宛先ベース(顧客網宛を拒否)を顧客側 out に= **復路だけ**落ちる型
+    conf(r1, ["access-list 157 deny ip any 10.0.13.0 0.0.0.255",
+              "access-list 157 permit ip any any",
+              "interface Ethernet0/0", "ip access-group 157 out", "exit"], log)
+    time.sleep(2)
+    b = (_hits(r1, 157, 10), _hits(r1, 157, 20))
+    pct, _ = ping(r3, "10.0.12.2", repeat=5)
+    a = (_hits(r1, 157, 10), _hits(r1, 157, 20))
+    log.append(f"- **(v) 復路だけ落とす= e0/0 out に宛先ベース**: "
+               f"RT03→RT02 **{pct}%** / deny {b[0]}→**{a[0]}** / "
+               f"permit {b[1]}→**{a[1]}**")
+    log.append("  → 往路は素通りしているのに ping は失敗する。"
+               "**通過率だけでは in の誤りと区別できない**かを判定する材料。")
+    _acl_clean(r1, [156, 157], binds)
+
+
+def check_G6_urpf_mode(devs, log):
+    """★uRPF `reachable-via rx` と `any` の差(適用行そのものが故障になる型)。
+
+    RT01 は 3.3.3.3 を e0/0(RT03側)経由で学習している。
+    RT02 に広告しない Lo98 3.3.3.3/32 を立て、**e0/1 から** 3.3.3.3 発を撃つ。
+      rx  … 入力 IF ≠ RIB の出力 IF → drop
+      any … RIB に経路があれば IF を問わない → 通る
+    ★応答は RT03 側へ流れて戻らないので **通過率では測れない**。drop カウンタで採る。
+    """
+    r1, r2 = devs["RT01"], devs["RT02"]
+    log.append("\n#### G6 uRPF `reachable-via rx` と `any`")
+    conf(r1, ["interface Ethernet0/1",
+              "no ip verify unicast source reachable-via rx",
+              "no ip verify unicast source reachable-via any", "exit"])
+    conf(r2, ["interface Loopback98", "ip address 3.3.3.3 255.255.255.255",
+              "exit"], log)
+    time.sleep(3)
+    for mode in ("rx", "any"):
+        conf(r1, ["interface Ethernet0/1",
+                  f"ip verify unicast source reachable-via {mode}", "exit"], log)
+        time.sleep(2)
+        before = sh(r1, "show ip interface Ethernet0/1 | include verif")
+        ping(r2, "10.0.13.3", source="Loopback98", repeat=5)
+        after = sh(r1, "show ip interface Ethernet0/1 | include verif")
+        block(log, f"- **{mode}** 撃つ前", before or "(空)")
+        block(log, f"- **{mode}** 撃った後", after or "(空)")
+        conf(r1, ["interface Ethernet0/1",
+                  f"no ip verify unicast source reachable-via {mode}", "exit"])
+    conf(r2, ["no interface Loopback98"])
+
+
+def check_G7_nat_iface(devs, log):
+    """★NAT: `ip nat inside source list` はあるが `ip nat inside/outside` が無い。"""
+    r1, r3 = devs["RT01"], devs["RT03"]
+    log.append("\n#### G7 NAT の inside/outside 付け忘れ")
+    conf(r1, ["interface Ethernet0/0", "no ip nat inside", "exit",
+              "interface Ethernet0/1", "no ip nat outside", "exit",
+              "no ip nat inside source list 61 interface Ethernet0/1 overload",
+              "no access-list 61"])
+    conf(r1, ["access-list 61 permit 10.0.13.0 0.0.0.255",
+              "ip nat inside source list 61 interface Ethernet0/1 overload"], log)
+    time.sleep(2)
+    ping(r3, "10.0.12.2", repeat=5)
+    block(log, "- (a) inside/outside **なし** `show ip nat translations`",
+          sh(r1, "show ip nat translations") or "(空)")
+    block(log, "  `show ip nat statistics | include Outside|Inside|Hits`",
+          sh(r1, "show ip nat statistics | include Outside|Inside|Hits") or "(空)")
+    conf(r1, ["interface Ethernet0/0", "ip nat inside", "exit",
+              "interface Ethernet0/1", "ip nat outside", "exit"], log)
+    time.sleep(2)
+    ping(r3, "10.0.12.2", repeat=5)
+    block(log, "- (b) 対照= inside/outside **あり** `show ip nat translations`",
+          sh(r1, "show ip nat translations") or "(空)")
+    conf(r1, ["interface Ethernet0/0", "no ip nat inside", "exit",
+              "interface Ethernet0/1", "no ip nat outside", "exit",
+              "no ip nat inside source list 61 interface Ethernet0/1 overload",
+              "no access-list 61"])
+    sh(r1, "clear ip nat translation *")
+
+
+def check_G8_dl_direction(devs, log):
+    """★distribute-list の in / out とインターフェイス指定。"""
+    r1, r2 = devs["RT01"], devs["RT02"]
+    log.append("\n#### G8 distribute-list の方向")
+    conf(r1, ["router eigrp 100", "no distribute-list 62 in",
+              "no distribute-list 62 out",
+              "no distribute-list 62 out Ethernet0/0", "exit",
+              "no access-list 62"])
+    conf(r1, ["access-list 62 deny 172.30.32.0 0.0.0.255",
+              "access-list 62 permit any"], log)
+    for label, on, off in [
+        ("(a) `distribute-list 62 in`",
+         ["router eigrp 100", "distribute-list 62 in", "exit"],
+         ["router eigrp 100", "no distribute-list 62 in", "exit"]),
+        ("(b) `distribute-list 62 out`",
+         ["router eigrp 100", "distribute-list 62 out", "exit"],
+         ["router eigrp 100", "no distribute-list 62 out", "exit"]),
+        ("(c) `distribute-list 62 out Ethernet0/0`(IF 指定)",
+         ["router eigrp 100", "distribute-list 62 out Ethernet0/0", "exit"],
+         ["router eigrp 100", "no distribute-list 62 out Ethernet0/0", "exit"]),
+    ]:
+        conf(r1, on, log)
+        time.sleep(15)
+        log.append(f"- **{label}**")
+        log.append(f"  - RT01 の学習経路: "
+                   f"**{sorted(learned_set(eigrp_routes_detail(r1)) & set(LEARNED))}**")
+        log.append(f"  - RT03 の学習経路: "
+                   f"**{sorted(learned_set(eigrp_routes_detail(devs['RT03'])))}**")
+        block(log, "  `show ip protocols | include filter|list`",
+              sh(r1, "show ip protocols | include filter|list") or "(空)")
+        conf(r1, off)
+        time.sleep(12)
+    conf(r1, ["no access-list 62"])
+
+
+def check_G9_copp_apply(devs, log):
+    """★CoPP: `service-policy input` を付けていないときの見え方。"""
+    r1, r3 = devs["RT01"], devs["RT03"]
+    log.append("\n#### G9 CoPP の service-policy 付け忘れ")
+    conf(r1, ["control-plane", "no service-policy input CPPOL",
+              "no service-policy output CPPOL", "exit",
+              "no policy-map CPPOL", "no class-map match-all CPCM",
+              "no access-list 63"])
+    conf(r1, ["no ip access-list extended CPACL"])
+    # ★`drop` アクションは IOL で拒否された(1回目)。P8 と同じ police 形で落とす。
+    conf(r1, ["ip access-list extended CPACL", "permit icmp host 10.0.13.3 any",
+              "exit",
+              "class-map match-all CPCM", "match access-group name CPACL", "exit",
+              "policy-map CPPOL", "class CPCM",
+              "police 8000 conform-action drop exceed-action drop",
+              "exit", "exit"], log)
+    time.sleep(2)
+    pct, _ = ping(r3, "10.0.13.1", repeat=5)
+    log.append(f"- (a) policy 定義のみ・**service-policy なし**: "
+               f"RT03→RT01(自機宛) **{pct}%**")
+    block(log, "  `show policy-map control-plane input`",
+          sh(r1, "show policy-map control-plane input") or "(空)")
+    conf(r1, ["control-plane", "service-policy input CPPOL", "exit"], log)
+    time.sleep(2)
+    pct2, _ = ping(r3, "10.0.13.1", repeat=5)
+    log.append(f"- (b) 対照= `service-policy input` **あり**: **{pct2}%**")
+    block(log, "  `show policy-map control-plane input`",
+          sh(r1, "show policy-map control-plane input") or "(空)")
+    # output 方向は受理されるか
+    log.append("- (c) `service-policy output` を control-plane に付けられるか")
+    conf_trace(r1, ["control-plane", "no service-policy input CPPOL",
+                    "service-policy output CPPOL", "exit"], log)
+    conf(r1, ["control-plane", "no service-policy output CPPOL", "exit",
+              "no policy-map CPPOL", "no class-map match-all CPCM",
+              "no ip access-list extended CPACL", "no access-list 63"])
+
+
+def check_G10_return_path(devs, log):
+    """★段B の前提①: **厳密な**(末尾 permit any の無い)送信元ベース ACL を
+    サーバ側 IF の **in** に付けたらどうなるか。
+
+    G5-(iii) では 100%(no-op)だったが、あの ACL には `permit ip any any` が
+    付いていた。要件どおりに書いた ACL には**暗黙の拒否**があるので、
+    **復路(サーバ→顧客)が落ちる**はず = 往路は素通りなのに疎通しない。
+    """
+    r1, r2, r3 = devs["RT01"], devs["RT02"], devs["RT03"]
+    binds = [("Ethernet0/1", "in", 158)]
+    _acl_clean(r1, [158], binds)
+    log.append("\n#### G10 厳密な送信元ベース ACL を**サーバ側 IF の in** に付けた")
+    conf(r1, ["access-list 158 permit ip 10.0.13.0 0.0.0.255 any",
+              "interface Ethernet0/1", "ip access-group 158 in", "exit"], log)
+    time.sleep(3)
+    if not _require_acl(r1, 158, log):
+        return
+    pct, _ = ping(r3, "10.0.12.2", repeat=5)
+    log.append(f"- (a) RT03(顧客)→RT02(サーバ) 通過率 **{pct}%** / "
+               f"permit 行 {_hits(r1, 158)}")
+    block(log, "  RT01 `show ip eigrp neighbors`(★隣接も落ちるか)",
+          sh(r1, "show ip eigrp neighbors") or "(空)")
+    # 対照= 復路の送信元も許可すれば戻るか
+    conf(r1, ["access-list 158 permit ip 10.0.12.0 0.0.0.255 any"], log)
+    time.sleep(3)
+    pct2, _ = ping(r3, "10.0.12.2", repeat=5)
+    log.append(f"- (b) 対照= 復路の送信元 10.0.12.0/24 も許可: **{pct2}%**")
+    block(log, "  `show ip access-lists 158`", sh(r1, "show ip access-lists 158"))
+    _acl_clean(r1, [158], binds)
+    time.sleep(20)
+
+
+def check_G11_selfgen_adjacency(devs, log):
+    """★段B の前提②: 厳密な送信元ベース ACL を**サーバ側 IF の out** に付けると、
+    往路は要件どおり通るが **RT01 自身の EIGRP hello が暗黙の拒否に食われる**はず
+    (実測 §5= outbound ACL は自機生成にも効く)。
+
+    → 「どこにどの向きで付けるか」を問う形で、`if_up out` を
+      **「動くがルーティングが壊れる」**として落とす根拠になる。
+    """
+    r1, r3 = devs["RT01"], devs["RT03"]
+    binds = [("Ethernet0/1", "out", 159)]
+    _acl_clean(r1, [159], binds)
+    log.append("\n#### G11 厳密な送信元ベース ACL を**サーバ側 IF の out** に付けた")
+    block(log, "- 基線 RT01 `show ip eigrp neighbors`",
+          sh(r1, "show ip eigrp neighbors") or "(空)")
+    conf(r1, ["access-list 159 permit ip 10.0.13.0 0.0.0.255 any",
+              "interface Ethernet0/1", "ip access-group 159 out", "exit"], log)
+    time.sleep(5)
+    if not _require_acl(r1, 159, log):
+        return
+    pct, _ = ping(r3, "10.0.12.2", repeat=5)
+    log.append(f"- (a) 直後: RT03→RT02 **{pct}%** / permit 行 {_hits(r1, 159)}")
+    time.sleep(25)                      # hold time(15s)を跨ぐ
+    block(log, "- (b) 25秒後 RT01 `show ip eigrp neighbors`",
+          sh(r1, "show ip eigrp neighbors") or "(空= 隣接が落ちた)")
+    pct2, _ = ping(r3, "10.0.12.2", repeat=5)
+    log.append(f"- (c) 25秒後: RT03→RT02 **{pct2}%**")
+    block(log, "  RT01 `show ip route eigrp`", sh(r1, "show ip route eigrp"))
+    # 対照= 自機の送信元も許可すれば隣接は保たれるか
+    conf(r1, ["access-list 159 permit ip 10.0.12.0 0.0.0.255 any"], log)
+    time.sleep(30)
+    block(log, "- (d) 対照= 10.0.12.0/24 も許可して30秒後",
+          sh(r1, "show ip eigrp neighbors") or "(空)")
+    _acl_clean(r1, [159], binds)
+    time.sleep(20)
+
+
+def check_G12_customer_out(devs, log):
+    """★段B `apply_direction` の裏取り: 要件どおりの ACL を**顧客側 IF の out** に。
+
+    G10 は隣の IF(サーバ側 in)で測ったので、顧客側 out は未実測のまま紙面に載っている。
+    紙面の `_right_acl` が許可するのは**ルータの先にある顧客網**であって
+    リンクのサブネットではないため、**ルータ自身が顧客側へ出す hello も落ちる**はず。
+      往路(顧客→サーバ) … この IF の out には来ない → 素通り
+      復路(サーバ→顧客) … src がサーバ側 → 暗黙の拒否で落ちる
+      自機の hello      … src=10.0.13.1 は許可対象外 → 落ちる → 隣接断
+    """
+    r1, r3 = devs["RT01"], devs["RT03"]
+    binds = [("Ethernet0/0", "out", 160)]
+    _acl_clean(r1, [160], binds)
+    log.append("\n#### G12 要件どおりの ACL を**顧客側 IF の out** に付けた")
+    block(log, "- 基線 RT01 `show ip eigrp neighbors`",
+          sh(r1, "show ip eigrp neighbors") or "(空)")
+    # ★許可対象は「ルータの先にある顧客網」= 3.3.3.0/24(リンク 10.0.13.0/24 は含めない)
+    conf(r1, ["access-list 160 permit ip 3.3.3.0 0.0.0.255 any",
+              "interface Ethernet0/0", "ip access-group 160 out", "exit"], log)
+    time.sleep(4)
+    if not _require_acl(r1, 160, log):
+        return
+    pct, _ = ping(r3, "10.0.12.2", source="Loopback0", repeat=5)
+    log.append(f"- (a) 直後: RT03(3.3.3.3)→RT02 **{pct}%** / "
+               f"permit 行 {_hits(r1, 160)}")
+    time.sleep(25)                      # hold time(15s)を跨ぐ
+    block(log, "- (b) 25秒後 `show ip eigrp neighbors`(★Et0/0 の隣接が残るか)",
+          sh(r1, "show ip eigrp neighbors") or "(空)")
+    block(log, "  `show ip access-lists 160`", sh(r1, "show ip access-lists 160"))
+    # 対照1= 復路の送信元も許可 → 疎通が戻るか
+    conf(r1, ["access-list 160 permit ip 10.0.12.0 0.0.0.255 any",
+              "access-list 160 permit ip 2.2.2.0 0.0.0.255 any"], log)
+    time.sleep(4)
+    pct2, _ = ping(r3, "10.0.12.2", source="Loopback0", repeat=5)
+    log.append(f"- (c) 対照= 復路の送信元も許可: **{pct2}%**")
+    # 対照2= 自機(リンク)の送信元も許可 → 隣接が戻るか
+    conf(r1, ["access-list 160 permit ip 10.0.13.0 0.0.0.255 any"], log)
+    time.sleep(30)
+    block(log, "- (d) 対照= 自機のリンク網も許可して30秒後",
+          sh(r1, "show ip eigrp neighbors") or "(空)")
+    _acl_clean(r1, [160], binds)
+    time.sleep(20)
+
+
+def check_E1_established(devs, log):
+    """★`established` の実測(P2-⑤ の前提。ここだけ未測定だった)。
+
+    プローブ= RT03 から **閉じているポート**へ telnet する
+    (`telnet 10.0.12.2 9999`)。SYN が出て、RT02 は **RST+ACK** を返す。
+      往路(SYN)  … ACK ビットが無い → `established` には**一致しない**はず
+      復路(RST)  … ACK/RST がある   → `established` に**一致する**はず
+    通過の成否ではなく**カウンタで帰属**させる(作法= 対照つき)。
+    """
+    r1, r3 = devs["RT01"], devs["RT03"]
+    binds = [("Ethernet0/0", "in", 170), ("Ethernet0/1", "in", 171)]
+    _acl_clean(r1, [170, 171], binds)
+    log.append("\n#### E1 `established` は往路(SYN)に一致せず復路(RST/ACK)に一致するか")
+    conf(r3, ["ip tcp synwait-time 5"])          # 待ち時間を短くする
+
+    def probe():
+        return sh(r3, "telnet 10.0.12.2 9999")
+
+    # --- (a) 往路側(e0/0 in)に established を置く ---
+    conf(r1, ["access-list 170 permit tcp any host 10.0.12.2 eq 9999 "
+              "established",
+              "access-list 170 deny tcp any host 10.0.12.2 eq 9999",
+              "access-list 170 permit ip any any",
+              "interface Ethernet0/0", "ip access-group 170 in", "exit"], log)
+    time.sleep(3)
+    if not _require_acl(r1, 170, log):
+        return
+    out = probe()
+    log.append(f"- (a) 往路側に `established`: "
+               f"permit(est) **{_hits(r1, 170, 10)}** / "
+               f"deny **{_hits(r1, 170, 20)}**")
+    block(log, "  RT03 の telnet 応答", out.strip()[-300:] or "(空)")
+    conf(r1, ["interface Ethernet0/0", "no ip access-group 170 in", "exit"])
+
+    # --- (b) 復路側(e0/1 in)に established を置く ---
+    conf(r1, ["access-list 171 permit tcp host 10.0.12.2 eq 9999 any "
+              "established",
+              "access-list 171 deny tcp host 10.0.12.2 eq 9999 any",
+              "access-list 171 permit ip any any",
+              "interface Ethernet0/1", "ip access-group 171 in", "exit"], log)
+    time.sleep(3)
+    out = probe()
+    log.append(f"- (b) 復路側に `established`: "
+               f"permit(est) **{_hits(r1, 171, 10)}** / "
+               f"deny **{_hits(r1, 171, 20)}**")
+    block(log, "  RT03 の telnet 応答", out.strip()[-300:] or "(空)")
+    block(log, "  `show ip access-lists 171`", sh(r1, "show ip access-lists 171"))
+
+    # --- (c) 対照= 復路側で established を**拒否**したら落ちるか ---
+    conf(r1, ["no access-list 171",
+              "access-list 171 deny tcp host 10.0.12.2 eq 9999 any established",
+              "access-list 171 permit ip any any"], log)
+    time.sleep(3)
+    out = probe()
+    log.append(f"- (c) 対照= 復路側で `established` を**拒否**: "
+               f"deny(est) **{_hits(r1, 171, 10)}**")
+    block(log, "  RT03 の telnet 応答", out.strip()[-300:] or "(空)")
+
+    _acl_clean(r1, [170, 171], binds)
+    conf(r3, ["default ip tcp synwait-time"])
+
+
 CHECKS = {
+    "E1_established": check_E1_established,
+    "G12_customer_out": check_G12_customer_out,
+    "G10_return_path": check_G10_return_path,
+    "G11_selfgen_adjacency": check_G11_selfgen_adjacency,
+    "G1_apply_show": check_G1_apply_show,
+    "G2_two_stage": check_G2_two_stage,
+    "G3_direction": check_G3_direction,
+    "G4_unapplied": check_G4_unapplied,
+    "G5_wrong_direction": check_G5_wrong_direction,
+    "G6_urpf_mode": check_G6_urpf_mode,
+    "G7_nat_iface": check_G7_nat_iface,
+    "G8_dl_direction": check_G8_dl_direction,
+    "G9_copp_apply": check_G9_copp_apply,
     "P1_undef": check_P1_undef,
     "P1F_ctrl": check_P1F_ctrl,
     # P2N_dl_num / P9B_log は conf_each の不具合と残骸 ACL で無効。P2C / P9C が後継

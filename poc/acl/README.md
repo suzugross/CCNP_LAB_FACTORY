@@ -482,9 +482,282 @@ iBGP・Loopback ピア（RT01 Lo0 1.1.1.1 ⇄ RT02 Lo0 2.2.2.2・AS 65000）。
 実機フルサイクル（broken→fix→100）とモデル⇔実機の突き合わせは、
 それ自体が対照になるので強い。単一の proxy 指標（ping の成否など）だけのものが危ない。
 
+## 16. ★★適用点（G系・2026-08-11・BL-109）
+
+紙面 shape=acl は「ACL の**中身**」だけを主題にしており、`ip access-group` 行は
+常に正しく・常に `in` で描かれていた（＝読む価値の無い装飾）。
+**適用点そのものを主題にする**ために、対照つきで測った。
+
+### 16-1. 適用点はどの show に出るか（★現行紙面の不忠実を1件発見）
+
+★ 現行紙面の `show run | section access-list|access-group|distribute-list|...` は
+**適用行だけ**を描いているが、実機は同じ正規表現で **ACL 本体も出す**
+（`access-list` が `ip access-list extended 150` に一致するため）。実出力:
+
+```
+ ip access-group 150 in
+ip access-list extended 150
+ 10 permit ip any any
+```
+
+★★ **番号付き ACL も running-config では named 形式で表示される**。
+`access-list 150 permit ip any any` と入れても `ip access-list extended 150` ＋
+` 10 permit ip any any` になる（`show ip access-lists` の書式とは別物）。
+
+| 出力 | 適用点の見え方 | 紙面向き |
+|---|---|---|
+| `show run \| section access-list\|access-group` | **IF 名が出ない**＋ACL 本体が付いてくる | × |
+| `show run \| section ^interface` | 全 IF ブロック（**IOL は 32 本**出る） | × 長すぎ |
+| **`show run interface Ethernet0/0`** | IF ブロック単体・適用点が読める | **◎** |
+| **`show ip interface Ethernet0/0 \| include access list`** | Inbound / Outgoing を明示 | **◎** |
+| `show ip interface \| include line protocol\|access list` | 全 IF（32本） | △ |
+
+`show ip interface` の実書式（IOS-XE 17.15 は **Common access list の行が挟まる**）:
+
+```
+  Outgoing Common access list is not set
+  Outgoing access list is not set
+  Inbound  Common access list is not set
+  Inbound  access list is 150
+```
+
+（`Inbound  access list` は**空白2つ**。行末に空白が付く行がある。
+なお本 README 上では先頭行の字下げが `block()` の `.strip()` で落ちている
+＝実機では 2 字下がる。）
+
+→ **紙面の 設定抜粋は `show run interface <IF>` を IF ごとに出す形へ変える**。
+
+### 16-2. ★入口 in と出口 out は二段で評価される
+
+e0/0 in に `permit ip any any`、e0/1 out に `deny icmp any any` ＋ `permit ip any any`。
+
+| 構成 | RT03→RT02 | 入口 permit | 出口 deny |
+|---|---|---|---|
+| 両方 permit | 100% | +5 | — |
+| ★出口だけ deny icmp | **0%** | **+5（進む）** | **+5** |
+
+★ 入口で**許可された**パケットが出口で落ちている＝**両方で評価される**。
+
+### 16-3. ★同一 IF の in と out は別のトラフィックに当たる
+
+ping は往復するので in / out の両方が進んでしまう。
+**応答が返らない宛先**（同一セグメント上の不在ホスト）へ撃って片道に限定した。
+
+| プローブ | e0/0 **in** | e0/0 **out** |
+|---|---|---|
+| RT03→10.0.12.99（顧客→サーバ・片道） | **+7** | +4 |
+| RT02→10.0.13.99（サーバ→顧客・片道） | +3 | **+8** |
+
+★ 差は付くが**ゼロにはならない**。EIGRP hello が e0/0 の両方向に流れており、
+**RT01 自身が出す hello が out のカウンタを進めている**（§5 の再確認）。
+→ 紙面でカウンタを出すなら、盤面にルーティング プロトコルを載せないか、
+末尾の `permit ip any any` が hello を拾う前提で数を決めること。
+
+### 16-4. ★「定義済みだが効いていない」の見え方（段A の根拠）
+
+| 状態 | 通過率 | `show ip access-lists` | `show ip interface <IF>` |
+|---|---|---|---|
+| **未適用** | 100% | **エントリあり・カウンタなし** | `Inbound  access list is not set` |
+| **無関係な IF に適用** | 100% | 同上（**区別できない**） | 同上 |
+| 対照＝正しく適用 | **0%** | `(6 matches)` が付く | `Inbound  access list is 155` |
+
+★ **カウンタが 0 のときは `(0 matches)` ではなく括弧ごと出ない**（紙面の描画規約）。
+★ 「未適用」と「別 IF に適用」は**当該 IF の show では区別できない**
+（全 IF か running-config を見る必要がある）。
+
+→ §13 の「フィルタが実質不在」3種に**2種が加わって5種**になる:
+
+| 仮説 | 割れる出力 |
+|---|---|
+| 未定義 | `show ip access-lists` に**何も出ない** |
+| 空 | **ヘッダのみ** |
+| 名前付き拡張（コマンドごと拒否） | ACL は出るが `show run` に**適用行が無い** |
+| **未適用** | **エントリあり・カウンタなし** |
+| **無関係な IF に適用** | 同上＋`show run interface` でのみ割れる |
+
+### 16-5. ★★方向を間違えたときの症状（apply 形の一意性に直結）
+
+ACL 156 ＝ `deny ip 10.0.13.0 0.0.0.255 any` / `permit ip any any`（**送信元ベース**）。
+
+| 適用点 | RT03→RT02 | deny のカウンタ | 判定 |
+|---|---|---|---|
+| (i) e0/0 **in**（顧客側の入口） | **0%** | +6 | 正 |
+| (ii) e0/0 **out** | **100%** | **+0** | 誤＝**完全な no-op** |
+| (iii) e0/1 **in**（隣の IF） | **100%** | **+0** | 誤＝完全な no-op |
+| (iv) ★e0/1 **out**（サーバ側の出口） | **0%** | **+5** | **正（別解）** |
+
+★★ **(iv) が設計上の要**。送信元ベースの ACL は「入口 e0/0 in」でも
+「出口 e0/1 out」でも**同じ結果**になる。
+→ 「どこにどの向きで付けるか」を問う形は、**素のままでは正解が2つ**。
+一意化するには要件で縛る（例:「不要なトラフィックは可能なかぎり早い段階で破棄する」＝入口）。
+Cisco の定石「標準 ACL は宛先の近く／拡張 ACL は送信元の近く」がそのまま要件文になる。
+
+**宛先ベース**を顧客側 out に付けた場合:
+
+| 適用点 | RT03→RT02 | deny |
+|---|---|---|
+| (v) `deny ip any 10.0.13.0 0.0.0.255` を e0/0 **out** | **0%** | +5 |
+
+★ **往路は素通りしているのに ping は失敗する**（復路が落ちている）。
+→ **通過率だけでは (i) と (v) を区別できない**。到達可/不可の表しか出さない紙面では
+方向の誤りは特定できず、**カウンタか `show ip interface` が要る**。
+
+### 16-6. uRPF の `rx` と `any`
+
+RT01 は 3.3.3.3 を e0/0 経由で学習。RT02 に非広告の Lo98 3.3.3.3/32 を立て、**e0/1 から**撃つ。
+
+| モード | verification drops | suppressed verification drops |
+|---|---|---|
+| `reachable-via rx` | **5** | 0 |
+| `reachable-via any` | **0** | **5** |
+
+★ `any` は経路さえあれば入力 IF を問わない。**通したことは
+`suppressed verification drops` に記録される**（§1 の未定義 ACL 例外と同じ欄）。
+→ `rx`→`any` は「uRPF を設定しているのに効かない」型として成立し、**出力で割れる**。
+★ 応答が戻らないので**通過率では測れない**（drop カウンタで採ること）。
+
+### 16-7. NAT の `ip nat inside/outside` 付け忘れ
+
+| 構成 | `show ip nat translations` | `show ip nat statistics` |
+|---|---|---|
+| ACL と `ip nat inside source list` のみ | **空** | `Outside interfaces:` / `Inside interfaces:` が**空** |
+| 対照＝ inside/outside あり | `icmp 10.0.12.1:1024  10.0.13.3:39 ...` | — |
+
+### 16-8. distribute-list の方向
+
+`access-list 62 deny 172.30.32.0 0.0.0.255` / `permit any` を RT01 に。
+
+| 適用 | RT01 が学ぶ | RT03 が学ぶ | `show ip protocols` |
+|---|---|---|---|
+| `distribute-list 62 in` | **落ちる** | 落ちる（RT01 が持たないため） | `Incoming update filter list for all interfaces is 62` |
+| `distribute-list 62 out` | 持つ | **落ちる** | `Outgoing update filter list for all interfaces is 62` |
+| `distribute-list 62 out Ethernet0/0` | 持つ | **落ちる** | `  Ethernet0/0 filtered by 62 (per-user), default is not set` |
+
+★ in と out は「**自分が学ばない**」対「**相手が学ばない**」で**下流の RIB に差が出る**
+＝1台の出力だけでは割れず、2台目を見せるか見せないかが出題設計になる。
+IF 指定形は `show ip protocols` の字面が変わる（`(per-user)`）ので read 形の材料。
+
+### 16-9. CoPP の `service-policy` 付け忘れ
+
+| 構成 | 自機宛 ICMP | `show policy-map control-plane input` |
+|---|---|---|
+| policy-map まで作って `service-policy` なし | **100%** | **何も出ない（完全に空）** |
+| 対照＝ `service-policy input` あり | **0%** | Class-map と police のカウンタが出る |
+
+★ `service-policy output` も **control-plane 配下で受理される**（誤りとして仕込める）。
+★ policy-map class の **`drop` 単独アクションは IOL では拒否された**（`% Invalid input`）。
+落とすなら `police <rate> conform-action drop exceed-action drop`。
+
+### 16-10. ★★厳密な ACL（末尾に `permit any` が無い）は**復路**を落とす
+
+§16-5 の (ii)(iii) が「完全な no-op」だったのは、あの ACL に `permit ip any any` が
+付いていたため。**要件どおりに書いた ACL には暗黙の拒否がある**ので話が変わる。
+
+`access-list 158 permit ip 10.0.13.0 0.0.0.255 any`（顧客網のみ）を
+**サーバ側 IF の in**（e0/1 in）に適用:
+
+| | 結果 |
+|---|---|
+| RT03（顧客）→ RT02（サーバ） | **0%** |
+| permit 行のカウンタ | **0**（＝往路はこの IF の in には来ていない） |
+| `show ip eigrp neighbors` | ★**10.0.12.2 の隣接が消える** |
+| 対照＝ `permit ip 10.0.12.0 0.0.0.255 any` を追加 | **100%**（その行に 12 matches） |
+
+★ **カウンタが 0 のまま疎通が 0%** という指紋になる。落ちているのは
+**復路**（サーバ→顧客・src がサーバ網）と**隣接**（RT02 の hello・src=10.0.12.2）で、
+どちらも暗黙の拒否に当たっている。
+
+### 16-11. ★★出口側に付けると「動くが 25 秒後にルーティングが壊れる」
+
+同じ ACL を**サーバ側 IF の out**（e0/1 out）に適用:
+
+| 経過 | RT03→RT02 | EIGRP 隣接 | 経路表 |
+|---|---|---|---|
+| 直後 | **100%**（permit 行 +5） | 正常 | 正常 |
+| **25 秒後** | **0%** | `SRTT 5000 / Q Cnt 1 / Seq 0`（実質断） | ★**RT02 側の経路が全部消える** |
+| 対照＝ `permit ip 10.0.12.0 0.0.0.255 any` 追加後 30 秒 | — | **復活** | — |
+
+★★ **フィルタとしては要件どおりに動いている**（往路の顧客網は通り、他は落ちる）のに、
+**RT01 自身が e0/1 から出す EIGRP hello（src=10.0.12.1）が暗黙の拒否に食われて**
+隣接が落ち、結果として経路ごと消える（§5 の「outbound ACL は自機生成にも効く」の帰結）。
+**直後は正しく見えて、hold time を跨いでから壊れる**という時間差がある。
+
+→ 「このアクセス リストをどこにどの向きで適用すべきか」を問う形で、
+**`if_up out` を「動くがルーティングを壊す」として落とす根拠**になる（実測に基づく complies）。
+
+### 16-11b. ★顧客側の out（＝紙面の `apply_direction`）— G12・2026-08-11
+
+§16-10 で測ったのは**サーバ側の in**（隣の IF）。紙面の `apply_direction` は
+**顧客側の out** なので測り直した。ACL は `permit ip 3.3.3.0 0.0.0.255 any`
+＝「ルータの**先にある**顧客網だけを許可」（リンクの 10.0.13.0/24 は含めない。
+紙面の `_right_acl` と同じ性質）。これを RT01 の e0/0 **out** に適用。
+
+| 経過 | RT03(3.3.3.3)→RT02 | permit のカウンタ | Et0/0 の EIGRP 隣接 |
+|---|---|---|---|
+| 直後 | **0%** | **0** | 正常 |
+| 25 秒後 | 0% | 0 | ★`SRTT 5000 / Q Cnt 1 / Seq 0`（実質断） |
+| 対照(c)＝復路の送信元も許可 | **0%（戻らなかった）** | — | — |
+| 対照(d)＝リンク網も許可して 30 秒 | — | — | **復活** |
+
+★ **2つの効果が同時に起きる**:
+1. **復路が暗黙の拒否で落ちる**（カウンタ 0 のまま疎通 0% ＝ §16-10 と同じ指紋）
+2. **自機が顧客側へ出す hello も落ちる**（許可対象はリンク網を含まないため）→ 隣接断
+
+★★ **対照 (c) が戻らなかった**のは、その時点で既に隣接が落ちており
+**RT01 が 3.3.3.3 への経路を失っていた**ため。
+= (1) と (2) を分離した対照は取れていない（(d) で隣接復活は確認したが、その後の
+疎通は測っていない）。**「復路の暗黙 deny 単独」の効果は §16-10（サーバ側 in）でのみ確定**。
+
+★★★ **紙面モデルへの含意**（この測定の最大の収穫）:
+紙面は `apply_direction` / `apply_iface_swap` を「復路が落ちて全断」とだけモデル化しており、
+症状表（到達可／不可）としては実機と矛盾しない。しかし実機では**隣接も落ちる**ので、
+cause 形の錯乱肢「**ルーティング・プロトコルの隣接関係が確立されていない**」は
+**この盤面では真になり得る**。→ 偽の錯乱肢として出してはならない。
+`CROSS` の当該エントリに「真になり得る盤面」の述語を付けて除外した
+（`in` ではなく `out` に適用されている、を CROSS から外したのと同じ方針）。
+
+### 16-12. ★測定の作法（追加）
+
+6. **仕込みが本当に入ったかを確かめてから観測する**。
+   G10/G11 の1回目は `access-list 158 permit 10.0.13.0 0.0.0.255` と書いており、
+   **158 は拡張帯の番号なので標準構文は `% Invalid input`**。ACL が作られないまま
+   ping を撃ち、**「100%＝no-op を確認した」と読み違えかけた**（作法1 と同型の事故で、
+   今度は構文帯の取り違え）。→ `_require_acl()` でカウンタ行の有無を先に見る。
+
+---
+
+## 17. ★`established`（E1・2026-08-11・P2-⑤）
+
+プローブ＝ RT03 から**閉じているポート**へ telnet（`telnet 10.0.12.2 9999`）。
+SYN が出て RT02 が **RST+ACK** を返すので、**1回の試行で往路と復路の両方**を観測できる。
+通過の成否ではなく**カウンタで帰属**させた。
+
+| 置いた場所 | permit(established) | deny | telnet の応答 |
+|---|---|---|---|
+| (a) **往路側**（e0/0 in・SYN が通る向き） | **0** | **1** | `% Destination unreachable; gateway or host down` |
+| (b) **復路側**（e0/1 in・RST が通る向き） | **1** | 0 | `% Connection refused by remote host` |
+| (c) 対照＝復路側で established を**拒否** | — | **2** | `% Connection timed out; remote host not responding` |
+
+★ **SYN は `established` に一致せず、RST+ACK は一致する**（定説どおり）。
+(c) が落ちることで、観測が対象を捉えていることも裏取りできている。
+
+★★ **副産物＝ telnet の応答メッセージが3通りに割れる**（この分野で一番使える観測）:
+
+| 応答 | 意味 |
+|---|---|
+| `% Destination unreachable; gateway or host down` | **往路**が ACL で落ちた |
+| `% Connection refused by remote host` | 往復とも通り、相手が RST を返した |
+| `% Connection timed out; remote host not responding` | **復路**が落ちた（または相手が無応答） |
+
+→ **「往路で落ちたか復路で落ちたか」が観測で区別できる**。
+ping（ICMP）では §16-10／§16-11b のとおり**どちらも 0%** になって区別できなかったので、
+往復を主題にする盤面（段B・`established` 系）の症状は
+**TCP の応答メッセージで書くほうが情報量が多い**。
+
 ### P0 の完了状況
 
-P1〜P15 すべて測定済み（P2 は 5 パスかけて意味論まで確定・P15 は P1c 実装中に必要になった追測）。後片付け（P14）で
+P1〜P15 すべて測定済み（P2 は 5 パスかけて意味論まで確定・P15 は P1c 実装中に必要になった追測）。
+**G1〜G12（適用点・§16）と E1（`established`・§17）も測定済み**（2026-08-11・BL-109）。後片付け（P14）で
 `show ip access-lists` が空・running-config に `access-group` / `distribute-list` /
 `service-policy` / `ip nat` / `verify unicast` の残骸なしを確認済み。
 CML ラボ **POC-ACL** は再利用のため保持（追加測定は `sweep.py <チェック名>` で個別再実行できる）。

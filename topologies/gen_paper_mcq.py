@@ -811,11 +811,24 @@ def _split_sections(md):
     return out
 
 
+_TBL_SEP = re.compile(r"^\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+$")
+
+
 def _prose_and_rest(lines):
-    """節の本文を (先頭の散文, 残り=図/表/出力) に割る。"""
+    """節の本文を (先頭の散文, 残り=図/表/出力) に割る。
+
+    ★表の見出し行は `|` で始まらないことがある(`観測 | サーバへの到達`)。
+      次の行が区切り行(`--- | ---`)ならそこから先は表として扱う。
+      ここを散文と誤判定すると、**節の先頭が表の形では表が丸ごと消える**
+      (BL-109 の filter evidence 形で発覚= 症状表が失われて解答不能になっていた)。
+    """
     i = 0
-    while i < len(lines) and not (lines[i].startswith("```")
-                                  or lines[i].startswith("|")):
+    while i < len(lines):
+        ln = lines[i]
+        if ln.startswith("```") or ln.startswith("|"):
+            break
+        if "|" in ln and i + 1 < len(lines) and _TBL_SEP.match(lines[i + 1]):
+            break
         i += 1
     return lines[:i], lines[i:]
 
@@ -858,6 +871,40 @@ def obfuscate_md(md, rnd, essay=False, keep_ask=False):
     md = re.sub(r"^(# 問題 \S+)\s*:.*$", r"\1", md, count=1, flags=re.M)
     if essay:
         return md
+    out_md = _obfuscate_body(md, rnd, keep_ask=keep_ask)
+    _assert_no_loss(md, out_md)
+    return out_md
+
+
+def _must_survive(md):
+    """不親切化を通しても**必ず残っていなければならない行**。
+
+    = コード フェンスの中身と表の行(実機出力・観測表)。散文は再構成されるので対象外。
+    ★BL-088 の不変条件「情報は1ビットも減らさない」を**言葉ではなく検査で**守る。
+      これが無かったため、節の先頭が表の形で表が丸ごと消えても気付けなかった
+      (BL-109 の filter evidence 形)。
+    """
+    keep, inside = [], False
+    for ln in md.splitlines():
+        if ln.startswith("```"):
+            inside = not inside
+            continue
+        if inside or ("|" in ln and ln.strip()):
+            if ln.strip() and not _TBL_SEP.match(ln):
+                keep.append(ln.strip())
+    return keep
+
+
+def _assert_no_loss(src, dst):
+    lost = [l for l in _must_survive(src) if l not in dst]
+    if lost:
+        raise AssertionError(
+            "不親切化で出力/表の行が失われた(BL-088 不変条件違反): "
+            + " / ".join(lost[:3]) + (f" ...他{len(lost) - 3}行" if len(lost) > 3
+                                      else ""))
+
+
+def _obfuscate_body(md, rnd, keep_ask=False):
     prose_mode = rnd.random() < 0.5
     shuffle_out = rnd.random() < 0.5
     secs = _split_sections(md)
@@ -880,10 +927,18 @@ def obfuscate_md(md, rnd, essay=False, keep_ask=False):
         vague = "".join(x.strip() for x in st_prose if x.strip())
 
     if prose_mode:
-        scenario = (rnd.choice(LEAD_IN) + intro + vague
-                    + ("" if keep_ask else rnd.choice(DIRECTIVE))
-                    + "".join(reqs))
         out = state_blocks + cfg_blocks
+        # ★出す物が1つも無い形(select= これから書く行を選ぶ)では、
+        #   症状の定型文も「示されている出力に基づいて」という指示文も**書かない**。
+        #   見出しを消すだけでは足りず、散文に残ると
+        #   **存在しない物を参照する文**になる(select の初出題で見出しだけ直し、
+        #   散文側が残っていたのを 2026-08-11 に発見)。
+        has_out = bool(out or state_other)
+        scenario = (rnd.choice(LEAD_IN) + intro
+                    + (vague if has_out else "")
+                    + ("" if keep_ask or not has_out
+                       else rnd.choice(DIRECTIVE))
+                    + "".join(reqs))
         if shuffle_out:
             rnd.shuffle(out)
         parts = ["\n".join(head).rstrip(), "", "## シナリオ", "", scenario, ""]
@@ -2130,17 +2185,20 @@ def pick_draw_pbr(qseed, kind):
 # shape=acl — ACL 単独読解 (gen_paper_acl 流用・BL-106)
 # ★紙面専用: 挙動は実機確定表(poc/acl/README.md)の写像モデルから決定的に生成。
 # --------------------------------------------------------------------------
-def pick_draw_aclv6(qseed, kind, forms=None):
+def pick_draw_aclv6(qseed, kind, forms=None, worlds=None):
+    ws = [w for w in (worlds or []) if w in gp6.worlds_for(kind)] or None
     for kk in range(400):
         s = qseed + kk * 151
         try:
-            d = gp6.draw(random.Random(s), kind=kind)
+            d = gp6.draw(random.Random(s), kind=kind,
+                         world=(random.Random(s ^ 0x5A).choice(ws)
+                                if ws else None))
         except ValueError:
             continue
         if not forms or (set(forms) & set(gp6.forms_for(d))):
             return s, d
-    raise SystemExit(f"aclv6 kind={kind} forms={forms} が成立する seed が"
-                     f"見つかりません({qseed})")
+    raise SystemExit(f"aclv6 kind={kind} forms={forms} worlds={worlds} が"
+                     f"成立する seed が見つかりません({qseed})")
 
 
 def aclv6_requirements(d, rnd):
@@ -2305,38 +2363,89 @@ def answer_md_aclv6(d, choices, stamp, master_seed, subseed, form):
 """
 
 
-def pick_draw_acl(qseed, kind, forms=None):
+def pick_draw_acl(qseed, kind, forms=None, worlds=None):
     """★forms を指定すると、**その形が成立する盤面**が出るまで sub-seed を進める。
-    (形は盤面ごとに成立可否が変わる= gpl.forms_for)。"""
+    (形は盤面ごとに成立可否が変わる= gpl.forms_for)。
+    ★worlds を指定すると要件世界も絞る(その種が持たない世界は無視する)。"""
+    ws = [w for w in (worlds or []) if w in gpl.worlds_for(kind)] or None
     for kk in range(400):
         s = qseed + kk * 149
         try:
-            d = gpl.draw(random.Random(s), kind=kind)
+            d = gpl.draw(random.Random(s), kind=kind,
+                         world=(random.Random(s ^ 0x5A).choice(ws)
+                                if ws else None))
         except ValueError:
             continue
         if not forms or (set(forms) & set(gpl.forms_for(d))):
             return s, d
-    raise SystemExit(f"acl kind={kind} forms={forms} が成立する seed が"
-                     f"見つかりません({qseed})")
+    raise SystemExit(f"acl kind={kind} forms={forms} worlds={worlds} が"
+                     f"成立する seed が見つかりません({qseed})")
 
 
 def acl_topo(d):
-    m = d["m"]
+    """★BL-109 以降はインターフェイス名を図に出す。
+
+    要件文が `Ethernet<s>/0` を名指しするので、どの IF が顧客の側なのかが
+    図から読めないと適用点の設問が成立しない。
+    """
+    m, o = d["m"], f"{d['oct1']}.{d['oct2']}"
+    if d["role"] != "filter":
+        return (f"```\n"
+                f"   {m['DN']} (顧客の側)                {m['UP']} (サーバの側)\n"
+                f"        |  {o}.253.0/24        {o}.254.0/24  |\n"
+                f"        +--------- {m['DUT']} ---------+\n"
+                f"                (被験のデバイス)\n```")
     return (f"```\n"
-            f"   {m['DN']} (顧客の側)                {m['UP']} (サーバの側)\n"
-            f"        |  {d['oct1']}.{d['oct2']}.253.0/24        "
-            f"{d['oct1']}.{d['oct2']}.254.0/24  |\n"
-            f"        +--------- {m['DUT']} ---------+\n"
-            f"                (被験のデバイス)\n```")
+            f"   {m['DN']} (顧客の側)                     "
+            f"{m['UP']} (サーバの側)\n"
+            f"        |  {o}.253.0/24        {o}.254.0/24  |\n"
+            f"  {d['if_dn']} --------- {m['DUT']} --------- {d['if_up']}\n"
+            f"                 (被験のデバイス)\n"
+            f"                        |\n"
+            f"                  {d['if_mgmt']}\n"
+            f"              {o}.{d['mgmt_o3']}.0/24 (管理セグメント)\n```")
+
+
+def acl_apply_block(d):
+    """適用点の提示(BL-109)。
+
+    ★filter ロールは `show running-config | section ^interface` に差し替える。
+      従来の `| section access-list|access-group|...` は
+      **インターフェイス名を出さない**(IOS の section は子行がマッチしても親を
+      出さない)ため、適用点を読み取る手段が盤面に存在しなかった。
+    ★他ロールは従来形のまま。ただし正規表現から `access-list` を落とす=
+      実機は同じ正規表現で **ACL 本体まで出す**(番号付きも running-config では
+      `ip access-list extended NNN` 形式)ので、そのままでは提示が実機と食い違う
+      (実測 poc/acl §16-1)。
+    """
+    m = d["m"]
+    if d["role"] == "filter":
+        return ("```\n"
+                f"{m['DUT']}# show running-config | section ^interface\n"
+                + "\n".join(gpl.interface_blocks(d)) + "\n```")
+    _ents, _is_std, name = gpl.current_entries(d)
+    lines = [f"{m['DUT']}# show running-config | section "
+             f"access-group|distribute-list|"
+             f"verify unicast|ip nat|access-class|class-map",
+             " " + gpl.ROLE_APPLY[d["role"]].format(n=name)]
+    return "```\n" + "\n".join(lines) + "\n```"
 
 
 def acl_evidence(d, rnd, form):
     """紙面に出すブロック群。select 形では**現在の ACL を出さない**
-    (これから書くべき行を選ぶ形なので、既設の誤りは提示物に含めない)。"""
+    (これから書くべき行を選ぶ形なので、既設の誤りは提示物に含めない)。
+
+    ★apply 形(BL-109 段B)は構築系= **まだ壊れていない**ので症状を出さない。
+      出すのは「書けている ACL」と「まだどこにも適用されていない IF 構成」の2つ。
+    """
     m = d["m"]
     state, cfg = [], []
     if form == "select":
         return state, cfg
+    if form == "apply":
+        return ([f"```\n{m['DUT']}# show ip access-lists\n"
+                 f"{gpl.show_acl_text(d)}\n```"],
+                [acl_apply_block(d)])
     acl_txt = gpl.show_acl_text(d)
     if acl_txt:
         state.append(f"```\n{m['DUT']}# show ip access-lists\n{acl_txt}\n```")
@@ -2344,12 +2453,7 @@ def acl_evidence(d, rnd, form):
         # ★未定義のときは実機も**何も出さない**。説明文を足さないこと
         #   (BL-088 の不変条件= 出力ブロックに実機が出さない文字列を入れない)。
         state.append(f"```\n{m['DUT']}# show ip access-lists\n```")
-    ents, is_std, name = gpl.current_entries(d)
-    lines = [f"{m['DUT']}# show running-config | section "
-             f"access-list|access-group|distribute-list|"
-             f"verify unicast|ip nat|access-class|class-map"]
-    lines.append(" " + gpl.ROLE_APPLY[d["role"]].format(n=name))
-    cfg.append("```\n" + "\n".join(lines) + "\n```")
+    cfg.append(acl_apply_block(d))
     # ★症状そのものを観測に出す(BL-103 ③の教訓=「観測に現れない故障」を作らない)。
     #   read / counter 形は症状表が答えそのものになるので出さない。
     if form in ("cause", "patch", "fix"):
@@ -2357,10 +2461,25 @@ def acl_evidence(d, rnd, form):
     return state, cfg
 
 
+def acl_evidence_lead(d):
+    """★evidence 形は**候補の仮説を明示する**(AAA の evidence 形と同じ)。
+
+    これが無いと、解答の理由文が「候補を2つまでしか絞り込めない」と言っているのに
+    **その候補集合が問題文に存在しない**ことになる(出題 20260811-016 で発覚)。
+    正解の種が先頭に来ないよう、提示順は盤面から決定的に並べ替える。
+    """
+    hyps = gpl.evidence_hyps(d)
+    shown = sorted(hyps, key=lambda k: zlib.crc32(f"{d['kind']}/{k}".encode()))
+    joined = " と ".join(f"**{gpl.CLAIMS[k]}**" for k in shown)
+    return ("要求されているところの動作が、得られていない、ということが、"
+            f"報告されています。原因として、{joined} の {len(shown)} つが、"
+            "想定されています。機器の構成は、まだ取得されていません。")
+
+
 def acl_evidence_blocks(d, rnd):
-    """evidence 形= **症状だけ**を出す。構成を出すと仮説が割れてしまう
+    """evidence 形= **候補の仮説＋症状だけ**を出す。構成を出すと仮説が割れてしまう
     (どの出力を取りに行くかを問う形なので、答えになる出力は提示しない)。"""
-    return [acl_symptom_block(d)], []
+    return [acl_evidence_lead(d), acl_symptom_block(d)], []
 
 
 def acl_logread_blocks(d, rnd):
@@ -2406,10 +2525,95 @@ def acl_symptom_block(d):
     return "\n".join(out)
 
 
-def acl_requirements(d, rnd, form):
+def acl_requirements_apply(d, rnd):
+    """★apply 形(BL-109 段B)。「どちら向きの通信を絞るのか」が世界で入れ替わり、
+    それによって**正解のインターフェイスが反転**する。
+
+    制約「不要なトラフィックは可能なかぎり早い段階で破棄する」は常時1行入れる=
+    出口側に置く解も意味的には成立してしまうため(実測 poc/acl §16-5 (iv))。
+    """
+    m = d["m"]
+    # ★src_server 以外は「ネットワーク」なので /24 を付ける(family の他の要件文と揃える)
+    _sfx = "" if d["world"] == "src_server" else "/24"
+    hosts = "、".join(f"`{h}{_sfx}`" for h in gpl.place_hosts(d))
+    if d["world"] == "deny_to_mgmt":
+        # ★定石から外れる世界= 標準 ACL は送信元しか見ないので、
+        #   入口(顧客側の in)に置くとサーバ宛まで巻き添えになる。
+        #   「早い段階で破棄」の制約は**入れない**(正解と矛盾する)。
+        mseg = f"{d['oct1']}.{d['oct2']}.{d['mgmt_o3']}.0/24"
+        core = [f"{hosts} のネットワークから、管理のためのセグメントである "
+                f"`{mseg}` への通信は、拒否されなければなりません。",
+                f"{hosts} のネットワークから、サーバの側のネットワークへの通信には、"
+                "影響を与えてはなりません。",
+                f"上記以外のネットワークから `{mseg}` への通信には、"
+                "影響を与えてはなりません。",
+                "示されているところのアクセス・リストは、変更されてはなりません。"]
+        core += rnd.sample([x for x in REQ_DECOYS if "スタティック" not in x], 1)
+        rnd.shuffle(core)
+        return finalize_reqs(core, rnd)
+    if d["world"] == "src_server":
+        core = [f"サーバの側のネットワークから、顧客の側のネットワークへ向かう通信は、"
+                f"送信元が {hosts} であるものに限り、許可されなければなりません。",
+                "顧客の側のネットワークから、サーバの側のネットワークへ向かう通信には、"
+                "影響を与えてはなりません。"]
+    else:
+        core = [f"顧客の側のネットワークから、サーバの側のネットワークへ向かう通信は、"
+                f"送信元が {hosts} のネットワークにあるものに限り、"
+                "許可されなければなりません。",
+                "サーバの側のネットワークから、顧客の側のネットワークへ向かう通信には、"
+                "影響を与えてはなりません。"]
+    core.append("示されているところのアクセス・リストは、変更されてはなりません。")
+    # ★一意化は文体上の制約ではなく**構造**で行う(BL-109・2026-08-11 の改訂)。
+    #   管理セグメントとの通信を要件に入れると、出口側に置く解は
+    #   **関係のない通信を巻き添えにする**ので意味的に成立しなくなる。
+    mseg = f"{d['oct1']}.{d['oct2']}.{d['mgmt_o3']}.0/24"
+    core.append(f"管理のためのセグメントである `{mseg}` と、"
+                "顧客の側およびサーバの側のネットワークとの間の通信には、"
+                "影響を与えてはなりません。")
+    core += rnd.sample([x for x in REQ_DECOYS if "スタティック" not in x], 1)
+    rnd.shuffle(core)
+    return finalize_reqs(core, rnd)
+
+
+def acl_requirements_est(d, rnd):
+    """★戻り通信の盤面(BL-109 P2-⑤)。要件が**双方向**になる。
+
+    「顧客→サーバのセッションは張れること」と
+    「サーバ→顧客の**新規**は許可しないこと」の両立が主題。
+    """
     m = d["m"]
     tg = "、".join(f"`{gpl.net(d, o)}/24`" for o in d["target"])
+    core = [
+        f"{m['DUT']} において、{tg} のネットワークから、サーバである "
+        f"`{d['srv_host']}` の TCP ポート {d['port']} への通信は、"
+        "セッションを確立できなければなりません。",
+        "サーバの側のネットワークから、顧客の側のネットワークへ"
+        "**新たに開始される**通信は、許可されてはなりません。",
+        f"顧客の側のインターフェイスである `{d['if_dn']}` と、"
+        f"サーバの側のインターフェイスである `{d['if_up']}` の双方において、"
+        "着信の方向にアクセス・リストが適用されています。",
+        "示されているところのアクセス・リストの適用は、"
+        "変更されてはなりません。",
+    ]
+    core += rnd.sample([x for x in REQ_DECOYS if "スタティック" not in x], 1)
+    rnd.shuffle(core)
+    return finalize_reqs(core, rnd)
+
+
+def acl_requirements(d, rnd, form):
+    m = d["m"]
+    if d["kind"] in gpl.EST_KINDS:
+        return acl_requirements_est(d, rnd)
+    # ★対象が7本になる世界(nb_*)は列挙すると冗長なので**範囲**で書く。
+    #   「ビット境界に載らないレンジ」を扱う世界なので、範囲表記のほうが題意にも合う。
+    nb = d["world"] in gpl.NB_WORLDS
+    tg = ((f"`{gpl.net(d, d['target'][0])}/24` から "
+           f"`{gpl.net(d, d['target'][-1])}/24` までの範囲にあるネットワーク") if nb
+          else "、".join(f"`{gpl.net(d, o)}/24`" for o in d["target"])
+          + " のネットワーク")
     core = []
+    if form == "apply":
+        return acl_requirements_apply(d, rnd)
     if d["role"] == "filter":
         # ★★要件は **ACL の形式に追随させる**(BL-101 の教訓=
         #   評価モデルが守る対象と、問題文が要求する対象は字面で一致させる)。
@@ -2427,7 +2631,7 @@ def acl_requirements(d, rnd, form):
             rnd.shuffle(core)
             return finalize_reqs(core, rnd)
         if d.get("aclform") == "ext":
-            core.append(f"{m['DUT']} において、{tg} のネットワークからの通信のみが、"
+            core.append(f"{m['DUT']} において、{tg}からの通信のみが、"
                         f"サーバである `{d['srv_host']}` の TCP ポート "
                         f"{d['port']} に到達できなければなりません。")
             core.append(f"当該のサーバの他のポート"
@@ -2436,14 +2640,28 @@ def acl_requirements(d, rnd, form):
                         f"(たとえば `{d['other_host']}`)への通信は、"
                         "許可されてはなりません。")
         else:
-            core.append(f"{m['DUT']} において、{tg} のネットワークからの通信のみが、"
+            core.append(f"{m['DUT']} において、{tg}からの通信のみが、"
                         "許可されなければなりません。")
         if d["fourth_forbidden"]:
             core.append(f"`{gpl.net(d, d['fourth'])}/24` からの通信は、"
                         "許可されてはなりません。")
         core.append(f"`{gpl.net(d, d['outsider'])}/24` からの通信は、"
                     "許可されてはなりません。")
-        w = {"one_line": "アクセス・リストのエントリは、1行で構成されなければなりません。",
+        _one = "アクセス・リストのエントリは、1行で構成されなければなりません。"
+        w = {"one_line": _one,
+             # ★ワイルドカードの組み立てが主題の世界。要件文は**列挙のまま**にして
+             #   「偶数だけ」「飛び地」といった性質は**受験者に気付かせる**
+             #   (性質を書くと組み立ての手掛かりを与えすぎる)。
+             "wc_even": _one, "wc_odd": _one, "wc_split": _one,
+             "wc_block": _one,
+             # ★1行では書けないレンジ。deny を使ってよいかで正解が反転する。
+             "nb_min": "対象としていないネットワークが、一致の対象に"
+                       "含まれてはなりません。また、エントリの行数は、"
+                       "最小でなければなりません。",
+             "nb_no_deny": "対象としていないネットワークが、一致の対象に"
+                           "含まれてはなりません。拒否のエントリを使用しては"
+                           "なりません。また、エントリの行数は、"
+                           "最小でなければなりません。",
              "exact_no_deny": "対象としていないネットワークが、"
                               "一致の対象に含まれてはなりません。"
                               "また、拒否のエントリを使用してはなりません。",
@@ -2452,16 +2670,22 @@ def acl_requirements(d, rnd, form):
                           "また、エントリの行数は、最小でなければなりません。",
              }[d["world"]]
         core.append(w)
+        # ★適用点の要件(BL-109)。これが無いと「どこにどの向きで付いているべきか」の
+        #   基準が盤面に存在せず、適用点の故障が判定できない。
+        #   全ての filter 盤面に入れる(適用点の故障のときだけ足すと目印になる)。
+        core.append(f"アクセス・リストは、顧客の側のインターフェイスである "
+                    f"`{d['if_dn']}` において、着信の方向に適用されなければ"
+                    "なりません。")
     elif d["role"] in ("copp", "urpf", "nat", "vty"):
         goal = {
             "copp": f"{m['DUT']} において、管理のためのトラフィックが、"
                     "意図されたクラスにおいて処理されなければなりません。",
             "urpf": f"{m['DUT']} において、着信インターフェイスと一致しない送信元を"
                     "持つところのトラフィックが、破棄されなければなりません。",
-            "nat": f"{m['DUT']} において、{tg} のネットワークからの通信のみが、"
+            "nat": f"{m['DUT']} において、{tg}からの通信のみが、"
                    "アドレスの変換の対象とされなければなりません。",
             "vty": f"{m['DUT']} への管理のための接続は、"
-                   f"{tg} のネットワークからのみ、受理されなければなりません。",
+                   f"{tg}からのみ、受理されなければなりません。",
         }[d["role"]]
         core.append(goal)
         core.append({"protect_mgmt": "管理のための端末からの接続および運用に、"
@@ -2469,7 +2693,7 @@ def acl_requirements(d, rnd, form):
                      "least_change": "変更は、必要最小限に留められなければなりません。",
                      }[d["world"]])
     else:
-        core.append(f"{m['DUT']} は、{tg} のルートのみを、"
+        core.append(f"{m['DUT']} は、{tg}のルートのみを、"
                     "ルーティング・テーブルに保持しなければなりません。")
         w = {"prefixlen_no_rm": "プレフィックスの長さが異なるルートは、"
                                 "区別して扱われなければなりません。"
@@ -2542,9 +2766,10 @@ def question_md_acl(d, blocks, choices, stamp, form="cause", reqs=None,
              "(1つを選択してください)")
     elif form == "compare":
         cp = d["_compare"]
-        q = ("次の2つの通信について、示されているところの構成において"
+        body = "\n".join(f"{i}. {t}" for i, t in enumerate(cp, 1))
+        q = (f"次の{len(cp)}つの通信について、示されているところの構成において"
              "正しく述べているものは、どれですか。(1つを選択してください)\n\n"
-             f"1. {cp['a']}\n2. {cp['b']}")
+             + body)
     elif form == "counter":
         pr = d["_counter_probe"]["text"]
         q = (f"{pr} が処理されるとき、一致のカウンタが増加するのは、どの行ですか。"
@@ -2565,6 +2790,10 @@ def question_md_acl(d, blocks, choices, stamp, form="cause", reqs=None,
     elif form == "select":
         q = ("示されているところのすべての要件を満たすものは、どれですか。"
              "(1つを選択してください)")
+    elif form == "apply":
+        q = ("示されているところのすべての要件を満たすためには、"
+             "当該のアクセス・リストを、どこに、どの方向に適用しなければ"
+             "なりませんか。(1つを選択してください)")
     else:
         want = d.get("_read_want", 1)
         _c, _t, _f, s_true, s_false = gpl.read_labels(d)
@@ -2625,6 +2854,33 @@ def answer_md_acl(d, choices, stamp, master_seed, subseed, form):
         "dst_any_too_wide": "宛先が any なのでサーバ以外の宛先まで通る",
         "dense_list": "★多エントリ読解(6〜8行)。先行 deny による影・ポート演算子"
                       "(eq/range)・ICMP タイプ・established を1行ずつ突き合わせる",
+        "apply_wrong_acl": "★適用点(BL-109)= ACL は2枚あり、`ip access-group` は"
+                           "**要件どおりでないほう**を指している",
+        "apply_missing": "★適用点(BL-109)= ACL の中身は要件どおりだが、"
+                         "どのインターフェイスにも適用されていない → 全許可",
+        "est_missing": "★戻り通信(BL-109 P2-⑤・論点14)= 復路用リストに "
+                       "`established` の行が無く、**戻りが暗黙の拒否で落ちる**。"
+                       "往路は通るのにセッションが張れない(実測 §17)",
+        "est_wrong_side": "★戻り通信(BL-109 P2-⑤)= `established` を**往路側**に"
+                          "書いた。**SYN には ACK が無いので一致せず**、"
+                          "最初のパケットから落ちる(実測 §17 (a))",
+        "apply_direction": "★適用点(BL-109 段B)= 同じインターフェイスで**向きだけ逆**"
+                           "(顧客側の out)。往路は素通りだが、要件どおりの ACL には"
+                           "暗黙の拒否があるので**復路が落ちて疎通しない**(実測 §16-10)",
+        "apply_iface_swap": "★適用点(BL-109 段B)= **サーバ側の in** に適用。"
+                            "やはり往路には当たらず復路が落ちる",
+        "apply_place": "★apply 形(BL-109 段B)= 構築系「どこに・どの向きで適用するか」。"
+                       "6択すべてが**実質的な理由**で決まる(2026-08-11 改訂= "
+                       "管理セグメントとの通信を要件に入れ、"
+                       "出口側の解は**関係のない通信を巻き添えにする**ので落ちる。"
+                       "以前は「早い段階で破棄」という文体上の制約で落としていた)。"
+                       "★実機ではさらに、出口側に置くと自機の EIGRP hello が"
+                       "暗黙の拒否に食われて**25 秒後にルーティングが壊れる**(実測 §16-11)",
+        "apply_other_iface": "★適用点(BL-109)= 対象外のインターフェイス"
+                             "(管理セグメント側)に適用されている → 全許可",
+        "filter_undef_ref": "★適用行が未定義の ACL を指している → 全許可"
+                            "(実測 §1。参照しても ACL は自動生成されない)",
+        "filter_empty_acl": "★適用されている ACL の中身が空 → 全許可(実測 §2)",
         "std_len_blind": "★標準 ACL はプレフィックス長を区別できない",
         "ext_named_rejected": "★名前付き拡張 ACL は distribute-list に指定できず、"
                               "フィルタ自体が適用されない",
@@ -2638,7 +2894,21 @@ def answer_md_acl(d, choices, stamp, master_seed, subseed, form):
         "vty_wc_wrong": "access-class の許可範囲が管理端末を含んでいない",
     }[d["kind"]]
     world_note = {
+        "src_customer": "顧客 → サーバ を絞る(正解= 顧客側の IF の in。"
+                        "★出口側は管理セグメントとの通信を巻き添えにするので不可)",
+        "src_server": "サーバ → 顧客 を絞る(★正解が反転= サーバ側の IF の in)",
+        "deny_to_mgmt": "★定石から外れる世界= 標準 ACL で「顧客→管理セグメントだけ拒否・"
+                        "顧客→サーバは維持」。標準は送信元しか見ないので入口では"
+                        "巻き添えになり、**宛先側(管理 IF)の out** が唯一解",
         "one_line": "1行で書く(過剰被覆キューブが正解)",
+        "wc_even": "★WCトリック= 第3オクテットが**偶数**の4本 → `0.0.6.255`",
+        "wc_odd": "★WCトリック= 第3オクテットが**奇数**の4本 → base を +1 して `0.0.6.255`",
+        "wc_split": "★WCトリック= **飛び地**2ブロック → **非連続**の `0.0.5.255`",
+        "wc_block": "★WCトリック= 連続4本(/22 相当) → `0.0.3.255`(厳密)",
+        "nb_min": "★1行では書けないレンジ(7本)・deny 可・行数最小 → "
+                  "**過剰被覆＋deny 先行の2行**",
+        "nb_no_deny": "★1行では書けないレンジ(7本)・deny 禁止 → "
+                      "**大きさの違うキューブ3つに分解**(集約の本題)",
         "exact_no_deny": "過剰許可なし＋deny 禁止(厳密列挙が正解)",
         "exact_min": "過剰許可なし＋行数最小(deny 先行が正解)",
         "prefixlen_no_rm": "長さを区別する(ルート・マップ禁止)→ prefix-list が正解",
@@ -4681,6 +4951,14 @@ def main():
                          "shape=aclv6: select,read,cause,counter。"
                          "指定した形が成立する盤面を seed 探索で選ぶ。"
                          "他の shape では無視される。")
+    ap.add_argument("--worlds", default="",
+                    help="要件世界を絞る(カンマ区切り・shape=acl/aclv6 のみ)。"
+                         "acl の filter= one_line,exact_no_deny,exact_min,"
+                         "wc_even,wc_odd,wc_split,wc_block / "
+                         "apply 形= src_customer,src_server,deny_to_mgmt / "
+                         "routefilter= prefixlen_no_rm,prefixlen_via_rm,"
+                         "by_neighbor,keep_others。"
+                         "指定した世界を持つ故障種だけに絞り込む。")
     ap.add_argument("--kinds", default=None,
                     help=f"カンマ区切りで種別を明示(chain: {','.join(KINDS)} / "
                          f"ring: {','.join(RING_KINDS)}。既定=seedシャッフル巡回)")
@@ -4716,8 +4994,25 @@ def main():
         if not set(kinds) <= set(pool):
             raise SystemExit(f"--kinds({a.shape}) は {pool} から選ぶこと: {kinds}")
     want_forms = [x.strip() for x in a.forms.split(",") if x.strip()]
+    want_worlds = [x.strip() for x in a.worlds.split(",") if x.strip()]
     if want_forms and a.shape not in ("acl", "aclv6", "mixed"):
         print(f"[!] --forms は shape={a.shape} では無視されます", flush=True)
+    if want_worlds and a.shape not in ("acl", "aclv6", "mixed"):
+        print(f"[!] --worlds は shape={a.shape} では無視されます", flush=True)
+    # ★--worlds 指定時は**故障種のプールも絞る**(--forms と同じ理由=
+    #   その世界を持たない種を先に引くと詰む)。
+    if want_worlds and kinds is not None and a.shape in ("acl", "aclv6"):
+        mod = gpl if a.shape == "acl" else gp6
+        keep = [k for k in kinds if set(want_worlds) & set(mod.worlds_for(k))]
+        if not keep:
+            raise SystemExit(
+                f"--worlds {a.worlds} を持つ故障種がありません。利用可能= "
+                + ", ".join(sorted({w for k in kinds
+                                    for w in mod.worlds_for(k)})))
+        if len(keep) < len(kinds):
+            print(f"[i] --worlds により故障種を {len(keep)}/{len(kinds)} に限定",
+                  flush=True)
+        kinds = keep
     # ★--forms 指定時は**故障種のプールも絞る**。形は種ごとに取り得るものが
     #   違うので(例: compare は dense_list だけ・fix は routefilter だけ)、
     #   種を先に決めてから形を探すと「その形を持たない種」で詰む。
@@ -4789,9 +5084,11 @@ def main():
         elif shape_i == "aaa":
             subseed, d = pick_draw_aaa(qseed, kind)
         elif shape_i == "acl":
-            subseed, d = pick_draw_acl(qseed, kind, forms=want_forms)
+            subseed, d = pick_draw_acl(qseed, kind, forms=want_forms,
+                                       worlds=want_worlds)
         elif shape_i == "aclv6":
-            subseed, d = pick_draw_aclv6(qseed, kind, forms=want_forms)
+            subseed, d = pick_draw_aclv6(qseed, kind, forms=want_forms,
+                                         worlds=want_worlds)
         elif shape_i == "bgpdbg":
             subseed = qseed
             d = gpb.draw(random.Random(subseed), variant=kind)
@@ -4838,7 +5135,8 @@ def main():
             # ★既定形はその盤面で成立する形から採る。
             #   dense_list(多エントリ読解)は cause 形を持たないので固定できない。
             _av = gpl.forms_for(d)
-            choices = (gpl.build_choices_cause(d, rnd) if "cause" in _av
+            choices = (gpl.build_choices_apply(d, rnd) if _av == ["apply"]
+                       else gpl.build_choices_cause(d, rnd) if "cause" in _av
                        else gpl.build_choices_read(d, rnd))
         elif shape_i == "aclv6":
             plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
@@ -4865,6 +5163,14 @@ def main():
         # exam: 出題形式も seed で抽選(fix=是正手順 / cause=原因特定)。
         # cause 形は選択肢が別サブシステムの原因仮説になり、語彙で領域が割れない。
         form = "fix"
+        # ★紙面専用 shape は既定形が fix ではない。form は解答 md の「出題形」欄
+        #   だけでなく**提示物の出し分け**(acl_evidence)にも使われるので、
+        #   ここで実際に組んだ形に合わせておく(既定= cause / 無ければ read)。
+        if not a.exam and shape_i in ("acl", "aclv6"):
+            _fm = gpl if shape_i == "acl" else gp6
+            _af = _fm.forms_for(d)
+            form = ("apply" if _af == ["apply"]
+                    else "cause" if "cause" in _af else "read")
         if a.exam and shape_i == "chain" and rnd.random() < 0.5:
             form = "cause"
             choices = build_cause_choices(d, plan, rnd, decoy=decoy, pol=pol)
@@ -4944,6 +5250,8 @@ def main():
             form = rnd.choice(avail)
             if form == "select":
                 choices = gpl.build_choices_select(d, rnd)
+            elif form == "apply":
+                choices = gpl.build_choices_apply(d, rnd)
             elif form == "counter":
                 choices = gpl.build_choices_counter(d, rnd)
             elif form == "patch":
@@ -5212,10 +5520,15 @@ def main():
                             #   汎用文に均すと解答不能になる。
                             keep_ask=(form in ("evidence", "patch", "dbgconf",
                                                "authread")
+                                      # ★apply(BL-109 段B)は構築系=
+                                      #   **壊れていない**。汎用の症状文を被せると
+                                      #   「動作していない理由を判断せよ」という
+                                      #   **存在しない事象**を参照してしまう。
                                       or (shape_i == "acl"
                                           and form in ("read", "counter",
                                                        "patch", "logread",
-                                                       "evidence", "compare"))
+                                                       "evidence", "compare",
+                                                       "apply"))
                                       or (shape_i == "aclv6"
                                           and form in ("read", "counter"))))
         leak_lint(q_md, lint)

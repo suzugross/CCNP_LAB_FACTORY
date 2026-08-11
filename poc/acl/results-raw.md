@@ -1992,3 +1992,1084 @@ D        172.30.16.0/28 [90/435200] via 10.0.12.1, 00:00:48, Ethernet0/0
 D        3.3.3.3 [90/435200] via 10.0.12.1, 00:01:05, Ethernet0/0
 D        172.30.16.0/28 [90/435200] via 10.0.12.1, 00:01:05, Ethernet0/0
 ```
+
+## sweep run (2026-08-11 06:23:00) — checks: G1_apply_show, G2_two_stage, G3_direction, G4_unapplied, G5_wrong_direction
+
+
+基線 RT01 `show ip route eigrp`:
+```
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      2.0.0.0/32 is subnetted, 1 subnets
+D        2.2.2.2 [90/409600] via 10.0.12.2, 06:13:22, Ethernet0/1
+      3.0.0.0/32 is subnetted, 1 subnets
+D        3.3.3.3 [90/409600] via 10.0.13.3, 06:13:22, Ethernet0/0
+      172.30.0.0/16 is variably subnetted, 5 subnets, 4 masks
+D        172.30.16.0/24 [90/409600] via 10.0.12.2, 06:13:22, Ethernet0/1
+D        172.30.16.0/28 [90/409600] via 10.0.13.3, 06:13:22, Ethernet0/0
+D        172.30.17.0/26 [90/409600] via 10.0.12.2, 06:13:22, Ethernet0/1
+D        172.30.18.0/30 [90/409600] via 10.0.12.2, 06:13:22, Ethernet0/1
+D        172.30.32.0/24 [90/409600] via 10.0.12.2, 06:13:22, Ethernet0/1
+```
+
+### G1_apply_show
+
+
+#### G1 適用点の表示書式
+
+現行の紙面が使っている形 `show run | section access-list|access-group`:
+```
+ip access-group 150 in
+ip access-list extended 150
+ 10 permit ip any any
+```
+
+★`show run | section ^interface`:
+```
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+interface Ethernet0/0
+ description === to RT03 ===
+ ip address 10.0.13.1 255.255.255.0
+ ip access-group 150 in
+ ipv6 address 2001:DB8:13::1/64
+ ipv6 enable
+interface Ethernet0/1
+ description === to RT02 ===
+ ip address 10.0.12.1 255.255.255.0
+ ipv6 address 2001:DB8:12::1/64
+ ipv6 enable
+interface Ethernet0/2
+ no ip address
+ shutdown
+interface Ethernet0/3
+ no ip address
+ shutdown
+interface Ethernet1/0
+ no ip address
+ shutdown
+interface Ethernet1/1
+ no ip address
+ shutdown
+interface Ethernet1/2
+ no ip address
+ shutdown
+interface Ethernet1/3
+ no ip address
+ shutdown
+interface Ethernet2/0
+ no ip address
+ shutdown
+interface Ethernet2/1
+ no ip address
+ shutdown
+interface Ethernet2/2
+ no ip address
+ shutdown
+interface Ethernet2/3
+ no ip address
+ shutdown
+interface Ethernet3/0
+ no ip address
+ shutdown
+interface Ethernet3/1
+ no ip address
+ shutdown
+interface Ethernet3/2
+ no ip address
+ shutdown
+interface Ethernet3/3
+ no ip address
+ shutdown
+interface Ethernet4/0
+ no ip address
+ shutdown
+interface Ethernet4/1
+ no ip address
+ shutdown
+interface Ethernet4/2
+ no ip address
+ shutdown
+interface Ethernet4/3
+ no ip address
+ shutdown
+interface Ethernet5/0
+ no ip address
+ shutdown
+interface Ethernet5/1
+ no ip address
+ shutdown
+interface Ethernet5/2
+ no ip address
+ shutdown
+interface Ethernet5/3
+ no ip address
+ shutdown
+interface Ethernet6/0
+ no ip address
+ shutdown
+interface Ethernet6/1
+ no ip address
+ shutdown
+interface Ethernet6/2
+ no ip address
+ shutdown
+interface Ethernet6/3
+ no ip address
+ shutdown
+interface Ethernet7/0
+ no ip address
+ shutdown
+interface Ethernet7/1
+ no ip address
+ shutdown
+interface Ethernet7/2
+ no ip address
+ shutdown
+interface Ethernet7/3
+ no ip address
+ shutdown
+```
+
+★`show run interface Ethernet0/0`:
+```
+Building configuration...
+
+Current configuration : 163 bytes
+!
+interface Ethernet0/0
+ description === to RT03 ===
+ ip address 10.0.13.1 255.255.255.0
+ ip access-group 150 in
+ ipv6 address 2001:DB8:13::1/64
+ ipv6 enable
+end
+```
+
+★`show ip interface Ethernet0/0 | include access list`:
+```
+Outgoing Common access list is not set 
+  Outgoing access list is not set
+  Inbound Common access list is not set 
+  Inbound  access list is 150
+```
+
+★`show ip interface | include line protocol|access list`(全IF一覧):
+```
+Ethernet0/0 is up, line protocol is up
+  Outgoing Common access list is not set 
+  Outgoing access list is not set
+  Inbound Common access list is not set 
+  Inbound  access list is 150
+Ethernet0/1 is up, line protocol is up
+  Outgoing Common access list is not set 
+  Outgoing access list is not set
+  Inbound Common access list is not set 
+  Inbound  access list is not set
+Ethernet0/2 is administratively down, line protocol is down
+Ethernet0/3 is administratively down, line protocol is down
+Ethernet1/0 is administratively down, line protocol is down
+Ethernet1/1 is administratively down, line protocol is down
+Ethernet1/2 is administratively down, line protocol is down
+Ethernet1/3 is administratively down, line protocol is down
+Ethernet2/0 is administratively down, line protocol is down
+Ethernet2/1 is administratively down, line protocol is down
+Ethernet2/2 is administratively down, line protocol is down
+Ethernet2/3 is administratively down, line protocol is down
+Ethernet3/0 is administratively down, line protocol is down
+Ethernet3/1 is administratively down, line protocol is down
+Ethernet3/2 is administratively down, line protocol is down
+Ethernet3/3 is administratively down, line protocol is down
+Ethernet4/0 is administratively down, line protocol is down
+Ethernet4/1 is administratively down, line protocol is down
+Ethernet4/2 is administratively down, line protocol is down
+Ethernet4/3 is administratively down, line protocol is down
+Ethernet5/0 is administratively down, line protocol is down
+Ethernet5/1 is administratively down, line protocol is down
+Ethernet5/2 is administratively down, line protocol is down
+Ethernet5/3 is administratively down, line protocol is down
+Ethernet6/0 is administratively down, line protocol is down
+Ethernet6/1 is administratively down, line protocol is down
+Ethernet6/2 is administratively down, line protocol is down
+Ethernet6/3 is administratively down, line protocol is down
+Ethernet7/0 is administratively down, line protocol is down
+Ethernet7/1 is administratively down, line protocol is down
+Ethernet7/2 is administratively down, line protocol is down
+Ethernet7/3 is administratively down, line protocol is down
+Loopback0 is up, line protocol is up
+  Outgoing Common access list is not set 
+  Outgoing access list is not set
+  Inbound Common access list is not set 
+  Inbound  access list is not set
+```
+
+`show ip interface brief`:
+```
+Interface              IP-Address      OK? Method Status                Protocol
+Ethernet0/0            10.0.13.1       YES manual up                    up      
+Ethernet0/1            10.0.12.1       YES manual up                    up      
+Ethernet0/2            unassigned      YES unset  administratively down down    
+Ethernet0/3            unassigned      YES unset  administratively down down    
+Ethernet1/0            unassigned      YES unset  administratively down down    
+Ethernet1/1            unassigned      YES unset  administratively down down    
+Ethernet1/2            unassigned      YES unset  administratively down down    
+Ethernet1/3            unassigned      YES unset  administratively down down    
+Ethernet2/0            unassigned      YES unset  administratively down down    
+Ethernet2/1            unassigned      YES unset  administratively down down    
+Ethernet2/2            unassigned      YES unset  administratively down down    
+Ethernet2/3            unassigned      YES unset  administratively down down    
+Ethernet3/0            unassigned      YES unset  administratively down down    
+Ethernet3/1            unassigned      YES unset  administratively down down    
+Ethernet3/2            unassigned      YES unset  administratively down down    
+Ethernet3/3            unassigned      YES unset  administratively down down    
+Ethernet4/0            unassigned      YES unset  administratively down down    
+Ethernet4/1            unassigned      YES unset  administratively down down    
+Ethernet4/2            unassigned      YES unset  administratively down down    
+Ethernet4/3            unassigned      YES unset  administratively down down    
+Ethernet5/0            unassigned      YES unset  administratively down down    
+Ethernet5/1            unassigned      YES unset  administratively down down    
+Ethernet5/2            unassigned      YES unset  administratively down down    
+Ethernet5/3            unassigned      YES unset  administratively down down    
+Ethernet6/0            unassigned      YES unset  administratively down down    
+Ethernet6/1            unassigned      YES unset  administratively down down    
+Ethernet6/2            unassigned      YES unset  administratively down down    
+Ethernet6/3            unassigned      YES unset  administratively down down    
+Ethernet7/0            unassigned      YES unset  administratively down down    
+Ethernet7/1            unassigned      YES unset  administratively down down    
+Ethernet7/2            unassigned      YES unset  administratively down down    
+Ethernet7/3            unassigned      YES unset  administratively down down    
+Loopback0              1.1.1.1         YES manual up                    up
+```
+
+### G2_two_stage
+
+
+#### G2 入口 in ＋ 出口 out の二段評価
+- (i) 両方 permit: RT03→RT02 **100%** / 入口151 1→**6** / 出口152 1→**6**
+- (ii) ★出口だけ deny icmp: RT03→RT02 **0%** / 入口151 7→**16** / 出口152 deny 0→**5** / permit 2→**3**
+  → 入口のカウンタが進んでいれば「**入口で許可され出口で落ちた**」＝二段で評価されている。
+
+  `show ip interface Ethernet0/1 | include access list`:
+```
+Outgoing Common access list is not set 
+  Outgoing access list is 152
+  Inbound Common access list is not set 
+  Inbound  access list is not set
+```
+
+### G3_direction
+
+
+#### G3 同一 IF の in / out（方向の非対称）
+- RT03→10.0.12.99(不在・片道): 通過率 0% / e0/0 **in** 153 1→**8** / e0/0 **out** 154 0→**4**
+- RT02→10.0.13.99(不在・片道): 通過率 0% / e0/0 **in** 153 8→**11** / e0/0 **out** 154 4→**12**
+- RT03→RT02(往復する通常の ping): 通過率 100% / e0/0 **in** 153 11→**16** / e0/0 **out** 154 14→**21**
+
+### G4_unapplied
+
+
+#### G4 定義済みだが効いていない（未適用 / 無関係な IF）
+- **(a) 未適用**: RT03→RT02 通過率 **100%**
+
+  `show ip access-lists 155`:
+```
+Extended IP access list 155
+    10 deny ip 10.0.13.0 0.0.0.255 any
+    20 permit ip any any
+```
+
+  `show ip interface Ethernet0/0 | include access list`:
+```
+Outgoing Common access list is not set 
+  Outgoing access list is not set
+  Inbound Common access list is not set 
+  Inbound  access list is not set
+```
+- **(b) 無関係な IF(Loopback0)に適用**: RT03→RT02 通過率 **100%**
+
+  `show ip access-lists 155`:
+```
+Extended IP access list 155
+    10 deny ip 10.0.13.0 0.0.0.255 any
+    20 permit ip any any
+```
+
+  `show ip interface Ethernet0/0 | include access list`:
+```
+Outgoing Common access list is not set 
+  Outgoing access list is not set
+  Inbound Common access list is not set 
+  Inbound  access list is not set
+```
+- **(c) 対照= 正しい IF(Ethernet0/0 in)に適用**: RT03→RT02 通過率 **0%**
+
+  `show ip access-lists 155`:
+```
+Extended IP access list 155
+    10 deny ip 10.0.13.0 0.0.0.255 any (6 matches)
+    20 permit ip any any
+```
+
+  `show ip interface Ethernet0/0 | include access list`:
+```
+Outgoing Common access list is not set 
+  Outgoing access list is not set
+  Inbound Common access list is not set 
+  Inbound  access list is 155
+```
+
+### G5_wrong_direction
+
+
+#### G5 方向の誤り（往路と復路のどちらが落ちるか）
+- **(i) 正= e0/0 in**: RT03→RT02 **0%** / deny 1→**7** / permit 0→**0**
+- **(ii) 誤= e0/0 **out**(同じ IF で向きだけ逆)**: RT03→RT02 **100%** / deny 8→**8** / permit 0→**6**
+- **(iii) 誤= e0/1 in(隣の IF)**: RT03→RT02 **100%** / deny 9→**9** / permit 6→**12**
+- **(iv) 正の別解= e0/1 **out**(出口側で同じ送信元を落とす)**: RT03→RT02 **0%** / deny 9→**14** / permit 13→**16**
+- **(v) 復路だけ落とす= e0/0 out に宛先ベース**: RT03→RT02 **0%** / deny 0→**5** / permit 0→**6**
+  → 往路は素通りしているのに ping は失敗する。**通過率だけでは in の誤りと区別できない**かを判定する材料。
+
+## sweep run (2026-08-11 06:27:24) — checks: G6_urpf_mode, G7_nat_iface, G8_dl_direction, G9_copp_apply
+
+
+基線 RT01 `show ip route eigrp`:
+```
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      2.0.0.0/32 is subnetted, 1 subnets
+D        2.2.2.2 [90/409600] via 10.0.12.2, 06:17:46, Ethernet0/1
+      3.0.0.0/32 is subnetted, 1 subnets
+D        3.3.3.3 [90/409600] via 10.0.13.3, 06:17:46, Ethernet0/0
+      172.30.0.0/16 is variably subnetted, 5 subnets, 4 masks
+D        172.30.16.0/24 [90/409600] via 10.0.12.2, 06:17:46, Ethernet0/1
+D        172.30.16.0/28 [90/409600] via 10.0.13.3, 06:17:46, Ethernet0/0
+D        172.30.17.0/26 [90/409600] via 10.0.12.2, 06:17:46, Ethernet0/1
+D        172.30.18.0/30 [90/409600] via 10.0.12.2, 06:17:46, Ethernet0/1
+D        172.30.32.0/24 [90/409600] via 10.0.12.2, 06:17:46, Ethernet0/1
+```
+
+### G6_urpf_mode
+
+
+#### G6 uRPF `reachable-via rx` と `any`
+
+- **rx** 撃つ前:
+```
+IP verify source reachable-via RX
+   0 verification drops
+   0 suppressed verification drops
+   0 verification drop-rate
+```
+
+- **rx** 撃った後:
+```
+IP verify source reachable-via RX
+   5 verification drops
+   0 suppressed verification drops
+   0 verification drop-rate
+```
+
+- **any** 撃つ前:
+```
+IP verify source reachable-via ANY
+   0 verification drops
+   0 suppressed verification drops
+   0 verification drop-rate
+```
+
+- **any** 撃った後:
+```
+IP verify source reachable-via ANY
+   0 verification drops
+   5 suppressed verification drops
+   0 verification drop-rate
+```
+
+### G7_nat_iface
+
+
+#### G7 NAT の inside/outside 付け忘れ
+
+- (a) inside/outside **なし** `show ip nat translations`:
+```
+(空)
+```
+
+  `show ip nat statistics | include Outside|Inside|Hits`:
+```
+Outside interfaces:
+Inside interfaces: 
+Hits: 10  Misses: 0
+-- Inside Source
+```
+
+- (b) 対照= inside/outside **あり** `show ip nat translations`:
+```
+Pro Inside global      Inside local       Outside local      Outside global
+icmp 10.0.12.1:1024    10.0.13.3:39       10.0.12.2:39       10.0.12.2:1024
+```
+
+### G8_dl_direction
+
+
+#### G8 distribute-list の方向
+- **(a) `distribute-list 62 in`**
+  - RT01 の学習経路: **['172.30.16.0/24', '172.30.16.0/28', '172.30.17.0/26', '172.30.18.0/30', '2.2.2.2/32', '3.3.3.3/32']**
+  - RT03 の学習経路: **['1.1.1.1/32', '10.0.12.0/24', '172.30.16.0/24', '172.30.17.0/26', '172.30.18.0/30', '2.2.2.2/32']**
+
+  `show ip protocols | include filter|list`:
+```
+Outgoing update filter list for all interfaces is not set
+  Incoming update filter list for all interfaces is not set
+  Outgoing update filter list for all interfaces is not set
+  Incoming update filter list for all interfaces is 62
+```
+- **(b) `distribute-list 62 out`**
+  - RT01 の学習経路: **['172.30.16.0/24', '172.30.16.0/28', '172.30.17.0/26', '172.30.18.0/30', '172.30.32.0/24', '2.2.2.2/32', '3.3.3.3/32']**
+  - RT03 の学習経路: **['1.1.1.1/32', '10.0.12.0/24', '172.30.16.0/24', '172.30.17.0/26', '172.30.18.0/30', '2.2.2.2/32']**
+
+  `show ip protocols | include filter|list`:
+```
+Outgoing update filter list for all interfaces is not set
+  Incoming update filter list for all interfaces is not set
+  Outgoing update filter list for all interfaces is 62
+  Incoming update filter list for all interfaces is not set
+```
+- **(c) `distribute-list 62 out Ethernet0/0`(IF 指定)**
+  - RT01 の学習経路: **['172.30.16.0/24', '172.30.16.0/28', '172.30.17.0/26', '172.30.18.0/30', '172.30.32.0/24', '2.2.2.2/32', '3.3.3.3/32']**
+  - RT03 の学習経路: **['1.1.1.1/32', '10.0.12.0/24', '172.30.16.0/24', '172.30.17.0/26', '172.30.18.0/30', '2.2.2.2/32']**
+
+  `show ip protocols | include filter|list`:
+```
+Outgoing update filter list for all interfaces is not set
+  Incoming update filter list for all interfaces is not set
+  Outgoing update filter list for all interfaces is not set
+    Ethernet0/0 filtered by 62 (per-user), default is not set
+  Incoming update filter list for all interfaces is not set
+```
+
+### G9_copp_apply
+
+
+#### G9 CoPP の service-policy 付け忘れ
+- CLI応答: `% Invalid input detected at '^' marker.`
+- CLI応答: `% Invalid input detected at '^' marker.`
+- (a) policy 定義のみ・**service-policy なし**: RT03→RT01(自機宛) **100%**
+
+  `show policy-map control-plane | include Class|packets`:
+```
+(空)
+```
+- (b) 対照= `service-policy input` **あり**: **100%**
+
+  `show policy-map control-plane | include Class|packets`:
+```
+Class-map: CPCM (match-all)  
+    Class-map: class-default (match-any)
+```
+
+## sweep run (2026-08-11 06:32:09) — checks: G9_copp_apply
+
+
+基線 RT01 `show ip route eigrp`:
+```
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      2.0.0.0/32 is subnetted, 1 subnets
+D        2.2.2.2 [90/409600] via 10.0.12.2, 00:03:10, Ethernet0/1
+      3.0.0.0/32 is subnetted, 1 subnets
+D        3.3.3.3 [90/409600] via 10.0.13.3, 00:03:10, Ethernet0/0
+      172.30.0.0/16 is variably subnetted, 5 subnets, 4 masks
+D        172.30.16.0/24 [90/409600] via 10.0.12.2, 00:03:10, Ethernet0/1
+D        172.30.16.0/28 [90/409600] via 10.0.13.3, 00:03:10, Ethernet0/0
+D        172.30.17.0/26 [90/409600] via 10.0.12.2, 00:03:10, Ethernet0/1
+D        172.30.18.0/30 [90/409600] via 10.0.12.2, 00:03:10, Ethernet0/1
+D        172.30.32.0/24 [90/409600] via 10.0.12.2, 00:03:10, Ethernet0/1
+```
+
+### G9_copp_apply
+
+
+#### G9 CoPP の service-policy 付け忘れ
+- (a) policy 定義のみ・**service-policy なし**: RT03→RT01(自機宛) **100%**
+
+  `show policy-map control-plane input`:
+```
+(空)
+```
+- (b) 対照= `service-policy input` **あり**: **0%**
+
+  `show policy-map control-plane input`:
+```
+Control Plane 
+
+  Service-policy input: CPPOL
+
+    Class-map: CPCM (match-all)  
+      Match: access-group name CPACL
+      police:
+          cir 8000 bps, bc 1500 bytes
+        conformed 5 packets, 570 bytes; actions:
+          drop 
+        exceeded 0 packets, 0 bytes; actions:
+          drop 
+        conformed 0000 bps, exceeded 0000 bps
+
+    Class-map: class-default (match-any)  
+      Match: any
+```
+- (c) `service-policy output` を control-plane に付けられるか
+- `control-plane` → 受理
+- `no service-policy input CPPOL` → 受理
+- `service-policy output CPPOL` → 受理
+- `exit` → 受理
+
+## sweep run (2026-08-11 06:35:39) — checks: P14_cleanup
+
+
+基線 RT01 `show ip route eigrp`:
+```
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      2.0.0.0/32 is subnetted, 1 subnets
+D        2.2.2.2 [90/409600] via 10.0.12.2, 00:06:40, Ethernet0/1
+      3.0.0.0/32 is subnetted, 1 subnets
+D        3.3.3.3 [90/409600] via 10.0.13.3, 00:06:40, Ethernet0/0
+      172.30.0.0/16 is variably subnetted, 5 subnets, 4 masks
+D        172.30.16.0/24 [90/409600] via 10.0.12.2, 00:06:40, Ethernet0/1
+D        172.30.16.0/28 [90/409600] via 10.0.13.3, 00:06:40, Ethernet0/0
+D        172.30.17.0/26 [90/409600] via 10.0.12.2, 00:06:40, Ethernet0/1
+D        172.30.18.0/30 [90/409600] via 10.0.12.2, 00:06:40, Ethernet0/1
+D        172.30.32.0/24 [90/409600] via 10.0.12.2, 00:06:40, Ethernet0/1
+```
+
+### P14_cleanup
+
+
+#### P14 後片付け
+
+RT01 `show ip access-lists`(残骸が無いこと):
+```
+
+```
+
+RT01 `show running-config | include access-group|distribute-list|service-policy|ip nat|verify unicast`:
+```
+ip nat inside source list 60 interface Ethernet0/1 overload
+ip nat inside source list 61 interface Ethernet0/1 overload
+```
+
+## sweep run (2026-08-11 07:08:36) — checks: G10_return_path, G11_selfgen_adjacency
+
+
+基線 RT01 `show ip route eigrp`:
+```
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      2.0.0.0/32 is subnetted, 1 subnets
+D        2.2.2.2 [90/409600] via 10.0.12.2, 00:39:37, Ethernet0/1
+      3.0.0.0/32 is subnetted, 1 subnets
+D        3.3.3.3 [90/409600] via 10.0.13.3, 00:39:37, Ethernet0/0
+      172.30.0.0/16 is variably subnetted, 5 subnets, 4 masks
+D        172.30.16.0/24 [90/409600] via 10.0.12.2, 00:39:37, Ethernet0/1
+D        172.30.16.0/28 [90/409600] via 10.0.13.3, 00:39:37, Ethernet0/0
+D        172.30.17.0/26 [90/409600] via 10.0.12.2, 00:39:37, Ethernet0/1
+D        172.30.18.0/30 [90/409600] via 10.0.12.2, 00:39:37, Ethernet0/1
+D        172.30.32.0/24 [90/409600] via 10.0.12.2, 00:39:37, Ethernet0/1
+```
+
+### G10_return_path
+
+
+#### G10 厳密な送信元ベース ACL を**サーバ側 IF の in** に付けた
+- CLI応答: `% Invalid input detected at '^' marker.`
+- (a) RT03(顧客)→RT02(サーバ) 通過率 **100%** / permit 行 -1
+
+  RT01 `show ip eigrp neighbors`(★隣接も落ちるか):
+```
+EIGRP-IPv4 Neighbors for AS(100)
+H   Address                 Interface              Hold Uptime   SRTT   RTO  Q  Seq
+                                                   (sec)         (ms)       Cnt Num
+1   10.0.13.3               Et0/0                    12 09:18:32    1   100  0  91
+0   10.0.12.2               Et0/1                    14 09:18:39    1   100  0  90
+```
+- CLI応答: `% Invalid input detected at '^' marker.`
+- (b) 対照= 復路の送信元 10.0.12.0/24 も許可: **100%**
+
+  `show ip access-lists 158`:
+```
+
+```
+
+### G11_selfgen_adjacency
+
+
+#### G11 厳密な送信元ベース ACL を**サーバ側 IF の out** に付けた
+
+- 基線 RT01 `show ip eigrp neighbors`:
+```
+EIGRP-IPv4 Neighbors for AS(100)
+H   Address                 Interface              Hold Uptime   SRTT   RTO  Q  Seq
+                                                   (sec)         (ms)       Cnt Num
+1   10.0.13.3               Et0/0                    13 09:18:58    1   100  0  91
+0   10.0.12.2               Et0/1                    11 09:19:06    1   100  0  90
+```
+- CLI応答: `% Invalid input detected at '^' marker.`
+- (a) 直後: RT03→RT02 **100%** / permit 行 -1
+
+- (b) 25秒後 RT01 `show ip eigrp neighbors`:
+```
+EIGRP-IPv4 Neighbors for AS(100)
+H   Address                 Interface              Hold Uptime   SRTT   RTO  Q  Seq
+                                                   (sec)         (ms)       Cnt Num
+1   10.0.13.3               Et0/0                    14 09:19:30    1   100  0  91
+0   10.0.12.2               Et0/1                    11 09:19:38    1   100  0  90
+```
+- (c) 25秒後: RT03→RT02 **100%**
+
+  RT01 `show ip route eigrp`:
+```
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      2.0.0.0/32 is subnetted, 1 subnets
+D        2.2.2.2 [90/409600] via 10.0.12.2, 00:40:42, Ethernet0/1
+      3.0.0.0/32 is subnetted, 1 subnets
+D        3.3.3.3 [90/409600] via 10.0.13.3, 00:40:42, Ethernet0/0
+      172.30.0.0/16 is variably subnetted, 5 subnets, 4 masks
+D        172.30.16.0/24 [90/409600] via 10.0.12.2, 00:40:42, Ethernet0/1
+D        172.30.16.0/28 [90/409600] via 10.0.13.3, 00:40:42, Ethernet0/0
+D        172.30.17.0/26 [90/409600] via 10.0.12.2, 00:40:42, Ethernet0/1
+D        172.30.18.0/30 [90/409600] via 10.0.12.2, 00:40:42, Ethernet0/1
+D        172.30.32.0/24 [90/409600] via 10.0.12.2, 00:40:42, Ethernet0/1
+```
+- CLI応答: `% Invalid input detected at '^' marker.`
+
+- (d) 対照= 10.0.12.0/24 も許可して30秒後:
+```
+EIGRP-IPv4 Neighbors for AS(100)
+H   Address                 Interface              Hold Uptime   SRTT   RTO  Q  Seq
+                                                   (sec)         (ms)       Cnt Num
+1   10.0.13.3               Et0/0                    10 09:20:02    1   100  0  91
+0   10.0.12.2               Et0/1                    13 09:20:09    1   100  0  90
+```
+
+## sweep run (2026-08-11 07:12:06) — checks: G10_return_path, G11_selfgen_adjacency
+
+
+基線 RT01 `show ip route eigrp`:
+```
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      2.0.0.0/32 is subnetted, 1 subnets
+D        2.2.2.2 [90/409600] via 10.0.12.2, 00:43:07, Ethernet0/1
+      3.0.0.0/32 is subnetted, 1 subnets
+D        3.3.3.3 [90/409600] via 10.0.13.3, 00:43:07, Ethernet0/0
+      172.30.0.0/16 is variably subnetted, 5 subnets, 4 masks
+D        172.30.16.0/24 [90/409600] via 10.0.12.2, 00:43:07, Ethernet0/1
+D        172.30.16.0/28 [90/409600] via 10.0.13.3, 00:43:07, Ethernet0/0
+D        172.30.17.0/26 [90/409600] via 10.0.12.2, 00:43:07, Ethernet0/1
+D        172.30.18.0/30 [90/409600] via 10.0.12.2, 00:43:07, Ethernet0/1
+D        172.30.32.0/24 [90/409600] via 10.0.12.2, 00:43:07, Ethernet0/1
+```
+
+### G10_return_path
+
+
+#### G10 厳密な送信元ベース ACL を**サーバ側 IF の in** に付けた
+- (a) RT03(顧客)→RT02(サーバ) 通過率 **0%** / permit 行 0
+
+  RT01 `show ip eigrp neighbors`(★隣接も落ちるか):
+```
+EIGRP-IPv4 Neighbors for AS(100)
+H   Address                 Interface              Hold Uptime   SRTT   RTO  Q  Seq
+                                                   (sec)         (ms)       Cnt Num
+1   10.0.13.3               Et0/0                    13 09:22:13    1   100  0  92
+```
+- (b) 対照= 復路の送信元 10.0.12.0/24 も許可: **100%**
+
+  `show ip access-lists 158`:
+```
+Extended IP access list 158
+    10 permit ip 10.0.13.0 0.0.0.255 any
+    20 permit ip 10.0.12.0 0.0.0.255 any (12 matches)
+```
+
+### G11_selfgen_adjacency
+
+
+#### G11 厳密な送信元ベース ACL を**サーバ側 IF の out** に付けた
+
+- 基線 RT01 `show ip eigrp neighbors`:
+```
+EIGRP-IPv4 Neighbors for AS(100)
+H   Address                 Interface              Hold Uptime   SRTT   RTO  Q  Seq
+                                                   (sec)         (ms)       Cnt Num
+0   10.0.12.2               Et0/1                    13 00:00:24    1   100  0  93
+1   10.0.13.3               Et0/0                    14 09:22:39    1   100  0  93
+```
+- (a) 直後: RT03→RT02 **100%** / permit 行 5
+
+- (b) 25秒後 RT01 `show ip eigrp neighbors`:
+```
+EIGRP-IPv4 Neighbors for AS(100)
+H   Address                 Interface              Hold Uptime   SRTT   RTO  Q  Seq
+                                                   (sec)         (ms)       Cnt Num
+0   10.0.12.2               Et0/1                    14 00:00:13    1  5000  1  0
+1   10.0.13.3               Et0/0                    14 09:23:11    1   100  0  94
+```
+- (c) 25秒後: RT03→RT02 **0%**
+
+  RT01 `show ip route eigrp`:
+```
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      3.0.0.0/32 is subnetted, 1 subnets
+D        3.3.3.3 [90/409600] via 10.0.13.3, 00:44:33, Ethernet0/0
+      172.30.0.0/28 is subnetted, 1 subnets
+D        172.30.16.0 [90/409600] via 10.0.13.3, 00:44:33, Ethernet0/0
+```
+
+- (d) 対照= 10.0.12.0/24 も許可して30秒後:
+```
+EIGRP-IPv4 Neighbors for AS(100)
+H   Address                 Interface              Hold Uptime   SRTT   RTO  Q  Seq
+                                                   (sec)         (ms)       Cnt Num
+0   10.0.12.2               Et0/1                    13 00:00:55    1   100  0  96
+1   10.0.13.3               Et0/0                    13 09:23:53    1   100  0  95
+```
+
+## sweep run (2026-08-11 09:33:01) — checks: G12_customer_out
+
+
+基線 RT01 `show ip route eigrp`:
+```
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      2.0.0.0/32 is subnetted, 1 subnets
+D        2.2.2.2 [90/409600] via 10.0.12.2, 02:19:19, Ethernet0/1
+      3.0.0.0/32 is subnetted, 1 subnets
+D        3.3.3.3 [90/409600] via 10.0.13.3, 03:04:02, Ethernet0/0
+      172.30.0.0/16 is variably subnetted, 5 subnets, 4 masks
+D        172.30.16.0/24 [90/409600] via 10.0.12.2, 02:19:19, Ethernet0/1
+D        172.30.16.0/28 [90/409600] via 10.0.13.3, 03:04:02, Ethernet0/0
+D        172.30.17.0/26 [90/409600] via 10.0.12.2, 02:19:19, Ethernet0/1
+D        172.30.18.0/30 [90/409600] via 10.0.12.2, 02:19:19, Ethernet0/1
+D        172.30.32.0/24 [90/409600] via 10.0.12.2, 02:19:19, Ethernet0/1
+```
+
+### G12_customer_out
+
+
+#### G12 要件どおりの ACL を**顧客側 IF の out** に付けた
+
+- 基線 RT01 `show ip eigrp neighbors`:
+```
+EIGRP-IPv4 Neighbors for AS(100)
+H   Address                 Interface              Hold Uptime   SRTT   RTO  Q  Seq
+                                                   (sec)         (ms)       Cnt Num
+0   10.0.12.2               Et0/1                    14 02:19:53    1   100  0  96
+1   10.0.13.3               Et0/0                    14 11:42:51    1   100  0  95
+```
+- (a) 直後: RT03(3.3.3.3)→RT02 **0%** / permit 行 0
+
+- (b) 25秒後 `show ip eigrp neighbors`(★Et0/0 の隣接が残るか):
+```
+EIGRP-IPv4 Neighbors for AS(100)
+H   Address                 Interface              Hold Uptime   SRTT   RTO  Q  Seq
+                                                   (sec)         (ms)       Cnt Num
+1   10.0.13.3               Et0/0                    14 00:00:23    1  5000  1  0
+0   10.0.12.2               Et0/1                    10 02:20:34    1   100  0  97
+```
+
+  `show ip access-lists 160`:
+```
+Extended IP access list 160
+    10 permit ip 3.3.3.0 0.0.0.255 any
+```
+- (c) 対照= 復路の送信元も許可: **0%**
+
+- (d) 対照= 自機のリンク網も許可して30秒後:
+```
+EIGRP-IPv4 Neighbors for AS(100)
+H   Address                 Interface              Hold Uptime   SRTT   RTO  Q  Seq
+                                                   (sec)         (ms)       Cnt Num
+1   10.0.13.3               Et0/0                    11 00:01:09    1   100  0  98
+0   10.0.12.2               Et0/1                    11 02:21:20    1   100  0  98
+```
+
+## sweep run (2026-08-11 09:39:18) — checks: P14_cleanup
+
+
+基線 RT01 `show ip route eigrp`:
+```
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      2.0.0.0/32 is subnetted, 1 subnets
+D        2.2.2.2 [90/409600] via 10.0.12.2, 02:25:36, Ethernet0/1
+      3.0.0.0/32 is subnetted, 1 subnets
+D        3.3.3.3 [90/409600] via 10.0.13.3, 00:05:11, Ethernet0/0
+      172.30.0.0/16 is variably subnetted, 5 subnets, 4 masks
+D        172.30.16.0/24 [90/409600] via 10.0.12.2, 02:25:36, Ethernet0/1
+D        172.30.16.0/28 [90/409600] via 10.0.13.3, 00:05:11, Ethernet0/0
+D        172.30.17.0/26 [90/409600] via 10.0.12.2, 02:25:36, Ethernet0/1
+D        172.30.18.0/30 [90/409600] via 10.0.12.2, 02:25:36, Ethernet0/1
+D        172.30.32.0/24 [90/409600] via 10.0.12.2, 02:25:36, Ethernet0/1
+```
+
+### P14_cleanup
+
+
+#### P14 後片付け
+
+RT01 `show ip access-lists`(残骸が無いこと):
+```
+
+```
+
+RT01 `show running-config | include access-group|distribute-list|service-policy|ip nat|verify unicast`:
+```
+
+```
+
+## sweep run (2026-08-11 10:30:46) — checks: E1_established
+
+
+基線 RT01 `show ip route eigrp`:
+```
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      2.0.0.0/32 is subnetted, 1 subnets
+D        2.2.2.2 [90/409600] via 10.0.12.2, 03:17:04, Ethernet0/1
+      3.0.0.0/32 is subnetted, 1 subnets
+D        3.3.3.3 [90/409600] via 10.0.13.3, 00:56:39, Ethernet0/0
+      172.30.0.0/16 is variably subnetted, 5 subnets, 4 masks
+D        172.30.16.0/24 [90/409600] via 10.0.12.2, 03:17:04, Ethernet0/1
+D        172.30.16.0/28 [90/409600] via 10.0.13.3, 00:56:39, Ethernet0/0
+D        172.30.17.0/26 [90/409600] via 10.0.12.2, 03:17:04, Ethernet0/1
+D        172.30.18.0/30 [90/409600] via 10.0.12.2, 03:17:04, Ethernet0/1
+D        172.30.32.0/24 [90/409600] via 10.0.12.2, 03:17:04, Ethernet0/1
+```
+
+### E1_established
+
+
+#### E1 `established` は往路(SYN)に一致せず復路(RST/ACK)に一致するか
+- (a) 往路側に `established`: permit(est) **0** / deny **1**
+
+  RT03 の telnet 応答:
+```
+Trying 10.0.12.2, 9999 ... 
+% Destination unreachable; gateway or host down
+```
+- (b) 復路側に `established`: permit(est) **1** / deny **0**
+
+  RT03 の telnet 応答:
+```
+Trying 10.0.12.2, 9999 ... 
+% Connection refused by remote host
+```
+
+  `show ip access-lists 171`:
+```
+Extended IP access list 171
+    10 permit tcp host 10.0.12.2 eq 9999 any established (1 match)
+    20 deny tcp host 10.0.12.2 eq 9999 any
+    30 permit ip any any (1 match)
+```
+- (c) 対照= 復路側で `established` を**拒否**: deny(est) **2**
+
+  RT03 の telnet 応答:
+```
+Trying 10.0.12.2, 9999 ... 
+% Connection timed out; remote host not responding
+```
+
+## sweep run (2026-08-11 10:36:23) — checks: P14_cleanup
+
+
+基線 RT01 `show ip route eigrp`:
+```
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      2.0.0.0/32 is subnetted, 1 subnets
+D        2.2.2.2 [90/409600] via 10.0.12.2, 03:22:41, Ethernet0/1
+      3.0.0.0/32 is subnetted, 1 subnets
+D        3.3.3.3 [90/409600] via 10.0.13.3, 01:02:16, Ethernet0/0
+      172.30.0.0/16 is variably subnetted, 5 subnets, 4 masks
+D        172.30.16.0/24 [90/409600] via 10.0.12.2, 03:22:41, Ethernet0/1
+D        172.30.16.0/28 [90/409600] via 10.0.13.3, 01:02:16, Ethernet0/0
+D        172.30.17.0/26 [90/409600] via 10.0.12.2, 03:22:41, Ethernet0/1
+D        172.30.18.0/30 [90/409600] via 10.0.12.2, 03:22:41, Ethernet0/1
+D        172.30.32.0/24 [90/409600] via 10.0.12.2, 03:22:41, Ethernet0/1
+```
+
+### P14_cleanup
+
+
+#### P14 後片付け
+
+RT01 `show ip access-lists`(残骸が無いこと):
+```
+
+```
+
+RT01 `show running-config | include access-group|distribute-list|service-policy|ip nat|verify unicast`:
+```
+
+```
