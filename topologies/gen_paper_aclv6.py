@@ -472,6 +472,23 @@ def _has_shadow(ents):
     return False
 
 
+def kind_forms(kind, samples=8):
+    """その故障種が**そもそも取り得る**出題形の集合。
+
+    形は盤面ごとに成立可否が変わるので、数個引いて和集合を取る。
+    `--forms` 指定時に「その形を持たない種」を選んでしまう事故を防ぐために使う。
+    """
+    out = set()
+    for i in range(samples):
+        for w in WORLDS:
+            try:
+                d = draw(random.Random(i * 131 + 7), kind=kind, world=w)
+            except ValueError:
+                continue
+            out |= set(forms_for(d))
+    return out
+
+
 def forms_for(d):
     forms = ["cause", "select"]
     if d["kind"] not in NO_READ_KINDS and read_polarity(d) is not None:

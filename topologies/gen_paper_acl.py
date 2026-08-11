@@ -24,10 +24,12 @@ P1a のロールは 2 種(設計メモ §10 のユーザ決定):
 自己検査: `python3 gen_paper_acl.py --selftest`
 """
 import os
+import collections
 import random
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import zlib               # noqa: E402
 import acl_cover as ac    # noqa: E402
 import acl_model          # noqa: E402
 
@@ -35,13 +37,26 @@ import acl_model          # noqa: E402
 # 論点カタログ
 # --------------------------------------------------------------------------
 # filter ロール(ip access-group)= ACL の中身そのものの誤り
-FILTER_KINDS = [
+# アドレス系(標準/拡張のどちらでも成立する)
+ADDR_KINDS = [
     "wc_narrow",        # ワイルドカードが狭く、対象の一部が漏れる
     "wc_wide",          # 広すぎて対象外まで許可してしまう
     "wc_bits",          # 非連続ワイルドカード(桁落ち)で飛び地を許可
     "mask_as_wildcard",  # ★サブネットマスクを書いた(実測 P10: 正規化で別物になる)
     "order_shadow",     # 先行の広い permit が後続の deny を影にする
 ]
+# ★拡張 ACL でしか起きない誤り(設計メモ 論点カタログ C節)。
+#   標準 ACL は送信元しか見ないので、宛先・プロトコル・ポートの誤りは表現できない。
+EXT_ONLY_KINDS = [
+    "port_swap",         # ★eq を**送信元側**に書いた(拡張の定番)
+    "proto_ip_not_tcp",  # `permit ip` にしてポートの制限が効いていない
+    "dst_any_too_wide",  # 宛先を any にしてサーバ以外にも到達できる
+]
+# ★多エントリ読解(ユーザ要望 2026-08-11「エントリー多めで、細かく条件に合致するか
+#   どうかを確認させるものがいい」)。1〜2行の盤面では first-match をたどる作業が
+#   ほとんど発生していなかった。6〜8行の現実的な ACL を読ませる。
+DENSE_KINDS = ["dense_list"]
+FILTER_KINDS = ADDR_KINDS + EXT_ONLY_KINDS + DENSE_KINDS
 # routefilter ロール(distribute-list)= 実測で確定した意味論に基づく誤り
 RF_KINDS = [
     "std_len_blind",       # 標準 ACL は長さを区別できない(同一網アドレスを巻き添え)
@@ -114,11 +129,41 @@ def role_of(kind):
     return ROLE_OF_KIND[kind]
 
 
+def kind_forms(kind, samples=8):
+    """その故障種が**そもそも取り得る**出題形の集合。
+
+    形は盤面ごとに成立可否が変わるので、数個引いて和集合を取る。
+    `--forms` 指定時に「その形を持たない種」を選んでしまう事故を防ぐために使う。
+    """
+    out = set()
+    for i in range(samples):
+        for w in worlds_for(kind):
+            try:
+                d = draw(random.Random(i * 131 + 7), kind=kind, world=w)
+            except ValueError:
+                continue
+            out |= set(forms_for(d))
+    return out
+
+
 def forms_for(d):
     """この盤面で成立する出題形。gen_paper_mcq の形抽選はこれに従う。
 
     ★成立しない形を抽選させない(=「答えが無い問題」を作らない)ための関門。
     """
+    if d["kind"] == "dense_list":
+        # ★多エントリ読解は「どれが通るか」「どの行のカウンタが増えるか」に絞る。
+        #   故障を1点に特定する形(cause)や、これから書く行を選ぶ形(select)は
+        #   多エントリ盤面では成立しない(誤りが1か所に定まらない)。
+        f = ["read"]
+        # ★counter は「全行＋どの行も増えない」が選択肢になるので、
+        #   記号が A〜J に収まる範囲(=9行まで)でのみ成立させる。
+        ents, _s, _n = current_entries(d)
+        if len(ents) <= 9 and counter_probe(d) is not None:
+            f.append("counter")
+        if compare_ok(d):
+            f.append("compare")
+        return f
     forms = ["cause"]
     if d["role"] == "filter":
         forms.append("select")
@@ -181,6 +226,39 @@ def draw(rnd, kind=None, world=None):
     d["srv"] = f"172.{rnd.randint(16, 31)}.{rnd.randint(1, 200)}"
     d["srv_host"] = f"{d['srv']}.{rnd.randint(10, 99)}"
     d["port"] = rnd.choice([22, 80, 443, 3389])
+    # ★対照用: 許可してはいけない「別のポート」「別の宛先」
+    d["other_port"] = rnd.choice([p for p in (21, 23, 25, 8080)
+                                  if p != d["port"]])
+    d["other_host"] = f"{d['srv']}.{rnd.randint(100, 199)}"
+    # --- 多エントリ読解(dense_list)用の値 ---
+    d["dns"] = f"{d['srv']}.{rnd.randint(200, 250)}"
+    d["mgmt_net"] = rnd.choice([o for o in range(20, 240)
+                                if o not in d["target"] + [d["fourth"],
+                                                           d["outsider"]]])
+    d["blk_net"] = d["target"][1]          # ★全面禁止され、後続の許可を影にする網
+    d["hi_lo"] = rnd.choice([8000, 9000, 16384])
+    d["deny_port"] = rnd.choice([p for p in (23, 21, 512)
+                                 if p != d["other_port"]])
+    d["dense_n"] = rnd.choice([7, 8])
+    # ★近接肢の本数(ユーザ指摘 2026-08-11「錯乱肢が明らかに一致しない行ばかりで
+    #   実質3択になっている」)。**1フィールドだけ違う行**を混ぜて、
+    #   1行ずつ突き合わせないと消せないようにする。
+    d["dense_near"] = 2            # 中核に固定で2本(行数を9に保つ)
+    d["srcport_kind"] = rnd.choice(["dns", "gt"])   # ★送信元ポートの軸
+    # ★ACL の形式。拡張でしか起きない故障種は必ず拡張。
+    #   アドレス系は標準/拡張のどちらでも成立するので抽選する。
+    #   ★これを持たせる前は **要件が宛先とポートを指定しているのに標準 ACL しか
+    #     出さない**という不整合があった(標準は送信元しか見ないので要件を字面どおり
+    #     満たせない)。要件文は aclform に追随させること。
+    d["aclform"] = ("ext" if d["kind"] in EXT_ONLY_KINDS
+                    else ("ext" if rnd.random() < 0.5 else "std"))
+    # ★mask_as_wildcard は**標準 ACL 固有**の罠(2行目はプロトコルも宛先も持たない
+    #   素のアドレス指定)。拡張形にすると1行目だけ拡張・2行目は標準という
+    #   混在になり、見出し(Standard/Extended)と中身が食い違う。
+    if d["kind"] == "mask_as_wildcard":
+        d["aclform"] = "std"
+    if d["kind"] in DENSE_KINDS:
+        d["aclform"] = "ext"           # 多エントリ読解は拡張でしか作れない
     # 隣接ルータ(routefilter の src 側)
     d["nb_up"] = f"10.{a}.254.2"
     d["nb_dn"] = f"10.{a}.253.3"
@@ -191,7 +269,7 @@ def draw(rnd, kind=None, world=None):
     rnd.shuffle(names)
     d["m"] = dict(zip(ROLES, names))
     d["roles"] = list(ROLES)
-    if d["role"] == "filter":
+    if d["role"] == "filter" and d["kind"] not in DENSE_KINDS:
         verify_select(d)                # select 形の一意性を機械検証
     return d
 
@@ -211,11 +289,208 @@ def _std(d, action, o3, wc3, seq):
     return ac.entry(action, None, src=net(d, o3), sw=f"0.0.{wc3}.255", seq=seq)
 
 
-def _ext(d, action, o3, wc3, seq, dport=None):
-    return ac.entry(action, "tcp" if dport else "ip",
-                    src=net(d, o3), sw=f"0.0.{wc3}.255",
-                    dst=f"{d['srv']}.0", dw="0.0.0.255",
-                    dport=("eq", [dport]) if dport else None, seq=seq)
+def _ext(d, action, o3, wc3, seq, proto="tcp", dst=None, dport=True,
+         sport=False, dst_any=False):
+    """拡張 ACL のエントリ。既定= `<action> tcp <src> <wc> host <SRV> eq <port>`。
+
+    sport=True で **eq を送信元側に置く**(port_swap の再現)。
+    dst_any=True で宛先を any に。proto="ip" でポートの制限が消える。
+    """
+    dst_ip = "0.0.0.0" if dst_any else (dst or d["srv_host"])
+    dst_w = "255.255.255.255" if dst_any else "0.0.0.0"
+    op = ("eq", [d["port"]])
+    return ac.entry(action, proto, src=net(d, o3), sw=f"0.0.{wc3}.255",
+                    dst=dst_ip, dw=dst_w,
+                    sport=(op if (proto in ("tcp", "udp") and sport) else None),
+                    dport=(op if (proto in ("tcp", "udp") and dport
+                                  and not sport) else None),
+                    seq=seq)
+
+
+def _row(d, action, o3, wc3, seq):
+    """aclform に応じて標準/拡張のどちらかで1行を作る。"""
+    return (_std(d, action, o3, wc3, seq) if d["aclform"] == "std"
+            else _ext(d, action, o3, wc3, seq))
+
+
+def _row_txt(d, action, o3, wc3):
+    if d["aclform"] == "std":
+        return f"{action} {net(d, o3)} 0.0.{wc3}.255"
+    return (f"{action} tcp {net(d, o3)} 0.0.{wc3}.255 "
+            f"host {d['srv_host']} eq {_port_txt(d['port'])}")
+
+
+# --------------------------------------------------------------------------
+# 多エントリ読解 (dense_list)
+# ★狙い= first-match を**実際にたどらせる**。1行ごとに
+#   「プロトコル / 送信元 / 宛先 / ポート演算子 / フラグ」を突き合わせないと解けない。
+# --------------------------------------------------------------------------
+def dense_entries(d):
+    """★**常に9行**。中核4行＋特徴5行(盤面から決定的に選ぶ)。
+
+    行数を固定するのは counter 形の選択肢が A〜J に収まるようにするため
+    (9行＋「どの行も増えない」= 10択)。
+
+    中核(順序に意味がある):
+      1 特定ポートの全面禁止 / 2 正規の許可 /
+      3・4 **近接肢**(1フィールドだけ違う・生きている) /
+      5 ある網の全面禁止 → 6 をその影にする
+    特徴(末尾に3行): DNS / ICMP タイプ / ポート範囲 / established /
+      ★**送信元ポート**(DNS 応答・エフェメラル)
+    """
+    e, seq = [], 10
+
+    def add(ent):
+        nonlocal seq
+        e.append(dict(ent, seq=seq))
+        seq += 10
+
+    srv, dns, blk = d["srv_host"], d["dns"], d["blk_net"]
+    add(ac.entry("deny", "tcp", src="0.0.0.0", sw="255.255.255.255",
+                 dst=srv, dw="0.0.0.0", dport=("eq", [d["deny_port"]])))
+    add(ac.entry("permit", "tcp", src=net(d, d["target"][0]), sw="0.0.0.255",
+                 dst=srv, dw="0.0.0.0", dport=("eq", [d["port"]])))
+    # ★近接肢(probe と1フィールドだけ違う。影より前なので生きている)
+    add(ac.entry("permit", "tcp", src=net(d, blk), sw="0.0.0.255",
+                 dst=srv, dw="0.0.0.0", dport=("eq", [d["other_port"]])))
+    add(ac.entry("permit", "udp", src=net(d, blk), sw="0.0.0.255",
+                 dst=srv, dw="0.0.0.0", dport=("eq", [d["port"]])))
+    # ★影を作る組
+    add(ac.entry("deny", "ip", src=net(d, blk), sw="0.0.0.255",
+                 dst="0.0.0.0", dw="255.255.255.255"))
+    add(ac.entry("permit", "tcp", src=net(d, blk), sw="0.0.0.255",
+                 dst=srv, dw="0.0.0.0", dport=("eq", [d["port"]])))
+    # --- 末尾の特徴3行 ---
+    pool = {
+        # ★送信元ポート: DNS サーバからの応答(送信元 53)
+        "srcport_dns": ac.entry("permit", "udp", src=dns, sw="0.0.0.0",
+                                sport=("eq", [53]),
+                                dst="0.0.0.0", dw="255.255.255.255"),
+        # ★送信元ポート: エフェメラルからの接続だけ許可
+        "srcport_gt": ac.entry("permit", "tcp", src="0.0.0.0",
+                               sw="255.255.255.255", sport=("gt", [1023]),
+                               dst=srv, dw="0.0.0.0",
+                               dport=("eq", [d["other_port"]])),
+        "dns": ac.entry("permit", "udp", src="0.0.0.0", sw="255.255.255.255",
+                        dst=dns, dw="0.0.0.0", dport=("eq", [53])),
+        "icmp": ac.entry("permit", "icmp", src="0.0.0.0",
+                         sw="255.255.255.255", dst="0.0.0.0",
+                         dw="255.255.255.255", icmp_type=0),
+        "range": ac.entry("permit", "tcp", src="0.0.0.0",
+                          sw="255.255.255.255", dst=srv, dw="0.0.0.0",
+                          dport=("range", [d["hi_lo"], d["hi_lo"] + 10])),
+        "est": ac.entry("permit", "tcp", src=srv, sw="0.0.0.0",
+                        dst="0.0.0.0", dw="255.255.255.255",
+                        established=True),
+    }
+    # ★送信元ポートの行は必ず1本入れる(ユーザ要望 2026-08-11)
+    must = "srcport_dns" if d["srcport_kind"] == "dns" else "srcport_gt"
+    rest = [k for k in ("dns", "icmp", "range", "est") if True]
+    pick = zlib.crc32(f"{d['base']}:{d['oct2']}:{d['hi_lo']}".encode())
+    chosen = [must] + [rest[(pick + i) % len(rest)] for i in range(2)]
+    seen = []
+    for k in chosen:
+        if k not in seen:
+            seen.append(k)
+    for k in ("dns", "icmp", "range", "est"):   # 3行に満たなければ補充
+        if len(seen) >= 3:
+            break
+        if k not in seen:
+            seen.append(k)
+    for k in seen[:3]:
+        add(pool[k])
+    d["_dense_feat"] = seen[:3]
+    return e
+
+
+def dense_probes(d):
+    """(表示文, ベクタ)。★1本ごとに違う軸を突く。"""
+    srv, dns = d["srv_host"], d["dns"]
+    t0, blk = d["target"][0], d["blk_net"]
+    out = [
+        (f"`{net(d, t0, 5)}` から `{srv}` の TCP ポート {d['port']} 宛て",
+         {"proto": "tcp", "src": net(d, t0, 5), "dst": srv, "sport": 40001,
+          "dport": d["port"], "established": False, "icmp_type": None}),
+        (f"`{net(d, blk, 5)}` から `{srv}` の TCP ポート {d['port']} 宛て",
+         {"proto": "tcp", "src": net(d, blk, 5), "dst": srv, "sport": 40002,
+          "dport": d["port"], "established": False, "icmp_type": None}),
+        (f"`{net(d, t0, 6)}` から `{srv}` の TCP ポート {d['deny_port']} 宛て",
+         {"proto": "tcp", "src": net(d, t0, 6), "dst": srv, "sport": 40003,
+          "dport": d["deny_port"], "established": False, "icmp_type": None}),
+        (f"`{net(d, d['mgmt_net'], 7)}` から `{dns}` の UDP ポート 53 宛て",
+         {"proto": "udp", "src": net(d, d["mgmt_net"], 7), "dst": dns,
+          "sport": 51000, "dport": 53, "established": False,
+          "icmp_type": None}),
+        (f"`{net(d, d['mgmt_net'], 8)}` から `{srv}` 宛ての "
+         f"ICMP エコー要求(type 8)",
+         {"proto": "icmp", "src": net(d, d["mgmt_net"], 8), "dst": srv,
+          "sport": None, "dport": None, "established": False, "icmp_type": 8}),
+        (f"`{net(d, d['mgmt_net'], 9)}` から `{srv}` 宛ての "
+         f"ICMP エコー応答(type 0)",
+         {"proto": "icmp", "src": net(d, d["mgmt_net"], 9), "dst": srv,
+          "sport": None, "dport": None, "established": False, "icmp_type": 0}),
+        (f"`{net(d, d['mgmt_net'], 10)}` から `{srv}` の "
+         f"TCP ポート {d['hi_lo'] + 5} 宛て",
+         {"proto": "tcp", "src": net(d, d["mgmt_net"], 10), "dst": srv,
+          "sport": 40004, "dport": d["hi_lo"] + 5, "established": False,
+          "icmp_type": None}),
+        (f"`{net(d, d['mgmt_net'], 11)}` から `{srv}` の "
+         f"TCP ポート {d['hi_lo'] + 50} 宛て",
+         {"proto": "tcp", "src": net(d, d["mgmt_net"], 11), "dst": srv,
+          "sport": 40005, "dport": d["hi_lo"] + 50, "established": False,
+          "icmp_type": None}),
+    ]
+    if d["dense_n"] >= 8:
+        out.append(
+            (f"`{srv}` から `{net(d, t0, 12)}` 宛ての、"
+             "確立済みのセッションに属する TCP セグメント",
+             {"proto": "tcp", "src": srv, "dst": net(d, t0, 12),
+              "sport": d["port"], "dport": 40006, "established": True,
+              "icmp_type": None}))
+    # ★近接肢の行を**多重一致の観測**にも使う(ACL の行数は増やさない)。
+    #   これらは「近接肢の permit(先)」と「deny ip(後)」の両方に一致するので、
+    #   counter 形の正解が **permit 行**になる組を作れる。
+    #   → 「deny ip の行を探せばよい」というメタ解法が誤答を引く近道に変わる。
+    if d["dense_near"] >= 1:
+        out.append(
+            (f"`{net(d, blk, 13)}` から `{srv}` の "
+             f"TCP ポート {d['other_port']} 宛て",
+             {"proto": "tcp", "src": net(d, blk, 13), "dst": srv,
+              "sport": 40007, "dport": d["other_port"], "established": False,
+              "icmp_type": None}))
+    out.append(
+        (f"`{net(d, blk, 14)}` から `{srv}` の UDP ポート {d['port']} 宛て",
+         {"proto": "udp", "src": net(d, blk, 14), "dst": srv,
+          "sport": 51001, "dport": d["port"], "established": False,
+          "icmp_type": None}))
+    # ★送信元ポートが効く観測(同じ組で送信元ポートだけ違えている)
+    if d.get("srcport_kind") == "dns":
+        out.append(
+            (f"`{dns}` の **UDP ポート 53 発**で `{net(d, d['mgmt_net'], 20)}` "
+             "宛ての応答",
+             {"proto": "udp", "src": dns, "dst": net(d, d["mgmt_net"], 20),
+              "sport": 53, "dport": 51002, "established": False,
+              "icmp_type": None}))
+        out.append(
+            (f"`{dns}` の **UDP ポート 5353 発**で "
+             f"`{net(d, d['mgmt_net'], 21)}` 宛ての応答",
+             {"proto": "udp", "src": dns, "dst": net(d, d["mgmt_net"], 21),
+              "sport": 5353, "dport": 51003, "established": False,
+              "icmp_type": None}))
+    else:
+        out.append(
+            (f"`{net(d, d['mgmt_net'], 22)}` の **TCP ポート 40100 発**で "
+             f"`{srv}` の TCP ポート {d['other_port']} 宛て",
+             {"proto": "tcp", "src": net(d, d["mgmt_net"], 22), "dst": srv,
+              "sport": 40100, "dport": d["other_port"], "established": False,
+              "icmp_type": None}))
+        out.append(
+            (f"`{net(d, d['mgmt_net'], 23)}` の **TCP ポート 80 発**で "
+             f"`{srv}` の TCP ポート {d['other_port']} 宛て",
+             {"proto": "tcp", "src": net(d, d["mgmt_net"], 23), "dst": srv,
+              "sport": 80, "dport": d["other_port"], "established": False,
+              "icmp_type": None}))
+    return out
 
 
 def target_entries(d):
@@ -232,12 +507,14 @@ def select_candidates(d):
     b = d["base"]
     out = []
 
+    num = d["acl_num"] if d["aclform"] == "std" else d["acl_ext"]
+
     def std_lines(rows):
-        return [f"access-list {d['acl_num']} {act} {net(d, o)} 0.0.{wc}.255"
+        return [f"access-list {num} {_row_txt(d, act, o, wc)}"
                 for act, o, wc in rows]
 
     def ents(rows):
-        return [_std(d, act, o, wc, (i + 1) * 10)
+        return [_row(d, act, o, wc, (i + 1) * 10)
                 for i, (act, o, wc) in enumerate(rows)]
 
     cands = [
@@ -253,28 +530,81 @@ def select_candidates(d):
     # ★サブネットマスクを書いてしまった候補(実測 P10: 正規化されて別物になる)
     #   0.0.3.255 のつもりで 255.255.252.0 と書く。IOS は受理し、
     #   don't care 側のビットがアドレスから落ちるため「まったく別の集合」になる。
-    out.append((
-        "maskish",
-        [f"access-list {d['acl_num']} permit {net(d, b)} 255.255.252.0"],
-        [ac.entry("permit", None, src=net(d, b), sw="255.255.252.0", seq=10)]))
+    if d["aclform"] == "std":
+        out.append((
+            "maskish",
+            [f"access-list {num} permit {net(d, b)} 255.255.252.0"],
+            [ac.entry("permit", None, src=net(d, b), sw="255.255.252.0",
+                      seq=10)]))
+    else:
+        # ★拡張でしか作れない錯乱肢。いずれも「対象は通るが**別の何か**まで通る/
+        #   通らない」ので、works() の対照(別ポート・別宛先)で機械的に落ちる。
+        # ★3本すべて足すと9択になり多すぎる(実試験は6〜7択)。2本に絞る。
+        _ext_pool = []
+        out2 = _ext_pool.append
+        out2((
+            "portswap",
+            [f"access-list {num} permit tcp {net(d, b)} 0.0.3.255 "
+             f"eq {_port_txt(d['port'])} host {d['srv_host']}"],
+            [_ext(d, "permit", b, 3, 10, sport=True)]))
+        out2((
+            "ipproto",
+            [f"access-list {num} permit ip {net(d, b)} 0.0.3.255 "
+             f"host {d['srv_host']}"],
+            [_ext(d, "permit", b, 3, 10, proto="ip")]))
+        out2((
+            "dstany",
+            [f"access-list {num} permit tcp {net(d, b)} 0.0.3.255 "
+             f"any eq {_port_txt(d['port'])}"],
+            [_ext(d, "permit", b, 3, 10, dst_any=True)]))
+        # 盤面から決定的に2本を選ぶ(seed 依存・再現性を保つ)
+        pick = zlib.crc32(f"{d['base']}:{d['oct2']}:{d['port']}"
+                          .encode()) % 3
+        out += [_ext_pool[(pick + i) % 3] for i in range(2)]
     return out
 
 
+def _vec_at(d, o3, dst=None, dport=None):
+    return {"proto": "tcp", "src": net(d, o3, 5),
+            "dst": dst or d["srv_host"], "sport": 12345,
+            "dport": dport or d["port"], "established": False,
+            "icmp_type": None}
+
+
 def _select_works(d, entries):
-    """対象3本を**すべて**許可し、禁止網を**1点も**許可しないか(意味だけの判定)。"""
-    if not ac.covers(entries, target_entries(d)):
+    """対象3本を**すべて**許可し、許してはいけないものを**1つも**許可しないか。
+
+    ★拡張形では「別のポート」「別の宛先」も対照に入れる。これを入れないと
+      `permit ip <cube> host SRV`(ポート制限なし)や
+      `permit tcp <cube> any eq <port>`(宛先 any)が「直る候補」として通ってしまう。
+    """
+    if not entries:
         return False
+    for o in d["target"]:
+        if not acl_model.evaluate(entries, _vec_at(d, o)):
+            return False
     for o in d["excluded"]:
-        bad = [_std(d, "permit", o, 0, 10)]
-        if ac.acl_intersects(entries, bad):    # 部分的な巻き添えも失格
+        if acl_model.evaluate(entries, _vec_at(d, o)):
+            return False
+    if d["aclform"] == "ext":
+        t0 = d["target"][0]
+        if acl_model.evaluate(entries, _vec_at(d, t0, dport=d["other_port"])):
+            return False
+        if acl_model.evaluate(entries, _vec_at(d, t0, dst=d["other_host"])):
             return False
     return True
+
+
+def _exact_ext(d, entries):
+    """拡張形の「過剰に許可しない」= 4本目(fourth)まで通していないこと。"""
+    return not acl_model.evaluate(entries, _vec_at(d, d["fourth"]))
 
 
 def _select_complies(d, lines, entries):
     """提示側の要件(行数・deny の有無)＋「過剰に許可しないこと」。"""
     w = d["world"]
-    exact = ac.permits_exactly(entries, target_entries(d))
+    exact = (ac.permits_exactly(entries, target_entries(d))
+             if d["aclform"] == "std" else _exact_ext(d, entries))
     if w == "one_line":
         return len(lines) == 1
     if w == "exact_no_deny":
@@ -318,6 +648,12 @@ WHY_SELECT = {
             "対象としていないネットワークが一致の対象に含まれる。",
     "maskish": "ワイルドカードとしてサブネット・マスクが記述されており、"
                "一致の対象が意図したものと異なる。",
+    "portswap": "ポートの演算子が**送信元の側**に記述されているため、"
+                "実際のクライアントからの通信には一致しない。",
+    "ipproto": "プロトコルが ip であるため、ポートによる制限が行われず、"
+               "当該のサーバの他のポートへの通信までが許可される。",
+    "dstany": "宛先が any であるため、当該のサーバ以外の宛先への通信までが"
+              "許可される。",
 }
 
 
@@ -348,12 +684,14 @@ def build_choices_select(d, rnd):
 def current_entries(d):
     """kind に応じた「いま入っている ACL」。(entries, 標準か, 表示名) を返す。"""
     k, b = d["kind"], d["base"]
+    ext = d.get("aclform") == "ext"
+    num = str(d["acl_ext"] if ext else d["acl_num"])
     if k == "wc_narrow":
-        return [_std(d, "permit", b, 1, 10)], True, str(d["acl_num"])
+        return [_row(d, "permit", b, 1, 10)], not ext, num
     if k == "wc_wide":
-        return [_std(d, "permit", b, 7, 10)], True, str(d["acl_num"])
+        return [_row(d, "permit", b, 7, 10)], not ext, num
     if k == "wc_bits":
-        return [_std(d, "permit", b, 5, 10)], True, str(d["acl_num"])
+        return [_row(d, "permit", b, 5, 10)], not ext, num
     if k == "mask_as_wildcard":
         # ★1行目は正しく書けており、2行目だけワイルドカードの代わりに
         #   サブネット・マスクを書いてしまっている。
@@ -361,13 +699,27 @@ def current_entries(d):
         #   `10.a.base.0 255.255.252.0` は「第3オクテットの下位2ビットが 0 かつ
         #   第4オクテットが 0」という**まったく別の集合**になり、
         #   実際のホスト宛てトラフィックには一致しない(=対象の残り2本が落ちる)。
-        return ([_std(d, "permit", d["target"][0], 0, 10),
+        return ([_row(d, "permit", d["target"][0], 0, 10),
                  ac.entry("permit", None, src=net(d, b), sw="255.255.252.0",
                           seq=20)], True, str(d["acl_num"]))
     if k == "order_shadow":
         # 先行の広い permit が、後続の「特定網だけ拒否」を影にする
-        return ([_std(d, "permit", b, 7, 10),
-                 _std(d, "deny", d["outsider"], 0, 20)], True, str(d["acl_num"]))
+        return ([_row(d, "permit", b, 7, 10),
+                 _row(d, "deny", d["outsider"], 0, 20)], not ext, num)
+    # --- 拡張 ACL でしか起きない誤り ---
+    if k == "port_swap":
+        # ★1行目は正しく、2行目だけ eq を送信元側に書いてしまっている。
+        #   実クライアントの送信元ポートは任意なので、その行は一致しない。
+        return ([_ext(d, "permit", d["target"][0], 0, 10),
+                 _ext(d, "permit", b, 3, 20, sport=True)], False, num)
+    if k == "proto_ip_not_tcp":
+        # プロトコルが ip なのでポートの制限が効かない(別ポートまで通る)
+        return ([_ext(d, "permit", b, 3, 10, proto="ip")], False, num)
+    if k == "dst_any_too_wide":
+        # 宛先が any なのでサーバ以外まで通る
+        return ([_ext(d, "permit", b, 3, 10, dst_any=True)], False, num)
+    if k == "dense_list":
+        return dense_entries(d), False, num
     # --- routefilter 系 ---
     if k == "std_len_blind":
         return ([_std(d, "deny", d["target"][0], 0, 10),
@@ -510,10 +862,21 @@ def _render_entry(e, is_std):
     if is_std:
         return f"{e['seq']} {act}{'   ' if act == 'deny' else ' '}{src}"
     dst = _addr_txt(e["dst"], e["dst_wild"], std=False)
+    # ★送信元のポート演算子は**送信元アドレスの直後**に出る(実機の語順)。
+    #   ここを描かないと port_swap の故障が提示物に現れず、
+    #   「表示された ACL では通るはずなのに通らない」= 解答不能な問題になる
+    #   (BL-106 の拡張 ACL 追加時に実際に作ってしまった)。
+    if e.get("sport"):
+        src = f"{src} {_port_op_txt(e['sport'])}"
     body = f"{e['proto']} {src} {dst}"
     if e.get("dport"):
-        op, v = e["dport"]
-        body += f" {op} {_port_txt(v[0])}"
+        body += f" {_port_op_txt(e['dport'])}"
+    # ★range の第2値・established・ICMP タイプの描画漏れは、
+    #   提示と判定の不一致(あるいはパース不能)に直結する。
+    if e.get("established"):
+        body += " established"
+    if e.get("icmp_type") is not None:
+        body += f" {_icmp_txt(e['icmp_type'])}"
     return f"{e['seq']} {act}{'   ' if act == 'deny' else ' '}{body}"
 
 
@@ -528,12 +891,27 @@ def _addr_txt(v, w, std):
     return f"{ip}, wildcard bits {wc}" if std else f"{ip} {wc}"
 
 
-_PORT_NAME = {80: "www", 21: "ftp", 23: "telnet", 53: "domain", 25: "smtp"}
+_PORT_NAME = {80: "www", 21: "ftp", 23: "telnet", 53: "domain", 25: "smtp",
+              512: "exec", 513: "login", 514: "cmd"}
+# 番号→名前(acl_model.ICMP_TYPES の逆引き)。実測で `echo-reply` 表示を確認済み。
+_ICMP_NAME = {v: k for k, v in acl_model.ICMP_TYPES.items()}
 
 
 def _port_txt(p):
     # 実測: 22 は数字のまま・80 は www と表示される
     return _PORT_NAME.get(p, str(p))
+
+
+def _icmp_txt(t):
+    return _ICMP_NAME.get(t, str(t))
+
+
+def _port_op_txt(spec):
+    """ポート演算子の描画。★range は**2値**を出す(第1値だけだと構文が壊れる)。"""
+    op, v = spec
+    if op == "range":
+        return f"range {_port_txt(v[0])} {_port_txt(v[1])}"
+    return f"{op} {_port_txt(v[0])}"
 
 
 # --------------------------------------------------------------------------
@@ -587,10 +965,30 @@ def read_items(d):
     """
     r = d["role"]
     probes = list(d["target"]) + [d["fourth"], d["outsider"], d["faraway"]]
+    if d["kind"] == "dense_list":
+        ents, _s, _n = current_entries(d)
+        return [(t, acl_model.evaluate(ents, v)) for t, v in dense_probes(d)]
     if r == "filter":
-        return [(f"送信元が {net(d, o)}/24 のネットワークにあるホストから、"
-                 f"{d['srv_host']} の TCP ポート {d['port']} 宛ての通信",
-                 flow_passes(d, o)) for o in probes]
+        out = [(f"送信元が {net(d, o)}/24 のネットワークにあるホストから、"
+                f"{d['srv_host']} の TCP ポート {d['port']} 宛ての通信",
+                flow_passes(d, o)) for o in probes]
+        if d.get("aclform") == "ext":
+            # ★拡張形の症状は「別のポート」「別の宛先」にも出る。
+            #   これを観測に出さないと proto_ip_not_tcp / dst_any_too_wide の
+            #   症状が見えない(BL-103 ③ と同型の事故になる)。
+            ents, _s, _n = current_entries(d)
+            t0 = d["target"][0]
+            out.append(
+                (f"送信元が {net(d, t0)}/24 のネットワークにあるホストから、"
+                 f"{d['srv_host']} の TCP ポート {d['other_port']} 宛ての通信",
+                 bool(ents) and acl_model.evaluate(
+                     ents, _vec_at(d, t0, dport=d["other_port"]))))
+            out.append(
+                (f"送信元が {net(d, t0)}/24 のネットワークにあるホストから、"
+                 f"{d['other_host']} の TCP ポート {d['port']} 宛ての通信",
+                 bool(ents) and acl_model.evaluate(
+                     ents, _vec_at(d, t0, dst=d["other_host"]))))
+        return out
     if r == "routefilter":
         routes = [(d["nb_up"], o, 24) for o in d["target"]] + \
                  [(d["nb_dn"], d["target"][0], 28),
@@ -611,6 +1009,70 @@ def read_items(d):
                 for o in probes]
     return [(f"{net(d, o, 5)} から {d['m']['DUT']} への SSH による管理接続",
              vty_allowed(d, o)) for o in probes]
+
+
+# --------------------------------------------------------------------------
+# compare 形(P1d)— 2つのフローを見比べる
+# ★狙い= 「同じアクセス・リストでも、どの行で確定するかはフローごとに変わる」。
+#   1本ずつ判定するのではなく、**差が1フィールドしかない2本を並べて対比**させる。
+# --------------------------------------------------------------------------
+def compare_pair(d):
+    """(表示A, 表示B, 判定A, 判定B) を返す。**結果が割れる組**を優先して選ぶ。"""
+    ents, _s, _n = current_entries(d)
+    if not ents:
+        return None
+    probes = dense_probes(d) if d["kind"] == "dense_list" else None
+    if probes is None:
+        return None
+    ev = [(t, v, acl_model.evaluate(ents, v)) for t, v in probes]
+
+    def diff_fields(a, b):
+        return sum(1 for k in ("proto", "src", "dst", "sport", "dport",
+                               "established", "icmp_type")
+                   if a.get(k) != b.get(k))
+
+    split, same = [], []
+    for i in range(len(ev)):
+        for j in range(i + 1, len(ev)):
+            ta, va, oa = ev[i]
+            tb, vb, ob = ev[j]
+            nd = diff_fields(va, vb)
+            if nd > 2:
+                continue           # 差が大きすぎると「見比べる」にならない
+            (split if oa != ob else same).append((ta, tb, oa, ob, nd))
+    pool = split or same
+    if not pool:
+        return None
+    pool.sort(key=lambda x: x[4])          # 差が小さい組を優先
+    top = [p for p in pool if p[4] == pool[0][4]]
+    pick = zlib.crc32(f"{d['base']}:{d['port']}:{d['deny_port']}"
+                      .encode()) % len(top)
+    return top[pick][:4]
+
+
+def compare_ok(d):
+    return d["kind"] == "dense_list" and compare_pair(d) is not None
+
+
+def build_choices_compare(d, rnd):
+    """4つの言い切りのうち、ちょうど1つが真になる(機械的に一意)。"""
+    pr = compare_pair(d)
+    if pr is None:
+        raise ValueError("acl compare: 見比べられる組が無い")
+    ta, tb, oa, ob = pr
+    d["_compare"] = {"a": ta, "b": tb}
+    opts = [
+        ("いずれも転送される。", (True, True)),
+        ("いずれも破棄される。", (False, False)),
+        ("1つ目は転送され、2つ目は破棄される。", (True, False)),
+        ("1つ目は破棄され、2つ目は転送される。", (False, True)),
+    ]
+    c = [(t, (oa, ob) == pat, "" if (oa, ob) == pat
+          else "示されているアクセス・リストでは、そのようにはならない。")
+         for t, pat in opts]
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
 
 
 def read_polarity(d):
@@ -648,8 +1110,10 @@ def build_choices_read(d, rnd, want=1):
     why = ("示されているアクセス・リストでは、これは一致の対象とならない。"
            if pol == "pass" else
            "示されているアクセス・リストでは、これは許可される。")
+    # ★複数選択では選択肢を厚くする(6つ)。2つ選べ×6択なら当てずっぽうは 1/15。
+    n_miss = min(len(miss), max(6 - want, 2))
     picked = [(t, True, "") for t in hit[:want]]
-    picked += [(t, False, why) for t in miss[:max(5 - want, 2)]]
+    picked += [(t, False, why) for t in miss[:n_miss]]
     order = list(range(len(picked)))
     rnd.shuffle(order)
     d["_read_polarity"] = pol
@@ -672,6 +1136,8 @@ def first_match(entries, vector):
 def _probe_vectors(d):
     """counter 形の候補となる観測(表示文, ベクタ)。ロールで意味が違う。"""
     out = []
+    if d["kind"] == "dense_list":
+        return dense_probes(d)
     if d["role"] == "filter":
         for o in list(d["target"]) + [d["fourth"], d["outsider"], d["faraway"]]:
             out.append((f"送信元が {net(d, o, 5)} のホストから、"
@@ -692,16 +1158,28 @@ def _probe_vectors(d):
 
 
 def counter_probe(d):
-    """★**2つ以上の行に一致する**観測を探す。無ければ counter 形は作らない
-    (1行しか一致しないなら「先頭一致」を問う意味が無く、ただの読み取りになる)。"""
+    """★**2つ以上の行に一致する**観測から1つを選ぶ。
+
+    無ければ counter 形は作らない(1行しか一致しないなら「先頭一致」を問う意味が
+    無く、ただの読み取りになる)。
+    ★候補が複数あるときは**盤面から決定的に抽選**する。先頭固定にすると
+      正解が毎回「deny ip の行」になり、『deny ip を探せばよい』という
+      メタ解法が成立してしまう(出題で判明・2026-08-11)。
+    """
     ents, _is_std, _n = current_entries(d)
     if not ents or len(ents) < 2:
         return None
+    cands = []
     for text, v in _probe_vectors(d):
         hits = [i for i, e in enumerate(ents) if acl_model.entry_matches(e, v)]
         if len(hits) >= 2:
-            return {"text": text, "vector": v, "hits": hits, "first": hits[0]}
-    return None
+            cands.append({"text": text, "vector": v, "hits": hits,
+                          "first": hits[0]})
+    if not cands:
+        return None
+    pick = zlib.crc32(f"{d['base']}:{d['oct2']}:{d['deny_port']}"
+                      .encode()) % len(cands)
+    return cands[pick]
 
 
 def build_choices_counter(d, rnd):
@@ -1152,6 +1630,11 @@ CLAIMS = {
                         "サブネット・マスクの形式になっている",
     "order_shadow": "先行するエントリが広い範囲を許可しており、"
                     "後続のエントリが評価されない",
+    "port_swap": "ポートの演算子が、宛先の側ではなく送信元の側に記述されている",
+    "proto_ip_not_tcp": "プロトコルとして ip が指定されているため、"
+                        "ポートによる制限が行われていない",
+    "dst_any_too_wide": "宛先として any が指定されているため、"
+                        "当該のサーバ以外への通信までが許可されている",
     "std_len_blind": "標準のアクセス・リストが用いられており、"
                      "プレフィックスの長さが区別されていない",
     "ext_named_rejected": "名前付きの拡張のアクセス・リストが指定されており、"
@@ -1177,6 +1660,9 @@ REFUTES = {
     "wc_bits": "示されているワイルドカードのビットは連続している。",
     "mask_as_wildcard": "示されている値はワイルドカードの形式である。",
     "order_shadow": "示されているエントリの順序では、後続のエントリが評価される。",
+    "port_swap": "ポートの演算子は、宛先の側に記述されている。",
+    "proto_ip_not_tcp": "示されているエントリのプロトコルは tcp である。",
+    "dst_any_too_wide": "示されているエントリの宛先は、当該のサーバに限定されている。",
     "std_len_blind": "用いられているのは標準のアクセス・リストではない。",
     "ext_named_rejected": "指定されているアクセス・リストは番号付きである。",
     "ext_src_is_network": "送信元にはネットワークのアドレスは記述されていない。",
@@ -1236,7 +1722,8 @@ def build_choices_cause(d, rnd):
     kind = d["kind"]
     # ★同じロールの主張から採る(別ロールの主張は「構成が存在しない」で自明に落ち、
     #   錯乱肢として機能しないため)。足りない分は CROSS で埋める。
-    pool = [k for k in KINDS if role_of(k) == d["role"]]
+    pool = [k for k in KINDS
+            if role_of(k) == d["role"] and k not in DENSE_KINDS]
     others = [k for k in pool if k != kind]
     # ★同時に真になり得る主張は錯乱肢に採らない(cause の一意性)。
     others = [k for k in others if not _also_true(d, k)]
@@ -1287,6 +1774,15 @@ def _also_true(d, other_kind):
     if other_kind == "ext_src_is_network":
         return (not is_std) and any(
             e["src"] & 0xFF == 0 and e["src_wild"] == 0 for e in ents)
+    # ★拡張 ACL 固有(機械判定にして手書きの排他表にしない)
+    if other_kind == "port_swap":
+        return any(e.get("sport") for e in ents)
+    if other_kind == "proto_ip_not_tcp":
+        return any(e["proto"] == "ip" and e["action"] == "permit"
+                   for e in ents)
+    if other_kind == "dst_any_too_wide":
+        return any(e["proto"] in ("tcp", "udp", "ip") and e["action"] == "permit"
+                   and e["dst_wild"] == 0xFFFFFFFF for e in ents)
     return False
 
 
@@ -1329,6 +1825,161 @@ def _selftest(n=60):
                 ok += good
             ng += n - good
     print(f"  select 一意性: OK={ok} NG={ng}")
+
+    # ★同一 ACL の中で標準/拡張が混在していないか(見出しと中身の食い違い防止)
+    mix = 0
+    for kind in FILTER_KINDS:
+        for world in FILTER_WORLDS:
+            for s2 in range(20):
+                try:
+                    d = draw(random.Random(s2 * 29 + 5), kind=kind, world=world)
+                except ValueError:
+                    continue
+                ents, is_std, _n = current_entries(d)
+                if not ents:
+                    continue
+                if any((e["proto"] is None) != is_std for e in ents):
+                    mix += 1
+                    if mix < 4:
+                        print(f"    標準/拡張の混在: {kind}/{world}")
+    print(f"  標準/拡張の混在: {mix} 件")
+    ng += mix
+
+    # ★提示された ACL の文面だけから読み戻して、判定と一致するか
+    #   (描画漏れがあると「表示では通るのに判定では通らない」問題になる)
+    import acl_model as _am
+    rb = 0
+    for kind in FILTER_KINDS:
+        for world in FILTER_WORLDS:
+            for s2 in range(12):
+                try:
+                    d = draw(random.Random(s2 * 41 + 9), kind=kind, world=world)
+                except ValueError:
+                    continue
+                txt = show_acl_text(d)
+                if not txt:
+                    continue
+                try:
+                    back = _am.parse_show_access_lists(txt)
+                except Exception as e:
+                    rb += 1
+                    if rb < 4:
+                        print(f"    読み戻し失敗: {kind}/{world}: {e}")
+                    continue
+                ents2 = list(back.values())[0]
+                ents1, _s3, _n3 = current_entries(d)
+                for text, ok in read_items(d):
+                    pass
+                for o3 in list(d["target"]) + [d["fourth"], d["outsider"]]:
+                    v = _vec_at(d, o3)
+                    if _am.evaluate(ents1, v) != _am.evaluate(ents2, v):
+                        rb += 1
+                        if rb < 5:
+                            print(f"    ★提示と判定の不一致: {kind}/{world} "
+                                  f"src={o3}")
+                        break
+    print(f"  提示ACLの読み戻し一致: NG={rb}")
+    ng += rb
+
+    # ★dense_list: 「読ませる価値がある盤面か」を機械で担保する
+    dn_ok = dn_ng = 0
+    for s2 in range(60):
+        d = draw(random.Random(s2 * 53 + 7), kind="dense_list")
+        ents, _s3, _n3 = current_entries(d)
+        items = read_items(d)
+        t = sum(1 for _x, ok2 in items if ok2)
+        # (a) 通る/通らないが両方あること (b) 行数が6以上
+        # (c) ★影になっている行が実在すること(先行 deny に食われる permit)
+        shadowed = any(
+            first_match(ents, v) is not None
+            and ents[first_match(ents, v)]["action"] == "deny"
+            and any(acl_model.entry_matches(e2, v) for e2 in ents
+                    if e2["action"] == "permit"
+                    and e2["seq"] > ents[first_match(ents, v)]["seq"])
+            for _t2, v in dense_probes(d))
+        if 0 < t < len(items) and len(ents) >= 6 and shadowed:
+            dn_ok += 1
+        else:
+            dn_ng += 1
+            if dn_ng < 4:
+                print(f"    dense NG: 通る{t}/{len(items)} 行数{len(ents)} "
+                      f"影={shadowed}")
+    print(f"  dense_list の盤面: OK={dn_ok} NG={dn_ng}")
+    ng += dn_ng
+
+    # ★近接肢の質= counter 形の観測に対し「1フィールドだけ違う行」が何本あるか。
+    #   これが少ないと選択肢数のわりに実質の判断が浅くなる(出題で判明)。
+    nr_ok = nr_ng = 0
+    for s2 in range(60):
+        d = draw(random.Random(s2 * 67 + 3), kind="dense_list")
+        p2 = counter_probe(d)
+        if p2 is None:
+            continue
+        ents, _s3, _n3 = current_entries(d)
+        v = p2["vector"]
+        near = 0
+        for i, e2 in enumerate(ents):
+            if i in p2["hits"]:
+                continue
+            # 送信元が一致するのに、他の1要素で外れている行= 近接肢
+            if acl_model._addr_match(e2["src"], e2["src_wild"], v["src"]):
+                near += 1
+        if near >= 2:
+            nr_ok += 1
+        else:
+            nr_ng += 1
+            if nr_ng < 4:
+                print(f"    近接肢が少ない: {near} 本")
+    print(f"  counter の近接肢(2本以上): OK={nr_ok} NG={nr_ng}")
+    ng += nr_ng
+
+    # ★counter の正解が deny 行に固定されていないか(メタ解法の封じ込め)
+    act = collections.Counter()
+    for s2 in range(120):
+        d = draw(random.Random(s2 * 71 + 13), kind="dense_list")
+        p2 = counter_probe(d)
+        if p2 is None:
+            continue
+        ents, _s3, _n3 = current_entries(d)
+        act[ents[p2["first"]]["action"]] += 1
+    tot = sum(act.values())
+    share = (act.get("permit", 0) / tot) if tot else 0
+    print(f"  counter の正解の内訳: {dict(act)} (permit 率 {share:.0%})")
+
+    # ★compare 形: 4肢のうち真がちょうど1つ／結果が割れる組が選べているか
+    cp_ok = cp_ng = 0
+    split = 0
+    for s2 in range(80):
+        d = draw(random.Random(s2 * 83 + 11), kind="dense_list")
+        if not compare_ok(d):
+            cp_ng += 1
+            continue
+        pr = compare_pair(d)
+        if pr[2] != pr[3]:
+            split += 1
+        ch = build_choices_compare(d, random.Random(1))
+        if sum(1 for _t, c2, *_r in ch if c2) == 1 and len(ch) == 4:
+            cp_ok += 1
+        else:
+            cp_ng += 1
+    print(f"  compare 形: OK={cp_ok} NG={cp_ng} (結果が割れる組 {split}/{cp_ok})")
+    ng += cp_ng
+    if cp_ok and split / cp_ok < 0.8:
+        print("    ★結果が同じ組ばかり(見比べる意味が薄い)")
+        ng += 1
+
+    # ★送信元ポートの行が必ず1本入っているか(ユーザ要望)
+    sp = sum(1 for s2 in range(60)
+             if any(e2.get("sport")
+                    for e2 in current_entries(
+                        draw(random.Random(s2 * 97 + 5),
+                             kind="dense_list"))[0]))
+    print(f"  送信元ポートの行を含む盤面: {sp}/60")
+    if sp < 60:
+        ng += 1
+    if share < 0.2:
+        print("    ★正解が deny 行に偏っている(『deny を探す』で解けてしまう)")
+        ng += 1
     if fails:
         for f in fails[:5]:
             print(f"    {f}")
@@ -1372,6 +2023,8 @@ def _selftest(n=60):
             rnd = random.Random(s * 53 + 3)
             try:
                 d = draw(rnd, kind=kind)
+                if "cause" not in forms_for(d):
+                    continue          # dense_list は cause 形を持たない
                 ch = build_choices_cause(d, rnd)
             except ValueError as e:
                 c_ng += 1

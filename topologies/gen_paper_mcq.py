@@ -887,7 +887,13 @@ def obfuscate_md(md, rnd, essay=False, keep_ask=False):
         if shuffle_out:
             rnd.shuffle(out)
         parts = ["\n".join(head).rstrip(), "", "## シナリオ", "", scenario, ""]
-        parts += ["\n".join(topo_rest).strip(), "", "## 出力", ""]
+        parts += ["\n".join(topo_rest).strip(), ""]
+        # ★出す物が1つも無い形(select= これから書く行を選ぶ)では
+        #   「## 出力」見出しを作らない。空見出しは道標になるうえ、
+        #   症状の定型文が「示されている出力に基づいて」と**存在しない物を参照**する
+        #   (BL-106 初出題2問目で発覚・AAA の「(該当する行はない)」と同型の欠陥)。
+        if out or state_other:
+            parts += ["## 出力", ""]
         # ★フェンスに入っていない状態ブロック(表など)も必ず載せる。
         #   ここを落とすと「情報は1ビットも減らさない」(BL-088 の不変条件)に反し、
         #   症状そのものが消えて解答不能になる(aaa の cause 形で発覚・2026-08-08)。
@@ -904,9 +910,14 @@ def obfuscate_md(md, rnd, essay=False, keep_ask=False):
     rebuilt = ["\n".join(head).rstrip(), "", "## トポロジ", "",
                rnd.choice(LEAD_IN) + intro, "",
                "\n".join(topo_rest).strip(), "",
-               "## 要件", ""] + [f"{i}. {x}" for i, x in enumerate(reqs, 1)] + [
-               "", "## 現在の状態", "",
-               vague + ("" if keep_ask else rnd.choice(DIRECTIVE)), ""]
+               "## 要件", ""] + [f"{i}. {x}" for i, x in enumerate(reqs, 1)]
+    # ★同上= 見せる観測が1つも無い形では「## 現在の状態」を作らない。
+    #   症状の定型文も出さない(そもそも「壊れている」形ではない)。
+    if state_other or state_blocks or cfg_blocks:
+        lead = vague + ("" if keep_ask else rnd.choice(DIRECTIVE))
+        # ★keep_ask 形(設問文が情報の担い手)では導入文が空になることがある。
+        #   空行だけを置くと「何か抜けている」ように見えるので出さない。
+        rebuilt += ["", "## 現在の状態", ""] + ([lead, ""] if lead.strip() else [])
     rebuilt += state_other + [""] if state_other else []
     rebuilt += ["\n".join(b) for b in state_blocks]
     if cfg_blocks:                      # ★空の見出しを残さない
@@ -2119,14 +2130,17 @@ def pick_draw_pbr(qseed, kind):
 # shape=acl — ACL 単独読解 (gen_paper_acl 流用・BL-106)
 # ★紙面専用: 挙動は実機確定表(poc/acl/README.md)の写像モデルから決定的に生成。
 # --------------------------------------------------------------------------
-def pick_draw_aclv6(qseed, kind):
-    for kk in range(200):
+def pick_draw_aclv6(qseed, kind, forms=None):
+    for kk in range(400):
         s = qseed + kk * 151
         try:
-            return s, gp6.draw(random.Random(s), kind=kind)
+            d = gp6.draw(random.Random(s), kind=kind)
         except ValueError:
             continue
-    raise SystemExit(f"aclv6 kind={kind} が成立する seed が見つかりません({qseed})")
+        if not forms or (set(forms) & set(gp6.forms_for(d))):
+            return s, d
+    raise SystemExit(f"aclv6 kind={kind} forms={forms} が成立する seed が"
+                     f"見つかりません({qseed})")
 
 
 def aclv6_requirements(d, rnd):
@@ -2291,14 +2305,19 @@ def answer_md_aclv6(d, choices, stamp, master_seed, subseed, form):
 """
 
 
-def pick_draw_acl(qseed, kind):
-    for kk in range(200):
+def pick_draw_acl(qseed, kind, forms=None):
+    """★forms を指定すると、**その形が成立する盤面**が出るまで sub-seed を進める。
+    (形は盤面ごとに成立可否が変わる= gpl.forms_for)。"""
+    for kk in range(400):
         s = qseed + kk * 149
         try:
-            return s, gpl.draw(random.Random(s), kind=kind)
+            d = gpl.draw(random.Random(s), kind=kind)
         except ValueError:
             continue
-    raise SystemExit(f"acl kind={kind} が成立する seed が見つかりません({qseed})")
+        if not forms or (set(forms) & set(gpl.forms_for(d))):
+            return s, d
+    raise SystemExit(f"acl kind={kind} forms={forms} が成立する seed が"
+                     f"見つかりません({qseed})")
 
 
 def acl_topo(d):
@@ -2392,9 +2411,33 @@ def acl_requirements(d, rnd, form):
     tg = "、".join(f"`{gpl.net(d, o)}/24`" for o in d["target"])
     core = []
     if d["role"] == "filter":
-        core.append(f"{m['DUT']} において、{tg} のネットワークからの通信のみが、"
-                    f"サーバである `{d['srv_host']}` の TCP ポート "
-                    f"{d['port']} に到達できなければなりません。")
+        # ★★要件は **ACL の形式に追随させる**(BL-101 の教訓=
+        #   評価モデルが守る対象と、問題文が要求する対象は字面で一致させる)。
+        #   標準 ACL は送信元しか見ないので、宛先やポートを要件に書いてはならない
+        #   (書くと「正解の行でも要件を字面どおり満たせない」問題になる)。
+        if d["kind"] == "dense_list":
+            # ★多エントリ読解は「意図した方針」を要件として述べ、
+            #   実際にどう振る舞うかを読ませる(故障の特定ではない)。
+            core = [
+                f"{m['DUT']} には、社内の複数のネットワークからサーバ "
+                f"`{d['srv_host']}` および DNS サーバ `{d['dns']}` へのアクセスを"
+                "制御するためのアクセス・リストが構成されています。",
+                "アクセス・リストは、示されているところの内容から変更されていません。",
+            ]
+            rnd.shuffle(core)
+            return finalize_reqs(core, rnd)
+        if d.get("aclform") == "ext":
+            core.append(f"{m['DUT']} において、{tg} のネットワークからの通信のみが、"
+                        f"サーバである `{d['srv_host']}` の TCP ポート "
+                        f"{d['port']} に到達できなければなりません。")
+            core.append(f"当該のサーバの他のポート"
+                        f"(たとえば TCP ポート {d['other_port']})への通信、"
+                        f"および当該のサーバ以外の宛先"
+                        f"(たとえば `{d['other_host']}`)への通信は、"
+                        "許可されてはなりません。")
+        else:
+            core.append(f"{m['DUT']} において、{tg} のネットワークからの通信のみが、"
+                        "許可されなければなりません。")
         if d["fourth_forbidden"]:
             core.append(f"`{gpl.net(d, d['fourth'])}/24` からの通信は、"
                         "許可されてはなりません。")
@@ -2497,6 +2540,11 @@ def question_md_acl(d, blocks, choices, stamp, form="cause", reqs=None,
     if form == "cause":
         q = ("この事象の原因である可能性が、最も高いものは、どれですか。"
              "(1つを選択してください)")
+    elif form == "compare":
+        cp = d["_compare"]
+        q = ("次の2つの通信について、示されているところの構成において"
+             "正しく述べているものは、どれですか。(1つを選択してください)\n\n"
+             f"1. {cp['a']}\n2. {cp['b']}")
     elif form == "counter":
         pr = d["_counter_probe"]["text"]
         q = (f"{pr} が処理されるとき、一致のカウンタが増加するのは、どの行ですか。"
@@ -2521,7 +2569,7 @@ def question_md_acl(d, blocks, choices, stamp, form="cause", reqs=None,
         want = d.get("_read_want", 1)
         _c, _t, _f, s_true, s_false = gpl.read_labels(d)
         subj = s_true if d.get("_read_polarity") == "pass" else s_false
-        n = "2つ" if want == 2 else "1つ"
+        n = f"{want}つ"
         q = (f"示されているところの構成において、{subj}は、どれですか。"
              f"({n}を選択してください)")
     opts = render_options(choices, style)
@@ -2570,6 +2618,13 @@ def answer_md_acl(d, choices, stamp, master_seed, subseed, form):
         "mask_as_wildcard": "★ワイルドカード欄にサブネット・マスクを記述"
                             "(実機は受理するが、アドレスが正規化されて別集合になる)",
         "order_shadow": "先行の広い permit が後続を影にする",
+        "port_swap": "★拡張 ACL でポートの演算子を**送信元側**に書いた"
+                     "(実クライアントの送信元ポートは任意なので一致しない)",
+        "proto_ip_not_tcp": "プロトコルが ip なのでポートの制限が効かず、"
+                            "同一サーバの他ポートまで通る",
+        "dst_any_too_wide": "宛先が any なのでサーバ以外の宛先まで通る",
+        "dense_list": "★多エントリ読解(6〜8行)。先行 deny による影・ポート演算子"
+                      "(eq/range)・ICMP タイプ・established を1行ずつ突き合わせる",
         "std_len_blind": "★標準 ACL はプレフィックス長を区別できない",
         "ext_named_rejected": "★名前付き拡張 ACL は distribute-list に指定できず、"
                               "フィルタ自体が適用されない",
@@ -4569,14 +4624,18 @@ def rebalance_position(repo, choices):
     for fp in files:
         # ★複数正解(`**B・C**`)も拾えるようにする。拾えないと直近2問の窓が
         #   欠けて 3 連続防止が効かなくなる(監査指摘)。判定には先頭の記号を使う。
-        mt = re.search(r"## 正解\n\n\*\*([A-H])(?:・[A-H])*\*\*",
+        # ★記号は A〜J まで(BL-099 で 7択超に対応済み)。ここだけ A〜H のままだと
+        #   選択肢が8を超える形(拡張の select= 9択)で IndexError になる。
+        mt = re.search(r"## 正解\n\n\*\*([A-J])(?:[・,、] ?[A-J])*\*\*",
                        open(fp, encoding="utf-8").read())
         if mt:
             recent.append(mt.group(1))
     hits = [i for i, c in enumerate(choices) if c[1]]
     if len(hits) != 1:
         return choices          # ★複数正解の形(authread)では回転しない
-    cur = "ABCDEFGH"[hits[0]]
+    if hits[0] >= 26:
+        return choices          # 記号が尽きる形では回転しない(安全側)
+    cur = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[hits[0]]
     if len(recent) == 2 and recent[0] == recent[1] == cur:
         return choices[1:] + choices[:1]
     return choices
@@ -4616,6 +4675,12 @@ def main():
                          " / v6redist=OSPFv3⇄EIGRPv6相互再配送の手段選択"
                          "(BL-098・紙面専用)"
                          " / mixed=問題ごとに形・種別を抽選(ごちゃまぜ)")
+    ap.add_argument("--forms", default="",
+                    help="出題形を絞る(カンマ区切り)。shape=acl: select,read,"
+                         "cause,counter,patch,fix,evidence,logread,compare / "
+                         "shape=aclv6: select,read,cause,counter。"
+                         "指定した形が成立する盤面を seed 探索で選ぶ。"
+                         "他の shape では無視される。")
     ap.add_argument("--kinds", default=None,
                     help=f"カンマ区切りで種別を明示(chain: {','.join(KINDS)} / "
                          f"ring: {','.join(RING_KINDS)}。既定=seedシャッフル巡回)")
@@ -4650,6 +4715,25 @@ def main():
                  else random.Random(a.seed ^ 0x5EED).sample(pool, len(pool)))
         if not set(kinds) <= set(pool):
             raise SystemExit(f"--kinds({a.shape}) は {pool} から選ぶこと: {kinds}")
+    want_forms = [x.strip() for x in a.forms.split(",") if x.strip()]
+    if want_forms and a.shape not in ("acl", "aclv6", "mixed"):
+        print(f"[!] --forms は shape={a.shape} では無視されます", flush=True)
+    # ★--forms 指定時は**故障種のプールも絞る**。形は種ごとに取り得るものが
+    #   違うので(例: compare は dense_list だけ・fix は routefilter だけ)、
+    #   種を先に決めてから形を探すと「その形を持たない種」で詰む。
+    if want_forms and kinds is not None and a.shape in ("acl", "aclv6"):
+        mod = gpl if a.shape == "acl" else gp6
+        keep = [k for k in kinds if set(want_forms) & mod.kind_forms(k)]
+        if not keep:
+            raise SystemExit(
+                f"--forms {a.forms} を出せる故障種がありません。"
+                f"利用可能= " + ", ".join(
+                    sorted({f for k in kinds for f in mod.kind_forms(k)})))
+        dropped = [k for k in kinds if k not in keep]
+        if dropped:
+            print(f"[i] --forms により故障種を {len(keep)}/{len(kinds)} に限定"
+                  f"(除外: {len(dropped)}種)", flush=True)
+        kinds = keep
     base = random.Random(a.seed)
     qseeds = [base.randint(10**6, 10**7 - 1) for _ in range(a.count)]
     results = []
@@ -4705,9 +4789,9 @@ def main():
         elif shape_i == "aaa":
             subseed, d = pick_draw_aaa(qseed, kind)
         elif shape_i == "acl":
-            subseed, d = pick_draw_acl(qseed, kind)
+            subseed, d = pick_draw_acl(qseed, kind, forms=want_forms)
         elif shape_i == "aclv6":
-            subseed, d = pick_draw_aclv6(qseed, kind)
+            subseed, d = pick_draw_aclv6(qseed, kind, forms=want_forms)
         elif shape_i == "bgpdbg":
             subseed = qseed
             d = gpb.draw(random.Random(subseed), variant=kind)
@@ -4751,7 +4835,11 @@ def main():
             choices = build_choices_read_aaa(d, rnd)   # 既定形= read
         elif shape_i == "acl":
             plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
-            choices = gpl.build_choices_cause(d, rnd)  # 既定形= cause(全 kind で成立)
+            # ★既定形はその盤面で成立する形から採る。
+            #   dense_list(多エントリ読解)は cause 形を持たないので固定できない。
+            _av = gpl.forms_for(d)
+            choices = (gpl.build_choices_cause(d, rnd) if "cause" in _av
+                       else gpl.build_choices_read(d, rnd))
         elif shape_i == "aclv6":
             plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
             choices = gp6.build_choices_cause(d, rnd)
@@ -4832,6 +4920,8 @@ def main():
                     pass
         elif a.exam and shape_i == "aclv6":
             avail = gp6.forms_for(d)
+            if want_forms:
+                avail = [f for f in avail if f in want_forms] or avail
             form = rnd.choice(avail)
             if form == "select":
                 choices = gp6.build_choices_select(d, rnd)
@@ -4849,6 +4939,8 @@ def main():
             #   フィルタが実質不在になる故障種は「全部素通り」が正解なので
             #   read 形が成立しない(対比が作れない)。
             avail = gpl.forms_for(d)
+            if want_forms:
+                avail = [f for f in avail if f in want_forms] or avail
             form = rnd.choice(avail)
             if form == "select":
                 choices = gpl.build_choices_select(d, rnd)
@@ -4862,16 +4954,30 @@ def main():
                 choices = gpl.build_choices_evidence(d, rnd)
             elif form == "logread":
                 choices = gpl.build_choices_logread(d, rnd, want=2)
+            elif form == "compare":
+                choices = gpl.build_choices_compare(d, rnd)
             elif form == "read":
-                want = 2 if rnd.random() < 0.35 else 1   # ★複数選択(2つ選べ)
-                try:
-                    choices = gpl.build_choices_read(d, rnd, want=want)
-                except ValueError:
+                # ★多エントリ盤面(dense_list)は**複数選択を主**にする。
+                #   1行ずつ突き合わせる作業量が本題なので、単一選択だと
+                #   消去法で当たってしまう(2つ選べ×6択なら当てずっぽうは 1/15)。
+                if d["kind"] in gpl.DENSE_KINDS:
+                    want = rnd.choice([2, 3, 3])   # ★3つ選べを主に
+                else:
+                    want = 2 if rnd.random() < 0.35 else 1
+                for w in (want, 2, 1):
                     try:
-                        choices = gpl.build_choices_read(d, rnd, want=1)
+                        choices = gpl.build_choices_read(d, rnd, want=w)
+                        break
                     except ValueError:
+                        continue
+                else:
+                    # ★cause を持たない盤面(dense)では cause に落とさない
+                    if "cause" in avail:
                         form = "cause"
                         choices = gpl.build_choices_cause(d, rnd)
+                    else:
+                        form = "counter"
+                        choices = gpl.build_choices_counter(d, rnd)
         elif a.exam and shape_i == "aaa":
             # read / cause / trace / evidence / dbgread / dbgconf / fix / patch
             r_form = rnd.random()
@@ -5109,7 +5215,7 @@ def main():
                                       or (shape_i == "acl"
                                           and form in ("read", "counter",
                                                        "patch", "logread",
-                                                       "evidence"))
+                                                       "evidence", "compare"))
                                       or (shape_i == "aclv6"
                                           and form in ("read", "counter"))))
         leak_lint(q_md, lint)
