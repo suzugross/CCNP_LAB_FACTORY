@@ -2441,6 +2441,12 @@ def acl_evidence(d, rnd, form):
     m = d["m"]
     state, cfg = [], []
     if form == "select":
+        # ★est_build(復路用リストを書く構築系)は、**往路用リストと適用の状態**を
+        #   見せないと「どちら向きのリストを書くのか」が決まらない。
+        if d["kind"] in gpl.EST_BUILD_KINDS:
+            return ([f"```\n{m['DUT']}# show ip access-lists\n"
+                     f"{gpl.show_acl_text(d)}\n```"],
+                    [acl_apply_block(d)])
         return state, cfg
     if form == "apply":
         return ([f"```\n{m['DUT']}# show ip access-lists\n"
@@ -2600,8 +2606,31 @@ def acl_requirements_est(d, rnd):
     return finalize_reqs(core, rnd)
 
 
+def acl_requirements_est_build(d, rnd):
+    """★復路用リストを書く構築系。要件は est の観測4本と字面で対応させる。"""
+    m = d["m"]
+    tg = "、".join(f"`{gpl.net(d, o)}/24`" for o in d["target"])
+    core = [
+        f"{m['DUT']} において、{tg} のネットワークから、サーバである "
+        f"`{d['srv_host']}` の TCP ポート {d['port']} への通信は、"
+        "セッションを確立できなければなりません。",
+        "サーバの側から**新たに開始される**通信は、"
+        "許可されてはなりません。",
+        f"当該のサーバの他のポートからの通信、および `{d['other_host']}` "
+        "からの通信は、許可されてはなりません。",
+        f"往路のアクセス・リストは `{d['if_dn']}` に適用済みです。"
+        f"サーバの側のインターフェイスである `{d['if_up']}` に、"
+        "着信の方向で適用するアクセス・リストを構成します。",
+    ]
+    core += rnd.sample([x for x in REQ_DECOYS if "スタティック" not in x], 1)
+    rnd.shuffle(core)
+    return finalize_reqs(core, rnd)
+
+
 def acl_requirements(d, rnd, form):
     m = d["m"]
+    if d["kind"] in gpl.EST_BUILD_KINDS:
+        return acl_requirements_est_build(d, rnd)
     if d["kind"] in gpl.EST_KINDS:
         return acl_requirements_est(d, rnd)
     # ★対象が7本になる世界(nb_*)は列挙すると冗長なので**範囲**で書く。
@@ -2858,6 +2887,14 @@ def answer_md_acl(d, choices, stamp, master_seed, subseed, form):
                            "**要件どおりでないほう**を指している",
         "apply_missing": "★適用点(BL-109)= ACL の中身は要件どおりだが、"
                          "どのインターフェイスにも適用されていない → 全許可",
+        "est_build": "★戻り通信の**構築系**(BL-109 P2-⑤)= 復路用リストを書く。"
+                     "`established` を省くと**送信元ポートを当該サービスに合わせた"
+                     "新規接続**まで通る(実測 §17)。一意性は構造から出る"
+                     "(4つの観測= セッション成立／サーバ発の新規／別ポートからの戻り／"
+                     "別サーバからの戻り)",
+        "est_ret_narrow": "★戻り通信(BL-109 P2-⑤)= 復路用リストの範囲が狭く、"
+                          "**往路は全部通るのに一部の顧客網だけセッションが張れない**"
+                          "(read/compare が成立する唯一の est 種)",
         "est_missing": "★戻り通信(BL-109 P2-⑤・論点14)= 復路用リストに "
                        "`established` の行が無く、**戻りが暗黙の拒否で落ちる**。"
                        "往路は通るのにセッションが張れない(実測 §17)",
@@ -2900,6 +2937,7 @@ def answer_md_acl(d, choices, stamp, master_seed, subseed, form):
         "deny_to_mgmt": "★定石から外れる世界= 標準 ACL で「顧客→管理セグメントだけ拒否・"
                         "顧客→サーバは維持」。標準は送信元しか見ないので入口では"
                         "巻き添えになり、**宛先側(管理 IF)の out** が唯一解",
+        "ret_established": "復路用リストを書く(★`established` が正解・構造で一意)",
         "one_line": "1行で書く(過剰被覆キューブが正解)",
         "wc_even": "★WCトリック= 第3オクテットが**偶数**の4本 → `0.0.6.255`",
         "wc_odd": "★WCトリック= 第3オクテットが**奇数**の4本 → base を +1 して `0.0.6.255`",
@@ -5529,6 +5567,10 @@ def main():
                                                        "patch", "logread",
                                                        "evidence", "compare",
                                                        "apply"))
+                                      # ★est_build は select だが**構築系**=
+                                      #   壊れていないので症状の定型文を付けない
+                                      or (shape_i == "acl" and form == "select"
+                                          and d["kind"] in gpl.EST_BUILD_KINDS)
                                       or (shape_i == "aclv6"
                                           and form in ("read", "counter"))))
         leak_lint(q_md, lint)

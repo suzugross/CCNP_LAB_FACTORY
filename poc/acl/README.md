@@ -760,4 +760,4 @@ P1〜P15 すべて測定済み（P2 は 5 パスかけて意味論まで確定�
 **G1〜G12（適用点・§16）と E1（`established`・§17）も測定済み**（2026-08-11・BL-109）。後片付け（P14）で
 `show ip access-lists` が空・running-config に `access-group` / `distribute-list` /
 `service-policy` / `ip nat` / `verify unicast` の残骸なしを確認済み。
-CML ラボ **POC-ACL** は再利用のため保持（追加測定は `sweep.py <チェック名>` で個別再実行できる）。
+CML ラボ **POC-ACL** は ACL 作業の一区切り（2026-08-11）で **STOPPED**。**ラボ定義は残してある**ので、`sweep.py <チェック名>` を実行すれば `ensure_lab()` が自動で起動し、`push_base()` が毎回 base 設定を流し直すためそのまま追加測定できる。

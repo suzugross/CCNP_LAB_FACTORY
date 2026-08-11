@@ -84,7 +84,12 @@ PLACE_KINDS = ["apply_place"]
 EST_KINDS = [
     "est_missing",     # 復路用リストに `established` の行が無い → 戻りが落ちる
     "est_wrong_side",  # `established` を**往路側**に書いた → SYN が落ちる
+    # ★往路は**全部通る**のに一部の顧客網だけセッションが張れない= 対比が作れる。
+    #   全断の2種と違って read / compare が成立する(復路を主題にした比較ができる)。
+    "est_ret_narrow",  # 復路用リストの範囲が狭く、一部の顧客網の戻りだけ落ちる
 ]
+# ★構築系= 復路用リストを**これから書く**。「established を正しく書けるか」を問う。
+EST_BUILD_KINDS = ["est_build"]
 # ★このうち4種は「フィルタが実質不在」＝**全部素通り**になり、症状では割れない。
 #   割れるのは出力(§16-4)。read 形は作らず、cause / evidence で出す。
 INERT_FILTER_KINDS = ("apply_missing", "apply_other_iface",
@@ -92,8 +97,10 @@ INERT_FILTER_KINDS = ("apply_missing", "apply_other_iface",
 # ★向きの取り違えは逆に**全断**になる(復路が落ちるため)。read 形はこちらも作れない。
 # ★全断になる種= 復路(または往路)が落ちて**どのセッションも成立しない**。
 #   read 形は作れない(対比が無い)ので cause / evidence で出す。
-BLACKOUT_FILTER_KINDS = tuple(DIRECTION_KINDS) + tuple(EST_KINDS)
-APPLY_KINDS = APPLY_KINDS + DIRECTION_KINDS + PLACE_KINDS + EST_KINDS
+BLACKOUT_FILTER_KINDS = (tuple(DIRECTION_KINDS)
+                         + ("est_missing", "est_wrong_side"))
+APPLY_KINDS = (APPLY_KINDS + DIRECTION_KINDS + PLACE_KINDS + EST_KINDS
+               + EST_BUILD_KINDS)
 FILTER_KINDS = ADDR_KINDS + EXT_ONLY_KINDS + DENSE_KINDS + APPLY_KINDS
 # routefilter ロール(distribute-list)= 実測で確定した意味論に基づく誤り
 RF_KINDS = [
@@ -251,6 +258,8 @@ def forms_for(d):
         return f
     if d["kind"] in PLACE_KINDS:
         return ["apply"]                # 構築系。故障ではないので他の形は無い
+    if d["kind"] in EST_BUILD_KINDS:
+        return ["select"]               # 構築系(復路用リストを書く)
     # ★apply_wrong_acl は cause 形を持たない。
     #   症状表(到達可/不可)だけで「別の ACL が効いている」と分かってしまい、
     #   **`ip access-group` 行を読まずに解ける**(初出題 20260811-011 で判明)。
@@ -270,6 +279,8 @@ def forms_for(d):
         forms.append("fix")
     if evidence_ok(d):
         forms.append("evidence")
+    if compare_ok(d):
+        forms.append("compare")
     if logread_ok(d):
         forms.append("logread")
     return forms
@@ -279,6 +290,8 @@ def worlds_for(kind):
     r = role_of(kind)
     if kind in PLACE_KINDS:
         return APPLY_PLACE_WORLDS
+    if kind in EST_BUILD_KINDS:
+        return ["ret_established"]
     if r == "filter":
         return [w for w in FILTER_WORLDS if (kind, w) not in INCOMPATIBLE]
     if r == "routefilter":
@@ -376,7 +389,7 @@ def draw(rnd, kind=None, world=None):
         d["aclform"] = "std"
     if d["kind"] in DENSE_KINDS:
         d["aclform"] = "ext"           # 多エントリ読解は拡張でしか作れない
-    if d["kind"] in EST_KINDS:
+    if d["kind"] in EST_KINDS + EST_BUILD_KINDS:
         d["aclform"] = "ext"           # established は拡張 ACL でしか書けない
     if d["kind"] in PLACE_KINDS:
         # ★apply 形の ACL は送信元だけを見る標準形。番号も標準帯でなければ
@@ -406,7 +419,8 @@ def draw(rnd, kind=None, world=None):
     d["m"] = dict(zip(ROLES, names))
     d["roles"] = list(ROLES)
     if (d["role"] == "filter" and d["kind"] not in DENSE_KINDS
-            and d["kind"] not in APPLY_KINDS):
+            and (d["kind"] not in APPLY_KINDS
+                 or d["kind"] in EST_BUILD_KINDS)):
         verify_select(d)                # select 形の一意性を機械検証
     if d["kind"] in PLACE_KINDS:
         verify_apply(d)                 # apply 形の一意性を機械検証
@@ -670,6 +684,8 @@ def select_candidates(d):
         return [_row(d, act, o, wc, (i + 1) * 10)
                 for i, (act, o, wc) in enumerate(rows)]
 
+    if d["kind"] in EST_BUILD_KINDS:
+        return est_build_candidates(d)
     if d["world"] in NB_WORLDS:
         # ★1行では書けないレンジ。候補は「行数」と「deny を使うか」で競わせる。
         cands = [
@@ -788,6 +804,8 @@ def _select_works(d, entries):
     """
     if not entries:
         return False
+    if d["kind"] in EST_BUILD_KINDS:
+        return est_build_works(d, entries)
     for o in d["target"]:
         if not acl_model.evaluate(entries, _vec_at(d, o)):
             return False
@@ -811,6 +829,8 @@ def _exact_ext(d, entries):
 def _select_complies(d, lines, entries):
     """提示側の要件(行数・deny の有無)＋「過剰に許可しないこと」。"""
     w = d["world"]
+    if d["kind"] in EST_BUILD_KINDS:
+        return True                    # 一意性は構造から出る(制約で絞らない)
     exact = (ac.permits_exactly(entries, target_entries(d))
              if d["aclform"] == "std" else _exact_ext(d, entries))
     if w == "nb_min":
@@ -838,7 +858,7 @@ def verify_select(d):
     if d["world"] in ("exact_min",) + NB_WORLDS and len(ok) > 1:
         least = min(len(l) for _k, l, _e in ok)
         ok = [x for x in ok if len(x[1]) == least]
-    if len(works) < 2:
+    if len(works) < 2 and d["kind"] not in EST_BUILD_KINDS:
         raise ValueError(f"acl select 直る候補不足: kind={d['kind']} "
                          f"world={d['world']} works={[k for k, _, _ in works]}")
     if len(ok) != 1:
@@ -891,10 +911,15 @@ def build_choices_select(d, rnd):
         txt = " / ".join(f"`{ln}`" for ln in lines)
         if key == correct:
             why = ""
+        elif d["kind"] in EST_BUILD_KINDS:
+            # ★同じ key 名(ipproto 等)が往路用の理由表にもあるので**先に**引く
+            why = EST_BUILD_WHY.get(key, "示されている要件を満たさない。")
         elif key in WHY_SELECT:
             why = WHY_SELECT[key]
         elif key == "exactN":
             why = "エントリが複数の行に分かれている。"
+        elif key in EST_BUILD_WHY:
+            why = EST_BUILD_WHY[key]
         elif key in ("deny1", "split3", "split4", "cube8", "deny_off"):
             why = _why_near(d, ents)
         else:
@@ -967,7 +992,7 @@ def current_entries(d):
     if k == "apply_wrong_acl":
         # 適用されているのは**広いほう**。対象外の網まで通ってしまう。
         return _wrong_acl(d), not ext, str(d["acl_other"])
-    if k in EST_KINDS:
+    if k in EST_KINDS + EST_BUILD_KINDS:
         # ★往路に効いているのは顧客側のリスト。復路は defined_acls / apply_map 側。
         return _fwd_acl(d, est=(k == "est_wrong_side")), False, est_refs(d)[0]
     if k in PLACE_KINDS:
@@ -1084,7 +1109,7 @@ def vty_allowed(d, o3):
 def read_labels(d):
     """(観測列の見出し, 真の語, 偽の語, 設問の主語(真側/偽側))。"""
     r = d["role"]
-    if d["kind"] in EST_KINDS:
+    if d["kind"] in EST_KINDS + EST_BUILD_KINDS:
         # ★戻り通信の盤面は**セッションが張れるか**が観測。到達可/不可より正確
         #   (実測 §17= 往路で落ちたか復路で落ちたかは TCP の応答で割れる)。
         return ("TCP セッション", "確立できる", "確立できない",
@@ -1147,9 +1172,12 @@ def _ret_acl(d, est=True):
       「リストはあるのに戻りが通らない」という主題が消える)。
     """
     if est:
+        # ★narrow=True で**顧客側の範囲を狭める**(前半だけ)。
+        #   往路は全部通るのに、後半の顧客網だけ戻りが落ちる= 対比が作れる。
+        wc = "0.0.1.255" if d["kind"] == "est_ret_narrow" else "0.0.7.255"
         return [ac.entry("permit", "tcp", src=d["srv_host"], sw="0.0.0.0",
                          sport=("eq", [d["port"]]),
-                         dst=net(d, d["base"]), dw="0.0.7.255",
+                         dst=net(d, d["base"]), dw=wc,
                          established=True, seq=10)]
     return [ac.entry("permit", "ip", src=d["srv_host"], sw="0.0.0.0",
                      dst=f"{d['oct1']}.{d['oct2']}.{d['mgmt_o3']}.0",
@@ -1172,6 +1200,9 @@ def defined_acls(d):
                 str(d["acl_other"]))]
         two.sort(key=lambda t: t[0])       # 実機は番号順に並べる
         return [(e, s, n) for _num, e, s, n in two]
+    if k in EST_BUILD_KINDS:
+        # ★復路用リストは**まだ書かれていない**。往路用だけを提示する。
+        return [(_fwd_acl(d), False, est_refs(d)[0])]
     if k in EST_KINDS:
         fwd, ret = est_refs(d)
         return [(_fwd_acl(d, est=(k == "est_wrong_side")), False, fwd),
@@ -1251,6 +1282,8 @@ def apply_map(d):
     ★戻り通信の盤面(EST_KINDS)だけは**2枚**を持つ
       (顧客側の in= 往路用 / サーバ側の in= 復路用)。
     """
+    if d["kind"] in EST_BUILD_KINDS:
+        return {(d["if_dn"], "in"): est_refs(d)[0]}   # 復路はこれから書く
     if d["kind"] in EST_KINDS:
         fwd, ret = est_refs(d)
         return {(d["if_dn"], "in"): fwd, (d["if_up"], "in"): ret}
@@ -1465,6 +1498,103 @@ def _mgmt_side_flows(d):
          {"proto": "tcp", "src": t0, "dst": mh, "sport": 40001,
           "dport": 514, "established": False, "icmp_type": None}, True),
     ]
+
+
+# --------------------------------------------------------------------------
+# est_build(構築系)= 「復路用のアクセス リストをどう書くか」
+# ★実測 §17= SYN は established に一致せず RST/ACK は一致する。
+#   established を省くと「**送信元ポートを当該サービスに合わせた新規接続**」まで
+#   通ってしまう(教科書どおりの危険)。それを (ii) の観測で機械的に落とす。
+# --------------------------------------------------------------------------
+def _est_stage(d, fwd, ret, vec, stages):
+    for ifn, dr in stages:
+        ents = (fwd if (ifn, dr) == (d["if_dn"], "in")
+                else ret if (ifn, dr) == (d["if_up"], "in") else None)
+        if ents is None:
+            continue
+        if not acl_model.evaluate(ents, vec):
+            return False
+    return True
+
+
+def est_build_flows(d):
+    """(表示文, ベクタ, 検査する段, 許可されるべきか)。"""
+    dn, up = d["if_dn"], d["if_up"]
+    v = _vec_at(d, d["target"][0])
+    new_from_srv = dict(rev_of(v), established=False)
+    other_port = dict(rev_of(v), sport=("eq", [d["other_port"]]))
+    other_host = dict(rev_of(v), src=d["other_host"])
+    return [
+        (f"{net(d, d['target'][0])}/24 からサーバへの TCP セッション",
+         v, [(dn, "in"), (up, "out")], True),
+        ("★サーバの側から新たに開始される通信"
+         "(送信元ポートは当該のサービスのもの・ACK を持たない)",
+         new_from_srv, [(up, "in")], False),
+        ("サーバの**別のポート**からの戻りの通信",
+         other_port, [(up, "in")], False),
+        ("**別のサーバ**からの戻りの通信",
+         other_host, [(up, "in")], False),
+    ]
+
+
+def est_build_works(d, ret):
+    fwd = _fwd_acl(d)
+    dn, up = d["if_dn"], d["if_up"]
+    for _txt, vec, stages, want in est_build_flows(d):
+        if _est_stage(d, fwd, ret, vec, stages) != want:
+            return False
+        if want:      # 許可されるべき通信は**戻りも**通ること
+            if not _est_stage(d, fwd, ret, rev_of(vec),
+                              [(up, "in"), (dn, "out")]):
+                return False
+    return True
+
+
+def est_build_candidates(d):
+    """(key, 提示行, 復路用リストの entries)。"""
+    num = est_refs(d)[1]
+    srv, cst, wc = d["srv_host"], net(d, d["base"]), "0.0.7.255"
+    pt = _port_txt(d["port"])
+
+    def e(**kw):
+        base = dict(proto="tcp", src=srv, sw="0.0.0.0",
+                    sport=("eq", [d["port"]]), dst=cst, dw=wc,
+                    established=True, seq=10)
+        base.update(kw)
+        return [ac.entry("permit", base.pop("proto"), **base)]
+
+    return [
+        ("est", [f"access-list {num} permit tcp host {srv} eq {pt} "
+                 f"{cst} {wc} established"], e()),
+        ("bare", [f"access-list {num} permit tcp host {srv} eq {pt} "
+                  f"{cst} {wc}"], e(established=False)),
+        ("swap", [f"access-list {num} permit tcp {cst} {wc} "
+                  f"host {srv} eq {pt} established"],
+         [ac.entry("permit", "tcp", src=cst, sw=wc, dst=srv, dw="0.0.0.0",
+                   dport=("eq", [d["port"]]), established=True, seq=10)]),
+        ("noport", [f"access-list {num} permit tcp host {srv} any established"],
+         e(sport=None, dst="0.0.0.0", dw="255.255.255.255")),
+        ("ipproto", [f"access-list {num} permit ip host {srv} {cst} {wc}"],
+         [ac.entry("permit", "ip", src=srv, sw="0.0.0.0", dst=cst, dw=wc,
+                   seq=10)]),
+        ("anysrc", [f"access-list {num} permit tcp any eq {pt} "
+                    f"{cst} {wc} established"],
+         e(src="0.0.0.0", sw="255.255.255.255")),
+    ]
+
+
+EST_BUILD_WHY = {
+    "bare": "established が無いため、サーバの側から**新たに開始される**通信"
+            "(送信元ポートを当該のサービスに合わせたもの)まで許可される。",
+    "swap": "送信元と宛先が逆であり、戻りのパケットには一致しない"
+            "(セッションが確立できない)。",
+    "noport": "送信元のポートが限定されていないため、"
+              "当該のサーバの他のポートからの戻りまで許可される。",
+    "ipproto": "プロトコルが ip であるため established を指定できず、"
+               "サーバの側から新たに開始される通信まで許可される。",
+    "anysrc": "送信元が any であるため、当該のサーバ以外からの戻りまで"
+              "許可される。",
+}
 
 
 def apply_points(d):
@@ -1714,6 +1844,29 @@ def _cmp_diff(a, b):
                if a.get(k) != b.get(k))
 
 
+def _compare_probes(d):
+    """compare 形の材料 [(表示, ベクタ, 結果), ...]。
+
+    ★dense_list は**片方向**の first-match 読解。
+    ★est_ret_narrow は**往復**で判定する(session_ok)= 往路は全部通るのに
+      復路用リストの範囲が狭くて一部だけセッションが張れない、という比較になる。
+    """
+    if d["kind"] == "dense_list":
+        ents, _s, _n = current_entries(d)
+        if not ents:
+            return None
+        return [(t, v, acl_model.evaluate(ents, v)) for t, v in dense_probes(d)]
+    if d["kind"] == "est_ret_narrow":
+        out = []
+        for o in list(d["target"]) + [d["fourth"], d["outsider"]]:
+            v = _vec_at(d, o)
+            out.append((f"送信元が {net(d, o)}/24 のネットワークにあるホストから、"
+                        f"`{d['srv_host']}` の TCP ポート {d['port']} への "
+                        f"TCP セッション", v, session_ok(d, vec=v)))
+        return out
+    return None
+
+
 def compare_flows(d):
     """見比べさせるフローの並び [(表示, 通るか), ...] を返す。
 
@@ -1724,12 +1877,9 @@ def compare_flows(d):
       - 結果が**割れている**こと(全部同じだと見比べる意味が無い)
       - 互いの差が小さい順に選ぶ(1フィールド違いを優先)
     """
-    if d["kind"] != "dense_list":
+    ev = _compare_probes(d)
+    if not ev:
         return None
-    ents, _s, _n = current_entries(d)
-    if not ents:
-        return None
-    ev = [(t, v, acl_model.evaluate(ents, v)) for t, v in dense_probes(d)]
     by_dst = {}
     for item in ev:
         by_dst.setdefault(item[1]["dst"], []).append(item)
@@ -1793,14 +1943,21 @@ def compare_ok(d):
     return compare_flows(d) is not None
 
 
-def _cmp_label(idx, n):
-    """通るものの番号の集合 → 言い切りの文。"""
+def _cmp_label(idx, n, d=None):
+    """通るものの番号の集合 → 言い切りの文。
+
+    ★往復で判定する盤面(est 系)は「転送」ではなく「セッションを確立できる」。
+    """
+    if d is not None and d.get("kind") in EST_KINDS + EST_BUILD_KINDS:
+        yes, no = "セッションを確立できる", "セッションを確立できない"
+    else:
+        yes, no = "転送される", "破棄される"
     if not idx:
-        return "いずれも破棄される。"
+        return f"いずれも{no}。"
     if len(idx) == n:
-        return "いずれも転送される。"
+        return f"いずれも{yes}。"
     nums = "、".join(str(i + 1) for i in sorted(idx))
-    return f"{nums} のみが転送される。"
+    return f"{nums} のみが{yes}。"
 
 
 def build_choices_compare(d, rnd):
@@ -1814,7 +1971,7 @@ def build_choices_compare(d, rnd):
     c = []
     for mask in range(1 << n):
         idx = frozenset(i for i in range(n) if mask & (1 << i))
-        c.append((_cmp_label(idx, n), idx == truth,
+        c.append((_cmp_label(idx, n, d), idx == truth,
                   "" if idx == truth
                   else "示されているアクセス・リストでは、そのようにはならない。"))
     order = list(range(len(c)))
@@ -2483,6 +2640,8 @@ CLAIMS = {
                    "established のキーワードを伴うエントリが存在しない",
     "est_wrong_side": "established のキーワードが、戻りの側ではなく、"
                       "通信を開始する側のアクセス・リストに記述されている",
+    "est_ret_narrow": "戻りの通信を許可するアクセス・リストの範囲が、"
+                      "対象としているネットワークの一部しか含んでいない",
     "apply_iface_swap": "アクセス・リストが、顧客の側ではなくサーバの側の"
                         "インターフェイスに、着信の方向で適用されている",
     "filter_undef_ref": "インターフェイスから参照されているアクセス・リストが、"
@@ -2528,6 +2687,8 @@ REFUTES = {
                    "established を伴うエントリが存在する。",
     "est_wrong_side": "通信を開始する側のアクセス・リストには、"
                       "established は記述されていない。",
+    "est_ret_narrow": "戻りの通信のアクセス・リストは、"
+                      "対象としているネットワークをすべて含んでいる。",
     "apply_iface_swap": "アクセス・リストは、顧客の側のインターフェイスに"
                         "適用されている。",
     "filter_undef_ref": "参照されているアクセス・リストは定義されている。",
@@ -2653,6 +2814,12 @@ def _also_true(d, other_kind):
             if other_kind == "est_missing":
                 return not any(e.get("established")
                                for ents, _s, _n in lists for e in ents)
+            if other_kind == "est_ret_narrow":
+                if len(lists) < 2:
+                    return False
+                # 復路リストが**対象の全部**を覆っていなければ真
+                return any(not stage_pass(d, rev_of(_vec_at(d, o)), "rev")[0]
+                           for o in d["target"])
             return any(e.get("established") for e in lists[0][0])
         if other_kind == "apply_wrong_acl":
             return len(defined) >= 2
@@ -3241,6 +3408,48 @@ def _selftest(n=60):
     print(f"  1行で書けないレンジ: OK={nb_ok} NG={nb_ng} "
           f"(正解: {[(w, sorted(v)) for w, v in sorted(nb_correct.items())]})")
 
+    # ★戻り通信(P2-⑤)。①est_build は works がちょうど1(構造で一意)
+    #   ②est_ret_narrow は read / compare が成立する(全断でない)
+    eb_ok = eb_ng = 0
+    for s2 in range(30):
+        d = draw(random.Random(s2 * 71 + 3), kind="est_build")
+        cands = est_build_candidates(d)
+        good = [k for k, _l, e in cands if est_build_works(d, e)]
+        ch = build_choices_select(d, random.Random(s2))
+        bad = None
+        if good != ["est"]:
+            bad = f"works が est 1つでない: {good}"
+        elif len(ch) != 6:
+            bad = f"選択肢が6つでない({len(ch)})"
+        elif sum(1 for _t, o, _w, _l in ch if o) != 1:
+            bad = "正解が1つでない"
+        elif any(not w for _t, o, w, _l in ch if not o):
+            bad = "誤答肢に理由が付いていない"
+        elif any("access-group" in l for l in interface_blocks(d)
+                 if d["if_up"] in l):
+            bad = "復路用リストが既に適用されている(構築系なのに)"
+        if bad:
+            eb_ng += 1
+            if eb_ng < 4:
+                print(f"    ★est_build NG: {bad}")
+        else:
+            eb_ok += 1
+    en_ok = en_ng = 0
+    for s2 in range(30):
+        d = draw(random.Random(s2 * 73 + 5), kind="est_ret_narrow")
+        fs = forms_for(d)
+        vals = [ok2 for _t, ok2 in read_items(d)]
+        if "read" not in fs or "compare" not in fs:
+            en_ng += 1
+            if en_ng < 3:
+                print(f"    ★est_ret_narrow NG: forms={fs}")
+        elif not (any(vals) and not all(vals)):
+            en_ng += 1
+        else:
+            en_ok += 1
+    print(f"  戻り通信: est_build OK={eb_ok} NG={eb_ng} / "
+          f"est_ret_narrow OK={en_ok} NG={en_ng}")
+
     # ★apply 形(段B の構築系)= 「意味的に成立する候補≥2・制約適合=ちょうど1」
     #   ＋世界で**正解の IF が反転する**こと(被覆エンジンの狙いが機能しているか)。
     pl_ok = pl_ng = 0
@@ -3285,7 +3494,7 @@ def _selftest(n=60):
           f"(正解IF: {[(w, sorted(v)) for w, v in sorted(seen_correct.items())]})")
 
     total_ng = (ng + r_ng + c_ng + m_ng + b_ng + cp_ng + ap_ng + ev_ng
-                + pl_ng + wc_ng + nb_ng)
+                + pl_ng + wc_ng + nb_ng + eb_ng + en_ng)
 
     print(f"gen_paper_acl selftest: NG合計={total_ng}")
     return total_ng == 0
