@@ -43,6 +43,8 @@ import gen_paper_pbr as gpp     # noqa: E402  (pbr=PBR×ワイルドカードACL
 import gen_paper_urpf as gpu    # noqa: E402  (urpf=uRPF×ACL・BL-084)
 import gen_paper_bgpdbg as gpb  # noqa: E402  (bgpdbg=BGP debug 読解・記述式・BL-085)
 import gen_paper_leakmap as gpk  # noqa: E402  (leakmap=EIGRP集約×リーク・BL-095)
+import gen_paper_acl as gpl     # noqa: E402  (acl=ACL単独読解・BL-106)
+import gen_paper_aclv6 as gp6   # noqa: E402  (aclv6=IPv6フィルタ・BL-106 P3)
 import gen_paper_ospfv3pl as gpo  # noqa: E402  (ospfv3pl=OSPFv3 prefix-list・BL-097)
 import gen_paper_v6redist as gpv  # noqa: E402  (v6redist=OSPFv3⇄EIGRPv6 相互再配送・BL-098)
 import gen_paper_aaa as gpa    # noqa: E402  (aaa=IOS AAA(RADIUS)読解・BL-101)
@@ -2113,6 +2115,538 @@ def pick_draw_pbr(qseed, kind):
     raise SystemExit(f"pbr kind={kind} が成立する seed が見つかりません({qseed})")
 
 
+# --------------------------------------------------------------------------
+# shape=acl — ACL 単独読解 (gen_paper_acl 流用・BL-106)
+# ★紙面専用: 挙動は実機確定表(poc/acl/README.md)の写像モデルから決定的に生成。
+# --------------------------------------------------------------------------
+def pick_draw_aclv6(qseed, kind):
+    for kk in range(200):
+        s = qseed + kk * 151
+        try:
+            return s, gp6.draw(random.Random(s), kind=kind)
+        except ValueError:
+            continue
+    raise SystemExit(f"aclv6 kind={kind} が成立する seed が見つかりません({qseed})")
+
+
+def aclv6_requirements(d, rnd):
+    m = d["m"]
+    tg = "、".join(f"`{gp6.net6(d, o)}/64`" for o in d["target"])
+    core = [f"{m['DUT']} において、{tg} のネットワークからの通信のみが、"
+            f"`{d['srv_host']}` の TCP ポート {d['port']} に到達できなければなりません。"]
+    if d["fourth_forbidden"]:
+        core.append(f"`{gp6.net6(d, d['fourth'])}/64` からの通信は、"
+                    "許可されてはなりません。")
+    core.append(f"`{gp6.net6(d, d['outsider'])}/64` からの通信は、"
+                "許可されてはなりません。")
+    core.append({"one_line": "アクセス・リストのエントリは、1行で構成されなければ"
+                             "なりません。",
+                 "exact_no_deny": "対象としていないネットワークが、一致の対象に"
+                                  "含まれてはなりません。また、拒否のエントリを"
+                                  "使用してはなりません。",
+                 "exact_min": "対象としていないネットワークが、一致の対象に"
+                              "含まれてはなりません。また、エントリの行数は、"
+                              "最小でなければなりません。",
+                 }[d["world"]])
+    core += rnd.sample([x for x in REQ_DECOYS if "スタティック" not in x], 1)
+    rnd.shuffle(core)
+    return finalize_reqs(core, rnd)
+
+
+def aclv6_evidence(d, rnd, form):
+    """★select 形では現在の ACL を出さない(これから書く行を選ぶ形のため)。"""
+    m = d["m"]
+    if form == "select":
+        return [], []
+    state, cfg = [], []
+    state.append(f"```\n{m['DUT']}# show ipv6 access-list\n"
+                 + gp6.show_text(d) + "\n```")
+    if form == "cause":
+        rows = ["観測 | サーバへの到達", "--- | ---"]
+        for text, ok in gp6.read_items(d):
+            rows.append(f"{text} | {'到達可' if ok else '到達不可'}")
+        state.append("\n".join(rows))
+        # ★隣接の状態は近隣探索が落ちる故障(v6_explicit_deny_nd)の**指紋**。
+        #   常に出す(壊れている盤面だけ出すと、表の有無が道標になる)。
+        state.append(f"```\n{m['DUT']}# show ipv6 neighbors\n"
+                     + gp6.neighbor_text(d) + "\n```")
+    cfg.append(f"```\n{m['DUT']}# show running-config | section "
+               f"ipv6 access-list|traffic-filter\n"
+               + (gp6.config_text(d) + "\n" if gp6.config_text(d) else "")
+               + f"interface Ethernet0/0\n"
+               f" ipv6 traffic-filter {d['acl_name']} in\n```")
+    return state, cfg
+
+
+def question_md_aclv6(d, blocks, choices, stamp, form="cause", reqs=None,
+                      style="prose"):
+    m = d["m"]
+    state_blocks, cfg_blocks = blocks
+    if reqs is None:
+        reqs = aclv6_requirements(d, random.Random(0))
+    if form == "cause":
+        q = ("この事象の原因である可能性が、最も高いものは、どれですか。"
+             "(1つを選択してください)")
+    elif form == "select":
+        q = ("示されているところのすべての要件を満たすものは、どれですか。"
+             "(1つを選択してください)")
+    elif form == "counter":
+        q = (f"{d['_counter_probe']['text']} が処理されるとき、"
+             "一致のカウンタが増加するのは、どの行ですか。(1つを選択してください)")
+    else:
+        want = d.get("_read_want", 1)
+        subj = ("転送されるもの" if d.get("_read_polarity") == "pass"
+                else "破棄されるもの")
+        q = (f"示されているところの構成において、{subj}は、どれですか。"
+             f"({'2つ' if want == 2 else '1つ'}を選択してください)")
+    opts = render_options(choices, style)
+    intro = (f"ある企業のネットワークにおいて、{m['DUT']} は、顧客の側の"
+             "ネットワークと、サーバの側のネットワークとの間に配置されており、"
+             "IPv6 によって運用されています。")
+    body_state = "\n".join(state_blocks) if state_blocks else ""
+    sec_state = f"## 現在の状態\n\n{body_state}\n" if body_state else ""
+    sec_cfg = f"## 設定抜粋\n\n{chr(10).join(cfg_blocks)}\n" if cfg_blocks else ""
+    return f"""# 問題 {stamp} : IPv6 のトラフィック・フィルタの分析
+
+{FIXED_NOTE}
+
+## トポロジ
+
+{terse_jp(intro)}
+
+```
+   {m['DN']} (顧客の側) --- {m['DUT']} (被験のデバイス) --- {m['UP']} (サーバの側)
+```
+
+## 要件
+
+{chr(10).join(reqs)}
+
+{sec_state}{sec_cfg}## 設問
+
+{q}
+
+## 選択肢
+
+{opts}
+"""
+
+
+def answer_md_aclv6(d, choices, stamp, master_seed, subseed, form):
+    letters = [chr(65 + i) for i in range(len(choices))]
+    correct = ", ".join(l for l, c in zip(letters, choices) if c[1])
+    wrongs = "\n".join(f"- **{l}**: {'(正解)' if c[1] else c[2]}"
+                        for l, c in zip(letters, choices))
+    kind_note = {
+        "v6_prefix_too_short": "プレフィックス長が短く、対象外まで許可している",
+        "v6_prefix_too_long": "プレフィックス長が長く、対象の一部が漏れている",
+        "v6_wildcard_habit": "★IPv4 の癖でワイルドカードを書き、その行が受理されずに"
+                             "存在していない",
+        "v6_undef_ref": "★未定義の参照 → 全許可(IPv6 では空のリストは保持されないので"
+                        "「空」と同一の状態)",
+        "v6_order_shadow": "先行の広い permit が後続を影にしている",
+        "v6_explicit_deny_nd": "★★末尾に明示の `deny ipv6 any any` を書いたため、"
+                               "暗黙の `permit icmp any any nd-na` / `nd-ns` が失われ、"
+                               "近隣探索ごと落ちて隣接が解決できない"
+                               "(`show ipv6 neighbors` が INCMP)",
+    }[d["kind"]]
+    world_note = {"one_line": "1行で書く", "exact_no_deny": "過剰許可なし＋deny 禁止",
+                  "exact_min": "過剰許可なし＋行数最小"}[d["world"]]
+    return f"""# 解答 {stamp}
+
+## 正解
+
+**{correct}**
+
+## 仕込んだ状態
+
+- 種別: `aclv6/{d['kind']}` — {kind_note}
+- 要件世界: {world_note}
+- 出題形: {form}
+- 生成: `gen_paper_mcq.py --shape aclv6 --seed {master_seed}` (sub-seed {subseed})
+
+## 各選択肢の判定
+
+{wrongs}
+
+## ★IPv4 との差分(BL-106 P3 実測・poc/acl/README.md §14)
+
+1. **ワイルドカードは使えない**。`permit ipv6 2001:DB8:x::/64 0.0.3.255 any` は
+   `% Invalid input detected` で拒否され、**その行は存在しないまま**になる。
+   指定は**プレフィックス長**で行う。
+2. 適用は `ip access-group` ではなく **`ipv6 traffic-filter`**。
+3. **`show` では `sequence` が行末**に出るが、**running-config では行頭**に出る。
+4. **`resequence` に相当するコマンドが無い**。
+5. **空のリストは保持されない**（作っても `show` にも running-config にも現れない）。
+   したがって IPv6 では「未定義」と「空」は**同一の状態**である。
+6. ★★**末尾には暗黙で `permit icmp any any nd-na` / `permit icmp any any nd-ns` が
+   存在する**。したがって**明示的に `deny ipv6 any any` を記述すると、その暗黙の許可が
+   失われ、近隣探索ごと落ちて隣接が解決できなくなる**（`show ipv6 neighbors` が
+   **INCMP**・リンク層アドレスが `-` になる）。回復させるには、明示の拒否の**手前に**
+   `permit icmp any any nd-ns` および `permit icmp any any nd-na` を記述する。
+
+## ENARSI ブループリント
+
+- 3.2.b IPv6 トラフィック・フィルタ
+"""
+
+
+def pick_draw_acl(qseed, kind):
+    for kk in range(200):
+        s = qseed + kk * 149
+        try:
+            return s, gpl.draw(random.Random(s), kind=kind)
+        except ValueError:
+            continue
+    raise SystemExit(f"acl kind={kind} が成立する seed が見つかりません({qseed})")
+
+
+def acl_topo(d):
+    m = d["m"]
+    return (f"```\n"
+            f"   {m['DN']} (顧客の側)                {m['UP']} (サーバの側)\n"
+            f"        |  {d['oct1']}.{d['oct2']}.253.0/24        "
+            f"{d['oct1']}.{d['oct2']}.254.0/24  |\n"
+            f"        +--------- {m['DUT']} ---------+\n"
+            f"                (被験のデバイス)\n```")
+
+
+def acl_evidence(d, rnd, form):
+    """紙面に出すブロック群。select 形では**現在の ACL を出さない**
+    (これから書くべき行を選ぶ形なので、既設の誤りは提示物に含めない)。"""
+    m = d["m"]
+    state, cfg = [], []
+    if form == "select":
+        return state, cfg
+    acl_txt = gpl.show_acl_text(d)
+    if acl_txt:
+        state.append(f"```\n{m['DUT']}# show ip access-lists\n{acl_txt}\n```")
+    else:
+        # ★未定義のときは実機も**何も出さない**。説明文を足さないこと
+        #   (BL-088 の不変条件= 出力ブロックに実機が出さない文字列を入れない)。
+        state.append(f"```\n{m['DUT']}# show ip access-lists\n```")
+    ents, is_std, name = gpl.current_entries(d)
+    lines = [f"{m['DUT']}# show running-config | section "
+             f"access-list|access-group|distribute-list|"
+             f"verify unicast|ip nat|access-class|class-map"]
+    lines.append(" " + gpl.ROLE_APPLY[d["role"]].format(n=name))
+    cfg.append("```\n" + "\n".join(lines) + "\n```")
+    # ★症状そのものを観測に出す(BL-103 ③の教訓=「観測に現れない故障」を作らない)。
+    #   read / counter 形は症状表が答えそのものになるので出さない。
+    if form in ("cause", "patch", "fix"):
+        state.append(acl_symptom_block(d))
+    return state, cfg
+
+
+def acl_evidence_blocks(d, rnd):
+    """evidence 形= **症状だけ**を出す。構成を出すと仮説が割れてしまう
+    (どの出力を取りに行くかを問う形なので、答えになる出力は提示しない)。"""
+    return [acl_symptom_block(d)], []
+
+
+def acl_logread_blocks(d, rnd):
+    """logread 形= ACL と syslog を出す。★log の有無が読解の鍵になる。"""
+    m = d["m"]
+    name, ents, _lg = gpl.logread_board(d)
+    acl = [f"Extended IP access list {name}"]
+    for e in ents:
+        line = "    " + gpl._render_entry(e, False)
+        if e["seq"] in _lg:
+            line += " log"
+        acl.append(line)
+    logs = gpl.logread_lines(d)
+    state = ["```\n" + f"{m['DUT']}# show logging | include SEC-6\n"
+             + "\n".join(logs) + "\n```"]
+    cfg = ["```\n" + f"{m['DUT']}# show ip access-lists {name}\n"
+           + "\n".join(acl) + "\n```"]
+    return state, cfg
+
+
+def acl_symptom_block(d):
+    """症状の観測。★判定と同じ関数(gpl.read_items)から描く= 提示と判定の一本化。"""
+    m = d["m"]
+    if d["role"] != "routefilter":
+        col, tw, fw, _s1, _s2 = gpl.read_labels(d)
+        rows = [f"観測 | {col}", "--- | ---"]
+        for text, ok in gpl.read_items(d):
+            rows.append(f"{text} | {tw if ok else fw}")
+        return "\n".join(rows)
+    out = [f"```\n{m['DUT']}# show ip route eigrp | begin Gateway",
+           "Gateway of last resort is not set", ""]
+    shown = [(d["nb_up"], o, 24) for o in d["target"]] + \
+            [(d["nb_dn"], d["target"][0], 28), (d["nb_up"], d["outsider"], 24)]
+    kept = [(adv, o, pl) for adv, o, pl in shown if gpl.route_kept(d, adv, o, pl)]
+    if kept:
+        o2 = f"{d['oct1']}.{d['oct2']}.0.0"
+        out.append(f"      {o2}/16 is variably subnetted, "
+                   f"{len(kept)} subnets, {len({p for _a, _o, p in kept})} masks")
+        for adv, o, pl in kept:
+            out.append(f"D        {gpl.net(d, o)}/{pl} [90/409600] "
+                       f"via {adv}, 00:04:11, Ethernet0/1")
+    out.append("```")
+    return "\n".join(out)
+
+
+def acl_requirements(d, rnd, form):
+    m = d["m"]
+    tg = "、".join(f"`{gpl.net(d, o)}/24`" for o in d["target"])
+    core = []
+    if d["role"] == "filter":
+        core.append(f"{m['DUT']} において、{tg} のネットワークからの通信のみが、"
+                    f"サーバである `{d['srv_host']}` の TCP ポート "
+                    f"{d['port']} に到達できなければなりません。")
+        if d["fourth_forbidden"]:
+            core.append(f"`{gpl.net(d, d['fourth'])}/24` からの通信は、"
+                        "許可されてはなりません。")
+        core.append(f"`{gpl.net(d, d['outsider'])}/24` からの通信は、"
+                    "許可されてはなりません。")
+        w = {"one_line": "アクセス・リストのエントリは、1行で構成されなければなりません。",
+             "exact_no_deny": "対象としていないネットワークが、"
+                              "一致の対象に含まれてはなりません。"
+                              "また、拒否のエントリを使用してはなりません。",
+             "exact_min": "対象としていないネットワークが、"
+                          "一致の対象に含まれてはなりません。"
+                          "また、エントリの行数は、最小でなければなりません。",
+             }[d["world"]]
+        core.append(w)
+    elif d["role"] in ("copp", "urpf", "nat", "vty"):
+        goal = {
+            "copp": f"{m['DUT']} において、管理のためのトラフィックが、"
+                    "意図されたクラスにおいて処理されなければなりません。",
+            "urpf": f"{m['DUT']} において、着信インターフェイスと一致しない送信元を"
+                    "持つところのトラフィックが、破棄されなければなりません。",
+            "nat": f"{m['DUT']} において、{tg} のネットワークからの通信のみが、"
+                   "アドレスの変換の対象とされなければなりません。",
+            "vty": f"{m['DUT']} への管理のための接続は、"
+                   f"{tg} のネットワークからのみ、受理されなければなりません。",
+        }[d["role"]]
+        core.append(goal)
+        core.append({"protect_mgmt": "管理のための端末からの接続および運用に、"
+                                     "影響を与えてはなりません。",
+                     "least_change": "変更は、必要最小限に留められなければなりません。",
+                     }[d["world"]])
+    else:
+        core.append(f"{m['DUT']} は、{tg} のルートのみを、"
+                    "ルーティング・テーブルに保持しなければなりません。")
+        w = {"prefixlen_no_rm": "プレフィックスの長さが異なるルートは、"
+                                "区別して扱われなければなりません。"
+                                "ルート・マップを使用してはなりません。",
+             "prefixlen_via_rm": "プレフィックスの長さが異なるルートは、"
+                                 "区別して扱われなければなりません。"
+                                 "プレフィックス・リストを使用してはなりません。",
+             "by_neighbor": "フィルタリングは、ルートを広告している"
+                            "ネイバーに基づいて、行われなければなりません。",
+             "keep_others": "上記以外のルートの受理には、"
+                            "影響を与えてはなりません。",
+             }[d["world"]]
+        core.append(w)
+    core += rnd.sample([x for x in REQ_DECOYS if "スタティック" not in x], 1)
+    rnd.shuffle(core)
+    return finalize_reqs(core, rnd)
+
+
+def acl_requirements_patch(d, rnd):
+    """★patch は要件と判定の対象を**字面で一致**させる(BL-101 の教訓=
+    「評価モデルが守る対象と、問題文が要求する対象は一致していなければならない」)。
+    判定に使う観測集合(gpl.patch_targets)そのものを要件文に書く。"""
+    m = d["m"]
+    keep = "、".join(f"`{gpl.net(d, o)}/24`" for o in d["target"])
+    core = [
+        f"`{gpl.net(d, d['outsider'])}/24` からの通信は、"
+        f"{m['DUT']} において拒否されなければなりません。",
+        f"{keep} からの通信には、影響を与えてはなりません。",
+        "既存のエントリを、削除または変更してはなりません"
+        "(追加のみが認められています)。",
+    ]
+    rnd.shuffle(core)
+    return finalize_reqs(core, rnd)
+
+
+def acl_requirements_fix(d, rnd):
+    """★fix も同様に、残すルート・落とすルートを**判定に使う集合そのもの**で書く。"""
+    m = d["m"]
+    keep = [f"`{gpl.net(d, o)}/{pl}`" for _a, o, pl, k in gpl.fix_routes(d) if k]
+    drop = [f"`{gpl.net(d, o)}/{pl}`" for _a, o, pl, k in gpl.fix_routes(d)
+            if not k]
+    core = [
+        f"{m['DUT']} は、{'、'.join(keep)} のルートを、"
+        "ルーティング・テーブルに保持しなければなりません。",
+        f"{'、'.join(drop)} のルートは、受理されてはなりません。",
+    ]
+    if d["world"] == "prefixlen_no_rm":
+        core.append("プレフィックスの長さが異なるルートは、"
+                    "区別して扱われなければなりません。"
+                    "ルート・マップを使用してはなりません。")
+    elif d["world"] == "prefixlen_via_rm":
+        core.append("プレフィックスの長さが異なるルートは、"
+                    "区別して扱われなければなりません。"
+                    "プレフィックス・リストを使用してはなりません。")
+    else:
+        core.append("フィルタリングは、ルートを広告しているネイバーに基づいて、"
+                    "行われなければなりません。")
+    rnd.shuffle(core)
+    return finalize_reqs(core, rnd)
+
+
+def question_md_acl(d, blocks, choices, stamp, form="cause", reqs=None,
+                    style="prose"):
+    m = d["m"]
+    state_blocks, cfg_blocks = blocks
+    if reqs is None:
+        reqs = acl_requirements(d, random.Random(0), form)
+    if form == "cause":
+        q = ("この事象の原因である可能性が、最も高いものは、どれですか。"
+             "(1つを選択してください)")
+    elif form == "counter":
+        pr = d["_counter_probe"]["text"]
+        q = (f"{pr} が処理されるとき、一致のカウンタが増加するのは、どの行ですか。"
+             "(1つを選択してください)")
+    elif form == "patch":
+        q = ("既存のエントリを変更することなく、1つのエントリを追加することによって、"
+             "示されているところの要件を満たすものは、どれですか。"
+             "(1つを選択してください)")
+    elif form == "fix":
+        q = ("示されているところのすべての要件が満たされることを確実にするために、"
+             "適用されなければならない構成は、どれですか。(1つを選択してください)")
+    elif form == "evidence":
+        q = ("この事象の原因を特定するために、次に取得するべき出力として、"
+             "最も多くの候補を除外できるものは、どれですか。(1つを選択してください)")
+    elif form == "logread":
+        q = ("示されているところの記録および構成から読み取ることができるものは、"
+             "どれですか。(2つを選択してください)")
+    elif form == "select":
+        q = ("示されているところのすべての要件を満たすものは、どれですか。"
+             "(1つを選択してください)")
+    else:
+        want = d.get("_read_want", 1)
+        _c, _t, _f, s_true, s_false = gpl.read_labels(d)
+        subj = s_true if d.get("_read_polarity") == "pass" else s_false
+        n = "2つ" if want == 2 else "1つ"
+        q = (f"示されているところの構成において、{subj}は、どれですか。"
+             f"({n}を選択してください)")
+    opts = render_options(choices, style)
+    intro = (f"ある企業のネットワークにおいて、{m['DUT']} は、顧客の側の"
+             f"ネットワークと、サーバの側のネットワークとの間に、"
+             f"配置されています。")
+    if d["role"] == "routefilter":
+        intro += (f"{m['DUT']} は、{m['UP']} および {m['DN']} の両方から、"
+                  "ルーティング・プロトコルによってルートを学習しています。")
+    body_state = ("\n".join(state_blocks) if state_blocks else "")
+    sec_state = (f"## 現在の状態\n\n{body_state}\n" if body_state else "")
+    sec_cfg = (f"## 設定抜粋\n\n{chr(10).join(cfg_blocks)}\n" if cfg_blocks else "")
+    return f"""# 問題 {stamp} : アクセス・リストの分析
+
+{FIXED_NOTE}
+
+## トポロジ
+
+{terse_jp(intro)}
+
+{acl_topo(d)}
+
+## 要件
+
+{chr(10).join(reqs)}
+
+{sec_state}{sec_cfg}## 設問
+
+{q}
+
+## 選択肢
+
+{opts}
+"""
+
+
+def answer_md_acl(d, choices, stamp, master_seed, subseed, form):
+    letters = [chr(65 + i) for i in range(len(choices))]
+    correct = ", ".join(l for l, c in zip(letters, choices) if c[1])
+    wrongs = "\n".join(f"- **{l}**: {'(正解)' if c[1] else c[2]}"
+                       for l, c in zip(letters, choices))
+    kind_note = {
+        "wc_narrow": "ワイルドカードが狭く、対象の一部が一致しない",
+        "wc_wide": "ワイルドカードが広く、対象外まで一致する",
+        "wc_bits": "非連続ワイルドカードで一致が飛び地になる",
+        "mask_as_wildcard": "★ワイルドカード欄にサブネット・マスクを記述"
+                            "(実機は受理するが、アドレスが正規化されて別集合になる)",
+        "order_shadow": "先行の広い permit が後続を影にする",
+        "std_len_blind": "★標準 ACL はプレフィックス長を区別できない",
+        "ext_named_rejected": "★名前付き拡張 ACL は distribute-list に指定できず、"
+                              "フィルタ自体が適用されない",
+        "ext_src_is_network": "★拡張 ACL の src は「広告元のルータ」であって"
+                              "「ネットワーク」ではない",
+        "undef_ref": "★未定義の ACL を参照 → 全許可",
+        "empty_acl": "★空の ACL → 全許可",
+        "copp_deny_to_default": "★CoPP の deny は「通す」ではなく class-default 行き",
+        "urpf_undef_exempt": "★uRPF の例外 ACL が未定義 → 全免除(検証が無力化)",
+        "nat_deny_scope": "NAT の変換対象を選ぶ ACL で、deny の範囲が広すぎる",
+        "vty_wc_wrong": "access-class の許可範囲が管理端末を含んでいない",
+    }[d["kind"]]
+    world_note = {
+        "one_line": "1行で書く(過剰被覆キューブが正解)",
+        "exact_no_deny": "過剰許可なし＋deny 禁止(厳密列挙が正解)",
+        "exact_min": "過剰許可なし＋行数最小(deny 先行が正解)",
+        "prefixlen_no_rm": "長さを区別する(ルート・マップ禁止)→ prefix-list が正解",
+        "prefixlen_via_rm": "長さを区別する(prefix-list 禁止)→ ★route-map 経由の拡張 ACL が正解",
+        "by_neighbor": "広告元のネイバーに基づいて絞る",
+        "keep_others": "他のルートに影響を与えない",
+        "protect_mgmt": "管理のための接続・運用に影響を与えない",
+        "least_change": "変更は必要最小限",
+    }[d["world"]]
+    works = (f"(「要件を無視すれば成立する候補」= "
+             f"{', '.join(d.get('_select_works', []))} のうち要件適合は1つ)"
+             if form == "select" else "")
+    return f"""# 解答 {stamp}
+
+## 正解
+
+**{correct}**
+
+## 仕込んだ状態
+
+- 種別: `acl/{d['kind']}`(ロール= {d['role']}) — {kind_note}
+- 要件世界: {world_note}{works}
+- 出題形: {form}
+- 生成: `gen_paper_mcq.py --shape acl --seed {master_seed}` (sub-seed {subseed})
+
+## 各選択肢の判定
+
+{wrongs}
+
+## ★この分野の最重要知見(BL-106 PoC 実測・poc/acl/README.md)
+
+1. **未定義の ACL を参照したときの帰結は、ロールによって違う**。
+   インターフェイス(`ip access-group`)・`distribute-list`・uRPF の例外リストは
+   **全許可**になる。一方 CoPP の `match access-group` と NAT の `source list` は
+   **どれにも一致しない**。**空の ACL も全許可**であり、「暗黙 deny だけが残って
+   全断」ではない。
+2. ★★**`distribute-list` における拡張 ACL の意味は、参照の経路によって切り替わる**
+   (実測 poc/acl §4・§16):
+   - **直接指定** `distribute-list <番号> in` …
+     **src = ルートを広告してきた隣接ルータ / dst = 広告されたネットワーク**
+     (プレフィックスの長さは見ない)
+   - **ルート・マップ経由** `distribute-list route-map <名前> in` …
+     **src = ネットワーク / dst = サブネット・マスク**(いわゆる教科書の形)。
+     こちらには「広告元」の概念が無い。
+   同じアクセス・リストでも、**どちらから参照されるかで意味が変わる**。
+3. したがって**プレフィックスの長さを区別する手段は2つある**=
+   **prefix-list** と、**ルート・マップ経由の拡張 ACL**(`... host 255.255.255.0`)。
+   一方、**直接指定の拡張 ACL では長さを区別できない**
+   (同じネットワーク・アドレスの /24 と /28 は必ず道連れになる)。
+   また **名前付きの拡張 ACL は、先に定義してから参照すると拒否される**が、
+   **先に参照してから定義すると受理される**(投入の順序に依存する)。
+4. ワイルドカードの欄に**サブネット・マスクを書いても IOS は受理する**が、
+   don't care 側のビットがアドレスから落とされるため、
+   `10.0.0.0 255.0.0.0` は `0.0.0.0, wildcard bits 255.0.0.0` として扱われる
+   (= 「10.x.x.x」ではなく「第2〜4オクテットが 0.0.0 の全アドレス」)。
+
+## ENARSI ブループリント
+
+- 3.2.a IPv4 アクセス・コントロール・リスト(標準/拡張)
+- 1.2 ルート・マップ / フィルタリング(distribute-list)
+"""
+
+
 def pick_draw_urpf(qseed, kind):
     for kk in range(200):
         s = qseed + kk * 137
@@ -4069,7 +4603,8 @@ def main():
     ap.add_argument("--date", default=None, help="YYYYMMDD(既定=今日)")
     ap.add_argument("--shape",
                     choices=["chain", "ring", "pbr", "urpf", "bgpdbg", "mploop",
-                             "leakmap", "ospfv3pl", "v6redist", "aaa", "mixed"],
+                             "leakmap", "ospfv3pl", "v6redist", "aaa", "acl",
+                             "aclv6", "mixed"],
                     default="chain",
                     help="chain=再配送欠落/誤設定系(既定) / ring=再配送リングの定常ループ(難5)"
                          " / pbr=PBR×ワイルドカードACL(BL-081)"
@@ -4109,7 +4644,8 @@ def main():
                 "urpf": gpu.URPF_KINDS, "mploop": MPLOOP_KINDS,
                 "bgpdbg": gpb.VARIANTS, "leakmap": gpk.KINDS,
                 "ospfv3pl": gpo.KINDS, "v6redist": gpv.KINDS,
-                "aaa": gpa.KINDS}.get(a.shape, KINDS)
+                "aaa": gpa.KINDS, "acl": gpl.KINDS,
+                "aclv6": gp6.KINDS}.get(a.shape, KINDS)
         kinds = (a.kinds.split(",") if a.kinds
                  else random.Random(a.seed ^ 0x5EED).sample(pool, len(pool)))
         if not set(kinds) <= set(pool):
@@ -4121,16 +4657,23 @@ def main():
         if a.shape == "mixed":
             roll = random.Random(qseed ^ 0xC0FE)
             r = roll.random()
-            shape_i = ("ring" if r < 0.13 else "pbr" if r < 0.25
-                       else "urpf" if r < 0.37 else "mploop" if r < 0.47
-                       else "leakmap" if r < 0.59 else "ospfv3pl" if r < 0.71
-                       else "v6redist" if r < 0.83
-                       else "aaa" if r < 0.92 else "chain")
+            # ★配分(2026-08-10 acl 追加時に再調整)= どの shape も概ね 8〜12% に均す。
+            #   acl の枠は**再配送系(chain/ring/mploop)を薄める**ことで作った
+            #   (BL-100 の突合せで「再配送だけが飽和」と出ているため)。
+            shape_i = ("ring" if r < 0.12 else "pbr" if r < 0.23
+                       else "urpf" if r < 0.34 else "mploop" if r < 0.43
+                       else "leakmap" if r < 0.54 else "ospfv3pl" if r < 0.65
+                       else "v6redist" if r < 0.74
+                       else "aaa" if r < 0.83
+                       else "acl" if r < 0.88
+                       else "aclv6" if r < 0.94 else "chain")
             kind = roll.choice({"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
                                 "urpf": gpu.URPF_KINDS, "mploop": MPLOOP_KINDS,
                                 "leakmap": gpk.KINDS, "ospfv3pl": gpo.KINDS,
                                 "v6redist": gpv.KINDS,
-                                "aaa": gpa.KINDS}.get(shape_i, KINDS))
+                                "aaa": gpa.KINDS,
+                                "acl": gpl.KINDS,
+                                "aclv6": gp6.KINDS}.get(shape_i, KINDS))
         else:
             shape_i = a.shape
             kind = kinds[i % len(kinds)]
@@ -4161,6 +4704,10 @@ def main():
             subseed, d = pick_draw_v6redist(qseed, kind)
         elif shape_i == "aaa":
             subseed, d = pick_draw_aaa(qseed, kind)
+        elif shape_i == "acl":
+            subseed, d = pick_draw_acl(qseed, kind)
+        elif shape_i == "aclv6":
+            subseed, d = pick_draw_aclv6(qseed, kind)
         elif shape_i == "bgpdbg":
             subseed = qseed
             d = gpb.draw(random.Random(subseed), variant=kind)
@@ -4202,6 +4749,12 @@ def main():
         elif shape_i == "aaa":
             plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
             choices = build_choices_read_aaa(d, rnd)   # 既定形= read
+        elif shape_i == "acl":
+            plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
+            choices = gpl.build_choices_cause(d, rnd)  # 既定形= cause(全 kind で成立)
+        elif shape_i == "aclv6":
+            plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
+            choices = gp6.build_choices_cause(d, rnd)
         elif shape_i == "bgpdbg":
             plan = {"checks": []}          # 紙面専用・記述式(選択肢なし)
             choices = []
@@ -4214,7 +4767,7 @@ def main():
             sites = (assign_sites(d, rnd)
                      if (a.exam and shape_i not in ("bgpdbg", "leakmap",
                                                     "ospfv3pl", "v6redist",
-                                                    "aaa"))
+                                                    "aaa", "acl", "aclv6"))
                      else None)
         # 赤ニシン(exam): 未適用ポリシー+無害な適用行を config に混入(pbr は素で騒がしい)
         herr, decoy = None, None
@@ -4277,6 +4830,48 @@ def main():
                     form = "trace"
                 except ValueError:
                     pass
+        elif a.exam and shape_i == "aclv6":
+            avail = gp6.forms_for(d)
+            form = rnd.choice(avail)
+            if form == "select":
+                choices = gp6.build_choices_select(d, rnd)
+            elif form == "counter":
+                choices = gp6.build_choices_counter(d, rnd)
+            elif form == "read":
+                want = 2 if rnd.random() < 0.3 else 1
+                try:
+                    choices = gp6.build_choices_read(d, rnd, want=want)
+                except ValueError:
+                    form = "cause"
+                    choices = gp6.build_choices_cause(d, rnd)
+        elif a.exam and shape_i == "acl":
+            # ★成立する形だけから選ぶ(gen_paper_acl.forms_for)。
+            #   フィルタが実質不在になる故障種は「全部素通り」が正解なので
+            #   read 形が成立しない(対比が作れない)。
+            avail = gpl.forms_for(d)
+            form = rnd.choice(avail)
+            if form == "select":
+                choices = gpl.build_choices_select(d, rnd)
+            elif form == "counter":
+                choices = gpl.build_choices_counter(d, rnd)
+            elif form == "patch":
+                choices = gpl.build_choices_patch(d, rnd)
+            elif form == "fix":
+                choices = gpl.build_choices_fix(d, rnd)
+            elif form == "evidence":
+                choices = gpl.build_choices_evidence(d, rnd)
+            elif form == "logread":
+                choices = gpl.build_choices_logread(d, rnd, want=2)
+            elif form == "read":
+                want = 2 if rnd.random() < 0.35 else 1   # ★複数選択(2つ選べ)
+                try:
+                    choices = gpl.build_choices_read(d, rnd, want=want)
+                except ValueError:
+                    try:
+                        choices = gpl.build_choices_read(d, rnd, want=1)
+                    except ValueError:
+                        form = "cause"
+                        choices = gpl.build_choices_cause(d, rnd)
         elif a.exam and shape_i == "aaa":
             # read / cause / trace / evidence / dbgread / dbgconf / fix / patch
             r_form = rnd.random()
@@ -4340,6 +4935,14 @@ def main():
         if choices:
             choices = rebalance_position(repo, choices)
         opt_style = choice_style(rnd, choices, form) if choices else "prose"
+        if shape_i == "aclv6" and form == "select":
+            opt_style = "cli"          # ★プレフィックス長が読めるようそのまま出す
+        if shape_i == "acl" and form == "patch":
+            opt_style = "cli"          # ★挿入位置が本題なのでコマンドのまま出す
+        if shape_i == "acl" and form == "select":
+            # ★select は「ACL の行そのもの」を選ばせる形。散文に均すと
+            #   ワイルドカードが読めなくなるので常にコマンドのまま提示する。
+            opt_style = "cli"
         if shape_i == "v6redist" and form == "fix":
             # ★v6redist の fix は常に CLI 提示にする。手段の散文表現では
             # 「参照やメトリックの是正も含むのか」が曖昧になり、提示と
@@ -4363,6 +4966,12 @@ def main():
                 reqs = v6redist_requirements(d, rnd)
             elif shape_i == "aaa":
                 reqs = aaa_requirements(d, rnd, form)
+            elif shape_i == "aclv6":
+                reqs = aclv6_requirements(d, rnd)
+            elif shape_i == "acl":
+                reqs = (acl_requirements_patch(d, rnd) if form == "patch"
+                        else acl_requirements_fix(d, rnd) if form == "fix"
+                        else acl_requirements(d, rnd, form))
             else:
                 reqs = chain_requirements(
                     rnd, style=pol["style"] if pol else "inline")
@@ -4371,7 +4980,7 @@ def main():
               f"nodes={len(gmp.NODES) if shape_i == 'mploop' else len(d.get('roles', [d.get('A'), d.get('B')]))}", flush=True)
 
         if shape_i in ("urpf", "bgpdbg", "leakmap", "ospfv3pl", "v6redist",
-                       "aaa"):
+                       "aaa", "acl", "aclv6"):
             collected = {}                 # 紙面専用: 実機展開・収集を行わない
         elif a.no_lab:
             collected = {(c["node"], c["command"]): "(PLACEHOLDER: --no-lab)"
@@ -4430,6 +5039,22 @@ def main():
             q_md = question_md_bgpdbg(d, stamp, rnd)
             a_md = answer_md_bgpdbg(d, stamp, a.seed, subseed)
             lint += list(gpb.VARIANTS) + ["variant=", "ルーブリック"]
+        elif shape_i == "aclv6":
+            blocks = aclv6_evidence(d, rnd, form)
+            q_md = question_md_aclv6(d, blocks, choices, stamp, form=form,
+                                     reqs=reqs, style=opt_style)
+            a_md = answer_md_aclv6(d, choices, stamp, a.seed, subseed, form)
+            lint += list(gp6.KINDS) + ["world=", "_select_works",
+                                       "_select_correct"]
+        elif shape_i == "acl":
+            blocks = (acl_evidence_blocks(d, rnd) if form == "evidence"
+                      else acl_logread_blocks(d, rnd) if form == "logread"
+                      else acl_evidence(d, rnd, form))
+            q_md = question_md_acl(d, blocks, choices, stamp, form=form,
+                                   reqs=reqs, style=opt_style)
+            a_md = answer_md_acl(d, choices, stamp, a.seed, subseed, form)
+            lint += list(gpl.KINDS) + ["world=", "_select_works",
+                                       "_select_correct", "role="]
         elif shape_i == "urpf":
             blocks, _st = urpf_evidence(d, rnd)
             q_md = question_md_urpf(d, blocks, choices, stamp, sites=sites,
@@ -4476,7 +5101,17 @@ def main():
         q_md = obfuscate_md(q_md, random.Random(subseed ^ 0x0BF0),
                             essay=(shape_i == "bgpdbg"),
                             # ★patch も設問文が情報の担い手(「接続を失わずに」「移行の途中」)
-                            keep_ask=(form in ("evidence", "patch", "dbgconf", "authread")))
+                            # ★acl の read も同様(BL-106・4例目)= 設問文が
+                            #   **向き**(転送される/破棄される)と**選ぶ個数**を担っており、
+                            #   汎用文に均すと解答不能になる。
+                            keep_ask=(form in ("evidence", "patch", "dbgconf",
+                                               "authread")
+                                      or (shape_i == "acl"
+                                          and form in ("read", "counter",
+                                                       "patch", "logread",
+                                                       "evidence"))
+                                      or (shape_i == "aclv6"
+                                          and form in ("read", "counter"))))
         leak_lint(q_md, lint)
         with open(f"{repo}/questions/{stamp}.md", "w", encoding="utf-8") as fh:
             fh.write(q_md)

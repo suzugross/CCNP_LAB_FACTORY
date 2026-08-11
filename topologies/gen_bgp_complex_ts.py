@@ -422,7 +422,18 @@ def main():
                 continue
             s, v = pk
             commit_sess(s, v, ft)
+            # ★★両側に注入する(BL-061・2026-08-11 実機確定)。
+            #   片側だけ外しても**セッションは Established のまま**になる
+            #   (残った側が開いた接続を相手が受理する接続レース。実測=
+            #    poc/acl/README.md §15-1: 片側 Established / 両側 Idle)。
+            #   片側注入では「症状ゼロ・かつ採点は経路ベースなので全チェック PASS」
+            #   という**見えない故障**になり、チケットだけが存在しない障害を訴える
+            #   (GEN-BGPCX-5926 で顕在化)。両側にすれば実機でも Idle になり、
+            #   sim_missing() の予測とも一致する。
+            other = s["y"] if v == s["x"] else s["x"]
             mut["no_upd_src"].add((v, sid(s)))
+            mut["no_upd_src"].add((other, sid(s)))
+            used_node.add(other)      # 相手側にも別故障を重ねない
         elif ft == "missing_ebgp_multihop":
             pk = pick_sess({"emhop"})
             if not pk:
@@ -543,6 +554,9 @@ def main():
                 ok = False
             for v in (s["x"], s["y"]):
                 k = (v, sid(s))
+                # ★no_upd_src は**両側に注入**される(上の注入部を参照)。
+                #   片側だけなら実機はセッションを維持するので、
+                #   片側での断判定はしてはならない。
                 if k in mut["remote_as_wrong"] or k in mut["neighbor_ip_wrong"] \
                    or k in mut["shutdown"] or k in mut["no_upd_src"] \
                    or k in mut["no_multihop"] or k in mut["password"] \
@@ -871,8 +885,14 @@ def main():
             return [{"node": Rn, "parents": rb(Rn),
                      "lines": [f"no neighbor {peer_ip_of(f)} shutdown"]}]
         if ft == "missing_update_source":
+            # ★両側に注入しているので、両側で戻す(BL-061)
+            sX = next(x for x in sessions if sid(x) == f["session"])
+            own_ip = sX["x_ip"] if Rn == sX["x"] else sX["y_ip"]
+            peer = f["peer"]
             return [{"node": Rn, "parents": rb(Rn),
-                     "lines": [f"neighbor {peer_ip_of(f)} update-source Loopback0"]}]
+                     "lines": [f"neighbor {peer_ip_of(f)} update-source Loopback0"]},
+                    {"node": peer, "parents": rb(peer),
+                     "lines": [f"neighbor {own_ip} update-source Loopback0"]}]
         if ft == "missing_ebgp_multihop":
             return [{"node": Rn, "parents": rb(Rn),
                      "lines": [f"neighbor {peer_ip_of(f)} ebgp-multihop 2"]}]

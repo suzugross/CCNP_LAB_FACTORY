@@ -34,6 +34,9 @@
 | bgpdbg | gen_paper_bgpdbg.py | 1.11.b の一部 / 4.3 の一部 | 紙面初の記述式 |
 | leakmap | gen_paper_leakmap.py | 1.5(EIGRP) / 1.2 | fix/cause/read の 3 形 |
 | ospfv3pl | gen_paper_ospfv3pl.py | 1.10.a の一部 / 1.2 | fix/read/patch。dual_select(両掛け) |
+| aaa | gen_paper_aaa.py | 3.1 | 故障15種・出題形9(BL-101/103) |
+| acl | gen_paper_acl.py | 3.2.a / 1.2 | ★ロールを衣装として着せる。6ロール・8形(BL-106) |
+| aclv6 | gen_paper_aclv6.py | 3.2.b | IPv4 との差分が主題。select/read/cause/counter(BL-106 P3) |
 | v6redist | gen_paper_v6redist.py | 1.4(IPv6 AF) | fix/cause/read/trace(ping 3値) |
 
 ### 再利用できる横断資産(新ファミリ実装の初速を決める)
@@ -93,9 +96,9 @@
 
 | 項番 | 内容 | 紙面 | ラボ |
 |---|---|---|---|
-| 3.1 | **AAA(TACACS+/RADIUS/local・method list)** | ❌ | GEN-RADIUS-100 / ENCOR-EDGE-HARDEN-01 |
-| 3.2.a | **IPv4 ACL(standard/extended/time-based)単独読解** | △ pbr/urpf の道具 | ACL 道場(gen_list_dojo) |
-| 3.2.b | **IPv6 traffic filter** | ❌ | なし |
+| 3.1 | **AAA(TACACS+/RADIUS/local・method list)** | ✅ **aaa(BL-101/103)** | GEN-RADIUS-100 / GEN-AAAGRP / ENCOR-EDGE-HARDEN-01 |
+| 3.2.a | **IPv4 ACL(standard/extended/time-based)単独読解** | ✅ **acl(BL-106・2026-08-10)** | ACL 道場(gen_list_dojo) |
+| 3.2.b | **IPv6 traffic filter** | ✅ **aclv6(BL-106 P3・2026-08-10)** | PoC のみ(poc/acl §14) |
 | 3.2.c | uRPF | ✅ urpf | PoC |
 | 3.3 | **CoPP** | ❌ | ENCOR-COPP-01/02/03 |
 | 3.4 | **IPv6 First Hop Security**(RA guard/DHCP guard/binding table/ND inspection/source guard) | ❌ | **なし**(完全空白) |
@@ -192,6 +195,9 @@
 - ★ IPv4 ACL との**差分が本題**=
   - **末尾の暗黙 permit が 2 行**(`permit icmp any any nd-na` / `nd-ns`)→ ND が暗黙で通る。
     → **明示 deny を書くと ND が落ちて隣接ごと壊れる**(最大の考えさせポイント)。
+    ★**実測で確認済み**(2026-08-10・poc/acl §14-2 の V7)= 隣接が **INCMP** になり、
+    `permit icmp any any nd-ns` / `nd-na` を手前に置けば回復する。
+    ★ただし**最初の測定では誤った結論を出しかけた**(§14-2b)。測定設計に注意。
   - ワイルドカードマスクではなく**プレフィックス長**表記。
   - 適用コマンドが `ip access-group` ではなく **`ipv6 traffic-filter`**(RA guard/ND inspection とは別物)。
   - リンクローカル宛/発の扱い・`sequence` 番号。
@@ -239,6 +245,18 @@
 10. **selftest で一意性を全組合せ × N seed 検証**。ただし**機械検証は自モデルの誤りを検出できない**
     (BL-081 の教訓)→ 挙動の根拠は実測 PoC か、実測済み既存知見に紐付けること。
 11. 実機挙動に依存する論点は `poc/<名前>/README.md` に実測表を作ってから実装に入る。
+12. ★★**「定説と違う」という結論が出たら、それを最も疑う**(BL-106 で2度踏んだ)。
+    採用する前に、**条件を1つずつ変えた対照**を必ず取る。効いた条件は実際に次の4つだった=
+    **①観測指標**(ping の成否ではなく隣接の REACH/INCMP だった)
+    **②参照の経路**(直接指定か route-map 経由か)
+    **③方向**(in か out か)
+    **④投入の順序**(定義→参照か参照→定義か)。
+    「効いていないように見える」ときは、**その観測が本当に対象を捉えているか**を
+    カウンタの内訳で裏取りする(自分の permit 行が対象を覆っていないか)。
+13. ★**紙面 shape は実機フルサイクルの安全網が無い**ことを自覚する。
+    ラボ問(broken→fix→100)はモデルが実機と食い違えば必ず露見するが、
+    **紙面は写像モデルが唯一の真実**なので誤りが露見しない。
+    → 紙面ほど PoC の設計(対照の有無)に注意が要る。BL-106 の誤り2件とも紙面で起きた。
 
 ---
 
