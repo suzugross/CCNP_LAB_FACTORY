@@ -48,6 +48,7 @@ import gen_paper_aclv6 as gp6   # noqa: E402  (aclv6=IPv6フィルタ・BL-106 P
 import gen_paper_ospfv3pl as gpo  # noqa: E402  (ospfv3pl=OSPFv3 prefix-list・BL-097)
 import gen_paper_v6redist as gpv  # noqa: E402  (v6redist=OSPFv3⇄EIGRPv6 相互再配送・BL-098)
 import gen_paper_aaa as gpa    # noqa: E402  (aaa=IOS AAA(RADIUS)読解・BL-101)
+import gen_paper_bgpbest as gbb  # noqa: E402  (bgpbest=BGPベストパス読解・BL-112)
 
 KINDS = ["missing", "no_seed", "filter", "wrong_id"]
 # ring(ループ)の正解法軸。arena の method をそのまま借りるが、tag は紙面専用の追加軸
@@ -2286,9 +2287,7 @@ def question_md_aclv6(d, blocks, choices, stamp, form="cause", reqs=None,
 
 {terse_jp(intro)}
 
-```
-   {m['DN']} (顧客の側) --- {m['DUT']} (被験のデバイス) --- {m['UP']} (サーバの側)
-```
+{mermaid_acl_chain(m)}
 
 ## 要件
 
@@ -2389,21 +2388,22 @@ def acl_topo(d):
     図から読めないと適用点の設問が成立しない。
     """
     m, o = d["m"], f"{d['oct1']}.{d['oct2']}"
+    fig = [mermaid_acl_chain(m, mgmt=(d["role"] == "filter"))]
+    rows = ["| 区間 | 被験デバイス側のインターフェイス | ネットワーク |",
+            "|------|----------------------------------|--------------|"]
     if d["role"] != "filter":
-        return (f"```\n"
-                f"   {m['DN']} (顧客の側)                {m['UP']} (サーバの側)\n"
-                f"        |  {o}.253.0/24        {o}.254.0/24  |\n"
-                f"        +--------- {m['DUT']} ---------+\n"
-                f"                (被験のデバイス)\n```")
-    return (f"```\n"
-            f"   {m['DN']} (顧客の側)                     "
-            f"{m['UP']} (サーバの側)\n"
-            f"        |  {o}.253.0/24        {o}.254.0/24  |\n"
-            f"  {d['if_dn']} --------- {m['DUT']} --------- {d['if_up']}\n"
-            f"                 (被験のデバイス)\n"
-            f"                        |\n"
-            f"                  {d['if_mgmt']}\n"
-            f"              {o}.{d['mgmt_o3']}.0/24 (管理セグメント)\n```")
+        # 適用点を問わないロールでは、従来どおり IF 名を出さない
+        rows += [f"| {m['DN']}（顧客の側） ⇔ {m['DUT']} | — | {o}.253.0/24 |",
+                 f"| {m['DUT']} ⇔ {m['UP']}（サーバの側） | — | {o}.254.0/24 |"]
+    else:
+        # ★BL-109: 要件文が IF 名を名指しするので、どれが顧客の側かを必ず示す
+        rows += [f"| {m['DN']}（顧客の側） ⇔ {m['DUT']} | `{d['if_dn']}` |"
+                 f" {o}.253.0/24 |",
+                 f"| {m['DUT']} ⇔ {m['UP']}（サーバの側） | `{d['if_up']}` |"
+                 f" {o}.254.0/24 |",
+                 f"| {m['DUT']} ⇔ 管理セグメント | `{d['if_mgmt']}` |"
+                 f" {o}.{d['mgmt_o3']}.0/24 |"]
+    return "\n".join(fig) + "\n\n" + "\n".join(rows)
 
 
 def acl_apply_block(d):
@@ -3320,6 +3320,49 @@ def urpf_requirements(d, rnd, sites):
     return finalize_reqs(core, rnd)
 
 
+def mermaid_urpf(d):
+    """uRPF の構成図。エッジ1台＋上流 ISP 2台(2本のアップリンク)。"""
+    e, a, b = d["m"]["EDGE"], d["m"]["ISPA"], d["m"]["ISPB"]
+    return "\n".join([
+        "```mermaid",
+        f"graph {d.get('_mmdir', 'TD')}",
+        f'  EDGE["{e}<br/>エッジ・被験のデバイス"]',
+        f'  ISPA["{a}<br/>ISP-A"]',
+        f'  ISPB["{b}<br/>ISP-B"]',
+        "  EDGE --- ISPA",
+        "  EDGE --- ISPB",
+        "```"])
+
+
+def topo_links_urpf(d):
+    """図の正典となるリンク一覧(アップリンクのIFとネットワーク)。"""
+    e, a, b = d["m"]["EDGE"], d["m"]["ISPA"], d["m"]["ISPB"]
+    return "\n".join([
+        "| 区間 | エッジ側インターフェイス | ネットワーク |",
+        "|------|--------------------------|--------------|",
+        f"| {e} ⇔ {a}（ISP-A） | Ethernet0/0 | {d['link_a']}.0/30 |",
+        f"| {e} ⇔ {b}（ISP-B） | Ethernet0/1 | {d['link_b']}.0/30 |"])
+
+
+def mermaid_acl_chain(m, mgmt=False):
+    """ACL 系の直列3台(顧客側 --- 被験デバイス --- サーバ側)の構成図。
+
+    acl / aclv6 で共用する。トポロジ自体は主題ではないので役割だけを示し、
+    インターフェイス名とアドレスは直下のリンク一覧(正典)に持たせる。
+    mgmt=True で管理セグメントの枝を足す(acl の filter ロール)。
+    """
+    lines = ["```mermaid", "graph LR",
+             f'  DN["{m["DN"]}<br/>顧客の側"]',
+             f'  DUT["{m["DUT"]}<br/>被験のデバイス"]',
+             f'  UP["{m["UP"]}<br/>サーバの側"]',
+             "  DN --- DUT",
+             "  DUT --- UP"]
+    if mgmt:
+        lines += ['  MGMT(["管理セグメント"])', "  DUT --- MGMT"]
+    lines.append("```")
+    return "\n".join(lines)
+
+
 def question_md_urpf(d, blocks, choices, stamp, sites=None, form="fix", reqs=None,
                      style="prose"):
     m = d["m"]
@@ -3339,12 +3382,7 @@ def question_md_urpf(d, blocks, choices, stamp, sites=None, form="fix", reqs=Non
              "満たされることを確実にするために、必要とされる手順は、どれですか。"
              "(1つを選択してください)")
     opts = render_options(choices, style)
-    topo = (f"```\n"
-            f"          {e} (エッジ・被験のデバイス)\n"
-            f"   {'Ethernet0/0'} |            | {'Ethernet0/1'}\n"
-            f"  {d['link_a']}.0/30      {d['link_b']}.0/30\n"
-            f"        |                    |\n"
-            f"      {a} (ISP-A)        {b} (ISP-B)\n```")
+    topo = mermaid_urpf(d) + "\n\n" + topo_links_urpf(d)
     return f"""# 問題 {stamp} : 送信元アドレスの検証のための分析
 
 {FIXED_NOTE}
@@ -3612,6 +3650,33 @@ LEAKMAP_INTRO = (
     "EIGRP {asn} が構成されています。")
 
 
+def mermaid_leakmap(d):
+    """leakmap の構成図。v6redist と同じ流儀(図は接続だけ・アドレスは表が正典)。
+
+    ★エッジにアドレスを描かない: mermaid はラベルをエッジの中点に固定で置くため、
+      箱と衝突する(BL-087 の実測)。数値は直下のリンク一覧で読む。
+    """
+    adv, rcv = d["m"]["ADV"], d["m"]["RCV"]
+    return "\n".join([
+        "```mermaid",
+        f"graph {d.get('_mmdir', 'TD')}",
+        f'  ADV["{adv}<br/>集約・リークの実施点"]',
+        f'  RCV["{rcv}<br/>受信側"]',
+        "  ADV --- RCV",
+        "```"])
+
+
+def topo_links_leakmap(d):
+    """図の正典となるテキスト表現(ループバックとリンクの一覧)。"""
+    adv, rcv = d["m"]["ADV"], d["m"]["RCV"]
+    rows = ["| 対象 | 内容 |", "|------|------|",
+            f"| {adv} のループバック | {', '.join(d['los'])} |",
+            f"| {adv} の運用系ループバック | {d['ops_lo']} |",
+            f"| {adv} ⇔ {rcv} のリンク | {d['link']}.0/24"
+            f"（{adv}={d['link']}.1 / {rcv}={d['link']}.2・{d['ifname']}） |"]
+    return "\n".join(rows)
+
+
 def question_md_leakmap(d, blocks, choices, stamp, form="fix", reqs=None,
                         style="prose"):
     adv, rcv = d["m"]["ADV"], d["m"]["RCV"]
@@ -3637,9 +3702,7 @@ def question_md_leakmap(d, blocks, choices, stamp, form="fix", reqs=None,
              "満たされることを確実にするために、必要とされる手順は、どれですか。"
              "(1つを選択してください)")
         opts = render_options(choices, style)
-    topo = (f"```\n  [{adv}]  Lo: {', '.join(d['los'])} (+ {d['ops_lo']})\n"
-            f"    {d['link']}.1 ─────({d['ifname']})───── {d['link']}.2\n"
-            f"  [{rcv}]\n```")
+    topo = mermaid_leakmap(d) + "\n\n" + topo_links_leakmap(d)
     fam_missing = d["kind"] in ("no_leakmap", "rmap_undefined",
                                 "pl_wrong_prefix", "not_injected",
                                 "shared_map_wrong_target")
@@ -3991,6 +4054,40 @@ O3PL_INTRO = (
     "そして、すべてのルータにおいて、OSPFv3 のプロセス {p} が構成されています。")
 
 
+def mermaid_ospfv3pl(d):
+    """OSPFv3 エリア間フィルタの構成図。R2 を ABR とする3エリアの星形。
+
+    ★アドレスはエッジに描かず、直下のリンク一覧を正典にする(BL-087 の流儀)。
+      エリアはノードのラベルに入れる(区間の帰属が図から読めることが要点)。
+    """
+    return "\n".join([
+        "```mermaid",
+        f"graph {d.get('_mmdir', 'LR')}",
+        f'  R1["R1<br/>Area {d["a1"]}"]',
+        f'  R2["R2<br/>ABR<br/>Area {d["a1"]} / 0 / {d["a2"]}"]',
+        '  RA["Ra<br/>Area 0<br/>ループバック収容"]',
+        f'  R3["R3<br/>Area {d["a2"]}"]',
+        "  R1 --- R2",
+        "  R2 --- RA",
+        "  R2 --- R3",
+        "```"])
+
+
+def topo_links_ospfv3pl(d):
+    """図の正典となるリンク一覧(アドレス・インターフェイス・エリア)。"""
+    los_t = ", ".join(gpo.fmt(h, h, 64) for h in d["los"])
+    rows = ["| 区間 | インターフェイス | ネットワーク | エリア |",
+            "|------|------------------|--------------|--------|",
+            f"| R1 ⇔ R2 | E0/0 | {gpo.fmt(*d['lnk']['a1'], 64)} | {d['a1']} |",
+            f"| R2 ⇔ Ra | E0/1 | {gpo.fmt(*d['lnk']['a0'], 64)} | 0 |",
+            f"| R2 ⇔ R3 | E0/2 | {gpo.fmt(*d['lnk']['a2'], 64)} | {d['a2']} |",
+            "",
+            f"- R1 の E0/0 セカンダリ: {gpo.fmt(*d['lnk']['a1b'], 64)}"
+            f"（Area {d['a1']}）",
+            f"- Ra のループバック: {los_t}（Area 0）"]
+    return "\n".join(rows)
+
+
 def question_md_ospfv3pl(d, blocks, choices, stamp, form="fix", reqs=None,
                          style="prose"):
     state_blocks, cfg_blocks = blocks
@@ -4017,27 +4114,7 @@ def question_md_ospfv3pl(d, blocks, choices, stamp, form="fix", reqs=None,
              "満たされることを確実にするために、必要とされる手順は、どれですか。"
              "(1つを選択してください)")
         opts = render_options(choices, style)
-    los_t = ", ".join(gpo.fmt(h, h, 64) for h in d["los"])
-    # エリアラベルは各リンク区間の中央に動的配置(ずれると誤読を招く)
-    main = (f"  [R1]--(E0/0: {gpo.fmt(*d['lnk']['a1'], 64)})--[R2]"
-            f"--(E0/1: {gpo.fmt(*d['lnk']['a0'], 64)})--[Ra]")
-    i_r2, i_ra = main.index("[R2]"), main.index("[Ra]")
-    hdr = [" "] * len(main)
-
-    def put(center, text):
-        s = max(0, center - len(text) // 2)
-        hdr[s:s + len(text)] = list(text)
-
-    put((6 + i_r2) // 2, f"Area {d['a1']}")
-    put((i_r2 + 4 + i_ra) // 2, "Area 0")
-    branch = (" " * (i_r2 + 2)
-              + f"└--(E0/2: {gpo.fmt(*d['lnk']['a2'], 64)})--[R3]"
-              + f"  Area {d['a2']}")
-    topo = ("```\n" + "".join(hdr).rstrip() + "\n" + main + "\n"
-            + branch + "\n"
-            f"  R1 E0/0 セカンダリ: {gpo.fmt(*d['lnk']['a1b'], 64)}"
-            f" (Area {d['a1']})\n"
-            f"  Ra Loopback: {los_t} (Area 0)\n```")
+    topo = mermaid_ospfv3pl(d) + "\n\n" + topo_links_ospfv3pl(d)
     if form == "read":
         sympt = "構成の適用後の、観測の結果が、確認されようとしています。"
     else:
@@ -4848,6 +4925,254 @@ def answer_md_aaa(d, choices, stamp, master_seed, subseed, form):
 
 
 # --------------------------------------------------------------------------
+# shape=bgpbest — BGP ベストパス読解 (gen_paper_bgpbest・BL-112)
+# ★紙面専用: 表・detail は poc/bgpbest 実測の byte 写し(レンダラ selftest で保証)。
+# ★決定リストの挙動は bgpbest_model.py(B番号= poc/bgpbest/README.md)。
+# --------------------------------------------------------------------------
+def pick_draw_bgpbest(qseed, kind, forms=None, worlds=None):
+    for kk in range(200):
+        s = qseed + kk * 149
+        rnd = random.Random(s)
+        world = None
+        if worlds and gbb.worlds_for(kind):
+            cand = [w for w in gbb.worlds_for(kind) if w in worlds]
+            if not cand:
+                raise SystemExit(
+                    f"bgpbest kind={kind} は worlds {worlds} を持ちません")
+            world = rnd.choice(cand)
+        try:
+            return s, gbb.verify_choices(gbb.draw(rnd, kind=kind, world=world))
+        except ValueError:
+            continue
+    raise SystemExit(f"bgpbest kind={kind} が成立する seed がありません({qseed})")
+
+
+def bgpbest_blocks(d, rnd, form):
+    """紙面に出すブロック(state, cfg)。
+
+    ★detail は「それでしか読めない情報」がある盤面で必ず出す(igp= (metric N)/
+    rid= RID と BGP Bestpath: 行/ nh_invalid= (inaccessible)/ oldest= Updated on)。
+    表だけで足りる盤面でも 35% は detail を添えて情報過多にする(簡単すぎ防止)。
+    """
+    v = d["vname"]
+    # ★read 形は「取り下げ直後・選出前」(B1 実測の no best path 過渡)で見せる。
+    #   `>` を出すと答えが表に書いてあるため。
+    nb = form == "read"
+    state = [f"```\n{v}# show ip bgp\n{gbb.render_table(d, nobest=nb)}\n```"]
+    if d["detail_need"] or d["kind"] in ("med_cross", "lp_ebgp") \
+            or rnd.random() < 0.35:
+        state.append(f"```\n{v}# show ip bgp {d['prefix']}\n"
+                     f"{gbb.render_detail(d, nobest=nb)}\n```")
+    if d["kind"] == "remote_lp":
+        rv = gbb.remote_view(d)
+        # ★「次の抜粋」と書かない(出力順のランダム化で別ブロックの直前に来ると
+        #   存在しない物を指す文になる)。PE01 を名指しして位置非依存にする。
+        state.append("PE01 の抜粋は、対向 AS の運用者から、提供を受けたもの"
+                     "です。\n"
+                     f"```\nPE01# show ip bgp {d['own_prefix']}\n"
+                     f"{gbb.render_detail(rv)}\n```")
+    cfg = [f"```\n{v}# show running-config | section router bgp\n"
+           f"{gbb.bgp_cfg_block(d)}\n```"]
+    rm = gbb.rmap_cfg_block(d)
+    if rm:
+        cfg.append(f"```\n{v}# show running-config | section route-map\n"
+                   f"{rm}\n```")
+    st = gbb.static_cfg_block(d)
+    if st:
+        cfg.append(f"```\n{v}# show running-config | include ip route\n"
+                   f"{st}\n```")
+    bc = gbb.border_cfg_block(d)
+    if bc:
+        cfg.append(f"```\n{d['bname']['c1']}# show running-config | "
+                   f"section router bgp\n{bc}\n```")
+    return state, cfg
+
+
+def bgpbest_symptom(d, form):
+    # ★oldest 決着の盤面は「クリア/リフレッシュ未実施」を明記する。
+    #   Updated on はソフト・リフレッシュでも更新されてしまう(B16 で確認)ので、
+    #   これを言わないと受信順が厳密には読めない(poc/bgpbest/README.md)。
+    fresh = ("なお、各経路の受信の後、セッションのクリア、および、ソフト・"
+             "リフレッシュは、実施されていません。"
+             if d["expect"] == "oldest" else "")
+    if form == "read":
+        return ("外部との 1 つのセッションが失われ、それまで使用されていた"
+                "ところの経路は、取り下げられました。ルータは、残るところの"
+                "経路からの、ベストパスの選出を、行おうとしています。"
+                "示されているところの出力は、その時点で、採取されたものです。"
+                + fresh)
+    if form == "why":
+        return ("ベストパスの選出の結果について、その根拠が、"
+                "確認されようとしています。") + fresh
+    if form == "fix":
+        if d["world"] in ("return_med", "return_prepend"):
+            return (f"対向 AS({d['as_a']})からの、戻りのトラフィックが、"
+                    f"{d['ip']['a1']} 側のリンクに、集中しています。"
+                    "なお、対向 AS 内の経路選択は、既定値のままです。")
+        return (f"現在、{d['prefix']}/24 への転送は、要件に適合しないところの"
+                "経路を、使用しています。")
+    k = d["kind"]
+    if k == "med_cross":
+        return ("事業者との合意に基づき、MED の値によって、経路の優先が、"
+                "表現されています。しかしながら、ベストパスの選出の結果は、"
+                "その値を、反映していません。")
+    if k == "weight_remote":
+        return (f"運用チームは、AS 全体のトラフィックを {d['ispa']} 経由と"
+                f"することを意図して、境界ルータ {d['bname']['c1']} に、"
+                f"示されているところの設定を、投入しました。しかしながら、"
+                f"{d['vname']} のベストパスは、変更されていません。")
+    if k == "lp_ebgp":
+        return ("運用チームは、対向 AS の経路選択に影響を与えることを意図して、"
+                "示されているところの route-map を、外部の近隣に対して、"
+                "適用しました。しかしながら、対向 AS から受信するところの"
+                "トラフィックの経路は、変更されていません。")
+    if k == "remote_lp":
+        return (f"運用チームは、戻りのトラフィックを {d['ip']['a2']} 側の"
+                "リンクへ移すことを意図して、示されているところの MED を、"
+                "設定しました。対向 AS の機器において、値が受信されていることは、"
+                "確認できています。しかしながら、トラフィックは、"
+                "変更されていません。")
+    if k == "nh_invalid":
+        return (f"境界ルータ {d['bname']['c1']} を経由するところの経路が、"
+                "優先されるように、意図されています。しかしながら、"
+                "その経路は、選択されていません。")
+    return "ベストパスの選出が、意図されたとおりに、行われていません。"
+
+
+def bgpbest_intro(d):
+    lines = [f"自社(AS {d['own_as']})のルータ {d['vname']} は、"
+             f"外部のネットワーク {d['prefix']}/24 への到達性を、"
+             "複数の経路を通じて、確立しています。"]
+    keys = {p["key"] for p in d["paths"]}
+    if keys & {"a1", "a2"}:
+        lines.append(f"{d['ispa']}(AS {d['as_a']}) とは、"
+                     + ("2 本のリンクで、" if {"a1", "a2"} <= keys else "")
+                     + "接続されています。")
+    if "b1" in keys:
+        lines.append(f"{d['ispb']}(AS {d['as_b']}) とも、接続されています。")
+    if keys & {"c1", "c2"}:
+        lines.append("一部の経路は、自 AS 内の境界ルータから、iBGP で、"
+                     "学習されています。")
+    if d["kind"] == "remote_lp" or d.get("world") in ("return_med",
+                                                      "return_prepend"):
+        lines.append(f"自社は、{d['own_prefix']}/24 を、両方のリンクを通じて、"
+                     "広告しています。")
+    return " ".join(lines)
+
+
+def question_md_bgpbest(d, blocks, choices, stamp, form="read", reqs=None):
+    state_blocks, cfg_blocks = blocks
+    if reqs is None:
+        reqs = gbb.requirements(d, random.Random(0), form)
+    if form == "fix":
+        q = ("示されているところのすべての要件が満たされることを確実にするために、"
+             "適用されなければならない構成は、どれですか。(1つを選択してください)")
+        opts = render_options(choices, "cli")
+    elif form == "cause":
+        q = ("この事象の原因である可能性が、最も高いものは、どれですか。"
+             "(1つを選択してください)")
+        opts = render_options(choices, "prose")
+    elif form == "why":
+        q = ("示されているところの出力において、ベストパスの選出を決定づけた"
+             "要素は、どれですか。(1つを選択してください)")
+        opts = render_options(choices, "prose")
+    else:
+        q = (f"示されているところの出力に基づいて、この後、{d['prefix']}/24 の"
+             "ベストパスとして選出され、転送に使用されるところの経路は、"
+             "どれですか。(1つを選択してください)")
+        opts = render_options(choices, "prose")
+    sympt = bgpbest_symptom(d, form)
+    cfg_sec = ("\n## 設定抜粋\n\n" + chr(10).join(cfg_blocks)) if cfg_blocks else ""
+    return f"""# 問題 {stamp} : BGP 経路選択 の 分析
+
+{FIXED_NOTE}
+
+## トポロジ
+
+{terse_jp(bgpbest_intro(d))}
+
+{messy_mermaid(gbb.mermaid_bgpbest(d))}
+
+## 要件
+
+{chr(10).join(reqs)}
+
+## 現在の状態
+
+{terse_jp(sympt)}
+
+{chr(10).join(state_blocks)}
+{cfg_sec}
+
+## 設問
+
+{q}
+
+## 選択肢
+
+{opts}
+"""
+
+
+def answer_md_bgpbest(d, choices, stamp, master_seed, subseed, form):
+    letters = [chr(65 + i) for i in range(len(choices))]
+    hits = [l for l, c in zip(letters, choices) if c[1]]
+    correct = "・".join(hits)
+    why = "\n".join(f"- **{l}**: {c[2]}" for l, c in zip(letters, choices)
+                    if c[2])
+    import bgpbest_model as bm
+    steps = []
+    for step, _sv, killed in d["trace"]:
+        names = "、".join(gbb.path_label(d, k) for k in killed)
+        steps.append(f"- {bm.STEP_JA[step]} — ここで {names} が除外される。")
+    trace_md = "\n".join(steps) if steps else "- (候補が 1 本しかない)"
+    world = d.get("world") or "-"
+    return f"""# 解答 {stamp}
+
+## 正解
+
+**{correct}**
+
+## 解説
+
+- 種別: `bgpbest/{d['kind']}` — 要件世界 `{world}` / 決め手 `{d['expect']}`
+- 形式: `{form}`
+- 生成: `gen_paper_mcq.py --shape bgpbest --seed {master_seed}` (sub-seed {subseed})
+
+### 消去の遍歴(決定リストの適用)
+
+{trace_md}
+
+決め手= **{bm.STEP_JA.get(d['expect'], d['expect'])}**。
+
+{why}
+
+## ★この分野の最重要知見(BL-112 PoC 実測・poc/bgpbest/README.md)
+
+**ベストパスは weight → LOCAL_PREF → 自機起源 → AS-PATH 長 → origin → MED →
+eBGP/iBGP → IGP メトリック → (最古) → RID の順で、最初に差が付いた段で決まる。**
+
+- **weight はローカル専用**であり、設定したルータの外には作用しない(伝播しない)。
+- **LOCAL_PREF は iBGP でのみ交換される。** eBGP の近隣へ set しても送信されない
+  (設定は無警告で受理される= 「設定はあるのに効かない」型の罠・B16 実測)。
+- **MED は同一の隣接 AS から受信した経路の間でしか比較されない**(B8/P4 実測)。
+  異なる AS 間で比較させるには `bgp always-compare-med` が要る(clear 不要で反転)。
+- **next-hop が解決できない経路は、候補にすら入らない。** ★表(`show ip bgp`)では
+  `*`(valid) のまま表示され見分けが付かない。detail の `(inaccessible)` が唯一の
+  証拠(B15 実測)。
+- eBGP 同士の全段タイは**最も古い経路が勝ち続ける**(新しい等価経路は奪えない・
+  B13b 実測)。`bgp bestpath compare-routerid` を入れるとこの段は使われなくなり、
+  RID 最小で決定化される(clear 不要・11 秒・B13c 実測)。
+- detail の `(metric N)` は **next-hop への IGP メトリック**(段8 の唯一の観測点)。
+  MED 欠落の経路は Metric 列が空欄になり、detail では `metric` 句ごと消える(B17)。
+
+## ENARSI ブループリント
+
+- 1.0 Layer 3 — Troubleshoot BGP path preference (attributes and best-path) (1.11.c)
+"""
+
+
+# --------------------------------------------------------------------------
 # 展開・収集・撤収
 # --------------------------------------------------------------------------
 def sh(repo, args, **kw):
@@ -4971,7 +5296,7 @@ def main():
     ap.add_argument("--shape",
                     choices=["chain", "ring", "pbr", "urpf", "bgpdbg", "mploop",
                              "leakmap", "ospfv3pl", "v6redist", "aaa", "acl",
-                             "aclv6", "mixed"],
+                             "aclv6", "bgpbest", "mixed"],
                     default="chain",
                     help="chain=再配送欠落/誤設定系(既定) / ring=再配送リングの定常ループ(難5)"
                          " / pbr=PBR×ワイルドカードACL(BL-081)"
@@ -4982,11 +5307,13 @@ def main():
                          " / ospfv3pl=OSPFv3エリア間prefix-list(BL-097・紙面専用)"
                          " / v6redist=OSPFv3⇄EIGRPv6相互再配送の手段選択"
                          "(BL-098・紙面専用)"
+                         " / bgpbest=BGPベストパス読解(BL-112・紙面専用)"
                          " / mixed=問題ごとに形・種別を抽選(ごちゃまぜ)")
     ap.add_argument("--forms", default="",
                     help="出題形を絞る(カンマ区切り)。shape=acl: select,read,"
                          "cause,counter,patch,fix,evidence,logread,compare / "
-                         "shape=aclv6: select,read,cause,counter。"
+                         "shape=aclv6: select,read,cause,counter / "
+                         "shape=bgpbest: read,why,fix,cause。"
                          "指定した形が成立する盤面を seed 探索で選ぶ。"
                          "他の shape では無視される。")
     ap.add_argument("--worlds", default="",
@@ -4995,7 +5322,9 @@ def main():
                          "wc_even,wc_odd,wc_split,wc_block / "
                          "apply 形= src_customer,src_server,deny_to_mgmt / "
                          "routefilter= prefixlen_no_rm,prefixlen_via_rm,"
-                         "by_neighbor,keep_others。"
+                         "by_neighbor,keep_others / "
+                         "bgpbest= one_router,whole_as,return_med,"
+                         "return_prepend,respect_med,igp_frozen,bgp_frozen。"
                          "指定した世界を持つ故障種だけに絞り込む。")
     ap.add_argument("--kinds", default=None,
                     help=f"カンマ区切りで種別を明示(chain: {','.join(KINDS)} / "
@@ -5026,21 +5355,22 @@ def main():
                 "bgpdbg": gpb.VARIANTS, "leakmap": gpk.KINDS,
                 "ospfv3pl": gpo.KINDS, "v6redist": gpv.KINDS,
                 "aaa": gpa.KINDS, "acl": gpl.KINDS,
-                "aclv6": gp6.KINDS}.get(a.shape, KINDS)
+                "aclv6": gp6.KINDS, "bgpbest": gbb.KINDS}.get(a.shape, KINDS)
         kinds = (a.kinds.split(",") if a.kinds
                  else random.Random(a.seed ^ 0x5EED).sample(pool, len(pool)))
         if not set(kinds) <= set(pool):
             raise SystemExit(f"--kinds({a.shape}) は {pool} から選ぶこと: {kinds}")
     want_forms = [x.strip() for x in a.forms.split(",") if x.strip()]
     want_worlds = [x.strip() for x in a.worlds.split(",") if x.strip()]
-    if want_forms and a.shape not in ("acl", "aclv6", "mixed"):
+    if want_forms and a.shape not in ("acl", "aclv6", "bgpbest", "mixed"):
         print(f"[!] --forms は shape={a.shape} では無視されます", flush=True)
-    if want_worlds and a.shape not in ("acl", "aclv6", "mixed"):
+    if want_worlds and a.shape not in ("acl", "aclv6", "bgpbest", "mixed"):
         print(f"[!] --worlds は shape={a.shape} では無視されます", flush=True)
     # ★--worlds 指定時は**故障種のプールも絞る**(--forms と同じ理由=
     #   その世界を持たない種を先に引くと詰む)。
-    if want_worlds and kinds is not None and a.shape in ("acl", "aclv6"):
-        mod = gpl if a.shape == "acl" else gp6
+    if want_worlds and kinds is not None and a.shape in ("acl", "aclv6",
+                                                         "bgpbest"):
+        mod = {"acl": gpl, "aclv6": gp6, "bgpbest": gbb}[a.shape]
         keep = [k for k in kinds if set(want_worlds) & set(mod.worlds_for(k))]
         if not keep:
             raise SystemExit(
@@ -5054,8 +5384,9 @@ def main():
     # ★--forms 指定時は**故障種のプールも絞る**。形は種ごとに取り得るものが
     #   違うので(例: compare は dense_list だけ・fix は routefilter だけ)、
     #   種を先に決めてから形を探すと「その形を持たない種」で詰む。
-    if want_forms and kinds is not None and a.shape in ("acl", "aclv6"):
-        mod = gpl if a.shape == "acl" else gp6
+    if want_forms and kinds is not None and a.shape in ("acl", "aclv6",
+                                                        "bgpbest"):
+        mod = {"acl": gpl, "aclv6": gp6, "bgpbest": gbb}[a.shape]
         keep = [k for k in kinds if set(want_forms) & mod.kind_forms(k)]
         if not keep:
             raise SystemExit(
@@ -5074,23 +5405,25 @@ def main():
         if a.shape == "mixed":
             roll = random.Random(qseed ^ 0xC0FE)
             r = roll.random()
-            # ★配分(2026-08-10 acl 追加時に再調整)= どの shape も概ね 8〜12% に均す。
-            #   acl の枠は**再配送系(chain/ring/mploop)を薄める**ことで作った
-            #   (BL-100 の突合せで「再配送だけが飽和」と出ているため)。
-            shape_i = ("ring" if r < 0.12 else "pbr" if r < 0.23
-                       else "urpf" if r < 0.34 else "mploop" if r < 0.43
-                       else "leakmap" if r < 0.54 else "ospfv3pl" if r < 0.65
-                       else "v6redist" if r < 0.74
-                       else "aaa" if r < 0.83
-                       else "acl" if r < 0.88
-                       else "aclv6" if r < 0.94 else "chain")
+            # ★配分(2026-08-12 bgpbest 追加時に再調整)= どの shape も概ね 7〜11%。
+            #   bgpbest の枠は引き続き**再配送系(chain/ring/mploop)を薄める**ことで
+            #   作った(BL-100/111 の突合せで「再配送だけが飽和」と出ているため)。
+            shape_i = ("ring" if r < 0.11 else "pbr" if r < 0.21
+                       else "urpf" if r < 0.31 else "mploop" if r < 0.39
+                       else "leakmap" if r < 0.49 else "ospfv3pl" if r < 0.59
+                       else "v6redist" if r < 0.67
+                       else "aaa" if r < 0.75
+                       else "acl" if r < 0.81
+                       else "aclv6" if r < 0.86
+                       else "bgpbest" if r < 0.94 else "chain")
             kind = roll.choice({"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
                                 "urpf": gpu.URPF_KINDS, "mploop": MPLOOP_KINDS,
                                 "leakmap": gpk.KINDS, "ospfv3pl": gpo.KINDS,
                                 "v6redist": gpv.KINDS,
                                 "aaa": gpa.KINDS,
                                 "acl": gpl.KINDS,
-                                "aclv6": gp6.KINDS}.get(shape_i, KINDS))
+                                "aclv6": gp6.KINDS,
+                                "bgpbest": gbb.KINDS}.get(shape_i, KINDS))
         else:
             shape_i = a.shape
             kind = kinds[i % len(kinds)]
@@ -5121,6 +5454,9 @@ def main():
             subseed, d = pick_draw_v6redist(qseed, kind)
         elif shape_i == "aaa":
             subseed, d = pick_draw_aaa(qseed, kind)
+        elif shape_i == "bgpbest":
+            subseed, d = pick_draw_bgpbest(qseed, kind, forms=want_forms,
+                                           worlds=want_worlds)
         elif shape_i == "acl":
             subseed, d = pick_draw_acl(qseed, kind, forms=want_forms,
                                        worlds=want_worlds)
@@ -5168,6 +5504,12 @@ def main():
         elif shape_i == "aaa":
             plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
             choices = build_choices_read_aaa(d, rnd)   # 既定形= read
+        elif shape_i == "bgpbest":
+            plan = {"checks": []}          # 紙面専用(実測写しレンダラ)
+            _bf = gbb.forms_for(d)
+            choices = (gbb.build_choices_cause(d, rnd) if _bf == ["cause"]
+                       else gbb.build_choices_read(d, rnd) if "read" in _bf
+                       else gbb.build_choices_why(d, rnd))
         elif shape_i == "acl":
             plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
             # ★既定形はその盤面で成立する形から採る。
@@ -5191,7 +5533,8 @@ def main():
             sites = (assign_sites(d, rnd)
                      if (a.exam and shape_i not in ("bgpdbg", "leakmap",
                                                     "ospfv3pl", "v6redist",
-                                                    "aaa", "acl", "aclv6"))
+                                                    "aaa", "acl", "aclv6",
+                                                    "bgpbest"))
                      else None)
         # 赤ニシン(exam): 未適用ポリシー+無害な適用行を config に混入(pbr は素で騒がしい)
         herr, decoy = None, None
@@ -5209,6 +5552,10 @@ def main():
             _af = _fm.forms_for(d)
             form = ("apply" if _af == ["apply"]
                     else "cause" if "cause" in _af else "read")
+        if not a.exam and shape_i == "bgpbest":
+            _bf = gbb.forms_for(d)
+            form = ("cause" if _bf == ["cause"]
+                    else "read" if "read" in _bf else "why")
         if a.exam and shape_i == "chain" and rnd.random() < 0.5:
             form = "cause"
             choices = build_cause_choices(d, plan, rnd, decoy=decoy, pol=pol)
@@ -5324,6 +5671,23 @@ def main():
                     else:
                         form = "counter"
                         choices = gpl.build_choices_counter(d, rnd)
+        elif a.exam and shape_i == "bgpbest":
+            # read / why / fix / cause — 成立する形からのみ抽選
+            avail = gbb.forms_for(d)
+            if "fix" in avail and "fix" not in d:
+                avail = [f for f in avail if f != "fix"]
+            if want_forms:
+                avail = [f for f in avail if f in want_forms] or avail
+            form = rnd.choice(avail)
+            if form == "read":
+                choices = gbb.build_choices_read(d, rnd)
+            elif form == "why":
+                choices = gbb.build_choices_why(d, rnd)
+            elif form == "fix":
+                choices = gbb.build_choices_fix(d, rnd)
+            else:
+                form = "cause"
+                choices = gbb.build_choices_cause(d, rnd)
         elif a.exam and shape_i == "aaa":
             # read / cause / trace / evidence / dbgread / dbgconf / fix / patch
             r_form = rnd.random()
@@ -5418,6 +5782,8 @@ def main():
                 reqs = v6redist_requirements(d, rnd)
             elif shape_i == "aaa":
                 reqs = aaa_requirements(d, rnd, form)
+            elif shape_i == "bgpbest":
+                reqs = gbb.requirements(d, rnd, form)
             elif shape_i == "aclv6":
                 reqs = aclv6_requirements(d, rnd)
             elif shape_i == "acl":
@@ -5432,7 +5798,7 @@ def main():
               f"nodes={len(gmp.NODES) if shape_i == 'mploop' else len(d.get('roles', [d.get('A'), d.get('B')]))}", flush=True)
 
         if shape_i in ("urpf", "bgpdbg", "leakmap", "ospfv3pl", "v6redist",
-                       "aaa", "acl", "aclv6"):
+                       "aaa", "acl", "aclv6", "bgpbest"):
             collected = {}                 # 紙面専用: 実機展開・収集を行わない
         elif a.no_lab:
             collected = {(c["node"], c["command"]): "(PLACEHOLDER: --no-lab)"
@@ -5531,6 +5897,16 @@ def main():
             q_md = question_md_aaa(d, blocks, choices, stamp, form=form, reqs=reqs)
             a_md = answer_md_aaa(d, choices, stamp, a.seed, subseed, form)
             lint += list(gpa.KINDS) + ["world=", "scope="]
+        elif shape_i == "bgpbest":
+            blocks = bgpbest_blocks(d, rnd, form)
+            q_md = question_md_bgpbest(d, blocks, choices, stamp, form=form,
+                                       reqs=reqs)
+            a_md = answer_md_bgpbest(d, choices, stamp, a.seed, subseed, form)
+            # ★lint は長い kind 名だけ(短い "lp"/"med"/"rid" は localpref /
+            #   always-compare-med / compare-routerid に正当に含まれ誤爆する)
+            lint += ["med_cross", "nh_invalid", "weight_remote", "lp_ebgp",
+                     "remote_lp", "localorig", "world=", "expect",
+                     "foil_winner", "決め手"]
         elif shape_i == "v6redist":
             blocks = v6redist_evidence(d, rnd, form)
             q_md = question_md_v6redist(d, blocks, choices, stamp, form=form,
@@ -5572,7 +5948,16 @@ def main():
                                       or (shape_i == "acl" and form == "select"
                                           and d["kind"] in gpl.EST_BUILD_KINDS)
                                       or (shape_i == "aclv6"
-                                          and form in ("read", "counter"))))
+                                          and form in ("read", "counter"))
+                                      # ★bgpbest は全形 keep_ask。read/why/fix は
+                                      #   壊れていない(読解・構築系)ので汎用の症状文が
+                                      #   存在しない障害を参照してしまい、cause は
+                                      #   錯乱肢に「一般則としては真」の記述
+                                      #   (MED は異AS間で比較されない等)を含むため、
+                                      #   「正しいものはどれ」へ均すと**二重正解**になる
+                                      #   (2026-08-12 E2E 検証で検出)。原因を問う
+                                      #   設問文と意図の症状文が一意性の担い手。
+                                      or shape_i == "bgpbest"))
         leak_lint(q_md, lint)
         with open(f"{repo}/questions/{stamp}.md", "w", encoding="utf-8") as fh:
             fh.write(q_md)
