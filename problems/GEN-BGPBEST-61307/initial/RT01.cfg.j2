@@ -1,0 +1,66 @@
+! RT01 (自社・視点)
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+!
+interface Loopback1
+ ip address 172.29.40.1 255.255.255.0
+!
+interface {{ links[0] }}
+ ip address 10.91.12.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.91.13.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.91.14.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ ip address 10.91.15.1 255.255.255.0
+ ip ospf cost 10
+ no shutdown
+!
+interface {{ links[5] }}
+ ip address 10.91.16.1 255.255.255.0
+ ip ospf cost 100
+ no shutdown
+!
+router ospf 1
+ router-id 1.1.1.1
+ network 10.91.15.0 0.0.0.255 area 0
+ network 10.91.16.0 0.0.0.255 area 0
+ network 1.1.1.1 0.0.0.0 area 0
+!
+router bgp 64900
+ bgp router-id 1.1.1.1
+ bgp log-neighbor-changes
+ bgp always-compare-med
+ bgp bestpath compare-routerid
+ neighbor 5.5.5.5 remote-as 64900
+ neighbor 5.5.5.5 update-source Loopback0
+ neighbor 6.6.6.6 remote-as 64900
+ neighbor 6.6.6.6 update-source Loopback0
+ neighbor 10.91.12.2 remote-as 64520
+ neighbor 10.91.13.3 remote-as 64520
+ neighbor 10.91.14.4 remote-as 65402
+ address-family ipv4
+  network 172.29.40.0 mask 255.255.255.0
+  neighbor 5.5.5.5 activate
+  neighbor 6.6.6.6 activate
+  neighbor 5.5.5.5 next-hop-self
+  neighbor 6.6.6.6 next-hop-self
+  neighbor 10.91.12.2 activate
+  neighbor 10.91.13.3 activate
+  neighbor 10.91.14.4 activate
+  neighbor 10.91.12.2 route-map RM-MED-A1 out
+  neighbor 10.91.13.3 route-map RM-MED-A2 out
+ exit-address-family
+!
+route-map RM-MED-A1 permit 10
+ set local-preference 300
+!
+route-map RM-MED-A2 permit 10
+ set local-preference 100
+!

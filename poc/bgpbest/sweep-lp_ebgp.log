@@ -1,0 +1,1226 @@
+[03:00:12] === lp_ebgp (seed=90005) ===
+wrote GEN-BGPBEST-90005: mode=ts fault=lp_ebgp P=192.0.2.0 P2=100.64.24.0 own=172.20.77.0
+[03:00:12] provision...
+== [1/3] build_topology (GEN-BGPBEST-90005, variant=base) ==
+
+PLAY [問題メタ読込み・対象ノード展開] ******************************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.file] ****************************************************
+changed: [localhost]
+
+TASK [MGMT IP をリース台帳から割当（mgmt_alloc.py → mgmt_map.yml）] ************
+changed: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    alloc.stdout_lines:
+    - '[mgmt_alloc] 割当: GEN-BGPBEST-90005 → .13-.18 (空き残 10個)'
+    - '[mgmt_alloc] wrote /home/suzuki/ansible/CCNP01/playbooks/../topologies/_generated/GEN-BGPBEST-90005/mgmt_map.yml'
+
+TASK [割当結果(mgmt_map.yml)を読み込む] ****************************************
+ok: [localhost]
+
+TASK [対象ノードを _gen グループへ（mgmt_ip と image_family を付与）] **********
+changed: [localhost] => (item=RT01)
+changed: [localhost] => (item=RT02)
+changed: [localhost] => (item=RT03)
+changed: [localhost] => (item=RT04)
+changed: [localhost] => (item=RT05)
+changed: [localhost] => (item=RT06)
+
+PLAY [各ノードの day0 config(baseline+initial) を描画] *************************
+[WARNING]: Host 'RT03' is using the discovered Python interpreter at '/home/suzuki/ansible/CCNP01/.venv/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+[WARNING]: Host 'RT02' is using the discovered Python interpreter at '/home/suzuki/ansible/CCNP01/.venv/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+[WARNING]: Host 'RT05' is using the discovered Python interpreter at '/home/suzuki/ansible/CCNP01/.venv/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+[WARNING]: Host 'RT04' is using the discovered Python interpreter at '/home/suzuki/ansible/CCNP01/.venv/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+[WARNING]: Host 'RT01' is using the discovered Python interpreter at '/home/suzuki/ansible/CCNP01/.venv/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+[WARNING]: Host 'RT06' is using the discovered Python interpreter at '/home/suzuki/ansible/CCNP01/.venv/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+
+TASK [baseline(role別) + initial を結合して day0 を生成（params をテンプレ文脈に渡す）] ***
+changed: [RT03]
+changed: [RT02]
+changed: [RT05]
+changed: [RT04]
+changed: [RT01]
+changed: [RT06]
+
+PLAY [lab.yaml を生成] *********************************************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.set_fact] ************************************************
+ok: [localhost]
+
+TASK [gen_cml_lab.py で組み立て] ***********************************************
+changed: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    gen.stdout: 'wrote /home/suzuki/ansible/CCNP01/playbooks/../topologies/_generated/GEN-BGPBEST-90005/lab.yaml:
+      8 nodes, 14 links (family=iol)'
+
+PLAY RECAP *********************************************************************
+RT01                       : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+RT02                       : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+RT03                       : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+RT04                       : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+RT05                       : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+RT06                       : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+localhost                  : ok=10   changed=4    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   
+
+== [2/3] lab_up (CML 起動) ==
+
+PLAY [CML にラボを構築・起動] **************************************************
+
+TASK [lab.yaml の存在確認] *****************************************************
+ok: [localhost]
+
+TASK [ansible.builtin.assert] **************************************************
+ok: [localhost] => 
+    changed: false
+    msg: All assertions passed
+
+TASK [起動前プリフライト（割当 IP の生存確認）] ********************************
+ok: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    pf.stdout_lines:
+    - '[preflight] OK: 割当 6 IP はすべて未使用(CCNP-LAB-4c71deaa 新規起動可)'
+
+TASK [ラボを started に] *******************************************************
+changed: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    r:
+      changed: true
+      failed: false
+
+TASK [未起動ノードのフォロー（全ノード BOOTED 待ち）] **************************
+ok: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    fix.stdout_lines:
+    - all 8 nodes BOOTED
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.command] *************************************************
+ok: [localhost] => (item=10.1.10.13)
+ok: [localhost] => (item=10.1.10.14)
+ok: [localhost] => (item=10.1.10.15)
+ok: [localhost] => (item=10.1.10.16)
+ok: [localhost] => (item=10.1.10.17)
+ok: [localhost] => (item=10.1.10.18)
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+[WARNING]: Could not match supplied host pattern, ignoring: _bringup
+
+PLAY [data IF を no shutdown（bringup_data_ifs 問題のみ）] *********************
+skipping: no hosts matched
+
+PLAY [console 経由の CVAC後 bringup（bringup_console 問題のみ）] ***************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+PLAY [Zabbix 監視ホスト登録（monitoring 問題のみ）] ****************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+PLAY RECAP *********************************************************************
+localhost                  : ok=14   changed=1    unreachable=0    failed=0    skipped=7    rescued=0    ignored=0   
+
+GEN-BGPBEST-90005: clab_topology 未定義 → containerlab はスキップ
+== [3/3] 作業フォルダ作成: /home/suzuki/ansible/CCNP01/lab/GEN-BGPBEST-90005 ==
+   問題.md 
+完了。VSCodeで開いた CCNP01 ツリーの lab/GEN-BGPBEST-90005/ を編集（問題.md 同梱）。SSH: SUZUKI/CCNP・mgmt .11〜。
+[03:01:05] 収束待ち 120s
+[03:03:05] grade(broken)
+
+PLAY [採点準備（基準読込・接続先解決）] ****************************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [収集方式を決定（problem.yml の access。既定 ssh / telnet・console=SSH不可ノード）] ***
+ok: [localhost]
+
+TASK [接続先マップ = mgmt_map ＋ clab ノード（problem.yml の clab_nodes。BL-061 複合ラボ）] ***
+ok: [localhost]
+
+TASK [各チェックに既定(genie_os 等)と接続先を併合した checks を作る] ***********
+ok: [localhost] => (item=RT01: RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=RT01: 監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=RT01: 監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=RT05: 監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=RT01: 回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [大域不変条件（軸1）= model / invariants / 採点対象ノードを確定] **********
+ok: [localhost]
+
+TASK [shell 採点ノード(Linux)を特定（指紋照合の取得方式振分け用）] *************
+ok: [localhost]
+
+TASK [junos 採点ノード(clab)を特定（exec=junos。接続は network_cli / 指紋照合は対象外）] ***
+ok: [localhost]
+
+TASK [採点対象ノードに ansible_host を付与（delegate 接続用・ssh のみ。checks＋invariant の全 RIB ノード）] ***
+changed: [localhost] => (item=RT01 -> 10.1.10.13)
+changed: [localhost] => (item=RT05 -> 10.1.10.17)
+changed: [localhost] => (item=RT02 -> 10.1.10.14)
+changed: [localhost] => (item=RT03 -> 10.1.10.15)
+ok: [localhost] => (item=RT02 -> 10.1.10.14)
+ok: [localhost] => (item=RT01 -> 10.1.10.13)
+ok: [localhost] => (item=RT01 -> 10.1.10.13)
+ok: [localhost] => (item=RT01 -> 10.1.10.13)
+ok: [localhost] => (item=RT01 -> 10.1.10.13)
+ok: [localhost] => (item=RT05 -> 10.1.10.17)
+ok: [localhost] => (item=RT01 -> 10.1.10.13)
+
+PLAY [ラボ指紋の照合（ssh のみ。telnet は collect_telnet.py 内 / console はラボ名解決で対象外）] ***
+[WARNING]: Deprecation warnings can be disabled by setting `deprecation_warnings=False` in ansible.cfg.
+[DEPRECATION WARNING]: Importing 'to_bytes' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+[DEPRECATION WARNING]: Importing 'to_text' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+[DEPRECATION WARNING]: The `ansible.module_utils.common._collections_compat` module is deprecated. This feature will be removed from ansible-core version 2.24. Use `collections.abc` from the Python standard library instead.
+[DEPRECATION WARNING]: Passing `warnings` to `exit_json` or `fail_json` is deprecated. This feature will be removed from ansible-core version 2.23. Use `AnsibleModule.warn` instead.
+
+TASK [labid を取得（IOS）] *****************************************************
+ok: [RT01]
+ok: [RT05]
+ok: [RT02]
+ok: [RT03]
+
+TASK [照合（別ラボの labid が返ったら採点中止）] *******************************
+ok: [RT05] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-4c71deaa'
+ok: [RT03] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-4c71deaa'
+ok: [RT01] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-4c71deaa'
+ok: [RT02] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-4c71deaa'
+
+PLAY [収束待ち付き採点] ********************************************************
+
+TASK [全チェック PASS まで（または最大試行まで）採点を繰り返す] ****************
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 1/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 2/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 3/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 4/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 5/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 6/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 7/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 8/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 9/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 10/10)
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+changed: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+Pausing for 9 seconds
+
+TASK [未収束なら次の試行まで待機（最終試行では待たない）] **********************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+Pausing for 9 seconds
+
+TASK [未収束なら次の試行まで待機（最終試行では待たない）] **********************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+Pausing for 9 seconds
+
+TASK [未収束なら次の試行まで待機（最終試行では待たない）] **********************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+Pausing for 9 seconds
+
+TASK [未収束なら次の試行まで待機（最終試行では待たない）] **********************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+Pausing for 9 seconds
+
+TASK [未収束なら次の試行まで待機（最終試行では待たない）] **********************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+Pausing for 9 seconds
+
+TASK [未収束なら次の試行まで待機（最終試行では待たない）] **********************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+Pausing for 9 seconds
+
+TASK [未収束なら次の試行まで待機（最終試行では待たない）] **********************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+Pausing for 9 seconds
+
+TASK [未収束なら次の試行まで待機（最終試行では待たない）] **********************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+Pausing for 9 seconds
+
+TASK [未収束なら次の試行まで待機（最終試行では待たない）] **********************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+
+TASK [最終結果] ****************************************************************
+ok: [localhost] => 
+    msg:
+    - ======================================================================
+    - '[PASS] (+ 20 点) RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う'
+    - '[PASS] (+ 10 点) RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う'
+    - '[FAIL] (+ 15 点) RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10)'
+    - '        未充足(raw): {''contains'': ''metric 10,''}'
+    - '[FAIL] (+ 10 点) RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信'
+    - '        未充足(raw): {''regex'': ''(?m)from 10\\.92\\.13\\.1 \\(.*\\)\\n      Origin
+      \\w+, metric 200,''}'
+    - '[PASS] (+  5 点) RT02: 境界経由の戻りが劣後(MED 300)で広告されている'
+    - '[PASS] (+ 10 点) RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小)'
+    - '[PASS] (+ 10 点) RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である'
+    - '[PASS] (+  5 点) 監査: MED 合意と決定化のノブが存在する(RT01)'
+    - '[FAIL] (+  5 点) 監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01)'
+    - '        未充足(raw): {''not_regex'': ''set local-preference''}'
+    - '[PASS] (+  5 点) 監査: 経路単位の weight 上書きが存在しない(RT05)'
+    - '[PASS] (+  5 点) 回帰: RT01 から 192.0.2.0/24 への到達性'
+    - ======================================================================
+    - '  合計: 70 / 100 点'
+    - ======================================================================
+
+TASK [収束したか] **************************************************************
+ok: [localhost] => 
+    msg: ⚠ 10 回試行しても全 PASS に至らず（上の未充足を参照）
+
+PLAY RECAP *********************************************************************
+RT01                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+RT02                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+RT03                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+RT05                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+localhost                  : ok=81   changed=2    unreachable=0    failed=0    skipped=44   rescued=0    ignored=0   
+
+[03:05:34] fix 投入
+
+PLAY [fix を読み込む] **********************************************************
+
+TASK [ansible.builtin.set_fact] ************************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [fix をリストへ正規化（新=fixes キー / 旧=単一オブジェクト）] *************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [修正対象ノードを登録（同一ノードに複数 fix があればまとめて付与）] *******
+changed: [localhost] => (item=RT01)
+
+PLAY [修正を投入] **************************************************************
+[WARNING]: To ensure idempotency and correct diff the input configuration lines should be similar to how they appear if present in the running configuration on device
+[WARNING]: Deprecation warnings can be disabled by setting `deprecation_warnings=False` in ansible.cfg.
+[DEPRECATION WARNING]: Importing 'to_bytes' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+[DEPRECATION WARNING]: Importing 'to_text' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+[DEPRECATION WARNING]: The `ansible.module_utils.common._collections_compat` module is deprecated. This feature will be removed from ansible-core version 2.24. Use `collections.abc` from the Python standard library instead.
+[DEPRECATION WARNING]: Passing `warnings` to `exit_json` or `fail_json` is deprecated. This feature will be removed from ansible-core version 2.23. Use `AnsibleModule.warn` instead.
+
+TASK [config 系 fix（ios_config）] *********************************************
+changed: [RT01] => (item=['route-map RM-MED-A1 permit 10'])
+changed: [RT01] => (item=['route-map RM-MED-A2 permit 10'])
+
+TASK [exec 系 fix（ios_command・config 投入後に実行。例 clear ip ospf process）] ***
+changed: [RT01] => (item=RT01 exec)
+
+PLAY RECAP *********************************************************************
+RT01                       : ok=2    changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+localhost                  : ok=5    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+[03:05:38] 収束待ち 45s
+[03:06:23] grade(fixed)
+
+PLAY [採点準備（基準読込・接続先解決）] ****************************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [収集方式を決定（problem.yml の access。既定 ssh / telnet・console=SSH不可ノード）] ***
+ok: [localhost]
+
+TASK [接続先マップ = mgmt_map ＋ clab ノード（problem.yml の clab_nodes。BL-061 複合ラボ）] ***
+ok: [localhost]
+
+TASK [各チェックに既定(genie_os 等)と接続先を併合した checks を作る] ***********
+ok: [localhost] => (item=RT01: RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=RT01: 監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=RT01: 監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=RT05: 監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=RT01: 回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [大域不変条件（軸1）= model / invariants / 採点対象ノードを確定] **********
+ok: [localhost]
+
+TASK [shell 採点ノード(Linux)を特定（指紋照合の取得方式振分け用）] *************
+ok: [localhost]
+
+TASK [junos 採点ノード(clab)を特定（exec=junos。接続は network_cli / 指紋照合は対象外）] ***
+ok: [localhost]
+
+TASK [採点対象ノードに ansible_host を付与（delegate 接続用・ssh のみ。checks＋invariant の全 RIB ノード）] ***
+changed: [localhost] => (item=RT01 -> 10.1.10.13)
+changed: [localhost] => (item=RT05 -> 10.1.10.17)
+changed: [localhost] => (item=RT02 -> 10.1.10.14)
+changed: [localhost] => (item=RT03 -> 10.1.10.15)
+ok: [localhost] => (item=RT02 -> 10.1.10.14)
+ok: [localhost] => (item=RT01 -> 10.1.10.13)
+ok: [localhost] => (item=RT01 -> 10.1.10.13)
+ok: [localhost] => (item=RT01 -> 10.1.10.13)
+ok: [localhost] => (item=RT01 -> 10.1.10.13)
+ok: [localhost] => (item=RT05 -> 10.1.10.17)
+ok: [localhost] => (item=RT01 -> 10.1.10.13)
+
+PLAY [ラボ指紋の照合（ssh のみ。telnet は collect_telnet.py 内 / console はラボ名解決で対象外）] ***
+[WARNING]: Deprecation warnings can be disabled by setting `deprecation_warnings=False` in ansible.cfg.
+[DEPRECATION WARNING]: Importing 'to_bytes' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+[DEPRECATION WARNING]: Importing 'to_text' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+[DEPRECATION WARNING]: The `ansible.module_utils.common._collections_compat` module is deprecated. This feature will be removed from ansible-core version 2.24. Use `collections.abc` from the Python standard library instead.
+[DEPRECATION WARNING]: Passing `warnings` to `exit_json` or `fail_json` is deprecated. This feature will be removed from ansible-core version 2.23. Use `AnsibleModule.warn` instead.
+
+TASK [labid を取得（IOS）] *****************************************************
+ok: [RT02]
+ok: [RT01]
+ok: [RT05]
+ok: [RT03]
+
+TASK [照合（別ラボの labid が返ったら採点中止）] *******************************
+ok: [RT01] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-4c71deaa'
+ok: [RT05] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-4c71deaa'
+ok: [RT03] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-4c71deaa'
+ok: [RT02] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-4c71deaa'
+
+PLAY [収束待ち付き採点] ********************************************************
+
+TASK [全チェック PASS まで（または最大試行まで）採点を繰り返す] ****************
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 1/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 2/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 3/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 4/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 5/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 6/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 7/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 8/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 9/10)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 10/10)
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+changed: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+changed: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+changed: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT05] => (item=RT05: show ip bgp 192.0.2.0 bestpath)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0 bestpath)
+ok: [localhost -> RT03] => (item=RT03: show ip bgp 172.20.77.0)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp 172.20.77.0)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0 bestpath)
+ok: [localhost -> RT01] => (item=RT01: show ip bgp 100.64.24.0)
+ok: [localhost -> RT01] => (item=RT01: show run | section router bgp)
+ok: [localhost -> RT01] => (item=RT01: show run | include weight|local-preference)
+ok: [localhost -> RT05] => (item=RT05: show run | include weight)
+ok: [localhost -> RT01] => (item=RT01: ping 192.0.2.4 source Loopback1 repeat 3)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う)
+ok: [localhost] => (item=RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う)
+ok: [localhost] => (item=RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10))
+ok: [localhost] => (item=RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信)
+ok: [localhost] => (item=RT02: 境界経由の戻りが劣後(MED 300)で広告されている)
+ok: [localhost] => (item=RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小))
+ok: [localhost] => (item=RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である)
+ok: [localhost] => (item=監査: MED 合意と決定化のノブが存在する(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01))
+ok: [localhost] => (item=監査: 経路単位の weight 上書きが存在しない(RT05))
+ok: [localhost] => (item=回帰: RT01 から 192.0.2.0/24 への到達性)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+
+TASK [最終結果] ****************************************************************
+ok: [localhost] => 
+    msg:
+    - ======================================================================
+    - '[PASS] (+ 20 点) RT01: 192.0.2.0/24 のベストが MED 合意(最安= ISP-B)に従う'
+    - '[PASS] (+ 10 点) RT05: 192.0.2.0/24 の転送が合意(RT01 経由)に従う'
+    - '[PASS] (+ 15 点) RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10)'
+    - '[PASS] (+ 10 点) RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信'
+    - '[PASS] (+  5 点) RT02: 境界経由の戻りが劣後(MED 300)で広告されている'
+    - '[PASS] (+ 10 点) RT01: 100.64.24.0/24(全属性タイ)が決定的に選出される(RID 最小)'
+    - '[PASS] (+ 10 点) RT01: 境界(RT05)経由の 100.64.24.0/24 が有効な候補である'
+    - '[PASS] (+  5 点) 監査: MED 合意と決定化のノブが存在する(RT01)'
+    - '[PASS] (+  5 点) 監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01)'
+    - '[PASS] (+  5 点) 監査: 経路単位の weight 上書きが存在しない(RT05)'
+    - '[PASS] (+  5 点) 回帰: RT01 から 192.0.2.0/24 への到達性'
+    - ======================================================================
+    - '  合計: 100 / 100 点'
+    - ======================================================================
+
+TASK [収束したか] **************************************************************
+ok: [localhost] => 
+    msg: ✅ 全チェック PASS で収束
+
+PLAY RECAP *********************************************************************
+RT01                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+RT02                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+RT03                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+RT05                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+localhost                  : ok=72   changed=4    unreachable=0    failed=0    skipped=53   rescued=0    ignored=0   
+
+[03:07:30] teardown
+== CMLラボを absent（VM実体を解放）: GEN-BGPBEST-90005 ==
+
+PLAY [CML にラボを構築・起動] **************************************************
+
+TASK [lab.yaml の存在確認] *****************************************************
+ok: [localhost]
+
+TASK [ansible.builtin.assert] **************************************************
+ok: [localhost] => 
+    changed: false
+    msg: All assertions passed
+
+TASK [ラボを absent に] ********************************************************
+changed: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    r:
+      changed: true
+      failed: false
+
+TASK [MGMT リースを解放（lab_state=absent 時）] ********************************
+changed: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    rel.stdout_lines:
+    - '[mgmt_alloc] released: GEN-BGPBEST-90005 (.13-.18)'
+[WARNING]: Could not match supplied host pattern, ignoring: _bringup
+
+PLAY [data IF を no shutdown（bringup_data_ifs 問題のみ）] *********************
+skipping: no hosts matched
+
+PLAY [console 経由の CVAC後 bringup（bringup_console 問題のみ）] ***************
+
+PLAY [Zabbix 監視ホスト登録（monitoring 問題のみ）] ****************************
+
+PLAY RECAP *********************************************************************
+localhost                  : ok=6    changed=2    unreachable=0    failed=0    skipped=15   rescued=0    ignored=0   
+
+[mgmt_alloc] リースなし(解放済): GEN-BGPBEST-90005
+GEN-BGPBEST-90005: clab_topology 未定義 → containerlab はスキップ
+== 生成物を掃除: topologies/_generated/GEN-BGPBEST-90005 ==
+== 作業コピー(使い捨て)を削除: /home/suzuki/ansible/CCNP01/lab/GEN-BGPBEST-90005 ==
+片付け完了。問題パック problems/GEN-BGPBEST-90005 は再利用のため保持。
+[03:07:34] === lp_ebgp 完了 ===

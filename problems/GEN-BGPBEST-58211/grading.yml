@@ -1,0 +1,77 @@
+# 自動生成 (gen_bgpbest_ts.py) seed=58211
+problem: GEN-BGPBEST-58211
+total_points: 100
+defaults:
+  genie_os: iosxe
+invariants: []
+checks:
+- name: 'RT01: 198.51.100.0/24 のベストが MED 合意(最安= ISP-B)に従う'
+  node: RT01
+  command: show ip bgp 198.51.100.0 bestpath
+  raw:
+  - contains: from 10.36.14.4 (
+  points: 20
+- name: 'RT05: 198.51.100.0/24 の転送が合意(RT01 経由)に従う'
+  node: RT05
+  command: show ip bgp 198.51.100.0 bestpath
+  raw:
+  - contains: from 1.1.1.1 (
+  points: 10
+- name: 'RT02: 戻り(172.20.77.0/24)が直結リンク優先(MED 10)'
+  node: RT02
+  command: show ip bgp 172.20.77.0 bestpath
+  raw:
+  - contains: from 10.36.12.1 (
+  - contains: metric 10,
+  points: 15
+- name: 'RT03: 戻り(172.20.77.0/24)の合意値(MED 200)を受信'
+  node: RT03
+  command: show ip bgp 172.20.77.0
+  raw:
+  - regex: (?m)from 10\.36\.13\.1 \(.*\)\n      Origin \w+, metric 200,
+  points: 10
+- name: 'RT02: 境界経由の戻りが劣後(MED 300)で広告されている'
+  node: RT02
+  command: show ip bgp 172.20.77.0
+  raw:
+  - regex: (?m)from 10\.36\.25\.5 \(.*\)\n      Origin \w+, metric 300,
+  points: 5
+- name: 'RT01: 203.0.113.0/24(全属性タイ)が決定的に選出される(RID 最小)'
+  node: RT01
+  command: show ip bgp 203.0.113.0 bestpath
+  raw:
+  - contains: from 10.36.12.2 (
+  points: 10
+- name: 'RT01: 境界(RT05)経由の 203.0.113.0/24 が有効な候補である'
+  node: RT01
+  command: show ip bgp 203.0.113.0
+  raw:
+  - contains: from 5.5.5.5
+  - not_contains: (inaccessible)
+  points: 10
+- name: '監査: MED 合意と決定化のノブが存在する(RT01)'
+  node: RT01
+  command: show run | section router bgp
+  raw:
+  - contains: bgp always-compare-med
+  - contains: bgp bestpath compare-routerid
+  points: 5
+- name: '監査: 経路単位の weight / LOCAL_PREF 上書きが存在しない(RT01)'
+  node: RT01
+  command: show run | include weight|local-preference
+  raw:
+  - not_regex: neighbor \S+ weight \d+
+  - not_regex: set local-preference
+  points: 5
+- name: '監査: 経路単位の weight 上書きが存在しない(RT05)'
+  node: RT05
+  command: show run | include weight
+  raw:
+  - not_regex: neighbor \S+ weight \d+
+  points: 5
+- name: '回帰: RT01 から 198.51.100.0/24 への到達性'
+  node: RT01
+  command: ping 198.51.100.4 source Loopback1 repeat 3
+  raw:
+  - regex: Success rate is [1-9][0-9]* percent
+  points: 5
