@@ -49,6 +49,10 @@ import yaml
 
 BOUNDARIES = ["RT02", "RT03"]
 TAG_RIP, TAG_OSPF = 120, 110    # 発ドメイン識別タグ(AD 値と揃える)
+TAG_TYPO = 100                  # wrong_tag_filter の deny 側 typo 値
+# ★BL-118 P3: 上の3値は紙面(gen_paper_mcq shape=riploop)が per-question で
+#   上書きする(タグ定数の暗記対策)。ラボ生成器としての既定値・挙動は不変。
+#   このため旧 rmaps_ok()(import 時スナップショット)は rmaps_ok() に変更した。
 SEED_OK = 5                     # OSPF→RIP の健全 seed metric
 FAULTS = ["seed_loop", "wrong_tag_filter", "fb_suboptimal", "half_fix",
           "stale_filter", "missing_seed_metric", "missing_r2o"]
@@ -90,7 +94,8 @@ def _rmaps(o2r_deny_tag):
             "route-map OSPF2RIP permit 20", f" set tag {TAG_OSPF}"]
 
 
-RMAPS_OK = _rmaps(TAG_RIP)
+def rmaps_ok():
+    return _rmaps(TAG_RIP)
 OSPF_OK = ["redistribute rip subnets route-map RIP2OSPF", "distance ospf external 180"]
 RIP_OK = [f"redistribute ospf 1 metric {SEED_OK} route-map OSPF2RIP"]
 
@@ -100,29 +105,29 @@ def boundary_blocks(fault, node):
     if fault == "seed_loop":            # タグ無し＋seed=1 → RT01 同値 ECMP → ループ
         return [], ["redistribute rip subnets"], ["redistribute ospf 1 metric 1"]
     if fault == "wrong_tag_filter":     # deny の tag 番号 typo → フィードバック素通り
-        return (_rmaps(100), ["redistribute rip subnets route-map RIP2OSPF"],
+        return (_rmaps(TAG_TYPO), ["redistribute rip subnets route-map RIP2OSPF"],
                 ["redistribute ospf 1 metric 1 route-map OSPF2RIP"])
     if fault == "fb_suboptimal":        # タグ/AD 対策なし(seed は常識値)
         return [], ["redistribute rip subnets"], [f"redistribute ospf 1 metric {SEED_OK}"]
     if fault == "half_fix":             # 対策が RT02 のみ
         if node == "RT02":
-            return RMAPS_OK, OSPF_OK, RIP_OK
-        return RMAPS_OK, ["redistribute rip subnets route-map RIP2OSPF"], RIP_OK
+            return rmaps_ok(), OSPF_OK, RIP_OK
+        return rmaps_ok(), ["redistribute rip subnets route-map RIP2OSPF"], RIP_OK
     if fault == "stale_filter":         # RT02 の RIP out に残骸フィルタ
         if node == "RT02":
-            return (RMAPS_OK + ["access-list 10 deny any"], OSPF_OK,
+            return (rmaps_ok() + ["access-list 10 deny any"], OSPF_OK,
                     RIP_OK + ["distribute-list 10 out"])
-        return RMAPS_OK, OSPF_OK, RIP_OK
+        return rmaps_ok(), OSPF_OK, RIP_OK
     if fault == "missing_seed_metric":  # seed metric 欠落(無限大)
-        return RMAPS_OK, OSPF_OK, ["redistribute ospf 1 route-map OSPF2RIP"]
+        return rmaps_ok(), OSPF_OK, ["redistribute ospf 1 route-map OSPF2RIP"]
     if fault == "missing_r2o":          # RIP→OSPF 再配送欠落
-        return RMAPS_OK, ["distance ospf external 180"], RIP_OK
+        return rmaps_ok(), ["distance ospf external 180"], RIP_OK
     raise SystemExit(f"unknown fault {fault}")
 
 
 def boundary_fix(fault, node):
     """故障を健全形へ是正する fix エントリ列(fix_generated.yml 互換)。"""
-    rmap_def = {"node": node, "lines": list(RMAPS_OK)}
+    rmap_def = {"node": node, "lines": rmaps_ok()}
     ospf_full = {"node": node, "parents": "router ospf 1",
                  "lines": ["no redistribute rip"] + OSPF_OK}
     rip_full = {"node": node, "parents": "router rip",
@@ -131,7 +136,7 @@ def boundary_fix(fault, node):
         return [rmap_def, ospf_full, rip_full]
     if fault == "wrong_tag_filter":
         return [{"node": node, "parents": "route-map OSPF2RIP deny 10",
-                 "lines": ["no match tag 100", f"match tag {TAG_RIP}"]},
+                 "lines": [f"no match tag {TAG_TYPO}", f"match tag {TAG_RIP}"]},
                 {"node": node, "parents": "router ospf 1",
                  "lines": ["distance ospf external 180"]}, rip_full]
     if fault == "half_fix":

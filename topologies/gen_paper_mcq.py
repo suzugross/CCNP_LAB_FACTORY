@@ -39,6 +39,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_redist_field as grf  # noqa: E402  (chain 抽選・config 描画を素材として流用)
 import gen_redist_arena as gra  # noqa: E402  (ring=再配送ループ抽選・config 描画を流用)
 import gen_redist_mp_ts as gmp  # noqa: E402  (mploop=同AD・メトリック差ループの盤面を流用)
+import gen_redist_ripospf_ts as gro  # noqa: E402  (riploop=RIP⇄OSPF 対策不全・BL-116)
 import gen_paper_pbr as gpp     # noqa: E402  (pbr=PBR×ワイルドカードACL・BL-081)
 import gen_paper_urpf as gpu    # noqa: E402  (urpf=uRPF×ACL・BL-084)
 import gen_paper_bgpdbg as gpb  # noqa: E402  (bgpdbg=BGP debug 読解・記述式・BL-085)
@@ -1409,6 +1410,10 @@ def evidence_plan_ring(d, rnd, exam=False):
         checks = [{"node": m[r], "command": f"show ip route {p}.0"}
                   for r in ("RC", "RA", "RB")]
     checks.append({"node": m["RC"], "command": "show ip bgp"})
+    # ★BL-118: 実効 AD の読取り素材。adworld の有無に関わらず常時提示する
+    #   (この行の有無で「AD がいじられている世界か」を割らせないため)。
+    checks.append({"node": m["RC"],
+                   "command": "show ip protocols | include Routing Protocol|Distance"})
     noise = [r for r in d["roles"] if r.startswith("NO")]
     tracer = rnd.choice(noise) if noise else "RB"
     checks.append({"node": m[tracer],
@@ -1417,6 +1422,48 @@ def evidence_plan_ring(d, rnd, exam=False):
     for r in ("RC", "RA", "RB", "RE"):
         checks.append({"node": m[r], "command": "show running-config | section router"})
     return {"tracer": tracer, "checks": checks}
+
+
+def ring_ad_remnant(d):
+    """BL-118 P1a: AD操作世界の残骸(前任者の distance 設定)。adworld=none は None。
+    ★成立条件= どの世界でも「RC の勝者(戻り外部経路)が変わらない」こと。ring は
+    生成時に実機へ展開して証拠を収集するため、ループが定常であり続ける残骸=
+    値・場所・対象プロトコルのいずれかが誤っていて「効いていない」ものに限る。
+    (「正しい値の残骸+clear 忘れ」の世界は day0 適用=起動時から有効になるため
+    実機では作れない。紙面合成 shape に移植する時の候補として設計メモに記録。)"""
+    w = d.get("adworld", "none")
+    if w == "none":
+        return None
+    inj_e = d["ring"] == "inject_eigrp"
+    return_ad = 110 if inj_e else 170
+    off, m = d["ad_off"], d["m"]
+    if w == "stale_value":
+        # RC 自身の distance bgp だが、内部距離が戻り AD に届いていない(惜しい値)。
+        # return_ad < val < 200 なので iBGP は依然として負ける=ループ不変。
+        val = return_ad + off
+        return {"role": "RC", "node": m["RC"], "val": val,
+                "parent": f"router bgp {d['bgp_as']}",
+                "line": f"distance bgp 20 {val} {val}"}
+    if w == "stale_target":
+        # 戻りドメインの中継ルータに「値は効きそうな」distance(場所が誤り)。
+        # そのルータは当該網を単一情報源からしか学習しない=完全 no-op。
+        val = 200 + off
+        if inj_e:
+            return {"role": "RB", "node": m["RB"], "val": val,
+                    "parent": f"router ospf {d['ospf_pid']}",
+                    "line": f"distance ospf external {val}"}
+        return {"role": "RA", "node": m["RA"], "val": val,
+                "parent": f"router eigrp {d['eigrp_as']}",
+                "line": f"distance eigrp 90 {val}"}
+    # stale_proto: RC 自身だが、対象が注入側プロトコル(戻り側でない)= no-op。
+    val = 200 + off
+    if inj_e:
+        return {"role": "RC", "node": m["RC"], "val": val,
+                "parent": f"router eigrp {d['eigrp_as']}",
+                "line": f"distance eigrp 90 {val}"}
+    return {"role": "RC", "node": m["RC"], "val": val,
+            "parent": f"router ospf {d['ospf_pid']}",
+            "line": f"distance ospf external {val}"}
 
 
 def build_choices_ring(d, rnd, exam=False):
@@ -1495,7 +1542,63 @@ def build_choices_ring(d, rnd, exam=False):
                   "deny する route-map を適用する")
     tag_why = ("出自のタグは付くが、一周した経路を落とす側の deny が無いため、"
                "戻り外部経路はそのまま学習され、ループは解消しない。")
-    if d["method"] == "distance":
+    ad = ring_ad_remnant(d)
+    if d["method"] == "distance" and ad:
+        # ★BL-118 P1a: AD操作世界の fix 形。残骸の「読解」が選択肢の主戦場になる。
+        w, val, ad_node = d["adworld"], ad["val"], ad["node"]
+        if w == "stale_value":
+            dist_fix = (f"{rc} の router bgp {bas} 配下の残存する distance bgp を"
+                        f"「{dist_line}」へ修正し、clear ip route * を実行する")
+            del_dist = (f"{rc} の router bgp {bas} 配下から残存する distance bgp を"
+                        "削除し、clear ip route * を実行する", False,
+                        f"削除すると iBGP の管理距離は既定の 200 に戻り、戻り経路"
+                        f"({return_ad}) にさらに大きく負ける。値が不足しているのであって、"
+                        "設定の存在が原因ではない。",
+                        [f"router bgp {bas}", " no distance bgp", "end",
+                         "clear ip route *"])
+            c = [(dist_fix, True, "", cli["dist"]), del_dist,
+                 (clear_only[0], False,
+                  f"反映待ちではない。設定されている内部距離({val})は戻り経路の"
+                  f"管理距離({return_ad})より依然として大きく、再計算しても勝者は"
+                  "変わらない。", cli["clear"]),
+                 (wrong_tgt, False, wrong_tgt_why, cli["wrong_tgt"])]
+            if exam:
+                c += [(no_ri[0], False, no_ri[1], cli["no_ri"]),
+                      (rm_inj, False, rm_inj_why, cli["rm_inj"])]
+        elif w == "stale_target":
+            retgt = (f"{ad_node} の {ad['parent']} 配下の残存する distance の値を "
+                     f"{val + 20} へ引き上げる", False,
+                     "distance は設定したルータ自身の経路選択にのみ作用する。値を"
+                     f"変えても、ループの分岐点である {rc} の比較(戻り {return_ad} 対 "
+                     "iBGP 200)は変わらない。",
+                     [ad["parent"], f" {ad['line'].rsplit(' ', 1)[0]} {val + 20}"])
+            clear_t = (f"{ad_node} で clear ip route * を実行する", False,
+                       f"反映待ちではない。{ad_node} の distance は {rc} の経路選択に"
+                       "作用しないため、どの時点で再計算しても事象は解消しない。",
+                       ["clear ip route *"])
+            c = [(dist_choice, True, "", cli["dist"]), retgt, clear_t,
+                 (no_ri[0], False, no_ri[1], cli["no_ri"])]
+            if exam:
+                c += [(rm_inj, False, rm_inj_why, cli["rm_inj"]),
+                      (clear_only[0], False, clear_only[1], cli["clear"])]
+        else:  # stale_proto
+            wrongp = "EIGRP" if inj_e else "OSPF"
+            retp_word = "OSPF" if inj_e else "EIGRP"
+            raisep = (f"{rc} の {ad['parent']} 配下の残存する distance の値をさらに"
+                      "引き上げ、clear ip route * を実行する", False,
+                      f"残存する distance が対象とするのは {wrongp} の外部経路であり、"
+                      f"戻り経路は {retp_word} の外部経路(管理距離 {return_ad})として"
+                      "学習されている。対象が誤っている以上、値を変えても勝者は"
+                      "変わらない。",
+                      [ad["parent"], f" {ad['line'].rsplit(' ', 1)[0]} {val + 20}",
+                       "end", "clear ip route *"])
+            c = [(dist_choice, True, "", cli["dist"]), raisep,
+                 (clear_only[0], False, clear_only[1], cli["clear"]),
+                 (wrong_tgt, False, wrong_tgt_why, cli["wrong_tgt"])]
+            if exam:
+                c += [(no_ri[0], False, no_ri[1], cli["no_ri"]),
+                      (rm_inj, False, rm_inj_why, cli["rm_inj"])]
+    elif d["method"] == "distance":
         c = [(dist_choice, True, "", cli["dist"]),
              (wrong_tgt, False, wrong_tgt_why, cli["wrong_tgt"]),
              (no_ri[0], False, no_ri[1], cli["no_ri"]),
@@ -1583,8 +1686,40 @@ def build_cause_choices_ring(d, rnd, exam=False):
          "外部経路タイプは同一プロトコル内の優劣に影響するに過ぎず、"
          "iBGP と IGP 外部経路の比較は管理距離で決まる。"),
     ]
+    # ★BL-118 P1a: AD操作世界では「残骸こそが原因」と誤認させる肢を必ず混ぜる。
+    #   真の機構(既定でも AD で負けている)は残骸より前から成立しており、
+    #   残骸は効いていない=事象の原因ではない。値・場所・対象の読解で落とす。
+    must = [correct]
+    ad = ring_ad_remnant(d)
+    if ad:
+        w, val = d["adworld"], ad["val"]
+        if w == "stale_value":
+            must.append((
+                f"{rc} に設定されている distance が iBGP の管理距離を引き上げており、"
+                "そのために戻ってきた外部経路が優先されている", False,
+                f"当該の distance は内部距離を既定の 200 から {val} へ「引き下げる」"
+                f"方向の設定である。既定の 200 のままでも戻り経路({return_ad})には"
+                "負けており、この設定は事象の原因ではない(値が不足しているだけの"
+                "是正の残骸である)。"))
+        elif w == "stale_target":
+            must.append((
+                f"{ad['node']} に設定されている distance によって {ad['node']} の"
+                "転送先が変更され、周回が生じている", False,
+                f"{ad['node']} は当該網を単一の情報源からのみ学習しており、管理距離は"
+                "複数の情報源の優劣が存在して初めて作用する。転送先は変わっておらず、"
+                f"周回の分岐点は {rc} である。"))
+        else:  # stale_proto
+            inj_word2 = "EIGRP" if inj_e else "OSPF"
+            ret_word2 = "OSPF" if inj_e else "EIGRP"
+            must.append((
+                f"{rc} に設定されている distance が {inj_word2} の外部経路の管理距離を"
+                f"{val} へ引き上げたことにより、経路が {ret_word2} 側へ迂回し、"
+                "周回が生じている", False,
+                f"{rc} が戻り経路として学習しているのは {ret_word2} の外部経路であり、"
+                f"その管理距離は既定({return_ad})のまま iBGP(200) に勝っている。"
+                "当該の distance の有無はこの比較に関与していない。"))
     rnd.shuffle(pool)
-    c = [correct] + pool[:(5 if exam else 3)]
+    c = must + pool[:((6 if exam else 4) - len(must))]
     order = list(range(len(c)))
     rnd.shuffle(order)
     return [c[i] for i in order]
@@ -1628,6 +1763,13 @@ def ring_requirements(d, rnd, form="fix"):
             "遮断の条件は、プレフィックスの列挙によるものであってはならず、"
             "その経路がどこから来たものであるか、という属性によって、"
             "表現されなければなりません。"]))
+    if d.get("adworld", "none") != "none":
+        # ★BL-118: AD操作世界の口実(症状文は不親切化で消えるため要件チャネルに)。
+        core.append(rnd.choice([
+            "過去の障害への対応において投入された設定が、ルータの一部に、"
+            "残存しています。それらの設定の見直しは、実施されていません。",
+            "以前の障害の対応の際に追加された設定が、一部のルータにおいて、"
+            "そのまま残されています。当該の設定の棚卸しは、行われていません。"]))
     core += rnd.sample([x for x in REQ_DECOYS if "静的経路" not in x],
                        rnd.choice([1, 2]))
     rnd.shuffle(core)
@@ -1658,6 +1800,12 @@ def question_md_ring(d, plan, choices, collected, stamp, sites=None, blind=False
         if form == "fix" and d["method"] == "tag":
             reqs.append("5. 遮断は経路の出自に基づくこと"
                         "(プレフィックスの列挙による指定は不可)。")
+        if d.get("adworld", "none") != "none":
+            # ★BL-118: AD操作世界の口実(値は伏せる)。無言の恣意的 AD は理不尽に
+            #   寄るため、残骸の存在だけを予告する(2026-08-14 合意)。症状文は
+            #   不親切化で定型文に差し替えられるため、要件チャネルに載せる。
+            reqs.append("4. 過去の障害への対応において投入された設定が、ルータの一部に"
+                        "残存しています。それらの設定の見直しは、実施されていません。")
     opts = render_options(choices, style)
     ask = ("この問題を解決し、上記の要件をすべて満たすために必要な手順はどれですか。"
            "(1つ選択)" if form == "fix" else
@@ -1731,6 +1879,12 @@ def answer_md_ring(d, plan, choices, stamp, master_seed, subseed, prob_id,
     if herr:
         herr_note = ("\n- 赤ニシン: " + "・".join(sorted(herr))
                      + " に未適用の route-map/prefix-list/ACL と無害な適用行を混入(実害なし)")
+    ad = ring_ad_remnant(d)
+    if ad:
+        herr_note += (f"\n- AD操作世界(BL-118): adworld={d['adworld']} — 前任者の残骸= "
+                      f"{ad['node']} の {ad['parent']} に「{ad['line']}」。"
+                      "効いていない(ループの勝者は不変)。既定 AD の暗記では解けず、"
+                      "show ip protocols / 設定抜粋からの実効 AD の読取りが決め手。")
     victim = "O E2 (AD 110)" if inj_e else "D EX (AD 170)"
     loop_word = (f"{m['RC']} → {m['RB']} → {m['RA']} → {m['RC']}" if inj_e
                  else f"{m['RC']} → {m['RA']} → {m['RB']} → {m['RC']}")
@@ -1808,7 +1962,7 @@ MPLOOP_SEG = {("RA", "RB"): "seg_o1", ("RA", "RC"): "seg_o2",
               ("RD", "RE"): "seg_e31", ("RE", "RF"): "seg_e41"}
 
 
-def write_pack_mploop(repo, prob_id, p, names, subseed):
+def write_pack_mploop(repo, prob_id, p, names, subseed, extra=None):
     pdir = f"{repo}/problems/{prob_id}"
     os.makedirs(f"{pdir}/initial", exist_ok=True)
     os.makedirs(f"{pdir}/params", exist_ok=True)
@@ -1829,6 +1983,8 @@ def write_pack_mploop(repo, prob_id, p, names, subseed):
         # 役割を書いた先頭コメント(! GEN-REDISTMP 初期 RB : ...)は落とす
         body = [ln for ln in gmp.render_node(role)
                 if not ln.startswith("! GEN-REDISTMP")]
+        if extra and names[role] in extra:
+            body += extra[names[role]]
         with open(f"{pdir}/initial/{names[role]}.cfg.j2", "w", encoding="utf-8") as fh:
             fh.write("\n".join(body) + "\n")
     return pdir
@@ -1879,6 +2035,10 @@ def evidence_plan_mploop(p, names, rnd):
                "optional": True},
               {"node": names["RE"], "command": "show ip route"},
               {"node": names["RA"], "command": "show ip route"},
+              # ★BL-118: 実効 AD の読取り素材。adworld の有無に関わらず常時提示
+              #   (この行の有無で「AD がいじられている世界か」を割らせない)。
+              {"node": names["RD"],
+               "command": "show ip protocols | include Routing Protocol|Distance"},
               {"node": names["RA"],
                "command": f"traceroute {p['p_net']}.6 probe 1 timeout 1 ttl 1 8",
                "optional": True}]
@@ -1886,6 +2046,22 @@ def evidence_plan_mploop(p, names, rnd):
         checks.append({"node": names[role],
                        "command": "show running-config | section router"})
     return {"checks": checks}
+
+
+def mploop_ad_remnant(p, names):
+    """BL-118 P1a: mploop の AD操作世界(stale_rd)。adworld=none は None。
+    残骸= RD の `distance eigrp 90 <200+off>`。RD が比較する 2 候補は
+    **どちらも同一 AS の EIGRP 外部**なので、外部距離を何に変えても両候補が
+    同値に動き、優劣(=複合メトリック差)は不変=ループ定常のまま(実機収集の前提)。
+    既存の shape 固有錯乱肢「RD で distance を触る」を盤面の事実に昇格させた形。
+    ★境界(RB/RC)への残骸は置かない: 鏡像の向きが収束レースで非保証のため、
+    どちらの境界が再注入源かを seed から確定できず、実機で勝者が変わり得る。"""
+    if p.get("adworld", "none") == "none":
+        return None
+    val = 200 + p["ad_off"]
+    return {"role": "RD", "node": names["RD"], "val": val,
+            "parent": f"router eigrp {p['asn']}",
+            "line": f"distance eigrp 90 {val}"}
 
 
 def _mploop_fix_text(p, names, mode):
@@ -1938,6 +2114,26 @@ def build_choices_mploop(p, names, mode, rnd, exam=False):
                 "routemap": "経路タグ(route-map)",
                 "distance": "管理距離(distance)の変更"}[alt]
     one_side_txt = good_txt.replace(f"{b} と {c} の両方で、", f"{b} でのみ、")
+    ad = mploop_ad_remnant(p, names)
+    if ad:
+        # ★BL-118: 残骸が既に RD に在る世界では「RD に distance を入れる」肢は
+        #   成立しない(もう在る)。「残骸の値を直す」肢に置き換える。
+        rd_choice = (f"{dd} の {ad['parent']} 配下の残存する distance の外部距離を "
+                     "169 以下へ引き下げ、clear ip route * を実行する",
+                     False,
+                     f"{dd} が比較している 2 つの候補はいずれも EIGRP 外部であり、"
+                     "外部距離をどの値に変えても両候補が同値に動く。同一プロトコル・"
+                     "同一 AD の間では管理距離は優劣を決めず、選択はメトリックのまま。",
+                     [ad["parent"], " distance eigrp 90 165", "end",
+                      "clear ip route *"])
+    else:
+        rd_choice = (f"{dd} の router eigrp {asn} 配下に `distance eigrp 90 200` を"
+                     "設定する",
+                     False,
+                     f"{dd} が比較している 2 つの候補はいずれも EIGRP 外部(AD 170)であり、"
+                     "同一プロトコル・同一 AD の間では管理距離は優劣を決めない。"
+                     "何も変わらない。",
+                     [f"router eigrp {asn}", " distance eigrp 90 200"])
     c_list = [
         (good_txt, True, "", good_cli),
         (one_side_txt, False,
@@ -1947,11 +2143,7 @@ def build_choices_mploop(p, names, mode, rnd, exam=False):
         (alt_txt, False,
          f"到達性・ループとも解消する(症状は直る)が、{alt_word} は変更凍結の対象であり、"
          "指定されている実装手段に反する。", alt_cli),
-        (f"{dd} の router eigrp {asn} 配下に `distance eigrp 90 200` を設定する",
-         False,
-         f"{dd} が比較している 2 つの候補はいずれも EIGRP 外部(AD 170)であり、"
-         "同一プロトコル・同一 AD の間では管理距離は優劣を決めない。何も変わらない。",
-         [f"router eigrp {asn}", " distance eigrp 90 200"]),
+        rd_choice,
     ]
     if exam:
         c_list += [
@@ -1996,8 +2188,19 @@ def build_cause_choices_mploop(p, names, rnd, exam=False):
         (f"{dd} において当該プレフィックスの外部経路タイプが誤っている", False,
          "外部経路の種別は EIGRP では優劣に関与せず、比較は複合メトリックで行われる。"),
     ]
+    # ★BL-118: AD操作世界では「RD の残骸こそが原因」と誤認させる肢を必ず混ぜる。
+    #   真の機構(同AD・メトリック差)は残骸の有無と無関係に成立している。
+    must = [correct]
+    ad = mploop_ad_remnant(p, names)
+    if ad:
+        must.append((
+            f"{dd} に設定されている distance が、再注入された経路を正規の経路より"
+            "優先させる原因となっている", False,
+            f"当該の distance は {dd} の EIGRP 外部経路の全てに同値で適用される。"
+            "2 つの候補はいずれも EIGRP 外部であり、優劣は複合メトリックで決まって"
+            "いる。この設定の導入の前後で、選択は変わっていない。"))
     rnd.shuffle(pool)
-    cs = [correct] + pool[:(5 if exam else 3)]
+    cs = must + pool[:((6 if exam else 4) - len(must))]
     order = list(range(len(cs)))
     rnd.shuffle(order)
     return [cs[i] for i in order]
@@ -2038,6 +2241,13 @@ def mploop_requirements(p, names, mode, rnd, form="fix"):
     ]
     if form == "fix":
         core.append(MPLOOP_POLICY[mode])
+    if p.get("adworld", "none") != "none":
+        # ★BL-118: AD操作世界の口実(症状文は不親切化で消えるため要件チャネルに)。
+        core.append(rnd.choice([
+            "過去の障害への対応において投入された設定が、ルータの一部に、"
+            "残存しています。それらの設定の見直しは、実施されていません。",
+            "以前の障害の対応の際に追加された設定が、一部のルータにおいて、"
+            "そのまま残されています。当該の設定の棚卸しは、行われていません。"]))
     core += rnd.sample([x for x in REQ_DECOYS if "静的経路" not in x],
                        rnd.choice([1, 2]))
     rnd.shuffle(core)
@@ -2120,6 +2330,13 @@ def answer_md_mploop(p, names, mode, choices, stamp, master_seed, subseed,
                         for l, ch in zip(letters, choices))
     b, c, dd, e, f6 = (names["RB"], names["RC"], names["RD"],
                        names["RE"], names["RF"])
+    ad_note = ""
+    if (ad := mploop_ad_remnant(p, names)):
+        ad_note = (f"\n- AD操作世界(BL-118): adworld={p['adworld']} — 前任者の残骸= "
+                   f"{ad['node']} の {ad['parent']} に「{ad['line']}」。"
+                   "効いていない(両候補は同一プロトコルの外部経路なので同値に動き、"
+                   "優劣はメトリックのまま=ループ不変)。「AD をいじった形跡がある→"
+                   "それが原因」という即断を封じる。")
     return f"""# 解答 {stamp}
 
 ## 正解
@@ -2140,7 +2357,7 @@ def answer_md_mploop(p, names, mode, choices, stamp, master_seed, subseed,
 - 正解法: {mode}(要件のポリシーで出し分け。**{b} と {c} の両方**に入れるのが必須で、
   片側だけでは鏡像の再注入が残る)
 - 生成: `gen_paper_mcq.py --shape mploop --seed {master_seed}`
-  (sub-seed {subseed} / 展開パック {prob_id}・撤収済)
+  (sub-seed {subseed} / 展開パック {prob_id}・撤収済){ad_note}
 
 ## 各選択肢の判定
 
@@ -2165,6 +2382,728 @@ ring 形(AD 反転)との違いはここ: **候補が両方とも同じプロト
 付け直される」という性質で、これにより**遠い経路が近く見える**。
 2 点相互再配送では、フィルタ/タグは**両方の境界に対で**入れないと、
 役割が入れ替わった鏡像のループが残る。
+"""
+
+
+# --------------------------------------------------------------------------
+# shape=riploop — RIP⇄OSPF 二点相互再配送「対策が効いていない」型 (BL-116)
+#   ring(AD 反転)・mploop(同AD・メトリック差)に続く第3の診断型。盤面は
+#   gen_redist_ripospf_ts(GEN-REDISTRO・6台)を流用し、
+#   「対策は構成に存在する(した)のに機能していない」を読ませる:
+#     wrong_tag_filter : タグ運用実装済みだが deny の match tag 不一致(素通り→周回)
+#     half_fix         : 前任者対策(distance)が片方の境界のみ(遠回り残存)
+#     stale_filter     : RIP out に残骸 distribute-list(片系依存・偏り)
+#     seed_loop        : 素の設計→ハブで同値 ECMP タイ(cause 形専用)
+#   ★症状が3種(周回/遠回り/偏り)に分かれるのが狙い。「traceroute が回って
+#   いる→ループ」の即断も「ループ問→AD」の即断も封じる。
+# --------------------------------------------------------------------------
+RIPLOOP_KINDS = ["seed_loop", "wrong_tag_filter", "half_fix", "stale_filter"]
+# (role_a, if_a, role_b, if_b, segキー, a側ホスト部, b側ホスト部)
+#   ★gro.render の焼き込み(IF slot・.1/.2 の向き)と一致させること。
+RIPLOOP_LINKS = [("RT06", 0, "RT01", 0, "16", 2, 1),
+                 ("RT01", 1, "RT02", 0, "12", 1, 2),
+                 ("RT01", 2, "RT03", 0, "13", 1, 2),
+                 ("RT02", 1, "RT04", 0, "24", 1, 2),
+                 ("RT04", 1, "RT05", 0, "45", 1, 2),
+                 ("RT03", 1, "RT05", 1, "35", 1, 2)]
+RIPLOOP_DOM = {"16": "RIP v2", "12": "RIP v2", "13": "RIP v2",
+               "24": "OSPF 1 area 0", "45": "OSPF 1 area 0",
+               "35": "OSPF 1 area 0"}
+
+
+def _riploop_seg(d, key):
+    return d["rseg"][key] if key in ("16", "12", "13") else d["oseg"][key]
+
+
+def pick_draw_riploop(qseed, kind):
+    """値抽選＋役割→名前シャッフル＋支社網の第3オクテット抽選(記憶封じ)。"""
+    rnd = random.Random(qseed)
+    lo, rseg, oseg = gro.rand_values(rnd)
+    used_p = {int(v.split(".")[1]) for v in rseg.values()}
+    while True:
+        b3 = rnd.randint(2, 250)        # 10.<b3>.0/24, 10.<b3>.1/24 (1=mgmt回避)
+        if b3 not in used_p:
+            break
+    tags = [f"RT{i:02d}" for i in range(1, len(gro.NODES) + 1)]
+    rnd.shuffle(tags)
+    d = {"kind": kind, "lo": lo, "rseg": rseg, "oseg": oseg,
+         "branch3": b3, "branch": [f"10.{b3}.0", f"10.{b3}.1"],
+         "names": dict(zip(gro.NODES, tags)),
+         "_mmdir": rnd.choice(["LR", "TD", "RL"])}
+    # ★BL-118 P3: タグ値の抽選(既定 120/110/typo100 の定数暗記対策・BL-116 残)。
+    #   値は driver が gro のモジュール値へ per-question 適用する(gro.BRANCH と
+    #   同じパターン)。wrong_tag_filter の核心=「deny が実タグと不一致」を保つため、
+    #   typo は実タグの「惜しい」近傍(桁ずれ・±1・±10)から選び、実タグとも
+    #   相手タグとも一致させない。
+    tag_pool = [10, 20, 30, 50, 90, 100, 110, 120, 150, 180, 200, 210, 220,
+                101, 111, 121, 202, 300, 310, 320]
+    t_rip = rnd.choice(tag_pool)
+    t_ospf = rnd.choice([t for t in tag_pool if t != t_rip])
+    near = [t_rip + 1, t_rip - 1, t_rip + 10, t_rip - 10,
+            t_rip * 10, t_rip // 10]
+    d["tag_rip"], d["tag_ospf"] = t_rip, t_ospf
+    d["tag_typo"] = rnd.choice(
+        [t for t in near if t > 0 and t not in (t_rip, t_ospf)])
+    return qseed, d
+
+
+def write_pack_riploop(repo, prob_id, d, subseed):
+    n = d["names"]
+    pdir = f"{repo}/problems/{prob_id}"
+    os.makedirs(f"{pdir}/initial", exist_ok=True)
+    problem = {"id": prob_id,
+               "title": f"机上問題スナップショット(使い捨て) seed={subseed}",
+               "exam": "ENARSI", "topics": ["generated", "paper-mcq"],
+               "difficulty": 5, "topology": "generated", "access": "ssh",
+               "target_nodes": sorted(n.values()), "points": 100,
+               "lab": {"links": [{"a": n[x], "a_if": ia, "b": n[y], "b_if": ib}
+                                 for x, ia, y, ib, _s, _pa, _pb
+                                 in RIPLOOP_LINKS]}}
+    with open(f"{pdir}/problem.yml", "w", encoding="utf-8") as fh:
+        fh.write("# 自動生成 (gen_paper_mcq.py) 机上問題用・撤収後に削除される\n")
+        yaml.safe_dump(problem, fh, sort_keys=False, allow_unicode=True)
+    orig_branch = gro.BRANCH
+    gro.BRANCH = d["branch"]            # 支社網の抽選値を gro に一時適用
+    try:
+        for role in gro.NODES:
+            # 役割を書いた先頭コメント(! RT06 初期構成 …)は落とす
+            body = [ln for ln in gro.render(role, d["lo"], d["rseg"],
+                                            d["oseg"], d["kind"])
+                    if not ln.startswith("! ")]
+            # ★紙面版 wrong_tag_filter は seed metric 5(gro のラボ版は 1)。
+            #   ★実測(2026-08-13・GEN-REDISTRO-990116)= seed 1 のままだと
+            #   境界2台の状態が入れ替わり続ける**振動**(経路消失の窓・ping
+            #   0%⇄100%)になり、cause 形の錯乱肢「振動している」が真になる。
+            #   seed 5 なら安定した「素通り+片境界遠回り」で一意性が保てる。
+            if d["kind"] == "wrong_tag_filter":
+                body = [ln.replace(
+                    "redistribute ospf 1 metric 1 route-map OSPF2RIP",
+                    f"redistribute ospf 1 metric {gro.SEED_OK} "
+                    "route-map OSPF2RIP") for ln in body]
+            with open(f"{pdir}/initial/{n[role]}.cfg.j2", "w",
+                      encoding="utf-8") as fh:
+                fh.write("\n".join(body) + "\n")
+    finally:
+        gro.BRANCH = orig_branch
+    return pdir
+
+
+def _riploop_lo(d, role):
+    if role == "RT06":
+        return (f"{d['branch'][0]}.1/24, {d['branch'][1]}.1/24 "
+                f"(`{d['branch'][0]}.0/24` `{d['branch'][1]}.0/24` を広告)")
+    return f"{d['lo'][role]}/32"
+
+
+def _riploop_protos(role):
+    return {"RT06": "RIP v2", "RT01": "RIP v2", "RT02": "RIP v2 / OSPF 1",
+            "RT03": "RIP v2 / OSPF 1", "RT04": "OSPF 1", "RT05": "OSPF 1"}[role]
+
+
+def mermaid_riploop(d, sites=None, blind=False):
+    n = d["names"]
+    lines = ["```mermaid", f"graph {d.get('_mmdir', 'LR')}"]
+    for role in sorted(gro.NODES, key=lambda r: n[r]):
+        site = ""
+        if sites:
+            site = f"{sites[role]}{'(支社)' if role == 'RT06' else ''}<br/>"
+        protos = "" if blind else f"<br/>{_riploop_protos(role)}"
+        lines.append((f'  {n[role]}["{site}{n[role]}<br/>'
+                      f'Lo: {_riploop_lo(d, role)}{protos}"]').replace("`", ""))
+    for a_, ia, b_, ib, s, pa, pb in RIPLOOP_LINKS:
+        seg = _riploop_seg(d, s)
+        label = f"{seg}.0/30<br/>{n[a_]}:E0/{ia}=.{pa} {n[b_]}:E0/{ib}=.{pb}"
+        if not blind:
+            label += f"<br/>{RIPLOOP_DOM[s]}"
+        lines.append(f'  {n[a_]} ---|"{label}"| {n[b_]}')
+    lines.append("```")
+    return "\n".join(lines)
+
+
+def topo_tables_riploop(d, sites=None, blind=False):
+    n = d["names"]
+    rows = []
+    for role in gro.NODES:
+        pre = ""
+        if sites:
+            pre = f"| {sites[role]}{'(支社)' if role == 'RT06' else ''} "
+        protos = "" if blind else f" {_riploop_protos(role)} |"
+        rows.append(f"{pre}| {n[role]} |{protos} {_riploop_lo(d, role)} |")
+    edges = []
+    for a_, ia, b_, ib, s, pa, pb in RIPLOOP_LINKS:
+        seg = _riploop_seg(d, s)
+        dom_txt = "" if blind else f"{RIPLOOP_DOM[s]} / "
+        edges.append(f"  {n[a_]}:E0/{ia}(.{pa}) ── {n[b_]}:E0/{ib}(.{pb})   "
+                     f"{dom_txt}{seg}.0/30")
+    if sites and blind:
+        head = ("| 拠点 | ルータ | Loopback / 広告網 |\n"
+                "|------|--------|--------------------|\n")
+    elif sites:
+        head = ("| 拠点 | ルータ | 参加プロトコル | Loopback / 広告網 |\n"
+                "|------|--------|----------------|--------------------|\n")
+    elif blind:
+        head = ("| ルータ | Loopback / 広告網 |\n"
+                "|--------|--------------------|\n")
+    else:
+        head = ("| ルータ | 参加プロトコル | Loopback / 広告網 |\n"
+                "|--------|----------------|--------------------|\n")
+    return (head + "\n".join(sorted(rows))
+            + "\n\nリンク一覧:\n```\n" + "\n".join(edges) + "\n```")
+
+
+def evidence_plan_riploop(d, rnd, exam=False):
+    """kind 別の証拠セット。★「対策の実在」が読める材料(show route-map /
+    show ip protocols)を必ず入れる=『対策が効いていない』を紙面で成立させる鍵。
+    ★half_fix は片方の境界の config を意図的に出さない(未提示前提=BL-113。
+    遠回りの症状と、もう一方の config から一意に補完できる)。"""
+    n, k, v = d["names"], d["kind"], d["branch"][0]
+    hub, b2, b3 = n["RT01"], n["RT02"], n["RT03"]
+    checks = []
+    if k == "seed_loop":
+        checks.append({"node": hub,
+                       "command": ("show ip route" if exam
+                                   else f"show ip route {v}.0")})
+        bx = rnd.choice([b2, b3])
+        d["_shown_b"] = bx
+        checks.append({"node": bx, "command": f"show ip route {v}.0"})
+        tracer = rnd.choice([n["RT04"], n["RT05"]])
+        checks.append({"node": tracer,
+                       "command": f"traceroute {v}.1 probe 1 timeout 1 ttl 1 8",
+                       "optional": True})   # 症状の生映像(取れなければ落とす)
+        for x in (b2, b3):
+            checks.append({"node": x,
+                           "command": "show running-config | section router"})
+    elif k == "wrong_tag_filter":
+        # ★安定盤面(seed 5)= どちらの境界が O E2 側に落ちるかは収束レースで
+        #   非決定なので、**両方の境界**の経路詳細を見せる(非対称そのものが
+        #   証拠)。route-map も両方(=「片側のみ実装」仮説を消す)。
+        checks.append({"node": hub,
+                       "command": ("show ip route" if exam
+                                   else f"show ip route {v}.0")})
+        checks += [{"node": b2, "command": f"show ip route {v}.0"},
+                   {"node": b3, "command": f"show ip route {v}.0"},
+                   {"node": b2, "command": "show route-map"},
+                   {"node": b3, "command": "show route-map"}]
+        tracer = rnd.choice([n["RT04"], n["RT05"]])
+        checks.append({"node": tracer,
+                       "command": f"traceroute {v}.1 probe 1 timeout 1 ttl 1 8",
+                       "optional": True})
+        for x in (b2, b3):
+            checks.append({"node": x,
+                           "command": "show running-config | section router"})
+    elif k == "half_fix":
+        checks += [
+            {"node": b3, "command": ("show ip route" if exam
+                                     else f"show ip route {v}.0")},
+            {"node": b2, "command": f"show ip route {v}.0"},
+            {"node": hub, "command": f"show ip route {d['lo']['RT04']}"},
+            {"node": b3,
+             "command": f"traceroute {v}.1 probe 1 timeout 1 ttl 1 8",
+             "optional": True},
+            {"node": b2, "command": "show running-config | section router"}]
+    else:                                   # stale_filter
+        checks += [
+            {"node": hub, "command": ("show ip route" if exam
+                                      else f"show ip route {d['lo']['RT04']}")},
+            {"node": hub, "command": f"show ip route {d['lo']['RT02']}"},
+            {"node": b2, "command": "show ip protocols"},
+            {"node": b2, "command": "show access-lists"},
+            {"node": b2, "command": "show running-config | section router"}]
+    return {"checks": checks}
+
+
+def build_choices_riploop(d, rnd, exam=False):
+    """是正手順形(kind 別)。★この shape 固有の錯乱肢=「既に実装済みの対策を
+    もう一度提案する」(構成が読めているか)と「片側だけ直す/揃える向きが逆」。"""
+    n, k = d["names"], d["kind"]
+    hub, b2, b3 = n["RT01"], n["RT02"], n["RT03"]
+    tr, to = gro.TAG_RIP, gro.TAG_OSPF
+    if k == "wrong_tag_filter":
+        bx = d.get("_shown_b", b2)
+        c_list = [
+            (f"{b2} と {b3} の両方で、route-map `OSPF2RIP` の deny エントリの "
+             f"match tag を、RIP 発の経路に付与されているタグ({tr})へ修正する",
+             True, "",
+             [f"! {b2} と {b3} の両方に投入", "route-map OSPF2RIP deny 10",
+              f" no match tag {gro.TAG_TYPO}", f" match tag {tr}"]),
+            (f"{bx} でのみ、route-map `OSPF2RIP` の deny エントリの match tag を "
+             f"{tr} へ修正する", False,
+             "もう一方の境界の遮断は壊れたままであり、「両方の境界で機能させる」"
+             "という要件を満たさない(境界の役割が入れ替われば再注入も再発する)。",
+             [f"! {bx} にのみ投入", "route-map OSPF2RIP deny 10",
+              f" no match tag {gro.TAG_TYPO}", f" match tag {tr}"]),
+            (f"{b2} と {b3} の両方の router ospf 1 配下に "
+             "`distance ospf external 180` を設定する", False,
+             "境界の選好は正されるが、管理距離は変更の凍結の対象であり、"
+             "また出自による遮断(タグ)が機能していない状態は残る。",
+             [f"! {b2} と {b3} の両方に投入", "router ospf 1",
+              " distance ospf external 180"]),
+            (f"{b2} と {b3} の OSPF→RIP の再配送の seed metric を、"
+             "より大きな値へ変更する", False,
+             "経路の劣後は強まるが、フィードバックの経路が RIP へ広告される"
+             "こと自体は続き、再配送の時点での拒否という要件を満たさない。",
+             [f"! {b2} と {b3} の両方に投入", "router rip",
+              " redistribute ospf 1 metric 20 route-map OSPF2RIP"]),
+        ]
+        if exam:
+            c_list += [
+                (f"{b2} と {b3} の route-map `RIP2OSPF` の deny エントリの "
+                 f"match tag を {tr} へ変更する", False,
+                 "修正の対象が逆方向の route-map であり、問題の再注入(OSPF→RIP)は"
+                 "そのまま残る。さらに OSPF 発の経路への遮断が壊れる。",
+                 [f"! {b2} と {b3} の両方に投入", "route-map RIP2OSPF deny 10",
+                  f" no match tag {to}", f" match tag {tr}"]),
+                (f"{hub} で `clear ip route *` を実行する", False,
+                 "構成に起因する定常状態であり、再計算しても同じ選択に戻る。",
+                 ["clear ip route *"]),
+            ]
+    elif k == "half_fix":
+        c_list = [
+            (f"{b3} の router ospf 1 配下に `distance ospf external 180` を"
+             "設定する", True, "",
+             [f"! {b3} にのみ投入", "router ospf 1",
+              " distance ospf external 180"]),
+            (f"{b2} の `distance ospf external 180` を削除し、両方の境界の"
+             "構成を一致させる", False,
+             "構成は対称になるが、境界がフィードバックの外部経路を優先しうる"
+             "状態が両方に広がる方向であり、遠回りは解消しない。",
+             [f"! {b2} に投入", "router ospf 1",
+              " no distance ospf external 180"]),
+            (f"{b3} の route-map `OSPF2RIP` に、再注入を拒否する deny エントリを"
+             "追加する", False,
+             "出自による遮断は既に両方の境界で機能している(経路の周回が発生して"
+             "いないことからも読み取れる)。事象は経路の選好の層で起きている。",
+             [f"! {b3} に投入", "route-map OSPF2RIP deny 10",
+              f" match tag {tr}"]),
+            (f"{n['RT04']} と {n['RT05']} の router ospf 1 配下に "
+             "`distance ospf external 180` を設定する", False,
+             "選好の競合が起きているのは境界であり、OSPF 内部のルータには"
+             "競合する RIP の経路が存在しない。何も変わらない。",
+             [f"! {n['RT04']} と {n['RT05']} に投入", "router ospf 1",
+              " distance ospf external 180"]),
+        ]
+        if exam:
+            c_list += [
+                (f"{b3} の `redistribute rip` を削除する", False,
+                 "遠回り自体は変化しうるが、二点相互再配送による冗長の設計を破る"
+                 "(要件に反する)。",
+                 [f"! {b3} に投入", "router ospf 1", " no redistribute rip"]),
+                (f"{b3} で `clear ip ospf process` を実行する", False,
+                 "構成に起因する定常状態であり、再計算しても同じ選択に戻る。",
+                 ["clear ip ospf process"]),
+            ]
+    else:                                   # stale_filter
+        c_list = [
+            (f"{b2} の router rip 配下の `distribute-list 10 out` を削除し、"
+             "参照されている access-list 10 も撤去する", True, "",
+             [f"! {b2} に投入", "router rip", " no distribute-list 10 out",
+              "!", "no access-list 10"]),
+            (f"{b3} の router rip 配下にも `distribute-list 10 out` を追加し、"
+             "両方の境界の構成を一致させる", False,
+             "残置物の側に揃える方向であり、双方の境界からの RIP の広告が"
+             "抑止され、支社側が本社側の経路をすべて失う。",
+             [f"! {b3} に投入", "access-list 10 deny any", "router rip",
+              " distribute-list 10 out"]),
+            (f"{b2} の access-list 10 の末尾に `permit any` を追加する", False,
+             "先頭の deny any がすべてのアップデートに一致するため、後段に "
+             "permit を追加しても効果がない。",
+             [f"! {b2} に投入", "access-list 10 permit any"]),
+            (f"{b2} の OSPF→RIP の再配送の seed metric を引き上げる", False,
+             "広告が抑止されている原因は distribute-list であり、メトリックの"
+             "値は関係しない。",
+             [f"! {b2} に投入", "router rip",
+              " redistribute ospf 1 metric 10 route-map OSPF2RIP"]),
+        ]
+        if exam:
+            c_list += [
+                (f"{hub} の router rip 配下に `maximum-paths 2` を設定する",
+                 False,
+                 "等コストの分散は既定で有効であり、片系に偏っている原因は"
+                 "一方の境界からの広告の抑止にある。",
+                 [f"! {hub} に投入", "router rip", " maximum-paths 2"]),
+                (f"{hub} で `clear ip route *` を実行する", False,
+                 "構成に起因する定常状態であり、再計算しても同じ状態に戻る。",
+                 ["clear ip route *"]),
+            ]
+    order = list(range(len(c_list)))
+    rnd.shuffle(order)
+    return [c_list[i] for i in order]
+
+
+def build_cause_choices_riploop(d, rnd, exam=False):
+    """原因特定形。★正解肢は数値・因果の詳細を書かず他肢と同粒度(BL-086 規約)。
+    錯乱肢には他 kind の機構(AD/抑止/欠落/振動)を node スコープ付きで混ぜ、
+    盤面の証拠で消せるものだけを置く。"""
+    n, k = d["names"], d["kind"]
+    hub, b2, b3, r6 = n["RT01"], n["RT02"], n["RT03"], n["RT06"]
+    if k == "seed_loop":
+        correct = (f"{hub} が、境界で再注入された経路を、{r6} からの正規の経路"
+                   "と等価に扱っている", True, "")
+        pool = [
+            (f"{hub} において、再注入された経路の管理距離が、正規の経路のそれ"
+             "より小さい", False,
+             f"{hub} はいずれの経路も RIP(AD 120)として学習しており、管理距離は"
+             "同一。等価な負荷分散が周回の入口になっている。"),
+            (f"{b2} と {b3} の間で OSPF の隣接が確立しておらず、経路情報が"
+             "同期していない", False,
+             "両方の境界とも OSPF ドメインの経路を保持しており、隣接は確立"
+             "している。"),
+            ("支社網の経路が収束せず、境界の間で振動している", False,
+             "経路表の経過時間は単調に進行しており、定常状態である。"),
+            (f"{r6} が支社網を広告しておらず、正規の経路が存在しない", False,
+             f"{hub} の経路表には {r6} 方向の正規の経路が存在する"
+             "(単独では選ばれていないだけ)。"),
+            ("境界の OSPF→RIP の再配送でメトリックが無限大となり、経路が"
+             "広告されていない", False,
+             "経路は広告されている。事象は広告の欠落ではなく、広告された経路の"
+             "扱われ方にある。"),
+            ("等コストの複数経路による正常な負荷分散であり、事象は仕様どおり"
+             "である", False,
+             "分散された一方の経路は広告元へ向かっておらず、同一の区間を反復"
+             "している。"),
+        ]
+    elif k == "wrong_tag_filter":
+        correct = ("再注入を遮断するための route-map の deny エントリの条件が、"
+                   "経路に実際に付与されているタグと一致していない", True, "")
+        pool = [
+            ("route-map が redistribute のステートメントに適用されておらず、"
+             "遮断そのものが行われていない", False,
+             "route-map は両方向の redistribute に適用されている。問題は条件の"
+             "値にある。"),
+            ("経路へのタグの付与(set tag)が実装されておらず、遮断の条件に一致"
+             "する経路が存在しない", False,
+             "set tag は実装されており、経路はタグを保持したまま境界に到達"
+             "している。"),
+            ("対策が片方の境界にのみ実装されており、もう一方の境界が素通りに"
+             "なっている", False,
+             "両方の境界に同じ route-map が存在している。実装の範囲ではなく、"
+             "条件の値に問題がある。"),
+            (f"{hub} において、再注入された経路の管理距離が、正規の経路のそれ"
+             "より小さい", False,
+             "いずれも RIP(AD 120)であり、管理距離は同一である。"),
+            ("支社網の経路が収束せず、境界の間で振動している", False,
+             "経路表の経過時間は単調に進行しており、定常状態である。"),
+            ("一方の境界の RIP の広告が distribute-list によって抑止され、"
+             "経路が片系に偏っている", False,
+             "そのようなフィルタは存在しない。事象は広告の抑止ではなく、"
+             "遮断されるべき経路が広告され続けていることにある。"),
+        ]
+    elif k == "half_fix":
+        correct = (f"{b3} が、フィードバックの外部経路を、支社からの正規の経路"
+                   "より優先している", True, "")
+        pool = [
+            ("出自のタグによる遮断が機能しておらず、経路が周回している", False,
+             "転送の周回は発生していない(事象は遠回りであり、TTL の超過では"
+             "ない)。"),
+            (f"{b3} の redistribute が欠落しており、OSPF ドメインが支社網の"
+             "経路を喪失している", False,
+             f"{b3} は支社網の経路を保持しており、到達も可能である(喪失では"
+             "ない)。"),
+            (f"{b3} の OSPF の隣接が不安定であり、経路の学習が断続している",
+             False,
+             "経路は安定して保持されており、経過時間も単調に進行している。"),
+            ("残置されたフィルタが、一方の境界からの広告を抑止している", False,
+             f"広告は両方の境界から行われている({hub} は本社側の経路を両方の"
+             "境界を経由して保持している)。"),
+            (f"{hub} において、両方の境界からの経路の管理距離が異なっている",
+             False,
+             f"{hub} はいずれも RIP として学習しており、管理距離は同一である。"
+             f"事象は {hub} ではなく境界で起きている。"),
+            ("支社網の経路が収束せず、境界の間で振動している", False,
+             "定常状態であり、振動の痕跡はない。"),
+        ]
+    else:                                   # stale_filter
+        correct = (f"{b2} からの RIP の広告が、適用されているフィルタによって、"
+                   "すべて抑止されている", True, "")
+        pool = [
+            (f"{b2} の redistribute ospf 1 が構成から欠落している", False,
+             "redistribute は構成に存在している。また、その場合に失われるのは"
+             "再配送された経路だけで、ネイティブの広告は継続するはずである。"),
+            (f"{hub} と {b2} の間のリンクに障害があり、RIP のアップデートが"
+             "届いていない", False,
+             "当該のリンクは稼働している(直結のセグメントへは到達できる)。"),
+            ("OSPF→RIP の再配送に seed metric が指定されておらず、無限大の"
+             "メトリックで広告されない", False,
+             "seed metric は指定されている。また、その場合でも抑止されるのは"
+             "再配送された経路のみで、ネイティブの経路の広告は継続する。"),
+            ("route-map `OSPF2RIP` の deny エントリが、すべての経路に一致して"
+             "いる", False,
+             "route-map が影響するのは再配送された経路のみで、ネイティブの"
+             "広告は継続する。事象はネイティブの経路も含めた全面的な欠落で"
+             "ある。"),
+            ("支社網の経路が収束せず、境界の間で振動している", False,
+             "定常状態であり、振動の痕跡はない。"),
+            (f"{hub} の等コスト分散が無効化されており、片方の経路だけが"
+             "使用されている", False,
+             "等コストの分散は既定で有効である。もう一方の経路は、そもそも"
+             "学習されていない。"),
+        ]
+    rnd.shuffle(pool)
+    cs = [correct] + pool[:(5 if exam else 3)]
+    order = list(range(len(cs)))
+    rnd.shuffle(order)
+    return [cs[i] for i in order]
+
+
+RIPLOOP_POLICY = {
+    # ★fix 形の一意性の担い手。cause 形では出さない(原因のリーク防止)。
+    "wrong_tag_filter": [
+        "経路の出自に基づく遮断(タグ)が、両方の境界において、意図どおりに"
+        "機能させられること(フィードバックの経路は、再配送の時点で、拒否"
+        "されなければなりません)。",
+        "管理距離の変更は、変更の凍結により、使用することができません。"],
+    "half_fix": [
+        "フィルタおよび route-map の新設は、変更の凍結により、使用することが"
+        "できません。",
+        "経路は、最短の転送パスを取ること(境界のルータの Loopback 宛の、"
+        "管理距離に由来する遠回りは、この限りではありません)。"],
+    "stale_filter": [
+        "支社側のルータにおいて、本社側の経路が、両方の境界を経由する等価な"
+        "経路として、保持されていること。",
+        "フィルタの新設は、変更の凍結により、使用することができません。"],
+    "seed_loop": [],
+}
+
+
+def riploop_requirements(d, rnd, form="fix"):
+    n = d["names"]
+    v0, v1, r6 = d["branch"][0], d["branch"][1], n["RT06"]
+    core = [
+        rnd.choice([
+            f"すべてのサイトから、支社のネットワーク `{v0}.0/24` および "
+            f"`{v1}.0/24` を含むところの、すべての宛先へ、到達することが"
+            "できること。",
+            f"支社のネットワーク `{v0}.0/24` / `{v1}.0/24` への到達可能性が、"
+            "すべてのサイトにおいて、確保されていること。"]),
+        rnd.choice([
+            f"支社のネットワーク宛のパケットが、広告元である {r6} の方向へ"
+            "転送され、そして、転送のループが存在していないこと。",
+            f"支社のネットワーク宛のトラフィックが {r6} へ配送され、"
+            "経路の周回が、発生していないこと。"]),
+        "二点相互再配送(それぞれの境界における redistribute)による、冗長の"
+        "設計が、維持されなければなりません。",
+        "スタティック・ルートおよび既定のルートによる迂回は、実施されては"
+        "なりません。",
+    ]
+    if form == "fix":
+        core += RIPLOOP_POLICY[d["kind"]]
+    core += rnd.sample([x for x in REQ_DECOYS if "スタティック" not in x],
+                       rnd.choice([1, 2]))
+    rnd.shuffle(core)
+    return finalize_reqs(core, rnd)
+
+
+RIPLOOP_SYMPTOM = {
+    "seed_loop":
+        "いくつかのサイトから、支社のネットワーク宛の通信が、タイムアウトする、"
+        "ということが、報告されています。\n他の宛先への通信は、正常です。\n"
+        "これは、意図された動作ではありません。"
+        "示されているところの出力を、参照してください。",
+    "wrong_tag_filter":
+        "過去に、経路の再注入に対する対策が、実装された、という記録が、"
+        "残されています。\nしかしながら、定期の監査において、OSPF から RIP へ"
+        "戻る方向の経路の広告が、依然として観測されており、また、一方の境界の"
+        "ルータからの、支社のネットワークへの経路が、遠回りになっています。\n"
+        "到達そのものは、可能です。"
+        "示されているところの出力を、参照してください。",
+    "half_fix":
+        "過去の障害への対応として、対策が実施された、ということが、記録されて"
+        "います。\nしかしながら、一方の境界のルータからの、支社のネットワーク"
+        "への経路が、遠回りのままである、ということが、報告されています。\n"
+        "到達そのものは、可能です。"
+        "示されているところの出力を、参照してください。",
+    "stale_filter":
+        "到達性に関する問題は、報告されていません。\nしかしながら、支社側の"
+        "ルータにおいて、本社側への経路が、一方の境界に偏っており、設計どおり"
+        "の冗長が、確認されることができません。\n"
+        "示されているところの出力を、参照してください。",
+}
+
+
+def question_md_riploop(d, plan, choices, collected, stamp, sites=None,
+                        blind=False, reqs=None, style="prose", form="fix"):
+    n = d["names"]
+    v0, v1, r6 = d["branch"][0], d["branch"][1], n["RT06"]
+    state, cfg = [], []
+    for chk in plan["checks"]:
+        body = collected.get((chk["node"], chk["command"]), "(未収集)")
+        if chk.get("optional") and _bad(body):
+            continue
+        if chk["command"].startswith("show ip route"):
+            body = _trim_route_table(body)
+        block = f"```\n{chk['node']}# {chk['command']}\n{body.strip()}\n```"
+        (cfg if chk["command"].startswith("show running-config")
+         else state).append(block)
+    opts = render_options(choices, style)
+    ask = ("この問題を解決し、そして、示されているところのすべての要件が満た"
+           "されることを確実にするために、適用されなければならない構成は、"
+           "どれですか。(1つを選択してください)" if form == "fix" else
+           "示されているところの事象を説明しているものとして、最も適切なものは、"
+           "どれですか。(1つを選択してください)")
+    intro = (f"あなたの会社のネットワークは、支社のドメイン(RIP バージョン 2)と、"
+             "本社のコアのドメイン(OSPF)とが、2 台の境界のルータによって接続"
+             "され、そして、それぞれの境界において、相互の再配送が実施されて"
+             "いる、というものです。\n"
+             f"支社のネットワーク `{v0}.0/24` および `{v1}.0/24` は、{r6} に"
+             "よって、広告されています。\n"
+             "どちらの境界が失われた場合においても、通信が継続されることが"
+             "できるように、設計されています。\n"
+             "ルーティングの設計の詳細は、示されているところの出力から、"
+             "読み取られることが、期待されています。")
+    symptom = RIPLOOP_SYMPTOM[d["kind"]]
+    cfg_sec = ""
+    if cfg:
+        cfg_sec = f"\n## 設定抜粋\n\n{chr(10).join(cfg)}\n"
+    return f"""# 問題 {stamp} : ルーティング到達性の分析
+
+{FIXED_NOTE}
+
+## トポロジ
+
+{terse_jp(intro)}
+
+{messy_mermaid(mermaid_riploop(d, sites, blind=blind))}
+
+{topo_tables_riploop(d, sites, blind=blind)}
+
+## 要件
+
+{chr(10).join(reqs)}
+
+## 現在の状態
+
+{terse_jp(symptom)}
+
+{chr(10).join(state)}
+{cfg_sec}
+## 設問
+
+{ask}
+
+## 選択肢
+
+{opts}
+"""
+
+
+def answer_md_riploop(d, choices, stamp, master_seed, subseed, prob_id,
+                      form="fix"):
+    n, k = d["names"], d["kind"]
+    hub, b2, b3, r6 = n["RT01"], n["RT02"], n["RT03"], n["RT06"]
+    v = d["branch"][0]
+    letters = [chr(65 + i) for i in range(len(choices))]
+    correct = [l for l, ch in zip(letters, choices) if ch[1]][0]
+    wrongs = "\n".join(f"- **{l}**: {'(正解)' if ch[1] else ch[2]}"
+                       for l, ch in zip(letters, choices))
+    mech = {
+        "seed_loop":
+            f"支社網 `{v}.0/24` 系は {r6} が RIP で広告し、両方の境界"
+            f"({b2}/{b3})が OSPF へ再配送する。対策(タグ・distance・常識的な "
+            "seed metric)が無い素の二点相互再配送のため、(1)一方の境界が、"
+            "他方が生成した O E2(AD 110)を RIP(120)より優先し【第1層=AD】、"
+            f"(2)それを seed metric 1 で RIP へ再注入するため、{hub} で "
+            f"{r6} 方向のネイティブ [120/1] と再注入 [120/1] が**同値の等コスト"
+            "**になる【第2層=seed metric】。分散の片割れが境界へ向かい、"
+            f"{hub}→境界→OSPF→もう一方の境界→{hub} の定常周回になる。",
+        "wrong_tag_filter":
+            f"タグ運用は実装済み(RIP 発= {gro.TAG_RIP} / OSPF 発= "
+            f"{gro.TAG_OSPF} を set tag)だが、OSPF→RIP の deny エントリが "
+            f"`match tag {gro.TAG_TYPO}` を参照しており、実際に経路へ付与されるタグ "
+            f"{gro.TAG_RIP} と一致しない。遮断が素通りになり、(1)一方の境界が "
+            "O E2(AD 110)のフィードバックを RIP(120)より優先して遠回りになり、"
+            "(2)その境界がフィードバックを RIP へ再広告し続ける"
+            "(**対策が存在するのに効いていない**のが本題)。"
+            "★実測(2026-08-13)= ラボ版の seed metric 1 だと両境界の状態が"
+            "入れ替わる振動になるため、紙面盤面は seed 5 で安定化してある。",
+        "half_fix":
+            f"前任者の対策(タグ+seed metric {gro.SEED_OK}+distance ospf "
+            f"external 180)が {b2} で完結している一方、{b3} には distance が"
+            f"入っていない。{b3} は {b2} が生成した O E2(AD 110)を RIP(120)"
+            "より優先し、支社網宛が OSPF 経由の遠回りになる。タグは両方の境界で"
+            "機能しているため、再注入による周回は起きない。",
+        "stale_filter":
+            f"{b2} の router rip に残骸の `distribute-list 10 out`"
+            f"(access-list 10 = deny any)が残っており、{b2} からの RIP の広告"
+            f"(再配送経路もネイティブの経路も)がすべて抑止される。{hub} は"
+            f"本社側の経路を {b3} 経由のみで学習し、片系依存になる"
+            f"({b2} 自身の Loopback さえ {b3} 経由で学習される)。",
+    }[k]
+    seikai = {
+        "seed_loop":
+            f"(cause 形専用)是正の定石は、出自タグ両方向+seed metric "
+            f"{gro.SEED_OK}+`distance ospf external 180` を**両方の境界**に"
+            "入れる(GEN-REDISTRO の模範解と同一)。",
+        "wrong_tag_filter":
+            f"{b2} と {b3} の両方で `route-map OSPF2RIP deny 10` の match tag "
+            f"を {gro.TAG_RIP} へ修正する(タグ設計を意図どおりに機能させる)。",
+        "half_fix":
+            f"{b3} に `distance ospf external 180` を投入し、対策を両方の境界で"
+            "完成させる。",
+        "stale_filter":
+            f"{b2} の `distribute-list 10 out` と access-list 10 の残骸を"
+            "撤去する。",
+    }[k]
+    verify = {
+        "seed_loop": [
+            f"{hub}: `show ip route {v}.0` の候補が {r6} 方向の1本になること"
+            "(是正後)。",
+            f"OSPF 側の任意のルータから `traceroute {v}.1` が {r6} まで"
+            "一直線に届くこと。"],
+        "wrong_tag_filter": [
+            "是正後、O E2 側だった境界の経路詳細から `Advertised by rip` の"
+            "行が消えること(再広告の停止)。",
+            f"{hub} が受信する {v}.0/24 の RIP 広告が {r6} 方向の1本になる"
+            "こと。※境界の O E2 選好(遠回り)自体は AD の層の問題として残る"
+            "(完全な健全形には distance ospf external 180 も要る=定石)。"],
+        "half_fix": [
+            f"{b3}: `show ip route {v}.0` が R(RIP)・{hub} 方向へ入れ替わる"
+            "こと。",
+            f"{b3}: `traceroute {v}.1` が {hub} 経由の最短になること。"],
+        "stale_filter": [
+            f"{hub}: `show ip route {d['lo']['RT04']}` が両方の境界 via の"
+            "等コスト2本に戻ること。",
+            f"{hub}: {b2} の Loopback({d['lo']['RT02']})を {b2} 直行で学習"
+            "すること。"],
+    }[k]
+    vtxt = "\n".join(f"- {x}" for x in verify)
+    return f"""# 解答 {stamp}
+
+## 正解
+
+**{correct}**
+
+## 仕込んだ状態
+
+- 種別: `riploop/{k}` — RIP⇄OSPF 二点相互再配送の「対策が効いていない」型
+  (GEN-REDISTRO 盤面の紙面化・BL-116)
+- 出題形式: {form}
+- 機構: {mech}
+- 正解法: {seikai}
+- 生成: `gen_paper_mcq.py --shape riploop --seed {master_seed}`
+  (sub-seed {subseed} / 展開パック {prob_id}・撤収済)
+
+## 各選択肢の判定
+
+{wrongs}
+
+## 検証コマンドと期待される出力
+
+{vtxt}
+
+## ENARSI ブループリント
+
+- 1.0 Layer 3 Technologies — Troubleshoot redistribution between any pair of
+  routing protocols / route filtering
+- 同 — AD・経路タグ・distribute-list による再配送ループ防止と、その運用上の劣化
+
+## 教育核心
+
+ring(AD 反転)・mploop(同AD・メトリック差)と違い、この形は**対策そのものは
+構成に存在する**(あるいは存在した痕跡がある)。読み筋は、症状の型で層を
+当てること — **周回(TTL 超過)**ならタグ/seed の層、**遠回り**なら選好(AD)の層、
+**偏り**なら広告の抑止。そのうえで「対策が機能している証拠」(match tag の一致・
+適用の範囲・残置物)を、config と `show route-map` / `show ip protocols` で
+突き合わせる。二点相互再配送の対策は**両方の境界に対**で入って初めて完成する。
 """
 
 
@@ -5295,10 +6234,11 @@ def main():
     ap.add_argument("--date", default=None, help="YYYYMMDD(既定=今日)")
     ap.add_argument("--shape",
                     choices=["chain", "ring", "pbr", "urpf", "bgpdbg", "mploop",
-                             "leakmap", "ospfv3pl", "v6redist", "aaa", "acl",
-                             "aclv6", "bgpbest", "mixed"],
+                             "riploop", "leakmap", "ospfv3pl", "v6redist",
+                             "aaa", "acl", "aclv6", "bgpbest", "mixed"],
                     default="chain",
                     help="chain=再配送欠落/誤設定系(既定) / ring=再配送リングの定常ループ(難5)"
+                         " / riploop=RIP⇄OSPF 対策が効いていない型(BL-116)"
                          " / pbr=PBR×ワイルドカードACL(BL-081)"
                          " / urpf=uRPF×ACL(BL-084・紙面専用)"
                          " / bgpdbg=BGP debug読解(BL-085・★記述式)"
@@ -5352,6 +6292,7 @@ def main():
     else:
         pool = {"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
                 "urpf": gpu.URPF_KINDS, "mploop": MPLOOP_KINDS,
+                "riploop": RIPLOOP_KINDS,
                 "bgpdbg": gpb.VARIANTS, "leakmap": gpk.KINDS,
                 "ospfv3pl": gpo.KINDS, "v6redist": gpv.KINDS,
                 "aaa": gpa.KINDS, "acl": gpl.KINDS,
@@ -5408,7 +6349,9 @@ def main():
             # ★配分(2026-08-12 bgpbest 追加時に再調整)= どの shape も概ね 7〜11%。
             #   bgpbest の枠は引き続き**再配送系(chain/ring/mploop)を薄める**ことで
             #   作った(BL-100/111 の突合せで「再配送だけが飽和」と出ているため)。
-            shape_i = ("ring" if r < 0.11 else "pbr" if r < 0.21
+            # ★riploop(BL-116)の枠は ring を割って捻出(再配送系の合計は不変)。
+            shape_i = ("ring" if r < 0.06 else "riploop" if r < 0.11
+                       else "pbr" if r < 0.21
                        else "urpf" if r < 0.31 else "mploop" if r < 0.39
                        else "leakmap" if r < 0.49 else "ospfv3pl" if r < 0.59
                        else "v6redist" if r < 0.67
@@ -5418,6 +6361,7 @@ def main():
                        else "bgpbest" if r < 0.94 else "chain")
             kind = roll.choice({"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
                                 "urpf": gpu.URPF_KINDS, "mploop": MPLOOP_KINDS,
+                                "riploop": RIPLOOP_KINDS,
                                 "leakmap": gpk.KINDS, "ospfv3pl": gpo.KINDS,
                                 "v6redist": gpv.KINDS,
                                 "aaa": gpa.KINDS,
@@ -5433,6 +6377,22 @@ def main():
             d = gmp.rand_values(mp_rnd)
             d["_mmdir"] = mp_rnd.choice(["LR", "TD", "RL"])
             mp_names = mploop_names(mp_rnd)
+            # ★BL-118 P1a: AD操作世界(stale_rd)。kind=distance の時のみ
+            #   (他 kind は監査ポリシーが distance 使用を禁止しており残骸と干渉)。
+            #   設計制約は mploop_ad_remnant() の docstring を参照。
+            ad_rnd = random.Random(subseed ^ 0xADAD)
+            d["adworld"] = "none"
+            if kind == "distance" and ad_rnd.random() < 0.6:
+                d["adworld"] = "stale_rd"
+                d["ad_off"] = ad_rnd.choice([3, 5, 8, 12])
+        elif shape_i == "riploop":
+            subseed, d = pick_draw_riploop(qseed, kind)
+            # ★BL-118 P3: 抽選したタグ値を gro へ per-question 適用。以降の
+            #   config 描画・選択肢・解答が全てこの値で揃う(gro の既定値は
+            #   ラボ生成器の byte 再現性のため触らない。restore は不要=
+            #   riploop の読み手はここで毎回設定し直すため)。
+            gro.TAG_RIP, gro.TAG_OSPF = d["tag_rip"], d["tag_ospf"]
+            gro.TAG_TYPO = d["tag_typo"]
         elif shape_i == "ring":
             subseed = qseed
             # ★tag 解は ring=inject_ospf に限定する(BL-086)。
@@ -5442,6 +6402,16 @@ def main():
             #   RA の OSPF→EIGRP で、EIGRP 側の構成員は RC/RA のみのため副作用が無い。
             d = gra.draw(random.Random(subseed), method=kind,
                          ring=("inject_ospf" if kind == "tag" else None))
+            # ★BL-118 P1a: AD操作世界(前任者の distance 残骸)の抽選。
+            #   method=distance の時のみ(filter/tag は監査要件「distance 変更禁止」と
+            #   残骸の存在が干渉するため v1 では対象外)。残骸の設計制約は
+            #   ring_ad_remnant() の docstring を参照(実機収集でループ定常が前提)。
+            ad_rnd = random.Random(subseed ^ 0xADAD)
+            d["adworld"] = "none"
+            if kind == "distance" and ad_rnd.random() < 0.6:
+                d["adworld"] = ad_rnd.choice(["stale_value", "stale_target",
+                                              "stale_proto"])
+                d["ad_off"] = ad_rnd.choice([3, 5, 8, 12])
         elif shape_i == "pbr":
             subseed, d = pick_draw_pbr(qseed, kind)
         elif shape_i == "urpf":
@@ -5483,6 +6453,11 @@ def main():
         if shape_i == "mploop":
             plan = evidence_plan_mploop(d, mp_names, rnd)
             choices = build_choices_mploop(d, mp_names, kind, rnd, exam=a.exam)
+        elif shape_i == "riploop":
+            plan = evidence_plan_riploop(d, rnd, exam=a.exam)
+            choices = (build_cause_choices_riploop(d, rnd, exam=a.exam)
+                       if d["kind"] == "seed_loop"
+                       else build_choices_riploop(d, rnd, exam=a.exam))
         elif shape_i == "ring":
             plan = evidence_plan_ring(d, rnd, exam=a.exam)
             choices = build_choices_ring(d, rnd, exam=a.exam)
@@ -5529,6 +6504,8 @@ def main():
             choices = build_choices(d, rnd, plan=plan, exam=a.exam, pol=pol)
         if a.exam and shape_i == "mploop":
             sites = dict(zip(gmp.NODES, rnd.sample(SITE_POOL, len(gmp.NODES))))
+        elif a.exam and shape_i == "riploop":
+            sites = dict(zip(gro.NODES, rnd.sample(SITE_POOL, len(gro.NODES))))
         else:
             sites = (assign_sites(d, rnd)
                      if (a.exam and shape_i not in ("bgpdbg", "leakmap",
@@ -5556,6 +6533,8 @@ def main():
             _bf = gbb.forms_for(d)
             form = ("cause" if _bf == ["cause"]
                     else "read" if "read" in _bf else "why")
+        if not a.exam and shape_i == "riploop" and d["kind"] == "seed_loop":
+            form = "cause"      # seed_loop は cause 形専用(fix は定石一式で長大)
         if a.exam and shape_i == "chain" and rnd.random() < 0.5:
             form = "cause"
             choices = build_cause_choices(d, plan, rnd, decoy=decoy, pol=pol)
@@ -5565,6 +6544,10 @@ def main():
         elif a.exam and shape_i == "mploop" and rnd.random() < 0.5:
             form = "cause"
             choices = build_cause_choices_mploop(d, mp_names, rnd, exam=a.exam)
+        elif a.exam and shape_i == "riploop" and (d["kind"] == "seed_loop"
+                                                  or rnd.random() < 0.5):
+            form = "cause"
+            choices = build_cause_choices_riploop(d, rnd, exam=a.exam)
         elif a.exam and shape_i == "pbr" and rnd.random() < 0.5:
             form = "cause"
             choices = gpp.build_choices_cause(d, rnd)
@@ -5768,6 +6751,8 @@ def main():
         if a.exam and shape_i != "bgpdbg":
             if shape_i == "mploop":
                 reqs = mploop_requirements(d, mp_names, kind, rnd, form=form)
+            elif shape_i == "riploop":
+                reqs = riploop_requirements(d, rnd, form=form)
             elif shape_i == "ring":
                 reqs = ring_requirements(d, rnd, form=form)
             elif shape_i == "pbr":
@@ -5793,9 +6778,16 @@ def main():
             else:
                 reqs = chain_requirements(
                     rnd, style=pol["style"] if pol else "inline")
+        if shape_i == "riploop" and reqs is None:
+            # ★riploop の要件は fix 形の一意性の担い手なので非 exam でも必須
+            reqs = riploop_requirements(d, rnd, form=form)
+        if shape_i == "mploop" and reqs is None:
+            # ★mploop も同様(監査ポリシーが fix 一意性の担い手)。従来は exam 専用
+            #   運用で非 exam は reqs=None のまま TypeError になっていた(BL-118 で検出)。
+            reqs = mploop_requirements(d, mp_names, kind, rnd, form=form)
         # 進行表示に故障種別・対象ルータは出さない(実行者=解答者のネタバレ防止)
         print(f"[{i + 1}/{a.count}] sub-seed={subseed} "
-              f"nodes={len(gmp.NODES) if shape_i == 'mploop' else len(d.get('roles', [d.get('A'), d.get('B')]))}", flush=True)
+              f"nodes={6 if shape_i in ('mploop', 'riploop') else len(d.get('roles', [d.get('A'), d.get('B')]))}", flush=True)
 
         if shape_i in ("urpf", "bgpdbg", "leakmap", "ospfv3pl", "v6redist",
                        "aaa", "acl", "aclv6", "bgpbest"):
@@ -5805,9 +6797,23 @@ def main():
                          for c in plan["checks"]}
         else:
             if shape_i == "mploop":
-                write_pack_mploop(repo, prob_id, d, mp_names, subseed)
+                # ★BL-118: AD操作世界の残骸を初期 config へ合流。
+                extra_mp = None
+                if (adm := mploop_ad_remnant(d, mp_names)):
+                    extra_mp = {adm["node"]:
+                                [adm["parent"], f" {adm['line']}", "!"]}
+                write_pack_mploop(repo, prob_id, d, mp_names, subseed,
+                                  extra=extra_mp)
+            elif shape_i == "riploop":
+                write_pack_riploop(repo, prob_id, d, subseed)
             elif shape_i == "ring":
-                write_pack_ring(repo, prob_id, d, subseed, extra=herr)
+                # ★BL-118: AD操作世界の残骸を初期 config へ合流(赤ニシンと同じ経路)。
+                extra_ring = {k: list(v) for k, v in (herr or {}).items()}
+                if (adr := ring_ad_remnant(d)):
+                    extra_ring.setdefault(adr["node"], []).extend(
+                        [adr["parent"], f" {adr['line']}", "!"])
+                write_pack_ring(repo, prob_id, d, subseed,
+                                extra=extra_ring or None)
             elif shape_i == "pbr":
                 write_pack_pbr(repo, prob_id, d, subseed)
             else:
@@ -5818,7 +6824,9 @@ def main():
                     collected = deploy_and_collect(
                         repo, prob_id, d, plan, a.boot_wait, a.settle,
                         nodes=(sorted(mp_names.values())
-                               if shape_i == "mploop" else None))
+                               if shape_i == "mploop"
+                               else sorted(d["names"].values())
+                               if shape_i == "riploop" else None))
                     break
                 except Exception as e:
                     err = e
@@ -5844,7 +6852,17 @@ def main():
                                       form=form)
             a_md = answer_md_mploop(d, mp_names, kind, choices, stamp, a.seed,
                                     subseed, prob_id, form=form)
-            lint += ["mploop", "seg_o1", "rand_values"]
+            lint += ["mploop", "seg_o1", "rand_values",
+                     "adworld", "stale_rd", "前任者", "残骸", "効いていない"]
+        elif shape_i == "riploop":
+            q_md = question_md_riploop(d, plan, choices, collected, stamp,
+                                       sites=sites, blind=a.exam, reqs=reqs,
+                                       style=opt_style, form=form)
+            a_md = answer_md_riploop(d, choices, stamp, a.seed, subseed,
+                                     prob_id, form=form)
+            # 「周回」「フィードバック」は要件・選択肢に正当に現れるため対象外
+            lint += ["riploop", "seed_loop", "wrong_tag", "half_fix",
+                     "stale_filter", "残骸", "rand_values", "GEN-REDISTRO"]
         elif shape_i == "ring":
             q_md = question_md_ring(d, plan, choices, collected, stamp, sites=sites,
                                     blind=a.exam, reqs=reqs, style=opt_style,
@@ -5852,7 +6870,10 @@ def main():
             a_md = answer_md_ring(d, plan, choices, stamp, a.seed, subseed, prob_id,
                                   herr=herr, form=form)
             # 「ループ」「RIB-failure」は要件文・show ip bgp 凡例に正当に現れるため対象外
-            lint += ["ring=", "inject_eigrp", "inject_ospf", "震源"]
+            # (「残存」は adworld の口実・選択肢に正当に現れるため対象外)
+            lint += ["ring=", "inject_eigrp", "inject_ospf", "震源",
+                     "adworld", "stale_value", "stale_target", "stale_proto",
+                     "前任者", "残骸", "効いていない"]
         elif shape_i == "bgpdbg":
             q_md = question_md_bgpdbg(d, stamp, rnd)
             a_md = answer_md_bgpdbg(d, stamp, a.seed, subseed)

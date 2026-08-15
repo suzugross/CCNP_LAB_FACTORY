@@ -1,0 +1,118 @@
+# PAPER-ENHANCE-ROADMAP — 紙面問題 拡張・強化ロードマップ(推奨順)
+
+- 発端: 2026-08-14 ユーザ相談「盤面(境界・プロトコル配置)を覚えてしまった。覚えられなくする方法は?」
+  → 対策案の議論(AD操作は条件付き推奨で合意)→「紙面の拡張・強化案を推奨順に記録」指示。
+- 対象: 紙面ファミリ全体(`gen_paper_mcq.py` 14 shape + `gen_pack.py`)。ラボ側の暗記対策は BL-119(別行)。
+- 並び順の基準: **(a) いま痛い暗記の無効化 → (b) 制定済み規約の消化 → (c) ブループリント空白の解消**。
+  (a)(b)は既存 shape の密度を上げる系(毎日のノルマ10問の質に直結)、(c)は範囲を広げる系(合格に直結)。
+  1本を直列でやり切る必要はなく、P1〜P2 と P3〜P4 は並行可。
+
+---
+
+## P1. 【BL-118・新】暗記無効化パック = AD操作世界 ＋ 固定定数の抽選化
+
+> **実装状況(2026-08-15)**: P1a= ring(3世界)・mploop(stale_rd) 実装済み。
+> riploop は **adworld 対象外と決定**(ファミリ自体が「残骸が効いていない」読解型で、
+> half_fix=distance 片境界残骸と物語が衝突するため。代わりに P1b のタグ抽選で対応)。
+> P1b= riploop タグ3値(実タグ RIP/OSPF+typo)を seed 抽選化(gro の既定値は
+> ラボ byte 再現性のため不変・紙面側が per-question 上書き)。ring は draw が
+> 元から全値抽選済み・mploop の SEED_METRIC は解答レバーでないため対象外と判断。
+> riploop の SEED_OK=5 は**凍結**(seed 1 振動の実測より。値を動かすなら要実機)。
+> 検証= ring 132問+mploop 72問+riploop 48問 no-lab スイープ NG=0・byte 決定性
+> PYTHONHASHSEED 1/999 一致・pack 書き込みユニットテスト NG=0。
+> ★設計上の要点(実機収集 shape の制約)= **残骸は「効いていない」形に限る**。
+> 「正しい値だが clear 忘れ」の世界は day0 適用=起動時から有効のため実機では
+> 作れない(紙面合成 shape へ移植する時の拡張候補)。
+> ★副次修正= 非 exam の mploop が reqs=None で TypeError になる潜在バグを
+> riploop 方式のフォールバックで修正。
+> ★実機E2E 5本 **全PASS(2026-08-15)**: ring stale_value(inject_eigrp・残骸
+> `distance bgp 20 115 115`)/stale_target(inject_ospf・`distance eigrp 90 205`@RA)/
+> stale_proto(inject_ospf・`distance ospf external 205`@RC)/mploop stale_rd
+> (`distance eigrp 90 205`@RD)/riploop 新タグ(rip=101/ospf=120/typo=91)。
+> どの残骸も勝者を変えず(ループ/誤選択が定常のまま)・`show ip protocols` に
+> 実効ADが期待どおり表示されることを実測。riploop の wrong_tag はハブが
+> 正規 RIP(metric 1)を保持=素通りの症状は境界側の遠回りに出る(既知の症状形)。
+> **P1 はこれで完了。**
+
+### P1-a. AD操作世界(既定ADからの逸脱を初期盤面に仕込む)
+
+- **何を**: ループ系3診断型 shape(`ring` / `mploop` / `riploop`)に、
+  「過去の障害対応で入れた `distance` 設定が残っている」世界を追加する。
+  既定 AD の暗記(iBGP200/OSPF110/EIGRP170…)では正解が出ず、
+  `show ip protocols` / `show ip route <prefix>` 詳細から**実効 AD を読む行動**を強制する。
+- **なぜ推奨1位か**: 2026-08-14 の相談の直接の帰結。再配送系は紙面の最頻出(7 shape 集中)で
+  暗記が最も進行している。紙面は静的盤面なので**ラボ版で必須になる定常性(振動)検証が不要**=安い。
+- **条件(2026-08-14 会話で合意)**:
+  1. いじるのは 1〜2 ルータ・1〜2 行まで(全域ランダムADは算数パズル化するので不可)。
+  2. 問題文に口実を必ず書く(「過去の障害対応の設定が残存」等。値そのものは伏せる)。
+  3. 世界ごとに解空間を再設計(是正= 値の修正 / 行の削除 / フィルタ解へ切替、が世界で反転)
+     し、一意性 selftest を世界別に通す。
+- **最初の一手**: `ring` から(勝者決定ロジックが最も単純)。`build_choices_ring` 系に
+  AD 世界の分岐を足し、`show ip protocols` の `Distance:` 行を提示素材へ追加。
+  次に `mploop`(同AD盤面が非対称ADに化ける)→ `riploop`(half_fix と自然に合流)。
+
+### P1-b. 固定定数の抽選化監査(表面ランダム化)
+
+- **何を**: 全 shape の「覚えられる定数」を洗い出し seed 抽選に置換。
+  既知の当たり= riploop のタグ値(120/110/typo100・BL-116 残に記録済)、
+  被害プレフィクス・AS番号・エリア番号・RT名の固定分。
+- **なぜ**: 構造は同じでも「値を見た瞬間に前回の答えを思い出す」経路を切る。機械的で安い。
+- **最初の一手**: shape ごとに定数を grep で棚卸し→ 抽選化→ selftest 再実行
+  (正解肢長バランス・byte 再現性の既存検査がそのまま回帰になる)。
+
+## P2. 【BL-113・既存】未提示前提×消去法の格上げ監査
+
+- 制定済み恒久規約(ccnp-implicit-premise-design)の実行フェーズ。既設 12 shape を監査し、
+  盤面から消せる明示情報を消して補完推測を要求する(3条件= 矛盾なし/一意に補完可/一意性維持)。
+- **なぜ2位**: ユーザ指示済み・新規盤面が不要で全 shape の思考密度が一度に上がる。
+  P1 と同じファイルを触るので、shape ごとに P1 と抱き合わせで監査すると二度手間がない。
+- 詳細= BL-113 行と [PAPER-BLUEPRINT-GAP.design.md](PAPER-BLUEPRINT-GAP.design.md) §5-14。
+
+## P3. 【BL-100 残・既存】ユーザ優先題材の残り = BGP 後続 ＋ CoPP
+
+- **BGP 後続**: `bgpbest`(完了・BL-112)に続く 1.11 の残り= `bgppol`(1.11.e ポリシー)→
+  `bgprr`(1.11.d・種= GEN-BGPRR 盤面)→ `bgpnbr`(1.11.b 残り・bgpdbg と非重複)。
+  bgpbest の決定リスト方式(`bgpbest_model.py`)と PoC 実測資産が温かいうちに。
+- **CoPP**(1系で唯一残ったユーザ指定題材): class-default 道連れ・conform/exceed 取り違え。
+  `acl_model.py`(汎用ACL意味評価器)にポリシー層を載せる設計スケッチ済み=初速が出る。
+- 詳細= BL-100 行と [PAPER-BLUEPRINT-GAP.design.md](PAPER-BLUEPRINT-GAP.design.md)。
+
+## P4. 【新・BL-100 第二群の先頭】VPN 空白の解消 = DMVPN 紙面化
+
+- **何を**: ブループリント 2.0 VPN(配点20%)は紙面ゼロ。`gen_dmvpn_ts.py` の
+  16故障カタログと実測知見(NHRP auth 8字上限・Attrb列拘束・mGRE再帰は RECURDOWN 非発出・
+  暗黙デフォルト)を紙面転用し、`show dmvpn` / `show ip nhrp` 読解 shape を新設。
+- **なぜ**: 範囲拡張系で最大の空白×ラボ資産が最も厚い=費用対効果最良。
+  mploop(BL-086④a)・riploop(BL-116)で確立した「ラボ生成器の盤面を紙面へ流用」方式の前例に乗る。
+- **最初の一手**: 16故障から「show 2枚で機構が割れる」もの5〜6種を選抜し fix/cause の2形から。
+
+## P5. 【BL-086④b・既存】振動形(時系列診断)
+
+- 時刻違いの `show ip route` 2枚で発振を読ませる紙面専用形。素材は実測済み
+  (GEN-REDISTRO wrong_tag_filter seed1 の発振= ping 0%⇄100%・境界2台の状態入替。BL-116 で記録)。
+  実機不要で最安。ラボ側 BL-117② と表裏なので、どちらかを先にやれば残りはほぼ流用。
+
+## P6. 【BL-100 第二群・既存】Services(配点25%)の紙面転用
+
+- SNMP/DHCP/IP SLA/NetFlow のラボ実機資産(gen_snmpv3_ts / gen_dhcp_ts / gen_fnf_ts ほか)を
+  紙面読解へ転用。FNF の編集ロック非対称・DHCP リレー(service dhcp の管轄)等、
+  実測済みの「意外な正解」が錯乱肢の種として揃っている。
+
+## P7. 【BL-082 残・既存】試験形式リアリズム = 複数選択・複合故障 ＋ 相互作用
+
+- ⑤複数選択(Choose two/three)・複合故障、②相互作用問題(PBR×再配送= 2サブシステム干渉)。
+  実試験の形式差を埋める最後のピース。既存 shape が増えるほど組合せ素材が増えるので最後尾。
+
+---
+
+## 台帳との対応
+
+| 優先 | 項目 | 台帳 |
+|------|------|------|
+| P1 | AD操作世界＋定数抽選化 | **BL-118(新設)** |
+| P2 | 未提示前提の格上げ監査 | BL-113(既存・未着手) |
+| P3 | BGP後続(bgppol/bgprr/bgpnbr)＋CoPP | BL-100(既存・残り分) |
+| P4 | DMVPN 紙面化 | BL-100 第二群(着手時に新番号を切る) |
+| P5 | 振動形 | BL-086④b(既存) |
+| P6 | Services 転用 | BL-100 第二群 |
+| P7 | 複数選択・複合故障/相互作用 | BL-082(既存・残り分) |
