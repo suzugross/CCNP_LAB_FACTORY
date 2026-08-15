@@ -20,6 +20,7 @@
 """
 
 import argparse
+import datetime
 import os
 import re
 import sys
@@ -133,6 +134,8 @@ class Handler(SimpleHTTPRequestHandler):
                 sec = get_section(fh.read(), no)
             if sec is None:
                 return self._json(404, f"Q{no} のセクションがありません")
+            self.audit("load", parse_qs(urlparse(self.path).query).get(
+                "pack", [""])[0], no)
             return self._json(200, sec)
         return SimpleHTTPRequestHandler.do_GET(self)
 
@@ -154,10 +157,31 @@ class Handler(SimpleHTTPRequestHandler):
         if merged is None:
             return self._json(404, f"Q{no} のセクションがありません")
         atomic_write(path, merged)
+        m = re.search(r"^[ \t]*(解答|メモ):[ \t]*(.*)$", body, re.M)
+        self.audit("save", parse_qs(urlparse(self.path).query).get("pack", [""])[0],
+                   no, f"{m.group(1)}={m.group(2).strip()[:60]}" if m else "")
         return self._json(200, "ok")
 
-    def log_message(self, fmt, *args):        # アクセスログは出さない(静かに動かす)
+    def log_message(self, fmt, *args):        # 標準のアクセスログは出さない(静かに動かす)
         pass
+
+    def audit(self, action, pack, no, detail=""):
+        """解答の読み書きを監査ログに残す。
+
+        ★「保存が効いていたのか、解答し直したから残っていたのか」を後から
+          判別できるようにするため(2026-08-12 ユーザ指摘。当時は記録が無く
+          判定不能だった)。**ユーザフォルダには置かず**リポの _state/ に書く。
+        """
+        try:
+            d = os.path.join(REPO, "topologies", "_state")
+            os.makedirs(d, exist_ok=True)
+            stamp = datetime.datetime.now().isoformat(timespec="seconds")
+            line = f"{stamp}\t{action}\t{pack}\tQ{no}\t{detail}".rstrip()
+            with open(os.path.join(d, "pack-answers.log"), "a",
+                      encoding="utf-8") as fh:
+                fh.write(line + "\n")
+        except OSError:
+            pass                            # 監査ログの失敗で解答保存を壊さない
 
 
 def main():

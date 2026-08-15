@@ -1,0 +1,29 @@
+! RT02 (AS 65509 / AS-b transit / BGP=mpbgp)
+interface Loopback0
+ ip address 22.22.22.22 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.110.223.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.145.50.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network 22.22.22.22 0.0.0.0 area 0
+ network 10.145.50.0 0.0.0.3 area 0
+!
+router bgp 65509
+ bgp router-id 22.22.22.22
+ no bgp default ipv4-unicast
+ neighbor 10.110.223.1 remote-as 65466
+ neighbor 71.71.71.71 remote-as 65509
+ neighbor 71.71.71.71 update-source Loopback0
+ address-family ipv4 unicast
+  neighbor 10.110.223.1 activate
+  neighbor 71.71.71.71 activate
+  neighbor 71.71.71.71 next-hop-self
+  network 22.22.22.22 mask 255.255.255.255
+ exit-address-family
+!

@@ -116,7 +116,12 @@
             name: "{{ item }}"
             groups: _bringup
             ansible_host: "{{ mm2[item] }}"
-            bringup_ifs: "{{ pmeta.bringup_ifs | default(omit) }}"
+            # bringup_ifs はリスト（全ノード共通）と辞書（ノード別）の両形式を受ける。
+            # ★辞書形が要る理由（2026-08-09・BL-107）: IOL は **CML が張ったリンク分の
+            #   IF しか実装されない**（IOSv のように Gi0/0-0/4 が常に生えるのとは違う）。
+            #   全ノード共通リストだと、そのスロットにリンクが無いノードで
+            #   `% Invalid input detected` になる。
+            bringup_ifs: "{{ (pmeta.bringup_ifs[item] | default([])) if (pmeta.bringup_ifs | default([])) is mapping else (pmeta.bringup_ifs | default(omit)) }}"
           loop: "{{ pmeta.target_nodes }}"
           when: pmeta.bringup_data_ifs | default(false)
 

@@ -1,0 +1,35 @@
+! GEN-CHAIN-42769 初期 (RT05) — 連鎖故障TS(12台)。設計書は task.md
+interface Loopback0
+ ip address 74.74.74.74 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT03 ===
+ ip address 10.45.68.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT02 ===
+ ip address 10.73.50.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 74.74.74.74
+ network 74.74.74.74 0.0.0.0 area 0
+ network 10.45.68.0 0.0.0.3 area 0
+ network 10.73.50.0 0.0.0.3 area 0
+!
+router bgp 65001
+ bgp router-id 74.74.74.74
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 12.12.12.12 remote-as 65001
+ neighbor 12.12.12.12 update-source Loopback0
+ neighbor 82.82.82.82 remote-as 65001
+ neighbor 82.82.82.82 update-source Loopback0
+ address-family ipv4
+  neighbor 12.12.12.12 activate
+  neighbor 12.12.12.12 send-community
+  neighbor 82.82.82.82 activate
+  neighbor 82.82.82.82 send-community
+ exit-address-family
+!

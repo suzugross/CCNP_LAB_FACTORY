@@ -229,9 +229,13 @@ def draw(rnd, kind=None, world=None):
     elif kind == "igp":
         # iBGP 同士は IGP メトリック。foil= 等メトリックなら RID で c2。
         # MED は両方欠落(トランジット経路の自然形・B17)= 比較で何も起きない。
+        # ★RID はピアアドレス(Lo)と別の値を新規に振る。既定の rid=Lo を
+        #   入れ替えると「互いのピアアドレスが RID」という不審な盤面になる
+        #   (合法だが事故・20260812-025 初回生成で検出)。
         c1, c2 = ibgp_c1(age_rank=2), ibgp_c2(age_rank=1)
-        c1["rid"], c2["rid"] = sorted([c1["rid"], c2["rid"]],
-                                      key=bm._ip_key, reverse=True)
+        rlo, rhi = sorted([_rid(rnd, used_rids), _rid(rnd, used_rids)],
+                          key=bm._ip_key)
+        c1["rid"], c2["rid"] = rhi, rlo
         paths = [c1, c2]
         expect, foil_kill = "igp", ("igp",)
         detail_need = True

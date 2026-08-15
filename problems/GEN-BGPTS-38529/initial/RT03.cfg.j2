@@ -1,0 +1,29 @@
+! RT03 (AS 65509 / AS-b transit / BGP=mpbgp)
+interface Loopback0
+ ip address 71.71.71.71 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.145.50.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.235.216.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network 71.71.71.71 0.0.0.0 area 0
+ network 10.145.50.0 0.0.0.3 area 0
+!
+router bgp 65509
+ bgp router-id 71.71.71.71
+ no bgp default ipv4-unicast
+ neighbor 10.235.216.2 remote-as 65102
+ neighbor 22.22.22.22 remote-as 65509
+ neighbor 22.22.22.22 update-source Loopback0
+ address-family ipv4 unicast
+  neighbor 10.235.216.2 activate
+  neighbor 22.22.22.22 activate
+  neighbor 22.22.22.22 next-hop-self
+  network 71.71.71.71 mask 255.255.255.255
+ exit-address-family
+!

@@ -40,7 +40,7 @@ case "$cmd" in
     echo "VSCode のポート転送が効いていれば Windows のブラウザからそのまま開けます"
     exec "$PY" "$REPO/topologies/pack_server.py" --repo "$REPO" --port "$port"
     ;;
-  status|grade|close|render|replace)
+  status|grade|close|render|replace|redeploy)
     # 第1引数が PACK-* ならそれを --pack-id として渡す（打ちやすさ優先）
     first="${1:-}"
     if [ -n "$first" ] && [ "$first" != "${first#PACK-}" ]; then

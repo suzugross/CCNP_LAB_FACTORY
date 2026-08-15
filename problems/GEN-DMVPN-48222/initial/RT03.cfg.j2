@@ -1,0 +1,57 @@
+! RT03 初期構成 (Spoke・DMVPN TS: 昨日まで正常稼働していた既設網)
+interface Loopback0
+ ip address 3.3.3.3 255.255.255.255
+!
+interface {{ links[0] }}
+ description === underlay to RT04 (WAN transit) ===
+ ip address 10.0.34.1 255.255.255.252
+ no shutdown
+!
+ip route 0.0.0.0 0.0.0.0 10.0.34.2
+!
+crypto ikev2 proposal PROP-NGE
+ encryption aes-gcm-256
+ prf sha384
+ group 19
+!
+crypto ikev2 policy POL-NGE
+ proposal PROP-NGE
+!
+crypto ikev2 keyring KR-DMVPN
+ peer ANY
+  address 0.0.0.0 0.0.0.0
+  pre-shared-key Ss2026#Gen9152
+!
+crypto ikev2 profile IKEV2-DMVPN
+ match identity remote address 0.0.0.0
+ authentication remote pre-share
+ authentication local pre-share
+ keyring local KR-DMVPN
+ dpd 30 5 on-demand
+!
+crypto ipsec transform-set TS-GCM esp-gcm 256
+ mode transport
+!
+crypto ipsec profile IPSEC-DMVPN
+ set transform-set TS-GCM
+ set pfs group19
+ set ikev2-profile IKEV2-DMVPN
+!
+interface Tunnel0
+ ip address 10.255.122.3 255.255.255.0
+ no ip redirects
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ ip nhrp authentication CRYPTD33
+ ip nhrp network-id 64
+ ip nhrp nhs 10.255.122.1 nbma 10.0.14.1 multicast
+ ip nhrp shortcut
+ tunnel source {{ links[0] }}
+ tunnel mode gre multipoint
+ tunnel key 747
+ tunnel protection ipsec profile IPSEC-DMVPN
+!
+router eigrp 863
+ network 3.3.3.3 0.0.0.0
+ network 10.255.122.0 0.0.0.255
+!

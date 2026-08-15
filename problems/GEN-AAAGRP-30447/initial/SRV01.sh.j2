@@ -1,0 +1,187 @@
+#!/bin/bash
+# SRV01 (FreeRADIUS 標準ポート) 初期化 — 生成: gen_aaa_build.py
+# ★サーバ側は**完成品**で渡す。受験者の課題は機器側 AAA だけ。
+set -e
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[$(date -Is)] $*"; }
+
+log "in-band NIC / 学習網への経路を netplan で永続化"
+rm -f /etc/netplan/50-cloud-init.yaml
+cat > /etc/netplan/60-ccnp.yaml <<'EOF'
+network:
+  version: 2
+  ethernets:
+    ens2:
+      addresses: [{{ mgmt_ip }}/{{ mgmt_prefixlen }}]
+      routes:
+        - to: default
+          via: {{ mgmt_gw }}
+      nameservers:
+        addresses: {{ mgmt_dns | to_json }}
+    ens3:
+      addresses: [10.99.38.2/30]
+      routes:
+        - to: 10.1.12.0/30
+          via: 10.99.38.1
+        - to: 10.99.39.0/30
+          via: 10.99.38.1
+        - to: 10.2.0.1/32
+          via: 10.99.38.1
+        - to: 10.2.0.2/32
+          via: 10.99.38.1
+EOF
+chmod 600 /etc/netplan/60-ccnp.yaml
+netplan apply
+
+log "パッケージ導入 (freeradius / freeradius-utils / sshpass)"
+for i in 1 2 3; do
+  apt-get update -qq && \
+  apt-get install -y -qq freeradius freeradius-utils sshpass && break
+  sleep 10
+done
+
+log "clients.conf — ★ルータの Loopback0 のみ許可・このサーバの鍵は Srv1-9050"
+cat > /etc/freeradius/3.0/clients.conf <<'EOF'
+# ★受理するのは各ルータの Loopback0 のみ。
+#   機器側で送信元を Loopback0 に固定していない要求は「不明なクライアント」として
+#   無言で破棄される(Reject は返らない= 機器からはタイムアウトに見える)。
+client localhost {
+	ipaddr = 127.0.0.1
+	secret = testing123
+}
+client rt01-lo {
+	ipaddr = 10.2.0.1
+	secret = Srv1-9050
+}
+client rt02-lo {
+	ipaddr = 10.2.0.2
+	secret = Srv1-9050
+}
+EOF
+
+log "ユーザ台帳(2 台とも同一。切替が起きても権限で判別できないようにする)"
+cat > /etc/freeradius/3.0/mods-config/files/authorize <<'EOF'
+adm-kato Cleartext-Password := "Noc-2532"
+	Service-Type = NAS-Prompt-User,
+	Cisco-AVPair = "shell:priv-lvl=15"
+
+watch-op Cleartext-Password := "Desk-5887"
+	Service-Type = NAS-Prompt-User,
+	Cisco-AVPair = "shell:priv-lvl=1"
+
+SUZUKI Cleartext-Password := "CCNP"
+	Service-Type = NAS-Prompt-User,
+	Cisco-AVPair = "shell:priv-lvl=15"
+EOF
+
+log "採点用の挙動フェーズスクリプトを設置(受験者は触らなくてよい)"
+install -d -m 755 /opt/ccnp
+cat > /opt/ccnp/aaa_phase.sh <<'PHASEEOF'
+#!/bin/bash
+# GEN-AAAGRP 挙動採点(片系断/全断) — 採点系が呼ぶ。受験者が実行する必要はない。
+# ★冪等・自己復旧: どこで失敗しても trap で両サーバを起動して終わる。
+OUT=/run/ccnp-aaa-phase.out
+PEER=10.99.39.2
+RT=10.1.12.2
+# ★ServerAlive を必ず付ける。IOL は **強制終了された SSH の VTY を解放しない**
+#   (`clear line` は [OK] を返すのに残り、`clear tcp line` は「TCP が無い」と言い、
+#   `exec-timeout` でも刈られない。VTY は 5 本固定で `line vty 5 15` は拒否される)。
+#   → ssh を kill せず、**ssh 自身に切断させる**。これを怠ると採点 1 回で VTY を
+#   使い切り、以後ルータへ SSH できなくなる(実測 2026-08-09)。
+SSHO="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+      -o ConnectTimeout=20 -o LogLevel=ERROR -o NumberOfPasswordPrompts=1 \
+      -o ServerAliveInterval=5 -o ServerAliveCountMax=8"
+
+rm -f "$OUT"                     # 途中で死んだら後続チェックも落ちるように先に消す
+
+# ★ssh は必ず `timeout` で包む。ConnectTimeout は TCP 接続までしか効かず、
+#   認証で固まると**無限に待つ**(実測: 1 本の ssh が 30 分ハングし採点全体が止まった)。
+peer() { timeout 30 sshpass -p 'CCNP' ssh $SSHO SUZUKI@$PEER "$1" 2>&1; }
+restore() {
+  sudo -n systemctl start freeradius >/dev/null 2>&1
+  peer 'sudo -n systemctl start freeradius' >/dev/null 2>&1
+}
+trap restore EXIT
+
+# $1=user $2=pass → "OK|NG <秒>"
+login() {
+  local t0 t1 out
+  t0=$(date +%s.%N)
+  out=$(timeout 45 sshpass -p "$2" ssh $SSHO "$1"@$RT 'show privilege' 2>&1)
+  t1=$(date +%s.%N)
+  local d
+  d=$(echo "$t1 $t0" | awk '{printf "%.1f", $1-$2}')
+  if echo "$out" | grep -q 'privilege level is 15'; then echo "OK $d"; else echo "NG $d"; fi
+}
+
+R=""
+add() { R="$R$1"$'\n'; }
+
+# ★前回の採点で優先サーバを DEAD 記録したまま次の試行が始まると、停止しても
+#   最初から速く、切り離しの観測が壊れる(実測: 3 連続とも 0.3s・PRIMARY=NG)。
+#   → **優先サーバが UP に戻るまで待ってから**測る。deadtime 分の待ちが入り得る。
+wait_primary() {
+  local i out
+  for i in $(seq 1 24); do
+    out=$(timeout 25 sshpass -p 'CCNP' ssh $SSHO SUZUKI@$RT \
+          'show aaa servers | include host|State' 2>&1)
+    if echo "$out" | grep -A1 'host 10.99.38.2,' | grep -q 'current UP'; then
+      return 0
+    fi
+    sleep 5
+  done
+  return 1
+}
+
+restore; sleep 2
+wait_primary && add "READY=OK" || add "READY=NG"
+
+# --- 基線: RADIUS 利用者が入れるか ------------------------------------------
+set -- $(login 'adm-kato' 'Noc-2532')
+add "PHASE1=$1"
+
+# --- フェーズ2: SRV01 停止(片系断) ------------------------------------------
+sudo -n systemctl stop freeradius
+set -- $(login 'adm-kato' 'Noc-2532'); s1=$1; d1=$2
+set -- $(login 'adm-kato' 'Noc-2532'); s2=$1; d2=$2
+set -- $(login 'adm-kato' 'Noc-2532'); s3=$1; d3=$2
+add "PHASE2=$s1"
+add "PHASE2_FIRST=$d1"
+add "PHASE2_SECOND=$d2"
+add "PHASE2_THIRD=$d3"
+# 優先サーバが SRV01 でなければ 1 回目から速い= 要件2(SRV01 優先)の取り違え
+add "PRIMARY=$(awk -v d=$d1 'BEGIN{print (d>2)?"OK":"NG"}')"
+# 遅延要件: 1 回目が 5 秒以内(ssh 自体の 1 秒を上乗せして判定)
+add "DELAY=$(awk -v d=$d1 'BEGIN{print (d<=5+1)?"OK":"NG"}')"
+# ★応答不能サーバの切り離し: 実測(results-deadcrit.md)では deadtime だけでは
+#   何も起きず毎回 6.3s。dead-criteria を入れると 6.4 → 3.3 → 0.3s と落ちる。
+#   よって判定は **3 回目**で行う。
+add "DEADTIME=$(awk -v a=$d1 -v c=$d3 'BEGIN{print (c<=2 && c<a/2)?"OK":"NG"}')"
+
+# --- フェーズ3: SRV02 も停止(全断) ------------------------------------------
+peer 'sudo -n systemctl stop freeradius' >/dev/null 2>&1
+set -- $(login 'emg-admin' 'Emg-9883')
+add "PHASE3_LOCAL=$1"
+add "PHASE3_LOCAL_SEC=$2"
+# ★「ローカルで入れた」だけでは AAA 未設定でも通ってしまう。**サーバを試した末に**
+#   ローカルへ落ちたことを、待ち時間(最低でもタイムアウト 1 回分)で裏取りする。
+add "PHASE3_VIA_FALLBACK=$(awk -v d=$2 'BEGIN{print (d>1.5)?"OK":"NG"}')"
+set -- $(login 'adm-kato' 'Noc-2532')
+# RADIUS 利用者は入れないのが正: 入れたら**ローカル台帳に写した**ということ
+add "PHASE3_RADIUS_DENIED=$([ "$1" = NG ] && echo OK || echo NG)"
+
+# --- 復旧 -------------------------------------------------------------------
+restore; sleep 3
+set -- $(login 'adm-kato' 'Noc-2532')
+add "RECOVER=$1"
+
+printf '%s' "$R" | tee "$OUT"
+PHASEEOF
+chmod 755 /opt/ccnp/aaa_phase.sh
+
+log "設定検査 → 起動"
+freeradius -XC >/dev/null
+systemctl enable -q freeradius || true
+systemctl restart freeradius
+systemctl is-active freeradius
+log "DONE"

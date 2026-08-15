@@ -4,6 +4,7 @@
 # Claude が一貫して回すための薄いラッパ。コピー〜削除までを1コマンドに集約。
 #
 #   出題:   scripts/lab.sh provision <PROBLEM_ID> [variant]
+#   採点:   scripts/lab.sh grade     <PROBLEM_ID> [variant]
 #   片付け: scripts/lab.sh teardown  <PROBLEM_ID> [--keep-workspace]
 #   状態:   scripts/lab.sh status
 #
@@ -23,7 +24,7 @@ LAB_HOME="$REPO/lab"   # リポジトリ内に作業フォルダを置く（VSCo
 PY="$REPO/.venv/bin"
 vault() { printf 'CCNP\n'; }   # vault パスワード（プロジェクト規約）
 
-usage() { sed -n '2,18p' "${BASH_SOURCE[0]}"; exit 1; }
+usage() { sed -n '2,19p' "${BASH_SOURCE[0]}"; exit 1; }
 
 cmd="${1:-}"; prob="${2:-}"
 
@@ -65,6 +66,15 @@ case "$cmd" in
     echo "== [3/3] 作業フォルダ作成: $dest =="
     echo "   $(ls "$dest" 2>/dev/null | tr '\n' ' ')"
     echo "完了。VSCodeで開いた CCNP01 ツリーの lab/$prob/ を編集（問題.md 同梱）。SSH: SUZUKI/CCNP・mgmt .11〜。"
+    ;;
+
+  grade)
+    # grade.yml をそのまま流しつつ、得点を学習ノルマ台帳に自動記録する（BL-114）。
+    # 出力・落ちたチェック名の見え方は素の ansible-playbook と同じ。
+    [ -n "$prob" ] || usage
+    variant="${3:-}"
+    exec "$PY/python3" "$REPO/topologies/quota.py" --repo "$REPO" \
+      grade-lab "$prob" ${variant:+--variant "$variant"}
     ;;
 
   teardown)

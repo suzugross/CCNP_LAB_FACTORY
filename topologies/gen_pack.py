@@ -38,10 +38,37 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import render_html                                    # noqa: E402
+import quota                                          # noqa: E402  (BL-114 ノルマ記録)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PACKS = "packs"
 RETRY_MAX = 3          # 紙面生成のリトライ上限(夜間バッチなので厚めに取る)
+
+# --------------------------------------------------------------------------
+# 夜間バッチ v2 の枠組み(2026-08-09 ユーザ決定・design.md §6.5)
+# --------------------------------------------------------------------------
+# 紙面の必須ジャンル: 該当 shape を1問ずつ専用に生成し、残りを mixed で埋める。
+# (--shape mixed はジャンルを保証しないため、必須枠は個別生成でしか担保できない)
+PAPER_GENRES = {
+    "redist": ["chain", "ring", "mploop", "riploop", "leakmap", "v6redist"],
+    "aaa": ["aaa"],
+    "acl": ["acl", "aclv6"],       # IPv4/IPv6 の ACL 紙面(2026-08-11 追加)
+}
+
+# 紙面の問題数を `auto` にしたときの範囲(ユーザ指示 2026-08-11: 10〜20問で適当に)
+PAPER_AUTO_MIN, PAPER_AUTO_MAX = 10, 20
+
+# ラボの固定ジャンル: この中から2つ選ぶ(+余裕があれば通常TSプールから1問)。
+# H型は EIGRP版/OSPF版をまとめて1ジャンル扱い(同時に2本入れると盤面がほぼ同じ)。
+LAB_GENRES = {
+    "hvrf": {"label": "H型VRF",
+             # ★EIGRP 優先(ユーザ指示)。直近に出ていれば OSPF 版へ回す。
+             "prefixes": ["PVT-EGVRFH", "PVT-OSVRFH"], "tags": ["vrf", "hvrf"]},
+    "dhcp": {"label": "DHCP TS",
+             "prefixes": ["GEN-DHCPTS"], "tags": ["dhcp"]},
+    "dmvpn": {"label": "DMVPN TS",
+              "prefixes": ["GEN-DMVPN"], "tags": ["dmvpn", "tunnel"]},
+}
 
 
 # ==========================================================================
@@ -66,11 +93,24 @@ def _rows(md_text, section_pred):
 
 
 def parse_catalog(repo=REPO):
-    """CATALOG.md → 出題候補の辞書。kind = normal / auto / special / gen / generator。"""
-    path = os.path.join(repo, "problems", "CATALOG.md")
-    with open(path, encoding="utf-8") as fh:
-        text = fh.read()
+    """CATALOG.md(＋private/CATALOG.md)→ 出題候補の辞書。
+
+    ★private も読む: H型 VRF(PVT-EGVRFH / PVT-OSVRFH)は非公開側にしか無く、
+      公開カタログだけ見ていると固定ジャンルが成立しない(CLAUDE.md の台帳分離)。
+    """
     out = {"normal": [], "auto": [], "special": [], "gen": [], "generator": []}
+    texts = []
+    for rel in ("problems/CATALOG.md", "private/CATALOG.md"):
+        path = os.path.join(repo, rel)
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as fh:
+                texts.append((rel.startswith("private"), fh.read()))
+    for is_pvt, text in texts:
+        _parse_catalog_text(text, out, is_pvt)
+    return out
+
+
+def _parse_catalog_text(text, out, is_pvt=False):
     for sec, c in _rows(text, lambda s: True):
         try:
             if sec in ("ENCOR 系", "ENARSI 系"):
@@ -85,17 +125,18 @@ def parse_catalog(repo=REPO):
                     "nodes": _int(c[3]), "ops": c[4].strip("`"),
                     "note": c[5] if len(c) > 5 else "", "kind": "special",
                 })
-            elif sec.startswith("生成器一覧"):
+            elif sec.startswith("生成器一覧") or (is_pvt and sec == "生成器"):
                 out["generator"].append({
                     "script": _script_of(c[0]) or c[0].strip("`"),
                     "prefix": _prefix_of(c[1]),
                     "desc": c[2], "note": c[3] if len(c) > 3 else "",
                     "diff": _diff_from_text(c[2] + " " + (c[3] if len(c) > 3 else "")),
-                    "kind": "generator",
+                    "kind": "generator", "pvt": is_pvt,
                 })
+            elif is_pvt and sec == "問題":
+                out["normal"].append(dict(_item(c, kind="normal"), pvt=True))
         except (IndexError, ValueError):
             continue
-    return out
 
 
 def _item(c, kind):
@@ -174,13 +215,14 @@ def _prefix_of(cell):
     セルは `GEN-MPLSTS / GEN-MPLSEB` `GEN-EIGRPCX 等` のような書き方が混ざるので、
     最初の GEN-トークンだけを採る(紙面・params 行は None で候補外になる)。
     """
-    m = re.search(r"GEN-[A-Z0-9]+", cell or "")
+    m = re.search(r"(?:GEN|PVT)-[A-Z0-9]+", cell or "")
     return m.group() if m else None
 
 
 def _script_of(cell):
     """同じく「生成器」セルから実行可能なスクリプト名を1つ取り出す。"""
-    m = re.search(r"gen_[a-z0-9_]+\.py", cell or "")
+    # ★pvt_ 接頭を落とさないこと(PVT系の生成器名は pvt_gen_*.py)
+    m = re.search(r"(?:pvt_)?gen_[a-z0-9_]+\.py", cell or "")
     return m.group() if m else None
 
 
@@ -189,13 +231,13 @@ def _nodes_from_text(text):
 
     「4 IOL」「3〜8台」「5台」等。範囲は上限を採る(予算検査は安全側に倒す)。
     """
-    m = re.search(r"(\d+)\s*[〜~-]\s*(\d+)\s*台", text or "")
+    m = re.search(r"(\d+)\s*[〜~-]\s*(\d+)\s*(?:台|ノード)", text or "")
     if m:
         return int(m.group(2))
-    m = re.search(r"(\d+)\s*台", text or "")
+    m = re.search(r"(\d+)\s*[台]|(\d+)\s*ノード", text or "")
     if m:
-        return int(m.group(1))
-    m = re.search(r"(\d+)\s*IOL", text or "")
+        return int(m.group(1) or m.group(2))
+    m = re.search(r"(\d+)\s*(?:IOL|IOSv|IOS|IOLL2)", text or "")
     return int(m.group(1)) if m else None
 
 
@@ -454,39 +496,164 @@ def select_labs(cat, hist, *, count, budget, used, rnd,
     return picked, notes
 
 
+def resolve_genre(cat, genre, hist, rnd, family_days, today, log=print):
+    """固定ジャンル → 実際に使う生成器(接頭辞・スクリプト・台数)を決める。
+
+    H型は **EIGRP 版を優先**し、直近 family_days に出ていれば OSPF 版へ回す
+    (ユーザ指示 2026-08-09)。片方しか無ければそれを使う。
+    """
+    spec = LAB_GENRES.get(genre)
+    if not spec:
+        return None
+    byprefix = {g["prefix"]: g for g in cat["generator"] if g.get("prefix")}
+    recent = {family(pid) for d, pid in hist
+              if _age(d, today) is not None and _age(d, today) <= family_days}
+    cands = [byprefix[p] for p in spec["prefixes"] if p in byprefix]
+    if not cands:
+        log(f"[選定] ★ジャンル {genre}: 生成器がカタログに見つからない")
+        return None
+    pick = next((g for g in cands if g["prefix"] not in recent), cands[0])
+    if pick is not cands[0]:
+        log(f"[選定] {spec['label']}: 優先の {cands[0]['prefix']} は直近"
+            f"{family_days}日に出題済 → {pick['prefix']} へ")
+    nodes = _nodes_from_text(pick["desc"] + " " + pick["note"]) or DEFAULT_NODES
+    return {"id": pick["prefix"], "script": pick["script"], "nodes": nodes,
+            "tags": spec["tags"], "diff": pick["diff"], "source": "generator",
+            "kind": "generator", "genre": genre, "label": spec["label"],
+            "pvt": bool(pick.get("pvt"))}
+
+
+def resolve_paper_count(spec, rnd):
+    """`--paper` の指定を実際の問題数に解決する。
+
+    `auto`(既定)= PAPER_AUTO_MIN〜MAX から抽選 / `12`= 固定 / `8-14`= 範囲から抽選。
+    ★毎晩ばらつかせるのが狙い(ユーザ指示 2026-08-11「10〜20問で適当に」)。
+    """
+    spec = str(spec or "auto").strip()
+    if spec in ("auto", ""):
+        return rnd.randint(PAPER_AUTO_MIN, PAPER_AUTO_MAX)
+    m = re.fullmatch(r"(\d+)\s*[-〜~]\s*(\d+)", spec)
+    if m:
+        lo, hi = sorted((int(m.group(1)), int(m.group(2))))
+        return rnd.randint(lo, hi)
+    if spec.isdigit():
+        return int(spec)
+    raise SystemExit(f"--paper の指定を解釈できません: {spec}")
+
+
+def _age(d, today):
+    try:
+        return (today - datetime.date.fromisoformat(d)).days
+    except ValueError:
+        return None
+
+
+def select_genre_labs(cat, hist, *, genres, count, budget, used, rnd,
+                      family_days=21, today=None, log=print):
+    """固定ジャンルから count 個を選ぶ(台数予算に収まる組合せを探す)。
+
+    ★固定ジャンルは**履歴による重複回避も分野タグ重複チェックも適用しない**。
+      毎晩指定する枠なので履歴で弾くと2日目から候補ゼロになるし、H型と他が
+      `vrf` 等で衝突して落ちるのも意図に反する(新 seed で盤面と故障は変わる)。
+    """
+    today = today or datetime.date.today()
+    pool = [g for g in genres if g in LAB_GENRES]
+    notes = []
+    order = pool[:]
+    rnd.shuffle(order)
+    picked, total = [], 0
+    for genre in order:
+        if len(picked) >= count:
+            break
+        lb = resolve_genre(cat, genre, hist, rnd, family_days, today, log=log)
+        if lb is None:
+            continue
+        if total + lb["nodes"] + used > budget:
+            notes.append(f"{lb['label']} は台数予算に入らず見送り"
+                         f"({lb['nodes']}台・稼働中{used}/{budget})")
+            continue
+        picked.append(lb)
+        total += lb["nodes"]
+    got = "・".join(f"{p['label']}({p['id']}/{p['nodes']}台)" for p in picked)
+    notes.insert(0, f"固定ジャンル {len(picked)}/{count} 問: {got or '(なし)'}")
+    return picked, notes, total
+
+
 # ==========================================================================
 # 紙面3問の調達
 # ==========================================================================
-def gen_papers(repo, count, seed, shape, exam, hard, log):
-    """gen_paper_mcq.py を回して紙面を作る(実機ラボを建てて撤収する・要 CML)。
+WROTE_RE = re.compile(r"wrote questions/(\d{8}-\d+)\.md")
 
-    ★完成判定: 要求数に満たなければ別 seed でリトライする。生成器は展開失敗時に
-    問題数を黙って減らすため、この検査が無いと朝に問題が足りない事故になる。
+
+def _run_paper_gen(repo, seed, count, shape, exam, hard, log, label):
+    """gen_paper_mcq.py を1回だけ回し、**この実行が書いた**スタンプを返す。
+
+    ★帰属は「生成器の標準出力の `wrote questions/<stamp>.md`」で判定する。
+      以前は questions/ のグロブ差分で数えていたが、**並行セッションが同じ時間帯に
+      生成した問題を自分の成果として取り込んでしまう**(2026-08-12 に実際に発生:
+      別セッションの shape=bgpbest の1問がパックに混入し、こちらの1問が溢れた)。
+      作問セッションとパックのセッションは別に動くので、差分での帰属は成立しない。
     """
-    made = []
+    cmd = [os.path.join(repo, ".venv/bin/python3"),
+           os.path.join(repo, "topologies/gen_paper_mcq.py"),
+           "--repo", repo, "--seed", str(seed), "--count", str(count),
+           "--shape", shape]
+    if exam:
+        cmd.append("--exam")
+    if hard:
+        cmd.append("--hard")
+    log(f"[紙面] {label}: shape={shape} count={count} seed={seed}")
+    r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True)
+    if r.returncode != 0:
+        log(f"[紙面] ★生成器が rc={r.returncode} で終了: {(r.stderr or '')[-1500:]}")
+    mine = []
+    for st in WROTE_RE.findall(r.stdout or ""):
+        if st not in mine and os.path.exists(f"{repo}/questions/{st}.md"):
+            mine.append(st)
+    if not mine and (r.stdout or ""):
+        log("[紙面] ★生成器の出力から生成分を特定できず(書式変更の疑い)")
+    return mine
+
+
+def gen_papers(repo, count, seed, shape, exam, hard, log, require=(), rnd=None):
+    """紙面を作る。必須ジャンルは個別に、残りは mixed でまとめて生成する。
+
+    ★`--shape mixed` は問題ごとのルーレットでジャンルを保証しない。
+      「再配送を1問以上」「AAA を1問以上」は**専用に1回ずつ生成**するしかない。
+    ★完成判定: 要求数に満たなければ別 seed でリトライ(生成器は展開失敗時に
+      問題数を黙って減らすため、この検査が無いと朝に問題が足りない事故になる)。
+    """
+    rnd = rnd or random.Random(seed)
+    made, got_genre = [], {}
+    for gi, genre in enumerate(require):
+        shapes = PAPER_GENRES.get(genre)
+        if not shapes:
+            log(f"[紙面] ★未知のジャンル指定 {genre} は無視")
+            continue
+        for attempt in range(1, RETRY_MAX + 1):
+            sh = rnd.choice(shapes)
+            new = _run_paper_gen(repo, seed + 7000 + gi * 100 + attempt, 1, sh,
+                                 exam, hard, log, f"必須[{genre}] 試行{attempt}")
+            if new:
+                made += new
+                got_genre[genre] = sh
+                log(f"[紙面] 必須[{genre}] 確保: {new[0]} (shape={sh})")
+                break
+            log(f"[紙面] 必須[{genre}] 試行{attempt} 失敗 → shape を引き直す")
+        else:
+            log(f"[紙面] ★必須ジャンル {genre} を確保できなかった")
+
     for attempt in range(1, RETRY_MAX + 1):
         need = count - len(made)
-        s = seed + attempt * 1000
-        cmd = [os.path.join(repo, ".venv/bin/python3"),
-               os.path.join(repo, "topologies/gen_paper_mcq.py"),
-               "--repo", repo, "--seed", str(s), "--count", str(need),
-               "--shape", shape]
-        if exam:
-            cmd.append("--exam")
-        if hard:
-            cmd.append("--hard")
-        before = set(glob.glob(f"{repo}/questions/*.md"))
-        log(f"[紙面] 試行{attempt}: {' '.join(cmd[2:])}")
-        r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True)
-        log(r.stdout[-4000:] if r.stdout else "")
-        if r.returncode != 0:
-            log(f"[紙面] ★生成器が rc={r.returncode} で終了: {r.stderr[-2000:]}")
-        new = sorted(set(glob.glob(f"{repo}/questions/*.md")) - before)
-        made += [os.path.basename(p)[:-3] for p in new]
-        log(f"[紙面] 試行{attempt}: {len(new)} 問取得(累計 {len(made)}/{count})")
-        if len(made) >= count:
+        if need <= 0:
             break
-    return made[:count]
+        new = _run_paper_gen(repo, seed + attempt * 1000, need, shape,
+                             exam, hard, log, f"残り 試行{attempt}")
+        made += new
+        log(f"[紙面] 累計 {len(made)}/{count} 問")
+    if got_genre:
+        log(f"[紙面] 必須ジャンルの充足: {got_genre}")
+    return made[:count], got_genre
 
 
 def run(cmd, repo, log, label, timeout=3600):
@@ -750,15 +917,22 @@ def answer_form(pack_id, it, src_path):
                 '<textarea class="memo"></textarea>'
                 '<label class="done"><input type="checkbox"> 実装完了</label>')
     else:
-        letters = []
+        letters, pick = [], 1
         if src_path and os.path.exists(src_path):
             with open(src_path, encoding="utf-8") as fh:
-                letters = render_html.choice_letters(fh.read())
+                qtext = fh.read()
+            letters = render_html.choice_letters(qtext)
+            pick = render_html.pick_count(qtext)
         if letters:
+            # ★複数選択(「2つを選択してください」)はチェックボックスにする。
+            #   ラジオのままだと1つしか選べず**解答不能**になる(2026-08-11 発覚)。
+            typ = "radio" if pick <= 1 else "checkbox"
             opts = "".join(
-                f'<label><input type="radio" name="ans{it["no"]}" '
+                f'<label><input type="{typ}" name="ans{it["no"]}" '
                 f'value="{l}">{l}</label>' for l in letters)
-            ansfield = f'<div class="opts">{opts}</div>'
+            hint = ("" if pick <= 1 else
+                    f'<label class="row">この問題は <b>{pick}つ選択</b>です</label>')
+            ansfield = f'{hint}<div class="opts">{opts}</div>'
         else:                       # 記述式(選択肢なし)
             ansfield = ('<label class="row">解答</label>'
                         '<textarea class="ans"></textarea>')
@@ -806,7 +980,7 @@ def write_pages(repo, pdir, items, mermaid_js, mermaid_mode="cdn", pack_id=""):
 
 
 def index_md(pack_id, items, notes, dry_run):
-    est = {"paper": 15, "lab": 60}
+    est = {"paper": 8, "lab": 60}     # 紙面は1問8分・ラボは1問60分の目安
     total = sum(est[it["kind"]] for it in items)
     lines = [f"# {pack_id} — 問題パック", ""]
     if dry_run:
@@ -982,20 +1156,21 @@ def choice_of(text):
     """
     if not text:
         return ""
-    z = text.translate({ord(c): ord(c) - 0xFEE0 for c in "ＡＢＣＤＥＦａｂｃｄｅｆ"})
+    z = text.translate({ord(c): ord(c) - 0xFEE0
+                        for c in "ＡＢＣＤＥＦＧＨＩＪａｂｃｄｅｆｇｈｉｊ"})
     # 「B. 選択肢の本文」のような記入で本文中の英字を拾わないよう、
     # 行頭・区切り直後の記号だけを対象にする。
     # ①「BD」「B,D」「B・D」「B と D」のような**記号だけの記入**は、区切りを
     #   取り除いて全文字が A-F なら全部を解答とみなす。
     core = re.sub(r"[\s*,、・/|]|と", "", z)
-    if core and len(core) <= 4 and re.fullmatch(r"[A-Fa-f]+", core):
+    if core and len(core) <= 4 and re.fullmatch(r"[A-Ja-j]+", core):
         got = list(core)
     else:
         # ②「B. 選択肢の本文…」のような記入は、**本文中の英字を拾わない**よう
         #   前後が英数字でない 1 文字だけを対象にする。
-        got = re.findall(r"(?<![A-Za-z0-9])([A-Fa-f])(?![A-Za-z0-9])", z)
+        got = re.findall(r"(?<![A-Za-z0-9])([A-Ja-j])(?![A-Za-z0-9])", z)
         if not got:
-            m = re.search(r"[A-Fa-f]", z)
+            m = re.search(r"[A-Ja-j]", z)
             got = [m.group()] if m else []
     seen = []
     for c in got:
@@ -1003,6 +1178,11 @@ def choice_of(text):
         if c not in seen:
             seen.append(c)
     return "".join(sorted(seen))
+
+
+def fmt_letters(s):
+    """choice_of/key_of の整列済み記号列を表示用に(複数選択は中黒区切り)。"""
+    return "・".join(s) if s else ""
 
 
 def key_of(repo, ref):
@@ -1018,13 +1198,15 @@ def key_of(repo, ref):
     if "ルーブリック" in text:
         return None, "記述式(ルーブリック採点)"
     # ★複数正解(`**B・D**`)にも対応。整列した記号列で返す(choice_of と同じ形)。
-    pat = r"([A-F](?:\s*[・,]\s*[A-F])*)"
+    # ★記号の範囲は A-J(2026-08-11): 8択の問題が実在し、`**H**` を読めず
+    #   「正解記号を読めず」で無言の採点不能になっていた(実データ3件で発覚)。
+    pat = r"([A-J](?:\s*[・,]\s*[A-J])*)"
     m = re.search(r"^##\s*正解\s*$\s*\n+\s*\*\*" + pat + r"\*\*", text, re.M)
     if not m:
         m = re.search(r"^\s*\*\*" + pat + r"\*\*\s*$", text, re.M)
     if not m:
         return None, "正解記号を読めず"
-    return "".join(sorted(re.findall(r"[A-F]", m.group(1)))), ""
+    return "".join(sorted(re.findall(r"[A-J]", m.group(1)))), ""
 
 
 # ==========================================================================
@@ -1040,7 +1222,10 @@ def history_upsert(repo, ref, *, diff="", state="出題中", score="-", memo="",
     ★台帳は他セッションも編集するため、読み→書きの間隔を最短にし、
       既存行の書式(列数)は壊さない。ID が一致する最初の行だけを触る。
     """
-    path = os.path.join(repo, "problems", "_history.md")
+    # ★PVT系の行は公開台帳に書かない(CLAUDE.md の台帳分離)
+    rel = ("private/_history.md" if str(ref).startswith("PVT-")
+           else "problems/_history.md")
+    path = os.path.join(repo, rel)
     if not os.path.exists(path):
         return False
     date = date or datetime.date.today().isoformat()
@@ -1102,7 +1287,7 @@ def build_report(repo, pack_id, pdir, man, rows, lab_rows):
     md += ["", "## 解説", ""]
     for no, kind, ref, given, key, note in rows:
         if kind != "紙面" or key in ("-", ""):
-            continue                       # 未解答・記述式はここに出さない
+            continue                       # 未解答・記述式はここに出さない(正解を伏せる)
         md += [f"### Q{no} `{ref}` — 正解 {key}（あなたの解答 {given}）", ""]
         md += [explain_of(repo, ref), ""]
     return "\n".join(md) + "\n"
@@ -1181,13 +1366,18 @@ def cmd_new(a):
     log(f"[台数] CML 起動中 {used} ノード {per or '(なし)'} / 予算 {a.budget}")
 
     # --- 紙面フェーズ ---
+    require = [g.strip() for g in (a.require_shape or "").split(",") if g.strip()]
+    n_paper = resolve_paper_count(a.paper, rnd)
+    log(f"[紙面] 問題数: {n_paper} 問(指定={a.paper}) / 必須ジャンル {require or '(なし)'}")
     if a.dry_run:
-        stamps = borrow_papers(repo, a.paper, today)
-        log(f"[紙面] dry-run: 既出の紙面を {len(stamps)} 問借用 {stamps}")
+        stamps = borrow_papers(repo, n_paper, today)
+        log(f"[紙面] dry-run: 既出の紙面を {len(stamps)} 問借用"
+            f"(必須ジャンルの個別生成は実生成時のみ)")
     else:
-        stamps = gen_papers(repo, a.paper, seed, a.shape, a.exam, a.hard, log)
-    if len(stamps) < a.paper:
-        log(f"[紙面] ★不足: {len(stamps)}/{a.paper} 問しか用意できなかった")
+        stamps, _got = gen_papers(repo, n_paper, seed, a.shape, a.exam, a.hard,
+                                  log, require=require, rnd=rnd)
+    if len(stamps) < n_paper:
+        log(f"[紙面] ★不足: {len(stamps)}/{n_paper} 問しか用意できなかった")
 
     items, no = [], 0
     for st in stamps:
@@ -1197,7 +1387,7 @@ def cmd_new(a):
         form = "essay" if _is_essay(repo, st) else "mcq"
         items.append({"no": no, "kind": "paper", "ref": st, "src": src,
                       "key": key, "form": form, "state": "未着手"})
-    for _ in range(a.paper - len(stamps)):
+    for _ in range(n_paper - len(stamps)):
         no += 1
         items.append({"no": no, "kind": "paper", "ref": "(未生成)", "src": "",
                       "state": "準備失敗", "error": "紙面の生成に失敗"})
@@ -1205,15 +1395,34 @@ def cmd_new(a):
     # --- ラボ選定フェーズ ---
     cat = parse_catalog(repo)
     hist = parse_history(repo)
-    labs, notes = select_labs(cat, hist, count=a.lab, budget=a.budget, used=used,
-                              rnd=rnd, diff_range=(a.min_diff, a.max_diff),
-                              repeat_days=a.repeat_days,
-                              family_days=a.family_days,
-                              allow_special=a.allow_special, today=today,
-                              pin=a.lab_id or (),
-                              allow_non_cisco=a.allow_non_cisco,
-                              allow_automation=a.allow_automation,
-                              ts_only=not a.any_lab)
+    n_lab = 0 if a.paper_only else a.lab
+    n_extra = 0 if a.paper_only else a.lab_extra
+    if a.paper_only:
+        log("[選定] --paper-only: ラボは作らない(CML のラボ枠を使わない)")
+    genres = [g.strip() for g in (a.lab_genres or "").split(",") if g.strip()]
+    labs, notes, used_nodes = ([], [], 0) if n_lab <= 0 else select_genre_labs(
+        cat, hist, genres=genres, count=n_lab, budget=a.budget, used=used,
+        rnd=rnd, family_days=a.family_days, today=today, log=log)
+    # ★3問目は「余裕があれば」。入らなければ黙って2問で確定する(無理に詰めない)
+    if n_extra > 0:
+        # ★追加枠は予算を使い切らない。上限に張り付くと他セッションの provision が
+        #   ライセンス不足で落ちる(2026-08-08 に実際に起こした)。reserve ぶん残す。
+        extra, xnotes = select_labs(
+            cat, hist, count=n_extra, budget=a.budget - a.reserve,
+            used=used + used_nodes, rnd=rnd,
+            diff_range=(a.min_diff, a.max_diff), repeat_days=a.repeat_days,
+            family_days=a.family_days, allow_special=a.allow_special,
+            today=today, pin=a.lab_id or (),
+            allow_non_cisco=a.allow_non_cisco,
+            allow_automation=a.allow_automation, ts_only=not a.any_lab)
+        chosen_tags = {t for lb in labs for t in lb.get("tags", [])}
+        extra = [e for e in extra if not (chosen_tags & set(e.get("tags", [])))]
+        if extra:
+            labs += extra
+            notes += [f"追加枠: {extra[0]['id']}({extra[0]['nodes']}台)"]
+        else:
+            notes += ["追加枠: 台数か分野の条件に合う候補が無いので見送り"]
+        notes += xnotes
     for n in notes:
         log(f"[選定] {n}")
     private = {"pack_id": pack_id, "seed": seed, "labs": []}
@@ -1421,6 +1630,66 @@ def cmd_replace(a):
     logf.close()
 
 
+def cmd_redeploy(a):
+    """パックのラボを**同じ内容のまま**作り直す(問題は差し替えない)。
+
+    用途: CML 側の不調(コンソール出力の乱れ等)でラボが使えなくなった時。
+    `problems/<ID>/initial/` から再構築するので、トポロジ・アドレス・仕込みは
+    完全に同一。変わるのは CML のラボ実体と MGMT の割当 IP だけ。
+    ★`replace`(別の問題に差し替え)とは別物。解答用紙にも触らない。
+    """
+    repo = os.path.abspath(a.repo)
+    pack_id = a.pack_id or latest_pack(repo)
+    pdir = pack_dir(repo, pack_id)
+    man = read_manifest(pdir)
+    targets = [it for it in man["items"]
+               if it.get("kind") == "lab" and (not a.no or it["no"] == a.no)]
+    if not targets:
+        sys.exit(f"対象のラボがありません(--no {a.no})")
+
+    logdir = os.path.join(repo, "topologies", "_state")
+    os.makedirs(logdir, exist_ok=True)
+    logf = open(os.path.join(logdir, f"pack-{pack_id}.log"), "a", encoding="utf-8")
+
+    def log(msg):
+        stamp = datetime.datetime.now().strftime("%H:%M:%S")
+        for line in str(msg).rstrip("\n").splitlines() or [""]:
+            print(f"{stamp} {line}", flush=True)
+            logf.write(f"{stamp} {line}\n")
+        logf.flush()
+
+    for it in targets:
+        ref = it.get("ref", "")
+        log(f"===== Q{it['no']} {ref} を同一内容で再構築 =====")
+        if not os.path.exists(os.path.join(repo, "problems", ref)):
+            log(f"★{ref}: 問題パックが無いので再構築できない(内容を再現できません)")
+            continue
+        run([os.path.join(repo, "scripts/lab.sh"), "teardown", ref],
+            repo, log, f"teardown {ref}")
+        src, err = provision_lab(repo, ref, it.get("variant"), log)
+        if not src:
+            log(f"★{ref}: 再構築に失敗: {err}")
+            it["error"] = err
+            continue
+        it["src"] = src
+        it.pop("error", None)
+        ng = bringup(repo, ref, log)
+        it["warn"] = f"未到達ノード: {','.join(ng)}" if ng else ""
+        if not it["warn"]:
+            it.pop("warn", None)
+        # ★基線を再測定して**再構築前と同じ点**であることを確かめる
+        #   (同じなら内容が同一である裏付けになる)
+        got, total, why = baseline_grade(repo, ref, it.get("variant"), log,
+                                         settle=a.settle)
+        log(f"[基線] {ref}: {got}/{total}" if got is not None
+            else f"[基線] 取得できず({why})")
+    write_manifest(pdir, {"pack_id": pack_id, "created": man.get("created", ""),
+                          "dry_run": False, "seed": man.get("seed", ""),
+                          "items": man["items"], "notes": man.get("notes", [])})
+    log("===== 再構築 完了(解答用紙・問題文は不変) =====")
+    logf.close()
+
+
 def cmd_render(a):
     """既存パックの HTML だけを作り直す(解答.md には触れない)。
 
@@ -1457,7 +1726,8 @@ def cmd_status(a):
         s = sheet.get(it["no"], {})
         mark = "✔ 解答済" if s.get("done") else "・未着手"
         done += 1 if s.get("done") else 0
-        ans = f"  解答={s['answer']}" if s.get("answer") else ""
+        ans = (f"  解答={fmt_letters(choice_of(s.get('answer')))}"
+               if s.get("answer") else "")
         print(f"  Q{it['no']} [{it.get('kind')}] {it.get('ref')}  {mark}{ans}")
     print(f"  -- {done}/{len(man['items'])} 問 解答済")
     used, per = leased_nodes(repo)
@@ -1480,10 +1750,14 @@ def cmd_grade(a):
     for it in man["items"]:
         s_it = sheet.get(it["no"], {})
         if it.get("kind") == "paper":
+            # choice_of / key_of は整列済みの記号列を返す("D" / "BD")。
+            # 複数選択は**過不足なしで正解**なので、文字列一致がそのまま集合一致。
             key, why = key_of(repo, it.get("ref", ""))
-            given = choice_of(s_it.get("answer"))
+            given = choice_of(s_it.get("answer")) or ""
+            gs = "・".join(given)
+            ks = "・".join(key) if key else ""
             if key is None:
-                rows.append((it["no"], "紙面", it.get("ref", ""), given or "-", "-",
+                rows.append((it["no"], "紙面", it.get("ref", ""), gs or "-", "-",
                              why or "自動採点不可(Claude が採点)"))
             elif not given:
                 rows.append((it["no"], "紙面", it.get("ref", ""), "(未記入)", "-",
@@ -1492,16 +1766,27 @@ def cmd_grade(a):
                 gradable += 1
                 ok = given == key
                 correct += 1 if ok else 0
-                rows.append((it["no"], "紙面", it.get("ref", ""), given, key,
-                             "正解" if ok else "不正解"))
+                note = "正解" if ok else "不正解"
+                if not ok and len(key) > 1:
+                    g, k = set(given), set(key)
+                    if g < k:
+                        note += "(選択が不足)"
+                    elif g > k:
+                        note += "(選択が過剰)"
+                rows.append((it["no"], "紙面", it.get("ref", ""), gs, ks, note))
                 history_upsert(repo, it["ref"], state="採点済", paper=True,
-                               score=f"{'正解' if ok else '不正解'}({key})",
+                               score=f"{'正解' if ok else '不正解'}({ks})",
                                memo=f"パック {pack_id} の Q{it['no']}")
+                # ノルマ台帳(BL-114): 採点が確定した瞬間の JST で記録する
+                quota.log_attempt(repo, "paper", it["ref"],
+                                  result="ok" if ok else "ng",
+                                  src=f"pack:{pack_id}", quiet=True)
         else:
             ref = it.get("ref", "")
             if a.no_lab or it.get("error"):
                 rows.append((it["no"], "ラボ", ref, "-", "-", "ラボ採点は省略"))
                 continue
+            print(f"  Q{it['no']} [ラボ] {ref}: 採点中…", flush=True)
             got, total, why = grade_lab(repo, ref, it.get("variant"))
             if got is None:
                 rows.append((it["no"], "ラボ", ref, "-", "-", f"採点できず({why})"))
@@ -1511,8 +1796,10 @@ def cmd_grade(a):
             rows.append((it["no"], "ラボ", ref, "-", "-", f"{got}/{total} 点"))
             history_upsert(repo, ref, state="採点済", score=str(got),
                            memo=f"パック {pack_id} の Q{it['no']}")
+            quota.log_attempt(repo, "lab", ref, score=got, total=total,
+                              src=f"pack:{pack_id}", quiet=True)
 
-    print(f"== {pack_id} 採点")
+    print(f"== {pack_id} 採点", flush=True)
     for no, kind, ref, given, key, note in rows:
         extra = f" 解答={given} 正解={key}" if kind == "紙面" else ""
         print(f"  Q{no} [{kind}] {ref}:{extra} … {note}")
@@ -1526,6 +1813,10 @@ def cmd_grade(a):
                                     nav=build_nav(man["items"], 0),
                                     mermaid_mode=a.mermaid))
     print(f"  レポート: {out}")
+    # ノルマ台帳(BL-114): 採点直後に当日の進捗を出す
+    cfg = quota.config(repo)
+    print(quota.render_today(quota.summarize(
+        repo, quota.quota_day(quota.now_jst(), cfg["day_start"]))))
 
 
 def grade_lab(repo, prob_id, variant=None, timeout=1800):
@@ -1579,12 +1870,28 @@ def main():
     ap = argparse.ArgumentParser(description="問題パック(連続出題)ビルダ")
     ap.add_argument("cmd",
                     choices=["new", "status", "grade", "close", "render",
-                             "replace"])
-    ap.add_argument("--no", type=int, default=0, help="replace: 差し替える問番号")
+                             "replace", "redeploy"])
+    ap.add_argument("--no", type=int, default=0,
+                    help="replace/redeploy: 対象の問番号"
+                         "(redeploy は省略で全ラボ)")
     ap.add_argument("--repo", default=REPO)
     ap.add_argument("--pack-id", default=None)
-    ap.add_argument("--paper", type=int, default=3)
-    ap.add_argument("--lab", type=int, default=2)
+    ap.add_argument("--paper", default="auto",
+                    help=f"紙面の問題数。`auto`(既定)= {PAPER_AUTO_MIN}〜"
+                         f"{PAPER_AUTO_MAX}問から抽選 / `12`= 固定 / `8-14`= 範囲")
+    ap.add_argument("--paper-only", action="store_true",
+                    help="紙面だけのパックにする(ラボを作らない=CMLのラボ枠を使わない)")
+    ap.add_argument("--require-shape", default="redist,aaa,acl",
+                    help="紙面の必須ジャンル(カンマ区切り。"
+                         f"選択肢: {','.join(PAPER_GENRES)})")
+    ap.add_argument("--lab", type=int, default=2,
+                    help="固定ジャンルから選ぶラボ数(v2 既定2)")
+    ap.add_argument("--lab-genres", default="hvrf,dhcp,dmvpn",
+                    help=f"ラボの固定ジャンル({','.join(LAB_GENRES)})")
+    ap.add_argument("--lab-extra", type=int, default=1,
+                    help="余裕があれば通常TSプールから追加する数(既定1)")
+    ap.add_argument("--reserve", type=int, default=3,
+                    help="追加枠が使わずに残すノード数(他セッション用の余白)")
     ap.add_argument("--budget", type=int, default=20, help="同時起動ノード上限")
     ap.add_argument("--settle", type=int, default=180,
                     help="基線採点の前に待つ秒数(収束待ち。0で無効)")
@@ -1618,7 +1925,7 @@ def main():
     a = ap.parse_args()
     {"new": cmd_new, "status": cmd_status, "grade": cmd_grade,
      "close": cmd_close, "render": cmd_render,
-     "replace": cmd_replace}[a.cmd](a)
+     "replace": cmd_replace, "redeploy": cmd_redeploy}[a.cmd](a)
 
 
 if __name__ == "__main__":

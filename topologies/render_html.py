@@ -131,6 +131,21 @@ def choice_letters(md_text):
     return letters
 
 
+def pick_count(md_text):
+    """設問が何個選ばせるかを返す（「(2つを選択してください)」→ 2。既定 1）。
+
+    ★解答フォームの形（ラジオ／チェックボックス）を決めるために使う。
+      正解キーは絶対に見ない — 問題文だけから判断する。
+    """
+    m = re.search(r"[(（]\s*([0-9０-９一二三四五六七八九])\s*つ(?:を)?\s*選[^)）]*"
+                  r"[)）]", md_text)
+    if not m:
+        return 1
+    z = m.group(1).translate({ord(c): ord(c) - 0xFEE0 for c in "０１２３４５６７８９"})
+    return {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
+            "六": 6, "七": 7, "八": 8, "九": 9}.get(z, int(z) if z.isdigit() else 1)
+
+
 def mark_choices(body):
     """選択肢の段落に、記号を切り出したカード用のクラスを付ける。
 
@@ -335,10 +350,15 @@ ANSWER_JS = r"""
     }
     return lines.join('\n') + '\n';
   }
-  /* 選択式はラジオ、記述式は textarea。★ラジオを読み忘れると解答が空で保存される */
+  /* 選択式はラジオ/チェックボックス、記述式は textarea。
+     ★複数選択は**チェックされた全部**を「・」で連結する(1つ目だけ読むと
+       解答が欠ける。2026-08-11 に複数選択問題を追加した際の修正)。 */
   function ansValue(){
-    var r = box.querySelector('.opts input:checked');
-    if(r) return r.value;
+    var on = box.querySelectorAll('.opts input:checked');
+    if(on.length){
+      return Array.prototype.map.call(on, function(e){ return e.value; })
+             .sort().join('・');
+    }
     return val('.ans');
   }
   function val(sel){
@@ -358,7 +378,11 @@ ANSWER_JS = r"""
       var a = t.match(/^[ \t]*解答:[ \t]*(.*)$/m);
       var w = t.match(/^[ \t]*根拠:[ \t]*(.*)$/m);
       var mm = t.match(/^[ \t]*メモ:[ \t]*(.*)$/m);
-      if(a && box.querySelector('.ans')) setAns(a[1].trim());
+      /* ★選択式(ラジオ/チェックボックス)には .ans 要素が無い。ここで .ans の
+         存在を条件にすると**選択式の解答だけ復元されない**(保存はされているので
+         開き直すと選択が消えたように見える。2026-08-12 にユーザ報告で発覚)。
+         setAns() は選択式・記述式の両方を扱えるので、無条件に呼ぶ。 */
+      if(a) setAns(a[1].trim());
       if(w && box.querySelector('.why')) box.querySelector('.why').value = w[1].trim();
       if(mm && box.querySelector('.memo')) box.querySelector('.memo').value = mm[1].trim();
       loaded = true; sync(); say('読み込み済み');
@@ -369,8 +393,15 @@ ANSWER_JS = r"""
     });
   }
   function setAns(v){
-    var r = box.querySelector('.opts input[value="' + v.toUpperCase() + '"]');
-    if(r){ r.checked = true; return; }
+    var letters = (v || '').toUpperCase().match(/[A-J]/g);
+    var hit = false;
+    if(letters){
+      letters.forEach(function(L){
+        var r = box.querySelector('.opts input[value="' + L + '"]');
+        if(r){ r.checked = true; hit = true; }
+      });
+    }
+    if(hit) return;
     var free = box.querySelector('.ans');
     if(free && free.tagName === 'TEXTAREA') free.value = v;
   }
@@ -382,11 +413,19 @@ ANSWER_JS = r"""
 
   function save(){
     if(!loaded) return;
+    var body = build();
     say('保存中…');
     fetch(api(), {method:'POST', headers:{'Content-Type':'text/plain; charset=utf-8'},
-                  body: build()})
-      .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status);
-                         say('保存しました（解答.md）'); })
+                  body: body})
+      .then(function(r){
+        if(!r.ok) throw new Error('HTTP ' + r.status);
+        /* ★何が保存されたかを必ず表示する。「保存しました」だけだと、
+           保存が効いているのか確かめる術が無い(2026-08-12 ユーザ指摘)。 */
+        var m = body.match(/^[ \t]*(解答|メモ):[ \t]*(.*)$/m);
+        var what = m ? m[1] + ' ' + (m[2].trim() || '(空)') : '';
+        var t = new Date().toTimeString().slice(0, 8);
+        say('保存しました ' + t + ' — ' + what);
+      })
       .catch(function(e){ say('保存に失敗: ' + e.message, true); });
   }
   function queue(){ sync(); clearTimeout(timer); timer = setTimeout(save, 600); }

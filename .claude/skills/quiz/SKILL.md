@@ -46,12 +46,13 @@ scripts/lab.sh provision <ID> [variant]        # 通常問題
 ### 4. 採点(ユーザが「採点して」と言ったら)
 
 ```bash
-.venv/bin/ansible-playbook playbooks/grade.yml -e problem=<ID> \
-  --vault-password-file <(printf 'CCNP\n')     # variant があれば -e variant=<名>
+scripts/lab.sh grade <ID> [variant]        # grade.yml を実走＋学習ノルマへ自動記録
 ```
 
 - チェック数が多い問題は2分を超える → Bash の timeout を 600000 に上げて実行。
-- 特殊ラボは ops CLI の `grade` サブコマンド。
+- **素の `ansible-playbook playbooks/grade.yml` は使わない**(ノルマ台帳に載らない)。
+  どうしても直接叩いた場合は、後から `scripts/quota.sh log lab <ID> --score N --total M` を打つ。
+- 特殊ラボは ops CLI の `grade` サブコマンド(記録は上の `quota.sh log lab` を手で打つ)。
 - 満点でなければ得点と **落ちたチェック名だけ** 伝える(修正方法は聞かれるまで言わない)。再挑戦→再採点は何度でも。
 
 ### 5. 採点後レビュー(満点後、または降参時に毎回)
@@ -63,6 +64,9 @@ scripts/lab.sh provision <ID> [variant]        # 通常問題
 ### 6. 記録・撤収
 
 - `_history.md` の行を更新(状態・得点・メモ)。**英語出題した回はメモに `en` を記録**(再出題判断・task.en.md キャッシュ有無の把握用)。
+- **学習ノルマ台帳(BL-114)**: 紙面をチャットで採点した回は、正誤が確定した時点で必ず打つ:
+  `scripts/quota.sh log paper <紙面ID> ok|ng`(ラボは `lab.sh grade`・パック採点が自動で記録するので不要)。
+  出力に当日の残ノルマが出るので、そのままユーザに伝える。
 - ユーザに確認のうえ撤収: `scripts/lab.sh teardown <ID>`(特殊ラボは ops の `teardown`/`stop`。**FGT は stop のみ・fgt1 wipe 禁止**)。
 - 撤収したら `_history.md` を `撤収済` に更新。
 
@@ -121,6 +125,21 @@ scripts/pack.sh close  [PACK-ID]                          # 全ラボ撤収
 - **要件は1対1対応**: 数値・条件・禁止事項の欠落/追加/意訳での弱化を禁止。訳後に原文と要件数を突き合わせる。
 - **用語は試験英語に統一**: 再配送=redistribution / 集約=summarization(BGPは aggregation) / 隣接=adjacency(EIGRPは neighbor) /
   経路=route / 疎通=reachability / 認証=authentication / 冗長化=redundancy / 本社=HQ / 拠点=branch site / 検証網=test segment。
+
+## 学習ノルマ(BL-114)
+
+1日のノルマは **紙面10問・ラボ3問(3ジャンル以上に分散)**。1日の境界は **JST 04:00**
+(深夜に解いた分は前日に計上)。ノルマ値は `records/quota.yml`、ジャンル定義は `records/genres.yml`。
+
+```bash
+scripts/quota.sh                       # 当日の進捗(残り問数・未消化ジャンル)
+scripts/quota.sh report --days 30      # 期間集計(--out で HTML)
+```
+
+- 記録の正準は `records/attempts.jsonl`(追記専用・PVT系は `private/attempts.jsonl`)。
+  **_history.md はノルマ計数に使わない**(叙述用・書き換えが起きるため)。
+- **出題の選定にノルマを使う**: 未消化ジャンルが残っていれば、指定が無い限りそこから優先して選ぶ。
+- ラボは**満点でノルマ1問**として数える(途中点は「挑戦中」表示)。紙面は正誤を問わず1問。
 
 ## 守ること
 

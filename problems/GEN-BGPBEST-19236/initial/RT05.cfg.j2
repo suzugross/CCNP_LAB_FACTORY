@@ -1,0 +1,36 @@
+! RT05 (自社・境界)
+interface Loopback0
+ ip address 5.5.5.5 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.98.15.5 255.255.255.0
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.98.25.5 255.255.255.0
+ no shutdown
+!
+router ospf 1
+ router-id 5.5.5.5
+ network 10.98.15.0 0.0.0.255 area 0
+ network 5.5.5.5 0.0.0.0 area 0
+!
+router bgp 64900
+ bgp router-id 5.5.5.5
+ bgp log-neighbor-changes
+ bgp always-compare-med
+ bgp bestpath compare-routerid
+ neighbor 1.1.1.1 remote-as 64900
+ neighbor 1.1.1.1 update-source Loopback0
+ neighbor 10.98.25.2 remote-as 64520
+ address-family ipv4
+  neighbor 1.1.1.1 activate
+  neighbor 1.1.1.1 next-hop-self
+  neighbor 10.98.25.2 activate
+  neighbor 10.98.25.2 route-map RM-MED-BK out
+  neighbor 10.98.25.2 weight 40000
+ exit-address-family
+!
+route-map RM-MED-BK permit 10
+ set metric 300
+!

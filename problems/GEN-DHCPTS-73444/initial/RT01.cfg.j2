@@ -1,0 +1,36 @@
+! RT01 初期状態 (DHCPサーバ・昨日 配布集約を実施した直後の状態)
+no service dhcp
+!
+interface {{ links[0] }}
+ description === to RT02 (relay uplink) ===
+ ip address 10.192.92.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === LOCAL segment (CL3) ===
+ ip address 10.192.89.1 255.255.255.0
+ no shutdown
+!
+ip dhcp excluded-address 10.192.89.1 10.192.89.9
+ip dhcp excluded-address 10.192.90.1 10.192.90.9
+ip dhcp excluded-address 10.192.91.1 10.192.91.9
+!
+ip dhcp pool NET-BRANCH-L
+ network 10.192.89.0 255.255.255.0
+ default-router 10.192.89.1
+ dns-server 198.51.100.247
+!
+ip dhcp pool NET-BRANCH-A
+ network 10.192.90.0 255.255.255.0
+ default-router 10.192.90.1
+ dns-server 198.51.100.247
+!
+ip dhcp pool NET-BRANCH-B
+ network 10.192.91.0 255.255.255.0
+ default-router 10.192.91.1
+ dns-server 198.51.100.247
+!
+! リレー戻り経路 (既設・変更禁止)
+ip route 10.192.90.0 255.255.255.0 10.192.92.2
+ip route 10.192.91.0 255.255.255.0 10.192.92.2
+!
