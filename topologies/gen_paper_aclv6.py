@@ -38,7 +38,13 @@ KINDS = [
     "v6_explicit_deny_nd",   # ★★明示 deny で近隣探索が落ち、隣接が解決できない
 ]
 # 要件世界（select 形で正解を反転させる。IPv4 版と同じ設計＝意味×提示の組）
-WORLDS = ["one_line", "exact_no_deny", "exact_min"]
+# ★BL-121(2026-08-16)= リーン要件世界を追加。排他の担い手が世界ごとに違う:
+#   exact_no_deny : 明文「対象外を含めるな」(監査型)
+#   lean_only     : 明文なし。「のみ」+deny禁止から排他を**導出**させる(読解型)
+#   lean_hole     : 「のみ」も無し。名指し禁止網(4本目=base+3)が**あらゆる惜しい
+#                   集約の内側**にあり、排他の錨になる(計算型・最難)。
+#   ★lean_hole の成立条件= 4本目が /62・/61 の中にあること(盤面構造が保証)。
+WORLDS = ["one_line", "exact_no_deny", "exact_min", "lean_only", "lean_hole"]
 # ★read 形が成立しない故障種＝「フィルタが実質不在で全部素通り」
 # ★v6_explicit_deny_nd は**隣接が壊れて全部落ちる**ので read 形の対比が作れない
 NO_READ_KINDS = ("v6_undef_ref", "v6_explicit_deny_nd")
@@ -61,7 +67,14 @@ def draw(rnd, kind=None, world=None):
     d["base"] = base
     d["target"] = [base, base + 1, base + 2]
     d["fourth"] = base + 3
-    d["fourth_forbidden"] = (d["world"] != "one_line") and rnd.random() < 0.5
+    # ★BL-121: lean_hole は4本目の名指しが排他の唯一の錨=必ず禁止。
+    #   lean_only は「のみ」だけで /62 を落とすのが主題=名指ししない。
+    if d["world"] == "lean_hole":
+        d["fourth_forbidden"] = True
+    elif d["world"] in ("one_line", "lean_only"):
+        d["fourth_forbidden"] = False
+    else:
+        d["fourth_forbidden"] = rnd.random() < 0.5
     d["outsider"] = base + 5           # /61 の中・/62 の外
     d["faraway"] = 250 if base < 200 else 1
     d["excluded"] = ([d["fourth"]] if d["fourth_forbidden"] else []) \
@@ -80,6 +93,10 @@ def draw(rnd, kind=None, world=None):
 
 def compatible_worlds(_kind):
     return WORLDS
+
+
+# gen_paper_mcq の --worlds 絞り込みが参照する名前(acl/bgpbest と揃える)
+worlds_for = compatible_worlds
 
 
 def net6(d, o64, host=""):
@@ -169,6 +186,15 @@ def _complies(d, lines, ents):
         return _exact(d, ents) and all(" deny " not in l for l in lines)
     if w == "exact_min":
         return _exact(d, ents)
+    if w == "lean_only":
+        # ★BL-121: 要件文に非包含の明文は無いが、「のみ」が排他を担う
+        #   (deny 禁止下では permit 一致=通過なので、のみ⇒正確被覆が定理)。
+        #   機械判定は exact_no_deny と同一。
+        return _exact(d, ents) and all(" deny " not in l for l in lines)
+    if w == "lean_hole":
+        # ★BL-121: 「のみ」も無い。排他は名指し禁止網(excluded)が担い、
+        #   それは _works が既に落としている。残る要件は deny 禁止のみ。
+        return all(" deny " not in l for l in lines)
     raise ValueError(w)
 
 
@@ -205,6 +231,12 @@ def build_choices_select(d, rnd):
     out = []
     for key, lines, ents in select_candidates(d):
         why = "" if key == correct else WHY_SELECT[key]
+        # ★lean_hole では p62/p61 は works 前で死ぬ(名指し網を踏む)。
+        #   汎用の「対象外まで含まれる」でなく名指し違反として説明する。
+        if key != correct and d["world"] == "lean_hole" \
+                and key in ("p62", "p61"):
+            why = ("許可されることはできないと指定されている"
+                   "ネットワークが、一致の対象に含まれる。")
         if key != correct and key in d["_select_works"]:
             why = {"one_line": "エントリが1行に収まっていない。",
                    "exact_no_deny": ("拒否のエントリが用いられている。"
@@ -212,6 +244,14 @@ def build_choices_select(d, rnd):
                                      else "対象としていないネットワークまでが"
                                           "一致の対象に含まれる。"),
                    "exact_min": "より少ない行数で同じ結果が得られる。",
+                   # ★lean_only: 排他の明文が無いので、導出チェーンごと説明する
+                   "lean_only": ("拒否のエントリが用いられている。"
+                                 if any(" deny " in l for l in lines)
+                                 else "「のみ」の要件に反する(拒否のエントリが"
+                                      "禁止されている以上、permit への一致は"
+                                      "通過を意味し、対象外のネットワークが"
+                                      "到達可能になる)。"),
+                   "lean_hole": "拒否のエントリが用いられている。",
                    }[d["world"]]
         out.append(("\n".join(lines), key == correct, why, lines))
     order = list(range(len(out)))
@@ -590,6 +630,23 @@ def _selftest(n=40):
     d2 = draw(random.Random(9), kind="v6_order_shadow", world="one_line")
     chk(not nd_broken(d2) and "REACH" in neighbor_text(d2),
         "明示 deny の無い盤面では隣接は正常")
+    # ★BL-121: リーン世界の排他の担い手を検証
+    for s in range(10):
+        d3 = draw(random.Random(1000 + s), kind="v6_order_shadow",
+                  world="lean_only")
+        chk(d3["_select_correct"] == "exact3"
+            and "p62" in d3["_select_works"]
+            and not d3["fourth_forbidden"],
+            f"lean_only s={s}: p62 は works(名指しでは死なない)が"
+            "「のみ」相当の exact で失格すること")
+        d4 = draw(random.Random(2000 + s), kind="v6_order_shadow",
+                  world="lean_hole")
+        chk(d4["_select_correct"] == "exact3"
+            and d4["fourth_forbidden"]
+            and "p62" not in d4["_select_works"]
+            and "deny_first" in d4["_select_works"],
+            f"lean_hole s={s}: p62 は名指し違反で works 前に死に、"
+            "deny_first が deny 禁止だけで落ちること")
     print(f"  実測との整合: OK={m_ok} NG={m_ng}")
 
     total = ng + f_ng + m_ng

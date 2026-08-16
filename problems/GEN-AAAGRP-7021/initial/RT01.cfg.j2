@@ -1,0 +1,29 @@
+! ============================================================
+! RT01 — データプレーンは構築済み(変更不可)。AAA は未設定。
+! ============================================================
+interface Loopback0
+ ip address 10.8.0.1 255.255.255.255
+interface Ethernet0/0
+ description === to SRV01 (RADIUS) ===
+ ip address 10.99.120.1 255.255.255.252
+ no shutdown
+interface Ethernet0/1
+ description === to SRV02 (RADIUS) ===
+ ip address 10.99.121.1 255.255.255.252
+ no shutdown
+interface Ethernet0/2
+ description === to RT02 ===
+ ip address 10.1.12.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 10.8.0.1
+ network 10.8.0.1 0.0.0.0 area 0
+ network 10.99.120.0 0.0.0.3 area 0
+ network 10.99.121.0 0.0.0.3 area 0
+ network 10.1.12.0 0.0.0.3 area 0
+!
+! --- 緊急用ローカル管理者(サーバ全断時の最後の砦) ---
+username break-glass privilege 15 secret Emg-3147
+!
+ip ssh version 2

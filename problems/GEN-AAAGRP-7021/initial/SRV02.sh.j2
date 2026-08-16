@@ -1,0 +1,99 @@
+#!/bin/bash
+# SRV02 (FreeRADIUS ★非標準ポート) 初期化 — 生成: gen_aaa_build.py
+# ★サーバ側は**完成品**で渡す。受験者の課題は機器側 AAA だけ。
+set -e
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[$(date -Is)] $*"; }
+
+log "in-band NIC / 学習網への経路を netplan で永続化"
+rm -f /etc/netplan/50-cloud-init.yaml
+cat > /etc/netplan/60-ccnp.yaml <<'EOF'
+network:
+  version: 2
+  ethernets:
+    ens2:
+      addresses: [{{ mgmt_ip }}/{{ mgmt_prefixlen }}]
+      routes:
+        - to: default
+          via: {{ mgmt_gw }}
+      nameservers:
+        addresses: {{ mgmt_dns | to_json }}
+    ens3:
+      addresses: [10.99.121.2/30]
+      routes:
+        - to: 10.1.12.0/30
+          via: 10.99.121.1
+        - to: 10.99.120.0/30
+          via: 10.99.121.1
+        - to: 10.8.0.1/32
+          via: 10.99.121.1
+        - to: 10.8.0.2/32
+          via: 10.99.121.1
+EOF
+chmod 600 /etc/netplan/60-ccnp.yaml
+netplan apply
+
+log "パッケージ導入 (freeradius / freeradius-utils)"
+for i in 1 2 3; do
+  apt-get update -qq && \
+  apt-get install -y -qq freeradius freeradius-utils && break
+  sleep 10
+done
+
+log "★非標準ポートへ変更 (auth 1645 / acct 1646)"
+python3 - <<'PY'
+import re
+p = '/etc/freeradius/3.0/sites-enabled/default'
+s = open(p).read()
+
+def fix(m):
+    blk = m.group(0)
+    t = re.search(r'type\s*=\s*(auth|acct)', blk)
+    if not t:
+        return blk
+    port = '1645' if t.group(1) == 'auth' else '1646'
+    return re.sub(r'(?m)^(\s*)port\s*=\s*0\s*$', r'\g<1>port = ' + port, blk)
+
+open(p, 'w').write(re.sub(r'(?ms)^listen\s*\{.*?^\}', fix, s))
+PY
+
+log "clients.conf — ★ルータの Loopback0 のみ許可・このサーバの鍵は Srv2-9305"
+cat > /etc/freeradius/3.0/clients.conf <<'EOF'
+# ★受理するのは各ルータの Loopback0 のみ。
+#   機器側で送信元を Loopback0 に固定していない要求は「不明なクライアント」として
+#   無言で破棄される(Reject は返らない= 機器からはタイムアウトに見える)。
+client localhost {
+	ipaddr = 127.0.0.1
+	secret = testing123
+}
+client rt01-lo {
+	ipaddr = 10.8.0.1
+	secret = Srv2-9305
+}
+client rt02-lo {
+	ipaddr = 10.8.0.2
+	secret = Srv2-9305
+}
+EOF
+
+log "ユーザ台帳(2 台とも同一。切替が起きても権限で判別できないようにする)"
+cat > /etc/freeradius/3.0/mods-config/files/authorize <<'EOF'
+noc-taro Cleartext-Password := "Noc-9341"
+	Service-Type = NAS-Prompt-User,
+	Cisco-AVPair = "shell:priv-lvl=15"
+
+watch-op Cleartext-Password := "Desk-2701"
+	Service-Type = NAS-Prompt-User,
+	Cisco-AVPair = "shell:priv-lvl=1"
+
+SUZUKI Cleartext-Password := "CCNP"
+	Service-Type = NAS-Prompt-User,
+	Cisco-AVPair = "shell:priv-lvl=15"
+EOF
+
+log "設定検査 → 起動"
+freeradius -XC >/dev/null
+systemctl enable -q freeradius || true
+systemctl restart freeradius
+systemctl is-active freeradius
+log "DONE"

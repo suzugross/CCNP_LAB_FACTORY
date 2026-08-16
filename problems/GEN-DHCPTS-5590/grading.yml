@@ -1,0 +1,173 @@
+# 自動生成 (gen_dhcp_ts.py) seed=5590 faults=relay_service_off tgt=A
+# ★renew のみ発火(release は DORA リセット競合で偽 FAIL)・CL1 判定は最後尾。
+#   負の要件は deny カウンタ。
+problem: GEN-DHCPTS-5590
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: '(発火) CL1: renew dhcp'
+  node: CL1
+  command: renew dhcp Ethernet0/0
+  raw:
+  - regex: .*
+  points: 0
+- name: 'RT01: 3プールの network/GW/DNS が配布標準どおり'
+  node: RT01
+  command: show running-config | section ip dhcp pool
+  raw:
+  - regex: network 10\.136\.138\.0 255\.255\.255\.0
+  - regex: network 10\.136\.139\.0 255\.255\.255\.0
+  - regex: network 10\.136\.140\.0 255\.255\.255\.0
+  - regex: default-router 10\.136\.138\.1
+  - regex: default-router 10\.136\.139\.1
+  - regex: default-router 10\.136\.140\.1
+  - regex: dns-server 198\.51\.100\.99
+  points: 10
+- name: 'RT01: excluded-address (.1-.9) が3セグメントとも標準どおり'
+  node: RT01
+  command: show running-config | include ip dhcp excluded-address
+  raw:
+  - regex: excluded-address 10\.136\.138\.1 10\.136\.138\.9
+  - regex: excluded-address 10\.136\.139\.1 10\.136\.139\.9
+  - regex: excluded-address 10\.136\.140\.1 10\.136\.140\.9
+  - not_regex: excluded-address \S+ \S+\.25[0-4]
+  points: 10
+- name: 'RT01: アドレス配布サービス基盤が有効'
+  node: RT01
+  command: show running-config | include service dhcp
+  raw:
+  - not_regex: no service dhcp
+  points: 5
+- name: 'RT02: Ethernet0/1 (segment A) のリレー設定が標準どおり'
+  node: RT02
+  command: show running-config interface Ethernet0/1
+  raw:
+  - regex: ip helper-address 10\.136\.141\.1
+  - not_regex: helper-address \S+\.9\b
+  points: 5
+- name: 'RT02: Ethernet0/2 (segment B) のリレー設定が標準どおり'
+  node: RT02
+  command: show running-config interface Ethernet0/2
+  raw:
+  - regex: ip helper-address 10\.136\.141\.1
+  - not_regex: helper-address \S+\.9\b
+  points: 5
+- name: 'RT02: リレー転送基盤(DHCPリレーエージェント)が有効'
+  node: RT02
+  command: show running-config | include service dhcp
+  raw:
+  - not_regex: no service dhcp
+  points: 5
+- name: 'RT02: ACL BRANCH-DHCP-ONLY が Ethernet0/1 の in に適用'
+  node: RT02
+  command: show ip interface Ethernet0/1
+  raw:
+  - regex: Inbound\s+access list is BRANCH-DHCP-ONLY
+  points: 5
+- name: 'RT02: ACL BRANCH-DHCP-ONLY が Ethernet0/2 の in に適用'
+  node: RT02
+  command: show ip interface Ethernet0/2
+  raw:
+  - regex: Inbound\s+access list is BRANCH-DHCP-ONLY
+  points: 5
+- name: 'RT02: ACL BRANCH-DHCP-ONLY の中身が配布標準どおり (DHCP/ICMP許可+明示deny)'
+  node: RT02
+  command: show access-lists BRANCH-DHCP-ONLY
+  acl_vectors:
+    acl: BRANCH-DHCP-ONLY
+    vectors:
+    - id: discover
+      proto: udp
+      src: 0.0.0.0
+      sport: 68
+      dst: 255.255.255.255
+      dport: 67
+      expect: permit
+    - id: renew_a
+      proto: udp
+      src: 10.136.139.50
+      sport: 68
+      dst: 10.136.141.1
+      dport: 67
+      expect: permit
+    - id: renew_b
+      proto: udp
+      src: 10.136.140.50
+      sport: 68
+      dst: 10.136.141.1
+      dport: 67
+      expect: permit
+    - id: rebind_a
+      proto: udp
+      src: 10.136.139.50
+      sport: 68
+      dst: 255.255.255.255
+      dport: 67
+      expect: permit
+    - id: rebind_b
+      proto: udp
+      src: 10.136.140.50
+      sport: 68
+      dst: 255.255.255.255
+      dport: 67
+      expect: permit
+    - id: icmp_ok
+      proto: icmp
+      src: 10.136.140.50
+      dst: 10.136.138.1
+      expect: permit
+    - id: telnet_ng
+      proto: tcp
+      src: 10.136.140.50
+      sport: 40000
+      dst: 10.136.141.1
+      dport: 23
+      expect: deny
+    - id: dns_ng
+      proto: udp
+      src: 10.136.140.50
+      sport: 12345
+      dst: 10.136.141.1
+      dport: 53
+      expect: deny
+  points: 10
+- name: '効果: CL3 が LOCAL プールから取得 (excluded 回避)'
+  node: CL3
+  command: show ip interface Ethernet0/0 | include Internet
+  raw:
+  - regex: Internet address is 10\.136\.138\.\d+/24
+  - not_regex: Internet address is 10\.136\.138\.[1-9]/
+  points: 5
+- name: '効果: CL2 が segment B から取得 (excluded 回避)'
+  node: CL2
+  command: show ip interface Ethernet0/0 | include Internet
+  raw:
+  - regex: Internet address is 10\.136\.140\.\d+/24
+  - not_regex: Internet address is 10\.136\.140\.[1-9]/
+  points: 10
+- name: '効果: ACL 越し ICMP + 配布 GW でセグメント間疎通 (CL2→10.136.138.1)'
+  node: CL2
+  command: ping 10.136.138.1 repeat 5
+  raw:
+  - regex: Success rate is [1-9]
+  points: 5
+- name: (発火) CL2→サーバへの非許可通信の試行 (telnet)
+  node: CL2
+  command: telnet 10.136.141.1
+  raw:
+  - regex: .*
+  points: 0
+- name: '効果: 非許可通信は遮断 (BRANCH-DHCP-ONLY の明示 deny がヒット)'
+  node: RT02
+  command: show access-lists BRANCH-DHCP-ONLY
+  raw:
+  - regex: deny\s+ip any any \([1-9][0-9]* match
+  points: 5
+- name: '★効果: CL1 が renew 後に segment A から(再)取得'
+  node: CL1
+  command: show ip interface Ethernet0/0 | include Internet
+  raw:
+  - regex: Internet address is 10\.136\.139\.\d+/24
+  - not_regex: Internet address is 10\.136\.139\.[1-9]/
+  points: 15

@@ -1542,6 +1542,21 @@ def build_choices_ring(d, rnd, exam=False):
                   "deny する route-map を適用する")
     tag_why = ("出自のタグは付くが、一周した経路を落とす側の deny が無いため、"
                "戻り外部経路はそのまま学習され、ループは解消しない。")
+    # ★BL-122: 方向反転の錯乱肢(set と deny の場所を入れ替えた「逆向きの対」)。
+    #   印が付くのは一周の**後**で、deny の適用先(BGP→IGP の注入)を戻り経路は
+    #   通らないため、決定的に無効=正解と鏡像の見た目だが機構が破綻している。
+    tag_rev = (f"{ra} の {ra_p} 配下の再配送に「set tag {bas}」を付与する "
+               f"route-map を適用し、{rc} の {inj_p} 配下の redistribute に"
+               f"「match tag {bas}」を deny する route-map を適用する")
+    tag_rev_why = (f"守る向きが逆。タグが付くのは {ra} で出自が一周した後であり、"
+                   f"{rc} の deny の適用先(BGP から IGP への注入)を戻り経路は"
+                   f"通らない。{rc} の RIB では戻り外部経路(AD {return_ad})が "
+                   "iBGP に勝ったまま残り、ループは解消しない。")
+    cli["tag_rev"] = [f"! {ra}", "route-map RM-MARK permit 10", f" set tag {bas}",
+                      ra_p, f" {ra_line} route-map RM-MARK",
+                      f"! {rc}", "route-map RM-DROP deny 10",
+                      f" match tag {bas}", "route-map RM-DROP permit 20",
+                      inj_p, f" redistribute bgp {bas} route-map RM-DROP"]
     ad = ring_ad_remnant(d)
     if d["method"] == "distance" and ad:
         # ★BL-118 P1a: AD操作世界の fix 形。残骸の「読解」が選択肢の主戦場になる。
@@ -1608,6 +1623,7 @@ def build_choices_ring(d, rnd, exam=False):
                   (rm_ra, False, rm_ra_why, cli["rm_ra"])]
     elif d["method"] == "tag":   # 監査で distance 禁止 かつ プレフィクス個別列挙も禁止
         c = [(tag_choice, True, "", cli["tag"]),
+             (tag_rev, False, tag_rev_why, cli["tag_rev"]),   # ★BL-122 方向反転
              (filt_choice, False,
               "到達性・ループとも解消する(症状は直る)が、被害プレフィックスを個別に"
               "列挙する形であり、要件「遮断は経路の出自に基づくこと"
@@ -1725,6 +1741,141 @@ def build_cause_choices_ring(d, rnd, exam=False):
     return [c[i] for i in order]
 
 
+def build_select2_ring(d, rnd):
+    """BL-120 #8 複数選択(kind=tag 限定・exam 専用・6択で正解2)。
+    タグ解は本質的に「注入側の set tag」+「一周箇所の match tag deny」の
+    2アクションなので、Choose two が最も自然に成立する。"""
+    m, p = d["m"], d["p_net"]
+    rc, ra, rb = m["RC"], m["RA"], m["RB"]
+    bas, eas, pid = d["bgp_as"], d["eigrp_as"], d["ospf_pid"]
+    inj_e = d["ring"] == "inject_eigrp"
+    return_ad = 110 if inj_e else 170
+    ret_p = f"router ospf {pid}" if inj_e else f"router eigrp {eas}"
+    inj_p = f"router eigrp {eas}" if inj_e else f"router ospf {pid}"
+    ra_line = (f"redistribute eigrp {eas}" if inj_e
+               else f"redistribute ospf {pid}")
+    dist_line = f"distance bgp 20 {return_ad - 5} {return_ad - 5}"
+    c = [
+        (f"{rc} の {inj_p} 配下の redistribute bgp {bas} に、「set tag {bas}」を"
+         "行う route-map を適用する", True, "",
+         ["route-map RM-ORIGIN permit 10", f" set tag {bas}",
+          inj_p, f" redistribute bgp {bas} route-map RM-ORIGIN"]),
+        (f"{ra} の {ret_p} 配下の {ra_line} に、「match tag {bas}」を deny する"
+         " route-map を適用する", True, "",
+         ["route-map RM-NOBACK deny 10", f" match tag {bas}",
+          "route-map RM-NOBACK permit 20",
+          ret_p, f" {ra_line} route-map RM-NOBACK"]),
+        (f"{rc} で `{p}.0/24` のみ deny の prefix-list を作成し、{ret_p} 配下に"
+         "「distribute-list prefix in」を適用する", False,
+         "到達性・ループとも解消する(症状は直る)が、被害プレフィックスを個別に"
+         "列挙する形であり、要件「遮断は経路の出自に基づくこと(列挙による指定は"
+         "不可)」を満たさない。",
+         [f"ip prefix-list PL-BLOCK seq 5 deny {p}.0/24",
+          "ip prefix-list PL-BLOCK seq 10 permit 0.0.0.0/0 le 32",
+          ret_p, " distribute-list prefix PL-BLOCK in"]),
+        (f"{rc} の router bgp {bas} 配下に「{dist_line}」を設定し、"
+         "clear ip route * を実行する", False,
+         "到達性・ループとも解消する(症状は直る)が、監査要件「管理距離(distance)"
+         "の変更禁止」に違反する。",
+         [f"router bgp {bas}", f" {dist_line}", "end", "clear ip route *"]),
+        (f"{ra} の {ret_p} 配下から {ra_line} を削除する", False,
+         "出自の一周は止まるが、要件「既存の再配送設計の維持」に違反し、"
+         f"{ra} の先のドメインが `{p}.0/24` への経路を失う。",
+         [ret_p, f" no {ra_line}"]),
+        (f"{rb} で「clear ip route *」を実行する", False,
+         "定常状態は経路の構造に起因するため、再計算しても同一の状態に戻る。",
+         ["clear ip route *"]),
+    ]
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
+def build_read_choices_ring(d, rnd):
+    """BL-120 #3 read/予測形(exam 専用・6択)。故障の物語なし・config のみを提示し、
+    被害網宛の転送の帰結を選ばせる。★選択肢は観測される帰結のみ(因果を書かない)。
+    ★「振動」錯乱肢の why は二重再配送(供給が絶えない)で潰す= config から導ける。"""
+    m, p = d["m"], d["p_net"]
+    rc, ra, rb, re_n = m["RC"], m["RA"], m["RB"], m["RE"]
+    inj_e = d["ring"] == "inject_eigrp"
+    # ★adworld stale_value では iBGP の実効 AD が 200 でない(解説の数値を合わせる)
+    ad = ring_ad_remnant(d)
+    ibgp_ad = ad["val"] if (ad and d["adworld"] == "stale_value") else 200
+    return_ad = 110 if inj_e else 170
+    cyc = (f"{rc} → {rb} → {ra}" if inj_e else f"{rc} → {ra} → {rb}")
+    correct = (f"{cyc} → {rc} の順の転送が繰り返され、TTL の満了によって"
+               "破棄される", True, "")
+    pool = [
+        (f"{rc} から {re_n} へ転送され、宛先に到達する", False,
+         f"{rc} は当該網を iBGP(管理距離 {ibgp_ad})でも学習するが、再配送で"
+         f"一周して戻る外部経路(管理距離 {return_ad})がそれを下回るため、"
+         f"{re_n} 方向は選択されない。"),
+        (f"{rc} が当該宛先への経路を保持せず、{rc} において破棄される", False,
+         f"{rc} は当該網を iBGP と戻りの外部経路の両方で学習しており、"
+         "経路は存在する(破棄ではなく転送される)。"),
+        (f"{rc} と {re_n} の間で等コストの分散が行われ、一部のパケットのみが"
+         "宛先に到達する", False,
+         "iBGP と戻り外部経路は管理距離が異なる別プロトコルの経路であり、"
+         "等コスト分散の関係にならない。"),
+        (f"{ra} が転送先を交互に切り替え、断続的に宛先に到達する", False,
+         f"{rc} は BGP と戻り側 IGP の両方を注入側 IGP へ再配送しており、"
+         "経路の供給が絶えないため定常状態になる(交互選択・振動は生じない)。"),
+        (f"{re_n} が当該網を広告しておらず、いずれのルータにおいても宛先が"
+         "不明となる", False,
+         f"{re_n} の BGP には network 文が存在し、{rc} は iBGP で当該網を"
+         "受信している(BGP テーブルには存在する)。"),
+    ]
+    rnd.shuffle(pool)
+    c = [correct] + pool[:5]
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
+def build_impact_choices_ring(d, rnd):
+    """BL-120 #4 変更影響形(exam 専用・6択)。「本日の工事の変更一覧」を選択肢として
+    提示し、事象(ループ)の引き金を選ばせる。正解= 出自の一周を閉じた再注入側の
+    redistribute(リングの最後の辺)。誤答= 盤面に実在する/性質上無害な変更。"""
+    m, p = d["m"], d["p_net"]
+    rc, ra, rb, re_n = m["RC"], m["RA"], m["RB"], m["RE"]
+    bas, eas, pid = d["bgp_as"], d["eigrp_as"], d["ospf_pid"]
+    inj_e = d["ring"] == "inject_eigrp"
+    if inj_e:
+        culp = (f"{ra}: router ospf {pid} 配下に「redistribute eigrp {eas} "
+                "subnets」を追加", True, "",
+                [f"router ospf {pid}", f" redistribute eigrp {eas} subnets"])
+    else:
+        culp = (f"{ra}: router eigrp {eas} 配下に「redistribute ospf {pid}」"
+                "(seed metric 付き)を追加", True, "",
+                [f"router eigrp {eas}",
+                 f" redistribute ospf {pid} metric {gra.EIGRP_METRIC}"])
+    pool = [
+        (f"{rc}: router bgp {bas} 配下に「network {d['lo']['RC']} mask "
+         "255.255.255.255」を追加", False,
+         f"{rc} 自身の Loopback の広告であり、`{p}.0/24` の経路選択・再配送には"
+         "関与しない。",
+         [f"router bgp {bas}", f" network {d['lo']['RC']} mask 255.255.255.255"]),
+        (f"{rb}: router ospf {pid} 配下に「network {d['lo']['RB']} 0.0.0.0 "
+         "area 0」を追加", False,
+         f"{rb} 自身の Loopback の広告であり、被害網の転送とは無関係。",
+         [f"router ospf {pid}", f" network {d['lo']['RB']} 0.0.0.0 area 0"]),
+        (f"{rc}: router bgp {bas} 配下に「bgp log-neighbor-changes」を追加",
+         False, "隣接の状態変化をログへ通知する設定であり、経路選択に影響しない。",
+         [f"router bgp {bas}", " bgp log-neighbor-changes"]),
+        (f"{re_n}: 時刻同期(NTP)のサーバ参照設定を追加", False,
+         "時刻同期の設定であり、ルーティングに影響しない。",
+         ["ntp server 10.1.10.1"]),
+        (f"{rb}: 対向リンクのインタフェースに description を追加", False,
+         "表示のための設定であり、動作に影響しない。",
+         ["interface Ethernet0/0", " description TO-CORE"]),
+    ]
+    rnd.shuffle(pool)
+    c = [culp] + pool[:5]
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
 def ring_requirements(d, rnd, form="fix"):
     """exam 用(ring): 言い換え抽選+ダミー+並びシャッフル。監査要件(distance禁止/
     出自ベース遮断)は fix 形での正解一意性の装置なので、その時だけ載せる。
@@ -1749,13 +1900,13 @@ def ring_requirements(d, rnd, form="fix"):
             "既存の再配送の設計(それぞれの境界の redistribute)が、変更または撤去"
             "されてはなりません。スタティック・ルートによる回避も、許可されていません。"]),
     ]
-    if form == "fix" and d["method"] in ("filter", "tag"):
+    if form in ("fix", "select2") and d["method"] in ("filter", "tag"):
         core.append(rnd.choice([
             "管理距離(administrative distance)の変更は、監査のポリシーによって、"
             "禁止されているところのものです。",
             "distance コマンドによる管理距離の操作は、監査のポリシー上、"
             "使用されることができません。"]))
-    if form == "fix" and d["method"] == "tag":
+    if form in ("fix", "select2") and d["method"] == "tag":
         core.append(rnd.choice([
             "経路の遮断は、当該の経路の出自に基づいて、実施されなければなりません"
             "(個々のプレフィックスを列挙する形式の指定は、将来における網の追加に際して"
@@ -1811,6 +1962,17 @@ def question_md_ring(d, plan, choices, collected, stamp, sites=None, blind=False
            "(1つ選択)" if form == "fix" else
            "示されているところの事象を説明しているものとして、最も適切なものは、"
            "どれですか。(1つを選択してください)")
+    # ★BL-120 Tier1 の形式別の設問(不親切化を keep_ask で通すので原文が残る)
+    if form == "select2":
+        ask = ("この問題を解決し、上記の要件をすべて満たすために、適用されなければ"
+               "ならない構成の変更は、どれとどれですか。(2つを選択してください)")
+    elif form == "read":
+        src = d.get("_read_src", m["RB"])
+        ask = (f"{src} から、`{p}.0/24` 内のホスト宛に送信されるパケットの転送に"
+               "ついて、正しい記述は、どれですか。(1つを選択してください)")
+    elif form == "impact":
+        ask = ("示されているところの変更のうち、この事象の原因であるものは、"
+               "どれですか。(1つを選択してください)")
     if sites:
         hq = sites["RE"]
         intro = (f"本社({hq})の顧客のネットワークは、BGP AS {d['bgp_as']} の "
@@ -1832,6 +1994,16 @@ def question_md_ring(d, plan, choices, collected, stamp, sites=None, blind=False
                    "ということが、報告されています。\n各ルータのループバック宛の通信は、"
                    "正常です。\nこれは、意図された動作ではありません。"
                    "示されているところの出力を、参照してください。")
+    # ★BL-120 Tier1 の形式別の症状文(keep_ask で不親切化後も原文が残る)
+    if form == "read":
+        # read は故障の物語を出さない(帰結そのものが設問)
+        symptom = ("示されているところの構成は、現在、稼働中のネットワークから、"
+                   "取得されたものです。到達性に関する報告は、この時点では、"
+                   "確認されていません。")
+    elif form == "impact":
+        symptom = ("本日の作業の時間帯において、下記の選択肢に示されている変更が、"
+                   "適用されました。作業の完了の直後から、複数のサイトにおいて、"
+                   f"`{p}.0/24` 宛の通信が、タイムアウトしています。")
     return f"""# 問題 {stamp} : ルーティング到達性の分析
 
 {FIXED_NOTE}
@@ -1872,7 +2044,7 @@ def answer_md_ring(d, plan, choices, stamp, master_seed, subseed, prob_id,
                    herr=None, form="fix"):
     m, p = d["m"], d["p_net"]
     letters = [chr(65 + i) for i in range(len(choices))]
-    correct = [l for l, c in zip(letters, choices) if c[1]][0]
+    correct = "・".join(l for l, c in zip(letters, choices) if c[1])
     inj_e = d["ring"] == "inject_eigrp"
     return_ad = 110 if inj_e else 170
     herr_note = ""
@@ -1888,6 +2060,14 @@ def answer_md_ring(d, plan, choices, stamp, master_seed, subseed, prob_id,
     victim = "O E2 (AD 110)" if inj_e else "D EX (AD 170)"
     loop_word = (f"{m['RC']} → {m['RB']} → {m['RA']} → {m['RC']}" if inj_e
                  else f"{m['RC']} → {m['RA']} → {m['RB']} → {m['RC']}")
+    form_note = {
+        "fix": "是正手順を選ばせる",
+        "cause": "機構(原因)を選ばせる。錯乱肢に「そもそもループでない」機構="
+                 "等コスト分散・遠回りと、結果を原因と取り違える RIB-failure を混入",
+        "read": "config のみから転送の帰結を予測させる(BL-120 #3・故障の物語なし)",
+        "select2": "タグ解の2アクションを複数選択で(BL-120 #8・正解2つ)",
+        "impact": "工事の変更一覧から事象の引き金を選ばせる(BL-120 #4)",
+    }[form]
     wrongs = "\n".join(f"- **{l}**: {'(正解)' if c[1] else c[2]}"
                         for l, c in zip(letters, choices))
     return f"""# 解答 {stamp}
@@ -1903,7 +2083,7 @@ def answer_md_ring(d, plan, choices, stamp, master_seed, subseed, prob_id,
   {m['RC']} が BGP を {'EIGRP' if inj_e else 'OSPF'} へ再配送し、{m['RA']} の相互再配送で
   出自が一周。戻ってきた {victim} が iBGP(200) に勝って {m['RC']} が採用
   → 定常転送ループ {loop_word}。
-- 出題形式: {form}({'是正手順を選ばせる' if form == 'fix' else '機構(原因)を選ばせる。錯乱肢に「そもそもループでない」機構=等コスト分散・遠回りと、結果を原因と取り違える RIB-failure を混入'})
+- 出題形式: {form}({form_note})
 - 正解法: {d['method']}(distance=iBGP の AD を戻り {return_ad} 未満へ /
   filter=戻り経路を学習段で遮断(distribute-list) /
   tag=注入時に出自タグを付け、一周する箇所で match tag deny。監査要件で出し分け)
@@ -2097,7 +2277,9 @@ def _mploop_fix_text(p, names, mode):
     else:
         body = f"router ospf {pid} 配下に `distance ospf external 180` を設定する"
         cli = [f"router ospf {pid}", " distance ospf external 180"]
-    return (f"{b} と {c} の両方で、{body}", ["! " + b + " と " + c + " の両方に投入"] + cli)
+    return (f"{b} と {c} の両方で、{body}",
+            ["! " + b + " と " + c + " の両方に投入"] + cli,
+            body)   # ★BL-120: 3要素目= 片ルータ分の本文(select2 で使う)
 
 
 def build_choices_mploop(p, names, mode, rnd, exam=False):
@@ -2105,10 +2287,10 @@ def build_choices_mploop(p, names, mode, rnd, exam=False):
     「RD で distance を触る」(候補が両方 D EX 170 なので効かない)。"""
     pid, asn, v = p["pid"], p["asn"], p["p_net"]
     b, c, dd, ff = names["RB"], names["RC"], names["RD"], names["RF"]
-    good_txt, good_cli = _mploop_fix_text(p, names, mode)
+    good_txt, good_cli, _ = _mploop_fix_text(p, names, mode)
     others = [m for m in gmp.MODES if m != mode]
     alt = rnd.choice(others)
-    alt_txt, alt_cli = _mploop_fix_text(p, names, alt)
+    alt_txt, alt_cli, _ = _mploop_fix_text(p, names, alt)
     alt_word = {"acl": "番号付き標準 ACL の distribute-list",
                 "prefix": "prefix-list の distribute-list",
                 "routemap": "経路タグ(route-map)",
@@ -2145,6 +2327,26 @@ def build_choices_mploop(p, names, mode, rnd, exam=False):
          "指定されている実装手段に反する。", alt_cli),
         rd_choice,
     ]
+    if mode == "routemap":
+        # ★BL-122: 方向反転の錯乱肢(set と deny の向きを逆にした鏡像の対)。
+        #   有害な再注入(OSPF→EIGRP)は許可されたままタグが付くだけで、
+        #   deny が効くのは2周目の EIGRP→OSPF に限られる=決定的に無効。
+        rev_txt = (f"{b} と {c} の両方で、OSPF→EIGRP 再配送で `set tag {p['tag']}` "
+                   f"を付与し、EIGRP→OSPF 再配送で `match tag {p['tag']}` を "
+                   "deny する")
+        rev_cli = ["route-map MARK permit 10", f" set tag {p['tag']}",
+                   "route-map DROP deny 10", f" match tag {p['tag']}",
+                   "route-map DROP permit 20",
+                   f"router eigrp {asn}",
+                   f" redistribute ospf {pid} metric {gmp.SEED_METRIC} "
+                   "route-map MARK",
+                   f"router ospf {pid}",
+                   f" redistribute eigrp {asn} subnets route-map DROP"]
+        c_list.insert(2, (rev_txt, False,
+                          "守る向きが逆。有害な再注入(OSPF→EIGRP)は許可されたまま"
+                          "タグが付くだけで、deny が効くのはその先(EIGRP→OSPF)に"
+                          f"限られる。{dd} の誤選択の原因である再注入の候補は"
+                          "残り、周回は解消しない。", rev_cli))
     if exam:
         c_list += [
             (f"{ff} の router eigrp {asn} 配下の `redistribute rip` の seed metric を"
@@ -2158,6 +2360,73 @@ def build_choices_mploop(p, names, mode, rnd, exam=False):
              "設定に起因する定常状態であり、再計算しても同じ選択に戻る。",
              ["clear ip route *"]),
         ]
+    order = list(range(len(c_list)))
+    rnd.shuffle(order)
+    return [c_list[i] for i in order]
+
+
+def build_select2_mploop(p, names, mode, rnd):
+    """BL-120 #8(mploop・exam 専用・6択で正解2)。「両方の境界に対で入れる」が
+    この shape の本質なので、境界ごとの2アクションを選ばせる複数選択が最も自然。"""
+    asn = p["asn"]
+    b, c, dd, ff = names["RB"], names["RC"], names["RD"], names["RF"]
+    _, good_cli, body = _mploop_fix_text(p, names, mode)
+    alt = rnd.choice([m for m in gmp.MODES if m != mode])
+    _, alt_cli, alt_body = _mploop_fix_text(p, names, alt)
+    c_list = [
+        (f"{b} で、{body}", True, "", [f"! {b} に投入"] + good_cli[1:]),
+        (f"{c} で、{body}", True, "", [f"! {c} に投入"] + good_cli[1:]),
+        (f"{b} で、{alt_body}", False,
+         "症状は解消しうるが、指定されている実装手段(変更の凍結)に反する。"
+         "また片方の境界だけでは鏡像の再注入が残る。",
+         [f"! {b} に投入"] + alt_cli[1:]),
+        (f"{dd} の router eigrp {asn} 配下に「distance eigrp 90 200」を設定する",
+         False,
+         f"{dd} が比較している 2 つの候補はいずれも EIGRP 外部(AD 170)であり、"
+         "同一プロトコル・同一 AD の間では管理距離は優劣を決めない。",
+         [f"router eigrp {asn}", " distance eigrp 90 200"]),
+        (f"{ff} の redistribute rip の seed metric を、より小さい値へ変更する",
+         False,
+         "当面の選択は変わりうるが、再注入の経路そのものは残るため構造的な"
+         "解決にならず、トポロジ変化で容易に再発する。",
+         [f"router eigrp {asn}", " redistribute rip metric 100 1 255 1 1500"]),
+        (f"{dd} で「clear ip route *」を実行する", False,
+         "設定に起因する定常状態であり、再計算しても同じ選択に戻る。",
+         ["clear ip route *"]),
+    ]
+    order = list(range(len(c_list)))
+    rnd.shuffle(order)
+    return [c_list[i] for i in order]
+
+
+def build_read_choices_mploop(p, names, rnd):
+    """BL-120 #3(mploop・exam 専用・6択)。config のみから帰結を予測させる。
+    ★鏡像の向き(どちらの境界が再注入源か)は収束レースで非保証のため、
+    正解肢は周回の向きを書かず「構成員の集合」で表現する。"""
+    dd, b, c, e, ff, a = (names["RD"], names["RB"], names["RC"], names["RE"],
+                          names["RF"], names["RA"])
+    correct = (f"{a}・{b}・{c}・{dd} の間で転送が繰り返され、宛先に到達しない",
+               True, "")
+    pool = [
+        (f"{dd} から {e} を経由して {ff} へ転送され、宛先に到達する", False,
+         f"{dd} が比較する 2 つの候補はいずれも EIGRP 外部(AD 170)で、境界で "
+         "seed metric が付け直される再注入側が複合メトリックで勝つため、"
+         f"{e} 方向は選択されない。"),
+        (f"{dd} が {e} 方向と境界方向の等コスト分散を行い、一部のパケットのみが"
+         "宛先に到達する", False,
+         "2 つの候補の複合メトリックは境界での付け直しにより 1 ホップ分異なり、"
+         "等コストにならない。"),
+        (f"{ff} が当該網を広告しておらず、{dd} において宛先が不明となる", False,
+         f"{ff} は別プロトコルで学習した当該網を seed metric 付きで EIGRP へ"
+         "再配送しており、広告は成立している。"),
+        ("境界の 2 台が経路を交互に選択し、断続的に宛先に到達する", False,
+         "2 つの境界は「注入する側/再注入する側」の役割を分担して固定される"
+         "(非対称平衡)ため、定常状態になる。"),
+        (f"{dd} において当該宛先への経路が存在せず、{dd} で破棄される", False,
+         f"{dd} は当該網を EIGRP 外部として学習しており、経路は存在する。"),
+    ]
+    rnd.shuffle(pool)
+    c_list = [correct] + pool[:5]
     order = list(range(len(c_list)))
     rnd.shuffle(order)
     return [c_list[i] for i in order]
@@ -2239,7 +2508,7 @@ def mploop_requirements(p, names, mode, rnd, form="fix"):
         "既存の相互再配送の設計(それぞれの境界の redistribute)が、削除または停止"
         "されてはなりません。",
     ]
-    if form == "fix":
+    if form in ("fix", "select2"):
         core.append(MPLOOP_POLICY[mode])
     if p.get("adworld", "none") != "none":
         # ★BL-118: AD操作世界の口実(症状文は不親切化で消えるため要件チャネルに)。
@@ -2272,6 +2541,15 @@ def question_md_mploop(p, names, plan, choices, collected, stamp, sites=None,
            "(1つを選択してください)" if form == "fix" else
            "示されているところの事象を説明しているものとして、最も適切なものは、"
            "どれですか。(1つを選択してください)")
+    # ★BL-120 Tier1 の形式別の設問(keep_ask で不親切化後も原文が残る)
+    if form == "select2":
+        ask = ("この問題を解決し、そして、示されているところのすべての要件が"
+               "満たされることを確実にするために、適用されなければならない構成の"
+               "変更は、どれとどれですか。(2つを選択してください)")
+    elif form == "read":
+        src = names["RA"]
+        ask = (f"{src} から、`{p['p_net']}.0/24` 内のホスト宛に送信されるパケット"
+               "の転送について、正しい記述は、どれですか。(1つを選択してください)")
     hq = sites["RF"] if sites else "本社"
     intro = (f"あなたの会社のネットワークは、OSPF のドメインと EIGRP のドメインとが、"
              "2 つの境界のルータによって接続され、そして、それぞれの境界において、"
@@ -2286,6 +2564,11 @@ def question_md_mploop(p, names, plan, choices, collected, stamp, sites=None,
                "サイトの間(それぞれのループバック宛)の通信は、正常です。\n"
                "これは、意図された動作ではありません。"
                "示されているところの出力を、参照してください。")
+    if form == "read":
+        # ★BL-120 #3: read は故障の物語を出さない(帰結そのものが設問)
+        symptom = ("示されているところの構成は、現在、稼働中のネットワークから、"
+                   "取得されたものです。到達性に関する報告は、この時点では、"
+                   "確認されていません。")
     return f"""# 問題 {stamp} : ルーティング到達性の分析
 
 {FIXED_NOTE}
@@ -2325,7 +2608,7 @@ def question_md_mploop(p, names, plan, choices, collected, stamp, sites=None,
 def answer_md_mploop(p, names, mode, choices, stamp, master_seed, subseed,
                      prob_id, form="fix"):
     letters = [chr(65 + i) for i in range(len(choices))]
-    correct = [l for l, ch in zip(letters, choices) if ch[1]][0]
+    correct = "・".join(l for l, ch in zip(letters, choices) if ch[1])
     wrongs = "\n".join(f"- **{l}**: {'(正解)' if ch[1] else ch[2]}"
                         for l, ch in zip(letters, choices))
     b, c, dd, e, f6 = (names["RB"], names["RC"], names["RD"],
@@ -2730,6 +3013,48 @@ def build_choices_riploop(d, rnd, exam=False):
     return [c_list[i] for i in order]
 
 
+def build_select2_riploop(d, rnd):
+    """BL-120 #8(riploop・kind=wrong_tag_filter 限定・exam 専用・6択で正解2)。
+    「両方の境界で deny を実タグへ修正する」を境界ごとの2アクションで選ばせる。"""
+    n = d["names"]
+    hub, b2, b3 = n["RT01"], n["RT02"], n["RT03"]
+    tr = gro.TAG_RIP
+
+    def fixcli(_node):
+        return ["route-map OSPF2RIP deny 10",
+                f" no match tag {gro.TAG_TYPO}", f" match tag {tr}"]
+
+    c_list = [
+        (f"{b2} で、route-map `OSPF2RIP` の deny エントリの match tag を、"
+         f"RIP 発の経路に付与されているタグ({tr})へ修正する", True, "",
+         [f"! {b2} に投入"] + fixcli(b2)),
+        (f"{b3} で、route-map `OSPF2RIP` の deny エントリの match tag を "
+         f"{tr} へ修正する", True, "",
+         [f"! {b3} に投入"] + fixcli(b3)),
+        (f"{b2} で、route-map `RIP2OSPF` の deny エントリの match tag を "
+         f"{tr} へ変更する", False,
+         "対象が逆方向の route-map であり、問題の再注入(OSPF→RIP)はそのまま残る。"
+         "さらに OSPF 発の経路への遮断が壊れる。",
+         [f"! {b2} に投入", "route-map RIP2OSPF deny 10", f" match tag {tr}"]),
+        (f"{b3} の router ospf 1 配下に「distance ospf external 180」を設定する",
+         False,
+         "管理距離の変更は、変更の凍結により使用できない。また出自による遮断が"
+         "機能していない状態は残る。",
+         ["router ospf 1", " distance ospf external 180"]),
+        (f"{b2} で、OSPF→RIP の再配送の seed metric を、より大きな値へ変更する",
+         False,
+         "経路の劣後は強まるが、フィードバックの経路が RIP へ広告されること自体は"
+         "続き、再配送の時点での拒否という要件を満たさない。",
+         ["router rip", " redistribute ospf 1 metric 12 route-map OSPF2RIP"]),
+        (f"{hub} で「clear ip route *」を実行する", False,
+         "構成に起因する状態であり、再計算しても同一の状態に戻る。",
+         ["clear ip route *"]),
+    ]
+    order = list(range(len(c_list)))
+    rnd.shuffle(order)
+    return [c_list[i] for i in order]
+
+
 def build_cause_choices_riploop(d, rnd, exam=False):
     """原因特定形。★正解肢は数値・因果の詳細を書かず他肢と同粒度(BL-086 規約)。
     錯乱肢には他 kind の機構(AD/抑止/欠落/振動)を node スコープ付きで混ぜ、
@@ -2885,7 +3210,7 @@ def riploop_requirements(d, rnd, form="fix"):
         "スタティック・ルートおよび既定のルートによる迂回は、実施されては"
         "なりません。",
     ]
-    if form == "fix":
+    if form in ("fix", "select2"):
         core += RIPLOOP_POLICY[d["kind"]]
     core += rnd.sample([x for x in REQ_DECOYS if "スタティック" not in x],
                        rnd.choice([1, 2]))
@@ -2940,6 +3265,11 @@ def question_md_riploop(d, plan, choices, collected, stamp, sites=None,
            "どれですか。(1つを選択してください)" if form == "fix" else
            "示されているところの事象を説明しているものとして、最も適切なものは、"
            "どれですか。(1つを選択してください)")
+    if form == "select2":
+        # ★BL-120 #8(keep_ask で不親切化後も原文が残る)
+        ask = ("この問題を解決し、そして、示されているところのすべての要件が"
+               "満たされることを確実にするために、適用されなければならない構成の"
+               "変更は、どれとどれですか。(2つを選択してください)")
     intro = (f"あなたの会社のネットワークは、支社のドメイン(RIP バージョン 2)と、"
              "本社のコアのドメイン(OSPF)とが、2 台の境界のルータによって接続"
              "され、そして、それぞれの境界において、相互の再配送が実施されて"
@@ -2992,7 +3322,7 @@ def answer_md_riploop(d, choices, stamp, master_seed, subseed, prob_id,
     hub, b2, b3, r6 = n["RT01"], n["RT02"], n["RT03"], n["RT06"]
     v = d["branch"][0]
     letters = [chr(65 + i) for i in range(len(choices))]
-    correct = [l for l, ch in zip(letters, choices) if ch[1]][0]
+    correct = "・".join(l for l, ch in zip(letters, choices) if ch[1])
     wrongs = "\n".join(f"- **{l}**: {'(正解)' if ch[1] else ch[2]}"
                        for l, ch in zip(letters, choices))
     mech = {
@@ -3144,7 +3474,12 @@ def pick_draw_aclv6(qseed, kind, forms=None, worlds=None):
 def aclv6_requirements(d, rnd):
     m = d["m"]
     tg = "、".join(f"`{gp6.net6(d, o)}/64`" for o in d["target"])
-    core = [f"{m['DUT']} において、{tg} のネットワークからの通信のみが、"
+    # ★BL-121: 排他の担い手が世界ごとに違う。
+    #   「のみ」を付ける= exact系/lean_only(のみが排他を担う)。
+    #   付けない= one_line(正解の /62 集約が4本目を通すため「のみ」と矛盾する
+    #   =従来からの潜在的な緊張を今回解消)・lean_hole(名指し禁止網が排他を担う)。
+    only = "のみ" if d["world"] not in ("one_line", "lean_hole") else ""
+    core = [f"{m['DUT']} において、{tg} のネットワークからの通信{only}が、"
             f"`{d['srv_host']}` の TCP ポート {d['port']} に到達できなければなりません。"]
     if d["fourth_forbidden"]:
         core.append(f"`{gp6.net6(d, d['fourth'])}/64` からの通信は、"
@@ -3159,6 +3494,9 @@ def aclv6_requirements(d, rnd):
                  "exact_min": "対象としていないネットワークが、一致の対象に"
                               "含まれてはなりません。また、エントリの行数は、"
                               "最小でなければなりません。",
+                 # ★BL-121 リーン世界: 明文の非包含なし。deny 禁止1点のみ。
+                 "lean_only": "拒否のエントリを使用してはなりません。",
+                 "lean_hole": "拒否のエントリを使用してはなりません。",
                  }[d["world"]])
     core += rnd.sample([x for x in REQ_DECOYS if "スタティック" not in x], 1)
     rnd.shuffle(core)
@@ -3261,7 +3599,23 @@ def answer_md_aclv6(d, choices, stamp, master_seed, subseed, form):
                                "(`show ipv6 neighbors` が INCMP)",
     }[d["kind"]]
     world_note = {"one_line": "1行で書く", "exact_no_deny": "過剰許可なし＋deny 禁止",
-                  "exact_min": "過剰許可なし＋行数最小"}[d["world"]]
+                  "exact_min": "過剰許可なし＋行数最小",
+                  "lean_only": "★リーン要件(BL-121)= 非包含の明文なし。"
+                               "「のみ」+deny 禁止から排他を導出させる(読解型)",
+                  "lean_hole": "★リーン要件・穴配置(BL-121)= 「のみ」も無し。"
+                               "名指し禁止網(4本目)が集約の踏み絵(計算型)",
+                  }[d["world"]]
+    lean_note = ""
+    if d["world"] == "lean_only":
+        lean_note = ("\n- 導出チェーン: deny 禁止 ⇒ permit 一致=通過 ⇒ "
+                     "「のみ」⇒ 対象外を一致対象に含められない(/62 は4本目を"
+                     "通すので失格)。明文の非包含要件は deny 許可世界でしか"
+                     "非冗長でない、が本世界の主題。")
+    elif d["world"] == "lean_hole":
+        lean_note = ("\n- 導出チェーン: 排他の明文は無い。名指しの禁止網"
+                     "(4本目=対象の直後)を踏まずに3対象を被覆できるのは"
+                     "正確被覆のみ(/62・/61 は禁止網を踏む)。各候補の"
+                     "プレフィックスが禁止網を覆うかのビット計算が本題。")
     return f"""# 解答 {stamp}
 
 ## 正解
@@ -3272,7 +3626,7 @@ def answer_md_aclv6(d, choices, stamp, master_seed, subseed, form):
 
 - 種別: `aclv6/{d['kind']}` — {kind_note}
 - 要件世界: {world_note}
-- 出題形: {form}
+- 出題形: {form}{lean_note}
 - 生成: `gen_paper_mcq.py --shape aclv6 --seed {master_seed}` (sub-seed {subseed})
 
 ## 各選択肢の判定
@@ -3598,8 +3952,12 @@ def acl_requirements(d, rnd, form):
             ]
             rnd.shuffle(core)
             return finalize_reqs(core, rnd)
+        # ★BL-121: 「のみ」の有無は世界で決まる。one_line は正解(過剰被覆
+        #   キューブ)が4本目を通すため「のみ」と矛盾(従来からの潜在的緊張を解消)。
+        #   lean_hole は排他を名指し禁止網だけに担わせるため「のみ」を落とす。
+        _only = "のみ" if d["world"] not in ("one_line", "lean_hole") else ""
         if d.get("aclform") == "ext":
-            core.append(f"{m['DUT']} において、{tg}からの通信のみが、"
+            core.append(f"{m['DUT']} において、{tg}からの通信{_only}が、"
                         f"サーバである `{d['srv_host']}` の TCP ポート "
                         f"{d['port']} に到達できなければなりません。")
             core.append(f"当該のサーバの他のポート"
@@ -3608,7 +3966,7 @@ def acl_requirements(d, rnd, form):
                         f"(たとえば `{d['other_host']}`)への通信は、"
                         "許可されてはなりません。")
         else:
-            core.append(f"{m['DUT']} において、{tg}からの通信のみが、"
+            core.append(f"{m['DUT']} において、{tg}からの通信{_only}が、"
                         "許可されなければなりません。")
         if d["fourth_forbidden"]:
             core.append(f"`{gpl.net(d, d['fourth'])}/24` からの通信は、"
@@ -3636,6 +3994,9 @@ def acl_requirements(d, rnd, form):
              "exact_min": "対象としていないネットワークが、"
                           "一致の対象に含まれてはなりません。"
                           "また、エントリの行数は、最小でなければなりません。",
+             # ★BL-121 リーン世界: 明文の非包含なし。deny 禁止1点のみ。
+             "lean_only": "拒否のエントリを使用してはなりません。",
+             "lean_hole": "拒否のエントリを使用してはなりません。",
              }[d["world"]]
         core.append(w)
         # ★適用点の要件(BL-109)。これが無いと「どこにどの向きで付いているべきか」の
@@ -3888,6 +4249,10 @@ def answer_md_acl(d, choices, stamp, master_seed, subseed, form):
                       "**大きさの違うキューブ3つに分解**(集約の本題)",
         "exact_no_deny": "過剰許可なし＋deny 禁止(厳密列挙が正解)",
         "exact_min": "過剰許可なし＋行数最小(deny 先行が正解)",
+        "lean_only": "★リーン要件(BL-121)= 非包含の明文なし。「のみ」+deny 禁止から"
+                     "排他を導出させる(読解型・厳密列挙が正解)",
+        "lean_hole": "★リーン要件・穴配置(BL-121)= 「のみ」も無し。名指し禁止網"
+                     "(4本目)が集約の踏み絵(計算型・厳密列挙が正解)",
         "prefixlen_no_rm": "長さを区別する(ルート・マップ禁止)→ prefix-list が正解",
         "prefixlen_via_rm": "長さを区別する(prefix-list 禁止)→ ★route-map 経由の拡張 ACL が正解",
         "by_neighbor": "広告元のネイバーに基づいて絞る",
@@ -5597,7 +5962,7 @@ def aaa_evidence_blocks(d, rnd, form):
     elif form == "evidence":
         state.append(gpa.render_obs(d))
         state.append("```\n" + gpa.trace_block(d) + "\n```")
-    elif form == "patch":
+    elif form in ("patch", "patchseq"):
         # ★移行途中の構成のみを見せる(症状はまだ起きていないので出さない)
         for site in ("A", "B"):
             cfg.append(f"```\n{d['rt'][site]}# show running-config | section aaa\n"
@@ -5711,6 +6076,11 @@ def question_md_aaa(d, blocks, choices, stamp, form="read", reqs=None):
         q = ("現在の接続が失われることなく、移行を進めるために、次に適用されなければ"
              "ならない構成は、どれですか。(1つを選択してください)")
         opts = render_options(choices, "cli")
+    elif form == "patchseq":
+        # ★BL-123: 手順列の構築形。順序ラベル(①/②)が選択肢に付く。
+        q = ("現在の接続が失われることなく、移行を完了するために、実施されなければ"
+             "ならない操作を、実施の順序とともに、2つ選択してください。")
+        opts = render_options(choices, "prose")
     elif form == "fix":
         q = ("示されているところのすべての要件が満たされることを確実にするために、"
              "適用されなければならない構成は、どれですか。(1つを選択してください)")
@@ -5744,10 +6114,13 @@ def question_md_aaa(d, blocks, choices, stamp, form="read", reqs=None):
         letters = [chr(65 + i) for i in range(len(choices))]
         opts = "\n".join(f"**{l}.**\n```\n{c[0]}\n```"
                          for l, c in zip(letters, choices))
-    if form == "patch":
+    if form in ("patch", "patchseq"):
+        # ★BL-123: 前提の明文化(「台帳・構成は示されているものが全て」)。
+        #   これが無いと「書いてないことは未実施か」が不明瞭になる(20260815-003)。
         sympt = ("ローカルの認証から、認証サーバ群を用いる認証への移行が、"
                  "実施されようとしています。作業は、遠隔からの接続によって"
-                 "行われています。")
+                 "行われています。認証サーバの利用者台帳、および、機器の構成は、"
+                 "示されているものが、全てです。")
     elif form == "fix":
         sympt = ("一部の利用者が、意図されたとおりに機器を操作できない、"
                  "ということが、報告されています。")
@@ -5818,6 +6191,19 @@ def answer_md_aaa(d, choices, stamp, master_seed, subseed, form):
     hits = [l for l, c in zip(letters, choices) if c[1]]
     correct = "・".join(hits)
     why = "\n".join(f"- **{l}**: {c[2]}" for l, c in zip(letters, choices) if c[2])
+    # ★patch 形は盤面を no_lockout 世界(移行前・機器側に欠陥なし)へ組み直すため、
+    #   抽選された故障種は盤面に存在しない。種別行にそのまま出すと
+    #   「この故障が盤面にある」と誤読される(2026-08-16 レビュー誤導で実害)。
+    kind_line = (f"- 種別: `aaa/{form}`(移行順序。抽選種 `{d['kind']}` は"
+                 "盤面に**含まれない**=機器側の構成に欠陥は無い)"
+                 if form in ("patch", "patchseq") else
+                 f"- 種別: `aaa/{d['kind']}` — 要件世界 `{d['world']}` / "
+                 f"故障拠点 `{d['scope']}`")
+    patch_note = ("\n- 本質: **ローカル DB とサーバ台帳の差分、または console 専用"
+                  "リストの欠落**。前提が欠けたまま切り替えると Reject は local に"
+                  "落ちず、締め出される。「切っても誰も切れない」状態を先に作る手"
+                  "(patchseq では ①前提作業→②切替 の順序)だけが正解になる。"
+                  if form in ("patch", "patchseq") else "")
     return f"""# 解答 {stamp}
 
 ## 正解
@@ -5826,8 +6212,8 @@ def answer_md_aaa(d, choices, stamp, master_seed, subseed, form):
 
 ## 解説
 
-- 種別: `aaa/{d['kind']}` — 要件世界 `{d['world']}` / 故障拠点 `{d['scope']}`
-- 形式: `{form}`
+{kind_line}
+- 形式: `{form}`{patch_note}
 - 生成: `gen_paper_mcq.py --shape aaa --seed {master_seed}` (sub-seed {subseed})
 
 {why}
@@ -6535,19 +6921,68 @@ def main():
                     else "read" if "read" in _bf else "why")
         if not a.exam and shape_i == "riploop" and d["kind"] == "seed_loop":
             form = "cause"      # seed_loop は cause 形専用(fix は定石一式で長大)
-        if a.exam and shape_i == "chain" and rnd.random() < 0.5:
+        if a.exam and shape_i == "chain" and rnd.random() < 0.3:
+            # ★BL-122: chain も fix 70%(cause 30%)へ
             form = "cause"
             choices = build_cause_choices(d, plan, rnd, decoy=decoy, pol=pol)
-        elif a.exam and shape_i == "ring" and rnd.random() < 0.5:
-            form = "cause"
-            choices = build_cause_choices_ring(d, rnd, exam=a.exam)
-        elif a.exam and shape_i == "mploop" and rnd.random() < 0.5:
-            form = "cause"
-            choices = build_cause_choices_mploop(d, mp_names, rnd, exam=a.exam)
-        elif a.exam and shape_i == "riploop" and (d["kind"] == "seed_loop"
-                                                  or rnd.random() < 0.5):
-            form = "cause"
-            choices = build_cause_choices_riploop(d, rnd, exam=a.exam)
+        elif a.exam and shape_i == "ring":
+            # ★BL-120 Tier1: 形式抽選。本番実在形(fix/cause/select2)を7割超に維持。
+            #   select2 は kind=tag 限定(タグ解=2アクションで Choose two が自然)。
+            # ★BL-122(2026-08-16 ユーザ要望)= config で解決させる形(fix+select2)を
+            #   合計 ~70% へ増量(tag: select2 22+fix 50 / 他: fix 70)。
+            roll = rnd.random()
+            _tag = d["method"] == "tag"
+            if _tag and roll < 0.22:
+                form = "select2"
+                choices = build_select2_ring(d, rnd)
+            elif roll < (0.34 if _tag else 0.18):
+                form = "cause"
+                choices = build_cause_choices_ring(d, rnd, exam=True)
+            elif roll < (0.42 if _tag else 0.24):
+                form = "read"
+                choices = build_read_choices_ring(d, rnd)
+                noise = [r for r in d["roles"] if r.startswith("NO")]
+                d["_read_src"] = d["m"][rnd.choice(noise) if noise else "RB"]
+                # read は config のみ提示(経路表・traceroute は帰結そのもの)
+                plan = {"tracer": None,
+                        "checks": [{"node": d["m"][r],
+                                    "command":
+                                        "show running-config | section router"}
+                                   for r in ("RC", "RA", "RB", "RE")]}
+            elif roll < (0.50 if _tag else 0.30):
+                form = "impact"
+                choices = build_impact_choices_ring(d, rnd)
+            # それ以外は fix のまま(tag 50% / 他 70%)
+        elif a.exam and shape_i == "mploop":
+            # ★BL-122: fix+select2 を ~73% へ(select2 15/cause 18/read 9/fix 58)
+            roll = rnd.random()
+            if roll < 0.15:
+                form = "select2"
+                choices = build_select2_mploop(d, mp_names, kind, rnd)
+            elif roll < 0.33:
+                form = "cause"
+                choices = build_cause_choices_mploop(d, mp_names, rnd, exam=True)
+            elif roll < 0.42:
+                form = "read"
+                choices = build_read_choices_mploop(d, mp_names, rnd)
+                plan = {"checks": [{"node": mp_names[r],
+                                    "command":
+                                        "show running-config | section router"}
+                                   for r in gmp.NODES]}
+        elif a.exam and shape_i == "riploop":
+            if d["kind"] == "seed_loop":
+                form = "cause"
+                choices = build_cause_choices_riploop(d, rnd, exam=True)
+            else:
+                # ★BL-122: fix+select2 を ~70% へ
+                #   (wrong_tag: select2 20/cause 30/fix 50・他: cause 30/fix 70)
+                roll = rnd.random()
+                if d["kind"] == "wrong_tag_filter" and roll < 0.20:
+                    form = "select2"
+                    choices = build_select2_riploop(d, rnd)
+                elif roll < (0.50 if d["kind"] == "wrong_tag_filter" else 0.30):
+                    form = "cause"
+                    choices = build_cause_choices_riploop(d, rnd, exam=True)
         elif a.exam and shape_i == "pbr" and rnd.random() < 0.5:
             form = "cause"
             choices = gpp.build_choices_cause(d, rnd)
@@ -6726,9 +7161,16 @@ def main():
                     form = "fix"
             else:
                 try:                    # ★P1b patch= 切らずに移行する順序
-                    choices = gpa.build_choices_patch(d, rnd)
-                    d["world"] = "no_lockout"
-                    form = "patch"
+                    # ★BL-123: 50% で patchseq((順番,操作)ペアの複数選択)。
+                    #   「次の一手」の現在地推定を排し、手順列を構築させる。
+                    if rnd.random() < 0.5:
+                        choices = gpa.build_choices_patchseq(d, rnd)
+                        d["world"] = "no_lockout"
+                        form = "patchseq"
+                    else:
+                        choices = gpa.build_choices_patch(d, rnd)
+                        d["world"] = "no_lockout"
+                        form = "patch"
                 except ValueError:
                     pass
         if choices:
@@ -6953,8 +7395,15 @@ def main():
                             # ★acl の read も同様(BL-106・4例目)= 設問文が
                             #   **向き**(転送される/破棄される)と**選ぶ個数**を担っており、
                             #   汎用文に均すと解答不能になる。
-                            keep_ask=(form in ("evidence", "patch", "dbgconf",
-                                               "authread")
+                            keep_ask=(form in ("evidence", "patch", "patchseq",
+                                               "dbgconf", "authread")
+                                      # ★BL-120 Tier1: 新形式は設問文・症状文が
+                                      #   情報の担い手(read=対象トラフィック/
+                                      #   select2=「2つ選択」/impact=工事の物語)。
+                                      #   汎用文に均すと解答不能または誤誘導になる。
+                                      or (shape_i in ("ring", "mploop", "riploop")
+                                          and form in ("read", "select2",
+                                                       "impact"))
                                       # ★apply(BL-109 段B)は構築系=
                                       #   **壊れていない**。汎用の症状文を被せると
                                       #   「動作していない理由を判断せよ」という

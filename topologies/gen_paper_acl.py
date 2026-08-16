@@ -129,6 +129,11 @@ FILTER_WORLDS = [
     "one_line",       # 1行で書く          → 過剰被覆キューブが正解
     "exact_no_deny",  # 過剰許可なし＋deny 禁止 → 厳密列挙が正解
     "exact_min",      # 過剰許可なし＋行数最小  → deny 先行が正解
+    # ★BL-121 P2(2026-08-16)= リーン要件世界(v6 と同設計)。排他の担い手が違う:
+    #   lean_only= 明文の非包含なし。「のみ」+deny禁止から排他を**導出**させる。
+    #   lean_hole= 「のみ」も無し。名指し禁止網(4本目=base+3)が集約の踏み絵。
+    "lean_only",
+    "lean_hole",
     # ★ワイルドカードの組み立てそのものを主題にする世界(ユーザ要望 2026-08-11
     #   「送信元のアドレス定義をもう少しバリエーション豊かに。
     #     ワイルドカードマスクを上手く使ったちょっとしたトリックなど」)。
@@ -343,7 +348,14 @@ def draw(rnd, kind=None, world=None):
         d["fourth"] = base + 3                     # キューブを完成させる4本目
         # 4本目を「触れてはいけない網」にするか(=1行では書けなくなる)。
         # ★one_line の世界では 4本目を許せないと正解が存在しないので必ず許容側にする。
-        d["fourth_forbidden"] = (d["world"] != "one_line") and rnd.random() < 0.5
+        # ★BL-121: lean_hole は4本目の名指しが排他の唯一の錨=必ず禁止。
+        #   lean_only は「のみ」だけで過剰被覆を落とすのが主題=名指ししない。
+        if d["world"] == "lean_hole":
+            d["fourth_forbidden"] = True
+        elif d["world"] in ("one_line", "lean_only"):
+            d["fourth_forbidden"] = False
+        else:
+            d["fourth_forbidden"] = rnd.random() < 0.5
         d["outsider"] = base + 5                   # ★上位キューブの中に置く
         d["excluded"] = ([d["fourth"]] if d["fourth_forbidden"] else []) \
             + [d["outsider"]]
@@ -843,6 +855,15 @@ def _select_complies(d, lines, entries):
         return exact and all(" deny " not in ln for ln in lines)
     if w == "exact_min":
         return exact                    # 行数の最小性は verify_select で解く
+    if w == "lean_only":
+        # ★BL-121: 非包含の明文は無いが「のみ」が排他を担う(deny 禁止下では
+        #   permit 一致=通過なので、のみ⇒正確被覆が定理)。機械判定は
+        #   exact_no_deny と同一。
+        return exact and all(" deny " not in ln for ln in lines)
+    if w == "lean_hole":
+        # ★BL-121: 「のみ」も無い。排他は名指し禁止網(excluded)が担い、
+        #   それは _select_works が既に落としている。残る要件は deny 禁止のみ。
+        return all(" deny " not in ln for ln in lines)
     raise ValueError(w)
 
 
@@ -937,8 +958,23 @@ def build_choices_select(d, rnd):
                    "nb_no_deny": ("拒否のエントリが用いられている。"
                                   if any(" deny " in ln for ln in lines)
                                   else "より少ない行数で同じ結果が得られる。"),
+                   # ★BL-121: lean_only は導出チェーンごと説明する
+                   "lean_only": ("拒否のエントリが用いられている。"
+                                 if any(" deny " in ln for ln in lines)
+                                 else "「のみ」の要件に反する(拒否のエントリが"
+                                      "禁止されている以上、permit への一致は"
+                                      "通過を意味し、対象外のネットワークが"
+                                      "許可されてしまう)。"),
+                   "lean_hole": "拒否のエントリが用いられている。",
                    })
             why = why[d["world"]]
+        # ★BL-121 lean_hole: 過剰被覆の候補は works 前で死ぬ(名指し網を踏む)。
+        #   汎用の「対象外まで含まれる」でなく名指し違反として説明する。
+        if key != correct and d["world"] == "lean_hole" \
+                and key not in d["_select_works"] \
+                and why.startswith("対象としていないネットワークまでが"):
+            why = ("許可されることはできないと指定されている"
+                   "ネットワークが、一致の対象に含まれる。")
         out.append((txt, key == correct, why, lines))
     order = list(range(len(out)))
     rnd.shuffle(order)

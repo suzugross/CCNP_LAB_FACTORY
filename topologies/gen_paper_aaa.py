@@ -1705,6 +1705,49 @@ def build_choices_patch(d, rnd):
     return [c[i] for i in order]
 
 
+def build_choices_patchseq(d, rnd):
+    """★BL-123(2026-08-16 ユーザ指摘): (順番, 操作) ペアの複数選択形。
+
+    patch 形(次の一手)は「暗黙の手順列のどこに現在地があるか」の推定と
+    次手選定が混在し、不公平感が出る(20260815-003 で実害)。本形は手順列
+    そのものを構築させる= 「①(最初に)」「②(その後に)」を冠した操作から
+    正しい2つを選ぶ。正解= {①=欠けている前提作業, ②=切替}。
+    ★成立条件= 切替単独が unsafe であること(さもなければ順序が任意になり
+    ②切替の一意性が崩れる)。機械判定は patch_safe / patch_unblocks を流用。
+    """
+    good, bad = verify_patch(d)
+    if patch_safe(d, ["sw_default"]):
+        raise ValueError("aaa patchseq: 切替単独が安全=順序問題が成立しない")
+    sw_label = PATCHES["sw_default"][0]
+    noise = [k for k in bad if k != "sw_default"]
+    rnd.shuffle(noise)
+
+    def pos(n, txt):
+        return (f"①(最初に) {txt}" if n == 1 else f"②(その後に) {txt}")
+
+    c = [
+        (pos(1, PATCHES[good][0]), True, ""),
+        (pos(2, sw_label), True, ""),
+        (pos(1, sw_label), False,
+         "①に置くと、前提が欠けたまま認証サーバが権威になり、"
+         "現在通っている経路が失われる。"),
+        (pos(2, PATCHES[good][0]), False,
+         "順序が誤り。前提の作業は、切替よりも前に、完了していなければ"
+         "ならない(②に置くと、①に切替が先行し、その時点で締め出される)。"),
+        (pos(1, PATCHES[noise[0]][0]), False,
+         ("この時点で投入すると、現在通っている経路が失われる。"
+          if not patch_safe(d, [noise[0]]) else
+          "この操作では、切替を安全に行えるようにはならない。")),
+        (pos(2, PATCHES[noise[1]][0]), False,
+         ("この時点で投入すると、現在通っている経路が失われる。"
+          if not patch_safe(d, [good, noise[1]]) else
+          "この操作は、移行の完了に寄与しない(切替が行われないまま残る)。")),
+    ]
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
 def patch_state_block(d, site):
     """patch 形で提示する現在の構成。"""
     dev, _ = patch_build(d, site)
@@ -1771,7 +1814,7 @@ def requirements(d, form=None):
         #   移行という出来事が存在しない)。守る経路は同じまま、時制だけ落とす。
         "no_lockout": (["移行の作業中に、運用者の遠隔からの接続が失われないこと。",
                         "移行の前後にわたり、緊急時にコンソールから操作できる経路を"
-                        "失わないこと。"] if form == "patch" else
+                        "失わないこと。"] if form in ("patch", "patchseq") else
                        ["運用者の遠隔からの接続が失われないこと。",
                         "緊急時にコンソールから操作できる経路を失わないこと。"]),
     }[w]

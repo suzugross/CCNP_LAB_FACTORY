@@ -1,0 +1,115 @@
+# 自動生成 (gen_aaa_build.py) seed=7021
+problem: GEN-AAAGRP-7021
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'RT01: test aaa がサーバグループ AUTH-GRP で成功'
+  node: RT01
+  command: test aaa group AUTH-GRP noc-taro Noc-9341 legacy
+  raw:
+  - contains: successfully authenticated
+  points: 10
+- name: 'RT01: 2 台のサーバが実効(標準/非標準ポート)'
+  node: RT01
+  command: show aaa servers
+  raw:
+  - contains: 10.99.120.2
+  - contains: 10.99.121.2
+  - contains: auth-port 1812
+  - contains: auth-port 1645
+  points: 8
+- name: 'RT01: 認証・認可とも グループ優先 + ローカル予備'
+  node: RT01
+  command: show running-config | include aaa auth
+  raw:
+  - regex: (?m)^aaa authentication login default group AUTH-GRP local\s*$
+  - regex: (?m)^aaa authorization exec default group AUTH-GRP local\s*$
+  points: 8
+- name: 'RT02: test aaa がサーバグループ AUTH-GRP で成功'
+  node: RT02
+  command: test aaa group AUTH-GRP noc-taro Noc-9341 legacy
+  raw:
+  - contains: successfully authenticated
+  points: 10
+- name: 'RT02: 2 台のサーバが実効(標準/非標準ポート)'
+  node: RT02
+  command: show aaa servers
+  raw:
+  - contains: 10.99.120.2
+  - contains: 10.99.121.2
+  - contains: auth-port 1812
+  - contains: auth-port 1645
+  points: 8
+- name: 'RT02: 認証・認可とも グループ優先 + ローカル予備'
+  node: RT02
+  command: show running-config | include aaa auth
+  raw:
+  - regex: (?m)^aaa authentication login default group AUTH-GRP local\s*$
+  - regex: (?m)^aaa authorization exec default group AUTH-GRP local\s*$
+  points: 8
+- name: 'RT01: 診断 — 応答待ちのタイマ(timeout/retransmit)の置き場所'
+  node: RT01
+  command: show running-config | section aaa group server radius
+  raw:
+  - contains: aaa group server radius AUTH-GRP
+  - not_regex: (?m)^\s+timeout\s+\d+
+  - not_regex: (?m)^\s+retransmit\s+\d+
+  points: 0
+- name: 'RT02: 診断 — 応答待ちのタイマ(timeout/retransmit)の置き場所'
+  node: RT02
+  command: show running-config | section aaa group server radius
+  raw:
+  - contains: aaa group server radius AUTH-GRP
+  - not_regex: (?m)^\s+timeout\s+\d+
+  - not_regex: (?m)^\s+retransmit\s+\d+
+  points: 0
+- name: 課金記録が両ルータの Loopback0 名で残っている(いずれかのサーバに)
+  node: SRV01
+  exec: shell
+  command: sudo -n ls /var/log/freeradius/radacct/ 2>&1; timeout 30 sshpass -p 'CCNP' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20 -o LogLevel=ERROR SUZUKI@10.99.121.2 'sudo -n ls /var/log/freeradius/radacct/' 2>&1
+  raw:
+  - contains: 10.8.0.1
+  - contains: 10.8.0.2
+  points: 10
+- name: '挙動①: 片系断(SRV01 停止)でも RADIUS 認証が継続する'
+  node: SRV01
+  exec: shell
+  command: timeout 420 sudo -n /opt/ccnp/aaa_phase.sh
+  raw:
+  - regex: (?m)^PHASE1=OK$
+  - regex: (?m)^PHASE2=OK$
+  points: 10
+- name: '挙動②: 片系断のログイン遅延が 5 秒以内'
+  node: SRV01
+  exec: shell
+  command: cat /run/ccnp-aaa-phase.out
+  raw:
+  - regex: (?m)^PHASE2=OK$
+  - regex: (?m)^DELAY=OK$
+  points: 6
+- name: '挙動③: 応答しない優先サーバへの問い合わせが停止し、待ちが消える'
+  node: SRV01
+  exec: shell
+  command: cat /run/ccnp-aaa-phase.out
+  raw:
+  - regex: (?m)^PHASE2=OK$
+  - regex: (?m)^PRIMARY=OK$
+  - regex: (?m)^DEADTIME=OK$
+  points: 6
+- name: '挙動④: 全断でサーバを試した末にローカル管理者へフォールバックする'
+  node: SRV01
+  exec: shell
+  command: cat /run/ccnp-aaa-phase.out
+  raw:
+  - regex: (?m)^PHASE3_LOCAL=OK$
+  - regex: (?m)^PHASE3_VIA_FALLBACK=OK$
+  points: 10
+- name: '挙動⑤: 全断のとき RADIUS 利用者は入れない(ローカルへ写していない)'
+  node: SRV01
+  exec: shell
+  command: cat /run/ccnp-aaa-phase.out
+  raw:
+  - regex: (?m)^PHASE3_RADIUS_DENIED=OK$
+  - regex: (?m)^RECOVER=OK$
+  points: 6
