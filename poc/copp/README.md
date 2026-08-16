@@ -1,4 +1,4 @@
-# CoPP PoC 実測 (BL-125 P0・2026-08-16)
+# CoPP PoC 実測 (BL-125 P0+E2E・2026-08-16)
 
 盤面= `_POC-COPP`(3 IOL: RT02—RT01(DUT)—RT03・OSPF 全網)。探針= probe.yml / p56.yml、
 生ログ= probes/P0〜P6。紙面 shape=copp の設計前提となる実測知見。
@@ -38,6 +38,29 @@
   10pps 制限下の 300 発で 4 分超= ansible の command timeout を食い破る(P5 初回失敗の原因)。
 - 8000 bps は police cir の実質最小域・bc 1500 自動。IOL で全探針が期待どおり=
   紙面の盤面プラットフォーム問題なし。
+
+## E2E 実機スポット照合 (P2 後・2026-08-16・16/16 PASS)
+
+探針= `e2e.yml`、生ログ= probes/E1〜E6。P0 で未実測だった紙面モデルの意味論を照合:
+
+1. **E1 class 評価順(kind class_order)**: 広い CM-LIMIT が先・遮断 CM-BLOCK が後 →
+   攻撃元 ping **90%**(遮断されず制限どまり)・CM-BLOCK は **0 packets** のまま。
+2. **E2 遮断 class 先頭(block_first 正解状態)**: 攻撃元 **0%**・他発信元 90%・
+   CM-BLOCK が 50/50 計上。★**police なし class の show は
+   `Class-map:`+`Match:` の2行のみ**(class-default と同形・カウンタ行なし)= byte 採取。
+3. **E3 conform-action drop(kind conform_drop)**: 低レート 30発= **0%**。
+   conformed 30 を計上しつつ actions: drop(「カウンタは動くのに全滅」の実証)。
+4. **E4 class-default police(kind cdefault_police)**: 65秒無操作で conformed 15→72・
+   exceeded 0→54= **OSPF hello と SSH 管理セッション自身が class-default に道連れ分類
+   される実証**(exceeded 54 は show 出力の ACK 群= 管理トラフィックが 1500B バケツを
+   食い破る。cdefault_police の「SSH 断続断」症状の機構そのもの)。flood 89% 制限・
+   OSPF 隣接は FULL 維持。
+5. **E5 紙面盤面の忠実復元**: `--seed 11`(deny_misread) の紙面 config を投入し、
+   実機 `show policy-map control-plane` と紙面レンダラ出力が**カウンタ数値を除き
+   行単位で一致**(16行・rstrip 基準)。ACL ブロックも一致。挙動= その他発信元 90%。
+6. **E6 `permit ospf any any` の class 一致**: 65秒無操作で 14 packets 計上=
+   hello が match access-group(proto ospf)に乗る(protect_explicit・select2/allthat の
+   OSPF 記述の根拠)。
 
 ## 紙面設計への写像(次段 P1 の入力)
 

@@ -1,0 +1,278 @@
+# BL-125 CoPP 紙面ファミリ E2E 実機スポット照合 (2026-08-16)
+# 使い方: .venv/bin/ansible-playbook poc/copp/e2e.yml -i poc/copp/inv.ini
+# 前提: _POC-COPP 稼働中(RT01=DUT 10.201.12.1/10.201.13.1, RT02=.12.2, RT03=.13.2)
+# 照合対象= P0 で未実測だった紙面モデルの意味論:
+#   E1 class 評価順(広い class が先→遮断 class に到達しない= kind class_order)
+#   E2 遮断 class 先頭(block_first 正解状態)+★police なし class の show 書式採取
+#   E3 conform-action drop(kind conform_drop= 低レートの正規トラフィックが全滅)
+#   E4 class-default police(kind cdefault_police= OSPF/管理 punt の道連れ分類)
+#   E5 紙面盤面の忠実復元(seed 11 deny_misread= PM-CPP/CM-ICMP-LIMIT/ACL 120)
+#      → show 出力をレンダラ出力と masked diff で照合(カウンタ数値のみ許容差)
+#   E6 permit ospf any any の class 一致(hello が police カウンタに乗る)
+---
+- name: E2E 用オブジェクトを段組み
+  hosts: RT01
+  gather_facts: false
+  tasks:
+    - cisco.ios.ios_config:
+        lines:
+          - access-list 110 permit icmp any any
+          - access-list 112 permit icmp host 10.201.12.2 any
+          - access-list 113 permit tcp any any eq 22
+          - access-list 113 permit ospf any any
+          - access-list 114 permit ospf any any
+          - access-list 120 deny icmp host 203.0.113.108 any
+          - access-list 120 permit icmp any any
+    - cisco.ios.ios_config:
+        parents: class-map match-all CM-LIMIT-E1
+        lines: [match access-group 110]
+    - cisco.ios.ios_config:
+        parents: class-map match-all CM-BLOCK-E1
+        lines: [match access-group 112]
+    - cisco.ios.ios_config:
+        parents: class-map match-all CM-PROT-E2
+        lines: [match access-group 113]
+    - cisco.ios.ios_config:
+        parents: class-map match-all CM-OSPF-E6
+        lines: [match access-group 114]
+    - cisco.ios.ios_config:
+        parents: class-map match-all CM-ICMP-LIMIT
+        lines: [match access-group 120]
+    # E1: 広い制限 class が先・遮断 class が後
+    - cisco.ios.ios_config:
+        parents: [policy-map PM-E1, class CM-LIMIT-E1]
+        lines: [police 8000 conform-action transmit exceed-action drop]
+    - cisco.ios.ios_config:
+        parents: [policy-map PM-E1, class CM-BLOCK-E1]
+        lines: [police 8000 conform-action drop exceed-action drop]
+    # E2: 遮断 class 先頭+police なしの保護 class
+    - cisco.ios.ios_config:
+        parents: [policy-map PM-E2, class CM-BLOCK-E1]
+        lines: [police 8000 conform-action drop exceed-action drop]
+    - cisco.ios.ios_config:
+        parents: [policy-map PM-E2, class CM-LIMIT-E1]
+        lines: [police 8000 conform-action transmit exceed-action drop]
+    - cisco.ios.ios_config:
+        parents: policy-map PM-E2
+        lines: [class CM-PROT-E2]
+    # E3: conform drop / exceed transmit(アクション取り違え)
+    - cisco.ios.ios_config:
+        parents: [policy-map PM-E3, class CM-LIMIT-E1]
+        lines: [police 8000 conform-action drop exceed-action transmit]
+    # E4: class-default のみ police
+    - cisco.ios.ios_config:
+        parents: [policy-map PM-E4, class class-default]
+        lines: [police 8000 conform-action transmit exceed-action drop]
+    # E5: 紙面盤面(seed 11)の忠実復元
+    - cisco.ios.ios_config:
+        parents: [policy-map PM-CPP, class CM-ICMP-LIMIT]
+        lines: [police 8000 conform-action transmit exceed-action drop]
+    # E6: OSPF 一致検証
+    - cisco.ios.ios_config:
+        parents: [policy-map PM-E6, class CM-OSPF-E6]
+        lines: [police 8000 conform-action transmit exceed-action transmit]
+
+- name: E1 class 評価順(制限が先→遮断されない)
+  hosts: RT01
+  gather_facts: false
+  vars: {ansible_command_timeout: 240}
+  tasks:
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [service-policy input PM-E1]
+    - name: E1 RT02→RT01 300発(遮断 class があるのに 9割通るはず)
+      cisco.ios.ios_command:
+        commands: ["ping 10.201.12.1 repeat 300 size 100 timeout 1"]
+      register: e1p
+      delegate_to: RT02
+      vars: {ansible_host: "{{ hostvars['RT02'].ansible_host }}",
+             ansible_command_timeout: 240}
+    - cisco.ios.ios_command:
+        commands: [show policy-map control-plane]
+      register: e1c
+    - copy:
+        content: |
+          ===== E1 RT02 ping(class_order: 期待=~90% 成功・遮断されない) =====
+          {{ e1p.stdout[0] }}
+          ===== E1 counters(期待= CM-BLOCK-E1 は 0 packets のまま) =====
+          {{ e1c.stdout[0] }}
+        dest: "{{ playbook_dir }}/probes/E1-class-order.txt"
+      delegate_to: localhost
+
+- name: E2 遮断 class 先頭(block_first 正解状態)
+  hosts: RT01
+  gather_facts: false
+  vars: {ansible_command_timeout: 240}
+  tasks:
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [no service-policy input PM-E1]
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [service-policy input PM-E2]
+    - name: E2 RT02→RT01 50発(期待= 0% 完全遮断)
+      cisco.ios.ios_command:
+        commands: ["ping 10.201.12.1 repeat 50 size 100 timeout 1"]
+      register: e2a
+      delegate_to: RT02
+      vars: {ansible_host: "{{ hostvars['RT02'].ansible_host }}",
+             ansible_command_timeout: 240}
+    - name: E2 RT03→RT01 300発(期待= ~90% 制限のみ)
+      cisco.ios.ios_command:
+        commands: ["ping 10.201.13.1 repeat 300 size 100 timeout 1"]
+      register: e2b
+      delegate_to: RT03
+      vars: {ansible_host: "{{ hostvars['RT03'].ansible_host }}",
+             ansible_command_timeout: 240}
+    - cisco.ios.ios_command:
+        commands: [show policy-map control-plane]
+      register: e2c
+    - copy:
+        content: |
+          ===== E2 RT02 ping(block_first: 期待= 0%) =====
+          {{ e2a.stdout[0] }}
+          ===== E2 RT03 ping(期待= ~90%) =====
+          {{ e2b.stdout[0] }}
+          ===== E2 counters(★police なし CM-PROT-E2 の書式に注目) =====
+          {{ e2c.stdout[0] }}
+        dest: "{{ playbook_dir }}/probes/E2-block-first.txt"
+      delegate_to: localhost
+
+- name: E3 conform-action drop(低レート正規が全滅)
+  hosts: RT01
+  gather_facts: false
+  vars: {ansible_command_timeout: 240}
+  tasks:
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [no service-policy input PM-E2]
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [service-policy input PM-E3]
+    - name: E3 RT02→RT01 30発 低レート(期待= ~0%・conformed が増えつつ drop)
+      cisco.ios.ios_command:
+        commands: ["ping 10.201.12.1 repeat 30 size 100 timeout 1"]
+      register: e3p
+      delegate_to: RT02
+      vars: {ansible_host: "{{ hostvars['RT02'].ansible_host }}",
+             ansible_command_timeout: 240}
+    - cisco.ios.ios_command:
+        commands: [show policy-map control-plane]
+      register: e3c
+    - copy:
+        content: |
+          ===== E3 RT02 ping(conform_drop: 期待= ~0%) =====
+          {{ e3p.stdout[0] }}
+          ===== E3 counters(期待= conformed 増加・actions drop) =====
+          {{ e3c.stdout[0] }}
+        dest: "{{ playbook_dir }}/probes/E3-conform-drop.txt"
+      delegate_to: localhost
+
+- name: E4 class-default police(道連れ分類の実証)
+  hosts: RT01
+  gather_facts: false
+  vars: {ansible_command_timeout: 240}
+  tasks:
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [no service-policy input PM-E3]
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [service-policy input PM-E4]
+    - name: E4 T0 カウンタ
+      cisco.ios.ios_command:
+        commands: [show policy-map control-plane]
+      register: e4t0
+    - name: E4 65秒 無操作(OSPF hello だけが流れる)
+      ansible.builtin.pause:
+        seconds: 65
+    - name: E4 T1 カウンタ(期待= ping なしで conformed 増= hello が道連れ分類)
+      cisco.ios.ios_command:
+        commands: [show policy-map control-plane]
+      register: e4t1
+    - name: E4 RT02→RT01 300発(期待= ~90% 制限)
+      cisco.ios.ios_command:
+        commands: ["ping 10.201.12.1 repeat 300 size 100 timeout 1"]
+      register: e4p
+      delegate_to: RT02
+      vars: {ansible_host: "{{ hostvars['RT02'].ansible_host }}",
+             ansible_command_timeout: 240}
+    - name: E4 隣接生存確認
+      cisco.ios.ios_command:
+        commands: [show policy-map control-plane, show ip ospf neighbor]
+      register: e4t2
+    - copy:
+        content: |
+          ===== E4 T0(適用直後) =====
+          {{ e4t0.stdout[0] }}
+          ===== E4 T1(65秒 無操作後: conformed の増分= OSPF hello 等の道連れ) =====
+          {{ e4t1.stdout[0] }}
+          ===== E4 RT02 ping(期待= ~90%) =====
+          {{ e4p.stdout[0] }}
+          ===== E4 T2 counters =====
+          {{ e4t2.stdout[0] }}
+          ===== E4 OSPF neighbor(期待= FULL 維持) =====
+          {{ e4t2.stdout[1] }}
+        dest: "{{ playbook_dir }}/probes/E4-cdefault.txt"
+      delegate_to: localhost
+
+- name: E5 紙面盤面の忠実復元(seed 11 deny_misread)
+  hosts: RT01
+  gather_facts: false
+  vars: {ansible_command_timeout: 240}
+  tasks:
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [no service-policy input PM-E4]
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [service-policy input PM-CPP]
+    - name: E5 RT03→RT01 300発(「その他の発信元」= 期待 ~90% 制限)
+      cisco.ios.ios_command:
+        commands: ["ping 10.201.13.1 repeat 300 size 100 timeout 1"]
+      register: e5p
+      delegate_to: RT03
+      vars: {ansible_host: "{{ hostvars['RT03'].ansible_host }}",
+             ansible_command_timeout: 240}
+    - name: E5 紙面と同じ show を採取
+      cisco.ios.ios_command:
+        commands: [show policy-map control-plane, show access-lists]
+      register: e5c
+    - copy:
+        content: |
+          ===== E5 RT03 ping(deny_misread 紙面盤面: その他の発信元= ~90%) =====
+          {{ e5p.stdout[0] }}
+          ===== E5 show policy-map control-plane(紙面レンダラと masked diff) =====
+          {{ e5c.stdout[0] }}
+          ===== E5 show access-lists =====
+          {{ e5c.stdout[1] }}
+        dest: "{{ playbook_dir }}/probes/E5-paper-replica.txt"
+      delegate_to: localhost
+
+- name: E6 permit ospf any any の class 一致
+  hosts: RT01
+  gather_facts: false
+  vars: {ansible_command_timeout: 240}
+  tasks:
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [no service-policy input PM-CPP]
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [service-policy input PM-E6]
+    - name: E6 65秒 無操作
+      ansible.builtin.pause:
+        seconds: 65
+    - name: E6 カウンタ(期待= hello ~13発が CM-OSPF-E6 に計上)
+      cisco.ios.ios_command:
+        commands: [show policy-map control-plane]
+      register: e6c
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [no service-policy input PM-E6]
+    - copy:
+        content: |
+          ===== E6 counters(65秒 無操作: permit ospf any any の一致) =====
+          {{ e6c.stdout[0] }}
+        dest: "{{ playbook_dir }}/probes/E6-ospf-match.txt"
+      delegate_to: localhost

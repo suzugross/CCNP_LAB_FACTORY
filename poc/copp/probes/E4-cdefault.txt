@@ -1,0 +1,55 @@
+===== E4 T0(適用直後) =====
+Control Plane 
+
+  Service-policy input: PM-E4
+
+    Class-map: class-default (match-any)  
+      Match: any 
+      police:
+          cir 8000 bps, bc 1500 bytes
+        conformed 15 packets, 1000 bytes; actions:
+          transmit 
+        exceeded 0 packets, 0 bytes; actions:
+          drop 
+        conformed 0000 bps, exceeded 0000 bps
+===== E4 T1(65秒 無操作後: conformed の増分= OSPF hello 等の道連れ) =====
+Control Plane 
+
+  Service-policy input: PM-E4
+
+    Class-map: class-default (match-any)  
+      Match: any 
+      police:
+          cir 8000 bps, bc 1500 bytes
+        conformed 72 packets, 8703 bytes; actions:
+          transmit 
+        exceeded 54 packets, 4850 bytes; actions:
+          drop 
+        conformed 0000 bps, exceeded 0000 bps
+===== E4 RT02 ping(期待= ~90%) =====
+Type escape sequence to abort.
+Sending 300, 100-byte ICMP Echos to 10.201.12.1, timeout is 1 seconds:
+!!!!!!!!!!!!!.!!!!!!!!!.!!!!!!!!.!!!!!!!!.!!!!!!!!.!!!!!!!!!.!!!!!!!!!
+.!!!!!.!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!.!!!!!!!!!.!!!!!!!!.!!!!!!!!
+!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!.!!!!!!!!!.!!!!!!!!.!!!!!!!!.!!!
+!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!
+!!!!!!.!!!!!!!!.!!!!
+Success rate is 89 percent (269/300), round-trip min/avg/max = 1/2/39 ms
+===== E4 T2 counters =====
+Control Plane 
+
+  Service-policy input: PM-E4
+
+    Class-map: class-default (match-any)  
+      Match: any 
+      police:
+          cir 8000 bps, bc 1500 bytes
+        conformed 368 packets, 42533 bytes; actions:
+          transmit 
+        exceeded 100 packets, 9634 bytes; actions:
+          drop 
+        conformed 4000 bps, exceeded 0000 bps
+===== E4 OSPF neighbor(期待= FULL 維持) =====
+Neighbor ID     Pri   State           Dead Time   Address         Interface
+3.3.3.3           1   FULL/DR         00:00:36    10.201.13.2     Ethernet0/1
+2.2.2.2           1   FULL/DR         00:00:37    10.201.12.2     Ethernet0/0

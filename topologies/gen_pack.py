@@ -929,11 +929,15 @@ def answer_form(pack_id, it, src_path):
         if letters:
             # ★複数選択(「2つを選択してください」)はチェックボックスにする。
             #   ラジオのままだと1つしか選べず**解答不能**になる(2026-08-11 発覚)。
-            typ = "radio" if pick <= 1 else "checkbox"
+            # ★pick == -1 は数非明示(「すべて選んでください」= BL-125 allthat)。
+            #   チェックボックスにするが、個数のヒントは出さない(数非明示が主題)。
+            typ = "radio" if pick == 1 else "checkbox"
             opts = "".join(
                 f'<label><input type="{typ}" name="ans{it["no"]}" '
                 f'value="{l}">{l}</label>' for l in letters)
-            hint = ("" if pick <= 1 else
+            hint = ("" if pick == 1 else
+                    '<label class="row">該当するものを<b>すべて選択</b>して'
+                    'ください(数は示されていません)</label>' if pick == -1 else
                     f'<label class="row">この問題は <b>{pick}つ選択</b>です</label>')
             ansfield = f'{hint}<div class="opts">{opts}</div>'
         else:                       # 記述式(選択肢なし)

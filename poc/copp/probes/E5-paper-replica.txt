@@ -1,0 +1,39 @@
+===== E5 RT03 ping(deny_misread 紙面盤面: その他の発信元= ~90%) =====
+Type escape sequence to abort.
+Sending 300, 100-byte ICMP Echos to 10.201.13.1, timeout is 1 seconds:
+!!!!!!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!
+!!!.!!!!!!!!!.!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!!!.!!!!!!
+!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!
+!!!.!!!!!!!!!.!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!!!.!!!!!!!
+!!.!!!!!!!!!.!!!!!!!
+Success rate is 90 percent (271/300), round-trip min/avg/max = 1/1/51 ms
+===== E5 show policy-map control-plane(紙面レンダラと masked diff) =====
+Control Plane 
+
+  Service-policy input: PM-CPP
+
+    Class-map: CM-ICMP-LIMIT (match-all)  
+      Match: access-group 120
+      police:
+          cir 8000 bps, bc 1500 bytes
+        conformed 271 packets, 30894 bytes; actions:
+          transmit 
+        exceeded 29 packets, 3306 bytes; actions:
+          drop 
+        conformed 3000 bps, exceeded 0000 bps
+
+    Class-map: class-default (match-any)  
+      Match: any
+===== E5 show access-lists =====
+Extended IP access list 110
+    10 permit icmp any any (630 matches)
+Extended IP access list 112
+    10 permit icmp host 10.201.12.2 any (50 matches)
+Extended IP access list 113
+    10 permit tcp any any eq 22 (222 matches)
+    20 permit ospf any any (18 matches)
+Extended IP access list 114
+    10 permit ospf any any
+Extended IP access list 120
+    10 deny icmp host 203.0.113.108 any
+    20 permit icmp any any (300 matches)

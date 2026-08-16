@@ -50,6 +50,8 @@ import gen_paper_ospfv3pl as gpo  # noqa: E402  (ospfv3pl=OSPFv3 prefix-list・B
 import gen_paper_v6redist as gpv  # noqa: E402  (v6redist=OSPFv3⇄EIGRPv6 相互再配送・BL-098)
 import gen_paper_aaa as gpa    # noqa: E402  (aaa=IOS AAA(RADIUS)読解・BL-101)
 import gen_paper_bgpbest as gbb  # noqa: E402  (bgpbest=BGPベストパス読解・BL-112)
+import gen_paper_copp as gpc   # noqa: E402  (copp=CoPP 分類→police 読解/是正・BL-125)
+import gen_paper_pref as gpr   # noqa: E402  (pref=OSPF/EIGRP 経路選好・BL-127)
 
 KINDS = ["missing", "no_seed", "filter", "wrong_id"]
 # ring(ループ)の正解法軸。arena の method をそのまま借りるが、tag は紙面専用の追加軸
@@ -6592,6 +6594,747 @@ eBGP/iBGP → IGP メトリック → (最古) → RID の順で、最初に差�
 
 
 # --------------------------------------------------------------------------
+# shape=copp — コントロール・プレーン・ポリシング (gen_paper_copp 流用・BL-125)
+# ★紙面専用: 証拠は PoC 実測(poc/copp/probes P0〜P6・IOL 17.15)の byte 写し。
+#   カウンタは分類→police モデル(gen_paper_copp.outcomes)から決定的に導く。
+# --------------------------------------------------------------------------
+def pick_draw_copp(qseed, kind):
+    for kk in range(200):
+        s = qseed + kk * 139
+        try:
+            return s, gpc.draw(random.Random(s), kind=kind)
+        except ValueError:
+            continue
+    raise SystemExit(f"copp kind={kind} が成立する seed が見つかりません({qseed})")
+
+
+def copp_counters(d, st, rnd):
+    """`show policy-map control-plane` の忠実な描画(実測書式 P0〜P6)。
+    ★書式罠を再現: bc 1500/burst 2 は自動既定が show にだけ出る・
+    pps ポリサは bytes 欄がパケット数・瞬時レート行は bps のみ 4 桁 0 詰め。"""
+    vs = gpc.vectors(d)
+    n = {"ssh": rnd.randint(15, 60), "mon": rnd.randint(8, 30),
+         "ospf": rnd.randint(20, 90), "flood": rnd.randint(220, 380)}
+    cls_of = {}
+    for name, v in vs.items():
+        if not v["punt"]:
+            continue
+        c = gpc.classify(d, st, v)
+        cls_of[name] = c["name"] if c else None
+
+    def police_lines(pol, matched):
+        total = sum(n[m] for m in matched)
+        exc = 0
+        if any(vs[m]["rate"] == "high" for m in matched):
+            exc = max(1, n["flood"] * (9 + rnd.randint(0, 5)) // 100)
+        conf = total - exc
+        if pol["unit"] == "pps":
+            head = f"          rate {pol['rate']} pps, burst 2 packets"
+            cb, eb = conf, exc             # ★PoC P5: bytes 欄=パケット数(書式罠)
+            tail = "        conformed 0 pps, exceeded 0 pps"
+        else:
+            head = "          cir 8000 bps, bc 1500 bytes"
+            fac = (114 if any(vs[m]["proto"] == "icmp" for m in matched)
+                   else rnd.choice([64, 92, 156]))
+            cb, eb = conf * fac, exc * fac
+            r = (rnd.choice([2000, 3000, 4000])
+                 if any(vs[m]["rate"] == "high" for m in matched) else 0)
+            tail = f"        conformed {r:04d} bps, exceeded 0000 bps"
+        return ["      police:", head,
+                f"        conformed {conf} packets, {cb} bytes; actions:",
+                f"          {pol['conform']} ",
+                f"        exceeded {exc} packets, {eb} bytes; actions:",
+                f"          {pol['exceed']} ",
+                tail]
+
+    L = ["Control Plane ", "", f"  Service-policy input: {d['pm']}"]
+    for c in st["classes"]:
+        matched = [m for m, cn in cls_of.items() if cn == c["name"]]
+        L += ["", f"    Class-map: {c['name']} (match-all)  ",
+              f"      Match: access-group {c['acl']}"]
+        if c["police"]:
+            L += police_lines(c["police"], matched)
+    matched_def = [m for m, cn in cls_of.items() if cn is None]
+    L += ["", "    Class-map: class-default (match-any)  ", "      Match: any"]
+    if st["cdefault"]:
+        L += police_lines(st["cdefault"], matched_def)
+    return "\n".join(L)
+
+
+def copp_evidence(d, rnd, form):
+    """紙面に出すブロック群(state=カウンタ / cfg=構成)。"""
+    st = gpc.state(d)
+    dut, ext = d["m"]["DUT"], d["m"]["EXT"]
+    state_blocks = [f"```\n{dut}# show policy-map control-plane\n"
+                    + copp_counters(d, st, rnd) + "\n```"]
+    cfg_blocks = [f"```\n{dut}# show running-config | section control-plane\n"
+                  f"control-plane\n service-policy input {d['pm']}\n```"]
+    acl_txt = "\n".join(gpc.acl_show(num, st["acls"][num])
+                        for num in sorted(st["acls"])) or "(出力なし)"
+    cfg_blocks.append(f"```\n{dut}# show access-lists\n{acl_txt}\n```")
+    cfg_blocks.append(
+        f"```\n{dut}# show running-config | section interface\n"
+        f"interface {d['ifaces']['out']}\n"
+        f" description === to {ext} ===\n"
+        f" ip address {d['out_ip']} 255.255.255.252\n"
+        f"interface {d['ifaces']['in']}\n"
+        f" ip address {d['in_ip']} 255.255.255.0\n```")
+    # ★vty は常設(曖昧要件世界の一意補完の錨= transport input ssh。
+    #   曖昧盤面だけに出すと存在自体が指紋になるため、常に出す)
+    cfg_blocks.append(
+        f"```\n{dut}# show running-config | section line\n"
+        "line con 0\n logging synchronous\nline vty 0 4\n login local\n"
+        " transport input ssh\n```")
+    return state_blocks, cfg_blocks
+
+
+def copp_requirements(d, rnd, form):
+    nms, att = d["nms"], d["att"]
+    core = [
+        "ルータ自身に宛てられた(コントロール・プレーンにおいて処理される)"
+        "トラフィックの保護は、control-plane の input のサービス・ポリシーに"
+        "よって、実装されなければなりません。",
+        f"管理のステーション {nms} からの SSH によるアクセス、および、"
+        "ルーティング・プロトコルの隣接関係は、影響を受けてはなりません。",
+    ]
+    world_txt = {
+        "w_block": [
+            f"攻撃元 {att} からの、ルータ自身に宛てられた ICMP は、レートに"
+            "関わらず、完全に破棄されなければなりません。",
+            f"監視のためのホスト {nms} からの ping による死活監視は、"
+            "安定して維持されなければなりません。",
+            "ルータを通過するところのトラフィックの転送に、影響が"
+            "与えられてはなりません。"],
+        "w_limit": [
+            "特定の発信元のアドレスを名指しにするところのエントリの使用は、"
+            "認められていません(対策は、汎用のものとすること)。",
+            "ルータ自身に宛てられた ICMP は、専用の class において帯域が"
+            "制限され、そして、超過するトラフィックは破棄されなければ"
+            "なりません。",
+            "class-default の扱いは、変更されてはなりません。",
+            "ルータを通過するところのトラフィックの転送に、影響が"
+            "与えられてはなりません。"],
+        "w_protect": [
+            "SSH およびルーティング・プロトコルのトラフィックは、明示の "
+            "class によって分類され、いかなる制限も受けてはなりません。",
+            "上記以外の、ルータ自身に宛てられたトラフィックは、class-default "
+            "において帯域が制限され、超過は破棄されなければなりません。",
+            "特定の用途または発信元ごとの class の追加は、認められていません。",
+            "ルータを通過するところのトラフィックの転送に、影響が"
+            "与えられてはなりません。"],
+        "w_monitor": [
+            "導入の第1段階として、いかなるトラフィックも、破棄されては"
+            "なりません。",
+            "ルータ自身に宛てられた ICMP は、police の統計によって計測され"
+            "なければなりません。"],
+    }[d["world"]]
+    # ★曖昧要件(BL-113 の3条件下・P2): 管理アクセスのプロトコル名を落とす。
+    #   盤面の vty(transport input ssh)が一意補完の錨= 管理アクセス=SSH。
+    if d.get("vague"):
+        core[1] = ("運用のために必要とされる、ルータへの管理のアクセス、"
+                   "および、ルーティング・プロトコルの隣接関係は、影響を"
+                   "受けてはなりません。")
+        if d["world"] == "w_protect":
+            world_txt = list(world_txt)
+            world_txt[0] = ("運用のために必要とされる管理のアクセス、および、"
+                            "ルーティング・プロトコルのトラフィックは、明示の "
+                            "class によって分類され、いかなる制限も受けては"
+                            "なりません。")
+    core += world_txt
+    # ★「管理のための構成(SSH/SNMP/NTP)を変更しない」ダミーは、管理 class の
+    #   是正候補と紛れるため使わない
+    core += rnd.sample([x for x in REQ_DECOYS if "SSH" not in x], 1)
+    rnd.shuffle(core)
+    return finalize_reqs(core, rnd)
+
+
+def copp_symptom(d):
+    att, nms, srv = d["att"], d["nms"], d["srv"]
+    k, w = d["kind"], d["world"]
+    if w == "w_monitor" and k in ("undef_acl", "deny_misread"):
+        tgt = ("計測の目的で導入されたポリシーのカウンタが、まったく増加して"
+               "いない" if k == "undef_acl" else
+               f"発信元 {att} からの、ルータ自身に宛てられた ICMP が、"
+               "ポリシーの統計にまったく計上されていない")
+        return f"{tgt}、ということが、報告されています。"
+    return {
+        "undef_acl":
+            f"外部の発信元 {att} からの、ルータ自身に宛てられた大量の ICMP "
+            "が、制限されずに処理され続けている、ということが、報告されて"
+            "います。CPU の使用率は高いままであり、そして、ポリシーの"
+            "カウンタは増加していません。",
+        "deny_misread":
+            f"攻撃元 {att} を拒否するためのエントリが追加された直後から、"
+            "当該の発信元からの、ルータ自身に宛てられた ICMP が、まったく"
+            "制限されなくなった、ということが、報告されています。その他の"
+            "発信元からの ICMP は、想定のとおり制限されています。",
+        "exceed_transmit":
+            "ポリシーのカウンタは増加しているにもかかわらず、超過する"
+            "トラフィックが破棄されていない、ということが、報告されています。",
+        "conform_drop":
+            f"{nms} からの SSH のセッションが、確立されることができない、"
+            "ということが、報告されています。ICMP に対する制限は、想定の"
+            "とおり動作しています。",
+        "class_order":
+            f"攻撃元 {att} からの、ルータ自身に宛てられた ICMP は、帯域は"
+            "制限されているものの、完全には破棄されていない、ということが、"
+            "報告されています。",
+        "cdefault_police":
+            "外部からの大量の ICMP の発生の時間帯において、SSH のセッションが"
+            "断続的に切断され、そして、ルーティング・プロトコルの隣接関係が"
+            "フラップする、ということが、報告されています。",
+        "transit_expect":
+            f"サーバ {srv} に宛てられた大量の ICMP が、構成されている"
+            "ポリシーによって制限されることが期待されたにもかかわらず、"
+            "まったく制限されていない、ということが、報告されています。"
+            "ルータ自身に宛てられたトラフィックへの制限は、動作しています。",
+    }[k]
+
+
+COPP_INTRO = (
+    "あなたの会社の拠点のルータ {dut} は、上流のルータ {ext} を経由して、"
+    "外部のネットワークへ接続されています。社内の LAN には、管理のステーション "
+    "{nms} およびサーバ {srv} が存在し、そして、{dut} と {ext} の間では、"
+    "ルーティング・プロトコルの隣接関係が確立されています。{dut} には、"
+    "コントロール・プレーンを保護するためのサービス・ポリシーが、"
+    "構成されています。")
+
+
+def mermaid_copp(d):
+    dut, ext = d["m"]["DUT"], d["m"]["EXT"]
+    return "\n".join([
+        "```mermaid",
+        f"graph {d.get('_mmdir', 'LR')}",
+        f'  ATT(["外部 {d["att"]}"])',
+        f'  EXT["{ext}<br/>上流のルータ"]',
+        f'  DUT["{dut}<br/>被験のデバイス"]',
+        f'  LAN(["社内 LAN<br/>{d["nms"]} / {d["srv"]}"])',
+        "  ATT --- EXT",
+        "  EXT --- DUT",
+        "  DUT --- LAN",
+        "```"])
+
+
+def topo_links_copp(d):
+    dut, ext = d["m"]["DUT"], d["m"]["EXT"]
+    return "\n".join([
+        "| 対象 | 内容 |",
+        "|------|------|",
+        f"| {dut} ⇔ {ext}（外部側） | {d['ifaces']['out']}・"
+        f"{d['out_net']}.0/30（{dut}={d['out_ip']} / {ext}={d['ext_ip']}） |",
+        f"| {dut} ⇔ 社内 LAN | {d['ifaces']['in']}・{d['in_net']}.0/24"
+        f"（{dut}={d['in_ip']}） |",
+        f"| 管理のステーション（NMS） | {d['nms']}（SSH / ping の発信元） |",
+        f"| サーバ | {d['srv']} |",
+        f"| 外部の発信元 | {d['att']} |"])
+
+
+def question_md_copp(d, blocks, choices, stamp, form="fix", reqs=None,
+                     style="prose"):
+    dut = d["m"]["DUT"]
+    state_blocks, cfg_blocks = blocks
+    if reqs is None:
+        reqs = copp_requirements(d, random.Random(0), form)
+    if form == "cause":
+        q = ("この事象の原因である可能性が、最も高いものは、どれですか。"
+             "(1つを選択してください)")
+        opts = render_options(choices, "prose")
+    elif form == "read":
+        q = (f"{d['_read_target']}は、示されているところの構成のもとで、"
+             "どのように扱われますか。(1つを選択してください)")
+        opts = render_options(choices, "prose")
+    elif form == "select2":
+        q = ("示されているところの構成の挙動に関する記述として、正しいものは、"
+             "どれとどれですか。(2つを選択してください)")
+        opts = render_options(choices, "prose")
+    elif form == "allthat":
+        # ★数非明示(all-that-apply・§0): 選ぶ個数は示さない
+        q = ("次のトラフィックのうち、示されているところのポリシーの police の"
+             "アクション(適合・超過としての計数と処理)の対象になるものを、"
+             "すべて選んでください。")
+        opts = render_options(choices, "prose")
+    elif style == "cli":
+        q = ("示されているところのすべての要件が満たされることを確実にするために、"
+             "適用されなければならない構成は、どれですか。(1つを選択してください)")
+        opts = render_options(choices, style)
+    else:
+        q = ("この問題を解決し、そして、示されているところのすべての要件が"
+             "満たされることを確実にするために、必要とされる手順は、どれですか。"
+             "(1つを選択してください)")
+        opts = render_options(choices, style)
+    # ★読解系(read/select2/allthat)は「壊れの訴え」を語らない(挙動レビューの体)
+    sympt = ("導入されているところの保護の構成について、その挙動のレビューが、"
+             "実施されています。" if form in ("read", "select2", "allthat")
+             else copp_symptom(d))
+    intro = COPP_INTRO.format(dut=dut, ext=d["m"]["EXT"], nms=d["nms"],
+                              srv=d["srv"])
+    topo = mermaid_copp(d) + "\n\n" + topo_links_copp(d)
+    return f"""# 問題 {stamp} : コントロール・プレーンの保護の分析
+
+{FIXED_NOTE}
+
+## トポロジ
+
+{terse_jp(intro)}
+
+{topo}
+
+## 要件
+
+{chr(10).join(reqs)}
+
+## 現在の状態
+
+{terse_jp(sympt)}
+
+{chr(10).join(state_blocks)}
+
+## 設定抜粋
+
+{chr(10).join(cfg_blocks)}
+
+## 設問
+
+{q}
+
+## 選択肢
+
+{opts}
+"""
+
+
+def answer_md_copp(d, choices, stamp, master_seed, subseed, form):
+    letters = [chr(65 + i) for i in range(len(choices))]
+    correct = "・".join(l for l, c in zip(letters, choices) if c[1])
+    wrongs = "\n".join(f"- **{l}**: {'(正解)' if c[1] else c[2]}"
+                       for l, c in zip(letters, choices))
+    kind_note = {
+        "undef_acl": "class の参照 ACL が未定義 → ★どの punt にも一致しない"
+                     "(0 match のサイレント失効・IF 適用の全許可と逆・PoC P4)",
+        "deny_misread": "★ACL の deny=「拒否」ではなく「class に乗せない」→ "
+                        "除外された発信元だけ class-default で無制限(PoC P3)",
+        "exceed_transmit": "exceed-action transmit → 数えつつ転送="
+                           "何も制限されない(PoC P6)",
+        "conform_drop": "conform/exceed のアクション取り違え → 適合する"
+                        "低レートのトラフィックまで drop=サービス断",
+        "class_order": "広い一致の class が先に評価され、後続の遮断 class に"
+                       "トラフィックが到達しない(制限どまり)",
+        "cdefault_police": "明示の保護 class なしで class-default を police → "
+                           "管理・ルーティングの punt が道連れに制限される",
+        "transit_expect": "★構成は健全。CoPP は punt トラフィックのみ対象"
+                          "(transit は 100% 素通し・カウンタ不変・PoC P2)",
+    }[d["kind"]]
+    world_note = {
+        "w_block": "攻撃元の完全遮断+監視 ping 安定+transit 無影響 → "
+                   "遮断 class を先頭に置く形が唯一適合",
+        "w_limit": "発信元の名指し禁止+専用 class での制限+class-default "
+                   "不変更 → 汎用 ICMP class の超過 drop が唯一適合",
+        "w_protect": "保護対象の明示 class 化+その他は class-default で制限 → "
+                     "protect class+class-default police が唯一適合",
+        "w_monitor": "第1段階=計測のみ・破棄禁止 → conform/exceed とも "
+                     "transmit が唯一適合",
+    }[d["world"]]
+    form_note = {
+        "fix": "", "cause": "",
+        "read": "(対象パケットの帰結をモデルから機械決定)",
+        "select2": "(6択・正解ちょうど2=スロット極性の構成的保証)",
+        "allthat": "★数非明示(all-that-apply)= 正解の数は設問に示さない。"
+                   "正解集合= 分類→policer の有無からの機械決定",
+    }[form]
+    vague_note = ("\n- ★曖昧要件: 管理アクセスのプロトコルは未提示。盤面の "
+                  "`line vty / transport input ssh` から SSH に一意補完する"
+                  + ("(telnet 保護の錯乱肢は管理アクセスを保護しない)"
+                     if form == "fix" else "")
+                  if d.get("vague") else "")
+    works = (f"(機能的に「直る候補」= {', '.join(d['_works'])})"
+             if "_works" in d and form == "fix" else form_note)
+    return f"""# 解答 {stamp}
+
+## 正解
+
+**{correct}**
+
+## 仕込んだ状態
+
+- 種別: `copp/{d['kind']}` — {kind_note}
+- 要件世界: `{d['world']}` — {world_note}
+- 出題形: {form}{works}{vague_note}
+- policer 単位: {d['unit']}(★pps ポリサは counters の bytes 欄がパケット数に
+  なる書式罠・PoC P5)
+- 生成: `gen_paper_mcq.py --shape copp --seed {master_seed}` (sub-seed {subseed})
+
+## 各選択肢の判定
+
+{wrongs}
+
+## 検証コマンドと期待される出力
+
+- `show policy-map control-plane`: 各 class の `conformed/exceeded N packets` と
+  actions 行。**構成に書いていない `bc 1500 bytes` / `burst 2 packets` は
+  自動の既定値が show にだけ現れる**(PoC P0/P5)。
+- 攻撃のトラフィックへの対処は、**DUT 側のカウンタの増分**で確認する
+  (発信側の ping の成功率は、exceed transmit では 100% のまま=判定に使えない)。
+
+## ★この分野の最重要知見(BL-125 PoC 実測・poc/copp/README.md)
+
+**CoPP はルータ自身に宛てられた(punt)トラフィックのみを対象とする。**
+通過(transit)のトラフィックは policer 稼働中でも 100% 素通し・カウンタ完全不変。
+そして class 分類の ACL は意味が反転して見える: **permit=分類対象/deny=分類除外**
+であり、deny は「拒否」ではない。参照 ACL が未定義の class は**どの punt にも
+一致せず**(IF 適用の「全許可」と逆)、通信は困らないまま保護だけが黙って失効する。
+
+## ENARSI ブループリント
+
+- 3.0 Infrastructure Security — 3.3 Troubleshoot control plane policing (CoPP)
+"""
+
+
+# --------------------------------------------------------------------------
+# shape=pref — 経路選好 OSPF 1.10.d × EIGRP 1.9.c (gen_paper_pref 流用・BL-127)
+# ★紙面専用: 証拠は PoC 実測(poc/pref/README.md・IOL 17.15)の byte 写し。
+#   勝者・搭載集合は決定リストの純関数モデル(ospfpref_model / eigrpfs_model)。
+#   ユーザ判断(2026-08-16)= OSPF 系と EIGRP 系を **1 つの shape** に統合し、
+#   kinds で系を分ける。
+# --------------------------------------------------------------------------
+def pick_draw_pref(qseed, kind, forms=None):
+    for kk in range(400):
+        s = qseed + kk * 149
+        try:
+            d = gpr.draw(random.Random(s), kind=kind)
+        except ValueError:
+            continue
+        if forms and not (gpr.forms_for(d) & set(forms)):
+            continue
+        return s, d
+    raise SystemExit(f"pref kind={kind} が成立する seed が見つかりません({qseed})")
+
+
+def pref_evidence(d, rnd, form):
+    """紙面に出すブロック群(state=状態の show / cfg=構成)。
+
+    ★read 形では **RIB(show ip route)を出さない**(答えそのもの)。
+      OSPF= LSA 断片+`show ip ospf border-routers`(ASBR/ABR までの内部コスト)、
+      EIGRP= `show ip eigrp topology all-links`(variance 構成前)。
+    """
+    obs = d["obs"]
+    if d["fam"] == "ospf":
+        state = []
+        if d["kind"] == "type_intra":
+            state.append(f"```\n{obs}# show ip ospf database summary "
+                         f"{d['pfx']}\n{gpr.ospf_db_summary(d)}\n```")
+        else:
+            state.append(f"```\n{obs}# show ip ospf database external "
+                         f"{d['pfx']}\n{gpr.ospf_db_external(d)}\n```")
+        state.append(f"```\n{obs}# show ip ospf border-routers\n"
+                     f"{gpr.ospf_border_routers(d)}\n```")
+        cfg = [f"```\n{obs}# show running-config | section router ospf\n"
+               f"router ospf {d['proc']}\n router-id {d['obs_rid']}\n"
+               + "".join(f" network {n['net'].replace('/24', '')} "
+                         f"0.0.0.255 area 0\n" for n in d["nbrs"])
+               + "```"]
+        cfg.append("```\n" + f"{obs}# show running-config | section interface\n"
+                   + "\n".join(f"interface {n['iface']}\n"
+                               f" description === to {n['name']} ===\n"
+                               f" ip address {n['nh'].rsplit('.', 1)[0]}.1 "
+                               "255.255.255.0\n"
+                               f" ip ospf cost {n['cost']}"
+                               for n in d["nbrs"]) + "\n```")
+        return state, cfg
+    state = [f"```\n{obs}# show ip eigrp topology all-links\n"
+             f"{gpr.eigrp_topology(d, all_links=True)}\n```"]
+    cfg = [f"```\n{obs}# show running-config | section router eigrp\n"
+           f"router eigrp {d['asn']}\n eigrp router-id {d['obs_rid']}\n"
+           f" network {d['net']}.0.0 0.0.255.255\n no auto-summary\n```"]
+    cfg.append("```\n" + f"{obs}# show running-config | section interface\n"
+               + "\n".join(f"interface {p['iface']}\n"
+                           f" description === to {p['name']} ===\n"
+                           f" ip address {p['nh'].rsplit('.', 1)[0]}.1 "
+                           "255.255.255.0\n"
+                           f" delay {p['near']}"
+                           for p in d["paths"]) + "\n```")
+    return state, cfg
+
+
+# ★要件世界= 制約の束(gpr.WORLD_RULES と 1 対 1 に対応させること。
+#   文面と機械判定がずれると、fix の一意性の保証が嘘になる)。
+PREF_WORLD_TXT = {
+    "w_freeze_area": [
+        "エリアの構成(どのネットワークが、どのエリアに属するか)は、"
+        "変更されてはなりません。",
+        "構成の変更は、1 箇所に限られなければなりません。"],
+    "w_no_e1": [
+        "外部の経路として再配送されるときの、メトリックの型(タイプ 1 または"
+        "タイプ 2)は、変更されてはなりません。",
+        "構成の変更は、1 箇所に限られなければなりません。"],
+    "w_variance_cap": [
+        "不等コストのロード・バランシングのために用いられる倍率は、"
+        "示されている値を超えて拡大されてはなりません。",
+        "構成の変更は、1 箇所に限られなければなりません。"],
+    "w_single_touch": [
+        "構成の変更は、1 箇所に限られなければなりません。",
+        "現在の最良の経路のメトリックは、悪化させられてはなりません。"],
+    "w_local_only": [
+        "構成の変更は、1 箇所に限られなければなりません。",
+        "構成の変更は、対象のルータ自身においてのみ、実施されなければ"
+        "なりません(他のデバイスの構成は、変更されてはなりません)。",
+        "現在の最良の経路のメトリックは、悪化させられてはなりません。"],
+    "w_target_only": [
+        "構成の変更は、1 箇所に限られなければなりません。",
+        "現在選好されているところの経路の側の構成(その経路を広告している"
+        "ルータ、および、その経路に向かうインタフェース)は、変更されては"
+        "なりません。"],
+}
+
+
+def pref_requirements(d, rnd, form):
+    core = [
+        f"{d['obs']} における {d['pfx_len']} への転送のパスは、"
+        "運用の設計の意図と一致していなければなりません。",
+        "既存の隣接関係(アジャセンシー)は、維持されなければなりません。",
+    ]
+    core += PREF_WORLD_TXT[d["world"]]
+    # ★「対象外であるところのデバイスの変更は不可」のダミーは、w_local_only
+    #   と同じことを言ってしまい、他の世界では一意性を壊す(remote 候補を
+    #   機械判定の外で禁止してしまう)ので、この shape では使わない。
+    core += rnd.sample([x for x in REQ_DECOYS
+                        if "対象外であるところのデバイス" not in x], 1)
+    rnd.shuffle(core)
+    return finalize_reqs(core, rnd)
+
+
+PREF_INTRO_OSPF = (
+    "拠点のルータ {obs} は、複数の隣接するルータを経由して、"
+    "{pfx} への経路を学習しています。ネットワークは単一の OSPF の"
+    "ドメインとして運用されており、そして、{obs} は当該のプレフィックスを"
+    "複数の経路によって受け取っています。")
+PREF_INTRO_EIGRP = (
+    "拠点のルータ {obs} は、複数の隣接するルータを経由して、"
+    "{pfx} への経路を学習しています。ネットワークは単一の EIGRP の"
+    "オートノマス・システム({asn})として運用されており、そして、"
+    "冗長なパスの活用が検討されています。")
+
+
+def mermaid_pref(d):
+    L = ["```mermaid", f"graph {d.get('_mmdir', 'LR')}",
+         f'  OBS["{d["obs"]}<br/>観測点"]']
+    nodes = (d["nbrs"] if d["fam"] == "ospf" else d["paths"])
+    for i, n in enumerate(nodes):
+        L.append(f'  N{i}["{n["name"]}"]')
+    L.append(f'  DST(["{d["pfx_len"]}"])')
+    for i, n in enumerate(nodes):
+        L.append(f"  OBS --- N{i}")
+        L.append(f"  N{i} --- DST")
+    L.append("```")
+    return "\n".join(L)
+
+
+def topo_links_pref(d):
+    """★type_intra はエリア内のコストの内訳を、ここだけが持つ(証拠の一部)。"""
+    L = ["| 対象 | 内容 |", "|------|------|"]
+    if d["fam"] == "ospf":
+        for n in d["nbrs"]:
+            L.append(f"| {d['obs']} ⇔ {n['name']} | {n['iface']}・{n['net']}"
+                     f"（{d['obs']} 側の OSPF のコスト = {n['cost']}） |")
+        if d["kind"] == "type_intra":
+            adv = [p for p in d["paths"] if p["kind"] == "intra"][0]
+            L.append(f"| {adv['nbr']['name']} における {d['pfx_len']} | "
+                     f"当該のプレフィックスを持つインタフェースは、エリア 0 に"
+                     f"属し、その OSPF のコストは {d['stub_cost']} |")
+            L.append(f"| {d['abr']['name']} | エリア 0 と エリア {d['area']} の"
+                     "境界のルータ（ABR）。エリア "
+                     f"{d['area']} 側にも、同一のプレフィックスが存在する |")
+        else:
+            for p in d["paths"]:
+                L.append(f"| {p['nbr']['name']} | 外部の経路を再配送している"
+                         "ルータ（ASBR） |")
+    else:
+        for p in d["paths"]:
+            L.append(f"| {d['obs']} ⇔ {p['name']} | {p['iface']}・"
+                     f"{p['nh'].rsplit('.', 1)[0]}.0/24"
+                     f"（{d['obs']} 側の delay = {p['near']}） |")
+        L.append(f"| 宛先 | {d['pfx_len']}（すべての隣接から到達可能） |")
+    return "\n".join(L)
+
+
+def question_md_pref(d, blocks, choices, stamp, form="read", reqs=None,
+                     style="prose"):
+    state_blocks, cfg_blocks = blocks
+    if reqs is None:
+        reqs = pref_requirements(d, random.Random(0), form)
+    q = {"read": gpr.read_question, "why": gpr.why_question,
+         "fix": gpr.fix_question, "cause": gpr.cause_question,
+         "allthat": gpr.allthat_question}[form](d)
+    opts = render_options(choices, "prose")
+    intro = (PREF_INTRO_OSPF if d["fam"] == "ospf" else PREF_INTRO_EIGRP)
+    intro = intro.format(obs=d["obs"], pfx=d["pfx_len"], asn=d.get("asn"))
+    sympt = ("経路の選好に関する挙動のレビューが、実施されています。")
+    topo = mermaid_pref(d) + "\n\n" + topo_links_pref(d)
+    return f"""# 問題 {stamp} : 経路の選好の分析
+
+{FIXED_NOTE}
+
+## トポロジ
+
+{terse_jp(intro)}
+
+{topo}
+
+## 要件
+
+{chr(10).join(reqs)}
+
+## 現在の状態
+
+{terse_jp(sympt)}
+
+{chr(10).join(state_blocks)}
+
+## 設定抜粋
+
+{chr(10).join(cfg_blocks)}
+
+## 設問
+
+{q}
+
+## 選択肢
+
+{opts}
+"""
+
+
+PREF_KIND_NOTE = {
+    "type_intra": "★エリア内 > エリア間の型優先。**コストの大小より先に型が"
+                  "効く**(PoC 実測: コスト 510 の intra が コスト 21 の "
+                  "inter に勝つ)",
+    "type_e1e2": "★E1 > E2 の型優先。E2 の表示メトリックが小さくても覆らない"
+                 "(PoC 実測: E1 累積 110 が E2 10 に勝つ)",
+    "e2_fwd": "E2 同値 → forward metric(ASBR までの内部コスト)の第2段"
+              "(PoC 実測: 10 vs 100 で決着・detail に `forward metric` 句)",
+    "e1_accum": "E1 のメトリックは 外部メトリック + ASBR までの内部コスト"
+                "(PoC 実測: 内部 10→60 で 110→160)",
+    "fc_strict": "★★FC は厳密不等号。**RD == サクセサの FD は不成立**"
+                 "(PoC 実測: variance 4 でも載らず、FD がより大きい FS の"
+                 "ほうが載る)",
+    "fs_allthat": "FS の定義(サクセサを除き FC を満たすもの)の列挙",
+    "variance_bound": "FS でも FD が variance × サクセサの FD を超えると"
+                      "載らない(PoC 実測: 倍率 2 で不可・3 で可)",
+    "variance_nonfc": "★FC 不成立の経路は、倍率をいくら上げても載らない",
+}
+PREF_WORLD_NOTE = {
+    "w_freeze_area": "エリア構成の凍結+1箇所 → エリア移動による是正を殺す",
+    "w_no_e1": "メトリック型の変更禁止+1箇所 → metric-type 化の是正を殺す",
+    "w_variance_cap": "倍率を上げない+1箇所 → 倍率で解く手を殺し、"
+                      "FC/範囲を作る側へ寄せる",
+    "w_single_touch": "1箇所+最良経路を悪化させない → 2箇所解と"
+                      "「サクセサを悪化させて条件を作る」解を殺す",
+    "w_local_only": "1箇所+観測点のみ+悪化させない → 隣接側の変更を殺す",
+    "w_target_only": "1箇所+現在の勝者側は触らない → 「勝っている側を"
+                     "劣化させる」解を殺す",
+}
+
+
+def answer_md_pref(d, choices, stamp, master_seed, subseed, form):
+    form_note = {
+        "fix": (f"(機能的に「目的を達成する候補」= {', '.join(d.get('_fix_works', []))}"
+                f" / 要件に適合するのは `{d.get('_fix_correct')}` のみ)"),
+        "allthat": "(★数非明示(all-that-apply)= 正解の数は設問に示さない。"
+                   "正解集合= FC(RD < サクセサの FD)の整数比較で機械決定)",
+        "read": "(搭載される集合をモデルから機械決定)",
+        "why": "(決め手の段/搭載されない唯一の理由をモデルから機械決定)",
+        "cause": "",
+    }.get(form, "")
+    vague_note = ("\n- ★曖昧要件: 対象の経路を名指ししない。"
+                  + ("盤面で唯一「より小さい外部メトリックが広告されている側」"
+                     "として一意に補完する" if d["fam"] == "ospf" else
+                     "盤面で唯一「搭載されていない冗長なパス」として一意に補完する")
+                  if d.get("vague") else "")
+    letters = [chr(65 + i) for i in range(len(choices))]
+    correct = "・".join(l for l, c in zip(letters, choices) if c[1])
+    wrongs = "\n".join(f"- **{l}**: {'(正解)' if c[1] else c[2]}"
+                       for l, c in zip(letters, choices))
+    if d["fam"] == "ospf":
+        detail = "\n".join(
+            f"- {p['nbr']['name']}({p['nh'] if 'nh' in p else p['nbr']['nh']})"
+            f"経由: 型={opm_type_ja(p['kind'])} / 実効メトリック="
+            f"{gpr.opm.metric_eff(p)}"
+            + (f"(外部 {p['ext']} + 内部 {p['fwd']})"
+               if p["kind"] in ("e1", "n1") else
+               f"(外部 {p['ext']} 固定・forward metric {p['fwd']})"
+               if p["kind"] in ("e2", "n2") else "")
+            for p in d["paths"])
+        model = (f"- 決め手の段: `{d['_step']}` — "
+                 f"{gpr.opm.STEP_JA[d['_step']]}\n- 勝者: {d['_winner']}")
+        verify = (f"`show ip route {d['pfx']}` の detail 1 行目で型を読む"
+                  "(`type intra area` / `type inter area` / `type extern 1` / "
+                  "`type extern 2, forward metric N`)。"
+                  "★**forward metric の句は外部タイプ 2 にしか現れない**。")
+    else:
+        detail = "\n".join(
+            f"- {p['name']}({p['nh']})経由: RD={p['rd']} / FD="
+            f"{gpr.efs.fd(p)} / 位置づけ="
+            f"{gpr.efs.ROLE_JA[d['_roles'][p['key']]]}"
+            for p in sorted(d["paths"], key=gpr.efs.fd))
+        model = (f"- サクセサの FD = {gpr.efs.fd_succ(d['paths'])} / "
+                 f"variance {d['variance']} の範囲 = "
+                 f"{d['variance'] * gpr.efs.fd_succ(d['paths'])}\n"
+                 f"- 搭載される経路: {len(d['_installed'])} 本")
+        verify = (f"`show ip eigrp topology all-links` の via 行は **(FD/RD)** "
+                  "の順。`show ip eigrp topology` は**サクセサと FS しか"
+                  "出さない**(FC 不成立の経路は all-links にしか出ない)。"
+                  "variance を入れると `N successors` の N が搭載本数に変わる。")
+    return f"""# 解答 {stamp}
+
+## 正解
+
+**{correct}**
+
+## 仕込んだ状態
+
+- 種別: `pref/{d['kind']}` — {PREF_KIND_NOTE[d['kind']]}
+- 要件世界: `{d['world']}` — {PREF_WORLD_NOTE[d['world']]}
+- 出題形: {form}{form_note}{vague_note}
+- 生成: `gen_paper_mcq.py --shape pref --seed {master_seed}` (sub-seed {subseed})
+
+## 盤面の内訳
+
+{detail}
+
+{model}
+
+## 各選択肢の判定
+
+{wrongs}
+
+## 検証コマンドと期待される出力
+
+- {verify}
+
+## ★この分野の最重要知見(BL-127 PoC 実測・poc/pref/README.md)
+
+**OSPF の選好は「型が先・メトリックは後」**。コストが小さいエリア間の経路は、
+コストが大きいエリア内の経路に勝てない。外部の経路では、タイプ 1 が
+タイプ 2 に先行し、タイプ 1 のメトリックだけが ASBR までの内部のコストを累積する。
+
+**EIGRP のフィージビリティの条件は厳密な不等号**であり、RD が現在のサクセサの
+FD と**等しい**経路は、フィージブル・サクセサにならない。実測では、
+その経路(FD 460800)が variance 4 でも搭載されず、**FD がより大きい**
+フィージブル・サクセサ(FD 486400)のほうが搭載された。
+variance は、FC を満たす経路の中から倍率の範囲に収まるものを乗せる機構であって、
+FC を満たさない経路を乗せる機構ではない。
+
+## ENARSI ブループリント
+
+- 1.0 Layer 3 Technologies — 1.10.d OSPF のパスの選好 /
+  1.9.c EIGRP の FD・FS・variance
+"""
+
+
+def opm_type_ja(kind):
+    return gpr.opm.TYPE_JA[kind]
+
+
+# --------------------------------------------------------------------------
 # 展開・収集・撤収
 # --------------------------------------------------------------------------
 def sh(repo, args, **kw):
@@ -6715,7 +7458,8 @@ def main():
     ap.add_argument("--shape",
                     choices=["chain", "ring", "pbr", "urpf", "bgpdbg", "mploop",
                              "riploop", "leakmap", "ospfv3pl", "v6redist",
-                             "aaa", "acl", "aclv6", "bgpbest", "mixed"],
+                             "aaa", "acl", "aclv6", "bgpbest", "copp", "pref",
+                             "mixed"],
                     default="chain",
                     help="chain=再配送欠落/誤設定系(既定) / ring=再配送リングの定常ループ(難5)"
                          " / riploop=RIP⇄OSPF 対策が効いていない型(BL-116)"
@@ -6729,13 +7473,19 @@ def main():
                          " / v6redist=OSPFv3⇄EIGRPv6相互再配送の手段選択"
                          "(BL-098・紙面専用)"
                          " / bgpbest=BGPベストパス読解(BL-112・紙面専用)"
+                         " / copp=CoPP 分類→police(BL-125・紙面専用・"
+                         "5形= fix/cause/read/select2/allthat)"
+                         " / pref=経路選好 OSPF 1.10.d×EIGRP 1.9.c"
+                         "(BL-127・紙面専用・P1= read/why)"
                          " / mixed=問題ごとに形・種別を抽選(ごちゃまぜ)")
     ap.add_argument("--forms", default="",
                     help="出題形を絞る(カンマ区切り)。shape=acl: select,read,"
                          "cause,counter,patch,fix,evidence,logread,compare / "
                          "shape=aclv6: select,read,cause,counter / "
                          "shape=bgpbest: read,why,fix,cause / "
-                         "shape=bgpdbg: dbgconf,select2,fix,read,essay。"
+                         "shape=bgpdbg: dbgconf,select2,fix,read,essay / "
+                         "shape=copp: fix,cause,read,select2,allthat / "
+                         "shape=pref: read,why。"
                          "指定した形が成立する盤面を seed 探索で選ぶ。"
                          "他の shape では無視される。")
     ap.add_argument("--worlds", default="",
@@ -6778,7 +7528,8 @@ def main():
                 "bgpdbg": gpb.VARIANTS, "leakmap": gpk.KINDS,
                 "ospfv3pl": gpo.KINDS, "v6redist": gpv.KINDS,
                 "aaa": gpa.KINDS, "acl": gpl.KINDS,
-                "aclv6": gp6.KINDS, "bgpbest": gbb.KINDS}.get(a.shape, KINDS)
+                "aclv6": gp6.KINDS, "bgpbest": gbb.KINDS,
+                "copp": gpc.KINDS, "pref": gpr.KINDS}.get(a.shape, KINDS)
         kinds = (a.kinds.split(",") if a.kinds
                  else random.Random(a.seed ^ 0x5EED).sample(pool, len(pool)))
         if not set(kinds) <= set(pool):
@@ -6786,7 +7537,7 @@ def main():
     want_forms = [x.strip() for x in a.forms.split(",") if x.strip()]
     want_worlds = [x.strip() for x in a.worlds.split(",") if x.strip()]
     if want_forms and a.shape not in ("acl", "aclv6", "bgpbest", "bgpdbg",
-                                      "mixed"):
+                                      "copp", "pref", "mixed"):
         print(f"[!] --forms は shape={a.shape} では無視されます", flush=True)
     if want_worlds and a.shape not in ("acl", "aclv6", "bgpbest", "mixed"):
         print(f"[!] --worlds は shape={a.shape} では無視されます", flush=True)
@@ -6809,9 +7560,10 @@ def main():
     #   違うので(例: compare は dense_list だけ・fix は routefilter だけ)、
     #   種を先に決めてから形を探すと「その形を持たない種」で詰む。
     if want_forms and kinds is not None and a.shape in ("acl", "aclv6",
-                                                        "bgpbest", "bgpdbg"):
+                                                        "bgpbest", "bgpdbg",
+                                                        "copp", "pref"):
         mod = {"acl": gpl, "aclv6": gp6, "bgpbest": gbb,
-               "bgpdbg": gpb}[a.shape]
+               "bgpdbg": gpb, "copp": gpc, "pref": gpr}[a.shape]
         keep = [k for k in kinds if set(want_forms) & mod.kind_forms(k)]
         if not keep:
             raise SystemExit(
@@ -6830,21 +7582,28 @@ def main():
         if a.shape == "mixed":
             roll = random.Random(qseed ^ 0xC0FE)
             r = roll.random()
-            # ★配分(2026-08-16 bgpdbg 選択式化 BL-124 で再調整)= 概ね 5〜9%。
-            #   bgpdbg の 5% は pbr/urpf/leakmap/ospfv3pl/chain から 1% ずつ捻出
-            #   (BGP 合計 13%= BL-100/111 の「BGP 最優先・再配送系は飽和」に整合)。
-            #   経緯= bgpbest の枠(2026-08-12)は再配送系を薄めて捻出・
+            # ★配分(2026-08-16 CoPP 合流 BL-125 で再調整)= 概ね 5〜8%。
+            #   copp の 7% は pbr/urpf/mploop/leakmap/ospfv3pl/v6redist/aaa から
+            #   1% ずつ捻出(Security 20% の空白解消= BL-100 優先題材④。
+            #   再配送系は飽和= BL-111 に整合)。
+            #   経緯= bgpdbg 5%(BL-124)は pbr/urpf/leakmap/ospfv3pl/chain から・
+            #   bgpbest の枠(2026-08-12)は再配送系を薄めて捻出・
             #   riploop(BL-116)の枠は ring を割って捻出。
+            #   ★pref の 5%(BL-127・2026-08-16)は pbr/urpf/leakmap/
+            #   ospfv3pl/bgpbest から 1% ずつ捻出した**暫定枠**。
+            #   全体の再配分はユーザ判断により後日まとめて行う。
             shape_i = ("ring" if r < 0.06 else "riploop" if r < 0.11
-                       else "pbr" if r < 0.20
-                       else "urpf" if r < 0.29 else "mploop" if r < 0.37
-                       else "leakmap" if r < 0.46 else "ospfv3pl" if r < 0.55
-                       else "v6redist" if r < 0.63
-                       else "aaa" if r < 0.71
-                       else "acl" if r < 0.77
-                       else "aclv6" if r < 0.82
-                       else "bgpbest" if r < 0.90
-                       else "bgpdbg" if r < 0.95 else "chain")
+                       else "pbr" if r < 0.18
+                       else "urpf" if r < 0.25 else "mploop" if r < 0.32
+                       else "leakmap" if r < 0.39 else "ospfv3pl" if r < 0.46
+                       else "v6redist" if r < 0.53
+                       else "aaa" if r < 0.60
+                       else "acl" if r < 0.66
+                       else "aclv6" if r < 0.71
+                       else "bgpbest" if r < 0.78
+                       else "bgpdbg" if r < 0.83
+                       else "copp" if r < 0.90
+                       else "pref" if r < 0.95 else "chain")
             kind = roll.choice({"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
                                 "urpf": gpu.URPF_KINDS, "mploop": MPLOOP_KINDS,
                                 "riploop": RIPLOOP_KINDS,
@@ -6854,7 +7613,9 @@ def main():
                                 "acl": gpl.KINDS,
                                 "aclv6": gp6.KINDS,
                                 "bgpbest": gbb.KINDS,
-                                "bgpdbg": gpb.VARIANTS}.get(shape_i, KINDS))
+                                "bgpdbg": gpb.VARIANTS,
+                                "copp": gpc.KINDS,
+                                "pref": gpr.KINDS}.get(shape_i, KINDS))
         else:
             shape_i = a.shape
             kind = kinds[i % len(kinds)]
@@ -6923,6 +7684,10 @@ def main():
         elif shape_i == "bgpdbg":
             subseed = qseed
             d = gpb.draw(random.Random(subseed), variant=kind)
+        elif shape_i == "copp":
+            subseed, d = pick_draw_copp(qseed, kind)
+        elif shape_i == "pref":
+            subseed, d = pick_draw_pref(qseed, kind, forms=want_forms)
         else:
             subseed, d = pick_draw(qseed, kind, hard=a.hard)
         prob_id = f"PAPER-RD-{subseed}"
@@ -6983,6 +7748,12 @@ def main():
         elif shape_i == "aclv6":
             plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
             choices = gp6.build_choices_cause(d, rnd)
+        elif shape_i == "copp":
+            plan = {"checks": []}          # 紙面専用(分類→police モデルの写像)
+            choices = None                 # ★形の抽選後に一括で組む(P2・下記)
+        elif shape_i == "pref":
+            plan = {"checks": []}          # 紙面専用(決定リスト・モデルの写像)
+            choices = None                 # ★形の抽選後に組む(下記)
         elif shape_i == "bgpdbg":
             plan = {"checks": []}          # 紙面専用(実機 PoC 出力の写し)
             # ★BL-124: 選択式が既定。essay(記述式)は --shape bgpdbg --forms essay
@@ -7009,7 +7780,8 @@ def main():
                      if (a.exam and shape_i not in ("bgpdbg", "leakmap",
                                                     "ospfv3pl", "v6redist",
                                                     "aaa", "acl", "aclv6",
-                                                    "bgpbest"))
+                                                    "bgpbest", "copp",
+                                                    "pref"))
                      else None)
         # 赤ニシン(exam): 未適用ポリシー+無害な適用行を config に混入(pbr は素で騒がしい)
         herr, decoy = None, None
@@ -7021,6 +7793,61 @@ def main():
         form = "fix"
         if shape_i == "bgpdbg":
             form = bgpdbg_form             # ★BL-124: 抽選済みの形(exam に依らない)
+        if shape_i == "copp":
+            # ★P2: 成立する形(gpc.kind_forms)から抽選/指定。--forms 対応。
+            #   非 exam の既定= fix(無い kind は cause)。
+            avail = sorted(gpc.kind_forms(d["kind"]))
+            if want_forms:
+                avail = [f for f in avail if f in want_forms] or avail
+            if a.exam:
+                wts = {"fix": 40, "cause": 20, "read": 15, "select2": 15,
+                       "allthat": 10}
+                r_w = rnd.random() * sum(wts[f] for f in avail)
+                for f in ("fix", "cause", "read", "select2", "allthat"):
+                    if f not in avail:
+                        continue
+                    r_w -= wts[f]
+                    if r_w < 0:
+                        form = f
+                        break
+            elif want_forms:
+                form = rnd.choice(avail)   # 明示指定時は指定内から抽選
+            else:
+                form = ("fix" if "fix" in avail
+                        else "cause" if "cause" in avail else avail[0])
+            choices = {"cause": gpc.build_choices_cause,
+                       "read": gpc.build_choices_read,
+                       "select2": gpc.build_choices_select2,
+                       "allthat": gpc.build_choices_allthat,
+                       "fix": gpc.build_choices_fix}[form](d, rnd)
+        if shape_i == "pref":
+            # ★P2: 盤面で成立する形(gpr.forms_for= fix は一意性検証に通った
+            #   盤面だけ)から抽選/指定。--forms 対応。
+            avail = sorted(gpr.forms_for(d))
+            if want_forms:
+                avail = [f for f in avail if f in want_forms] or avail
+            if a.exam:
+                # ★allthat(数非明示)は fs_allthat 盤面にしか無いので、
+                #   出現させたい割合まで重みを上げる(全体の 3〜4%)。
+                wts = {"fix": 35, "cause": 20, "read": 20, "why": 15,
+                       "allthat": 40}
+                r_w = rnd.random() * sum(wts[f] for f in avail)
+                for f in ("fix", "cause", "read", "why", "allthat"):
+                    if f not in avail:
+                        continue
+                    r_w -= wts[f]
+                    if r_w < 0:
+                        form = f
+                        break
+            elif want_forms:
+                form = rnd.choice(avail)
+            else:
+                form = "fix" if "fix" in avail else "read"
+            choices = {"read": gpr.build_choices_read,
+                       "why": gpr.build_choices_why,
+                       "fix": gpr.build_choices_fix,
+                       "cause": gpr.build_choices_cause,
+                       "allthat": gpr.build_choices_allthat}[form](d, rnd)
         # ★紙面専用 shape は既定形が fix ではない。form は解答 md の「出題形」欄
         #   だけでなく**提示物の出し分け**(acl_evidence)にも使われるので、
         #   ここで実際に組んだ形に合わせておく(既定= cause / 無ければ read)。
@@ -7317,6 +8144,10 @@ def main():
                 reqs = urpf_requirements(d, rnd, sites)
             elif shape_i == "leakmap":
                 reqs = leakmap_requirements(d, rnd)
+            elif shape_i == "copp":
+                reqs = copp_requirements(d, rnd, form)
+            elif shape_i == "pref":
+                reqs = pref_requirements(d, rnd, form)
             elif shape_i == "ospfv3pl":
                 reqs = ospfv3pl_requirements(d, rnd)
             elif shape_i == "v6redist":
@@ -7341,6 +8172,12 @@ def main():
             # ★mploop も同様(監査ポリシーが fix 一意性の担い手)。従来は exam 専用
             #   運用で非 exam は reqs=None のまま TypeError になっていた(BL-118 で検出)。
             reqs = mploop_requirements(d, mp_names, kind, rnd, form=form)
+        if shape_i == "copp" and reqs is None:
+            # ★copp の要件は世界=fix 一意性の担い手(非 exam でも必須)
+            reqs = copp_requirements(d, rnd, form)
+        if shape_i == "pref" and reqs is None:
+            # ★pref の要件世界は P2 の fix 一意性の担い手(非 exam でも常設)
+            reqs = pref_requirements(d, rnd, form)
         if shape_i == "bgpdbg" and form in ("select2", "fix"):
             # ★BL-124: bgpdbg の要件は是正形の一意性の担い手(exam に依らず必須。
             #   「設計の維持」「開始側への非依存」が錯乱肢の決定的な排除条件)。
@@ -7350,7 +8187,7 @@ def main():
               f"nodes={6 if shape_i in ('mploop', 'riploop') else len(d.get('roles', [d.get('A'), d.get('B')]))}", flush=True)
 
         if shape_i in ("urpf", "bgpdbg", "leakmap", "ospfv3pl", "v6redist",
-                       "aaa", "acl", "aclv6", "bgpbest"):
+                       "aaa", "acl", "aclv6", "bgpbest", "copp", "pref"):
             collected = {}                 # 紙面専用: 実機展開・収集を行わない
         elif a.no_lab:
             collected = {(c["node"], c["command"]): "(PLACEHOLDER: --no-lab)"
@@ -7468,6 +8305,20 @@ def main():
                                        reqs=reqs, style=opt_style)
             a_md = answer_md_leakmap(d, choices, stamp, a.seed, subseed, form)
             lint += list(gpk.KINDS) + ["world=", "_works", "_correct"]
+        elif shape_i == "copp":
+            blocks = copp_evidence(d, rnd, form)
+            q_md = question_md_copp(d, blocks, choices, stamp, form=form,
+                                    reqs=reqs, style=opt_style)
+            a_md = answer_md_copp(d, choices, stamp, a.seed, subseed, form)
+            lint += list(gpc.KINDS) + ["world=", "_works", "_correct"]
+        elif shape_i == "pref":
+            blocks = pref_evidence(d, rnd, form)
+            q_md = question_md_pref(d, blocks, choices, stamp, form=form,
+                                    reqs=reqs, style=opt_style)
+            a_md = answer_md_pref(d, choices, stamp, a.seed, subseed, form)
+            # ★"サクセサの FD" は why 形の選択肢に正当に現れるので lint しない
+            lint += list(gpr.KINDS) + ["world=", "_winner", "_step",
+                                       "_installed", "_roles", "_why_target"]
         elif shape_i == "ospfv3pl":
             blocks = ospfv3pl_evidence(d, rnd, form)
             q_md = question_md_ospfv3pl(d, blocks, choices, stamp, form=form,
@@ -7554,7 +8405,27 @@ def main():
                                       #   選ぶ個数が、dbgconf は前提文(示されている
                                       #   出力が全て)が設問側の情報の担い手。
                                       or (shape_i == "bgpdbg"
-                                          and form != "essay")))
+                                          and form != "essay")
+                                      # ★BL-125: transit_expect は構成が健全で、
+                                      #   「通過トラフィックが制限されない」という
+                                      #   症状文だけが情報の担い手(証拠からは
+                                      #   何も壊れていないことしか読めない)。
+                                      #   P2 の read/select2/allthat も設問文が
+                                      #   情報の担い手(対象パケットの指定/選ぶ個数/
+                                      #   数非明示の「すべて選べ」)+非故障の
+                                      #   レビュー文言(汎用の症状文が存在しない
+                                      #   障害を参照してしまう)。
+                                      or (shape_i == "copp"
+                                          and (d["kind"] == "transit_expect"
+                                               or form in ("read", "select2",
+                                                           "allthat")))
+                                      # ★BL-127: pref は全形 keep_ask。盤面は
+                                      #   **壊れていない**(選好の読解)ので汎用の
+                                      #   症状文は存在しない障害を参照してしまい、
+                                      #   設問文が対象(どのプレフィックス・どの
+                                      #   経路・variance をいくつ構成した場合か)
+                                      #   を担っているため、汎用文に均すと解答不能。
+                                      or shape_i == "pref"))
         leak_lint(q_md, lint)
         with open(f"{repo}/questions/{stamp}.md", "w", encoding="utf-8") as fh:
             fh.write(q_md)
