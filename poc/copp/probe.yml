@@ -1,0 +1,214 @@
+# BL-125 CoPP PoC 探針 (2026-08-16)
+# 使い方: .venv/bin/ansible-playbook poc/copp/probe.yml -i poc/copp/inv.ini
+# 前提: _POC-COPP 稼働中(RT01=DUT, RT02/RT03=対向)。出力は poc/copp/probes/ へ。
+---
+- name: RT01 に PoC 用オブジェクトを段組み
+  hosts: RT01
+  gather_facts: false
+  tasks:
+    - cisco.ios.ios_config:
+        lines:
+          - access-list 110 permit icmp any any
+          - access-list 111 deny icmp host 10.201.12.2 any
+          - access-list 111 deny icmp host 2.2.2.2 any
+          - access-list 111 permit icmp any any
+    - cisco.ios.ios_config:
+        parents: class-map match-all CM-ICMP
+        lines: [match access-group 110]
+    - cisco.ios.ios_config:
+        parents: class-map match-all CM-ICMP-EXCL
+        lines: [match access-group 111]
+    - cisco.ios.ios_config:
+        parents: class-map match-all CM-UNDEF
+        lines: [match access-group 199]
+    - cisco.ios.ios_config:
+        parents: [policy-map PM-BPS, class CM-ICMP]
+        lines: [police 8000 conform-action transmit exceed-action drop]
+    - cisco.ios.ios_config:
+        parents: [policy-map PM-PPS, class CM-ICMP]
+        lines: [police rate 10 pps conform-action transmit exceed-action drop]
+    - cisco.ios.ios_config:
+        parents: [policy-map PM-TRANSMIT, class CM-ICMP]
+        lines: [police 8000 conform-action transmit exceed-action transmit]
+    - cisco.ios.ios_config:
+        parents: [policy-map PM-EXCL, class CM-ICMP-EXCL]
+        lines: [police 8000 conform-action transmit exceed-action drop]
+    - cisco.ios.ios_config:
+        parents: [policy-map PM-UNDEF, class CM-UNDEF]
+        lines: [police 8000 conform-action transmit exceed-action drop]
+    - name: 定義書式の採取
+      cisco.ios.ios_command:
+        commands:
+          - show class-map
+          - show policy-map
+          - show access-lists
+      register: defs
+    - copy:
+        content: "{{ defs.stdout | join('\n\n=====\n\n') }}"
+        dest: "{{ playbook_dir }}/probes/P0-definitions.txt"
+      delegate_to: localhost
+
+- name: P1 bps 書式+超過drop / P2 transit 非対象
+  hosts: RT01
+  gather_facts: false
+  tasks:
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [service-policy input PM-BPS]
+    - name: P1 前カウンタ
+      cisco.ios.ios_command:
+        commands: [show policy-map control-plane]
+      register: pre
+    - name: P1 RT02→RT01 punt ICMP 300発
+      cisco.ios.ios_command:
+        commands: ["ping 10.201.12.1 repeat 300 size 100 timeout 1"]
+      register: p1ping
+      delegate_to: RT02
+      vars: {ansible_host: "{{ hostvars['RT02'].ansible_host }}"}
+    - name: P1 後カウンタ
+      cisco.ios.ios_command:
+        commands: [show policy-map control-plane]
+      register: post
+    - copy:
+        content: |
+          ===== P1 pre =====
+          {{ pre.stdout[0] }}
+          ===== P1 RT02 ping RT01 (punt) =====
+          {{ p1ping.stdout[0] }}
+          ===== P1 post =====
+          {{ post.stdout[0] }}
+        dest: "{{ playbook_dir }}/probes/P1-bps-drop.txt"
+      delegate_to: localhost
+    - name: P2 RT02→RT03 transit ICMP 300発
+      cisco.ios.ios_command:
+        commands: ["ping 3.3.3.3 source Loopback0 repeat 300 size 100 timeout 1"]
+      register: p2ping
+      delegate_to: RT02
+      vars: {ansible_host: "{{ hostvars['RT02'].ansible_host }}"}
+    - name: P2 後カウンタ(transit が乗っていないこと)
+      cisco.ios.ios_command:
+        commands: [show policy-map control-plane]
+      register: post2
+    - copy:
+        content: |
+          ===== P2 RT02 ping RT03 (transit through RT01) =====
+          {{ p2ping.stdout[0] }}
+          ===== P2 post(P1 とのカウンタ差が transit 分だけ増えて「いない」こと) =====
+          {{ post2.stdout[0] }}
+        dest: "{{ playbook_dir }}/probes/P2-transit.txt"
+      delegate_to: localhost
+
+- name: P3 deny=分類除外
+  hosts: RT01
+  gather_facts: false
+  tasks:
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [no service-policy input PM-BPS]
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [service-policy input PM-EXCL]
+    - name: P3 RT02(除外側)→RT01 200発
+      cisco.ios.ios_command:
+        commands: ["ping 10.201.12.1 repeat 200 size 100 timeout 1"]
+      register: p3a
+      delegate_to: RT02
+      vars: {ansible_host: "{{ hostvars['RT02'].ansible_host }}"}
+    - name: P3 RT03(対象側)→RT01 300発
+      cisco.ios.ios_command:
+        commands: ["ping 10.201.13.1 repeat 300 size 100 timeout 1"]
+      register: p3b
+      delegate_to: RT03
+      vars: {ansible_host: "{{ hostvars['RT03'].ansible_host }}"}
+    - cisco.ios.ios_command:
+        commands: [show policy-map control-plane]
+      register: p3c
+    - copy:
+        content: |
+          ===== P3 RT02(ACL deny=除外側) ping =====
+          {{ p3a.stdout[0] }}
+          ===== P3 RT03(permit=対象側) ping =====
+          {{ p3b.stdout[0] }}
+          ===== P3 counters =====
+          {{ p3c.stdout[0] }}
+        dest: "{{ playbook_dir }}/probes/P3-deny-exclude.txt"
+      delegate_to: localhost
+
+- name: P4 未定義 ACL 参照
+  hosts: RT01
+  gather_facts: false
+  tasks:
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [no service-policy input PM-EXCL]
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [service-policy input PM-UNDEF]
+    - name: P4 RT02→RT01 200発
+      cisco.ios.ios_command:
+        commands: ["ping 10.201.12.1 repeat 200 size 100 timeout 1"]
+      register: p4a
+      delegate_to: RT02
+      vars: {ansible_host: "{{ hostvars['RT02'].ansible_host }}"}
+    - cisco.ios.ios_command:
+        commands: [show policy-map control-plane]
+      register: p4b
+    - copy:
+        content: |
+          ===== P4 RT02 ping(未定義 ACL 参照の class は match するか) =====
+          {{ p4a.stdout[0] }}
+          ===== P4 counters =====
+          {{ p4b.stdout[0] }}
+        dest: "{{ playbook_dir }}/probes/P4-undef-acl.txt"
+      delegate_to: localhost
+
+- name: P5 pps 単位 / P6 exceed transmit
+  hosts: RT01
+  gather_facts: false
+  tasks:
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [no service-policy input PM-UNDEF]
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [service-policy input PM-PPS]
+    - name: P5 RT02→RT01 300発
+      cisco.ios.ios_command:
+        commands: ["ping 10.201.12.1 repeat 300 size 100 timeout 1"]
+      register: p5a
+      delegate_to: RT02
+      vars: {ansible_host: "{{ hostvars['RT02'].ansible_host }}"}
+    - cisco.ios.ios_command:
+        commands: [show policy-map control-plane]
+      register: p5b
+    - copy:
+        content: |
+          ===== P5 ping(pps 制限) =====
+          {{ p5a.stdout[0] }}
+          ===== P5 counters(rate pps 書式) =====
+          {{ p5b.stdout[0] }}
+        dest: "{{ playbook_dir }}/probes/P5-pps.txt"
+      delegate_to: localhost
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [no service-policy input PM-PPS]
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [service-policy input PM-TRANSMIT]
+    - name: P6 RT02→RT01 300発(exceed transmit=落ちない)
+      cisco.ios.ios_command:
+        commands: ["ping 10.201.12.1 repeat 300 size 100 timeout 1"]
+      register: p6a
+      delegate_to: RT02
+      vars: {ansible_host: "{{ hostvars['RT02'].ansible_host }}"}
+    - cisco.ios.ios_command:
+        commands: [show policy-map control-plane]
+      register: p6b
+    - copy:
+        content: |
+          ===== P6 ping(exceed transmit) =====
+          {{ p6a.stdout[0] }}
+          ===== P6 counters(exceeded が増えつつ損失なしのはず) =====
+          {{ p6b.stdout[0] }}
+        dest: "{{ playbook_dir }}/probes/P6-exceed-transmit.txt"
+      delegate_to: localhost

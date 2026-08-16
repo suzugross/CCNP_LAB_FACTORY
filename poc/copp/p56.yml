@@ -1,0 +1,48 @@
+---
+- name: P5 pps / P6 exceed transmit (再実行・待ち時間排除版)
+  hosts: RT01
+  gather_facts: false
+  vars: {ansible_command_timeout: 120}
+  tasks:
+    - name: P5 RT02→RT01 200発 timeout 0(応答待ちなし・測定は RT01 カウンタ)
+      cisco.ios.ios_command:
+        commands: ["ping 10.201.12.1 repeat 200 size 100 timeout 0"]
+      register: p5a
+      delegate_to: RT02
+      vars: {ansible_host: "{{ hostvars['RT02'].ansible_host }}",
+             ansible_command_timeout: 120}
+    - cisco.ios.ios_command:
+        commands: [show policy-map control-plane]
+      register: p5b
+    - copy:
+        content: |
+          ===== P5 ping(pps 制限・timeout 0 なので成功率は無意味) =====
+          {{ p5a.stdout[0] }}
+          ===== P5 counters(rate pps 書式) =====
+          {{ p5b.stdout[0] }}
+        dest: "{{ playbook_dir }}/probes/P5-pps.txt"
+      delegate_to: localhost
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [no service-policy input PM-PPS]
+    - cisco.ios.ios_config:
+        parents: control-plane
+        lines: [service-policy input PM-TRANSMIT]
+    - name: P6 RT02→RT01 100発 timeout 1(exceed transmit=無損失のはず)
+      cisco.ios.ios_command:
+        commands: ["ping 10.201.12.1 repeat 100 size 100 timeout 1"]
+      register: p6a
+      delegate_to: RT02
+      vars: {ansible_host: "{{ hostvars['RT02'].ansible_host }}",
+             ansible_command_timeout: 180}
+    - cisco.ios.ios_command:
+        commands: [show policy-map control-plane]
+      register: p6b
+    - copy:
+        content: |
+          ===== P6 ping(exceed transmit) =====
+          {{ p6a.stdout[0] }}
+          ===== P6 counters =====
+          {{ p6b.stdout[0] }}
+        dest: "{{ playbook_dir }}/probes/P6-exceed-transmit.txt"
+      delegate_to: localhost

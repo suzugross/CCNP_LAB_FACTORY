@@ -1,0 +1,52 @@
+Class Map match-all CM-ICMP-EXCL (id 2)
+   Match access-group  111 
+
+ Class Map match-any class-default (id 0)
+   Match any 
+
+ Class Map match-all CM-ICMP (id 1)
+   Match access-group  110 
+
+ Class Map match-all CM-UNDEF (id 3)
+   Match access-group  199
+
+=====
+
+Policy Map PM-PPS
+    Class CM-ICMP
+     police rate 10 pps
+       conform-action transmit 
+       exceed-action drop 
+
+  Policy Map PM-UNDEF
+    Class CM-UNDEF
+     police cir 8000 bc 1500
+       conform-action transmit 
+       exceed-action drop 
+
+  Policy Map PM-BPS
+    Class CM-ICMP
+     police cir 8000 bc 1500
+       conform-action transmit 
+       exceed-action drop 
+
+  Policy Map PM-TRANSMIT
+    Class CM-ICMP
+     police cir 8000 bc 1500
+       conform-action transmit 
+       exceed-action transmit 
+
+  Policy Map PM-EXCL
+    Class CM-ICMP-EXCL
+     police cir 8000 bc 1500
+       conform-action transmit 
+       exceed-action drop
+
+=====
+
+Extended IP access list 110
+    10 permit icmp any any
+Extended IP access list 111
+    10 deny icmp host 10.201.12.2 any
+    20 deny icmp host 2.2.2.2 any
+    30 permit icmp any any
