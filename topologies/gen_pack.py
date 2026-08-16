@@ -53,6 +53,9 @@ PAPER_GENRES = {
     "redist": ["chain", "ring", "mploop", "riploop", "leakmap", "v6redist"],
     "aaa": ["aaa"],
     "acl": ["acl", "aclv6"],       # IPv4/IPv6 の ACL 紙面(2026-08-11 追加)
+    # BGP 紙面(BL-124・2026-08-16 追加): mixed の抽選だけでは BGP ゼロの
+    # パックが出るため必須枠にする(BL-100/111 の「BGP 最優先」方針)。
+    "bgp": ["bgpbest", "bgpdbg"],
 }
 
 # 紙面の問題数を `auto` にしたときの範囲(ユーザ指示 2026-08-11: 10〜20問で適当に)
@@ -1881,7 +1884,7 @@ def main():
                          f"{PAPER_AUTO_MAX}問から抽選 / `12`= 固定 / `8-14`= 範囲")
     ap.add_argument("--paper-only", action="store_true",
                     help="紙面だけのパックにする(ラボを作らない=CMLのラボ枠を使わない)")
-    ap.add_argument("--require-shape", default="redist,aaa,acl",
+    ap.add_argument("--require-shape", default="redist,aaa,acl,bgp",
                     help="紙面の必須ジャンル(カンマ区切り。"
                          f"選択肢: {','.join(PAPER_GENRES)})")
     ap.add_argument("--lab", type=int, default=2,

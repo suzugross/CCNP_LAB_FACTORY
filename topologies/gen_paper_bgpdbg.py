@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""BGP ループバック・ピアリング debug 読解（記述式）紙面問題 (BL-085)。
+"""BGP ループバック・ピアリング debug 読解 紙面問題 (BL-085 → BL-124 で選択式化)。
 
 ユーザ発案: 「debug メッセージからコンフィグを想像し、修正案まで提出させる」。
-選択肢は無く、**記述式**(採点は Claude がルーブリックで実施)。
+BL-085 の原形は**記述式**(採点は Claude がルーブリックで実施)。
+★BL-124(2026-08-16): 通常出題は選択式(dbgconf/select2/fix/read)へ改修し、
+mixed・問題パックに合流した。記述式は `--forms essay` の明示時のみ
+(BL-111 の MPLS L3VPN 記述式が essay 機構を流用予定のため温存)。
 
 素材は PoC 実機採取(poc/bgpdbg/README.md・IOL 17.15)の実出力:
   ★`BGP: <peer> open active, local address <X>` … その機がどの送信元で開きに行ったか
@@ -224,3 +227,507 @@ def rubric(d):
         "減点": ["『UP しているので問題なし』と結論している",
                  "拒否メッセージと ADJCHANGE Up の共存を説明できていない"],
     }
+
+
+# ==========================================================================
+# 選択式化 (BL-124・2026-08-16) — 構成モデル・可視指紋・選択肢ビルダ
+# ==========================================================================
+# 記述式の難しさの核3点を選択式の各形で保存する:
+#   dbgconf … 逆問題「この出力を生じさせている構成はどれか」(単一選択・全 variant。
+#             aaa の dbgconf 形= BL-103① の前例に従う)
+#   select2 … 是正の2アクション複数選択(addr_mismatch / ebgp_multihop。
+#             ★ebgp_multihop は「片側だけでは確立しない」= Choose two が最も自然)
+#   fix     … 是正の単一選択(asym_up: B への update-source が唯一の安全手)
+#   read    … 状態の事実文を2つ選ぶ(asym_up の「なぜ UP か」の器・authread 方式)
+#
+# 構成は3属性で持つ: nbr("lo"/"phy")= neighbor 文の宛先 / upd= update-source /
+# mh= ebgp-multihop。★可視指紋 visible() は「debug に実際に現れる要素」だけを
+# 返すのが肝: ebgp_multihop の no route to peer は open active 行の**前**に失敗する
+# = 送信元(update-source の有無)が観測できない。この可視性の欠落をモデル化しないと
+# 「update-source だけ違う構成」が同一出力になり dbgconf が二重正解化する。
+
+MCQ_FORMS = {"addr_mismatch": ["select2", "dbgconf"],
+             "ebgp_multihop": ["select2", "dbgconf"],
+             "asym_up": ["read", "fix", "dbgconf"]}
+
+# 形の抽選比。★BL-122(2026-08-16 ユーザ方針)= config で解決させる形を厚めに。
+# asym_up だけは「なぜ UP か」を問う read を最厚に維持する(記述式で配点40の主役)。
+FORM_W = {"addr_mismatch": {"select2": 65, "dbgconf": 35},
+          "ebgp_multihop": {"select2": 70, "dbgconf": 30},
+          "asym_up": {"read": 45, "fix": 30, "dbgconf": 25}}
+
+# dbgconf / read で置く前提文(BL-123 の「示されているものが全て」パターン)。
+# 未提示前提の補完余地を封じ、一意性を確実にする。
+PREMISE = ("なお、両ルータの BGP のネイバーに関する構成について判断できることは、"
+           "示されている出力が全てです。示されている以外の障害は、存在しません。")
+
+
+def kind_forms(kind):
+    """その variant が取り得る出題形(--forms の絞り込みに使う)。"""
+    return set(MCQ_FORMS[kind]) | {"essay"}
+
+
+def forms_for(d):
+    return sorted(kind_forms(d["variant"]))
+
+
+def pick_form(d, rnd, allowed=None):
+    """出題形の抽選。allowed(--forms)指定時はその中から比率を保って選ぶ。
+    essay は明示指定の時だけ返す(通常抽選には出さない)。"""
+    v = d["variant"]
+    if allowed and set(allowed) == {"essay"}:
+        return "essay"
+    pool = [f for f in MCQ_FORMS[v] if not allowed or f in allowed]
+    if not pool:
+        raise ValueError(f"bgpdbg: variant={v} は forms={allowed} を持たない")
+    weights = [FORM_W[v][f] for f in pool]
+    x = rnd.random() * sum(weights)
+    for f, w in zip(pool, weights):
+        x -= w
+        if x < 0:
+            return f
+    return pool[-1]
+
+
+# ---------------------------------------------------------------- 構成モデル
+def actual_cfgs(d):
+    """variant ごとの実像(debug を生じさせている構成)。"""
+    v = d["variant"]
+    if v == "addr_mismatch":
+        return {"A": {"nbr": "lo", "upd": True, "mh": False},
+                "B": {"nbr": "phy", "upd": False, "mh": False}}
+    if v == "ebgp_multihop":
+        return {"A": {"nbr": "lo", "upd": True, "mh": False},
+                "B": {"nbr": "lo", "upd": True, "mh": False}}
+    return {"A": {"nbr": "lo", "upd": True, "mh": False},
+            "B": {"nbr": "lo", "upd": False, "mh": False}}
+
+
+def _accept(opener, peer, ebgp):
+    """opener の active open の帰結。実機根拠= poc/bgpdbg/README.md。
+    no_route= 自側の直接接続検査で TCP 以前に失敗(発見3) /
+    refused = TCP RST(相手の neighbor 文に送信元が不一致・発見2)または
+              相手側の multihop 検査(★片側だけの multihop では確立しない)。"""
+    src = "lo" if opener["upd"] else "phy"
+    if ebgp and opener["nbr"] == "lo" and not opener["mh"]:
+        return "no_route"
+    if peer["nbr"] != src:
+        return "refused"
+    if ebgp and src == "lo" and not peer["mh"]:
+        return "refused"
+    return "accepted"
+
+
+def session(cfgs, ebgp):
+    """(確立するか, A発の帰結, B発の帰結)。確立= どちらか一方の open が受理
+    されること(発見1の接続レース)。"""
+    ra = _accept(cfgs["A"], cfgs["B"], ebgp)
+    rb = _accept(cfgs["B"], cfgs["A"], ebgp)
+    return ("accepted" in (ra, rb)), ra, rb
+
+
+def visible(cfgs, ebgp):
+    """両側 debug の可視指紋 {側: (宛先種別, 送信元種別 or None, 帰結)}。
+    dbgconf の一意性判定の土台。no_route は送信元が観測できない(None)。"""
+    up, ra, rb = session(cfgs, ebgp)
+    out = {}
+    for side, res in (("A", ra), ("B", rb)):
+        cfg = cfgs[side]
+        src = "lo" if cfg["upd"] else "phy"
+        if res == "no_route":
+            out[side] = (cfg["nbr"], None, "no_route")
+        elif res == "accepted":
+            out[side] = (cfg["nbr"], src, "up_clean")
+        else:
+            out[side] = (cfg["nbr"], src, "refused_up" if up else "refused_idle")
+    return out
+
+
+def _peer_addr(d, side, kind):
+    """side("A"/"B") の neighbor 文が指す対向アドレス。"""
+    peer = "b" if side == "A" else "a"
+    return d[("lo_" if kind == "lo" else "ip_") + peer]
+
+
+def cfg_lines(d, side, cfg, ebgp):
+    """1台分の router bgp 抜粋(dbgconf 選択肢の部品)。"""
+    own_as = d["as_a"] if side == "A" else d["as_b"]
+    peer_as = d["as_b"] if side == "A" else d["as_a"]
+    tgt = _peer_addr(d, side, cfg["nbr"])
+    lines = [f"router bgp {own_as}",
+             f" neighbor {tgt} remote-as {peer_as}"]
+    if cfg["upd"]:
+        lines.append(f" neighbor {tgt} update-source Loopback0")
+    if ebgp and cfg["mh"]:
+        lines.append(f" neighbor {tgt} ebgp-multihop 2")
+    return lines
+
+
+def cfg_pair_lines(d, cfgs):
+    ebgp = d["variant"] == "ebgp_multihop"
+    return ([f"! {d['A']}"] + cfg_lines(d, "A", cfgs["A"], ebgp)
+            + ["!", f"! {d['B']}"] + cfg_lines(d, "B", cfgs["B"], ebgp))
+
+
+def _cfg_desc(d, cfgs):
+    """選択肢の散文ラベル(解答 md での参照用)。"""
+    ebgp = d["variant"] == "ebgp_multihop"
+    parts = []
+    for side in ("A", "B"):
+        c = cfgs[side]
+        p = [("ループバック宛" if c["nbr"] == "lo" else "物理宛"),
+             ("update-source あり" if c["upd"] else "update-source なし")]
+        if ebgp:
+            p.append("multihop あり" if c["mh"] else "multihop なし")
+        parts.append(f"{d[side]}= " + "・".join(p))
+    return " / ".join(parts)
+
+
+# ---------------------------------------------------------------- dbgconf 形
+def _dbgconf_pool(d):
+    """錯乱肢= 描き直すと**可視出力が変わる**近傍構成だけを置く(aaa dbgconf 前例)。
+    ★ebgp_multihop では update-source 軸を動かさない(可視でない軸の変更は
+    同一出力の構成を生み、二重正解になる)。"""
+    A, B = d["A"], d["B"]
+    v = d["variant"]
+    if v == "addr_mismatch":
+        return [
+            ({"A": {"nbr": "lo", "upd": True, "mh": False},
+              "B": {"nbr": "lo", "upd": True, "mh": False}},
+             "この構成であれば両側の open が受理されて確立し、拒否のメッセージは"
+             "現れない。"),
+            ({"A": {"nbr": "lo", "upd": True, "mh": False},
+              "B": {"nbr": "lo", "upd": False, "mh": False}},
+             f"片側の update-source 欠けであれば {A} 発の接続が受理されて "
+             f"Established になる(両側 Idle にはならない)。また {B} の行頭の"
+             f"宛先が {d['lo_a']} になるはずである。"),
+            ({"A": {"nbr": "lo", "upd": False, "mh": False},
+              "B": {"nbr": "phy", "upd": False, "mh": False}},
+             f"{A} の open active の local address が {d['ip_a']}(物理)になる"
+             f"はずで、示されている {d['lo_a']} と一致しない。"),
+            ({"A": {"nbr": "phy", "upd": False, "mh": False},
+              "B": {"nbr": "phy", "upd": False, "mh": False}},
+             "物理宛の対称構成であれば確立する。示されている宛先(ループバック)"
+             "とも一致しない。"),
+        ]
+    if v == "ebgp_multihop":
+        return [
+            ({"A": {"nbr": "lo", "upd": True, "mh": True},
+              "B": {"nbr": "lo", "upd": True, "mh": True}},
+             "この構成であれば直接接続検査を通過して確立し、失敗のメッセージは"
+             "現れない。"),
+            ({"A": {"nbr": "phy", "upd": False, "mh": False},
+              "B": {"nbr": "phy", "upd": False, "mh": False}},
+             "物理宛の eBGP であれば直接接続の検査を満たして確立する。宛先の"
+             "表示も物理になるはずである。"),
+            ({"A": {"nbr": "phy", "upd": False, "mh": False},
+              "B": {"nbr": "lo", "upd": True, "mh": False}},
+             f"{A} 側の宛先・送信元が物理となり、示されている {A} 側の出力"
+             "(ループバック宛・no route to peer)と一致しない。"),
+            ({"A": {"nbr": "lo", "upd": True, "mh": False},
+              "B": {"nbr": "phy", "upd": False, "mh": False}},
+             f"{B} 側の宛先・送信元が物理となり、示されている {B} 側の出力"
+             "(ループバック宛・no route to peer)と一致しない。"),
+        ]
+    return [
+        ({"A": {"nbr": "lo", "upd": True, "mh": False},
+          "B": {"nbr": "lo", "upd": True, "mh": False}},
+         "対称な構成であれば両側の open が受理され、拒否の行は現れない。"),
+        ({"A": {"nbr": "lo", "upd": False, "mh": False},
+          "B": {"nbr": "lo", "upd": True, "mh": False}},
+         f"鏡像の構成。拒否が現れるのは {A} の側になり、示されている出力と"
+         "左右が逆である。"),
+        ({"A": {"nbr": "lo", "upd": True, "mh": False},
+          "B": {"nbr": "phy", "upd": False, "mh": False}},
+         f"宛先が食い違う構成であれば両側とも拒否されて Idle となり、"
+         f"ADJCHANGE Up は現れない。また {B} の行頭の宛先が物理になる。"),
+        ({"A": {"nbr": "lo", "upd": False, "mh": False},
+          "B": {"nbr": "lo", "upd": False, "mh": False}},
+         "両側とも送信元が物理となり、どちらの接続も受理されず Idle となる。"),
+    ]
+
+
+def build_choices_dbgconf(d, rnd):
+    """逆問題(単一選択・5択)。正解= 実像。錯乱肢= 可視指紋が異なる近傍構成。"""
+    ebgp = d["variant"] == "ebgp_multihop"
+    act = actual_cfgs(d)
+    vis0 = visible(act, ebgp)
+    c = [(_cfg_desc(d, act), True,
+          "各行頭の宛先・open active の local address・帰結のすべてが、"
+          "示されている出力と一致する。", cfg_pair_lines(d, act))]
+    for cfgs, why in _dbgconf_pool(d):
+        if visible(cfgs, ebgp) == vis0:
+            raise ValueError("bgpdbg dbgconf: 錯乱肢が実像と同一の可視指紋")
+        c.append((_cfg_desc(d, cfgs), False, why, cfg_pair_lines(d, cfgs)))
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
+# ---------------------------------------------------------------- fix 系
+def _apply(cfgs, deltas):
+    """選択の組を構成へ適用。★neighbor の付け替えは update-source / multihop を
+    道連れにリセットする(no neighbor で行ごと消えるため)。upd/mh の行は
+    ループバック宛の neighbor 文を名指ししており、その neighbor が現存しない
+    場合は投入エラー= 無効(no-op)としてモデル化する。"""
+    import copy
+    c = copy.deepcopy(cfgs)
+    for dl in deltas:
+        if "nbr" in dl:
+            c[dl["side"]].update(nbr=dl["nbr"], upd=False, mh=False)
+    for dl in deltas:
+        for k in ("upd", "mh"):
+            if k in dl and c[dl["side"]]["nbr"] == "lo":
+                c[dl["side"]][k] = dl[k]
+    return c
+
+
+def _fix_ok(d, cfgs):
+    """要件を満たすか。①確立 ②Lo間ピアリング設計の維持
+    ③(addr_mismatch/asym_up) 確立が一方の側の接続開始に依存しない。"""
+    ebgp = d["variant"] == "ebgp_multihop"
+    up, ra, rb = session(cfgs, ebgp)
+    if not up:
+        return False
+    if not (cfgs["A"]["nbr"] == "lo" == cfgs["B"]["nbr"]):
+        return False
+    if d["variant"] != "ebgp_multihop" and not (ra == rb == "accepted"):
+        return False
+    return True
+
+
+def _fix_menu(d):
+    """(text, deltas, why, cli) の一覧。正解フラグは機械判定(手書きしない)。
+    ★鏡像(直す側が逆)の錯乱肢は1肢だけ(2肢置くと組で直る二重正解が生まれる)。"""
+    A, B = d["A"], d["B"]
+    v = d["variant"]
+    as_a, as_b = d["as_a"], d["as_b"]
+    if v == "addr_mismatch":
+        return [
+            (f"{B} の neighbor 文の宛先を、{A} のループバック({d['lo_a']})へ"
+             "是正する",
+             [{"side": "B", "nbr": "lo"}],
+             f"{B} の neighbor 文が {A} の送信元(= {d['lo_a']})と一致し、"
+             f"{A} 発の接続が受理されるようになる(2手の一方。これだけでは "
+             f"{B} 発の接続が拒否されたままで、確立が {A} からの開始に依存する)。",
+             [f"! {B}", f"router bgp {as_b}",
+              f" no neighbor {d['ip_a']} remote-as {as_a}",
+              f" neighbor {d['lo_a']} remote-as {as_a}"]),
+            (f"{B} に、{d['lo_a']} 宛の update-source Loopback0 を設定する",
+             [{"side": "B", "upd": True}],
+             f"{B} 発の接続の送信元が {d['lo_b']} となり、{A} の neighbor 文に"
+             "一致する(2手の一方。宛先の是正と併せて要件を満たす)。",
+             [f"! {B}", f"router bgp {as_b}",
+              f" neighbor {d['lo_a']} update-source Loopback0"]),
+            (f"{A} の neighbor 文の宛先を、{B} の物理アドレス({d['ip_b']})へ"
+             "付け替える",
+             [{"side": "A", "nbr": "phy"}],
+             "ピアは確立し得るが、ループバック・インターフェイスの間で"
+             "ピアリングを行う設計の維持、という要件に違反する。",
+             [f"! {A}", f"router bgp {as_a}",
+              f" no neighbor {d['lo_b']} remote-as {as_b}",
+              f" neighbor {d['ip_b']} remote-as {as_b}"]),
+            (f"{B} に、{d['lo_a']} への静的ルートを設定する",
+             [],
+             "到達性の障害ではない(ping は成功しており、拒否は TCP RST で"
+             "ある)。経路を追加しても接続の拒否は変わらない。",
+             [f"! {B}", f"ip route {d['lo_a']} 255.255.255.255 {d['ip_a']}"]),
+            (f"{A} に、{d['lo_b']} 宛の ebgp-multihop を設定する",
+             [{"side": "A", "mh": True}],
+             "両ルータは同一 AS の iBGP ピアであり、eBGP の直接接続の検査は"
+             "行われない(事象と無関係)。",
+             [f"! {A}", f"router bgp {as_a}",
+              f" neighbor {d['lo_b']} ebgp-multihop 2"]),
+            ("両ルータで、clear ip bgp * を実行する",
+             [],
+             "構成が変わらない限り、接続の試行は同じ帰結(拒否)に戻る。",
+             [f"! {A} と {B} の両方で", "clear ip bgp *"]),
+        ]
+    if v == "ebgp_multihop":
+        return [
+            (f"{A} に、{d['lo_b']} 宛の ebgp-multihop を設定する",
+             [{"side": "A", "mh": True}],
+             f"{A} 側の直接接続の検査が解除される(2手の一方。★片側だけでは、"
+             "対向側の検査が残るため確立しない)。",
+             [f"! {A}", f"router bgp {as_a}",
+              f" neighbor {d['lo_b']} ebgp-multihop 2"]),
+            (f"{B} に、{d['lo_a']} 宛の ebgp-multihop を設定する",
+             [{"side": "B", "mh": True}],
+             f"{B} 側の直接接続の検査が解除される(2手の一方)。",
+             [f"! {B}", f"router bgp {as_b}",
+              f" neighbor {d['lo_a']} ebgp-multihop 2"]),
+            (f"{A} に、{d['lo_b']} への静的ルートを設定する",
+             [],
+             "経路は既に存在している(経路表の提示のとおり)。このメッセージは"
+             "経路の有無ではなく、eBGP の直接接続の検査の失敗を示す。また、"
+             "到達性を提供している構成の変更は要件に違反する。",
+             [f"! {A}", f"ip route {d['lo_b']} 255.255.255.255 {d['ip_b']}"]),
+            (f"{B} に、{d['lo_a']} 宛の update-source Loopback0 を設定する",
+             [{"side": "B", "upd": True}],
+             "失敗は TCP の接続よりも前(直接接続の検査)で起きており、"
+             "送信元アドレスの構成では帰結が変わらない。",
+             [f"! {B}", f"router bgp {as_b}",
+              f" neighbor {d['lo_a']} update-source Loopback0"]),
+            (f"{A} の neighbor 文の宛先を、{B} の物理アドレス({d['ip_b']})へ"
+             "付け替える",
+             [{"side": "A", "nbr": "phy"}],
+             "設計の維持の要件に違反するうえ、単独では対向側の neighbor 文との"
+             "不一致が残り、確立しない。",
+             [f"! {A}", f"router bgp {as_a}",
+              f" no neighbor {d['lo_b']} remote-as {as_b}",
+              f" neighbor {d['ip_b']} remote-as {as_b}"]),
+            ("両ルータで、clear ip bgp * を実行する",
+             [],
+             "構成が変わらない限り、直接接続の検査の失敗は繰り返される。",
+             [f"! {A} と {B} の両方で", "clear ip bgp *"]),
+        ]
+    return [
+        (f"{B} に、{d['lo_a']} 宛の update-source Loopback0 を設定する",
+         [{"side": "B", "upd": True}],
+         f"{B} 発の接続の送信元が {d['lo_b']} となって {A} に受理されるように"
+         "なり、どちらの側から開始しても確立する(非対称の解消)。",
+         [f"! {B}", f"router bgp {as_b}",
+          f" neighbor {d['lo_a']} update-source Loopback0"]),
+        (f"{A} から、update-source Loopback0 を削除して両側を揃える",
+         [{"side": "A", "upd": False}],
+         "対称にはなるが、両側の送信元が物理アドレスとなり、どちら発の接続も"
+         "相手の neighbor 文(ループバック宛)に一致しなくなる= 現在確立して"
+         "いるピアまで失われる。",
+         [f"! {A}", f"router bgp {as_a}",
+          f" no neighbor {d['lo_b']} update-source Loopback0"]),
+        ("両ルータの neighbor 文を、物理アドレス宛へ付け替える",
+         [{"side": "A", "nbr": "phy"}, {"side": "B", "nbr": "phy"}],
+         "確立はするが、ループバック・インターフェイスの間でピアリングを行う"
+         "設計の維持、という要件に違反する。",
+         [f"! {A}", f"router bgp {as_a}",
+          f" no neighbor {d['lo_b']} remote-as {as_b}",
+          f" neighbor {d['ip_b']} remote-as {as_b}",
+          f"! {B}", f"router bgp {as_b}",
+          f" no neighbor {d['lo_a']} remote-as {as_a}",
+          f" neighbor {d['ip_a']} remote-as {as_a}"]),
+        (f"{B} に、{d['lo_a']} への静的ルートを設定する",
+         [],
+         "到達性の障害ではない(拒否は TCP RST であり、経路・IF は生きている)。",
+         [f"! {B}", f"ip route {d['lo_a']} 255.255.255.255 {d['ip_a']}"]),
+        ("両ルータで、clear ip bgp * を実行する",
+         [],
+         "接続レースのやり直しに過ぎず、非対称(一方の側の開始への依存)は残る。",
+         [f"! {A} と {B} の両方で", "clear ip bgp *"]),
+    ]
+
+
+def build_choices_fix(d, rnd):
+    """是正形。addr_mismatch / ebgp_multihop= 2つ選択(select2)・asym_up= 単一。
+    正解の組は列挙総当たりで機械判定し、一意でなければ ValueError。"""
+    import itertools
+    menu = _fix_menu(d)
+    base = actual_cfgs(d)
+    k = 1 if d["variant"] == "asym_up" else 2
+    wins = [combo for combo in itertools.combinations(range(len(menu)), k)
+            if _fix_ok(d, _apply(base, sum((menu[i][1] for i in combo), [])))]
+    if len(wins) != 1:
+        raise ValueError(f"bgpdbg fix({d['variant']}): 正解組が一意でない: {wins}")
+    okset = set(wins[0])
+    c = [(t, i in okset, w, cli) for i, (t, _dl, w, cli) in enumerate(menu)]
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
+# ---------------------------------------------------------------- read 形
+def build_choices_read(d, rnd):
+    """asym_up 専用(複数選択・6択・正解2)。事実文の真偽はモデルの帰結
+    (session/visible)と提示物(ping・debug 行)に対応させる。"""
+    if d["variant"] != "asym_up":
+        raise ValueError("bgpdbg read: asym_up 専用")
+    A, B = d["A"], d["B"]
+    true_pool = [
+        (f"確立されている TCP 接続は、{A} が開始したものである"
+         f"(送信元 {d['lo_a']})",
+         f"{A} の open active(local address {d['lo_a']})は {B} の "
+         f"neighbor {d['lo_a']} に一致して受理される。{B} 発は拒否されて"
+         "いるため、生き残る接続は {} 発のみ。".format(A)),
+        (f"{B} が開始する接続(送信元 {d['ip_b']})は、{A} によって拒否され"
+         "続けている",
+         f"{B} 側の open failed: Connection refused がそれを示す。{A} は "
+         f"{d['ip_b']} を neighbor として持たないため TCP RST を返す。"),
+        (f"{B} の neighbor 文には、update-source の構成が伴っていない",
+         f"{B} の open active の local address が {d['ip_b']}(物理)である"
+         "ことから確定する。"),
+    ]
+    false_pool = [
+        ("両ルータの BGP のネイバーの構成は、対称である",
+         f"local address の行が {d['lo_a']}(ループバック)と {d['ip_b']}"
+         "(物理)で食い違っており、非対称であることが確定する。"),
+        (f"{d['lo_a']} への経路が {B} に存在しないため、{B} の接続の試行が"
+         "失敗している",
+         "ping(送信元・宛先ともループバック)の成功が往復の到達性を示す。"
+         "拒否は TCP RST であり、経路の欠落では起こらない。"),
+        (f"{A} の側の update-source の構成が、欠落している",
+         f"{A} の open active の local address は {d['lo_a']} であり、"
+         "Loopback0 を送信元とする構成が存在する。"),
+        (f"ピアは、{B} が開始した接続の上で、確立されている",
+         f"{B} 発の接続は拒否され続けている。ADJCHANGE Up は {A} 発の接続が"
+         "受理されたことによる。"),
+    ]
+    c = ([(t, True, w) for t, w in rnd.sample(true_pool, 2)]
+         + [(t, False, w) for t, w in false_pool])
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
+# ---------------------------------------------------------------- 要件
+def requirements(d, form=None):
+    """fix / select2 の一意性の担い手。リーンに保つ(BL-121 の方針)。"""
+    v = d["variant"]
+    if v == "addr_mismatch":
+        return ["両ルータの間で、BGP のピアが確立されること。",
+                "ループバック・インターフェイスの間でピアリングを行う設計が、"
+                "維持されること。",
+                "ピアの確立が、いずれか一方の側からの接続の開始に、"
+                "依存しないこと。"]
+    if v == "ebgp_multihop":
+        return ["両ルータの間で、BGP のピアが確立されること。",
+                "ループバック・インターフェイスの間でピアリングを行う設計が、"
+                "維持されること。",
+                "対向のループバックへの到達性を提供している構成は、"
+                "変更しないこと。"]
+    return ["現在確立されているピアが、失われないこと。",
+            "ループバック・インターフェイスの間でピアリングを行う設計が、"
+            "維持されること。",
+            "ピアの確立が、いずれか一方の側からの接続の開始に、"
+            "依存しないこと。"]
+
+
+# ---------------------------------------------------------------- selftest
+def selftest(n=200):
+    """モデル不変条件(PoC の実測)と選択肢の一意性を機械検証する。"""
+    import random as _r
+    checked = 0
+    for seed in range(n):
+        for v in VARIANTS:
+            d = draw(_r.Random(20000 + seed), variant=v)
+            ebgp = v == "ebgp_multihop"
+            up, ra, rb = session(actual_cfgs(d), ebgp)
+            # 実測: asym_up だけ確立(発見1)・ebgp は両側 no_route(発見3)
+            assert up == (v == "asym_up"), (v, up)
+            if ebgp:
+                assert ra == rb == "no_route"
+            for form in MCQ_FORMS[v]:
+                rnd = _r.Random(30000 + seed * 7 + hash(form) % 1000)
+                ch = (build_choices_dbgconf(d, rnd) if form == "dbgconf"
+                      else build_choices_read(d, rnd) if form == "read"
+                      else build_choices_fix(d, rnd))
+                want = 2 if form in ("select2", "read") else 1
+                n_ok = sum(1 for c in ch if c[1])
+                assert n_ok == want, (v, form, n_ok)
+                texts = [c[0] for c in ch]
+                assert len(set(texts)) == len(texts), (v, form, "重複肢")
+                assert all(c[2] for c in ch if not c[1]), (v, form, "why欠落")
+                checked += 1
+    print(f"bgpdbg selftest OK ({checked} 通り)")
+
+
+if __name__ == "__main__":
+    selftest()

@@ -5536,22 +5536,29 @@ def answer_md_ospfv3pl(d, choices, stamp, master_seed, subseed, form):
 
 
 # --------------------------------------------------------------------------
-# shape=bgpdbg — BGP debug 読解(★記述式・選択肢なし) BL-085
-# 採点は自動化しない(自由記述)。answers/ にルーブリックを出し、Claude が採点する。
+# shape=bgpdbg — BGP debug 読解 BL-085(記述式)→ BL-124 で選択式化
+# 選択式(dbgconf/select2/fix/read)が既定。essay は --forms essay の明示時のみ
+# (採点を自動化しない自由記述。answers/ にルーブリックを出し、Claude が採点する)。
 # --------------------------------------------------------------------------
-def question_md_bgpdbg(d, stamp, rnd):
+def question_md_bgpdbg(d, stamp, rnd, form="essay", choices=None, reqs=None):
     A, B = d["A"], d["B"]
     a_lines, b_lines = gpb.debug_blocks(d, rnd)
-    qs = gpb.questions(d)
     ebgp = d["variant"] == "ebgp_multihop"
     as_txt = (f"{A} は AS {d['as_a']}、{B} は AS {d['as_b']} に所属しています。"
               if ebgp else f"両ルータは、同一の AS {d['as_a']} に所属しています。")
-    return f"""# 問題 {stamp} : BGP ピアの確立に関する分析(記述式)
-
-> **本問は機器に接続せずに解答すること。追加の show 実行は認めない。**
-> **本問は選択式ではありません。求められている内容を、文章で記述してください。**
-
-## トポロジ
+    # ★症状の1文: asym_up は「壊れていない」(Established)ので、確立の障害を
+    #   示唆する定型文を使わない(存在しない事象の参照を避ける・acl apply と同旨)。
+    #   essay は従来文面を維持する(BL-085 の原形を変えない)。
+    if form == "essay" or d["variant"] != "asym_up":
+        sympt = ("ネイバーの状態に関する事象が、報告されています。調査のために、"
+                 "両方のルータにおいて `debug ip bgp` が有効にされ、そして、"
+                 "ログが採取されました。")
+    else:
+        sympt = ("ピアは Established であると報告されていますが、ログには、"
+                 "接続の拒否が、繰り返し記録されています。調査のために、"
+                 "両方のルータにおいて `debug ip bgp` が有効にされ、そして、"
+                 "ログが採取されました。")
+    board = f"""## トポロジ
 
 2台のルータが、1本のリンクによって直接に接続されており、そして、
 それぞれのループバック・インターフェイスを使用して、BGP のピアが構成されています。
@@ -5566,8 +5573,7 @@ def question_md_bgpdbg(d, stamp, rnd):
 
 ## 現在の状態
 
-ネイバーの状態に関する事象が、報告されています。調査のために、両方のルータにおいて
-`debug ip bgp` が有効にされ、そして、ログが採取されました。
+{sympt}
 
 ```
 {A}# show logging | include BGP:
@@ -5579,7 +5585,15 @@ def question_md_bgpdbg(d, stamp, rnd):
 ```
 ```
 {gpb.extra_block(d)}
-```
+```"""
+    if form == "essay":
+        qs = gpb.questions(d)
+        return f"""# 問題 {stamp} : BGP ピアの確立に関する分析(記述式)
+
+> **本問は機器に接続せずに解答すること。追加の show 実行は認めない。**
+> **本問は選択式ではありません。求められている内容を、文章で記述してください。**
+
+{board}
 
 ## 設問(記述式)
 
@@ -5589,16 +5603,75 @@ def question_md_bgpdbg(d, stamp, rnd):
 > 解答は、この問題文の下に追記するか、チャットに記述してください。
 > 採点は、示されているところの根拠に基づいて行われます。
 """
+    # ---- 選択式(BL-124) ----
+    if form == "dbgconf":
+        q = ("示されているところの出力を生じさせている、両ルータの BGP の"
+             "ネイバーの構成として、正しいものは、どれですか。"
+             "(1つを選択してください)")
+        opts = render_options(choices, "cli")
+        premise = "\n" + gpb.PREMISE
+    elif form == "read":
+        q = ("示されているところの出力、および、ネイバーの状態に関する記述と"
+             "して、正しいものは、どれとどれですか。(2つを選択してください)")
+        opts = render_options(choices, "prose")
+        premise = "\n" + gpb.PREMISE
+    elif form == "select2":
+        q = ("示されているところのすべての要件が満たされることを確実にするため"
+             "に、行われなければならない構成の変更は、どれとどれですか。"
+             "(2つを選択してください)")
+        opts = render_options(choices, "cli")
+        premise = ""
+    else:                                  # fix(単一選択・asym_up)
+        q = ("示されているところのすべての要件が満たされることを確実にするため"
+             "に、行われなければならない構成の変更は、どれですか。"
+             "(1つを選択してください)")
+        opts = render_options(choices, "cli")
+        premise = ""
+    # ★素の文のまま並べる(obfuscate_md の構造化モードが番号を付ける。
+    #   こちらで「- 」を付けると「1. - 」の二重装飾になる)
+    req_sec = f"\n## 要件\n\n{chr(10).join(reqs)}\n" if reqs else ""
+    return f"""# 問題 {stamp} : BGP ピアの確立 の 分析
+
+{FIXED_NOTE}
+
+{board}{premise}
+{req_sec}
+## 設問
+
+{q}
+
+## 選択肢
+
+{opts}
+"""
 
 
-def answer_md_bgpdbg(d, stamp, master_seed, subseed):
-    rb = gpb.rubric(d)
-    items = "\n".join(f"- **{t}**" for t, _p in rb["項目"])
-    minus = "\n".join(f"- {x}" for x in rb["減点"])
-    v_note = {"addr_mismatch": "両側の neighbor 宛先が食い違う(Lo宛 vs 物理宛)",
-              "ebgp_multihop": "eBGP ループバック・ピアで ebgp-multihop 欠落",
-              "asym_up": "片側 update-source 欠けだが Established(接続レース)"}[d["variant"]]
-    return f"""# 解答・採点ルーブリック {stamp}
+_BGPDBG_POC_NOTE = """## 出題素材の根拠(実機 PoC・poc/bgpdbg/README.md)
+
+- `open active, local address <X>` … その機がどの送信元で開きに行ったか
+  = **update-source の有無**が両側それぞれについて確定する。
+- 行頭のピアアドレス … その機の **neighbor 文の宛先**(ループバック宛か物理宛か)。
+- `open failed: Connection refused by remote host` … 相手がその送信元を neighbor として
+  **持っていない**(TCP RST)。到達性の障害ではない。
+- `Active open failed - no route to peer` … eBGP の**シングルホップ検査**の失敗。
+  経路が存在していても出る(字面に釣られると誤診する)。
+- ★片側だけ update-source が欠けている場合、**セッションは確立してしまう**
+  (update-source を持つ側が開いた接続が受理されるため)。
+"""
+
+_BGPDBG_VNOTE = {
+    "addr_mismatch": "両側の neighbor 宛先が食い違う(Lo宛 vs 物理宛)",
+    "ebgp_multihop": "eBGP ループバック・ピアで ebgp-multihop 欠落",
+    "asym_up": "片側 update-source 欠けだが Established(接続レース)"}
+
+
+def answer_md_bgpdbg(d, choices, stamp, master_seed, subseed, form="essay"):
+    v_note = _BGPDBG_VNOTE[d["variant"]]
+    if form == "essay":
+        rb = gpb.rubric(d)
+        items = "\n".join(f"- **{t}**" for t, _p in rb["項目"])
+        minus = "\n".join(f"- {x}" for x in rb["減点"])
+        return f"""# 解答・採点ルーブリック {stamp}
 
 ## 出題の仕込み
 
@@ -5615,18 +5688,39 @@ def answer_md_bgpdbg(d, stamp, master_seed, subseed):
 
 {minus}
 
-## 出題素材の根拠(実機 PoC・poc/bgpdbg/README.md)
+{_BGPDBG_POC_NOTE}"""
+    # ---- 選択式(BL-124)。★「ルーブリック」の語を書かない: gen_pack の
+    #   key_of() がこの語で記述式と判定し、自動採点(キー突合)から外れるため。
+    letters = [chr(65 + i) for i in range(len(choices))]
+    hits = [l for l, c in zip(letters, choices) if c[1]]
+    correct = "・".join(hits)
+    why = "\n".join(f"- **{l}**: {c[2]}" for l, c in zip(letters, choices)
+                    if c[2])
+    form_note = {
+        "dbgconf": "逆問題(この出力を生じさせている構成はどれか)",
+        "select2": "是正の2アクションを複数選択で(正解2つ)",
+        "fix": "是正手段の単一選択",
+        "read": "状態の事実文を2つ選ぶ(なぜ確立しているかの読解)",
+    }[form]
+    return f"""# 解答 {stamp}
 
-- `open active, local address <X>` … その機がどの送信元で開きに行ったか
-  = **update-source の有無**が両側それぞれについて確定する。
-- 行頭のピアアドレス … その機の **neighbor 文の宛先**(ループバック宛か物理宛か)。
-- `open failed: Connection refused by remote host` … 相手がその送信元を neighbor として
-  **持っていない**(TCP RST)。到達性の障害ではない。
-- `Active open failed - no route to peer` … eBGP の**シングルホップ検査**の失敗。
-  経路が存在していても出る(字面に釣られると誤診する)。
-- ★片側だけ update-source が欠けている場合、**セッションは確立してしまう**
-  (update-source を持つ側が開いた接続が受理されるため)。
-"""
+## 正解
+
+**{correct}**
+
+## 解説(各選択肢)
+
+{why}
+
+## 出題の仕込み
+
+- 種別: `bgpdbg/{d['variant']}` — {v_note}(難易度 {gpb.DIFF[d['variant']]})
+- 出題形: {form}({form_note})
+- {d['A']}: Lo0={d['lo_a']} / 物理={d['ip_a']} / AS {d['as_a']}
+- {d['B']}: Lo0={d['lo_b']} / 物理={d['ip_b']} / AS {d['as_b']}
+- 生成: `gen_paper_mcq.py --shape bgpdbg --seed {master_seed}` (sub-seed {subseed})
+
+{_BGPDBG_POC_NOTE}"""
 
 
 # --------------------------------------------------------------------------
@@ -6627,7 +6721,8 @@ def main():
                          " / riploop=RIP⇄OSPF 対策が効いていない型(BL-116)"
                          " / pbr=PBR×ワイルドカードACL(BL-081)"
                          " / urpf=uRPF×ACL(BL-084・紙面専用)"
-                         " / bgpdbg=BGP debug読解(BL-085・★記述式)"
+                         " / bgpdbg=BGP debug読解(BL-085→BL-124 選択式化。"
+                         "記述式は --forms essay)"
                          " / mploop=多点相互再配送の同AD・メトリック差ループ(難5)"
                          " / leakmap=EIGRP集約×リーク手段選択(BL-095・紙面専用)"
                          " / ospfv3pl=OSPFv3エリア間prefix-list(BL-097・紙面専用)"
@@ -6639,7 +6734,8 @@ def main():
                     help="出題形を絞る(カンマ区切り)。shape=acl: select,read,"
                          "cause,counter,patch,fix,evidence,logread,compare / "
                          "shape=aclv6: select,read,cause,counter / "
-                         "shape=bgpbest: read,why,fix,cause。"
+                         "shape=bgpbest: read,why,fix,cause / "
+                         "shape=bgpdbg: dbgconf,select2,fix,read,essay。"
                          "指定した形が成立する盤面を seed 探索で選ぶ。"
                          "他の shape では無視される。")
     ap.add_argument("--worlds", default="",
@@ -6689,7 +6785,8 @@ def main():
             raise SystemExit(f"--kinds({a.shape}) は {pool} から選ぶこと: {kinds}")
     want_forms = [x.strip() for x in a.forms.split(",") if x.strip()]
     want_worlds = [x.strip() for x in a.worlds.split(",") if x.strip()]
-    if want_forms and a.shape not in ("acl", "aclv6", "bgpbest", "mixed"):
+    if want_forms and a.shape not in ("acl", "aclv6", "bgpbest", "bgpdbg",
+                                      "mixed"):
         print(f"[!] --forms は shape={a.shape} では無視されます", flush=True)
     if want_worlds and a.shape not in ("acl", "aclv6", "bgpbest", "mixed"):
         print(f"[!] --worlds は shape={a.shape} では無視されます", flush=True)
@@ -6712,8 +6809,9 @@ def main():
     #   違うので(例: compare は dense_list だけ・fix は routefilter だけ)、
     #   種を先に決めてから形を探すと「その形を持たない種」で詰む。
     if want_forms and kinds is not None and a.shape in ("acl", "aclv6",
-                                                        "bgpbest"):
-        mod = {"acl": gpl, "aclv6": gp6, "bgpbest": gbb}[a.shape]
+                                                        "bgpbest", "bgpdbg"):
+        mod = {"acl": gpl, "aclv6": gp6, "bgpbest": gbb,
+               "bgpdbg": gpb}[a.shape]
         keep = [k for k in kinds if set(want_forms) & mod.kind_forms(k)]
         if not keep:
             raise SystemExit(
@@ -6732,19 +6830,21 @@ def main():
         if a.shape == "mixed":
             roll = random.Random(qseed ^ 0xC0FE)
             r = roll.random()
-            # ★配分(2026-08-12 bgpbest 追加時に再調整)= どの shape も概ね 7〜11%。
-            #   bgpbest の枠は引き続き**再配送系(chain/ring/mploop)を薄める**ことで
-            #   作った(BL-100/111 の突合せで「再配送だけが飽和」と出ているため)。
-            # ★riploop(BL-116)の枠は ring を割って捻出(再配送系の合計は不変)。
+            # ★配分(2026-08-16 bgpdbg 選択式化 BL-124 で再調整)= 概ね 5〜9%。
+            #   bgpdbg の 5% は pbr/urpf/leakmap/ospfv3pl/chain から 1% ずつ捻出
+            #   (BGP 合計 13%= BL-100/111 の「BGP 最優先・再配送系は飽和」に整合)。
+            #   経緯= bgpbest の枠(2026-08-12)は再配送系を薄めて捻出・
+            #   riploop(BL-116)の枠は ring を割って捻出。
             shape_i = ("ring" if r < 0.06 else "riploop" if r < 0.11
-                       else "pbr" if r < 0.21
-                       else "urpf" if r < 0.31 else "mploop" if r < 0.39
-                       else "leakmap" if r < 0.49 else "ospfv3pl" if r < 0.59
-                       else "v6redist" if r < 0.67
-                       else "aaa" if r < 0.75
-                       else "acl" if r < 0.81
-                       else "aclv6" if r < 0.86
-                       else "bgpbest" if r < 0.94 else "chain")
+                       else "pbr" if r < 0.20
+                       else "urpf" if r < 0.29 else "mploop" if r < 0.37
+                       else "leakmap" if r < 0.46 else "ospfv3pl" if r < 0.55
+                       else "v6redist" if r < 0.63
+                       else "aaa" if r < 0.71
+                       else "acl" if r < 0.77
+                       else "aclv6" if r < 0.82
+                       else "bgpbest" if r < 0.90
+                       else "bgpdbg" if r < 0.95 else "chain")
             kind = roll.choice({"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
                                 "urpf": gpu.URPF_KINDS, "mploop": MPLOOP_KINDS,
                                 "riploop": RIPLOOP_KINDS,
@@ -6753,7 +6853,8 @@ def main():
                                 "aaa": gpa.KINDS,
                                 "acl": gpl.KINDS,
                                 "aclv6": gp6.KINDS,
-                                "bgpbest": gbb.KINDS}.get(shape_i, KINDS))
+                                "bgpbest": gbb.KINDS,
+                                "bgpdbg": gpb.VARIANTS}.get(shape_i, KINDS))
         else:
             shape_i = a.shape
             kind = kinds[i % len(kinds)]
@@ -6883,8 +6984,19 @@ def main():
             plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
             choices = gp6.build_choices_cause(d, rnd)
         elif shape_i == "bgpdbg":
-            plan = {"checks": []}          # 紙面専用・記述式(選択肢なし)
-            choices = []
+            plan = {"checks": []}          # 紙面専用(実機 PoC 出力の写し)
+            # ★BL-124: 選択式が既定。essay(記述式)は --shape bgpdbg --forms essay
+            #   の明示時のみ(mixed には出さない。BL-111 の MPLS 記述式が流用予定)。
+            bgpdbg_form = gpb.pick_form(
+                d, rnd,
+                allowed=(want_forms if (a.shape == "bgpdbg" and want_forms)
+                         else None))
+            choices = ([] if bgpdbg_form == "essay"
+                       else gpb.build_choices_dbgconf(d, rnd)
+                       if bgpdbg_form == "dbgconf"
+                       else gpb.build_choices_read(d, rnd)
+                       if bgpdbg_form == "read"
+                       else gpb.build_choices_fix(d, rnd))
         else:
             plan = evidence_plan(d, rnd, hard=a.hard, exam=a.exam)
             choices = build_choices(d, rnd, plan=plan, exam=a.exam, pol=pol)
@@ -6907,6 +7019,8 @@ def main():
         # exam: 出題形式も seed で抽選(fix=是正手順 / cause=原因特定)。
         # cause 形は選択肢が別サブシステムの原因仮説になり、語彙で領域が割れない。
         form = "fix"
+        if shape_i == "bgpdbg":
+            form = bgpdbg_form             # ★BL-124: 抽選済みの形(exam に依らない)
         # ★紙面専用 shape は既定形が fix ではない。form は解答 md の「出題形」欄
         #   だけでなく**提示物の出し分け**(acl_evidence)にも使われるので、
         #   ここで実際に組んだ形に合わせておく(既定= cause / 無ければ read)。
@@ -7227,6 +7341,10 @@ def main():
             # ★mploop も同様(監査ポリシーが fix 一意性の担い手)。従来は exam 専用
             #   運用で非 exam は reqs=None のまま TypeError になっていた(BL-118 で検出)。
             reqs = mploop_requirements(d, mp_names, kind, rnd, form=form)
+        if shape_i == "bgpdbg" and form in ("select2", "fix"):
+            # ★BL-124: bgpdbg の要件は是正形の一意性の担い手(exam に依らず必須。
+            #   「設計の維持」「開始側への非依存」が錯乱肢の決定的な排除条件)。
+            reqs = gpb.requirements(d, form)
         # 進行表示に故障種別・対象ルータは出さない(実行者=解答者のネタバレ防止)
         print(f"[{i + 1}/{a.count}] sub-seed={subseed} "
               f"nodes={6 if shape_i in ('mploop', 'riploop') else len(d.get('roles', [d.get('A'), d.get('B')]))}", flush=True)
@@ -7317,8 +7435,10 @@ def main():
                      "adworld", "stale_value", "stale_target", "stale_proto",
                      "前任者", "残骸", "効いていない"]
         elif shape_i == "bgpdbg":
-            q_md = question_md_bgpdbg(d, stamp, rnd)
-            a_md = answer_md_bgpdbg(d, stamp, a.seed, subseed)
+            q_md = question_md_bgpdbg(d, stamp, rnd, form=form,
+                                      choices=choices, reqs=reqs)
+            a_md = answer_md_bgpdbg(d, choices, stamp, a.seed, subseed,
+                                    form=form)
             lint += list(gpb.VARIANTS) + ["variant=", "ルーブリック"]
         elif shape_i == "aclv6":
             blocks = aclv6_evidence(d, rnd, form)
@@ -7388,9 +7508,9 @@ def main():
             a_md = answer_md(d, plan, choices, stamp, a.seed, subseed, kind, prob_id,
                              herr=herr, pol=pol)
             lint += ["missing", "no_seed", "wrong_id"]
-        # 道標の除去(BL-088)。essay(bgpdbg)はタイトルのみ触る。
+        # 道標の除去(BL-088)。essay(bgpdbg --forms essay)はタイトルのみ触る。
         q_md = obfuscate_md(q_md, random.Random(subseed ^ 0x0BF0),
-                            essay=(shape_i == "bgpdbg"),
+                            essay=(shape_i == "bgpdbg" and form == "essay"),
                             # ★patch も設問文が情報の担い手(「接続を失わずに」「移行の途中」)
                             # ★acl の read も同様(BL-106・4例目)= 設問文が
                             #   **向き**(転送される/破棄される)と**選ぶ個数**を担っており、
@@ -7427,7 +7547,14 @@ def main():
                                       #   「正しいものはどれ」へ均すと**二重正解**になる
                                       #   (2026-08-12 E2E 検証で検出)。原因を問う
                                       #   設問文と意図の症状文が一意性の担い手。
-                                      or shape_i == "bgpbest"))
+                                      or shape_i == "bgpbest"
+                                      # ★BL-124: bgpdbg の選択式も全形 keep_ask。
+                                      #   asym_up は「壊れていない」(汎用の症状文が
+                                      #   存在しない障害を参照する)・select2/read は
+                                      #   選ぶ個数が、dbgconf は前提文(示されている
+                                      #   出力が全て)が設問側の情報の担い手。
+                                      or (shape_i == "bgpdbg"
+                                          and form != "essay")))
         leak_lint(q_md, lint)
         with open(f"{repo}/questions/{stamp}.md", "w", encoding="utf-8") as fh:
             fh.write(q_md)

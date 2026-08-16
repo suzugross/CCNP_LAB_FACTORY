@@ -1,5 +1,10 @@
 # BGPDBG-MCQ — shape=bgpdbg の選択式化(パック合流) 設計 (BL-124)
 
+> **★実装完了(2026-08-16)**。本設計どおり+実装時の差分2点:
+> ①asym_up に fix 形(単一選択)を追加(§2 の追記どおり) ②要件行は素の文で渡す
+> (obfuscate の構造化モードが番号を付けるため「- 」を付けると二重装飾)。
+> 検証結果は BACKLOG 完了アーカイブ BL-124 の行を参照。
+
 2026-08-16 ユーザ指示: 「bgpdbg(記述式)を、難易度を可能な限り落とさずに
 選択形式(2〜3選択の複数選択あるいは単一選択)の通常紙面問題へ改修し、パックに載せたい」。
 
@@ -73,11 +78,23 @@ DIFF 表(4/4/5)は変えない。
 
 ### variant × form 抽選(mixed / --shape bgpdbg 共通)
 
+★2026-08-16 コミット ff9afd8(BL-122)のユーザ方針「config で解決させる形を ~70% へ」を反映:
+
 | variant | 抽選 |
 |---|---|
-| addr_mismatch | fix-select2 50% / dbgconf 50% |
-| ebgp_multihop | fix-select2 60% / dbgconf 40% |
-| asym_up | read 60% / dbgconf 40% |
+| addr_mismatch | fix-select2 65% / dbgconf 35% |
+| ebgp_multihop | fix-select2 70% / dbgconf 30% |
+| asym_up | read 45% / fix(単一選択) 30% / dbgconf 25% |
+
+- **asym_up の fix(単一選択・新設)**: 要件=「ピアの確立を維持しつつ非対称を解消」。
+  正解= B に `update-source Loopback0`。決定的錯乱肢= 「A の update-source を
+  **外して**対称化」(両側欠け= Idle 化・PoC 発見1(c) が根拠。対称化はするが要件
+  「確立の維持」に反して切断される)。他= 物理宛への両側付け替え(要件違反)・clear。
+- **鏡像錯乱肢(BL-122 の方向反転パターン)**: fix 形に「直す側を逆にした」肢を
+  **1肢だけ**置く(2肢置くと組で直る二重正解が生まれるため対を成立させない)。
+- **前提文常設(BL-123 パターン)**: dbgconf / read には「構成に関して判断できる
+  ことは、示されている出力が全てである」旨の前提文を置き、未提示前提の
+  補完余地を封じて一意性を担保する。
 
 **essay 形の温存**: `--forms essay` 指定時のみ従来の記述式を出す(mixed には出さない)。
 BL-111 で MPLS L3VPN 記述式が essay 方式を流用予定のため、機構は削除しない。
