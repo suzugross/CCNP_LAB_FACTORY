@@ -1,0 +1,61 @@
+# 自動生成 (gen_redist_field.py) GEN-RDFIELD-54721 K=3 faults=[('BR1', 'filter')]
+problem: GEN-RDFIELD-54721
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT02: 1.1.1.1
+    RT03: 11.11.11.11
+    RT04: 3.3.3.3
+    RT01: 27.27.27.27
+  links:
+  - a: RT02
+    a_ip: 10.248.248.1
+    b: RT04
+    b_ip: 10.248.248.2
+  - a: RT02
+    a_ip: 10.48.148.1
+    b: RT03
+    b_ip: 10.48.148.2
+  - a: RT03
+    a_ip: 10.18.204.1
+    b: RT01
+    b_ip: 10.18.204.2
+invariants:
+  - { type: reachability_all, name: "全ルータ間 Loopback 相互到達", points: 40 }
+  - { type: loop_free, name: "転送ループ無し", points: 10 }
+checks:
+  - name: "RT02: 収容標準どおりの相互再配送(方向・参照ID・seed metric)"
+    node: RT02
+    command: "show running-config | include redistribute"
+    raw:
+      - { regex: 'redistribute +eigrp +471 +metric +100000 +100 +255 +1 +1500' }
+      - { regex: 'redistribute +eigrp +222 +metric +100000 +100 +255 +1 +1500' }
+    points: 10
+  - name: "RT03: 収容標準どおりの相互再配送(方向・参照ID・seed metric)"
+    node: RT03
+    command: "show running-config | include redistribute"
+    raw:
+      - { regex: 'redistribute +eigrp +659 +metric +100000 +100 +255 +1 +1500' }
+      - { regex: 'redistribute +eigrp +471 +metric +100000 +100 +255 +1 +1500' }
+    points: 10
+  - name: "RT02: 再配送にフィルタ類が残っていない(収容標準=全 Loopback 相互到達)"
+    node: RT02
+    command: "show running-config | include redistribute"
+    raw:
+      - { not_regex: "redistribute .*route-map" }
+    points: 10
+  - name: "RT03: 再配送にフィルタ類が残っていない(収容標準=全 Loopback 相互到達)"
+    node: RT03
+    command: "show running-config | include redistribute"
+    raw:
+      - { not_regex: "redistribute .*route-map" }
+    points: 10
+  - name: "RT04: 対岸 RT01 の Loopback(27.27.27.27) を外部経路として学習"
+    node: RT04
+    command: "show ip route 27.27.27.27"
+    raw:
+      - { regex: 'Known via' }
+      - { regex: "distance 170" }
+    points: 10

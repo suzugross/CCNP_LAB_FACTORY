@@ -1,0 +1,31 @@
+! GEN-RDFIELD 初期
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.248.248.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.48.148.1 255.255.255.252
+ no shutdown
+!
+router eigrp 222
+ network 1.1.1.1 0.0.0.0
+ no auto-summary
+ network 10.248.248.0 0.0.0.3
+ redistribute eigrp 471 metric 100000 100 255 1 1500 route-map RM-SVC
+!
+router eigrp 471
+ network 1.1.1.1 0.0.0.0
+ no auto-summary
+ network 10.48.148.0 0.0.0.3
+ redistribute eigrp 222 metric 100000 100 255 1 1500
+!
+ip prefix-list PL-SVC seq 5 permit 27.27.27.27/32
+!
+route-map RM-SVC deny 10
+ match ip address prefix-list PL-SVC
+!
+route-map RM-SVC permit 20
+!

@@ -5153,8 +5153,14 @@ def o3pl_table(d, rows, dev):
     return "\n".join(lines)
 
 
-def ospfv3pl_cfg(d, st):
-    """R2 running-config 抜粋(現在状態の忠実な描画・乱立リスト込み)。"""
+def ospfv3pl_cfg(d, st, omit=()):
+    """R2 running-config 抜粋(現在状態の忠実な描画・乱立リスト込み)。
+
+    omit: **R2 のものではない** prefix-list 名(= R1 の distribute-list が参照して
+    いる実リスト)。R2 の全文 running-config にそれを混ぜると「そのリストは R2 の
+    ものだ」と読めてしまい、選択肢が R1 側で `no ipv6 prefix-list <名前>` と
+    書いているのと矛盾する(2026-08-17 ユーザ指摘・BL-128)。
+    """
     p, a1, a2 = d["proc"], d["a1"], d["a2"]
     L = []
     for ifn, lkey, area in [("Ethernet0/0", "a1", a1),
@@ -5174,10 +5180,19 @@ def ospfv3pl_cfg(d, st):
         L.append(f"  distribute-list prefix-list {st['dl'][1]} in")
     L += [" exit-address-family", "!"]
     for name in sorted(st["pls"]):
+        if name in omit:
+            continue
         for i, ent in enumerate(st["pls"][name], 1):
             L.append(gpo.ent_cli(name, i * 5, ent))
         L.append("!")
     return "\n".join(L)
+
+
+def ospfv3pl_pl_r1(d, st):
+    """R1 が持つ prefix-list(= R1 の distribute-list が参照している実リスト)。"""
+    name = st["dl"][1]
+    return "\n".join(gpo.ent_cli(name, i * 5, ent)
+                     for i, ent in enumerate(st["pls"][name], 1))
 
 
 def ospfv3pl_cfg_r1(d, st):
@@ -5202,12 +5217,20 @@ def ospfv3pl_evidence(d, rnd, form):
         state_blocks.append(
             "```\nR3# show ipv6 route ospf | include ^O|via\n"
             + o3pl_table(d, m["t3"], "R3") + "\n```")
+    # ★distribute-list が R1 に載る盤面では、参照している prefix-list は
+    #   **R1 のもの**。R2 の全文から外し、R1 側の抜粋として提示する
+    #   (提示と判定の食い違いの是正・BL-128)。
+    own_r1 = ({st["dl"][1]} if st["dl"] and st["dl"][0] == "R1" else set())
     cfg_blocks = [f"```\nR2# show running-config\n"
-                  "Building configuration...\n!\n" + ospfv3pl_cfg(d, st) + "\n```"]
-    if st["dl"] and st["dl"][0] == "R1":
+                  "Building configuration...\n!\n"
+                  + ospfv3pl_cfg(d, st, omit=own_r1) + "\n```"]
+    if own_r1:
         cfg_blocks.append(
             "```\nR1# show running-config | section router ospfv3\n"
             + ospfv3pl_cfg_r1(d, st) + "\n```")
+        cfg_blocks.append(
+            "```\nR1# show running-config | include ipv6 prefix-list\n"
+            + ospfv3pl_pl_r1(d, st) + "\n```")
     return state_blocks, cfg_blocks
 
 

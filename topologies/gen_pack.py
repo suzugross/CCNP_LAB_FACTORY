@@ -71,6 +71,14 @@ LAB_GENRES = {
              "prefixes": ["GEN-DHCPTS"], "tags": ["dhcp"]},
     "dmvpn": {"label": "DMVPN TS",
               "prefixes": ["GEN-DMVPN"], "tags": ["dmvpn", "tunnel"]},
+    # ★再配送系(2026-08-16 追加)。GEN-RDFIELD は shape 抽選型の統一生成器で、
+    #   1 つの ID から chain/twoborder/ring の 3 形が出る(ID から型が割れない)。
+    "redist": {"label": "再配送フィールド",
+               "prefixes": ["GEN-RDFIELD"], "tags": ["redistribution", "igp"]},
+    # ★再配送をもう1問取れるようにする枠(同一ジャンルは1問しか選ばれないため、
+    #   別ジャンル名として立てる)。多点相互再配送のループTS(BL-058)。
+    "redistmp": {"label": "多点相互再配送ループTS",
+                 "prefixes": ["GEN-REDISTMP"], "tags": ["redistribution", "igp"]},
 }
 
 
