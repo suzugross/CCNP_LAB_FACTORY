@@ -79,6 +79,14 @@ LAB_GENRES = {
     #   別ジャンル名として立てる)。多点相互再配送のループTS(BL-058)。
     "redistmp": {"label": "多点相互再配送ループTS",
                  "prefixes": ["GEN-REDISTMP"], "tags": ["redistribution", "igp"]},
+    # ★bgp / l2 枠(2026-08-18 追加)= ノルマのジャンル分散で埋まりにくかった2つ。
+    #   bgp= リングBGP(1つのIDから5形が出る統一生成器・4 IOL・実機11サイクル済)。
+    #   l2= EtherChannel 等の L2 TS。★IOSvL2 を使うので Vlan999 SVI の
+    #      shut/no shut が要る場合がある(CATALOG 備考)・採点は telnet 経路。
+    "bgp": {"label": "リングBGP TS",
+            "prefixes": ["GEN-BGPRING"], "tags": ["bgp"]},
+    "l2": {"label": "L2(EtherChannel)TS",
+           "prefixes": ["GEN-L2TS"], "tags": ["l2", "etherchannel"]},
 }
 
 

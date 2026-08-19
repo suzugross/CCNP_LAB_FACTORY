@@ -216,7 +216,7 @@ provision は lab.sh(通常問題と同じ)。採点前にユーザの playbook 
 | `gen_redist_field.py` | GEN-RDFIELD | ★★再配送フィールド=**統一生成器(BL-074完成形)**: shape抽選 chain50%/twoborder25%/ring25%・難4-5・3〜8台 | **1つのIDから3形が出る**(どれが来たかは非自明): ①chain=木構造トラブル(missing/wrong_id/no_seed/filter・全4型実機済・`--hard`=K3+subtle保証) ②twoborder=2点相互再配送(mutual_ts定石移植・no_tag次善/missing両方向/seed_metric・AD95固定・タグ衛生が健全形・no_tag 60→100/seed_metric 20→100実機済) ③ring=ループ(arena委譲・25→100実機済)。`--shape`指定可。★監査regexは表示形/検証seedは掃除済・出題時新seed |
 | `gen_redist_ripospf_ts.py` | GEN-REDISTRO | RIP⇄OSPF 再配送ループTS(7故障) | ★seed_loop 以外は出題前に実機1サイクル推奨。★実測(2026-08-13・BL-116)= **wrong_tag_filter は定常ループにならず振動**(境界2台の状態が入れ替わり・経路消失の窓・ping 0%⇄100%。seed 1 の同値タイ×タグ半遮断が原因)。task.md の症状文「ループしている(TTL超過)」は「断続的に到達不能」が実態。**seed 5 に変えると安定した素通り+片境界遠回り**(紙面 shape=riploop はこちらを採用) |
 | `gen_redist_loop_ts.py` | GEN-REDISTLOOP | 再配送リング BGP ループTS | `--variant ad_ospf/ad_eigrp/filter_ospf`(3変種とも実機済。filter_ospf は distance 禁止→フィルタ解法強制) |
-| `gen_redist_mp_ts.py` | GEN-REDISTMP | 多点相互再配送 定常ループTS(6台・AD無操作) | `--solution acl/prefix/routemap/distance`(要求解法を seed 抽選し監査ポリシーで強制。4モードとも実機フルサイクル済・出題時は新seed) |
+| `gen_redist_mp_ts.py` | GEN-REDISTMP | 多点相互再配送 定常ループTS(6台・AD無操作)・★routemap 時は 1/2 で **Task2**(タグ後残存次善の dl-in 是正・BL-129)が付く | `--solution acl/prefix/routemap/distance`(要求解法を seed 抽選し監査ポリシーで強制・4モード実機済)＋`--task2 auto/on/off`(Task1/Task2 二段・E2E 済 broken10→100/Task1のみ69。2026-08-18)。出題時は新seed |
 | `gen_chain_ts.py` | GEN-CHAIN | 12台レイヤ連鎖故障(17故障) | `--chain-depth 0/2/3/4`・fullmesh/branch×IGP軸 |
 | `gen_mpls_ts.py` | GEN-MPLSTS / GEN-MPLSEB | 12台 MPLS L3VPN TS | `--pece ebgp` で PE-CE eBGP 軸 |
 | `gen_l2_troubleshoot.py` | GEN-L2TS | EtherChannel 等 L2 TS | access=telnet |

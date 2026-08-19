@@ -1,0 +1,57 @@
+# 自動生成 (gen_bgp_ring_ts.py) seed=25856
+problem: GEN-BGPRING-25856
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT01: 172.16.134.1
+    RT02: 172.16.100.1
+    RT03: 172.16.41.1
+    RT04: 172.16.210.1
+  links:
+  - a: RT01
+    a_ip: 10.217.30.1
+    b: RT02
+    b_ip: 10.217.30.2
+  - a: RT02
+    a_ip: 10.247.18.1
+    b: RT03
+    b_ip: 10.247.18.2
+  - a: RT03
+    a_ip: 10.79.30.1
+    b: RT04
+    b_ip: 10.79.30.2
+  - a: RT04
+    a_ip: 10.7.225.1
+    b: RT01
+    b_ip: 10.7.225.2
+invariants:
+- type: reachability_all
+  name: 全拠点網への到達性
+  points: 30
+- type: loop_free
+  name: 転送ループ不在
+  points: 10
+checks:
+- name: 'RT02: 172.16.210.0/24 への転送が主経路(RT01)を経由する'
+  node: RT02
+  command: show ip route 172.16.210.0
+  raw:
+  - contains: 10.217.30.1
+  - not_contains: 10.247.18.2
+  points: 25
+- name: 'RT04: 172.16.100.0/24 への転送が主経路(RT01)を経由する'
+  node: RT04
+  command: show ip route 172.16.100.0
+  raw:
+  - contains: 10.7.225.2
+  - not_contains: 10.79.30.1
+  points: 25
+- name: 'RT02: 近隣単位の weight が使用されていない(監査)'
+  node: RT02
+  command: show run | section router bgp
+  raw:
+  - contains: router bgp 64620
+  - not_regex: neighbor \S+ weight \d+
+  points: 10

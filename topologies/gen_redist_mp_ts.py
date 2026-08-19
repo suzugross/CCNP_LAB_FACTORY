@@ -36,7 +36,16 @@
 出力: problems/GEN-REDISTMP-<seed>/ {problem.yml, params/base.yml, initial/*.cfg.j2,
       grading.yml.j2, task.md.j2, solution.md, solution.json}
       既存 build_topology/lab_up/grade/solve_generated パイプライン互換。
+Task2 オプション(BL-129・2026-08-18): routemap モード時に seed 抽選(1/2)で「タグ是正後も
+残る境界 RIB の次善(O E2 が D EX に勝つ)」の是正を追加要件化。想定解= OSPF 配下
+`distribute-list route-map <名> in`(match tag)で RIB 挿入のみ抑止(LSDB は保持)。
+実測= 即時収束 clear 不要/片側適用は次善が対向へ引っ越す(役割反転)→効果チェックで
+対称性を機械強制。正典= problems/_drafts/REDISTMP-TASK2-DLIN.design.md・
+実測= poc/redistmp-task2/README.md。★task2 の抽選は全 draw の最後(既存 seed の
+バイト再現性維持)。--task2 off で従来と完全同一の生成物。
+
 使い方: gen_redist_mp_ts.py --repo . --seed <int> [--solution acl|prefix|routemap|distance]
+       [--task2 auto|on|off]  (auto=routemap 時 1/2 抽選・on は routemap 強制)
 """
 import argparse
 import json
@@ -190,7 +199,7 @@ INCLUDE_CMD = ("show running-config | include "
                "|^ip route |set tag|match tag")
 
 
-def mode_checks(mode, p):
+def mode_checks(mode, p, task2=False):
     """RB/RC の解法指紋チェック(正の指紋 AND 他解法禁止の複合)。"""
     pid, asn = p["pid"], p["asn"]
     ban_static = {"not_regex": r"(?m)^ip route "}
@@ -213,10 +222,21 @@ def mode_checks(mode, p):
                {"regex": rf"redistribute ospf {pid} metric \S+ \S+ \S+ \S+ \S+ route-map \S+"},
                {"regex": rf"set tag {p['tag']}\b"},
                {"regex": rf"match tag {p['tag']}\b"},
-               {"not_regex": "distribute-list"}, {"not_regex": "prefix-list"},
+               {"not_regex": "prefix-list"},
                {"not_regex": r"(?m)^\s*distance "}, ban_static]
-        name = (f"経路タグ {p['tag']} 方式で実装(E→O 再配送で set tag / O→E 再配送で遮断。"
-                "distribute-list/prefix-list/distance/静的は監査ポリシー違反)")
+        if task2:
+            # Task2(BL-129): OSPF 配下の「distribute-list route-map <名> in」だけを許し、
+            # ACL/prefix/gateway 形(プレフィックス列挙・特定ルータ依存の逃げ道)は禁止。
+            # 実機表示形= " distribute-list route-map DENY-TAG-RIB in"(PoC 採取)。
+            raw += [{"regex": r"distribute-list route-map \S+ in\b"},
+                    {"not_regex": r"distribute-list (\d|prefix|gateway)"},
+                    {"not_regex": r"distribute-list route-map \S+ out"}]
+            name = (f"経路タグ {p['tag']} 方式(Task1)＋タグ判定の受信フィルタ(Task2)で実装"
+                    "(ACL/prefix-list/gateway 形の distribute-list・distance・静的は監査ポリシー違反)")
+        else:
+            raw.insert(4, {"not_regex": "distribute-list"})
+            name = (f"経路タグ {p['tag']} 方式で実装(E→O 再配送で set tag / O→E 再配送で遮断。"
+                    "distribute-list/prefix-list/distance/静的は監査ポリシー違反)")
     else:  # distance
         raw = [{"regex": r"(?m)^\s*distance (\d|ospf|eigrp)"},
                {"not_regex": "distribute-list"}, {"not_regex": "route-map"},
@@ -226,11 +246,14 @@ def mode_checks(mode, p):
     return raw, name
 
 
-def build_grading(prob_id, mode, p):
+def build_grading(prob_id, mode, p, task2=False):
     """grading dict(YAML 化して .j2 として書く。baked 値のみ=描画は素通し)。"""
     victim = f"{p['p_net']}.0"
+    # Task2 時は BL-058 で除外していた RB/RC→RF(片側 O E2 遠回りの正常残留)を再包含=
+    # 「両境界とも EIGRP 直行」を要求。片側適用は次善が対向へ引っ越す(役割反転・実測)
+    # ため、この効果チェックだけで対称適用が機械的に強制される。
     opt_pairs = [[r, t] for r in NODES for t in NODES
-                 if r != t and not (t == "RF" and r in ("RB", "RC"))]
+                 if r != t and (task2 or not (t == "RF" and r in ("RB", "RC")))]
     ra_raw = [{"regex": 'Known via "ospf'}, {"regex": "extern 2"}]
     if mode == "routemap":
         ra_raw.append({"regex": rf"Tag {p['tag']}, type extern 2"})
@@ -248,25 +271,45 @@ def build_grading(prob_id, mode, p):
          "raw": ra_raw, "points": 5},
     ]
     for node in ("RB", "RC"):
-        raw, name = mode_checks(mode, p)
+        raw, name = mode_checks(mode, p, task2)
         checks.append({"name": f"{node}: {name}", "node": node,
-                       "command": INCLUDE_CMD, "raw": raw, "points": 10})
+                       "command": INCLUDE_CMD, "raw": raw,
+                       "points": 8 if task2 else 10})
+    if task2:
+        for node in ("RB", "RC"):
+            # 効果: 境界自身の RIB が D EX(EIGRP 直行)。詳細ビューの
+            # 「Advertised by ospf ...」行は 'Known via "ospf' に非マッチ(PoC 採取)。
+            checks.append({
+                "name": f"{node}: {victim}/24 の RIB が EIGRP 外部(D EX)="
+                        "EIGRP 隣接直行(Task2: 戻り O E2 の排除)",
+                "node": node, "command": f"show ip route {victim}",
+                "raw": [{"regex": 'Known via "eigrp'},
+                        {"not_regex": 'Known via "ospf'}], "points": 5})
+        checks.append({
+            "name": f"RB: {victim}/24 の Type-5 LSA が LSDB に残存"
+                    "(Task2: RIB 挿入のみ抑止・LSA の喪失禁止)",
+            "node": "RB", "command": f"show ip ospf database external {victim}",
+            "raw": [{"regex": rf"Link State ID: {re.escape(victim)}"},
+                    {"regex": rf"External Route Tag: {p['tag']}\b"}], "points": 4})
     checks.append({"name": "RD: 静的経路による回避なし", "node": "RD",
                    "command": "show running-config | include ^ip route ",
                    "raw": [{"not_regex": r"(?m)^ip route "}], "points": 5})
-    assert sum(c["points"] for c in checks) + 25 + 25 + 10 == 100
+    reach_pts, loop_pts = (20, 20) if task2 else (25, 25)
+    assert sum(c["points"] for c in checks) + reach_pts + loop_pts + 10 == 100
+    opt_name = ("最短転送(Task2: 境界→RF の EIGRP 直行を含む全ペア)" if task2 else
+                "最短転送(RB/RC→RF はフィルタ系解法で片側 O E2 遠回りが正常のため除外)")
     return {
         "problem": prob_id,
         "total_points": 100,
         "defaults": {"genie_os": "iosxe"},
         "model": build_model(p),
         "invariants": [
-            {"type": "reachability_all", "points": 25,
+            {"type": "reachability_all", "points": reach_pts,
              "name": f"全ルータ間到達性({victim}/24 を含む)"},
-            {"type": "loop_free", "points": 25,
+            {"type": "loop_free", "points": loop_pts,
              "name": "転送ループ無し(RA/RB/RC/RD の再配送フィードバックループ解消)"},
             {"type": "optimal", "points": 10, "pairs": opt_pairs,
-             "name": "最短転送(RB/RC→RF はフィルタ系解法で片側 O E2 遠回りが正常のため除外)"}],
+             "name": opt_name}],
         "checks": checks}
 
 
@@ -295,7 +338,7 @@ def policy_md(mode, p):
             "- 静的経路・デフォルトルートによる回避は不可。")
 
 
-def fix_filters(mode, p):
+def fix_filters(mode, p, task2=False):
     """solution.json の filters(RB/RC 両方に同一ブロック)。"""
     pid, asn = p["pid"], p["asn"]
     victim = p["p_net"]
@@ -322,14 +365,48 @@ def fix_filters(mode, p):
                 f"redistribute eigrp {asn} subnets route-map SET-TAG"]},
             {"parents": f"router eigrp {asn}", "lines": [
                 f"redistribute ospf {pid} metric {SEED_METRIC} route-map DENY-TAG"]}]
+        if task2:
+            # Task2(BL-129): タグ判定で RIB 挿入のみ抑止(LSDB 保持・即時収束 clear 不要)
+            blocks += [
+                {"parents": "route-map DENY-TAG-RIB deny 10",
+                 "lines": [f"match tag {p['tag']}"]},
+                {"parents": None, "lines": ["route-map DENY-TAG-RIB permit 20"]},
+                {"parents": f"router ospf {pid}", "lines": [
+                    "distribute-list route-map DENY-TAG-RIB in"]}]
     else:  # distance
         blocks = [{"parents": f"router ospf {pid}", "lines": ["distance ospf external 180"]}]
     return [{"node": n, "blocks": blocks} for n in ("RB", "RC")]
 
 
-def task_text(prob_id, mode, p):
+def task_text(prob_id, mode, p, task2=False):
     victim = p["p_net"]
     d = DIFFICULTY[mode]
+    # Task2 節(BL-129・Cisco語調)。どちらの境界が次善側かは収束依存のため断定しない。
+    # 制約は design.md §4(AD 禁止/Task1 不可侵/喪失禁止/将来分自動追従/タグ判定)。
+    task2_block = "" if not task2 else f"""
+## 追加作業指示(Task 2)
+
+上記のループ是正(Task 1)が、監査ポリシーに**完全に準拠して完了している**ことを
+前提とします。Task 1 の設定に、誤りはないものとして扱ってください。その上で、
+次の事象が残存することが、確認されています。
+
+> 境界ルータの一方(どちらの側であるかは、Task 1 完了時の収束状態に依存します)に
+> おいて、`{victim}.0/24` 宛のトラフィックが、隣接する EIGRP ネイバーへ直接
+> 転送されず、**OSPF ドメインを迂回して、対向の境界ルータを経由**しています。
+
+両方の境界ルータについて、`{victim}.0/24` 宛の転送が、**EIGRP 隣接経由の
+最短パス**となるように、設定してください。
+
+### Task 2 の制約条件
+- 管理距離(AD)の変更を伴う手法は、使用しないでください。
+- Task 1 として投入した設定は、変更・削除しないでください。
+- OSPF ドメイン内の他のルータから、当該プレフィックスの **Type-5 LSA および
+  O E2 経路が失われない**ようにしてください。
+- RIP ドメインへ後日追加されるプレフィックスについても、**追加設定なしに**
+  同一の動作が保証されるようにしてください。
+- 経路の判定は、Task 1 で付与した**出自タグに基づいて**行ってください
+  (特定のルータのアドレスに依存する設定は、使用しないでください)。
+"""
     return f"""# 問題 {prob_id} : 多点相互再配送によるルーティングループ(難易度{d})
 
 ## 状況
@@ -370,7 +447,7 @@ EIGRP へ再配送している(シードメトリックは全再配送で `{SEED
 - プロトコル配置(どのルータ・リンクが OSPF / EIGRP / RIP か)は変更不可。
 - **設定変更は RB と RC のみ**。RA / RD / RE / RF は変更禁止。
 {policy_md(mode, p)}
-
+{task2_block}
 ## 進め方のヒント(控えめ)
 `traceroute {victim}.6` の繰り返しパターンを読み、ループ上の各ルータで
 `show ip route {victim}.0` の **Known via(学習元)とメトリック**を 1 台ずつ追え。
@@ -386,8 +463,61 @@ ansible-playbook playbooks/grade.yml -e problem={prob_id} --vault-password-file 
 """
 
 
-def solution_md(prob_id, mode, p):
+def task2_md(p):
+    """Task2(BL-129)の模範解答・解説節。実測値は poc/redistmp-task2/README.md 準拠。"""
     pid, asn, victim, tag = p["pid"], p["asn"], p["p_net"], p["tag"]
+    return f"""
+## Task 2 : タグ是正後も残る境界の次善経路
+
+### なぜタグだけでは残るのか(伝播制御と経路選択の分離)
+DENY-TAG が止めるのは **O→E 再配送(=ドメイン間の伝播)** だけで、境界ルータ自身の
+RIB の勝敗(O E2 110 vs D EX 170)には一切作用しない。Task 1 完了時点では
+victim の Type-5 を生成できるのは片方の境界だけ — もう片方は対向発の O E2 が勝ち、
+`redistribute eigrp` の拾う対象(EIGRP の RIB 経路)を失って LSA を生成しない。
+この「OSPF 勝ち側」境界の転送が、OSPF 迂回(5 ホップ)の次善パスになる。
+**これは Task 1 の設定ミスではなく、タグ運用が構造的にカバーしない領域**である。
+
+### 解(RB・RC の**両方**に投入)
+```
+route-map DENY-TAG-RIB deny 10
+ match tag {tag}
+route-map DENY-TAG-RIB permit 20
+!
+router ospf {pid}
+ distribute-list route-map DENY-TAG-RIB in
+```
+
+OSPF の `distribute-list ... in` は **LSA/LSDB には一切作用せず、LSDB→RIB の
+挿入だけを抑止**する(リンクステートは LSDB の一貫性を壊せないため、ディスタンス
+ベクタの distribute-list とは根本的に別物)。タグ {tag} の O E2 が RIB に入らなく
+なった結果、D EX 170 が昇格して EIGRP 隣接直行(3 ホップ)へ切り替わる。
+実測では適用・撤去とも**約 1 秒で収束・`clear ip route *` 不要**。
+
+### 片側だけ入れると何が起きるか(実測)
+適用側が D EX 化して Type-5 を自己生成した瞬間、**未適用側が O E2 に反転**して
+自分の Type-5 を取り下げる — 次善経路は消えず**対向境界へ引っ越すだけ**。
+固定的な非対称状態は存在しない。対策は必ず両境界に対で入れる(Task 1 と同じ定石)。
+
+### 確認(Before/After)
+- 両境界: `show ip route {victim}.0` が `Known via "eigrp {asn}"`(D EX・直行)。
+- 両境界: `show ip ospf database external {victim}.0` に Type-5 が**残存**
+  (`External Route Tag: {tag}`)。**RIB からだけ消えている**ことが本問の核心の証拠。
+  最終状態では両境界が ASBR 化し LSA は 2 枚(正常)。
+- RA: O E2 のまま維持(ECMP 2 経路化は正常)・到達性不変。
+
+### 教育核心(Task 1 との関係=置換ではなく併用)
+- タグ＋DENY-TAG(再配送点) = **ドメイン間の伝播制御**(ループ防止)。
+- DENY-TAG-RIB(distribute-list in) = **ローカル RIB の選択制御**(次善排除)。
+- 担当する問題が異なるため**両者は併用する** — Task 1 で焼いた出自タグが
+  Task 2 の判定材料にそのまま再利用できるのが、出自マーキング方式の配当。
+- 運用上の注意: dl-in は設定したルータ自身の転送にしか効かない。また、
+  タグ体系の変更は伝播制御と選択制御の**両方を同時に壊す単一依存点**になる。
+"""
+
+
+def solution_md(prob_id, mode, p, task2=False):
+    pid, asn, victim, tag = p["pid"], p["asn"], p["p_net"], p["tag"]
+    label = mode + ("+task2" if task2 else "")
     fixes = {
         "acl": f"""```
 access-list {p['acl_no']} deny {victim}.0 0.0.0.255
@@ -434,7 +564,7 @@ EIGRP 外部(正規方向)を選ぶ。RIB が EIGRP になるため `redistribut
 `distance eigrp 90 100` のように **EIGRP 外部を 110 未満へ下げる**形でも同じ効果(別解)。
 ★実機では設定後 15〜20 秒で自然収束する(`clear ip route *` は不要・実測)。""",
     }
-    return f"""# 模範解答 : {prob_id}(solution={mode})
+    return f"""# 模範解答 : {prob_id}(solution={label})
 
 ## なぜ壊れるか(多点相互再配送×seed metric の定常ループ 型)
 `{victim}.0/24` は RIP 発。RF が EIGRP へ再配送し(D EX・AD 170)、境界 RB/RC が
@@ -465,14 +595,14 @@ EIGRP→OSPF へ再配送(O E2・AD 110)、それが**もう一方の境界で O
 - RA: `traceroute {victim}.6` が RA→(境界)→RD→RE→RF で完走(巡回しない)。
 - フィルタ系解法では、片側境界の `{victim}.0` が O E2(遠回りだが到達可)のまま残るのは
   **正常**(O→E 再注入だけを止めたため。距離調整版では両境界とも EIGRP 直行になる)。
-
+{"  ※ ただし本問は **Task 2 でこの残存を是正する**(下記)。" if task2 else ""}
 ## 教育核心
 - **多点(2 点以上)相互再配送**は、出自が一周して戻る**フィードバック経路**を必ず作る。
   防御は①再配送点フィルタ(distribute-list out)②出自タグ③AD 調整④メトリック劣化の
   4 家系 — 本問は監査ポリシーで {mode} 家系を指定して解かせる形。
 - `distribute-list <list> out <protocol>` の **out+プロトコル引数**は「再配送の入口で
   絞る」ための構文(ネイバー向け out とは別物)。ENARSI 頻出。
-"""
+{task2_md(p) if task2 else ""}"""
 
 
 # ---------------------------------------------------------------- main
@@ -481,10 +611,22 @@ def main():
     ap.add_argument("--repo", default=".")
     ap.add_argument("--seed", type=int, required=True)
     ap.add_argument("--solution", choices=MODES, default=None)
+    ap.add_argument("--task2", choices=["auto", "on", "off"], default="auto",
+                    help="Task2(BL-129: タグ後残存次善の dl-in 是正)。auto=routemap 時に 1/2 抽選")
     a = ap.parse_args()
     rnd = random.Random(a.seed)
     p = rand_values(rnd)
     mode = a.solution or rnd.choice(MODES)
+    # ★task2 の抽選は全 draw の最後(既存 seed のバイト再現性維持・design.md §1)
+    if a.task2 == "on":
+        if a.solution and a.solution != "routemap":
+            ap.error("--task2 on は --solution routemap 専用(タグが無いと成立しない)")
+        mode, task2 = "routemap", True
+    elif a.task2 == "off":
+        task2 = False
+    else:
+        task2 = (mode == "routemap") and (rnd.random() < 0.5)
+    mode_str = mode + ("+task2" if task2 else "")
 
     prob_id = f"GEN-REDISTMP-{a.seed}"
     pdir = f"{a.repo}/problems/{prob_id}"
@@ -492,14 +634,15 @@ def main():
     os.makedirs(f"{pdir}/params", exist_ok=True)
 
     with open(f"{pdir}/params/base.yml", "w", encoding="utf-8") as f:
-        f.write(f"# 自動生成 (gen_redist_mp_ts.py) seed={a.seed} solution={mode}\n")
+        f.write(f"# 自動生成 (gen_redist_mp_ts.py) seed={a.seed} solution={mode_str}\n")
         yaml.safe_dump(p, f, sort_keys=False, allow_unicode=True)
 
     problem = {"id": prob_id,
-               "title": f"多点相互再配送 定常ループTS solution={mode} (seed={a.seed})",
+               "title": f"多点相互再配送 定常ループTS solution={mode_str} (seed={a.seed})",
                "exam": "ENARSI",
                "topics": ["redistribution", "ospf", "eigrp", "rip",
-                          "distribute-list", "routing-loop", "generated"],
+                          "distribute-list", "routing-loop", "generated"]
+                         + (["distribute-list-in"] if task2 else []),
                "difficulty": DIFFICULTY[mode], "topology": "generated",
                "access": "ssh", "target_nodes": NODES, "points": 100,
                "lab": {"links": [
@@ -513,33 +656,35 @@ def main():
                                  "RC": [-480, 0], "RD": [-200, -160],
                                  "RE": [80, -160], "RF": [360, -160]}}}
     with open(f"{pdir}/problem.yml", "w", encoding="utf-8") as f:
-        f.write(f"# 自動生成 (gen_redist_mp_ts.py) seed={a.seed} solution={mode}\n")
+        f.write(f"# 自動生成 (gen_redist_mp_ts.py) seed={a.seed} solution={mode_str}\n")
         yaml.safe_dump(problem, f, sort_keys=False, allow_unicode=True)
 
     for n in NODES:
         with open(f"{pdir}/initial/{n}.cfg.j2", "w", encoding="utf-8") as f:
             f.write("\n".join(render_node(n)) + "\n")
 
-    grading = build_grading(prob_id, mode, p)
+    grading = build_grading(prob_id, mode, p, task2)
     with open(f"{pdir}/grading.yml.j2", "w", encoding="utf-8") as f:
-        f.write(f"# 自動生成 (gen_redist_mp_ts.py) {prob_id} solution={mode}\n"
+        f.write(f"# 自動生成 (gen_redist_mp_ts.py) {prob_id} solution={mode_str}\n"
                 f"# 初期: {p['p_net']}.0/24 が RA/RB/RC/RD で定常ループ"
                 "(reachability/loop_free/optimal/RD正規経路/指紋 が 0)。\n"
-                "# 是正後: RB/RC 両方に指定解法 → 全到達＋ループ消失＋指紋成立。\n")
+                "# 是正後: RB/RC 両方に指定解法 → 全到達＋ループ消失＋指紋成立。\n"
+                + ("# Task2(BL-129): 境界2台とも victim が D EX(EIGRP直行)+Type-5 残存+全ペア optimal。\n"
+                   if task2 else ""))
         yaml.safe_dump(grading, f, sort_keys=False, allow_unicode=True,
                        default_flow_style=False, width=120)
     with open(f"{pdir}/task.md.j2", "w", encoding="utf-8") as f:
-        f.write(task_text(prob_id, mode, p))
+        f.write(task_text(prob_id, mode, p, task2))
     with open(f"{pdir}/solution.md", "w", encoding="utf-8") as f:
-        f.write(solution_md(prob_id, mode, p))
+        f.write(solution_md(prob_id, mode, p, task2))
 
     sol = {"_comment": f"solution={mode}: RB/RC 両方に対で投入(片側のみは鏡像ループ残存)。"
                        "distance 変更も本トポロジでは clear 不要(15-20秒自然収束・実測)。",
-           "nodes": {}, "filters": fix_filters(mode, p)}
+           "nodes": {}, "filters": fix_filters(mode, p, task2)}
     with open(f"{pdir}/solution.json", "w", encoding="utf-8") as f:
         json.dump(sol, f, ensure_ascii=False, indent=2)
 
-    print(f"wrote problems/{prob_id} : solution={mode} diff={DIFFICULTY[mode]} "
+    print(f"wrote problems/{prob_id} : solution={mode_str} diff={DIFFICULTY[mode]} "
           f"victim={p['p_net']}.0/24 pid={p['pid']} asn={p['asn']}")
 
 
