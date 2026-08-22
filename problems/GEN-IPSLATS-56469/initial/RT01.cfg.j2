@@ -1,0 +1,26 @@
+! RT01 初期状態 (顧客エッジ・先般 監視の導入/変更作業を実施した直後の状態)
+interface {{ links[0] }}
+ description === to RT02 (primary ISP access) ===
+ ip address 10.6.217.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (backup ISP access) ===
+ ip address 10.6.82.1 255.255.255.252
+ no shutdown
+!
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+!
+ip sla 42
+ icmp-echo 9.9.9.9 source-ip 10.6.217.1
+ frequency 10
+!
+ip sla schedule 42 life forever start-time now
+!
+track 36 ip sla 42 reachability
+!
+ip route 100.64.76.116 255.255.255.255 10.6.217.2
+ip route 0.0.0.0 0.0.0.0 10.6.217.2 track 36
+ip route 0.0.0.0 0.0.0.0 10.6.82.2 250
+!

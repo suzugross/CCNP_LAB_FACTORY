@@ -1,0 +1,35 @@
+! RT04
+interface Loopback0
+ ip address 31.31.31.31 255.255.255.255
+!
+interface Loopback1
+ ip address 172.16.217.1 255.255.255.0
+!
+interface {{ links[1] }}
+ ip address 10.60.228.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[0] }}
+ ip address 10.195.167.2 255.255.255.252
+ no shutdown
+!
+router bgp 64576
+ bgp router-id 31.31.31.31
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ bgp bestpath compare-routerid
+ neighbor 10.60.228.2 remote-as 65440
+ neighbor 10.195.167.1 remote-as 65221
+ address-family ipv4 unicast
+  network 172.16.217.0 mask 255.255.255.0
+  neighbor 10.60.228.2 activate
+  neighbor 10.195.167.1 activate
+  neighbor 10.195.167.1 route-map RM-PREPEND-OUT out
+ exit-address-family
+!
+ip prefix-list PL-SELF permit 172.16.217.0/24
+route-map RM-PREPEND-OUT permit 10
+ match ip address prefix-list PL-SELF
+ set as-path prepend 64576 64576
+route-map RM-PREPEND-OUT permit 20
+!

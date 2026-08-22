@@ -1,0 +1,150 @@
+# 自動生成 (gen_redist_mp_ts.py) GEN-REDISTMP-42834 solution=distance
+# 初期: 192.168.154.0/24 が RA/RB/RC/RD で定常ループ(reachability/loop_free/optimal/RD正規経路/指紋 が 0)。
+# 是正後: RB/RC 両方に指定解法 → 全到達＋ループ消失＋指紋成立。
+problem: GEN-REDISTMP-42834
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RA: 99.99.99.99
+    RB: 51.51.51.51
+    RC: 94.94.94.94
+    RD: 91.91.91.91
+    RE: 62.62.62.62
+    RF: 192.168.154.6
+  links:
+  - a: RA
+    a_ip: 172.16.85.1
+    b: RB
+    b_ip: 172.16.85.2
+  - a: RA
+    a_ip: 172.16.169.1
+    b: RC
+    b_ip: 172.16.169.3
+  - a: RB
+    a_ip: 172.16.197.2
+    b: RD
+    b_ip: 172.16.197.4
+  - a: RC
+    a_ip: 172.16.65.3
+    b: RD
+    b_ip: 172.16.65.4
+  - a: RD
+    a_ip: 172.16.175.4
+    b: RE
+    b_ip: 172.16.175.5
+  - a: RE
+    a_ip: 172.16.165.5
+    b: RF
+    b_ip: 172.16.165.6
+invariants:
+- type: reachability_all
+  points: 25
+  name: 全ルータ間到達性(192.168.154.0/24 を含む)
+- type: loop_free
+  points: 25
+  name: 転送ループ無し(RA/RB/RC/RD の再配送フィードバックループ解消)
+- type: optimal
+  points: 10
+  pairs:
+  - - RA
+    - RB
+  - - RA
+    - RC
+  - - RA
+    - RD
+  - - RA
+    - RE
+  - - RA
+    - RF
+  - - RB
+    - RA
+  - - RB
+    - RC
+  - - RB
+    - RD
+  - - RB
+    - RE
+  - - RC
+    - RA
+  - - RC
+    - RB
+  - - RC
+    - RD
+  - - RC
+    - RE
+  - - RD
+    - RA
+  - - RD
+    - RB
+  - - RD
+    - RC
+  - - RD
+    - RE
+  - - RD
+    - RF
+  - - RE
+    - RA
+  - - RE
+    - RB
+  - - RE
+    - RC
+  - - RE
+    - RD
+  - - RE
+    - RF
+  - - RF
+    - RA
+  - - RF
+    - RB
+  - - RF
+    - RC
+  - - RF
+    - RD
+  - - RF
+    - RE
+  name: 最短転送(RB/RC→RF はフィルタ系解法で片側 O E2 遠回りが正常のため除外)
+checks:
+- name: 'RD: 192.168.154.0/24 を正規経路(RE 方向 172.16.175.5)で学習(再注入経路の排除)'
+  node: RD
+  command: show ip route 192.168.154.0
+  raw:
+  - regex: Known via "eigrp
+  - regex: \* 172\.16\.175\.5,
+  points: 10
+- name: 'RA: 192.168.154.0/24 を O E2 で学習(EIGRP→OSPF 再配送設計の維持)'
+  node: RA
+  command: show ip route 192.168.154.0
+  raw:
+  - regex: Known via "ospf
+  - regex: extern 2
+  points: 5
+- name: 'RB: 管理距離(AD)の調整のみで実装(distribute-list/route-map/prefix-list/静的は変更凍結中=監査ポリシー違反)'
+  node: RB
+  command: show running-config | include redistribute |distribute-list|distance |route-map|prefix-list|^ip route |set tag|match
+    tag
+  raw:
+  - regex: (?m)^\s*distance (\d|ospf|eigrp)
+  - not_regex: distribute-list
+  - not_regex: route-map
+  - not_regex: prefix-list
+  - not_regex: '(?m)^ip route '
+  points: 10
+- name: 'RC: 管理距離(AD)の調整のみで実装(distribute-list/route-map/prefix-list/静的は変更凍結中=監査ポリシー違反)'
+  node: RC
+  command: show running-config | include redistribute |distribute-list|distance |route-map|prefix-list|^ip route |set tag|match
+    tag
+  raw:
+  - regex: (?m)^\s*distance (\d|ospf|eigrp)
+  - not_regex: distribute-list
+  - not_regex: route-map
+  - not_regex: prefix-list
+  - not_regex: '(?m)^ip route '
+  points: 10
+- name: 'RD: 静的経路による回避なし'
+  node: RD
+  command: 'show running-config | include ^ip route '
+  raw:
+  - not_regex: '(?m)^ip route '
+  points: 5

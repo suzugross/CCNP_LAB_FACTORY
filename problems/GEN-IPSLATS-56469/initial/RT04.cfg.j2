@@ -1,0 +1,29 @@
+! RT04 初期状態 (Internet コア・プロバイダ管理・変更禁止)
+interface Loopback0
+ ip address 5.5.5.5 255.255.255.255
+!
+interface Loopback10
+ description === Simulated Internet Service (9.9.9.9) ===
+ ip address 9.9.9.9 255.255.255.255
+!
+interface Loopback20
+ description === Primary-path Health Beacon ===
+ ip address 100.64.76.116 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 ===
+ ip address 10.6.223.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 ===
+ ip address 10.6.231.2 255.255.255.252
+ no shutdown
+!
+! データ(RT01 Lo0 宛戻り)は常時生存の backup 優先+primary フォールバック
+!   (IOL リンクダウン非伝播対策・ENCOR-IPSLA-02 と同方針)
+ip route 2.2.2.2 255.255.255.255 10.6.231.1
+ip route 2.2.2.2 255.255.255.255 10.6.223.1 200
+! プローブ送信元(/30)への戻りは primary 経由のみ(応答も primary 対称)
+ip route 10.6.217.0 255.255.255.252 10.6.223.1
+!

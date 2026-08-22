@@ -1,0 +1,43 @@
+# 自動生成 (gen_redist_field.py) GEN-RDFIELD-4246 K=2 faults=[('BR1', 'missing')]
+problem: GEN-RDFIELD-4246
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT02: 35.35.35.35
+    RT01: 20.20.20.20
+    RT03: 87.87.87.87
+  links:
+  - a: RT02
+    a_ip: 10.249.90.1
+    b: RT01
+    b_ip: 10.249.90.2
+  - a: RT02
+    a_ip: 10.60.217.1
+    b: RT03
+    b_ip: 10.60.217.2
+invariants:
+  - { type: reachability_all, name: "全ルータ間 Loopback 相互到達", points: 40 }
+  - { type: loop_free, name: "転送ループ無し", points: 10 }
+checks:
+  - name: "RT02: 収容標準どおりの相互再配送(方向・参照ID・seed metric)"
+    node: RT02
+    command: "show running-config | include redistribute"
+    raw:
+      - { regex: 'redistribute +eigrp +629 +metric +100000 +100 +255 +1 +1500' }
+      - { regex: 'redistribute +eigrp +891 +metric +100000 +100 +255 +1 +1500' }
+    points: 15
+  - name: "RT02: 再配送にフィルタ類が残っていない(収容標準=全 Loopback 相互到達)"
+    node: RT02
+    command: "show running-config | include redistribute"
+    raw:
+      - { not_regex: "redistribute .*route-map" }
+    points: 25
+  - name: "RT01: 対岸 RT03 の Loopback(87.87.87.87) を外部経路として学習"
+    node: RT01
+    command: "show ip route 87.87.87.87"
+    raw:
+      - { regex: 'Known via' }
+      - { regex: "distance 170" }
+    points: 10

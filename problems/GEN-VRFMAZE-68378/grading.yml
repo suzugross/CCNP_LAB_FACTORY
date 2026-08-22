@@ -1,0 +1,110 @@
+# 自動生成 (gen_vrf_maze.py) seed=68378
+# 足跡採点=traceroute のホップ番号×中継IPで順路まで拘束。
+problem: GEN-VRFMAZE-68378
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'RT01: 部屋 ROOM-RED の収容(入口/出口サブIF)'
+  node: RT01
+  command: show vrf detail ROOM-RED
+  raw:
+  - regex: Et0/0\.370\b
+  - regex: Lo11\b
+  points: 8
+- name: 'RT01: 部屋 ROOM-OLIVE の収容(入口/出口サブIF)'
+  node: RT01
+  command: show vrf detail ROOM-OLIVE
+  raw:
+  - regex: Et0/0\.337\b
+  - regex: Et0/0\.578\b
+  points: 4
+- name: 'RT01: 部屋 ROOM-GREEN の収容(入口/出口サブIF)'
+  node: RT01
+  command: show vrf detail ROOM-GREEN
+  raw:
+  - regex: Et0/0\.229\b
+  - regex: Et0/0\.867\b
+  points: 4
+- name: 'RT01: 部屋 ROOM-BLUE の収容(入口/出口サブIF)'
+  node: RT01
+  command: show vrf detail ROOM-BLUE
+  raw:
+  - regex: Et0/0\.341\b
+  - regex: Et0/0\.492\b
+  points: 4
+- name: 'RT01: 部屋 ROOM-AMBER の収容(入口/出口サブIF)'
+  node: RT01
+  command: show vrf detail ROOM-AMBER
+  raw:
+  - regex: Et0/0\.735\b
+  - regex: Lo99\b
+  points: 4
+- name: 'RT02: TURN1 の収容(廊下1/2)'
+  node: RT02
+  command: show vrf detail TURN1
+  raw:
+  - regex: Et0/0\.370\b
+  - regex: Et0/0\.337\b
+  points: 4
+- name: 'RT02: TURN2 の収容(廊下3/4)'
+  node: RT02
+  command: show vrf detail TURN2
+  raw:
+  - regex: Et0/0\.578\b
+  - regex: Et0/0\.229\b
+  points: 4
+- name: 'RT02: TURN3 の収容(廊下5/6)'
+  node: RT02
+  command: show vrf detail TURN3
+  raw:
+  - regex: Et0/0\.867\b
+  - regex: Et0/0\.341\b
+  points: 4
+- name: 'RT02: TURN4 の収容(廊下7/8)'
+  node: RT02
+  command: show vrf detail TURN4
+  raw:
+  - regex: Et0/0\.492\b
+  - regex: Et0/0\.735\b
+  points: 4
+- name: 'RT01: 温め(ARP解決・採点対象外)'
+  node: RT01
+  command: ping vrf ROOM-RED 172.22.47.1 source 172.22.248.1 repeat 3
+  raw:
+  - regex: Success rate
+  points: 0
+- name: 'RT01: START→GOAL 迷路走破 (172.22.248.1→172.22.47.1)'
+  node: RT01
+  command: ping vrf ROOM-RED 172.22.47.1 source 172.22.248.1 repeat 10
+  raw:
+  - regex: Success rate is (100|[89][0-9]) percent
+  points: 20
+- name: 'RT01: GOAL→START 帰路走破'
+  node: RT01
+  command: ping vrf ROOM-AMBER 172.22.248.1 source 172.22.47.1 repeat 10
+  raw:
+  - regex: Success rate is (100|[89][0-9]) percent
+  points: 10
+- name: 'RT01: traceroute 足跡が設計の順路と完全一致'
+  node: RT01
+  command: traceroute vrf ROOM-RED 172.22.47.1 source 172.22.248.1 numeric timeout
+    1 probe 2
+  raw:
+  - regex: (?m)^\s*1\s+[* ]*10\.68\.1\.2\b
+  - regex: (?m)^\s*2\s+[* ]*10\.68\.2\.1\b
+  - regex: (?m)^\s*3\s+[* ]*10\.68\.3\.2\b
+  - regex: (?m)^\s*4\s+[* ]*10\.68\.4\.1\b
+  - regex: (?m)^\s*5\s+[* ]*10\.68\.5\.2\b
+  - regex: (?m)^\s*6\s+[* ]*10\.68\.6\.1\b
+  - regex: (?m)^\s*7\s+[* ]*10\.68\.7\.2\b
+  - regex: (?m)^\s*8\s+[* ]*(172\.22\.47\.1|10\.68\.8\.1)\b
+  points: 20
+- name: 'RT01: ちょうど 8 歩で GOAL(近道・遠回りなし)'
+  node: RT01
+  command: traceroute vrf ROOM-RED 172.22.47.1 source 172.22.248.1 numeric timeout
+    1 probe 2
+  raw:
+  - regex: (?m)^\s*8\s+[* ]*(172\.22\.47\.1|10\.68\.8\.1)\b
+  - not_regex: (?m)^\s*9\s
+  points: 10

@@ -1,0 +1,77 @@
+# 自動生成 (gen_ipsla_ts.py) seed=56469 faults=sla_wrong_target
+# 監視標準の指定値で固定判定(ENCOR-IPSLA-01/02 の型)。効果チェックは
+# statistics OK/RIB/実疎通。破壊実証は verify_ipsla_generated.yml(任意)。
+problem: GEN-IPSLATS-56469
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'SLA 42: オペレーション定義が監視標準どおり (icmp-echo/ビーコン/送信元)'
+  node: RT01
+  command: show ip sla configuration 42
+  raw:
+  - regex: 'Type of operation to perform: icmp-echo'
+  - regex: 'Target address/Source address: 100\.64\.76\.116/10\.6\.217\.1'
+  points: 10
+- name: 'SLA 42: 恒久スケジュールで稼働中 (life forever / Active)'
+  node: RT01
+  command: show ip sla configuration 42
+  raw:
+  - regex: 'Life \(seconds\): Forever'
+  - regex: 'Status of entry \(SNMP RowStatus\): Active'
+  points: 10
+- name: '効果: SLA 42 のプローブが成功している (return code OK)'
+  node: RT01
+  command: show ip sla statistics 42
+  raw:
+  - regex: 'Latest operation return code: OK'
+  points: 10
+- name: 'Track 36: SLA 42 の reachability を監視し Up'
+  node: RT01
+  command: show track 36
+  raw:
+  - regex: IP SLA 42 reachability
+  - regex: Reachability is Up
+  points: 10
+- name: ビーコン /32 が primary next-hop へ固定されている
+  node: RT01
+  command: show running-config | include ^ip route
+  raw:
+  - regex: (?m)^ip route 100\.64\.76\.116 255\.255\.255\.255 10\.6\.217\.2\s*$
+  - not_regex: ip route 100\.64\.76\.116 255\.255\.255\.255 10\.6\.82\.2
+  points: 10
+- name: default route 対が監視標準どおり (primary=track 36 / backup=AD 250)
+  node: RT01
+  command: show running-config | include ^ip route
+  raw:
+  - regex: (?m)^ip route 0\.0\.0\.0 0\.0\.0\.0 10\.6\.217\.2 track 36\s*$
+  - regex: (?m)^ip route 0\.0\.0\.0 0\.0\.0\.0 10\.6\.82\.2 250\s*$
+  - not_regex: (?m)^ip route 0\.0\.0\.0 0\.0\.0\.0 10\.6\.217\.2\s*$
+  - not_regex: (?m)^ip route 0\.0\.0\.0 0\.0\.0\.0 10\.6\.82\.2\s*$
+  points: 15
+- name: '効果: RIB の default が primary 単独 (AD1・backup 混走なし)'
+  node: RT01
+  command: show ip route 0.0.0.0
+  raw:
+  - regex: Known via \"static\", distance 1
+  - regex: \* 10\.6\.217\.2
+  - not_regex: 10\.6\.82\.2
+  points: 10
+- name: '効果: 9.9.9.9 への実疎通 (source Lo0)'
+  node: RT01
+  command: ping 9.9.9.9 source Loopback0 repeat 10
+  raw:
+  - regex: Success rate is 100 percent
+  points: 15
+- name: 'track-table: default が track 36 に連動 (state up)'
+  node: RT01
+  command: show ip route track-table
+  raw:
+  - regex: track 36 state is \[up\]
+  points: 5
+- name: 監視標準外のオペレーション残骸なし
+  node: RT01
+  command: show running-config | section ^ip sla
+  raw:
+  - not_regex: (?m)^\s*(path-echo|udp-jitter|tcp-connect|icmp-jitter)
+  points: 5

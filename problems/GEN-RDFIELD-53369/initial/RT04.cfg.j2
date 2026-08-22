@@ -1,0 +1,24 @@
+! GEN-RDFIELD 初期
+interface Loopback0
+ ip address 71.71.71.71 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.48.50.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.160.141.1 255.255.255.252
+ no shutdown
+!
+router ospf 14
+ router-id 71.71.71.71
+ network 71.71.71.71 0.0.0.0 area 0
+ network 10.48.50.0 0.0.0.3 area 0
+ redistribute eigrp 315 subnets
+!
+router eigrp 308
+ network 71.71.71.71 0.0.0.0
+ no auto-summary
+ network 10.160.141.0 0.0.0.3
+ redistribute ospf 14 match internal external 1 external 2 metric 100000 100 255 1 1500
+!

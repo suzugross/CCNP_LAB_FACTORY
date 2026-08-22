@@ -1,0 +1,31 @@
+! RT06 (role=e, eigrp=named) 初期構成 (AS 100)
+key chain KC
+ key 1
+  key-string CCNPKEY
+!
+interface Loopback0
+ ip address 10.78.78.78 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.139.139.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.163.163.1 255.255.255.252
+ no shutdown
+!
+router eigrp CCNP
+ address-family ipv4 unicast autonomous-system 100
+  af-interface Loopback0
+   passive-interface
+  exit-af-interface
+  af-interface {{ links[1] }}
+   authentication mode md5
+   authentication key-chain KC
+  exit-af-interface
+  eigrp router-id 10.78.78.78
+  network 10.78.78.78 0.0.0.0
+  network 10.139.139.0 0.0.0.3
+  network 10.163.163.0 0.0.0.3
+ exit-address-family
+!
