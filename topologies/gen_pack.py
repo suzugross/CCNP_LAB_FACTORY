@@ -1401,6 +1401,11 @@ def cmd_new(a):
         stamps = borrow_papers(repo, n_paper, today)
         log(f"[紙面] dry-run: 既出の紙面を {len(stamps)} 問借用"
             f"(必須ジャンルの個別生成は実生成時のみ)")
+    elif n_paper <= 0:
+        # ★BL-133: 0問指定でも必須ジャンル確保ループが走り、パック未収載の
+        #   孤児 questions/answers が残っていた → 紙面フェーズごとスキップ
+        stamps = []
+        log("[紙面] 0問指定のため紙面フェーズをスキップ(必須ジャンルも生成しない)")
     else:
         stamps, _got = gen_papers(repo, n_paper, seed, a.shape, a.exam, a.hard,
                                   log, require=require, rnd=rnd)
