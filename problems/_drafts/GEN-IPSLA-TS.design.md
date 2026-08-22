@@ -47,7 +47,7 @@ RT01: Lo0=1.1.1.1(データ送信元)
 |---|---|---|---|
 | sla | `sla_not_scheduled` schedule 未投入 | 固着 | `show ip sla statistics` に試行が出ない |
 | sla | `sla_wrong_source` source が backup 側/Lo0 | 固着 | 戻り経路ポリシーで応答が返らない。statistics は Timeout |
-| sla | `sla_wrong_target` 監視先が 8.8.8.8(両ISP到達可) | 不感 | 奥障害時にプローブが backup で成功し続ける |
+| sla | `sla_wrong_target` 監視先がデータ宛(両ISP到達可) | ★機能症状なし(監査形) | ★p10 是正= プローブ送信元への戻りが primary 限定のため、default 追従でも backup で成功できず**フラップは起こらない**。構成監査指摘のチケットで出す |
 | sla | `sla_threshold_only` react/threshold だけ設定した残骸 | 不感(効いていない) | threshold は reachability に効かない |
 | track | `track_wrong_sla` 存在しない SLA 番号参照 | 固着 or 無条件 | `show track` の対象表示 |
 | track | `track_route_mismatch` スタティック側の track 番号不一致 | 不感/無条件 | `show ip route track-table` |
@@ -60,7 +60,7 @@ RT01: Lo0=1.1.1.1(データ送信元)
 | 上流 | `acl_probe_block` RT02/RT04 の ACL がプローブだけ遮断 | 固着 | 決め手は上流の ACL カウンタ(acl/aaa の型) |
 | sla | ★`sla_life_finite`(PoC 知見5) unschedule→再 schedule 時に life 既定 3600 のまま | 時限で固着 | configuration の `Life (seconds): 3600` |
 | sla | ★`sla_schedule_rejected`(PoC 知見8) timeout>frequency で schedule が day0 で落ちる | 固着(未稼働) | running-config に schedule 行が無い+return code Unknown |
-| sla | ★`sla_wrong_source_lo`(PoC 知見14) source=Lo0 で非対称往復成功 | **不感**(track Up のまま) | 監視が primary 戻り経路を見ていない。破壊実証で顕在化 |
+| sla | ★`sla_wrong_source_lo`(PoC 知見14+p10) source=Lo0 で非対称往復成功 | ★**誤フェイルオーバ**(p10 是正) | 応答が backup 依存になり、**backup 側奥障害で誤 Down→健全な primary から死んだ backup へ切替→全断**(10.2s・ping 0% 実測)。primary 奥障害は普通に検知する(当初の「不感」予測は誤り) |
 
 ★PoC 実測(2026-08-22・poc/ipsla/README.md)による確定:
 - `pin_missing` の実症状= **フェイルバック不能ラッチ**(平常時 Up の潜在故障→障害後、
@@ -164,3 +164,16 @@ CML に STOPPED で温存)。
 - ★**実機 E2E 14 サイクル全通過(2026-08-22)**= 全13種 broken 50〜90→fix 後 100、
   複合1本(wrong_source_lo×route_track_missing) 70→100、不感系4種+複合の
   破壊実証 PASS。結果表= poc/ipsla/README.md §E2E。CATALOG/gen_pack 合流済み。
+
+## 9. ★症状文の事後是正(2026-08-22・出題初日にユーザが発見)
+
+- PACK-20260822-D Q1(sla_wrong_target)で、チケットの「フラップ」がユーザの
+  破壊実験で再現されず、**症状文が盤面と矛盾**していることが発覚。原因=
+  wrong_source_lo / wrong_target の2種だけ症状文を**机上予測**で書いており、
+  E2E は「fix で満点」「切替・復帰」だけを見て**症状文と実挙動の一致を検証して
+  いなかった**。p10 実測で両種を是正(§2 の表・実測= poc/ipsla/README.md p10)。
+- ★恒久教訓= **症状文(チケット)も実測対象**。故障種を追加するときは
+  「そのチケットの出来事を実機で再現できること」を PoC/E2E の検証項目に含める。
+- 盤面特性の副記録(p10 対照)= backup 側奥障害では golden でもデータが全断する
+  (RT04 の Lo0 宛戻りが backup 優先+IOL リンクダウン非伝播で AD200 フォール
+  バックが発動しないため)。チケットには使わないこと。

@@ -694,9 +694,59 @@ def p6c(devs, log):
     conf(d, ["no ip route 0.0.0.0 0.0.0.0 10.0.12.2"])
 
 
+def p10(devs, log):
+    """sla_wrong_source_lo の真の症状の裏取り(BL-134 出題後の症状文監査)。
+
+    仮説: source=Lo0 だとプローブ応答が backup 経由に依存するため、
+    ①奥障害(primary 側)は普通に検知できる(=「切替されず」の症状文は誤り)
+    ②backup 側の奥障害(RT03 e0/2 shut)で track が誤って Down し、
+      健全な primary から壊れた backup へ切り替えて全断する(誤フェイルオーバ)。
+    対照: golden(source=primary IF)は backup 側障害の影響を受けない。
+    """
+    d = devs["RT01"]
+    # --- ①② wrong_source_lo 形 ---
+    reset_rt01(devs)
+    golden(devs, sla_lines=["ip sla 1",
+                            f"icmp-echo {BEACON} source-ip 1.1.1.1",
+                            "frequency 10", "exit"])
+    t_up = wait(lambda: track_state(d)[0] == "Up", timeout=120, label="p10 up")
+    log.append(f"- Lo0 source の定常: track Up まで {t_up}s(非対称往復で成立)")
+    print("[i] p10: ①奥障害(RT02 e0/2 shutdown)= primary 側")
+    conf(devs["RT02"], ["interface Ethernet0/2", "shutdown", "exit"])
+    t_down = wait(lambda: track_state(d)[0] == "Down", timeout=90, every=3,
+                  label="p10 deep down")
+    log.append(f"- ①primary 奥障害の検知: track Down まで **{t_down}s**"
+               "(-1=検知せず。検知するなら『切替されず』の症状文は誤り)")
+    conf(devs["RT02"], ["interface Ethernet0/2", "no shutdown", "exit"])
+    wait(lambda: track_state(d)[0] == "Up", timeout=120, label="p10 re-up")
+    # --- ② backup 側の奥障害 ---
+    print("[i] p10: ②backup 奥障害(RT03 e0/2 shutdown)")
+    conf(devs["RT03"], ["interface Ethernet0/2", "shutdown", "exit"])
+    t_false = wait(lambda: track_state(d)[0] == "Down", timeout=90, every=3,
+                   label="p10 false down")
+    log.append(f"- ②backup 奥障害での track: Down まで **{t_false}s**"
+               "(-1=影響なし。Down なら誤フェイルオーバ)")
+    block(log, "②の `show ip route 0.0.0.0`", sh(d, "show ip route 0.0.0.0"))
+    rate, out = ping_ok(d, DATA)
+    log.append(f"- ②の ping {DATA} source Lo0: **{rate}%**"
+               "(0% なら健全な primary があるのに全断)")
+    block(log, "②の `show ip sla statistics`", sla_stats(d))
+    # --- 対照: golden source で同じ backup 奥障害 ---
+    reset_rt01(devs)
+    golden(devs)
+    wait(lambda: track_state(d)[0] == "Up", timeout=120, label="p10 ctl up")
+    time.sleep(30)
+    st, _ = track_state(d)
+    rate, _ = ping_ok(d, DATA)
+    log.append(f"- 対照(golden source・backup 奥障害継続中): track **{st}** / "
+               f"ping **{rate}%**(Up・100% なら backup 側障害に不感=正しい設計)")
+    conf(devs["RT03"], ["interface Ethernet0/2", "no shutdown", "exit"])
+
+
 CHECKS = {"p0": p0, "p1": p1, "p2": p2, "p3": p3, "p4": p4,
           "p5": p5, "p6": p6, "p7": p7, "p8": p8,
-          "p4b": p4b, "p6b": p6b, "p8b": p8b, "p9": p9, "p6c": p6c}
+          "p4b": p4b, "p6b": p6b, "p8b": p8b, "p9": p9, "p6c": p6c,
+          "p10": p10}
 
 
 def main():

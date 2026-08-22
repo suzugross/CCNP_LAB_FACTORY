@@ -132,10 +132,31 @@ results-raw.md。gen_ipsla_ts の設計前提となる実測知見。
 - track_wrong_sla の fix は `track T ip sla S reachability` の**直接再定義で成立**
   (no 形不要・実機確認)。
 
+## p10 症状文監査(2026-08-22・出題初日のユーザ指摘を受けた事後実測)
+
+PACK-20260822-D Q1 で sla_wrong_target のチケット(フラップ)が実挙動と矛盾すると
+ユーザが発見 → 机上予測で書いた2種の症状文を実測で是正した。
+
+19. **sla_wrong_source_lo(source=Lo0)の真の症状= 誤フェイルオーバ**:
+    ①primary 奥障害は**普通に検知する**(Down まで 10.2s。「切替されず Up のまま」
+    という当初の症状文は誤り)。②★**backup 奥障害で誤って Down(10.2s)**→
+    健全な primary から死んだ backup へ切替→ **ping 0% 全断**(プローブ応答が
+    RT04 の Lo0 宛戻り=backup 優先に依存しているため)。対照= golden source は
+    同状況で track Up を維持。
+20. **sla_wrong_target(データ宛監視)は機能症状が出ない**: プローブ送信元
+    (primary IF アドレス)への戻りが primary 限定のため、default 追従でも backup
+    経由で成功できず、**フラップは構造的に不成立**。奥障害の検知・復帰も golden と
+    外形が同じ → チケットは「構成監査からの不適合指摘」形に変更。
+21. (盤面特性・チケット使用禁止)backup 側奥障害では **golden でもデータが全断**
+    する= RT04 の Lo0 宛戻りが backup 優先で、IOL リンクダウン非伝播により
+    AD200 フォールバックが発動しないため(p10 対照で track Up・ping 0% を実測)。
+22. ★恒久教訓: **症状文(チケット)も実測対象**。E2E の「fix で満点」だけでは
+    症状文の正しさは保証されない。
+
 ## 生成器設計への反映(design.md への差分)
 
 - 故障種に追加: `sla_life_finite`(知見5)・`sla_schedule_rejected`(知見8)・
-  `sla_wrong_source_lo`(知見14・不感形の最有力)。
+  `sla_wrong_source_lo`(知見14・★p10 で誤フェイルオーバ形と確定)。
 - `op_pathecho_blocked` は「差し替え唯一解」形に確定(知見10)。要件世界Bは廃止。
 - 収束待ち: frequency 10 なら遷移 7〜11s。採点は 30s 待ちで安全。
 - 破壊実証の破壊点= RT02 e0/2 shutdown(奥)。track Down 0.4〜7s で速い。

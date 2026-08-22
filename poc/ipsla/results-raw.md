@@ -760,3 +760,35 @@ Number of successes: 0
 Number of failures: 5
 Operation time to live: Forever
 ```
+
+
+# probe run 2026-08-22 10:17 (p10)
+
+## p10
+- Lo0 source の定常: track Up まで 10.9s(非対称往復で成立)
+- ①primary 奥障害の検知: track Down まで **10.2s**(-1=検知せず。検知するなら『切替されず』の症状文は誤り)
+- ②backup 奥障害での track: Down まで **10.2s**(-1=影響なし。Down なら誤フェイルオーバ)
+
+②の `show ip route 0.0.0.0`:
+```
+Routing entry for 0.0.0.0/0, supernet
+  Known via "static", distance 200, metric 0, candidate default path
+  Routing Descriptor Blocks:
+  * 10.0.13.2
+      Route metric is 0, traffic share count is 1
+```
+- ②の ping 8.8.8.8 source Lo0: **0%**(0% なら健全な primary があるのに全断)
+
+②の `show ip sla statistics`:
+```
+IPSLAs Latest Operation Statistics
+
+IPSLA operation id: 1
+	Latest RTT: NoConnection/Busy/Timeout
+Latest operation start time: 10:18:05 UTC Sat Aug 22 2026
+Latest operation return code: Timeout
+Number of successes: 2
+Number of failures: 4
+Operation time to live: Forever
+```
+- 対照(golden source・backup 奥障害継続中): track **Up** / ping **0%**(Up・100% なら backup 側障害に不感=正しい設計)

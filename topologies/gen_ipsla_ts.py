@@ -14,8 +14,11 @@ day0 は「先般 監視の導入・変更作業が行われた直後」の体�
 
 故障カタログ(--fault 指定・既定 seed 抽選。--faults 2 は別レイヤから2つ):
   sla:    sla_not_scheduled(難3) / sla_wrong_source(難4 backup側IF=全滅) /
-          sla_wrong_source_lo(難5 ★Lo0=非対称往復で成功し track Up のまま=不感) /
-          sla_wrong_target(難5 ★データ宛監視=奥障害でフラップ・事後形) /
+          sla_wrong_source_lo(難5 ★Lo0=応答が backup 依存になり、backup 側奥障害で
+          誤 Down→健全な primary から死んだ backup へ切替→全断=誤フェイルオーバ。
+          p10 実測) /
+          sla_wrong_target(難3 ★データ宛監視=この盤面では機能症状が出ない=
+          構成監査指摘形。p10 監査で症状文を是正) /
           op_pathecho(難4 ★IOL では何をしても上がらない=icmp-echo 差し替えが唯一解) /
           op_udp_jitter(難4 responder 不在= return code "No connection") /
           op_tcp_connect(難4 listen なし= "Socket connect error")
@@ -55,7 +58,7 @@ LAYERS = {
 }
 FAULTS = [f for fs in LAYERS.values() for f in fs]
 DIFFICULTY = {"sla_not_scheduled": 3, "sla_wrong_source": 4,
-              "sla_wrong_source_lo": 5, "sla_wrong_target": 5,
+              "sla_wrong_source_lo": 5, "sla_wrong_target": 3,
               "op_pathecho": 4, "op_udp_jitter": 4, "op_tcp_connect": 4,
               "track_wrong_sla": 3, "pin_missing": 5, "pin_wrong_nh": 4,
               "route_track_missing": 4, "ad_not_floating": 4,
@@ -284,13 +287,17 @@ SYMPTOM = {
     "sla_wrong_source":
         "すべての外部向けトラフィックが backup ISP を経由して転送されています。"
         "一次対応者は、監視の定義は投入されているように見えると報告しています。",
+    # ★下2種の症状文は 2026-08-22 に実測(poc/ipsla p10)で是正済み。
+    #   当初の机上予測(「切替されず Up のまま」「フラップ」)は盤面の戻り経路
+    #   ポリシーと矛盾していた(ユーザが出題中に発見)。症状文は必ず実測とセットで。
     "sla_wrong_source_lo":
-        "昨夜、primary ISP の上流側で障害が発生しましたが、backup への切替が"
-        "実行されず、外部通信が約20分間失われました。その間、監視オブジェクトは"
-        " Up を示していたと報告されています。",
+        "昨夜、backup ISP の上流側で障害が発生した際、監視が Down を報告して"
+        " backup への切替が実行され、外部通信が失われました。primary ISP は"
+        "終始健全であったと報告されています。",
     "sla_wrong_target":
-        "昨夜の primary ISP 上流側の障害の際、デフォルト経路が primary と backup の"
-        "間を短い周期で往復し、外部通信が不安定になりました。",
+        "先般の導入・変更作業の完了後、社内の構成監査から「WAN 経路監視標準に"
+        "適合していない項目が残っている」との指摘を受領しています。機能上の"
+        "障害報告は現時点で届いていません。",
     "op_pathecho":
         "すべての外部向けトラフィックが backup ISP を経由して転送されています。"
         "前任者の作業記録には「経路単位の詳細な計測を行うため監視方式を変更した」"
