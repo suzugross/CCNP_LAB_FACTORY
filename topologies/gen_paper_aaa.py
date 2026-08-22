@@ -904,6 +904,29 @@ def trace_variants(d):
     return cur, alts
 
 
+def trace_shown_material(d, kind=None):
+    """★BL-131: trace 形で紙面に出る材料(両拠点の構成+サーバ仕様表)だけの指紋。"""
+    kind = d["kind"] if kind is None else kind
+    return "\n".join([cfg_block(d, "A", kind), cfg_block(d, "B", kind),
+                      server_spec(d)])
+
+
+def trace_underivable(d):
+    """★BL-131: 提示材料が同一なのに観測が異なる状態(健全 __none__ 含む)の一覧。
+
+    trace 形は観測表を伏せて「構成から観測を導出させる」形(2026-08-21 是正。
+    従前は設問対象の観測(所要時間・結果)が盤面の観測表に既出で、表の転記だけで
+    正解できた= PACK-20260820 Q2 のユーザ指摘)。そのため、紙面材料(構成+
+    サーバ仕様)から真の状態を特定できない盤面 — 例: user_not_registered は
+    サーバ台帳側の事由で、構成にも仕様表にも現れない — では観測を導出できない。
+    その場合は呼び出し側が trace 形を諦めて別形へ落とす。"""
+    mat = trace_shown_material(d)
+    obs = trace_block(d)
+    others = ["__none__"] + [k for k in KINDS if k != d["kind"]]
+    return [k for k in others
+            if trace_shown_material(d, k) == mat and trace_block(d, k) != obs]
+
+
 OBSERVATIONS = [
     # ★サーバログは使わない(ENARSI の範囲外で、解答者が差を判断できない=
     #   2026-08-08 ユーザ指摘)。機器側 debug が同じ切り分けを与えることを実測で確認済み。
@@ -1956,6 +1979,21 @@ def _selftest(seeds=60):
             for r in confusable(d):
                 pairs.add(tuple(sorted((kind, r))))
     print(f"  機器側で区別できないペア: {sorted(pairs)}")
+    # ★BL-131: trace 形(観測を伏せて構成から導出)が成立する盤面の集計。
+    #   導出不能 kind(材料に現れない状態)が存在するのは設計どおり(別形へ落ちる)。
+    tr_ok = tr_ng = 0
+    tr_bad_kinds = {}
+    for kind in KINDS:
+        for s in range(seeds):
+            d = draw(random.Random(s * 53 + 5), kind=kind)
+            bad = trace_underivable(d)
+            if bad:
+                tr_ng += 1
+                tr_bad_kinds.setdefault(kind, bad)
+            else:
+                tr_ok += 1
+    print(f"  trace 形(BL-131 導出型)が成立する盤面: {tr_ok}/{tr_ok + tr_ng}"
+          f"  導出不能kind: {sorted(tr_bad_kinds)}")
     return 0 if ng == 0 else 1
 
 

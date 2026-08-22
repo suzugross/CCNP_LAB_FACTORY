@@ -6077,7 +6077,11 @@ def aaa_evidence_blocks(d, rnd, form):
         # 結果表そのものが選択肢なので、症状側は test aaa だけ見せる
         state.append("```\n" + gpa.trace_block(d) + "\n```")
     elif form == "trace":
-        state.append(gpa.render_obs(d))
+        # ★BL-131(2026-08-21): 観測は出さない。従前は render_obs を出しており、
+        #   選択肢が問う「結果+所要時間」が観測表に既出=表の転記で正解できた
+        #   (PACK-20260820 Q2 ユーザ指摘)。構成+サーバ仕様から導出させる。
+        #   導出可能性は build_choices_trace_aaa の trace_underivable が保証。
+        pass
     elif form == "evidence":
         state.append(gpa.render_obs(d))
         state.append("```\n" + gpa.trace_block(d) + "\n```")
@@ -6147,7 +6151,14 @@ def build_choices_read_aaa(d, rnd):
 
 
 def build_choices_trace_aaa(d, rnd):
-    """trace 形: `test aaa` の文言と所要時間の組合せを読み分けさせる。"""
+    """trace 形: `test aaa` の文言と所要時間の組合せを読み分けさせる。
+
+    ★BL-131: 観測表は伏せる(aaa_evidence_blocks 参照)ので、紙面材料(構成+
+    サーバ仕様)だけから観測を導出できない盤面では成立しない → ValueError で
+    呼び出し側が別形へ落とす。"""
+    bad = gpa.trace_underivable(d)
+    if bad:
+        raise ValueError(f"aaa trace: 材料から観測を導出できない(同材料異観測: {bad})")
     cur, alts = gpa.trace_variants(d)
     seen = {cur}
     c = [(cur, True, "")]
