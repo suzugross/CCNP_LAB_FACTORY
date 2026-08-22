@@ -87,6 +87,11 @@ LAB_GENRES = {
             "prefixes": ["GEN-BGPRING"], "tags": ["bgp"]},
     "l2": {"label": "L2(EtherChannel)TS",
            "prefixes": ["GEN-L2TS"], "tags": ["l2", "etherchannel"]},
+    # ★services 枠(2026-08-22 追加・BL-134)= IP SLA/track TS。ENARSI は TS 傾向という
+    #   ユーザ方針で新設。4 IOL と軽く台数予算に優しい。★既定 --lab-genres にも
+    #   参加(2026-08-22 ユーザ指示・hvrf/dhcp/dmvpn と同格の抽選)。
+    "ipsla": {"label": "IP SLA/track TS",
+              "prefixes": ["GEN-IPSLATS"], "tags": ["ip-sla", "track"]},
 }
 
 
@@ -1909,7 +1914,9 @@ def main():
                          f"選択肢: {','.join(PAPER_GENRES)})")
     ap.add_argument("--lab", type=int, default=2,
                     help="固定ジャンルから選ぶラボ数(v2 既定2)")
-    ap.add_argument("--lab-genres", default="hvrf,dhcp,dmvpn",
+    # ★既定に ipsla を追加(2026-08-22 ユーザ指示「既定の抽選に混ぜられるように」)。
+    #   4ジャンルのシャッフルから2つ選ぶ形になる。
+    ap.add_argument("--lab-genres", default="hvrf,dhcp,dmvpn,ipsla",
                     help=f"ラボの固定ジャンル({','.join(LAB_GENRES)})")
     ap.add_argument("--lab-extra", type=int, default=1,
                     help="余裕があれば通常TSプールから追加する数(既定1)")

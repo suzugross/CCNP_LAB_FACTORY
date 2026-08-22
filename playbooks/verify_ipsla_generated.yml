@@ -1,0 +1,112 @@
+---
+# GEN-IPSLATS-* 汎用: 「奥」の障害(primary ISP ↔ RT04 リンク)を注入し、監視が検知して
+# backup へ切替わり・復旧後に primary へ戻ることを能動的に実証する(BL-134)。
+# パラメータは problems/<ID>/solution/fault.json から読む(生成器が書く)。
+#
+#   ansible-playbook playbooks/verify_ipsla_generated.yml -e problem=GEN-IPSLATS-12345 \
+#       [-e settle=40]
+#
+# ★不感系の故障種(sla_wrong_source_lo / sla_wrong_target / route_track_missing /
+#   pin_missing)は、broken のままこれを流すと [4/6] か [6/6] で落ちる=故障の実証。
+#   fix 後に流せば全段 PASS する(E2E 自己検品でもこの使い方をする)。
+
+- name: 検証パラメータを読み込む
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+  tasks:
+    - ansible.builtin.include_vars:
+        file: "{{ repo }}/problems/{{ problem }}/solution/fault.json"
+        name: meta
+    - ansible.builtin.include_vars:
+        file: "{{ repo }}/topologies/_generated/{{ problem }}/mgmt_map.yml"
+        name: mgmt_map
+    - ansible.builtin.add_host:
+        name: RT01
+        groups: _vfy
+        ansible_host: "{{ mgmt_map.RT01 }}"
+        meta: "{{ meta }}"
+    - ansible.builtin.add_host:
+        name: "{{ meta.prim }}"
+        groups: _vfy
+        ansible_host: "{{ mgmt_map[meta.prim] }}"
+        meta: "{{ meta }}"
+
+- name: 奥障害フェイルオーバー実証
+  hosts: _vfy
+  gather_facts: false
+  vars:
+    settle: 40
+  tasks:
+    - name: "[1/6] 定常状態（RT01: track Up / データ疎通）"
+      cisco.ios.ios_command:
+        commands:
+          - "show track {{ meta.track }}"
+          - "ping {{ meta.data }} source Loopback0 repeat 5"
+      when: inventory_hostname == 'RT01'
+      register: pre
+
+    - ansible.builtin.assert:
+        that:
+          - "'Reachability is Up' in (pre.stdout[0] | default(''))"
+        success_msg: "定常: track Up"
+        fail_msg: "❌ 定常状態で track が Up でない（監視が機能していない）"
+      when: inventory_hostname == 'RT01'
+
+    - name: "[2/6] 奥障害注入：{{ meta.prim }} の {{ meta.deep_if }}(→RT04) を shut"
+      cisco.ios.ios_config:
+        lines: ["shutdown"]
+        parents: "interface {{ meta.deep_if }}"
+      when: inventory_hostname == meta.prim
+
+    - name: "[3/6] 収束待ち（{{ settle }}s）"
+      ansible.builtin.pause: { seconds: "{{ settle }}" }
+      run_once: true
+
+    - name: "[4/6] 切替後（RT01: track Down / 既定=backup / データ疎通）"
+      cisco.ios.ios_command:
+        commands:
+          - "show track {{ meta.track }}"
+          - "show ip route 0.0.0.0"
+          - "ping {{ meta.data }} source Loopback0 repeat 10"
+      when: inventory_hostname == 'RT01'
+      register: failover
+
+    - ansible.builtin.debug: { msg: "{{ failover.stdout_lines }}" }
+      when: inventory_hostname == 'RT01'
+
+    - name: "[5/6] 障害復旧：{{ meta.prim }} の {{ meta.deep_if }} を no shutdown"
+      cisco.ios.ios_config:
+        lines: ["no shutdown"]
+        parents: "interface {{ meta.deep_if }}"
+      when: inventory_hostname == meta.prim
+
+    - name: "収束待ち（{{ settle }}s）"
+      ansible.builtin.pause: { seconds: "{{ settle }}" }
+      run_once: true
+
+    - name: "[6/6] 復帰後（RT01: track Up / 既定=primary / データ疎通）"
+      cisco.ios.ios_command:
+        commands:
+          - "show track {{ meta.track }}"
+          - "show ip route 0.0.0.0"
+          - "ping {{ meta.data }} source Loopback0 repeat 5"
+      when: inventory_hostname == 'RT01'
+      register: post
+
+    - ansible.builtin.debug: { msg: "{{ post.stdout_lines }}" }
+      when: inventory_hostname == 'RT01'
+
+    - name: 判定サマリ（検知→切替→データ継続→復旧でフェイルバック）
+      ansible.builtin.assert:
+        that:
+          - "'Reachability is Down' in (failover.stdout[0] | default(''))"
+          - "failover.stdout[1] is search(meta.bk_nh | replace('.', '\\.'))"
+          - "failover.stdout[2] is search('Success rate is [1-9]')"
+          - "'Reachability is Up' in (post.stdout[0] | default(''))"
+          - "post.stdout[1] is search(meta.pri_nh | replace('.', '\\.'))"
+          - "post.stdout[2] is search('Success rate is [1-9]')"
+        success_msg: "✅ 奥障害を検知→backup 切替→データ継続→復旧後 primary へ復帰"
+        fail_msg: "❌ 検知/切替/継続/復帰のいずれかに失敗（上の出力を確認。不感系の故障が残っている可能性）"
+      when: inventory_hostname == 'RT01'
