@@ -213,6 +213,9 @@ TAG_KEYWORDS = {
     "l2": ("L2", "EtherChannel", "STP", "VLAN"),
     "acl": ("ACL", "uRPF"), "pbr": ("PBR",), "qos": ("QoS",),
     "ipv6": ("IPv6", "v6"), "igp": ("IGP",), "aaa": ("AAA", "RADIUS"),
+    # ★2026-08-22: GEN-IPSLATS(既存インスタンス無し)の散文推定が空になり
+    #   分野重複チェックをすり抜けたため追加
+    "ip-sla": ("IP SLA", "IPSLATS"),
 }
 
 
@@ -1449,7 +1452,12 @@ def cmd_new(a):
             allow_non_cisco=a.allow_non_cisco,
             allow_automation=a.allow_automation, ts_only=not a.any_lab)
         chosen_tags = {t for lb in labs for t in lb.get("tags", [])}
-        extra = [e for e in extra if not (chosen_tags & set(e.get("tags", [])))]
+        chosen_ids = {lb["id"] for lb in labs}
+        # ★同一ファミリ(同じ生成器)の二重選定を防ぐ(2026-08-22: タグ推定が空の
+        #   生成器が分野重複チェックをすり抜け、固定枠+追加枠で重複した)
+        extra = [e for e in extra
+                 if e["id"] not in chosen_ids
+                 and not (chosen_tags & set(e.get("tags", [])))]
         if extra:
             labs += extra
             notes += [f"追加枠: {extra[0]['id']}({extra[0]['nodes']}台)"]
