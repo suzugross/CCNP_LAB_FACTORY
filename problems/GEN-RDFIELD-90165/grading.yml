@@ -1,0 +1,73 @@
+# 自動生成 (gen_redist_field.py) GEN-RDFIELD-90165 shape=twoborder kind=missing_seed_metric
+problem: GEN-RDFIELD-90165
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT05: 68.68.68.68
+    RT01: 70.70.70.70
+    RT04: 5.5.5.5
+    RT02: 17.17.17.17
+    RT03: 56.56.56.56
+  links:
+  - a: RT04
+    a_ip: 10.201.90.1
+    b: RT05
+    b_ip: 10.201.90.2
+  - a: RT04
+    a_ip: 10.58.42.1
+    b: RT01
+    b_ip: 10.58.42.2
+  - a: RT05
+    a_ip: 10.53.199.1
+    b: RT01
+    b_ip: 10.53.199.2
+  - a: RT05
+    a_ip: 10.150.80.1
+    b: RT02
+    b_ip: 10.150.80.2
+  - a: RT01
+    a_ip: 10.199.186.1
+    b: RT02
+    b_ip: 10.199.186.2
+  - a: RT02
+    a_ip: 10.52.76.1
+    b: RT03
+    b_ip: 10.52.76.2
+invariants:
+- type: reachability_all
+  name: 全ルータ間 Loopback 相互到達
+  points: 30
+- type: optimal
+  name: ドメイン内代表宛先への最短転送(再配送由来の次善が無い)
+  points: 40
+  pairs:
+  - - RT05
+    - RT04
+  - - RT01
+    - RT04
+  - - RT02
+    - RT04
+  - - RT04
+    - RT02
+  - - RT05
+    - RT02
+  - - RT01
+    - RT02
+- type: loop_free
+  name: 転送ループ無し
+  points: 10
+checks:
+- name: 'RT02: 5.5.5.5/32 を EIGRP外部(D EX)で学習(OSPF→EIGRP)'
+  node: RT02
+  command: show ip route eigrp
+  raw:
+  - regex: D EX\s+5\.5\.5\.5
+  points: 10
+- name: 'RT04: 17.17.17.17/32 を OSPF外部(O E2)で学習(EIGRP→OSPF)'
+  node: RT04
+  command: show ip route ospf
+  raw:
+  - regex: O E2\s+17\.17\.17\.17
+  points: 10

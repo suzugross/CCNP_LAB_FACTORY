@@ -1,0 +1,36 @@
+! GEN-RDFIELD 初期
+interface Loopback0
+ ip address 70.70.70.70 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.58.42.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.53.199.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.199.186.1 255.255.255.252
+ no shutdown
+!
+router ospf 17
+ router-id 70.70.70.70
+ network 70.70.70.70 0.0.0.0 area 0
+ network 10.58.42.0 0.0.0.3 area 0
+ redistribute eigrp 301 subnets
+!
+router eigrp 301
+ network 10.53.199.0 0.0.0.3
+ network 10.199.186.0 0.0.0.3
+ no auto-summary
+ distance eigrp 90 95
+ redistribute ospf 17 route-map SET_TAG
+ distribute-list route-map BLOCK_TAG in
+!
+route-map SET_TAG permit 10
+ set tag 254
+route-map BLOCK_TAG deny 10
+ match tag 254
+route-map BLOCK_TAG permit 20
+!
