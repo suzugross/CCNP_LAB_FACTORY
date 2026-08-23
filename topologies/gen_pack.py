@@ -61,6 +61,39 @@ PAPER_GENRES = {
 # 紙面の問題数を `auto` にしたときの範囲(ユーザ指示 2026-08-11: 10〜20問で適当に)
 PAPER_AUTO_MIN, PAPER_AUTO_MAX = 10, 20
 
+# ★BL-136(2026-08-23): 紙面の shape/kind 反復回避の参照日数。answers/ の種別履歴で
+#   直近 N 日に出た kind を抽選順の後ろへ(gen_paper_mcq --avoid-recent-days)、
+#   必須ジャンルの shape も最終出題日の古い順に選ぶ。
+AVOID_KIND_DAYS = 4
+
+
+def _recent_shape_dates(repo, days):
+    """answers/ の `種別: \\`shape/...\\`` 行から shape ごとの最終出題日を集める。"""
+    today = datetime.date.today()
+    floor = (today - datetime.timedelta(days=days)).strftime("%Y%m%d")
+    ceil = today.strftime("%Y%m%d")
+    last = {}
+    pat = re.compile(r"種別:\s*`?([a-z0-9]+)/")
+    # ★chain だけ歴史的に `種別: \`missing\`` と素の kind 名で書く(quota の
+    #   genres.yml も bare kind を igp に畳んでいる)。shape/ 形式に揃えると
+    #   quota 側の解析に波及するので、走査側で chain へ写像する。
+    bare = re.compile(r"種別:\s*`?(missing|no_seed|filter|wrong_id)`")
+    for path in glob.glob(os.path.join(repo, "answers", "*.md")):
+        stamp = os.path.basename(path)[:8]
+        # ★未来日付は除外(20261229-* は BL-103 の検証アーティファクト)
+        if not (stamp.isdigit() and floor <= stamp <= ceil):
+            continue
+        try:
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        m = pat.search(text)
+        sh = m.group(1) if m else ("chain" if bare.search(text) else None)
+        if sh:
+            last[sh] = max(last.get(sh, ""), stamp)
+    return last
+
 # ラボの固定ジャンル: この中から2つ選ぶ(+余裕があれば通常TSプールから1問)。
 # H型は EIGRP版/OSPF版をまとめて1ジャンル扱い(同時に2本入れると盤面がほぼ同じ)。
 LAB_GENRES = {
@@ -624,7 +657,9 @@ def _run_paper_gen(repo, seed, count, shape, exam, hard, log, label):
     cmd = [os.path.join(repo, ".venv/bin/python3"),
            os.path.join(repo, "topologies/gen_paper_mcq.py"),
            "--repo", repo, "--seed", str(seed), "--count", str(count),
-           "--shape", shape]
+           "--shape", shape,
+           # ★BL-136: 履歴参照の kind 反復回避(mixed には無効=無害)。
+           "--avoid-recent-days", str(AVOID_KIND_DAYS)]
     if exam:
         cmd.append("--exam")
     if hard:
@@ -657,8 +692,13 @@ def gen_papers(repo, count, seed, shape, exam, hard, log, require=(), rnd=None):
         if not shapes:
             log(f"[紙面] ★未知のジャンル指定 {genre} は無視")
             continue
+        # ★BL-136: shape も履歴参照で選ぶ(最終出題日が最も古いものを優先。
+        #   例: bgp 枠の bgpbest/bgpdbg が乱択で bgpdbg に3連続偏った対策)。
+        #   リトライ2回目以降は従来どおり乱択(壊れた shape で詰まらないため)。
+        last_sh = _recent_shape_dates(repo, AVOID_KIND_DAYS)
+        ordered = sorted(shapes, key=lambda s: last_sh.get(s, ""))
         for attempt in range(1, RETRY_MAX + 1):
-            sh = rnd.choice(shapes)
+            sh = ordered[0] if attempt == 1 else rnd.choice(shapes)
             new = _run_paper_gen(repo, seed + 7000 + gi * 100 + attempt, 1, sh,
                                  exam, hard, log, f"必須[{genre}] 試行{attempt}")
             if new:

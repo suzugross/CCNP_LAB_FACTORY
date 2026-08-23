@@ -5568,9 +5568,17 @@ def answer_md_ospfv3pl(d, choices, stamp, master_seed, subseed, form):
 def question_md_bgpdbg(d, stamp, rnd, form="essay", choices=None, reqs=None):
     A, B = d["A"], d["B"]
     a_lines, b_lines = gpb.debug_blocks(d, rnd)
-    ebgp = d["variant"] == "ebgp_multihop"
+    ebgp = d["variant"] in ("ebgp_multihop", "remote_as_wrong")
     as_txt = (f"{A} は AS {d['as_a']}、{B} は AS {d['as_b']} に所属しています。"
               if ebgp else f"両ルータは、同一の AS {d['as_a']} に所属しています。")
+    # ★remote_as_wrong は物理アドレス間のピア(probe2 実測の体裁)。他はループバック間
+    phy_peer = d["variant"] == "remote_as_wrong"
+    peer_txt = ("直接に接続されたインターフェイスのアドレスを使用して"
+                if phy_peer else
+                "それぞれのループバック・インターフェイスを使用して")
+    reach_line = ("" if phy_peer else
+                  f"\n- 対向のループバックへの到達性は、{d['igp']}によって"
+                  "提供されています。")
     # ★症状の1文: asym_up は「壊れていない」(Established)ので、確立の障害を
     #   示唆する定型文を使わない(存在しない事象の参照を避ける・acl apply と同旨)。
     #   essay は従来文面を維持する(BL-085 の原形を変えない)。
@@ -5586,15 +5594,14 @@ def question_md_bgpdbg(d, stamp, rnd, form="essay", choices=None, reqs=None):
     board = f"""## トポロジ
 
 2台のルータが、1本のリンクによって直接に接続されており、そして、
-それぞれのループバック・インターフェイスを使用して、BGP のピアが構成されています。
+{peer_txt}、BGP のピアが構成されています。
 {as_txt}
 
 ```
   [{A}]  Lo0={d['lo_a']}          [{B}]  Lo0={d['lo_b']}
     {d['ip_a']} ────────────────── {d['ip_b']}   ({d['link']}.0/30)
 ```
-
-- 対向のループバックへの到達性は、{d['igp']}によって提供されています。
+{reach_line}
 
 ## 現在の状態
 
@@ -5682,12 +5689,28 @@ _BGPDBG_POC_NOTE = """## 出題素材の根拠(実機 PoC・poc/bgpdbg/README.md
   経路が存在していても出る(字面に釣られると誤診する)。
 - ★片側だけ update-source が欠けている場合、**セッションは確立してしまう**
   (update-source を持つ側が開いた接続が受理されるため)。
+
+追加変種の指紋(BL-136(b)・poc/bgpdbg/results-probe2.md・IOL 実測):
+
+- `%TCP-6-BADAUTH: Invalid MD5 digest` … **双方が異なるキー**で digest を付けている
+  (password の不一致)。両側に周期的に出て、Connection timed out で Idle へ。
+- `%TCP-6-BADAUTH: No MD5 digest` … 受けたパケットに digest が**無い**
+  = 相手側に password の構成が無い。★**password を持つ側にしか出ない**。
+- `bad OPEN, remote AS is X, expected Y` + `NOTIFICATION 2/2 (peer in wrong AS)` …
+  remote-as の誤り。**sent の側= 期待が誤っている側 / received の側= 健全**。
+- summary の `Idle (Admin)` + debug 無音 … neighbor shutdown(FSM が動かない)。
+  対向には Connection refused の周期が出る。
 """
 
 _BGPDBG_VNOTE = {
     "addr_mismatch": "両側の neighbor 宛先が食い違う(Lo宛 vs 物理宛)",
     "ebgp_multihop": "eBGP ループバック・ピアで ebgp-multihop 欠落",
-    "asym_up": "片側 update-source 欠けだが Established(接続レース)"}
+    "asym_up": "片側 update-source 欠けだが Established(接続レース)",
+    # BL-136(b)(2026-08-23・probe2 実測)
+    "pw_mismatch": "MD5 password 不一致(両側に Invalid MD5 digest)",
+    "pw_oneside": "片側だけ password(No MD5 digest は持つ側にだけ出る)",
+    "remote_as_wrong": "remote-as 誤り(NOTIFICATION 2/2 の sent/received で犯人が割れる)",
+    "nbr_shutdown": "neighbor shutdown 残骸(debug 無音+Idle (Admin))"}
 
 
 def answer_md_bgpdbg(d, choices, stamp, master_seed, subseed, form="essay"):
@@ -5725,7 +5748,7 @@ def answer_md_bgpdbg(d, choices, stamp, master_seed, subseed, form="essay"):
         "dbgconf": "逆問題(この出力を生じさせている構成はどれか)",
         "select2": "是正の2アクションを複数選択で(正解2つ)",
         "fix": "是正手段の単一選択",
-        "read": "状態の事実文を2つ選ぶ(なぜ確立しているかの読解)",
+        "read": "状態の事実文を2つ選ぶ(出力の読解)",
     }[form]
     return f"""# 解答 {stamp}
 
@@ -7482,12 +7505,49 @@ def leak_lint(text, tokens):
         raise RuntimeError(f"問題側に漏えいの疑い: {hits}")
 
 
+def recent_kind_dates(repo, shape, days):
+    """★BL-136: answers/ の `種別: \\`shape/kind\\`` 行から、当該 shape の
+    kind ごとの最終出題日(YYYYMMDD)を集める(直近 days 日ぶんのみ)。
+
+    紙面にはラボの「同一90日・ファミリ21日」に相当する反復回避が無く、
+    変種3つの bgpdbg で ebgp_multihop が4連続した(2026-08-22 ユーザ指摘)。"""
+    import datetime as _dt
+    import glob as _glob
+    today = _dt.date.today()
+    floor = (today - _dt.timedelta(days=days)).strftime("%Y%m%d")
+    ceil = today.strftime("%Y%m%d")
+    last = {}
+    pat = re.compile(r"種別:\s*`?" + re.escape(shape) + r"/([a-z0-9_]+)")
+    # ★chain の答案は歴史的に `種別: \`missing\`` と素の kind 名(quota 互換の
+    #   ため書式は変えない)。shape=chain のときだけ bare 形式も拾う。
+    bare = (re.compile(r"種別:\s*`?(missing|no_seed|filter|wrong_id)`")
+            if shape == "chain" else None)
+    for path in _glob.glob(os.path.join(repo, "answers", "*.md")):
+        stamp = os.path.basename(path)[:8]
+        # ★未来日付は除外(20261229-* は BL-103 の検証アーティファクト)
+        if not (stamp.isdigit() and floor <= stamp <= ceil):
+            continue
+        try:
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        m = pat.search(text) or (bare.search(text) if bare else None)
+        if m:
+            k = m.group(1)
+            last[k] = max(last.get(k, ""), stamp)
+    return last
+
+
 # --------------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", default=".")
     ap.add_argument("--seed", type=int, required=True)
     ap.add_argument("--count", type=int, default=1)
+    ap.add_argument("--avoid-recent-days", type=int, default=0,
+                    help="★BL-136: answers/ の種別履歴を見て、直近 N 日に出た "
+                         "kind を抽選順の後ろへ回す(0=無効・既定。mixed は対象外)")
     ap.add_argument("--date", default=None, help="YYYYMMDD(既定=今日)")
     ap.add_argument("--shape",
                     choices=["chain", "ring", "pbr", "urpf", "bgpdbg", "mploop",
@@ -7568,6 +7628,17 @@ def main():
                  else random.Random(a.seed ^ 0x5EED).sample(pool, len(pool)))
         if not set(kinds) <= set(pool):
             raise SystemExit(f"--kinds({a.shape}) は {pool} から選ぶこと: {kinds}")
+        # ★BL-136: 履歴参照の反復回避(オプトイン)。直近に出た kind ほど後ろへ
+        #   並べ替える(kind は kinds[i % len] で先頭から使われるため、count=1 なら
+        #   「最も長く出ていない kind」が選ばれる)。未出は最前・同日内は
+        #   シャッフル順を保持(sort は安定)。既定 0=無効なので同 seed 再現性は
+        #   既定挙動では不変(gen_pack がフラグを渡した時だけ効く)。
+        if a.avoid_recent_days and not a.kinds:
+            last = recent_kind_dates(a.repo, a.shape, a.avoid_recent_days)
+            kinds.sort(key=lambda k: last.get(k, ""))
+            if last:
+                print(f"[i] 反復回避: 直近{a.avoid_recent_days}日の既出 "
+                      f"{sorted(last)} を後回し → 先頭 {kinds[0]}", flush=True)
     want_forms = [x.strip() for x in a.forms.split(",") if x.strip()]
     want_worlds = [x.strip() for x in a.worlds.split(",") if x.strip()]
     if want_forms and a.shape not in ("acl", "aclv6", "bgpbest", "bgpdbg",

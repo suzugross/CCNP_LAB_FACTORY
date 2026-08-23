@@ -61,3 +61,31 @@ BGP: 4.4.4.4 Active open failed - no route to peer, open active delayed 12288ms 
 - 発見1 は「**なぜ片側欠けでも UP するのか**」を問う上級変種（または赤ニシン）に使える。
 - 収集は console（`show logging | include BGP:`）。`debug ip bgp` を有効化してから
   再試行を待って採る（本番の紙面問題では PoC で採った実出力を素材として使う）。
+
+---
+
+# PoC 続編: 変種追加の実測 (BL-136(b)・2026-08-23) — probe2.py
+
+盤面= `_POC-BGPDBG2`(IOL 2台・Lo/物理 back-to-back)。生ログ= results-probe2.md。
+bgpdbg の変種3→7への拡張素材。★採取の教訓= `clear logging` の [confirm] は
+コンソールを1コマンドずらす→ **`logging buffered` のサイズ付け直しで無プロンプト
+クリア**が安全。
+
+## 確定した指紋(4点)
+
+1. **password 不一致(b1)**: 両側に `%TCP-6-BADAUTH: Invalid MD5 digest from <peer>(<port>)
+   to <own>(179)` が再送間隔で並び、約30秒で `open failed: Connection timed out;
+   remote host not responding` → Idle。
+2. **★片側だけ password(b1b)**: `No MD5 digest`(Invalid ではない)が**両方向**
+   ((179)発と(eph)発)で出る。★**BADAUTH を記録するのは password を持つ側だけ**
+   — 持たない側のログは静かに Active open failed するのみ。Invalid/No の読み分け
+   +出る側の非対称、の2軸が読解の決め手。
+3. **remote-as 誤り(b2)**: 誤設定側= `bad OPEN, remote AS is <actual>, expected
+   <wrong>` → `%BGP-3-NOTIFICATION: sent ... 2/2 (peer in wrong AS) 2 bytes <hex>`
+   (hex= 相手 AS の16進・実測 FDEA=65002)。健全側= OpenConfirm まで進んで
+   `NOTIFICATION: received`。**sent/received で犯人の側が割れる**。summary の
+   AS 列には誤設定値がそのまま出る(状態 Closing/Idle)。
+4. **neighbor shutdown(b3)**: 残骸側= debug を有効にしても**一切の行が出ない**
+   (FSM 不動作)+ summary `Idle (Admin)`。対向= `Connection refused` の周期。
+   ★debug だけでは「neighbor 文が無い」と区別できないため、**この変種のみ
+   summary を紙面に提示する**(設計判断・gen_paper_bgpdbg 参照)。
