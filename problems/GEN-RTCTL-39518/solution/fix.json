@@ -1,0 +1,69 @@
+{
+  "fixes": [
+    {
+      "node": "RT01",
+      "lines": [
+        "ip prefix-list PL-BRANCH24 seq 5 permit 172.26.96.0/22 ge 24 le 24",
+        "access-list 76 permit 10.43.7.0 0.0.0.255",
+        "access-list 76 permit 10.43.15.0 0.0.0.255"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "ip access-list standard FILTER-CORE-IN"
+      ],
+      "lines": [
+        "permit 172.26.0.0 0.0.255.255",
+        "permit 10.4.20.0 0.0.0.255",
+        "permit 10.4.24.0 0.0.0.255",
+        "permit 10.4.28.0 0.0.0.255",
+        "permit 10.1.24.0 0.0.0.3",
+        "permit 10.1.34.0 0.0.0.3"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "route-map RM-REDIST-OUT permit 10"
+      ],
+      "lines": [
+        "match ip address prefix-list PL-BRANCH24"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "route-map RM-OSPF-IMPORT permit 10"
+      ],
+      "lines": [
+        "match ip address 76"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "router eigrp 100"
+      ],
+      "lines": [
+        "distribute-list FILTER-CORE-IN in Ethernet0/0",
+        "redistribute ospf 1 metric 50000 200 255 1 1500 route-map RM-OSPF-IMPORT"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "router ospf 1"
+      ],
+      "lines": [
+        "redistribute eigrp 100 subnets route-map RM-REDIST-OUT"
+      ]
+    },
+    {
+      "node": "RT01",
+      "lines": [
+        "access-list 76 permit 10.43.23.0 0.0.0.255"
+      ]
+    }
+  ]
+}

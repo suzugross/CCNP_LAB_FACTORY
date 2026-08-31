@@ -1,0 +1,340 @@
+lab:
+  title: POC-RTCTL
+  description: 'PoC BL-141 (console-only / MGMT lease not used)'
+  notes: |
+    PoC lab (Claude 2026-08-23): BL-141 純粋経路制御ラボ問(RTCTL-DOJO.design.md §9)
+    - EIGRP AS100: RT04(経路源) -- RT02/RT03(並列フィード) -- RT01(主戦場)
+      RT04-RT02: 10.0.24.0/24 / RT04-RT03: 10.0.34.0/24
+      RT02-RT01: 10.0.12.0/24 / RT03-RT01: 10.0.13.0/24
+    - OSPF 1 Area0: RT01 -- RT05 (10.0.15.0/24)
+    - battery(RT04 Lo): 172.16.0-3.0/24(連続4) / 10.10.1|5|9.0/24(飛び地3) /
+      192.168.20|40.0/24(除外題材2)
+    - battery(RT05 Lo): 10.50.1-3.0/24 / 172.31.100.0/24 (全て ospf network p2p で /24 広告)
+    - 再配送・各種リストは未投入(基線=解答者開始状態)。PoC はここへ手動投入して検証
+    - コンソール収集のみ (MGMT VRF/リース不使用)
+  version: 0.3.0
+nodes:
+- id: RT01
+  label: RT01
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT01
+    !
+    ip domain name ccnp.local
+    no ip domain lookup
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === to RT02 (EIGRP) ===
+     ip address 10.0.12.1 255.255.255.0
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to RT03 (EIGRP) ===
+     ip address 10.0.13.1 255.255.255.0
+     no shutdown
+    !
+    interface Ethernet0/2
+     description === to RT05 (OSPF) ===
+     ip address 10.0.15.1 255.255.255.0
+     no shutdown
+    !
+    router eigrp 100
+     network 10.0.12.0 0.0.0.255
+     network 10.0.13.0 0.0.0.255
+     no auto-summary
+    !
+    router ospf 1
+     router-id 1.1.1.1
+     network 10.0.15.0 0.0.0.255 area 0
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 0
+  y: 100
+  tags: [routers]
+  interfaces:
+  - id: RT01-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RT01-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+  - id: RT01-i2
+    label: Ethernet0/2
+    type: physical
+    slot: 2
+- id: RT02
+  label: RT02
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT02
+    !
+    ip domain name ccnp.local
+    no ip domain lookup
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === to RT04 (EIGRP) ===
+     ip address 10.0.24.2 255.255.255.0
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to RT01 (EIGRP) ===
+     ip address 10.0.12.2 255.255.255.0
+     no shutdown
+    !
+    router eigrp 100
+     network 10.0.24.0 0.0.0.255
+     network 10.0.12.0 0.0.0.255
+     no auto-summary
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: -150
+  y: -50
+  tags: [routers]
+  interfaces:
+  - id: RT02-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RT02-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+- id: RT03
+  label: RT03
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT03
+    !
+    ip domain name ccnp.local
+    no ip domain lookup
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === to RT04 (EIGRP) ===
+     ip address 10.0.34.3 255.255.255.0
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to RT01 (EIGRP) ===
+     ip address 10.0.13.3 255.255.255.0
+     no shutdown
+    !
+    router eigrp 100
+     network 10.0.34.0 0.0.0.255
+     network 10.0.13.0 0.0.0.255
+     no auto-summary
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 150
+  y: -50
+  tags: [routers]
+  interfaces:
+  - id: RT03-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RT03-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+- id: RT04
+  label: RT04
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT04
+    !
+    ip domain name ccnp.local
+    no ip domain lookup
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === to RT02 (EIGRP) ===
+     ip address 10.0.24.4 255.255.255.0
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === to RT03 (EIGRP) ===
+     ip address 10.0.34.4 255.255.255.0
+     no shutdown
+    !
+    interface Loopback1
+     ip address 172.16.0.1 255.255.255.0
+    !
+    interface Loopback2
+     ip address 172.16.1.1 255.255.255.0
+    !
+    interface Loopback3
+     ip address 172.16.2.1 255.255.255.0
+    !
+    interface Loopback4
+     ip address 172.16.3.1 255.255.255.0
+    !
+    interface Loopback11
+     ip address 10.10.1.1 255.255.255.0
+    !
+    interface Loopback12
+     ip address 10.10.5.1 255.255.255.0
+    !
+    interface Loopback13
+     ip address 10.10.9.1 255.255.255.0
+    !
+    interface Loopback21
+     ip address 192.168.20.1 255.255.255.0
+    !
+    interface Loopback22
+     ip address 192.168.40.1 255.255.255.0
+    !
+    router eigrp 100
+     network 10.0.24.0 0.0.0.255
+     network 10.0.34.0 0.0.0.255
+     network 172.16.0.0 0.0.3.255
+     network 10.10.1.0 0.0.0.255
+     network 10.10.5.0 0.0.0.255
+     network 10.10.9.0 0.0.0.255
+     network 192.168.20.0 0.0.0.255
+     network 192.168.40.0 0.0.0.255
+     no auto-summary
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 0
+  y: -200
+  tags: [routers]
+  interfaces:
+  - id: RT04-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RT04-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+- id: RT05
+  label: RT05
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT05
+    !
+    ip domain name ccnp.local
+    no ip domain lookup
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === to RT01 (OSPF) ===
+     ip address 10.0.15.5 255.255.255.0
+     no shutdown
+    !
+    interface Loopback1
+     ip address 10.50.1.1 255.255.255.0
+     ip ospf network point-to-point
+    !
+    interface Loopback2
+     ip address 10.50.2.1 255.255.255.0
+     ip ospf network point-to-point
+    !
+    interface Loopback3
+     ip address 10.50.3.1 255.255.255.0
+     ip ospf network point-to-point
+    !
+    interface Loopback9
+     ip address 172.31.100.1 255.255.255.0
+     ip ospf network point-to-point
+    !
+    router ospf 1
+     router-id 5.5.5.5
+     network 10.0.15.0 0.0.0.255 area 0
+     network 10.50.1.0 0.0.0.255 area 0
+     network 10.50.2.0 0.0.0.255 area 0
+     network 10.50.3.0 0.0.0.255 area 0
+     network 172.31.100.0 0.0.0.255 area 0
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 0
+  y: 250
+  tags: [routers]
+  interfaces:
+  - id: RT05-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+links:
+- id: l0
+  n1: RT04
+  i1: RT04-i0
+  n2: RT02
+  i2: RT02-i0
+  conditioning: {}
+  label: RT04<->RT02
+- id: l1
+  n1: RT04
+  i1: RT04-i1
+  n2: RT03
+  i2: RT03-i0
+  conditioning: {}
+  label: RT04<->RT03
+- id: l2
+  n1: RT02
+  i1: RT02-i1
+  n2: RT01
+  i2: RT01-i0
+  conditioning: {}
+  label: RT02<->RT01
+- id: l3
+  n1: RT03
+  i1: RT03-i1
+  n2: RT01
+  i2: RT01-i1
+  conditioning: {}
+  label: RT03<->RT01
+- id: l4
+  n1: RT01
+  i1: RT01-i2
+  n2: RT05
+  i2: RT05-i0
+  conditioning: {}
+  label: RT01<->RT05
+annotations: []
+smart_annotations: []

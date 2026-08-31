@@ -1,0 +1,31 @@
+! RT01 初期状態 (顧客エッジ・先般 監視の導入/変更作業を実施した直後の状態)
+ip access-list extended EDGE-PROTECT-IN
+ deny icmp host 100.64.207.99 host 10.94.75.1 echo-reply
+ permit ip any any
+!
+interface {{ links[0] }}
+ description === to RT02 (primary ISP access) ===
+ ip address 10.94.75.1 255.255.255.252
+ ip access-group EDGE-PROTECT-IN in
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (backup ISP access) ===
+ ip address 10.94.170.1 255.255.255.252
+ no shutdown
+!
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+!
+ip sla 42
+ icmp-echo 100.64.207.99 source-ip 10.94.75.1
+ frequency 10
+!
+ip sla schedule 42 life forever start-time now
+!
+track 82 ip sla 42 reachability
+!
+ip route 100.64.207.99 255.255.255.255 10.94.75.2
+ip route 0.0.0.0 0.0.0.0 10.94.75.2 track 82
+ip route 0.0.0.0 0.0.0.0 10.94.170.2 180
+!

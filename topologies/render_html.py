@@ -264,6 +264,15 @@ pre.mermaid svg{max-width:100%; height:auto}
 }
 .answer .done{display:flex; align-items:center; gap:.4rem; margin:.8rem 0 0;
   font-weight:600}
+.answer .timer{display:flex; align-items:center; gap:.6rem; margin:.9rem 0 0;
+  padding:.5rem .7rem; border:1px solid #cccccc; background:#fafafa}
+.answer .timer button{font:inherit; padding:.25rem .8rem; border:1px solid #333333;
+  background:#ffffff; cursor:pointer}
+.answer .timer button:hover{background:#eeeeee}
+.answer .timer button:disabled{color:#aaaaaa; border-color:#bbbbbb; cursor:default}
+.answer .timer .telapsed{font-variant-numeric:tabular-nums; font-weight:600;
+  min-width:4.5rem}
+.answer .timer .tkind{font-size:.8rem; color:#777777}
 .answer .savemsg{font-size:.83rem; color:#555555; margin-top:.5rem;
   min-height:1.2em}
 .answer .savemsg.err{color:#a00000; font-weight:600}
@@ -338,6 +347,99 @@ ANSWER_JS = r"""
   function say(t, err){ msg.textContent = t; msg.className = 'savemsg' + (err ? ' err' : ''); }
   function api(){ return '/_api/sheet?pack=' + encodeURIComponent(pack) + '&no=' + no; }
 
+  /* ---- ストップウォッチ(BL-144) --------------------------------------
+     ページを開いたら自動開始(2026-08-24 ユーザ要望)。ページ離脱で自動一時停止・
+     再訪で自動再開する(開きっぱなしで別の問題を解くと二重計上になるのを防ぐ)。
+     ★「一時停止」ボタン・「解答済み」チェックによる**明示的な停止は尊重**し、
+       開き直しても勝手に再開しない(p='user')。タブ切替(hidden)では止めない —
+       ラボ問は CML コンソール作業中ページが隠れるため、止めると過小計測になる。
+     「解答済み/実装完了」チェックで一時停止=確定し、所要: 行として保存される。
+     状態は localStorage に持ちリロード・再訪に耐える。 */
+  var TKEY = 'ccnp-timer:' + pack + ':' + no;
+  /* e=累積ms, r=計測中なら開始epoch,
+     k=open(ページ表示で開始)|manual|auto(入力で開始・押し忘れ保険),
+     p=停止の由来 ''|user(明示停止=再開しない)|page(離脱停止=再訪で再開) */
+  var ts = {e: 0, r: 0, k: '', p: ''};
+  try{ ts = JSON.parse(localStorage.getItem(TKEY)) || ts; }catch(_e){}
+  function tsave(){ try{ localStorage.setItem(TKEY, JSON.stringify(ts)); }catch(_e){} }
+  function tnow(){ return ts.e + (ts.r ? Date.now() - ts.r : 0); }
+  function tfmt(ms){
+    var s = Math.floor(ms / 1000), h = Math.floor(s / 3600);
+    var m = Math.floor(s % 3600 / 60), r = s % 60;
+    function z(n){ return (n < 10 ? '0' : '') + n; }
+    return h ? h + ':' + z(m) + ':' + z(r) : m + ':' + z(r);
+  }
+  var tui = document.createElement('div');
+  tui.className = 'timer';
+  tui.innerHTML = '<button type="button" class="tstart">スタート</button>' +
+                  '<button type="button" class="tpause">一時停止</button>' +
+                  '<span class="telapsed">0:00</span><span class="tkind"></span>';
+  function tstart(kind){
+    if(ts.r) return;
+    ts.r = Date.now(); if(!ts.k) ts.k = kind;
+    ts.p = '';
+    tsave(); trender();
+  }
+  function tpause(by){
+    if(!ts.r) return;
+    ts.e += Date.now() - ts.r; ts.r = 0; ts.p = by || 'user';
+    tsave(); trender(); queue();     /* 中断時点の所要も 解答.md へ反映しておく */
+  }
+  function trender(){
+    tui.querySelector('.telapsed').textContent = tfmt(tnow());
+    tui.querySelector('.tkind').textContent =
+      (ts.r ? '計測中' : (ts.k ? '停止中' : '未計測')) +
+      (ts.k === 'auto' ? '・自動開始' :
+       (ts.k === 'open' ? '・ページ表示で開始' : ''));
+    tui.querySelector('.tstart').disabled = !!ts.r;
+    tui.querySelector('.tpause').disabled = !ts.r;
+  }
+  tui.querySelector('.tstart').addEventListener('click', function(){ tstart('manual'); });
+  tui.querySelector('.tpause').addEventListener('click', function(){ tpause('user'); });
+  setInterval(function(){ if(ts.r) trender(); }, 1000);
+  /* ページ表示で自動開始。明示停止(p='user')済み・解答済みの問題は再開しない。
+     ★過去データ(pなし)の停止は由来不明=明示停止扱いにして勝手に動かさない。 */
+  function topen(){
+    var done = box.querySelector('.done input');
+    if(done && done.checked) return;
+    if(ts.r || ts.p === 'user') return;
+    if(ts.k && ts.p !== 'page') return;
+    if(document.visibilityState !== 'hidden'){ tstart('open'); return; }
+    /* バックグラウンドタブで開かれた時は、最初に表に出た瞬間から計り始める */
+    document.addEventListener('visibilitychange', function h(){
+      if(document.visibilityState === 'hidden') return;
+      document.removeEventListener('visibilitychange', h);
+      if(!ts.r && ts.p !== 'user') tstart('open');
+    });
+  }
+  /* 離脱(次の問題へ移動・タブを閉じる)で自動一時停止=二重計上の防止。
+     fetch はもう完走しないので sendBeacon で 所要: を 解答.md へ滑り込ませる。 */
+  window.addEventListener('pagehide', function(){
+    if(!ts.r) return;
+    ts.e += Date.now() - ts.r; ts.r = 0; ts.p = 'page'; tsave();
+    if(loaded && navigator.sendBeacon){
+      try{
+        navigator.sendBeacon(api(),
+          new Blob([build()], {type: 'text/plain; charset=utf-8'}));
+      }catch(_e){}
+    }
+  });
+  /* 戻る/進むで bfcache から復活した時(load は走らない)も再開判定をやり直す */
+  window.addEventListener('pageshow', function(ev){
+    if(!ev.persisted) return;
+    try{ ts = JSON.parse(localStorage.getItem(TKEY)) || ts; }catch(_e){}
+    trender(); topen();
+  });
+  /* 押し忘れフォールバック: 解答欄への最初の入力で自動開始
+     (タイマー操作と「解答済み」チェック自体は対象外) */
+  function tguard(ev){
+    if(ev.target.closest('.timer') || ev.target.closest('.done')) return;
+    var done = box.querySelector('.done input');
+    if(!ts.k && !ts.r && !(done && done.checked)) tstart('auto');
+  }
+  box.addEventListener('input', tguard, true);
+  box.addEventListener('change', tguard, true);
+
   /* 解答.md の該当セクション本文を組み立てる(パーサと同じ書式を保つ) */
   function build(){
     var done = box.querySelector('.done input').checked;
@@ -351,6 +453,9 @@ ANSWER_JS = r"""
     }else{
       lines.push('解答: ' + ansValue());
       lines.push('根拠: ' + val('.why'));
+    }
+    if(ts.k){                        /* 計測があった時だけ 所要: 行を書く(BL-144) */
+      lines.push('所要: ' + tfmt(tnow()) + (ts.k === 'auto' ? ' (自動開始)' : ''));
     }
     return lines.join('\n') + '\n';
   }
@@ -389,11 +494,21 @@ ANSWER_JS = r"""
       if(a) setAns(a[1].trim());
       if(w && box.querySelector('.why')) box.querySelector('.why').value = w[1].trim();
       if(mm && box.querySelector('.memo')) box.querySelector('.memo').value = mm[1].trim();
+      /* 所要の復元: localStorage が空(別ブラウザ等)なら 解答.md の値を種にする */
+      var du = t.match(/^[ \t]*所要:[ \t]*(?:(\d+):)?(\d+):(\d\d)(\s*\(自動開始\))?/m);
+      if(du && !ts.k && !ts.e){
+        ts.e = ((+(du[1] || 0)) * 3600 + (+du[2]) * 60 + (+du[3])) * 1000;
+        ts.k = du[4] ? 'auto' : 'manual';
+        tsave();
+      }
+      trender();
       loaded = true; sync(); say('読み込み済み');
+      topen();                       /* 解答済みかどうか確定してから自動開始判定 */
     }).catch(function(e){
       say('解答.md に書き込めません（' + e.message +
           '）。scripts/pack.sh serve 経由で開いてください', true);
       box.classList.add('offline');
+      topen();                       /* 保存不能でも計測自体は生かす(localStorage) */
     });
   }
   function setAns(v){
@@ -436,6 +551,15 @@ ANSWER_JS = r"""
 
   box.addEventListener('input', queue);
   box.addEventListener('change', queue);
+  /* タイマーUIを「解答済み」チェックの直前に置き、チェックで計測を確定する */
+  var doneLbl = box.querySelector('.done');
+  if(doneLbl){
+    doneLbl.parentNode.insertBefore(tui, doneLbl);
+    doneLbl.querySelector('input').addEventListener('change', function(ev){
+      if(ev.target.checked) tpause('user');
+    });
+  }
+  trender();
   load();
 })();
 """

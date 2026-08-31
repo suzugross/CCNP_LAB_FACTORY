@@ -118,6 +118,11 @@ LAB_GENRES = {
     #      shut/no shut が要る場合がある(CATALOG 備考)・採点は telnet 経路。
     "bgp": {"label": "リングBGP TS",
             "prefixes": ["GEN-BGPRING"], "tags": ["bgp"]},
+    # ★純粋経路制御(2026-08-23 追加・ユーザ指示「パックに既定で混ぜて」)。
+    #   構築問(TSでない)だが固定ジャンル枠は _is_ts を通らないので混ぜられる。
+    #   v2 で骨格・手段・PL集合形が seed 抽選されるため連投にも耐える(BL-143)。
+    "rtctl": {"label": "純粋経路制御(構築)",
+              "prefixes": ["GEN-RTCTL"], "tags": ["redistribution", "routing"]},
     "l2": {"label": "L2(EtherChannel)TS",
            "prefixes": ["GEN-L2TS"], "tags": ["l2", "etherchannel"]},
     # ★services 枠(2026-08-22 追加・BL-134)= IP SLA/track TS。ENARSI は TS 傾向という
@@ -1213,6 +1218,10 @@ def parse_answer_sheet(path):
         # ★ \s は改行も食うため [ \t] で止める(空欄の「解答:」が次行を拾う事故を防ぐ)
         m = re.search(r"^[ \t]*解答:[ \t]*(.*)$", blob, re.M)
         it["answer"] = (m.group(1).strip() if m else "")
+        # 所要時間(BL-144: ページ内ストップウォッチが書く。書式= mm:ss / h:mm:ss)
+        m = re.search(r"^[ \t]*所要:[ \t]*([0-9:]+)( *\(自動開始\))?", blob, re.M)
+        it["duration"] = (m.group(1) if m else "")
+        it["dur_auto"] = bool(m and m.group(2))
         it["body"] = blob.strip()
     return out
 
@@ -1344,10 +1353,19 @@ def build_report(repo, pack_id, pdir, man, rows, lab_rows):
           f"作成日: {man.get('created', '')} / 採点日: "
           f"{datetime.date.today().isoformat()}", "",
           "## 成績", "",
-          "| # | 種別 | 問題 | 解答 | 正解 | 判定 |",
-          "|---|------|------|------|------|------|"]
-    for no, kind, ref, given, key, note in rows:
-        md.append(f"| Q{no} | {kind} | `{ref}` | {given} | {key} | {note} |")
+          "| # | 種別 | 問題 | 解答 | 正解 | 判定 | 所要 |",
+          "|---|------|------|------|------|------|------|"]
+    total_s = 0
+    for no, kind, ref, given, key, note, dur in rows:
+        md.append(f"| Q{no} | {kind} | `{ref}` | {given} | {key} | {note} | {dur} |")
+        m = re.fullmatch(r"(?:(\d+):)?(\d+):(\d\d)(?:\(自\))?", dur or "")
+        if m:
+            total_s += int(m.group(1) or 0) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
+    if total_s:
+        h, rem = divmod(total_s, 3600)
+        md.append("")
+        md.append(f"計測合計: **{h}:{rem // 60:02d}:{rem % 60:02d}**"
+                  f"（ストップウォッチ計測分のみ・(自)=自動開始）")
     if lab_rows:
         md += ["", "## ラボの採点", "",
                "| # | 問題 | 得点 | 未充足のチェック |",
@@ -1356,7 +1374,7 @@ def build_report(repo, pack_id, pdir, man, rows, lab_rows):
             f = "<br>".join(fails) if fails else "（なし・全 PASS）"
             md.append(f"| Q{no} | `{ref}` | **{got}/{total}** | {f} |")
     md += ["", "## 解説", ""]
-    for no, kind, ref, given, key, note in rows:
+    for no, kind, ref, given, key, note, dur in rows:
         if kind != "紙面" or key in ("-", ""):
             continue                       # 未解答・記述式はここに出さない(正解を伏せる)
         md += [f"### Q{no} `{ref}` — 正解 {key}（あなたの解答 {given}）", ""]
@@ -1809,7 +1827,9 @@ def cmd_status(a):
         done += 1 if s.get("done") else 0
         ans = (f"  解答={fmt_letters(choice_of(s.get('answer')))}"
                if s.get("answer") else "")
-        print(f"  Q{it['no']} [{it.get('kind')}] {it.get('ref')}  {mark}{ans}")
+        dur = (f"  所要={s['duration']}{'(自)' if s.get('dur_auto') else ''}"
+               if s.get("duration") else "")
+        print(f"  Q{it['no']} [{it.get('kind')}] {it.get('ref')}  {mark}{ans}{dur}")
     print(f"  -- {done}/{len(man['items'])} 問 解答済")
     used, per = leased_nodes(repo)
     print(f"== 稼働中ラボ: {per or '(なし)'} 合計 {used} ノード")
@@ -1830,6 +1850,9 @@ def cmd_grade(a):
 
     for it in man["items"]:
         s_it = sheet.get(it["no"], {})
+        # 所要時間(BL-144)。"(自)" = スタート押し忘れ→初回入力で自動開始した計測
+        dur = (s_it.get("duration") or "-") + ("(自)" if s_it.get("dur_auto") else "")
+        dmemo = f"所要 {dur}" if dur != "-" else ""
         if it.get("kind") == "paper":
             # choice_of / key_of は整列済みの記号列を返す("D" / "BD")。
             # 複数選択は**過不足なしで正解**なので、文字列一致がそのまま集合一致。
@@ -1839,10 +1862,10 @@ def cmd_grade(a):
             ks = "・".join(key) if key else ""
             if key is None:
                 rows.append((it["no"], "紙面", it.get("ref", ""), gs or "-", "-",
-                             why or "自動採点不可(Claude が採点)"))
+                             why or "自動採点不可(Claude が採点)", dur))
             elif not given:
                 rows.append((it["no"], "紙面", it.get("ref", ""), "(未記入)", "-",
-                             "未解答"))
+                             "未解答", dur))
             else:
                 gradable += 1
                 ok = given == key
@@ -1854,36 +1877,38 @@ def cmd_grade(a):
                         note += "(選択が不足)"
                     elif g > k:
                         note += "(選択が過剰)"
-                rows.append((it["no"], "紙面", it.get("ref", ""), gs, ks, note))
+                rows.append((it["no"], "紙面", it.get("ref", ""), gs, ks, note, dur))
                 history_upsert(repo, it["ref"], state="採点済", paper=True,
                                score=f"{'正解' if ok else '不正解'}({ks})",
                                memo=f"パック {pack_id} の Q{it['no']}")
                 # ノルマ台帳(BL-114): 採点が確定した瞬間の JST で記録する
                 quota.log_attempt(repo, "paper", it["ref"],
                                   result="ok" if ok else "ng",
-                                  src=f"pack:{pack_id}", quiet=True)
+                                  src=f"pack:{pack_id}", memo=dmemo, quiet=True)
         else:
             ref = it.get("ref", "")
             if a.no_lab or it.get("error"):
-                rows.append((it["no"], "ラボ", ref, "-", "-", "ラボ採点は省略"))
+                rows.append((it["no"], "ラボ", ref, "-", "-", "ラボ採点は省略", dur))
                 continue
             print(f"  Q{it['no']} [ラボ] {ref}: 採点中…", flush=True)
             got, total, why = grade_lab(repo, ref, it.get("variant"))
             if got is None:
-                rows.append((it["no"], "ラボ", ref, "-", "-", f"採点できず({why})"))
+                rows.append((it["no"], "ラボ", ref, "-", "-", f"採点できず({why})",
+                             dur))
                 continue
             fails = why if isinstance(why, list) else []
             lab_rows.append((it["no"], ref, got, total, fails))
-            rows.append((it["no"], "ラボ", ref, "-", "-", f"{got}/{total} 点"))
+            rows.append((it["no"], "ラボ", ref, "-", "-", f"{got}/{total} 点", dur))
             history_upsert(repo, ref, state="採点済", score=str(got),
                            memo=f"パック {pack_id} の Q{it['no']}")
             quota.log_attempt(repo, "lab", ref, score=got, total=total,
-                              src=f"pack:{pack_id}", quiet=True)
+                              src=f"pack:{pack_id}", memo=dmemo, quiet=True)
 
     print(f"== {pack_id} 採点", flush=True)
-    for no, kind, ref, given, key, note in rows:
+    for no, kind, ref, given, key, note, dur in rows:
         extra = f" 解答={given} 正解={key}" if kind == "紙面" else ""
-        print(f"  Q{no} [{kind}] {ref}:{extra} … {note}")
+        dtxt = f"（所要 {dur}）" if dur != "-" else ""
+        print(f"  Q{no} [{kind}] {ref}:{extra} … {note}{dtxt}")
     if gradable:
         print(f"  -- 紙面 MCQ {correct}/{gradable} 問正解")
 
@@ -1969,7 +1994,7 @@ def main():
                     help="固定ジャンルから選ぶラボ数(v2 既定2)")
     # ★既定に ipsla を追加(2026-08-22 ユーザ指示「既定の抽選に混ぜられるように」)。
     #   4ジャンルのシャッフルから2つ選ぶ形になる。
-    ap.add_argument("--lab-genres", default="hvrf,dhcp,dmvpn,ipsla",
+    ap.add_argument("--lab-genres", default="hvrf,dhcp,dmvpn,ipsla,rtctl",
                     help=f"ラボの固定ジャンル({','.join(LAB_GENRES)})")
     ap.add_argument("--lab-extra", type=int, default=1,
                     help="余裕があれば通常TSプールから追加する数(既定1)")

@@ -1,0 +1,49 @@
+{
+  "fixes": [
+    {
+      "node": "RT01",
+      "lines": [
+        "ip prefix-list PL-EDGE-IN seq 5 permit 10.0.0.0/8 le 32",
+        "ip prefix-list PL-EDGE-IN seq 10 permit 172.31.0.0/16 le 32",
+        "access-list 36 permit 10.42.42.0 0.0.0.255",
+        "access-list 36 permit 10.42.49.0 0.0.0.255",
+        "access-list 28 permit 10.42.47.0 0.0.0.255",
+        "access-list 9 permit 172.31.180.0",
+        "access-list 9 permit 172.31.181.0",
+        "access-list 9 permit 172.31.182.0",
+        "access-list 9 permit 172.31.183.0",
+        "access-list 85 permit 10.2.19.0 0.0.0.255",
+        "access-list 85 permit 10.2.27.0 0.0.0.255"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "router eigrp 100"
+      ],
+      "lines": [
+        "distribute-list prefix PL-EDGE-IN in Ethernet0/0",
+        "offset-list 36 in 2000 Ethernet0/1",
+        "offset-list 28 in 2000 Ethernet0/0",
+        "redistribute ospf 1 metric 100000 100 255 1 1500",
+        "distribute-list 85 out ospf 1"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "router ospf 1"
+      ],
+      "lines": [
+        "redistribute eigrp 100 subnets",
+        "distribute-list 9 out eigrp 100"
+      ]
+    },
+    {
+      "node": "RT01",
+      "lines": [
+        "access-list 85 permit 10.2.23.0 0.0.0.255"
+      ]
+    }
+  ]
+}

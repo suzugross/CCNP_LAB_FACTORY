@@ -1,0 +1,186 @@
+# 自動生成 (gen_route_ctrl.py) seed=65174 mode=bind
+problem: GEN-RTCTL-65174
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: '基線維持: RT01 の EIGRP 隣接が両フィードと確立している'
+  node: RT01
+  command: show ip eigrp neighbors
+  raw:
+  - contains: 10.1.12.2
+  - contains: 10.1.13.2
+  points: 2
+- name: '基線維持: RT01-RT05 の OSPF 隣接が FULL である'
+  node: RT01
+  command: show ip ospf neighbor
+  raw:
+  - contains: FULL
+  - contains: 10.1.15.2
+  points: 2
+- name: 'T1: 192.168.103.0/24 が RT03 から学習されていない'
+  node: RT01
+  command: show ip route 192.168.103.0
+  raw:
+  - contains: 10.1.12.2
+  - not_contains: 10.1.13.2
+  points: 4
+- name: 'T1: 192.168.136.0/24 が RT03 から学習されていない'
+  node: RT01
+  command: show ip route 192.168.136.0
+  raw:
+  - contains: 10.1.12.2
+  - not_contains: 10.1.13.2
+  points: 4
+- name: 'T1: 巻き添えなし — 10.1.34.0/30 が RT03 直行のまま'
+  node: RT01
+  command: show ip route 10.1.34.0 255.255.255.252
+  raw:
+  - contains: 10.1.13.2
+  - not_contains: 10.1.12.2
+  points: 6
+- name: 'T1: 巻き添えなし — 172.19.168.0/24 の ECMP(両フィード)が維持されている'
+  node: RT01
+  command: show ip route 172.19.168.0
+  raw:
+  - contains: 10.1.13.2
+  - contains: 10.1.12.2
+  points: 3
+- name: 'T1: 制約 — ACL 36 の distribute-list を Ethernet0/1 の in に適用'
+  node: RT01
+  command: show running-config | section router eigrp
+  raw:
+  - regex: distribute-list 36 in Ethernet0/1
+  points: 4
+- name: 'T1: 制約 — ACL 36 に deny エントリが無い(permit 列挙)'
+  node: RT01
+  command: show access-lists 36
+  raw:
+  - contains: permit
+  - not_regex: '(?m)^\s*\d+ deny '
+  points: 4
+- name: 'T2: 10.31.18.0/24 が Ethernet0/0 経由で転送される'
+  node: RT01
+  command: show ip route 10.31.18.0
+  raw:
+  - contains: via Ethernet0/0
+  - not_contains: Ethernet0/1
+  points: 5
+- name: 'T2: 10.31.24.0/24 が Ethernet0/1 経由で転送される'
+  node: RT01
+  command: show ip route 10.31.24.0
+  raw:
+  - contains: via Ethernet0/1
+  - not_contains: Ethernet0/0
+  points: 5
+- name: 'T2: 10.31.18.0/24 の代替経路が topology table に残っている(切替可能)'
+  node: RT01
+  command: show ip eigrp topology 10.31.18.0/24
+  raw:
+  - contains: 1 Successor
+  - contains: Ethernet0/0
+  - contains: Ethernet0/1
+  points: 3
+- name: 'T2: 10.31.24.0/24 の代替経路が topology table に残っている(切替可能)'
+  node: RT01
+  command: show ip eigrp topology 10.31.24.0/24
+  raw:
+  - contains: 1 Successor
+  - contains: Ethernet0/0
+  - contains: Ethernet0/1
+  points: 3
+- name: 'T2: 制約 — 両インターフェイスの in 方向 offset-list で実現'
+  node: RT01
+  command: show running-config | section router eigrp
+  raw:
+  - regex: offset-list \S+ in \d+ Ethernet0/0
+  - regex: offset-list \S+ in \d+ Ethernet0/1
+  points: 4
+- name: 'T3: RT05 の外部経路が A 群 4 経路のみである'
+  node: RT05
+  command: show ip route ospf
+  raw:
+  - regex: (?m)^O E2 +172\.19\.168\.0 \[110/
+  - regex: (?m)^O E2 +172\.19\.169\.0 \[110/
+  - regex: (?m)^O E2 +172\.19\.170\.0 \[110/
+  - regex: (?m)^O E2 +172\.19\.171\.0 \[110/
+  - not_regex: 10\.31\.
+  - not_regex: 192\.168\.
+  - not_regex: 10\.1\.(12|13|24|34)\.
+  points: 9
+- name: 'T3: 制約 — prefix-list PL-CORE-NETS が 1 行である'
+  node: RT01
+  command: show ip prefix-list PL-CORE-NETS
+  raw:
+  - regex: 'ip prefix-list PL-CORE-NETS: 1 entries'
+  - contains: permit
+  points: 4
+- name: 'T3: 制約 — 再配送が route-map RM-E2O を参照している'
+  node: RT01
+  command: show running-config | section router ospf
+  raw:
+  - regex: redistribute eigrp 100 (subnets )?route-map RM-E2O
+  points: 4
+- name: 'T4: RT04 が 10.4.74.0/24 と 10.4.77.0/24 のみ外部学習(デコイ遮断)'
+  node: RT04
+  command: show ip route eigrp
+  raw:
+  - regex: (?m)^D EX +10.4.74.0/24
+  - regex: (?m)^D EX +10.4.77.0/24
+  - not_contains: 172.28.100.0
+  - not_contains: 10.1.15.0
+  points: 6
+- name: 'T4: 制約 — ACL 84 のプロトコル指定 distribute-list と seed metric(route-map 不使用)'
+  node: RT01
+  command: show running-config | section router eigrp
+  raw:
+  - regex: distribute-list 84 out ospf 1
+  - regex: redistribute ospf 1 metric 1000000 1 255 1 1500(?!\d)
+  - not_regex: redistribute ospf 1[^\n]*route-map
+  points: 6
+- name: 'T5: 追加要件 — 10.4.82.0/24 が EIGRP ドメインへ届いている'
+  node: RT04
+  command: show ip route 10.4.82.0
+  raw:
+  - contains: Known via "eigrp 100"
+  - contains: distance 170
+  points: 4
+- name: 'T5: ACL 84 が 3 permit(deny なし)である'
+  node: RT01
+  command: show access-lists 84
+  raw:
+  - contains: 10.4.74.0
+  - contains: 10.4.77.0
+  - contains: 10.4.82.0
+  - not_regex: '(?m)^\s*\d+ deny '
+  points: 4
+- name: 'T6: RT04 から 10.4.74.1 への source 指定 ping が成功'
+  node: RT04
+  command: ping 10.4.74.1 source 172.19.168.1 repeat 5
+  raw:
+  - regex: Success rate is (80|100) percent
+  points: 6
+- name: '監査: RT02 の構成が変更されていない'
+  node: RT02
+  command: show running-config | include distribute-list|offset-list|route-map|redistribute
+  raw:
+  - not_regex: (distribute-list|offset-list|route-map|redistribute)
+  points: 2
+- name: '監査: RT03 の構成が変更されていない'
+  node: RT03
+  command: show running-config | include distribute-list|offset-list|route-map|redistribute
+  raw:
+  - not_regex: (distribute-list|offset-list|route-map|redistribute)
+  points: 2
+- name: '監査: RT04 の構成が変更されていない'
+  node: RT04
+  command: show running-config | include distribute-list|offset-list|route-map|redistribute
+  raw:
+  - not_regex: (distribute-list|offset-list|route-map|redistribute)
+  points: 2
+- name: '監査: RT05 の構成が変更されていない'
+  node: RT05
+  command: show running-config | include distribute-list|offset-list|route-map|redistribute
+  raw:
+  - not_regex: (distribute-list|offset-list|route-map|redistribute)
+  points: 2

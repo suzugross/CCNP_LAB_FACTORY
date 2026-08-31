@@ -1,0 +1,31 @@
+! RT01 初期状態 (顧客エッジ・先般 監視の導入/変更作業を実施した直後の状態)
+ip access-list extended WAN-PROTECT-IN
+ deny icmp host 100.64.191.69 host 10.64.114.1 echo-reply
+ permit ip any any
+!
+interface {{ links[0] }}
+ description === to RT02 (backup ISP access) ===
+ ip address 10.64.140.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (primary ISP access) ===
+ ip address 10.64.114.1 255.255.255.252
+ ip access-group WAN-PROTECT-IN in
+ no shutdown
+!
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+!
+ip sla 37
+ icmp-echo 100.64.191.69 source-ip 10.64.114.1
+ frequency 10
+!
+ip sla schedule 37 life forever start-time now
+!
+track 43 ip sla 37 reachability
+!
+ip route 100.64.191.69 255.255.255.255 10.64.114.2
+ip route 0.0.0.0 0.0.0.0 10.64.114.2 track 43
+ip route 0.0.0.0 0.0.0.0 10.64.140.2 250
+!

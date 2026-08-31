@@ -1,0 +1,61 @@
+{
+  "fixes": [
+    {
+      "node": "RT01",
+      "lines": [
+        "ip prefix-list PL-FEED-IN seq 5 permit 10.0.0.0/8 le 32",
+        "ip prefix-list PL-FEED-IN seq 10 permit 172.23.0.0/16 le 32",
+        "access-list 18 permit 10.44.2.0 0.0.0.255",
+        "access-list 47 permit 10.44.5.0 0.0.0.255",
+        "ip prefix-list PL-TOKYO-LAN seq 5 permit 172.23.172.0/22 ge 24 le 24",
+        "access-list 71 permit 10.45.68.0 0.0.0.255",
+        "access-list 71 permit 10.45.77.0 0.0.0.255"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "route-map RM-REDIST-OUT permit 10"
+      ],
+      "lines": [
+        "match ip address prefix-list PL-TOKYO-LAN"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "route-map RM-O2E permit 10"
+      ],
+      "lines": [
+        "match ip address 71"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "router eigrp 100"
+      ],
+      "lines": [
+        "distribute-list prefix PL-FEED-IN in Ethernet0/1",
+        "offset-list 18 in 1000 Ethernet0/1",
+        "offset-list 47 in 1000 Ethernet0/0",
+        "redistribute ospf 1 metric 10000 1000 255 1 1500 route-map RM-O2E"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "router ospf 1"
+      ],
+      "lines": [
+        "redistribute eigrp 100 subnets route-map RM-REDIST-OUT"
+      ]
+    },
+    {
+      "node": "RT01",
+      "lines": [
+        "access-list 71 permit 10.45.74.0 0.0.0.255"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "fixes": [
+    {
+      "node": "RT01",
+      "lines": [
+        "ip prefix-list PL-EDGE-IN seq 5 deny 192.168.198.0/24",
+        "ip prefix-list PL-EDGE-IN seq 10 deny 192.168.209.0/24",
+        "ip prefix-list PL-EDGE-IN seq 15 permit 0.0.0.0/0 le 32",
+        "access-list 19 permit 10.30.77.0 0.0.0.255",
+        "access-list 19 permit 10.30.85.0 0.0.0.255",
+        "access-list 26 permit 10.30.73.0 0.0.0.255",
+        "ip prefix-list PL-BRANCH24 seq 5 permit 172.17.44.0/23 ge 24 le 24",
+        "access-list 51 permit 10.58.34.0 0.0.0.255",
+        "access-list 51 permit 10.58.37.0 0.0.0.255"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "route-map RM-REDIST-OUT permit 10"
+      ],
+      "lines": [
+        "match ip address prefix-list PL-BRANCH24"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "router eigrp 6884"
+      ],
+      "lines": [
+        "distribute-list prefix PL-EDGE-IN in Ethernet0/1",
+        "offset-list 19 in 4000 Ethernet0/1",
+        "offset-list 26 in 4000 Ethernet0/0",
+        "redistribute ospf 53 metric 10000 1000 255 1 1500",
+        "distribute-list 51 out ospf 53"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "router ospf 53"
+      ],
+      "lines": [
+        "redistribute eigrp 6884 subnets route-map RM-REDIST-OUT"
+      ]
+    },
+    {
+      "node": "RT01",
+      "lines": [
+        "access-list 51 permit 10.58.40.0 0.0.0.255"
+      ]
+    }
+  ]
+}
