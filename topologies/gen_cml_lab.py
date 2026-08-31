@@ -155,6 +155,13 @@ def main():
     #     ext_links:
     #       - { node: RT01, if: 1, connector: "LAN-IX" }   # connector はラベル or デバイス名
     ext_links = pmeta.get("lab", {}).get("ext_links", [])
+    # データ面の非管理スイッチ(多アクセス LAN 用): target_nodes に含めない＝
+    # mgmt/day0/採点の対象外。lab.links の端点として名前で参照できる。
+    #   lab:
+    #     switches: [SWB]                     # 非管理スイッチのノード名リスト
+    #     links: [{a: RT02, a_if: 2, b: SWB, b_if: 0}, {a: CLB, a_if: 0, b: SWB, b_if: 1}, ...]
+    switches = list(pmeta.get("lab", {}).get("switches", []) or [])
+    switch_set = set(switches)
 
     # ノード単位イメージ上書き（無ければ全ノード --image-family）。
     node_fam = pmeta.get("node_image_families", {}) or {}
@@ -164,11 +171,13 @@ def main():
         fam = node_fam.get(name, a.image_family)
         return all_profiles[fam][role_of(name)]
 
-    # 各ノードが使う物理スロット（リンク参加分 + MGMT）
+    # 各ノードが使う物理スロット（リンク参加分 + MGMT）。スイッチはポートを別集計。
     used = {n: set() for n in nodes_in}
+    sw_used = {s: set() for s in switches}
     for lk in data_links:
-        used[lk["a"]].add(lk["a_if"])
-        used[lk["b"]].add(lk["b_if"])
+        for end, ifk in (("a", "a_if"), ("b", "b_if")):
+            n = lk[end]
+            (sw_used[n] if n in switch_set else used[n]).add(lk[ifk])
     for ex in ext_links:
         used[ex["node"]].add(ex["if"])
     for n in nodes_in:
@@ -215,6 +224,26 @@ def main():
         if name in node_ram:
             node["ram"] = int(node_ram[name])
         nodes.append(node)
+
+    # データ面の非管理スイッチを配置（接続先ノードの重心近くに置く）。
+    for s in switches:
+        neigh = []
+        for lk in data_links:
+            if lk["a"] == s and lk["b"] in coords:
+                neigh.append(coords[lk["b"]])
+            elif lk["b"] == s and lk["a"] in coords:
+                neigh.append(coords[lk["a"]])
+        if neigh:
+            sx = sum(c[0] for c in neigh) // len(neigh)
+            sy = sum(c[1] for c in neigh) // len(neigh)
+        else:
+            sx, sy = 0, 0
+        nodes.append({
+            "id": s, "label": s,
+            "node_definition": "unmanaged_switch", "image_definition": None,
+            "configuration": "", "x": sx, "y": sy, "tags": [],
+            "interfaces": [iface(s, p, f"port{p}") for p in sorted(sw_used[s])],
+        })
 
     # 管理スイッチ(unmanaged) + 外部接続(System Bridge) — トポロジの下に置く
     min_x = min(c[0] for c in coords.values())

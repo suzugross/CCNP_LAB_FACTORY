@@ -1,0 +1,215 @@
+lab:
+  title: POC-V6ADDR
+  description: 'PoC BL-149 (console-only / MGMT lease not used)'
+  notes: |
+    PoC lab (Claude 2026-08-25): BL-149 IPv6 自動アドレッシング TS (V6ADDR-TS.design.md §5)
+    - RT01=DHCPv6サーバ(Lo0 2001:DB8:1::1) -- RT02=GW/リレー
+    - LAN-A(2001:DB8:A::/64)=多アクセス(SWA): RT02 Et0/1 / CLA(client) / ROG(rogue+DAD相手)
+    - RT01-RT02: 2001:DB8:12::/64
+    - RA/ND・DHCPv6・ACL 等は day0 に入れず、コンソールから順次投入して挙動観測
+    - コンソール収集のみ (MGMT VRF/リース不使用)。クライアント/ROG のデータIFは
+      アドレス無し→CVAC で admin-down 起動→起動後コンソールで no shutdown
+  version: 0.3.0
+nodes:
+- id: RT01
+  label: RT01
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT01
+    !
+    ip domain name ccnp.local
+    no ip domain lookup
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    ipv6 unicast-routing
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Loopback0
+     ipv6 address 2001:DB8:1::1/128
+    !
+    interface Ethernet0/0
+     description === to RT02 ===
+     ipv6 address 2001:DB8:12::1/64
+     no shutdown
+    !
+    ipv6 route 2001:DB8:A::/64 2001:DB8:12::2
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: -300
+  y: -150
+  tags: [routers]
+  interfaces:
+  - id: RT01-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+- id: RT02
+  label: RT02
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname RT02
+    !
+    ip domain name ccnp.local
+    no ip domain lookup
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    ipv6 unicast-routing
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === to RT01 ===
+     ipv6 address 2001:DB8:12::2/64
+     no shutdown
+    !
+    interface Ethernet0/1
+     description === LAN-A (multi-access via SWA) ===
+     ipv6 address 2001:DB8:A::1/64
+     no shutdown
+    !
+    ipv6 route 2001:DB8:1::/64 2001:DB8:12::1
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 0
+  y: -150
+  tags: [routers]
+  interfaces:
+  - id: RT02-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: RT02-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+- id: CLA
+  label: CLA
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname CLA
+    !
+    ip domain name ccnp.local
+    no ip domain lookup
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    ipv6 unicast-routing
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === to LAN-A (client: autoconfig/dhcp をコンソール投入) ===
+     no shutdown
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 300
+  y: -300
+  tags: [routers]
+  interfaces:
+  - id: CLA-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+- id: ROG
+  label: ROG
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: |
+    hostname ROG
+    !
+    ip domain name ccnp.local
+    no ip domain lookup
+    ip cef
+    no ip http server
+    no ip http secure-server
+    !
+    ipv6 unicast-routing
+    !
+    enable secret CCNP
+    username SUZUKI privilege 15 secret CCNP
+    !
+    interface Ethernet0/0
+     description === to LAN-A (rogue RA / DAD 相手: コンソール投入) ===
+     no shutdown
+    !
+    line con 0
+     exec-timeout 0 0
+     logging synchronous
+  x: 300
+  y: 0
+  tags: [routers]
+  interfaces:
+  - id: ROG-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+- id: SWA
+  label: SWA
+  node_definition: unmanaged_switch
+  image_definition: null
+  configuration: ''
+  x: 150
+  y: -150
+  tags: []
+  interfaces:
+  - id: SWA-i0
+    label: port0
+    type: physical
+    slot: 0
+  - id: SWA-i1
+    label: port1
+    type: physical
+    slot: 1
+  - id: SWA-i2
+    label: port2
+    type: physical
+    slot: 2
+links:
+- id: l0
+  n1: RT01
+  i1: RT01-i0
+  n2: RT02
+  i2: RT02-i0
+  conditioning: {}
+  label: RT01<->RT02
+- id: l1
+  n1: RT02
+  i1: RT02-i1
+  n2: SWA
+  i2: SWA-i0
+  conditioning: {}
+  label: RT02<->LAN-A
+- id: l2
+  n1: CLA
+  i1: CLA-i0
+  n2: SWA
+  i2: SWA-i1
+  conditioning: {}
+  label: CLA<->LAN-A
+- id: l3
+  n1: ROG
+  i1: ROG-i0
+  n2: SWA
+  i2: SWA-i2
+  conditioning: {}
+  label: ROG<->LAN-A
+annotations: []
+smart_annotations: []
