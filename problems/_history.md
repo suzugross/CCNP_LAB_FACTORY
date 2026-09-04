@@ -11,6 +11,26 @@
 
 | 出題日 | 問題ID (variant/seed) | 難 | 状態 | 得点 | メモ |
 |--------|----------------------|----|------|------|------|
+| 2026-09-05 | GEN-V6ADDR-53318 (board=fhs) | 4 | 撤収済 | 100 | board=fhs 2問目(構築版 48213 の直後・ユーザ希望)。fault=fhs_absent。LAN-A=W_M。ユーザ一発100。撤収 2026-09-05。★CLB の `ipv6 dhcp client request vendor` はユーザ未投入(IOS 自動挿入の疑い・要調査) |
+| 2026-09-04 | GEN-V6BUILD-48213 | 4 | 撤収済 | 100 | ★構築版 初出題(BL-153・要件書駆動)。worlds=A:W_S,B:W_SO method=role。8ノード(ioll2 SWB・telnet 採点)。途中採点84(★採点欠陥=方式指紋がVLANスコープ解を読めず→counters allへ是正)→92→ヒント1回(CLBの余計なaddress dhcp)→100(2026-09-05)。撤収 2026-09-05 |
+| 2026-09-03 | GEN-V6ADDR-61207 (board=fhs) | 5 | 撤収済 | 100 | ★board=fhs 初出題(BL-146・IPv6 FHS/Security)。fault=fhs_prefix_match_wrong(単一)。ioll2 SWB(telnet 採点)+ROG の 8 ノード。LAN-A=W_S。ユーザ一発100(2026-09-04)= PL の誤 seq10 を削除し seq15 permit LAN-B/64(最小解)。CLB に ipv6 enable/dhcp client request vendor の残骸(無害)。撤収 2026-09-04 |
+| 2026-09-03 | GEN-V6ADDR-58106 (board=rogue) | 4 | 撤収済 | 100 | ★board=rogue 初出題(P4・不正RA/Security)。fault=rogue_ra(単一)。多アクセスLAN-B(SWB)+ROG の5 IOL。ユーザ一発100(fix=ROG `ipv6 nd ra suppress all`・shutより要件忠実)。撤収 2026-09-03 |
+| 2026-09-02 | GEN-V6ADDR-71828 (board=pd) | 5 | 撤収済 | 100 | board=pd 2問目。fault=pd_automatic_trap。**本題は初回採点時点で完答**(PD 4チェック全PASS)。89点だったのは★**出題側ミス**= task.md の domain が example.net なのに Claude がチャット提示時に前問の lab.internal を書き写し、解答者がその通り設定→採点不一致。是正して100。教訓= task.md は逐語で貼る |
+| 2026-09-02 | GEN-V6ADDR-63417 (board=pd) | 4 | 撤収済 | 100 | ★board=pd 初出題(P3)。fault=pd_client_missing。CPE Et0/0 に `ipv6 dhcp client pd DELEG` 追加で一発100。★レビュー訂正= 解答者が追加した O-flag+relay は空振りでなく実際に機能(RT01 Et0/1 の named POOL-PD が link-address 選択を経由せず DNS/domain を返す・HST で受領確認) |
+| 2026-08-31 | GEN-URPF-37256 | 4 | 撤収済 | 100 | パック PACK-20260831-B の Q8。missing_on_uplink: ★strict rx+例外ACL 10(named構文定義・非対称の192.168.5.0/24のみ救済)=模範のlooseより防御的に上位の解。suppressed drops 6で例外の実働も確認(レビュー初報の「ACL未定義」はgrep誤りで撤回) |
+| 2026-08-31 | GEN-IPSLATS-42660 | 4 | 撤収済 | 100 | パック PACK-20260831-B の Q6。track_wrong_sla(2回目): 3:17で処理・型定着 |
+| 2026-08-31 | 紙面 20260831-010 | - | 採点済 | 正解(D) | パック PACK-20260831-B の Q5 |
+| 2026-08-31 | 紙面 20260831-009 | - | 採点済 | 正解(B) | パック PACK-20260831-B の Q4 |
+| 2026-08-31 | 紙面 20260831-008 | - | 採点済 | 正解(C) | パック PACK-20260831-B の Q3 |
+| 2026-08-31 | 紙面 20260831-007 | - | 採点済 | 正解(B) | パック PACK-20260831-B の Q2 |
+| 2026-08-31 | 紙面 20260831-006 | - | 採点済 | 正解(B) | パック PACK-20260831-B の Q1 |
+| 2026-08-31 | GEN-BGPRR-68581 | 4 | 撤収済 | 100 | パック PACK-20260831 の Q8。ibgp_wrong_remoteas: RR配下のneighbor remote-as誤りを是正・一発 |
+| 2026-08-31 | GEN-RTCTL-38390 | 4 | 撤収済 | 100 | パック PACK-20260831 の Q7。v3 permit_only回: PL除外をスーパーネット2行(10/8+172.16/12)の開放permitで構成・一発(27分) |
+| 2026-08-31 | 紙面 20260831-005 | - | 採点済 | 不正解(C) | パック PACK-20260831 の Q5 |
+| 2026-08-31 | 紙面 20260831-004 | - | 採点済 | 正解(E) | パック PACK-20260831 の Q4 |
+| 2026-08-31 | 紙面 20260831-003 | - | 採点済 | 不正解(D) | パック PACK-20260831 の Q3 |
+| 2026-08-31 | 紙面 20260831-002 | - | 採点済 | 正解(C) | パック PACK-20260831 の Q2 |
+| 2026-08-31 | 紙面 20260831-001 | - | 採点済 | 正解(E) | パック PACK-20260831 の Q1 |
 | 2026-08-30 | GEN-V6ADDR-52890 | 4 | 撤収済 | 100 | ★BL-149 初出題。worlds A:W_SO/B:W_MA・fault pool_prefix_mismatch@B(単一)。一発100=POOL-B の address prefix を正LAN-B /64へ是正。決め手=binding空+Address State(SLAAC併存で疎通は終始OK) |
 | 2026-08-30 | GEN-EGVRF-16311 | 4 | 撤収済 | 100 | パック PACK-20260830 の Q8。summary_wrong_if: VRF AF/af-interface配下の誤summary-addressを正IFへ付替え・一発 |
 | 2026-08-30 | GEN-RTCTL-15723 | 4 | 撤収済 | 96→100 | パック PACK-20260830 の Q7。v3 deny_based(PL)2回目は正しく構成。初回失点はE→O再配送のroute-map参照制約のみ→再挑戦で是正 |

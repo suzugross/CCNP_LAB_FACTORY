@@ -339,3 +339,62 @@ target_nodes と rendering は board(a) 固定なので、board を明示選択�
 - **出題可否**: **board=pd 出題可**（4 故障・難4-5）。出題時は新 seed。
 - 残（P1-P4 完了後）: automatic↔named 要件反転（board infra で 1 LAN 化）/ dad_conflict 決定化 /
   PD の派生故障（pd_upstream_route_missing 等）。
+
+## 13. 次段の検討（2026-09-03・ユーザ要望= L2 FHS ラボ → 構築版）
+
+### 13.1 `--board fhs`（BL-146 ラボ側・TS 形）
+- PoC 全項目成立: [poc/fhs/README.md](../../poc/fhs/README.md)（ioll2-xe 17.15.1・RA Guard/DHCPv6 Guard/device-tracking）。
+- 盤面= board=rogue の SWB を **ioll2 管理スイッチ(target_nodes 入り・role=switch→family iol の switch profile=ioll2-xe・mgmt Et3/3)**に置換。
+  8 ノード(RT01/RT02/CLA/CLB/ROG/SWB+MGMTSW+EXTC)。VLAN10 アクセス×3(Et0/0=RT02・Et0/1=CLB・Et0/2=ROG)。
+- 採点経路= `access: telnet`(ioll2 は SSH 不可・collect_telnet.py)。IOL ルータは baseline が `transport input ssh` のみ
+  → 各ルータ initial 末尾に `line vty 0 4 / transport input ssh telnet` を追記して telnet 収集に乗せる。
+- 故障候補(1 つ抽選・ROG は「触れない他部署機器」制約で解法を SWB 側に強制):
+  | fault | 仕掛け | 症状 | 採点(SWB show + CLB 挙動) |
+  |---|---|---|---|
+  | fhs_absent | ポリシー無し | CLB 既定GW=ROG・偽GUA・DNS evil | `show ipv6 nd raguard policy` 存在+Et0/2 に attach / CLB routers に High 不在 |
+  | fhs_vlan_overblock | HOST を vlan configuration に attach・GW ポート role なし | CLB LL のみ(GW RA も遮断) | Et0/0 に role router(port)or trusted-port / CLB routers に RT02 あり |
+  | fhs_role_swapped | ROUTER を Et0/2・HOST を Et0/0 | ROG 通過・GW 遮断 | 上記の逆転是正 |
+  | fhs_dhcpguard_wrong_port | dhcp guard role client を Et0/0(GW) | RA は正常だが DNS/ドメイン取れず(O flag) | Et0/0 role server / CLB dhcp interface に RT02 |
+  | fhs_pref_cap_low | `router-preference maximum low` を VLAN attach | 正規(Medium)も落ちる | maximum medium 以上 or role 方式 |
+  | fhs_prefix_match_wrong | `match ra prefix-list` が正規 /64 を deny | 正規 RA 落ち | PL 是正 |
+- 過剰解監査= ROG 無改変(`show running-config interface Et0/0` に `ipv6 nd router-preference High` が残る＝ROG 側で直していない)＋
+  SWB のポートが up(shut で解決を封じる)。
+- 曖昧要件の芽= 「不正ルータの排除」を **ROG 特定なしの汎用対策**として要求(端末ポート全部に host role) vs 「ROG のポートだけ」。
+  設問文で「今後同種の機器が別ポートに繋がれても防げること」と言えば前者が一意。
+
+### 13.2 構築版（BL-153・要件書駆動）
+- 空の RT01/RT02/SWB(＋端末は既設)を要件書どおりに組む。要件抽選軸= 既存 5 世界(W_SO/W_M/W_MA/W_S/W_MP)の
+  1 つ×DNS 供給方法(DHCPv6 stateless/RDNSS)×既定GW 供給方法(RA/静的 LL next-hop)×PD 有無×FHS 方針(role 方式/pref 上限方式)。
+- 採点は既存 `lan_checks`(挙動)＋rogue_grading(High 不在+到達性)＋pd_grading を**そのまま流用**(TS と同じ最終状態を要求するため)。
+- 「顔が変わる」= 同じ盤面で要件書が違えば正解 config が全部違う(TS の反転世界を出題側に回す)。
+
+### 13.3 `--board fhs` 実装結果（2026-09-03・全6故障 実機E2E）
+seed 90001（LAN-A=W_MP・VLAN 30・ポリシー名 HOSTS/CLIENTS）を 1 回 provision し、SWB の FHS 設定を
+コンソールで差し替えながら 6 故障を順に検証（broken 採点→模範 fix→CLB IF bounce→採点）。
+
+| fault | broken | fixed | 備考 |
+|---|---|---|---|
+| fhs_vlan_overblock | 61 | 100 | 初回 provision。RA guard 有効チェックの regex は target 名「vlan 30」の空白で `\S+` が外れ→ `^.+\s(PORT|VLAN)` に是正 |
+| fhs_absent | 62 | 100 | DNS も evil（DHCPv6 Guard なし） |
+| fhs_role_swapped | 68 | 100 | **DNS は正規**（DHCP guard は正しい）→ 症状文から「DNS も想定外」を削除 |
+| fhs_dhcpguard_wrong_port | 93 | 100 | DNS/ドメインのみ FAIL（症状文どおり） |
+| fhs_pref_cap_low | 66 | 100 | 修正= `router-preference maximum medium` |
+| fhs_prefix_match_wrong | 66 | 100 | ★fix 初版が空振り= `no ipv6 prefix-list X seq 10`（prefix 省略）は不受理・同 seq への別 prefix も拒否→ **完全形で削除**して再投入 |
+
+- 実装メモ: (1) ROG は短寿命 RA（`ra interval 30`/`ra lifetime 120`/`nd prefix ... 180 90`）＝ガード適用後に端末の偽 default/偽 GUA が数分で消える。
+  (2) DHCPv6 の構成情報は端末が 24h キャッシュ → task で「CLB の IF shutdown/no shutdown は許可」を明記（アドレス設定変更は不可）。
+  (3) `show interfaces status` の日本語 description は telnet/console で化ける → SWB の description は ASCII。
+  (4) `show running-config` は device-role host / security-level guard の既定値を出さない → 採点は `show device-tracking policies`。
+  (5) lab_up.yml に `bringup_nodes`（任意）を追加＝SSH 不可の SWB を SSH bringup から除外（ioll2 のスイッチポートは day0 で up・CVAC shutdown を受けない）。
+  (6) SWB への模範解は `solution/fix_console.json`（fix_console.py 形式）。fix.json(ios_config 形式)は参考のみ。
+- **出題可**（難4-5）。出題時は新 seed。検証 seed 90001 は掃除済。
+
+### 13.4 構築版 `gen_v6addr_build.py`（BL-153）実装結果（2026-09-04）
+- ID= GEN-V6BUILD-<seed>。盤面= board=fhs と同一(8 ノード)。初期状態は**土台のみ**(RT01: Lo0/コア IF/LAN 宛戻り経路・RT02: 全 IF アドレス(W_MP の LAN は FE80::1 LL も)+Lo0 宛経路・端末: IF up のみ・SWB: VLAN+アクセス 3 ポート・ROG: 不正 RA+DHCPv6 稼働)。
+- 要件書= LAN ごとの `lan_spec`(世界別の端末/GW/サーバ要件・コマンドは書かない)+DHCPv6 サーバ集約(コア側 1 IF のみ=automatic を暗示)+FHS 方式(role/prefix)+制約(ROG/ポート/土台不変・端末は最小設定・bounce 可)。
+- 採点= TS の `lan_checks` 両 LAN+High 不在/Medium あり+偽 GUA 無し+両ガード有効+**方式指紋**(counters の RA guard drop 理由。ROG が 30 秒周期で RA を出すため常時計上)+Et0/2 connected+ROG 無改変。
+  DHCPv6 REP の drop 指紋は不採用(端末が問い合わせた時だけ計上・W_S では O=0 で発生しない)。
+- E2E: 70001(A=W_MA/B=W_S/role) blank 15→模範 100 / 70081(A=W_MP/B=W_SO/prefix) blank 12→93→100。
+  ★93 の原因= fix_console.json の投入順(RT01→…→CLB(bounce)→SWB)で、ガード前の bounce が ROG の DHCPv6 情報(evil DNS)を再学習し 24h キャッシュ。→ dict 順を SWB 先頭に是正(解答者にも同じ罠が起きうる=task の「構築完了後に bounce してよい」で示唆)。
+- 定常状態は 1 試行で 100(bounce 20 秒後には正規状態)。genres.yml: first-hop-security/ra-guard/dhcpv6-guard→security・GEN-V6BUILD family=security。
+- 出題可(難4-5・出題時新 seed)。検証 seed 70001/70081 は掃除済。

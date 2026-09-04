@@ -31,7 +31,8 @@
 
 出力: problems/GEN-V6ADDR-<seed>/{problem.yml, initial/*.cfg.j2, task.md, grading.yml,
       solution/{fault.json, fix.json}}
-使い方: gen_v6addr_ts.py --repo . --seed <int> [--fault <name>] [--faults 1|2]
+使い方: gen_v6addr_ts.py --repo . --seed <int> [--board a|rogue|pd|fhs] [--fault <name>] [--faults 1|2]
+board=fhs(BL-146)= ioll2 アクセス SW の RA Guard/DHCPv6 Guard TS（telnet 採点・PoC= poc/fhs/README.md）。
 採点は DHCP 交換+RA 周期のラグを吸収するため max_attempts=8 settle_delay=15 を推奨。
 """
 import argparse
@@ -1147,14 +1148,355 @@ def gen_rogue(a, rnd):
           f"worlds=A:{v['lans'][0]['world']},B:W_SO site={v['site']}")
 
 
+# ============================================================================
+# board=fhs（BL-146・IPv6 First-Hop Security）: board=rogue の SWB を ioll2 管理スイッチ
+# （採点対象）に置換。ROG は「他部署管理・触れない」制約で、解法を SWB の FHS
+# （RA Guard / DHCPv6 Guard）に強制する。PoC= poc/fhs/README.md（ioll2-xe 17.15 実機）。
+#   RT01(サーバ) ─ RT02(GW/リレー) ─Et0/0[SWB]Et0/1─ CLB(client) / Et0/2─ ROG(不正 RA+DHCPv6)
+#   採点は telnet（ioll2 は SSH 不可）。IOL ルータは vty に telnet を追加して同経路に乗せる。
+# ============================================================================
+FHS_FAULTS = ["fhs_absent", "fhs_vlan_overblock", "fhs_role_swapped",
+              "fhs_dhcpguard_wrong_port", "fhs_pref_cap_low", "fhs_prefix_match_wrong"]
+FHS_DIFFICULTY = {"fhs_absent": 4, "fhs_vlan_overblock": 5, "fhs_role_swapped": 4,
+                  "fhs_dhcpguard_wrong_port": 4, "fhs_pref_cap_low": 5,
+                  "fhs_prefix_match_wrong": 5}
+TELNET_VTY = ["line vty 0 4", " transport input ssh telnet", "!"]
+
+
+def fhs_values(rnd):
+    v = rogue_values(rnd)
+    v["evil_dns"] = f"2001:DB8:{v['site']}:BAD::53"
+    v["evil_dom"] = rnd.choice(["evil.example", "guest.local", "test-lab.internal"])
+    v["vlan"] = rnd.choice([10, 20, 30, 100, 110, 200])
+    v["pol_ra"] = rnd.choice(["RAG-ACCESS", "HOSTS", "NO-RA", "EDGE-RA"])
+    v["pol_dh"] = rnd.choice(["DHG-ACCESS", "CLIENTS", "NO-DHCP", "EDGE-DHCP"])
+    return v
+
+
+def render_rog_fhs(v):
+    """ROG は常に不正 RA(High・偽 /64)+不正 stateless DHCPv6 を出す（他部署機器・変更不可）。"""
+    return ["! ROG 初期状態 (LAN-B に接続された他部署管理の機器・自社からは変更不可)",
+            "ipv6 unicast-routing", "ipv6 cef", "!",
+            "ipv6 dhcp pool GUEST",
+            f" dns-server {v['evil_dns']}", f" domain-name {v['evil_dom']}", "!",
+            "interface {{ links[0] }}",
+            " description === to LAN-B (SWB) ===",
+            f" ipv6 address {v['bad']}::1/64",
+            " ipv6 nd other-config-flag",
+            " ipv6 nd router-preference High",
+            # 短寿命 RA（interval 30 / lifetime 120 / prefix valid 180 preferred 90）:
+            # ガード適用後に端末の残留（偽 default・偽 GUA）が数分で自然消滅し採点が収束する。
+            " ipv6 nd ra interval 30",
+            " ipv6 nd ra lifetime 120",
+            f" ipv6 nd prefix {v['bad']}::/64 180 90",
+            " ipv6 dhcp server GUEST",
+            " no shutdown", "!"] + TELNET_VTY
+
+
+def render_swb_fhs(v, fault):
+    """SWB(ioll2)。links[0]=RT02(GW) / links[1]=CLB / links[2]=ROG。全て VLAN vlan のアクセス。"""
+    vl, ra, dh = v["vlan"], v["pol_ra"], v["pol_dh"]
+    L = ["! SWB 初期状態 (LAN-B アクセススイッチ・先般 IPv6 FHS の導入作業を実施した直後)",
+         f"vlan {vl}", " name LAN-B", "!"]
+    ports = [("{{ links[0] }}", "to RT02 (LAN-B GW)"), ("{{ links[1] }}", "to CLB (host)"),
+             ("{{ links[2] }}", "to ROG (other-dept device)")]
+    # ---- ポリシー定義 ----
+    pol = []
+    if fault != "fhs_absent":
+        if fault == "fhs_pref_cap_low":
+            pol += [f"ipv6 nd raguard policy {ra}", " device-role router",
+                    " router-preference maximum low", "!"]
+        elif fault == "fhs_prefix_match_wrong":
+            # 正規 /64 を許可するつもりの PL が LAN-A の /64 を指している
+            pol += [f"ipv6 prefix-list RA-OK seq 10 permit {v['lanA']}::/64", "!",
+                    f"ipv6 nd raguard policy {ra}", " device-role router",
+                    " match ra prefix-list RA-OK", "!"]
+        else:
+            pol += [f"ipv6 nd raguard policy {ra}", " device-role host", "!"]
+        pol += ["ipv6 nd raguard policy UPLINK", " device-role router", "!",
+                f"ipv6 dhcp guard policy {dh}", " device-role client", "!",
+                "ipv6 dhcp guard policy DHCP-SRV", " device-role server", "!"]
+    L += pol
+    # ---- attach（故障ごとの配置）----
+    att = {p: [] for p, _ in ports}        # port → attach lines
+    vlan_att = []
+    gw, cl, rg = ports[0][0], ports[1][0], ports[2][0]
+    if fault == "fhs_absent":
+        pass
+    elif fault == "fhs_vlan_overblock":
+        vlan_att += [f" ipv6 nd raguard attach-policy {ra}"]
+        att[gw] += [" ipv6 dhcp guard attach-policy DHCP-SRV"]
+        att[cl] += [f" ipv6 dhcp guard attach-policy {dh}"]
+        att[rg] += [f" ipv6 dhcp guard attach-policy {dh}"]
+    elif fault == "fhs_role_swapped":
+        att[gw] += [f" ipv6 nd raguard attach-policy {ra}", " ipv6 dhcp guard attach-policy DHCP-SRV"]
+        att[cl] += [f" ipv6 nd raguard attach-policy {ra}", f" ipv6 dhcp guard attach-policy {dh}"]
+        att[rg] += [" ipv6 nd raguard attach-policy UPLINK", f" ipv6 dhcp guard attach-policy {dh}"]
+    elif fault == "fhs_dhcpguard_wrong_port":
+        att[gw] += [" ipv6 nd raguard attach-policy UPLINK", f" ipv6 dhcp guard attach-policy {dh}"]
+        att[cl] += [f" ipv6 nd raguard attach-policy {ra}", f" ipv6 dhcp guard attach-policy {dh}"]
+        att[rg] += [f" ipv6 nd raguard attach-policy {ra}"]
+    elif fault in ("fhs_pref_cap_low", "fhs_prefix_match_wrong"):
+        vlan_att += [f" ipv6 nd raguard attach-policy {ra}"]
+        att[gw] += [" ipv6 dhcp guard attach-policy DHCP-SRV"]
+        att[cl] += [f" ipv6 dhcp guard attach-policy {dh}"]
+        att[rg] += [f" ipv6 dhcp guard attach-policy {dh}"]
+    if vlan_att:
+        L += [f"vlan configuration {vl}"] + vlan_att + ["!"]
+    for p, desc in ports:
+        L += [f"interface {p}", f" description === {desc} ===", " switchport",
+              " switchport mode access", f" switchport access vlan {vl}"] + att[p] + [" no shutdown", "!"]
+    return L
+
+
+def fhs_symptom(v, fault):
+    if fault == "fhs_absent":
+        return ("LAN-B の端末が、社外（`{slo}`）へ到達できません。端末には想定していない"
+                "プレフィックスの IPv6 アドレスが付与され、DNS サーバも想定外のものが"
+                "設定されています。").format(slo=v["slo"])
+    if fault == "fhs_role_swapped":
+        # DHCPv6 Guard は正しく配置されているため DNS は正規（実測: broken 68 で DNS check PASS）
+        return ("LAN-B の端末が、社外（`{slo}`）へ到達できません。端末には正規のプレフィックス"
+                "のアドレスが付与されておらず、想定していないプレフィックスのアドレスだけが"
+                "付与されています。").format(slo=v["slo"])
+    if fault == "fhs_dhcpguard_wrong_port":
+        return ("LAN-B の端末は社外（`{slo}`）へ到達できますが、端末に配布された DNS サーバ"
+                "とドメイン名が社内標準と異なっています。").format(slo=v["slo"])
+    return ("LAN-B の端末が、グローバル IPv6 アドレスを取得できず、既定ゲートウェイも"
+            "持っていません（リンクローカルアドレスのみ）。SWB の FHS 導入後から発生しています。")
+
+
+def fhs_fix(v, fault):
+    """模範修正（SWB のみ・ROG 無改変）。fix_console.py 形式 {node: {config: [...]}} も併記。"""
+    ra, dh, vl = v["pol_ra"], v["pol_dh"], v["vlan"]
+    gw, cl, rg = "Ethernet0/0", "Ethernet0/1", "Ethernet0/2"
+    if fault == "fhs_absent":
+        cfg = [f"ipv6 nd raguard policy {ra}", " device-role host",
+               "ipv6 nd raguard policy UPLINK", " device-role router",
+               f"ipv6 dhcp guard policy {dh}", " device-role client",
+               "ipv6 dhcp guard policy DHCP-SRV", " device-role server",
+               f"interface {gw}", " ipv6 nd raguard attach-policy UPLINK",
+               " ipv6 dhcp guard attach-policy DHCP-SRV",
+               f"interface {cl}", f" ipv6 nd raguard attach-policy {ra}",
+               f" ipv6 dhcp guard attach-policy {dh}",
+               f"interface {rg}", f" ipv6 nd raguard attach-policy {ra}",
+               f" ipv6 dhcp guard attach-policy {dh}"]
+    elif fault == "fhs_vlan_overblock":
+        # VLAN 全体の host ポリシーはそのまま、GW ポートだけ router role を port attach（ポート>VLAN）
+        cfg = [f"interface {gw}", " ipv6 nd raguard attach-policy UPLINK"]
+    elif fault == "fhs_role_swapped":
+        cfg = [f"interface {gw}", " ipv6 nd raguard attach-policy UPLINK",
+               f"interface {rg}", f" ipv6 nd raguard attach-policy {ra}"]
+    elif fault == "fhs_dhcpguard_wrong_port":
+        cfg = [f"interface {gw}", " ipv6 dhcp guard attach-policy DHCP-SRV",
+               f"interface {rg}", f" ipv6 dhcp guard attach-policy {dh}"]
+    elif fault == "fhs_pref_cap_low":
+        cfg = [f"ipv6 nd raguard policy {ra}", " router-preference maximum medium"]
+    else:  # fhs_prefix_match_wrong
+        # `no ipv6 prefix-list RA-OK seq 10`(prefix 省略)は IOS で受理されず、同 seq への別 prefix
+        # 追加も拒否される(実測)→ 誤エントリを完全形で削除して正しい /64 を入れる
+        cfg = [f"no ipv6 prefix-list RA-OK seq 10 permit {v['lanA']}::/64",
+               f"ipv6 prefix-list RA-OK seq 10 permit {v['lanB']}::/64"]
+    return {"console": {"SWB": {"config": cfg}}, "fixes": [{"node": "SWB", "lines": cfg,
+                                                              "match": "none"}]}
+
+
+def fhs_grading(v, prob_id, fault):
+    lanB = v["lans"][1]
+    checks = []
+    checks += lan_checks(v, v["lans"][0])          # LAN-A: 通常世界（健全）
+    checks += lan_checks(v, lanB)                  # LAN-B: W_SO（EUI-64/DNS/ping）
+    checks.append({
+        "name": "LAN-B: 未認可の高優先ルータ広告が端末に届いていない (正規 GW のみ)",
+        "node": "CLB", "command": "show ipv6 routers",
+        "raw": [{"not_regex": r"Preference=High"},
+                {"regex": r"Preference=Medium"}], "points": 10})
+    checks.append({
+        "name": "LAN-B: 端末に偽プレフィックスのアドレスが無い",
+        "node": "CLB", "command": "show ipv6 interface brief Ethernet0/0",
+        "raw": [{"not_regex": rx(v["bad"]) + ":"}], "points": 6})
+    checks.append({
+        "name": "SWB: RA Guard が有効 (ポリシーが適用されている)",
+        "node": "SWB", "command": "show device-tracking policies",
+        "raw": [{"regex": r"(?m)^.+\s(PORT|VLAN)\s+\S+\s+RA guard"}], "points": 6})
+    checks.append({
+        "name": "SWB: DHCPv6 Guard が有効 (ポリシーが適用されている)",
+        "node": "SWB", "command": "show device-tracking policies",
+        "raw": [{"regex": r"(?m)^.+\s(PORT|VLAN)\s+\S+\s+DHCP Guard"}], "points": 6})
+    checks.append({
+        "name": "SWB: ROG 接続ポートが稼働中 (ポート閉塞による解決は不可)",
+        "node": "SWB", "command": "show interfaces status",
+        "raw": [{"regex": r"(?m)^Et0/2\s+.*\sconnected\s"}], "points": 6})
+    checks.append({
+        "name": "ROG: 他部署機器が無改変 (RA 設定と IF が初期状態のまま)",
+        "node": "ROG", "command": "show running-config interface Ethernet0/0",
+        "raw": [{"regex": r"ipv6 nd router-preference High"},
+                {"regex": r"ipv6 dhcp server GUEST"},
+                {"not_regex": r"(?m)^\s*shutdown"},
+                {"not_regex": r"ra suppress"}], "points": 6})
+    for c in checks:
+        for cond in c.get("raw", []):
+            for k in ("regex", "not_regex"):
+                if k in cond and not cond[k].startswith("(?i)"):
+                    cond[k] = "(?i)" + cond[k]
+    raw_total = sum(c["points"] for c in checks)
+    acc = 0
+    for c in checks[:-1]:
+        c["points"] = round(c["points"] * 100 / raw_total)
+        acc += c["points"]
+    checks[-1]["points"] = 100 - acc
+    return {"problem": prob_id, "total_points": 100,
+            "defaults": {"genie_os": "iosxe"}, "checks": checks}
+
+
+def fhs_task(v, prob_id, fault, diff):
+    la = v["lans"][0]
+    return f"""# 問題 {prob_id} : IPv6 自動アドレッシング 適合トラブルシュート／First-Hop Security（難易度{diff}）
+
+## シナリオ
+
+あなたは、ある企業のネットワーク管理者です。中央のルータ **RT01** が DHCPv6 サーバ、
+**RT02** が各 LAN のデフォルトゲートウェイ兼 DHCPv6 リレーを担います。**LAN-B は
+アクセススイッチ SWB を介した共有セグメント**で、利用者端末 **CLB** のほか、**他部署が
+管理する機器 ROG** も接続されています。ROG は他部署の業務に使用中であり、あなたの
+部署には設定変更の権限がありません。また、ROG の接続ポートを閉塞することも業務上
+認められていません。
+
+先般、LAN-B のアクセススイッチ SWB に対して IPv6 First-Hop Security の導入作業が
+行われた後、下記の障害報告が提出されています。**下記の「LAN 要件」に完全に準拠
+するよう**、構成を調査し、是正してください。
+
+## LAN 要件
+
+1. {world_req(la)}
+2. LAN-B の端末は、**IPv6 アドレスを自動生成**し（正規ゲートウェイ RT02 のルータ広告に
+   基づく）、**DNS などの構成情報は中央の DHCPv6 サーバから取得**する。
+3. LAN-B では、**正規のゲートウェイ RT02 以外のルータ広告および DHCPv6 応答が端末に
+   届いてはならない**。この保護は **アクセススイッチ SWB で実施**し、ROG 以外の機器が
+   別のアクセスポートに接続された場合にも有効であること。
+
+- いずれの LAN でも、端末は取得した既定ゲートウェイ経由で **RT01 の Loopback0
+  （`{v['slo']}`）へ到達**できること。
+- 配布する **DNS サーバは `{v['dns']}`**、DHCPv6 を使う LAN ではドメイン名 `{v['dom']}` も配布する。
+
+## 障害報告
+
+> {fhs_symptom(v, fault)}
+
+## トポロジ
+
+```
+   RT01 (DHCPv6 サーバ, Lo0={v['slo']})
+     │ {v['core']}::/64  (core)
+   RT02 (GW / DHCPv6 リレー)
+     ├─ {la['pfx']}::/64  LAN-A ── CLA
+     └─ {v['lanB']}::/64  LAN-B ── Et0/0 [SWB] Et0/1 ── CLB（端末）
+                                         Et0/2 ── ROG（他部署機器）
+```
+SWB のアクセスポートはすべて VLAN {v['vlan']}（LAN-B）です。
+
+## 遵守事項
+
+- 変更してよいのは **RT01・RT02・CLA・CLB・SWB** です。**ROG は変更禁止**（他部署管理）、
+  **SWB のポートを shutdown することも禁止**です。各機器の **インタフェースの IPv6 アドレス
+  と Loopback0 は変更しないこと**。アドレッシング/経路の土台は健全です。
+- 原因の種類・箇所・数は開示されません。LAN 要件と実機の状態を突き合わせて差分を特定して
+  ください。
+- 端末 CLB は、是正後に IPv6 の状態を再取得させる目的で **インタフェースの shutdown /
+  no shutdown を行ってよい**（端末のアドレス設定そのものを変更してはならない）。
+  DHCPv6 で取得した構成情報は端末側に長時間キャッシュされることに注意。
+
+## アクセス・採点
+
+telnet/SSH `SUZUKI / CCNP`（mgmt は割当順・**SWB は telnet のみ**）または CML コンソール。
+```
+scripts/lab.sh grade {prob_id}
+```
+> 採点では、各 LAN 要件と `{v['slo']}` への実疎通、LAN-B の供給源の正当性、SWB の保護機能の
+> 有効性、および ROG・ポートの無改変を確認します。
+"""
+
+
+def gen_fhs(a, rnd):
+    v = fhs_values(rnd)
+    fault = a.fault if a.fault in FHS_FAULTS else rnd.choice(FHS_FAULTS)
+    diff = FHS_DIFFICULTY[fault]
+    prob_id = f"GEN-V6ADDR-{a.seed}"
+    pdir = f"{a.repo}/problems/{prob_id}"
+    os.makedirs(f"{pdir}/initial", exist_ok=True)
+    os.makedirs(f"{pdir}/solution", exist_ok=True)
+
+    problem = {
+        "id": prob_id,
+        "title": f"IPv6 自動アドレッシング TS / First-Hop Security (seed={a.seed})",
+        "exam": "ENARSI",
+        "topics": ["ipv6", "slaac", "ra", "first-hop-security", "ra-guard", "dhcpv6-guard",
+                   "troubleshooting", "generated"],
+        "difficulty": diff, "topology": "generated",
+        "target_nodes": ["RT01", "RT02", "CLA", "CLB", "ROG", "SWB"],
+        "points": 100, "access": "telnet", "bringup_data_ifs": True,
+        # SWB(ioll2) は SSH 不可＝SSH 経路の bringup から除外（スイッチポートは day0 で up）
+        "bringup_nodes": ["RT01", "RT02", "CLA", "CLB", "ROG"],
+        "lab": {"links": [
+            {"a": "RT01", "a_if": 0, "b": "RT02", "b_if": 0},
+            {"a": "RT02", "a_if": 1, "b": "CLA", "b_if": 0},
+            {"a": "RT02", "a_if": 2, "b": "SWB", "b_if": 0},
+            {"a": "CLB", "a_if": 0, "b": "SWB", "b_if": 1},
+            {"a": "ROG", "a_if": 0, "b": "SWB", "b_if": 2}],
+            "positions": {"RT01": [-320, -140], "RT02": [0, 0], "SWB": [200, 160],
+                          "CLA": [320, -200], "CLB": [400, 80], "ROG": [400, 260]}}}
+    with open(f"{pdir}/problem.yml", "w", encoding="utf-8") as f:
+        f.write(f"# 自動生成 (gen_v6addr_ts.py --board fhs) seed={a.seed} "
+                f"fault={fault} worlds=A:{v['lans'][0]['world']},B:W_SO\n")
+        yaml.safe_dump(problem, f, sort_keys=False, allow_unicode=True)
+
+    renderers = {
+        "RT01": render_rt01(v, []) + TELNET_VTY,
+        "RT02": render_rt02(v, []) + TELNET_VTY,
+        "CLA": render_client(v, v["lans"][0], []) + TELNET_VTY,
+        "CLB": render_client(v, v["lans"][1], []) + TELNET_VTY,
+        "ROG": render_rog_fhs(v),
+        "SWB": render_swb_fhs(v, fault),
+    }
+    for node, lines in renderers.items():
+        with open(f"{pdir}/initial/{node}.cfg.j2", "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+
+    grading = fhs_grading(v, prob_id, fault)
+    with open(f"{pdir}/grading.yml", "w", encoding="utf-8") as f:
+        f.write(f"# 自動生成 (gen_v6addr_ts.py --board fhs) seed={a.seed} fault={fault}\n"
+                "# telnet 収集(SWB=ioll2)。挙動採点+SWB の FHS 有効性+ROG/ポート無改変監査。\n")
+        yaml.safe_dump(grading, f, sort_keys=False, allow_unicode=True)
+
+    meta = {"board": "fhs", "fault": fault, "difficulty": diff,
+            "worlds": {"A": v["lans"][0]["world"], "B": "W_SO"},
+            "site": v["site"], "lanB": v["lanB"], "bad": v["bad"], "vlan": v["vlan"],
+            "pol_ra": v["pol_ra"], "pol_dh": v["pol_dh"],
+            "slo": v["slo"], "dns": v["dns"], "dom": v["dom"],
+            "evil_dns": v["evil_dns"], "evil_dom": v["evil_dom"]}
+    with open(f"{pdir}/solution/fault.json", "w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+    fx = fhs_fix(v, fault)
+    with open(f"{pdir}/solution/fix.json", "w", encoding="utf-8") as f:
+        json.dump({"fixes": fx["fixes"]}, f, ensure_ascii=False, indent=2)
+    # SWB は SSH 不可 → 自己検品は fix_console.yml(CML コンソール)で投入する形式も出力
+    with open(f"{pdir}/solution/fix_console.json", "w", encoding="utf-8") as f:
+        json.dump(fx["console"], f, ensure_ascii=False, indent=2)
+    with open(f"{pdir}/task.md", "w", encoding="utf-8") as f:
+        f.write(fhs_task(v, prob_id, fault, diff))
+    print(f"wrote problems/{prob_id} : board=fhs fault={fault} diff={diff} "
+          f"worlds=A:{v['lans'][0]['world']},B:W_SO site={v['site']} vlan={v['vlan']}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", default=".")
     ap.add_argument("--seed", type=int, required=True)
-    ap.add_argument("--board", choices=["a", "rogue", "pd"], default="a",
+    ap.add_argument("--board", choices=["a", "rogue", "pd", "fhs"], default="a",
                     help="a=2 LAN 点対点(既定) / rogue=多アクセス LAN-B+ROG(L5) / "
-                         "pd=Prefix Delegation スパー(CPE 直結)")
-    ap.add_argument("--fault", choices=FAULTS + L5_ALL + PD_FAULTS, default=None)
+                         "pd=Prefix Delegation スパー(CPE 直結) / "
+                         "fhs=ioll2 アクセスSW の RA Guard/DHCPv6 Guard(BL-146・telnet 採点)")
+    ap.add_argument("--fault", choices=FAULTS + L5_ALL + PD_FAULTS + FHS_FAULTS, default=None)
     ap.add_argument("--faults", type=int, choices=[1, 2], default=1)
     a = ap.parse_args()
     rnd = random.Random(a.seed)
@@ -1163,6 +1505,9 @@ def main():
         return
     if a.board == "pd":
         gen_pd(a, rnd)
+        return
+    if a.board == "fhs":
+        gen_fhs(a, rnd)
         return
     v = rand_values(rnd)
     faults = pick_faults(rnd, a.faults, a.fault, v)

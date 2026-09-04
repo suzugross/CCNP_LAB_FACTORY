@@ -122,7 +122,8 @@
             #   全ノード共通リストだと、そのスロットにリンクが無いノードで
             #   `% Invalid input detected` になる。
             bringup_ifs: "{{ (pmeta.bringup_ifs[item] | default([])) if (pmeta.bringup_ifs | default([])) is mapping else (pmeta.bringup_ifs | default(omit)) }}"
-          loop: "{{ pmeta.target_nodes }}"
+          # bringup_nodes(任意)で対象を絞る(SSH 不可の L2 スイッチ等を除外・2026-09-03 BL-146)。
+          loop: "{{ pmeta.bringup_nodes | default(pmeta.target_nodes) }}"
           when: pmeta.bringup_data_ifs | default(false)
 
 - name: data IF を no shutdown（bringup_data_ifs 問題のみ）

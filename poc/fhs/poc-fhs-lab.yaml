@@ -1,0 +1,127 @@
+lab:
+  title: POC-FHS
+  description: PoC BL-146 IPv6 FHS on ioll2-xe (console-only)
+  notes: 'PoC lab (Claude 2026-09-03): BL-146 IPv6 First-Hop Security on ioll2-xe
+    17.15
+
+    - SWB=ioll2 managed switch, VLAN10: RT02(GW, O-flag+stateless DHCPv6) / CLB(autoconfig)
+    / ROG(rogue RA High + rogue DHCPv6)
+
+    - FHS policies are applied from console during PoC
+
+    '
+  version: 0.3.0
+nodes:
+- id: RT02
+  label: RT02
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: "ip cef\nipv6 unicast-routing\n\nhostname RT02\n!\nip domain name\
+    \ ccnp.local\nno ip domain lookup\nno ip http server\nno ip http secure-server\n\
+    !\nenable secret CCNP\nusername SUZUKI privilege 15 secret CCNP\n!\nline con 0\n\
+    \ exec-timeout 0 0\n logging synchronous\n!\ninterface Ethernet0/0\n description\
+    \ === LAN-B GW ===\n ipv6 address 2001:DB8:33:B::1/64\n ipv6 nd other-config-flag\n\
+    \ no shutdown\n!\nipv6 dhcp pool LANB\n dns-server 2001:DB8:22:1::53\n domain-name\
+    \ example.net\n!\ninterface Ethernet0/0\n ipv6 dhcp server LANB\n"
+  x: -300
+  y: 0
+  tags:
+  - routers
+  interfaces:
+  - id: RT02-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+- id: CLB
+  label: CLB
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: "ip cef\nipv6 unicast-routing\n\nhostname CLB\n!\nip domain name\
+    \ ccnp.local\nno ip domain lookup\nno ip http server\nno ip http secure-server\n\
+    !\nenable secret CCNP\nusername SUZUKI privilege 15 secret CCNP\n!\nline con 0\n\
+    \ exec-timeout 0 0\n logging synchronous\n!\ninterface Ethernet0/0\n description\
+    \ === LAN-B host ===\n ipv6 address autoconfig default\n no shutdown\n"
+  x: 300
+  y: -150
+  tags:
+  - routers
+  interfaces:
+  - id: CLB-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+- id: ROG
+  label: ROG
+  node_definition: iol-xe
+  image_definition: iol-xe-17-15-01
+  configuration: "ip cef\nipv6 unicast-routing\n\nhostname ROG\n!\nip domain name\
+    \ ccnp.local\nno ip domain lookup\nno ip http server\nno ip http secure-server\n\
+    !\nenable secret CCNP\nusername SUZUKI privilege 15 secret CCNP\n!\nline con 0\n\
+    \ exec-timeout 0 0\n logging synchronous\n!\ninterface Ethernet0/0\n description\
+    \ === rogue RA + rogue DHCPv6 ===\n ipv6 address 2001:DB8:33:BAD::1/64\n ipv6\
+    \ nd router-preference High\n ipv6 nd other-config-flag\n no shutdown\n!\nipv6\
+    \ dhcp pool EVIL\n dns-server 2001:DB8:BAD::53\n domain-name evil.example\n!\n\
+    interface Ethernet0/0\n ipv6 dhcp server EVIL\n"
+  x: 300
+  y: 150
+  tags:
+  - routers
+  interfaces:
+  - id: ROG-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+- id: SWB
+  label: SWB
+  node_definition: ioll2-xe
+  image_definition: ioll2-xe-17-15-01
+  configuration: "\nhostname SWB\n!\nip domain name ccnp.local\nno ip domain lookup\n\
+    no ip http server\nno ip http secure-server\n!\nenable secret CCNP\nusername SUZUKI\
+    \ privilege 15 secret CCNP\n!\nline con 0\n exec-timeout 0 0\n logging synchronous\n\
+    !\nvlan 10\n name LANB\n!\ninterface Ethernet0/0\n description === to RT02 (GW)\
+    \ ===\n switchport access vlan 10\n switchport mode access\n no shutdown\ninterface\
+    \ Ethernet0/1\n description === to CLB (host) ===\n switchport access vlan 10\n\
+    \ switchport mode access\n no shutdown\ninterface Ethernet0/2\n description ===\
+    \ to ROG (rogue) ===\n switchport access vlan 10\n switchport mode access\n no\
+    \ shutdown\n"
+  x: 0
+  y: 0
+  tags:
+  - switches
+  interfaces:
+  - id: SWB-i0
+    label: Ethernet0/0
+    type: physical
+    slot: 0
+  - id: SWB-i1
+    label: Ethernet0/1
+    type: physical
+    slot: 1
+  - id: SWB-i2
+    label: Ethernet0/2
+    type: physical
+    slot: 2
+links:
+- id: l0
+  n1: RT02
+  i1: RT02-i0
+  n2: SWB
+  i2: SWB-i0
+  conditioning: {}
+  label: RT02<->SWB
+- id: l1
+  n1: CLB
+  i1: CLB-i0
+  n2: SWB
+  i2: SWB-i1
+  conditioning: {}
+  label: CLB<->SWB
+- id: l2
+  n1: ROG
+  i1: ROG-i0
+  n2: SWB
+  i2: SWB-i2
+  conditioning: {}
+  label: ROG<->SWB
+annotations: []
+smart_annotations: []

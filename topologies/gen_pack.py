@@ -130,6 +130,22 @@ LAB_GENRES = {
     #   参加(2026-08-22 ユーザ指示・hvrf/dhcp/dmvpn と同格の抽選)。
     "ipsla": {"label": "IP SLA/track TS",
               "prefixes": ["GEN-IPSLATS"], "tags": ["ip-sla", "track"]},
+    # ★IPv6 自動アドレッシング(2026-09-05 追加・BL-149/146/153)。
+    #   v6addr= TS 生成器。board(盤面)を variants から抽選して `--board` を渡す
+    #   (a=4 IOL 点対点 17 故障 / rogue=不正RA 5 IOL+非管理SW / pd=委任 5 IOL /
+    #    fhs=ioll2 SWB の RA Guard・DHCPv6 Guard 6 故障・telnet 採点)。台数は
+    #   MGMTSW/EXTC を含む CML 実ノード数で見積る。
+    #   v6build= 要件書駆動の構築問(fhs 盤面・security 枠)。構築問だが固定ジャンル枠は
+    #   _is_ts を通らないので混ぜられる(rtctl と同じ扱い)。
+    "v6addr": {"label": "IPv6 自動アドレッシング TS",
+               "prefixes": ["GEN-V6ADDR"], "tags": ["ipv6", "dhcpv6", "slaac"],
+               "variants": [{"args": ["--board", "a"], "nodes": 6, "label": "board=a"},
+                            {"args": ["--board", "rogue"], "nodes": 8, "label": "board=rogue"},
+                            {"args": ["--board", "pd"], "nodes": 7, "label": "board=pd"},
+                            {"args": ["--board", "fhs"], "nodes": 8, "label": "board=fhs"}]},
+    "v6build": {"label": "IPv6 自動アドレッシング 構築(FHS)",
+                "prefixes": ["GEN-V6BUILD"], "tags": ["ipv6", "security", "first-hop-security"],
+                "nodes": 8},
 }
 
 
@@ -581,10 +597,16 @@ def resolve_genre(cat, genre, hist, rnd, family_days, today, log=print):
     if pick is not cands[0]:
         log(f"[選定] {spec['label']}: 優先の {cands[0]['prefix']} は直近"
             f"{family_days}日に出題済 → {pick['prefix']} へ")
-    nodes = _nodes_from_text(pick["desc"] + " " + pick["note"]) or DEFAULT_NODES
+    nodes = spec.get("nodes") or _nodes_from_text(pick["desc"] + " " + pick["note"]) or DEFAULT_NODES
+    args, label = [], spec["label"]
+    if spec.get("variants"):
+        # 盤面/形の variant を抽選し、生成器へ渡す追加引数と台数を確定する
+        var = rnd.choice(spec["variants"])
+        args, nodes = list(var.get("args", [])), var.get("nodes", nodes)
+        label = f"{spec['label']}({var.get('label', ' '.join(args))})"
     return {"id": pick["prefix"], "script": pick["script"], "nodes": nodes,
             "tags": spec["tags"], "diff": pick["diff"], "source": "generator",
-            "kind": "generator", "genre": genre, "label": spec["label"],
+            "kind": "generator", "genre": genre, "label": label, "args": args,
             "pvt": bool(pick.get("pvt"))}
 
 
@@ -742,16 +764,16 @@ def run(cmd, repo, log, label, timeout=3600):
     return r.returncode, out
 
 
-def gen_instance(repo, script, seed, log):
+def gen_instance(repo, script, seed, log, args=None):
     """GEN 生成器を新 seed で回し、できた problems/<ID> を突き止める。
 
     生成器の標準出力の書式は生成器ごとに違うため、**problems/ の差分**で特定する
-    (文字列パースより頑健)。
+    (文字列パースより頑健)。args= 固定ジャンルの variant が渡す追加引数(`--board fhs` 等)。
     """
     before = set(os.listdir(os.path.join(repo, "problems")))
     cmd = [os.path.join(repo, ".venv/bin/python3"),
            os.path.join(repo, "topologies", script),
-           "--repo", repo, "--seed", str(seed)]
+           "--repo", repo, "--seed", str(seed)] + list(args or [])
     rc, _ = run(cmd, repo, log, "生成器")
     after = set(os.listdir(os.path.join(repo, "problems")))
     new = sorted(n for n in (after - before) if not n.startswith("_"))
@@ -1540,7 +1562,7 @@ def cmd_new(a):
         # ① GEN 系は新 seed で新インスタンスを作る(既存インスタンスは既出の可能性)
         prob_id = lb["id"]
         if lb["source"] == "generator":
-            prob_id = gen_instance(repo, lb["script"], rnd.randrange(1000, 99999), log)
+            prob_id = gen_instance(repo, lb["script"], rnd.randrange(1000, 99999), log, lb.get("args"))
             if not prob_id:
                 it["error"] = "生成器の実行に失敗"
                 log(f"[ラボ] ★{lb['id']} の生成に失敗 → この問題は欠落")
@@ -1685,7 +1707,7 @@ def cmd_replace(a):
 
     prob_id = lb["id"]
     if lb["source"] == "generator":
-        prob_id = gen_instance(repo, lb["script"], rnd.randrange(1000, 99999), log)
+        prob_id = gen_instance(repo, lb["script"], rnd.randrange(1000, 99999), log, lb.get("args"))
         if not prob_id:
             sys.exit("生成器の実行に失敗しました")
         log(f"[ラボ] 生成: {prob_id}")
@@ -1994,7 +2016,7 @@ def main():
                     help="固定ジャンルから選ぶラボ数(v2 既定2)")
     # ★既定に ipsla を追加(2026-08-22 ユーザ指示「既定の抽選に混ぜられるように」)。
     #   4ジャンルのシャッフルから2つ選ぶ形になる。
-    ap.add_argument("--lab-genres", default="hvrf,dhcp,dmvpn,ipsla,rtctl",
+    ap.add_argument("--lab-genres", default="hvrf,dhcp,dmvpn,ipsla,rtctl,v6addr,v6build",
                     help=f"ラボの固定ジャンル({','.join(LAB_GENRES)})")
     ap.add_argument("--lab-extra", type=int, default=1,
                     help="余裕があれば通常TSプールから追加する数(既定1)")
