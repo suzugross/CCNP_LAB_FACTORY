@@ -58,8 +58,8 @@ PAPER_GENRES = {
     "bgp": ["bgpbest", "bgpdbg"],
 }
 
-# 紙面の問題数を `auto` にしたときの範囲(ユーザ指示 2026-08-11: 10〜20問で適当に)
-PAPER_AUTO_MIN, PAPER_AUTO_MAX = 10, 20
+# 紙面の問題数を `auto` にしたときの範囲(2026-08-11「10〜20問で適当に」→ 2026-09-05「5問程度」に変更)
+PAPER_AUTO_MIN, PAPER_AUTO_MAX = 5, 6   # ★2026-09-05 ユーザ指示「紙面は5問程度」(旧 10〜20)。必須4ジャンル+mixed 1〜2問
 
 # ★BL-136(2026-08-23): 紙面の shape/kind 反復回避の参照日数。answers/ の種別履歴で
 #   直近 N 日に出た kind を抽選順の後ろへ(gen_paper_mcq --avoid-recent-days)、
@@ -121,7 +121,7 @@ LAB_GENRES = {
     # ★純粋経路制御(2026-08-23 追加・ユーザ指示「パックに既定で混ぜて」)。
     #   構築問(TSでない)だが固定ジャンル枠は _is_ts を通らないので混ぜられる。
     #   v2 で骨格・手段・PL集合形が seed 抽選されるため連投にも耐える(BL-143)。
-    "rtctl": {"label": "純粋経路制御(構築)",
+    "rtctl": {"label": "純粋経路制御(構築)", "build": True,
               "prefixes": ["GEN-RTCTL"], "tags": ["redistribution", "routing"]},
     "l2": {"label": "L2(EtherChannel)TS",
            "prefixes": ["GEN-L2TS"], "tags": ["l2", "etherchannel"]},
@@ -143,10 +143,50 @@ LAB_GENRES = {
                             {"args": ["--board", "rogue"], "nodes": 8, "label": "board=rogue"},
                             {"args": ["--board", "pd"], "nodes": 7, "label": "board=pd"},
                             {"args": ["--board", "fhs"], "nodes": 8, "label": "board=fhs"}]},
-    "v6build": {"label": "IPv6 自動アドレッシング 構築(FHS)",
+    "v6build": {"label": "IPv6 自動アドレッシング 構築(FHS)", "build": True,
                 "prefixes": ["GEN-V6BUILD"], "tags": ["ipv6", "security", "first-hop-security"],
                 "nodes": 8},
+    # ★BL-158(2026-09-07 ユーザ指示「ENARSI 範囲は構築問(DMVPN 等)も・MPLS-VPN も」)。
+    #   build=True のジャンルは「構築スロット」(1 パック最大 1 本・--build-rate で付く)からしか
+    #   選ばれない = TS 多めの比率を規則で担保する(select_genre_labs)。
+    #   group= 同じ題材の TS/構築が同居しないための排他キー(dmvpn TS × vpnbuild 等)。
+    #   gap_days= その題材(prefixes/ids の family)の再出題間隔。MPLS は 12 台で重いので週 1 程度。
+    #   minutes= パック index の所要目安(既定 60)。
+    #   ids= 静的問題(seed 無し)のローテーション。段(tier)ごとのリストで、前の段に
+    #        直近 repeat_days(既定 90 日)未出題のものがあればそこから選ぶ。全て直近なら最古へ。
+    "mpls": {"label": "MPLS L3VPN TS", "group": "mpls", "gap_days": 6, "minutes": 75,
+             "prefixes": ["GEN-MPLSTS"], "tags": ["mpls", "l3vpn", "vpnv4"],
+             # 間隔判定は同題材の構築(静的)と --pece ebgp の GEN-MPLSEB も含める
+             "gap_families": ["GEN-MPLSEB"],
+             "gap_ids": ["ENARSI-MPLS-L3VPN-01", "ENARSI-MPLS-L3VPN-02", "ENARSI-MPLS-L3VPN-03",
+                         "ENARSI-MPLS-L3VPN-04", "ENARSI-MPLS-L3VPN-05", "ENARSI-MPLS-L3VPN-06"],
+             # 12 IOL + MGMTSW を台数に見込む(CML 20 ノード上限の 6 割 = 大型スロット)
+             "nodes": 13,
+             "variants": [{"args": ["--pece", "ospf"], "label": "pece=ospf"},
+                          {"args": ["--pece", "ebgp"], "label": "pece=ebgp"}]},
+    "vpnbuild": {"label": "VPN 構築(DMVPN/IPsec)", "build": True, "group": "vpn",
+                 "tags": ["dmvpn", "tunnel", "ipsec"],
+                 # 1 段目= DMVPN 構築 4 本(優先)/ 2 段目= IPsec 構築 3 本。全て IOSv・console 採点
+                 "ids": [["DMVPN-POC-01", "DMVPN-PHASE3-01",
+                          "ENARSI-DMVPN-BGP-01", "ENARSI-DMVPN-IPSEC-01"],
+                         ["ENARSI-IPSEC-VTI-01", "ENARSI-IPSEC-IKEV2-01",
+                          "ENARSI-GREIPSEC-MAP-01"]]},
+    "mplsbuild": {"label": "MPLS L3VPN 構築", "build": True, "group": "mpls",
+                  "gap_days": 6, "minutes": 90, "tags": ["mpls", "l3vpn", "vpnv4"],
+                  "gap_families": ["GEN-MPLSTS", "GEN-MPLSEB"],
+                  # 05(12 台)は大型すぎるので除外。06 は 9 台(大型スロット扱い)
+                  "ids": [["ENARSI-MPLS-L3VPN-01", "ENARSI-MPLS-L3VPN-02",
+                           "ENARSI-MPLS-L3VPN-03", "ENARSI-MPLS-L3VPN-04",
+                           "ENARSI-MPLS-L3VPN-06"]]},
 }
+
+# ★大型スロット(BL-158): この台数以上のラボを選んだら、相方は BIG_PARTNER_MAX 台以下の
+#   ジャンルに限定し、追加枠(--lab-extra)は自動で 0 にする(CML Personal 20 ノード上限)。
+#   ★実測(2026-09-07 E2E PACK-20260907-D): MPLS TS(12 IOL)+VPN 構築(4 IOSv)で CML 実ノードは
+#   14+6=**20/20 ちょうど**(MGMTSW/EXTC も数に入る)。相方に 5 台ルータを許すと 21 で
+#   ライセンス超過になるため上限は 4。
+BIG_NODES = 9
+BIG_PARTNER_MAX = 4
 
 
 # ==========================================================================
@@ -577,15 +617,82 @@ def select_labs(cat, hist, *, count, budget, used, rnd,
     return picked, notes
 
 
-def resolve_genre(cat, genre, hist, rnd, family_days, today, log=print):
-    """固定ジャンル → 実際に使う生成器(接頭辞・スクリプト・台数)を決める。
+def _genre_gap_hit(spec, hist, today):
+    """gap_days 付きジャンルが直近に出ていれば (日数, ID) を返す(BL-158)。
+
+    対象= spec の prefixes(生成器 family)と ids(静的 ID)。variants で接頭辞が変わる
+    生成器(GEN-MPLSTS → --pece ebgp は GEN-MPLSEB)は同じ題材なので `gap_families` で補う。
+    """
+    gap = spec.get("gap_days")
+    if not gap:
+        return None
+    fams = set(spec.get("prefixes", [])) | set(spec.get("gap_families", []))
+    ids = {i for tier in spec.get("ids", []) for i in tier} | set(spec.get("gap_ids", []))
+    best = None
+    for d, pid in hist:
+        age = _age(d, today)
+        if age is None or age > gap:
+            continue
+        if family(pid) in fams or pid in ids:
+            if best is None or age < best[0]:
+                best = (age, pid)
+    return best
+
+
+def _resolve_static(cat, spec, hist, rnd, repeat_days, today):
+    """静的 ID ローテーション(BL-158): 段ごとに直近 repeat_days 未出題のものから抽選。
+
+    全段とも直近なら**最も古く出したもの**へフォールバックする(候補ゼロで欠落させない。
+    静的問題は seed が無い= 同じ問題の再演になるので、間隔だけは最大化する)。
+    """
+    byid = {it["id"]: it for it in cat["normal"]}
+    last = {}
+    for d, pid in hist:
+        age = _age(d, today)
+        if age is not None and (pid not in last or age < last[pid]):
+            last[pid] = age
+    tiers = [[i for i in tier if i in byid] for tier in spec.get("ids", [])]
+    known = [i for tier in tiers for i in tier]
+    if not known:
+        return None, "静的 ID が CATALOG に無い"
+    for tier in tiers:
+        fresh = [i for i in tier if last.get(i) is None or last[i] > repeat_days]
+        if fresh:
+            pick = rnd.choice(fresh)
+            return byid[pick], f"未出題/直近{repeat_days}日外から抽選"
+    pick = max(known, key=lambda i: last.get(i, 10 ** 6))
+    return byid[pick], f"全て直近{repeat_days}日内 → 最古({last.get(pick)}日前)を再演"
+
+
+def resolve_genre(cat, genre, hist, rnd, family_days, today, log=print,
+                  repeat_days=90):
+    """固定ジャンル → 実際に使う生成器(接頭辞・スクリプト・台数)か静的問題を決める。
 
     H型は **EIGRP 版を優先**し、直近 family_days に出ていれば OSPF 版へ回す
     (ユーザ指示 2026-08-09)。片方しか無ければそれを使う。
+    ★BL-158: `ids` を持つジャンルは静的問題のローテーション(_resolve_static)。
+      `gap_days` 付きジャンルは直近に同題材が出ていれば今回は見送る(None)。
     """
     spec = LAB_GENRES.get(genre)
     if not spec:
         return None
+    hit = _genre_gap_hit(spec, hist, today)
+    if hit:
+        log(f"[選定] {spec['label']}: {hit[1]} を {hit[0]} 日前に出題済"
+            f"(間隔 {spec['gap_days']} 日) → 今回は見送り")
+        return None
+    common = {"tags": spec["tags"], "genre": genre, "build": bool(spec.get("build")),
+              "group": spec.get("group"), "minutes": spec.get("minutes", 60)}
+    if spec.get("ids"):
+        it, why = _resolve_static(cat, spec, hist, rnd, repeat_days, today)
+        if it is None:
+            log(f"[選定] ★ジャンル {genre}: {why}")
+            return None
+        log(f"[選定] {spec['label']}: {it['id']} ({why})")
+        return dict(common, id=it["id"], script=None, nodes=it["nodes"] or DEFAULT_NODES,
+                    diff=it["diff"], source="static", kind=it.get("kind", "normal"),
+                    label=spec["label"], args=[],
+                    variant=it.get("variant", ""), pvt=bool(it.get("pvt")))
     byprefix = {g["prefix"]: g for g in cat["generator"] if g.get("prefix")}
     recent = {family(pid) for d, pid in hist
               if _age(d, today) is not None and _age(d, today) <= family_days}
@@ -604,10 +711,9 @@ def resolve_genre(cat, genre, hist, rnd, family_days, today, log=print):
         var = rnd.choice(spec["variants"])
         args, nodes = list(var.get("args", [])), var.get("nodes", nodes)
         label = f"{spec['label']}({var.get('label', ' '.join(args))})"
-    return {"id": pick["prefix"], "script": pick["script"], "nodes": nodes,
-            "tags": spec["tags"], "diff": pick["diff"], "source": "generator",
-            "kind": "generator", "genre": genre, "label": label, "args": args,
-            "pvt": bool(pick.get("pvt"))}
+    return dict(common, id=pick["prefix"], script=pick["script"], nodes=nodes,
+                diff=pick["diff"], source="generator", kind="generator",
+                label=label, args=args, pvt=bool(pick.get("pvt")))
 
 
 def resolve_paper_count(spec, rnd):
@@ -636,24 +742,54 @@ def _age(d, today):
 
 
 def select_genre_labs(cat, hist, *, genres, count, budget, used, rnd,
-                      family_days=21, today=None, log=print):
+                      family_days=21, today=None, log=print,
+                      build_rate=0.4, repeat_days=90):
     """固定ジャンルから count 個を選ぶ(台数予算に収まる組合せを探す)。
 
     ★固定ジャンルは**履歴による重複回避も分野タグ重複チェックも適用しない**。
       毎晩指定する枠なので履歴で弾くと2日目から候補ゼロになるし、H型と他が
       `vrf` 等で衝突して落ちるのも意図に反する(新 seed で盤面と故障は変わる)。
+      例外= `group` が同じジャンル同士(同じ題材の TS と構築)・`gap_days`(BL-158)。
+
+    ★BL-158 2 段抽選(TS 多めの比率を規則で担保):
+      1. 構築スロット: 確率 build_rate で build ジャンルから **1 つだけ**引き、先頭に置く。
+         外れれば構築 0。build_rate=0 で従来どおり(構築ジャンルは選ばれない)。
+      2. 残りは TS ジャンルのシャッフルで埋める。
+      大型(BIG_NODES 以上)を選んだら相方は BIG_PARTNER_MAX 台以下に限定する。
     """
     today = today or datetime.date.today()
     pool = [g for g in genres if g in LAB_GENRES]
     notes = []
-    order = pool[:]
-    rnd.shuffle(order)
-    picked, total = [], 0
+    build_pool = [g for g in pool if LAB_GENRES[g].get("build")]
+    ts_pool = [g for g in pool if not LAB_GENRES[g].get("build")]
+    rnd.shuffle(ts_pool)
+    order = []
+    if build_pool and rnd.random() < build_rate:
+        order.append(rnd.choice(build_pool))
+        notes.append(f"構築スロット(確率{build_rate:.2f}): {order[0]} を先頭に")
+    elif build_pool:
+        notes.append(f"構築スロット(確率{build_rate:.2f}): 外れ → 今回は TS のみ")
+    order += ts_pool
+    picked, total, groups = [], 0, set()
+    big = False
     for genre in order:
         if len(picked) >= count:
             break
-        lb = resolve_genre(cat, genre, hist, rnd, family_days, today, log=log)
+        spec = LAB_GENRES[genre]
+        if spec.get("group") and spec["group"] in groups:
+            notes.append(f"{spec['label']} は同題材({spec['group']})を既に選んだので見送り")
+            continue
+        lb = resolve_genre(cat, genre, hist, rnd, family_days, today, log=log,
+                           repeat_days=repeat_days)
         if lb is None:
+            continue
+        if big and lb["nodes"] > BIG_PARTNER_MAX:
+            notes.append(f"{lb['label']} は大型ラボの相方には大きすぎるので見送り"
+                         f"({lb['nodes']}台 > {BIG_PARTNER_MAX})")
+            continue
+        if picked and lb["nodes"] >= BIG_NODES and any(
+                p["nodes"] > BIG_PARTNER_MAX for p in picked):
+            notes.append(f"{lb['label']} は大型({lb['nodes']}台)で既選定と同居できず見送り")
             continue
         if total + lb["nodes"] + used > budget:
             notes.append(f"{lb['label']} は台数予算に入らず見送り"
@@ -661,8 +797,17 @@ def select_genre_labs(cat, hist, *, genres, count, budget, used, rnd,
             continue
         picked.append(lb)
         total += lb["nodes"]
-    got = "・".join(f"{p['label']}({p['id']}/{p['nodes']}台)" for p in picked)
-    notes.insert(0, f"固定ジャンル {len(picked)}/{count} 問: {got or '(なし)'}")
+        if spec.get("group"):
+            groups.add(spec["group"])
+        if lb["nodes"] >= BIG_NODES:
+            big = True
+            lb["big"] = True
+            notes.append(f"{lb['label']} は大型({lb['nodes']}台) → 相方は"
+                         f"{BIG_PARTNER_MAX}台以下・追加枠なし")
+    got = "・".join(f"{p['label']}({p['id']}/{p['nodes']}台"
+                    f"{'・構築' if p.get('build') else ''})" for p in picked)
+    n_build = sum(1 for p in picked if p.get("build"))
+    notes.insert(0, f"固定ジャンル {len(picked)}/{count} 問(構築 {n_build}): {got or '(なし)'}")
     return picked, notes, total
 
 
@@ -1079,7 +1224,10 @@ def write_pages(repo, pdir, items, mermaid_js, mermaid_mode="cdn", pack_id=""):
 
 def index_md(pack_id, items, notes, dry_run):
     est = {"paper": 8, "lab": 60}     # 紙面は1問8分・ラボは1問60分の目安
-    total = sum(est[it["kind"]] for it in items)
+
+    def _est(it):                     # ラボはジャンルごとの目安(MPLS 構築 90 等・BL-158)
+        return int(it.get("est") or est[it["kind"]])
+    total = sum(_est(it) for it in items)
     lines = [f"# {pack_id} — 問題パック", ""]
     if dry_run:
         lines += ["> ★これは **--dry-run のプレビュー**です。紙面は既出のものを借りて",
@@ -1102,7 +1250,7 @@ def index_md(pack_id, items, notes, dry_run):
             how = f"CML コンソールで解く（作業フォルダ `lab/{it['ref']}/`）"
         lines.append(f"| [Q{it['no']}](q{it['no']}.html) | "
                      f"{'紙面' if it['kind'] == 'paper' else 'ラボ'} | "
-                     f"`{it['ref']}` | {est[it['kind']]}分 | {how} |")
+                     f"`{it['ref']}` | {_est(it)}分 | {how} |")
     lines += ["", "## 進め方", "",
               "1. 上の表から各問を開く（順不同）。",
               "2. **各ページの下にある解答欄に書き込む**（自動で `解答.md` に保存される）。"
@@ -1475,6 +1623,10 @@ def cmd_new(a):
         used, per = leased_nodes(repo)
         log(f"[台数] ★CML に問い合わせできず、リース台帳で代用: {used} ノード")
     log(f"[台数] CML 起動中 {used} ノード {per or '(なし)'} / 予算 {a.budget}")
+    if a.dry_run and a.assume_used is not None:
+        # ★選定ロジックの確認用(BL-158)。構築しない dry-run でだけ稼働台数を上書きできる
+        log(f"[台数] dry-run: 稼働台数を {used} → {a.assume_used} と仮定して選定する")
+        used = a.assume_used
 
     # --- 紙面フェーズ ---
     require = [g.strip() for g in (a.require_shape or "").split(",") if g.strip()]
@@ -1518,7 +1670,12 @@ def cmd_new(a):
     genres = [g.strip() for g in (a.lab_genres or "").split(",") if g.strip()]
     labs, notes, used_nodes = ([], [], 0) if n_lab <= 0 else select_genre_labs(
         cat, hist, genres=genres, count=n_lab, budget=a.budget, used=used,
-        rnd=rnd, family_days=a.family_days, today=today, log=log)
+        rnd=rnd, family_days=a.family_days, today=today, log=log,
+        build_rate=a.build_rate, repeat_days=a.repeat_days)
+    # ★大型ラボ(MPLS 12 台等)を選んだ日は追加枠を使わない(BL-158)
+    if n_extra > 0 and any(lb.get("big") for lb in labs):
+        notes.append("追加枠: 大型ラボを選んだので使わない")
+        n_extra = 0
     # ★3問目は「余裕があれば」。入らなければ黙って2問で確定する(無理に詰めない)
     if n_extra > 0:
         # ★追加枠は予算を使い切らない。上限に張り付くと他セッションの provision が
@@ -1550,7 +1707,8 @@ def cmd_new(a):
     for lb in labs:
         no += 1
         it = {"no": no, "kind": "lab", "ref": lb["id"], "src": "",
-              "nodes": lb["nodes"], "state": "未着手"}
+              "nodes": lb["nodes"], "state": "未着手",
+              "est": int(lb.get("minutes") or 60)}
         if a.dry_run:
             it["ref"] = (f"{lb['id']}-<新seed>" if lb["source"] == "generator"
                          else lb["id"])
@@ -2016,8 +2174,15 @@ def main():
                     help="固定ジャンルから選ぶラボ数(v2 既定2)")
     # ★既定に ipsla を追加(2026-08-22 ユーザ指示「既定の抽選に混ぜられるように」)。
     #   4ジャンルのシャッフルから2つ選ぶ形になる。
-    ap.add_argument("--lab-genres", default="hvrf,dhcp,dmvpn,ipsla,rtctl,v6addr,v6build",
+    # ★BL-158(2026-09-07): mpls(TS 12 台)・vpnbuild/mplsbuild(構築の静的ローテーション)を既定に追加。
+    #   構築ジャンル(rtctl/v6build/vpnbuild/mplsbuild)は --build-rate の構築スロット 1 本からのみ。
+    ap.add_argument("--lab-genres",
+                    default="hvrf,dhcp,dmvpn,ipsla,rtctl,v6addr,v6build,mpls,vpnbuild,mplsbuild",
                     help=f"ラボの固定ジャンル({','.join(LAB_GENRES)})")
+    ap.add_argument("--assume-used", type=int, default=None,
+                    help="dry-run 専用: CML 稼働台数をこの値と仮定して選定を確認する")
+    ap.add_argument("--build-rate", type=float, default=0.4,
+                    help="構築ジャンルを 1 本混ぜる確率(1 パック最大 1 本・0 で構築なし・既定 0.4)")
     ap.add_argument("--lab-extra", type=int, default=1,
                     help="余裕があれば通常TSプールから追加する数(既定1)")
     ap.add_argument("--reserve", type=int, default=3,

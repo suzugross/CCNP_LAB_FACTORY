@@ -1,0 +1,74 @@
+{
+  "SWB": {
+    "config": [
+      "ipv6 nd raguard policy RAG-HOST",
+      " device-role host",
+      "ipv6 nd raguard policy RAG-UPLINK",
+      " device-role router",
+      "ipv6 dhcp guard policy DHG-CLIENT",
+      " device-role client",
+      "ipv6 dhcp guard policy DHG-SERVER",
+      " device-role server",
+      "interface Ethernet0/0",
+      " ipv6 nd raguard attach-policy RAG-UPLINK",
+      " ipv6 dhcp guard attach-policy DHG-SERVER",
+      "interface Ethernet0/1",
+      " ipv6 nd raguard attach-policy RAG-HOST",
+      " ipv6 dhcp guard attach-policy DHG-CLIENT",
+      "interface Ethernet0/2",
+      " ipv6 nd raguard attach-policy RAG-HOST",
+      " ipv6 dhcp guard attach-policy DHG-CLIENT"
+    ]
+  },
+  "RT01": {
+    "config": [
+      "ipv6 unicast-routing",
+      "ipv6 cef",
+      "interface Loopback0",
+      " ipv6 address 2001:DB8:45:1::1/128",
+      "ipv6 dhcp pool POOL-B",
+      " link-address 2001:DB8:45:B::/64",
+      " dns-server 2001:DB8:45:1::53",
+      " domain-name example.net",
+      "interface Ethernet0/0",
+      " description === to RT02 (core) ===",
+      " ipv6 address 2001:DB8:45:12::1/64",
+      " no shutdown",
+      " ipv6 dhcp server",
+      "ipv6 route 2001:DB8:45:A::/64 2001:DB8:45:12::2",
+      "ipv6 route 2001:DB8:45:B::/64 2001:DB8:45:12::2"
+    ]
+  },
+  "RT02": {
+    "config": [
+      "interface Ethernet0/1",
+      " ipv6 nd ra dns server 2001:DB8:45:1::53",
+      "interface Ethernet0/2",
+      " ipv6 dhcp relay destination 2001:DB8:45:12::1",
+      " ipv6 nd other-config-flag"
+    ]
+  },
+  "CLA": {
+    "config": [
+      "ipv6 unicast-routing",
+      "ipv6 cef",
+      "interface Ethernet0/0",
+      " description === to RT02 (LAN-A) ===",
+      " no shutdown",
+      " ipv6 address autoconfig default"
+    ]
+  },
+  "CLB": {
+    "config": [
+      "ipv6 unicast-routing",
+      "ipv6 cef",
+      "interface Ethernet0/0",
+      " description === to RT02 (LAN-B) ===",
+      " no shutdown",
+      " ipv6 address autoconfig default",
+      "interface Ethernet0/0",
+      " shutdown",
+      " no shutdown"
+    ]
+  }
+}

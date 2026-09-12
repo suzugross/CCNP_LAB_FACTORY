@@ -1,0 +1,69 @@
+# 自動生成 (gen_v6addr_ts.py --board rogue) seed=44235 fault=rogue_ra
+problem: GEN-V6ADDR-44235
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'LAN-A: 端末が SLAAC でグローバルアドレスを自動生成 (EUI-64)'
+  node: CLA
+  command: show ipv6 interface brief Ethernet0/0
+  raw:
+  - regex: (?i)2001\:DB8\:c4\:A:[0-9A-Fa-f:]*[Aa]8[Bb][Bb]:CCFF:FE
+  points: 13
+- name: 'LAN-A: 端末がサーバ管理アドレスを取得し OPEN'
+  node: CLA
+  command: show ipv6 dhcp interface Ethernet0/0
+  raw:
+  - regex: (?i)Address State is OPEN
+  - regex: '(?i)Address\s*:\s*2001\:DB8\:c4\:A:'
+  points: 13
+- name: 'LAN-A: サーバの binding に IA_NA 割当が存在'
+  node: RT01
+  command: show ipv6 dhcp binding
+  raw:
+  - regex: '(?i)Address\s*:\s*2001\:DB8\:c4\:A:'
+  points: 7
+- name: 'LAN-A: 管理アドレスと自動生成アドレスが併存'
+  node: CLA
+  command: show ipv6 interface brief Ethernet0/0
+  raw:
+  - regex: (?i)2001\:DB8\:c4\:A:[0-9A-Fa-f:]*[Aa]8[Bb][Bb]:CCFF:FE
+  points: 7
+- name: 'LAN-A: DNS/ドメインがサーバから配布されている'
+  node: CLA
+  command: show ipv6 dhcp interface Ethernet0/0
+  raw:
+  - regex: (?i)DNS server\s*:\s*2001\:DB8\:c4\:1\:\:53
+  - regex: (?i)Domain name\s*:\s*corp\.example
+  points: 9
+- name: 'LAN-A: 端末が既定経路を持ちサーバ Lo0 へ実疎通'
+  node: CLA
+  command: ping 2001:DB8:c4:1::1 source Ethernet0/0 repeat 6
+  raw:
+  - regex: (?i)Success rate is (100|8[3-9]|9[0-9]) percent
+  points: 9
+- name: 'LAN-B: 端末が SLAAC でグローバルアドレスを自動生成 (EUI-64)'
+  node: CLB
+  command: show ipv6 interface brief Ethernet0/0
+  raw:
+  - regex: (?i)2001\:DB8\:c4\:B:[0-9A-Fa-f:]*[Aa]8[Bb][Bb]:CCFF:FE
+  points: 13
+- name: 'LAN-B: DNS/ドメインがサーバから配布されている'
+  node: CLB
+  command: show ipv6 dhcp interface Ethernet0/0
+  raw:
+  - regex: (?i)DNS server\s*:\s*2001\:DB8\:c4\:1\:\:53
+  - regex: (?i)Domain name\s*:\s*corp\.example
+  points: 9
+- name: 'LAN-B: 端末が既定経路を持ちサーバ Lo0 へ実疎通'
+  node: CLB
+  command: ping 2001:DB8:c4:1::1 source Ethernet0/0 repeat 6
+  raw:
+  - regex: (?i)Success rate is (100|8[3-9]|9[0-9]) percent
+  points: 9
+- name: 'LAN-B: 未認可の高優先ルータ広告が排除されている (正規 GW のみ)'
+  node: CLB
+  command: show ipv6 routers
+  raw:
+  - not_regex: (?i)Preference=High
+  points: 11

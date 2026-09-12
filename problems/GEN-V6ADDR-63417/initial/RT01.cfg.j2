@@ -1,0 +1,32 @@
+! RT01 初期状態 (DHCPv6 サーバ + プレフィックス委任サーバ)
+ipv6 unicast-routing
+ipv6 cef
+!
+interface Loopback0
+ ipv6 address 2001:DB8:a3:1::1/128
+!
+ipv6 dhcp pool POOL-A
+ link-address 2001:DB8:a3:A::/64
+ dns-server 2001:DB8:a3:1::53
+ domain-name lab.internal
+!
+ipv6 local pool DELEG 2001:DB8:e000::/40 48
+ipv6 dhcp pool POOL-PD
+ prefix-delegation pool DELEG
+ dns-server 2001:DB8:a3:1::53
+ domain-name lab.internal
+!
+interface {{ links[0] }}
+ description === to RT02 (core・LAN-A relay) ===
+ ipv6 address 2001:DB8:a3:12::1/64
+ no shutdown
+ ipv6 dhcp server
+!
+interface {{ links[1] }}
+ description === to RT03 (CPE・prefix delegation) ===
+ ipv6 address 2001:DB8:a3:13::1/64
+ no shutdown
+ ipv6 dhcp server POOL-PD
+!
+ipv6 route 2001:DB8:a3:A::/64 2001:DB8:a3:12::2
+!

@@ -1,0 +1,68 @@
+! RT01 初期状態 (VRF迷路・迷路本体。各部屋=VRF)
+vrf definition ROOM-IVORY
+ rd 65000:101
+ address-family ipv4
+ exit-address-family
+!
+vrf definition ROOM-OLIVE
+ rd 65000:102
+ address-family ipv4
+ exit-address-family
+!
+vrf definition ROOM-GREEN
+ rd 65000:103
+ address-family ipv4
+ exit-address-family
+!
+vrf definition ROOM-RUBY
+ rd 65000:104
+ address-family ipv4
+ exit-address-family
+!
+interface {{ links[0] }}
+ no shutdown
+!
+interface {{ links[0] }}.210
+ encapsulation dot1q 210
+ vrf forwarding ROOM-IVORY
+ ip address 10.74.1.1 255.255.255.252
+!
+interface {{ links[0] }}.570
+ encapsulation dot1q 570
+ vrf forwarding ROOM-OLIVE
+ ip address 10.74.2.1 255.255.255.252
+!
+interface {{ links[0] }}.818
+ encapsulation dot1q 818
+ vrf forwarding ROOM-OLIVE
+ ip address 10.74.3.1 255.255.255.252
+!
+interface {{ links[0] }}.145
+ encapsulation dot1q 145
+ vrf forwarding ROOM-GREEN
+ ip address 10.74.4.1 255.255.255.252
+!
+interface {{ links[0] }}.724
+ encapsulation dot1q 724
+ vrf forwarding ROOM-GREEN
+ ip address 10.74.5.1 255.255.255.252
+!
+interface {{ links[0] }}.734
+ encapsulation dot1q 734
+ vrf forwarding ROOM-RUBY
+ ip address 10.74.6.1 255.255.255.252
+!
+interface Loopback11
+ vrf forwarding ROOM-IVORY
+ ip address 172.24.223.1 255.255.255.255
+!
+interface Loopback99
+ vrf forwarding ROOM-RUBY
+ ip address 172.24.220.1 255.255.255.255
+!
+ip route vrf ROOM-IVORY 172.24.220.1 255.255.255.255 {{ links[0] }}.210 10.74.1.2
+ip route vrf ROOM-OLIVE 172.24.220.1 255.255.255.255 {{ links[0] }}.818 10.74.3.2
+ip route vrf ROOM-OLIVE 172.24.223.1 255.255.255.255 {{ links[0] }}.570 10.74.2.2
+ip route vrf ROOM-GREEN 172.24.220.1 255.255.255.255 {{ links[0] }}.724 10.74.5.2
+ip route vrf ROOM-GREEN 172.24.223.1 255.255.255.255 {{ links[0] }}.145 10.74.4.2
+ip route vrf ROOM-RUBY 172.24.223.1 255.255.255.255 {{ links[0] }}.734 10.74.6.2

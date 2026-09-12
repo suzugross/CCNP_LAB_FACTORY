@@ -1,6 +1,6 @@
 # PoC: IPv6 First-Hop Security on ioll2-xe — BL-146 準備 (2026-09-03 実施・全項目クリア)
 
-ラボ: CML `POC-FHS`(4 ノード・STOPPED で温存・`poc_ops.py start` で再開)
+ラボ: CML `POC-FHS`(4 ノード・**2026-09-05 削除済**・必要なら `poc_ops.py import` → `start` で再作成)
 = SWB(**ioll2-xe 17.15.1**・VLAN10 アクセス×3) / RT02(正規GW: RA Medium+O flag+stateless DHCPv6 `example.net`) /
 CLB(`ipv6 address autoconfig default`) / ROG(不正: RA **High**+偽 `2001:DB8:33:BAD::/64`+不正 DHCPv6 `evil.example`)。
 コンソール収集のみ(`poc/redist-mp-loop/poc_console.py --title POC-FHS`)。

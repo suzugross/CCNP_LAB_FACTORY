@@ -104,3 +104,5 @@
 3. **ラボは POC-S2SVPN として STOPPED 退避中**（day0=クリーン NAPT ベースライン・
    crypto 投入分は write mem していないので stop/start で初期状態に戻る）。
    BL-064 シナリオ③（NAT overlapping × IPsec）の PoC に再利用予定。
+
+> ★CML 上の PoC ラボは 2026-09-05 に削除済(残骸掃除・ユーザ指示)。必要なら本ディレクトリの yaml/ops から再作成する。

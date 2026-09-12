@@ -1,0 +1,25 @@
+! RT04 (AS 65382 / RR client)
+interface Loopback0
+ ip address 62.62.62.62 255.255.255.255
+!
+interface Loopback1
+ ip address 82.82.82.82 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.138.136.2 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network 62.62.62.62 0.0.0.0 area 0
+ network 10.138.136.0 0.0.0.3 area 0
+!
+router bgp 65382
+ bgp router-id 62.62.62.62
+ no bgp default ipv4-unicast
+ neighbor 2.2.2.2 remote-as 65383
+ neighbor 2.2.2.2 update-source Loopback0
+ address-family ipv4 unicast
+  neighbor 2.2.2.2 activate
+  network 82.82.82.82 mask 255.255.255.255
+ exit-address-family
+!

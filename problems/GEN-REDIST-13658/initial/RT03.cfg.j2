@@ -1,0 +1,27 @@
+! RT03 初期構成 (相互再配送TS・故障注入済)
+interface Loopback0
+ ip address 69.69.69.69 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.234.165.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.177.143.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.253.222.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network 69.69.69.69 0.0.0.0 area 0
+ network 10.234.165.0 0.0.0.3 area 0
+ redistribute eigrp 65063 subnets
+!
+router eigrp 65063
+ network 10.177.143.0 0.0.0.3
+ network 10.253.222.0 0.0.0.3
+ no auto-summary
+ distance eigrp 90 95
+!

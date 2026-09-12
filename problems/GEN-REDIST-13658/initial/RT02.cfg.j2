@@ -1,0 +1,27 @@
+! RT02 初期構成 (相互再配送TS・故障注入済)
+interface Loopback0
+ ip address 20.20.20.20 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.120.192.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.177.143.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.73.229.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network 20.20.20.20 0.0.0.0 area 0
+ network 10.120.192.0 0.0.0.3 area 0
+ redistribute eigrp 65063 subnets
+!
+router eigrp 65063
+ network 10.177.143.0 0.0.0.3
+ network 10.73.229.0 0.0.0.3
+ no auto-summary
+ distance eigrp 90 95
+!

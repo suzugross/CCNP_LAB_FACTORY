@@ -1,0 +1,43 @@
+! RT02 (AS 65382 / Route Reflector)
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+!
+interface Loopback1
+ ip address 95.95.95.95 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.221.193.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.221.151.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.138.136.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network 2.2.2.2 0.0.0.0 area 0
+ network 10.221.151.0 0.0.0.3 area 0
+ network 10.138.136.0 0.0.0.3 area 0
+!
+router bgp 65382
+ bgp router-id 2.2.2.2
+ no bgp default ipv4-unicast
+ neighbor 10.221.193.1 remote-as 64824
+ neighbor 48.48.48.48 remote-as 65382
+ neighbor 48.48.48.48 update-source Loopback0
+ neighbor 62.62.62.62 remote-as 65382
+ neighbor 62.62.62.62 update-source Loopback0
+ address-family ipv4 unicast
+  neighbor 10.221.193.1 activate
+  neighbor 48.48.48.48 activate
+  neighbor 48.48.48.48 next-hop-self
+  neighbor 48.48.48.48 route-reflector-client
+  neighbor 62.62.62.62 activate
+  neighbor 62.62.62.62 next-hop-self
+  neighbor 62.62.62.62 route-reflector-client
+  network 95.95.95.95 mask 255.255.255.255
+ exit-address-family
+!

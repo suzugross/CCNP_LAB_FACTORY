@@ -141,6 +141,12 @@ def pick_count(md_text):
     m = re.search(r"[(（]\s*([0-9０-９一二三四五六七八九])\s*つ(?:を)?\s*選[^)）]*"
                   r"[)）]", md_text)
     if not m:
+        # ★括弧なしの「…、2つ選択してください。」(aaa/patchseq 等の設問文)も複数選択
+        #   (2026-09-06 PACK-20260906-B Q2: ラジオになり B・C を選べず誤採点→BL-156)。
+        #   設問見出し以降に限定して本文中の偶然の一致を避ける。
+        tail = md_text.split("## 設問", 1)[1] if "## 設問" in md_text else md_text
+        m = re.search(r"([0-9０-９一二三四五六七八九])\s*つ(?:を)?\s*選(?:択|ん)", tail)
+    if not m:
         # 数非明示の複数選択。個数はヒントにも出さない(採点は記号集合の一致)。
         if re.search(r"すべて選んでください", md_text):
             return -1

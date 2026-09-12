@@ -1,0 +1,21 @@
+! RT01 初期状態 (DHCPv6 サーバ・先般 IPv6 自動アドレッシングの導入/変更作業を実施した直後)
+ipv6 unicast-routing
+ipv6 cef
+!
+interface Loopback0
+ ipv6 address 2001:DB8:4e:1::1/128
+!
+ipv6 dhcp pool POOL-B
+ address prefix 2001:DB8:4e:B::/64
+ dns-server 2001:DB8:4e:1::53
+ domain-name ccnp.local
+!
+interface {{ links[0] }}
+ description === to RT02 (core) ===
+ ipv6 address 2001:DB8:4e:12::1/64
+ no shutdown
+ ipv6 dhcp server
+!
+ipv6 route 2001:DB8:4e:A::/64 2001:DB8:4e:12::2
+ipv6 route 2001:DB8:4e:B::/64 2001:DB8:4e:12::2
+!

@@ -1,0 +1,66 @@
+# 自動生成 (gen_redist_field.py) GEN-RDFIELD-3381 K=3 faults=[('BR1', 'wrong_id'), ('BR2', 'missing')]
+problem: GEN-RDFIELD-3381
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT03: 34.34.34.34
+    RT05: 68.68.68.68
+    RT01: 23.23.23.23
+    RT04: 43.43.43.43
+    RT02: 69.69.69.69
+  links:
+  - a: RT03
+    a_ip: 10.220.186.1
+    b: RT01
+    b_ip: 10.220.186.2
+  - a: RT03
+    a_ip: 10.74.178.1
+    b: RT04
+    b_ip: 10.74.178.2
+  - a: RT03
+    a_ip: 10.85.193.1
+    b: RT05
+    b_ip: 10.85.193.2
+  - a: RT05
+    a_ip: 10.75.228.1
+    b: RT02
+    b_ip: 10.75.228.2
+invariants:
+  - { type: reachability_all, name: "全ルータ間 Loopback 相互到達", points: 40 }
+  - { type: loop_free, name: "転送ループ無し", points: 10 }
+checks:
+  - name: "RT03: 収容標準どおりの相互再配送(方向・参照ID・seed metric)"
+    node: RT03
+    command: "show running-config | include redistribute"
+    raw:
+      - { regex: 'redistribute +eigrp +504 +metric +100000 +100 +255 +1 +1500' }
+      - { regex: 'redistribute +eigrp +136 +metric +100000 +100 +255 +1 +1500' }
+    points: 10
+  - name: "RT05: 収容標準どおりの相互再配送(方向・参照ID・seed metric)"
+    node: RT05
+    command: "show running-config | include redistribute"
+    raw:
+      - { regex: 'redistribute +eigrp +193 +metric +100000 +100 +255 +1 +1500' }
+      - { regex: 'redistribute +eigrp +504 +metric +100000 +100 +255 +1 +1500' }
+    points: 10
+  - name: "RT03: 再配送にフィルタ類が残っていない(収容標準=全 Loopback 相互到達)"
+    node: RT03
+    command: "show running-config | include redistribute"
+    raw:
+      - { not_regex: "redistribute .*route-map" }
+    points: 10
+  - name: "RT05: 再配送にフィルタ類が残っていない(収容標準=全 Loopback 相互到達)"
+    node: RT05
+    command: "show running-config | include redistribute"
+    raw:
+      - { not_regex: "redistribute .*route-map" }
+    points: 10
+  - name: "RT01: 対岸 RT02 の Loopback(69.69.69.69) を外部経路として学習"
+    node: RT01
+    command: "show ip route 69.69.69.69"
+    raw:
+      - { regex: 'Known via' }
+      - { regex: "distance 170" }
+    points: 10

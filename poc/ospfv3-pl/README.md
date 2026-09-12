@@ -83,3 +83,5 @@ E1/x を勝手に作って結線する**(populate_interfaces=True でも)。IF �
 設計完了= [OSPFV3-PL-PAPER.design.md](../../problems/_drafts/OSPFV3-PL-PAPER.design.md)
 (2026-08-08 le 境界追測込み・未測項目なし)。次= 生成器実装
 (gen_paper_ospfv3pl.py + gen_paper_mcq `--shape ospfv3pl`)。
+
+> ★CML 上の PoC ラボは 2026-09-05 に削除済(残骸掃除・ユーザ指示)。必要なら本ディレクトリの yaml/ops から再作成する。

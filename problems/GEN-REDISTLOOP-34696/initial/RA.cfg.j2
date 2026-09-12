@@ -1,0 +1,23 @@
+! GEN-REDISTLOOP 初期 RA : EIGRP AS100 ⇄ OSPF area0 完全相互再配送(リング中継)
+interface Loopback0
+ ip address {{ params.ra_lo }} 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address {{ params.seg_ca }}.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address {{ params.seg_ab }}.1 255.255.255.252
+ no shutdown
+!
+router eigrp 100
+ network {{ params.seg_ca }}.0 0.0.0.3
+ no auto-summary
+ redistribute ospf 1 metric 100000 100 255 1 1500
+!
+router ospf 1
+ router-id {{ params.ra_lo }}
+ network {{ params.ra_lo }} 0.0.0.0 area 0
+ network {{ params.seg_ab }}.0 0.0.0.3 area 0
+ redistribute eigrp 100 subnets
+!

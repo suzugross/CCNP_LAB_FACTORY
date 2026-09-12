@@ -89,3 +89,5 @@ bgpdbg の変種3→7への拡張素材。★採取の教訓= `clear logging` �
    (FSM 不動作)+ summary `Idle (Admin)`。対向= `Connection refused` の周期。
    ★debug だけでは「neighbor 文が無い」と区別できないため、**この変種のみ
    summary を紙面に提示する**(設計判断・gen_paper_bgpdbg 参照)。
+
+> ★CML の `_POC-BGPDBG2` は 2026-09-05 に削除済(BL-136 完了・実測は results-probe2.md に保存済。盤面は IOL 2台 back-to-back で手組み再現可)。

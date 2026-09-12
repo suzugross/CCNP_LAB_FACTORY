@@ -1,0 +1,68 @@
+# 自動生成 (gen_redist_mutual_ts.py) seed=13658 fault=missing_o2e
+problem: GEN-REDIST-13658
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT01: 79.79.79.79
+    RT02: 20.20.20.20
+    RT03: 69.69.69.69
+    RT04: 71.71.71.71
+  links:
+  - a: RT01
+    a_ip: 10.120.192.1
+    b: RT02
+    b_ip: 10.120.192.2
+  - a: RT01
+    a_ip: 10.234.165.1
+    b: RT03
+    b_ip: 10.234.165.2
+  - a: RT02
+    a_ip: 10.177.143.1
+    b: RT03
+    b_ip: 10.177.143.2
+  - a: RT02
+    a_ip: 10.73.229.1
+    b: RT04
+    b_ip: 10.73.229.2
+  - a: RT03
+    a_ip: 10.253.222.1
+    b: RT04
+    b_ip: 10.253.222.2
+invariants:
+- type: reachability_all
+  name: 全ルータ間 Loopback 到達性
+  points: 30
+- type: optimal
+  name: ドメイン内宛先(RT01/RT04)への最短転送(再配送由来の次善が無い)
+  points: 40
+  pairs:
+  - - RT02
+    - RT01
+  - - RT03
+    - RT01
+  - - RT04
+    - RT01
+  - - RT01
+    - RT04
+  - - RT02
+    - RT04
+  - - RT03
+    - RT04
+- type: loop_free
+  name: 転送ループ無し
+  points: 10
+checks:
+- name: 'RT04: 79.79.79.79/32 を EIGRP外部(D EX)で学習(OSPF→EIGRP再配送)'
+  node: RT04
+  command: show ip route eigrp
+  raw:
+  - regex: D EX\s+79\.79\.79\.79
+  points: 10
+- name: 'RT01: 71.71.71.71/32 を OSPF外部(O E2)で学習(EIGRP→OSPF再配送)'
+  node: RT01
+  command: show ip route ospf
+  raw:
+  - regex: O E2\s+71\.71\.71\.71
+  points: 10

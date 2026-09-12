@@ -1,0 +1,76 @@
+{
+  "SWB": {
+    "config": [
+      "ipv6 prefix-list RA-OK seq 10 permit 2001:DB8:e0:B::/64",
+      "ipv6 nd raguard policy RAG-PL",
+      " device-role router",
+      " match ra prefix-list RA-OK",
+      "ipv6 dhcp guard policy DHG-CLIENT",
+      " device-role client",
+      "ipv6 dhcp guard policy DHG-SERVER",
+      " device-role server",
+      "vlan configuration 20",
+      " ipv6 nd raguard attach-policy RAG-PL",
+      "interface Ethernet0/0",
+      " ipv6 dhcp guard attach-policy DHG-SERVER",
+      "interface Ethernet0/1",
+      " ipv6 dhcp guard attach-policy DHG-CLIENT",
+      "interface Ethernet0/2",
+      " ipv6 dhcp guard attach-policy DHG-CLIENT"
+    ]
+  },
+  "RT01": {
+    "config": [
+      "ipv6 unicast-routing",
+      "ipv6 cef",
+      "interface Loopback0",
+      " ipv6 address 2001:DB8:e0:1::1/128",
+      "ipv6 dhcp pool POOL-B",
+      " address prefix 2001:DB8:e0:B::/64",
+      " dns-server 2001:DB8:e0:1::53",
+      " domain-name example.net",
+      "interface Ethernet0/0",
+      " description === to RT02 (core) ===",
+      " ipv6 address 2001:DB8:e0:12::1/64",
+      " no shutdown",
+      " ipv6 dhcp server",
+      "ipv6 route 2001:DB8:e0:A::/64 2001:DB8:e0:12::2",
+      "ipv6 route 2001:DB8:e0:B::/64 2001:DB8:e0:12::2"
+    ]
+  },
+  "RT02": {
+    "config": [
+      "interface Ethernet0/1",
+      " ipv6 nd ra dns server 2001:DB8:e0:1::53",
+      "interface Ethernet0/2",
+      " ipv6 dhcp relay destination 2001:DB8:e0:12::1",
+      " ipv6 nd managed-config-flag",
+      " ipv6 nd prefix 2001:DB8:e0:B::/64 2592000 604800 no-autoconfig"
+    ]
+  },
+  "CLA": {
+    "config": [
+      "ipv6 unicast-routing",
+      "ipv6 cef",
+      "interface Ethernet0/0",
+      " description === to RT02 (LAN-A) ===",
+      " no shutdown",
+      " ipv6 address autoconfig default"
+    ]
+  },
+  "CLB": {
+    "config": [
+      "ipv6 unicast-routing",
+      "ipv6 cef",
+      "interface Ethernet0/0",
+      " description === to RT02 (LAN-B) ===",
+      " no shutdown",
+      " ipv6 enable",
+      " ipv6 address dhcp",
+      " ipv6 address autoconfig default",
+      "interface Ethernet0/0",
+      " shutdown",
+      " no shutdown"
+    ]
+  }
+}

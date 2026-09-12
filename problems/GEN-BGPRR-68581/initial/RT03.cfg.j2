@@ -1,0 +1,25 @@
+! RT03 (AS 65382 / RR client)
+interface Loopback0
+ ip address 48.48.48.48 255.255.255.255
+!
+interface Loopback1
+ ip address 13.13.13.13 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.221.151.2 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ network 48.48.48.48 0.0.0.0 area 0
+ network 10.221.151.0 0.0.0.3 area 0
+!
+router bgp 65382
+ bgp router-id 48.48.48.48
+ no bgp default ipv4-unicast
+ neighbor 2.2.2.2 remote-as 65382
+ neighbor 2.2.2.2 update-source Loopback0
+ address-family ipv4 unicast
+  neighbor 2.2.2.2 activate
+  network 13.13.13.13 mask 255.255.255.255
+ exit-address-family
+!

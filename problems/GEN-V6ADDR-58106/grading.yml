@@ -1,0 +1,49 @@
+# 自動生成 (gen_v6addr_ts.py --board rogue) seed=58106 fault=rogue_ra
+problem: GEN-V6ADDR-58106
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'LAN-A: 端末が SLAAC でグローバルアドレスを自動生成 (EUI-64)'
+  node: CLA
+  command: show ipv6 interface brief Ethernet0/0
+  raw:
+  - regex: (?i)2001\:DB8\:33\:A:[0-9A-Fa-f:]*[Aa]8[Bb][Bb]:CCFF:FE
+  points: 18
+- name: 'LAN-A: DNS サーバが RA(DNS オプション)で配布されている'
+  node: CLA
+  command: show ipv6 routers
+  raw:
+  - regex: (?i)DNS server\s+2001\:DB8\:33\:1\:\:53
+  points: 12
+- name: 'LAN-A: 端末が既定経路を持ちサーバ Lo0 へ実疎通'
+  node: CLA
+  command: ping 2001:DB8:33:1::1 source Ethernet0/0 repeat 6
+  raw:
+  - regex: (?i)Success rate is (100|8[3-9]|9[0-9]) percent
+  points: 12
+- name: 'LAN-B: 端末が SLAAC でグローバルアドレスを自動生成 (EUI-64)'
+  node: CLB
+  command: show ipv6 interface brief Ethernet0/0
+  raw:
+  - regex: (?i)2001\:DB8\:33\:B:[0-9A-Fa-f:]*[Aa]8[Bb][Bb]:CCFF:FE
+  points: 18
+- name: 'LAN-B: DNS/ドメインがサーバから配布されている'
+  node: CLB
+  command: show ipv6 dhcp interface Ethernet0/0
+  raw:
+  - regex: (?i)DNS server\s*:\s*2001\:DB8\:33\:1\:\:53
+  - regex: (?i)Domain name\s*:\s*corp\.example
+  points: 12
+- name: 'LAN-B: 端末が既定経路を持ちサーバ Lo0 へ実疎通'
+  node: CLB
+  command: ping 2001:DB8:33:1::1 source Ethernet0/0 repeat 6
+  raw:
+  - regex: (?i)Success rate is (100|8[3-9]|9[0-9]) percent
+  points: 12
+- name: 'LAN-B: 未認可の高優先ルータ広告が排除されている (正規 GW のみ)'
+  node: CLB
+  command: show ipv6 routers
+  raw:
+  - not_regex: (?i)Preference=High
+  points: 16

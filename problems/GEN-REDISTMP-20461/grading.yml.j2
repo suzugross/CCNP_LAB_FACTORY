@@ -1,0 +1,187 @@
+# 自動生成 (gen_redist_mp_ts.py) GEN-REDISTMP-20461 solution=routemap+task2
+# 初期: 192.168.27.0/24 が RA/RB/RC/RD で定常ループ(reachability/loop_free/optimal/RD正規経路/指紋 が 0)。
+# 是正後: RB/RC 両方に指定解法 → 全到達＋ループ消失＋指紋成立。
+# Task2(BL-129): 境界2台とも victim が D EX(EIGRP直行)+Type-5 残存+全ペア optimal。
+problem: GEN-REDISTMP-20461
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RA: 31.31.31.31
+    RB: 73.73.73.73
+    RC: 35.35.35.35
+    RD: 93.93.93.93
+    RE: 89.89.89.89
+    RF: 192.168.27.6
+  links:
+  - a: RA
+    a_ip: 172.16.114.1
+    b: RB
+    b_ip: 172.16.114.2
+  - a: RA
+    a_ip: 172.16.10.1
+    b: RC
+    b_ip: 172.16.10.3
+  - a: RB
+    a_ip: 172.16.75.2
+    b: RD
+    b_ip: 172.16.75.4
+  - a: RC
+    a_ip: 172.16.125.3
+    b: RD
+    b_ip: 172.16.125.4
+  - a: RD
+    a_ip: 172.16.27.4
+    b: RE
+    b_ip: 172.16.27.5
+  - a: RE
+    a_ip: 172.16.56.5
+    b: RF
+    b_ip: 172.16.56.6
+invariants:
+- type: reachability_all
+  points: 20
+  name: 全ルータ間到達性(192.168.27.0/24 を含む)
+- type: loop_free
+  points: 20
+  name: 転送ループ無し(RA/RB/RC/RD の再配送フィードバックループ解消)
+- type: optimal
+  points: 10
+  pairs:
+  - - RA
+    - RB
+  - - RA
+    - RC
+  - - RA
+    - RD
+  - - RA
+    - RE
+  - - RA
+    - RF
+  - - RB
+    - RA
+  - - RB
+    - RC
+  - - RB
+    - RD
+  - - RB
+    - RE
+  - - RB
+    - RF
+  - - RC
+    - RA
+  - - RC
+    - RB
+  - - RC
+    - RD
+  - - RC
+    - RE
+  - - RC
+    - RF
+  - - RD
+    - RA
+  - - RD
+    - RB
+  - - RD
+    - RC
+  - - RD
+    - RE
+  - - RD
+    - RF
+  - - RE
+    - RA
+  - - RE
+    - RB
+  - - RE
+    - RC
+  - - RE
+    - RD
+  - - RE
+    - RF
+  - - RF
+    - RA
+  - - RF
+    - RB
+  - - RF
+    - RC
+  - - RF
+    - RD
+  - - RF
+    - RE
+  name: '最短転送(Task2: 境界→RF の EIGRP 直行を含む全ペア)'
+checks:
+- name: 'RD: 192.168.27.0/24 を正規経路(RE 方向 172.16.27.5)で学習(再注入経路の排除)'
+  node: RD
+  command: show ip route 192.168.27.0
+  raw:
+  - regex: Known via "eigrp
+  - regex: \* 172\.16\.27\.5,
+  points: 10
+- name: 'RA: 192.168.27.0/24 を O E2 で学習(EIGRP→OSPF 再配送設計の維持＋出自タグ付与)'
+  node: RA
+  command: show ip route 192.168.27.0
+  raw:
+  - regex: Known via "ospf
+  - regex: extern 2
+  - regex: Tag 347, type extern 2
+  points: 5
+- name: 'RB: 経路タグ 347 方式(Task1)＋タグ判定の受信フィルタ(Task2)で実装(ACL/prefix-list/gateway 形の distribute-list・distance・静的は監査ポリシー違反)'
+  node: RB
+  command: show running-config | include redistribute |distribute-list|distance |route-map|prefix-list|^ip route |set tag|match
+    tag
+  raw:
+  - regex: redistribute eigrp 61 (subnets )?route-map \S+
+  - regex: redistribute ospf 31 metric \S+ \S+ \S+ \S+ \S+ route-map \S+
+  - regex: set tag 347\b
+  - regex: match tag 347\b
+  - not_regex: prefix-list
+  - not_regex: '(?m)^\s*distance '
+  - not_regex: '(?m)^ip route '
+  - regex: distribute-list route-map \S+ in\b
+  - not_regex: distribute-list (\d|prefix|gateway)
+  - not_regex: distribute-list route-map \S+ out
+  points: 8
+- name: 'RC: 経路タグ 347 方式(Task1)＋タグ判定の受信フィルタ(Task2)で実装(ACL/prefix-list/gateway 形の distribute-list・distance・静的は監査ポリシー違反)'
+  node: RC
+  command: show running-config | include redistribute |distribute-list|distance |route-map|prefix-list|^ip route |set tag|match
+    tag
+  raw:
+  - regex: redistribute eigrp 61 (subnets )?route-map \S+
+  - regex: redistribute ospf 31 metric \S+ \S+ \S+ \S+ \S+ route-map \S+
+  - regex: set tag 347\b
+  - regex: match tag 347\b
+  - not_regex: prefix-list
+  - not_regex: '(?m)^\s*distance '
+  - not_regex: '(?m)^ip route '
+  - regex: distribute-list route-map \S+ in\b
+  - not_regex: distribute-list (\d|prefix|gateway)
+  - not_regex: distribute-list route-map \S+ out
+  points: 8
+- name: 'RB: 192.168.27.0/24 の RIB が EIGRP 外部(D EX)=EIGRP 隣接直行(Task2: 戻り O E2 の排除)'
+  node: RB
+  command: show ip route 192.168.27.0
+  raw:
+  - regex: Known via "eigrp
+  - not_regex: Known via "ospf
+  points: 5
+- name: 'RC: 192.168.27.0/24 の RIB が EIGRP 外部(D EX)=EIGRP 隣接直行(Task2: 戻り O E2 の排除)'
+  node: RC
+  command: show ip route 192.168.27.0
+  raw:
+  - regex: Known via "eigrp
+  - not_regex: Known via "ospf
+  points: 5
+- name: 'RB: 192.168.27.0/24 の Type-5 LSA が LSDB に残存(Task2: RIB 挿入のみ抑止・LSA の喪失禁止)'
+  node: RB
+  command: show ip ospf database external 192.168.27.0
+  raw:
+  - regex: 'Link State ID: 192\.168\.27\.0'
+  - regex: 'External Route Tag: 347\b'
+  points: 4
+- name: 'RD: 静的経路による回避なし'
+  node: RD
+  command: 'show running-config | include ^ip route '
+  raw:
+  - not_regex: '(?m)^ip route '
+  points: 5

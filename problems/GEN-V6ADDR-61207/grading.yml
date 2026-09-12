@@ -1,0 +1,84 @@
+# 自動生成 (gen_v6addr_ts.py --board fhs) seed=61207 fault=fhs_prefix_match_wrong
+# telnet 収集(SWB=ioll2)。挙動採点+SWB の FHS 有効性+ROG/ポート無改変監査。
+problem: GEN-V6ADDR-61207
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'LAN-A: 端末が SLAAC でグローバルアドレスを自動生成 (EUI-64)'
+  node: CLA
+  command: show ipv6 interface brief Ethernet0/0
+  raw:
+  - regex: (?i)2001\:DB8\:68\:A:[0-9A-Fa-f:]*[Aa]8[Bb][Bb]:CCFF:FE
+  points: 12
+- name: 'LAN-A: DNS サーバが RA(DNS オプション)で配布されている'
+  node: CLA
+  command: show ipv6 routers
+  raw:
+  - regex: (?i)DNS server\s+2001\:DB8\:68\:1\:\:53
+  points: 8
+- name: 'LAN-A: 端末が既定経路を持ちサーバ Lo0 へ実疎通'
+  node: CLA
+  command: ping 2001:DB8:68:1::1 source Ethernet0/0 repeat 6
+  raw:
+  - regex: (?i)Success rate is (100|8[3-9]|9[0-9]) percent
+  points: 8
+- name: 'LAN-B: 端末が SLAAC でグローバルアドレスを自動生成 (EUI-64)'
+  node: CLB
+  command: show ipv6 interface brief Ethernet0/0
+  raw:
+  - regex: (?i)2001\:DB8\:68\:B:[0-9A-Fa-f:]*[Aa]8[Bb][Bb]:CCFF:FE
+  points: 12
+- name: 'LAN-B: DNS/ドメインがサーバから配布されている'
+  node: CLB
+  command: show ipv6 dhcp interface Ethernet0/0
+  raw:
+  - regex: (?i)DNS server\s*:\s*2001\:DB8\:68\:1\:\:53
+  - regex: (?i)Domain name\s*:\s*corp\.example
+  points: 8
+- name: 'LAN-B: 端末が既定経路を持ちサーバ Lo0 へ実疎通'
+  node: CLB
+  command: ping 2001:DB8:68:1::1 source Ethernet0/0 repeat 6
+  raw:
+  - regex: (?i)Success rate is (100|8[3-9]|9[0-9]) percent
+  points: 8
+- name: 'LAN-B: 未認可の高優先ルータ広告が端末に届いていない (正規 GW のみ)'
+  node: CLB
+  command: show ipv6 routers
+  raw:
+  - not_regex: (?i)Preference=High
+  - regex: (?i)Preference=Medium
+  points: 10
+- name: 'LAN-B: 端末に偽プレフィックスのアドレスが無い'
+  node: CLB
+  command: show ipv6 interface brief Ethernet0/0
+  raw:
+  - not_regex: '(?i)2001\:DB8\:68\:BAD:'
+  points: 6
+- name: 'SWB: RA Guard が有効 (ポリシーが適用されている)'
+  node: SWB
+  command: show device-tracking policies
+  raw:
+  - regex: (?i)(?m)^.+\s(PORT|VLAN)\s+\S+\s+RA guard
+  points: 6
+- name: 'SWB: DHCPv6 Guard が有効 (ポリシーが適用されている)'
+  node: SWB
+  command: show device-tracking policies
+  raw:
+  - regex: (?i)(?m)^.+\s(PORT|VLAN)\s+\S+\s+DHCP Guard
+  points: 6
+- name: 'SWB: ROG 接続ポートが稼働中 (ポート閉塞による解決は不可)'
+  node: SWB
+  command: show interfaces status
+  raw:
+  - regex: (?i)(?m)^Et0/2\s+.*\sconnected\s
+  points: 6
+- name: 'ROG: 他部署機器が無改変 (RA 設定と IF が初期状態のまま)'
+  node: ROG
+  command: show running-config interface Ethernet0/0
+  raw:
+  - regex: (?i)ipv6 nd router-preference High
+  - regex: (?i)ipv6 dhcp server GUEST
+  - not_regex: (?i)(?m)^\s*shutdown
+  - not_regex: (?i)ra suppress
+  points: 10

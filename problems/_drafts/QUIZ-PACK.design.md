@@ -448,3 +448,22 @@ ACL 紙面（`acl` / `aclv6` から抽選）。
   パックに入れたくなったら、Q4 採点後に撤収→Q5 構築へ切り替えるモードを追加する。
 - **PVT 系の扱い**: パックに PVT 問題を含める場合、`packs/` は gitignore 済だが
   manifest・履歴行は `private/_history.md` 側に付ける（CLAUDE.md 台帳分離ルール）。
+
+### ラボ枠 v3(BL-158・2026-09-07): 構築スロット＋MPLS 合流
+
+ユーザ指示「ENARSI 範囲は構築問(DMVPN 等)も含める(比率は TS 多め)・MPLS-VPN もラボの範疇に」。
+
+- **2 段抽選**: 構築ジャンル(`build: True` = rtctl/v6build/vpnbuild/mplsbuild)は
+  `--build-rate`(既定 0.4)の**構築スロット 1 本**からしか選ばれない。残りは TS ジャンルの
+  シャッフル。→ 1 パック構築 ≤1・期待比 TS:構築 ≈ 3:1(400 seed シミュ= 構築あり 43%)。
+- **静的 ID ローテーション**(`ids` = 段ごとのリスト): seed の無い構築問を直近 `--repeat-days`(90日)
+  未出題から抽選、全て直近なら最古を再演。`vpnbuild`= DMVPN 4 本(1 段目)→ IPsec 3 本(2 段目)。
+  `mplsbuild`= L3VPN-01〜04/06(05 は 12 台で除外)。
+- **`mpls`(TS)**: GEN-MPLSTS を `--pece ospf/ebgp` 抽選で。台数 13(12 IOL+MGMTSW)= **大型スロット**
+  (`BIG_NODES`=9 以上)→ 相方は `BIG_PARTNER_MAX`=4 台以下(実測 20/20 ちょうどのため)・追加枠 0。`gap_days`=6 で同題材
+  (GEN-MPLSTS/GEN-MPLSEB/静的 MPLS)を週 1 程度に制限。
+- **`group`**: 同題材の TS と構築(dmvpn×vpnbuild / mpls×mplsbuild)は同居しない。
+- 所要目安はジャンルの `minutes`(MPLS TS 75・MPLS 構築 90・他 60)で index に出す。
+- `--assume-used N`(dry-run 専用)で稼働台数を仮定して選定を確認できる。
+- 検証: 選定シミュ 400 seed(最大 18 台・同題材同居 0)＋ dry-run 3 seed で index 生成まで確認。
+  **実機 E2E(vpnbuild/mpls 各 1 パック)は未**(2026-09-07 は CML 20/20 稼働中で不可)。

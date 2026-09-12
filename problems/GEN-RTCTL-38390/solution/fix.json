@@ -1,0 +1,61 @@
+{
+  "fixes": [
+    {
+      "node": "RT01",
+      "lines": [
+        "ip prefix-list PL-EDGE-IN seq 5 permit 10.0.0.0/8 le 32",
+        "ip prefix-list PL-EDGE-IN seq 10 permit 172.27.0.0/16 le 32",
+        "access-list 40 permit 10.43.26.0 0.0.0.255",
+        "access-list 49 permit 10.43.19.0 0.0.0.255",
+        "ip prefix-list PL-CORE-NETS seq 5 permit 172.27.140.0/22 ge 24 le 26",
+        "access-list 73 permit 10.3.13.0 0.0.0.255",
+        "access-list 73 permit 10.3.9.0 0.0.0.255"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "route-map RM-REDIST-OUT permit 10"
+      ],
+      "lines": [
+        "match ip address prefix-list PL-CORE-NETS"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "route-map RM-OSPF-IMPORT permit 10"
+      ],
+      "lines": [
+        "match ip address 73"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "router eigrp 25332"
+      ],
+      "lines": [
+        "distribute-list prefix PL-EDGE-IN in Ethernet0/1",
+        "offset-list 40 in 4000 Ethernet0/1",
+        "offset-list 49 in 4000 Ethernet0/0",
+        "redistribute ospf 79 metric 100000 100 255 1 1500 route-map RM-OSPF-IMPORT"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "router ospf 79"
+      ],
+      "lines": [
+        "redistribute eigrp 25332 subnets route-map RM-REDIST-OUT"
+      ]
+    },
+    {
+      "node": "RT01",
+      "lines": [
+        "access-list 73 permit 10.3.17.0 0.0.0.255"
+      ]
+    }
+  ]
+}

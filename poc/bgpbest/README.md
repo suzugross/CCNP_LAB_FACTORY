@@ -100,3 +100,5 @@ RT05・RT06=AS65100 境界(iBGP・Lo ピア・next-hop-self・OSPF cost 10/100)�
   (→prepend)/respect_med(→acm)/igp_frozen(→next-hop-self)/bgp_frozen(→IGP 広告)。
 - モデルの strict 拒否= MED 順序依存盤面・MED 欠落 vs 有値の比較盤面。
 - 表・detail は上の表示規則の写し。selftest が実測行との byte 一致を毎回検査する。
+
+> ★CML 上の PoC ラボは 2026-09-05 に削除済(残骸掃除・ユーザ指示)。必要なら本ディレクトリの yaml/ops から再作成する。
