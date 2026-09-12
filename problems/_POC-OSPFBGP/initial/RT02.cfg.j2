@@ -1,0 +1,27 @@
+! RT02: BGP(AS65000) と OSPF 1 の境界。ここで redistribute ospf を出し分けて測る。
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 (BGP) ===
+ ip address 192.168.1.2 255.255.255.0
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT03 (OSPF) ===
+ ip address 192.168.2.2 255.255.255.0
+ no shutdown
+!
+router ospf 1
+ router-id 2.2.2.2
+ network 192.168.2.0 0.0.0.255 area 0
+!
+router bgp 65000
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 192.168.1.1 remote-as 65000
+ address-family ipv4 unicast
+  neighbor 192.168.1.1 activate
+  redistribute ospf 1
+ exit-address-family
+!

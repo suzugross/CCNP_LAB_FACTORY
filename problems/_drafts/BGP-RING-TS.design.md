@@ -192,3 +192,35 @@ fix 手順は `clear ip bgp <nbr> in`(ハード)標準 ④advertised-routes は 
 - stale が P2 で振動した場合: 紙面送りにするか、症状を「フラップの証跡読解」としてラボに残すか。
 - isp_exchange の冗長性採点(片系断テスト)を v1 でやるか(採点が重い)。
 - 難易度既定: 単発を難4に置いたが、no_transit 単発は難3寄り。--hard 相当(複合既定化)を作るか。
+
+## 11. BL-161: shape `prefix_steer`（out 方向 route-map の暗黙 deny・2026-09-12）
+
+定番題材派生。既存 shape が「BGP の読解(bgpdbg/bgpbest)」「選好(pref)」「トランジット遮断
+(no_transit)」を持つ一方で、**BGP ポリシー適用そのもの（route-map out の副作用）**が空白だった
+ので追加。shape 数は 5→6（`SHAPE_W` を再配分し `prefix_steer` に 20）。
+
+- **盤面**: A(拠点・**4 本の /24** を広告) ─ P / S(2つの中継AS) ─ Bx(受け手)。
+  A の追加 3 本は `Loopback2-4`＋`network` 文で作る（px と衝突しない値を抽選）。
+  `swap_rid(S, P)` で **素のタイ(AS長同値)は S 勝ち**＝「S 経由が既定」を決定化。
+- **設計意図**: S は「特定の 1 本(`special`)だけを P 側へ寄せる」ために out 方向へ
+  prepend を打つ。健全形は `permit 10 (match+prepend)` ＋ **末尾の catch-all**。
+- **故障**: catch-all を落とす（`no_catchall`）／deny にする（`deny_catchall`）。
+  → S から Bx への広告が `special` 1 本だけになり、**残り全部（S 自身の網も含む）が P 経由**に。
+  ★**到達性は失われない**（ring の反対回りで届く）＝「壊れていないのに方針だけ破れている」型。
+- **採点(75点)＋invariants(25)**: special が P 経由(12)／他 3 本が S 経由(12×3)／
+  **S 自身の網が S 経由(12)**／監査= out 適用(8)・prepend 維持(7)。
+  5 本目が **「3 本を列挙して塞ぐ」誤解法の踏み絵**（列挙すると S 自身の網が漏れる）。
+- **実機 E2E（seed 51001・A=RT02 / P=RT03 / S=RT01 / Bx=RT04・IOL 17.15）**:
+
+  | 状態 | 点 | 備考 |
+  |---|---|---|
+  | broken(no_catchall) | 52 | Bx は 4 本とも P 経由。special のみ 3 連 prepend の副経路が見える |
+  | 模範 fix(`route-map ... permit 20`) | **100** | `clear ip bgp * soft out` 付き。1 試行で収束 |
+  | broken(deny_catchall) | 45 | 症状は同じ＋ prepend 監査も FAIL（deny 節が残る） |
+  | 模範 fix(deny 形= `no route-map X deny 20` → `permit 20`) | **100** | IOS は seq の permit/deny 変更を直接は受けないので**削除してから追加**が必要 |
+  | 誤解法（他 3 本を prefix-list で列挙して permit 20 に match） | **88** | **S 自身の網(`prefix(S)/24`)が漏れて FAIL**＝出典の誤答肢と同じ穴を実機で再現 |
+
+- ★**実装の罠**: 監査の `not_regex` を `^route-map \S+ deny ` と広く書くと、
+  **囮の `route-map RM-MAINT-2019 deny 10`（make_decoys）に誤反応**して健全状態でも FAIL する。
+  → `^route-map RM-STEER-OUT deny ` と**対象 route-map 限定**にすること。
+- 出題可（難4）。検証 seed 51001 は撤収・インスタンス削除済。出題時は新 seed。

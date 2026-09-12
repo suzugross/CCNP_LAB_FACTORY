@@ -24,7 +24,9 @@
     解錠は `no ... suppress all`（`no ipv6 nd ra suppress` では消えない）。
   ・ra_lifetime_zero=GUA は付くがデフォルト経路だけ消える。
   ・非 /64=RA に載るが SLAAC アドレス生成されず（完全サイレント）。
-  ・acl は「明示 permit + deny 546/547」でないと RA も全断（P4 の異物系で使用）。
+  ・acl は「明示 permit + deny 546/547」でないと RA も全断（＝IPv6 ACL の暗黙 permit は
+    NS/NA のみで RS/RA は対象外）。この性質を正面から使うのが BL-160 の acl_blocks_ra
+    （端末の入力フィルタに LL 発の許可行が無く RA が落ちる・層跨ぎ）。
   ・server_return_route_missing=割当は成立し到達性だけ片方向で死ぬ。
   ・採点主力= client `show ipv6 routers`（M/O/pref/lifetime/prefix/DNS 一括）
     ＋ `show ipv6 dhcp interface`（Address State OPEN / Configuration parameters）。
@@ -53,6 +55,8 @@ LAYERS = {
     "client": ["ipv6_enable_missing", "client_default_missing",
                "client_static_default_missing"],
     "data": ["server_return_route_missing"],
+    # BL-160: 端末側の入力フィルタ（IPv6 ACL）が制御トラフィックを巻き込む層跨ぎ故障。
+    "filter": ["acl_blocks_ra"],
 }
 FAULTS = [f for fs in LAYERS.values() for f in fs]
 LAYER_OF = {f: L for L, fs in LAYERS.items() for f in fs}
@@ -65,6 +69,7 @@ DIFFICULTY = {
     "server_named_wrong_pool": 4, "relay_missing": 3, "relay_wrong_dest": 4,
     "ipv6_enable_missing": 5, "client_default_missing": 4,
     "client_static_default_missing": 5, "server_return_route_missing": 5,
+    "acl_blocks_ra": 5,
 }
 
 # 世界（方式）。P2 で W_S（純 SLAAC+RDNSS）と W_MP（RA 抑止ポリシー）を追加。
@@ -102,6 +107,10 @@ FAULT_WORLDS = {
     "ipv6_enable_missing": {"W_MP"},
     "client_default_missing": {"W_M", "W_MA"},
     "client_static_default_missing": {"W_MP"},
+    # acl_blocks_ra: RA が「アドレスの供給源」である世界に限定（W_S=純 SLAAC /
+    # W_SO=SLAAC+stateless）。stateful 世界では症状が DHCPv6 側に寄り、
+    # 要件文の「フィルタ方針」と症状の対応が鈍るため対象外（PoC #7 の裏取りに基づく）。
+    "acl_blocks_ra": {"W_S", "W_SO"},
 }
 # サーバ全体に効く（LAN を選ばない）故障。
 GLOBAL_FAULTS = {"server_attach_missing", "server_named_wrong_pool",
@@ -155,6 +164,20 @@ def pick_faults(rnd, n, forced, v):
         worlds = FAULT_WORLDS.get(f, set(WORLDS))
         return [lan["name"] for lan in v["lans"] if lan["world"] in worlds]
 
+    def clash(f, t, picks):
+        """BL-160: acl_blocks_ra は端末の入力フィルタが RA も DHCPv6 応答も
+        GW からの応答も一律に落とすため、**同じ LAN の他故障**や**サーバ全体に
+        効く故障**とはチケット文が両立しない（相手の「アドレスは取得できている」
+        「GW へは到達できる」が偽になる）。→ LAN をまたぐ組合せのみ許す。"""
+        for g, gt in picks:
+            if f != g and "acl_blocks_ra" in (f, g):
+                if t is None or gt is None or t == gt:
+                    return True
+        return False
+
+    def free(f, picks):
+        return [t for t in applicable(f) if not clash(f, t, picks)]
+
     if forced:
         tgts = applicable(forced)
         if not tgts:
@@ -166,19 +189,24 @@ def pick_faults(rnd, n, forced, v):
         picks = [(forced, rnd.choice(tgts))]
         if n == 2:
             pool = [f for f in FAULTS
-                    if LAYER_OF[f] != LAYER_OF[forced] and applicable(f)]
-            g = rnd.choice(pool)
-            picks.append((g, rnd.choice(applicable(g))))
+                    if LAYER_OF[f] != LAYER_OF[forced] and free(f, picks)]
+            if pool:
+                g = rnd.choice(pool)
+                picks.append((g, rnd.choice(free(g, picks))))
         return picks
     # 無指定: 適用可能な故障からレイヤをまたいで n 個。
     layers = [L for L in LAYERS
               if any(applicable(f) for f in LAYERS[L])]
-    chosen_layers = rnd.sample(layers, k=min(n, len(layers)))
+    order = rnd.sample(layers, k=len(layers))
     picks = []
-    for L in chosen_layers:
-        cand = [f for f in LAYERS[L] if applicable(f)]
+    for L in order:
+        if len(picks) >= n:
+            break
+        cand = [f for f in LAYERS[L] if free(f, picks)]
+        if not cand:
+            continue
         f = rnd.choice(cand)
-        picks.append((f, rnd.choice(applicable(f))))
+        picks.append((f, rnd.choice(free(f, picks))))
     return picks
 
 
@@ -303,13 +331,38 @@ def render_rt02(v, faults):
     return L
 
 
+def srv_seg(v):
+    """サーバ・セグメント（Lo0/DNS が属する /64）。端末の入力フィルタの許可対象。"""
+    return f"2001:DB8:{v['site']}:1"
+
+
+def acl_name(lan):
+    return f"FILTER-{lan['name']}"
+
+
+def acl_lines(v, lan, faults):
+    """BL-160: 端末の入力フィルタ（方針）。健全形は
+        permit ipv6 FE80::/10 any      ← RA/リレー応答など LL 発の制御トラフィック
+        permit ipv6 <サーバ /64> any   ← 方針そのもの（利用者トラフィック）
+    acl_blocks_ra は 1 行目（LL 許可）を欠落させる。IPv6 ACL の暗黙 permit は
+    NS/NA のみで RS/RA は対象外（poc/v6addr/README.md #7 実測）＝ RA が落ち、
+    SLAAC でグローバルアドレスが生成されない。"""
+    if not has(faults, "acl_blocks_ra", lan["name"]):
+        return []
+    return [f"ipv6 access-list {acl_name(lan)}",
+            f" permit ipv6 {srv_seg(v)}::/64 any", "!"]
+
+
 def render_client(v, lan, faults):
     """クライアント（IOL ルータをホスト役）。links[0]=RT02。"""
     w, name = lan["world"], lan["name"]
     L = [f"! {lan['client']} 初期状態 (LAN-{name} クライアント端末・{WORLD_LABEL[w]})",
-         "ipv6 unicast-routing", "ipv6 cef", "!",
-         f"interface {{{{ links[0] }}}}",
-         f" description === to RT02 (LAN-{name}) ===", " no shutdown"]
+         "ipv6 unicast-routing", "ipv6 cef", "!"]
+    L += acl_lines(v, lan, faults)
+    L += [f"interface {{{{ links[0] }}}}",
+          f" description === to RT02 (LAN-{name}) ===", " no shutdown"]
+    if has(faults, "acl_blocks_ra", name):
+        L.append(f" ipv6 traffic-filter {acl_name(lan)} in")
     if w in ("W_SO", "W_S"):
         L.append(" ipv6 address autoconfig default")
         L.append("!")
@@ -391,6 +444,12 @@ def build_fix(v, faults):
         if has(faults, "client_static_default_missing", name):
             fixes.append({"node": lan["client"],
                           "lines": ["ipv6 route ::/0 {{ links[0] }} FE80::1"], **N})
+        if has(faults, "acl_blocks_ra", name):
+            # 方針(サーバ /64 の許可)は残したまま、LL 発の制御トラフィックを許可する
+            # 1 行を足すのが模範解。フィルタ自体の削除・全面許可は過剰解（監査で降格）。
+            fixes.append({"node": lan["client"],
+                          "parents": f"ipv6 access-list {acl_name(lan)}",
+                          "lines": ["permit ipv6 FE80::/10 any"], **N})
     # サーバ全体
     if has(faults, "server_named_wrong_pool"):
         named = next(l["pool"] for l in v["lans"] if l["world"] in DHCPV6_WORLDS)
@@ -453,6 +512,10 @@ def symptom(v, f, tgt):
         "rdnss_missing":
             f"{ln} の端末は IPv6 アドレスを自動生成できていますが、"
             "DNS 情報を受け取れていません。",
+        "acl_blocks_ra":
+            f"{ln} の端末が、IPv6 アドレスを自動生成できず、リンクローカルアドレス"
+            "のみの状態です。端末を再起動しても改善しません。ゲートウェイ側では、"
+            "この LAN 向けの設定は先般の作業で変更していないとの申告があります。",
         "client_static_default_missing":
             f"{ln} ではセキュリティ方針によりルータ広告（RA）を停止しています。"
             "端末はアドレスを取得できていますが、同一 LAN の外にある宛先へ"
@@ -471,8 +534,8 @@ def eui64_re(pfx):
     return rf"{rx(pfx)}:[0-9A-Fa-f:]*[Aa]8[Bb][Bb]:CCFF:FE"
 
 
-def lan_checks(v, lan):
-    """1 LAN の世界に応じた挙動チェック群を返す。"""
+def lan_checks(v, lan, faults=None):
+    """1 LAN の世界に応じた挙動チェック群を返す（faults= フィルタ方針の監査用）。"""
     w, pfx, name = lan["world"], lan["pfx"], lan["name"]
     cl, cif = lan["client"], "Ethernet0/0"
     gwif = f"Ethernet0/{lan['gw_slot']}"
@@ -528,6 +591,21 @@ def lan_checks(v, lan):
             "node": cl, "command": f"show ipv6 dhcp interface {cif}",
             "raw": [{"regex": rf"DNS server\s*:\s*{dns_re}"},
                     {"regex": rf"Domain name\s*:\s*{dom_re}"}], "points": 8})
+    # BL-160: 入力フィルタ方針の LAN は「方針を維持したまま是正したか」を監査する
+    # （フィルタの取り外し・全面許可への置換＝過剰解を降格させる）。
+    if has(faults or [], "acl_blocks_ra", name):
+        an = acl_name(lan)
+        checks.append({
+            "name": f"LAN-{name}: 端末の入力フィルタが適用されたまま維持されている"
+                    "（過剰解の防止）",
+            "node": cl, "command": f"show running-config interface {cif}",
+            "raw": [{"regex": rf"ipv6 traffic-filter {an} in"}], "points": 8})
+        checks.append({
+            "name": f"LAN-{name}: フィルタ方針（サーバ・セグメントのみ許可）が"
+                    "維持されている",
+            "node": cl, "command": f"show ipv6 access-list {an}",
+            "raw": [{"regex": rf"permit ipv6 {rx(srv_seg(v))}\:\:/64 any"},
+                    {"not_regex": r"permit ipv6 any any"}], "points": 8})
     # 実疎通（サーバ Lo0）: 既定経路が RA 由来でも静的でも到達すれば OK。
     gw_kind = "静的既定" if w == "W_MP" else "既定"
     checks.append({
@@ -539,10 +617,10 @@ def lan_checks(v, lan):
     return checks
 
 
-def build_grading(v, prob_id):
+def build_grading(v, prob_id, faults=None):
     checks = []
     for lan in v["lans"]:
-        checks += lan_checks(v, lan)
+        checks += lan_checks(v, lan, faults)
     # IOS は IPv6 を大文字表示するが生成側は小文字 hex → 全 regex を大小無視化。
     for c in checks:
         for cond in c.get("raw", []):
@@ -579,12 +657,26 @@ def world_req(lan):
     return reqs[w]
 
 
+def filter_req(v, lan):
+    """BL-160: 入力フィルタ方針を持つ LAN の追加要件。
+    「利用者トラフィック」と限定することで、制御メッセージの許可が方針違反に
+    ならないようにしてある（＝ 正解が一意に補完でき、かつ機構は明かさない）。"""
+    return (f"また、LAN-{lan['name']} の端末では、**入力方向のトラフィック・"
+            f"フィルタ**により、**利用者トラフィックは、サーバ・セグメント"
+            f"（`{srv_seg(v)}::/64`）から発信されたもののみを許可**する。"
+            f"**このフィルタを取り外したり、すべての通信を許可する形に"
+            f"置き換えたりしてはならない。**")
+
+
 def build_task(v, prob_id, faults, diff):
     tickets = "\n".join(
         f"> {i + 1}. {symptom(v, f, tgt)}" for i, (f, tgt) in enumerate(faults)) \
         if len(faults) > 1 else f"> {symptom(v, faults[0][0], faults[0][1])}"
-    reqs = "\n".join(f"{i + 1}. {world_req(lan)}"
-                     for i, lan in enumerate(v["lans"]))
+    reqs = "\n".join(
+        f"{i + 1}. {world_req(lan)}"
+        + (" " + filter_req(v, lan)
+           if has(faults, "acl_blocks_ra", lan["name"]) else "")
+        for i, lan in enumerate(v["lans"]))
     la, lb = v["lans"][0], v["lans"][1]
     return f"""# 問題 {prob_id} : IPv6 自動アドレッシング 適合トラブルシュート（難易度{diff}）
 
@@ -1550,7 +1642,7 @@ def main():
         with open(f"{pdir}/initial/{node}.cfg.j2", "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
 
-    grading = build_grading(v, prob_id)
+    grading = build_grading(v, prob_id, faults)
     with open(f"{pdir}/grading.yml", "w", encoding="utf-8") as f:
         f.write(f"# 自動生成 (gen_v6addr_ts.py) seed={a.seed} "
                 f"faults={','.join(n for n, _ in faults)}\n"

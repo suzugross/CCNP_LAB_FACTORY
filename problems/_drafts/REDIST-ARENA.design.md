@@ -111,3 +111,64 @@
 - ★distance 系解法は clear 要否がプロトコルで違う(bgp=clear必須/ospf external=不要)
 - 内部ノイズノードの RIB も netmodel に食わせると採点が重くなる → RIB 収集は
   境界+代表内部ノードに限定するオプションを検討
+
+## 5. BL-162: 故障型 `name_clash`（同名の prefix-list と ACL の取り違え・2026-09-12）
+
+定番題材派生。chain の故障型は長く4型（missing / wrong_id / no_seed / filter）だったが、
+**「config は完備に見え、フィルタも permit だけなのに、ほとんどの経路が落ちる」**型を追加した。
+紙面 `gen_paper_mcq --shape chain --kinds name_clash` が主用途。
+
+- **仕込み（`gen_redist_field.render_node`）**: 境界の `redistribute ... route-map RM-SVC` に対し
+  ```
+  ip prefix-list SVC seq 5 permit <出自側 Lo1>/32      ← 全 Lo を列挙＝意図は「全部通す」
+  ip prefix-list SVC seq 10 permit <出自側 Lo2>/32
+  ip access-list standard SVC
+   permit <keeper の Lo>                               ← 旧移行の残骸(1 行だけ)
+  route-map RM-SVC permit 10
+   match ip address SVC                                ← ★prefix-list キーワードが無い
+  ```
+  → `match ip address <名前>` は **ACL 参照**なので、prefix-list SVC は一切参照されず、
+  **keeper の 1 本以外は暗黙 deny で全喪失**する。
+- ★**実機で確認した決め手（IOL 17.15・PAPER-RD-3894867 で収集）**:
+  - IOS は **prefix-list と standard ACL に同じ名前を許す**（名前空間が別）。
+  - `show route-map` の表示が決定的 — 本件は `ip address (access-lists): SVC`、
+    prefix-list を参照している赤ニシンの方は `ip address prefix-lists: PL-MIGR1` と
+    **同じ画面に対比で出る**。
+  - `show access-lists` の `Standard IP access list SVC ... (1 match)` がヒットの証拠。
+  - 症状側の経路表には keeper の /32 だけが `O E2`(または `D EX`)で載り、他は不在。
+- **抽選方針**: ラボ側（GEN-RDFIELD）の**既定抽選には入れない**（`fault_kind="name_clash"`
+  を明示した時だけ `applicable` に入る）。紙面が明示指定で使う。filter と同様に
+  トポロジ全体で 1 本まで。
+- **紙面の形**:
+  - fix 形の正解 = 「route-map を外し、route-map / prefix-list / ACL を削除」（要件
+    「再配送へのフィルタ適用禁止」）。
+    ★ディストラクタ筆頭が **「`match ip address prefix-list SVC` に書き換える」**＝
+    *知識としては正しいが要件に反する* 形（症状は直るが減点）。
+    他に「prefix-list SVC に permit を足す」（**参照されていないので実効ゼロ**）と
+    「ACL に残りを列挙する」（フィルタ残存＋将来の追加で再発）。
+  - cause 形の正解 = 「match が、プレフィックスリストではなく、同名のアクセスリストを
+    参照している」。この盤面では route-map が *permit のみ* なので、filter 主張
+    （「特定の拠点網を deny している」）の反証文を専用に差し替えている。
+- 出題可。検証は `--no-lab` 14 本＋実機 1 本（seed 62023・パック撤収済・
+  生成した questions/answers も削除）。
+
+### 5.1 ラボ化（2026-09-12・ユーザ要望で同日実施）
+
+紙面専用にする理由が「未検証」だけだったので、**ラボ(GEN-RDFIELD chain)の既定抽選にも入れた**。
+
+- `FAULTS` / `--fault` に `name_clash` を追加し、`applicable` へは
+  **出自側に 2 台以上あるときだけ**入れる（1 台だと「1 本だけ生き残る」対比が作れない）。
+  `filter` と同じくトポロジ全体で 1 本まで。
+  ※これで既存 GEN-RDFIELD seed の抽選結果は変わる（生成済みインスタンスは不変）。
+- **採点は既存のままで足りる**: chain の grading には
+  `not_regex: redistribute .*route-map`（収容標準=フィルタ禁止）が既にあるので、
+  **「`prefix-list` キーワードを足して症状だけ直す」誤解法は自動的に降格**する。
+- **実機 E2E（seed 63002・K=3・5 ノード・RT01 が境界）**:
+
+  | 状態 | 点 | 備考 |
+  |---|---|---|
+  | broken | 50 | 大域の Loopback 相互到達(40) と RT01 のフィルタ監査(10) が FAIL |
+  | 模範 fix（route-map を外し 3 オブジェクトを削除） | **100** | |
+  | 誤解法（`match ip address prefix-list SVC` に書き換え） | **90** | **到達性は全 PASS** なのにフィルタ残存で -10＝「症状は直るが要件違反」を実機で実証 |
+
+- 検証 seed 63002 は撤収・インスタンス削除済み。出題時は新 seed。

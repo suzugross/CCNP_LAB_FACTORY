@@ -52,8 +52,9 @@ import gen_paper_aaa as gpa    # noqa: E402  (aaa=IOS AAA(RADIUS)読解・BL-101
 import gen_paper_bgpbest as gbb  # noqa: E402  (bgpbest=BGPベストパス読解・BL-112)
 import gen_paper_copp as gpc   # noqa: E402  (copp=CoPP 分類→police 読解/是正・BL-125)
 import gen_paper_pref as gpr   # noqa: E402  (pref=OSPF/EIGRP 経路選好・BL-127)
+import gen_paper_ospfbgp as gob  # noqa: E402  (ospfbgp=OSPF→BGP 再配送の範囲・BL-163)
 
-KINDS = ["missing", "no_seed", "filter", "wrong_id"]
+KINDS = ["missing", "no_seed", "filter", "wrong_id", "name_clash"]
 # ring(ループ)の正解法軸。arena の method をそのまま借りるが、tag は紙面専用の追加軸
 # (初期 config は method に依存しない=どの解法でも同じ盤面。要件文で正解を一意化する)。
 RING_KINDS = ["distance", "filter", "tag"]
@@ -338,6 +339,12 @@ def evidence_plan(d, rnd, hard=False, exam=False):
         checks.append({"node": m[symptom], "command": f"show ip route {vlo}"})
         checks.append({"node": m[br], "command": "show route-map RM-SVC"})
         checks.append({"node": m[br], "command": "show ip prefix-list PL-SVC"})
+    elif f["kind"] == "name_clash":
+        # ★決め手は `show route-map` の `ip address (access-lists): SVC` の1行。
+        #   同名の2つ(prefix-list SVC / ACL SVC)も並べて出す。
+        checks.append({"node": m[br], "command": "show route-map RM-SVC"})
+        checks.append({"node": m[br], "command": "show ip prefix-list SVC"})
+        checks.append({"node": m[br], "command": "show access-lists SVC"})
     for n in cfg_nodes:
         checks.append({"node": m[n], "command": "show running-config | section router"})
     return {"symptom": symptom, "contrast": contrast, "cfg_nodes": cfg_nodes,
@@ -468,6 +475,37 @@ def build_choices(d, rnd, plan=None, exam=False, pol=None):
              (f"{br} の {rev_p} 配下の「{rev_disp}」を削除して参照 ID を見直す", False,
               "逆方向の再配送は参照 ID も含めて正常(対比側の経路表で確認できる)。"
               "削除すればかえって逆方向の到達性を壊す。")]
+    elif f["kind"] == "name_clash":
+        # ★BL-162: 「知識としては正しいが要件に反する」修正をディストラクタの筆頭に置く。
+        src_word = (f"ospf {srcd['id']}" if srcd["type"] == "ospf"
+                    else f"eigrp {srcd['id']}")
+        keep = d["lo"][f["keeper"]]
+        c = [(f"{br} の {tgt_p} 配下で redistribute から route-map RM-SVC を外し、"
+              "route-map・プレフィックスリスト・アクセスリストを削除する", True, "",
+              [tgt_p, f" no redistribute {src_word}", f" {good}",
+               "no route-map RM-SVC", "no ip prefix-list SVC",
+               "no ip access-list standard SVC"]),
+             ("route-map RM-SVC の match を「match ip address prefix-list SVC」に"
+              "書き換える", False,
+              "参照先がプレフィックスリストに切り替わるため症状は解消する。"
+              "しかし再配送へのフィルタ適用が残るため、要件"
+              "「再配送へのフィルタ適用禁止」を満たさない。",
+              ["route-map RM-SVC permit 10", " no match ip address SVC",
+               " match ip address prefix-list SVC"]),
+             ("ip prefix-list SVC に「permit 0.0.0.0/0 le 32」を追加する", False,
+              "プレフィックスリスト SVC は、そもそも route-map から参照されていない"
+              "(match はキーワードが無いため同名のアクセスリストに束縛されている)。"
+              "何を追加しても実効が無く、症状は変わらない。",
+              ["ip prefix-list SVC seq 100 permit 0.0.0.0/0 le 32"]),
+             (f"アクセスリスト SVC に、残りの拠点網の permit を追加する"
+              f"(現在は `{keep}` の 1 行のみ)", False,
+              "症状は緩和しうるが、フィルタ適用が残るため要件を満たさない。"
+              "また列挙した網以外は暗黙の deny で落ち続ける(将来の追加でも再発する)。",
+              ["ip access-list standard SVC"]
+              + [f" permit {d['lo'][r]}"
+                 for r in sorted(grf._side_roles(d, f["br"], src),
+                                 key=lambda x: d["lo"][x])
+                 if r not in (f["br"], f["keeper"])])]
     else:  # filter
         src_word = (f"ospf {srcd['id']}" if srcd["type"] == "ospf"
                     else f"eigrp {srcd['id']}")
@@ -651,6 +689,9 @@ SYMPTOM_TEXT = {
     "wrong_id": "いくつかのサイトの間において、通信が確立されることができない、"
                 "ということが、報告されています。",
     "filter": None,  # victim を埋め込むため question_md 内で組み立て
+    # BL-162: ACL に載っている 1 本だけが通り、残りが全喪失する形
+    "name_clash": "対岸のドメインにおいて、ほとんどのルートが、学習されていません。"
+                  "一方で、一部のルートについては、正常に学習されています。",
 }
 
 FIXED_NOTE = "> **本問は機器に接続せずに解答すること。追加の show 実行は認めない。**"
@@ -1108,6 +1149,8 @@ def build_cause_choices(d, plan, rnd, decoy=None, pol=None):
         "no_seed": f"{br} の {tgt_p} への redistribute に seed metric が指定されていない",
         "filter": f"{br} の redistribute に適用された route-map が特定の拠点網を"
                   " deny している",
+        "name_clash": f"{br} の route-map の match が、プレフィックスリストではなく、"
+                      "同じ名前のアクセスリストを参照している",
     }
     defmet = bool(pol and pol.get("style") == "defmet" and tgt["type"] == "eigrp")
     if defmet:
@@ -1120,11 +1163,20 @@ def build_cause_choices(d, plan, rnd, decoy=None, pol=None):
         "no_seed": ("当該プロセスには default-metric が設定されている。" if defmet
                     else "当該 redistribute 行には seed metric が指定されている。"),
         "filter": "redistribute に route-map は適用されておらず、定義も存在しない。",
+        "name_clash": "redistribute に適用された route-map の match は、"
+                      "`prefix-list` を明示して参照しており、同名のアクセスリストも"
+                      "存在しない。",
     }
+    if f["kind"] == "name_clash":
+        # この盤面では route-map は「適用されている・permit のみ」なので、
+        # filter 主張の反証は「deny 節が無い」でなければならない。
+        refute["filter"] = ("適用されている route-map は permit のみで構成されており、"
+                            "特定の拠点網を名指しで deny する節は存在しない。")
     in_genre = {"missing": ["wrong_id", "filter"],
                 "wrong_id": ["missing", "filter"],
                 "no_seed": ["missing", "wrong_id"],
-                "filter": ["missing", "wrong_id"]}[f["kind"]]
+                "filter": ["missing", "wrong_id"],
+                "name_clash": ["filter", "missing"]}[f["kind"]]
     pool = [
         (f"{sym} と隣接ルータの間で {tgt_word} のネイバー(隣接関係)が確立していない",
          f"{sym} の経路表に同一ドメインの内部経路(タイマー進行中)が載っており、"
@@ -1142,7 +1194,7 @@ def build_cause_choices(d, plan, rnd, decoy=None, pol=None):
     c = [(claim[f["kind"]], True, "")]
     c += [(claim[k], False, refute[k]) for k in in_genre]
     n_pool = 3
-    if decoy and f["kind"] != "filter":
+    if decoy and f["kind"] not in ("filter", "name_clash"):
         c.append((f"{br} の route-map {decoy} が対象の経路を拒否している", False,
                   f"route-map {decoy} は定義されているだけで、どの redistribute にも"
                   "適用されていない(実効なし)。"))
@@ -1260,11 +1312,18 @@ def answer_md(d, plan, choices, stamp, master_seed, subseed, kind, prob_id,
         "no_seed": "OSPF→EIGRP 注入の metric 欠落(∞メトリックで不広告。config は存在)",
         "filter": "redistribute に route-map が付き特定 Loopback だけ deny(部分喪失)",
         "wrong_id": "redistribute の参照プロセス/AS が誤り(config は一見完備・無言で経路ゼロ)",
+        "name_clash": "route-map の match が同名の ACL に束縛され(prefix-list は"
+                      "参照されず)、ACL の 1 本以外が暗黙 deny で全喪失",
     }[kind]
     wrongs = "\n".join(f"- **{l}**: {'(正解)' if c[1] else c[2]}"
                         for l, c in zip(letters, choices))
     victim = (f"\n- フィルタ被害者: {m[f['victim']]} ({d['lo'][f['victim']]}/32)"
               if kind == "filter" else "")
+    if kind == "name_clash":
+        victim = (f"\n- 生き残る 1 本(ACL SVC の permit): {m[f['keeper']]} "
+                  f"({d['lo'][f['keeper']]}/32)。決め手は "
+                  "`show route-map` の `ip address (access-lists): SVC` の行"
+                  "(prefix-list を参照していれば `(prefix-lists)` と表示される)")
     if herr:
         victim += ("\n- 赤ニシン: " + "・".join(sorted(herr))
                    + " に未適用の route-map/prefix-list/ACL と無害な適用行"
@@ -4778,6 +4837,137 @@ echo-reply が戻れず必ず 0% になる。ドロップの証拠は per-IF の
 
 
 # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# shape=ospfbgp — OSPF→BGP 再配送の範囲(match オプション)・BL-163
+# ★紙面専用: 挙動は実機確定表(poc/ospfbgp/README.md の遷移表)の写像モデル。
+# --------------------------------------------------------------------------
+def pick_draw_ospfbgp(qseed, kind, worlds=None):
+    for k in range(400):
+        sd = qseed + k * 157
+        rnd = random.Random(sd)
+        w = rnd.choice(worlds) if worlds else None
+        try:
+            d = gob.draw(rnd, kind=kind, world=w)
+        except ValueError:
+            continue
+        return sd, d
+    raise SystemExit(f"ospfbgp kind={kind} が成立する seed が見つかりません({qseed})")
+
+
+def mermaid_ospfbgp(d):
+    m = d["m"]
+    return "\n".join([
+        "```mermaid", "graph LR",
+        f'  {m["RCV"]}["{m["RCV"]}<br/>BGP AS {d["asn"]}"]',
+        f'  {m["DUT"]}["{m["DUT"]}<br/>BGP AS {d["asn"]} / OSPF {d["pid"]}"]',
+        f'  {m["ABR"]}["{m["ABR"]}<br/>OSPF {d["pid"]} (エリア 0 / エリア {d["area"]})<br/>RIP との境界"]',
+        f'  {m["EDGE"]}["{m["EDGE"]}<br/>RIP"]',
+        f'  {m["RCV"]} ---|"{d["link_bgp"]}/24"| {m["DUT"]}',
+        f'  {m["DUT"]} ---|"{d["link_ospf"]}/24"| {m["ABR"]}',
+        f'  {m["ABR"]} ---|"{d["link_rip"]}/24"| {m["EDGE"]}',
+        "```"])
+
+
+def ospfbgp_evidence(d, rnd, form):
+    m = d["m"]
+    blocks = [f"```\n{m['DUT']}# show ip route ospf\n{gob.ospf_table(d)}\n```",
+              f"```\n{m['DUT']}# show running-config | section router\n"
+              f"{gob.dut_cfg(d)}\n```"]
+    if form != "read":
+        # 結果(受信側の BGP テーブル)を見せて、そこから設定を逆算させる
+        blocks.append(f"```\n{m['RCV']}# show ip bgp\n"
+                      f"{gob.bgp_table(d, gob.STATE_OF[d['kind']])}\n```")
+    return blocks
+
+
+def question_md_ospfbgp(d, blocks, choices, stamp, form="fix", reqs=None,
+                        style="prose"):
+    m = d["m"]
+    q = {"fix": ("要件が満たされるために、"
+                 f"{m['DUT']} において適用されなければならない構成は、どれですか。"
+                 "(1つを選択してください)"),
+         "cause": ("この事象が発生している理由として、最も適切なものは、どれですか。"
+                   "(1つを選択してください)"),
+         "read": (f"この構成のとき、{m['RCV']} の BGP テーブルとして正しいものは、"
+                  "どれですか。(1つを選択してください)")}[form]
+    sym = {
+        "default_only": (f"{m['RCV']} において、{m['ABR']} の配下にあるネットワークの"
+                         "うちの一部が、学習されていない、ということが、"
+                         "報告されています。"),
+        "ext_only": (f"{m['RCV']} において、OSPF のエリア内およびエリア間の"
+                     "ネットワークが、学習されていない、ということが、"
+                     "報告されています。"),
+        "int_ext1": (f"{m['RCV']} において、外部タイプ 2 のネットワークだけが、"
+                     "学習されていない、ということが、報告されています。"),
+        "ext2_only": (f"{m['RCV']} において、外部タイプ 2 のネットワーク以外が、"
+                      "学習されていない、ということが、報告されています。"),
+    }[d["kind"]]
+    head = [f"# 問題 {stamp}", "", FIXED_NOTE, "", "## トポロジ", "",
+            f"{m['RCV']} と {m['DUT']} は同一の AS({d['asn']})に属し、iBGP で"
+            f"ピアリングしています。{m['DUT']} は OSPF {d['pid']} にも参加し、"
+            f"{m['ABR']} を経由して、エリア {d['area']} および RIP のドメインへ"
+            "接続しています。", "",
+            mermaid_ospfbgp(d), ""]
+    if form != "read":
+        head += ["## 症状", "", sym, ""]
+    if reqs:
+        head += ["## 要件", ""] + list(reqs) + [""]
+    # ★節名は不親切化(BL-088)が拾う正規の名前でなければならない
+    #   (「現在の状態」/「設定抜粋」以外に置くとフェンスが再構成で落ちる)。
+    head += ["## 現在の状態", ""] + blocks + ["", "## 設問", "", q, "",
+                                            "## 選択肢", ""]
+    return "\n".join(head) + "\n" + render_options(choices, style) + "\n"
+
+
+def answer_md_ospfbgp(d, choices, stamp, master_seed, subseed, form):
+    letters = [chr(65 + i) for i in range(len(choices))]
+    correct = [l for l, c in zip(letters, choices) if c[1]][0]
+    wrongs = "\n".join(f"- **{l}**: {'(正解)' if c[1] else c[2]}"
+                        for l, c in zip(letters, choices))
+    kind_note = {
+        "default_only": "既定のまま(=内部ルートのみ)。外部が BGP に入らない",
+        "ext_only": "`match external 1 external 2` のみ(=内部が入らない)",
+        "int_ext1": "`match internal external 1`(=外部タイプ 2 だけ入らない)",
+        "ext2_only": "`match external 2` のみ(=外部タイプ 2 だけ入る)",
+    }[d["kind"]]
+    world_note = {"all": "すべて(内部＋外部の両タイプ)",
+                  "internal_only": "内部ルートのみ",
+                  "ext1_only": "外部タイプ 1 のみ"}[d["world"]]
+    return f"""# 解答 {stamp}
+
+## 正解
+
+**{correct}**
+
+## 盤面
+
+- 現状の設定: `{gob.disp(d['pid'], gob.STATE_OF[d['kind']])}` — {kind_note}
+- 要件(世界): **{world_note}**{"（read 形では未提示）" if form == "read" else ""}
+- 生成: `gen_paper_mcq.py --shape ospfbgp --seed {master_seed}` (sub-seed {subseed})
+
+## 各選択肢の判定
+
+{wrongs}
+
+## この分野の最重要知見(BL-163 PoC 実測・poc/ospfbgp/README.md)
+
+1. **OSPF から BGP への再配送は、既定ではエリア内(O)とエリア間(O IA)だけが対象**。
+   外部(O E1 / O E2)を入れるには `match external 1 external 2` の明示が要る。
+   ★接続セグメント(OSPF のエリア内経路)も一緒に入る。
+2. **`match` 付きの再発行はマージ(置換ではない)**。既定だった `internal` は、
+   外部を足した時点で `match internal external 1` のように**明示表示**へ変わる。
+3. ★**`match` を伴わない `redistribute ospf <pid>` の再発行は、対象を既定へ
+   「リセット」する**(マージではない)。外部を指定済みの構成でこれを出すと、
+   外部の指定が消える。
+4. **`no redistribute ospf <pid> match <種別>`** は、その種別だけを対象から外す
+   (行ごと消えるのではなく、残りの指定は保たれる)。
+5. ★★**外部だけを再配送すると、next-hop の解決に必要なエリア内のセグメントも
+   一緒に落ちる**ため、受信側では `(inaccessible)` となり
+   `Paths: (1 available, no best path)` — **BGP テーブルには載るが、
+   ルーティング テーブルには入らない**(`* i` のまま `>` が付かない)。
+"""
+
+
 # shape=leakmap — EIGRP 集約×リーク 手段選択 (gen_paper_leakmap 流用・BL-095)
 # ★紙面専用: 挙動は実機確定表(poc/leakmap/README.md)の写像モデルから決定的に生成。
 # --------------------------------------------------------------------------
@@ -7554,7 +7744,7 @@ def main():
                     choices=["chain", "ring", "pbr", "urpf", "bgpdbg", "mploop",
                              "riploop", "leakmap", "ospfv3pl", "v6redist",
                              "aaa", "acl", "aclv6", "bgpbest", "copp", "pref",
-                             "mixed"],
+                             "ospfbgp", "mixed"],
                     default="chain",
                     help="chain=再配送欠落/誤設定系(既定) / ring=再配送リングの定常ループ(難5)"
                          " / riploop=RIP⇄OSPF 対策が効いていない型(BL-116)"
@@ -7572,6 +7762,8 @@ def main():
                          "5形= fix/cause/read/select2/allthat)"
                          " / pref=経路選好 OSPF 1.10.d×EIGRP 1.9.c"
                          "(BL-127・紙面専用・P1= read/why)"
+                         " / ospfbgp=OSPF→BGP 再配送の範囲(match オプション)"
+                         "(BL-163・紙面専用・fix/cause/read)"
                          " / mixed=問題ごとに形・種別を抽選(ごちゃまぜ)")
     ap.add_argument("--forms", default="",
                     help="出題形を絞る(カンマ区切り)。shape=acl: select,read,"
@@ -7624,7 +7816,8 @@ def main():
                 "ospfv3pl": gpo.KINDS, "v6redist": gpv.KINDS,
                 "aaa": gpa.KINDS, "acl": gpl.KINDS,
                 "aclv6": gp6.KINDS, "bgpbest": gbb.KINDS,
-                "copp": gpc.KINDS, "pref": gpr.KINDS}.get(a.shape, KINDS)
+                "copp": gpc.KINDS, "pref": gpr.KINDS,
+                "ospfbgp": gob.KINDS}.get(a.shape, KINDS)
         kinds = (a.kinds.split(",") if a.kinds
                  else random.Random(a.seed ^ 0x5EED).sample(pool, len(pool)))
         if not set(kinds) <= set(pool):
@@ -7697,6 +7890,8 @@ def main():
             #   riploop(BL-116)の枠は ring を割って捻出。
             #   ★pref の 5%(BL-127・2026-08-16)は pbr/urpf/leakmap/
             #   ospfv3pl/bgpbest から 1% ずつ捻出した**暫定枠**。
+            #   ★ospfbgp の 3%(BL-163・2026-09-12)は chain の枠(5%)を割って捻出
+            #   (chain は実機展開を伴い重い・ospfbgp は紙面専用で軽い)。
             #   全体の再配分はユーザ判断により後日まとめて行う。
             shape_i = ("ring" if r < 0.06 else "riploop" if r < 0.11
                        else "pbr" if r < 0.18
@@ -7709,7 +7904,8 @@ def main():
                        else "bgpbest" if r < 0.78
                        else "bgpdbg" if r < 0.83
                        else "copp" if r < 0.90
-                       else "pref" if r < 0.95 else "chain")
+                       else "pref" if r < 0.95
+                       else "ospfbgp" if r < 0.98 else "chain")
             kind = roll.choice({"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
                                 "urpf": gpu.URPF_KINDS, "mploop": MPLOOP_KINDS,
                                 "riploop": RIPLOOP_KINDS,
@@ -7721,7 +7917,8 @@ def main():
                                 "bgpbest": gbb.KINDS,
                                 "bgpdbg": gpb.VARIANTS,
                                 "copp": gpc.KINDS,
-                                "pref": gpr.KINDS}.get(shape_i, KINDS))
+                                "pref": gpr.KINDS,
+                                "ospfbgp": gob.KINDS}.get(shape_i, KINDS))
         else:
             shape_i = a.shape
             kind = kinds[i % len(kinds)]
@@ -7772,6 +7969,8 @@ def main():
             subseed, d = pick_draw_urpf(qseed, kind)
         elif shape_i == "leakmap":
             subseed, d = pick_draw_leakmap(qseed, kind)
+        elif shape_i == "ospfbgp":
+            subseed, d = pick_draw_ospfbgp(qseed, kind)
         elif shape_i == "ospfv3pl":
             subseed, d = pick_draw_ospfv3pl(qseed, kind)
         elif shape_i == "v6redist":
@@ -7828,6 +8027,9 @@ def main():
         elif shape_i == "leakmap":
             plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
             choices = gpk.build_choices_fix(d, rnd)
+        elif shape_i == "ospfbgp":
+            plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
+            choices = gob.build_choices_fix(d, rnd)
         elif shape_i == "ospfv3pl":
             plan = {"checks": []}          # 紙面専用(実機確定表の写像モデル)
             choices = gpo.build_choices_fix(d, rnd)
@@ -7887,7 +8089,7 @@ def main():
                                                     "ospfv3pl", "v6redist",
                                                     "aaa", "acl", "aclv6",
                                                     "bgpbest", "copp",
-                                                    "pref"))
+                                                    "pref", "ospfbgp"))
                      else None)
         # 赤ニシン(exam): 未適用ポリシー+無害な適用行を config に混入(pbr は素で騒がしい)
         herr, decoy = None, None
@@ -8036,6 +8238,15 @@ def main():
         elif a.exam and shape_i == "urpf" and rnd.random() < 0.5:
             form = "cause"
             choices = gpu.build_choices_cause(d, rnd)
+        elif shape_i == "ospfbgp" and (a.exam or rnd.random() < 0.45):
+            # ★BL-163: fix 45% / cause 35% / read 20%(非 exam でも形を抽選)
+            r_form = rnd.random()
+            if r_form < 0.35:
+                form = "cause"
+                choices = gob.build_choices_cause(d, rnd)
+            elif r_form < 0.55:
+                form = "read"
+                choices = gob.build_choices_read(d, rnd)
         elif a.exam and shape_i == "leakmap":
             r_form = rnd.random()          # fix / cause / read の3形を抽選
             if r_form < 0.34:
@@ -8223,6 +8434,10 @@ def main():
         if choices:
             choices = rebalance_position(repo, choices)
         opt_style = choice_style(rnd, choices, form) if choices else "prose"
+        if shape_i == "ospfbgp" and form == "fix":
+            # ★BL-163: 選択肢は全て設定コマンド。散文と混在すると
+            #   1行の候補だけ地の文になり、提示が不揃いになる
+            opt_style = "cli"
         if shape_i == "aclv6" and form == "select":
             opt_style = "cli"          # ★プレフィックス長が読めるようそのまま出す
         if shape_i == "acl" and form == "patch":
@@ -8250,6 +8465,10 @@ def main():
                 reqs = urpf_requirements(d, rnd, sites)
             elif shape_i == "leakmap":
                 reqs = leakmap_requirements(d, rnd)
+            elif shape_i == "ospfbgp":
+                # ★read 形は「この設定なら表はどうなるか」なので要件は出さない
+                #   (要件を出すと「要件を満たす表」を選ぶ別の設問に化ける)
+                reqs = None if form == "read" else gob.requirements(d, rnd, form)
             elif shape_i == "copp":
                 reqs = copp_requirements(d, rnd, form)
             elif shape_i == "pref":
@@ -8281,6 +8500,9 @@ def main():
         if shape_i == "copp" and reqs is None:
             # ★copp の要件は世界=fix 一意性の担い手(非 exam でも必須)
             reqs = copp_requirements(d, rnd, form)
+        if shape_i == "ospfbgp" and reqs is None and form != "read":
+            # ★BL-163: 要件世界が fix/cause の一意性の担い手(非 exam でも必須)
+            reqs = gob.requirements(d, rnd, form)
         if shape_i == "pref" and reqs is None:
             # ★pref の要件世界は P2 の fix 一意性の担い手(非 exam でも常設)
             reqs = pref_requirements(d, rnd, form)
@@ -8293,7 +8515,8 @@ def main():
               f"nodes={6 if shape_i in ('mploop', 'riploop') else len(d.get('roles', [d.get('A'), d.get('B')]))}", flush=True)
 
         if shape_i in ("urpf", "bgpdbg", "leakmap", "ospfv3pl", "v6redist",
-                       "aaa", "acl", "aclv6", "bgpbest", "copp", "pref"):
+                       "aaa", "acl", "aclv6", "bgpbest", "copp", "pref",
+                       "ospfbgp"):
             collected = {}                 # 紙面専用: 実機展開・収集を行わない
         elif a.no_lab:
             collected = {(c["node"], c["command"]): "(PLACEHOLDER: --no-lab)"
@@ -8405,6 +8628,12 @@ def main():
                                     form=form, reqs=reqs, style=opt_style)
             a_md = answer_md_urpf(d, choices, stamp, a.seed, subseed)
             lint += list(gpu.URPF_KINDS) + ["world=", "_works"]
+        elif shape_i == "ospfbgp":
+            blocks = ospfbgp_evidence(d, rnd, form)
+            q_md = question_md_ospfbgp(d, blocks, choices, stamp, form=form,
+                                       reqs=reqs, style=opt_style)
+            a_md = answer_md_ospfbgp(d, choices, stamp, a.seed, subseed, form)
+            lint += list(gob.KINDS) + ["world=", "STATE_OF", "_works"]
         elif shape_i == "leakmap":
             blocks = leakmap_evidence(d, rnd, form)
             q_md = question_md_leakmap(d, blocks, choices, stamp, form=form,

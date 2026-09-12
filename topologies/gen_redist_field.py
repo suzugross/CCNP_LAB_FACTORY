@@ -32,7 +32,7 @@ import random
 import yaml
 
 EIGRP_METRIC = "100000 100 255 1 1500"
-FAULTS = ["missing", "wrong_id", "no_seed", "filter"]
+FAULTS = ["missing", "wrong_id", "no_seed", "filter", "name_clash"]
 
 
 # --------------------------------------------------------------------------
@@ -118,8 +118,14 @@ def draw(rnd, faults_n=None, fault_kind=None, hard=False):
                for x in doms):
             applicable.remove("wrong_id")
         # filter はトポロジ全体で1本まで(route-map/prefix-list 名の衝突防止)
-        if any(x["kind"] == "filter" for x in faults):
+        if any(x["kind"] in ("filter", "name_clash") for x in faults):
             applicable.remove("filter")
+        # BL-162 name_clash(同名の prefix-list と ACL の取り違え)。
+        # 出自側に 2 台以上ないと「1 本だけ生き残る」対比が作れないので、その時だけ抽選に入れる
+        # (ラボ・紙面の双方で使う。policy 系は filter と同様トポロジ全体で 1 本まで)。
+        if (len([r for r in _side_roles(d, br, src_idx) if r != br]) >= 2
+                and not any(x["kind"] in ("filter", "name_clash") for x in faults)):
+            applicable.append("name_clash")
         if doms[into]["type"] == "eigrp" and doms[src_idx]["type"] == "ospf":
             applicable.append("no_seed")
         if fault_kind:
@@ -134,12 +140,15 @@ def draw(rnd, faults_n=None, fault_kind=None, hard=False):
             kind = rnd.choice(subtle or applicable)
         else:
             kind = rnd.choice(applicable)
-        victim = None
+        victim, keeper = None, None
         if kind == "filter":
             far = _side_roles(d, br, src_idx)      # src 側の Lo から1つ deny
             victim = rnd.choice([r for r in far if r != br])
+        if kind == "name_clash":
+            # ACL に載っている 1 本だけが生き残る(＝ keeper)。他は暗黙 deny で全喪失。
+            keeper = rnd.choice([r for r in _side_roles(d, br, src_idx) if r != br])
         faults.append({"br": br, "into": into, "src": src_idx, "kind": kind,
-                       "victim": victim})
+                       "victim": victim, "keeper": keeper})
     if not faults:
         raise SystemExit("fault 抽選失敗(--fault と抽選形の不整合)。別 seed か指定無しで。")
     d["faults"] = faults
@@ -236,7 +245,7 @@ def render_node(d, role):
                 out.append(" " + _redist_line(d, role, di, wrong=True))
             elif f["kind"] == "no_seed":
                 out.append(" " + _redist_line(d, role, di, no_metric=True))
-            elif f["kind"] == "filter":
+            elif f["kind"] in ("filter", "name_clash"):
                 out.append(" " + _redist_line(d, role, di, with_rm="RM-SVC"))
         out.append("!")
     # filter 故障の route-map / prefix-list(グローバル)
@@ -246,6 +255,17 @@ def render_node(d, role):
             out += [f"ip prefix-list PL-SVC seq 5 permit {vlo}/32", "!",
                     "route-map RM-SVC deny 10", " match ip address prefix-list PL-SVC", "!",
                     "route-map RM-SVC permit 20", "!"]
+        # BL-162: **同名**の prefix-list と standard ACL。route-map の match が
+        # `prefix-list` キーワード無しなので **ACL の方**に束縛される
+        # (prefix-list は参照されず、ACL の 1 本以外は暗黙 deny で全喪失)。
+        if f["kind"] == "name_clash" and f["br"] == role:
+            far = [r for r in _side_roles(d, f["br"], f["src"]) if r != f["br"]]
+            for i, r in enumerate(sorted(far, key=lambda x: lo[x])):
+                out.append(f"ip prefix-list SVC seq {5 * (i + 1)} "
+                           f"permit {lo[r]}/32")
+            out += ["!", "ip access-list standard SVC",
+                    f" permit {lo[f['keeper']]}", "!",
+                    "route-map RM-SVC permit 10", " match ip address SVC", "!"]
     return out
 
 
@@ -415,6 +435,12 @@ def solution_md(d, prob_id):
         elif f["kind"] == "no_seed":
             body = (f"metric 欠落で EIGRP 注入が∞メトリック=不広告(config は在るのに効かない)。"
                     f"`{good}` を再投入(上書き)。")
+        elif f["kind"] == "name_clash":
+            body = (f"route-map RM-SVC の `match ip address SVC` が、**同名の standard ACL** "
+                    f"(`permit {d['lo'][f['keeper']]}`)に束縛されている"
+                    f"(`prefix-list` キーワードが無い)。prefix-list SVC は参照されず、"
+                    f"ACL の 1 本以外は暗黙 deny で全喪失。収容標準はフィルタ禁止なので "
+                    f"`no redistribute ...` → `{good}` で貼り替え、route-map/prefix-list/ACL も撤去。")
         else:
             body = (f"route-map RM-SVC が {m[f['victim']]} の Lo({d['lo'][f['victim']]}/32) を "
                     f"deny(収容標準はフィルタ禁止)。`no redistribute ...` → `{good}` で貼り替え、"
@@ -462,9 +488,11 @@ def fix_json(d):
             fixes.append({"node": node, "parents": [parent],
                           "lines": [f"no redistribute {src_word}", good],
                           "match": "none"})
-            fixes.append({"node": node, "lines": ["no route-map RM-SVC",
-                                                  "no ip prefix-list PL-SVC"],
-                          "match": "none"})
+            drop = (["no route-map RM-SVC", "no ip prefix-list SVC",
+                     "no ip access-list standard SVC"]
+                    if f["kind"] == "name_clash" else
+                    ["no route-map RM-SVC", "no ip prefix-list PL-SVC"])
+            fixes.append({"node": node, "lines": drop, "match": "none"})
     for n in sorted({d["m"][f["br"]] for f in d["faults"]}):
         fixes.append({"node": n, "exec": ["clear ip route *"]})
     return {"_comment": "gen_redist_field fix(仕様書どおりの再配送へ復旧)", "fixes": fixes}

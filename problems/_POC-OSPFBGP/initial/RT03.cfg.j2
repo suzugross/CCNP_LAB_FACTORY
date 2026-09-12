@@ -1,0 +1,41 @@
+! RT03: OSPF 1 と RIP の境界。RIP→OSPF 再配送を route-map で E1/E2 に作り分ける。
+!   192.168.40.0/24 → metric-type 1 (O E1) / 192.168.41.0/24 → metric-type 2 (O E2)
+interface Loopback0
+ ip address 3.3.3.3 255.255.255.255
+!
+interface Loopback1
+ description === OSPF エリア内の拠点網 ===
+ ip address 192.168.30.1 255.255.255.0
+!
+interface {{ links[0] }}
+ description === to RT02 (OSPF) ===
+ ip address 192.168.2.3 255.255.255.0
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT04 (RIP) ===
+ ip address 192.168.3.3 255.255.255.0
+ no shutdown
+!
+ip prefix-list PL-E1 seq 5 permit 192.168.40.0/24
+ip prefix-list PL-E2 seq 5 permit 192.168.41.0/24
+!
+route-map RIP2OSPF permit 10
+ match ip address prefix-list PL-E1
+ set metric-type type-1
+!
+route-map RIP2OSPF permit 20
+ match ip address prefix-list PL-E2
+ set metric-type type-2
+!
+router ospf 1
+ router-id 3.3.3.3
+ network 192.168.2.0 0.0.0.255 area 0
+ network 192.168.30.0 0.0.0.255 area 0
+ redistribute rip subnets route-map RIP2OSPF
+!
+router rip
+ version 2
+ network 192.168.3.0
+ no auto-summary
+!

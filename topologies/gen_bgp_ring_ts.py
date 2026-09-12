@@ -21,6 +21,10 @@
   stale        : 監査是正形。実害残骸(weight/裏LP)＋無害残骸(allowas-in/as-override)の
                  混在を全撤去(★PoC実測: as-override/allowas-inは素の4ASリングで不発)
   ibgp_ring    : 全iBGP。mesh欠落(全Established・対角のみ欠け)/network欠落/OSPF Lo欠落
+  prefix_steer : プレフィックス単位の経路寄せ(BL-160→BL-161)。中継Sが特定の1本だけを
+                 prepend して対向Pへ寄せる設計だが、**out 方向 route-map の末尾に
+                 catch-all が無い**ため他の経路が広告されず全部Pへ寄る。
+                 variant=no_catchall(permit節が無い)/deny_catchall(deny節が置かれている)
 
 ■ PoC 由来の設計規則（poc/bgp-ring/README.md 2026-08-05）
   - 対角プレフィックスのAS長タイは oldest 勝ちで非決定的
@@ -48,8 +52,9 @@ DIAG = {"RT01": "RT03", "RT03": "RT01", "RT02": "RT04", "RT04": "RT02"}
 LINKS = [("RT01", "RT02"), ("RT02", "RT03"), ("RT03", "RT04"), ("RT04", "RT01")]
 SLOTS = {"RT01": {"RT02": 0, "RT04": 1}, "RT02": {"RT01": 0, "RT03": 1},
          "RT03": {"RT02": 0, "RT04": 1}, "RT04": {"RT03": 0, "RT01": 1}}
-SHAPES = ["isp_exchange", "no_transit", "path_select", "stale", "ibgp_ring"]
-SHAPE_W = [25, 20, 25, 15, 15]
+SHAPES = ["isp_exchange", "no_transit", "path_select", "stale", "ibgp_ring",
+          "prefix_steer"]
+SHAPE_W = [20, 15, 20, 12, 13, 20]
 
 
 # ---------------------------------------------------------------- 盤面モデル
@@ -705,9 +710,124 @@ def shape_ibgp_ring(b, a):
                          "ospf": suppress_ospf}}
 
 
+def shape_prefix_steer(b, a):
+    """BL-161: out 方向 route-map の暗黙 deny（catch-all 欠落）。
+
+    盤面: A(拠点・4本の /24 を広告) ─ P / S(2つの中継AS) ─ Bx(受け手)。
+    S は「特定の1本だけを P 側へ寄せる」ために自分の広告に prepend を打つ。
+    健全形は `route-map ... permit 10(match+prepend)` ＋ **末尾の catch-all**。
+    故障は catch-all を落とす（または deny にする）＝ S から Bx への広告が
+    その1本だけになり、**残り全部も P 経由になる**（到達性は失われない）。
+    """
+    rnd = b.rnd
+    A = rnd.choice(ROUTERS)
+    Bx = DIAG[A]
+    P = rnd.choice([NEXT[A], PREV[A]])
+    S = PREV[A] if P == NEXT[A] else NEXT[A]
+    b.swap_rid(S, P)      # 素のタイ(AS長同値)は S 勝ち＝「S 経由が既定」を決定化
+    variant = a.variant if a.variant in ("no_catchall", "deny_catchall") \
+        else rnd.choice(["no_catchall", "deny_catchall"])
+    # A は 4 本のネットワークを持つ（1本は既定の Loopback1・残り 3 本を追加）
+    spare = [v for v in range(1, 251) if v not in b.px.values()]
+    extra = rnd.sample(spare, 3)
+    nets = [b.prefix(A)] + [f"172.16.{v}.0" for v in extra]
+    special = rnd.choice(nets)
+    others = [n for n in nets if n != special]
+
+    session, af, glob = {}, {}, {}
+    for i, v in enumerate(extra, start=2):
+        glob.setdefault(A, []).extend(
+            [f"interface Loopback{i}", f" ip address 172.16.{v}.1 255.255.255.0",
+             "!"])
+        af.setdefault(A, []).append(f"network 172.16.{v}.0 mask 255.255.255.0")
+    rm = "RM-STEER-OUT"
+    blk = [f"ip prefix-list PL-STEER permit {special}/24",
+           f"route-map {rm} permit 10",
+           " match ip address prefix-list PL-STEER",
+           f" set as-path prepend {b.asn[S]} {b.asn[S]}"]
+    if variant == "deny_catchall":
+        blk.append(f"route-map {rm} deny 20")
+    glob.setdefault(S, []).extend(blk + ["!"])
+    af.setdefault(S, []).append(f"neighbor {b.ip(Bx, S)} route-map {rm} out")
+
+    # ---- fix（末尾に素通しの permit を置く。deny 形はそれを外してから）
+    lines = ([f"no route-map {rm} deny 20"] if variant == "deny_catchall" else []) \
+        + [f"route-map {rm} permit 20"]
+    fixes = [{"node": S, "lines": lines, "match": "none"},
+             {"node": S, "exec": ["clear ip bgp * soft out"]}]
+
+    # ---- checks（75点。残 25 は invariants=到達性+ループ不在）
+    checks = [{
+        "name": f"{Bx}: 指定された {special}/24 は {P} 経由である（維持）",
+        "node": Bx, "command": f"show ip route {special}",
+        "raw": [{"contains": b.ip(P, Bx)}, {"not_contains": b.ip(S, Bx)}],
+        "points": 12}]
+    for n in others:
+        checks.append({
+            "name": f"{Bx}: {n}/24 は {S} 経由である",
+            "node": Bx, "command": f"show ip route {n}",
+            "raw": [{"contains": b.ip(S, Bx)}, {"not_contains": b.ip(P, Bx)}],
+            "points": 12})
+    checks.append({
+        "name": f"{Bx}: {S} 自身のネットワーク({b.prefix(S)}/24)へ {S} 経由で到達する",
+        "node": Bx, "command": f"show ip route {b.prefix(S)}",
+        "raw": [{"contains": b.ip(S, Bx)}, {"not_contains": b.ip(P, Bx)}],
+        "points": 12})
+    checks.append({
+        "name": f"{S}: 監査: {Bx} 向けの out ポリシーが適用されたままである",
+        "node": S, "command": bgp_sec(b, S),
+        "raw": [{"regex": rf"neighbor {b.ip(Bx, S)} route-map \S+ out"}],
+        "points": 8})
+    checks.append({
+        "name": f"{S}: 監査: {special}/24 に対する AS パスの付加が維持されている",
+        "node": S, "command": "show run | section route-map",
+        # not_regex は**この route-map 限定**にする（囮の `RM-MAINT-2019 deny 10`
+        # に誤反応して健全状態を FAIL させないため）
+        "raw": [{"regex": r"set as-path prepend"},
+                {"not_regex": rf"(?m)^route-map {rm} deny "}], "points": 7})
+
+    task = {
+        "title": "プレフィックス単位の経路制御",
+        "situation": (
+            f"4つの組織のルータが、リング状に、相互接続されています。"
+            f"あなたの会社({S})は、{A} のネットワークを、{Bx} に対して、"
+            "中継しています。"
+            f"運用上の要請により、{A} のネットワークのうちの1本"
+            f"(`{special}/24`)についてのみ、{Bx} からのトラフィックを、"
+            f"もう一方の中継事業者({P})の側へ、寄せることとなりました。"
+            "先般、そのための設定が、実施されています。"
+            "しかしながら、その後の確認において、"
+            f"**{A} のネットワークのすべて**が、{P} の側を経由している、"
+            "ということが、判明しました。"),
+        "requirements": [
+            f"{Bx} から `{special}/24` へのトラフィックは、{P} を経由すること"
+            "（この動作は、すでに実現されており、維持されなければなりません）。",
+            f"{Bx} から {A} のその他のネットワークへのトラフィックは、"
+            f"あなたの会社({S})を、経由すること。",
+            f"{Bx} は、あなたの会社のネットワーク(`{b.prefix(S)}/24`)に対して、"
+            "あなたの会社を経由して、到達すること。",
+            "経路制御は、既存の route-map によって、実装されていること。"
+            f"`{special}/24` に対する AS パスの付加は、維持されること。",
+            "すべてのネットワークへの到達性が、維持されていること。",
+        ],
+        "constraints": [
+            f"構成の変更は、あなたの会社の管理下にあるところのデバイス({S})に"
+            "おいてのみ、許可されています。",
+            "BGP セッションの削除、および、スタティック・ルートの追加は、"
+            "許可されていません。",
+        ],
+        "diff": 4,
+    }
+    return {"session": session, "af": af, "glob": glob, "fixes": fixes,
+            "faults": [f"prefix_steer:{variant}"], "checks": checks,
+            "task": task,
+            "meta": {"A": A, "B": Bx, "P": P, "S": S, "variant": variant,
+                     "nets": nets, "special": special}}
+
+
 SHAPE_FN = {"isp_exchange": shape_isp_exchange, "no_transit": shape_no_transit,
             "path_select": shape_path_select, "stale": shape_stale,
-            "ibgp_ring": shape_ibgp_ring}
+            "ibgp_ring": shape_ibgp_ring, "prefix_steer": shape_prefix_steer}
 
 
 # ---------------------------------------------------------------- 囮

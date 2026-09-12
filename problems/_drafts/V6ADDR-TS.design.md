@@ -398,3 +398,41 @@ seed 90001（LAN-A=W_MP・VLAN 30・ポリシー名 HOSTS/CLIENTS）を 1 回 pr
   ★93 の原因= fix_console.json の投入順(RT01→…→CLB(bounce)→SWB)で、ガード前の bounce が ROG の DHCPv6 情報(evil DNS)を再学習し 24h キャッシュ。→ dict 順を SWB 先頭に是正(解答者にも同じ罠が起きうる=task の「構築完了後に bounce してよい」で示唆)。
 - 定常状態は 1 試行で 100(bounce 20 秒後には正規状態)。genres.yml: first-hop-security/ra-guard/dhcpv6-guard→security・GEN-V6BUILD family=security。
 - 出題可(難4-5・出題時新 seed)。検証 seed 70001/70081 は掃除済。
+
+## 14. BL-160: `acl_blocks_ra`（端末の入力フィルタが RA を巻き込む・2026-09-12）
+
+定番題材派生。**層跨ぎ（Security × アドレッシング）**の故障を 1 つ追加し、レイヤを 5→6 に拡張。
+
+- **仕込み**: 対象 LAN の端末 IF に方針としての入力フィルタを置く。
+  健全形は 2 行 — `permit ipv6 FE80::/10 any`（RA/リレー応答など LL 発の制御）＋
+  `permit ipv6 <サーバ /64> any`（方針そのもの）。**故障は 1 行目だけを欠落**させる。
+- **成立理由**: IPv6 ACL の暗黙 permit は **NS/NA のみで RS/RA は対象外**（PoC #7 の裏取り）。
+  よって RA が落ち、SLAAC のグローバルアドレスが生成されない。端末は LL のみ・
+  `show ipv6 routers` は空・`ping` は「送信元/経路が無い」形で失敗する
+  （**ACL の deny カウンタではなく「アドレスが無い」が指紋**＝ ACL を見ても一見正しく見える）。
+- **適用世界**: `{W_S, W_SO}`（RA がアドレスの供給源である世界）。stateful 世界は症状が
+  DHCPv6 側に寄り、要件文との対応が鈍るため対象外。
+- **要件文**: 「**利用者トラフィック**は、サーバ・セグメントからのもののみを許可する。
+  フィルタの取り外し・全面許可への置換は不可」。“利用者トラフィック” と限定することで、
+  制御メッセージの許可が方針違反にならない（＝ 一意に補完できるが、機構は明かさない）。
+- **採点**: 既存の挙動チェックに加えて 2 本の監査 —
+  (a) `ipv6 traffic-filter <ACL> in` が IF に残っている、
+  (b) `show ipv6 access-list` に方針行が残り、かつ `permit ipv6 any any` が無い。
+- **共存制約**: acl_blocks_ra はフィルタが RA も DHCPv6 応答も GW からの応答も一律に落とすため、
+  **同一 LAN の他故障・サーバ全体に効く故障とはチケット文が両立しない**
+  （相手の「アドレスは取得できている」「GW へは到達できる」が偽になる）。
+  → `pick_faults` に `clash()` を入れ、**LAN をまたぐ組合せのみ**許可。
+  併せて層抽選を `sample(k=n)` から「applicable な層をシャッフルして先頭から埋める」形に変更
+  （clash で埋まらない層を飛ばせるようにするため。filter 層の追加時点で既存 seed の
+  乱数列は変わっているので、再現性の観点でも実害なし）。
+- **実機 E2E（seed 41001・LAN-A=W_S / LAN-B=W_MP・IOL 17.15）**:
+
+  | 状態 | 点 | 備考 |
+  |---|---|---|
+  | broken | 69 | LAN-A の SLAAC/DNS/実疎通が FAIL。ACL は day0 で正しく解釈され（submode 落ちなし）、`show ipv6 routers` は空 |
+  | 模範 fix（`permit ipv6 FE80::/10 any` 追記） | **100** | RA 受信まで最大 200 秒（RT02 の既定 RA 間隔）→ 採点は 10 試行中 7〜8 回目で収束。`(1 match)` カウンタで確認 |
+  | 過剰解（`permit ipv6 any any` で通す） | **91** | 挙動は全 PASS だが (b) の方針監査が FAIL＝降格を実証 |
+
+- 出題可（難5）。検証 seed 41001 は撤収・インスタンス削除済。出題時は新 seed。
+- 派生候補（未実装）: `acl_blocks_dhcpv6`（「明示 permit + deny 546/547」で DHCPv6 だけ殺す外科的形・
+  PoC #7 で成立確認済）。同じ filter 層に置ける。
