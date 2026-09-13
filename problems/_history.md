@@ -11,6 +11,53 @@
 
 | 出題日 | 問題ID (variant/seed) | 難 | 状態 | 得点 | メモ |
 |--------|----------------------|----|------|------|------|
+| 2026-09-13 | 紙面 20260913-021 | - | 採点済 | 正解(A) | パック PACK-TEST-SVC2 の Q7 |
+| 2026-09-13 | 紙面 20260913-023 | - | 採点済 | 正解(A・B) | パック PACK-TEST-SVC2 の Q6 |
+| 2026-09-13 | 紙面 20260913-022 | - | 採点済 | 不正解(A・B・D) | パック PACK-TEST-SVC2 の Q5 |
+| 2026-09-13 | 紙面 20260913-024 | - | 採点済 | 正解(C) | パック PACK-TEST-SVC2 の Q4 |
+| 2026-09-13 | 紙面 20260913-020 | - | 採点済 | 正解(B) | パック PACK-TEST-SVC2 の Q3 |
+| 2026-09-13 | 紙面 20260913-019 | - | 採点済 | 正解(D) | パック PACK-TEST-SVC2 の Q2 |
+| 2026-09-13 | 紙面 20260913-018 | - | 採点済 | 正解(D) | パック PACK-TEST-SVC2 の Q1 |
+| 2026-09-13 | 紙面 20260913-006 | - | 採点済 | 正解(A・D・E) | パック PACK-TEST-SVC の Q13 |
+| 2026-09-13 | 紙面 20260913-014 | - | 採点済 | 不正解(A) | パック PACK-TEST-SVC の Q12 |
+| 2026-09-13 | 紙面 20260913-008 | - | 採点済 | 正解(A・B) | パック PACK-TEST-SVC の Q11 |
+| 2026-09-13 | 紙面 20260913-015 | - | 採点済 | 不正解(C) | パック PACK-TEST-SVC の Q10 |
+| 2026-09-13 | 紙面 20260913-010 | - | 採点済 | 正解(A・D・E) | パック PACK-TEST-SVC の Q9 |
+| 2026-09-13 | 紙面 20260913-011 | - | 採点済 | 正解(B) | パック PACK-TEST-SVC の Q8 |
+| 2026-09-13 | 紙面 20260913-016 | - | 採点済 | 正解(D) | パック PACK-TEST-SVC の Q7 |
+| 2026-09-13 | 紙面 20260913-007 | - | 採点済 | 正解(A) | パック PACK-TEST-SVC の Q6 |
+| 2026-09-13 | 紙面 20260913-005 | - | 採点済 | 正解(A) | パック PACK-TEST-SVC の Q5 |
+| 2026-09-13 | 紙面 20260913-013 | - | 採点済 | 正解(①B・②D・③A・④C) | パック PACK-TEST-SVC の Q4 |
+| 2026-09-13 | 紙面 20260913-017 | - | 採点済 | 正解(A) | パック PACK-TEST-SVC の Q3 |
+| 2026-09-13 | 紙面 20260913-009 | - | 採点済 | 正解(B) | パック PACK-TEST-SVC の Q2 |
+| 2026-09-13 | 紙面 20260913-012 | - | 採点済 | 正解(D) | パック PACK-TEST-SVC の Q1 |
+| 2026-09-13 | GEN-EIGRP-56855 | 5 | 撤収済 | 100 | パック PACK-20260913 の Q8。3故障(RT05 Et0/0・RT04 Et0/2 の passive-interface＋RT01 の metric weights 0 2 0 1 0 0)を7:50で一発。passive は af-interface ブロックごと削除(中身が passive のみで等価・残骸ゼロ)・K値は行削除で既定へ |
+| 2026-09-13 | GEN-DHCPTS-89765 | 5 | 撤収済 | 100 | パック PACK-20260913 の Q7。acl_src_narrow を7:06で一発。★模範解(ACL全書き換え permit udp any eq bootpc any eq bootps)ではなく **seq 5 に `permit udp host 0.0.0.0 eq bootpc host 255.255.255.255 eq bootps` を挿入**= 既存ACEを壊さない最小手。DISCOVER のみ通す形なので /24 外の src からの broadcast REQUEST は落ちる(汎用性は模範解が上・最小権限は本解が上) |
+| 2026-09-13 | 紙面 20260913-003 | - | 採点済 | 正解(D・E) | パック PACK-20260913 の Q5 |
+| 2026-09-13 | 紙面 20260913-004 | - | 採点済 | 正解(C) | パック PACK-20260913 の Q4 |
+| 2026-09-13 | 紙面 20260913-001 | - | 採点済 | 正解(D) | パック PACK-20260913 の Q2 |
+| 2026-09-13 | 紙面 20260913-002 | - | 採点済 | 正解(C) | パック PACK-20260913 の Q1 |
+| 2026-09-12 | 紙面 20260912-015 | - | 採点済 | 正解(B) | パック PACK-20260912-C の Q4 |
+| 2026-09-12 | 紙面 20260912-014 | - | 採点済 | 正解(E) | パック PACK-20260912-C の Q3 |
+| 2026-09-12 | 紙面 20260912-013 | - | 採点済 | 不正解(D) | パック PACK-20260912-C の Q2 |
+| 2026-09-12 | 紙面 20260912-012 | - | 採点済 | 正解(B・E) | パック PACK-20260912-C の Q1 |
+| 2026-09-12 | GEN-EIGRP-32121 | 5 | 撤収済 | 100 | パック PACK-20260912-B の Q9。3故障(missing_network@RT02 / shutdown@RT06 Et0/2 / **k_values_mismatch@RT01**)を一発満点(7:03)。named mode。K値は既定へ戻す形で解決(`metric weights` が running に出ない=既定復帰を確認)。静的・variance 等の逃げ無し・残骸ゼロ |
+| 2026-09-12 | GEN-DMVPN-27417 | 4 | 撤収済 | 100 | パック PACK-20260912-B の Q8。fault=n4_multicast_map_tunnelip@RT03(**2026-07-23 GEN-DMVPN-8817 と同一故障種の再遭遇**)。最速 4:19 で一発満点。`ip nhrp map multicast` を overlay 10.255.171.1 → NBMA 10.0.14.1 に差し替え＋clear ip nhrp。残骸なし |
+| 2026-09-12 | GEN-DHCPTS-43728 | 4 | 撤収済 | 100 | パック PACK-20260912-B の Q7。fault=acl_no_dhcp_permit(リレー側 RT02 のクライアントIF入力ACLに DHCP の permit が無い)。一発満点(7:10)。**ACL 総取り替えでなくシーケンス番号 5 で挿入**(`permit udp any eq bootpc any eq bootps`)=既存行温存・無瞬断。src を any にしているので DISCOVER(src 0.0.0.0)も通る |
+| 2026-09-12 | 紙面 20260912-011 | - | 採点済 | 正解(F) | パック PACK-20260912-B の Q6 |
+| 2026-09-12 | 紙面 20260912-010 | - | 採点済 | 正解(A・C) | パック PACK-20260912-B の Q5 |
+| 2026-09-12 | 紙面 20260912-009 | - | 採点済 | 正解(B) | パック PACK-20260912-B の Q4 |
+| 2026-09-12 | 紙面 20260912-008 | - | 採点済 | 正解(D) | パック PACK-20260912-B の Q3 |
+| 2026-09-12 | 紙面 20260912-007 | - | 採点済 | 正解(C) | パック PACK-20260912-B の Q2 |
+| 2026-09-12 | 紙面 20260912-006 | - | 採点済 | 正解(C) | パック PACK-20260912-B の Q1 |
+| 2026-09-12 | ENARSI-IPSEC-VTI-01 (再演) | 3 | 撤収済 | 100 | パック PACK-20260912 の Q6(52日ぶりの再演)。仕様完全準拠で再び一発満点(所要 18:40)。PSK は対向アドレス限定・IF モード `ip ospf 1 area 0`・Lo10 に `ip ospf network point-to-point` で /24 保持・Lo0 は広告せず要件どおりの範囲に限定 |
+| 2026-09-12 | GEN-REDISTRO-83905 | 4 | 撤収済 | 100 | パック PACK-20260912 の Q8。fault=fb_suboptimal(二点相互再配送の戻り込みで境界が遠回り)。一発満点。**模範の `distance ospf external 180` ではなくタグ+`distribute-list route-map ... in` で解決**(RIP→OSPF に set tag 120・OSPF 側は同タグを RIB 不採用・OSPF→RIP 再配送でも同タグを deny)。両境界対称・静的なし |
+| 2026-09-12 | GEN-V6ADDR-6317 | 5 | 撤収済 | 100 | パック PACK-20260912 の Q7。board=fhs / fault=fhs_pref_cap_low(VLAN 適用の RA ガード `router-preference maximum low` が正規 RT02 の RA(既定 medium)ごと落としていた)。一発満点。**模範の「上限を medium に緩める」ではなく、未使用だった UPLINK ポリシーを上り口 Et0/0 にポート適用**(ポート適用がVLAN適用に優先)=アクセスポート側は low 上限のまま残る、より締まった形 |
+| 2026-09-12 | 紙面 20260912-005 | - | 採点済 | 正解(B) | パック PACK-20260912 の Q5 |
+| 2026-09-12 | 紙面 20260912-004 | - | 採点済 | 正解(C) | パック PACK-20260912 の Q4 |
+| 2026-09-12 | 紙面 20260912-003 | - | 採点済 | 正解(D) | パック PACK-20260912 の Q3 |
+| 2026-09-12 | 紙面 20260912-002 | - | 採点済 | 正解(C) | パック PACK-20260912 の Q2 |
+| 2026-09-12 | 紙面 20260912-001 | - | 採点済 | 正解(B) | パック PACK-20260912 の Q1 |
 | 2026-09-11 | GEN-BGPBEST-60617 | - | 採点済 | 100 | パック PACK-20260911-B の Q8 |
 | 2026-09-11 | GEN-L2TS-88482 | - | 採点済 | 100 | パック PACK-20260911-B の Q7 |
 | 2026-09-11 | GEN-RTCTL-6394 | - | 採点済 | 100 | パック PACK-20260911-B の Q6 |
@@ -563,7 +610,7 @@
 | 2026-07-22 | ENCOR-PBR-01 | 3 | 採点済 | 100 | PBR基礎を一発満点。★02(通過=ip policy)直後の対比出題で ip local policy を正しく選択(自ルータ生成トラフィックの勘所を即座に把握)。Policy routing matches 29pktで実効確認 |
 | 2026-07-22 | ENCOR-PBR-02 | 4 | 採点済 | 50→100 | PBR送信元別振り分け。1st50=IF適用/ACLは正だがroute-mapのset next-hop欠落→2nd100。名前付きACL PBR01+route-map PMAP・ip policy入口IF適用。Policy routing matches 85packetsで実効確認 |
 | 2026-07-22 | ENARSI-IPSEC-IKEV2-01 | 4 | 撤収済 | 100 | sVTI×IKEv2構築を一発満点(全13PASS)。IKEv2 4点セット(proposal/policy/keyring peer別PSK/profile)・GCM=esp-gcm 256のみ(整合性内包)・DPD on-demand。P2P VTI×2なのでsplit-horizon不要(DMVPN単一mGREとの対比)を理解 |
-| 2026-07-22 | ENARSI-IPSEC-VTI-01 | 3 | 撤収済 | 100 | sVTI×IKEv1構築を一発満点(全13チェックPASS)。仕様完全準拠(ISAKMP policy/transform-set/PFS/DPD/MTU/MSS)。tunnel mode ipsec ipv4・P2P型で/24保持。IPsec構築系デビュー戦 |
+| 2026-07-22 | ENARSI-IPSEC-VTI-01 | 3 | 採点済 | 100 | sVTI×IKEv1構築を一発満点(全13チェックPASS)。仕様完全準拠(ISAKMP policy/transform-set/PFS/DPD/MTU/MSS)。tunnel mode ipsec ipv4・P2P型で/24保持。IPsec構築系デビュー戦 |
 | 2026-07-21 | ENARSI-MPLS-L3VPN-05 | 4 | 撤収済 | 44→100 | フルメッシュ×H&S組み分け。1st44=折り返し半分(拠点発220受けのみ)→2nd100=上りCUST_B_UP export210×spoke import210で折返し完成。★ユーザはUP側peerにallowas-in設定で自AS重複の折返し経路を受理(置き場所=受信in方向で正解・04のas-overrideと送信/受信で対比)。RD補足=CUST_B_UPを65200:210(仕様65000:210)にしたが動作影響なし・慣習は管理AS |
 | 2026-07-21 | GEN-DMVPN-6402 (r2_underlay_in_eigrp) | 4 | 撤収済 | 100 | DMVPN再帰ルーティングTS。★真因=restoreで入った広域network `10.0.0.0`(クラスフル)がunderlay/30まで巻き込む→mGRE再帰でフラップ。解=その1行を仕様どおり`network 10.255.106.0 0.0.0.255`(overlayのみ)に差替=最小手・一発満点。RECURDOWN非発出を状態フラップ観察で特定。※当初レビューで私が「Lo0広告が犯人」と誤読→ユーザ訂正(犯人は広域network文) |
 | 2026-07-20 | FGT-FW-BASIC-01 | 2 | 撤収済 | 100 | FortiGate初出題を一発満点(全13チェックPASS)。仕様完全準拠。レビュー指摘=ポリシー3に不要なnat enable(LAN→DMZがSNATされDMZログから発信元が消える)・role未設定(採点外)。共用ラボFGT-LAB(stopのみ) |

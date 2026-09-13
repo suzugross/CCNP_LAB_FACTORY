@@ -1,0 +1,44 @@
+! SWB 初期状態 (LAN-B アクセススイッチ・先般 IPv6 FHS の導入作業を実施した直後)
+vlan 100
+ name LAN-B
+!
+ipv6 nd raguard policy NO-RA
+ device-role router
+ router-preference maximum low
+!
+ipv6 nd raguard policy UPLINK
+ device-role router
+!
+ipv6 dhcp guard policy DHG-ACCESS
+ device-role client
+!
+ipv6 dhcp guard policy DHCP-SRV
+ device-role server
+!
+vlan configuration 100
+ ipv6 nd raguard attach-policy NO-RA
+!
+interface {{ links[0] }}
+ description === to RT02 (LAN-B GW) ===
+ switchport
+ switchport mode access
+ switchport access vlan 100
+ ipv6 dhcp guard attach-policy DHCP-SRV
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to CLB (host) ===
+ switchport
+ switchport mode access
+ switchport access vlan 100
+ ipv6 dhcp guard attach-policy DHG-ACCESS
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to ROG (other-dept device) ===
+ switchport
+ switchport mode access
+ switchport access vlan 100
+ ipv6 dhcp guard attach-policy DHG-ACCESS
+ no shutdown
+!
