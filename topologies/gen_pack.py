@@ -429,6 +429,79 @@ def family(pid):
     return m.group(1) if m else pid
 
 
+def pool_base(ref):
+    """紙面プールの変種ID `<基底ID>-s<数字>` → 基底ID(履歴照合の単位)。"""
+    return re.sub(r"-s\d+$", "", ref)
+
+
+def pool_papers(repo, rnd, today, log=print, exclude=()):
+    """別置きの紙面プール(`private/paper_pools.yml`・任意)から紙面を抽選する。
+
+    プール= `dir/questions/<pattern>` の紙面 md と `dir/answers/<同名>.md` の正解キー
+    (--extra-paper と同じ置き方)。同じ基底ID(末尾の `-s<数字>` を除いた部分)は、
+    両方の出題履歴で直近 repeat_days 日に出ていれば避け、候補が尽きたら最も古いものを再演する。
+    基底IDごとに変種を1つだけ選ぶ(同じ問題の変種を同じパックに2つ入れない)。
+    `exclude` の基底ID(--extra-paper で明示指定済みのもの)は候補から外す。
+
+      pools:
+        - dir: private/<系統>/out     # 相対パス。questions/ と answers/ を持つ
+          pattern: "*-s*.md"          # 抽選対象(既定 *.md)
+          count: 1                    # 1パックあたりの抽選数
+          repeat_days: 30             # 基底IDの再出題を避ける日数(既定 30)
+          extra: false                # true= 紙面数に上乗せ / false= 紙面数の内数(既定)
+    """
+    cfg_path = os.path.join(repo, "private", "paper_pools.yml")
+    if not os.path.exists(cfg_path):
+        return []
+    import yaml                      # manifest と同じく必要な時だけ読む
+    with open(cfg_path, encoding="utf-8") as fh:
+        cfg = yaml.safe_load(fh) or {}
+    last = {}                                   # 基底ID → 最終出題からの日数
+    for d, pid in parse_history(repo):
+        age = _age(d, today)
+        if age is None:
+            continue
+        b = pool_base(pid)
+        if b not in last or age < last[b]:
+            last[b] = age
+    picks = []
+    for pool in cfg.get("pools") or []:
+        d, n = pool.get("dir"), int(pool.get("count") or 0)
+        if not d or n <= 0:
+            continue
+        rdays = int(pool.get("repeat_days") or 30)
+        by_base = {}
+        for p in sorted(glob.glob(os.path.join(repo, d, "questions",
+                                               pool.get("pattern") or "*.md"))):
+            ref = os.path.splitext(os.path.basename(p))[0]
+            key = os.path.join(d, "answers", os.path.basename(p))
+            if not os.path.exists(os.path.join(repo, key)):
+                continue
+            by_base.setdefault(pool_base(ref), []).append(
+                {"ref": ref, "src": os.path.relpath(p, repo), "key": key,
+                 "extra": bool(pool.get("extra"))})
+        if not by_base:
+            log(f"[紙面] プール {d}: 候補なし")
+            continue
+        for b in set(exclude):
+            by_base.pop(b, None)
+        fresh = sorted(b for b in by_base
+                       if last.get(b) is None or last[b] > rdays)
+        if len(fresh) >= n:
+            bases = rnd.sample(fresh, n)
+            why = f"直近{rdays}日外 {len(fresh)}/{len(by_base)} 問から抽選"
+        else:
+            stale = sorted((b for b in by_base if b not in fresh),
+                           key=lambda b: -last[b])
+            bases = fresh + stale[: n - len(fresh)]
+            why = f"直近{rdays}日外が {len(fresh)} 問しか無く最古を再演"
+        for b in bases:
+            picks.append(rnd.choice(by_base[b]))
+        log(f"[紙面] プール {d}: {', '.join(x['ref'] for x in picks[-len(bases):])}"
+            f" ({why})")
+    return picks
+
+
 def cml_started_nodes(repo=REPO, timeout=20):
     """★CML に実際に起動しているノード数を数える(読み取りのみ)。
 
@@ -1156,13 +1229,27 @@ def answer_form(pack_id, it, src_path):
                 '<textarea class="memo"></textarea>'
                 '<label class="done"><input type="checkbox"> 実装完了</label>')
     else:
-        letters, pick = [], 1
+        letters, pick, terms = [], 1, []
         if src_path and os.path.exists(src_path):
             with open(src_path, encoding="utf-8") as fh:
                 qtext = fh.read()
             letters = render_html.choice_letters(qtext)
             pick = render_html.pick_count(qtext)
-        if letters:
+            terms = render_html.match_terms(qtext)
+        if letters and terms:
+            # ★組合せ形(項目①〜と記号A〜の対応付け・BL-168): 項目ごとに記号を1つ選ぶ。
+            #   値は「①D」の形。ページの ansValue() はチェック済みを全部「・」でつなぐので
+            #   解答: 行は「①D・②A・③C・④B」になり、採点は match_of() が読む。
+            rows = []
+            for i, (tk, ttext) in enumerate(terms, 1):
+                opts = "".join(
+                    f'<label><input type="radio" name="ans{it["no"]}_{i}" '
+                    f'value="{tk}{l}">{l}</label>' for l in letters)
+                rows.append(f'<div class="mrow"><span class="mterm">{tk} '
+                            f'{H.escape(ttext)}</span><div class="opts">{opts}</div></div>')
+            ansfield = ('<label class="row">各項目に対応する記号を<b>1つずつ</b>'
+                        '選んでください</label>' + "".join(rows))
+        elif letters:
             # ★複数選択(「2つを選択してください」)はチェックボックスにする。
             #   ラジオのままだと1つしか選べず**解答不能**になる(2026-08-11 発覚)。
             # ★pick == -1 は数非明示(「すべて選んでください」= BL-125 allthat)。
@@ -1435,12 +1522,53 @@ def fmt_letters(s):
     return "・".join(s) if s else ""
 
 
-def key_of(repo, ref):
-    """answers/<ref>.md から正解記号を読む。記述式なら None。
+# ★組合せ形(項目①〜⑳ × 記号A〜J の対応付け・BL-168)。解答欄・正解キーとも
+#   「①D・②A・③C・④B」(項目順に整列・「・」区切り)へ正規化して文字列比較する。
+MATCH_PAIR_RE = re.compile(r"([①-⑳])\s*[－\-–—:：=]?\s*([A-Ja-jＡ-Ｊａ-ｊ])")
+_FW_LETTERS = {ord(c): ord(c) - 0xFEE0 for c in "ＡＢＣＤＥＦＧＨＩＪａｂｃｄｅｆｇｈｉｊ"}
+
+
+def match_of(text):
+    """組合せ形の記入 → 正規形 "①D・②A・③C・④B"。丸数字と記号の対が無ければ ""。
+
+    「①D・②A」(ページの自動保存)でも「①-D、②-A」(手書き)でも読む。
+    同じ項目を書き直していたら後の方を採る。
+    """
+    if not text:
+        return ""
+    pairs = {}
+    for t, l in MATCH_PAIR_RE.findall(text):
+        pairs[t] = l.translate(_FW_LETTERS).upper()
+    return "・".join(f"{t}{pairs[t]}" for t in sorted(pairs))
+
+
+def match_key_of(text):
+    """解答 md の「## 正解」節から組合せ形の正解(`**①－D、②－A…**`)を読む。無ければ ""。"""
+    m = re.search(r"^##\s*正解\s*$(.*?)(?=^##\s|\Z)", text, re.M | re.S)
+    return match_of(m.group(1)) if m else ""
+
+
+def is_match_key(key):
+    """key_of() の戻りが組合せ形の正規形か(先頭が丸数字)。"""
+    return bool(key) and "①" <= key[0] <= "⑳"
+
+
+def fmt_answer(text):
+    """解答欄の記入を表示用に(組合せ形はその正規形・選択式は整列した記号)。"""
+    return match_of(text) or fmt_letters(choice_of(text))
+
+
+def key_of(repo, ref, key_path=None):
+    """正解キーから記号を読む。記述式なら None。
+    組合せ形(`**①－D、②－A…**`)は正規形 "①D・②A…" を返す(match_key_of)。
+
+    既定は `answers/<ref>.md`。`key_path`(repo 相対)が渡されればそちらを見る
+    (questions/ 以外の場所に置いた紙面を混ぜたとき用)。
 
     ★この関数の戻り値は採点結果の表示にしか使わない。キー本文は packs/ に書かない。
     """
-    path = os.path.join(repo, "answers", f"{ref}.md")
+    path = (os.path.join(repo, key_path) if key_path
+            else os.path.join(repo, "answers", f"{ref}.md"))
     if not os.path.exists(path):
         return None, "キー無し"
     with open(path, encoding="utf-8") as fh:
@@ -1450,11 +1578,14 @@ def key_of(repo, ref):
     # ★複数正解(`**B・D**`)にも対応。整列した記号列で返す(choice_of と同じ形)。
     # ★記号の範囲は A-J(2026-08-11): 8択の問題が実在し、`**H**` を読めず
     #   「正解記号を読めず」で無言の採点不能になっていた(実データ3件で発覚)。
-    pat = r"([A-J](?:\s*[・,]\s*[A-J])*)"
+    pat = r"([A-J](?:\s*[・,、]\s*[A-J])*)"
     m = re.search(r"^##\s*正解\s*$\s*\n+\s*\*\*" + pat + r"\*\*", text, re.M)
     if not m:
         m = re.search(r"^\s*\*\*" + pat + r"\*\*\s*$", text, re.M)
     if not m:
+        mk = match_key_of(text)          # 組合せ形(①－D、②－A…)
+        if mk:
+            return mk, ""
         return None, "正解記号を読めず"
     return "".join(sorted(re.findall(r"[A-J]", m.group(1)))), ""
 
@@ -1544,23 +1675,33 @@ def build_report(repo, pack_id, pdir, man, rows, lab_rows):
             f = "<br>".join(fails) if fails else "（なし・全 PASS）"
             md.append(f"| Q{no} | `{ref}` | **{got}/{total}** | {f} |")
     md += ["", "## 解説", ""]
+    # 別置きの紙面(--extra-paper)は正解キーの場所が manifest に入っている
+    key_paths = {it["no"]: it.get("key") for it in man["items"]}
     for no, kind, ref, given, key, note, dur in rows:
         if kind != "紙面" or key in ("-", ""):
             continue                       # 未解答・記述式はここに出さない(正解を伏せる)
         md += [f"### Q{no} `{ref}` — 正解 {key}（あなたの解答 {given}）", ""]
-        md += [explain_of(repo, ref), ""]
+        md += [explain_of(repo, ref, key_paths.get(no)), ""]
     return "\n".join(md) + "\n"
 
 
-def explain_of(repo, ref):
-    """answers/<ref>.md から選択肢の判定だけを取り出す(仕込みの種別は出さない)。"""
-    path = os.path.join(repo, "answers", f"{ref}.md")
+def explain_of(repo, ref, key_path=None):
+    """answers/<ref>.md から選択肢の判定だけを取り出す(仕込みの種別は出さない)。
+
+    `key_path`(repo 相対)が渡されればそちらを読む(別置きの紙面)。判定の節が無い
+    問題(組合せ形など)は「## 解説」の節で代用する。
+    """
+    path = (os.path.join(repo, key_path) if key_path
+            else os.path.join(repo, "answers", f"{ref}.md"))
     if not os.path.exists(path):
         return "（解説なし）"
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
     m = re.search(r"^## 各選択肢の判定\s*$(.*?)^## ", text, re.M | re.S)
     body = m.group(1).strip() if m else ""
+    if not body:
+        m = re.search(r"^## 解説\s*$(.*?)(?=^## |\Z)", text, re.M | re.S)
+        body = m.group(1).strip() if m else ""
     m2 = re.search(r"^## 教育核心\s*$(.*?)(^## |\Z)", text, re.M | re.S)
     core = m2.group(1).strip() if m2 else ""
     out = body
@@ -1631,7 +1772,31 @@ def cmd_new(a):
     # --- 紙面フェーズ ---
     require = [g.strip() for g in (a.require_shape or "").split(",") if g.strip()]
     n_paper = resolve_paper_count(a.paper, rnd)
-    log(f"[紙面] 問題数: {n_paper} 問(指定={a.paper}) / 必須ジャンル {require or '(なし)'}")
+    # ★明示指定された紙面(--extra-paper)を先に取り込み、その数だけ自動調達を減らす
+    extra_papers = []
+    for rel in (a.extra_paper or []):
+        rel = os.path.relpath(os.path.abspath(rel), repo)
+        if not os.path.exists(os.path.join(repo, rel)):
+            log(f"[紙面] ★--extra-paper が見つからない: {rel}")
+            continue
+        if "/questions/" in rel:
+            key = rel.replace("/questions/", "/answers/")
+        else:
+            key = os.path.join("answers", os.path.basename(rel))
+        extra_papers.append({"ref": os.path.splitext(os.path.basename(rel))[0],
+                             "src": rel, "key": key})
+    if extra_papers:
+        log(f"[紙面] 明示指定 {len(extra_papers)} 問: "
+            + ", ".join(e["ref"] for e in extra_papers))
+    if not a.no_pool:
+        # ★別置きの紙面プール(private/paper_pools.yml)からの抽選も明示指定と同じ扱い
+        extra_papers += pool_papers(
+            repo, rnd, today, log, exclude={pool_base(e["ref"]) for e in extra_papers})
+    n_on_top = sum(1 for e in extra_papers if e.get("extra"))
+    n_auto = max(0, n_paper - (len(extra_papers) - n_on_top))
+    log(f"[紙面] 問題数: {n_paper + n_on_top} 問(指定={a.paper}) / 自動調達 {n_auto} 問 / "
+        f"必須ジャンル {require or '(なし)'}")
+    n_paper_total, n_paper = n_paper + n_on_top, n_auto
     if a.dry_run:
         stamps = borrow_papers(repo, n_paper, today)
         log(f"[紙面] dry-run: 既出の紙面を {len(stamps)} 問借用"
@@ -1647,18 +1812,27 @@ def cmd_new(a):
     if len(stamps) < n_paper:
         log(f"[紙面] ★不足: {len(stamps)}/{n_paper} 問しか用意できなかった")
 
-    items, no = [], 0
+    papers = []
     for st in stamps:
-        no += 1
         src = f"questions/{st}.md"          # manifest には repo 相対で持つ
         key = f"answers/{st}.md"
         form = "essay" if _is_essay(repo, st) else "mcq"
-        items.append({"no": no, "kind": "paper", "ref": st, "src": src,
-                      "key": key, "form": form, "state": "未着手"})
+        papers.append({"kind": "paper", "ref": st, "src": src,
+                       "key": key, "form": form, "state": "未着手"})
+    for e in extra_papers:
+        papers.append({"kind": "paper", "ref": e["ref"], "src": e["src"],
+                       "key": e["key"], "form": "mcq", "state": "未着手"})
     for _ in range(n_paper - len(stamps)):
+        papers.append({"kind": "paper", "ref": "(未生成)", "src": "",
+                       "state": "準備失敗", "error": "紙面の生成に失敗"})
+    # ★明示指定ぶんが末尾に固まらないよう、紙面のなかで並びを混ぜる
+    rnd.shuffle(papers)
+    items, no = [], 0
+    for it in papers:
         no += 1
-        items.append({"no": no, "kind": "paper", "ref": "(未生成)", "src": "",
-                      "state": "準備失敗", "error": "紙面の生成に失敗"})
+        it["no"] = no
+        items.append(it)
+    n_paper = n_paper_total
 
     # --- ラボ選定フェーズ ---
     cat = parse_catalog(repo)
@@ -2005,7 +2179,7 @@ def cmd_status(a):
         s = sheet.get(it["no"], {})
         mark = "✔ 解答済" if s.get("done") else "・未着手"
         done += 1 if s.get("done") else 0
-        ans = (f"  解答={fmt_letters(choice_of(s.get('answer')))}"
+        ans = (f"  解答={fmt_answer(s.get('answer'))}"
                if s.get("answer") else "")
         dur = (f"  所要={s['duration']}{'(自)' if s.get('dur_auto') else ''}"
                if s.get("duration") else "")
@@ -2036,10 +2210,15 @@ def cmd_grade(a):
         if it.get("kind") == "paper":
             # choice_of / key_of は整列済みの記号列を返す("D" / "BD")。
             # 複数選択は**過不足なしで正解**なので、文字列一致がそのまま集合一致。
-            key, why = key_of(repo, it.get("ref", ""))
-            given = choice_of(s_it.get("answer")) or ""
-            gs = "・".join(given)
-            ks = "・".join(key) if key else ""
+            key, why = key_of(repo, it.get("ref", ""), it.get("key"))
+            if is_match_key(key):
+                # 組合せ形(BL-168): 正規形どうし(項目順・「・」区切り)の文字列一致
+                given = match_of(s_it.get("answer"))
+                gs, ks = given, key
+            else:
+                given = choice_of(s_it.get("answer")) or ""
+                gs = "・".join(given)
+                ks = "・".join(key) if key else ""
             if key is None:
                 rows.append((it["no"], "紙面", it.get("ref", ""), gs or "-", "-",
                              why or "自動採点不可(Claude が採点)", dur))
@@ -2051,7 +2230,10 @@ def cmd_grade(a):
                 ok = given == key
                 correct += 1 if ok else 0
                 note = "正解" if ok else "不正解"
-                if not ok and len(key) > 1:
+                if not ok and is_match_key(key):
+                    kp, gp = key.split("・"), given.split("・")
+                    note += f"(一致 {len(set(kp) & set(gp))}/{len(kp)})"
+                elif not ok and len(key) > 1:
                     g, k = set(given), set(key)
                     if g < k:
                         note += "(選択が不足)"
@@ -2165,6 +2347,13 @@ def main():
     ap.add_argument("--paper", default="auto",
                     help=f"紙面の問題数。`auto`(既定)= {PAPER_AUTO_MIN}〜"
                          f"{PAPER_AUTO_MAX}問から抽選 / `12`= 固定 / `8-14`= 範囲")
+    ap.add_argument("--extra-paper", action="append", default=[],
+                    metavar="PATH",
+                    help="紙面問題を明示指定して混ぜる(repo 相対の questions md・複数可)。"
+                         "正解キーはパス中の /questions/ を /answers/ に置換して探す。"
+                         "指定したぶんだけ自動生成・借用の数が減る")
+    ap.add_argument("--no-pool", action="store_true",
+                    help="private/paper_pools.yml の紙面プールから抽選しない")
     ap.add_argument("--paper-only", action="store_true",
                     help="紙面だけのパックにする(ラボを作らない=CMLのラボ枠を使わない)")
     ap.add_argument("--require-shape", default="redist,aaa,acl,bgp",

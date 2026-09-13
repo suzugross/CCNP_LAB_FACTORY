@@ -156,6 +156,38 @@ def pick_count(md_text):
             "六": 6, "七": 7, "八": 8, "九": 9}.get(z, int(z) if z.isdigit() else 1)
 
 
+# 組合せ形(対応付け): 「対応」を含む見出しの節にある表で、先頭列が丸数字の行を項目とみなす
+MATCH_HEAD_RE = re.compile(r"^#{2,4}\s+.*対応")
+MATCH_ROW_RE = re.compile(r"^\|\s*([①-⑳])\s*\|\s*(.*?)\s*\|")
+
+
+def match_terms(md_text):
+    """組合せ形(項目①〜と記号A〜の対応付け)の項目を順に返す [(丸数字, 項目名), ...]。
+
+    見出し(h2〜h4)に「対応」を含む節の表で、先頭列が丸数字(①〜⑳)の行を項目とみなす。
+    項目があり、かつ「## 選択肢」に A〜 の候補もある問題は、パックの解答欄が
+    「項目ごとに記号を1つ選ぶ」形になる(gen_pack.answer_form)。候補側は通常の
+    選択肢と同じ書式なので choice_letters()/mark_choices() はそのまま効く。
+    ★通常の問題で「対応」見出し＋丸数字の表を組み合わせると組合せ形と誤認するので避ける。
+    """
+    terms, seen, in_fence, in_sec = [], set(), False, False
+    for line in md_text.split("\n"):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if re.match(r"^#{1,6}\s", line):
+            in_sec = bool(MATCH_HEAD_RE.match(line))
+            continue
+        if in_sec:
+            m = MATCH_ROW_RE.match(line)
+            if m and m.group(1) not in seen:
+                seen.add(m.group(1))
+                terms.append((m.group(1), m.group(2)))
+    return terms
+
+
 def mark_choices(body):
     """選択肢の段落に、記号を切り出したカード用のクラスを付ける。
 
@@ -262,6 +294,10 @@ pre.mermaid svg{max-width:100%; height:auto}
 .answer .opts label:hover{background:#f2f2f2}
 .answer .opts input{margin:0}
 .answer .opts label.on{border:2px solid #000000; padding:.3rem .75rem}
+/* 組合せ形: 項目ごとに1行(項目名＋記号のラジオ) */
+.answer .mrow{display:flex; align-items:center; gap:.8rem; margin:.35rem 0; flex-wrap:wrap}
+.answer .mrow .mterm{font-weight:600; min-width:9rem}
+.answer .mrow .opts{margin:0}
 .answer label.row{display:block; margin:.6rem 0 .2rem; font-size:.9rem}
 .answer textarea{
   width:100%; min-height:4.5rem; padding:.5rem; border:1px solid #999999;
@@ -518,8 +554,20 @@ ANSWER_JS = r"""
     });
   }
   function setAns(v){
-    var letters = (v || '').toUpperCase().match(/[A-J]/g);
+    v = (v || '');
     var hit = false;
+    /* 組合せ形(項目①〜×記号): 「①D・②A」(自動保存)でも「①-D、②-A」(手書き)でも拾う。
+       値「①D」のラジオが無い(通常の選択式)なら、下の記号だけの復元へ落ちる。 */
+    var pairs = v.replace(/([\u2460-\u2473])\s*[－\-–—:：=]?\s*([A-Ja-j])/g, '$1$2')
+                 .toUpperCase().match(/[\u2460-\u2473][A-J]/g);
+    if(pairs){
+      pairs.forEach(function(P){
+        var r = box.querySelector('.opts input[value="' + P + '"]');
+        if(r){ r.checked = true; hit = true; }
+      });
+      if(hit) return;
+    }
+    var letters = v.toUpperCase().match(/[A-J]/g);
     if(letters){
       letters.forEach(function(L){
         var r = box.querySelector('.opts input[value="' + L + '"]');

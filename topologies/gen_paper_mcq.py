@@ -51,6 +51,8 @@ import gen_paper_v6redist as gpv  # noqa: E402  (v6redist=OSPFv3⇄EIGRPv6 相�
 import gen_paper_aaa as gpa    # noqa: E402  (aaa=IOS AAA(RADIUS)読解・BL-101)
 import gen_paper_bgpbest as gbb  # noqa: E402  (bgpbest=BGPベストパス読解・BL-112)
 import gen_paper_copp as gpc   # noqa: E402  (copp=CoPP 分類→police 読解/是正・BL-125)
+import gen_paper_mpls as gpm   # noqa: E402  (mpls=MPLS L3VPN 知識+VRF 構成読解・BL-169)
+import gen_paper_svc as gsv   # noqa: E402  (svc=Services 即答形・BL-170)
 import gen_paper_pref as gpr   # noqa: E402  (pref=OSPF/EIGRP 経路選好・BL-127)
 import gen_paper_ospfbgp as gob  # noqa: E402  (ospfbgp=OSPF→BGP 再配送の範囲・BL-163)
 
@@ -6855,6 +6857,115 @@ def pick_draw_copp(qseed, kind):
     raise SystemExit(f"copp kind={kind} が成立する seed が見つかりません({qseed})")
 
 
+# --------------------------------------------------------------------------
+# shape=mpls — MPLS L3VPN の知識(term 群)と VRF 構成の読解(vrfcfg 群)(gen_paper_mpls・BL-169)
+# ★紙面専用。term 群は事実ベース(タグ排他)、vrfcfg 群は rt_model(RT 集合→到達)で一意性を機械検証。
+#   独自の節構成(シナリオ/設問/対応させる項目/選択肢)なので obfuscate_md はタイトルだけ触る。
+# --------------------------------------------------------------------------
+def pick_draw_mpls(qseed, kind, forms=None, worlds=None):
+    for kk in range(200):
+        s = qseed + kk * 139
+        rnd = random.Random(s)
+        ws = [w for w in gpm.worlds_for(kind) if not worlds or w in worlds] \
+            or gpm.worlds_for(kind)
+        world = None if ws == ["-"] else rnd.choice(ws)
+        try:
+            return s, gpm.draw(rnd, kind, world)
+        except ValueError:
+            continue
+    raise SystemExit(f"mpls kind={kind} が成立する seed が見つかりません({qseed})")
+
+
+def question_md_mpls(d, choices, stamp, form):
+    before, ask, ch_md, terms_md = gpm.question_body(d, choices, form)
+    title = ("MPLS の用語と動作" if d["kind"] in gpm.TERM_KINDS
+             else "MPLS L3VPN の VRF 構成の分析")
+    parts = [f"# 問題 {stamp} : {title}", "", FIXED_NOTE, ""]
+    if before:
+        parts += ["## シナリオ", "", before, ""]
+    parts += ["## 設問", "", ask, ""]
+    if terms_md:
+        parts += [terms_md, ""]
+    parts += ["## 選択肢", "", ch_md, ""]
+    return "\n".join(parts)
+
+
+def answer_md_mpls(d, choices, stamp, master_seed, subseed, form):
+    body = gpm.answer_body(d, choices, form)
+    form_note = {"allthat": "(数非明示= 正解の数は設問に示さない・正解集合は事実ベースから機械決定)",
+                 "match": "(組合せ形= 解答UIは BL-168・正解は全単射)",
+                 "fix": "(works>=2・規約適合==1 を draw 時に機械検証)",
+                 "select2": "(正解ちょうど2・「真だが設問外」の肢を含み得る)"}.get(form, "")
+    return f"""# 解答 {stamp}
+
+{body}
+
+## 仕込んだ状態
+
+- 種別: `mpls/{d['kind']}` — {gpm.CORE[d['kind']]}
+- 要件世界: `{d['world']}`
+- 出題形: {form}{form_note}
+- 生成: `gen_paper_mcq.py --shape mpls --seed {master_seed}` (sub-seed {subseed})
+"""
+
+
+# --------------------------------------------------------------------------
+# shape=svc — Services 即答形(SNMP/SSH/syslog/NTP/archive/CEF/転送/DNAC・BL-170)
+# ★紙面専用。知識形は事実ベース(タグ排他)、分析形は小さな真偽関数＋実測 exhibit。
+#   独自の節構成なので obfuscate_md はタイトルだけ触る(mpls と同様)。
+# --------------------------------------------------------------------------
+def pick_draw_svc(qseed, kind, forms=None):
+    for kk in range(200):
+        s = qseed + kk * 149
+        rnd = random.Random(s)
+        try:
+            return s, gsv.draw(rnd, kind)
+        except ValueError:
+            continue
+    raise SystemExit(f"svc kind={kind} が成立する seed が見つかりません({qseed})")
+
+
+SVC_TITLES = {
+    "ssh": "SSH の有効化と vty の構成", "snmp": "SNMP の動作の分析",
+    "log": "syslog のレベルとタイムスタンプ", "ntp": "NTP の同期の分析",
+    "archive": "構成の管理(archive)", "cef": "CEF の出力の読解",
+    "copy": "ファイル転送", "dnac": "Cisco DNA Center の Assurance",
+    "light": "監視・可用性の構成の点検",
+}
+
+
+def question_md_svc(d, choices, stamp, form):
+    before, ask, ch_md, terms_md = gsv.question_body(d, choices, form)
+    title = SVC_TITLES.get(d["kind"], "ネットワーク・サービス")
+    parts = [f"# 問題 {stamp} : {title}", "", FIXED_NOTE, ""]
+    if before:
+        parts += ["## シナリオ", "", before, ""]
+    parts += ["## 設問", "", ask, ""]
+    if terms_md:
+        parts += [terms_md, ""]
+    parts += ["## 選択肢", "", ch_md, ""]
+    return "\n".join(parts)
+
+
+def answer_md_svc(d, choices, stamp, master_seed, subseed, form):
+    body = gsv.answer_body(d, choices, form)
+    form_note = {"allthat": "(数非明示= 正解の数は設問に示さない・正解集合は事実ベースから機械決定)",
+                 "match": "(組合せ形= 解答UIは BL-168・正解は全単射)",
+                 "select2": "(正解ちょうど2・「真だが設問外」の肢を含み得る)",
+                 "read": "(exhibit は poc/svc-paper の実測書式)",
+                 "fix": "(真偽関数で「直る候補==1」を draw 時に機械検証)"}.get(form, "")
+    return f"""# 解答 {stamp}
+
+{body}
+
+## 仕込んだ状態
+
+- 種別: `svc/{d['kind']}` — {gsv.CORE[d['kind']]}
+- 出題形: {form}{form_note}
+- 生成: `gen_paper_mcq.py --shape svc --seed {master_seed}` (sub-seed {subseed})
+"""
+
+
 def copp_counters(d, st, rnd):
     """`show policy-map control-plane` の忠実な描画(実測書式 P0〜P6)。
     ★書式罠を再現: bc 1500/burst 2 は自動既定が show にだけ出る・
@@ -7744,7 +7855,7 @@ def main():
                     choices=["chain", "ring", "pbr", "urpf", "bgpdbg", "mploop",
                              "riploop", "leakmap", "ospfv3pl", "v6redist",
                              "aaa", "acl", "aclv6", "bgpbest", "copp", "pref",
-                             "ospfbgp", "mixed"],
+                             "ospfbgp", "mpls", "svc", "mixed"],
                     default="chain",
                     help="chain=再配送欠落/誤設定系(既定) / ring=再配送リングの定常ループ(難5)"
                          " / riploop=RIP⇄OSPF 対策が効いていない型(BL-116)"
@@ -7764,6 +7875,11 @@ def main():
                          "(BL-127・紙面専用・P1= read/why)"
                          " / ospfbgp=OSPF→BGP 再配送の範囲(match オプション)"
                          "(BL-163・紙面専用・fix/cause/read)"
+                         " / mpls=MPLS L3VPN の知識と VRF 構成の読解(BL-169・"
+                         "紙面専用・select/select2/allthat/match/fix/cause/read)"
+                         " / svc=Services 即答形(SNMP/SSH/syslog/NTP/archive/"
+                         "CEF/ファイル転送/DNAC・BL-170・紙面専用・"
+                         "select/select2/allthat/match/read/fix/cause)"
                          " / mixed=問題ごとに形・種別を抽選(ごちゃまぜ)")
     ap.add_argument("--forms", default="",
                     help="出題形を絞る(カンマ区切り)。shape=acl: select,read,"
@@ -7772,7 +7888,9 @@ def main():
                          "shape=bgpbest: read,why,fix,cause / "
                          "shape=bgpdbg: dbgconf,select2,fix,read,essay / "
                          "shape=copp: fix,cause,read,select2,allthat / "
-                         "shape=pref: read,why。"
+                         "shape=pref: read,why / "
+                         "shape=mpls: select,select2,allthat,match,fix,cause,read / "
+                         "shape=svc: select,select2,allthat,match,read,fix,cause。"
                          "指定した形が成立する盤面を seed 探索で選ぶ。"
                          "他の shape では無視される。")
     ap.add_argument("--worlds", default="",
@@ -7817,7 +7935,8 @@ def main():
                 "aaa": gpa.KINDS, "acl": gpl.KINDS,
                 "aclv6": gp6.KINDS, "bgpbest": gbb.KINDS,
                 "copp": gpc.KINDS, "pref": gpr.KINDS,
-                "ospfbgp": gob.KINDS}.get(a.shape, KINDS)
+                "ospfbgp": gob.KINDS, "mpls": gpm.KINDS,
+                "svc": gsv.KINDS}.get(a.shape, KINDS)
         kinds = (a.kinds.split(",") if a.kinds
                  else random.Random(a.seed ^ 0x5EED).sample(pool, len(pool)))
         if not set(kinds) <= set(pool):
@@ -7836,15 +7955,15 @@ def main():
     want_forms = [x.strip() for x in a.forms.split(",") if x.strip()]
     want_worlds = [x.strip() for x in a.worlds.split(",") if x.strip()]
     if want_forms and a.shape not in ("acl", "aclv6", "bgpbest", "bgpdbg",
-                                      "copp", "pref", "mixed"):
+                                      "copp", "pref", "mpls", "svc", "mixed"):
         print(f"[!] --forms は shape={a.shape} では無視されます", flush=True)
-    if want_worlds and a.shape not in ("acl", "aclv6", "bgpbest", "mixed"):
+    if want_worlds and a.shape not in ("acl", "aclv6", "bgpbest", "mpls", "mixed"):
         print(f"[!] --worlds は shape={a.shape} では無視されます", flush=True)
     # ★--worlds 指定時は**故障種のプールも絞る**(--forms と同じ理由=
     #   その世界を持たない種を先に引くと詰む)。
     if want_worlds and kinds is not None and a.shape in ("acl", "aclv6",
-                                                         "bgpbest"):
-        mod = {"acl": gpl, "aclv6": gp6, "bgpbest": gbb}[a.shape]
+                                                         "bgpbest", "mpls"):
+        mod = {"acl": gpl, "aclv6": gp6, "bgpbest": gbb, "mpls": gpm}[a.shape]
         keep = [k for k in kinds if set(want_worlds) & set(mod.worlds_for(k))]
         if not keep:
             raise SystemExit(
@@ -7860,9 +7979,10 @@ def main():
     #   種を先に決めてから形を探すと「その形を持たない種」で詰む。
     if want_forms and kinds is not None and a.shape in ("acl", "aclv6",
                                                         "bgpbest", "bgpdbg",
-                                                        "copp", "pref"):
+                                                        "copp", "pref", "mpls", "svc"):
         mod = {"acl": gpl, "aclv6": gp6, "bgpbest": gbb,
-               "bgpdbg": gpb, "copp": gpc, "pref": gpr}[a.shape]
+               "bgpdbg": gpb, "copp": gpc, "pref": gpr, "mpls": gpm,
+               "svc": gsv}[a.shape]
         keep = [k for k in kinds if set(want_forms) & mod.kind_forms(k)]
         if not keep:
             raise SystemExit(
@@ -7893,19 +8013,23 @@ def main():
             #   ★ospfbgp の 3%(BL-163・2026-09-12)は chain の枠(5%)を割って捻出
             #   (chain は実機展開を伴い重い・ospfbgp は紙面専用で軽い)。
             #   全体の再配分はユーザ判断により後日まとめて行う。
+            #   ★mpls の 5%(BL-169・2026-09-13)は pbr/urpf/leakmap/ospfv3pl/
+            #   v6redist から 1% ずつ捻出した**暫定枠**(2.0 VPN の紙面空白解消)。
             shape_i = ("ring" if r < 0.06 else "riploop" if r < 0.11
-                       else "pbr" if r < 0.18
-                       else "urpf" if r < 0.25 else "mploop" if r < 0.32
-                       else "leakmap" if r < 0.39 else "ospfv3pl" if r < 0.46
-                       else "v6redist" if r < 0.53
-                       else "aaa" if r < 0.60
-                       else "acl" if r < 0.66
-                       else "aclv6" if r < 0.71
-                       else "bgpbest" if r < 0.78
-                       else "bgpdbg" if r < 0.83
-                       else "copp" if r < 0.90
-                       else "pref" if r < 0.95
-                       else "ospfbgp" if r < 0.98 else "chain")
+                       else "pbr" if r < 0.17
+                       else "urpf" if r < 0.23 else "mploop" if r < 0.30
+                       else "leakmap" if r < 0.36 else "ospfv3pl" if r < 0.42
+                       else "v6redist" if r < 0.48
+                       else "aaa" if r < 0.55
+                       else "acl" if r < 0.61
+                       else "aclv6" if r < 0.66
+                       else "bgpbest" if r < 0.73
+                       else "bgpdbg" if r < 0.78
+                       else "copp" if r < 0.85
+                       else "pref" if r < 0.90
+                       else "ospfbgp" if r < 0.93
+                       else "mpls" if r < 0.96
+                       else "svc" if r < 0.99 else "chain")
             kind = roll.choice({"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
                                 "urpf": gpu.URPF_KINDS, "mploop": MPLOOP_KINDS,
                                 "riploop": RIPLOOP_KINDS,
@@ -7918,7 +8042,9 @@ def main():
                                 "bgpdbg": gpb.VARIANTS,
                                 "copp": gpc.KINDS,
                                 "pref": gpr.KINDS,
-                                "ospfbgp": gob.KINDS}.get(shape_i, KINDS))
+                                "ospfbgp": gob.KINDS,
+                                "mpls": gpm.KINDS,
+                                "svc": gsv.KINDS}.get(shape_i, KINDS))
         else:
             shape_i = a.shape
             kind = kinds[i % len(kinds)]
@@ -7993,6 +8119,11 @@ def main():
             subseed, d = pick_draw_copp(qseed, kind)
         elif shape_i == "pref":
             subseed, d = pick_draw_pref(qseed, kind, forms=want_forms)
+        elif shape_i == "mpls":
+            subseed, d = pick_draw_mpls(qseed, kind, forms=want_forms,
+                                        worlds=want_worlds)
+        elif shape_i == "svc":
+            subseed, d = pick_draw_svc(qseed, kind, forms=want_forms)
         else:
             subseed, d = pick_draw(qseed, kind, hard=a.hard)
         prob_id = f"PAPER-RD-{subseed}"
@@ -8062,6 +8193,12 @@ def main():
         elif shape_i == "pref":
             plan = {"checks": []}          # 紙面専用(決定リスト・モデルの写像)
             choices = None                 # ★形の抽選後に組む(下記)
+        elif shape_i == "mpls":
+            plan = {"checks": []}          # 紙面専用(事実ベース＋rt_model の写像)
+            choices = None                 # ★形の抽選後に組む(下記)
+        elif shape_i == "svc":
+            plan = {"checks": []}          # 紙面専用(事実ベース＋真偽関数の写像・BL-170)
+            choices = None                 # ★形の抽選後に組む(下記)
         elif shape_i == "bgpdbg":
             plan = {"checks": []}          # 紙面専用(実機 PoC 出力の写し)
             # ★BL-124: 選択式が既定。essay(記述式)は --shape bgpdbg --forms essay
@@ -8089,7 +8226,7 @@ def main():
                                                     "ospfv3pl", "v6redist",
                                                     "aaa", "acl", "aclv6",
                                                     "bgpbest", "copp",
-                                                    "pref", "ospfbgp"))
+                                                    "pref", "ospfbgp", "mpls", "svc"))
                      else None)
         # 赤ニシン(exam): 未適用ポリシー+無害な適用行を config に混入(pbr は素で騒がしい)
         herr, decoy = None, None
@@ -8156,6 +8293,64 @@ def main():
                        "fix": gpr.build_choices_fix,
                        "cause": gpr.build_choices_cause,
                        "allthat": gpr.build_choices_allthat}[form](d, rnd)
+        if shape_i == "mpls":
+            # ★BL-169: 成立する形(gpm.kind_forms)から抽選/指定。--forms 対応。
+            avail = sorted(gpm.kind_forms(d["kind"]))
+            if want_forms:
+                avail = [f for f in avail if f in want_forms] or avail
+            if a.exam:
+                wts = {"fix": 40, "cause": 30, "read": 25, "select": 20,
+                       "select2": 20, "allthat": 15, "match": 15}
+                r_w = rnd.random() * sum(wts[f] for f in avail)
+                for f in ("fix", "cause", "read", "select", "select2",
+                          "allthat", "match"):
+                    if f not in avail:
+                        continue
+                    r_w -= wts[f]
+                    if r_w < 0:
+                        form = f
+                        break
+            elif want_forms:
+                form = rnd.choice(avail)
+            else:
+                form = ("fix" if "fix" in avail else "cause" if "cause" in avail
+                        else "read" if "read" in avail else "select")
+            choices = (gpm.build_match(d, rnd) if form == "match" else
+                       {"select": gpm.build_choices_select,
+                        "select2": gpm.build_choices_select2,
+                        "allthat": gpm.build_choices_allthat,
+                        "fix": gpm.build_choices_fix,
+                        "read": gpm.build_choices_read,
+                        "cause": gpm.build_choices_cause}[form](d, rnd))
+        if shape_i == "svc":
+            # ★BL-170: 成立する形(gsv.kind_forms)から抽選/指定。--forms 対応。
+            avail = sorted(gsv.kind_forms(d["kind"]))
+            if want_forms:
+                avail = [f for f in avail if f in want_forms] or avail
+            if a.exam:
+                wts = {"fix": 35, "cause": 30, "read": 30, "select": 25,
+                       "select2": 20, "allthat": 20, "match": 15}
+                r_w = rnd.random() * sum(wts[f] for f in avail)
+                for f in ("fix", "cause", "read", "select", "select2",
+                          "allthat", "match"):
+                    if f not in avail:
+                        continue
+                    r_w -= wts[f]
+                    if r_w < 0:
+                        form = f
+                        break
+            elif want_forms:
+                form = rnd.choice(avail)
+            else:
+                form = ("read" if "read" in avail else "fix" if "fix" in avail
+                        else "cause" if "cause" in avail else "select")
+            choices = (gsv.build_match(d, rnd) if form == "match" else
+                       {"select": gsv.build_choices_select,
+                        "select2": gsv.build_choices_select2,
+                        "allthat": gsv.build_choices_allthat,
+                        "fix": gsv.build_choices_fix,
+                        "read": gsv.build_choices_read,
+                        "cause": gsv.build_choices_cause}[form](d, rnd))
         # ★紙面専用 shape は既定形が fix ではない。form は解答 md の「出題形」欄
         #   だけでなく**提示物の出し分け**(acl_evidence)にも使われるので、
         #   ここで実際に組んだ形に合わせておく(既定= cause / 無ければ read)。
@@ -8432,8 +8627,11 @@ def main():
                 except ValueError:
                     pass
         if choices:
-            choices = rebalance_position(repo, choices)
-        opt_style = choice_style(rnd, choices, form) if choices else "prose"
+            if not (shape_i in ("mpls", "svc") and form == "match"):   # ★組合せ形は (terms, 説明, 対応) の組
+                choices = rebalance_position(repo, choices)
+        opt_style = (choice_style(rnd, choices, form)
+                     if choices and not (shape_i in ("mpls", "svc") and form == "match")
+                     else "prose")
         if shape_i == "ospfbgp" and form == "fix":
             # ★BL-163: 選択肢は全て設定コマンド。散文と混在すると
             #   1行の候補だけ地の文になり、提示が不揃いになる
@@ -8469,6 +8667,10 @@ def main():
                 # ★read 形は「この設定なら表はどうなるか」なので要件は出さない
                 #   (要件を出すと「要件を満たす表」を選ぶ別の設問に化ける)
                 reqs = None if form == "read" else gob.requirements(d, rnd, form)
+            elif shape_i == "mpls":
+                reqs = None            # ★BL-169: 要件は question_body が本文に埋める
+            elif shape_i == "svc":
+                reqs = None            # ★BL-170: 紙面専用(exhibit と設問に自足)
             elif shape_i == "copp":
                 reqs = copp_requirements(d, rnd, form)
             elif shape_i == "pref":
@@ -8516,7 +8718,7 @@ def main():
 
         if shape_i in ("urpf", "bgpdbg", "leakmap", "ospfv3pl", "v6redist",
                        "aaa", "acl", "aclv6", "bgpbest", "copp", "pref",
-                       "ospfbgp"):
+                       "ospfbgp", "mpls", "svc"):
             collected = {}                 # 紙面専用: 実機展開・収集を行わない
         elif a.no_lab:
             collected = {(c["node"], c["command"]): "(PLACEHOLDER: --no-lab)"
@@ -8646,6 +8848,14 @@ def main():
                                     reqs=reqs, style=opt_style)
             a_md = answer_md_copp(d, choices, stamp, a.seed, subseed, form)
             lint += list(gpc.KINDS) + ["world=", "_works", "_correct"]
+        elif shape_i == "mpls":
+            q_md = question_md_mpls(d, choices, stamp, form)
+            a_md = answer_md_mpls(d, choices, stamp, a.seed, subseed, form)
+            lint += list(gpm.KINDS) + list(gpm.WORLDS) + ["world=", "_works"]
+        elif shape_i == "svc":
+            q_md = question_md_svc(d, choices, stamp, form)
+            a_md = answer_md_svc(d, choices, stamp, a.seed, subseed, form)
+            lint += ["_works", "ssh_missing", "_correct"]   # ★svc は kind 名が本文の正規語彙なので lint しない
         elif shape_i == "pref":
             blocks = pref_evidence(d, rnd, form)
             q_md = question_md_pref(d, blocks, choices, stamp, form=form,
@@ -8696,7 +8906,10 @@ def main():
             lint += ["missing", "no_seed", "wrong_id"]
         # 道標の除去(BL-088)。essay(bgpdbg --forms essay)はタイトルのみ触る。
         q_md = obfuscate_md(q_md, random.Random(subseed ^ 0x0BF0),
-                            essay=(shape_i == "bgpdbg" and form == "essay"),
+                            # ★BL-169: mpls は独自の節構成(知識・読解)。標準5節の
+                            #   再構成は当てはまらないのでタイトルの無機質化だけ行う。
+                            essay=((shape_i == "bgpdbg" and form == "essay")
+                                   or shape_i in ("mpls", "svc")),
                             # ★patch も設問文が情報の担い手(「接続を失わずに」「移行の途中」)
                             # ★acl の read も同様(BL-106・4例目)= 設問文が
                             #   **向き**(転送される/破棄される)と**選ぶ個数**を担っており、

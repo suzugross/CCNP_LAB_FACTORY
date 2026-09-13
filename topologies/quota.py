@@ -21,6 +21,7 @@
 import argparse
 import datetime
 import json
+import glob
 import os
 import re
 import subprocess
@@ -179,8 +180,12 @@ def catalog_tags(repo, prob_id):
 
 def paper_shape(repo, ref):
     """answers/<ID>.md の「種別: `shape/kind`」行から shape を取る。"""
-    for rel in (f"answers/{ref}.md", f"private/answers/{ref}.md"):
-        path = os.path.join(repo, rel)
+    # ★private 配下に別置きした紙面(専用ディレクトリを持つ系統)も拾う
+    cands = [os.path.join(repo, f"answers/{ref}.md"),
+             os.path.join(repo, f"private/answers/{ref}.md")]
+    cands += sorted(glob.glob(os.path.join(repo, "private", "*", "out",
+                                           "answers", f"{ref}.md")))
+    for path in cands:
         if not os.path.exists(path):
             continue
         with open(path, encoding="utf-8") as fh:
