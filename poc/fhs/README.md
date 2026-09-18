@@ -31,3 +31,10 @@ DHCP guard= `device-role {client|server}` / `trusted-port`。source-guard= `deny
   採点は `access: telnet`(ioll2 は SSH 不可)＋ IOL ルータの initial に `line vty 0 4 / transport input ssh telnet` を追記(baseline は ssh のみ)。
 - 故障候補(TS 形)= 未適用(素の rogue)/ VLAN スコープ over-block(P5) / role 逆(ROUTER を端末ポート・HOST を GW ポート) / DHCP guard の role client を GW ポートに(正規 DHCPv6 遮断) / trusted-port 不在 / router-preference 上限が正規より低い / match prefix-list 誤り。
 - 構築形(要件で顔が変わる)= 「ROG に触れない」制約下で ①ポート role 方式 ②VLAN+pref 上限方式 ③prefix-list 一致方式 のどれを要求するか。
+
+## P8(2026-09-18 追試・`p8_guards.py`・生ログ `results-p8.md`)= source/prefix/destination guard は **ioll2 でデータプレーン遮断が効かない**
+
+RT02 側の受信 ACL カウンタで測定: source-guard(validate address)を CLB ポートに attach しても、表に無い送信元(Lo0 の 2001:DB8:99::1)が 5/5 で GW に届く。
+`validate prefix` でも範囲外(2001:DB8:98::1)が 5/5 で届く。destination-guard(enforcement always・Et0/0)でも静的 ND 宛の未知宛先が drop されない。
+`show device-tracking counters` の Dropped/Faults は常に空。ポリシーの設定・attach・show 表示は正常(P1 の CLI 実装は「表示まで」)。
+→ RA guard / DHCPv6 guard(punt される制御プレーン)だけが IOL で実測可能。3 ガードの出題は文書ベース(設計書 §8)・ラボ化不可。

@@ -1,0 +1,77 @@
+SSL Verification disabled
+Could not find details in testbed for server terminal_server.
+Could not find details in testbed for server terminal_server.
+No details found in testbed for hostname terminal_server.
+Could not find details in testbed for server terminal_server.
+Could not find details in testbed for server terminal_server.
+No details found in testbed for hostname terminal_server.
+Could not find details in testbed for server terminal_server.
+Could not find details in testbed for server terminal_server.
+No details found in testbed for hostname terminal_server.
+Could not find details in testbed for server terminal_server.
+Could not find details in testbed for server terminal_server.
+No details found in testbed for hostname terminal_server.
+[i] ラボ POC-KB を新規作成
+[i] link RT01 Ethernet0/0 <-> RT02 Ethernet0/0
+[i] link RT02 Ethernet0/1 <-> RT03 Ethernet0/1
+[i] link RT03 Ethernet0/0 <-> RT04 Ethernet0/0
+[i] lab start...
+    RT01: BOOTED
+    RT02: BOOTED
+    RT03: BOOTED
+    RT04: BOOTED
+
+===== P0 =====
+  [note] RT01: admin-down IF あり(CVAC 罠)→ no shutdown を投入
+  [rec] P0 基線 — RT01 show ip interface brief (2780 bytes)
+  [rec] P0 — RT01 show version | include Software|uptime (143 bytes)
+  [note] RT02: admin-down IF あり(CVAC 罠)→ no shutdown を投入
+  [rec] P0 基線 — RT02 show ip interface brief (2780 bytes)
+  [rec] P0 — RT02 show version | include Software|uptime (143 bytes)
+  [note] RT03: admin-down IF あり(CVAC 罠)→ no shutdown を投入
+  [rec] P0 基線 — RT03 show ip interface brief (2780 bytes)
+  [rec] P0 — RT03 show version | include Software|uptime (143 bytes)
+  [note] RT04: admin-down IF あり(CVAC 罠)→ no shutdown を投入
+  [rec] P0 基線 — RT04 show ip interface brief (2780 bytes)
+  [rec] P0 — RT04 show version | include Software|uptime (144 bytes)
+  [rec] P0 疎通 RT01→RT04(static 連鎖) — RT01# ping 10.0.34.4 repeat 3 → 100% (173 bytes)
+  [rec] P0 疎通 RT04→RT01 — RT04# ping 10.0.12.1 repeat 3 → 100% (173 bytes)
+
+===== P1 =====
+  [rec] P1 eigrp named: (config-router) — RT01: router eigrp NAMED : ? (375 bytes)
+  [rec] P1 eigrp named: (config-router-af) — RT01: router eigrp NAMED / address-family ipv4 unicast autonomous-system 100 : ? (986 bytes)
+  [rec] P1 eigrp named: (config-router-af-interface) — RT01: router eigrp NAMED / address-family ipv4 unicast autonomous-system 100 / af-interface default : ? (944 bytes)
+  [rec] P1 eigrp named: (config-router-af-topology) — RT01: router eigrp NAMED / address-family ipv4 unicast autonomous-system 100 / topology base : ? (1563 bytes)
+Traceback (most recent call last):
+  File "/home/suzuki/ansible/CCNP01/poc/paper-kb/sweep.py", line 740, in main
+    STEPS[s](devs)
+  File "/home/suzuki/ansible/CCNP01/poc/paper-kb/sweep.py", line 313, in P1
+    help_capture(d, ["router eigrp NAMED", "address-family ipv4 unicast autonomous-system 100"], "eigrp ",
+  File "/home/suzuki/ansible/CCNP01/poc/paper-kb/sweep.py", line 267, in help_capture
+    out = xp(r"\)#" + re.escape(query) + r"\s*$")
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/suzuki/ansible/CCNP01/poc/paper-kb/sweep.py", line 258, in xp
+    sp.expect([pat], timeout=t)
+  File "src/unicon/eal/backend/spawn.py", line 364, in unicon.eal.backend.spawn.RawSpawn.expect
+unicon.core.errors.TimeoutError: Timeout occurred
+
+  [rec] P1 EXCEPTION (755 bytes)
+
+===== P2 =====
+  [note] P2a forus(自ルータ宛を受信): ping RT01→10.0.12.2 = -1%
+  [rec] P2a forus(自ルータ宛を受信) — RT02 show logging (0 bytes)
+  [note] P2b transit(中継 forward): ping RT01→10.0.23.3 = -1%
+  [rec] P2b transit(中継 forward) — RT02 show logging (0 bytes)
+  [note] P2c local 発(自ルータ発): ping RT02→10.0.12.1 = 100%
+  [rec] P2c local 発(自ルータ発) — RT02 show logging (1617 bytes)
+  [note] P2d unroutable(経路なし): ping RT01→172.31.99.1 = -1%
+  [rec] P2d unroutable(経路なし) — RT02 show logging (0 bytes)
+  [note] P2e access denied(inbound ACL で拒否): ping RT01→10.0.23.3 = -1%
+  [rec] P2e access denied(inbound ACL で拒否) — RT02 show logging (0 bytes)
+  [note] P2f encapsulation failed(next-hop が ARP 応答しない): ping RT01→172.31.100.1 = -1%
+  [rec] P2f encapsulation failed(next-hop が ARP 応答しない) — RT02 show logging (0 bytes)
+  [note] P2g detail(forus・ICMP type/code): ping RT01→10.0.12.2 = -1%
+  [rec] P2g detail(forus・ICMP type/code) — RT02 show logging (0 bytes)
+  [note] P2h detail(transit): ping RT01→10.0.23.3 = -1%
+  [rec] P2h detail(transit) — RT02 show logging (0 bytes)
+exit=0

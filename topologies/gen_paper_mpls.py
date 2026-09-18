@@ -24,15 +24,15 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rt_model  # noqa: E402
 
-KINDS = ["t_roles", "t_label", "t_ldp", "t_vpn", "v_peer", "v_reach", "v_cause",
+KINDS = ["t_roles", "t_label", "t_ldp", "t_vpn", "t_protect", "v_peer", "v_reach", "v_cause",
          "p_asoverride", "l_read", "l_cause"]
-TERM_KINDS = ["t_roles", "t_label", "t_ldp", "t_vpn"]
+TERM_KINDS = ["t_roles", "t_label", "t_ldp", "t_vpn", "t_protect"]
 VRF_KINDS = ["v_peer", "v_reach", "v_cause"]
 PECE_KINDS = ["p_asoverride"]
 LABEL_KINDS = ["l_read", "l_cause"]
 WORLDS = ["w_fullmesh", "w_hubspoke", "w_extranet", "w_isolate", "w_ce_frozen", "w_pe_frozen"]
 KIND_WORLDS = {
-    "t_roles": ["-"], "t_label": ["-"], "t_ldp": ["-"], "t_vpn": ["-"],
+    "t_roles": ["-"], "t_label": ["-"], "t_ldp": ["-"], "t_vpn": ["-"], "t_protect": ["-"],
     "v_peer": ["w_fullmesh", "w_hubspoke", "w_isolate"],
     "v_reach": ["w_fullmesh", "w_hubspoke", "w_extranet", "w_isolate"],
     "v_cause": ["w_fullmesh", "w_hubspoke", "w_extranet"],
@@ -45,6 +45,7 @@ FORMS = {
     "t_label": {"select", "select2", "allthat", "match"},
     "t_ldp": {"select", "select2", "allthat", "match"},
     "t_vpn": {"select", "select2", "allthat", "match"},
+    "t_protect": {"select", "select2", "allthat", "match"},   # ★BL-183(2026-09-18): MPLS 網の保護(FRR/LFA/SRLG)
     "v_peer": {"fix"},
     "v_reach": {"read", "select2"},
     "v_cause": {"cause"},
@@ -52,7 +53,7 @@ FORMS = {
     "l_read": {"read"},
     "l_cause": {"cause"},
 }
-DIFF = {"t_roles": 2, "t_label": 2, "t_ldp": 3, "t_vpn": 3,
+DIFF = {"t_roles": 2, "t_label": 2, "t_ldp": 3, "t_vpn": 3, "t_protect": 3,
         "v_peer": 3, "v_reach": 3, "v_cause": 4, "p_asoverride": 4,
         "l_read": 3, "l_cause": 4}
 
@@ -109,6 +110,13 @@ FACTS = {
         ("mpls ldp router-id コマンドに force を付けると、構成したルータ ID が即座に反映される。", True, ""),
         ("LDP の自動構成(autoconfig)は、OSPF と IS-IS で利用できる。", True, ""),
         ("LDP は、転送等価クラスごとにラベルを配布する。", True, ""),
+        ("LDP の既定の配布方式は Downstream Unsolicited であり、要求が無くてもラベルを隣接に広告する。", True, ""),
+        ("各 LER/LSR は、配布されたラベルからローカルにラベル・バインディングのデータベース(LIB)を作る。", True, ""),
+        ("各 LER/LSR は、自身のラベル・バインディングを LDP の隣接にだけ通知する。", True, ""),
+        ("LDP は、既定で Downstream-on-Demand によってラベルを配布する。", False, "既定は Downstream Unsolicited(DU)であり、DoD は要求に応じて配布する方式である。"),
+        ("ラベル・バインディングのデータベースは、MPLS ドメイン全体で常に同期される。", False, "各ルータがローカルに保持し、隣接との交換で作られる。ドメイン全体で同期されるものではない。"),
+        ("各 LER/LSR は、自身のラベル・バインディングを MPLS ドメイン内の全てのルータに通知する。", False, "通知先は LDP の隣接だけである。"),
+        ("LDP は、複数の MPLS ドメイン間でラベル・バインディングを共有する。", False, "ラベルはドメイン内でローカルに意味を持ち、ドメイン間で共有されない。"),
         ("LDP のセッションは、UDP で確立される。", False, "セッションは TCP(646)であり、UDP(646)は Hello に使われる。"),
         ("LDP のルータ ID は、ループバックの有無にかかわらず、最も大きい IP アドレスを持つ物理インターフェイスから選ばれる。", False, "ループバックがあればループバックが優先される。"),
         ("LDP のルータ ID は、重複していなければ相互の到達性は不要である。", False, "transport address への到達性が無いとセッションが確立しない。"),
@@ -144,7 +152,25 @@ FACTS = {
     ],
     "te": [
         ("MPLS トラフィック・エンジニアリングのラベル配布には、RSVP-TE が使用される。", True, ""),
+        ("RSVP-TE は、LSP の経路を明示的に指定し、帯域を予約できる。", True, ""),
+        ("MPLS のラベル配布に使われるプロトコルには、LDP と RSVP-TE がある。", True, ""),
         ("MPLS トラフィック・エンジニアリングのラベル配布には、LDP が使用される。", False, "TE のラベル配布は RSVP-TE であり、LDP は最短経路のラベル配布を行う。"),
+        ("PHP や LFIB は、ラベルを配布するためのプロトコルである。", False, "PHP は最終ホップ手前でラベルを除去する動作、LFIB は転送テーブルであり、配布プロトコルではない。"),
+    ],
+    "protect": [
+        ("MPLS-TE Fast Reroute は、リンクやノードの障害時に、あらかじめ用意したバックアップ LSP へ自動で切り替える。", True, ""),
+        ("MPLS-TE Fast Reroute では、RSVP-TE でバックアップ LSP にも帯域を予約でき、迂回後のパケット損失を防げる。", True, ""),
+        ("MPLS-TE Fast Reroute は、MPLS 網内で LSP を保護する仕組みである。", True, ""),
+        ("LFA(Loop-Free Alternate)は、ループを起こさない代替の next-hop をあらかじめ計算しておき、障害時に即座に切り替える。", True, ""),
+        ("LFA には IP-LFA、Remote LFA、TI-LFA があり、後者ほどトポロジによる保護の穴を減らす。", True, ""),
+        ("LFA は、MPLS 網のラベル転送でも通常の IP 転送でも動作する。", True, ""),
+        ("SRLG は、同じ物理リスク(同じファイバ束や電源など)を共有するリンクの集合である。", True, ""),
+        ("SRLG-disjoint では、プライマリ経路と同じ SRLG に属するリンクをバックアップ経路の候補から除外する。", True, ""),
+        ("MPLS-TE Fast Reroute は、IP 網でのみ使用できる。", False, "MPLS-TE の機能であり、MPLS 網内で LSP を保護する。"),
+        ("MPLS-TE Fast Reroute は、物理リンクの障害を検出して通知する機能である。", False, "検出や通知の機能ではなく、バックアップ LSP への切り替えの仕組みである。"),
+        ("MPLS-TE Fast Reroute は、同一 SRLG に属するリンクをバックアップ経路から除外する機能である。", False, "それは SRLG-disjoint の考え方であり、Fast Reroute は切り替えの仕組みである。"),
+        ("LFA は、障害を検知してから代替経路を計算する。", False, "代替 next-hop は事前に計算しておき、障害時は即座に切り替える。"),
+        ("SRLG は、同じ IGP エリアに属するリンクの集合である。", False, "SRLG は物理的なリスクを共有するリンクの集合であり、エリアとは無関係である。"),
     ],
 }
 # kind → (設問の主題語, 主タグ, 「真だが設問外」肢を供給するタグ)
@@ -153,6 +179,7 @@ TERM_SCOPE = {
     "t_label": ("MPLS のラベルと LSP", ["label", "lsp"], ["ldp", "rd"]),
     "t_ldp": ("LDP", ["ldp"], ["te", "mpbgp"]),
     "t_vpn": ("MPLS L3VPN における RD・RT・MP-BGP", ["rd", "rt", "mpbgp"], ["ldp", "te"]),
+    "t_protect": ("MPLS 網の保護(MPLS-TE Fast Reroute・LFA・SRLG)", ["protect"], ["ldp", "te"]),
 }
 # 対応付け(match)の用語セット: kind → [(用語, 説明)] (説明は事実ベースと矛盾しない短文)
 MATCH_SETS = {
@@ -168,6 +195,10 @@ MATCH_SETS = {
               ("セッション", "TCP のポート 646 で確立される、ラベル配布のための接続"),
               ("transport address", "セッションの確立に使用され、隣接から到達可能でなければならないアドレス"),
               ("autoconfig", "IGP のインターフェイスで LDP を自動的に有効にする機能")],
+    "t_protect": [("MPLS-TE Fast Reroute", "障害時にあらかじめ用意したバックアップ LSP へ自動で切り替える仕組み"),
+                  ("LFA", "ループを起こさない代替 next-hop を事前に計算しておく高速リカバリの方式"),
+                  ("SRLG", "同じ物理リスクを共有するリンクの集合"),
+                  ("RSVP-TE", "経路の明示指定と帯域予約ができるラベル配布プロトコル")],
     "t_vpn": [("RD", "IPv4 プレフィックスの前に付加され、VPNv4 プレフィックスを一意にする値"),
               ("RT", "拡張コミュニティとして付与され、VRF への取り込みを制御する値"),
               ("MP-BGP", "PE 間で VPNv4 経路と VPN ラベルを伝播するプロトコル"),
@@ -1097,6 +1128,7 @@ CORE = {
     "t_label": "ヘッダは 32 ビット(Label 20/EXP 3/S 1/TTL 8)、LSP は片方向、PHP は出口手前で imp-null により除去。",
     "t_ldp": "セッションは TCP 646・Hello は UDP 646、router-id はループバック優先、transport address の到達性が必須。",
     "t_vpn": "RD は一意化(64 ビット・PE 間で一致不要)、RT が取り込みを制御(import≠export 可)、MP-BGP が VPNv4 とラベルを運ぶ。",
+    "t_protect": "MPLS-TE Fast Reroute= 障害時にあらかじめ用意したバックアップ LSP へ自動切替(RSVP-TE でバックアップにも帯域予約→迂回後の損失防止)。検出/通知の機能ではなく IP 網専用でもない。LFA= ループしない代替 next-hop を事前計算(IP-LFA/rLFA/TI-LFA・MPLS でも IP でも動く)。SRLG= 同じ物理リスクを共有するリンク集合、SRLG-disjoint はそれをバックアップから除外。LDP は DU 既定・バインディングはローカル DB＋隣接通知。",
     "v_peer": "対向 PE の VRF は「提示側の export を import し、提示側の import に一致する export を持つ」形にする。RD は一致させる必要がなく、規約に従う。",
     "v_reach": "VRF 表に載るのは、自 VRF の import と一致する export を持つ VRF の経路だけ。RD は取り込みに関与しない。",
     "v_cause": "片方向だけ落ちるのは RT の import/export の不一致。RD の不一致・vpnv4 の構成・LSP は、示されている事実で否定できる。",

@@ -55,7 +55,13 @@ PAPER_GENRES = {
     "acl": ["acl", "aclv6"],       # IPv4/IPv6 の ACL 紙面(2026-08-11 追加)
     # BGP 紙面(BL-124・2026-08-16 追加): mixed の抽選だけでは BGP ゼロの
     # パックが出るため必須枠にする(BL-100/111 の「BGP 最優先」方針)。
-    "bgp": ["bgpbest", "bgpdbg"],
+    "bgp": ["bgpbest", "bgpdbg", "bgppol"],
+    # ★BL-176(2026-09-18): svc 型の思考系ファミリ(--require-shape で指名できる。既定の必須枠には入れない)
+    "ipv6": ["fhs", "dhcp6"],
+    "vpn": ["dmvpn"],
+    "ospf": ["ospfdbg"],
+    "eigrp": ["eigrpkb"],
+    "route": ["rtbasic"],
 }
 
 # 紙面の問題数を `auto` にしたときの範囲(2026-08-11「10〜20問で適当に」→ 2026-09-05「5問程度」に変更)
@@ -2381,8 +2387,9 @@ def main():
     ap.add_argument("--speed", type=int, default=5,
                     help="瞬発力枠(即答形)の問題数。思考系(--paper)とは別枠で"
                          "上乗せする(既定5・0 で無効)")
-    ap.add_argument("--speed-shape", default="svc",
-                    help="瞬発力枠の shape(既定 svc=Services 即答形)")
+    ap.add_argument("--speed-shape", default="speed",
+                    help="瞬発力枠の shape(既定 speed= svc 型ファミリ(svc/fhs/ospfdbg/dhcp6/dmvpn …)の"
+                         "即答 kind を問題ごとに抽選。svc を指定すると従来どおり Services のみ)")
     ap.add_argument("--paper-only", action="store_true",
                     help="紙面だけのパックにする(ラボを作らない=CMLのラボ枠を使わない)")
     ap.add_argument("--require-shape", default="redist,aaa,acl,bgp",

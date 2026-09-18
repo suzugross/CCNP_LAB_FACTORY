@@ -26,7 +26,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-KINDS = ["ssh", "snmp", "log", "ntp", "archive", "cef", "copy", "dnac", "light"]
+KINDS = ["ssh", "snmp", "log", "ntp", "archive", "cef", "copy", "dnac", "light",
+         "dbgpkt", "prec", "bfd"]   # ★BL-181(2026-09-18)追加= debug ip packet 読解 / precedence・DSCP 等価 / BFD
 WORLDS = ["-"]
 KIND_WORLDS = {k: ["-"] for k in KINDS}
 
@@ -40,9 +41,12 @@ FORMS = {
     "copy":    {"select", "fix"},
     "dnac":    {"select"},
     "light":   {"fix", "cause"},
+    "dbgpkt":  {"read", "cause"},
+    "prec":    {"select", "allthat", "read"},
+    "bfd":     {"select", "select2", "allthat", "read"},
 }
 DIFF = {"ssh": 2, "snmp": 3, "log": 2, "ntp": 3, "archive": 2,
-        "cef": 3, "copy": 2, "dnac": 3, "light": 3}
+        "cef": 3, "copy": 2, "dnac": 3, "light": 3, "dbgpkt": 3, "prec": 2, "bfd": 3}
 
 
 def kind_forms(kind):
@@ -165,6 +169,31 @@ FACTS = {
         ("SCP のサーバには、ip scp server enable は不要である。", False, "SCP のサーバには ip scp server enable が必要である。"),
         ("ftp のパスワードは、URL に含めることができない。", False, "ftp://user:pass@host/file の形で URL に含められる。"),
     ],
+    "bfd": [
+        ("min-tx は、自ルータが BFD 制御パケットを送信できる最小の間隔である。", True, ""),
+        ("min-rx は、自ルータが BFD 制御パケットを受信できる(許容できる)最小の間隔である。", True, ""),
+        ("multiplier は、連続して受信できなかったときに障害と判定するパケット数である。", True, ""),
+        ("実際の送信間隔は、自ルータの min-tx と相手の min-rx のうち大きい方になる。", True, ""),
+        ("インターフェイスでは bfd interval <min-tx> min_rx <min-rx> multiplier <N> の形で指定する。", True, ""),
+        ("bfd-template で定義した間隔は、インターフェイスの bfd template で適用する。", True, ""),
+        ("OSPF で全インターフェイスの BFD を有効にするには router ospf 配下の bfd all-interfaces を使う。", True, ""),
+        ("OSPF で特定のインターフェイスだけ BFD を有効にするには、そのインターフェイスの ip ospf bfd を使う。", True, ""),
+        ("BFD は CEF と IP ルーティングが有効であることを前提とする。", True, ""),
+        ("min-rx は、自ルータが BFD 制御パケットを送信する間隔である。", False, "min-rx は受信の許容間隔であり、送信間隔は min-tx である。"),
+        ("実際の送信間隔は、自ルータの min-tx と相手の min-rx のうち小さい方になる。", False, "大きい方(遅い方)に合わせられる。"),
+        ("multiplier は、送信間隔を秒で指定する。", False, "multiplier は障害判定までの未受信パケット数である。"),
+        ("BFD はルーティング プロトコルの hello を短くする方式であり、hello/dead の値を自動で書き換える。", False, "BFD は hello とは独立したセッションで検出し、hello/dead の値は変えない。"),
+    ],
+    "prec": [
+        ("IP precedence のキーワード routine・priority・immediate・flash・flash-override・critical・internet・network は、それぞれ 0〜7 に対応する。", True, ""),
+        ("set ip precedence では数値とキーワードのどちらでも指定でき、show running-config にはキーワードで表示される。", True, ""),
+        ("DSCP の cs1〜cs7 は、precedence 1〜7 と同じ上位 3 ビットを持つ。", True, ""),
+        ("DSCP の ef は 46 である。", True, ""),
+        ("route-map の set ip precedence は、ポリシー ルーティングで一致したパケットの precedence を書き換える。", True, ""),
+        ("set ip precedence のキーワードは、数値に対応するものが無い独立した分類である。", False, "キーワードは 0〜7 の別名であり、同じ意味である。"),
+        ("DSCP の ef は 40 である。", False, "ef は 46(101110)である。"),
+        ("DSCP の cs5 は precedence 3 に対応する。", False, "cs5 は precedence 5(101000)に対応する。"),
+    ],
     "dnac": [
         ("Cisco DNA Center の Assurance は、ネットワークの健全性を可視化し、問題の根本原因を提示する。", True, ""),
         ("NTP の時刻ずれは、ログの相関やアシュアランスの分析を妨げる。", True, ""),
@@ -186,6 +215,8 @@ FACT_SCOPE = {
     "cef":     ("CEF と show ip cef の読み方", ["cef"], ["copy", "archive"]),
     "copy":    ("ファイル転送(tftp/ftp/scp)", ["copy"], ["archive", "ssh"]),
     "dnac":    ("Cisco DNA Center の Assurance", ["dnac"], ["ntp", "log_lvl"]),
+    "bfd":     ("BFD の間隔とネゴシエーション", ["bfd"], ["log_lvl", "cef"]),
+    "prec":    ("IP precedence と DSCP の指定", ["prec"], ["cef", "log_lvl"]),
 }
 MATCH_SETS = {
     "cef": [("receive", "ルータ自身に宛てられたアドレスを示すエントリ"),
@@ -224,6 +255,12 @@ def draw(rnd, kind, world=None, form=None):
         _draw_ntp_cause(d, rnd)
     elif kind == "light":
         _draw_light(d, rnd, form)
+    elif kind == "dbgpkt":
+        _draw_dbgpkt(d, rnd)
+    elif kind == "prec":
+        _draw_prec(d, rnd)
+    elif kind == "bfd":
+        _draw_bfd(d, rnd)
     return d
 
 
@@ -254,6 +291,8 @@ def _fact_choices(d, rnd, n_true, n_total, offscope=True):
 
 
 def build_choices_select(d, rnd):
+    if d["kind"] == "prec":
+        return _prec_select_choices(d, rnd)
     return _fact_choices(d, rnd, n_true=1, n_total=4)
 
 
@@ -263,6 +302,8 @@ def build_choices_select2(d, rnd):
 
 def build_choices_allthat(d, rnd):
     """数非明示。正解数は 1〜4 を抽選(選択肢 5)。"""
+    if d["kind"] == "prec":
+        return _prec_allthat_choices(d, rnd)
     n_true = rnd.choice([1, 2, 2, 3, 3, 4])
     return _fact_choices(d, rnd, n_true=n_true, n_total=5, offscope=(n_true <= 2))
 
@@ -291,6 +332,9 @@ CORE = {
     "copy": "URL は proto://host/path。ftp は ip ftp username/password か URL 埋め込み、passive は ip ftp passive。SCP サーバは ip scp server enable が要り、aaa new-model 時は authorization exec も要る。SCP は SSH の上で動く。",
     "dnac": "Cisco DNA Center の Assurance は、機器から集めたテレメトリで健全性を可視化し根本原因を提示する(設定変更やバックアップの機能ではない)。デバイス/クライアント/アプリのスコア(1〜10・高いほど健全)を示す。時刻同期(NTP)がずれると相関・分析が乱れる。",
     "light": "監視・可用性の構成は 1 行の欠落で機能しない: IP SLA は schedule と track、NetFlow は monitor へのエクスポータの参照とインターフェイス適用、DHCP は helper-address と excluded-address が要る。",
+    "dbgpkt": "debug ip packet は**プロセス スイッチング**されたパケットだけを表示する(CEF で中継されるパケットは出ない)。s=送信元(IF)・d=宛先(IF)、(local)= 自ルータ発、rcvd= 自ルータ宛の受信、g=<次ホップ> … forward= 中継、unroutable= 経路なし、access denied= ACL で拒否、encapsulation failed= 次ホップの L2 解決失敗。実出力= iol-xe 17.15.1(poc/paper-kb P2/P2x)。",
+    "prec": "precedence 0 routine / 1 priority / 2 immediate / 3 flash / 4 flash-override / 5 critical / 6 internet / 7 network。数値で入れても show はキーワード表示。DSCP: cs1〜cs7= 8,16,…,56(precedence と同じ上位 3 ビット)、ef= 46、af11=10 af12=12 af13=14 / af21=18 af22=20 af23=22 / af31=26 af32=28 af33=30 / af41=34 af42=36 af43=38。route-map の set ip precedence は PBR の書き換え。",
+    "bfd": "min-tx= 自分の最小送信間隔、min-rx= 自分の最小受信間隔、multiplier= 障害判定の未受信数。**実送信間隔= max(自 min-tx, 相手 min-rx)**(実測)。IF は bfd interval <tx> min_rx <rx> multiplier <n>、template は bfd-template single-hop … interval min-tx/min-rx/multiplier → bfd template。OSPF: bfd all-interfaces(router)/ip ospf bfd(IF)。echo mode 有効時は show の非同期 MinTx/MinRx が 1 秒に見える。",
 }
 
 
@@ -343,6 +387,12 @@ SNMP_WHY = {
 
 
 def build_choices_read(d, rnd):
+    if d["kind"] == "dbgpkt":
+        return _dbgpkt_read_choices(d, rnd)
+    if d["kind"] == "prec":
+        return _prec_read_choices(d, rnd)
+    if d["kind"] == "bfd":
+        return _bfd_read_choices(d, rnd)
     if d["kind"] == "snmp":
         return _snmp_read_choices(d, rnd)
     if d["kind"] == "cef":
@@ -608,6 +658,8 @@ def _draw_ntp_cause(d, rnd):
 
 
 def build_choices_cause(d, rnd):
+    if d["kind"] == "dbgpkt":
+        return _dbgpkt_cause_choices(d, rnd)
     if d["kind"] == "ntp":
         return _ntp_cause_choices(d, rnd)
     if d["kind"] == "light":
@@ -740,6 +792,235 @@ def _light_cause_choices(d, rnd):
 
 
 # ==========================================================================
+# BL-181: dbgpkt / prec / bfd
+# ==========================================================================
+DBG_CASES = ["forus", "local", "forward", "unroutable", "acl", "encap"]
+
+
+def _draw_dbgpkt(d, rnd):
+    d["dbg"] = {"case": rnd.choice(DBG_CASES),
+                "s": rnd.choice(["10.0.12.1", "192.168.10.11", "172.16.5.20"]),
+                "me": rnd.choice(["10.0.12.2", "192.168.10.1", "172.16.5.1"]),
+                "far": rnd.choice(["10.0.23.3", "192.168.20.7", "172.16.9.44"]),
+                "nh": rnd.choice(["10.0.23.3", "192.168.20.1", "172.16.9.1"]),
+                "inif": rnd.choice(["Ethernet0/0", "GigabitEthernet0/0"]),
+                "outif": rnd.choice(["Ethernet0/1", "GigabitEthernet0/1"]),
+                "ts": f"*Sep 18 {rnd.randint(0, 23):02d}:{rnd.randint(0, 59):02d}:{rnd.randint(0, 59):02d}"}
+
+
+def _dbgpkt_exhibit(d):
+    g = d["dbg"]
+    t = g["ts"]
+    s, me, far, nh, i, o = g["s"], g["me"], g["far"], g["nh"], g["inif"], g["outif"]
+    head = f"{d['host']}# debug ip packet 199\nIP packet debugging is on for access list 199\n"
+    if g["case"] == "forus":
+        L = [f"{t}.482: IP: s={s} ({i}), d={me} (nil), len 100, input feature, MCI Check(110), rtype 0, forus FALSE, sendself FALSE, mtu 0, fwdchk FALSE",
+             f"{t}.482: IP: s={s} ({i}), d={me} (nil), len 100, rcvd 2",
+             f"{t}.482: IP: s={s} ({i}), d={me} (nil), len 100, stop process pak for forus packet",
+             f"{t}.482: IP: tableid=0, s={me} (local), d={s} ({i}) nexthop={s}, routed via FIB",
+             f"{t}.482: IP: s={me} (local), d={s} ({i}), len 100, sending",
+             f"{t}.482: IP: s={me} (local), d={s} ({i}), len 100, sending full packet"]
+    elif g["case"] == "local":
+        L = [f"{t}.943: IP: tableid=0, s={me} (local), d={s} ({i}) nexthop={s}, routed via FIB",
+             f"{t}.943: IP: s={me} (local), d={s} ({i}), len 100, sending",
+             f"{t}.943: IP: s={me} (local), d={s} ({i}), len 100, sending full packet",
+             f"{t}.944: IP: s={s} ({i}), d={me} (nil), len 100, input feature, MCI Check(110), rtype 0, forus FALSE, sendself FALSE, mtu 0, fwdchk FALSE",
+             f"{t}.944: IP: s={s} ({i}), d={me} (nil), len 100, rcvd 2"]
+    elif g["case"] == "forward":
+        L = [f"{t}.243: IP: s={s} ({i}), d={far} (nil), len 100, input feature, MCI Check(110), rtype 0, forus FALSE, sendself FALSE, mtu 0, fwdchk FALSE",
+             f"{t}.243: IP: tableid=0, s={s} ({i}), d={far} ({o}) nexthop={nh}, routed via FIB",
+             f"{t}.243: IP: s={s} ({i}), d={far} ({o}), g={nh}, len 100, forward",
+             f"{t}.243: IP: s={s} ({i}), d={far} ({o}), len 100, sending full packet"]
+    elif g["case"] == "unroutable":
+        L = [f"{t}.548: IP: s={s} ({i}), d={far} (nil), len 100, input feature, MCI Check(110), rtype 0, forus FALSE, sendself FALSE, mtu 0, fwdchk FALSE",
+             f"{t}.548: IP: s={s} ({i}), d={far} (nil), len 100, unroutable",
+             f"{t}.548: IP: tableid=0, s={me} (local), d={s} ({i}) nexthop={s}, routed via FIB",
+             f"{t}.548: IP: s={me} (local), d={s} ({i}), len 56, sending",
+             f"{t}.548: IP: s={me} (local), d={s} ({i}), len 56, sending full packet"]
+    elif g["case"] == "acl":
+        L = [f"{t}.204: IP: s={s} ({i}), d={far} (nil), len 100, access denied",
+             f"{t}.204: IP: tableid=0, s={s} ({i}), d={far} ({o}) nexthop={nh}, routed via FIB",
+             f"{t}.204: IP: tableid=0, s={me} (local), d={s} ({i}) nexthop={s}, routed via FIB",
+             f"{t}.204: IP: s={me} (local), d={s} ({i}), len 56, sending",
+             f"{t}.204: IP: s={me} (local), d={s} ({i}), len 56, sending full packet",
+             f"{t}.204: IP: s={s} ({i}), d={far} (nil), len 100, input feature, packet consumed, Access List(48), rtype 0, forus FALSE, sendself FALSE, mtu 0, fwdchk FALSE"]
+    else:  # encap
+        L = [f"{t}.440: IP: s={s} ({i}), d={far} (nil), len 100, input feature, MCI Check(110), rtype 0, forus FALSE, sendself FALSE, mtu 0, fwdchk FALSE",
+             f"{t}.440: IP: tableid=0, s={s} ({i}), d={far} ({o}) nexthop={nh}, routed via FIB",
+             f"{t}.440: IP: s={s} ({i}), d={far} ({o}), g={nh}, len 100, forward",
+             f"{t}.440: IP: s={s} ({i}), d={far} ({o}), len 100, encapsulation failed"]
+    return head + "\n".join(L)
+
+
+def _dbgpkt_read_choices(d, rnd):
+    g = d["dbg"]
+    s, me, far, nh = g["s"], g["me"], g["far"], g["nh"]
+    c = g["case"]
+    P = [
+        (f"{s} から {me} 宛のパケットを受信し、自ルータ宛として処理している。", c == "forus", "自ルータ宛の受信なら rcvd と stop process pak for forus packet の行が出る。"),
+        (f"{me} は自ルータのアドレスである。", c in ("forus", "local", "unroutable", "acl"), "(local) や rcvd の行に自ルータのアドレスとして現れていない。"),
+        (f"自ルータが {s} 宛にパケットを送信している。", c in ("forus", "local", "unroutable", "acl"), "s=<自ルータ> (local) … sending の行が無い。"),
+        (f"{s} から {far} 宛のパケットを {nh} へ中継(転送)している。", c == "forward", "g=<次ホップ> … forward の行が無い。"),
+        (f"{far} 宛の経路が無く、パケットは破棄されている。", c == "unroutable", "unroutable の行が無い。"),
+        (f"{s} から {far} 宛のパケットは、アクセス リストで拒否されている。", c == "acl", "access denied の行が無い。"),
+        (f"次ホップ {nh} の L2 アドレスを解決できず、パケットは破棄されている。", c == "encap", "encapsulation failed の行が無い。"),
+        (f"自ルータは {s} へ 56 バイトのパケット(ICMP エラー)を返している。", c in ("unroutable", "acl"), "len 56 の sending の行が無い。"),
+        (f"{s} から {far} 宛のパケットは CEF でスイッチングされている。", False, "debug ip packet に出ているのはプロセス スイッチングされたパケットであり、CEF で転送されるパケットは表示されない。"),
+    ]
+    trues = [(t, w) for t, ok, w in P if ok]
+    falses = [(t, w) for t, ok, w in P if not ok]
+    if not trues or len(falses) < 3:
+        raise ValueError("dbgpkt read: 肢が組めない")
+    t, _ = rnd.choice(trues)
+    out = [(t, True, "")]
+    for f, w in rnd.sample(falses, 3):
+        out.append((f, False, w))
+    order = list(range(len(out)))
+    rnd.shuffle(order)
+    return [out[i] for i in order]
+
+
+def _dbgpkt_cause_choices(d, rnd):
+    c = [("中継されるパケットは CEF でスイッチングされており、プロセス レベルの debug ip packet には表示されない。", True, ""),
+         ("アクセス リスト 199 が中継パケットに一致していない。", False, "アクセス リストは送信元と宛先を permit しており、一致している(自ルータ宛は表示されている)。"),
+         ("debug ip packet は着信インターフェイスのパケットしか表示しない。", False, "方向の制限ではなく、スイッチング パスの違いである。"),
+         ("logging buffered のレベルが debugging になっていない。", False, "自ルータ宛の debug 行はバッファに記録されており、レベルの問題ではない。")]
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
+PREC_NAMES = ["routine", "priority", "immediate", "flash", "flash-override", "critical", "internet", "network"]
+DSCP_NAMES = {"cs1": 8, "cs2": 16, "cs3": 24, "cs4": 32, "cs5": 40, "cs6": 48, "cs7": 56, "ef": 46,
+              "af11": 10, "af12": 12, "af13": 14, "af21": 18, "af22": 20, "af23": 22,
+              "af31": 26, "af32": 28, "af33": 30, "af41": 34, "af42": 36, "af43": 38}
+TOS_NAMES = {"normal": 0, "min-monetary-cost": 1, "max-reliability": 2, "max-throughput": 4, "min-delay": 8}
+
+
+def _draw_prec(d, rnd):
+    d["prec"] = {"mode": rnd.choice(["p2n", "n2p", "dscp", "cs"]), "n": rnd.randint(0, 7),
+                 "dscp": rnd.choice(list(DSCP_NAMES)), "tos": rnd.choice(list(TOS_NAMES))}
+
+
+def _prec_select_choices(d, rnd):
+    p = d["prec"]
+    if p["mode"] == "p2n":       # 数値 → キーワード
+        ans = PREC_NAMES[p["n"]]
+        picks = [ans] + rnd.sample([x for x in PREC_NAMES if x != ans], 3)
+        rnd.shuffle(picks)
+        return [(f"set ip precedence {x}", x == ans, "" if x == ans else f"{x} は precedence {PREC_NAMES.index(x)} である。") for x in picks]
+    if p["mode"] == "n2p":       # キーワード → 数値
+        ans = p["n"]
+        picks = [ans] + rnd.sample([x for x in range(8) if x != ans], 3)
+        rnd.shuffle(picks)
+        return [(f"set ip precedence {x}", x == ans, "" if x == ans else f"{x} は {PREC_NAMES[x]} である。") for x in picks]
+    if p["mode"] == "dscp":      # DSCP 名 → 値
+        ans = DSCP_NAMES[p["dscp"]]
+        picks = [ans] + rnd.sample([v for v in set(DSCP_NAMES.values()) if v != ans], 3)
+        rnd.shuffle(picks)
+        return [(f"set dscp {x}", x == ans, "" if x == ans else f"{x} は {', '.join(k for k, v in DSCP_NAMES.items() if v == x)} である。") for x in picks]
+    # cs → precedence
+    csn = int(p["dscp"][2]) if p["dscp"].startswith("cs") else rnd.randint(1, 7)
+    d["prec"]["dscp"] = f"cs{csn}"
+    ans = csn
+    picks = [ans] + rnd.sample([x for x in range(8) if x != ans], 3)
+    rnd.shuffle(picks)
+    return [(f"precedence {x}({PREC_NAMES[x]})", x == ans, "" if x == ans else f"cs{csn} の上位 3 ビットは {csn} であり、precedence {x} ではない。") for x in picks]
+
+
+def _prec_allthat_choices(d, rnd):
+    """show の表示(キーワード)から、投入され得たコマンドをすべて選ぶ(数値とキーワードの両方が正解)。"""
+    p = d["prec"]
+    n = p["n"]
+    name = PREC_NAMES[n]
+    d["prec"]["shown"] = name
+    c = [(f"set ip precedence {n}", True, ""), (f"set ip precedence {name}", True, "")]
+    others = [x for x in range(8) if x != n]
+    for x in rnd.sample(others, 2):
+        c.append((f"set ip precedence {x}", False, f"{x} は {PREC_NAMES[x]} と表示される。"))
+    c.append((f"set ip tos {rnd.choice(list(TOS_NAMES))}", False, "tos の設定は ip tos … として別行に表示される。"))
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
+def _prec_read_choices(d, rnd):
+    p = d["prec"]
+    n = p["n"]
+    d["prec"]["shown"] = PREC_NAMES[n]
+    c = [(f"パケットの IP precedence は {n} に書き換えられる。", True, "")]
+    for x in rnd.sample([x for x in range(8) if x != n], 2):
+        c.append((f"パケットの IP precedence は {x} に書き換えられる。", False, f"{PREC_NAMES[n]} は precedence {n} である。"))
+    c.append((f"パケットの DSCP は {DSCP_NAMES['ef']}(ef)に書き換えられる。", False, "set ip precedence は上位 3 ビット(precedence)の書き換えであり、ef(46)ではない。"))
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
+def _prec_exhibit(d):
+    p = d["prec"]
+    name = p.get("shown", PREC_NAMES[p["n"]])
+    return (f"{d['host']}# show route-map PBR-VOICE\nroute-map PBR-VOICE, permit, sequence 10\n  Match clauses:\n    ip address (access-lists): 110 \n"
+            f"  Set clauses:\n    ip precedence {name}\n    ip next-hop 10.1.1.2\n  Policy routing matches: 1240 packets, 124000 bytes")
+
+
+def _draw_bfd(d, rnd):
+    tx, rx, m = rnd.choice([(50, 50, 4), (100, 100, 3), (200, 200, 3), (300, 300, 5)])
+    rtx, rrx, rm = rnd.choice([(300, 200, 5), (100, 100, 3), (500, 250, 3), (50, 150, 4)])
+    d["bfd"] = {"tx": tx, "rx": rx, "m": m, "rtx": rtx, "rrx": rrx, "rm": rm,
+                "me": rnd.choice(["10.0.34.3", "10.10.1.1", "192.168.99.5"]), "nb": rnd.choice(["10.0.34.4", "10.10.1.2", "192.168.99.6"]),
+                "ifs": rnd.choice(["Et0/0", "Gi0/1"])}
+
+
+def _bfd_exhibit(d):
+    b = d["bfd"]
+    return (f"{d['host']}# show bfd neighbors details\n\nIPv4 Sessions\nNeighAddr                              LD/RD         RH/RS     State     Int\n"
+            f"{b['nb']:<38} 1/1           Up        Up        {b['ifs']}\n"
+            f"Session state is UP and not using echo function.\nOurAddr: {b['me']}\nLocal Diag: 0, Demand mode: 0, Poll bit: 0\n"
+            f"MinTxInt: {b['tx'] * 1000}, MinRxInt: {b['rx'] * 1000}, Multiplier: {b['m']}\n"
+            f"Received MinRxInt: {b['rrx'] * 1000}, Received Multiplier: {b['rm']}\n"
+            f"Holddown (hits): {max(b['tx'], b['rrx']) * b['rm']}(0), Hello (hits): {max(b['tx'], b['rrx'])}(146)\n"
+            f"Registered protocols: OSPF CEF ")
+
+
+def _bfd_read_choices(d, rnd):
+    b = d["bfd"]
+    tx_eff = max(b["tx"], b["rrx"])
+    det = tx_eff * b["rm"]
+    c = [(f"自ルータが BFD 制御パケットを送信する実際の間隔は {tx_eff} ms である。", True, "")]
+    wrong = {b["tx"]: "自ルータの MinTxInt そのものではなく、相手の Received MinRxInt と比べて大きい方になる。",
+             b["rrx"]: "相手の MinRxInt そのものではなく、自ルータの MinTxInt と比べて大きい方になる。",
+             b["rx"]: "MinRxInt は受信の許容間隔であり、送信間隔ではない。",
+             min(b["tx"], b["rrx"]): "小さい方ではなく大きい方に合わせる。"}
+    cand = [(f"自ルータが BFD 制御パケットを送信する実際の間隔は {v} ms である。", w) for v, w in wrong.items() if v != tx_eff]
+    seen = set()
+    cand = [(t, w) for t, w in cand if not (t in seen or seen.add(t))]
+    for t, w in rnd.sample(cand, min(2, len(cand))):
+        c.append((t, False, w))
+    extra = [
+        (f"自ルータの multiplier {b['m']} は、自ルータが相手を障害と判定するまでの未受信回数である。", False,
+         "自ルータの multiplier は相手に通知され、相手が自ルータを判定するのに使う。自ルータ側の判定は Received Multiplier による。"),
+        (f"相手が自ルータからのパケットの途絶を障害と判定するまでの時間は {b['rx'] * b['m']} ms である。", False,
+         f"相手側の検出時間は Received Multiplier({b['rm']})×自ルータの実送信間隔({tx_eff} ms)= {det} ms である。"),
+        (f"このセッションは echo 機能を使用している。", False, "Session state に not using echo function とある。"),
+        (f"Received MinRxInt {b['rrx']} ms は、自ルータが受信できる最小の間隔である。", False, "Received … は相手から通知された値であり、相手の受信の許容間隔である。"),
+        (f"OSPF の Hello は、BFD の送信間隔({tx_eff} ms)で送信されるようになる。", False, "BFD は OSPF の hello とは独立したセッションで検出し、hello の間隔は変えない。"),
+    ]
+    if b["m"] == b["rm"]:
+        extra = extra[1:]
+    for t, _, w in extra:
+        if len([x for x in c if not x[1]]) >= 3:
+            break
+        c.append((t, False, w))
+    c = c[:4]
+    if len(c) < 4:
+        raise ValueError("bfd read: 肢が足りない")
+    order = list(range(len(c)))
+    rnd.shuffle(order)
+    return [c[i] for i in order]
+
+
+# ==========================================================================
 # Markdown(設問本文と解答本文)
 # ==========================================================================
 ASK_FACT = {
@@ -754,6 +1035,10 @@ def question_body(d, choices, form):
     """(before_ask, ask_text, choices_md, terms_md or "") を返す。"""
     kind = d["kind"]
     subject = FACT_SCOPE.get(kind, (CORE[kind],))[0]
+    if kind == "prec" and form in ("select", "allthat"):
+        before, ask = _analysis_body(d, form)
+        ch_md = "\n\n".join(f"{'ABCDEFG'[i]}. {t}" for i, (t, _, _) in enumerate(choices))
+        return before, ask, ch_md, ""
     if form in ("select", "select2", "allthat", "match"):
         ask = ASK_FACT[form].format(subject=subject)
         if form == "match":
@@ -811,6 +1096,39 @@ def _analysis_body(d, form):
         ask = ("このルータは、指定した NTP のサーバと同期しません。この事象の原因として"
                "最も適切なものは、次のうちどれですか。(1つを選択してください)")
         return f"次の構成と出力が示されています。\n\n```\n{ex}\n```", ask
+    if kind == "dbgpkt":
+        ex = _dbgpkt_exhibit(d)
+        if form == "cause":
+            before = (f"{d['host']} で、{d['dbg']['s']} から {d['dbg']['far']} 宛の通信を確認するために debug ip packet 199 を有効にしました"
+                      f"(アクセス リスト 199 は両アドレスを送信元・宛先とする IP を permit しています)。{d['dbg']['s']} からの ping は成功しますが、"
+                      f"次のように自ルータ宛のパケットしか表示されず、中継されるパケットは表示されません。\n\n```\n{ex}\n```")
+            ask = "中継されるパケットが表示されない理由として最も適切なものは、次のうちどれですか。(1つを選択してください)"
+            return before, ask
+        ask = "この出力から分かることとして、正しく述べられているものは、次のうちどれですか。(1つを選択してください)"
+        return f"次の出力が示されています。\n\n```\n{ex}\n```", ask
+    if kind == "prec":
+        if form == "read":
+            ex = _prec_exhibit(d)
+            ask = "このルート マップに一致したパケットについて、正しく述べられているものは、次のうちどれですか。(1つを選択してください)"
+            return f"```\n{ex}\n```", ask
+        if form == "allthat":
+            ex = _prec_exhibit(d)
+            ask = "この表示になる set コマンドとして投入された可能性のあるものを、すべて選んでください。"
+            return f"```\n{ex}\n```", ask
+        p = d["prec"]
+        if p["mode"] == "p2n":
+            ask = f"`set ip precedence {p['n']}` と同じ意味のコマンドはどれですか。(1つを選択してください)"
+        elif p["mode"] == "n2p":
+            ask = f"`set ip precedence {PREC_NAMES[p['n']]}` と同じ意味のコマンドはどれですか。(1つを選択してください)"
+        elif p["mode"] == "dscp":
+            ask = f"`set dscp {p['dscp']}` と同じ意味のコマンドはどれですか。(1つを選択してください)"
+        else:
+            ask = f"DSCP 値 {p['dscp']} と同じ上位 3 ビットを持つ IP precedence はどれですか。(1つを選択してください)"
+        return "", ask
+    if kind == "bfd":
+        ex = _bfd_exhibit(d)
+        ask = "この出力から分かることとして、正しく述べられているものは、次のうちどれですか。(1つを選択してください)"
+        return f"```\n{ex}\n```", ask
     if kind == "light":
         ex = _light_exhibit(d)
         tmpl = LIGHT_CASES[d["light"]["key"]]

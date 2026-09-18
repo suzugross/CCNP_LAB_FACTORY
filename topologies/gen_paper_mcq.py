@@ -53,6 +53,20 @@ import gen_paper_bgpbest as gbb  # noqa: E402  (bgpbest=BGPベストパス読解
 import gen_paper_copp as gpc   # noqa: E402  (copp=CoPP 分類→police 読解/是正・BL-125)
 import gen_paper_mpls as gpm   # noqa: E402  (mpls=MPLS L3VPN 知識+VRF 構成読解・BL-169)
 import gen_paper_svc as gsv   # noqa: E402  (svc=Services 即答形・BL-170)
+import gen_paper_fhs as gpf   # noqa: E402  (fhs=IPv6 First-Hop Security 紙面・BL-146)
+import gen_paper_ospfdbg as god   # noqa: E402  (ospfdbg=OSPF 隣接 debug 読解・BL-177)
+import gen_paper_dhcp6 as gd6   # noqa: E402  (dhcp6=DHCPv6/SLAAC モード・BL-178)
+import gen_paper_dmvpn as gdm   # noqa: E402  (dmvpn=DMVPN 構文/意味/フェーズ・BL-179)
+import gen_paper_eigrpkb as gek   # noqa: E402  (eigrpkb=EIGRP named-mode/auto-summary・BL-180)
+import gen_paper_bgppol as gbp   # noqa: E402  (bgppol=BGP out ポリシー・BL-182)
+import gen_paper_rtbasic as grt   # noqa: E402  (rtbasic=経路選択の基礎 AD/RIB・BL-184)
+# ★svc 型ファミリ(事実ベース＋小さな真偽関数・紙面専用)の共通レジストリ(2026-09-18・BL-176 計画)。
+#   shape 名 → module。新ファミリはここに 1 行足すだけで pick/forms/render/lint/obfuscate/
+#   瞬発力枠(--shape speed)/思考系枠(mixed の kbthink)の全経路に乗る。module の規約は
+#   gen_paper_svc.py の docstring(KINDS/kind_forms/draw/build_choices_*/question_body/
+#   answer_body/pick_count/CORE/TITLES)＋ SPEED_KINDS / THINK_KINDS(任意。無ければ全 kind が瞬発力枠)。
+KB_FAMILIES = {"svc": gsv, "fhs": gpf, "ospfdbg": god, "dhcp6": gd6, "dmvpn": gdm, "eigrpkb": gek,
+               "bgppol": gbp, "rtbasic": grt}
 import gen_paper_pref as gpr   # noqa: E402  (pref=OSPF/EIGRP 経路選好・BL-127)
 import gen_paper_ospfbgp as gob  # noqa: E402  (ospfbgp=OSPF→BGP 再配送の範囲・BL-163)
 
@@ -6914,15 +6928,17 @@ def answer_md_mpls(d, choices, stamp, master_seed, subseed, form):
 # ★紙面専用。知識形は事実ベース(タグ排他)、分析形は小さな真偽関数＋実測 exhibit。
 #   独自の節構成なので obfuscate_md はタイトルだけ触る(mpls と同様)。
 # --------------------------------------------------------------------------
-def pick_draw_svc(qseed, kind, forms=None):
+def pick_draw_kb(shape, qseed, kind, forms=None):
+    """svc 型ファミリ共通: kind が成立する seed を探して draw する。"""
+    mod = KB_FAMILIES[shape]
     for kk in range(200):
         s = qseed + kk * 149
         rnd = random.Random(s)
         try:
-            return s, gsv.draw(rnd, kind)
+            return s, mod.draw(rnd, kind)
         except ValueError:
             continue
-    raise SystemExit(f"svc kind={kind} が成立する seed が見つかりません({qseed})")
+    raise SystemExit(f"{shape} kind={kind} が成立する seed が見つかりません({qseed})")
 
 
 SVC_TITLES = {
@@ -6931,12 +6947,18 @@ SVC_TITLES = {
     "archive": "構成の管理(archive)", "cef": "CEF の出力の読解",
     "copy": "ファイル転送", "dnac": "Cisco DNA Center の Assurance",
     "light": "監視・可用性の構成の点検",
+    "dbgpkt": "debug ip packet の出力の読解", "prec": "IP precedence と DSCP の指定", "bfd": "BFD の間隔とネゴシエーション",
 }
 
 
-def question_md_svc(d, choices, stamp, form):
-    before, ask, ch_md, terms_md = gsv.question_body(d, choices, form)
-    title = SVC_TITLES.get(d["kind"], "ネットワーク・サービス")
+KB_TITLES = {"svc": SVC_TITLES, "fhs": gpf.TITLES, "ospfdbg": god.TITLES, "dhcp6": gd6.TITLES, "dmvpn": gdm.TITLES, "eigrpkb": gek.TITLES,
+             "bgppol": gbp.TITLES, "rtbasic": grt.TITLES}
+
+
+def question_md_kb(shape, d, choices, stamp, form):
+    mod = KB_FAMILIES[shape]
+    before, ask, ch_md, terms_md = mod.question_body(d, choices, form)
+    title = KB_TITLES[shape].get(d["kind"], "ネットワーク・サービス")
     parts = [f"# 問題 {stamp} : {title}", "", FIXED_NOTE, ""]
     if before:
         parts += ["## シナリオ", "", before, ""]
@@ -6947,8 +6969,9 @@ def question_md_svc(d, choices, stamp, form):
     return "\n".join(parts)
 
 
-def answer_md_svc(d, choices, stamp, master_seed, subseed, form):
-    body = gsv.answer_body(d, choices, form)
+def answer_md_kb(shape, d, choices, stamp, master_seed, subseed, form):
+    mod = KB_FAMILIES[shape]
+    body = mod.answer_body(d, choices, form)
     form_note = {"allthat": "(数非明示= 正解の数は設問に示さない・正解集合は事実ベースから機械決定)",
                  "match": "(組合せ形= 解答UIは BL-168・正解は全単射)",
                  "select2": "(正解ちょうど2・「真だが設問外」の肢を含み得る)",
@@ -6960,9 +6983,9 @@ def answer_md_svc(d, choices, stamp, master_seed, subseed, form):
 
 ## 仕込んだ状態
 
-- 種別: `svc/{d['kind']}` — {gsv.CORE[d['kind']]}
+- 種別: `{shape}/{d['kind']}` — {mod.CORE[d['kind']]}
 - 出題形: {form}{form_note}
-- 生成: `gen_paper_mcq.py --shape svc --seed {master_seed}` (sub-seed {subseed})
+- 生成: `gen_paper_mcq.py --shape {shape} --seed {master_seed}` (sub-seed {subseed})
 """
 
 
@@ -7855,7 +7878,7 @@ def main():
                     choices=["chain", "ring", "pbr", "urpf", "bgpdbg", "mploop",
                              "riploop", "leakmap", "ospfv3pl", "v6redist",
                              "aaa", "acl", "aclv6", "bgpbest", "copp", "pref",
-                             "ospfbgp", "mpls", "svc", "mixed"],
+                             "ospfbgp", "mpls", "svc", "fhs", "ospfdbg", "dhcp6", "dmvpn", "eigrpkb", "bgppol", "rtbasic", "speed", "mixed"],
                     default="chain",
                     help="chain=再配送欠落/誤設定系(既定) / ring=再配送リングの定常ループ(難5)"
                          " / riploop=RIP⇄OSPF 対策が効いていない型(BL-116)"
@@ -7880,6 +7903,15 @@ def main():
                          " / svc=Services 即答形(SNMP/SSH/syslog/NTP/archive/"
                          "CEF/ファイル転送/DNAC・BL-170・紙面専用・"
                          "select/select2/allthat/match/read/fix/cause)"
+                         " / fhs=IPv6 First-Hop Security(BL-146 紙面・紙面専用・"
+                         "term/pick=瞬発 select/select2/allthat/match・policy=思考 read/cause/fix)"
+                         " / ospfdbg=OSPF 隣接 debug 読解(BL-177・紙面専用・12 故障種×read/cause/fix＋which=瞬発)"
+                         " / dhcp6=DHCPv6/SLAAC モード(BL-178・紙面専用・mode=瞬発 select/select2/read・trouble=思考 cause/fix/read)"
+                         " / dmvpn=DMVPN 構文(実機 ?)・キーワードの意味・フェーズ判定(BL-179・紙面専用)"
+                         " / eigrpkb=EIGRP named-mode のモード対応(瞬発)・auto-summary 境界(思考)(BL-180・紙面専用)"
+                         " / bgppol=BGP out ポリシー(暗黙 deny/非トランジット DL)(BL-182・紙面専用・思考)"
+                         " / rtbasic=経路選択の基礎(floating static の閾値世界/AD で勝つ経路/EIGRP topology→RIB)(BL-184・紙面専用・思考)"
+                         " / speed=瞬発力枠(svc 型ファミリの即答 kind を問題ごとに抽選)"
                          " / mixed=問題ごとに形・種別を抽選(ごちゃまぜ)")
     ap.add_argument("--forms", default="",
                     help="出題形を絞る(カンマ区切り)。shape=acl: select,read,"
@@ -7924,7 +7956,7 @@ def main():
 
     # 既定は種別の巡回順も seed で混ぜる(--count 1 でも型が割れないように)。
     # qseeds の再現性を保つため base とは別の rng を使う。
-    if a.shape == "mixed":
+    if a.shape in ("mixed", "speed"):
         kinds = None   # 問題ごとに shape/種別を抽選(--kinds は無視)
     else:
         pool = {"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
@@ -7936,7 +7968,7 @@ def main():
                 "aclv6": gp6.KINDS, "bgpbest": gbb.KINDS,
                 "copp": gpc.KINDS, "pref": gpr.KINDS,
                 "ospfbgp": gob.KINDS, "mpls": gpm.KINDS,
-                "svc": gsv.KINDS}.get(a.shape, KINDS)
+                **{k: m.KINDS for k, m in KB_FAMILIES.items()}}.get(a.shape, KINDS)
         kinds = (a.kinds.split(",") if a.kinds
                  else random.Random(a.seed ^ 0x5EED).sample(pool, len(pool)))
         if not set(kinds) <= set(pool):
@@ -7955,7 +7987,8 @@ def main():
     want_forms = [x.strip() for x in a.forms.split(",") if x.strip()]
     want_worlds = [x.strip() for x in a.worlds.split(",") if x.strip()]
     if want_forms and a.shape not in ("acl", "aclv6", "bgpbest", "bgpdbg",
-                                      "copp", "pref", "mpls", "svc", "mixed"):
+                                      "copp", "pref", "mpls", *KB_FAMILIES,
+                                      "mixed", "speed"):
         print(f"[!] --forms は shape={a.shape} では無視されます", flush=True)
     if want_worlds and a.shape not in ("acl", "aclv6", "bgpbest", "mpls", "mixed"):
         print(f"[!] --worlds は shape={a.shape} では無視されます", flush=True)
@@ -7979,10 +8012,11 @@ def main():
     #   種を先に決めてから形を探すと「その形を持たない種」で詰む。
     if want_forms and kinds is not None and a.shape in ("acl", "aclv6",
                                                         "bgpbest", "bgpdbg",
-                                                        "copp", "pref", "mpls", "svc"):
+                                                        "copp", "pref", "mpls",
+                                                        *KB_FAMILIES):
         mod = {"acl": gpl, "aclv6": gp6, "bgpbest": gbb,
                "bgpdbg": gpb, "copp": gpc, "pref": gpr, "mpls": gpm,
-               "svc": gsv}[a.shape]
+               **KB_FAMILIES}[a.shape]
         keep = [k for k in kinds if set(want_forms) & mod.kind_forms(k)]
         if not keep:
             raise SystemExit(
@@ -8018,21 +8052,32 @@ def main():
             #   ★svc(BL-170)は mixed に入れない(2026-09-13 ユーザ指示)。
             #   即答形は gen_pack の**瞬発力枠**(--speed・既定5問)で別枠に出すため、
             #   mixed に混ぜると「思考系 N 問」の枠が即答形で埋まってしまう。
+            #   ★kbthink の 4%(BL-176・2026-09-18)は pbr/urpf/leakmap/ospfv3pl から
+            #   1% ずつ捻出した**暫定枠**= svc 型ファミリの思考系 kind(THINK_KINDS:
+            #   fhs.policy など)を family 均等→kind 均等で抽選する。svc は入れない。
             shape_i = ("ring" if r < 0.06 else "riploop" if r < 0.11
-                       else "pbr" if r < 0.17
-                       else "urpf" if r < 0.23 else "mploop" if r < 0.30
-                       else "leakmap" if r < 0.36 else "ospfv3pl" if r < 0.42
-                       else "v6redist" if r < 0.48
-                       else "aaa" if r < 0.55
-                       else "acl" if r < 0.61
-                       else "aclv6" if r < 0.66
-                       else "bgpbest" if r < 0.73
-                       else "bgpdbg" if r < 0.78
-                       else "copp" if r < 0.85
-                       else "pref" if r < 0.90
-                       else "ospfbgp" if r < 0.93
-                       else "mpls" if r < 0.98 else "chain")
-            kind = roll.choice({"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
+                       else "pbr" if r < 0.16
+                       else "urpf" if r < 0.21 else "mploop" if r < 0.28
+                       else "leakmap" if r < 0.33 else "ospfv3pl" if r < 0.38
+                       else "v6redist" if r < 0.44
+                       else "aaa" if r < 0.51
+                       else "acl" if r < 0.57
+                       else "aclv6" if r < 0.62
+                       else "bgpbest" if r < 0.69
+                       else "bgpdbg" if r < 0.74
+                       else "copp" if r < 0.81
+                       else "pref" if r < 0.86
+                       else "ospfbgp" if r < 0.89
+                       else "mpls" if r < 0.94
+                       else "kbthink" if r < 0.98 else "chain")
+            if shape_i == "kbthink":
+                fams = sorted(sh for sh, m in KB_FAMILIES.items()
+                              if getattr(m, "THINK_KINDS", None))
+                shape_i = roll.choice(fams)
+                kind = roll.choice(KB_FAMILIES[shape_i].THINK_KINDS)
+            else:
+                kind = None
+            kind = kind or roll.choice({"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
                                 "urpf": gpu.URPF_KINDS, "mploop": MPLOOP_KINDS,
                                 "riploop": RIPLOOP_KINDS,
                                 "leakmap": gpk.KINDS, "ospfv3pl": gpo.KINDS,
@@ -8046,7 +8091,15 @@ def main():
                                 "pref": gpr.KINDS,
                                 "ospfbgp": gob.KINDS,
                                 "mpls": gpm.KINDS,
-                                "svc": gsv.KINDS}.get(shape_i, KINDS))
+                                **{k: m.KINDS for k, m in KB_FAMILIES.items()}
+                                }.get(shape_i, KINDS))
+        elif a.shape == "speed":
+            # ★瞬発力枠(BL-176・2026-09-18): svc 型ファミリの即答 kind(SPEED_KINDS・
+            #   無ければ全 kind)を family 均等→kind 均等で抽選。gen_pack --speed-shape speed。
+            roll = random.Random(qseed ^ 0x5EED5)
+            shape_i = roll.choice(sorted(KB_FAMILIES))
+            m = KB_FAMILIES[shape_i]
+            kind = roll.choice(getattr(m, "SPEED_KINDS", None) or m.KINDS)
         else:
             shape_i = a.shape
             kind = kinds[i % len(kinds)]
@@ -8124,8 +8177,8 @@ def main():
         elif shape_i == "mpls":
             subseed, d = pick_draw_mpls(qseed, kind, forms=want_forms,
                                         worlds=want_worlds)
-        elif shape_i == "svc":
-            subseed, d = pick_draw_svc(qseed, kind, forms=want_forms)
+        elif shape_i in KB_FAMILIES:
+            subseed, d = pick_draw_kb(shape_i, qseed, kind, forms=want_forms)
         else:
             subseed, d = pick_draw(qseed, kind, hard=a.hard)
         prob_id = f"PAPER-RD-{subseed}"
@@ -8198,8 +8251,8 @@ def main():
         elif shape_i == "mpls":
             plan = {"checks": []}          # 紙面専用(事実ベース＋rt_model の写像)
             choices = None                 # ★形の抽選後に組む(下記)
-        elif shape_i == "svc":
-            plan = {"checks": []}          # 紙面専用(事実ベース＋真偽関数の写像・BL-170)
+        elif shape_i in KB_FAMILIES:
+            plan = {"checks": []}          # 紙面専用(事実ベース＋真偽関数の写像・BL-170/BL-176)
             choices = None                 # ★形の抽選後に組む(下記)
         elif shape_i == "bgpdbg":
             plan = {"checks": []}          # 紙面専用(実機 PoC 出力の写し)
@@ -8228,7 +8281,8 @@ def main():
                                                     "ospfv3pl", "v6redist",
                                                     "aaa", "acl", "aclv6",
                                                     "bgpbest", "copp",
-                                                    "pref", "ospfbgp", "mpls", "svc"))
+                                                    "pref", "ospfbgp", "mpls",
+                                                    *KB_FAMILIES))
                      else None)
         # 赤ニシン(exam): 未適用ポリシー+無害な適用行を config に混入(pbr は素で騒がしい)
         herr, decoy = None, None
@@ -8324,9 +8378,10 @@ def main():
                         "fix": gpm.build_choices_fix,
                         "read": gpm.build_choices_read,
                         "cause": gpm.build_choices_cause}[form](d, rnd))
-        if shape_i == "svc":
-            # ★BL-170: 成立する形(gsv.kind_forms)から抽選/指定。--forms 対応。
-            avail = sorted(gsv.kind_forms(d["kind"]))
+        if shape_i in KB_FAMILIES:
+            # ★BL-170/BL-176: 成立する形(mod.kind_forms)から抽選/指定。--forms 対応。
+            _kb = KB_FAMILIES[shape_i]
+            avail = sorted(_kb.kind_forms(d["kind"]))
             if want_forms:
                 avail = [f for f in avail if f in want_forms] or avail
             if a.exam:
@@ -8346,13 +8401,24 @@ def main():
             else:
                 form = ("read" if "read" in avail else "fix" if "fix" in avail
                         else "cause" if "cause" in avail else "select")
-            choices = (gsv.build_match(d, rnd) if form == "match" else
-                       {"select": gsv.build_choices_select,
-                        "select2": gsv.build_choices_select2,
-                        "allthat": gsv.build_choices_allthat,
-                        "fix": gsv.build_choices_fix,
-                        "read": gsv.build_choices_read,
-                        "cause": gsv.build_choices_cause}[form](d, rnd))
+            # ★BL-176: 形と盤面の組合せが成立しない(モジュールが ValueError)ときは
+            #   別 seed で盤面を引き直す(kind は保持・形は再抽選しない)。
+            for _try in range(80):
+                try:
+                    choices = (_kb.build_match(d, rnd) if form == "match" else
+                               {"select": _kb.build_choices_select,
+                                "select2": _kb.build_choices_select2,
+                                "allthat": _kb.build_choices_allthat,
+                                "fix": _kb.build_choices_fix,
+                                "read": _kb.build_choices_read,
+                                "cause": _kb.build_choices_cause}[form](d, rnd))
+                    break
+                except ValueError:
+                    subseed, d = pick_draw_kb(shape_i, subseed + 7919, kind, forms=want_forms)
+                    rnd = random.Random(subseed ^ 0xA5A5)
+                    prob_id = f"PAPER-RD-{subseed}"
+            else:
+                raise SystemExit(f"{shape_i}/{kind}/{form}: 成立する盤面が見つかりません")
         # ★紙面専用 shape は既定形が fix ではない。form は解答 md の「出題形」欄
         #   だけでなく**提示物の出し分け**(acl_evidence)にも使われるので、
         #   ここで実際に組んだ形に合わせておく(既定= cause / 無ければ read)。
@@ -8629,10 +8695,10 @@ def main():
                 except ValueError:
                     pass
         if choices:
-            if not (shape_i in ("mpls", "svc") and form == "match"):   # ★組合せ形は (terms, 説明, 対応) の組
+            if not (shape_i in ("mpls", *KB_FAMILIES) and form == "match"):   # ★組合せ形は (terms, 説明, 対応) の組
                 choices = rebalance_position(repo, choices)
         opt_style = (choice_style(rnd, choices, form)
-                     if choices and not (shape_i in ("mpls", "svc") and form == "match")
+                     if choices and not (shape_i in ("mpls", *KB_FAMILIES) and form == "match")
                      else "prose")
         if shape_i == "ospfbgp" and form == "fix":
             # ★BL-163: 選択肢は全て設定コマンド。散文と混在すると
@@ -8671,8 +8737,8 @@ def main():
                 reqs = None if form == "read" else gob.requirements(d, rnd, form)
             elif shape_i == "mpls":
                 reqs = None            # ★BL-169: 要件は question_body が本文に埋める
-            elif shape_i == "svc":
-                reqs = None            # ★BL-170: 紙面専用(exhibit と設問に自足)
+            elif shape_i in KB_FAMILIES:
+                reqs = None            # ★BL-170/BL-176: 紙面専用(exhibit と設問に自足)
             elif shape_i == "copp":
                 reqs = copp_requirements(d, rnd, form)
             elif shape_i == "pref":
@@ -8720,7 +8786,7 @@ def main():
 
         if shape_i in ("urpf", "bgpdbg", "leakmap", "ospfv3pl", "v6redist",
                        "aaa", "acl", "aclv6", "bgpbest", "copp", "pref",
-                       "ospfbgp", "mpls", "svc"):
+                       "ospfbgp", "mpls", *KB_FAMILIES):
             collected = {}                 # 紙面専用: 実機展開・収集を行わない
         elif a.no_lab:
             collected = {(c["node"], c["command"]): "(PLACEHOLDER: --no-lab)"
@@ -8854,10 +8920,11 @@ def main():
             q_md = question_md_mpls(d, choices, stamp, form)
             a_md = answer_md_mpls(d, choices, stamp, a.seed, subseed, form)
             lint += list(gpm.KINDS) + list(gpm.WORLDS) + ["world=", "_works"]
-        elif shape_i == "svc":
-            q_md = question_md_svc(d, choices, stamp, form)
-            a_md = answer_md_svc(d, choices, stamp, a.seed, subseed, form)
-            lint += ["_works", "ssh_missing", "_correct"]   # ★svc は kind 名が本文の正規語彙なので lint しない
+        elif shape_i in KB_FAMILIES:
+            q_md = question_md_kb(shape_i, d, choices, stamp, form)
+            a_md = answer_md_kb(shape_i, d, choices, stamp, a.seed, subseed, form)
+            # ★svc 型は kind 名が本文の正規語彙なので kind 名は lint しない(内部キーだけ)
+            lint += ["_works", "ssh_missing", "_correct", "_state", "_fix", "_match_keys"]
         elif shape_i == "pref":
             blocks = pref_evidence(d, rnd, form)
             q_md = question_md_pref(d, blocks, choices, stamp, form=form,
@@ -8911,7 +8978,7 @@ def main():
                             # ★BL-169: mpls は独自の節構成(知識・読解)。標準5節の
                             #   再構成は当てはまらないのでタイトルの無機質化だけ行う。
                             essay=((shape_i == "bgpdbg" and form == "essay")
-                                   or shape_i in ("mpls", "svc")),
+                                   or shape_i in ("mpls", *KB_FAMILIES)),
                             # ★patch も設問文が情報の担い手(「接続を失わずに」「移行の途中」)
                             # ★acl の read も同様(BL-106・4例目)= 設問文が
                             #   **向き**(転送される/破棄される)と**選ぶ個数**を担っており、
