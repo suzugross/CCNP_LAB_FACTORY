@@ -1,0 +1,71 @@
+# 自動生成 (gen_redist_field.py) GEN-RDFIELD-92000 K=3 faults=[('BR1', 'name_clash'), ('BR2', 'wrong_id')]
+problem: GEN-RDFIELD-92000
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT02: 64.64.64.64
+    RT06: 26.26.26.26
+    RT05: 12.12.12.12
+    RT01: 4.4.4.4
+    RT03: 32.32.32.32
+    RT04: 6.6.6.6
+  links:
+  - a: RT02
+    a_ip: 10.105.26.1
+    b: RT05
+    b_ip: 10.105.26.2
+  - a: RT05
+    a_ip: 10.118.201.1
+    b: RT01
+    b_ip: 10.118.201.2
+  - a: RT02
+    a_ip: 10.252.191.1
+    b: RT06
+    b_ip: 10.252.191.2
+  - a: RT06
+    a_ip: 10.20.192.1
+    b: RT03
+    b_ip: 10.20.192.2
+  - a: RT06
+    a_ip: 10.97.198.1
+    b: RT04
+    b_ip: 10.97.198.2
+invariants:
+  - { type: reachability_all, name: "全ルータ間 Loopback 相互到達", points: 40 }
+  - { type: loop_free, name: "転送ループ無し", points: 10 }
+checks:
+  - name: "RT02: 収容標準どおりの相互再配送(方向・参照ID・seed metric)"
+    node: RT02
+    command: "show running-config | include redistribute"
+    raw:
+      - { regex: 'redistribute +ospf +90 +match +internal +external +1 +external +2 +metric +100000 +100 +255 +1 +1500' }
+      - { regex: 'redistribute +eigrp +589' }
+    points: 10
+  - name: "RT06: 収容標準どおりの相互再配送(方向・参照ID・seed metric)"
+    node: RT06
+    command: "show running-config | include redistribute"
+    raw:
+      - { regex: 'redistribute +ospf +84 +match +internal +external +1 +external +2' }
+      - { regex: 'redistribute +ospf +90 +match +internal +external +1 +external +2' }
+    points: 10
+  - name: "RT02: 再配送にフィルタ類が残っていない(収容標準=全 Loopback 相互到達)"
+    node: RT02
+    command: "show running-config | include redistribute"
+    raw:
+      - { not_regex: "redistribute .*route-map" }
+    points: 10
+  - name: "RT06: 再配送にフィルタ類が残っていない(収容標準=全 Loopback 相互到達)"
+    node: RT06
+    command: "show running-config | include redistribute"
+    raw:
+      - { not_regex: "redistribute .*route-map" }
+    points: 10
+  - name: "RT05: 対岸 RT04 の Loopback(6.6.6.6) を外部経路として学習"
+    node: RT05
+    command: "show ip route 6.6.6.6"
+    raw:
+      - { regex: 'Known via' }
+      - { regex: "distance 170" }
+    points: 10

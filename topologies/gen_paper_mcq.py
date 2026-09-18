@@ -8015,6 +8015,9 @@ def main():
             #   全体の再配分はユーザ判断により後日まとめて行う。
             #   ★mpls の 5%(BL-169・2026-09-13)は pbr/urpf/leakmap/ospfv3pl/
             #   v6redist から 1% ずつ捻出した**暫定枠**(2.0 VPN の紙面空白解消)。
+            #   ★svc(BL-170)は mixed に入れない(2026-09-13 ユーザ指示)。
+            #   即答形は gen_pack の**瞬発力枠**(--speed・既定5問)で別枠に出すため、
+            #   mixed に混ぜると「思考系 N 問」の枠が即答形で埋まってしまう。
             shape_i = ("ring" if r < 0.06 else "riploop" if r < 0.11
                        else "pbr" if r < 0.17
                        else "urpf" if r < 0.23 else "mploop" if r < 0.30
@@ -8028,8 +8031,7 @@ def main():
                        else "copp" if r < 0.85
                        else "pref" if r < 0.90
                        else "ospfbgp" if r < 0.93
-                       else "mpls" if r < 0.96
-                       else "svc" if r < 0.99 else "chain")
+                       else "mpls" if r < 0.98 else "chain")
             kind = roll.choice({"ring": RING_KINDS, "pbr": gpp.PBR_KINDS,
                                 "urpf": gpu.URPF_KINDS, "mploop": MPLOOP_KINDS,
                                 "riploop": RIPLOOP_KINDS,

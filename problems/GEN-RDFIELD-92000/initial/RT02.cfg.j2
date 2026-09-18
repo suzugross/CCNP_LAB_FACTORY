@@ -1,0 +1,33 @@
+! GEN-RDFIELD 初期
+interface Loopback0
+ ip address 64.64.64.64 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.105.26.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.252.191.1 255.255.255.252
+ no shutdown
+!
+router eigrp 589
+ network 64.64.64.64 0.0.0.0
+ no auto-summary
+ network 10.105.26.0 0.0.0.3
+ redistribute ospf 90 match internal external 1 external 2 metric 100000 100 255 1 1500
+!
+router ospf 90
+ router-id 64.64.64.64
+ network 64.64.64.64 0.0.0.0 area 0
+ network 10.252.191.0 0.0.0.3 area 0
+ redistribute eigrp 589 subnets route-map RM-SVC
+!
+ip prefix-list SVC seq 5 permit 12.12.12.12/32
+ip prefix-list SVC seq 10 permit 4.4.4.4/32
+!
+ip access-list standard SVC
+ permit 12.12.12.12
+!
+route-map RM-SVC permit 10
+ match ip address SVC
+!

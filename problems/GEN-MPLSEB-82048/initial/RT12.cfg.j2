@@ -1,0 +1,25 @@
+! GEN-MPLSEB-82048 初期状態 (RT12 = CUST_B site3 CE / 変更不可)
+interface Loopback0
+ description === CUST_B site3 LAN (172.16.115.0/24) ===
+ ip address 172.16.115.9 255.255.255.0
+!
+interface Loopback9
+ description === CE 機器管理 (VPN へ広告禁止) ===
+ ip address 10.99.119.1 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT03 PE (site3, 192.168.77.0/30) ===
+ ip address 192.168.77.1 255.255.255.252
+ no shutdown
+!
+router bgp 65200
+ bgp router-id 12.12.12.12
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 192.168.77.2 remote-as 65000
+ address-family ipv4
+  network 172.16.115.0 mask 255.255.255.0
+  network 10.99.119.1 mask 255.255.255.255
+  neighbor 192.168.77.2 activate
+ exit-address-family
+!

@@ -1,0 +1,61 @@
+# 自動生成 (gen_bgp_ring_ts.py) seed=48328
+problem: GEN-BGPRING-48328
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT01: 172.16.42.1
+    RT02: 172.16.123.1
+    RT03: 172.16.225.1
+    RT04: 172.16.70.1
+  links:
+  - a: RT01
+    a_ip: 10.140.242.1
+    b: RT02
+    b_ip: 10.140.242.2
+  - a: RT02
+    a_ip: 10.126.252.1
+    b: RT03
+    b_ip: 10.126.252.2
+  - a: RT03
+    a_ip: 10.88.67.1
+    b: RT04
+    b_ip: 10.88.67.2
+  - a: RT04
+    a_ip: 10.233.228.1
+    b: RT01
+    b_ip: 10.233.228.2
+invariants:
+- type: reachability_all
+  name: 全拠点網への到達性
+  points: 40
+- type: loop_free
+  name: 転送ループ不在
+  points: 10
+checks:
+- name: 'RT02: 対向拠点網 172.16.70.0/24 を両事業者経由の2経路で保持'
+  node: RT02
+  command: show ip bgp 172.16.70.0
+  raw:
+  - regex: 'Paths: \(2 available'
+  - contains: 65189 65263
+  - contains: 65349 65263
+  - not_regex: 65189 +65189\b
+  points: 20
+- name: 'RT04: 対向拠点網 172.16.123.0/24 を両事業者経由の2経路で保持'
+  node: RT04
+  command: show ip bgp 172.16.123.0
+  raw:
+  - regex: 'Paths: \(2 available'
+  - contains: 65189 65263
+  - contains: 65349 65263
+  - not_regex: 65189 +65189\b
+  points: 20
+- name: 'RT02: 事業者との両セッションが Established (拠点側)'
+  node: RT02
+  command: show ip bgp summary
+  raw:
+  - regex: (?m)^10.126.252.2\s+4\s+65189\s.*\s\d+\s*$
+  - regex: (?m)^10.140.242.1\s+4\s+65349\s.*\s\d+\s*$
+  points: 10

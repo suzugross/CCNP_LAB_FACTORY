@@ -917,7 +917,13 @@ def pd_values(rnd):
     v["pdwan"] = f"2001:DB8:{v['site']}:13"       # RT01-RT03 直結 /64
     v["deleg_pool"] = f"2001:DB8:{h}000::/40 48"  # 委任元 local pool（/40→/48 委任）
     v["deleg48"] = f"2001:DB8:{h}000"             # 委任される /48（先頭）
-    v["hstpfx"] = f"2001:DB8:{h}000:1"            # CPE 配下 LAN（DELEG 0:0:0:1::/64）
+    # ★2026-09-14 ユーザ指示で2パターン化: 配下 LAN の /64 を
+    #   "fixed" = 要件で使うサブネットを名指し(値のみ・CLI の形は示さない)
+    #   "any"   = どの /64 でもよい(採点も委任 /48 配下なら通す)
+    #   サブネット ID も抽選する(1 決め打ちだと「::1 を書く」の暗記で通る)。
+    v["hstsub"] = rnd.choice(["1", "2", "3", "a", "10", "20"])
+    v["hstpfx"] = f"2001:DB8:{h}000:{v['hstsub']}"   # CPE 配下 LAN
+    v["pd_subnet_mode"] = rnd.choice(["fixed", "any"])
     # LAN-A は W_SO 固定（対比の健全 LAN）。
     v["lans"] = [{"name": "A", "pfx": v["lanA"], "world": "W_SO",
                   "gw_slot": 1, "client": "CLA", "pool": "POOL-A"}]
@@ -982,7 +988,7 @@ def render_cpe(v, fault):
           "interface {{ links[1] }}",
           " description === LAN to HST (配下・SLAAC) ==="]
     if fault != "pd_general_prefix_missing":
-        L.append(" ipv6 address DELEG 0:0:0:1::1/64")  # 委任 /48 から /64 派生
+        L.append(f" ipv6 address DELEG 0:0:0:{v['hstsub']}::1/64")  # 委任 /48 から /64 派生
     L += [" no shutdown", "!",
           f"ipv6 route ::/0 {v['pdwan']}::1", "!"]     # 上流デフォルト
     return L
@@ -1014,7 +1020,7 @@ def pd_symptom(v, fault):
     return T[fault]
 
 
-def pd_fix(v, fault):
+def pd_fix(v, fault):   # noqa: C901
     N = {"match": "none"}
     if fault == "pd_automatic_trap":
         return [{"node": "RT01", "parents": "interface {{ links[1] }}",
@@ -1026,7 +1032,7 @@ def pd_fix(v, fault):
         return [{"node": "RT03", "parents": "interface {{ links[0] }}",
                  "lines": ["ipv6 dhcp client pd DELEG"], **N}]
     return [{"node": "RT03", "parents": "interface {{ links[1] }}",
-             "lines": ["ipv6 address DELEG 0:0:0:1::1/64"], **N}]
+             "lines": [f"ipv6 address DELEG 0:0:0:{v['hstsub']}::1/64"], **N}]
 
 
 def pd_grading(v, prob_id, fault):
@@ -1040,9 +1046,16 @@ def pd_grading(v, prob_id, fault):
          "node": "RT03", "command": "show ipv6 general-prefix",
          "raw": [{"regex": r"acquired via DHCP PD"}, {"regex": rf"{d48}::"}],
          "points": 12},
-        {"name": "配下ホスト: 委任 /64 から SLAAC アドレスを生成",
+        {"name": ("配下ホスト: 指定された /64 から SLAAC アドレスを生成"
+                  if v["pd_subnet_mode"] == "fixed"
+                  else "配下ホスト: 委任 /48 のいずれかの /64 から SLAAC アドレスを生成"),
          "node": "HST", "command": "show ipv6 interface brief Ethernet0/0",
-         "raw": [{"regex": rf"{hp}:[0-9A-Fa-f:]*[Aa]8[Bb][Bb]:CCFF:FE"}],
+         # ★fixed= 要件が名指しした /64 のみ可 / any= 委任 /48 配下ならどの /64 でも可
+         #   (要件がサブネットを指定しないのに 1 を決め打ちしていた欠陥の是正・2026-09-14)
+         "raw": [{"regex": (rf"{hp}:[0-9A-Fa-f:]*[Aa]8[Bb][Bb]:CCFF:FE"
+                            if v["pd_subnet_mode"] == "fixed"
+                            else rf"{d48}:[0-9A-Fa-f]{{0,4}}:+[0-9A-Fa-f:]*"
+                                 rf"[Aa]8[Bb][Bb]:CCFF:FE")}],
          "points": 12},
         {"name": "配下ホスト: サーバ Lo0 へ実疎通(委任経路の自動インストール)",
          "node": "HST", "command": f"ping {v['slo']} source Ethernet0/0 repeat 6",
@@ -1066,6 +1079,14 @@ def pd_grading(v, prob_id, fault):
 
 def pd_task(v, prob_id, fault, diff):
     la = v["lans"][0]
+    # ★配下 LAN の /64 の指定(2パターン)。値だけを示し、設定コマンドの形は書かない。
+    if v["pd_subnet_mode"] == "fixed":
+        subnet_req = (f"   配下 LAN に用いる /64 は、委任されたプレフィックスのうち\n"
+                      f"   **サブネット ID `{v['hstsub']}`**（すなわち "
+                      f"`{v['hstpfx']}::/64`）とすること。")
+    else:
+        subnet_req = ("   委任されたプレフィックスのうち、どの /64 を配下 LAN に"
+                      "用いるかは問わない。")
     return f"""# 問題 {prob_id} : IPv6 プレフィックス委任 適合トラブルシュート（難易度{diff}）
 
 ## シナリオ
@@ -1084,6 +1105,7 @@ def pd_task(v, prob_id, fault, diff):
 1. {world_req(la)}
 2. **CPE（RT03）は上流 RT01 からプレフィックス委任を受け**、配下 LAN 用の /64 を
    派生させる。配下ホスト **HST** は、その /64 から **IPv6 アドレスを自動生成**する。
+{subnet_req}
 3. HST は、CPE 経由で **RT01 の Loopback0（`{v['slo']}`）へ到達**できること。
 
 ## トポロジ
@@ -1120,6 +1142,8 @@ ansible-playbook playbooks/grade.yml -e problem={prob_id} \\
 
 def gen_pd(a, rnd):
     v = pd_values(rnd)
+    if getattr(a, "pd_subnet", "auto") in ("fixed", "any"):
+        v["pd_subnet_mode"] = a.pd_subnet
     fault = a.fault if a.fault in PD_FAULTS else rnd.choice(PD_FAULTS)
     diff = PD_DIFFICULTY[fault]
     prob_id = f"GEN-V6ADDR-{a.seed}"
@@ -1167,6 +1191,7 @@ def gen_pd(a, rnd):
 
     meta = {"board": "pd", "fault": fault, "difficulty": diff,
             "site": v["site"], "deleg48": v["deleg48"], "hstpfx": v["hstpfx"],
+            "pd_subnet_mode": v["pd_subnet_mode"], "hstsub": v["hstsub"],
             "pdwan": v["pdwan"], "slo": v["slo"], "dns": v["dns"], "dom": v["dom"]}
     with open(f"{pdir}/solution/fault.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
@@ -1590,6 +1615,11 @@ def main():
                          "fhs=ioll2 アクセスSW の RA Guard/DHCPv6 Guard(BL-146・telnet 採点)")
     ap.add_argument("--fault", choices=FAULTS + L5_ALL + PD_FAULTS + FHS_FAULTS, default=None)
     ap.add_argument("--faults", type=int, choices=[1, 2], default=1)
+    ap.add_argument("--pd-subnet", choices=["auto", "fixed", "any"],
+                    default="auto",
+                    help="board=pd: 配下 LAN の /64 の指定方法。"
+                         "fixed=要件でサブネットを名指し / any=どの /64 でも可 / "
+                         "auto(既定)=seed で抽選")
     a = ap.parse_args()
     rnd = random.Random(a.seed)
     if a.board == "rogue":

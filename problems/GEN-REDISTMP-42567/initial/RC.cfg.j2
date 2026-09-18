@@ -1,0 +1,22 @@
+! GEN-REDISTMP 初期 RC : OSPF⇄EIGRP 境界(相互再配送・タグ/フィルタ無し=故障)
+interface Loopback0
+ ip address {{ params.rc_lo }} 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address {{ params.seg_o2 }}.3 255.255.255.0
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address {{ params.seg_e12 }}.3 255.255.255.0
+ no shutdown
+!
+router eigrp {{ params.asn }}
+ network {{ params.seg_e12 }}.0 0.0.0.255
+ redistribute ospf {{ params.pid }} metric 1000000 1 255 1 1500
+!
+router ospf {{ params.pid }}
+ router-id {{ params.rc_lo }}
+ redistribute eigrp {{ params.asn }} subnets
+ network {{ params.rc_lo }} 0.0.0.0 area 0
+ network {{ params.seg_o2 }}.0 0.0.0.255 area 0
+!

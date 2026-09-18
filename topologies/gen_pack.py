@@ -1404,8 +1404,8 @@ def write_manifest(pdir, manifest):
              "items:"]
     for it in manifest["items"]:
         lines.append(f"  - no: {it['no']}")
-        for k in ("kind", "ref", "src", "key", "form", "variant", "nodes",
-                  "state", "ops", "error", "warn"):
+        for k in ("kind", "slot", "ref", "src", "key", "form", "variant",
+                  "nodes", "state", "ops", "error", "warn"):
             if it.get(k) not in (None, ""):
                 lines.append(f"    {k}: {esc(it[k])}")
     lines += ["notes:"] + [f"  - {esc(n)}" for n in manifest["notes"]]
@@ -1812,16 +1812,39 @@ def cmd_new(a):
     if len(stamps) < n_paper:
         log(f"[紙面] ★不足: {len(stamps)}/{n_paper} 問しか用意できなかった")
 
+    # --- 瞬発力枠(即答形・別枠) --------------------------------------------
+    # ★2026-09-13 ユーザ指示: 「深くないが瞬発力で答える問題」を思考系とは別枠で
+    #   既定で入れる。思考系(--paper)の数は減らさず、この枠ぶんを上乗せする。
+    #   shape=svc は 1 回の生成で kind が重複しない(kinds[i % 9])ので 5 問=5 種。
+    speed_stamps = []
+    if a.speed > 0:
+        if a.dry_run:
+            log(f"[紙面] dry-run: 瞬発力枠 {a.speed} 問(shape={a.speed_shape})は実生成時のみ")
+        else:
+            speed_stamps = _run_paper_gen(repo, seed + 31000, a.speed,
+                                          a.speed_shape, a.exam, a.hard, log,
+                                          f"瞬発力枠[{a.speed_shape}]")
+            if len(speed_stamps) < a.speed:
+                log(f"[紙面] ★瞬発力枠 不足: {len(speed_stamps)}/{a.speed} 問")
+        log(f"[紙面] 瞬発力枠: {len(speed_stamps)} 問(shape={a.speed_shape}"
+            f"・思考系 {n_paper_total} 問とは別枠)")
+
     papers = []
     for st in stamps:
         src = f"questions/{st}.md"          # manifest には repo 相対で持つ
         key = f"answers/{st}.md"
         form = "essay" if _is_essay(repo, st) else "mcq"
         papers.append({"kind": "paper", "ref": st, "src": src,
-                       "key": key, "form": form, "state": "未着手"})
+                       "key": key, "form": form, "slot": "think",
+                       "state": "未着手"})
     for e in extra_papers:
         papers.append({"kind": "paper", "ref": e["ref"], "src": e["src"],
-                       "key": e["key"], "form": "mcq", "state": "未着手"})
+                       "key": e["key"], "form": "mcq", "slot": "think",
+                       "state": "未着手"})
+    for st in speed_stamps:
+        papers.append({"kind": "paper", "ref": st, "src": f"questions/{st}.md",
+                       "key": f"answers/{st}.md", "form": "mcq",
+                       "slot": "speed", "state": "未着手"})
     for _ in range(n_paper - len(stamps)):
         papers.append({"kind": "paper", "ref": "(未生成)", "src": "",
                        "state": "準備失敗", "error": "紙面の生成に失敗"})
@@ -1832,7 +1855,7 @@ def cmd_new(a):
         no += 1
         it["no"] = no
         items.append(it)
-    n_paper = n_paper_total
+    n_paper = n_paper_total + len(speed_stamps)
 
     # --- ラボ選定フェーズ ---
     cat = parse_catalog(repo)
@@ -2183,7 +2206,8 @@ def cmd_status(a):
                if s.get("answer") else "")
         dur = (f"  所要={s['duration']}{'(自)' if s.get('dur_auto') else ''}"
                if s.get("duration") else "")
-        print(f"  Q{it['no']} [{it.get('kind')}] {it.get('ref')}  {mark}{ans}{dur}")
+        slot = {"speed": " (瞬発)", "think": ""}.get(it.get("slot"), "")
+        print(f"  Q{it['no']} [{it.get('kind')}{slot}] {it.get('ref')}  {mark}{ans}{dur}")
     print(f"  -- {done}/{len(man['items'])} 問 解答済")
     used, per = leased_nodes(repo)
     print(f"== 稼働中ラボ: {per or '(なし)'} 合計 {used} ノード")
@@ -2354,6 +2378,11 @@ def main():
                          "指定したぶんだけ自動生成・借用の数が減る")
     ap.add_argument("--no-pool", action="store_true",
                     help="private/paper_pools.yml の紙面プールから抽選しない")
+    ap.add_argument("--speed", type=int, default=5,
+                    help="瞬発力枠(即答形)の問題数。思考系(--paper)とは別枠で"
+                         "上乗せする(既定5・0 で無効)")
+    ap.add_argument("--speed-shape", default="svc",
+                    help="瞬発力枠の shape(既定 svc=Services 即答形)")
     ap.add_argument("--paper-only", action="store_true",
                     help="紙面だけのパックにする(ラボを作らない=CMLのラボ枠を使わない)")
     ap.add_argument("--require-shape", default="redist,aaa,acl,bgp",
