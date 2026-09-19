@@ -10,6 +10,7 @@ kinds:
 """
 import os
 import random
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -171,6 +172,10 @@ def _draw_nt(d, rnd):
     d["p1"] = rnd.choice(["10.1.1.0", "172.16.1.0", "10.100.0.0"])
     d["p3"] = rnd.choice(["192.168.1.0", "172.31.9.0", "192.168.50.0"])
     d["p2"] = rnd.choice(["172.16.1.0", "10.2.2.0", "172.20.5.0"])
+    # ★BL-188: フィルタ手段の世界(正解の形が変わる)= distribute-list(ACL) / prefix-list / filter-list(AS-PATH)
+    d["method"] = rnd.choice(["acl", "acl", "prefix", "aspath"])
+    d["pl_a"], d["pl_c"] = f"TO-{d['ra']}", f"TO-{d['rc']}"
+    d["aspl"] = rnd.choice([1, 10, 50])
     if d["p2"] in (d["p1"], d["p3"]):
         d["p2"] = "10.9.9.0"
     d["ip_a"], d["ip_c"] = rnd.choice([("198.51.100.1", "198.51.100.6"), ("203.0.113.1", "203.0.113.6"), ("10.255.0.1", "10.255.0.6")])
@@ -189,10 +194,27 @@ def _nt_exhibit(d):
          "",
          f"【{rb} に追加する設定】",
          f"{rb}(config)# 【?】",
-         f"{rb}(config)# router bgp {d['as2']}",
-         f"{rb}(config-router)# neighbor {d['ip_a']} distribute-list {d['acl_to_a']} out",
-         f"{rb}(config-router)# neighbor {d['ip_c']} distribute-list {d['acl_to_c']} out"]
+         f"{rb}(config)# router bgp {d['as2']}"]
+    m = d.get("method", "acl")
+    if m == "prefix":
+        L += [f"{rb}(config-router)# neighbor {d['ip_a']} prefix-list {d['pl_a']} out",
+              f"{rb}(config-router)# neighbor {d['ip_c']} prefix-list {d['pl_c']} out"]
+    elif m == "aspath":
+        L += [f"{rb}(config-router)# neighbor {d['ip_a']} filter-list {d['aspl']} out",
+              f"{rb}(config-router)# neighbor {d['ip_c']} filter-list {d['aspl']} out"]
+    else:
+        L += [f"{rb}(config-router)# neighbor {d['ip_a']} distribute-list {d['acl_to_a']} out",
+              f"{rb}(config-router)# neighbor {d['ip_c']} distribute-list {d['acl_to_c']} out"]
     return "\n".join(L)
+
+
+def _pl_pair(d, to_a_deny, to_c_deny, na, nc, permit_first=False, no_le=False):
+    tail = "0.0.0.0/0" if no_le else "0.0.0.0/0 le 32"
+    if permit_first:
+        return (f"ip prefix-list {na} seq 5 permit {to_a_deny}/24\nip prefix-list {na} seq 10 deny {tail}\n"
+                f"ip prefix-list {nc} seq 5 permit {to_c_deny}/24\nip prefix-list {nc} seq 10 deny {tail}")
+    return (f"ip prefix-list {na} seq 5 deny {to_a_deny}/24\nip prefix-list {na} seq 10 permit {tail}\n"
+            f"ip prefix-list {nc} seq 5 deny {to_c_deny}/24\nip prefix-list {nc} seq 10 permit {tail}")
 
 
 def _acl_pair(d, to_a_deny, to_c_deny, num_a, num_c, permit_first=False):
@@ -205,19 +227,38 @@ def _acl_pair(d, to_a_deny, to_c_deny, num_a, num_c, permit_first=False):
 
 
 def build_choices_select(d, rnd):
-    ra, rc = d["ra"], d["rc"]
+    ra, rb, rc = d["ra"], d["rb"], d["rc"]
     a, c = d["acl_to_a"], d["acl_to_c"]
     p1, p3 = d["p1"], d["p3"]
-    correct = _acl_pair(d, p3, p1, a, c)
-    wrong_swap = _acl_pair(d, p1, p3, a, c)
-    wrong_permit = _acl_pair(d, p3, p1, a, c, permit_first=True)
-    wrong_num = _acl_pair(d, p3, p1, a * 10 + 1 if a < 10 else a + 5, c * 10 + 1 if c < 10 else c + 5)
-    choices = [
-        (correct, True, ""),
-        (wrong_swap, False, f"ACL {a} は {ra}({ra} の AS)向けの out に適用されるので、止めるべきは {rc} 側の {p3} である。ACL {c} はその逆。対応が入れ替わっている。"),
-        (wrong_permit, False, "ディストリビュート リストでは deny した経路がフィルタされる。止めたい経路を permit し他を deny すると、逆に止めたい経路だけが通る。"),
-        (wrong_num, False, f"router bgp で参照している ACL 番号は {a} と {c} であり、番号が一致していない。"),
-    ]
+    m = d.get("method", "acl")
+    if m == "prefix":
+        na, nc = d["pl_a"], d["pl_c"]
+        choices = [
+            (_pl_pair(d, p3, p1, na, nc), True, ""),
+            (_pl_pair(d, p1, p3, na, nc), False, f"{na} は {ra} 向けの out に適用されるので、止めるべきは {rc} 側の {p3} である。{nc} はその逆。対応が入れ替わっている。"),
+            (_pl_pair(d, p3, p1, na, nc, permit_first=True), False, "プレフィックス リストは末尾が暗黙の deny であり、止めたい経路を permit して残りを deny すると、逆に止めたい経路だけが通る。"),
+            (_pl_pair(d, p3, p1, na, nc, no_le=True), False, "permit 0.0.0.0/0 は le 32 が無いとデフォルト ルート(/0)にしか一致せず、他の経路は末尾の暗黙 deny で全部止まる。"),
+        ]
+    elif m == "aspath":
+        n = d["aspl"]
+        choices = [
+            (f"ip as-path access-list {n} permit ^$", True, ""),
+            (f"ip as-path access-list {n} permit ^{d['as1']}$\nip as-path access-list {n} permit ^{d['as3']}$", False,
+             f"AS {d['as1']} 発と AS {d['as3']} 発の経路を通す指定であり、止めたい経路を通し、自 AS 発(空の AS パス)を止めてしまう。"),
+            (f"ip as-path access-list {n} deny ^$\nip as-path access-list {n} permit .*", False, "自 AS 発の経路(AS パスが空)を止め、他 AS から学習した経路を全部通す=逆である。"),
+            (f"ip as-path access-list {n + 1} permit ^$", False, f"router bgp で参照している filter-list の番号は {n} であり、番号が一致していない。"),
+        ]
+    else:
+        correct = _acl_pair(d, p3, p1, a, c)
+        wrong_swap = _acl_pair(d, p1, p3, a, c)
+        wrong_permit = _acl_pair(d, p3, p1, a, c, permit_first=True)
+        wrong_num = _acl_pair(d, p3, p1, a * 10 + 1 if a < 10 else a + 5, c * 10 + 1 if c < 10 else c + 5)
+        choices = [
+            (correct, True, ""),
+            (wrong_swap, False, f"ACL {a} は {ra}({ra} の AS)向けの out に適用されるので、止めるべきは {rc} 側の {p3} である。ACL {c} はその逆。対応が入れ替わっている。"),
+            (wrong_permit, False, "ディストリビュート リストでは deny した経路がフィルタされる。止めたい経路を permit し他を deny すると、逆に止めたい経路だけが通る。"),
+            (wrong_num, False, f"router bgp で参照している ACL 番号は {a} と {c} であり、番号が一致していない。"),
+        ]
     order = list(range(len(choices)))
     rnd.shuffle(order)
     return [choices[i] for i in order]
@@ -248,9 +289,40 @@ def build_match(d, rnd):
 
 CORE = {
     "rm_implicit_deny": "out 方向のルート マップは、どのエントリにも一致しない経路を暗黙の deny で落とす。1 経路だけ操作したいなら、残りを通す空の permit エントリ(route-map X permit 20)が要る。deny 20 は暗黙 deny と同じ。match の ACL を消す手は permit 10 が全一致になり全経路に prepend が付く。",
-    "nontransit_dl": "非トランジット AS= 他 AS から学習した経路を別の他 AS へ広告しない。distribute-list out は deny した経路を止める(permit any を最後に)。隣接ごとに「その隣接へ送らない経路」を deny する: AS1 側の隣接には AS3 の経路を、AS3 側の隣接には AS1 の経路を deny。ACL 番号は router bgp の参照と一致させる。別解= prefix-list / filter-list(^$)/ community no-export。",
+    "nontransit_dl": "非トランジット AS= 他 AS から学習した経路を別の他 AS へ広告しない。distribute-list out は deny した経路を止める(permit any を最後に)。隣接ごとに「その隣接へ送らない経路」を deny する: AS1 側の隣接には AS3 の経路を、AS3 側の隣接には AS1 の経路を deny。ACL 番号は router bgp の参照と一致させる。prefix-list 世界= 同じ構造(deny 対象 + permit 0.0.0.0/0 le 32・le 32 が無いと /0 にしか一致しない)。filter-list 世界= AS パスが空(^$)= 自 AS 発だけを通す 1 本のリストを両隣接に out で適用(隣接ごとの作り分けが不要)。別解= community no-export。",
 }
 TITLES = {"rm_implicit_deny": "BGP のアウトバウンド ポリシー(ルート マップ)", "nontransit_dl": "BGP の非トランジット AS の構成"}
+
+
+
+def _mmid(name):
+    """Mermaid のノード ID(ハイフン等は _ に。表示名は label 側に持つ)。"""
+    return "n_" + re.sub(r"[^A-Za-z0-9]", "_", name)
+
+
+def _nt_mermaid(d):
+    """非トランジット AS の図(RA - RB - RC の直列・AS と広告プレフィックスを併記)。"""
+    ra, rb, rc = d["ra"], d["rb"], d["rc"]
+    i = _mmid
+    return "\n".join([
+        "```mermaid", "graph LR",
+        f'  {i(ra)}["{ra}<br/>AS {d["as1"]}<br/>{d["p1"]}/24"]',
+        f'  {i(rb)}["{rb}<br/>AS {d["as2"]}<br/>{d["p2"]}/24"]',
+        f'  {i(rc)}["{rc}<br/>AS {d["as3"]}<br/>{d["p3"]}/24"]',
+        f"  {i(ra)} ---|eBGP| {i(rb)} ---|eBGP| {i(rc)}",
+        "```"])
+
+
+def _rm_mermaid(d):
+    """アウトバウンド ポリシーの図(RA-RB-RC-RE と RA-RD-RE の 2 経路・AS を併記)。"""
+    ra, rb, rc, rd, re_ = d["ra"], d["rb"], d["rc"], d["rd"], d["re"]
+    A = d["as"]
+    i = _mmid
+    nodes = [f'  {i(n)}["{n}<br/>AS {A[n]}"]' for n in (ra, rb, rc, rd, re_)]
+    return "\n".join(["```mermaid", "graph LR"] + nodes + [
+        f"  {i(ra)} --- {i(rb)} --- {i(rc)} --- {i(re_)}",
+        f"  {i(ra)} --- {i(rd)} --- {i(re_)}",
+        "```"])
 
 
 def question_body(d, choices, form):
@@ -262,7 +334,7 @@ def question_body(d, choices, form):
         intro = (f"各ルータで BGP を動作させています。{ra}(AS {A[ra]})は {'、'.join(d['pfx'])} を広告し、{re_}(AS {A[re_]})には "
                  f"{rd}(AS {A[rd]})経由と {rc}(AS {A[rc]})経由の 2 つの経路が届く構成です。"
                  f"{re_} から {steer} 宛のパケットを {rc} 経由で転送するように、{rd} で次の設定を行いました。")
-        before = f"{intro}\n\n```\n{_rm_exhibit(d)}\n```"
+        before = f"{_rm_mermaid(d)}\n\n{intro}\n\n```\n{_rm_exhibit(d)}\n```"
         if form == "fix":
             before += f"\n\nしかし、{others} も {rc} 経由で転送されるようになってしまいました。"
             ask = f"{others} を {rd} 経由で転送させるために {rd} に追加する設定として最も適切なものは、次のうちどれですか。(1つを選択してください)"
@@ -278,7 +350,7 @@ def question_body(d, choices, form):
     ra, rb, rc = d["ra"], d["rb"], d["rc"]
     intro = (f"{ra}(AS {d['as1']})- {rb}(AS {d['as2']})- {rc}(AS {d['as3']})の順に eBGP で接続されています。{ra} は {d['p1']}/24、{rb} は {d['p2']}/24、"
              f"{rc} は {d['p3']}/24 を広告しています。AS {d['as2']} を非トランジット AS にしようとしましたが、AS {d['as1']} と AS {d['as3']} がそれぞれの経路を交換しています。")
-    before = f"{intro}\n\n```\n{_nt_exhibit(d)}\n```"
+    before = f"{_nt_mermaid(d)}\n\n{intro}\n\n```\n{_nt_exhibit(d)}\n```"
     if form == "select":
         ask = (f"AS {d['as1']} に AS {d['as3']} の経路、AS {d['as3']} に AS {d['as1']} の経路が届かないようにするために {rb} で必要な【?】に当てはまる設定はどれですか。"
                f"なお、{ra} と {rc} は AS {d['as2']} の経路を動的に学習する必要があり、{rb} は AS {d['as1']} と AS {d['as3']} の経路を動的に学習する必要があります。(1つを選択してください)")
@@ -295,6 +367,8 @@ def answer_body(d, choices, form):
     for k, (t, ok, w) in zip("ABCDEFG", choices):
         lines.append(f"- **{k}**: {'(正解)' if ok else w}")
     lines += ["", "## 解説", "", CORE[d["kind"]]]
+    if d["kind"] == "nontransit_dl":
+        lines += ["", f"- 世界(BL-188): フィルタ手段= {d.get('method', 'acl')}"]
     return "\n".join(lines)
 
 

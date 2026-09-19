@@ -13,6 +13,7 @@ kinds:
 """
 import os
 import random
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -476,6 +477,21 @@ CORE = {
 TITLES = {"mode": "IPv6 アドレスの自動設定(SLAAC/DHCPv6)", "trouble": "IPv6 アドレス自動設定のトラブルシューティング"}
 
 
+
+def _mmid(name):
+    """Mermaid のノード ID(英数字以外は _ に。表示名は label 側に持つ・BL-187)。"""
+    return "n_" + re.sub(r"[^A-Za-z0-9]", "_", str(name))
+
+
+def _dhcp6_mermaid(d):
+    srv, cli = d["srv"], d["cli"]
+    return "\n".join([
+        "```mermaid", "graph LR",
+        f'  {_mmid(srv)}["{srv}<br/>{d["ifl"]}<br/>RA / DHCPv6"]',
+        f'  {_mmid(cli)}["{cli}<br/>{d["ifl"]}"]',
+        f'  {_mmid(srv)} ---|"{d["pfx"]}/64"| {_mmid(cli)}',
+        "```"])
+
 def question_body(d, choices, form):
     if d["kind"] == "mode":
         if form == "read":
@@ -485,7 +501,7 @@ def question_body(d, choices, form):
             intro = {"slaac": f"{d['srv']} は RA を送信し、{d['cli']} は RA のプレフィックスからアドレスを自動生成します。DHCPv6 は使用しません。",
                      "stateless": f"{d['srv']} は DHCPv6 サーバとして DNS サーバとドメイン名だけを配布し、{d['cli']} はアドレスを RA のプレフィックスから自動生成します。",
                      "stateful": f"{d['srv']} は DHCPv6 サーバとしてアドレスと DNS サーバ・ドメイン名を配布し、{d['cli']} はアドレスを DHCPv6 で取得します。"}[d["mode"]]
-            before = f"{intro}\n\n```\n{_mode_exhibit(d)}\n```"
+            before = f"{_dhcp6_mermaid(d)}\n\n{intro}\n\n```\n{_mode_exhibit(d)}\n```"
             if form == "select":
                 ask = "【1】と【2】に当てはまるコマンドの組合せとして正しいものは、次のうちどれですか。(1つを選択してください)"
             else:
@@ -496,7 +512,7 @@ def question_body(d, choices, form):
     intro = {"stateful": f"{d['srv']} は DHCPv6 サーバとしてアドレスと DNS サーバ・ドメイン名を配布し、{d['cli']} はアドレスを DHCPv6 で取得する設計です。",
              "stateless": f"{d['srv']} は DHCPv6 サーバとして DNS サーバとドメイン名だけを配布し、{d['cli']} はアドレスを RA のプレフィックスから自動生成する設計です。",
              "slaac": f"{d['cli']} は {d['srv']} が送る RA のプレフィックスからアドレスを自動生成する設計です。"}[d["mode"]]
-    before = f"{intro}\n\n```\n{_trouble_exhibit(d)}\n```\n\n{SYMPTOM[d['cause']].format(**fmt)}"
+    before = f"{_dhcp6_mermaid(d)}\n\n{intro}\n\n```\n{_trouble_exhibit(d)}\n```\n\n{SYMPTOM[d['cause']].format(**fmt)}"
     if form == "cause":
         ask = "この事象の原因として最も適切なものは、次のうちどれですか。(1つを選択してください)"
     elif form == "fix":

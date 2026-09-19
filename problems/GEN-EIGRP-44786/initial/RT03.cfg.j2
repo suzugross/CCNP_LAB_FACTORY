@@ -1,0 +1,28 @@
+! RT03 (role=f, eigrp=named) 初期構成 (AS 100)
+ip access-list extended BLOCK-EIGRP
+ deny eigrp any any
+ permit ip any any
+!
+interface Loopback0
+ ip address 10.44.44.44 255.255.255.255
+!
+interface {{ links[0] }}
+ ip address 10.166.166.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.114.114.1 255.255.255.252
+ ip access-group BLOCK-EIGRP in
+ no shutdown
+!
+router eigrp CCNP
+ address-family ipv4 unicast autonomous-system 100
+  af-interface Loopback0
+   passive-interface
+  exit-af-interface
+  eigrp router-id 10.44.44.44
+  network 10.44.44.44 0.0.0.0
+  network 10.166.166.0 0.0.0.3
+  network 10.114.114.0 0.0.0.3
+ exit-address-family
+!

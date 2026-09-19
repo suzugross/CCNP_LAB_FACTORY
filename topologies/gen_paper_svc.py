@@ -529,21 +529,43 @@ def _log_read_choices(d, rnd):
 
 
 # ---- SSH fix: 足りない 1 つを補う候補がちょうど 1 つ -----------------------
-SSH_REQS = ["key", "transport", "auth"]
+SSH_REQS = ["key", "transport", "auth", "domain", "keysize", "access", "user"]
+# ★BL-189(2026-09-19): 盤面は「事実の表示」だけで割る(コメントで故障を語らない)。
+#   fix= その世界で SSH が使えるようになる構成 1 つ。wrong= 他世界の是正(この盤面では無駄)＋固有の錯乱肢
 SSH_FIX = {
     "key": ("crypto key generate rsa modulus 2048", "RSA 鍵を生成して SSH のサーバを有効にする。"),
     "transport": ("line vty 0 4\n transport input ssh", "vty の transport input に ssh を含める。"),
     "auth": ("line vty 0 4\n login local", "vty にローカル認証を構成する(ユーザは定義済み)。"),
+    "domain": ("ip domain name example.com\ncrypto key generate rsa modulus 2048", "ドメイン名を定義してから鍵ペアを生成する。"),
+    "keysize": ("crypto key generate rsa modulus 2048", "768 ビット以上の鍵に作り直して SSH バージョン 2 を有効にする。"),
+    "access": ("access-list 10 permit <管理端末のサブネット> 0.0.0.255", "管理端末のサブネットを vty の access-class で許可する(実文は _ssh_fix_text)。"),
+    "user": ("username admin privilege 15 secret Adm1n-Pass", "login local が参照するローカル ユーザを定義する。"),
 }
 SSH_WRONG = {
-    "key": ("ip ssh time-out 60", "タイムアウトの変更であり、欠けている鍵ペアを補わない。"),
-    "transport": ("line vty 0 4\n transport output ssh", "output の指定であり、着信(input)に ssh を許可しない。"),
-    "auth": ("line vty 0 4\n no login", "認証を無くす構成であり、要件(認証手段の構成)を満たさない。"),
+    "key": [("ip ssh time-out 60", "タイムアウトの変更であり、欠けている鍵ペアを補わない。"),
+            ("ip domain name example.com", "ドメイン名は既に定義されており、鍵ペアは生成されない。")],
+    "transport": [("line vty 0 4\n transport output ssh", "output の指定であり、着信(input)に ssh を許可しない。")],
+    "auth": [("line vty 0 4\n no login", "認証を無くす構成であり、SSH は認証手段が無いと接続を受け付けない。"),
+             ("line vty 0 4\n login", "login だけではラインのパスワードが要り、それも無いので Password required, but none set になる。")],
+    "domain": [("crypto key generate rsa modulus 2048", "ドメイン名が未定義のため % Please define a domain-name first で鍵の生成が失敗する。"),
+               ("ip domain name example.com", "ドメイン名だけでは鍵ペアが無く、SSH は有効にならない。")],
+    "keysize": [("ip ssh version 1", "SSH バージョン 1 は非推奨であり、要件(バージョン 2)を満たさない。"),
+                ("ip ssh time-out 60", "タイムアウトの変更であり、鍵長の不足を解消しない。")],
+    "access": [("line vty 0 4\n no access-class 10 in", "接続元の制限そのものを外す構成であり、要件(制限は維持)を満たさない。"),
+               ("line vty 0 4\n transport input all", "transport は既に ssh を許可しており、拒否しているのは access-class である。")],
+    "user": [("line vty 0 4\n no login", "認証を無くす構成であり、SSH は認証手段が無いと接続を受け付けない。"),
+             ("enable secret Adm1n-Pass", "enable パスワードはログイン後の昇格用であり、ログインの認証には使われない。")],
+}
+SSH_REQ_NOTE = {
+    "key": "鍵が無く SSH Disabled", "transport": "vty が telnet のみ", "auth": "vty に認証が無い", "domain": "ドメイン名が無く鍵も無い",
+    "keysize": "鍵はあるが 512 ビットで v2 が Disabled", "access": "access-class が管理端末のサブネットを許可していない", "user": "login local だがユーザ未定義",
 }
 
 
 def _draw_ssh_fix(d, rnd):
     d["ssh_missing"] = rnd.choice(SSH_REQS)
+    d["ssh_client"] = rnd.choice(["192.168.50.10", "10.200.5.21", "172.16.9.7"])
+    d["ssh_bits"] = 512
 
 
 def build_choices_fix(d, rnd):
@@ -557,39 +579,86 @@ def build_choices_fix(d, rnd):
 
 
 def _ssh_exhibit(d):
+    """running-config 抜粋＋show ip ssh＋show crypto key＋ログ。故障は表示の事実で割る。"""
     miss = d["ssh_missing"]
-    L = [f"{d['host']}# show running-config"]
-    L.append(f"hostname {d['host']}")
-    L.append("ip domain name example.com")
-    L.append("!")
-    if miss == "key":
-        L.append("! (鍵ペアは生成されていない)")
+    host = d["host"]
+    cli = d.get("ssh_client", "192.168.50.10")
+    L = [f"{host}# show running-config | include hostname|domain|username|access-list|ssh version"]
+    L.append(f"hostname {host}")
+    if miss != "domain":
+        L.append("ip domain name example.com")
+    if miss != "user":
+        L.append("username admin privilege 15 secret 9 xxxxx")
+    if miss == "access":
+        L.append("access-list 10 permit 10.1.10.0 0.0.0.255")
+    if miss == "keysize":
+        L.append("ip ssh version 2")
+    L += ["", f"{host}# show running-config | section line vty", "line vty 0 4"]
+    if miss == "access":
+        L.append(" access-class 10 in")
+    L.append(" transport input telnet" if miss == "transport" else " transport input ssh")
+    L.append(" no login" if miss == "auth" else " login local")
+    L += ["", f"{host}# show ip ssh"]
+    if miss in ("key", "domain", "keysize"):
+        L += ["SSH Disabled - version 2.0", "%Please create RSA keys to enable SSH (and of atleast 768 bits for SSH v2)."]
     else:
-        L.append("! (RSA 鍵ペアは生成済み)")
-    L.append("username admin privilege 15 secret 9 xxxxx")
-    L += ["line vty 0 4"]
-    if miss == "transport":
-        L.append(" transport input telnet")
+        L += ["SSH Enabled - version 2.0", "Authentication methods:publickey,keyboard-interactive,password",
+              "Authentication Publickey Algorithms:x509v3-ssh-rsa,ssh-rsa", "Authentication timeout: 120 secs; Authentication retries: 3"]
+    L += ["", f"{host}# show crypto key mypubkey rsa"]
+    if miss in ("key", "domain"):
+        L.append("")
     else:
-        L.append(" transport input ssh")
-    if miss == "auth":
-        L.append(" no login")
+        L += [f"% Key pair was generated at: 09:12:41 UTC Sep 18 2026", f"Key name: {host}.example.com", "Key type: RSA KEYS",
+              " Storage Device: private-config", " Usage: General Purpose Key", " Key is not exportable. Redundancy enabled.",
+              " Key Data:", "  " + ("305C" if miss == "keysize" else "30820122") + " 300D0609 2A864886 F70D0101 01050003 ..."]
+    L += ["", f"{host}# show logging | include SSH|SEC_LOGIN|vty"]
+    if miss == "user":
+        L.append(f"%SEC_LOGIN-4-LOGIN_FAILED: Login failed [user: admin] [Source: {cli}] [localport: 22] [Reason: Login Authentication Failed]")
+    elif miss == "auth":
+        L.append("(該当なし)")
+    elif miss == "transport":
+        L.append(f"(該当なし)")
+    elif miss == "access":
+        L.append(f"%SEC-6-IPACCESSLOGNP: list 10 denied 0 {cli} -> 0.0.0.0, 1 packet")
+    elif miss == "keysize":
+        L.append("%SSH-5-DISABLED: SSH 2.0 has been disabled")
     else:
-        L.append(" login local")
+        L.append("(該当なし)")
     return "\n".join(L)
+
+
+def _ssh_fix_text(d, r):
+    """世界 r の是正コマンド(access は管理端末のサブネットに追随)。"""
+    cli = d.get("ssh_client", "192.168.50.10")
+    if r == "access":
+        return f"access-list 10 permit {cli.rsplit('.', 1)[0]}.0 0.0.0.255"
+    return SSH_FIX[r][0]
 
 
 def _ssh_fix_choices(d, rnd):
     miss = d["ssh_missing"]
-    cfg, _ = SSH_FIX[miss]
+    cfg = _ssh_fix_text(d, miss)
     c = [(cfg, True, "")]
-    others = [r for r in SSH_REQS if r != miss]
-    for r in rnd.sample(others, 2):
-        # 別の要件を直す候補(この盤面では既に満たされている=無駄)
-        cli, _ = SSH_FIX[r]
-        c.append((cli, False, "その構成は、この盤面では既に満たされており、SSH が使えない原因を解消しない。"))
-    wrong_cli, wrong_why = SSH_WRONG[miss]
-    c.append((wrong_cli, False, wrong_why))
+    # 他世界の是正(この盤面では既に満たされている・原因を解消しない)。同じ文面の重複と、この世界でも効く肢は除く
+    dup = {cfg}
+    others = [r for r in SSH_REQS if r != miss and SSH_FIX[r][0] not in dup]
+    if miss == "key":
+        others = [r for r in others if r not in ("domain", "keysize")]      # domain 版(2 行)は鍵生成を含み効いてしまう
+    if miss == "keysize":
+        others = [r for r in others if r not in ("key", "domain")]
+    if miss == "domain":
+        others = [r for r in others if r not in ("key", "keysize")]         # 錯乱は SSH_WRONG 側(鍵だけ生成)で出す
+    picks = []
+    for r in rnd.sample(others, min(2, len(others))):
+        cli = _ssh_fix_text(d, r)
+        why = ("vty に access-class は無く、接続元の制限は原因ではない。" if r == "access"
+               else "その構成は、この盤面では既に満たされており、SSH が使えない原因を解消しない。")
+        picks.append((cli, False, why))
+    wrongs = list(SSH_WRONG[miss])
+    rnd.shuffle(wrongs)
+    for w, why in wrongs[:max(1, 3 - len(picks))]:
+        picks.append((w, False, why))
+    c += picks[:3]
     order = list(range(len(c)))
     rnd.shuffle(order)
     return [c[i] for i in order]
@@ -1076,9 +1145,12 @@ def _analysis_body(d, form):
         return f"次の構成が示されています。\n\n```\n{ex}\n```", ask
     if kind == "ssh":      # fix
         ex = _ssh_exhibit(d)
+        cli = d.get("ssh_client", "192.168.50.10")
         ask = ("このルータでは、SSH による接続ができません。接続を可能にするために"
                "追加すべき構成として最も適切なものは、次のうちどれですか。(1つを選択してください)")
-        return f"次の構成が示されています。\n\n```\n{ex}\n```", ask
+        before = (f"管理端末({cli})からこのルータ({d['host']})へ SSH バージョン 2 で接続しようとしています。管理端末のサブネットは "
+                  f"{cli.rsplit('.', 1)[0]}.0/24 で、vty の接続元制限は維持します。次の構成と出力が示されています。\n\n```\n{ex}\n```")
+        return before, ask
     if kind == "copy":     # fix
         cp = d["copy"]
         if cp["proto"] == "ftp":

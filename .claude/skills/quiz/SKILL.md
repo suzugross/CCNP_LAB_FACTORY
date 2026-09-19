@@ -79,7 +79,8 @@ scripts/lab.sh grade <ID> [variant]        # grade.yml を実走＋学習ノル�
 scripts/pack.sh new [--paper 3] [--lab 2] [--budget 20]   # 作成(15〜25分・nohup 推奨)
 scripts/pack.sh serve                                     # 配信(Windows ブラウザから開く)
 scripts/pack.sh status [PACK-ID]                          # 進捗
-scripts/pack.sh grade  [PACK-ID]                          # 採点＋report.html
+scripts/pack.sh grade  [PACK-ID] --no-lab                 # ①紙面だけ即採点(ラボは走らせない)
+scripts/pack.sh grade  [PACK-ID]                          # ②全体採点＋report.html(ラボはバックグラウンドで)
 scripts/pack.sh replace <PACK-ID> --no 5                  # 1問だけ差し替え
 scripts/pack.sh close  [PACK-ID]                          # 全ラボ撤収
 ```
@@ -92,6 +93,12 @@ scripts/pack.sh close  [PACK-ID]                          # 全ラボ撤収
   他ベンダ機/Linux サーバ構築/自動化は既定で除外(`--allow-non-cisco` / `--allow-automation` /
   `--any-lab` で解除)。外部機器が単なる観測機(Zabbix 等)なら可。
 - 台数は **CML に問い合わせて実測**する(リース台帳では手組みラボを取りこぼす)。
+- **採点は 2 段階(2026-09-19 ユーザ指示)**: ①`grade --no-lab` で紙面だけ先に採点し、結果で分岐する。
+  **全問正解**= 全紙面の正誤＋正答＋解説を即提示(解説は `answers/<stamp>.md` の「各選択肢の判定」「解説」を
+  そのまま整形して貼る。プール問題は manifest の `key:` 先)。**誤答あり**= 正解率と誤答の問番号だけを示して
+  再挑戦を促す(正答・解説は出さない)。再採点で全問正解になった時点、または求められた時に全問の解説を出す。
+  ②同時に `grade <PACK-ID>` を `run_in_background` で実走(ラボ 1 本あたり数分・timeout 600000)し、完了通知後に
+  ラボの点数・未充足チェック名・解法レビューを追って報告する。紙面の再採点は dedupe されるので 2 度走って問題ない。
 - ラボ採点・レビューは通常フローと同じ(`grade.yml` を実走し、実機 config を読んでレビュー)。
   **`_history.md` のメモ欄はパックが自動で埋めない**(空欄のときだけ定型文を入れる)。
   レビュー内容は従来どおり Claude が書く。

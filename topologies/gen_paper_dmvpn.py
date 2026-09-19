@@ -12,6 +12,7 @@ kinds:
 """
 import os
 import random
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -901,7 +902,7 @@ def _nhrp_question(d, choices, form):
         intro += f" 保守担当者が、{s2} の network-id が {hub} と異なることに気づきました。"
     else:
         intro += f" 昨日まで全拠点が正常に通信していましたが、{s2} のトンネル設定を変更した後、{s2} の LAN と他拠点との通信ができなくなりました。{s1} は正常です。"
-    before = f"{intro}\n\n```\n{nhrp_exhibit(d, form)}\n```"
+    before = f"{_dmvpn_mermaid(d, d['hub_nbma'], d['s1_nbma'], d['s2_nbma'])}\n\n{intro}\n\n```\n{nhrp_exhibit(d, form)}\n```"
     if form == "read":
         ask = "この出力について、正しく述べられているものは、次のうちどれですか。(1つを選択してください)"
     elif form == "cause":
@@ -922,6 +923,32 @@ SYMPTOM = {
     "spoke_p2p": "{s1} から {s2} の LAN({lan2})への通信が、常に {hub} を経由して転送されています。",
 }
 
+
+
+def _mmid(name):
+    """Mermaid のノード ID(英数字以外は _ に。表示名は label 側に持つ・BL-187)。"""
+    return "n_" + re.sub(r"[^A-Za-z0-9]", "_", str(name))
+
+
+def _dmvpn_mermaid(d, hub_nbma, s1_nbma=None, s2_nbma=None):
+    """hub-spoke の図(WAN/NBMA 雲を介した 3 拠点・トンネル IP と LAN を併記)。"""
+    hub, s1, s2 = d["hub"], d["s1"], d["s2"]
+    tun = d["tun"]
+    tnet = d.get("tnet")
+    hub_t = d.get("hub_tip") or f"{tnet}.1"
+    s1_t = d.get("s1_tip") or f"{tnet}.2"
+    s2_t = d.get("s2_tip") or f"{tnet}.3"
+    def lab(name, nbma, tip, lan=None):
+        parts = [name, f"NBMA {nbma}" if nbma else None, f"{tun} {tip}", f"LAN {lan}" if lan else None]
+        return "<br/>".join(x for x in parts if x)
+    return "\n".join([
+        "```mermaid", "graph TB",
+        f'  {_mmid(hub)}["{lab(hub, hub_nbma, hub_t)}"]',
+        '  WAN(("WAN / NBMA"))',
+        f'  {_mmid(s1)}["{lab(s1, s1_nbma, s1_t, d["lan1"])}"]',
+        f'  {_mmid(s2)}["{lab(s2, s2_nbma, s2_t, d["lan2"])}"]',
+        f"  {_mmid(hub)} --- WAN", f"  WAN --- {_mmid(s1)}", f"  WAN --- {_mmid(s2)}",
+        "```"])
 
 def question_body(d, choices, form):
     k = d["kind"]
@@ -952,7 +979,7 @@ def question_body(d, choices, form):
     fmt = dict(_fmt(d), lan1=d["lan1"], lan2=d["lan2"])
     intro = (f"{d['hub']} をハブ、{d['s1']} と {d['s2']} をスポークとする DMVPN です。各スポークの LAN は {d['lan1']}({d['s1']})と {d['lan2']}({d['s2']})で、"
              f"{'EIGRP' if d['attr']['igp'] == 'eigrp' else 'OSPF'} をトンネル上で動作させています。")
-    before = f"{intro}\n\n```\n{phase_exhibit(d)}\n```"
+    before = f"{_dmvpn_mermaid(d, d['nbma_hub'])}\n\n{intro}\n\n```\n{phase_exhibit(d)}\n```"
     if form == "read":
         ask = "この構成について、正しく述べられているものは、次のうちどれですか。(1つを選択してください)"
     elif form == "cause":

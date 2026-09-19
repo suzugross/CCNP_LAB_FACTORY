@@ -897,7 +897,7 @@ def select_genre_labs(cat, hist, *, genres, count, budget, used, rnd,
 WROTE_RE = re.compile(r"wrote questions/(\d{8}-\d+)\.md")
 
 
-def _run_paper_gen(repo, seed, count, shape, exam, hard, log, label):
+def _run_paper_gen(repo, seed, count, shape, exam, hard, log, label, extra_args=()):
     """gen_paper_mcq.py を1回だけ回し、**この実行が書いた**スタンプを返す。
 
     ★帰属は「生成器の標準出力の `wrote questions/<stamp>.md`」で判定する。
@@ -916,6 +916,7 @@ def _run_paper_gen(repo, seed, count, shape, exam, hard, log, label):
         cmd.append("--exam")
     if hard:
         cmd.append("--hard")
+    cmd += list(extra_args)
     log(f"[紙面] {label}: shape={shape} count={count} seed={seed}")
     r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True)
     if r.returncode != 0:
@@ -1828,9 +1829,21 @@ def cmd_new(a):
         if a.dry_run:
             log(f"[紙面] dry-run: 瞬発力枠 {a.speed} 問(shape={a.speed_shape})は実生成時のみ")
         else:
+            # ★BL-185 二次是正: 思考系で既に出した shape/kind は瞬発力枠から外す(同 kind の連発防止)
+            _think_kinds = []
+            for _st in stamps:
+                try:
+                    _m = re.search(r"種別: `([a-z0-9]+/[a-z0-9_]+)`", open(f"{repo}/answers/{_st}.md", encoding="utf-8").read())
+                    if _m:
+                        _think_kinds.append(_m.group(1))
+                except OSError:
+                    pass
+            _extra = ["--exclude-kinds", ",".join(sorted(set(_think_kinds)))] if _think_kinds else []
+            if _think_kinds:
+                log(f"[紙面] 瞬発力枠から除外(思考系と同 kind): {sorted(set(_think_kinds))}")
             speed_stamps = _run_paper_gen(repo, seed + 31000, a.speed,
                                           a.speed_shape, a.exam, a.hard, log,
-                                          f"瞬発力枠[{a.speed_shape}]")
+                                          f"瞬発力枠[{a.speed_shape}]", extra_args=_extra)
             if len(speed_stamps) < a.speed:
                 log(f"[紙面] ★瞬発力枠 不足: {len(speed_stamps)}/{a.speed} 問")
         log(f"[紙面] 瞬発力枠: {len(speed_stamps)} 問(shape={a.speed_shape}"

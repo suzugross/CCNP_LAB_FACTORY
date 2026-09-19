@@ -7936,6 +7936,8 @@ def main():
                          "bgpbest= one_router,whole_as,return_med,"
                          "return_prepend,respect_med,igp_frozen,bgp_frozen。"
                          "指定した世界を持つ故障種だけに絞り込む。")
+    ap.add_argument("--exclude-kinds", default="",
+                    help="speed 枠で引かない種別(カンマ区切りの shape/kind。gen_pack が思考系で出した kind を渡す・BL-185)")
     ap.add_argument("--kinds", default=None,
                     help=f"カンマ区切りで種別を明示(chain: {','.join(KINDS)} / "
                          f"ring: {','.join(RING_KINDS)}。既定=seedシャッフル巡回)")
@@ -8033,6 +8035,8 @@ def main():
     qseeds = [base.randint(10**6, 10**7 - 1) for _ in range(a.count)]
     results = []
     seen_q = set()          # ★BL-185: 同一設問の重複排除(speed 枠)
+    speed_used = set()      # ★BL-185 二次是正: speed 枠は同じ (shape, kind) を 1 実行で 2 度引かない
+    exclude_kinds = {x.strip() for x in (getattr(a, "exclude_kinds", "") or "").split(",") if x.strip()}
     for i, qseed in enumerate(qseeds):
         if len(results) >= a.count:
             break
@@ -8103,13 +8107,18 @@ def main():
             #   無ければ全 kind)を family 均等→kind 均等で抽選。gen_pack --speed-shape speed。
             roll = random.Random(qseed ^ 0x5EED5)
             # ★BL-186: mpls の用語 kind(gpm.SPEED_KINDS)も瞬発力枠の 1 ファミリとして混ぜる
-            shape_i = roll.choice(sorted(KB_FAMILIES) + ["mpls"])
-            if shape_i == "mpls":
-                kind = roll.choice(gpm.SPEED_KINDS)
-                m = None
-            else:
-                m = KB_FAMILIES[shape_i]
-                kind = roll.choice(getattr(m, "SPEED_KINDS", None) or m.KINDS)
+            # ★BL-185 二次是正(2026-09-19): 1 実行内で同じ (shape, kind) を 2 度引かない・
+            #   --exclude-kinds(思考系で既に出した kind)も外す。残り kind を持つ family から均等抽選。
+            fams = {f: list(getattr(mm, "SPEED_KINDS", None) or mm.KINDS) for f, mm in KB_FAMILIES.items()}
+            fams["mpls"] = list(gpm.SPEED_KINDS)
+            cands = {f: [k for k in ks if (f, k) not in speed_used and f"{f}/{k}" not in exclude_kinds]
+                     for f, ks in fams.items()}
+            cands = {f: ks for f, ks in cands.items() if ks}
+            if not cands:                      # 全 kind を使い切ったら解放(count が kind 総数を超える場合)
+                cands = {f: ks for f, ks in fams.items() if ks}
+            shape_i = roll.choice(sorted(cands))
+            kind = roll.choice(cands[shape_i])
+            m = None if shape_i == "mpls" else KB_FAMILIES[shape_i]
             # ★BL-186: kind の中で即答の形だけを使う(module の SPEED_FORMS・任意)
             speed_forms = (getattr(m, "SPEED_FORMS", None) or {}).get(kind) if m else None
         else:
@@ -9061,13 +9070,16 @@ def main():
             # ★BL-185: 瞬発力枠は同じ設問文(シナリオ+設問+選択肢)を 1 パックに 2 度出さない。
             #   重複なら qseed を足して引き直す(上限= count の 4 倍)
             import hashlib as _hl
-            _key = _hl.md5(re.sub(r"^# 問題 .*$", "", q_md, flags=re.M).encode("utf-8")).hexdigest()
+            _body = re.sub(r"^# 問題 .*$", "", q_md, flags=re.M)
+            _body = re.sub(r"## 選択肢.*", "", _body, flags=re.S)     # 選択肢の並び/錯乱肢が違っても同じ設問なら重複
+            _key = _hl.md5(_body.encode("utf-8")).hexdigest()
             if _key in seen_q:
                 if len(qseeds) < a.count * 4:
                     qseeds.append((qseed * 7919 + len(qseeds)) % (10**7) + 10**6)
                 print(f"  重複(同一設問)→ 引き直し", flush=True)
                 continue
             seen_q.add(_key)
+            speed_used.add((shape_i, kind))
         leak_lint(q_md, lint)
         with open(f"{repo}/questions/{stamp}.md", "w", encoding="utf-8") as fh:
             fh.write(q_md)

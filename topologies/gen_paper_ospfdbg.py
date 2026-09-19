@@ -26,6 +26,7 @@ kinds(=故障種。which は横断の即答 kind):
 """
 import os
 import random
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -650,6 +651,21 @@ def _intro(d):
     return base + f" 隣接が形成されないため、{me} でデバッグを有効にしたところ、次の出力が得られました。"
 
 
+
+def _mmid(name):
+    """Mermaid のノード ID(英数字以外は _ に。表示名は label 側に持つ・BL-187)。"""
+    return "n_" + re.sub(r"[^A-Za-z0-9]", "_", str(name))
+
+
+def _ospf_mermaid(d):
+    me, nb = d["me"], d["nbr"]
+    return "\n".join([
+        "```mermaid", "graph LR",
+        f'  {_mmid(me)}["{me}<br/>RID {d["me_rid"]}<br/>{d["ifl"]} {d["me_ip"]}"]',
+        f'  {_mmid(nb)}["{nb}<br/>RID {d["nbr_rid"]}<br/>{d["ifl"]} {d["nbr_ip"]}"]',
+        f'  {_mmid(me)} ---|"{d["net"]}/24<br/>OSPF {d["pid"]} area {d["area"]}"| {_mmid(nb)}',
+        "```"])
+
 def question_body(d, choices, form):
     v = d["variant"]
     if d["kind"] == "which":
@@ -658,7 +674,7 @@ def question_body(d, choices, form):
         ch_md = "\n\n".join(f"{'ABCDEFG'[i]}. {t}" for i, (t, _, _) in enumerate(choices))
         return before, ask, ch_md, ""
     ex = exhibit(d)
-    before = f"{_intro(d)}\n\n```\n{ex}\n```"
+    before = f"{_ospf_mermaid(d)}\n\n{_intro(d)}\n\n```\n{ex}\n```"
     if form == "read":
         ask = "この出力から分かることとして、正しく述べられているものは、次のうちどれですか。(1つを選択してください)"
     elif form == "cause":

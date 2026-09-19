@@ -12,6 +12,7 @@ kinds:
 """
 import os
 import random
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -93,7 +94,8 @@ MAJORS = [("172.16", "172.17"), ("10", "172.16"), ("172.31", "10"), ("172.20", "
 def _draw_autosum(d, rnd):
     n = rnd.choice([4, 5, 6])
     d["n"] = n
-    d["names"] = [f"R{i + 1}" for i in range(n)] if rnd.random() < 0.5 else [rnd.choice(["A", "B"]) + str(i + 1) for i in range(n)]
+    _pre = rnd.choice(["A", "B"])    # ★BL-187: 接頭辞はルータ列で統一(A1/A2/B3 のような混在を避ける)
+    d["names"] = [f"R{i + 1}" for i in range(n)] if rnd.random() < 0.5 else [_pre + str(i + 1) for i in range(n)]
     d["names"] = [f"RT{i + 1:02d}" for i in range(n)] if rnd.random() < 0.3 else d["names"]
     mA, mB = rnd.choice(MAJORS)
     d["mA"], d["mB"] = mA, mB
@@ -332,6 +334,26 @@ def build_choices_fix(d, rnd):
 # ==========================================================================
 # Markdown
 # ==========================================================================
+
+def _mmid(name):
+    """Mermaid のノード ID(英数字以外は _ に。表示名は label 側に持つ・BL-187)。"""
+    return "n_" + re.sub(r"[^A-Za-z0-9]", "_", str(name))
+
+
+def _autosum_mermaid(d):
+    n, names, links = d["n"], d["names"], d["links"]
+    mA, mB = d["mA"], d["mB"]
+    L = ["```mermaid", "graph LR", f'  LANA["{_subnet(d, mA, 11)}"]']
+    L += [f'  {_mmid(x)}["{x}"]' for x in names]
+    L.append(f'  LANB["{_subnet(d, mA, 41)}"]')
+    L.append(f"  LANA --- {_mmid(names[0])}")
+    for i, m in enumerate(links):
+        major = mA if m == "A" else mB
+        L.append(f'  {_mmid(names[i])} ---|"{_subnet(d, major, 20 + i)}"| {_mmid(names[i + 1])}')
+    L.append(f"  {_mmid(names[-1])} --- LANB")
+    L.append("```")
+    return "\n".join(L)
+
 def question_body(d, choices, form):
     if d["kind"] == "named_mode":
         if form == "match":
@@ -352,7 +374,7 @@ def question_body(d, choices, form):
         return before, ask, ch_md, ""
     # autosum
     names = d["names"]
-    before = (f"{names[0]} から {names[-1]} までを直列に接続し、全ルータで EIGRP(AS 1)を動作させています。"
+    before = (f"{_autosum_mermaid(d)}\n\n{names[0]} から {names[-1]} までを直列に接続し、全ルータで EIGRP(AS 1)を動作させています。"
               f"{names[0]} のルーティング テーブルを確認したところ、{names[-1]} の LAN のネットワークが載っていません。\n\n```\n{autosum_exhibit(d)}\n```")
     if form == "select2":
         ask = f"{names[0]} と {names[-1]} の両方のルーティング テーブルに相手の LAN の個別経路が載るようにするには、どのコマンドを使用すればよいですか。(2つを選択してください)"
