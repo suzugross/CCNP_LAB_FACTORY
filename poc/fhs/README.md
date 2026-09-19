@@ -38,3 +38,9 @@ RT02 側の受信 ACL カウンタで測定: source-guard(validate address)を C
 `validate prefix` でも範囲外(2001:DB8:98::1)が 5/5 で届く。destination-guard(enforcement always・Et0/0)でも静的 ND 宛の未知宛先が drop されない。
 `show device-tracking counters` の Dropped/Faults は常に空。ポリシーの設定・attach・show 表示は正常(P1 の CLI 実装は「表示まで」)。
 → RA guard / DHCPv6 guard(punt される制御プレーン)だけが IOL で実測可能。3 ガードの出題は文書ベース(設計書 §8)・ラボ化不可。
+
+## P8L(2026-09-19・IOSvL2 追試・`poc-fhs-lab-iosvl2.yaml` = SWB を iosvl2 に差し替え・`P8_LEGACY=1 P8_TITLE=POC-FHS-IOSV P8_SWIFS=Gi0/0,Gi0/1,Gi0/2`)
+
+vios_l2 15.2 は旧 CLI(`ipv6 snooping`/`ipv6 nd raguard`/`ipv6 source-guard`/`ipv6 destination-guard`/`ipv6 dhcp guard` の policy)を持つが `device-tracking policy` は無い。
+**ポート attach は全部 `% Invalid input`**(source-guard は Box に付く)。VLAN に snooping を付けても binding table は空・counters は受信ゼロ。
+**VLAN 単位の RA guard(HOST)でも RA は一切落ちない**(CLB が正規+不正の両プレフィックスを取得)。→ IOSvL2 の FHS は CLI だけで完全非機能。ioll2-xe(RA/DHCPv6 guard のみ動く)が唯一の選択肢。

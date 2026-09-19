@@ -15,8 +15,9 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 KINDS = ["rm_implicit_deny", "nontransit_dl"]
-SPEED_KINDS = []
-THINK_KINDS = KINDS
+SPEED_KINDS = ["nontransit_dl"]            # ★BL-186: select(穴埋め)形は知識で即答できる
+SPEED_FORMS = {"nontransit_dl": ["select"]}
+THINK_KINDS = KINDS                          # nontransit_dl の cause 形は思考系に残す
 WORLDS = ["-"]
 KIND_WORLDS = {k: ["-"] for k in KINDS}
 FORMS = {"rm_implicit_deny": {"fix", "cause", "read"}, "nontransit_dl": {"select", "cause"}}

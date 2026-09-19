@@ -17,8 +17,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 KINDS = ["adfix", "adpath", "ribread"]
-SPEED_KINDS = []
-THINK_KINDS = KINDS
+SPEED_KINDS = ["adpath"]                   # ★BL-186: AD 値の知識で即答(select/select2)
+THINK_KINDS = ["adfix", "ribread"]
 WORLDS = ["-"]
 KIND_WORLDS = {k: ["-"] for k in KINDS}
 FORMS = {"adfix": {"fix", "cause"}, "adpath": {"select", "select2"}, "ribread": {"allthat"}}

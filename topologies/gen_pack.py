@@ -62,6 +62,7 @@ PAPER_GENRES = {
     "ospf": ["ospfdbg"],
     "eigrp": ["eigrpkb"],
     "route": ["rtbasic"],
+    "mpls": ["mpls"],           # ★BL-186(2026-09-19): --require-shape mpls で指名可(既定の必須枠には入れない)
 }
 
 # 紙面の問題数を `auto` にしたときの範囲(2026-08-11「10〜20問で適当に」→ 2026-09-05「5問程度」に変更)
@@ -2384,9 +2385,9 @@ def main():
                          "指定したぶんだけ自動生成・借用の数が減る")
     ap.add_argument("--no-pool", action="store_true",
                     help="private/paper_pools.yml の紙面プールから抽選しない")
-    ap.add_argument("--speed", type=int, default=5,
+    ap.add_argument("--speed", type=int, default=15,
                     help="瞬発力枠(即答形)の問題数。思考系(--paper)とは別枠で"
-                         "上乗せする(既定5・0 で無効)")
+                         "上乗せする(既定15・BL-186 2026-09-19・0 で無効)")
     ap.add_argument("--speed-shape", default="speed",
                     help="瞬発力枠の shape(既定 speed= svc 型ファミリ(svc/fhs/ospfdbg/dhcp6/dmvpn …)の"
                          "即答 kind を問題ごとに抽選。svc を指定すると従来どおり Services のみ)")

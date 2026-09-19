@@ -64,7 +64,8 @@ import gen_paper_rtbasic as grt   # noqa: E402  (rtbasic=経路選択の基礎 A
 #   shape 名 → module。新ファミリはここに 1 行足すだけで pick/forms/render/lint/obfuscate/
 #   瞬発力枠(--shape speed)/思考系枠(mixed の kbthink)の全経路に乗る。module の規約は
 #   gen_paper_svc.py の docstring(KINDS/kind_forms/draw/build_choices_*/question_body/
-#   answer_body/pick_count/CORE/TITLES)＋ SPEED_KINDS / THINK_KINDS(任意。無ければ全 kind が瞬発力枠)。
+#   answer_body/pick_count/CORE/TITLES)＋ SPEED_KINDS / THINK_KINDS(任意。無ければ全 kind が瞬発力枠)
+#   ＋ SPEED_FORMS={kind: [forms]}(任意。瞬発力枠でその kind に使う形を絞る・BL-186)。
 KB_FAMILIES = {"svc": gsv, "fhs": gpf, "ospfdbg": god, "dhcp6": gd6, "dmvpn": gdm, "eigrpkb": gek,
                "bgppol": gbp, "rtbasic": grt}
 import gen_paper_pref as gpr   # noqa: E402  (pref=OSPF/EIGRP 経路選好・BL-127)
@@ -8031,7 +8032,11 @@ def main():
     base = random.Random(a.seed)
     qseeds = [base.randint(10**6, 10**7 - 1) for _ in range(a.count)]
     results = []
+    seen_q = set()          # ★BL-185: 同一設問の重複排除(speed 枠)
     for i, qseed in enumerate(qseeds):
+        if len(results) >= a.count:
+            break
+        speed_forms = None
         if a.shape == "mixed":
             roll = random.Random(qseed ^ 0xC0FE)
             r = roll.random()
@@ -8050,7 +8055,7 @@ def main():
             #   ★mpls の 5%(BL-169・2026-09-13)は pbr/urpf/leakmap/ospfv3pl/
             #   v6redist から 1% ずつ捻出した**暫定枠**(2.0 VPN の紙面空白解消)。
             #   ★svc(BL-170)は mixed に入れない(2026-09-13 ユーザ指示)。
-            #   即答形は gen_pack の**瞬発力枠**(--speed・既定5問)で別枠に出すため、
+            #   即答形は gen_pack の**瞬発力枠**(--speed・既定15問・BL-186)で別枠に出すため、
             #   mixed に混ぜると「思考系 N 問」の枠が即答形で埋まってしまう。
             #   ★kbthink の 4%(BL-176・2026-09-18)は pbr/urpf/leakmap/ospfv3pl から
             #   1% ずつ捻出した**暫定枠**= svc 型ファミリの思考系 kind(THINK_KINDS:
@@ -8097,9 +8102,16 @@ def main():
             # ★瞬発力枠(BL-176・2026-09-18): svc 型ファミリの即答 kind(SPEED_KINDS・
             #   無ければ全 kind)を family 均等→kind 均等で抽選。gen_pack --speed-shape speed。
             roll = random.Random(qseed ^ 0x5EED5)
-            shape_i = roll.choice(sorted(KB_FAMILIES))
-            m = KB_FAMILIES[shape_i]
-            kind = roll.choice(getattr(m, "SPEED_KINDS", None) or m.KINDS)
+            # ★BL-186: mpls の用語 kind(gpm.SPEED_KINDS)も瞬発力枠の 1 ファミリとして混ぜる
+            shape_i = roll.choice(sorted(KB_FAMILIES) + ["mpls"])
+            if shape_i == "mpls":
+                kind = roll.choice(gpm.SPEED_KINDS)
+                m = None
+            else:
+                m = KB_FAMILIES[shape_i]
+                kind = roll.choice(getattr(m, "SPEED_KINDS", None) or m.KINDS)
+            # ★BL-186: kind の中で即答の形だけを使う(module の SPEED_FORMS・任意)
+            speed_forms = (getattr(m, "SPEED_FORMS", None) or {}).get(kind) if m else None
         else:
             shape_i = a.shape
             kind = kinds[i % len(kinds)]
@@ -8384,6 +8396,8 @@ def main():
             avail = sorted(_kb.kind_forms(d["kind"]))
             if want_forms:
                 avail = [f for f in avail if f in want_forms] or avail
+            if speed_forms:
+                avail = [f for f in avail if f in speed_forms] or avail
             if a.exam:
                 wts = {"fix": 35, "cause": 30, "read": 30, "select": 25,
                        "select2": 20, "allthat": 20, "match": 15}
@@ -9043,6 +9057,17 @@ def main():
                                       #   経路・variance をいくつ構成した場合か)
                                       #   を担っているため、汎用文に均すと解答不能。
                                       or shape_i == "pref"))
+        if a.shape == "speed":
+            # ★BL-185: 瞬発力枠は同じ設問文(シナリオ+設問+選択肢)を 1 パックに 2 度出さない。
+            #   重複なら qseed を足して引き直す(上限= count の 4 倍)
+            import hashlib as _hl
+            _key = _hl.md5(re.sub(r"^# 問題 .*$", "", q_md, flags=re.M).encode("utf-8")).hexdigest()
+            if _key in seen_q:
+                if len(qseeds) < a.count * 4:
+                    qseeds.append((qseed * 7919 + len(qseeds)) % (10**7) + 10**6)
+                print(f"  重複(同一設問)→ 引き直し", flush=True)
+                continue
+            seen_q.add(_key)
         leak_lint(q_md, lint)
         with open(f"{repo}/questions/{stamp}.md", "w", encoding="utf-8") as fh:
             fh.write(q_md)

@@ -58,6 +58,10 @@ DIFF = {"t_roles": 2, "t_label": 2, "t_ldp": 3, "t_vpn": 3, "t_protect": 3,
         "l_read": 3, "l_cause": 4}
 
 
+# ★BL-186(2026-09-19): 用語 kind は知識で即答できるので瞬発力枠(gen_paper_mcq --shape speed)にも乗せる
+SPEED_KINDS = ["t_roles", "t_label", "t_ldp", "t_vpn", "t_protect"]
+
+
 def kind_forms(kind):
     return set(FORMS[kind])
 
