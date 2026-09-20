@@ -77,6 +77,7 @@ scripts/lab.sh grade <ID> [variant]        # grade.yml を実走＋学習ノル�
 
 ```bash
 scripts/pack.sh new [--paper 3] [--lab 2] [--budget 20]   # 作成(15〜25分・nohup 推奨)
+#   既定の構成= 思考系 5〜6 ＋ 瞬発力 15(--speed) ＋ 穴埋め 5(--cloze・解説穴埋め形 BL-191) ＋ ラボ 2〜3
 scripts/pack.sh serve                                     # 配信(Windows ブラウザから開く)
 scripts/pack.sh status [PACK-ID]                          # 進捗
 scripts/pack.sh grade  [PACK-ID] --no-lab                 # ①紙面だけ即採点(ラボは走らせない)
@@ -147,6 +148,7 @@ scripts/quota.sh report --days 30      # 期間集計(--out で HTML)
   **_history.md はノルマ計数に使わない**(叙述用・書き換えが起きるため)。
 - **出題の選定にノルマを使う**: 未消化ジャンルが残っていれば、指定が無い限りそこから優先して選ぶ。
 - ラボは**満点でノルマ1問**として数える(途中点は「挑戦中」表示)。紙面は正誤を問わず1問。
+- **紙面の正答率は初回の解答だけで集計する**(2026-09-19 ユーザ指示・quota.py dedupe)。再挑戦→再採点で正解になっても正答には入れない(問数は 1 のまま)。ラボは最後の結果。
 
 ## 守ること
 

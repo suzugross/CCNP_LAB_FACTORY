@@ -60,6 +60,7 @@ import gen_paper_dmvpn as gdm   # noqa: E402  (dmvpn=DMVPN 構文/意味/フェ�
 import gen_paper_eigrpkb as gek   # noqa: E402  (eigrpkb=EIGRP named-mode/auto-summary・BL-180)
 import gen_paper_bgppol as gbp   # noqa: E402  (bgppol=BGP out ポリシー・BL-182)
 import gen_paper_rtbasic as grt   # noqa: E402  (rtbasic=経路選択の基礎 AD/RIB・BL-184)
+import gen_paper_cloze as gcl  # noqa: E402  (cloze=解説穴埋め形・BL-191)
 # ★svc 型ファミリ(事実ベース＋小さな真偽関数・紙面専用)の共通レジストリ(2026-09-18・BL-176 計画)。
 #   shape 名 → module。新ファミリはここに 1 行足すだけで pick/forms/render/lint/obfuscate/
 #   瞬発力枠(--shape speed)/思考系枠(mixed の kbthink)の全経路に乗る。module の規約は
@@ -67,7 +68,7 @@ import gen_paper_rtbasic as grt   # noqa: E402  (rtbasic=経路選択の基礎 A
 #   answer_body/pick_count/CORE/TITLES)＋ SPEED_KINDS / THINK_KINDS(任意。無ければ全 kind が瞬発力枠)
 #   ＋ SPEED_FORMS={kind: [forms]}(任意。瞬発力枠でその kind に使う形を絞る・BL-186)。
 KB_FAMILIES = {"svc": gsv, "fhs": gpf, "ospfdbg": god, "dhcp6": gd6, "dmvpn": gdm, "eigrpkb": gek,
-               "bgppol": gbp, "rtbasic": grt}
+               "bgppol": gbp, "rtbasic": grt, "cloze": gcl}
 import gen_paper_pref as gpr   # noqa: E402  (pref=OSPF/EIGRP 経路選好・BL-127)
 import gen_paper_ospfbgp as gob  # noqa: E402  (ospfbgp=OSPF→BGP 再配送の範囲・BL-163)
 
@@ -6953,7 +6954,7 @@ SVC_TITLES = {
 
 
 KB_TITLES = {"svc": SVC_TITLES, "fhs": gpf.TITLES, "ospfdbg": god.TITLES, "dhcp6": gd6.TITLES, "dmvpn": gdm.TITLES, "eigrpkb": gek.TITLES,
-             "bgppol": gbp.TITLES, "rtbasic": grt.TITLES}
+             "bgppol": gbp.TITLES, "rtbasic": grt.TITLES, "cloze": gcl.TITLES}
 
 
 def question_md_kb(shape, d, choices, stamp, form):
@@ -6974,7 +6975,8 @@ def answer_md_kb(shape, d, choices, stamp, master_seed, subseed, form):
     mod = KB_FAMILIES[shape]
     body = mod.answer_body(d, choices, form)
     form_note = {"allthat": "(数非明示= 正解の数は設問に示さない・正解集合は事実ベースから機械決定)",
-                 "match": "(組合せ形= 解答UIは BL-168・正解は全単射)",
+                 "match": ("(穴埋め形= 解答UIは BL-168 の組合せ形を流用・語群 8 のうち正解 4・全単射ではない)"
+                           if shape == "cloze" else "(組合せ形= 解答UIは BL-168・正解は全単射)"),
                  "select2": "(正解ちょうど2・「真だが設問外」の肢を含み得る)",
                  "read": "(exhibit は poc/svc-paper の実測書式)",
                  "fix": "(真偽関数で「直る候補==1」を draw 時に機械検証)"}.get(form, "")
@@ -7879,7 +7881,7 @@ def main():
                     choices=["chain", "ring", "pbr", "urpf", "bgpdbg", "mploop",
                              "riploop", "leakmap", "ospfv3pl", "v6redist",
                              "aaa", "acl", "aclv6", "bgpbest", "copp", "pref",
-                             "ospfbgp", "mpls", "svc", "fhs", "ospfdbg", "dhcp6", "dmvpn", "eigrpkb", "bgppol", "rtbasic", "speed", "mixed"],
+                             "ospfbgp", "mpls", "svc", "fhs", "ospfdbg", "dhcp6", "dmvpn", "eigrpkb", "bgppol", "rtbasic", "cloze", "speed", "mixed"],
                     default="chain",
                     help="chain=再配送欠落/誤設定系(既定) / ring=再配送リングの定常ループ(難5)"
                          " / riploop=RIP⇄OSPF 対策が効いていない型(BL-116)"
@@ -8109,7 +8111,9 @@ def main():
             # ★BL-186: mpls の用語 kind(gpm.SPEED_KINDS)も瞬発力枠の 1 ファミリとして混ぜる
             # ★BL-185 二次是正(2026-09-19): 1 実行内で同じ (shape, kind) を 2 度引かない・
             #   --exclude-kinds(思考系で既に出した kind)も外す。残り kind を持つ family から均等抽選。
-            fams = {f: list(getattr(mm, "SPEED_KINDS", None) or mm.KINDS) for f, mm in KB_FAMILIES.items()}
+            fams = {f: list(mm.KINDS if getattr(mm, "SPEED_KINDS", None) is None else mm.SPEED_KINDS)
+                    for f, mm in KB_FAMILIES.items()}
+            fams = {f: ks for f, ks in fams.items() if ks}   # ★BL-191: SPEED_KINDS=[] (cloze) は瞬発力枠に出さない
             fams["mpls"] = list(gpm.SPEED_KINDS)
             cands = {f: [k for k in ks if (f, k) not in speed_used and f"{f}/{k}" not in exclude_kinds]
                      for f, ks in fams.items()}
@@ -8423,7 +8427,8 @@ def main():
                 form = rnd.choice(avail)
             else:
                 form = ("read" if "read" in avail else "fix" if "fix" in avail
-                        else "cause" if "cause" in avail else "select")
+                        else "cause" if "cause" in avail
+                        else "select" if "select" in avail else avail[0])
             # ★BL-176: 形と盤面の組合せが成立しない(モジュールが ValueError)ときは
             #   別 seed で盤面を引き直す(kind は保持・形は再抽選しない)。
             for _try in range(80):

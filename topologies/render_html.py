@@ -161,6 +161,26 @@ MATCH_HEAD_RE = re.compile(r"^#{2,4}\s+.*対応")
 MATCH_ROW_RE = re.compile(r"^\|\s*([①-⑳])\s*\|\s*(.*?)\s*\|")
 
 
+def choice_texts(md_text):
+    """`## 選択肢` 節の候補を [(記号, 本文), ...] で返す(プルダウンの表示用・BL-191)。"""
+    out, in_fence, in_sec = [], False, False
+    for line in md_text.split("\n"):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if re.match(r"^#{1,6}\s", line):
+            in_sec = "選択肢" in line
+            continue
+        if in_sec:
+            m = CHOICE_RE.match(line.strip())
+            if m:
+                text = line.strip()[m.end():].strip().strip("*").strip()
+                out.append((m.group(2), text))
+    return out
+
+
 def match_terms(md_text):
     """組合せ形(項目①〜と記号A〜の対応付け)の項目を順に返す [(丸数字, 項目名), ...]。
 
@@ -185,6 +205,38 @@ def match_terms(md_text):
             if m and m.group(1) not in seen:
                 seen.add(m.group(1))
                 terms.append((m.group(1), m.group(2)))
+    if terms:
+        return terms
+    return blank_terms(md_text)
+
+
+BLANK_RE = re.compile(r"［([①-⑳])］")
+
+
+def blank_terms(md_text, ctx=14):
+    """穴埋め形(BL-191): 本文中の ［①］〜 マーカーを出現順に項目として返す [(丸数字, 前後の文脈), ...]。
+
+    「対応させる項目」の表を置かなくても、解答欄が「空欄ごとに記号を 1 つ選ぶ」形になる
+    (表は解く側に意味が無く、本文と語群を遠ざけるだけだった= 2026-09-19 ユーザ指摘)。
+    文脈はマーカーを含む行の前後 ctx 文字(コードフェンス内の設定例も対象)。同じ番号が
+    複数回出る場合(設定例と説明文の両方など)は最初の出現の文脈を使う。
+    """
+    terms, seen = [], set()
+    for line in md_text.split("\n"):
+        for m in BLANK_RE.finditer(line):
+            k = m.group(1)
+            if k in seen:
+                continue
+            seen.add(k)
+            if len(line.strip()) <= 2 * ctx + 12:      # 短い行(設定例の 1 行など)は丸ごと
+                snip = line.strip()
+            else:
+                pre = line[max(0, m.start() - ctx):m.start()]
+                post = line[m.end():m.end() + ctx]
+                snip = (("…" if m.start() > ctx else "") + pre + "［" + k + "］" + post +
+                        ("…" if m.end() + ctx < len(line) else ""))
+            snip = re.sub(r"[`*]", "", snip)
+            terms.append((k, snip.strip()))
     return terms
 
 
@@ -298,6 +350,16 @@ pre.mermaid svg{max-width:100%; height:auto}
 .answer .mrow{display:flex; align-items:center; gap:.8rem; margin:.35rem 0; flex-wrap:wrap}
 .answer .mrow .mterm{font-weight:600; min-width:9rem}
 .answer .mrow .opts{margin:0}
+/* 穴埋め形(BL-191): 空欄ごとのプルダウン */
+.answer .mrow.cloze{align-items:flex-start; flex-direction:column; gap:.25rem; margin:.6rem 0}
+.answer .mrow.cloze .mterm{min-width:0; font-weight:600}
+.answer .mrow.cloze .mctx{font-weight:400; color:#444444; margin-left:.4rem}
+.answer .mrow select.msel{font-size:1rem; padding:.35rem .5rem; max-width:100%; border:1px solid #999999; border-radius:4px; background:#ffffff}
+/* 穴埋め形: 本文中(表・設定例・説明文)に埋め込むプルダウンと、同番号の鏡・解答欄の要約 */
+select.msel.inline{font:inherit; font-size:.95em; padding:.1rem .3rem; margin:0 .15rem; max-width:22rem; border:1px solid #666666; border-radius:4px; background:#fffbe6; vertical-align:baseline}
+pre select.msel.inline{font-family:inherit}
+.bmirror{font-weight:600; background:#fffbe6; border-bottom:2px solid #666666; padding:0 .2rem}
+.answer .clsum{font-weight:600; font-size:1.05rem; margin:.3rem 0 .9rem; letter-spacing:.02em}
 .answer label.row{display:block; margin:.6rem 0 .2rem; font-size:.9rem}
 .answer textarea{
   width:100%; min-height:4.5rem; padding:.5rem; border:1px solid #999999;
@@ -506,10 +568,10 @@ ANSWER_JS = r"""
        解答が欠ける。2026-08-11 に複数選択問題を追加した際の修正)。 */
   function ansValue(){
     var on = box.querySelectorAll('.opts input:checked');
-    if(on.length){
-      return Array.prototype.map.call(on, function(e){ return e.value; })
-             .sort().join('・');
-    }
+    var vals = Array.prototype.map.call(on, function(e){ return e.value; });
+    /* 穴埋め形(BL-191): 空欄ごとのプルダウン(select.msel)。空(未選択)は除く。 */
+    document.querySelectorAll('select.msel').forEach(function(sl){ if(sl.value) vals.push(sl.value); });
+    if(vals.length){ return vals.sort().join('・'); }
     return val('.ans');
   }
   function val(sel){
@@ -563,7 +625,9 @@ ANSWER_JS = r"""
     if(pairs){
       pairs.forEach(function(P){
         var r = box.querySelector('.opts input[value="' + P + '"]');
-        if(r){ r.checked = true; hit = true; }
+        if(r){ r.checked = true; hit = true; return; }
+        var o = document.querySelector('select.msel option[value="' + P + '"]');
+        if(o){ o.parentNode.value = P; hit = true; }
       });
       if(hit) return;
     }
@@ -582,6 +646,23 @@ ANSWER_JS = r"""
     box.querySelectorAll('.opts label').forEach(function(l){
       l.classList.toggle('on', l.querySelector('input').checked);
     });
+    mirror();
+  }
+  /* 穴埋め形: 本文中のプルダウンの選択値を、同番号の鏡(span.bmirror)と解答欄の要約(.clsum)へ映す */
+  function mirror(){
+    var parts = [];
+    document.querySelectorAll('select.msel').forEach(function(sl){
+      var k = sl.dataset.k || (sl.value || '').charAt(0);
+      var v = sl.value ? sl.value.slice(1) : '';
+      if(k){
+        document.querySelectorAll('.bmirror[data-k="' + k + '"]').forEach(function(m){
+          m.textContent = v ? ('［' + k + ' ' + v + '］') : ('［' + k + '］');
+        });
+        parts.push(k + (v ? v : '－'));
+      }
+    });
+    var sum = box.querySelector('.clsum');
+    if(sum) sum.textContent = parts.length ? parts.join('　') : '';
   }
 
   function save(){
@@ -605,6 +686,9 @@ ANSWER_JS = r"""
 
   box.addEventListener('input', queue);
   box.addEventListener('change', queue);
+  document.addEventListener('change', function(ev){
+    if(ev.target && ev.target.classList && ev.target.classList.contains('msel') && !box.contains(ev.target)) queue();
+  });
   /* タイマーUIを「解答済み」チェックの直前に置き、チェックで計測を確定する */
   var doneLbl = box.querySelector('.done');
   if(doneLbl){
@@ -658,7 +742,7 @@ def build_nav(nav):
 
 
 def render(md_text, title="問題", nav=None, meta="", mermaid_js=None,
-           mermaid_mode="cdn", answer_form=""):
+           mermaid_mode="cdn", answer_form="", inline_blanks=None):
     """Markdown 文字列 → HTML 文字列。
 
     mermaid_mode:
@@ -668,6 +752,15 @@ def render(md_text, title="問題", nav=None, meta="", mermaid_js=None,
     mermaid_js: embed 時に使うソース(None なら MERMAID_JS を読む)。
     """
     body, has_mermaid = md_to_body(md_text)
+    # ★穴埋め形(BL-191/198): ［①］ の位置にプルダウンを埋め込む(本文中で直接選ぶ・2026-09-20 ユーザ要望)。
+    #   同じ番号の 2 回目以降は選択値を映す鏡(span.bmirror)にする(同名 select の二重計上を避ける)。
+    for k, sel_html in (inline_blanks or {}).items():
+        mark = f"［{k}］"
+        first = body.find(mark)
+        if first < 0:
+            continue
+        body = body[:first] + sel_html + body[first + len(mark):]
+        body = body.replace(mark, f'<span class="bmirror" data-k="{k}">{mark}</span>')
     scripts = ""
     if has_mermaid and mermaid_mode != "none":
         if mermaid_mode == "cdn":
@@ -706,7 +799,7 @@ def read_mermaid(path=MERMAID_JS):
 
 
 def render_file(in_path, out_path, title=None, nav=None, meta="", mermaid_js=None,
-                mermaid_mode="cdn", answer_form=""):
+                mermaid_mode="cdn", answer_form="", inline_blanks=None):
     with open(in_path, encoding="utf-8") as fh:
         text = fh.read()
     assert_not_answer_key(in_path, text)
@@ -714,7 +807,7 @@ def render_file(in_path, out_path, title=None, nav=None, meta="", mermaid_js=Non
         m = re.search(r"^#\s+(.+)$", text, re.M)
         title = m.group(1).strip() if m else os.path.basename(in_path)
     out = render(text, title=title, nav=nav, meta=meta, mermaid_js=mermaid_js,
-                 mermaid_mode=mermaid_mode, answer_form=answer_form)
+                 mermaid_mode=mermaid_mode, answer_form=answer_form, inline_blanks=inline_blanks)
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(out)

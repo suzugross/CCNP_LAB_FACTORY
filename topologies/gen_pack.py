@@ -63,6 +63,7 @@ PAPER_GENRES = {
     "eigrp": ["eigrpkb"],
     "route": ["rtbasic"],
     "mpls": ["mpls"],           # ★BL-186(2026-09-19): --require-shape mpls で指名可(既定の必須枠には入れない)
+    "cloze": ["cloze"],         # ★BL-191(2026-09-19): 解説穴埋め形。--require-shape cloze で指名可(既定の必須枠には入れない)
 }
 
 # 紙面の問題数を `auto` にしたときの範囲(2026-08-11「10〜20問で適当に」→ 2026-09-05「5問程度」に変更)
@@ -178,6 +179,17 @@ LAB_GENRES = {
                           "ENARSI-DMVPN-BGP-01", "ENARSI-DMVPN-IPSEC-01"],
                          ["ENARSI-IPSEC-VTI-01", "ENARSI-IPSEC-IKEV2-01",
                           "ENARSI-GREIPSEC-MAP-01"]]},
+    # ★security 枠(2026-09-19 ユーザ指示・ブループリント突合せ報告の推奨4)=
+    #   既定プールに Security のラボが無く、8/23 以降のラボは security 11 件に留まっていた。
+    #   urpf= uRPF TS(3 IOL・4 故障・データプレーン効果採点)= TS プール側。
+    #   aaa= 冗長 AAA(RADIUS サーバグループ)構築(RT×2 + FreeRADIUS×2・3 フェーズ挙動採点)
+    #        = 構築スロット側。nodes は MGMTSW/EXTC を含む CML 実ノード数の見積り。
+    "urpf": {"label": "uRPF TS",
+             "prefixes": ["GEN-URPF"], "tags": ["urpf", "security", "anti-spoofing"],
+             "nodes": 5},
+    "aaa": {"label": "冗長 AAA 構築(RADIUS)", "build": True,
+            "prefixes": ["GEN-AAAGRP"], "tags": ["aaa", "radius", "security"],
+            "nodes": 6},
     "mplsbuild": {"label": "MPLS L3VPN 構築", "build": True, "group": "mpls",
                   "gap_days": 6, "minutes": 90, "tags": ["mpls", "l3vpn", "vpnv4"],
                   "gap_families": ["GEN-MPLSTS", "GEN-MPLSEB"],
@@ -1220,6 +1232,27 @@ def q_title(no, item):
     return f"Q{no} ({kind} {item['ref']})"
 
 
+def cloze_inline_selects(it, src_path):
+    """穴埋め形なら {丸数字: <select> HTML} を返す(本文中の ［①］ に埋め込む・BL-198)。それ以外は {}。"""
+    import html as H
+    if it.get("kind") != "paper" or not src_path or not os.path.exists(src_path):
+        return {}
+    with open(src_path, encoding="utf-8") as fh:
+        qtext = fh.read()
+    letters = render_html.choice_letters(qtext)
+    blanks = render_html.blank_terms(qtext) if letters else []
+    if not blanks or any(render_html.MATCH_HEAD_RE.match(l) for l in qtext.split("\n") if l.startswith("#")):
+        return {}
+    texts = dict(render_html.choice_texts(qtext))
+    out = {}
+    for i, (tk, _ctx) in enumerate(blanks, 1):
+        opts = f'<option value="">{tk}</option>' + "".join(
+            f'<option value="{tk}{l}">{l}. {H.escape((texts.get(l) or "")[:60])}</option>' for l in letters)
+        out[tk] = (f'<select class="msel inline" name="ans{it["no"]}_{i}" data-k="{tk}" '
+                   f'title="空欄 {tk}">{opts}</select>')
+    return out
+
+
 def answer_form(pack_id, it, src_path):
     """問題ページ下部に置く解答欄の HTML。
 
@@ -1244,7 +1277,18 @@ def answer_form(pack_id, it, src_path):
             letters = render_html.choice_letters(qtext)
             pick = render_html.pick_count(qtext)
             terms = render_html.match_terms(qtext)
-        if letters and terms:
+        blanks = render_html.blank_terms(qtext) if letters else []
+        if letters and blanks and not any(
+                render_html.MATCH_HEAD_RE.match(l) for l in qtext.split("\n") if l.startswith("#")):
+            # ★穴埋め形(BL-191・2026-09-19 ユーザ要望「プルダウンで選べる形式に」):
+            #   空欄①〜ごとに <select>。option の値は組合せ形と同じ「①D」なので、ansValue()/
+            #   match_of()/採点はそのまま効く。表示は「D. 語句」(語句は 60 字で切る)。
+            # ★2026-09-20 ユーザ要望: プルダウンは本文中の ［①］ の位置に埋め込む(cloze_inline_selects →
+            #   render_html.render(inline_blanks=…))。解答欄には案内と選択状況の要約だけを置く。
+            last = blanks[-1][0]
+            ansfield = (f'<label class="row">空欄 ①〜{last} は<b>本文中のプルダウン</b>で選んでください'
+                        '（選択状況は下に映ります）</label><div class="clsum"></div>')
+        elif letters and terms:
             # ★組合せ形(項目①〜と記号A〜の対応付け・BL-168): 項目ごとに記号を1つ選ぶ。
             #   値は「①D」の形。ページの ansValue() はチェック済みを全部「・」でつなぐので
             #   解答: 行は「①D・②A・③C・④B」になり、採点は match_of() が読む。
@@ -1312,7 +1356,8 @@ def write_pages(repo, pdir, items, mermaid_js, mermaid_mode="cdn", pack_id=""):
                                     nav=build_nav(items, it["no"]), meta=meta,
                                     mermaid_js=mermaid_js,
                                     mermaid_mode=mermaid_mode,
-                                    answer_form=answer_form(pack_id, it, src))
+                                    answer_form=answer_form(pack_id, it, src),
+                                    inline_blanks=cloze_inline_selects(it, src))
         written.append(out)
     return written
 
@@ -1849,6 +1894,21 @@ def cmd_new(a):
         log(f"[紙面] 瞬発力枠: {len(speed_stamps)} 問(shape={a.speed_shape}"
             f"・思考系 {n_paper_total} 問とは別枠)")
 
+    # --- 穴埋め枠(解説穴埋め形・別枠・BL-191) -------------------------------------
+    # ★2026-09-19 ユーザ指示: 「問題を解きながら解説も頭に入れる」穴埋め形を新規ジャンルとして
+    #   5 問程度、思考系・瞬発力枠とは別枠で毎パックに混ぜる。shape=cloze は 1 実行で kind が
+    #   重複せず(kinds[i % n])、--avoid-recent-days で直近に出た kind を後ろへ回す。
+    cloze_stamps = []
+    if a.cloze > 0:
+        if a.dry_run:
+            log(f"[紙面] dry-run: 穴埋め枠 {a.cloze} 問(shape=cloze)は実生成時のみ")
+        else:
+            cloze_stamps = _run_paper_gen(repo, seed + 47000, a.cloze, "cloze",
+                                          a.exam, False, log, "穴埋め枠[cloze]")
+            if len(cloze_stamps) < a.cloze:
+                log(f"[紙面] ★穴埋め枠 不足: {len(cloze_stamps)}/{a.cloze} 問")
+        log(f"[紙面] 穴埋め枠: {len(cloze_stamps)} 問(shape=cloze・思考系/瞬発力枠とは別枠)")
+
     papers = []
     for st in stamps:
         src = f"questions/{st}.md"          # manifest には repo 相対で持つ
@@ -1865,6 +1925,10 @@ def cmd_new(a):
         papers.append({"kind": "paper", "ref": st, "src": f"questions/{st}.md",
                        "key": f"answers/{st}.md", "form": "mcq",
                        "slot": "speed", "state": "未着手"})
+    for st in cloze_stamps:
+        papers.append({"kind": "paper", "ref": st, "src": f"questions/{st}.md",
+                       "key": f"answers/{st}.md", "form": "mcq",
+                       "slot": "cloze", "state": "未着手"})
     for _ in range(n_paper - len(stamps)):
         papers.append({"kind": "paper", "ref": "(未生成)", "src": "",
                        "state": "準備失敗", "error": "紙面の生成に失敗"})
@@ -2226,7 +2290,7 @@ def cmd_status(a):
                if s.get("answer") else "")
         dur = (f"  所要={s['duration']}{'(自)' if s.get('dur_auto') else ''}"
                if s.get("duration") else "")
-        slot = {"speed": " (瞬発)", "think": ""}.get(it.get("slot"), "")
+        slot = {"speed": " (瞬発)", "cloze": " (穴埋め)", "think": ""}.get(it.get("slot"), "")
         print(f"  Q{it['no']} [{it.get('kind')}{slot}] {it.get('ref')}  {mark}{ans}{dur}")
     print(f"  -- {done}/{len(man['items'])} 問 解答済")
     used, per = leased_nodes(repo)
@@ -2401,6 +2465,9 @@ def main():
     ap.add_argument("--speed", type=int, default=15,
                     help="瞬発力枠(即答形)の問題数。思考系(--paper)とは別枠で"
                          "上乗せする(既定15・BL-186 2026-09-19・0 で無効)")
+    ap.add_argument("--cloze", type=int, default=5,
+                    help="穴埋め枠(解説穴埋め形 shape=cloze・BL-191)の問題数。思考系・瞬発力枠とは"
+                         "別枠で上乗せする(既定5・2026-09-19 ユーザ指示・0 で無効)")
     ap.add_argument("--speed-shape", default="speed",
                     help="瞬発力枠の shape(既定 speed= svc 型ファミリ(svc/fhs/ospfdbg/dhcp6/dmvpn …)の"
                          "即答 kind を問題ごとに抽選。svc を指定すると従来どおり Services のみ)")
@@ -2415,8 +2482,11 @@ def main():
     #   4ジャンルのシャッフルから2つ選ぶ形になる。
     # ★BL-158(2026-09-07): mpls(TS 12 台)・vpnbuild/mplsbuild(構築の静的ローテーション)を既定に追加。
     #   構築ジャンル(rtctl/v6build/vpnbuild/mplsbuild)は --build-rate の構築スロット 1 本からのみ。
+    # ★2026-09-19(ユーザ指示・ブループリント突合せ報告の推奨4): bgp(リングBGP TS)・
+    #   urpf(TS)・aaa(構築スロット)を既定に追加= ラボ既定に BGP/Security が無かった穴を塞ぐ。
     ap.add_argument("--lab-genres",
-                    default="hvrf,dhcp,dmvpn,ipsla,rtctl,v6addr,v6build,mpls,vpnbuild,mplsbuild",
+                    default="hvrf,dhcp,dmvpn,ipsla,rtctl,v6addr,v6build,mpls,vpnbuild,mplsbuild,"
+                            "bgp,urpf,aaa",
                     help=f"ラボの固定ジャンル({','.join(LAB_GENRES)})")
     ap.add_argument("--assume-used", type=int, default=None,
                     help="dry-run 専用: CML 稼働台数をこの値と仮定して選定を確認する")

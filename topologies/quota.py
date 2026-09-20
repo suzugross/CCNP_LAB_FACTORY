@@ -191,7 +191,7 @@ def paper_shape(repo, ref):
         with open(path, encoding="utf-8") as fh:
             m = re.search(r"^-?\s*種別:\s*`([^`]+)`", fh.read(), re.M)
         if m:
-            return m.group(1).split("/")[0].strip().lower()
+            return m.group(1).strip().lower()      # "shape/kind"(kind 無しの旧書式もそのまま)
     return None
 
 
@@ -202,8 +202,15 @@ def genre_for(repo, kind, ref):
     if ref in tbl["overrides"]:
         return tbl["overrides"][ref]
     if kind == "paper":
-        shape = paper_shape(repo, ref)
-        if shape:
+        full = paper_shape(repo, ref)
+        if full:
+            shape = full.split("/")[0]
+            # ★BL-191: genres.yml の shapes に "cloze/m_*" のような shape/kind パターンも書ける
+            #   (穴埋め形は topic ごとにジャンルが違う)。パターン→shape 単独の順。
+            import fnmatch
+            for key, g in tbl["shape"].items():
+                if "/" in key and fnmatch.fnmatch(full, key):
+                    return g
             return tbl["shape"].get(shape) or vote([shape], tbl, order) or "other"
         return "other"
     # ラボ: problem.yml の topics を最優先(新 seed の GEN でも当たる)
@@ -273,13 +280,19 @@ def read_events(repo):
 
 
 def dedupe(events):
-    """同じ日・同じ問題の複数回採点は1件に畳む(最後の結果を採る)。
+    """同じ日・同じ問題の複数回採点は1件に畳む。
 
     ラボは broken→fix で何度も grade を回すため、これが無いと水増しになる。
+    ★2026-09-19 ユーザ指示: **紙面の正誤は初回の解答(その日最初の採点)を採る**。
+      再挑戦→再採点で正解になっても正答率には入れない(問数は 1 のまま)。
+      ラボは従来どおり最後の結果(満点まで直して 1 問)。
     """
     out = {}
     for e in events:
-        out[(e.get("day"), e.get("kind"), e.get("ref"))] = e
+        key = (e.get("day"), e.get("kind"), e.get("ref"))
+        if e.get("kind") == "paper" and key in out:
+            continue                     # 初回を保持
+        out[key] = e
     return list(out.values())
 
 
