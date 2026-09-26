@@ -1,0 +1,105 @@
+# 自動生成 (gen_dmvpn_wreck.py) seed=31701
+problem: GEN-DMVPNW-31701
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'RT01(HUB): 3 拠点の spoke が登録され UP'
+  node: RT01
+  command: show dmvpn
+  raw:
+  - contains: Type:Hub
+  - regex: 198\.51\.100\.2\s+172\.31\.61\.2\s+UP\s+\S+\s+D(?!\w)
+  - regex: 198\.51\.100\.6\s+172\.31\.61\.3\s+UP\s+\S+\s+D(?!\w)
+  - regex: 198\.51\.100\.10\s+172\.31\.61\.4\s+UP\s+\S+\s+D(?!\w)
+  points: 25
+- name: 'RT01(HUB): 3 拠点との ISAKMP SA が QM_IDLE'
+  node: RT01
+  command: show crypto isakmp sa
+  raw:
+  - regex: 203\.0\.113\.2\s+198\.51\.100\.2\s+QM_IDLE
+  - regex: 203\.0\.113\.2\s+198\.51\.100\.6\s+QM_IDLE
+  - regex: 203\.0\.113\.2\s+198\.51\.100\.10\s+QM_IDLE
+  points: 10
+- name: 'RT01(HUB): ESP が transport で暗号化・復号カウンタが加算'
+  node: RT01
+  command: show crypto ipsec sa
+  raw:
+  - regex: in use settings =\{Transport,
+  - not_contains: ={Tunnel,
+  - regex: '#pkts encaps: [1-9]'
+  - regex: '#pkts decaps: [1-9]'
+  points: 10
+- name: 'RT01(HUB): EIGRP 隣接が 3 拠点と確立'
+  node: RT01
+  command: show ip eigrp neighbors
+  raw:
+  - regex: 172\.31\.61\.2\s+Tu0\s+\d+\s+\S+\s+\d+\s+\d+\s+0\s+\d+
+  - regex: 172\.31\.61\.3\s+Tu0\s+\d+\s+\S+\s+\d+\s+\d+\s+0\s+\d+
+  - regex: 172\.31\.61\.4\s+Tu0\s+\d+\s+\S+\s+\d+\s+\d+\s+0\s+\d+
+  points: 10
+- name: 'RT02(支店1): 支店2 の LAN へ到達(能動・直結誘発)'
+  node: RT02
+  command: ping 10.64.3.1 source Loopback1 repeat 5
+  raw:
+  - regex: Success rate is [1-9]
+  points: 5
+- name: 'RT03(支店2): 支店3 の LAN へ到達(能動・直結誘発)'
+  node: RT03
+  command: ping 10.64.4.1 source Loopback1 repeat 5
+  raw:
+  - regex: Success rate is [1-9]
+  points: 5
+- name: 'RT04(支店3): 本社の LAN へ到達'
+  node: RT04
+  command: ping 10.64.0.1 source Loopback1 repeat 5
+  raw:
+  - regex: Success rate is [1-9]
+  points: 5
+- name: 'RT02(支店1): 支店2 への直接トンネル(Phase 3 shortcut)が UP'
+  node: RT02
+  command: show dmvpn
+  raw:
+  - regex: 198\.51\.100\.6\s+172\.31\.61\.3\s+UP\s+\S+\s+DT
+  points: 10
+- name: 'RT01(HUB): Tunnel0 が仕様どおり(mGRE・key・network-id・protection)'
+  node: RT01
+  command: show running-config interface Tunnel0
+  raw:
+  - contains: tunnel mode gre multipoint
+  - not_contains: tunnel destination
+  - contains: tunnel key 5984
+  - contains: ip nhrp network-id 164
+  - contains: tunnel protection ipsec profile
+  - not_contains: no ip nhrp map multicast dynamic
+  points: 8
+- name: 'RT01(HUB): 外側の保護 EDGE-IN が適用されたまま・不要な通信は拒否'
+  node: RT01
+  command: show running-config interface Ethernet0/0
+  raw:
+  - contains: ip access-group EDGE-IN in
+  points: 2
+- name: 'RT02(支店1): Tunnel0 が仕様どおり(key・network-id・protection)'
+  node: RT02
+  command: show running-config interface Tunnel0
+  raw:
+  - contains: tunnel key 5984
+  - contains: ip nhrp network-id 164
+  - contains: tunnel protection ipsec profile
+  points: 4
+- name: 'RT03(支店2): Tunnel0 が仕様どおり(key・network-id・protection)'
+  node: RT03
+  command: show running-config interface Tunnel0
+  raw:
+  - contains: tunnel key 5984
+  - contains: ip nhrp network-id 164
+  - contains: tunnel protection ipsec profile
+  points: 3
+- name: 'RT04(支店3): Tunnel0 が仕様どおり(key・network-id・protection)'
+  node: RT04
+  command: show running-config interface Tunnel0
+  raw:
+  - contains: tunnel key 5984
+  - contains: ip nhrp network-id 164
+  - contains: tunnel protection ipsec profile
+  points: 3

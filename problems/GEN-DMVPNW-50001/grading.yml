@@ -1,0 +1,188 @@
+# 自動生成 (gen_dmvpn_wreck.py) seed=50001
+problem: GEN-DMVPNW-50001
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'RT01(HUB): 3 拠点の spoke が登録され UP'
+  node: RT01
+  command: show dmvpn
+  raw:
+  - contains: Type:Hub
+  - regex: 198\.51\.100\.2\s+172\.30\.131\.2\s+UP\s+\S+\s+D(?!\w)
+  - regex: 198\.51\.100\.6\s+172\.30\.131\.3\s+UP\s+\S+\s+D(?!\w)
+  - regex: 198\.51\.100\.10\s+172\.30\.131\.4\s+UP\s+\S+\s+D(?!\w)
+  points: 20
+- name: 'RT01(HUB): 3 拠点との ISAKMP SA が QM_IDLE'
+  node: RT01
+  command: show crypto isakmp sa
+  raw:
+  - regex: 203\.0\.113\.2\s+198\.51\.100\.2\s+QM_IDLE
+  - regex: 203\.0\.113\.2\s+198\.51\.100\.6\s+QM_IDLE
+  - regex: 203\.0\.113\.2\s+198\.51\.100\.10\s+QM_IDLE
+  points: 10
+- name: 'RT01(HUB): ESP が transport で暗号化・復号カウンタが加算'
+  node: RT01
+  command: show crypto ipsec sa
+  raw:
+  - regex: in use settings =\{Transport,
+  - not_contains: ={Tunnel,
+  - regex: '#pkts encaps: [1-9]'
+  - regex: '#pkts decaps: [1-9]'
+  points: 7
+- name: 'RT01(HUB): EIGRP 隣接が 3 拠点と確立'
+  node: RT01
+  command: show ip eigrp neighbors
+  raw:
+  - regex: 172\.30\.131\.2\s+Tu0\s+\d+\s+\S+\s+\d+\s+\d+\s+0\s+\d+
+  - regex: 172\.30\.131\.3\s+Tu0\s+\d+\s+\S+\s+\d+\s+\d+\s+0\s+\d+
+  - regex: 172\.30\.131\.4\s+Tu0\s+\d+\s+\S+\s+\d+\s+\d+\s+0\s+\d+
+  points: 10
+- name: 'RT02(支店1): 支店2 の LAN へ到達(能動・直結誘発)'
+  node: RT02
+  command: ping 10.37.3.1 source Loopback1 repeat 5
+  raw:
+  - regex: Success rate is [1-9]
+  points: 5
+- name: 'RT03(支店2): 支店3 の LAN へ到達(能動・直結誘発)'
+  node: RT03
+  command: ping 10.37.4.1 source Loopback1 repeat 5
+  raw:
+  - regex: Success rate is [1-9]
+  points: 5
+- name: 'RT04(支店3): 本社の LAN へ到達'
+  node: RT04
+  command: ping 10.37.0.1 source Loopback1 repeat 5
+  raw:
+  - regex: Success rate is [1-9]
+  points: 5
+- name: 'RT02(支店1): 支店2 への直接トンネル(Phase 3 shortcut)が UP'
+  node: RT02
+  command: show dmvpn
+  raw:
+  - regex: 198\.51\.100\.6\s+172\.30\.131\.3\s+UP\s+\S+\s+DT
+  points: 10
+- name: 'RT01(HUB): Tunnel0 が仕様どおり(mGRE・key・network-id・protection)'
+  node: RT01
+  command: show running-config interface Tunnel0
+  raw:
+  - contains: tunnel mode gre multipoint
+  - not_contains: tunnel destination
+  - contains: tunnel key 1155
+  - contains: ip nhrp network-id 985
+  - contains: tunnel protection ipsec profile
+  - not_contains: no ip nhrp map multicast dynamic
+  points: 8
+- name: 'RT01(HUB): 外側の保護 EDGE-IN が適用されたまま・不要な通信は拒否'
+  node: RT01
+  command: show running-config interface Ethernet0/0
+  raw:
+  - contains: ip access-group EDGE-IN in
+  points: 2
+- name: 'RT02(支店1): Tunnel0 が仕様どおり(key・network-id・protection)'
+  node: RT02
+  command: show running-config interface Tunnel0
+  raw:
+  - contains: tunnel key 1155
+  - contains: ip nhrp network-id 985
+  - contains: tunnel protection ipsec profile
+  points: 4
+- name: 'RT03(支店2): Tunnel0 が仕様どおり(key・network-id・protection)'
+  node: RT03
+  command: show running-config interface Tunnel0
+  raw:
+  - contains: tunnel key 1155
+  - contains: ip nhrp network-id 985
+  - contains: tunnel protection ipsec profile
+  points: 3
+- name: 'RT04(支店3): Tunnel0 が仕様どおり(key・network-id・protection)'
+  node: RT04
+  command: show running-config interface Tunnel0
+  raw:
+  - contains: tunnel key 1155
+  - contains: ip nhrp network-id 985
+  - contains: tunnel protection ipsec profile
+  points: 3
+- name: 'RT01(HUB): EDGE-IN が保全され(削除・置換なし)、必要な通信だけが追加で許可されている'
+  node: RT01
+  command: show ip access-lists EDGE-IN
+  acl_vectors:
+    acl: EDGE-IN
+    vectors:
+    - id: need_esp_0
+      proto: esp
+      src: 198.51.100.2
+      dst: 203.0.113.2
+      expect: permit
+    - id: need_esp_1
+      proto: esp
+      src: 198.51.100.6
+      dst: 203.0.113.2
+      expect: permit
+    - id: need_esp_2
+      proto: esp
+      src: 198.51.100.10
+      dst: 203.0.113.2
+      expect: permit
+    - id: need_udp500
+      proto: udp
+      src: 198.51.100.2
+      dst: 203.0.113.2
+      dport: 500
+      sport: 500
+      expect: permit
+    - id: need_udp4500
+      proto: udp
+      src: 198.51.100.2
+      dst: 203.0.113.2
+      dport: 4500
+      sport: 4500
+      expect: permit
+    - id: spoof
+      proto: esp
+      src: 10.9.9.9
+      dst: 203.0.113.2
+      expect: deny
+    - id: broad
+      proto: esp
+      src: 198.51.100.2
+      dst: 8.8.4.4
+      expect: deny
+    - id: telnet
+      proto: tcp
+      src: 8.8.4.4
+      sport: 40004
+      dst: 203.0.113.2
+      dport: 23
+      expect: deny
+    - id: snmp_out
+      proto: udp
+      src: 8.8.4.4
+      sport: 40005
+      dst: 203.0.113.2
+      dport: 161
+      expect: deny
+    - id: transit
+      proto: tcp
+      src: 8.8.4.4
+      sport: 40006
+      dst: 10.1.1.1
+      dport: 80
+      expect: deny
+    - id: blocklist
+      proto: esp
+      src: 31.33.96.175
+      dst: 203.0.113.2
+      expect: deny
+    must_have:
+    - deny ip 10.0.0.0 0.255.255.255 any
+    - deny ip 172.16.0.0 0.15.255.255 any
+    - deny ip host 31.33.96.175 any
+    - deny ip host 188.70.160.251 any
+    - deny udp any any eq 5060
+    - deny tcp any any eq 25
+    - permit gre any host 203.0.113.2
+    - deny ip any host 203.0.113.2 log
+    min_entries: 50
+    max_entries: 52
+  points: 8

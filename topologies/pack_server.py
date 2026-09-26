@@ -7,9 +7,14 @@
 
   GET  /_api/sheet?pack=<PACK-ID>&no=<N>   … 該当セクションの本文を返す
   POST /_api/sheet?pack=<PACK-ID>&no=<N>   … 本文で該当セクションを差し替える
+  POST /_api/check?pack=<PACK-ID>&no=<N>   … 本文を保存したうえで正誤だけ返す(BL-212 答え合わせ)。
+                                              応答= "ok" | "ng" | "empty" | "nokey<TAB>理由"。組合せ/穴埋めは
+                                              "ng<TAB>①○ ②× …" のように項目ごとの内訳を付ける。
+                                              正解の記号は返さない(解説は採点後)。
 
 設計上の約束:
-  - **127.0.0.1 のみに bind**(既定)。外に開かない。
+  - bind は既定 127.0.0.1(このスクリプト単体)。★pack.sh serve は 2026-09-21 から **0.0.0.0** で起動する
+    (ユーザ指示= Windows から http://10.1.10.6:8899/ で直接開く)。LAN(10.1.10.0/26)は自宅ラボ網。
   - 書き込み先は `packs/<PACK-ID>/解答.md` **だけ**。pack 名は書式を検査し、
     解決後のパスが packs/ 配下に収まることも確認する。
   - 書き込みは**該当セクションの差し替えのみ**。ファイル全体を送らせない
@@ -140,7 +145,10 @@ class Handler(SimpleHTTPRequestHandler):
         return SimpleHTTPRequestHandler.do_GET(self)
 
     def do_POST(self):
-        if urlparse(self.path).path != "/_api/sheet":
+        p = urlparse(self.path).path
+        if p == "/_api/check":
+            return self._check()
+        if p != "/_api/sheet":
             return self._json(404, "not found")
         path, no = self._target()
         if not path:
@@ -161,6 +169,57 @@ class Handler(SimpleHTTPRequestHandler):
         self.audit("save", parse_qs(urlparse(self.path).query).get("pack", [""])[0],
                    no, f"{m.group(1)}={m.group(2).strip()[:60]}" if m else "")
         return self._json(200, "ok")
+
+    def _check(self):
+        """答え合わせ(BL-212): 本文を保存し、manifest の ref から正解キーを引いて正誤だけ返す。"""
+        path, no = self._target()
+        if not path:
+            return self._json(404, "pack が見つかりません")
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > 64 * 1024:
+            return self._json(413, "本文が大きすぎます")
+        body = self.rfile.read(n).decode("utf-8", "replace")
+        if not gen_pack.HDR.match(body.split("\n")[0]):
+            return self._json(400, "セクション見出しが不正です")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        merged = replace_section(text, no, body)
+        if merged is None:
+            return self._json(404, f"Q{no} のセクションがありません")
+        atomic_write(path, merged)                 # 答え合わせした解答をそのまま確定として残す
+        pack = parse_qs(urlparse(self.path).query).get("pack", [""])[0]
+        man = gen_pack.read_manifest(os.path.dirname(path))
+        it = next((i for i in man["items"] if i["no"] == no), None)
+        if not it or it.get("kind") != "paper":
+            return self._json(200, "nokey\t紙面ではありません")
+        key, why = gen_pack.key_of(self.repo, it.get("ref", ""), it.get("key"))
+        m = re.search(r"^[ \t]*解答:[ \t]*(.*)$", body, re.M)
+        ans = m.group(1).strip() if m else ""
+        if key is None:
+            return self._json(200, "nokey\t" + (why or ""))
+        parts = ""
+        if gen_pack.is_match_key(key):
+            given = gen_pack.match_of(ans)
+            if not given:
+                return self._json(200, "empty")
+            kp = {t[0]: t[1:] for t in key.split("・")}
+            gp = {t[0]: t[1:] for t in given.split("・")}
+            parts = " ".join(f"{t}{'○' if gp.get(t) == kp[t] else '×'}" for t in kp)
+            ok = given == key
+        else:
+            given = gen_pack.choice_of(ans)
+            if not given:
+                return self._json(200, "empty")
+            ok = given == key
+        self.audit("check", pack, no, f"{given}={'ok' if ok else 'ng'}")
+        return self._json(200, ("ok" if ok else "ng") + (("\t" + parts) if parts else ""))
+
+    def end_headers(self):
+        # ★静的ページもキャッシュさせない(2026-09-21: 再描画後も古いページが表示され
+        #   「答え合わせボタンが見当たらない」となった。SimpleHTTPRequestHandler は
+        #   Last-Modified だけ返すのでブラウザが古い HTML を使い回す)
+        self.send_header("Cache-Control", "no-store, max-age=0")
+        SimpleHTTPRequestHandler.end_headers(self)
 
     def log_message(self, fmt, *args):        # 標準のアクセスログは出さない(静かに動かす)
         pass
@@ -193,6 +252,7 @@ def main():
     root = os.path.join(os.path.abspath(a.repo), "packs")
     os.makedirs(root, exist_ok=True)
     Handler.packs_root = root
+    Handler.repo = os.path.abspath(a.repo)
 
     def factory(*args, **kw):
         return Handler(*args, directory=root, **kw)

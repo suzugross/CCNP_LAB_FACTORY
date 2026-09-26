@@ -1,0 +1,286 @@
+
+======== 準備 trunk を 10,20 に絞る(mgmt VLAN999 隔離)・SW02 Et0/2 の bpduguard 解除 ========
+### SW01: conf ['interface range Ethernet0/0 - 1', 'switchport trunk allowed vlan 10,20']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW02: conf ['interface range Ethernet0/0 - 2', 'switchport trunk allowed vlan 10,20', 'interface Ethernet0/2', 'no spanning-tree bpduguard enable', 'shutdown', 'no shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW03: conf ['interface range Ethernet0/0 - 2', 'switchport trunk allowed vlan 10,20']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 40
+
+======== M1 既定モード(SW03 で no spanning-tree mode) ========
+### SW03: show version | include Version|IOL|Software
+Cisco IOS Software [IOSXE], Linux Software (X86_64BI_LINUX_L2-ADVENTERPRISEK9-M), Version 17.15.1, RELEASE SOFTWARE (fc4)
+### SW03: show running-config | include spanning-tree
+spanning-tree mode rapid-pvst
+spanning-tree extend system-id
+### SW03: show spanning-tree summary
+Switch is in rapid-pvst mode
+Root bridge for: VLAN0001
+EtherChannel misconfig guard            is enabled
+Extended system ID                      is enabled
+Portfast Default                        is disabled
+PortFast BPDU Guard Default            is disabled
+Portfast BPDU Filter Default           is disabled
+Loopguard Default                      is disabled
+UplinkFast                              is disabled
+BackboneFast                            is disabled
+Configured Pathcost method used is short
+
+Name                   Blocking Listening Learning Forwarding STP Active
+---------------------- -------- --------- -------- ---------- ----------
+VLAN0001                     0         0        0         12         12
+VLAN0010                     2         0        0          1          3
+VLAN0020                     2         0        0          1          3
+VLAN0999                     0         0        0          1          1
+---------------------- -------- --------- -------- ---------- ----------
+4 vlans                      4         0        0         15         19
+### SW03: conf ['no spanning-tree mode']
+Enter configuration commands, one per line.  End with CNTL/Z.
+Warning: Changing STP mode can disrupt the traffic and make system unstable
+Recommend to change STP mode only during maintenance window
+### SW03: show running-config | include spanning-tree
+spanning-tree mode rapid-pvst
+spanning-tree extend system-id
+### SW03: show spanning-tree summary
+Switch is in rapid-pvst mode
+Root bridge for: VLAN0001
+EtherChannel misconfig guard            is enabled
+Extended system ID                      is enabled
+Portfast Default                        is disabled
+PortFast BPDU Guard Default            is disabled
+Portfast BPDU Filter Default           is disabled
+Loopguard Default                      is disabled
+UplinkFast                              is disabled
+BackboneFast                            is disabled
+Configured Pathcost method used is short
+
+Name                   Blocking Listening Learning Forwarding STP Active
+---------------------- -------- --------- -------- ---------- ----------
+VLAN0001                     0         0        0         12         12
+VLAN0010                     2         0        0          1          3
+VLAN0020                     2         0        0          1          3
+VLAN0999                     0         0        0          1          1
+---------------------- -------- --------- -------- ---------- ----------
+4 vlans                      4         0        0         15         19
+### SW03: show spanning-tree vlan 10
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4106
+             Address     aabb.cc02.4000
+             Cost        100
+             Port        1 (Ethernet0/0)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32778  (priority 32768 sys-id-ext 10)
+             Address     aabb.cc02.4200
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Altn BLK 100       128.2    P2p 
+Et0/2               Altn BLK 100       128.3    P2p 
+### SW03: conf ['spanning-tree mode rapid-pvst']
+Enter configuration commands, one per line.  End with CNTL/Z.
+Warning: Changing STP mode can disrupt the traffic and make system unstable
+Recommend to change STP mode only during maintenance window
+
+======== 基準状態(M6 summary・vlan 10/20) ========
+### SW01: show spanning-tree summary
+Switch is in rapid-pvst mode
+Root bridge for: VLAN0001, VLAN0010, VLAN0999
+EtherChannel misconfig guard            is enabled
+Extended system ID                      is enabled
+Portfast Default                        is disabled
+PortFast BPDU Guard Default            is disabled
+Portfast BPDU Filter Default           is disabled
+Loopguard Default                      is disabled
+UplinkFast                              is disabled
+BackboneFast                            is disabled
+Configured Pathcost method used is short
+
+Name                   Blocking Listening Learning Forwarding STP Active
+---------------------- -------- --------- -------- ---------- ----------
+VLAN0001                     0         0        0         13         13
+VLAN0010                     0         0        0          2          2
+VLAN0020                     0         0        0          2          2
+VLAN0999                     0         0        0          1          1
+---------------------- -------- --------- -------- ---------- ----------
+4 vlans                      0         0        0         18         18
+### SW01: show spanning-tree vlan 10
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4106
+             Address     aabb.cc02.4000
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    4106   (priority 4096 sys-id-ext 10)
+             Address     aabb.cc02.4000
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Desg FWD 100       128.1    P2p 
+Et0/1               Desg FWD 100       128.2    P2p 
+### SW01: show spanning-tree vlan 20
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4116
+             Address     aabb.cc02.4100
+             Cost        100
+             Port        1 (Ethernet0/0)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    8212   (priority 8192 sys-id-ext 20)
+             Address     aabb.cc02.4000
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Desg FWD 100       128.2    P2p 
+### SW01: show spanning-tree root
+                                        Root    Hello Max Fwd
+Vlan                   Root ID          Cost    Time  Age Dly  Root Port
+---------------- -------------------- --------- ----- --- ---  ------------
+VLAN0001         32769 aabb.cc02.4000         0    2   20  15                  
+VLAN0010          4106 aabb.cc02.4000         0    2   20  15                  
+VLAN0020          4116 aabb.cc02.4100       100    2   20  15  Et0/0           
+VLAN0999         33767 aabb.cc02.4000         0    2   20  15                  
+### SW01: show interfaces status
+Port         Name               Status       Vlan       Duplex  Speed Type
+Et0/0                           connected    trunk        full   auto 10/100/1000BaseTX
+Et0/1                           connected    trunk        full   auto 10/100/1000BaseTX
+Et0/2                           connected    1            full   auto 10/100/1000BaseTX
+Et0/3                           connected    1            full   auto 10/100/1000BaseTX
+Et1/0                           connected    1            full   auto 10/100/1000BaseTX
+Et1/1                           connected    1            full   auto 10/100/1000BaseTX
+Et1/2                           connected    1            full   auto 10/100/1000BaseTX
+Et1/3                           connected    1            full   auto 10/100/1000BaseTX
+Et2/0                           connected    1            full   auto 10/100/1000BaseTX
+Et2/1                           connected    1            full   auto 10/100/1000BaseTX
+Et2/2                           connected    1            full   auto 10/100/1000BaseTX
+Et2/3                           connected    1            full   auto 10/100/1000BaseTX
+Et3/0                           connected    1            full   auto 10/100/1000BaseTX
+Et3/1                           connected    1            full   auto 10/100/1000BaseTX
+Et3/2                           connected    1            full   auto 10/100/1000BaseTX
+Et3/3        === MGMT (Ansible) connected    999          full   auto 10/100/1000BaseTX
+### SW02: show spanning-tree vlan 10
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4106
+             Address     aabb.cc02.4000
+             Cost        100
+             Port        1 (Ethernet0/0)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    8202   (priority 8192 sys-id-ext 10)
+             Address     aabb.cc02.4100
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Desg FWD 100       128.2    P2p 
+Et0/2               Desg FWD 100       128.3    P2p 
+### SW02: show spanning-tree vlan 20
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4116
+             Address     aabb.cc02.4100
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    4116   (priority 4096 sys-id-ext 20)
+             Address     aabb.cc02.4100
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Desg FWD 100       128.1    P2p 
+Et0/1               Desg FWD 100       128.2    P2p 
+Et0/2               Desg FWD 100       128.3    P2p 
+### SW02: show interfaces status
+Port         Name               Status       Vlan       Duplex  Speed Type
+Et0/0                           connected    trunk        full   auto 10/100/1000BaseTX
+Et0/1                           connected    trunk        full   auto 10/100/1000BaseTX
+Et0/2                           connected    trunk        full   auto 10/100/1000BaseTX
+Et0/3                           connected    1            full   auto 10/100/1000BaseTX
+Et1/0                           connected    1            full   auto 10/100/1000BaseTX
+Et1/1                           connected    1            full   auto 10/100/1000BaseTX
+Et1/2                           connected    1            full   auto 10/100/1000BaseTX
+Et1/3                           connected    1            full   auto 10/100/1000BaseTX
+Et2/0                           connected    1            full   auto 10/100/1000BaseTX
+Et2/1                           connected    1            full   auto 10/100/1000BaseTX
+Et2/2                           connected    1            full   auto 10/100/1000BaseTX
+Et2/3                           connected    1            full   auto 10/100/1000BaseTX
+Et3/0                           connected    1            full   auto 10/100/1000BaseTX
+Et3/1                           connected    1            full   auto 10/100/1000BaseTX
+Et3/2                           connected    1            full   auto 10/100/1000BaseTX
+Et3/3        === MGMT (Ansible) connected    999          full   auto 10/100/1000BaseTX
+### SW03: show spanning-tree vlan 10
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4106
+             Address     aabb.cc02.4000
+             Cost        100
+             Port        1 (Ethernet0/0)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32778  (priority 32768 sys-id-ext 10)
+             Address     aabb.cc02.4200
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Altn BLK 100       128.2    P2p 
+Et0/2               Altn BLK 100       128.3    P2p 
+### SW03: show spanning-tree vlan 20
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4116
+             Address     aabb.cc02.4100
+             Cost        100
+             Port        2 (Ethernet0/1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32788  (priority 32768 sys-id-ext 20)
+             Address     aabb.cc02.4200
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Altn BLK 100       128.1    P2p 
+Et0/1               Root FWD 100       128.2    P2p 
+Et0/2               Altn BLK 100       128.3    P2p 
+### SW03: show spanning-tree summary
+Switch is in rapid-pvst mode
+Root bridge for: VLAN0001
+EtherChannel misconfig guard            is enabled
+Extended system ID                      is enabled
+Portfast Default                        is disabled
+PortFast BPDU Guard Default            is disabled
+Portfast BPDU Filter Default           is disabled
+Loopguard Default                      is disabled
+UplinkFast                              is disabled
+BackboneFast                            is disabled
+Configured Pathcost method used is short
+
+Name                   Blocking Listening Learning Forwarding STP Active
+---------------------- -------- --------- -------- ---------- ----------
+VLAN0001                     0         0        0         12         12
+VLAN0010                     2         0        0          1          3
+VLAN0020                     2         0        0          1          3
+VLAN0999                     0         0        0          1          1
+---------------------- -------- --------- -------- ---------- ----------
+4 vlans                      4         0        0         15         19

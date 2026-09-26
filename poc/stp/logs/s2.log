@@ -1,0 +1,287 @@
+
+======== 準備 VLAN30-37 を作成して trunk に追加 ========
+### SW01: conf ['vlan 30-37', 'exit', 'interface range Ethernet0/0 - 1', 'switchport trunk allowed vlan add 30-37']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW02: conf ['vlan 30-37', 'exit', 'interface range Ethernet0/0 - 2', 'switchport trunk allowed vlan add 30-37']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW03: conf ['vlan 30-37', 'exit', 'interface range Ethernet0/0 - 2', 'switchport trunk allowed vlan add 30-37']
+Enter configuration commands, one per line.  End with CNTL/Z.
+
+======== M2 前提: SW01 の各 VLAN priority(30=既定/31=16384/32=4096/33=0/34=24576/35=4096/36=既定/37=28672) ========
+### SW01: conf ['spanning-tree vlan 31 priority 16384', 'spanning-tree vlan 32 priority 4096', 'spanning-tree vlan 33 priority 0', 'spanning-tree vlan 34 priority 24576', 'spanning-tree vlan 35 priority 4096', 'spanning-tree vlan 37 priority 28672']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 20
+### SW03: show spanning-tree root
+                                        Root    Hello Max Fwd
+Vlan                   Root ID          Cost    Time  Age Dly  Root Port
+---------------- -------------------- --------- ----- --- ---  ------------
+VLAN0001         32769 aabb.cc02.4200         0    2   20  15                  
+VLAN0010          4106 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0020          4116 aabb.cc02.4100       100    2   20  15  Et0/1           
+VLAN0030         32798 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0031         16415 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0032          4128 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0033            33 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0034         24610 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0035          4131 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0036         32804 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0037         28709 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0999         33767 aabb.cc02.4000       100    2   20  15  Et3/3           
+
+======== M2 SW03 で root primary(VLAN30〜34)を 1 本ずつ ========
+### SW03: conf ['spanning-tree vlan 30 root primary']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW03: show running-config | include spanning-tree vlan 30 
+spanning-tree vlan 30 priority 24576
+### SW03: conf ['spanning-tree vlan 31 root primary']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW03: show running-config | include spanning-tree vlan 31 
+spanning-tree vlan 31 priority 12288
+### SW03: conf ['spanning-tree vlan 32 root primary']
+Enter configuration commands, one per line.  End with CNTL/Z.
+% Failed to make the bridge root for vlan 32
+% It may be possible to make the bridge root by setting the priority
+% for some (or all) of these instances to zero.
+### SW03: show running-config | include spanning-tree vlan 32 
+
+### SW03: conf ['spanning-tree vlan 33 root primary']
+Enter configuration commands, one per line.  End with CNTL/Z.
+% Failed to make the bridge root for vlan 33
+% It may be possible to make the bridge root by setting the priority
+% for some (or all) of these instances to zero.
+### SW03: show running-config | include spanning-tree vlan 33 
+
+### SW03: conf ['spanning-tree vlan 34 root primary']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW03: show running-config | include spanning-tree vlan 34 
+spanning-tree vlan 34 priority 20480
+
+======== M3 SW02 で root secondary(VLAN35=root 4096/36=全員既定/37=root 28672) ========
+### SW02: conf ['spanning-tree vlan 35 root secondary']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW02: show running-config | include spanning-tree vlan 35 
+spanning-tree vlan 35 priority 28672
+### SW02: conf ['spanning-tree vlan 36 root secondary']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW02: show running-config | include spanning-tree vlan 36 
+
+### SW02: conf ['spanning-tree vlan 37 root secondary']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW02: show running-config | include spanning-tree vlan 37 
+
+### sleep 20
+
+======== M2/M3 結果 ========
+### SW01: show spanning-tree root
+                                        Root    Hello Max Fwd
+Vlan                   Root ID          Cost    Time  Age Dly  Root Port
+---------------- -------------------- --------- ----- --- ---  ------------
+VLAN0001         32769 aabb.cc02.4000         0    2   20  15                  
+VLAN0010          4106 aabb.cc02.4000         0    2   20  15                  
+VLAN0020          4116 aabb.cc02.4100       100    2   20  15  Et0/0           
+VLAN0030         24606 aabb.cc02.4200       100    2   20  15  Et0/1           
+VLAN0031         12319 aabb.cc02.4200       100    2   20  15  Et0/1           
+VLAN0032          4128 aabb.cc02.4000         0    2   20  15                  
+VLAN0033            33 aabb.cc02.4000         0    2   20  15                  
+VLAN0034         20514 aabb.cc02.4200       100    2   20  15  Et0/1           
+VLAN0035          4131 aabb.cc02.4000         0    2   20  15                  
+VLAN0036         28708 aabb.cc02.4100       100    2   20  15  Et0/0           
+VLAN0037         28709 aabb.cc02.4000         0    2   20  15                  
+VLAN0999         33767 aabb.cc02.4000         0    2   20  15                  
+### SW01: show running-config | include spanning-tree vlan
+spanning-tree vlan 10,32,35 priority 4096
+spanning-tree vlan 20 priority 8192
+spanning-tree vlan 31 priority 16384
+spanning-tree vlan 33 priority 0
+spanning-tree vlan 34 priority 24576
+spanning-tree vlan 37 priority 28672
+### SW02: show spanning-tree root
+                                        Root    Hello Max Fwd
+Vlan                   Root ID          Cost    Time  Age Dly  Root Port
+---------------- -------------------- --------- ----- --- ---  ------------
+VLAN0001         32769 aabb.cc02.4100         0    2   20  15                  
+VLAN0010          4106 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0020          4116 aabb.cc02.4100         0    2   20  15                  
+VLAN0030         24606 aabb.cc02.4200       100    2   20  15  Et0/1           
+VLAN0031         12319 aabb.cc02.4200       100    2   20  15  Et0/1           
+VLAN0032          4128 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0033            33 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0034         20514 aabb.cc02.4200       100    2   20  15  Et0/1           
+VLAN0035          4131 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0036         28708 aabb.cc02.4100         0    2   20  15                  
+VLAN0037         28709 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0999         33767 aabb.cc02.4000       100    2   20  15  Et3/3           
+### SW02: show running-config | include spanning-tree vlan
+spanning-tree vlan 10 priority 8192
+spanning-tree vlan 20 priority 4096
+spanning-tree vlan 35-37 priority 28672
+### SW03: show spanning-tree root
+                                        Root    Hello Max Fwd
+Vlan                   Root ID          Cost    Time  Age Dly  Root Port
+---------------- -------------------- --------- ----- --- ---  ------------
+VLAN0001         32769 aabb.cc02.4200         0    2   20  15                  
+VLAN0010          4106 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0020          4116 aabb.cc02.4100       100    2   20  15  Et0/1           
+VLAN0030         24606 aabb.cc02.4200         0    2   20  15                  
+VLAN0031         12319 aabb.cc02.4200         0    2   20  15                  
+VLAN0032          4128 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0033            33 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0034         20514 aabb.cc02.4200         0    2   20  15                  
+VLAN0035          4131 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0036         28708 aabb.cc02.4100       100    2   20  15  Et0/1           
+VLAN0037         28709 aabb.cc02.4000       100    2   20  15  Et0/0           
+VLAN0999         33767 aabb.cc02.4000       100    2   20  15  Et3/3           
+### SW03: show running-config | include spanning-tree vlan
+spanning-tree vlan 30 priority 24576
+spanning-tree vlan 31 priority 12288
+spanning-tree vlan 34 priority 20480
+
+======== M2b root primary は一度きりの計算か: SW01 VLAN30 を 0 にした後 SW03 の値は追従するか ========
+### SW01: conf ['spanning-tree vlan 30 priority 0']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW03: show running-config | include spanning-tree vlan 30 
+spanning-tree vlan 30 priority 24576
+### SW03: show spanning-tree vlan 30 | include Priority|root
+  Root ID    Priority    30
+  Bridge ID  Priority    24606  (priority 24576 sys-id-ext 30)
+
+======== M20 priority に 4096 の倍数でない値 ========
+### SW03: conf ['spanning-tree vlan 36 priority 5000', 'spanning-tree vlan 36 priority 65536']
+Enter configuration commands, one per line.  End with CNTL/Z.
+% Bridge Priority must be in increments of 4096.
+% Allowed values are: 
+  0     4096  8192  12288 16384 20480 24576 28672
+  32768 36864 40960 45056 49152 53248 57344 61440
+                                                ^
+% Invalid input detected at '^' marker.
+
+======== M4 port-priority: VLAN20(root=SW02)で SW03 の RP は Et0/1 か ========
+### SW03: show spanning-tree vlan 20
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4116
+             Address     aabb.cc02.4100
+             Cost        100
+             Port        2 (Ethernet0/1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32788  (priority 32768 sys-id-ext 20)
+             Address     aabb.cc02.4200
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Altn BLK 100       128.1    P2p 
+Et0/1               Root FWD 100       128.2    P2p 
+Et0/2               Altn BLK 100       128.3    P2p 
+
+======== M4a 下流(SW03) Et0/2 の port-priority を 16 に → RP は変わらないはず ========
+### SW03: conf ['interface Ethernet0/2', 'spanning-tree vlan 20 port-priority 16']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW03: show spanning-tree vlan 20
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4116
+             Address     aabb.cc02.4100
+             Cost        100
+             Port        2 (Ethernet0/1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32788  (priority 32768 sys-id-ext 20)
+             Address     aabb.cc02.4200
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Altn BLK 100       128.1    P2p 
+Et0/1               Root FWD 100       128.2    P2p 
+Et0/2               Altn BLK 100        16.3    P2p 
+
+======== M4b 上流(SW02) Et0/2 の port-priority を 64 に → SW03 の RP が Et0/2 へ移るはず ========
+### SW02: conf ['interface Ethernet0/2', 'spanning-tree vlan 20 port-priority 64']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW02: show spanning-tree vlan 20
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4116
+             Address     aabb.cc02.4100
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    4116   (priority 4096 sys-id-ext 20)
+             Address     aabb.cc02.4100
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Desg FWD 100       128.1    P2p 
+Et0/1               Desg FWD 100       128.2    P2p 
+Et0/2               Desg FWD 100        64.3    P2p 
+### SW03: show spanning-tree vlan 20
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4116
+             Address     aabb.cc02.4100
+             Cost        100
+             Port        3 (Ethernet0/2)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32788  (priority 32768 sys-id-ext 20)
+             Address     aabb.cc02.4200
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Altn BLK 100       128.1    P2p 
+Et0/1               Altn BLK 100       128.2    P2p 
+Et0/2               Root FWD 100        16.3    P2p 
+
+======== M4c 刻みと範囲: 20 / 256 を入れてみる ========
+### SW02: conf ['interface Ethernet0/2', 'spanning-tree vlan 20 port-priority 20', 'spanning-tree vlan 20 port-priority 256', 'spanning-tree port-priority 48']
+Enter configuration commands, one per line.  End with CNTL/Z.
+% Port Priority in increments of 16 is required
+                                                      ^
+% Invalid input detected at '^' marker.
+### SW02: show running-config interface Ethernet0/2
+Building configuration...
+
+Current configuration : 205 bytes
+!
+interface Ethernet0/2
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 10,20,30-37
+ switchport mode trunk
+ spanning-tree vlan 20 port-priority 64
+ spanning-tree port-priority 48
+end
+
+======== M4d 戻す→ SW03 Et0/1 の cost を 200 に(自側 cost) → RP は Et0/2 へ移るはず ========
+### SW02: conf ['interface Ethernet0/2', 'no spanning-tree vlan 20 port-priority', 'no spanning-tree port-priority']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW03: conf ['interface Ethernet0/2', 'no spanning-tree vlan 20 port-priority', 'interface Ethernet0/1', 'spanning-tree vlan 20 cost 200']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW03: show spanning-tree vlan 20
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4116
+             Address     aabb.cc02.4100
+             Cost        100
+             Port        3 (Ethernet0/2)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32788  (priority 32768 sys-id-ext 20)
+             Address     aabb.cc02.4200
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Altn BLK 100       128.1    P2p 
+Et0/1               Altn BLK 200       128.2    P2p 
+Et0/2               Root FWD 100       128.3    P2p 
+### SW03: conf ['interface Ethernet0/1', 'no spanning-tree vlan 20 cost']
+Enter configuration commands, one per line.  End with CNTL/Z.

@@ -1,0 +1,134 @@
+
+======== R0 RP 設定の確認と復旧 ========
+### 07:05:47 RT02: show running-config | include rp-address|bidir|ssm|autorp|spt|multipath|mroute
+
+### RT02: conf ['ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:05:49 RT03: show running-config | include rp-address|bidir|ssm|autorp|spt|multipath|mroute
+
+### RT03: conf ['ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:05:52 RT04: show running-config | include rp-address|bidir|ssm|autorp|spt|multipath|mroute
+
+### RT04: conf ['ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:05:55 RT05: show running-config | include rp-address|bidir|ssm|autorp|spt|multipath|mroute
+
+### RT05: conf ['ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:05:58 RT08: show running-config | include rp-address|bidir|ssm|autorp|spt|multipath|mroute
+
+### RT08: conf ['ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 5
+
+======== M13' 受信者のいないグループへ送信(Register と Register-Stop) ========
+### 07:06:05 RT01: ping 239.7.7.7 repeat 3 source Ethernet0/0
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 239.7.7.7, timeout is 2 seconds:
+Packet sent with a source address of 10.0.12.1 
+...
+### 07:06:11 RT02: show ip mroute 239.7.7.7 | include \(|flags|Incoming|Ethernet|Null|RP 3
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.7.7.7), 00:00:06/stopped, RP 3.3.3.3, flags: SPF
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.23.3
+  Outgoing interface list: Null
+(10.0.12.1, 239.7.7.7), 00:00:06/00:02:53, flags: PFT
+  Incoming interface: Ethernet0/0, RPF nbr 0.0.0.0
+  Outgoing interface list: Null
+### 07:06:12 RT03: show ip mroute 239.7.7.7 | include \(|flags|Incoming|Ethernet|Null|RP 3
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.7.7.7), 00:00:06/stopped, RP 3.3.3.3, flags: SP
+  Incoming interface: Null, RPF nbr 0.0.0.0
+  Outgoing interface list: Null
+(10.0.12.1, 239.7.7.7), 00:00:06/00:02:53, flags: P
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.23.2
+  Outgoing interface list: Null
+### sleep 60
+### 07:07:12 RT02: show ip mroute 239.7.7.7 | include \(|flags|Incoming|Ethernet|Null|RP 3
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.7.7.7), 00:01:06/stopped, RP 3.3.3.3, flags: SPF
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.23.3
+  Outgoing interface list: Null
+(10.0.12.1, 239.7.7.7), 00:01:06/00:01:53, flags: PFT
+  Incoming interface: Ethernet0/0, RPF nbr 0.0.0.0
+  Outgoing interface list: Null
+
+======== M8' bidir: bidir-enable を入れてから rp-address ... bidir ========
+### 07:07:12 RT04: show running-config all | include bidir
+ip pim bidir-offer-interval 100 msec
+ip pim bidir-offer-limit 3
+### RT02: conf ['ip pim bidir-enable', 'ip pim rp-address 3.3.3.3 BIDIR bidir']
+Enter configuration commands, one per line.  End with CNTL/Z.
+% Ambiguous command:  "ip pim rp-address 3.3.3.3 BIDIR bidir"
+### RT03: conf ['ip pim bidir-enable', 'ip pim rp-address 3.3.3.3 BIDIR bidir']
+Enter configuration commands, one per line.  End with CNTL/Z.
+% Ambiguous command:  "ip pim rp-address 3.3.3.3 BIDIR bidir"
+### RT04: conf ['ip pim bidir-enable', 'ip pim rp-address 3.3.3.3 BIDIR bidir']
+Enter configuration commands, one per line.  End with CNTL/Z.
+% Ambiguous command:  "ip pim rp-address 3.3.3.3 BIDIR bidir"
+### RT05: conf ['ip pim bidir-enable', 'ip pim rp-address 3.3.3.3 BIDIR bidir']
+Enter configuration commands, one per line.  End with CNTL/Z.
+% Ambiguous command:  "ip pim rp-address 3.3.3.3 BIDIR bidir"
+### RT08: conf ['ip pim bidir-enable', 'ip pim rp-address 3.3.3.3 BIDIR bidir']
+Enter configuration commands, one per line.  End with CNTL/Z.
+% Ambiguous command:  "ip pim rp-address 3.3.3.3 BIDIR bidir"
+### 07:07:13 RT04: show running-config | include bidir|rp-address
+ip pim bidir-enable
+ip pim rp-address 3.3.3.3
+### 07:07:13 RT04: show ip pim rp mapping
+PIM Group-to-RP Mappings
+
+Group(s): 224.0.0.0/4, Static
+    RP: 3.3.3.3 (?)
+### RT06: conf ['interface Ethernet0/0', 'ip igmp join-group 239.2.2.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:07:29 RT01: ping 239.2.2.2 repeat 3 source Ethernet0/0
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 239.2.2.2, timeout is 2 seconds:
+Packet sent with a source address of 10.0.12.1 
+
+Reply to request 0 from 10.0.100.6, 22 ms
+Reply to request 1 from 10.0.100.6, 3 ms
+Reply to request 2 from 10.0.100.6, 4 ms
+### 07:07:38 RT02: show ip mroute 239.2.2.2 | include \(|flags|Incoming|Ethernet|Null|RP 3
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.2.2.2), 00:00:09/stopped, RP 3.3.3.3, flags: SPF
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.23.3
+  Outgoing interface list: Null
+(10.0.12.1, 239.2.2.2), 00:00:09/00:03:27, flags: FT
+  Incoming interface: Ethernet0/0, RPF nbr 0.0.0.0
+    Ethernet0/2, Forward/Sparse, 00:00:09/00:03:20, flags: 
+    Ethernet0/1, Forward/Sparse, 00:00:09/00:03:25, flags: 
+### 07:07:39 RT03: show ip mroute 239.2.2.2 | include \(|flags|Incoming|Ethernet|Null|RP 3
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.2.2.2), 00:03:18/stopped, RP 3.3.3.3, flags: S
+  Incoming interface: Null, RPF nbr 0.0.0.0
+    Ethernet0/1, Forward/Sparse, 00:03:18/00:03:08, flags: 
+(10.0.12.1, 239.2.2.2), 00:00:09/00:02:57, flags: T
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.23.2
+    Ethernet0/1, Forward/Sparse, 00:00:09/00:02:50, flags: 
+### 07:07:39 RT04: show ip mroute 239.2.2.2 | include \(|flags|Incoming|Ethernet|Null|RP 3
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.2.2.2), 00:03:18/stopped, RP 3.3.3.3, flags: SJC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.34.3
+    Ethernet0/2, Forward/Sparse, 00:03:18/00:03:10, flags: 
+(10.0.12.1, 239.2.2.2), 00:00:09/00:02:50, flags: PJ
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.45.5
+  Outgoing interface list: Null
+### 07:07:39 RT08: show ip mroute 239.2.2.2 | include \(|flags|Incoming|Ethernet|Null|RP 3
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.2.2.2), 00:03:18/stopped, RP 3.3.3.3, flags: SJPC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.100.4
+  Outgoing interface list: Null
+(10.0.12.1, 239.2.2.2), 00:00:09/00:02:50, flags: JT
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.58.5
+    Ethernet0/0, Forward/Sparse, 00:00:09/00:02:50, flags: A
+### 07:07:39 RT04: show ip pim interface df
+* implies this system is the DF
+Interface                RP               DF Winner        Metric     Uptime
+### 07:07:39 RT02: show ip pim interface df
+* implies this system is the DF
+Interface                RP               DF Winner        Metric     Uptime
+### RT06: conf ['interface Ethernet0/0', 'no ip igmp join-group 239.2.2.2']
+Enter configuration commands, one per line.  End with CNTL/Z.

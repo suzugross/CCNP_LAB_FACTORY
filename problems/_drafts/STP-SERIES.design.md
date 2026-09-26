@@ -56,3 +56,92 @@ PoC ラボ `problems/_POC-STP` は再利用可。**→ 準備完了。次は §5
 
 1. PoC(上記・半日未満) → 2. ①構築問(1セッション・実機フルサイクル) →
 3. ②生成器(故障カタログは PoC 知見で確定) → 4. ③MST 設計問。
+
+## 6. 方針改訂(2026-09-22・ユーザ承認)— 生成器 1 本に統合
+
+§1 の 3 段(固定 BUILD-01 / TS 生成器 / MST 設計問)を **`topologies/gen_stp.py` → `GEN-STP-<seed>` の 1 本**に統合する。
+ID から型(build/ts/mst)が割れない(RDFIELD と同じ運用)。紙面 P2 の計算器 `stp_model.py` を期待値の正典にする(紙面とラボで答えが一致)。
+
+### 6.1 盤面(ioll2×4・ホスト無し)
+
+```
+   DS1 ===(2本)=== DS2        DS1/DS2 = 分配(VLAN ごとに root を分担)
+    |  \         /  |
+    |    \     /    |          AS1/AS2 = アクセス(2 系統上り)
+   AS1     (X)     AS2         AS の Et1/x = エッジ(portfast/bpduguard 対象)
+```
+- DS 間 2 本 = port-priority の論点(上流で効く・M4)用。
+- mgmt 隔離は二重: 全データ trunk に `allowed vlan <データのみ>` + Et3/3 に `spanning-tree bpdufilter enable`(BL-135 恒久策)。
+- ホストは置かない。効果採点は SVI 間 ping → `show mac address-table` の学習ポートで転送経路を確認。
+
+### 6.2 モードと段階
+
+| 段階 | モード | 中身 | 難 |
+|---|---|---|---|
+| L1 | `--mode build --level 1` | rapid-pvst 統一・VLAN 毎 root primary/secondary・エッジ portfast+bpduguard | 3 |
+| L2 | `--mode build` | 要件書駆動(VLAN X はリンク B を使う/アクセス向きは上位 BPDU 拒否/long 方式統一 等・手段は自由) | 4 |
+| L3 | `--mode ts --faults 1〜3` | §6.3 故障カタログ | 4-5 |
+| L4 | `--world mst / mst_pvst` | MST region 設計＋PVST+ 旧 SW 共存(CIST root を PVST 側より強くしないと PVSTSIM_FAIL) | 5 |
+
+### 6.3 故障カタログ(L3)
+
+A(実測済): root_hijack / secondary_only(M3) / pprio_downstream(M4・効いていない形) / rootguard_allvlan(M9) /
+bpduguard_uplink(P3) / filter_beats_guard(M8) / mode_mismatch(M14・clear 片側) / mst_region(P4/M15) / cost_skew(M4d)。
+B(PoC 第3回で確認): loopguard_trip(片側 bpdufilter→対向 LOOP_Inc。loop guard 無しは実ループ=IOL 耐性要確認) /
+native_mismatch(PVID_Inc) / allowed_vlan_skew(VLAN 毎トポロジ割れ) / 4 台盤面の決定性(計算器 vs 実機・全 VLAN 全ポート)。
+
+### 6.4 採点
+- 構造: VLAN 毎 root・ポート role/state(Genie + raw regex)。期待値は stp_model.py から導出。
+- 効果: SVI 間 ping → mac テーブルの学習 trunk。
+- 負の要件は正の root 確認とペア。filter_beats_guard の効果は**監査用 AS1-AS2 access 直結ポート**を採点時 no shut → err-disabled を見る(PoC 第3回)。
+- 過剰解降格(root guard 全削除・bpduguard 撤去など)= 暗黙の最小変更原則。
+- 収束待ち: rapid 数秒/loop guard 約 5 秒/IOL 対向リンクダウン約 5 秒。errdisable recovery(300 秒)に依存しない。
+
+### 6.5 パック統合
+`gen_pack.LAB_GENRES["l2"]` に `GEN-STP`(build は構築スロット)・`units.yml` U-A3 `lab.genres`・`genres.yml` families l2。
+
+### 6.6 実装順
+PoC 第3回 → L3 TS(A 9 種の broken→fix→100) → build L1/L2(0→100・誤解法降格) → MST 世界。
+
+### 6.7 PoC 第3回の結果(2026-09-22・poc/stp/README.md 第3回)
+- 決定性 ✅(4 台 2 VLAN 24 ポートが計算器と全一致)・mac テーブルで経路採点 ✅・監査ポート方式 ✅(対向は PARK VLAN 99・guard 無し)。
+- loopguard_trip ✅採用(IOL の実ループは嵐にならず mgmt 無事。誤解法は構造チェックで拾う)。
+- allowed_vlan_skew ✅採用(遠回り故障)。**native_mismatch ✗不採用**(allowed を絞ると PVID_Inc が出ない)。
+- mgmt の bpdufilter は STP 盤面の initial にだけ入れる(baseline 共通化は VLAN999 ループの危険)。
+- 確定カタログ(L3)= A 9 種＋loopguard_trip＋allowed_vlan_skew の 11 種。
+
+### 6.8 L3 TS 実装(2026-09-22・完了)
+`gen_stp.py --mode ts`。故障 10 種(native_mismatch 不採用後の確定版。loopguard_trip・allowed_skew を含む)。
+監査ポートは持ち込み機器 SW05(常時接続・spanning-tree vlan 1 priority 0)→ 正解状態= 接続ポート err-disabled。
+配点= root 5×3・予備 root 2×3・role 3×12・不整合 1×4・持ち込み遮断 8・DS 監査 7×2・AS 監査 4×2・SVI 疎通 3×3。
+監査は `show running-config | include ^interface Ethernet|spanning-tree|allowed vlan` の 1 本で guard/filter/許可 VLAN/cost を見る。
+E2E と誤解法の結果は BACKLOG BL-076 行。次= build(L1/L2)= 同じ盤面で STP 設定を白紙にし設計書から組む。
+
+### 6.9 build モード(L1/L2・2026-09-22・完了)
+- 初期= STP 設定だけ白紙(全台 Rapid PVST+ 既定)・VLAN/trunk(allowed 絞り)/SVI/エッジ所属 VLAN は構築済み。
+- L1= root/予備 root(数値指定・`root primary/secondary` マクロでも可)+エッジ PortFast/BPDU ガード。
+- L2= 要件書(long 方式統一・DS 間 2 本の使い分け+個別コスト禁止= 上流 port-priority が唯一解・root guard・loop guard・自動復旧禁止)。
+  採点に「使い分け」専用チェック(6 点)を追加(ts にも)。
+- ★実測で変えた設計(RSTP の規定と異なる IOL 固有挙動= 論点にしない):
+  1. 実行中の pvst→rapid 移行 → Desg BLK 固着(`clear spanning-tree detected-protocols` で解ける)・約 40 秒周期の TC・
+     IOL プロセス停止 2 回(`UNIX-EXT-SIGNAL: Segmentation fault(11), Process = VMATM Callback`→ CML iol-runner も panic)。
+     起動時 rapid なら素直に収束 → 移行は出題しない(`PVST_START=False`。TS の mode_mismatch は 1 台だけなので E2E 通過のまま残す)。
+  2. 持ち込み機器(priority 0)をデータ VLAN に置くと、一括設定中に bpduguard が発動した AS が
+     `Root ID Priority 1 / Port 0 ()`(root port 無しの古い root 情報)を保持し続け、DS の root guard が ROOT_Inc のまま。
+     clear・上りの shut・priority 再投入でも解けず、`no spanning-tree vlan N`→戻すでのみ解消(2/2 再現・手動の単発操作では再現せず)。
+     → 持ち込み機器は駐車 VLAN 99(AS にだけ作り trunk に載せない)のエッジへ。影響が VLAN99 に閉じる。
+  3. 持ち込み機器を最弱 priority にすると root port 側になり、RSTP では定期 BPDU を出さない → 後から入れた bpduguard が発動しない。
+     ioll2 には `event manager` が無い(Invalid input)ので定期的なポート上げ下げもできない → root のまま駐車 VLAN に閉じ込める。
+- 罠(実測・論点として使える): 持ち込み機器がデータ VLAN の root だと `root primary` は `% Failed to make the bridge root` で失敗する
+  (M2 と同じ)。現行の盤面では駐車 VLAN に閉じるため出ない(紙面 P2 で扱う)。
+
+### 6.10 L4 = MST 世界(2026-09-22・完了)
+`gen_stp.py --world mst`(実体 `gen_stp_mst.py`)。SW01〜03= MST リージョン(名前・revision・inst1= VLAN A,C / inst2= VLAN B)・SW04= MST 非対応の旧機(Rapid PVST+・long)。
+CIST+inst1 の root= x・inst2 の root= y(リンク2 は上流 port-priority)。持ち込み機器は置かない。
+- ts 故障 13 種: m_rev / m_name / m_map / m_mode(SW03 が rapid)/ m_unmapped / m_pvstsim / m_cist / m_pprio_down / m_cost / m_allowed_hole / loopguard_trip / guard_swap / bpduguard_uplink。
+- build: 初期は全台 rapid 白紙 → MST 化(rapid→MST の実行時移行は安定)。
+- 採点: CIST/inst1/inst2 の root・予備・region 設定・MST 3 台×3 インスタンスの役割(DS の Et0/3 は `Bound(PVST)`・内部に Bound が無いこと)・
+  SW04 の VLAN ごとの役割と `Root ID Priority 24576`・不整合 0・inst2 のリンク2・SW04 long・監査・SVI 疎通。
+- 裏どり: PVST シミュレーション規則・allowed の穴(「同じインスタンスの VLAN は一緒に外せ」)・region の 3 属性= Cisco 公式と実測一致。
+  SW04 の `Peer(STP)` は公式に記述が無いので採点しない。
+- E2E: 93001 45→100 / 93002 54→100 / 93004 68→100 / 93005 67→100 / 93006 73→100 / 93007 85→100 / build 93003 13→100(region 名違い 86・下流 port-priority 90)。

@@ -1,0 +1,106 @@
+# 自動生成 (gen_redist_field.py) GEN-RDFIELD-8801 K=2 faults=[('BR1', 'missing')]
+problem: GEN-RDFIELD-8801
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT04: 18.18.18.18
+    RT03: 48.48.48.48
+    RT02: 63.63.63.63
+    RT01: 9.9.9.9
+  links:
+  - a: RT04
+    a_ip: 10.139.232.1
+    b: RT03
+    b_ip: 10.139.232.2
+  - a: RT03
+    a_ip: 10.166.192.1
+    b: RT02
+    b_ip: 10.166.192.2
+  - a: RT04
+    a_ip: 10.117.217.1
+    b: RT01
+    b_ip: 10.117.217.2
+invariants:
+  - { type: reachability_all, name: "全ルータ間 Loopback 相互到達", points: 32 }
+  - { type: loop_free, name: "転送ループ無し", points: 10 }
+checks:
+  - name: "RT04: 収容標準どおりの相互再配送(方向・参照ID・seed metric)"
+    node: RT04
+    command: "show running-config | include redistribute"
+    raw:
+      - { regex: 'redistribute +ospf +82 +match +internal +external +1 +external +2 +metric +100000 +100 +255 +1 +1500' }
+      - { regex: 'redistribute +eigrp +820' }
+    points: 15
+  - name: "RT04: 再配送にフィルタ類が残っていない(収容標準=全 Loopback 相互到達)"
+    node: RT04
+    command: "show running-config | include redistribute"
+    raw:
+      - { not_regex: "redistribute .*route-map" }
+    points: 25
+  - name: "RT03: 対岸 RT01 の Loopback(9.9.9.9) を外部経路として学習"
+    node: RT03
+    command: "show ip route 9.9.9.9"
+    raw:
+      - { regex: 'Known via' }
+      - { regex: "distance 170" }
+    points: 10
+  - name: 'RT04: BORDER-IN が保全され(削除・置換なし)、隣接に必要な通信だけが追加で許可されている'
+    node: RT04
+    command: show ip access-lists BORDER-IN
+    acl_vectors:
+      acl: BORDER-IN
+      vectors:
+      - id: need_eigrp_uni
+        proto: eigrp
+        src: 10.139.232.2
+        dst: 10.139.232.1
+        expect: permit
+      - id: need_eigrp_mcast
+        proto: eigrp
+        src: 10.139.232.2
+        dst: 224.0.0.10
+        expect: permit
+      - id: telnet
+        proto: tcp
+        src: 10.139.232.2
+        sport: 40001
+        dst: 10.139.232.1
+        dport: 23
+        expect: deny
+      - id: spoof
+        proto: eigrp
+        src: 0.0.0.1
+        dst: 10.139.232.1
+        expect: deny
+      - id: transit_ok
+        proto: icmp
+        src: 10.5.5.1
+        dst: 2.2.2.2
+        icmp_type: 8
+        expect: permit
+      - id: transit_deny
+        proto: tcp
+        src: 8.8.4.4
+        sport: 40002
+        dst: 1.1.1.1
+        dport: 80
+        expect: deny
+      - id: blocklist
+        proto: eigrp
+        src: 80.235.240.240
+        dst: 10.139.232.1
+        expect: deny
+      must_have:
+      - deny ip 172.16.0.0 0.15.255.255 any
+      - deny ip 192.168.0.0 0.0.255.255 any
+      - deny ip host 80.235.240.240 any
+      - deny ip host 185.189.157.167 any
+      - deny udp any any eq 19
+      - deny udp any any eq 69
+      - deny ip any host 10.139.232.1 log
+      - deny ip any any log
+      min_entries: 39
+      max_entries: 41
+    points: 8

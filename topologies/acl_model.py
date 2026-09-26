@@ -38,6 +38,8 @@ PORT_NAMES = {
     "login": 513, "who": 513, "cmd": 514, "syslog": 514, "lpd": 515,
     "talk": 517, "rip": 520, "uucp": 540, "klogin": 543, "kshell": 544,
     "non500-isakmp": 4500,
+    # IOS の表示で使われる名前(BL-210 で追加): 135 は tcp で "msrpc" と表示される
+    "msrpc": 135, "drip": 3949, "onep-plain": 15001, "onep-tls": 15002, "ripv6": 521,
 }
 ICMP_TYPES = {
     "echo-reply": 0, "unreachable": 3, "source-quench": 4, "redirect": 5,
@@ -236,6 +238,27 @@ def eval_acl_vectors(spec, stdout):
     if name not in acls:
         return False, {"reason": f"ACL {name} が存在しない（show 出力に無い）"}
     entries = acls[name]
+    # ★BL-210(うんざり ACL): 構造保全と最小変更。must_have= 元のエントリ本文(seq なし)が
+    #   意味的に同じ形で残っていること / min_entries・max_entries= エントリ数の範囲。
+    #   表示はポート名に正規化される(eq 80 → eq www)ので文字列でなく**モデルで**比較する。
+    if spec.get("must_have"):
+        have = [_model_key(e) for e in entries]
+        lost = []
+        for body in spec["must_have"]:
+            toks = body.split()
+            action, rest = toks[0], " ".join(toks[1:])
+            try:
+                m = parse_entry("extended", 0, action, rest)
+            except AclParseError as exc:
+                return False, {"reason": f"must_have のパース失敗: {body} ({exc})"}
+            if _model_key(m) not in have:
+                lost.append(body)
+        if lost:
+            return False, {"acl_lost_entries": lost}
+    if "min_entries" in spec and len(entries) < spec["min_entries"]:
+        return False, {"reason": f"エントリ数 {len(entries)} < 最小 {spec['min_entries']}(削除された)"}
+    if "max_entries" in spec and len(entries) > spec["max_entries"]:
+        return False, {"reason": f"エントリ数 {len(entries)} > 最大 {spec['max_entries']}(最小変更でない)"}
     mismatches = []
     for v in spec["vectors"]:
         got = "permit" if evaluate(entries, v) else "deny"
@@ -246,6 +269,12 @@ def eval_acl_vectors(spec, stdout):
     if mismatches:
         return False, {"acl_mismatch": mismatches}
     return True, {}
+
+
+def _model_key(e):
+    """エントリの意味(seq を除く)を比較用のタプルに。"""
+    return (e["action"], e["proto"], e["src"], e["src_wild"], e["sport"],
+            e["dst"], e["dst_wild"], e["dport"], e["established"], e["icmp_type"])
 
 
 def _vector_str(v):

@@ -1,0 +1,254 @@
+- note: 'M6 static(非 override・全範囲)と Auto-RP(RT05 announce)の優先: 受信者を参加させ RT04 の (*,G)
+    の RP 欄で判定'
+- node: RT02
+  conf:
+  - ip pim autorp listener
+- node: RT03
+  conf:
+  - ip pim autorp listener
+- node: RT04
+  conf:
+  - ip pim autorp listener
+- node: RT05
+  conf:
+  - ip pim autorp listener
+- node: RT08
+  conf:
+  - ip pim autorp listener
+- node: RT05
+  conf:
+  - ip pim send-rp-announce Loopback0 scope 16
+- node: RT02
+  conf:
+  - ip pim send-rp-discovery Loopback0 scope 16
+- sleep: 75
+- node: RT06
+  conf:
+  - interface Ethernet0/0
+  - ip igmp join-group 239.1.1.1
+  wait: 8
+- node: RT04
+  show:
+  - show ip pim rp mapping
+  - show ip mroute 239.1.1.1 | include \(|flags|Incoming|Ethernet|Null|RP
+- note: M6b RT04 だけ static を override に
+- node: RT04
+  conf:
+  - ip pim rp-address 3.3.3.3 override
+  show:
+  - clear ip mroute *
+  wait: 3
+- node: RT06
+  conf:
+  - interface Ethernet0/0
+  - no ip igmp join-group 239.1.1.1
+  - ip igmp join-group 239.1.1.1
+  wait: 8
+- node: RT04
+  show:
+  - show ip mroute 239.1.1.1 | include \(|flags|Incoming|Ethernet|Null|RP
+- node: RT04
+  conf:
+  - no ip pim rp-address 3.3.3.3 override
+  - ip pim rp-address 3.3.3.3
+- note: 'M6c 範囲の違い: RT04 に 239.1.1.0/24 だけの static(非 override)を 8.8.8.8 で追加・Auto-RP
+    は 224/4'
+- node: RT04
+  conf:
+  - ip access-list standard G239-1-1
+  - permit 239.1.1.0 0.0.0.255
+  - exit
+  - ip pim rp-address 8.8.8.8 G239-1-1
+  show:
+  - clear ip mroute *
+  wait: 3
+- node: RT06
+  conf:
+  - interface Ethernet0/0
+  - no ip igmp join-group 239.1.1.1
+  - ip igmp join-group 239.1.1.1
+  wait: 8
+- node: RT04
+  show:
+  - show ip pim rp mapping
+  - show ip mroute 239.1.1.1 | include \(|flags|Incoming|Ethernet|Null|RP
+- node: RT04
+  conf:
+  - no ip pim rp-address 8.8.8.8 G239-1-1
+- node: RT05
+  conf:
+  - no ip pim send-rp-announce Loopback0 scope 16
+- node: RT02
+  conf:
+  - no ip pim send-rp-discovery Loopback0 scope 16
+- node: RT02
+  conf:
+  - no ip pim autorp listener
+- node: RT03
+  conf:
+  - no ip pim autorp listener
+- node: RT04
+  conf:
+  - no ip pim autorp listener
+- node: RT05
+  conf:
+  - no ip pim autorp listener
+- node: RT08
+  conf:
+  - no ip pim autorp listener
+- node: RT06
+  conf:
+  - interface Ethernet0/0
+  - no ip igmp join-group 239.1.1.1
+- note: M13 受信者のいないグループへ送信(Register と Register-Stop)
+- node: RT01
+  show:
+  - ping 239.7.7.7 repeat 3 source Ethernet0/0
+- node: RT02
+  show:
+  - show ip mroute 239.7.7.7 | include \(|flags|Incoming|Ethernet|Null|RP
+- node: RT03
+  show:
+  - show ip mroute 239.7.7.7 | include \(|flags|Incoming|Ethernet|Null|RP
+  - show ip pim rp mapping
+- note: 'M9 SSM の既定: ip pim ssm default を外して IGMPv3 の (S,G) 参加'
+- node: RT02
+  conf:
+  - no ip pim ssm default
+- node: RT03
+  conf:
+  - no ip pim ssm default
+- node: RT04
+  conf:
+  - no ip pim ssm default
+- node: RT05
+  conf:
+  - no ip pim ssm default
+- node: RT08
+  conf:
+  - no ip pim ssm default
+- node: RT07
+  conf:
+  - interface Ethernet0/0
+  - no ip igmp join-group 232.1.1.1 source 10.0.12.1
+  - ip igmp join-group 232.1.1.1 source 10.0.12.1
+  wait: 8
+- node: RT08
+  show:
+  - show ip igmp groups 232.1.1.1 detail | include Flags|mode|10.0.12.1
+  - show ip mroute 232.1.1.1 | include \(|flags|Incoming|Ethernet|Null|RP
+- node: RT04
+  show:
+  - show ip igmp groups 232.1.1.1 detail | include Flags|mode|10.0.12.1
+  - show ip mroute 232.1.1.1 | include \(|flags|Incoming|Ethernet|Null|RP
+- node: RT07
+  conf:
+  - interface Ethernet0/0
+  - no ip igmp join-group 232.1.1.1 source 10.0.12.1
+- note: 'M10 RPF: RT04 の RPF(送信元)は IP 最大の 10.0.45.5。RT05 側 IF の PIM を止めると?'
+- node: RT05
+  conf:
+  - interface Ethernet0/1
+  - no ip pim sparse-mode
+  wait: 5
+- node: RT04
+  show:
+  - show ip rpf 10.0.12.1 | include interface|neighbor
+  - show ip route 10.0.12.0 | include \*|via
+- node: RT05
+  conf:
+  - interface Ethernet0/1
+  - ip pim sparse-mode
+  wait: 35
+- node: RT04
+  conf:
+  - ip multicast multipath
+  show:
+  - show ip rpf 10.0.12.1 | include interface|neighbor
+  - show running-config | include multipath
+- node: RT04
+  conf:
+  - no ip multicast multipath
+- note: M10b 静的 mroute で RPF を RT03 側に
+- node: RT04
+  conf:
+  - ip mroute 10.0.12.0 255.255.255.0 10.0.34.3
+  show:
+  - show ip rpf 10.0.12.1
+- node: RT04
+  conf:
+  - no ip mroute 10.0.12.0 255.255.255.0 10.0.34.3
+- note: 'M8 bidir: bidir-enable の既定 → RP 3.3.3.3 を 239.2.0.0/16 の bidir に'
+- node: RT04
+  show:
+  - show running-config all | include bidir-enable
+- node: RT02
+  conf:
+  - ip access-list standard BIDIR
+  - permit 239.2.0.0 0.0.255.255
+  - exit
+  - ip pim rp-address 3.3.3.3 BIDIR bidir
+- node: RT03
+  conf:
+  - ip access-list standard BIDIR
+  - permit 239.2.0.0 0.0.255.255
+  - exit
+  - ip pim rp-address 3.3.3.3 BIDIR bidir
+- node: RT04
+  conf:
+  - ip access-list standard BIDIR
+  - permit 239.2.0.0 0.0.255.255
+  - exit
+  - ip pim rp-address 3.3.3.3 BIDIR bidir
+- node: RT05
+  conf:
+  - ip access-list standard BIDIR
+  - permit 239.2.0.0 0.0.255.255
+  - exit
+  - ip pim rp-address 3.3.3.3 BIDIR bidir
+- node: RT08
+  conf:
+  - ip access-list standard BIDIR
+  - permit 239.2.0.0 0.0.255.255
+  - exit
+  - ip pim rp-address 3.3.3.3 BIDIR bidir
+- node: RT06
+  conf:
+  - interface Ethernet0/0
+  - ip igmp join-group 239.2.2.2
+  wait: 10
+- node: RT01
+  show:
+  - ping 239.2.2.2 repeat 3 source Ethernet0/0
+- node: RT02
+  show:
+  - show ip mroute 239.2.2.2 | include \(|flags|Incoming|Ethernet|Null|RP
+- node: RT03
+  show:
+  - show ip mroute 239.2.2.2 | include \(|flags|Incoming|Ethernet|Null|RP
+- node: RT04
+  show:
+  - show ip mroute 239.2.2.2 | include \(|flags|Incoming|Ethernet|Null|RP
+- node: RT04
+  show:
+  - show ip pim interface df
+  - show ip pim rp mapping
+- node: RT06
+  conf:
+  - interface Ethernet0/0
+  - no ip igmp join-group 239.2.2.2
+- node: RT02
+  conf:
+  - no ip pim rp-address 3.3.3.3 BIDIR bidir
+- node: RT03
+  conf:
+  - no ip pim rp-address 3.3.3.3 BIDIR bidir
+- node: RT04
+  conf:
+  - no ip pim rp-address 3.3.3.3 BIDIR bidir
+- node: RT05
+  conf:
+  - no ip pim rp-address 3.3.3.3 BIDIR bidir
+- node: RT08
+  conf:
+  - no ip pim rp-address 3.3.3.3 BIDIR bidir

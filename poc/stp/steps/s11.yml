@@ -1,0 +1,63 @@
+- note: N1 持ち込み機器ポート(SW03 Et1/2)に portfast+bpduguard → CIST root が SW01 に戻るか(固着 B2 の有無)
+- node: SW03
+  conf: ["interface Ethernet1/2", "spanning-tree portfast", "spanning-tree bpduguard enable"]
+  wait: 30
+  show: ["show spanning-tree mst 0 | include ^Et0|Root|Regional", "show interfaces status err-disabled"]
+- node: SW01
+  show: ["show spanning-tree mst 0 | include ^Et0|Root|Regional"]
+- node: SW02
+  show: ["show spanning-tree mst 0 | include ^Et0|Root|Regional"]
+- node: SW04
+  show: ["show spanning-tree vlan 174 | include ^Et|Root ID|Priority", "show spanning-tree vlan 218 | include ^Et|Root ID|Priority"]
+- note: N2 PVST 側(SW04)が VLAN218 だけ優位(4096) → 境界の PVST シミュレーション不整合
+- node: SW04
+  conf: ["spanning-tree vlan 218 priority 4096"]
+  wait: 20
+  show: ["show spanning-tree vlan 218 | include ^Et|Root ID|Priority", "show spanning-tree vlan 174 | include ^Et|Root ID"]
+- node: SW01
+  show: ["show spanning-tree mst 0 | include ^Et0|Root|Regional", "show spanning-tree inconsistentports", "show logging | include PVSTSIM|INCONSIST"]
+- node: SW02
+  show: ["show spanning-tree mst 0 | include ^Et0|Root|Regional", "show spanning-tree inconsistentports"]
+- node: SW04
+  conf: ["no spanning-tree vlan 218 priority"]
+  wait: 20
+- node: SW01
+  show: ["show spanning-tree inconsistentports", "show spanning-tree mst 0 | include ^Et0|Root|Regional"]
+- note: N3 PVST 側が全 VLAN で優位(vlan 1-4094 priority 4096) → CIST root が外(SW04)になるか・不整合は出るか
+- node: SW04
+  conf: ["spanning-tree vlan 1-4094 priority 4096"]
+  wait: 25
+  show: ["show spanning-tree vlan 174 | include ^Et|Root ID|Priority", "show running-config | include spanning-tree vlan"]
+- node: SW01
+  show: ["show spanning-tree mst 0 | include ^Et0|Root|Regional", "show spanning-tree inconsistentports", "show spanning-tree mst 1 | include ^Et0|Root"]
+- node: SW02
+  show: ["show spanning-tree mst 0 | include ^Et0|Root|Regional", "show spanning-tree inconsistentports"]
+- node: SW04
+  conf: ["no spanning-tree vlan 1-4094 priority"]
+  wait: 25
+- node: SW01
+  show: ["show spanning-tree inconsistentports", "show spanning-tree mst 0 | include ^Et0|Root|Regional"]
+- note: N4 region 不一致(SW03 revision 4)
+- node: SW03
+  conf: ["spanning-tree mst configuration", "revision 4", "exit"]
+  wait: 20
+  show: ["show spanning-tree mst 0 | include ^Et0|Root|Regional", "show spanning-tree mst 1 | include ^Et0|Root", "show spanning-tree mst configuration digest"]
+- node: SW01
+  show: ["show spanning-tree mst 0 | include ^Et0|Root|Regional", "show spanning-tree mst 1 | include ^Et0|Root", "show spanning-tree mst configuration digest", "show spanning-tree inconsistentports"]
+- node: SW03
+  conf: ["spanning-tree mst configuration", "revision 3", "exit"]
+  wait: 20
+- node: SW01
+  show: ["show spanning-tree mst 0 | include ^Et0|Root|Regional"]
+- note: N5 instance 対応の不一致(SW02 で 233 を instance 2 へ)
+- node: SW02
+  conf: ["spanning-tree mst configuration", "no instance 1 vlan 233", "instance 2 vlan 233", "exit"]
+  wait: 20
+  show: ["show spanning-tree mst 0 | include ^Et0|Root|Regional", "show spanning-tree mst 1 | include ^Et0|Root", "show spanning-tree mst 2 | include ^Et0|Root", "show spanning-tree mst configuration"]
+- node: SW01
+  show: ["show spanning-tree mst 0 | include ^Et0|Root|Regional", "show spanning-tree mst 2 | include ^Et0|Root"]
+- node: SW02
+  conf: ["spanning-tree mst configuration", "no instance 2 vlan 233", "instance 1 vlan 233", "exit"]
+  wait: 25
+- node: SW01
+  show: ["show spanning-tree mst 0 | include ^Et0|Root|Regional", "show spanning-tree mst 2 | include ^Et0|Root"]

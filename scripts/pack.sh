@@ -1,18 +1,26 @@
 #!/usr/bin/env bash
 # ============================================================
-# 問題パック（連続出題）のライフサイクル管理。BL-099。
-# 思考系の紙面5問＋**瞬発力枠の即答形15問**＋**穴埋め枠5問**＋ラボ2〜3問を1パックにまとめ、
-# HTML の問題用紙を packs/<PACK-ID>/ に出す（2026-09-13 既定を変更）。
-#   思考系 = --paper（既定 auto=5〜6・必須ジャンル redist/aaa/acl/bgp）
-#   瞬発力 = --speed（既定15・shape=speed・思考系とは別枠で上乗せ・0 で無効）
+# 問題パック（連続出題）のライフサイクル管理。BL-099 / BL-205。
+# ★2026-09-20（BL-205・ユーザ指示）: **1回の new で 3 パック作る**のが既定。
+#   1パックの中身 = 思考系5問 ＋ 瞬発力枠8問 ＋ 穴埋め枠5問（＝紙面18問）。
+#   ラボ2〜3問は **1本目にだけ**付く（CML の予算は1日ぶんで共通のため増やせない）。
+#   配分は**1日全体**で決める: 必須ジャンルを3パックへ配り分け（4/3/3＝全10ジャンルを1周）、
+#   先行パックで出した shape/kind は後続パックの抽選から外す。
+#   HTML の問題用紙は packs/<PACK-ID>/ に出る（2本目以降は -B / -C が自動で付く）。
+#   本数   = --packs（既定3・1 にすれば従来どおり単発）
+#   思考系 = --paper（既定 auto=5〜6・必須ジャンルは --require-shape auto で配り分け）
+#   瞬発力 = --speed（既定8・shape=speed・別枠で上乗せ・0 で無効。3×8=24 で型プール26種にほぼ収まる）
 #   穴埋め = --cloze（既定5・shape=cloze=解説穴埋め形・別枠で上乗せ・0 で無効・2026-09-19）
-#   ラボ   = --lab 2 ＋ --lab-extra 1（余裕があれば3問目）
+#   ラボ   = --lab 2 ＋ --lab-extra 1（余裕があれば3問目・1本目のみ）
+#   範囲   = --profile ccna|encor|enarsi|ccie|vendor|U-A3,U-H2 …（単元台帳 CURRICULUM.md の単元で絞る・BL-213）
 #
 #   作成:   scripts/pack.sh new [オプション]          # 夜間バッチ想定（時間はかかる）
 #   下見:   scripts/pack.sh new --dry-run             # CML にも questions/ にも触らない
 #   進捗:   scripts/pack.sh status [PACK-ID]
 #   採点:   scripts/pack.sh grade  [PACK-ID]
-#   撤収:   scripts/pack.sh close  [PACK-ID]
+#           scripts/pack.sh grade --today --no-lab   # 今日の3パックの紙面をまとめて採点
+#           scripts/pack.sh grade --today --report-only  # 解説ページだけ組み直す(再記録なし)
+#   撤収:   scripts/pack.sh close  [PACK-ID] / close --today
 #   配信:   scripts/pack.sh serve  [PORT]   # Windows のブラウザから開く用
 #           ★このサーバ経由で開くと、ページ下部の解答欄がそのまま 解答.md に保存される
 #
@@ -31,7 +39,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="$REPO/.venv/bin/python3"
 GEN="$REPO/topologies/gen_pack.py"
 
-usage() { sed -n '2,21p' "${BASH_SOURCE[0]}"; exit 1; }
+usage() { sed -n '2,28p' "${BASH_SOURCE[0]}"; exit 1; }
 
 cmd="${1:-}"; shift || true
 case "$cmd" in
@@ -39,11 +47,14 @@ case "$cmd" in
     "$PY" "$GEN" new --repo "$REPO" "$@"
     ;;
   serve)
-    # Windows 側のブラウザから開くための配信。VSCode Remote-SSH ならポートが
-    # 自動転送されるので、Windows で http://localhost:<PORT>/ を開けばよい。
+    # Windows 側のブラウザから開くための配信。
+    # ★2026-09-21 ユーザ指示: LAN(10.1.10.6:<PORT>)から直接開けるように、既定で 0.0.0.0 に bind する
+    #   (VSCode のポート転送越しの http://localhost:<PORT>/ も従来どおり使える)。
+    #   127.0.0.1 だけに戻すなら: scripts/pack.sh serve 8899 127.0.0.1  (または PACK_BIND=127.0.0.1)
     port="${1:-8899}"
-    echo "VSCode のポート転送が効いていれば Windows のブラウザからそのまま開けます"
-    exec "$PY" "$REPO/topologies/pack_server.py" --repo "$REPO" --port "$port"
+    bind="${2:-${PACK_BIND:-0.0.0.0}}"
+    echo "Windows のブラウザから http://10.1.10.6:${port}/ (LAN) または http://localhost:${port}/ (VSCode 転送) で開けます"
+    exec "$PY" "$REPO/topologies/pack_server.py" --repo "$REPO" --port "$port" --bind "$bind"
     ;;
   status|grade|close|render|replace|redeploy)
     # 第1引数が PACK-* ならそれを --pack-id として渡す（打ちやすさ優先）

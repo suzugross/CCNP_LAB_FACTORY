@@ -1,0 +1,43 @@
+! RT03
+interface Loopback0
+ ip address 7.7.7.7 255.255.255.255
+!
+interface Loopback1
+ ip address 172.16.194.1 255.255.255.0
+!
+interface {{ links[1] }}
+ ip address 10.72.69.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[0] }}
+ ip address 10.142.120.2 255.255.255.252
+ no shutdown
+!
+router bgp 64945
+ bgp router-id 7.7.7.7
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ bgp bestpath compare-routerid
+ neighbor 10.72.69.2 remote-as 65184
+ neighbor 10.142.120.1 remote-as 64667
+ address-family ipv4 unicast
+  network 172.16.194.0 mask 255.255.255.0
+  neighbor 10.72.69.2 activate
+  neighbor 10.142.120.1 activate
+  neighbor 10.142.120.1 route-map RM-LP-IN in
+  neighbor 10.72.69.2 route-map RM-PREPEND-OUT out
+  neighbor 10.72.69.2 weight 40000
+ exit-address-family
+!
+ip prefix-list PL-DIAG permit 172.16.71.0/24
+route-map RM-LP-IN permit 10
+ match ip address prefix-list PL-DIAG
+ set local-preference 200
+route-map RM-LP-IN permit 20
+!
+ip prefix-list PL-SELF permit 172.16.194.0/24
+route-map RM-PREPEND-OUT permit 10
+ match ip address prefix-list PL-SELF
+ set as-path prepend 64945 64945
+route-map RM-PREPEND-OUT permit 20
+!

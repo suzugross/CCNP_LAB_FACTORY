@@ -1,0 +1,250 @@
+
+======== M6 static(非 override・全範囲)と Auto-RP(RT05 announce)の優先: 受信者を参加させ RT04 の (*,G) の RP 欄で判定 ========
+### RT02: conf ['ip pim autorp listener']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT03: conf ['ip pim autorp listener']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT04: conf ['ip pim autorp listener']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT05: conf ['ip pim autorp listener']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT08: conf ['ip pim autorp listener']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT05: conf ['ip pim send-rp-announce Loopback0 scope 16']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT02: conf ['ip pim send-rp-discovery Loopback0 scope 16']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 75
+### RT06: conf ['interface Ethernet0/0', 'ip igmp join-group 239.1.1.1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:01:06 RT04: show ip pim rp mapping
+PIM Group-to-RP Mappings
+
+Group(s) 224.0.0.0/4
+  RP 5.5.5.5 (?), v2v1
+    Info source: 2.2.2.2 (?), elected via Auto-RP
+         Uptime: 00:00:26, expires: 00:02:31
+Group(s): 224.0.0.0/4, Static
+    RP: 3.3.3.3 (?)
+### 07:01:25 RT04: show ip mroute 239.1.1.1 | include \(|flags|Incoming|Ethernet|Null|RP
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.1.1.1), 00:00:27/00:02:44, RP 5.5.5.5, flags: SP
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.45.5
+  Outgoing interface list: Null
+
+======== M6b RT04 だけ static を override に ========
+### RT04: conf ['ip pim rp-address 3.3.3.3 override']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:01:28 RT04: clear ip mroute *
+
+### RT06: conf ['interface Ethernet0/0', 'no ip igmp join-group 239.1.1.1', 'ip igmp join-group 239.1.1.1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:01:37 RT04: show ip mroute 239.1.1.1 | include \(|flags|Incoming|Ethernet|Null|RP
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.1.1.1), 00:00:08/00:02:51, RP 3.3.3.3, flags: SP
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.34.3
+  Outgoing interface list: Null
+### RT04: conf ['no ip pim rp-address 3.3.3.3 override', 'ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+
+======== M6c 範囲の違い: RT04 に 239.1.1.0/24 だけの static(非 override)を 8.8.8.8 で追加・Auto-RP は 224/4 ========
+### RT04: conf ['ip access-list standard G239-1-1', 'permit 239.1.1.0 0.0.0.255', 'exit', 'ip pim rp-address 8.8.8.8 G239-1-1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:01:41 RT04: clear ip mroute *
+
+### RT06: conf ['interface Ethernet0/0', 'no ip igmp join-group 239.1.1.1', 'ip igmp join-group 239.1.1.1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:01:49 RT04: show ip pim rp mapping
+PIM Group-to-RP Mappings
+
+Group(s) 224.0.0.0/4
+  RP 5.5.5.5 (?), v2v1
+    Info source: 2.2.2.2 (?), elected via Auto-RP
+         Uptime: 00:01:09, expires: 00:02:49
+Group(s): 224.0.0.0/4, Static
+    RP: 3.3.3.3 (?)
+Acl: G239-1-1, Static
+    RP: 8.8.8.8 (?)
+### 07:02:21 RT04: show ip mroute 239.1.1.1 | include \(|flags|Incoming|Ethernet|Null|RP
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.1.1.1), 00:00:40/00:02:43, RP 5.5.5.5, flags: SP
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.45.5
+  Outgoing interface list: Null
+### RT04: conf ['no ip pim rp-address 8.8.8.8 G239-1-1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT05: conf ['no ip pim send-rp-announce Loopback0 scope 16']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT02: conf ['no ip pim send-rp-discovery Loopback0 scope 16']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT02: conf ['no ip pim autorp listener']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT03: conf ['no ip pim autorp listener']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT04: conf ['no ip pim autorp listener']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT05: conf ['no ip pim autorp listener']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT08: conf ['no ip pim autorp listener']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT06: conf ['interface Ethernet0/0', 'no ip igmp join-group 239.1.1.1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+
+======== M13 受信者のいないグループへ送信(Register と Register-Stop) ========
+### 07:02:26 RT01: ping 239.7.7.7 repeat 3 source Ethernet0/0
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 239.7.7.7, timeout is 2 seconds:
+Packet sent with a source address of 10.0.12.1 
+...
+### 07:02:32 RT02: show ip mroute 239.7.7.7 | include \(|flags|Incoming|Ethernet|Null|RP
+
+### 07:02:32 RT03: show ip mroute 239.7.7.7 | include \(|flags|Incoming|Ethernet|Null|RP
+
+### 07:02:32 RT03: show ip pim rp mapping
+PIM Group-to-RP Mappings
+
+Group(s): 224.0.0.0/4, Static
+    RP: 3.3.3.3 (?)
+
+======== M9 SSM の既定: ip pim ssm default を外して IGMPv3 の (S,G) 参加 ========
+### RT02: conf ['no ip pim ssm default']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT03: conf ['no ip pim ssm default']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT04: conf ['no ip pim ssm default']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT05: conf ['no ip pim ssm default']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT08: conf ['no ip pim ssm default']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT07: conf ['interface Ethernet0/0', 'no ip igmp join-group 232.1.1.1 source 10.0.12.1', 'ip igmp join-group 232.1.1.1 source 10.0.12.1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:02:47 RT08: show ip igmp groups 232.1.1.1 detail | include Flags|mode|10.0.12.1
+Flags: L - Local, U - User, SG - Static Group, VG - Virtual Group,
+Flags:		
+Group mode:	INCLUDE
+  Source Address   Uptime    v3 Exp   CSR Exp   Fwd  Flags
+  10.0.12.1        00:14:40  00:02:51  stopped   Yes  R
+### 07:02:47 RT08: show ip mroute 232.1.1.1 | include \(|flags|Incoming|Ethernet|Null|RP
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 232.1.1.1), 00:00:11/00:02:51, RP 3.3.3.3, flags: SJPC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.100.4
+  Outgoing interface list: Null
+### 07:02:47 RT04: show ip igmp groups 232.1.1.1 detail | include Flags|mode|10.0.12.1
+Flags: L - Local, U - User, SG - Static Group, VG - Virtual Group,
+Flags:		
+Group mode:	INCLUDE
+  Source Address   Uptime    v3 Exp   CSR Exp   Fwd  Flags
+  10.0.12.1        00:14:40  00:02:51  stopped   Yes  R
+### 07:02:47 RT04: show ip mroute 232.1.1.1 | include \(|flags|Incoming|Ethernet|Null|RP
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 232.1.1.1), 00:00:11/00:03:18, RP 3.3.3.3, flags: SJC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.34.3
+    Ethernet0/2, Forward/Sparse, 00:00:11/00:03:18, flags: 
+### RT07: conf ['interface Ethernet0/0', 'no ip igmp join-group 232.1.1.1 source 10.0.12.1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+
+======== M10 RPF: RT04 の RPF(送信元)は IP 最大の 10.0.45.5。RT05 側 IF の PIM を止めると? ========
+### RT05: conf ['interface Ethernet0/1', 'no ip pim sparse-mode']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:02:53 RT04: show ip rpf 10.0.12.1 | include interface|neighbor
+  RPF interface: Ethernet0/1
+  RPF neighbor: ? (10.0.45.5)
+### 07:03:09 RT04: show ip route 10.0.12.0 | include \*|via
+  Known via "ospf 1", distance 110, metric 30, type intra area
+  * 10.0.45.5, from 2.2.2.2, 00:23:47 ago, via Ethernet0/1
+    10.0.34.3, from 2.2.2.2, 00:23:29 ago, via Ethernet0/0
+### RT05: conf ['interface Ethernet0/1', 'ip pim sparse-mode']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT04: conf ['ip multicast multipath']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:03:45 RT04: show ip rpf 10.0.12.1 | include interface|neighbor
+  RPF interface: Ethernet0/0
+  RPF neighbor: ? (10.0.34.3)
+### 07:04:01 RT04: show running-config | include multipath
+ip multicast multipath
+### RT04: conf ['no ip multicast multipath']
+Enter configuration commands, one per line.  End with CNTL/Z.
+
+======== M10b 静的 mroute で RPF を RT03 側に ========
+### RT04: conf ['ip mroute 10.0.12.0 255.255.255.0 10.0.34.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:04:01 RT04: show ip rpf 10.0.12.1
+RPF information for ? (10.0.12.1)
+  RPF interface: Ethernet0/0
+  RPF neighbor: ? (10.0.34.3)
+  RPF route/mask: 10.0.12.0/24
+  RPF type: multicast (static)
+  Doing distance-preferred lookups across tables
+  RPF topology: ipv4 multicast base
+### RT04: conf ['no ip mroute 10.0.12.0 255.255.255.0 10.0.34.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+
+======== M8 bidir: bidir-enable の既定 → RP 3.3.3.3 を 239.2.0.0/16 の bidir に ========
+### 07:04:18 RT04: show running-config all | include bidir-enable
+
+### RT02: conf ['ip access-list standard BIDIR', 'permit 239.2.0.0 0.0.255.255', 'exit', 'ip pim rp-address 3.3.3.3 BIDIR bidir']
+Enter configuration commands, one per line.  End with CNTL/Z.
+                                             ^
+% Invalid input detected at '^' marker.
+### RT03: conf ['ip access-list standard BIDIR', 'permit 239.2.0.0 0.0.255.255', 'exit', 'ip pim rp-address 3.3.3.3 BIDIR bidir']
+Enter configuration commands, one per line.  End with CNTL/Z.
+                                             ^
+% Invalid input detected at '^' marker.
+### RT04: conf ['ip access-list standard BIDIR', 'permit 239.2.0.0 0.0.255.255', 'exit', 'ip pim rp-address 3.3.3.3 BIDIR bidir']
+Enter configuration commands, one per line.  End with CNTL/Z.
+                                             ^
+% Invalid input detected at '^' marker.
+### RT05: conf ['ip access-list standard BIDIR', 'permit 239.2.0.0 0.0.255.255', 'exit', 'ip pim rp-address 3.3.3.3 BIDIR bidir']
+Enter configuration commands, one per line.  End with CNTL/Z.
+                                             ^
+% Invalid input detected at '^' marker.
+### RT08: conf ['ip access-list standard BIDIR', 'permit 239.2.0.0 0.0.255.255', 'exit', 'ip pim rp-address 3.3.3.3 BIDIR bidir']
+Enter configuration commands, one per line.  End with CNTL/Z.
+                                             ^
+% Invalid input detected at '^' marker.
+### RT06: conf ['interface Ethernet0/0', 'ip igmp join-group 239.2.2.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:04:30 RT01: ping 239.2.2.2 repeat 3 source Ethernet0/0
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 239.2.2.2, timeout is 2 seconds:
+Packet sent with a source address of 10.0.12.1 
+...
+### 07:04:36 RT02: show ip mroute 239.2.2.2 | include \(|flags|Incoming|Ethernet|Null|RP
+
+### 07:04:36 RT03: show ip mroute 239.2.2.2 | include \(|flags|Incoming|Ethernet|Null|RP
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.2.2.2), 00:00:16/00:03:13, RP 3.3.3.3, flags: S
+  Incoming interface: Null, RPF nbr 0.0.0.0
+    Ethernet0/1, Forward/Sparse, 00:00:16/00:03:13, flags: 
+### 07:04:37 RT04: show ip mroute 239.2.2.2 | include \(|flags|Incoming|Ethernet|Null|RP
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.2.2.2), 00:00:16/00:03:13, RP 3.3.3.3, flags: SJC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.34.3
+    Ethernet0/2, Forward/Sparse, 00:00:16/00:03:13, flags: 
+### 07:04:37 RT04: show ip pim interface df
+* implies this system is the DF
+Interface                RP               DF Winner        Metric     Uptime
+### 07:04:37 RT04: show ip pim rp mapping
+PIM Group-to-RP Mappings
+
+Group(s): 224.0.0.0/4, Static
+    RP: 3.3.3.3 (?)
+### RT06: conf ['interface Ethernet0/0', 'no ip igmp join-group 239.2.2.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT02: conf ['no ip pim rp-address 3.3.3.3 BIDIR bidir']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT03: conf ['no ip pim rp-address 3.3.3.3 BIDIR bidir']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT04: conf ['no ip pim rp-address 3.3.3.3 BIDIR bidir']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT05: conf ['no ip pim rp-address 3.3.3.3 BIDIR bidir']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT08: conf ['no ip pim rp-address 3.3.3.3 BIDIR bidir']
+Enter configuration commands, one per line.  End with CNTL/Z.

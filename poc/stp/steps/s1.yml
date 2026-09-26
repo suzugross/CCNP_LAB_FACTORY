@@ -1,0 +1,25 @@
+- note: 準備 trunk を 10,20 に絞る(mgmt VLAN999 隔離)・SW02 Et0/2 の bpduguard 解除
+- node: SW01
+  conf: ["interface range Ethernet0/0 - 1", "switchport trunk allowed vlan 10,20"]
+- node: SW02
+  conf: ["interface range Ethernet0/0 - 2", "switchport trunk allowed vlan 10,20", "interface Ethernet0/2", "no spanning-tree bpduguard enable", "shutdown", "no shutdown"]
+- node: SW03
+  conf: ["interface range Ethernet0/0 - 2", "switchport trunk allowed vlan 10,20"]
+- sleep: 40
+- note: M1 既定モード(SW03 で no spanning-tree mode)
+- node: SW03
+  show: ["show version | include Version|IOL|Software", "show running-config | include spanning-tree", "show spanning-tree summary"]
+- node: SW03
+  conf: ["no spanning-tree mode"]
+  wait: 5
+  show: ["show running-config | include spanning-tree", "show spanning-tree summary", "show spanning-tree vlan 10"]
+- node: SW03
+  conf: ["spanning-tree mode rapid-pvst"]
+  wait: 40
+- note: 基準状態(M6 summary・vlan 10/20)
+- node: SW01
+  show: ["show spanning-tree summary", "show spanning-tree vlan 10", "show spanning-tree vlan 20", "show spanning-tree root", "show interfaces status"]
+- node: SW02
+  show: ["show spanning-tree vlan 10", "show spanning-tree vlan 20", "show interfaces status"]
+- node: SW03
+  show: ["show spanning-tree vlan 10", "show spanning-tree vlan 20", "show spanning-tree summary"]

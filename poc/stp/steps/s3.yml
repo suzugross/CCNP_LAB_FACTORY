@@ -1,0 +1,213 @@
+- note: 準備 logging buffered
+- node: SW01
+  conf:
+  - logging buffered 200000 debugging
+  - service timestamps log datetime msec
+  show:
+  - clear logging
+- node: SW02
+  conf:
+  - logging buffered 200000 debugging
+  - service timestamps log datetime msec
+  show:
+  - clear logging
+- node: SW03
+  conf:
+  - logging buffered 200000 debugging
+  - service timestamps log datetime msec
+  show:
+  - clear logging
+- note: M5 pathcost method long を 3 台すべてに
+- node: SW01
+  conf:
+  - spanning-tree pathcost method long
+- node: SW02
+  conf:
+  - spanning-tree pathcost method long
+- node: SW03
+  conf:
+  - spanning-tree pathcost method long
+- sleep: 30
+- node: SW03
+  show:
+  - show spanning-tree summary | include Pathcost
+  - show spanning-tree vlan 10
+  - show spanning-tree root
+- note: M5b short に戻す
+- node: SW01
+  conf:
+  - spanning-tree pathcost method short
+- node: SW02
+  conf:
+  - spanning-tree pathcost method short
+- node: SW03
+  conf:
+  - spanning-tree pathcost method short
+- sleep: 30
+- node: SW03
+  show:
+  - show spanning-tree summary | include Pathcost
+  - show spanning-tree vlan 10 | include Et0|Cost
+- note: 'M9 root guard: SW01(VLAN10 root)Et0/0 に guard root → SW02 VLAN10 priority
+    0'
+- node: SW01
+  conf:
+  - interface Ethernet0/0
+  - spanning-tree guard root
+- node: SW02
+  conf:
+  - spanning-tree vlan 10 priority 0
+  wait: 10
+- node: SW01
+  show:
+  - show spanning-tree inconsistentports
+  - show spanning-tree vlan 10
+  - show spanning-tree interface Ethernet0/0 detail
+  - show logging | include SPANTREE
+- node: SW02
+  show:
+  - show spanning-tree vlan 10 | include Root|This|Et0
+- note: M9b SW02 を 8192 に戻す → 復帰の時間
+- node: SW02
+  conf:
+  - spanning-tree vlan 10 priority 8192
+- sleep: 2
+- node: SW01
+  show:
+  - show spanning-tree inconsistentports
+  - show spanning-tree vlan 10 | include Et0/0
+- sleep: 4
+- node: SW01
+  show:
+  - show spanning-tree inconsistentports
+  - show spanning-tree vlan 10 | include Et0/0
+- sleep: 8
+- node: SW01
+  show:
+  - show spanning-tree inconsistentports
+  - show spanning-tree vlan 10 | include Et0/0
+- node: SW01
+  show:
+  - show logging | include SPANTREE
+- note: 'M10 loop guard: SW03 Et0/1(VLAN10 Altn)に guard loop・SW02 Et0/1 に bpdufilter
+    で BPDU を止める'
+- node: SW03
+  conf:
+  - interface Ethernet0/1
+  - spanning-tree guard loop
+  show:
+  - show spanning-tree vlan 10 | include Et0
+- node: SW02
+  conf:
+  - interface Ethernet0/1
+  - spanning-tree bpdufilter enable
+- sleep: 3
+- node: SW03
+  show:
+  - show spanning-tree inconsistentports
+  - show spanning-tree vlan 10 | include Et0
+- sleep: 5
+- node: SW03
+  show:
+  - show spanning-tree inconsistentports
+  - show spanning-tree vlan 10 | include Et0
+- sleep: 10
+- node: SW03
+  show:
+  - show spanning-tree inconsistentports
+  - show spanning-tree vlan 10 | include Et0
+- node: SW03
+  show:
+  - show spanning-tree interface Ethernet0/1 detail
+  - show logging | include SPANTREE
+- note: M10b bpdufilter 解除 → 復帰
+- node: SW02
+  conf:
+  - interface Ethernet0/1
+  - no spanning-tree bpdufilter enable
+  wait: 6
+- node: SW03
+  show:
+  - show spanning-tree inconsistentports
+  - show spanning-tree vlan 10 | include Et0
+  - show logging | include SPANTREE
+- note: M10c 同一 IF で guard loop → guard root(後勝ちか)
+- node: SW03
+  conf:
+  - interface Ethernet0/1
+  - spanning-tree guard root
+  show:
+  - show running-config interface Ethernet0/1
+- node: SW03
+  conf:
+  - interface Ethernet0/1
+  - no spanning-tree guard
+- note: M10d global loopguard default + IF guard root
+- node: SW03
+  conf:
+  - spanning-tree loopguard default
+  - interface Ethernet0/1
+  - spanning-tree guard root
+  wait: 5
+  show:
+  - show spanning-tree interface Ethernet0/1 detail
+  - show spanning-tree summary | include Loopguard
+- node: SW03
+  conf:
+  - no spanning-tree loopguard default
+  - interface Ethernet0/1
+  - no spanning-tree guard
+- note: M12 errdisable recovery の既定
+- node: SW02
+  show:
+  - show errdisable recovery
+- note: M8 同一ポートに bpduguard + bpdufilter(SW02 Et0/2)→ shut/no shut
+- node: SW02
+  conf:
+  - interface Ethernet0/2
+  - spanning-tree bpduguard enable
+  - spanning-tree bpdufilter enable
+  - shutdown
+  - no shutdown
+  wait: 15
+  show:
+  - show interfaces Ethernet0/2 status
+  - show spanning-tree interface Ethernet0/2 detail
+  - show logging | include BPDUGUARD|ERR
+- note: M8b bpdufilter を外す → bpduguard 発火
+- node: SW02
+  conf:
+  - interface Ethernet0/2
+  - no spanning-tree bpdufilter enable
+  wait: 8
+  show:
+  - show interfaces Ethernet0/2 status
+  - show interfaces status err-disabled
+  - show logging | include BPDUGUARD|ERR
+- note: M12b recovery 有効化(interval 29 を試し 30 に)
+- node: SW02
+  conf:
+  - errdisable recovery cause bpduguard
+  - errdisable recovery interval 29
+  - errdisable recovery interval 30
+  show:
+  - show errdisable recovery
+- sleep: 40
+- node: SW02
+  show:
+  - show logging | include ERR|BPDUGUARD|RECOV|LINK
+  - show interfaces Ethernet0/2 status
+- note: 後始末 bpduguard 外す・recovery 既定へ
+- node: SW02
+  conf:
+  - interface Ethernet0/2
+  - no spanning-tree bpduguard enable
+  - shutdown
+  - no shutdown
+  - exit
+  - no errdisable recovery cause bpduguard
+  - no errdisable recovery interval
+- node: SW01
+  conf:
+  - interface Ethernet0/0
+  - no spanning-tree guard

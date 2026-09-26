@@ -1,0 +1,118 @@
+! RT01 (本社)
+interface Loopback1
+ ip address 10.77.0.1 255.255.255.0
+!
+ip access-list extended Sec_edge-In.v7
+ 10 remark === EDGE PROTECTION (SEC-TEAM) - change via ticket only ===
+ 20 remark --- anti-spoofing ---
+ 30 deny ip 10.0.0.0 0.255.255.255 any
+ 40 deny ip 172.16.0.0 0.15.255.255 any
+ 50 deny ip 192.168.0.0 0.0.255.255 any
+ 60 deny ip 127.0.0.0 0.255.255.255 any
+ 70 deny ip 0.0.0.0 0.255.255.255 any
+ 80 deny ip 169.254.0.0 0.0.255.255 any
+ 90 deny ip 224.0.0.0 15.255.255.255 any
+ 100 deny ip 240.0.0.0 15.255.255.255 any
+ 110 remark --- SOC blocklist (updated 2026-03-12) ---
+ 120 deny ip host 109.56.173.5 any
+ 130 deny ip host 5.56.178.187 any
+ 140 deny ip host 93.102.0.60 any
+ 150 deny ip 213.34.48.0 0.0.0.255 any
+ 160 deny ip 188.228.41.0 0.0.0.255 any
+ 170 deny ip host 5.109.71.9 any
+ 180 deny ip host 79.130.57.96 any
+ 190 deny ip 5.85.224.0 0.0.0.255 any
+ 200 deny ip 77.35.15.0 0.0.0.255 any
+ 210 deny ip host 79.230.4.251 any
+ 220 deny ip 91.196.170.0 0.0.0.255 any
+ 230 deny ip host 95.38.135.247 any
+ 240 deny ip host 77.163.103.138 any
+ 250 deny ip host 103.41.25.216 any
+ 260 deny ip 45.21.68.0 0.0.0.255 any
+ 270 remark --- port hygiene ---
+ 280 deny udp any any range 137 138
+ 290 deny udp any any eq 5060
+ 300 deny tcp any any range 135 139
+ 310 deny tcp any any eq 21
+ 320 deny udp any any eq 69
+ 330 deny tcp any any eq 3306
+ 340 deny udp any any eq 19
+ 350 deny udp any any eq 1900
+ 360 deny tcp any any range 6000 6063
+ 370 deny tcp any any eq 1433
+ 380 deny tcp any any eq 25
+ 390 remark === VPN (SEC-TEAM) ===
+ 400 permit udp any host 203.0.113.2 eq 4500
+ 410 permit udp any host 203.0.113.2 eq 500
+ 420 permit gre any host 203.0.113.2
+ 430 remark --- ICMP ---
+ 440 permit icmp any host 203.0.113.2 echo
+ 450 permit icmp any host 203.0.113.2 echo-reply
+ 460 permit icmp any host 203.0.113.2 unreachable
+ 470 permit icmp any host 203.0.113.2 time-exceeded
+ 480 remark --- management (NOC) ---
+ 490 permit tcp host 192.0.2.10 host 203.0.113.2 eq 22
+ 500 permit udp host 192.0.2.20 host 203.0.113.2 eq snmp
+ 510 permit udp host 192.0.2.123 host 203.0.113.2 eq ntp
+ 520 remark --- router protection ---
+ 530 deny ip any host 203.0.113.2 log
+ 540 deny ip any any log
+!
+interface {{ links[0] }}
+ description === to ISP ===
+ ip address 203.0.113.2 255.255.255.252
+ ip access-group Sec_edge-In.v7 in
+ no shutdown
+!
+ip route 0.0.0.0 0.0.0.0 203.0.113.1
+!
+crypto isakmp policy 10
+ encryption aes 256
+ hash sha256
+ authentication pre-share
+ group 14
+!
+crypto isakmp key PReshAREd-KEY#80 address 0.0.0.0
+!
+crypto ipsec transform-set Ts_aEs256_Sha2.v4 esp-aes 256 esp-sha256-hmac
+ mode transport
+!
+crypto ipsec profile ip5Ec_PR0F_DMvpn4
+ set transform-set Ts_aEs256_Sha2.v4
+!
+crypto ipsec transform-set ts_aes256_sha2.v4 esp-aes esp-sha-hmac
+ mode tunnel
+!
+crypto ipsec profile ip5Ec_PR0F_DMvpn4-OLD
+ set transform-set ts_aes256_sha2.v4
+ set pfs group14
+!
+crypto ipsec profile ip5Ec_PR0F_DMvpn0
+ set transform-set Ts_aEs256_Sha2.v4
+ set security-association lifetime seconds 3600
+!
+ip access-list extended Sec_edge-In.v7-OLD
+ permit udp any any eq isakmp
+ permit esp any any
+ permit gre any any
+ permit icmp any any
+ permit ip any any
+!
+interface Tunnel0
+ ip address 172.23.114.1 255.255.255.0
+ no ip redirects
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ ip nhrp authentication nhRP-K42
+ ip nhrp network-id 277
+ no ip nhrp map multicast dynamic
+ ip nhrp redirect
+ no ip split-horizon eigrp 477
+ tunnel source {{ links[0] }}
+ tunnel destination 198.51.100.10
+ tunnel protection ipsec profile ip5Ec_PR0F_DMvpn4
+!
+router eigrp 477
+ network 172.23.114.0 0.0.0.255
+ network 10.77.0.0 0.0.0.255
+!

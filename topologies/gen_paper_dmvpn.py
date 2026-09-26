@@ -57,6 +57,39 @@ VOCAB = ["authentication", "holdtime", "network-id", "gre multipoint", "multicas
          "differential", "no-unique", "req-def-map", "timeout", "dynamic", "fallback", "cluster", "interest",
          "virtual-template", "multipoint", "ipsec", "psk", "ikev2-profile", "isakmp-profile", "key", "source", "destination",
          "unique", "register", "ipv6", "ip", "mode", "server-only", "shortcut", "redirect", "map", "nhs"]
+# ★2026-09-20(ユーザ指示「実機の `?` にある/無い、だけでは寂しい。そのコマンド・
+#   その後続語が何をするためのものかが欲しい」): 後続語の**役割**。
+#   ★確信の持てない語(req-def-map / nhs dynamic / fallback / shortcut virtual-template /
+#     tunnel protection psk)は**意図的に空**にしてある。分からないものは書かない
+#     (不確かな記述を出さない・2026-09-13 の方針)。実機で確かめたら足す。
+OPT_MEAN = {
+    ("ip nhrp registration", "differential"): "登録の内容が変わったときだけ差分で登録し直す",
+    ("ip nhrp registration", "no-unique"): "登録要求に Unique フラグを立てず、スポークの NBMA アドレスが変わってもハブが上書きを受け付けられるようにする",
+    ("ip nhrp registration", "timeout"): "登録を送る間隔(秒)を決める",
+    ("ip nhrp map", "A.B.C.D(宛先のトンネル IP アドレス)"): "対向のトンネル IP と、その NBMA アドレスの対応を静的に書く",
+    ("ip nhrp map", "multicast"): "マルチキャスト/ブロードキャスト(ルーティング プロトコルの Hello など)の複製先を指定する",
+    ("ip nhrp map multicast", "A.B.C.D(NBMA アドレス)"): "複製先の NBMA アドレスを静的に指定する(スポークはハブを書く)",
+    ("ip nhrp map multicast", "X:X:X:X::X(IPv6 の NBMA アドレス)"): "複製先の NBMA を IPv6 で指定する",
+    ("ip nhrp map multicast", "dynamic"): "登録してきたスポークの NBMA を複製先に自動で加える(ハブ側)",
+    ("ip nhrp nhs", "A.B.C.D(NHS のプロトコル アドレス)"): "NHS(ハブ)のトンネル IP を指定する",
+    ("ip nhrp nhs", "cluster"): "NHS をグループにまとめ、冗長の単位にする",
+    ("ip nhrp nhs <NHS のアドレス>", "cluster"): "その NHS が属するクラスタ(冗長グループ)を指定する",
+    ("ip nhrp nhs <NHS のアドレス>", "nbma"): "その NHS の NBMA アドレスを同じ 1 行で書く(3 行構文をまとめた形)",
+    ("ip nhrp nhs <NHS のアドレス>", "priority"): "同じクラスタ内で使う順序(値が小さいほど優先)",
+    ("ip nhrp nhs <NHS のアドレス> nbma <NBMA アドレス>", "multicast"): "その NBMA をマルチキャストの複製先にも加える",
+    ("ip nhrp nhs <NHS のアドレス> nbma <NBMA アドレス>", "cluster"): "その NHS が属するクラスタを指定する",
+    ("ip nhrp nhs <NHS のアドレス> nbma <NBMA アドレス>", "priority"): "同じクラスタ内で使う順序(値が小さいほど優先)",
+    ("ip nhrp redirect", "interest"): "Redirect を送る対象のトラフィックを ACL で絞る",
+    ("ip nhrp redirect", "timeout"): "同じ相手へ Redirect を送り直さない時間",
+    ("tunnel mode gre", "ip"): "IPv4 を運ぶポイントツーポイントの GRE(フェーズ 1 のスポーク)",
+    ("tunnel mode gre", "ipv6"): "IPv6 を運ぶポイントツーポイントの GRE",
+    ("tunnel mode gre", "multipoint"): "1 つのインターフェイスで多対向(mGRE)。宛先は NHRP が解決する",
+    ("tunnel protection", "ipsec"): "IPsec プロファイルでこのトンネルを保護する",
+    ("tunnel protection ipsec profile <プロファイル名>", "ikev2-profile"): "このトンネルに結び付ける IKEv2 プロファイルを指定する",
+    ("tunnel protection ipsec profile <プロファイル名>", "isakmp-profile"): "このトンネルに結び付ける ISAKMP(IKEv1)プロファイルを指定する",
+    ("tunnel protection ipsec profile <プロファイル名>", "shared"): "同じ tunnel source を持つ複数のトンネルで同じ IPsec プロファイル(暗号ソケット)を共用する",
+}
+
 VOCAB_WHY = {
     "authentication": "authentication は ip nhrp authentication として独立したコマンドであり、このコマンドの後続語ではない。",
     "holdtime": "holdtime は ip nhrp holdtime として独立したコマンドであり、このコマンドの後続語ではない。",
@@ -215,7 +248,8 @@ def _syntax_choices(d, rnd, n_total, n_true=None):
     falses = rnd.sample(pool, n_total - n_true)
     c = [(t, True, "") for t in trues]
     for f in falses:
-        c.append((f, False, VOCAB_WHY.get(f, f"{f} は、このコマンドの後続語として実機の `?` に現れない(別のコマンドの語)。")))
+        why = VOCAB_WHY.get(f, f"{f} は、このコマンドの後続語として実機の `?` に現れない(別のコマンドの語)。")
+        c.append((f, False, why + _elsewhere(f, d["cmd"])))
     order = list(range(len(c)))
     rnd.shuffle(order)
     return [c[i] for i in order]
@@ -992,6 +1026,34 @@ def question_body(d, choices, form):
     return before, ask, ch_md, ""
 
 
+def _elsewhere(word, cmd):
+    """その語が**別のコマンドの後続語**なら、どこで何をする語かを添える(2026-09-20)。
+
+    「ここには無い」だけで終わらせず、正しい居場所と役割まで書く。
+    """
+    for (c, o), mean in OPT_MEAN.items():
+        if c != cmd and _norm(o) == word:
+            return f"(`{c}` の後続語で、{mean})"
+    return ""
+
+
+def _syntax_lead(d):
+    """構文問の解説の頭に「このコマンドは何をするものか」と後続語の役割を置く。
+
+    2026-09-20 ユーザ指示。`?` に在る/無いという事実だけでは覚えどころが無いので、
+    **コマンドの目的**(SYNTAX の第 2 要素)と、**分かっている後続語の役割**を先に書く。
+    """
+    cmd = d.get("cmd")
+    if not cmd or cmd not in SYNTAX:
+        return ""
+    opts, purpose = SYNTAX[cmd]
+    out = [f"`{cmd}` は{purpose}を行うコマンドである。"]
+    rows = [f"- `{o}` — {OPT_MEAN[(cmd, o)]}" for o in opts if (cmd, o) in OPT_MEAN]
+    if rows:
+        out += ["", "後続に取れる語とその役割:", ""] + rows
+    return "\n".join(out) + "\n\n"
+
+
 def answer_body(d, choices, form):
     if form == "match":
         terms, ch, ans = choices
@@ -1000,7 +1062,8 @@ def answer_body(d, choices, form):
     lines = ["## 正解", "", "**" + "、".join(keys) + "**", "", "## 各選択肢の判定", ""]
     for k, (t, ok, w) in zip("ABCDEFG", choices):
         lines.append(f"- **{k}**: {'(正解)' if ok else w}")
-    lines += ["", "## 解説", "", CORE[d["kind"]]]
+    lead = _syntax_lead(d) if d["kind"] == "syntax" else ""
+    lines += ["", "## 解説", "", lead + CORE[d["kind"]]]
     if d["kind"] == "phase":
         a = d["attr"]
         lines += ["", f"- 仕込み: `{d['fault']}` / 属性: {a} / フェーズ判定: {phase_of(a)} / 直接通信: {direct_ok(a)}"]

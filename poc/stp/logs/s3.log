@@ -1,0 +1,829 @@
+
+======== 準備 logging buffered ========
+### SW01: conf ['logging buffered 200000 debugging', 'service timestamps log datetime msec']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:08:26 SW01: clear logging
+Error: Failed to set Clear Logging Chasfs Property
+Clear logging buffer [confirm]
+### SW02: conf ['logging buffered 200000 debugging', 'service timestamps log datetime msec']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:08:26 SW02: clear logging
+Error: Failed to set Clear Logging Chasfs Property
+Clear logging buffer [confirm]
+### SW03: conf ['logging buffered 200000 debugging', 'service timestamps log datetime msec']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:08:27 SW03: clear logging
+Error: Failed to set Clear Logging Chasfs Property
+Clear logging buffer [confirm]
+
+======== M5 pathcost method long を 3 台すべてに ========
+### SW01: conf ['spanning-tree pathcost method long']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW02: conf ['spanning-tree pathcost method long']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW03: conf ['spanning-tree pathcost method long']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 30
+### 05:08:58 SW03: show spanning-tree summary | include Pathcost
+Configured Pathcost method used is long
+### 05:08:58 SW03: show spanning-tree vlan 10
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4106
+             Address     aabb.cc02.4000
+             Cost        2000000
+             Port        1 (Ethernet0/0)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32778  (priority 32768 sys-id-ext 10)
+             Address     aabb.cc02.4200
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Root FWD 2000000   128.1    P2p 
+Et0/1               Altn BLK 2000000   128.2    P2p 
+Et0/2               Altn BLK 2000000   128.3    P2p 
+### 05:08:58 SW03: show spanning-tree root
+                                        Root    Hello Max Fwd
+Vlan                   Root ID          Cost    Time  Age Dly  Root Port
+---------------- -------------------- --------- ----- --- ---  ------------
+VLAN0001         32769 aabb.cc02.4200         0    2   20  15                  
+VLAN0010          4106 aabb.cc02.4000   2000000    2   20  15  Et0/0           
+VLAN0020          4116 aabb.cc02.4100   2000000    2   20  15  Et0/1           
+VLAN0030            30 aabb.cc02.4000   2000000    2   20  15  Et0/0           
+VLAN0031         12319 aabb.cc02.4200         0    2   20  15                  
+VLAN0032          4128 aabb.cc02.4000   2000000    2   20  15  Et0/0           
+VLAN0033            33 aabb.cc02.4000   2000000    2   20  15  Et0/0           
+VLAN0034         20514 aabb.cc02.4200         0    2   20  15                  
+VLAN0035          4131 aabb.cc02.4000   2000000    2   20  15  Et0/0           
+VLAN0036         28708 aabb.cc02.4100   2000000    2   20  15  Et0/1           
+VLAN0037         28709 aabb.cc02.4000   2000000    2   20  15  Et0/0           
+VLAN0999         33767 aabb.cc02.4000   2000000    2   20  15  Et3/3           
+
+======== M5b short に戻す ========
+### SW01: conf ['spanning-tree pathcost method short']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW02: conf ['spanning-tree pathcost method short']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW03: conf ['spanning-tree pathcost method short']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 30
+### 05:09:29 SW03: show spanning-tree summary | include Pathcost
+Configured Pathcost method used is short
+### 05:09:29 SW03: show spanning-tree vlan 10 | include Et0|Cost
+             Cost        100
+Interface           Role Sts Cost      Prio.Nbr Type
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Altn BLK 100       128.2    P2p 
+Et0/2               Altn BLK 100       128.3    P2p 
+
+======== M9 root guard: SW01(VLAN10 root)Et0/0 に guard root → SW02 VLAN10 priority 0 ========
+### SW01: conf ['interface Ethernet0/0', 'spanning-tree guard root']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW02: conf ['spanning-tree vlan 10 priority 0']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:09:39 SW01: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+VLAN0010             Ethernet0/0                    Root Inconsistent
+VLAN0020             Ethernet0/0                    Root Inconsistent
+VLAN0036             Ethernet0/0                    Root Inconsistent
+
+Number of inconsistent ports (segments) in the system : 3
+### 05:09:39 SW01: show spanning-tree vlan 10
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    10
+             Address     aabb.cc02.4100
+             Cost        200
+             Port        2 (Ethernet0/1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    4106   (priority 4096 sys-id-ext 10)
+             Address     aabb.cc02.4000
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Desg BKN*100       128.1    P2p *ROOT_Inc 
+Et0/1               Root FWD 100       128.2    P2p 
+### 05:09:39 SW01: show spanning-tree interface Ethernet0/0 detail
+ Port 1 (Ethernet0/0) of VLAN0010 is broken  (Root Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.1.
+   Designated root has priority 10, address aabb.cc02.4100
+   Designated bridge has priority 4106, address aabb.cc02.4000
+   Designated port id is 128.1, designated path cost 200
+   Timers: message age 16, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 252, received 21
+
+ Port 1 (Ethernet0/0) of VLAN0020 is broken  (Root Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.1.
+   Designated root has priority 4116, address aabb.cc02.4100
+   Designated bridge has priority 8212, address aabb.cc02.4000
+   Designated port id is 128.1, designated path cost 200
+   Timers: message age 15, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 16, received 260
+
+ Port 1 (Ethernet0/0) of VLAN0030 is designated forwarding 
+   Port path cost 100, Port priority 128, Port Identifier 128.1.
+   Designated root has priority 30, address aabb.cc02.4000
+   Designated bridge has priority 30, address aabb.cc02.4000
+   Designated port id is 128.1, designated path cost 0
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 166, received 11
+
+ Port 1 (Ethernet0/0) of VLAN0031 is designated forwarding 
+   Port path cost 100, Port priority 128, Port Identifier 128.1.
+   Designated root has priority 12319, address aabb.cc02.4200
+   Designated bridge has priority 16415, address aabb.cc02.4000
+   Designated port id is 128.1, designated path cost 100
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 2
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 169, received 9
+
+ Port 1 (Ethernet0/0) of VLAN0032 is designated forwarding 
+   Port path cost 100, Port priority 128, Port Identifier 128.1.
+   Designated root has priority 4128, address aabb.cc02.4000
+   Designated bridge has priority 4128, address aabb.cc02.4000
+   Designated port id is 128.1, designated path cost 0
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 163, received 8
+
+ Port 1 (Ethernet0/0) of VLAN0033 is designated forwarding 
+   Port path cost 100, Port priority 128, Port Identifier 128.1.
+   Designated root has priority 33, address aabb.cc02.4000
+   Designated bridge has priority 33, address aabb.cc02.4000
+   Designated port id is 128.1, designated path cost 0
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 163, received 9
+
+ Port 1 (Ethernet0/0) of VLAN0034 is designated forwarding 
+   Port path cost 100, Port priority 128, Port Identifier 128.1.
+   Designated root has priority 20514, address aabb.cc02.4200
+   Designated bridge has priority 24610, address aabb.cc02.4000
+   Designated port id is 128.1, designated path cost 100
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 2
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 169, received 8
+
+ Port 1 (Ethernet0/0) of VLAN0035 is designated forwarding 
+   Port path cost 100, Port priority 128, Port Identifier 128.1.
+   Designated root has priority 4131, address aabb.cc02.4000
+   Designated bridge has priority 4131, address aabb.cc02.4000
+   Designated port id is 128.1, designated path cost 0
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 163, received 8
+
+ Port 1 (Ethernet0/0) of VLAN0036 is broken  (Root Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.1.
+   Designated root has priority 28708, address aabb.cc02.4100
+   Designated bridge has priority 32804, address aabb.cc02.4000
+   Designated port id is 128.1, designated path cost 200
+   Timers: message age 15, forward delay 0, hold 0
+   Number of transitions to forwarding state: 2
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 32, received 158
+
+ Port 1 (Ethernet0/0) of VLAN0037 is designated forwarding 
+   Port path cost 100, Port priority 128, Port Identifier 128.1.
+   Designated root has priority 28709, address aabb.cc02.4000
+   Designated bridge has priority 28709, address aabb.cc02.4000
+   Designated port id is 128.1, designated path cost 0
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 3
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 168, received 29
+### 05:09:39 SW01: show logging | include SPANTREE
+*Sep 22 05:09:29.338: %SPANTREE-2-ROOTGUARD_CONFIG_CHANGE: Root guard enabled on port Ethernet0/0.
+*Sep 22 05:09:29.345: %SPANTREE-2-ROOTGUARD_BLOCK: Received a superior STP BPDU from bridge aabb.cc02.4100. Root guard blocking port Ethernet0/0 on VLAN0036.
+### 05:09:39 SW02: show spanning-tree vlan 10 | include Root|This|Et0
+  Root ID    Priority    10
+             This bridge is the root
+Et0/0               Desg FWD 100       128.1    P2p 
+Et0/1               Desg FWD 100       128.2    P2p 
+Et0/2               Desg FWD 100       128.3    P2p 
+
+======== M9b SW02 を 8192 に戻す → 復帰の時間 ========
+### SW02: conf ['spanning-tree vlan 10 priority 8192']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 2
+### 05:09:42 SW01: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+VLAN0010             Ethernet0/0                    Root Inconsistent
+VLAN0020             Ethernet0/0                    Root Inconsistent
+VLAN0036             Ethernet0/0                    Root Inconsistent
+
+Number of inconsistent ports (segments) in the system : 3
+### 05:09:42 SW01: show spanning-tree vlan 10 | include Et0/0
+Et0/0               Desg BKN*100       128.1    P2p Dispute *ROOT_Inc 
+### sleep 4
+### 05:09:46 SW01: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+VLAN0020             Ethernet0/0                    Root Inconsistent
+VLAN0036             Ethernet0/0                    Root Inconsistent
+
+Number of inconsistent ports (segments) in the system : 2
+### 05:09:46 SW01: show spanning-tree vlan 10 | include Et0/0
+Et0/0               Desg FWD 100       128.1    P2p 
+### sleep 8
+### 05:09:54 SW01: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+VLAN0020             Ethernet0/0                    Root Inconsistent
+VLAN0036             Ethernet0/0                    Root Inconsistent
+
+Number of inconsistent ports (segments) in the system : 2
+### 05:09:54 SW01: show spanning-tree vlan 10 | include Et0/0
+Et0/0               Desg FWD 100       128.1    P2p 
+### 05:09:54 SW01: show logging | include SPANTREE
+*Sep 22 05:09:29.338: %SPANTREE-2-ROOTGUARD_CONFIG_CHANGE: Root guard enabled on port Ethernet0/0.
+*Sep 22 05:09:29.345: %SPANTREE-2-ROOTGUARD_BLOCK: Received a superior STP BPDU from bridge aabb.cc02.4100. Root guard blocking port Ethernet0/0 on VLAN0036.
+*Sep 22 05:09:44.063: %SPANTREE-2-ROOTGUARD_UNBLOCK: Root guard unblocking port Ethernet0/0 on VLAN0010.
+
+======== M10 loop guard: SW03 Et0/1(VLAN10 Altn)に guard loop・SW02 Et0/1 に bpdufilter で BPDU を止める ========
+### SW03: conf ['interface Ethernet0/1', 'spanning-tree guard loop']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:09:54 SW03: show spanning-tree vlan 10 | include Et0
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Altn BLK 100       128.2    P2p 
+Et0/2               Altn BLK 100       128.3    P2p 
+### SW02: conf ['interface Ethernet0/1', 'spanning-tree bpdufilter enable']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 3
+### 05:09:58 SW03: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+
+Number of inconsistent ports (segments) in the system : 0
+### 05:09:58 SW03: show spanning-tree vlan 10 | include Et0
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Altn BLK 100       128.2    P2p 
+Et0/2               Altn BLK 100       128.3    P2p 
+### sleep 5
+### 05:10:03 SW03: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+VLAN0010             Ethernet0/1                    Loop Inconsistent
+VLAN0020             Ethernet0/1                    Loop Inconsistent
+VLAN0032             Ethernet0/1                    Loop Inconsistent
+VLAN0033             Ethernet0/1                    Loop Inconsistent
+VLAN0035             Ethernet0/1                    Loop Inconsistent
+VLAN0036             Ethernet0/1                    Loop Inconsistent
+VLAN0037             Ethernet0/1                    Loop Inconsistent
+
+Number of inconsistent ports (segments) in the system : 7
+### 05:10:03 SW03: show spanning-tree vlan 10 | include Et0
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Desg BKN*100       128.2    P2p *LOOP_Inc 
+Et0/2               Altn BLK 100       128.3    P2p 
+### sleep 10
+### 05:10:13 SW03: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+VLAN0010             Ethernet0/1                    Loop Inconsistent
+VLAN0020             Ethernet0/1                    Loop Inconsistent
+VLAN0032             Ethernet0/1                    Loop Inconsistent
+VLAN0033             Ethernet0/1                    Loop Inconsistent
+VLAN0035             Ethernet0/1                    Loop Inconsistent
+VLAN0036             Ethernet0/1                    Loop Inconsistent
+VLAN0037             Ethernet0/1                    Loop Inconsistent
+
+Number of inconsistent ports (segments) in the system : 7
+### 05:10:13 SW03: show spanning-tree vlan 10 | include Et0
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Desg BKN*100       128.2    P2p *LOOP_Inc 
+Et0/2               Altn BLK 100       128.3    P2p 
+### 05:10:13 SW03: show spanning-tree interface Ethernet0/1 detail
+ Port 2 (Ethernet0/1) of VLAN0010 is broken  (Loop Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 4106, address aabb.cc02.4000
+   Designated bridge has priority 32778, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 100
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 2
+   Link type is point-to-point by default
+   Loop guard is enabled on the port
+   BPDU: sent 16, received 268
+
+ Port 2 (Ethernet0/1) of VLAN0020 is broken  (Loop Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 4116, address aabb.cc02.4100
+   Designated bridge has priority 32788, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 100
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 2
+   Link type is point-to-point by default
+   Loop guard is enabled on the port
+   BPDU: sent 18, received 262
+
+ Port 2 (Ethernet0/1) of VLAN0030 is designated forwarding 
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 30, address aabb.cc02.4000
+   Designated bridge has priority 24606, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 100
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 3
+   Link type is point-to-point by default
+   Loop guard is enabled on the port
+   BPDU: sent 173, received 18
+
+ Port 2 (Ethernet0/1) of VLAN0031 is designated forwarding 
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 12319, address aabb.cc02.4200
+   Designated bridge has priority 12319, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 0
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   Link type is point-to-point by default
+   Loop guard is enabled on the port
+   BPDU: sent 170, received 17
+
+ Port 2 (Ethernet0/1) of VLAN0032 is broken  (Loop Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 4128, address aabb.cc02.4000
+   Designated bridge has priority 32800, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 100
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 0
+   Link type is point-to-point by default
+   Loop guard is enabled on the port
+   BPDU: sent 6, received 172
+
+ Port 2 (Ethernet0/1) of VLAN0033 is broken  (Loop Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 33, address aabb.cc02.4000
+   Designated bridge has priority 32801, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 100
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   Link type is point-to-point by default
+   Loop guard is enabled on the port
+   BPDU: sent 6, received 172
+
+ Port 2 (Ethernet0/1) of VLAN0034 is designated forwarding 
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 20514, address aabb.cc02.4200
+   Designated bridge has priority 20514, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 0
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 2
+   Link type is point-to-point by default
+   Loop guard is enabled on the port
+   BPDU: sent 164, received 21
+
+ Port 2 (Ethernet0/1) of VLAN0035 is broken  (Loop Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 4131, address aabb.cc02.4000
+   Designated bridge has priority 32803, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 100
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   Link type is point-to-point by default
+   Loop guard is enabled on the port
+   BPDU: sent 6, received 171
+
+ Port 2 (Ethernet0/1) of VLAN0036 is broken  (Loop Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 28708, address aabb.cc02.4100
+   Designated bridge has priority 32804, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 100
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 5
+   Link type is point-to-point by default
+   Loop guard is enabled on the port
+   BPDU: sent 23, received 170
+
+ Port 2 (Ethernet0/1) of VLAN0037 is broken  (Loop Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 28709, address aabb.cc02.4000
+   Designated bridge has priority 32805, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 100
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 7
+   Link type is point-to-point by default
+   Loop guard is enabled on the port
+   BPDU: sent 20, received 174
+### 05:10:13 SW03: show logging | include SPANTREE
+*Sep 22 05:09:59.068: %SPANTREE-2-LOOPGUARD_BLOCK: Loop guard blocking port Ethernet0/1 on VLAN0010.
+
+======== M10b bpdufilter 解除 → 復帰 ========
+### SW02: conf ['interface Ethernet0/1', 'no spanning-tree bpdufilter enable']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:10:19 SW03: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+
+Number of inconsistent ports (segments) in the system : 0
+### 05:10:19 SW03: show spanning-tree vlan 10 | include Et0
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Altn BLK 100       128.2    P2p 
+Et0/2               Altn BLK 100       128.3    P2p 
+### 05:10:20 SW03: show logging | include SPANTREE
+*Sep 22 05:09:59.068: %SPANTREE-2-LOOPGUARD_BLOCK: Loop guard blocking port Ethernet0/1 on VLAN0010.
+*Sep 22 05:10:14.084: %SPANTREE-2-LOOPGUARD_UNBLOCK: Loop guard unblocking port Ethernet0/1 on VLAN0020.
+*Sep 22 05:10:15.131: %SPANTREE-2-LOOPGUARD_UNBLOCK: Loop guard unblocking port Ethernet0/1 on VLAN0032.
+
+======== M10c 同一 IF で guard loop → guard root(後勝ちか) ========
+### SW03: conf ['interface Ethernet0/1', 'spanning-tree guard root']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:10:20 SW03: show running-config interface Ethernet0/1
+Building configuration...
+
+Current configuration : 159 bytes
+!
+interface Ethernet0/1
+ switchport trunk encapsulation dot1q
+ switchport trunk allowed vlan 10,20,30-37
+ switchport mode trunk
+ spanning-tree guard root
+end
+### SW03: conf ['interface Ethernet0/1', 'no spanning-tree guard']
+Enter configuration commands, one per line.  End with CNTL/Z.
+
+======== M10d global loopguard default + IF guard root ========
+### SW03: conf ['spanning-tree loopguard default', 'interface Ethernet0/1', 'spanning-tree guard root']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:10:25 SW03: show spanning-tree interface Ethernet0/1 detail
+ Port 2 (Ethernet0/1) of VLAN0010 is broken  (Root Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 4106, address aabb.cc02.4000
+   Designated bridge has priority 32778, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 100
+   Timers: message age 15, forward delay 0, hold 0
+   Number of transitions to forwarding state: 2
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 18, received 275
+
+ Port 2 (Ethernet0/1) of VLAN0020 is broken  (Root Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 4116, address aabb.cc02.4100
+   Designated bridge has priority 32788, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 100
+   Timers: message age 15, forward delay 0, hold 0
+   Number of transitions to forwarding state: 3
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 22, received 270
+
+ Port 2 (Ethernet0/1) of VLAN0030 is designated forwarding 
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 30, address aabb.cc02.4000
+   Designated bridge has priority 24606, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 100
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 3
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 179, received 19
+
+ Port 2 (Ethernet0/1) of VLAN0031 is designated forwarding 
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 12319, address aabb.cc02.4200
+   Designated bridge has priority 12319, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 0
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 2
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 177, received 22
+
+ Port 2 (Ethernet0/1) of VLAN0032 is broken  (Root Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 4128, address aabb.cc02.4000
+   Designated bridge has priority 32800, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 100
+   Timers: message age 15, forward delay 0, hold 0
+   Number of transitions to forwarding state: 0
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 7, received 178
+
+ Port 2 (Ethernet0/1) of VLAN0033 is broken  (Root Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 33, address aabb.cc02.4000
+   Designated bridge has priority 32801, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 100
+   Timers: message age 15, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 7, received 178
+
+ Port 2 (Ethernet0/1) of VLAN0034 is designated forwarding 
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 20514, address aabb.cc02.4200
+   Designated bridge has priority 20514, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 0
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 3
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 171, received 26
+
+ Port 2 (Ethernet0/1) of VLAN0035 is broken  (Root Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 4131, address aabb.cc02.4000
+   Designated bridge has priority 32803, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 100
+   Timers: message age 15, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 7, received 177
+
+ Port 2 (Ethernet0/1) of VLAN0036 is broken  (Root Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 28708, address aabb.cc02.4100
+   Designated bridge has priority 32804, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 100
+   Timers: message age 15, forward delay 0, hold 0
+   Number of transitions to forwarding state: 6
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 29, received 179
+
+ Port 2 (Ethernet0/1) of VLAN0037 is broken  (Root Inconsistent)
+   Port path cost 100, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 28709, address aabb.cc02.4000
+   Designated bridge has priority 32805, address aabb.cc02.4200
+   Designated port id is 128.2, designated path cost 100
+   Timers: message age 15, forward delay 0, hold 0
+   Number of transitions to forwarding state: 7
+   Link type is point-to-point by default
+   Root guard is enabled on the port
+   BPDU: sent 22, received 180
+### 05:10:26 SW03: show spanning-tree summary | include Loopguard
+Loopguard Default                      is enabled
+### SW03: conf ['no spanning-tree loopguard default', 'interface Ethernet0/1', 'no spanning-tree guard']
+Enter configuration commands, one per line.  End with CNTL/Z.
+
+======== M12 errdisable recovery の既定 ========
+### 05:10:26 SW02: show errdisable recovery
+ErrDisable Reason            Timer Status
+-----------------            --------------
+arp-inspection               Disabled
+bpduguard                    Disabled
+channel-misconfig            Disabled
+dhcp-rate-limit              Disabled
+dtp-flap                     Disabled
+evpn-mh-core-isolation       Disabled
+gbic-invalid                 Disabled
+inline-power                 Disabled
+l2ptguard                    Disabled
+link-flap                    Disabled
+mac-limit                    Disabled
+link-monitor-failure         Disabled
+loopback                     Disabled
+loopdetect                   Disabled
+oam-remote-failure           Disabled
+pagp-flap                    Disabled
+port-mode-failure            Disabled
+pppoe-ia-rate-limit          Disabled
+psecure-violation            Disabled
+security-violation           Disabled
+sfp-config-mismatch          Disabled
+storm-control                Disabled
+udld                         Disabled
+unicast-flood                Disabled
+vmps                         Disabled
+psp                          Disabled
+dual-active-recovery         Disabled
+evc-lite input mapping fa    Disabled
+mrp-miscabling               Disabled
+
+Timer interval: 300 seconds
+
+Interfaces that will be enabled at the next timeout:
+
+======== M8 同一ポートに bpduguard + bpdufilter(SW02 Et0/2)→ shut/no shut ========
+### SW02: conf ['interface Ethernet0/2', 'spanning-tree bpduguard enable', 'spanning-tree bpdufilter enable', 'shutdown', 'no shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:10:41 SW02: show interfaces Ethernet0/2 status
+Port         Name               Status       Vlan       Duplex  Speed Type
+Et0/2                           connected    trunk        full   auto 10/100/1000BaseTX
+### 05:10:41 SW02: show spanning-tree interface Ethernet0/2 detail
+ Port 3 (Ethernet0/2) of VLAN0010 is designated blocking 
+   Port path cost 100, Port priority 128, Port Identifier 128.3.
+   Designated root has priority 4106, address aabb.cc02.4000
+   Designated bridge has priority 8202, address aabb.cc02.4100
+   Designated port id is 128.3, designated path cost 100
+   Timers: message age 0, forward delay 2, hold 0
+   Number of transitions to forwarding state: 0
+   Link type is point-to-point by default
+   Bpdu guard is enabled
+   Bpdu filter is enabled
+   BPDU: sent 0, received 0
+
+ Port 3 (Ethernet0/2) of VLAN0020 is designated blocking 
+   Port path cost 100, Port priority 128, Port Identifier 128.3.
+   Designated root has priority 4116, address aabb.cc02.4100
+   Designated bridge has priority 4116, address aabb.cc02.4100
+   Designated port id is 128.3, designated path cost 0
+   Timers: message age 0, forward delay 2, hold 0
+   Number of transitions to forwarding state: 0
+   Link type is point-to-point by default
+   Bpdu guard is enabled
+   Bpdu filter is enabled
+   BPDU: sent 0, received 0
+
+ Port 3 (Ethernet0/2) of VLAN0030 is designated blocking 
+   Port path cost 100, Port priority 128, Port Identifier 128.3.
+   Designated root has priority 30, address aabb.cc02.4000
+   Designated bridge has priority 32798, address aabb.cc02.4100
+   Designated port id is 128.3, designated path cost 100
+   Timers: message age 0, forward delay 2, hold 0
+   Number of transitions to forwarding state: 0
+   Link type is point-to-point by default
+   Bpdu guard is enabled
+   Bpdu filter is enabled
+   BPDU: sent 0, received 0
+
+ Port 3 (Ethernet0/2) of VLAN0031 is designated blocking 
+   Port path cost 100, Port priority 128, Port Identifier 128.3.
+   Designated root has priority 12319, address aabb.cc02.4200
+   Designated bridge has priority 32799, address aabb.cc02.4100
+   Designated port id is 128.3, designated path cost 100
+   Timers: message age 0, forward delay 2, hold 0
+   Number of transitions to forwarding state: 0
+   Link type is point-to-point by default
+   Bpdu guard is enabled
+   Bpdu filter is enabled
+   BPDU: sent 0, received 0
+
+ Port 3 (Ethernet0/2) of VLAN0032 is designated blocking 
+   Port path cost 100, Port priority 128, Port Identifier 128.3.
+   Designated root has priority 4128, address aabb.cc02.4000
+   Designated bridge has priority 32800, address aabb.cc02.4100
+   Designated port id is 128.3, designated path cost 100
+   Timers: message age 0, forward delay 2, hold 0
+   Number of transitions to forwarding state: 0
+   Link type is point-to-point by default
+   Bpdu guard is enabled
+   Bpdu filter is enabled
+   BPDU: sent 0, received 0
+
+ Port 3 (Ethernet0/2) of VLAN0033 is designated blocking 
+   Port path cost 100, Port priority 128, Port Identifier 128.3.
+   Designated root has priority 33, address aabb.cc02.4000
+   Designated bridge has priority 32801, address aabb.cc02.4100
+   Designated port id is 128.3, designated path cost 100
+   Timers: message age 0, forward delay 2, hold 0
+   Number of transitions to forwarding state: 0
+   Link type is point-to-point by default
+   Bpdu guard is enabled
+   Bpdu filter is enabled
+   BPDU: sent 0, received 0
+
+ Port 3 (Ethernet0/2) of VLAN0034 is designated blocking 
+   Port path cost 100, Port priority 128, Port Identifier 128.3.
+   Designated root has priority 20514, address aabb.cc02.4200
+   Designated bridge has priority 32802, address aabb.cc02.4100
+   Designated port id is 128.3, designated path cost 100
+   Timers: message age 0, forward delay 2, hold 0
+   Number of transitions to forwarding state: 0
+   Link type is point-to-point by default
+   Bpdu guard is enabled
+   Bpdu filter is enabled
+   BPDU: sent 0, received 0
+
+ Port 3 (Ethernet0/2) of VLAN0035 is designated blocking 
+   Port path cost 100, Port priority 128, Port Identifier 128.3.
+   Designated root has priority 4131, address aabb.cc02.4000
+   Designated bridge has priority 28707, address aabb.cc02.4100
+   Designated port id is 128.3, designated path cost 100
+   Timers: message age 0, forward delay 2, hold 0
+   Number of transitions to forwarding state: 0
+   Link type is point-to-point by default
+   Bpdu guard is enabled
+   Bpdu filter is enabled
+   BPDU: sent 0, received 0
+
+ Port 3 (Ethernet0/2) of VLAN0036 is designated blocking 
+   Port path cost 100, Port priority 128, Port Identifier 128.3.
+   Designated root has priority 28708, address aabb.cc02.4100
+   Designated bridge has priority 28708, address aabb.cc02.4100
+   Designated port id is 128.3, designated path cost 0
+   Timers: message age 0, forward delay 2, hold 0
+   Number of transitions to forwarding state: 0
+   Link type is point-to-point by default
+   Bpdu guard is enabled
+   Bpdu filter is enabled
+   BPDU: sent 0, received 0
+
+ Port 3 (Ethernet0/2) of VLAN0037 is designated blocking 
+   Port path cost 100, Port priority 128, Port Identifier 128.3.
+   Designated root has priority 28709, address aabb.cc02.4000
+   Designated bridge has priority 28709, address aabb.cc02.4100
+   Designated port id is 128.3, designated path cost 100
+   Timers: message age 0, forward delay 2, hold 0
+   Number of transitions to forwarding state: 0
+   Link type is point-to-point by default
+   Bpdu guard is enabled
+   Bpdu filter is enabled
+   BPDU: sent 0, received 0
+### 05:10:42 SW02: show logging | include BPDUGUARD|ERR
+
+
+======== M8b bpdufilter を外す → bpduguard 発火 ========
+### SW02: conf ['interface Ethernet0/2', 'no spanning-tree bpdufilter enable']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:10:50 SW02: show interfaces Ethernet0/2 status
+Port         Name               Status       Vlan       Duplex  Speed Type
+Et0/2                           err-disabled 1            full   auto 10/100/1000BaseTX
+### 05:10:50 SW02: show interfaces status err-disabled
+Port         Name         Status       Reason               Err-disabled Vlans
+
+Et0/2                     err-disabled bpduguard
+### 05:10:50 SW02: show logging | include BPDUGUARD|ERR
+*Sep 22 05:10:42.525: %SPANTREE-2-BLOCK_BPDUGUARD: Received BPDU from bridge aabb.cc02.4200 on port Et0/2 with BPDU Guard enabled. Disabling port.
+*Sep 22 05:10:42.525: %PM-4-ERR_DISABLE: bpduguard error detected on Et0/2, putting Et0/2 in err-disable state
+
+======== M12b recovery 有効化(interval 29 を試し 30 に) ========
+### SW02: conf ['errdisable recovery cause bpduguard', 'errdisable recovery interval 29', 'errdisable recovery interval 30']
+Enter configuration commands, one per line.  End with CNTL/Z.
+                                          ^
+% Invalid input detected at '^' marker.
+### 05:10:50 SW02: show errdisable recovery
+ErrDisable Reason            Timer Status
+-----------------            --------------
+arp-inspection               Disabled
+bpduguard                    Enabled
+channel-misconfig            Disabled
+dhcp-rate-limit              Disabled
+dtp-flap                     Disabled
+evpn-mh-core-isolation       Disabled
+gbic-invalid                 Disabled
+inline-power                 Disabled
+l2ptguard                    Disabled
+link-flap                    Disabled
+mac-limit                    Disabled
+link-monitor-failure         Disabled
+loopback                     Disabled
+loopdetect                   Disabled
+oam-remote-failure           Disabled
+pagp-flap                    Disabled
+port-mode-failure            Disabled
+pppoe-ia-rate-limit          Disabled
+psecure-violation            Disabled
+security-violation           Disabled
+sfp-config-mismatch          Disabled
+storm-control                Disabled
+udld                         Disabled
+unicast-flood                Disabled
+vmps                         Disabled
+psp                          Disabled
+dual-active-recovery         Disabled
+evc-lite input mapping fa    Disabled
+mrp-miscabling               Disabled
+
+Timer interval: 30 seconds
+
+Interfaces that will be enabled at the next timeout:
+
+Interface        Errdisable reason       Time left(sec)
+---------        -----------------       --------------
+Et0/2                    bpduguard          299
+### sleep 40
+### 05:11:30 SW02: show logging | include ERR|BPDUGUARD|RECOV|LINK
+*Sep 22 05:10:42.525: %SPANTREE-2-BLOCK_BPDUGUARD: Received BPDU from bridge aabb.cc02.4200 on port Et0/2 with BPDU Guard enabled. Disabling port.
+*Sep 22 05:10:42.525: %PM-4-ERR_DISABLE: bpduguard error detected on Et0/2, putting Et0/2 in err-disable state
+*Sep 22 05:10:44.525: %LINK-5-UPDOWN: Interface Ethernet0/2, changed state to down
+### 05:11:30 SW02: show interfaces Ethernet0/2 status
+Port         Name               Status       Vlan       Duplex  Speed Type
+Et0/2                           err-disabled 1            full   auto 10/100/1000BaseTX
+
+======== 後始末 bpduguard 外す・recovery 既定へ ========
+### SW02: conf ['interface Ethernet0/2', 'no spanning-tree bpduguard enable', 'shutdown', 'no shutdown', 'exit', 'no errdisable recovery cause bpduguard', 'no errdisable recovery interval']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW01: conf ['interface Ethernet0/0', 'no spanning-tree guard']
+Enter configuration commands, one per line.  End with CNTL/Z.

@@ -1,0 +1,54 @@
+{
+  "fixes": [
+    {
+      "node": "RT01",
+      "lines": [
+        "ip prefix-list PL-CORE-IN seq 5 permit 10.0.0.0/8 le 32",
+        "ip prefix-list PL-CORE-IN seq 10 permit 172.28.0.0/16 le 32",
+        "access-list 6 permit 10.46.76.0 0.0.0.255",
+        "access-list 6 permit 10.46.82.0 0.0.0.255",
+        "access-list 14 permit 10.46.72.0 0.0.0.255",
+        "access-list 23 permit 172.28.96.0",
+        "access-list 67 permit 10.7.83.0 0.0.0.255",
+        "access-list 67 permit 10.7.78.0 0.0.0.255"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "route-map RM-FROM-OSPF permit 10"
+      ],
+      "lines": [
+        "match ip address 67"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "router eigrp 65301"
+      ],
+      "lines": [
+        "distribute-list prefix PL-CORE-IN in Ethernet0/0",
+        "offset-list 6 in 4000 Ethernet0/0",
+        "offset-list 14 in 4000 Ethernet0/1",
+        "redistribute ospf 12 metric 1000000 1 255 1 1500 route-map RM-FROM-OSPF"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "router ospf 12"
+      ],
+      "lines": [
+        "redistribute eigrp 65301 subnets",
+        "distribute-list 23 out eigrp 65301"
+      ]
+    },
+    {
+      "node": "RT01",
+      "lines": [
+        "access-list 67 permit 10.7.87.0 0.0.0.255"
+      ]
+    }
+  ]
+}

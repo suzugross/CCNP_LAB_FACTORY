@@ -1,0 +1,138 @@
+- note: M5 spt-threshold infinity(受信側 DR= RT08 と RT04 の両方)→ 共有木に留まるか
+- node: RT04
+  conf:
+  - ip pim spt-threshold infinity
+  show:
+  - clear ip mroute 239.1.1.1
+- node: RT08
+  conf:
+  - ip pim spt-threshold infinity
+  show:
+  - clear ip mroute 239.1.1.1
+- sleep: 5
+- node: RT01
+  show:
+  - ping 239.1.1.1 repeat 5 source Ethernet0/0
+- node: RT08
+  show:
+  - show ip mroute 239.1.1.1 | include \(|flags|Incoming|Ethernet|Null
+- node: RT04
+  show:
+  - show ip mroute 239.1.1.1 | include \(|flags|Incoming|Ethernet|Null
+- node: RT03
+  show:
+  - show ip mroute 239.1.1.1 | include \(|flags|Incoming|Ethernet|Null
+- node: RT02
+  show:
+  - show ip mroute 239.1.1.1 | include \(|flags|Incoming|Ethernet|Null
+- node: RT04
+  conf:
+  - no ip pim spt-threshold infinity
+- node: RT08
+  conf:
+  - no ip pim spt-threshold infinity
+- note: M6 IGMPv2 の離脱(RT06 が leave)→ 何秒でグループが消えるか
+- node: RT06
+  conf:
+  - interface Ethernet0/0
+  - no ip igmp join-group 239.1.1.1
+- sleep: 1
+- node: RT04
+  show:
+  - show ip igmp groups 239.1.1.1
+- sleep: 2
+- node: RT04
+  show:
+  - show ip igmp groups 239.1.1.1
+- sleep: 3
+- node: RT04
+  show:
+  - show ip igmp groups 239.1.1.1
+- node: SW01
+  show:
+  - show ip igmp snooping groups
+- note: 'M7 DR priority: RT04 に dr-priority 10 → DR が RT04 に'
+- node: RT04
+  conf:
+  - interface Ethernet0/2
+  - ip pim dr-priority 10
+  wait: 35
+  show:
+  - show ip pim interface Ethernet0/2
+  - show ip pim neighbor Ethernet0/2
+- node: RT04
+  conf:
+  - interface Ethernet0/2
+  - no ip pim dr-priority
+- note: 'M8 SSM: 全ルータ ip pim ssm default・受信 LAN を IGMPv3 に・RT07 が (10.0.12.1, 232.1.1.1)
+    に参加'
+- node: RT02
+  conf:
+  - ip pim ssm default
+- node: RT03
+  conf:
+  - ip pim ssm default
+- node: RT04
+  conf:
+  - ip pim ssm default
+- node: RT05
+  conf:
+  - ip pim ssm default
+- node: RT08
+  conf:
+  - ip pim ssm default
+- node: RT04
+  conf:
+  - interface Ethernet0/2
+  - ip igmp version 3
+- node: RT08
+  conf:
+  - interface Ethernet0/0
+  - ip igmp version 3
+- node: RT07
+  conf:
+  - interface Ethernet0/0
+  - ip igmp version 3
+  - ip igmp join-group 232.1.1.1 source 10.0.12.1
+  wait: 10
+- node: RT08
+  show:
+  - show ip igmp groups 232.1.1.1 detail
+  - show ip mroute 232.1.1.1 | include \(|flags|Incoming|Ethernet|Null
+  - show ip igmp interface Ethernet0/0 | include version|querying
+- node: RT04
+  show:
+  - show ip igmp groups 232.1.1.1 detail
+  - show ip mroute 232.1.1.1 | include \(|flags|Incoming|Ethernet|Null
+  - show ip igmp interface Ethernet0/2 | include version|querying
+- node: RT03
+  show:
+  - show ip mroute 232.1.1.1
+- node: RT01
+  show:
+  - ping 232.1.1.1 repeat 5 source Ethernet0/0
+- node: SW01
+  show:
+  - show ip igmp snooping groups
+- note: M8b SSM 範囲に IGMPv2 で(送信元なしで)参加すると?(RT06 は v2 ホストのまま 232.2.2.2)
+- node: RT06
+  conf:
+  - interface Ethernet0/0
+  - ip igmp join-group 232.2.2.2
+  wait: 8
+- node: RT08
+  show:
+  - show ip igmp groups 232.2.2.2
+  - show ip mroute 232.2.2.2
+- node: RT04
+  show:
+  - show ip igmp groups 232.2.2.2
+  - show ip mroute 232.2.2.2
+- node: RT06
+  conf:
+  - interface Ethernet0/0
+  - no ip igmp join-group 232.2.2.2
+- node: RT08
+  show:
+  - show ip pim rp mapping
+  - show running-config | include ssm

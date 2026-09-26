@@ -81,6 +81,49 @@ CMDS = [
     ("timers active-time 5", "topo", None),
     ("default-information in", "topo", None),
 ]
+# ★2026-09-20(ユーザ指示「実機がこうだから、だけの解説はさみしい。せめてその
+#   コマンドは何をするためのものかが欲しい」): コマンドの**役割**を持たせ、解答の
+#   解説に「何をするコマンドか → だからこのモード」の1文を出す。
+#   モードの性格(何を決める階層か)は MODE_ROLE。
+MODE_ROLE = {
+    "router": "EIGRP プロセス全体(どのアドレス ファミリを動かすか)を決める階層",
+    "af": "そのアドレス ファミリ全体(参加インターフェイス・隣接・ルータ ID)を決める階層",
+    "afi": "インターフェイスごとの振る舞いを決める階層",
+    "topo": "経路の計算と制御(再配送・距離・フィルタ・負荷分散)を決める階層",
+}
+PURPOSE = {
+    "address-family ipv4 unicast autonomous-system 100":
+        "名前付き EIGRP で IPv4 ユニキャストのアドレス ファミリを AS 100 として開始する",
+    "network 10.0.0.0": "そのアドレス ファミリで EIGRP を動かすインターフェイスを、アドレスの一致で選ぶ",
+    "eigrp router-id 1.1.1.1": "このプロセスのルータ ID を手で決める(外部経路のループ検知などに使われる)",
+    "eigrp stub connected summary": "スタブとして広告する経路の種類を限定し、隣接からの Query を受けないようにする",
+    "neighbor 10.0.0.2 Ethernet0/0": "マルチキャストの Hello ではなく、指定した相手とユニキャストで隣接を組む",
+    "metric weights 0 1 0 1 0 0": "メトリック計算の K 値(帯域・遅延などの重み)を変える",
+    "af-interface Ethernet0/0": "そのインターフェイス向けの設定階層へ入る(af-interface default で全 IF の既定)",
+    "topology base": "経路の計算と制御(再配送・距離・フィルタ)を書く階層へ入る",
+    "passive-interface": "そのインターフェイスで Hello を出さず隣接を作らない(経路の広告対象からは外れない)",
+    "authentication mode md5": "そのインターフェイスの隣接認証の方式を決める",
+    "authentication key-chain KC1": "隣接認証に使うキーチェーンを指定する",
+    "hello-interval 5": "そのインターフェイスの Hello の送出間隔(秒)を変える",
+    "hold-time 15": "隣接が落ちたとみなすまでの保持時間(秒)を変える",
+    "split-horizon": "学んだインターフェイスへ同じ経路を返さないようにする(既定で有効・DMVPN のハブでは無効にする)",
+    "next-hop-self": "広告する経路の next-hop を自分にする(既定で有効・DMVPN のフェーズ 2 では無効にする)",
+    "summary-address 172.16.0.0/16": "そのインターフェイスから出す広告を手動で集約する",
+    "bandwidth-percent 50": "EIGRP のパケットがそのインターフェイスの帯域のうち使ってよい割合を決める",
+    "bfd": "そのインターフェイスで BFD による高速な障害検知を EIGRP に使わせる",
+    "redistribute ospf 1 metric 100000 100 255 1 1500": "他のプロトコルの経路を EIGRP に取り込む",
+    "variance 2": "FD の何倍までの実行可能後継を不等コスト負荷分散に使うかを決める",
+    "distance eigrp 90 170": "内部/外部の EIGRP 経路のアドミニストレーティブ ディスタンスを変える",
+    "offset-list 10 in 1000 Ethernet0/0": "該当する経路のメトリックに下駄を履かせて経路選択を変える",
+    "distribute-list prefix PL1 in": "受け取る(または広告する)経路をフィルタする",
+    "maximum-paths 2": "同時に使う等コスト経路の本数(variance と併用すれば不等コストも)を決める",
+    "auto-summary": "クラスフル境界で自動集約する(IOS 15 以降は既定で無効)",
+    "default-metric 100000 100 255 1 1500": "再配送する経路に既定のメトリックを与える",
+    "metric maximum-hops 50": "この値を超えるホップ数の経路を到達不能として扱う",
+    "timers active-time 5": "Query が返らないまま SIA と判定するまでの時間(分)を決める",
+    "default-information in": "既定経路(0.0.0.0/0)を受け入れる/広告するかを制御する",
+}
+
 CMD_BY_MODE = {}
 for c, m, _ in CMDS:
     CMD_BY_MODE.setdefault(m, []).append(c)
@@ -202,7 +245,9 @@ def build_choices_select(d, rnd):
         if m == d["mode"]:
             c.append((MODE_JA[m], True, ""))
         else:
-            c.append((MODE_JA[m], False, f"`{d['cmd']}` は {MODES[m]} では受け付けられない(実機の `?` に無い)。"))
+            c.append((MODE_JA[m], False,
+                      f"`{d['cmd']}` は {MODES[m]} では受け付けられない(実機の `?` に無い)。"
+                      f"{MODES[m]} は{MODE_ROLE[m]}である。"))
     return c
 
 
@@ -238,7 +283,8 @@ def build_choices_allthat(d, rnd):
     c = [(t, True, "") for t in trues]
     for f in falses:
         fm = next(m for cc, m, _ in CMDS if cc == f)
-        c.append((f, False, f"`{f}` は {MODES[fm]} で入力する。"))
+        c.append((f, False, f"`{f}` は{PURPOSE.get(f, '')}コマンドで、{MODES[fm]} で入力する。"
+                  if PURPOSE.get(f) else f"`{f}` は {MODES[fm]} で入力する。"))
     order = list(range(len(c)))
     rnd.shuffle(order)
     return [c[i] for i in order]
@@ -388,15 +434,50 @@ def question_body(d, choices, form):
     return before, ask, ch_md, ""
 
 
+def _roles(cmds):
+    rows = [f"- `{c}` — {PURPOSE[c]}（{MODES[m]}）"
+            for c, m in cmds if c in PURPOSE]
+    return ("### 出題されたコマンドの役割\n\n" + "\n".join(rows) + "\n\n") if rows else ""
+
+
+def _lead(d, form=None, choices=()):
+    """「そのコマンドは何をするためのものか」を書く(2026-09-20・機械導出の解説の補強)。
+
+    モードの対応表(CORE)だけだと「実機がこうだから」で終わってしまうので、
+    **役割 → だからこの階層**の順に書く。役割が分かっていないコマンドは書かない。
+    「すべて選べ」形は 1 コマンドの話ではないので、出題された全コマンドの役割を並べる。
+    """
+    if d["kind"] != "named_mode":
+        return ""
+    if form == "allthat":
+        mode = d.get("allthat_mode", d["mode"])
+        cmds = [(t, next((m for c, m, _ in CMDS if c == t), None))
+                for t, _ok, _w in choices]
+        return (f"{MODES[mode]} は{MODE_ROLE[mode]}である。\n\n"
+                + _roles([(c, m) for c, m in cmds if m]))
+    cmd, mode = d["cmd"], d["mode"]
+    p = PURPOSE.get(cmd)
+    if not p:
+        return ""
+    return (f"`{cmd}` は{p}コマンドである。{MODES[mode]} は{MODE_ROLE[mode]}なので、"
+            f"このコマンドはそこに入る。\n\n")
+
+
+def _match_roles(d):
+    """組合せ形: 出題された 4 コマンドの役割を並べる(どれが何をするかで解ける形にする)。"""
+    return _roles(d.get("_match") or [])
+
+
 def answer_body(d, choices, form):
     if form == "match":
         terms, ch, ans = choices
-        return "\n".join(["## 正解", "", "**" + "、".join(f"{k}－{v}" for k, v in ans.items()) + "**", "", "## 解説", "", CORE[d["kind"]]])
+        return "\n".join(["## 正解", "", "**" + "、".join(f"{k}－{v}" for k, v in ans.items()) + "**",
+                          "", "## 解説", "", _match_roles(d) + CORE[d["kind"]]])
     keys = [k for k, (t, ok, w) in zip("ABCDEFG", choices) if ok]
     lines = ["## 正解", "", "**" + "、".join(keys) + "**", "", "## 各選択肢の判定", ""]
     for k, (t, ok, w) in zip("ABCDEFG", choices):
         lines.append(f"- **{k}**: {'(正解)' if ok else w}")
-    lines += ["", "## 解説", "", CORE[d["kind"]]]
+    lines += ["", "## 解説", "", _lead(d, form, choices) + CORE[d["kind"]]]
     if d["kind"] == "autosum":
         lines += ["", f"- 仕込み: 境界ルータ= {[d['names'][i] for i in d['boundary']]} / リンクのメジャー= {d['links']}",
                   "- 実測(poc/paper-kb P6): 全台 auto-summary で疎通 0%・非境界 fix は無効・片側境界 fix で疎通は戻るが個別経路は要約のみ・両側 fix で個別経路"]

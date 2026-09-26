@@ -1,0 +1,125 @@
+
+======== T5a 監査ポート(SW03 Et0/2=access10+portfast+bpduguard / SW04 Et0/2=access99)を no shut ========
+### SW04: conf ['interface Ethernet0/2', 'no shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW03: conf ['interface Ethernet0/2', 'no shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:57:26 SW03: show interfaces status err-disabled
+Port         Name         Status       Reason               Err-disabled Vlans
+
+Et0/2                     err-disabled bpduguard
+### 07:57:26 SW03: show logging | include BPDUGUARD|ERR_DISABLE
+*Sep 22 07:57:18.556: %SPANTREE-2-BLOCK_BPDUGUARD: Received BPDU from bridge aabb.cc02.4f00 on port Et0/2 with BPDU Guard enabled. Disabling port.
+*Sep 22 07:57:18.556: %PM-4-ERR_DISABLE: bpduguard error detected on Et0/2, putting Et0/2 in err-disable state
+### 07:57:26 SW03: show spanning-tree interface Ethernet0/2 detail
+no spanning tree info available for Ethernet0/2 
+### 07:57:26 SW04: show spanning-tree vlan 99
+VLAN0099
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    32867
+             Address     aabb.cc02.4f00
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32867  (priority 32768 sys-id-ext 99)
+             Address     aabb.cc02.4f00
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/2               Desg FWD 100       128.3    P2p 
+### 07:57:26 SW04: show interfaces Ethernet0/2 status
+Port         Name               Status       Vlan       Duplex  Speed Type
+Et0/2                           connected    99           full   auto 10/100/1000BaseTX
+### SW03: conf ['interface Ethernet0/2', 'shutdown', 'spanning-tree bpdufilter enable']
+Enter configuration commands, one per line.  End with CNTL/Z.
+
+======== T5b 同じポートに bpdufilter を足した状態で no shut(filter 勝ち・ループしないこと) ========
+### SW03: conf ['interface Ethernet0/2', 'no shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:57:42 SW03: show interfaces status err-disabled
+
+### 07:57:42 SW03: show interfaces Ethernet0/2 status
+Port         Name               Status       Vlan       Duplex  Speed Type
+Et0/2                           connected    10           full   auto 10/100/1000BaseTX
+### 07:57:42 SW03: show spanning-tree interface Ethernet0/2 detail
+ Port 3 (Ethernet0/2) of VLAN0010 is designated forwarding 
+   Port path cost 100, Port priority 128, Port Identifier 128.3.
+   Designated root has priority 4106, address aabb.cc02.4c00
+   Designated bridge has priority 32778, address aabb.cc02.4e00
+   Designated port id is 128.3, designated path cost 100
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   The port is in the portfast mode
+   Link type is point-to-point by default
+   Bpdu guard is enabled
+   Bpdu filter is enabled
+   BPDU: sent 0, received 0
+### 07:57:42 SW03: ping 10.76.10.4 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.76.10.4, timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/1 ms
+### 07:57:42 SW03: show processes cpu | include CPU
+CPU utilization for five seconds: 0%/0%; one minute: 0%; five minutes: 0%
+  51           0         104          0  0.00%  0.00%  0.00%   0 CPUHOG process   
+### 07:57:42 SW04: show spanning-tree vlan 99
+VLAN0099
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    32867
+             Address     aabb.cc02.4f00
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32867  (priority 32768 sys-id-ext 99)
+             Address     aabb.cc02.4f00
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/2               Desg FWD 100       128.3    P2p 
+### 07:57:42 SW04: show mac address-table dynamic vlan 99
+          Mac Address Table
+-------------------------------------------
+
+Vlan    Mac Address       Type        Ports
+----    -----------       --------    -----
+  99    aabb.cc02.4e20    DYNAMIC     Et0/2
+  99    aabb.cc82.4e00    DYNAMIC     Et0/2
+Total Mac Addresses for this criterion: 2
+### 07:57:42 SW04: show processes cpu | include CPU
+CPU utilization for five seconds: 0%/0%; one minute: 0%; five minutes: 0%
+  51           0         102          0  0.00%  0.00%  0.00%   0 CPUHOG process   
+### SW03: conf ['interface Ethernet0/2', 'shutdown', 'no spanning-tree bpdufilter enable']
+Enter configuration commands, one per line.  End with CNTL/Z.
+
+======== T5c 両端とも portfast+bpduguard(両側 err-disable になるか) ========
+### SW04: conf ['interface Ethernet0/2', 'shutdown', 'spanning-tree portfast', 'spanning-tree bpduguard enable', 'no shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%Warning: portfast should only be enabled on ports connected to a single
+ host. Connecting hubs, concentrators, switches, bridges, etc... to this
+ interface  when portfast is enabled, can cause temporary bridging loops.
+ Use with CAUTION
+
+%Portfast has been configured on Ethernet0/2 but will only
+ have effect when the interface is in a non-trunking mode.
+### SW03: conf ['interface Ethernet0/2', 'no shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:57:51 SW03: show interfaces status err-disabled
+
+### 07:57:52 SW03: show logging | include BPDUGUARD
+*Sep 22 07:57:18.556: %SPANTREE-2-BLOCK_BPDUGUARD: Received BPDU from bridge aabb.cc02.4f00 on port Et0/2 with BPDU Guard enabled. Disabling port.
+### 07:57:52 SW04: show interfaces status err-disabled
+Port         Name         Status       Reason               Err-disabled Vlans
+
+Et0/2                     err-disabled bpduguard
+### 07:57:52 SW04: show logging | include BPDUGUARD
+*Sep 22 07:57:43.903: %SPANTREE-2-BLOCK_BPDUGUARD: Received BPDU from bridge aabb.cc02.4e00 on port Et0/2 with BPDU Guard enabled. Disabling port.
+### SW04: conf ['interface Ethernet0/2', 'shutdown', 'no spanning-tree portfast', 'no spanning-tree bpduguard enable']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW03: conf ['interface Ethernet0/2', 'shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:57:52 SW03: show interfaces status | include Et0/2
+Et0/2                           disabled     10           full   auto 10/100/1000BaseTX

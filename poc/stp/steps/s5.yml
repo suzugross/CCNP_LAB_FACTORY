@@ -1,0 +1,181 @@
+- note: M14c Peer(STP) 残存の解消
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0/2
+- node: SW02
+  show:
+  - show spanning-tree vlan 10 | include Et0/2
+- node: SW03
+  show:
+  - clear spanning-tree detected-protocols interface Ethernet0/2
+  wait: 5
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0/2
+- node: SW02
+  show:
+  - show spanning-tree vlan 10 | include Et0/2
+- note: M7b global bpdufilter の送出は止まるか(SW02 Et0/2・VLAN10 は SW03 側 Altn= 受信 0)
+- node: SW02
+  conf:
+  - spanning-tree portfast bpdufilter default
+  - interface Ethernet0/2
+  - spanning-tree portfast trunk
+  - shutdown
+  wait: 3
+- node: SW02
+  conf:
+  - interface Ethernet0/2
+  - no shutdown
+- sleep: 10
+- node: SW02
+  show:
+  - 'show spanning-tree interface Ethernet0/2 detail | include of VLAN0010|of VLAN0030|filter|BPDU:'
+- sleep: 20
+- node: SW02
+  show:
+  - 'show spanning-tree interface Ethernet0/2 detail | include of VLAN0010|of VLAN0030|filter|BPDU:'
+- sleep: 30
+- node: SW02
+  show:
+  - 'show spanning-tree interface Ethernet0/2 detail | include of VLAN0010|of VLAN0030|filter|BPDU:'
+- sleep: 30
+- node: SW02
+  show:
+  - 'show spanning-tree interface Ethernet0/2 detail | include of VLAN0010|of VLAN0030|filter|BPDU:'
+- node: SW02
+  conf:
+  - no spanning-tree portfast bpdufilter default
+  - interface Ethernet0/2
+  - no spanning-tree portfast trunk
+- note: 'M11c UDLD 片方向の擬似: SW03 Et0/1 in で UDLD 宛先 MAC を落とす(両側 aggressive)'
+- node: SW03
+  conf:
+  - udld enable
+  - interface Ethernet0/1
+  - no udld port
+  - udld port aggressive
+- node: SW03
+  conf:
+  - mac access-list extended NOUDLD
+  - deny any host 0100.0ccc.cccc
+  - permit any any
+  - interface Ethernet0/1
+  - mac access-group NOUDLD in
+- sleep: 15
+- node: SW02
+  show:
+  - show udld Ethernet0/1 | include state|Current
+  - show interfaces status err-disabled
+- node: SW03
+  show:
+  - show udld Ethernet0/1 | include state|Current
+  - show interfaces status err-disabled
+- sleep: 30
+- node: SW02
+  show:
+  - show udld Ethernet0/1 | include state|Current
+  - show interfaces status err-disabled
+- node: SW03
+  show:
+  - show udld Ethernet0/1 | include state|Current
+  - show interfaces status err-disabled
+- sleep: 30
+- node: SW02
+  show:
+  - show udld Ethernet0/1 | include state|Current
+  - show interfaces status err-disabled
+- node: SW03
+  show:
+  - show udld Ethernet0/1 | include state|Current
+  - show interfaces status err-disabled
+- node: SW02
+  show:
+  - show logging | include UDLD|ERR_DISABLE
+- node: SW03
+  show:
+  - show logging | include UDLD|ERR_DISABLE
+- note: 'M11d normal モード: ACL を外し両側 normal・リセットしてから同じ片方向'
+- node: SW03
+  conf:
+  - interface Ethernet0/1
+  - no mac access-group NOUDLD in
+  - no udld port aggressive
+  - udld port
+  - shutdown
+  - no shutdown
+- node: SW02
+  conf:
+  - interface Ethernet0/1
+  - no udld port aggressive
+  - udld port
+  - shutdown
+  - no shutdown
+- node: SW02
+  show:
+  - udld reset
+- node: SW03
+  show:
+  - udld reset
+  wait: 30
+- node: SW02
+  show:
+  - show udld Ethernet0/1 | include state|Current|mode
+- node: SW03
+  conf:
+  - interface Ethernet0/1
+  - mac access-group NOUDLD in
+- sleep: 15
+- node: SW02
+  show:
+  - show udld Ethernet0/1 | include state|Current
+  - show interfaces status err-disabled
+- node: SW03
+  show:
+  - show udld Ethernet0/1 | include state|Current
+  - show interfaces status err-disabled
+- sleep: 30
+- node: SW02
+  show:
+  - show udld Ethernet0/1 | include state|Current
+  - show interfaces status err-disabled
+- node: SW03
+  show:
+  - show udld Ethernet0/1 | include state|Current
+  - show interfaces status err-disabled
+- sleep: 30
+- node: SW02
+  show:
+  - show udld Ethernet0/1 | include state|Current
+  - show interfaces status err-disabled
+- node: SW03
+  show:
+  - show udld Ethernet0/1 | include state|Current
+  - show interfaces status err-disabled
+- node: SW02
+  show:
+  - show logging | include UDLD
+- node: SW03
+  show:
+  - show logging | include UDLD
+- note: 後始末
+- node: SW03
+  conf:
+  - interface Ethernet0/1
+  - no mac access-group NOUDLD in
+  - no udld port
+  - shutdown
+  - no shutdown
+  - exit
+  - no udld enable
+- node: SW02
+  conf:
+  - interface Ethernet0/1
+  - no udld port
+  - shutdown
+  - no shutdown
+  - exit
+  - no udld enable
+- node: SW02
+  show:
+  - udld reset

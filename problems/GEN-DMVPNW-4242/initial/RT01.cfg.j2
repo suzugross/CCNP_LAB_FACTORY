@@ -1,0 +1,241 @@
+! RT01 (本社)
+interface Loopback1
+ ip address 10.23.0.1 255.255.255.0
+!
+ip access-list extended seC_eDGe-1n.v3
+ 10 remark === EDGE PROTECTION (SEC-TEAM) - change via ticket only ===
+ 20 remark --- anti-spoofing ---
+ 30 deny ip 10.0.0.0 0.255.255.255 any
+ 40 deny ip 172.16.0.0 0.15.255.255 any
+ 50 deny ip 192.168.0.0 0.0.255.255 any
+ 60 deny ip 127.0.0.0 0.255.255.255 any
+ 70 deny ip 0.0.0.0 0.255.255.255 any
+ 80 deny ip 169.254.0.0 0.0.255.255 any
+ 90 deny ip 224.0.0.0 15.255.255.255 any
+ 100 deny ip 240.0.0.0 15.255.255.255 any
+ 101 remark --- SOC blocklist (updated 2026-04-19) ---
+ 102 deny ip 80.7.50.0 0.0.0.255 any
+ 103 deny ip host 109.69.170.201 any
+ 104 deny ip host 178.9.128.136 any
+ 105 deny ip 46.37.208.0 0.0.0.255 any
+ 106 deny ip host 37.47.38.233 any
+ 107 deny ip host 80.17.111.169 any
+ 108 deny ip host 103.58.53.237 any
+ 109 deny ip host 194.48.13.90 any
+ 110 deny ip host 95.11.38.198 any
+ 111 deny ip host 5.142.134.27 any
+ 112 deny ip host 93.234.116.194 any
+ 113 deny ip host 176.20.78.117 any
+ 114 deny ip host 83.177.53.192 any
+ 115 deny ip host 95.40.154.24 any
+ 116 remark --- port hygiene ---
+ 117 deny tcp any any eq 445
+ 118 deny tcp any any eq 25
+ 119 deny udp any any eq 5060
+ 120 deny tcp any any eq 21
+ 121 deny tcp any any eq 23
+ 122 deny tcp any any eq 1433
+ 123 deny udp any any eq 1900
+ 124 deny udp any any eq 69
+ 125 deny udp any any range 137 138
+ 126 deny tcp any any range 135 139
+ 127 deny tcp any any eq 3306
+ 128 deny udp any any eq 19
+ 129 remark === VPN (SEC-TEAM) ===
+ 130 permit udp any host 203.0.113.2 eq 500
+ 131 permit udp any host 203.0.113.2 eq 4500
+ 132 permit gre any host 203.0.113.2
+ 133 remark --- ICMP ---
+ 134 permit icmp any host 203.0.113.2 echo
+ 135 permit icmp any host 203.0.113.2 echo-reply
+ 136 permit icmp any host 203.0.113.2 unreachable
+ 137 permit icmp any host 203.0.113.2 time-exceeded
+ 138 remark --- management (NOC) ---
+ 139 permit tcp host 192.0.2.10 host 203.0.113.2 eq 22
+ 140 permit udp host 192.0.2.20 host 203.0.113.2 eq snmp
+ 141 permit udp host 192.0.2.123 host 203.0.113.2 eq ntp
+ 142 remark --- router protection ---
+ 143 deny ip any host 203.0.113.2 log
+ 150 deny ip any any log
+!
+interface {{ links[0] }}
+ description === to ISP ===
+ ip address 203.0.113.2 255.255.255.252
+ ip access-group seC_eDGe-1n.v3 in
+ no shutdown
+!
+ip route 0.0.0.0 0.0.0.0 203.0.113.1
+!
+crypto isakmp policy 10
+ encryption aes 256
+ hash sha256
+ authentication pre-share
+ group 14
+!
+crypto isakmp key PrEsHARed-key#87 address 0.0.0.0
+!
+crypto ipsec transform-set ts_aes256_SHa2.v3 esp-aes 256 esp-sha256-hmac
+ mode transport
+!
+crypto ipsec profile ipSEc_pr0f_DMVpn3
+ set transform-set ts_aes256_SHa2.v3
+!
+crypto ipsec transform-set ts_aes256_5Ha2.v3 esp-aes esp-sha-hmac
+ mode tunnel
+!
+crypto ipsec profile ip5Ec_pr0f_DMVpn3
+ set transform-set ts_aes256_5Ha2.v3
+ set pfs group14
+!
+crypto ipsec profile ipsec_pr0f_dmvpn3
+ set transform-set ts_aes256_SHa2.v3
+ set security-association lifetime seconds 3600
+!
+ip access-list extended seC_eDGe_1n.v3
+ permit udp any any eq isakmp
+ permit esp any any
+ permit gre any any
+ permit icmp any any
+ permit ip any any
+!
+interface Loopback100
+ description === LEGACY: test (decom 2025) ===
+ ip address 192.0.2.100 255.255.255.255
+!
+interface Loopback101
+ description === LEGACY: MPLS PE (decom 2025) ===
+ ip address 192.0.2.101 255.255.255.255
+!
+interface Loopback102
+ description === LEGACY: old NMS probe (decom 2025) ===
+ ip address 192.0.2.102 255.255.255.255
+!
+interface Loopback103
+ description === LEGACY: test (decom 2025) ===
+ ip address 192.0.2.103 255.255.255.255
+!
+interface Loopback104
+ description === LEGACY: old NMS probe (decom 2025) ===
+ ip address 192.0.2.104 255.255.255.255
+!
+interface Loopback105
+ description === LEGACY: test (decom 2025) ===
+ ip address 192.0.2.105 255.255.255.255
+!
+interface Loopback106
+ description === LEGACY: BGP RR (decom 2025) ===
+ ip address 192.0.2.106 255.255.255.255
+!
+interface Loopback107
+ description === LEGACY: IPsla source (decom 2025) ===
+ ip address 192.0.2.107 255.255.255.255
+!
+class-map match-any CM-VOICE
+ match dscp ef
+ match dscp cs5
+!
+class-map match-any CM-VIDEO
+ match dscp af41
+ match dscp af42
+!
+class-map match-all CM-SCAVENGER
+ match dscp cs1
+!
+policy-map PM-WAN-OUT
+ class CM-VOICE
+  priority percent 10
+ class CM-VIDEO
+  bandwidth percent 20
+ class CM-SCAVENGER
+  bandwidth percent 1
+ class class-default
+  fair-queue
+!
+ip route 100.64.40.0 255.255.255.0 Null0 name DECOM-575
+ip route 100.64.38.0 255.255.255.0 Null0 name DECOM-517
+ip route 100.64.16.0 255.255.255.0 Null0 name DECOM-400
+ip route 100.64.51.0 255.255.255.0 Null0 name DECOM-931
+ip route 100.64.37.0 255.255.255.0 Null0 name DECOM-645
+ip route 100.64.56.0 255.255.255.0 Null0 name DECOM-301
+ip route 100.64.49.0 255.255.255.0 Null0 name DECOM-227
+ip route 100.64.0.0 255.255.255.0 Null0 name DECOM-940
+ip route 100.64.32.0 255.255.255.0 Null0 name DECOM-208
+!
+ip prefix-list PL-LEGACY-SUMMARY seq 5 permit 100.64.0.0/10 le 24
+!
+ip access-list standard MGMT-HOSTS-OLD
+ permit 192.0.2.56
+ permit 192.0.2.54
+ permit 192.0.2.52
+ permit 192.0.2.14
+ permit 192.0.2.20
+!
+ip access-list extended NMS-POLL-OLD
+ permit udp host 192.0.2.20 any eq snmp
+ permit udp host 192.0.2.21 any eq snmp
+ permit icmp host 192.0.2.20 any
+!
+route-map RM-LEGACY-OUT deny 10
+ match ip address prefix-list PL-LEGACY-SUMMARY
+!
+route-map RM-LEGACY-OUT permit 20
+!
+ip sla 900
+ icmp-echo 192.0.2.200 source-ip 192.0.2.100
+ frequency 300
+!
+track 900 ip sla 900 reachability
+!
+ip domain list corp.example
+ip domain list legacy.example
+!
+interface Loopback200
+ description === LEGACY: unused ===
+ ip address 100.127.0.1 255.255.255.255
+!
+interface Loopback201
+ description === LEGACY: unused ===
+ ip address 100.127.0.2 255.255.255.255
+!
+interface Loopback202
+ description === LEGACY: unused ===
+ ip address 100.127.0.3 255.255.255.255
+!
+interface Loopback203
+ description === LEGACY: unused ===
+ ip address 100.127.0.4 255.255.255.255
+!
+interface Loopback204
+ description === LEGACY: unused ===
+ ip address 100.127.0.5 255.255.255.255
+!
+interface Loopback205
+ description === LEGACY: unused ===
+ ip address 100.127.0.6 255.255.255.255
+!
+interface Loopback206
+ description === LEGACY: unused ===
+ ip address 100.127.0.7 255.255.255.255
+!
+interface Loopback207
+ description === LEGACY: unused ===
+ ip address 100.127.0.8 255.255.255.255
+!
+interface Tunnel0
+ ip address 172.29.33.1 255.255.255.0
+ no ip redirects
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ ip nhrp authentication NHRP-k57
+ no ip nhrp map multicast dynamic
+ ip nhrp redirect
+ no ip split-horizon eigrp 731
+ tunnel source {{ links[0] }}
+ tunnel mode gre multipoint
+ tunnel protection ipsec profile ipSEc_pr0f_DMVpn3
+!
+router eigrp 731
+ eigrp router-id 172.29.33.1
+ network 172.29.33.0 0.0.0.255
+ network 10.23.0.0 0.0.0.255
+!

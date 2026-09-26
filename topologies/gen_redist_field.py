@@ -31,6 +31,8 @@ import random
 
 import yaml
 
+import hardmode
+
 EIGRP_METRIC = "100000 100 255 1 1500"
 FAULTS = ["missing", "wrong_id", "no_seed", "filter", "name_clash"]
 
@@ -283,8 +285,32 @@ def _dom_label(dom):
     return f"OSPF {dom['id']}" if dom["type"] == "ospf" else f"EIGRP AS {dom['id']}"
 
 
+def _wall_pick(d, rnd):
+    """--wall: 境界ルータ brs[0] の 1 リンク(in)にうんざり ACL(BL-210 C1・border テーマ)。"""
+    br = d["brs"][0]
+    slot, seg, side, dom_i = node_links(d, br)[0]
+    me_ip, peer_ip = f"{seg}.{side}", f"{seg}.{2 if side == 1 else 1}"
+    w = hardmode.border_wall(rnd, name="BORDER-IN", me_ip=me_ip, peer_ip=peer_ip,
+                             proto=d["doms"][dom_i]["type"])
+    return {"br": br, "slot": slot, "seg": seg, "dom_i": dom_i, "wall": w}
+
+
+def _inject_wall(lines, wl):
+    """render_node の出力に壁と適用行を差し込む(Loopback ブロックの後・対象 IF の ip address の後)。"""
+    out, done = [], False
+    for i, ln in enumerate(lines):
+        out.append(ln)
+        if i == 3 and not done:                       # 4 行目= Loopback ブロック末尾の "!"
+            out += hardmode.wall_cfg(wl["wall"])
+        if ln.startswith("interface {{ links[") and f"links[{wl['slot']}]" in ln:
+            done = True
+            out.append(f" ip access-group {wl['wall'].name} in")
+    return out
+
+
 def grading_text(d, prob_id):
     m = d["m"]
+    reach_pts = 32 if d.get("wall") else 40
     mo = build_model(d)
     model_yaml = yaml.safe_dump(mo, sort_keys=False, allow_unicode=True,
                                 default_flow_style=False)
@@ -330,6 +356,12 @@ def grading_text(d, prob_id):
       - {{ regex: 'Known via' }}
       - {{ regex: "{fp}" }}
     points: 10""")
+    if d.get("wall"):
+        wl = d["wall"]
+        chk = hardmode.wall_check(wl["wall"], m[wl["br"]], 8,
+                                  name=f"{m[wl['br']]}: {wl['wall'].name} が保全され(削除・置換なし)、隣接に必要な通信だけが追加で許可されている")
+        chk_yaml = yaml.safe_dump([chk], allow_unicode=True, sort_keys=False, default_flow_style=False)
+        checks.append("\n".join("  " + ln for ln in chk_yaml.rstrip().splitlines()))
     checks_txt = "\n".join(checks)
     return f"""# 自動生成 (gen_redist_field.py) {prob_id} K={d['K']} faults={[(f['br'], f['kind']) for f in d['faults']]}
 problem: {prob_id}
@@ -339,7 +371,7 @@ defaults:
 model:
 {model_yaml}
 invariants:
-  - {{ type: reachability_all, name: "全ルータ間 Loopback 相互到達", points: 40 }}
+  - {{ type: reachability_all, name: "全ルータ間 Loopback 相互到達", points: {reach_pts} }}
   - {{ type: loop_free, name: "転送ループ無し", points: 10 }}
 checks:
 {checks_txt}
@@ -372,6 +404,14 @@ def task_text(d, prob_id):
     tickets_txt = "\n".join(tickets)
     diff = 5 if (len(d["faults"]) >= 2 or
                  any(f["kind"] in ("wrong_id", "no_seed") for f in d["faults"])) else 4
+    wall_req = ""
+    if d.get("wall"):
+        wl = d["wall"]
+        wall_req = (f"6. {m[wl['br']]} の {_dom_label(doms[wl['dom_i']])} 側のリンク({wl['seg']}.0/30)の着信には、"
+                    f"セキュリティ チームによって管理されているところのアクセス リスト **`{wl['wall'].name}`** が、"
+                    "適用されています。このアクセス リストのエントリは、削除、変更、または無効化されてはなりません。"
+                    "必要とされる変更は、エントリの追加によってのみ、行われることができます。\n")
+        diff = min(diff + 1, 6)
     return f"""# 問題 {prob_id} : 経路到達性障害チケット(難易度{diff})
 
 ## 状況
@@ -401,7 +441,7 @@ def task_text(d, prob_id):
 3. **OSPF 出自の再配送は internal / external とも対象**(match internal external 1 external 2)。
 4. 再配送への**フィルタ類(route-map / distribute-list)の適用は禁止**。
 5. 参照するプロセス ID / AS 番号は本書のドメイン表記({dom_words})に一致させること。
-
+{wall_req}
 ## 制約
 - 設定変更してよいのは境界ルータ({brs_txt})のみ。他は変更禁止(show・ping・traceroute は可)。
 - 静的経路・デフォルトルート・ドメイン構成の変更による回避は不可。
@@ -447,6 +487,12 @@ def solution_md(d, prob_id):
                     "route-map/prefix-list も撤去。")
         parts.append(f"{head}\n{body}")
     roles_txt = ", ".join(f"{r}={m[r]}" for r in d["roles"])
+    if d.get("wall"):
+        wl = d["wall"]
+        parts.append(f"### {m[wl['br']]} / うんざり ACL {wl['wall'].name}(--wall・BL-210)\n"
+                     + hardmode.wall_readme(wl["wall"])
+                     + "  - 見え方(border): missing/wrong_proto= 隣接が立たない(hello が落ちる)/ narrow= hello(224.0.0.x)が落ちて"
+                       "隣接が立たない / shadowed= hello は通るのに unicast(DBD/Update)が落ちる= OSPF EXSTART 固着・EIGRP retry limit")
     return f"""# 模範解答 : {prob_id}
 
 ## 役割の種明かし
@@ -495,6 +541,9 @@ def fix_json(d):
             fixes.append({"node": node, "lines": drop, "match": "none"})
     for n in sorted({d["m"][f["br"]] for f in d["faults"]}):
         fixes.append({"node": n, "exec": ["clear ip route *"]})
+    if d.get("wall"):
+        wl = d["wall"]
+        fixes = hardmode.wall_fix(wl["wall"], d["m"][wl["br"]]) + fixes
     return {"_comment": "gen_redist_field fix(仕様書どおりの再配送へ復旧)", "fixes": fixes}
 
 
@@ -785,11 +834,15 @@ def main():
     ap.add_argument("--shape", choices=["chain", "twoborder", "ring"], default=None)
     ap.add_argument("--hard", action="store_true",
                     help="chain=K3+subtle保証 / twoborder=no_tag・seed_metric系 / ring=そのまま")
+    ap.add_argument("--wall", action="store_true",
+                    help="BL-210 C1: 境界ルータの 1 リンク in にうんざり ACL(欠陥 4 種)。shape は chain 固定")
     a = ap.parse_args()
     rnd = random.Random(a.seed)
     # shape 抽選(chain 50% / twoborder 25% / ring 25%)。ID は全 shape 共通 GEN-RDFIELD。
     roll = rnd.random()
     shape = a.shape or ("chain" if roll < 0.5 else "twoborder" if roll < 0.75 else "ring")
+    if a.wall:
+        shape = "chain"
     prob_id = f"GEN-RDFIELD-{a.seed}"
 
     if shape == "ring":
@@ -839,6 +892,8 @@ def main():
     d = draw(rnd, faults_n=(a.faults or (2 if a.hard else None)),
              fault_kind=a.fault, hard=a.hard)
     m = d["m"]
+    if a.wall:
+        d["wall"] = _wall_pick(d, random.Random(a.seed ^ 0xAC1))    # 別系列の乱数(故障配置は不変)
 
     pdir = f"{a.repo}/problems/{prob_id}"
     os.makedirs(f"{pdir}/initial", exist_ok=True)
@@ -854,18 +909,21 @@ def main():
                "exam": "ENARSI",
                "topics": ["redistribution", "ospf", "eigrp", "topology-randomized",
                           "generated"],
-               "difficulty": 5, "topology": "generated", "access": "ssh",
+               "difficulty": 6 if d.get("wall") else 5, "topology": "generated", "access": "ssh",
                "target_nodes": sorted(m.values()), "points": 100,
                "lab": {"links": lab_links}}
     with open(f"{pdir}/problem.yml", "w", encoding="utf-8") as fh:
-        fh.write(f"# 自動生成 (gen_redist_field.py) seed={a.seed} shape=chain "
+        fh.write(f"# 自動生成 (gen_redist_field.py) seed={a.seed} shape=chain{' wall' if d.get('wall') else ''} "
                  f"faults={[(f['br'], f['into'], f['kind']) for f in d['faults']]} "
                  f"roles={ {r: m[r] for r in d['roles']} }\n")
         yaml.safe_dump(problem, fh, sort_keys=False, allow_unicode=True)
 
     for r in d["roles"]:
+        lines = render_node(d, r)
+        if d.get("wall") and r == d["wall"]["br"]:
+            lines = _inject_wall(lines, d["wall"])
         with open(f"{pdir}/initial/{m[r]}.cfg.j2", "w", encoding="utf-8") as fh:
-            fh.write("\n".join(render_node(d, r)) + "\n")
+            fh.write("\n".join(lines) + "\n")
     with open(f"{pdir}/grading.yml", "w", encoding="utf-8") as fh:
         fh.write(grading_text(d, prob_id))
     with open(f"{pdir}/task.md", "w", encoding="utf-8") as fh:

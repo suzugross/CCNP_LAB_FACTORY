@@ -1,0 +1,72 @@
+! GEN-RDFIELD 初期
+interface Loopback0
+ ip address 18.18.18.18 255.255.255.255
+!
+ip access-list extended BORDER-IN
+ 10 remark === DOMAIN BORDER FILTER (SEC-TEAM) - change via ticket only ===
+ 20 remark --- anti-spoofing ---
+ 30 deny ip 172.16.0.0 0.15.255.255 any
+ 40 deny ip 192.168.0.0 0.0.255.255 any
+ 50 deny ip 127.0.0.0 0.255.255.255 any
+ 60 deny ip 0.0.0.0 0.255.255.255 any
+ 70 deny ip 169.254.0.0 0.0.255.255 any
+ 80 deny ip 240.0.0.0 15.255.255.255 any
+ 81 remark --- SOC blocklist (updated 2026-08-10) ---
+ 82 deny ip host 80.235.240.240 any
+ 83 deny ip host 185.189.157.167 any
+ 84 deny ip 195.43.61.0 0.0.0.255 any
+ 85 deny ip host 95.76.37.58 any
+ 86 deny ip host 188.173.108.246 any
+ 87 deny ip 217.43.238.0 0.0.0.255 any
+ 88 deny ip host 194.132.15.19 any
+ 89 deny ip 185.113.153.0 0.0.0.255 any
+ 90 deny ip 212.85.224.0 0.0.0.255 any
+ 91 deny ip host 83.232.174.143 any
+ 92 deny ip host 45.27.245.216 any
+ 93 deny ip host 37.185.167.105 any
+ 94 deny ip host 103.29.209.235 any
+ 95 deny ip host 5.73.167.128 any
+ 96 remark --- port hygiene ---
+ 97 deny udp any any eq 19
+ 98 deny udp any any eq 69
+ 99 deny udp any any eq 5060
+ 100 deny tcp any any eq 25
+ 101 deny tcp any any range 135 139
+ 102 deny tcp any any eq 3389
+ 103 deny udp any any eq 7
+ 104 deny tcp any any range 6000 6063
+ 105 deny udp any any range 137 138
+ 106 deny tcp any any eq 21
+ 107 remark === ROUTING (SEC-TEAM) ===
+ 108 permit tcp host 10.139.232.2 host 10.139.232.1 eq bgp
+ 109 remark --- router protection ---
+ 110 permit icmp any host 10.139.232.1 echo
+ 111 permit icmp any host 10.139.232.1 echo-reply
+ 112 permit tcp host 192.0.2.10 host 10.139.232.1 eq 22
+ 113 deny ip any host 10.139.232.1 log
+ 120 remark --- transit (tcp/udp/icmp only) ---
+ 130 permit icmp any any
+ 140 permit tcp 10.0.0.0 0.255.255.255 any
+ 150 permit udp 10.0.0.0 0.255.255.255 any
+ 160 deny ip any any log
+!
+interface {{ links[0] }}
+ ip access-group BORDER-IN in
+ ip address 10.139.232.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.117.217.1 255.255.255.252
+ no shutdown
+!
+router eigrp 820
+ network 18.18.18.18 0.0.0.0
+ no auto-summary
+ network 10.139.232.0 0.0.0.3
+!
+router ospf 82
+ router-id 18.18.18.18
+ network 18.18.18.18 0.0.0.0 area 0
+ network 10.117.217.0 0.0.0.3 area 0
+ redistribute eigrp 820 subnets
+!

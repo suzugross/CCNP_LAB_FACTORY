@@ -81,8 +81,12 @@ def _fence_rule(self, tokens, idx, options, env):
     return f'<pre class="code"><code{cls}>{html.escape(tok.content)}</code></pre>\n'
 
 
-def make_md():
-    md = MarkdownIt("default")          # CommonMark + table + strikethrough
+def make_md(allow_html=False):
+    """allow_html= 生の HTML ブロックを通す(解説ページのカード組みで使う)。
+
+    問題用紙では既定どおり **False**(答案・問題文に HTML を混ぜない)。
+    """
+    md = MarkdownIt("default", {"html": True} if allow_html else {})
     md.add_render_rule("fence", _fence_rule)
     return md
 
@@ -261,10 +265,10 @@ def mark_choices(body):
     return head + tail
 
 
-def md_to_body(md_text):
+def md_to_body(md_text, allow_html=False):
     """Markdown 本文を HTML 断片へ。(body, has_mermaid) を返す。"""
     env = {}
-    body = make_md().render(separate_choices(md_text), env)
+    body = make_md(allow_html).render(separate_choices(md_text), env)
     body = mark_choices(body)
     # 表は横スクロール容器で包む(リンク一覧が広い問題で本文が横に伸びるのを防ぐ)
     body = body.replace("<table>", '<div class="tablewrap"><table>')
@@ -379,6 +383,28 @@ pre select.msel.inline{font-family:inherit}
 .answer .timer .tkind{font-size:.8rem; color:#777777}
 .answer .savemsg{font-size:.83rem; color:#555555; margin-top:.5rem;
   min-height:1.2em}
+/* 答え合わせ(BL-212): 正誤だけを色で示す(緑=正解・赤=不正解)。確定後は入力をロック */
+.answer .chkrow{display:flex; align-items:center; gap:.8rem; margin:1rem 0 0; flex-wrap:wrap}
+.answer button.chk{font:inherit; font-weight:700; padding:.45rem 1.2rem; border:2px solid #000000;
+  background:#ffffff; cursor:pointer}
+.answer button.chk:hover{background:#eeeeee}
+.answer button.chk:disabled{color:#aaaaaa; border-color:#bbbbbb; cursor:default}
+.answer .chkres{font-weight:700; font-size:1.1rem}
+.answer .chknote{font-size:.8rem; color:#777777}
+.answer.chk-ok{background:#e8f5e9; outline:3px solid #2e7d32; outline-offset:8px}
+.answer.chk-ng{background:#ffebee; outline:3px solid #c62828; outline-offset:8px}
+.answer.chk-ok .chkres{color:#1b5e20}
+.answer.chk-ng .chkres{color:#b71c1c}
+.answer.chk-ok .opts label.on{border-color:#2e7d32; background:#c8e6c9}
+.answer.chk-ng .opts label.on{border-color:#c62828; background:#ffcdd2}
+.answer .mrow.cok .mterm{color:#1b5e20}
+.answer .mrow.cng .mterm{color:#b71c1c}
+.answer .mrow.cok .opts label.on{border-color:#2e7d32; background:#c8e6c9}
+.answer .mrow.cng .opts label.on{border-color:#c62828; background:#ffcdd2}
+select.msel.cok{background:#c8e6c9 !important; border-color:#2e7d32 !important}
+select.msel.cng{background:#ffcdd2 !important; border-color:#c62828 !important}
+.bmirror.cok{background:#c8e6c9; border-bottom-color:#2e7d32}
+.bmirror.cng{background:#ffcdd2; border-bottom-color:#c62828}
 .answer .savemsg.err{color:#a00000; font-weight:600}
 .tablewrap{overflow-x:auto; margin:.9rem 0}
 table{border-collapse:collapse; width:100%; font-size:.92rem}
@@ -450,6 +476,50 @@ ANSWER_JS = r"""
 
   function say(t, err){ msg.textContent = t; msg.className = 'savemsg' + (err ? ' err' : ''); }
   function api(){ return '/_api/sheet?pack=' + encodeURIComponent(pack) + '&no=' + no; }
+  /* ---- 答え合わせ(BL-212) ----------------------------------------------
+     押した時点の解答をサーバ(/_api/check)で正誤判定し、緑/赤で表示して入力をロックする
+     (=初回解答の確定。ノルマの正答率は初回解答だけで数える規則と整合)。
+     正解の記号・解説は出さない(採点後の解説ページで)。状態は 解答.md の
+     「答え合わせ:」行に残し、開き直しても復元する。 */
+  var chkBtn = box.querySelector('.chk'), chkRes = box.querySelector('.chkres');
+  var ck = {r: '', t: '', p: ''};       /* r= ok|ng, t= 時刻, p= 内訳(①○ ②× …) */
+  function capi(){ return '/_api/check?pack=' + encodeURIComponent(pack) + '&no=' + no; }
+  function lock(){
+    if(!ck.r) return;
+    box.classList.add(ck.r === 'ok' ? 'chk-ok' : 'chk-ng');
+    if(chkRes) chkRes.textContent = (ck.r === 'ok' ? '正解' : '不正解') + (ck.t ? '（' + ck.t + ' 確定）' : '');
+    if(chkBtn) chkBtn.disabled = true;
+    box.querySelectorAll('.opts input').forEach(function(e){ e.disabled = true; });
+    document.querySelectorAll('select.msel').forEach(function(sl){ sl.disabled = true; });
+    var free = box.querySelector('.ans'); if(free) free.disabled = true;
+    (ck.p || '').split(/\s+/).forEach(function(tok){
+      if(!tok) return;
+      var k = tok.charAt(0), cls = (tok.charAt(1) === '○') ? 'cok' : 'cng';
+      document.querySelectorAll('select.msel[data-k="' + k + '"], .bmirror[data-k="' + k + '"]')
+        .forEach(function(e){ e.classList.add(cls); });
+      box.querySelectorAll('.opts input[value^="' + k + '"]').forEach(function(i){
+        var row = i.closest('.mrow'); if(row) row.classList.add(cls);
+      });
+    });
+  }
+  function check(){
+    if(!loaded){ say('解答.md に接続できていません（scripts/pack.sh serve 経由で開いてください）', true); return; }
+    if(!ansValue()){ say('解答が未記入です', true); return; }
+    if(!confirm('この解答で確定して答え合わせします。確定後は変更できません。よろしいですか？')) return;
+    say('答え合わせ中…');
+    fetch(capi(), {method:'POST', headers:{'Content-Type':'text/plain; charset=utf-8'}, body: build()})
+      .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      .then(function(t){
+        var f = t.split('\t'), res = f[0];
+        if(res === 'nokey'){ say('この問題は自動判定できません（採点時に判定します）' + (f[1] ? '：' + f[1] : ''), true); return; }
+        if(res === 'empty'){ say('解答を読み取れませんでした', true); return; }
+        ck.r = res; ck.t = new Date().toTimeString().slice(0, 8); ck.p = (f[1] || '').trim();
+        var done = box.querySelector('.done input'); if(done) done.checked = true;
+        tpause('user');
+        lock(); save();
+      }).catch(function(e){ say('答え合わせに失敗: ' + e.message, true); });
+  }
+  if(chkBtn) chkBtn.addEventListener('click', check);
 
   /* ---- ストップウォッチ(BL-144) --------------------------------------
      ページを開いたら自動開始(2026-08-24 ユーザ要望)。ページ離脱で自動一時停止・
@@ -558,6 +628,10 @@ ANSWER_JS = r"""
       lines.push('解答: ' + ansValue());
       lines.push('根拠: ' + val('.why'));
     }
+    if(ck.r){                        /* 答え合わせ済み(BL-212): 確定結果を残す */
+      lines.push('答え合わせ: ' + (ck.r === 'ok' ? '正解' : '不正解') + (ck.t ? ' ' + ck.t : '') +
+                 (ck.p ? ' ' + ck.p : ''));
+    }
     if(ts.k){                        /* 計測があった時だけ 所要: 行を書く(BL-144) */
       lines.push('所要: ' + tfmt(tnow()) + (ts.k === 'auto' ? ' (自動開始)' : ''));
     }
@@ -605,8 +679,10 @@ ANSWER_JS = r"""
         ts.k = du[4] ? 'auto' : 'manual';
         tsave();
       }
+      var c = t.match(/^[ \t]*答え合わせ:[ \t]*(正解|不正解)(?:[ \t]+(\d\d:\d\d:\d\d))?(?:[ \t]+(.*))?$/m);
+      if(c){ ck.r = (c[1] === '正解') ? 'ok' : 'ng'; ck.t = c[2] || ''; ck.p = (c[3] || '').trim(); }
       trender();
-      loaded = true; sync(); say('読み込み済み');
+      loaded = true; sync(); lock(); say('読み込み済み');
       topen();                       /* 解答済みかどうか確定してから自動開始判定 */
     }).catch(function(e){
       say('解答.md に書き込めません（' + e.message +
@@ -711,7 +787,7 @@ PAGE = """<!doctype html>
 <title>{title}</title>
 <style>{css}</style>
 </head>
-<body>
+<body{body_class}>
 {nav}
 <main>
 {meta}
@@ -742,7 +818,8 @@ def build_nav(nav):
 
 
 def render(md_text, title="問題", nav=None, meta="", mermaid_js=None,
-           mermaid_mode="cdn", answer_form="", inline_blanks=None):
+           mermaid_mode="cdn", answer_form="", inline_blanks=None,
+           extra_css="", body_class="", allow_html=False):
     """Markdown 文字列 → HTML 文字列。
 
     mermaid_mode:
@@ -751,7 +828,7 @@ def render(md_text, title="問題", nav=None, meta="", mermaid_js=None,
       none  … 図はソースのまま表示(JS を一切入れない)
     mermaid_js: embed 時に使うソース(None なら MERMAID_JS を読む)。
     """
-    body, has_mermaid = md_to_body(md_text)
+    body, has_mermaid = md_to_body(md_text, allow_html=allow_html)
     # ★穴埋め形(BL-191/198): ［①］ の位置にプルダウンを埋め込む(本文中で直接選ぶ・2026-09-20 ユーザ要望)。
     #   同じ番号の 2 回目以降は選択値を映す鏡(span.bmirror)にする(同名 select の二重計上を避ける)。
     for k, sel_html in (inline_blanks or {}).items():
@@ -774,8 +851,10 @@ def render(md_text, title="問題", nav=None, meta="", mermaid_js=None,
     if answer_form:
         body += answer_form
         scripts += "\n<script>" + ANSWER_JS + "</script>"
-    return PAGE.format(title=html.escape(title), css=CSS, nav=build_nav(nav),
-                       meta=meta_html, body=body, scripts=scripts)
+    return PAGE.format(title=html.escape(title), css=CSS + (extra_css or ""),
+                       body_class=f' class="{body_class}"' if body_class else "",
+                       nav=build_nav(nav), meta=meta_html, body=body,
+                       scripts=scripts)
 
 
 _MERMAID_CACHE = {}

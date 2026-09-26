@@ -1,0 +1,104 @@
+- note: R0 RP 設定の確認と復旧
+- node: RT02
+  show:
+  - show running-config | include rp-address|bidir|ssm|autorp|spt|multipath|mroute
+- node: RT02
+  conf:
+  - ip pim rp-address 3.3.3.3
+- node: RT03
+  show:
+  - show running-config | include rp-address|bidir|ssm|autorp|spt|multipath|mroute
+- node: RT03
+  conf:
+  - ip pim rp-address 3.3.3.3
+- node: RT04
+  show:
+  - show running-config | include rp-address|bidir|ssm|autorp|spt|multipath|mroute
+- node: RT04
+  conf:
+  - ip pim rp-address 3.3.3.3
+- node: RT05
+  show:
+  - show running-config | include rp-address|bidir|ssm|autorp|spt|multipath|mroute
+- node: RT05
+  conf:
+  - ip pim rp-address 3.3.3.3
+- node: RT08
+  show:
+  - show running-config | include rp-address|bidir|ssm|autorp|spt|multipath|mroute
+- node: RT08
+  conf:
+  - ip pim rp-address 3.3.3.3
+- sleep: 5
+- note: M13' 受信者のいないグループへ送信(Register と Register-Stop)
+- node: RT01
+  show:
+  - ping 239.7.7.7 repeat 3 source Ethernet0/0
+- node: RT02
+  show:
+  - show ip mroute 239.7.7.7 | include \(|flags|Incoming|Ethernet|Null|RP 3
+- node: RT03
+  show:
+  - show ip mroute 239.7.7.7 | include \(|flags|Incoming|Ethernet|Null|RP 3
+- sleep: 60
+- node: RT02
+  show:
+  - show ip mroute 239.7.7.7 | include \(|flags|Incoming|Ethernet|Null|RP 3
+- note: 'M8'' bidir: bidir-enable を入れてから rp-address ... bidir'
+- node: RT04
+  show:
+  - show running-config all | include bidir
+- node: RT02
+  conf:
+  - ip pim bidir-enable
+  - ip pim rp-address 3.3.3.3 BIDIR bidir
+- node: RT03
+  conf:
+  - ip pim bidir-enable
+  - ip pim rp-address 3.3.3.3 BIDIR bidir
+- node: RT04
+  conf:
+  - ip pim bidir-enable
+  - ip pim rp-address 3.3.3.3 BIDIR bidir
+- node: RT05
+  conf:
+  - ip pim bidir-enable
+  - ip pim rp-address 3.3.3.3 BIDIR bidir
+- node: RT08
+  conf:
+  - ip pim bidir-enable
+  - ip pim rp-address 3.3.3.3 BIDIR bidir
+- node: RT04
+  show:
+  - show running-config | include bidir|rp-address
+  - show ip pim rp mapping
+- node: RT06
+  conf:
+  - interface Ethernet0/0
+  - ip igmp join-group 239.2.2.2
+  wait: 10
+- node: RT01
+  show:
+  - ping 239.2.2.2 repeat 3 source Ethernet0/0
+- node: RT02
+  show:
+  - show ip mroute 239.2.2.2 | include \(|flags|Incoming|Ethernet|Null|RP 3
+- node: RT03
+  show:
+  - show ip mroute 239.2.2.2 | include \(|flags|Incoming|Ethernet|Null|RP 3
+- node: RT04
+  show:
+  - show ip mroute 239.2.2.2 | include \(|flags|Incoming|Ethernet|Null|RP 3
+- node: RT08
+  show:
+  - show ip mroute 239.2.2.2 | include \(|flags|Incoming|Ethernet|Null|RP 3
+- node: RT04
+  show:
+  - show ip pim interface df
+- node: RT02
+  show:
+  - show ip pim interface df
+- node: RT06
+  conf:
+  - interface Ethernet0/0
+  - no ip igmp join-group 239.2.2.2

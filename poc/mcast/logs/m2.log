@@ -1,0 +1,194 @@
+
+======== M5 spt-threshold infinity(受信側 DR= RT08 と RT04 の両方)→ 共有木に留まるか ========
+### RT04: conf ['ip pim spt-threshold infinity']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 06:46:49 RT04: clear ip mroute 239.1.1.1
+
+### RT08: conf ['ip pim spt-threshold infinity']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 06:46:52 RT08: clear ip mroute 239.1.1.1
+
+### sleep 5
+### 06:47:00 RT01: ping 239.1.1.1 repeat 5 source Ethernet0/0
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 239.1.1.1, timeout is 2 seconds:
+Packet sent with a source address of 10.0.12.1 
+.....
+### 06:47:10 RT08: show ip mroute 239.1.1.1 | include \(|flags|Incoming|Ethernet|Null
+
+### 06:47:10 RT04: show ip mroute 239.1.1.1 | include \(|flags|Incoming|Ethernet|Null
+
+### 06:47:12 RT03: show ip mroute 239.1.1.1 | include \(|flags|Incoming|Ethernet|Null
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.1.1.1), 00:02:01/00:02:27, RP 3.3.3.3, flags: S
+  Incoming interface: Null, RPF nbr 0.0.0.0
+    Ethernet0/1, Forward/Sparse, 00:02:01/00:02:27, flags: 
+(10.0.12.1, 239.1.1.1), 00:01:46/00:01:20, flags: T
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.23.2
+    Ethernet0/1, Forward/Sparse, 00:01:46/00:02:27, flags: 
+### 06:47:15 RT02: show ip mroute 239.1.1.1 | include \(|flags|Incoming|Ethernet|Null
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.1.1.1), 00:01:49/stopped, RP 3.3.3.3, flags: SPF
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.23.3
+  Outgoing interface list: Null
+(10.0.12.1, 239.1.1.1), 00:01:49/00:01:47, flags: FT
+  Incoming interface: Ethernet0/0, RPF nbr 0.0.0.0
+    Ethernet0/2, Forward/Sparse, 00:01:49/00:02:39, flags: 
+    Ethernet0/1, Forward/Sparse, 00:01:49/00:02:45, flags: 
+### RT04: conf ['no ip pim spt-threshold infinity']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT08: conf ['no ip pim spt-threshold infinity']
+Enter configuration commands, one per line.  End with CNTL/Z.
+
+======== M6 IGMPv2 の離脱(RT06 が leave)→ 何秒でグループが消えるか ========
+### RT06: conf ['interface Ethernet0/0', 'no ip igmp join-group 239.1.1.1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 1
+### 06:47:19 RT04: show ip igmp groups 239.1.1.1
+IGMP Connected Group Membership
+Group Address    Interface                Uptime    Expires   Last Reporter   Group Accounted
+239.1.1.1        Ethernet0/2              00:02:08  00:02:55  10.0.100.6      
+### sleep 2
+### 06:47:21 RT04: show ip igmp groups 239.1.1.1
+IGMP Connected Group Membership
+Group Address    Interface                Uptime    Expires   Last Reporter   Group Accounted
+239.1.1.1        Ethernet0/2              00:02:10  00:00:00  10.0.100.6      
+### sleep 3
+### 06:47:24 RT04: show ip igmp groups 239.1.1.1
+IGMP Connected Group Membership
+Group Address    Interface                Uptime    Expires   Last Reporter   Group Accounted
+### 06:47:25 SW01: show ip igmp snooping groups
+Flags: I -- IGMP snooping, S -- Static, P -- PIM snooping, A -- ASM mode
+       E -- EVPN sync
+
+Vlan      Group/source             Type        Version     Port List
+-----------------------------------------------------------------------
+
+======== M7 DR priority: RT04 に dr-priority 10 → DR が RT04 に ========
+### RT04: conf ['interface Ethernet0/2', 'ip pim dr-priority 10']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 06:48:00 RT04: show ip pim interface Ethernet0/2
+Address          Interface                Ver/   Nbr    Query  DR         DR
+                                          Mode   Count  Intvl  Prior
+10.0.100.4       Ethernet0/2              v2/S   1      30     10         10.0.100.4
+### 06:48:00 RT04: show ip pim neighbor Ethernet0/2
+PIM Neighbor Table
+Mode: B - Bidir Capable, DR - Designated Router, N - Default DR Priority,
+      P - Proxy Capable, S - State Refresh Capable, G - GenID Capable,
+      L - DR Load-balancing Capable
+Neighbor          Interface                Uptime/Expires    Ver   DR
+Address                                                            Prio/Mode
+10.0.100.8        Ethernet0/2              00:08:17/00:01:17 v2    1 / S P G
+### RT04: conf ['interface Ethernet0/2', 'no ip pim dr-priority']
+Enter configuration commands, one per line.  End with CNTL/Z.
+
+======== M8 SSM: 全ルータ ip pim ssm default・受信 LAN を IGMPv3 に・RT07 が (10.0.12.1, 232.1.1.1) に参加 ========
+### RT02: conf ['ip pim ssm default']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT03: conf ['ip pim ssm default']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT04: conf ['ip pim ssm default']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT05: conf ['ip pim ssm default']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT08: conf ['ip pim ssm default']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT04: conf ['interface Ethernet0/2', 'ip igmp version 3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT08: conf ['interface Ethernet0/0', 'ip igmp version 3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT07: conf ['interface Ethernet0/0', 'ip igmp version 3', 'ip igmp join-group 232.1.1.1 source 10.0.12.1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 06:48:17 RT08: show ip igmp groups 232.1.1.1 detail
+Flags: L - Local, U - User, SG - Static Group, VG - Virtual Group,
+       SS - Static Source, VS - Virtual Source,
+       Ac - Group accounted towards access control limit
+
+Interface:	Ethernet0/0
+Group:		232.1.1.1
+Flags:		SSM 
+Uptime:		00:00:10
+Group mode:	INCLUDE
+Last reporter:	0.0.0.0
+Group source list: (C - Cisco Src Report, U - URD, R - Remote, S - Static,
+                    V - Virtual, M - SSM Mapping, L - Local,
+                    Ac - Channel accounted towards access control limit)
+  Source Address   Uptime    v3 Exp   CSR Exp   Fwd  Flags
+  10.0.12.1        00:00:10  00:02:49  stopped   Yes  R
+### 06:48:17 RT08: show ip mroute 232.1.1.1 | include \(|flags|Incoming|Ethernet|Null
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(10.0.12.1, 232.1.1.1), 00:00:10/00:02:49, flags: sTI
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.58.5
+    Ethernet0/0, Forward/Sparse, 00:00:10/00:02:49, flags: 
+### 06:48:17 RT08: show ip igmp interface Ethernet0/0 | include version|querying
+  Current IGMP host version is 3
+  Current IGMP router version is 3
+  IGMP querying router is 10.0.100.8 (this system)
+### 06:48:17 RT04: show ip igmp groups 232.1.1.1 detail
+Flags: L - Local, U - User, SG - Static Group, VG - Virtual Group,
+       SS - Static Source, VS - Virtual Source,
+       Ac - Group accounted towards access control limit
+
+Interface:	Ethernet0/2
+Group:		232.1.1.1
+Flags:		SSM 
+Uptime:		00:00:10
+Group mode:	INCLUDE
+Last reporter:	0.0.0.0
+Group source list: (C - Cisco Src Report, U - URD, R - Remote, S - Static,
+                    V - Virtual, M - SSM Mapping, L - Local,
+                    Ac - Channel accounted towards access control limit)
+  Source Address   Uptime    v3 Exp   CSR Exp   Fwd  Flags
+  10.0.12.1        00:00:10  00:02:49  stopped   Yes  R
+### 06:48:17 RT04: show ip mroute 232.1.1.1 | include \(|flags|Incoming|Ethernet|Null
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(10.0.12.1, 232.1.1.1), 00:00:10/00:02:49, flags: sPT
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.45.5
+  Outgoing interface list: Null
+### 06:48:18 RT04: show ip igmp interface Ethernet0/2 | include version|querying
+  Current IGMP host version is 3
+  Current IGMP router version is 3
+  IGMP querying router is 10.0.100.4 (this system)
+### 06:48:18 RT03: show ip mroute 232.1.1.1
+Group 232.1.1.1 not found
+### 06:48:18 RT01: ping 232.1.1.1 repeat 5 source Ethernet0/0
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 232.1.1.1, timeout is 2 seconds:
+Packet sent with a source address of 10.0.12.1 
+
+Reply to request 0 from 10.0.100.7, 2 ms
+Reply to request 1 from 10.0.100.7, 2 ms
+Reply to request 2 from 10.0.100.7, 2 ms
+Reply to request 3 from 10.0.100.7, 2 ms
+Reply to request 4 from 10.0.100.7, 2 ms
+### 06:48:44 SW01: show ip igmp snooping groups
+Flags: I -- IGMP snooping, S -- Static, P -- PIM snooping, A -- ASM mode
+       E -- EVPN sync
+
+Vlan      Group/source             Type        Version     Port List
+-----------------------------------------------------------------------
+100       232.1.1.1                I           v3          Et0/2 
+            /10.0.12.1             I                       Et0/2 
+
+======== M8b SSM 範囲に IGMPv2 で(送信元なしで)参加すると?(RT06 は v2 ホストのまま 232.2.2.2) ========
+### RT06: conf ['interface Ethernet0/0', 'ip igmp join-group 232.2.2.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 06:48:52 RT08: show ip igmp groups 232.2.2.2
+IGMP Connected Group Membership
+Group Address    Interface                Uptime    Expires   Last Reporter   Group Accounted
+### 06:48:52 RT08: show ip mroute 232.2.2.2
+Group 232.2.2.2 not found
+### 06:48:52 RT04: show ip igmp groups 232.2.2.2
+IGMP Connected Group Membership
+Group Address    Interface                Uptime    Expires   Last Reporter   Group Accounted
+### 06:48:52 RT04: show ip mroute 232.2.2.2
+Group 232.2.2.2 not found
+### RT06: conf ['interface Ethernet0/0', 'no ip igmp join-group 232.2.2.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 06:48:53 RT08: show ip pim rp mapping
+PIM Group-to-RP Mappings
+
+Group(s): 224.0.0.0/4, Static
+    RP: 3.3.3.3 (?)
+### 06:49:01 RT08: show running-config | include ssm
+ip pim ssm default

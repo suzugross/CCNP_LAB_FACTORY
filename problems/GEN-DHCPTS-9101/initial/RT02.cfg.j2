@@ -1,0 +1,76 @@
+! RT02 初期状態 (リレー+セキュリティACL・昨日 強化を実施した直後の状態)
+ip access-list extended BRANCH-DHCP-ONLY
+ 10 remark === CLIENT SEGMENT POLICY (SEC-TEAM) - change via ticket only ===
+ 20 remark --- bootstrap ---
+ 30 remark --- anti-spoofing ---
+ 40 deny ip 0.0.0.0 0.255.255.255 any
+ 50 deny ip 127.0.0.0 0.255.255.255 any
+ 60 deny ip 169.254.0.0 0.0.255.255 any
+ 70 deny ip 224.0.0.0 15.255.255.255 any
+ 80 permit udp any eq bootpc any eq bootps
+ 90 remark --- blocked destinations (SOC list 2026-01) ---
+ 100 deny ip any host 80.211.99.164
+ 110 deny ip any host 45.80.222.112
+ 120 deny ip any host 62.112.110.51
+ 130 deny ip any 62.173.27.0 0.0.0.255
+ 140 deny ip any host 77.184.91.15
+ 150 deny ip any host 80.148.81.170
+ 160 deny ip any host 195.36.147.192
+ 170 deny ip any 95.19.23.0 0.0.0.255
+ 180 deny ip any host 85.163.244.139
+ 190 deny ip any 212.245.222.0 0.0.0.255
+ 200 deny ip any host 178.138.76.116
+ 210 deny ip any host 103.16.157.126
+ 220 deny ip any host 91.160.61.122
+ 230 deny ip any host 80.71.84.62
+ 240 deny ip any host 89.117.97.192
+ 250 deny ip any 62.205.45.0 0.0.0.255
+ 260 deny ip any 95.88.254.0 0.0.0.255
+ 270 deny ip any 95.102.84.0 0.0.0.255
+ 280 remark --- guest hygiene ---
+ 290 deny tcp any any range 135 139
+ 300 deny tcp any any eq 3389
+ 310 deny tcp any any eq 445
+ 320 deny udp any any range 137 138
+ 330 deny udp any any eq 1900
+ 340 deny udp any any eq 69
+ 350 deny tcp any any eq 25
+ 360 deny tcp any any eq 23
+ 370 remark --- allowed services ---
+ 380 permit udp 10.190.6.0 0.0.0.255 any eq ntp
+ 390 permit tcp 10.190.7.0 0.0.0.255 any eq 443
+ 400 permit udp 10.190.6.0 0.0.0.255 host 198.51.100.248 eq domain
+ 410 permit tcp 10.190.7.0 0.0.0.255 any eq 8443
+ 420 permit udp 10.190.7.0 0.0.0.255 any eq ntp
+ 430 permit tcp 10.190.7.0 0.0.0.255 any eq www
+ 440 permit tcp 10.190.6.0 0.0.0.255 any eq 443
+ 450 permit tcp 10.190.6.0 0.0.0.255 any eq www
+ 460 permit udp 10.190.7.0 0.0.0.255 host 198.51.100.248 eq domain
+ 470 permit tcp 10.190.6.0 0.0.0.255 any eq 8443
+ 480 permit icmp any any
+ 490 remark --- default ---
+ 500 deny ip any any log
+!
+!
+interface {{ links[0] }}
+ description === to RT01 (DHCP server) ===
+ ip address 10.190.8.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === CLIENT segment A (CL1) ===
+ ip address 10.190.6.1 255.255.255.0
+ ip helper-address 10.190.8.1
+ ip access-group BRANCH-DHCP-ONLY in
+ no shutdown
+!
+interface {{ links[2] }}
+ description === CLIENT segment B (CL2) ===
+ ip address 10.190.7.1 255.255.255.0
+ ip helper-address 10.190.8.1
+ ip access-group BRANCH-DHCP-ONLY in
+ no shutdown
+!
+! LOCAL セグメントへの経路 (既設・変更禁止)
+ip route 10.190.5.0 255.255.255.0 10.190.8.1
+!

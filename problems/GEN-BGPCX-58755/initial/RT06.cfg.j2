@@ -1,0 +1,53 @@
+! RT06 (role=be, AS=65001) 初期構成
+interface Loopback0
+ ip address 10.0.40.40 255.255.255.255
+ ip ospf 1 area 0
+!
+interface {{ links[0] }}
+ ip address 10.117.117.2 255.255.255.252
+ ip ospf 1 area 0
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.107.107.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.169.169.1 255.255.255.252
+ no shutdown
+!
+ip route 10.0.78.78 255.255.255.255 10.169.169.2
+!
+router ospf 1
+ router-id 10.0.40.40
+!
+route-map RM-TAG-MHOP permit 10
+ set community 65001:500
+!
+route-map RM-LP-BACKUP permit 10
+ set local-preference 80
+!
+route-map RM-PREPEND-BACKUP permit 10
+ set as-path prepend 65001 65001 65001
+!
+router bgp 65001
+ bgp router-id 10.0.40.40
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.0.44.44 remote-as 65001
+ neighbor 10.0.44.44 update-source Loopback0
+ neighbor 10.107.107.6 remote-as 65100
+ neighbor 10.0.78.78 remote-as 65200
+ neighbor 10.0.78.78 update-source Loopback0
+ neighbor 10.0.78.78 ebgp-multihop 2
+ address-family ipv4 unicast
+  neighbor 10.0.44.44 activate
+  neighbor 10.0.44.44 send-community
+  neighbor 10.0.44.44 next-hop-self
+  neighbor 10.107.107.6 activate
+  neighbor 10.107.107.6 route-map RM-LP-BACKUP in
+  neighbor 10.107.107.6 route-map RM-PREPEND-BACKUP out
+  neighbor 10.0.78.78 activate
+  neighbor 10.0.78.78 route-map RM-TAG-MHOP in
+ exit-address-family
+!

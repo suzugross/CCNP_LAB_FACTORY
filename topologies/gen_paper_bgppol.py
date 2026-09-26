@@ -20,7 +20,10 @@ SPEED_KINDS = ["nontransit_dl"]            # ★BL-186: select(穴埋め)形は�
 SPEED_FORMS = {"nontransit_dl": ["select"]}
 THINK_KINDS = KINDS                          # nontransit_dl の cause 形は思考系に残す
 WORLDS = ["-"]
+# ★nontransit_dl はフィルタ手段が世界(BL-188)= 正解の形そのものが変わる。
+#   `--worlds acl|prefix|aspath` で指名できる(2026-09-20 ユーザ要望「AS パスの解も欲しい」)。
 KIND_WORLDS = {k: ["-"] for k in KINDS}
+KIND_WORLDS["nontransit_dl"] = ["acl", "prefix", "aspath"]
 FORMS = {"rm_implicit_deny": {"fix", "cause", "read"}, "nontransit_dl": {"select", "cause"}}
 DIFF = {"rm_implicit_deny": 4, "nontransit_dl": 4}
 
@@ -43,6 +46,9 @@ def draw(rnd, kind, world=None, form=None):
         _draw_rm(d, rnd)
     else:
         _draw_nt(d, rnd)
+        if world in ("acl", "prefix", "aspath"):
+            d["method"] = world          # --worlds で手段を指名(抽選を上書き)
+        d["world"] = d["method"]
     return d
 
 
@@ -173,7 +179,9 @@ def _draw_nt(d, rnd):
     d["p3"] = rnd.choice(["192.168.1.0", "172.31.9.0", "192.168.50.0"])
     d["p2"] = rnd.choice(["172.16.1.0", "10.2.2.0", "172.20.5.0"])
     # ★BL-188: フィルタ手段の世界(正解の形が変わる)= distribute-list(ACL) / prefix-list / filter-list(AS-PATH)
-    d["method"] = rnd.choice(["acl", "acl", "prefix", "aspath"])
+    #   2026-09-20 ユーザ指示で **均等割り**(それまでは acl を2枠にして 2:1:1)。
+    #   `--worlds acl|prefix|aspath` で指名も可。
+    d["method"] = rnd.choice(["acl", "prefix", "aspath"])
     d["pl_a"], d["pl_c"] = f"TO-{d['ra']}", f"TO-{d['rc']}"
     d["aspl"] = rnd.choice([1, 10, 50])
     if d["p2"] in (d["p1"], d["p3"]):

@@ -61,6 +61,7 @@ import gen_paper_eigrpkb as gek   # noqa: E402  (eigrpkb=EIGRP named-mode/auto-s
 import gen_paper_bgppol as gbp   # noqa: E402  (bgppol=BGP out ポリシー・BL-182)
 import gen_paper_rtbasic as grt   # noqa: E402  (rtbasic=経路選択の基礎 AD/RIB・BL-184)
 import gen_paper_cloze as gcl  # noqa: E402  (cloze=解説穴埋め形・BL-191)
+import gen_paper_stp as gst  # noqa: E402  (stp=STP 選択問・単元 U-A3 の P2・BL-216)
 # ★svc 型ファミリ(事実ベース＋小さな真偽関数・紙面専用)の共通レジストリ(2026-09-18・BL-176 計画)。
 #   shape 名 → module。新ファミリはここに 1 行足すだけで pick/forms/render/lint/obfuscate/
 #   瞬発力枠(--shape speed)/思考系枠(mixed の kbthink)の全経路に乗る。module の規約は
@@ -68,7 +69,7 @@ import gen_paper_cloze as gcl  # noqa: E402  (cloze=解説穴埋め形・BL-191)
 #   answer_body/pick_count/CORE/TITLES)＋ SPEED_KINDS / THINK_KINDS(任意。無ければ全 kind が瞬発力枠)
 #   ＋ SPEED_FORMS={kind: [forms]}(任意。瞬発力枠でその kind に使う形を絞る・BL-186)。
 KB_FAMILIES = {"svc": gsv, "fhs": gpf, "ospfdbg": god, "dhcp6": gd6, "dmvpn": gdm, "eigrpkb": gek,
-               "bgppol": gbp, "rtbasic": grt, "cloze": gcl}
+               "bgppol": gbp, "rtbasic": grt, "cloze": gcl, "stp": gst}
 import gen_paper_pref as gpr   # noqa: E402  (pref=OSPF/EIGRP 経路選好・BL-127)
 import gen_paper_ospfbgp as gob  # noqa: E402  (ospfbgp=OSPF→BGP 再配送の範囲・BL-163)
 
@@ -967,7 +968,223 @@ def _assert_no_loss(src, dst):
                                       else ""))
 
 
+# --------------------------------------------------------------------------
+# Cisco 語 v2(BL-207・2026-09-21 ユーザの本試験所感)= **量ではなく構文で**読みにくくする。
+# 前置き・症状の定型文・指示文(水増し)を出さず、要件を「〜という条件において、」の
+# 長い一文に畳んで設問へつなげる。出力ブロックは常時シャッフル・見出しなし。
+# 図・リンク一覧はそのまま(本試験の図はアドレスが充実している)。
+# ★v1 と v2 は同じ問題に対する文体バリエーション。抽選は md から導いた独立の乱数で行い、
+#   v1 側の乱数列(prose_mode 等)を消費しない= v1 の出方は従来と同一。
+# 設計= problems/_drafts/EXAM-STYLE-V2.design.md
+# --------------------------------------------------------------------------
+STYLE_MODE = "mix"          # v1 / v2 / mix(--style で上書き)
+P_STYLE_V2 = 0.5
+LAST_STYLE = "v1"           # 直前の obfuscate_md が選んだ文体(解答 md へ記録する)
+
+# 水増しの理由付け・判断の指示文(情報を持たない)は v2 では落とす
+V2_COMPRESS = [
+    (re.compile(r"^本作業は、日中の時間帯において実施されるという理由により、"), ""),
+]
+# 導入・症状の中の水増し文(情報を持たない)= v2 では落とす
+V2_PROSE_DROP = [
+    re.compile(r"ルーティングの設計の詳細は、示されているところの[^。]*?から、読み取られることが、期待されています。"),
+    re.compile(r"示されているところの出力を、参照してください。"),
+    re.compile(r"これは、意図された動作ではありません。"),
+    re.compile(r"導入されているところの保護の構成について、その挙動のレビューが、実施されています。"),
+    re.compile(r"経路の選好に関する挙動のレビューが、実施されています。"),
+    re.compile(r"示されているところの出力は、その時点で、採取されたものです。"),
+]
+V2_PROSE_FIX = [
+    # INTRO_DENAME の置換跡(「接続され、そして、それらは境界において接続されています」)
+    (re.compile(r"によって接続され、そして、それらは境界において接続されています。"),
+     "によって接続されています。"),
+]
+
+
+def v2_prose(s):
+    for pat in V2_PROSE_DROP:
+        s = pat.sub("", s)
+    for pat, rep in V2_PROSE_FIX:
+        s = pat.sub(rep, s)
+    return s
+
+
+V2_DROP = re.compile(r"^示されているところの出力、?\s*および、?\s*構成に基づいて、判断すること。$")
+# 五段の未然形 → 終止形
+_GODAN_A2U = dict(zip("わかがさたなばまら", "うくぐすつぬぶむる"))
+
+
+def _v2_plain_from_nakereba(stem):
+    """「〜なければなりません」の語幹(未然形) → 終止形。変換できなければ None。"""
+    if not stem:
+        return None
+    last = stem[-1]
+    if last == "し":
+        return stem[:-1] + "する"
+    if last in _GODAN_A2U:
+        return stem[:-1] + _GODAN_A2U[last]
+    if last in "きけせてねへめれえげべい":
+        return stem + "る"
+    return None
+
+
+def _v2_neg_from_te(stem):
+    """「〜てはなりません」の語幹(連用形) → 否定の終止形。五段の音便は None。"""
+    if not stem or stem[-1] in "っんい":
+        return None
+    return stem + "ない"
+
+
+def v2_clause(s):
+    """要件 1 文 → ('pos'|'neg', 終止形の節) / ('other', 元の文) / ('drop', '')。
+
+    ★意味は変えない(述語の形だけを変える)。複数文の要件・未知の文末は other=原文のまま。
+    """
+    s = s.strip()
+    for pat, rep in V2_COMPRESS:
+        s = pat.sub(rep, s)
+    if V2_DROP.match(s):
+        return ("drop", "")
+    s = re.sub(r"^ただし、", "", s)
+    if s.count("。") != 1 or not s.endswith("。"):
+        return ("other", s)
+    body = s[:-1]
+    plain = None
+    m = re.match(r"^(.*?)(?:することが|することは)できません$", body)
+    if m:
+        plain = m.group(1) + "しない"
+    if plain is None:
+        m = re.match(r"^(.*?)ることは(?:、)?できません$", body)
+        if m:
+            plain = m.group(1) + "ない"
+    if plain is None:
+        m = re.match(r"^(.*)なければなりません$", body)
+        if m:
+            plain = _v2_plain_from_nakereba(m.group(1))
+            if plain is None:
+                return ("other", s)
+    if plain is None:
+        m = re.match(r"^(.*)てはなりません$", body)
+        if m:
+            plain = _v2_neg_from_te(m.group(1))
+            if plain is None:
+                return ("other", s)
+    if plain is None:
+        m = re.match(r"^(.*る)必要があります$", body)
+        if m:
+            plain = m.group(1)
+    if plain is None:
+        m = re.match(r"^(.*て)いません$", body)
+        if m:
+            plain = m.group(1) + "いない"
+    if plain is None and body.endswith("こと"):
+        plain = body[:-2]
+        if not plain.endswith(("る", "ない", "う", "く", "す", "つ", "ぶ", "む", "ぐ")):
+            return ("other", s)
+    if plain is None:
+        return ("other", s)
+    return ("neg" if plain.endswith("ない") else "pos", plain)
+
+
+def _v2_renyo_neg(plain):
+    """否定の終止形 → 連用中止(「〜ず」)。「ていない」→「ておらず」。"""
+    if plain.endswith("ていない"):
+        return plain[:-4] + "ておらず"
+    if plain.endswith("しない"):
+        return plain[:-3] + "せず"
+    if plain.endswith("ない"):
+        return plain[:-2] + "ず"
+    return plain
+
+
+def v2_condition(reqs, rnd):
+    """要件の列 → (条件句= 「…という条件において、」まで, 後置文のリスト)。"""
+    parsed, seen = [], set()
+    for r in reqs:
+        k, c = v2_clause(r)
+        # ★表記ゆれ(中黒/空白)だけ違う同じ要件は 1 回にする(要件の要素は各 1 回)
+        key = re.sub(r"[\s・]", "", c)
+        if key in seen:
+            continue
+        seen.add(key)
+        parsed.append((k, c))
+    pos = [c for k, c in parsed if k == "pos"]
+    neg = [c for k, c in parsed if k == "neg"]
+    other = [c for k, c in parsed if k == "other"]
+    cond_items, trail = (pos, neg) if pos else (neg, [])
+    joiner = rnd.choice(["、そして、", "、かつ、"])
+    cond = (joiner.join(cond_items) + "という条件において、") if cond_items else ""
+    tail = []
+    if trail:
+        body = "、".join(_v2_renyo_neg(c) for c in trail[:-1])
+        body = (body + "、" if body else "") + trail[-1]
+        tail.append(body + rnd.choice(["ものとします。", "ことが求められます。"]))
+    return cond, tail + other
+
+
+def _style_is_v2(md):
+    if STYLE_MODE in ("v1", "v2"):
+        return STYLE_MODE == "v2"
+    return random.Random(zlib.crc32(md.encode("utf-8")) ^ 0x5717).random() < P_STYLE_V2
+
+
+def _obfuscate_body_v2(md, rnd, keep_ask=False):
+    secs = _split_sections(md)
+    get = {k: v for k, v in secs}
+    head = secs[0][1]
+    topo_prose, topo_rest = _prose_and_rest(get.get("トポロジ", []))
+    intro = "".join(x.strip() for x in topo_prose if x.strip())
+    for a, b in INTRO_DENAME:
+        intro = intro.replace(a.replace("\\n", "\n"), b)
+    reqs = [re.sub(r"^\d+\.\s*", "", x.strip())
+            for x in get.get("要件", []) if x.strip()]
+    st_prose, st_rest = _prose_and_rest(get.get("現在の状態", []))
+    state_blocks, state_other = _fenced_blocks(st_rest)
+    cfg_blocks, _ = _fenced_blocks(get.get("設定抜粋", []))
+    opts = "\n".join(get.get("選択肢", [])).strip()
+
+    if keep_ask:
+        # ★設問文・症状文が情報の担い手の形(個数・対象・前提)はそのまま残す
+        ask = "\n".join(x for x in get.get("設問", []) if x.strip()).strip()
+        symptom = "".join(x.strip() for x in st_prose if x.strip())
+    else:
+        symptom = ""
+        # 選択肢がすべて構成(コード)なら「必要な設定」を問う形に揃える(R5)
+        letters = re.findall(r"^\*\*[A-J]\.\*\*", opts, flags=re.M)
+        fences = opts.count("```") // 2
+        if letters and fences >= len(letters):
+            ask = rnd.choice(["必要な設定を、下記の項目から選択しなさい。",
+                              "必要とされる設定を、下記から選択しなさい。"])
+        else:
+            ask = rnd.choice(["下記の項目から、正しいものを選択しなさい。",
+                              "正しいものを、下記から選択しなさい。"])
+    intro, symptom = v2_prose(intro), v2_prose(symptom)
+    cond, tail = v2_condition(reqs, rnd)
+    # ★設問文が個数の指示「(1つを選択してください)」で終わる形は、その後ろに
+    #   制約を置くと指示が文の途中に埋もれる → 制約を条件句の前へ回す
+    if re.search(r"[)）]\s*$", ask):
+        para = intro + symptom + "".join(tail) + cond + ask
+    else:
+        para = intro + symptom + cond + ask + "".join(tail)
+
+    out = state_blocks + cfg_blocks
+    rnd.shuffle(out)
+    parts = ["\n".join(head).rstrip(), "", "## 設問", "", para, ""]
+    if "".join(topo_rest).strip():
+        parts += ["\n".join(topo_rest).strip(), ""]
+    if state_other:
+        parts += state_other + [""]
+    parts += ["\n".join(b) for b in out]
+    parts += ["", "## 選択肢", "", opts, ""]
+    return "\n".join(parts)
+
+
 def _obfuscate_body(md, rnd, keep_ask=False):
+    global LAST_STYLE
+    if _style_is_v2(md):
+        LAST_STYLE = "v2"
+        return _obfuscate_body_v2(md, rnd, keep_ask=keep_ask)
+    LAST_STYLE = "v1"
     prose_mode = rnd.random() < 0.5
     shuffle_out = rnd.random() < 0.5
     secs = _split_sections(md)
@@ -6954,7 +7171,7 @@ SVC_TITLES = {
 
 
 KB_TITLES = {"svc": SVC_TITLES, "fhs": gpf.TITLES, "ospfdbg": god.TITLES, "dhcp6": gd6.TITLES, "dmvpn": gdm.TITLES, "eigrpkb": gek.TITLES,
-             "bgppol": gbp.TITLES, "rtbasic": grt.TITLES, "cloze": gcl.TITLES}
+             "bgppol": gbp.TITLES, "rtbasic": grt.TITLES, "cloze": gcl.TITLES, "stp": gst.TITLES}
 
 
 def question_md_kb(shape, d, choices, stamp, form):
@@ -7881,7 +8098,7 @@ def main():
                     choices=["chain", "ring", "pbr", "urpf", "bgpdbg", "mploop",
                              "riploop", "leakmap", "ospfv3pl", "v6redist",
                              "aaa", "acl", "aclv6", "bgpbest", "copp", "pref",
-                             "ospfbgp", "mpls", "svc", "fhs", "ospfdbg", "dhcp6", "dmvpn", "eigrpkb", "bgppol", "rtbasic", "cloze", "speed", "mixed"],
+                             "ospfbgp", "mpls", "svc", "fhs", "ospfdbg", "dhcp6", "dmvpn", "eigrpkb", "bgppol", "rtbasic", "cloze", "stp", "speed", "mixed"],
                     default="chain",
                     help="chain=再配送欠落/誤設定系(既定) / ring=再配送リングの定常ループ(難5)"
                          " / riploop=RIP⇄OSPF 対策が効いていない型(BL-116)"
@@ -7940,6 +8157,9 @@ def main():
                          "指定した世界を持つ故障種だけに絞り込む。")
     ap.add_argument("--exclude-kinds", default="",
                     help="speed 枠で引かない種別(カンマ区切りの shape/kind。gen_pack が思考系で出した kind を渡す・BL-185)")
+    ap.add_argument("--only-kinds", default="",
+                    help="この種別だけを引く(カンマ区切りの shape/kind グロブ。`cloze/t_*`・`acl/*` 等。"
+                         "gen_pack --profile が units.yml から渡す・BL-213)。mixed/speed/cloze/単一 shape のどれでも効く")
     ap.add_argument("--kinds", default=None,
                     help=f"カンマ区切りで種別を明示(chain: {','.join(KINDS)} / "
                          f"ring: {','.join(RING_KINDS)}。既定=seedシャッフル巡回)")
@@ -7953,7 +8173,12 @@ def main():
     ap.add_argument("--keep-pack", action="store_true")
     ap.add_argument("--boot-wait", type=int, default=100)
     ap.add_argument("--settle", type=int, default=60)
+    ap.add_argument("--style", choices=["v1", "v2", "mix"], default="mix",
+                    help="問題文の文体(BL-207): v1=従来の Cisco 語 / v2=Cisco 語 v2"
+                         "(構文で読みにくく・情報最小・長い一文) / mix=問題ごとに抽選(既定)")
     a = ap.parse_args()
+    global STYLE_MODE
+    STYLE_MODE = a.style
     repo = os.path.abspath(a.repo)
     date = a.date or datetime.date.today().strftime("%Y%m%d")
     os.makedirs(f"{repo}/questions", exist_ok=True)
@@ -8033,12 +8258,43 @@ def main():
             print(f"[i] --forms により故障種を {len(keep)}/{len(kinds)} に限定"
                   f"(除外: {len(dropped)}種)", flush=True)
         kinds = keep
+    exclude_kinds = {x.strip() for x in (getattr(a, "exclude_kinds", "") or "").split(",") if x.strip()}
+    # ★BL-213: --only-kinds(shape/kind グロブ)。単一 shape の kinds はここで絞り、mixed/speed は抽選後に検査する
+    import fnmatch as _fnm
+    only_kinds = [x.strip() for x in (getattr(a, "only_kinds", "") or "").split(",") if x.strip()]
+
+    def _allowed(shape_, kind_):
+        if not only_kinds:
+            return True
+        key = f"{shape_}/{kind_}"
+        return any(_fnm.fnmatchcase(key, g) for g in only_kinds)
+    if only_kinds and kinds is not None:
+        keep = [k for k in kinds if _allowed(a.shape, k)]
+        if not keep:
+            raise SystemExit(f"--only-kinds {a.only_kinds} に合う種別が shape={a.shape} にありません")
+        if len(keep) < len(kinds):
+            print(f"[i] --only-kinds により種別を {len(keep)}/{len(kinds)} に限定", flush=True)
+        kinds = keep
     base = random.Random(a.seed)
-    qseeds = [base.randint(10**6, 10**7 - 1) for _ in range(a.count)]
+    # ★BL-205(2026-09-20): 予備の qseed を後ろに足す。--exclude-kinds で弾かれた
+    #   設問は捨てて次の qseed へ進むため、予備が無いと要求数に届かない。
+    #   先頭 count 個の値は従来と同一なので、除外指定が無い場合の再現性は変わらない。
+    qseeds = [base.randint(10**6, 10**7 - 1)
+              for _ in range(a.count + (16 if exclude_kinds else 0) + (200 if only_kinds else 0))]
+    # ★BL-216(2026-09-22): mixed で許可された種別が svc 型ファミリの思考系 kind だけのとき
+    #   (例 `--only-kinds stp/*`)は、4% の kbthink 枠を当てに待つと 0 問になるので、許可された
+    #   (shape, kind) から直接引く。通常の紙面 shape も許可に含まれる場合の抽選は従来どおり。
+    kb_think_pool = []
+    if a.shape == "mixed" and only_kinds:
+        kb_think_pool = [(sh, k) for sh, m in sorted(KB_FAMILIES.items())
+                         for k in (getattr(m, "THINK_KINDS", None) or []) if _allowed(sh, k)]
+        _plain = ["ring", "riploop", "pbr", "urpf", "mploop", "leakmap", "ospfv3pl", "v6redist", "aaa", "acl",
+                  "aclv6", "bgpbest", "bgpdbg", "copp", "pref", "ospfbgp", "mpls", "chain"]
+        if any(_fnm.fnmatchcase(f"{sh}/x", g.split("/")[0] + "/x") for sh in _plain for g in only_kinds):
+            kb_think_pool = []
     results = []
     seen_q = set()          # ★BL-185: 同一設問の重複排除(speed 枠)
     speed_used = set()      # ★BL-185 二次是正: speed 枠は同じ (shape, kind) を 1 実行で 2 度引かない
-    exclude_kinds = {x.strip() for x in (getattr(a, "exclude_kinds", "") or "").split(",") if x.strip()}
     for i, qseed in enumerate(qseeds):
         if len(results) >= a.count:
             break
@@ -8081,7 +8337,11 @@ def main():
                        else "ospfbgp" if r < 0.89
                        else "mpls" if r < 0.94
                        else "kbthink" if r < 0.98 else "chain")
-            if shape_i == "kbthink":
+            if kb_think_pool:
+                shape_i = "kbthink_direct"
+            if shape_i == "kbthink_direct":
+                shape_i, kind = roll.choice(kb_think_pool)
+            elif shape_i == "kbthink":
                 fams = sorted(sh for sh, m in KB_FAMILIES.items()
                               if getattr(m, "THINK_KINDS", None))
                 shape_i = roll.choice(fams)
@@ -8115,11 +8375,15 @@ def main():
                     for f, mm in KB_FAMILIES.items()}
             fams = {f: ks for f, ks in fams.items() if ks}   # ★BL-191: SPEED_KINDS=[] (cloze) は瞬発力枠に出さない
             fams["mpls"] = list(gpm.SPEED_KINDS)
-            cands = {f: [k for k in ks if (f, k) not in speed_used and f"{f}/{k}" not in exclude_kinds]
+            cands = {f: [k for k in ks if (f, k) not in speed_used and f"{f}/{k}" not in exclude_kinds
+                         and _allowed(f, k)]
                      for f, ks in fams.items()}
             cands = {f: ks for f, ks in cands.items() if ks}
             if not cands:                      # 全 kind を使い切ったら解放(count が kind 総数を超える場合)
-                cands = {f: ks for f, ks in fams.items() if ks}
+                cands = {f: [k for k in ks if _allowed(f, k)] for f, ks in fams.items()}
+                cands = {f: ks for f, ks in cands.items() if ks}
+            if not cands:
+                raise SystemExit(f"--only-kinds {a.only_kinds} に合う瞬発力 kind がありません")
             shape_i = roll.choice(sorted(cands))
             kind = roll.choice(cands[shape_i])
             m = None if shape_i == "mpls" else KB_FAMILIES[shape_i]
@@ -8127,7 +8391,13 @@ def main():
             speed_forms = (getattr(m, "SPEED_FORMS", None) or {}).get(kind) if m else None
         else:
             shape_i = a.shape
-            kind = kinds[i % len(kinds)]
+            # ★BL-205: 同日の別パックで既に出した kind は外す(全部除外なら解放)
+            pool = [k for k in kinds if f"{shape_i}/{k}" not in exclude_kinds] or kinds
+            kind = pool[i % len(pool)]
+        if a.shape == "mixed" and (f"{shape_i}/{kind}" in exclude_kinds or not _allowed(shape_i, kind)):
+            # ★BL-205: 同日の別パックと同じ型になったのでこの設問は捨てる(予備 qseed へ)
+            # ★BL-213: --only-kinds に合わない型も同様に捨てる
+            continue
         if shape_i == "mploop":
             subseed = qseed
             mp_rnd = random.Random(subseed)
@@ -9085,6 +9355,11 @@ def main():
                 continue
             seen_q.add(_key)
             speed_used.add((shape_i, kind))
+        if not ((shape_i == "bgpdbg" and form == "essay")
+                or shape_i in ("mpls", *KB_FAMILIES)):
+            a_md = a_md.rstrip("\n") + ("\n\n## 文体\n\n"
+                    + ("Cisco 語 v2(BL-207)" if LAST_STYLE == "v2" else "Cisco 語 v1")
+                    + "\n")
         leak_lint(q_md, lint)
         with open(f"{repo}/questions/{stamp}.md", "w", encoding="utf-8") as fh:
             fh.write(q_md)

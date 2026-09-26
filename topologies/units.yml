@@ -1,0 +1,124 @@
+# ============================================================
+# 単元タグ表(BL-213・2026-09-21)。CURRICULUM.md の単元(U-番号)と、
+# 紙面 shape/kind・ラボ生成器/固定問題の対応。gen_pack --profile が読む。
+#
+#   paper.kinds : gen_paper_mcq の `shape/kind` グロブ(`*` 可)。`shape/*` で shape 全体。
+#   lab.genres  : gen_pack.LAB_GENRES のキー(固定ジャンル枠)。
+#   lab.ids     : TS プール(--lab-extra)に許す 静的ID または GEN 接頭辞(前方一致)。
+#   blueprint   : 該当する資格(ccna/encor/enarsi/ccie)。profile ccna 等はここから導く。
+#
+# ★新しい shape / cloze topic / 生成器を作ったら、該当単元の行に足す(CATALOG 追記と同時)。
+# ★PVT 系の接頭辞は private/units.yml に書く(後勝ちで合流)。
+# ============================================================
+
+profiles:
+  # 資格プロファイル= blueprint に当該キーを持つ単元の和。
+  ccna:   {blueprint: ccna}
+  encor:  {blueprint: encor}
+  enarsi: {blueprint: enarsi}
+  ccie:   {blueprint: ccie}
+  # 別ベンダ= 非 Cisco ラボ(Junos/FortiGate/Linux)を許可し、紙面は出さない。
+  vendor: {units: [U-X1], lab_flags: [allow_non_cisco, any_lab, allow_special]}
+
+units:
+  # ---------------- A. L2 / キャンパス ----------------
+  U-A1: {name: VLAN/トランク, blueprint: [ccna, encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [CAMPUS-TS-01]}}
+  U-A2: {name: EtherChannel, blueprint: [ccna, encor, ccie], paper: {kinds: []}, lab: {genres: [l2], ids: [ENCOR-LAG-01, ENCOR-LAG-TS-01, GEN-L2TS]}}
+  U-A3: {name: STP, blueprint: [ccna, encor, ccie], paper: {kinds: ["cloze/t_*", "stp/*"]}, lab: {genres: [stpts, stpmst, stpbuild, stpmstbuild], ids: [CAMPUS-TS-01, GEN-STP]}}
+  U-A4: {name: スイッチ管理, blueprint: [ccna, ccie], paper: {kinds: []}, lab: {genres: [], ids: []}}
+  U-A5: {name: L2 セキュリティ, blueprint: [ccna, ccie], paper: {kinds: []}, lab: {genres: [], ids: [ENCOR-VACL-01, ENCOR-VACL-02]}}
+  U-A6: {name: FHRP, blueprint: [ccna, encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [ENCOR-FHRP-01, UM2-BUILD-01, UM2-BUILD-02]}}
+  U-A7: {name: SPAN/RSPAN/ERSPAN, blueprint: [encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [ENCOR-SPAN-01, ENCOR-RSPAN-01]}}
+  # ---------------- B. ルーティング基礎 ----------------
+  U-B1: {name: 経路表/AD/static, blueprint: [ccna, enarsi, ccie], paper: {kinds: ["rtbasic/*", "cloze/o_ad"]}, lab: {genres: [], ids: [ENCOR-IPSLA-01]}}
+  U-B2: {name: ルートフィルタ, blueprint: [encor, enarsi, ccie], paper: {kinds: ["chain/*", "ospfv3pl/*"]}, lab: {genres: [rtctl], ids: [GEN-RTCTL, GEN-TWIST, GEN-DOJO-PREFIX]}}
+  U-B3: {name: 再配送, blueprint: [enarsi, ccie], paper: {kinds: ["chain/*", "ring/*", "mploop/*", "riploop/*", "ospfbgp/*", "v6redist/*"]}, lab: {genres: [redist, redistmp], ids: [GEN-RDFIELD, GEN-RDARENA, GEN-REDISTMP, GEN-REDISTLOOP, GEN-REDISTRO, GEN-REDIST, ENCOR-REDIST-01, ENARSI-REDIST-POLICY-01, ENARSI-REDIST-MUTUAL-01, ENARSI-REDIST-LOOP-01, ENARSI-REDIST-BGP-LOOP-01]}}
+  U-B4: {name: 集約, blueprint: [encor, enarsi, ccie], paper: {kinds: ["leakmap/*", "eigrpkb/autosum"]}, lab: {genres: [], ids: [GEN-AGG, ENCOR-EIGRP-BUILD-01, ENARSI-BGP-AGGREGATE-01]}}
+  U-B5: {name: PBR, blueprint: [encor, enarsi, ccie], paper: {kinds: ["pbr/*"]}, lab: {genres: [], ids: [ENCOR-PBR-01, ENCOR-PBR-02]}}
+  U-B6: {name: VRF-Lite, blueprint: [ccna, encor, enarsi, ccie], paper: {kinds: []}, lab: {genres: [hvrf], ids: [ENCOR-VRF-LEAK-01, ENCOR-VRF-TS-01, ENCOR-VRF-NAT-01, GEN-EGVRF, GEN-VRFMAZE, ENARSI-EIGRP-VRF-01]}}
+  U-B7: {name: BFD, blueprint: [enarsi, ccie], paper: {kinds: ["svc/bfd"]}, lab: {genres: [], ids: []}}
+  U-B8: {name: ルーティング認証, blueprint: [enarsi, ccie], paper: {kinds: ["ospfdbg/auth_*", "bgpdbg/pw_*"]}, lab: {genres: [], ids: [ENCOR-OSPF-AUTH-01]}}
+  U-B9: {name: L3 MTU, blueprint: [ccie], paper: {kinds: ["ospfdbg/mtu", "cloze/d_mtu"]}, lab: {genres: [], ids: []}}
+  # ---------------- C. EIGRP ----------------
+  U-C1: {name: EIGRP 隣接, blueprint: [encor, enarsi, ccie], paper: {kinds: []}, lab: {genres: [], ids: [GEN-EIGRPCX, ENCOR-EIGRP-01]}}
+  U-C2: {name: EIGRP ベストパス, blueprint: [encor, enarsi, ccie], paper: {kinds: ["pref/fc_strict", "pref/fs_allthat", "pref/variance_*"]}, lab: {genres: [], ids: [ENCOR-EIGRP-VARIANCE-01]}}
+  U-C3: {name: EIGRP stub/SIA, blueprint: [enarsi, ccie], paper: {kinds: ["leakmap/*"]}, lab: {genres: [], ids: [ENARSI-EIGRP-SIA-01]}}
+  U-C4: {name: EIGRP named/VRF, blueprint: [enarsi, ccie], paper: {kinds: ["eigrpkb/named_mode"]}, lab: {genres: [hvrf], ids: [ENARSI-EIGRP-VRF-01, GEN-EGVRF]}}
+  U-C5: {name: EIGRP 負荷分散, blueprint: [encor, enarsi, ccie], paper: {kinds: ["pref/variance_*"]}, lab: {genres: [], ids: [ENCOR-EIGRP-VARIANCE-01]}}
+  U-C6: {name: EIGRPv6, blueprint: [enarsi], paper: {kinds: ["v6redist/*"]}, lab: {genres: [], ids: [GEN-EIGRPV6CX]}}
+  # ---------------- D. OSPF ----------------
+  U-D1: {name: OSPF 隣接, blueprint: [ccna, encor, enarsi, ccie], paper: {kinds: ["ospfdbg/*"]}, lab: {genres: [], ids: [GEN-TS, GEN-OSPFCX, ENARSI-OSPF-MADJ-01, ENCOR-OSPF-01, ENCOR-OSPF-IF-01, ENCOR-OSPF-AUTH-01, GEN-OSPF]}}
+  U-D2: {name: OSPF エリア種別, blueprint: [ccna, encor, enarsi, ccie], paper: {kinds: ["ospfdbg/nettype", "ospfdbg/stub"]}, lab: {genres: [], ids: [ENCOR-OSPF-STUB-01, ENCOR-OSPF-NSSA-01, ENARSI-OSPF-MADJ-01]}}
+  U-D3: {name: OSPF パス選好, blueprint: [encor, enarsi, ccie], paper: {kinds: ["pref/type_*", "pref/e2_fwd", "pref/e1_accum"]}, lab: {genres: [], ids: [GEN-PATH]}}
+  U-D4: {name: OSPFv3, blueprint: [encor, enarsi, ccie], paper: {kinds: ["ospfv3pl/*", "v6redist/*"]}, lab: {genres: [], ids: [ENCOR-OSPFV3-01, ENCOR-OSPFV3-AREA-01, GEN-OSPFV3CX]}}
+  U-D5: {name: OSPF 最適化, blueprint: [ccie], paper: {kinds: []}, lab: {genres: [], ids: []}}
+  U-D6: {name: OSPF 集約/フィルタ, blueprint: [encor, enarsi, ccie], paper: {kinds: ["ospfv3pl/*"]}, lab: {genres: [], ids: [GEN-AGG, GEN-TWIST]}}
+  U-D7: {name: OSPF×VRF, blueprint: [enarsi, ccie], paper: {kinds: []}, lab: {genres: [hvrf], ids: [ENARSI-VRFLITE-DNBIT-01]}}
+  # ---------------- E. BGP ----------------
+  U-E1: {name: BGP 隣接, blueprint: [encor, enarsi, ccie], paper: {kinds: ["bgpdbg/*"]}, lab: {genres: [], ids: [GEN-BGPCX, GEN-BGPTS, ENARSI-BGP-01]}}
+  U-E2: {name: BGP ベストパス, blueprint: [encor, enarsi, ccie], paper: {kinds: ["bgpbest/*", "cloze/o_bgp"]}, lab: {genres: [bgp], ids: [GEN-BGPBEST, GEN-BGPPATH, GEN-BGPRING, ENARSI-BGP-POLICY-01, ENARSI-BGP-WEIGHT-01, ENARSI-BGP-MED-01, ENARSI-BGP-ORIGIN-01]}}
+  U-E3: {name: BGP ポリシー, blueprint: [enarsi, ccie], paper: {kinds: ["bgppol/*"]}, lab: {genres: [bgp], ids: [GEN-BGPRING, ENARSI-BGP-COMM-01, ENARSI-BGP-PREFIX-01, ENARSI-BGP-ROUTEMAP-01]}}
+  U-E4: {name: AS-path 操作, blueprint: [enarsi, ccie], paper: {kinds: ["mpls/p_asoverride"]}, lab: {genres: [], ids: [GEN-DOJO-ASPATH, ENARSI-BGP-ASPATH-01, ENARSI-BGP-ASPATH-RM-01]}}
+  U-E5: {name: BGP RR, blueprint: [enarsi, ccie], paper: {kinds: []}, lab: {genres: [], ids: [GEN-BGPRR, GEN-CHAIN]}}
+  U-E6: {name: BGP 集約, blueprint: [enarsi, ccie], paper: {kinds: []}, lab: {genres: [], ids: [ENARSI-BGP-AGGREGATE-01]}}
+  U-E7: {name: BGP 運用, blueprint: [enarsi, ccie], paper: {kinds: []}, lab: {genres: [], ids: [ENARSI-BGP-SYNC-01, ENARSI-BGP-NHSELF-01]}}
+  U-E8: {name: BGP AF/VRF, blueprint: [enarsi, ccie], paper: {kinds: []}, lab: {genres: [], ids: [ENARSI-BGP-IPV6-01]}}
+  # ---------------- F. マルチキャスト ----------------
+  U-F1: {name: IGMP/MLD, blueprint: [encor, ccie], paper: {kinds: ["cloze/g_basics", "cloze/g_igmp", "cloze/g_l2"]}, lab: {genres: [], ids: []}}
+  U-F2: {name: PIM/RP, blueprint: [encor, ccie], paper: {kinds: ["cloze/g_pim", "cloze/g_rp", "cloze/g_ssm", "cloze/g_rpf", "cloze/g_read"]}, lab: {genres: [], ids: []}}
+  # ---------------- G. VPN / トランスポート ----------------
+  U-G1: {name: GRE, blueprint: [encor, ccie], paper: {kinds: ["cloze/d_mtu"]}, lab: {genres: [], ids: [ENCOR-GRE-01, ENCOR-GRE-02, ENCOR-WANHA-01]}}
+  U-G2: {name: IPsec, blueprint: [ccna, encor, enarsi, ccie], paper: {kinds: ["cloze/d_ipsec*", "cloze/d_ike*"]}, lab: {genres: [vpnbuild], ids: [ENARSI-IPSEC-VTI-01, ENARSI-IPSEC-IKEV2-01, ENARSI-GREIPSEC-MAP-01, GEN-S2SVPN]}}
+  U-G3: {name: DMVPN, blueprint: [enarsi, ccie], paper: {kinds: ["dmvpn/*", "cloze/d_*"]}, lab: {genres: [dmvpn, vpnbuild], ids: [GEN-DMVPN, GEN-DMVPNW, DMVPN-POC-01, DMVPN-PHASE3-01, ENARSI-DMVPN-BGP-01, ENARSI-DMVPN-IPSEC-01]}}
+  U-G4: {name: MPLS 基礎, blueprint: [enarsi, ccie], paper: {kinds: ["mpls/t_*", "mpls/l_*", "cloze/m_*"]}, lab: {genres: [mpls], ids: [GEN-MPLSTS, ENARSI-MPLS-L3VPN-01]}}
+  U-G5: {name: MPLS L3VPN, blueprint: [enarsi, ccie], paper: {kinds: ["mpls/*", "cloze/m_*"]}, lab: {genres: [mpls, mplsbuild], ids: [GEN-MPLSTS, GEN-MPLSEB, ENARSI-MPLS-L3VPN-]}}
+  U-G6: {name: LISP/VXLAN/EVPN, blueprint: [encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [SDA-LISP-01, EVPN-VXLAN-01]}}
+  U-G7: {name: SD-WAN, blueprint: [encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [FGT-SDWAN-01]}}
+  U-G8: {name: SD-Access, blueprint: [encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [SDA-LISP-01]}}
+  # ---------------- H. セキュリティ ----------------
+  U-H1: {name: AAA, blueprint: [ccna, encor, enarsi, ccie], paper: {kinds: ["aaa/*", "cloze/a_*"]}, lab: {genres: [aaa], ids: [GEN-AAAGRP, GEN-RADIUS, ENCOR-EDGE-HARDEN-01]}}
+  U-H2: {name: IPv4 ACL, blueprint: [ccna, encor, enarsi, ccie], paper: {kinds: ["acl/*"]}, lab: {genres: [], ids: [ENCOR-ACL-EXTENDED-01, ENCOR-ACL-NAMED-01, GEN-DOJO-ACL]}}
+  U-H3: {name: IPv6 traffic filter, blueprint: [enarsi, ccie], paper: {kinds: ["aclv6/*"]}, lab: {genres: [], ids: []}}
+  U-H4: {name: uRPF, blueprint: [enarsi, ccie], paper: {kinds: ["urpf/*"]}, lab: {genres: [urpf], ids: [GEN-URPF, ENARSI-URPF-01]}}
+  U-H5: {name: CoPP, blueprint: [encor, enarsi, ccie], paper: {kinds: ["copp/*"]}, lab: {genres: [], ids: [ENCOR-COPP-01, ENCOR-COPP-02, ENCOR-COPP-03]}}
+  U-H6: {name: IPv6 FHS, blueprint: [enarsi, ccie], paper: {kinds: ["fhs/*", "cloze/f_*"]}, lab: {genres: [v6build], ids: [GEN-V6BUILD, GEN-V6ADDR]}}
+  U-H7: {name: デバイスアクセス, blueprint: [ccna, encor, enarsi, ccie], paper: {kinds: ["svc/ssh", "svc/copy", "aaa/line", "aaa/vty_hi", "aaa/con", "aaa/enable"]}, lab: {genres: [], ids: [ENCOR-EDGE-HARDEN-01]}}
+  U-H8: {name: NW セキュリティ設計, blueprint: [ccna, encor], paper: {kinds: []}, lab: {genres: [], ids: [FGT-FW-BASIC-01, FGT-REPLACE-01, FGT-IPSEC-01]}}
+  U-H9: {name: 無線セキュリティ, blueprint: [ccna], paper: {kinds: []}, lab: {genres: [], ids: []}}
+  U-H10: {name: REST API セキュリティ, blueprint: [ccna, encor], paper: {kinds: []}, lab: {genres: [], ids: []}}
+  # ---------------- I. サービス / 運用 ----------------
+  U-I1: {name: NTP/PTP, blueprint: [ccna, encor, ccie], paper: {kinds: ["svc/ntp"]}, lab: {genres: [], ids: []}}
+  U-I2: {name: NAT/PAT, blueprint: [ccna, encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [ENCOR-VRF-NAT-01, ENCOR-INTEGRATED-01]}}
+  U-I3: {name: DHCPv4, blueprint: [ccna, enarsi, ccie], paper: {kinds: ["svc/dhcp_helper"]}, lab: {genres: [dhcp], ids: [GEN-DHCPTS, ENCOR-DHCP-01]}}
+  U-I4: {name: DHCPv6/SLAAC, blueprint: [enarsi, ccie], paper: {kinds: ["dhcp6/*"]}, lab: {genres: [v6addr], ids: [GEN-V6ADDR, ENARSI-DHCPV6-01]}}
+  U-I5: {name: SNMP, blueprint: [ccna, encor, enarsi, ccie], paper: {kinds: ["svc/snmp", "cloze/s_snmp*"]}, lab: {genres: [], ids: [GEN-SNMPTS, GEN-ZBXBUILD]}}
+  U-I6: {name: ロギング/デバッグ, blueprint: [ccna, encor, enarsi, ccie], paper: {kinds: ["svc/log", "svc/archive", "svc/dbgpkt", "cloze/o_syslog"]}, lab: {genres: [], ids: []}}
+  U-I7: {name: IP SLA/track, blueprint: [encor, enarsi, ccie], paper: {kinds: ["svc/ipsla_sched"]}, lab: {genres: [ipsla], ids: [GEN-IPSLATS, ENCOR-IPSLA-01, ENCOR-IPSLA-02, ENCOR-WANHA-01]}}
+  U-I8: {name: NetFlow/FNF, blueprint: [encor, enarsi, ccie], paper: {kinds: ["svc/nfe_apply", "cloze/s_fnf*", "cloze/s_nf*", "cloze/s_top*"]}, lab: {genres: [], ids: [GEN-FNFTS, ENCOR-FNF-01]}}
+  U-I9: {name: EEM, blueprint: [encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [ENCOR-EEM-01]}}
+  U-I10: {name: Catalyst Center, blueprint: [encor, enarsi, ccie], paper: {kinds: ["svc/dnac"]}, lab: {genres: [], ids: []}}
+  U-I11: {name: QoS MQC, blueprint: [ccna, encor, ccie], paper: {kinds: ["cloze/o_prec"]}, lab: {genres: [], ids: [ENCOR-QOS-CLASS-01, ENCOR-QOS-POLICE-01, ENCOR-QOS-LLQ-01]}}
+  U-I12: {name: ファイル/イメージ管理, blueprint: [ccna, enarsi], paper: {kinds: ["svc/copy", "svc/archive"]}, lab: {genres: [], ids: []}}
+  U-I13: {name: CEF/スイッチング概念, blueprint: [ccna], paper: {kinds: ["svc/cef"]}, lab: {genres: [], ids: []}}
+  U-I14: {name: 診断ツール, blueprint: [encor, enarsi, ccie], paper: {kinds: []}, lab: {genres: [], ids: []}}
+  # ---------------- J. IPv6 基礎 ----------------
+  U-J1: {name: IPv6 アドレス, blueprint: [ccna], paper: {kinds: []}, lab: {genres: [], ids: [ENCOR-IPV6-STATIC-01, ENCOR-IPV6-SLAAC-STATIC-01]}}
+  U-J2: {name: ND/RA, blueprint: [enarsi, ccie], paper: {kinds: ["aclv6/v6_explicit_deny_nd", "dhcp6/mode"]}, lab: {genres: [v6addr], ids: [GEN-V6ADDR]}}
+  U-J3: {name: IPv6 トンネリング, blueprint: [], paper: {kinds: []}, lab: {genres: [], ids: []}}
+  # ---------------- K. 自動化 ----------------
+  U-K1: {name: データ形式/Python, blueprint: [ccna, encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [ANSIBLE-04-VARS]}}
+  U-K2: {name: REST API, blueprint: [ccna, encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [NETAUTO-03-RESTCONF]}}
+  U-K3: {name: NETCONF/RESTCONF/YANG, blueprint: [encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [NETAUTO-03-RESTCONF]}}
+  U-K4: {name: オンボックス自動化, blueprint: [ccie], paper: {kinds: []}, lab: {genres: [], ids: []}}
+  U-K5: {name: 構成管理ツール, blueprint: [ccna, encor], paper: {kinds: []}, lab: {genres: [], ids: [ANSIBLE-, ENCOR-AUTO-, ENARSI-AUTO-]}}
+  U-K6: {name: テレメトリ, blueprint: [ccie], paper: {kinds: []}, lab: {genres: [], ids: []}}
+  U-K7: {name: SDN 概念/AI, blueprint: [ccna, encor], paper: {kinds: []}, lab: {genres: [], ids: []}}
+  # ---------------- L. 基礎概念 ----------------
+  U-L1: {name: 構成要素/ケーブル, blueprint: [ccna, encor], paper: {kinds: []}, lab: {genres: [], ids: []}}
+  U-L2: {name: TCP/UDP/サブネット, blueprint: [ccna], paper: {kinds: []}, lab: {genres: [], ids: []}}
+  U-L3: {name: 仮想化/クラウド, blueprint: [ccna, encor], paper: {kinds: []}, lab: {genres: [], ids: []}}
+  U-L4: {name: 無線基礎, blueprint: [ccna], paper: {kinds: []}, lab: {genres: [], ids: []}}
+  U-L5: {name: 高可用設計, blueprint: [ccna, encor], paper: {kinds: []}, lab: {genres: [], ids: []}}
+  U-L6: {name: クライアント OS, blueprint: [ccna], paper: {kinds: []}, lab: {genres: [], ids: []}}
+  # ---------------- X. 別ベンダ(ブループリント外・周辺) ----------------
+  U-X1: {name: 別ベンダ/Linux, blueprint: [], paper: {kinds: []}, lab: {genres: [], ids: [JUNOS-, FGT-, GEN-DNSDHCP, GEN-DNSTS, GEN-RADIUS, GEN-ZBXBUILD]}}

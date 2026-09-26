@@ -1,0 +1,34 @@
+- note: T5a 監査ポート(SW03 Et0/2=access10+portfast+bpduguard / SW04 Et0/2=access99)を no shut
+- node: SW04
+  conf: ["interface Ethernet0/2", "no shutdown"]
+- node: SW03
+  conf: ["interface Ethernet0/2", "no shutdown"]
+  wait: 8
+  show: ["show interfaces status err-disabled", "show logging | include BPDUGUARD|ERR_DISABLE", "show spanning-tree interface Ethernet0/2 detail"]
+- node: SW04
+  show: ["show spanning-tree vlan 99", "show interfaces Ethernet0/2 status"]
+- node: SW03
+  conf: ["interface Ethernet0/2", "shutdown", "spanning-tree bpdufilter enable"]
+- note: T5b 同じポートに bpdufilter を足した状態で no shut(filter 勝ち・ループしないこと)
+- node: SW03
+  conf: ["interface Ethernet0/2", "no shutdown"]
+  wait: 15
+  show: ["show interfaces status err-disabled", "show interfaces Ethernet0/2 status", "show spanning-tree interface Ethernet0/2 detail", "ping 10.76.10.4 repeat 5", "show processes cpu | include CPU"]
+- node: SW04
+  show: ["show spanning-tree vlan 99", "show mac address-table dynamic vlan 99", "show processes cpu | include CPU"]
+- node: SW03
+  conf: ["interface Ethernet0/2", "shutdown", "no spanning-tree bpdufilter enable"]
+- note: T5c 両端とも portfast+bpduguard(両側 err-disable になるか)
+- node: SW04
+  conf: ["interface Ethernet0/2", "shutdown", "spanning-tree portfast", "spanning-tree bpduguard enable", "no shutdown"]
+- node: SW03
+  conf: ["interface Ethernet0/2", "no shutdown"]
+  wait: 8
+  show: ["show interfaces status err-disabled", "show logging | include BPDUGUARD"]
+- node: SW04
+  show: ["show interfaces status err-disabled", "show logging | include BPDUGUARD"]
+- node: SW04
+  conf: ["interface Ethernet0/2", "shutdown", "no spanning-tree portfast", "no spanning-tree bpduguard enable"]
+- node: SW03
+  conf: ["interface Ethernet0/2", "shutdown"]
+  show: ["show interfaces status | include Et0/2"]

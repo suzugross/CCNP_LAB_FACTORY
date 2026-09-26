@@ -1,0 +1,101 @@
+! RT04 (支店3)
+interface Loopback1
+ ip address 10.37.4.1 255.255.255.0
+!
+ip access-list extended EDGE-IN
+ 10 remark === EDGE PROTECTION (SEC-TEAM) - change via ticket only ===
+ 20 remark --- anti-spoofing ---
+ 30 deny ip 10.0.0.0 0.255.255.255 any
+ 40 deny ip 172.16.0.0 0.15.255.255 any
+ 50 deny ip 192.168.0.0 0.0.255.255 any
+ 60 deny ip 127.0.0.0 0.255.255.255 any
+ 70 deny ip 0.0.0.0 0.255.255.255 any
+ 80 deny ip 169.254.0.0 0.0.255.255 any
+ 90 deny ip 224.0.0.0 15.255.255.255 any
+ 100 remark --- SOC blocklist (updated 2026-07-24) ---
+ 110 deny ip host 5.33.140.145 any
+ 120 deny ip host 62.248.199.165 any
+ 130 deny ip 91.32.223.0 0.0.0.255 any
+ 140 deny ip host 37.0.250.100 any
+ 150 deny ip 103.61.39.0 0.0.0.255 any
+ 160 deny ip host 31.184.144.111 any
+ 170 deny ip host 178.147.144.54 any
+ 180 deny ip 31.98.62.0 0.0.0.255 any
+ 190 deny ip 188.63.65.0 0.0.0.255 any
+ 200 deny ip 31.203.244.0 0.0.0.255 any
+ 210 deny ip host 79.14.227.129 any
+ 220 deny ip host 213.42.215.50 any
+ 230 deny ip host 45.173.37.193 any
+ 240 deny ip host 45.62.135.66 any
+ 250 deny ip 80.116.112.0 0.0.0.255 any
+ 260 deny ip 46.55.219.0 0.0.0.255 any
+ 270 deny ip host 31.191.113.87 any
+ 280 deny ip 193.172.182.0 0.0.0.255 any
+ 290 deny ip host 213.178.183.163 any
+ 300 deny ip host 31.43.222.68 any
+ 310 deny ip host 176.247.176.164 any
+ 320 remark --- port hygiene ---
+ 330 deny udp any any range 137 138
+ 340 deny tcp any any eq 23
+ 350 deny tcp any any range 6000 6063
+ 360 deny udp any any eq 5060
+ 370 deny udp any any eq 19
+ 380 deny udp any any eq 7
+ 390 deny tcp any any eq 445
+ 400 deny tcp any any eq 3389
+ 410 deny tcp any any range 135 139
+ 420 deny tcp any any eq 3306
+ 430 deny udp any any eq 69
+ 440 remark === VPN (SEC-TEAM) ===
+ 450 permit udp any host 198.51.100.10 eq 500
+ 460 permit esp any host 198.51.100.10
+ 470 permit udp any host 198.51.100.10 eq 4500
+ 480 permit gre any host 198.51.100.10
+ 490 remark --- ICMP ---
+ 500 permit icmp any host 198.51.100.10 echo
+ 510 permit icmp any host 198.51.100.10 echo-reply
+ 520 permit icmp any host 198.51.100.10 unreachable
+ 530 permit icmp any host 198.51.100.10 time-exceeded
+ 540 remark --- management (NOC) ---
+ 550 permit tcp host 192.0.2.10 host 198.51.100.10 eq 22
+ 560 permit udp host 192.0.2.20 host 198.51.100.10 eq snmp
+ 570 permit udp host 192.0.2.123 host 198.51.100.10 eq ntp
+ 580 remark --- router protection ---
+ 590 deny ip any host 198.51.100.10 log
+ 600 deny ip any any log
+!
+interface {{ links[0] }}
+ description === to ISP ===
+ ip address 198.51.100.10 255.255.255.252
+ ip access-group EDGE-IN in
+ no shutdown
+!
+ip route 0.0.0.0 0.0.0.0 198.51.100.9
+!
+crypto isakmp policy 10
+ encryption aes 256
+ hash sha256
+ authentication pre-share
+ group 14
+!
+crypto isakmp key SECKEY3446 address 0.0.0.0
+!
+crypto ipsec transform-set TS-DMVPN esp-aes 256 esp-sha256-hmac
+ mode transport
+!
+interface Tunnel0
+ ip address 172.30.131.4 255.255.255.0
+ no ip redirects
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ ip nhrp authentication WANSEC53
+ ip nhrp nhs 172.30.131.1 nbma 203.0.113.2 multicast
+ ip nhrp shortcut
+ tunnel source {{ links[0] }}
+ tunnel mode gre multipoint
+ tunnel key 1155
+!
+router eigrp 298
+ network 172.30.131.0 0.0.0.255
+ network 10.37.4.0 0.0.0.255
+!

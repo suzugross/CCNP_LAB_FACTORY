@@ -1,0 +1,278 @@
+
+======== N1 持ち込み機器ポート(SW03 Et1/2)に portfast+bpduguard → CIST root が SW01 に戻るか(固着 B2 の有無) ========
+### SW03: conf ['interface Ethernet1/2', 'spanning-tree portfast', 'spanning-tree bpduguard enable']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%Warning: portfast should only be enabled on ports connected to a single
+ host. Connecting hubs, concentrators, switches, bridges, etc... to this
+ interface  when portfast is enabled, can cause temporary bridging loops.
+ Use with CAUTION
+
+%Portfast has been configured on Ethernet1/2 but will only
+ have effect when the interface is in a non-trunking mode.
+### 10:37:42 SW03: show spanning-tree mst 0 | include ^Et0|Root|Regional
+Root          address aabb.cc02.9200  priority      24576 (24576 sysid 0)
+Regional Root address aabb.cc02.9200  priority      24576 (24576 sysid 0)
+Et0/0                            Root FWD 2000000   128.1    P2p 
+Et0/1                            Altn BLK 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p 
+### 10:37:42 SW03: show interfaces status err-disabled
+Port         Name         Status       Reason               Err-disabled Vlans
+
+Et1/2                     err-disabled bpduguard
+### 10:37:42 SW01: show spanning-tree mst 0 | include ^Et0|Root|Regional
+Root          this switch for the CIST
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:37:43 SW02: show spanning-tree mst 0 | include ^Et0|Root|Regional
+Root          address aabb.cc02.9200  priority      24576 (24576 sysid 0)
+Regional Root address aabb.cc02.9200  priority      24576 (24576 sysid 0)
+Et0/0                            Root FWD 2000000   128.1    P2p 
+Et0/1                            Altn BLK 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:37:43 SW04: show spanning-tree vlan 174 | include ^Et|Root ID|Priority
+  Root ID    Priority    24576
+  Bridge ID  Priority    32942  (priority 32768 sys-id-ext 174)
+Et0/0               Root FWD 2000000   128.1    P2p Peer(STP) 
+Et0/1               Altn BLK 2000000   128.2    P2p Peer(STP) 
+Et1/0               Desg FWD 2000000   128.5    P2p 
+Et1/2               Desg FWD 2000000   128.7    P2p 
+### 10:37:43 SW04: show spanning-tree vlan 218 | include ^Et|Root ID|Priority
+  Root ID    Priority    24576
+  Bridge ID  Priority    32986  (priority 32768 sys-id-ext 218)
+Et0/0               Root FWD 2000000   128.1    P2p Peer(STP) 
+Et0/1               Altn BLK 2000000   128.2    P2p Peer(STP) 
+Et1/1               Desg FWD 2000000   128.6    P2p 
+
+======== N2 PVST 側(SW04)が VLAN218 だけ優位(4096) → 境界の PVST シミュレーション不整合 ========
+### SW04: conf ['spanning-tree vlan 218 priority 4096']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 10:38:03 SW04: show spanning-tree vlan 218 | include ^Et|Root ID|Priority
+  Root ID    Priority    4314
+  Bridge ID  Priority    4314   (priority 4096 sys-id-ext 218)
+Et0/0               Desg FWD 2000000   128.1    P2p Peer(STP) 
+Et0/1               Desg LRN 2000000   128.2    P2p Peer(STP) 
+Et1/1               Desg FWD 2000000   128.6    P2p 
+### 10:38:03 SW04: show spanning-tree vlan 174 | include ^Et|Root ID
+  Root ID    Priority    24576
+Et0/0               Root FWD 2000000   128.1    P2p Peer(STP) 
+Et0/1               Altn BLK 2000000   128.2    P2p Peer(STP) 
+Et1/0               Desg FWD 2000000   128.5    P2p 
+Et1/2               Desg FWD 2000000   128.7    P2p 
+### 10:38:03 SW01: show spanning-tree mst 0 | include ^Et0|Root|Regional
+Root          this switch for the CIST
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg BKN*2000000   128.4    P2p Bound(PVST) *PVST_Inc 
+### 10:38:04 SW01: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+MST0                 Ethernet0/3                    PVST Sim. Inconsistent
+MST1                 Ethernet0/3                    PVST Sim. Inconsistent
+MST2                 Ethernet0/3                    PVST Sim. Inconsistent
+
+Number of inconsistent ports (segments) in the system : 3
+### 10:38:04 SW01: show logging | include PVSTSIM|INCONSIST
+*Sep 22 10:37:43.730: %SPANTREE-2-PVSTSIM_FAIL: Blocking designated port Et0/3: Inconsitent superior PVST BPDU received on VLAN 218, claiming root 4314:aabb.cc02.9400
+### 10:38:04 SW02: show spanning-tree mst 0 | include ^Et0|Root|Regional
+Root          address aabb.cc02.9200  priority      24576 (24576 sysid 0)
+Regional Root address aabb.cc02.9200  priority      24576 (24576 sysid 0)
+Et0/0                            Root FWD 2000000   128.1    P2p 
+Et0/1                            Altn BLK 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg BKN*2000000   128.4    P2p Bound(PVST) *PVST_Inc 
+### 10:38:04 SW02: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+MST0                 Ethernet0/3                    PVST Sim. Inconsistent
+MST1                 Ethernet0/3                    PVST Sim. Inconsistent
+MST2                 Ethernet0/3                    PVST Sim. Inconsistent
+
+Number of inconsistent ports (segments) in the system : 3
+### SW04: conf ['no spanning-tree vlan 218 priority']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 10:38:24 SW01: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+
+Number of inconsistent ports (segments) in the system : 0
+### 10:38:24 SW01: show spanning-tree mst 0 | include ^Et0|Root|Regional
+Root          this switch for the CIST
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg BLK 2000000   128.4    P2p Bound(PVST) 
+
+======== N3 PVST 側が全 VLAN で優位(vlan 1-4094 priority 4096) → CIST root が外(SW04)になるか・不整合は出るか ========
+### SW04: conf ['spanning-tree vlan 1-4094 priority 4096']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 10:38:49 SW04: show spanning-tree vlan 174 | include ^Et|Root ID|Priority
+  Root ID    Priority    4270
+  Bridge ID  Priority    4270   (priority 4096 sys-id-ext 174)
+Et0/0               Desg FWD 2000000   128.1    P2p Peer(STP) 
+Et0/1               Desg LRN 2000000   128.2    P2p Peer(STP) 
+Et1/0               Desg FWD 2000000   128.5    P2p 
+Et1/2               Desg FWD 2000000   128.7    P2p 
+### 10:38:49 SW04: show running-config | include spanning-tree vlan
+spanning-tree vlan 1-4094 priority 4096
+### 10:38:49 SW01: show spanning-tree mst 0 | include ^Et0|Root|Regional
+Root          this switch for the CIST
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg BKN*2000000   128.4    P2p Bound(PVST) *PVST_Inc 
+### 10:38:50 SW01: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+MST0                 Ethernet0/3                    PVST Sim. Inconsistent
+MST1                 Ethernet0/3                    PVST Sim. Inconsistent
+MST2                 Ethernet0/3                    PVST Sim. Inconsistent
+
+Number of inconsistent ports (segments) in the system : 3
+### 10:38:50 SW01: show spanning-tree mst 1 | include ^Et0|Root
+Root          this switch for MST1
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg BKN*2000000   128.4    P2p Bound(PVST) *PVST_Inc 
+### 10:38:50 SW02: show spanning-tree mst 0 | include ^Et0|Root|Regional
+Root          address aabb.cc02.9200  priority      24576 (24576 sysid 0)
+Regional Root address aabb.cc02.9200  priority      24576 (24576 sysid 0)
+Et0/0                            Root FWD 2000000   128.1    P2p 
+Et0/1                            Altn BLK 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg BKN*2000000   128.4    P2p Bound(PVST) *PVST_Inc 
+### 10:38:50 SW02: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+MST0                 Ethernet0/3                    PVST Sim. Inconsistent
+MST1                 Ethernet0/3                    PVST Sim. Inconsistent
+MST2                 Ethernet0/3                    PVST Sim. Inconsistent
+
+Number of inconsistent ports (segments) in the system : 3
+### SW04: conf ['no spanning-tree vlan 1-4094 priority']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 10:39:15 SW01: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+
+Number of inconsistent ports (segments) in the system : 0
+### 10:39:15 SW01: show spanning-tree mst 0 | include ^Et0|Root|Regional
+Root          this switch for the CIST
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg BLK 2000000   128.4    P2p Bound(PVST) 
+
+======== N4 region 不一致(SW03 revision 4) ========
+### SW03: conf ['spanning-tree mst configuration', 'revision 4', 'exit']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 10:39:35 SW03: show spanning-tree mst 0 | include ^Et0|Root|Regional
+Root          address aabb.cc02.9200  priority      24576 (24576 sysid 0)
+Regional Root this switch
+Et0/0                            Root FWD 2000000   128.1    P2p Bound(RSTP) 
+Et0/1                            Altn BLK 2000000   128.2    P2p Bound(RSTP) 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p 
+### 10:39:49 SW03: show spanning-tree mst 1 | include ^Et0|Root
+Root          this switch for MST1
+Et0/0                            Mstr FWD 2000000   128.1    P2p Bound(RSTP) 
+Et0/1                            Altn BLK 2000000   128.2    P2p Bound(RSTP) 
+### 10:39:49 SW03: show spanning-tree mst configuration digest
+Name      [CAMPUS]
+Revision  4     Instances configured 3
+Digest          0x424F717F24AE7DCBC362E7E7B9AC2928
+Pre-std Digest  0xDB40482078BDD9EBC0C363B5736B6258
+### 10:39:49 SW01: show spanning-tree mst 0 | include ^Et0|Root|Regional
+Root          this switch for the CIST
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:39:49 SW01: show spanning-tree mst 1 | include ^Et0|Root
+Root          this switch for MST1
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:39:49 SW01: show spanning-tree mst configuration digest
+Name      [CAMPUS]
+Revision  3     Instances configured 3
+Digest          0x424F717F24AE7DCBC362E7E7B9AC2928
+Pre-std Digest  0xDB40482078BDD9EBC0C363B5736B6258
+### 10:39:49 SW01: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+
+Number of inconsistent ports (segments) in the system : 0
+### SW03: conf ['spanning-tree mst configuration', 'revision 3', 'exit']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 10:40:10 SW01: show spanning-tree mst 0 | include ^Et0|Root|Regional
+Root          this switch for the CIST
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+
+======== N5 instance 対応の不一致(SW02 で 233 を instance 2 へ) ========
+### SW02: conf ['spanning-tree mst configuration', 'no instance 1 vlan 233', 'instance 2 vlan 233', 'exit']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 10:40:30 SW02: show spanning-tree mst 0 | include ^Et0|Root|Regional
+Root          address aabb.cc02.9200  priority      24576 (24576 sysid 0)
+Regional Root this switch
+Et0/0                            Root FWD 2000000   128.1    P2p Bound(RSTP) 
+Et0/1                            Altn BLK 2000000   128.2    P2p Bound(RSTP) 
+Et0/2                            Altn BLK 2000000   128.3    P2p Bound(RSTP) 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:40:44 SW02: show spanning-tree mst 1 | include ^Et0|Root
+Root          this switch for MST1
+Et0/0                            Mstr FWD 2000000   128.1    P2p Bound(RSTP) 
+Et0/1                            Altn BLK 2000000   128.2    P2p Bound(RSTP) 
+Et0/2                            Altn BLK 2000000   128.3    P2p Bound(RSTP) 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:40:44 SW02: show spanning-tree mst 2 | include ^Et0|Root
+Root          this switch for MST2
+Et0/0                            Mstr FWD 2000000   128.1    P2p Bound(RSTP) 
+Et0/1                            Altn BLK 2000000    64.2    P2p Bound(RSTP) 
+Et0/2                            Altn BLK 2000000   128.3    P2p Bound(RSTP) 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:40:44 SW02: show spanning-tree mst configuration
+Name      [CAMPUS]
+Revision  3     Instances configured 3
+
+Instance  Vlans mapped
+--------  ---------------------------------------------------------------------
+0         1-173,175-217,219-232,234-4094
+1         174
+2         218,233
+-------------------------------------------------------------------------------
+### 10:40:44 SW01: show spanning-tree mst 0 | include ^Et0|Root|Regional
+Root          this switch for the CIST
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:40:44 SW01: show spanning-tree mst 2 | include ^Et0|Root
+Root          this switch for MST2
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg LRN 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### SW02: conf ['spanning-tree mst configuration', 'no instance 2 vlan 233', 'instance 1 vlan 233', 'exit']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 10:41:09 SW01: show spanning-tree mst 0 | include ^Et0|Root|Regional
+Root          this switch for the CIST
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:41:09 SW01: show spanning-tree mst 2 | include ^Et0|Root
+Root          address aabb.cc02.9300  priority      24578 (24576 sysid 2)
+Et0/0                            Altn BLK 2000000   128.1    P2p 
+Et0/1                            Root FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 

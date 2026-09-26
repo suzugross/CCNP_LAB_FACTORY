@@ -1,0 +1,161 @@
+- note: 準備 VLAN30-37 を作成して trunk に追加
+- node: SW01
+  conf:
+  - vlan 30-37
+  - exit
+  - interface range Ethernet0/0 - 1
+  - switchport trunk allowed vlan add 30-37
+- node: SW02
+  conf:
+  - vlan 30-37
+  - exit
+  - interface range Ethernet0/0 - 2
+  - switchport trunk allowed vlan add 30-37
+- node: SW03
+  conf:
+  - vlan 30-37
+  - exit
+  - interface range Ethernet0/0 - 2
+  - switchport trunk allowed vlan add 30-37
+- note: 'M2 前提: SW01 の各 VLAN priority(30=既定/31=16384/32=4096/33=0/34=24576/35=4096/36=既定/37=28672)'
+- node: SW01
+  conf:
+  - spanning-tree vlan 31 priority 16384
+  - spanning-tree vlan 32 priority 4096
+  - spanning-tree vlan 33 priority 0
+  - spanning-tree vlan 34 priority 24576
+  - spanning-tree vlan 35 priority 4096
+  - spanning-tree vlan 37 priority 28672
+- sleep: 20
+- node: SW03
+  show:
+  - show spanning-tree root
+- note: M2 SW03 で root primary(VLAN30〜34)を 1 本ずつ
+- node: SW03
+  conf:
+  - spanning-tree vlan 30 root primary
+  wait: 3
+  show:
+  - 'show running-config | include spanning-tree vlan 30 '
+- node: SW03
+  conf:
+  - spanning-tree vlan 31 root primary
+  wait: 3
+  show:
+  - 'show running-config | include spanning-tree vlan 31 '
+- node: SW03
+  conf:
+  - spanning-tree vlan 32 root primary
+  wait: 3
+  show:
+  - 'show running-config | include spanning-tree vlan 32 '
+- node: SW03
+  conf:
+  - spanning-tree vlan 33 root primary
+  wait: 3
+  show:
+  - 'show running-config | include spanning-tree vlan 33 '
+- node: SW03
+  conf:
+  - spanning-tree vlan 34 root primary
+  wait: 3
+  show:
+  - 'show running-config | include spanning-tree vlan 34 '
+- note: M3 SW02 で root secondary(VLAN35=root 4096/36=全員既定/37=root 28672)
+- node: SW02
+  conf:
+  - spanning-tree vlan 35 root secondary
+  wait: 3
+  show:
+  - 'show running-config | include spanning-tree vlan 35 '
+- node: SW02
+  conf:
+  - spanning-tree vlan 36 root secondary
+  wait: 3
+  show:
+  - 'show running-config | include spanning-tree vlan 36 '
+- node: SW02
+  conf:
+  - spanning-tree vlan 37 root secondary
+  wait: 3
+  show:
+  - 'show running-config | include spanning-tree vlan 37 '
+- sleep: 20
+- note: M2/M3 結果
+- node: SW01
+  show:
+  - show spanning-tree root
+  - show running-config | include spanning-tree vlan
+- node: SW02
+  show:
+  - show spanning-tree root
+  - show running-config | include spanning-tree vlan
+- node: SW03
+  show:
+  - show spanning-tree root
+  - show running-config | include spanning-tree vlan
+- note: 'M2b root primary は一度きりの計算か: SW01 VLAN30 を 0 にした後 SW03 の値は追従するか'
+- node: SW01
+  conf:
+  - spanning-tree vlan 30 priority 0
+  wait: 20
+- node: SW03
+  show:
+  - 'show running-config | include spanning-tree vlan 30 '
+  - show spanning-tree vlan 30 | include Priority|root
+- note: M20 priority に 4096 の倍数でない値
+- node: SW03
+  conf:
+  - spanning-tree vlan 36 priority 5000
+  - spanning-tree vlan 36 priority 65536
+- note: 'M4 port-priority: VLAN20(root=SW02)で SW03 の RP は Et0/1 か'
+- node: SW03
+  show:
+  - show spanning-tree vlan 20
+- note: M4a 下流(SW03) Et0/2 の port-priority を 16 に → RP は変わらないはず
+- node: SW03
+  conf:
+  - interface Ethernet0/2
+  - spanning-tree vlan 20 port-priority 16
+  wait: 10
+  show:
+  - show spanning-tree vlan 20
+- note: M4b 上流(SW02) Et0/2 の port-priority を 64 に → SW03 の RP が Et0/2 へ移るはず
+- node: SW02
+  conf:
+  - interface Ethernet0/2
+  - spanning-tree vlan 20 port-priority 64
+  wait: 10
+  show:
+  - show spanning-tree vlan 20
+- node: SW03
+  show:
+  - show spanning-tree vlan 20
+- note: 'M4c 刻みと範囲: 20 / 256 を入れてみる'
+- node: SW02
+  conf:
+  - interface Ethernet0/2
+  - spanning-tree vlan 20 port-priority 20
+  - spanning-tree vlan 20 port-priority 256
+  - spanning-tree port-priority 48
+  show:
+  - show running-config interface Ethernet0/2
+- note: M4d 戻す→ SW03 Et0/1 の cost を 200 に(自側 cost) → RP は Et0/2 へ移るはず
+- node: SW02
+  conf:
+  - interface Ethernet0/2
+  - no spanning-tree vlan 20 port-priority
+  - no spanning-tree port-priority
+- node: SW03
+  conf:
+  - interface Ethernet0/2
+  - no spanning-tree vlan 20 port-priority
+  - interface Ethernet0/1
+  - spanning-tree vlan 20 cost 200
+  wait: 10
+  show:
+  - show spanning-tree vlan 20
+- node: SW03
+  conf:
+  - interface Ethernet0/1
+  - no spanning-tree vlan 20 cost

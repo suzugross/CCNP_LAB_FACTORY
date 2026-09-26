@@ -405,7 +405,28 @@ def cmd_today(a):
 
 
 def cmd_grade_lab(a):
-    """grade.yml を実走(出力はそのまま流す)→ 得点を記録する。"""
+    """grade.yml を実走(出力はそのまま流す)→ 得点を記録する。
+
+    ★2026-09-26: 得点行が読めなかったら **bringup を挟んで 1 度だけ再採点**する
+      (IOSvL2 は時間が経つと mgmt SVI が再び固着し telnet 収集が丸ごと失敗する)。
+    """
+    rc = _grade_lab_once(a)
+    if rc == 1 and not getattr(a, "_retried", False):
+        print("[ノルマ] 得点行が読めず → bringup を試して再採点する", file=sys.stderr)
+        try:
+            sys.path.insert(0, os.path.join(repo_root(a.repo), "topologies"))
+            import stp_ops
+            import gen_pack
+            gen_pack.bringup(repo_root(a.repo), a.ref, print)
+            stp_ops.bounce_down_svis(a.ref, print)
+        except Exception as e:
+            print(f"[ノルマ] bringup 失敗 {e}", file=sys.stderr)
+        a._retried = True
+        return _grade_lab_once(a)
+    return rc
+
+
+def _grade_lab_once(a):
     repo = repo_root(a.repo)
     import tempfile
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:

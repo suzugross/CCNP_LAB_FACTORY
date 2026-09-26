@@ -1,0 +1,93 @@
+- note: 'M0 基準: 版と multicast/pim 設定の受理'
+- node: RT02
+  show:
+  - show version | include Software,
+  - show running-config | include multicast|pim|rp-address
+- node: RT03
+  show:
+  - show version | include Software,
+  - show running-config | include multicast|pim|rp-address
+- node: RT04
+  show:
+  - show version | include Software,
+  - show running-config | include multicast|pim|rp-address
+- node: RT05
+  show:
+  - show version | include Software,
+  - show running-config | include multicast|pim|rp-address
+- node: RT08
+  show:
+  - show version | include Software,
+  - show running-config | include multicast|pim|rp-address
+- note: M1 PIM 隣接・DR(受信 LAN)・IGMP querier・既定のタイマとバージョン
+- node: RT04
+  show:
+  - show ip pim neighbor
+  - show ip pim interface
+  - show ip igmp interface Ethernet0/2
+- node: RT08
+  show:
+  - show ip pim interface Ethernet0/0 detail
+  - show ip igmp interface Ethernet0/0
+- note: M2 RPF(RT04 から送信元 10.0.12.1 へは RT03 経由と RT05 経由が等コスト)
+- node: RT04
+  show:
+  - show ip route 10.0.12.0
+  - show ip rpf 10.0.12.1
+  - show ip rpf 3.3.3.3
+- node: RT08
+  show:
+  - show ip route 10.0.12.0
+  - show ip rpf 10.0.12.1
+  - show ip rpf 3.3.3.3
+- note: M3 受信者 RT06 が 239.1.1.1 に参加(IGMPv2 既定)
+- node: RT06
+  conf:
+  - interface Ethernet0/0
+  - ip igmp join-group 239.1.1.1
+  wait: 8
+- node: RT04
+  show:
+  - show ip igmp groups
+  - show ip mroute 239.1.1.1
+- node: RT08
+  show:
+  - show ip igmp groups
+  - show ip mroute 239.1.1.1
+- node: RT03
+  show:
+  - show ip mroute 239.1.1.1
+  - show ip pim rp mapping
+- node: RT05
+  show:
+  - show ip mroute 239.1.1.1
+- node: SW01
+  show:
+  - show ip igmp snooping groups
+  - show ip igmp snooping mrouter
+  - show ip igmp snooping querier
+- note: M4 送信元 RT01 から 239.1.1.1 へ ping(5 回)→ 各ルータの mroute
+- node: RT01
+  show:
+  - ping 239.1.1.1 repeat 5 source Ethernet0/0
+- sleep: 3
+- node: RT02
+  show:
+  - show ip mroute 239.1.1.1
+- node: RT03
+  show:
+  - show ip mroute 239.1.1.1
+- node: RT04
+  show:
+  - show ip mroute 239.1.1.1
+- node: RT05
+  show:
+  - show ip mroute 239.1.1.1
+- node: RT08
+  show:
+  - show ip mroute 239.1.1.1
+- node: RT04
+  show:
+  - show ip mroute count
+  - show ip mroute
+- note: M4b 継続送信なしで 3 分後(状態の失効の様子)は後段で

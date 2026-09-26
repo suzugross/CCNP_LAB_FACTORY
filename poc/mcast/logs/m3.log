@@ -1,0 +1,243 @@
+
+======== M5' spt-threshold infinity をやり直し(受信者が参加し直してから送信) ========
+### RT04: conf ['ip pim spt-threshold infinity']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT08: conf ['ip pim spt-threshold infinity']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT06: conf ['interface Ethernet0/0', 'ip igmp join-group 239.5.5.5']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 06:49:54 RT01: ping 239.5.5.5 repeat 5 source Ethernet0/0
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 239.5.5.5, timeout is 2 seconds:
+Packet sent with a source address of 10.0.12.1 
+
+Reply to request 0 from 10.0.100.6, 18 ms
+Reply to request 1 from 10.0.100.6, 3 ms
+Reply to request 1 from 10.0.100.6, 6 ms
+Reply to request 2 from 10.0.100.6, 3 ms
+Reply to request 3 from 10.0.100.6, 2 ms
+Reply to request 4 from 10.0.100.6, 2 ms
+### 06:50:20 RT08: show ip mroute 239.5.5.5 | include \(|flags|Incoming|Ethernet|Null
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.5.5.5), 00:00:36/00:02:47, RP 3.3.3.3, flags: SPC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.100.4
+  Outgoing interface list: Null
+### 06:50:20 RT04: show ip mroute 239.5.5.5 | include \(|flags|Incoming|Ethernet|Null
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.5.5.5), 00:00:36/00:02:53, RP 3.3.3.3, flags: SC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.34.3
+    Ethernet0/2, Forward/Sparse, 00:00:36/00:02:53, flags: 
+### 06:50:23 RT03: show ip mroute 239.5.5.5 | include \(|flags|Incoming|Ethernet|Null
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+(*, 239.5.5.5), 00:00:39/stopped, RP 3.3.3.3, flags: S
+  Incoming interface: Null, RPF nbr 0.0.0.0
+    Ethernet0/1, Forward/Sparse, 00:00:39/00:02:50, flags: 
+(10.0.12.1, 239.5.5.5), 00:00:28/00:02:43, flags: T
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.23.2
+    Ethernet0/1, Forward/Sparse, 00:00:28/00:02:31, flags: 
+### 06:50:25 RT05: show ip mroute 239.5.5.5 | include \(|flags|Incoming|Ethernet|Null
+
+### RT04: conf ['no ip pim spt-threshold infinity']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT08: conf ['no ip pim spt-threshold infinity']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT06: conf ['interface Ethernet0/0', 'no ip igmp join-group 239.5.5.5']
+Enter configuration commands, one per line.  End with CNTL/Z.
+
+======== M9 BSR: static RP を外し RT03= C-BSR+C-RP・RT05= C-RP ========
+### RT02: conf ['no ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT03: conf ['no ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT04: conf ['no ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT05: conf ['no ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT08: conf ['no ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT03: conf ['ip pim bsr-candidate Loopback0', 'ip pim rp-candidate Loopback0']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT05: conf ['ip pim rp-candidate Loopback0']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 75
+### 06:51:45 RT08: show ip pim rp mapping
+PIM Group-to-RP Mappings
+
+Group(s) 224.0.0.0/4
+  RP 5.5.5.5 (?), v2
+    Info source: 3.3.3.3 (?), via bootstrap, priority 0, holdtime 150
+         Uptime: 00:01:15, expires: 00:02:12
+  RP 3.3.3.3 (?), v2
+    Info source: 3.3.3.3 (?), via bootstrap, priority 0, holdtime 150
+         Uptime: 00:01:26, expires: 00:02:04
+### 06:51:56 RT08: show ip pim bsr-router
+PIMv2 Bootstrap information
+  BSR address: 3.3.3.3 (?)
+  Uptime:      00:01:26, BSR Priority: 0, Hash mask length: 0
+  Expires:     00:01:44
+### 06:51:56 RT08: show ip pim rp-hash 239.1.1.1
+  RP 5.5.5.5 (?), v2
+    Info source: 3.3.3.3 (?), via bootstrap, priority 0, holdtime 150
+         Uptime: 00:01:26, expires: 00:02:01
+  PIMv2 Hash Value (mask 0.0.0.0)
+    RP 5.5.5.5, via bootstrap, priority 0, hash value 567812805
+    RP 3.3.3.3, via bootstrap, priority 0, hash value 450145259
+
+======== M9b RT05 の C-RP に priority 10(RT03 は既定) ========
+### RT05: conf ['ip pim rp-candidate Loopback0 priority 10']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 70
+### 06:53:22 RT08: show ip pim rp mapping
+PIM Group-to-RP Mappings
+
+Group(s) 224.0.0.0/4
+  RP 3.3.3.3 (?), v2
+    Info source: 3.3.3.3 (?), via bootstrap, priority 0, holdtime 150
+         Uptime: 00:02:52, expires: 00:01:35
+  RP 5.5.5.5 (?), v2
+    Info source: 3.3.3.3 (?), via bootstrap, priority 10, holdtime 150
+         Uptime: 00:03:00, expires: 00:01:29
+### 06:53:46 RT08: show ip pim rp-hash 239.1.1.1
+  RP 3.3.3.3 (?), v2
+    Info source: 3.3.3.3 (?), via bootstrap, priority 0, holdtime 150
+         Uptime: 00:03:16, expires: 00:02:10
+  PIMv2 Hash Value (mask 0.0.0.0)
+    RP 3.3.3.3, via bootstrap, priority 0, hash value 450145259
+    RP 5.5.5.5, via bootstrap, priority 10, hash value 567812805
+
+======== M10 Auto-RP: BSR を外し RT03/RT05= announce・RT02= mapping agent。まず autorp listener なし ========
+### RT03: conf ['no ip pim bsr-candidate Loopback0', 'no ip pim rp-candidate Loopback0', 'ip pim send-rp-announce Loopback0 scope 16']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT05: conf ['no ip pim rp-candidate Loopback0 priority 10', 'no ip pim rp-candidate Loopback0', 'ip pim send-rp-announce Loopback0 scope 16']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT02: conf ['ip pim send-rp-discovery Loopback0 scope 16']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 75
+### 06:55:03 RT02: show ip pim rp mapping
+PIM Group-to-RP Mappings
+This system is an RP-mapping agent (Loopback0)
+
+Group(s) 224.0.0.0/4
+  RP 5.5.5.5 (?), v2v1
+    Info source: 5.5.5.5 (?), elected via Auto-RP, via bootstrap, priority 10, holdtime 181
+         Uptime: 00:04:32, expires: 00:02:42
+  RP 3.3.3.3 (?), v2v1
+    Info source: 3.3.3.3 (?), via Auto-RP, via bootstrap, priority 0, holdtime 181
+         Uptime: 00:04:36, expires: 00:02:41
+### 06:55:14 RT04: show ip pim rp mapping
+PIM Group-to-RP Mappings
+
+Group(s) 224.0.0.0/4
+  RP 3.3.3.3 (?), v2
+    Info source: 3.3.3.3 (?), via bootstrap, priority 0, holdtime 150
+         Uptime: 00:04:44, expires: 00:01:00
+  RP 5.5.5.5 (?), v2
+    Info source: 3.3.3.3 (?), via bootstrap, priority 10, holdtime 150
+         Uptime: 00:04:46, expires: 00:00:59
+### 06:55:33 RT08: show ip pim rp mapping
+PIM Group-to-RP Mappings
+
+Group(s) 224.0.0.0/4
+  RP 3.3.3.3 (?), v2
+    Info source: 3.3.3.3 (?), via bootstrap, priority 0, holdtime 150
+         Uptime: 00:05:03, expires: 00:00:42
+  RP 5.5.5.5 (?), v2
+    Info source: 3.3.3.3 (?), via bootstrap, priority 10, holdtime 150
+         Uptime: 00:05:10, expires: 00:00:33
+
+======== M10b 全ルータに ip pim autorp listener ========
+### RT02: conf ['ip pim autorp listener']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT03: conf ['ip pim autorp listener']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT04: conf ['ip pim autorp listener']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT05: conf ['ip pim autorp listener']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT08: conf ['ip pim autorp listener']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 75
+### 06:57:13 RT02: show ip pim rp mapping
+PIM Group-to-RP Mappings
+This system is an RP-mapping agent (Loopback0)
+
+Group(s) 224.0.0.0/4
+  RP 5.5.5.5 (?), v2v1
+    Info source: 5.5.5.5 (?), elected via Auto-RP
+         Uptime: 00:06:42, expires: 00:02:32
+  RP 3.3.3.3 (?), v2v1
+    Info source: 3.3.3.3 (?), via Auto-RP
+         Uptime: 00:06:51, expires: 00:02:22
+### 06:57:29 RT02: show ip pim autorp
+AutoRP Information: 
+  AutoRP is enabled.
+  RP Discovery packet MTU is 1500.
+  224.0.1.40 is joined on Loopback0.
+  AutoRP groups over sparse mode interface is enabled
+
+PIM AutoRP Statistics: Sent/Received
+  RP Announce: 0/6, RP Discovery: 16/0
+### 06:57:29 RT08: show ip pim rp mapping
+PIM Group-to-RP Mappings
+
+Group(s) 224.0.0.0/4
+  RP 5.5.5.5 (?), v2v1
+    Info source: 2.2.2.2 (?), elected via Auto-RP
+         Uptime: 00:00:43, expires: 00:02:13
+### 06:57:40 RT08: show ip pim autorp
+AutoRP Information: 
+  AutoRP is enabled.
+  RP Discovery packet MTU is 0.
+  224.0.1.40 is joined on Loopback0.
+  AutoRP groups over sparse mode interface is enabled
+
+PIM AutoRP Statistics: Sent/Received
+  RP Announce: 0/0, RP Discovery: 0/1
+
+======== M11 static(override なし)と Auto-RP の併存 → どちらが使われるか / override ========
+### RT08: conf ['ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 06:57:43 RT08: show ip pim rp mapping
+PIM Group-to-RP Mappings
+
+Group(s) 224.0.0.0/4
+  RP 5.5.5.5 (?), v2v1
+    Info source: 2.2.2.2 (?), elected via Auto-RP
+         Uptime: 00:00:57, expires: 00:01:59
+Group(s): 224.0.0.0/4, Static
+    RP: 3.3.3.3 (?)
+### 06:58:07 RT08: show ip pim rp 239.1.1.1
+Group 239.1.1.1 not found
+### RT08: conf ['ip pim rp-address 3.3.3.3 override']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 06:58:11 RT08: show ip pim rp mapping
+PIM Group-to-RP Mappings
+
+Group(s) 224.0.0.0/4
+  RP 5.5.5.5 (?), v2v1
+    Info source: 2.2.2.2 (?), elected via Auto-RP
+         Uptime: 00:01:24, expires: 00:02:31
+Group(s): 224.0.0.0/4, Static-Override
+    RP: 3.3.3.3 (?)
+### 06:58:35 RT08: show ip pim rp 239.1.1.1
+Group 239.1.1.1 not found
+
+======== 後始末: Auto-RP を外し static 3.3.3.3 に戻す ========
+### RT08: conf ['no ip pim rp-address 3.3.3.3 override']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT03: conf ['no ip pim send-rp-announce Loopback0 scope 16']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT05: conf ['no ip pim send-rp-announce Loopback0 scope 16']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT02: conf ['no ip pim send-rp-discovery Loopback0 scope 16']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT02: conf ['no ip pim autorp listener', 'ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT03: conf ['no ip pim autorp listener', 'ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT04: conf ['no ip pim autorp listener', 'ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT05: conf ['no ip pim autorp listener', 'ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### RT08: conf ['no ip pim autorp listener', 'ip pim rp-address 3.3.3.3']
+Enter configuration commands, one per line.  End with CNTL/Z.

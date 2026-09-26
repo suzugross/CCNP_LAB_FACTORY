@@ -1,0 +1,37 @@
+- note: T3 native_mismatch(SW01 Et0/2 のみ native 10・SW03 側 native 1)
+- node: SW01
+  conf: ["interface Ethernet0/2", "switchport trunk native vlan 10"]
+  wait: 15
+  show: ["show spanning-tree vlan 10", "show spanning-tree inconsistentports", "show logging | include PVID|NATIVE|INCONSIST|CDP"]
+- node: SW03
+  show: ["show spanning-tree vlan 10", "show spanning-tree vlan 20", "show spanning-tree inconsistentports", "show logging | include PVID|NATIVE|INCONSIST|CDP", "ping 10.76.10.1 repeat 3", "ping 10.76.20.1 repeat 3"]
+- node: SW01
+  conf: ["interface Ethernet0/2", "no switchport trunk native vlan"]
+  wait: 10
+  show: ["show spanning-tree inconsistentports", "show logging | include PVID|INCONSIST"]
+- node: SW03
+  show: ["show spanning-tree inconsistentports", "show spanning-tree vlan 10 | include Et0"]
+- note: T3b native を trunk に載っている VLAN 20 にした場合(SW01 Et0/2 native 20)
+- node: SW01
+  conf: ["interface Ethernet0/2", "switchport trunk native vlan 20"]
+  wait: 15
+  show: ["show spanning-tree inconsistentports", "show spanning-tree vlan 20 | include Et0"]
+- node: SW03
+  show: ["show spanning-tree inconsistentports", "show spanning-tree vlan 10 | include Et0", "show spanning-tree vlan 20 | include Et0", "ping 10.76.10.1 repeat 3", "ping 10.76.20.1 repeat 3"]
+- node: SW01
+  conf: ["interface Ethernet0/2", "no switchport trunk native vlan"]
+  wait: 15
+- node: SW03
+  show: ["show spanning-tree inconsistentports"]
+- note: T4 allowed_vlan_skew(片側だけ VLAN20 を外す)
+- node: SW02
+  conf: ["interface Ethernet0/2", "switchport trunk allowed vlan 10"]
+  wait: 15
+  show: ["show spanning-tree vlan 20 | include Et0|Root|Cost"]
+- node: SW03
+  show: ["show spanning-tree vlan 20", "show spanning-tree inconsistentports", "ping 10.76.20.2 repeat 3", "ping 10.76.20.4 repeat 3"]
+- node: SW02
+  conf: ["interface Ethernet0/2", "switchport trunk allowed vlan 10,20"]
+  wait: 15
+- node: SW03
+  show: ["show spanning-tree vlan 20 | include Et0"]

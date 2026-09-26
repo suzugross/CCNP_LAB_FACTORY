@@ -45,6 +45,8 @@ import random
 
 import yaml
 
+import hardmode
+
 LAYERS = {
     "relay": ["helper_missing", "helper_wrong_ip", "relay_service_off"],
     "acl": ["acl_no_dhcp_permit", "acl_src_narrow"],
@@ -105,21 +107,29 @@ def render_rt01(seg, pools, dns, faults, tgt, wrong_net):
     return L
 
 
-def render_rt02(seg, acl, faults, tgt):
+def render_rt02(seg, acl, faults, tgt, wall=None):
     srv = f"{seg['P']}.1"
     L = ["! RT02 初期状態 (リレー+セキュリティACL・昨日 強化を実施した直後の状態)"]
     if "relay_service_off" in faults:
         L += ["no service dhcp", "!"]     # リレーエージェント停止(helper は完璧に見える)
     # --- ACL(変種込み) ---
-    L.append(f"ip access-list extended {acl}")
-    if "acl_no_dhcp_permit" in faults:
+    if wall:                                     # BL-210 C1: うんざり ACL(欠陥は wall.defect)
+        L += hardmode.wall_cfg(wall)
+        L.append("!")
+        L.append(f"! (wall)")
+    L.append(f"ip access-list extended {acl}") if not wall else None
+    if wall:
+        pass
+    elif "acl_no_dhcp_permit" in faults:
         pass                                     # DHCP permit 欠落
     elif "acl_src_narrow" in faults:
         L += [f" permit udp {seg['A']}.0 0.0.0.255 eq bootpc any eq bootps",
               f" permit udp {seg['B']}.0 0.0.0.255 eq bootpc any eq bootps"]
     else:
         L.append(" permit udp any eq bootpc any eq bootps")
-    L += [" permit icmp any any", " deny ip any any", "!"]
+    if not wall:
+        L += [" permit icmp any any", " deny ip any any", "!"]
+    L = [x for x in L if x is not None and x != "! (wall)"]
     L += ["interface {{ links[0] }}", " description === to RT01 (DHCP server) ===",
           f" ip address {seg['P']}.2 255.255.255.252", " no shutdown", "!"]
     for slot, s, ifn, cl in [(1, "A", IF_A, "CL1"), (2, "B", IF_B, "CL2")]:
@@ -145,10 +155,12 @@ def render_client(name, s, seg):
             " ip address dhcp", " no shutdown", "!"]
 
 
-def build_fix(seg, pools, acl, faults, tgt, wrong_net):
+def build_fix(seg, pools, acl, faults, tgt, wrong_net, wall=None):
     srv = f"{seg['P']}.1"
     N = {"match": "none"}
     fixes = []
+    if wall:
+        fixes += hardmode.wall_fix(wall, "RT02")
     if "service_dhcp_off" in faults:
         fixes.append({"node": "RT01", "lines": ["service dhcp"]})
     if "excluded_swallows" in faults:
@@ -205,6 +217,19 @@ SYMPTOM = {
         "主張している。",
     "service_dhcp_off":
         "**全セグメント（ローカル含む）で一斉に取得不能**になった。",
+    # BL-210 C1(うんざり ACL)の欠陥(--hard acl_wall)
+    "wall_missing":
+        "セキュリティ チームによるクライアント収容 IF のポリシー適用の直後から、"
+        "**両リモートセグメントで取得不能**。ローカルセグメントは正常。",
+    "wall_narrow":
+        "ポリシーの「最小権限化」の直後から、**リース切れや初期化をした端末だけが取得できない**"
+        "（既存リースの更新は通っている形跡がある）。",
+    "wall_shadowed":
+        "ポリシー適用の直後から**両リモートセグメントで取得不能**。セキュリティ チームは"
+        "「DHCP の許可行は入れてある」と主張している。",
+    "wall_wrong_proto":
+        "ポリシー適用の直後から**両リモートセグメントで取得不能**。セキュリティ チームは"
+        "「DHCP のポートは許可してある」と主張している。",
 }
 
 
@@ -214,6 +239,9 @@ def main():
     ap.add_argument("--seed", type=int, required=True)
     ap.add_argument("--fault", choices=FAULTS, default=None)
     ap.add_argument("--faults", type=int, choices=[1, 2], default=1)
+    ap.add_argument("--hard", default="",
+                    help="スーパーハード部品(カンマ区切り・BL-210): acl_wall= 収容 IF のうんざり ACL"
+                         "(欠陥 4 種= missing/narrow/shadowed/wrong_proto・ACL 層の故障を置き換える)")
     a = ap.parse_args()
     rnd = random.Random(a.seed)
     seg, pools, acl, dns = rand_values(rnd)
@@ -221,6 +249,18 @@ def main():
     tgt = rnd.choice(["A", "B"])                  # セグメント限定故障の対象
     wrong_net = f"{seg[tgt].rsplit('.', 1)[0]}.{int(seg[tgt].rsplit('.', 1)[1]) + 60}"
     diff = min(max(DIFFICULTY[f] for f in faults) + (1 if len(faults) == 2 else 0), 5)
+    hard = tuple(x for x in a.hard.split(",") if x)
+    wall = None
+    if "acl_wall" in hard:
+        # ★壁は別系列の乱数(同 seed の通常版と他の故障が同じ)。ACL 層の故障は壁の欠陥に置き換える
+        wall = hardmode.lan_wall(random.Random(a.seed ^ 0xAC1), name=acl,
+                                 segs=[seg["A"], seg["B"]], server_ip=f"{seg['P']}.1", dns_ip=dns)
+        faults = [f"wall_{wall.defect}"] + [f for f in faults if f not in LAYERS["acl"]]
+        if a.faults == 1:
+            faults = faults[:1]
+        diff = min(4 + (1 if len(faults) == 2 else 0) + 1, 6)
+    elif any(x not in ("",) for x in hard):
+        raise SystemExit(f"未知の --hard 部品: {hard}")
     srv = f"{seg['P']}.1"
 
     prob_id = f"GEN-DHCPTS-{a.seed}"
@@ -250,7 +290,7 @@ def main():
     with open(f"{pdir}/initial/RT01.cfg.j2", "w", encoding="utf-8") as f:
         f.write("\n".join(render_rt01(seg, pools, dns, faults, tgt, wrong_net)) + "\n")
     with open(f"{pdir}/initial/RT02.cfg.j2", "w", encoding="utf-8") as f:
-        f.write("\n".join(render_rt02(seg, acl, faults, tgt)) + "\n")
+        f.write("\n".join(render_rt02(seg, acl, faults, tgt, wall)) + "\n")
     for name, s in [("CL1", "A"), ("CL2", "B"), ("CL3", "L")]:
         with open(f"{pdir}/initial/{name}.cfg.j2", "w", encoding="utf-8") as f:
             f.write("\n".join(render_client(name, s, seg)) + "\n")
@@ -313,6 +353,9 @@ def main():
                    # (7710でユーザの意味的等価解がregexに弾かれた実戦教訓)。
                    # ベクタ= DISCOVER/renew単方向×2seg/rebind broadcast×2seg/
                    #         icmp許可/非許可(telnet・DNS)遮断
+                   (hardmode.wall_check(wall, "RT02", 10,
+                                        name=f"RT02: ACL {acl} が保全され(削除・置換なし)、DHCP/ICMP だけが追加で許可されている")
+                    if wall else
                    {"name": f"RT02: ACL {acl} の中身が配布標準どおり (DHCP/ICMP許可+明示deny)",
                     "node": "RT02", "command": f"show access-lists {acl}",
                     "acl_vectors": {"acl": acl, "vectors": [
@@ -332,7 +375,7 @@ def main():
                          "dst": f"{seg['P']}.1", "dport": 23, "expect": "deny"},
                         {"id": "dns_ng", "proto": "udp", "src": f"{seg['B']}.50", "sport": 12345,
                          "dst": f"{seg['P']}.1", "dport": 53, "expect": "deny"},
-                    ]}, "points": 10},
+                    ]}, "points": 10}),
                    {"name": "効果: CL3 が LOCAL プールから取得 (excluded 回避)",
                     "node": "CL3",
                     "command": "show ip interface Ethernet0/0 | include Internet",
@@ -353,7 +396,9 @@ def main():
                     "raw": [{"regex": ".*"}], "points": 0},
                    {"name": f"効果: 非許可通信は遮断 ({acl} の明示 deny がヒット)",
                     "node": "RT02", "command": f"show access-lists {acl}",
-                    "raw": [{"regex": r"deny\s+ip any any \([1-9][0-9]* match"}],
+                    # ★hard(壁)では telnet は hygiene 行(deny tcp any any eq telnet)か catch-all のどちらかに当たる
+                    "raw": [{"regex": (r"deny (?:tcp any any eq telnet|ip any any log) \([1-9][0-9]* match"
+                                       if wall else r"deny\s+ip any any \([1-9][0-9]* match")}],
                     "points": 5},
                    # ★CL1 は最後尾: renew 発火(先頭)からの経過時間を最大化して DORA を収束させる
                    {"name": "★効果: CL1 が renew 後に segment A から(再)取得",
@@ -370,13 +415,29 @@ def main():
 
     with open(f"{pdir}/solution/fault.json", "w", encoding="utf-8") as f:
         json.dump({"faults": faults, "target_segment": tgt, "segments": seg,
-                   "pools": pools, "acl": acl, "dns": dns, "difficulty": diff},
+                   "pools": pools, "acl": acl, "dns": dns, "difficulty": diff,
+                   "hard": list(hard),
+                   "wall": ({"defect": wall.defect, "gaps": wall.gaps, "n_entries": wall.n_entries}
+                            if wall else None)},
                   f, ensure_ascii=False, indent=2)
     with open(f"{pdir}/solution/fix.json", "w", encoding="utf-8") as f:
-        json.dump({"fixes": build_fix(seg, pools, acl, faults, tgt, wrong_net)},
+        json.dump({"fixes": build_fix(seg, pools, acl, faults, tgt, wrong_net, wall)},
                   f, ensure_ascii=False, indent=2)
+    if wall:
+        with open(f"{pdir}/solution/README.md", "w", encoding="utf-8") as f:
+            f.write(f"# 採点者専用 ({prob_id})\n\n- faults: {faults} / tgt: {tgt}\n"
+                    + hardmode.wall_readme(wall)
+                    + "  - ★DHCP の壁は anti-spoof(`deny ip 0.0.0.0 0.255.255.255 any`)より**前**に入れる"
+                      "(DISCOVER の送信元は 0.0.0.0)。後ろに入れると DISCOVER だけ落ちる\n")
 
     # ---- task.md ----
+    sec_req = (f"""4. **セキュリティ** — RT02 の両クライアント収容 IF の in に、セキュリティ チームによって管理されているところの
+   アクセス リスト **`{acl}`** が、適用されています。このアクセス リストのエントリは、削除、変更、または
+   無効化されてはなりません。必要とされる変更は、エントリの追加によってのみ、行われることができます。
+   この状態で**初回取得(DISCOVER)・更新・ICMP とも壊れないこと**。""" if wall else
+               f"""4. **セキュリティ** — RT02 の両クライアント収容 IF の in に ACL **`{acl}`** を適用し、
+   **DHCP (UDP 67/68) と ICMP のみ許可**・最終行は**明示の `deny ip any any`**。
+   この状態で**初回取得(DISCOVER)・更新とも壊れないこと**。""")
     tseg = f"{tgt} ({seg[tgt]}.0/24)"
     tickets = "\n".join(f"> {i + 1}. {SYMPTOM[f].format(tseg=tseg)}"
                         for i, f in enumerate(faults)) \
@@ -404,9 +465,7 @@ LOCAL: {seg['L']}.0/24        .1        .2                └─ CL2  segment B:
    各セグメントの network・default-router(各 GW `.1`)・DNS **`{dns}`** を配布する。
 2. **配布禁止** — 各セグメント **`.1`〜`.9`** を excluded とする。
 3. **リレー** — RT02 の両クライアント収容 IF から **`{srv}`** へリレーする。
-4. **セキュリティ** — RT02 の両クライアント収容 IF の in に ACL **`{acl}`** を適用し、
-   **DHCP (UDP 67/68) と ICMP のみ許可**・最終行は**明示の `deny ip any any`**。
-   この状態で**初回取得(DISCOVER)・更新とも壊れないこと**。
+{sec_req}
 
 ## 遵守事項
 

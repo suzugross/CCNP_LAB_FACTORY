@@ -1,0 +1,190 @@
+
+======== T3 native_mismatch(SW01 Et0/2 のみ native 10・SW03 側 native 1) ========
+### SW01: conf ['interface Ethernet0/2', 'switchport trunk native vlan 10']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:55:55 SW01: show spanning-tree vlan 10
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4106
+             Address     aabb.cc02.4c00
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    4106   (priority 4096 sys-id-ext 10)
+             Address     aabb.cc02.4c00
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Desg FWD 100       128.1    P2p 
+Et0/1               Desg FWD 100       128.2    P2p 
+Et0/2               Desg FWD 100       128.3    P2p 
+Et0/3               Desg FWD 100       128.4    P2p 
+### 07:55:56 SW01: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+
+Number of inconsistent ports (segments) in the system : 0
+### 07:55:56 SW01: show logging | include PVID|NATIVE|INCONSIST|CDP
+
+### 07:55:56 SW03: show spanning-tree vlan 10
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4106
+             Address     aabb.cc02.4c00
+             Cost        200
+             Port        2 (Ethernet0/1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32778  (priority 32768 sys-id-ext 10)
+             Address     aabb.cc02.4e00
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Desg BLK 100       128.1    P2p 
+Et0/1               Root FWD 100       128.2    P2p 
+### 07:55:56 SW03: show spanning-tree vlan 20
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4116
+             Address     aabb.cc02.4d00
+             Cost        100
+             Port        2 (Ethernet0/1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32788  (priority 32768 sys-id-ext 20)
+             Address     aabb.cc02.4e00
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Altn BLK 100       128.1    P2p 
+Et0/1               Root FWD 100       128.2    P2p 
+### 07:55:56 SW03: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+
+Number of inconsistent ports (segments) in the system : 0
+### 07:55:56 SW03: show logging | include PVID|NATIVE|INCONSIST|CDP
+
+### 07:55:56 SW03: ping 10.76.10.1 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 10.76.10.1, timeout is 2 seconds:
+.!!
+Success rate is 66 percent (2/3), round-trip min/avg/max = 1/1/1 ms
+### 07:55:58 SW03: ping 10.76.20.1 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 10.76.20.1, timeout is 2 seconds:
+.!!
+Success rate is 66 percent (2/3), round-trip min/avg/max = 1/1/1 ms
+### SW01: conf ['interface Ethernet0/2', 'no switchport trunk native vlan']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:56:11 SW01: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+
+Number of inconsistent ports (segments) in the system : 0
+### 07:56:11 SW01: show logging | include PVID|INCONSIST
+
+### 07:56:11 SW03: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+
+Number of inconsistent ports (segments) in the system : 0
+### 07:56:11 SW03: show spanning-tree vlan 10 | include Et0
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Altn BLK 100       128.2    P2p 
+
+======== T3b native を trunk に載っている VLAN 20 にした場合(SW01 Et0/2 native 20) ========
+### SW01: conf ['interface Ethernet0/2', 'switchport trunk native vlan 20']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:56:26 SW01: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+
+Number of inconsistent ports (segments) in the system : 0
+### 07:56:26 SW01: show spanning-tree vlan 20 | include Et0
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Altn BLK 100       128.2    P2p 
+Et0/2               Desg FWD 100       128.3    P2p 
+Et0/3               Desg FWD 100       128.4    P2p 
+### 07:56:26 SW03: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+
+Number of inconsistent ports (segments) in the system : 0
+### 07:56:26 SW03: show spanning-tree vlan 10 | include Et0
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Altn BLK 100       128.2    P2p 
+### 07:56:26 SW03: show spanning-tree vlan 20 | include Et0
+Et0/0               Desg BLK 100       128.1    P2p 
+Et0/1               Root FWD 100       128.2    P2p 
+### 07:56:27 SW03: ping 10.76.10.1 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 10.76.10.1, timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 1/1/1 ms
+### 07:56:27 SW03: ping 10.76.20.1 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 10.76.20.1, timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 1/1/1 ms
+### SW01: conf ['interface Ethernet0/2', 'no switchport trunk native vlan']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:56:42 SW03: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+
+Number of inconsistent ports (segments) in the system : 0
+
+======== T4 allowed_vlan_skew(片側だけ VLAN20 を外す) ========
+### SW02: conf ['interface Ethernet0/2', 'switchport trunk allowed vlan 10']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:56:58 SW02: show spanning-tree vlan 20 | include Et0|Root|Cost
+  Root ID    Priority    4116
+Interface           Role Sts Cost      Prio.Nbr Type
+Et0/0               Desg FWD 100       128.1    P2p 
+Et0/1               Desg FWD 100       128.2    P2p 
+Et0/3               Desg FWD 100       128.4    P2p 
+### 07:56:58 SW03: show spanning-tree vlan 20
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4116
+             Address     aabb.cc02.4d00
+             Cost        200
+             Port        1 (Ethernet0/0)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32788  (priority 32768 sys-id-ext 20)
+             Address     aabb.cc02.4e00
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Desg BLK 100       128.2    P2p 
+### 07:56:58 SW03: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+
+Number of inconsistent ports (segments) in the system : 0
+### 07:56:58 SW03: ping 10.76.20.2 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 10.76.20.2, timeout is 2 seconds:
+.!!
+Success rate is 66 percent (2/3), round-trip min/avg/max = 1/1/2 ms
+### 07:57:00 SW03: ping 10.76.20.4 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 10.76.20.4, timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 1/1/2 ms
+### SW02: conf ['interface Ethernet0/2', 'switchport trunk allowed vlan 10,20']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:57:15 SW03: show spanning-tree vlan 20 | include Et0
+Et0/0               Altn BLK 100       128.1    P2p 
+Et0/1               Root FWD 100       128.2    P2p 

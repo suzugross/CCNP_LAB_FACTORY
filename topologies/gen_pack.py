@@ -74,6 +74,82 @@ PAPER_AUTO_MIN, PAPER_AUTO_MAX = 5, 6   # ★2026-09-05 ユーザ指示「紙面
 #   必須ジャンルの shape も最終出題日の古い順に選ぶ。
 AVOID_KIND_DAYS = 4
 
+# ==========================================================================
+# ★BL-213(2026-09-21): 単元プロファイル(--profile)。topologies/units.yml(+private/units.yml)の
+#   単元タグ表から「この単元集合に属する紙面 shape/kind グロブ・ラボ genre・ラボ候補 ID」を導き、
+#   紙面は gen_paper_mcq --only-kinds、ラボは固定ジャンルと TS プールの絞り込みで実現する。
+#   指定= カンマ区切りで profile 名(ccna/encor/enarsi/ccie/vendor)と単元 ID(U-A3 …)を混在可。
+# ==========================================================================
+PROFILE = None                       # main() で解決した dict(無指定なら None)
+PAPER_GENRES_ACTIVE = None           # profile で絞った必須ジャンル表(None= PAPER_GENRES)
+
+
+def load_units(repo=REPO):
+    import yaml
+    data = {"profiles": {}, "units": {}}
+    for rel in ("topologies/units.yml", "private/units.yml"):
+        path = os.path.join(repo, rel)
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            d = yaml.safe_load(fh) or {}
+        data["profiles"].update(d.get("profiles") or {})
+        for uid, u in (d.get("units") or {}).items():
+            cur = data["units"].setdefault(uid, {"name": "", "blueprint": [], "paper": {"kinds": []}, "lab": {"genres": [], "ids": []}})
+            cur["name"] = u.get("name") or cur["name"]
+            cur["blueprint"] = sorted(set(cur["blueprint"]) | set(u.get("blueprint") or []))
+            cur["paper"]["kinds"] += list((u.get("paper") or {}).get("kinds") or [])
+            cur["lab"]["genres"] += list((u.get("lab") or {}).get("genres") or [])
+            cur["lab"]["ids"] += list((u.get("lab") or {}).get("ids") or [])
+    return data
+
+
+def resolve_profile(spec, repo=REPO):
+    """`--profile` の文字列 → {"units", "paper_kinds", "lab_genres", "lab_ids", "flags", "label"}。"""
+    if not (spec or "").strip():
+        return None
+    data = load_units(repo)
+    units, flags = [], set()
+    for tok in (t.strip() for t in spec.split(",") if t.strip()):
+        tok = tok[5:] if tok.lower().startswith("unit:") else tok
+        if tok.upper().startswith("U-"):
+            if tok.upper() not in data["units"]:
+                sys.exit(f"--profile: 単元 {tok} は units.yml にありません")
+            units.append(tok.upper())
+            continue
+        prof = data["profiles"].get(tok.lower())
+        if prof is None:
+            sys.exit(f"--profile: {tok} は profile 名(" + "/".join(data["profiles"]) + ")でも単元 ID でもありません")
+        flags |= set(prof.get("lab_flags") or [])
+        if prof.get("blueprint"):
+            units += [u for u, d in data["units"].items() if prof["blueprint"] in d["blueprint"]]
+        units += list(prof.get("units") or [])
+    units = sorted(set(units))
+    kinds, genres, ids = [], [], []
+    for u in units:
+        d = data["units"][u]
+        kinds += d["paper"]["kinds"]
+        genres += d["lab"]["genres"]
+        ids += d["lab"]["ids"]
+    return {"label": spec, "units": units,
+            "paper_kinds": sorted(set(kinds)), "lab_genres": sorted(set(genres)),
+            "lab_ids": sorted(set(ids)), "flags": flags}
+
+
+def _profile_shapes(prof):
+    return {g.split("/", 1)[0] for g in (prof or {}).get("paper_kinds", [])}
+
+
+def _profile_only_args(prof):
+    ks = (prof or {}).get("paper_kinds") or []
+    return ["--only-kinds", ",".join(ks)] if ks else []
+
+
+def _profile_allows_id(prof, pid):
+    if not prof:
+        return True
+    return any(pid == x or pid.startswith(x) for x in prof.get("lab_ids", []))
+
 
 def _recent_shape_dates(repo, days):
     """answers/ の `種別: \\`shape/...\\`` 行から shape ごとの最終出題日を集める。"""
@@ -104,6 +180,17 @@ def _recent_shape_dates(repo, days):
 
 # ラボの固定ジャンル: この中から2つ選ぶ(+余裕があれば通常TSプールから1問)。
 # H型は EIGRP版/OSPF版をまとめて1ジャンル扱い(同時に2本入れると盤面がほぼ同じ)。
+# ★生成器ごとの既定追加引数(ユーザ指示)。固定ジャンル枠でも TS プール経由でも効かせる。
+#   H型VRF(EIGRP版/OSPF版)は **最大故障数 3 で出題する**(2026-09-20 ユーザ指示)。
+#   理由= 実試験再現の原本 PVT-EIGRP-VRF-H-01 が 3 故障同時で、量産形の既定
+#   `--faults 1` では体感難度が原本に届かなかった(本人の指摘)。
+#   生成器側の pick_faults は「中央系故障は最大2・3個目は CE 故障へ差し替え」を
+#   自前で担保するので、3 指定で組合せが破綻することはない。
+GEN_DEFAULT_ARGS = {
+    "PVT-EGVRFH": ["--faults", "3"],
+    "PVT-OSVRFH": ["--faults", "3"],
+}
+
 LAB_GENRES = {
     "hvrf": {"label": "H型VRF",
              # ★EIGRP 優先(ユーザ指示)。直近に出ていれば OSPF 版へ回す。
@@ -131,8 +218,31 @@ LAB_GENRES = {
     #   v2 で骨格・手段・PL集合形が seed 抽選されるため連投にも耐える(BL-143)。
     "rtctl": {"label": "純粋経路制御(構築)", "build": True,
               "prefixes": ["GEN-RTCTL"], "tags": ["redistribution", "routing"]},
-    "l2": {"label": "L2(EtherChannel)TS",
+    # ★GEN-STP(2026-09-22・BL-076)= STP TS(ioll2×5・telnet 採点・故障 10 種)。
+    "l2": {"label": "L2(EtherChannel)TS", "group": "l2",
            "prefixes": ["GEN-L2TS"], "tags": ["l2", "etherchannel"]},
+    # ★STP(2026-09-22・BL-076)= gen_stp.py。単元 U-A3 の段階ごとにジャンルを分ける(`--lab-genres` で段階を絞れる):
+    #   stpts= L3 TS(Rapid PVST+・ioll2×5+MGMTSW/EXTC)/ stpmst= L4 TS(MST+旧機境界・ioll2×4+2)/
+    #   stpbuild= L2 構築 / stpmstbuild= L4 構築。variants は生成器にそのまま渡るので GEN-L2TS とは別ジャンル。
+    #   group は TS 同士・構築同士で分ける(STP 限定パックで TS と構築を 1 本ずつ出せるように)。
+    # ★2026-09-26: ラボは **IOSvL2(--image iosv)** で出す。理由= 長時間稼働した ioll2 で
+    #   「特定 VLAN・片方向だけ BPDU が落ちる」現象(BL-219)に 2 度当たり採点が揺れたため。
+    #   IOSvL2 は 3 分計測で全リンク全 VLAN 完全一致。IOL 版は `--image iol` で手動生成できる。
+    "stpts": {"label": "STP TS(Rapid PVST+)", "group": "stp-ts",
+              "prefixes": ["GEN-STP"], "tags": ["stp", "rstp", "l2"], "nodes": 7,
+              "variants": [{"args": ["--image", "iosv"], "nodes": 7, "label": "IOSvL2"}]},
+    "stpmst": {"label": "STP TS(MST+旧機境界)", "group": "stp-ts",
+               "prefixes": ["GEN-STP"], "tags": ["stp", "mst", "l2"], "nodes": 6,
+               "variants": [{"args": ["--world", "mst"], "nodes": 6, "label": "L4"}]},
+    # ★STP 構築(2026-09-22・BL-076)= gen_stp.py --mode build(L2= --level 2 / L4= --world mst)。
+    #   既定 --lab-genres には入れていない(--profile U-A3 か明示指定で出る)。L1 は手動出題用。
+    "stpbuild": {"label": "STP 構築(要件書・Rapid PVST+)", "build": True, "group": "stp-build",
+                 "prefixes": ["GEN-STP"], "tags": ["stp", "rstp", "l2"], "nodes": 7,
+                 "variants": [{"args": ["--mode", "build", "--level", "2", "--image", "iosv"],
+                               "nodes": 7, "label": "L2/IOSvL2"}]},
+    "stpmstbuild": {"label": "STP 構築(MST 導入)", "build": True, "group": "stp-build",
+                    "prefixes": ["GEN-STP"], "tags": ["stp", "mst", "l2"], "nodes": 6,
+                    "variants": [{"args": ["--mode", "build", "--world", "mst"], "nodes": 6, "label": "L4"}]},
     # ★services 枠(2026-08-22 追加・BL-134)= IP SLA/track TS。ENARSI は TS 傾向という
     #   ユーザ方針で新設。4 IOL と軽く台数予算に優しい。★既定 --lab-genres にも
     #   参加(2026-08-22 ユーザ指示・hvrf/dhcp/dmvpn と同格の抽選)。
@@ -590,8 +700,10 @@ def select_labs(cat, hist, *, count, budget, used, rnd,
                 diff_range=(3, 5), repeat_days=90, family_days=21,
                 allow_special=False,
                 today=None, pin=(), allow_non_cisco=False,
-                allow_automation=False, ts_only=True):
+                allow_automation=False, ts_only=True, only=None):
     """台数合計・分野重複・出題履歴の制約下でラボ問題を選ぶ。
+
+    only= ID/接頭辞の列(BL-213 プロファイル)。与えられたら候補をそれに前方一致するものへ絞る。
 
     返り値: (選定リスト, 理由メモのリスト)。候補が足りなければ短いリストを返す
     (夜間バッチは黙って諦めず、欠落を index に出すため理由も返す)。
@@ -641,6 +753,7 @@ def select_labs(cat, hist, *, count, budget, used, rnd,
                       "nodes": nodes, "kind": "generator",
                       "script": g["script"], "note": g["note"],
                       "desc": g["desc"], "source": "generator",
+                      "args": list(GEN_DEFAULT_ARGS.get(g["prefix"], [])),
                       "star": g["note"].count("★") + g["desc"].count("★")})
 
     # --lab-id で名指しされたものは制約(履歴・難易度)を素通しで最優先に入れる
@@ -653,6 +766,10 @@ def select_labs(cat, hist, *, count, budget, used, rnd,
         else:
             notes.append(f"★指定 {pid} は CATALOG に無いので無視した")
 
+    if only is not None:
+        before = len(cands)
+        cands = [c for c in cands if any(c["id"] == x or c["id"].startswith(x) for x in only)]
+        notes.append(f"プロファイルの単元に限定: {before} → {len(cands)} 種")
     excluded_nc = [c["id"] for c in cands if _non_cisco(c)]
     if not allow_non_cisco:
         cands = [c for c in cands if not _non_cisco(c)]
@@ -797,11 +914,11 @@ def resolve_genre(cat, genre, hist, rnd, family_days, today, log=print,
         log(f"[選定] {spec['label']}: 優先の {cands[0]['prefix']} は直近"
             f"{family_days}日に出題済 → {pick['prefix']} へ")
     nodes = spec.get("nodes") or _nodes_from_text(pick["desc"] + " " + pick["note"]) or DEFAULT_NODES
-    args, label = [], spec["label"]
+    args, label = list(GEN_DEFAULT_ARGS.get(pick["prefix"], [])), spec["label"]
     if spec.get("variants"):
         # 盤面/形の variant を抽選し、生成器へ渡す追加引数と台数を確定する
         var = rnd.choice(spec["variants"])
-        args, nodes = list(var.get("args", [])), var.get("nodes", nodes)
+        args, nodes = args + list(var.get("args", [])), var.get("nodes", nodes)
         label = f"{spec['label']}({var.get('label', ' '.join(args))})"
     return dict(common, id=pick["prefix"], script=pick["script"], nodes=nodes,
                 diff=pick["diff"], source="generator", kind="generator",
@@ -929,7 +1046,10 @@ def _run_paper_gen(repo, seed, count, shape, exam, hard, log, label, extra_args=
     if hard:
         cmd.append("--hard")
     cmd += list(extra_args)
-    log(f"[紙面] {label}: shape={shape} count={count} seed={seed}")
+    if PROFILE and PROFILE.get("paper_kinds"):
+        cmd += _profile_only_args(PROFILE)            # ★BL-213: プロファイルの単元だけに限定
+    log(f"[紙面] {label}: shape={shape} count={count} seed={seed}"
+        + (f" profile={PROFILE['label']}" if PROFILE else ""))
     r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True)
     if r.returncode != 0:
         log(f"[紙面] ★生成器が rc={r.returncode} で終了: {(r.stderr or '')[-1500:]}")
@@ -942,7 +1062,62 @@ def _run_paper_gen(repo, seed, count, shape, exam, hard, log, label, extra_args=
     return mine
 
 
-def gen_papers(repo, count, seed, shape, exam, hard, log, require=(), rnd=None):
+# ==========================================================================
+# 1日 N パック(BL-205・2026-09-20 ユーザ指示)
+#   「思考5 + 瞬発8 + 穴埋め5」を1日3パック出し、**配分は1日全体で考える**。
+#   - 必須ジャンルは 1日で全ジャンルを1周するよう 3 パックへ配り分ける
+#     (--require-shape auto)。
+#   - 既に出した (shape/kind) は次のパックの抽選から外す(--exclude-kinds)。
+#   - ラボは 1 本目だけに付ける(CML の予算は1日ぶんで共通なので増やせない)。
+# ==========================================================================
+REQUIRE_PER_PACK = 4          # 1パックの必須ジャンル枠(思考系 5〜6 問のうち)
+
+
+def _exclude_args(exclude):
+    """gen_paper_mcq に渡す --exclude-kinds 引数(空なら付けない)。"""
+    ex = sorted({e for e in (exclude or ()) if e})
+    return ["--exclude-kinds", ",".join(ex)] if ex else []
+
+
+def kinds_of_stamps(repo, stamps):
+    r"""answers/<stamp>.md の `種別: \`shape/kind\`` を集める(パック間の重複回避用)。"""
+    pat = re.compile(r"種別:\s*`?([a-z0-9]+)/([a-z0-9_]+)")
+    out = set()
+    for st in stamps or ():
+        try:
+            with open(os.path.join(repo, "answers", f"{st}.md"),
+                      encoding="utf-8") as fh:
+                m = pat.search(fh.read())
+        except OSError:
+            continue
+        if m:
+            out.add(f"{m.group(1)}/{m.group(2)}")
+    return out
+
+
+def plan_genres(spec, n_packs, rnd):
+    """必須ジャンルをパックへ配り分ける。`auto`= 1日で全ジャンルを1周。
+
+    明示指定(カンマ区切り)なら従来どおり全パックに同じ必須ジャンルを課す。
+    auto は core 4 ジャンル(redist/aaa/acl/bgp)を先に配り、残りを続けて
+    ラウンドロビンする(3パックなら 4/3/3 ジャンル= 全10ジャンルが1日で1周)。
+    """
+    if (spec or "").strip().lower() != "auto":
+        req = [g.strip() for g in (spec or "").split(",") if g.strip()]
+        return [list(req) for _ in range(n_packs)]
+    table = PAPER_GENRES_ACTIVE if PAPER_GENRES_ACTIVE is not None else PAPER_GENRES
+    core = [g for g in ["redist", "aaa", "acl", "bgp"] if g in table]
+    rest = [g for g in table if g not in core and g != "cloze"]
+    rnd.shuffle(core)
+    rnd.shuffle(rest)
+    plan = [[] for _ in range(n_packs)]
+    for i, g in enumerate((core + rest)[:n_packs * REQUIRE_PER_PACK]):
+        plan[i % n_packs].append(g)
+    return plan
+
+
+def gen_papers(repo, count, seed, shape, exam, hard, log, require=(), rnd=None,
+               exclude=()):
     """紙面を作る。必須ジャンルは個別に、残りは mixed でまとめて生成する。
 
     ★`--shape mixed` は問題ごとのルーレットでジャンルを保証しない。
@@ -965,7 +1140,8 @@ def gen_papers(repo, count, seed, shape, exam, hard, log, require=(), rnd=None):
         for attempt in range(1, RETRY_MAX + 1):
             sh = ordered[0] if attempt == 1 else rnd.choice(shapes)
             new = _run_paper_gen(repo, seed + 7000 + gi * 100 + attempt, 1, sh,
-                                 exam, hard, log, f"必須[{genre}] 試行{attempt}")
+                                 exam, hard, log, f"必須[{genre}] 試行{attempt}",
+                                 extra_args=_exclude_args(exclude))
             if new:
                 made += new
                 got_genre[genre] = sh
@@ -980,7 +1156,8 @@ def gen_papers(repo, count, seed, shape, exam, hard, log, require=(), rnd=None):
         if need <= 0:
             break
         new = _run_paper_gen(repo, seed + attempt * 1000, need, shape,
-                             exam, hard, log, f"残り 試行{attempt}")
+                             exam, hard, log, f"残り 試行{attempt}",
+                             extra_args=_exclude_args(exclude))
         made += new
         log(f"[紙面] 累計 {len(made)}/{count} 問")
     if got_genre:
@@ -1119,6 +1296,15 @@ def bringup(repo, prob_id, log, tries=8, wait=15):
             log(f"[bringup] {prob_id}: bounce 後の未到達 {ng or '(なし)'}")
     if ng:
         log(f"[bringup] ★{prob_id}: {ng} に到達できないまま(朝の要確認)")
+    # ★IOSvL2 は**データ VLAN の SVI も起動後 down で固着**する(2026-09-26・BL-076 の IOSvL2 版検証で判明)。
+    #   未接続のエッジポートが本当に down なので VLAN に up のアクセスポートが無く、trunk が forwarding でも
+    #   SVI が上がらない(IOL は未接続でも connected 扱いなので起きない)。mgmt が上がった後に telnet で bounce。
+    if _iosvl2_nodes(repo, prob_id):
+        try:
+            import stp_ops
+            stp_ops.bounce_down_svis(prob_id, log)
+        except Exception as e:                       # 救済は best-effort(失敗しても provision は続ける)
+            log(f"[bringup] {prob_id}: データ SVI bounce に失敗 {e}")
     return ng
 
 
@@ -1318,9 +1504,15 @@ def answer_form(pack_id, it, src_path):
         else:                       # 記述式(選択肢なし)
             ansfield = ('<label class="row">解答</label>'
                         '<textarea class="ans"></textarea>')
+        # ★BL-212(2026-09-21 ユーザ要望): 「答え合わせ」ボタン。押した時点の解答で正誤だけを
+        #   即時表示(緑/赤)し、その問の入力をロックする(=初回解答の確定。解説は採点後のまま)。
+        #   判定は pack_server の /_api/check がサーバ側で行う(正解キーはページに置かない)。
         body = (ansfield +
                 '<label class="row">根拠（任意）</label>'
                 '<textarea class="why"></textarea>'
+                '<div class="chkrow"><button type="button" class="chk">答え合わせ</button>'
+                '<span class="chkres"></span>'
+                '<span class="chknote">押すと正誤だけ表示し、この問の解答を確定します（解説は採点後）</span></div>'
                 '<label class="done"><input type="checkbox"> 解答済</label>')
     return head + body + '<div class="savemsg"></div></section>'
 
@@ -1362,13 +1554,17 @@ def write_pages(repo, pdir, items, mermaid_js, mermaid_mode="cdn", pack_id=""):
     return written
 
 
-def index_md(pack_id, items, notes, dry_run):
+def index_md(pack_id, items, notes, dry_run, report=False):
     est = {"paper": 8, "lab": 60}     # 紙面は1問8分・ラボは1問60分の目安
 
     def _est(it):                     # ラボはジャンルごとの目安(MPLS 構築 90 等・BL-158)
         return int(it.get("est") or est[it["kind"]])
     total = sum(_est(it) for it in items)
     lines = [f"# {pack_id} — 問題パック", ""]
+    if report:
+        # ★採点後は解説ページへの導線を最上部に置く(2026-09-20 ユーザ指示)
+        lines += ["> 📘 **採点済み** — [解説ページを開く（正答・あなたの解答・"
+                  "なぜそうなるか）](report.html)", ""]
     if dry_run:
         lines += ["> ★これは **--dry-run のプレビュー**です。紙面は既出のものを借りて",
                   "> 体裁を確認するためのもので、ラボは構築されていません。", ""]
@@ -1458,7 +1654,8 @@ def write_manifest(pdir, manifest):
     for it in manifest["items"]:
         lines.append(f"  - no: {it['no']}")
         for k in ("kind", "slot", "ref", "src", "key", "form", "variant",
-                  "nodes", "state", "ops", "error", "warn"):
+                  "nodes", "state", "ops", "error", "warn",
+                  "lab_score", "lab_fails"):   # ラボ採点の結果(再描画で使う)
             if it.get(k) not in (None, ""):
                 lines.append(f"    {k}: {esc(it[k])}")
     lines += ["notes:"] + [f"  - {esc(n)}" for n in manifest["notes"]]
@@ -1696,71 +1893,794 @@ def history_upsert(repo, ref, *, diff="", state="出題中", score="-", memo="",
 
 
 # ==========================================================================
-# 採点レポート(report.html)
+# 採点レポート(report.html) = 「解説ページ」
+#   ★2026-09-20 ユーザ指示で恒久変更: **初回採点から全紙面の正答と解説を出す**。
+#     (旧運用= 誤答があるうちは正解率と問番号だけ。再挑戦の学習価値を優先していた)
+#     解説の素材は answers/<ID>.md に**パック生成時から存在する**ので、ここでは
+#     「解答との突き合わせ」と「読みやすい並べ替え」だけを採点時に行う。
+#   ★ラボは対象外(従来どおり正解 config は求められてから)。
 # ==========================================================================
-def build_report(repo, pack_id, pdir, man, rows, lab_rows):
-    """採点結果を1枚の HTML にまとめる(パックの成績表)。
+# 解説に出してはいけない行(仕込みの種別・seed・生成コマンド等。型が割れる)
+_META_LINE = re.compile(
+    r"^\s*[-*]\s*(種別|形式|出題形|出題形式|生成|仕込み|要件世界|世界|"
+    r"実出力の正典|検証 seed|sub-seed)\s*[:：]")
 
+
+def _key_text(repo, ref, key_path=None):
+    path = (os.path.join(repo, key_path) if key_path
+            else os.path.join(repo, "answers", f"{ref}.md"))
+    if not os.path.exists(path):
+        return ""
+    with open(path, encoding="utf-8") as fh:
+        return fh.read()
+
+
+def _section(text, title_re):
+    """`## <見出し>` 節の本文を取り出す(次の ## まで)。"""
+    m = re.search(rf"^## {title_re}[^\n]*$(.*?)(?=^## |\Z)", text, re.M | re.S)
+    return m.group(1).strip() if m else ""
+
+
+def _strip_meta(body):
+    """メタ行を落とし、節内の見出し(## / ###)を1段下げる(問題見出しと混ざらないように)。"""
+    out = []
+    for l in body.split("\n"):
+        if _META_LINE.match(l):
+            continue
+        if l.startswith("### "):
+            l = "##### " + l[4:]
+        elif l.startswith("## "):
+            l = "##### " + l[3:]
+        out.append(l)
+    return "\n".join(out).strip()
+
+
+# --------------------------------------------------------------------------
+# 可読性(2026-09-20 ユーザ指示「解説ページはもう少し改行を工夫して読みやすく」)
+#   解説の地の文は 600〜800 字の一段落になりがちで、そのままだと壁になる。
+#   ここで **文ごとに改行**し、句点が来ないまま伸びる文は読点で折る。
+#   表・コードブロック・見出し・生 HTML 行には触らない。
+# --------------------------------------------------------------------------
+# 「af-interface= …」「分類: …」のように頭にラベルが立つ文(ラベルを太字にする)
+_LEAD_LABEL = re.compile(r"^([^\s、。]{1,28}?)\s*([=＝:：])\s*(\S.*)$")
+
+
+def _sentences(s):
+    """一段落を文に割る(句点は文末に残す)。"""
+    return [t for t in re.split(r"(?<=。)", (s or "").strip()) if t.strip()]
+
+
+def _soft_wrap(sent, limit=130, chunk=55):
+    """句点が来ないまま伸びる文を読点で折る(短すぎる断片は作らない)。"""
+    if len(sent) <= limit:
+        return [sent]
+    out, cur = [], ""
+    for part in re.split(r"(?<=、)", sent):
+        cur += part
+        if len(cur) >= chunk:
+            out.append(cur)
+            cur = ""
+    if cur:
+        if out and len(cur) < 12:
+            out[-1] += cur
+        else:
+            out.append(cur)
+    return out
+
+
+# 段落の途中で改行されている原文(編集の都合で 60 字前後に折ってある)は、
+# いったん1本につないでから文で割り直す。行頭がこれらの行は別ブロックの始まり。
+_BLOCK_START = re.compile(r"^(?:[-*+]\s|\d+[.)]\s|>|#|\||```|<)")
+
+
+def _join_paragraph(lines):
+    """段落内の改行をほどく(和文はそのまま・英数の境目だけ空白を残す)。"""
+    text = lines[0]
+    for nxt in lines[1:]:
+        sep = " " if (text[-1:].isascii() and text[-1:].strip()
+                      and nxt[:1].isascii() and nxt[:1].strip()) else ""
+        text += sep + nxt
+    return text
+
+
+def _paragraphs(body):
+    """(行, それが段落本文か) の列に整える(コード/表/見出しは触らない印を付ける)。"""
+    out, buf, in_fence = [], [], False
+    def flush():
+        if buf:
+            out.append((_join_paragraph(buf), True))
+            buf.clear()
+    for line in (body or "").split("\n"):
+        st = line.strip()
+        if line.lstrip().startswith("```"):
+            flush()
+            in_fence = not in_fence
+            out.append((line, False))
+            continue
+        if in_fence or not st:
+            flush()
+            out.append((line, False))
+            continue
+        if _BLOCK_START.match(st):
+            flush()
+            buf.append(line)            # 箇条書き・引用も、続き行はつないで扱う
+            continue
+        if buf:
+            buf.append(st)
+            continue
+        out.append((line, True))
+    flush()
+    return out
+
+
+def _readable(body, limit=60):
+    """長い段落・箇条書きを文ごとに改行する(解説ページ専用の整形)。
+
+    ・原文が途中改行されていても、段落単位でつなぎ直してから文で割る
+    ・コードブロック・表・見出し・生 HTML 行には触らない
+    """
+    out = []
+    for line, is_text in _paragraphs(body):
+        st = line.lstrip()
+        if not is_text or len(line) <= limit or st.startswith(("|", "#", "<")):
+            out.append(line)
+            continue
+        pieces = []
+        for sent in _sentences(st):
+            chunks = _soft_wrap(sent)
+            # 文の途中で折った行は全角空白で字下げ= 句点での改行と見分けがつく
+            pieces += [chunks[0]] + ["\u3000" + c for c in chunks[1:]]
+        out.append(line[:len(line) - len(st)] + "<br>".join(pieces)
+                   if len(pieces) > 1 else line)
+    return "\n".join(out)
+
+
+def _inline_code(s):
+    """エスケープ済みテキストの `x` を <code> にする(素のバッククォート除去)。"""
+    return re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
+
+
+def oneliner_html(one):
+    """「一行でいうと」を読める形に組む。
+
+    短ければ従来どおり 1 行。長ければ **先頭の文を見出し**にし、残りは
+    1 文 1 行に割って並べる(`ラベル=` で始まる文はラベルを太字にする)。
+    """
+    sents = _sentences(one)
+    if len(sents) <= 1 and len(one) <= 80:
+        return ('<div class="oneliner">💡 <b>一行でいうと</b> — '
+                f'{_inline_code(html_escape(one))}</div>')
+    lead, rest = sents[0], sents[1:]
+    if not rest:                       # 1 文だが長い= 読点で折って並べる
+        parts = _soft_wrap(lead, limit=80, chunk=40)
+        lead, rest = parts[0], parts[1:]
+    parts = ['<div class="ol-head">💡 一行でいうと</div>',
+             f'<div class="ol-lead">{_inline_code(html_escape(lead))}</div>']
+    for sent in rest:
+        for i, piece in enumerate(_soft_wrap(sent, limit=110, chunk=48)):
+            m = _LEAD_LABEL.match(piece) if i == 0 else None
+            if m:
+                txt = (f'<b>{_inline_code(html_escape(m.group(1) + m.group(2)))}</b> '
+                       + _inline_code(html_escape(m.group(3))))
+            else:
+                txt = _inline_code(html_escape(piece))
+            cls = "ol-s" if i == 0 else "ol-s cont"   # 続きの行には ▸ を付けない
+            parts.append(f'<div class="{cls}">{txt}</div>')
+    return '<div class="oneliner">' + "".join(parts) + "</div>"
+
+
+def _choice_letters(repo, src):
+    """その問題に実在する選択肢記号(A,B,C…)。比較表を全選択肢ぶん出すために使う。"""
+    if not src:
+        return []
+    path = os.path.join(repo, src)
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return render_html.choice_letters(fh.read())
+    except Exception:
+        return []
+
+
+def _one_liner(text):
+    """`- 種別: `shape/kind` — <説明>` の説明部分を「一行でいうと」に使う。
+
+    穴埋め形は `— 要点語: ...` が続くのでそこで切る。説明が無い形は空を返す。
+    """
+    m = re.search(r"^\s*[-*]\s*種別\s*[:：]\s*`[^`]*`\s*[—-]\s*(.+)$", text, re.M)
+    if not m:
+        return ""
+    s = m.group(1).strip()
+    s = re.split(r"\s*[—-]\s*要点語\s*[:：]", s)[0].strip()
+    return s if len(s) > 8 else ""
+
+
+_CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩"
+
+
+def _tokens(s):
+    return [t for t in re.split(r"[・,、\s]+", (s or "").strip()) if t and t != "-"]
+
+
+def answer_compare_md(given, key, letters=()):
+    """あなたの解答と正解を**並べる**(判定は ✅/❌ だけ・理由は本文で書く)。
+
+    letters= その問題に実在する選択肢。渡せば選ばなかった肢も行に出す。
+    """
+    g, k = _tokens(given), _tokens(key)
+    if k and all(t[0] in _CIRCLED for t in k):          # 穴埋め・組合せ形
+        gmap = {t[0]: t[1:].lstrip("－-") for t in g if t and t[0] in _CIRCLED}
+        out = ["| 空欄 | あなたの解答 | 正解 | |", "|---|---|---|---|"]
+        for t in k:
+            n, v = t[0], t[1:].lstrip("－-")
+            mine = gmap.get(n) or "（無回答）"
+            out.append(f"| {n} | {mine} | **{v}** | {'✅' if mine == v else '❌'} |")
+        return "\n".join(out)
+    gs, ks = set(g), set(k)                             # 選択形(単一・複数)
+    out = ["| 選択肢 | あなたの解答 | 正解 | |", "|---|---|---|---|"]
+    for letter in (list(letters) or sorted(gs | ks)):
+        mine, ans = letter in gs, letter in ks
+        mark = ("✅" if mine and ans else
+                "❌ 余分" if mine else "❌ 選べていない" if ans else "")
+        out.append(f"| {letter} | {'選んだ' if mine else '—'} | "
+                   f"{'**正解**' if ans else '—'} | {mark} |")
+    return "\n".join(out)
+
+
+def explain_parts(repo, ref, key_path=None):
+    """解説ページ1問ぶんの部品(仕込みの種別・seed は落とす)。"""
+    text = _key_text(repo, ref, key_path)
+    if not text:
+        return {}
+    why = _strip_meta(_section(text, "解説"))
+    judge = _strip_meta(_section(text, "各選択肢の判定"))
+    core = _strip_meta(_section(text, "教育核心")) or \
+        _strip_meta(_section(text, r"★この分野の最重要知見"))
+    verify = _strip_meta(_section(text, "検証コマンドと期待される出力"))
+    note = _strip_meta(_section(text, "原典との記号対応"))
+    return {"summary": _one_liner(text), "why": why, "judge": judge,
+            "core": core, "verify": verify, "note": note}
+
+
+# 解説ページ専用のテーマ(問題用紙= 試験シム風の白一色 とは意図的に別の見た目にする)
+REPORT_CSS = """
+body.report{background:#eef1f7}
+body.report main{max-width:940px; background:#ffffff; margin:1.2rem auto;
+  padding:1.4rem 1.6rem 4rem; border:1px solid #d8dee9; border-radius:14px;
+  box-shadow:0 2px 12px rgba(16,24,40,.07)}
+body.report h1{border-bottom:3px solid #4b5bd6; color:#1f2a55}
+body.report h2{border-bottom:1px solid #dfe4ee; color:#33406b; margin-top:2.2rem}
+body.report .nav{background:#1f2a55; border-bottom:none}
+body.report .nav a{color:#cdd6ff}
+body.report .nav .cur{color:#9aa6d8}
+.scorebox{display:flex; align-items:baseline; gap:.9rem; color:#ffffff;
+  background:linear-gradient(90deg,#4b5bd6,#7b88f2); border-radius:12px;
+  padding:.85rem 1.2rem; margin:1rem 0 .6rem}
+.scorebox .big{font-size:1.9rem; font-weight:700}
+.scorebox .sub{font-size:.95rem; opacity:.93}
+.jumps{margin:.2rem 0 1.4rem; font-size:.92rem}
+.jumps .lead{color:#5a6580; margin-right:.4rem}
+.jumps a{display:inline-block; margin:.15rem .3rem .15rem 0; padding:.12rem .6rem;
+  border-radius:999px; background:#fdecec; color:#b3261e; text-decoration:none;
+  border:1px solid #f3c7c7}
+.jumps a:hover{background:#fbdada}
+.qcard{border:1px solid #dfe4ee; border-radius:12px; padding:1rem 1.2rem .5rem;
+  margin:1.1rem 0; background:#ffffff}
+.qcard.ng{border-left:6px solid #d23f3f; background:#fffafa}
+.qcard.ok{border-left:6px solid #1f9d55}
+.qhead{display:flex; align-items:center; gap:.55rem; flex-wrap:wrap;
+  margin-bottom:.4rem; padding-bottom:.45rem; border-bottom:1px dashed #e2e6f0}
+.qhead .qno{font-size:1.12rem; font-weight:700; color:#1f2a55}
+.qhead code{font-size:.8rem; color:#6b7280}
+.badge{font-size:.8rem; font-weight:700; border-radius:999px; padding:.1rem .6rem}
+.badge.ok{background:#e6f5ec; color:#1f7a45; border:1px solid #bfe3cd}
+.badge.ng{background:#fdecec; color:#b3261e; border:1px solid #f3c7c7}
+.slot{font-size:.78rem; color:#5a6580; background:#eef1f7; border-radius:6px;
+  padding:.08rem .5rem}
+.oneliner{background:#fff8e1; border:1px solid #f2d492; border-left:5px solid #e8a33d;
+  border-radius:8px; padding:.7rem 1rem; margin:.9rem 0; font-size:.98rem;
+  line-height:1.85}
+.oneliner .ol-head{font-weight:700; color:#8a6d1f; font-size:.86rem;
+  letter-spacing:.04em; margin-bottom:.35rem}
+.oneliner .ol-lead{font-weight:700; color:#5c4708}
+.oneliner .ol-s{margin-top:.34rem; padding-left:1.2em; text-indent:-1.2em}
+.oneliner .ol-s::before{content:"▸ "; color:#c08b2c; font-weight:700}
+.oneliner .ol-s.cont{margin-top:.1rem; text-indent:0}
+.oneliner .ol-s.cont::before{content:""}
+.oneliner .ol-s b{color:#8a6d1f}
+.oneliner code{background:#fff2cc; border:1px solid #efdca6; border-radius:4px;
+  padding:0 .25em}
+/* 地の文は 1 文ごとに改行する(gen_pack._readable)。行間と行長を読みやすく */
+body.report .qcard p, body.report .qcard li{line-height:1.9}
+body.report .qcard>p, body.report .qcard>ul, body.report .qcard>ol{max-width:46em}
+body.report .qcard li{margin:.4rem 0}
+body.report .qcard ul, body.report .qcard ol{padding-left:1.4rem}
+body.report .qcard :not(pre)>code{background:#eef1f7; border-radius:4px;
+  padding:0 .25em}
+body.report .qcard h4{font-size:.87rem; font-weight:700; color:#3b4a7a;
+  margin:1.7rem 0 .45rem; padding-top:.55rem; border-top:1px dashed #edf0f6;
+  display:flex; align-items:center; gap:.45rem}
+body.report .qcard h4::before{content:""; width:.45rem; height:.45rem;
+  border-radius:2px; background:#4b5bd6}
+body.report .qcard h5{font-size:.95rem; color:#1f2a55; margin:.9rem 0 .3rem}
+body.report table{border-collapse:collapse; font-size:.93rem; margin:.6rem 0}
+body.report th{background:#f1f4fa; color:#33406b; border:1px solid #dfe4ee;
+  padding:.35rem .7rem; text-align:left}
+body.report td{border:1px solid #e6eaf3; padding:.32rem .7rem}
+body.report tr.bad td{background:#fff1f1}
+body.report tr.good td{background:#f5fbf7}
+body.report blockquote{background:#f7f9fd; border:1px solid #dfe4ee;
+  border-left:4px solid #9aa6d8; border-radius:8px}
+body.report pre.code{background:#0f172a; border:none; border-radius:8px}
+body.report pre.code code{color:#e5e9f5}
+.qbody{background:#f8f9fc; border:1px solid #e2e6f0; border-left:4px solid #b9c2dd;
+  border-radius:8px; padding:.35rem 1rem .8rem; margin:.7rem 0 .9rem; font-size:.95rem}
+.qbody h5{color:#5a6580 !important; font-size:.82rem !important; font-weight:700;
+  letter-spacing:.04em; margin:.7rem 0 .3rem !important}
+.qbody ul{margin:.35rem 0 .35rem 1.1rem; padding:0}
+.qbody li{margin:.18rem 0}
+.qbody pre.code, .qbody pre.mermaid{background:#ffffff !important; border:1px solid #dfe4ee !important;
+  border-radius:6px}
+.qbody pre.code code{color:#0f172a !important}
+.qfold{margin:.7rem 0 .9rem}
+.qfold>summary{cursor:pointer; font-size:.82rem; font-weight:700; color:#5a6580;
+  background:#f1f4fa; border:1px solid #e2e6f0; border-radius:8px; padding:.3rem .8rem;
+  list-style:none}
+.qfold>summary::marker{content:""}
+.qfold>summary::before{content:"▸ "; color:#8a94b5}
+.qfold[open]>summary::before{content:"▾ "}
+.qfold .qbody{margin-top:.4rem}
+.qlink{font-size:.78rem; margin-left:auto; color:#4b5bd6; text-decoration:none;
+  border:1px solid #ccd3ef; border-radius:999px; padding:.08rem .55rem}
+.qlink:hover{background:#eef1ff}
+.whyline{display:inline-block; color:#5a6580; font-size:.9rem; background:#f8f9fc;
+  border-left:3px solid #c9d2e8; border-radius:4px; padding:.1rem .5rem; margin:.1rem 0}
+.miss{background:#ffe3e3; border-bottom:2px solid #d23f3f; border-radius:3px;
+  padding:0 .15rem}
+/* 出題文と採点の統合(2026-09-20): 選択肢の行に直接「あなた/正解」を出す */
+.mk{font-size:.78rem; font-weight:700; border-radius:999px; padding:.06rem .5rem;
+  white-space:nowrap; margin-right:.3rem}
+.mk.ok{background:#e6f5ec; color:#1f7a45; border:1px solid #bfe3cd}
+.mk.ng{background:#fdecec; color:#b3261e; border:1px solid #f3c7c7}
+.mk.miss{background:#fff4e0; color:#a35b00; border:1px solid #f0d3a6}
+body.report .qbody li:has(.mk.ok){background:#f2fbf5}
+body.report .qbody li:has(.mk.ng){background:#fff5f5}
+body.report .qbody li:has(.mk.miss){background:#fffaf0}
+body.report .qbody li:has(.mk){border-radius:6px; padding:.18rem .45rem;
+  margin:.3rem 0 .3rem -.45rem}
+body.report .qbody li li{background:none !important; color:#4a5568;
+  font-size:.92em; margin:.15rem 0}
+body.report .qbody ul{list-style:none; padding-left:.2rem}
+body.report .qbody ul ul{list-style:disc; padding-left:1.3rem}
+/* 穴埋め形: 本文の空欄をその場で埋める */
+.fill{border-radius:5px; padding:0 .3em; font-weight:600}
+.fill.ok{background:#e6f5ec; border:1px solid #bfe3cd; color:#14613a}
+.fill.ng{background:#fdecec; border:1px solid #f3c7c7; color:#8f1d16}
+.fill.ng s{color:#b3261e; font-weight:400; opacity:.75}
+.qhead .pick{font-size:.82rem; color:#33406b; background:#eef1ff;
+  border:1px solid #ccd3ef; border-radius:6px; padding:.08rem .55rem}
+.qhead .pick b{color:#1f2a55}
+.qhead .pick i{font-style:normal; color:#8a94b5; margin:0 .25rem}
+.qhead .pick.ok{background:#e6f5ec; border-color:#bfe3cd; color:#1f7a45}
+.tag-miss{color:#b3261e; font-size:.86rem; font-weight:700; white-space:nowrap}
+.tag-pick{color:#8a6d1f; font-size:.86rem; font-weight:700; white-space:nowrap}
+.labnote{color:#5a6580; font-size:.92rem}
+"""
+
+
+def _question_md(repo, src, marks=None, fills=None, applied=None):
+    """出題された問題文を解説カードに埋め込む形に整える。
+
+    ・先頭の `# 問題 <ID>` と「機器に接続せずに解答」の注意書きは落とす
+    ・見出しは h5 まで降格(カードの見出し階層に合わせる)
+    ・選択肢の行は箇条書きにする(元の `.choice` 装飾はカード内では使わない)
+    ・図(mermaid)とコードブロックはそのまま残す = 何を見て答える問題かが分かる
+
+    ★2026-09-20(ユーザ指示「出題文と『あなたの解答と正解』は統合できないか」):
+      `marks` = {記号: (バッジ, 理由)} を渡すと、**選択肢の行に採点結果と理由を併記**する
+      (= 別表と「選択肢ごとの理由」節が要らなくなる)。
+      `fills` = {丸数字: (状態, 正解記号, 正解語, あなたの記号, あなたの語)} を渡すと、
+      本文中の ［n］ を**その場で埋める**(穴埋め形)。コードブロックの中だけは
+      生 HTML が使えないので素のテキストで埋める。
+      `applied` にリストを渡すと、**実際に印を付けられた記号・空欄番号**が入る
+      (1つも付かなければ呼び出し側は従来の対比表に戻す)。
+    """
+    if not src:
+        return ""
+    path = os.path.join(repo, src)
+    if not os.path.exists(path):
+        return ""
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    out, in_fence, pending = [], False, ""
+    def flush():                      # 設定ブロック選択肢の理由はブロックの**後**に置く
+        nonlocal pending
+        if pending:
+            out.extend(["", f'<span class="whyline">{pending}</span>', ""])
+            pending = ""
+    for line in text.split("\n"):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            out.append(line)
+            if not in_fence:
+                flush()
+            continue
+        if fills:
+            line, hit = _fill_blanks(line, fills, plain=in_fence)
+            if applied is not None:
+                applied += hit
+        if not in_fence:
+            if line.startswith("# "):
+                continue                       # タイトル行(問題ID)は不要
+            if line.startswith("> ") and "機器に接続せず" in line:
+                continue                       # 解答時の注意書きは解説では不要
+            if line.strip() in ("## 設問", "### 設問"):
+                continue                       # パネル見出しと重複するので落とす
+            if marks is not None and line.strip() in ("## 選択肢", "### 選択肢"):
+                out += ["##### 選択肢 — あなたの解答・正解・理由", ""]
+                continue
+            if line.startswith("### "):
+                line = "##### " + line[4:]
+            elif line.startswith("## "):
+                line = "##### " + line[3:]
+            m = re.match(r"^([A-J])([.．)）])\s*(.+)$", line)
+            if m:
+                # 直前の空行を捨てて詰まった箇条書きにする(選択肢が間延びしない)
+                if out and not out[-1].strip() and len(out) > 1 and \
+                        out[-2].lstrip().startswith(("- ", "- **")):
+                    out.pop()
+                letter, body = m.group(1), m.group(3)
+                badge, why = (marks or {}).get(letter, ("", ""))
+                if badge and applied is not None:
+                    applied.append(letter)
+                line = f"- {badge}**{letter}.** {body}" if badge else \
+                       f"- **{letter}.** {body}"
+                out.append(line)
+                if why:
+                    out.append(f"  - {_readable(why)}")
+                continue
+            # 設定ブロックを選択肢にする形(`**A.**` の次行から ``` が続く)は
+            # 箇条書きにできない(フェンスが入れ子にならない)。行の末尾に印を足す
+            m = re.match(r"^\*\*([A-J])[.．)）]?\*\*\s*(.*)$", line.strip())
+            if m and marks is not None:
+                letter, body = m.group(1), m.group(2)
+                badge, why = marks.get(letter, ("", ""))
+                if badge and applied is not None:
+                    applied.append(letter)
+                flush()                 # 前の選択肢の理由が残っていれば先に出す
+                if out and out[-1].strip():
+                    out.append("")          # 直前が見出し/本文なら段落を分ける
+                out.append(f"**{letter}.** {body} {badge}".rstrip())
+                pending = _readable(why) if why else ""
+                continue
+        out.append(line)
+    flush()
+    # 解説ページに載せる再掲なので、地の文は文ごとに改行する(用紙そのものは変えない)
+    return _readable("\n".join(out).strip())
+
+
+# --------------------------------------------------------------------------
+# 出題文と採点結果の統合(2026-09-20)
+#   ・選択形= 選択肢の行に「あなたの解答／正解」と理由を併記する
+#   ・穴埋め形= 本文の ［n］ をその場で埋め、誤答は取り消し線で併記する
+# --------------------------------------------------------------------------
+def _choice_pairs(repo, src):
+    """その問題の [(記号, 選択肢の本文), ...]。"""
+    if not src:
+        return []
+    path = os.path.join(repo, src)
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return render_html.choice_texts(fh.read())
+    except Exception:
+        return []
+
+
+def _badge(mine, ans):
+    if ans and mine:
+        return '<span class="mk ok">✅ 正解＝あなたの解答</span> '
+    if ans:
+        return '<span class="mk miss">★ 正解（選べていない）</span> '
+    if mine:
+        return '<span class="mk ng">❌ あなたの解答</span> '
+    return ""
+
+
+def _judge_map(judge):
+    """`- **A**: 理由` を {記号: 理由} に割る。対応しない行は注記として返す。"""
+    by, rest, cur = {}, [], None
+    for line in (judge or "").split("\n"):
+        m = re.match(r"^\s*[-*]\s*\*\*([A-J])\*\*\s*[:：]?\s*(.*)$", line)
+        if m:
+            cur = m.group(1)
+            by[cur] = m.group(2).strip()
+        elif cur and line[:1] in (" ", "\t") and line.strip():
+            by[cur] += " " + line.strip()      # ぶら下がりの続き行
+        elif line.strip():
+            cur = None
+            rest.append(line)
+    # 「(正解)」だけの行は情報が無いので落とす
+    by = {k: v for k, v in by.items() if re.sub(r"[()（）\s]|正解", "", v)}
+    return by, "\n".join(rest).strip()
+
+
+def choice_marks(repo, src, given, key, judge, why=""):
+    """選択形: ({記号: (バッジ, 理由)}, 判定節の残り, 解説節の残り)。
+
+    理由は「各選択肢の判定」節から採るが、その節を持たず**解説の中で
+    `- **A**: …` と並べている**ファミリもあるので、そちらも拾って本文へ移す
+    (同じ選択肢の列挙がページに 2 回出るのを避ける)。
+    """
+    letters = [l for l, _ in _choice_pairs(repo, src)]
+    g, k = set(_tokens(given)), set(_tokens(key))
+    if not letters or not k or not k <= set(letters):
+        return {}, judge, why
+    by, rest_j = _judge_map(judge)
+    by_w, rest_w = _judge_map(why)
+    # 解説側は「選択肢の列挙」と確信できるときだけ動かす(別用途の箇条書き対策)
+    if len(by_w) >= 2 and set(by_w) <= set(letters) and len(by_w) * 2 >= len(letters):
+        by = {**by_w, **by}
+    else:
+        rest_w = why
+    return ({l: (_badge(l in g, l in k), by.get(l, "")) for l in letters},
+            rest_j, rest_w)
+
+
+def cloze_fills(repo, src, given, key):
+    """穴埋め形: {丸数字: (状態, 正解記号, 正解語, あなたの記号, あなたの語)}。"""
+    texts = dict(_choice_pairs(repo, src))
+    def parse(s):
+        return {t[0]: t[1:].lstrip("－-") for t in _tokens(s)
+                if t and t[0] in _CIRCLED}
+    g, k = parse(given), parse(key)
+    if not k:
+        return {}
+    fills = {}
+    for n, kl in k.items():
+        gl = g.get(n)
+        fills[n] = ("ok" if gl == kl else "ng", kl, texts.get(kl, ""),
+                    gl, texts.get(gl, "") if gl else "")
+    return fills
+
+
+def _fill_blanks(line, fills, plain=False):
+    """本文中の ［n］ を答えで埋める(plain= コードブロック内なので素のテキスト)。
+
+    戻り= (置換後の行, 埋めた空欄番号のリスト)。
+    """
+    hit = []
+    def rep(m):
+        n = m.group(1)
+        if n not in fills:
+            return m.group(0)
+        hit.append(n)
+        st, kl, ktxt, gl, gtxt = fills[n]
+        ans = f"{kl}. {ktxt}" if ktxt else kl
+        if plain:      # コードブロック内= 設定行を崩さないよう最短で埋める
+            word = ktxt or kl
+            if st == "ok":
+                return f"［{n}］{word}"
+            mine = (gtxt or gl) if gl else "無回答"
+            return f"［{n}］{word}《あなた: {mine}》"
+        if st == "ok":
+            return (f'<span class="fill ok">［{n}］{html_escape(ans)}</span>')
+        mine = f"{gl}. {gtxt}" if gl else "（無回答）"
+        return (f'<span class="fill ng">［{n}］<s>{html_escape(mine)}</s> → '
+                f'<b>{html_escape(ans)}</b></span>')
+    return re.sub(r"［([①-⑳])］", rep, line), hit
+
+
+def cloze_choice_marks(fills, letters):
+    """穴埋め形の語群にも印を付ける(どの空欄の正解か・どこで誤って選んだか)。"""
+    hit = {}
+    for n, (st, kl, _kt, gl, _gt) in sorted(fills.items()):
+        hit.setdefault(kl, []).append(f'<span class="mk ok">✅ {n} の正解</span> ')
+        if st == "ng" and gl:
+            hit.setdefault(gl, []).append(
+                f'<span class="mk ng">❌ あなたは {n} に選んだ</span> ')
+    return {l: ("".join(hit.get(l, [])), "") for l in letters}
+
+
+def _strip_completed(why):
+    """穴埋め形の解説から「完成文」節を落とす(本文を埋めたので重複するため)。"""
+    return re.sub(r"^#{3,6}\s*完成文[^\n]*\n(?:(?!^#{1,6}\s).*\n?)*", "",
+                  why or "", flags=re.M).strip()
+
+
+def _diff_marks(given, key):
+    """(取りこぼした空欄番号, 余分に選んだ肢, 選べなかった肢) を返す。"""
+    g, k = _tokens(given), _tokens(key)
+    if k and all(t[0] in _CIRCLED for t in k):
+        gmap = {t[0]: t[1:].lstrip("－-") for t in g if t and t[0] in _CIRCLED}
+        miss = [t[0] for t in k if gmap.get(t[0]) != t[1:].lstrip("－-")]
+        return miss, set(), set()
+    gs, ks = set(g), set(k)
+    return [], gs - ks, ks - gs
+
+
+def _mark_blanks(text, blanks):
+    """解説本文の ［②］ のうち、取りこぼした空欄だけ色を付ける。"""
+    for b in blanks:
+        text = text.replace(f"［{b}］", f'<span class="miss">［{b}］</span>')
+    return text
+
+
+def _mark_judge(judge, picked, missed):
+    """選択肢ごとの理由に「あなたが選んだ」「選べていない正解」の目印を足す。"""
+    if not judge or not (picked or missed):
+        return judge
+    out = []
+    for line in judge.split("\n"):
+        m = re.match(r"^\s*[-*]\s*\*\*([A-J])\*\*", line)
+        if m and m.group(1) in picked:
+            line += ' <span class="tag-pick">← あなたが選んだ</span>'
+        elif m and m.group(1) in missed:
+            line += ' <span class="tag-miss">← これを選べていない</span>'
+        out.append(line)
+    return "\n".join(out)
+
+
+def html_escape(t):
+    return (str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def explain_block(repo, no, ref, given, key, ok, slot, key_path=None, src=None):
+    """1問ぶんの解説カード(見出し＋解答の並置＋なぜ＋選択肢＋記憶のフック)。
+
+    カードの枠は生 HTML で出す(`render(allow_html=True)`)。中身は Markdown のまま
+    書き、空行で挟むことで通常どおり解釈させる。
+    """
+    label = {"think": "思考系", "speed": "瞬発力", "cloze": "穴埋め"}.get(slot, "紙面")
+    cls, badge = ("ok", "正解") if ok else ("ng", "誤答")
+    p = explain_parts(repo, ref, key_path) or {}
+    letters = _choice_letters(repo, src)
+    # --- 出題文と採点結果を1つに畳む(2026-09-20) ---------------------------
+    #   選択形= 選択肢の行に「あなたの解答／正解」＋理由 / 穴埋め形= 本文の ［n］ を埋める
+    fills = cloze_fills(repo, src, given, key) if _CIRCLED[0] in (key or "") else {}
+    marks, rest, rest_why = {}, p.get("judge", ""), p.get("why", "")
+    if fills:
+        marks = cloze_choice_marks(fills, letters)
+    else:
+        marks, rest, rest_why = choice_marks(repo, src, given, key,
+                                             p.get("judge", ""), p.get("why", ""))
+    applied = []
+    qmd = _question_md(repo, src, marks=marks or None, fills=fills or None,
+                       applied=applied)
+    merged = bool(applied)      # 本文に印を付けられたときだけ対比表を省く
+    if merged and not fills:
+        p["judge"], p["why"] = rest, rest_why
+    pick = (f'<span class="pick">あなた <b>{html_escape(given)}</b>'
+            f'<i>／</i>正解 <b>{html_escape(key)}</b></span>' if not ok else
+            f'<span class="pick ok">解答 <b>{html_escape(given)}</b></span>')
+    out = [f'<section class="qcard {cls}" id="q{no}">', "",
+           f'<div class="qhead"><span class="badge {cls}">{badge}</span>'
+           f'<span class="qno">Q{no}</span><span class="slot">{label}</span>'
+           f'{pick}<code>{html_escape(ref)}</code>'
+           f'<a class="qlink" href="q{no}.html">問題ページ</a></div>', ""]
+    if qmd:
+        # 誤答カードは常に展開。正解カードは長文なら折りたたむ(図がある問題は
+        # 閉じた <details> の中だと mermaid が描画に失敗するので常に展開する)
+        fold = ok and len(qmd) > 1500 and "```mermaid" not in qmd
+        head = "##### 出題された問題と採点" if merged else "##### 出題された問題"
+        if fold:
+            out += ["<details class=\"qfold\">",
+                    "<summary>出題された問題と採点を開く</summary>",
+                    '<div class="qbody">', "", qmd, "", "</div>", "</details>", ""]
+        else:
+            out += ['<div class="qbody">', "", head, "", qmd, "", "</div>", ""]
+    if not merged:      # 併記できない形(組合せ表・記述式など)は従来どおり別表で出す
+        out += ["#### あなたの解答と正解", "",
+                answer_compare_md(given, key, letters), ""]
+    if not p:
+        return "\n".join(out + ["（この問題の解説は用意されていません）", "", "</section>", ""])
+    miss_blanks, picked, missed = _diff_marks(given, key)
+    why = _strip_completed(p["why"]) if fills else p["why"]
+    why = _mark_blanks(why, miss_blanks)
+    if not merged:
+        p["judge"] = _mark_judge(p["judge"], picked, missed)
+    if p["summary"]:
+        one = p["summary"].replace("**", "")
+        out += [oneliner_html(one), ""]
+        # 種別行と解説本文が同文のファミリがある(svc/mpls 等)。二度書かない
+        # ★整形(_readable)の**前**に突き合わせる(改行を入れると一致しなくなる)
+        if why and (why == p["summary"] or why.startswith(p["summary"])):
+            why = why[len(p["summary"]):].strip()
+    if p["note"]:
+        out += ["#### 出題の注記", "", _readable(p["note"]), ""]
+    if why:
+        out += ["#### なぜこの答えになるか", "", _readable(why), ""]
+    if p["judge"]:
+        head = "#### 選択肢についての補足" if merged else "#### 選択肢ごとの理由"
+        out += [head, "", _readable(p["judge"]), ""]
+    if p["verify"]:
+        out += ["#### 実機での確かめ方", "", _readable(p["verify"]), ""]
+    if p["core"]:
+        out += ["#### 記憶のフック（この分野の核心）", "", _readable(p["core"]), ""]
+    out += ["</section>", ""]
+    return "\n".join(out)
+
+
+def decorate_report(page_html):
+    """採点済みの表に色を付ける(❌ の行＝赤・✅ の行＝緑の薄い背景)。"""
+    def _row(m):
+        row = m.group(0)
+        if "❌" in row:
+            return row.replace("<tr>", '<tr class="bad">', 1)
+        if "✅" in row:
+            return row.replace("<tr>", '<tr class="good">', 1)
+        return row
+    return re.sub(r"<tr>.*?</tr>", _row, page_html, flags=re.S)
+
+
+def build_report(repo, pack_id, pdir, man, rows, lab_rows):
+    """採点結果＋解説を1枚の HTML にまとめる(解説ページ)。
+
+    並び= ①正答率 ②誤答へのジャンプ ③ラボの採点 ④解説(誤答→正解) ⑤成績一覧。
+    **学習に使う順**に置く(長い成績表は最後)。
     ★未解答の問題については正解を書かない(まだ解ける状態を壊さないため)。
     """
-    md = [f"# {pack_id} — 採点結果", "",
-          f"作成日: {man.get('created', '')} / 採点日: "
-          f"{datetime.date.today().isoformat()}", "",
-          "## 成績", "",
-          "| # | 種別 | 問題 | 解答 | 正解 | 判定 | 所要 |",
-          "|---|------|------|------|------|------|------|"]
+    md = [f"# {pack_id} — 採点結果と解説", "",
+          f'<p class="labnote">作成日 {man.get("created", "")} ／ 採点日 '
+          f'{datetime.date.today().isoformat()}</p>', ""]
+    papers = [r for r in rows if r[1] == "紙面" and r[4] not in ("-", "")]
+    wrong = [r for r in papers if "不正解" in (r[5] or "")]
+    if papers:
+        got = len(papers) - len(wrong)
+        md += [f'<div class="scorebox"><span class="big">{got} / {len(papers)}</span>'
+               f'<span class="sub">紙面 正解'
+               f'{"（全問正解）" if not wrong else ""}</span></div>', ""]
+        if wrong:
+            chips = "".join(f'<a href="#q{r[0]}">Q{r[0]}</a>' for r in wrong)
+            md += [f'<div class="jumps"><span class="lead">誤答した問題'
+                   f'（クリックで解説へ）:</span>{chips}</div>', ""]
+    if lab_rows:
+        md += ["## ラボの採点", "",
+               "| # | 問題 | 得点 | 未充足のチェック |",
+               "|---|------|------|------------------|"]
+        for no, ref, g, total, fails in lab_rows:
+            if fails:
+                f = "<br>".join(fails)
+            else:   # 満点でないのにチェック名が無い= 再描画で拾えなかったとき
+                f = "（なし・全 PASS）" if str(g) == str(total) else "（記録なし）"
+            md.append(f"| Q{no} | `{ref}` | **{g}/{total}** | {f} |")
+        md += ["", '<p class="labnote">※ ラボの模範 config はこのページには載せない'
+               '（従来どおり、求められたときに出す）。</p>', ""]
+    # --- 解説: 誤答を先に、正解は確認用に後ろへ -------------------------------
+    key_paths = {it["no"]: it.get("key") for it in man["items"]}
+    slots = {it["no"]: it.get("slot") for it in man["items"]}
+    srcs = {it["no"]: it.get("src") for it in man["items"]}
+    right = [r for r in papers if r not in wrong]
+    if wrong:
+        md += ["", "## 解説 — まず誤答した問題", ""]
+        for no, kind, ref, given, key, note, dur in wrong:
+            md += [explain_block(repo, no, ref, given, key, False,
+                                 slots.get(no), key_paths.get(no),
+                                 srcs.get(no)), ""]
+    if right:
+        md += ["", "## 解説 — 正解した問題（確認用）", ""]
+        for no, kind, ref, given, key, note, dur in right:
+            md += [explain_block(repo, no, ref, given, key, True,
+                                 slots.get(no), key_paths.get(no),
+                                 srcs.get(no)), ""]
+    # --- 一覧(長いので最後) ---------------------------------------------------
+    md += ["", "## 成績一覧", "",
+           "| # | 種別 | 問題 | あなたの解答 | 正解 | 判定 | 所要 |",
+           "|---|------|------|------|------|------|------|"]
     total_s = 0
     for no, kind, ref, given, key, note, dur in rows:
-        md.append(f"| Q{no} | {kind} | `{ref}` | {given} | {key} | {note} | {dur} |")
+        link = f"[Q{no}](#q{no})" if (kind == "紙面" and key not in ("-", "")) else f"Q{no}"
+        md.append(f"| {link} | {kind} | `{ref}` | {given} | {key} | {note} | {dur} |")
         m = re.fullmatch(r"(?:(\d+):)?(\d+):(\d\d)(?:\(自\))?", dur or "")
         if m:
             total_s += int(m.group(1) or 0) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
     if total_s:
         h, rem = divmod(total_s, 3600)
-        md.append("")
-        md.append(f"計測合計: **{h}:{rem // 60:02d}:{rem % 60:02d}**"
-                  f"（ストップウォッチ計測分のみ・(自)=自動開始）")
-    if lab_rows:
-        md += ["", "## ラボの採点", "",
-               "| # | 問題 | 得点 | 未充足のチェック |",
-               "|---|------|------|------------------|"]
-        for no, ref, got, total, fails in lab_rows:
-            f = "<br>".join(fails) if fails else "（なし・全 PASS）"
-            md.append(f"| Q{no} | `{ref}` | **{got}/{total}** | {f} |")
-    md += ["", "## 解説", ""]
-    # 別置きの紙面(--extra-paper)は正解キーの場所が manifest に入っている
-    key_paths = {it["no"]: it.get("key") for it in man["items"]}
-    for no, kind, ref, given, key, note, dur in rows:
-        if kind != "紙面" or key in ("-", ""):
-            continue                       # 未解答・記述式はここに出さない(正解を伏せる)
-        md += [f"### Q{no} `{ref}` — 正解 {key}（あなたの解答 {given}）", ""]
-        md += [explain_of(repo, ref, key_paths.get(no)), ""]
+        md += ["", f'<p class="labnote">計測合計 <b>{h}:{rem // 60:02d}:{rem % 60:02d}</b>'
+               f'（ストップウォッチ計測分のみ・(自)=自動開始）</p>']
     return "\n".join(md) + "\n"
-
-
-def explain_of(repo, ref, key_path=None):
-    """answers/<ref>.md から選択肢の判定だけを取り出す(仕込みの種別は出さない)。
-
-    `key_path`(repo 相対)が渡されればそちらを読む(別置きの紙面)。判定の節が無い
-    問題(組合せ形など)は「## 解説」の節で代用する。
-    """
-    path = (os.path.join(repo, key_path) if key_path
-            else os.path.join(repo, "answers", f"{ref}.md"))
-    if not os.path.exists(path):
-        return "（解説なし）"
-    with open(path, encoding="utf-8") as fh:
-        text = fh.read()
-    m = re.search(r"^## 各選択肢の判定\s*$(.*?)^## ", text, re.M | re.S)
-    body = m.group(1).strip() if m else ""
-    if not body:
-        m = re.search(r"^## 解説\s*$(.*?)(?=^## |\Z)", text, re.M | re.S)
-        body = m.group(1).strip() if m else ""
-    m2 = re.search(r"^## 教育核心\s*$(.*?)(^## |\Z)", text, re.M | re.S)
-    core = m2.group(1).strip() if m2 else ""
-    out = body
-    if core:
-        out += "\n\n**この分野の核心**\n\n" + core
-    return out or "（解説なし）"
 
 
 # ==========================================================================
@@ -1781,6 +2701,14 @@ def default_pack_id(repo, today):
     return base + "-Z"
 
 
+def todays_packs(repo):
+    """今日ぶんのパックID(PACK-YYYYMMDD / -B / -C …)を古い順に返す。★BL-205"""
+    base = f"PACK-{datetime.date.today().strftime('%Y%m%d')}"
+    return sorted(os.path.basename(d)
+                  for d in glob.glob(os.path.join(repo, PACKS, base + "*"))
+                  if os.path.isdir(d))
+
+
 def latest_pack(repo):
     dirs = sorted(glob.glob(os.path.join(repo, PACKS, "PACK-*")))
     if not dirs:
@@ -1789,9 +2717,53 @@ def latest_pack(repo):
 
 
 def cmd_new(a):
+    """パックを --packs 本まとめて作る(既定3本・BL-205)。
+
+    配分は**1日全体**で決める: 必須ジャンルを全パックへ配り分け、先行パックで
+    出した (shape/kind) を後続の抽選から外す。ラボは1本目にだけ付ける。
+    """
+    repo = os.path.abspath(a.repo)
+    n_packs = max(1, a.packs)
+    rnd = random.Random(a.seed if a.seed is not None
+                        else random.randrange(1, 10 ** 9))
+    plan = plan_genres(a.require_shape, n_packs, rnd)
+    if n_packs > 1:
+        print(f"== {n_packs} パックを作る(思考{a.paper}・瞬発{a.speed}・穴埋め{a.cloze}"
+              f"／ラボは1本目のみ)")
+        for i, gs in enumerate(plan, 1):
+            print(f"   {i} 本目の必須ジャンル: {', '.join(gs) or '(なし)'}")
+    made, exclude = [], set()
+    for i in range(n_packs):
+        seed_override = (None if a.seed is None else a.seed + i * 9001)
+        # ★--pack-id を明示した時は 2 本目以降を <ID>-2, -3 … にする
+        #   (既定の日付ID なら default_pack_id が -B/-C を振る)
+        pid_i = a.pack_id if i == 0 else (f"{a.pack_id}-{i + 1}" if a.pack_id else None)
+        pid, kinds = build_pack(a, pack_no=i + 1, n_packs=n_packs,
+                                require=plan[i], exclude=exclude,
+                                pack_id=pid_i, seed_override=seed_override)
+        made.append(pid)
+        exclude |= kinds
+    if n_packs > 1:
+        print("\n== 作成したパック ==")
+        for pid in made:
+            print(f"  {pid}: {os.path.join(pack_dir(repo, pid), 'index.html')}")
+        print(f"採点は `scripts/pack.sh grade --today --no-lab`(紙面のみ)/"
+              f"`scripts/pack.sh grade {made[0]}`(ラボ込み)")
+    return made
+
+
+def build_pack(a, pack_no=1, n_packs=1, require=None, exclude=(),
+               pack_id=None, seed_override=None):
+    """パックを1本作る。戻り値= (pack_id, この回に出した kind の集合)。
+
+    ★BL-205: 1日3パック運用では 2 本目以降を紙面だけ(paper_only)にし、
+      `exclude`(先行パックで出した shape/kind)を抽選から外して回す。
+    """
     repo = os.path.abspath(a.repo)
     today = datetime.date.today()
-    pack_id = a.pack_id or default_pack_id(repo, today)
+    paper_only = a.paper_only or pack_no > 1
+    pack_id = pack_id or (a.pack_id if pack_no == 1 else None) \
+        or default_pack_id(repo, today)
     pdir = pack_dir(repo, pack_id)
     os.makedirs(pdir, exist_ok=True)
     # ★ビルドログは packs/ に置かない: 生成器の標準出力には故障種・shape が出るため、
@@ -1808,9 +2780,18 @@ def cmd_new(a):
             logf.write(f"{stamp} {line}\n")
         logf.flush()
 
-    seed = a.seed if a.seed is not None else random.randrange(1, 10 ** 9)
+    seed = (seed_override if seed_override is not None
+            else a.seed if a.seed is not None else random.randrange(1, 10 ** 9))
     rnd = random.Random(seed)
-    log(f"===== {pack_id} 生成開始 (seed={seed}, dry_run={a.dry_run}) =====")
+    log(f"===== {pack_id} 生成開始 (seed={seed}, dry_run={a.dry_run}"
+        f"{f', {pack_no}/{n_packs} 本目' if n_packs > 1 else ''}) =====")
+    if exclude:
+        log(f"[紙面] 先行パックと同じ型を除外: {len(exclude)} 種")
+    if PROFILE:
+        log(f"[profile] {PROFILE['label']}: 単元 {len(PROFILE['units'])}"
+            f"({', '.join(PROFILE['units'][:12])}{'…' if len(PROFILE['units']) > 12 else ''})"
+            f" / 紙面グロブ {len(PROFILE['paper_kinds'])} / ラボ genre {PROFILE['lab_genres'] or '(なし)'}"
+            f" / ラボ候補 {len(PROFILE['lab_ids'])}")
 
     used, per = cml_started_nodes(repo)
     if used is None:
@@ -1823,7 +2804,8 @@ def cmd_new(a):
         used = a.assume_used
 
     # --- 紙面フェーズ ---
-    require = [g.strip() for g in (a.require_shape or "").split(",") if g.strip()]
+    require = (list(require) if require is not None else
+               plan_genres(a.require_shape, 1, rnd)[0])
     n_paper = resolve_paper_count(a.paper, rnd)
     # ★明示指定された紙面(--extra-paper)を先に取り込み、その数だけ自動調達を減らす
     extra_papers = []
@@ -1861,7 +2843,8 @@ def cmd_new(a):
         log("[紙面] 0問指定のため紙面フェーズをスキップ(必須ジャンルも生成しない)")
     else:
         stamps, _got = gen_papers(repo, n_paper, seed, a.shape, a.exam, a.hard,
-                                  log, require=require, rnd=rnd)
+                                  log, require=require, rnd=rnd,
+                                  exclude=exclude)
     if len(stamps) < n_paper:
         log(f"[紙面] ★不足: {len(stamps)}/{n_paper} 問しか用意できなかった")
 
@@ -1883,7 +2866,8 @@ def cmd_new(a):
                         _think_kinds.append(_m.group(1))
                 except OSError:
                     pass
-            _extra = ["--exclude-kinds", ",".join(sorted(set(_think_kinds)))] if _think_kinds else []
+            _ex = set(_think_kinds) | set(exclude)      # ★BL-205: 先行パックぶんも外す
+            _extra = _exclude_args(_ex)
             if _think_kinds:
                 log(f"[紙面] 瞬発力枠から除外(思考系と同 kind): {sorted(set(_think_kinds))}")
             speed_stamps = _run_paper_gen(repo, seed + 31000, a.speed,
@@ -1904,7 +2888,8 @@ def cmd_new(a):
             log(f"[紙面] dry-run: 穴埋め枠 {a.cloze} 問(shape=cloze)は実生成時のみ")
         else:
             cloze_stamps = _run_paper_gen(repo, seed + 47000, a.cloze, "cloze",
-                                          a.exam, False, log, "穴埋め枠[cloze]")
+                                          a.exam, False, log, "穴埋め枠[cloze]",
+                                          extra_args=_exclude_args(exclude))
             if len(cloze_stamps) < a.cloze:
                 log(f"[紙面] ★穴埋め枠 不足: {len(cloze_stamps)}/{a.cloze} 問")
         log(f"[紙面] 穴埋め枠: {len(cloze_stamps)} 問(shape=cloze・思考系/瞬発力枠とは別枠)")
@@ -1944,10 +2929,11 @@ def cmd_new(a):
     # --- ラボ選定フェーズ ---
     cat = parse_catalog(repo)
     hist = parse_history(repo)
-    n_lab = 0 if a.paper_only else a.lab
-    n_extra = 0 if a.paper_only else a.lab_extra
-    if a.paper_only:
-        log("[選定] --paper-only: ラボは作らない(CML のラボ枠を使わない)")
+    n_lab = 0 if paper_only else a.lab
+    n_extra = 0 if paper_only else a.lab_extra
+    if paper_only:
+        log("[選定] 紙面だけのパック: ラボは作らない(CML のラボ枠を使わない)"
+            + ("" if a.paper_only else f" — {pack_no} 本目(ラボは1本目に集約)"))
     genres = [g.strip() for g in (a.lab_genres or "").split(",") if g.strip()]
     labs, notes, used_nodes = ([], [], 0) if n_lab <= 0 else select_genre_labs(
         cat, hist, genres=genres, count=n_lab, budget=a.budget, used=used,
@@ -1968,7 +2954,8 @@ def cmd_new(a):
             family_days=a.family_days, allow_special=a.allow_special,
             today=today, pin=a.lab_id or (),
             allow_non_cisco=a.allow_non_cisco,
-            allow_automation=a.allow_automation, ts_only=not a.any_lab)
+            allow_automation=a.allow_automation, ts_only=not a.any_lab,
+            only=(PROFILE["lab_ids"] if PROFILE else None))
         chosen_tags = {t for lb in labs for t in lb.get("tags", [])}
         chosen_ids = {lb["id"] for lb in labs}
         # ★同一ファミリ(同じ生成器)の二重選定を防ぐ(2026-08-22: タグ推定が空の
@@ -2057,7 +3044,17 @@ def cmd_new(a):
                                     mermaid_mode=a.mermaid))
     log(f"[出力] 図の描画方法: {a.mermaid}")
     sheet = os.path.join(pdir, "解答.md")
-    if os.path.exists(sheet):
+    # ★2026-09-22: dry-run も packs/<ID>/ に出力するため、同日の下見と同じ ID を本番が採番すると
+    #   下見の解答用紙(別の問題)が残っていた。前回の出力が dry-run なら上書きする。
+    import yaml
+    old_mf = os.path.join(pdir, "manifest.yml")
+    prev_dry = False
+    if os.path.exists(old_mf):
+        try:
+            prev_dry = bool((yaml.safe_load(open(old_mf, encoding="utf-8")) or {}).get("dry_run"))
+        except Exception:
+            prev_dry = False
+    if os.path.exists(sheet) and not (prev_dry and not a.dry_run):
         log(f"[出力] 解答.md は既存のため上書きしない: {sheet}")
     else:
         with open(sheet, "w", encoding="utf-8") as fh:
@@ -2076,6 +3073,7 @@ def cmd_new(a):
     print(f"\n目次: {os.path.join(pdir, 'index.html')}")
     print(f"解答: {sheet}")
     logf.close()
+    return pack_id, kinds_of_stamps(repo, stamps + speed_stamps + cloze_stamps)
 
 
 def _is_essay(repo, stamp):
@@ -2308,7 +3306,8 @@ def cmd_grade(a):
     pdir = pack_dir(repo, pack_id)
     man = read_manifest(pdir)
     sheet = parse_answer_sheet(os.path.join(pdir, "解答.md"))
-    rows, lab_rows, correct, gradable = [], [], 0, 0
+    report_only = getattr(a, "report_only", False)   # 解説ページの組み直しだけ
+    rows, lab_rows, correct, gradable, lab_graded = [], [], 0, 0, False
 
     for it in man["items"]:
         s_it = sheet.get(it["no"], {})
@@ -2348,6 +3347,8 @@ def cmd_grade(a):
                     elif g > k:
                         note += "(選択が過剰)"
                 rows.append((it["no"], "紙面", it.get("ref", ""), gs, ks, note, dur))
+                if report_only:      # 再描画のときは二重記録しない
+                    continue
                 history_upsert(repo, it["ref"], state="採点済", paper=True,
                                score=f"{'正解' if ok else '不正解'}({ks})",
                                memo=f"パック {pack_id} の Q{it['no']}")
@@ -2357,8 +3358,16 @@ def cmd_grade(a):
                                   src=f"pack:{pack_id}", memo=dmemo, quiet=True)
         else:
             ref = it.get("ref", "")
-            if a.no_lab or it.get("error"):
-                rows.append((it["no"], "ラボ", ref, "-", "-", "ラボ採点は省略", dur))
+            if a.no_lab or report_only or it.get("error"):
+                prev = it.get("lab_score") if report_only else None
+                if prev:            # 前回の採点結果をそのまま載せ直す
+                    got, _, total = prev.partition("/")
+                    fails = [f for f in (it.get("lab_fails") or "").split("｜") if f]
+                    lab_rows.append((it["no"], ref, got, total, fails))
+                    rows.append((it["no"], "ラボ", ref, "-", "-", f"{prev} 点", dur))
+                else:
+                    rows.append((it["no"], "ラボ", ref, "-", "-", "ラボ採点は省略",
+                                 dur))
                 continue
             print(f"  Q{it['no']} [ラボ] {ref}: 採点中…", flush=True)
             got, total, why = grade_lab(repo, ref, it.get("variant"))
@@ -2368,6 +3377,10 @@ def cmd_grade(a):
                 continue
             fails = why if isinstance(why, list) else []
             lab_rows.append((it["no"], ref, got, total, fails))
+            # --report-only で組み直すときのために結果を manifest に残す
+            it["lab_score"] = f"{got}/{total}"
+            it["lab_fails"] = "｜".join(f.replace("\n", " ") for f in fails)
+            lab_graded = True
             rows.append((it["no"], "ラボ", ref, "-", "-", f"{got}/{total} 点", dur))
             history_upsert(repo, ref, state="採点済", score=str(got),
                            memo=f"パック {pack_id} の Q{it['no']}")
@@ -2382,21 +3395,57 @@ def cmd_grade(a):
     if gradable:
         print(f"  -- 紙面 MCQ {correct}/{gradable} 問正解")
 
+    if lab_graded:      # ラボの結果を manifest に残す(--report-only の再描画用)
+        write_manifest(pdir, {"pack_id": pack_id, "created": man.get("created", ""),
+                              "dry_run": False, "seed": man.get("seed", ""),
+                              "items": man["items"],
+                              "notes": man.get("notes", [])})
     md = build_report(repo, pack_id, pdir, man, rows, lab_rows)
     out = os.path.join(pdir, "report.html")
     with open(out, "w", encoding="utf-8") as fh:
-        fh.write(render_html.render(md, title=f"{pack_id} — 採点結果",
-                                    nav=build_nav(man["items"], 0),
-                                    mermaid_mode=a.mermaid))
+        fh.write(decorate_report(render_html.render(
+            md, title=f"{pack_id} — 採点結果と解説",
+            nav=[{"label": "問題パックの目次", "href": "index.html"},
+                 {"label": "採点結果と解説", "href": "report.html", "current": True}],
+            mermaid_mode=a.mermaid, extra_css=REPORT_CSS,
+            body_class="report", allow_html=True)))
     print(f"  レポート: {out}")
+    # ★index.html に解説ページへのリンクを足して貼り替える(2026-09-20 ユーザ指示)
+    try:
+        idx = index_md(pack_id, man["items"], man.get("notes", []),
+                       man.get("dry_run") == "true", report=True)
+        with open(os.path.join(pdir, "index.html"), "w", encoding="utf-8") as fh:
+            fh.write(render_html.render(idx, title=f"{pack_id} — 問題パック",
+                                        nav=build_nav(man["items"], 0),
+                                        mermaid_mode=a.mermaid))
+    except Exception as e:                 # 目次の更新失敗で採点自体は壊さない
+        print(f"  ★index.html の更新に失敗（解説は {out} から開ける）: {e}")
     # ノルマ台帳(BL-114): 採点直後に当日の進捗を出す
     cfg = quota.config(repo)
     print(quota.render_today(quota.summarize(
         repo, quota.quota_day(quota.now_jst(), cfg["day_start"]))))
 
 
-def grade_lab(repo, prob_id, variant=None, timeout=1800):
-    """grade.yml を実走して (得点, 満点, 未充足チェック名) を返す。"""
+def grade_lab(repo, prob_id, variant=None, timeout=1800, _retry=True):
+    """grade.yml を実走して (得点, 満点, 未充足チェック名) を返す。
+
+    ★2026-09-26: 得点行が読めなかったら **bringup を挟んで 1 度だけ再試行**する。
+      IOSvL2 は provision 時に救済しても、しばらく経つと mgmt(Vlan999)が再び固着して
+      telnet 収集が丸ごと失敗する(= 採点できず)。実際に PACK-20260926-D で発生した。
+    """
+    got, total, fails = _grade_lab_once(repo, prob_id, variant, timeout)
+    if got is None and _retry and fails == "得点行を読めず":
+        log = print
+        log(f"[採点] {prob_id}: 得点行が読めず → bringup を試して再採点する")
+        try:
+            bringup(repo, prob_id, log)
+        except Exception as e:
+            log(f"[採点] {prob_id}: bringup 失敗 {e}")
+        return _grade_lab_once(repo, prob_id, variant, timeout)
+    return got, total, fails
+
+
+def _grade_lab_once(repo, prob_id, variant=None, timeout=1800):
     import tempfile
     if not os.path.exists(os.path.join(repo, "problems", prob_id)):
         return None, None, "問題パックが無い"
@@ -2462,9 +3511,14 @@ def main():
                          "指定したぶんだけ自動生成・借用の数が減る")
     ap.add_argument("--no-pool", action="store_true",
                     help="private/paper_pools.yml の紙面プールから抽選しない")
-    ap.add_argument("--speed", type=int, default=15,
+    ap.add_argument("--packs", type=int, default=3,
+                    help="1回の new で作るパック数(既定3・BL-205 2026-09-20 ユーザ指示)。"
+                         "2本目以降は紙面だけ(ラボは1本目に集約)・必須ジャンルは"
+                         "全パックへ配り分け・既出 kind は後続から除外する")
+    ap.add_argument("--speed", type=int, default=8,
                     help="瞬発力枠(即答形)の問題数。思考系(--paper)とは別枠で"
-                         "上乗せする(既定15・BL-186 2026-09-19・0 で無効)")
+                         "上乗せする(既定8・BL-205 2026-09-20: 3パック×8=24 で"
+                         "型プール26種にほぼ収まる。旧既定は単発15問)")
     ap.add_argument("--cloze", type=int, default=5,
                     help="穴埋め枠(解説穴埋め形 shape=cloze・BL-191)の問題数。思考系・瞬発力枠とは"
                          "別枠で上乗せする(既定5・2026-09-19 ユーザ指示・0 で無効)")
@@ -2473,9 +3527,11 @@ def main():
                          "即答 kind を問題ごとに抽選。svc を指定すると従来どおり Services のみ)")
     ap.add_argument("--paper-only", action="store_true",
                     help="紙面だけのパックにする(ラボを作らない=CMLのラボ枠を使わない)")
-    ap.add_argument("--require-shape", default="redist,aaa,acl,bgp",
+    ap.add_argument("--require-shape", default="auto",
                     help="紙面の必須ジャンル(カンマ区切り。"
-                         f"選択肢: {','.join(PAPER_GENRES)})")
+                         f"選択肢: {','.join(PAPER_GENRES)})。"
+                         "既定 auto= 全パックへ配り分け(3パックなら 4/3/3 ジャンルで"
+                         "1日に全ジャンルを1周)。明示指定すると全パックに同じ必須枠を課す")
     ap.add_argument("--lab", type=int, default=2,
                     help="固定ジャンルから選ぶラボ数(v2 既定2)")
     # ★既定に ipsla を追加(2026-08-22 ユーザ指示「既定の抽選に混ぜられるように」)。
@@ -2514,6 +3570,9 @@ def main():
                     help="ラボ問題を名指しで指定(静的ID または GEN 接頭・複数可)")
     ap.add_argument("--no-lab", action="store_true",
                     help="grade: ラボの実機採点を省略(紙面だけ採点する)")
+    ap.add_argument("--report-only", action="store_true",
+                    help="grade: 解説ページ(report.html)を組み直すだけ。"
+                         "履歴・ノルマ台帳には記録しない(採点済みパックの再描画用)")
     ap.add_argument("--any-lab", action="store_true",
                     help="TS以外(構築問・ドリル)もラボ候補に含める(既定はTSのみ)")
     ap.add_argument("--allow-automation", action="store_true",
@@ -2524,12 +3583,70 @@ def main():
                     help="特殊ラボ(専用 ops CLI)も候補に含める")
     ap.add_argument("--mermaid", choices=render_html.MERMAID_MODES, default="cdn",
                     help="図の描画方法(既定 cdn=ふつうのHTML / embed=オフライン用)")
+    ap.add_argument("--profile", default="",
+                    help="★BL-213: 出題範囲のプロファイル(カンマ区切り)。profile 名= ccna/encor/enarsi/ccie/vendor、"
+                         "または単元 ID(U-A3 等・CURRICULUM.md)。例: --profile enarsi / --profile U-A3,U-H2。"
+                         "紙面は該当単元の shape/kind だけ(--only-kinds)、ラボは該当単元の genre/候補だけになる")
+    ap.add_argument("--today", action="store_true",
+                    help="status/grade/close/render: 今日のパックを全部まとめて処理する")
     ap.add_argument("--dry-run", action="store_true",
                     help="CML にも questions/ にも触らないプレビュー")
+    ap.add_argument("--lab-args", action="append", default=[],
+                    help="ラボ生成器の追加引数(PREFIX=引数…・複数可・BL-210/211 のスーパーハード指定用)。"
+                         "例: --lab-args 'GEN-DHCPTS=--hard acl_wall' --lab-args 'GEN-DMVPNW=--hard all'")
     a = ap.parse_args()
-    {"new": cmd_new, "status": cmd_status, "grade": cmd_grade,
-     "close": cmd_close, "render": cmd_render,
-     "replace": cmd_replace, "redeploy": cmd_redeploy}[a.cmd](a)
+    global PROFILE, PAPER_GENRES_ACTIVE
+    PROFILE = resolve_profile(a.profile, os.path.abspath(a.repo))
+    if PROFILE and a.cmd == "new":
+        shapes = _profile_shapes(PROFILE)
+        # 必須ジャンル表は該当 shape を持つものだけに絞る(auto 配分がここから引く)
+        PAPER_GENRES_ACTIVE = {g: sh for g, sh in PAPER_GENRES.items() if set(sh) & shapes}
+        # 枠ごとに「引ける kind が 1 つも無い」なら 0 問にする(生成器の空振りリトライを避ける)
+        import gen_paper_mcq as _gm
+        # 瞬発力枠に出せる family だけ(SPEED_KINDS=[] の cloze 等は除く)
+        speed_shapes = {f for f, m in _gm.KB_FAMILIES.items()
+                        if getattr(m, "SPEED_KINDS", None) is None or m.SPEED_KINDS} | {"mpls"}
+        if not (shapes - {"cloze"}):
+            a.paper = "0"
+        if "cloze" not in shapes:
+            a.cloze = 0
+        if not (shapes & speed_shapes):
+            a.speed = 0
+        for fl in PROFILE["flags"]:
+            setattr(a, fl, True)
+        if "enarsi" not in a.profile.lower():
+            a.no_pool = True                       # 別置き紙面プール(ENARSI 模擬)は ENARSI 以外の範囲に混ぜない
+        genres = [g for g in (a.lab_genres or "").split(",") if g.strip() and g.strip() in PROFILE["lab_genres"]]
+        n_fixed = a.lab if genres else 0
+        if not genres and PROFILE["lab_ids"]:
+            a.lab_extra = a.lab_extra + a.lab       # 固定ジャンルが無い単元は TS プール側で本数を保つ
+        a.lab_genres = ",".join(genres)
+        a.lab = n_fixed
+        if not PROFILE["lab_ids"] and not genres:
+            a.lab, a.lab_extra = 0, 0
+        print(f"[profile] {PROFILE['label']}: 単元 {len(PROFILE['units'])} / 紙面 shape {sorted(shapes) or '(なし)'} / "
+              f"思考 {a.paper} 瞬発 {a.speed} 穴埋め {a.cloze} / ラボ genre {genres or '(なし)'} + プール候補 {len(PROFILE['lab_ids'])}"
+              f" (固定 {a.lab}・追加 {a.lab_extra})", flush=True)
+    for spec in a.lab_args:
+        import shlex
+        if "=" not in spec:
+            sys.exit(f"--lab-args は PREFIX=引数 の形: {spec}")
+        pfx, rest = spec.split("=", 1)
+        GEN_DEFAULT_ARGS.setdefault(pfx.strip(), [])
+        GEN_DEFAULT_ARGS[pfx.strip()] = list(GEN_DEFAULT_ARGS[pfx.strip()]) + shlex.split(rest)
+    fn = {"new": cmd_new, "status": cmd_status, "grade": cmd_grade,
+          "close": cmd_close, "render": cmd_render,
+          "replace": cmd_replace, "redeploy": cmd_redeploy}[a.cmd]
+    if a.today and a.cmd in ("status", "grade", "close", "render"):
+        pids = todays_packs(os.path.abspath(a.repo))
+        if not pids:
+            sys.exit("今日のパックがありません")
+        for pid in pids:
+            print(f"\n########## {pid} ##########")
+            a.pack_id = pid
+            fn(a)
+        return
+    fn(a)
 
 
 if __name__ == "__main__":

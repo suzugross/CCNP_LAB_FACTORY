@@ -1,0 +1,93 @@
+
+======== T6 loop guard と実ループ(SW02 Et0/1 guard loop・SW01 Et0/1 bpdufilter) ========
+### SW02: conf ['interface Ethernet0/1', 'spanning-tree guard loop']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW01: conf ['interface Ethernet0/1', 'spanning-tree bpdufilter enable']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:58:46 SW01: show spanning-tree vlan 10 | include Et0/1
+Et0/1               Desg FWD 100       128.2    P2p 
+### 07:58:46 SW01: show spanning-tree vlan 20 | include Et0/1
+Et0/1               Desg BLK 100       128.2    P2p 
+### 07:58:46 SW02: show spanning-tree inconsistentports
+Name                 Interface                      Inconsistency
+-------------------- ------------------------------ ------------------
+VLAN0010             Ethernet0/1                    Loop Inconsistent
+
+Number of inconsistent ports (segments) in the system : 1
+### 07:58:47 SW02: show spanning-tree vlan 10 | include Et0/1
+Et0/1               Desg BKN*100       128.2    P2p *LOOP_Inc 
+### 07:58:47 SW02: show spanning-tree vlan 20 | include Et0/1
+Et0/1               Desg FWD 100       128.2    P2p 
+### sleep 30
+
+======== T6 40 秒後(VLAN20 は filter 側 SW01 Et0/1 が Altn だった= loop guard の無い側) ========
+### 07:59:17 SW01: show spanning-tree vlan 20 | include Et0/1
+Et0/1               Desg FWD 100       128.2    P2p 
+### 07:59:17 SW01: show processes cpu | include CPU
+CPU utilization for five seconds: 0%/0%; one minute: 0%; five minutes: 0%
+  51           0         154          0  0.00%  0.00%  0.00%   0 CPUHOG process   
+### 07:59:17 SW01: show interfaces Ethernet0/1 | include rate
+  Queueing strategy: fifo
+  5 minute input rate 0 bits/sec, 0 packets/sec
+  5 minute output rate 0 bits/sec, 0 packets/sec
+### 07:59:17 SW03: ping 10.76.20.2 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.76.20.2, timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/1 ms
+### 07:59:17 SW03: show processes cpu | include CPU
+CPU utilization for five seconds: 0%/0%; one minute: 0%; five minutes: 0%
+  51           0         151          0  0.00%  0.00%  0.00%   0 CPUHOG process   
+### 07:59:17 SW02: show processes cpu | include CPU
+CPU utilization for five seconds: 0%/0%; one minute: 0%; five minutes: 0%
+  51           0         153          0  0.00%  0.00%  0.00%   0 CPUHOG process   
+### 07:59:18 SW02: show interfaces Ethernet0/1 | include rate
+  Queueing strategy: fifo
+  5 minute input rate 0 bits/sec, 0 packets/sec
+  5 minute output rate 0 bits/sec, 0 packets/sec
+### 07:59:18 SW02: show logging | include LOOPGUARD|MACFLAP|FLAP
+*Sep 22 07:58:41.851: %SPANTREE-2-LOOPGUARD_BLOCK: Loop guard blocking port Ethernet0/1 on VLAN0010.
+
+======== T6b loop guard も外す(VLAN10 も実ループ) ========
+### SW02: conf ['interface Ethernet0/1', 'no spanning-tree guard loop']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 07:59:58 SW02: show spanning-tree vlan 10 | include Et0/1
+Et0/1               Desg FWD 100       128.2    P2p 
+### 07:59:58 SW02: show processes cpu | include CPU
+CPU utilization for five seconds: 0%/0%; one minute: 0%; five minutes: 0%
+  51           0         173          0  0.00%  0.00%  0.00%   0 CPUHOG process   
+### 07:59:58 SW02: show interfaces Ethernet0/1 | include rate
+  Queueing strategy: fifo
+  5 minute input rate 0 bits/sec, 0 packets/sec
+  5 minute output rate 0 bits/sec, 0 packets/sec
+### 07:59:58 SW02: show logging | include MACFLAP|FLAP
+
+### 07:59:58 SW03: ping 10.76.10.1 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.76.10.1, timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/1 ms
+### 07:59:58 SW03: ping 10.76.10.2 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.76.10.2, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+### 08:00:08 SW03: show processes cpu | include CPU
+CPU utilization for five seconds: 0%/0%; one minute: 0%; five minutes: 0%
+  51           0         177          0  0.00%  0.00%  0.00%   0 CPUHOG process   
+
+======== T6c 復旧(filter 撤去) ========
+### SW01: conf ['interface Ethernet0/1', 'no spanning-tree bpdufilter enable']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 08:00:24 SW01: show spanning-tree vlan 10 | include Et0/1
+Et0/1               Desg FWD 100       128.2    P2p 
+### 08:00:24 SW01: show spanning-tree vlan 20 | include Et0/1
+Et0/1               Altn BLK 100       128.2    P2p 
+### 08:00:24 SW01: show processes cpu | include CPU
+CPU utilization for five seconds: 0%/0%; one minute: 0%; five minutes: 0%
+  51           0         188          0  0.00%  0.00%  0.00%   0 CPUHOG process   
+### 08:00:24 SW02: show spanning-tree vlan 10 | include Et0/1
+Et0/1               Altn BLK 100       128.2    P2p 
+### 08:00:24 SW02: show processes cpu | include CPU
+CPU utilization for five seconds: 0%/0%; one minute: 0%; five minutes: 0%
+  51           0         186          0  0.00%  0.00%  0.00%   0 CPUHOG process   

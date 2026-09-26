@@ -1,0 +1,486 @@
+
+======== M0 起動直後(全台 rapid 白紙) ========
+### 10:30:58 SW01: show version | include uptime
+SW01 uptime is 0 minutes
+### 10:30:59 SW01: show spanning-tree summary | include mode
+Switch is in rapid-pvst mode
+
+======== M1 稼働中に SW01〜03 を MST 化(SW04 は rapid-pvst のまま= 境界)・全台 long ========
+### SW04: conf ['spanning-tree pathcost method long']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW01: conf ['spanning-tree mst configuration', 'name CAMPUS', 'revision 3', 'instance 1 vlan 174,233', 'instance 2 vlan 218', 'exit', 'spanning-tree mst 0-1 priority 24576', 'spanning-tree mst 2 priority 28672', 'spanning-tree mode mst']
+Enter configuration commands, one per line.  End with CNTL/Z.
+Warning: Changing STP mode can disrupt the traffic and make system unstable
+Recommend to change STP mode only during maintenance window
+### SW02: conf ['spanning-tree mst configuration', 'name CAMPUS', 'revision 3', 'instance 1 vlan 174,233', 'instance 2 vlan 218', 'exit', 'spanning-tree mst 0-1 priority 28672', 'spanning-tree mst 2 priority 24576', 'interface Ethernet0/1', 'spanning-tree mst 2 port-priority 64', 'exit', 'spanning-tree mode mst']
+Enter configuration commands, one per line.  End with CNTL/Z.
+Warning: Changing STP mode can disrupt the traffic and make system unstable
+Recommend to change STP mode only during maintenance window
+### SW03: conf ['spanning-tree mst configuration', 'name CAMPUS', 'revision 3', 'instance 1 vlan 174,233', 'instance 2 vlan 218', 'exit', 'spanning-tree mode mst']
+Enter configuration commands, one per line.  End with CNTL/Z.
+Warning: Changing STP mode can disrupt the traffic and make system unstable
+Recommend to change STP mode only during maintenance window
+### sleep 30
+
+======== 観測 30 秒 ========
+### 10:31:32 SW01: show spanning-tree mst 0 | include ^Et|Root|Regional|Bridge
+Bridge        address aabb.cc02.9200  priority      24576 (24576 sysid 0)
+Root          address aabb.cc02.9500  priority      1     (0 sysid 1)
+Regional Root address aabb.cc02.9100  priority      32768 (32768 sysid 0)
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Root FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+Et1/0                            Desg FWD 2000000   128.5    P2p 
+Et1/1                            Desg FWD 2000000   128.6    P2p 
+Et1/2                            Desg FWD 2000000   128.7    P2p 
+Et1/3                            Desg FWD 2000000   128.8    P2p 
+Et2/0                            Desg FWD 2000000   128.9    P2p 
+Et2/1                            Desg FWD 2000000   128.10   P2p 
+Et2/2                            Desg FWD 2000000   128.11   P2p 
+Et2/3                            Desg FWD 2000000   128.12   P2p 
+Et3/0                            Desg FWD 2000000   128.13   P2p 
+Et3/1                            Desg FWD 2000000   128.14   P2p 
+Et3/2                            Desg FWD 2000000   128.15   P2p 
+Et3/3                            Desg FWD 2000000   128.16   P2p 
+### 10:31:32 SW01: show spanning-tree mst 1 | include ^Et|Root
+Root          this switch for MST1
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:31:32 SW01: show spanning-tree mst 2 | include ^Et|Root
+Root          address aabb.cc02.9300  priority      24578 (24576 sysid 2)
+Et0/0                            Altn BLK 2000000   128.1    P2p 
+Et0/1                            Root FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:31:32 SW01: show spanning-tree mst 0 detail | include topology change|occurred|from
+
+### 10:31:32 SW01: show logging | count SPANTREE
+Number of lines which match regexp = 0
+### 10:31:32 SW02: show spanning-tree mst 0 | include ^Et|Root|Regional
+Root          address aabb.cc02.9500  priority      1     (0 sysid 1)
+Regional Root address aabb.cc02.9100  priority      32768 (32768 sysid 0)
+Et0/0                            Altn BLK 2000000   128.1    P2p 
+Et0/1                            Altn BLK 2000000   128.2    P2p 
+Et0/2                            Root FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+Et1/0                            Desg FWD 2000000   128.5    P2p 
+Et1/1                            Desg FWD 2000000   128.6    P2p 
+Et1/2                            Desg FWD 2000000   128.7    P2p 
+Et1/3                            Desg FWD 2000000   128.8    P2p 
+Et2/0                            Desg FWD 2000000   128.9    P2p 
+Et2/1                            Desg FWD 2000000   128.10   P2p 
+Et2/2                            Desg FWD 2000000   128.11   P2p 
+Et2/3                            Desg FWD 2000000   128.12   P2p 
+Et3/0                            Desg FWD 2000000   128.13   P2p 
+Et3/1                            Desg FWD 2000000   128.14   P2p 
+Et3/2                            Desg FWD 2000000   128.15   P2p 
+Et3/3                            Desg FWD 2000000   128.16   P2p 
+### 10:31:32 SW02: show spanning-tree mst 1 | include ^Et
+Et0/0                            Root FWD 2000000   128.1    P2p 
+Et0/1                            Altn BLK 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:31:32 SW02: show spanning-tree mst 2 | include ^Et
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000    64.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:31:33 SW02: show spanning-tree mst 0 detail | include topology change|occurred|from
+
+### 10:31:33 SW03: show spanning-tree mst 0 | include ^Et|Root|Regional
+Root          address aabb.cc02.9500  priority      1     (0 sysid 1)
+Regional Root this switch
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p 
+Et1/0                            Desg FWD 2000000   128.5    P2p 
+Et1/1                            Desg FWD 2000000   128.6    P2p 
+Et1/2                            Root FWD 2000000   128.7    P2p Bound(RSTP) 
+Et1/3                            Desg FWD 2000000   128.8    P2p 
+Et2/0                            Desg FWD 2000000   128.9    P2p 
+Et2/1                            Desg FWD 2000000   128.10   P2p 
+Et2/2                            Desg FWD 2000000   128.11   P2p 
+Et2/3                            Desg FWD 2000000   128.12   P2p 
+Et3/0                            Desg FWD 2000000   128.13   P2p 
+Et3/1                            Desg FWD 2000000   128.14   P2p 
+Et3/2                            Desg FWD 2000000   128.15   P2p 
+Et3/3                            Desg FWD 2000000   128.16   P2p 
+### 10:31:33 SW03: show spanning-tree mst 1 | include ^Et
+Et0/0                            Root FWD 2000000   128.1    P2p 
+Et0/1                            Altn BLK 2000000   128.2    P2p 
+Et1/0                            Desg FWD 2000000   128.5    P2p 
+Et1/3                            Desg FWD 2000000   128.8    P2p 
+### 10:31:33 SW03: show spanning-tree mst 2 | include ^Et
+Et0/0                            Altn BLK 2000000   128.1    P2p 
+Et0/1                            Root FWD 2000000   128.2    P2p 
+Et1/1                            Desg FWD 2000000   128.6    P2p 
+### 10:31:33 SW03: show interfaces status err-disabled
+
+### 10:31:33 SW04: show spanning-tree vlan 174 | include ^Et|Root ID|Priority
+  Root ID    Priority    1
+  Bridge ID  Priority    32942  (priority 32768 sys-id-ext 174)
+Et0/0               Root FWD 2000000   128.1    P2p Peer(STP) 
+Et0/1               Altn BLK 2000000   128.2    P2p Peer(STP) 
+Et1/0               Desg LRN 2000000   128.5    P2p 
+Et1/2               Desg LRN 2000000   128.7    P2p 
+### 10:31:33 SW04: show spanning-tree vlan 218 | include ^Et|Root ID|Priority
+  Root ID    Priority    1
+  Bridge ID  Priority    32986  (priority 32768 sys-id-ext 218)
+Et0/0               Root FWD 2000000   128.1    P2p Peer(STP) 
+Et0/1               Altn BLK 2000000   128.2    P2p Peer(STP) 
+Et1/1               Desg LRN 2000000   128.6    P2p 
+### 10:31:33 SW04: show spanning-tree summary | include mode|Pathcost
+Switch is in rapid-pvst mode
+Configured Pathcost method used is long
+### sleep 60
+
+======== 観測 90 秒 ========
+### 10:32:34 SW01: show spanning-tree mst 0 | include ^Et|Root|Regional|Bridge
+Bridge        address aabb.cc02.9200  priority      24576 (24576 sysid 0)
+Root          address aabb.cc02.9500  priority      1     (0 sysid 1)
+Regional Root address aabb.cc02.9100  priority      32768 (32768 sysid 0)
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Root FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+Et1/0                            Desg FWD 2000000   128.5    P2p 
+Et1/1                            Desg FWD 2000000   128.6    P2p 
+Et1/2                            Desg FWD 2000000   128.7    P2p 
+Et1/3                            Desg FWD 2000000   128.8    P2p 
+Et2/0                            Desg FWD 2000000   128.9    P2p 
+Et2/1                            Desg FWD 2000000   128.10   P2p 
+Et2/2                            Desg FWD 2000000   128.11   P2p 
+Et2/3                            Desg FWD 2000000   128.12   P2p 
+Et3/0                            Desg FWD 2000000   128.13   P2p 
+Et3/1                            Desg FWD 2000000   128.14   P2p 
+Et3/2                            Desg FWD 2000000   128.15   P2p 
+Et3/3                            Desg FWD 2000000   128.16   P2p 
+### 10:32:34 SW01: show spanning-tree mst 1 | include ^Et|Root
+Root          this switch for MST1
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:32:34 SW01: show spanning-tree mst 2 | include ^Et|Root
+Root          address aabb.cc02.9300  priority      24578 (24576 sysid 2)
+Et0/0                            Altn BLK 2000000   128.1    P2p 
+Et0/1                            Root FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:32:34 SW01: show spanning-tree mst 0 detail | include topology change|occurred|from
+
+### 10:32:34 SW01: show logging | count SPANTREE
+Number of lines which match regexp = 0
+### 10:32:34 SW02: show spanning-tree mst 0 | include ^Et|Root|Regional
+Root          address aabb.cc02.9500  priority      1     (0 sysid 1)
+Regional Root address aabb.cc02.9100  priority      32768 (32768 sysid 0)
+Et0/0                            Altn BLK 2000000   128.1    P2p 
+Et0/1                            Altn BLK 2000000   128.2    P2p 
+Et0/2                            Root FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+Et1/0                            Desg FWD 2000000   128.5    P2p 
+Et1/1                            Desg FWD 2000000   128.6    P2p 
+Et1/2                            Desg FWD 2000000   128.7    P2p 
+Et1/3                            Desg FWD 2000000   128.8    P2p 
+Et2/0                            Desg FWD 2000000   128.9    P2p 
+Et2/1                            Desg FWD 2000000   128.10   P2p 
+Et2/2                            Desg FWD 2000000   128.11   P2p 
+Et2/3                            Desg FWD 2000000   128.12   P2p 
+Et3/0                            Desg FWD 2000000   128.13   P2p 
+Et3/1                            Desg FWD 2000000   128.14   P2p 
+Et3/2                            Desg FWD 2000000   128.15   P2p 
+Et3/3                            Desg FWD 2000000   128.16   P2p 
+### 10:32:34 SW02: show spanning-tree mst 1 | include ^Et
+Et0/0                            Root FWD 2000000   128.1    P2p 
+Et0/1                            Altn BLK 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:32:34 SW02: show spanning-tree mst 2 | include ^Et
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000    64.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:32:34 SW02: show spanning-tree mst 0 detail | include topology change|occurred|from
+
+### 10:32:34 SW03: show spanning-tree mst 0 | include ^Et|Root|Regional
+Root          address aabb.cc02.9500  priority      1     (0 sysid 1)
+Regional Root this switch
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p 
+Et1/0                            Desg FWD 2000000   128.5    P2p 
+Et1/1                            Desg FWD 2000000   128.6    P2p 
+Et1/2                            Root FWD 2000000   128.7    P2p Bound(RSTP) 
+Et1/3                            Desg FWD 2000000   128.8    P2p 
+Et2/0                            Desg FWD 2000000   128.9    P2p 
+Et2/1                            Desg FWD 2000000   128.10   P2p 
+Et2/2                            Desg FWD 2000000   128.11   P2p 
+Et2/3                            Desg FWD 2000000   128.12   P2p 
+Et3/0                            Desg FWD 2000000   128.13   P2p 
+Et3/1                            Desg FWD 2000000   128.14   P2p 
+Et3/2                            Desg FWD 2000000   128.15   P2p 
+Et3/3                            Desg FWD 2000000   128.16   P2p 
+### 10:32:34 SW03: show spanning-tree mst 1 | include ^Et
+Et0/0                            Root FWD 2000000   128.1    P2p 
+Et0/1                            Altn BLK 2000000   128.2    P2p 
+Et1/0                            Desg FWD 2000000   128.5    P2p 
+Et1/3                            Desg FWD 2000000   128.8    P2p 
+### 10:32:34 SW03: show spanning-tree mst 2 | include ^Et
+Et0/0                            Altn BLK 2000000   128.1    P2p 
+Et0/1                            Root FWD 2000000   128.2    P2p 
+Et1/1                            Desg FWD 2000000   128.6    P2p 
+### 10:32:34 SW03: show interfaces status err-disabled
+
+### 10:32:34 SW04: show spanning-tree vlan 174 | include ^Et|Root ID|Priority
+  Root ID    Priority    1
+  Bridge ID  Priority    32942  (priority 32768 sys-id-ext 174)
+Et0/0               Root FWD 2000000   128.1    P2p Peer(STP) 
+Et0/1               Altn BLK 2000000   128.2    P2p Peer(STP) 
+Et1/0               Desg FWD 2000000   128.5    P2p 
+Et1/2               Desg FWD 2000000   128.7    P2p 
+### 10:32:35 SW04: show spanning-tree vlan 218 | include ^Et|Root ID|Priority
+  Root ID    Priority    1
+  Bridge ID  Priority    32986  (priority 32768 sys-id-ext 218)
+Et0/0               Root FWD 2000000   128.1    P2p Peer(STP) 
+Et0/1               Altn BLK 2000000   128.2    P2p Peer(STP) 
+Et1/1               Desg FWD 2000000   128.6    P2p 
+### 10:32:35 SW04: show spanning-tree summary | include mode|Pathcost
+Switch is in rapid-pvst mode
+Configured Pathcost method used is long
+### sleep 90
+
+======== 観測 3 分 ========
+### 10:34:05 SW01: show spanning-tree mst 0 | include ^Et|Root|Regional|Bridge
+Bridge        address aabb.cc02.9200  priority      24576 (24576 sysid 0)
+Root          address aabb.cc02.9500  priority      1     (0 sysid 1)
+Regional Root address aabb.cc02.9100  priority      32768 (32768 sysid 0)
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Root FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+Et1/0                            Desg FWD 2000000   128.5    P2p 
+Et1/1                            Desg FWD 2000000   128.6    P2p 
+Et1/2                            Desg FWD 2000000   128.7    P2p 
+Et1/3                            Desg FWD 2000000   128.8    P2p 
+Et2/0                            Desg FWD 2000000   128.9    P2p 
+Et2/1                            Desg FWD 2000000   128.10   P2p 
+Et2/2                            Desg FWD 2000000   128.11   P2p 
+Et2/3                            Desg FWD 2000000   128.12   P2p 
+Et3/0                            Desg FWD 2000000   128.13   P2p 
+Et3/1                            Desg FWD 2000000   128.14   P2p 
+Et3/2                            Desg FWD 2000000   128.15   P2p 
+Et3/3                            Desg FWD 2000000   128.16   P2p 
+### 10:34:05 SW01: show spanning-tree mst 1 | include ^Et|Root
+Root          this switch for MST1
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:34:05 SW01: show spanning-tree mst 2 | include ^Et|Root
+Root          address aabb.cc02.9300  priority      24578 (24576 sysid 2)
+Et0/0                            Altn BLK 2000000   128.1    P2p 
+Et0/1                            Root FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:34:05 SW01: show spanning-tree mst 0 detail | include topology change|occurred|from
+
+### 10:34:05 SW01: show logging | count SPANTREE
+Number of lines which match regexp = 0
+### 10:34:05 SW02: show spanning-tree mst 0 | include ^Et|Root|Regional
+Root          address aabb.cc02.9500  priority      1     (0 sysid 1)
+Regional Root address aabb.cc02.9100  priority      32768 (32768 sysid 0)
+Et0/0                            Altn BLK 2000000   128.1    P2p 
+Et0/1                            Altn BLK 2000000   128.2    P2p 
+Et0/2                            Root FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+Et1/0                            Desg FWD 2000000   128.5    P2p 
+Et1/1                            Desg FWD 2000000   128.6    P2p 
+Et1/2                            Desg FWD 2000000   128.7    P2p 
+Et1/3                            Desg FWD 2000000   128.8    P2p 
+Et2/0                            Desg FWD 2000000   128.9    P2p 
+Et2/1                            Desg FWD 2000000   128.10   P2p 
+Et2/2                            Desg FWD 2000000   128.11   P2p 
+Et2/3                            Desg FWD 2000000   128.12   P2p 
+Et3/0                            Desg FWD 2000000   128.13   P2p 
+Et3/1                            Desg FWD 2000000   128.14   P2p 
+Et3/2                            Desg FWD 2000000   128.15   P2p 
+Et3/3                            Desg FWD 2000000   128.16   P2p 
+### 10:34:05 SW02: show spanning-tree mst 1 | include ^Et
+Et0/0                            Root FWD 2000000   128.1    P2p 
+Et0/1                            Altn BLK 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:34:05 SW02: show spanning-tree mst 2 | include ^Et
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000    64.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:34:05 SW02: show spanning-tree mst 0 detail | include topology change|occurred|from
+
+### 10:34:05 SW03: show spanning-tree mst 0 | include ^Et|Root|Regional
+Root          address aabb.cc02.9500  priority      1     (0 sysid 1)
+Regional Root this switch
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p 
+Et1/0                            Desg FWD 2000000   128.5    P2p 
+Et1/1                            Desg FWD 2000000   128.6    P2p 
+Et1/2                            Root FWD 2000000   128.7    P2p Bound(RSTP) 
+Et1/3                            Desg FWD 2000000   128.8    P2p 
+Et2/0                            Desg FWD 2000000   128.9    P2p 
+Et2/1                            Desg FWD 2000000   128.10   P2p 
+Et2/2                            Desg FWD 2000000   128.11   P2p 
+Et2/3                            Desg FWD 2000000   128.12   P2p 
+Et3/0                            Desg FWD 2000000   128.13   P2p 
+Et3/1                            Desg FWD 2000000   128.14   P2p 
+Et3/2                            Desg FWD 2000000   128.15   P2p 
+Et3/3                            Desg FWD 2000000   128.16   P2p 
+### 10:34:05 SW03: show spanning-tree mst 1 | include ^Et
+Et0/0                            Root FWD 2000000   128.1    P2p 
+Et0/1                            Altn BLK 2000000   128.2    P2p 
+Et1/0                            Desg FWD 2000000   128.5    P2p 
+Et1/3                            Desg FWD 2000000   128.8    P2p 
+### 10:34:05 SW03: show spanning-tree mst 2 | include ^Et
+Et0/0                            Altn BLK 2000000   128.1    P2p 
+Et0/1                            Root FWD 2000000   128.2    P2p 
+Et1/1                            Desg FWD 2000000   128.6    P2p 
+### 10:34:06 SW03: show interfaces status err-disabled
+
+### 10:34:06 SW04: show spanning-tree vlan 174 | include ^Et|Root ID|Priority
+  Root ID    Priority    1
+  Bridge ID  Priority    32942  (priority 32768 sys-id-ext 174)
+Et0/0               Root FWD 2000000   128.1    P2p Peer(STP) 
+Et0/1               Altn BLK 2000000   128.2    P2p Peer(STP) 
+Et1/0               Desg FWD 2000000   128.5    P2p 
+Et1/2               Desg FWD 2000000   128.7    P2p 
+### 10:34:06 SW04: show spanning-tree vlan 218 | include ^Et|Root ID|Priority
+  Root ID    Priority    1
+  Bridge ID  Priority    32986  (priority 32768 sys-id-ext 218)
+Et0/0               Root FWD 2000000   128.1    P2p Peer(STP) 
+Et0/1               Altn BLK 2000000   128.2    P2p Peer(STP) 
+Et1/1               Desg FWD 2000000   128.6    P2p 
+### 10:34:06 SW04: show spanning-tree summary | include mode|Pathcost
+Switch is in rapid-pvst mode
+Configured Pathcost method used is long
+### sleep 120
+
+======== 観測 5 分 ========
+### 10:36:06 SW01: show spanning-tree mst 0 | include ^Et|Root|Regional|Bridge
+Bridge        address aabb.cc02.9200  priority      24576 (24576 sysid 0)
+Root          address aabb.cc02.9500  priority      1     (0 sysid 1)
+Regional Root address aabb.cc02.9100  priority      32768 (32768 sysid 0)
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Root FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+Et1/0                            Desg FWD 2000000   128.5    P2p 
+Et1/1                            Desg FWD 2000000   128.6    P2p 
+Et1/2                            Desg FWD 2000000   128.7    P2p 
+Et1/3                            Desg FWD 2000000   128.8    P2p 
+Et2/0                            Desg FWD 2000000   128.9    P2p 
+Et2/1                            Desg FWD 2000000   128.10   P2p 
+Et2/2                            Desg FWD 2000000   128.11   P2p 
+Et2/3                            Desg FWD 2000000   128.12   P2p 
+Et3/0                            Desg FWD 2000000   128.13   P2p 
+Et3/1                            Desg FWD 2000000   128.14   P2p 
+Et3/2                            Desg FWD 2000000   128.15   P2p 
+Et3/3                            Desg FWD 2000000   128.16   P2p 
+### 10:36:06 SW01: show spanning-tree mst 1 | include ^Et|Root
+Root          this switch for MST1
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:36:06 SW01: show spanning-tree mst 2 | include ^Et|Root
+Root          address aabb.cc02.9300  priority      24578 (24576 sysid 2)
+Et0/0                            Altn BLK 2000000   128.1    P2p 
+Et0/1                            Root FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:36:06 SW01: show spanning-tree mst 0 detail | include topology change|occurred|from
+
+### 10:36:06 SW01: show logging | count SPANTREE
+Number of lines which match regexp = 0
+### 10:36:06 SW02: show spanning-tree mst 0 | include ^Et|Root|Regional
+Root          address aabb.cc02.9500  priority      1     (0 sysid 1)
+Regional Root address aabb.cc02.9100  priority      32768 (32768 sysid 0)
+Et0/0                            Altn BLK 2000000   128.1    P2p 
+Et0/1                            Altn BLK 2000000   128.2    P2p 
+Et0/2                            Root FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+Et1/0                            Desg FWD 2000000   128.5    P2p 
+Et1/1                            Desg FWD 2000000   128.6    P2p 
+Et1/2                            Desg FWD 2000000   128.7    P2p 
+Et1/3                            Desg FWD 2000000   128.8    P2p 
+Et2/0                            Desg FWD 2000000   128.9    P2p 
+Et2/1                            Desg FWD 2000000   128.10   P2p 
+Et2/2                            Desg FWD 2000000   128.11   P2p 
+Et2/3                            Desg FWD 2000000   128.12   P2p 
+Et3/0                            Desg FWD 2000000   128.13   P2p 
+Et3/1                            Desg FWD 2000000   128.14   P2p 
+Et3/2                            Desg FWD 2000000   128.15   P2p 
+Et3/3                            Desg FWD 2000000   128.16   P2p 
+### 10:36:06 SW02: show spanning-tree mst 1 | include ^Et
+Et0/0                            Root FWD 2000000   128.1    P2p 
+Et0/1                            Altn BLK 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:36:06 SW02: show spanning-tree mst 2 | include ^Et
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000    64.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p Bound(PVST) 
+### 10:36:06 SW02: show spanning-tree mst 0 detail | include topology change|occurred|from
+
+### 10:36:07 SW03: show spanning-tree mst 0 | include ^Et|Root|Regional
+Root          address aabb.cc02.9500  priority      1     (0 sysid 1)
+Regional Root this switch
+Et0/0                            Desg FWD 2000000   128.1    P2p 
+Et0/1                            Desg FWD 2000000   128.2    P2p 
+Et0/2                            Desg FWD 2000000   128.3    P2p 
+Et0/3                            Desg FWD 2000000   128.4    P2p 
+Et1/0                            Desg FWD 2000000   128.5    P2p 
+Et1/1                            Desg FWD 2000000   128.6    P2p 
+Et1/2                            Root FWD 2000000   128.7    P2p Bound(RSTP) 
+Et1/3                            Desg FWD 2000000   128.8    P2p 
+Et2/0                            Desg FWD 2000000   128.9    P2p 
+Et2/1                            Desg FWD 2000000   128.10   P2p 
+Et2/2                            Desg FWD 2000000   128.11   P2p 
+Et2/3                            Desg FWD 2000000   128.12   P2p 
+Et3/0                            Desg FWD 2000000   128.13   P2p 
+Et3/1                            Desg FWD 2000000   128.14   P2p 
+Et3/2                            Desg FWD 2000000   128.15   P2p 
+Et3/3                            Desg FWD 2000000   128.16   P2p 
+### 10:36:07 SW03: show spanning-tree mst 1 | include ^Et
+Et0/0                            Root FWD 2000000   128.1    P2p 
+Et0/1                            Altn BLK 2000000   128.2    P2p 
+Et1/0                            Desg FWD 2000000   128.5    P2p 
+Et1/3                            Desg FWD 2000000   128.8    P2p 
+### 10:36:07 SW03: show spanning-tree mst 2 | include ^Et
+Et0/0                            Altn BLK 2000000   128.1    P2p 
+Et0/1                            Root FWD 2000000   128.2    P2p 
+Et1/1                            Desg FWD 2000000   128.6    P2p 
+### 10:36:07 SW03: show interfaces status err-disabled
+
+### 10:36:07 SW04: show spanning-tree vlan 174 | include ^Et|Root ID|Priority
+  Root ID    Priority    1
+  Bridge ID  Priority    32942  (priority 32768 sys-id-ext 174)
+Et0/0               Root FWD 2000000   128.1    P2p Peer(STP) 
+Et0/1               Altn BLK 2000000   128.2    P2p Peer(STP) 
+Et1/0               Desg FWD 2000000   128.5    P2p 
+Et1/2               Desg FWD 2000000   128.7    P2p 
+### 10:36:07 SW04: show spanning-tree vlan 218 | include ^Et|Root ID|Priority
+  Root ID    Priority    1
+  Bridge ID  Priority    32986  (priority 32768 sys-id-ext 218)
+Et0/0               Root FWD 2000000   128.1    P2p Peer(STP) 
+Et0/1               Altn BLK 2000000   128.2    P2p Peer(STP) 
+Et1/1               Desg FWD 2000000   128.6    P2p 
+### 10:36:07 SW04: show spanning-tree summary | include mode|Pathcost
+Switch is in rapid-pvst mode
+Configured Pathcost method used is long

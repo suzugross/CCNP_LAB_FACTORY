@@ -28,9 +28,12 @@ import cloze_kb_aaa  # noqa: E402
 import cloze_kb_order  # noqa: E402
 import cloze_kb_svc  # noqa: E402
 import cloze_kb_dmvpn  # noqa: E402
+import cloze_kb_stp  # noqa: E402
+import cloze_kb_mcast  # noqa: E402
 
 TOPICS = {"mpls": cloze_kb_mpls, "ipv6fhs": cloze_kb_ipv6fhs, "aaa": cloze_kb_aaa, "order": cloze_kb_order,
-          "svc": cloze_kb_svc, "dmvpn": cloze_kb_dmvpn}   # svc= SNMPv3/NetFlow(BL-202) / dmvpn= Phase 比較+IPsec(BL-203)
+          "svc": cloze_kb_svc, "dmvpn": cloze_kb_dmvpn,
+          "stp": cloze_kb_stp, "mcast": cloze_kb_mcast}   # svc= SNMPv3/NetFlow(BL-202) / dmvpn= Phase 比較+IPsec(BL-203) / stp= U-A3 STP(BL-214) / mcast= U-F1/F2 マルチキャスト(BL-217)
 
 PASSAGES = []
 for _t, _m in TOPICS.items():

@@ -1,0 +1,31 @@
+- note: T6 loop guard と実ループ(SW02 Et0/1 guard loop・SW01 Et0/1 bpdufilter)
+- node: SW02
+  conf: ["interface Ethernet0/1", "spanning-tree guard loop"]
+- node: SW01
+  conf: ["interface Ethernet0/1", "spanning-tree bpdufilter enable"]
+  wait: 10
+  show: ["show spanning-tree vlan 10 | include Et0/1", "show spanning-tree vlan 20 | include Et0/1"]
+- node: SW02
+  show: ["show spanning-tree inconsistentports", "show spanning-tree vlan 10 | include Et0/1", "show spanning-tree vlan 20 | include Et0/1"]
+- sleep: 30
+- note: T6 40 秒後(VLAN20 は filter 側 SW01 Et0/1 が Altn だった= loop guard の無い側)
+- node: SW01
+  show: ["show spanning-tree vlan 20 | include Et0/1", "show processes cpu | include CPU", "show interfaces Ethernet0/1 | include rate"]
+- node: SW03
+  show: ["ping 10.76.20.2 repeat 5", "show processes cpu | include CPU"]
+- node: SW02
+  show: ["show processes cpu | include CPU", "show interfaces Ethernet0/1 | include rate", "show logging | include LOOPGUARD|MACFLAP|FLAP"]
+- note: T6b loop guard も外す(VLAN10 も実ループ)
+- node: SW02
+  conf: ["interface Ethernet0/1", "no spanning-tree guard loop"]
+  wait: 40
+  show: ["show spanning-tree vlan 10 | include Et0/1", "show processes cpu | include CPU", "show interfaces Ethernet0/1 | include rate", "show logging | include MACFLAP|FLAP"]
+- node: SW03
+  show: ["ping 10.76.10.1 repeat 5", "ping 10.76.10.2 repeat 5", "show processes cpu | include CPU"]
+- note: T6c 復旧(filter 撤去)
+- node: SW01
+  conf: ["interface Ethernet0/1", "no spanning-tree bpdufilter enable"]
+  wait: 15
+  show: ["show spanning-tree vlan 10 | include Et0/1", "show spanning-tree vlan 20 | include Et0/1", "show processes cpu | include CPU"]
+- node: SW02
+  show: ["show spanning-tree vlan 10 | include Et0/1", "show processes cpu | include CPU"]

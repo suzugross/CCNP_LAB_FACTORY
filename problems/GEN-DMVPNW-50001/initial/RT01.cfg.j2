@@ -1,0 +1,103 @@
+! RT01 (本社)
+interface Loopback1
+ ip address 10.37.0.1 255.255.255.0
+!
+ip access-list extended EDGE-IN
+ 10 remark === EDGE PROTECTION (SEC-TEAM) - change via ticket only ===
+ 20 remark --- anti-spoofing ---
+ 30 deny ip 10.0.0.0 0.255.255.255 any
+ 40 deny ip 172.16.0.0 0.15.255.255 any
+ 50 deny ip 192.168.0.0 0.0.255.255 any
+ 60 deny ip 127.0.0.0 0.255.255.255 any
+ 70 deny ip 0.0.0.0 0.255.255.255 any
+ 80 deny ip 169.254.0.0 0.0.255.255 any
+ 81 remark --- SOC blocklist (updated 2026-07-17) ---
+ 82 deny ip host 31.33.96.175 any
+ 83 deny ip 79.40.164.0 0.0.0.255 any
+ 84 deny ip 85.212.27.0 0.0.0.255 any
+ 85 deny ip host 188.70.160.251 any
+ 86 deny ip host 5.130.173.86 any
+ 87 deny ip host 62.15.178.173 any
+ 88 deny ip host 178.189.236.68 any
+ 89 deny ip host 46.157.46.174 any
+ 90 deny ip host 91.162.70.131 any
+ 91 deny ip host 37.144.153.79 any
+ 92 deny ip 93.175.209.0 0.0.0.255 any
+ 93 deny ip 185.78.115.0 0.0.0.255 any
+ 94 deny ip 83.203.189.0 0.0.0.255 any
+ 95 deny ip host 93.141.7.198 any
+ 96 deny ip host 188.180.2.60 any
+ 97 deny ip host 109.209.69.233 any
+ 98 deny ip host 213.129.124.203 any
+ 99 deny ip host 176.76.127.58 any
+ 100 deny ip 217.11.177.0 0.0.0.255 any
+ 101 deny ip 185.66.69.0 0.0.0.255 any
+ 102 deny ip host 195.48.110.237 any
+ 103 remark --- port hygiene ---
+ 104 deny udp any any eq 5060
+ 105 deny tcp any any eq 25
+ 106 deny tcp any any eq 3389
+ 107 deny tcp any any range 6000 6063
+ 108 deny tcp any any eq 445
+ 109 deny udp any any eq 19
+ 110 deny tcp any any eq 3306
+ 111 deny tcp any any eq 21
+ 112 deny tcp any any range 135 139
+ 113 deny udp any any eq 69
+ 114 deny tcp any any eq 23
+ 115 remark === VPN (SEC-TEAM) ===
+ 116 permit udp any host 203.0.113.2 eq 500
+ 117 permit udp any host 203.0.113.2 eq 4500
+ 118 permit gre any host 203.0.113.2
+ 119 remark --- ICMP ---
+ 120 permit icmp any host 203.0.113.2 echo
+ 121 permit icmp any host 203.0.113.2 echo-reply
+ 122 permit icmp any host 203.0.113.2 unreachable
+ 123 permit icmp any host 203.0.113.2 time-exceeded
+ 124 remark --- management (NOC) ---
+ 125 permit tcp host 192.0.2.10 host 203.0.113.2 eq 22
+ 126 permit udp host 192.0.2.20 host 203.0.113.2 eq snmp
+ 127 permit udp host 192.0.2.123 host 203.0.113.2 eq ntp
+ 128 remark --- router protection ---
+ 129 deny ip any host 203.0.113.2 log
+ 130 deny ip any any log
+!
+interface {{ links[0] }}
+ description === to ISP ===
+ ip address 203.0.113.2 255.255.255.252
+ ip access-group EDGE-IN in
+ no shutdown
+!
+ip route 0.0.0.0 0.0.0.0 203.0.113.1
+!
+crypto isakmp policy 10
+ encryption aes 256
+ hash sha256
+ authentication pre-share
+ group 14
+!
+crypto isakmp key SECKEY3446 address 0.0.0.0
+!
+crypto ipsec transform-set TS-DMVPN esp-aes 256 esp-sha256-hmac
+ mode transport
+!
+crypto ipsec profile DMVPN-PROF
+ set transform-set TS-DMVPN
+!
+interface Tunnel0
+ ip address 172.30.131.1 255.255.255.0
+ no ip redirects
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ ip nhrp authentication WANSEC53
+ ip nhrp network-id 985
+ no ip nhrp map multicast dynamic
+ ip nhrp redirect
+ no ip split-horizon eigrp 298
+ tunnel source {{ links[0] }}
+ tunnel destination 198.51.100.2
+!
+router eigrp 298
+ network 172.30.131.0 0.0.0.255
+ network 10.37.0.0 0.0.0.255
+!

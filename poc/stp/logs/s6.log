@@ -1,0 +1,325 @@
+
+======== T1 4台盤面の決定性(計算器予測 vs 実機)・mgmt 隔離の確認 ========
+### 07:55:31 SW01: show version | include IOL|Version
+Cisco IOS Software [IOSXE], Linux Software (X86_64BI_LINUX_L2-ADVENTERPRISEK9-M), Version 17.15.1, RELEASE SOFTWARE (fc4)
+### 07:55:31 SW01: show spanning-tree summary
+Switch is in rapid-pvst mode
+Root bridge for: VLAN0001, VLAN0010, VLAN0999
+EtherChannel misconfig guard            is enabled
+Extended system ID                      is enabled
+Portfast Default                        is disabled
+PortFast BPDU Guard Default            is disabled
+Portfast BPDU Filter Default           is disabled
+Loopguard Default                      is disabled
+UplinkFast                              is disabled
+BackboneFast                            is disabled
+Configured Pathcost method used is short
+
+Name                   Blocking Listening Learning Forwarding STP Active
+---------------------- -------- --------- -------- ---------- ----------
+VLAN0001                     0         0        0         11         11
+VLAN0010                     0         0        0          4          4
+VLAN0020                     1         0        0          3          4
+VLAN0999                     0         0        0          1          1
+---------------------- -------- --------- -------- ---------- ----------
+4 vlans                      1         0        0         19         20
+### 07:55:31 SW01: show spanning-tree vlan 10
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4106
+             Address     aabb.cc02.4c00
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    4106   (priority 4096 sys-id-ext 10)
+             Address     aabb.cc02.4c00
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Desg FWD 100       128.1    P2p 
+Et0/1               Desg FWD 100       128.2    P2p 
+Et0/2               Desg FWD 100       128.3    P2p 
+Et0/3               Desg FWD 100       128.4    P2p 
+### 07:55:32 SW01: show spanning-tree vlan 20
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4116
+             Address     aabb.cc02.4d00
+             Cost        100
+             Port        1 (Ethernet0/0)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    8212   (priority 8192 sys-id-ext 20)
+             Address     aabb.cc02.4c00
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Altn BLK 100       128.2    P2p 
+Et0/2               Desg FWD 100       128.3    P2p 
+Et0/3               Desg FWD 100       128.4    P2p 
+### 07:55:32 SW01: show interfaces trunk
+Port           Mode             Encapsulation  Status        Native vlan  
+Et0/0          on               802.1q         trunking      1
+Et0/1          on               802.1q         trunking      1
+Et0/2          on               802.1q         trunking      1
+Et0/3          on               802.1q         trunking      1
+
+Port           Vlans allowed on trunk
+Et0/0          10,20
+Et0/1          10,20
+Et0/2          10,20
+Et0/3          10,20
+
+Port           Vlans allowed and active in management domain
+Et0/0          10,20
+Et0/1          10,20
+Et0/2          10,20
+Et0/3          10,20
+
+Port           Vlans in spanning tree forwarding state and not pruned
+Et0/0          10,20
+Et0/1          10
+Et0/2          10,20
+Et0/3          10,20
+### 07:55:32 SW01: show spanning-tree interface Ethernet3/3 detail
+ Port 16 (Ethernet3/3) of VLAN0999 is designated forwarding 
+   Port path cost 100, Port priority 128, Port Identifier 128.16.
+   Designated root has priority 33767, address aabb.cc02.4c00
+   Designated bridge has priority 33767, address aabb.cc02.4c00
+   Designated port id is 128.16, designated path cost 0
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   Link type is point-to-point by default
+   Bpdu filter is enabled
+   BPDU: sent 0, received 0
+### 07:55:32 SW01: show spanning-tree interface Ethernet3/3
+Vlan                Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+VLAN0999            Desg FWD 100       128.16   P2p 
+### 07:55:32 SW02: show spanning-tree vlan 10
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4106
+             Address     aabb.cc02.4c00
+             Cost        100
+             Port        1 (Ethernet0/0)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    8202   (priority 8192 sys-id-ext 10)
+             Address     aabb.cc02.4d00
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Altn BLK 100       128.2    P2p 
+Et0/2               Desg FWD 100       128.3    P2p 
+Et0/3               Desg FWD 100       128.4    P2p 
+### 07:55:32 SW02: show spanning-tree vlan 20
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4116
+             Address     aabb.cc02.4d00
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    4116   (priority 4096 sys-id-ext 20)
+             Address     aabb.cc02.4d00
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Desg FWD 100       128.1    P2p 
+Et0/1               Desg FWD 100       128.2    P2p 
+Et0/2               Desg FWD 100       128.3    P2p 
+Et0/3               Desg FWD 100       128.4    P2p 
+### 07:55:33 SW03: show spanning-tree vlan 10
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4106
+             Address     aabb.cc02.4c00
+             Cost        100
+             Port        1 (Ethernet0/0)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32778  (priority 32768 sys-id-ext 10)
+             Address     aabb.cc02.4e00
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Altn BLK 100       128.2    P2p 
+### 07:55:33 SW03: show spanning-tree vlan 20
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4116
+             Address     aabb.cc02.4d00
+             Cost        100
+             Port        2 (Ethernet0/1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32788  (priority 32768 sys-id-ext 20)
+             Address     aabb.cc02.4e00
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Altn BLK 100       128.1    P2p 
+Et0/1               Root FWD 100       128.2    P2p 
+### 07:55:33 SW03: show interfaces status
+Port         Name               Status       Vlan       Duplex  Speed Type
+Et0/0                           connected    trunk        full   auto 10/100/1000BaseTX
+Et0/1                           connected    trunk        full   auto 10/100/1000BaseTX
+Et0/2                           disabled     10           full   auto 10/100/1000BaseTX
+Et0/3                           connected    1            full   auto 10/100/1000BaseTX
+Et1/0                           connected    1            full   auto 10/100/1000BaseTX
+Et1/1                           connected    1            full   auto 10/100/1000BaseTX
+Et1/2                           connected    1            full   auto 10/100/1000BaseTX
+Et1/3                           connected    1            full   auto 10/100/1000BaseTX
+Et2/0                           connected    1            full   auto 10/100/1000BaseTX
+Et2/1                           connected    1            full   auto 10/100/1000BaseTX
+Et2/2                           connected    1            full   auto 10/100/1000BaseTX
+Et2/3                           connected    1            full   auto 10/100/1000BaseTX
+Et3/0                           connected    1            full   auto 10/100/1000BaseTX
+Et3/1                           connected    1            full   auto 10/100/1000BaseTX
+Et3/2                           connected    1            full   auto 10/100/1000BaseTX
+Et3/3        === MGMT (Ansible) connected    999          full   auto 10/100/1000BaseTX
+### 07:55:33 SW04: show spanning-tree vlan 10
+VLAN0010
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4106
+             Address     aabb.cc02.4c00
+             Cost        100
+             Port        1 (Ethernet0/0)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32778  (priority 32768 sys-id-ext 10)
+             Address     aabb.cc02.4f00
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Root FWD 100       128.1    P2p 
+Et0/1               Altn BLK 100       128.2    P2p 
+### 07:55:33 SW04: show spanning-tree vlan 20
+VLAN0020
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4116
+             Address     aabb.cc02.4d00
+             Cost        100
+             Port        2 (Ethernet0/1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32788  (priority 32768 sys-id-ext 20)
+             Address     aabb.cc02.4f00
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Et0/0               Altn BLK 100       128.1    P2p 
+Et0/1               Root FWD 100       128.2    P2p 
+
+======== T2 転送経路の効果採点(SVI ping → mac テーブルの学習ポート) ========
+### 07:55:33 SW03: ping 10.76.10.4 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 10.76.10.4, timeout is 2 seconds:
+.!!
+Success rate is 66 percent (2/3), round-trip min/avg/max = 1/1/1 ms
+### 07:55:35 SW03: ping 10.76.20.4 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 10.76.20.4, timeout is 2 seconds:
+.!!
+Success rate is 66 percent (2/3), round-trip min/avg/max = 1/1/2 ms
+### 07:55:38 SW03: show mac address-table dynamic vlan 10
+          Mac Address Table
+-------------------------------------------
+
+Vlan    Mac Address       Type        Ports
+----    -----------       --------    -----
+  10    aabb.cc02.4c20    DYNAMIC     Et0/0
+  10    aabb.cc82.4c00    DYNAMIC     Et0/0
+  10    aabb.cc82.4d00    DYNAMIC     Et0/0
+  10    aabb.cc82.4f00    DYNAMIC     Et0/0
+Total Mac Addresses for this criterion: 4
+### 07:55:38 SW03: show mac address-table dynamic vlan 20
+          Mac Address Table
+-------------------------------------------
+
+Vlan    Mac Address       Type        Ports
+----    -----------       --------    -----
+  20    aabb.cc02.4d20    DYNAMIC     Et0/1
+  20    aabb.cc82.4f00    DYNAMIC     Et0/1
+Total Mac Addresses for this criterion: 2
+### 07:55:38 SW04: show mac address-table dynamic vlan 10
+          Mac Address Table
+-------------------------------------------
+
+Vlan    Mac Address       Type        Ports
+----    -----------       --------    -----
+  10    aabb.cc02.4c30    DYNAMIC     Et0/0
+  10    aabb.cc82.4e00    DYNAMIC     Et0/0
+Total Mac Addresses for this criterion: 2
+### 07:55:38 SW04: show mac address-table dynamic vlan 20
+          Mac Address Table
+-------------------------------------------
+
+Vlan    Mac Address       Type        Ports
+----    -----------       --------    -----
+  20    aabb.cc02.4d30    DYNAMIC     Et0/1
+  20    aabb.cc82.4e00    DYNAMIC     Et0/1
+Total Mac Addresses for this criterion: 2
+### 07:55:38 SW04: show interfaces Vlan10 | include address
+  Hardware is Ethernet SVI, address is aabb.cc82.4f00 (bia aabb.cc82.4f00)
+  Internet address is 10.76.10.4/24
+### 07:55:38 SW01: show mac address-table dynamic vlan 10
+          Mac Address Table
+-------------------------------------------
+
+Vlan    Mac Address       Type        Ports
+----    -----------       --------    -----
+  10    aabb.cc02.4d00    DYNAMIC     Et0/0
+  10    aabb.cc82.4e00    DYNAMIC     Et0/2
+  10    aabb.cc82.4f00    DYNAMIC     Et0/3
+Total Mac Addresses for this criterion: 3
+### 07:55:38 SW01: show mac address-table dynamic vlan 20
+          Mac Address Table
+-------------------------------------------
+
+Vlan    Mac Address       Type        Ports
+----    -----------       --------    -----
+  20    aabb.cc02.4d00    DYNAMIC     Et0/0
+  20    aabb.cc82.4e00    DYNAMIC     Et0/0
+  20    aabb.cc82.4f00    DYNAMIC     Et0/0
+Total Mac Addresses for this criterion: 3
+### 07:55:38 SW02: show mac address-table dynamic vlan 10
+          Mac Address Table
+-------------------------------------------
+
+Vlan    Mac Address       Type        Ports
+----    -----------       --------    -----
+  10    aabb.cc02.4c00    DYNAMIC     Et0/0
+  10    aabb.cc82.4e00    DYNAMIC     Et0/0
+  10    aabb.cc82.4f00    DYNAMIC     Et0/0
+Total Mac Addresses for this criterion: 3
+### 07:55:38 SW02: show mac address-table dynamic vlan 20
+          Mac Address Table
+-------------------------------------------
+
+Vlan    Mac Address       Type        Ports
+----    -----------       --------    -----
+  20    aabb.cc02.4c00    DYNAMIC     Et0/0
+  20    aabb.cc82.4e00    DYNAMIC     Et0/2
+  20    aabb.cc82.4f00    DYNAMIC     Et0/3
+Total Mac Addresses for this criterion: 3

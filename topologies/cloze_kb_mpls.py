@@ -254,6 +254,9 @@ PASSAGES = [
     # ------------------------------------------------------------------ RSVP-TE
     {
         "kind": "m_rsvp",
+        "scope": "beyond",   # ★ENARSI 範囲外(2026-09-20 ユーザ判断)= RSVP のオブジェクト
+                             #   (PATH/RESV/ERO/RRO)は 2026-09-19 の「RSVP オブジェクトは範囲外」
+                             #   判断の取りこぼし。既定の出題から外す(--kinds 明示時のみ)
         "title": "RSVP-TE による LSP のシグナリング",
         "diagram": None,
         "exhibit": None,

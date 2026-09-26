@@ -1,0 +1,230 @@
+
+======== M14c Peer(STP) 残存の解消 ========
+### 05:18:04 SW03: show spanning-tree vlan 10 | include Et0/2
+Et0/2               Altn BLK 100       128.3    P2p Peer(STP) 
+### 05:18:04 SW02: show spanning-tree vlan 10 | include Et0/2
+Et0/2               Desg FWD 100       128.3    P2p Peer(STP) 
+### 05:18:09 SW03: clear spanning-tree detected-protocols interface Ethernet0/2
+
+### 05:18:09 SW03: show spanning-tree vlan 10 | include Et0/2
+Et0/2               Altn BLK 100       128.3    P2p 
+### 05:18:09 SW02: show spanning-tree vlan 10 | include Et0/2
+Et0/2               Desg FWD 100       128.3    P2p Peer(STP) 
+
+======== M7b global bpdufilter の送出は止まるか(SW02 Et0/2・VLAN10 は SW03 側 Altn= 受信 0) ========
+### SW02: conf ['spanning-tree portfast bpdufilter default', 'interface Ethernet0/2', 'spanning-tree portfast trunk', 'shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%Warning: portfast should only be enabled on ports connected to a single
+ host. Connecting hubs, concentrators, switches, bridges, etc... to this
+ interface  when portfast is enabled, can cause temporary bridging loops.
+ Use with CAUTION
+### SW02: conf ['interface Ethernet0/2', 'no shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 10
+### 05:18:23 SW02: show spanning-tree interface Ethernet0/2 detail | include of VLAN0010|of VLAN0030|filter|BPDU:
+ Port 3 (Ethernet0/2) of VLAN0010 is designated forwarding 
+   Bpdu filter is enabled by default
+   BPDU: sent 5, received 0
+   Bpdu filter is enabled by default
+   BPDU: sent 5, received 0
+ Port 3 (Ethernet0/2) of VLAN0030 is designated forwarding 
+   Bpdu filter is enabled by default
+   BPDU: sent 5, received 0
+   BPDU: sent 5, received 2
+   Bpdu filter is enabled by default
+   BPDU: sent 5, received 0
+   Bpdu filter is enabled by default
+   BPDU: sent 5, received 0
+   BPDU: sent 3, received 5
+   Bpdu filter is enabled by default
+   BPDU: sent 5, received 0
+   Bpdu filter is enabled by default
+   BPDU: sent 5, received 0
+   Bpdu filter is enabled by default
+   BPDU: sent 5, received 0
+### sleep 20
+### 05:18:43 SW02: show spanning-tree interface Ethernet0/2 detail | include of VLAN0010|of VLAN0030|filter|BPDU:
+ Port 3 (Ethernet0/2) of VLAN0010 is designated forwarding 
+   BPDU: sent 13, received 1
+   BPDU: sent 12, received 1
+ Port 3 (Ethernet0/2) of VLAN0030 is designated blocking 
+   BPDU: sent 12, received 3
+   BPDU: sent 13, received 7
+   BPDU: sent 13, received 1
+   BPDU: sent 13, received 1
+   BPDU: sent 4, received 12
+   BPDU: sent 13, received 1
+   BPDU: sent 13, received 1
+   BPDU: sent 13, received 1
+### sleep 30
+### 05:19:13 SW02: show spanning-tree interface Ethernet0/2 detail | include of VLAN0010|of VLAN0030|filter|BPDU:
+ Port 3 (Ethernet0/2) of VLAN0010 is designated forwarding 
+   BPDU: sent 28, received 1
+   BPDU: sent 27, received 1
+ Port 3 (Ethernet0/2) of VLAN0030 is designated blocking 
+   BPDU: sent 26, received 4
+   BPDU: sent 23, received 14
+   BPDU: sent 28, received 1
+   BPDU: sent 28, received 1
+   BPDU: sent 7, received 23
+   BPDU: sent 28, received 1
+   BPDU: sent 28, received 1
+   BPDU: sent 28, received 1
+### sleep 30
+### 05:19:43 SW02: show spanning-tree interface Ethernet0/2 detail | include of VLAN0010|of VLAN0030|filter|BPDU:
+ Port 3 (Ethernet0/2) of VLAN0010 is designated forwarding 
+   BPDU: sent 43, received 1
+   BPDU: sent 42, received 1
+ Port 3 (Ethernet0/2) of VLAN0030 is alternate blocking 
+   BPDU: sent 37, received 6
+   BPDU: sent 31, received 23
+   BPDU: sent 43, received 1
+   BPDU: sent 43, received 1
+   BPDU: sent 13, received 30
+   BPDU: sent 43, received 1
+   BPDU: sent 43, received 1
+   BPDU: sent 43, received 1
+### SW02: conf ['no spanning-tree portfast bpdufilter default', 'interface Ethernet0/2', 'no spanning-tree portfast trunk']
+Enter configuration commands, one per line.  End with CNTL/Z.
+
+======== M11c UDLD 片方向の擬似: SW03 Et0/1 in で UDLD 宛先 MAC を落とす(両側 aggressive) ========
+### SW03: conf ['udld enable', 'interface Ethernet0/1', 'no udld port', 'udld port aggressive']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW03: conf ['mac access-list extended NOUDLD', 'deny any host 0100.0ccc.cccc', 'permit any any', 'interface Ethernet0/1', 'mac access-group NOUDLD in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 15
+### 05:19:59 SW02: show udld Ethernet0/1 | include state|Current
+Port enable operational state: Enabled / in aggressive mode
+Current bidirectional state: Bidirectional
+Current operational state: Advertisement - Single neighbor detected
+Port fast-hello operational state: Disabled
+    Current neighbor state: Bidirectional
+### 05:20:00 SW02: show interfaces status err-disabled
+
+### 05:20:00 SW03: show udld Ethernet0/1 | include state|Current
+Port enable operational state: Enabled / in aggressive mode
+Current bidirectional state: Bidirectional
+Current operational state: Advertisement - Single neighbor detected
+Port fast-hello operational state: Disabled
+    Current neighbor state: Bidirectional
+### 05:20:00 SW03: show interfaces status err-disabled
+
+### sleep 30
+### 05:20:30 SW02: show udld Ethernet0/1 | include state|Current
+Port enable operational state: Enabled / in aggressive mode
+Current bidirectional state: Bidirectional
+Current operational state: Advertisement - Single neighbor detected
+Port fast-hello operational state: Disabled
+    Current neighbor state: Bidirectional
+### 05:20:30 SW02: show interfaces status err-disabled
+
+### 05:20:30 SW03: show udld Ethernet0/1 | include state|Current
+Port enable operational state: Enabled / in aggressive mode
+Current bidirectional state: Bidirectional
+Current operational state: Advertisement - Single neighbor detected
+Port fast-hello operational state: Disabled
+    Current neighbor state: Bidirectional
+### 05:20:30 SW03: show interfaces status err-disabled
+
+### sleep 30
+### 05:21:00 SW02: show udld Ethernet0/1 | include state|Current
+Port enable operational state: Enabled / in aggressive mode
+Current bidirectional state: Bidirectional
+Current operational state: Advertisement - Single neighbor detected
+Port fast-hello operational state: Disabled
+    Current neighbor state: Bidirectional
+### 05:21:00 SW02: show interfaces status err-disabled
+
+### 05:21:00 SW03: show udld Ethernet0/1 | include state|Current
+Port enable operational state: Enabled / in aggressive mode
+Current bidirectional state: Bidirectional
+Current operational state: Advertisement - Single neighbor detected
+Port fast-hello operational state: Disabled
+    Current neighbor state: Bidirectional
+### 05:21:00 SW03: show interfaces status err-disabled
+
+### 05:21:00 SW02: show logging | include UDLD|ERR_DISABLE
+*Sep 22 05:10:42.525: %PM-4-ERR_DISABLE: bpduguard error detected on Et0/2, putting Et0/2 in err-disable state
+### 05:21:00 SW03: show logging | include UDLD|ERR_DISABLE
+
+
+======== M11d normal モード: ACL を外し両側 normal・リセットしてから同じ片方向 ========
+### SW03: conf ['interface Ethernet0/1', 'no mac access-group NOUDLD in', 'no udld port aggressive', 'udld port', 'shutdown', 'no shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW02: conf ['interface Ethernet0/1', 'no udld port aggressive', 'udld port', 'shutdown', 'no shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:21:01 SW02: udld reset
+No ports are disabled by UDLD.
+### 05:21:31 SW03: udld reset
+No ports are disabled by UDLD.
+### 05:21:31 SW02: show udld Ethernet0/1 | include state|Current|mode
+Port enable operational state: Enabled
+Current bidirectional state: Bidirectional
+Current operational state: Advertisement - Single neighbor detected
+Port fast-hello operational state: Disabled
+    Current neighbor state: Bidirectional
+### SW03: conf ['interface Ethernet0/1', 'mac access-group NOUDLD in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 15
+### 05:21:47 SW02: show udld Ethernet0/1 | include state|Current
+Port enable operational state: Enabled
+Current bidirectional state: Bidirectional
+Current operational state: Advertisement - Single neighbor detected
+Port fast-hello operational state: Disabled
+    Current neighbor state: Bidirectional
+### 05:21:47 SW02: show interfaces status err-disabled
+
+### 05:21:47 SW03: show udld Ethernet0/1 | include state|Current
+Port enable operational state: Enabled
+Current bidirectional state: Bidirectional
+Current operational state: Advertisement - Single neighbor detected
+Port fast-hello operational state: Disabled
+    Current neighbor state: Bidirectional
+### 05:21:47 SW03: show interfaces status err-disabled
+
+### sleep 30
+### 05:22:17 SW02: show udld Ethernet0/1 | include state|Current
+Port enable operational state: Enabled
+Current bidirectional state: Bidirectional
+Current operational state: Advertisement - Single neighbor detected
+Port fast-hello operational state: Disabled
+    Current neighbor state: Bidirectional
+### 05:22:17 SW02: show interfaces status err-disabled
+
+### 05:22:17 SW03: show udld Ethernet0/1 | include state|Current
+Port enable operational state: Enabled
+Current bidirectional state: Bidirectional
+Current operational state: Advertisement - Single neighbor detected
+Port fast-hello operational state: Disabled
+    Current neighbor state: Bidirectional
+### 05:22:17 SW03: show interfaces status err-disabled
+
+### sleep 30
+### 05:22:47 SW02: show udld Ethernet0/1 | include state|Current
+Port enable operational state: Enabled
+Current bidirectional state: Bidirectional
+Current operational state: Advertisement - Single neighbor detected
+Port fast-hello operational state: Disabled
+    Current neighbor state: Bidirectional
+### 05:22:47 SW02: show interfaces status err-disabled
+
+### 05:22:47 SW03: show udld Ethernet0/1 | include state|Current
+Port enable operational state: Enabled
+Current bidirectional state: Bidirectional
+Current operational state: Advertisement - Single neighbor detected
+Port fast-hello operational state: Disabled
+    Current neighbor state: Bidirectional
+### 05:22:48 SW03: show interfaces status err-disabled
+
+### 05:22:48 SW02: show logging | include UDLD
+
+### 05:22:48 SW03: show logging | include UDLD
+
+
+======== 後始末 ========
+### SW03: conf ['interface Ethernet0/1', 'no mac access-group NOUDLD in', 'no udld port', 'shutdown', 'no shutdown', 'exit', 'no udld enable']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### SW02: conf ['interface Ethernet0/1', 'no udld port', 'shutdown', 'no shutdown', 'exit', 'no udld enable']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:22:49 SW02: udld reset
+No ports are disabled by UDLD.

@@ -1,0 +1,173 @@
+- note: M5' spt-threshold infinity をやり直し(受信者が参加し直してから送信)
+- node: RT04
+  conf:
+  - ip pim spt-threshold infinity
+- node: RT08
+  conf:
+  - ip pim spt-threshold infinity
+- node: RT06
+  conf:
+  - interface Ethernet0/0
+  - ip igmp join-group 239.5.5.5
+  wait: 8
+- node: RT01
+  show:
+  - ping 239.5.5.5 repeat 5 source Ethernet0/0
+- node: RT08
+  show:
+  - show ip mroute 239.5.5.5 | include \(|flags|Incoming|Ethernet|Null
+- node: RT04
+  show:
+  - show ip mroute 239.5.5.5 | include \(|flags|Incoming|Ethernet|Null
+- node: RT03
+  show:
+  - show ip mroute 239.5.5.5 | include \(|flags|Incoming|Ethernet|Null
+- node: RT05
+  show:
+  - show ip mroute 239.5.5.5 | include \(|flags|Incoming|Ethernet|Null
+- node: RT04
+  conf:
+  - no ip pim spt-threshold infinity
+- node: RT08
+  conf:
+  - no ip pim spt-threshold infinity
+- node: RT06
+  conf:
+  - interface Ethernet0/0
+  - no ip igmp join-group 239.5.5.5
+- note: 'M9 BSR: static RP を外し RT03= C-BSR+C-RP・RT05= C-RP'
+- node: RT02
+  conf:
+  - no ip pim rp-address 3.3.3.3
+- node: RT03
+  conf:
+  - no ip pim rp-address 3.3.3.3
+- node: RT04
+  conf:
+  - no ip pim rp-address 3.3.3.3
+- node: RT05
+  conf:
+  - no ip pim rp-address 3.3.3.3
+- node: RT08
+  conf:
+  - no ip pim rp-address 3.3.3.3
+- node: RT03
+  conf:
+  - ip pim bsr-candidate Loopback0
+  - ip pim rp-candidate Loopback0
+- node: RT05
+  conf:
+  - ip pim rp-candidate Loopback0
+- sleep: 75
+- node: RT08
+  show:
+  - show ip pim rp mapping
+  - show ip pim bsr-router
+  - show ip pim rp-hash 239.1.1.1
+- note: M9b RT05 の C-RP に priority 10(RT03 は既定)
+- node: RT05
+  conf:
+  - ip pim rp-candidate Loopback0 priority 10
+- sleep: 70
+- node: RT08
+  show:
+  - show ip pim rp mapping
+  - show ip pim rp-hash 239.1.1.1
+- note: 'M10 Auto-RP: BSR を外し RT03/RT05= announce・RT02= mapping agent。まず autorp listener
+    なし'
+- node: RT03
+  conf:
+  - no ip pim bsr-candidate Loopback0
+  - no ip pim rp-candidate Loopback0
+  - ip pim send-rp-announce Loopback0 scope 16
+- node: RT05
+  conf:
+  - no ip pim rp-candidate Loopback0 priority 10
+  - no ip pim rp-candidate Loopback0
+  - ip pim send-rp-announce Loopback0 scope 16
+- node: RT02
+  conf:
+  - ip pim send-rp-discovery Loopback0 scope 16
+- sleep: 75
+- node: RT02
+  show:
+  - show ip pim rp mapping
+- node: RT04
+  show:
+  - show ip pim rp mapping
+- node: RT08
+  show:
+  - show ip pim rp mapping
+- note: M10b 全ルータに ip pim autorp listener
+- node: RT02
+  conf:
+  - ip pim autorp listener
+- node: RT03
+  conf:
+  - ip pim autorp listener
+- node: RT04
+  conf:
+  - ip pim autorp listener
+- node: RT05
+  conf:
+  - ip pim autorp listener
+- node: RT08
+  conf:
+  - ip pim autorp listener
+- sleep: 75
+- node: RT02
+  show:
+  - show ip pim rp mapping
+  - show ip pim autorp
+- node: RT08
+  show:
+  - show ip pim rp mapping
+  - show ip pim autorp
+- note: M11 static(override なし)と Auto-RP の併存 → どちらが使われるか / override
+- node: RT08
+  conf:
+  - ip pim rp-address 3.3.3.3
+  wait: 3
+  show:
+  - show ip pim rp mapping
+  - show ip pim rp 239.1.1.1
+- node: RT08
+  conf:
+  - ip pim rp-address 3.3.3.3 override
+  wait: 3
+  show:
+  - show ip pim rp mapping
+  - show ip pim rp 239.1.1.1
+- note: '後始末: Auto-RP を外し static 3.3.3.3 に戻す'
+- node: RT08
+  conf:
+  - no ip pim rp-address 3.3.3.3 override
+- node: RT03
+  conf:
+  - no ip pim send-rp-announce Loopback0 scope 16
+- node: RT05
+  conf:
+  - no ip pim send-rp-announce Loopback0 scope 16
+- node: RT02
+  conf:
+  - no ip pim send-rp-discovery Loopback0 scope 16
+- node: RT02
+  conf:
+  - no ip pim autorp listener
+  - ip pim rp-address 3.3.3.3
+- node: RT03
+  conf:
+  - no ip pim autorp listener
+  - ip pim rp-address 3.3.3.3
+- node: RT04
+  conf:
+  - no ip pim autorp listener
+  - ip pim rp-address 3.3.3.3
+- node: RT05
+  conf:
+  - no ip pim autorp listener
+  - ip pim rp-address 3.3.3.3
+- node: RT08
+  conf:
+  - no ip pim autorp listener
+  - ip pim rp-address 3.3.3.3

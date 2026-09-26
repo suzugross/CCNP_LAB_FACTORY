@@ -1,0 +1,500 @@
+
+======== M0 基準: 版と multicast/pim 設定の受理 ========
+### 06:44:02 RT02: show version | include Software,
+
+### 06:44:03 RT02: show running-config | include multicast|pim|rp-address
+ip multicast-routing 
+ ip pim sparse-mode
+ ip pim sparse-mode
+ ip pim sparse-mode
+ ip pim sparse-mode
+ip pim rp-address 3.3.3.3
+### 06:44:05 RT03: show version | include Software,
+
+### 06:44:05 RT03: show running-config | include multicast|pim|rp-address
+ip multicast-routing 
+ ip pim sparse-mode
+ ip pim sparse-mode
+ ip pim sparse-mode
+ip pim rp-address 3.3.3.3
+### 06:44:08 RT04: show version | include Software,
+
+### 06:44:08 RT04: show running-config | include multicast|pim|rp-address
+ip multicast-routing 
+ ip pim sparse-mode
+ ip pim sparse-mode
+ ip pim sparse-mode
+ ip pim sparse-mode
+ip pim rp-address 3.3.3.3
+### 06:44:10 RT05: show version | include Software,
+
+### 06:44:10 RT05: show running-config | include multicast|pim|rp-address
+ip multicast-routing 
+ ip pim sparse-mode
+ ip pim sparse-mode
+ ip pim sparse-mode
+ ip pim sparse-mode
+ip pim rp-address 3.3.3.3
+### 06:44:13 RT08: show version | include Software,
+
+### 06:44:13 RT08: show running-config | include multicast|pim|rp-address
+ip multicast-routing 
+ ip pim sparse-mode
+ ip pim sparse-mode
+ ip pim sparse-mode
+ip pim rp-address 3.3.3.3
+
+======== M1 PIM 隣接・DR(受信 LAN)・IGMP querier・既定のタイマとバージョン ========
+### 06:44:13 RT04: show ip pim neighbor
+PIM Neighbor Table
+Mode: B - Bidir Capable, DR - Designated Router, N - Default DR Priority,
+      P - Proxy Capable, S - State Refresh Capable, G - GenID Capable,
+      L - DR Load-balancing Capable
+Neighbor          Interface                Uptime/Expires    Ver   DR
+Address                                                            Prio/Mode
+10.0.34.3         Ethernet0/0              00:04:56/00:01:44 v2    1 / S P G
+10.0.45.5         Ethernet0/1              00:04:59/00:01:40 v2    1 / DR S P G
+10.0.100.8        Ethernet0/2              00:04:30/00:01:38 v2    1 / DR S P G
+### 06:44:13 RT04: show ip pim interface
+Address          Interface                Ver/   Nbr    Query  DR         DR
+                                          Mode   Count  Intvl  Prior
+4.4.4.4          Loopback0                v2/S   0      30     1          4.4.4.4
+10.0.34.4        Ethernet0/0              v2/S   1      30     1          10.0.34.4
+10.0.45.4        Ethernet0/1              v2/S   1      30     1          10.0.45.5
+10.0.100.4       Ethernet0/2              v2/S   1      30     1          10.0.100.8
+### 06:44:13 RT04: show ip igmp interface Ethernet0/2
+Ethernet0/2 is up, line protocol is up
+  Internet address is 10.0.100.4/24
+  IGMP is enabled on interface
+  Current IGMP host version is 2
+  Current IGMP router version is 2
+  IGMP query interval is 60 seconds
+  IGMP configured query interval is 60 seconds
+  IGMP robustness-variable is 2
+  IGMP querier timeout is 120 seconds
+  IGMP configured querier timeout is 120 seconds
+  IGMP max query response time is 10 seconds
+  Last member query count is 2
+  Last member query response interval is 1000 ms
+  Inbound IGMP access group is not set
+  IGMP activity: 0 joins, 0 leaves
+  Multicast routing is enabled on interface
+  Multicast TTL threshold is 0
+  Multicast designated router (DR) is 10.0.100.8  
+  IGMP querying router is 10.0.100.4 (this system)
+  No multicast groups joined by this system
+### 06:44:13 RT08: show ip pim interface Ethernet0/0 detail
+Ethernet0/0 is up, line protocol is up
+  Internet address is 10.0.100.8/24
+  Multicast switching: fast
+  Multicast packets in/out: 0/0
+  Multicast TTL threshold: 0
+  PIM: enabled
+    PIM version: 2, mode: sparse
+    PIM DR: 10.0.100.8 (this system)
+    PIM neighbor count: 1
+    PIM Hello/Query interval: 30 seconds
+    PIM Hello packets in/out: 10/13
+    PIM J/P interval: 60 seconds
+    PIM State-Refresh processing: enabled
+    PIM State-Refresh origination: disabled
+    PIM NBMA mode: disabled
+    PIM ATM multipoint signalling: disabled
+    PIM domain border: disabled
+    PIM neighbors rpf proxy capable: TRUE
+    PIM BFD: disabled
+    PIM Non-DR-Join: FALSE
+  Multicast Tagswitching: disabled
+### 06:44:13 RT08: show ip igmp interface Ethernet0/0
+Ethernet0/0 is up, line protocol is up
+  Internet address is 10.0.100.8/24
+  IGMP is enabled on interface
+  Current IGMP host version is 2
+  Current IGMP router version is 2
+  IGMP query interval is 60 seconds
+  IGMP configured query interval is 60 seconds
+  IGMP robustness-variable is 2
+  IGMP querier timeout is 120 seconds
+  IGMP configured querier timeout is 120 seconds
+  IGMP max query response time is 10 seconds
+  Last member query count is 2
+  Last member query response interval is 1000 ms
+  Inbound IGMP access group is not set
+  IGMP activity: 0 joins, 0 leaves
+  Multicast routing is enabled on interface
+  Multicast TTL threshold is 0
+  Multicast designated router (DR) is 10.0.100.8 (this system)
+  IGMP querying router is 10.0.100.4  
+  No multicast groups joined by this system
+
+======== M2 RPF(RT04 から送信元 10.0.12.1 へは RT03 経由と RT05 経由が等コスト) ========
+### 06:44:14 RT04: show ip route 10.0.12.0
+Routing entry for 10.0.12.0/24
+  Known via "ospf 1", distance 110, metric 30, type intra area
+  Last update from 10.0.34.3 on Ethernet0/0, 00:04:34 ago
+  Routing Descriptor Blocks:
+  * 10.0.45.5, from 2.2.2.2, 00:04:52 ago, via Ethernet0/1
+      Route metric is 30, traffic share count is 1
+    10.0.34.3, from 2.2.2.2, 00:04:34 ago, via Ethernet0/0
+      Route metric is 30, traffic share count is 1
+### 06:44:14 RT04: show ip rpf 10.0.12.1
+RPF information for ? (10.0.12.1)
+  RPF interface: Ethernet0/1
+  RPF neighbor: ? (10.0.45.5)
+  RPF route/mask: 10.0.12.0/24
+  RPF type: unicast (ospf 1)
+  Doing distance-preferred lookups across tables
+  RPF topology: ipv4 multicast base, originated from ipv4 unicast base
+### 06:44:25 RT04: show ip rpf 3.3.3.3
+RPF information for ? (3.3.3.3)
+  RPF interface: Ethernet0/0
+  RPF neighbor: ? (10.0.34.3)
+  RPF route/mask: 3.3.3.3/32
+  RPF type: unicast (ospf 1)
+  Doing distance-preferred lookups across tables
+  RPF topology: ipv4 multicast base, originated from ipv4 unicast base
+### 06:44:41 RT08: show ip route 10.0.12.0
+Routing entry for 10.0.12.0/24
+  Known via "ospf 1", distance 110, metric 30, type intra area
+  Last update from 10.0.58.5 on Ethernet0/1, 00:04:56 ago
+  Routing Descriptor Blocks:
+  * 10.0.58.5, from 2.2.2.2, 00:04:56 ago, via Ethernet0/1
+      Route metric is 30, traffic share count is 1
+### 06:44:41 RT08: show ip rpf 10.0.12.1
+RPF information for ? (10.0.12.1)
+  RPF interface: Ethernet0/1
+  RPF neighbor: ? (10.0.58.5)
+  RPF route/mask: 10.0.12.0/24
+  RPF type: unicast (ospf 1)
+  Doing distance-preferred lookups across tables
+  RPF topology: ipv4 multicast base, originated from ipv4 unicast base
+### 06:44:52 RT08: show ip rpf 3.3.3.3
+RPF information for ? (3.3.3.3)
+  RPF interface: Ethernet0/0
+  RPF neighbor: ? (10.0.100.4)
+  RPF route/mask: 3.3.3.3/32
+  RPF type: unicast (ospf 1)
+  Doing distance-preferred lookups across tables
+  RPF topology: ipv4 multicast base, originated from ipv4 unicast base
+
+======== M3 受信者 RT06 が 239.1.1.1 に参加(IGMPv2 既定) ========
+### RT06: conf ['interface Ethernet0/0', 'ip igmp join-group 239.1.1.1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 06:45:19 RT04: show ip igmp groups
+IGMP Connected Group Membership
+Group Address    Interface                Uptime    Expires   Last Reporter   Group Accounted
+239.1.1.1        Ethernet0/2              00:00:08  00:02:51  10.0.100.6      
+224.0.1.40       Loopback0                00:06:08  00:02:56  4.4.4.4         
+### 06:45:19 RT04: show ip mroute 239.1.1.1
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.1.1.1), 00:00:08/00:03:21, RP 3.3.3.3, flags: SJC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.34.3
+  Outgoing interface list:
+    Ethernet0/2, Forward/Sparse, 00:00:08/00:03:21, flags: 
+### 06:45:19 RT08: show ip igmp groups
+IGMP Connected Group Membership
+Group Address    Interface                Uptime    Expires   Last Reporter   Group Accounted
+239.1.1.1        Ethernet0/0              00:00:08  00:02:51  10.0.100.6      
+224.0.1.40       Loopback0                00:05:39  00:02:21  8.8.8.8         
+### 06:45:19 RT08: show ip mroute 239.1.1.1
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.1.1.1), 00:00:08/00:02:51, RP 3.3.3.3, flags: SJPC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.100.4
+  Outgoing interface list: Null
+### 06:45:19 RT03: show ip mroute 239.1.1.1
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.1.1.1), 00:00:08/00:03:21, RP 3.3.3.3, flags: S
+  Incoming interface: Null, RPF nbr 0.0.0.0
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse, 00:00:08/00:03:21, flags: 
+### 06:45:19 RT03: show ip pim rp mapping
+PIM Group-to-RP Mappings
+
+Group(s): 224.0.0.0/4, Static
+    RP: 3.3.3.3 (?)
+### 06:45:22 RT05: show ip mroute 239.1.1.1
+Group 239.1.1.1 not found
+### 06:45:23 SW01: show ip igmp snooping groups
+Flags: I -- IGMP snooping, S -- Static, P -- PIM snooping, A -- ASM mode
+       E -- EVPN sync
+
+Vlan      Group/source             Type        Version     Port List
+-----------------------------------------------------------------------
+100       239.1.1.1                I           v2          Et0/1 
+### 06:45:23 SW01: show ip igmp snooping mrouter
+Vlan    ports
+----    -----
+ 100    Et0/0(dynamic), Et0/3(dynamic)
+### 06:45:23 SW01: show ip igmp snooping querier
+Vlan      IP Address               IGMP Version  Port              
+-------------------------------------------------------------
+100       10.0.100.4               v2            Et0/0                    
+
+======== M4 送信元 RT01 から 239.1.1.1 へ ping(5 回)→ 各ルータの mroute ========
+### 06:45:25 RT01: ping 239.1.1.1 repeat 5 source Ethernet0/0
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 239.1.1.1, timeout is 2 seconds:
+Packet sent with a source address of 10.0.12.1 
+
+Reply to request 0 from 10.0.100.6, 38 ms
+Reply to request 1 from 10.0.100.6, 2 ms
+Reply to request 2 from 10.0.100.6, 3 ms
+Reply to request 3 from 10.0.100.6, 3 ms
+Reply to request 4 from 10.0.100.6, 2 ms
+### sleep 3
+### 06:45:50 RT02: show ip mroute 239.1.1.1
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.1.1.1), 00:00:24/stopped, RP 3.3.3.3, flags: SPF
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.23.3
+  Outgoing interface list: Null
+
+(10.0.12.1, 239.1.1.1), 00:00:24/00:03:12, flags: FT
+  Incoming interface: Ethernet0/0, RPF nbr 0.0.0.0
+  Outgoing interface list:
+    Ethernet0/2, Forward/Sparse, 00:00:24/00:03:05, flags: 
+    Ethernet0/1, Forward/Sparse, 00:00:24/00:03:10, flags: 
+### 06:45:50 RT03: show ip mroute 239.1.1.1
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.1.1.1), 00:00:39/stopped, RP 3.3.3.3, flags: S
+  Incoming interface: Null, RPF nbr 0.0.0.0
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse, 00:00:39/00:02:50, flags: 
+
+(10.0.12.1, 239.1.1.1), 00:00:24/00:02:42, flags: T
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.23.2
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse, 00:00:24/00:02:35, flags: 
+### 06:45:50 RT04: show ip mroute 239.1.1.1
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.1.1.1), 00:00:39/stopped, RP 3.3.3.3, flags: SJC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.34.3
+  Outgoing interface list:
+    Ethernet0/2, Forward/Sparse, 00:00:39/00:02:50, flags: 
+
+(10.0.12.1, 239.1.1.1), 00:00:24/00:02:35, flags: PJ
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.45.5
+  Outgoing interface list: Null
+### 06:45:50 RT05: show ip mroute 239.1.1.1
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.1.1.1), 00:00:24/stopped, RP 3.3.3.3, flags: SP
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.45.4
+  Outgoing interface list: Null
+
+(10.0.12.1, 239.1.1.1), 00:00:24/00:02:35, flags: T
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.25.2
+  Outgoing interface list:
+    Ethernet0/2, Forward/Sparse, 00:00:24/00:03:05, flags: 
+### 06:45:50 RT08: show ip mroute 239.1.1.1
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.1.1.1), 00:00:39/stopped, RP 3.3.3.3, flags: SJPC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.100.4
+  Outgoing interface list: Null
+
+(10.0.12.1, 239.1.1.1), 00:00:24/00:02:35, flags: JT
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.58.5
+  Outgoing interface list:
+    Ethernet0/0, Forward/Sparse, 00:00:24/00:02:35, flags: A
+### 06:45:50 RT04: show ip mroute count
+Use "show ip mfib count" to get better response time for a large number of mroutes.
+
+IP Multicast Statistics
+3 routes using 3738 bytes of memory
+2 groups, 0.50 average sources per group
+Forwarding Counts: Pkt Count/Pkts per second/Avg Pkt Size/Kilobits per second
+Other counts: Total/RPF failed/Other drops(OIF-null, rate-limit etc)
+
+Group: 239.1.1.1, Source count: 1, Packets forwarded: 1, Packets received: 10
+  RP-tree: Forwarding: 0/0/0/0, Other: 0/0/0
+  Source: 10.0.12.1/32, Forwarding: 1/0/100/0, Other: 10/4/5
+
+Group: 224.0.1.40, Source count: 0, Packets forwarded: 0, Packets received: 0
+### 06:45:50 RT04: show ip mroute
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.1.1.1), 00:00:39/stopped, RP 3.3.3.3, flags: SJC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.34.3
+  Outgoing interface list:
+    Ethernet0/2, Forward/Sparse, 00:00:39/00:02:50, flags: 
+
+(10.0.12.1, 239.1.1.1), 00:00:24/00:02:35, flags: PJ
+  Incoming interface: Ethernet0/1, RPF nbr 10.0.45.5
+  Outgoing interface list: Null
+
+(*, 224.0.1.40), 00:06:39/00:03:24, RP 3.3.3.3, flags: SJCL
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.34.3
+  Outgoing interface list:
+    Ethernet0/2, Forward/Sparse, 00:05:30/00:03:24, flags: 
+    Ethernet0/1, Forward/Sparse, 00:06:05/00:03:17, flags: 
+    Loopback0, Forward/Sparse, 00:06:38/00:02:24, flags: 
+
+======== M4b 継続送信なしで 3 分後(状態の失効の様子)は後段で ========

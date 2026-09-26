@@ -1,0 +1,243 @@
+- note: M7/M17 SW02 Et0/2 に portfast trunk + global portfast bpdufilter default
+- node: SW02
+  conf:
+  - spanning-tree portfast bpdufilter default
+  - interface Ethernet0/2
+  - spanning-tree portfast trunk
+  - shutdown
+  wait: 3
+- node: SW02
+  conf:
+  - interface Ethernet0/2
+  - no shutdown
+- sleep: 1
+- node: SW02
+  show:
+  - show spanning-tree interface Ethernet0/2 detail | include VLAN0010|portfast|filter|BPDU:|edge|Edge
+  - show spanning-tree vlan 10 | include Et0/2
+- sleep: 3
+- node: SW02
+  show:
+  - show spanning-tree interface Ethernet0/2 detail | include VLAN0010|portfast|filter|BPDU:|edge|Edge
+  - show spanning-tree vlan 10 | include Et0/2
+- sleep: 6
+- node: SW02
+  show:
+  - show spanning-tree interface Ethernet0/2 detail | include VLAN0010|portfast|filter|BPDU:|edge|Edge
+  - show spanning-tree vlan 10 | include Et0/2
+- sleep: 15
+- node: SW02
+  show:
+  - show spanning-tree interface Ethernet0/2 detail | include VLAN0010|portfast|filter|BPDU:|edge|Edge
+  - show spanning-tree vlan 10 | include Et0/2
+- node: SW02
+  show:
+  - show spanning-tree summary | include Portfast|PortFast|Filter
+  - show spanning-tree interface Ethernet0/2 portfast
+- note: 'M17b portfast を端末相当(SW03 側で STP を止めない)で Edge 表示: SW01 Et0/2(未接続 access)に
+    portfast'
+- node: SW01
+  conf:
+  - interface Ethernet0/2
+  - switchport mode access
+  - switchport access vlan 10
+  - spanning-tree portfast
+  wait: 5
+  show:
+  - show spanning-tree vlan 10 | include Et0
+- node: SW01
+  conf:
+  - spanning-tree portfast default
+  show:
+  - show spanning-tree summary | include Portfast|PortFast
+- node: SW01
+  conf:
+  - no spanning-tree portfast default
+  - interface Ethernet0/2
+  - no spanning-tree portfast
+  - switchport access vlan 1
+- node: SW02
+  conf:
+  - no spanning-tree portfast bpdufilter default
+  - interface Ethernet0/2
+  - no spanning-tree portfast trunk
+- note: M11 UDLD の有無と表示
+- node: SW02
+  conf:
+  - udld enable
+  - interface Ethernet0/1
+  - udld port aggressive
+  wait: 2
+- node: SW03
+  conf:
+  - interface Ethernet0/1
+  - udld port aggressive
+  wait: 20
+- node: SW02
+  show:
+  - show udld Ethernet0/1
+  - show udld neighbors
+  - show running-config | include udld
+- note: 'M11b normal モード: SW03 側 normal に'
+- node: SW03
+  conf:
+  - interface Ethernet0/1
+  - no udld port aggressive
+  - udld port
+  wait: 20
+- node: SW03
+  show:
+  - show udld Ethernet0/1
+- note: M14 SW03 を pvst に → SW01 の Type 列
+- node: SW03
+  conf:
+  - spanning-tree mode pvst
+  wait: 40
+- node: SW03
+  show:
+  - show spanning-tree vlan 10
+- node: SW01
+  show:
+  - show spanning-tree vlan 10
+  - show spanning-tree interface Ethernet0/1 detail | include VLAN0010|STP|RSTP|BPDU
+- note: M14b SW03 を rapid-pvst に戻す → SW01 は Peer(STP) のままか
+- node: SW03
+  conf:
+  - spanning-tree mode rapid-pvst
+  wait: 15
+- node: SW01
+  show:
+  - show spanning-tree vlan 10 | include Et0
+- node: SW01
+  show:
+  - clear spanning-tree detected-protocols
+  wait: 5
+- node: SW01
+  show:
+  - show spanning-tree vlan 10 | include Et0
+- note: M15 SW03 を MST(region R1・instance 1 vlan 10,20)に。SW01/SW02 は rapid-pvst
+- node: SW03
+  conf:
+  - spanning-tree mst configuration
+  - name R1
+  - revision 1
+  - instance 1 vlan 10,20
+  - exit
+  - spanning-tree mode mst
+  wait: 40
+- node: SW03
+  show:
+  - show spanning-tree mst
+  - show spanning-tree summary | include mode|PVST|Simulation
+  - show spanning-tree inconsistentports
+  - show spanning-tree mst configuration
+- node: SW01
+  show:
+  - show spanning-tree vlan 10 | include Et0
+  - show spanning-tree vlan 1 | include Et0|Root ID|Address
+- note: M15b PVST 側 VLAN1 root を MST 側より劣位に(SW01/SW02 vlan1 priority 61440)
+- node: SW01
+  conf:
+  - spanning-tree vlan 1 priority 61440
+- node: SW02
+  conf:
+  - spanning-tree vlan 1 priority 61440
+  wait: 20
+- node: SW03
+  show:
+  - show spanning-tree inconsistentports
+  - show spanning-tree mst 0 | include Et0|Root|root
+- node: SW01
+  conf:
+  - no spanning-tree vlan 1 priority
+- node: SW02
+  conf:
+  - no spanning-tree vlan 1 priority
+- node: SW03
+  conf:
+  - spanning-tree mode rapid-pvst
+  wait: 40
+- node: SW03
+  show:
+  - show spanning-tree summary | include mode
+  - show spanning-tree vlan 10 | include Et0
+- note: 'M13 RSTP 切替時間: SW03 VLAN10 RP=Et0/0(対 SW01)。対向 SW01 Et0/1 を shut'
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0
+- node: SW01
+  conf:
+  - interface Ethernet0/1
+  - shutdown
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0/0|Et0/1
+- sleep: 1
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0/0|Et0/1
+- sleep: 1
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0/0|Et0/1
+- sleep: 1
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0/0|Et0/1
+- sleep: 1
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0/0|Et0/1
+- sleep: 1
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0/0|Et0/1
+- sleep: 1
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0/0|Et0/1
+- sleep: 1
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0/0|Et0/1
+- sleep: 1
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0/0|Et0/1
+- sleep: 1
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0/0|Et0/1
+- sleep: 1
+- node: SW03
+  show:
+  - show interfaces Ethernet0/0 | include line protocol
+  - show logging | include Et0/0|Ethernet0/0
+- node: SW01
+  conf:
+  - interface Ethernet0/1
+  - no shutdown
+  wait: 10
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0
+- note: M13b 自側 SW03 Et0/0 を shut
+- node: SW03
+  conf:
+  - interface Ethernet0/0
+  - shutdown
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0
+- sleep: 1
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0
+- node: SW03
+  conf:
+  - interface Ethernet0/0
+  - no shutdown
+  wait: 10
+- node: SW03
+  show:
+  - show spanning-tree vlan 10 | include Et0
