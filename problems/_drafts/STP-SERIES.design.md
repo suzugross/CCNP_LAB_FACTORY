@@ -145,3 +145,72 @@ CIST+inst1 の root= x・inst2 の root= y(リンク2 は上流 port-priority)�
 - 裏どり: PVST シミュレーション規則・allowed の穴(「同じインスタンスの VLAN は一緒に外せ」)・region の 3 属性= Cisco 公式と実測一致。
   SW04 の `Peer(STP)` は公式に記述が無いので採点しない。
 - E2E: 93001 45→100 / 93002 54→100 / 93004 68→100 / 93005 67→100 / 93006 73→100 / 93007 85→100 / build 93003 13→100(region 名違い 86・下流 port-priority 90)。
+
+## 7. 構築問の要件をシードで振る(BL-220・2026-09-26 調査)
+
+### 7.1 現状の切り分け
+`design()` が振っているのは**値**だけ。要件書の行の並びは毎回同じ。
+
+| seed で動く | 直書きで固定 |
+|---|---|
+| VLAN ID 3 個・SVI の第 2 オクテット | STP モード= Rapid PVST+ |
+| どちらの DS が root か(x/y の入れ替え・2 通り) | root 配置の**型**= 2 VLAN が片方・1 VLAN が反対 |
+| 持ち込み機器の接続先 AS とポート | DS 間の使い分け= A/C→リンク1・B→リンク2(向き固定) |
+| エッジポートの所属 VLAN | 寄せる手段= 上流 port-priority 一択(要件で cost 禁止) |
+| — | 保護= DS 間 loop guard / AS 向き root guard / エッジ portfast+bpduguard |
+| — | パスコスト方式(L2 は long 固定)・err-disabled は自動復旧させない |
+
+### 7.2 振れる軸(安全度順)
+| 軸 | 実現 | 採点の影響 | 判定 |
+|---|---|---|---|
+| root 配置の型(2-1 / 1-2 / どの VLAN が単独か) | `design()` に型を抽選 | `expected_roles` が `d["root"]` から計算するので自動追従 | ◎ |
+| 使い分けの向き(単独 VLAN をリンク1 に寄せる世界) | `base_state` の port-priority 付与先を可変に | steer チェックが `Et0/1`/`Et0/0` 直書き → 引数化 | ◎ |
+| パスコスト方式 long / short | 要件表＋`long` チェックの反転 | 全リンク同速度なので役割は不変・安全 | ◎ |
+| 保護機構の割当(loop guard を AS 上りに / root guard を DS 間にも) | 付与先を表で持つ | DS/AS 監査 regex を表から生成 | ○ |
+| 寄せる手段の自由化(port-priority でも cost でも可) | 要件文から cost 禁止を外す | `common_audit` の cost 全面禁止を「設計行以外の cost 禁止」へ | △ regex が繊細 |
+| err-disabled の自動復旧を要件化する世界 | recovery cause/interval | 復旧すると持ち込み機器チェック(err-disabled のまま・8点)が消える | ✗ 競合 |
+
+### 7.3 触り所
+`design()` に世界キー → `expected_roles()`(`pp` が VLAN B・`Et0/1` 直書き) → `base_state()` → `grading()`(steer / DS 監査 / AS 監査 / long / errdis の 5 箇所) → `task_md_build()`(要件表) → `selftest()` に世界軸。
+`build_fix()` は `base_state` から導出しているので自動で追いつく。
+
+### 7.4 注意
+- TS モードも `design`/`base_state` を共有するため、世界軸を入れると **TS の盤面も自動で多様化**し、実機 E2E の対象が世界数だけ増える。まず build だけ振るのが現実的。
+- `expected_roles` はイメージに関わらず 10M(cost 100)でモデル化している。役割判定は全リンク同速度なので問題ないが、`cost_ovr` 世界を入れるなら **IOSvL2(Gi・short=4)用の値表**が必要。
+- MST 側も `inst_vlans()` が `{1:[A,C], 2:[B]}` 固定。同じ手当てで「どの VLAN が単独インスタンスか」「3 VLAN を 3 インスタンスへ」を振れる。
+- 先例= `gen_v6addr_build.py`(LAN ごとに世界を抽選し要件文と採点を分岐)。
+
+## 8. 別系トポロジによる難易度・論点の拡張(BL-221・2026-09-26 調査)
+
+### 8.1 基盤の余裕(調査結果)
+- **計算器は無改造で通る**: `stp_model.Topo.solve()` は Dijkstra + リンクごとの designated 判定で、任意グラフ(三角・リング・多段)に対応。制約は連結であることだけ。
+  ただし役割語彙は Root/Desg/Altn の 3 つで **Backup が無い**(共有セグメントを作る系だけ追加が必要)。
+- **ポート数の余裕**: `device_profiles` の L2 プロファイルは ioll2-xe / iosvl2 ともに **データ 15 ポート(Et|Gi 0/0〜3/2)＋mgmt は slot15(3/3)固定**。1 台 6 リンク＋エッジ 4 本でも余る。
+- **非管理スイッチ(ハブ相当)が既に置ける**: `problem.yml` の `lab.switches: [HUB1]` で `unmanaged_switch` ノードが生える(`gen_cml_lab.py`)。共有セグメント系は基盤追加なしで組める(BPDU を透過するかは PoC 必須)。
+- **台数**: 現行 stpts= 7 ノード(SW4+持ち込み+MGMTSW+EXTC)。1 台増えるごとに +1。CML Personal の同時 20 では 6 スイッチ系(9 ノード)が上限目安・Personal Plus(40)なら余裕。
+- **IOSvL2 は起動が遅い**(BL-219 で既定を iosv に寄せた)。台数を増やすほど bringup が伸びるので、軽い系ほど IOSvL2 向き。
+
+### 8.2 系の候補
+| 系 | 台数 | 骨格 | 難 | 新しく出せる論点 | コスト |
+|---|---|---|---|---|---|
+| T1 三角 | 3(+持ち込み) | DS2+AS1・リンク3 | 2〜3 | 最小の root/RP/DP 選出・cost と port-priority の基礎。**速筋レーン(BL-145)向けの短時間構築** | 小 |
+| T2 リング | 4 | 環状・階層なし | 4 | Altn の位置がコストの積み上げで決まる・BID 順が効く・root 位置で塞ぐ辺が回る | 小〜中 |
+| T3 2 層横広 | 6 | DS2+AS3〜4 | 4 | VLAN 毎負荷分散が複数 AS に及ぶ・AS ごとに別リンクへ寄せる要件 | 中 |
+| T4 3 層 | 6 | コア2+分配2+アクセス2 | 5 | root はコア・分配に root guard・コア間 loop guard・2 段の RP 決定 | 中〜大 |
+| T5 共有セグメント | 3〜4+HUB | 1 台の 2 ポートを同一セグメントへ | 5 | **Backup ポート**(現行盤面では出せない唯一の役割)・BPDU の自己受信 | 中＋PoC |
+| T6 EtherChannel 併用 | 4 | DS 間 2 本を Po に束ねる | 5 | STP から見て 1 論理リンク・Po の cost・U-A2(BL-003)と合流 | 中 |
+| T7 旧機混在 | 5 | 一部を day0 から PVST+ | 5 | 版の境界・PVST+ 島の扱い。★実行中の移行は IOL が不安定(§6.9)なので day0 固定に限る | 中 |
+
+### 8.3 触り所
+盤面定数 `LINKS`/`POS`/`DSLINK`/`UPLINK`/`DOWNLINK`/`EDGE`(現在は module global を `set_image()` が組み立て)をトポロジ定義オブジェクトに束ねる。
+採点側で座標を直書きしている箇所= DS の root guard 先(`0/2`・`0/3`)・不整合の `0/[0-3]` 監査・steer の `0/1`・疎通の SW03→SW04・持ち込み機器の `EDGE`。
+day0 描画(`render`)は `ifn(i)` のスロット換算なのでトポロジ非依存。`gen_pack` の genre ごとに `nodes` 申告を更新。
+
+### 8.4 PoC で先に潰す点
+1. CML の `unmanaged_switch` が **BPDU を透過するか**(T5 の前提。透過しなければ T5 は不成立)。
+2. T5 で実機が本当に `Backup` 役を出すか(`show spanning-tree` の表記・`stp_model` に Backup 役を足す根拠)。
+3. T6 の Po 上で PVST+ の VLAN 毎 cost/port-priority が期待どおり効くか(IOSvL2 で LACP を含む)。
+4. T4/T3 の 6 台構成で IOSvL2 の bringup 時間と SVI down 固着(BL-219 の副作用)が許容範囲か。
+
+### 8.5 推奨順
+T1(軽い・速筋レーンの穴を埋める) → T2 または T4 のどちらか 1 系 → T5 は PoC 価値が高い(紙面 P2 の Backup 論点の裏どりにもなる)。

@@ -84,6 +84,10 @@ def set_image(image):
     MGMT_IF = f"{PFX}3/3"
     AUDIT_CMD = f"show running-config | include ^interface {PFX}|spanning-tree|allowed vlan"
 PRIMARY, SECONDARY = 24576, 28672
+# ★CML 上のノード配置(2026-09-26 ユーザ再配置のとおり)= 分配 2 台を上段・アクセス 2 台を下段。
+#   持ち込み機器は接続先 AS の下。座標は見た目だけで採点には影響しない(gen_cml_lab.layout が使う)。
+POS = {"SW01": [-480, -200], "SW02": [-120, -200], "SW03": [-520, 40], "SW04": [-80, 40]}
+ROGUE_POS = {"SW03": [-560, 260], "SW04": [-40, 260]}
 PVST_START = False
 PARK = 99          # 未使用ポートの駐車 VLAN(AS にだけ作る・trunk に載せない)
 
@@ -593,7 +597,8 @@ def build_mst(repo, seed, mode, nfaults, forced):
     problem = {"id": pid, "title": g["title"], "exam": "ENCOR",
                "topics": ["stp", "rstp", "l2"] + g["topics"] + ["generated"],
                "difficulty": g["diff"], "topology": "generated", "target_nodes": g["nodes"], "points": 100,
-               "access": "telnet", "image_family": "iol", "lab": {"links": g["links"]}}
+               "access": "telnet", "image_family": "iol",
+               "lab": {"positions": g.get("positions", {}), "links": g["links"]}}
     with open(os.path.join(pdir, "problem.yml"), "w", encoding="utf-8") as f:
         f.write(f"# 自動生成 (gen_stp.py) seed={seed} mode={mode} world=mst\n")
         yaml.safe_dump(problem, f, sort_keys=False, allow_unicode=True)
@@ -639,7 +644,8 @@ def build(repo, seed, mode, nfaults, forced, level=2):
                "topics": ["stp", "rstp", "l2"] + topics + ["generated"],
                "difficulty": diff, "topology": "generated",
                "target_nodes": DS + AS + [ROGUE], "points": 100, "access": "telnet",
-               "image_family": IMAGE_FAMILY[PFX], "lab": {"links": links}}
+               "image_family": IMAGE_FAMILY[PFX],
+               "lab": {"positions": dict(POS, **{ROGUE: ROGUE_POS[d["rogue_as"]]}), "links": links}}
     with open(os.path.join(pdir, "problem.yml"), "w", encoding="utf-8") as f:
         f.write(f"# 自動生成 (gen_stp.py) seed={seed} mode={mode} level={glevel}\n")
         yaml.safe_dump(problem, f, sort_keys=False, allow_unicode=True)

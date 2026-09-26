@@ -40,6 +40,8 @@ UPLINK = {("SW03", "SW01"): "Ethernet0/0", ("SW03", "SW02"): "Ethernet0/1",
           ("SW04", "SW01"): "Ethernet0/0", ("SW04", "SW02"): "Ethernet0/1"}
 DSLINK = ["Ethernet0/0", "Ethernet0/1"]
 PRIMARY, SECONDARY = 24576, 28672
+# ★CML 上のノード配置(gen_stp と共通・分配を上段/アクセスを下段)。見た目だけで採点に影響しない。
+POS = {"SW01": [-480, -200], "SW02": [-120, -200], "SW03": [-520, 40], "SW04": [-80, 40]}
 AUDIT_CMD = "show running-config | include ^interface Ethernet|spanning-tree|allowed vlan"
 NAMES = ["CAMPUS", "BLDG-A", "HQ-L2", "CORE-EAST", "SITE01"]
 
@@ -472,7 +474,8 @@ def generate(seed, mode, nfaults, forced):
     return {"pid": pid, "d": d, "faults": faults, "note": note, "fix": fix, "initial": initial,
             "grading": grading(d, pid), "task": task_md(d, pid, mode, faults), "diff": diff, "topics": topics,
             "title": title, "nodes": REGION + [LEGACY],
-            "links": [{"a": a, "a_if": ia, "b": b, "b_if": ib} for a, ia, b, ib in LINKS]}
+            "links": [{"a": a, "a_if": ia, "b": b, "b_if": ib} for a, ia, b, ib in LINKS],
+            "positions": dict(POS)}
 
 
 def selftest():
