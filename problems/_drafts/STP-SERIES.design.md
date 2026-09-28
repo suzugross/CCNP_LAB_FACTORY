@@ -214,3 +214,147 @@ day0 描画(`render`)は `ifn(i)` のスロット換算なのでトポロジ非�
 
 ### 8.5 推奨順
 T1(軽い・速筋レーンの穴を埋める) → T2 または T4 のどちらか 1 系 → T5 は PoC 価値が高い(紙面 P2 の Backup 論点の裏どりにもなる)。
+
+### 8.6 T4 = 3 層キャンパス構築問の実装(2026-09-26・完了)
+`gen_stp.py --world 3tier --mode build`(実体 `topologies/gen_stp_3tier.py`・ID は `GEN-STP-<seed>` のまま・難5・IOSvL2 既定)。
+盤面= SW01/SW02 コア・SW03/SW04 分配・SW05/SW06 アクセス・SW07 持ち込み機器、リンク 10 本
+(コア間 1・コア↔分配 4 のフルメッシュ・分配間 1・分配↔アクセス 4)。9 ノード(MGMTSW+EXTC 込み)。SVI はアクセス層のみ。
+
+要件書の骨組み(値は seed・構成は固定):
+- root= コア(VLAN A・C は x、B は y。24576)、予備 root= 反対のコア(28672)。アクセスは既定のまま。
+- **分配は VLAN ごとに片方だけ 36864**。これが ①分配間リンクのブロック側 ②アクセスの上りが通る側 を同時に決める
+  (= 2 段の負荷分散)。既定のままだと両方が MAC 依存になるので、要件に「MAC に依存せず決めること」を明記した。
+- 保護は**方針**で与える(ポートを列挙しない)= 上位層へ向くポートと同一層のスイッチ間リンク= loop guard /
+  下位層へ向くポート= root guard / エッジ= portfast+BPDU ガード(自動復旧なし)。20 ポートを解答者が分類する。
+- パスコスト方式 long で統一・ポート単位の cost / port-priority は使用禁止(監査で降格)。
+- 配点(合計 100)= root 3×3・予備 3×2・分配の 36864 3×2・役割 18×2・不整合 6×1・持ち込み機器 7・
+  監査 core 2×3/dist 2×5/acc 2×3・errdisable recovery 2・SVI 疎通 3×2。44 チェック・収集コマンド 35。
+  `long` は監査(`show running-config | include …`)に畳んで `show spanning-tree summary` の収集を省いた。
+
+決定性(§2)の作り込み: どのセグメントも rpc か **設定した BID の差**で決まり MAC 比較に落ちない。
+selftest は **MAC の並びを逆にした計算と役割が一致すること**を全 seed で検査する(iol/iosv 各 300 seed・600 件 NG=0)。
+
+実機 E2E(seed 94001・IOSvL2×7):
+- 基線(白紙) **16** → 模範解 `stp_ops.py fix` で **100**。
+- 誤解法①「分配の priority を振らず MAC 任せ」= **78**。実測では SW03 が VLAN110/186 でも Desg 側に転び、
+  設計とは逆(= 上りの寄せ先も逆)。3 本の 36864 チェック＋役割 8 本が落ちる。
+- 誤解法②「方針の取り違え= root guard を上りに・loop guard を下りに(SW03 のみ)」= **82**。
+  ★実機知見= root guard を上りに付けると**その上りが全 VLAN で Root Inconsistent**。さらに SW03 の
+  ルートパスコストが上がった結果、**下位のアクセス側 BPDU が優位になり、まだ root guard のままだった
+  アクセス向きポート(Gi1/0)まで VLAN83 で Root Inconsistent に巻き込まれた**(不整合 4 本)。
+  → 方針型の要件は「1 ポートの取り違えが層をまたいで波及する」ので 難5 の題材として機能する。
+- パスコスト長形式の確認= IOSvL2 の Gi は long で **20000**(short 4)。
+
+パック= ジャンル `stp3build`(9 ノード・`--image iosv` 既定・group は `stp-build`)。★9 ノードは **BIG_NODES(9)以上= 大型スロット**扱いで、相方のラボは 4 台以下・追加枠なし(2026-09-26 dry-run で確認)。ただし 2026-09-27 の Personal Plus(40 ノード)化で、この制限は**予算が `BIG_RULE_BUDGET`(20)以下のときだけ**に変わった(別作業)。build ジャンルなので構築スロット(`--build-rate`)経由でしか出ない。既定の `--lab-genres` には入れず、
+`--profile U-A3` か明示指定で出る。`units.yml` の U-A3 に追記済み。
+残(BL-221 の続き)= TS モード(故障カタログを 3 層向けに作り直す)・T1 三角(難2・速筋レーン)・T5 共有セグメント(PoC 先)。
+
+## 9. T4 3 層盤面の TS モード 設計(BL-221 の続き・2026-09-26 準備・**未実装**)
+`gen_stp.py --world 3tier --mode ts`。盤面・採点表・要件書は構築版(§8.6)をそのまま使い、
+**base_state(設計どおり)に故障を 2〜3 個注入**する形(2 層盤面・MST 世界と同じ作り)。難5。
+
+### 9.1 故障カタログ(案・★= 3 層固有で 2 層盤面に無い形)
+| 種別 | 注入 | 指紋(解答者が見るもの) |
+|---|---|---|
+| `t_core_prio_swap` | コアの priority を VLAN 間で入れ違いに | root が設計と違う VLAN がある |
+| `t_dist_weak_missing` | 分配の 36864 を 1〜2 VLAN ぶん削除 | 分配間のブロック側とアクセスの上りが設計と逆(MAC 任せ)。初出題時の誤解法と同じ形= **78 点相当** |
+| `t_dist_weak_wrong_vlan` | 36864 を別の VLAN に付け替え | 一部 VLAN だけ上りが逆 |
+| ★`t_rootguard_up` | root guard を分配の上りに付ける(loop guard と入れ替え) | **上りが全 VLAN で Root Inconsistent**＋コスト増の連鎖で下向きポートまで巻き込む(§8.6 実測) |
+| ★`t_loopguard_down` | 下向きを loop guard にする(root guard 無し) | **STP の状態は正常**・監査だけ落ちる= 要件違反型 |
+| ★`t_acc_priority` | アクセスに低い priority を振る | 分配の root guard が発動しアクセスの上りが root-inconsistent = その VLAN が全断 |
+| `t_cost_bump_dist` | 分配の上りに VLAN 単位 cost | その VLAN が他コア経由の遠回りになる(監査の cost 禁止にも触れる) |
+| `t_allowed_hole` | 分配↔アクセスの allowed から 1 VLAN 抜く | STP 正常のまま 1 VLAN だけ不通(層が 3 つなので切り分けが増える) |
+| `t_mode_pvst` | 1 台だけ起動時から `mode pvst` | 境界で相互運用に落ちる(★実行中の移行は不安定なので day0 固定に限る・§6.9) |
+| `t_bpduguard_uplink` | アクセスの上りに bpduguard | 上り 1 本が起動以来使われない(err-disabled) |
+| `t_loopguard_trip` | コア間か分配間の片側に bpdufilter | loop-inconsistent(2 層で実証済みの手法・コア間は root を含むので★要 PoC) |
+| `t_pathcost_short` | 1 台だけ short 方式 | 2 ホップの比較が壊れる(★long/short 混在の効き方は要 PoC) |
+
+排他(同時に選ばない): {`t_rootguard_up`, `t_loopguard_down`, `t_loopguard_trip`}(同じポートの guard を奪う)／
+{`t_dist_weak_missing`, `t_dist_weak_wrong_vlan`}／{`t_core_prio_swap`, `t_acc_priority`}(どちらも root 位置に効く)。
+
+### 9.2 症状文(不親切に・keep_ask 方針)
+「特定 VLAN の通信が分配層で遠回りしている」／「アクセスの上り 1 本が起動以来使われていない」／
+「点検で不整合状態のポートが報告された」／「特定 VLAN だけアクセス間で疎通しない(STP の状態は正常に見える)」。
+故障種ごとに 1 文を対応させ、同文は重複排除して並べる(2 層・MST と同じ `SYMPTOM` 表)。
+
+### 9.3 採点・難易度
+構築版の 44 チェックをそのまま流用(root/予備/36864/役割/不整合/持ち込み機器/監査/errdisable/疎通)。配点も同じ。
+難5 固定・故障は 2〜3(台数が多く収集 35 コマンドあるため 4 以上にはしない)。パックのジャンルは `stp3ts`(group `stp-ts`・9 ノード)。
+
+### 9.4 着手時の段取り
+1. **PoC(実機)を先に**: ①`t_loopguard_trip` をコア間で(root を含む区間での loop-inconsistent) ②`t_pathcost_short` の混在挙動
+   ③`t_acc_priority` で root guard が確実に発動する priority 値。→ `poc/stp/README.md` 第 6 回として記録。
+2. 注入関数 + `SYMPTOM` + 排他表 → selftest(故障が config に現れる・期待役割が壊れる・採点表が組める)。
+3. 実機 E2E= 全故障 broken→`stp_ops.py fix`→100、加えて誤解法 1 本の降格確認。
+4. CATALOG 追記・`units.yml` と `gen_pack` に `stp3ts` 追加・CURRICULUM §5 に 1 行。
+
+## 10. 保護機構の「記述方式」を要件軸にする(BL-222・2026-09-26 準備・**未実装**)
+初出題(GEN-STP-9444)のレビューで出た穴= 要件書は「実現手段は問わない」なのに、監査は
+**インタフェース配下の `spanning-tree guard loop` 行**を要求するため、グローバル既定で同じ挙動を作った解答が
+実機の状態が等価でも減点される。対象コマンドは 3 つ:
+
+| コマンド | 効く範囲 | 3 層盤面での使い道 |
+|---|---|---|
+| `spanning-tree portfast edge default` | **access ポートだけ**(trunk には効かない) | アクセスのエッジ 4 本ぶんを 1 行で(上りの trunk は無影響なので安全) |
+| `spanning-tree portfast edge bpduguard default` | portfast が有効なポート | 同じくエッジ 4 本ぶんの BPDU ガード |
+| `spanning-tree loopguard default` | **全ポート**(portfast ポートは対象外) | 上り・同層の loop guard を 1 行で。下向きは IF で root guard を明示して上書き(★排他の優先関係は要 PoC) |
+
+### 10.1 採点を「実効状態」に寄せる(推奨)
+方式に依存しない監査へ移す:
+- 既定の有効/無効= `show spanning-tree summary` の該当行(`Portfast Default` / `PortFast BPDU Guard Default` / `Loopguard Default`)。
+- ポートごとの実効= `show spanning-tree detail` を 1 ノード 1 回収集し、ポートのブロック内に
+  `Loop guard is enabled` / `Root guard is enabled` 相当の行があるかで判定(★出力書式は要 PoC。
+  detail に出なければ `show spanning-tree interface <IF> detail` に落とすが、収集が 20 本/台 増えるので代表ポートに絞る)。
+- これなら **method=port / global のどちらでも同じチェックで通る**。既存の port 方式の E2E を再走して等価を確認する。
+
+### 10.2 要件軸 `--guard-style` を足す(BL-220 の要件世界軸と同じ機構)
+- `port`(現行)= 「ポート単位で設定する。グローバル既定は使わない」と要件に明記 → 現行の監査でよい。
+- `global`= 「可能な範囲はグローバル既定で与え、例外だけポート単位で書く」→ 実効監査＋ summary の既定行を要求。
+- `any`= 「手段は問わない」と書き、採点は実効のみ(10.1 の監査だけ)。
+seed で振れば「同じ盤面でも要件書の締め方が変わる」= BL-220 の狙いにそのまま乗る。
+
+### 10.3 注意
+- `loopguard default` は**全ポート**に効くため、エッジ(portfast)を除く 20 ポートが対象になる。下向きに root guard を
+  明示しないと「下りも loop guard」になり要件違反 → `global` 世界でも下向きの明示は必須(そこが解答の山になる)。
+- 2 層盤面(`gen_stp.py` の L2/L4)にも同じ穴がある。10.1 の監査に寄せる時は 3 層と一緒に直すか、
+  3 層で実証してから移植するかを決める(移植時は 2 層の E2E 全数を再走)。
+
+### 9.5 実装記録(2026-09-27・§9 の設計から変えた点を含む)
+`gen_stp.py --world 3tier --mode ts`(実体 `gen_stp_3tier.py`)。故障 12 種・排他 4 組・`DAY0_ONLY={t_mode_pvst}`。
+fix.json に **`break`**(故障を稼働中の盤面へ入れる conf)を持たせ、`stp_ops.py break <ID>` で注入できるようにした
+(同じ seed で `--fault` を変えて再生成→注入→採点→fix→採点を 1 台の盤面で回すため)。
+PoC 第6回(poc/stp/README.md)の結果で決めたこと:
+- `t_loopguard_trip` はコア間(PoC T1= 両コアが相手の VLAN で孤立)。`t_acc_priority` は 4096/20480/28672 を抽選し、
+  28672 のときは症状文を「状態に異常は無いが設計書に無い設定」に変える(PoC T3)。
+- `t_cost_bump_dist` の値は **long の 1 リンク × 3**(iosv 60000 / iol 6000000)= 予備コア経由(2 本)の方が安くなる値。
+  2 層盤面の 250〜500 は short 前提なので流用しない。
+実機 E2E(`GEN-STP-94002`・port 方式・1 台の盤面へ break→fix で 4 バッチ):
+- `t_core_prio_swap`+`t_dist_weak_missing`+`t_rootguard_up` = **61 → 100**
+- `t_acc_priority`(20480)+`t_cost_bump_dist`+`t_allowed_hole`+`t_bpduguard_uplink` = **68 → 100**
+  (分配 2 台の不整合と VLAN32 の SVI 間疎通断・err-disabled の上りは実効チェックで落ちる)
+- `t_loopguard_down`+`t_dist_weak_wrong_vlan`+`t_pathcost_short` = **75 → 100**(この組では予備コアにも不整合が出た= 組合せの波及)
+- `t_loopguard_trip` = **79 → 100**(両コアの不整合・分配の役割 6 本)
+- day0 の検証= 新規に立てた `GEN-STP-94003`(global 方式・`t_mode_pvst`+`t_loopguard_down`)= **62 → 100**。
+  ★`t_mode_pvst` を分配に当てると、**隣接 5 台すべての役割チェックが落ちる**(相手側ポートが `Peer(STP)`)= 1 故障で
+  36 点を奪う最大の故障。指紋は明確(Peer(STP) が 1 台を指す)なので残すが、`--faults` の組合せでは他と並べた時の
+  点の偏りに注意。
+
+### 10.4 実装記録(BL-222・2026-09-27)
+- 記述方式 `style` を `design()` の**最後に**抽選(追加前と同じ seed で他の値が変わらない・指定時も 1 回引いて捨てる)。
+  `--guard-style {port,global,any}` で固定可。**global は IOSvL2 のみ**(ioll2 は `portfast edge` 構文が無い)→ iol で抽選が
+  global に当たったら any に落とす。要件書は port/global のときだけ「保護機構の設定方法」行を足す(any は「実現手段は問わない」)。
+- 採点を**実効状態**へ移した: `show spanning-tree vlan <A> detail` の各ポート ブロック内の
+  `Loop guard is enabled( by default)? on the port` / `Root guard is enabled on the port`(PoC G2)。
+  エッジの portfast/BPDU ガードは running-config で「IF の行 か `spanning-tree portfast (edge )?(bpduguard )?default`」のどちらか。
+  記述方式の指定は running-config のグローバル行で見る(port= 3 種とも無いこと / global= loopguard default 全台・
+  portfast/bpduguard default をアクセスに)。配点= 実効 12(core 2・dist 3・acc 1)/ 監査 10(core 1・dist 2・acc 2)。
+- 模範解(global)= 全台 `loopguard default` + 下向き 8 本だけ `guard root` + アクセスに `portfast edge default` と
+  `portfast edge bpduguard default`。持ち込み機器のポートは念のため上げ直す(下の実測では不要だった)。
+- 実機 E2E(`GEN-STP-94002`・同じ設定のまま採点表だけ方式を差し替え):
+  port 方式の設定 × any 世界 **100**／global 方式の設定 × global 世界 **100**・× any 世界 **100**・× port 世界 **90**
+  (初回 96= 下の不具合。修正後に GEN-STP-94003 で実測 90)／port 方式の設定 × global 世界 **90**。
+- ★E2E で見つけた不具合= port 世界の「既定値不使用」判定が `spanning-tree loopguard default` を取りこぼしていた
+  (正規表現で `loopguard` の後の空白が抜けていた)→ 修正し、3 種＋旧構文の既定行すべてに当たることを selftest に追加。
+- ★実測= **既定の BPDU ガードは bounce 無しでも発動した**(持ち込み機器のポートが up のまま `portfast edge default` と
+  `portfast edge bpduguard default` を入れたら `err-disabled bpduguard`)。ただし直前まで IF に `spanning-tree portfast` が
+  あった状態からの移行なので、「edge を一度も持たなかったポート」でも同じかは未確認。模範解の bounce は残す。

@@ -10,7 +10,8 @@ U4 1 問の中でパスコスト方式をそろえる(混在は出さない)。
 kinds:
   瞬発(事実ベース): s_basic(802.1D 基礎)/ s_rstp / s_modes(PVST+・Rapid PVST+・MST の知識)
   思考: s_elect(盤面を抽選→ stp_model で選出)/ s_read(show の読解)/ s_mst(MST リージョン設定の比較)/
-        s_tuning(root primary/secondary の結果・経路を寄せる最小変更)/ s_guard(要件→保護機能)/ s_ts(症状→原因・是正)
+        s_tuning(root primary/secondary の結果・経路を寄せる最小変更)/ s_guard(要件→保護機能)/ s_ts(症状→原因・是正)/
+        s_rolemap(ラボと同じ盤面= 2 層 12 ポート・3 層 20 ポートの**全ポートの役割を記入**・BL-226・2026-09-27)
 
 公開 API は gen_paper_svc.py と同じ(KINDS/kind_forms/draw/build_choices_*/build_match/question_body/answer_body/pick_count/selftest)。
 """
@@ -22,9 +23,9 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import stp_model as sm  # noqa: E402
 
-KINDS = ["s_basic", "s_rstp", "s_modes", "s_elect", "s_read", "s_mst", "s_tuning", "s_guard", "s_ts"]
+KINDS = ["s_basic", "s_rstp", "s_modes", "s_elect", "s_read", "s_mst", "s_tuning", "s_guard", "s_ts", "s_rolemap"]
 SPEED_KINDS = ["s_basic", "s_rstp", "s_modes"]
-THINK_KINDS = ["s_elect", "s_read", "s_mst", "s_tuning", "s_guard", "s_ts"]
+THINK_KINDS = ["s_elect", "s_read", "s_mst", "s_tuning", "s_guard", "s_ts", "s_rolemap"]
 WORLDS = ["-"]
 KIND_WORLDS = {k: ["-"] for k in KINDS}
 FORMS = {
@@ -37,16 +38,18 @@ FORMS = {
     "s_tuning": {"select", "select2", "allthat", "fix"},
     "s_guard": {"select", "select2", "allthat"},
     "s_ts": {"cause", "fix", "read"},
+    "s_rolemap": {"match"},          # 全ポート記入(穴埋め形の UI= 表のセルにプルダウン・全空欄正解で 1 問)
 }
 SPEED_FORMS = {"s_basic": ["select", "select2", "allthat", "match"],
                "s_rstp": ["select", "select2", "allthat", "match"],
                "s_modes": ["select", "select2", "allthat", "match"]}
 DIFF = {"s_basic": 2, "s_rstp": 2, "s_modes": 2, "s_elect": 4, "s_read": 3, "s_mst": 3,
-        "s_tuning": 4, "s_guard": 3, "s_ts": 4}
+        "s_tuning": 4, "s_guard": 3, "s_ts": 4, "s_rolemap": 4}
 TITLES = {
     "s_basic": "スパニング ツリーの基本動作", "s_rstp": "Rapid Spanning Tree Protocol", "s_modes": "スパニング ツリーのモード",
     "s_elect": "ルート ブリッジとポートの役割", "s_read": "スパニング ツリーの状態の確認", "s_mst": "MST リージョンの構成",
     "s_tuning": "スパニング ツリーのチューニング", "s_guard": "スパニング ツリーの保護機能", "s_ts": "スパニング ツリーのトラブルシューティング",
+    "s_rolemap": "全ポートの役割",
 }
 LET = "ABCDEFG"
 
@@ -297,6 +300,7 @@ CORE = {
     "s_rstp": "RSTP(802.1w)= 状態 3 つ(ディスカーディング/ラーニング/フォワーディング)・役割 4 つ(ルート/指定/代替/バックアップ)・各スイッチが hello ごとに BPDU・p2p とエッジで提案/合意による高速遷移。",
     "s_modes": "PVST+(VLAN ごとに 802.1D)・Rapid PVST+(VLAN ごとに RSTP)・MST(802.1s・VLAN を束ねたインスタンス・リージョン= 名前/リビジョン/対応表の一致)。",
     "s_elect": "選出順= ルート ブリッジ(最小 BID)→ ルート ポート(最小ルート パス コスト→送信元 BID→送信元ポート ID)→ 各リンクの指定ポート(ルート パス コスト→BID→ポート ID が小さい端)→ 残りが代替(ブロッキング)。",
+    "s_rolemap": "選出順= ルート ブリッジ(最小 BID)→ 各スイッチのルート ポート(最小ルート パス コスト→送信元 BID→送信元ポート ID)→ リンクごとに 1 つの指定ポート(ルート パス コスト→BID→ポート ID が小さい端)→ ルート ポートにも指定ポートにもならなかったポートが代替。共有セグメント(ハブ)が無い盤面なのでバックアップ ポートは生じない。スイッチ間リンクの本数 − (スイッチ数 − 1) が代替ポートの数になる。",
     "s_read": "`show spanning-tree vlan N`: Root ID= ルート ブリッジ(Cost/Port は自分のルート パス コストとルート ポート・ルートなら This bridge is the root)。Bridge ID= 自分(priority 表示= 設定値+sys-id-ext)。protocol rstp= Rapid PVST+・ieee= PVST+。",
     "s_mst": "MST リージョン= リージョン名・リビジョン番号・VLAN とインスタンスの対応の 3 つがすべて一致するスイッチの集まり。1 つでも違えば別リージョンになり、間のポートは境界ポート(`Bound`)になる。未割り当ての VLAN はインスタンス 0(IST)。",
     "s_tuning": "root primary= 24576 でルートになれるなら 24576、なれなければ現ルートより 4096 小さい値(1 未満が必要なら失敗)。一度だけ計算して数値を書き込む。secondary= 常に 28672。port-priority は送信元(上流)側で効き、cost は自分のルート ポート選択に効く。",
@@ -456,6 +460,9 @@ def draw(rnd, kind, world=None, form=None):
         if kind == "s_read":
             d["who"] = rnd.choice([s for s in b["names"]])
             d["proto"] = "rstp" if rnd.random() < 0.7 else "ieee"
+    if kind == "s_rolemap":
+        b = _draw_rolemap(rnd)
+        d["b"], d["t"] = b, _solve(b)
     if kind == "s_mst":
         _draw_mst(d, rnd)
     if kind == "s_tuning":
@@ -604,6 +611,8 @@ def build_choices_fix(d, rnd):
 
 def build_match(d, rnd):
     k = d["kind"]
+    if k == "s_rolemap":
+        return _rolemap_match(d)
     if k not in MATCH:
         raise ValueError("match 無し")
     picks = rnd.sample(MATCH[k], 4)
@@ -658,6 +667,266 @@ def _why_port(d, s, ifn):
         return f"{s} はルート ブリッジで、全ポートが指定ポート。"
     peer = next((n, ni) for ifc, n, ni, sp in t.ports(s) if ifc["name"] == ifn)
     return f"このリンクの対向は {peer[0]} の {peer[1]['name']}({_role_ja(t.role[(peer[0], peer[1]['name'])])})。{s} のルート パス コストは {t.rpc[s]}。"
+
+
+# ==========================================================================
+# s_rolemap: ラボと同じ盤面で全ポートの役割を記入(BL-226・2026-09-27)
+#   盤面の配線は gen_stp.py(2 層)/ gen_stp_3tier.py(3 層)の LINKS をそのまま使う(ラボと同じ図)。
+#   priority・MAC・VLAN 単位 cost・(2 層の並行リンクだけ)port-priority を毎回ランダムにし、正解は stp_model。
+#   解答は表のセルの［①］〜［⑳］(穴埋め形の UI・BL-198)。**全空欄が正しいときだけ正解**(一部だけ当てる勘を封じる)。
+# ==========================================================================
+RM_CHOICES = [("A", "ルート ポート"), ("B", "指定ポート"), ("C", "代替ポート"), ("D", "バックアップ ポート")]
+RM_LET = {"Root": "A", "Desg": "B", "Altn": "C"}
+RM_FREE_PRIOS = [4096, 8192, 24576, 28672, 32768, 32768, 32768, 36864]
+CIRC = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+
+
+def _rm_spec(board):
+    if board == "3tier":
+        import gen_stp_3tier as g3
+        return {"links": g3.LINKS, "layers": [g3.CORE, g3.DIST, g3.ACC], "layer_names": ["コア", "分配", "アクセス"],
+                "label": g3.LABEL, "pools": [[24576, 28672, 32768], [28672, 32768, 36864], [32768, 32768, 36864]]}
+    import gen_stp as g2
+    return {"links": g2.LINKS, "layers": [g2.DS, g2.AS], "layer_names": ["分配", "アクセス"],
+            "label": {"SW01": "分配 DS1", "SW02": "分配 DS2", "SW03": "アクセス AS1", "SW04": "アクセス AS2"},
+            "pools": [[24576, 28672, 32768], [32768, 32768, 36864]]}
+
+
+def _gi(i):
+    """IOSvL2 の IF 名とポート番号(Gi0/0=1 … Gi1/0=5)= ラボの盤面と同じ。"""
+    return {"name": f"Gi{i // 4}/{i % 4}", "num": i + 1}
+
+
+# 盤面の 3 系統(2026-09-27 ユーザ要望「破綻のない範囲でバリエーション」):
+#   ① lab= ラボの配線そのまま(50%)/ ② mut= ラボの配線を 1〜2 か所崩す(30%)/ ③ shape= 階層でない形(20%)。
+#   どれも _rm_valid の 5 条件(連結・ポート 20 以下・代替 2 以上・BID かポート ID で決まる比較が 1 つ以上・
+#   情報はすべて表示)を満たしたものだけを使う。①はラボと同じポート割当、②③はポート割当もずらす。
+RM_MUT = {
+    "3tier": {"no_dsdl": ("del", ("SW03", 2, "SW04", 2)),                 # 分配間リンク無し
+              "acc_link": ("add", ("SW05", 2, "SW06", 2)),                # アクセス間リンク
+              "core_par": ("add", ("SW01", 3, "SW02", 3)),                # コア間を並行 2 本
+              "single_home": ("del1", [("SW03", 3, "SW05", 0), ("SW04", 3, "SW05", 1),
+                                       ("SW03", 4, "SW06", 0), ("SW04", 4, "SW06", 1)]),   # アクセスを片側収容
+              "cut_core_dist": ("del1", [("SW01", 1, "SW03", 0), ("SW01", 2, "SW04", 0),
+                                         ("SW02", 1, "SW03", 1), ("SW02", 2, "SW04", 1)])},
+    "2tier": {"one_dsdl": ("del", ("SW01", 1, "SW02", 1)),                # 分配間を 1 本に
+              "acc_link": ("add", ("SW03", 2, "SW04", 2)),
+              "single_home": ("del1", [("SW01", 2, "SW03", 0), ("SW02", 2, "SW03", 1),
+                                       ("SW01", 3, "SW04", 0), ("SW02", 3, "SW04", 1)])},
+}
+RM_SHAPES = ["ringchord", "mesh4", "ladder", "bowtie", "tridual", "tripar"]
+
+
+def _shape_edges(rnd, kind):
+    """階層でない形の (台数, 辺)。どれも 辺数 ≥ 台数 + 1(代替ポート 2 以上)。"""
+    if kind == "ringchord":
+        n = rnd.choice([4, 5, 6])
+        e = [(i, (i + 1) % n) for i in range(n)]
+        i = rnd.randrange(n)
+        j = (i + rnd.choice([k for k in range(2, n - 1)])) % n
+        return n, e + [(i, j)]
+    if kind == "mesh4":
+        return 4, [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
+    if kind == "ladder":
+        return 6, [(0, 1), (1, 2), (3, 4), (4, 5), (0, 3), (1, 4), (2, 5)]
+    if kind == "bowtie":
+        return 5, [(0, 1), (1, 2), (2, 0), (2, 3), (3, 4), (4, 2)]
+    if kind == "tridual":
+        return 4, [(0, 1), (1, 2), (2, 0), (3, 0), (3, 1)]
+    if kind == "tripar":
+        return 3, [(0, 1), (1, 2), (2, 0), (1, 2)]            # 並行 2 本= ポート ID が決め手になり得る
+    raise ValueError(kind)
+
+
+def _rm_family(rnd):
+    r = rnd.random()
+    return "lab" if r < 0.5 else "mut" if r < 0.8 else "shape"
+
+
+def _draw_rolemap(rnd, board=None, family=None):
+    for _ in range(200):
+        b = _draw_rolemap_once(rnd, board, family)
+        try:
+            t = _solve(b)
+        except ValueError:
+            continue
+        if _rm_valid(b, t) is None:
+            return b
+    raise ValueError("条件を満たす盤面が作れない")
+
+
+def _draw_rolemap_once(rnd, board=None, family=None):
+    family = family or _rm_family(rnd)
+    used = set()
+    method = rnd.choice(["long", "short"])
+    if family == "shape":
+        kind = rnd.choice(RM_SHAPES)
+        n, edges = _shape_edges(rnd, kind)
+        names = [f"SW{i + 1:02d}" for i in range(n)]
+        deg = {x: 0 for x in names}
+        for a, c in edges:
+            deg[names[a]] += 1
+            deg[names[c]] += 1
+        # ポート割当もずらす(Gi0/0 が常に同じ向きにならない・空き番号も出る)
+        pool = {x: rnd.sample(range(deg[x] + rnd.randint(0, 2)), deg[x]) for x in names}
+        raw = [(names[a], pool[names[a]].pop(), names[c], pool[names[c]].pop()) for a, c in edges]
+        sw = {x: {"prio": rnd.choice(RM_FREE_PRIOS), "mac": _mac(rnd, used)} for x in names}
+        spec = {"label": None, "layers": None, "layer_names": None}
+        shape = kind
+    else:
+        board = board or rnd.choice(["3tier", "3tier", "2tier"])
+        spec = _rm_spec(board)
+        names = [x for layer in spec["layers"] for x in layer]
+        raw = list(spec["links"])
+        shape = board
+        if family == "mut":
+            ops = rnd.sample(sorted(RM_MUT[board]), rnd.choice([1, 2]))
+            for op in ops:
+                how, arg = RM_MUT[board][op]
+                if how == "del":
+                    raw.remove(arg)
+                elif how == "add":
+                    raw.append(arg)
+                else:
+                    raw.remove(rnd.choice([x for x in arg if x in raw]))
+            shape = f"{board}-{'+'.join(ops)}"
+        lab_like = rnd.random() < 0.4          # 上位層ほど優位(設計に近い)/ それ以外は全く自由
+        sw = {}
+        for li, layer in enumerate(spec["layers"]):
+            for x in layer:
+                pr = rnd.choice(spec["pools"][li]) if lab_like else rnd.choice(RM_FREE_PRIOS)
+                sw[x] = {"prio": pr, "mac": _mac(rnd, used)}
+    links = [(a, _gi(ia), c, _gi(ic), "1G") for a, ia, c, ic in raw]
+    cost_ovr, port_prio = {}, {}
+    if rnd.random() < 0.4:
+        a, ia, c, ic, _sp = rnd.choice(links)
+        x, ifc = rnd.choice([(a, ia), (c, ic)])
+        cost_ovr[(x, ifc["name"])] = rnd.choice([30000, 50000, 100000] if method == "long" else [6, 10, 19])
+    pairs = {}
+    for a, ia, c, ic, _sp in links:
+        pairs.setdefault(frozenset((a, c)), []).append((a, ia, c, ic))
+    par = [v for v in pairs.values() if len(v) >= 2]
+    if par and rnd.random() < 0.5:
+        # 並行リンクだけは送信元ポート ID が決め手になり得る= port-priority が効く
+        a, ia, c, ic = rnd.choice(rnd.choice(par))
+        x, ifc = rnd.choice([(a, ia), (c, ic)])
+        port_prio[(x, ifc["name"])] = rnd.choice([16, 32, 64, 96])
+    return {"shape": shape, "family": family, "names": names, "sw": sw, "links": links, "method": method,
+            "port_prio": port_prio, "cost_ovr": cost_ovr, "vlan": rnd.choice([10, 20, 30, 100, 110, 200]),
+            "label": spec["label"], "layers": spec["layers"], "layer_names": spec["layer_names"],
+            "dir": "TD" if family != "shape" else rnd.choice(["TD", "LR"])}
+
+
+def _rm_tiebreaks(t):
+    """コストの差ではなく BID かポート ID の比較で決まった判定の数(ルート ポートの選択と各リンクの指定)。"""
+    n = 0
+    for x in t.sw:
+        if x == t.root:
+            continue
+        c = sorted((t.rpc[m] + t.pcost(x, ifc, sp), t.bid(m), t.pid(m, mif)) for ifc, m, mif, sp in t.ports(x))
+        if len(c) > 1 and c[0][0] == c[1][0]:
+            n += 1
+    for a, ia, c, ic, _sp in t.links:
+        if t.rpc[a] == t.rpc[c]:
+            n += 1
+    return n
+
+
+def _rm_valid(b, t):
+    """破綻の無い盤面の条件。満たせば None、満たさなければ理由。"""
+    ports = 2 * len(b["links"])
+    if ports > 20:
+        return f"ポート {ports} > 20"
+    alt = sum(1 for r in t.role.values() if r == "Altn")
+    if alt < 2 or alt != len(b["links"]) - (len(b["names"]) - 1):
+        return f"代替 {alt}"
+    if _rm_tiebreaks(t) < 1:
+        return "コストの差だけで決まる"
+    for x in b["names"]:
+        ifs = [ifc["name"] for ifc, _m, _mi, _sp in t.ports(x)]
+        if len(ifs) != len(set(ifs)):
+            return f"{x} のポート番号の重複"
+    return None
+
+
+def _rm_ports(b):
+    """記入対象のポート(スイッチ順・ポート番号順)= [(sw, ifc, 対向 sw, 対向 ifc)]。"""
+    out = []
+    for x in b["names"]:
+        for a, ia, bb, ib, _sp in b["links"]:
+            if a == x:
+                out.append((x, ia, bb, ib))
+            elif bb == x:
+                out.append((x, ib, a, ia))
+    return sorted(out, key=lambda r: (b["names"].index(r[0]), r[1]["num"]))
+
+
+def rolemap_board_md(b):
+    L = ["```mermaid", f"graph {b.get('dir', 'TD')}"]
+    if b["layers"]:
+        for li, layer in enumerate(b["layers"]):
+            L.append(f'  subgraph L{li}["{b["layer_names"][li]}"]')
+            L += [f'    {_mm(x)}["{x}"]' for x in layer]
+            L.append("  end")
+    else:
+        L += [f'  {_mm(x)}["{x}"]' for x in b["names"]]
+    for a, ia, bb, ib, _sp in b["links"]:
+        L.append(f'  {_mm(a)} ---|"{ia["name"]} — {ib["name"]}"| {_mm(bb)}')
+    L.append("```")
+    if b["label"]:
+        L += ["", f"| スイッチ | 役割 | ブリッジ プライオリティ(VLAN {b['vlan']}) | MAC アドレス |", "|---|---|---|---|"]
+        for x in b["names"]:
+            L.append(f"| {x} | {b['label'][x]} | {b['sw'][x]['prio']} | {b['sw'][x]['mac']} |")
+    else:
+        L += ["", f"| スイッチ | ブリッジ プライオリティ(VLAN {b['vlan']}) | MAC アドレス |", "|---|---|---|"]
+        for x in b["names"]:
+            L.append(f"| {x} | {b['sw'][x]['prio']} | {b['sw'][x]['mac']} |")
+    extra = []
+    for (x, ifn), v in sorted(b["cost_ovr"].items()):
+        extra.append(f"{x}(config)# interface {ifn}\n{x}(config-if)# spanning-tree vlan {b['vlan']} cost {v}")
+    for (x, ifn), v in sorted(b["port_prio"].items()):
+        extra.append(f"{x}(config)# interface {ifn}\n{x}(config-if)# spanning-tree vlan {b['vlan']} port-priority {v}")
+    if extra:
+        L += ["", "既定値から変更している設定は次のとおりです。", "", "```", "\n".join(extra), "```"]
+    L += ["", f"全スイッチで Rapid PVST+ を使用し、パス コストは{'ロング' if b['method'] == 'long' else 'ショート'}方式にそろえています。"
+          f"スイッチ間のリンクはすべて 1 Gbps・全二重のトランクで、VLAN {b['vlan']} を通します。"
+          "ポート ID はポート プライオリティ(既定 128)とポート番号で構成します。記載のない設定は既定値です。"]
+    return "\n".join(L)
+
+
+def rolemap_table_md(b):
+    L = [f"### ポートの一覧(VLAN {b['vlan']})", "", "| スイッチ | ポート | ポート番号 | 接続先 | 役割 |", "|---|---|---|---|---|"]
+    for i, (x, ifc, n, nifc) in enumerate(_rm_ports(b)):
+        L.append(f"| {x} | {ifc['name']} | {ifc['num']} | {n} {nifc['name']} | ［{CIRC[i]}］ |")
+    return "\n".join(L)
+
+
+def _rm_reason(b, t, x, ifc, n, nifc):
+    """1 ポートの役割の決め手(解説の表に 1 行)。"""
+    r = t.role[(x, ifc["name"])]
+    if x == t.root:
+        return "ルート ブリッジのポートはすべて指定ポート"
+    if r == "Root":
+        return f"{x} からルート ブリッジへの最良の経路(ルート パス コスト {t.rpc[x]})"
+    me = (t.rpc[x], t.bid(x), t.pid(x, ifc))
+    you = (t.rpc[n], t.bid(n), t.pid(n, nifc))
+    step = ("ルート パス コスト" if me[0] != you[0] else "ブリッジ ID" if me[1] != you[1] else "ポート ID")
+    detail = {"ルート パス コスト": f"{me[0]} 対 {you[0]}",
+              "ブリッジ ID": f"{b['sw'][x]['prio']}・{b['sw'][x]['mac']} 対 {b['sw'][n]['prio']}・{b['sw'][n]['mac']}",
+              "ポート ID": f"{me[2][0]}.{me[2][1]} 対 {you[2][0]}.{you[2][1]}"}[step]
+    if r == "Desg":
+        return f"このリンクで {n} より{step} が小さい({detail})"
+    return f"このリンクの指定ポートは {n} {nifc['name']}({step} で負け: {detail})で、ルート ポートでもない"
+
+
+def _rolemap_match(d):
+    b, t = d["b"], d["t"]
+    rows = _rm_ports(b)
+    if len(rows) > len(CIRC):
+        raise ValueError("空欄が 20 を超える")
+    terms = [(CIRC[i], f"{x} {ifc['name']}") for i, (x, ifc, _n, _ni) in enumerate(rows)]
+    ans = {CIRC[i]: RM_LET[t.role[(x, ifc["name"])]] for i, (x, ifc, _n, _ni) in enumerate(rows)}
+    return terms, list(RM_CHOICES), ans
 
 
 def _simple_paths(adj, a, bb, limit=12):
@@ -1232,6 +1501,12 @@ def _suffix(form, n=None):
 
 def question_body(d, choices, form):
     k = d["kind"]
+    if k == "s_rolemap":
+        _terms, ch, _ = choices
+        n = len(_terms)
+        ask = (f"VLAN {d['b']['vlan']} について、次の表の各ポートの役割として正しいものを選択肢から選んでください。"
+               f"**①〜{CIRC[n - 1]} のすべてを正しく選んだ場合にのみ得点**になります。")
+        return rolemap_board_md(d["b"]), ask, "\n\n".join(f"{a}. {t}" for a, t in ch), rolemap_table_md(d["b"])
     if form == "match":
         terms, ch, _ = choices
         head = {"s_basic": "ポートの状態", "s_rstp": "ポートの役割", "s_modes": "方式"}[k]
@@ -1380,6 +1655,20 @@ def _note(d, form):
 
 
 def answer_body(d, choices, form):
+    if d["kind"] == "s_rolemap":
+        _terms, ch, ans = choices
+        b, t = d["b"], d["t"]
+        name = dict(ch)
+        rows = ["| 空欄 | ポート | 役割 | 決め手 |", "|---|---|---|---|"]
+        for i, (x, ifc, n, nifc) in enumerate(_rm_ports(b)):
+            k = CIRC[i]
+            rows.append(f"| {k} | {x} {ifc['name']} | {ans[k]}. {name[ans[k]]} | {_rm_reason(b, t, x, ifc, n, nifc)} |")
+        n_alt = sum(1 for v in ans.values() if v == "C")
+        return "\n".join(["## 正解", "", "**" + "、".join(f"{k}－{v}" for k, v in ans.items()) + "**", "",
+                          "## 解説", "", "\n".join(rows), "",
+                          f"- 代替ポートは {n_alt} 個= スイッチ間リンク {len(b['links'])} 本 − (スイッチ {len(b['names'])} 台 − 1)。"
+                          "バックアップ ポート(D)は、同じスイッチの 2 つのポートが同じセグメントにつながる(ハブ経由)ときにしか生じない。",
+                          "", explain_board(b, t), "", CORE["s_rolemap"]])
     if form == "match":
         terms, ch, ans = choices
         rows = "\n".join(f"- {t}: {desc}" for t, desc in d.get("_match") or [])
@@ -1427,7 +1716,22 @@ def selftest(seeds=40):
                         except ValueError:
                             continue
                     assert d is not None, "不成立"
-                    if form == "match":
+                    if kind == "s_rolemap":
+                        terms, ch, ans = choices
+                        b, t = d["b"], d["t"]
+                        assert len(ans) == 2 * len(b["links"]) <= 20, len(ans)
+                        assert _rm_valid(b, t) is None, _rm_valid(b, t)
+                        assert set(ans.values()) <= {"A", "B", "C"}, "バックアップ(D)が正解に出た"
+                        assert list(ans.values()).count("A") == len(b["names"]) - 1, "ルート ポート数"
+                        assert list(ans.values()).count("C") == len(b["links"]) - (len(b["names"]) - 1), "代替ポート数"
+                        before, ask, ch_md, tbl = question_body(d, choices, form)
+                        assert len(re.findall(r"［[①-⑳]］", tbl)) == len(ans), "空欄の数"
+                        body = answer_body(d, choices, form)
+                        key = re.search(r"^\*\*(.+)\*\*$", body, re.M).group(1)
+                        assert len(re.findall(r"[①-⑳]－[A-D]", key)) == len(ans), "正解行の形"
+                        assert "対応" not in "\n".join(l for l in (before + ask + tbl).split("\n") if l.startswith("#")), \
+                            "見出しに「対応」= 組合せ形の UI に化ける"
+                    elif form == "match":
                         terms, ch, ans = choices
                         assert len(ans) == 4 and len(set(ans.values())) == 4
                     else:
@@ -1454,6 +1758,25 @@ def selftest(seeds=40):
                 except (AssertionError, ValueError, KeyError) as exc:
                     ng += 1
                     bad.setdefault((kind, form), [0, repr(exc)])[0] += 1
+    # s_rolemap の盤面 3 系統(2026-09-27): 大量に引いて 5 条件・決定性・系統の出現を検査
+    seen = set()
+    for i in range(1500):
+        n += 1
+        try:
+            dd = draw(_r.Random(900000 + i), "s_rolemap")
+            b_, t_ = dd["b"], dd["t"]
+            assert _rm_valid(b_, t_) is None, _rm_valid(b_, t_)
+            seen.add(b_["family"])
+            # 同じ入力(表に出している priority・MAC・cost・port-priority・ポート番号)から同じ答え= 決定性
+            t2 = sm.Topo(b_["sw"], b_["links"], b_["method"], b_["port_prio"], b_["cost_ovr"], b_["vlan"]).solve()
+            assert t2.role == t_.role
+            assert set(t_.role.values()) <= {"Root", "Desg", "Altn"}
+        except (AssertionError, ValueError) as exc:
+            ng += 1
+            bad.setdefault(("s_rolemap", "boards"), [0, repr(exc)])[0] += 1
+    if seen != {"lab", "mut", "shape"}:
+        ng += 1
+        bad.setdefault(("s_rolemap", "families"), [0, repr(seen)])[0] += 1
     # 計算器の selftest も通す(盤面の正解は stp_model が出す)
     ng += sm.selftest()
     for (k, f), (cnt, ex) in sorted(bad.items()):

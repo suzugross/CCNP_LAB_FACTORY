@@ -11,7 +11,11 @@
 #   思考系 = --paper（既定 auto=5〜6・必須ジャンルは --require-shape auto で配り分け）
 #   瞬発力 = --speed（既定8・shape=speed・別枠で上乗せ・0 で無効。3×8=24 で型プール26種にほぼ収まる）
 #   穴埋め = --cloze（既定5・shape=cloze=解説穴埋め形・別枠で上乗せ・0 で無効・2026-09-19）
-#   ラボ   = --lab 2 ＋ --lab-extra 1（余裕があれば3問目・1本目のみ）
+#   紙面   = 3 枠とも単元ローテーション（BL-224）= units.yml の全単元を最終実施日の古い順に 1 問ずつ。
+#            確認: python3 topologies/paper_rotation.py [--all]。--require-shape/--profile 明示で従来の抽選
+#   ラボ   = 単元ローテーション 3 問（1本目のみ・BL-223）= 曜日表＋遅れ補正（topologies/lab_modes.yml）。
+#            今日の選定表の確認: python3 topologies/lab_rotation.py [--date YYYY-MM-DD]
+#            --lab-genres a,b,… を明示すると従来の固定ジャンル抽選（--lab 2 ＋ --lab-extra 1）
 #   範囲   = --profile ccna|encor|enarsi|ccie|vendor|U-A3,U-H2 …（単元台帳 CURRICULUM.md の単元で絞る・BL-213）
 #
 #   作成:   scripts/pack.sh new [オプション]          # 夜間バッチ想定（時間はかかる）

@@ -139,3 +139,38 @@ show interfaces X | include packets output|output errors         ! 送信側の�
 ```
 IOSvL2 の注意= 起動後に Vlan999 SVI が down で固着する(コンソールから SVI を shut/no shut で復旧)。
 IOSvL2 のポートは Gi(コスト short=4)・IOL は Et(short=100)。役割の期待値は方式を揃えれば同じ。
+
+# PoC 第6回: 3 層盤面の TS 論点とグローバル既定(BL-221 TS / BL-222・2026-09-27・IOSvL2 iosvl2-2020)
+盤面= `GEN-STP-94002`(gen_stp.py --world 3tier・build を模範解で設計どおりにした状態)。
+設計= VLAN14/147 root SW01・予備 SW02・36864 は SW03 / VLAN32 root SW02・予備 SW01・36864 は SW04 / 持ち込み機器= SW06 Gi1/3。
+ログ= 実験スクリプトの出力(セッションの scratchpad・要点はここに転記)。
+
+## G. グローバル既定(BL-222)
+- **G1 summary の書式**: 既定は `Portfast Default is disabled` / `Portfast Edge BPDU Guard Default is disabled` /
+  `Loopguard Default is disabled`。`portfast edge default` で **`Portfast Default is edge`**、
+  `portfast edge bpduguard default` で `... BPDU Guard Default is enabled`、`loopguard default` で `Loopguard Default is enabled`。
+- **G2 ポートごとの実効**(`show spanning-tree vlan N detail` / `show spanning-tree detail` / `... interface X detail` 共通):
+  明示= **`Loop guard is enabled on the port`**・既定由来= **`Loop guard is enabled by default on the port`**・
+  **`Root guard is enabled on the port`**。行は各 ` Port N (IF 名) of VLAN00NN is <役割> <状態>` ブロックの
+  `Link type` と `BPDU:` の間に出る → ブロック内に限定した regex で実効を採点できる。
+- **G3 優先関係**: `loopguard default` + IF の `spanning-tree guard root` → そのポートは **Root guard の行だけ**
+  (loop guard は出ない)・不整合 0。= 「既定で loop guard・下向きだけ root guard を明示」は成立する。
+- **G4 BPDU ガード既定**: IF の bpduguard を外し `portfast edge default` + `portfast edge bpduguard default` にして
+  持ち込み機器のポートを shut/no shut → **`err-disabled bpduguard` で再び遮断**。
+  ★未確認= bounce しない場合(既に BPDU を受けて edge でなくなったポートに既定が効くか)→ E2E で確認する。
+- G5 `portfast edge default` は `%Warning: this command enables portfast by default on all interfaces.` を出す(確認プロンプトは無い)。
+- 副次: IOSvL2 は**未接続のポートも up 扱い**で `show spanning-tree` に出る(VLAN1 の全ポート・アクセスの未接続エッジは
+  `Desg FWD ... P2p Edge`)。採点は期待行の存在で見るので影響しない。
+
+## T. TS 故障の実測(BL-221)
+- **T1 コア間の loopguard_trip**(片側に bpdufilter): **両コアとも「自分が root でない VLAN」で孤立**。
+  非 root 側コアのコア間ポート= `LOOP_Inc`、さらに下向き 2 本= `ROOT_Inc`(root へ分配経由で届こうとして
+  root guard に当たる)→ そのコアは当該 VLAN で `This bridge is the root` を名乗り全ポート BKN。
+  bpdufilter は送受とも止めるので**どちら側に付けても対称**(SW01 側・SW02 側とも同じ 3+6 本)。
+  外すと自動復旧(不整合 0)。アクセス間の疎通は root 側コア経由で保たれる(症状は不整合の報告だけ)。
+- **T2 1 台だけ pathcost short**(SW04): SW04 が `Cost 4` を広告し比較で全勝 → **VLAN32(SW04 が 36864 の VLAN)で
+  分配間のブロック側とアクセスの上りが逆転**(アクセスの root cost が 20004 になる)。SW04 は予備コア側の
+  リンクでも Desg を取る。指紋= Cost 列の 4 と 20000 の混在。long に戻すと設計どおりに戻る。
+- **T3 アクセスに低い priority**: root(24576)より優位な値(4096・20480)→ **分配 2 台のそのアクセス向きポートが
+  当該 VLAN で `Root Inconsistent`** → アクセスが孤立(SVI 間 ping 0%)。**28672(予備と同値・root に届かない)
+  → 不整合も役割の変化も無し**= 監査(アクセスは priority 既定)でしか分からない「要件違反型」。

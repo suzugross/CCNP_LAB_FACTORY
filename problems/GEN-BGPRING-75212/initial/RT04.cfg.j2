@@ -1,0 +1,40 @@
+! RT04
+interface Loopback0
+ ip address 82.82.82.82 255.255.255.255
+!
+interface Loopback1
+ ip address 172.16.5.1 255.255.255.0
+!
+interface {{ links[1] }}
+ ip address 10.63.127.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[0] }}
+ ip address 10.240.15.2 255.255.255.252
+ no shutdown
+!
+router bgp 65082
+ bgp router-id 82.82.82.82
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ bgp bestpath compare-routerid
+ neighbor 10.63.127.2 remote-as 65502
+ neighbor 10.240.15.1 remote-as 64633
+ address-family ipv4 unicast
+  network 172.16.5.0 mask 255.255.255.0
+  neighbor 10.63.127.2 activate
+  neighbor 10.240.15.1 activate
+  network 172.16.67.0 mask 255.255.255.0
+  network 172.16.151.0 mask 255.255.255.0
+  network 172.16.51.0 mask 255.255.255.0
+ exit-address-family
+!
+interface Loopback2
+ ip address 172.16.67.1 255.255.255.0
+!
+interface Loopback3
+ ip address 172.16.151.1 255.255.255.0
+!
+interface Loopback4
+ ip address 172.16.51.1 255.255.255.0
+!

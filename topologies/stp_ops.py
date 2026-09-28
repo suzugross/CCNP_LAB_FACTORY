@@ -3,6 +3,7 @@
 config 投入はここで行う(poc/stp/stpcli.py の本番版。プロンプト regex は PoC 知見 3)。
 
   stp_ops.py fix  <ID>                     solution/fix.json の "fix" を投入(conf → exec)
+  stp_ops.py break <ID>                    solution/fix.json の "break" を投入(故障を稼働中の盤面へ入れる・3tier の自己検証用)
   stp_ops.py conf <ID> <NODE> "<行>" ...    任意の config を投入(誤解法の検証用)
   stp_ops.py show <ID> <NODE> "<cmd>" ...   show を実行して表示
   stp_ops.py bringup <ID>                  IOSvL2 の起動後 Vlan999 SVI 固着を救済(gen_pack.bringup 相当)
@@ -105,6 +106,12 @@ def main():
         for n, f in fx.items():
             for e in f["exec"]:
                 print(f"### {n}: {e}\n{run(sess[n], e)}")
+    elif op == "break":
+        brk = json.load(open(os.path.join(REPO, "problems", pid, "solution", "fix.json"))).get("break") or {}
+        if not brk:
+            raise SystemExit(f"{pid}: fix.json に break がありません(build か旧形式)")
+        for n, lines in brk.items():
+            print(f"### {n}: break {lines}\n{conf(login(hm[n], user, pw), lines)}")
     elif op in ("conf", "show"):
         n = sys.argv[3]
         c = login(hm[n], user, pw)

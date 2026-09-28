@@ -62,6 +62,7 @@ import gen_paper_bgppol as gbp   # noqa: E402  (bgppol=BGP out ポリシー・BL
 import gen_paper_rtbasic as grt   # noqa: E402  (rtbasic=経路選択の基礎 AD/RIB・BL-184)
 import gen_paper_cloze as gcl  # noqa: E402  (cloze=解説穴埋め形・BL-191)
 import gen_paper_stp as gst  # noqa: E402  (stp=STP 選択問・単元 U-A3 の P2・BL-216)
+import gen_paper_fhrp as gfh  # noqa: E402  (fhrp=FHRP の経路全記入・単元 U-A6・BL-228)
 # ★svc 型ファミリ(事実ベース＋小さな真偽関数・紙面専用)の共通レジストリ(2026-09-18・BL-176 計画)。
 #   shape 名 → module。新ファミリはここに 1 行足すだけで pick/forms/render/lint/obfuscate/
 #   瞬発力枠(--shape speed)/思考系枠(mixed の kbthink)の全経路に乗る。module の規約は
@@ -69,7 +70,7 @@ import gen_paper_stp as gst  # noqa: E402  (stp=STP 選択問・単元 U-A3 の 
 #   answer_body/pick_count/CORE/TITLES)＋ SPEED_KINDS / THINK_KINDS(任意。無ければ全 kind が瞬発力枠)
 #   ＋ SPEED_FORMS={kind: [forms]}(任意。瞬発力枠でその kind に使う形を絞る・BL-186)。
 KB_FAMILIES = {"svc": gsv, "fhs": gpf, "ospfdbg": god, "dhcp6": gd6, "dmvpn": gdm, "eigrpkb": gek,
-               "bgppol": gbp, "rtbasic": grt, "cloze": gcl, "stp": gst}
+               "bgppol": gbp, "rtbasic": grt, "cloze": gcl, "stp": gst, "fhrp": gfh}
 import gen_paper_pref as gpr   # noqa: E402  (pref=OSPF/EIGRP 経路選好・BL-127)
 import gen_paper_ospfbgp as gob  # noqa: E402  (ospfbgp=OSPF→BGP 再配送の範囲・BL-163)
 
@@ -7171,7 +7172,7 @@ SVC_TITLES = {
 
 
 KB_TITLES = {"svc": SVC_TITLES, "fhs": gpf.TITLES, "ospfdbg": god.TITLES, "dhcp6": gd6.TITLES, "dmvpn": gdm.TITLES, "eigrpkb": gek.TITLES,
-             "bgppol": gbp.TITLES, "rtbasic": grt.TITLES, "cloze": gcl.TITLES, "stp": gst.TITLES}
+             "bgppol": gbp.TITLES, "rtbasic": grt.TITLES, "cloze": gcl.TITLES, "stp": gst.TITLES, "fhrp": gfh.TITLES}
 
 
 def question_md_kb(shape, d, choices, stamp, form):
@@ -7193,7 +7194,9 @@ def answer_md_kb(shape, d, choices, stamp, master_seed, subseed, form):
     body = mod.answer_body(d, choices, form)
     form_note = {"allthat": "(数非明示= 正解の数は設問に示さない・正解集合は事実ベースから機械決定)",
                  "match": ("(穴埋め形= 解答UIは BL-168 の組合せ形を流用・語群 8 のうち正解 4・全単射ではない)"
-                           if shape == "cloze" else "(組合せ形= 解答UIは BL-168・正解は全単射)"),
+                           if shape == "cloze" else
+                           "(全ポート記入= 表のセルに穴埋め形の UI(BL-198)・記号は何度でも使う・全空欄が正しいときだけ正答・BL-226)"
+                           if d.get("kind") in ("s_rolemap", "h_path", "h_acl") else "(組合せ形= 解答UIは BL-168・正解は全単射)"),
                  "select2": "(正解ちょうど2・「真だが設問外」の肢を含み得る)",
                  "read": "(exhibit は poc/svc-paper の実測書式)",
                  "fix": "(真偽関数で「直る候補==1」を draw 時に機械検証)"}.get(form, "")
@@ -8098,7 +8101,7 @@ def main():
                     choices=["chain", "ring", "pbr", "urpf", "bgpdbg", "mploop",
                              "riploop", "leakmap", "ospfv3pl", "v6redist",
                              "aaa", "acl", "aclv6", "bgpbest", "copp", "pref",
-                             "ospfbgp", "mpls", "svc", "fhs", "ospfdbg", "dhcp6", "dmvpn", "eigrpkb", "bgppol", "rtbasic", "cloze", "stp", "speed", "mixed"],
+                             "ospfbgp", "mpls", "svc", "fhs", "ospfdbg", "dhcp6", "dmvpn", "eigrpkb", "bgppol", "rtbasic", "cloze", "stp", "fhrp", "speed", "mixed"],
                     default="chain",
                     help="chain=再配送欠落/誤設定系(既定) / ring=再配送リングの定常ループ(難5)"
                          " / riploop=RIP⇄OSPF 対策が効いていない型(BL-116)"

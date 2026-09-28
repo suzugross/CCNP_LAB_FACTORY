@@ -1,0 +1,74 @@
+# ラボ単元ローテーションのモード定義(BL-223・設計= problems/_drafts/LAB-ROTATION.design.md)
+#
+# gen_pack.py は `--lab-genres` も `--profile` も無いとき、`--lab-mode`(既定 default)をここから引く。
+#   units.<名前>.genres   = gen_pack.LAB_GENRES のキー(単元の中で TS/構築・変種を回す)
+#   units.<名前>.per_week = 目標の週あたり回数(遅れ度 = 経過日数 ÷ (7 / per_week))
+#   units.<名前>.also     = genres の接頭辞以外に「この単元をやった」と数える問題 ID の正規表現
+#   week                  = 曜日(mon〜sun)ごとの単元。無いモードは遅れ度順だけで埋める
+#   catchup_ratio / max_catchup = 遅れ度がこれ以上の単元を、曜日表の外から最大この枠数まで差し込む
+modes:
+  default:
+    label: デフォルト(全単元・曜日ローテーション)
+    slots: 3
+    catchup_ratio: 2.0
+    max_catchup: 2
+    units:
+      bgp:
+        label: BGP
+        per_week: 3
+        genres: [bgp]
+        also: ['^GEN-BGP', '^ENARSI-BGP-']
+      stp:
+        label: STP/L2
+        per_week: 3
+        genres: [stpts, stpmst, stp3ts, stpbuild, stpmstbuild, stp3build, l2]
+        also: ['^GEN-STP', '^GEN-L2TS', '^ENCOR-LAG', '^ENCOR-STP']
+      security:
+        label: Security
+        per_week: 3
+        genres: [urpf, aaa]
+        also: ['^GEN-URPF', '^GEN-AAA', '^ENARSI-AAA', '^ENARSI-URPF']
+      redist:
+        label: 再配送
+        per_week: 2
+        genres: [redist, redistmp]
+        also: ['^GEN-(RDFIELD|RDARENA|REDIST)', '^ENARSI-REDIST']
+      rtvrf:
+        label: 経路制御/VRF
+        per_week: 2
+        genres: [rtctl, hvrf]
+        also: ['^GEN-(RTCTL|EGVRF|DOJO-DLIST)', '^ENARSI-(EIGRP-VRF|VRFLITE)', '^ENCOR-PBR']
+      vpn:
+        label: VPN
+        per_week: 2
+        genres: [dmvpn, vpnbuild]
+        also: ['^GEN-DMVPN', '^DMVPN-', '^ENARSI-(DMVPN|IPSEC|GREIPSEC)']
+      mpls:
+        label: MPLS
+        per_week: 2
+        genres: [mpls, mplsbuild]
+        also: ['^GEN-MPLS', '^ENARSI-MPLS']
+      ipv6:
+        label: IPv6
+        per_week: 2
+        genres: [v6addr, v6build]
+        also: ['^GEN-V6', '^ENARSI-DHCPV6']
+      services:
+        label: Services
+        per_week: 2
+        genres: [dhcp, ipsla]
+        also: ['^GEN-(DHCPTS|IPSLATS)', '^ENCOR-(DHCP|IPSLA)']
+    # 紙面(BL-224・paper_rotation.py): units: all = units.yml で紙面 kind を持つ全単元(資格で絞らない)。
+    #   思考・瞬発・穴埋めの 3 枠とも、最終実施日(採点記録)が古い単元から 1 問ずつ割り当てる。
+    #   将来のモードは units: [U-…] で範囲を絞る / exclude: [U-…] で外す。
+    paper:
+      units: all
+      exclude: []
+    week:
+      mon: [stp, security, redist]
+      tue: [bgp, vpn, ipv6]
+      wed: [stp, mpls, services]
+      thu: [bgp, security, rtvrf]
+      fri: [redist, vpn, ipv6]
+      sat: [stp, security, services]
+      sun: [bgp, mpls, rtvrf]

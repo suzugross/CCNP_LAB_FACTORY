@@ -1,0 +1,72 @@
+{
+  "world": "3tier",
+  "faults": [
+    {
+      "fault": "t_allowed_hole",
+      "sw": "SW04",
+      "port": "GigabitEthernet1/0",
+      "vlan": 16,
+      "acc": "SW06"
+    },
+    {
+      "fault": "t_cost_bump_dist",
+      "sw": "SW04",
+      "vlan": 83,
+      "port": "GigabitEthernet0/0",
+      "cost": 60000
+    }
+  ],
+  "fix": {
+    "SW04": {
+      "conf": [
+        "interface GigabitEthernet1/0",
+        "switchport trunk allowed vlan add 16",
+        "interface GigabitEthernet0/0",
+        "no spanning-tree vlan 83 cost"
+      ],
+      "exec": []
+    }
+  },
+  "break": {
+    "SW04": [
+      "interface GigabitEthernet1/0",
+      "switchport trunk allowed vlan remove 16",
+      "interface GigabitEthernet0/0",
+      "spanning-tree vlan 83 cost 60000"
+    ]
+  },
+  "design": {
+    "A": 83,
+    "B": 16,
+    "C": 14,
+    "vlans": [
+      83,
+      16,
+      14
+    ],
+    "root": {
+      "83": "SW01",
+      "14": "SW01",
+      "16": "SW02"
+    },
+    "backup": {
+      "83": "SW02",
+      "14": "SW02",
+      "16": "SW01"
+    },
+    "weak": {
+      "83": "SW04",
+      "14": "SW04",
+      "16": "SW03"
+    },
+    "prefer": {
+      "83": "SW03",
+      "14": "SW03",
+      "16": "SW04"
+    },
+    "rogue_acc": "SW05",
+    "rogue_port": "GigabitEthernet1/3",
+    "oct2": 72,
+    "style": "global"
+  }
+}

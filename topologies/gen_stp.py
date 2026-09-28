@@ -617,6 +617,40 @@ def build_mst(repo, seed, mode, nfaults, forced):
     return pid, g["faults"], g["note"]
 
 
+def build_3tier(repo, seed, mode, image, nfaults=0, forced=None, style=None):
+    """T4 = 3 層キャンパス世界(gen_stp_3tier.py・build/ts)。ID は同じ GEN-STP-<seed>。
+    style= 保護機構の記述方式(port/global/any・None で seed 抽選・BL-222)。"""
+    import gen_stp_3tier as T
+    T.set_image(image)
+    g = T.generate(seed, mode, nfaults, forced, style)
+    pid = g["pid"]
+    pdir = os.path.join(repo, "problems", pid)
+    os.makedirs(os.path.join(pdir, "initial"), exist_ok=True)
+    os.makedirs(os.path.join(pdir, "solution"), exist_ok=True)
+    problem = {"id": pid, "title": g["title"], "exam": "ENCOR",
+               "topics": ["stp", "rstp", "l2"] + g["topics"] + ["generated"],
+               "difficulty": g["diff"], "topology": "generated", "target_nodes": g["nodes"], "points": 100,
+               "access": "telnet", "image_family": g["image_family"],
+               "lab": {"positions": g["positions"], "links": g["links"]}}
+    with open(os.path.join(pdir, "problem.yml"), "w", encoding="utf-8") as f:
+        f.write(f"# 自動生成 (gen_stp.py) seed={seed} mode={mode} world=3tier image={image} style={g['d']['style']}\n")
+        yaml.safe_dump(problem, f, sort_keys=False, allow_unicode=True)
+    for s, txt in g["initial"].items():
+        with open(os.path.join(pdir, "initial", f"{s}.cfg.j2"), "w", encoding="utf-8") as f:
+            f.write(txt)
+    with open(os.path.join(pdir, "grading.yml"), "w", encoding="utf-8") as f:
+        f.write(f"# 自動生成 (gen_stp.py --world 3tier) seed={seed}\n")
+        yaml.safe_dump(g["grading"], f, sort_keys=False, allow_unicode=True)
+    with open(os.path.join(pdir, "task.md"), "w", encoding="utf-8") as f:
+        f.write(g["task"])
+    # break= 故障を稼働中の盤面へ入れる conf(自己検証用・stp_ops.py break)。build では空
+    json.dump({"world": "3tier", "faults": g["note"], "fix": g["fix"], "break": g["break"],
+               "design": {k: v for k, v in g["d"].items() if k != "edge_vlan"}},
+              open(os.path.join(pdir, "solution", "fix.json"), "w", encoding="utf-8"),
+              ensure_ascii=False, indent=2, default=str)
+    return pid, g["faults"], g["note"]
+
+
 def build(repo, seed, mode, nfaults, forced, level=2):
     rnd = random.Random(seed)
     d = design(rnd)
@@ -731,9 +765,12 @@ def main():
     ap.add_argument("--mode", default="ts", choices=["ts", "build"])
     ap.add_argument("--image", default="iol", choices=["iol", "iosv"],
                     help="iol= ioll2(Ethernet・既定) / iosv= IOSvL2(GigabitEthernet)")
-    ap.add_argument("--world", default="pvst", choices=["pvst", "mst"],
-                    help="mst= L4(MST リージョン+旧機 Rapid PVST+ の境界・gen_stp_mst.py)")
+    ap.add_argument("--world", default="pvst", choices=["pvst", "mst", "3tier"],
+                    help="mst= L4(MST リージョン+旧機 Rapid PVST+ の境界・gen_stp_mst.py) / "
+                         "3tier= T4(3 層キャンパス・build/ts・gen_stp_3tier.py・BL-221)")
     ap.add_argument("--level", type=int, default=2, choices=[1, 2], help="build の段階(1=最小構築 / 2=実務構築)")
+    ap.add_argument("--guard-style", choices=["port", "global", "any"],
+                    help="3tier のみ: 保護機構の記述方式(未指定= seed 抽選・global は iosv のみ・BL-222)")
     ap.add_argument("--faults", type=int, default=0, help="0=ランダム(2〜3)")
     ap.add_argument("--fault", default="", help="故障を指定(カンマ区切り・検証用)")
     ap.add_argument("--selftest", action="store_true")
@@ -746,11 +783,17 @@ def main():
             print(f"-- image={img}")
             ng += selftest()
         set_image("iol")
-        sys.exit(1 if (ng + gen_stp_mst.selftest()) else 0)
+        import gen_stp_3tier
+        sys.exit(1 if (ng + gen_stp_mst.selftest() + gen_stp_3tier.selftest()) else 0)
     if a.seed is None:
         a.seed = random.SystemRandom().randint(1000, 99999)
     forced = [x for x in a.fault.split(",") if x]
     set_image(a.image)
+    if a.world == "3tier":
+        pid, faults, note = build_3tier(a.repo, a.seed, a.mode, a.image, a.faults, forced, a.guard_style)
+        print(f"wrote problems/{pid}: world=3tier mode={a.mode} image={a.image}"
+              + (f" faults={faults}" if a.mode == "ts" else ""))
+        return
     if a.world == "mst":
         if a.image != "iol":
             raise SystemExit("--world mst は今のところ iol のみ(IOSvL2 版は未検証)")

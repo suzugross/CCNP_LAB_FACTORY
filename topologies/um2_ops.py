@@ -11,7 +11,7 @@
 変種選択（--variant・サブコマンドの前に指定）:
   inline (既定) = UM2-BUILD-01 … LB上流タグ254サブIF/下流Gi0/1・SRV-SW配下・11ノード
   onearm        = UM2-BUILD-02 … LB腕1本にdot1q 254/251多重・DMZ-SV=L3SW2 Gi1/0・10ノード
-★CML Personal 20ノード上限のため両問の同時起動は不可。
+★旧 CML Personal 20ノード上限では両問の同時起動は不可だった(2026-09-27 Personal Plus 40 ノード化・合計 40 台以内なら可)。
 
 収集は全ノード CML コンソール（MGMT/リース不要）。alpine は root/cisco シェル。
 IOS/ASA 認証: SUZUKI/CCNPccnp（ASA 初回 enable ウィザードも処理）。

@@ -1,0 +1,29 @@
+! RT02
+interface Loopback0
+ ip address 19.19.19.19 255.255.255.255
+!
+interface Loopback1
+ ip address 172.16.77.1 255.255.255.0
+!
+interface {{ links[1] }}
+ ip address 10.68.199.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[0] }}
+ ip address 10.31.97.2 255.255.255.252
+ no shutdown
+!
+router bgp 64713
+ bgp router-id 19.19.19.19
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ bgp bestpath compare-routerid
+ neighbor 10.68.199.2 remote-as 64633
+ neighbor 10.31.97.1 remote-as 65502
+ address-family ipv4 unicast
+  network 172.16.77.0 mask 255.255.255.0
+  neighbor 10.68.199.2 activate
+  neighbor 10.31.97.1 activate
+ exit-address-family
+!
+! NOTE: legacy policy retained for audit (2019 migration)

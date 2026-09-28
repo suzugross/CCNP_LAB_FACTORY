@@ -11,7 +11,7 @@
   ※ビルドログは topologies/_state/pack-<PACK-ID>.log(故障種が出るため隔離)
 
 サブコマンド:
-  new    --paper 3 --lab 2 [--budget 20] [--dry-run]
+  new    --paper 3 [--lab N] [--lab-mode default] [--budget 40] [--dry-run]
       パックを作る。--dry-run は **CML にも questions/ にも一切触らない**
       プレビュー用(既出の古い紙面を借りて体裁だけ作る)。
   status [--pack-id P]      解答.md を読んで進捗を表示(オフライン)
@@ -243,6 +243,18 @@ LAB_GENRES = {
     "stpmstbuild": {"label": "STP 構築(MST 導入)", "build": True, "group": "stp-build",
                     "prefixes": ["GEN-STP"], "tags": ["stp", "mst", "l2"], "nodes": 6,
                     "variants": [{"args": ["--mode", "build", "--world", "mst"], "nodes": 6, "label": "L4"}]},
+    # ★STP 3 層キャンパス(2026-09-26・BL-221 の T4)= gen_stp.py --world 3tier(構築のみ・難5)。
+    #   7 スイッチ(コア2+分配2+アクセス2+持ち込み)+MGMTSW+EXTC= 9 ノード。IOSvL2 既定(BL-219)。
+    "stp3build": {"label": "STP 構築(3 層キャンパス)", "build": True, "group": "stp-build",
+                  "prefixes": ["GEN-STP"], "tags": ["stp", "rstp", "l2"], "nodes": 9,
+                  "variants": [{"args": ["--mode", "build", "--world", "3tier", "--image", "iosv"],
+                                "nodes": 9, "label": "T4/IOSvL2"}]},
+    # ★STP 3 層キャンパス TS(2026-09-27・BL-221)= gen_stp.py --world 3tier --mode ts(故障 12 種から 2〜3・難5)。
+    #   保護機構の記述方式(port/global/any・BL-222)は seed で抽選。9 ノード(予算 20 以下なら大型スロット扱い)。
+    "stp3ts": {"label": "STP TS(3 層キャンパス)", "group": "stp-ts",
+               "prefixes": ["GEN-STP"], "tags": ["stp", "rstp", "l2"], "nodes": 9,
+               "variants": [{"args": ["--mode", "ts", "--world", "3tier", "--image", "iosv"],
+                             "nodes": 9, "label": "T4/IOSvL2"}]},
     # ★services 枠(2026-08-22 追加・BL-134)= IP SLA/track TS。ENARSI は TS 傾向という
     #   ユーザ方針で新設。4 IOL と軽く台数予算に優しい。★既定 --lab-genres にも
     #   参加(2026-08-22 ユーザ指示・hvrf/dhcp/dmvpn と同格の抽選)。
@@ -278,7 +290,7 @@ LAB_GENRES = {
              "gap_families": ["GEN-MPLSEB"],
              "gap_ids": ["ENARSI-MPLS-L3VPN-01", "ENARSI-MPLS-L3VPN-02", "ENARSI-MPLS-L3VPN-03",
                          "ENARSI-MPLS-L3VPN-04", "ENARSI-MPLS-L3VPN-05", "ENARSI-MPLS-L3VPN-06"],
-             # 12 IOL + MGMTSW を台数に見込む(CML 20 ノード上限の 6 割 = 大型スロット)
+             # 12 IOL + MGMTSW を台数に見込む(旧 CML 20 ノード上限の 6 割 = 大型スロット)
              "nodes": 13,
              "variants": [{"args": ["--pece", "ospf"], "label": "pece=ospf"},
                           {"args": ["--pece", "ebgp"], "label": "pece=ebgp"}]},
@@ -314,8 +326,25 @@ LAB_GENRES = {
 #   ★実測(2026-09-07 E2E PACK-20260907-D): MPLS TS(12 IOL)+VPN 構築(4 IOSv)で CML 実ノードは
 #   14+6=**20/20 ちょうど**(MGMTSW/EXTC も数に入る)。相方に 5 台ルータを許すと 21 で
 #   ライセンス超過になるため上限は 4。
+#   ★2026-09-27 Personal Plus(40 ノード)化= この制限は予算が BIG_RULE_BUDGET 以下の時だけ
+#   掛ける(--budget 20 で旧挙動)。それより大きい予算では通常の台数予算検査だけで足りる。
 BIG_NODES = 9
 BIG_PARTNER_MAX = 4
+BIG_RULE_BUDGET = 20
+# ★CML ライセンスの同時起動上限(2026-09-27 Personal Plus = 40)。実効予算は MGMT プールの
+#   大きさ(group_vars/all/local.yml の mgmt_pool・現 30)でも頭打ちにする: CML 実ノード数 ≥
+#   MGMT リース数なので、ノード総数をプール以下に抑えれば IP 枯渇で provision が落ちない。
+CML_NODE_LIMIT = 40
+
+
+def default_budget(repo, log=print):
+    try:
+        import mgmt_alloc
+        pool = len(mgmt_alloc.load_pool(repo))
+    except (SystemExit, Exception) as e:
+        log(f"[台数] ★mgmt_pool を読めず、予算は CML 上限 {CML_NODE_LIMIT} のまま: {e}")
+        return CML_NODE_LIMIT
+    return min(CML_NODE_LIMIT, pool)
 
 
 # ==========================================================================
@@ -874,7 +903,7 @@ def _resolve_static(cat, spec, hist, rnd, repeat_days, today):
 
 
 def resolve_genre(cat, genre, hist, rnd, family_days, today, log=print,
-                  repeat_days=90):
+                  repeat_days=90, ignore_gap=False):
     """固定ジャンル → 実際に使う生成器(接頭辞・スクリプト・台数)か静的問題を決める。
 
     H型は **EIGRP 版を優先**し、直近 family_days に出ていれば OSPF 版へ回す
@@ -885,7 +914,7 @@ def resolve_genre(cat, genre, hist, rnd, family_days, today, log=print,
     spec = LAB_GENRES.get(genre)
     if not spec:
         return None
-    hit = _genre_gap_hit(spec, hist, today)
+    hit = None if ignore_gap else _genre_gap_hit(spec, hist, today)
     if hit:
         log(f"[選定] {spec['label']}: {hit[1]} を {hit[0]} 日前に出題済"
             f"(間隔 {spec['gap_days']} 日) → 今回は見送り")
@@ -981,6 +1010,7 @@ def select_genre_labs(cat, hist, *, genres, count, budget, used, rnd,
     order += ts_pool
     picked, total, groups = [], 0, set()
     big = False
+    big_rules = budget <= BIG_RULE_BUDGET
     for genre in order:
         if len(picked) >= count:
             break
@@ -992,11 +1022,11 @@ def select_genre_labs(cat, hist, *, genres, count, budget, used, rnd,
                            repeat_days=repeat_days)
         if lb is None:
             continue
-        if big and lb["nodes"] > BIG_PARTNER_MAX:
+        if big_rules and big and lb["nodes"] > BIG_PARTNER_MAX:
             notes.append(f"{lb['label']} は大型ラボの相方には大きすぎるので見送り"
                          f"({lb['nodes']}台 > {BIG_PARTNER_MAX})")
             continue
-        if picked and lb["nodes"] >= BIG_NODES and any(
+        if big_rules and picked and lb["nodes"] >= BIG_NODES and any(
                 p["nodes"] > BIG_PARTNER_MAX for p in picked):
             notes.append(f"{lb['label']} は大型({lb['nodes']}台)で既選定と同居できず見送り")
             continue
@@ -1008,7 +1038,7 @@ def select_genre_labs(cat, hist, *, genres, count, budget, used, rnd,
         total += lb["nodes"]
         if spec.get("group"):
             groups.add(spec["group"])
-        if lb["nodes"] >= BIG_NODES:
+        if big_rules and lb["nodes"] >= BIG_NODES:
             big = True
             lb["big"] = True
             notes.append(f"{lb['label']} は大型({lb['nodes']}台) → 相方は"
@@ -1017,6 +1047,74 @@ def select_genre_labs(cat, hist, *, genres, count, budget, used, rnd,
                     f"{'・構築' if p.get('build') else ''})" for p in picked)
     n_build = sum(1 for p in picked if p.get("build"))
     notes.insert(0, f"固定ジャンル {len(picked)}/{count} 問(構築 {n_build}): {got or '(なし)'}")
+    return picked, notes, total
+
+
+def select_rotation_labs(cat, hist, *, mode_name, count, budget, used, rnd,
+                         family_days=21, today=None, log=print,
+                         build_rate=0.4, repeat_days=90, repo=REPO):
+    """単元ローテーション(BL-223・lab_rotation.py)で count 本を選ぶ。
+
+    単元の順序は lab_rotation.plan_units(曜日表＋遅れ補正)。単元の中では構築を --build-rate の
+    当たり時だけ候補に入れ(1 パック最大 1 本)、前回出した日が古いジャンルから解決する。
+    解決できない単元(台数予算・カタログ欠落)は遅れ度順の代わりの単元で埋める。
+    gap_days は掛けない(頻度は曜日表が決める)。大型スロット制限は予算 20 以下の時だけ。
+    """
+    import lab_rotation
+    mode = lab_rotation.load_mode(repo, mode_name)
+    count = mode["slots"] if count is None else count
+    seen = lab_rotation.last_seen(repo, mode, LAB_GENRES, today, hist)
+    plan = lab_rotation.plan_units(mode, today, seen)
+    for line in lab_rotation.describe(mode, today, seen, plan):
+        log(line)
+    picks, fallback, _ = plan
+    genre_last = lab_rotation.genre_last_issued(repo)
+    notes, picked, total, groups = [], [], 0, set()
+    big_rules = budget <= BIG_RULE_BUDGET
+    build_ok = rnd.random() < build_rate
+    notes.append(f"構築(確率{build_rate:.2f}): {'当たり= 1 本まで構築を候補に' if build_ok else '外れ → TS のみ'}")
+    for unit in picks + fallback:
+        if len(picked) >= count:
+            break
+        uspec = mode["units"][unit]
+        gens = [g for g in uspec["genres"] if g in LAB_GENRES]
+        use_build = build_ok and not any(p.get("build") for p in picked)
+        cands = [g for g in gens if use_build or not LAB_GENRES[g].get("build")]
+        rnd.shuffle(cands)
+        cands.sort(key=lambda g: genre_last.get(g, ""))       # 前回が古い(未記録)ジャンルから
+        if use_build and any(LAB_GENRES[g].get("build") for g in cands):
+            # 構築の当たりは「構築のある最初の単元」で使う(TS に流れて当たりが消えないように)
+            cands.sort(key=lambda g: not LAB_GENRES[g].get("build"))
+        got = None
+        for genre in cands:
+            spec = LAB_GENRES[genre]
+            if spec.get("group") and spec["group"] in groups:
+                continue
+            lb = resolve_genre(cat, genre, hist, rnd, family_days, today, log=log,
+                               repeat_days=repeat_days, ignore_gap=True)
+            if lb is None:
+                continue
+            if big_rules and any(p.get("big") for p in picked) and lb["nodes"] > BIG_PARTNER_MAX:
+                continue
+            if total + lb["nodes"] + used > budget:
+                notes.append(f"{uspec['label']}: {lb['label']} は台数予算に入らず見送り"
+                             f"({lb['nodes']}台・稼働中{used}+選定{total}/{budget})")
+                continue
+            got = lb
+            break
+        if got is None:
+            notes.append(f"{uspec['label']}: 出せるジャンルが無い → 次の単元へ")
+            continue
+        got["unit"] = unit
+        if big_rules and got["nodes"] >= BIG_NODES:
+            got["big"] = True
+        picked.append(got)
+        total += got["nodes"]
+        if LAB_GENRES[got["genre"]].get("group"):
+            groups.add(LAB_GENRES[got["genre"]]["group"])
+    desc = "・".join(f"{mode['units'][p['unit']]['label']}={p['label']}({p['id']}/{p['nodes']}台"
+                     f"{'・構築' if p.get('build') else ''})" for p in picked)
+    notes.insert(0, f"単元ローテーション {len(picked)}/{count} 問: {desc or '(なし)'}")
     return picked, notes, total
 
 
@@ -1163,6 +1261,39 @@ def gen_papers(repo, count, seed, shape, exam, hard, log, require=(), rnd=None,
     if got_genre:
         log(f"[紙面] 必須ジャンルの充足: {got_genre}")
     return made[:count], got_genre
+
+
+def gen_rotation_papers(repo, rot, slot, count, seed, a, log, exclude=()):
+    """紙面の単元ローテーション(BL-224・paper_rotation.py)で slot 枠を count 問作る。
+
+    最終実施日が古い単元から 1 問ずつ、その単元の shape/kind に絞って(`--only-kinds`)生成する。
+    同じ kind は 1 枠の中で 2 度出さない(除外に積む)。生成に失敗した単元は飛ばして次へ。
+    """
+    import paper_rotation
+    made, ex, skipped, tries, got = [], set(exclude), set(), 0, []
+    while len(made) < count and tries < count * 4:
+        order = [u for u in rot.order(slot) if u not in skipped]
+        if not order:
+            log(f"[紙面] ★{paper_rotation.SLOT_JA[slot]}枠: 出せる単元が尽きた")
+            break
+        uid = order[0]
+        tries += 1
+        shape, only = rot.args_for(uid, slot)
+        new = _run_paper_gen(repo, seed + tries * 37, 1, shape, a.exam,
+                             a.hard if slot != "cloze" else False, log,
+                             f"{paper_rotation.SLOT_JA[slot]}枠[{uid} {rot.units[uid]['name']}]",
+                             extra_args=only + _exclude_args(ex))
+        if new:
+            made += new
+            ex |= kinds_of_stamps(repo, new)
+            rot.take(uid)
+            got.append(uid)
+        else:
+            skipped.add(uid)
+            log(f"[紙面] {uid} は生成できず(除外で種切れ等) → 次の単元へ")
+    log(f"[紙面] {paper_rotation.SLOT_JA[slot]}枠(単元ローテ): {len(made)}/{count} 問 — "
+        + "・".join(f"{u}{rot.units[u]['name']}" for u in got))
+    return made
 
 
 def run(cmd, repo, log, label, timeout=3600):
@@ -1654,7 +1785,7 @@ def write_manifest(pdir, manifest):
     for it in manifest["items"]:
         lines.append(f"  - no: {it['no']}")
         for k in ("kind", "slot", "ref", "src", "key", "form", "variant",
-                  "nodes", "state", "ops", "error", "warn",
+                  "nodes", "state", "ops", "error", "warn", "genre", "unit",
                   "lab_score", "lab_fails"):   # ラボ採点の結果(再描画で使う)
             if it.get(k) not in (None, ""):
                 lines.append(f"    {k}: {esc(it[k])}")
@@ -2727,11 +2858,25 @@ def cmd_new(a):
     rnd = random.Random(a.seed if a.seed is not None
                         else random.randrange(1, 10 ** 9))
     plan = plan_genres(a.require_shape, n_packs, rnd)
+    a._paper_rot = None
+    if getattr(a, "paper_rotation", False):
+        # ★BL-224: 必須ジャンルは使わず、3 枠とも単元ローテーションで 1 問ずつ割り当てる
+        import lab_rotation
+        import paper_rotation
+        rday = (datetime.date.fromisoformat(a.lab_date) if a.lab_date
+                else lab_rotation.quota_today(repo))
+        a._paper_rot = paper_rotation.PaperRotation(repo, a.lab_mode, rday, rnd)
+        plan = [[] for _ in range(n_packs)]
+        for line in a._paper_rot.describe():
+            print(line)
     if n_packs > 1:
         print(f"== {n_packs} パックを作る(思考{a.paper}・瞬発{a.speed}・穴埋め{a.cloze}"
               f"／ラボは1本目のみ)")
         for i, gs in enumerate(plan, 1):
-            print(f"   {i} 本目の必須ジャンル: {', '.join(gs) or '(なし)'}")
+            if a._paper_rot is None:
+                print(f"   {i} 本目の必須ジャンル: {', '.join(gs) or '(なし)'}")
+        if a._paper_rot is not None:
+            print("   紙面: 単元ローテーション(必須ジャンルなし・全単元を最終実施日の古い順に)")
     made, exclude = [], set()
     for i in range(n_packs):
         seed_override = (None if a.seed is None else a.seed + i * 9001)
@@ -2841,6 +2986,9 @@ def build_pack(a, pack_no=1, n_packs=1, require=None, exclude=(),
         #   孤児 questions/answers が残っていた → 紙面フェーズごとスキップ
         stamps = []
         log("[紙面] 0問指定のため紙面フェーズをスキップ(必須ジャンルも生成しない)")
+    elif getattr(a, "_paper_rot", None):
+        stamps = gen_rotation_papers(repo, a._paper_rot, "think", n_paper, seed + 7000,
+                                     a, log, exclude)
     else:
         stamps, _got = gen_papers(repo, n_paper, seed, a.shape, a.exam, a.hard,
                                   log, require=require, rnd=rnd,
@@ -2870,9 +3018,13 @@ def build_pack(a, pack_no=1, n_packs=1, require=None, exclude=(),
             _extra = _exclude_args(_ex)
             if _think_kinds:
                 log(f"[紙面] 瞬発力枠から除外(思考系と同 kind): {sorted(set(_think_kinds))}")
-            speed_stamps = _run_paper_gen(repo, seed + 31000, a.speed,
-                                          a.speed_shape, a.exam, a.hard, log,
-                                          f"瞬発力枠[{a.speed_shape}]", extra_args=_extra)
+            if getattr(a, "_paper_rot", None):
+                speed_stamps = gen_rotation_papers(repo, a._paper_rot, "speed", a.speed,
+                                                   seed + 31000, a, log, _ex)
+            else:
+                speed_stamps = _run_paper_gen(repo, seed + 31000, a.speed,
+                                              a.speed_shape, a.exam, a.hard, log,
+                                              f"瞬発力枠[{a.speed_shape}]", extra_args=_extra)
             if len(speed_stamps) < a.speed:
                 log(f"[紙面] ★瞬発力枠 不足: {len(speed_stamps)}/{a.speed} 問")
         log(f"[紙面] 瞬発力枠: {len(speed_stamps)} 問(shape={a.speed_shape}"
@@ -2887,9 +3039,13 @@ def build_pack(a, pack_no=1, n_packs=1, require=None, exclude=(),
         if a.dry_run:
             log(f"[紙面] dry-run: 穴埋め枠 {a.cloze} 問(shape=cloze)は実生成時のみ")
         else:
-            cloze_stamps = _run_paper_gen(repo, seed + 47000, a.cloze, "cloze",
-                                          a.exam, False, log, "穴埋め枠[cloze]",
-                                          extra_args=_exclude_args(exclude))
+            if getattr(a, "_paper_rot", None):
+                cloze_stamps = gen_rotation_papers(repo, a._paper_rot, "cloze", a.cloze,
+                                                   seed + 47000, a, log, exclude)
+            else:
+                cloze_stamps = _run_paper_gen(repo, seed + 47000, a.cloze, "cloze",
+                                              a.exam, False, log, "穴埋め枠[cloze]",
+                                              extra_args=_exclude_args(exclude))
             if len(cloze_stamps) < a.cloze:
                 log(f"[紙面] ★穴埋め枠 不足: {len(cloze_stamps)}/{a.cloze} 問")
         log(f"[紙面] 穴埋め枠: {len(cloze_stamps)} 問(shape=cloze・思考系/瞬発力枠とは別枠)")
@@ -2935,10 +3091,20 @@ def build_pack(a, pack_no=1, n_packs=1, require=None, exclude=(),
         log("[選定] 紙面だけのパック: ラボは作らない(CML のラボ枠を使わない)"
             + ("" if a.paper_only else f" — {pack_no} 本目(ラボは1本目に集約)"))
     genres = [g.strip() for g in (a.lab_genres or "").split(",") if g.strip()]
-    labs, notes, used_nodes = ([], [], 0) if n_lab <= 0 else select_genre_labs(
-        cat, hist, genres=genres, count=n_lab, budget=a.budget, used=used,
-        rnd=rnd, family_days=a.family_days, today=today, log=log,
-        build_rate=a.build_rate, repeat_days=a.repeat_days)
+    if getattr(a, "rotation", False) and not paper_only:
+        # ★BL-223: 単元ローテーション(曜日表＋遅れ補正)。日付/曜日はノルマ日(JST 04:00 境界)
+        import lab_rotation
+        rday = (datetime.date.fromisoformat(a.lab_date) if a.lab_date
+                else lab_rotation.quota_today(repo))
+        labs, notes, used_nodes = select_rotation_labs(
+            cat, hist, mode_name=a.lab_mode, count=a.lab, budget=a.budget, used=used,
+            rnd=rnd, family_days=a.family_days, today=rday, log=log,
+            build_rate=a.build_rate, repeat_days=a.repeat_days, repo=repo)
+    else:
+        labs, notes, used_nodes = ([], [], 0) if n_lab <= 0 else select_genre_labs(
+            cat, hist, genres=genres, count=n_lab, budget=a.budget, used=used,
+            rnd=rnd, family_days=a.family_days, today=today, log=log,
+            build_rate=a.build_rate, repeat_days=a.repeat_days)
     # ★大型ラボ(MPLS 12 台等)を選んだ日は追加枠を使わない(BL-158)
     if n_extra > 0 and any(lb.get("big") for lb in labs):
         notes.append("追加枠: 大型ラボを選んだので使わない")
@@ -2976,6 +3142,7 @@ def build_pack(a, pack_no=1, n_packs=1, require=None, exclude=(),
         no += 1
         it = {"no": no, "kind": "lab", "ref": lb["id"], "src": "",
               "nodes": lb["nodes"], "state": "未着手",
+              "genre": lb.get("genre", ""), "unit": lb.get("unit", ""),
               "est": int(lb.get("minutes") or 60)}
         if a.dry_run:
             it["ref"] = (f"{lb['id']}-<新seed>" if lb["source"] == "generator"
@@ -3532,27 +3699,35 @@ def main():
                          f"選択肢: {','.join(PAPER_GENRES)})。"
                          "既定 auto= 全パックへ配り分け(3パックなら 4/3/3 ジャンルで"
                          "1日に全ジャンルを1周)。明示指定すると全パックに同じ必須枠を課す")
-    ap.add_argument("--lab", type=int, default=2,
-                    help="固定ジャンルから選ぶラボ数(v2 既定2)")
+    ap.add_argument("--lab", type=int, default=None,
+                    help="ラボ数(既定= 単元ローテーションは lab_modes.yml の slots=3・"
+                         "--lab-genres/--profile 指定時は 2)")
     # ★既定に ipsla を追加(2026-08-22 ユーザ指示「既定の抽選に混ぜられるように」)。
     #   4ジャンルのシャッフルから2つ選ぶ形になる。
     # ★BL-158(2026-09-07): mpls(TS 12 台)・vpnbuild/mplsbuild(構築の静的ローテーション)を既定に追加。
     #   構築ジャンル(rtctl/v6build/vpnbuild/mplsbuild)は --build-rate の構築スロット 1 本からのみ。
     # ★2026-09-19(ユーザ指示・ブループリント突合せ報告の推奨4): bgp(リングBGP TS)・
     #   urpf(TS)・aaa(構築スロット)を既定に追加= ラボ既定に BGP/Security が無かった穴を塞ぐ。
-    ap.add_argument("--lab-genres",
-                    default="hvrf,dhcp,dmvpn,ipsla,rtctl,v6addr,v6build,mpls,vpnbuild,mplsbuild,"
-                            "bgp,urpf,aaa",
-                    help=f"ラボの固定ジャンル({','.join(LAB_GENRES)})")
+    # ★BL-223(2026-09-27): 既定は単元ローテーション(--lab-mode)。--lab-genres を明示した時だけ
+    #   従来の固定ジャンル抽選(select_genre_labs)。--profile 時の既定は全ジャンル(を単元で絞る)。
+    #   旧既定= hvrf,dhcp,dmvpn,ipsla,rtctl,v6addr,v6build,mpls,vpnbuild,mplsbuild,bgp,urpf,aaa
+    ap.add_argument("--lab-genres", default="",
+                    help=f"ラボの固定ジャンル({','.join(LAB_GENRES)})。明示すると単元ローテーションを使わない")
+    ap.add_argument("--lab-mode", default="default",
+                    help="単元ローテーションのモード(topologies/lab_modes.yml・BL-223)")
+    ap.add_argument("--lab-date", default=None,
+                    help="単元ローテーションのノルマ日を仮定(YYYY-MM-DD・曜日/遅れ度の確認用)")
     ap.add_argument("--assume-used", type=int, default=None,
                     help="dry-run 専用: CML 稼働台数をこの値と仮定して選定を確認する")
     ap.add_argument("--build-rate", type=float, default=0.4,
                     help="構築ジャンルを 1 本混ぜる確率(1 パック最大 1 本・0 で構築なし・既定 0.4)")
-    ap.add_argument("--lab-extra", type=int, default=1,
-                    help="余裕があれば通常TSプールから追加する数(既定1)")
+    ap.add_argument("--lab-extra", type=int, default=None,
+                    help="余裕があれば通常TSプールから追加する数(既定1・単元ローテーションは0)")
     ap.add_argument("--reserve", type=int, default=3,
                     help="追加枠が使わずに残すノード数(他セッション用の余白)")
-    ap.add_argument("--budget", type=int, default=20, help="同時起動ノード上限")
+    ap.add_argument("--budget", type=int, default=None,
+                    help=f"同時起動ノード上限(既定= min(CML 上限 {CML_NODE_LIMIT}, mgmt_pool の個数)。"
+                         f"{BIG_RULE_BUDGET} 以下なら大型スロット制限も掛かる)")
     ap.add_argument("--settle", type=int, default=180,
                     help="基線採点の前に待つ秒数(収束待ち。0で無効)")
     ap.add_argument("--seed", type=int, default=None)
@@ -3595,6 +3770,23 @@ def main():
                     help="ラボ生成器の追加引数(PREFIX=引数…・複数可・BL-210/211 のスーパーハード指定用)。"
                          "例: --lab-args 'GEN-DHCPTS=--hard acl_wall' --lab-args 'GEN-DMVPNW=--hard all'")
     a = ap.parse_args()
+    if a.budget is None:
+        a.budget = default_budget(os.path.abspath(a.repo))
+    # ★BL-223: --lab-genres も --profile も無ければ単元ローテーション
+    a.rotation = a.cmd == "new" and not a.lab_genres and not a.profile
+    if not a.rotation and not a.lab_genres:
+        # ★--profile 時は全ジャンルを単元で絞る(旧既定 13 種と交差すると STP 等が落ちていた)
+        a.lab_genres = ",".join(LAB_GENRES)
+    if a.lab_extra is None:
+        a.lab_extra = 0 if a.rotation else 1
+    if a.lab is None and not a.rotation:
+        a.lab = 2
+    # ★BL-224: 紙面も単元ローテーション(資格で絞らず units.yml の全単元を均等に)。
+    #   --profile / --require-shape 明示 / --shape・--speed-shape 変更時は従来の抽選。
+    a.paper_rotation = (a.cmd == "new" and not a.profile and a.require_shape == "auto"
+                        and a.shape == "mixed" and a.speed_shape == "speed")
+    if a.paper_rotation:
+        a.no_pool = True        # 別置きの ENARSI 模擬プールは資格モード用(デフォルトには混ぜない)
     global PROFILE, PAPER_GENRES_ACTIVE
     PROFILE = resolve_profile(a.profile, os.path.abspath(a.repo))
     if PROFILE and a.cmd == "new":

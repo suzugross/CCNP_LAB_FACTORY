@@ -7,6 +7,7 @@
 
   GET  /_api/sheet?pack=<PACK-ID>&no=<N>   … 該当セクションの本文を返す
   POST /_api/sheet?pack=<PACK-ID>&no=<N>   … 本文で該当セクションを差し替える
+  GET  /                                   … パック一覧(採点状態つき。pack_home.py)。素の一覧は /?raw=1
   POST /_api/check?pack=<PACK-ID>&no=<N>   … 本文を保存したうえで正誤だけ返す(BL-212 答え合わせ)。
                                               応答= "ok" | "ng" | "empty" | "nokey<TAB>理由"。組合せ/穴埋めは
                                               "ng<TAB>①○ ②× …" のように項目ごとの内訳を付ける。
@@ -35,6 +36,7 @@ from urllib.parse import urlparse, parse_qs
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_pack                                        # noqa: E402
+import pack_home                                       # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PACK_RE = re.compile(r"^PACK-[A-Za-z0-9_.-]{1,64}$")
@@ -111,6 +113,7 @@ def atomic_write(path, text):
 
 class Handler(SimpleHTTPRequestHandler):
     packs_root = os.path.join(REPO, "packs")
+    repo = REPO
 
     def _json(self, code, msg):
         body = msg.encode("utf-8")
@@ -131,7 +134,16 @@ class Handler(SimpleHTTPRequestHandler):
         return sheet_path(self.packs_root, pack), no
 
     def do_GET(self):
-        if urlparse(self.path).path == "/_api/sheet":
+        u = urlparse(self.path)
+        # トップ = パック一覧(採点状態つき・2026-09-27)。素の一覧は /?raw=1
+        if u.path in ("/", "/index.html") and "raw" not in parse_qs(u.query):
+            body = pack_home.build_home(self.packs_root, self.repo).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            return self.wfile.write(body)
+        if u.path == "/_api/sheet":
             path, no = self._target()
             if not path:
                 return self._json(404, "pack が見つかりません")

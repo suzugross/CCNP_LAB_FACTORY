@@ -8,6 +8,8 @@
 #   blueprint   : 該当する資格(ccna/encor/enarsi/ccie)。profile ccna 等はここから導く。
 #
 # ★新しい shape / cloze topic / 生成器を作ったら、該当単元の行に足す(CATALOG 追記と同時)。
+# ★グロブは生成器の kind 名で書く(サブケース名は不可)。svc/light は 1 kind に IP SLA 予約・NetFlow 適用・DHCP relay の
+#   3 サブケースを持つので、U-I3/U-I7/U-I8 は svc/light を共有する(BL-224 で発見・サブケース名だと --only-kinds が空振り)。
 # ★PVT 系の接頭辞は private/units.yml に書く(後勝ちで合流)。
 # ============================================================
 
@@ -22,12 +24,12 @@ profiles:
 
 units:
   # ---------------- A. L2 / キャンパス ----------------
-  U-A1: {name: VLAN/トランク, blueprint: [ccna, encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [CAMPUS-TS-01]}}
-  U-A2: {name: EtherChannel, blueprint: [ccna, encor, ccie], paper: {kinds: []}, lab: {genres: [l2], ids: [ENCOR-LAG-01, ENCOR-LAG-TS-01, GEN-L2TS]}}
-  U-A3: {name: STP, blueprint: [ccna, encor, ccie], paper: {kinds: ["cloze/t_*", "stp/*"]}, lab: {genres: [stpts, stpmst, stpbuild, stpmstbuild], ids: [CAMPUS-TS-01, GEN-STP]}}
+  U-A1: {name: VLAN/トランク, blueprint: [ccna, encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [CAMPUS-TS-01, GEN-ENT]}}
+  U-A2: {name: EtherChannel, blueprint: [ccna, encor, ccie], paper: {kinds: []}, lab: {genres: [l2], ids: [ENCOR-LAG-01, ENCOR-LAG-TS-01, GEN-L2TS, GEN-ENT]}}
+  U-A3: {name: STP, blueprint: [ccna, encor, ccie], paper: {kinds: ["cloze/t_*", "stp/*"]}, lab: {genres: [stpts, stpmst, stpbuild, stpmstbuild, stp3build, stp3ts], ids: [CAMPUS-TS-01, GEN-STP]}}
   U-A4: {name: スイッチ管理, blueprint: [ccna, ccie], paper: {kinds: []}, lab: {genres: [], ids: []}}
   U-A5: {name: L2 セキュリティ, blueprint: [ccna, ccie], paper: {kinds: []}, lab: {genres: [], ids: [ENCOR-VACL-01, ENCOR-VACL-02]}}
-  U-A6: {name: FHRP, blueprint: [ccna, encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [ENCOR-FHRP-01, UM2-BUILD-01, UM2-BUILD-02]}}
+  U-A6: {name: FHRP, blueprint: [ccna, encor, ccie], paper: {kinds: ["fhrp/*"]}, lab: {genres: [], ids: [ENCOR-FHRP-01, UM2-BUILD-01, UM2-BUILD-02, GEN-ENT]}}
   U-A7: {name: SPAN/RSPAN/ERSPAN, blueprint: [encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [ENCOR-SPAN-01, ENCOR-RSPAN-01]}}
   # ---------------- B. ルーティング基礎 ----------------
   U-B1: {name: 経路表/AD/static, blueprint: [ccna, enarsi, ccie], paper: {kinds: ["rtbasic/*", "cloze/o_ad"]}, lab: {genres: [], ids: [ENCOR-IPSLA-01]}}
@@ -77,7 +79,7 @@ units:
   U-G8: {name: SD-Access, blueprint: [encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [SDA-LISP-01]}}
   # ---------------- H. セキュリティ ----------------
   U-H1: {name: AAA, blueprint: [ccna, encor, enarsi, ccie], paper: {kinds: ["aaa/*", "cloze/a_*"]}, lab: {genres: [aaa], ids: [GEN-AAAGRP, GEN-RADIUS, ENCOR-EDGE-HARDEN-01]}}
-  U-H2: {name: IPv4 ACL, blueprint: [ccna, encor, enarsi, ccie], paper: {kinds: ["acl/*"]}, lab: {genres: [], ids: [ENCOR-ACL-EXTENDED-01, ENCOR-ACL-NAMED-01, GEN-DOJO-ACL]}}
+  U-H2: {name: IPv4 ACL, blueprint: [ccna, encor, enarsi, ccie], paper: {kinds: ["acl/*"]}, lab: {genres: [], ids: [ENCOR-ACL-EXTENDED-01, ENCOR-ACL-NAMED-01, GEN-DOJO-ACL, GEN-ENT]}}
   U-H3: {name: IPv6 traffic filter, blueprint: [enarsi, ccie], paper: {kinds: ["aclv6/*"]}, lab: {genres: [], ids: []}}
   U-H4: {name: uRPF, blueprint: [enarsi, ccie], paper: {kinds: ["urpf/*"]}, lab: {genres: [urpf], ids: [GEN-URPF, ENARSI-URPF-01]}}
   U-H5: {name: CoPP, blueprint: [encor, enarsi, ccie], paper: {kinds: ["copp/*"]}, lab: {genres: [], ids: [ENCOR-COPP-01, ENCOR-COPP-02, ENCOR-COPP-03]}}
@@ -88,13 +90,13 @@ units:
   U-H10: {name: REST API セキュリティ, blueprint: [ccna, encor], paper: {kinds: []}, lab: {genres: [], ids: []}}
   # ---------------- I. サービス / 運用 ----------------
   U-I1: {name: NTP/PTP, blueprint: [ccna, encor, ccie], paper: {kinds: ["svc/ntp"]}, lab: {genres: [], ids: []}}
-  U-I2: {name: NAT/PAT, blueprint: [ccna, encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [ENCOR-VRF-NAT-01, ENCOR-INTEGRATED-01]}}
-  U-I3: {name: DHCPv4, blueprint: [ccna, enarsi, ccie], paper: {kinds: ["svc/dhcp_helper"]}, lab: {genres: [dhcp], ids: [GEN-DHCPTS, ENCOR-DHCP-01]}}
+  U-I2: {name: NAT/PAT, blueprint: [ccna, encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [ENCOR-VRF-NAT-01, ENCOR-INTEGRATED-01, GEN-ENT]}}
+  U-I3: {name: DHCPv4, blueprint: [ccna, enarsi, ccie], paper: {kinds: ["svc/light"]}, lab: {genres: [dhcp], ids: [GEN-DHCPTS, ENCOR-DHCP-01, GEN-ENT]}}
   U-I4: {name: DHCPv6/SLAAC, blueprint: [enarsi, ccie], paper: {kinds: ["dhcp6/*"]}, lab: {genres: [v6addr], ids: [GEN-V6ADDR, ENARSI-DHCPV6-01]}}
   U-I5: {name: SNMP, blueprint: [ccna, encor, enarsi, ccie], paper: {kinds: ["svc/snmp", "cloze/s_snmp*"]}, lab: {genres: [], ids: [GEN-SNMPTS, GEN-ZBXBUILD]}}
   U-I6: {name: ロギング/デバッグ, blueprint: [ccna, encor, enarsi, ccie], paper: {kinds: ["svc/log", "svc/archive", "svc/dbgpkt", "cloze/o_syslog"]}, lab: {genres: [], ids: []}}
-  U-I7: {name: IP SLA/track, blueprint: [encor, enarsi, ccie], paper: {kinds: ["svc/ipsla_sched"]}, lab: {genres: [ipsla], ids: [GEN-IPSLATS, ENCOR-IPSLA-01, ENCOR-IPSLA-02, ENCOR-WANHA-01]}}
-  U-I8: {name: NetFlow/FNF, blueprint: [encor, enarsi, ccie], paper: {kinds: ["svc/nfe_apply", "cloze/s_fnf*", "cloze/s_nf*", "cloze/s_top*"]}, lab: {genres: [], ids: [GEN-FNFTS, ENCOR-FNF-01]}}
+  U-I7: {name: IP SLA/track, blueprint: [encor, enarsi, ccie], paper: {kinds: ["svc/light"]}, lab: {genres: [ipsla], ids: [GEN-IPSLATS, ENCOR-IPSLA-01, ENCOR-IPSLA-02, ENCOR-WANHA-01, GEN-ENT]}}
+  U-I8: {name: NetFlow/FNF, blueprint: [encor, enarsi, ccie], paper: {kinds: ["svc/light", "cloze/s_fnf*", "cloze/s_nf*", "cloze/s_top*"]}, lab: {genres: [], ids: [GEN-FNFTS, ENCOR-FNF-01]}}
   U-I9: {name: EEM, blueprint: [encor, ccie], paper: {kinds: []}, lab: {genres: [], ids: [ENCOR-EEM-01]}}
   U-I10: {name: Catalyst Center, blueprint: [encor, enarsi, ccie], paper: {kinds: ["svc/dnac"]}, lab: {genres: [], ids: []}}
   U-I11: {name: QoS MQC, blueprint: [ccna, encor, ccie], paper: {kinds: ["cloze/o_prec"]}, lab: {genres: [], ids: [ENCOR-QOS-CLASS-01, ENCOR-QOS-POLICE-01, ENCOR-QOS-LLQ-01]}}

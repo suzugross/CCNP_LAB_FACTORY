@@ -14,7 +14,7 @@ description: CCNP問題の出題フロー。ユーザが「問題を出して」
 さらに `private/` ディレクトリが存在すれば `private/CATALOG.md` と `private/_history.md`
 も読む(git管理外の非公開問題群=PVT系。選定候補に含め、出題記録は `private/_history.md` 側に付ける)。
 
-環境の前提(既知として扱ってよい): CML 10.1.10.10 / vault パスワード `CCNP` / 機器ログイン SUZUKI/CCNP / **ユーザは CML コンソールで直接解く(SSH 不使用・IOSv も出題可)** / CML Personal は同時起動 20 ノード上限。
+環境の前提(既知として扱ってよい): CML 10.1.10.10 / vault パスワード `CCNP` / 機器ログイン SUZUKI/CCNP / **ユーザは CML コンソールで直接解く(SSH 不使用・IOSv も出題可)** / CML Personal Plus は同時起動 40 ノード上限(2026-09-27〜・MGMT プールも 40 リース)。
 
 ## 手順
 
@@ -26,7 +26,7 @@ description: CCNP問題の出題フロー。ユーザが「問題を出して」
 - **「スーパーハード」指定**(BL-210/211): CATALOG の生成器行にある部品オプションを付けて生成する
   (`gen_dmvpn_wreck --hard all` / `gen_dhcp_ts --hard acl_wall` / `gen_redist_field --wall`)。難易度は +1〜2。
   提示は通常どおり task.md のみ(壁の欠陥・囮・偽メモの中身は solution/README.md にあり、採点後レビューまで出さない)。
-- 台数を確認: 稼働中ラボと合計で 20 ノードを超えるなら、先に teardown を提案。
+- 台数を確認: 稼働中ラボと合計で 40 ノードを超えるなら、先に teardown を提案。
 - パラメータ化問題(params/ あり)の再出題は `gen_params.py --problem <ID> --seed <新N>` で値違いにできる。
 
 ### 2. 構築
@@ -81,7 +81,7 @@ scripts/lab.sh grade <ID> [variant]        # grade.yml を実走＋学習ノル�
 ```bash
 scripts/pack.sh new [--packs 3] [--lab 2] [--budget 20]   # 作成(15〜25分・nohup 推奨)
 #   ★既定は **1回で3パック**(BL-205・2026-09-20)。1パック= 思考系 5〜6 ＋ 瞬発力 8(--speed)
-#     ＋ 穴埋め 5(--cloze)= 紙面18問。**ラボ 2〜3 は1本目にだけ**付く(CML 予算は1日ぶん共通)。
+#     ＋ 穴埋め 5(--cloze)= 紙面18問。**ラボ 3 は1本目にだけ**付く(CML 予算は1日ぶん共通)。ラボは**単元ローテーション**(BL-223・曜日表＋遅れ補正・`topologies/lab_modes.yml`)、紙面も**単元ローテーション**(BL-224・全単元を最終実施日の古い順・資格で絞らない)で選ぶ。
 #     配分は1日全体で決める= 必須ジャンルを3本へ配り分け(全10ジャンルを1周)・既出 kind は後続から除外。
 #     単発に戻すなら `--packs 1`。
 scripts/pack.sh serve                                     # 配信(Windows ブラウザから開く)

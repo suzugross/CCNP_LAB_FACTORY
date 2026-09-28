@@ -1,0 +1,83 @@
+{
+  "world": "3tier",
+  "faults": [
+    {
+      "fault": "t_core_prio_swap",
+      "vlan": 22,
+      "root": "SW01",
+      "backup": "SW02"
+    },
+    {
+      "fault": "t_loopguard_down",
+      "sw": "SW03",
+      "port": "GigabitEthernet0/3"
+    }
+  ],
+  "fix": {
+    "SW01": {
+      "conf": [
+        "spanning-tree vlan 22 priority 24576"
+      ],
+      "exec": []
+    },
+    "SW02": {
+      "conf": [
+        "spanning-tree vlan 22 priority 28672"
+      ],
+      "exec": []
+    },
+    "SW03": {
+      "conf": [
+        "interface GigabitEthernet0/3",
+        "spanning-tree guard root"
+      ],
+      "exec": []
+    }
+  },
+  "break": {
+    "SW01": [
+      "spanning-tree vlan 22 priority 28672"
+    ],
+    "SW02": [
+      "spanning-tree vlan 22 priority 24576"
+    ],
+    "SW03": [
+      "interface GigabitEthernet0/3",
+      "spanning-tree guard loop"
+    ]
+  },
+  "design": {
+    "A": 22,
+    "B": 205,
+    "C": 123,
+    "vlans": [
+      22,
+      205,
+      123
+    ],
+    "root": {
+      "22": "SW01",
+      "123": "SW01",
+      "205": "SW02"
+    },
+    "backup": {
+      "22": "SW02",
+      "123": "SW02",
+      "205": "SW01"
+    },
+    "weak": {
+      "22": "SW03",
+      "123": "SW03",
+      "205": "SW04"
+    },
+    "prefer": {
+      "22": "SW04",
+      "123": "SW04",
+      "205": "SW03"
+    },
+    "rogue_acc": "SW06",
+    "rogue_port": "GigabitEthernet1/3",
+    "oct2": 222,
+    "style": "any"
+  }
+}
