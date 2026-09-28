@@ -1,0 +1,27 @@
+### 04:57:05 PC02$ networkctl down ens3; ip -4 -br addr show ens3
+ 
+__RC=0
+### 04:57:08 RT01: clear ip dhcp binding 10.20.20.5
+
+### 04:57:08 RT01: conf ['ip dhcp pool PRN01', 'client-identifier 0152.5400.aa00.02']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:57:08 PC02$ networkctl up ens3; sleep 15; ip -4 -br addr show ens3; grep -E "ADDRESS|ROUTER" /run/systemd/netif/leases/*
+ 
+ens3             UP             10.20.20.50/24 metric 100 
+ADDRESS=10.20.20.50
+ROUTER=10.20.20.1
+SERVER_ADDRESS=10.20.100.30
+__RC=0
+### 04:57:24 RT01: show ip dhcp binding
+Bindings from all pools not associated with VRF:
+IP address      Client-ID/ 		Lease expiration 	Type       State      Interface
+		Hardware address/
+		User name
+10.20.10.4      0152.5400.4f91.d6       Sep 27 2026 04:58 AM    Automatic  Active     Ethernet0/0
+10.20.20.4      0152.5400.d5de.6a       Sep 27 2026 04:57 AM    Automatic  Active     Ethernet0/0
+10.20.20.50     0152.5400.aa00.02       Infinite                Manual     Active     Ethernet0/0
+### 04:57:24 RT01: show running-config | section pool PRN01
+ip dhcp pool PRN01
+ host 10.20.20.50 255.255.255.0
+ client-identifier 0152.5400.aa00.02
+ default-router 10.20.20.1 

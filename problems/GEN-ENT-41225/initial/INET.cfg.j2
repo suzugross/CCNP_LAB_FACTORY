@@ -1,0 +1,29 @@
+! INET（インターネット中継・既設・変更不可）
+interface {{ links[0] }}
+ description === to ISP-A ===
+ ip address 198.51.100.250 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to ISP-B ===
+ ip address 203.0.113.250 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ description === INET segment (SRVINET) ===
+ ip address 192.0.2.1 255.255.255.0
+ ip access-group PMTU-BLACKHOLE out
+ no shutdown
+!
+ip route 198.51.100.0 255.255.255.0 198.51.100.249
+ip route 203.0.113.0 255.255.255.0 203.0.113.249
+! インターネット上の PMTUD ブラックホール（packet-too-big を捨てる経路）
+ip access-list extended PMTU-BLACKHOLE
+ deny icmp any any packet-too-big
+ permit ip any any
+!
+ntp master 3
+!
+line vty 0 4
+ transport input ssh telnet
+!

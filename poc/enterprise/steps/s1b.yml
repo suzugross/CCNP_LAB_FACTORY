@@ -1,0 +1,10 @@
+- node: PC01
+  sh: ['ip -4 -br addr show ens3; networkctl reconfigure ens3; sleep 15; ip -4 -br addr show ens3; cat /run/systemd/netif/leases/* 2>/dev/null | grep -E "ADDRESS|ROUTER|DNS|SERVER"']
+- node: PC02
+  sh: ['ip -4 -br addr show ens3; networkctl reconfigure ens3; sleep 15; ip -4 -br addr show ens3']
+- node: RT01
+  show: ['show ip dhcp binding', 'show ip dhcp server statistics | include DISCOVER|OFFER|REQUEST|ACK', 'show ip route 10.20.10.0']
+- node: SW01
+  show: ['show ip interface Vlan10 | include Helper|access list']
+- node: PC01
+  sh: ['ping -c2 -W2 10.20.20.1 | tail -1; ping -c2 -W2 192.0.2.10 | tail -1; curl -s -m5 http://192.0.2.10/ip; dig +short +time=2 +tries=1 @192.0.2.10 www.inet.example']

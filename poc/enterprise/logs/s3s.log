@@ -1,0 +1,46 @@
+
+======== S3s-1 snooping 有効(option 82 挿入・既定)でまっさらな DORA ========
+### 05:02:47 SW03: clear ip dhcp snooping statistics
+
+### 05:02:47 PC01$ networkctl down ens3; rm -f /run/systemd/netif/leases/*; sleep 1; networkctl up ens3; sleep 20; ip -4 -br addr show ens3
+ 
+ens3             UP             10.20.10.4/24 metric 100 
+__RC=0
+### 05:03:09 SW03: show ip dhcp snooping binding
+MacAddress          IpAddress        Lease(sec)  Type           VLAN  Interface
+------------------  ---------------  ----------  -------------  ----  --------------------
+Total number of bindings: 0
+### 05:03:09 SW03: show ip dhcp snooping statistics detail | include Forwarded|Dropped|Received|giaddr|option
+ Packets Dropped Because 
+   Received on untrusted ports                         = 0
+   Nonzero giaddr                                      = 0
+### 05:03:09 SW01: show logging | include DHCP|RELAY|relay|inconsistent
+*Sep 27 04:55:36.117: %DHCPD-7-NO_LEASE: DHCP lease assignment failure, client 5254.008e.ff45 reason CANT FORWARD
+### 05:03:12 RT01: show ip dhcp binding | include 10.20.10
+10.20.10.4      0152.5400.4f91.d6       Sep 27 2026 05:04 AM    Automatic  Active     Ethernet0/0
+### 05:03:12 RT01: show logging | include DHCPD
+*Sep 27 04:55:36.013: %DHCPD-7-NO_LEASE: DHCP lease assignment failure, client 5254.008e.ff45 reason NO POOL
+*Sep 27 04:56:41.264: %DHCPD-7-NO_LEASE: DHCP lease assignment failure, client 5254.00aa.0002 reason CANT FORWARD
+*Sep 27 04:57:09.208: %DHCPD-7-NO_LEASE: DHCP lease assignment failure, client 5254.00aa.0002 reason CLIENT CONFUSED ABOUT ADDRESS
+*Sep 27 04:57:09.208: %DHCPD-7-NAK: DHCP nak sent to client 0152.5400.aa00.02
+*Sep 27 04:57:09.208: %DHCPD-7-NAK: DHCP nak sent to client 0152.5400.aa00.02
+
+======== S3s-2 リレー(SW01/SW02)で option 82 を信頼(trust-all)して再試行 ========
+### 05:03:12 SW01: conf ['ip dhcp relay information trust-all']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:03:13 SW02: conf ['ip dhcp relay information trust-all']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:03:13 PC01$ networkctl down ens3; rm -f /run/systemd/netif/leases/*; sleep 1; networkctl up ens3; sleep 20; ip -4 -br addr show ens3
+ 
+ens3             UP             10.20.10.4/24 metric 100 
+__RC=0
+### 05:03:34 SW03: show ip dhcp snooping binding
+MacAddress          IpAddress        Lease(sec)  Type           VLAN  Interface
+------------------  ---------------  ----------  -------------  ----  --------------------
+Total number of bindings: 0
+### 05:03:34 SW03: show ip dhcp snooping statistics
+ Packets Forwarded                                     = 0
+ Packets Dropped                                       = 0
+ Packets Dropped From untrusted ports                  = 0
+### 05:03:34 RT01: show ip dhcp binding | include 10.20.10
+10.20.10.4      0152.5400.4f91.d6       Sep 27 2026 05:05 AM    Automatic  Active     Ethernet0/0

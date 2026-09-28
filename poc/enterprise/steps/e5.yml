@@ -1,0 +1,80 @@
+# 設計書 §4.2 の模範 ACL(WAN-IN/LAN-IN)を RT01 に入れて: 平常の成立・E6 外部から不応答・T3 OSPF 許可抜け・T1 echo-reply 抜け
+- note: 'E5a ACL 投入前: 外部(SRV01)から RT01 グローバルへの 22/23・ping'
+- node: SRV01
+  sh:
+    - 'for p in 22 23 80; do nc -z -w3 198.51.100.10 $p && echo "port $p OPEN" || echo "port $p closed"; done; ping -c2 -W2 198.51.100.10 | tail -2'
+- note: 'E5b 模範 ACL 投入'
+- node: RT01
+  conf:
+    - ip access-list extended WAN-IN
+    - deny ip 10.0.0.0 0.255.255.255 any
+    - deny ip 172.16.0.0 0.15.255.255 any
+    - deny ip 192.168.0.0 0.0.255.255 any
+    - deny ip 127.0.0.0 0.255.255.255 any
+    - permit tcp any any established
+    - permit udp host 192.0.2.10 eq domain any
+    - permit udp host 192.0.2.10 eq ntp any eq ntp
+    - permit icmp any any echo-reply
+    - permit icmp any any unreachable
+    - permit icmp any any time-exceeded
+    - deny ip any any log
+    - ip access-list extended LAN-IN
+    - permit ospf any any
+    - deny tcp any any eq smtp
+    - deny tcp any any range 135 139
+    - deny udp any any range netbios-ns netbios-ss
+    - deny tcp any any eq 445
+    - permit udp host 10.20.100.10 any eq domain
+    - permit tcp host 10.20.100.10 any eq domain
+    - deny udp any any eq domain
+    - deny tcp any any eq domain
+    - permit ip 10.20.10.0 0.0.0.255 any
+    - deny ip any any log
+    - interface Dialer1
+    - ip access-group WAN-IN in
+    - interface Ethernet0/0
+    - ip access-group LAN-IN in
+- sleep: 20
+- node: RT01
+  show: ['show track 1', 'show ip ospf neighbor']
+- node: PC01
+  timeout: 90
+  sh:
+    - curl -s -m5 http://192.0.2.10/ip
+    - "curl -s -m30 -o /dev/null -w 'size=%{size_download} time=%{time_total} rc=%{exitcode}\\n' http://192.0.2.10/big.bin"
+    - ping -c2 -W2 192.0.2.10 | tail -2
+    - 'dig +short +time=2 +tries=1 @192.0.2.10 www.inet.example || echo DIG_FAIL'
+    - 'nc -z -w3 192.0.2.10 445 && echo 445_OPEN || echo 445_blocked_or_closed'
+- node: SRV01
+  sh:
+    - 'for p in 22 23 80; do nc -z -w3 198.51.100.10 $p && echo "port $p OPEN" || echo "port $p closed"; done; ping -c2 -W2 198.51.100.10 | tail -2'
+- node: RT01
+  show: ['show access-lists WAN-IN', 'show access-lists LAN-IN']
+- note: 'E5c T3: LAN-IN から permit ospf を外す → 隣接'
+- node: RT01
+  conf: ['ip access-list extended LAN-IN', 'no permit ospf any any']
+- sleep: 45
+- node: RT01
+  show: ['show ip ospf neighbor', 'show logging | include OSPF-5']
+- node: RT06
+  show: ['show ip route 0.0.0.0']
+- node: RT01
+  conf: ['ip access-list extended LAN-IN', '5 permit ospf any any']
+- sleep: 45
+- node: RT01
+  show: ['show ip ospf neighbor', 'show access-lists LAN-IN']
+- note: 'E5d T1: WAN-IN から echo-reply を外す → track'
+- node: RT01
+  conf: ['ip access-list extended WAN-IN', 'no permit icmp any any echo-reply']
+- sleep: 30
+- node: RT01
+  show: ['show track 1', 'show ip sla statistics 1 | include return code', 'show ip route 0.0.0.0']
+- node: RT06
+  show: ['show ip route 0.0.0.0']
+- node: PC01
+  sh: ['curl -s -m5 http://192.0.2.10/ip']
+- node: RT01
+  conf: ['ip access-list extended WAN-IN', '75 permit icmp any any echo-reply']
+- sleep: 45
+- node: RT01
+  show: ['show track 1', 'show access-lists WAN-IN']

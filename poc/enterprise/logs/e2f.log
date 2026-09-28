@@ -1,0 +1,60 @@
+
+======== E2f MSS 調整なし・両端 cache クリア・SYN の MSS 観測 ========
+### 04:21:44 RT01: conf ['interface Dialer1', 'no ip tcp adjust-mss 1452']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:21:44 PC01$ ip route get 192.0.2.10; ip route flush cache; ip route get 192.0.2.10
+ 
+192.0.2.10 via 10.20.10.1 dev ens3 src 10.20.10.10 uid 0 
+    cache expires 556sec mtu 1492 
+192.0.2.10 via 10.20.10.1 dev ens3 src 10.20.10.10 uid 0 
+    cache 
+__RC=0
+### 04:21:44 SRV01$ ip route flush cache; rm -f /tmp/syn.txt; (timeout 40 tcpdump -lni ens3 -c 6 "tcp[tcpflags] & tcp-syn != 0 or icmp" > /tmp/syn.txt 2>&1 &) ; sleep 1; echo started
+ 
+started
+__RC=0
+### 04:21:46 PC01$ curl -s -m20 -o /dev/null -w 'size=%{size_download} time=%{time_total} rc=%{exitcode}\n' http://192.0.2.10/big.bin; echo curl_rc=$?
+ 
+size=0 time=20.003109 rc=28
+curl_rc=28
+__RC=0
+### 04:22:06 SRV01$ sleep 2; cat /tmp/syn.txt; ip route get 198.51.100.10
+ 
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on ens3, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+04:21:46.619515 IP 198.51.100.10.4103 > 192.0.2.10.80: Flags [S], seq 82678755, win 64240, options [mss 1460,sackOK,TS val 190950576 ecr 0,nop,wscale 7], length 0
+04:21:46.619553 IP 192.0.2.10.80 > 198.51.100.10.4103: Flags [S.], seq 3635861467, ack 82678756, win 65160, options [mss 1460,sackOK,TS val 3410611323 ecr 190950576,nop,wscale 7], length 0
+198.51.100.10 via 192.0.2.1 dev ens3 src 192.0.2.10 uid 0 
+    cache 
+__RC=0
+### 04:22:11 RT05: show access-lists PMTU-BLACKHOLE
+Extended IP access list PMTU-BLACKHOLE
+    10 deny icmp any any packet-too-big (6 matches)
+    20 permit ip any any (6382 matches)
+
+======== E2g 同条件で adjust-mss 1452 を入れる ========
+### 04:22:12 RT01: conf ['interface Dialer1', 'ip tcp adjust-mss 1452']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:22:12 PC01$ ip route flush cache
+ 
+__RC=0
+### 04:22:12 SRV01$ ip route flush cache; rm -f /tmp/syn.txt; (timeout 40 tcpdump -lni ens3 -c 6 "tcp[tcpflags] & tcp-syn != 0 or icmp" > /tmp/syn.txt 2>&1 &) ; sleep 1; echo started
+ 
+started
+__RC=0
+### 04:22:13 PC01$ curl -s -m20 -o /dev/null -w 'size=%{size_download} time=%{time_total} rc=%{exitcode}\n' http://192.0.2.10/big.bin; echo curl_rc=$?
+ 
+size=8388608 time=0.981629 rc=0
+curl_rc=0
+__RC=0
+### 04:22:15 SRV01$ sleep 2; cat /tmp/syn.txt
+ 
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on ens3, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+04:22:14.191599 IP 198.51.100.10.4096 > 192.0.2.10.80: Flags [S], seq 1433783813, win 64240, options [mss 1452,sackOK,TS val 190978148 ecr 0,nop,wscale 7], length 0
+04:22:14.191624 IP 192.0.2.10.80 > 198.51.100.10.4096: Flags [S.], seq 2901580068, ack 1433783814, win 65160, options [mss 1460,sackOK,TS val 3410638895 ecr 190978148,nop,wscale 7], length 0
+__RC=0
+### 04:22:17 RT05: show access-lists PMTU-BLACKHOLE
+Extended IP access list PMTU-BLACKHOLE
+    10 deny icmp any any packet-too-big (7 matches)
+    20 permit ip any any (7887 matches)

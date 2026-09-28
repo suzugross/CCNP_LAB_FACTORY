@@ -1,0 +1,50 @@
+### 04:53:46 PC01$ ip -4 -br addr show ens3; networkctl reconfigure ens3; sleep 15; ip -4 -br addr show ens3; cat /run/systemd/netif/leases/* 2>/dev/null | grep -E "ADDRESS|ROUTER|DNS|SERVER"
+ 
+ens3             UP             10.20.10.4/24 metric 100 
+ADDRESS=10.20.10.4
+ROUTER=10.20.10.1
+SERVER_ADDRESS=10.20.100.30
+DNS=192.0.2.10
+__RC=0
+### 04:54:02 PC02$ ip -4 -br addr show ens3; networkctl reconfigure ens3; sleep 15; ip -4 -br addr show ens3
+ 
+ens3             UP             10.20.20.4/24 metric 100 
+__RC=0
+### 04:54:20 RT01: show ip dhcp binding
+Bindings from all pools not associated with VRF:
+IP address      Client-ID/ 		Lease expiration 	Type       State      Interface
+		Hardware address/
+		User name
+10.20.10.4      0152.5400.4f91.d6       Sep 27 2026 04:55 AM    Automatic  Active     Ethernet0/0
+10.20.20.4      0152.5400.d5de.6a       Sep 27 2026 04:56 AM    Automatic  Active     Ethernet0/0
+### 04:54:20 RT01: show ip dhcp server statistics | include DISCOVER|OFFER|REQUEST|ACK
+BOOTREQUEST          0
+DHCPDISCOVER         6
+DHCPREQUEST          4
+  REQUEST            4
+DHCPOFFER            0
+DHCPACK              0
+DHCPOFFER            4
+DHCPACK              4
+BOOTREQUEST          0
+DHCPDISCOVER         0
+DHCPREQUEST          0
+  REQUEST            0
+DHCPOFFER            0
+DHCPACK              0
+DHCP Relay ACK drop          0
+### 04:54:20 RT01: show ip route 10.20.10.0
+% Subnet not in table
+### 04:54:20 SW01: show ip interface Vlan10 | include Helper|access list
+  Helper address is 10.20.100.30
+  Outgoing Common access list is not set 
+  Outgoing access list is not set
+  Inbound Common access list is not set 
+  Inbound  access list is not set
+### 04:54:20 PC01$ ping -c2 -W2 10.20.20.1 | tail -1; ping -c2 -W2 192.0.2.10 | tail -1; curl -s -m5 http://192.0.2.10/ip; dig +short +time=2 +tries=1 @192.0.2.10 www.inet.example
+ 
+
+rtt min/avg/max/mdev = 2.741/3.311/3.882/0.570 ms
+10.20.10.4
+192.0.2.10
+__RC=0

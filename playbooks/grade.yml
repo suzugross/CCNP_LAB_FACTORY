@@ -98,6 +98,29 @@
       loop_control: { label: "{{ item }} -> {{ hostmap[item] }} (junos)" }
       when: access == 'ssh'
 
+    # ★BL-225: 採点前フック。problem.yml に `pre_grade: <repo 相対のスクリプト>` があれば、
+    #   収束待ちの試行ループに入る前に **1 回だけ**実行する(回線断→待ち→確認→復旧のような
+    #   動的試験は試行のたびに繰り返せないため)。スクリプトは結果をノード上のファイルに書き、
+    #   checks はそれを読む。引数= 問題 ID。失敗しても採点は続行(該当チェックが落ちるだけ)。
+    - name: 採点前フック（problem.yml の pre_grade）
+      ansible.builtin.command:
+        argv:
+          - "{{ repo }}/.venv/bin/python3"
+          - "{{ repo }}/{{ pmeta.pre_grade }}"
+          - "{{ problem }}"
+      environment:
+        CCNP_USER: "{{ ansible_user }}"
+        CCNP_PASS: "{{ ansible_ssh_pass }}"
+      register: pre_grade_out
+      changed_when: false
+      failed_when: false
+      when: pmeta.pre_grade is defined
+
+    - name: 採点前フックの出力
+      ansible.builtin.debug:
+        msg: "{{ pre_grade_out.stdout_lines | default([]) + pre_grade_out.stderr_lines | default([]) }}"
+      when: pmeta.pre_grade is defined
+
 # === ラボ指紋の照合（誤ラボ採点の決定的防御） ================================
 # baseline が焼き込んだ labid（IOS: alias exec labid / Linux: /etc/ccnp-lab-id）を
 # 採点前に照合する。MGMT IP が別ラボに当たっていれば別ラボの labid が返り即中止＝

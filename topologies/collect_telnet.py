@@ -12,6 +12,7 @@ SSH(network_cli)が使えないノード向けの収集層。判定ロジック(
     OUT.json    : grade.py に渡す grade_input.json（各 check に stdout を付与して出力）
 """
 import json
+import shlex
 import os
 import sys
 
@@ -73,24 +74,74 @@ def collect(ip, user, pw, commands, timeout=45, expected_labid=None):
     return out
 
 
+SSH_OPTS = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
+
+
+def run_shell(ip, user, pw, cmd, timeout=180):
+    """Linux ノード(exec: shell)で 1 コマンドを ssh 実行し、stdout+stderr を返す。
+    ssh 方式の採点(_grade_attempt.yml の ansible.builtin.shell)と同じく sudo なし・
+    失敗コマンドの出力もそのまま採点に回す。"""
+    c = pexpect.spawn(f"ssh {SSH_OPTS} {user}@{ip} {shlex.quote(cmd)}", timeout=timeout,
+                      encoding="utf-8", codec_errors="ignore")
+    try:
+        c.expect("[Pp]assword:")
+        c.sendline(pw)
+        c.expect(pexpect.EOF)
+        return (c.before or "").replace("\r\n", "\n").strip("\n")
+    except (pexpect.EOF, pexpect.TIMEOUT) as exc:
+        return f"[collect_telnet] ssh 失敗: {type(exc).__name__}"
+    finally:
+        c.close()
+
+
 def main():
     checks = json.load(open(sys.argv[1], encoding="utf-8"))
     user, pw = os.environ["CCNP_USER"], os.environ["CCNP_PASS"]
+    expected_labid = os.environ.get("LAB_ID")  # 期待するラボ指紋(無ければ照合しない)
+
+    # ★BL-225: exec: shell のチェック(Linux 端末での疎通試験等)は ssh で 1 コマンドずつ実行する
+    #   (telnet 収集の問題でも Linux ノードを採点できるように。IOS のチェックは従来どおり)。
+    captured_sh = {}
+    sh_hosts = {}
+    for chk in checks:
+        if chk.get("exec") == "shell":
+            sh_hosts[chk["node"]] = chk["ansible_host"]
+    for node, ip in sh_hosts.items():
+        if expected_labid:
+            fp = run_shell(ip, user, pw, "cat /etc/ccnp-lab-id", timeout=60)
+            if "CCNP-LAB-" in fp and expected_labid not in fp:
+                sys.exit(f"[collect_telnet] ★誤ラボ検知: {node}({ip}) の labid が期待 "
+                         f"{expected_labid} と不一致。採点を中止")
+        captured_sh[node] = {}
+    for chk in checks:
+        if chk.get("exec") == "shell":
+            captured_sh[chk["node"]][chk["command"]] = run_shell(
+                chk["ansible_host"], user, pw, chk["command"])
 
     # ノード単位で必要コマンドをまとめ、1 セッションで収集
-    by_node = {}
+    by_node, by_console = {}, {}
     for chk in checks:
+        if chk.get("exec") == "shell":
+            continue
+        if chk.get("via") == "console":
+            # ★BL-225: 管理 IF を持たないノード（problem.yml の console_nodes）は CML コンソールで収集
+            by_console.setdefault(chk["node"], set()).add(chk["command"])
+            continue
         key = (chk["node"], chk["ansible_host"])
         by_node.setdefault(key, set()).add(chk["command"])
 
     captured = {}
-    expected_labid = os.environ.get("LAB_ID")  # 期待するラボ指紋(無ければ照合しない)
     for (node, ip), cmds in by_node.items():
         captured[node] = collect(ip, user, pw, sorted(cmds),
                                  expected_labid=expected_labid)
+    if by_console:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import collect_console
+        captured.update(collect_console.collect_nodes(by_console, lab_title=expected_labid))
 
     for chk in checks:
-        chk["stdout"] = captured.get(chk["node"], {}).get(chk["command"], "")
+        src = captured_sh if chk.get("exec") == "shell" else captured
+        chk["stdout"] = src.get(chk["node"], {}).get(chk["command"], "")
 
     json.dump(checks, open(sys.argv[2], "w", encoding="utf-8"),
               ensure_ascii=False, indent=2)

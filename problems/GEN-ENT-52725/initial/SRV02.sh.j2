@@ -1,0 +1,38 @@
+#!/bin/bash
+# SRV02: 社内 Web/ファイル役（既設）・待受 80/443/445/3389（自動生成 gen_enterprise.py）
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[$(date -Is)] $*"; }
+echo "{{ ansible_user }} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-ccnp; chmod 440 /etc/sudoers.d/90-ccnp
+for i in 1 2 3; do apt-get update -qq && apt-get install -y -qq nginx netcat-openbsd dnsutils curl && break; sleep 10; done
+echo 'portal OK' > /var/www/html/index.html
+systemctl restart nginx
+cat > /etc/systemd/system/ccnp-listen@.service <<'UNIT'
+[Unit]
+Description=ccnp tcp listener %i
+After=network-online.target
+[Service]
+ExecStart=/bin/nc -lk %i
+Restart=always
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now ccnp-listen@443.service
+systemctl enable --now ccnp-listen@445.service
+systemctl enable --now ccnp-listen@3389.service
+rm -f /etc/netplan/50-cloud-init.yaml
+cat > /etc/netplan/60-ccnp.yaml <<NP
+network:
+  version: 2
+  ethernets:
+    ens2:
+      addresses: [{{ mgmt_ip }}/{{ mgmt_prefixlen }}]
+    ens3:
+      addresses: [10.51.170.20/24]
+      routes:
+        - to: default
+          via: 10.51.170.1
+NP
+chmod 600 /etc/netplan/60-ccnp.yaml
+netplan apply
+log "DONE"

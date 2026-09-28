@@ -56,6 +56,9 @@
         mgmt_ip: "{{ mgmt_map[item] }}"
         image_family: "{{ (pmeta.node_image_families | default({}))[item]
                           | default(pmeta.image_family | default(omit), true) }}"
+        # BL-225: problem.yml の console_nodes= 管理 IF/SVI を持たないノード（採点・投入はコンソール）。
+        # MGMT IP は従来どおり割り当てる（下流の mgmt_map[node] 参照を壊さないため・使わないだけ）。
+        console_only: "{{ item in (pmeta.console_nodes | default([])) }}"
       loop: "{{ pmeta.target_nodes }}"
 
 - name: 各ノードの day0 config(baseline+initial) を描画

@@ -1,0 +1,165 @@
+
+======== S2a T12: SW02 Vlan10 in に「SALES の TCP だけ許可」(HSRP hello 224.0.0.102 は暗黙 deny) ========
+### 04:54:38 SW02: conf ['ip access-list extended T12-IN', 'permit tcp 10.20.10.0 0.0.0.255 any', 'deny ip any any log', 'interface Vlan10', 'ip access-group T12-IN in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 20
+### 04:54:58 SW02: show standby brief
+                     P indicates configured to preempt.
+                     |
+Interface   Grp  Pri P State   Active          Standby         Virtual IP
+Vl10        10   100 P Active  local           unknown         10.20.10.1
+Vl20        20   110 P Active  local           10.20.20.2      10.20.20.1
+Vl100       100  100 P Standby 10.20.100.2     local           10.20.100.1
+### 04:54:58 SW02: show access-lists T12-IN
+Extended IP access list T12-IN
+    10 permit tcp 10.20.10.0 0.0.0.255 any
+    20 deny ip any any log (14 matches)
+### 04:54:58 SW02: show logging | include HSRP|SEC-6
+*Sep 27 04:52:37.007: %HSRP-5-STATECHANGE: Vlan20 Grp 20 state Standby -> Active
+*Sep 27 04:52:54.946: %HSRP-5-STATECHANGE: Vlan10 Grp 10 state Speak -> Standby
+*Sep 27 04:52:55.310: %HSRP-5-STATECHANGE: Vlan100 Grp 100 state Speak -> Standby
+*Sep 27 04:54:39.473: %SEC-6-IPACCESSLOGP: list T12-IN denied udp 10.20.10.2(1985) -> 224.0.0.102(1985), 1 packet 
+*Sep 27 04:54:47.828: %HSRP-5-STATECHANGE: Vlan10 Grp 10 state Standby -> Active
+### 04:54:58 SW01: show standby brief
+                     P indicates configured to preempt.
+                     |
+Interface   Grp  Pri P State   Active          Standby         Virtual IP
+Vl10        10   110 P Active  local           unknown         10.20.10.1
+Vl20        20   100 P Standby 10.20.20.3      local           10.20.20.1
+Vl100       100  110 P Active  local           10.20.100.3     10.20.100.1
+### 04:54:58 SW02: conf ['interface Vlan10', 'no ip access-group T12-IN in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 15
+### 04:55:13 SW02: show standby brief | include Vl10
+Vl10        10   100 P Standby 10.20.10.2      local           10.20.10.1
+Vl100       100  100 P Standby 10.20.100.2     local           10.20.100.1
+
+======== S2b T6: Vlan100 in(両 L3SW)でリレー応答の宛先をカウント(VIP/.2/.3・20 系も) ========
+### 04:55:14 SW01: conf ['ip access-list extended T6-CNT', 'permit udp host 10.20.100.30 eq bootps host 10.20.10.1', 'permit udp host 10.20.100.30 eq bootps host 10.20.10.2', 'permit udp host 10.20.100.30 eq bootps host 10.20.10.3', 'permit udp host 10.20.100.30 eq bootps host 10.20.20.2', 'permit udp host 10.20.100.30 eq bootps host 10.20.20.3', 'permit udp host 10.20.100.30 eq bootps any', 'permit ip any any', 'interface Vlan100', 'ip access-group T6-CNT in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:55:15 SW02: conf ['ip access-list extended T6-CNT', 'permit udp host 10.20.100.30 eq bootps host 10.20.10.1', 'permit udp host 10.20.100.30 eq bootps host 10.20.10.2', 'permit udp host 10.20.100.30 eq bootps host 10.20.10.3', 'permit udp host 10.20.100.30 eq bootps host 10.20.20.2', 'permit udp host 10.20.100.30 eq bootps host 10.20.20.3', 'permit udp host 10.20.100.30 eq bootps any', 'permit ip any any', 'interface Vlan100', 'ip access-group T6-CNT in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:55:15 PC01$ networkctl down ens3; sleep 2; networkctl up ens3; sleep 10; ip -4 -br addr show ens3
+ 
+ens3             UP             10.20.10.4/24 metric 100 
+__RC=0
+### 04:55:27 SW01: show access-lists T6-CNT
+Extended IP access list T6-CNT
+    10 permit udp host 10.20.100.30 eq bootps host 10.20.10.1
+    20 permit udp host 10.20.100.30 eq bootps host 10.20.10.2 (2 matches)
+    30 permit udp host 10.20.100.30 eq bootps host 10.20.10.3 (1 match)
+    40 permit udp host 10.20.100.30 eq bootps host 10.20.20.2
+    50 permit udp host 10.20.100.30 eq bootps host 10.20.20.3
+    60 permit udp host 10.20.100.30 eq bootps any
+    70 permit ip any any (5 matches)
+### 04:55:28 SW02: show access-lists T6-CNT
+Extended IP access list T6-CNT
+    10 permit udp host 10.20.100.30 eq bootps host 10.20.10.1
+    20 permit udp host 10.20.100.30 eq bootps host 10.20.10.2
+    30 permit udp host 10.20.100.30 eq bootps host 10.20.10.3
+    40 permit udp host 10.20.100.30 eq bootps host 10.20.20.2
+    50 permit udp host 10.20.100.30 eq bootps host 10.20.20.3
+    60 permit udp host 10.20.100.30 eq bootps any
+    70 permit ip any any (5 matches)
+
+======== S2c T6 本番: Vlan100 in で VIP 宛てだけ許可(実アドレス宛ての応答を捨てる)→ PC01 取り直し ========
+### 04:55:28 SW01: conf ['ip access-list extended T6-VIP', 'permit udp host 10.20.100.30 eq bootps host 10.20.10.1', 'deny udp any any eq bootps log', 'permit ip any any', 'interface Vlan100', 'ip access-group T6-VIP in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:55:29 SW02: conf ['ip access-list extended T6-VIP', 'permit udp host 10.20.100.30 eq bootps host 10.20.10.1', 'deny udp any any eq bootps log', 'permit ip any any', 'interface Vlan100', 'ip access-group T6-VIP in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:55:29 PC01$ networkctl down ens3; sleep 2; networkctl up ens3; sleep 15; ip -4 -br addr show ens3
+ 
+__RC=0
+### 04:55:46 SW01: conf ['interface Vlan100', 'no ip access-group T6-VIP in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:55:46 SW01: show access-lists T6-VIP
+Extended IP access list T6-VIP
+    10 permit udp host 10.20.100.30 eq bootps host 10.20.10.1
+    20 deny udp any any eq bootps log (8 matches)
+    30 permit ip any any (8 matches)
+### 04:55:47 SW02: conf ['interface Vlan100', 'no ip access-group T6-VIP in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:55:47 SW02: show access-lists T6-VIP
+Extended IP access list T6-VIP
+    10 permit udp host 10.20.100.30 eq bootps host 10.20.10.1
+    20 deny udp any any eq bootps log
+    30 permit ip any any (7 matches)
+### 04:55:47 PC01$ networkctl down ens3; sleep 2; networkctl up ens3; sleep 10; ip -4 -br addr show ens3
+ 
+ens3             UP             10.20.10.4/24 metric 100 
+__RC=0
+
+======== S2d T4: Vlan10 in(両 L3SW)に DHCP 行なし(送信元 SALES のみ許可)→ 取り直し ========
+### 04:56:00 SW01: conf ['ip access-list extended T4-IN', 'permit ip 10.20.10.0 0.0.0.255 any', 'deny ip any any log', 'interface Vlan10', 'ip access-group T4-IN in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:56:00 SW02: conf ['ip access-list extended T4-IN', 'permit ip 10.20.10.0 0.0.0.255 any', 'deny ip any any log', 'interface Vlan10', 'ip access-group T4-IN in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:56:00 PC01$ networkctl down ens3; sleep 2; networkctl up ens3; sleep 15; ip -4 -br addr show ens3
+ 
+__RC=0
+### 04:56:17 SW01: show access-lists T4-IN
+Extended IP access list T4-IN
+    10 permit ip 10.20.10.0 0.0.0.255 any (8 matches)
+    20 deny ip any any log (4 matches)
+### 04:56:17 SW01: show standby brief | include Vl10
+Vl10        10   110 P Active  local           10.20.10.3      10.20.10.1
+Vl100       100  110 P Active  local           10.20.100.3     10.20.100.1
+
+======== S2e T5: DHCP はブロードキャストだけ許可(0.0.0.0→255.255.255.255)・他は SALES 発を拒否 → 取得後、更新(ユニキャスト)が通らずアドレスを失うか(リース 2 分・3 分観察) ========
+### 04:56:18 SW01: conf ['ip access-list extended T5-IN', 'permit udp host 0.0.0.0 host 255.255.255.255 eq bootps', 'permit udp any host 224.0.0.102 eq 1985', 'deny ip any any log', 'interface Vlan10', 'ip access-group T5-IN in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:56:18 SW02: conf ['ip access-list extended T5-IN', 'permit udp host 0.0.0.0 host 255.255.255.255 eq bootps', 'permit udp any host 224.0.0.102 eq 1985', 'deny ip any any log', 'interface Vlan10', 'ip access-group T5-IN in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:56:18 PC01$ networkctl down ens3; sleep 2; networkctl up ens3; for i in $(seq 1 22); do printf "%s " $(date +%T); ip -4 -br addr show ens3 | tr -s " "; sleep 10; done
+ 
+04:56:21 04:56:31 ens3 UP 10.20.10.4/24 metric 100 
+04:56:41 ens3 UP 10.20.10.4/24 metric 100 
+04:56:51 ens3 UP 10.20.10.4/24 metric 100 
+04:57:01 ens3 UP 10.20.10.4/24 metric 100 
+04:57:11 ens3 UP 10.20.10.4/24 metric 100 
+04:57:21 ens3 UP 10.20.10.4/24 metric 100 
+04:57:31 ens3 UP 10.20.10.4/24 metric 100 
+04:57:41 ens3 UP 10.20.10.4/24 metric 100 
+04:57:51 ens3 UP 10.20.10.4/24 metric 100 
+04:58:01 ens3 UP 10.20.10.4/24 metric 100 
+04:58:11 ens3 UP 10.20.10.4/24 metric 100 
+04:58:21 ens3 UP 10.20.10.4/24 metric 100 
+04:58:31 ens3 UP 10.20.10.4/24 metric 100 
+04:58:41 ens3 UP 10.20.10.4/24 metric 100 
+04:58:51 ens3 UP 10.20.10.4/24 metric 100 
+04:59:01 ens3 UP 10.20.10.4/24 metric 100 
+04:59:11 ens3 UP 10.20.10.4/24 metric 100 
+04:59:21 ens3 UP 10.20.10.4/24 metric 100 
+04:59:31 ens3 UP 10.20.10.4/24 metric 100 
+04:59:41 ens3 UP 10.20.10.4/24 metric 100 
+04:59:51 ens3 UP 10.20.10.4/24 metric 100 
+__RC=0
+### 05:00:01 SW01: show access-lists T5-IN
+Extended IP access list T5-IN
+    10 permit udp host 0.0.0.0 host 255.255.255.255 eq bootps (6 matches)
+    20 permit udp any host 224.0.0.102 eq 1985 (91 matches)
+    30 deny ip any any log (2 matches)
+### 05:00:01 SW02: show access-lists T5-IN
+Extended IP access list T5-IN
+    10 permit udp host 0.0.0.0 host 255.255.255.255 eq bootps (6 matches)
+    20 permit udp any host 224.0.0.102 eq 1985 (82 matches)
+    30 deny ip any any log (6 matches)
+### 05:00:03 RT01: show ip dhcp server statistics | include DISCOVER|REQUEST|ACK|RELEASE
+BOOTREQUEST          0
+DHCPDISCOVER         25
+DHCPREQUEST          30
+  REQUEST            13
+DHCPRELEASE          0
+DHCPACK              0
+DHCPACK              25
+BOOTREQUEST          0
+DHCPDISCOVER         0
+DHCPREQUEST          0
+  REQUEST            0
+DHCPRELEASE          0
+DHCPACK              0
+DHCP Relay ACK drop          0
+### 05:00:04 SW01: conf ['interface Vlan10', 'no ip access-group T5-IN in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:00:04 SW02: conf ['interface Vlan10', 'no ip access-group T5-IN in']
+Enter configuration commands, one per line.  End with CNTL/Z.

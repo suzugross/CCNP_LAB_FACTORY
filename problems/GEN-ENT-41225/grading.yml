@@ -1,0 +1,2215 @@
+# 自動生成 (gen_enterprise.py) seed=41225
+# telnet 収集(IOS)+ssh(Linux 端末のプローブ)。回線切替は採点前フック(ent_ops.py)の結果を読む。
+problem: GEN-ENT-41225
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'RT01: ISP-A と PPPoE を確立し Dialer1 に払い出しアドレス (198.51.100.40)'
+  node: RT01
+  command: show ip interface brief | include Dialer
+  raw:
+  - regex: Dialer1\s+198\.51\.100\.40\s+\S+\s+\S+\s+up\s+up
+  points: 4
+- name: 'RT02: ISP-B と PPPoE を確立し Dialer1 に払い出しアドレス (203.0.113.55)'
+  node: RT02
+  command: show ip interface brief | include Dialer
+  raw:
+  - regex: Dialer1\s+203\.0\.113\.55\s+\S+\s+\S+\s+up\s+up
+  points: 4
+- name: '冗長: 平常時は主回線から出る (送信元 = 主回線のアドレス)'
+  node: PC01
+  command: cat /var/tmp/ccnp-failover.txt
+  raw:
+  - regex: (?m)^BASE=203\.0\.113\.55\s*$
+  points: 3
+  exec: shell
+- name: '冗長: 主回線の ISP 網内障害 (PPPoE は維持) で予備回線へ切り替わる'
+  node: PC01
+  command: cat /var/tmp/ccnp-failover.txt
+  raw:
+  - regex: (?m)^BASE=203\.0\.113\.55\s*$
+  - regex: (?m)^FAIL=198\.51\.100\.40\s*$
+  points: 5
+  exec: shell
+- name: '冗長: 主回線の復旧後に主回線へ戻る'
+  node: PC01
+  command: cat /var/tmp/ccnp-failover.txt
+  raw:
+  - regex: (?m)^FAIL=198\.51\.100\.40\s*$
+  - regex: (?m)^BACK=203\.0\.113\.55\s*$
+  points: 4
+  exec: shell
+- name: 'DHCP: 製造 (PC01) = アドレス・既定 GW (仮想)・DNS=社内 DNS・ドメイン名'
+  node: PC01
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^addr=10\.80\.130\.\d+/24\s*$
+  - regex: (?m)^ROUTER=10\.80\.130\.1\s*$
+  - regex: (?m)^DNS=10\.80\.100\.10\s*$
+  - regex: (?m)^DOMAINNAME=intra\.example\s*$
+  points: 1
+  exec: shell
+- name: 'DHCP: 営業 (PC02) = アドレス・既定 GW (仮想)・DNS=社内 DNS・ドメイン名'
+  node: PC02
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^addr=10\.80\.220\.\d+/24\s*$
+  - regex: (?m)^ROUTER=10\.80\.220\.1\s*$
+  - regex: (?m)^DNS=10\.80\.100\.10\s*$
+  - regex: (?m)^DOMAINNAME=intra\.example\s*$
+  points: 1
+  exec: shell
+- name: 'DHCP: 総務 (PC03) = アドレス・既定 GW (仮想)・DNS=社内 DNS・ドメイン名'
+  node: PC03
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^addr=10\.80\.210\.\d+/24\s*$
+  - regex: (?m)^ROUTER=10\.80\.210\.1\s*$
+  - regex: (?m)^DNS=10\.80\.100\.10\s*$
+  - regex: (?m)^DOMAINNAME=intra\.example\s*$
+  points: 1
+  exec: shell
+- name: 'DHCP: 情シス (PC04) = アドレス・既定 GW (仮想)・DNS=社内 DNS・ドメイン名'
+  node: PC04
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^addr=10\.80\.110\.\d+/24\s*$
+  - regex: (?m)^ROUTER=10\.80\.110\.1\s*$
+  - regex: (?m)^DNS=10\.80\.100\.10\s*$
+  - regex: (?m)^DOMAINNAME=intra\.example\s*$
+  points: 1
+  exec: shell
+- name: 'DHCP: 来客 (PC05) = アドレス・既定 GW (仮想)・DNS=ISP の DNS・ドメイン名なし'
+  node: PC05
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^addr=10\.80\.120\.\d+/24\s*$
+  - regex: (?m)^ROUTER=10\.80\.120\.1\s*$
+  - regex: (?m)^DNS=192\.0\.2\.10\s*$
+  - not_regex: (?m)^DOMAINNAME=
+  points: 1
+  exec: shell
+- name: 'DHCP: 複合機 (PC06) = 予約アドレス 10.80.170.50・既定 GW (仮想)・DNS'
+  node: PC06
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^addr=10\.80\.170\.50/24\s*$
+  - regex: (?m)^ROUTER=10\.80\.170\.1\s*$
+  - regex: (?m)^DNS=10\.80\.100\.10\s*$
+  points: 1
+  exec: shell
+- name: 'DHCP: 仮想アドレスと L3SW の実アドレスを配布対象から除外'
+  node: DHCP01
+  command: show running-config | include excluded-address
+  raw:
+  - regex: ip dhcp excluded-address 10\.80\.130\.1 10\.80\.130\.(?:[3-9]|\d\d+)\b
+  - regex: ip dhcp excluded-address 10\.80\.220\.1 10\.80\.220\.(?:[3-9]|\d\d+)\b
+  - regex: ip dhcp excluded-address 10\.80\.210\.1 10\.80\.210\.(?:[3-9]|\d\d+)\b
+  - regex: ip dhcp excluded-address 10\.80\.110\.1 10\.80\.110\.(?:[3-9]|\d\d+)\b
+  - regex: ip dhcp excluded-address 10\.80\.120\.1 10\.80\.120\.(?:[3-9]|\d\d+)\b
+  - regex: ip dhcp excluded-address 10\.80\.170\.1 10\.80\.170\.(?:[3-9]|\d\d+)\b
+  points: 1
+- name: '製造 (PC01): 社内 DNS で社内名・外部名を解決でき、外部の DNS へは直接問い合わせない'
+  node: PC01
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^dns_portal=10\.80\.100\.20\s*$
+  - regex: (?m)^dns_inet=192\.0\.2\.10\s*$
+  - regex: (?m)^dns_direct=NONE\s*$
+  points: 2
+  exec: shell
+- name: '製造 (PC01): 許可された通信 (社内サーバ・複合機・インターネット (主回線))'
+  node: PC01
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^app80=OPEN\s*$
+  - regex: (?m)^app445=OPEN\s*$
+  - regex: (?m)^srv_ping=OK\s*$
+  - regex: (?m)^prn=OPEN\s*$
+  - regex: (?m)^inet_ip=203\.0\.113\.55\s*$
+  - regex: (?m)^inet8080=OPEN\s*$
+  points: 1
+  exec: shell
+- name: '製造 (PC01): 遮断すべき通信 (他部門・情シス・機器管理・許可外サービス・危険ポート) が通らない'
+  node: PC01
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^app3389=CLOSED\s*$
+  - regex: (?m)^peer_ping=NG\s*$
+  - regex: (?m)^peer_ssh=CLOSED\s*$
+  - regex: (?m)^it_ping=NG\s*$
+  - regex: (?m)^mgmt_ping=NG\s*$
+  - regex: (?m)^mgmt_telnet=CLOSED\s*$
+  - regex: (?m)^inet445=CLOSED\s*$
+  - regex: (?m)^inet25=CLOSED\s*$
+  - regex: (?m)^app80=OPEN\s*$
+  points: 3
+  exec: shell
+- name: '営業 (PC02): 社内 DNS で社内名・外部名を解決でき、外部の DNS へは直接問い合わせない'
+  node: PC02
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^dns_portal=10\.80\.100\.20\s*$
+  - regex: (?m)^dns_inet=192\.0\.2\.10\s*$
+  - regex: (?m)^dns_direct=NONE\s*$
+  points: 2
+  exec: shell
+- name: '営業 (PC02): 許可された通信 (社内サーバ・複合機・インターネット (主回線))'
+  node: PC02
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^app80=OPEN\s*$
+  - regex: (?m)^app445=OPEN\s*$
+  - regex: (?m)^srv_ping=OK\s*$
+  - regex: (?m)^prn=OPEN\s*$
+  - regex: (?m)^inet_ip=203\.0\.113\.55\s*$
+  - regex: (?m)^inet8080=OPEN\s*$
+  points: 2
+  exec: shell
+- name: '営業 (PC02): 遮断すべき通信 (他部門・情シス・機器管理・許可外サービス・危険ポート) が通らない'
+  node: PC02
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^app3389=CLOSED\s*$
+  - regex: (?m)^peer_ping=NG\s*$
+  - regex: (?m)^peer_ssh=CLOSED\s*$
+  - regex: (?m)^it_ping=NG\s*$
+  - regex: (?m)^mgmt_ping=NG\s*$
+  - regex: (?m)^mgmt_telnet=CLOSED\s*$
+  - regex: (?m)^inet445=CLOSED\s*$
+  - regex: (?m)^inet25=CLOSED\s*$
+  - regex: (?m)^app80=OPEN\s*$
+  points: 3
+  exec: shell
+- name: '総務 (PC03): 社内 DNS で社内名・外部名を解決でき、外部の DNS へは直接問い合わせない'
+  node: PC03
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^dns_portal=10\.80\.100\.20\s*$
+  - regex: (?m)^dns_inet=192\.0\.2\.10\s*$
+  - regex: (?m)^dns_direct=NONE\s*$
+  points: 2
+  exec: shell
+- name: '総務 (PC03): 許可された通信 (社内サーバ・複合機)'
+  node: PC03
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^app80=OPEN\s*$
+  - regex: (?m)^app445=OPEN\s*$
+  - regex: (?m)^srv_ping=OK\s*$
+  - regex: (?m)^prn=OPEN\s*$
+  points: 2
+  exec: shell
+- name: '総務 (PC03): 遮断すべき通信 (他部門・情シス・機器管理・許可外サービス・インターネット) が通らない'
+  node: PC03
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^app3389=CLOSED\s*$
+  - regex: (?m)^peer_ping=NG\s*$
+  - regex: (?m)^peer_ssh=CLOSED\s*$
+  - regex: (?m)^it_ping=NG\s*$
+  - regex: (?m)^mgmt_ping=NG\s*$
+  - regex: (?m)^mgmt_telnet=CLOSED\s*$
+  - regex: (?m)^inet_ip=NONE\s*$
+  - regex: (?m)^inet8080=CLOSED\s*$
+  - regex: (?m)^app80=OPEN\s*$
+  points: 3
+  exec: shell
+- name: '情シス (PC04): 名前解決・インターネット・全業務部門/複合機/機器管理 VLAN への ping と telnet'
+  node: PC04
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^dns_portal=10\.80\.100\.20\s*$
+  - regex: (?m)^dns_inet=192\.0\.2\.10\s*$
+  - regex: (?m)^inet_ip=203\.0\.113\.55\s*$
+  - regex: (?m)^app80=OPEN\s*$
+  - regex: (?m)^prn=OPEN\s*$
+  - regex: (?m)^prn_ping=OK\s*$
+  - regex: (?m)^mgmt_telnet=OPEN\s*$
+  - regex: (?m)^ping_pc01=OK\s*$
+  - regex: (?m)^ping_pc02=OK\s*$
+  - regex: (?m)^ping_pc03=OK\s*$
+  - regex: (?m)^mgmt_ping_sw03=OK\s*$
+  - regex: (?m)^mgmt_ping_sw04=OK\s*$
+  - regex: (?m)^mgmt_ping_sw05=OK\s*$
+  points: 3
+  exec: shell
+- name: '情シス (PC04): 業務部門へは ping 以外通らず、来客 VLAN とは通信しない'
+  node: PC04
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^ssh_pc01=CLOSED\s*$
+  - regex: (?m)^ssh_pc02=CLOSED\s*$
+  - regex: (?m)^ssh_pc03=CLOSED\s*$
+  - regex: (?m)^guest_ping=NG\s*$
+  - regex: (?m)^ping_pc01=OK\s*$
+  points: 1
+  exec: shell
+- name: '来客 (PC05): ISP の DNS で名前解決し Web (HTTP/HTTPS) を利用できる'
+  node: PC05
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^dns_inet=192\.0\.2\.10\s*$
+  - regex: (?m)^inet_ip=203\.0\.113\.55\s*$
+  - regex: (?m)^inet443=OPEN\s*$
+  points: 2
+  exec: shell
+- name: '来客 (PC05): Web/DNS 以外のインターネット通信と、社内への通信が一切通らない'
+  node: PC05
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^inet8080=CLOSED\s*$
+  - regex: (?m)^inet_ping=NG\s*$
+  - regex: (?m)^app80=CLOSED\s*$
+  - regex: (?m)^dns_corp_at=NONE\s*$
+  - regex: (?m)^dept_ping=NG\s*$
+  - regex: (?m)^prn=CLOSED\s*$
+  - regex: (?m)^inet443=OPEN\s*$
+  points: 2
+  exec: shell
+- name: '境界: インターネットから自社グローバルアドレスへの新規接続・ping に応答しない'
+  node: PC01
+  command: cat /var/tmp/ccnp-failover.txt
+  raw:
+  - regex: (?m)^BASE=(?:203\.0\.113\.55|198\.51\.100\.40)\s*$
+  - regex: (?m)^EXT=CLOSED\s*$
+  points: 3
+  exec: shell
+- name: '境界: 大きなファイルの TCP 転送がタイムアウトしない (PMTUD が効かない経路でも)'
+  node: PC01
+  command: sudo -n /usr/local/bin/ccnp-probe
+  raw:
+  - regex: (?m)^big=8388608\s*$
+  points: 5
+  exec: shell
+- name: 'SW01: 担当 VLAN で HSRP Active かつ STP ルートブリッジ'
+  node: SW01
+  command: show standby brief
+  raw:
+  - regex: (?m)^Vl130\s+130\s+\d+\s+\S*\s*Active\s+local
+  - regex: (?m)^Vl210\s+210\s+\d+\s+\S*\s*Active\s+local
+  - regex: (?m)^Vl110\s+110\s+\d+\s+\S*\s*Active\s+local
+  - regex: (?m)^Vl40\s+40\s+\d+\s+\S*\s*Active\s+local
+  points: 1
+- name: 'SW01: 担当 VLAN の STP ルートブリッジ'
+  node: SW01
+  command: show spanning-tree root
+  raw:
+  - regex: (?m)^VLAN0130\s+\d+\s+\S+\s+0\s+\d+\s+\d+\s+\d+\s*$
+  - regex: (?m)^VLAN0210\s+\d+\s+\S+\s+0\s+\d+\s+\d+\s+\d+\s*$
+  - regex: (?m)^VLAN0110\s+\d+\s+\S+\s+0\s+\d+\s+\d+\s+\d+\s*$
+  - regex: (?m)^VLAN0040\s+\d+\s+\S+\s+0\s+\d+\s+\d+\s+\d+\s*$
+  - regex: (?m)^VLAN0960\s+\d+\s+\S+\s+0\s+\d+\s+\d+\s+\d+\s*$
+  points: 1
+- name: 'SW01: L3SW 間の 2 本を LACP で束ねている (Po1)'
+  node: SW01
+  command: show etherchannel summary
+  raw:
+  - regex: Po1\(SU\)\s+LACP\s+Et0/0\(P\)\s+Et0/1\(P\)
+  points: 1
+- name: 'SW01: トランクのネイティブ VLAN・許可 VLAN が要件どおり'
+  node: SW01
+  command: show interfaces trunk
+  raw:
+  - regex: (?m)^Po1\s+\S+\s+802\.1q\s+trunking\s+888\b
+  - regex: (?m)Vlans allowed on trunk[\s\S]*?^Po1\s+40,100,110,120,130,170,210,220,960\s*$
+  - regex: (?m)^Et0/3\s+\S+\s+802\.1q\s+trunking\s+888\b
+  - regex: (?m)Vlans allowed on trunk[\s\S]*?^Et0/3\s+40,130,210,220\s*$
+  - regex: (?m)^Et1/0\s+\S+\s+802\.1q\s+trunking\s+888\b
+  - regex: (?m)Vlans allowed on trunk[\s\S]*?^Et1/0\s+40,110,120,170\s*$
+  - regex: (?m)^Et1/1\s+\S+\s+802\.1q\s+trunking\s+888\b
+  - regex: (?m)Vlans allowed on trunk[\s\S]*?^Et1/1\s+40,100\s*$
+  points: 1
+- name: 'SW01: 利用者側の SVI では OSPF の hello を出さない'
+  node: SW01
+  command: show ip protocols | section ospf
+  raw:
+  - regex: Passive Interface\(s\):[\s\S]*\bVlan130\b
+  - regex: Passive Interface\(s\):[\s\S]*\bVlan220\b
+  - regex: Passive Interface\(s\):[\s\S]*\bVlan210\b
+  - regex: Passive Interface\(s\):[\s\S]*\bVlan110\b
+  - regex: Passive Interface\(s\):[\s\S]*\bVlan120\b
+  - regex: Passive Interface\(s\):[\s\S]*\bVlan170\b
+  - regex: Passive Interface\(s\):[\s\S]*\bVlan100\b
+  - regex: Passive Interface\(s\):[\s\S]*\bVlan40\b
+  points: 1
+- name: 'SW01: NTP サーバとして RT を設定'
+  node: SW01
+  command: show ntp associations
+  raw:
+  - regex: ~10\.80\.255\.[12]\s
+  points: 1
+- name: 'SW02: 担当 VLAN で HSRP Active かつ STP ルートブリッジ'
+  node: SW02
+  command: show standby brief
+  raw:
+  - regex: (?m)^Vl220\s+220\s+\d+\s+\S*\s*Active\s+local
+  - regex: (?m)^Vl120\s+120\s+\d+\s+\S*\s*Active\s+local
+  - regex: (?m)^Vl170\s+170\s+\d+\s+\S*\s*Active\s+local
+  - regex: (?m)^Vl100\s+100\s+\d+\s+\S*\s*Active\s+local
+  points: 1
+- name: 'SW02: 担当 VLAN の STP ルートブリッジ'
+  node: SW02
+  command: show spanning-tree root
+  raw:
+  - regex: (?m)^VLAN0220\s+\d+\s+\S+\s+0\s+\d+\s+\d+\s+\d+\s*$
+  - regex: (?m)^VLAN0120\s+\d+\s+\S+\s+0\s+\d+\s+\d+\s+\d+\s*$
+  - regex: (?m)^VLAN0170\s+\d+\s+\S+\s+0\s+\d+\s+\d+\s+\d+\s*$
+  - regex: (?m)^VLAN0100\s+\d+\s+\S+\s+0\s+\d+\s+\d+\s+\d+\s*$
+  points: 1
+- name: 'SW02: L3SW 間の 2 本を LACP で束ねている (Po1)'
+  node: SW02
+  command: show etherchannel summary
+  raw:
+  - regex: Po1\(SU\)\s+LACP\s+Et0/0\(P\)\s+Et0/1\(P\)
+  points: 1
+- name: 'SW02: トランクのネイティブ VLAN・許可 VLAN が要件どおり'
+  node: SW02
+  command: show interfaces trunk
+  raw:
+  - regex: (?m)^Po1\s+\S+\s+802\.1q\s+trunking\s+888\b
+  - regex: (?m)Vlans allowed on trunk[\s\S]*?^Po1\s+40,100,110,120,130,170,210,220,960\s*$
+  - regex: (?m)^Et0/3\s+\S+\s+802\.1q\s+trunking\s+888\b
+  - regex: (?m)Vlans allowed on trunk[\s\S]*?^Et0/3\s+40,130,210,220\s*$
+  - regex: (?m)^Et1/0\s+\S+\s+802\.1q\s+trunking\s+888\b
+  - regex: (?m)Vlans allowed on trunk[\s\S]*?^Et1/0\s+40,110,120,170\s*$
+  - regex: (?m)^Et1/1\s+\S+\s+802\.1q\s+trunking\s+888\b
+  - regex: (?m)Vlans allowed on trunk[\s\S]*?^Et1/1\s+40,100\s*$
+  points: 1
+- name: 'SW02: 利用者側の SVI では OSPF の hello を出さない'
+  node: SW02
+  command: show ip protocols | section ospf
+  raw:
+  - regex: Passive Interface\(s\):[\s\S]*\bVlan130\b
+  - regex: Passive Interface\(s\):[\s\S]*\bVlan220\b
+  - regex: Passive Interface\(s\):[\s\S]*\bVlan210\b
+  - regex: Passive Interface\(s\):[\s\S]*\bVlan110\b
+  - regex: Passive Interface\(s\):[\s\S]*\bVlan120\b
+  - regex: Passive Interface\(s\):[\s\S]*\bVlan170\b
+  - regex: Passive Interface\(s\):[\s\S]*\bVlan100\b
+  - regex: Passive Interface\(s\):[\s\S]*\bVlan40\b
+  points: 1
+- name: 'SW02: NTP サーバとして RT を設定'
+  node: SW02
+  command: show ntp associations
+  raw:
+  - regex: ~10\.80\.255\.[12]\s
+  points: 1
+- name: 'SW03 (ASW01): アップリンクのトランクが要件どおり'
+  node: SW03
+  command: show interfaces trunk
+  raw:
+  - regex: (?m)^Et0/0\s+\S+\s+802\.1q\s+trunking\s+888\b
+  - regex: (?m)Vlans allowed on trunk[\s\S]*?^Et0/0\s+40,130,210,220\s*$
+  - regex: (?m)^Et0/1\s+\S+\s+802\.1q\s+trunking\s+888\b
+  - regex: (?m)Vlans allowed on trunk[\s\S]*?^Et0/1\s+40,130,210,220\s*$
+  points: 1
+- name: 'SW03 (ASW01): 端末側ポートの VLAN とエッジ保護 (PortFast + BPDU ガード)'
+  node: SW03
+  command: show running-config | section ^interface Ethernet
+  raw:
+  - regex: interface Ethernet0/2\s*\n(?:[ \t][^\n]*\n)*?[ \t]switchport access vlan
+      130\s*\n
+  - regex: interface Ethernet0/2\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree portfast
+  - regex: interface Ethernet0/2\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree bpduguard
+      enable
+  - regex: interface Ethernet0/3\s*\n(?:[ \t][^\n]*\n)*?[ \t]switchport access vlan
+      220\s*\n
+  - regex: interface Ethernet0/3\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree portfast
+  - regex: interface Ethernet0/3\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree bpduguard
+      enable
+  - regex: interface Ethernet1/0\s*\n(?:[ \t][^\n]*\n)*?[ \t]switchport access vlan
+      210\s*\n
+  - regex: interface Ethernet1/0\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree portfast
+  - regex: interface Ethernet1/0\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree bpduguard
+      enable
+  points: 1
+- name: 'SW03 (ASW01): NTP サーバとして L3SW (MGMT VLAN) を設定'
+  node: SW03
+  command: show ntp associations
+  raw:
+  - regex: ~10\.80\.40\.[23]\s
+  points: 1
+- name: 'SW04 (ASW02): アップリンクのトランクが要件どおり'
+  node: SW04
+  command: show interfaces trunk
+  raw:
+  - regex: (?m)^Et0/0\s+\S+\s+802\.1q\s+trunking\s+888\b
+  - regex: (?m)Vlans allowed on trunk[\s\S]*?^Et0/0\s+40,110,120,170\s*$
+  - regex: (?m)^Et0/1\s+\S+\s+802\.1q\s+trunking\s+888\b
+  - regex: (?m)Vlans allowed on trunk[\s\S]*?^Et0/1\s+40,110,120,170\s*$
+  points: 1
+- name: 'SW04 (ASW02): 端末側ポートの VLAN とエッジ保護 (PortFast + BPDU ガード)'
+  node: SW04
+  command: show running-config | section ^interface Ethernet
+  raw:
+  - regex: interface Ethernet0/2\s*\n(?:[ \t][^\n]*\n)*?[ \t]switchport access vlan
+      110\s*\n
+  - regex: interface Ethernet0/2\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree portfast
+  - regex: interface Ethernet0/2\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree bpduguard
+      enable
+  - regex: interface Ethernet0/3\s*\n(?:[ \t][^\n]*\n)*?[ \t]switchport access vlan
+      120\s*\n
+  - regex: interface Ethernet0/3\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree portfast
+  - regex: interface Ethernet0/3\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree bpduguard
+      enable
+  - regex: interface Ethernet1/0\s*\n(?:[ \t][^\n]*\n)*?[ \t]switchport access vlan
+      170\s*\n
+  - regex: interface Ethernet1/0\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree portfast
+  - regex: interface Ethernet1/0\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree bpduguard
+      enable
+  points: 1
+- name: 'SW04 (ASW02): NTP サーバとして L3SW (MGMT VLAN) を設定'
+  node: SW04
+  command: show ntp associations
+  raw:
+  - regex: ~10\.80\.40\.[23]\s
+  points: 1
+- name: 'SW05 (SRVSW): アップリンクのトランクが要件どおり'
+  node: SW05
+  command: show interfaces trunk
+  raw:
+  - regex: (?m)^Et0/0\s+\S+\s+802\.1q\s+trunking\s+888\b
+  - regex: (?m)Vlans allowed on trunk[\s\S]*?^Et0/0\s+40,100\s*$
+  - regex: (?m)^Et0/1\s+\S+\s+802\.1q\s+trunking\s+888\b
+  - regex: (?m)Vlans allowed on trunk[\s\S]*?^Et0/1\s+40,100\s*$
+  points: 1
+- name: 'SW05 (SRVSW): 端末側ポートの VLAN とエッジ保護 (PortFast + BPDU ガード)'
+  node: SW05
+  command: show running-config | section ^interface Ethernet
+  raw:
+  - regex: interface Ethernet0/2\s*\n(?:[ \t][^\n]*\n)*?[ \t]switchport access vlan
+      100\s*\n
+  - regex: interface Ethernet0/2\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree portfast
+  - regex: interface Ethernet0/2\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree bpduguard
+      enable
+  - regex: interface Ethernet0/3\s*\n(?:[ \t][^\n]*\n)*?[ \t]switchport access vlan
+      100\s*\n
+  - regex: interface Ethernet0/3\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree portfast
+  - regex: interface Ethernet0/3\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree bpduguard
+      enable
+  - regex: interface Ethernet1/0\s*\n(?:[ \t][^\n]*\n)*?[ \t]switchport access vlan
+      100\s*\n
+  - regex: interface Ethernet1/0\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree portfast
+  - regex: interface Ethernet1/0\s*\n(?:[ \t][^\n]*\n)*?[ \t]spanning-tree bpduguard
+      enable
+  points: 1
+- name: 'SW05 (SRVSW): NTP サーバとして L3SW (MGMT VLAN) を設定'
+  node: SW05
+  command: show ntp associations
+  raw:
+  - regex: ~10\.80\.40\.[23]\s
+  points: 1
+- name: 'RT01: L3SW 2 台と OSPF 隣接 (トランジット VLAN)'
+  node: RT01
+  command: show ip ospf neighbor
+  raw:
+  - regex: FULL/\S*\s+\S+\s+10\.80\.255\.3\s
+  - regex: FULL/\S*\s+\S+\s+10\.80\.255\.4\s
+  points: 1
+- name: 'RT01: NTP サーバとして ISP の NTP を設定'
+  node: RT01
+  command: show ntp associations
+  raw:
+  - regex: ~192\.0\.2\.1\s
+  points: 1
+- name: 'RT02: L3SW 2 台と OSPF 隣接 (トランジット VLAN)'
+  node: RT02
+  command: show ip ospf neighbor
+  raw:
+  - regex: FULL/\S*\s+\S+\s+10\.80\.255\.3\s
+  - regex: FULL/\S*\s+\S+\s+10\.80\.255\.4\s
+  points: 1
+- name: 'RT02: NTP サーバとして ISP の NTP を設定'
+  node: RT02
+  command: show ntp associations
+  raw:
+  - regex: ~192\.0\.2\.1\s
+  points: 1
+- name: 'SW01: 各 SVI の受信方向に命名規約どおりの ACL を適用'
+  node: SW01
+  command: show ip interface | include line protocol|Inbound  access list
+  raw:
+  - regex: (?m)^Vlan130 is up[^\n]*\n\s*Inbound\s+access list is IN-MFG\s*$
+  - regex: (?m)^Vlan220 is up[^\n]*\n\s*Inbound\s+access list is IN-SALES\s*$
+  - regex: (?m)^Vlan210 is up[^\n]*\n\s*Inbound\s+access list is IN-GA\s*$
+  - regex: (?m)^Vlan110 is up[^\n]*\n\s*Inbound\s+access list is IN-IT\s*$
+  - regex: (?m)^Vlan120 is up[^\n]*\n\s*Inbound\s+access list is IN-GUEST\s*$
+  - regex: (?m)^Vlan170 is up[^\n]*\n\s*Inbound\s+access list is IN-PRINT\s*$
+  - regex: (?m)^Vlan100 is up[^\n]*\n\s*Inbound\s+access list is IN-SERVER\s*$
+  - regex: (?m)^Vlan40 is up[^\n]*\n\s*Inbound\s+access list is IN-MGMT\s*$
+  points: 1
+- name: 'SW01: VLAN 間 ACL の許可/拒否が要件どおり (意味評価・8 本)'
+  node: SW01
+  command: show ip access-lists
+  points: 2
+  acl_vectors:
+    acls:
+    - acl: IN-MFG
+      vectors: &id001
+      - id: dhcp-bcast
+        proto: udp
+        src: 0.0.0.0
+        dst: 255.255.255.255
+        expect: permit
+        sport: 68
+        dport: 67
+      - id: dhcp-renew
+        proto: udp
+        src: 10.80.130.100
+        dst: 10.80.100.30
+        expect: permit
+        sport: 68
+        dport: 67
+      - id: hsrp-sw01
+        proto: udp
+        src: 10.80.130.2
+        dst: 224.0.0.102
+        expect: permit
+        sport: 1985
+        dport: 1985
+      - id: hsrp-sw02
+        proto: udp
+        src: 10.80.130.3
+        dst: 224.0.0.102
+        expect: permit
+        sport: 1985
+        dport: 1985
+      - id: dns-udp
+        proto: udp
+        src: 10.80.130.100
+        dst: 10.80.100.10
+        expect: permit
+        sport: 40000
+        dport: 53
+      - id: dns-tcp
+        proto: tcp
+        src: 10.80.130.100
+        dst: 10.80.100.10
+        expect: permit
+        sport: 40000
+        dport: 53
+      - id: app-www
+        proto: tcp
+        src: 10.80.130.100
+        dst: 10.80.100.20
+        expect: permit
+        sport: 40000
+        dport: 80
+      - id: app-443
+        proto: tcp
+        src: 10.80.130.100
+        dst: 10.80.100.20
+        expect: permit
+        sport: 40000
+        dport: 443
+      - id: app-445
+        proto: tcp
+        src: 10.80.130.100
+        dst: 10.80.100.20
+        expect: permit
+        sport: 40000
+        dport: 445
+      - id: srv-ping
+        proto: icmp
+        src: 10.80.130.100
+        dst: 10.80.100.20
+        expect: permit
+        icmp_type: 8
+      - id: prn-9100
+        proto: tcp
+        src: 10.80.130.100
+        dst: 10.80.170.50
+        expect: permit
+        sport: 40000
+        dport: 9100
+      - id: it-echo-reply
+        proto: icmp
+        src: 10.80.130.100
+        dst: 10.80.110.100
+        expect: permit
+        icmp_type: 0
+      - id: app-3389
+        proto: tcp
+        src: 10.80.130.100
+        dst: 10.80.100.20
+        expect: deny
+        sport: 40000
+        dport: 3389
+      - id: app-ssh
+        proto: tcp
+        src: 10.80.130.100
+        dst: 10.80.100.20
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: dns-ssh
+        proto: tcp
+        src: 10.80.130.100
+        dst: 10.80.100.10
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: prn-www
+        proto: tcp
+        src: 10.80.130.100
+        dst: 10.80.170.50
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: peer-ssh
+        proto: tcp
+        src: 10.80.130.100
+        dst: 10.80.220.100
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: peer-ping
+        proto: icmp
+        src: 10.80.130.100
+        dst: 10.80.220.100
+        expect: deny
+        icmp_type: 8
+      - id: it-ping
+        proto: icmp
+        src: 10.80.130.100
+        dst: 10.80.110.100
+        expect: deny
+        icmp_type: 8
+      - id: guest-ping
+        proto: icmp
+        src: 10.80.130.100
+        dst: 10.80.120.100
+        expect: deny
+        icmp_type: 8
+      - id: mgmt-telnet
+        proto: tcp
+        src: 10.80.130.100
+        dst: 10.80.40.11
+        expect: deny
+        sport: 40000
+        dport: 23
+      - id: mgmt-ping
+        proto: icmp
+        src: 10.80.130.100
+        dst: 10.80.40.11
+        expect: deny
+        icmp_type: 8
+      - id: dhcp01-telnet
+        proto: tcp
+        src: 10.80.130.100
+        dst: 10.80.100.30
+        expect: deny
+        sport: 40000
+        dport: 23
+      - id: transit-ssh
+        proto: tcp
+        src: 10.80.130.100
+        dst: 10.80.255.1
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: inet-8080
+        proto: tcp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: permit
+        sport: 40000
+        dport: 8080
+      - id: inet-www
+        proto: tcp
+        src: 10.80.130.100
+        dst: 198.51.100.77
+        expect: permit
+        sport: 40000
+        dport: 80
+    - acl: IN-SALES
+      vectors: &id002
+      - id: dhcp-bcast
+        proto: udp
+        src: 0.0.0.0
+        dst: 255.255.255.255
+        expect: permit
+        sport: 68
+        dport: 67
+      - id: dhcp-renew
+        proto: udp
+        src: 10.80.220.100
+        dst: 10.80.100.30
+        expect: permit
+        sport: 68
+        dport: 67
+      - id: hsrp-sw01
+        proto: udp
+        src: 10.80.220.2
+        dst: 224.0.0.102
+        expect: permit
+        sport: 1985
+        dport: 1985
+      - id: hsrp-sw02
+        proto: udp
+        src: 10.80.220.3
+        dst: 224.0.0.102
+        expect: permit
+        sport: 1985
+        dport: 1985
+      - id: dns-udp
+        proto: udp
+        src: 10.80.220.100
+        dst: 10.80.100.10
+        expect: permit
+        sport: 40000
+        dport: 53
+      - id: dns-tcp
+        proto: tcp
+        src: 10.80.220.100
+        dst: 10.80.100.10
+        expect: permit
+        sport: 40000
+        dport: 53
+      - id: app-www
+        proto: tcp
+        src: 10.80.220.100
+        dst: 10.80.100.20
+        expect: permit
+        sport: 40000
+        dport: 80
+      - id: app-443
+        proto: tcp
+        src: 10.80.220.100
+        dst: 10.80.100.20
+        expect: permit
+        sport: 40000
+        dport: 443
+      - id: app-445
+        proto: tcp
+        src: 10.80.220.100
+        dst: 10.80.100.20
+        expect: permit
+        sport: 40000
+        dport: 445
+      - id: srv-ping
+        proto: icmp
+        src: 10.80.220.100
+        dst: 10.80.100.20
+        expect: permit
+        icmp_type: 8
+      - id: prn-9100
+        proto: tcp
+        src: 10.80.220.100
+        dst: 10.80.170.50
+        expect: permit
+        sport: 40000
+        dport: 9100
+      - id: it-echo-reply
+        proto: icmp
+        src: 10.80.220.100
+        dst: 10.80.110.100
+        expect: permit
+        icmp_type: 0
+      - id: app-3389
+        proto: tcp
+        src: 10.80.220.100
+        dst: 10.80.100.20
+        expect: deny
+        sport: 40000
+        dport: 3389
+      - id: app-ssh
+        proto: tcp
+        src: 10.80.220.100
+        dst: 10.80.100.20
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: dns-ssh
+        proto: tcp
+        src: 10.80.220.100
+        dst: 10.80.100.10
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: prn-www
+        proto: tcp
+        src: 10.80.220.100
+        dst: 10.80.170.50
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: peer-ssh
+        proto: tcp
+        src: 10.80.220.100
+        dst: 10.80.130.100
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: peer-ping
+        proto: icmp
+        src: 10.80.220.100
+        dst: 10.80.130.100
+        expect: deny
+        icmp_type: 8
+      - id: it-ping
+        proto: icmp
+        src: 10.80.220.100
+        dst: 10.80.110.100
+        expect: deny
+        icmp_type: 8
+      - id: guest-ping
+        proto: icmp
+        src: 10.80.220.100
+        dst: 10.80.120.100
+        expect: deny
+        icmp_type: 8
+      - id: mgmt-telnet
+        proto: tcp
+        src: 10.80.220.100
+        dst: 10.80.40.11
+        expect: deny
+        sport: 40000
+        dport: 23
+      - id: mgmt-ping
+        proto: icmp
+        src: 10.80.220.100
+        dst: 10.80.40.11
+        expect: deny
+        icmp_type: 8
+      - id: dhcp01-telnet
+        proto: tcp
+        src: 10.80.220.100
+        dst: 10.80.100.30
+        expect: deny
+        sport: 40000
+        dport: 23
+      - id: transit-ssh
+        proto: tcp
+        src: 10.80.220.100
+        dst: 10.80.255.1
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: inet-8080
+        proto: tcp
+        src: 10.80.220.100
+        dst: 192.0.2.10
+        expect: permit
+        sport: 40000
+        dport: 8080
+      - id: inet-www
+        proto: tcp
+        src: 10.80.220.100
+        dst: 198.51.100.77
+        expect: permit
+        sport: 40000
+        dport: 80
+    - acl: IN-GA
+      vectors: &id003
+      - id: dhcp-bcast
+        proto: udp
+        src: 0.0.0.0
+        dst: 255.255.255.255
+        expect: permit
+        sport: 68
+        dport: 67
+      - id: dhcp-renew
+        proto: udp
+        src: 10.80.210.100
+        dst: 10.80.100.30
+        expect: permit
+        sport: 68
+        dport: 67
+      - id: hsrp-sw01
+        proto: udp
+        src: 10.80.210.2
+        dst: 224.0.0.102
+        expect: permit
+        sport: 1985
+        dport: 1985
+      - id: hsrp-sw02
+        proto: udp
+        src: 10.80.210.3
+        dst: 224.0.0.102
+        expect: permit
+        sport: 1985
+        dport: 1985
+      - id: dns-udp
+        proto: udp
+        src: 10.80.210.100
+        dst: 10.80.100.10
+        expect: permit
+        sport: 40000
+        dport: 53
+      - id: dns-tcp
+        proto: tcp
+        src: 10.80.210.100
+        dst: 10.80.100.10
+        expect: permit
+        sport: 40000
+        dport: 53
+      - id: app-www
+        proto: tcp
+        src: 10.80.210.100
+        dst: 10.80.100.20
+        expect: permit
+        sport: 40000
+        dport: 80
+      - id: app-443
+        proto: tcp
+        src: 10.80.210.100
+        dst: 10.80.100.20
+        expect: permit
+        sport: 40000
+        dport: 443
+      - id: app-445
+        proto: tcp
+        src: 10.80.210.100
+        dst: 10.80.100.20
+        expect: permit
+        sport: 40000
+        dport: 445
+      - id: srv-ping
+        proto: icmp
+        src: 10.80.210.100
+        dst: 10.80.100.20
+        expect: permit
+        icmp_type: 8
+      - id: prn-9100
+        proto: tcp
+        src: 10.80.210.100
+        dst: 10.80.170.50
+        expect: permit
+        sport: 40000
+        dport: 9100
+      - id: it-echo-reply
+        proto: icmp
+        src: 10.80.210.100
+        dst: 10.80.110.100
+        expect: permit
+        icmp_type: 0
+      - id: app-3389
+        proto: tcp
+        src: 10.80.210.100
+        dst: 10.80.100.20
+        expect: deny
+        sport: 40000
+        dport: 3389
+      - id: app-ssh
+        proto: tcp
+        src: 10.80.210.100
+        dst: 10.80.100.20
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: dns-ssh
+        proto: tcp
+        src: 10.80.210.100
+        dst: 10.80.100.10
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: prn-www
+        proto: tcp
+        src: 10.80.210.100
+        dst: 10.80.170.50
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: peer-ssh
+        proto: tcp
+        src: 10.80.210.100
+        dst: 10.80.130.100
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: peer-ping
+        proto: icmp
+        src: 10.80.210.100
+        dst: 10.80.130.100
+        expect: deny
+        icmp_type: 8
+      - id: it-ping
+        proto: icmp
+        src: 10.80.210.100
+        dst: 10.80.110.100
+        expect: deny
+        icmp_type: 8
+      - id: guest-ping
+        proto: icmp
+        src: 10.80.210.100
+        dst: 10.80.120.100
+        expect: deny
+        icmp_type: 8
+      - id: mgmt-telnet
+        proto: tcp
+        src: 10.80.210.100
+        dst: 10.80.40.11
+        expect: deny
+        sport: 40000
+        dport: 23
+      - id: mgmt-ping
+        proto: icmp
+        src: 10.80.210.100
+        dst: 10.80.40.11
+        expect: deny
+        icmp_type: 8
+      - id: dhcp01-telnet
+        proto: tcp
+        src: 10.80.210.100
+        dst: 10.80.100.30
+        expect: deny
+        sport: 40000
+        dport: 23
+      - id: transit-ssh
+        proto: tcp
+        src: 10.80.210.100
+        dst: 10.80.255.1
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: inet-8080
+        proto: tcp
+        src: 10.80.210.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 8080
+      - id: inet-www
+        proto: tcp
+        src: 10.80.210.100
+        dst: 198.51.100.77
+        expect: deny
+        sport: 40000
+        dport: 80
+    - acl: IN-IT
+      vectors: &id004
+      - id: dhcp-bcast
+        proto: udp
+        src: 0.0.0.0
+        dst: 255.255.255.255
+        expect: permit
+        sport: 68
+        dport: 67
+      - id: dhcp-renew
+        proto: udp
+        src: 10.80.110.100
+        dst: 10.80.100.30
+        expect: permit
+        sport: 68
+        dport: 67
+      - id: hsrp-sw01
+        proto: udp
+        src: 10.80.110.2
+        dst: 224.0.0.102
+        expect: permit
+        sport: 1985
+        dport: 1985
+      - id: hsrp-sw02
+        proto: udp
+        src: 10.80.110.3
+        dst: 224.0.0.102
+        expect: permit
+        sport: 1985
+        dport: 1985
+      - id: dns-udp
+        proto: udp
+        src: 10.80.110.100
+        dst: 10.80.100.10
+        expect: permit
+        sport: 40000
+        dport: 53
+      - id: app-www
+        proto: tcp
+        src: 10.80.110.100
+        dst: 10.80.100.20
+        expect: permit
+        sport: 40000
+        dport: 80
+      - id: prn-9100
+        proto: tcp
+        src: 10.80.110.100
+        dst: 10.80.170.50
+        expect: permit
+        sport: 40000
+        dport: 9100
+      - id: prn-ping
+        proto: icmp
+        src: 10.80.110.100
+        dst: 10.80.170.50
+        expect: permit
+        icmp_type: 8
+      - id: mgmt-ping
+        proto: icmp
+        src: 10.80.110.100
+        dst: 10.80.40.12
+        expect: permit
+        icmp_type: 8
+      - id: mgmt-telnet
+        proto: tcp
+        src: 10.80.110.100
+        dst: 10.80.40.12
+        expect: permit
+        sport: 40000
+        dport: 23
+      - id: mgmt-www
+        proto: tcp
+        src: 10.80.110.100
+        dst: 10.80.40.12
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: mgmt-ssh
+        proto: tcp
+        src: 10.80.110.100
+        dst: 10.80.40.12
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: guest-ping
+        proto: icmp
+        src: 10.80.110.100
+        dst: 10.80.120.100
+        expect: deny
+        icmp_type: 8
+      - id: app-3389
+        proto: tcp
+        src: 10.80.110.100
+        dst: 10.80.100.20
+        expect: deny
+        sport: 40000
+        dport: 3389
+      - id: inet-8080
+        proto: tcp
+        src: 10.80.110.100
+        dst: 192.0.2.10
+        expect: permit
+        sport: 40000
+        dport: 8080
+      - id: ping-MFG
+        proto: icmp
+        src: 10.80.110.100
+        dst: 10.80.130.100
+        expect: permit
+        icmp_type: 8
+      - id: ssh-MFG
+        proto: tcp
+        src: 10.80.110.100
+        dst: 10.80.130.100
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: ping-SALES
+        proto: icmp
+        src: 10.80.110.100
+        dst: 10.80.220.100
+        expect: permit
+        icmp_type: 8
+      - id: ssh-SALES
+        proto: tcp
+        src: 10.80.110.100
+        dst: 10.80.220.100
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: ping-GA
+        proto: icmp
+        src: 10.80.110.100
+        dst: 10.80.210.100
+        expect: permit
+        icmp_type: 8
+      - id: ssh-GA
+        proto: tcp
+        src: 10.80.110.100
+        dst: 10.80.210.100
+        expect: deny
+        sport: 40000
+        dport: 22
+    - acl: IN-GUEST
+      vectors: &id005
+      - id: dhcp-bcast
+        proto: udp
+        src: 0.0.0.0
+        dst: 255.255.255.255
+        expect: permit
+        sport: 68
+        dport: 67
+      - id: dhcp-renew
+        proto: udp
+        src: 10.80.120.100
+        dst: 10.80.100.30
+        expect: permit
+        sport: 68
+        dport: 67
+      - id: hsrp-sw01
+        proto: udp
+        src: 10.80.120.2
+        dst: 224.0.0.102
+        expect: permit
+        sport: 1985
+        dport: 1985
+      - id: hsrp-sw02
+        proto: udp
+        src: 10.80.120.3
+        dst: 224.0.0.102
+        expect: permit
+        sport: 1985
+        dport: 1985
+      - id: isp-dns
+        proto: udp
+        src: 10.80.120.100
+        dst: 192.0.2.10
+        expect: permit
+        sport: 40000
+        dport: 53
+      - id: inet-www
+        proto: tcp
+        src: 10.80.120.100
+        dst: 198.51.100.77
+        expect: permit
+        sport: 40000
+        dport: 80
+      - id: inet-443
+        proto: tcp
+        src: 10.80.120.100
+        dst: 198.51.100.77
+        expect: permit
+        sport: 40000
+        dport: 443
+      - id: corp-dns
+        proto: udp
+        src: 10.80.120.100
+        dst: 10.80.100.10
+        expect: deny
+        sport: 40000
+        dport: 53
+      - id: app-www
+        proto: tcp
+        src: 10.80.120.100
+        dst: 10.80.100.20
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: prn-9100
+        proto: tcp
+        src: 10.80.120.100
+        dst: 10.80.170.50
+        expect: deny
+        sport: 40000
+        dport: 9100
+      - id: dept-ping
+        proto: icmp
+        src: 10.80.120.100
+        dst: 10.80.130.100
+        expect: deny
+        icmp_type: 8
+      - id: mgmt-telnet
+        proto: tcp
+        src: 10.80.120.100
+        dst: 10.80.40.12
+        expect: deny
+        sport: 40000
+        dport: 23
+    - acl: IN-PRINT
+      vectors: &id006
+      - id: dhcp-bcast
+        proto: udp
+        src: 0.0.0.0
+        dst: 255.255.255.255
+        expect: permit
+        sport: 68
+        dport: 67
+      - id: dhcp-renew
+        proto: udp
+        src: 10.80.170.100
+        dst: 10.80.100.30
+        expect: permit
+        sport: 68
+        dport: 67
+      - id: hsrp-sw01
+        proto: udp
+        src: 10.80.170.2
+        dst: 224.0.0.102
+        expect: permit
+        sport: 1985
+        dport: 1985
+      - id: hsrp-sw02
+        proto: udp
+        src: 10.80.170.3
+        dst: 224.0.0.102
+        expect: permit
+        sport: 1985
+        dport: 1985
+      - id: print-reply
+        proto: tcp
+        src: 10.80.170.50
+        dst: 10.80.130.100
+        expect: permit
+        sport: 9100
+        dport: 40000
+        established: true
+      - id: echo-reply-it
+        proto: icmp
+        src: 10.80.170.50
+        dst: 10.80.110.100
+        expect: permit
+        icmp_type: 0
+      - id: new-to-dept
+        proto: tcp
+        src: 10.80.170.50
+        dst: 10.80.130.100
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: ping-dept
+        proto: icmp
+        src: 10.80.170.50
+        dst: 10.80.130.100
+        expect: deny
+        icmp_type: 8
+      - id: to-dns
+        proto: udp
+        src: 10.80.170.50
+        dst: 10.80.100.10
+        expect: deny
+        sport: 40000
+        dport: 53
+      - id: to-inet
+        proto: tcp
+        src: 10.80.170.50
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 80
+    - acl: IN-SERVER
+      vectors: &id007
+      - id: hsrp-sw01
+        proto: udp
+        src: 10.80.100.2
+        dst: 224.0.0.102
+        expect: permit
+        sport: 1985
+        dport: 1985
+      - id: hsrp-sw02
+        proto: udp
+        src: 10.80.100.3
+        dst: 224.0.0.102
+        expect: permit
+        sport: 1985
+        dport: 1985
+      - id: app-reply
+        proto: tcp
+        src: 10.80.100.20
+        dst: 10.80.130.100
+        expect: permit
+        sport: 80
+        dport: 40000
+        established: true
+      - id: dns-reply
+        proto: udp
+        src: 10.80.100.10
+        dst: 10.80.130.100
+        expect: permit
+        sport: 53
+        dport: 40000
+      - id: echo-reply
+        proto: icmp
+        src: 10.80.100.20
+        dst: 10.80.130.100
+        expect: permit
+        icmp_type: 0
+      - id: relay-reply-sw01
+        proto: udp
+        src: 10.80.100.30
+        dst: 10.80.130.2
+        expect: permit
+        sport: 67
+        dport: 67
+      - id: relay-reply-sw02
+        proto: udp
+        src: 10.80.100.30
+        dst: 10.80.130.3
+        expect: permit
+        sport: 67
+        dport: 67
+      - id: renew-reply
+        proto: udp
+        src: 10.80.100.30
+        dst: 10.80.130.100
+        expect: permit
+        sport: 67
+        dport: 68
+      - id: dns-forward
+        proto: udp
+        src: 10.80.100.10
+        dst: 192.0.2.10
+        expect: permit
+        sport: 40000
+        dport: 53
+      - id: app-new-to-dept
+        proto: tcp
+        src: 10.80.100.20
+        dst: 10.80.130.100
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: app-ping-dept
+        proto: icmp
+        src: 10.80.100.20
+        dst: 10.80.130.100
+        expect: deny
+        icmp_type: 8
+      - id: app-inet
+        proto: tcp
+        src: 10.80.100.20
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: app-inet-dns
+        proto: udp
+        src: 10.80.100.20
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 53
+      - id: dns-inet-www
+        proto: tcp
+        src: 10.80.100.10
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: app-mgmt
+        proto: tcp
+        src: 10.80.100.20
+        dst: 10.80.40.11
+        expect: deny
+        sport: 40000
+        dport: 23
+    - acl: IN-MGMT
+      vectors: &id008
+      - id: hsrp-sw01
+        proto: udp
+        src: 10.80.40.2
+        dst: 224.0.0.102
+        expect: permit
+        sport: 1985
+        dport: 1985
+      - id: hsrp-sw02
+        proto: udp
+        src: 10.80.40.3
+        dst: 224.0.0.102
+        expect: permit
+        sport: 1985
+        dport: 1985
+      - id: telnet-reply-it
+        proto: tcp
+        src: 10.80.40.11
+        dst: 10.80.110.100
+        expect: permit
+        sport: 23
+        dport: 40000
+        established: true
+      - id: echo-reply-it
+        proto: icmp
+        src: 10.80.40.11
+        dst: 10.80.110.100
+        expect: permit
+        icmp_type: 0
+      - id: ntp-sw01
+        proto: udp
+        src: 10.80.40.11
+        dst: 10.80.40.2
+        expect: permit
+        sport: 123
+        dport: 123
+      - id: ntp-sw02
+        proto: udp
+        src: 10.80.40.11
+        dst: 10.80.40.3
+        expect: permit
+        sport: 123
+        dport: 123
+      - id: new-to-it
+        proto: tcp
+        src: 10.80.40.11
+        dst: 10.80.110.100
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: new-to-dept
+        proto: tcp
+        src: 10.80.40.11
+        dst: 10.80.130.100
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: to-inet
+        proto: tcp
+        src: 10.80.40.11
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 80
+- name: 'SW02: 各 SVI の受信方向に命名規約どおりの ACL を適用'
+  node: SW02
+  command: show ip interface | include line protocol|Inbound  access list
+  raw:
+  - regex: (?m)^Vlan130 is up[^\n]*\n\s*Inbound\s+access list is IN-MFG\s*$
+  - regex: (?m)^Vlan220 is up[^\n]*\n\s*Inbound\s+access list is IN-SALES\s*$
+  - regex: (?m)^Vlan210 is up[^\n]*\n\s*Inbound\s+access list is IN-GA\s*$
+  - regex: (?m)^Vlan110 is up[^\n]*\n\s*Inbound\s+access list is IN-IT\s*$
+  - regex: (?m)^Vlan120 is up[^\n]*\n\s*Inbound\s+access list is IN-GUEST\s*$
+  - regex: (?m)^Vlan170 is up[^\n]*\n\s*Inbound\s+access list is IN-PRINT\s*$
+  - regex: (?m)^Vlan100 is up[^\n]*\n\s*Inbound\s+access list is IN-SERVER\s*$
+  - regex: (?m)^Vlan40 is up[^\n]*\n\s*Inbound\s+access list is IN-MGMT\s*$
+  points: 1
+- name: 'SW02: VLAN 間 ACL の許可/拒否が要件どおり (意味評価・8 本)'
+  node: SW02
+  command: show ip access-lists
+  points: 2
+  acl_vectors:
+    acls:
+    - acl: IN-MFG
+      vectors: *id001
+    - acl: IN-SALES
+      vectors: *id002
+    - acl: IN-GA
+      vectors: *id003
+    - acl: IN-IT
+      vectors: *id004
+    - acl: IN-GUEST
+      vectors: *id005
+    - acl: IN-PRINT
+      vectors: *id006
+    - acl: IN-SERVER
+      vectors: *id007
+    - acl: IN-MGMT
+      vectors: *id008
+- name: 'RT01: Dialer1 の受信方向に IN-WAN・Et0/0 の受信方向に IN-LAN'
+  node: RT01
+  command: show ip interface | include line protocol|Inbound  access list
+  raw:
+  - regex: (?m)^Dialer1 is up[^\n]*\n\s*Inbound\s+access list is IN-WAN\s*$
+  - regex: (?m)^Ethernet0/0 is up[^\n]*\n\s*Inbound\s+access list is IN-LAN\s*$
+  points: 1
+- name: 'RT01: 境界 ACL (IN-WAN/IN-LAN) の許可/拒否が要件どおり (意味評価)'
+  node: RT01
+  command: show ip access-lists
+  points: 2
+  acl_vectors:
+    acls:
+    - acl: IN-WAN
+      vectors:
+      - id: tcp-return
+        proto: tcp
+        src: 192.0.2.10
+        dst: 198.51.100.40
+        expect: permit
+        sport: 80
+        dport: 40000
+        established: true
+      - id: dns-return
+        proto: udp
+        src: 192.0.2.10
+        dst: 198.51.100.40
+        expect: permit
+        sport: 53
+        dport: 40000
+      - id: ntp-return
+        proto: udp
+        src: 192.0.2.1
+        dst: 198.51.100.40
+        expect: permit
+        sport: 123
+        dport: 123
+      - id: sla-echo-reply
+        proto: icmp
+        src: 192.0.2.10
+        dst: 198.51.100.40
+        expect: permit
+        icmp_type: 0
+      - id: unreachable
+        proto: icmp
+        src: 192.0.2.200
+        dst: 198.51.100.40
+        expect: permit
+        icmp_type: 3
+      - id: time-exceeded
+        proto: icmp
+        src: 192.0.2.200
+        dst: 198.51.100.40
+        expect: permit
+        icmp_type: 11
+      - id: ssh-in
+        proto: tcp
+        src: 192.0.2.66
+        dst: 198.51.100.40
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: telnet-in
+        proto: tcp
+        src: 192.0.2.66
+        dst: 198.51.100.40
+        expect: deny
+        sport: 40000
+        dport: 23
+      - id: www-in
+        proto: tcp
+        src: 192.0.2.66
+        dst: 198.51.100.40
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: ping-in
+        proto: icmp
+        src: 192.0.2.66
+        dst: 198.51.100.40
+        expect: deny
+        icmp_type: 8
+      - id: dns-other-src
+        proto: udp
+        src: 192.0.2.66
+        dst: 198.51.100.40
+        expect: deny
+        sport: 53
+        dport: 40000
+      - id: spoof-10
+        proto: tcp
+        src: 10.1.2.3
+        dst: 198.51.100.40
+        expect: deny
+        sport: 80
+        dport: 40000
+        established: true
+      - id: spoof-172
+        proto: tcp
+        src: 172.16.5.5
+        dst: 198.51.100.40
+        expect: deny
+        sport: 80
+        dport: 40000
+        established: true
+      - id: spoof-192
+        proto: tcp
+        src: 192.168.1.1
+        dst: 198.51.100.40
+        expect: deny
+        sport: 80
+        dport: 40000
+        established: true
+      - id: spoof-127
+        proto: udp
+        src: 127.0.0.1
+        dst: 198.51.100.40
+        expect: deny
+        sport: 53
+        dport: 40000
+    - acl: IN-LAN
+      vectors:
+      - id: ospf
+        proto: ospf
+        src: 10.80.255.3
+        dst: 224.0.0.5
+        expect: permit
+      - id: ntp-sw01
+        proto: udp
+        src: 10.80.255.3
+        dst: 10.80.255.1
+        expect: permit
+        sport: 123
+        dport: 123
+      - id: ntp-sw02
+        proto: udp
+        src: 10.80.255.4
+        dst: 10.80.255.1
+        expect: permit
+        sport: 123
+        dport: 123
+      - id: dns-fwd-udp
+        proto: udp
+        src: 10.80.100.10
+        dst: 192.0.2.10
+        expect: permit
+        sport: 40000
+        dport: 53
+      - id: dns-fwd-tcp
+        proto: tcp
+        src: 10.80.100.10
+        dst: 192.0.2.10
+        expect: permit
+        sport: 40000
+        dport: 53
+      - id: guest-dns
+        proto: udp
+        src: 10.80.120.100
+        dst: 192.0.2.10
+        expect: permit
+        sport: 40000
+        dport: 53
+      - id: guest-www
+        proto: tcp
+        src: 10.80.120.100
+        dst: 198.51.100.77
+        expect: permit
+        sport: 40000
+        dport: 80
+      - id: guest-443
+        proto: tcp
+        src: 10.80.120.100
+        dst: 198.51.100.77
+        expect: permit
+        sport: 40000
+        dport: 443
+      - id: dept-8080
+        proto: tcp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: permit
+        sport: 40000
+        dport: 8080
+      - id: dept-ping
+        proto: icmp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: permit
+        icmp_type: 8
+      - id: it-www
+        proto: tcp
+        src: 10.80.110.100
+        dst: 198.51.100.77
+        expect: permit
+        sport: 40000
+        dport: 80
+      - id: dept-445
+        proto: tcp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 445
+      - id: dept-smtp
+        proto: tcp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 25
+      - id: dept-139
+        proto: tcp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 139
+      - id: dept-137-udp
+        proto: udp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 137
+      - id: it-445
+        proto: tcp
+        src: 10.80.110.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 445
+      - id: dept-direct-dns
+        proto: udp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 53
+      - id: dept-direct-dns-tcp
+        proto: tcp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 53
+      - id: guest-8080
+        proto: tcp
+        src: 10.80.120.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 8080
+      - id: guest-ping
+        proto: icmp
+        src: 10.80.120.100
+        dst: 192.0.2.10
+        expect: deny
+        icmp_type: 8
+      - id: guest-other-dns
+        proto: udp
+        src: 10.80.120.100
+        dst: 192.0.2.66
+        expect: deny
+        sport: 40000
+        dport: 53
+      - id: intra-www
+        proto: tcp
+        src: 10.80.210.100
+        dst: 198.51.100.77
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: app-www
+        proto: tcp
+        src: 10.80.100.20
+        dst: 198.51.100.77
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: dns-www
+        proto: tcp
+        src: 10.80.100.10
+        dst: 198.51.100.77
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: prn-www
+        proto: tcp
+        src: 10.80.170.50
+        dst: 198.51.100.77
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: mgmt-www
+        proto: tcp
+        src: 10.80.40.11
+        dst: 198.51.100.77
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: spoof-src
+        proto: tcp
+        src: 10.200.1.1
+        dst: 198.51.100.77
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: spoof-172
+        proto: tcp
+        src: 172.16.1.1
+        dst: 198.51.100.77
+        expect: deny
+        sport: 40000
+        dport: 80
+- name: 'RT02: Dialer1 の受信方向に IN-WAN・Et0/0 の受信方向に IN-LAN'
+  node: RT02
+  command: show ip interface | include line protocol|Inbound  access list
+  raw:
+  - regex: (?m)^Dialer1 is up[^\n]*\n\s*Inbound\s+access list is IN-WAN\s*$
+  - regex: (?m)^Ethernet0/0 is up[^\n]*\n\s*Inbound\s+access list is IN-LAN\s*$
+  points: 1
+- name: 'RT02: 境界 ACL (IN-WAN/IN-LAN) の許可/拒否が要件どおり (意味評価)'
+  node: RT02
+  command: show ip access-lists
+  points: 2
+  acl_vectors:
+    acls:
+    - acl: IN-WAN
+      vectors:
+      - id: tcp-return
+        proto: tcp
+        src: 192.0.2.10
+        dst: 203.0.113.55
+        expect: permit
+        sport: 80
+        dport: 40000
+        established: true
+      - id: dns-return
+        proto: udp
+        src: 192.0.2.10
+        dst: 203.0.113.55
+        expect: permit
+        sport: 53
+        dport: 40000
+      - id: ntp-return
+        proto: udp
+        src: 192.0.2.1
+        dst: 203.0.113.55
+        expect: permit
+        sport: 123
+        dport: 123
+      - id: sla-echo-reply
+        proto: icmp
+        src: 192.0.2.10
+        dst: 203.0.113.55
+        expect: permit
+        icmp_type: 0
+      - id: unreachable
+        proto: icmp
+        src: 192.0.2.200
+        dst: 203.0.113.55
+        expect: permit
+        icmp_type: 3
+      - id: time-exceeded
+        proto: icmp
+        src: 192.0.2.200
+        dst: 203.0.113.55
+        expect: permit
+        icmp_type: 11
+      - id: ssh-in
+        proto: tcp
+        src: 192.0.2.66
+        dst: 203.0.113.55
+        expect: deny
+        sport: 40000
+        dport: 22
+      - id: telnet-in
+        proto: tcp
+        src: 192.0.2.66
+        dst: 203.0.113.55
+        expect: deny
+        sport: 40000
+        dport: 23
+      - id: www-in
+        proto: tcp
+        src: 192.0.2.66
+        dst: 203.0.113.55
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: ping-in
+        proto: icmp
+        src: 192.0.2.66
+        dst: 203.0.113.55
+        expect: deny
+        icmp_type: 8
+      - id: dns-other-src
+        proto: udp
+        src: 192.0.2.66
+        dst: 203.0.113.55
+        expect: deny
+        sport: 53
+        dport: 40000
+      - id: spoof-10
+        proto: tcp
+        src: 10.1.2.3
+        dst: 203.0.113.55
+        expect: deny
+        sport: 80
+        dport: 40000
+        established: true
+      - id: spoof-172
+        proto: tcp
+        src: 172.16.5.5
+        dst: 203.0.113.55
+        expect: deny
+        sport: 80
+        dport: 40000
+        established: true
+      - id: spoof-192
+        proto: tcp
+        src: 192.168.1.1
+        dst: 203.0.113.55
+        expect: deny
+        sport: 80
+        dport: 40000
+        established: true
+      - id: spoof-127
+        proto: udp
+        src: 127.0.0.1
+        dst: 203.0.113.55
+        expect: deny
+        sport: 53
+        dport: 40000
+    - acl: IN-LAN
+      vectors:
+      - id: ospf
+        proto: ospf
+        src: 10.80.255.3
+        dst: 224.0.0.5
+        expect: permit
+      - id: ntp-sw01
+        proto: udp
+        src: 10.80.255.3
+        dst: 10.80.255.2
+        expect: permit
+        sport: 123
+        dport: 123
+      - id: ntp-sw02
+        proto: udp
+        src: 10.80.255.4
+        dst: 10.80.255.2
+        expect: permit
+        sport: 123
+        dport: 123
+      - id: dns-fwd-udp
+        proto: udp
+        src: 10.80.100.10
+        dst: 192.0.2.10
+        expect: permit
+        sport: 40000
+        dport: 53
+      - id: dns-fwd-tcp
+        proto: tcp
+        src: 10.80.100.10
+        dst: 192.0.2.10
+        expect: permit
+        sport: 40000
+        dport: 53
+      - id: guest-dns
+        proto: udp
+        src: 10.80.120.100
+        dst: 192.0.2.10
+        expect: permit
+        sport: 40000
+        dport: 53
+      - id: guest-www
+        proto: tcp
+        src: 10.80.120.100
+        dst: 198.51.100.77
+        expect: permit
+        sport: 40000
+        dport: 80
+      - id: guest-443
+        proto: tcp
+        src: 10.80.120.100
+        dst: 198.51.100.77
+        expect: permit
+        sport: 40000
+        dport: 443
+      - id: dept-8080
+        proto: tcp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: permit
+        sport: 40000
+        dport: 8080
+      - id: dept-ping
+        proto: icmp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: permit
+        icmp_type: 8
+      - id: it-www
+        proto: tcp
+        src: 10.80.110.100
+        dst: 198.51.100.77
+        expect: permit
+        sport: 40000
+        dport: 80
+      - id: dept-445
+        proto: tcp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 445
+      - id: dept-smtp
+        proto: tcp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 25
+      - id: dept-139
+        proto: tcp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 139
+      - id: dept-137-udp
+        proto: udp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 137
+      - id: it-445
+        proto: tcp
+        src: 10.80.110.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 445
+      - id: dept-direct-dns
+        proto: udp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 53
+      - id: dept-direct-dns-tcp
+        proto: tcp
+        src: 10.80.130.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 53
+      - id: guest-8080
+        proto: tcp
+        src: 10.80.120.100
+        dst: 192.0.2.10
+        expect: deny
+        sport: 40000
+        dport: 8080
+      - id: guest-ping
+        proto: icmp
+        src: 10.80.120.100
+        dst: 192.0.2.10
+        expect: deny
+        icmp_type: 8
+      - id: guest-other-dns
+        proto: udp
+        src: 10.80.120.100
+        dst: 192.0.2.66
+        expect: deny
+        sport: 40000
+        dport: 53
+      - id: intra-www
+        proto: tcp
+        src: 10.80.210.100
+        dst: 198.51.100.77
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: app-www
+        proto: tcp
+        src: 10.80.100.20
+        dst: 198.51.100.77
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: dns-www
+        proto: tcp
+        src: 10.80.100.10
+        dst: 198.51.100.77
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: prn-www
+        proto: tcp
+        src: 10.80.170.50
+        dst: 198.51.100.77
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: mgmt-www
+        proto: tcp
+        src: 10.80.40.11
+        dst: 198.51.100.77
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: spoof-src
+        proto: tcp
+        src: 10.200.1.1
+        dst: 198.51.100.77
+        expect: deny
+        sport: 40000
+        dport: 80
+      - id: spoof-172
+        proto: tcp
+        src: 172.16.1.1
+        dst: 198.51.100.77
+        expect: deny
+        sport: 40000
+        dport: 80

@@ -1,0 +1,147 @@
+== [1/3] build_topology (_POC-ENT3, variant=base) ==
+
+PLAY [問題メタ読込み・対象ノード展開] ******************************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.file] ****************************************************
+changed: [localhost]
+
+TASK [MGMT IP をリース台帳から割当（mgmt_alloc.py → mgmt_map.yml）] ************
+changed: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    alloc.stdout_lines:
+    - '[mgmt_alloc] 割当: _POC-ENT3 → .11-.13 (空き残 37個)'
+    - '[mgmt_alloc] wrote /home/suzuki/ansible/CCNP01/playbooks/../topologies/_generated/_POC-ENT3/mgmt_map.yml'
+
+TASK [割当結果(mgmt_map.yml)を読み込む] ****************************************
+ok: [localhost]
+
+TASK [対象ノードを _gen グループへ（mgmt_ip と image_family を付与）] **********
+changed: [localhost] => (item=SW01)
+changed: [localhost] => (item=SW02)
+changed: [localhost] => (item=RT01)
+
+PLAY [各ノードの day0 config(baseline+initial) を描画] *************************
+[WARNING]: Host 'SW01' is using the discovered Python interpreter at '/usr/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+[WARNING]: Host 'RT01' is using the discovered Python interpreter at '/usr/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+[WARNING]: Host 'SW02' is using the discovered Python interpreter at '/usr/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+
+TASK [baseline(role別) + initial を結合して day0 を生成（params をテンプレ文脈に渡す）] ***
+changed: [SW01]
+changed: [RT01]
+changed: [SW02]
+
+PLAY [lab.yaml を生成] *********************************************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.set_fact] ************************************************
+ok: [localhost]
+
+TASK [gen_cml_lab.py で組み立て] ***********************************************
+changed: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    gen.stdout: 'wrote /home/suzuki/ansible/CCNP01/playbooks/../topologies/_generated/_POC-ENT3/lab.yaml:
+      5 nodes, 6 links (family=iol)'
+
+PLAY RECAP *********************************************************************
+RT01                       : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+SW01                       : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+SW02                       : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+localhost                  : ok=10   changed=4    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   
+
+== [2/3] lab_up (CML 起動) ==
+
+PLAY [CML にラボを構築・起動] **************************************************
+
+TASK [lab.yaml の存在確認] *****************************************************
+ok: [localhost]
+
+TASK [ansible.builtin.assert] **************************************************
+ok: [localhost] => 
+    changed: false
+    msg: All assertions passed
+
+TASK [起動前プリフライト（割当 IP の生存確認）] ********************************
+ok: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    pf.stdout_lines:
+    - '[preflight] OK: 割当 3 IP はすべて未使用(CCNP-LAB-1e7c95c9 新規起動可)'
+
+TASK [ラボを started に] *******************************************************
+changed: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    r:
+      changed: true
+      failed: false
+
+TASK [未起動ノードのフォロー（全ノード BOOTED 待ち）] **************************
+ok: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    fix.stdout_lines:
+    - all 5 nodes BOOTED
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.command] *************************************************
+ok: [localhost] => (item=10.1.10.11)
+ok: [localhost] => (item=10.1.10.12)
+ok: [localhost] => (item=10.1.10.13)
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [bringup ノード登録] ******************************************************
+changed: [localhost] => (item=RT01)
+
+PLAY [data IF を no shutdown（bringup_data_ifs 問題のみ）] *********************
+
+TASK [SSH ポート待ち] **********************************************************
+ok: [RT01 -> localhost]
+[WARNING]: To ensure idempotency and correct diff the input configuration lines should be similar to how they appear if present in the running configuration on device
+[WARNING]: Deprecation warnings can be disabled by setting `deprecation_warnings=False` in ansible.cfg.
+[DEPRECATION WARNING]: Importing 'to_bytes' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+[DEPRECATION WARNING]: Importing 'to_text' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+[DEPRECATION WARNING]: The `ansible.module_utils.common._collections_compat` module is deprecated. This feature will be removed from ansible-core version 2.24. Use `collections.abc` from the Python standard library instead.
+[DEPRECATION WARNING]: Passing `warnings` to `exit_json` or `fail_json` is deprecated. This feature will be removed from ansible-core version 2.23. Use `AnsibleModule.warn` instead.
+
+TASK [data IF を no shutdown（SSH鍵生成待ちでリトライ）] ***********************
+changed: [RT01] => (item=Ethernet0/0)
+changed: [RT01] => (item=Ethernet0/1)
+changed: [RT01] => (item=Ethernet0/2)
+
+PLAY [console 経由の CVAC後 bringup（bringup_console 問題のみ）] ***************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+PLAY [Zabbix 監視ホスト登録（monitoring 問題のみ）] ****************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+PLAY RECAP *********************************************************************
+RT01                       : ok=2    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+localhost                  : ok=15   changed=2    unreachable=0    failed=0    skipped=6    rescued=0    ignored=0   
+
+_POC-ENT3: clab_topology 未定義 → containerlab はスキップ
+== [3/3] 作業フォルダ作成: /home/suzuki/ansible/CCNP01/lab/_POC-ENT3 ==
+   
+完了。VSCodeで開いた CCNP01 ツリーの lab/_POC-ENT3/ を編集（問題.md 同梱）。SSH: SUZUKI/CCNP・mgmt .11〜。

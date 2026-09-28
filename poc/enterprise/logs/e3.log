@@ -1,0 +1,39 @@
+
+======== E3 NAT 順序: カウンタ用 ACL ========
+### 04:22:34 RT01: conf ['ip access-list extended P9-DOUT', 'permit icmp host 10.20.10.10 any', 'permit icmp host 198.51.100.10 any', 'permit ip any any', 'ip access-list extended P9-DIN', 'permit icmp any host 10.20.10.10', 'permit icmp any host 198.51.100.10', 'permit ip any any', 'ip access-list extended P9-LIN', 'permit icmp host 10.20.10.10 any', 'permit icmp host 198.51.100.10 any', 'permit ip any any', 'ip access-list extended P9-LOUT', 'permit icmp any host 10.20.10.10', 'permit icmp any host 198.51.100.10', 'permit ip any any', 'interface Dialer1', 'ip access-group P9-DOUT out', 'ip access-group P9-DIN in', 'interface Ethernet0/0', 'ip access-group P9-LIN in', 'ip access-group P9-LOUT out']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:22:34 PC01$ ping -c5 -W2 192.0.2.10
+ 
+PING 192.0.2.10 (192.0.2.10) 56(84) bytes of data.
+64 bytes from 192.0.2.10: icmp_seq=1 ttl=60 time=2.09 ms
+64 bytes from 192.0.2.10: icmp_seq=2 ttl=60 time=1.93 ms
+64 bytes from 192.0.2.10: icmp_seq=3 ttl=60 time=2.24 ms
+64 bytes from 192.0.2.10: icmp_seq=4 ttl=60 time=1.79 ms
+64 bytes from 192.0.2.10: icmp_seq=5 ttl=60 time=1.96 ms
+
+--- 192.0.2.10 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 4008ms
+rtt min/avg/max/mdev = 1.794/2.003/2.241/0.151 ms
+__RC=0
+### 04:22:39 RT01: conf ['interface Dialer1', 'no ip access-group P9-DOUT out', 'no ip access-group P9-DIN in', 'interface Ethernet0/0', 'no ip access-group P9-LIN in', 'no ip access-group P9-LOUT out']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:22:39 RT01: show access-lists P9-DOUT
+Extended IP access list P9-DOUT
+    10 permit icmp host 10.20.10.10 any
+    20 permit icmp host 198.51.100.10 any (5 matches)
+    30 permit ip any any
+### 04:22:39 RT01: show access-lists P9-DIN
+Extended IP access list P9-DIN
+    10 permit icmp any host 10.20.10.10
+    20 permit icmp any host 198.51.100.10 (5 matches)
+    30 permit ip any any
+### 04:22:39 RT01: show access-lists P9-LIN
+Extended IP access list P9-LIN
+    10 permit icmp host 10.20.10.10 any (5 matches)
+    20 permit icmp host 198.51.100.10 any
+    30 permit ip any any (1 match)
+### 04:22:39 RT01: show access-lists P9-LOUT
+Extended IP access list P9-LOUT
+    10 permit icmp any host 10.20.10.10 (5 matches)
+    20 permit icmp any host 198.51.100.10
+    30 permit ip any any

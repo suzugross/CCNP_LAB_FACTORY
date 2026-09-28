@@ -1,0 +1,48 @@
+#!/bin/bash
+# INET-SV: nginx(/ip=送信元を返す・大容量ファイル)+dnsmasq(192.0.2.10:53)
+set -e
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[$(date -Is)] $*"; }
+for i in 1 2 3; do
+  apt-get update -qq && apt-get install -y -qq nginx dnsmasq tcpdump && break
+  sleep 10
+done
+rm -f /etc/netplan/50-cloud-init.yaml
+cat > /etc/netplan/60-ccnp.yaml <<NP
+network:
+  version: 2
+  ethernets:
+    ens2:
+      addresses: [{{ mgmt_ip }}/{{ mgmt_prefixlen }}]
+      routes:
+        - to: default
+          via: {{ mgmt_gw }}
+      nameservers:
+        addresses: [8.8.8.8]
+    ens3:
+      addresses: [192.0.2.10/24]
+      routes:
+        - to: 198.51.100.0/24
+          via: 192.0.2.1
+        - to: 203.0.113.0/24
+          via: 192.0.2.1
+NP
+chmod 600 /etc/netplan/60-ccnp.yaml
+netplan apply
+cat > /etc/nginx/sites-available/default <<'NG'
+server {
+  listen 80 default_server;
+  root /var/www/html;
+  location = /ip { default_type text/plain; return 200 "$remote_addr\n"; }
+}
+NG
+dd if=/dev/urandom of=/var/www/html/big.bin bs=1M count=8 status=none
+systemctl restart nginx
+cat > /etc/dnsmasq.d/inet.conf <<'DM'
+listen-address=192.0.2.10
+bind-interfaces
+no-resolv
+address=/www.inet.example/192.0.2.10
+DM
+systemctl restart dnsmasq
+log "DONE"

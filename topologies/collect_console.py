@@ -68,10 +68,28 @@ def restore_console(dev):
         pass
 
 
+def connect_retry(dev, tries=3, wait=10):
+    """コンソール接続（失敗したら切断→待機→再接続）。★BL-225: 設定投入直後など syslog が多い機器で
+    「enable 状態にできない」(StateMachineError)が起きた（落ち着けば成功）ため、失敗時のみ再試行する。"""
+    import time
+    for i in range(tries):
+        try:
+            dev.connect(via="a", log_stdout=False, learn_hostname=True)
+            return
+        except Exception:
+            if i == tries - 1:
+                raise
+            try:
+                dev.disconnect()
+            except Exception:
+                pass
+            time.sleep(wait)
+
+
 def collect(dev, commands, timeout=90):
     """1 ノードにコンソール接続し、commands を順に実行して {cmd: 出力} を返す。"""
     out = {}
-    dev.connect(via="a", log_stdout=False, learn_hostname=True)
+    connect_retry(dev)
     try:
         dev.enable()
         for cmd in commands:
@@ -86,6 +104,37 @@ def collect(dev, commands, timeout=90):
         except Exception:
             pass
     return out
+
+
+def collect_nodes(by_node, lab_title=None):
+    """{node: {cmd,...}} をコンソールで収集して {node: {cmd: 出力}} を返す（環境変数は main と同じ）。
+    collect_telnet.py の `via: console` チェック（管理 IF を持たないノード・BL-225）からも使う。"""
+    cml_host = os.environ["CML_HOST"]
+    cml_user = os.environ["CML_USER"]
+    cml_pass = os.environ["CML_PASS"]
+    lab_title = lab_title or os.environ["LAB_TITLE"]
+    node_user = os.environ["NODE_USER"]
+    node_pass = os.environ["NODE_PASS"]
+    node_enable = os.environ.get("NODE_ENABLE") or node_pass
+    verify = os.environ.get("CML_VERIFY", "false").strip().lower() in ("1", "true", "yes")
+    url = cml_host if cml_host.startswith("http") else f"https://{cml_host}"
+    cl = ClientLibrary(url, cml_user, cml_pass, ssl_verify=verify)
+    labs = [l for l in cl.all_labs() if l.title == lab_title]
+    if not labs:
+        sys.exit(f"[collect_console] lab '{lab_title}' が CML({url}) に見つかりません")
+    testbed = loader.load(_patch_testbed(labs[0].get_pyats_testbed(), cml_user, cml_pass,
+                                         node_user, node_pass, node_enable))
+    captured = {}
+    for node, cmds in by_node.items():
+        dev = testbed.devices.get(node)
+        if dev is None:
+            captured[node] = {c: f"(node '{node}' not in testbed)" for c in cmds}
+            continue
+        try:
+            captured[node] = collect(dev, sorted(cmds))
+        except Exception as e:  # 接続失敗はそのノードの全コマンドを空扱い
+            captured[node] = {c: f"(console connect error: {e})" for c in cmds}
+    return captured
 
 
 def main():

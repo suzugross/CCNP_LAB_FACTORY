@@ -1,0 +1,66 @@
+# P4: IP SLA(source Dialer)+track+static+OSPF default-information originate の切替・切り戻しの秒数
+#     上流断は (a) INET の ISP-A 向け IF shutdown と (b) INET-SV の iptables(採点器で再現しやすい)の 2 方式
+- note: 'E4a SLA/track/static(監視対象の /32 を Dialer に固定)'
+- node: RT01
+  conf:
+    - ip sla 1
+    - icmp-echo 192.0.2.10 source-interface Dialer1
+    - frequency 5
+    - exit
+    - ip sla schedule 1 life forever start-time now
+    - track 1 ip sla 1 reachability
+    - delay down 10 up 30
+    - exit
+    - no ip route 0.0.0.0 0.0.0.0 Dialer1
+    - ip route 0.0.0.0 0.0.0.0 Dialer1 track 1
+    - ip route 192.0.2.10 255.255.255.255 Dialer1
+- node: RT02
+  conf:
+    - ip sla 1
+    - icmp-echo 192.0.2.10 source-interface Dialer1
+    - frequency 5
+    - exit
+    - ip sla schedule 1 life forever start-time now
+    - track 1 ip sla 1 reachability
+    - delay down 10 up 30
+    - exit
+    - no ip route 0.0.0.0 0.0.0.0 Dialer1
+    - ip route 0.0.0.0 0.0.0.0 Dialer1 track 1
+    - ip route 192.0.2.10 255.255.255.255 Dialer1
+- sleep: 40
+- node: RT01
+  show: ['show track 1', 'show ip route 0.0.0.0']
+- node: RT06
+  show: ['show ip route 0.0.0.0']
+- note: 'E4b 方式(a): INET の ISP-A 向け IF を shutdown → PC01 で 3 秒ごとに /ip'
+- node: RT05
+  conf: ['interface Ethernet0/0', 'shutdown']
+- node: PC01
+  timeout: 200
+  sh: ['for i in $(seq 1 30); do printf "%s " $(date +%T); curl -s -m2 http://192.0.2.10/ip || echo FAIL; sleep 3; done']
+- node: RT01
+  show: ['show track 1', 'show ip route 0.0.0.0', 'show pppoe session', 'show logging | include TRACK|OSPF']
+- node: RT06
+  show: ['show ip route 0.0.0.0']
+- note: 'E4c 方式(a) 復旧 → 切り戻し'
+- node: RT05
+  conf: ['interface Ethernet0/0', 'no shutdown']
+- node: PC01
+  timeout: 200
+  sh: ['for i in $(seq 1 30); do printf "%s " $(date +%T); curl -s -m2 http://192.0.2.10/ip || echo FAIL; sleep 3; done']
+- node: RT06
+  show: ['show ip route 0.0.0.0']
+- note: 'E4d 方式(b): INET-SV で ISP-A の送信元を DROP → 切替'
+- node: SRV01
+  sh: ['iptables -I INPUT -s 198.51.100.0/24 -j DROP; iptables -L INPUT -n --line-numbers | head -5']
+- node: PC01
+  timeout: 200
+  sh: ['for i in $(seq 1 30); do printf "%s " $(date +%T); curl -s -m2 http://192.0.2.10/ip || echo FAIL; sleep 3; done']
+- note: 'E4e 方式(b) 復旧 → 切り戻し'
+- node: SRV01
+  sh: ['iptables -D INPUT -s 198.51.100.0/24 -j DROP; iptables -L INPUT -n | head -4']
+- node: PC01
+  timeout: 200
+  sh: ['for i in $(seq 1 30); do printf "%s " $(date +%T); curl -s -m2 http://192.0.2.10/ip || echo FAIL; sleep 3; done']
+- node: RT01
+  show: ['show track 1', 'show ip sla statistics 1 | include return code|Number of']

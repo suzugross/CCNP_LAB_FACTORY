@@ -1,0 +1,78 @@
+# 段2 s3: P5 の L2 セキュリティ(SW03: DHCP snooping・DAI・port-security)と LACP(SW01-SW02 1 本)／P7 DHCP 予約(client-id)／P11 NTP 同期時間
+- note: 'S3a DHCP snooping(option 82 既定のまま)→ リレー越しに取れるか'
+- node: SW03
+  conf:
+    - ip dhcp snooping
+    - ip dhcp snooping vlan 10,20
+    - interface Ethernet0/0
+    - ip dhcp snooping trust
+    - interface Ethernet0/1
+    - ip dhcp snooping trust
+- node: PC01
+  sh: ['networkctl down ens3; sleep 2; networkctl up ens3; sleep 15; ip -4 -br addr show ens3']
+- node: SW03
+  show: ['show ip dhcp snooping', 'show ip dhcp snooping binding', 'show ip dhcp snooping statistics']
+- node: SW01
+  show: ['show logging | include DHCP|giaddr|relay']
+- node: RT01
+  show: ['show ip dhcp binding', 'show logging | include DHCP']
+- note: 'S3b DAI＋port-security(PC ポート・max 1)'
+- node: SW03
+  conf:
+    - ip arp inspection vlan 10,20
+    - interface Ethernet0/0
+    - ip arp inspection trust
+    - interface Ethernet0/1
+    - ip arp inspection trust
+    - interface Ethernet0/3
+    - switchport port-security
+    - switchport port-security maximum 1
+    - spanning-tree portfast edge
+    - spanning-tree bpduguard enable
+    - interface Ethernet1/0
+    - switchport port-security
+    - spanning-tree portfast edge
+    - spanning-tree bpduguard enable
+- sleep: 5
+- node: PC01
+  sh: ['ip neigh flush dev ens3; ping -c3 -W2 10.20.10.1 | tail -2; ping -c2 -W2 192.0.2.10 | tail -1']
+- node: SW03
+  show: ['show ip arp inspection statistics vlan 10', 'show port-security', 'show port-security interface Ethernet0/3 | include Status|Violation|Last Source']
+- note: 'S3c P7: PC02 の MAC で client-identifier 予約(01+MAC)'
+- node: PC02
+  sh: ['cat /sys/class/net/ens3/address']
+- note: 'S3d LACP(SW01-SW02 の 1 本を Po1 に)'
+- node: SW01
+  conf:
+    - interface Ethernet0/0
+    - channel-group 1 mode active
+    - interface Port-channel1
+    - switchport trunk encapsulation dot1q
+    - switchport mode trunk
+    - switchport trunk native vlan 666
+    - switchport trunk allowed vlan 10,20,99,100,900
+- node: SW02
+  conf:
+    - interface Ethernet0/0
+    - channel-group 1 mode active
+    - interface Port-channel1
+    - switchport trunk encapsulation dot1q
+    - switchport mode trunk
+    - switchport trunk native vlan 666
+    - switchport trunk allowed vlan 10,20,99,100,900
+- sleep: 40
+- node: SW01
+  show: ['show etherchannel summary | begin Group', 'show standby brief', 'show ip ospf neighbor']
+- note: 'S3e P11: SW01/SW03 を RT02(10.20.255.1)に NTP 同期(SW03 は L3 なし→ SW03 の管理は割愛・SW01 のみ)'
+- node: SW01
+  conf: ['ntp server 10.20.255.1']
+  show: ['show clock', 'show ntp associations']
+- sleep: 60
+- node: SW01
+  show: ['show ntp associations', 'show ntp status | include Clock is']
+- sleep: 120
+- node: SW01
+  show: ['show ntp associations', 'show ntp status | include Clock is']
+- sleep: 180
+- node: SW01
+  show: ['show ntp associations', 'show ntp status | include Clock is']

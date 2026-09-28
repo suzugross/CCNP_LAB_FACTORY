@@ -1,0 +1,126 @@
+# 段2 s2: SVI の in ACL の罠。T12(HSRP hello)・T4(DHCP ブロードキャスト)・T6(リレー応答の宛先)・T5(更新ユニキャスト)
+- note: 'S2a T12: SW02 Vlan10 in に「SALES の TCP だけ許可」(HSRP hello 224.0.0.102 は暗黙 deny)'
+- node: SW02
+  conf:
+    - ip access-list extended T12-IN
+    - permit tcp 10.20.10.0 0.0.0.255 any
+    - deny ip any any log
+    - interface Vlan10
+    - ip access-group T12-IN in
+- sleep: 20
+- node: SW02
+  show: ['show standby brief', 'show access-lists T12-IN', 'show logging | include HSRP|SEC-6']
+- node: SW01
+  show: ['show standby brief']
+- node: SW02
+  conf: ['interface Vlan10', 'no ip access-group T12-IN in']
+- sleep: 15
+- node: SW02
+  show: ['show standby brief | include Vl10']
+- note: 'S2b T6: Vlan100 in(両 L3SW)でリレー応答の宛先をカウント(VIP/.2/.3・20 系も)'
+- node: SW01
+  conf:
+    - ip access-list extended T6-CNT
+    - permit udp host 10.20.100.30 eq bootps host 10.20.10.1
+    - permit udp host 10.20.100.30 eq bootps host 10.20.10.2
+    - permit udp host 10.20.100.30 eq bootps host 10.20.10.3
+    - permit udp host 10.20.100.30 eq bootps host 10.20.20.2
+    - permit udp host 10.20.100.30 eq bootps host 10.20.20.3
+    - permit udp host 10.20.100.30 eq bootps any
+    - permit ip any any
+    - interface Vlan100
+    - ip access-group T6-CNT in
+- node: SW02
+  conf:
+    - ip access-list extended T6-CNT
+    - permit udp host 10.20.100.30 eq bootps host 10.20.10.1
+    - permit udp host 10.20.100.30 eq bootps host 10.20.10.2
+    - permit udp host 10.20.100.30 eq bootps host 10.20.10.3
+    - permit udp host 10.20.100.30 eq bootps host 10.20.20.2
+    - permit udp host 10.20.100.30 eq bootps host 10.20.20.3
+    - permit udp host 10.20.100.30 eq bootps any
+    - permit ip any any
+    - interface Vlan100
+    - ip access-group T6-CNT in
+- node: PC01
+  sh: ['networkctl down ens3; sleep 2; networkctl up ens3; sleep 10; ip -4 -br addr show ens3']
+- node: SW01
+  show: ['show access-lists T6-CNT']
+- node: SW02
+  show: ['show access-lists T6-CNT']
+- note: 'S2c T6 本番: Vlan100 in で VIP 宛てだけ許可(実アドレス宛ての応答を捨てる)→ PC01 取り直し'
+- node: SW01
+  conf:
+    - ip access-list extended T6-VIP
+    - permit udp host 10.20.100.30 eq bootps host 10.20.10.1
+    - deny udp any any eq bootps log
+    - permit ip any any
+    - interface Vlan100
+    - ip access-group T6-VIP in
+- node: SW02
+  conf:
+    - ip access-list extended T6-VIP
+    - permit udp host 10.20.100.30 eq bootps host 10.20.10.1
+    - deny udp any any eq bootps log
+    - permit ip any any
+    - interface Vlan100
+    - ip access-group T6-VIP in
+- node: PC01
+  sh: ['networkctl down ens3; sleep 2; networkctl up ens3; sleep 15; ip -4 -br addr show ens3']
+- node: SW01
+  show: ['show access-lists T6-VIP']
+  conf: ['interface Vlan100', 'no ip access-group T6-VIP in']
+- node: SW02
+  show: ['show access-lists T6-VIP']
+  conf: ['interface Vlan100', 'no ip access-group T6-VIP in']
+- node: PC01
+  sh: ['networkctl down ens3; sleep 2; networkctl up ens3; sleep 10; ip -4 -br addr show ens3']
+- note: 'S2d T4: Vlan10 in(両 L3SW)に DHCP 行なし(送信元 SALES のみ許可)→ 取り直し'
+- node: SW01
+  conf:
+    - ip access-list extended T4-IN
+    - permit ip 10.20.10.0 0.0.0.255 any
+    - deny ip any any log
+    - interface Vlan10
+    - ip access-group T4-IN in
+- node: SW02
+  conf:
+    - ip access-list extended T4-IN
+    - permit ip 10.20.10.0 0.0.0.255 any
+    - deny ip any any log
+    - interface Vlan10
+    - ip access-group T4-IN in
+- node: PC01
+  sh: ['networkctl down ens3; sleep 2; networkctl up ens3; sleep 15; ip -4 -br addr show ens3']
+- node: SW01
+  show: ['show access-lists T4-IN', 'show standby brief | include Vl10']
+- note: 'S2e T5: DHCP はブロードキャストだけ許可(0.0.0.0→255.255.255.255)・他は SALES 発を拒否 → 取得後、更新(ユニキャスト)が通らずアドレスを失うか(リース 2 分・3 分観察)'
+- node: SW01
+  conf:
+    - ip access-list extended T5-IN
+    - permit udp host 0.0.0.0 host 255.255.255.255 eq bootps
+    - permit udp any host 224.0.0.102 eq 1985
+    - deny ip any any log
+    - interface Vlan10
+    - ip access-group T5-IN in
+- node: SW02
+  conf:
+    - ip access-list extended T5-IN
+    - permit udp host 0.0.0.0 host 255.255.255.255 eq bootps
+    - permit udp any host 224.0.0.102 eq 1985
+    - deny ip any any log
+    - interface Vlan10
+    - ip access-group T5-IN in
+- node: PC01
+  timeout: 260
+  sh: ['networkctl down ens3; sleep 2; networkctl up ens3; for i in $(seq 1 22); do printf "%s " $(date +%T); ip -4 -br addr show ens3 | tr -s " "; sleep 10; done']
+- node: SW01
+  show: ['show access-lists T5-IN']
+- node: SW02
+  show: ['show access-lists T5-IN']
+- node: RT01
+  show: ['show ip dhcp server statistics | include DISCOVER|REQUEST|ACK|RELEASE']
+- node: SW01
+  conf: ['interface Vlan10', 'no ip access-group T5-IN in']
+- node: SW02
+  conf: ['interface Vlan10', 'no ip access-group T5-IN in']

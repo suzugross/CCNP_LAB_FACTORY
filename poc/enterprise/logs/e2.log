@@ -1,0 +1,170 @@
+
+======== E2a NAT と既定経路(RT01 主 metric 10 / RT02 予備 metric 100) ========
+### 04:20:36 RT01: conf ['interface Dialer1', 'ip nat outside', 'interface Ethernet0/0', 'ip nat inside', 'ip access-list standard NAT-SRC', 'permit 10.20.0.0 0.0.255.255', 'exit', 'ip nat inside source list NAT-SRC interface Dialer1 overload', 'ip route 0.0.0.0 0.0.0.0 Dialer1', 'router ospf 1', 'default-information originate metric 10 metric-type 1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:20:39 RT02: conf ['interface Dialer1', 'ip nat outside', 'interface Ethernet0/0', 'ip nat inside', 'ip access-list standard NAT-SRC', 'permit 10.20.0.0 0.0.255.255', 'exit', 'ip nat inside source list NAT-SRC interface Dialer1 overload', 'ip route 0.0.0.0 0.0.0.0 Dialer1', 'router ospf 1', 'default-information originate metric 100 metric-type 1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 15
+### 04:20:56 RT06: show ip route ospf
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is 10.20.255.1 to network 0.0.0.0
+
+O*E1  0.0.0.0/0 [110/20] via 10.20.255.1, 00:00:21, Ethernet0/0
+### 04:20:56 RT06: show ip ospf neighbor
+Neighbor ID     Pri   State           Dead Time   Address         Interface
+10.20.255.1       1   FULL/DROTHER    00:00:30    10.20.255.1     Ethernet0/0
+10.20.255.2       1   FULL/BDR        00:00:33    10.20.255.2     Ethernet0/0
+### 04:20:57 SRV01$ tail -3 /var/log/ccnp-init.log
+ 
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+[2026-09-27T04:13:54+00:00] DONE
+__RC=0
+### 04:20:57 SRV01$ sysctl net.ipv4.tcp_mtu_probing net.ipv4.ip_no_pmtu_disc
+ 
+net.ipv4.tcp_mtu_probing = 0
+net.ipv4.ip_no_pmtu_disc = 0
+__RC=0
+### 04:20:58 SRV01$ ip -br addr
+ 
+lo               UNKNOWN        127.0.0.1/8 ::1/128 
+ens2             UP             10.1.10.34/26 fe80::5054:ff:fe66:779/64 
+ens3             UP             192.0.2.10/24 fe80::5054:ff:fe47:e423/64 
+__RC=0
+### 04:20:58 PC01$ tail -2 /var/log/ccnp-init.log
+ 
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+[2026-09-27T04:13:57+00:00] DONE
+__RC=0
+### 04:20:59 PC01$ curl -s -m5 http://192.0.2.10/ip
+ 
+198.51.100.10
+__RC=0
+### 04:20:59 PC01$ dig +short +time=2 +tries=1 @192.0.2.10 www.inet.example
+ 
+192.0.2.10
+__RC=0
+### 04:20:59 PC01$ curl -s -m30 -o /dev/null -w 'size=%{size_download} time=%{time_total} rc=%{exitcode}\n' http://192.0.2.10/big.bin; echo curl_rc=$?
+ 
+size=8388608 time=0.967900 rc=0
+curl_rc=0
+__RC=0
+### 04:21:01 PC01$ ping -c2 -W2 -M do -s 1472 192.0.2.10; ping -c2 -W2 -M do -s 1464 192.0.2.10
+ 
+PING 192.0.2.10 (192.0.2.10) 1472(1500) bytes of data.
+From 10.20.255.1 icmp_seq=1 Frag needed and DF set (mtu = 1492)
+ping: local error: message too long, mtu=1492
+
+--- 192.0.2.10 ping statistics ---
+2 packets transmitted, 0 received, +2 errors, 100% packet loss, time 1001ms
+
+PING 192.0.2.10 (192.0.2.10) 1464(1492) bytes of data.
+1472 bytes from 192.0.2.10: icmp_seq=1 ttl=60 time=1.80 ms
+1472 bytes from 192.0.2.10: icmp_seq=2 ttl=60 time=2.06 ms
+
+--- 192.0.2.10 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1002ms
+rtt min/avg/max/mdev = 1.796/1.928/2.061/0.132 ms
+__RC=0
+### 04:21:04 SRV01$ ip route get 198.51.100.10
+ 
+198.51.100.10 via 192.0.2.1 dev ens3 src 192.0.2.10 uid 0 
+    cache expires 595sec mtu 1492 
+__RC=0
+### 04:21:04 RT01: show ip nat translations
+Pro Inside global         Inside local          Outside local         Outside global
+icmp 198.51.100.10:1025   10.20.10.10:2429      192.0.2.10:2429       192.0.2.10:1025
+icmp 198.51.100.10:1024   10.20.10.10:2430      192.0.2.10:2430       192.0.2.10:1024
+tcp 198.51.100.10:4096    10.20.10.10:40074     192.0.2.10:80         192.0.2.10:80
+tcp 198.51.100.10:4097    10.20.10.10:40078     192.0.2.10:80         192.0.2.10:80
+udp 198.51.100.10:4785    10.20.10.10:54943     192.0.2.10:53         192.0.2.10:53
+### 04:21:04 RT01: show interfaces Dialer1 | include MTU
+  MTU 1492 bytes, BW 56 Kbit/sec, DLY 20000 usec, 
+  MTU 1492 bytes, BW 56 Kbit/sec, DLY 20000 usec, 
+
+======== E2b ブラックホール ON(INET→INET-SV で packet-too-big を捨てる)・SRV01 の PMTU キャッシュを消す ========
+### 04:21:07 RT05: conf ['interface Ethernet0/2', 'ip access-group PMTU-BLACKHOLE out']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:21:07 SRV01$ ip route flush cache; ip route get 198.51.100.10
+ 
+198.51.100.10 via 192.0.2.1 dev ens3 src 192.0.2.10 uid 0 
+    cache 
+__RC=0
+### 04:21:08 PC01$ curl -s -m30 -o /dev/null -w 'size=%{size_download} time=%{time_total} rc=%{exitcode}\n' http://192.0.2.10/big.bin; echo curl_rc=$?
+ 
+size=8388608 time=1.010716 rc=0
+curl_rc=0
+__RC=0
+### 04:21:09 PC01$ curl -s -m5 http://192.0.2.10/ip
+ 
+198.51.100.10
+__RC=0
+### 04:21:09 RT05: show access-lists PMTU-BLACKHOLE
+Extended IP access list PMTU-BLACKHOLE
+    10 deny icmp any any packet-too-big
+    20 permit ip any any (1612 matches)
+
+======== E2c RT01 Dialer1 に ip mtu 1492 のみ(MSS なし) ========
+### 04:21:10 RT01: conf ['interface Dialer1', 'ip mtu 1492']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:21:10 SRV01$ ip route flush cache
+ 
+__RC=0
+### 04:21:10 PC01$ curl -s -m30 -o /dev/null -w 'size=%{size_download} time=%{time_total} rc=%{exitcode}\n' http://192.0.2.10/big.bin; echo curl_rc=$?
+ 
+size=8388608 time=1.006837 rc=0
+curl_rc=0
+__RC=0
+
+======== E2d RT01 Dialer1 に ip tcp adjust-mss 1452 を追加 ========
+### 04:21:12 RT01: conf ['interface Dialer1', 'ip tcp adjust-mss 1452']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:21:12 SRV01$ ip route flush cache
+ 
+__RC=0
+### 04:21:12 PC01$ curl -s -m30 -o /dev/null -w 'size=%{size_download} time=%{time_total} rc=%{exitcode}\n' http://192.0.2.10/big.bin; echo curl_rc=$?
+ 
+size=8388608 time=0.981006 rc=0
+curl_rc=0
+__RC=0
+
+======== E2e MSS は残し ip mtu 1492 を外す(MSS 単独で足りるか) ========
+### 04:21:14 RT01: conf ['interface Dialer1', 'no ip mtu 1492']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:21:14 SRV01$ ip route flush cache
+ 
+__RC=0
+### 04:21:14 PC01$ curl -s -m30 -o /dev/null -w 'size=%{size_download} time=%{time_total} rc=%{exitcode}\n' http://192.0.2.10/big.bin; echo curl_rc=$?
+ 
+size=8388608 time=1.015041 rc=0
+curl_rc=0
+__RC=0
+### 04:21:16 RT01: conf ['interface Dialer1', 'ip mtu 1492']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:21:16 RT01: show running-config interface Dialer1
+Building configuration...
+
+Current configuration : 188 bytes
+!
+interface Dialer1
+ mtu 1492
+ ip address negotiated
+ ip nat outside
+ encapsulation ppp
+ ip tcp adjust-mss 1452
+ dialer pool 1
+ ppp chap hostname ent-a@ispa
+ ppp chap password 0 pppA
+end

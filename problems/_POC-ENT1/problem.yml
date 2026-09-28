@@ -1,0 +1,31 @@
+# BL-225 PoC 段1: PPPoE(BRAS/クライアント)・MTU/MSS・回線切替・NAT と ACL の評価順。出題用ではない。
+# 役割の割当(インベントリが固定名のため):
+#   RT01/RT02 = 境界ルータ(PPPoE クライアント) / RT03 = ISP-A BRAS / RT04 = ISP-B BRAS
+#   RT05 = INET / RT06 = コア(L3SW 代役) / SRV01 = INET-SV(nginx+dnsmasq) / PC01 = 社内端末
+#   SWT = TRANSIT(非管理スイッチ・RT01/RT02/RT06)
+id: _POC-ENT1
+title: "[PoC] enterprise edge: PPPoE dual ISP"
+exam: POC
+topics: [pppoe, nat, ipsla, poc]
+difficulty: 0
+topology: generated
+access: ssh
+target_nodes: [RT01, RT02, RT03, RT04, RT05, RT06, SRV01, PC01]
+points: 0
+image_family: iol
+bringup_data_ifs: true
+node_image_families:
+  SRV01: ubuntu
+  PC01: ubuntu
+lab:
+  switches: [SWT]
+  links:
+    - { a: RT01, a_if: 0, b: SWT, b_if: 0 }
+    - { a: RT02, a_if: 0, b: SWT, b_if: 1 }
+    - { a: RT06, a_if: 0, b: SWT, b_if: 2 }
+    - { a: RT06, a_if: 1, b: PC01, b_if: 1 }
+    - { a: RT01, a_if: 1, b: RT03, b_if: 0 }
+    - { a: RT02, a_if: 1, b: RT04, b_if: 0 }
+    - { a: RT03, a_if: 1, b: RT05, b_if: 0 }
+    - { a: RT04, a_if: 1, b: RT05, b_if: 1 }
+    - { a: RT05, a_if: 2, b: SRV01, b_if: 1 }

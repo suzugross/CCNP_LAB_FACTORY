@@ -1,0 +1,160 @@
+
+======== S3a DHCP snooping(option 82 既定のまま)→ リレー越しに取れるか ========
+### 05:00:22 SW03: conf ['ip dhcp snooping', 'ip dhcp snooping vlan 10,20', 'interface Ethernet0/0', 'ip dhcp snooping trust', 'interface Ethernet0/1', 'ip dhcp snooping trust']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:00:22 PC01$ networkctl down ens3; sleep 2; networkctl up ens3; sleep 15; ip -4 -br addr show ens3
+ 
+ens3             UP             10.20.10.4/24 metric 100 
+__RC=0
+### 05:00:40 SW03: show ip dhcp snooping
+Switch DHCP snooping is enabled
+Switch DHCP gleaning is disabled
+DHCP snooping is configured on following VLANs:
+10,20
+DHCP snooping is operational on following VLANs:
+10,20
+ Proxy bridge is configured on following VLANs:
+none
+ Proxy bridge is operational on following VLANs:
+none
+DHCP snooping is configured on the following L3 Interfaces:
+
+Insertion of option 82 is enabled
+   circuit-id default format: vlan-mod-port
+   remote-id: aabb.cc00.0400 (MAC)
+Option 82 on untrusted port is not allowed
+Verification of hwaddr field is enabled
+Verification of giaddr field is enabled
+DHCP snooping trust/rate is configured on the following Interfaces:
+
+Interface                  Trusted    Allow option    Rate limit (pps)
+-----------------------    -------    ------------    ----------------   
+Ethernet0/0                      yes        yes             unlimited
+  Custom circuit-ids:
+Ethernet0/1                      yes        yes             unlimited
+  Custom circuit-ids:
+### 05:00:40 SW03: show ip dhcp snooping binding
+MacAddress          IpAddress        Lease(sec)  Type           VLAN  Interface
+------------------  ---------------  ----------  -------------  ----  --------------------
+Total number of bindings: 0
+### 05:00:40 SW03: show ip dhcp snooping statistics
+ Packets Forwarded                                     = 0
+ Packets Dropped                                       = 0
+ Packets Dropped From untrusted ports                  = 0
+### 05:00:41 SW01: show logging | include DHCP|giaddr|relay
+*Sep 27 04:55:36.117: %DHCPD-7-NO_LEASE: DHCP lease assignment failure, client 5254.008e.ff45 reason CANT FORWARD
+### 05:00:43 RT01: show ip dhcp binding
+Bindings from all pools not associated with VRF:
+IP address      Client-ID/ 		Lease expiration 	Type       State      Interface
+		Hardware address/
+		User name
+10.20.10.4      0152.5400.4f91.d6       Sep 27 2026 05:02 AM    Automatic  Active     Ethernet0/0
+10.20.20.50     0152.5400.aa00.02       Infinite                Manual     Active     Ethernet0/0
+### 05:00:43 RT01: show logging | include DHCP
+*Sep 27 04:55:36.013: %DHCPD-7-NO_LEASE: DHCP lease assignment failure, client 5254.008e.ff45 reason NO POOL
+*Sep 27 04:56:41.264: %DHCPD-7-NO_LEASE: DHCP lease assignment failure, client 5254.00aa.0002 reason CANT FORWARD
+*Sep 27 04:57:09.208: %DHCPD-7-NO_LEASE: DHCP lease assignment failure, client 5254.00aa.0002 reason CLIENT CONFUSED ABOUT ADDRESS
+*Sep 27 04:57:09.208: %DHCPD-7-NAK: DHCP nak sent to client 0152.5400.aa00.02
+*Sep 27 04:57:09.208: %DHCPD-7-NAK: DHCP nak sent to client 0152.5400.aa00.02
+
+======== S3b DAI＋port-security(PC ポート・max 1) ========
+### 05:00:44 SW03: conf ['ip arp inspection vlan 10,20', 'interface Ethernet0/0', 'ip arp inspection trust', 'interface Ethernet0/1', 'ip arp inspection trust', 'interface Ethernet0/3', 'switchport port-security', 'switchport port-security maximum 1', 'spanning-tree portfast edge', 'spanning-tree bpduguard enable', 'interface Ethernet1/0', 'switchport port-security', 'spanning-tree portfast edge', 'spanning-tree bpduguard enable']
+Enter configuration commands, one per line.  End with CNTL/Z.
+                                       ^
+% Invalid input detected at '^' marker.
+                                       ^
+% Invalid input detected at '^' marker.
+### sleep 5
+### 05:00:49 PC01$ ip neigh flush dev ens3; ping -c3 -W2 10.20.10.1 | tail -2; ping -c2 -W2 192.0.2.10 | tail -1
+ 
+3 packets transmitted, 0 received, +3 errors, 100% packet loss, time 2044ms
+pipe 3
+
+__RC=0
+### 05:00:56 SW03: show ip arp inspection statistics vlan 10
+ Vlan      Forwarded        Dropped     DHCP Drops      ACL Drops
+ ----      ---------        -------     ----------      ---------
+   10              0              6              6              0
+
+ Vlan   DHCP Permits    ACL Permits  Probe Permits   Source MAC Failures
+ ----   ------------    -----------  -------------   -------------------
+   10              0              0              0                     0
+
+ Vlan   Dest MAC Failures   IP Validation Failures   Invalid Protocol Data
+ ----   -----------------   ----------------------   ---------------------
+   10                   0                        0                       0
+### 05:00:56 SW03: show port-security
+Secure Port  MaxSecureAddr  CurrentAddr  SecurityViolation  Security Action
+                (Count)       (Count)          (Count)
+---------------------------------------------------------------------------
+      Et0/3              1            1                  0         Shutdown
+      Et1/0              1            0                  0         Shutdown
+---------------------------------------------------------------------------
+Total Addresses in System (excluding one mac per port)     : 0
+Max Addresses limit in System (excluding one mac per port) : 4096
+### 05:00:56 SW03: show port-security interface Ethernet0/3 | include Status|Violation|Last Source
+Port Status                : Secure-up
+Violation Mode             : Shutdown
+Last Source Address:Vlan   : 5254.004f.91d6:10
+Security Violation Count   : 0
+
+======== S3c P7: PC02 の MAC で client-identifier 予約(01+MAC) ========
+### 05:00:56 PC02$ cat /sys/class/net/ens3/address
+ 
+52:54:00:aa:00:02
+__RC=0
+
+======== S3d LACP(SW01-SW02 の 1 本を Po1 に) ========
+### 05:00:57 SW01: conf ['interface Ethernet0/0', 'channel-group 1 mode active', 'interface Port-channel1', 'switchport trunk encapsulation dot1q', 'switchport mode trunk', 'switchport trunk native vlan 666', 'switchport trunk allowed vlan 10,20,99,100,900']
+Enter configuration commands, one per line.  End with CNTL/Z.
+Creating a port-channel interface Port-channel 1
+### 05:00:58 SW02: conf ['interface Ethernet0/0', 'channel-group 1 mode active', 'interface Port-channel1', 'switchport trunk encapsulation dot1q', 'switchport mode trunk', 'switchport trunk native vlan 666', 'switchport trunk allowed vlan 10,20,99,100,900']
+Enter configuration commands, one per line.  End with CNTL/Z.
+Creating a port-channel interface Port-channel 1
+### sleep 40
+### 05:01:38 SW01: show etherchannel summary | begin Group
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1      Po1(SU)         LACP        Et0/0(P)        
+### 05:01:38 SW01: show standby brief
+                     P indicates configured to preempt.
+                     |
+Interface   Grp  Pri P State   Active          Standby         Virtual IP
+Vl10        10   110 P Active  local           10.20.10.3      10.20.10.1
+Vl20        20   100 P Standby 10.20.20.3      local           10.20.20.1
+Vl100       100  110 P Active  local           10.20.100.3     10.20.100.1
+### 05:01:38 SW01: show ip ospf neighbor
+Neighbor ID     Pri   State           Dead Time   Address         Interface
+10.20.255.1       1   FULL/DR         00:00:36    10.20.255.1     Vlan900
+10.20.255.4       1   FULL/DROTHER    00:00:37    10.20.255.4     Vlan900
+
+======== S3e P11: SW01/SW03 を RT02(10.20.255.1)に NTP 同期(SW03 は L3 なし→ SW03 の管理は割愛・SW01 のみ) ========
+### 05:01:38 SW01: conf ['ntp server 10.20.255.1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:01:38 SW01: show clock
+*05:01:38.796 UTC Sun Sep 27 2026
+### 05:01:38 SW01: show ntp associations
+  address         ref clock       st   when   poll reach  delay  offset   disp
+ ~10.20.255.1     .INIT.          16      0     64     0  0.000   0.000 15937.
+ * sys.peer, # selected, + candidate, - outlyer, x falseticker, ~ configured
+### sleep 60
+### 05:02:38 SW01: show ntp associations
+  address         ref clock       st   when   poll reach  delay  offset   disp
+ ~10.20.255.1     .INIT.          16     50     64     0  0.000   0.000 15937.
+ * sys.peer, # selected, + candidate, - outlyer, x falseticker, ~ configured
+### 05:02:38 SW01: show ntp status | include Clock is
+Clock is unsynchronized, stratum 16, no reference clock
+### sleep 120
+### 05:04:38 SW01: show ntp associations
+  address         ref clock       st   when   poll reach  delay  offset   disp
+*~10.20.255.1     127.127.1.1      3     14     64     3  0.000   0.000 939.39
+ * sys.peer, # selected, + candidate, - outlyer, x falseticker, ~ configured
+### 05:04:39 SW01: show ntp status | include Clock is
+Clock is unsynchronized, stratum 4, reference is 10.20.255.1    
+### sleep 180
+### 05:07:39 SW01: show ntp associations
+  address         ref clock       st   when   poll reach  delay  offset   disp
+*~10.20.255.1     127.127.1.1      3      2     64    17  1.000   0.500 190.47
+ * sys.peer, # selected, + candidate, - outlyer, x falseticker, ~ configured
+### 05:07:39 SW01: show ntp status | include Clock is
+Clock is unsynchronized, stratum 4, reference is 10.20.255.1    

@@ -1,0 +1,56 @@
+#!/bin/bash
+# PC04: 情シスの端末（既設・DHCP）（自動生成 gen_enterprise.py）
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[$(date -Is)] $*"; }
+echo "{{ ansible_user }} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-ccnp; chmod 440 /etc/sudoers.d/90-ccnp
+for i in 1 2 3; do apt-get update -qq && apt-get install -y -qq dnsutils netcat-openbsd curl && break; sleep 10; done
+cat > /usr/local/bin/ccnp-probe <<'PROBE'
+#!/bin/bash
+# GEN-ENT 採点用の疎通プローブ（自動生成）。出力= id=結果 の行
+ip route flush cache 2>/dev/null; resolvectl flush-caches 2>/dev/null
+. /var/tmp/ccnp-peers 2>/dev/null
+t_tcp(){ nc -z -w3 "$2" "$3" >/dev/null 2>&1 && echo "$1=OPEN" || echo "$1=CLOSED"; }
+t_icmp(){ ping -c2 -W2 -q "$2" >/dev/null 2>&1 && echo "$1=OK" || echo "$1=NG"; }
+t_dns(){ r=$(dig +short +time=2 +tries=2 "$2" A 2>/dev/null | grep -E "^[0-9.]+$" | tail -1); echo "$1=${r:-NONE}"; }
+t_dnsat(){ r=$(dig +short +time=2 +tries=1 @"$2" "$3" A 2>/dev/null | grep -E "^[0-9.]+$" | tail -1); echo "$1=${r:-NONE}"; }
+t_http(){ r=$(curl -s -m5 "$2" 2>/dev/null | head -1); echo "$1=${r:-NONE}"; }
+t_big(){ s=$(curl -s -m25 -o /dev/null -w '%{size_download}' "$2" 2>/dev/null); echo "$1=${s:-0}"; }
+{
+  t_dns dns_portal "portal.intra.example" &
+  t_dns dns_inet "www.inet.example" &
+  t_tcp app80 "10.80.100.20" "80" &
+  t_tcp prn "10.80.170.50" "9100" &
+  t_icmp prn_ping "10.80.170.50" &
+  t_icmp guest_ping "$IP_PC05" &
+  t_http inet_ip "http://192.0.2.10/ip" &
+  t_icmp ping_pc01 "$IP_PC01" &
+  t_tcp ssh_pc01 "$IP_PC01" "22" &
+  t_icmp ping_pc02 "$IP_PC02" &
+  t_tcp ssh_pc02 "$IP_PC02" "22" &
+  t_icmp ping_pc03 "$IP_PC03" &
+  t_tcp ssh_pc03 "$IP_PC03" "22" &
+  t_icmp mgmt_ping_sw03 "10.80.40.11" &
+  t_icmp mgmt_ping_sw04 "10.80.40.12" &
+  t_icmp mgmt_ping_sw05 "10.80.40.13" &
+  t_tcp mgmt_telnet "10.80.40.11" "23" &
+  wait
+} | sort
+echo "addr=$(ip -4 -o addr show ens3 | awk '{print $4}' | head -1)"
+L=$(ls /run/systemd/netif/leases/* 2>/dev/null | head -1)
+[ -n "$L" ] && grep -E "^(ROUTER|DNS|DOMAINNAME)=" "$L"
+PROBE
+chmod 755 /usr/local/bin/ccnp-probe
+rm -f /etc/netplan/50-cloud-init.yaml
+cat > /etc/netplan/60-ccnp.yaml <<NP
+network:
+  version: 2
+  ethernets:
+    ens2:
+      addresses: [{{ mgmt_ip }}/{{ mgmt_prefixlen }}]
+    ens3:
+      dhcp4: true
+      dhcp-identifier: mac
+NP
+chmod 600 /etc/netplan/60-ccnp.yaml
+netplan apply
+log "DONE"

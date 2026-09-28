@@ -1,0 +1,15 @@
+---
+# エンタープライズ構築ラボ PoC の手順実行(BL-225)。認証情報は vault から環境変数で ecli.py に渡す(値は表示しない)。
+#   .venv/bin/ansible-playbook poc/enterprise/run.yml -e hosts_json=<HOSTS.json> -e steps=<STEPS.yml> -e log=<LOG> --vault-password-file <(printf 'CCNP\n')
+- hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../group_vars/all/vault.yml
+  tasks:
+    - name: 手順を実行してログに保存
+      ansible.builtin.shell: >-
+        {{ playbook_dir }}/../../.venv/bin/python3 {{ playbook_dir }}/ecli.py {{ hosts_json }} {{ steps }} > {{ log }} 2>&1
+      environment:
+        CCNP_USER: "{{ ansible_user }}"
+        CCNP_PASS: "{{ ansible_ssh_pass }}"
+      changed_when: false

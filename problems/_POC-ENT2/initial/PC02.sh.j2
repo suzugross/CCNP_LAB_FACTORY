@@ -1,0 +1,36 @@
+#!/bin/bash
+# 端末(VLAN 20)。ens3 は DHCP(client-id = 01+MAC)。経路と DNS は DHCP から取らず、試験用に静的経路を置く
+set -e
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[$(date -Is)] $*"; }
+for i in 1 2 3; do
+  apt-get update -qq && apt-get install -y -qq dnsutils netcat-openbsd tcpdump && break
+  sleep 10
+done
+rm -f /etc/netplan/50-cloud-init.yaml
+cat > /etc/netplan/60-ccnp.yaml <<NP
+network:
+  version: 2
+  ethernets:
+    ens2:
+      addresses: [{{ mgmt_ip }}/{{ mgmt_prefixlen }}]
+      routes:
+        - to: default
+          via: {{ mgmt_gw }}
+      nameservers:
+        addresses: [8.8.8.8]
+    ens3:
+      dhcp4: true
+      dhcp-identifier: mac
+      dhcp4-overrides:
+        use-routes: false
+        use-dns: false
+      routes:
+        - to: 10.20.0.0/16
+          via: 10.20.20.1
+        - to: 192.0.2.0/24
+          via: 10.20.20.1
+NP
+chmod 600 /etc/netplan/60-ccnp.yaml
+netplan apply
+log "DONE"

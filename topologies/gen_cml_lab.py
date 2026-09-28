@@ -180,8 +180,11 @@ def main():
             (sw_used[n] if n in switch_set else used[n]).add(lk[ifk])
     for ex in ext_links:
         used[ex["node"]].add(ex["if"])
+    # problem.yml の console_nodes= 管理 IF を持たないノード（管理スイッチへ結線しない・BL-225）
+    console_nodes = set(pmeta.get("console_nodes", []) or [])
     for n in nodes_in:
-        used[n].add(prof_of(n)["mgmt_slot"])
+        if n not in console_nodes:
+            used[n].add(prof_of(n)["mgmt_slot"])
 
     # 座標: problem.yml の lab.positions 優先(役割ベースの正準配置を生成器が埋める)
     coords = layout(nodes_in, pmeta.get("lab", {}).get("positions", {}) or {},
@@ -206,9 +209,16 @@ def main():
         else:
             configuration = day0
         ifaces = []
+        # problem.yml の lab.macs: {PC06: {1: "52:54:00:..."}} でインタフェースの MAC を固定
+        # (DHCP 予約の client-id 用・BL-225)。★CML は起動済みノードの MAC を変更できない
+        # (物理構成ロック)ため、トポロジ作成時に書くしかない。
+        macs = (pmeta.get("lab", {}).get("macs", {}) or {}).get(name, {}) or {}
         for slot in sorted(used[name]):
             label = prof["mgmt"] if slot == prof["mgmt_slot"] else prof["links"][slot]
-            ifaces.append(iface(name, slot, label))
+            ifc = iface(name, slot, label)
+            if slot in macs or str(slot) in macs:
+                ifc["mac_address"] = macs.get(slot, macs.get(str(slot)))
+            ifaces.append(ifc)
         cx, cy = coords[name]
         node = {
             "id": name, "label": name,
@@ -290,6 +300,8 @@ def main():
                  f"{ex['node']}<->{ex['connector']}")
     # 各ノードの MGMT → 管理スイッチ → 外部接続
     for idx, name in enumerate(nodes_in):
+        if name in console_nodes:
+            continue
         mslot = prof_of(name)["mgmt_slot"]
         add_link(name, f"{name}-i{mslot}", "MGMTSW", f"MGMTSW-i{idx}", f"{name}-mgmt")
     add_link("MGMTSW", f"MGMTSW-i{len(nodes_in)}", "EXTC", "EXTC-i0", "mgmt-uplink")

@@ -1,0 +1,97 @@
+# P2/P3: NAT＋既定経路(OSPF)を入れて PC01 から通す → PMTUD ブラックホール(INET で packet-too-big を捨てる)→ MSS 調整の効果
+- note: 'E2a NAT と既定経路(RT01 主 metric 10 / RT02 予備 metric 100)'
+- node: RT01
+  conf:
+    - interface Dialer1
+    - ip nat outside
+    - interface Ethernet0/0
+    - ip nat inside
+    - ip access-list standard NAT-SRC
+    - permit 10.20.0.0 0.0.255.255
+    - exit
+    - ip nat inside source list NAT-SRC interface Dialer1 overload
+    - ip route 0.0.0.0 0.0.0.0 Dialer1
+    - router ospf 1
+    - default-information originate metric 10 metric-type 1
+- node: RT02
+  conf:
+    - interface Dialer1
+    - ip nat outside
+    - interface Ethernet0/0
+    - ip nat inside
+    - ip access-list standard NAT-SRC
+    - permit 10.20.0.0 0.0.255.255
+    - exit
+    - ip nat inside source list NAT-SRC interface Dialer1 overload
+    - ip route 0.0.0.0 0.0.0.0 Dialer1
+    - router ospf 1
+    - default-information originate metric 100 metric-type 1
+- sleep: 15
+- node: RT06
+  show:
+    - show ip route ospf
+    - show ip ospf neighbor
+- node: SRV01
+  sh:
+    - tail -3 /var/log/ccnp-init.log
+    - sysctl net.ipv4.tcp_mtu_probing net.ipv4.ip_no_pmtu_disc
+    - ip -br addr
+- node: PC01
+  sh:
+    - tail -2 /var/log/ccnp-init.log
+    - curl -s -m5 http://192.0.2.10/ip
+    - dig +short +time=2 +tries=1 @192.0.2.10 www.inet.example
+    - "curl -s -m30 -o /dev/null -w 'size=%{size_download} time=%{time_total} rc=%{exitcode}\\n' http://192.0.2.10/big.bin; echo curl_rc=$?"
+    - "ping -c2 -W2 -M do -s 1472 192.0.2.10; ping -c2 -W2 -M do -s 1464 192.0.2.10"
+- node: SRV01
+  sh:
+    - ip route get 198.51.100.10
+- node: RT01
+  show:
+    - show ip nat translations
+    - show interfaces Dialer1 | include MTU
+- note: 'E2b ブラックホール ON(INET→INET-SV で packet-too-big を捨てる)・SRV01 の PMTU キャッシュを消す'
+- node: RT05
+  conf:
+    - interface Ethernet0/2
+    - ip access-group PMTU-BLACKHOLE out
+- node: SRV01
+  sh:
+    - ip route flush cache; ip route get 198.51.100.10
+- node: PC01
+  timeout: 60
+  sh:
+    - "curl -s -m30 -o /dev/null -w 'size=%{size_download} time=%{time_total} rc=%{exitcode}\\n' http://192.0.2.10/big.bin; echo curl_rc=$?"
+    - curl -s -m5 http://192.0.2.10/ip
+- node: RT05
+  show: ['show access-lists PMTU-BLACKHOLE']
+- note: 'E2c RT01 Dialer1 に ip mtu 1492 のみ(MSS なし)'
+- node: RT01
+  conf: ['interface Dialer1', 'ip mtu 1492']
+- node: SRV01
+  sh: ['ip route flush cache']
+- node: PC01
+  timeout: 60
+  sh:
+    - "curl -s -m30 -o /dev/null -w 'size=%{size_download} time=%{time_total} rc=%{exitcode}\\n' http://192.0.2.10/big.bin; echo curl_rc=$?"
+- note: 'E2d RT01 Dialer1 に ip tcp adjust-mss 1452 を追加'
+- node: RT01
+  conf: ['interface Dialer1', 'ip tcp adjust-mss 1452']
+- node: SRV01
+  sh: ['ip route flush cache']
+- node: PC01
+  timeout: 60
+  sh:
+    - "curl -s -m30 -o /dev/null -w 'size=%{size_download} time=%{time_total} rc=%{exitcode}\\n' http://192.0.2.10/big.bin; echo curl_rc=$?"
+- note: 'E2e MSS は残し ip mtu 1492 を外す(MSS 単独で足りるか)'
+- node: RT01
+  conf: ['interface Dialer1', 'no ip mtu 1492']
+- node: SRV01
+  sh: ['ip route flush cache']
+- node: PC01
+  timeout: 60
+  sh:
+    - "curl -s -m30 -o /dev/null -w 'size=%{size_download} time=%{time_total} rc=%{exitcode}\\n' http://192.0.2.10/big.bin; echo curl_rc=$?"
+- node: RT01
+  conf: ['interface Dialer1', 'ip mtu 1492']
+  show: ['show running-config interface Dialer1']

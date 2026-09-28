@@ -1,0 +1,13 @@
+- note: 'S4r reflexive 再試験(PC01 は DAI 解除後)＋ZBF/CBAC の有無'
+- node: RT02
+  conf: ['interface Ethernet0/1', 'ip access-group R-OUT out', 'ip access-group R-IN in']
+- node: PC01
+  sh: ['curl -s -m5 http://192.0.2.10/ip; dig +short +time=2 +tries=1 @192.0.2.10 www.inet.example || echo DIG_FAIL; ping -c2 -W2 192.0.2.10 | tail -1; curl -s -m15 -o /dev/null -w "size=%{size_download}\n" http://192.0.2.10/big.bin']
+- node: SRV01
+  sh: ['nc -z -w3 192.0.2.1 22 && echo "RT02 22 OPEN" || echo "RT02 22 closed"; ping -c2 -W2 10.20.10.4 | tail -1']
+- node: RT02
+  show: ['show access-lists MIRROR', 'show ip ospf neighbor | include FULL', 'show ntp associations | include 127']
+  conf: ['interface Ethernet0/1', 'no ip access-group R-OUT out', 'no ip access-group R-IN in']
+- node: RT02
+  show: ['show version | include Software|License|Technology', 'show license summary | include Status|ipbase|security|appx|uck9']
+  conf: ['zone ?', 'zone security Z1', 'ip inspect ?', 'ip inspect name T1 tcp', 'parameter-map type inspect ?']

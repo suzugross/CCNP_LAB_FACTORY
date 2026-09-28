@@ -1,0 +1,33 @@
+# P3 やり直し: PC01 側の PMTU キャッシュ(e2a の DF ping で 1492 を学習)が MSS を下げていた疑い。両端の cache を消し MSS 調整を外して SYN の MSS を見る
+- note: 'E2f MSS 調整なし・両端 cache クリア・SYN の MSS 観測'
+- node: RT01
+  conf: ['interface Dialer1', 'no ip tcp adjust-mss 1452']
+- node: PC01
+  sh: ['ip route get 192.0.2.10; ip route flush cache; ip route get 192.0.2.10']
+- node: SRV01
+  sh:
+    - 'ip route flush cache; rm -f /tmp/syn.txt; (timeout 40 tcpdump -lni ens3 -c 6 "tcp[tcpflags] & tcp-syn != 0 or icmp" > /tmp/syn.txt 2>&1 &) ; sleep 1; echo started'
+- node: PC01
+  timeout: 60
+  sh:
+    - "curl -s -m20 -o /dev/null -w 'size=%{size_download} time=%{time_total} rc=%{exitcode}\\n' http://192.0.2.10/big.bin; echo curl_rc=$?"
+- node: SRV01
+  sh: ['sleep 2; cat /tmp/syn.txt; ip route get 198.51.100.10']
+- node: RT05
+  show: ['show access-lists PMTU-BLACKHOLE']
+- note: 'E2g 同条件で adjust-mss 1452 を入れる'
+- node: RT01
+  conf: ['interface Dialer1', 'ip tcp adjust-mss 1452']
+- node: PC01
+  sh: ['ip route flush cache']
+- node: SRV01
+  sh:
+    - 'ip route flush cache; rm -f /tmp/syn.txt; (timeout 40 tcpdump -lni ens3 -c 6 "tcp[tcpflags] & tcp-syn != 0 or icmp" > /tmp/syn.txt 2>&1 &) ; sleep 1; echo started'
+- node: PC01
+  timeout: 60
+  sh:
+    - "curl -s -m20 -o /dev/null -w 'size=%{size_download} time=%{time_total} rc=%{exitcode}\\n' http://192.0.2.10/big.bin; echo curl_rc=$?"
+- node: SRV01
+  sh: ['sleep 2; cat /tmp/syn.txt']
+- node: RT05
+  show: ['show access-lists PMTU-BLACKHOLE']

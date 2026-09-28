@@ -1,0 +1,55 @@
+### 19:39:47 SW02: show vlan brief | include ^40|^110|^1 
+1    default                          active    Et0/1, Et0/2, Et0/3, Et1/0, Et1/1, Et1/2, Et1/3, Et2/0, Et2/1, Et2/2, Et2/3, Et3/0, Et3/1, Et3/2
+### 19:39:47 SW02: show vtp status | include Operating Mode
+VTP Operating Mode                : Server
+### 19:39:47 SW02: show interfaces trunk
+Port           Mode             Encapsulation  Status        Native vlan  
+Et0/0          on               802.1q         trunking      1
+
+Port           Vlans allowed on trunk
+Et0/0          40
+
+Port           Vlans allowed and active in management domain
+Et0/0          none
+
+Port           Vlans in spanning tree forwarding state and not pruned
+Et0/0          none
+
+======== R2 VLAN を作り直して再試験（SW01 は ip routing 有効のまま） ========
+### 19:39:48 SW01: conf ['vlan 40', 'vlan 110']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 19:39:49 SW02: conf ['vlan 40']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 19:40:24 SW02: show ip interface brief | include Vlan40
+Vlan40                 10.9.40.11      YES TFTP   up                    up      
+### 19:40:24 SW02: ping 10.9.40.1
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.9.40.1, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 1/7/17 ms
+### 19:40:26 SW02: ping 10.9.110.10
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.9.110.10, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+### 19:40:36 RT01: ping 10.9.40.11
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.9.40.11, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+
+======== R2b SW01 を no ip routing に戻す → SW02 から VLAN 110 端末へ（通らないはず） ========
+### 19:40:48 SW01: conf ['no ip routing']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 19:40:53 SW02: ping 10.9.40.1
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.9.40.1, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 1/1/2 ms
+### 19:40:55 SW02: ping 10.9.110.10
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.9.110.10, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+### 19:41:05 SW01: conf ['ip routing']
+Enter configuration commands, one per line.  End with CNTL/Z.

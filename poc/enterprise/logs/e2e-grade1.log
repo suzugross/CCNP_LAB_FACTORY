@@ -1,0 +1,291 @@
+
+PLAY [採点準備（基準読込・接続先解決）] ****************************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [収集方式を決定（problem.yml の access。既定 ssh / telnet・console=SSH不可ノード）] ***
+ok: [localhost]
+
+TASK [接続先マップ = mgmt_map ＋ clab ノード（problem.yml の clab_nodes。BL-061 複合ラボ）] ***
+ok: [localhost]
+
+TASK [各チェックに既定(genie_os 等)と接続先を併合した checks を作る] ***********
+ok: [localhost] => (item=RT01: RT01: ISP-A と PPPoE を確立し Dialer1 に払い出しアドレス (198.51.100.40))
+ok: [localhost] => (item=RT02: RT02: ISP-B と PPPoE を確立し Dialer1 に払い出しアドレス (203.0.113.55))
+ok: [localhost] => (item=PC01: 冗長: 平常時は主回線から出る (送信元 = 主回線のアドレス))
+ok: [localhost] => (item=PC01: 冗長: 主回線の ISP 網内障害 (PPPoE は維持) で予備回線へ切り替わる)
+ok: [localhost] => (item=PC01: 冗長: 主回線の復旧後に主回線へ戻る)
+ok: [localhost] => (item=PC01: DHCP: 製造 (PC01) = アドレス・既定 GW (仮想)・DNS=社内 DNS・ドメイン名)
+ok: [localhost] => (item=PC02: DHCP: 営業 (PC02) = アドレス・既定 GW (仮想)・DNS=社内 DNS・ドメイン名)
+ok: [localhost] => (item=PC03: DHCP: 総務 (PC03) = アドレス・既定 GW (仮想)・DNS=社内 DNS・ドメイン名)
+ok: [localhost] => (item=PC04: DHCP: 情シス (PC04) = アドレス・既定 GW (仮想)・DNS=社内 DNS・ドメイン名)
+ok: [localhost] => (item=PC05: DHCP: 来客 (PC05) = アドレス・既定 GW (仮想)・DNS=ISP の DNS・ドメイン名なし)
+ok: [localhost] => (item=PC06: DHCP: 複合機 (PC06) = 予約アドレス 10.80.170.50・既定 GW (仮想)・DNS)
+ok: [localhost] => (item=DHCP01: DHCP: 仮想アドレスと L3SW の実アドレスを配布対象から除外)
+ok: [localhost] => (item=PC01: 製造 (PC01): 社内 DNS で社内名・外部名を解決でき、外部の DNS へは直接問い合わせない)
+ok: [localhost] => (item=PC01: 製造 (PC01): 許可された通信 (社内サーバ・複合機・インターネット (主回線)))
+ok: [localhost] => (item=PC01: 製造 (PC01): 遮断すべき通信 (他部門・情シス・機器管理・許可外サービス・危険ポート) が通らない)
+ok: [localhost] => (item=PC02: 営業 (PC02): 社内 DNS で社内名・外部名を解決でき、外部の DNS へは直接問い合わせない)
+ok: [localhost] => (item=PC02: 営業 (PC02): 許可された通信 (社内サーバ・複合機・インターネット (主回線)))
+ok: [localhost] => (item=PC02: 営業 (PC02): 遮断すべき通信 (他部門・情シス・機器管理・許可外サービス・危険ポート) が通らない)
+ok: [localhost] => (item=PC03: 総務 (PC03): 社内 DNS で社内名・外部名を解決でき、外部の DNS へは直接問い合わせない)
+ok: [localhost] => (item=PC03: 総務 (PC03): 許可された通信 (社内サーバ・複合機))
+ok: [localhost] => (item=PC03: 総務 (PC03): 遮断すべき通信 (他部門・情シス・機器管理・許可外サービス・インターネット) が通らない)
+ok: [localhost] => (item=PC04: 情シス (PC04): 名前解決・インターネット・全業務部門/複合機/機器管理 VLAN への ping と telnet)
+ok: [localhost] => (item=PC04: 情シス (PC04): 業務部門へは ping 以外通らず、来客 VLAN とは通信しない)
+ok: [localhost] => (item=PC05: 来客 (PC05): ISP の DNS で名前解決し Web (HTTP/HTTPS) を利用できる)
+ok: [localhost] => (item=PC05: 来客 (PC05): Web/DNS 以外のインターネット通信と、社内への通信が一切通らない)
+ok: [localhost] => (item=PC01: 境界: インターネットから自社グローバルアドレスへの新規接続・ping に応答しない)
+ok: [localhost] => (item=PC01: 境界: 大きなファイルの TCP 転送がタイムアウトしない (PMTUD が効かない経路でも))
+ok: [localhost] => (item=SW01: SW01: 担当 VLAN で HSRP Active かつ STP ルートブリッジ)
+ok: [localhost] => (item=SW01: SW01: 担当 VLAN の STP ルートブリッジ)
+ok: [localhost] => (item=SW01: SW01: L3SW 間の 2 本を LACP で束ねている (Po1))
+ok: [localhost] => (item=SW01: SW01: トランクのネイティブ VLAN・許可 VLAN が要件どおり)
+ok: [localhost] => (item=SW01: SW01: 利用者側の SVI では OSPF の hello を出さない)
+ok: [localhost] => (item=SW01: SW01: NTP で RT に同期している (サーバ選択済み))
+ok: [localhost] => (item=SW02: SW02: 担当 VLAN で HSRP Active かつ STP ルートブリッジ)
+ok: [localhost] => (item=SW02: SW02: 担当 VLAN の STP ルートブリッジ)
+ok: [localhost] => (item=SW02: SW02: L3SW 間の 2 本を LACP で束ねている (Po1))
+ok: [localhost] => (item=SW02: SW02: トランクのネイティブ VLAN・許可 VLAN が要件どおり)
+ok: [localhost] => (item=SW02: SW02: 利用者側の SVI では OSPF の hello を出さない)
+ok: [localhost] => (item=SW02: SW02: NTP で RT に同期している (サーバ選択済み))
+ok: [localhost] => (item=SW03: SW03 (ASW01): アップリンクのトランクが要件どおり)
+ok: [localhost] => (item=SW03: SW03 (ASW01): 端末側ポートの VLAN とエッジ保護 (PortFast + BPDU ガード))
+ok: [localhost] => (item=SW03: SW03 (ASW01): 機器管理アドレス・既定ゲートウェイ・NTP 同期)
+ok: [localhost] => (item=SW04: SW04 (ASW02): アップリンクのトランクが要件どおり)
+ok: [localhost] => (item=SW04: SW04 (ASW02): 端末側ポートの VLAN とエッジ保護 (PortFast + BPDU ガード))
+ok: [localhost] => (item=SW04: SW04 (ASW02): 機器管理アドレス・既定ゲートウェイ・NTP 同期)
+ok: [localhost] => (item=SW05: SW05 (SRVSW): アップリンクのトランクが要件どおり)
+ok: [localhost] => (item=SW05: SW05 (SRVSW): 端末側ポートの VLAN とエッジ保護 (PortFast + BPDU ガード))
+ok: [localhost] => (item=SW05: SW05 (SRVSW): 機器管理アドレス・既定ゲートウェイ・NTP 同期)
+ok: [localhost] => (item=RT01: RT01: L3SW 2 台と OSPF 隣接 (トランジット VLAN))
+ok: [localhost] => (item=RT01: RT01: NTP で ISP の NTP に同期している (サーバ選択済み))
+ok: [localhost] => (item=RT02: RT02: L3SW 2 台と OSPF 隣接 (トランジット VLAN))
+ok: [localhost] => (item=RT02: RT02: NTP で ISP の NTP に同期している (サーバ選択済み))
+ok: [localhost] => (item=SW01: SW01: 各 SVI の受信方向に命名規約どおりの ACL を適用)
+ok: [localhost] => (item=SW01: SW01: VLAN 間 ACL の許可/拒否が要件どおり (意味評価・8 本))
+ok: [localhost] => (item=SW02: SW02: 各 SVI の受信方向に命名規約どおりの ACL を適用)
+ok: [localhost] => (item=SW02: SW02: VLAN 間 ACL の許可/拒否が要件どおり (意味評価・8 本))
+ok: [localhost] => (item=RT01: RT01: Dialer1 の受信方向に IN-WAN・Et0/0 の受信方向に IN-LAN)
+ok: [localhost] => (item=RT01: RT01: 境界 ACL (IN-WAN/IN-LAN) の許可/拒否が要件どおり (意味評価))
+ok: [localhost] => (item=RT02: RT02: Dialer1 の受信方向に IN-WAN・Et0/0 の受信方向に IN-LAN)
+ok: [localhost] => (item=RT02: RT02: 境界 ACL (IN-WAN/IN-LAN) の許可/拒否が要件どおり (意味評価))
+
+TASK [大域不変条件（軸1）= model / invariants / 採点対象ノードを確定] **********
+ok: [localhost]
+
+TASK [shell 採点ノード(Linux)を特定（指紋照合の取得方式振分け用）] *************
+ok: [localhost]
+
+TASK [junos 採点ノード(clab)を特定（exec=junos。接続は network_cli / 指紋照合は対象外）] ***
+ok: [localhost]
+
+TASK [採点前フック（problem.yml の pre_grade）] ********************************
+ok: [localhost]
+[WARNING]: Could not match supplied host pattern, ignoring: _graded
+
+TASK [採点前フックの出力] ******************************************************
+ok: [localhost] => 
+    msg:
+    - '[ent_ops 12:42:26] 端末のアドレス: PC01=10.80.130.4, PC02=10.80.220.4, PC03=10.80.210.4,
+      PC04=10.80.110.4, PC05=10.80.120.4, PC06=10.80.170.50'
+    - '[ent_ops 12:42:30] 外部からの到達試験: CLOSED'
+    - '[ent_ops 12:42:30] 切替試験: 平常時の送信元 203.0.113.55 → 主回線 203.0.113.55 を SRVINET で遮断して
+      60 秒待つ'
+    - '[ent_ops 12:43:32] 切替後の送信元 198.51.100.40 → 遮断を解除して 75 秒待つ'
+    - '[ent_ops 12:44:47] 復旧後の送信元 203.0.113.55'
+    - '[ent_ops 12:44:48] 結果: BASE=203.0.113.55 EXT=CLOSED FAIL=198.51.100.40 BACK=203.0.113.55'
+
+PLAY [ラボ指紋の照合（ssh のみ。telnet は collect_telnet.py 内 / console はラボ名解決で対象外）] ***
+skipping: no hosts matched
+
+PLAY [収束待ち付き採点] ********************************************************
+
+TASK [全チェック PASS まで（または最大試行まで）採点を繰り返す] ****************
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt_telnet.yml for localhost => (item=attempt 1/3)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt_telnet.yml for localhost => (item=attempt 2/3)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt_telnet.yml for localhost => (item=attempt 3/3)
+
+TASK [checks.json を書き出し（telnet 収集の入力）] *****************************
+changed: [localhost]
+
+TASK [telnet で show を収集し grade_input.json を生成] *************************
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+Pausing for 9 seconds
+
+TASK [未収束なら次の試行まで待機（最終試行では待たない）] **********************
+ok: [localhost]
+
+TASK [checks.json を書き出し（telnet 収集の入力）] *****************************
+ok: [localhost]
+
+TASK [telnet で show を収集し grade_input.json を生成] *************************
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+Pausing for 9 seconds
+
+TASK [未収束なら次の試行まで待機（最終試行では待たない）] **********************
+ok: [localhost]
+
+TASK [checks.json を書き出し（telnet 収集の入力）] *****************************
+ok: [localhost]
+
+TASK [telnet で show を収集し grade_input.json を生成] *************************
+ok: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+
+TASK [最終結果] ****************************************************************
+ok: [localhost] => 
+    msg:
+    - ======================================================================
+    - '[PASS] (+  4 点) RT01: ISP-A と PPPoE を確立し Dialer1 に払い出しアドレス (198.51.100.40)'
+    - '[PASS] (+  4 点) RT02: ISP-B と PPPoE を確立し Dialer1 に払い出しアドレス (203.0.113.55)'
+    - '[PASS] (+  3 点) 冗長: 平常時は主回線から出る (送信元 = 主回線のアドレス)'
+    - '[PASS] (+  5 点) 冗長: 主回線の ISP 網内障害 (PPPoE は維持) で予備回線へ切り替わる'
+    - '[PASS] (+  4 点) 冗長: 主回線の復旧後に主回線へ戻る'
+    - '[PASS] (+  1 点) DHCP: 製造 (PC01) = アドレス・既定 GW (仮想)・DNS=社内 DNS・ドメイン名'
+    - '[PASS] (+  1 点) DHCP: 営業 (PC02) = アドレス・既定 GW (仮想)・DNS=社内 DNS・ドメイン名'
+    - '[PASS] (+  1 点) DHCP: 総務 (PC03) = アドレス・既定 GW (仮想)・DNS=社内 DNS・ドメイン名'
+    - '[PASS] (+  1 点) DHCP: 情シス (PC04) = アドレス・既定 GW (仮想)・DNS=社内 DNS・ドメイン名'
+    - '[PASS] (+  1 点) DHCP: 来客 (PC05) = アドレス・既定 GW (仮想)・DNS=ISP の DNS・ドメイン名なし'
+    - '[PASS] (+  1 点) DHCP: 複合機 (PC06) = 予約アドレス 10.80.170.50・既定 GW (仮想)・DNS'
+    - '[PASS] (+  1 点) DHCP: 仮想アドレスと L3SW の実アドレスを配布対象から除外'
+    - '[PASS] (+  2 点) 製造 (PC01): 社内 DNS で社内名・外部名を解決でき、外部の DNS へは直接問い合わせない'
+    - '[PASS] (+  1 点) 製造 (PC01): 許可された通信 (社内サーバ・複合機・インターネット (主回線))'
+    - '[PASS] (+  3 点) 製造 (PC01): 遮断すべき通信 (他部門・情シス・機器管理・許可外サービス・危険ポート) が通らない'
+    - '[PASS] (+  2 点) 営業 (PC02): 社内 DNS で社内名・外部名を解決でき、外部の DNS へは直接問い合わせない'
+    - '[PASS] (+  2 点) 営業 (PC02): 許可された通信 (社内サーバ・複合機・インターネット (主回線))'
+    - '[PASS] (+  3 点) 営業 (PC02): 遮断すべき通信 (他部門・情シス・機器管理・許可外サービス・危険ポート) が通らない'
+    - '[PASS] (+  2 点) 総務 (PC03): 社内 DNS で社内名・外部名を解決でき、外部の DNS へは直接問い合わせない'
+    - '[PASS] (+  2 点) 総務 (PC03): 許可された通信 (社内サーバ・複合機)'
+    - '[PASS] (+  3 点) 総務 (PC03): 遮断すべき通信 (他部門・情シス・機器管理・許可外サービス・インターネット) が通らない'
+    - '[PASS] (+  3 点) 情シス (PC04): 名前解決・インターネット・全業務部門/複合機/機器管理 VLAN への ping と telnet'
+    - '[PASS] (+  1 点) 情シス (PC04): 業務部門へは ping 以外通らず、来客 VLAN とは通信しない'
+    - '[PASS] (+  2 点) 来客 (PC05): ISP の DNS で名前解決し Web (HTTP/HTTPS) を利用できる'
+    - '[PASS] (+  2 点) 来客 (PC05): Web/DNS 以外のインターネット通信と、社内への通信が一切通らない'
+    - '[PASS] (+  3 点) 境界: インターネットから自社グローバルアドレスへの新規接続・ping に応答しない'
+    - '[PASS] (+  5 点) 境界: 大きなファイルの TCP 転送がタイムアウトしない (PMTUD が効かない経路でも)'
+    - '[PASS] (+  1 点) SW01: 担当 VLAN で HSRP Active かつ STP ルートブリッジ'
+    - '[PASS] (+  1 点) SW01: 担当 VLAN の STP ルートブリッジ'
+    - '[PASS] (+  1 点) SW01: L3SW 間の 2 本を LACP で束ねている (Po1)'
+    - '[FAIL] (+  1 点) SW01: トランクのネイティブ VLAN・許可 VLAN が要件どおり'
+    - '        未充足(raw): {''regex'': ''Vlans allowed on trunk[\\s\\S]*?(?m:^)Et0/3\\s+40,130,210,220\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlans allowed on trunk[\\s\\S]*?(?m:^)Et1/0\\s+40,110,120,170\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlans allowed on trunk[\\s\\S]*?(?m:^)Et1/1\\s+40,100\\s*$''}'
+    - '[PASS] (+  1 点) SW01: 利用者側の SVI では OSPF の hello を出さない'
+    - '[FAIL] (+  1 点) SW01: NTP で RT に同期している (サーバ選択済み)'
+    - '        未充足(raw): {''regex'': ''\\*~10\\.80\\.255\\.[12]\\s''}'
+    - '[PASS] (+  1 点) SW02: 担当 VLAN で HSRP Active かつ STP ルートブリッジ'
+    - '[PASS] (+  1 点) SW02: 担当 VLAN の STP ルートブリッジ'
+    - '[PASS] (+  1 点) SW02: L3SW 間の 2 本を LACP で束ねている (Po1)'
+    - '[FAIL] (+  1 点) SW02: トランクのネイティブ VLAN・許可 VLAN が要件どおり'
+    - '        未充足(raw): {''regex'': ''Vlans allowed on trunk[\\s\\S]*?(?m:^)Et0/3\\s+40,130,210,220\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlans allowed on trunk[\\s\\S]*?(?m:^)Et1/0\\s+40,110,120,170\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlans allowed on trunk[\\s\\S]*?(?m:^)Et1/1\\s+40,100\\s*$''}'
+    - '[PASS] (+  1 点) SW02: 利用者側の SVI では OSPF の hello を出さない'
+    - '[FAIL] (+  1 点) SW02: NTP で RT に同期している (サーバ選択済み)'
+    - '        未充足(raw): {''regex'': ''\\*~10\\.80\\.255\\.[12]\\s''}'
+    - '[FAIL] (+  1 点) SW03 (ASW01): アップリンクのトランクが要件どおり'
+    - '        未充足(raw): {''regex'': ''Vlans allowed on trunk[\\s\\S]*?(?m:^)Et0/0\\s+40,130,210,220\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlans allowed on trunk[\\s\\S]*?(?m:^)Et0/1\\s+40,130,210,220\\s*$''}'
+    - '[PASS] (+  1 点) SW03 (ASW01): 端末側ポートの VLAN とエッジ保護 (PortFast + BPDU ガード)'
+    - '[FAIL] (+  1 点) SW03 (ASW01): 機器管理アドレス・既定ゲートウェイ・NTP 同期'
+    - '        未充足(raw): {''regex'': ''\\*~10\\.80\\.40\\.[23]\\s''}'
+    - '[FAIL] (+  1 点) SW04 (ASW02): アップリンクのトランクが要件どおり'
+    - '        未充足(raw): {''regex'': ''Vlans allowed on trunk[\\s\\S]*?(?m:^)Et0/0\\s+40,110,120,170\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlans allowed on trunk[\\s\\S]*?(?m:^)Et0/1\\s+40,110,120,170\\s*$''}'
+    - '[PASS] (+  1 点) SW04 (ASW02): 端末側ポートの VLAN とエッジ保護 (PortFast + BPDU ガード)'
+    - '[FAIL] (+  1 点) SW04 (ASW02): 機器管理アドレス・既定ゲートウェイ・NTP 同期'
+    - '        未充足(raw): {''regex'': ''\\*~10\\.80\\.40\\.[23]\\s''}'
+    - '[FAIL] (+  1 点) SW05 (SRVSW): アップリンクのトランクが要件どおり'
+    - '        未充足(raw): {''regex'': ''Vlans allowed on trunk[\\s\\S]*?(?m:^)Et0/0\\s+40,100\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlans allowed on trunk[\\s\\S]*?(?m:^)Et0/1\\s+40,100\\s*$''}'
+    - '[PASS] (+  1 点) SW05 (SRVSW): 端末側ポートの VLAN とエッジ保護 (PortFast + BPDU ガード)'
+    - '[FAIL] (+  1 点) SW05 (SRVSW): 機器管理アドレス・既定ゲートウェイ・NTP 同期'
+    - '        未充足(raw): {''regex'': ''\\*~10\\.80\\.40\\.[23]\\s''}'
+    - '[PASS] (+  1 点) RT01: L3SW 2 台と OSPF 隣接 (トランジット VLAN)'
+    - '[PASS] (+  1 点) RT01: NTP で ISP の NTP に同期している (サーバ選択済み)'
+    - '[PASS] (+  1 点) RT02: L3SW 2 台と OSPF 隣接 (トランジット VLAN)'
+    - '[PASS] (+  1 点) RT02: NTP で ISP の NTP に同期している (サーバ選択済み)'
+    - '[FAIL] (+  1 点) SW01: 各 SVI の受信方向に命名規約どおりの ACL を適用'
+    - '        未充足(raw): {''regex'': ''Vlan130 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-MFG\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlan220 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-SALES\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlan210 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-GA\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlan110 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-IT\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlan120 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-GUEST\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlan170 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-PRINT\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlan100 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-SERVER\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlan40 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-MGMT\\s*$''}'
+    - '[PASS] (+  2 点) SW01: VLAN 間 ACL の許可/拒否が要件どおり (意味評価・8 本)'
+    - '[FAIL] (+  1 点) SW02: 各 SVI の受信方向に命名規約どおりの ACL を適用'
+    - '        未充足(raw): {''regex'': ''Vlan130 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-MFG\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlan220 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-SALES\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlan210 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-GA\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlan110 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-IT\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlan120 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-GUEST\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlan170 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-PRINT\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlan100 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-SERVER\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Vlan40 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-MGMT\\s*$''}'
+    - '[PASS] (+  2 点) SW02: VLAN 間 ACL の許可/拒否が要件どおり (意味評価・8 本)'
+    - '[FAIL] (+  1 点) RT01: Dialer1 の受信方向に IN-WAN・Et0/0 の受信方向に IN-LAN'
+    - '        未充足(raw): {''regex'': ''Dialer1 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-WAN\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Ethernet0/0 is up[^\\n]*\\n\\s*Inbound\\s+access
+      list is IN-LAN\\s*$''}'
+    - '[PASS] (+  2 点) RT01: 境界 ACL (IN-WAN/IN-LAN) の許可/拒否が要件どおり (意味評価)'
+    - '[FAIL] (+  1 点) RT02: Dialer1 の受信方向に IN-WAN・Et0/0 の受信方向に IN-LAN'
+    - '        未充足(raw): {''regex'': ''Dialer1 is up[^\\n]*\\n\\s*Inbound\\s+access list
+      is IN-WAN\\s*$''}'
+    - '        未充足(raw): {''regex'': ''Ethernet0/0 is up[^\\n]*\\n\\s*Inbound\\s+access
+      list is IN-LAN\\s*$''}'
+    - '[PASS] (+  2 点) RT02: 境界 ACL (IN-WAN/IN-LAN) の許可/拒否が要件どおり (意味評価)'
+    - ======================================================================
+    - '  合計: 86 / 100 点'
+    - ======================================================================
+
+TASK [収束したか] **************************************************************
+ok: [localhost] => 
+    msg: ⚠ 3 回試行しても全 PASS に至らず（上の未充足を参照）
+
+PLAY RECAP *********************************************************************
+localhost                  : ok=30   changed=1    unreachable=0    failed=0    skipped=5    rescued=0    ignored=0   
+

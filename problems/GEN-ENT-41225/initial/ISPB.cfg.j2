@@ -1,0 +1,30 @@
+! ISP-B BRAS（PPPoE サーバ・既設・変更不可）
+username office225@isp-b.example password 0 ic4OnBWv
+ip local pool CUST-B 203.0.113.55 203.0.113.55
+bba-group pppoe global
+ virtual-template 1
+!
+interface Loopback0
+ ip address 203.0.113.1 255.255.255.255
+!
+interface Virtual-Template1
+ ip unnumbered Loopback0
+ peer default ip address pool CUST-B
+ ppp authentication chap
+!
+interface {{ links[0] }}
+ description === to customer (PPPoE) ===
+ no ip address
+ pppoe enable group global
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to INET ===
+ ip address 203.0.113.249 255.255.255.252
+ no shutdown
+!
+ip route 0.0.0.0 0.0.0.0 203.0.113.250
+!
+line vty 0 4
+ transport input ssh telnet
+!

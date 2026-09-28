@@ -17,6 +17,9 @@ username {{ ansible_user }} privilege 15 secret {{ ansible_ssh_pass }}
 !
 spanning-tree mode rapid-pvst
 !
+{% if console_only | default(false) | bool %}
+! --- 管理 VLAN / SVI なし（problem.yml の console_nodes。採点・投入は CML コンソール経由・BL-225）---
+{% else %}
 ! --- 管理 VLAN / SVI ---
 vlan {{ mgmt_vlan }}
  name MGMT
@@ -33,6 +36,7 @@ interface Vlan{{ mgmt_vlan }}
  ip address {{ mgmt_ip }} {{ mgmt_mask | default('255.255.255.192') }}
  no shutdown
 !
+{% endif %}
 ip ssh version 2
 !
 ! SSH鍵は exec コマンドのため startup に書けない → EEM で起動後に自動生成

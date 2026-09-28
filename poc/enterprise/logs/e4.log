@@ -1,0 +1,246 @@
+
+======== E4a SLA/track/static(監視対象の /32 を Dialer に固定) ========
+### 04:22:54 RT01: conf ['ip sla 1', 'icmp-echo 192.0.2.10 source-interface Dialer1', 'frequency 5', 'exit', 'ip sla schedule 1 life forever start-time now', 'track 1 ip sla 1 reachability', 'delay down 10 up 30', 'exit', 'no ip route 0.0.0.0 0.0.0.0 Dialer1', 'ip route 0.0.0.0 0.0.0.0 Dialer1 track 1', 'ip route 192.0.2.10 255.255.255.255 Dialer1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:22:58 RT02: conf ['ip sla 1', 'icmp-echo 192.0.2.10 source-interface Dialer1', 'frequency 5', 'exit', 'ip sla schedule 1 life forever start-time now', 'track 1 ip sla 1 reachability', 'delay down 10 up 30', 'exit', 'no ip route 0.0.0.0 0.0.0.0 Dialer1', 'ip route 0.0.0.0 0.0.0.0 Dialer1 track 1', 'ip route 192.0.2.10 255.255.255.255 Dialer1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 40
+### 04:23:38 RT01: show track 1
+Track 1
+  IP SLA 1 reachability
+  Reachability is Up
+    1 change, last change 00:00:44
+  Delay up 30 secs, down 10 secs
+  Latest operation return code: OK
+  Latest RTT (millisecs) 2
+  Tracked by:
+    Static IP Routing 0
+### 04:23:38 RT01: show ip route 0.0.0.0
+Routing entry for 0.0.0.0/0, supernet
+  Known via "static", distance 1, metric 0 (connected), candidate default path
+  Routing Descriptor Blocks:
+  * directly connected, via Dialer1
+      Route metric is 0, traffic share count is 1
+### 04:23:40 RT06: show ip route 0.0.0.0
+Routing entry for 0.0.0.0/0, supernet
+  Known via "ospf 1", distance 110, metric 20, candidate default path
+  Tag 1, type extern 1
+  Last update from 10.20.255.1 on Ethernet0/0, 00:00:46 ago
+  Routing Descriptor Blocks:
+  * 10.20.255.1, from 10.20.255.1, 00:00:46 ago, via Ethernet0/0
+      Route metric is 20, traffic share count is 1
+      Route tag 1
+
+======== E4b 方式(a): INET の ISP-A 向け IF を shutdown → PC01 で 3 秒ごとに /ip ========
+### 04:23:43 RT05: conf ['interface Ethernet0/0', 'shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:23:43 PC01$ for i in $(seq 1 30); do printf "%s " $(date +%T); curl -s -m2 http://192.0.2.10/ip || echo FAIL; sleep 3; done
+ 
+04:23:43 FAIL
+04:23:48 FAIL
+04:23:54 FAIL
+04:23:59 203.0.113.20
+04:24:03 203.0.113.20
+04:24:06 203.0.113.20
+04:24:09 203.0.113.20
+04:24:12 203.0.113.20
+04:24:15 203.0.113.20
+04:24:18 203.0.113.20
+04:24:21 203.0.113.20
+04:24:24 203.0.113.20
+04:24:27 203.0.113.20
+04:24:30 203.0.113.20
+04:24:33 203.0.113.20
+04:24:36 203.0.113.20
+04:24:39 203.0.113.20
+04:24:42 203.0.113.20
+04:24:45 203.0.113.20
+04:24:48 203.0.113.20
+04:24:51 203.0.113.20
+04:24:54 203.0.113.20
+04:24:57 203.0.113.20
+04:25:00 203.0.113.20
+04:25:03 203.0.113.20
+04:25:06 203.0.113.20
+04:25:09 203.0.113.20
+04:25:12 203.0.113.20
+04:25:15 203.0.113.20
+04:25:18 203.0.113.20
+__RC=0
+### 04:25:22 RT01: show track 1
+Track 1
+  IP SLA 1 reachability
+  Reachability is Down
+    2 changes, last change 00:01:23
+  Delay up 30 secs, down 10 secs
+  Latest operation return code: Timeout
+  Tracked by:
+    Static IP Routing 0
+### 04:25:24 RT01: show ip route 0.0.0.0
+Routing entry for 0.0.0.0/0, supernet
+  Known via "ospf 1", distance 110, metric 110, candidate default path
+  Tag 1, type extern 1
+  Last update from 10.20.255.2 on Ethernet0/0, 00:01:26 ago
+  Routing Descriptor Blocks:
+  * 10.20.255.2, from 10.20.255.2, 00:01:26 ago, via Ethernet0/0
+      Route metric is 110, traffic share count is 1
+      Route tag 1
+### 04:25:24 RT01: show pppoe session
+     1 client session 
+
+Uniq ID  PPPoE  RemMAC          Port                    VT  VA         State
+           SID  LocMAC                                      VA-st      Type
+    N/A      1  aabb.cc00.2400  Et0/1                   Di1 Vi2        UP      
+                aabb.cc00.2010                              UP              
+### 04:25:25 RT01: show logging | include TRACK|OSPF
+*Sep 27 04:23:59.076: %TRACK-6-STATE: 1 ip sla 1 reachability Up -> Down
+### 04:25:26 RT06: show ip route 0.0.0.0
+Routing entry for 0.0.0.0/0, supernet
+  Known via "ospf 1", distance 110, metric 110, candidate default path
+  Tag 1, type extern 1
+  Last update from 10.20.255.2 on Ethernet0/0, 00:01:27 ago
+  Routing Descriptor Blocks:
+  * 10.20.255.2, from 10.20.255.2, 00:01:27 ago, via Ethernet0/0
+      Route metric is 110, traffic share count is 1
+      Route tag 1
+
+======== E4c 方式(a) 復旧 → 切り戻し ========
+### 04:25:31 RT05: conf ['interface Ethernet0/0', 'no shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:25:31 PC01$ for i in $(seq 1 30); do printf "%s " $(date +%T); curl -s -m2 http://192.0.2.10/ip || echo FAIL; sleep 3; done
+ 
+04:25:39 203.0.113.20
+04:25:42 203.0.113.20
+04:25:45 203.0.113.20
+04:25:48 203.0.113.20
+04:25:51 203.0.113.20
+04:25:54 203.0.113.20
+04:25:57 203.0.113.20
+04:26:00 203.0.113.20
+04:26:03 203.0.113.20
+04:26:06 198.51.100.10
+04:26:09 198.51.100.10
+04:26:12 198.51.100.10
+04:26:15 198.51.100.10
+04:26:18 198.51.100.10
+04:26:21 198.51.100.10
+04:26:24 198.51.100.10
+04:26:27 198.51.100.10
+04:26:30 198.51.100.10
+04:26:33 198.51.100.10
+04:26:36 198.51.100.10
+04:26:39 198.51.100.10
+04:26:42 198.51.100.10
+04:26:45 198.51.100.10
+04:26:48 198.51.100.10
+04:26:51 198.51.100.10
+04:26:54 198.51.100.10
+04:26:57 198.51.100.10
+04:27:00 198.51.100.10
+04:27:03 198.51.100.10
+04:27:06 198.51.100.10
+__RC=0
+### 04:27:09 RT06: show ip route 0.0.0.0
+Routing entry for 0.0.0.0/0, supernet
+  Known via "ospf 1", distance 110, metric 20, candidate default path
+  Tag 1, type extern 1
+  Last update from 10.20.255.1 on Ethernet0/0, 00:01:05 ago
+  Routing Descriptor Blocks:
+  * 10.20.255.1, from 10.20.255.1, 00:01:05 ago, via Ethernet0/0
+      Route metric is 20, traffic share count is 1
+      Route tag 1
+
+======== E4d 方式(b): INET-SV で ISP-A の送信元を DROP → 切替 ========
+### 04:27:09 SRV01$ iptables -I INPUT -s 198.51.100.0/24 -j DROP; iptables -L INPUT -n --line-numbers | head -5
+ 
+Chain INPUT (policy ACCEPT)
+num  target     prot opt source               destination         
+1    DROP       0    --  198.51.100.0/24      0.0.0.0/0           
+__RC=0
+### 04:27:10 PC01$ for i in $(seq 1 30); do printf "%s " $(date +%T); curl -s -m2 http://192.0.2.10/ip || echo FAIL; sleep 3; done
+ 
+04:27:10 FAIL
+04:27:15 FAIL
+04:27:20 FAIL
+04:27:25 FAIL
+04:27:30 203.0.113.20
+04:27:33 203.0.113.20
+04:27:36 203.0.113.20
+04:27:39 203.0.113.20
+04:27:42 203.0.113.20
+04:27:45 203.0.113.20
+04:27:48 203.0.113.20
+04:27:51 203.0.113.20
+04:27:54 203.0.113.20
+04:27:57 203.0.113.20
+04:28:00 203.0.113.20
+04:28:03 203.0.113.20
+04:28:06 203.0.113.20
+04:28:09 203.0.113.20
+04:28:12 203.0.113.20
+04:28:15 203.0.113.20
+04:28:18 203.0.113.20
+04:28:21 203.0.113.20
+04:28:24 203.0.113.20
+04:28:27 203.0.113.20
+04:28:30 203.0.113.20
+04:28:33 203.0.113.20
+04:28:36 203.0.113.20
+04:28:39 203.0.113.20
+04:28:42 203.0.113.20
+04:28:45 203.0.113.20
+__RC=0
+
+======== E4e 方式(b) 復旧 → 切り戻し ========
+### 04:28:48 SRV01$ iptables -D INPUT -s 198.51.100.0/24 -j DROP; iptables -L INPUT -n | head -4
+ 
+Chain INPUT (policy ACCEPT)
+target     prot opt source               destination         
+__RC=0
+### 04:28:49 PC01$ for i in $(seq 1 30); do printf "%s " $(date +%T); curl -s -m2 http://192.0.2.10/ip || echo FAIL; sleep 3; done
+ 
+04:28:50 203.0.113.20
+04:28:53 203.0.113.20
+04:28:56 203.0.113.20
+04:28:59 203.0.113.20
+04:29:02 203.0.113.20
+04:29:05 203.0.113.20
+04:29:08 203.0.113.20
+04:29:11 203.0.113.20
+04:29:14 203.0.113.20
+04:29:17 203.0.113.20
+04:29:20 203.0.113.20
+04:29:23 203.0.113.20
+04:29:26 198.51.100.10
+04:29:29 198.51.100.10
+04:29:32 198.51.100.10
+04:29:35 198.51.100.10
+04:29:38 198.51.100.10
+04:29:41 198.51.100.10
+04:29:44 198.51.100.10
+04:29:47 198.51.100.10
+04:29:50 198.51.100.10
+04:29:53 198.51.100.10
+04:29:56 198.51.100.10
+04:29:59 198.51.100.10
+04:30:02 198.51.100.10
+04:30:05 198.51.100.10
+04:30:08 198.51.100.10
+04:30:11 198.51.100.10
+04:30:14 198.51.100.10
+04:30:17 198.51.100.10
+__RC=0
+### 04:30:21 RT01: show track 1
+Track 1
+  IP SLA 1 reachability
+  Reachability is Up
+    5 changes, last change 00:00:57
+  Delay up 30 secs, down 10 secs
+  Latest operation return code: OK
+  Latest RTT (millisecs) 2
+  Tracked by:
+    Static IP Routing 0
+### 04:30:21 RT01: show ip sla statistics 1 | include return code|Number of
+Latest operation return code: OK
+Number of successes: 48
+Number of failures: 21

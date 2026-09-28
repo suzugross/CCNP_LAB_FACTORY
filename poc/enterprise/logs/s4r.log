@@ -1,0 +1,53 @@
+
+======== S4r reflexive 再試験(PC01 は DAI 解除後)＋ZBF/CBAC の有無 ========
+### 05:02:13 RT02: conf ['interface Ethernet0/1', 'ip access-group R-OUT out', 'ip access-group R-IN in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:02:13 PC01$ curl -s -m5 http://192.0.2.10/ip; dig +short +time=2 +tries=1 @192.0.2.10 www.inet.example || echo DIG_FAIL; ping -c2 -W2 192.0.2.10 | tail -1; curl -s -m15 -o /dev/null -w "size=%{size_download}\n" http://192.0.2.10/big.bin
+ 
+10.20.10.4
+192.0.2.10
+rtt min/avg/max/mdev = 1.728/1.914/2.101/0.186 ms
+size=8388608
+__RC=0
+### 05:02:16 SRV01$ nc -z -w3 192.0.2.1 22 && echo "RT02 22 OPEN" || echo "RT02 22 closed"; ping -c2 -W2 10.20.10.4 | tail -1
+ 
+RT02 22 closed
+
+__RC=0
+### 05:02:20 RT02: conf ['interface Ethernet0/1', 'no ip access-group R-OUT out', 'no ip access-group R-IN in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:02:20 RT02: show access-lists MIRROR
+Reflexive IP access list MIRROR
+     permit tcp host 192.0.2.10 eq www host 10.20.10.4 eq 36902 (5855 matches) (time left 0)
+     permit icmp host 192.0.2.10 host 10.20.10.4  (2 matches) (time left 295)
+     permit udp host 192.0.2.10 eq domain host 10.20.10.4 eq 39238 (1 match) (time left 294)
+     permit icmp host 192.0.2.10 host 192.0.2.1  (time left 297)
+### 05:02:20 RT02: show ip ospf neighbor | include FULL
+10.20.255.3       1   FULL/BDR        00:00:35    10.20.255.3     Ethernet0/0
+10.20.255.4       1   FULL/DROTHER    00:00:33    10.20.255.4     Ethernet0/0
+### 05:02:20 RT02: show ntp associations | include 127
+*~127.127.1.1     .LOCL.           2     12     16   377  0.000   0.000  1.204
+### 05:02:20 RT02: conf ['zone ?', 'zone security Z1', 'ip inspect ?', 'ip inspect name T1 tcp', 'parameter-map type inspect ?']
+Enter configuration commands, one per line.  End with CNTL/Z.
+% Unrecognized command
+zone 
+             ^
+% Invalid input detected at '^' marker.
+zone security Z1
+             ^
+% Invalid input detected at '^' marker.
+ip inspect ?
+% Unrecognized command
+ip inspect 
+                 ^
+% Invalid input detected at '^' marker.
+ip inspect name T1 tcp
+                 ^
+% Invalid input detected at '^' marker.
+### 05:02:20 RT02: show version | include Software|License|Technology
+parameter-map type inspect ?
+% Unrecognized command
+### 05:02:21 RT02: show license summary | include Status|ipbase|security|appx|uck9
+parameter-map type inspect 
+                ^
+% Invalid input detected at '^' marker.

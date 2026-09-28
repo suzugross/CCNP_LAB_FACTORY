@@ -1,0 +1,190 @@
+
+======== E5a ACL 投入前: 外部(SRV01)から RT01 グローバルへの 22/23・ping ========
+### 04:32:35 SRV01$ for p in 22 23 80; do nc -z -w3 198.51.100.10 $p && echo "port $p OPEN" || echo "port $p closed"; done; ping -c2 -W2 198.51.100.10 | tail -2
+ 
+Connection to 198.51.100.10 22 port [tcp/ssh] succeeded!
+port 22 OPEN
+port 23 closed
+port 80 closed
+2 packets transmitted, 2 received, 0% packet loss, time 1002ms
+rtt min/avg/max/mdev = 1.082/1.198/1.314/0.116 ms
+__RC=0
+
+======== E5b 模範 ACL 投入 ========
+### 04:32:42 RT01: conf ['ip access-list extended WAN-IN', 'deny ip 10.0.0.0 0.255.255.255 any', 'deny ip 172.16.0.0 0.15.255.255 any', 'deny ip 192.168.0.0 0.0.255.255 any', 'deny ip 127.0.0.0 0.255.255.255 any', 'permit tcp any any established', 'permit udp host 192.0.2.10 eq domain any', 'permit udp host 192.0.2.10 eq ntp any eq ntp', 'permit icmp any any echo-reply', 'permit icmp any any unreachable', 'permit icmp any any time-exceeded', 'deny ip any any log', 'ip access-list extended LAN-IN', 'permit ospf any any', 'deny tcp any any eq smtp', 'deny tcp any any range 135 139', 'deny udp any any range netbios-ns netbios-ss', 'deny tcp any any eq 445', 'permit udp host 10.20.100.10 any eq domain', 'permit tcp host 10.20.100.10 any eq domain', 'deny udp any any eq domain', 'deny tcp any any eq domain', 'permit ip 10.20.10.0 0.0.0.255 any', 'deny ip any any log', 'interface Dialer1', 'ip access-group WAN-IN in', 'interface Ethernet0/0', 'ip access-group LAN-IN in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 20
+### 04:33:02 RT01: show track 1
+Track 1
+  IP SLA 1 reachability
+  Reachability is Up
+    5 changes, last change 00:03:38
+  Delay up 30 secs, down 10 secs
+  Latest operation return code: OK
+  Latest RTT (millisecs) 2
+  Tracked by:
+    Static IP Routing 0
+### 04:33:03 RT01: show ip ospf neighbor
+Neighbor ID     Pri   State           Dead Time   Address         Interface
+10.20.255.2       1   FULL/BDR        00:00:36    10.20.255.2     Ethernet0/0
+10.20.255.3       1   FULL/DR         00:00:30    10.20.255.3     Ethernet0/0
+### 04:33:03 PC01$ curl -s -m5 http://192.0.2.10/ip
+ 
+198.51.100.10
+__RC=0
+### 04:33:28 PC01$ curl -s -m30 -o /dev/null -w 'size=%{size_download} time=%{time_total} rc=%{exitcode}\n' http://192.0.2.10/big.bin
+ 
+size=8388608 time=1.069187 rc=0
+__RC=0
+### 04:33:30 PC01$ ping -c2 -W2 192.0.2.10 | tail -2
+ 
+2 packets transmitted, 2 received, 0% packet loss, time 1002ms
+rtt min/avg/max/mdev = 2.230/2.331/2.432/0.101 ms
+__RC=0
+### 04:33:31 PC01$ dig +short +time=2 +tries=1 @192.0.2.10 www.inet.example || echo DIG_FAIL
+ 
+;; communications error to 192.0.2.10#53: host unreachable
+;; no servers could be reached
+DIG_FAIL
+__RC=0
+### 04:33:32 PC01$ nc -z -w3 192.0.2.10 445 && echo 445_OPEN || echo 445_blocked_or_closed
+ 
+445_blocked_or_closed
+__RC=0
+### 04:33:33 SRV01$ for p in 22 23 80; do nc -z -w3 198.51.100.10 $p && echo "port $p OPEN" || echo "port $p closed"; done; ping -c2 -W2 198.51.100.10 | tail -2
+ 
+port 22 closed
+port 23 closed
+port 80 closed
+2 packets transmitted, 0 received, +1 errors, 100% packet loss, time 1021ms
+
+__RC=0
+### 04:33:41 RT01: show access-lists WAN-IN
+Extended IP access list WAN-IN
+    10 deny ip 10.0.0.0 0.255.255.255 any
+    20 deny ip 172.16.0.0 0.15.255.255 any
+    30 deny ip 192.168.0.0 0.0.255.255 any
+    40 deny ip 127.0.0.0 0.255.255.255 any
+    50 permit tcp any any established (5856 matches)
+    60 permit udp host 192.0.2.10 eq domain any
+    70 permit udp host 192.0.2.10 eq ntp any eq ntp
+    80 permit icmp any any echo-reply (26 matches)
+    90 permit icmp any any unreachable
+    100 permit icmp any any time-exceeded
+    110 deny ip any any log (7 matches)
+### 04:33:47 RT01: show access-lists LAN-IN
+Extended IP access list LAN-IN
+    10 permit ospf any any (14 matches)
+    20 deny tcp any any eq smtp
+    30 deny tcp any any range msrpc 139
+    40 deny udp any any range netbios-ns netbios-ss
+    50 deny tcp any any eq 445 (1 match)
+    60 permit udp host 10.20.100.10 any eq domain
+    70 permit tcp host 10.20.100.10 any eq domain
+    80 deny udp any any eq domain (1 match)
+    90 deny tcp any any eq domain
+    100 permit ip 10.20.10.0 0.0.0.255 any (1559 matches)
+    110 deny ip any any log
+
+======== E5c T3: LAN-IN から permit ospf を外す → 隣接 ========
+### 04:34:29 RT01: conf ['ip access-list extended LAN-IN', 'no permit ospf any any']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 45
+### 04:35:15 RT01: show ip ospf neighbor
+
+### 04:35:15 RT01: show logging | include OSPF-5
+*Sep 27 04:35:01.620: %OSPF-5-ADJCHG: Process 1, Nbr 10.20.255.3 on Ethernet0/0 from FULL to DOWN, Neighbor Down: Dead timer expired
+*Sep 27 04:35:05.719: %OSPF-5-ADJCHG: Process 1, Nbr 10.20.255.2 on Ethernet0/0 from FULL to DOWN, Neighbor Down: Dead timer expired
+### 04:35:25 RT06: show ip route 0.0.0.0
+Routing entry for 0.0.0.0/0, supernet
+  Known via "ospf 1", distance 110, metric 110, candidate default path
+  Tag 1, type extern 1
+  Last update from 10.20.255.2 on Ethernet0/0, 00:00:24 ago
+  Routing Descriptor Blocks:
+  * 10.20.255.2, from 10.20.255.2, 00:00:24 ago, via Ethernet0/0
+      Route metric is 110, traffic share count is 1
+      Route tag 1
+### 04:35:25 RT01: conf ['ip access-list extended LAN-IN', '5 permit ospf any any']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 45
+### 04:36:14 RT01: show ip ospf neighbor
+Neighbor ID     Pri   State           Dead Time   Address         Interface
+10.20.255.2       1   FULL/BDR        00:00:35    10.20.255.2     Ethernet0/0
+10.20.255.3       1   FULL/DR         00:00:31    10.20.255.3     Ethernet0/0
+### 04:36:14 RT01: show access-lists LAN-IN
+Extended IP access list LAN-IN
+    5 permit ospf any any (27 matches)
+    20 deny tcp any any eq smtp
+    30 deny tcp any any range msrpc 139
+    40 deny udp any any range netbios-ns netbios-ss
+    50 deny tcp any any eq 445 (1 match)
+    60 permit udp host 10.20.100.10 any eq domain
+    70 permit tcp host 10.20.100.10 any eq domain
+    80 deny udp any any eq domain (1 match)
+    90 deny tcp any any eq domain
+    100 permit ip 10.20.10.0 0.0.0.255 any (1559 matches)
+    110 deny ip any any log (22 matches)
+
+======== E5d T1: WAN-IN から echo-reply を外す → track ========
+### 04:36:15 RT01: conf ['ip access-list extended WAN-IN', 'no permit icmp any any echo-reply']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 30
+### 04:36:45 RT01: show track 1
+Track 1
+  IP SLA 1 reachability
+  Reachability is Down
+    6 changes, last change 00:00:11
+  Delay up 30 secs, down 10 secs
+  Latest operation return code: Timeout
+  Tracked by:
+    Static IP Routing 0
+### 04:36:45 RT01: show ip sla statistics 1 | include return code
+Latest operation return code: Timeout
+### 04:36:45 RT01: show ip route 0.0.0.0
+Routing entry for 0.0.0.0/0, supernet
+  Known via "ospf 1", distance 110, metric 110, candidate default path
+  Tag 1, type extern 1
+  Last update from 10.20.255.2 on Ethernet0/0, 00:00:11 ago
+  Routing Descriptor Blocks:
+  * 10.20.255.2, from 10.20.255.2, 00:00:11 ago, via Ethernet0/0
+      Route metric is 110, traffic share count is 1
+      Route tag 1
+### 04:36:45 RT06: show ip route 0.0.0.0
+Routing entry for 0.0.0.0/0, supernet
+  Known via "ospf 1", distance 110, metric 110, candidate default path
+  Tag 1, type extern 1
+  Last update from 10.20.255.2 on Ethernet0/0, 00:00:11 ago
+  Routing Descriptor Blocks:
+  * 10.20.255.2, from 10.20.255.2, 00:00:11 ago, via Ethernet0/0
+      Route metric is 110, traffic share count is 1
+      Route tag 1
+### 04:36:45 PC01$ curl -s -m5 http://192.0.2.10/ip
+ 
+203.0.113.20
+__RC=0
+### 04:36:46 RT01: conf ['ip access-list extended WAN-IN', '75 permit icmp any any echo-reply']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 45
+### 04:37:31 RT01: show track 1
+Track 1
+  IP SLA 1 reachability
+  Reachability is Up
+    7 changes, last change 00:00:12
+  Delay up 30 secs, down 10 secs
+  Latest operation return code: OK
+  Latest RTT (millisecs) 2
+  Tracked by:
+    Static IP Routing 0
+### 04:37:31 RT01: show access-lists WAN-IN
+Extended IP access list WAN-IN
+    10 deny ip 10.0.0.0 0.255.255.255 any
+    20 deny ip 172.16.0.0 0.15.255.255 any
+    30 deny ip 192.168.0.0 0.0.255.255 any
+    40 deny ip 127.0.0.0 0.255.255.255 any
+    50 permit tcp any any established (5856 matches)
+    60 permit udp host 192.0.2.10 eq domain any
+    70 permit udp host 192.0.2.10 eq ntp any eq ntp
+    75 permit icmp any any echo-reply (18 matches)
+    90 permit icmp any any unreachable
+    100 permit icmp any any time-exceeded
+    110 deny ip any any log (10 matches)

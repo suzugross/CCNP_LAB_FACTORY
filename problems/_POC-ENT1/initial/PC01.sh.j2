@@ -1,0 +1,34 @@
+#!/bin/bash
+# 社内端末(営業 VLAN 相当)
+set -e
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[$(date -Is)] $*"; }
+for i in 1 2 3; do
+  apt-get update -qq && apt-get install -y -qq dnsutils netcat-openbsd tcpdump && break
+  sleep 10
+done
+rm -f /etc/netplan/50-cloud-init.yaml
+cat > /etc/netplan/60-ccnp.yaml <<NP
+network:
+  version: 2
+  ethernets:
+    ens2:
+      addresses: [{{ mgmt_ip }}/{{ mgmt_prefixlen }}]
+      routes:
+        - to: default
+          via: {{ mgmt_gw }}
+      nameservers:
+        addresses: [8.8.8.8]
+    ens3:
+      addresses: [10.20.10.10/24]
+      routes:
+        - to: 192.0.2.0/24
+          via: 10.20.10.1
+        - to: 198.51.100.0/24
+          via: 10.20.10.1
+        - to: 203.0.113.0/24
+          via: 10.20.10.1
+NP
+chmod 600 /etc/netplan/60-ccnp.yaml
+netplan apply
+log "DONE"

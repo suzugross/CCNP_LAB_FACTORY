@@ -1,0 +1,22 @@
+- note: 'S3s-1 snooping 有効(option 82 挿入・既定)でまっさらな DORA'
+- node: SW03
+  show: ['clear ip dhcp snooping statistics']
+- node: PC01
+  sh: ['networkctl down ens3; rm -f /run/systemd/netif/leases/*; sleep 1; networkctl up ens3; sleep 20; ip -4 -br addr show ens3']
+- node: SW03
+  show: ['show ip dhcp snooping binding', 'show ip dhcp snooping statistics detail | include Forwarded|Dropped|Received|giaddr|option']
+- node: SW01
+  show: ['show logging | include DHCP|RELAY|relay|inconsistent']
+- node: RT01
+  show: ['show ip dhcp binding | include 10.20.10', 'show logging | include DHCPD']
+- note: 'S3s-2 リレー(SW01/SW02)で option 82 を信頼(trust-all)して再試行'
+- node: SW01
+  conf: ['ip dhcp relay information trust-all']
+- node: SW02
+  conf: ['ip dhcp relay information trust-all']
+- node: PC01
+  sh: ['networkctl down ens3; rm -f /run/systemd/netif/leases/*; sleep 1; networkctl up ens3; sleep 20; ip -4 -br addr show ens3']
+- node: SW03
+  show: ['show ip dhcp snooping binding', 'show ip dhcp snooping statistics']
+- node: RT01
+  show: ['show ip dhcp binding | include 10.20.10']

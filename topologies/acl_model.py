@@ -8,7 +8,8 @@
 
 対応: 標準/拡張・番号/named、host/any、ワイルドカード（**非連続含む**）、
 ポート演算子 eq/neq/gt/lt/range、established、icmp タイプ（名前/番号）、
-ポート名⇔番号（www/telnet/domain/bootps 等）、"(N matches)" と "log" の除去。
+ポート名⇔番号（www/telnet/domain/bootps 等）、"(N matches)" の除去、
+"log"/"log-input" は判定に使わず属性 e["log"] に保持（ベクタの expect_log で任意に判定）。
 
 表示仕様の注意（実機検証 2026-07-12・IOL-XE 17.15）:
   - 標準 ACL のサブネットは「A, wildcard bits W」形式・ホストは裸の IP。
@@ -115,12 +116,15 @@ def parse_entry(kind, seq, action, body):
     e = {"seq": seq, "action": action, "proto": None,
          "src": 0, "src_wild": 0xFFFFFFFF, "sport": None,
          "dst": 0, "dst_wild": 0xFFFFFFFF, "dport": None,
-         "established": False, "icmp_type": None}
+         "established": False, "icmp_type": None, "log": None}
     # 標準 ACL のサブネット表示「A, wildcard bits W」を「A W」へ正規化
     body = body.replace(", wildcard bits ", " ")
     toks = body.split()
     # 末尾の "(N matches)" は呼び出し前に除去済み・"log" はここで無視
-    if toks and toks[-1] == "log":
+    # log / log-input は許可・拒否の判定に影響しないので評価からは外すが、属性として保持する
+    # （e["log"]= None|"log"|"log-input"。ベクタの expect_log で判定できる・BL-225）。
+    if toks and toks[-1] in ("log", "log-input"):
+        e["log"] = toks[-1]
         toks = toks[:-1]
     if kind == "standard":
         e["src"], e["src_wild"], i = _addr_spec(toks, 0)
@@ -226,6 +230,14 @@ def evaluate(entries, vector):
     return False
 
 
+def matched_log(entries, vector):
+    """ベクタに最初に一致したエントリのログ指定（None|"log"|"log-input"）。暗黙 deny は None。"""
+    for e in entries:
+        if entry_matches(e, vector):
+            return e["log"]
+    return None
+
+
 def eval_acl_vectors(spec, stdout):
     """grade.py のチェック種 `acl_vectors:` 本体。
     spec = {"acl": name, "vectors": [{...vector, "expect": "permit"|"deny"}]}
@@ -234,6 +246,19 @@ def eval_acl_vectors(spec, stdout):
         acls = parse_show_access_lists(stdout)
     except AclParseError as exc:
         return False, {"reason": f"ACL パース失敗: {exc}"}
+    # ★BL-225: 複数 ACL を 1 チェックで評価する形 {"acls": [{"acl":..., "vectors": [...]}, ...]}
+    #   （stdout は全 ACL を含む `show ip access-lists`）。全 ACL が一致したときだけ PASS。
+    if "acls" in spec:
+        detail = {}
+        for sub in spec["acls"]:
+            ok, d = _eval_one(sub, acls)
+            if not ok:
+                detail[str(sub["acl"])] = d
+        return (not detail), detail
+    return _eval_one(spec, acls)
+
+
+def _eval_one(spec, acls):
     name = str(spec["acl"])
     if name not in acls:
         return False, {"reason": f"ACL {name} が存在しない（show 出力に無い）"}
@@ -266,6 +291,13 @@ def eval_acl_vectors(spec, stdout):
             mismatches.append({
                 "vector": v.get("id") or _vector_str(v),
                 "expected": v["expect"], "observed": got})
+        # 任意: 一致した行のログ指定まで問う（"log"|"log-input"|"none"）。書かなければ従来どおり
+        elif "expect_log" in v:
+            lg = matched_log(entries, v) or "none"
+            if lg != v["expect_log"]:
+                mismatches.append({
+                    "vector": v.get("id") or _vector_str(v),
+                    "expected": f"{v['expect']} ({v['expect_log']})", "observed": f"{got} ({lg})"})
     if mismatches:
         return False, {"acl_mismatch": mismatches}
     return True, {}

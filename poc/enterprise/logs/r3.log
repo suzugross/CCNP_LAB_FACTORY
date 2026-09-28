@@ -1,0 +1,53 @@
+### 19:41:21 SW01: show running-config | include ^ip routing|^no ip routing
+
+### 19:41:21 SW01: show vlan brief | include ^40|^110
+40   VLAN0040                         active    
+110  VLAN0110                         active    Et0/1
+### 19:41:21 SW01: show ip interface brief | include Vlan
+Vlan40                 10.9.40.1       YES TFTP   up                    up      
+Vlan110                10.9.110.1      YES TFTP   up                    up      
+Vlan999                10.1.10.11      YES TFTP   up                    up      
+### 19:41:21 SW01: show ip route | begin Gateway
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 6 subnets, 3 masks
+C        10.1.10.0/26 is directly connected, Vlan999
+L        10.1.10.11/32 is directly connected, Vlan999
+C        10.9.40.0/24 is directly connected, Vlan40
+L        10.9.40.1/32 is directly connected, Vlan40
+C        10.9.110.0/24 is directly connected, Vlan110
+L        10.9.110.1/32 is directly connected, Vlan110
+### 19:41:21 SW01: ping 10.9.110.10
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.9.110.10, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 1/1/1 ms
+### 19:41:24 SW01: ping 10.9.40.11
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.9.40.11, timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/1 ms
+### 19:41:24 SW01: show interfaces Ethernet0/1 switchport | include Access Mode VLAN|Operational Mode
+Operational Mode: static access
+Access Mode VLAN: 110 (VLAN0110)
+### 19:41:24 RT01: show ip route | begin Gateway
+Gateway of last resort is 10.9.110.1 to network 0.0.0.0
+
+S*    0.0.0.0/0 [1/0] via 10.9.110.1
+      10.0.0.0/8 is variably subnetted, 2 subnets, 2 masks
+C        10.9.110.0/24 is directly connected, Ethernet0/0
+L        10.9.110.10/32 is directly connected, Ethernet0/0
+### 19:41:24 RT01: show arp
+Protocol  Address          Age (min)  Hardware Addr   Type   Interface
+Internet  10.9.110.1              0   aabb.cc80.1800  ARPA   Ethernet0/0
+Internet  10.9.110.10             -   aabb.cc00.1a00  ARPA   Ethernet0/0
+### 19:41:25 SW02: ping 10.9.110.10
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.9.110.10, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+### 19:41:35 SW02: show ip route
+Default gateway is 10.9.40.1
+
+Host               Gateway           Last Use    Total Uses  Interface
+ICMP redirect cache is empty

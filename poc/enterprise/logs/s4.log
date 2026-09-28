@@ -1,0 +1,130 @@
+
+======== S4a 基準(フィルタなし): 外部 SRV01 から RT02 へ 22/80・ping、社内 VIP へ ping ========
+### 05:01:04 SRV01$ for p in 22 80; do nc -z -w3 192.0.2.1 $p && echo "RT02 $p OPEN" || echo "RT02 $p closed"; done; ping -c2 -W2 192.0.2.1 | tail -1; ping -c2 -W2 10.20.10.1 | tail -1
+ 
+RT02 22 OPEN
+Connection to 192.0.2.1 22 port [tcp/ssh] succeeded!
+RT02 80 closed
+rtt min/avg/max/mdev = 0.358/0.451/0.544/0.093 ms
+rtt min/avg/max/mdev = 0.865/0.879/0.894/0.014 ms
+__RC=0
+
+======== S4b reflexive ACL ========
+### 05:01:10 RT02: conf ['ip access-list extended R-OUT', 'permit tcp any any reflect MIRROR', 'permit udp any any reflect MIRROR', 'permit icmp any any reflect MIRROR', 'ip access-list extended R-IN', 'evaluate MIRROR', 'deny ip any any log', 'interface Ethernet0/1', 'ip access-group R-OUT out', 'ip access-group R-IN in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+% Reflect/Eval and log/fqdn group/geo group ACE cannot be configured in same ACL
+% Failed to add ace to access-list
+### 05:01:10 PC01$ curl -s -m5 http://192.0.2.10/ip; dig +short +time=2 +tries=1 @192.0.2.10 www.inet.example || echo DIG_FAIL; ping -c2 -W2 192.0.2.10 | tail -1
+ 
+;; communications error to 192.0.2.10#53: timed out
+;; no servers could be reached
+DIG_FAIL
+pipe 2
+__RC=0
+### 05:01:19 SRV01$ for p in 22 80; do nc -z -w3 192.0.2.1 $p && echo "RT02 $p OPEN" || echo "RT02 $p closed"; done; ping -c2 -W2 192.0.2.1 | tail -1; ping -c2 -W2 10.20.10.1 | tail -1
+ 
+RT02 22 closed
+RT02 80 closed
+
+
+__RC=0
+### 05:01:25 RT02: conf ['interface Ethernet0/1', 'no ip access-group R-OUT out', 'no ip access-group R-IN in']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 05:01:25 RT02: show access-lists
+Reflexive IP access list MIRROR
+     permit icmp host 192.0.2.10 host 192.0.2.1  (time left 299)
+Extended IP access list R-IN
+    10 evaluate MIRROR
+Extended IP access list R-OUT
+    10 permit tcp any any reflect MIRROR
+    20 permit udp any any reflect MIRROR
+    30 permit icmp any any reflect MIRROR (5 matches)
+
+======== S4c ZBF(INSIDE=Et0/0・OUTSIDE=Et0/1・self のポリシーなし) ========
+### 05:01:26 RT02: conf ['zone security INSIDE', 'zone security OUTSIDE', 'class-map type inspect match-any C-ALL', 'match protocol tcp', 'match protocol udp', 'match protocol icmp', 'policy-map type inspect P-IN2OUT', 'class type inspect C-ALL', 'inspect', 'zone-pair security ZP-IN2OUT source INSIDE destination OUTSIDE', 'service-policy type inspect P-IN2OUT', 'interface Ethernet0/0', 'zone-member security INSIDE', 'interface Ethernet0/1', 'zone-member security OUTSIDE']
+Enter configuration commands, one per line.  End with CNTL/Z.
+             ^
+% Invalid input detected at '^' marker.
+             ^
+% Invalid input detected at '^' marker.
+                            ^
+% Invalid input detected at '^' marker.
+               ^
+% Invalid input detected at '^' marker.
+               ^
+% Invalid input detected at '^' marker.
+               ^
+% Invalid input detected at '^' marker.
+                             ^
+% Invalid input detected at '^' marker.
+                  ^
+% Invalid input detected at '^' marker.
+               ^
+% Invalid input detected at '^' marker.
+             ^
+% Invalid input detected at '^' marker.
+                                 ^
+% Invalid input detected at '^' marker.
+                ^
+% Invalid input detected at '^' marker.
+                ^
+% Invalid input detected at '^' marker.
+### sleep 10
+### 05:01:36 PC01$ curl -s -m5 http://192.0.2.10/ip; dig +short +time=2 +tries=1 @192.0.2.10 www.inet.example || echo DIG_FAIL; ping -c2 -W2 192.0.2.10 | tail -1
+ 
+10.20.10.4
+192.0.2.10
+rtt min/avg/max/mdev = 1.546/1.867/2.188/0.321 ms
+__RC=0
+### 05:01:37 SRV01$ for p in 22 80; do nc -z -w3 192.0.2.1 $p && echo "RT02 $p OPEN" || echo "RT02 $p closed"; done; ping -c2 -W2 192.0.2.1 | tail -1; ping -c2 -W2 10.20.10.1 | tail -1
+ 
+Connection to 192.0.2.1 22 port [tcp/ssh] succeeded!
+RT02 22 OPEN
+RT02 80 closed
+rtt min/avg/max/mdev = 0.578/0.663/0.749/0.085 ms
+rtt min/avg/max/mdev = 0.842/1.167/1.493/0.325 ms
+__RC=0
+### 05:01:40 RT02: show ip ospf neighbor
+Neighbor ID     Pri   State           Dead Time   Address         Interface
+10.20.255.3       1   FULL/BDR        00:00:36    10.20.255.3     Ethernet0/0
+10.20.255.4       1   FULL/DROTHER    00:00:35    10.20.255.4     Ethernet0/0
+### 05:01:40 RT02: show policy-map type inspect zone-pair ZP-IN2OUT sessions | include Session|Established|Class-map
+                          ^
+% Invalid input detected at '^' marker.
+
+======== S4d self zone(OUTSIDE→self は全 drop) ========
+### 05:01:41 RT02: conf ['policy-map type inspect P-OUT2SELF', 'class class-default', 'drop log', 'zone-pair security ZP-OUT2SELF source OUTSIDE destination self', 'service-policy type inspect P-OUT2SELF']
+Enter configuration commands, one per line.  End with CNTL/Z.
+                             ^
+% Invalid input detected at '^' marker.
+                  ^
+% Invalid input detected at '^' marker.
+              ^
+% Invalid input detected at '^' marker.
+             ^
+% Invalid input detected at '^' marker.
+                                 ^
+% Invalid input detected at '^' marker.
+### sleep 5
+### 05:01:46 SRV01$ for p in 22 80; do nc -z -w3 192.0.2.1 $p && echo "RT02 $p OPEN" || echo "RT02 $p closed"; done; ping -c2 -W2 192.0.2.1 | tail -1; ping -c2 -W2 10.20.10.1 | tail -1
+ 
+RT02 22 OPEN
+Connection to 192.0.2.1 22 port [tcp/ssh] succeeded!
+RT02 80 closed
+rtt min/avg/max/mdev = 0.345/0.453/0.561/0.108 ms
+rtt min/avg/max/mdev = 0.928/2.434/3.940/1.506 ms
+__RC=0
+### 05:01:48 PC01$ curl -s -m5 http://192.0.2.10/ip; dig +short +time=2 +tries=1 @192.0.2.10 www.inet.example || echo DIG_FAIL; ping -c2 -W2 192.0.2.10 | tail -1
+ 
+10.20.10.4
+192.0.2.10
+rtt min/avg/max/mdev = 1.726/1.882/2.039/0.156 ms
+__RC=0
+### 05:01:50 RT02: show ip ospf neighbor
+Neighbor ID     Pri   State           Dead Time   Address         Interface
+10.20.255.3       1   FULL/BDR        00:00:36    10.20.255.3     Ethernet0/0
+10.20.255.4       1   FULL/DROTHER    00:00:35    10.20.255.4     Ethernet0/0
+### 05:01:50 RT02: show ntp associations
+  address         ref clock       st   when   poll reach  delay  offset   disp
+*~127.127.1.1     .LOCL.           2     13     16   377  0.000   0.000  1.204
+ * sys.peer, # selected, + candidate, - outlyer, x falseticker, ~ configured

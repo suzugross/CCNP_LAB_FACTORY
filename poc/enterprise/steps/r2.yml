@@ -1,0 +1,19 @@
+- node: SW02
+  show: ['show vlan brief | include ^40|^110|^1 ', 'show vtp status | include Operating Mode', 'show interfaces trunk']
+- note: 'R2 VLAN を作り直して再試験（SW01 は ip routing 有効のまま）'
+- node: SW01
+  conf: ['vlan 40', 'vlan 110']
+- node: SW02
+  conf: ['vlan 40']
+  wait: 35
+  show: ['show ip interface brief | include Vlan40', 'ping 10.9.40.1', 'ping 10.9.110.10']
+- node: RT01
+  show: ['ping 10.9.40.11']
+- note: 'R2b SW01 を no ip routing に戻す → SW02 から VLAN 110 端末へ（通らないはず）'
+- node: SW01
+  conf: ['no ip routing']
+  wait: 5
+- node: SW02
+  show: ['ping 10.9.40.1', 'ping 10.9.110.10']
+- node: SW01
+  conf: ['ip routing']

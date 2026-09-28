@@ -1,0 +1,78 @@
+# P6(ハード H4): Dialer の戻り通信のステートフル化。reflexive ACL と ZBF(self zone 含む)が iol-xe で使えるか
+- note: 'E6a 準備: WAN-IN を外し LAN-IN の DNS 制限も外す(PC から dig できるように)'
+- node: RT01
+  conf:
+    - interface Dialer1
+    - no ip access-group WAN-IN in
+    - interface Ethernet0/0
+    - no ip access-group LAN-IN in
+- note: 'E6b reflexive ACL(Dialer out で reflect・in で evaluate。ルータ自身の SLA は reflect されないので echo-reply を明示)'
+- node: RT01
+  conf:
+    - ip access-list extended R-OUT
+    - permit tcp any any reflect MIRROR
+    - permit udp any any reflect MIRROR
+    - permit icmp any any reflect MIRROR
+    - ip access-list extended R-IN
+    - permit icmp any any echo-reply
+    - evaluate MIRROR
+    - deny ip any any log
+    - interface Dialer1
+    - ip access-group R-OUT out
+    - ip access-group R-IN in
+- node: PC01
+  sh: ['curl -s -m5 http://192.0.2.10/ip; dig +short +time=2 +tries=1 @192.0.2.10 www.inet.example || echo DIG_FAIL; ping -c2 -W2 192.0.2.10 | tail -2']
+- node: SRV01
+  sh: ['for p in 22 80; do nc -z -w3 198.51.100.10 $p && echo "port $p OPEN" || echo "port $p closed"; done; ping -c2 -W2 198.51.100.10 | tail -2']
+- node: RT01
+  show: ['show access-lists R-IN', 'show access-lists MIRROR', 'show track 1 | include Reachability']
+  conf:
+    - interface Dialer1
+    - no ip access-group R-OUT out
+    - no ip access-group R-IN in
+- note: 'E6c ZBF(INSIDE=Et0/0・OUTSIDE=Dialer1・self zone のポリシーなし)'
+- node: RT01
+  conf:
+    - zone security INSIDE
+    - zone security OUTSIDE
+    - class-map type inspect match-any C-WEB
+    - match protocol tcp
+    - match protocol udp
+    - match protocol icmp
+    - policy-map type inspect P-IN2OUT
+    - class type inspect C-WEB
+    - inspect
+    - zone-pair security ZP-IN2OUT source INSIDE destination OUTSIDE
+    - service-policy type inspect P-IN2OUT
+    - interface Ethernet0/0
+    - zone-member security INSIDE
+    - interface Dialer1
+    - zone-member security OUTSIDE
+- sleep: 15
+- node: PC01
+  sh: ['curl -s -m5 http://192.0.2.10/ip; dig +short +time=2 +tries=1 @192.0.2.10 www.inet.example || echo DIG_FAIL; ping -c2 -W2 192.0.2.10 | tail -2']
+- node: SRV01
+  sh: ['for p in 22 80; do nc -z -w3 198.51.100.10 $p && echo "port $p OPEN" || echo "port $p closed"; done; ping -c2 -W2 198.51.100.10 | tail -2']
+- node: RT01
+  show: ['show policy-map type inspect zone-pair sessions | include Established|Session|Class-map', 'show track 1 | include Reachability', 'show ip ospf neighbor']
+- note: 'E6d ZBF に self zone を足す(OUTSIDE→self は SLA の戻り echo-reply だけ許可・それ以外 drop)'
+- node: RT01
+  conf:
+    - ip access-list extended A-SELF
+    - permit icmp any any echo-reply
+    - class-map type inspect match-any C-SELF
+    - match access-group name A-SELF
+    - policy-map type inspect P-OUT2SELF
+    - class type inspect C-SELF
+    - pass
+    - class class-default
+    - drop log
+    - zone-pair security ZP-OUT2SELF source OUTSIDE destination self
+    - service-policy type inspect P-OUT2SELF
+- sleep: 20
+- node: SRV01
+  sh: ['for p in 22 80; do nc -z -w3 198.51.100.10 $p && echo "port $p OPEN" || echo "port $p closed"; done; ping -c2 -W2 198.51.100.10 | tail -2']
+- node: RT01
+  show: ['show track 1 | include Reachability|return code', 'show ip ospf neighbor']
+- node: PC01
+  sh: ['curl -s -m5 http://192.0.2.10/ip; dig +short +time=2 +tries=1 @192.0.2.10 www.inet.example || echo DIG_FAIL; ping -c2 -W2 192.0.2.10 | tail -2']

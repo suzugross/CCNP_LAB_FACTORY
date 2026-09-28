@@ -1,0 +1,130 @@
+
+======== E0 基準: 版 ========
+### 04:19:24 RT01: show version | include Software,
+
+
+======== P1 RT01/RT02 に PPPoE クライアント(ip mtu はまだ詰めない) ========
+### 04:19:25 RT01: conf ['interface Ethernet0/1', 'pppoe enable group global', 'pppoe-client dial-pool-number 1', 'interface Dialer1', 'ip address negotiated', 'encapsulation ppp', 'dialer pool 1', 'ppp chap hostname ent-a@ispa', 'ppp chap password 0 pppA']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 04:19:29 RT02: conf ['interface Ethernet0/1', 'pppoe enable group global', 'pppoe-client dial-pool-number 1', 'interface Dialer1', 'ip address negotiated', 'encapsulation ppp', 'dialer pool 1', 'ppp chap hostname ent-b@ispb', 'ppp chap password 0 pppB']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### sleep 30
+### 04:19:59 RT01: show pppoe session
+     1 client session 
+
+Uniq ID  PPPoE  RemMAC          Port                    VT  VA         State
+           SID  LocMAC                                      VA-st      Type
+    N/A      1  aabb.cc00.2400  Et0/1                   Di1 Vi2        UP      
+                aabb.cc00.2010                              UP              
+### 04:19:59 RT01: show ip interface brief | exclude unassigned
+Interface              IP-Address      OK? Method Status                Protocol
+Ethernet0/0            10.20.255.1     YES TFTP   up                    up      
+Ethernet0/3            10.1.10.18      YES TFTP   up                    up      
+Dialer1                198.51.100.10   YES IPCP   up                    up      
+### 04:19:59 RT01: show interfaces Dialer1 | include MTU|line protocol|Internet address
+Dialer1 is up, line protocol is up 
+  Internet address is 198.51.100.10/32
+  MTU 1492 bytes, BW 56 Kbit/sec, DLY 20000 usec, 
+Virtual-Access2 is up, line protocol is up 
+  Internet address will be negotiated using IPCP
+  MTU 1492 bytes, BW 56 Kbit/sec, DLY 20000 usec, 
+### 04:19:59 RT01: show ip route | begin Gateway
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 3 subnets, 3 masks
+O        10.20.10.0/24 [110/20] via 10.20.255.3, 00:06:01, Ethernet0/0
+C        10.20.255.0/29 is directly connected, Ethernet0/0
+L        10.20.255.1/32 is directly connected, Ethernet0/0
+      198.51.100.0/32 is subnetted, 2 subnets
+C        198.51.100.1 is directly connected, Dialer1
+C        198.51.100.10 is directly connected, Dialer1
+### 04:19:59 RT01: show running-config interface Dialer1
+Building configuration...
+
+Current configuration : 148 bytes
+!
+interface Dialer1
+ mtu 1492
+ ip address negotiated
+ encapsulation ppp
+ dialer pool 1
+ ppp chap hostname ent-a@ispa
+ ppp chap password 0 pppA
+end
+### 04:19:59 RT01: show running-config interface Ethernet0/1
+Building configuration...
+
+Current configuration : 134 bytes
+!
+interface Ethernet0/1
+ description to ISP-A (PPPoE)
+ no ip address
+ pppoe enable group global
+ pppoe-client dial-pool-number 1
+end
+### 04:19:59 RT02: show pppoe session
+     1 client session 
+
+Uniq ID  PPPoE  RemMAC          Port                    VT  VA         State
+           SID  LocMAC                                      VA-st      Type
+    N/A      1  aabb.cc00.2500  Et0/1                   Di1 Vi2        UP      
+                aabb.cc00.2110                              UP              
+### 04:19:59 RT02: show interfaces Dialer1 | include MTU|line protocol|Internet address
+Dialer1 is up, line protocol is up 
+  Internet address is 203.0.113.20/32
+  MTU 1492 bytes, BW 56 Kbit/sec, DLY 20000 usec, 
+Virtual-Access2 is up, line protocol is up 
+  Internet address will be negotiated using IPCP
+  MTU 1492 bytes, BW 56 Kbit/sec, DLY 20000 usec, 
+### 04:20:02 RT03: show pppoe session
+     1 session  in LOCALLY_TERMINATED (PTA) State
+     1 session  total
+
+Uniq ID  PPPoE  RemMAC          Port                    VT  VA         State
+           SID  LocMAC                                      VA-st      Type
+      1      1  aabb.cc00.2010  Et0/0                    1  Vi2.1      PTA  
+                aabb.cc00.2400                              UP              
+### 04:20:02 RT03: show ip interface brief | include Virtual|Loopback
+Loopback0              198.51.100.1    YES TFTP   up                    up      
+Virtual-Access1        unassigned      YES unset  down                  down    
+Virtual-Access2        unassigned      YES unset  up                    up      
+Virtual-Access2.1      198.51.100.1    YES unset  up                    up      
+Virtual-Template1      198.51.100.1    YES unset  down                  down    
+### 04:20:02 RT03: show interfaces virtual-access 2.1 | include MTU|line protocol
+Virtual-Access2.1 is up, line protocol is up 
+  MTU 1492 bytes, BW 100000 Kbit/sec, DLY 100000 usec, 
+### 04:20:02 RT03: show interfaces virtual-access 1 | include MTU|line protocol
+Virtual-Access1 is down, line protocol is down 
+  MTU 1500 bytes, BW 100000 Kbit/sec, DLY 100000 usec, 
+### 04:20:02 RT03: show ip route 198.51.100.10
+Routing entry for 198.51.100.10/32
+  Known via "connected", distance 0, metric 0 (connected, via interface)
+  Routing Descriptor Blocks:
+  * directly connected, via Virtual-Access2.1
+      Route metric is 0, traffic share count is 1
+
+======== P1 疎通(NAT なし): RT01 自身から INET-SV ========
+### 04:20:02 RT01: ping 192.0.2.10 source Dialer1 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.0.2.10, timeout is 2 seconds:
+Packet sent with a source address of 198.51.100.10 
+...
+Success rate is 0 percent (0/3)
+### 04:20:08 RT01: ping 192.0.2.10 size 1500 df-bit repeat 2
+Type escape sequence to abort.
+Sending 2, 1500-byte ICMP Echos to 192.0.2.10, timeout is 2 seconds:
+Packet sent with the DF bit set
+..
+Success rate is 0 percent (0/2)
+### 04:20:12 RT01: ping 192.0.2.10 size 1492 df-bit repeat 2
+Type escape sequence to abort.
+Sending 2, 1492-byte ICMP Echos to 192.0.2.10, timeout is 2 seconds:
+Packet sent with the DF bit set
+..
+Success rate is 0 percent (0/2)
+### 04:20:16 RT01: ping 192.0.2.10 size 1493 df-bit repeat 2
+Type escape sequence to abort.
+Sending 2, 1493-byte ICMP Echos to 192.0.2.10, timeout is 2 seconds:
+Packet sent with the DF bit set
+..
+Success rate is 0 percent (0/2)

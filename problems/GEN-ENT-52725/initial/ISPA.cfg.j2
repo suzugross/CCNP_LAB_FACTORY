@@ -1,0 +1,30 @@
+! ISP-A BRAS（PPPoE サーバ・既設・変更不可）
+username hq725@isp-a.example password 0 kek7xnPw
+ip local pool CUST-A 198.51.100.60 198.51.100.60
+bba-group pppoe global
+ virtual-template 1
+!
+interface Loopback0
+ ip address 198.51.100.1 255.255.255.255
+!
+interface Virtual-Template1
+ ip unnumbered Loopback0
+ peer default ip address pool CUST-A
+ ppp authentication chap
+!
+interface {{ links[0] }}
+ description === to customer (PPPoE) ===
+ no ip address
+ pppoe enable group global
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to INET ===
+ ip address 198.51.100.249 255.255.255.252
+ no shutdown
+!
+ip route 0.0.0.0 0.0.0.0 198.51.100.250
+!
+line vty 0 4
+ transport input ssh telnet
+!

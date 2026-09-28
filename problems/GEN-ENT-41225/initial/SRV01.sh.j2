@@ -1,0 +1,55 @@
+#!/bin/bash
+# SRV01: 社内 DNS（BIND9・既設）（自動生成 gen_enterprise.py）
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[$(date -Is)] $*"; }
+echo "{{ ansible_user }} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-ccnp; chmod 440 /etc/sudoers.d/90-ccnp
+for i in 1 2 3; do apt-get update -qq && apt-get install -y -qq bind9 dnsutils && break; sleep 10; done
+cat > /etc/bind/named.conf.options <<'OPT'
+options {
+  directory "/var/cache/bind";
+  listen-on { 127.0.0.1; 10.80.100.10; };
+  listen-on-v6 { none; };
+  allow-query { 127.0.0.1; 10.80.0.0/16; };
+  allow-recursion { 127.0.0.1; 10.80.0.0/16; };
+  forwarders { 192.0.2.10; };
+  forward only;
+  dnssec-validation no;
+};
+OPT
+cat > /etc/bind/named.conf.local <<'LOC'
+zone "intra.example" { type master; file "/etc/bind/db.corp"; };
+zone "80.10.in-addr.arpa" { type master; file "/etc/bind/db.rev"; };
+LOC
+cat > /etc/bind/db.corp <<'Z'
+$TTL 300
+@ IN SOA dns.intra.example. admin.intra.example. (1 3600 600 86400 300)
+@ IN NS dns.intra.example.
+dns IN A 10.80.100.10
+portal IN A 10.80.100.20
+files IN CNAME portal
+prn01 IN A 10.80.170.50
+Z
+cat > /etc/bind/db.rev <<'Z'
+$TTL 300
+@ IN SOA dns.intra.example. admin.intra.example. (1 3600 600 86400 300)
+@ IN NS dns.intra.example.
+10.100 IN PTR dns.intra.example.
+20.100 IN PTR portal.intra.example.
+Z
+rm -f /etc/netplan/50-cloud-init.yaml
+cat > /etc/netplan/60-ccnp.yaml <<NP
+network:
+  version: 2
+  ethernets:
+    ens2:
+      addresses: [{{ mgmt_ip }}/{{ mgmt_prefixlen }}]
+    ens3:
+      addresses: [10.80.100.10/24]
+      routes:
+        - to: default
+          via: 10.80.100.1
+NP
+chmod 600 /etc/netplan/60-ccnp.yaml
+netplan apply
+systemctl restart named
+log "DONE"

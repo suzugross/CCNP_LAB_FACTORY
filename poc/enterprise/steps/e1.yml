@@ -1,0 +1,54 @@
+# P1: PPPoE サーバ(BRAS)/クライアント(Dialer)の成立・IPCP 払い出し・MTU の既定値(P2 の前提)
+- note: 'E0 基準: 版'
+- node: RT01
+  show: ['show version | include Software,']
+- note: 'P1 RT01/RT02 に PPPoE クライアント(ip mtu はまだ詰めない)'
+- node: RT01
+  conf:
+    - interface Ethernet0/1
+    - pppoe enable group global
+    - pppoe-client dial-pool-number 1
+    - interface Dialer1
+    - ip address negotiated
+    - encapsulation ppp
+    - dialer pool 1
+    - ppp chap hostname ent-a@ispa
+    - ppp chap password 0 pppA
+- node: RT02
+  conf:
+    - interface Ethernet0/1
+    - pppoe enable group global
+    - pppoe-client dial-pool-number 1
+    - interface Dialer1
+    - ip address negotiated
+    - encapsulation ppp
+    - dialer pool 1
+    - ppp chap hostname ent-b@ispb
+    - ppp chap password 0 pppB
+- sleep: 30
+- node: RT01
+  show:
+    - show pppoe session
+    - show ip interface brief | exclude unassigned
+    - show interfaces Dialer1 | include MTU|line protocol|Internet address
+    - show ip route | begin Gateway
+    - show running-config interface Dialer1
+    - show running-config interface Ethernet0/1
+- node: RT02
+  show:
+    - show pppoe session
+    - show interfaces Dialer1 | include MTU|line protocol|Internet address
+- node: RT03
+  show:
+    - show pppoe session
+    - show ip interface brief | include Virtual|Loopback
+    - show interfaces virtual-access 2.1 | include MTU|line protocol
+    - show interfaces virtual-access 1 | include MTU|line protocol
+    - show ip route 198.51.100.10
+- note: 'P1 疎通(NAT なし): RT01 自身から INET-SV'
+- node: RT01
+  show:
+    - ping 192.0.2.10 source Dialer1 repeat 3
+    - ping 192.0.2.10 size 1500 df-bit repeat 2
+    - ping 192.0.2.10 size 1492 df-bit repeat 2
+    - ping 192.0.2.10 size 1493 df-bit repeat 2

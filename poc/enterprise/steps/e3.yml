@@ -1,0 +1,41 @@
+# P9: NAT と ACL の評価順。Dialer の in/out と LAN 側 in/out に「変換前」「変換後」の両方の行を置き、カウンタで見る
+- note: 'E3 NAT 順序: カウンタ用 ACL'
+- node: RT01
+  conf:
+    - ip access-list extended P9-DOUT
+    - permit icmp host 10.20.10.10 any
+    - permit icmp host 198.51.100.10 any
+    - permit ip any any
+    - ip access-list extended P9-DIN
+    - permit icmp any host 10.20.10.10
+    - permit icmp any host 198.51.100.10
+    - permit ip any any
+    - ip access-list extended P9-LIN
+    - permit icmp host 10.20.10.10 any
+    - permit icmp host 198.51.100.10 any
+    - permit ip any any
+    - ip access-list extended P9-LOUT
+    - permit icmp any host 10.20.10.10
+    - permit icmp any host 198.51.100.10
+    - permit ip any any
+    - interface Dialer1
+    - ip access-group P9-DOUT out
+    - ip access-group P9-DIN in
+    - interface Ethernet0/0
+    - ip access-group P9-LIN in
+    - ip access-group P9-LOUT out
+- node: PC01
+  sh: ['ping -c5 -W2 192.0.2.10']
+- node: RT01
+  show:
+    - show access-lists P9-DOUT
+    - show access-lists P9-DIN
+    - show access-lists P9-LIN
+    - show access-lists P9-LOUT
+  conf:
+    - interface Dialer1
+    - no ip access-group P9-DOUT out
+    - no ip access-group P9-DIN in
+    - interface Ethernet0/0
+    - no ip access-group P9-LIN in
+    - no ip access-group P9-LOUT out

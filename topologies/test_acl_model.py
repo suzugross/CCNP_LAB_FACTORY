@@ -131,9 +131,31 @@ def test_eval_acl_vectors():
     check(not ok, "空出力（未定義）は FAIL")
 
 
+def test_log_attr():
+    """log / log-input は許可・拒否に影響せず属性に残る。expect_log を書いた時だけ判定（BL-225）。"""
+    show = ("Extended IP access list LG\n"
+            "    10 deny tcp any any eq 445 log-input\n"
+            "    20 deny tcp any any eq 25 log\n"
+            "    30 permit ip any any\n")
+    ent = am.parse_show_access_lists(show)["LG"]
+    check([e["log"] for e in ent] == ["log-input", "log", None], "log/log-input を属性に保持")
+    v445 = tcp("10.0.0.1", 1, "10.0.0.2", 445)
+    check(not am.evaluate(ent, v445) and am.matched_log(ent, v445) == "log-input", "log-input 行も deny 判定")
+    ok, _ = am.eval_acl_vectors({"acl": "LG", "vectors": [dict(v445, expect="deny")]}, show)
+    check(ok, "expect_log なし= 従来どおり（ログ指定は問わない）")
+    ok, _ = am.eval_acl_vectors({"acl": "LG", "vectors": [dict(v445, expect="deny", expect_log="log-input")]}, show)
+    check(ok, "expect_log=log-input が一致")
+    ok, d = am.eval_acl_vectors({"acl": "LG", "vectors": [dict(tcp("10.0.0.1", 1, "10.0.0.2", 25),
+                                                              expect="deny", expect_log="log-input")]}, show)
+    check(not ok and "(log)" in d["acl_mismatch"][0]["observed"], "log と log-input を区別")
+    ok, _ = am.eval_acl_vectors({"acl": "LG", "vectors": [dict(tcp("10.0.0.1", 1, "10.0.0.2", 80),
+                                                              expect="permit", expect_log="none")]}, show)
+    check(ok, "ログ指定なしの行= none")
+
+
 def main():
     for t in [test_parse, test_standard, test_noncontiguous_wildcard,
-              test_extended, test_eval_acl_vectors]:
+              test_extended, test_eval_acl_vectors, test_log_attr]:
         t()
     print("=" * 60)
     n_ok, n = sum(1 for x in PASSED if x), len(PASSED)
