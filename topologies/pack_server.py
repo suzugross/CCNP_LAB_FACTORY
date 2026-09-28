@@ -8,10 +8,13 @@
   GET  /_api/sheet?pack=<PACK-ID>&no=<N>   … 該当セクションの本文を返す
   POST /_api/sheet?pack=<PACK-ID>&no=<N>   … 本文で該当セクションを差し替える
   GET  /                                   … パック一覧(採点状態つき。pack_home.py)。素の一覧は /?raw=1
-  POST /_api/check?pack=<PACK-ID>&no=<N>   … 本文を保存したうえで正誤だけ返す(BL-212 答え合わせ)。
-                                              応答= "ok" | "ng" | "empty" | "nokey<TAB>理由"。組合せ/穴埋めは
-                                              "ng<TAB>①○ ②× …" のように項目ごとの内訳を付ける。
-                                              正解の記号は返さない(解説は採点後)。
+  POST /_api/check?pack=<PACK-ID>&no=<N>   … 本文を保存したうえで正誤を返す(BL-212 答え合わせ)。
+                                              応答= "ok|ng<TAB>内訳<TAB>正解" | "empty" | "nokey<TAB>理由"。
+                                              内訳は組合せ/穴埋めだけ("①○ ②× …"・他は空)。
+                                              正解は key_of の正規形("BD" / "①D・②A…")。
+                                              ★2026-09-28 から正解も返す(ユーザ要望= 選択肢ごとの正誤を色分け)。
+                                              押した時点で入力はロック済みなので初回解答の確定は崩れない。
+                                              解説本文は従来どおり採点後の解説ページ。
 
 設計上の約束:
   - bind は既定 127.0.0.1(このスクリプト単体)。★pack.sh serve は 2026-09-21 から **0.0.0.0** で起動する
@@ -183,7 +186,7 @@ class Handler(SimpleHTTPRequestHandler):
         return self._json(200, "ok")
 
     def _check(self):
-        """答え合わせ(BL-212): 本文を保存し、manifest の ref から正解キーを引いて正誤だけ返す。"""
+        """答え合わせ(BL-212): 本文を保存し、manifest の ref から正解キーを引いて正誤と正解を返す。"""
         path, no = self._target()
         if not path:
             return self._json(404, "pack が見つかりません")
@@ -224,7 +227,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(200, "empty")
             ok = given == key
         self.audit("check", pack, no, f"{given}={'ok' if ok else 'ng'}")
-        return self._json(200, ("ok" if ok else "ng") + (("\t" + parts) if parts else ""))
+        return self._json(200, ("ok" if ok else "ng") + "\t" + parts + "\t" + key)
 
     def end_headers(self):
         # ★静的ページもキャッシュさせない(2026-09-21: 再描画後も古いページが表示され

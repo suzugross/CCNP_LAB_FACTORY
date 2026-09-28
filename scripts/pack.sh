@@ -8,9 +8,10 @@
 #   先行パックで出した shape/kind は後続パックの抽選から外す。
 #   HTML の問題用紙は packs/<PACK-ID>/ に出る（2本目以降は -B / -C が自動で付く）。
 #   本数   = --packs（既定3・1 にすれば従来どおり単発）
-#   思考系 = --paper（既定 auto=5〜6・必須ジャンルは --require-shape auto で配り分け）
-#   瞬発力 = --speed（既定8・shape=speed・別枠で上乗せ・0 で無効。3×8=24 で型プール26種にほぼ収まる）
-#   穴埋め = --cloze（既定5・shape=cloze=解説穴埋め形・別枠で上乗せ・0 で無効・2026-09-19）
+#   ★1パック7問(思考2+瞬発3+穴埋め2)×3 = 21問/日(2026-09-28 ユーザ指示。旧 5〜6+8+5)
+#   思考系 = --paper（既定 auto=2・必須ジャンルは --require-shape auto で配り分け）
+#   瞬発力 = --speed（既定3・shape=speed・別枠で上乗せ・0 で無効）
+#   穴埋め = --cloze（既定2・shape=cloze=解説穴埋め形・別枠で上乗せ・0 で無効・2026-09-19）
 #   紙面   = 3 枠とも単元ローテーション（BL-224）= units.yml の全単元を最終実施日の古い順に 1 問ずつ。
 #            確認: python3 topologies/paper_rotation.py [--all]。--require-shape/--profile 明示で従来の抽選
 #   ラボ   = 単元ローテーション 3 問（1本目のみ・BL-223）= 曜日表＋遅れ補正（topologies/lab_modes.yml）。

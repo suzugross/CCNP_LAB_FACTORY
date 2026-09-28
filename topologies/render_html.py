@@ -405,6 +405,24 @@ select.msel.cok{background:#c8e6c9 !important; border-color:#2e7d32 !important}
 select.msel.cng{background:#ffcdd2 !important; border-color:#c62828 !important}
 .bmirror.cok{background:#c8e6c9; border-bottom-color:#2e7d32}
 .bmirror.cng{background:#ffcdd2; border-bottom-color:#c62828}
+/* 選択肢ごとの正誤(2026-09-28): 選んで正解=緑塗り/選んだが誤り=赤塗り/選ばなかった正解=緑破線/他=淡色 */
+.answer .opts label.k-hit{border:2px solid #2e7d32 !important; background:#c8e6c9 !important; padding:.3rem .75rem}
+.answer .opts label.k-wrong{border:2px solid #c62828 !important; background:#ffcdd2 !important; padding:.3rem .75rem}
+.answer .opts label.k-miss{border:2px dashed #2e7d32 !important; background:#ffffff !important; padding:.3rem .75rem; color:#1b5e20}
+.answer .opts label.k-other{opacity:.45}
+.answer .opts label.k-hit::after, .answer .opts label.k-miss::after{content:"✓"; color:#1b5e20; font-weight:700}
+.answer .opts label.k-wrong::after{content:"✗"; color:#b71c1c; font-weight:700}
+.choice.k-hit{border:2px solid #2e7d32; background:#e8f5e9}
+.choice.k-wrong{border:2px solid #c62828; background:#ffebee}
+.choice.k-miss{border:2px dashed #2e7d32; background:#f5fbf5}
+.choice.k-other{opacity:.55}
+.choice .kbadge{display:inline-block; margin-left:.6rem; padding:0 .45rem; font-size:.8rem; font-weight:700;
+  border-radius:3px; color:#ffffff; background:#2e7d32; vertical-align:baseline}
+.choice.k-wrong .kbadge{background:#c62828}
+.choice.k-miss .kbadge{background:#ffffff; color:#1b5e20; border:1px dashed #2e7d32}
+div.choice .kbadge{position:absolute; right:.6rem; top:.5rem}
+.kfix{display:inline-block; margin:0 .3rem; padding:0 .4rem; font-size:.85em; font-weight:700;
+  color:#1b5e20; background:#e8f5e9; border:1px dashed #2e7d32; border-radius:3px}
 .answer .savemsg.err{color:#a00000; font-weight:600}
 .tablewrap{overflow-x:auto; margin:.9rem 0}
 table{border-collapse:collapse; width:100%; font-size:.92rem}
@@ -479,15 +497,20 @@ ANSWER_JS = r"""
   /* ---- 答え合わせ(BL-212) ----------------------------------------------
      押した時点の解答をサーバ(/_api/check)で正誤判定し、緑/赤で表示して入力をロックする
      (=初回解答の確定。ノルマの正答率は初回解答だけで数える規則と整合)。
-     正解の記号・解説は出さない(採点後の解説ページで)。状態は 解答.md の
-     「答え合わせ:」行に残し、開き直しても復元する。 */
+     ★2026-09-28 ユーザ要望: 選択肢ごとに正解/不正解を色分けする(正解キーも返す)。
+       選んで正解=緑塗り・選んだが誤り=赤塗り・選ばなかった正解=緑の破線枠・その他=淡色。
+       穴埋めの誤答は該当プルダウンの横に正解を添える。解説本文は採点後の解説ページで。
+     状態は 解答.md の「答え合わせ:」行(… 正解=BD)に残し、開き直しても復元する。 */
   var chkBtn = box.querySelector('.chk'), chkRes = box.querySelector('.chkres');
-  var ck = {r: '', t: '', p: ''};       /* r= ok|ng, t= 時刻, p= 内訳(①○ ②× …) */
+  var ck = {r: '', t: '', p: '', k: ''}; /* r= ok|ng, t= 時刻, p= 内訳(①○ ②× …), k= 正解(BD / ①D・②A) */
   function capi(){ return '/_api/check?pack=' + encodeURIComponent(pack) + '&no=' + no; }
   function lock(){
     if(!ck.r) return;
     box.classList.add(ck.r === 'ok' ? 'chk-ok' : 'chk-ng');
-    if(chkRes) chkRes.textContent = (ck.r === 'ok' ? '正解' : '不正解') + (ck.t ? '（' + ck.t + ' 確定）' : '');
+    var isMatch = /^[\u2460-\u2473]/.test(ck.k);
+    if(chkRes) chkRes.textContent = (ck.r === 'ok' ? '正解' : '不正解') +
+      (ck.r === 'ng' && ck.k && !isMatch ? '　正解は ' + ck.k.split('').join('・') : '') +
+      (ck.t ? '（' + ck.t + ' 確定）' : '');
     if(chkBtn) chkBtn.disabled = true;
     box.querySelectorAll('.opts input').forEach(function(e){ e.disabled = true; });
     document.querySelectorAll('select.msel').forEach(function(sl){ sl.disabled = true; });
@@ -500,6 +523,45 @@ ANSWER_JS = r"""
       box.querySelectorAll('.opts input[value^="' + k + '"]').forEach(function(i){
         var row = i.closest('.mrow'); if(row) row.classList.add(cls);
       });
+    });
+    markKey(isMatch);
+  }
+  /* 選択肢ごとの正誤(正解キー ck.k が分かっている時だけ)。
+     記号チップ(.opts input の値= "B" / "①D")と、本文の選択肢の箱(.choice)を塗る。 */
+  function markKey(isMatch){
+    if(!ck.k) return;
+    var inKey = {};
+    (isMatch ? ck.k.split('・') : ck.k.split('')).forEach(function(t){ if(t) inKey[t] = 1; });
+    function cls(v, on){ return inKey[v] ? (on ? 'k-hit' : 'k-miss') : (on ? 'k-wrong' : 'k-other'); }
+    var chosen = {};
+    box.querySelectorAll('.opts input').forEach(function(i){
+      if(i.checked) chosen[i.value] = 1;
+      var lab = i.closest('label'); if(lab) lab.classList.add(cls(i.value, i.checked));
+    });
+    if(!isMatch){
+      var BADGE = {'k-hit': '✓ 正解（選択）', 'k-miss': '✓ 正解（未選択）',
+                   'k-wrong': '✗ 誤り（選択）', 'k-other': ''};
+      document.querySelectorAll('.choice').forEach(function(c){
+        var cl = c.querySelector('.cl'); if(!cl) return;
+        var k = cls(cl.textContent.trim(), !!chosen[cl.textContent.trim()]);
+        c.classList.add(k);
+        if(BADGE[k] && !c.querySelector('.kbadge')){
+          var b = document.createElement('span'); b.className = 'kbadge'; b.textContent = BADGE[k];
+          c.appendChild(b);
+        }
+      });
+      return;
+    }
+    /* 穴埋め形: 誤った空欄のプルダウンの横に正解を添える(選択肢の文言つき) */
+    Object.keys(inKey).forEach(function(tok){
+      var sl = document.querySelector('select.msel[data-k="' + tok.charAt(0) + '"]');
+      if(!sl || sl.value === tok) return;
+      var nx = sl.nextSibling;
+      if(nx && nx.classList && nx.classList.contains('kfix')) return;
+      var o = sl.querySelector('option[value="' + tok + '"]');
+      var s = document.createElement('span'); s.className = 'kfix';
+      s.textContent = '→ 正解 ' + (o ? o.textContent.trim() : tok.slice(1));
+      sl.parentNode.insertBefore(s, sl.nextSibling);
     });
   }
   function check(){
@@ -514,6 +576,7 @@ ANSWER_JS = r"""
         if(res === 'nokey'){ say('この問題は自動判定できません（採点時に判定します）' + (f[1] ? '：' + f[1] : ''), true); return; }
         if(res === 'empty'){ say('解答を読み取れませんでした', true); return; }
         ck.r = res; ck.t = new Date().toTimeString().slice(0, 8); ck.p = (f[1] || '').trim();
+        ck.k = (f[2] || '').trim();
         var done = box.querySelector('.done input'); if(done) done.checked = true;
         tpause('user');
         lock(); save();
@@ -630,7 +693,7 @@ ANSWER_JS = r"""
     }
     if(ck.r){                        /* 答え合わせ済み(BL-212): 確定結果を残す */
       lines.push('答え合わせ: ' + (ck.r === 'ok' ? '正解' : '不正解') + (ck.t ? ' ' + ck.t : '') +
-                 (ck.p ? ' ' + ck.p : ''));
+                 (ck.p ? ' ' + ck.p : '') + (ck.k ? ' 正解=' + ck.k : ''));
     }
     if(ts.k){                        /* 計測があった時だけ 所要: 行を書く(BL-144) */
       lines.push('所要: ' + tfmt(tnow()) + (ts.k === 'auto' ? ' (自動開始)' : ''));
@@ -680,7 +743,12 @@ ANSWER_JS = r"""
         tsave();
       }
       var c = t.match(/^[ \t]*答え合わせ:[ \t]*(正解|不正解)(?:[ \t]+(\d\d:\d\d:\d\d))?(?:[ \t]+(.*))?$/m);
-      if(c){ ck.r = (c[1] === '正解') ? 'ok' : 'ng'; ck.t = c[2] || ''; ck.p = (c[3] || '').trim(); }
+      if(c){
+        ck.r = (c[1] === '正解') ? 'ok' : 'ng'; ck.t = c[2] || '';
+        var rest = (c[3] || ''), km = rest.match(/(?:^|\s)正解=(\S+)/);
+        ck.k = km ? km[1] : '';
+        ck.p = rest.replace(/(?:^|\s)正解=\S+/, '').trim();
+      }
       trender();
       loaded = true; sync(); lock(); say('読み込み済み');
       topen();                       /* 解答済みかどうか確定してから自動開始判定 */

@@ -67,7 +67,7 @@ PAPER_GENRES = {
 }
 
 # 紙面の問題数を `auto` にしたときの範囲(2026-08-11「10〜20問で適当に」→ 2026-09-05「5問程度」に変更)
-PAPER_AUTO_MIN, PAPER_AUTO_MAX = 5, 6   # ★2026-09-05 ユーザ指示「紙面は5問程度」(旧 10〜20)。必須4ジャンル+mixed 1〜2問
+PAPER_AUTO_MIN, PAPER_AUTO_MAX = 2, 2   # ★2026-09-28 ユーザ指示「1パック7問程度×3」= 思考2+瞬発3+穴埋め2(旧 5〜6・その前 10〜20)
 
 # ★BL-136(2026-08-23): 紙面の shape/kind 反復回避の参照日数。answers/ の種別履歴で
 #   直近 N 日に出た kind を抽選順の後ろへ(gen_paper_mcq --avoid-recent-days)、
@@ -1162,13 +1162,14 @@ def _run_paper_gen(repo, seed, count, shape, exam, hard, log, label, extra_args=
 
 # ==========================================================================
 # 1日 N パック(BL-205・2026-09-20 ユーザ指示)
-#   「思考5 + 瞬発8 + 穴埋め5」を1日3パック出し、**配分は1日全体で考える**。
+#   「思考2 + 瞬発3 + 穴埋め2」(=7問・2026-09-28。旧 5+8+5)を1日3パック出し、**配分は1日全体で考える**。
 #   - 必須ジャンルは 1日で全ジャンルを1周するよう 3 パックへ配り分ける
 #     (--require-shape auto)。
 #   - 既に出した (shape/kind) は次のパックの抽選から外す(--exclude-kinds)。
 #   - ラボは 1 本目だけに付ける(CML の予算は1日ぶんで共通なので増やせない)。
 # ==========================================================================
-REQUIRE_PER_PACK = 4          # 1パックの必須ジャンル枠(思考系 5〜6 問のうち)
+REQUIRE_PER_PACK = 2          # 1パックの必須ジャンル枠(思考系 2 問のうち・2026-09-28 に 4→2。
+                              #   単元ローテ既定では使わない= --profile/--require-shape 明示時だけ)
 
 
 def _exclude_args(exclude):
@@ -1635,15 +1636,16 @@ def answer_form(pack_id, it, src_path):
         else:                       # 記述式(選択肢なし)
             ansfield = ('<label class="row">解答</label>'
                         '<textarea class="ans"></textarea>')
-        # ★BL-212(2026-09-21 ユーザ要望): 「答え合わせ」ボタン。押した時点の解答で正誤だけを
+        # ★BL-212(2026-09-21 ユーザ要望): 「答え合わせ」ボタン。押した時点の解答で正誤を
         #   即時表示(緑/赤)し、その問の入力をロックする(=初回解答の確定。解説は採点後のまま)。
+        #   2026-09-28 から選択肢ごとの正解/不正解も色分けする(render_html.ANSWER_JS の markKey)。
         #   判定は pack_server の /_api/check がサーバ側で行う(正解キーはページに置かない)。
         body = (ansfield +
                 '<label class="row">根拠（任意）</label>'
                 '<textarea class="why"></textarea>'
                 '<div class="chkrow"><button type="button" class="chk">答え合わせ</button>'
                 '<span class="chkres"></span>'
-                '<span class="chknote">押すと正誤だけ表示し、この問の解答を確定します（解説は採点後）</span></div>'
+                '<span class="chknote">押すと正誤と正解の選択肢を色で示し、この問の解答を確定します（解説は採点後）</span></div>'
                 '<label class="done"><input type="checkbox"> 解答済</label>')
     return head + body + '<div class="savemsg"></div></section>'
 
@@ -3682,13 +3684,13 @@ def main():
                     help="1回の new で作るパック数(既定3・BL-205 2026-09-20 ユーザ指示)。"
                          "2本目以降は紙面だけ(ラボは1本目に集約)・必須ジャンルは"
                          "全パックへ配り分け・既出 kind は後続から除外する")
-    ap.add_argument("--speed", type=int, default=8,
+    ap.add_argument("--speed", type=int, default=3,
                     help="瞬発力枠(即答形)の問題数。思考系(--paper)とは別枠で"
-                         "上乗せする(既定8・BL-205 2026-09-20: 3パック×8=24 で"
-                         "型プール26種にほぼ収まる。旧既定は単発15問)")
-    ap.add_argument("--cloze", type=int, default=5,
+                         "上乗せする(既定3・2026-09-28「1パック7問程度」。旧 8(3×8=24)・"
+                         "その前は単発15問)")
+    ap.add_argument("--cloze", type=int, default=2,
                     help="穴埋め枠(解説穴埋め形 shape=cloze・BL-191)の問題数。思考系・瞬発力枠とは"
-                         "別枠で上乗せする(既定5・2026-09-19 ユーザ指示・0 で無効)")
+                         "別枠で上乗せする(既定2・2026-09-28「1パック7問程度」。旧5・0 で無効)")
     ap.add_argument("--speed-shape", default="speed",
                     help="瞬発力枠の shape(既定 speed= svc 型ファミリ(svc/fhs/ospfdbg/dhcp6/dmvpn …)の"
                          "即答 kind を問題ごとに抽選。svc を指定すると従来どおり Services のみ)")
