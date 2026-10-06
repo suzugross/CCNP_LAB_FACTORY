@@ -1,0 +1,27 @@
+! RT02 初期状態 (デフォルトゲートウェイ / DHCPv6 リレー)
+ipv6 unicast-routing
+ipv6 cef
+!
+interface {{ links[0] }}
+ description === to RT01 (core) ===
+ ipv6 address 2001:DB8:f7:12::2/64
+ no shutdown
+!
+interface {{ links[1] }}
+ description === LAN-A (RA 抑止ポリシー（stateful アドレス + 静的既定ゲートウェイ・RA は停止）) ===
+ ipv6 address 2001:DB8:f7:A::1/64
+ no shutdown
+ ipv6 address FE80::1 link-local
+ ipv6 dhcp relay destination 2001:DB8:f7:12::1
+ ipv6 nd ra suppress all
+!
+interface {{ links[2] }}
+ description === LAN-B (stateful DHCPv6 + SLAAC 併存（M フラグ・自動生成も可）) ===
+ ipv6 address 2001:DB8:f7:B::1/64
+ no shutdown
+ ipv6 dhcp relay destination 2001:DB8:f7:12::1
+ ipv6 nd managed-config-flag
+ ipv6 nd ra lifetime 0
+!
+ipv6 route 2001:DB8:f7:1::/64 2001:DB8:f7:12::1
+!

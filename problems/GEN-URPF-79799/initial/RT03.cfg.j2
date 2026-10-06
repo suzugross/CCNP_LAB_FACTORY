@@ -1,0 +1,26 @@
+! RT03 (ISP設備・変更禁止)
+interface Loopback0
+ ip address 21.21.21.21 255.255.255.255
+!
+interface Loopback2
+ description === ISP NOC test source (do not modify) ===
+ ip address 192.168.189.99 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT01 (customer edge) ===
+ ip address 10.143.98.2 255.255.255.252
+ no shutdown
+!
+interface {{ links[1] }}
+ description === ISP peering ===
+ ip address 10.44.181.2 255.255.255.252
+ no shutdown
+!
+ip route 192.168.186.0 255.255.255.0 10.44.181.1
+!
+router ospf 1
+ redistribute static subnets
+ router-id 21.21.21.21
+ network 21.21.21.21 0.0.0.0 area 0
+ network 10.143.98.0 0.0.0.3 area 0
+!

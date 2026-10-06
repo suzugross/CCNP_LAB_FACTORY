@@ -296,6 +296,10 @@ def _hsrp_cfg(d, x):
 def question_body(d, choices, form):
     b, X, Y = d["b"], d["X"], d["Y"]
     L = _mermaid(b)
+    # 接続表(2026-09-29 ユーザ要望= 図の線をたどらなくても配線を引けるように)。図と同じ順・同じ IF 名。
+    L += ["", "| スイッチ | インタフェース(ポート番号) | 対向スイッチ | 対向インタフェース(ポート番号) |", "|---|---|---|---|"]
+    for a, ia, c, ic, _sp in b["links"]:
+        L.append(f"| {a} | {ia['name']}({ia['num']}) | {c} | {ic['name']}({ic['num']}) |")
     L += ["", f"| スイッチ | 役割 | ブリッジ プライオリティ(VLAN {X}) | ブリッジ プライオリティ(VLAN {Y}) | MAC アドレス |",
           "|---|---|---|---|---|"]
     for x in b["names"]:

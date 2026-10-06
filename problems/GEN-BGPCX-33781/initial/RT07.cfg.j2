@@ -1,0 +1,24 @@
+! RT07 (role=mhop, AS=65200) 初期構成
+interface Loopback0
+ ip address 10.0.14.14 255.255.255.255
+!
+interface Loopback1
+ ip address 198.51.100.1 255.255.255.0
+!
+interface {{ links[0] }}
+ ip address 10.167.167.2 255.255.255.252
+ no shutdown
+!
+ip route 10.0.68.68 255.255.255.255 10.167.167.1
+!
+router bgp 65200
+ bgp router-id 10.0.14.14
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.0.68.68 remote-as 65001
+ neighbor 10.0.68.68 update-source Loopback0
+ neighbor 10.0.68.68 ebgp-multihop 2
+ address-family ipv4 unicast
+  neighbor 10.0.68.68 activate
+ exit-address-family
+!

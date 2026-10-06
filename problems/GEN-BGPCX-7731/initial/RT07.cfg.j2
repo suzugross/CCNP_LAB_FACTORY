@@ -1,0 +1,47 @@
+! RT07 (role=bw, AS=65001) 初期構成
+interface Loopback0
+ ip address 10.0.52.52 255.255.255.255
+ ip ospf 1 area 0
+!
+interface {{ links[0] }}
+ ip address 10.173.173.2 255.255.255.252
+ ip ospf 1 area 0
+ no shutdown
+!
+interface {{ links[1] }}
+ ip address 10.163.163.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[2] }}
+ ip address 10.198.198.1 255.255.255.252
+ no shutdown
+!
+router ospf 1
+ router-id 10.0.52.52
+!
+route-map RM-LP-BACKUP permit 10
+ set local-preference 150
+!
+route-map RM-PREPEND-BACKUP permit 10
+ set as-path prepend 65001 65001 65001
+!
+router bgp 65001
+ bgp router-id 10.0.52.52
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.0.91.91 remote-as 65001
+ neighbor 10.0.91.91 update-source Loopback0
+ neighbor 10.163.163.2 remote-as 65100
+ neighbor 10.198.198.2 remote-as 65300
+ address-family ipv4 unicast
+  neighbor 10.0.91.91 activate
+  neighbor 10.0.91.91 send-community
+  neighbor 10.0.91.91 next-hop-self
+  neighbor 10.163.163.2 activate
+  neighbor 10.163.163.2 route-map RM-LP-BACKUP in
+  neighbor 10.163.163.2 route-map RM-PREPEND-BACKUP out
+  neighbor 10.198.198.2 activate
+  neighbor 10.198.198.2 default-originate
+  aggregate-address 172.31.0.0 255.255.252.0 summary-only
+ exit-address-family
+!

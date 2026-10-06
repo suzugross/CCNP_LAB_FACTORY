@@ -1,0 +1,77 @@
+# 自動生成 (gen_bgp_ring_ts.py) seed=4353
+problem: GEN-BGPRING-4353
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT01: 172.16.23.1
+    RT02: 172.16.190.1
+    RT03: 172.16.123.1
+    RT04: 172.16.24.1
+  links:
+  - a: RT01
+    a_ip: 10.68.103.1
+    b: RT02
+    b_ip: 10.68.103.2
+  - a: RT02
+    a_ip: 10.180.191.1
+    b: RT03
+    b_ip: 10.180.191.2
+  - a: RT03
+    a_ip: 10.50.176.1
+    b: RT04
+    b_ip: 10.50.176.2
+  - a: RT04
+    a_ip: 10.149.53.1
+    b: RT01
+    b_ip: 10.149.53.2
+invariants:
+- type: reachability_all
+  name: 全拠点網への到達性
+  points: 20
+- type: loop_free
+  name: 転送ループ不在
+  points: 10
+checks:
+- name: 'RT01: 他事業者網 172.16.123.0/24 への経路が RT04 を経由しない'
+  node: RT01
+  command: show ip bgp 172.16.123.0
+  raw:
+  - contains: 65029 64653
+  - not_contains: 64648 64653
+  points: 20
+- name: 'RT01: 自社網 172.16.24.0/24 の広告は維持されている'
+  node: RT01
+  command: show ip bgp 172.16.24.0
+  raw:
+  - regex: 64648\b
+  points: 5
+- name: 'RT03: 他事業者網 172.16.23.0/24 への経路が RT04 を経由しない'
+  node: RT03
+  command: show ip bgp 172.16.23.0
+  raw:
+  - contains: 65029 65047
+  - not_contains: 64648 65047
+  points: 20
+- name: 'RT03: 自社網 172.16.24.0/24 の広告は維持されている'
+  node: RT03
+  command: show ip bgp 172.16.24.0
+  raw:
+  - regex: 64648\b
+  points: 5
+- name: 'RT04: 事業者への広告が自社の経路のみである'
+  node: RT04
+  command: show ip bgp neighbors 10.149.53.2 advertised-routes
+  raw:
+  - contains: Total number of prefixes 1
+  - contains: 172.16.24.0
+  points: 10
+- name: 'RT04: 監査: フィルタは route-map で実装されている'
+  node: RT04
+  command: show run | section router bgp
+  raw:
+  - regex: neighbor 10.149.53.2 route-map \S+ out
+  - regex: neighbor 10.50.176.1 route-map \S+ out
+  - not_regex: filter-list
+  points: 10

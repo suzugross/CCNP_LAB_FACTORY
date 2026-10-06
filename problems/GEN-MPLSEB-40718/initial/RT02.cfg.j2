@@ -1,0 +1,76 @@
+! GEN-MPLSEB-40718 初期状態 (RT02 = PE / 変更対象)
+vrf definition CUST_A
+ rd 65000:100
+ address-family ipv4
+  route-target export 65000:100
+  route-target import 65000:100
+ exit-address-family
+!
+vrf definition CUST_B
+ rd 65000:200
+ address-family ipv4
+  route-target export 65000:200
+  route-target import 65000:200
+ exit-address-family
+!
+interface Loopback0
+ ip address 65.65.65.65 255.255.255.255
+!
+interface Loopback9
+ description === local mgmt (IGP/LDP 対象外) ===
+ ip address 10.255.2.1 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT05 (10.192.167.0/30) ===
+ ip address 10.192.167.1 255.255.255.252
+ mpls ip
+ no shutdown
+!
+interface {{ links[1] }}
+ description === to RT09 CUST_A-CE (site2, 192.168.222.0/30) ===
+ vrf forwarding CUST_A
+ ip address 192.168.222.2 255.255.255.252
+ ip tcp adjust-mss 1452
+ no shutdown
+!
+interface {{ links[2] }}
+ description === to RT10 CUST_B-CE (site2, 192.168.30.0/30) ===
+ vrf forwarding CUST_B
+ ip address 192.168.30.2 255.255.255.252
+ ip tcp adjust-mss 1452
+ no shutdown
+!
+mpls ldp router-id Loopback0 force
+!
+router ospf 1
+ router-id 65.65.65.65
+ network 65.65.65.65 0.0.0.0 area 0
+ network 10.192.167.0 0.0.0.3 area 0
+!
+ip prefix-list PL-CUST-LAN seq 5 permit 172.16.0.0/16 le 24
+route-map RM-CE-IN permit 10
+ match ip address prefix-list PL-CUST-LAN
+!
+router bgp 65000
+ bgp router-id 65.65.65.65
+ no bgp default ipv4-unicast
+ neighbor 24.24.24.24 remote-as 65000
+ neighbor 24.24.24.24 update-source Loopback0
+ neighbor 58.58.58.58 remote-as 65000
+ neighbor 58.58.58.58 update-source Loopback0
+ address-family vpnv4
+  neighbor 24.24.24.24 activate
+  neighbor 58.58.58.58 activate
+ exit-address-family
+ address-family ipv4 vrf CUST_A
+  neighbor 192.168.222.1 remote-as 65102
+  neighbor 192.168.222.1 activate
+  neighbor 192.168.222.1 route-map RM-CE-IN in
+ exit-address-family
+ address-family ipv4 vrf CUST_B
+  neighbor 192.168.30.1 remote-as 65200
+  neighbor 192.168.30.1 activate
+  neighbor 192.168.30.1 as-override
+  neighbor 192.168.30.1 route-map RM-CE-IN in
+ exit-address-family
+!

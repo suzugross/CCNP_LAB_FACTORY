@@ -1,0 +1,43 @@
+! RT02
+interface Loopback0
+ ip address 42.42.42.42 255.255.255.255
+!
+interface Loopback1
+ ip address 172.16.138.1 255.255.255.0
+!
+interface {{ links[1] }}
+ ip address 10.131.214.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[0] }}
+ ip address 10.31.114.2 255.255.255.252
+ no shutdown
+!
+router bgp 64990
+ bgp router-id 42.42.42.42
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ bgp bestpath compare-routerid
+ neighbor 10.131.214.2 remote-as 65285
+ neighbor 10.31.114.1 remote-as 64512
+ address-family ipv4 unicast
+  network 172.16.138.0 mask 255.255.255.0
+  neighbor 10.131.214.2 activate
+  neighbor 10.31.114.1 activate
+  neighbor 10.131.214.2 route-map RM-LP-IN in
+  neighbor 10.131.214.2 route-map RM-PREPEND-OUT out
+ exit-address-family
+!
+ip prefix-list PL-DIAG permit 172.16.72.0/24
+route-map RM-LP-IN permit 10
+ match ip address prefix-list PL-DIAG
+ set local-preference 200
+route-map RM-LP-IN permit 20
+!
+ip prefix-list PL-SELF permit 172.16.138.0/24
+route-map RM-PREPEND-OUT permit 10
+ match ip address prefix-list PL-SELF
+ set as-path prepend 64990 64990
+route-map RM-PREPEND-OUT permit 20
+!
+! NOTE: legacy policy retained for audit (2019 migration)

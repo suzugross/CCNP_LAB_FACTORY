@@ -491,10 +491,12 @@ def _tags_from_text(text):
 def _prefix_of(cell):
     """生成器一覧の「出題ID接頭」セルから GEN-XXXX を取り出す。
 
-    セルは `GEN-MPLSTS / GEN-MPLSEB` `GEN-EIGRPCX 等` のような書き方が混ざるので、
+    セルは `GEN-MPLSTS / GEN-MPLSEB` のような書き方が混ざるので、
     最初の GEN-トークンだけを採る(紙面・params 行は None で候補外になる)。
+    `GEN-DOJO-DLIST` のような多段の接頭辞は末尾まで採る(`GEN-DOJO-*` は `GEN-DOJO`)。
+    ★ここで採れる接頭辞は生成器が実際に書く ID と一致させること(食い違うと履歴と突き合わない・BL-175)。
     """
-    m = re.search(r"(?:GEN|PVT)-[A-Z0-9]+", cell or "")
+    m = re.search(r"(?:GEN|PVT)-[A-Z0-9]+(?:-[A-Z][A-Z0-9]*)*", cell or "")
     return m.group() if m else None
 
 
@@ -725,6 +727,44 @@ def leased_nodes(repo=REPO):
 # ==========================================================================
 # ラボ2問の選定
 # ==========================================================================
+def _lab_candidates(cat, allow_special=False):
+    """CATALOG の静的問題＋生成器 → 出題候補の辞書の列(select_labs と発掘枠が共用)。
+
+    生成器は「新 seed で新インスタンス」= 台数・分野は既存インスタンスから見積る
+    (生成器一覧の表は 内容/軸 が散文で、分野タグとしては使えないため)。
+    後継がある旧生成器は落とさず `deprecated` を立てて返す(呼び出し側が判断する)。
+    """
+    est, gtags = {}, {}
+    for g in cat["gen"]:
+        fam = family(g["id"])
+        est.setdefault(fam, []).append(g["nodes"])
+        gtags.setdefault(fam, set()).update(g["tags"])
+
+    cands = []
+    for it in cat["normal"] + cat["auto"] + (cat["special"] if allow_special else []):
+        cands.append(dict(it, source="static"))
+    for g in cat["generator"]:
+        if not g["prefix"] or not g["script"].endswith(".py"):
+            continue                      # 紙面・params 行など、ラボでないもの
+        sizes = sorted(est.get(g["prefix"], []))
+        if sizes:
+            nodes = sizes[len(sizes) // 2]
+        else:
+            # ★検証 seed を掃除した生成器は既存インスタンスが無い(主力 TS の多く)。
+            #   説明文から台数を読み、それも無ければ既定値で見積る。
+            nodes = _nodes_from_text(g["desc"] + " " + g["note"]) or DEFAULT_NODES
+        cands.append({"id": g["prefix"], "diff": g["diff"],
+                      "tags": (sorted(gtags.get(g["prefix"], set()))
+                               or _tags_from_text(g["desc"] + " " + g["note"])),
+                      "nodes": nodes, "kind": "generator",
+                      "script": g["script"], "note": g["note"],
+                      "desc": g["desc"], "source": "generator",
+                      "args": list(GEN_DEFAULT_ARGS.get(g["prefix"], [])),
+                      "deprecated": _deprecated(g["note"]), "pvt": bool(g.get("pvt")),
+                      "star": g["note"].count("★") + g["desc"].count("★")})
+    return cands
+
+
 def select_labs(cat, hist, *, count, budget, used, rnd,
                 diff_range=(3, 5), repeat_days=90, family_days=21,
                 allow_special=False,
@@ -753,37 +793,8 @@ def select_labs(cat, hist, *, count, budget, used, rnd,
         if age <= family_days:
             recent_fam.add(family(pid))
 
-    # GEN 生成器は「新 seed で新インスタンス」= 台数・分野は既存インスタンスから見積る
-    # (生成器一覧の表は 内容/軸 が散文で、分野タグとしては使えないため)
-    est, gtags = {}, {}
-    for g in cat["gen"]:
-        fam = family(g["id"])
-        est.setdefault(fam, []).append(g["nodes"])
-        gtags.setdefault(fam, set()).update(g["tags"])
-
-    cands = []
-    for it in cat["normal"] + cat["auto"] + (cat["special"] if allow_special else []):
-        cands.append(dict(it, source="static"))
-    for g in cat["generator"]:
-        if not g["prefix"] or not g["script"].endswith(".py"):
-            continue                      # 紙面・params 行など、ラボでないもの
-        if _deprecated(g["note"]):
-            continue                      # 後継に置き換えられた旧生成器は出さない
-        sizes = sorted(est.get(g["prefix"], []))
-        if sizes:
-            nodes = sizes[len(sizes) // 2]
-        else:
-            # ★検証 seed を掃除した生成器は既存インスタンスが無い(主力 TS の多く)。
-            #   説明文から台数を読み、それも無ければ既定値で見積る。
-            nodes = _nodes_from_text(g["desc"] + " " + g["note"]) or DEFAULT_NODES
-        cands.append({"id": g["prefix"], "diff": g["diff"],
-                      "tags": (sorted(gtags.get(g["prefix"], set()))
-                               or _tags_from_text(g["desc"] + " " + g["note"])),
-                      "nodes": nodes, "kind": "generator",
-                      "script": g["script"], "note": g["note"],
-                      "desc": g["desc"], "source": "generator",
-                      "args": list(GEN_DEFAULT_ARGS.get(g["prefix"], [])),
-                      "star": g["note"].count("★") + g["desc"].count("★")})
+    cands = [c for c in _lab_candidates(cat, allow_special=allow_special)
+             if not c.get("deprecated")]   # 後継に置き換えられた旧生成器は出さない
 
     # --lab-id で名指しされたものは制約(履歴・難易度)を素通しで最優先に入れる
     picked_pin, notes = [], []
@@ -1052,27 +1063,32 @@ def select_genre_labs(cat, hist, *, genres, count, budget, used, rnd,
 
 def select_rotation_labs(cat, hist, *, mode_name, count, budget, used, rnd,
                          family_days=21, today=None, log=print,
-                         build_rate=0.4, repeat_days=90, repo=REPO):
+                         build_rate=0.4, repeat_days=90, repo=REPO, exclude_units=(),
+                         allow_build=True):
     """単元ローテーション(BL-223・lab_rotation.py)で count 本を選ぶ。
 
     単元の順序は lab_rotation.plan_units(曜日表＋遅れ補正)。単元の中では構築を --build-rate の
     当たり時だけ候補に入れ(1 パック最大 1 本)、前回出した日が古いジャンルから解決する。
     解決できない単元(台数予算・カタログ欠落)は遅れ度順の代わりの単元で埋める。
     gap_days は掛けない(頻度は曜日表が決める)。大型スロット制限は予算 20 以下の時だけ。
+    count= 単元に回す本数(None なら mode の slots から発掘枠を引いた残り)。
+    exclude_units= 今日は発掘枠(BL-233)が同じ単元の問題を出すので外す単元。
+    allow_build= False なら単元側は TS のみ(発掘枠が構築問を出した日。構築は 1 日最大 1 本を保つ)。
     """
     import lab_rotation
     mode = lab_rotation.load_mode(repo, mode_name)
-    count = mode["slots"] if count is None else count
+    count = lab_rotation.rotation_slots(mode) if count is None else count
     seen = lab_rotation.last_seen(repo, mode, LAB_GENRES, today, hist)
-    plan = lab_rotation.plan_units(mode, today, seen)
+    plan = lab_rotation.plan_units(mode, today, seen, slots=count, exclude=exclude_units)
     for line in lab_rotation.describe(mode, today, seen, plan):
         log(line)
     picks, fallback, _ = plan
     genre_last = lab_rotation.genre_last_issued(repo)
     notes, picked, total, groups = [], [], 0, set()
     big_rules = budget <= BIG_RULE_BUDGET
-    build_ok = rnd.random() < build_rate
-    notes.append(f"構築(確率{build_rate:.2f}): {'当たり= 1 本まで構築を候補に' if build_ok else '外れ → TS のみ'}")
+    build_ok = rnd.random() < build_rate and allow_build
+    notes.append("構築: 発掘枠が構築問なので単元側は TS のみ" if not allow_build else
+                 f"構築(確率{build_rate:.2f}): {'当たり= 1 本まで構築を候補に' if build_ok else '外れ → TS のみ'}")
     for unit in picks + fallback:
         if len(picked) >= count:
             break
@@ -1116,6 +1132,192 @@ def select_rotation_labs(cat, hist, *, mode_name, count, budget, used, rnd,
                      f"{'・構築' if p.get('build') else ''})" for p in picked)
     notes.insert(0, f"単元ローテーション {len(picked)}/{count} 問: {desc or '(なし)'}")
     return picked, notes, total
+
+
+# ==========================================================================
+# 発掘枠(BL-233): 単元ローテーションが引けない資産を「最後に出した日が古い順」で回す
+# ==========================================================================
+DISCOVERY_KIND_JA = {"generator": "生成器", "static": "静的"}
+
+
+def rotation_reach(mode):
+    """単元ローテーションが引ける生成器接頭辞と静的 ID(= 発掘枠では扱わないもの)。"""
+    prefixes, ids = set(), set()
+    for spec in mode["units"].values():
+        for g in spec["genres"]:
+            gs = LAB_GENRES.get(g) or {}
+            prefixes |= set(gs.get("prefixes", []))
+            ids |= {i for tier in gs.get("ids", []) for i in tier}
+    return prefixes, ids
+
+
+def _issued_as(pid, cand):
+    """出題履歴の ID が候補 cand のものか。
+
+    生成器は接頭辞の前方一致で見る(`family()` は `GEN-DOJO-DLIST-123` のような多段の接頭辞を
+    拾えないため)。`GEN-REDIST` が `GEN-REDISTMP-…` を拾わないよう、区切りの `-` まで含めて比べる。
+    """
+    if cand["source"] != "generator":
+        return pid == cand["id"]
+    return pid == cand["id"] or pid.startswith(cand["id"] + "-")
+
+
+def discovery_last_issued(repo):
+    """発掘枠が出した候補キー → 最後に出した日(パック manifest のラボ行の `pool` から)。
+
+    ★履歴の ID 接頭辞だけに頼らない理由: 生成器が書く ID がカタログの接頭辞と食い違うと
+      (BL-175 の型)その候補は永久に「記録なし」= 毎回先頭に来て、他が回らなくなる。
+      発掘枠が自分で選んだキーを控えておけば、ID の付け方に関係なく一巡が保証される。
+    """
+    out = {}
+    for path in glob.glob(os.path.join(repo, "packs", "*", "manifest.yml")):
+        try:
+            man = read_manifest(os.path.dirname(path))
+        except Exception:                 # 古い書式・壊れた manifest は読み飛ばす(順序の参考情報なので)
+            continue
+        if str(man.get("dry_run", "")).lower() == "true":
+            continue                      # プレビューは出題していない
+        created = str(man.get("created", ""))[:10]
+        for it in man["items"]:
+            key = it.get("pool")
+            if key and not it.get("error") and created > out.get(key, ""):
+                out[key] = created
+    return out
+
+
+def discovery_pool(cat, mode, *, allow_non_cisco=False, allow_automation=False):
+    """発掘枠の候補と、対象から外したもの。返り値 (候補の列, [(ID, 理由)])。
+
+    対象= 単元ローテーション(mode の units → LAB_GENRES)が引けない生成器と静的問題。
+    外すもの= 保留(mode の discovery.hold)・後継がある旧生成器・非 Cisco・自動化・
+    専用 CLI 運用(パックの構築/採点が lab.sh 前提)・難易度が min_diff 未満。
+    """
+    disc = mode["discovery"]
+    prefixes, ids = rotation_reach(mode)
+    pool, skipped, seen = [], [], set()
+    for c in _lab_candidates(cat, allow_special=True):
+        if c["source"] == "generator":
+            if c["id"] in prefixes or "paper" in c["script"]:
+                continue                  # ローテーション側の生成器・紙面の生成器
+        elif c["id"] in ids or "紙面" in c.get("access", ""):
+            continue                      # ローテーション側の静的問題・機器なしの紙面
+        if c["id"] in seen:
+            continue                      # 同じ接頭辞の行が複数ある(1 つの生成器の別モード等)
+        seen.add(c["id"])
+        if c["id"] in disc["hold"]:
+            why = f"保留: {disc['hold'][c['id']]}"
+        elif c.get("deprecated"):
+            why = "後継の生成器がある"
+        elif c["kind"] == "special":
+            why = "専用 CLI 運用(パック未対応)"
+        elif _non_cisco(c) and not allow_non_cisco:
+            why = "非 Cisco"
+        elif _automation(c) and not allow_automation:
+            why = "自動化"
+        elif c["diff"] and c["diff"] < disc["min_diff"]:
+            why = f"難{c['diff']}(下限 {disc['min_diff']})"
+        else:
+            pool.append(c)
+            continue
+        skipped.append((c["id"], why))
+    return pool, skipped
+
+
+def discovery_queue(cat, hist, mode, today, *, repo=REPO, **flags):
+    """発掘枠の待ち行列。各候補に `last`(最後に出した日・無ければ "")を付けて返す。"""
+    pool, skipped = discovery_pool(cat, mode, **flags)
+    by_pool = discovery_last_issued(repo)
+    day = today.isoformat()
+    for c in pool:
+        dates = [d for d, pid in hist if d <= day and _issued_as(pid, c)]
+        if by_pool.get(c["id"], "") and by_pool[c["id"]] <= day:
+            dates.append(by_pool[c["id"]])
+        c["last"] = max(dates, default="")
+    return pool, skipped
+
+
+def select_discovery_labs(cat, hist, *, mode, count, budget, used, rnd, today,
+                          repo=REPO, log=print, **flags):
+    """発掘枠で count 本を選ぶ。返り値 (選定リスト, メモ, 合計台数)。
+
+    ★順序は「最後に出した日が古い順」(記録なしが最優先)で、乱数は同じ日のもの同士の並びにしか
+      使わない。候補が N 件なら N 回以内に必ず全件が一巡する(抽選だけだと偏って出ないものが残る)。
+    ★種別(生成器/静的)は mode の discovery.kinds の順に日替わりで交互。生成器は新 seed で何度でも
+      出せるが、静的問題は 1 問 1 回なので、混ぜて古い順にすると未出題の静的問題が先に並び切ってしまう。
+      その種別で出せるもの(台数予算)が無い日はもう一方から選ぶ。
+    """
+    if count <= 0:
+        return [], [], 0
+    pool, _ = discovery_queue(cat, hist, mode, today, repo=repo, **flags)
+    kinds = [k for k in mode["discovery"]["kinds"] if k in DISCOVERY_KIND_JA] or list(DISCOVERY_KIND_JA)
+    extra_args = mode["discovery"]["args"]
+    for c in pool:
+        c["_tie"] = rnd.random()
+    pool.sort(key=lambda c: (c["last"], c["_tie"]))
+    picked, notes, total = [], [], 0
+    for slot in range(count):
+        start = (today.toordinal() + slot) % len(kinds)
+        got = None
+        for kind in kinds[start:] + kinds[:start]:
+            for c in pool:
+                if c["source"] != kind or c in picked:
+                    continue
+                if total + c["nodes"] + used > budget:
+                    notes.append(f"発掘枠: {c['id']} は台数予算に入らず次回へ"
+                                 f"({c['nodes']}台・稼働中{used}+選定{total}/{budget})")
+                    continue
+                got = c
+                break
+            if got:
+                break
+        if got is None:
+            notes.append("発掘枠: 出せる候補が無い(台数予算か、候補ゼロ)")
+            break
+        picked.append(got)
+        total += got["nodes"]
+    labs = []
+    for c in picked:
+        kind_ja = DISCOVERY_KIND_JA[c["source"]]
+        extra = extra_args.get(c["id"]) or []
+        if extra and isinstance(extra[0], list):
+            extra = rnd.choice(extra)     # 引数の組が複数あれば 1 組を抽選(検証済みの故障だけに絞る等)
+        labs.append({"id": c["id"], "script": c.get("script"), "nodes": c["nodes"] or DEFAULT_NODES,
+                     "diff": c["diff"], "source": c["source"], "kind": c["kind"],
+                     "label": f"発掘枠({kind_ja})", "tags": c.get("tags", []),
+                     "args": list(c.get("args", [])) + list(extra),
+                     "variant": c.get("variant", ""), "pvt": bool(c.get("pvt")),
+                     "genre": "discovery", "pool": c["id"], "build": not _is_ts(c), "group": None,
+                     "minutes": 60, "last": c["last"]})
+    desc = "・".join(f"{lb['id']}({DISCOVERY_KIND_JA[lb['source']]}/{lb['nodes']}台・"
+                     f"前回 {lb['last'] or '記録なし'})" for lb in labs)
+    notes.insert(0, f"発掘枠 {len(labs)}/{count} 問(ローテーション外を古い順に): {desc or '(なし)'}")
+    return labs, notes, total
+
+
+def describe_discovery(cat, hist, mode, today, *, repo=REPO, full=False, head=6, **flags):
+    """発掘枠の待ち行列を人が読む形で(lab_rotation.py の単体実行が出す)。"""
+    n = mode["discovery"]["slots"]
+    if n <= 0:
+        return ["[発掘] このモードは発掘枠を使わない(discovery.slots = 0)"]
+    pool, skipped = discovery_queue(cat, hist, mode, today, repo=repo, **flags)
+    kinds = [k for k in mode["discovery"]["kinds"] if k in DISCOVERY_KIND_JA] or list(DISCOVERY_KIND_JA)
+    first = kinds[today.toordinal() % len(kinds)]
+    lines = [f"[発掘] 1 日 {n} 本・今日の種別= {DISCOVERY_KIND_JA[first]}"
+             f"(日替わりで {'→'.join(DISCOVERY_KIND_JA[k] for k in kinds)})"]
+    for kind in kinds:
+        q = sorted((c for c in pool if c["source"] == kind), key=lambda c: (c["last"], c["id"]))
+        never = sum(1 for c in q if not c["last"])
+        lines.append(f"[発掘] {DISCOVERY_KIND_JA[kind]} {len(q)} 件(うち出題記録なし {never} 件)・古い順:")
+        for c in (q if full else q[:head]):
+            lines.append(f"[発掘]    {c['id']:<28} 前回 {c['last'] or '記録なし':<10} 難{c['diff']} {c['nodes']}台")
+        if not full and len(q) > head:
+            lines.append(f"[発掘]    … ほか {len(q) - head} 件(--all で全件)")
+    why = {}
+    for pid, w in skipped:
+        why.setdefault(w, []).append(pid)
+    for w, pids in sorted(why.items(), key=lambda kv: -len(kv[1])):
+        lines.append(f"[発掘] 対象外 {len(pids)} 件 — {w}: {', '.join(pids) if full or len(pids) <= 6 else ', '.join(pids[:6]) + ' …'}")
+    return lines
 
 
 # ==========================================================================
@@ -1297,12 +1499,13 @@ def gen_rotation_papers(repo, rot, slot, count, seed, a, log, exclude=()):
     return made
 
 
-def run(cmd, repo, log, label, timeout=3600):
-    """外部コマンドを回してログに落とす。(rc, stdout) を返す。"""
+def run(cmd, repo, log, label, timeout=3600, env=None):
+    """外部コマンドを回してログに落とす。(rc, stdout) を返す。env= 追加の環境変数。"""
     log(f"[{label}] $ {' '.join(str(c) for c in cmd)}")
     try:
         r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True,
-                           timeout=timeout)
+                           timeout=timeout,
+                           env={**os.environ, **env} if env else None)
     except subprocess.TimeoutExpired:
         log(f"[{label}] ★タイムアウト({timeout}s)")
         return 124, ""
@@ -1342,7 +1545,9 @@ def provision_lab(repo, prob_id, variant, log):
     cmd = [os.path.join(repo, "scripts/lab.sh"), "provision", prob_id]
     if variant:
         cmd.append(variant)
-    rc, out = run(cmd, repo, log, f"provision {prob_id}")
+    # パックのラボはキャンバスの要約注釈を貼らない(盤面を開いただけで題材が割れるため)。
+    rc, out = run(cmd, repo, log, f"provision {prob_id}",
+                  env={"LAB_TASK_ANNOTATION": "off"})
     task = os.path.join(repo, "lab", prob_id, "問題.md")
     if rc != 0 or not os.path.exists(task):
         why = f"provision 失敗(rc={rc} / 問題.md {os.path.exists(task)})"
@@ -1546,7 +1751,8 @@ def borrow_papers(repo, count, today):
 # 成果物の生成(HTML / 解答用紙 / manifest)
 # ==========================================================================
 def q_title(no, item):
-    kind = "紙面" if item["kind"] == "paper" else "ラボ"
+    """問題ページの題名(画面の枠= 英語・BL-236)。解答.md の見出し(紙面/ラボ)とは別物。"""
+    kind = "Paper" if item["kind"] == "paper" else "Lab"
     return f"Q{no} ({kind} {item['ref']})"
 
 
@@ -1567,7 +1773,7 @@ def cloze_inline_selects(it, src_path):
         opts = f'<option value="">{tk}</option>' + "".join(
             f'<option value="{tk}{l}">{l}. {H.escape((texts.get(l) or "")[:60])}</option>' for l in letters)
         out[tk] = (f'<select class="msel inline" name="ans{it["no"]}_{i}" data-k="{tk}" '
-                   f'title="空欄 {tk}">{opts}</select>')
+                   f'title="Blank {tk}">{opts}</select>')
     return out
 
 
@@ -1582,11 +1788,11 @@ def answer_form(pack_id, it, src_path):
     ref = H.escape(str(it.get("ref", "")))
     head = (f'<section class="answer" data-pack="{H.escape(pack_id)}" '
             f'data-no="{it["no"]}" data-kind="{kind}" data-ref="{ref}">'
-            f"<h2>解答</h2>")
+            f"<h2>Answer</h2>")
     if kind == "lab":
-        body = ('<label class="row">メモ（任意・実機の設定が解答の本体です）</label>'
+        body = ('<label class="row">Notes (optional — the configuration on the devices is your answer)</label>'
                 '<textarea class="memo"></textarea>'
-                '<label class="done"><input type="checkbox"> 実装完了</label>')
+                '<label class="done"><input type="checkbox"> Done</label>')
     else:
         letters, pick, terms = [], 1, []
         if src_path and os.path.exists(src_path):
@@ -1604,8 +1810,8 @@ def answer_form(pack_id, it, src_path):
             # ★2026-09-20 ユーザ要望: プルダウンは本文中の ［①］ の位置に埋め込む(cloze_inline_selects →
             #   render_html.render(inline_blanks=…))。解答欄には案内と選択状況の要約だけを置く。
             last = blanks[-1][0]
-            ansfield = (f'<label class="row">空欄 ①〜{last} は<b>本文中のプルダウン</b>で選んでください'
-                        '（選択状況は下に映ります）</label><div class="clsum"></div>')
+            ansfield = (f'<label class="row">Fill blanks ①–{last} with the <b>drop-downs in the text</b> '
+                        '(your selections are mirrored below).</label><div class="clsum"></div>')
         elif letters and terms:
             # ★組合せ形(項目①〜と記号A〜の対応付け・BL-168): 項目ごとに記号を1つ選ぶ。
             #   値は「①D」の形。ページの ansValue() はチェック済みを全部「・」でつなぐので
@@ -1617,8 +1823,8 @@ def answer_form(pack_id, it, src_path):
                     f'value="{tk}{l}">{l}</label>' for l in letters)
                 rows.append(f'<div class="mrow"><span class="mterm">{tk} '
                             f'{H.escape(ttext)}</span><div class="opts">{opts}</div></div>')
-            ansfield = ('<label class="row">各項目に対応する記号を<b>1つずつ</b>'
-                        '選んでください</label>' + "".join(rows))
+            ansfield = ('<label class="row">Choose <b>one</b> letter for each item.</label>'
+                        + "".join(rows))
         elif letters:
             # ★複数選択(「2つを選択してください」)はチェックボックスにする。
             #   ラジオのままだと1つしか選べず**解答不能**になる(2026-08-11 発覚)。
@@ -1629,33 +1835,81 @@ def answer_form(pack_id, it, src_path):
                 f'<label><input type="{typ}" name="ans{it["no"]}" '
                 f'value="{l}">{l}</label>' for l in letters)
             hint = ("" if pick == 1 else
-                    '<label class="row">該当するものを<b>すべて選択</b>して'
-                    'ください(数は示されていません)</label>' if pick == -1 else
-                    f'<label class="row">この問題は <b>{pick}つ選択</b>です</label>')
+                    '<label class="row">Select <b>all that apply</b> '
+                    '(the number is not given).</label>' if pick == -1 else
+                    f'<label class="row">Select <b>{pick}</b> answers.</label>')
             ansfield = f'{hint}<div class="opts">{opts}</div>'
         else:                       # 記述式(選択肢なし)
-            ansfield = ('<label class="row">解答</label>'
+            ansfield = ('<label class="row">Answer</label>'
                         '<textarea class="ans"></textarea>')
         # ★BL-212(2026-09-21 ユーザ要望): 「答え合わせ」ボタン。押した時点の解答で正誤を
         #   即時表示(緑/赤)し、その問の入力をロックする(=初回解答の確定。解説は採点後のまま)。
         #   2026-09-28 から選択肢ごとの正解/不正解も色分けする(render_html.ANSWER_JS の markKey)。
         #   判定は pack_server の /_api/check がサーバ側で行う(正解キーはページに置かない)。
         body = (ansfield +
-                '<label class="row">根拠（任意）</label>'
+                '<label class="row">Rationale (optional)</label>'
                 '<textarea class="why"></textarea>'
-                '<div class="chkrow"><button type="button" class="chk">答え合わせ</button>'
+                '<div class="chkrow"><button type="button" class="chk">Check answer</button>'
                 '<span class="chkres"></span>'
-                '<span class="chknote">押すと正誤と正解の選択肢を色で示し、この問の解答を確定します（解説は採点後）</span></div>'
-                '<label class="done"><input type="checkbox"> 解答済</label>')
+                '<span class="chknote">Shows whether you are right and marks the correct choices in color, '
+                'then locks your answer for this question (explanations come after grading).</span></div>'
+                '<label class="done"><input type="checkbox"> Answered</label>')
     return head + body + '<div class="savemsg"></div></section>'
 
 
-def build_nav(items, cur_no):
-    nav = [{"label": "目次", "href": "index.html"}]
+def q_href(it, pack_id=""):
+    """問題へのリンク先。ラボは最初からワークスペースで開く(BL-236・2026-10-07 ユーザ指示)。
+
+    行き先は配信サーバの /_lab(そこからワークスペースのサーバ lab_console.py へ転送される。
+    ワークスペースが上がっていなければ、単体の問題ページ q<N>.html へ落ちる)。
+    """
+    if pack_id and it.get("kind") == "lab" and it.get("src"):
+        return f"/_lab?pack={pack_id}&no={it['no']}"
+    return f"q{it['no']}.html"
+
+
+def build_nav(items, cur_no, pack_id="", workspace_link=True):
+    """ナビ帯(画面の下端= render_html の .nav)。target=_top = ワークスペースの左枠の中で押しても画面ごと移る。
+
+    workspace_link= ラボの問題ページ単体(q<N>.html)に、ワークスペースへの入口を帯の右端に置く。
+    ワークスペースの中で出す版(q<N>.ws.html)には置かない(すでに中に居る)。
+    """
+    nav = [{"label": "Contents", "href": "index.html", "target": "_top"}]
     for it in items:
         n = it["no"]
-        nav.append({"label": f"Q{n}", "href": f"q{n}.html", "current": n == cur_no})
+        nav.append({"label": f"Q{n}", "href": q_href(it, pack_id), "current": n == cur_no,
+                    "target": "_top"})
+    cur = next((it for it in items if it["no"] == cur_no), None)
+    if workspace_link and pack_id and cur and cur.get("kind") == "lab" and cur.get("src"):
+        nav.append({"label": "Open lab workspace ▸", "href": q_href(cur, pack_id),
+                    "spacer": True, "target": "_top"})
     return nav
+
+
+def write_workspace_pages(src, pdir, it, items, pack_id, meta, mermaid_js, mermaid_mode):
+    """ラボのワークスペース(lab_console.py・BL-234)用の別版を書く。
+
+    ワークスペースには CML から起こした結線図の Topology タブがあるので、問題文の盤面の節
+    (トポロジ／構成図)は Task タブに出さず Topology タブへ移す。節にはアドレス・AS など
+    結線図に無い情報が載るので、消さずに置き場所だけ変える(2026-10-06 ユーザ指示)。
+      q<N>.ws.html   … ワークスペースの左枠に出す問題ページ。盤面の節を除き、ナビ帯に
+                       「Open lab workspace」を置かない(すでに中に居る)。解答欄は q<N>.html と同じ
+      q<N>.topo.html … 盤面の節だけ(結線図の下に出す)。盤面の節がある問題だけ
+    問題ページ単体(q<N>.html)は従来どおり全文(ワークスペースが上がっていない時の受け皿)。
+    """
+    with open(src, encoding="utf-8") as fh:
+        rest, topo = render_html.split_topology(fh.read())
+    no = it["no"]
+    with open(os.path.join(pdir, f"q{no}.ws.html"), "w", encoding="utf-8") as fh:
+        fh.write(render_html.render(rest, title=q_title(no, it),
+                                    nav=build_nav(items, no, pack_id, workspace_link=False), meta=meta,
+                                    mermaid_js=mermaid_js, mermaid_mode=mermaid_mode,
+                                    answer_form=answer_form(pack_id, it, src)))
+    if not topo:
+        return
+    with open(os.path.join(pdir, f"q{no}.topo.html"), "w", encoding="utf-8") as fh:
+        fh.write(render_html.render(topo, title=f"{q_title(no, it)} — Topology",
+                                    mermaid_js=mermaid_js, mermaid_mode=mermaid_mode))
 
 
 def write_pages(repo, pdir, items, mermaid_js, mermaid_mode="cdn", pack_id=""):
@@ -1664,25 +1918,36 @@ def write_pages(repo, pdir, items, mermaid_js, mermaid_mode="cdn", pack_id=""):
     for it in items:
         src = os.path.join(repo, it["src"]) if it.get("src") else ""
         out = os.path.join(pdir, f"q{it['no']}.html")
+        for variant in ("ws", "topo"):          # ワークスペース用の別版は毎回作り直す(差し替え後の残骸を残さない)
+            stale = os.path.join(pdir, f"q{it['no']}.{variant}.html")
+            if os.path.exists(stale):
+                os.remove(stale)
         if not src or not os.path.exists(src):
             body = (f"# {q_title(it['no'], it)}\n\n"
-                    f"> ★この問題は準備に失敗しました（{it.get('error', '理由不明')}）。\n"
-                    f"> 出題者（Claude）に伝えてください。\n")
+                    f"> ★This question could not be prepared ({it.get('error', 'unknown reason')}).\n"
+                    f"> Tell the examiner (Claude).\n")
             with open(out, "w", encoding="utf-8") as fh:
                 fh.write(render_html.render(body, title=q_title(it["no"], it),
-                                            nav=build_nav(items, it["no"]),
+                                            nav=build_nav(items, it["no"], pack_id),
                                             mermaid_mode=mermaid_mode,
                                             answer_form=answer_form(pack_id, it, "")))
         else:
-            meta = ("機器に接続して解く問題です。作業フォルダ: lab/%s/" % it["ref"]
+            meta = ("Hands-on lab. Connect to the devices to solve it. Working folder: lab/%s/" % it["ref"]
                     if it["kind"] == "lab" else
-                    "机上問題。機器には接続せず、示された出力だけで解答してください。")
+                    "Paper question. Do not connect to any device; answer from the output shown.")
+            # ラボは英文出題が基本: 英語版(lab/<ID>/Task.md)が置かれていればそちらを描画する。
+            # 置くのは出題者(quiz スキル「英語出題」節)。無ければ日本語の 問題.md のまま。
+            en = os.path.join(repo, "lab", it["ref"], "Task.md")
+            if it["kind"] == "lab" and os.path.exists(en):
+                src = en
             render_html.render_file(src, out, title=q_title(it["no"], it),
-                                    nav=build_nav(items, it["no"]), meta=meta,
+                                    nav=build_nav(items, it["no"], pack_id), meta=meta,
                                     mermaid_js=mermaid_js,
                                     mermaid_mode=mermaid_mode,
                                     answer_form=answer_form(pack_id, it, src),
                                     inline_blanks=cloze_inline_selects(it, src))
+            if it["kind"] == "lab":
+                write_workspace_pages(src, pdir, it, items, pack_id, meta, mermaid_js, mermaid_mode)
         written.append(out)
     return written
 
@@ -1693,41 +1958,43 @@ def index_md(pack_id, items, notes, dry_run, report=False):
     def _est(it):                     # ラボはジャンルごとの目安(MPLS 構築 90 等・BL-158)
         return int(it.get("est") or est[it["kind"]])
     total = sum(_est(it) for it in items)
-    lines = [f"# {pack_id} — 問題パック", ""]
+    lines = [f"# {pack_id} — Question Pack", ""]
     if report:
         # ★採点後は解説ページへの導線を最上部に置く(2026-09-20 ユーザ指示)
-        lines += ["> 📘 **採点済み** — [解説ページを開く（正答・あなたの解答・"
-                  "なぜそうなるか）](report.html)", ""]
+        lines += ["> 📘 **Graded** — [Open the review page (correct answers, your answers, "
+                  "and why)](report.html)", ""]
     if dry_run:
-        lines += ["> ★これは **--dry-run のプレビュー**です。紙面は既出のものを借りて",
-                  "> 体裁を確認するためのもので、ラボは構築されていません。", ""]
+        lines += ["> ★This is a **--dry-run preview**. The paper questions are borrowed from earlier ones",
+                  "> to check the layout, and the labs are not built.", ""]
     # dry-run で「ラボ未構築」は想定どおりなので警告しない(本番の失敗だけを目立たせる)
     broken = [it for it in items if not it.get("src")
               and not (dry_run and it["kind"] == "lab")]
     if broken:
-        lines += ["> ★**準備できなかった問題があります**: " +
+        lines += ["> ★**Some questions could not be prepared**: " +
                   ", ".join(f"Q{it['no']}" for it in broken),
-                  "> 出題者（Claude）に伝えてください。", ""]
-    lines += [f"全 {len(items)} 問 / 目安 約 {total // 60} 時間{total % 60}分。"
-              "解答は `解答.md` に書き込んでください。", "",
-              "| # | 種別 | 問題 | 目安 | 解き方 |",
-              "|---|------|------|------|--------|"]
+                  "> Tell the examiner (Claude).", ""]
+    lines += [f"{len(items)} questions / about {total // 60} h {total % 60} min. "
+              "Your answers are saved to `解答.md`.", "",
+              "| # | Type | Question | Est. | How to solve |",
+              "|---|------|----------|------|--------------|"]
     for it in items:
         if it["kind"] == "paper":
-            how = "機器に接続しない（示された出力だけで解答）"
+            how = "No device access (answer from the output shown)"
         else:
-            how = f"CML コンソールで解く（作業フォルダ `lab/{it['ref']}/`）"
-        lines.append(f"| [Q{it['no']}](q{it['no']}.html) | "
-                     f"{'紙面' if it['kind'] == 'paper' else 'ラボ'} | "
-                     f"`{it['ref']}` | {_est(it)}分 | {how} |")
-    lines += ["", "## 進め方", "",
-              "1. 上の表から各問を開く（順不同）。",
-              "2. **各ページの下にある解答欄に書き込む**（自動で `解答.md` に保存される）。"
-              "ラボ問題は**実機の設定が本体**なので、状態を `実装完了` にするだけでよい。",
-              "3. 全部終わったら「採点して」と伝える。", "",
-              "※ 解答欄が「保存できません」と出る場合は `scripts/pack.sh serve` 経由で"
-              "開いていない。`解答.md` を直接編集しても同じことができる。", "",
-              "## この回の構成メモ", ""]
+            how = (f"Solve on the device consoles (opens in the lab workspace: task, topology, and "
+                   f"consoles on one screen. Working folder `lab/{it['ref']}/`)")
+        lines.append(f"| [Q{it['no']}]({q_href(it, pack_id)}) | "
+                     f"{'Paper' if it['kind'] == 'paper' else 'Lab'} | "
+                     f"`{it['ref']}` | {_est(it)} min | {how} |")
+    lines += ["", "## How to proceed", "",
+              "1. Open each question from the table above (in any order).",
+              "2. **Enter your answer in the answer area at the bottom of each page** "
+              "(it is saved to `解答.md` automatically). "
+              "For a lab, **the configuration on the devices is your answer**, so you only need to tick `Done`.",
+              "3. When you have finished, ask for grading (「採点して」).", "",
+              "Note: if the answer area reports that it cannot save, the page was not opened through "
+              "`scripts/pack.sh serve`. Editing `解答.md` directly has the same effect.", "",
+              "## Build notes", ""]
     lines += [f"- {n}" for n in notes]
     return "\n".join(lines) + "\n"
 
@@ -1787,7 +2054,7 @@ def write_manifest(pdir, manifest):
     for it in manifest["items"]:
         lines.append(f"  - no: {it['no']}")
         for k in ("kind", "slot", "ref", "src", "key", "form", "variant",
-                  "nodes", "state", "ops", "error", "warn", "genre", "unit",
+                  "nodes", "state", "ops", "error", "warn", "genre", "unit", "pool",
                   "lab_score", "lab_fails"):   # ラボ採点の結果(再描画で使う)
             if it.get(k) not in (None, ""):
                 lines.append(f"    {k}: {esc(it[k])}")
@@ -2284,7 +2551,7 @@ body.report main{max-width:940px; background:#ffffff; margin:1.2rem auto;
   box-shadow:0 2px 12px rgba(16,24,40,.07)}
 body.report h1{border-bottom:3px solid #4b5bd6; color:#1f2a55}
 body.report h2{border-bottom:1px solid #dfe4ee; color:#33406b; margin-top:2.2rem}
-body.report .nav{background:#1f2a55; border-bottom:none}
+body.report .nav{background:#1f2a55; border:none}
 body.report .nav a{color:#cdd6ff}
 body.report .nav .cur{color:#9aa6d8}
 .scorebox{display:flex; align-items:baseline; gap:.9rem; color:#ffffff;
@@ -3098,10 +3365,25 @@ def build_pack(a, pack_no=1, n_packs=1, require=None, exclude=(),
         import lab_rotation
         rday = (datetime.date.fromisoformat(a.lab_date) if a.lab_date
                 else lab_rotation.quota_today(repo))
+        mode = lab_rotation.load_mode(repo, a.lab_mode)
+        n_total = mode["slots"] if a.lab is None else a.lab
+        n_disc = mode["discovery"]["slots"] if a.discovery is None else a.discovery
+        if n_total <= n_disc:
+            n_disc = 0                    # 本数を絞った回は単元ローテーションを優先する
+        # ★BL-233: 発掘枠を先に取る(後回しにすると大型の候補が台数予算に入らず永久に出ない)。
+        #   同じ単元を同じ日に 2 本出さないよう、発掘枠が当たった単元は今日のローテーションから外す。
+        disc_labs, dnotes, disc_nodes = select_discovery_labs(
+            cat, hist, mode=mode, count=n_disc, budget=a.budget, used=used, rnd=rnd,
+            today=rday, repo=repo, log=log, allow_non_cisco=a.allow_non_cisco,
+            allow_automation=a.allow_automation)
+        matchers = lab_rotation.unit_matchers(mode, LAB_GENRES)
+        skip = {u for u in (lab_rotation.unit_of(lb["id"], matchers) for lb in disc_labs) if u}
         labs, notes, used_nodes = select_rotation_labs(
-            cat, hist, mode_name=a.lab_mode, count=a.lab, budget=a.budget, used=used,
-            rnd=rnd, family_days=a.family_days, today=rday, log=log,
-            build_rate=a.build_rate, repeat_days=a.repeat_days, repo=repo)
+            cat, hist, mode_name=a.lab_mode, count=n_total - len(disc_labs), budget=a.budget,
+            used=used + disc_nodes, rnd=rnd, family_days=a.family_days, today=rday, log=log,
+            build_rate=a.build_rate, repeat_days=a.repeat_days, repo=repo, exclude_units=skip,
+            allow_build=not any(lb["build"] for lb in disc_labs))
+        labs, notes, used_nodes = labs + disc_labs, notes + dnotes, used_nodes + disc_nodes
     else:
         labs, notes, used_nodes = ([], [], 0) if n_lab <= 0 else select_genre_labs(
             cat, hist, genres=genres, count=n_lab, budget=a.budget, used=used,
@@ -3145,6 +3427,7 @@ def build_pack(a, pack_no=1, n_packs=1, require=None, exclude=(),
         it = {"no": no, "kind": "lab", "ref": lb["id"], "src": "",
               "nodes": lb["nodes"], "state": "未着手",
               "genre": lb.get("genre", ""), "unit": lb.get("unit", ""),
+              "pool": lb.get("pool", ""),          # 発掘枠の候補キー(discovery_last_issued が読む)
               "est": int(lb.get("minutes") or 60)}
         if a.dry_run:
             it["ref"] = (f"{lb['id']}-<新seed>" if lb["source"] == "generator"
@@ -3208,8 +3491,8 @@ def build_pack(a, pack_no=1, n_packs=1, require=None, exclude=(),
                 pack_id=pack_id)
     idx = index_md(pack_id, items, notes, a.dry_run)
     with open(os.path.join(pdir, "index.html"), "w", encoding="utf-8") as fh:
-        fh.write(render_html.render(idx, title=f"{pack_id} — 問題パック",
-                                    nav=build_nav(items, 0),
+        fh.write(render_html.render(idx, title=f"{pack_id} — Question Pack",
+                                    nav=build_nav(items, 0, pack_id),
                                     mermaid_mode=a.mermaid))
     log(f"[出力] 図の描画方法: {a.mermaid}")
     sheet = os.path.join(pdir, "解答.md")
@@ -3348,8 +3631,8 @@ def cmd_replace(a):
                 pack_id=pack_id)
     idx = index_md(pack_id, items, man.get("notes", []), False)
     with open(os.path.join(pdir, "index.html"), "w", encoding="utf-8") as fh:
-        fh.write(render_html.render(idx, title=f"{pack_id} — 問題パック",
-                                    nav=build_nav(items, 0),
+        fh.write(render_html.render(idx, title=f"{pack_id} — Question Pack",
+                                    nav=build_nav(items, 0, pack_id),
                                     mermaid_mode=a.mermaid))
     history_upsert(repo, prob_id, state="出題中",
                    memo=f"パック {pack_id} の Q{a.no}(差し替え)", log=log)
@@ -3434,8 +3717,8 @@ def cmd_render(a):
     idx = index_md(pack_id, items, man.get("notes", []),
                    man.get("dry_run") == "true")
     with open(os.path.join(pdir, "index.html"), "w", encoding="utf-8") as fh:
-        fh.write(render_html.render(idx, title=f"{pack_id} — 問題パック",
-                                    nav=build_nav(items, 0),
+        fh.write(render_html.render(idx, title=f"{pack_id} — Question Pack",
+                                    nav=build_nav(items, 0, pack_id),
                                     mermaid_mode=a.mermaid))
     print(f"再描画しました: {pdir} ({len(items)} 問・解答.md は不変)")
 
@@ -3584,8 +3867,8 @@ def cmd_grade(a):
         idx = index_md(pack_id, man["items"], man.get("notes", []),
                        man.get("dry_run") == "true", report=True)
         with open(os.path.join(pdir, "index.html"), "w", encoding="utf-8") as fh:
-            fh.write(render_html.render(idx, title=f"{pack_id} — 問題パック",
-                                        nav=build_nav(man["items"], 0),
+            fh.write(render_html.render(idx, title=f"{pack_id} — Question Pack",
+                                        nav=build_nav(man["items"], 0, pack_id),
                                         mermaid_mode=a.mermaid))
     except Exception as e:                 # 目次の更新失敗で採点自体は壊さない
         print(f"  ★index.html の更新に失敗（解説は {out} から開ける）: {e}")
@@ -3717,6 +4000,8 @@ def main():
                     help=f"ラボの固定ジャンル({','.join(LAB_GENRES)})。明示すると単元ローテーションを使わない")
     ap.add_argument("--lab-mode", default="default",
                     help="単元ローテーションのモード(topologies/lab_modes.yml・BL-223)")
+    ap.add_argument("--discovery", type=int, default=None,
+                    help="発掘枠の本数(BL-233・既定は lab_modes.yml の discovery.slots。0 で使わない)")
     ap.add_argument("--lab-date", default=None,
                     help="単元ローテーションのノルマ日を仮定(YYYY-MM-DD・曜日/遅れ度の確認用)")
     ap.add_argument("--assume-used", type=int, default=None,

@@ -1,0 +1,84 @@
+# 自動生成 (gen_bgp_ring_ts.py) seed=12669
+problem: GEN-BGPRING-12669
+total_points: 100
+defaults:
+  genie_os: iosxe
+model:
+  loopbacks:
+    RT01: 172.16.193.1
+    RT02: 172.16.237.1
+    RT03: 172.16.143.1
+    RT04: 172.16.225.1
+  links:
+  - a: RT01
+    a_ip: 10.9.50.1
+    b: RT02
+    b_ip: 10.9.50.2
+  - a: RT02
+    a_ip: 10.250.254.1
+    b: RT03
+    b_ip: 10.250.254.2
+  - a: RT03
+    a_ip: 10.227.181.1
+    b: RT04
+    b_ip: 10.227.181.2
+  - a: RT04
+    a_ip: 10.7.167.1
+    b: RT01
+    b_ip: 10.7.167.2
+invariants:
+- type: reachability_all
+  name: 全拠点網への到達性
+  points: 15
+- type: loop_free
+  name: 転送ループ不在
+  points: 10
+checks:
+- name: 'RT03: 指定された 172.16.121.0/24 は RT02 経由である（維持）'
+  node: RT03
+  command: show ip route 172.16.121.0
+  raw:
+  - contains: 10.250.254.1
+  - not_contains: 10.227.181.2
+  points: 12
+- name: 'RT03: 172.16.193.0/24 は RT04 経由である'
+  node: RT03
+  command: show ip route 172.16.193.0
+  raw:
+  - contains: 10.227.181.2
+  - not_contains: 10.250.254.1
+  points: 12
+- name: 'RT03: 172.16.229.0/24 は RT04 経由である'
+  node: RT03
+  command: show ip route 172.16.229.0
+  raw:
+  - contains: 10.227.181.2
+  - not_contains: 10.250.254.1
+  points: 12
+- name: 'RT03: 172.16.208.0/24 は RT04 経由である'
+  node: RT03
+  command: show ip route 172.16.208.0
+  raw:
+  - contains: 10.227.181.2
+  - not_contains: 10.250.254.1
+  points: 12
+- name: 'RT03: RT04 自身のネットワーク(172.16.225.0/24)へ RT04 経由で到達する'
+  node: RT03
+  command: show ip route 172.16.225.0
+  raw:
+  - contains: 10.227.181.2
+  - not_contains: 10.250.254.1
+  points: 12
+- name: 'RT04: 監査: RT03 向けの out ポリシーが適用されたままである'
+  node: RT04
+  command: show run | section router bgp
+  raw:
+  - regex: neighbor 10.227.181.1 route-map \S+ out
+  points: 8
+- name: 'RT04: 監査: 172.16.121.0/24 に対する AS パスの付加が維持されている'
+  node: RT04
+  command: show run | section route-map
+  raw:
+  - regex: set as-path prepend
+  - not_regex: '(?m)^route-map RM-STEER-OUT deny '
+  points: 7

@@ -197,6 +197,8 @@ provision は lab.sh(通常問題と同じ)。採点前にユーザの playbook 
 
 共通手順: `.venv/bin/python3 topologies/<生成器> --repo . --seed <新seed>` → `problems/<生成ID>/` ができる → `scripts/lab.sh provision <生成ID>`。
 軸・故障種の詳細は各スクリプトの docstring / `--help`。**同 seed = 同問題**(再現可能)。
+★「出題ID接頭」は**生成器が実際に書く ID の接頭辞**と一致させ、1 行に 1 生成器(1 接頭辞)で書く。
+  パックの発掘枠(BL-233)と再出題回避が、この接頭辞で出題履歴と突き合わせる。
 
 | 生成器 (topologies/) | 出題ID接頭 | 内容 | 軸・注意 |
 |---------------------|-----------|------|----------|
@@ -210,7 +212,10 @@ provision は lab.sh(通常問題と同じ)。採点前にユーザの playbook 
 | `gen_bgp_ring_ts.py` | GEN-BGPRING | ★★リングBGP=**AS設計/ポリシー層の統一生成器(BL-093完成形)**: 4台リング固定×AS配置抽選(4AS別/自社対角同一AS+ISP×2/全iBGP)×shape抽選・難4-5・4 IOL | **1つのIDから5形が出る**: ①isp_exchange=ISP越し自社AS交換不能(variant=allowas_full/partial/**override_partial**=ISP側as-override残骸で片側だけ通る) ②no_transit=非トランジット化(`--solution aspath/routemap` 解法強制・監査regex) ③path_select=対角双方向経路指定(LP/prepend欠落・誤適用/weight残骸/**MED異AS比較=always-compare-med**) ④stale=監査是正(実害weight・裏LP×無害allowas-in・as-override混在全撤去) ⑤ibgp_ring=フルメッシュ欠落(全Established対角欠け)/network欠落/OSPF Lo欠落。`--shape`/`--faults 2`指定可。task.mdはCisco語＋論理構成非提示。全shape×全解法軸×複合 実機11サイクル済(2026-08-06)・検証seed掃除済・出題時新seed。★**BL-161=shape `prefix_steer` 追加(2026-09-12・5→6 shape)**= **out 方向 route-map の暗黙 deny**(定番題材派生)。A(4本の/24を広告)─P/S(2中継AS)─Bx(受け手)で、S が「特定の1本だけを P へ寄せる」prepend を out に打つが**末尾の catch-all が無い/deny** → S からの広告がその1本だけになり**残り全部(S自身の網も)が P 経由**に(到達性は失われない=方針だけ破れる型)。正解= 空の `route-map X permit 20`。採点は「special が P 経由/他3本が S 経由/**S 自身の網が S 経由**/out 適用・prepend 維持の監査」。★5本目が**「3本を列挙して塞ぐ」誤解法の踏み絵**。**実機E2E= no_catchall 52→100・deny_catchall 45→100・列挙解 88 降格**(seed 51001・撤収済)。★罠= 監査の not_regex を `^route-map \S+ deny` と広く書くと囮 route-map に誤反応する→対象限定必須 |
 | `gen_bgp_rrts.py` | GEN-BGPRR | RR 伝播TS | |
 | `gen_bgp_complex_ts.py` | GEN-BGPCX | BGP 複合TS(7台4AS・26故障・48変種) | `--faults` `--policy-faults` ほか変種軸 |
-| `gen_eigrp_complex_ts.py` / `gen_ospf_complex_ts.py` / `gen_ospfv3_complex_ts.py` / `gen_eigrpv6_complex_ts.py` | GEN-EIGRPCX 等 | IGP 複合TS | |
+| `gen_eigrp_complex_ts.py` | GEN-EIGRP | EIGRP 複合TS(7台・ダイヤモンド+チェーン・難4-5) | `--faults`(既定3)・`--style named/classic/mixed` |
+| `gen_ospf_complex_ts.py` | GEN-OSPFX | OSPF 複合TS(6台・マルチエリア+冗長ダイヤモンド・難4-5) | `--faults`(既定1)・`--decoys` |
+| `gen_ospfv3_complex_ts.py` | GEN-OSPFV3 | OSPFv3 複合TS(5台・マルチエリア・難4-5) | `--faults`(既定1)・`--ospfv3-style trad/af/mixed` |
+| `gen_eigrpv6_complex_ts.py` | GEN-EIGRPV6 | EIGRPv6 複合TS(7台・難4-5) | `--faults`(既定3)・`--style classic/named/mixed` |
 | `gen_redist_mutual_ts.py` | GEN-REDIST系 | 相互再配送TS | |
 | `gen_redist_arena.py` | GEN-RDARENA | 再配送ループ・アリーナ=トポロジ抽選型ループ特化(BL-074 Phase1・難5・5〜8台) | **通常出題は gen_redist_field.py 経由(shape=ring)を推奨**(IDから型が割れないため)。単体はループ確定で出したい時のみ。generate()関数化済(prob_id差替可)。実機検証済・提示改修済・出題時新seed |
 | `gen_redist_field.py` | GEN-RDFIELD | ★★再配送フィールド=**統一生成器(BL-074完成形)**: shape抽選 chain50%/twoborder25%/ring25%・難4-5・3〜8台 | **1つのIDから3形が出る**(どれが来たかは非自明): ①chain=木構造トラブル(missing/wrong_id/no_seed/filter・全4型実機済・`--hard`=K3+subtle保証) ②twoborder=2点相互再配送(mutual_ts定石移植・no_tag次善/missing両方向/seed_metric・AD95固定・タグ衛生が健全形・no_tag 60→100/seed_metric 20→100実機済) ③ring=ループ(arena委譲・25→100実機済)。`--shape`指定可。★監査regexは表示形/検証seedは掃除済・出題時新seed |★**BL-162= 故障型 `name_clash` 追加(2026-09-12・4→5型)**= 同名の prefix-list と standard ACL があり route-map の `match ip address SVC` が **ACL に束縛**される(prefix-list は参照されない)→ ACL の 1 行以外が暗黙 deny で全喪失。出自側 2 台以上の方向でのみ抽選・filter と同じく 1 本まで。**実機E2E= broken 50→模範fix 100→誤解法(prefix-list キーワードを足すだけ)90 降格**(到達性は全PASSだが既存の `not_regex: redistribute .*route-map` 監査で -10)。 ★**スーパーハード `--wall`(BL-210・chain 固定)**= 境界ルータの 1 リンク in に壁(target= permit ospf|eigrp any any・shadowed= hello は通るのに unicast が落ちる)。E2E 8801 35→50→100。
@@ -235,7 +240,9 @@ provision は lab.sh(通常問題と同じ)。採点前にユーザの playbook 
 | `gen_v6addr_build.py` | GEN-V6BUILD | ★★**IPv6 自動アドレッシング 構築問(BL-153・要件書駆動・2026-09-04)**: gen_v6addr の fhs 盤面(8ノード・ioll2 SWB・telnet 採点)を**土台だけ**にして要件書どおりに組ませる・難4-5・ENARSI IPv6 DHCP/SLAAC+**First-Hop Security(security)** | **要件抽選= LAN-A 世界{W_SO/W_M/W_MA/W_S/W_MP}×LAN-B 世界{W_SO/W_M/W_MA/W_S}(相異なる)×FHS 方式{role=ポート役割/prefix=許可プレフィックスリスト}(`--method` 強制可)**=同じ盤面でも要件書が違えば正解 config が全部変わる。組む対象= RT01(LAN ごとのプール=link-address/address prefix+DNS/ドメイン+**automatic bind**(2 LAN が DHCPv6 なら named は不成立の隠し罠))/RT02(O/M フラグ・no-autoconfig・RDNSS・リレー・W_MP は suppress all)/端末(autoconfig default / ipv6 enable+dhcp / W_MP は静的既定 LL next-hop)/SWB(RA Guard+DHCPv6 Guard)。ROG(不正 RA High+不正 DHCPv6)は day0 から稼働=変更禁止・ポート閉塞禁止。採点= TS の挙動採点流用+CLB routers に High 不在/Medium あり+SWB 両ガード有効+**方式指紋= `show device-tracking counters interface Et0/2` の drop 理由**(role=`Message unauthorized on port` / prefix=`Unauthorized prefix in prefix list`)+Et0/2 connected+ROG 無改変。模範解= solution/fix_console.json(SWB→RT01→RT02→CLA→CLB の順・**SWB を先に入れないと端末が ROG の DHCPv6 情報を 24h キャッシュ**)。**実機E2E= 70001(W_MA/W_S/role) 15→100・70081(W_MP/W_SO/prefix) 12→100**。task は端末の IF bounce を許可(古い情報の再取得)。出題時は新 seed |
 | `gen_s2svpn.py` | GEN-S2SVPN | 複数拠点 IPsec VPN 設計構築(要件書形式・技術選定自由・8台) | 運用=`s2svpn_ops.py`(console・リース不要)。seed軸=支店ごとfull/split×支店間4種×公開静的NAT。svti/cmap両模範解で実機4サイクル済(2026-07-24)・出題時は新seed・難4 |
 | `gen_s2svpn.py --day2` | GEN-S2SVPN-\*-D2 | Day2運用チケット3本(支店追加×仕様書食い違い/full→split移行/サブネット重複×NAT overlapping・12台) | 手順=build→`solve --mode base`→`day2init`→受講者→`grade --ticket t1/t2/t3`(各100点・回帰込み)。3チケット実機済(2026-07-25)・難5・BL-063既習前提 |
-| `gen_list_dojo.py` | GEN-DOJO-* | フィルタ道場(prefix/aspath/ACL) | `--dojo prefix/aspath/acl` |
+| `gen_list_dojo.py --dojo prefix` | GEN-DOJO-PREFIX | フィルタ道場 prefix-list(2台・難3-4・10 課題のドリル) | 盤面は道場ごとに固定・要件だけ seed で変わる |
+| `gen_list_dojo.py --dojo aspath` | GEN-DOJO-ASPATH | フィルタ道場 AS-path ACL(2台・難3-4・10 課題のドリル) | 同上 |
+| `gen_list_dojo.py --dojo acl` | GEN-DOJO-ACL | フィルタ道場 ACL(2台・難3-4・10 課題のドリル) | 同上 |
 | `gen_dojo_dlist.py` | GEN-DOJO-DLIST | distribute-list 道場(BL-215・IOL 6 台・難4) | ★第1部= 4 つのフィルタ(標準/拡張直接/route-map 経由/非連続 WC から抽選)を全体に掛けて観察し、残った経路を prefix-list `PRED-1〜4` に 1 経路 1 行で提出(32 点)／第2部= IF ごとに方式指定(拡張直接で RT04 の経路だけ落とす・prefix-list で長さ・標準 ACL 1 行の非連続 WC・route-map 経由でマスク)(64 点)＋全体を残さない(4 点)。E2E= 初期 4 → 模範 100・第1部の期待集合は実機と全一致・誤答(src=RT04)は −12。PoC= poc/dlist/README.md。出題時は新 seed |
 | `gen_dnsdhcp_build.py` / `gen_dnsdhcp_ts.py` | GEN-DNSDHCP / GEN-DNSTS | BIND9+DHCP 構築/TS | Linux ノード |
 | `gen_radius_build.py` | GEN-RADIUS | FreeRADIUS 構築 | |

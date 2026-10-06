@@ -8,6 +8,10 @@
   GET  /_api/sheet?pack=<PACK-ID>&no=<N>   … 該当セクションの本文を返す
   POST /_api/sheet?pack=<PACK-ID>&no=<N>   … 本文で該当セクションを差し替える
   GET  /                                   … パック一覧(採点状態つき。pack_home.py)。素の一覧は /?raw=1
+  GET  /_lab?pack=<PACK-ID>&no=<N>         … ラボのワークスペース(lab_console.py・別ポート)へ転送(BL-234)。
+                                              問題ページにポート番号を焼き込まないための中継ぎ。
+                                              ★ラボへのリンクは全部ここを通る(BL-236= 最初からワークスペース)。
+                                              ワークスペースが無効・未起動なら単体の q<N>.html へ落とす。
   POST /_api/check?pack=<PACK-ID>&no=<N>   … 本文を保存したうえで正誤を返す(BL-212 答え合わせ)。
                                               応答= "ok|ng<TAB>内訳<TAB>正解" | "empty" | "nokey<TAB>理由"。
                                               内訳は組合せ/穴埋めだけ("①○ ②× …"・他は空)。
@@ -32,10 +36,11 @@ import argparse
 import datetime
 import os
 import re
+import socket
 import sys
 import tempfile
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, urlencode
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_pack                                        # noqa: E402
@@ -117,6 +122,8 @@ def atomic_write(path, text):
 class Handler(SimpleHTTPRequestHandler):
     packs_root = os.path.join(REPO, "packs")
     repo = REPO
+    console_port = 0                # ラボのワークスペース(lab_console.py)のポート。0 = 無効
+    console_probe = "127.0.0.1"     # 起動確認の接続先(自分の bind。0.0.0.0 ならループバック)
 
     def _json(self, code, msg):
         body = msg.encode("utf-8")
@@ -157,7 +164,32 @@ class Handler(SimpleHTTPRequestHandler):
             self.audit("load", parse_qs(urlparse(self.path).query).get(
                 "pack", [""])[0], no)
             return self._json(200, sec)
+        if u.path == "/_lab":
+            return self._lab(parse_qs(u.query))
         return SimpleHTTPRequestHandler.do_GET(self)
+
+    def _lab(self, q):
+        """ラボのワークスペースへ転送する。相手が無効・未起動なら単体の問題ページへ落とす
+        (ラボへのリンクは全部ここを通るので、行き止まりにしない)。"""
+        pack = (q.get("pack") or [""])[0]
+        no = (q.get("no") or [""])[0]
+        if not PACK_RE.match(pack) or not no.isdigit():
+            return self._json(400, "pack / no が不正です")
+        up = bool(self.console_port)
+        if up:
+            try:
+                socket.create_connection((self.console_probe, self.console_port), timeout=1).close()
+            except OSError:
+                up = False
+        if up:
+            host = (self.headers.get("Host") or "localhost").rsplit(":", 1)[0]
+            where = f"http://{host}:{self.console_port}/lab?" + urlencode({"pack": pack, "no": no})
+        else:
+            where = f"/{pack}/q{int(no)}.html"
+        self.send_response(302)
+        self.send_header("Location", where)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def do_POST(self):
         p = urlparse(self.path).path
@@ -263,11 +295,15 @@ def main():
     ap.add_argument("--repo", default=REPO)
     ap.add_argument("--port", type=int, default=8899)
     ap.add_argument("--bind", default="127.0.0.1")
+    ap.add_argument("--console-port", type=int, default=0,
+                    help="ラボのワークスペース(lab_console.py)のポート。/_lab の転送先(0=無効)")
     a = ap.parse_args()
     root = os.path.join(os.path.abspath(a.repo), "packs")
     os.makedirs(root, exist_ok=True)
     Handler.packs_root = root
     Handler.repo = os.path.abspath(a.repo)
+    Handler.console_port = a.console_port
+    Handler.console_probe = "127.0.0.1" if a.bind in ("0.0.0.0", "") else a.bind
 
     def factory(*args, **kw):
         return Handler(*args, directory=root, **kw)

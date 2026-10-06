@@ -276,15 +276,44 @@ def md_to_body(md_text, allow_html=False):
     return body, bool(env.get("has_mermaid"))
 
 
+# ラボの問題文で盤面を示す ## 節(見出しに トポロジ／構成図／Topology を含む)。
+TOPO_HEAD_RE = re.compile(r"^##\s+.*(トポロジ|構成図|topology|network diagram)", re.I)
+
+
+def split_topology(md_text):
+    """問題文を (盤面の節を除いた本文, 盤面の節だけ) に分ける。節が無ければ (md_text, "")。
+
+    ラボのワークスペース(lab_console.py・BL-234)用: 盤面の節は Topology タブへ移し、Task タブからは外す。
+    節は該当の ## 見出しから次の # / ## 見出しの手前まで(複数あれば全部)。
+    コードフェンスの中の行は見出しと見なさない。
+    """
+    rest, topo, fence, into = [], [], False, False
+    for line in md_text.split("\n"):
+        if re.match(r"^\s*(```|~~~)", line):
+            fence = not fence
+        elif not fence and re.match(r"^#{1,2}\s", line):
+            into = bool(TOPO_HEAD_RE.match(line))
+        (topo if into else rest).append(line)
+    if not topo:
+        return md_text, ""
+    return "\n".join(rest), "\n".join(topo).strip() + "\n"
+
+
 # --------------------------------------------------------------------------
 # ページ組み立て
 # --------------------------------------------------------------------------
-CSS = """
-/* 試験画面風テーマ: 白一色・装飾なし・罫線だけで区切る。
-   ダークモードには追随しない(常に白。本番の試験シムに合わせる)。 */
+# 紙の色(BL-236・2026-10-07 ユーザ指示): 真っ白は眩しいので、白を基調にごく僅かにグレーへ寄せる。
+#   PAPER= ページの地・ナビ帯 / PANEL= 箱(コード・表・選択肢・入力欄)。地よりわずかに明るくして罫線と併せて区切る。
+#   濃さを変える時はこの 2 つだけを動かす(ラボのワークスペース lab_console.py とパック一覧 pack_home.py も同じ値を使う)。
+PAPER = "#eceef1"
+PANEL = "#f4f5f7"
+
+CSS = ":root{ --paper:%s; --panel:%s; }" % (PAPER, PANEL) + """
+/* 試験画面風テーマ: 白基調の単色・装飾なし・罫線だけで区切る。
+   ダークモードには追随しない(常に明るい地。本番の試験シムに合わせる)。 */
 :root{ color-scheme: light; }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0;background:#ffffff;color:#000000}
+html,body{margin:0;padding:0;background:var(--paper);color:#000000}
 body{
   font-family:"Segoe UI","Yu Gothic UI",Meiryo,"Hiragino Kaku Gothic ProN",
               system-ui,sans-serif;
@@ -292,14 +321,17 @@ body{
 }
 a{color:#0645ad}
 a:visited{color:#0645ad}
+/* ナビ帯(目次・問番号)は画面の下端に固定する(BL-236・2026-10-07 ユーザ指示)。
+   上にあると、ラボのワークスペースで Task／Topology タブの直下に並び、押し間違える。
+   main の下余白は、帯が 2 段に折り返しても本文の末尾が隠れない分を取る。 */
 .nav{
-  position:sticky; top:0; z-index:10; background:#ffffff;
-  border-bottom:1px solid #000000; padding:.5rem 1rem;
+  position:fixed; left:0; right:0; bottom:0; z-index:10; background:var(--paper);
+  border-top:1px solid #000000; padding:.5rem 1rem;
   display:flex; gap:.9rem; align-items:center; flex-wrap:wrap; font-size:.88rem;
 }
 .nav .cur{color:#555555}
 .nav .sp{flex:1}
-main{max-width:1000px; margin:0 auto; padding:1rem 1.2rem 5rem}
+main{max-width:1000px; margin:0 auto; padding:1rem 1.2rem 7rem}
 h1{font-size:1.4rem; font-weight:600; border-bottom:1px solid #000000;
    padding-bottom:.35rem; margin:1rem 0 .8rem}
 h2{font-size:1.1rem; font-weight:600; border-bottom:1px solid #aaaaaa;
@@ -307,13 +339,13 @@ h2{font-size:1.1rem; font-weight:600; border-bottom:1px solid #aaaaaa;
 h3{font-size:1rem; font-weight:600; margin:1.4rem 0 .5rem}
 p{margin:.7rem 0}
 blockquote{
-  margin:.9rem 0; padding:.5rem .9rem; background:#ffffff;
+  margin:.9rem 0; padding:.5rem .9rem; background:var(--panel);
   border:1px solid #000000;
 }
 blockquote p{margin:.2rem 0}
 /* show 出力・config・ASCII 図: 折り返さず横スクロール(崩さないことが最優先) */
 pre.code{
-  background:#ffffff; color:#000000; border:1px solid #999999;
+  background:var(--panel); color:#000000; border:1px solid #999999;
   padding:.7rem .9rem; overflow-x:auto; margin:.9rem 0;
 }
 pre.code code{
@@ -323,7 +355,7 @@ pre.code code{
 code{font-family:Consolas,"DejaVu Sans Mono",monospace; font-size:.92em}
 pre.code code{background:none; padding:0}
 pre.mermaid{
-  background:#ffffff; border:1px solid #999999; padding:.9rem;
+  background:var(--panel); border:1px solid #999999; padding:.9rem;
   overflow-x:auto; margin:.9rem 0; text-align:center;
   font-family:Consolas,"DejaVu Sans Mono",monospace; font-size:13px;
   white-space:pre;
@@ -332,7 +364,7 @@ pre.mermaid svg{max-width:100%; height:auto}
 /* 選択肢: 罫線だけの素っ気ない箱。記号は左肩に固定 */
 .choice{
   position:relative; margin:.5rem 0; padding:.6rem .9rem .6rem 2.6rem;
-  border:1px solid #999999; background:#ffffff;
+  border:1px solid #999999; background:var(--panel);
 }
 .choice .cl{
   position:absolute; left:.8rem; top:.55rem; font-weight:700; color:#000000;
@@ -347,7 +379,7 @@ pre.mermaid svg{max-width:100%; height:auto}
   border:1px solid #999999; padding:.35rem .8rem; cursor:pointer;
   min-width:3.4rem; justify-content:center; font-weight:600;
 }
-.answer .opts label:hover{background:#f2f2f2}
+.answer .opts label:hover{background:#e3e6ea}
 .answer .opts input{margin:0}
 .answer .opts label.on{border:2px solid #000000; padding:.3rem .75rem}
 /* 組合せ形: 項目ごとに1行(項目名＋記号のラジオ) */
@@ -358,7 +390,7 @@ pre.mermaid svg{max-width:100%; height:auto}
 .answer .mrow.cloze{align-items:flex-start; flex-direction:column; gap:.25rem; margin:.6rem 0}
 .answer .mrow.cloze .mterm{min-width:0; font-weight:600}
 .answer .mrow.cloze .mctx{font-weight:400; color:#444444; margin-left:.4rem}
-.answer .mrow select.msel{font-size:1rem; padding:.35rem .5rem; max-width:100%; border:1px solid #999999; border-radius:4px; background:#ffffff}
+.answer .mrow select.msel{font-size:1rem; padding:.35rem .5rem; max-width:100%; border:1px solid #999999; border-radius:4px; background:var(--panel)}
 /* 穴埋め形: 本文中(表・設定例・説明文)に埋め込むプルダウンと、同番号の鏡・解答欄の要約 */
 select.msel.inline{font:inherit; font-size:.95em; padding:.1rem .3rem; margin:0 .15rem; max-width:22rem; border:1px solid #666666; border-radius:4px; background:#fffbe6; vertical-align:baseline}
 pre select.msel.inline{font-family:inherit}
@@ -367,16 +399,16 @@ pre select.msel.inline{font-family:inherit}
 .answer label.row{display:block; margin:.6rem 0 .2rem; font-size:.9rem}
 .answer textarea{
   width:100%; min-height:4.5rem; padding:.5rem; border:1px solid #999999;
-  font-family:inherit; font-size:.95rem; line-height:1.6; background:#ffffff;
+  font-family:inherit; font-size:.95rem; line-height:1.6; background:var(--panel);
   color:#000000;
 }
 .answer .done{display:flex; align-items:center; gap:.4rem; margin:.8rem 0 0;
   font-weight:600}
 .answer .timer{display:flex; align-items:center; gap:.6rem; margin:.9rem 0 0;
-  padding:.5rem .7rem; border:1px solid #cccccc; background:#fafafa}
+  padding:.5rem .7rem; border:1px solid #cccccc; background:var(--panel)}
 .answer .timer button{font:inherit; padding:.25rem .8rem; border:1px solid #333333;
-  background:#ffffff; cursor:pointer}
-.answer .timer button:hover{background:#eeeeee}
+  background:var(--panel); cursor:pointer}
+.answer .timer button:hover{background:#e3e6ea}
 .answer .timer button:disabled{color:#aaaaaa; border-color:#bbbbbb; cursor:default}
 .answer .timer .telapsed{font-variant-numeric:tabular-nums; font-weight:600;
   min-width:4.5rem}
@@ -386,8 +418,8 @@ pre select.msel.inline{font-family:inherit}
 /* 答え合わせ(BL-212): 正誤だけを色で示す(緑=正解・赤=不正解)。確定後は入力をロック */
 .answer .chkrow{display:flex; align-items:center; gap:.8rem; margin:1rem 0 0; flex-wrap:wrap}
 .answer button.chk{font:inherit; font-weight:700; padding:.45rem 1.2rem; border:2px solid #000000;
-  background:#ffffff; cursor:pointer}
-.answer button.chk:hover{background:#eeeeee}
+  background:var(--panel); cursor:pointer}
+.answer button.chk:hover{background:#e3e6ea}
 .answer button.chk:disabled{color:#aaaaaa; border-color:#bbbbbb; cursor:default}
 .answer .chkres{font-weight:700; font-size:1.1rem}
 .answer .chknote{font-size:.8rem; color:#777777}
@@ -408,7 +440,7 @@ select.msel.cng{background:#ffcdd2 !important; border-color:#c62828 !important}
 /* 選択肢ごとの正誤(2026-09-28): 選んで正解=緑塗り/選んだが誤り=赤塗り/選ばなかった正解=緑破線/他=淡色 */
 .answer .opts label.k-hit{border:2px solid #2e7d32 !important; background:#c8e6c9 !important; padding:.3rem .75rem}
 .answer .opts label.k-wrong{border:2px solid #c62828 !important; background:#ffcdd2 !important; padding:.3rem .75rem}
-.answer .opts label.k-miss{border:2px dashed #2e7d32 !important; background:#ffffff !important; padding:.3rem .75rem; color:#1b5e20}
+.answer .opts label.k-miss{border:2px dashed #2e7d32 !important; background:var(--panel) !important; padding:.3rem .75rem; color:#1b5e20}
 .answer .opts label.k-other{opacity:.45}
 .answer .opts label.k-hit::after, .answer .opts label.k-miss::after{content:"✓"; color:#1b5e20; font-weight:700}
 .answer .opts label.k-wrong::after{content:"✗"; color:#b71c1c; font-weight:700}
@@ -419,7 +451,7 @@ select.msel.cng{background:#ffcdd2 !important; border-color:#c62828 !important}
 .choice .kbadge{display:inline-block; margin-left:.6rem; padding:0 .45rem; font-size:.8rem; font-weight:700;
   border-radius:3px; color:#ffffff; background:#2e7d32; vertical-align:baseline}
 .choice.k-wrong .kbadge{background:#c62828}
-.choice.k-miss .kbadge{background:#ffffff; color:#1b5e20; border:1px dashed #2e7d32}
+.choice.k-miss .kbadge{background:var(--panel); color:#1b5e20; border:1px dashed #2e7d32}
 div.choice .kbadge{position:absolute; right:.6rem; top:.5rem}
 .kfix{display:inline-block; margin:0 .3rem; padding:0 .4rem; font-size:.85em; font-weight:700;
   color:#1b5e20; background:#e8f5e9; border:1px dashed #2e7d32; border-radius:3px}
@@ -427,14 +459,14 @@ div.choice .kbadge{position:absolute; right:.6rem; top:.5rem}
 .tablewrap{overflow-x:auto; margin:.9rem 0}
 table{border-collapse:collapse; width:100%; font-size:.92rem}
 th,td{border:1px solid #999999; padding:.4rem .65rem; text-align:left}
-th{background:#ffffff; font-weight:600}
+th{background:var(--panel); font-weight:600}
 hr{border:0; border-top:1px solid #aaaaaa; margin:1.8rem 0}
 ul,ol{padding-left:1.5rem}
 li{margin:.25rem 0}
 .meta{color:#555555; font-size:.83rem; margin:.2rem 0 1.2rem}
 .diagnote{
   margin:.9rem 0 -.4rem; padding:.45rem .7rem; font-size:.86rem;
-  border:1px solid #000000; background:#ffffff; color:#000000;
+  border:1px solid #000000; background:var(--panel); color:#000000;
 }
 @media print{
   .nav{display:none}
@@ -453,16 +485,16 @@ MERMAID_INIT = """
     el.dataset.noted = '1';
     var d = document.createElement('div');
     d.className = 'diagnote';
-    d.textContent = '⚠ 図の描画に失敗しました（' + msg +
-                    '）。以下の図ソースとリンク一覧を参照してください。';
+    d.textContent = '⚠ The diagram could not be rendered (' + msg +
+                    '). Refer to the diagram source and the link list below.';
     el.parentNode.insertBefore(d, el);
   }
   var blocks = Array.prototype.slice.call(
                  document.querySelectorAll('pre.mermaid'));
   if(!window.mermaid){
     blocks.forEach(function(el){
-      note(el, 'mermaid を読み込めなかった（ネットに出られない環境なら ' +
-               'pack.sh new --mermaid embed で作り直す）');
+      note(el, 'mermaid could not be loaded (without Internet access, rebuild with ' +
+               'pack.sh new --mermaid embed)');
     });
     return;
   }
@@ -475,7 +507,7 @@ MERMAID_INIT = """
       .catch(function(e){ blocks.forEach(function(el){ note(el, String(e)); }); })
       .then(function(){
         blocks.forEach(function(el){
-          if(!el.querySelector('svg')) note(el, '描画結果なし');
+          if(!el.querySelector('svg')) note(el, 'no output');
         });
       });
   }catch(e){
@@ -484,6 +516,30 @@ MERMAID_INIT = """
 })();
 """
 
+# ナビ帯のリンクを、ラボのワークスペース(lab_console.py)の左枠の中で押した時の動き(BL-236)。
+#   枠の中で移動すると Task だけが替わり、Topology とコンソールが前の問題のまま残る。
+#   なので移動は親(ワークスペース)に任せる: 行き先を親へ伝え、親が画面ごと移る。
+#   親はこの合図で「意図した移動」と分かるので、接続中のコンソールがあっても離脱確認を出さない。
+#   親が応えない時(古いワークスペース等)は、少し待って自分で画面ごと移る。
+#   Ctrl/Shift/中クリック(別タブで開く)は横取りしない。枠の外(単体のページ)では何もしない。
+NAV_JS = r"""
+(function(){
+  if(window.top === window.self) return;
+  document.querySelectorAll('.nav a').forEach(function(a){
+    a.addEventListener('click', function(ev){
+      if(ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey || ev.button) return;
+      ev.preventDefault();
+      var href = a.href;
+      try{ window.parent.postMessage({ccnpNav: href}, '*'); }catch(_e){}
+      setTimeout(function(){ try{ window.top.location.href = href; }catch(_e){ location.href = href; } }, 600);
+    });
+  });
+})();
+"""
+
+# ★画面に出る文言は英語(BL-236・2026-10-07 ユーザ指示「フレームは英語で」)。
+#   ただし 解答.md へ書く／から読む語(状態:・解答:・根拠:・メモ:・所要:・答え合わせ: 正解/不正解 など)は
+#   採点(gen_pack の HDR・parse_answer_sheet)が読む書式なので、日本語のまま変えない。
 ANSWER_JS = r"""
 (function(){
   var box = document.querySelector('.answer'); if(!box) return;
@@ -508,9 +564,9 @@ ANSWER_JS = r"""
     if(!ck.r) return;
     box.classList.add(ck.r === 'ok' ? 'chk-ok' : 'chk-ng');
     var isMatch = /^[\u2460-\u2473]/.test(ck.k);
-    if(chkRes) chkRes.textContent = (ck.r === 'ok' ? '正解' : '不正解') +
-      (ck.r === 'ng' && ck.k && !isMatch ? '　正解は ' + ck.k.split('').join('・') : '') +
-      (ck.t ? '（' + ck.t + ' 確定）' : '');
+    if(chkRes) chkRes.textContent = (ck.r === 'ok' ? 'Correct' : 'Incorrect') +
+      (ck.r === 'ng' && ck.k && !isMatch ? ' — correct answer: ' + ck.k.split('').join(', ') : '') +
+      (ck.t ? ' (locked ' + ck.t + ')' : '');
     if(chkBtn) chkBtn.disabled = true;
     box.querySelectorAll('.opts input').forEach(function(e){ e.disabled = true; });
     document.querySelectorAll('select.msel').forEach(function(sl){ sl.disabled = true; });
@@ -539,8 +595,8 @@ ANSWER_JS = r"""
       var lab = i.closest('label'); if(lab) lab.classList.add(cls(i.value, i.checked));
     });
     if(!isMatch){
-      var BADGE = {'k-hit': '✓ 正解（選択）', 'k-miss': '✓ 正解（未選択）',
-                   'k-wrong': '✗ 誤り（選択）', 'k-other': ''};
+      var BADGE = {'k-hit': '✓ Correct (selected)', 'k-miss': '✓ Correct (not selected)',
+                   'k-wrong': '✗ Wrong (selected)', 'k-other': ''};
       document.querySelectorAll('.choice').forEach(function(c){
         var cl = c.querySelector('.cl'); if(!cl) return;
         var k = cls(cl.textContent.trim(), !!chosen[cl.textContent.trim()]);
@@ -560,27 +616,27 @@ ANSWER_JS = r"""
       if(nx && nx.classList && nx.classList.contains('kfix')) return;
       var o = sl.querySelector('option[value="' + tok + '"]');
       var s = document.createElement('span'); s.className = 'kfix';
-      s.textContent = '→ 正解 ' + (o ? o.textContent.trim() : tok.slice(1));
+      s.textContent = '→ correct: ' + (o ? o.textContent.trim() : tok.slice(1));
       sl.parentNode.insertBefore(s, sl.nextSibling);
     });
   }
   function check(){
-    if(!loaded){ say('解答.md に接続できていません（scripts/pack.sh serve 経由で開いてください）', true); return; }
-    if(!ansValue()){ say('解答が未記入です', true); return; }
-    if(!confirm('この解答で確定して答え合わせします。確定後は変更できません。よろしいですか？')) return;
-    say('答え合わせ中…');
+    if(!loaded){ say('Not connected to the answer sheet (open this page through scripts/pack.sh serve).', true); return; }
+    if(!ansValue()){ say('No answer entered.', true); return; }
+    if(!confirm('Lock in this answer and check it? You cannot change it afterwards.')) return;
+    say('Checking…');
     fetch(capi(), {method:'POST', headers:{'Content-Type':'text/plain; charset=utf-8'}, body: build()})
       .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
       .then(function(t){
         var f = t.split('\t'), res = f[0];
-        if(res === 'nokey'){ say('この問題は自動判定できません（採点時に判定します）' + (f[1] ? '：' + f[1] : ''), true); return; }
-        if(res === 'empty'){ say('解答を読み取れませんでした', true); return; }
+        if(res === 'nokey'){ say('This question cannot be checked automatically (it is judged at grading)' + (f[1] ? ': ' + f[1] : ''), true); return; }
+        if(res === 'empty'){ say('Could not read your answer.', true); return; }
         ck.r = res; ck.t = new Date().toTimeString().slice(0, 8); ck.p = (f[1] || '').trim();
         ck.k = (f[2] || '').trim();
         var done = box.querySelector('.done input'); if(done) done.checked = true;
         tpause('user');
         lock(); save();
-      }).catch(function(e){ say('答え合わせに失敗: ' + e.message, true); });
+      }).catch(function(e){ say('Check failed: ' + e.message, true); });
   }
   if(chkBtn) chkBtn.addEventListener('click', check);
 
@@ -608,8 +664,8 @@ ANSWER_JS = r"""
   }
   var tui = document.createElement('div');
   tui.className = 'timer';
-  tui.innerHTML = '<button type="button" class="tstart">スタート</button>' +
-                  '<button type="button" class="tpause">一時停止</button>' +
+  tui.innerHTML = '<button type="button" class="tstart">Start</button>' +
+                  '<button type="button" class="tpause">Pause</button>' +
                   '<span class="telapsed">0:00</span><span class="tkind"></span>';
   function tstart(kind){
     if(ts.r) return;
@@ -625,9 +681,9 @@ ANSWER_JS = r"""
   function trender(){
     tui.querySelector('.telapsed').textContent = tfmt(tnow());
     tui.querySelector('.tkind').textContent =
-      (ts.r ? '計測中' : (ts.k ? '停止中' : '未計測')) +
-      (ts.k === 'auto' ? '・自動開始' :
-       (ts.k === 'open' ? '・ページ表示で開始' : ''));
+      (ts.r ? 'Running' : (ts.k ? 'Paused' : 'Not started')) +
+      (ts.k === 'auto' ? ' · auto-started' :
+       (ts.k === 'open' ? ' · started on page open' : ''));
     tui.querySelector('.tstart').disabled = !!ts.r;
     tui.querySelector('.tpause').disabled = !ts.r;
   }
@@ -750,11 +806,11 @@ ANSWER_JS = r"""
         ck.p = rest.replace(/(?:^|\s)正解=\S+/, '').trim();
       }
       trender();
-      loaded = true; sync(); lock(); say('読み込み済み');
+      loaded = true; sync(); lock(); say('Loaded');
       topen();                       /* 解答済みかどうか確定してから自動開始判定 */
     }).catch(function(e){
-      say('解答.md に書き込めません（' + e.message +
-          '）。scripts/pack.sh serve 経由で開いてください', true);
+      say('Cannot write to the answer sheet (' + e.message +
+          '). Open this page through scripts/pack.sh serve.', true);
       box.classList.add('offline');
       topen();                       /* 保存不能でも計測自体は生かす(localStorage) */
     });
@@ -812,7 +868,7 @@ ANSWER_JS = r"""
   function save(){
     if(!loaded) return;
     var body = build();
-    say('保存中…');
+    say('Saving…');
     fetch(api(), {method:'POST', headers:{'Content-Type':'text/plain; charset=utf-8'},
                   body: body})
       .then(function(r){
@@ -820,11 +876,11 @@ ANSWER_JS = r"""
         /* ★何が保存されたかを必ず表示する。「保存しました」だけだと、
            保存が効いているのか確かめる術が無い(2026-08-12 ユーザ指摘)。 */
         var m = body.match(/^[ \t]*(解答|メモ):[ \t]*(.*)$/m);
-        var what = m ? m[1] + ' ' + (m[2].trim() || '(空)') : '';
+        var what = m ? (m[1] === 'メモ' ? 'Notes' : 'Answer') + ' ' + (m[2].trim() || '(empty)') : '';
         var t = new Date().toTimeString().slice(0, 8);
-        say('保存しました ' + t + ' — ' + what);
+        say('Saved ' + t + ' — ' + what);
       })
-      .catch(function(e){ say('保存に失敗: ' + e.message, true); });
+      .catch(function(e){ say('Save failed: ' + e.message, true); });
   }
   function queue(){ sync(); clearTimeout(timer); timer = setTimeout(save, 600); }
 
@@ -856,11 +912,11 @@ PAGE = """<!doctype html>
 <style>{css}</style>
 </head>
 <body{body_class}>
-{nav}
 <main>
 {meta}
 {body}
 </main>
+{nav}
 {scripts}
 </body>
 </html>
@@ -868,7 +924,7 @@ PAGE = """<!doctype html>
 
 
 def build_nav(nav):
-    """nav = [{'label':..., 'href':..., 'current':bool}, ...] → ナビ HTML。"""
+    """nav = [{'label':..., 'href':..., 'current':bool, 'target':...}, ...] → ナビ HTML。"""
     if not nav:
         return ""
     parts = []
@@ -879,7 +935,8 @@ def build_nav(nav):
         if it.get("current"):
             parts.append(f'<span class="cur">{label}</span>')
         else:
-            parts.append(f'<a href="{html.escape(it["href"])}">{label}</a>')
+            target = f' target="{html.escape(it["target"])}"' if it.get("target") else ""
+            parts.append(f'<a href="{html.escape(it["href"])}"{target}>{label}</a>')
         if i < len(nav) - 1 and not nav[i + 1].get("spacer"):
             parts.append('<span class="cur">·</span>')
     return '<div class="nav">' + "".join(parts) + "</div>"
@@ -919,6 +976,8 @@ def render(md_text, title="問題", nav=None, meta="", mermaid_js=None,
     if answer_form:
         body += answer_form
         scripts += "\n<script>" + ANSWER_JS + "</script>"
+    if nav:
+        scripts += "\n<script>" + NAV_JS + "</script>"
     return PAGE.format(title=html.escape(title), css=CSS + (extra_css or ""),
                        body_class=f' class="{body_class}"' if body_class else "",
                        nav=build_nav(nav), meta=meta_html, body=body,
@@ -1030,7 +1089,7 @@ def main():
     ap.add_argument("--title", default=None)
     ap.add_argument("--meta", default="", help="タイトル下の小さな注記")
     ap.add_argument("--nav-json", default=None,
-                    help="ナビ定義 JSON([{label,href,current,spacer}])")
+                    help="ナビ定義 JSON([{label,href,current,spacer,target}])")
     ap.add_argument("--mermaid", choices=MERMAID_MODES, default="cdn",
                     help="図の描画方法(既定 cdn=ふつうのHTML / embed=オフライン用)")
     ap.add_argument("--selftest", action="store_true")

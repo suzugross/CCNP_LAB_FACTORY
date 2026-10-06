@@ -1,0 +1,22 @@
+! RT01 (TARGET) 初期構成 — prefix-list 道場
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+!
+interface {{ links[0] }}
+ description === to RT02 (FEEDER, AS65099) ===
+ ip address 10.1.12.1 255.255.255.252
+ no shutdown
+!
+router bgp 65001
+ bgp router-id 1.1.1.1
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.1.12.2 remote-as 65099
+ address-family ipv4
+  neighbor 10.1.12.2 activate
+ exit-address-family
+!
+! SEQ 課題用の定義済みリスト（変更・再採番禁止）
+ip prefix-list PL-7 seq 10 permit 10.0.0.0/8
+ip prefix-list PL-7 seq 30 permit 172.20.64.0/20
+!

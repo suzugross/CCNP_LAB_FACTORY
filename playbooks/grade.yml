@@ -29,8 +29,13 @@
         dest: "{{ repo }}/topologies/_generated/{{ problem }}/grading.rendered.yml"
       when: (problem_dir ~ '/grading.yml.j2') is exists
 
+    # ★-e checkpoint=<名前> で中間チェック用の problems/<ID>/grading.<名前>.yml を使う(BL-231)。
+    #   途中のタスクが後のタスクに上書きされて最終状態に痕跡が残らない問題向け。
+    #   ノルマには記録しない(記録は lab.sh grade = 本番採点だけ)。
     - ansible.builtin.include_vars:
-        file: "{{ (problem_dir ~ '/grading.yml.j2') is exists | ternary(repo ~ '/topologies/_generated/' ~ problem ~ '/grading.rendered.yml', problem_dir ~ '/grading.yml') }}"
+        file: >-
+          {{ (problem_dir ~ '/grading.' ~ checkpoint ~ '.yml') if (checkpoint | default('')) else
+             ((problem_dir ~ '/grading.yml.j2') is exists | ternary(repo ~ '/topologies/_generated/' ~ problem ~ '/grading.rendered.yml', problem_dir ~ '/grading.yml')) }}
         name: grading
     - ansible.builtin.include_vars: { file: "{{ repo }}/topologies/_generated/{{ problem }}/mgmt_map.yml", name: mgmt_map }
 

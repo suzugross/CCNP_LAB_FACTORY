@@ -5,8 +5,12 @@
 #
 #   出題:   scripts/lab.sh provision <PROBLEM_ID> [variant]
 #   採点:   scripts/lab.sh grade     <PROBLEM_ID> [variant]
+#   中間:   scripts/lab.sh checkpoint <PROBLEM_ID> <名前>   # grading.<名前>.yml で途中の状態を確認(ノルマ記録なし)
 #   片付け: scripts/lab.sh teardown  <PROBLEM_ID> [--keep-workspace]
 #   状態:   scripts/lab.sh status
+#
+#   LAB_TASK_ANNOTATION=off を付けて provision すると、CML キャンバスに問題の要約注釈を貼らない
+#   (全文は Lab Notes に残る)。パック(gen_pack)経由の構築は常に off。
 #
 # 設計方針:
 #   - 容量を食うのは CML 側の VM。teardown は **CMLラボを absent** にして実体を解放する。
@@ -35,7 +39,8 @@ case "$cmd" in
     variant="${3:-base}"
     echo "== [1/3] build_topology ($prob, variant=$variant) =="
     "$PY/ansible-playbook" "$REPO/playbooks/build_topology.yml" \
-      -e problem="$prob" -e variant="$variant" --vault-password-file <(vault)
+      -e problem="$prob" -e variant="$variant" \
+      -e task_annotation="${LAB_TASK_ANNOTATION:-on}" --vault-password-file <(vault)
     echo "== [2/3] lab_up (CML 起動) =="
     "$PY/ansible-playbook" "$REPO/playbooks/lab_up.yml" \
       -e problem="$prob" --vault-password-file <(vault)
@@ -75,6 +80,16 @@ case "$cmd" in
     variant="${3:-}"
     exec "$PY/python3" "$REPO/topologies/quota.py" --repo "$REPO" \
       grade-lab "$prob" ${variant:+--variant "$variant"}
+    ;;
+
+  checkpoint)
+    # 途中の状態を確認する中間チェック(BL-231)。点数は参考・ノルマには記録しない。
+    [ -n "$prob" ] || usage
+    cp="${3:-}"; [ -n "$cp" ] || { echo "中間チェック名を指定: 例 scripts/lab.sh checkpoint $prob t13"; exit 2; }
+    [ -f "$REPO/problems/$prob/grading.$cp.yml" ] || { echo "problems/$prob/grading.$cp.yml が無い"; exit 2; }
+    echo "== 中間チェック $cp（参考点・ノルマ記録なし）: $prob =="
+    exec "$PY/ansible-playbook" "$REPO/playbooks/grade.yml" \
+      -e problem="$prob" -e checkpoint="$cp" --vault-password-file <(vault)
     ;;
 
   teardown)

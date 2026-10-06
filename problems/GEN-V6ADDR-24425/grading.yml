@@ -1,0 +1,84 @@
+# 自動生成 (gen_v6addr_ts.py) seed=24425 faults=ra_lifetime_zero
+# 挙動ベース(世界ごと)。SLAAC=EUI-64 有無 / stateful=Address State OPEN+binding
+# / DNS=show ipv6 dhcp interface / 実疎通=ping Lo0。
+problem: GEN-V6ADDR-24425
+total_points: 100
+defaults:
+  genie_os: iosxe
+checks:
+- name: 'LAN-A: 端末がサーバ管理アドレスを取得し OPEN'
+  node: CLA
+  command: show ipv6 dhcp interface Ethernet0/0
+  raw:
+  - regex: (?i)Address State is OPEN
+  - regex: '(?i)Address\s*:\s*2001\:DB8\:f7\:A:'
+  points: 12
+- name: 'LAN-A: サーバの binding に IA_NA 割当が存在'
+  node: RT01
+  command: show ipv6 dhcp binding
+  raw:
+  - regex: '(?i)Address\s*:\s*2001\:DB8\:f7\:A:'
+  points: 6
+- name: 'LAN-A: RA が方針どおり停止されている (RT02・過剰解の防止)'
+  node: RT02
+  command: show ipv6 interface Ethernet0/1
+  raw:
+  - regex: (?i)RAs are suppressed \(all\)
+  points: 6
+- name: 'LAN-A: 端末が静的既定ゲートウェイを保持'
+  node: CLA
+  command: show running-config | include ^ipv6 route
+  raw:
+  - regex: (?i)(?m)^ipv6 route ::/0 \S+ FE80::1\s*$
+  points: 6
+- name: 'LAN-A: DNS/ドメインがサーバから配布されている'
+  node: CLA
+  command: show ipv6 dhcp interface Ethernet0/0
+  raw:
+  - regex: (?i)DNS server\s*:\s*2001\:DB8\:f7\:1\:\:53
+  - regex: (?i)Domain name\s*:\s*example\.net
+  points: 8
+- name: 'LAN-A: 端末が静的既定経路を持ちサーバ Lo0 へ実疎通'
+  node: CLA
+  command: ping 2001:DB8:f7:1::1 source Ethernet0/0 repeat 6
+  raw:
+  - regex: (?i)Success rate is (100|8[3-9]|9[0-9]) percent
+  points: 8
+- name: 'LAN-B: 端末が SLAAC でグローバルアドレスを自動生成 (EUI-64)'
+  node: CLB
+  command: show ipv6 interface brief Ethernet0/0
+  raw:
+  - regex: (?i)2001\:DB8\:f7\:B:[0-9A-Fa-f:]*[Aa]8[Bb][Bb]:CCFF:FE
+  points: 12
+- name: 'LAN-B: 端末がサーバ管理アドレスを取得し OPEN'
+  node: CLB
+  command: show ipv6 dhcp interface Ethernet0/0
+  raw:
+  - regex: (?i)Address State is OPEN
+  - regex: '(?i)Address\s*:\s*2001\:DB8\:f7\:B:'
+  points: 12
+- name: 'LAN-B: サーバの binding に IA_NA 割当が存在'
+  node: RT01
+  command: show ipv6 dhcp binding
+  raw:
+  - regex: '(?i)Address\s*:\s*2001\:DB8\:f7\:B:'
+  points: 6
+- name: 'LAN-B: 管理アドレスと自動生成アドレスが併存'
+  node: CLB
+  command: show ipv6 interface brief Ethernet0/0
+  raw:
+  - regex: (?i)2001\:DB8\:f7\:B:[0-9A-Fa-f:]*[Aa]8[Bb][Bb]:CCFF:FE
+  points: 6
+- name: 'LAN-B: DNS/ドメインがサーバから配布されている'
+  node: CLB
+  command: show ipv6 dhcp interface Ethernet0/0
+  raw:
+  - regex: (?i)DNS server\s*:\s*2001\:DB8\:f7\:1\:\:53
+  - regex: (?i)Domain name\s*:\s*example\.net
+  points: 8
+- name: 'LAN-B: 端末が既定経路を持ちサーバ Lo0 へ実疎通'
+  node: CLB
+  command: ping 2001:DB8:f7:1::1 source Ethernet0/0 repeat 6
+  raw:
+  - regex: (?i)Success rate is (100|8[3-9]|9[0-9]) percent
+  points: 10

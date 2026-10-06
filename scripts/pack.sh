@@ -28,6 +28,9 @@
 #   撤収:   scripts/pack.sh close  [PACK-ID] / close --today
 #   配信:   scripts/pack.sh serve  [PORT]   # Windows のブラウザから開く用
 #           ★このサーバ経由で開くと、ページ下部の解答欄がそのまま 解答.md に保存される
+#           ★ラボのワークスペース(BL-234)も一緒に上がる: ラボの問番号を押すと、最初から
+#             左=タスク/トポロジ・右=機器コンソール の 1 画面で開く(別ポート 8897・topologies/lab_console.py)。
+#             ポートは PACK_CONSOLE_PORT で変更、PACK_CONSOLE_PORT=0 で起動しない
 #
 # 設計方針:
 #   - 「寝る前に作らせ、翌朝から1日で解く」運用。所要時間は最適化せず、
@@ -44,7 +47,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="$REPO/.venv/bin/python3"
 GEN="$REPO/topologies/gen_pack.py"
 
-usage() { sed -n '2,28p' "${BASH_SOURCE[0]}"; exit 1; }
+usage() { sed -n '2,33p' "${BASH_SOURCE[0]}"; exit 1; }
 
 cmd="${1:-}"; shift || true
 case "$cmd" in
@@ -58,8 +61,17 @@ case "$cmd" in
     #   127.0.0.1 だけに戻すなら: scripts/pack.sh serve 8899 127.0.0.1  (または PACK_BIND=127.0.0.1)
     port="${1:-8899}"
     bind="${2:-${PACK_BIND:-0.0.0.0}}"
+    cport="${PACK_CONSOLE_PORT:-8897}"
     echo "Windows のブラウザから http://10.1.10.6:${port}/ (LAN) または http://localhost:${port}/ (VSCode 転送) で開けます"
-    exec "$PY" "$REPO/topologies/pack_server.py" --repo "$REPO" --port "$port" --bind "$bind"
+    # ラボのワークスペース(コンソール中継)を同じ bind で一緒に上げる。配信サーバ(下の exec で
+    # このシェルと同じ PID になる)が終われば --with-parent で自分も終わる。配信サーバが
+    # ポート使用中などで即終了した時も居残らないよう、親の PID はここから渡す。
+    # 起動に失敗しても(ポート使用中など)配信は続ける。VSCode 転送で開く時は ${cport} も転送する。
+    if [ "$cport" != "0" ]; then
+      "$PY" "$REPO/topologies/lab_console.py" --repo "$REPO" --port "$cport" --bind "$bind" \
+            --pack-port "$port" --with-parent "$$" &
+    fi
+    exec "$PY" "$REPO/topologies/pack_server.py" --repo "$REPO" --port "$port" --bind "$bind" --console-port "$cport"
     ;;
   status|grade|close|render|replace|redeploy)
     # 第1引数が PACK-* ならそれを --pack-id として渡す（打ちやすさ優先）

@@ -151,7 +151,7 @@ def _row(p, first=False):
             v = f'<a href="{pid}/report.html">✓</a>'
         else:
             v = f'<span class="dim">{p["p_answered"]}/{p["papers"]}</span>'
-        paper = f'<span class="k">紙面</span>{v}'
+        paper = f'<span class="k">Paper</span>{v}'
 
     lab = ""
     if p["labs"]:
@@ -161,8 +161,8 @@ def _row(p, first=False):
                 got, _, tot = sc.partition("/")
                 vs.append(f'<span class="{"" if got == tot else "ng"}" title="{_esc(ref)}">{_esc(got)}</span>')
             else:
-                vs.append(f'<span class="dim" title="{_esc(ref)}">未</span>')
-        lab = f'<span class="k">ラボ</span>' + (" ".join(vs) or '<span class="dim">—</span>')
+                vs.append(f'<span class="dim" title="{_esc(ref)}">…</span>')
+        lab = f'<span class="k">Lab</span>' + (" ".join(vs) or '<span class="dim">—</span>')
 
     return (f'<tr class="st-{st}{" first" if first else ""}" data-d="{_esc(p["date"])}">'
             f'<td class="m m-{st}">{STATE_MARK[st]}</td><td class="n">{name}</td>'
@@ -172,7 +172,7 @@ def _row(p, first=False):
 CSS = """
 :root{ color-scheme: light; }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0;background:#fff;color:#111}
+html,body{margin:0;padding:0;background:@@PAPER@@;color:#111}
 body{font-family:"Segoe UI","Yu Gothic UI",Meiryo,"Hiragino Kaku Gothic ProN",system-ui,sans-serif;
      font-size:15px;line-height:1.5}
 a{color:#0645ad;text-decoration:none} a:hover{text-decoration:underline}
@@ -247,18 +247,19 @@ def build_home(packs_root, repo=REPO):
     daily = sorted((p for p in packs if not p["dry"] and not p["id"].startswith("PACK-TEST")),
                    key=lambda p: (p["date"], p["id"]), reverse=True)
 
-    out = [f"<title>問題パック</title><style>{CSS}</style>",
-           '<main><header><h1>問題パック</h1>'
-           '<label><input type="checkbox" id="hide"> 採点済を隠す</label></header>',
+    css = CSS.replace("@@PAPER@@", gen_pack.render_html.PAPER)      # 紙の色は問題ページと同じ値
+    out = [f"<title>Question Packs</title><style>{css}</style>",
+           '<main><header><h1>Question Packs</h1>'
+           '<label><input type="checkbox" id="hide"> Hide graded</label></header>',
            "<table>"] + _rows(daily) + ["</table>"]
-    for label, ps in (("dry-run", drys), ("テスト", tests)):
+    for label, ps in (("dry-run", drys), ("Tests", tests)):
         if ps:
-            out += [f"<details><summary>{label}（{len(ps)}）</summary><table>"]
+            out += [f"<details><summary>{label} ({len(ps)})</summary><table>"]
             out += [_row(p) for p in ps] + ["</table></details>"]
     if broken:
-        out += ["<details open><summary>読めなかったパック</summary><ul>"]
+        out += ["<details open><summary>Unreadable packs</summary><ul>"]
         out += [f"<li>{_esc(n)}: {_esc(e)}</li>" for n, e in broken] + ["</ul></details>"]
-    out.append('<p class="foot"><a href="/?raw=1">ファイル一覧</a></p>')
+    out.append('<p class="foot"><a href="/?raw=1">File list</a></p>')
     out.append(f"</main><script>{JS}</script>")
     return ("<!doctype html><html lang=\"ja\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
