@@ -25,6 +25,7 @@
 #   採点:   scripts/pack.sh grade  [PACK-ID]
 #           scripts/pack.sh grade --today --no-lab   # 今日の3パックの紙面をまとめて採点
 #           scripts/pack.sh grade --today --report-only  # 解説ページだけ組み直す(再記録なし)
+#           scripts/pack.sh grade <PACK-ID> --no 3   # Q3 のラボだけ再採点(他のラボは前回の結果のまま)
 #   撤収:   scripts/pack.sh close  [PACK-ID] / close --today
 #   配信:   scripts/pack.sh serve  [PORT]   # Windows のブラウザから開く用
 #           ★このサーバ経由で開くと、ページ下部の解答欄がそのまま 解答.md に保存される
@@ -47,8 +48,13 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="$REPO/.venv/bin/python3"
 GEN="$REPO/topologies/gen_pack.py"
 
-usage() { sed -n '2,33p' "${BASH_SOURCE[0]}"; exit 1; }
+usage() { sed -n '2,34p' "${BASH_SOURCE[0]}"; exit 1; }
 
+# ★本体は関数に入れて最後に 1 回呼ぶ。bash はスクリプトを読み進めながら実行するので、実行中
+#   (new は 15〜25 分・grade は数分)にこのファイルを書き換えると、続きを別の位置から読んで壊れる
+#   (2026-10-07 実発= grade の実行中に編集し、終了時に「-repo: command not found」で exit 127)。
+#   関数にしておけば、呼ぶ前に全文を読み終えているので、あとからの編集に影響されない。
+main() {
 cmd="${1:-}"; shift || true
 case "$cmd" in
   new)
@@ -85,3 +91,5 @@ case "$cmd" in
     ;;
   *) usage ;;
 esac
+}
+main "$@"; exit $?

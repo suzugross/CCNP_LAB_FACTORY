@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """ラボのワークスペース — ブラウザ 1 画面でラボを解く(BL-234)。
 
-画面: 左半分= タスク／トポロジ(タブ切替)、右半分= 機器コンソール(機器ごとのタブ)。
+画面: 上= タスク／トポロジ(タブ切替)、下= 機器コンソール(機器ごとのタブ)。左右に並べる形へも切り替えられる。
+      画面下端に目次・問番号の帯(パック常駐の時)。境目はドラッグで動かせる。
 
   ブラウザ(xterm.js) ⇄ WebSocket ⇄ この中継 ⇄ SSH ⇄ CML コンソールサーバ ⇄ ノードのシリアル
 
@@ -75,8 +76,9 @@ PASTE_GAP = 0.01        # 行間の待ち(秒)
 IF_ABBR = (("TenGigabitEthernet", "Te"), ("GigabitEthernet", "Gi"), ("FastEthernet", "Fa"),
            ("Ethernet", "Et"), ("Loopback", "Lo"), ("Management", "Mg"))
 
-# 繋ぐ先: CML のラボ題名・左のタスクの URL・画面の見出し・盤面の節のページ(パックの q<N>.topo.html。無ければ None)
-Target = namedtuple("Target", "title task_src caption notes")
+# 繋ぐ先: CML のラボ題名・タスクの URL・画面の見出し・盤面の節のページ(パックの q<N>.topo.html。無ければ None)・
+#         画面下端の帯に出すリンク [(表示, 行き先, 今ここか)](単発では空)
+Target = namedtuple("Target", "title task_src caption notes nav")
 
 
 def lab_title(problem_id):
@@ -279,7 +281,8 @@ def resolve(app, request):
     pdir = os.path.join(app["packs"], pack)
     if not os.path.exists(os.path.join(pdir, "manifest.yml")):
         return None
-    it = next((i for i in gen_pack.read_manifest(pdir)["items"]
+    items = gen_pack.read_manifest(pdir)["items"]
+    it = next((i for i in items
                if i["no"] == int(no) and i.get("kind") == "lab" and i.get("ref")), None)
     if it is None:
         return None
@@ -291,9 +294,15 @@ def resolve(app, request):
     n = int(no)
     notes = os.path.join(pdir, f"q{n}.topo.html")
     page = f"q{n}.ws.html" if os.path.exists(os.path.join(pdir, f"q{n}.ws.html")) else f"q{n}.html"
-    return Target(lab_title(it["ref"]),
-                  f"{request.scheme}://{host}:{app['pack_port']}/{pack}/{page}",
-                  f"{pack} · Q{n}", notes if os.path.exists(notes) else None)
+    base = f"{request.scheme}://{host}:{app['pack_port']}/{pack}/"
+    # 画面下端の帯: 目次と各問。ラボはこのワークスペースの中で開き、紙面は配信サーバの問題ページへ出る
+    nav = [("Contents", base + "index.html", False)]
+    for i in items:
+        built_lab = i.get("kind") == "lab" and i.get("ref") and i.get("src")
+        nav.append((f"Q{i['no']}", f"lab?pack={pack}&no={i['no']}" if built_lab else base + f"q{i['no']}.html",
+                    i["no"] == n))
+    return Target(lab_title(it["ref"]), base + page, f"{pack} · Q{n}",
+                  notes if os.path.exists(notes) else None, nav)
 
 
 async def load_topo(app, title):
@@ -316,8 +325,13 @@ async def h_page(request):
     if tgt is None:
         return web.Response(status=404, content_type="text/html", text=(
             "<p>No such lab. Open a lab page of a pack and use <b>Open lab workspace</b>.</p>"))
+    nav = '<span class="dotsep">·</span>'.join(
+        f'<span class="cur">{html.escape(label)}</span>' if cur else
+        f'<a href="{html.escape(href, quote=True)}">{html.escape(label)}</a>'
+        for label, href, cur in tgt.nav)
     page = (PAGE.replace("@@CAPTION@@", html.escape(tgt.caption))
             .replace("@@TASK_SRC@@", html.escape(tgt.task_src, quote=True))
+            .replace("@@NAV@@", nav)
             .replace("@@PAPER@@", render_html.PAPER).replace("@@PANEL@@", render_html.PANEL))
     return web.Response(text=page, content_type="text/html", headers={"Cache-Control": "no-store"})
 
@@ -493,7 +507,7 @@ def make_app(repo=REPO, pack_port=8899, lab=None, task=None, with_parent=None):
     if with_parent:
         app["with_parent"] = with_parent
         app.on_startup.append(_follow_parent)
-    app["fixed"] = Target(lab, "task", lab, None) if lab else None
+    app["fixed"] = Target(lab, "task", lab, None, []) if lab else None
     app["task"] = task
     app["packs"] = os.path.join(os.path.abspath(repo), "packs")
     app["pack_port"] = pack_port
@@ -526,9 +540,26 @@ PAGE = r"""<!doctype html>
        --paper:@@PAPER@@; --panel:@@PANEL@@; }   /* 紙の色は問題ページと同じ値(render_html.PAPER / PANEL) */
 html,body{ height:100%; margin:0; }
 body{ font:14px/1.45 system-ui,"Segoe UI","Yu Gothic UI",sans-serif; color:var(--ink); background:var(--paper);
-      display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); height:100vh; overflow:hidden; }
+      display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+/* 並べ方: 既定は上下(上= Task/Topology・下= コンソール)。body.side で左右。境目はドラッグで動かす・ダブルクリックで既定へ */
+#ws{ flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr);
+     grid-template-rows:minmax(0,var(--split-v,45%)) 7px minmax(0,1fr); }
+body.side #ws{ grid-template-rows:minmax(0,1fr); grid-template-columns:minmax(0,var(--split,50%)) 7px minmax(0,1fr); }
 .half{ display:flex; flex-direction:column; min-width:0; min-height:0; }
-.half + .half{ border-left:1px solid var(--line); }
+#split{ background:#cfd4db; cursor:row-resize; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+body.side #split{ cursor:col-resize; border:0; border-left:1px solid var(--line); border-right:1px solid var(--line); }
+#split:hover, body.dragging #split{ background:var(--accent); }
+#dragshield{ position:fixed; inset:0; z-index:50; cursor:row-resize; }   /* ドラッグ中、枠(iframe)に操作を取られない覆い */
+body.side #dragshield{ cursor:col-resize; }
+/* 画面下端の帯: 目次・問番号(問題ページのナビ帯と同じ役目)。コンソールや Task のタブから離して置く */
+#foot{ flex:none; display:flex; align-items:center; gap:.9rem; padding:5px 14px; font-size:13px;
+       border-top:1px solid #000; background:var(--paper); white-space:nowrap; overflow-x:auto; }
+#foot a{ color:#0645ad; } #foot .cur, #foot .dotsep{ color:#555; } #foot .sp{ flex:1; }
+#foot button{ font:inherit; font-size:12px; color:var(--mute); background:none; border:1px solid var(--line);
+              border-radius:4px; padding:2px 8px; cursor:pointer; }
+#foot button:hover{ color:var(--ink); background:#dfe2e7; }
+#foot .fz{ display:flex; align-items:center; gap:5px; font-size:12px; color:var(--mute); }
+#foot #fsize{ min-width:2.6em; text-align:center; font-variant-numeric:tabular-nums; }
 .tabs{ display:flex; align-items:stretch; gap:0; background:#dfe2e7; border-bottom:1px solid var(--line);
        overflow-x:auto; flex:none; }
 .tabs button{ font:inherit; font-weight:600; color:var(--mute); background:none; border:0;
@@ -549,7 +580,11 @@ iframe{ border:0; width:100%; height:100%; background:var(--paper); }
 #topo .err{ color:#8a3b12; margin:0; }
 #toponotes{ flex:none; height:0; border-top:1px solid var(--line); margin-top:6px; }
 #terms{ background:var(--term); }
+/* 余白は .term に持たせ、端末は余白なしの .xt に開く。fit(桁・行の計算)は端末の親の寸法を読むので、
+   親に余白があるとその分だけ広く見積もり、右端の桁と最下行が隠れる(2026-10-07 実発) */
 .term{ padding:6px 4px 4px 8px; box-sizing:border-box; }
+.term .xt{ width:100%; height:100%; }
+.xterm .xterm-viewport{ scrollbar-width:thin; scrollbar-color:#3a4250 var(--term); }
 #empty{ color:#9aa5b5; display:grid; place-items:center; text-align:center; padding:24px; }
 /* トポロジ */
 .tl{ stroke:#5b6676; stroke-width:1.6; }
@@ -566,6 +601,7 @@ iframe{ border:0; width:100%; height:100%; background:var(--paper); }
 </style>
 </head>
 <body>
+<div id="ws">
 <section class="half" id="left">
   <nav class="tabs" id="ltabs">
     <button data-tab="task" class="on">Task</button>
@@ -577,12 +613,19 @@ iframe{ border:0; width:100%; height:100%; background:var(--paper); }
     <div id="topo" hidden></div>
   </div>
 </section>
+<div id="split" title="Drag to resize · double-click to reset"></div>
 <section class="half" id="right">
   <nav class="tabs" id="ctabs"></nav>
   <div class="pane" id="terms">
     <div id="empty">Select a device tab, or click a node in the topology, to open its console.</div>
   </div>
 </section>
+</div>
+<footer id="foot">@@NAV@@<span class="sp"></span>
+  <span class="fz">Console text
+    <button type="button" id="fminus" title="Smaller console text">A−</button><span id="fsize" title="Double-click: default size"></span><button type="button" id="fplus" title="Larger console text">A+</button>
+  </span>
+  <button type="button" id="layout"></button></footer>
 <script src="vendor/xterm.js"></script>
 <script src="vendor/addon-fit.js"></script>
 <script>
@@ -608,9 +651,14 @@ function addNotes(){
   f.id = 'toponotes'; f.title = 'Topology notes'; f.src = 'toponotes?' + Q;
   f.addEventListener('load', () => {
     const doc = f.contentDocument;
-    const fit = () => { f.style.height = doc.documentElement.offsetHeight + 'px'; };
+    doc.documentElement.style.overflow = 'hidden';      // スクロールは Topology タブ側の 1 本だけにする
+    let last = -1;
+    const fit = () => {
+      const h = Math.ceil(Math.max(doc.documentElement.getBoundingClientRect().height, doc.body.scrollHeight)) + 8;
+      if (h !== last){ last = h; f.style.height = h + 'px'; }
+    };
     fit();
-    new ResizeObserver(fit).observe(doc.documentElement);
+    new ResizeObserver(fit).observe(doc.body);
   });
   $('#topo').appendChild(f);
 }
@@ -648,13 +696,13 @@ function addTab(label){
   sessions[label] = {label, btn, dot, el:null, term:null, fit:null, ws:null};
 }
 function setState(s, st){ s.dot.className = 'dot ' + st; }
-// IOS のコンソールは 80 桁で折り返す。幅が足りない画面では 80 桁入るまで字を小さくする
+// コンソールの字の大きさ。既定は 10px(2026-10-07 ユーザ指示)。画面下端の A− / A+ で変えた大きさは覚えておく
+const FONT_DEFAULT = 10;
+let fontPref = FONT_DEFAULT;
+try { const v = parseInt(localStorage.getItem('ccnp-ws-font'), 10); if (v >= 7 && v <= 22) fontPref = v; } catch (_e) {}
 function fitTerm(s){
-  for (const size of [14, 13, 12, 11]){
-    if (s.term.options.fontSize !== size) s.term.options.fontSize = size;
-    s.fit.fit();
-    if (s.term.cols >= 80) break;
-  }
+  if (s.term.options.fontSize !== fontPref) s.term.options.fontSize = fontPref;
+  s.fit.fit();
 }
 
 function show(label){
@@ -672,16 +720,17 @@ function openConsole(label){
   if (!s) return;
   if (!s.term){                           // 端末は初めて開いた時に作る(全機器へ一斉には繋がない)
     s.el = document.createElement('div'); s.el.className = 'term';
+    const xt = document.createElement('div'); xt.className = 'xt'; s.el.appendChild(xt);
     $('#terms').appendChild(s.el);
     show(label);                          // 見える状態にしてから open する(隠れた要素では寸法が取れない)
     s.term = new Terminal({
-      fontSize:14, fontFamily:'Consolas,"Cascadia Mono",Menlo,"DejaVu Sans Mono",monospace',
+      fontSize:fontPref, fontFamily:'Consolas,"Cascadia Mono",Menlo,"DejaVu Sans Mono",monospace',
       cursorBlink:true, scrollback:20000,
       theme:{background:'#0c0f14', foreground:'#d8dee9', cursor:'#d8dee9', selectionBackground:'#3b5b85'}
     });
     s.fit = new FitAddon.FitAddon();
     s.term.loadAddon(s.fit);
-    s.term.open(s.el);
+    s.term.open(xt);
     fitTerm(s);
     s.term.onData(d => {
       if (s.ws && s.ws.readyState === WebSocket.OPEN) s.ws.send(enc.encode(d));
@@ -725,6 +774,81 @@ function connect(s){
     s.term.write('\r\n\x1b[33m[disconnected — press Enter to reconnect]\x1b[0m\r\n');
   };
 }
+
+// ---- 並べ方(上下／左右)と境目のドラッグ。どちらも覚えておく ----
+//   既定は上下(上= Task/Topology・下= コンソール)。コンソールが画面の幅いっぱいになり、IOS の広い表が折り返さない
+(function(){
+  const bar = $('#split'), ws = $('#ws'), btn = $('#layout');
+  const K = {layout: 'ccnp-ws-layout', stack: 'ccnp-ws-split-v', side: 'ccnp-ws-split'};
+  const DEF = {stack: 45, side: 50};
+  const get = k => { try { return localStorage.getItem(k); } catch (_e) { return null; } };
+  const put = (k, v) => { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (_e) {} };
+  let mode = get(K.layout) === 'side' ? 'side' : 'stack';
+  function setSplit(pct){ ws.style.setProperty(mode === 'side' ? '--split' : '--split-v', pct + '%'); }
+  function apply(){
+    document.body.classList.toggle('side', mode === 'side');
+    btn.textContent = mode === 'side' ? '⇅ Top and bottom' : '⇆ Side by side';
+    const v = parseFloat(get(K[mode]));
+    setSplit(v >= 20 && v <= 80 ? v : DEF[mode]);
+  }
+  apply();
+  btn.addEventListener('click', () => { mode = mode === 'side' ? 'stack' : 'side'; put(K.layout, mode); apply(); });
+  bar.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    // 押している間のポインタ操作は境目が受け取る。これが無いと、枠(iframe)や端末の上へ出た瞬間に操作を取られる
+    bar.setPointerCapture(e.pointerId);
+    const x0 = e.clientX, y0 = e.clientY;
+    let shield = null, pct = null;
+    const move = ev => {
+      if (!shield){                         // 覆いは動かし始めてから被せる(被せたままだとダブルクリックが境目に届かない)
+        if (Math.abs(ev.clientX - x0) < 3 && Math.abs(ev.clientY - y0) < 3) return;
+        shield = document.createElement('div'); shield.id = 'dragshield';
+        document.body.appendChild(shield); document.body.classList.add('dragging');
+      }
+      const r = ws.getBoundingClientRect();
+      const at = mode === 'side' ? (ev.clientX - r.left) / r.width : (ev.clientY - r.top) / r.height;
+      pct = Math.min(80, Math.max(20, at * 100)); setSplit(pct);
+    };
+    const up = () => {
+      if (shield) shield.remove();
+      document.body.classList.remove('dragging');
+      bar.removeEventListener('pointermove', move);
+      bar.removeEventListener('pointerup', up); bar.removeEventListener('pointercancel', up);
+      try { bar.releasePointerCapture(e.pointerId); } catch (_e) {}
+      if (pct !== null) put(K[mode], pct.toFixed(1));
+    };
+    bar.addEventListener('pointermove', move);
+    bar.addEventListener('pointerup', up); bar.addEventListener('pointercancel', up);
+  });
+  bar.addEventListener('dblclick', () => { put(K[mode], null); setSplit(DEF[mode]); });
+})();
+
+// ---- コンソールの字の大きさ(A− / A+。大きさの表示をダブルクリックすると既定へ戻る) ----
+(function(){
+  function apply(){
+    $('#fsize').textContent = fontPref + 'px';
+    const s = sessions[active];
+    if (s && s.term){ fitTerm(s); s.term.focus(); }      // 他のタブの端末は、表に出した時に合わせ直す
+  }
+  function step(d){
+    fontPref = Math.min(22, Math.max(7, fontPref + d));
+    try { localStorage.setItem('ccnp-ws-font', String(fontPref)); } catch (_e) {}
+    apply();
+  }
+  $('#fminus').addEventListener('click', () => step(-1));
+  $('#fplus').addEventListener('click', () => step(+1));
+  $('#fsize').addEventListener('dblclick', () => {
+    fontPref = FONT_DEFAULT;
+    try { localStorage.removeItem('ccnp-ws-font'); } catch (_e) {}
+    apply();
+  });
+  apply();
+})();
+
+// 画面下端の帯(Contents・問番号)からの移動は意図したものなので、離脱確認を出さない。別タブで開く操作は除く
+$('#foot').addEventListener('click', e => {
+  if (e.target.closest('a') && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) leaving = true;
+});
 
 new ResizeObserver(() => {
   const s = sessions[active];

@@ -90,6 +90,7 @@ scripts/pack.sh serve                                     # 配信(Windows ブ�
 scripts/pack.sh status --today                            # 今日の3パックの進捗(個別は status <PACK-ID>)
 scripts/pack.sh grade  --today --no-lab                   # ①今日の全パックの紙面を即採点
 scripts/pack.sh grade  <PACK-ID>                          # ②ラボ込み採点(ラボがあるのは1本目)
+scripts/pack.sh grade  <PACK-ID> --no 3                   # 再挑戦した 1 問(Q3)のラボだけ再採点
 scripts/pack.sh replace <PACK-ID> --no 5                  # 1問だけ差し替え
 scripts/pack.sh close  --today                            # 全ラボ撤収
 ```
@@ -102,7 +103,8 @@ scripts/pack.sh close  --today                            # 全ラボ撤収
   (`解答.md` の書式= `状態:`/`解答:`/`根拠:`/`メモ:` は日本語のまま。採点が読むので変えない)。
   目次・問番号のナビ帯は**画面の下端に固定**(上にあるとワークスペースのタブと押し間違える)。
 - **ラボは最初からワークスペースで開く**(BL-234/236): 目次・ナビ帯のラボの問番号は、そのまま
-  左= タスク/トポロジ(タブ)・右= 機器コンソール(機器ごとのタブ)の 1 画面を開く(`topologies/lab_console.py`・
+  上= タスク/トポロジ(タブ)・下= 機器コンソール(機器ごとのタブ)の 1 画面を開く(既定は上下。画面下端の帯の右端で
+  左右にも切替・境目はドラッグで可変。`topologies/lab_console.py`・
   `serve` が同時に起動・ポート 8897。VSCode 転送で開く時は 8897 も転送)。問番号を押すと画面ごとその問題へ切り替わる
   (前の問題のコンソール画面は閉じる。機器の状態はそのまま。別タブで並べたい時は Ctrl+クリック)。
   ワークスペースが上がっていない時は、単体の問題ページ(全文)に落ちる。

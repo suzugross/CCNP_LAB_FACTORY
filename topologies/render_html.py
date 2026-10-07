@@ -332,6 +332,7 @@ a:visited{color:#0645ad}
 .nav .cur{color:#555555}
 .nav .sp{flex:1}
 main{max-width:1000px; margin:0 auto; padding:1rem 1.2rem 7rem}
+body.nonav main{padding-bottom:2rem}      /* ナビ帯の無いページ(ワークスペースの中に出す版)は下余白を取らない */
 h1{font-size:1.4rem; font-weight:600; border-bottom:1px solid #000000;
    padding-bottom:.35rem; margin:1rem 0 .8rem}
 h2{font-size:1.1rem; font-weight:600; border-bottom:1px solid #aaaaaa;

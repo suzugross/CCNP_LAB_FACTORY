@@ -1869,10 +1869,10 @@ def q_href(it, pack_id=""):
 
 
 def build_nav(items, cur_no, pack_id="", workspace_link=True):
-    """ナビ帯(画面の下端= render_html の .nav)。target=_top = ワークスペースの左枠の中で押しても画面ごと移る。
+    """ナビ帯(画面の下端= render_html の .nav)。target=_top = ワークスペースの枠の中で押しても画面ごと移る。
 
     workspace_link= ラボの問題ページ単体(q<N>.html)に、ワークスペースへの入口を帯の右端に置く。
-    ワークスペースの中で出す版(q<N>.ws.html)には置かない(すでに中に居る)。
+    ワークスペースの中で出す版(q<N>.ws.html)はナビ帯そのものを付けない(ワークスペースが下端に出す)。
     """
     nav = [{"label": "Contents", "href": "index.html", "target": "_top"}]
     for it in items:
@@ -1892,8 +1892,9 @@ def write_workspace_pages(src, pdir, it, items, pack_id, meta, mermaid_js, merma
     ワークスペースには CML から起こした結線図の Topology タブがあるので、問題文の盤面の節
     (トポロジ／構成図)は Task タブに出さず Topology タブへ移す。節にはアドレス・AS など
     結線図に無い情報が載るので、消さずに置き場所だけ変える(2026-10-06 ユーザ指示)。
-      q<N>.ws.html   … ワークスペースの左枠に出す問題ページ。盤面の節を除き、ナビ帯に
-                       「Open lab workspace」を置かない(すでに中に居る)。解答欄は q<N>.html と同じ
+      q<N>.ws.html   … ワークスペースの中に出す問題ページ。盤面の節を除き、ナビ帯も付けない
+                       (目次・問番号の帯はワークスペースが画面の下端に出す。枠の中にあるとコンソールの
+                       タブと隣り合って押し間違える)。解答欄は q<N>.html と同じ
       q<N>.topo.html … 盤面の節だけ(結線図の下に出す)。盤面の節がある問題だけ
     問題ページ単体(q<N>.html)は従来どおり全文(ワークスペースが上がっていない時の受け皿)。
     """
@@ -1901,15 +1902,14 @@ def write_workspace_pages(src, pdir, it, items, pack_id, meta, mermaid_js, merma
         rest, topo = render_html.split_topology(fh.read())
     no = it["no"]
     with open(os.path.join(pdir, f"q{no}.ws.html"), "w", encoding="utf-8") as fh:
-        fh.write(render_html.render(rest, title=q_title(no, it),
-                                    nav=build_nav(items, no, pack_id, workspace_link=False), meta=meta,
+        fh.write(render_html.render(rest, title=q_title(no, it), meta=meta,
                                     mermaid_js=mermaid_js, mermaid_mode=mermaid_mode,
-                                    answer_form=answer_form(pack_id, it, src)))
+                                    answer_form=answer_form(pack_id, it, src), body_class="nonav"))
     if not topo:
         return
     with open(os.path.join(pdir, f"q{no}.topo.html"), "w", encoding="utf-8") as fh:
         fh.write(render_html.render(topo, title=f"{q_title(no, it)} — Topology",
-                                    mermaid_js=mermaid_js, mermaid_mode=mermaid_mode))
+                                    mermaid_js=mermaid_js, mermaid_mode=mermaid_mode, body_class="nonav"))
 
 
 def write_pages(repo, pdir, items, mermaid_js, mermaid_mode="cdn", pack_id=""):
@@ -3810,8 +3810,10 @@ def cmd_grade(a):
                                   src=f"pack:{pack_id}", memo=dmemo, quiet=True)
         else:
             ref = it.get("ref", "")
-            if a.no_lab or report_only or it.get("error"):
-                prev = it.get("lab_score") if report_only else None
+            # --no N: その問のラボだけ実機で採点し、他のラボは前回の結果を載せ直す(再挑戦した 1 問だけ見たい時)
+            other = bool(getattr(a, "no", 0)) and it["no"] != a.no
+            if a.no_lab or report_only or it.get("error") or other:
+                prev = it.get("lab_score") if (report_only or other) else None
                 if prev:            # 前回の採点結果をそのまま載せ直す
                     got, _, total = prev.partition("/")
                     fails = [f for f in (it.get("lab_fails") or "").split("｜") if f]
@@ -3950,7 +3952,8 @@ def main():
                              "replace", "redeploy"])
     ap.add_argument("--no", type=int, default=0,
                     help="replace/redeploy: 対象の問番号"
-                         "(redeploy は省略で全ラボ)")
+                         "(redeploy は省略で全ラボ) / grade: この問のラボだけ実機採点"
+                         "(他のラボは前回の結果を載せ直す)")
     ap.add_argument("--repo", default=REPO)
     ap.add_argument("--pack-id", default=None)
     ap.add_argument("--paper", default="auto",
