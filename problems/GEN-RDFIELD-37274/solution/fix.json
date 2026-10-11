@@ -1,0 +1,49 @@
+{
+  "_comment": "twoborder kind=no_tag 両境界を健全形(双方向+タグ衛生+seed metric)へ。",
+  "fixes": [
+    {
+      "node": "RT04",
+      "lines": [
+        "route-map SET_TAG permit 10",
+        " set tag 903",
+        "route-map BLOCK_TAG deny 10",
+        " match tag 903",
+        "route-map BLOCK_TAG permit 20"
+      ]
+    },
+    {
+      "node": "RT04",
+      "parents": [
+        "router eigrp 485"
+      ],
+      "match": "none",
+      "lines": [
+        "no redistribute ospf 19",
+        "redistribute ospf 19 metric 100000 100 255 1 1500 route-map SET_TAG",
+        "distribute-list route-map BLOCK_TAG in"
+      ]
+    },
+    {
+      "node": "RT01",
+      "lines": [
+        "route-map SET_TAG permit 10",
+        " set tag 903",
+        "route-map BLOCK_TAG deny 10",
+        " match tag 903",
+        "route-map BLOCK_TAG permit 20"
+      ]
+    },
+    {
+      "node": "RT01",
+      "parents": [
+        "router eigrp 485"
+      ],
+      "match": "none",
+      "lines": [
+        "no redistribute ospf 19",
+        "redistribute ospf 19 metric 100000 100 255 1 1500 route-map SET_TAG",
+        "distribute-list route-map BLOCK_TAG in"
+      ]
+    }
+  ]
+}

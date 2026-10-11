@@ -45,7 +45,7 @@ Catalyst Center の AI ワークフロー追加・ハードウェア/ソフト�
 
 | U | 単元 | CCNA | ENCOR | ENARSI | CCIE | P1 | P2 | L1 | L2 | L3 | L4 | 資産(現状) | 抜け・薄い点 | 関連BL |
 |---|------|------|-------|--------|------|----|----|----|----|----|----|-----------|-------------|--------|
-| U-A1 | VLAN/トランク(802.1Q・native・DTP・VTP・pruning・voice VLAN) | 2.1 2.2 | 3.1.a | — | 1.1.c | ✗ | ✗ | ✗ | ○ | △ | ○ | CAMPUS-TS-01 内(vtp transparent)・**L4= gen_enterprise.py(GEN-ENT・拠点構築)**・PVT 構築問 1 本(DTP/VTP/許可 VLAN・6 台・private/CATALOG.md 参照) | 専用問なし。DTP/native 不一致・VTP 事故・allowed vlan 絞りの TS が空白 | BL-225 BL-231 |
+| U-A1 | VLAN/トランク(802.1Q・native・DTP・VTP・pruning・voice VLAN) | 2.1 2.2 | 3.1.a | — | 1.1.c | ✗ | ✗ | ○ | ○ | △ | ○ | CAMPUS-TS-01 内(vtp transparent)・**L4= gen_enterprise.py(GEN-ENT・拠点構築)**・PVT 構築問 2 本(DTP/VTP/許可 VLAN・6 台／VTP プルーニング・2 台・private/CATALOG.md 参照) | 専用問なし。DTP/native 不一致・VTP 事故・allowed vlan 絞りの TS が空白 | BL-225 BL-231 |
 | U-A2 | EtherChannel(LACP/PAgP/static・L2/L3・負荷分散・misconfig guard) | 2.4 | 3.1.b | — | 1.1.d | ✗ | ✗ | ○ | ✗ | ○ | ○ | ENCOR-LAG-01/LAG-TS-01・gen_l2_troubleshoot・**L4= gen_enterprise.py(GEN-ENT・拠点構築)** | 紙面ゼロ。L3 EtherChannel・load-balance 方式・misconfig guard 未 | BL-003 BL-225 |
 | U-A3 | STP(PVST+/RSTP/MST・root/port priority・cost・timers・PortFast/BPDU guard/filter・loop/root guard) | 2.5 | 3.1.c | — | 1.1.e | ◎ | ◎ | ◎ | ◎ | ◎ | ◎ | **L1〜L4= gen_stp.py(build L1・build L2・ts・--world mst= MST+旧機境界・**--world 3tier= 3 層キャンパス 構築/TS(難5・BL-221)・保護機構の記述方式 port/global/any(BL-222)**)**・**L3= gen_stp.py(GEN-STP・故障 10 種・E2E 済)**・**P1= cloze_kb_stp.py 6 セクション(t_basics/t_rstp/t_modes/t_tuning/t_guard/t_read 世界)・知識項目表 curriculum/U-A3-stp.md 47+5 項目**・**P2= gen_paper_stp.py 10 kind(瞬発 s_basic/s_rstp/s_modes・思考 s_elect/s_read/s_mst/s_tuning/s_guard/s_ts/s_rolemap=全ポート記入・計算器 stp_model.py)**・照合表 curriculum/U-A3-stp.sources.md・CAMPUS-TS-01 内・PoC 済(poc/stp 第1・2回) | ラボは L1〜L4 完了(2026-09-22)。実行中の pvst→rapid 移行は IOL が不安定で出題しない。P2 未被覆= #10 TCN・#51 誤接続・summary 読解。構築の要件構成が固定(BL-220)・盤面が DS2+AS2 の 1 系のみ=難2 と難5 の段が無い(BL-221) | BL-076 BL-214 BL-216 BL-220 BL-221 BL-226 BL-227 |
 | U-A4 | スイッチ管理(MAC テーブル・errdisable recovery・L2 MTU・CDP/LLDP・UDLD) | 1.13 2.3 | — | — | 1.1.a 1.1.b | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | なし | errdisable 復旧・UDLD・CDP/LLDP 読解はすべて空白 | — |
@@ -150,7 +150,7 @@ Catalyst Center の AI ワークフロー追加・ハードウェア/ソフト�
 | U-I6 | ロギング/デバッグ(local/buffered/syslog・severity・timestamps・conditional debug・config change notification・archive) | 4.5(d) | 4.1 | 4.3 | 4.3.c | △ | ○ | ✗ | ✗ | ✗ | ✗ | svc log/archive・ospfdbg/bgpdbg 読解・cloze order syslog | **conditional debug(`debug condition`/`debug platform condition`)** 両方空白・config change logging 空白 | — |
 | U-I7 | IP SLA / track / track list(ICMP/UDP jitter/TCP/HTTP・responder・boolean list・threshold) | — | 4.4 | 4.5 | 4.6.a 4.6.b | ✗ | △ | ○ | ○ | ◎ | ○ | svc ipsla_sched/light・IPSLA-01/02・gen_ipsla_ts・WANHA・**L4= gen_enterprise.py(GEN-ENT・拠点構築)** | 紙面が薄い(4.5 は 25% 帯)。track list・jitter/UDP プローブ(responder)空白 | BL-148 BL-225 |
 | U-I8 | NetFlow v5/v9 / FNF(record/exporter/monitor/sampler・top-talkers) | — | 4.2 | 4.6 | 4.6.c | ○ | △ | ○ | ✗ | ◎ | ✗ | cloze s_ FNF 4・svc light・FNF-01・gen_fnf_ts | sampler・IPv6 FNF | — |
-| U-I9 | EEM(applet・event syslog/cli/timer/track・action) | — | 6.6 | — | 5.2.a | ✗ | ✗ | ○ | ✗ | ✗ | ✗ | ENCOR-EEM-01 | **紙面ゼロ**(ENCOR「applet を構成せよ」→ fix/read 形が要る) | — |
+| U-I9 | EEM(applet・event syslog/cli/timer/track・action) | — | 6.6 | — | 5.2.a | ✗ | ✗ | ○ | ✗ | ✗ | ✗ | ENCOR-EEM-01 | **紙面ゼロ**(ENCOR「applet を構成せよ」→ fix/read 形が要る) | BL-237 |
 | U-I10 | Catalyst Center(assurance・device 360・path trace・PnP/LAN automation・AI ワークフロー) | — | 4.5(d) | 4.7 | 2.1.a | ✗ | △ | — | — | — | — | svc dnac 1 kind | 実機不可→**紙面が唯一の受け皿なのに 1 kind** | — |
 | U-I11 | QoS MQC(classification/marking・trust boundary・NBAR・policing/shaping・LLQ/CBWFQ/WRED・HQoS・DSCP/CoS map・PHB) | 4.7(d) | 1.4 | — | 4.4 | △ | ✗ | ○ | ✗ | ✗ | ✗ | QOS-CLASS/POLICE/LLQ-01 | **紙面ゼロ**(ENCOR「QoS 設定を解釈せよ」→ read 形が本命)。shaping/WRED/HQoS/NBAR・生成器 | BL-025 BL-026 |
 | U-I12 | ファイル/イメージ管理((T)FTP/SCP・copy/archive・boot system・ROMMON・パスワード復旧・ライセンス) | 4.9(d) | — | 4.1.c | — | ✗ | △ | ✗ | — | ✗ | — | svc copy/archive | ラボ無し(IOL で copy tftp/scp は可) | — |
@@ -280,6 +280,7 @@ C 群= 既存単元の薄い層。**
 
 | 日付 | U | 段階 | 成果物 | 備考 |
 |------|---|------|--------|------|
+| 2026-10-08 | U-A1 | L1 | PVT 構築問 1 本(private/CATALOG.md 参照) | BL-231。VTP プルーニングの有効化と対象リストの操作(単独/add/none/既定/remove)。中間チェック 4 本。採点は表示形でなく実際に刈られた VLAN で見る。ioll2 実機で白紙 0→模範解 100 |
 | 2026-09-30 | U-A1 | L2 | PVT 構築問 1 本(private/CATALOG.md 参照) | BL-231。DTP 4 モード・encap dot1q/isl/negotiate・VTP 伝播・許可 VLAN の only/add/remove/none/except/all。ioll2 実機で白紙 0→模範解 100 |
 | 2026-09-27 | U-A1 U-A2 U-A6 U-H2 U-I2 U-I3 U-I7 | L4 | `gen_enterprise.py`(GEN-ENT・エンタープライズ拠点構築・難5・20 ノード)＋`ent_ops.py`(採点前フック=回線切替試験) | BL-225。U-H2 は ACL の実務構築(SVI×送信元 VLAN・境界 WAN/LAN・命名規約)として L2 も ○。E2E 3→100・誤解法 63。残り(ハード・TS・世界 B・パック)= BL-229 |
 | 2026-09-27 | U-A6 | P2 | `gen_paper_fhrp.py`(shape fhrp・h_path/h_acl)= U-A6 初の紙面 | BL-228。STP の盤面＋HSRP で往路・復路を全記入・ハードは SVI ACL。実機 PoC(poc/fhrp)で選出・preempt・非対称・ACL の効き方を確定 |

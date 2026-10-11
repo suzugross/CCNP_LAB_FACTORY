@@ -95,6 +95,15 @@ def make_md(allow_html=False):
 # ★A-F 決め打ちは不可(2026-08-08 実機で 7択=A-G の問題が出て G が欠落した)。
 CHOICE_RE = re.compile(r"^(\*{0,2})([A-J])([.．)）])")
 
+# 選択肢の節の見出し。日本語(「選択肢」を含む)と、英語版(`## Choices`・紙面の英語出題= BL-236 ③)を読む。
+# ★英語は見出し全体が Choices の時だけ(「## DHCP Options」のような見出しを巻き込まない)。
+CHOICES_HEAD_EN_RE = re.compile(r"^#{1,6}\s+(?:Answer\s+)?Choices\s*$", re.I)
+
+
+def is_choices_head(line):
+    """その見出し行が選択肢の節の始まりか。"""
+    return "選択肢" in line or bool(CHOICES_HEAD_EN_RE.match(line.strip()))
+
 
 def separate_choices(md_text):
     """「## 選択肢」節の各選択肢を独立した段落にする。
@@ -109,7 +118,7 @@ def separate_choices(md_text):
         if line.lstrip().startswith("```"):
             in_fence = not in_fence
         elif not in_fence and line.startswith("## "):
-            in_sec = "選択肢" in line
+            in_sec = is_choices_head(line)
         if in_sec and not in_fence and CHOICE_RE.match(line) \
                 and out and out[-1].strip():
             out.append("")
@@ -127,7 +136,7 @@ def choice_letters(md_text):
         if line.lstrip().startswith("```"):
             in_fence = not in_fence
         elif not in_fence and line.startswith("## "):
-            in_sec = "選択肢" in line
+            in_sec = is_choices_head(line)
         if in_sec and not in_fence:
             m = CHOICE_RE.match(line)
             if m and m.group(2) not in letters:
@@ -154,14 +163,40 @@ def pick_count(md_text):
         # 数非明示の複数選択。個数はヒントにも出さない(採点は記号集合の一致)。
         if re.search(r"すべて選んでください", md_text):
             return -1
-        return 1
+        return _pick_count_en(md_text)
     z = m.group(1).translate({ord(c): ord(c) - 0xFEE0 for c in "０１２３４５６７８９"})
     return {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
             "六": 6, "七": 7, "八": 8, "九": 9}.get(z, int(z) if z.isdigit() else 1)
 
 
-# 組合せ形(対応付け): 「対応」を含む見出しの節にある表で、先頭列が丸数字の行を項目とみなす
-MATCH_HEAD_RE = re.compile(r"^#{2,4}\s+.*対応")
+_EN_NUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+           "six": 6, "seven": 7, "eight": 8, "nine": 9}
+_EN_PICK = r"(?:Choose|Select)\s+(one|two|three|four|five|six|seven|eight|nine|[1-9])\b"
+EN_PICK_RE = re.compile(r"[(（]\s*" + _EN_PICK + r"[^)）]*[)）]", re.I)
+EN_PICK_BARE_RE = re.compile(_EN_PICK, re.I)
+EN_PICK_ALL_RE = re.compile(r"(?:Choose|Select)\s+all\s+that\s+apply", re.I)
+EN_QUESTION_HEAD_RE = re.compile(r"^##\s+Question\s*$", re.M)
+
+
+def _pick_count_en(md_text):
+    """英語版の設問が何個選ばせるか(「(Choose two.)」→ 2・「(Choose all that apply.)」→ -1・既定 1)。
+
+    括弧つきは全文から、括弧なしは `## Question` 節の中だけから読む(本文の偶然の一致を避ける)。
+    """
+    parts = EN_QUESTION_HEAD_RE.split(md_text, 1)
+    tail = parts[1] if len(parts) == 2 else ""
+    if EN_PICK_ALL_RE.search(tail) or re.search(
+            r"[(（]\s*" + EN_PICK_ALL_RE.pattern + r"[^)）]*[)）]", md_text, re.I):
+        return -1
+    m = EN_PICK_RE.search(md_text) or EN_PICK_BARE_RE.search(tail)
+    if not m:
+        return 1
+    w = m.group(1).lower()
+    return _EN_NUM.get(w) or int(w)
+
+
+# 組合せ形(対応付け): 「対応」を含む見出し(英語版は Items to Match)の節にある表で、先頭列が丸数字の行を項目とみなす
+MATCH_HEAD_RE = re.compile(r"^#{2,4}\s+(?:.*対応|Items\s+to\s+Match\b)", re.I)
 MATCH_ROW_RE = re.compile(r"^\|\s*([①-⑳])\s*\|\s*(.*?)\s*\|")
 
 
@@ -175,7 +210,7 @@ def choice_texts(md_text):
         if in_fence:
             continue
         if re.match(r"^#{1,6}\s", line):
-            in_sec = "選択肢" in line
+            in_sec = is_choices_head(line)
             continue
         if in_sec:
             m = CHOICE_RE.match(line.strip())
@@ -249,7 +284,7 @@ def mark_choices(body):
 
     ★後処理は「選択肢」見出し以降だけに限定する(本文中の「A. 〜」を巻き込まない)。
     """
-    m = re.search(r"<h2>[^<]*選択肢[^<]*</h2>", body)
+    m = re.search(r"<h2>[^<]*選択肢[^<]*</h2>|<h2>\s*(?:Answer\s+)?Choices\s*</h2>", body, re.I)
     if not m:
         return body
     head, tail = body[:m.end()], body[m.end():]

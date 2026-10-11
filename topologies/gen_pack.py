@@ -38,6 +38,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import render_html                                    # noqa: E402
+import paper_en                                       # noqa: E402  (紙面の英語版・BL-236 ③)
 import quota                                          # noqa: E402  (BL-114 ノルマ記録)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -447,6 +448,10 @@ NON_CISCO_TAGS = {"junos", "multivendor", "bind9", "dns", "sdwan",
 # 対象機は Cisco だが、試験のシムレットでは解答を要求されないため。
 AUTOMATION_PREFIX = ("ANSIBLE-", "NETAUTO-")
 AUTOMATION_TAGS = {"automation", "ansible", "restconf", "netconf", "python"}
+# 学習目的のラボ(手順に沿って効果を体感する演習。測定の手順・記録表・考察がついていて、解くより観察が主)。
+# パックは力試しの場なので既定で選定対象外(2026-10-11 ユーザ指示)。CATALOG のタグ `tutorial` で印を付ける。
+# 名指し(--lab-id)は通す。まとめて解除するなら --allow-tutorial。
+TUTORIAL_TAGS = {"tutorial"}
 
 # TS(トラブルシュート)判定。ユーザ方針=「Cisco の TS 中心」(2026-08-08)。
 # 生成器はスクリプト名(…ts.py / troubleshoot)と説明文、静的問題は ID とタグで見る。
@@ -473,7 +478,7 @@ TAG_KEYWORDS = {
 
 # 分野重複の判定から外すメタタグ。★これを混ぜると「troubleshooting」が共通するだけで
 # 他の TS 問題が全て弾かれ、選定が1種類に固定される(2026-08-08 に実際そうなった)。
-META_TAGS = {"troubleshooting", "generated", "multivendor", "security"}
+META_TAGS = {"troubleshooting", "generated", "multivendor", "security", "tutorial"}
 
 
 def _topic(cand):
@@ -523,11 +528,21 @@ def _nodes_from_text(text):
 
 
 def _automation(cand):
-    """自動化ラボ(Ansible/RESTCONF)か。既定で選定対象外。"""
+    """自動化ラボ(Ansible/RESTCONF)か。既定で選定対象外。
+
+    ★EEM は対象外にしない(2026-10-07 ユーザ指示「EEM も強化したい分野なので混ぜる」)。分野タグに
+      `automation` が付いていても、機器の外のツールを使う演習ではなく IOS 上の設定作業のため。
+    """
     pid = cand["id"]
     if pid.startswith(AUTOMATION_PREFIX) or "-AUTO-" in pid:
         return True
-    return bool(set(cand.get("tags", [])) & AUTOMATION_TAGS)
+    tags = set(cand.get("tags", []))
+    return "eem" not in tags and bool(tags & AUTOMATION_TAGS)
+
+
+def _tutorial(cand):
+    """学習目的(体感)のラボか(既定で選定対象外)。CATALOG のタグ `tutorial` で判定する。"""
+    return bool(set(cand.get("tags", [])) & TUTORIAL_TAGS)
 
 
 def _is_ts(cand):
@@ -769,7 +784,7 @@ def select_labs(cat, hist, *, count, budget, used, rnd,
                 diff_range=(3, 5), repeat_days=90, family_days=21,
                 allow_special=False,
                 today=None, pin=(), allow_non_cisco=False,
-                allow_automation=False, ts_only=True, only=None):
+                allow_automation=False, ts_only=True, only=None, allow_tutorial=False):
     """台数合計・分野重複・出題履歴の制約下でラボ問題を選ぶ。
 
     only= ID/接頭辞の列(BL-213 プロファイル)。与えられたら候補をそれに前方一致するものへ絞る。
@@ -822,6 +837,11 @@ def select_labs(cat, hist, *, count, budget, used, rnd,
         if excluded_au:
             notes.append(f"自動化ラボを {len(set(excluded_au))} 種 除外"
                          f"(シムレットで解答を要求されないため)")
+    excluded_tu = [c["id"] for c in cands if _tutorial(c)]
+    if not allow_tutorial:
+        cands = [c for c in cands if not _tutorial(c)]
+        if excluded_tu:
+            notes.append(f"学習目的(体感)のラボを {len(set(excluded_tu))} 種 除外")
     if ts_only:
         before = len(cands)
         cands = [c for c in cands if _is_ts(c)]
@@ -1185,11 +1205,11 @@ def discovery_last_issued(repo):
     return out
 
 
-def discovery_pool(cat, mode, *, allow_non_cisco=False, allow_automation=False):
+def discovery_pool(cat, mode, *, allow_non_cisco=False, allow_automation=False, allow_tutorial=False):
     """発掘枠の候補と、対象から外したもの。返り値 (候補の列, [(ID, 理由)])。
 
     対象= 単元ローテーション(mode の units → LAB_GENRES)が引けない生成器と静的問題。
-    外すもの= 保留(mode の discovery.hold)・後継がある旧生成器・非 Cisco・自動化・
+    外すもの= 保留(mode の discovery.hold)・後継がある旧生成器・非 Cisco・自動化・学習目的(体感)・
     専用 CLI 運用(パックの構築/採点が lab.sh 前提)・難易度が min_diff 未満。
     """
     disc = mode["discovery"]
@@ -1214,6 +1234,8 @@ def discovery_pool(cat, mode, *, allow_non_cisco=False, allow_automation=False):
             why = "非 Cisco"
         elif _automation(c) and not allow_automation:
             why = "自動化"
+        elif _tutorial(c) and not allow_tutorial:
+            why = "学習目的(体感)"
         elif c["diff"] and c["diff"] < disc["min_diff"]:
             why = f"難{c['diff']}(下限 {disc['min_diff']})"
         else:
@@ -1809,7 +1831,7 @@ def answer_form(pack_id, it, src_path):
             #   match_of()/採点はそのまま効く。表示は「D. 語句」(語句は 60 字で切る)。
             # ★2026-09-20 ユーザ要望: プルダウンは本文中の ［①］ の位置に埋め込む(cloze_inline_selects →
             #   render_html.render(inline_blanks=…))。解答欄には案内と選択状況の要約だけを置く。
-            last = blanks[-1][0]
+            last = max(tk for tk, _ctx in blanks)      # 訳文は語順が変わり、出現順が番号順とは限らない
             ansfield = (f'<label class="row">Fill blanks ①–{last} with the <b>drop-downs in the text</b> '
                         '(your selections are mirrored below).</label><div class="clsum"></div>')
         elif letters and terms:
@@ -1912,9 +1934,31 @@ def write_workspace_pages(src, pdir, it, items, pack_id, meta, mermaid_js, merma
                                     mermaid_js=mermaid_js, mermaid_mode=mermaid_mode, body_class="nonav"))
 
 
-def write_pages(repo, pdir, items, mermaid_js, mermaid_mode="cdn", pack_id=""):
+def pack_paper_lang(pdir):
+    """そのパックの紙面を何語で出すか(manifest の paper_lang。既定 en= 英語版があれば英語)。"""
+    try:
+        return read_manifest(pdir).get("paper_lang") or "en"
+    except OSError:
+        return "en"
+
+
+def presented_src(repo, it, lang="en"):
+    """その問題を画面に出す時のソース(repo 相対)。問題ページと解説ページが同じものを見るための入口。
+
+    紙面= 英語版(`<原文の隣>/en/<同名>.md`)が原文との照合を通っていれば英語版(paper_en.presented)。
+    ラボは manifest の src のまま(英語版 `lab/<ID>/Task.md` への切替は write_pages が行う)。
+    """
+    src = it.get("src") or ""
+    if it.get("kind") != "paper" or not src:
+        return src
+    return paper_en.presented(repo, src, lang)
+
+
+def write_pages(repo, pdir, items, mermaid_js, mermaid_mode="cdn", pack_id="", paper_lang=None):
     """各問の HTML を書く。入力は questions/ と lab/ に限る(answers/ は読まない)。"""
     written = []
+    if paper_lang is None:
+        paper_lang = pack_paper_lang(pdir)
     for it in items:
         src = os.path.join(repo, it["src"]) if it.get("src") else ""
         out = os.path.join(pdir, f"q{it['no']}.html")
@@ -1940,6 +1984,10 @@ def write_pages(repo, pdir, items, mermaid_js, mermaid_mode="cdn", pack_id=""):
             en = os.path.join(repo, "lab", it["ref"], "Task.md")
             if it["kind"] == "lab" and os.path.exists(en):
                 src = en
+            # 紙面も英文出題が基本(2026-10-08): 英語版が原文との照合を通っていればそちらを描画する。
+            # 無い・食い違う時は日本語の原文のまま(状態は `pack.sh en` で見る)。
+            if it["kind"] == "paper":
+                src = os.path.join(repo, presented_src(repo, it, paper_lang))
             render_html.render_file(src, out, title=q_title(it["no"], it),
                                     nav=build_nav(items, it["no"], pack_id), meta=meta,
                                     mermaid_js=mermaid_js,
@@ -2049,8 +2097,10 @@ def write_manifest(pdir, manifest):
     lines = [f"pack_id: {manifest['pack_id']}",
              f"created: {manifest['created']}",
              f"dry_run: {str(manifest['dry_run']).lower()}",
-             f"seed: {manifest['seed']}",
-             "items:"]
+             f"seed: {manifest['seed']}"]
+    if manifest.get("paper_lang"):          # 紙面の出題言語(無ければ既定= en)
+        lines.append(f"paper_lang: {manifest['paper_lang']}")
+    lines.append("items:")
     for it in manifest["items"]:
         lines.append(f"  - no: {it['no']}")
         for k in ("kind", "slot", "ref", "src", "key", "form", "variant",
@@ -2713,11 +2763,13 @@ def _question_md(repo, src, marks=None, fills=None, applied=None):
         if not in_fence:
             if line.startswith("# "):
                 continue                       # タイトル行(問題ID)は不要
-            if line.startswith("> ") and "機器に接続せず" in line:
+            if line.startswith("> ") and ("機器に接続せず" in line
+                                          or "without connecting to" in line.lower()):
                 continue                       # 解答時の注意書きは解説では不要
-            if line.strip() in ("## 設問", "### 設問"):
+            if line.strip() in ("## 設問", "### 設問", "## Question", "### Question"):
                 continue                       # パネル見出しと重複するので落とす
-            if marks is not None and line.strip() in ("## 選択肢", "### 選択肢"):
+            if marks is not None and line.strip() in ("## 選択肢", "### 選択肢",
+                                                      "## Choices", "### Choices"):
                 out += ["##### 選択肢 — あなたの解答・正解・理由", ""]
                 continue
             if line.startswith("### "):
@@ -3051,7 +3103,9 @@ def build_report(repo, pack_id, pdir, man, rows, lab_rows):
     # --- 解説: 誤答を先に、正解は確認用に後ろへ -------------------------------
     key_paths = {it["no"]: it.get("key") for it in man["items"]}
     slots = {it["no"]: it.get("slot") for it in man["items"]}
-    srcs = {it["no"]: it.get("src") for it in man["items"]}
+    # 再掲する問題文は**出した版**(英語で出していれば英語版)。解説は日本語のまま。
+    lang = man.get("paper_lang") or "en"
+    srcs = {it["no"]: presented_src(repo, it, lang) for it in man["items"]}
     right = [r for r in papers if r not in wrong]
     if wrong:
         md += ["", "## 解説 — まず誤答した問題", ""]
@@ -3375,7 +3429,7 @@ def build_pack(a, pack_no=1, n_packs=1, require=None, exclude=(),
         disc_labs, dnotes, disc_nodes = select_discovery_labs(
             cat, hist, mode=mode, count=n_disc, budget=a.budget, used=used, rnd=rnd,
             today=rday, repo=repo, log=log, allow_non_cisco=a.allow_non_cisco,
-            allow_automation=a.allow_automation)
+            allow_automation=a.allow_automation, allow_tutorial=a.allow_tutorial)
         matchers = lab_rotation.unit_matchers(mode, LAB_GENRES)
         skip = {u for u in (lab_rotation.unit_of(lb["id"], matchers) for lb in disc_labs) if u}
         labs, notes, used_nodes = select_rotation_labs(
@@ -3405,7 +3459,7 @@ def build_pack(a, pack_no=1, n_packs=1, require=None, exclude=(),
             today=today, pin=a.lab_id or (),
             allow_non_cisco=a.allow_non_cisco,
             allow_automation=a.allow_automation, ts_only=not a.any_lab,
-            only=(PROFILE["lab_ids"] if PROFILE else None))
+            only=(PROFILE["lab_ids"] if PROFILE else None), allow_tutorial=a.allow_tutorial)
         chosen_tags = {t for lb in labs for t in lb.get("tags", [])}
         chosen_ids = {lb["id"] for lb in labs}
         # ★同一ファミリ(同じ生成器)の二重選定を防ぐ(2026-08-22: タグ推定が空の
@@ -3587,7 +3641,7 @@ def cmd_replace(a):
                               allow_special=a.allow_special, pin=a.lab_id or (),
                               allow_non_cisco=a.allow_non_cisco,
                               allow_automation=a.allow_automation,
-                              ts_only=not a.any_lab)
+                              ts_only=not a.any_lab, allow_tutorial=a.allow_tutorial)
     for n in notes:
         log(f"[選定] {n}")
     if not labs:
@@ -3624,6 +3678,7 @@ def cmd_replace(a):
 
     write_manifest(pdir, {"pack_id": pack_id, "created": man.get("created", ""),
                           "dry_run": False, "seed": man.get("seed", ""),
+                          "paper_lang": man.get("paper_lang", ""),
                           "items": items, "notes": man.get("notes", [])})
     reset_sheet_section(pdir, target)
     mermaid_js = render_html.read_mermaid() if a.mermaid == "embed" else None
@@ -3695,6 +3750,7 @@ def cmd_redeploy(a):
             else f"[基線] 取得できず({why})")
     write_manifest(pdir, {"pack_id": pack_id, "created": man.get("created", ""),
                           "dry_run": False, "seed": man.get("seed", ""),
+                          "paper_lang": man.get("paper_lang", ""),
                           "items": man["items"], "notes": man.get("notes", [])})
     log("===== 再構築 完了(解答用紙・問題文は不変) =====")
     logf.close()
@@ -3711,16 +3767,49 @@ def cmd_render(a):
     pdir = pack_dir(repo, pack_id)
     man = read_manifest(pdir)
     items = man["items"]
+    if getattr(a, "paper_lang", None):      # 紙面の出題言語を切り替える(以後の再描画・解説ページにも効く)
+        man["paper_lang"] = a.paper_lang
+        write_manifest(pdir, {"pack_id": pack_id, "created": man.get("created", ""),
+                              "dry_run": man.get("dry_run") == "true", "seed": man.get("seed", ""),
+                              "paper_lang": a.paper_lang,
+                              "items": items, "notes": man.get("notes", [])})
+    lang = man.get("paper_lang") or "en"
     mermaid_js = render_html.read_mermaid() if a.mermaid == "embed" else None
     write_pages(repo, pdir, items, mermaid_js, mermaid_mode=a.mermaid,
-                pack_id=pack_id)
+                pack_id=pack_id, paper_lang=lang)
+    papers = [it for it in items if it.get("kind") == "paper" and it.get("src")]
+    n_en = sum(1 for it in papers if presented_src(repo, it, lang) != it["src"])
     idx = index_md(pack_id, items, man.get("notes", []),
                    man.get("dry_run") == "true")
     with open(os.path.join(pdir, "index.html"), "w", encoding="utf-8") as fh:
         fh.write(render_html.render(idx, title=f"{pack_id} — Question Pack",
                                     nav=build_nav(items, 0, pack_id),
                                     mermaid_mode=a.mermaid))
-    print(f"再描画しました: {pdir} ({len(items)} 問・解答.md は不変)")
+    print(f"再描画しました: {pdir} ({len(items)} 問・解答.md は不変"
+          f"・紙面 {len(papers)} 問のうち英語版 {n_en} 問)")
+    if lang == "en" and n_en < len(papers):
+        print(f"  ★英語版で出せていない紙面が {len(papers) - n_en} 問(日本語のまま)。"
+              f"状態: scripts/pack.sh en {pack_id}")
+
+
+def cmd_en(a):
+    """紙面の英語版の状態を出す(未訳・原文との食い違い)。全部 OK なら rc=0。
+
+    訳文そのものは出題者が書く(quiz スキル「紙面の英語出題」節)。ここは置き場の案内と機械照合だけ。
+    照合を通らない訳文は描画に使われない(その問は日本語のまま出る)。
+    """
+    repo = os.path.abspath(a.repo)
+    pack_id = a.pack_id or latest_pack(repo)
+    man = read_manifest(pack_dir(repo, pack_id))
+    papers = [(f"Q{it['no']}", it["src"]) for it in man["items"]
+              if it.get("kind") == "paper" and it.get("src")]
+    lang = man.get("paper_lang") or "en"
+    print(f"== {pack_id} 紙面 {len(papers)} 問の英語版"
+          f"{'（このパックは日本語で出す設定= paper_lang: ja）' if lang != 'en' else ''}")
+    ok = paper_en.report(repo, papers)
+    if not ok:
+        print(f"  → 未訳・要修正を直したら: scripts/pack.sh render {pack_id}")
+    return ok
 
 
 def cmd_status(a):
@@ -3852,6 +3941,7 @@ def cmd_grade(a):
     if lab_graded:      # ラボの結果を manifest に残す(--report-only の再描画用)
         write_manifest(pdir, {"pack_id": pack_id, "created": man.get("created", ""),
                               "dry_run": False, "seed": man.get("seed", ""),
+                              "paper_lang": man.get("paper_lang", ""),
                               "items": man["items"],
                               "notes": man.get("notes", [])})
     md = build_report(repo, pack_id, pdir, man, rows, lab_rows)
@@ -3949,7 +4039,7 @@ def main():
     ap = argparse.ArgumentParser(description="問題パック(連続出題)ビルダ")
     ap.add_argument("cmd",
                     choices=["new", "status", "grade", "close", "render",
-                             "replace", "redeploy"])
+                             "replace", "redeploy", "en"])
     ap.add_argument("--no", type=int, default=0,
                     help="replace/redeploy: 対象の問番号"
                          "(redeploy は省略で全ラボ) / grade: この問のラボだけ実機採点"
@@ -4044,6 +4134,8 @@ def main():
                     help="自動化ラボ(Ansible/RESTCONF)も候補に含める(既定は除外)")
     ap.add_argument("--allow-non-cisco", action="store_true",
                     help="他ベンダ機・Linuxサーバ構築系も候補に含める(既定は除外)")
+    ap.add_argument("--allow-tutorial", action="store_true",
+                    help="学習目的(体感)のラボ(CATALOG のタグ tutorial)も候補に含める(既定は除外)")
     ap.add_argument("--allow-special", action="store_true",
                     help="特殊ラボ(専用 ops CLI)も候補に含める")
     ap.add_argument("--mermaid", choices=render_html.MERMAID_MODES, default="cdn",
@@ -4053,7 +4145,10 @@ def main():
                          "または単元 ID(U-A3 等・CURRICULUM.md)。例: --profile enarsi / --profile U-A3,U-H2。"
                          "紙面は該当単元の shape/kind だけ(--only-kinds)、ラボは該当単元の genre/候補だけになる")
     ap.add_argument("--today", action="store_true",
-                    help="status/grade/close/render: 今日のパックを全部まとめて処理する")
+                    help="status/grade/close/render/en: 今日のパックを全部まとめて処理する")
+    ap.add_argument("--paper-lang", choices=["en", "ja"], default=None,
+                    help="render: 紙面の出題言語を切り替えて manifest に残す(既定 en= 英語版があれば英語・"
+                         "ja= 英語版があっても日本語の原文で出す)")
     ap.add_argument("--dry-run", action="store_true",
                     help="CML にも questions/ にも触らないプレビュー")
     ap.add_argument("--lab-args", action="append", default=[],
@@ -4118,17 +4213,21 @@ def main():
         GEN_DEFAULT_ARGS[pfx.strip()] = list(GEN_DEFAULT_ARGS[pfx.strip()]) + shlex.split(rest)
     fn = {"new": cmd_new, "status": cmd_status, "grade": cmd_grade,
           "close": cmd_close, "render": cmd_render,
-          "replace": cmd_replace, "redeploy": cmd_redeploy}[a.cmd]
-    if a.today and a.cmd in ("status", "grade", "close", "render"):
+          "replace": cmd_replace, "redeploy": cmd_redeploy, "en": cmd_en}[a.cmd]
+    if a.today and a.cmd in ("status", "grade", "close", "render", "en"):
         pids = todays_packs(os.path.abspath(a.repo))
         if not pids:
             sys.exit("今日のパックがありません")
+        results = []
         for pid in pids:
             print(f"\n########## {pid} ##########")
             a.pack_id = pid
-            fn(a)
+            results.append(fn(a))
+        if a.cmd == "en" and not all(results):
+            sys.exit(1)
         return
-    fn(a)
+    if fn(a) is False:           # en: 未訳・要修正があれば rc=1
+        sys.exit(1)
 
 
 if __name__ == "__main__":

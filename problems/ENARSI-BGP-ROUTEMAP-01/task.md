@@ -14,19 +14,21 @@ RT01 に実装したい:
 ## トポロジ
 ```
 [Lo10  = 10.10.0.0/24]    [Lo172 = 172.16.0.0/24]
+[Lo11  = 10.10.16.0/20]
 [Lo20  = 10.20.0.0/24]
        │
 RT01 ─ eBGP ─ RT02 ──── eBGP ──── RT03
 AS65001       AS65002 (transit)    AS65003
 ```
 
-初期状態で RT01 の BGP テーブルには `10.10.0.0/24`、`10.20.0.0/24`、`172.16.0.0/24`
-の 3 つが見える。
+初期状態で RT01 の BGP テーブルには `10.10.0.0/24`、`10.10.16.0/20`、`10.20.0.0/24`、
+`172.16.0.0/24` の 4 つが見える。
 
 ## 到達目標
 - RT01 ↔ RT02 eBGP は Established で維持。
 - RT01 BGP テーブル:
   - `10.10.0.0/24` が残り、best path の **local-pref = 200** であること。
+  - `10.10.16.0/20` が残り、local-pref はデフォルト (100)。
   - `10.20.0.0/24` が残り、local-pref はデフォルト (100)。
   - `172.16.0.0/24` は **消えている** こと。
 
@@ -40,9 +42,9 @@ AS65001       AS65002 (transit)    AS65003
 - route-map は **inbound** で適用する。
 
 ## アクセス
-- RT01: `10.1.10.11` / RT02: `10.1.10.12` / RT03: `10.1.10.13`（SSH, admin/CCNP）
+- CML コンソール、または管理 IP へ SSH（SUZUKI / CCNP。管理 IP は出題時の割当を参照）
 
 ## 採点
 ```
-ansible-playbook playbooks/grade.yml -e problem=ENARSI-BGP-ROUTEMAP-01 --vault-password-file <(printf 'CCNP\n')
+scripts/lab.sh grade ENARSI-BGP-ROUTEMAP-01
 ```

@@ -88,8 +88,11 @@ case "$cmd" in
     cp="${3:-}"; [ -n "$cp" ] || { echo "中間チェック名を指定: 例 scripts/lab.sh checkpoint $prob t13"; exit 2; }
     [ -f "$REPO/problems/$prob/grading.$cp.yml" ] || { echo "problems/$prob/grading.$cp.yml が無い"; exit 2; }
     echo "== 中間チェック $cp（参考点・ノルマ記録なし）: $prob =="
+    # 中間チェックは「いまの状態」を見るだけなので、本採点(10 回)ほど粘らない。未充足が残ると
+    # 全項目を取り直すため、10 回だと 10 分を超える(2026-10-06 実測)。収束待ちぶんだけ 3 回にする。
     exec "$PY/ansible-playbook" "$REPO/playbooks/grade.yml" \
-      -e problem="$prob" -e checkpoint="$cp" --vault-password-file <(vault)
+      -e problem="$prob" -e checkpoint="$cp" -e max_attempts="${LAB_CP_ATTEMPTS:-3}" \
+      --vault-password-file <(vault)
     ;;
 
   teardown)

@@ -5,6 +5,10 @@ total_points: 100
 defaults:
   genie_os: iosxe
 
+# 2026-10-10(BL-239): prefix-list の ge/le の取り違えを結果で区別できるようにした。
+#   盤面に 10.10.16.0/20(10.10.0.0/16 の中だが /24 単位ではない経路)を足し、local-pref が既定(100)のままかを見る。
+#   `10.10.0.0/16 le 24` は /16〜/24 に一致するので /20 にも 200 が付いて落ちる(以前は /24 しか流れておらず満点だった)。
+#   制約の「ge 表記」は定義そのものを見る(ge 24 / ge 24 le 24 / ge 24 le 32 を受ける。/25 以降の扱いは問わない)。
 checks:
   - name: "RT01: eBGP ネイバー RT02(10.1.12.2) が Established"
     node: RT01
@@ -13,14 +17,14 @@ checks:
     find: ["vrf", "default", "neighbor", "10.1.12.2"]
     match:
       session_state: { startswith: "Establ" }
-    points: 15
+    points: 10
 
   - name: "RT01: route-map が RT02 ピアに inbound 適用されている"
     node: RT01
     command: "show running-config | section router bgp"
     raw:
       - regex: "neighbor +10\\.1\\.12\\.2 +route-map +\\S+ +in"
-    points: 15
+    points: 10
 
   - name: "RT01: 10.10.0.0/24 の best path で localpref 200 が適用 (seq 1: prefix match + set)"
     node: RT01
@@ -29,16 +33,31 @@ checks:
       - regex: "localpref 200,.+best"
     points: 25
 
-  - name: "RT01: 10.20.0.0/24 が BGP テーブルに残存 (seq 3: その他 permit)"
+  - name: "RT01: 10.10.16.0/20 が残り localpref は既定の 100 (10.10.0.0/16 の中でも /24 単位でない経路は優先の対象外)"
     node: RT01
-    command: "show ip bgp"
+    command: "show ip bgp 10.10.16.0/20"
     raw:
-      - regex: "10\\.20\\.0\\.0"
-    points: 20
+      - regex: "localpref 100,.+best"
+    points: 15
+
+  - name: "RT01: 10.20.0.0/24 が残り localpref は既定の 100 (seq 3: その他 permit)"
+    node: RT01
+    command: "show ip bgp 10.20.0.0/24"
+    raw:
+      - regex: "localpref 100,.+best"
+    points: 10
 
   - name: "RT01: 172.16.0.0/24 が BGP テーブルから消えている (seq 2: as-path 65003 deny)"
     node: RT01
     command: "show ip bgp"
     raw:
+      - regex: "10\\.10\\.0\\.0"
       - not_contains: "172.16.0.0"
-    points: 25
+    points: 20
+
+  - name: "RT01: 優先サービスの判定が prefix-list の ge 表記で書かれている (10.10.0.0/16 ge 24)"
+    node: RT01
+    command: "show running-config | include ^ip prefix-list"
+    raw:
+      - regex: "(?m)^ip prefix-list \\S+ (?:seq \\d+ )?permit 10\\.10\\.0\\.0/16 ge 24(?: le (?:24|32))?\\s*$"
+    points: 10

@@ -21,8 +21,9 @@ description: CCNP問題の出題フロー。ユーザが「問題を出して」
 ### 1. 選定
 
 - ユーザ指定(分野・難易度・ID)があればそれに従う。指定がなければ **履歴と重複しない難3〜4** から2〜3候補を挙げて提案(難易度は全体的に難しめ好み)。
-- **出題言語**(2026-10-05 ユーザ指示): **ラボ問は英文出題が既定**(手順は「英語出題」節)・**紙面問は日本語が既定**。
-  「日本語で」と指定された回だけラボも日本語で出す(途中からの切替も可)。
+- **出題言語**(2026-10-05・紙面は 2026-10-08 ユーザ指示): **ラボ問も紙面問も英文出題が既定**
+  (ラボは「英語出題」節・紙面は「紙面の英語出題」節)。
+  「日本語で」と指定された回だけ日本語で出す(途中からの切替も可)。
 - **GEN 系は新 seed で新インスタンスを生成**してから出題(既存インスタンスは既出の可能性)。生成コマンドは CATALOG の生成器一覧。
 - **「スーパーハード」指定**(BL-210/211): CATALOG の生成器行にある部品オプションを付けて生成する
   (`gen_dmvpn_wreck --hard all` / `gen_dhcp_ts --hard acl_wall` / `gen_redist_field --wall`)。難易度は +1〜2。
@@ -115,8 +116,11 @@ scripts/pack.sh close  --today                            # 全ラボ撤収
   `http://localhost:8899/…` でも可。2026-09-21 から serve は LAN に bind)。
   task.md 全文貼りは不要(HTML が問題用紙そのもの)。
 - **選定方針(ユーザ指示)**: 純粋な Cisco 問題のみ・**ラボは TS 中心**。
-  他ベンダ機/Linux サーバ構築/自動化は既定で除外(`--allow-non-cisco` / `--allow-automation` /
+  他ベンダ機/Linux サーバ構築/自動化(Ansible・RESTCONF 等。**EEM は含めない**= 出題対象・2026-10-07)は既定で除外(`--allow-non-cisco` / `--allow-automation` /
   `--any-lab` で解除)。外部機器が単なる観測機(Zabbix 等)なら可。
+  **学習目的のラボ**(手順に沿って効果を体感する演習。測定手順・記録表・考察つき= QoS 体感シリーズ等)も既定で除外
+  (2026-10-11 ユーザ指示「学習目的のラボはパックに入れない」)。印は CATALOG のタグ `tutorial`。名指し(`--lab-id`)は通る・
+  まとめて解除は `--allow-tutorial`。新しく体感型の問題を作った時は CATALOG の行にこのタグを付ける。
 - **発掘枠(BL-233・2026-10-06)**: ラボ 3 本のうち 1 本は、単元ローテーションが引けない資産(登録外の生成器・静的問題)
   から**最後に出した日が古い順**に選ぶ(生成器と静的を日替わりで交互・同じ日の中だけ乱数)。静的問題は構築問が多いので、
   その日は単元側の構築スロットを使わない(構築は 1 日最大 1 本)。待ち行列と対象外の理由は
@@ -136,8 +140,11 @@ scripts/pack.sh close  --today                            # 全ラボ撤収
   **ラボの正解 config は従来どおり求められてから**(解説ページにも載せない)。
 - **パックのラボも英文で出す**(2026-10-05): `pack.sh new` の完了後、提示の前に、ラボ各問について「英語出題」節の
   手順 1〜4(翻訳 → `lab/<ID>/Task.md` → Lab Notes 差し替え)を行い、最後に `scripts/pack.sh render <PACK-ID>` で
-  ページを作り直す(`Task.md` があるラボは英語版が描画される。紙面ページは日本語のまま)。`replace`/`redeploy` で
+  ページを作り直す(`Task.md` があるラボは英語版が描画される)。`replace`/`redeploy` で
   ラボを入れ替えた時も同じ。CML キャンバスの要約注釈はパックでは貼られない(`LAB_TASK_ANNOTATION=off`)。
+- **パックの紙面も英文で出す**(2026-10-08): `pack.sh new` の完了後、提示の前に「紙面の英語出題」節の手順で
+  全パックの紙面を訳し、`scripts/pack.sh en --today` が全問 OK になってから `scripts/pack.sh render --today` で
+  ページを作り直す。**URL を伝えるのはその後**(訳す前のページは日本語で出ている)。
 - ラボ採点・レビューは通常フローと同じ(`grade.yml` を実走し、実機 config を読んでレビュー)。
   **`_history.md` のメモ欄はパックが自動で埋めない**(空欄のときだけ定型文を入れる)。
   レビュー内容は従来どおり Claude が書く。
@@ -174,6 +181,92 @@ scripts/pack.sh close  --today                            # 全ラボ撤収
 - **要件は1対1対応**: 数値・条件・禁止事項の欠落/追加/意訳での弱化を禁止。訳後に原文と要件数を突き合わせる。
 - **用語は試験英語に統一**: 再配送=redistribution / 集約=summarization(BGPは aggregation) / 隣接=adjacency(EIGRPは neighbor) /
   経路=route / 疎通=reachability / 認証=authentication / 冗長化=redundancy / 本社=HQ / 拠点=branch site / 検証網=test segment。
+
+## 紙面の英語出題(オンデマンド翻訳・紙面の既定)
+
+**紙面問も英文出題が既定**(2026-10-08〜)。ラボと同じく**提示物だけ**を英語にする。生成器・原文
+(`questions/<ID>.md`)・正解キー(`answers/`)・採点・`解答.md` の書式には一切手を入れない。
+解説ページ(report.html)は、問題文の再掲だけが出した版(英語)になり、**解説は日本語のまま**。
+
+### 手順
+
+```bash
+scripts/pack.sh en --today            # 紙面ごとの状態: 未訳 / 要修正(食い違いの中身つき) / OK。全部 OK で rc=0
+scripts/pack.sh render --today        # 訳文を置いたらページを作り直す(英語版で出せた問数が出る)
+scripts/pack.sh render <PACK-ID> --paper-lang ja   # 「日本語で」の回: そのパックの紙面を原文に戻す(en で英語へ)
+```
+
+1. **置き場**: 訳文は原文の隣の `en/` に同じ名前で置く(`questions/20261008-001.md` → `questions/en/20261008-001.md`。
+   別置きプールの紙面も同じ規則= `<原文のディレクトリ>/en/`)。`pack.sh en` が行ごとに置き場を出す。
+2. **訳す**: 下の規約に従い Claude が全文を訳す。★**読むのは原文だけ。`answers/` は開かない**(正解を知って訳すと、
+   正解の肢だけ言い回しが精密になる)。show 出力・config が長い問題は、原文を `en/` へコピーしてから
+   日本語の行だけを置き換える(コードブロックを打ち直さない)。
+3. **照合**: `pack.sh en` が原文と機械照合する(`topologies/paper_en.py`)。**通らない訳文は描画に使われず、その問は
+   日本語のまま出る**(解けない・誤採点になる訳文を出さない安全側の作り)。食い違いが出たら訳文を直す
+   (原文は直さない)。照合が見るのは下の「変えてはいけないもの」だけで、訳の良し悪しは見ない。
+4. **1 問だけ紙面を出す回**(パック外)も同じ: 訳文を `en/` に置き、`.venv/bin/python3 topologies/paper_en.py <原文>` が
+   OK になってから、英語版をチャットに貼って出す。採点・`quota.sh log paper` は従来どおり。
+
+### 変えてはいけないもの(照合が落とす)
+
+- **解答欄の形を決める目印**は下の表の英語に固定する(描画と解答欄はこの語を鍵に読む)。
+
+  | 原文 | 訳文 |
+  |---|---|
+  | `# 問題 <ID>` | `# Question <ID>` |
+  | `> **本問は機器に接続せずに解答すること。…**` | `> **Answer this question without connecting to any device. No additional show commands may be run.**` |
+  | `## 設問` ／ `## 選択肢` | `## Question` ／ `## Choices` |
+  | `(1つを選択してください)` ／ `2 つ選択してください` | `(Choose one.)` ／ `(Choose two.)`(個数は必ず括弧つきで文末に) |
+  | `すべて選んでください`(数非明示) | `(Choose all that apply.)` |
+  | `### 対応させる項目`(組合せ形の表) | `### Items to Match` |
+  | 空欄 `［①］` | そのまま写す(全角の角括弧＋丸数字。番号は同じ概念に付けたまま)。★半角の `[①]` にすると空欄として読めない |
+  | 穴埋め形の指示文(定型) | `For each of the blanks ① through ⑥ in the following explanation (which includes a configuration example), select one term from choices A through J below. No term is used in two blanks. The choices include terms that do not fit any of the blanks.` |
+  | 組合せ形の指示文(型) | `… match each of the commands ① through ④ on the left with one of A through D on the right.`(語群も見出しは `## Choices`) |
+
+  それ以外の見出し: シナリオ= Scenario / トポロジ= Topology / 要件= Requirements / 現在の状態= Current State /
+  設定抜粋= Configuration Excerpt / 出力= Output / 解答の表= Answer Table / ルータのアドレス= Router Addresses。
+- **選択肢の記号と順序**は原文どおり(入れ替えない・統合しない)。正解キーも解説も記号で指している。
+- **コードブロック**: 数と行数を変えない。日本語を含まない行(show 出力・config・図の配線)は一字一句そのまま。
+  日本語を含む行(図のラベル・`(出力なし)`・説明の行)だけを訳し、その行の識別子は残す。
+- **識別子は逐語保持**: ホスト名・アドレス・プレフィックス・IF 名・AS 番号・タイマ値・コマンド・インラインコード。
+  **数は数字のまま**書く(`30 seconds`。thirty と綴らない)。1 桁の数だけは綴ってよい(two routers / the third octet)。
+  コマンドのキーワードは地の文に溶かさない(「passive-interface に設定されている」→ `is configured as passive-interface`。
+  a passive interface と書かない。数字を含まない語は照合で拾えないので、訳す側が守る)。
+- **骨組み**: 見出しの階層・表の行と列・番号付きの要件の数・箇条書きの数を変えない(要件は 1 対 1)。
+- **日本語を残さない**(全角の括弧・読点・中黒も半角へ。**例外は空欄の `［ ］` だけ**)。
+
+### 変えてはいけないもの(照合では見えない= 訳す側が守る)
+
+- **情報を足さない・削らない・強めない・弱めない**。原文が冗長でも要件が重複していても、そのまま訳す
+  (紙面の読みにくさは仕様。整理して読みやすくしない)。原文が明示していない前提・主語・理由を補わない
+  (未提示の前提から消去法で解かせる問題が、補った一語で割れる)。
+- **二通りに読める英文を作らない**: 訳した結果、原文に無い読みが生まれていないかを肢ごとに確かめる
+  (2026-10-08 実例: 「reload を伴って構成を置き換える」を `replaces the configuration with a reload` と訳すと、
+  replace A with B の型で「構成を reload に置き換える」とも読める。`…, and the replacement involves a reload` のように書く)。
+- **選択肢の粒度をそろえる**: 正解らしい肢だけ長く・具体的にしない。原文で同じ語は訳文でも同じ語にする
+  (肢ごとに言い換えると、言い換えの差が手がかりになる)。
+- **穴埋め形**: 空欄に語群のどの語を入れても**文法が通る**ように文を組む(品詞・語形で正解が割れないように)。
+  語群は固有の表記を除き**小文字始まり**でそろえる(文頭用・表用の大文字で入る場所が割れる)。
+  英語の語順で空欄の出現順が変わるのはよい(番号は概念に付けたまま)。
+
+### 文体(CCIE ラボ対策書の文体をモチーフにする・2026-10-08 ユーザ指示)
+
+手本は CCIE のラボ対策書(ワークブック)の**タスク文と解説の地の文**。言い回しの実例は、あれば
+`private/PAPER-EN-STYLE.md`(出典つきの抜粋・非公開)を読む。要点:
+
+| 問題の部分 | 書き方 |
+|---|---|
+| シナリオ・現在の状態 | 平叙の現在形で短く事実を並べる。障害の報告はチケットの型: `R1 is configured to …. However, …` / `R4 can't reach R1's Lo0.` / `… should …, but it does not.` |
+| 要件・条件 | タスク文の型。命令形 `Configure …` / 目的は `Ensure that …` / 状態は `… should be …`・`… must …` / 禁止は `Do not …`・`You should not …` / 条件の列挙は `based on the following policy:` / 手段の制限は `… to accomplish this task.` / 対象をぼかす時は `the appropriate router/s such that …` |
+| 設問 | Cisco の試験の型: `Which statement about … is true?` / `Which two statements … are true? (Choose two.)` / `Which route/s are installed … if … is configured?`。原文が 1 文に条件を畳み込んでいる時は `Given that …, that …, and that …, which …?` で 1 文のまま訳す |
+| 選択肢 | 完結した平叙文(ピリオドで終える)。語句だけの肢は語句のまま |
+| 穴埋めの説明文 | 解説の地の文の型。現在形で、出力や構成を指して言う: `Notice that …` / `This is because …` / `As a result, …` / `In this case, …` / `In other words, …` / `Recall that …` / `Keep in mind that …` / `If this configuration is performed successfully, … should …` |
+
+- **機器と IF の指し方**: `the G0/1 interface of R2` / `R2's Lo0` / `the Loopback0 interfaces of these routers` /
+  `network 10.1.1.0/24` / `the 7.7.7.7/32 prefix` / 並列は `…, respectively`。
+- **用語は試験英語に統一**(ラボの翻訳規約と同じ表): redistribution / summarization(BGP は aggregation) /
+  adjacency(EIGRP は neighbor) / route / reachability / next hop / administrative distance。
+  装飾語(simply, just, easily)と推量(probably, seems)は足さない。
 
 ## 学習ノルマ(BL-114)
 

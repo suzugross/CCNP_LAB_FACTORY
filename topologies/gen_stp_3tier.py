@@ -23,7 +23,9 @@
 採点(BL-222 で「実効状態」へ移行): 保護機構は `show spanning-tree vlan <A> detail` の各ポート ブロック内の
     `Loop guard is enabled( by default)? on the port` / `Root guard is enabled on the port` で見る(記述方式に依存しない)。
     エッジの portfast/BPDU ガードは running-config で「IF の行 か グローバル既定」のどちらかを受ける。
-    記述方式の指定(port/global)は running-config のグローバル行の有無で見る。
+    記述方式の指定(port/global)は running-config のグローバル行の有無で見る。global では加えて、既定値と同じ効果の
+    ポート単位設定(上り/同層の `guard loop`・エッジの `portfast`/`bpduguard`)が残っていないことも見る(BL-239・
+    2026-10-10: 実効状態は重ね書きでも通るため、6 台に 24 行重ねた解答が満点になっていた)。
 決定性(STP-SERIES.design.md §2)= どのセグメントも root path cost か BID の**設定値の差**で決まり、MAC 比較に落ちない。
     selftest が MAC の並びを逆にした計算と突き合わせて全 seed で検査する。
 裏どり(実機 PoC 第6回・poc/stp/README.md): detail の guard 行の書式・loopguard default と IF の root guard の優先関係
@@ -50,6 +52,11 @@ STYLES = ["port", "global", "any"]
 GLOBAL_LINES = {"loopguard": "spanning-tree loopguard default",
                 "pf": "spanning-tree portfast edge default",
                 "bg": "spanning-tree portfast edge bpduguard default"}
+# global 方式で「既定値と同じ効果のポート単位設定」に当たる running-config の行(監査の not_regex・BL-239)。
+# 下りの root guard(` spanning-tree guard root`)は既定値で与えられないので当てない。
+GLOBAL_DUP = {"loopguard": r"(?m)^ spanning-tree guard loop",
+              "pf": r"(?m)^ spanning-tree portfast",
+              "bg": r"(?m)^ spanning-tree bpduguard"}
 LONG_BASE = {"Ethernet": 2000000, "GigabitEthernet": 20000}   # long 方式の 1 リンクのコスト(ioll2= 10M 扱い)
 
 # 物理配線(添字 = スロット順。0/0=0 … 1/0=4。mgmt は 3/3=slot15 固定で触らない)
@@ -557,12 +564,18 @@ def grading(d, pid):
             out.append({"not_regex": r"(?m)^spanning-tree (loopguard |portfast (edge )?(bpduguard )?)default"})
         elif style == "global":
             out.append({"regex": r"(?m)^spanning-tree loopguard default"})
+            # ★既定値で足りる機能をポート単位で重ねない(BL-239・2026-10-10)。要件書は「既定値のままでは要件を
+            #   満たせないポートだけをポートごとに設定する」= ポート単位で書いてよいのは下りの root guard だけ。
+            #   実効状態の検査は重ね書きでも通るので、ここ(running-config)で見る。port 方式の「既定値不使用」と対。
+            out.append({"not_regex": GLOBAL_DUP["loopguard"]})
             if s in ACC:
                 out.append({"regex": r"(?m)^spanning-tree portfast edge default"})
                 out.append({"regex": r"(?m)^spanning-tree portfast edge bpduguard default"})
+                out.append({"not_regex": GLOBAL_DUP["pf"]})
+                out.append({"not_regex": GLOBAL_DUP["bg"]})
         return out
 
-    how = {"port": "・既定値不使用", "global": "・既定値で付与", "any": ""}[style]
+    how = {"port": "・既定値不使用", "global": "・既定値で付与(ポート単位の重ね書き無し)", "any": ""}[style]
     for s in SWS:
         what = ("エッジ= portfast+BPDU ガード・priority 設定無し" if s in ACC else "priority 以外の個別設定無し")
         lay = "a_acc" if s in ACC else "a_dist" if s in DIST else "a_core"
@@ -722,6 +735,26 @@ def selftest():
         if not re.search(nx, line):
             ng += 1
             print(f"NG 既定値の検出漏れ: {line}")
+    # 0b) global 世界: 既定値と同じ効果のポート単位設定は監査に当たる。下りの root guard と模範解は当たらない(BL-239)
+    for seed in (1, 2, 3):
+        d0 = design(random.Random(seed), "global")
+        gg = grading(d0, "X")
+        ok_cfg = {s: render(d0, base_state(d0), s, seed) for s in SWS}
+        for s in SWS:
+            nots = [r["not_regex"] for c in gg["checks"] if c["command"] == AUDIT_CMD and c["node"] == s
+                    for r in c["raw"] if "not_regex" in r]
+            if any(re.search(n, ok_cfg[s]) for n in nots):
+                ng += 1
+                print(f"NG global 模範の構成が監査の禁止行に当たる: seed={seed} {s}")
+            dup = [" spanning-tree guard loop"] + ([" spanning-tree portfast edge", " spanning-tree portfast",
+                                                    " spanning-tree bpduguard enable"] if s in ACC else [])
+            for line in dup:
+                if not any(re.search(n, ok_cfg[s] + f"interface {ifn(0)}\n{line}\n") for n in nots):
+                    ng += 1
+                    print(f"NG global 重ね書きの検出漏れ: seed={seed} {s}:{line}")
+            if any(re.search(n, " spanning-tree guard root\n") for n in nots):
+                ng += 1
+                print(f"NG global 下りの root guard を禁止行と誤認: seed={seed} {s}")
     for image in ("iol", "iosv"):
         set_image(image)
         styles = ("port", "any") if image == "iol" else STYLES

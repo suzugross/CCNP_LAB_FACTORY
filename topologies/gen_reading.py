@@ -16,6 +16,7 @@
   :::orig ... :::               … 原文併記（既定は折りたたみ）
   :::topo ... :::               … ネットワーク図（座標指定の SVG・下記）
   ```console ... ```            … 端末風（プロンプト行を強調）
+  ![説明](img/ファイル名)        … 図版（画面キャプチャ等の画像・下記）
   ```mermaid ... ```            … 図（render_html の機構をそのまま使う）
 
 :::topo — ネットワーク図を **座標で** 置く（YAML）:
@@ -37,10 +38,17 @@
   （実例: 正方形＋対角線の 4 台メッシュが縦一列に潰れた・2026-09-29 ユーザ指摘）。
   **盤面の図は :::topo を使う**。Mermaid は系列図・状態遷移など「自動配置で困らない図」に限る。
 
+図版（画像） — 描き直せない図（GUI の画面キャプチャ等）を **原書の位置にそのまま** 載せる:
+
+  <src>/img/ に画像を置き、本文から `![説明](img/ファイル名)` で参照する。
+  build は img/ を出力先へ写す。bundle は data URI で HTML に埋め込む（外部参照ゼロを保つ）。
+  ★盤面（トポロジ）の図は引き続き :::topo で描く。画像で載せるのは描き直しが利かない図だけ。
+
 ソースの置き場と出力:
 
   <src>/book.yml     … {key, title, subtitle, pages:[{file,title}...]} （無ければ NN-*.md を名前順）
   <src>/NN-*.md      … 1 ファイル = 1 ページ
+  <src>/img/         … 図版（任意）
   → <repo>/reading/<key>/NN-*.html ＋ index.html
 
 使い方:
@@ -48,7 +56,9 @@
   scripts/read.sh serve 8898
 """
 import argparse
+import base64
 import html
+import mimetypes
 import os
 import re
 import shutil
@@ -137,6 +147,10 @@ body.reading code{ padding:0 .22em; }
 .topo .tf{ fill:#f8f5ee; stroke:#c3b48c; stroke-width:1.4; stroke-dasharray:7 5; }
 .topo .tfl{ font-family:"Segoe UI",system-ui,sans-serif; font-size:12px;
   fill:#8a7a52; font-weight:600; }
+
+/* ---- 図版(画面キャプチャ等) ---- */
+body.reading main img{ display:block; max-width:100%; height:auto; margin:1.9rem auto;
+  border:1px solid #d9dde3; border-radius:3px; }
 
 /* ---- 節末の訳注一覧 ---- */
 .notes{ margin-top:4.5rem; border-top:2px solid #111; padding-top:.7rem;
@@ -390,6 +404,44 @@ def termify(page_html):
     return pat.sub(rep, page_html)
 
 
+IMG_DIR = "img"
+IMG_SRC_RE = re.compile(r'(<img\b[^>]*?\bsrc=")(' + IMG_DIR + r'/[^"]+)(")')
+
+
+def lazy_images(page_html):
+    """図版は画面に入ってから読む（キャプチャが数十枚あるページの初期表示を軽くする）。"""
+    return page_html.replace("<img ", '<img loading="lazy" decoding="async" ')
+
+
+def copy_images(src, out_dir):
+    """<src>/img/ を出力先へ写す。無ければ何もしない。"""
+    d = os.path.join(src, IMG_DIR)
+    if os.path.isdir(d):
+        shutil.copytree(d, os.path.join(out_dir, IMG_DIR), dirs_exist_ok=True)
+        return len(os.listdir(d))
+    return 0
+
+
+def inline_images(page_html, src):
+    """束ね版用: img/… への参照を data URI に置き換える（外部参照ゼロを保つ）。"""
+    cache = {}
+
+    def rep(m):
+        rel = html.unescape(m.group(2))
+        if rel not in cache:
+            path = os.path.join(src, rel)
+            if not os.path.exists(path):
+                print(f"[reading] 警告: 図版が無い {rel}", file=sys.stderr)
+                cache[rel] = None
+            else:
+                mime = mimetypes.guess_type(path)[0] or "application/octet-stream"
+                with open(path, "rb") as fh:
+                    cache[rel] = f"data:{mime};base64," + base64.b64encode(fh.read()).decode("ascii")
+        return m.group(0) if cache[rel] is None else m.group(1) + cache[rel] + m.group(3)
+
+    return IMG_SRC_RE.sub(rep, page_html)
+
+
 # --------------------------------------------------------------------------
 # ページ構成
 # --------------------------------------------------------------------------
@@ -438,7 +490,7 @@ def build_page(src, meta, i, out_dir, mermaid_mode):
                     mermaid_mode=("cdn" if mermaid_mode == "local" else mermaid_mode))
     if mermaid_mode == "local":
         out = out.replace(RH.MERMAID_CDN, "mermaid.min.js")
-    out = wrap_tables(termify(out))
+    out = lazy_images(wrap_tables(termify(out)))
     dst = os.path.join(out_dir, p["html"])
     with open(dst, "w", encoding="utf-8") as fh:
         fh.write(out)
@@ -472,6 +524,7 @@ def build(src, mermaid_mode="local"):
         elif not os.path.exists(RH.MERMAID_JS):
             print("[reading] 警告: mermaid.min.js が無いので CDN にします", file=sys.stderr)
             mermaid_mode = "cdn"
+    copy_images(src, out_dir)
     total = 0
     for i in range(len(meta["pages"])):
         dst, n = build_page(src, meta, i, out_dir, mermaid_mode)
@@ -532,11 +585,11 @@ def _assemble(meta, pages, title, dst):
     out = RH.render(md, title=title, extra_css=READING_CSS + BUNDLE_CSS,
                     body_class="reading", allow_html=True, mermaid_mode=mode)
     out = out.replace("<body", '<body id="top"', 1)
-    out = wrap_tables(termify(out))
+    out = inline_images(wrap_tables(termify(out)), os.path.dirname(pages[0]["_path"]))
     os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
     with open(dst, "w", encoding="utf-8") as fh:
         fh.write(out)
-    ext = re.findall(r'(?:src|href)="(?!#)([^"]+)"', out)
+    ext = re.findall(r'(?:src|href)="(?!#|data:)([^"]+)"', out)
     print(f"  {os.path.relpath(dst, REPO):46} {len(out)/1024:7.0f}KB  "
           f"{len(pages)} ページ / 訳注 {offset} 件"
           + ("" if not ext else f"  ★外部参照 {ext}"))

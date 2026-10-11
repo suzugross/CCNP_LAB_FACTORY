@@ -26,6 +26,10 @@
 #           scripts/pack.sh grade --today --no-lab   # 今日の3パックの紙面をまとめて採点
 #           scripts/pack.sh grade --today --report-only  # 解説ページだけ組み直す(再記録なし)
 #           scripts/pack.sh grade <PACK-ID> --no 3   # Q3 のラボだけ再採点(他のラボは前回の結果のまま)
+#   英語版: scripts/pack.sh en     [PACK-ID] / en --today   # 紙面の英語版の状態(未訳・原文との食い違い)。全部 OK で rc=0
+#           ★紙面も英文出題が基本(2026-10-08)。訳文は questions/en/<ID>.md(原文の隣の en/)に出題者が置き、
+#             照合を通ったものだけが描画に使われる(通らない問は日本語のまま)。置いたら render で反映。
+#           scripts/pack.sh render <PACK-ID> --paper-lang ja   # このパックの紙面を日本語に戻す(en で英語へ)
 #   撤収:   scripts/pack.sh close  [PACK-ID] / close --today
 #   配信:   scripts/pack.sh serve  [PORT]   # Windows のブラウザから開く用
 #           ★このサーバ経由で開くと、ページ下部の解答欄がそのまま 解答.md に保存される
@@ -48,7 +52,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="$REPO/.venv/bin/python3"
 GEN="$REPO/topologies/gen_pack.py"
 
-usage() { sed -n '2,34p' "${BASH_SOURCE[0]}"; exit 1; }
+usage() { sed -n '2,38p' "${BASH_SOURCE[0]}"; exit 1; }
 
 # ★本体は関数に入れて最後に 1 回呼ぶ。bash はスクリプトを読み進めながら実行するので、実行中
 #   (new は 15〜25 分・grade は数分)にこのファイルを書き換えると、続きを別の位置から読んで壊れる
@@ -79,7 +83,7 @@ case "$cmd" in
     fi
     exec "$PY" "$REPO/topologies/pack_server.py" --repo "$REPO" --port "$port" --bind "$bind" --console-port "$cport"
     ;;
-  status|grade|close|render|replace|redeploy)
+  status|grade|close|render|replace|redeploy|en)
     # 第1引数が PACK-* ならそれを --pack-id として渡す（打ちやすさ優先）
     first="${1:-}"
     if [ -n "$first" ] && [ "$first" != "${first#PACK-}" ]; then

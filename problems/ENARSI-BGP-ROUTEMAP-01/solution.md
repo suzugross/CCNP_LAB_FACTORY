@@ -25,6 +25,7 @@ clear ip bgp 10.1.12.2 soft in
 ```
 show ip bgp
 show ip bgp 10.10.0.0/24    ! localpref 200
+show ip bgp 10.10.16.0/20   ! localpref 100 (/24 単位ではないので優先の対象外)
 show ip bgp 10.20.0.0/24    ! localpref 100
 show ip bgp 172.16.0.0/24   ! Network not in table
 show route-map RM-IN
@@ -40,6 +41,11 @@ show route-map RM-IN
   落とし穴。
 - **`route-map ... deny SEQ` + `match`**: deny で書くと「match した場合に経路を捨てる」。
   `match` を書かないと「すべて deny」になるので、必ず match を入れる。
+- **`ge 24` と `le 24` は意味が逆**: `10.10.0.0/16 ge 24` は「10.10.0.0/16 の中で、長さが 24 以上」
+  (/24〜/32)に一致する。`10.10.0.0/16 le 24` は「長さが 16 以上 24 以下」(/16〜/24)に一致し、
+  /16 の集約や `10.10.16.0/20` にも local-pref 200 が付いてしまう。盤面の `10.10.16.0/20` は
+  この取り違えを結果で見分けるための経路(正しくは seq 30 に落ちて 100 のまま)。「/24 ちょうど」に
+  絞るなら `ge 24 le 24`。採点は `ge 24`・`ge 24 le 24`・`ge 24 le 32` のいずれも受ける。
 - **prefix-list 名の `ip address` 指定**: route-map の prefix-list を呼ぶには
   `match ip address prefix-list NAME`。`match ip address NAME` だと標準 ACL を見にいく。
 - **as-path access-list は番号 (1-500)**: `permit _65003_` で 65003 を含む path を識別。
@@ -47,5 +53,5 @@ show route-map RM-IN
   deny アクション。逆 (`deny _65003_` + route-map permit) でも実現可能だが思考は逆になる。
 - **`set local-preference`**: ハイフン無しの `local-preference`。`local-pref` は無効。
 
-> 採点: route-map inbound 適用 / BGP テーブルで 10.10/24 が LP=200、10.20/24 が
-> 残存 (LP=100)、172.16/24 が不在を判定。
+> 採点: route-map inbound 適用 / BGP テーブルで 10.10.0.0/24 が LP=200、10.10.16.0/20 と
+> 10.20.0.0/24 が残存 (LP=100)、172.16.0.0/24 が不在 / prefix-list が ge 表記、を判定。

@@ -33,9 +33,12 @@ def catalog():
     return {
         "normal": [static_row("ENCOR-A-01"), static_row("ENCOR-B-01"), static_row("ENCOR-C-01"),
                    static_row("ENCOR-EASY-01", diff=2),
+                   static_row("ENCOR-EEM-01", diff=3, tags=("eem", "automation", "assurance"), nodes=1),
+                   static_row("ENCOR-QOS-TUT-01", tags=("qos", "mqc", "tutorial"), nodes=4),   # 学習目的(体感)
                    static_row("ENARSI-IPSEC-VTI-01", tags=("ipsec",)),      # ローテーション側(vpnbuild)
                    static_row("PVT-PAPER-01", nodes=0, access="紙面(機器なし)")],
-        "auto": [static_row("ANSIBLE-01-INVENTORY", diff=3, tags=("automation", "ansible"), kind="auto")],
+        "auto": [static_row("ANSIBLE-01-INVENTORY", diff=3, tags=("automation", "ansible"), kind="auto"),
+                 static_row("ENCOR-AUTO-X-01", diff=3, tags=("eem", "automation"), kind="auto")],
         "special": [{"id": "CAMPUS-TS-01", "diff": 5, "tags": ["ospf"], "nodes": 11,
                      "ops": "campus_ops.py", "note": "", "kind": "special"}],
         "gen": [],
@@ -69,24 +72,41 @@ def pick(cat, hist, day, repo, budget=40, used=0, m=None, count=1, seed=0):
 def test_pool_and_skips(repo):
     pool, skipped = gp.discovery_pool(catalog(), mode())
     ids = sorted(c["id"] for c in pool)
-    assert ids == ["ENCOR-A-01", "ENCOR-B-01", "ENCOR-C-01", "GEN-ALPHA", "GEN-BETA", "GEN-BIG"], ids
+    assert ids == ["ENCOR-A-01", "ENCOR-B-01", "ENCOR-C-01", "ENCOR-EEM-01",
+                   "GEN-ALPHA", "GEN-BETA", "GEN-BIG"], ids      # EEM は `automation` タグ付きでも対象
     why = dict(skipped)
     assert "保留" in why["GEN-HELD"] and "後継" in why["GEN-OLD"] and why["GEN-RADIUS"] == "非 Cisco"
     assert why["ANSIBLE-01-INVENTORY"] == "自動化" and "専用 CLI" in why["CAMPUS-TS-01"]
+    assert why["ENCOR-AUTO-X-01"] == "自動化"                  # ID が自動化ラボの形なら eem タグがあっても除外
     assert "難2" in why["ENCOR-EASY-01"]
+    assert why["ENCOR-QOS-TUT-01"] == "学習目的(体感)"          # タグ tutorial は既定で対象外(2026-10-11)
     # ローテーション側の資産と紙面は、対象にも対象外の一覧にも出ない(発掘枠の管轄外)
     for pid in ("GEN-DMVPN", "ENARSI-IPSEC-VTI-01", "PVT-PAPER-01", "PVT-PAPERGEN"):
         assert pid not in ids and pid not in why, pid
     # 除外方針の解除フラグ
     pool2, _ = gp.discovery_pool(catalog(), mode(), allow_non_cisco=True, allow_automation=True)
     assert {"GEN-RADIUS", "ANSIBLE-01-INVENTORY"} <= {c["id"] for c in pool2}
+    assert "ENCOR-QOS-TUT-01" not in {c["id"] for c in pool2}
+    pool3, _ = gp.discovery_pool(catalog(), mode(), allow_tutorial=True)
+    assert "ENCOR-QOS-TUT-01" in {c["id"] for c in pool3}
+    # 通常の選定(TS 以外も含める指定)でも既定では出ない・名指しなら出る
+    hist0 = []
+    labs, notes = gp.select_labs(catalog(), hist0, count=20, budget=199, used=0, rnd=random.Random(1),
+                                 today=D0, ts_only=False)
+    assert "ENCOR-QOS-TUT-01" not in {c["id"] for c in labs} and any("学習目的" in n for n in notes), notes
+    labs, _ = gp.select_labs(catalog(), hist0, count=20, budget=199, used=0, rnd=random.Random(1),
+                             today=D0, ts_only=False, allow_tutorial=True)
+    assert "ENCOR-QOS-TUT-01" in {c["id"] for c in labs}
+    labs, _ = gp.select_labs(catalog(), hist0, count=1, budget=99, used=0, rnd=random.Random(1),
+                             today=D0, pin=("ENCOR-QOS-TUT-01",))
+    assert [c["id"] for c in labs] == ["ENCOR-QOS-TUT-01"]
 
 
 def test_cycle_guarantee(repo):
-    """毎日 1 本で回すと、候補 6 件が「種別ごとの件数 × 種別数」日以内に必ず全部出る。"""
+    """毎日 1 本で回すと、候補 7 件(生成器 3・静的 4)が「多い方の件数 × 種別数」日以内に必ず全部出る。"""
     cat, hist, seen_days = catalog(), [], {}
     kinds_by_day = []
-    for i in range(12):
+    for i in range(16):
         day = D0 + datetime.timedelta(days=i)
         labs, _, _ = pick(cat, hist, day, repo, seed=i)
         assert len(labs) == 1
@@ -95,11 +115,12 @@ def test_cycle_guarantee(repo):
         seen_days.setdefault(lb["id"], []).append(i)
         # 生成器は新 seed の ID で履歴に載る・静的は ID そのまま
         hist.append((day.isoformat(), f"{lb['id']}-{1000 + i}" if lb["source"] == "generator" else lb["id"]))
-    assert len(seen_days) == 6, seen_days                       # 全件が出た
-    assert all(d[0] < 6 for d in seen_days.values()), seen_days  # 最初の 6 日で一巡
+    assert len(seen_days) == 7, seen_days                       # 全件が出た
+    assert all(d[0] < 8 for d in seen_days.values()), seen_days  # 静的 4 件 × 2 種別 = 最初の 8 日で一巡
     assert all(a != b for a, b in zip(kinds_by_day, kinds_by_day[1:])), kinds_by_day   # 日替わりで交互
-    for pid, days in seen_days.items():                         # 2 周目は同じ間隔(= 古い順が保たれている)
-        assert len(days) == 2 and days[1] - days[0] == 6, (pid, days)
+    for pid, days in seen_days.items():                         # 2 周目以降は種別ごとに同じ間隔(= 古い順が保たれている)
+        gap = 6 if pid.startswith("GEN-") else 8
+        assert all(b - a == gap for a, b in zip(days, days[1:])) and len(days) >= 2, (pid, days)
 
 
 def test_oldest_first_not_random(repo):
