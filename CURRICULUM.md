@@ -280,6 +280,7 @@ C 群= 既存単元の薄い層。**
 
 | 日付 | U | 段階 | 成果物 | 備考 |
 |------|---|------|--------|------|
+| 2026-10-11 | U-D6 | L1 | `gen_twist.py` v2(GEN-TWIST・資産は既存) | BL-242。中継点でのフィルタで到達性が欠ける盤面を残し、到達性を能動 ping で採点。手段(OSPF のデフォルト)は問題文に書かない。U-B2 にも掛かる |
 | 2026-10-08 | U-A1 | L1 | PVT 構築問 1 本(private/CATALOG.md 参照) | BL-231。VTP プルーニングの有効化と対象リストの操作(単独/add/none/既定/remove)。中間チェック 4 本。採点は表示形でなく実際に刈られた VLAN で見る。ioll2 実機で白紙 0→模範解 100 |
 | 2026-09-30 | U-A1 | L2 | PVT 構築問 1 本(private/CATALOG.md 参照) | BL-231。DTP 4 モード・encap dot1q/isl/negotiate・VTP 伝播・許可 VLAN の only/add/remove/none/except/all。ioll2 実機で白紙 0→模範解 100 |
 | 2026-09-27 | U-A1 U-A2 U-A6 U-H2 U-I2 U-I3 U-I7 | L4 | `gen_enterprise.py`(GEN-ENT・エンタープライズ拠点構築・難5・20 ノード)＋`ent_ops.py`(採点前フック=回線切替試験) | BL-225。U-H2 は ACL の実務構築(SVI×送信元 VLAN・境界 WAN/LAN・命名規約)として L2 も ○。E2E 3→100・誤解法 63。残り(ハード・TS・世界 B・パック)= BL-229 |

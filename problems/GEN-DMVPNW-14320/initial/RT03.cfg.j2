@@ -1,0 +1,42 @@
+! RT03 (支店2)
+interface Loopback1
+ ip address 10.71.3.1 255.255.255.0
+!
+interface {{ links[0] }}
+ description === to ISP ===
+ ip address 198.51.100.6 255.255.255.252
+ no shutdown
+!
+ip route 0.0.0.0 0.0.0.0 198.51.100.5
+!
+crypto isakmp policy 10
+ encryption aes 256
+ hash sha256
+ authentication pre-share
+ group 14
+!
+crypto ipsec transform-set TS-DMVPN esp-aes 256 esp-sha256-hmac
+ mode transport
+!
+crypto ipsec profile DMVPN-PROF
+ set transform-set TS-DMVPN
+!
+interface Tunnel0
+ ip address 172.26.137.3 255.255.255.0
+ no ip redirects
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ ip nhrp authentication BRANCH60
+ ip nhrp network-id 614
+ ip nhrp nhs 172.26.137.1 nbma 203.0.113.2 multicast
+ ip nhrp shortcut
+ tunnel source {{ links[0] }}
+ tunnel mode gre multipoint
+ tunnel key 2771
+ tunnel protection ipsec profile DMVPN-PROF
+!
+router eigrp 834
+ eigrp router-id 172.26.137.3
+ network 172.26.137.0 0.0.0.255
+ network 10.71.3.0 0.0.0.255
+!

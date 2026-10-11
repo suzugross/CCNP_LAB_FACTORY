@@ -11,6 +11,8 @@
 
 | 出題日 | 問題ID (variant/seed) | 難 | 状態 | 得点 | メモ |
 |--------|----------------------|----|------|------|------|
+| 2026-10-11 | GEN-DMVPNW-14320 | 5 | 撤収済 | 100 | パック PACK-20261011 の Q3・en。**壊滅 DMVPN の初出題**。欠落 8 か所(hub= p2p GRE 化/tunnel key/ipsec profile/multicast dynamic 無効、RT02= isakmp key・network-id、RT03= isakmp key、RT04= ipsec profile)＋最後の 1 層= EDGE-IN に ESP 許可なし。全て是正・EDGE-IN は外さず `5 permit esp any host 203.0.113.2` を先頭に挿入。一発満点・所要 1:25:27。Phase 3 shortcut は 3 支店間で成立(DT1/DT2) |
+| 2026-10-11 | GEN-TWIST-11599 | 3 | 撤収済 | 100 | パック PACK-20261011 の Q2・en(発掘枠)。IF 単位の `ip ospf 1 area 0`＋Lo0 passive＋RT01 に `distribute-list route-map MAP01 in`(PL01 を deny)。一発満点・所要 9:16。★出題側の不備= RT01 が中継点のため RT03/RT04 から 21.21.21.21 へは実際には届かない(採点は経路表のみ)→ BL-242 |
 | 2026-10-10 | ENCOR-QOS-POLICE-01 | - | 撤収済 | - | パック PACK-20261010 の Q3・en |
 | 2026-10-10 | GEN-RDFIELD-37274 | - | 撤収済 | 100 | パック PACK-20261010 の Q2・en。ユーザ解答 20→100(25:16＋見直し)。1 回目= タグ遮断を `distribute-list route-map … out ospf 19` に置き(OSPF からの再配送そのものを遮断= 自分で付けた 903 を自分で落とす)EIGRP 側が OSPF 側へ no_route。2 回目= `in` へ直して模範と同じ形(両境界で OSPF→EIGRP にタグ 903 付与＋EIGRP 受信で 903 を deny)。解説は出さず自力で是正 |
 | 2026-10-10 | GEN-V6ADDR-75673 | - | 撤収済 | 100 | パック PACK-20261010 の Q1・en。ユーザ解答 100(28:12)。CPE の LAN 側 IF に委任プレフィックスからのアドレスを付ける 1 行が模範(同じ箇所を是正)。sub-bits に委任部分まで書いた形(`DELEG 2001:DB8:F000:2::1/64`)。要件に無い追加 3 行(CPE LAN の other-config-flag と dhcp relay・HST の dhcp client request vendor)が残るが減点なし |
