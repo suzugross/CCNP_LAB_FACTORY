@@ -1778,8 +1778,12 @@ def q_title(no, item):
     return f"Q{no} ({kind} {item['ref']})"
 
 
-def cloze_inline_selects(it, src_path):
-    """穴埋め形なら {丸数字: <select> HTML} を返す(本文中の ［①］ に埋め込む・BL-198)。それ以外は {}。"""
+def cloze_inline_selects(it, src_path, alt=False):
+    """穴埋め形なら {丸数字: <select> HTML} を返す(本文中の ［①］ に埋め込む・BL-198)。それ以外は {}。
+
+    alt= 日英 2 版のページの、切替先の版に埋めるぶん(data-alt を付ける)。値は既定の版と同じ「①D」で、
+    ページ側が両版のプルダウンを同期させ、解答として数えるのは既定の版のものだけ(render_html.ANSWER_JS)。
+    """
     import html as H
     if it.get("kind") != "paper" or not src_path or not os.path.exists(src_path):
         return {}
@@ -1794,16 +1798,18 @@ def cloze_inline_selects(it, src_path):
     for i, (tk, _ctx) in enumerate(blanks, 1):
         opts = f'<option value="">{tk}</option>' + "".join(
             f'<option value="{tk}{l}">{l}. {H.escape((texts.get(l) or "")[:60])}</option>' for l in letters)
-        out[tk] = (f'<select class="msel inline" name="ans{it["no"]}_{i}" data-k="{tk}" '
-                   f'title="Blank {tk}">{opts}</select>')
+        out[tk] = (f'<select class="msel inline" name="ans{it["no"]}_{i}{"_alt" if alt else ""}" data-k="{tk}" '
+                   f'{"data-alt=\"1\" " if alt else ""}title="Blank {tk}">{opts}</select>')
     return out
 
 
-def answer_form(pack_id, it, src_path):
+def answer_form(pack_id, it, src_path, lang="", alt_src="", alt_lang=""):
     """問題ページ下部に置く解答欄の HTML。
 
     紙面(選択式)は実在する選択肢だけのラジオ、記述式は自由記述、ラボはメモのみ。
     入力は pack_server.py の API 経由で 解答.md の該当セクションへ書き戻される。
+    alt_src= 日英 2 版のページの切替先の版。解答欄は 2 版で共通(形は既定の版から決める。英語版は原文との
+    照合で形が同じと分かっている)。問題文の語が出るのは組合せ形の項目名だけなので、そこだけ 2 言語で持つ。
     """
     import html as H
     kind = it["kind"]
@@ -1838,13 +1844,20 @@ def answer_form(pack_id, it, src_path):
             # ★組合せ形(項目①〜と記号A〜の対応付け・BL-168): 項目ごとに記号を1つ選ぶ。
             #   値は「①D」の形。ページの ansValue() はチェック済みを全部「・」でつなぐので
             #   解答: 行は「①D・②A・③C・④B」になり、採点は match_of() が読む。
-            rows = []
+            rows, alt_terms = [], {}
+            if alt_src and os.path.exists(alt_src):
+                with open(alt_src, encoding="utf-8") as fh:
+                    alt_terms = dict(render_html.match_terms(fh.read()))
             for i, (tk, ttext) in enumerate(terms, 1):
                 opts = "".join(
                     f'<label><input type="radio" name="ans{it["no"]}_{i}" '
                     f'value="{tk}{l}">{l}</label>' for l in letters)
+                term = H.escape(ttext)
+                if tk in alt_terms:
+                    term = (f'<span data-l="{lang}">{term}</span>'
+                            f'<span data-l="{alt_lang}">{H.escape(alt_terms[tk])}</span>')
                 rows.append(f'<div class="mrow"><span class="mterm">{tk} '
-                            f'{H.escape(ttext)}</span><div class="opts">{opts}</div></div>')
+                            f'{term}</span><div class="opts">{opts}</div></div>')
             ansfield = ('<label class="row">Choose <b>one</b> letter for each item.</label>'
                         + "".join(rows))
         elif letters:
@@ -1896,7 +1909,8 @@ def build_nav(items, cur_no, pack_id="", workspace_link=True):
     workspace_link= ラボの問題ページ単体(q<N>.html)に、ワークスペースへの入口を帯の右端に置く。
     ワークスペースの中で出す版(q<N>.ws.html)はナビ帯そのものを付けない(ワークスペースが下端に出す)。
     """
-    nav = [{"label": "Contents", "href": "index.html", "target": "_top"}]
+    nav = [{"label": "‹ Packs", "href": "../", "target": "_top"},      # パック一覧(pack_home)へ戻る
+           {"label": "Contents", "href": "index.html", "target": "_top"}]
     for it in items:
         n = it["no"]
         nav.append({"label": f"Q{n}", "href": q_href(it, pack_id), "current": n == cur_no,
@@ -1908,7 +1922,8 @@ def build_nav(items, cur_no, pack_id="", workspace_link=True):
     return nav
 
 
-def write_workspace_pages(src, pdir, it, items, pack_id, meta, mermaid_js, mermaid_mode):
+def write_workspace_pages(src, pdir, it, items, pack_id, meta, mermaid_js, mermaid_mode,
+                          lang="", alt_src="", alt_lang=""):
     """ラボのワークスペース(lab_console.py・BL-234)用の別版を書く。
 
     ワークスペースには CML から起こした結線図の Topology タブがあるので、問題文の盤面の節
@@ -1919,19 +1934,34 @@ def write_workspace_pages(src, pdir, it, items, pack_id, meta, mermaid_js, merma
                        タブと隣り合って押し間違える)。解答欄は q<N>.html と同じ
       q<N>.topo.html … 盤面の節だけ(結線図の下に出す)。盤面の節がある問題だけ
     問題ページ単体(q<N>.html)は従来どおり全文(ワークスペースが上がっていない時の受け皿)。
+    alt_src= 日英 2 版で出す時の切替先の版(BL-236 (c))。両方の別版を 2 版で書く。盤面の節を切り出せるのが
+    片方の版だけの時は、切り出せなかった版は全文のまま Task に出す(どちらの版でも節が欠けない)。
     """
     with open(src, encoding="utf-8") as fh:
-        rest, topo = render_html.split_topology(fh.read())
+        full = fh.read()
+    rest, topo = render_html.split_topology(full)
+    alt_rest = alt_topo = None
+    if alt_src:
+        with open(alt_src, encoding="utf-8") as fh:
+            alt_full = fh.read()
+        # 切替先は、既定の版と同じ番目の節を切り出す(見出しの語が違っても同じ節が同じタブへ行く)
+        alt_rest, alt_topo = render_html.split_topology(alt_full, like=full)
+        if not topo:                 # 既定の版に盤面の節が無い= Topology タブへは移さない。切替先も全文のまま
+            alt_rest, alt_topo = alt_full, None
+        elif not alt_topo:
+            alt_topo = None
     no = it["no"]
     with open(os.path.join(pdir, f"q{no}.ws.html"), "w", encoding="utf-8") as fh:
         fh.write(render_html.render(rest, title=q_title(no, it), meta=meta,
                                     mermaid_js=mermaid_js, mermaid_mode=mermaid_mode,
-                                    answer_form=answer_form(pack_id, it, src), body_class="nonav"))
+                                    answer_form=answer_form(pack_id, it, src), body_class="nonav",
+                                    lang=lang, alt_md=alt_rest, alt_lang=alt_lang))
     if not topo:
         return
     with open(os.path.join(pdir, f"q{no}.topo.html"), "w", encoding="utf-8") as fh:
         fh.write(render_html.render(topo, title=f"{q_title(no, it)} — Topology",
-                                    mermaid_js=mermaid_js, mermaid_mode=mermaid_mode, body_class="nonav"))
+                                    mermaid_js=mermaid_js, mermaid_mode=mermaid_mode, body_class="nonav",
+                                    lang=lang, alt_md=alt_topo, alt_lang=alt_lang))
 
 
 def pack_paper_lang(pdir):
@@ -1952,6 +1982,27 @@ def presented_src(repo, it, lang="en"):
     if it.get("kind") != "paper" or not src:
         return src
     return paper_en.presented(repo, src, lang)
+
+
+def lang_versions(repo, it, paper_lang="en"):
+    """その問題をページに載せる版を [(言語, 絶対パス), …] で返す。先頭が開いた時に出る版、2 つ目が切替先。
+
+    紙面= 原文(ja)と、原文との照合を通った英語版(en)。先頭は paper_lang(既定 en)。照合を通らない英語版は
+          載せない(解けない・誤採点になる訳文を出さない= paper_en と同じ安全側)。
+    ラボ= manifest の src(日本語の 問題.md)と、出題者が置いた英語版 lab/<ID>/Task.md。あれば英語が先頭。
+    1 つしか返らない問は切替なし(従来どおりの 1 版のページ)。
+    """
+    src = os.path.join(repo, it["src"])
+    if it["kind"] == "paper":
+        vers = [("ja", src)]
+        en = paper_en.presented(repo, it["src"], "en")
+        if en != it["src"]:
+            vers.append(("en", os.path.join(repo, en)))
+        return sorted(vers, key=lambda v: v[0] != paper_lang)
+    en = os.path.join(repo, "lab", it["ref"], "Task.md")
+    if not os.path.exists(en) or os.path.abspath(en) == os.path.abspath(src):
+        return [("ja", src)]
+    return [("en", en), ("ja", src)]
 
 
 def write_pages(repo, pdir, items, mermaid_js, mermaid_mode="cdn", pack_id="", paper_lang=None):
@@ -1979,23 +2030,21 @@ def write_pages(repo, pdir, items, mermaid_js, mermaid_mode="cdn", pack_id="", p
             meta = ("Hands-on lab. Connect to the devices to solve it. Working folder: lab/%s/" % it["ref"]
                     if it["kind"] == "lab" else
                     "Paper question. Do not connect to any device; answer from the output shown.")
-            # ラボは英文出題が基本: 英語版(lab/<ID>/Task.md)が置かれていればそちらを描画する。
-            # 置くのは出題者(quiz スキル「英語出題」節)。無ければ日本語の 問題.md のまま。
-            en = os.path.join(repo, "lab", it["ref"], "Task.md")
-            if it["kind"] == "lab" and os.path.exists(en):
-                src = en
-            # 紙面も英文出題が基本(2026-10-08): 英語版が原文との照合を通っていればそちらを描画する。
-            # 無い・食い違う時は日本語の原文のまま(状態は `pack.sh en` で見る)。
-            if it["kind"] == "paper":
-                src = os.path.join(repo, presented_src(repo, it, paper_lang))
+            # 英文出題が基本(ラボ= 2026-10-05・紙面= 2026-10-08)で、ページの中で日本語へ切り替えられる
+            # (BL-236 (c))。版の決め方は lang_versions。英語版が無い問は日本語だけ(切替なし)。
+            (lang, src), *rest = lang_versions(repo, it, paper_lang)
+            alt_lang, alt_src = rest[0] if rest else ("", "")
             render_html.render_file(src, out, title=q_title(it["no"], it),
                                     nav=build_nav(items, it["no"], pack_id), meta=meta,
                                     mermaid_js=mermaid_js,
                                     mermaid_mode=mermaid_mode,
-                                    answer_form=answer_form(pack_id, it, src),
-                                    inline_blanks=cloze_inline_selects(it, src))
+                                    answer_form=answer_form(pack_id, it, src, lang, alt_src, alt_lang),
+                                    inline_blanks=cloze_inline_selects(it, src),
+                                    lang=lang, alt_path=alt_src or None, alt_lang=alt_lang,
+                                    alt_inline_blanks=cloze_inline_selects(it, alt_src, alt=True))
             if it["kind"] == "lab":
-                write_workspace_pages(src, pdir, it, items, pack_id, meta, mermaid_js, mermaid_mode)
+                write_workspace_pages(src, pdir, it, items, pack_id, meta, mermaid_js, mermaid_mode,
+                                      lang, alt_src, alt_lang)
         written.append(out)
     return written
 
@@ -3949,7 +3998,8 @@ def cmd_grade(a):
     with open(out, "w", encoding="utf-8") as fh:
         fh.write(decorate_report(render_html.render(
             md, title=f"{pack_id} — 採点結果と解説",
-            nav=[{"label": "問題パックの目次", "href": "index.html"},
+            nav=[{"label": "‹ パック一覧", "href": "../"},
+                 {"label": "問題パックの目次", "href": "index.html"},
                  {"label": "採点結果と解説", "href": "report.html", "current": True}],
             mermaid_mode=a.mermaid, extra_css=REPORT_CSS,
             body_class="report", allow_html=True)))
@@ -4147,8 +4197,8 @@ def main():
     ap.add_argument("--today", action="store_true",
                     help="status/grade/close/render/en: 今日のパックを全部まとめて処理する")
     ap.add_argument("--paper-lang", choices=["en", "ja"], default=None,
-                    help="render: 紙面の出題言語を切り替えて manifest に残す(既定 en= 英語版があれば英語・"
-                         "ja= 英語版があっても日本語の原文で出す)")
+                    help="render: 紙面を開いた時に出す言語を切り替えて manifest に残す(既定 en= 英語版があれば英語・"
+                         "ja= 日本語の原文。どちらでも、英語版がある問はページの中のボタンでもう一方へ切り替えられる)")
     ap.add_argument("--dry-run", action="store_true",
                     help="CML にも questions/ にも触らないプレビュー")
     ap.add_argument("--lab-args", action="append", default=[],

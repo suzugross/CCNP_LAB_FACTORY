@@ -251,6 +251,52 @@ def main():
         expect("OK → 英語版", paper_en.presented(repo, src) == "questions/en/20990101-001.md")
         expect("日本語指定 → 原文", paper_en.presented(repo, src, "ja") == src)
 
+    print("[日英 2 版のページ(ページ内の切替)]")
+    import gen_pack
+    two = R.render(EN, lang="en", alt_md=JA, alt_lang="ja", answer_form="<section class='answer'></section>")
+    expect("版ごとの箱が 2 つ・既定は英語", two.count('class="lv"') == 2 and '<body data-lang="en">' in two
+           and two.index('class="lv" data-l="en"') < two.index('class="lv" data-l="ja"'))
+    expect("切替ボタンとスクリプトが入る", 'class="langsw"' in two and "ccnpLangs" in two)
+    one = R.render(EN)
+    expect("1 版のページには何も足さない", 'class="lv"' not in one and 'class="langsw"' not in one
+           and "ccnpLangs" not in one and "<body>" in one)
+    expect("言語の指定が揃わなければ 1 版", 'class="lv"' not in R.render(EN, alt_md=JA))
+    with tempfile.TemporaryDirectory() as repo:
+        os.makedirs(os.path.join(repo, "questions", "en"))
+        os.makedirs(os.path.join(repo, "lab", "X-01"))
+        it = {"no": 1, "kind": "paper", "ref": "20990101-002", "src": "questions/20990101-002.md"}
+        with open(os.path.join(repo, it["src"]), "w", encoding="utf-8") as fh:
+            fh.write(CLOZE_JA)
+        expect("紙面: 未訳は日本語だけ", [l for l, _ in gen_pack.lang_versions(repo, it)] == ["ja"])
+        with open(os.path.join(repo, paper_en.en_path(it["src"])), "w", encoding="utf-8") as fh:
+            fh.write(CLOZE_EN)
+        expect("紙面: 既定は英語が先", [l for l, _ in gen_pack.lang_versions(repo, it, "en")] == ["en", "ja"])
+        expect("紙面: paper_lang=ja は日本語が先", [l for l, _ in gen_pack.lang_versions(repo, it, "ja")] == ["ja", "en"])
+        (_, src), (_, alt) = gen_pack.lang_versions(repo, it)
+        sel, sel_alt = gen_pack.cloze_inline_selects(it, src), gen_pack.cloze_inline_selects(it, alt, alt=True)
+        expect("穴埋め: 両版のプルダウンは同じ空欄・同じ値", list(sel) == list(sel_alt) == ["①", "②"]
+               and all(v.count('value="') == sel_alt[k].count('value="') for k, v in sel.items()))
+        expect("穴埋め: 切替先のぶんだけ写しの印", all("data-alt" in v for v in sel_alt.values())
+               and not any("data-alt" in v for v in sel.values()))
+        lab = {"no": 2, "kind": "lab", "ref": "X-01", "src": "lab/X-01/問題.md"}
+        with open(os.path.join(repo, lab["src"]), "w", encoding="utf-8") as fh:
+            fh.write("# X\n\n## 状況\n\na\n\n## 構成台帳\n\nb\n\n## タスク\n\nc\n")
+        expect("ラボ: 英語版が無ければ日本語だけ", [l for l, _ in gen_pack.lang_versions(repo, lab)] == ["ja"])
+        with open(os.path.join(repo, "lab", "X-01", "Task.md"), "w", encoding="utf-8") as fh:
+            fh.write("# X\n\n## Scenario\n\na\n\n## Topology\n\nb\n\n## Task\n\nc\n")
+        vers = gen_pack.lang_versions(repo, lab)
+        expect("ラボ: 英語が先・日本語が切替先", [l for l, _ in vers] == ["en", "ja"])
+        with open(vers[0][1], encoding="utf-8") as fh:
+            en_md = fh.read()
+        with open(vers[1][1], encoding="utf-8") as fh:
+            ja_md = fh.read()
+        expect("盤面の節: 見出しの語が鍵に掛からない版は切り出せない", R.split_topology(ja_md)[1] == "")
+        rest, topo = R.split_topology(ja_md, like=en_md)
+        expect("盤面の節: 英語版と同じ番目の節を切り出す", "構成台帳" in topo and "構成台帳" not in rest
+               and "タスク" in rest)
+        expect("盤面の節: 見出しの数が違えば自分の語で決める",
+               R.split_topology(ja_md, like=en_md + "\n## Extra\n")[1] == "")
+
     print(f"\n{'全部 ok' if not FAILS else 'FAIL: ' + ', '.join(FAILS)}")
     sys.exit(1 if FAILS else 0)
 

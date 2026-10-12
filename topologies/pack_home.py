@@ -12,6 +12,10 @@
           `error:` 付きの問(dry-run・構築失敗)は採点対象から外す。
   - 解答: 解答.md の `状態: [x]` か、`解答:` 欄の記入。
 
+打ち切り: パックのディレクトリに空ファイル `.abandoned` を置くと、本流の並びから外して下の
+  折りたたみ(Abandoned)へ回す(ラボを途中で撤収して採点が永久に揃わないパック用。2026-10-11)。
+  manifest に書かないのは、write_manifest が決まった項目しか書き戻さず再描画・採点で消えるため。
+
 単体で `python3 pack_home.py --out /tmp/x.html` とすればページを書き出して確認できる。
 """
 
@@ -123,6 +127,7 @@ def pack_summary(pdir, attempts):
     date = man.get("created") or (f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else "")
     return {
         "id": pid, "date": date, "dry": man.get("dry_run") == "true",
+        "abandoned": os.path.exists(os.path.join(pdir, ".abandoned")),
         "papers": len(papers), "slots": slots, "labs": len(labs),
         "live_labs": len(live_labs), "items": len(man["items"]),
         "answered": answered, "p_answered": p_answered, "has_report": has_report,
@@ -240,7 +245,9 @@ def build_home(packs_root, repo=REPO):
             except Exception as e:           # 1 パックの破損で一覧全体を落とさない
                 broken.append((name, str(e)))
 
-    # dry-run(ラボ未構築の試し作り)とテスト用は本流から外して下の折りたたみへ
+    # 打ち切り(.abandoned)・dry-run(ラボ未構築の試し作り)・テスト用は本流から外して下の折りたたみへ
+    abandoned = sorted((p for p in packs if p["abandoned"]), key=lambda p: p["id"], reverse=True)
+    packs = [p for p in packs if not p["abandoned"]]
     drys = sorted((p for p in packs if p["dry"]), key=lambda p: p["id"], reverse=True)
     tests = sorted((p for p in packs if not p["dry"] and p["id"].startswith("PACK-TEST")),
                    key=lambda p: p["id"])
@@ -252,7 +259,7 @@ def build_home(packs_root, repo=REPO):
            '<main><header><h1>Question Packs</h1>'
            '<label><input type="checkbox" id="hide"> Hide graded</label></header>',
            "<table>"] + _rows(daily) + ["</table>"]
-    for label, ps in (("dry-run", drys), ("Tests", tests)):
+    for label, ps in (("Abandoned", abandoned), ("dry-run", drys), ("Tests", tests)):
         if ps:
             out += [f"<details><summary>{label} ({len(ps)})</summary><table>"]
             out += [_row(p) for p in ps] + ["</table></details>"]

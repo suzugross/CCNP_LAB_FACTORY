@@ -315,19 +315,39 @@ def md_to_body(md_text, allow_html=False):
 TOPO_HEAD_RE = re.compile(r"^##\s+.*(トポロジ|構成図|topology|network diagram)", re.I)
 
 
-def split_topology(md_text):
+def _topo_flags(md_text):
+    """# / ## 見出しごとに「盤面の節の始まりか」を順に返す(コードフェンスの中の行は見出しと見なさない)。"""
+    flags, fence = [], False
+    for line in md_text.split("\n"):
+        if re.match(r"^\s*(```|~~~)", line):
+            fence = not fence
+        elif not fence and re.match(r"^#{1,2}\s", line):
+            flags.append(bool(TOPO_HEAD_RE.match(line)))
+    return flags
+
+
+def split_topology(md_text, like=None):
     """問題文を (盤面の節を除いた本文, 盤面の節だけ) に分ける。節が無ければ (md_text, "")。
 
     ラボのワークスペース(lab_console.py・BL-234)用: 盤面の節は Topology タブへ移し、Task タブからは外す。
     節は該当の ## 見出しから次の # / ## 見出しの手前まで(複数あれば全部)。
     コードフェンスの中の行は見出しと見なさない。
+    like= 同じ問題の別の言語の版(BL-236 (c))。# / ## 見出しの数が同じなら、**その版で盤面の節だった番目**の節を
+    切り出す(訳は見出しの並びを変えないので、見出しの語が鍵に掛からない版でも同じ節が同じタブへ行く。
+    例: 英語版「Topology (Cabling)」⇔ 原文「構成台帳（配線）」)。数が違えば自分の見出しの語で決める。
     """
-    rest, topo, fence, into = [], [], False, False
+    flags = _topo_flags(md_text)
+    if like is not None:
+        ref = _topo_flags(like)
+        if len(ref) == len(flags):
+            flags = ref
+    rest, topo, fence, into, n = [], [], False, False, 0
     for line in md_text.split("\n"):
         if re.match(r"^\s*(```|~~~)", line):
             fence = not fence
         elif not fence and re.match(r"^#{1,2}\s", line):
-            into = bool(TOPO_HEAD_RE.match(line))
+            into = flags[n]
+            n += 1
         (topo if into else rest).append(line)
     if not topo:
         return md_text, ""
@@ -459,6 +479,13 @@ pre select.msel.inline{font-family:inherit}
 .answer button.chk:disabled{color:#aaaaaa; border-color:#bbbbbb; cursor:default}
 .answer .chkres{font-weight:700; font-size:1.1rem}
 .answer .chknote{font-size:.8rem; color:#777777}
+/* 日本語⇔英語の切替(BL-236 (c)): 2 版を 1 ページに持ち、body の data-lang で片方だけ見せる。解答欄は共通で 1 つ */
+body[data-lang="en"] [data-l="ja"], body[data-lang="ja"] [data-l="en"]{display:none}
+.langsw{position:fixed; top:.45rem; right:.9rem; z-index:11; font:inherit; font-size:.82rem;
+        padding:.2rem .75rem; border:1px solid #333333; border-radius:4px; background:var(--paper); cursor:pointer}
+.langsw:hover{background:#e3e6ea}
+body.hosted .langsw{display:none}        /* ワークスペースの中では、切替は画面下端の帯のボタンが受け持つ */
+@media print{ .langsw{display:none} }
 .answer.chk-ok{background:#e8f5e9; outline:3px solid #2e7d32; outline-offset:8px}
 .answer.chk-ng{background:#ffebee; outline:3px solid #c62828; outline-offset:8px}
 .answer.chk-ok .chkres{color:#1b5e20}
@@ -534,21 +561,40 @@ MERMAID_INIT = """
     });
     return;
   }
+  /* 描くのは見えている図だけ。隠れた要素の中では寸法が取れず図が崩れるので、日英の切替で隠れている版や
+     表に出ていない枠の図は、見えた時に描く(切替= window.ccnpMermaid・枠が表に出た時= 下の監視)。 */
+  function run(){
+    var todo = blocks.filter(function(el){ return !el.dataset.ccnpRun && el.getClientRects().length; });
+    if(!todo.length) return;
+    todo.forEach(function(el){ el.dataset.ccnpRun = '1'; });
+    try{
+      Promise.resolve(window.mermaid.run({nodes: todo}))
+        .catch(function(e){ todo.forEach(function(el){ note(el, String(e)); }); })
+        .then(function(){
+          todo.forEach(function(el){
+            if(!el.querySelector('svg')) note(el, 'no output');
+          });
+        });
+    }catch(e){
+      todo.forEach(function(el){ note(el, String(e)); });
+    }
+  }
   try{
     window.mermaid.initialize({
       startOnLoad:false, theme:'neutral',   /* 白基調・グレースケール寄り */
       securityLevel:'loose', flowchart:{htmlLabels:true, useMaxWidth:true}
     });
-    Promise.resolve(window.mermaid.run({querySelector:'pre.mermaid'}))
-      .catch(function(e){ blocks.forEach(function(el){ note(el, String(e)); }); })
-      .then(function(){
-        blocks.forEach(function(el){
-          if(!el.querySelector('svg')) note(el, 'no output');
-        });
-      });
   }catch(e){
     blocks.forEach(function(el){ note(el, String(e)); });
+    return;
   }
+  window.ccnpMermaid = run;
+  window.addEventListener('resize', run);
+  if(window.IntersectionObserver){
+    var io = new IntersectionObserver(function(){ run(); });
+    blocks.forEach(function(el){ io.observe(el); });
+  }
+  run();
 })();
 """
 
@@ -570,6 +616,73 @@ NAV_JS = r"""
       setTimeout(function(){ try{ window.top.location.href = href; }catch(_e){ location.href = href; } }, 600);
     });
   });
+})();
+"""
+
+# 日本語⇔英語の切替(BL-236 (c)・2026-10-12)。render(alt_md=…) で 2 版を持つページにだけ入る。
+#   ・本文は版ごとの箱(div.lv[data-l])に入れ、body の data-lang で片方だけ見せる。解答欄は共通で 1 つ。
+#   ・選んだ言語は localStorage(ccnp-lang)に残し、以後に開く問題もその言語で出す(無ければページの既定)。
+#   ・切り替えても読んでいた位置を保つ(2 版は骨組みが同じなので、同じ番目の要素へ合わせる)。
+#   ・ラボのワークスペース(lab_console.py)の中では、切替は画面下端の帯のボタンが受け持つ: 枠の中のページは
+#     自分が 2 版を持つことを親へ知らせ、親の合図(ccnpLang)で切り替わる。親が応えた時は自分のボタンを隠す。
+LANG_EARLY = ("<script>try{var l=localStorage.getItem('ccnp-lang');"
+              "if(l==='en'||l==='ja')document.body.dataset.lang=l;}catch(_e){}</script>")
+LANG_JS = r"""
+(function(){
+  var b = document.body, KEY = 'ccnp-lang', NAME = {en: 'English', ja: '日本語'};
+  var btn = document.querySelector('.langsw');
+  var framed = window.top !== window.self;
+  function other(l){ return l === 'en' ? 'ja' : 'en'; }
+  function view(l){ return document.querySelector('.lv[data-l="' + l + '"]'); }
+  /* 今の版で画面の上端にある要素(何番目か・上端からのずれ)。版を過ぎて解答欄にいる時は解答欄を目印にする */
+  function mark(){
+    var v = view(b.dataset.lang), kids = v ? v.children : [];
+    for(var i = 0; i < kids.length; i++){
+      var r = kids[i].getBoundingClientRect();
+      if(r.bottom > 0) return {i: i, n: kids.length, top: r.top};
+    }
+    var a = document.querySelector('.answer');
+    return a ? {el: a, top: a.getBoundingClientRect().top} : null;
+  }
+  function restore(m){
+    if(!m) return;
+    var el = m.el;
+    if(!el){
+      var v = view(b.dataset.lang);
+      if(!v || v.children.length !== m.n) return;
+      el = v.children[m.i];
+    }
+    window.scrollBy(0, el.getBoundingClientRect().top - m.top);
+  }
+  function paint(){
+    if(btn) btn.textContent = NAME[other(b.dataset.lang)];
+    document.documentElement.lang = b.dataset.lang;
+  }
+  function apply(l){
+    if(l !== 'en' && l !== 'ja') return;
+    if(l !== b.dataset.lang){
+      var m = mark();
+      b.dataset.lang = l;
+      restore(m);
+      if(window.ccnpMermaid) window.ccnpMermaid();
+    }
+    paint();
+    try{ localStorage.setItem(KEY, l); }catch(_e){}
+  }
+  if(btn) btn.addEventListener('click', function(){
+    apply(other(b.dataset.lang));
+    if(framed){ try{ window.parent.postMessage({ccnpLang: b.dataset.lang}, '*'); }catch(_e){} }
+  });
+  function report(){ try{ window.parent.postMessage({ccnpLangs: true, lang: b.dataset.lang}, '*'); }catch(_e){} }
+  window.addEventListener('message', function(ev){
+    if(!framed || ev.source !== window.parent || !ev.data) return;
+    if(ev.data.ccnpLangAsk){ report(); return; }     /* 親が後から立ち上がった時の問い合わせ */
+    if(typeof ev.data.ccnpLang !== 'string') return;
+    if(ev.data.ccnpHost) b.classList.add('hosted');
+    apply(ev.data.ccnpLang);
+  });
+  paint();
+  if(framed) report();
 })();
 """
 
@@ -646,14 +759,15 @@ ANSWER_JS = r"""
     }
     /* 穴埋め形: 誤った空欄のプルダウンの横に正解を添える(選択肢の文言つき) */
     Object.keys(inKey).forEach(function(tok){
-      var sl = document.querySelector('select.msel[data-k="' + tok.charAt(0) + '"]');
-      if(!sl || sl.value === tok) return;
-      var nx = sl.nextSibling;
-      if(nx && nx.classList && nx.classList.contains('kfix')) return;
-      var o = sl.querySelector('option[value="' + tok + '"]');
-      var s = document.createElement('span'); s.className = 'kfix';
-      s.textContent = '→ correct: ' + (o ? o.textContent.trim() : tok.slice(1));
-      sl.parentNode.insertBefore(s, sl.nextSibling);
+      document.querySelectorAll('select.msel[data-k="' + tok.charAt(0) + '"]').forEach(function(sl){
+        if(sl.value === tok) return;
+        var nx = sl.nextSibling;
+        if(nx && nx.classList && nx.classList.contains('kfix')) return;
+        var o = sl.querySelector('option[value="' + tok + '"]');
+        var s = document.createElement('span'); s.className = 'kfix';
+        s.textContent = '→ correct: ' + (o ? o.textContent.trim() : tok.slice(1));
+        sl.parentNode.insertBefore(s, sl.nextSibling);
+      });
     });
   }
   function check(){
@@ -798,8 +912,9 @@ ANSWER_JS = r"""
   function ansValue(){
     var on = box.querySelectorAll('.opts input:checked');
     var vals = Array.prototype.map.call(on, function(e){ return e.value; });
-    /* 穴埋め形(BL-191): 空欄ごとのプルダウン(select.msel)。空(未選択)は除く。 */
-    document.querySelectorAll('select.msel').forEach(function(sl){ if(sl.value) vals.push(sl.value); });
+    /* 穴埋め形(BL-191): 空欄ごとのプルダウン(select.msel)。空(未選択)は除く。
+       日英 2 版のページでは同じ空欄のプルダウンが版ごとにある。数えるのは既定の版のものだけ(data-alt は写し)。 */
+    document.querySelectorAll('select.msel:not([data-alt])').forEach(function(sl){ if(sl.value) vals.push(sl.value); });
     if(vals.length){ return vals.sort().join('・'); }
     return val('.ans');
   }
@@ -862,8 +977,9 @@ ANSWER_JS = r"""
       pairs.forEach(function(P){
         var r = box.querySelector('.opts input[value="' + P + '"]');
         if(r){ r.checked = true; hit = true; return; }
-        var o = document.querySelector('select.msel option[value="' + P + '"]');
-        if(o){ o.parentNode.value = P; hit = true; }
+        document.querySelectorAll('select.msel option[value="' + P + '"]').forEach(function(o){
+          o.parentNode.value = P; hit = true;
+        });
       });
       if(hit) return;
     }
@@ -887,7 +1003,7 @@ ANSWER_JS = r"""
   /* 穴埋め形: 本文中のプルダウンの選択値を、同番号の鏡(span.bmirror)と解答欄の要約(.clsum)へ映す */
   function mirror(){
     var parts = [];
-    document.querySelectorAll('select.msel').forEach(function(sl){
+    document.querySelectorAll('select.msel:not([data-alt])').forEach(function(sl){
       var k = sl.dataset.k || (sl.value || '').charAt(0);
       var v = sl.value ? sl.value.slice(1) : '';
       if(k){
@@ -923,7 +1039,13 @@ ANSWER_JS = r"""
   box.addEventListener('input', queue);
   box.addEventListener('change', queue);
   document.addEventListener('change', function(ev){
-    if(ev.target && ev.target.classList && ev.target.classList.contains('msel') && !box.contains(ev.target)) queue();
+    var t = ev.target;
+    if(!(t && t.classList && t.classList.contains('msel'))) return;
+    /* 日英 2 版のページ: 同じ空欄のもう一方の版のプルダウンへ写す(値は両版とも「①D」の形で同じ) */
+    if(t.dataset.k) document.querySelectorAll('select.msel[data-k="' + t.dataset.k + '"]').forEach(function(sl){
+      if(sl !== t) sl.value = t.value;
+    });
+    if(!box.contains(t)) queue();
   });
   /* タイマーUIを「解答済み」チェックの直前に置き、チェックで計測を確定する */
   var doneLbl = box.querySelector('.done');
@@ -978,17 +1100,8 @@ def build_nav(nav):
     return '<div class="nav">' + "".join(parts) + "</div>"
 
 
-def render(md_text, title="問題", nav=None, meta="", mermaid_js=None,
-           mermaid_mode="cdn", answer_form="", inline_blanks=None,
-           extra_css="", body_class="", allow_html=False):
-    """Markdown 文字列 → HTML 文字列。
-
-    mermaid_mode:
-      cdn   … ふつうの HTML。mermaid は CDN から読む(既定・数十KB)
-      embed … mermaid 本体を埋め込む(3.5MB・外部参照ゼロ・オフライン用)
-      none  … 図はソースのまま表示(JS を一切入れない)
-    mermaid_js: embed 時に使うソース(None なら MERMAID_JS を読む)。
-    """
+def _lang_body(md_text, inline_blanks, allow_html):
+    """1 版ぶんの本文 HTML。(body, has_mermaid)。"""
     body, has_mermaid = md_to_body(md_text, allow_html=allow_html)
     # ★穴埋め形(BL-191/198): ［①］ の位置にプルダウンを埋め込む(本文中で直接選ぶ・2026-09-20 ユーザ要望)。
     #   同じ番号の 2 回目以降は選択値を映す鏡(span.bmirror)にする(同名 select の二重計上を避ける)。
@@ -999,6 +1112,33 @@ def render(md_text, title="問題", nav=None, meta="", mermaid_js=None,
             continue
         body = body[:first] + sel_html + body[first + len(mark):]
         body = body.replace(mark, f'<span class="bmirror" data-k="{k}">{mark}</span>')
+    return body, has_mermaid
+
+
+def render(md_text, title="問題", nav=None, meta="", mermaid_js=None,
+           mermaid_mode="cdn", answer_form="", inline_blanks=None,
+           extra_css="", body_class="", allow_html=False,
+           lang="", alt_md=None, alt_lang="", alt_inline_blanks=None):
+    """Markdown 文字列 → HTML 文字列。
+
+    mermaid_mode:
+      cdn   … ふつうの HTML。mermaid は CDN から読む(既定・数十KB)
+      embed … mermaid 本体を埋め込む(3.5MB・外部参照ゼロ・オフライン用)
+      none  … 図はソースのまま表示(JS を一切入れない)
+    mermaid_js: embed 時に使うソース(None なら MERMAID_JS を読む)。
+    alt_md: もう一方の言語の版(BL-236 (c))。渡すと 2 版を 1 ページに持ち、右上のボタンで切り替わる。
+      md_text が既定で出す版(lang)、alt_md が切替先(alt_lang)。lang/alt_lang は "en" / "ja"。
+      解答欄(answer_form)は共通で 1 つ。渡さなければ従来どおりの 1 版のページ。
+    """
+    body, has_mermaid = _lang_body(md_text, inline_blanks, allow_html)
+    two = alt_md is not None and {lang, alt_lang} == {"en", "ja"}
+    if two:
+        alt_body, alt_mermaid = _lang_body(alt_md, alt_inline_blanks, allow_html)
+        has_mermaid = has_mermaid or alt_mermaid
+        body = (LANG_EARLY + '<button type="button" class="langsw" title="Switch the question text '
+                'between English and Japanese"></button>'
+                f'<div class="lv" data-l="{lang}">{body}</div>'
+                f'<div class="lv" data-l="{alt_lang}">{alt_body}</div>')
     scripts = ""
     if has_mermaid and mermaid_mode != "none":
         if mermaid_mode == "cdn":
@@ -1012,10 +1152,13 @@ def render(md_text, title="問題", nav=None, meta="", mermaid_js=None,
     if answer_form:
         body += answer_form
         scripts += "\n<script>" + ANSWER_JS + "</script>"
+    if two:
+        scripts += "\n<script>" + LANG_JS + "</script>"
     if nav:
         scripts += "\n<script>" + NAV_JS + "</script>"
+    body_attr = (f' class="{body_class}"' if body_class else "") + (f' data-lang="{lang}"' if two else "")
     return PAGE.format(title=html.escape(title), css=CSS + (extra_css or ""),
-                       body_class=f' class="{body_class}"' if body_class else "",
+                       body_class=body_attr,
                        nav=build_nav(nav), meta=meta_html, body=body,
                        scripts=scripts)
 
@@ -1041,15 +1184,22 @@ def read_mermaid(path=MERMAID_JS):
 
 
 def render_file(in_path, out_path, title=None, nav=None, meta="", mermaid_js=None,
-                mermaid_mode="cdn", answer_form="", inline_blanks=None):
+                mermaid_mode="cdn", answer_form="", inline_blanks=None,
+                lang="", alt_path=None, alt_lang="", alt_inline_blanks=None):
     with open(in_path, encoding="utf-8") as fh:
         text = fh.read()
     assert_not_answer_key(in_path, text)
+    alt_md = None
+    if alt_path:
+        with open(alt_path, encoding="utf-8") as fh:
+            alt_md = fh.read()
+        assert_not_answer_key(alt_path, alt_md)
     if title is None:
         m = re.search(r"^#\s+(.+)$", text, re.M)
         title = m.group(1).strip() if m else os.path.basename(in_path)
     out = render(text, title=title, nav=nav, meta=meta, mermaid_js=mermaid_js,
-                 mermaid_mode=mermaid_mode, answer_form=answer_form, inline_blanks=inline_blanks)
+                 mermaid_mode=mermaid_mode, answer_form=answer_form, inline_blanks=inline_blanks,
+                 lang=lang, alt_md=alt_md, alt_lang=alt_lang, alt_inline_blanks=alt_inline_blanks)
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(out)

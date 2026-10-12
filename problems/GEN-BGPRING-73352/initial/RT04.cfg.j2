@@ -1,0 +1,32 @@
+! RT04
+interface Loopback0
+ ip address 80.80.80.80 255.255.255.255
+!
+interface Loopback1
+ ip address 172.16.67.1 255.255.255.0
+!
+interface {{ links[1] }}
+ ip address 10.249.233.1 255.255.255.252
+ no shutdown
+!
+interface {{ links[0] }}
+ ip address 10.247.249.2 255.255.255.252
+ no shutdown
+!
+router bgp 64951
+ bgp router-id 80.80.80.80
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ bgp bestpath compare-routerid
+ neighbor 10.249.233.2 remote-as 65157
+ neighbor 10.247.249.1 remote-as 65287
+ address-family ipv4 unicast
+  network 172.16.67.0 mask 255.255.255.0
+  neighbor 10.249.233.2 activate
+  neighbor 10.247.249.1 activate
+  neighbor 10.249.233.2 route-map RM-MED-OUT out
+ exit-address-family
+!
+route-map RM-MED-OUT permit 10
+ set metric 200
+!

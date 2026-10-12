@@ -30,6 +30,12 @@
   - この中継は CML の認証を肩代わりする。bind の既定は 127.0.0.1。
   - WebSocket は Origin を検査する(別サイトのページからこの中継へ繋がせない)。
   - 機器へは何も打たない(接続時に改行すら送らない)。出題状態を変えるのは受験者の打鍵だけ。
+  - コンソールの入出力は records/console/<問題 ID>/<ノード>.jsonl に記録する(BL-243。--no-record で止める)。
+    採点後に過程(手数・切り分けの順)を振り返るための材料で、採点には使わない。機器側には何も仕込まない。
+    1 行= {"t": UNIX 秒, "c": 接続 ID, "d": "open"/"in"/"out"/"close", "b": バイト列(latin-1 で 1 バイト 1 文字)}。
+    "in" は受験者の打鍵だけ(採点のコンソール経路の入力は通らない)。"out" は機器の出力で、同じノードを複数の
+    タブで開けば接続ごとに重複し、採点が同時に走ればその出力も混ざる。打鍵にはパスワードも含まれるので
+    置き場は git 管理外・ファイルは 0600。記録に失敗してもコンソールは止めない。
   - コンソールは同じノードへの全接続で共有される(CML の仕様)。採点のコンソール経路とも共有。
   - 問題文の盤面の節は Task タブに出さず Topology タブへ移す(結線図と重複するため)。節には
     アドレス・AS など結線図に無い情報が載るので、消さずに置き場所だけ変える。切り分けは
@@ -48,6 +54,8 @@ import os
 import re
 import signal
 import sys
+import time
+import uuid
 from collections import defaultdict, namedtuple
 from urllib.parse import urlparse
 
@@ -78,7 +86,8 @@ IF_ABBR = (("TenGigabitEthernet", "Te"), ("GigabitEthernet", "Gi"), ("FastEthern
 
 # 繋ぐ先: CML のラボ題名・タスクの URL・画面の見出し・盤面の節のページ(パックの q<N>.topo.html。無ければ None)・
 #         画面下端の帯に出すリンク [(表示, 行き先, 今ここか)](単発では空)
-Target = namedtuple("Target", "title task_src caption notes nav")
+#         操作記録のフォルダ名(パックでは問題 ID・単発ではラボ題名)
+Target = namedtuple("Target", "title task_src caption notes nav rec")
 
 
 def lab_title(problem_id):
@@ -296,13 +305,14 @@ def resolve(app, request):
     page = f"q{n}.ws.html" if os.path.exists(os.path.join(pdir, f"q{n}.ws.html")) else f"q{n}.html"
     base = f"{request.scheme}://{host}:{app['pack_port']}/{pack}/"
     # 画面下端の帯: 目次と各問。ラボはこのワークスペースの中で開き、紙面は配信サーバの問題ページへ出る
-    nav = [("Contents", base + "index.html", False)]
+    nav = [("‹ Packs", f"{request.scheme}://{host}:{app['pack_port']}/", False),   # パック一覧へ戻る
+           ("Contents", base + "index.html", False)]
     for i in items:
         built_lab = i.get("kind") == "lab" and i.get("ref") and i.get("src")
         nav.append((f"Q{i['no']}", f"lab?pack={pack}&no={i['no']}" if built_lab else base + f"q{i['no']}.html",
                     i["no"] == n))
     return Target(lab_title(it["ref"]), base + page, f"{pack} · Q{n}",
-                  notes if os.path.exists(notes) else None, nav)
+                  notes if os.path.exists(notes) else None, nav, it["ref"])
 
 
 async def load_topo(app, title):
@@ -351,11 +361,41 @@ def _single_task(app):
         return render_html.split_topology(fh.read())
 
 
+# 単発: 英語版 Task.md と日本語版 問題.md が同じフォルダに並んでいれば(lab.sh と出題者が置く形)、2 版で出す
+_PAIR = {"Task.md": ("en", "ja", "問題.md"), "問題.md": ("ja", "en", "Task.md")}
+
+
+def _single_alt(app):
+    """単発: 切替先の版を (既定の言語, 切替先の言語, 本文, 盤面の節) で返す。相方のファイルが無ければ None。"""
+    if not app["task"]:
+        return None
+    d, name = os.path.split(os.path.abspath(app["task"]))
+    pair = _PAIR.get(name)
+    if not pair or not os.path.exists(os.path.join(d, pair[2])):
+        return None
+    with open(os.path.join(d, pair[2]), encoding="utf-8") as fh:
+        full = fh.read()
+    with open(app["task"], encoding="utf-8") as fh:
+        rest, topo = render_html.split_topology(full, like=fh.read())
+    if not _single_task(app)[1]:              # 既定の版に盤面の節が無い= 切替先も全文のまま Task に出す
+        rest, topo = full, ""
+    return pair[0], pair[1], rest, topo
+
+
+def _alt_kw(app, part):
+    """render_html.render へ渡す 2 版ぶんの引数(part= 2: 本文 / 3: 盤面の節)。切替先が無ければ空。"""
+    alt = _single_alt(app)
+    if not alt or not alt[part]:
+        return {}
+    return {"lang": alt[0], "alt_lang": alt[1], "alt_md": alt[part]}
+
+
 async def h_task(request):
     if not request.app["fixed"]:
         return web.Response(status=404, text="not found")
     rest, _topo = _single_task(request.app)
-    return web.Response(text=render_html.render(rest, title=request.app["fixed"].caption),
+    return web.Response(text=render_html.render(rest, title=request.app["fixed"].caption,
+                                                **_alt_kw(request.app, 2)),
                         content_type="text/html")
 
 
@@ -370,7 +410,8 @@ async def h_toponotes(request):
     if tgt is None or not _has_notes(app, tgt):
         return web.Response(status=404, text="no topology section")
     if app["fixed"]:
-        text = render_html.render(_single_task(app)[1], title=f"{tgt.caption} — Topology")
+        text = render_html.render(_single_task(app)[1], title=f"{tgt.caption} — Topology",
+                                  **_alt_kw(app, 3))
     else:
         with open(tgt.notes, encoding="utf-8") as fh:
             text = fh.read()
@@ -397,6 +438,44 @@ async def h_topo(request):
 def _same_origin(request):
     origin = request.headers.get("Origin")
     return origin is None or urlparse(origin).netloc == request.headers.get("Host")
+
+
+class Recorder:
+    """コンソール 1 接続ぶんの入出力を追記する(BL-243)。書式はモジュール冒頭の「設計上の約束」。
+
+    記録は振り返りの材料であって、コンソールの動作に必須ではない。開けない・書けない時は黙って止める。
+    """
+
+    def __init__(self, root, key, node):
+        self.fh, self.conn = None, uuid.uuid4().hex[:8]
+        if not root:
+            return
+        safe = lambda s: re.sub(r"[^A-Za-z0-9_.-]", "_", s) or "_"   # noqa: E731
+        try:
+            d = os.path.join(root, safe(key))
+            os.makedirs(d, exist_ok=True)
+            fd = os.open(os.path.join(d, safe(node) + ".jsonl"),
+                         os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            self.fh = os.fdopen(fd, "a", encoding="ascii", buffering=1)
+        except OSError:
+            self.fh = None
+
+    def write(self, kind, data=b""):
+        if self.fh is None:
+            return
+        try:
+            self.fh.write(json.dumps({"t": round(time.time(), 3), "c": self.conn, "d": kind,
+                                      "b": data.decode("latin-1")}) + "\n")
+        except (OSError, ValueError):
+            self.close()
+
+    def close(self):
+        if self.fh is not None:
+            try:
+                self.fh.close()
+            except OSError:
+                pass
+            self.fh = None
 
 
 async def h_console(request):
@@ -437,16 +516,21 @@ async def h_console(request):
             conn.close()
         return ws
 
+    rec = Recorder(app["record"], tgt.rec, node)
+    rec.write("open")
+
     async def ssh_to_ws():
         while True:
             data = await proc.stdout.read(65536)
             if not data:
                 break
+            rec.write("out", data)
             await ws.send_bytes(data)
 
     async def ws_to_ssh():
         async for msg in ws:
             if msg.type == aiohttp.WSMsgType.BINARY:
+                rec.write("in", msg.data)
                 if len(msg.data) <= PASTE_MIN:
                     proc.stdin.write(msg.data)
                 else:                                     # 貼り付け: 行ごとに間を空けて流す
@@ -468,6 +552,8 @@ async def h_console(request):
     finally:
         for t in tasks:
             t.cancel()
+        rec.write("close")
+        rec.close()
         conn.close()
         if not ws.closed:
             await ws.close(message=b"console closed")
@@ -501,16 +587,18 @@ async def _follow_parent(app):
     app["parent_watch"] = asyncio.ensure_future(watch())
 
 
-def make_app(repo=REPO, pack_port=8899, lab=None, task=None, with_parent=None):
+def make_app(repo=REPO, pack_port=8899, lab=None, task=None, with_parent=None, record=True):
     """lab を渡すと単発(そのラボに固定)、渡さなければパック常駐。"""
     app = web.Application()
     if with_parent:
         app["with_parent"] = with_parent
         app.on_startup.append(_follow_parent)
-    app["fixed"] = Target(lab, "task", lab, None, []) if lab else None
+    app["fixed"] = Target(lab, "task", lab, None, [], lab) if lab else None
     app["task"] = task
     app["packs"] = os.path.join(os.path.abspath(repo), "packs")
     app["pack_port"] = pack_port
+    # コンソールの操作記録の置き場(BL-243)。None = 記録しない
+    app["record"] = os.path.join(os.path.abspath(repo), "records", "console") if record else None
     app["cml"] = load_cml()
     app["nodes"] = {}                         # ラボ題名 → コンソールを開いてよいノード名の集合
     app.router.add_get("/", h_root)
@@ -625,6 +713,7 @@ iframe{ border:0; width:100%; height:100%; background:var(--paper); }
   <span class="fz">Console text
     <button type="button" id="fminus" title="Smaller console text">A−</button><span id="fsize" title="Double-click: default size"></span><button type="button" id="fplus" title="Larger console text">A+</button>
   </span>
+  <button type="button" id="lang" hidden title="Switch the task text between English and Japanese"></button>
   <button type="button" id="layout"></button></footer>
 <script src="vendor/xterm.js"></script>
 <script src="vendor/addon-fit.js"></script>
@@ -876,6 +965,35 @@ window.addEventListener('message', ev => {
   location.href = to.href;
 });
 
+// ---- 問題文の日本語⇔英語(BL-236 (c)) ----
+//   Task と Topology の盤面の節は別々の枠なので、切替はこの帯のボタンで受けて両方の枠へ知らせる。
+//   2 版を持つページ(render_html の LANG_JS)は、読み込まれると自分の言語を知らせてくる。選んだ言語を覚えるのは
+//   問題ページの側(紙面のページと同じ置き場)なので、ここでは Task の枠が知らせてきた言語に合わせる。
+//   1 版しか無い問題のページは何も知らせてこないので、ボタンは出ない。
+(function(){
+  const btn = $('#lang'), NAME = {en: 'English', ja: '日本語'};
+  let lang = null;
+  const frames = () => [$('#task'), $('#toponotes')].filter(Boolean);
+  const tell = f => { try { f.contentWindow.postMessage({ccnpLang: lang, ccnpHost: true}, '*'); } catch (_e) {} };
+  function paint(){ btn.hidden = false; btn.textContent = NAME[lang === 'en' ? 'ja' : 'en']; }
+  window.addEventListener('message', ev => {
+    const f = frames().find(x => x.contentWindow === ev.source);
+    const d = ev.data;
+    if (!f || !d || !d.ccnpLangs || (d.lang !== 'en' && d.lang !== 'ja')) return;
+    if (f.id === 'task' || lang === null) lang = d.lang;       // Task の枠が正。盤面の節の枠はそれに従う
+    paint();
+    frames().forEach(tell);
+  });
+  btn.addEventListener('click', () => {
+    if (lang === null) return;
+    lang = lang === 'en' ? 'ja' : 'en';
+    paint();
+    frames().forEach(tell);
+  });
+  // Task の枠がこの画面の準備より先に読み終わっていると、知らせを受け損ねる。こちらからも一度たずねる
+  try { $('#task').contentWindow.postMessage({ccnpLangAsk: true}, '*'); } catch (_e) {}
+})();
+
 loadTopo();
 </script>
 </body>
@@ -894,13 +1012,15 @@ def main():
     ap.add_argument("--task", help="単発: 左のタブに出すタスクの Markdown")
     ap.add_argument("--with-parent", type=int, metavar="PID",
                     help="この PID の親プロセスが終わったら自分も終わる(pack.sh serve が自分の PID を渡す)")
+    ap.add_argument("--no-record", action="store_true",
+                    help="コンソールの操作記録(records/console/)を書かない")
     a = ap.parse_args()
     if a.task and not os.path.exists(a.task):
         sys.exit(f"--task {a.task} がありません")
     mode = f"単発 lab={a.lab}" if a.lab else "パック常駐"
     ready = f"ラボのワークスペース({mode})を http://{a.bind}:{a.port}/ で待ち受け中"
     try:
-        web.run_app(make_app(a.repo, a.pack_port, a.lab, a.task, a.with_parent),
+        web.run_app(make_app(a.repo, a.pack_port, a.lab, a.task, a.with_parent, not a.no_record),
                     host=a.bind, port=a.port,
                     print=lambda *_: print(ready, flush=True))     # 待ち受けに成功してから出す
     except OSError as e:                          # ポート使用中など。長いトレースを出さず 1 行で終わる

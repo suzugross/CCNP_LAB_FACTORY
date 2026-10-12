@@ -11,6 +11,12 @@
 
 | 出題日 | 問題ID (variant/seed) | 難 | 状態 | 得点 | メモ |
 |--------|----------------------|----|------|------|------|
+| 2026-10-12 | ENCOR-REDIST-01 | - | 撤収済 | 100 | パック PACK-20261011-C の Q3・en。発掘枠(静的・base)。RT02 に `redistribute eigrp 100`(subnets は IOL 17 で暗黙)＋`redistribute ospf 1 metric 10000 100 255 1 1500`。一発満点・所要 5:11 |
+| 2026-10-12 | GEN-STP-24828 | - | 撤収済 | 100 | パック PACK-20261011-C の Q2・en。world=mst・故障 2= SW02 Et0/0 の bpdufilter(loop guard 発動)／VLAN175 のインスタンス未割当。bpdufilter を除去し、SW01〜03 の 3 台で instance 1 に VLAN175 を割当。不整合ポート 0。一発満点・所要 21:01 |
+| 2026-10-12 | GEN-URPF-33702 | - | 撤収済 | 100 | パック PACK-20261011-C の Q1・en。fault=missing_on_uplink(E0/1 に uRPF なし)。模範= E0/1 に loose(reachable-via any)。解答= E0/1 に strict＋例外 ACL(`reachable-via rx 1`・ACL 1= permit host 192.168.73.1)= loose より厳格な別解。経路変更なし。一発満点・所要 9:42 |
+| 2026-10-11 | GEN-DOJO-ASPATH-72705 | - | 撤収済 | 100 | パック PACK-20261011-B の Q3・en。発掘枠。70→100(初回は課題 7・8・10 が未充足。解説なしで自力是正)。7= `_65200$`／8・10= `_65100_[0-9]+` 形の 1 行(模範は deny `_X$`→permit `_X_` の 2 行。1 行形は起源 AS がプリペンドした経路を通してしまう= この経路群には無いので満点)。所要 33:21 |
+| 2026-10-11 | GEN-BGPRING-73352 | - | 撤収済 | 100 | パック PACK-20261011-B の Q2・en。path_select(prepend_wrong_nbr・fwd=med)。模範= RT01 の prepend を RT04 向けへ付け替え。解答= RT02 向けの prepend 適用を外し、戻りも MED で表現(RT03 に always-compare-med＋RT02/RT04 の RT03 向けに RM-MED-OUT out)。3 台 4 行。RT01 に未適用の RM-PREPEND-OUT/PL-SELF が残る。一発満点・所要 32:01 |
+| 2026-10-11 | GEN-MPLSEB-43354 | - | 撤収済 | 100 | パック PACK-20261011-B の Q1・en。故障 2= RT01 の VRF CUST_A の route-target export 誤り(65000:1001)／RT03 の RT12 向け as-override 欠落。両方是正。囮(RT04 E0/2 の ip ospf cost 100)には触れていない。一発満点・所要 15:56 |
 | 2026-10-11 | GEN-DMVPNW-14320 | 5 | 撤収済 | 100 | パック PACK-20261011 の Q3・en。**壊滅 DMVPN の初出題**。欠落 8 か所(hub= p2p GRE 化/tunnel key/ipsec profile/multicast dynamic 無効、RT02= isakmp key・network-id、RT03= isakmp key、RT04= ipsec profile)＋最後の 1 層= EDGE-IN に ESP 許可なし。全て是正・EDGE-IN は外さず `5 permit esp any host 203.0.113.2` を先頭に挿入。一発満点・所要 1:25:27。Phase 3 shortcut は 3 支店間で成立(DT1/DT2) |
 | 2026-10-11 | GEN-TWIST-11599 | 3 | 撤収済 | 100 | パック PACK-20261011 の Q2・en(発掘枠)。IF 単位の `ip ospf 1 area 0`＋Lo0 passive＋RT01 に `distribute-list route-map MAP01 in`(PL01 を deny)。一発満点・所要 9:16。★出題側の不備= RT01 が中継点のため RT03/RT04 から 21.21.21.21 へは実際には届かない(採点は経路表のみ)→ BL-242 |
 | 2026-10-10 | ENCOR-QOS-POLICE-01 | - | 撤収済 | - | パック PACK-20261010 の Q3・en |

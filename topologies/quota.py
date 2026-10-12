@@ -437,6 +437,19 @@ def _grade_lab_once(a):
            "-e", f"problem={a.ref}", "--vault-password-file", vault]
     if a.variant:
         cmd += ["-e", f"variant={a.variant}"]
+    # 再試行の回数: 未充足が残ると全項目を取り直すので、コンソール収集の問題では既定の 10 回だと
+    # 1 回の採点に 10 分を超える(2026-10-12 実測)。問題側が problem.yml の `grade_attempts` で
+    # 回数を決められるようにする(環境変数 LAB_GRADE_ATTEMPTS が最優先。どちらも無ければ従来どおり)。
+    attempts = os.environ.get("LAB_GRADE_ATTEMPTS")
+    if not attempts:
+        try:
+            import yaml
+            with open(os.path.join(repo, "problems", a.ref, "problem.yml"), encoding="utf-8") as fh:
+                attempts = (yaml.safe_load(fh) or {}).get("grade_attempts")
+        except Exception:
+            attempts = None
+    if attempts:
+        cmd += ["-e", f"max_attempts={int(attempts)}"]
     buf = []
     try:
         p = subprocess.Popen(cmd, cwd=repo, stdout=subprocess.PIPE,
