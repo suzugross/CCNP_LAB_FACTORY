@@ -1,0 +1,66 @@
+######## init: 出発点の見え方
+show bgp ipv4 unicast summary
+BGP router identifier 1.1.1.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 3
+BGP main routing table version 3
+BGP NSR Initial initsync version 18446744073709551615 (Not Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+BGP is operating in STANDALONE mode.
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker            3             1             3             0             1             0
+Some configured eBGP neighbors (under default or non-default vrfs)
+do not have both inbound and outbound policies configured for IPv4 Unicast
+address family. These neighbors will default to sending and/or
+receiving no routes and are marked with '!' in the output below.
+Use the 'show bgp neighbor <nbr_address>' command for details.
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.0.11.2         0 65101       2       2            0    0    0 00:00:00          0!
+10.0.12.2         0 65102       2       2            0    0    0 00:00:02          0!
+10.0.13.2         0 65201       2       2            0    0    0 00:00:00          0!
+RP/0/RP0/CPU0:XR01#
+show bgp neighbor 10.0.11.2 | include "olic|denied|No policy|By policy"
+  eBGP neighbor with no inbound or outbound policy; defaults to 'drop'
+  Exact no. of prefixes denied: 0
+  Cumulative no. of prefixes denied: 0
+RP/0/RP0/CPU0:XR01#
+show bgp neighbor 10.0.12.2 | include "olic|denied|No policy|By policy"
+  eBGP neighbor with no outbound policy; defaults to 'drop'
+  Policy for incoming advertisements is ISPB-IN
+  Exact no. of prefixes denied: 0
+  Cumulative no. of prefixes denied: 0
+RP/0/RP0/CPU0:XR01#
+######## setonly: set だけ(pass なし)のポリシーを ISP-A の入力に
+configure
+route-policy T-SET
+set local-preference 150
+end-policy
+router bgp 65000
+neighbor 10.0.11.2
+address-family ipv4 unicast
+route-policy T-SET in
+commit
+end
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast neighbors 10.0.11.2 routes
+RP/0/RP0/CPU0:XR01#
+show bgp neighbor 10.0.11.2 | include "denied|By policy"
+  Exact no. of prefixes denied: 0
+  Cumulative no. of prefixes denied: 0
+RP/0/RP0/CPU0:XR01#
+######## ifset: 条件つき set だけ(合わない経路は?)
+configure
+route-policy T-SET
+% WARNING: Policy object route-policy T-SET exists! Reconfiguring it via CLI will replace current definition. Use abort to cancel.
+if destination in (11.0.0.0/8) then
+set local-preference 150
+endif
+end-policy
+commit
+end
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast neighbors 10.0.11.2 routes
+RP/0/RP0/CPU0:XR01#

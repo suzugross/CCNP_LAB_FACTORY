@@ -1,0 +1,30 @@
+! _POC-XRCMP eBGP 相手(AS65001)。経路の種類を増やすため Lo に複数のプレフィックス
+ipv6 unicast-routing
+interface Loopback0
+ ip address 11.11.11.11 255.255.255.255
+!
+interface Loopback1
+ ip address 172.16.0.1 255.255.255.0
+ ip address 172.16.1.1 255.255.255.0 secondary
+ ip address 172.16.2.1 255.255.255.128 secondary
+ ip address 172.16.3.1 255.255.255.192 secondary
+!
+interface {{ links[0] }}
+ ip address 10.0.1.2 255.255.255.0
+ ipv6 address 2001:db8:1::2/64
+ no shutdown
+!
+router bgp 65001
+ bgp router-id 11.11.11.11
+ bgp log-neighbor-changes
+ neighbor 10.0.1.1 remote-as 65000
+ address-family ipv4
+  network 11.11.11.11 mask 255.255.255.255
+  network 172.16.0.0 mask 255.255.255.0
+  network 172.16.1.0 mask 255.255.255.0
+  network 172.16.2.0 mask 255.255.255.128
+  network 172.16.3.0 mask 255.255.255.192
+  neighbor 10.0.1.1 activate
+  neighbor 10.0.1.1 send-community both
+ exit-address-family
+!

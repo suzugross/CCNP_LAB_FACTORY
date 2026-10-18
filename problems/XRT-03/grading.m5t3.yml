@@ -1,0 +1,30 @@
+# M5-3: ISP-A を LP 200・ISP-B を LP 100、65000:101/102 を付ける。定義は 1 つの引数つきポリシーで両 ISP に付ける。M5-2 の濾過は残す。
+problem: XRT-03
+total_points: 100
+checks:
+  - name: "M5-3 XR01: 11.0.0.0/8 — ISP-A path best with LP 200 and 65000:101, ISP-B path LP 100 and 65000:102"
+    node: XR01
+    command: "show bgp ipv4 unicast 11.0.0.0/8"
+    raw:
+      - { regex: "10\\.0\\.11\\.2 from 10\\.0\\.11\\.2(?:(?!Path #)[\\s\\S])*localpref 200, valid, external, best(?:(?!Path #)[\\s\\S])*Community: [^\\n]*65000:101" }
+      - { regex: "10\\.0\\.12\\.2 from 10\\.0\\.12\\.2(?:(?!Path #)[\\s\\S])*localpref 100,(?:(?!Path #)[\\s\\S])*Community: [^\\n]*65000:102" }
+    points: 35
+  - name: "M5-3 XR01: 14.2.0.0/16 (ISP-B only) has LP 100 and 65000:102"
+    node: XR01
+    command: "show bgp ipv4 unicast 14.2.0.0/16"
+    raw:
+      - { regex: "localpref 100,[\\s\\S]*Community: [^\\n]*65000:102" }
+    points: 15
+  - name: "M5-3 XR01: one parameterised policy is attached inbound to both ISPs"
+    node: XR01
+    command: "show running-config router bgp 65000"
+    raw:
+      - { regex: "neighbor 10\\.0\\.11\\.2\\n(?:(?! neighbor )[\\s\\S])*route-policy (\\S+)\\([^)]*\\) in\\n[\\s\\S]*neighbor 10\\.0\\.12\\.2\\n(?:(?! neighbor )[\\s\\S])*route-policy \\1\\([^)]*\\) in\\n" }
+    points: 30
+  - name: "M5-3 XR01: the M5-2 filtering still applies"
+    node: XR01
+    command: "show bgp ipv4 unicast"
+    raw:
+      - { regex: "13\\.1\\.1\\.0/24" }
+      - { not_regex: "0\\.0\\.0\\.0/0|13\\.1\\.2\\.0/25|13\\.1\\.4\\.0/26|10\\.10\\.0\\.0/16|172\\.20\\.0\\.0/16|192\\.168\\.50\\.0/24|172\\.31\\.0\\.0/16" }
+    points: 20

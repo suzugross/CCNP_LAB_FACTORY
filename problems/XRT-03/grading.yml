@@ -1,0 +1,214 @@
+# XRT-03 最終確認(M5 と M6 を終えた状態。配点 M5 50(12/10/13/15)/ M6 50(15/10/15/10))。学習目的のラボ= パック・ノルマの対象外。
+# 中身は課題ごとの確認(grading.<課題>.yml)を寄せ集めて配点を付け直したもの(手で保守する。課題ごとの確認を直したらここも直す)。
+# 白紙で通る項目は無い(否定条件は必ず肯定条件と同じ項目に入れている)。
+problem: XRT-03
+total_points: 100
+checks:
+- name: 'M5-1 XR01: 11.0.0.0/8 arrives from both ISPs'
+  node: XR01
+  command: show bgp ipv4 unicast 11.0.0.0/8
+  raw:
+  - regex: 'Paths: \(2 available'
+  points: 4
+- name: 'M5-1 XR01: routes from both ISPs are accepted, private ones are not'
+  node: XR01
+  command: show bgp ipv4 unicast
+  raw:
+  - regex: \*>?\s*11\.0\.0\.0/8
+  - regex: 14\.2\.0\.0/16
+  - not_regex: 10\.10\.0\.0/16|172\.20\.0\.0/16|192\.168\.50\.0/24|172\.31\.0\.0/16
+  points: 4
+- name: 'M5-1 RT01 (ISP-A): receives 203.0.113.0/24 and nothing learnt from ISP-B'
+  node: RT01
+  command: show ip bgp neighbors 10.0.11.1 routes
+  raw:
+  - regex: 203\.0\.113\.0\s
+  - not_regex: 65000 65102|14\.2\.0\.0
+  points: 2
+- name: 'M5-1 RT02 (ISP-B): receives 203.0.113.0/24 and nothing learnt from ISP-A'
+  node: RT02
+  command: show ip bgp neighbors 10.0.12.1 routes
+  raw:
+  - regex: 203\.0\.113\.0\s
+  - not_regex: 65000 65101
+  points: 2
+- name: 'M5-2 XR01: from ISP-A only 11/8, 12.1/16 and 13.1.1/24'
+  node: XR01
+  command: show bgp ipv4 unicast neighbors 10.0.11.2 routes
+  raw:
+  - regex: 11\.0\.0\.0/8
+  - regex: 12\.1\.0\.0/16
+  - regex: 13\.1\.1\.0/24
+  - not_regex: 0\.0\.0\.0/0|13\.1\.2\.0/25|10\.10\.0\.0/16|172\.20\.0\.0/16|192\.168\.50\.0/24
+  points: 5
+- name: 'M5-2 XR01: from ISP-B only 11/8, 12.1/16, 13.1.1/24 and 14.2/16'
+  node: XR01
+  command: show bgp ipv4 unicast neighbors 10.0.12.2 routes
+  raw:
+  - regex: 11\.0\.0\.0/8
+  - regex: 14\.2\.0\.0/16
+  - regex: 13\.1\.1\.0/24
+  - not_regex: 0\.0\.0\.0/0|13\.1\.4\.0/26|172\.31\.0\.0/16
+  points: 5
+- name: 'M5-3 XR01: 11.0.0.0/8 — ISP-A path best with LP 200 and 65000:101, ISP-B path LP 100 and 65000:102'
+  node: XR01
+  command: show bgp ipv4 unicast 11.0.0.0/8
+  raw:
+  - regex: '10\.0\.11\.2 from 10\.0\.11\.2(?:(?!Path #)[\s\S])*localpref 200, valid, external, best(?:(?!Path #)[\s\S])*Community: [^\n]*65000:101'
+  - regex: '10\.0\.12\.2 from 10\.0\.12\.2(?:(?!Path #)[\s\S])*localpref 100,(?:(?!Path #)[\s\S])*Community: [^\n]*65000:102'
+  points: 5
+- name: 'M5-3 XR01: 14.2.0.0/16 (ISP-B only) has LP 100 and 65000:102'
+  node: XR01
+  command: show bgp ipv4 unicast 14.2.0.0/16
+  raw:
+  - regex: 'localpref 100,[\s\S]*Community: [^\n]*65000:102'
+  points: 2
+- name: 'M5-3 XR01: one parameterised policy is attached inbound to both ISPs'
+  node: XR01
+  command: show running-config router bgp 65000
+  raw:
+  - regex: neighbor 10\.0\.11\.2\n(?:(?! neighbor )[\s\S])*route-policy (\S+)\([^)]*\) in\n[\s\S]*neighbor 10\.0\.12\.2\n(?:(?! neighbor )[\s\S])*route-policy \1\([^)]*\) in\n
+  points: 4
+- name: 'M5-3 XR01: the M5-2 filtering still applies'
+  node: XR01
+  command: show bgp ipv4 unicast
+  raw:
+  - regex: 13\.1\.1\.0/24
+  - not_regex: 0\.0\.0\.0/0|13\.1\.2\.0/25|13\.1\.4\.0/26|10\.10\.0\.0/16|172\.20\.0\.0/16|192\.168\.50\.0/24|172\.31\.0\.0/16
+  points: 2
+- name: 'M5-4 XR01: from the customer only 198.51.100.0/24 and 198.51.101.0/24'
+  node: XR01
+  command: show bgp ipv4 unicast neighbors 10.0.13.2 routes
+  raw:
+  - regex: 198\.51\.100\.0/24
+  - regex: 198\.51\.101\.0/24
+  - not_regex: 198\.51\.100\.128/25|13\.1\.1\.0/24
+  points: 4
+- name: 'M5-4 RT01 (ISP-A): 198.51.101.0/24 without 65000 communities, and not 198.51.100.0/24'
+  node: RT01
+  command: show ip bgp neighbors 10.0.11.1 routes | include 198|203
+  raw:
+  - regex: 198\.51\.101\.0
+  - regex: 203\.0\.113\.0
+  - not_regex: 198\.51\.100\.0
+  points: 2
+- name: 'M5-4 RT02 (ISP-B): 198.51.100.0/24 with 65201:500 only, and not 198.51.101.0/24'
+  node: RT02
+  command: show ip bgp 198.51.100.0/24
+  raw:
+  - regex: 65000 65201 65201 65201
+  - regex: 'Community: 65201:500\s*\n'
+  points: 2
+- name: 'M5-4 RT02 (ISP-B): does not receive 198.51.101.0/24'
+  node: RT02
+  command: show ip bgp neighbors 10.0.12.1 routes | include 198|203
+  raw:
+  - regex: 198\.51\.100\.0
+  - regex: 203\.0\.113\.0
+  - not_regex: 198\.51\.101\.0
+  points: 2
+- name: 'M5-4 RT01 (ISP-A): 198.51.101.0/24 arrives with no 65000 community'
+  node: RT01
+  command: show ip bgp 198.51.101.0/24
+  raw:
+  - regex: 65000 65201
+  - not_regex: '65000:'
+  points: 2
+- name: 'M5-4 RT03 (customer): receives the ISP routes with XR01''s tags, and 203.0.113.0/24'
+  node: RT03
+  command: show ip bgp 11.0.0.0/8
+  raw:
+  - regex: 65000 65101
+  - regex: 'Community: [^\n]*65000:101'
+  points: 2
+- name: 'M5-4 RT03 (customer): receives 203.0.113.0/24 and 14.2.0.0/16'
+  node: RT03
+  command: show ip bgp neighbors 10.0.13.1 routes | include 203|14\.2
+  raw:
+  - regex: 203\.0\.113\.0
+  - regex: 14\.2\.0\.0
+  points: 1
+- name: 'M6-1 RT04: the iBGP session to 1.1.1.1 is Established'
+  node: RT04
+  command: show ip bgp summary | include ^1\.1\.1\.1
+  raw:
+  - regex: (?m)^1\.1\.1\.1\s+4\s+65000(\s+\d+){5}\s+\S+\s+\d+\s*$
+  points: 4
+- name: 'M6-1 RT04: provider and customer routes are installed via 1.1.1.1, and the link subnets are not in OSPF'
+  node: RT04
+  command: show ip route
+  raw:
+  - regex: B\s+11\.0\.0\.0/8 \[200/\d+\] via 1\.1\.1\.1
+  - regex: B\s+14\.2\.0\.0 \[200/\d+\] via 1\.1\.1\.1
+  - regex: B\s+198\.51\.100\.0/24 \[200/\d+\] via 1\.1\.1\.1
+  - not_regex: O\s+10\.0\.1[123]\.0
+  points: 11
+- name: 'M6-2 RT03 (customer): receives the two internal LANs'
+  node: RT03
+  command: show ip bgp neighbors 10.0.13.1 routes | include 203\.0\.113|4\.4\.4\.4|10\.0\.14
+  raw:
+  - regex: 203\.0\.113\.128/26
+  - regex: 203\.0\.113\.192/26
+  - not_regex: 4\.4\.4\.4|10\.0\.14\.0|1\.1\.1\.1
+  points: 5
+- name: 'M6-2 XR01: only the internal LANs are redistributed from OSPF'
+  node: XR01
+  command: show bgp ipv4 unicast
+  raw:
+  - regex: 203\.0\.113\.128/26\s+10\.0\.14\.2
+  - regex: 203\.0\.113\.192/26\s+10\.0\.14\.2
+  - not_regex: 4\.4\.4\.4/32|10\.0\.14\.0/24|1\.1\.1\.1/32
+  points: 3
+- name: 'M6-2 RT01 (ISP-A): still only the /24 from AS 65000''s own space'
+  node: RT01
+  command: show ip bgp neighbors 10.0.11.1 routes | include 203\.0\.113
+  raw:
+  - regex: 203\.0\.113\.0\s
+  - not_regex: 203\.0\.113\.(128|192)
+  points: 2
+- name: 'M6-3 RT02 (ISP-B): 203.0.113.0/24 arrives with AS 65000 four times'
+  node: RT02
+  command: show ip bgp 203.0.113.0/24
+  raw:
+  - regex: \n\s+65000 65000 65000 65000\s*\n
+  points: 4
+- name: 'M6-3 RT02 (ISP-B): the customer route is prepended the same way'
+  node: RT02
+  command: show ip bgp 198.51.100.0/24
+  raw:
+  - regex: \n\s+65000 65000 65000 65000 65201 65201 65201\s*\n
+  points: 3
+- name: 'M6-3 RT02 (ISP-B): still nothing but AS 65000''s own and customer routes'
+  node: RT02
+  command: show ip bgp neighbors 10.0.12.1 routes
+  raw:
+  - regex: 203\.0\.113\.0\s
+  - not_regex: 65101|198\.51\.101\.0|203\.0\.113\.(128|192)
+  points: 4
+- name: 'M6-3 RT01 (ISP-A): 203.0.113.0/24 still arrives with AS 65000 once'
+  node: RT01
+  command: show ip bgp 203.0.113.0/24
+  raw:
+  - regex: \n\s+65000\s*\n
+  points: 4
+- name: 'M6-4 XR01: ISP-A inherits community sending and the prefix limit from a template'
+  node: XR01
+  command: show bgp neighbor 10.0.11.2 configuration
+  raw:
+  - regex: 'maximum-prefix 1000 80\s+\[[na]:'
+  - regex: 'send-community-ebgp\s+\[[na]:'
+  points: 4
+- name: 'M6-4 XR01: ISP-B inherits community sending and the prefix limit from a template'
+  node: XR01
+  command: show bgp neighbor 10.0.12.2 configuration
+  raw:
+  - regex: 'maximum-prefix 1000 80\s+\[[na]:'
+  - regex: 'send-community-ebgp\s+\[[na]:'
+  points: 4
+- name: 'M6-4 XR01: the limit is in force on both providers'
+  node: XR01
+  command: show bgp neighbor | include "^BGP neighbor is|Maximum prefixes allowed|Threshold for warning"
+  raw:
+  - regex: neighbor is 10\.0\.11\.2\s*\n\s*Maximum prefixes allowed 1000\s*\n\s*Threshold for warning message 80%
+  - regex: neighbor is 10\.0\.12\.2\s*\n\s*Maximum prefixes allowed 1000\s*\n\s*Threshold for warning message 80%
+  points: 2

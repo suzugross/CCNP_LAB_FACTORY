@@ -1,0 +1,617 @@
+
+######## rpl-1: ポリシーなしの eBGP
+configure
+Sun Oct 18 14:40:37.670 UTC
+RP/0/RP0/CPU0:XRD01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XRD01(config-bgp)#
+bgp router-id 1.1.1.1
+RP/0/RP0/CPU0:XRD01(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XRD01(config-bgp-af)#
+exit
+RP/0/RP0/CPU0:XRD01(config-bgp)#
+neighbor 10.0.1.2
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr)#
+remote-as 65001
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+send-community-ebgp
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+root
+RP/0/RP0/CPU0:XRD01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XRD01(config-bgp)#
+neighbor 10.0.2.2
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr)#
+remote-as 65000
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+commit
+Sun Oct 18 14:40:43.385 UTC
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:XRD01#
+show bgp ipv4 unicast summary
+Sun Oct 18 14:41:25.906 UTC
+BGP router identifier 1.1.1.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 3
+BGP main routing table version 3
+BGP NSR Initial initsync version 3 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker            3             3             3             3             3             0
+
+Some configured eBGP neighbors (under default or non-default vrfs)
+do not have both inbound and outbound policies configured for IPv4 Unicast
+address family. These neighbors will default to sending and/or
+receiving no routes and are marked with '!' in the output below.
+Use the 'show bgp neighbor <nbr_address>' command for details.
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.0.1.2          0 65001       5       3            3    0    0 00:00:37          0!
+10.0.2.2          0 65000       5       3            3    0    0 00:00:36          1
+
+RP/0/RP0/CPU0:XRD01#
+show bgp ipv4 unicast
+Sun Oct 18 14:41:26.306 UTC
+BGP router identifier 1.1.1.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 3
+BGP main routing table version 3
+BGP NSR Initial initsync version 3 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*>i22.22.22.22/32     10.0.2.2                 0    100      0 i
+
+Processed 1 prefixes, 1 paths
+RP/0/RP0/CPU0:XRD01#
+show bgp neighbor 10.0.1.2 | include "olic|Policy|accepted|denied"
+Sun Oct 18 14:41:26.712 UTC
+  eBGP neighbor with no inbound or outbound policy; defaults to 'drop'
+  0 accepted prefixes, 0 are bestpaths
+  Exact no. of prefixes denied: 0
+  Cumulative no. of prefixes denied: 5
+    No policy: 5, Failed RT match: 0
+    By ORF policy: 0, By policy: 0
+RP/0/RP0/CPU0:XRD01#
+
+######## rpl-2: prefix-set・community-set・as-path-set・引数つき・apply・末尾まで pass なし
+configure
+Sun Oct 18 14:41:28.544 UTC
+RP/0/RP0/CPU0:XRD01(config)#
+prefix-set PS-24
+RP/0/RP0/CPU0:XRD01(config-pfx)#
+172.16.0.0/16 ge 24 le 24
+RP/0/RP0/CPU0:XRD01(config-pfx)#
+end-set
+RP/0/RP0/CPU0:XRD01(config)#
+community-set CS-TAG
+RP/0/RP0/CPU0:XRD01(config-comm)#
+65000:100
+RP/0/RP0/CPU0:XRD01(config-comm)#
+end-set
+RP/0/RP0/CPU0:XRD01(config)#
+as-path-set AS-ORIGIN
+RP/0/RP0/CPU0:XRD01(config-as)#
+ios-regex '^65001$'
+RP/0/RP0/CPU0:XRD01(config-as)#
+end-set
+RP/0/RP0/CPU0:XRD01(config)#
+route-policy SET-LP($lp)
+RP/0/RP0/CPU0:XRD01(config-rpl)#
+set local-preference $lp
+RP/0/RP0/CPU0:XRD01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XRD01(config)#
+route-policy RP-IN
+RP/0/RP0/CPU0:XRD01(config-rpl)#
+if destination in PS-24 then
+RP/0/RP0/CPU0:XRD01(config-rpl-if)#
+set community CS-TAG
+RP/0/RP0/CPU0:XRD01(config-rpl-if)#
+apply SET-LP(200)
+RP/0/RP0/CPU0:XRD01(config-rpl-if)#
+elseif destination in (172.16.2.0/25) and as-path in AS-ORIGIN then
+RP/0/RP0/CPU0:XRD01(config-rpl-elseif)#
+pass
+RP/0/RP0/CPU0:XRD01(config-rpl-elseif)#
+endif
+RP/0/RP0/CPU0:XRD01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XRD01(config)#
+route-policy PASS
+RP/0/RP0/CPU0:XRD01(config-rpl)#
+pass
+RP/0/RP0/CPU0:XRD01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XRD01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XRD01(config-bgp)#
+neighbor 10.0.1.2
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+route-policy RP-IN in
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+route-policy PASS out
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+commit
+Sun Oct 18 14:41:40.376 UTC
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:XRD01#
+show bgp ipv4 unicast
+Sun Oct 18 14:42:02.799 UTC
+BGP router identifier 1.1.1.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 6
+BGP main routing table version 6
+BGP NSR Initial initsync version 3 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*>i22.22.22.22/32     10.0.2.2                 0    100      0 i
+*> 172.16.0.0/24      10.0.1.2                 0    200      0 65001 i
+*> 172.16.1.0/24      10.0.1.2                 0    200      0 65001 i
+*> 172.16.2.0/25      10.0.1.2                 0             0 65001 i
+
+Processed 4 prefixes, 4 paths
+RP/0/RP0/CPU0:XRD01#
+show bgp ipv4 unicast 172.16.0.0/24
+Sun Oct 18 14:42:03.202 UTC
+BGP routing table entry for 172.16.0.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                  4            4
+Last Modified: Oct 18 14:41:41.939 for 00:00:21
+Paths: (1 available, best #1)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.0.2.2        
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.0.2.2        
+  65001
+    10.0.1.2 from 10.0.1.2 (11.11.11.11)
+      Origin IGP, metric 0, localpref 200, valid, external, best, group-best
+      Received Path ID 0, Local Path ID 1, version 4
+      Community: 65000:100
+      Origin-AS validity: (disabled)
+RP/0/RP0/CPU0:XRD01#
+show bgp ipv4 unicast community 65000:100
+Sun Oct 18 14:42:03.602 UTC
+BGP router identifier 1.1.1.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 6
+BGP main routing table version 6
+BGP NSR Initial initsync version 3 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*> 172.16.0.0/24      10.0.1.2                 0    200      0 65001 i
+*> 172.16.1.0/24      10.0.1.2                 0    200      0 65001 i
+
+Processed 2 prefixes, 2 paths
+RP/0/RP0/CPU0:XRD01#
+
+######## rpl-3: 表示・確認系
+show rpl route-policy RP-IN
+Sun Oct 18 14:42:05.320 UTC
+route-policy RP-IN
+  if destination in PS-24 then
+    set community CS-TAG
+    apply SET-LP(200)
+  elseif destination in (172.16.2.0/25) and as-path in AS-ORIGIN then
+    pass
+  endif
+end-policy
+!
+RP/0/RP0/CPU0:XRD01#
+show rpl route-policy RP-IN detail
+Sun Oct 18 14:42:05.821 UTC
+prefix-set PS-24
+  172.16.0.0/16 ge 24 le 24
+end-set
+!
+as-path-set AS-ORIGIN
+  ios-regex '^65001$'
+end-set
+!
+community-set CS-TAG
+  65000:100
+end-set
+!
+route-policy SET-LP($lp)
+  set local-preference $lp
+end-policy
+!
+route-policy RP-IN
+  if destination in PS-24 then
+    set community CS-TAG
+    apply SET-LP(200)
+  elseif destination in (172.16.2.0/25) and as-path in AS-ORIGIN then
+    pass
+  endif
+end-policy
+!
+RP/0/RP0/CPU0:XRD01#
+show rpl route-policy RP-IN attachment-points
+                                                      ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XRD01#
+show rpl active route-policy
+Sun Oct 18 14:42:06.724 UTC
+
+ACTIVE -- Referenced by at least one policy which is attached
+INACTIVE -- Only referenced by policies which are not attached
+UNUSED -- Not attached (directly or indirectly) and not referenced
+
+The following policies are (ACTIVE)
+------------------------------------------
+    PASS
+    RP-IN
+    SET-LP
+
+RP/0/RP0/CPU0:XRD01#
+show rpl inactive route-policy
+Sun Oct 18 14:42:07.227 UTC
+
+ACTIVE -- Referenced by at least one policy which is attached
+INACTIVE -- Only referenced by policies which are not attached
+UNUSED -- Not attached (directly or indirectly) and not referenced
+
+The following policies are (INACTIVE)
+------------------------------------------
+None found with this status.
+
+RP/0/RP0/CPU0:XRD01#
+show rpl prefix-set PS-24 attachment-points
+                                                    ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XRD01#
+show bgp neighbor 10.0.1.2 | include "olic"
+Sun Oct 18 14:42:08.130 UTC
+  Policy for incoming advertisements is RP-IN
+  Policy for outgoing advertisements is PASS
+    No policy: 5, Failed RT match: 0
+    By ORF policy: 0, By policy: 2
+RP/0/RP0/CPU0:XRD01#
+show bgp ipv4 unicast policy | utility head count 30
+Sun Oct 18 14:42:08.531 UTC
+22.22.22.22/32 is advertised to 10.0.1.2
+  Path info:
+    neighbor: 10.0.2.2        neighbor router id: 22.22.22.22
+    valid  internal  best  
+Received Path ID 0, Local Path ID 1, version 3
+  Attributes after inbound policy was applied:
+    next hop: 10.0.2.2
+    MET ORG AS LOCAL 
+    origin: IGP  metric: 0  local pref: 100  
+    aspath: 
+  Attributes after outbound policy was applied:
+    next hop: 10.0.1.1
+    ORG AS LOCAL 
+    origin: IGP  local pref: 100  
+    aspath: 65000
+
+172.16.0.0/24 is advertised to 10.0.2.2
+  Path info:
+    neighbor: 10.0.1.2        neighbor router id: 11.11.11.11
+    valid  external  best  
+Received Path ID 0, Local Path ID 1, version 4
+  Attributes after inbound policy was applied:
+    next hop: 10.0.1.2
+    MET ORG AS LOCAL COMM 
+    origin: IGP  neighbor as: 65001  metric: 0  local pref: 200  
+    aspath: 65001
+    community: 65000:100
+  Attributes after outbound policy was applied:
+    next hop: 10.0.1.2
+    MET ORG AS LOCAL COMM 
+RP/0/RP0/CPU0:XRD01#
+show bgp ipv4 unicast neighbors 10.0.1.2 routes
+Sun Oct 18 14:42:09.031 UTC
+BGP router identifier 1.1.1.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 6
+BGP main routing table version 6
+BGP NSR Initial initsync version 3 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*> 172.16.0.0/24      10.0.1.2                 0    200      0 65001 i
+*> 172.16.1.0/24      10.0.1.2                 0    200      0 65001 i
+*> 172.16.2.0/25      10.0.1.2                 0             0 65001 i
+
+Processed 3 prefixes, 3 paths
+RP/0/RP0/CPU0:XRD01#
+show bgp ipv4 unicast neighbors 10.0.1.2 received routes
+Sun Oct 18 14:42:09.432 UTC
+% The 'show bgp neighbor received routes' command is only available when inbound soft reconfiguration is active.  To activate inbound soft reconfiguration, use the 'soft-reconfiguration inbound' command.  If the neighbor supports route-refresh, the 'always' option to the command must also be specified.
+RP/0/RP0/CPU0:XRD01#
+
+######## rpl-4: 使用中の set を書き換える(clear なしで反映されるか)
+configure
+Sun Oct 18 14:42:11.142 UTC
+RP/0/RP0/CPU0:XRD01(config)#
+prefix-set PS-24
+Sun Oct 18 14:42:11.741 UTC
+% WARNING: Policy object prefix-set PS-24 exists! Reconfiguring it via CLI will replace current definition. Use abort to cancel.
+RP/0/RP0/CPU0:XRD01(config-pfx)#
+172.16.0.0/16 ge 24 le 24,
+RP/0/RP0/CPU0:XRD01(config-pfx)#
+11.11.11.11/32
+RP/0/RP0/CPU0:XRD01(config-pfx)#
+end-set
+RP/0/RP0/CPU0:XRD01(config)#
+commit
+Sun Oct 18 14:42:13.345 UTC
+RP/0/RP0/CPU0:XRD01(config)#
+end
+RP/0/RP0/CPU0:XRD01#
+show bgp ipv4 unicast
+Sun Oct 18 14:42:30.557 UTC
+BGP router identifier 1.1.1.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 7
+BGP main routing table version 7
+BGP NSR Initial initsync version 3 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*> 11.11.11.11/32     10.0.1.2                 0    200      0 65001 i
+*>i22.22.22.22/32     10.0.2.2                 0    100      0 i
+*> 172.16.0.0/24      10.0.1.2                 0    200      0 65001 i
+*> 172.16.1.0/24      10.0.1.2                 0    200      0 65001 i
+*> 172.16.2.0/25      10.0.1.2                 0             0 65001 i
+
+Processed 5 prefixes, 5 paths
+RP/0/RP0/CPU0:XRD01#
+show bgp ipv4 unicast 11.11.11.11/32
+Sun Oct 18 14:42:30.958 UTC
+BGP routing table entry for 11.11.11.11/32
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                  7            7
+Last Modified: Oct 18 14:42:22.939 for 00:00:08
+Paths: (1 available, best #1)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.0.2.2        
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.0.2.2        
+  65001
+    10.0.1.2 from 10.0.1.2 (11.11.11.11)
+      Origin IGP, metric 0, localpref 200, valid, external, best, group-best
+      Received Path ID 0, Local Path ID 1, version 7
+      Community: 65000:100
+      Origin-AS validity: (disabled)
+RP/0/RP0/CPU0:XRD01#
+
+######## rpl-5: 未定義のポリシー・使用中の削除・適用点にそぐわない動作
+configure
+Sun Oct 18 14:42:32.673 UTC
+RP/0/RP0/CPU0:XRD01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XRD01(config-bgp)#
+neighbor 10.0.2.2
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+route-policy NOPE out
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+commit
+Sun Oct 18 14:42:34.778 UTC
+
+% Failed to commit one or more configuration items during a pseudo-atomic operation. All changes made have been reverted. Please issue 'show configuration failed [inheritance]' from this session to view the errors
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+show configuration failed
+Sun Oct 18 14:42:36.387 UTC
+!! SEMANTIC ERRORS: This configuration was rejected by 
+!! the system due to semantic errors. The individual 
+!! errors with each failed configuration command can be 
+!! found below.
+
+
+router bgp 65000
+ neighbor 10.0.2.2
+  address-family ipv4 unicast
+   route-policy NOPE out
+!!% Could not find entry in list: Policy [NOPE] must be defined before it can be attached.
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+abort
+RP/0/RP0/CPU0:XRD01#
+configure
+Sun Oct 18 14:42:39.604 UTC
+RP/0/RP0/CPU0:XRD01(config)#
+no route-policy PASS
+RP/0/RP0/CPU0:XRD01(config)#
+commit
+Sun Oct 18 14:42:40.606 UTC
+
+% Failed to commit one or more configuration items during a pseudo-atomic operation. All changes made have been reverted. Please issue 'show configuration failed [inheritance]' from this session to view the errors
+RP/0/RP0/CPU0:XRD01(config)#
+show configuration failed
+Sun Oct 18 14:42:42.116 UTC
+!! SEMANTIC ERRORS: This configuration was rejected by 
+!! the system due to semantic errors. The individual 
+!! errors with each failed configuration command can be 
+!! found below.
+
+
+no route-policy PASS
+!!% Deletion of policy [PASS] is not allowed because it is in use at the bgp neighbor-out-dflt attach point.
+end
+
+RP/0/RP0/CPU0:XRD01(config)#
+abort
+RP/0/RP0/CPU0:XRD01#
+configure
+Sun Oct 18 14:42:45.332 UTC
+RP/0/RP0/CPU0:XRD01(config)#
+router ospf 1
+RP/0/RP0/CPU0:XRD01(config-ospf)#
+area 0
+RP/0/RP0/CPU0:XRD01(config-ospf-ar)#
+interface Loopback0
+RP/0/RP0/CPU0:XRD01(config-ospf-ar-if)#
+root
+RP/0/RP0/CPU0:XRD01(config)#
+router ospf 1
+RP/0/RP0/CPU0:XRD01(config-ospf)#
+redistribute bgp 65000 route-policy RP-IN
+RP/0/RP0/CPU0:XRD01(config-ospf)#
+commit
+Sun Oct 18 14:42:48.242 UTC
+
+% Failed to commit one or more configuration items during a pseudo-atomic operation. All changes made have been reverted. Please issue 'show configuration failed [inheritance]' from this session to view the errors
+RP/0/RP0/CPU0:XRD01(config-ospf)#
+show configuration failed
+Sun Oct 18 14:42:50.451 UTC
+!! SEMANTIC ERRORS: This configuration was rejected by 
+!! the system due to semantic errors. The individual 
+!! errors with each failed configuration command can be 
+!! found below.
+
+
+router ospf 1
+ redistribute bgp 65000 route-policy RP-IN
+!!% Could not find entry in list: Policy [RP-IN] uses the 'community' attribute. There is no 'community' attribute at the ospf redistribution attach point.
+!
+end
+
+RP/0/RP0/CPU0:XRD01(config-ospf)#
+abort
+RP/0/RP0/CPU0:XRD01#
+configure
+Sun Oct 18 14:42:53.685 UTC
+RP/0/RP0/CPU0:XRD01(config)#
+route-policy RP-OSPF
+RP/0/RP0/CPU0:XRD01(config-rpl)#
+set metric-type type-1
+RP/0/RP0/CPU0:XRD01(config-rpl)#
+pass
+RP/0/RP0/CPU0:XRD01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XRD01(config)#
+router ospf 1
+RP/0/RP0/CPU0:XRD01(config-ospf)#
+area 0
+RP/0/RP0/CPU0:XRD01(config-ospf-ar)#
+interface Loopback0
+RP/0/RP0/CPU0:XRD01(config-ospf-ar-if)#
+root
+RP/0/RP0/CPU0:XRD01(config)#
+router ospf 1
+RP/0/RP0/CPU0:XRD01(config-ospf)#
+redistribute bgp 65000 route-policy RP-OSPF
+RP/0/RP0/CPU0:XRD01(config-ospf)#
+commit
+Sun Oct 18 14:42:58.197 UTC
+RP/0/RP0/CPU0:XRD01(config-ospf)#
+show configuration failed
+Sun Oct 18 14:42:59.102 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XRD01(config-ospf)#
+end
+RP/0/RP0/CPU0:XRD01#
+show rpl route-policy RP-OSPF attachment-points
+                                                        ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XRD01#
+
+######## rpl-6: soft reconfiguration の要否(受信前の経路が見えるか)
+clear bgp ipv4 unicast 10.0.1.2 soft in
+Sun Oct 18 14:43:04.035 UTC
+RP/0/RP0/CPU0:XRD01#
+show bgp ipv4 unicast neighbors 10.0.1.2 received routes
+Sun Oct 18 14:43:04.438 UTC
+% The 'show bgp neighbor received routes' command is only available when inbound soft reconfiguration is active.  To activate inbound soft reconfiguration, use the 'soft-reconfiguration inbound' command.  If the neighbor supports route-refresh, the 'always' option to the command must also be specified.
+RP/0/RP0/CPU0:XRD01#
+configure
+Sun Oct 18 14:43:06.170 UTC
+RP/0/RP0/CPU0:XRD01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XRD01(config-bgp)#
+neighbor 10.0.1.2
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+soft-reconfiguration inbound always
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+commit
+Sun Oct 18 14:43:08.274 UTC
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:XRD01#
+show bgp ipv4 unicast neighbors 10.0.1.2 received routes
+Sun Oct 18 14:43:20.378 UTC
+BGP router identifier 1.1.1.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 7
+BGP main routing table version 7
+BGP NSR Initial initsync version 3 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*  11.11.11.11/32     10.0.1.2                 0             0 65001 i
+*  172.16.0.0/24      10.0.1.2                 0             0 65001 i
+*  172.16.1.0/24      10.0.1.2                 0             0 65001 i
+*> 172.16.2.0/25      10.0.1.2                 0             0 65001 i
+*  172.16.3.0/26      10.0.1.2                 0             0 65001 i
+
+Processed 5 prefixes, 5 paths
+RP/0/RP0/CPU0:XRD01#

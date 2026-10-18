@@ -1,0 +1,32 @@
+# M5-1: 両 ISP から私設以外を受け、各 ISP へは 203.0.113.0/24 だけを出す(出発点= ISP-A は方針なし・ISP-B は pass の無い方針)。
+problem: XRT-03
+total_points: 100
+checks:
+  - name: "M5-1 XR01: 11.0.0.0/8 arrives from both ISPs"
+    node: XR01
+    command: "show bgp ipv4 unicast 11.0.0.0/8"
+    raw:
+      - { regex: "Paths: \\(2 available" }
+    points: 30
+  - name: "M5-1 XR01: routes from both ISPs are accepted, private ones are not"
+    node: XR01
+    command: "show bgp ipv4 unicast"
+    raw:
+      - { regex: "\\*>?\\s*11\\.0\\.0\\.0/8" }
+      - { regex: "14\\.2\\.0\\.0/16" }
+      - { not_regex: "10\\.10\\.0\\.0/16|172\\.20\\.0\\.0/16|192\\.168\\.50\\.0/24|172\\.31\\.0\\.0/16" }
+    points: 30
+  - name: "M5-1 RT01 (ISP-A): receives 203.0.113.0/24 and nothing learnt from ISP-B"
+    node: RT01
+    command: "show ip bgp neighbors 10.0.11.1 routes"
+    raw:
+      - { regex: "203\\.0\\.113\\.0\\s" }
+      - { not_regex: "65000 65102|14\\.2\\.0\\.0" }
+    points: 20
+  - name: "M5-1 RT02 (ISP-B): receives 203.0.113.0/24 and nothing learnt from ISP-A"
+    node: RT02
+    command: "show ip bgp neighbors 10.0.12.1 routes"
+    raw:
+      - { regex: "203\\.0\\.113\\.0\\s" }
+      - { not_regex: "65000 65101" }
+    points: 20

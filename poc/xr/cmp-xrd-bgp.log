@@ -1,0 +1,333 @@
+######## rpl-3b: 適用先の表示
+show rpl route-policy RP-IN attachpoints
+Sun Oct 18 14:43:43.366 UTC
+
+BGP Attachpoint: Neighbor
+
+Neighbor/Group                           type  afi/safi             in/out  vrf name   bound by       
+--------------------------------------------------------------------------------
+10.0.1.2                                 --    IPv4/uni             in   default                          RP-IN                                                                                                                                                                                                                                                          
+
+RP/0/RP0/CPU0:XRD01#
+show rpl prefix-set PS-24 attachpoints
+Sun Oct 18 14:43:43.868 UTC
+
+BGP Attachpoint: Neighbor
+
+Neighbor/Group                           type  afi/safi             in/out  vrf name   bound by       
+--------------------------------------------------------------------------------
+10.0.1.2                                 --    IPv4/uni             in   default                          RP-IN                                                                                                                                                                                                                                                          
+
+RP/0/RP0/CPU0:XRD01#
+show rpl route-policy RP-OSPF attachpoints
+Sun Oct 18 14:43:44.370 UTC
+
+OSPFv2 Attachpoint: Redistribution to OSPFv2 process 
+
+source     instance   to process vrf name   bound by                                 
+----------------------------------------------------
+bgp        65000      1          default    RP-OSPF                                  
+
+RP/0/RP0/CPU0:XRD01#
+
+######## bgp-1: RR・next-hop-self・相手側の受信
+configure
+Sun Oct 18 14:43:46.186 UTC
+RP/0/RP0/CPU0:XRD01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XRD01(config-bgp)#
+neighbor 10.0.2.2
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+route-reflector-client
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+next-hop-self
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+commit
+Sun Oct 18 14:43:48.698 UTC
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:XRD01#
+show ip bgp
+BGP table version is 6, local router ID is 22.22.22.22
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>i  11.11.11.11/32   10.0.2.1                 0    200      0 65001 i
+ *>   22.22.22.22/32   0.0.0.0                  0         32768 i
+ *>i  172.16.0.0/24    10.0.2.1                 0    200      0 65001 i
+ *>i  172.16.1.0/24    10.0.2.1                 0    200      0 65001 i
+ *>i  172.16.2.0/25    10.0.2.1                 0    100      0 65001 i
+RT04#
+show ip bgp 11.11.11.11
+BGP routing table entry for 11.11.11.11/32, version 4
+Paths: (1 available, best #1, table default)
+  Not advertised to any peer
+  Refresh Epoch 1
+  65001
+    10.0.2.1 from 10.0.2.1 (1.1.1.1)
+      Origin IGP, metric 0, localpref 200, valid, internal, best
+      Community: 65000:100
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Oct 18 2026 14:43:55 UTC
+RT04#
+show ip bgp
+BGP table version is 9, local router ID is 11.11.11.11
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   11.11.11.11/32   0.0.0.0                  0         32768 i
+ *>   22.22.22.22/32   10.0.1.1                               0 65000 i
+ *>   172.16.0.0/24    0.0.0.0                  0         32768 i
+ *>   172.16.1.0/24    0.0.0.0                  0         32768 i
+ *>   172.16.2.0/25    0.0.0.0                  0         32768 i
+ *>   172.16.3.0/26    0.0.0.0                  0         32768 i
+RT03#
+
+######## bgp-2: XR を通り抜ける転送(RT01 Lo0 → RT02 Lo0)
+ping 22.22.22.22 source Loopback0 repeat 20
+Type escape sequence to abort.
+Sending 20, 100-byte ICMP Echos to 22.22.22.22, timeout is 2 seconds:
+Packet sent with a source address of 11.11.11.11 
+!!!!!!!!!!!!!!!!!!!!
+Success rate is 100 percent (20/20), round-trip min/avg/max = 1/1/2 ms
+RT03#
+traceroute 22.22.22.22 source Loopback0 numeric timeout 1 ttl 1 3
+Type escape sequence to abort.
+Tracing the route to 22.22.22.22
+VRF info: (vrf in name/id, vrf out name/id)
+  1 10.0.1.1 2 msec 0 msec 1 msec
+  2  *  *  * 
+  3  *  *  * 
+RT03#
+show cef 22.22.22.22
+Sun Oct 18 14:44:26.960 UTC
+22.22.22.22/32, version 15, internal 0x5000001 0x40 (ptr 0x88539a10) [1], 0x0 (0x0), 0x0 (0x0)
+ Updated Oct 18 14:43:53.649 
+ local adjacency to GigabitEthernet0/0/0/1
+
+ Prefix Len 32, traffic index 0, precedence n/a, priority 4
+  gateway array (0x896757c8) reference count 1, flags 0x2010, source rib (7), 0 backups
+                [1 type 3 flags 0x48501 (0x89718ca0) ext 0x0 (0x0) (collapsed)]
+  LW-LDI[type=0, refc=0, ptr=0x0, sh-ldi=0x0]
+  gateway array update type-time 1 Oct 18 14:43:53.649
+ LDI Update time Oct 18 14:43:53.649
+   via 10.0.2.2/32, 2 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0x885303d8 0x0]
+    next hop 10.0.2.2/32 via 10.0.2.2/32
+
+    Load distribution: 0 (refcount 1)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/1    10.0.2.2       
+RP/0/RP0/CPU0:XRD01#
+show route 22.22.22.22
+Sun Oct 18 14:44:27.364 UTC
+
+Routing entry for 22.22.22.22/32
+  Known via "bgp 65000", distance 200, metric 0, type internal
+  Installed Oct 18 14:43:53.646 for 00:00:33
+  Routing Descriptor Blocks
+    10.0.2.2, from 10.0.2.2
+      Route metric is 0, Wt is 1
+  No advertising protos. 
+RP/0/RP0/CPU0:XRD01#
+show interfaces GigabitEthernet0/0/0/1 | include "packets|rate"
+Sun Oct 18 14:44:27.763 UTC
+  5 minute input rate 0 bits/sec, 0 packets/sec
+  5 minute output rate 0 bits/sec, 0 packets/sec
+     243 packets input, 24227 bytes, 0 total input drops
+     Received 0 broadcast packets, 32 multicast packets
+     146 packets output, 14134 bytes, 0 total output drops
+     Output 2 broadcast packets, 14 multicast packets
+RP/0/RP0/CPU0:XRD01#
+
+######## bgp-3: パス選択の表示・属性
+show bgp ipv4 unicast 11.11.11.11/32 bestpath-compare
+Sun Oct 18 14:44:29.461 UTC
+BGP routing table entry for 11.11.11.11/32
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                  7            7
+    Flags: 0x00001001+0x20000000+0x00000000 
+Last Modified: Oct 18 14:42:22.939 for 00:02:06
+Paths: (2 available, best #1)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.0.2.2        
+  Path #1: Received by speaker 0
+  Flags: 0x3000000001040003+0x00, import: 0x020
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.0.2.2        
+  65001
+    10.0.1.2 from 10.0.1.2 (11.11.11.11), if-handle 0x00000000
+      Origin IGP, metric 0, localpref 200, valid, external, best, group-best
+      Received Path ID 0, Local Path ID 1, version 7
+      Community: 65000:100
+      Origin-AS validity: (disabled)
+      best of AS 65001, Overall best
+  Path #2: Received by speaker 0
+  Flags: 0x3000000000004003+0x00, import: 0x020
+  Not advertised to any peer
+  65001, (received-only)
+    10.0.1.2 from 10.0.1.2 (11.11.11.11), if-handle 0x00000000
+      Origin IGP, metric 0, localpref 100, valid, external
+      Received Path ID 0, Local Path ID 0, version 0
+      Origin-AS validity: (disabled)
+      Ineligible path
+RP/0/RP0/CPU0:XRD01#
+show bgp ipv4 unicast neighbors 10.0.2.2 advertised-routes
+Sun Oct 18 14:44:29.862 UTC
+Network            Next Hop        From            AS Path
+11.11.11.11/32     10.0.2.1        10.0.1.2        65001i
+172.16.0.0/24      10.0.2.1        10.0.1.2        65001i
+172.16.1.0/24      10.0.2.1        10.0.1.2        65001i
+172.16.2.0/25      10.0.2.1        10.0.1.2        65001i
+
+Processed 4 prefixes, 4 paths
+RP/0/RP0/CPU0:XRD01#
+show bgp ipv4 unicast summary
+Sun Oct 18 14:44:30.262 UTC
+BGP router identifier 1.1.1.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 9
+BGP main routing table version 9
+BGP NSR Initial initsync version 3 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker            9             9             9             9             9             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.0.1.2          0 65001      11      13            9    0    0 00:03:41          4
+10.0.2.2          0 65000      13      16            9    0    0 00:00:36          1
+
+RP/0/RP0/CPU0:XRD01#
+show bgp neighbor 10.0.2.2 | utility head count 40
+Sun Oct 18 14:44:30.663 UTC
+
+BGP neighbor is 10.0.2.2
+ Remote AS 65000, local AS 65000, internal link
+ Remote router ID 22.22.22.22
+ Cluster ID 1.1.1.1
+  BGP state = Established, up for 00:00:37
+  Previous State: Idle
+  Last Received Message: Update
+  NSR State: None
+  Last read 00:00:37, Last read before reset 00:01:02
+  Hold time is 180, keepalive interval is 60 seconds
+  Configured hold time: 180, keepalive: 60, min acceptable hold time: 3
+  Last write 00:00:35, attempted 158, written 158
+  Second last write 00:00:37, attempted 162, written 162
+  Last write before reset 00:01:08, attempted 19, written 19
+  Second last write before reset 00:02:08, attempted 69, written 69
+  Last write pulse rcvd  Oct 18 14:43:53.646 last full not set pulse count 14
+  Last write pulse rcvd before reset 00:01:02
+  Last insert into reset queue: Oct 18 14:43:50.738, removed at Oct 18 14:43:50.738
+  Socket not armed for io, armed for read, armed for write
+  Last write thread event before reset 00:00:46, second last 00:00:48
+  Last KA expiry before reset 00:01:08, second last 00:00:00
+  Last KA error before reset 00:00:00, KA not sent 00:00:00
+  Last KA start before reset 00:01:08, second last 00:02:08
+  Precedence: internet
+  Non-stop routing is enabled
+  Multi-protocol capability received
+  Neighbor capabilities:
+    Route refresh: advertised (old + new) and received (old + new)
+    4-byte AS: advertised and received
+    Address family IPv4 Unicast: advertised and received
+  Received 13 messages, 0 notifications, 0 in queue
+  Sent 16 messages, 0 notifications, 0 in queue
+  Minimum time between advertisement runs is 0 secs
+  Inbound message logging enabled, 4 messages buffered
+  Outbound message logging enabled, 4 messages buffered
+  Fast fallover is not enabled
+    Neighbor is directly connected
+    Neighbor fast-fallover is not configured
+
+RP/0/RP0/CPU0:XRD01#
+
+######## bgp-4: IPv6 AF(XR 側だけ・相手なしで設定が通るか)と BFD
+configure
+Sun Oct 18 14:44:32.488 UTC
+RP/0/RP0/CPU0:XRD01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XRD01(config-bgp)#
+address-family ipv6 unicast
+RP/0/RP0/CPU0:XRD01(config-bgp-af)#
+exit
+RP/0/RP0/CPU0:XRD01(config-bgp)#
+neighbor 2001:db8:1::2
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr)#
+remote-as 65001
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr)#
+address-family ipv6 unicast
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+route-policy PASS in
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+route-policy PASS out
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr-af)#
+root
+RP/0/RP0/CPU0:XRD01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XRD01(config-bgp)#
+neighbor 10.0.1.2
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr)#
+bfd fast-detect
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr)#
+bfd minimum-interval 300
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr)#
+commit
+Sun Oct 18 14:44:38.205 UTC
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr)#
+show configuration failed
+Sun Oct 18 14:44:38.608 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XRD01(config-bgp-nbr)#
+end
+RP/0/RP0/CPU0:XRD01#
+show bfd session
+Sun Oct 18 14:44:41.619 UTC
+
+
+RP/0/RP0/CPU0:XRD01#
+show bgp ipv6 unicast summary
+Sun Oct 18 14:44:42.022 UTC
+BGP router identifier 1.1.1.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0800000   RD version: 0
+BGP main routing table version 1
+BGP NSR Initial initsync version 0 (Not Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker            1             1             0             0             1             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+2001:db8:1::2     0 65001       0       0            0    0    0 00:00:00  Idle
+
+RP/0/RP0/CPU0:XRD01#
+[1]+  Done                    run xrv 10.1.10.11 10.1.10.13 10.1.10.14

@@ -1,0 +1,44 @@
+! XRT-03 RT02(据付・変更しない)。ISP-B(AS 65102)。ISP-A と同じ経路を一段遠い経路で、ほかに自分だけの経路と濾過の対象を送る。
+ip route 11.0.0.0 255.0.0.0 Null0
+ip route 12.1.0.0 255.255.0.0 Null0
+ip route 13.1.1.0 255.255.255.0 Null0
+ip route 14.2.0.0 255.255.0.0 Null0
+ip route 13.1.4.0 255.255.255.192 Null0
+ip route 172.31.0.0 255.255.0.0 Null0
+!
+ip prefix-list VIA-A seq 5 permit 11.0.0.0/8
+ip prefix-list DOWNSTREAM seq 5 permit 12.1.0.0/16
+ip prefix-list DOWNSTREAM seq 10 permit 13.1.1.0/24
+route-map TO-XR01 permit 10
+ match ip address prefix-list VIA-A
+ set as-path prepend 65101
+route-map TO-XR01 permit 20
+ match ip address prefix-list DOWNSTREAM
+ set as-path prepend 65301
+route-map TO-XR01 permit 30
+!
+interface Loopback0
+ ip address 102.102.102.102 255.255.255.255
+!
+interface {{ links[0] }}
+ description to XR01 (AS 65000)
+ ip address 10.0.12.2 255.255.255.0
+ no shutdown
+!
+router bgp 65102
+ bgp router-id 102.102.102.102
+ bgp log-neighbor-changes
+ neighbor 10.0.12.1 remote-as 65000
+ address-family ipv4
+  network 11.0.0.0
+  network 12.1.0.0 mask 255.255.0.0
+  network 13.1.1.0 mask 255.255.255.0
+  network 14.2.0.0 mask 255.255.0.0
+  network 13.1.4.0 mask 255.255.255.192
+  network 172.31.0.0 mask 255.255.0.0
+  neighbor 10.0.12.1 activate
+  neighbor 10.0.12.1 send-community both
+  neighbor 10.0.12.1 default-originate
+  neighbor 10.0.12.1 route-map TO-XR01 out
+ exit-address-family
+!

@@ -210,7 +210,22 @@ ul.books li{padding:.35rem .5rem;border-top:1px solid #e3e3e3}
 ul.books .bk{font-weight:600}
 ul.books .alt{color:#555;margin-left:.6rem}
 ul.books .tag{font-size:.7rem;color:#555;border:1px solid #c9c9c9;border-radius:3px;padding:0 .3rem;margin:0 .5rem}
-ul.books .lab{font-size:.82rem;margin-left:.8rem;white-space:nowrap}
+/* 学習用ラボの縦メニュー(本の行の「Labs ▾」を押すと開く) */
+details.labs{display:inline-block;position:relative;margin:0 0 0 .8rem;font-size:.82rem;color:inherit}
+details.labs>summary{list-style:none;display:inline-block;padding:0 .45rem;border:1px solid #c9c9c9;
+  border-radius:3px;color:#0645ad;background:#fff;user-select:none}
+details.labs>summary::-webkit-details-marker{display:none}
+details.labs>summary::after{content:" \25BE";color:#888}
+details.labs[open]>summary{border-color:#0645ad}
+details.labs ul{position:absolute;left:0;top:calc(100% + 3px);z-index:10;list-style:none;margin:0;padding:.25rem 0;
+  min-width:22rem;max-width:calc(100vw - 2rem);background:#fff;border:1px solid #c9c9c9;border-radius:4px;box-shadow:0 4px 14px rgba(0,0,0,.12)}
+details.labs li{border:0;padding:0}
+details.labs li a{display:flex;gap:.7rem;align-items:baseline;padding:.35rem .7rem;color:#111}
+details.labs li a:hover{background:#eef3fb;text-decoration:none}
+details.labs .id{font-family:Consolas,"DejaVu Sans Mono",monospace;color:#0645ad;white-space:nowrap}
+details.labs .tt{flex:1}
+details.labs .n{color:#999;white-space:nowrap;font-variant-numeric:tabular-nums}
+details.labs .hint{padding:.3rem .7rem .15rem;border-top:1px solid #eee;margin-top:.2rem;color:#999;font-size:.75rem}
 ul.books .sub{font-size:.82rem;color:#666;margin-top:.1rem}
 .foot a{color:#999}
 """
@@ -231,6 +246,14 @@ JS = """
     try{ localStorage.setItem('packhome.hide', cb.checked?'1':'0'); }catch(e){} }
   try{ cb.checked = localStorage.getItem('packhome.hide')==='1'; }catch(e){}
   cb.addEventListener('change', apply); apply();
+  // ラボの縦メニュー: 1 つ開いたら他は閉じる・外側クリックと Esc で閉じる
+  var menus=document.querySelectorAll('details.labs');
+  menus.forEach(function(d){ d.addEventListener('toggle', function(){
+    if(d.open) menus.forEach(function(o){ if(o!==d) o.open=false; }); }); });
+  document.addEventListener('click', function(e){
+    menus.forEach(function(d){ if(d.open && !d.contains(e.target)) d.open=false; }); });
+  document.addEventListener('keydown', function(e){
+    if(e.key==='Escape') menus.forEach(function(d){ d.open=false; }); });
 })();
 """
 
@@ -258,6 +281,38 @@ def load_materials(repo):
             for name, bs in sorted(shelves.items())]
 
 
+def _lab_info(repo, lab):
+    """縦メニューの 1 行に出す (題名, 課題数)。題名は problem.yml の title の「—」より後ろ(無ければ全体)。"""
+    title, steps = "", 0
+    try:
+        with open(os.path.join(repo, "problems", lab, "problem.yml"), encoding="utf-8") as fh:
+            m = re.search(r'^title:\s*"?(.*?)"?\s*$', fh.read(), re.M)
+        if m:
+            title = m.group(1).split("\u2014", 1)[-1].strip()
+    except OSError:
+        pass
+    try:
+        with open(os.path.join(repo, "problems", lab, "learn.yml"), encoding="utf-8") as fh:
+            steps = len(re.findall(r"^  - id:", fh.read(), re.M))
+    except OSError:
+        pass
+    return title, steps
+
+
+def _labs_menu(repo, labs):
+    """本の行の「Labs ▾」= 学習用ラボのワークスペースへの縦メニュー。ラボが無ければ空文字。"""
+    if not labs:
+        return ""
+    items = []
+    for x in labs:
+        title, steps = _lab_info(repo, x)
+        items.append(f'<li><a href="/_learn?id={_esc(x)}"><span class="id">{_esc(x)}</span>'
+                     f'<span class="tt">{_esc(title)}</span>'
+                     + (f'<span class="n">{steps} tasks</span>' if steps else "") + "</a></li>")
+    return (f'<details class="labs"><summary>Labs {len(labs)}</summary><ul>' + "".join(items)
+            + '<li class="hint">Opens the lab workspace. The lab must be running.</li></ul></details>')
+
+
 def _materials(repo):
     """教材の区画(棚ごとの見出し＋本ごとの 1 行)。1 冊も無ければ空文字。"""
     shelves = load_materials(repo)
@@ -267,8 +322,7 @@ def _materials(repo):
     for name, books in shelves:
         out.append(f'<h2>{_esc(name)}</h2><ul class="books">')
         for b in books:
-            labs = "".join(f' <a class="lab" href="/_learn?id={_esc(x)}" title="Open the lab workspace (the lab must be running)">'
-                           f'Lab {_esc(x)}</a>' for x in b["labs"])
+            labs = _labs_menu(repo, b["labs"])
             # 2 言語の本は 1 行で出す(言語はページの中のボタンで切り替わる・BL-248)。札は「EN·JA」
             langs = b.get("langs") or [b.get("lang", "")]
             tag = "·".join(str(x).upper() for x in langs if x)

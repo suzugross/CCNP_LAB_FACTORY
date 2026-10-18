@@ -1,0 +1,25 @@
+# M6-4: 両プロバイダの共通設定(コミュニティ送信・受信上限 1000/80% 警告)をテンプレートに持ち、各プロバイダはそれを継承する。
+problem: XRT-03
+total_points: 100
+checks:
+  - name: "M6-4 XR01: ISP-A inherits community sending and the prefix limit from a template"
+    node: XR01
+    command: "show bgp neighbor 10.0.11.2 configuration"
+    raw:
+      - { regex: "maximum-prefix 1000 80\\s+\\[[na]:" }
+      - { regex: "send-community-ebgp\\s+\\[[na]:" }
+    points: 40
+  - name: "M6-4 XR01: ISP-B inherits community sending and the prefix limit from a template"
+    node: XR01
+    command: "show bgp neighbor 10.0.12.2 configuration"
+    raw:
+      - { regex: "maximum-prefix 1000 80\\s+\\[[na]:" }
+      - { regex: "send-community-ebgp\\s+\\[[na]:" }
+    points: 40
+  - name: "M6-4 XR01: the limit is in force on both providers"
+    node: XR01
+    command: "show bgp neighbor | include \"^BGP neighbor is|Maximum prefixes allowed|Threshold for warning\""
+    raw:
+      - { regex: "neighbor is 10\\.0\\.11\\.2\\s*\\n\\s*Maximum prefixes allowed 1000\\s*\\n\\s*Threshold for warning message 80%" }
+      - { regex: "neighbor is 10\\.0\\.12\\.2\\s*\\n\\s*Maximum prefixes allowed 1000\\s*\\n\\s*Threshold for warning message 80%" }
+    points: 20

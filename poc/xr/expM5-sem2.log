@@ -1,0 +1,161 @@
+######## comm: 顧客の入力に as-path・community の判定と削除
+configure
+as-path-set CUST-AS
+ios-regex '^65201(_65201)*$'
+end-set
+route-policy T-CUST
+if as-path in CUST-AS then
+pass
+endif
+end-policy
+route-policy T-PASS
+pass
+end-policy
+router bgp 65000
+neighbor 10.0.13.2
+address-family ipv4 unicast
+route-policy T-CUST in
+route-policy T-PASS out
+commit
+end
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast neighbors 10.0.13.2 routes
+BGP router identifier 1.1.1.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 16
+BGP main routing table version 16
+BGP NSR Initial initsync version 4 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*> 198.51.100.0/24    10.0.13.2                0             0 65201 65201 65201 i
+*> 198.51.100.128/25  10.0.13.2                0             0 65201 i
+*> 198.51.101.0/24    10.0.13.2                0             0 65201 i
+Processed 3 prefixes, 3 paths
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast 198.51.100.0/24
+BGP routing table entry for 198.51.100.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 16           16
+Last Modified: Oct 18 21:33:59.939 for 00:00:12
+Paths: (1 available, best #1)
+  Not advertised to any peer
+  Path #1: Received by speaker 0
+  Not advertised to any peer
+  65201 65201 65201
+    10.0.13.2 from 10.0.13.2 (201.201.201.201)
+      Origin IGP, metric 0, localpref 100, valid, external, best, group-best
+      Received Path ID 0, Local Path ID 1, version 16
+      Community: 65201:500
+      Origin-AS validity: (disabled)
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast 198.51.101.0/24
+BGP routing table entry for 198.51.101.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 14           14
+Last Modified: Oct 18 21:33:59.939 for 00:00:12
+Paths: (1 available, best #1)
+  Not advertised to any peer
+  Path #1: Received by speaker 0
+  Not advertised to any peer
+  65201
+    10.0.13.2 from 10.0.13.2 (201.201.201.201)
+      Origin IGP, metric 0, localpref 100, valid, external, best, group-best
+      Received Path ID 0, Local Path ID 1, version 14
+      Community: 65000:1002
+      Origin-AS validity: (disabled)
+RP/0/RP0/CPU0:XR01#
+######## comm2: originates-from・community の条件・delete community in
+configure
+route-policy T-CUST
+% WARNING: Policy object route-policy T-CUST exists! Reconfiguring it via CLI will replace current definition. Use abort to cancel.
+if as-path originates-from '65201' then
+pass
+endif
+end-policy
+commit
+end
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast neighbors 10.0.13.2 routes
+BGP router identifier 1.1.1.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 16
+BGP main routing table version 16
+BGP NSR Initial initsync version 4 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*> 198.51.100.0/24    10.0.13.2                0             0 65201 65201 65201 i
+*> 198.51.100.128/25  10.0.13.2                0             0 65201 i
+*> 198.51.101.0/24    10.0.13.2                0             0 65201 i
+Processed 3 prefixes, 3 paths
+RP/0/RP0/CPU0:XR01#
+configure
+community-set SIG
+65000:*
+end-set
+route-policy T-OUT
+if community matches-any (65000:1002) then
+drop
+endif
+delete community in SIG
+pass
+end-policy
+router bgp 65000
+neighbor 10.0.12.2
+address-family ipv4 unicast
+route-policy T-OUT out
+send-community-ebgp
+root
+router bgp 65000
+neighbor 10.0.11.2
+address-family ipv4 unicast
+route-policy T-OUT out
+send-community-ebgp
+commit
+show configuration failed
+% No such configuration item(s)
+end
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast neighbors 10.0.12.2 advertised-routes
+Network            Next Hop        From            AS Path
+0.0.0.0/0          10.0.12.1       10.0.11.2       65000 65101i
+10.10.0.0/16       10.0.12.1       10.0.11.2       65000 65101i
+11.0.0.0/8         10.0.12.1       10.0.11.2       65000 65101i
+12.1.0.0/16        10.0.12.1       10.0.11.2       65000 65101 65301i
+13.1.1.0/24        10.0.12.1       10.0.11.2       65000 65101 65301i
+13.1.2.0/25        10.0.12.1       10.0.11.2       65000 65101i
+172.20.0.0/16      10.0.12.1       10.0.11.2       65000 65101i
+192.168.50.0/24    10.0.12.1       10.0.11.2       65000 65101i
+198.51.100.0/24    10.0.12.1       10.0.13.2       65000 65201 65201 65201i
+198.51.100.128/25  10.0.12.1       10.0.13.2       65000 65201i
+203.0.113.0/24     10.0.12.1       Local           65000i
+Processed 11 prefixes, 11 paths
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast neighbors 10.0.11.2 advertised-routes
+Network            Next Hop        From            AS Path
+0.0.0.0/0          10.0.11.1       10.0.11.2       65000 65101i
+10.10.0.0/16       10.0.11.1       10.0.11.2       65000 65101i
+11.0.0.0/8         10.0.11.1       10.0.11.2       65000 65101i
+12.1.0.0/16        10.0.11.1       10.0.11.2       65000 65101 65301i
+13.1.1.0/24        10.0.11.1       10.0.11.2       65000 65101 65301i
+13.1.2.0/25        10.0.11.1       10.0.11.2       65000 65101i
+172.20.0.0/16      10.0.11.1       10.0.11.2       65000 65101i
+192.168.50.0/24    10.0.11.1       10.0.11.2       65000 65101i
+198.51.100.0/24    10.0.11.1       10.0.13.2       65000 65201 65201 65201i
+198.51.100.128/25  10.0.11.1       10.0.13.2       65000 65201i
+203.0.113.0/24     10.0.11.1       Local           65000i
+Processed 11 prefixes, 11 paths
+RP/0/RP0/CPU0:XR01#

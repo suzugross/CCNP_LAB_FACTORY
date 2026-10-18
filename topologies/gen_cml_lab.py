@@ -202,6 +202,12 @@ def main():
         node_fam = {n: (a.xr_platform if f == "iosxr" else f) for n, f in node_fam.items()}
         if a.image_family == "iosxr":
             a.image_family = a.xr_platform
+    # problem.yml の node_xr_platforms: {XRD01: iosxrd} でノード単位に XR 機種を差し替える
+    # (同じ盤面に XRv9000 と XRd を並べて挙動を比べる等。採点・履歴の仕込みは family=iosxr のまま扱う)。
+    for n, plat in (pmeta.get("node_xr_platforms", {}) or {}).items():
+        node_fam[n] = plat
+    # problem.yml の node_images: {XRV01: iosxrv9000-26-1-1} でノード単位にイメージ(版)を差し替える。
+    node_img = pmeta.get("node_images", {}) or {}
 
     def prof_of(name):
         """そのノードのイメージ family × role からプロファイルを引く。"""
@@ -291,7 +297,7 @@ def main():
         node = {
             "id": name, "label": name,
             "node_definition": prof["node_definition"],
-            "image_definition": prof["image_definition"],
+            "image_definition": node_img.get(name, prof["image_definition"]),
             "configuration": configuration,
             "x": cx, "y": cy,
             "tags": [role + "s"],

@@ -1,0 +1,490 @@
+# XRT-03 の学習モード(ワークスペースの Steps タブ)。lab_console.py --learn XRT-03 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# ここに書いた挙動は XRd 26.1.1 の実機で確認した(設計= problems/_drafts/XR-TRACK.design.md §15・§16。XRv9000 との一致は §14)。
+# 読み物(BL-252)= Reading タブに出す本(reading/<key>/)。各課題の read: はその本の「ページ#節」(節= data-sec)。
+reading: xr
+steps:
+  - id: m5t1
+    title: { en: "M5-1  Sessions up, nothing exchanged", ja: "M5-1  セッションは上がっているのに何も交換しない" }
+    check: m5t1
+    read: [50-m5-rpl#s1, 50-m5-rpl#s3]
+    hints:
+      - en: "Two different reasons, one per provider. Ask BGP itself why each neighbour sends and receives nothing: the summary marks such neighbours, and the neighbour detail says what XR01 does with routes when a policy is missing. Then read the colleague's policy as IOS XR reads it: what happens to a route that reaches the end of a policy without being passed?"
+        ja: "理由はプロバイダごとに 1 つずつ、2 つあります。各ネイバーが何も送受信しない理由を BGP 自身に聞きます。summary はそのようなネイバーに印を付け、ネイバーの詳細は、ポリシーが無いときに XR01 がルートをどう扱うかを示します。次に、同僚のポリシーを IOS XR が読むとおりに読みます。pass されないままポリシーの終わりに達したルートはどうなるでしょうか。"
+      - en: "On IOS XR an eBGP neighbour with no inbound policy accepts nothing, and with no outbound policy sends nothing (`show bgp ipv4 unicast summary` shows `!`; `show bgp neighbor <address>` says \"defaults to 'drop'\" and counts \"By policy\" denials). A route that is neither passed nor modified by a `set` before `end-policy` is dropped. The policy needs a `pass` for everything that is not private, and an outbound policy must pass 203.0.113.0/24 only. Guide: Routing Configuration Guide, 'Implementing Routing Policy'."
+        ja: "IOS XR では、着信ポリシーの無い eBGP ネイバーは何も受け入れず、発信ポリシーが無ければ何も送りません(`show bgp ipv4 unicast summary` に `!`、`show bgp neighbor <アドレス>` に「defaults to 'drop'」と「By policy」の拒否数)。`end-policy` までに pass も `set` による変更もされなかったルートは破棄されます。ポリシーには、プライベートでないものすべてに対する `pass` が必要で、発信ポリシーは 203.0.113.0/24 だけを pass する必要があります。ガイド: Routing Configuration Guide の「Implementing Routing Policy」。"
+      - en: "A policy `if destination in PRIVATE then drop endif pass`, attached `in` on both providers. A prefix-set with 203.0.113.0/24 and a policy `if destination in <that set> then pass endif`, attached `out` on both providers. Attach under `router bgp 65000` → `neighbor <address>` → `address-family ipv4 unicast` → `route-policy <name> in|out`."
+        ja: "`if destination in PRIVATE then drop endif pass` のポリシーを、両方のプロバイダに `in` で付けます。203.0.113.0/24 を入れた prefix-set と、`if destination in <その set> then pass endif` のポリシーを、両方のプロバイダに `out` で付けます。付ける場所は `router bgp 65000` → `neighbor <アドレス>` → `address-family ipv4 unicast` → `route-policy <名前> in|out`。"
+    solution:
+      en: |
+        configure
+         prefix-set OWN
+           203.0.113.0/24
+         end-set
+         route-policy ISP-FILTER
+           if destination in PRIVATE then
+             drop
+           endif
+           pass
+         end-policy
+         route-policy ISP-OUT
+           if destination in OWN then
+             pass
+           endif
+         end-policy
+         router bgp 65000
+          neighbor 10.0.11.2
+           address-family ipv4 unicast
+            route-policy ISP-FILTER in
+            route-policy ISP-OUT out
+          neighbor 10.0.12.2
+           address-family ipv4 unicast
+            route-policy ISP-FILTER in
+            route-policy ISP-OUT out
+         no route-policy ISPB-IN
+         commit
+        end
+        Fixing ISPB-IN in place (adding `pass` before `end-policy`) and attaching it to ISP-A as well is equally correct;
+        the solution gives it a name that fits both providers. ISPB-IN can only be removed in the same commit that
+        detaches it: a policy in use cannot be deleted. ISP-OUT needs no explicit drop: every route other than
+        203.0.113.0/24 reaches the end of the policy and is dropped there.
+      ja: |
+        configure
+         prefix-set OWN
+           203.0.113.0/24
+         end-set
+         route-policy ISP-FILTER
+           if destination in PRIVATE then
+             drop
+           endif
+           pass
+         end-policy
+         route-policy ISP-OUT
+           if destination in OWN then
+             pass
+           endif
+         end-policy
+         router bgp 65000
+          neighbor 10.0.11.2
+           address-family ipv4 unicast
+            route-policy ISP-FILTER in
+            route-policy ISP-OUT out
+          neighbor 10.0.12.2
+           address-family ipv4 unicast
+            route-policy ISP-FILTER in
+            route-policy ISP-OUT out
+         no route-policy ISPB-IN
+         commit
+        end
+        ISPB-IN をその場で直して(`end-policy` の前に `pass` を足して)ISP-A にも付けるのも同じく正解です。
+        模範解では、両方のプロバイダに合う名前を付け直しています。ISPB-IN は、付け外しと同じコミットでしか削除できません。
+        使用中のポリシーは削除できないためです。ISP-OUT に明示の drop は要りません。203.0.113.0/24 以外のルートは
+        すべてポリシーの終わりに達し、そこで破棄されます。
+
+  - id: m5t2
+    title: { en: "M5-2  Tightening the inbound filter", ja: "M5-2  着信フィルタを絞る" }
+    check: m5t2
+    read: [50-m5-rpl#s2]
+    hints:
+      - en: "Two more kinds of prefix to drop. One is a single exact prefix. The other is \"any prefix whose length is greater than 24\", whatever its address. A prefix-set entry can match a range of lengths, and an inline set can be written inside the condition."
+        ja: "破棄するプレフィックスがあと 2 種類あります。1 つは完全一致の 1 つのプレフィックスです。もう 1 つは、アドレスにかかわらず「長さが 24 より大きいすべてのプレフィックス」です。prefix-set のエントリは長さの範囲に一致でき、条件の中にインラインで set を書くこともできます。"
+      - en: "Prefix-set entries take `ge` and `le` as IOS prefix lists do. `0.0.0.0/0` matches only the default route; `0.0.0.0/0 ge 25` matches every prefix of length 25 to 32. Either add these entries to a set, or extend the condition with `or destination in (…)`. Re-entering a prefix-set replaces the whole set. Guide: Routing Configuration Guide, 'Implementing Routing Policy' — 'prefix-set'."
+        ja: "prefix-set のエントリは、IOS のプレフィックス リストと同じく `ge` と `le` を取ります。`0.0.0.0/0` はデフォルト ルートだけに一致し、`0.0.0.0/0 ge 25` は長さ 25〜32 のすべてのプレフィックスに一致します。これらを set に足すか、条件を `or destination in (…)` で広げます。prefix-set を入れ直すと、set 全体が置き換わります。ガイド: Routing Configuration Guide の「Implementing Routing Policy」—「prefix-set」。"
+      - en: "In the inbound policy: `if destination in PRIVATE or destination in (0.0.0.0/0, 0.0.0.0/0 ge 25) then drop endif pass`."
+        ja: "着信ポリシーを `if destination in PRIVATE or destination in (0.0.0.0/0, 0.0.0.0/0 ge 25) then drop endif pass` にします。"
+    solution:
+      en: |
+        configure
+         route-policy ISP-FILTER
+           if destination in PRIVATE or destination in (0.0.0.0/0, 0.0.0.0/0 ge 25) then
+             drop
+           endif
+           pass
+         end-policy
+         commit
+        end
+        Adding `0.0.0.0/0` and `0.0.0.0/0 ge 25` to the PRIVATE set works as well, but then the set no longer holds
+        what its name says. The change takes effect at commit: XR01 re-evaluates the routes it already holds, with no
+        `clear bgp` needed. Re-entering a policy prints a warning that the current definition will be replaced.
+      ja: |
+        configure
+         route-policy ISP-FILTER
+           if destination in PRIVATE or destination in (0.0.0.0/0, 0.0.0.0/0 ge 25) then
+             drop
+           endif
+           pass
+         end-policy
+         commit
+        end
+        `0.0.0.0/0` と `0.0.0.0/0 ge 25` を PRIVATE の set に足しても動きますが、set の中身が名前と合わなくなります。
+        変更はコミットした時点で効きます。XR01 は持っているルートを評価し直すので、`clear bgp` は要りません。
+        ポリシーを入れ直すと、いまの定義を置き換えるという警告が出ます。
+
+  - id: m5t3
+    title: { en: "M5-3  One policy for every provider", ja: "M5-3  すべてのプロバイダに 1 つのポリシー" }
+    check: m5t3
+    read: [50-m5-rpl#s4]
+    hints:
+      - en: "The two providers differ only in two values: a local preference and a community. RPL lets a policy take values when it is attached, and lets one policy call another — so the filter does not have to be copied into the new policy."
+        ja: "2 つのプロバイダの違いは、ローカル プリファレンスとコミュニティの 2 つの値だけです。RPL では、ポリシーが付けられるときに値を受け取らせることができ、あるポリシーから別のポリシーを呼ぶこともできます。したがって、フィルタを新しいポリシーに写す必要はありません。"
+      - en: "Parameters are declared after the policy name, `route-policy NAME($a, $b)`, used as `$a` inside, and given when attached: `route-policy NAME(200, 101) in`. `apply OTHER` runs another policy: a route it drops stays dropped. `set community (…) additive` adds to the communities the route already has; without `additive` it replaces them. A parameter can stand inside a community value, as in `65000:$tag`. Guide: Routing Configuration Guide, 'Implementing Routing Policy' — 'Parameterization' and 'Policy Statements'."
+        ja: "パラメータはポリシー名の後ろで宣言し(`route-policy 名前($a, $b)`)、中では `$a` として使い、付けるときに値を渡します(`route-policy 名前(200, 101) in`)。`apply 別名` は別のポリシーを実行します。そこで破棄されたルートは破棄されたままです。`set community (…) additive` はルートが持っているコミュニティに追加し、`additive` が無ければ置き換えます。パラメータは `65000:$tag` のようにコミュニティの値の中にも置けます。ガイド: Routing Configuration Guide の「Implementing Routing Policy」—「Parameterization」と「Policy Statements」。"
+      - en: "`route-policy ISP-IN($lp, $tag)` with `apply ISP-FILTER`, `set local-preference $lp` and `set community (65000:$tag) additive`. Attach `route-policy ISP-IN(200, 101) in` to ISP-A and `route-policy ISP-IN(100, 102) in` to ISP-B."
+        ja: "`route-policy ISP-IN($lp, $tag)` の中に `apply ISP-FILTER`、`set local-preference $lp`、`set community (65000:$tag) additive`。ISP-A に `route-policy ISP-IN(200, 101) in`、ISP-B に `route-policy ISP-IN(100, 102) in` を付けます。"
+    solution:
+      en: |
+        configure
+         route-policy ISP-IN($lp, $tag)
+           apply ISP-FILTER
+           set local-preference $lp
+           set community (65000:$tag) additive
+         end-policy
+         router bgp 65000
+          neighbor 10.0.11.2
+           address-family ipv4 unicast
+            route-policy ISP-IN(200, 101) in
+          neighbor 10.0.12.2
+           address-family ipv4 unicast
+            route-policy ISP-IN(100, 102) in
+         commit
+        end
+        ISP-IN has no `pass`, and needs none: a route that survives ISP-FILTER is modified by the `set` statements,
+        and a modified route is accepted. `show rpl route-policy ISP-IN attachpoints` lists both neighbours with their
+        values. `show rpl active route-policy` shows ISP-FILTER as active although it is attached nowhere directly —
+        it is referenced by an attached policy. On 11.0.0.0/8, which both providers send, the ISP-A path now wins on
+        local preference (`show bgp ipv4 unicast 11.0.0.0/8`).
+      ja: |
+        configure
+         route-policy ISP-IN($lp, $tag)
+           apply ISP-FILTER
+           set local-preference $lp
+           set community (65000:$tag) additive
+         end-policy
+         router bgp 65000
+          neighbor 10.0.11.2
+           address-family ipv4 unicast
+            route-policy ISP-IN(200, 101) in
+          neighbor 10.0.12.2
+           address-family ipv4 unicast
+            route-policy ISP-IN(100, 102) in
+         commit
+        end
+        ISP-IN に `pass` はありませんが、要りません。ISP-FILTER を通り抜けたルートは `set` で変更され、
+        変更されたルートは受け入れられます。`show rpl route-policy ISP-IN attachpoints` には、両方のネイバーが値とともに並びます。
+        `show rpl active route-policy` では、ISP-FILTER はどこにも直接付いていないのに active と表示されます。
+        付いているポリシーから参照されているためです。両方のプロバイダが送る 11.0.0.0/8 では、ローカル プリファレンスにより
+        ISP-A のパスが選ばれます(`show bgp ipv4 unicast 11.0.0.0/8`)。
+
+  - id: m5t4
+    title: { en: "M5-4  A customer with signalling communities", ja: "M5-4  合図のコミュニティを使う顧客" }
+    check: m5t4
+    read: [50-m5-rpl#s2, 50-m5-rpl#s3]
+    hints:
+      - en: "Four policy points: in and out towards the customer, and out towards the providers, which now has two kinds of route to pass and differs between the providers in one value. For the customer's routes you need a condition on the prefix and one on the AS path; for the providers, a condition on the communities, a way to remove some communities but not others, and the providers have to receive communities at all."
+        ja: "ポリシーの付け所は 4 つです。顧客に向けた in と out、プロバイダに向けた out です。プロバイダ向けは pass するルートが 2 種類になり、プロバイダ間で 1 つの値だけが違います。顧客のルートにはプレフィックスの条件と AS パスの条件が要ります。プロバイダ向けには、コミュニティの条件、一部のコミュニティだけを消す手段が要り、そもそもプロバイダがコミュニティを受け取れる必要があります。"
+      - en: "AS path: an `as-path-set` with `ios-regex '^65201(_65201)*$'`, or the condition `as-path originates-from '65201'` (both allow prepending; the leaked route 65201 65101 fails both). Communities: `community matches-any (65000:$x)` as a condition, a `community-set` with `65000:*` and `delete community in <set>`. IOS XR sends no communities to an eBGP neighbour unless `send-community-ebgp` is set under the neighbour's address family. Guide: Routing Configuration Guide, 'Implementing Routing Policy' — 'as-path-set', 'community-set', 'delete community'."
+        ja: "AS パスは、`ios-regex '^65201(_65201)*$'` の `as-path-set` か、条件 `as-path originates-from '65201'`(どちらもプリペンドを許し、漏れたルート 65201 65101 はどちらにも一致しません)。コミュニティは、条件の `community matches-any (65000:$x)`、`65000:*` を入れた `community-set` と `delete community in <set>`。IOS XR は、ネイバーのアドレス ファミリの下に `send-community-ebgp` が無いと、eBGP ネイバーにコミュニティを送りません。ガイド: Routing Configuration Guide の「Implementing Routing Policy」—「as-path-set」「community-set」「delete community」。"
+      - en: "Customer in: `if destination in (198.51.100.0/23 le 24) and as-path in CUST-AS then pass endif`. Customer out: `pass`. Provider out: `route-policy ISP-OUT($nosend)` — `if destination in OWN then pass elseif destination in CUST-PFX and not community matches-any (65000:$nosend) then delete community in OURS pass endif`, attached as `ISP-OUT(1001)` to ISP-A and `ISP-OUT(1002)` to ISP-B. `send-community-ebgp` on all three neighbours."
+        ja: "顧客の in は `if destination in (198.51.100.0/23 le 24) and as-path in CUST-AS then pass endif`。顧客の out は `pass`。プロバイダの out は `route-policy ISP-OUT($nosend)` で、`if destination in OWN then pass elseif destination in CUST-PFX and not community matches-any (65000:$nosend) then delete community in OURS pass endif`。ISP-A には `ISP-OUT(1001)`、ISP-B には `ISP-OUT(1002)` として付けます。3 つのネイバーすべてに `send-community-ebgp`。"
+    solution:
+      en: |
+        configure
+         prefix-set CUST-PFX
+           198.51.100.0/23 le 24
+         end-set
+         as-path-set CUST-AS
+           ios-regex '^65201(_65201)*$'
+         end-set
+         community-set OURS
+           65000:*
+         end-set
+         route-policy CUST-IN
+           if destination in CUST-PFX and as-path in CUST-AS then
+             pass
+           endif
+         end-policy
+         route-policy CUST-OUT
+           pass
+         end-policy
+         route-policy ISP-OUT($nosend)
+           if destination in OWN then
+             pass
+           elseif destination in CUST-PFX and not community matches-any (65000:$nosend) then
+             delete community in OURS
+             pass
+           endif
+         end-policy
+         router bgp 65000
+          neighbor 10.0.11.2
+           address-family ipv4 unicast
+            route-policy ISP-OUT(1001) out
+            send-community-ebgp
+          neighbor 10.0.12.2
+           address-family ipv4 unicast
+            route-policy ISP-OUT(1002) out
+            send-community-ebgp
+          neighbor 10.0.13.2
+           address-family ipv4 unicast
+            route-policy CUST-IN in
+            route-policy CUST-OUT out
+            send-community-ebgp
+         commit
+        end
+        ISP-OUT gains a parameter, and the two attachments change in the same commit. Done in two commits, the first
+        would fail: a policy that takes a parameter cannot stay attached without one. CUST-PFX in the outbound policy
+        matches only customer routes, because CUST-IN accepts nothing else in that range. The customer sends
+        198.51.100.0/24 with 65000:1001, so it reaches ISP-B only; 198.51.101.0/24 carries 65000:1002 and reaches
+        ISP-A only. Without `send-community-ebgp`, the providers would receive no communities at all, and 65201:500
+        would be lost along with 65000:*.
+      ja: |
+        configure
+         prefix-set CUST-PFX
+           198.51.100.0/23 le 24
+         end-set
+         as-path-set CUST-AS
+           ios-regex '^65201(_65201)*$'
+         end-set
+         community-set OURS
+           65000:*
+         end-set
+         route-policy CUST-IN
+           if destination in CUST-PFX and as-path in CUST-AS then
+             pass
+           endif
+         end-policy
+         route-policy CUST-OUT
+           pass
+         end-policy
+         route-policy ISP-OUT($nosend)
+           if destination in OWN then
+             pass
+           elseif destination in CUST-PFX and not community matches-any (65000:$nosend) then
+             delete community in OURS
+             pass
+           endif
+         end-policy
+         router bgp 65000
+          neighbor 10.0.11.2
+           address-family ipv4 unicast
+            route-policy ISP-OUT(1001) out
+            send-community-ebgp
+          neighbor 10.0.12.2
+           address-family ipv4 unicast
+            route-policy ISP-OUT(1002) out
+            send-community-ebgp
+          neighbor 10.0.13.2
+           address-family ipv4 unicast
+            route-policy CUST-IN in
+            route-policy CUST-OUT out
+            send-community-ebgp
+         commit
+        end
+        ISP-OUT にパラメータが付き、2 つの付け所も同じコミットで変わります。2 回のコミットに分けると 1 回目が失敗します。
+        パラメータを取るポリシーは、値なしで付いたままにはできないためです。発信ポリシーの CUST-PFX が顧客のルートだけに一致するのは、
+        CUST-IN がその範囲で顧客以外のものを受け入れないからです。顧客は 198.51.100.0/24 を 65000:1001 付きで送るので、
+        これは ISP-B にだけ届きます。198.51.101.0/24 は 65000:1002 付きで、ISP-A にだけ届きます。`send-community-ebgp` が無いと、
+        プロバイダはコミュニティをまったく受け取らず、65201:500 も 65000:* と一緒に失われます。
+
+  - id: m6t1
+    title: { en: "M6-1  An internal peer between loopbacks", ja: "M6-1  ループバック間の社内ピア" }
+    check: m6t1
+    read: [60-m6-bgp#s2]
+    hints:
+      - en: "Two separate problems. First the session: RT04 expects the TCP connection to come from a particular address — which address does XR01 use now? Then the routes: once the session is up, look at one of the provider routes on RT04 and read its next hop. Can RT04 reach that address?"
+        ja: "問題は 2 つあります。まずセッションです。RT04 は特定のアドレスから TCP 接続が来ることを期待しています。XR01 はいまどのアドレスを使っているでしょうか。次にルートです。セッションが上がったら、RT04 でプロバイダのルートを 1 つ見て、ネクスト ホップを読みます。RT04 はそのアドレスに到達できるでしょうか。"
+      - en: "XR01 sources the session from the outgoing interface (10.0.14.1) unless told otherwise; RT04 knows the peer only as 1.1.1.1. Then RT04 shows the provider routes with their eBGP next hop marked `(inaccessible)`: iBGP does not change the next hop. The fix for the next hop is on XR01, not in OSPF. Note that the session needs no route policy: the default drop applies to eBGP only. Guide: Routing Configuration Guide, 'Implementing BGP' — 'update-source', 'next-hop-self'."
+        ja: "XR01 は、指定が無ければ出力インターフェイス(10.0.14.1)からセッションを張ります。RT04 が知っている相手は 1.1.1.1 だけです。次に RT04 では、プロバイダのルートが eBGP のネクスト ホップのまま `(inaccessible)` と表示されます。iBGP はネクスト ホップを変えないからです。ネクスト ホップの直し方は OSPF ではなく XR01 にあります。なお、このセッションにルート ポリシーは要りません。既定の破棄は eBGP にだけ効きます。ガイド: Routing Configuration Guide の「Implementing BGP」—「update-source」「next-hop-self」。"
+      - en: "Under `router bgp 65000` → `neighbor 4.4.4.4`: `update-source Loopback0`, and under its `address-family ipv4 unicast`: `next-hop-self`."
+        ja: "`router bgp 65000` → `neighbor 4.4.4.4` の下に `update-source Loopback0`、その `address-family ipv4 unicast` の下に `next-hop-self`。"
+    solution:
+      en: |
+        configure
+         router bgp 65000
+          neighbor 4.4.4.4
+           update-source Loopback0
+           address-family ipv4 unicast
+            next-hop-self
+         commit
+        end
+        With only `update-source`, the session comes up and RT04 receives the routes, but shows them as
+        `10.0.11.2 (inaccessible)` with no best path, and installs none of them. `next-hop-self` makes XR01 announce
+        itself (1.1.1.1) as the next hop, which RT04 reaches by OSPF. The routes arrive with their local preference and
+        communities: XR01 sends communities to iBGP peers without `send-community-ebgp`.
+      ja: |
+        configure
+         router bgp 65000
+          neighbor 4.4.4.4
+           update-source Loopback0
+           address-family ipv4 unicast
+            next-hop-self
+         commit
+        end
+        `update-source` だけでも、セッションは上がり RT04 はルートを受け取りますが、`10.0.11.2 (inaccessible)` と表示され
+        最良パスが無く、どれもインストールされません。`next-hop-self` で XR01 は自身(1.1.1.1)をネクスト ホップとしてアナウンスし、
+        RT04 はそこへ OSPF で到達します。ルートはローカル プリファレンスとコミュニティを持ったまま届きます。
+        XR01 は `send-community-ebgp` が無くても iBGP の相手にはコミュニティを送ります。
+
+  - id: m6t2
+    title: { en: "M6-2  Internal LANs for the customer", ja: "M6-2  顧客へ社内 LAN を渡す" }
+    check: m6t2
+    read: [60-m6-bgp#s3]
+    hints:
+      - en: "The LANs are known to XR01 only by OSPF, so they must be redistributed into BGP. Redistribution is an attach point like any other, and it takes a route policy. Then think about where they go: which of XR01's existing outbound policies would let them out, and which would not?"
+        ja: "LAN は XR01 には OSPF でしか知られていないので、BGP へ再配送する必要があります。再配送はほかと同じ付け所で、ルート ポリシーを取ります。次に行き先を考えます。XR01 にいまある発信ポリシーのうち、どれがそれらを通し、どれが通さないでしょうか。"
+      - en: "`redistribute ospf 1 route-policy <name>` under `router bgp 65000` → `address-family ipv4 unicast`. A prefix-set entry `203.0.113.0/24 ge 25` matches every prefix inside the /24 that is longer than /24. Without a policy every OSPF route would be redistributed, loopbacks and links included. The customer's outbound policy passes everything; the providers' outbound policy passes 203.0.113.0/24 exactly, so the /26 prefixes do not reach them. Guide: Routing Configuration Guide, 'Implementing BGP' — 'Redistribution'."
+        ja: "`router bgp 65000` → `address-family ipv4 unicast` の下に `redistribute ospf 1 route-policy <名前>`。prefix-set のエントリ `203.0.113.0/24 ge 25` は、/24 の内側で /24 より長いすべてのプレフィックスに一致します。ポリシーが無いと、ループバックやリンクも含めてすべての OSPF ルートが再配送されます。顧客向けの発信ポリシーはすべてを通し、プロバイダ向けの発信ポリシーは 203.0.113.0/24 を完全一致で通すので、/26 はプロバイダに届きません。ガイド: Routing Configuration Guide の「Implementing BGP」—「Redistribution」。"
+      - en: "A policy `if destination in (203.0.113.0/24 ge 25) then pass endif`, and `redistribute ospf 1 route-policy <that policy>`."
+        ja: "`if destination in (203.0.113.0/24 ge 25) then pass endif` のポリシーと、`redistribute ospf 1 route-policy <そのポリシー>`。"
+    solution:
+      en: |
+        configure
+         route-policy OSPF-TO-BGP
+           if destination in (203.0.113.0/24 ge 25) then
+             pass
+           endif
+         end-policy
+         router bgp 65000
+          address-family ipv4 unicast
+           redistribute ospf 1 route-policy OSPF-TO-BGP
+         commit
+        end
+        In XR01's BGP table the two LANs appear as locally originated (`redistributed`), with origin incomplete and the
+        OSPF metric as MED. ISP-OUT needs no change: OWN holds 203.0.113.0/24 without `le`, so it matches the /24 only.
+        RT04 also receives the LANs back over iBGP; they are its own connected networks, so it keeps those.
+      ja: |
+        configure
+         route-policy OSPF-TO-BGP
+           if destination in (203.0.113.0/24 ge 25) then
+             pass
+           endif
+         end-policy
+         router bgp 65000
+          address-family ipv4 unicast
+           redistribute ospf 1 route-policy OSPF-TO-BGP
+         commit
+        end
+        XR01 の BGP テーブルでは、2 つの LAN はローカルに生成されたもの(`redistributed`)として、オリジン incomplete、
+        OSPF のメトリックを MED として表示されます。ISP-OUT は変えなくてよいです。OWN は 203.0.113.0/24 を `le` なしで持つので、
+        /24 だけに一致します。RT04 も iBGP で LAN を受け取り返しますが、自身の直結ネットワークなので、直結のルートを使い続けます。
+
+  - id: m6t3
+    title: { en: "M6-3  Making ISP-B the longer way in", ja: "M6-3  ISP-B を遠回りにする" }
+    check: m6t3
+    read: [60-m6-bgp#s4]
+    hints:
+      - en: "Lengthening the AS path is a change to the routes, made in the outbound policy towards ISP-B. Be careful how you combine it with the policy that already decides what ISP-B may receive: a change to a route is also a decision about it."
+        ja: "AS パスを長くするのはルートの書き換えで、ISP-B に向けた発信ポリシーで行います。ISP-B が受け取ってよいものを決めている既存のポリシーとどう組み合わせるかに注意してください。ルートの書き換えは、そのルートについての判断でもあります。"
+      - en: "`prepend as-path own-as <n>` adds your own AS n times; n may be 0. If you write `apply ISP-OUT(…)` followed by `prepend …`, the routes that ISP-OUT did not pass come back to the caller undecided, and the prepend accepts them: ISP-B would receive the ISP-A routes. Either test the applied policy as a condition (`if apply ISP-OUT(…) then … endif`), or give ISP-OUT one more parameter. Guide: Routing Configuration Guide, 'Implementing Routing Policy' — 'prepend as-path', 'apply'."
+        ja: "`prepend as-path own-as <n>` は自身の AS を n 回足します。n は 0 でもかまいません。`apply ISP-OUT(…)` の後に `prepend …` と書くと、ISP-OUT が pass しなかったルートが未決のまま呼び出し元に戻り、prepend がそれを受け入れます。ISP-B は ISP-A のルートを受け取ってしまいます。apply したポリシーを条件として調べる(`if apply ISP-OUT(…) then … endif`)か、ISP-OUT にパラメータを 1 つ足します。ガイド: Routing Configuration Guide の「Implementing Routing Policy」—「prepend as-path」「apply」。"
+      - en: "`route-policy ISP-OUT($nosend, $prepend)` with `prepend as-path own-as $prepend` before each `pass`, attached as `ISP-OUT(1001, 0)` to ISP-A and `ISP-OUT(1002, 3)` to ISP-B, in the same commit as the new definition."
+        ja: "`route-policy ISP-OUT($nosend, $prepend)` の各 `pass` の前に `prepend as-path own-as $prepend` を置き、ISP-A に `ISP-OUT(1001, 0)`、ISP-B に `ISP-OUT(1002, 3)` として、新しい定義と同じコミットで付けます。"
+    solution:
+      en: |
+        configure
+         route-policy ISP-OUT($nosend, $prepend)
+           if destination in OWN then
+             prepend as-path own-as $prepend
+             pass
+           elseif destination in CUST-PFX and not community matches-any (65000:$nosend) then
+             delete community in OURS
+             prepend as-path own-as $prepend
+             pass
+           endif
+         end-policy
+         router bgp 65000
+          neighbor 10.0.11.2
+           address-family ipv4 unicast
+            route-policy ISP-OUT(1001, 0) out
+          neighbor 10.0.12.2
+           address-family ipv4 unicast
+            route-policy ISP-OUT(1002, 3) out
+         commit
+        end
+        Equally correct: a separate policy for ISP-B, `if apply ISP-OUT(1002) then prepend as-path own-as 3 endif`.
+        The trap is the same policy without the `if`: measured on this lab, it sent ISP-B every ISP-A route and the
+        customer route marked 65000:1002, all prepended. RT02 shows `65000 65000 65000 65000` for 203.0.113.0/24;
+        RT01 still shows `65000`.
+      ja: |
+        configure
+         route-policy ISP-OUT($nosend, $prepend)
+           if destination in OWN then
+             prepend as-path own-as $prepend
+             pass
+           elseif destination in CUST-PFX and not community matches-any (65000:$nosend) then
+             delete community in OURS
+             prepend as-path own-as $prepend
+             pass
+           endif
+         end-policy
+         router bgp 65000
+          neighbor 10.0.11.2
+           address-family ipv4 unicast
+            route-policy ISP-OUT(1001, 0) out
+          neighbor 10.0.12.2
+           address-family ipv4 unicast
+            route-policy ISP-OUT(1002, 3) out
+         commit
+        end
+        ISP-B 用に別のポリシー `if apply ISP-OUT(1002) then prepend as-path own-as 3 endif` を作るのも同じく正解です。
+        罠は、同じポリシーから `if` を抜いたものです。このラボで測ると、ISP-B に ISP-A のルートすべてと、65000:1002 の付いた
+        顧客のルートを、すべて prepend して送りました。RT02 では 203.0.113.0/24 が `65000 65000 65000 65000`、RT01 では `65000` のままです。
+
+  - id: m6t4
+    title: { en: "M6-4  Settings shared by the providers", ja: "M6-4  プロバイダ共通の設定" }
+    check: m6t4
+    read: [60-m6-bgp#s5]
+    hints:
+      - en: "IOS XR has configuration templates for BGP neighbours. Some hold session settings, some hold address-family settings, and one kind can hold both. A neighbour that uses a template inherits what it does not set itself. Find a show command that tells you, for each value, where it came from."
+        ja: "IOS XR には BGP ネイバーの設定テンプレートがあります。セッションの設定を持つもの、アドレス ファミリの設定を持つもの、両方を持てるものがあります。テンプレートを使うネイバーは、自身で設定していないものを継承します。値ごとに、それがどこから来たかを教えてくれる show コマンドを探してください。"
+      - en: "`af-group NAME address-family ipv4 unicast` holds address-family settings; `neighbor-group NAME` holds session settings and can carry address-family settings (directly or with `use af-group`). A neighbour takes it with `use neighbor-group NAME`. A value set on the neighbour itself wins, so remove the neighbours' own `send-community-ebgp`. The limit is `maximum-prefix <limit> <threshold %>`. `show bgp neighbor <address> configuration` tags each value with its source, e.g. `[n:ISP a:ISP-AF]`. Guide: Routing Configuration Guide, 'Implementing BGP' — 'BGP Configuration Templates'."
+        ja: "`af-group 名前 address-family ipv4 unicast` はアドレス ファミリの設定を、`neighbor-group 名前` はセッションの設定を持ち、アドレス ファミリの設定も(直接、または `use af-group` で)持てます。ネイバーは `use neighbor-group 名前` でそれを取り込みます。ネイバー自身に設定した値が勝つので、ネイバーの `send-community-ebgp` は外します。上限は `maximum-prefix <上限> <閾値 %>`。`show bgp neighbor <アドレス> configuration` は値ごとに出どころを付けます(例: `[n:ISP a:ISP-AF]`)。ガイド: Routing Configuration Guide の「Implementing BGP」—「BGP Configuration Templates」。"
+      - en: "`af-group ISP-AF address-family ipv4 unicast` with `send-community-ebgp` and `maximum-prefix 1000 80`; `neighbor-group ISP` → `address-family ipv4 unicast` → `use af-group ISP-AF`; on both providers `use neighbor-group ISP` and `no send-community-ebgp` under their address family."
+        ja: "`af-group ISP-AF address-family ipv4 unicast` の下に `send-community-ebgp` と `maximum-prefix 1000 80`。`neighbor-group ISP` → `address-family ipv4 unicast` → `use af-group ISP-AF`。両方のプロバイダで `use neighbor-group ISP`、アドレス ファミリの下で `no send-community-ebgp`。"
+    solution:
+      en: |
+        configure
+         router bgp 65000
+          af-group ISP-AF address-family ipv4 unicast
+           send-community-ebgp
+           maximum-prefix 1000 80
+          neighbor-group ISP
+           address-family ipv4 unicast
+            use af-group ISP-AF
+          neighbor 10.0.11.2
+           use neighbor-group ISP
+           address-family ipv4 unicast
+            no send-community-ebgp
+          neighbor 10.0.12.2
+           use neighbor-group ISP
+           address-family ipv4 unicast
+            no send-community-ebgp
+         commit
+        end
+        Putting the two lines straight into the neighbor-group's address family, without an af-group, is equally correct.
+        The policies stay on each neighbour because their values differ. `show running-config router bgp` does not show
+        inherited values, even with `inheritance`; `show bgp neighbor 10.0.11.2 configuration` does:
+        `maximum-prefix 1000 80 [n:ISP a:ISP-AF]`. A third provider then needs `remote-as`, `use neighbor-group ISP`
+        and its two policies with their values.
+      ja: |
+        configure
+         router bgp 65000
+          af-group ISP-AF address-family ipv4 unicast
+           send-community-ebgp
+           maximum-prefix 1000 80
+          neighbor-group ISP
+           address-family ipv4 unicast
+            use af-group ISP-AF
+          neighbor 10.0.11.2
+           use neighbor-group ISP
+           address-family ipv4 unicast
+            no send-community-ebgp
+          neighbor 10.0.12.2
+           use neighbor-group ISP
+           address-family ipv4 unicast
+            no send-community-ebgp
+         commit
+        end
+        af-group を使わず、2 行を neighbor-group のアドレス ファミリに直接書くのも同じく正解です。ポリシーは値が違うので
+        各ネイバーに残ります。`show running-config router bgp` は、`inheritance` を付けても継承した値を表示しません。
+        `show bgp neighbor 10.0.11.2 configuration` は表示します: `maximum-prefix 1000 80 [n:ISP a:ISP-AF]`。
+        3 社目のプロバイダに要るのは、`remote-as`、`use neighbor-group ISP`、値を渡した 2 つのポリシーだけです。

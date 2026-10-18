@@ -1,0 +1,27 @@
+# M6-2: OSPF で学ぶ社内 LAN(203.0.113.0/24 より長いもの)だけを BGP に入れて顧客へ。プロバイダには /24 だけ。
+problem: XRT-03
+total_points: 100
+checks:
+  - name: "M6-2 RT03 (customer): receives the two internal LANs"
+    node: RT03
+    command: "show ip bgp neighbors 10.0.13.1 routes | include 203\\.0\\.113|4\\.4\\.4\\.4|10\\.0\\.14"
+    raw:
+      - { regex: "203\\.0\\.113\\.128/26" }
+      - { regex: "203\\.0\\.113\\.192/26" }
+      - { not_regex: "4\\.4\\.4\\.4|10\\.0\\.14\\.0|1\\.1\\.1\\.1" }
+    points: 50
+  - name: "M6-2 XR01: only the internal LANs are redistributed from OSPF"
+    node: XR01
+    command: "show bgp ipv4 unicast"
+    raw:
+      - { regex: "203\\.0\\.113\\.128/26\\s+10\\.0\\.14\\.2" }
+      - { regex: "203\\.0\\.113\\.192/26\\s+10\\.0\\.14\\.2" }
+      - { not_regex: "4\\.4\\.4\\.4/32|10\\.0\\.14\\.0/24|1\\.1\\.1\\.1/32" }
+    points: 30
+  - name: "M6-2 RT01 (ISP-A): still only the /24 from AS 65000's own space"
+    node: RT01
+    command: "show ip bgp neighbors 10.0.11.1 routes | include 203\\.0\\.113"
+    raw:
+      - { regex: "203\\.0\\.113\\.0\\s" }
+      - { not_regex: "203\\.0\\.113\\.(128|192)" }
+    points: 20

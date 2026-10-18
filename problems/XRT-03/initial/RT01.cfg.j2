@@ -1,0 +1,42 @@
+! XRT-03 RT01(据付・変更しない)。ISP-A(AS 65101)。インターネットの経路と、濾過の対象(デフォルト・私設・長すぎ)を送る。
+ip route 11.0.0.0 255.0.0.0 Null0
+ip route 12.1.0.0 255.255.0.0 Null0
+ip route 13.1.1.0 255.255.255.0 Null0
+ip route 13.1.2.0 255.255.255.128 Null0
+ip route 10.10.0.0 255.255.0.0 Null0
+ip route 172.20.0.0 255.255.0.0 Null0
+ip route 192.168.50.0 255.255.255.0 Null0
+!
+ip prefix-list DOWNSTREAM seq 5 permit 12.1.0.0/16
+ip prefix-list DOWNSTREAM seq 10 permit 13.1.1.0/24
+route-map TO-XR01 permit 10
+ match ip address prefix-list DOWNSTREAM
+ set as-path prepend 65301
+route-map TO-XR01 permit 20
+!
+interface Loopback0
+ ip address 101.101.101.101 255.255.255.255
+!
+interface {{ links[0] }}
+ description to XR01 (AS 65000)
+ ip address 10.0.11.2 255.255.255.0
+ no shutdown
+!
+router bgp 65101
+ bgp router-id 101.101.101.101
+ bgp log-neighbor-changes
+ neighbor 10.0.11.1 remote-as 65000
+ address-family ipv4
+  network 11.0.0.0
+  network 12.1.0.0 mask 255.255.0.0
+  network 13.1.1.0 mask 255.255.255.0
+  network 13.1.2.0 mask 255.255.255.128
+  network 10.10.0.0 mask 255.255.0.0
+  network 172.20.0.0 mask 255.255.0.0
+  network 192.168.50.0 mask 255.255.255.0
+  neighbor 10.0.11.1 activate
+  neighbor 10.0.11.1 send-community both
+  neighbor 10.0.11.1 default-originate
+  neighbor 10.0.11.1 route-map TO-XR01 out
+ exit-address-family
+!

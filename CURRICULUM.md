@@ -199,6 +199,8 @@ Catalyst Center の AI ワークフロー追加・ハードウェア/ソフト�
 | U-M1 | IOS XR 設定の管理(ターゲット/実行・履歴・ラベル・ロールバック・確認つきコミット・失敗の読み方・排他・全体差し替え) | — | — | — | — | ✗ | ✗ | ○ | — | ○ | — | 読み物 `courses/xr/`(M1・日英)・XRT-01 の M1 課題 7 本(履歴を使った TS・変更の完全な取り消しを含む) | 紙面なし。TS は 1 本(履歴に仕込む変更を増やせば生成器にできる) | BL-246 |
 | U-M2 | IOS XR 管理プレーンの保護(タスク ID・タスク/ユーザグループ・describe・MPP・TACACS+ の AAA(方式リスト・送信元・サーバの task 属性・保留)・LPTS・ACL。SPCOR 1.5.a 1.6.b 1.7.b) | — | — | — | — | ✗ | ✗ | ○ | — | — | — | 読み物 `courses/xr/`(M2・日英)・XRT-02 の M2 課題 5 本(学習モード・採点機から実際にログインして許可/拒否を見る) | 紙面なし。TS なし(送信元 IF 抜け・方式リストの順・保留を故障にすれば TS にできる) | BL-246 |
 | U-M3 | IOS XR の OSPF(階層 CLI と継承・passive の継承・OSPFv3・スタブ/完全スタブ・range。SPCOR 2.2 2.6) | — | — | — | — | ✗ | ✗ | ○ | — | ○ | — | 読み物 `courses/xr/`(M3・日英)・XRT-02 の M3 課題 3 本(継承した passive の TS を含む) | 紙面なし。NSSA・仮想リンク・認証(キーチェーン)は未作問 | BL-246 |
+| U-M5 | IOS XR のルーティング ポリシー言語(eBGP の既定の拒否・set と判定の規則・pass/drop/done・引数と apply・付け所と確認・変更時のコミット検査。SPCOR 2.5) | — | — | — | — | ✗ | ✗ | ○ | — | ○ | — | 読み物 `courses/xr/`(M5・日英)・XRT-03 の M5 課題 4 本(pass の無い方針の TS を含む・XR01 は XRd) | 紙面なし。OSPF/IS-IS 側の付け所・extcommunity は未作問 | BL-246 |
+| U-M6 | IOS XR の BGP(設定の木構造・ループバック間 iBGP と next-hop-self・iBGP に既定の拒否が無いこと・再配送に RPL・プリペンドと apply の罠・neighbor-group/af-group と継承の確認・bestpath-compare。SPCOR 2.3 2.4 2.6) | — | — | — | — | ✗ | ✗ | ○ | — | ○ | — | 読み物 `courses/xr/`(M6・日英)・XRT-03 の M6 課題 4 本(iBGP の TS を含む・XR01 は XRd) | 紙面なし。RR・コンフェデレーション・マルチパス・BGP の IPv6/VPN は未作問 | BL-246 |
 
 ## 2. 空白・薄層の一覧(優先順の提案・2026-09-21)
 
@@ -292,6 +294,8 @@ C 群= 既存単元の薄い層。**
 
 | 日付 | U | 段階 | 成果物 | 備考 |
 |------|---|------|--------|------|
+| 2026-10-18 | U-M6 | L1 L3 | `XRT-03` に RT04(社内・OSPF+iBGP)を足して M6 を同居(配点 M5 50 / M6 50)＋読み物 `courses/xr/`(M6・日英) | BL-246。実機 E2E= 白紙 0 → M5〜M6 の模範解 100(課題ごとの確認 8 本も同じ)。実測= apply の後の set が未決の経路を受け入れて漏らす(if apply で防ぐ)・prepend 0 は無効果・running-config は継承値を出さず show bgp neighbor X configuration が出どころを示す |
+| 2026-10-18 | U-M5 | L1 L3 | `XRT-03`(XRd 1 台+IOL 3 台・学習モード)＋読み物 `courses/xr/`(M5・日英) | BL-246。先に XRv9000/XRd の比較 PoC(design §14)= RPL/BGP は一致→ XRd を採用。実機 E2E= 作り直したラボで白紙 0 → 模範解 100。実測= set は暗黙の pass・変更は clear なしで効く・付け所のパラメータ数不一致はコミット失敗 |
 | 2026-10-18 | U-M3 | L1 L3 | `XRT-02` に RT02 とリンク 2 本を足して M3 を同居(配点 M2 60 / M3 40)＋読み物 `courses/xr/`(M3・日英) | BL-246。実機 E2E= 作り直したラボで白紙 0 → 模範解 100。実測= inheritance detail が継承 passive を注記しない・IPv6 表で OSPFv3 は "ospf 1" 表示 |
 | 2026-10-18 | U-M2 | L1 | `XRT-02`(XR 1 台+IOL 1 台+Ubuntu の TACACS+ サーバ・学習モード)＋読み物 `courses/xr/`(M2・日英)＋採点の `exec: local`(`topologies/login_probe.py`) | BL-246 第二弾。実機 E2E= 作り直したラボで白紙 0 → 模範解 100。実測と公式の照合は XR-TRACK.design.md §12 |
 | 2026-10-12 | U-M0 U-M1 | L1 L3 | `XRT-01`(XR 1 台+IOL 2 台・学習モード)＋読み物 `courses/xr/`(M0・M1・日英)＋基盤(XR の機器プロファイル・初期設定・履歴の仕込み `xr_bringup.py`・ワークスペースの学習モード) | BL-246 第一弾。領域 M(IOS XR)を新設。実機 E2E= 白紙 0 → M0 後 55 → 全課題後 100。実測の記録は poc/xr/README.md |

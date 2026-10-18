@@ -1,0 +1,37 @@
+! XRT-03 RT04(据付・変更しない)。社内ルータ(AS 65000)。XR01 と OSPF エリア 0、ループバック間の iBGP(M6)。
+! 社内 LAN 203.0.113.128/26・203.0.113.192/26 は OSPF で XR01 に渡す(BGP には入れない= M6-2 で XR01 が再配送する)。
+interface Loopback0
+ ip address 4.4.4.4 255.255.255.255
+ ip ospf 1 area 0
+!
+interface Loopback1
+ description LAN-1
+ ip address 203.0.113.129 255.255.255.192
+ ip ospf network point-to-point
+ ip ospf 1 area 0
+!
+interface Loopback2
+ description LAN-2
+ ip address 203.0.113.193 255.255.255.192
+ ip ospf network point-to-point
+ ip ospf 1 area 0
+!
+interface {{ links[0] }}
+ description to XR01
+ ip address 10.0.14.2 255.255.255.0
+ ip ospf network point-to-point
+ ip ospf 1 area 0
+ no shutdown
+!
+router ospf 1
+ router-id 4.4.4.4
+!
+router bgp 65000
+ bgp router-id 4.4.4.4
+ bgp log-neighbor-changes
+ neighbor 1.1.1.1 remote-as 65000
+ neighbor 1.1.1.1 update-source Loopback0
+ address-family ipv4
+  neighbor 1.1.1.1 activate
+ exit-address-family
+!

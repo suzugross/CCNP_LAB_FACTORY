@@ -1,0 +1,29 @@
+# M6-3: ISP-B へ出す経路(自社・顧客)だけ AS パスを 3 つ長く。ISP-A へは変えない。ISP-B へ出す範囲は M5 のまま(apply の後の set で漏らさない)。
+problem: XRT-03
+total_points: 100
+checks:
+  - name: "M6-3 RT02 (ISP-B): 203.0.113.0/24 arrives with AS 65000 four times"
+    node: RT02
+    command: "show ip bgp 203.0.113.0/24"
+    raw:
+      - { regex: "\\n\\s+65000 65000 65000 65000\\s*\\n" }
+    points: 30
+  - name: "M6-3 RT02 (ISP-B): the customer route is prepended the same way"
+    node: RT02
+    command: "show ip bgp 198.51.100.0/24"
+    raw:
+      - { regex: "\\n\\s+65000 65000 65000 65000 65201 65201 65201\\s*\\n" }
+    points: 20
+  - name: "M6-3 RT02 (ISP-B): still nothing but AS 65000's own and customer routes"
+    node: RT02
+    command: "show ip bgp neighbors 10.0.12.1 routes"
+    raw:
+      - { regex: "203\\.0\\.113\\.0\\s" }
+      - { not_regex: "65101|198\\.51\\.101\\.0|203\\.0\\.113\\.(128|192)" }
+    points: 30
+  - name: "M6-3 RT01 (ISP-A): 203.0.113.0/24 still arrives with AS 65000 once"
+    node: RT01
+    command: "show ip bgp 203.0.113.0/24"
+    raw:
+      - { regex: "\\n\\s+65000\\s*\\n" }
+    points: 20

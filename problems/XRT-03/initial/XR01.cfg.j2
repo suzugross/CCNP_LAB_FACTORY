@@ -1,0 +1,85 @@
+!! XRT-03 XR01 — M5 の出発点(わざと不完全)。
+!! ISP-A(10.0.11.2)は方針なし= eBGP の既定で何も送受しない。ISP-B(10.0.12.2)には「私設だけ落とす」つもりの方針
+!! ISPB-IN があるが pass が無く、私設以外も末尾で捨てられる。出方向も方針なし。顧客(10.0.13.2)も方針なし。
+interface Loopback0
+ ipv4 address 1.1.1.1 255.255.255.255
+!
+interface {{ links[3] }}
+ description ISP-A (AS 65101)
+ ipv4 address 10.0.11.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description ISP-B (AS 65102)
+ ipv4 address 10.0.12.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[5] }}
+ description CUSTOMER (AS 65201)
+ ipv4 address 10.0.13.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[6] }}
+ description CORE to RT04 (AS 65000)
+ ipv4 address 10.0.14.1 255.255.255.0
+ no shutdown
+!
+router ospf 1
+ router-id 1.1.1.1
+ area 0
+  interface Loopback0
+  !
+  interface {{ links[6] }}
+   network point-to-point
+  !
+ !
+!
+router static
+ address-family ipv4 unicast
+  203.0.113.0/24 Null0
+ !
+!
+prefix-set PRIVATE
+  10.0.0.0/8 le 32,
+  172.16.0.0/12 le 32,
+  192.168.0.0/16 le 32
+end-set
+!
+route-policy ISPB-IN
+  if destination in PRIVATE then
+    drop
+  endif
+end-policy
+!
+router bgp 65000
+ bgp router-id 1.1.1.1
+ address-family ipv4 unicast
+  network 203.0.113.0/24
+ !
+ neighbor 10.0.11.2
+  remote-as 65101
+  description ISP-A
+  address-family ipv4 unicast
+  !
+ !
+ neighbor 10.0.12.2
+  remote-as 65102
+  description ISP-B
+  address-family ipv4 unicast
+   route-policy ISPB-IN in
+  !
+ !
+ neighbor 10.0.13.2
+  remote-as 65201
+  description CUSTOMER
+  address-family ipv4 unicast
+  !
+ !
+ neighbor 4.4.4.4
+  remote-as 65000
+  description RT04 (internal)
+  address-family ipv4 unicast
+  !
+ !
+!
+end

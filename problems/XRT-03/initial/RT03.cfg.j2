@@ -1,0 +1,46 @@
+! XRT-03 RT03(据付・変更しない)。顧客(AS 65201)。割当は 198.51.100.0/23。
+! 198.51.100.0/24 は 65201 を 2 回前置して 65201:500 と 65000:1001(ISP-A へ出さない合図)付き・198.51.101.0/24 は 65000:1002(ISP-B へ出さない合図)付き。
+! 198.51.100.128/25(長すぎ)と 13.1.1.0/24(他所の経路の漏れ・経路 65201 65101)も送ってくる。
+ip bgp-community new-format
+ip route 198.51.100.0 255.255.255.0 Null0
+ip route 198.51.101.0 255.255.255.0 Null0
+ip route 198.51.100.128 255.255.255.128 Null0
+ip route 13.1.1.0 255.255.255.0 Null0
+!
+ip prefix-list P100 seq 5 permit 198.51.100.0/24
+ip prefix-list P101 seq 5 permit 198.51.101.0/24
+ip prefix-list LEAK seq 5 permit 13.1.1.0/24
+route-map TO-XR01 permit 10
+ match ip address prefix-list P100
+ set as-path prepend 65201 65201
+ set community 65201:500 65000:1001
+route-map TO-XR01 permit 20
+ match ip address prefix-list P101
+ set community 65000:1002
+route-map TO-XR01 permit 30
+ match ip address prefix-list LEAK
+ set as-path prepend 65101
+route-map TO-XR01 permit 40
+!
+interface Loopback0
+ ip address 201.201.201.201 255.255.255.255
+!
+interface {{ links[0] }}
+ description to XR01 (AS 65000)
+ ip address 10.0.13.2 255.255.255.0
+ no shutdown
+!
+router bgp 65201
+ bgp router-id 201.201.201.201
+ bgp log-neighbor-changes
+ neighbor 10.0.13.1 remote-as 65000
+ address-family ipv4
+  network 198.51.100.0
+  network 198.51.101.0
+  network 198.51.100.128 mask 255.255.255.128
+  network 13.1.1.0 mask 255.255.255.0
+  neighbor 10.0.13.1 activate
+  neighbor 10.0.13.1 send-community both
+  neighbor 10.0.13.1 route-map TO-XR01 out
+ exit-address-family
+!

@@ -1,0 +1,19 @@
+# M6-1: RT04 とのループバック間 iBGP を上げ、RT04 がプロバイダ・顧客の経路をルート表に入れる(リンクは OSPF に入れない)。
+problem: XRT-03
+total_points: 100
+checks:
+  - name: "M6-1 RT04: the iBGP session to 1.1.1.1 is Established"
+    node: RT04
+    command: "show ip bgp summary | include ^1\\.1\\.1\\.1"
+    raw:
+      - { regex: "(?m)^1\\.1\\.1\\.1\\s+4\\s+65000(\\s+\\d+){5}\\s+\\S+\\s+\\d+\\s*$" }
+    points: 30
+  - name: "M6-1 RT04: provider and customer routes are installed via 1.1.1.1, and the link subnets are not in OSPF"
+    node: RT04
+    command: "show ip route"
+    raw:
+      - { regex: "B\\s+11\\.0\\.0\\.0/8 \\[200/\\d+\\] via 1\\.1\\.1\\.1" }
+      - { regex: "B\\s+14\\.2\\.0\\.0 \\[200/\\d+\\] via 1\\.1\\.1\\.1" }
+      - { regex: "B\\s+198\\.51\\.100\\.0/24 \\[200/\\d+\\] via 1\\.1\\.1\\.1" }
+      - { not_regex: "O\\s+10\\.0\\.1[123]\\.0" }
+    points: 70
