@@ -24,6 +24,7 @@
   GET /ws/console?node=<ラベル>   … そのノードのコンソール(バイト列をそのまま流す)
   GET /task            … タスク(単発のみ。--task の Markdown を問題用紙と同じ体裁で HTML 化)
   GET /api/learn       … 学習モード(単発に --learn <問題 ID>。BL-246)= Steps タブの中身。POST /api/learn/hint・/api/learn/check
+                         POST /api/learn/reset= やり直し(XR を構築直後のコミットへ戻し、記録を退避・BL-254)
 
 設計上の約束:
   - **繋げるラボはサーバ側でしか決まらない**。パック常駐ではパックの manifest のラボ項目から
@@ -604,6 +605,8 @@ async def h_console(request):
 #         check: m0t1              # 中間チェック problems/<ID>/grading.m0t1.yml(無ければ確認ボタンなし)
 #         hints: [{en: "...", ja: "..."}, ...]     # 上から順に 1 段ずつ開く
 #         solution: {en: "...", ja: "..."}         # 確認を通過するか、ヒントを全部開いた後に見せる
+#         read: [20-m2-management-plane#s1]        # この課題の背景の節(BL-252)。「ページ#節」(節= 読み物の data-sec)
+#     reading: xr                  # Reading タブに出す読み物(reading/<key>/)。無ければ Reading タブは出ない
 #   ヒントの本文と模範解はサーバが持ち、開いた分だけ返す(ページの中に先に入れない)。
 #   開封と確認の結果は records/learn/<問題 ID>.jsonl に残す(ノルマには数えない)。
 #   確認は既存の採点(grade.yml の checkpoint)を 1 回だけ回す。同時に 1 本(コンソールでなく管理 IF 経由)。
@@ -654,11 +657,99 @@ def _learn_view(app):
     return out
 
 
+_TASK_HEAD = re.compile(r"^### (?:Task|課題) M(\d+)-(\d+)\b.*$", re.M)
+_UNIT_HEAD = re.compile(r"^## (M(\d+)\b.*)$", re.M)
+
+
+def _learn_texts(app):
+    """課題カード(BL-255)に入れる課題文。問題文(lab/<ID>/Task.md と 問題.md)を見出しで切り分けて HTML にする。
+      rules: 冒頭(題名の下の前置きと「## 単元」以外の節。盤面の節は Topology タブにあるので除く)
+      units: {"m2": {title, intro}}  … 「## M2 …」の見出しと、最初の課題までの前置き
+      tasks: {"m2t1": 本文}         … 「### Task M2-1」「### 課題 M2-1」から次の見出しまで(見出しの行は除く)
+    値はどれも {言語: HTML}。課題 ID は learn.yml の規約(M2-1 → m2t1)。"""
+    files = {}
+    if app["task"]:
+        alt = _single_alt(app)
+        d, name = os.path.split(os.path.abspath(app["task"]))
+        own = _PAIR.get(name, ("en",))[0]
+        files[own] = app["task"]
+        if alt:
+            files[alt[1]] = os.path.join(d, _PAIR[name][2])
+    out = {"rules": {}, "units": {}, "tasks": {}}
+    html_ = lambda md: render_html.md_to_body(md, allow_html=True)[0] if md.strip() else ""
+    for lang, path in files.items():
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        parts = re.split(r"(?m)^(?=## )", text)
+        head = re.sub(r"(?m)^# .*\n?", "", parts[0], count=1)
+        rules = [head]
+        for part in parts[1:]:
+            um = _UNIT_HEAD.match(part)
+            if not um:
+                if not re.match(r"## (Topology|トポロジ)", part):
+                    rules.append(part)
+                continue
+            uid = f"m{um.group(2)}"
+            body = part[um.end():]
+            first = _TASK_HEAD.search(body)
+            u = out["units"].setdefault(uid, {"title": {}, "intro": {}})
+            u["title"][lang] = um.group(1).strip()
+            u["intro"][lang] = html_(body[:first.start()] if first else body)
+            heads = list(_TASK_HEAD.finditer(body))
+            for k, m in enumerate(heads):
+                end = heads[k + 1].start() if k + 1 < len(heads) else len(body)
+                out["tasks"].setdefault(f"m{m.group(1)}t{m.group(2)}", {})[lang] = html_(body[m.end():end])
+        out["rules"][lang] = html_("\n".join(rules))
+    return out
+
+
+def _learn_reading(app, request):
+    """Reading タブ(BL-252)。learn.yml の reading:(本の key)と各課題の read:(「ページ#節」)を、
+    パック配信サーバの読み物の URL と見出しの文字に解く。見出しは読み物の出力 reading/<key>/book.json から。
+    (None, {}) = 読み物なし。"""
+    with open(os.path.join(app["repo"], "problems", app["learn"], "learn.yml"), encoding="utf-8") as fh:
+        spec = yaml.safe_load(fh) or {}
+    key = spec.get("reading")
+    if not key or not LEARN_RE.match(str(key)):
+        return None, {}
+    try:
+        with open(os.path.join(app["repo"], "reading", key, "book.json"), encoding="utf-8") as fh:
+            book = json.load(fh)
+    except (OSError, ValueError):
+        return None, {}
+    host = request.url.host or "localhost"
+    if ":" in host:
+        host = f"[{host}]"
+    base = f"{request.scheme}://{host}:{app['pack_port']}/_read/{key}/"
+    secs, titles = book.get("sections") or {}, book.get("page_titles") or {}
+    refs = {}
+    for st in spec.get("steps") or []:
+        out = []
+        for ref in st.get("read") or []:
+            page, _, sec = str(ref).partition("#")
+            page = page if page.endswith(".html") else page + ".html"
+            if page not in titles:
+                continue
+            out.append({"href": base + page + (f"#{sec}" if sec else ""),
+                        "page": titles[page], "sec": (secs.get(page) or {}).get(sec) or {}})
+        refs[st["id"]] = out
+    return {"href": base + "index.html", "base": base}, refs
+
+
 async def h_learn(request):
     app = _view(request)
     if not app["learn"]:
         return web.json_response({"enabled": False})
-    return web.json_response({"enabled": True, "steps": _learn_view(app)},
+    reading, refs = _learn_reading(app, request)
+    texts = _learn_texts(app)
+    steps = _learn_view(app)
+    for v in steps:
+        v["read"] = refs.get(v["id"], [])
+        v["task"] = texts["tasks"].get(v["id"], {})
+        m = re.match(r"(m\d+)t", v["id"])
+        v["unit"] = m.group(1) if m else ""
+    return web.json_response({"enabled": True, "steps": steps, "reading": reading,
+                              "rules": texts["rules"], "units": texts["units"]},
                              headers={"Cache-Control": "no-store"})
 
 
@@ -726,6 +817,42 @@ async def h_learn_check(request):
     return web.json_response({"enabled": True, "steps": _learn_view(app)})
 
 
+async def h_learn_reset(request):
+    """やり直し(BL-254)。IOS XR の機器を構築直後のコミットへ戻し(playbooks/xr_reset.yml)、学習モードの記録を退避して初期化する。
+    戻せなかった時は記録に触らない(機器と表示が食い違わないように)。"""
+    app = _view(request)
+    if not app["learn"] or not _same_origin(request):
+        return web.Response(status=403, text="forbidden")
+    if app["learn_lock"].locked():
+        return web.json_response({"busy": True})
+    async with app["learn_lock"]:
+        repo = app["repo"]
+        fd, vault = tempfile.mkstemp(prefix="ccnp-learn-")
+        os.write(fd, b"CCNP\n")
+        os.close(fd)
+        proc = await asyncio.create_subprocess_exec(
+            os.path.join(repo, ".venv/bin/ansible-playbook"), os.path.join(repo, "playbooks/xr_reset.yml"),
+            "-e", f"problem={app['learn']}", "--vault-password-file", vault,
+            cwd=repo, stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        try:
+            raw, _ = await asyncio.wait_for(proc.communicate(), timeout=300)
+        except asyncio.TimeoutError:
+            proc.kill()
+            return web.json_response({"error": "reset timed out"})
+        finally:
+            os.unlink(vault)
+        text = raw.decode("utf-8", "replace")
+        if proc.returncode != 0:
+            print(text[-2000:], flush=True)
+            msgs = re.findall(r'"(ERROR [^"]+)"', text)
+            return web.json_response({"error": "The lab could not be reset. " + (" / ".join(msgs) or "See the server log.")})
+        log = _learn_log_path(app)
+        if os.path.exists(log):
+            os.replace(log, log[:-len(".jsonl")] + time.strftime(".%Y%m%d-%H%M%S") + ".jsonl.bak")
+    return web.json_response({"enabled": True, "steps": _learn_view(app), "reset": True})
+
+
 def load_cml():
     v = {}
     path = os.path.join(REPO, "group_vars", "all", "local.yml")
@@ -779,6 +906,7 @@ def make_app(repo=REPO, pack_port=8899, lab=None, task=None, with_parent=None, r
     app.router.add_get("/api/learn", h_learn)
     app.router.add_post("/api/learn/hint", h_learn_hint)
     app.router.add_post("/api/learn/check", h_learn_check)
+    app.router.add_post("/api/learn/reset", h_learn_reset)
     for name in ("xterm.js", "xterm.css", "addon-fit.js"):
         app.router.add_get(f"/vendor/{name}",
                            lambda _r, p=os.path.join(ASSETS, name): web.FileResponse(p))
@@ -842,6 +970,21 @@ iframe{ border:0; width:100%; height:100%; background:var(--paper); }
 /* 学習モードの Steps タブ(BL-246): 課題ごとの確認・段階式ヒント・模範解 */
 #steps{ overflow:auto; padding:12px 16px; box-sizing:border-box; }
 #steps .note{ color:var(--mute); font-size:12px; margin:0 0 10px; }
+#steps h2.unit{ font-size:15px; margin:18px 0 8px; padding:0 0 4px; border-bottom:2px solid var(--line); }
+#steps .ttext{ font-size:13px; line-height:1.6; margin:4px 0 8px; }
+#steps .ttext p{ margin:6px 0; } #steps .ttext ul, #steps .ttext ol{ margin:6px 0; padding-left:20px; } #steps .ttext li{ margin:3px 0; }
+#steps .ttext code{ font-family:ui-monospace,Consolas,Menlo,monospace; font-size:12px; background:#eef0f3; padding:0 3px; border-radius:3px; }
+#steps .ttext pre{ background:#eef0f3; padding:6px 8px; overflow:auto; }
+#steps .ttext table{ border-collapse:collapse; font-size:12px; } #steps .ttext th, #steps .ttext td{ border:1px solid var(--line); padding:2px 6px; }
+#steps .ttext h2{ font-size:13.5px; margin:10px 0 4px; }
+#steps .unitintro{ color:var(--ink); }
+#steps details.rules{ border:1px solid var(--line); border-radius:6px; background:var(--panel); margin:0 0 10px; padding:6px 12px; }
+#steps details.rules summary{ cursor:pointer; font-weight:600; font-size:13px; }
+.stepsbar{ display:flex; gap:12px; align-items:flex-start; margin:0 0 10px; }
+.stepsbar .note{ flex:1; margin:0; }
+.stepsbar .reset{ flex:none; font:inherit; font-size:12px; border:1px solid #c9a3a0; border-radius:4px; background:#fff;
+                  color:#8a2b22; padding:3px 10px; cursor:pointer; }
+.stepsbar .reset:hover:not(:disabled){ background:#fbefee; } .stepsbar .reset:disabled{ opacity:.5; cursor:default; }
 .step{ border:1px solid var(--line); border-radius:6px; background:var(--panel); margin:0 0 10px; padding:9px 12px; }
 .step h3{ margin:0 0 6px; font-size:14px; display:flex; align-items:center; gap:8px; }
 .step h3 .badge{ font-size:11px; font-weight:600; border-radius:10px; padding:1px 8px; background:#dfe2e7; color:var(--mute); }
@@ -856,6 +999,10 @@ iframe{ border:0; width:100%; height:100%; background:var(--paper); }
 .step .res .p{ color:#17643a; } .step .res .f{ color:#8a2b22; } .step .res .u{ color:var(--mute); padding-left:1.5em; }
 .step .hint, .step .sol{ border-left:3px solid #c9a227; padding:3px 0 3px 9px; white-space:pre-wrap; }
 .step .sol{ border-left-color:#1f9d55; font-family:ui-monospace,Consolas,Menlo,monospace; }
+.step .read{ margin:7px 0 0; font-size:12.5px; display:flex; gap:4px 12px; flex-wrap:wrap; align-items:baseline; }
+.step .read .lbl{ display:inline; }
+.step .read a{ color:var(--accent); text-decoration:none; cursor:pointer; } .step .read a:hover{ text-decoration:underline; }
+.step.flash{ box-shadow:0 0 0 2px var(--accent); transition:box-shadow .3s; }
 .step .lbl{ font-weight:600; color:var(--mute); font-size:11px; display:block; font-family:system-ui,sans-serif; }
 #terms{ background:var(--term); }
 /* 余白は .term に持たせ、端末は余白なしの .xt に開く。fit(桁・行の計算)は端末の親の寸法を読むので、
@@ -885,12 +1032,14 @@ iframe{ border:0; width:100%; height:100%; background:var(--paper); }
     <button data-tab="task" class="on">Task</button>
     <button data-tab="topo">Topology</button>
     <button data-tab="steps" id="stepsbtn" hidden>Steps</button>
+    <button data-tab="read" id="readbtn" hidden>Reading</button>
     <span class="lab">@@CAPTION@@</span>
   </nav>
   <div class="pane">
     <iframe id="task" src="@@TASK_SRC@@" title="Task"></iframe>
     <div id="topo" hidden></div>
     <div id="steps" hidden></div>
+    <iframe id="reading" title="Reading" hidden></iframe>
   </div>
 </section>
 <div id="split" title="Drag to resize · double-click to reset"></div>
@@ -924,6 +1073,8 @@ function leftTab(name){
   $('#task').hidden = name !== 'task';
   $('#topo').hidden = name !== 'topo';
   $('#steps').hidden = name !== 'steps';
+  $('#reading').hidden = name !== 'read';
+  if (name === 'read' && !$('#reading').getAttribute('src') && learnReading) openReading(defaultReading(), false);
   if (name === 'topo' && notesPending){ notesPending = false; addNotes(); }
 }
 // 結線図の下に、問題文の盤面の節を枠で出す。枠の高さは中身に合わせる(スクロールは Topology タブ 1 本にする)。
@@ -1166,7 +1317,7 @@ window.addEventListener('message', ev => {
 (function(){
   const btn = $('#lang'), NAME = {en: 'English', ja: '日本語'};
   let lang = null;
-  const frames = () => [$('#task'), $('#toponotes')].filter(Boolean);
+  const frames = () => [$('#task'), $('#toponotes'), $('#reading')].filter(Boolean);
   const tell = f => { try { f.contentWindow.postMessage({ccnpLang: lang, ccnpHost: true}, '*'); } catch (_e) {} };
   function paint(){ btn.hidden = false; btn.textContent = NAME[lang === 'en' ? 'ja' : 'en'];
                     window.ccnpLang = lang; window.dispatchEvent(new Event('ccnp-lang')); }
@@ -1191,25 +1342,54 @@ window.addEventListener('message', ev => {
 // ---- 学習モード(BL-246): Steps タブ ----
 //   課題ごとに 確認(中間チェックを 1 回回す)・ヒント(1 段ずつ)・模範解(通過後かヒント全開後)。
 //   本文はサーバが開いた分だけ返す。言語は問題文の切替に合わせる(1 版しか無ければ英語)。
-let learnSteps = null, learnBusy = null;
+let learnSteps = null, learnBusy = null, learnReading = null, learnRead = {};
+// 課題カード(BL-255): 課題文・単元の見出し・冒頭の約束。最初の読み込みで受け取って持っておく(確認・ヒントの応答には入らない)
+let learnTask = {}, learnUnit = {}, learnUnits = {}, learnRules = null, rulesOpen = false;
 function learnLang(){ return window.ccnpLang === 'ja' ? 'ja' : 'en'; }
 function tr(o){ if (!o) return ''; if (typeof o === 'string') return o; return o[learnLang()] || o.en || o.ja || ''; }
 const LT = {en: {check:'Check', checking:'Checking…', hint:'Hint', sol:'Reference solution', pass:'passed', fail:'not yet',
-                 none:'self-check', note:'Each Check reads the live state of the devices (about 15 seconds). Leave configuration mode before you press it. Hints open one level at a time and are logged.',
-                 busy:'Another check is still running.'},
+                 none:'self-check', read:'Read:', rules:'Ground rules', note:'Each Check reads the live state of the devices (about 15 seconds). Leave configuration mode before you press it. Hints open one level at a time and are logged.',
+                 busy:'Another check is still running.', reset:'Start over', resetting:'Resetting…',
+                 resetq:'Start the whole lab over?\n\nXR01 is rolled back to the configuration it had right after the lab was built (your changes are discarded), and every task here returns to not yet checked, with no hints opened.',
+                 resetdone:'The lab is back at its starting state.'},
             ja: {check:'確認', checking:'確認中…', hint:'ヒント', sol:'模範解', pass:'通過', fail:'未充足',
-                 none:'自己確認', note:'確認は機器のいまの状態を読みます(約 15 秒)。設定モードを抜けてから押してください。ヒントは 1 段ずつ開き、開いた段数は記録されます。',
-                 busy:'別の確認がまだ実行中です。'}};
+                 none:'自己確認', read:'読み物:', rules:'進め方の約束', note:'確認は機器のいまの状態を読みます(約 15 秒)。設定モードを抜けてから押してください。ヒントは 1 段ずつ開き、開いた段数は記録されます。',
+                 busy:'別の確認がまだ実行中です。', reset:'最初からやり直す', resetting:'戻しています…',
+                 resetq:'ラボ全体を最初からやり直しますか？\n\nXR01 をラボを作った直後の設定へ戻し(あなたの変更は消えます)、ここの課題もすべて未確認・ヒント未開封に戻します。',
+                 resetdone:'ラボを最初の状態に戻しました。'}};
 function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 function paintSteps(){
   if (!learnSteps) return;
   const T = LT[learnLang()], root = $('#steps');
-  root.replaceChildren(el('p', 'note', T.note));
+  const top = el('div', 'stepsbar'); top.append(el('p', 'note', T.note));
+  const rb = el('button', 'reset', learnBusy === '*reset' ? T.resetting : T.reset);
+  rb.disabled = learnBusy !== null;
+  rb.addEventListener('click', learnReset);
+  top.append(rb);
+  root.replaceChildren(top);
+  if (learnRules && tr(learnRules)){        // 冒頭の約束(問題文の前置き・Ground rules)。既定は畳む
+    const dt = el('details', 'rules'); dt.open = rulesOpen;
+    dt.addEventListener('toggle', () => { rulesOpen = dt.open; });
+    dt.append(el('summary', null, T.rules));
+    const b = el('div', 'ttext'); b.innerHTML = tr(learnRules); dt.append(b);
+    root.append(dt);
+  }
+  let unit = null;
   for (const st of learnSteps){
+    const u = learnUnit[st.id];
+    if (u && u !== unit && learnUnits[u]){  // 単元が替わるところに単元の見出しと前置き
+      unit = u;
+      root.append(el('h2', 'unit', tr(learnUnits[u].title)));
+      const intro = tr(learnUnits[u].intro);
+      if (intro){ const d = el('div', 'ttext unitintro'); d.innerHTML = intro; root.append(d); }
+    }
     const box = el('div', 'step' + (st.passed ? ' ok' : (st.last && !st.last.ok ? ' ng' : '')));
+    box.id = 'step-' + st.id;
     const h = el('h3', null, tr(st.title));
     h.append(el('span', 'badge', st.passed ? T.pass : (st.check ? (st.last ? T.fail : '—') : T.none)));
     box.append(h);
+    const tt = tr(learnTask[st.id]);
+    if (tt){ const d = el('div', 'ttext'); d.innerHTML = tt; box.append(d); }
     const row = el('div', 'row');
     if (st.check){
       const b = el('button', 'go', learnBusy === st.id ? T.checking : T.check);
@@ -1224,6 +1404,20 @@ function paintSteps(){
       row.append(b);
     }
     box.append(row);
+    const reads = learnRead[st.id] || [];
+    if (reads.length){                      // この課題の背景の節(BL-252)。押すと Reading タブがその節で開く
+      const r = el('div', 'read'); r.append(el('span', 'lbl', T.read));
+      for (const rd of reads){
+        const a = el('a', null, (tr(rd.sec) || tr(rd.page)) + ' ');
+        a.href = rd.href; a.title = tr(rd.page);
+        a.addEventListener('click', e => {
+          if (e.ctrlKey || e.metaKey || e.shiftKey || e.button) return;     // 別タブで開く操作はそのまま
+          e.preventDefault(); openReading(rd.href, true);
+        });
+        r.append(a);
+      }
+      box.append(r);
+    }
     if (st.last){
       const r = el('div', 'res');
       for (const ln of st.last.lines)
@@ -1234,6 +1428,20 @@ function paintSteps(){
     if (st.solution){ const d = el('div', 'sol'); d.append(el('span', 'lbl', T.sol), document.createTextNode(tr(st.solution))); box.append(d); }
     root.append(box);
   }
+}
+async function learnReset(){
+  const T = LT[learnLang()];
+  if (!confirm(T.resetq)) return;
+  learnBusy = '*reset'; paintSteps();
+  try {
+    const r = await fetch('api/learn/reset?' + Q, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
+    const d = await r.json();
+    if (d.busy) alert(T.busy);
+    if (d.error) alert(d.error);
+    if (d.steps) learnSteps = d.steps;
+    if (d.reset){ learnBusy = null; paintSteps(); $('#steps').scrollTop = 0; alert(T.resetdone); return; }
+  } catch (e) { alert(String(e)); }
+  learnBusy = null; paintSteps();
 }
 async function learnPost(kind, id){
   if (kind === 'check'){ learnBusy = id; paintSteps(); }
@@ -1250,9 +1458,57 @@ async function learnPost(kind, id){
   try {
     const d = await (await fetch('api/learn?' + Q)).json();
     if (!d.enabled) return;
-    learnSteps = d.steps; $('#stepsbtn').hidden = false; paintSteps();
+    learnSteps = d.steps;
+    for (const st of d.steps){ learnRead[st.id] = st.read || []; learnTask[st.id] = st.task || {}; learnUnit[st.id] = st.unit || ''; }
+    learnUnits = d.units || {}; learnRules = d.rules || null;
+    if (d.reading){ learnReading = d.reading; $('#readbtn').hidden = false; }
+    // 課題カード(BL-255): 課題文はこのタブに入るので Task タブは出さない。Task の枠は読み込んだまま残す
+    // (問題文の日英切替は、その枠が知らせてくる言語に合わせる作りのため)
+    if (Object.keys(learnTask).some(k => tr(learnTask[k]))){
+      $('#ltabs [data-tab="task"]').hidden = true; $('#stepsbtn').textContent = 'Tasks';
+      $('#ltabs').prepend($('#stepsbtn'));                    // 先頭のタブにする(Tasks / Topology / Reading)
+    }
+    $('#stepsbtn').hidden = false; paintSteps();
+    const m = /^#step=([\w-]+)$/.exec(location.hash);       // 読み物の実践ページから来た時(/_learn?id=…&step=…)
+    if (m) gotoStep(m[1]); else if ($('#ltabs [data-tab="task"]').hidden) leftTab('steps');
   } catch (_e) {}
 })();
+// ---- 読み物(BL-252): Reading タブ ----
+//   中身はパック配信サーバの読み物(/_read/<key>/…)。Steps の各課題の「読み物」リンクがその節で開く。
+//   同じページの別の節へは枠を読み直さず合図(ccnpGoto)で送る。言語は問題文の切替に従う(frames() に入っている)。
+//   読み物の実践ページの「ワークスペースで開く」は、枠の中では合図(ccnpStep)になり、ここで Steps のその課題を開く。
+function defaultReading(){
+  const st = (learnSteps || []).find(x => !x.passed && (learnRead[x.id] || []).length);
+  return st ? learnRead[st.id][0].href : learnReading.href;
+}
+function openReading(href, show){
+  const f = $('#reading'), cur = f.getAttribute('src');
+  const strip = u => u ? u.replace(/#.*$/, '') : '';
+  if (cur && strip(cur) === strip(href) && f.contentWindow){
+    const sec = (href.split('#')[1] || '');
+    try { f.contentWindow.postMessage({ccnpGoto: sec}, new URL(href).origin); } catch (_e) {}
+  } else {
+    f.setAttribute('src', href);
+  }
+  if (show) leftTab('read');
+}
+function gotoStep(id){
+  leftTab('steps');
+  const box = document.getElementById('step-' + id);
+  if (!box) return;
+  box.scrollIntoView({block: 'start', behavior: 'smooth'});
+  box.classList.add('flash'); setTimeout(() => box.classList.remove('flash'), 1600);
+}
+window.addEventListener('message', ev => {
+  const f = $('#reading');
+  if (ev.source !== f.contentWindow || !ev.data || typeof ev.data.ccnpStep !== 'string') return;
+  const lid = new URLSearchParams(location.search).get('learn');
+  if (ev.data.ccnpLab && lid && ev.data.ccnpLab !== lid){       // 別のラボの課題= そのラボのワークスペースへ移る
+    leaving = true; location.href = new URL(f.getAttribute('src')).origin + '/_learn?id=' + encodeURIComponent(ev.data.ccnpLab)
+      + (ev.data.ccnpStep ? '&step=' + encodeURIComponent(ev.data.ccnpStep) : ''); return;
+  }
+  if (ev.data.ccnpStep) gotoStep(ev.data.ccnpStep); else leftTab('steps');
+});
 window.addEventListener('ccnp-lang', paintSteps);
 
 loadTopo();

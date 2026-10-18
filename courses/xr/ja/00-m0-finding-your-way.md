@@ -310,3 +310,5 @@ Interface and Hardware Component Configuration Guide の「Configuring Ethernet 
 
 ワークスペースでラボ **XRT-01** を開き、M0 の課題に取り組みます。XR01 は設定が途中の状態です。
 変更する前に、何が入っているかを調べます。
+
+<p class="tolab"><a href="/_learn?id=XRT-01">ワークスペースでラボ XRT-01 を開く</a> — <a href="01-m0-practice.html">課題の一覧</a></p>

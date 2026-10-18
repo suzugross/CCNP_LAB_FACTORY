@@ -1,0 +1,30 @@
+# IOS XR のノードを構築直後の設定へ戻す / 戻り先を記録する(BL-254・topologies/xr_reset.py の薄い包み)。
+#   戻す:   ansible-playbook playbooks/xr_reset.yml -e problem=<ID>            (scripts/lab.sh reset <ID>・ワークスペースのやり直し)
+#   記録:   ansible-playbook playbooks/xr_reset.yml -e problem=<ID> -e xr_action=record   (lab_up.yml が構築の最後に行う)
+# 資格情報(ansible_user / ansible_ssh_pass)を vault から渡すために playbook にしている。
+- name: IOS XR を構築直後へ戻す（xr_reset.py）
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+    xr_action: reset
+  tasks:
+    - name: "xr_reset.py {{ xr_action }}"
+      ansible.builtin.command:
+        argv:
+          - "{{ repo }}/.venv/bin/python3"
+          - "{{ repo }}/topologies/xr_reset.py"
+          - "--repo={{ repo }}"
+          - "--problem={{ problem }}"
+          - "{{ xr_action }}"
+      environment:
+        NODE_USER: "{{ ansible_user }}"
+        NODE_PASS: "{{ ansible_ssh_pass }}"
+      register: xrr
+      changed_when: xr_action == 'reset'
+      failed_when: false
+    - name: 結果
+      ansible.builtin.debug: { msg: "{{ xrr.stdout_lines }}" }
+    - name: 失敗
+      ansible.builtin.fail: { msg: "xr_reset.py {{ xr_action }} failed (rc={{ xrr.rc }})" }
+      when: xrr.rc != 0

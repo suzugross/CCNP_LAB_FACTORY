@@ -236,6 +236,8 @@ had a lock on the running configuration.
 
 Go back to lab **XRT-01** and do the M1 tasks. Finish the M0 tasks first; some M1 tasks use LINK1.
 
+<p class="tolab"><a href="/_learn?id=XRT-01">Open lab XRT-01 in the workspace</a> — <a href="11-m1-practice.html">The tasks</a></p>
+
 :::note
 The commit and rollback commands in this unit are not described in the current ASR 9000 *System Setup Command Reference*,
 where one would look for them first (checked October 2026; the other volumes were not searched). The descriptions here come from the CLI help and from measurement on 24.3.1.

@@ -33,6 +33,8 @@ once a task passes, a reference solution for each task. No command examples are 
 ## M3 — OSPF
 
 ### Task M3-1
+<p class="tolab"><a href="/_learn?id=XRT-02&amp;step=m3t1">Open in the lab workspace</a> — Read: <a href="30-m3-ospf.html#s2">2. Inheritance</a></p>
+
 
 LINK2 has been added to OSPF on XR01, but no adjacency forms over it.
 Ensure that XR01 and RT01 form an OSPF adjacency over LINK2.
@@ -40,11 +42,15 @@ The design rule for XR01 stays in force: an interface added to OSPF must not sen
 meant to form adjacencies. The SERVERS segment must remain without adjacencies.
 
 ### Task M3-2
+<p class="tolab"><a href="/_learn?id=XRT-02&amp;step=m3t2">Open in the lab workspace</a> — Read: <a href="30-m3-ospf.html#s3">3. OSPFv3</a></p>
+
 
 Ensure that XR01 and RT01 exchange their IPv6 loopback prefixes by OSPFv3 over LINK1.
 XR01 must learn 2001:DB8::2/128 and RT01 must learn 2001:DB8::1/128.
 
 ### Task M3-3
+<p class="tolab"><a href="/_learn?id=XRT-02&amp;step=m3t3">Open in the lab workspace</a> — Read: <a href="30-m3-ospf.html#s4">4. Areas</a></p>
+
 
 XR01 is the area border router for area 1.
 

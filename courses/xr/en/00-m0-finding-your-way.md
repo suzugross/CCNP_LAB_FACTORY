@@ -311,3 +311,5 @@ Chapters you will want in this unit: *Implementing OSPF* and *Implementing Stati
 
 Open lab **XRT-01** in the workspace and do the M0 tasks. XR01 has been left half-configured.
 Work out what is there before you change it.
+
+<p class="tolab"><a href="/_learn?id=XRT-01">Open lab XRT-01 in the workspace</a> — <a href="01-m0-practice.html">The tasks</a></p>

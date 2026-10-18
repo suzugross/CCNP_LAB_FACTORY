@@ -235,6 +235,8 @@ had a lock on the running configuration.
 
 ラボ **XRT-01** に戻り、M1 の課題に取り組みます。先に M0 の課題を終えてください。M1 の一部の課題は LINK1 を使います。
 
+<p class="tolab"><a href="/_learn?id=XRT-01">ワークスペースでラボ XRT-01 を開く</a> — <a href="11-m1-practice.html">課題の一覧</a></p>
+
 :::note
 この単元のコミットとロールバックのコマンドは、最初に探すはずの現行の ASR 9000 の System Setup Command Reference には
 載っていません(2026 年 10 月に確認。他の巻は調べていません)。ここの説明は、CLI のヘルプと 24.3.1 での実測によるものです。

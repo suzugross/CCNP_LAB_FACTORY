@@ -268,6 +268,8 @@ that link down.
 Go to lab **XRT-02** and do the M2 tasks. Several of them can lock you out of XR01; the management interface is
 how the checks reach it. Plan each risky change as a confirmed commit.
 
+<p class="tolab"><a href="/_learn?id=XRT-02">Open lab XRT-02 in the workspace</a> — <a href="21-m2-practice.html">The tasks</a></p>
+
 :::note
 Sources: the IOS XR configuration guides for the ASR 9000 (System Security: *Configuring AAA Services*,
 *Implementing Management Plane Protection*; IP Addresses and Services: *Implementing LPTS*) and their command

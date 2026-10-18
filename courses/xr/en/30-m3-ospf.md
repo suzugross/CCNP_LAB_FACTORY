@@ -128,6 +128,8 @@ Redistribution into OSPF and filtering of routes are done with route policies on
 
 Go to lab **XRT-02** and do the M3 tasks, after the M2 tasks.
 
+<p class="tolab"><a href="/_learn?id=XRT-02">Open lab XRT-02 in the workspace</a> — <a href="31-m3-practice.html">The tasks</a></p>
+
 :::note
 Source: the IOS XR *Routing Configuration Guide* for the ASR 9000, *Implementing OSPF* (OSPF Hierarchical CLI and CLI
 Inheritance), checked October 2026. The following come from measurement on 24.3.1: `inheritance detail` not marking

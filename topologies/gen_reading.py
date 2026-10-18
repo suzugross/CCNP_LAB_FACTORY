@@ -52,7 +52,10 @@
                        `alt_lang:` もう一方の言語。lang と合わせて en/ja の 2 言語の本になる(BL-248):
                          ページは <src>/<lang>/<file> と <src>/<alt_lang>/<file>。2 版を 1 ページに持ち、ボタンで切り替わる。
                          title・subtitle・chapters の値は {en: …, ja: …} で書ける。bundle は言語ごとに別の 1 枚を作る
-  → 出力先に book.json(ポータルが読む一覧用のメタ)も書く
+  → 出力先に book.json(ポータルが読む一覧用のメタ。節の一覧 sections・ページ題名 page_titles も)も書く
+  ★節の目印(BL-252): h2/h3 に言語に依らない data-sec="s<n>" / "s<n>-<m>" を振る。`<ページ>.html#s2` で表示中の版の節へ飛ぶ。
+    ラボのワークスペースの Reading タブ(learn.yml の read:)と実践ページのリンクが使う。2 版の見出しの並びがずれると警告する
+  `<p class="tolab">…</p>`(行頭) … 配信時だけのリンク(ワークスペース・他ページの節)。持ち出しの 1 枚では落とす
   <src>/NN-*.md      … 1 ファイル = 1 ページ
   <src>/img/         … 図版（任意）
   → <repo>/reading/<key>/NN-*.html ＋ index.html
@@ -104,6 +107,36 @@ body.reading th,body.reading td{ border:1px solid #999; padding:.45rem .8rem; }
 body.reading th{ background:#f2f2f2; }
 body.reading .lead{ color:#444; }
 body.reading code{ padding:0 .22em; }
+
+/* ---- ナビ帯(BL-253): 下端に固定・☰ で上に開く縦のメニュー ---- */
+.rnav{ position:fixed; left:0; right:0; bottom:0; z-index:20; background:#fff; border-top:1px solid #222;
+  display:flex; align-items:center; gap:.6rem; padding:.4rem .9rem; font-size:.88rem; line-height:1.4; }
+.rnav a{ text-decoration:none; }
+.rn-portal{ white-space:nowrap; }
+.rn-menu{ position:relative; min-width:0; flex:0 1 auto; }
+.rn-btn{ font:inherit; display:flex; align-items:center; gap:.45rem; max-width:100%; cursor:pointer;
+  background:#f3f4f6; border:1px solid #c9ced6; border-radius:5px; padding:.28rem .7rem; color:#111; }
+.rn-btn:hover{ background:#e9ecf0; } .rn-btn[aria-expanded="true"]{ background:#e3e8ef; border-color:#8796ab; }
+.rn-cur{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.rn-ic, .rn-car{ color:#555; flex:none; }
+.rn-panel{ position:absolute; bottom:calc(100% + 8px); left:0; width:min(24rem, calc(100vw - 2rem));
+  max-height:70vh; overflow:auto; background:#fff; border:1px solid #c9ced6; border-radius:7px;
+  box-shadow:0 6px 24px rgba(0,0,0,.18); padding:.4rem 0; }
+.rn-panel a{ display:block; padding:.36rem 1rem; color:#1a1f27; }
+.rn-panel a:hover{ background:#eef2f7; }
+.rn-panel a.cur{ background:#e3ebf6; border-left:3px solid #3f7fbf; padding-left:calc(1rem - 3px); font-weight:600; }
+.rn-panel .rn-toc{ font-weight:600; }
+.rn-panel .rn-toc{ border-bottom:1px solid #d5dae1; }
+.rn-grp{ padding:.2rem 0; } .rn-grp + .rn-grp{ border-top:1px solid #d5dae1; }
+.rn-grp.here{ background:#f4f7fb; }
+.rn-sp{ flex:1; }
+.rn-step{ font-size:1.05rem; padding:.1rem .45rem; border-radius:4px; }
+.rn-step:hover{ background:#eef2f7; } .rn-step.off{ color:#c3c7cd; }
+
+/* ---- 実践へのリンク(BL-252)= ワークスペースで開く・課題の背景の節 ---- */
+body.reading .tolab{ font-size:.86rem; line-height:1.7; margin:.5rem 0 1rem; padding:.35rem .7rem;
+  background:#f3f6fa; border-left:3px solid #3f7fbf; border-radius:3px; }
+body.reading .tolab a{ text-decoration:none; } body.reading .tolab a:hover{ text-decoration:underline; }
 
 /* ---- 端末風のコンソール出力 ---- */
 .term{ margin:1.9rem 0; border-radius:7px; overflow:hidden;
@@ -325,9 +358,10 @@ _TAGS = {"note": ("c-note", "訳注"), "sic": ("c-sic", "原典の誤り"),
 # 画面の決まり文句。book.yml の `lang: en` で英語にする(既定は日本語。訳文でない英語の教材用・BL-246)。
 # <html lang> も合わせる(読み上げ・フォント選択のため)。
 _LANG = "ja"
-_WORDS = {"ja": {"toc": "目次", "back": "↑ 目次へ", "note": "訳注", "sic": "原典の誤り", "orig": "原文", "portal": "‹ ポータル"},
+_WORDS = {"ja": {"toc": "目次", "back": "↑ 目次へ", "note": "訳注", "sic": "原典の誤り", "orig": "原文", "portal": "‹ ポータル",
+                 "prev": "前のページ", "next": "次のページ"},
           "en": {"toc": "Contents", "back": "↑ Contents", "note": "Note", "sic": "Error in the source", "orig": "Original",
-                 "portal": "‹ Portal"}}
+                 "portal": "‹ Portal", "prev": "Previous page", "next": "Next page"}}
 
 
 def set_lang(meta, lang=None):
@@ -557,6 +591,129 @@ def _page_text(meta, i, lang, path, offset=0):
     return text + f'\n\n<div class="pager">{prev_}{next_}</div>\n', len(notes)
 
 
+# 節の目印(BL-252): h2/h3 に言語に依らない番号 data-sec="s<h2 の番目>" / "s<h2>-<h3 の番目>" を振る。
+#   2 版は見出しの並びがそろっている(courses/ の規約)ので、同じ番号が両方の版の同じ節を指す。
+#   ラボのワークスペースの Reading タブや実践ページのリンクは `<ページ>.html#s2` の形で節を指し、
+#   READ_JS がいま表示中の版の該当見出しへ送る(id は版ごとに重なるので使わない)。
+_SEC_TOK = re.compile(r'<div class="lv" data-l="(\w+)">|<h([23])((?:\s[^>]*)?)>(.*?)</h\2>', re.S)
+
+
+def mark_sections(page_html):
+    """見出しに data-sec を振る。(HTML, {sec: {lang: 見出しの文字}})。1 言語のページは lang を "" で返す。"""
+    secs, cnt, lang = {}, [0, 0], ""
+
+    def rep(m):
+        nonlocal lang
+        if m.group(1):
+            lang = m.group(1)
+            cnt[:] = [0, 0]
+            return m.group(0)
+        lv, attrs, inner = m.group(2), m.group(3) or "", m.group(4)
+        if lv == "2":
+            cnt[0] += 1
+            cnt[1] = 0
+            sec = f"s{cnt[0]}"
+        else:
+            cnt[1] += 1
+            sec = f"s{cnt[0]}-{cnt[1]}"
+        secs.setdefault(sec, {})[lang] = html.unescape(re.sub(r"<[^>]+>", "", inner)).strip()
+        return f'<h{lv}{attrs} data-sec="{sec}">{inner}</h{lv}>'
+
+    return _SEC_TOK.sub(rep, page_html), secs
+
+
+# 読み物のページに足す動き(BL-252):
+#   ・`#s2` などの節の目印へ送る(いま表示中の版の見出しへ。言語を切り替えた後の hashchange でも)
+#   ・実践へのリンク(.tolab の中の /_learn?id=…)は、ラボのワークスペースの枠の中では親の Steps タブを開く合図に替える。
+#     単体で開いた時はそのままワークスペースへ移る。持ち出し(file://)では行き先が無いので出さない
+#   ・ポータルへ戻るリンクは、枠の中では画面ごと移る(枠の中にポータルを開かない)
+READ_JS = r"""
+(function(){
+  var framed = window.top !== window.self, synced = false;
+  function go(){
+    var m = /^#(s\d+(?:-\d+)?)$/.exec(location.hash);
+    if(!m) return;
+    var lang = document.body.dataset.lang, root = lang ? document.querySelector('.lv[data-l="' + lang + '"]') : document;
+    var h = (root || document).querySelector('[data-sec="' + m[1] + '"]');
+    if(h) h.scrollIntoView({block: 'start'});
+  }
+  window.addEventListener('hashchange', go);
+  window.addEventListener('load', go);
+  window.addEventListener('message', function(ev){
+    if(!ev.data || ev.source !== window.parent) return;
+    if(typeof ev.data.ccnpGoto === 'string'){          /* 親(ワークスペース)が同じページの別の節を指した */
+      if(ev.data.ccnpGoto) history.replaceState(null, '', '#' + ev.data.ccnpGoto);
+      go(); return;
+    }
+    /* 開いた直後に親が言語を合わせた時だけ節へ送り直す(以後の切替は LANG_JS が読んでいた位置を保つ) */
+    if(typeof ev.data.ccnpLang === 'string' && !synced){ synced = true; setTimeout(go, 0); }
+  });
+  if(location.protocol === 'file:')
+    document.querySelectorAll('.tolab').forEach(function(p){ p.style.display = 'none'; });
+  document.querySelectorAll('.tolab a[href^="/_learn"]').forEach(function(a){
+    if(!framed) return;
+    a.addEventListener('click', function(ev){
+      if(ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey || ev.button) return;
+      ev.preventDefault();
+      var u = new URL(a.href);
+      try{ window.parent.postMessage({ccnpStep: u.searchParams.get('step') || '', ccnpLab: u.searchParams.get('id') || ''}, '*'); }catch(_e){}
+    });
+  });
+  if(framed) document.querySelectorAll('a[href="/"]').forEach(function(a){ a.target = '_top'; });
+})();
+"""
+
+
+# 読み物のナビ帯(BL-253・2026-10-18 ユーザ要望「ただ並べてあるだけで見づらい」)。画面の下端に固定:
+#   ‹ ポータル | ☰ いまのページ名 ▴ | ← →
+#   ☰ を押すと上に向かってメニューが開く= 目次・ページの一覧(いまのページに印)。単元(章)ごとのまとまりを線で区切り、
+#   いまの単元は薄く色を付ける。
+#   ★ページ内の節の一覧も章の見出しも置かない(2026-10-18 ユーザ指示「目線が散る・シンプルに」
+#     「章の見出しはページ名と同じになっている」)。
+#   言語ごとの文字は _both で 2 つ持ち、切替(body の data-lang)で片方だけ見せる。
+READ_NAV_JS = r"""
+(function(){
+  var nav = document.querySelector('.rnav'); if(!nav) return;
+  var btn = nav.querySelector('.rn-btn'), panel = nav.querySelector('.rn-panel');
+  function set(open){
+    panel.hidden = !open; btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if(open){ var c = panel.querySelector('.cur'); if(c) c.scrollIntoView({block: 'nearest'}); }
+  }
+  btn.addEventListener('click', function(ev){ ev.stopPropagation(); set(panel.hidden); });
+  panel.addEventListener('click', function(ev){ if(ev.target.closest('a')) set(false); });
+  document.addEventListener('click', function(ev){ if(!panel.hidden && !nav.contains(ev.target)) set(false); });
+  document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape' && !panel.hidden){ set(false); btn.focus(); } });
+})();
+"""
+
+
+def reading_nav(meta, i):
+    pages, langs = meta["pages"], meta["_langs"]
+    both = lambda by_lang: _both(meta, {l: html.escape(by_lang.get(l) or next(iter(by_lang.values()), "")) for l in langs})
+    word = lambda k: both({l: _WORDS[l][k] for l in langs})
+    p = pages[i]
+    rows = [f'<a class="rn-toc" href="index.html">{word("toc")}</a>']
+    # 単元(章)ごとにまとめ、まとまりの間に線を引く。いまのページがある単元は薄く色を付ける
+    groups = []
+    for j, pg in enumerate(pages):
+        ch = _chapter_of(pg)
+        if not groups or groups[-1][0] != ch:
+            groups.append((ch, []))
+        cur = ' class="cur" aria-current="page"' if j == i else ""
+        groups[-1][1].append(f'<a href="{pg["html"]}"{cur}>{both(pg["_titles"])}</a>')
+    here = _chapter_of(p)
+    rows += [f'<div class="rn-grp{" here" if ch == here else ""}">{"".join(links)}</div>' for ch, links in groups]
+    prev_ = (f'<a class="rn-step" href="{pages[i-1]["html"]}" title="{html.escape(_WORDS[langs[0]]["prev"])}">←</a>'
+             if i else '<span class="rn-step off">←</span>')
+    next_ = (f'<a class="rn-step" href="{pages[i+1]["html"]}" title="{html.escape(_WORDS[langs[0]]["next"])}">→</a>'
+             if i + 1 < len(pages) else '<span class="rn-step off">→</span>')
+    return (f'<nav class="rnav"><a class="rn-portal" href="/">{word("portal")}</a>'
+            f'<div class="rn-menu"><button type="button" class="rn-btn" aria-expanded="false" aria-haspopup="true">'
+            f'<span class="rn-ic">☰</span><span class="rn-cur">{both(p["_titles"])}</span><span class="rn-car">▴</span></button>'
+            f'<div class="rn-panel" hidden>{"".join(rows)}</div></div>'
+            f'<span class="rn-sp"></span>{prev_}{next_}</nav>\n<script>{READ_NAV_JS}</script>')
+
+
 def build_page(src, meta, i, out_dir, mermaid_mode):
     pages, langs = meta["pages"], meta["_langs"]
     p = pages[i]
@@ -566,26 +723,14 @@ def build_page(src, meta, i, out_dir, mermaid_mode):
         alt_text, _n = _page_text(meta, i, langs[1], p["_alt_path"])
         kw = {"lang": langs[0], "alt_lang": langs[1], "alt_md": alt_text}
     set_lang(meta)
-    # ナビの文言は言語ごとに出し分ける。render はラベルをエスケープするので、目印を置いて後から差し替える
-    marks = {}
-
-    def mark(by_lang):
-        key = f"@@RNAV{len(marks)}@@"
-        marks[key] = _both(meta, {l: html.escape(v) for l, v in by_lang.items()})
-        return key
-
-    word = lambda k: {l: _WORDS[l][k] for l in langs}
-    # 先頭= 配信サーバのトップ(ポータル・BL-247)。`/` はどの配信のしかたでもサーバの根を指す
-    nav = [{"label": mark(word("portal")), "href": "/"}, {"label": mark(word("toc")), "href": "index.html"}] + [
-        {"label": mark(pg["_titles"]), "href": pg["html"], "current": j == i}
-        for j, pg in enumerate(pages)]
-    out = RH.render(text, title=p["title"], nav=nav, extra_css=READING_CSS,
+    # ナビ帯は読み物専用の作り(BL-253)。問題ページの横並びの帯(render の nav)は使わない
+    out = RH.render(text, title=p["title"], extra_css=READING_CSS,
                     body_class="reading", allow_html=True,
                     mermaid_mode=("cdn" if mermaid_mode == "local" else mermaid_mode), **kw)
-    for key, val in marks.items():
-        out = out.replace(key, val)
     if mermaid_mode == "local":
         out = out.replace(RH.MERMAID_CDN, "mermaid.min.js")
+    out, p["_sections"] = mark_sections(out)
+    out = out.replace("</body>", f"{reading_nav(meta, i)}\n<script>{READ_JS}</script>\n</body>", 1)
     out = _finish_lang(lazy_images(wrap_tables(termify(out))))
     dst = os.path.join(out_dir, p["html"])
     with open(dst, "w", encoding="utf-8") as fh:
@@ -635,6 +780,10 @@ def build(src, mermaid_mode="local"):
     for i in range(len(meta["pages"])):
         dst, n = build_page(src, meta, i, out_dir, mermaid_mode)
         total += n
+        langs = meta["_langs"]
+        odd = [k for k, v in meta["pages"][i].get("_sections", {}).items() if set(v) != set(langs)]
+        if len(langs) == 2 and odd:
+            print(f"[reading] 警告: {meta['pages'][i]['html']} の 2 版で見出しの並びがそろっていない(節 {odd})", file=sys.stderr)
         print(f"  {os.path.relpath(dst, REPO)}  （訳注 {n}）")
     build_index(meta, out_dir)
     # ポータル(配信サーバのトップ・BL-247)が教材の一覧を作るためのメタ。出力先だけを見れば足りるようにする
@@ -648,7 +797,11 @@ def build(src, mermaid_mode="local"):
                    "subtitle_alt": _pick(meta.get("subtitle"), langs[-1]) if len(langs) == 2 else "",
                    "shelf": meta.get("shelf", ""), "lang": langs[0], "langs": langs,
                    "order": meta.get("order", 50), "labs": meta.get("labs") or [],
-                   "pages": len(meta["pages"])}, fh, ensure_ascii=False, indent=1)
+                   "pages": len(meta["pages"]),
+                   # 節の一覧(BL-252)= {ページの html: {s2: {en: 見出し, ja: 見出し}}}。ワークスペースの Reading リンクの表示名
+                   "sections": {pg["html"]: pg.get("_sections", {}) for pg in meta["pages"]},
+                   "page_titles": {pg["html"]: pg["_titles"] for pg in meta["pages"]}},
+                  fh, ensure_ascii=False, indent=1)
     print(f"[reading] {len(meta['pages'])} ページ / 訳注 {total} 件 → "
           f"{os.path.relpath(out_dir, REPO)}/index.html")
     return out_dir
@@ -691,6 +844,8 @@ def _assemble(meta, pages, title, dst):
         with open(p["_path"], encoding="utf-8") as fh:
             text = fh.read()
         text = expand_containers(expand_topo(text))
+        # ワークスペース・他ページの節へのリンク(BL-252)は配信している時だけのもの。持ち出しの 1 枚には行き先が無い
+        text = re.sub(r'(?m)^<p class="tolab">.*</p>\n?', "", text)
         text, notes = expand_sic(text, offset)
         text += notes_section(notes, offset)
         offset += len(notes)

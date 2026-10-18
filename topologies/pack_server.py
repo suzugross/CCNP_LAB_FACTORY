@@ -207,7 +207,10 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(503, "ラボのワークスペースが起動していません(scripts/pack.sh serve で一緒に上がります)")
         host = (self.headers.get("Host") or "localhost").rsplit(":", 1)[0]
         self.send_response(302)
-        self.send_header("Location", f"http://{host}:{self.console_port}/lab?" + urlencode({"learn": lid}))
+        # 読み物の実践ページの「ワークスペースで開く」は step= で課題を指す(BL-252)。ワークスペースが #step= で Steps のその課題を開く
+        step = (q.get("step") or [""])[0]
+        frag = f"#step={step}" if re.match(r"^[A-Za-z0-9_-]{1,32}$", step) else ""
+        self.send_header("Location", f"http://{host}:{self.console_port}/lab?" + urlencode({"learn": lid}) + frag)
         self.send_header("Content-Length", "0")
         self.end_headers()
 

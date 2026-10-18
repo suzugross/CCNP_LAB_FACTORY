@@ -33,6 +33,8 @@
 ## M3 — OSPF
 
 ### 課題 M3-1
+<p class="tolab"><a href="/_learn?id=XRT-02&amp;step=m3t1">ワークスペースで開く</a> — 読み物: <a href="30-m3-ospf.html#s2">2. 継承</a></p>
+
 
 XR01 の OSPF に LINK2 が追加されましたが、LINK2 上で隣接関係が形成されません。
 XR01 と RT01 が LINK2 上で OSPF 隣接関係を形成するようにしてください。
@@ -40,11 +42,15 @@ XR01 の設計規則は引き続き有効です。OSPF に追加されたイン�
 hello を送信してはなりません。SERVERS セグメントは隣接関係を持たないままにしてください。
 
 ### 課題 M3-2
+<p class="tolab"><a href="/_learn?id=XRT-02&amp;step=m3t2">ワークスペースで開く</a> — 読み物: <a href="30-m3-ospf.html#s3">3. OSPFv3</a></p>
+
 
 XR01 と RT01 が、LINK1 上の OSPFv3 で IPv6 のループバック プレフィックスを交換するようにしてください。
 XR01 は 2001:DB8::2/128 を、RT01 は 2001:DB8::1/128 を学習する必要があります。
 
 ### 課題 M3-3
+<p class="tolab"><a href="/_learn?id=XRT-02&amp;step=m3t3">ワークスペースで開く</a> — 読み物: <a href="30-m3-ospf.html#s4">4. エリア</a></p>
+
 
 XR01 はエリア 1 のエリア境界ルータです。
 

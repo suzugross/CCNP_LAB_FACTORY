@@ -7,6 +7,7 @@
 #   採点:   scripts/lab.sh grade     <PROBLEM_ID> [variant]
 #   中間:   scripts/lab.sh checkpoint <PROBLEM_ID> <名前>   # grading.<名前>.yml で途中の状態を確認(ノルマ記録なし)
 #   片付け: scripts/lab.sh teardown  <PROBLEM_ID> [--keep-workspace]
+#   やり直し: scripts/lab.sh reset   <PROBLEM_ID>          # IOS XR を構築直後のコミットへ戻す＋学習モードの記録を初期化(BL-254)
 #   学習:   scripts/lab.sh learn     <PROBLEM_ID> [PORT]   # 学習モードのワークスペース(Steps タブ= 確認・ヒント)。既定 8896
 #   状態:   scripts/lab.sh status
 #   交換:   scripts/lab.sh rma <PROBLEM_ID> <NODE>     # 機器交換(保存済みの設定で新しい MAC の機体に入れ替える・BL-249)
@@ -89,6 +90,15 @@ case "$cmd" in
     variant="${3:-}"
     exec "$PY/python3" "$REPO/topologies/quota.py" --repo "$REPO" \
       grade-lab "$prob" ${variant:+--variant "$variant"}
+    ;;
+
+  reset)
+    # 学習用ラボのやり直し(BL-254)。IOS XR の機器を構築直後のコミットへ戻す(作り直さない・数秒)。
+    # 相手役の IOS・サーバは戻さない(課題で変えない約束)。学習モードの記録は退避して初期化する。
+    [ -n "$prob" ] || usage
+    "$PY/ansible-playbook" "$REPO/playbooks/xr_reset.yml" -e problem="$prob" --vault-password-file <(vault)
+    log="$REPO/records/learn/$prob.jsonl"
+    if [ -f "$log" ]; then mv "$log" "$REPO/records/learn/$prob.$(date +%Y%m%d-%H%M%S).jsonl.bak"; echo "学習モードの記録を退避: records/learn/$prob.*.jsonl.bak"; fi
     ;;
 
   checkpoint)

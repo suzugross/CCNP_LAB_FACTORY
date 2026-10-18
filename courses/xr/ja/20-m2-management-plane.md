@@ -262,6 +262,8 @@ ACL がトラフィックに対して行うことは IOS と同じです。イ�
 ラボ **XRT-02** に移り、M2 の課題に取り組みます。いくつかの課題は XR01 から締め出される可能性があり、確認は管理インターフェイス経由で
 XR01 に到達します。危険な変更は、それぞれ確認つきコミットとして計画します。
 
+<p class="tolab"><a href="/_learn?id=XRT-02">ワークスペースでラボ XRT-02 を開く</a> — <a href="21-m2-practice.html">課題の一覧</a></p>
+
 :::note
 出典: ASR 9000 向け IOS XR コンフィギュレーション ガイド(System Security の *Configuring AAA Services*、
 *Implementing Management Plane Protection*、IP Addresses and Services の *Implementing LPTS*)と各コマンド リファレンス(2026 年 10 月に確認)。

@@ -44,6 +44,8 @@ once a task passes, a reference solution for each task. No command examples are 
 ## M2 — Securing the management plane
 
 ### Task M2-1
+<p class="tolab"><a href="/_learn?id=XRT-02&amp;step=m2t1">Open in the lab workspace</a> — Read: <a href="20-m2-management-plane.html#s1">1. Rights are task IDs</a></p>
+
 
 The NOC needs a local account `noc1` with the password `Noc1-Pass`.
 
@@ -53,6 +55,8 @@ The NOC needs a local account `noc1` with the password `Noc1-Pass`.
 - Do not make `noc1` a member of any predefined user group. Build what it needs yourself.
 
 ### Task M2-2
+<p class="tolab"><a href="/_learn?id=XRT-02&amp;step=m2t2">Open in the lab workspace</a> — Read: <a href="20-m2-management-plane.html#s2">2. Where management sessions are accepted</a></p>
+
 
 Restrict which interfaces accept management sessions on XR01.
 
@@ -61,6 +65,8 @@ Restrict which interfaces accept management sessions on XR01.
   No other data-side source may open Telnet or SSH sessions to XR01.
 
 ### Task M2-3
+<p class="tolab"><a href="/_learn?id=XRT-02&amp;step=m2t3">Open in the lab workspace</a> — Read: <a href="20-m2-management-plane.html#s3">3. Logging in through an AAA server</a></p>
+
 
 Authenticate and authorise logins on XR01 with SRV01.
 
@@ -71,11 +77,15 @@ Authenticate and authorise logins on XR01 with SRV01.
 - The console must always authenticate against the local accounts, whether or not SRV01 is up.
 
 ### Task M2-4
+<p class="tolab"><a href="/_learn?id=XRT-02&amp;step=m2t4">Open in the lab workspace</a> — Read: <a href="20-m2-management-plane.html#s4">4. Traffic addressed to the router: LPTS</a></p>
+
 
 Limit the rate at which XR01 accepts ICMP echo requests addressed to itself to **50 packets per second**.
 Monitoring pings from SRV01 (five per second) must still succeed. Do not change how XR01 handles any other traffic.
 
 ### Task M2-5
+<p class="tolab"><a href="/_learn?id=XRT-02&amp;step=m2t5">Open in the lab workspace</a> — Read: <a href="20-m2-management-plane.html#s5">5. Access lists</a></p>
+
 
 The guest network 198.51.100.0/24 must not reach XR01. Drop its traffic where it enters XR01.
 The OSPF adjacency over LINK1 and everything else that crosses LINK1 must be unaffected.

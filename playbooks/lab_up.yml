@@ -218,6 +218,37 @@
     - ansible.builtin.debug: { msg: "{{ xrb.stdout_lines | default([]) }}" }
       when: xrb is not skipped
 
+# === IOS XR の戻り先を記録（iosxr の機器がある問題のみ・BL-254）=================
+# 学習モードのやり直し(xr_reset.py reset)は、ここで記録したコミット ID へ rollback する。
+# 履歴の仕込み(上)の後に取るので、仕込んだ履歴も「構築直後」に含まれる。失敗しても構築は止めない。
+- name: IOS XR の戻り先のコミットを記録する
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+  tasks:
+    - ansible.builtin.include_vars: { file: "{{ repo }}/problems/{{ problem }}/problem.yml", name: pmeta_xr }
+      when: lab_state | default('started') == 'started'
+    - name: xr_reset.py record
+      ansible.builtin.command:
+        argv:
+          - "{{ repo }}/.venv/bin/python3"
+          - "{{ repo }}/topologies/xr_reset.py"
+          - "--repo={{ repo }}"
+          - "--problem={{ problem }}"
+          - record
+      environment:
+        NODE_USER: "{{ ansible_user }}"
+        NODE_PASS: "{{ ansible_ssh_pass }}"
+      register: xrrec
+      changed_when: true
+      failed_when: false
+      when:
+        - lab_state | default('started') == 'started'
+        - "'iosxr' in (pmeta_xr.node_image_families | default({})).values() | list"
+    - ansible.builtin.debug: { msg: "{{ xrrec.stdout_lines | default([]) }}" }
+      when: xrrec is not skipped
+
 # === 監視サービス（problem.yml に monitoring がある問題のみ） ==============
 # ZBX ノードは cloud-init が Zabbix を自動構築する（initial/<node>.sh.j2）。
 # ここでは API が応答するまで待ち、監視対象ホストを SNMPv3 で登録する。

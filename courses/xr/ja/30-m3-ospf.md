@@ -125,6 +125,8 @@ OSPF への再配送とルートのフィルタは、IOS XR ではルート ポ�
 
 ラボ **XRT-02** に移り、M2 の課題の後で M3 の課題に取り組みます。
 
+<p class="tolab"><a href="/_learn?id=XRT-02">ワークスペースでラボ XRT-02 を開く</a> — <a href="31-m3-practice.html">課題の一覧</a></p>
+
 :::note
 出典: ASR 9000 向け IOS XR *Routing Configuration Guide* の *Implementing OSPF*(OSPF Hierarchical CLI and CLI Inheritance)、2026 年 10 月に確認。
 次の点は 24.3.1 の実測によります。`inheritance detail` が継承した passive を注記しないこと、IPv6 のテーブルで OSPFv3 のルートが `ospf` と表示されること。

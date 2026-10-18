@@ -604,9 +604,10 @@ MERMAID_INIT = """
 #   親はこの合図で「意図した移動」と分かるので、接続中のコンソールがあっても離脱確認を出さない。
 #   親が応えない時(古いワークスペース等)は、少し待って自分で画面ごと移る。
 #   Ctrl/Shift/中クリック(別タブで開く)は横取りしない。枠の外(単体のページ)では何もしない。
+#   読み物のページ(body.reading)は Reading タブの枠の中を移るので横取りしない(BL-252・gen_reading.READ_JS)。
 NAV_JS = r"""
 (function(){
-  if(window.top === window.self) return;
+  if(window.top === window.self || document.body.classList.contains('reading')) return;
   document.querySelectorAll('.nav a').forEach(function(a){
     a.addEventListener('click', function(ev){
       if(ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey || ev.button) return;
