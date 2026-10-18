@@ -1,0 +1,25 @@
+# M2-4: LPTS の ICMP-local(XR01 宛ての ICMP エコー)の上限が 50。ほかの流れは既定のまま(設定した流れは
+# avgrate_type が Global になる)。挙動は SRV01(Linux)から見る:
+#   監視程度(0.2 秒間隔)の ping は全部通る/連打(-f)は落ちる(既定の 1500 pps では落ちない・24.3.1 実測)。
+#   両方を 1 項目で見る(「通ること」だけの項目は白紙で通ってしまうため)。
+# ★RT01(IOL)の ping は応答を受けるとすぐ次を送るので、上限 50 では 3 発目が必ず落ちる(!!.!!)。
+#   「通常の ping が通る」を RT01 で見ると誤って落ちるので使わない。
+problem: XRT-02
+total_points: 100
+checks:
+  - name: "M2-4 XR01: ICMP echo to the router is policed at 50 pps, other flows untouched"
+    node: XR01
+    command: "show lpts pifib hardware police location 0/0/CPU0"
+    raw:
+      - { regex: "(?m)^ICMP-local\\s+\\S+\\s+\\d+\\s+\\d+\\s+50\\s" }
+      - { not_regex: "(?m)^(?!ICMP-local\\s)\\S+\\s+.*\\sGlobal\\s" }
+    points: 50
+  - name: "M2-4 SRV01: a ping flood to XR01 is cut down, while monitoring pings (5 per second) all succeed"
+    node: SRV01
+    exec: shell
+    command: "ping -c 5 -i 0.2 1.1.1.1 | tail -2; sudo -n ping -q -f -c 500 1.1.1.1 | tail -2"
+    raw:
+      - { regex: "5 packets transmitted, 5 received, 0% packet loss" }
+      - { regex: "500 packets transmitted" }
+      - { not_regex: "500 packets transmitted, 500 received" }
+    points: 50

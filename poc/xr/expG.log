@@ -1,0 +1,136 @@
+### commit label EXP-BASE
+
+### show ospf neighbor
+
+* Indicates MADJ interface
+# Indicates Neighbor awaiting BFD session up
+
+Neighbors for OSPF 1
+
+Neighbor ID     Pri   State           Dead Time   Address         Interface
+2.2.2.2         1     FULL/  -        00:00:31    10.0.12.2       GigabitEthernet0/0/0/0
+    Neighbor is up for 07:10:40
+2.2.2.2         1     FULL/  -        00:00:16    10.0.21.2       GigabitEthernet0/0/0/2
+    Neighbor is up for 00:12:55
+
+Total neighbor count: 2
+### show running-config router ospf 1 area 0 interface GigabitEthernet0/0/0/2
+router ospf 1
+ area 0
+  interface GigabitEthernet0/0/0/2
+   cost 50
+   authentication message-digest
+   message-digest-key 1 md5 encrypted 143800020B55012E3D
+   network point-to-point
+   dead-interval 20
+   hello-interval 5
+  !
+ !
+!
+### commit label EXP-BAD
+
+### show ospf neighbor
+
+* Indicates MADJ interface
+# Indicates Neighbor awaiting BFD session up
+
+Neighbors for OSPF 1
+
+Neighbor ID     Pri   State           Dead Time   Address         Interface
+2.2.2.2         1     FULL/  -        00:00:31    10.0.12.2       GigabitEthernet0/0/0/0
+    Neighbor is up for 07:11:28
+
+Total neighbor count: 1
+### show configuration commit changes EXP-BAD
+!! Building configuration...
+!! IOS XR Configuration 24.3.1
+interface Loopback101
+ description MONITORING-v2
+!
+interface Loopback201
+ ipv4 address 192.0.2.201 255.255.255.255
+!
+router ospf 1
+ area 0
+  interface GigabitEthernet0/0/0/2
+   message-digest-key 1 md5 encrypted 123A0D161C0C5F00012E3D
+   no dead-interval 20
+   no hello-interval 5
+  !
+ !
+!
+end
+### show configuration rollback changes EXP-BAD
+!! Building configuration...
+!! IOS XR Configuration 24.3.1
+interface Loopback101
+ description MONITORING
+!
+no interface Loopback201
+router ospf 1
+ area 0
+  interface GigabitEthernet0/0/0/2
+   message-digest-key 1 md5 encrypted 143800020B55012E3D
+   dead-interval 20
+   hello-interval 5
+  !
+ !
+!
+end
+### load rollback changes EXP-BAD
+Loading.
+301 bytes parsed in 1 sec (300)bytes/sec
+### show configuration
+!! Building configuration...
+!! IOS XR Configuration 24.3.1
+interface Loopback101
+ description MONITORING
+!
+no interface Loopback201
+router ospf 1
+ area 0
+  interface GigabitEthernet0/0/0/2
+   message-digest-key 1 md5 encrypted 143800020B55012E3D
+   dead-interval 20
+   hello-interval 5
+  !
+ !
+!
+end
+### commit label EXP-UNDO
+
+### show ospf neighbor
+
+* Indicates MADJ interface
+# Indicates Neighbor awaiting BFD session up
+
+Neighbors for OSPF 1
+
+Neighbor ID     Pri   State           Dead Time   Address         Interface
+2.2.2.2         1     FULL/  -        00:00:32    10.0.12.2       GigabitEthernet0/0/0/0
+    Neighbor is up for 07:12:06
+2.2.2.2         1     FULL/  -        00:00:16    10.0.21.2       GigabitEthernet0/0/0/2
+    Neighbor is up for 00:00:30
+
+Total neighbor count: 2
+### show running-config router ospf 1 area 0 interface GigabitEthernet0/0/0/2
+router ospf 1
+ area 0
+  interface GigabitEthernet0/0/0/2
+   cost 50
+   authentication message-digest
+   message-digest-key 1 md5 encrypted 143800020B55012E3D
+   network point-to-point
+   dead-interval 20
+   hello-interval 5
+  !
+ !
+!
+### show running-config interface Loopback101
+interface Loopback101
+ description MONITORING
+ ipv4 address 192.0.2.101 255.255.255.255
+!
+### show running-config interface Loopback201
+% No such configuration item(s)
+RT01: [' ip ospf authentication message-digest', ' ip ospf message-digest-key 1 md5 Orig1Key', ' ip ospf network point-to-point', ' ip ospf dead-interval 20', ' ip ospf hello-interval 5', ' ip ospf 1 area 0']

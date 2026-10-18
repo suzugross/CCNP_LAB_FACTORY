@@ -7,6 +7,42 @@
 #   exec: ios   … cisco.ios.ios_command を対象ノードで実行
 #   exec: shell … Linux ノード(ZBX*/SRV*/PC*)で shell 実行（snmpget / dig / Zabbix API 照会など）。
 #                 失敗コマンド(タイムアウト等)も stdout+stderr を採点対象にする。
+# ラベルで指すコミット(IOS XR・BL-246)。チェックに `commit_label: M1-T3` があれば、コマンド中の `{label}` を
+#   履歴の中で「M1-T3 か、やり直し用の M1-T3-2・M1-T3-3 …」のうち**いちばん新しいもの**に置き換える。
+#   ★XR のラベルは使い回せず、特定のコミットだけを履歴から消すこともできない。正しいラベルを内容の足りない
+#   コミットに付けてしまうと、ラベルを固定で見る採点では二度と通らない(2026-10-15 実発)。その抜け道。
+#   該当が無ければ `commit_label` のままにする(そのチェックは自然に落ちる)。exec=ios の経路だけ。
+- name: ラベルで指すコミットを解決する(commit_label があるチェックのノードの履歴を取る)
+  cisco.ios.ios_command:
+    commands: ["show configuration commit list"]
+  delegate_to: "{{ item }}"
+  loop: "{{ checks | default([]) | selectattr('commit_label', 'defined') | map(attribute='node') | unique | list }}"
+  register: commit_lists
+  changed_when: false
+  failed_when: false
+
+- name: ラベルを解決してコマンドを組み直す
+  ansible.builtin.set_fact:
+    checks_resolved: >-
+      {{ checks_resolved | default([]) + [
+           (item | combine({'command_tpl': item.command_tpl | default(item.command),
+                            'command': (item.command_tpl | default(item.command)) | replace('{label}', resolved),
+                            'label_used': resolved}))
+           if item.commit_label is defined else item ] }}
+  loop: "{{ checks | default([]) }}"
+  loop_control: { label: "{{ item.name }}" }
+  vars:
+    lst: "{{ ((commit_lists.results | default([]) | selectattr('item', 'equalto', item.node) | map(attribute='stdout') | first | default([''])) or ['']) | first }}"
+    found: "{{ lst | regex_findall('(?m)^\\s*\\d+\\s+(' ~ (item.commit_label | default('') | regex_escape) ~ '(?:-\\d+)?)\\s') }}"
+    resolved: "{{ found | first | default(item.commit_label | default('')) }}"
+  when: (checks | default([]) | selectattr('commit_label', 'defined') | list | length) > 0
+
+- name: 解決後のチェックに差し替える
+  ansible.builtin.set_fact:
+    checks: "{{ checks_resolved }}"
+    checks_resolved: []
+  when: checks_resolved is defined and (checks_resolved | length) > 0
+
 - name: 各チェックの show を対象ノードから取得 (exec=ios)
   cisco.ios.ios_command:
     commands: ["{{ item.command }}"]
@@ -22,15 +58,21 @@
   failed_when: false
   when: (item.exec | default('ios')) == 'ios'
 
-- name: 各チェックのコマンドを Linux ノードで実行 (exec=shell)
+# exec: local … 採点機(localhost)でリポ直下から実行する(BL-246 M2)。実際にログインして許可/拒否を見る
+#   topologies/login_probe.py など。ラボの資格情報は環境変数 LAB_USER / LAB_PASS で渡す。node は表示用。
+#   shell と同じタスクで回すので、shell/local のチェックはチェックの並び順に実行される。
+- name: 各チェックのコマンドを Linux ノードで実行 (exec=shell) / 採点機で実行 (exec=local)
   ansible.builtin.shell: "{{ item.command }}"
-  delegate_to: "{{ item.node }}"
+  args:
+    chdir: "{{ repo if (item.exec | default('ios')) == 'local' else omit }}"
+  delegate_to: "{{ 'localhost' if (item.exec | default('ios')) == 'local' else item.node }}"
+  environment: "{{ {'LAB_USER': ansible_user, 'LAB_PASS': ansible_ssh_pass} if (item.exec | default('ios')) == 'local' else {} }}"
   loop: "{{ checks | default([]) }}"
   loop_control: { label: "{{ item.node }}: {{ item.command | truncate(60) }}" }
   register: collected_sh
   changed_when: false
   failed_when: false
-  when: (item.exec | default('ios')) == 'shell'
+  when: (item.exec | default('ios')) in ['shell', 'local']
 
 # exec: junos … clab 側 Junos ノード(BL-061 複合ラボ)。network_cli 越しの CLI 実行。
 # `| display json` 付きコマンドなら grade.py の parser: json で構造化採点できる。

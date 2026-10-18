@@ -73,6 +73,38 @@ device_profiles:
       mgmt_slot: 3
       mgmt: GigabitEthernet4
       links: [GigabitEthernet1, GigabitEthernet2, GigabitEthernet3]
+  # IOS XRv 9000 (IOS XR)。BL-246。★1 台 7 vCPU・割当 20GB・実使用 約 17GB= 同時 2 台が上限。
+  # slot0=管理 IF、slot1〜2 は使用不可、データは slot3 から(lab.links では a_if: 3 以上を使う)。
+  # 初期設定は ISO の iosxr_config.txt で入る(CVAC)。テンプレートは baseline_router_iosxr.cfg.j2。
+  iosxr:
+    router:
+      node_definition: iosxrv9000
+      image_definition: iosxrv9000-24-03-1  # 2.10.1 で ID が改名(旧 -24-3-1)
+      prefix: GigabitEthernet
+      mgmt_slot: 0
+      mgmt: MgmtEth0/RP0/CPU0/0
+      links: [MgmtEth0/RP0/CPU0/0, donotuse1, donotuse2,
+              GigabitEthernet0/0/0/0, GigabitEthernet0/0/0/1, GigabitEthernet0/0/0/2,
+              GigabitEthernet0/0/0/3, GigabitEthernet0/0/0/4, GigabitEthernet0/0/0/5,
+              GigabitEthernet0/0/0/6, GigabitEthernet0/0/0/7]
+  # IOS XRd control plane (コンテナ)。BL-250。2 vCPU/3GB・起動 約 80 秒(XRv9000 は約 9 分)。
+  # problem.yml は iosxr のまま書き、構築時に LAB_XR_PLATFORM=xrd(-e xr_platform=iosxrd)で差し替える。
+  # slot_map= problem.yml の slot 番号(XRv9000 基準: 3 が Gi0/0/0/0)→ XRd の slot(1 が Gi0/0/0/0)。
+  # XRd は渡された IF を順番に Gi0/0/0/0,1,… と名付けるため、間を空けず slot を埋める(contiguous_slots)。
+  # 初期設定は first-boot.cfg に入る(テンプレートは iosxr と共用)。未配線の IF は作られない。
+  iosxrd:
+    router:
+      node_definition: xrd
+      image_definition: xrd-26-1-1
+      prefix: GigabitEthernet
+      mgmt_slot: 0
+      mgmt: MgmtEth0/RP0/CPU0/0
+      slot_map: {3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6, 9: 7, 10: 8}
+      contiguous_slots: true
+      links: [MgmtEth0/RP0/CPU0/0,
+              GigabitEthernet0/0/0/0, GigabitEthernet0/0/0/1, GigabitEthernet0/0/0/2,
+              GigabitEthernet0/0/0/3, GigabitEthernet0/0/0/4, GigabitEthernet0/0/0/5,
+              GigabitEthernet0/0/0/6, GigabitEthernet0/0/0/7]
   iosv:
     router:
       node_definition: iosv

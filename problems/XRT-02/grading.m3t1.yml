@@ -1,0 +1,16 @@
+# M3-1: LINK2 で隣接が上がる。プロセス単位の passive は残し(設計規則)、SERVERS は passive のまま。
+# 白紙で通る項目を作らないため、隣接・設定・SERVERS の状態を 1 項目で見る(採点機から入って複数行を打つ)。
+problem: XRT-02
+total_points: 100
+checks:
+  - name: "M3-1 XR01: adjacency over LINK2, process-wide passive kept, SERVERS still passive"
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-02 ssh XR01
+      -- 'show ospf neighbor' 'show running-config router ospf 1' 'show ospf interface GigabitEthernet0/0/0/1'
+    raw:
+      - { regex: "FULL[^\\n]*10\\.0\\.21\\.2\\s+GigabitEthernet0/0/0/2" }
+      - { regex: "router ospf 1\\s*\\n(?: [^\\n]*\\n)*? passive enable\\s*\\n" }
+      - { regex: "GigabitEthernet0/0/0/1 is up[\\s\\S]*?[Pp]assive" }
+    points: 100

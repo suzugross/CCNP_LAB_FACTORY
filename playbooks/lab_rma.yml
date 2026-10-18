@@ -1,0 +1,25 @@
+---
+# ノードの「機器交換」(BL-249)。scripts/lab.sh rma <問題ID> <ノード名> から呼ぶ。
+# 本体は topologies/lab_rma.py(保存済みの設定を退避 → 停止・初期化 → MAC 差し替え → 保存済みの設定で起動)。
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: 機器交換
+      ansible.builtin.command:
+        argv: ["{{ repo }}/.venv/bin/python3", "{{ repo }}/topologies/lab_rma.py"]
+      environment:
+        REPO: "{{ repo }}"
+        PROBLEM: "{{ problem }}"
+        NODE: "{{ node }}"
+        CML_HOST: "{{ cml_host }}"
+        CML_USER: "{{ cml_username }}"
+        CML_PASS: "{{ cml_password }}"
+        LAB_TITLE: "CCNP-LAB-{{ (problem | hash('md5'))[:8] }}"
+        NODE_USER: "{{ ansible_user }}"
+        NODE_PASS: "{{ ansible_ssh_pass }}"
+        NODE_ENABLE: "{{ ansible_become_pass | default(ansible_ssh_pass) }}"
+      register: r
+      changed_when: true
+    - name: 結果
+      ansible.builtin.debug:
+        var: r.stdout_lines

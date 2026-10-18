@@ -1,0 +1,23 @@
+problem: XRT-01
+total_points: 100
+checks:
+  - name: "XR01: OSPF adjacency on LINK3 is FULL (original key and timers)"
+    node: XR01
+    command: "show ospf neighbor"
+    raw: [ { regex: "FULL.*GigabitEthernet0/0/0/3" } ]
+    points: 40
+  - name: "XR01: Loopback101 has its original description and Loopback201 is gone"
+    node: XR01
+    command: "show running-config interface"
+    raw: [ { regex: "interface Loopback101\\s+description MONITORING\\s" }, { not_regex: "Loopback201" } ]
+    points: 20
+  - name: "XR01: the work committed after CHG2001 is still there"
+    node: XR01
+    command: "show ipv4 interface brief"
+    raw: [ { regex: "Loopback50\\s+10\\.50\\.50\\.50" }, { regex: "Loopback70\\s+10\\.70\\.70\\.70" }, { regex: "Loopback62\\s+10\\.62\\.62\\.62" } ]
+    points: 20
+  - name: "RT01: LINK3 still uses MD5 authentication with hello 5 / dead 20"
+    node: RT01
+    command: "show ip ospf interface Ethernet0/2"
+    raw: [ { regex: "Hello 5, Dead 20" }, { regex: "Cryptographic authentication enabled" } ]
+    points: 20

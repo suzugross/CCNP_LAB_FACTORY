@@ -1,0 +1,32 @@
+# M2-1: noc1 で実際にログインして、許可と拒否を打って見る。
+# ★M2-3 を終えた後は SRV01 が稼働中だと XR01 だけのアカウントは入れない(それが M2-3 の要件)。
+#   なので確認の間だけ SRV01 を止め、終わったら必ず起こす(--post は失敗しても走る)。
+problem: XRT-02
+total_points: 100
+checks:
+  - name: "M2-1 noc1 can show, ping and clear counters, and cannot configure"
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-02 ssh XR01 --user noc1 --pass Noc1-Pass
+      --pre 'SRV01:sudo -n systemctl stop tacacs_plus' --post 'SRV01:sudo -n systemctl start tacacs_plus' --wait-tacacs XR01
+      -- 'show route 2.2.2.2/32' 'show ospf neighbor' 'show interfaces GigabitEthernet0/0/0/0 brief'
+      'ping 10.0.12.2 count 2' 'clear counters interface GigabitEthernet0/0/0/0' ''
+      'configure' 'router ospf 1' 'interface Loopback99'
+    raw:
+      - { regex: "== LOGIN OK as noc1" }
+      - { regex: "Known via \"ospf 1\"" }
+      - { regex: "2\\.2\\.2\\.2\\s+\\d+\\s+FULL" }
+      - { regex: "Gi0/0/0/0\\s+up\\s+up" }
+      - { regex: "Success rate is 100 percent" }
+      - { not_regex: "clear counters interface GigabitEthernet0/0/0/0\\s*\\n% This command is not authorized" }
+      - { regex: "router ospf 1\\s*\\n% This command is not authorized" }
+      - { regex: "interface Loopback99\\s*\\n% This command is not authorized" }
+    points: 80
+  - name: "M2-1 noc1 is a member of a user group of your own"
+    node: XR01
+    command: "show running-config username noc1"
+    raw:
+      - { regex: "\\n\\s+group \\S+" }
+      - { not_regex: "group (root-lr|netadmin|sysadmin|operator|cisco-support|serviceadmin|maintenance|provisioning|retrieve|read-only-tg)\\s*\\n" }
+    points: 20

@@ -1,0 +1,21 @@
+# M3-3: エリア 1 = totally stubby(RT02 はデフォルトだけを IA で受ける)・エリア 0 には 172.16.0.0/22 だけ。
+problem: XRT-02
+total_points: 100
+checks:
+  - name: "M3-3 RT02: only a default route from outside area 1"
+    node: RT02
+    command: "show ip route ospf"
+    raw:
+      - { regex: "O\\*IA\\s+0\\.0\\.0\\.0/0" }
+      - { not_regex: "(?m)^O IA\\s" }
+    points: 50
+  - name: "M3-3 RT01: the branch LANs arrive as 172.16.0.0/22 only"
+    node: RT01
+    # ★IOS はクラスフルの見出しの下にプレフィックス長なしで並べる(「172.16.0.0/22 is subnetted, 1 subnets」の下に
+    #   「O IA 172.16.0.0」)。/24 が残っていれば「172.16.1.0」のように出る。
+    command: "show ip route ospf | include 172"
+    raw:
+      - { regex: "172\\.16\\.0\\.0/22 is subnetted, 1 subnets" }
+      - { regex: "O IA\\s+172\\.16\\.0\\.0\\s" }
+      - { not_regex: "172\\.16\\.[123]\\.0" }
+    points: 50

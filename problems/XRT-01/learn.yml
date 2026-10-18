@@ -1,0 +1,389 @@
+# XRT-01 の学習モード(ワークスペースの Steps タブ)。lab_console.py --learn XRT-01 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# ここに書いた挙動はすべて XRv9000 24.3.1 の実機で確認済み(poc/xr/README.md)。
+steps:
+  - id: m0t1
+    title: { en: "M0-1  Reachability over LINK1 (IPv4 and IPv6)", ja: "M0-1  LINK1 の到達性(IPv4 と IPv6)" }
+    check: m0t1
+    hints:
+      - en: "Look at the interface before you look at routing. What state is it in, and which address families does it have? There is a one-line-per-interface view for each address family."
+        ja: "ルーティングの前にインターフェイスを見ます。どの状態にあり、どのアドレス ファミリを持っていますか。アドレス ファミリごとに、インターフェイス 1 行の一覧表示があります。"
+      - en: "On IOS XR the IPv4 and IPv6 views are separate commands (`show ipv4 interface brief`, `show ipv6 interface brief`). An interface that says Shutdown is administratively down. Guide: Interface and Hardware Component Configuration Guide, 'Configuring Ethernet Interfaces'."
+        ja: "IOS XR では IPv4 と IPv6 の一覧は別のコマンドです(`show ipv4 interface brief`、`show ipv6 interface brief`)。Shutdown と表示されるインターフェイスは管理上ダウンしています。ガイド: Interface and Hardware Component Configuration Guide の「Configuring Ethernet Interfaces」。"
+      - en: "Under the interface: `no shutdown` and `ipv6 address 2001:db8:12::1/64`. Nothing takes effect until you `commit`."
+        ja: "インターフェイスの下で `no shutdown` と `ipv6 address 2001:db8:12::1/64`。`commit` するまで何も有効になりません。"
+    solution:
+      en: |
+        configure
+         interface GigabitEthernet0/0/0/0
+          no shutdown
+          ipv6 address 2001:db8:12::1/64
+         commit
+        end
+        Note: `no shutdown` does not appear in the running configuration afterwards. On IOS XR an interface with no
+        `shutdown` line is up; the line only exists while the interface is administratively down.
+      ja: |
+        configure
+         interface GigabitEthernet0/0/0/0
+          no shutdown
+          ipv6 address 2001:db8:12::1/64
+         commit
+        end
+        補足: 投入後の実行コンフィギュレーションに `no shutdown` は表示されません。IOS XR では `shutdown` の行が無い
+        インターフェイスはアップで、この行は管理上ダウンの間だけ存在します。
+
+  - id: m0t2
+    title: { en: "M0-2  OSPF routes over LINK1", ja: "M0-2  LINK1 経由の OSPF ルート" }
+    check: m0t2
+    hints:
+      - en: "Two separate things are wrong, and fixing the first one gives you a FULL adjacency that still installs no route over LINK1. Compare what each side believes about the link."
+        ja: "誤りは 2 つあります。1 つ目を直すと隣接関係は FULL になりますが、LINK1 経由のルートはまだ入りません。リンクについて両側が何を前提にしているかを比べます。"
+      - en: "On IOS XR an interface joins OSPF by being listed under an area inside `router ospf` — there are no `network` statements and nothing under the interface itself. See which area LINK1 is listed under (`show running-config router ospf`, `show ospf interface brief`), then compare the network type with RT01 (`show ip ospf interface` on RT01). Guide: Routing Configuration Guide, 'Implementing OSPF' — 'OSPF Hierarchical CLI and CLI Inheritance'."
+        ja: "IOS XR では、インターフェイスは `router ospf` の中のエリアの下に列挙されることで OSPF に参加します。`network` 文は無く、インターフェイス自体の下にも何も書きません。LINK1 がどのエリアの下にあるかを確認し(`show running-config router ospf`、`show ospf interface brief`)、次にネットワーク タイプを RT01 と比べます(RT01 で `show ip ospf interface`)。ガイド: Routing Configuration Guide の「Implementing OSPF」—「OSPF Hierarchical CLI and CLI Inheritance」。"
+      - en: "Remove the interface from area 1 (`no area 1`), list it under `area 0`, and set `network point-to-point` under that interface entry."
+        ja: "インターフェイスをエリア 1 から外し(`no area 1`)、`area 0` の下に列挙し、そのインターフェイスの項目の下で `network point-to-point` を設定します。"
+    solution:
+      en: |
+        configure
+         router ospf 1
+          no area 1
+          area 0
+           interface GigabitEthernet0/0/0/0
+            network point-to-point
+         commit
+        end
+        Why the first fix alone is not enough: RT01 treats LINK1 as point-to-point, XR01's default for Ethernet is
+        broadcast. Hello and dead timers match, so the adjacency reaches FULL (XR01 even shows FULL/DR), but the
+        two routers describe the link differently in their router LSAs and SPF cannot use it.
+      ja: |
+        configure
+         router ospf 1
+          no area 1
+          area 0
+           interface GigabitEthernet0/0/0/0
+            network point-to-point
+         commit
+        end
+        1 つ目の修正だけでは足りない理由: RT01 は LINK1 をポイントツーポイントとして扱い、XR01 のイーサネットの
+        既定はブロードキャストです。Hello と Dead のタイマーは一致するので隣接関係は FULL になります(XR01 では
+        FULL/DR と表示されます)。しかし両ルータがルータ LSA でリンクを別の形で記述するので、SPF はこのリンクを使えません。
+
+  - id: m0t3
+    title: { en: "M0-3  Customer A in its VRF", ja: "M0-3  顧客 A を VRF に入れる" }
+    check: m0t3
+    hints:
+      - en: "The VRF exists. What is missing is membership, and then a route inside the VRF. Find a view that shows interfaces together with the VRF they belong to."
+        ja: "VRF は存在します。足りないのは所属と、VRF の中のルートです。インターフェイスと所属 VRF を一緒に表示する方法を探します。"
+      - en: "`show ipv4 vrf all interface brief` shows the VRF column. Static routes on IOS XR are not `ip route` lines; they live in one `router static` block, with a sub-block per VRF and address family. Guide: Routing Configuration Guide, 'Implementing Static Routes'."
+        ja: "`show ipv4 vrf all interface brief` に VRF の列があります。IOS XR のスタティック ルートは `ip route` の行ではなく、1 つの `router static` ブロックの中に、VRF とアドレス ファミリごとの下位ブロックとして書きます。ガイド: Routing Configuration Guide の「Implementing Static Routes」。"
+      - en: "`interface GigabitEthernet0/0/0/1` → `vrf CUST-A`. Then `router static` → `vrf CUST-A` → `address-family ipv4 unicast` → `172.16.2.0/24 10.0.13.2`."
+        ja: "`interface GigabitEthernet0/0/0/1` → `vrf CUST-A`。次に `router static` → `vrf CUST-A` → `address-family ipv4 unicast` → `172.16.2.0/24 10.0.13.2`。"
+    solution:
+      en: |
+        configure
+         interface GigabitEthernet0/0/0/1
+          vrf CUST-A
+         router static
+          vrf CUST-A
+           address-family ipv4 unicast
+            172.16.2.0/24 10.0.13.2
+         commit
+        end
+        Contrast with IOS: there, `vrf forwarding` strips the IP address from the interface. On this IOS XR release
+        (24.3.1) the address stayed in place when the interface was moved into the VRF. Check, do not assume.
+      ja: |
+        configure
+         interface GigabitEthernet0/0/0/1
+          vrf CUST-A
+         router static
+          vrf CUST-A
+           address-family ipv4 unicast
+            172.16.2.0/24 10.0.13.2
+         commit
+        end
+        IOS との違い: IOS では `vrf forwarding` を入れるとインターフェイスの IP アドレスが外れます。この IOS XR の
+        リリース(24.3.1)では、インターフェイスを VRF に移してもアドレスはそのまま残りました。思い込まずに確認します。
+
+  - id: m0t4
+    title: { en: "M0-4  Default route to RT01", ja: "M0-4  RT01 へのデフォルト ルート" }
+    check: m0t4
+    hints:
+      - en: "Same block as the customer route in M0-3, but for the global table."
+        ja: "M0-3 の顧客向けルートと同じブロックで、グローバル テーブルの分を書きます。"
+      - en: "`router static` → `address-family ipv4 unicast` (no `vrf` level) → prefix and next hop. Verify with `show route 0.0.0.0/0`."
+        ja: "`router static` → `address-family ipv4 unicast`(`vrf` の階層なし)→ プレフィックスとネクスト ホップ。`show route 0.0.0.0/0` で確認します。"
+    solution:
+      en: |
+        configure
+         router static
+          address-family ipv4 unicast
+           0.0.0.0/0 10.0.12.2
+         commit
+        end
+        The management interface is in VRF MGMT, so a default route in the global table does not touch it.
+      ja: |
+        configure
+         router static
+          address-family ipv4 unicast
+           0.0.0.0/0 10.0.12.2
+         commit
+        end
+        管理インターフェイスは VRF MGMT にあるので、グローバル テーブルのデフォルト ルートの影響を受けません。
+
+  - id: m1t1
+    title: { en: "M1-1  A change that undoes itself", ja: "M1-1  自分で元に戻る変更" }
+    check: m1t1
+    hints:
+      - en: "`commit` has options. One of them makes the commit provisional."
+        ja: "`commit` にはオプションがあります。そのうちの 1 つが、コミットを仮のものにします。"
+      - en: "`commit confirmed <seconds>` (30 or more). To make it permanent, issue a plain `commit` before the timer expires. Watch the history with `show configuration commit list`. Mind where you are while you wait."
+        ja: "`commit confirmed <秒>`(30 以上)。恒久的にするには、タイマーが切れる前に通常の `commit` を実行します。履歴は `show configuration commit list` で見ます。待つ間、自分がどのモードにいるかに注意します。"
+      - en: "Stay in configuration mode. Leaving it (`end`, `exit`) cancels a pending confirmed commit at once — it does not wait for the timer. Part 2: `commit confirmed 60 label M1-T1`, then `commit`."
+        ja: "コンフィギュレーション モードに留まります。モードを抜ける(`end`、`exit`)と、保留中の確認つきコミットはその場で取り消されます(タイマーを待ちません)。2 つ目: `commit confirmed 60 label M1-T1` の後に `commit`。"
+    solution:
+      en: |
+        configure
+         interface GigabitEthernet0/0/0/0
+          shutdown
+         commit confirmed 30
+         ! wait in configuration mode; after 30 seconds the history shows a Rollback entry and LINK1 is back
+         interface Loopback50
+          ipv4 address 10.50.50.50 255.255.255.255
+         commit confirmed 60 label M1-T1
+         commit
+        end
+        Observed on 24.3.1: leaving configuration mode cancels the confirmed commit immediately; after an automatic
+        rollback the staged configuration is empty (the change is not kept for a second try).
+      ja: |
+        configure
+         interface GigabitEthernet0/0/0/0
+          shutdown
+         commit confirmed 30
+         ! コンフィギュレーション モードで待つ。30 秒後、履歴に Rollback の項目が増え、LINK1 が戻る
+         interface Loopback50
+          ipv4 address 10.50.50.50 255.255.255.255
+         commit confirmed 60 label M1-T1
+         commit
+        end
+        24.3.1 での実測: コンフィギュレーション モードを抜けると、確認つきコミットは即座に取り消されます。
+        自動ロールバックの後、編集中の設定は空になります(やり直し用には残りません)。
+
+  - id: m1t2
+    title: { en: "M1-2  Undo one commit, keep the next", ja: "M1-2  1 つのコミットだけ取り消す" }
+    check: m1t2
+    hints:
+      - en: "`rollback configuration` goes back through the history in order, so it would take M1-T2B with it. You need the reverse of one commit, not a point in time."
+        ja: "`rollback configuration` は履歴を順にさかのぼるので、M1-T2B も一緒に戻ってしまいます。必要なのはある時点ではなく、1 つのコミットの逆の変更です。"
+      - en: "In configuration mode, `load` can bring things into the staged configuration — including the changes needed to roll back a commit. Preview from EXEC mode with `show configuration rollback changes <label>`."
+        ja: "コンフィギュレーション モードの `load` は、編集中の設定に内容を読み込めます。コミットをロールバックするための変更も読み込めます。EXEC モードの `show configuration rollback changes <ラベル>` で事前に確認できます。"
+      - en: "`load rollback changes M1-T2A`, check with `show configuration`, then `commit`."
+        ja: "`load rollback changes M1-T2A` の後、`show configuration` で確認し、`commit` します。"
+    solution:
+      en: |
+        configure
+         interface Loopback61
+          ipv4 address 10.61.61.61 255.255.255.255
+         commit label M1-T2A
+         interface Loopback62
+          ipv4 address 10.62.62.62 255.255.255.255
+         commit label M1-T2B
+         load rollback changes M1-T2A
+         show configuration
+         commit
+        end
+        `rollback configuration last N | to <id> | to-exclude <id>` rolls back a run of commits from the newest;
+        `load rollback changes <id>` stages the reverse of one commit and leaves the rest alone.
+        Labels must be unique: reusing one is refused.
+      ja: |
+        configure
+         interface Loopback61
+          ipv4 address 10.61.61.61 255.255.255.255
+         commit label M1-T2A
+         interface Loopback62
+          ipv4 address 10.62.62.62 255.255.255.255
+         commit label M1-T2B
+         load rollback changes M1-T2A
+         show configuration
+         commit
+        end
+        `rollback configuration last N | to <ID> | to-exclude <ID>` は新しい側から連続したコミットを戻します。
+        `load rollback changes <ID>` は 1 つのコミットの逆の変更だけを編集中の設定に入れ、他には触れません。
+        ラベルは一意である必要があり、同じラベルの再利用は拒否されます。
+
+  - id: m1t3
+    title: { en: "M1-3  A commit that is refused", ja: "M1-3  拒否されるコミット" }
+    check: m1t3
+    hints:
+      - en: "After the refusal, XR01 names a command to run. Run it from the same session, before leaving configuration mode."
+        ja: "拒否された後、XR01 は実行すべきコマンドを示します。コンフィギュレーション モードを抜ける前に、同じセッションから実行します。"
+      - en: "`show configuration failed` shows the rejected lines with the reason. `show configuration` shows that what you typed is still staged. A route policy is its own top-level block: `route-policy <name>` … `end-policy`. Guide: Routing Configuration Guide, 'Implementing Routing Policy' and 'Implementing BGP'."
+        ja: "`show configuration failed` に、拒否された行と理由が表示されます。`show configuration` で、入力した内容がまだ編集中の設定に残っていることが分かります。ルート ポリシーは独立した最上位のブロックです: `route-policy <名前>` … `end-policy`。ガイド: Routing Configuration Guide の「Implementing Routing Policy」と「Implementing BGP」。"
+      - en: "Add `route-policy RP-IN` / `pass` / `end-policy` to the same staged configuration and commit again with the label. BGP on IOS XR needs the address family enabled under `router bgp` and again under the neighbor."
+        ja: "同じ編集中の設定に `route-policy RP-IN` / `pass` / `end-policy` を追加し、ラベルを付けてもう一度コミットします。IOS XR の BGP では、`router bgp` の下と、ネイバーの下の両方でアドレス ファミリを有効にする必要があります。"
+    solution:
+      en: |
+        configure
+         interface Loopback70
+          ipv4 address 10.70.70.70 255.255.255.255
+         route-policy RP-IN
+          pass
+         end-policy
+         router bgp 65001
+          bgp router-id 1.1.1.1
+          address-family ipv4 unicast
+          neighbor 10.0.12.2
+           remote-as 65002
+           address-family ipv4 unicast
+            route-policy RP-IN in
+         commit label M1-T3
+        end
+        Answers: the commit is refused because the policy is attached before it exists (a semantic error, reported
+        by `show configuration failed`). Nothing was applied — a plain commit is all-or-nothing, so Loopback70 did
+        not go in either. Nothing was lost — the staged configuration is kept, and the label was not used up.
+        `commit best-effort` would have applied the valid lines and dropped only the failing one.
+        `show bgp summary` marks the neighbor with `!`: without an outbound policy XR01 advertises nothing to an
+        eBGP neighbor, just as it would accept nothing without the inbound one.
+      ja: |
+        configure
+         interface Loopback70
+          ipv4 address 10.70.70.70 255.255.255.255
+         route-policy RP-IN
+          pass
+         end-policy
+         router bgp 65001
+          bgp router-id 1.1.1.1
+          address-family ipv4 unicast
+          neighbor 10.0.12.2
+           remote-as 65002
+           address-family ipv4 unicast
+            route-policy RP-IN in
+         commit label M1-T3
+        end
+        答え: ポリシーが存在する前に適用しようとしたので、コミットは拒否されます(意味上のエラー。
+        `show configuration failed` に表示されます)。何も適用されていません。通常のコミットは全か無かなので、
+        Loopback70 も入っていません。何も失われていません。編集中の設定は残り、ラベルも消費されていません。
+        `commit best-effort` なら、有効な行だけを適用し、失敗する行だけを落とします。
+        `show bgp summary` はネイバーに `!` を付けます。発信ポリシーが無いと、XR01 は eBGP ネイバーに何も
+        アドバタイズしません(着信ポリシーが無いと何も受け入れないのと同じです)。
+
+  - id: m1t4
+    title: { en: "M1-4  Two sessions, one lock", ja: "M1-4  2 つのセッションと 1 つのロック" }
+    check: m1t4
+    hints:
+      - en: "`configure` has a variant. And there are `show configuration …` views for sessions and for the lock."
+        ja: "`configure` には別の形があります。セッションとロックを表示する `show configuration …` もあります。"
+      - en: "`configure exclusive` in session A. From session B: `show configuration sessions detail`, `show configuration lock`."
+        ja: "セッション A で `configure exclusive`。セッション B から `show configuration sessions detail`、`show configuration lock`。"
+    solution:
+      en: |
+        Part 1 — when A commits after B, XR01 warns that other sessions have committed since A started and asks
+        whether to proceed. `show configuration commit changes last 1` shows what the other session did.
+        Part 2 — session A: `configure exclusive`. Session B can still enter configuration mode and stage changes,
+        but its `commit` fails ("Another configuration session had a lock on the running configuration").
+        `show configuration sessions detail` shows the session with `Lock: Reserved`.
+        Clean up: `abort` in both sessions.
+      ja: |
+        1 つ目: B の後に A がコミットすると、XR01 は「A の開始以降に他のセッションがコミットした」と警告し、
+        続行するかを尋ねます。`show configuration commit changes last 1` で、他のセッションの変更内容を確認できます。
+        2 つ目: セッション A で `configure exclusive`。セッション B はコンフィギュレーション モードに入って
+        変更を用意できますが、`commit` は失敗します(「Another configuration session had a lock on the running
+        configuration」)。`show configuration sessions detail` に `Lock: Reserved` のセッションが表示されます。
+        後片付け: 両方のセッションで `abort`。
+
+  - id: m1t5
+    title: { en: "M1-5  What a replace would remove (no check)", ja: "M1-5  置き換えで消えるもの(確認なし)" }
+    hints:
+      - en: "In configuration mode, `show configuration` has sub-options beyond the staged lines."
+        ja: "コンフィギュレーション モードの `show configuration` には、編集中の行以外を表示するオプションがあります。"
+      - en: "`show configuration changes` — 'changes to be made during a replace operation'."
+        ja: "`show configuration changes`(置き換えの際に行われる変更を表示します)。"
+    solution:
+      en: |
+        configure
+         hostname XR01-NEW
+         show configuration changes
+         abort
+        The output lists everything `commit replace` would delete as `no …` lines: the user account, VRF MGMT,
+        the management interface, `ssh server`, OSPF, every interface. The checks would not reach XR01 any more,
+        and neither would you except on the console. `commit replace` replaces the whole running configuration
+        with the staged one; it is not a merge.
+      ja: |
+        configure
+         hostname XR01-NEW
+         show configuration changes
+         abort
+        出力には、`commit replace` が削除するものがすべて `no …` の行として並びます。ユーザ アカウント、
+        VRF MGMT、管理インターフェイス、`ssh server`、OSPF、すべてのインターフェイスです。確認は XR01 に
+        到達できなくなり、自分もコンソール以外からは入れなくなります。`commit replace` は実行コンフィギュレーション
+        全体を編集中の設定で置き換えます。マージではありません。
+
+  - id: m1t6
+    title: { en: "M1-6  Find the change that broke LINK2", ja: "M1-6  LINK2 を壊した変更を探す" }
+    check: m1t6
+    hints:
+      - en: "Do not start from the OSPF configuration. Start from what was changed, and when."
+        ja: "OSPF の設定から始めません。何が、いつ変更されたかから始めます。"
+      - en: "`show configuration commit list` gives the commits with labels; `show configuration commit changes <label>` shows what each one did. The log shows when the adjacency went down."
+        ja: "`show configuration commit list` にラベルつきのコミットが並びます。`show configuration commit changes <ラベル>` で、各コミットの内容を確認できます。隣接関係がいつダウンしたかはログに出ています。"
+      - en: "One commit added authentication to LINK2 on XR01 only. Undo that single commit the way you did in M1-2."
+        ja: "1 つのコミットが、XR01 の LINK2 にだけ認証を追加しています。M1-2 と同じ方法で、そのコミットだけを取り消します。"
+    solution:
+      en: |
+        show configuration commit list
+        show configuration commit changes CHG1003
+        configure
+         load rollback changes CHG1003
+         show configuration
+         commit label M1-T6
+        end
+        CHG1003 enabled MD5 authentication on LINK2 on XR01 alone. CHG1002 (cost 50) and CHG1004 (NTP, domain
+        name) are unrelated and must stay — `rollback configuration last 2` would have removed CHG1004 as well.
+      ja: |
+        show configuration commit list
+        show configuration commit changes CHG1003
+        configure
+         load rollback changes CHG1003
+         show configuration
+         commit label M1-T6
+        end
+        CHG1003 は、XR01 側だけで LINK2 の MD5 認証を有効にしています。CHG1002(コスト 50)と CHG1004(NTP、
+        ドメイン名)は無関係で、残す必要があります。`rollback configuration last 2` では CHG1004 も消えます。
+
+  - id: m1t7
+    title: { en: "M1-7  Back out a change completely", ja: "M1-7  変更を完全に取り消す" }
+    check: m1t7
+    hints:
+      - en: "List what CHG2001 changed. Which of those lines could you type back yourself, and which could you not?"
+        ja: "CHG2001 が変更した内容を一覧します。そのうち、自分で打ち直せる行と、打ち直せない行はどれですか。"
+      - en: "The key appears only in encrypted form, and nobody wrote down the old one. The router itself still knows the previous values — they are in the commit history. Mind which tool you use: anything that rolls back to a point in time also removes what was committed after CHG2001."
+        ja: "鍵は暗号化された形でしか表示されず、古い鍵は誰も控えていません。変更前の値はルータ自身が知っています(コミット履歴にあります)。使う道具に注意します。ある時点まで戻す操作は、CHG2001 より後にコミットされたものまで消します。"
+      - en: "`show configuration rollback changes CHG2001` shows what would be restored. Stage it with `load rollback changes CHG2001`, read it, and commit."
+        ja: "`show configuration rollback changes CHG2001` で、何が戻るかを確認できます。`load rollback changes CHG2001` で読み込み、内容を読んでからコミットします。"
+    solution:
+      en: |
+        show configuration commit changes CHG2001
+        show configuration rollback changes CHG2001
+        configure
+         load rollback changes CHG2001
+         show configuration
+         commit
+        end
+        CHG2001 changed the MD5 key on LINK3, removed its hello and dead intervals, changed the description of
+        Loopback101 and added Loopback201. Removing Loopback201 and restoring the timers can be done by hand
+        (RT01 shows hello 5 / dead 20). The key cannot: the old value exists only in the history, in encrypted form.
+        `load rollback changes` puts the old encrypted value back exactly. `rollback configuration to CHG2001`
+        (up to and including CHG2001) would also restore it, but it would take back every commit made after CHG2001
+        as well — including all of your own work in this lab.
+      ja: |
+        show configuration commit changes CHG2001
+        show configuration rollback changes CHG2001
+        configure
+         load rollback changes CHG2001
+         show configuration
+         commit
+        end
+        CHG2001 は、LINK3 の MD5 鍵を変え、hello と dead の間隔を消し、Loopback101 の説明を変え、Loopback201 を
+        追加しています。Loopback201 の削除とタイマーの復元は手でもできます(RT01 で hello 5 / dead 20 と分かります)。
+        鍵はできません。古い値は履歴の中に、暗号化された形でしか残っていないからです。`load rollback changes` は
+        古い暗号化済みの値をそのまま戻します。`rollback configuration to CHG2001`(CHG2001 を含めてそこまで戻す)でも戻りますが、
+        CHG2001 より後のコミットもすべて取り消します。このラボで行った自分の作業も含めてです。

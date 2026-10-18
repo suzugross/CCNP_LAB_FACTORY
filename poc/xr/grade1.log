@@ -1,0 +1,105 @@
+
+PLAY [採点準備（基準読込・接続先解決）] ****************************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [収集方式を決定（problem.yml の access。既定 ssh / telnet・console=SSH不可ノード）] ***
+ok: [localhost]
+
+TASK [接続先マップ = mgmt_map ＋ clab ノード（problem.yml の clab_nodes。BL-061 複合ラボ）] ***
+ok: [localhost]
+
+TASK [各チェックに既定(genie_os 等)と接続先を併合した checks を作る] ***********
+ok: [localhost] => (item=XR01: XR01: OSPF 隣接 FULL (Genie iosxr))
+ok: [localhost] => (item=XR01: XR01: OSPF 隣接 FULL (raw))
+ok: [localhost] => (item=RT01: RT01: OSPF 隣接 FULL)
+
+TASK [大域不変条件（軸1）= model / invariants / 採点対象ノードを確定] **********
+ok: [localhost]
+
+TASK [shell 採点ノード(Linux)を特定（指紋照合の取得方式振分け用）] *************
+ok: [localhost]
+
+TASK [junos 採点ノード(clab)を特定（exec=junos。接続は network_cli / 指紋照合は対象外）] ***
+ok: [localhost]
+
+TASK [採点対象ノードに ansible_host を付与（delegate 接続用・ssh のみ。checks＋invariant の全 RIB ノード）] ***
+changed: [localhost] => (item=XR01 -> 10.1.10.17)
+ok: [localhost] => (item=XR01 -> 10.1.10.17)
+changed: [localhost] => (item=RT01 -> 10.1.10.18)
+
+PLAY [ラボ指紋の照合（ssh のみ。telnet は collect_telnet.py 内 / console はラボ名解決で対象外）] ***
+[WARNING]: Deprecation warnings can be disabled by setting `deprecation_warnings=False` in ansible.cfg.
+[DEPRECATION WARNING]: Importing 'to_bytes' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+[DEPRECATION WARNING]: Importing 'to_text' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+[DEPRECATION WARNING]: The `ansible.module_utils.common._collections_compat` module is deprecated. This feature will be removed from ansible-core version 2.24. Use `collections.abc` from the Python standard library instead.
+[DEPRECATION WARNING]: Passing `warnings` to `exit_json` or `fail_json` is deprecated. This feature will be removed from ansible-core version 2.23. Use `AnsibleModule.warn` instead.
+
+TASK [labid を取得（IOS）] *****************************************************
+ok: [XR01]
+ok: [RT01]
+
+TASK [照合（別ラボの labid が返ったら採点中止）] *******************************
+ok: [XR01] => 
+    changed: false
+    msg: 指紋なし(台帳導入前の旧build or 到達不能)→照合スキップ
+ok: [RT01] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-0522ea9c'
+
+PLAY [収束待ち付き採点] ********************************************************
+
+TASK [全チェック PASS まで（または最大試行まで）採点を繰り返す] ****************
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 1/1)
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> XR01] => (item=XR01: show ospf neighbor)
+ok: [localhost -> XR01] => (item=XR01: show ospf neighbor)
+ok: [localhost -> RT01] => (item=RT01: show ip ospf neighbor)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=XR01: OSPF 隣接 FULL (Genie iosxr))
+ok: [localhost] => (item=XR01: OSPF 隣接 FULL (raw))
+ok: [localhost] => (item=RT01: OSPF 隣接 FULL)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+changed: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+
+TASK [最終結果] ****************************************************************
+ok: [localhost] => 
+    msg:
+    - ======================================================================
+    - '[FAIL] (+ 40 点) XR01: OSPF 隣接 FULL (Genie iosxr)'
+    - '        未充足: パース失敗/出力空（未収束の可能性）'
+    - '[PASS] (+ 30 点) XR01: OSPF 隣接 FULL (raw)'
+    - '[PASS] (+ 30 点) RT01: OSPF 隣接 FULL'
+    - ======================================================================
+    - '  合計: 60 / 100 点'
+    - ======================================================================
+
+TASK [収束したか] **************************************************************
+ok: [localhost] => 
+    msg: ⚠ 1 回試行しても全 PASS に至らず（上の未充足を参照）
+
+PLAY RECAP *********************************************************************
+RT01                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+XR01                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+localhost                  : ok=18   changed=2    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+
+
+real	0m10.989s
+user	0m2.844s
+sys	0m3.406s

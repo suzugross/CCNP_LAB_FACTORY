@@ -75,6 +75,18 @@
                          | selectattr('exec', 'equalto', 'junos')
                          | map(attribute='node') | unique | list }}"
 
+    # ★採点先の古い SSH ホスト鍵を消す(2026-10-15 実発)。IOL は起動のたびに鍵を作り直すので、ラボを CML の画面から
+    #   止めて再開すると known_hosts の鍵と食い違い、paramiko は host_key_checking=False でも「host key mismatch」で
+    #   接続を拒む → その回の出力がエラー文になり、チェックが FAIL する。lab_up は起動時に消しているが、
+    #   lab_up を通らない再開(CML の画面からの Start)では消えない。どのラボかは直後のラボ指紋の照合が守る。
+    - name: 採点先の古い known_hosts エントリを削除
+      ansible.builtin.command:
+        argv: ["ssh-keygen", "-R", "{{ item }}"]
+      loop: "{{ hostmap.values() | list | unique }}"
+      changed_when: false
+      failed_when: false
+      when: access == 'ssh'
+
     - name: 採点対象ノードに ansible_host を付与（delegate 接続用・ssh のみ。checks＋invariant の全 RIB ノード）
       ansible.builtin.add_host:
         name: "{{ item }}"
@@ -84,6 +96,20 @@
       loop: "{{ (checks | default([]) | map(attribute='node') | list) + rib_nodes | unique | list }}"
       loop_control: { label: "{{ item }} -> {{ hostmap[item] }}" }
       when: access == 'ssh' and item not in junos_nodes
+
+    # IOS XR ノード(BL-246): 収集は IOS と同じ ios_command で通るが、特権昇格(enable)は無い。
+    #   become したままだと接続直後に `show privilege` を打って失敗し、その回の出力がエラー文になる
+    #   (2026-10-12 実測)。XR はログインした時点で権限が決まるので become を切る。
+    - name: IOS XR ノードは become しない（problem.yml の node_image_families が iosxr のノード）
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups: _graded
+        ansible_become: false
+      # ★採点対象に入っているノードだけ(2026-10-18 実発: XR を見ないチェックポイントで XR01 が接続先なしで
+      #   _graded に入り、指紋照合が「labid_exec is undefined」で止まった)
+      loop: "{{ (pmeta.node_image_families | default({})) | dict2items | selectattr('value', 'equalto', 'iosxr') | map(attribute='key')
+                | select('in', (checks | default([]) | map(attribute='node') | list) + (rib_nodes | default([]))) | list }}"
+      when: access == 'ssh'
 
     - name: junos ノードを登録（clab 側。vault の IOS 用接続変数をホスト変数で上書き）
       ansible.builtin.add_host:

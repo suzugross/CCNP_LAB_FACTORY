@@ -1,0 +1,25 @@
+# M2-2: RT01 から送信元を変えて Telnet する(Loopback0 は通る・LINK1 の IF アドレスと Loopback100 は通らない)。
+# SSH は「管理 IF だけで待ち受けている」ことを LPTS の受付表で見る(IOL の SSH クライアントは XR とつながらないため)。
+problem: XRT-02
+total_points: 100
+checks:
+  - name: "M2-2 Telnet from RT01: only the NOC workstation (2.2.2.2) gets a login prompt"
+    node: XR01
+    exec: local
+    command: >-
+      echo '## from Lo0'; .venv/bin/python topologies/login_probe.py XRT-02 telnet RT01 10.0.12.1 --source Loopback0;
+      echo '## from LINK1'; .venv/bin/python topologies/login_probe.py XRT-02 telnet RT01 10.0.12.1;
+      echo '## from Lo100'; .venv/bin/python topologies/login_probe.py XRT-02 telnet RT01 1.1.1.1 --source Loopback100;
+      echo '## end'
+    raw:
+      - { regex: "## from Lo0(?:(?!## from)[\\s\\S])*== TELNET PROMPT" }
+      - { regex: "## from LINK1(?:(?!## from)[\\s\\S])*== TELNET (REFUSED|TIMEOUT)" }
+      - { regex: "## from Lo100(?:(?!## end)[\\s\\S])*== TELNET (REFUSED|TIMEOUT)" }
+    points: 60
+  - name: "M2-2 XR01: SSH listens only on the management interface"
+    node: XR01
+    command: "show lpts bindings brief"
+    raw:
+      - { regex: "TCP\\s+MGMT\\s+Mg0/RP0/CPU0/0\\s+any,22\\s" }
+      - { not_regex: "TCP\\s+default\\s+\\S+\\s+any,22\\s" }
+    points: 40

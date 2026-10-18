@@ -1,0 +1,26 @@
+# M2-5: ゲスト網(RT01 Loopback100)から XR01 へは届かず、ほかは今までどおり(RT01 の Loopback0 から SRV01 へ・
+# OSPF の隣接)。入口= LINK1 の入力方向で落とす。
+# 「残っていること」は「直っていること」と同じ項目で見る(白紙で通る項目を作らない)ので、採点機から入って複数行を打つ。
+problem: XRT-02
+total_points: 100
+checks:
+  - name: "M2-5 RT01: the guest network cannot reach XR01, the NOC workstation still reaches SRV01 through it"
+    node: RT01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-02 ssh RT01
+      -- 'ping 1.1.1.1 source Loopback100 repeat 3' 'ping 10.0.50.10 source Loopback0 repeat 3'
+    raw:
+      - { regex: "source Loopback100 repeat 3(?:(?!source Loopback0 )[\\s\\S])*Success rate is 0 percent" }
+      - { regex: "source Loopback0 repeat 3[\\s\\S]*Success rate is 100 percent" }
+    points: 50
+  - name: "M2-5 XR01: an ACL is applied inbound on LINK1 and the OSPF adjacency over LINK1 is FULL"
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-02 ssh XR01
+      -- 'show running-config interface GigabitEthernet0/0/0/0' 'show ospf neighbor'
+    raw:
+      - { regex: "ipv4 access-group \\S+ ingress" }
+      - { regex: "2\\.2\\.2\\.2\\s+\\d+\\s+FULL" }
+    points: 50

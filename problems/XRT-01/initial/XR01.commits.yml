@@ -1,0 +1,43 @@
+# 起動後に上から順に 1 コミットずつ入れる(履歴の仕込み)。3 つ目が LINK2 の隣接を落とす。
+- label: CHG1001
+  comment: customer loopback for monitoring
+  lines: |
+    interface Loopback101
+     description MONITORING
+     ipv4 address 192.0.2.101 255.255.255.255
+- label: CHG1002
+  comment: prefer LINK1 over LINK2
+  lines: |
+    router ospf 1
+     area 0
+      interface GigabitEthernet0/0/0/2
+       cost 50
+- label: CHG1003
+  comment: OSPF hardening on LINK2
+  lines: |
+    router ospf 1
+     area 0
+      interface GigabitEthernet0/0/0/2
+       authentication message-digest
+       message-digest-key 1 md5 Xr7rack
+- label: CHG1004
+  comment: time source and domain name
+  lines: |
+    ntp
+     server 2.2.2.2
+    domain name xrtrack.example
+# M1-7 の題材。既存の値を書き換え・消している(鍵は暗号化された形でしか見えない= 手で打ち直せない)。
+- label: CHG2001
+  comment: LINK3 maintenance and monitoring update
+  lines: |
+    router ospf 1
+     area 0
+      interface GigabitEthernet0/0/0/3
+       message-digest-key 1 md5 Rot4tedKey
+       no hello-interval
+       no dead-interval
+    interface Loopback101
+     description MONITORING-NEW
+    interface Loopback201
+     description MONITORING-NEW
+     ipv4 address 192.0.2.201 255.255.255.255

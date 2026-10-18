@@ -1,0 +1,49 @@
+# M2-3: サーバのユーザで実際に入り、権限がサーバの指定どおりかを見る。XR01 だけのアカウント(noc1)は
+# サーバ稼働中は入れず、サーバ停止中だけ入れる(方式リストの順= サーバが先・ローカルは到達不能の時だけ)。
+# ★サーバを止める確認は --post で必ず起こす(採点は再試行される)。
+problem: XRT-02
+total_points: 100
+checks:
+  - name: "M2-3 ops1 (on SRV01 only) logs in and can configure"
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-02 ssh XR01 --user ops1 --pass Ops1-Pass
+      -- 'show user group' 'configure' 'interface Loopback99' 'description probe'
+    raw:
+      - { regex: "== LOGIN OK as ops1" }
+      - { regex: "netadmin" }
+      - { regex: "interface Loopback99\\s*\\n\\S*\\(config-if\\)#" }
+    points: 25
+  - name: "M2-3 view1 (on SRV01 only) logs in and cannot configure"
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-02 ssh XR01 --user view1 --pass View1-Pass
+      -- 'show user group' 'configure' 'interface Loopback99'
+    raw:
+      - { regex: "== LOGIN OK as view1" }
+      - { regex: "read-only-tg" }
+      - { regex: "interface Loopback99\\s*\\n% This command is not authorized" }
+    points: 25
+  - name: "M2-3 noc1 (on XR01 only) is refused while SRV01 is up, accepted while it is down"
+    node: XR01
+    exec: local
+    command: >-
+      echo '## server up'; .venv/bin/python topologies/login_probe.py XRT-02 ssh XR01 --user noc1 --pass Noc1-Pass -- 'show user group';
+      echo '## server down'; .venv/bin/python topologies/login_probe.py XRT-02 ssh XR01 --user noc1 --pass Noc1-Pass
+      --pre 'SRV01:sudo -n systemctl stop tacacs_plus' --post 'SRV01:sudo -n systemctl start tacacs_plus' --wait-tacacs XR01 -- 'show user group';
+      echo '## end'
+    raw:
+      - { regex: "## server up(?:(?!## server down)[\\s\\S])*== LOGIN FAILED as noc1" }
+      - { regex: "## server down(?:(?!## end)[\\s\\S])*== LOGIN OK as noc1" }
+    points: 30
+  - name: "M2-3 XR01: the console authenticates against local accounts only"
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-02 ssh XR01
+      -- 'show running-config line console' 'show running-config aaa'
+    raw:
+      - { regex: "line console[\\s\\S]*login authentication (\\S+)[\\s\\S]*aaa authentication login \\1 local\\s*\\n" }
+    points: 20

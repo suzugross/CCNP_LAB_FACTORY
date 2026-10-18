@@ -83,7 +83,7 @@
       ansible.builtin.copy:
         dest: "{{ gen_dir }}/day0/{{ inventory_hostname }}.cfg"
         content: |
-          {{ lookup('template', repo ~ '/roles/baseline/templates/baseline_' ~ node_role ~ '.cfg.j2') }}
+          {{ lookup('template', repo ~ '/roles/baseline/templates/baseline_' ~ node_role ~ ('_iosxr' if image_family is match('iosxr') else '') ~ '.cfg.j2') }}
           {{ lookup('template', problem_dir ~ '/initial/' ~ inventory_hostname ~ '.cfg.j2') }}
 
 - name: lab.yaml を生成
@@ -111,5 +111,7 @@
           - "--day0-dir={{ gen_dir }}/day0"
           - "--out={{ gen_dir }}/lab.yaml"
           - "--task-annotation={{ task_annotation | default('on') }}"
+          # XR ノードの機種(iosxr= XRv9000 / iosxrd= XRd。BL-250)。lab.sh は LAB_XR_PLATFORM=xrd で渡す
+          - "--xr-platform={{ xr_platform | default('iosxr') }}"
       register: gen
     - ansible.builtin.debug: { var: gen.stdout }

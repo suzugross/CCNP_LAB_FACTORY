@@ -1,0 +1,56 @@
+!! XRT-02 XR01 — M2 の出発点。ルーティングは LINK1 まで完成済み。
+!! 管理プレーンは既定のまま: Telnet と SSH がどの IF でも受かる・AAA なし・LPTS 既定・ACL なし。
+!! M3 の出発点(わざと不完全): passive をプロセス単位で入れ LINK1 だけ解除= LINK2 は継承で passive のまま(M3-1)。
+!! エリア 1 は stub の指定なし(RT02 は stub)= 隣接が上がらない(M3-3)。OSPFv3 なし(IPv6 アドレスだけ入っている・M3-2)。
+ssh server vrf default
+telnet vrf default ipv4 server max-servers 5
+!
+interface Loopback0
+ ipv4 address 1.1.1.1 255.255.255.255
+ ipv6 address 2001:db8::1/128
+!
+interface {{ links[3] }}
+ description LINK1 to RT01
+ ipv4 address 10.0.12.1 255.255.255.0
+ ipv6 address 2001:db8:12::1/64
+ no shutdown
+!
+interface {{ links[4] }}
+ description SERVERS (SRV01 10.0.50.10)
+ ipv4 address 10.0.50.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[5] }}
+ description LINK2 to RT01
+ ipv4 address 10.0.21.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[6] }}
+ description LINK3 to RT02 (area 1)
+ ipv4 address 10.0.23.1 255.255.255.0
+ no shutdown
+!
+router ospf 1
+ router-id 1.1.1.1
+ passive enable
+ area 0
+  interface Loopback0
+  !
+  interface {{ links[3] }}
+   network point-to-point
+   passive disable
+  !
+  interface {{ links[4] }}
+  !
+  interface {{ links[5] }}
+   network point-to-point
+  !
+ !
+ area 1
+  interface {{ links[6] }}
+   network point-to-point
+   passive disable
+  !
+ !
+!
+end

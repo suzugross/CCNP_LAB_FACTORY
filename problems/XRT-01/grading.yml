@@ -1,0 +1,99 @@
+# XRT-01 最終確認(M0+M1 を終えた状態)。学習目的のラボ= パック・ノルマの対象外。
+# 課題ごとの確認は grading.<課題>.yml(Steps タブの確認ボタン)。ここは最後まで残る状態だけを見る
+# (M1-1 の自動ロールバック・M1-4 のロック・M1-5 は痕跡が残らないか確認なしなので含めない)。
+# 白紙で通る項目を作らない(「残っていること」は「直っていること」と同じ項目で見る)。
+problem: XRT-01
+total_points: 100
+checks:
+  - name: "M0-1 XR01: IPv4 ping to RT01 over LINK1"
+    node: XR01
+    command: "ping 10.0.12.2 count 3"
+    raw: [ { regex: "Success rate is 100 percent" } ]
+    points: 5
+  - name: "M0-1 XR01: IPv6 ping to RT01 over LINK1"
+    node: XR01
+    command: "ping 2001:db8:12::2 count 3"
+    raw: [ { regex: "Success rate is 100 percent" } ]
+    points: 5
+  - name: "M0-2 XR01: 2.2.2.2/32 is an OSPF route via LINK1"
+    node: XR01
+    command: "show route 2.2.2.2/32"
+    raw: [ { regex: "Known via \"ospf 1\"" }, { regex: "10\\.0\\.12\\.2" } ]
+    points: 10
+  - name: "M0-2 RT01: 1.1.1.1/32 is an OSPF route"
+    node: RT01
+    command: "show ip route 1.1.1.1"
+    raw: [ { regex: "Known via \"ospf 1\"" } ]
+    points: 5
+  - name: "M0-3 XR01: Gi0/0/0/1 is up in VRF CUST-A with its address"
+    node: XR01
+    command: "show ipv4 vrf CUST-A interface brief"
+    raw: [ { regex: "GigabitEthernet0/0/0/1\\s+10\\.0\\.13\\.1\\s+Up\\s+Up" } ]
+    points: 10
+  - name: "M0-3 XR01: customer LAN reachable inside the VRF"
+    node: XR01
+    command: "ping vrf CUST-A 172.16.2.1 count 3"
+    raw: [ { regex: "Success rate is 100 percent" } ]
+    points: 5
+  - name: "M0-4 XR01: static default route via RT01 on LINK1"
+    node: XR01
+    command: "show route 0.0.0.0/0"
+    raw: [ { regex: "Known via \"static\"" }, { regex: "10\\.0\\.12\\.2" } ]
+    points: 5
+  - name: "M0-4 XR01: 8.8.8.8 reachable"
+    node: XR01
+    command: "ping 8.8.8.8 count 3"
+    raw: [ { regex: "Success rate is 100 percent" } ]
+    points: 5
+  - name: "M1-1 XR01: Loopback50 committed under the label M1-T1"
+    node: XR01
+    command: "show configuration commit changes {label}"
+    commit_label: M1-T1
+    raw: [ { regex: "interface Loopback50" } ]
+    points: 5
+  - name: "M1-1 XR01: Loopback50 is still in the running configuration"
+    node: XR01
+    command: "show running-config interface Loopback50"
+    raw: [ { regex: "ipv4 address 10\\.50\\.50\\.50 255\\.255\\.255\\.255" } ]
+    points: 5
+  - name: "M1-2 XR01: commits M1-T2A and M1-T2B are both in the history"
+    node: XR01
+    command: "show configuration commit list"
+    raw: [ { regex: "M1-T2A(-\\d+)?\\s" }, { regex: "M1-T2B(-\\d+)?\\s" } ]
+    points: 5
+  - name: "M1-2 XR01: Loopback62 is present and Loopback61 is gone"
+    node: XR01
+    command: "show ipv4 interface brief"
+    raw: [ { regex: "Loopback62\\s+10\\.62\\.62\\.62" }, { not_regex: "Loopback61" } ]
+    points: 5
+  - name: "M1-3 XR01: one commit (M1-T3) carries the neighbor, its policy and Loopback70"
+    node: XR01
+    command: "show configuration commit changes {label}"
+    commit_label: M1-T3
+    raw: [ { regex: "route-policy RP-IN" }, { regex: "neighbor 10\\.0\\.12\\.2" }, { regex: "interface Loopback70" } ]
+    points: 5
+  - name: "M1-3 XR01: 198.51.100.0/24 is learned from RT01 by BGP"
+    node: XR01
+    command: "show route 198.51.100.0/24"
+    raw: [ { regex: "Known via \"bgp 65001\"" } ]
+    points: 5
+  - name: "M1-6 XR01: OSPF adjacency on LINK2 is FULL"
+    node: XR01
+    command: "show ospf neighbor"
+    raw: [ { regex: "FULL.*GigabitEthernet0/0/0/2" } ]
+    points: 5
+  - name: "M1-6 XR01: only the offending change is gone from LINK2 (cost 50 remains)"
+    node: XR01
+    command: "show running-config router ospf 1 area 0 interface GigabitEthernet0/0/0/2"
+    raw: [ { not_regex: "message-digest" }, { regex: "cost 50" } ]
+    points: 5
+  - name: "M1-7 XR01: OSPF adjacency on LINK3 is FULL (original key and timers)"
+    node: XR01
+    command: "show ospf neighbor"
+    raw: [ { regex: "FULL.*GigabitEthernet0/0/0/3" } ]
+    points: 5
+  - name: "M1-7 XR01: Loopback101 has its original description and Loopback201 is gone"
+    node: XR01
+    command: "show running-config interface"
+    raw: [ { regex: "interface Loopback101\\s+description MONITORING\\s" }, { not_regex: "Loopback201" } ]
+    points: 5

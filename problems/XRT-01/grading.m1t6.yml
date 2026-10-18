@@ -1,0 +1,18 @@
+problem: XRT-01
+total_points: 100
+checks:
+  - name: "XR01: OSPF adjacency on LINK2 is FULL"
+    node: XR01
+    command: "show ospf neighbor"
+    raw: [ { regex: "FULL.*GigabitEthernet0/0/0/2" } ]
+    points: 40
+  - name: "XR01: the offending change is gone and the earlier change (cost 50 on LINK2) is still in place"
+    node: XR01
+    command: "show running-config router ospf 1 area 0 interface GigabitEthernet0/0/0/2"
+    raw: [ { regex: "cost 50" }, { not_regex: "message-digest" } ]
+    points: 40
+  - name: "XR01: the later change (NTP and domain name) is still in place"
+    node: XR01
+    command: "show running-config ntp"
+    raw: [ { regex: "server 2\\.2\\.2\\.2" } ]
+    points: 20

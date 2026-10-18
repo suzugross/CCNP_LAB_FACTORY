@@ -7,7 +7,12 @@
 
   GET  /_api/sheet?pack=<PACK-ID>&no=<N>   … 該当セクションの本文を返す
   POST /_api/sheet?pack=<PACK-ID>&no=<N>   … 本文で該当セクションを差し替える
-  GET  /                                   … パック一覧(採点状態つき。pack_home.py)。素の一覧は /?raw=1
+  GET  /                                   … ポータル(BL-247)= 教材の区画＋パック一覧(採点状態つき)。pack_home.py。
+                                              素の一覧は /?raw=1
+  GET  /_read/<key>/…                      … 教材(読み物)。<repo>/reading/ の静的配信(読み物ビルダーの出力)。
+                                              ポータルの教材の区画はここへ飛ぶ。一覧のもとは reading/<key>/book.json。
+  GET  /_learn?id=<問題 ID>                … 学習モードのワークスペース(lab_console.py の /lab?learn=…)へ転送。
+                                              ワークスペースが無効・未起動なら案内を返す。
   GET  /_lab?pack=<PACK-ID>&no=<N>         … ラボのワークスペース(lab_console.py・別ポート)へ転送(BL-234)。
                                               問題ページにポート番号を焼き込まないための中継ぎ。
                                               ★ラボへのリンクは全部ここを通る(BL-236= 最初からワークスペース)。
@@ -48,6 +53,7 @@ import pack_home                                       # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PACK_RE = re.compile(r"^PACK-[A-Za-z0-9_.-]{1,64}$")
+LEARN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 SHEET = "解答.md"
 
 
@@ -166,7 +172,44 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(200, sec)
         if u.path == "/_lab":
             return self._lab(parse_qs(u.query))
+        if u.path == "/_learn":
+            return self._learn(parse_qs(u.query))
+        if u.path == "/_read" or u.path == "/_read/":
+            self.send_response(302)
+            self.send_header("Location", "/")
+            self.send_header("Content-Length", "0")
+            return self.end_headers()
         return SimpleHTTPRequestHandler.do_GET(self)
+
+    def translate_path(self, path):
+        """/_read/… だけ <repo>/reading/ から配信する(それ以外は従来どおり packs/)。
+        正規化とディレクトリ外への脱出の防止は親クラスに任せ、根だけ差し替える。"""
+        clean = urlparse(path).path
+        if clean.startswith("/_read/"):
+            saved = self.directory
+            self.directory = os.path.join(self.repo, "reading")
+            try:
+                return SimpleHTTPRequestHandler.translate_path(self, clean[len("/_read"):])
+            finally:
+                self.directory = saved
+        return SimpleHTTPRequestHandler.translate_path(self, path)
+
+    def _learn(self, q):
+        """学習モードのワークスペースへ転送する(ポータルの教材の「Lab …」)。"""
+        lid = (q.get("id") or [""])[0]
+        if not LEARN_RE.match(lid) or not os.path.exists(os.path.join(self.repo, "problems", lid, "learn.yml")):
+            return self._json(404, "そのラボは学習モードの対象ではありません")
+        try:
+            if not self.console_port:
+                raise OSError
+            socket.create_connection((self.console_probe, self.console_port), timeout=1).close()
+        except OSError:
+            return self._json(503, "ラボのワークスペースが起動していません(scripts/pack.sh serve で一緒に上がります)")
+        host = (self.headers.get("Host") or "localhost").rsplit(":", 1)[0]
+        self.send_response(302)
+        self.send_header("Location", f"http://{host}:{self.console_port}/lab?" + urlencode({"learn": lid}))
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _lab(self, q):
         """ラボのワークスペースへ転送する。相手が無効・未起動なら単体の問題ページへ落とす

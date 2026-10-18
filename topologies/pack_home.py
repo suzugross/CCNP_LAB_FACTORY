@@ -202,6 +202,16 @@ body.hide tr.st-graded{display:none}
 details{margin-top:2rem;font-size:.85rem;color:#666}
 summary{cursor:pointer}
 .foot{margin-top:1.5rem;font-size:.8rem}
+/* 教材の区画(BL-247): 棚ごとの見出しと、本ごとの 1 行 */
+#materials{margin-bottom:2.2rem;padding-bottom:1.4rem;border-bottom:1px solid #d5d5d5}
+h2{font-size:.82rem;font-weight:600;color:#666;letter-spacing:.03em;margin:1rem 0 .3rem}
+ul.books{list-style:none;margin:0;padding:0}
+ul.books li{padding:.35rem .5rem;border-top:1px solid #e3e3e3}
+ul.books .bk{font-weight:600}
+ul.books .alt{color:#555;margin-left:.6rem}
+ul.books .tag{font-size:.7rem;color:#555;border:1px solid #c9c9c9;border-radius:3px;padding:0 .3rem;margin:0 .5rem}
+ul.books .lab{font-size:.82rem;margin-left:.8rem;white-space:nowrap}
+ul.books .sub{font-size:.82rem;color:#666;margin-top:.1rem}
 .foot a{color:#999}
 """
 
@@ -209,7 +219,7 @@ JS = """
 (function(){
   var cb=document.getElementById('hide');
   function apply(){ document.body.classList.toggle('hide', cb.checked);
-    document.querySelectorAll('main > table').forEach(function(t){
+    document.querySelectorAll('#packs > table').forEach(function(t){
       var last=null;
       t.querySelectorAll('tr').forEach(function(r){
         var vis=!(cb.checked && r.classList.contains('st-graded'));
@@ -223,6 +233,54 @@ JS = """
   cb.addEventListener('change', apply); apply();
 })();
 """
+
+
+def load_materials(repo):
+    """教材(読み物)の一覧= reading/<key>/book.json(読み物ビルダーが書く)。棚(shelf)ごとにまとめて返す。
+    [(棚の名前, [book…])]。棚の並びは名前順、棚の中は order → 題名。壊れた book.json は黙って飛ばす。"""
+    root = os.path.join(repo, "reading")
+    shelves = {}
+    for key in sorted(os.listdir(root)) if os.path.isdir(root) else []:
+        path = os.path.join(root, key, "book.json")
+        if key.startswith("_") or not os.path.exists(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as fh:
+                b = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        b["key"] = key                                      # リンク先は実在するディレクトリ名で決める
+        b["labs"] = [x for x in (b.get("labs") or [])
+                     if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", str(x))
+                     and os.path.exists(os.path.join(repo, "problems", str(x), "learn.yml"))]
+        shelves.setdefault(b.get("shelf") or "Other", []).append(b)
+    return [(name, sorted(bs, key=lambda b: (b.get("order", 50), b.get("title", ""))))
+            for name, bs in sorted(shelves.items())]
+
+
+def _materials(repo):
+    """教材の区画(棚ごとの見出し＋本ごとの 1 行)。1 冊も無ければ空文字。"""
+    shelves = load_materials(repo)
+    if not shelves:
+        return ""
+    out = ['<section id="materials"><header><h1>Study Materials</h1></header>']
+    for name, books in shelves:
+        out.append(f'<h2>{_esc(name)}</h2><ul class="books">')
+        for b in books:
+            labs = "".join(f' <a class="lab" href="/_learn?id={_esc(x)}" title="Open the lab workspace (the lab must be running)">'
+                           f'Lab {_esc(x)}</a>' for x in b["labs"])
+            # 2 言語の本は 1 行で出す(言語はページの中のボタンで切り替わる・BL-248)。札は「EN·JA」
+            langs = b.get("langs") or [b.get("lang", "")]
+            tag = "·".join(str(x).upper() for x in langs if x)
+            alt = b.get("title_alt") if b.get("title_alt") and b.get("title_alt") != b.get("title") else ""
+            out.append(f'<li><a class="bk" href="/_read/{_esc(b["key"])}/index.html">{_esc(b.get("title", b["key"]))}</a>'
+                       + (f'<span class="alt">{_esc(alt)}</span>' if alt else "")
+                       + f'<span class="tag">{_esc(tag)}</span>'
+                       f'<span class="dim">{_esc(b.get("pages", ""))} pages</span>{labs}'
+                       + (f'<div class="sub">{_esc(b["subtitle"])}</div>' if b.get("subtitle") else "") + "</li>")
+        out.append("</ul>")
+    out.append("</section>")
+    return "".join(out)
 
 
 def _rows(ps):
@@ -255,8 +313,8 @@ def build_home(packs_root, repo=REPO):
                    key=lambda p: (p["date"], p["id"]), reverse=True)
 
     css = CSS.replace("@@PAPER@@", gen_pack.render_html.PAPER)      # 紙の色は問題ページと同じ値
-    out = [f"<title>Question Packs</title><style>{css}</style>",
-           '<main><header><h1>Question Packs</h1>'
+    out = [f"<title>Study Portal</title><style>{css}</style>",
+           '<main>' + _materials(repo) + '<section id="packs"><header><h1>Question Packs</h1>'
            '<label><input type="checkbox" id="hide"> Hide graded</label></header>',
            "<table>"] + _rows(daily) + ["</table>"]
     for label, ps in (("Abandoned", abandoned), ("dry-run", drys), ("Tests", tests)):
@@ -266,7 +324,7 @@ def build_home(packs_root, repo=REPO):
     if broken:
         out += ["<details open><summary>Unreadable packs</summary><ul>"]
         out += [f"<li>{_esc(n)}: {_esc(e)}</li>" for n, e in broken] + ["</ul></details>"]
-    out.append('<p class="foot"><a href="/?raw=1">File list</a></p>')
+    out.append('</section><p class="foot"><a href="/?raw=1">File list</a></p>')
     out.append(f"</main><script>{JS}</script>")
     return ("<!doctype html><html lang=\"ja\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"

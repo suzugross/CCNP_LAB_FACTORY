@@ -183,6 +183,41 @@
     - ansible.builtin.debug: { msg: "{{ bc.stdout_lines | default([]) }}" }
       when: bc is not skipped
 
+# === IOS XR のコミット履歴の仕込み（initial/<node>.commits.yml がある問題のみ・BL-246）===
+# day0 は 1 回のコミットとしてしか入らない。履歴を読ませる課題のために、起動後に変更を
+# 複数回に分けてコンソールからコミットする(topologies/xr_bringup.py)。
+- name: IOS XR のコミット履歴を仕込む（commits.yml がある問題のみ）
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+  tasks:
+    - name: commits.yml の有無
+      ansible.builtin.find:
+        paths: "{{ repo }}/problems/{{ problem }}/initial"
+        patterns: "*.commits.yml"
+      register: xr_commits
+      when: lab_state | default('started') == 'started'
+    - name: xr_bringup.py（コンソールのログイン待ち→コミット列を投入）
+      ansible.builtin.command:
+        argv:
+          - "{{ repo }}/.venv/bin/python3"
+          - "{{ repo }}/topologies/xr_bringup.py"
+          - "--repo={{ repo }}"
+          - "--problem={{ problem }}"
+          - "--nodes={{ xr_commits.files | map(attribute='path') | map('basename') | map('regex_replace', '\\.commits\\.yml$', '') | join(',') }}"
+      environment:
+        NODE_USER: "{{ ansible_user }}"
+        NODE_PASS: "{{ ansible_ssh_pass }}"
+        XR_BRINGUP_LOG: "{{ lookup('env', 'XR_BRINGUP_LOG') }}"
+      register: xrb
+      changed_when: true
+      when:
+        - lab_state | default('started') == 'started'
+        - (xr_commits.files | default([])) | length > 0
+    - ansible.builtin.debug: { msg: "{{ xrb.stdout_lines | default([]) }}" }
+      when: xrb is not skipped
+
 # === 監視サービス（problem.yml に monitoring がある問題のみ） ==============
 # ZBX ノードは cloud-init が Zabbix を自動構築する（initial/<node>.sh.j2）。
 # ここでは API が応答するまで待ち、監視対象ホストを SNMPv3 で登録する。

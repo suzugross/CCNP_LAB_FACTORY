@@ -1,0 +1,55 @@
+!! XRT-01 XR01 — M0 の出発点(わざと不完全): LINK1 は shutdown・IPv6 なし・OSPF のエリアと種別が RT01 と不一致、
+!! 顧客 A の IF が VRF に入っていない、既定経路なし。M1 の題材(LINK2 の認証)は commits.yml で後から入る。
+ssh server vrf default
+!! M1-4 の 2 本目のセッション用(RT01 から Telnet で入る。IOL の SSH クライアントは XR と折り合わず接続できない・2026-10-12 実測)
+telnet vrf default ipv4 server max-servers 5
+!
+vrf CUST-A
+ address-family ipv4 unicast
+ !
+!
+interface Loopback0
+ ipv4 address 1.1.1.1 255.255.255.255
+!
+interface {{ links[3] }}
+ description LINK1 to RT01
+ ipv4 address 10.0.12.1 255.255.255.0
+ shutdown
+!
+interface {{ links[4] }}
+ description CUST-A to RT02
+ ipv4 address 10.0.13.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[5] }}
+ description LINK2 to RT01
+ ipv4 address 10.0.21.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[6] }}
+ description LINK3 to RT01
+ ipv4 address 10.0.31.1 255.255.255.0
+ no shutdown
+!
+router ospf 1
+ router-id 1.1.1.1
+ area 0
+  interface Loopback0
+  !
+  interface {{ links[5] }}
+   network point-to-point
+  !
+  interface {{ links[6] }}
+   network point-to-point
+   authentication message-digest
+   message-digest-key 1 md5 L1nk3Key
+   hello-interval 5
+   dead-interval 20
+  !
+ !
+ area 1
+  interface {{ links[3] }}
+  !
+ !
+!
+end

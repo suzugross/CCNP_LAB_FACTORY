@@ -1,0 +1,95 @@
+#!/bin/bash
+# XRT-02 SRV01 — TACACS+ サーバ(完成品で渡す。解答者は XR01 側だけを組む)。BL-246 M2。
+# ★Ubuntu 24.04 の標準リポジトリに TACACS+ サーバが無い → 22.04 系の tacacs+ (4.0.4.27a) の .deb を入れる。
+#   依存の `python`(Python 2)は付属スクリプト用でデーモンには不要 → --ignore-depends で外す。
+# ★受け付けるクライアントは XR01 の Loopback0(1.1.1.1)だけ(host 単位の鍵・全体の鍵は置かない)。
+#   XR01 が出口 IF のアドレス(10.0.50.1)で送ると、サーバは鍵を持たないので応答しない。
+set -e
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[$(date -Is)] $*"; }
+
+log "サーバ区画の NIC と XR01 への経路"
+cat > /etc/netplan/61-ccnp-inband.yaml <<'EOF'
+network:
+  version: 2
+  ethernets:
+    ens3:
+      addresses: [10.0.50.10/24]
+      routes:
+        - to: 1.1.1.1/32
+          via: 10.0.50.1
+        - to: 10.0.12.0/24
+          via: 10.0.50.1
+        - to: 2.2.2.2/32
+          via: 10.0.50.1
+EOF
+chmod 600 /etc/netplan/61-ccnp-inband.yaml
+netplan apply
+
+log "依存パッケージ"
+for i in 1 2 3; do
+  apt-get update -qq && apt-get install -y -qq libwrap0 libpam0g curl && break
+  sleep 10
+done
+
+log "tacacs+ 4.0.4.27a(22.04 系)を導入"
+cd /tmp
+base="http://archive.ubuntu.com/ubuntu/pool/universe/t/tacacs%2B"
+for f in libtacacs%2B1_4.0.4.27a-3_amd64.deb tacacs%2B_4.0.4.27a-3_amd64.deb; do
+  for i in 1 2 3; do curl -fsS -o "${f//%2B/+}" "$base/$f" && break; sleep 5; done
+done
+dpkg -i 'libtacacs+1_4.0.4.27a-3_amd64.deb'
+dpkg -i --ignore-depends=python 'tacacs+_4.0.4.27a-3_amd64.deb' || true
+# 依存を外した分を apt の「壊れた依存」として残さない(以後の apt-get を止めないため)
+python3 - <<'PY'
+import re
+p = "/var/lib/dpkg/status"
+s = open(p).read()
+s = re.sub(r"(Package: tacacs\+\n(?:.+\n)*?Depends: [^\n]*?), python(?=,|\n)", r"\1", s)
+open(p, "w").write(s)
+PY
+
+log "tac_plus.conf"
+install -d -m 755 /var/log/tac_plus
+cat > /etc/tacacs+/tac_plus.conf <<'EOF'
+# XRT-02 SRV01 — XR01 の Loopback0 からだけ受ける(全体の鍵は置かない)
+host = 1.1.1.1 {
+    key = "XRT02-Tac-Key"
+}
+accounting file = /var/log/tac_plus/acct.log
+
+# ラボの共通アカウント(採点もこれで入る)
+user = {{ ansible_user }} {
+    login = cleartext "{{ ansible_ssh_pass }}"
+    service = exec {
+        task = "#root-lr,#cisco-support"
+    }
+}
+# 運用(設定変更できる)
+user = ops1 {
+    login = cleartext "Ops1-Pass"
+    service = exec {
+        task = "#netadmin"
+    }
+}
+# 閲覧だけ
+user = view1 {
+    login = cleartext "View1-Pass"
+    service = exec {
+        task = "#read-only-tg"
+    }
+}
+EOF
+chmod 600 /etc/tacacs+/tac_plus.conf
+tac_plus -P -C /etc/tacacs+/tac_plus.conf
+systemctl enable -q tacacs_plus 2>/dev/null || true
+systemctl restart tacacs_plus
+sleep 2
+ss -lntp | grep -q ':49 ' && log "tac_plus listening on 49"
+
+log "採点用: 採点アカウントがパスワードなしでサーバを止め/起こしできるように(既定ユーザの sudo 設定に依らない)"
+cat > /etc/sudoers.d/ccnp-tacacs <<EOF
+{{ ansible_user }} ALL=(root) NOPASSWD: /usr/bin/systemctl stop tacacs_plus, /usr/bin/systemctl start tacacs_plus, /usr/bin/systemctl is-active tacacs_plus
+EOF
+chmod 440 /etc/sudoers.d/ccnp-tacacs
+log "DONE"

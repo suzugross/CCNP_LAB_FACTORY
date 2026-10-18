@@ -1,0 +1,210 @@
+== [1/3] build_topology (XRT-01, variant=base) ==
+
+PLAY [問題メタ読込み・対象ノード展開] ******************************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.file] ****************************************************
+changed: [localhost]
+
+TASK [MGMT IP をリース台帳から割当（mgmt_alloc.py → mgmt_map.yml）] ************
+changed: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    alloc.stdout_lines:
+    - '[mgmt_alloc] 割当: XRT-01 → .11-.13 (空き残 37個)'
+    - '[mgmt_alloc] wrote /home/suzuki/ansible/CCNP01/playbooks/../topologies/_generated/XRT-01/mgmt_map.yml'
+
+TASK [割当結果(mgmt_map.yml)を読み込む] ****************************************
+ok: [localhost]
+
+TASK [対象ノードを _gen グループへ（mgmt_ip と image_family を付与）] **********
+changed: [localhost] => (item=XR01)
+changed: [localhost] => (item=RT01)
+changed: [localhost] => (item=RT02)
+
+PLAY [各ノードの day0 config(baseline+initial) を描画] *************************
+[WARNING]: Host 'RT02' is using the discovered Python interpreter at '/usr/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+[WARNING]: Host 'XR01' is using the discovered Python interpreter at '/usr/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+[WARNING]: Host 'RT01' is using the discovered Python interpreter at '/usr/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+
+TASK [baseline(role別) + initial を結合して day0 を生成（params をテンプレ文脈に渡す）] ***
+changed: [RT02]
+changed: [XR01]
+changed: [RT01]
+
+PLAY [lab.yaml を生成] *********************************************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.set_fact] ************************************************
+ok: [localhost]
+
+TASK [gen_cml_lab.py で組み立て] ***********************************************
+changed: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    gen.stdout: 'wrote /home/suzuki/ansible/CCNP01/playbooks/../topologies/_generated/XRT-01/lab.yaml:
+      5 nodes, 8 links (family=iol)'
+
+PLAY RECAP *********************************************************************
+RT01                       : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+RT02                       : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+XR01                       : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+localhost                  : ok=10   changed=4    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   
+
+== [2/3] lab_up (CML 起動) ==
+
+PLAY [CML にラボを構築・起動] **************************************************
+
+TASK [lab.yaml の存在確認] *****************************************************
+ok: [localhost]
+
+TASK [ansible.builtin.assert] **************************************************
+ok: [localhost] => 
+    changed: false
+    msg: All assertions passed
+
+TASK [起動前プリフライト（割当 IP の生存確認）] ********************************
+ok: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    pf.stdout_lines:
+    - '[preflight] OK: 割当 3 IP はすべて未使用(CCNP-LAB-15505d87 新規起動可)'
+
+TASK [ラボを started に] *******************************************************
+changed: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    r:
+      changed: true
+      failed: false
+
+TASK [未起動ノードのフォロー（全ノード BOOTED 待ち）] **************************
+ok: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    fix.stdout_lines:
+    - all 5 nodes BOOTED
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.command] *************************************************
+ok: [localhost] => (item=10.1.10.11)
+ok: [localhost] => (item=10.1.10.12)
+ok: [localhost] => (item=10.1.10.13)
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+[WARNING]: Could not match supplied host pattern, ignoring: _bringup
+
+PLAY [data IF を no shutdown（bringup_data_ifs 問題のみ）] *********************
+skipping: no hosts matched
+
+PLAY [console 経由の CVAC後 bringup（bringup_console 問題のみ）] ***************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+PLAY [IOS XR のコミット履歴を仕込む（commits.yml がある問題のみ）] *************
+
+TASK [commits.yml の有無] ******************************************************
+ok: [localhost]
+
+TASK [xr_bringup.py（コンソールのログイン待ち→コミット列を投入）] **************
+[ERROR]: Task failed: Module failed: non-zero return code
+Origin: /home/suzuki/ansible/CCNP01/playbooks/lab_up.yml:201:7
+
+199       register: xr_commits
+200       when: lab_state | default('started') == 'started'
+201     - name: xr_bringup.py（コンソールのログイン待ち→コミット列を投入）
+          ^ column 7
+
+fatal: [localhost]: FAILED! => 
+    changed: true
+    cmd:
+    - /home/suzuki/ansible/CCNP01/playbooks/../.venv/bin/python3
+    - /home/suzuki/ansible/CCNP01/playbooks/../topologies/xr_bringup.py
+    - --repo=/home/suzuki/ansible/CCNP01/playbooks/..
+    - --problem=XRT-01
+    - --nodes=XR01
+    delta: '0:00:34.588374'
+    end: '2026-10-15 13:00:40.275817'
+    msg: non-zero return code
+    rc: 1
+    start: '2026-10-15 13:00:05.687443'
+    stderr: ''
+    stderr_lines: []
+    stdout: |-
+      [XR01] console ready after 1s
+      [XR01] commit#1 CHG1001 ok
+      [XR01] commit#2 CHG1002 ok
+      [XR01] commit#3 CHG1003 ok
+      [XR01] commit#4 CHG1004 ok
+      [XR01] commit#5 CHG2001 ok
+      [XR01] commits:
+      show configuration commit list
+      Thu Oct 15 13:00:38.918 UTC
+      SNo. Label/ID              User      Line                Client      Time Stamp
+      ~~~~ ~~~~~~~~              ~~~~      ~~~~                ~~~~~~      ~~~~~~~~~~
+      1    CHG2001               SUZUKI    con0_RP0_CPU0       CLI         Thu Oct 15 13:00:37 2026
+      2    CHG1004               SUZUKI    con0_RP0_CPU0       CLI         Thu Oct 15 13:00:35 2026
+      3    CHG1003               SUZUKI    con0_RP0_CPU0       CLI         Thu Oct 15 13:00:34 2026
+      4    CHG1002               SUZUKI    con0_RP0_CPU0       CLI         Thu Oct 15 13:00:32 2026
+      5    CHG1001               SUZUKI    con0_RP0_CPU0       CLI         Thu Oct 15 13:00:31 2026
+      6    1000000003            ZTP       ZTP                 CLI         Thu Oct 15 13:00:06 2026
+      7    1000000002            ZTP       ZTP                 CLI         Thu Oct 15 13:00:01 2026
+      8    1000000001            CVAC      UNKNOWN             CLI         Thu Oct 15 12:59:56 2026
+      ERROR commit#5: 'description MONITORING-NEW' -> % Invalid input detected at '^' marker.
+      ERROR commit#5: 'description MONITORING-NEW' -> % Invalid input detected at '^' marker.
+      ERROR commit#5: 'ipv4 address 192.0.2.201 255.255.255.255' -> % Invalid input detected at '^' marker.
+    stdout_lines:
+    - '[XR01] console ready after 1s'
+    - '[XR01] commit#1 CHG1001 ok'
+    - '[XR01] commit#2 CHG1002 ok'
+    - '[XR01] commit#3 CHG1003 ok'
+    - '[XR01] commit#4 CHG1004 ok'
+    - '[XR01] commit#5 CHG2001 ok'
+    - '[XR01] commits:'
+    - show configuration commit list
+    - Thu Oct 15 13:00:38.918 UTC
+    - SNo. Label/ID              User      Line                Client      Time Stamp
+    - ~~~~ ~~~~~~~~              ~~~~      ~~~~                ~~~~~~      ~~~~~~~~~~
+    - 1    CHG2001               SUZUKI    con0_RP0_CPU0       CLI         Thu Oct 15
+      13:00:37 2026
+    - 2    CHG1004               SUZUKI    con0_RP0_CPU0       CLI         Thu Oct 15
+      13:00:35 2026
+    - 3    CHG1003               SUZUKI    con0_RP0_CPU0       CLI         Thu Oct 15
+      13:00:34 2026
+    - 4    CHG1002               SUZUKI    con0_RP0_CPU0       CLI         Thu Oct 15
+      13:00:32 2026
+    - 5    CHG1001               SUZUKI    con0_RP0_CPU0       CLI         Thu Oct 15
+      13:00:31 2026
+    - 6    1000000003            ZTP       ZTP                 CLI         Thu Oct 15
+      13:00:06 2026
+    - 7    1000000002            ZTP       ZTP                 CLI         Thu Oct 15
+      13:00:01 2026
+    - 8    1000000001            CVAC      UNKNOWN             CLI         Thu Oct 15
+      12:59:56 2026
+    - 'ERROR commit#5: ''description MONITORING-NEW'' -> % Invalid input detected at ''^''
+      marker.'
+    - 'ERROR commit#5: ''description MONITORING-NEW'' -> % Invalid input detected at ''^''
+      marker.'
+    - 'ERROR commit#5: ''ipv4 address 192.0.2.201 255.255.255.255'' -> % Invalid input
+      detected at ''^'' marker.'
+
+PLAY RECAP *********************************************************************
+localhost                  : ok=14   changed=1    unreachable=0    failed=1    skipped=5    rescued=0    ignored=0   
+
+rc=2 t=1264s

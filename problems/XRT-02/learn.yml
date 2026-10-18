@@ -1,0 +1,346 @@
+# XRT-02 の学習モード(ワークスペースの Steps タブ)。lab_console.py --learn XRT-02 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# ここに書いた挙動は XRv9000 24.3.1 の実機で確認する(設計= problems/_drafts/XR-TRACK.design.md §12)。
+steps:
+  - id: m2t1
+    title: { en: "M2-1  An account that can look but not touch", ja: "M2-1  見られるが触れないアカウント" }
+    check: m2t1
+    hints:
+      - en: "On IOS XR a user's rights are a set of task IDs, each with read, write, execute or debug. Find out which task IDs each of the five operations needs before you build anything. One exec command answers that for any command line you give it."
+        ja: "IOS XR では、ユーザの権限はタスク ID の集合で、それぞれに読み取り・書き込み・実行・デバッグがあります。何かを作る前に、5 つの操作がそれぞれどのタスク ID を必要とするかを調べます。どのコマンド行についても、それを答える exec コマンドが 1 つあります。"
+      - en: "`describe <command line>` lists the task IDs a command needs (try it on ping, clear counters and the show commands). Its answer depends on who asks: as an administrator `describe ping` also lists root-system, which cannot be put in a task group and is not needed. Tasks are collected in a task group, a task group is attached to a user group, and the user is a member of the user group. Guide: System Security Configuration Guide, 'Configuring AAA Services' — 'Task-based Authorization'."
+        ja: "`describe <コマンド行>` が、そのコマンドに必要なタスク ID を表示します(ping、clear counters、各 show で試します)。答えは打つユーザによって変わります。管理者で `describe ping` を打つと root-system も表示されますが、これはタスク グループに入れられず、必要でもありません。タスクはタスク グループにまとめ、タスク グループをユーザ グループに付け、ユーザをそのユーザ グループのメンバーにします。ガイド: System Security Configuration Guide の「Configuring AAA Services」—「Task-based Authorization」。"
+      - en: "`taskgroup <name>` with `task read rib`, `task read ospf`, `task read interface`, `task execute interface`, `task read basic-services`, `task write basic-services`, `task execute basic-services`. Then `usergroup <name>` → `taskgroup <name>`, and `username noc1` → `group <usergroup>` → `secret Noc1-Pass`."
+        ja: "`taskgroup <名前>` の下に `task read rib`、`task read ospf`、`task read interface`、`task execute interface`、`task read basic-services`、`task write basic-services`、`task execute basic-services`。次に `usergroup <名前>` → `taskgroup <名前>`、`username noc1` → `group <ユーザグループ>` → `secret Noc1-Pass`。"
+    solution:
+      en: |
+        configure
+         taskgroup NOC-TG
+          task read rib
+          task read ospf
+          task read interface
+          task execute interface
+          task read basic-services
+          task write basic-services
+          task execute basic-services
+         usergroup NOC
+          taskgroup NOC-TG
+         username noc1
+          group NOC
+          secret Noc1-Pass
+         commit
+        end
+        Logged in as noc1, `show user tasks` lists exactly these tasks. A command outside them answers
+        `% This command is not authorized`. `configure` itself is accepted, but every line is refused, so nothing can
+        be committed. `show running-config` does not fail either: it shows only the parts noc1 may read.
+      ja: |
+        configure
+         taskgroup NOC-TG
+          task read rib
+          task read ospf
+          task read interface
+          task execute interface
+          task read basic-services
+          task write basic-services
+          task execute basic-services
+         usergroup NOC
+          taskgroup NOC-TG
+         username noc1
+          group NOC
+          secret Noc1-Pass
+         commit
+        end
+        noc1 でログインすると、`show user tasks` にちょうどこれらのタスクが並びます。範囲外のコマンドは
+        `% This command is not authorized` になります。`configure` 自体は受け付けますが、すべての行が拒否されるので
+        何もコミットできません。`show running-config` も失敗せず、noc1 が読める部分だけを表示します。
+
+  - id: m2t2
+    title: { en: "M2-2  Where management sessions are accepted", ja: "M2-2  管理セッションを受け付ける場所" }
+    check: m2t2
+    hints:
+      - en: "This is not an ACL on the VTY lines. IOS XR has a feature that names, per interface, which management protocols are accepted and from which peers. It distinguishes the management interface from the data interfaces. Commit it so that a mistake undoes itself."
+        ja: "VTY 回線の ACL ではありません。IOS XR には、インターフェイスごとに、どの管理プロトコルをどの相手から受け付けるかを指定する機能があります。管理インターフェイスとデータ インターフェイスを区別します。誤っても自動で戻るようにコミットします。"
+      - en: "Management Plane Protection: `control-plane` → `management-plane`, with `out-of-band` (the management interface; it also names the VRF) and `inband` (data interfaces). Check what is listening with `show lpts bindings brief` and `show mgmt-plane`. Guide: System Security Configuration Guide, 'Implementing Management Plane Protection'."
+        ja: "Management Plane Protection です。`control-plane` → `management-plane` の下に `out-of-band`(管理インターフェイス。VRF もここで指定します)と `inband`(データ インターフェイス)。何が待ち受けているかは `show lpts bindings brief` と `show mgmt-plane` で確認します。ガイド: System Security Configuration Guide の「Implementing Management Plane Protection」。"
+      - en: "`out-of-band` → `vrf MGMT` → `interface MgmtEth0/RP0/CPU0/0` → `allow SSH`. `inband` → `interface GigabitEthernet0/0/0/0` → `allow Telnet peer` → `address ipv4 2.2.2.2`. Use `commit confirmed` and confirm it from the same session."
+        ja: "`out-of-band` → `vrf MGMT` → `interface MgmtEth0/RP0/CPU0/0` → `allow SSH`。`inband` → `interface GigabitEthernet0/0/0/0` → `allow Telnet peer` → `address ipv4 2.2.2.2`。`commit confirmed` で入れ、同じセッションから確定します。"
+    solution:
+      en: |
+        configure
+         control-plane
+          management-plane
+           out-of-band
+            vrf MGMT
+            interface MgmtEth0/RP0/CPU0/0
+             allow SSH
+            !
+           !
+           inband
+            interface GigabitEthernet0/0/0/0
+             allow Telnet peer
+              address ipv4 2.2.2.2
+         commit confirmed 300
+         (check from another session that SSH to the management address still works)
+         commit
+        end
+        Once any management-plane configuration exists, a protocol is accepted only where it is allowed.
+        `show lpts bindings brief` shows the effect: port 22 is bound only to Mg0/RP0/CPU0/0 in VRF MGMT, and
+        port 23 only to Gi0/0/0/0 with the peer 2.2.2.2.
+      ja: |
+        configure
+         control-plane
+          management-plane
+           out-of-band
+            vrf MGMT
+            interface MgmtEth0/RP0/CPU0/0
+             allow SSH
+            !
+           !
+           inband
+            interface GigabitEthernet0/0/0/0
+             allow Telnet peer
+              address ipv4 2.2.2.2
+         commit confirmed 300
+         (別のセッションから管理アドレスへの SSH がまだ通ることを確かめる)
+         commit
+        end
+        管理プレーンの設定が 1 つでも存在すると、プロトコルは許可された場所でだけ受け付けられます。
+        `show lpts bindings brief` に効果が表れます。ポート 22 は VRF MGMT の Mg0/RP0/CPU0/0 にだけ、
+        ポート 23 は相手 2.2.2.2 付きで Gi0/0/0/0 にだけ結び付きます。
+
+  - id: m2t3
+    title: { en: "M2-3  Logins through TACACS+", ja: "M2-3  TACACS+ によるログイン" }
+    check: m2t3
+    hints:
+      - en: "Three things: where the server is (and from which address XR01 talks to it), which method lists decide authentication and authorisation, and which method list the console uses. If the server's users are refused while XR01's own accounts still log in, ask what source address the server sees — you may log in to SRV01 and read its log (`journalctl -u tacacs_plus`)."
+        ja: "3 つあります。サーバの場所(と、XR01 がどのアドレスから話しかけるか)、認証と認可を決める方式リスト、コンソールが使う方式リストです。サーバのユーザは拒否されるのに XR01 のアカウントは入れるなら、サーバから見える送信元アドレスを考えます。SRV01 にログインしてログ(`journalctl -u tacacs_plus`)を読んでも構いません。"
+      - en: "A server is defined globally (`tacacs-server host`) and collected in a server group (`aaa group server tacacs+`). The source address is set with `tacacs source-interface`. Method lists: `aaa authentication login`, `aaa authorization exec`. A line template (`line console`, `line default`) points at a named list. Guide: System Security Configuration Guide, 'Configuring AAA Services'."
+        ja: "サーバはグローバルに定義し(`tacacs-server host`)、サーバ グループにまとめます(`aaa group server tacacs+`)。送信元アドレスは `tacacs source-interface` で決めます。方式リストは `aaa authentication login` と `aaa authorization exec`。回線テンプレート(`line console`、`line default`)が名前付きのリストを指します。ガイド: System Security Configuration Guide の「Configuring AAA Services」。"
+      - en: "`tacacs-server host 10.0.50.10 port 49` → `key XRT02-Tac-Key`; `tacacs source-interface Loopback0 vrf default`; `aaa group server tacacs+ TAC` → `server 10.0.50.10`; `aaa authentication login default group TAC local`; `aaa authentication login CONSOLE local`; `line console` → `login authentication CONSOLE`."
+        ja: "`tacacs-server host 10.0.50.10 port 49` → `key XRT02-Tac-Key`。`tacacs source-interface Loopback0 vrf default`。`aaa group server tacacs+ TAC` → `server 10.0.50.10`。`aaa authentication login default group TAC local`。`aaa authentication login CONSOLE local`。`line console` → `login authentication CONSOLE`。"
+    solution:
+      en: |
+        configure
+         tacacs-server host 10.0.50.10 port 49
+          key XRT02-Tac-Key
+         tacacs source-interface Loopback0 vrf default
+         aaa group server tacacs+ TAC
+          server 10.0.50.10
+         aaa authentication login default group TAC local
+         aaa authentication login CONSOLE local
+         line console
+          login authentication CONSOLE
+         commit confirmed 300
+         (log in as ops1 and view1 from another session, then confirm)
+         commit
+        end
+        Without the source interface, XR01 sends from 10.0.50.1. The server has no key for that address and drops the
+        exchange ('Invalid AUTHEN/START packet (check keys)' in its log). XR01 counts that as an error and falls back
+        to the local accounts at once: ops1 and view1 are refused, noc1 and the lab account still log in — it looks as
+        if TACACS+ were ignored. `local` after the group is used only on an error; a reject from the server is final.
+        That is why noc1 is refused once the server works.
+        The rights arrive without any `aaa authorization exec` line on 24.3.1 (XR01 asks the server a second time for
+        every login). `aaa authorization exec default group TAC local` makes that explicit and does no harm.
+        After a server outage XR01 keeps the server on hold (`show tacacs`: status=down, on-hold=true) for about 25 s
+        after it is back; logins fall back to local until then.
+      ja: |
+        configure
+         tacacs-server host 10.0.50.10 port 49
+          key XRT02-Tac-Key
+         tacacs source-interface Loopback0 vrf default
+         aaa group server tacacs+ TAC
+          server 10.0.50.10
+         aaa authentication login default group TAC local
+         aaa authentication login CONSOLE local
+         line console
+          login authentication CONSOLE
+         commit confirmed 300
+         (別のセッションから ops1 と view1 でログインしてから確定する)
+         commit
+        end
+        送信元インターフェイスが無いと、XR01 は 10.0.50.1 から送ります。サーバはそのアドレスの鍵を持たないので
+        やり取りを打ち切ります(ログに「Invalid AUTHEN/START packet (check keys)」)。XR01 はこれをエラーと数え、
+        すぐにローカル アカウントへフォールバックします。ops1 と view1 は拒否され、noc1 とラボのアカウントは入れます。
+        TACACS+ が無視されているように見えます。グループの後の `local` はエラーのときにだけ使われ、サーバの拒否は
+        最終結果です。サーバが動き出すと noc1 が拒否されるのはこのためです。
+        24.3.1 では `aaa authorization exec` の行が無くても権限は届きます(XR01 はログインのたびにサーバへもう一度
+        問い合わせます)。`aaa authorization exec default group TAC local` を入れれば明示でき、害はありません。
+        サーバが止まった後、XR01 はサーバが戻ってからも約 25 秒は保留にします(`show tacacs` で status=down、
+        on-hold=true)。その間のログインはローカルに落ちます。
+
+  - id: m2t4
+    title: { en: "M2-4  Policing ICMP to the router", ja: "M2-4  ルータ宛ての ICMP の制限" }
+    check: m2t4
+    hints:
+      - en: "There is no class map and no service policy to write. IOS XR already polices every kind of traffic addressed to the router, flow by flow; you only change one of the existing rates."
+        ja: "クラス マップもサービス ポリシーも書きません。IOS XR はルータ宛てのあらゆるトラフィックを、流れごとに既に制限しています。既存のレートを 1 つ変えるだけです。"
+      - en: "Local Packet Transport Services (LPTS). `show lpts pifib hardware police location 0/0/CPU0` lists every flow with its current rate; find the flow that counts pings to XR01 by pinging and watching the AggrAccepts column. The rates are changed under `lpts pifib hardware police`. Guide: IP Addresses and Services Configuration Guide, 'Implementing LPTS'."
+        ja: "Local Packet Transport Services(LPTS)です。`show lpts pifib hardware police location 0/0/CPU0` がすべての流れと現在のレートを表示します。ping を打ってカウンタを見て、XR01 宛ての ping を数えている流れを見つけます。レートは `lpts pifib hardware police` の下で変えます。ガイド: IP Addresses and Services Configuration Guide の「Implementing LPTS」。"
+      - en: "`lpts pifib hardware police` → `flow icmp local rate 50`."
+        ja: "`lpts pifib hardware police` → `flow icmp local rate 50`。"
+    solution:
+      en: |
+        configure
+         lpts pifib hardware police
+          flow icmp local rate 50
+         commit
+        end
+        In the policer table ICMP-local now shows 50 with the rate type Global (configured); every other flow stays
+        Static (default). Pings to XR01 count under ICMP-local, not ICMP-default. A ping flood from SRV01 now loses
+        about 60 % of its packets (with the default 1500 pps it loses none), while pings five per second all pass.
+        Back-to-back pings, as RT01 sends them, do not: every third one is dropped (!!.!!) — a policer limits bursts,
+        not just the average. The table is per line card: on the RP location the command answers 'only supported on LC'.
+      ja: |
+        configure
+         lpts pifib hardware police
+          flow icmp local rate 50
+         commit
+        end
+        ポリサーの表で ICMP-local が 50、レートの種類が Global(設定済み)になります。他の流れは Static(既定)のままです。
+        XR01 宛ての ping は ICMP-default ではなく ICMP-local に数えられます。SRV01 から連打すると約 6 割が落ちます
+        (既定の 1500 pps では 1 つも落ちません)。毎秒 5 回の ping はすべて通ります。RT01 のように間を空けずに送る ping は
+        通りきらず、3 発目が毎回落ちます(!!.!!)。ポリサーは平均だけでなくバーストも制限するからです。
+        表はラインカード単位です。RP のロケーションを指定すると「only supported on LC」と返ります。
+
+  - id: m2t5
+    title: { en: "M2-5  Keeping the guest network out", ja: "M2-5  ゲスト ネットワークを入れない" }
+    check: m2t5
+    hints:
+      - en: "This is an ordinary inbound ACL — written the IOS XR way. Remember what an inbound ACL on a routed interface does to traffic addressed to the router itself, and what the last line of every ACL is."
+        ja: "普通の入力 ACL です。ただし IOS XR の書き方で書きます。ルーテッド インターフェイスの入力 ACL が、ルータ自身宛てのトラフィックに何をするか、そしてすべての ACL の最後の行が何かを思い出します。"
+      - en: "`ipv4 access-list <name>` with numbered lines; applied under the interface with `ipv4 access-group <name> ingress`. Guide: IP Addresses and Services Configuration Guide, 'Implementing Access Lists and Prefix Lists'."
+        ja: "`ipv4 access-list <名前>` に番号付きの行を書き、インターフェイスの下で `ipv4 access-group <名前> ingress` で適用します。ガイド: IP Addresses and Services Configuration Guide の「Implementing Access Lists and Prefix Lists」。"
+      - en: "`ipv4 access-list GUEST-IN` → `10 deny ipv4 198.51.100.0 0.0.0.255 any` → `20 permit ipv4 any any`; `interface GigabitEthernet0/0/0/0` → `ipv4 access-group GUEST-IN ingress`."
+        ja: "`ipv4 access-list GUEST-IN` → `10 deny ipv4 198.51.100.0 0.0.0.255 any` → `20 permit ipv4 any any`。`interface GigabitEthernet0/0/0/0` → `ipv4 access-group GUEST-IN ingress`。"
+    solution:
+      en: |
+        configure
+         ipv4 access-list GUEST-IN
+          10 deny ipv4 198.51.100.0 0.0.0.255 any
+          20 permit ipv4 any any
+         interface GigabitEthernet0/0/0/0
+          ipv4 access-group GUEST-IN ingress
+         commit
+        end
+        Without line 20 the implicit deny drops the OSPF hellos from RT01 too: an inbound ACL also filters traffic
+        addressed to the router, and the adjacency goes down when the dead timer expires. This is the same on IOS;
+        what is new is only the syntax.
+      ja: |
+        configure
+         ipv4 access-list GUEST-IN
+          10 deny ipv4 198.51.100.0 0.0.0.255 any
+          20 permit ipv4 any any
+         interface GigabitEthernet0/0/0/0
+          ipv4 access-group GUEST-IN ingress
+         commit
+        end
+        20 行目が無いと、暗黙の拒否が RT01 からの OSPF hello も落とします。入力 ACL はルータ宛てのトラフィックも
+        フィルタするので、Dead タイマーが切れると隣接関係が落ちます。これは IOS と同じです。新しいのは書き方だけです。
+
+  - id: m3t1
+    title: { en: "M3-1  A link that inherits silence", ja: "M3-1  沈黙を継承したリンク" }
+    check: m3t1
+    hints:
+      - en: "Look at how OSPF sees LINK2 on XR01, not only at the neighbour table. Then read the OSPF configuration from the top: a setting does not have to be written under an interface to apply to it."
+        ja: "隣接の表だけでなく、XR01 の OSPF が LINK2 をどう見ているかを確かめます。次に OSPF の設定を上から読みます。設定は、インターフェイスの下に書かれていなくてもそのインターフェイスに効きます。"
+      - en: "`show ospf interface GigabitEthernet0/0/0/2` says 'No Hellos (Passive interface)'. Under `router ospf`, a setting at process level is inherited by every area, and an area-level setting by every interface in it; the closest level wins. Guide: Routing Configuration Guide, 'Implementing OSPF' — 'OSPF Hierarchical CLI and CLI Inheritance'."
+        ja: "`show ospf interface GigabitEthernet0/0/0/2` に「No Hellos (Passive interface)」と出ます。`router ospf` の下では、プロセス単位の設定はすべてのエリアに、エリア単位の設定はそのエリアのすべてのインターフェイスに継承され、いちばん近い階層の設定が勝ちます。ガイド: Routing Configuration Guide の「Implementing OSPF」—「OSPF Hierarchical CLI and CLI Inheritance」。"
+      - en: "Leave `passive enable` at process level. Under `area 0` → `interface GigabitEthernet0/0/0/2`, add `passive disable`."
+        ja: "プロセス単位の `passive enable` は残します。`area 0` → `interface GigabitEthernet0/0/0/2` の下に `passive disable` を足します。"
+    solution:
+      en: |
+        configure
+         router ospf 1
+          area 0
+           interface GigabitEthernet0/0/0/2
+            passive disable
+         commit
+        end
+        Removing `passive enable` from the process would also bring the link up, but it breaks the design rule: the
+        SERVERS segment would start sending hellos, and so would every interface added later. Note that
+        `show running-config router ospf 1 inheritance detail` does not mark the inherited passive on LINK2;
+        `show ospf interface` is where the effective value shows.
+      ja: |
+        configure
+         router ospf 1
+          area 0
+           interface GigabitEthernet0/0/0/2
+            passive disable
+         commit
+        end
+        プロセスから `passive enable` を外してもリンクは上がりますが、設計規則を破ります。SERVERS セグメントが
+        hello を送り始め、後から追加するインターフェイスもすべて同じになります。なお、
+        `show running-config router ospf 1 inheritance detail` は LINK2 が継承した passive を注記しません。
+        実際に効いている値は `show ospf interface` で見ます。
+
+  - id: m3t2
+    title: { en: "M3-2  OSPFv3", ja: "M3-2  OSPFv3" }
+    check: m3t2
+    hints:
+      - en: "OSPFv3 is a separate process on IOS XR, with the same hierarchy as OSPFv2. If the adjacency is FULL but no route arrives, you have met this before (M0-2)."
+        ja: "IOS XR の OSPFv3 は別のプロセスで、OSPFv2 と同じ階層を持ちます。隣接は FULL なのにルートが来ないなら、前に一度見ています(M0-2)。"
+      - en: "`router ospfv3 1` with a router ID, areas and interfaces, as for OSPFv2. Verify with `show ospfv3 neighbor` and `show route ipv6`. RT01 runs LINK1 as point-to-point. Guide: Routing Configuration Guide, 'Implementing OSPF' (OSPFv3 is covered in the same chapter)."
+        ja: "`router ospfv3 1` にルータ ID、エリア、インターフェイスを書きます(OSPFv2 と同じ)。確認は `show ospfv3 neighbor` と `show route ipv6`。RT01 は LINK1 をポイントツーポイントで動かしています。ガイド: Routing Configuration Guide の「Implementing OSPF」(OSPFv3 も同じ章)。"
+      - en: "`router ospfv3 1` → `router-id 1.1.1.1` → `area 0` → `interface Loopback0` and `interface GigabitEthernet0/0/0/0` → `network point-to-point`."
+        ja: "`router ospfv3 1` → `router-id 1.1.1.1` → `area 0` → `interface Loopback0` と `interface GigabitEthernet0/0/0/0` → `network point-to-point`。"
+    solution:
+      en: |
+        configure
+         router ospfv3 1
+          router-id 1.1.1.1
+          area 0
+           interface Loopback0
+           !
+           interface GigabitEthernet0/0/0/0
+            network point-to-point
+         commit
+        end
+        Without the network type the adjacency reaches FULL/DR and no route is installed — the same mismatch as in
+        M0-2. In the IPv6 table the route shows as Known via "ospf 1", not "ospfv3 1".
+      ja: |
+        configure
+         router ospfv3 1
+          router-id 1.1.1.1
+          area 0
+           interface Loopback0
+           !
+           interface GigabitEthernet0/0/0/0
+            network point-to-point
+         commit
+        end
+        ネットワーク タイプが無いと、隣接は FULL/DR になってもルートは入りません。M0-2 と同じ不一致です。
+        IPv6 のルート表では、このルートは「ospfv3 1」ではなく Known via "ospf 1" と表示されます。
+
+  - id: m3t3
+    title: { en: "M3-3  A totally stubby branch", ja: "M3-3  完全スタブの拠点" }
+    check: m3t3
+    hints:
+      - en: "Three requirements, three settings on the ABR, all at area level: one makes the adjacency possible, one keeps inter-area routes out, one summarises in the other direction."
+        ja: "要件が 3 つ、ABR での設定が 3 つで、どれもエリア単位です。1 つは隣接を可能にし、1 つはエリア間ルートを入れず、1 つは逆向きに集約します。"
+      - en: "The stub flag in the hellos must match, so XR01 must call area 1 a stub too. A totally stubby area is a stub area whose ABR sends no summary LSAs. Summarisation at an ABR is `range` under the area. Guide: Routing Configuration Guide, 'Implementing OSPF'."
+        ja: "hello のスタブ フラグは一致する必要があるので、XR01 もエリア 1 をスタブと呼ぶ必要があります。完全スタブ エリアは、ABR がサマリー LSA を送らないスタブ エリアです。ABR での集約はエリアの下の `range` です。ガイド: Routing Configuration Guide の「Implementing OSPF」。"
+      - en: "Under `router ospf 1` → `area 1`: `stub no-summary` and `range 172.16.0.0/22`."
+        ja: "`router ospf 1` → `area 1` の下に `stub no-summary` と `range 172.16.0.0/22`。"
+    solution:
+      en: |
+        configure
+         router ospf 1
+          area 1
+           stub no-summary
+           range 172.16.0.0/22
+         commit
+        end
+        With `stub` alone the adjacency comes up and RT02 receives the default route plus every inter-area route.
+        `no-summary` matters only on the ABR, so RT02 keeps its plain `area 1 stub`. The running configuration shows
+        the range as `range 172.16.0.0/22 advertise` — `advertise` is the default and is displayed.
+      ja: |
+        configure
+         router ospf 1
+          area 1
+           stub no-summary
+           range 172.16.0.0/22
+         commit
+        end
+        `stub` だけでも隣接は上がり、RT02 はデフォルト ルートとすべてのエリア間ルートを受け取ります。
+        `no-summary` が意味を持つのは ABR だけなので、RT02 は `area 1 stub` のままです。実行コンフィギュレーションには
+        range が `range 172.16.0.0/22 advertise` と表示されます。`advertise` は既定値で、表示に現れます。

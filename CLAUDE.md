@@ -79,12 +79,26 @@
 
 | 目的 | コマンド |
 |---|---|
-| 手元で読む | `scripts/read.sh build <src>` → `serve`（既定 8898） |
+| 手元で読む | `scripts/read.sh build <src>` → ポータル `http://10.1.10.6:8899/` の Study Materials（`scripts/pack.sh serve`。棚は `book.yml` の `shelf:`） |
 | 章ごとに 1 枚へ束ねる | `scripts/read.sh bundle <src> --split` |
 | クラウドへ反映 | `scripts/read.sh sync <src>` |
 
 `sync` は **作成・改訂・削除をまとめて反映**する（rclone sync）。宛先は `book.yml` の `drive:`。
 ★**章を訳し終えたら sync まで走らせる**（ユーザが端末側で読めて初めて 1 サイクル完了）。
+
+### 6. 書き下ろしの教材（courses/）は 1 冊で日英切替にする
+
+**2026-10-13 ユーザ指示で制定。今後の教材の標準。** 訳文ではなく自分たちで書く教材（例: XR トラック）は、
+言語ごとに別の本にせず、**1 冊に 2 言語を持たせてページの中のボタンで切り替える**（問題パックと同じ切替）。
+
+- 置き場は `courses/<名前>/`。`book.yml` は 1 つで `lang: en`・`alt_lang: ja`（英語が原文）。
+  ページは `en/` と `ja/` に**同じファイル名**で置く。記法は `topologies/gen_reading.py` の docstring が正典。
+- 2 つの版は**見出しの並びと段落の数をそろえる**（切り替えたときに読んでいた位置を保つため）。
+- ポータルの棚は `shelf:`、学習用ラボは `labs:`。実践ページ（課題文）は二重に持たず、`scripts/course.sh` が
+  `problems/<ID>/task.en.md`・`task.md` から切り出す。
+- 持ち出し（Drive）だけは切替式にしない。`scripts/course.sh <名前> sync` が言語ごとに別の 1 枚を作り、
+  宛先の下の `en/`・`ja/` に置く。
+- 訳文の読み物（§1〜§5）は従来どおり 1 言語のまま。
 
 ## 非公開（PVT）コンテンツの取り扱い — 必ず従うこと
 

@@ -7,8 +7,11 @@
 #   採点:   scripts/lab.sh grade     <PROBLEM_ID> [variant]
 #   中間:   scripts/lab.sh checkpoint <PROBLEM_ID> <名前>   # grading.<名前>.yml で途中の状態を確認(ノルマ記録なし)
 #   片付け: scripts/lab.sh teardown  <PROBLEM_ID> [--keep-workspace]
+#   学習:   scripts/lab.sh learn     <PROBLEM_ID> [PORT]   # 学習モードのワークスペース(Steps タブ= 確認・ヒント)。既定 8896
 #   状態:   scripts/lab.sh status
+#   交換:   scripts/lab.sh rma <PROBLEM_ID> <NODE>     # 機器交換(保存済みの設定で新しい MAC の機体に入れ替える・BL-249)
 #
+#   LAB_XR_PLATFORM=xrd を付けて provision すると、XR のノードを XRv9000 ではなく XRd(コンテナ)で組む(BL-250)。
 #   LAB_TASK_ANNOTATION=off を付けて provision すると、CML キャンバスに問題の要約注釈を貼らない
 #   (全文は Lab Notes に残る)。パック(gen_pack)経由の構築は常に off。
 #
@@ -28,7 +31,7 @@ LAB_HOME="$REPO/lab"   # リポジトリ内に作業フォルダを置く（VSCo
 PY="$REPO/.venv/bin"
 vault() { printf 'CCNP\n'; }   # vault パスワード（プロジェクト規約）
 
-usage() { sed -n '2,19p' "${BASH_SOURCE[0]}"; exit 1; }
+usage() { sed -n '2,20p' "${BASH_SOURCE[0]}"; exit 1; }
 
 cmd="${1:-}"; prob="${2:-}"
 
@@ -40,7 +43,9 @@ case "$cmd" in
     echo "== [1/3] build_topology ($prob, variant=$variant) =="
     "$PY/ansible-playbook" "$REPO/playbooks/build_topology.yml" \
       -e problem="$prob" -e variant="$variant" \
-      -e task_annotation="${LAB_TASK_ANNOTATION:-on}" --vault-password-file <(vault)
+      -e task_annotation="${LAB_TASK_ANNOTATION:-on}" \
+      -e xr_platform="$( [ "${LAB_XR_PLATFORM:-}" = xrd ] && echo iosxrd || echo iosxr )" \
+      --vault-password-file <(vault)
     echo "== [2/3] lab_up (CML 起動) =="
     "$PY/ansible-playbook" "$REPO/playbooks/lab_up.yml" \
       -e problem="$prob" --vault-password-file <(vault)
@@ -68,6 +73,10 @@ case "$cmd" in
     elif [ -f "$REPO/problems/$prob/task.md" ]; then
       cp "$REPO/problems/$prob/task.md" "$dest/問題.md"
     fi
+    # 英語版の原文を持つ問題(problems/<ID>/task.en.md)は Task.md として並べる(ワークスペースが 問題.md と対で切り替える)
+    if [ -f "$REPO/problems/$prob/task.en.md" ]; then
+      cp "$REPO/problems/$prob/task.en.md" "$dest/Task.md"
+    fi
     echo "== [3/3] 作業フォルダ作成: $dest =="
     echo "   $(ls "$dest" 2>/dev/null | tr '\n' ' ')"
     echo "完了。VSCodeで開いた CCNP01 ツリーの lab/$prob/ を編集（問題.md 同梱）。SSH: SUZUKI/CCNP・mgmt .11〜。"
@@ -93,6 +102,22 @@ case "$cmd" in
     exec "$PY/ansible-playbook" "$REPO/playbooks/grade.yml" \
       -e problem="$prob" -e checkpoint="$cp" -e max_attempts="${LAB_CP_ATTEMPTS:-3}" \
       --vault-password-file <(vault)
+    ;;
+
+  rma)
+    # 機器交換(BL-249): 保存済みの startup-config を退避 → 停止・初期化 → MAC 差し替え → 保存済みの設定で起動。
+    # 保存していない設定は戻らない(本物の交換と同じ)。初期化で VLAN データベースも消える。
+    [ -n "$prob" ] || usage
+    node="${3:-}"; [ -n "$node" ] || { echo "交換するノード名を指定: 例 scripts/lab.sh rma $prob SW5"; exit 2; }
+    echo "== 機器交換: $prob の $node (保存済みの設定だけが新しい機体に戻ります) =="
+    exec "$PY/ansible-playbook" "$REPO/playbooks/lab_rma.yml" \
+      -e repo="$REPO" -e problem="$prob" -e node="$node" --vault-password-file <(vault)
+    ;;
+  learn)
+    # 学習モードのワークスペース(BL-246)。problems/<ID>/learn.yml を持つ問題だけ。provision 済みが前提。
+    [ -n "$prob" ] || usage
+    [ -f "$REPO/problems/$prob/learn.yml" ] || { echo "problems/$prob/learn.yml が無い(学習モードの対象外)"; exit 2; }
+    exec "$PY/python3" "$REPO/topologies/lab_console.py" --repo "$REPO" --learn "$prob" --port "${3:-8896}"
     ;;
 
   teardown)

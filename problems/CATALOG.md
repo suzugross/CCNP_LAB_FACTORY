@@ -101,6 +101,13 @@
 | ENARSI-URPF-01 | 4 | urpf,security,anti-spoofing | 3 | ssh |  |  |
 | ENARSI-VRFLITE-DNBIT-01 | 4 | vrf-lite,ospf,redistribution | 3 | ssh |  |  |
 
+### IOS XR 系(XR トラック・学習目的)
+
+| ID | 難 | 分野 | 台数 | access | variant | 備考 |
+|----|----|------|------|--------|---------|------|
+| XRT-01 | 3 | iosxr,commit,rollback,vrf,ospf,tutorial | 3 | ssh |  | XR トラック第一弾(M0 入り方と調べ方／M1 設定の管理)の共用ラボ。XR 1 台+IOL 2 台。★学習目的= パックの選定対象外(タグ tutorial)。読み物 `courses/xr/` を読んでから `scripts/lab.sh learn XRT-01` のワークスペースで解く(Steps タブ= 課題ごとの確認・段階式ヒント・通過後の模範解)。コマンド例なし・英語が原文(日本語に切替可)。★XR は 1 台で約 17GB・起動 約 8 分(provision 全体で約 9.5 分)。実機 E2E= 白紙 0 → M0 後 55 → 全課題後 100(BL-246) |
+| XRT-02 | 3 | iosxr,aaa,tacacs,mpp,lpts,acl,ospf,ospfv3,tutorial | 3 | ssh |  | XR トラック第二弾(M2 管理プレーンの保護／M3 OSPF)の共用ラボ。XR 1 台+IOL 2 台+SRV01(Ubuntu・TACACS+ サーバは完成品)。★学習目的= パックの選定対象外(タグ tutorial)。読み物 `courses/xr/` の M2・M3 を読んでから `scripts/lab.sh learn XRT-02` で解く。課題= M2 5 本(権限・MPP・TACACS+・LPTS・ACL)＋M3 3 本(継承した passive の TS・OSPFv3・完全スタブと range)。確認は採点機から noc1/ops1/view1 で実際にログインして見る(SRV01 を一時停止する確認あり)。★provision 約 10 分。実機 E2E= 白紙 0 → 模範解 100(BL-246) |
+
 ### 生成済み GEN インスタンス
 
 ★既存インスタンスは**ユーザに既出の可能性あり**。GEN 系の出題は原則「生成器で新 seed を切って新インスタンスを作る」(下の生成器一覧)。既存分は復習用。

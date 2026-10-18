@@ -47,13 +47,19 @@
 ソースの置き場と出力:
 
   <src>/book.yml     … {key, title, subtitle, pages:[{file,title}...]} （無ければ NN-*.md を名前順）
+                       `lang: en` で画面の決まり文句(目次・訳注など)と <html lang> を英語にする(既定 ja)
+                       `shelf:` ポータルでの棚の名前／`order:` 棚の中の並び(小さい順・既定 50)／`labs: [問題 ID]` 学習モードで開くラボ
+                       `alt_lang:` もう一方の言語。lang と合わせて en/ja の 2 言語の本になる(BL-248):
+                         ページは <src>/<lang>/<file> と <src>/<alt_lang>/<file>。2 版を 1 ページに持ち、ボタンで切り替わる。
+                         title・subtitle・chapters の値は {en: …, ja: …} で書ける。bundle は言語ごとに別の 1 枚を作る
+  → 出力先に book.json(ポータルが読む一覧用のメタ)も書く
   <src>/NN-*.md      … 1 ファイル = 1 ページ
   <src>/img/         … 図版（任意）
   → <repo>/reading/<key>/NN-*.html ＋ index.html
 
 使い方:
   python3 topologies/gen_reading.py build --src private/reading/<key>
-  scripts/read.sh serve 8898
+  読むのはポータル(scripts/pack.sh serve → :8899 の Study Materials。book.yml の shelf: の棚に載る)
 """
 import argparse
 import base64
@@ -316,6 +322,33 @@ FENCE_RE = re.compile(r"^```")
 _TAGS = {"note": ("c-note", "訳注"), "sic": ("c-sic", "原典の誤り"),
          "orig": ("c-orig", "原文")}
 
+# 画面の決まり文句。book.yml の `lang: en` で英語にする(既定は日本語。訳文でない英語の教材用・BL-246)。
+# <html lang> も合わせる(読み上げ・フォント選択のため)。
+_LANG = "ja"
+_WORDS = {"ja": {"toc": "目次", "back": "↑ 目次へ", "note": "訳注", "sic": "原典の誤り", "orig": "原文", "portal": "‹ ポータル"},
+          "en": {"toc": "Contents", "back": "↑ Contents", "note": "Note", "sic": "Error in the source", "orig": "Original",
+                 "portal": "‹ Portal"}}
+
+
+def set_lang(meta, lang=None):
+    """画面の決まり文句の言語を決める。lang を渡せばその言語、無ければ book.yml の lang:。
+    words: は決まり文句の上書き。`{note: 補足}`(既定の言語に効く)でも `{ja: {note: 補足}}`(言語ごと)でもよい。"""
+    global _LANG
+    base = meta.get("lang") if meta.get("lang") in _WORDS else "ja"
+    _LANG = lang if lang in _WORDS else base
+    words = meta.get("words") or {}
+    per = words if words and all(k in _WORDS and isinstance(v, dict) for k, v in words.items()) else {base: words}
+    if per.get(_LANG):
+        _WORDS[_LANG] = dict(_WORDS[_LANG], **per[_LANG])
+
+
+def _w(key):
+    return _WORDS[_LANG][key]
+
+
+def _finish_lang(page_html):
+    return page_html if _LANG == "ja" else page_html.replace('<html lang="ja">', f'<html lang="{_LANG}">', 1)
+
 
 def expand_containers(md_text):
     """:::note / :::sic / :::orig … ::: を HTML ブロックへ開く。
@@ -332,7 +365,8 @@ def expand_containers(md_text):
         if not in_fence:
             m = re.match(r"^:::\s*(\w+)\s*$", line)
             if m and m.group(1) in _TAGS:
-                cls, label = _TAGS[m.group(1)]
+                cls = _TAGS[m.group(1)][0]
+                label = _w(m.group(1))
                 if m.group(1) == "orig":
                     out += ["", f'<details class="callout {cls}">',
                             f"<summary>{label}（クリックで開く）</summary>", ""]
@@ -445,8 +479,29 @@ def inline_images(page_html, src):
 # --------------------------------------------------------------------------
 # ページ構成
 # --------------------------------------------------------------------------
+def _first_heading(path, default):
+    if not os.path.exists(path):
+        return default
+    with open(path, encoding="utf-8") as fh:
+        m = re.search(r"^#\s+(.+)$", fh.read(), re.M)
+    return m.group(1).strip() if m else default
+
+
+def _pick(value, lang, default=""):
+    """book.yml の値が {en: …, ja: …} ならその言語の分、文字列ならそのまま。"""
+    if isinstance(value, dict):
+        return value.get(lang) or default or next(iter(value.values()), "")
+    return value if value is not None else default
+
+
 def load_book(src):
-    """book.yml があれば読む。無ければ NN-*.md を名前順に並べる。"""
+    """book.yml があれば読む。無ければ NN-*.md を名前順に並べる。
+
+    ★2 言語の本(BL-248): book.yml に `lang:` と `alt_lang:`(en / ja)を書くと、ページは
+      <src>/<lang>/<file>(既定で出す版)と <src>/<alt_lang>/<file>(切替先)の 2 版を 1 ページに持ち、
+      ページの中のボタンで切り替わる(問題パックと同じ仕組み・選んだ言語は共通で覚える)。
+      切替先のファイルが無いページは 1 版のまま出す。title・subtitle・chapters の値は {en: …, ja: …} で書ける。
+    """
     meta = {"key": os.path.basename(os.path.abspath(src)), "title": "読み物",
             "subtitle": "", "pages": []}
     y = os.path.join(src, "book.yml")
@@ -454,67 +509,118 @@ def load_book(src):
         import yaml
         with open(y, encoding="utf-8") as fh:
             meta.update(yaml.safe_load(fh) or {})
+    lang, alt = meta.get("lang"), meta.get("alt_lang")
+    two = {lang, alt} == {"en", "ja"}
+    meta["_langs"] = [lang, alt] if two else [lang if lang in _WORDS else "ja"]
+    base = os.path.join(src, lang) if two else src
     if not meta["pages"]:
-        files = sorted(f for f in os.listdir(src)
+        files = sorted(f for f in os.listdir(base)
                        if f.endswith(".md") and not f.startswith("_"))
         meta["pages"] = [{"file": f} for f in files]
     for p in meta["pages"]:
-        path = os.path.join(src, p["file"])
-        if not p.get("title") and os.path.exists(path):
-            with open(path, encoding="utf-8") as fh:
-                m = re.search(r"^#\s+(.+)$", fh.read(), re.M)
-            p["title"] = m.group(1).strip() if m else p["file"]
+        p["_path"] = os.path.join(base, p["file"])
+        alt_path = os.path.join(src, alt, p["file"]) if two else None
+        p["_alt_path"] = alt_path if alt_path and os.path.exists(alt_path) else None
+        if not p.get("title"):
+            p["title"] = _first_heading(p["_path"], p["file"])
+        # 言語ごとの題名(ナビ・目次・前後のページへのリンクに使う)
+        p["_titles"] = {meta["_langs"][0]: _pick(p["title"], meta["_langs"][0])}
+        if two:
+            p["_titles"][alt] = (_pick(p["title"], alt) if isinstance(p["title"], dict)
+                                 else _first_heading(p["_alt_path"], p["_titles"][lang]) if p["_alt_path"]
+                                 else p["_titles"][lang])
+        p["title"] = p["_titles"][meta["_langs"][0]]
         p["html"] = os.path.splitext(p["file"])[0] + ".html"
     return meta
 
 
-def build_page(src, meta, i, out_dir, mermaid_mode):
+def _both(meta, by_lang):
+    """言語ごとの文字列 → 片方だけ見える 2 つの span(1 言語の本ならその 1 つをそのまま)。中身は呼ぶ側でエスケープ済み。"""
+    langs = meta["_langs"]
+    if len(langs) == 1:
+        return by_lang[langs[0]]
+    return "".join(f'<span data-l="{l}">{by_lang[l]}</span>' for l in langs)
+
+
+def _page_text(meta, i, lang, path, offset=0):
+    """1 ページ・1 言語ぶんの本文(記法を開き、前後のページへのリンクを付ける)。(Markdown, 訳注の数)。"""
     pages = meta["pages"]
-    p = pages[i]
-    with open(os.path.join(src, p["file"]), encoding="utf-8") as fh:
+    set_lang(meta, lang)
+    with open(path, encoding="utf-8") as fh:
         text = fh.read()
-    text = expand_topo(text)
-    text = expand_containers(text)
-    text, notes = expand_sic(text)
-    text += notes_section(notes)
+    text = expand_containers(expand_topo(text))
+    text, notes = expand_sic(text, offset)
+    text += notes_section(notes, offset)
+    t = lambda j: html.escape(pages[j]["_titles"][lang])
+    prev_ = f'<a href="{pages[i-1]["html"]}">← {t(i-1)}</a>' if i else "<span></span>"
+    next_ = f'<a href="{pages[i+1]["html"]}">{t(i+1)} →</a>' if i + 1 < len(pages) else "<span></span>"
+    return text + f'\n\n<div class="pager">{prev_}{next_}</div>\n', len(notes)
 
-    prev_ = f'<a href="{pages[i-1]["html"]}">← {html.escape(pages[i-1]["title"])}</a>' if i else "<span></span>"
-    next_ = f'<a href="{pages[i+1]["html"]}">{html.escape(pages[i+1]["title"])} →</a>' if i + 1 < len(pages) else "<span></span>"
-    text += f'\n\n<div class="pager">{prev_}{next_}</div>\n'
 
-    nav = [{"label": "目次", "href": "index.html"}] + [
-        {"label": pg["title"], "href": pg["html"], "current": j == i}
+def build_page(src, meta, i, out_dir, mermaid_mode):
+    pages, langs = meta["pages"], meta["_langs"]
+    p = pages[i]
+    text, n = _page_text(meta, i, langs[0], p["_path"])
+    kw = {}
+    if len(langs) == 2 and p["_alt_path"]:
+        alt_text, _n = _page_text(meta, i, langs[1], p["_alt_path"])
+        kw = {"lang": langs[0], "alt_lang": langs[1], "alt_md": alt_text}
+    set_lang(meta)
+    # ナビの文言は言語ごとに出し分ける。render はラベルをエスケープするので、目印を置いて後から差し替える
+    marks = {}
+
+    def mark(by_lang):
+        key = f"@@RNAV{len(marks)}@@"
+        marks[key] = _both(meta, {l: html.escape(v) for l, v in by_lang.items()})
+        return key
+
+    word = lambda k: {l: _WORDS[l][k] for l in langs}
+    # 先頭= 配信サーバのトップ(ポータル・BL-247)。`/` はどの配信のしかたでもサーバの根を指す
+    nav = [{"label": mark(word("portal")), "href": "/"}, {"label": mark(word("toc")), "href": "index.html"}] + [
+        {"label": mark(pg["_titles"]), "href": pg["html"], "current": j == i}
         for j, pg in enumerate(pages)]
     out = RH.render(text, title=p["title"], nav=nav, extra_css=READING_CSS,
                     body_class="reading", allow_html=True,
-                    mermaid_mode=("cdn" if mermaid_mode == "local" else mermaid_mode))
+                    mermaid_mode=("cdn" if mermaid_mode == "local" else mermaid_mode), **kw)
+    for key, val in marks.items():
+        out = out.replace(key, val)
     if mermaid_mode == "local":
         out = out.replace(RH.MERMAID_CDN, "mermaid.min.js")
-    out = lazy_images(wrap_tables(termify(out)))
+    out = _finish_lang(lazy_images(wrap_tables(termify(out))))
     dst = os.path.join(out_dir, p["html"])
     with open(dst, "w", encoding="utf-8") as fh:
         fh.write(out)
-    return dst, len(notes)
+    return dst, n
 
 
 def build_index(meta, out_dir):
-    items = "\n".join(
-        f'<li><a href="{p["html"]}">{html.escape(p["title"])}</a></li>'
-        for p in meta["pages"])
-    body = (f'# {meta["title"]}\n\n'
-            + (f'<p class="lead">{html.escape(meta["subtitle"])}</p>\n\n' if meta.get("subtitle") else "")
-            + f'<ul class="toc">\n{items}\n</ul>\n')
-    out = RH.render(body, title=meta["title"], extra_css=READING_CSS,
-                    body_class="reading", allow_html=True, mermaid_mode="none")
+    langs = meta["_langs"]
+
+    def body(lang):
+        set_lang(meta, lang)
+        items = "\n".join(
+            f'<li><a href="{p["html"]}">{html.escape(p["_titles"][lang])}</a></li>'
+            for p in meta["pages"])
+        sub = _pick(meta.get("subtitle"), lang)
+        return (f'<p class="portal"><a href="/">{_w("portal")}</a></p>\n\n# {_pick(meta["title"], lang)}\n\n'
+                + (f'<p class="lead">{html.escape(sub)}</p>\n\n' if sub else "")
+                + f'<ul class="toc">\n{items}\n</ul>\n')
+
+    kw = {"lang": langs[0], "alt_lang": langs[1], "alt_md": body(langs[1])} if len(langs) == 2 else {}
+    first = body(langs[0])
+    set_lang(meta)
+    out = RH.render(first, title=_pick(meta["title"], langs[0]), extra_css=READING_CSS,
+                    body_class="reading", allow_html=True, mermaid_mode="none", **kw)
     dst = os.path.join(out_dir, "index.html")
     with open(dst, "w", encoding="utf-8") as fh:
-        fh.write(out)
+        fh.write(_finish_lang(out))
     return dst
 
 
 def build(src, mermaid_mode="local"):
     src = src if os.path.isabs(src) else os.path.join(REPO, src)
     meta = load_book(src)
+    set_lang(meta)
     out_dir = os.path.join(OUT_ROOT, meta["key"])
     os.makedirs(out_dir, exist_ok=True)
     if mermaid_mode == "local":
@@ -531,6 +637,18 @@ def build(src, mermaid_mode="local"):
         total += n
         print(f"  {os.path.relpath(dst, REPO)}  （訳注 {n}）")
     build_index(meta, out_dir)
+    # ポータル(配信サーバのトップ・BL-247)が教材の一覧を作るためのメタ。出力先だけを見れば足りるようにする
+    # (ソースは非公開側にあることもあるので、ポータルはソースを読まない)。
+    import json
+    with open(os.path.join(out_dir, "book.json"), "w", encoding="utf-8") as fh:
+        langs = meta["_langs"]
+        json.dump({"key": meta["key"], "title": _pick(meta["title"], langs[0]),
+                   "subtitle": _pick(meta.get("subtitle"), langs[0]),
+                   "title_alt": _pick(meta["title"], langs[-1]) if len(langs) == 2 else "",
+                   "subtitle_alt": _pick(meta.get("subtitle"), langs[-1]) if len(langs) == 2 else "",
+                   "shelf": meta.get("shelf", ""), "lang": langs[0], "langs": langs,
+                   "order": meta.get("order", 50), "labs": meta.get("labs") or [],
+                   "pages": len(meta["pages"])}, fh, ensure_ascii=False, indent=1)
     print(f"[reading] {len(meta['pages'])} ページ / 訳注 {total} 件 → "
           f"{os.path.relpath(out_dir, REPO)}/index.html")
     return out_dir
@@ -564,9 +682,9 @@ def _assemble(meta, pages, title, dst):
     toc = "\n".join(f'<li><a href="#pg{i}">{html.escape(p["title"])}</a></li>'
                      for i, p in enumerate(pages))
     head = [f"# {title}", ""]
-    if meta.get("subtitle"):
-        head.append(f'<p class="lead">{html.escape(meta["subtitle"])}</p>')
-    head += ['<nav class="btoc"><strong>目次</strong>', f"<ol>\n{toc}\n</ol>", "</nav>"]
+    if _pick(meta.get("subtitle"), _LANG):
+        head.append(f'<p class="lead">{html.escape(_pick(meta.get("subtitle"), _LANG))}</p>')
+    head += [f'<nav class="btoc"><strong>{_w("toc")}</strong>', f"<ol>\n{toc}\n</ol>", "</nav>"]
     chunks.append("\n".join(head))
 
     for i, p in enumerate(pages):
@@ -578,14 +696,14 @@ def _assemble(meta, pages, title, dst):
         offset += len(notes)
         sep = '<hr class="bsep">\n\n' if i else ""
         chunks.append(f'{sep}<a id="pg{i}"></a>\n\n{text}\n\n'
-                      f'<a class="bhome" href="#top">↑ 目次へ</a>')
+                      f'<a class="bhome" href="#top">{_w("back")}</a>')
 
     md = "\n\n".join(chunks)
     mode = "embed" if "```mermaid" in md else "none"
     out = RH.render(md, title=title, extra_css=READING_CSS + BUNDLE_CSS,
                     body_class="reading", allow_html=True, mermaid_mode=mode)
     out = out.replace("<body", '<body id="top"', 1)
-    out = inline_images(wrap_tables(termify(out)), os.path.dirname(pages[0]["_path"]))
+    out = _finish_lang(inline_images(wrap_tables(termify(out)), os.path.dirname(pages[0]["_path"])))
     os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
     with open(dst, "w", encoding="utf-8") as fh:
         fh.write(out)
@@ -607,28 +725,40 @@ def build_bundle(src, out_path=None, split=False, stage=False):
     ★持ち出し(Drive→スマホ)を考えると章ごとが扱いやすい。章 1 つ＝数十〜数百 KB で、
       更新した章だけ入れ替えられる。stage=True で持ち出し用ディレクトリへ出す
       （そこを rclone で同期する。作成・改訂・削除がそのまま反映される）。
+    ★2 言語の本は **言語ごとに別の 1 枚**を作る(切替式にしない)。持ち出し先の閲覧アプリではスクリプトが
+      動かないことがあり、切替ボタンが効かないと片方の言語が読めなくなるため。置き場は言語ごとの下位フォルダ
+      (stage なら reading/_offline/<key>/<言語>/)。
     """
     src = src if os.path.isabs(src) else os.path.join(REPO, src)
     meta = load_book(src)
-    for p in meta["pages"]:
-        p["_path"] = os.path.join(src, p["file"])
-    key, titles = meta["key"], (meta.get("chapters") or {})
+    key, titles, langs = meta["key"], (meta.get("chapters") or {}), meta["_langs"]
+    two = len(langs) == 2
     made = []
-    if split:
-        chs = {}
-        for p in meta["pages"]:
-            chs.setdefault(_chapter_of(p), []).append(p)
-        if stage:                      # 消えた章を残さないため、毎回作り直す
-            shutil.rmtree(stage_dir(key), ignore_errors=True)
-        for ch, pages in sorted(chs.items()):
-            name = str(titles.get(ch) or titles.get(int(ch)) or f"ch{ch}")
-            dst = (os.path.join(stage_dir(key), f"{name}.html") if stage
-                   else os.path.join(OUT_ROOT, f"{key}-ch{ch}-offline.html"))
-            made.append(_assemble(meta, pages, f'{meta["title"]} — {name}', dst))
-    else:
-        made.append(_assemble(meta, meta["pages"], meta["title"],
-                              out_path or os.path.join(OUT_ROOT, f"{key}-offline.html")))
+    if split and stage:                # 消えた章を残さないため、毎回作り直す
+        shutil.rmtree(stage_dir(key), ignore_errors=True)
+    for lang in langs:
+        set_lang(meta, lang)
+        # その言語の版のページ(切替先のファイルが無いページは既定の版で代える)
+        pages = [dict(p, title=p["_titles"][lang],
+                      _path=(p["_alt_path"] if lang != langs[0] and p["_alt_path"] else p["_path"]))
+                 for p in meta["pages"]]
+        book_title = _pick(meta["title"], lang)
+        tag = f"-{lang}" if two else ""
+        if split:
+            chs = {}
+            for p in pages:
+                chs.setdefault(_chapter_of(p), []).append(p)
+            for ch, ps in sorted(chs.items()):
+                name = str(_pick(titles.get(ch) or titles.get(int(ch)), lang) or f"ch{ch}")
+                dst = (os.path.join(stage_dir(key), lang if two else "", f"{name}.html") if stage
+                       else os.path.join(OUT_ROOT, f"{key}{tag}-ch{ch}-offline.html"))
+                made.append(_assemble(meta, ps, f"{book_title} — {name}", dst))
+        else:
+            made.append(_assemble(meta, pages, book_title,
+                                  out_path or os.path.join(OUT_ROOT, f"{key}{tag}-offline.html")))
+    set_lang(meta)
     return made
+
 
 
 def main():

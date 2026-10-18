@@ -14,12 +14,16 @@
       左のタスクはパックの問題ページそのもの(解答欄・ストップウォッチもそのまま使える)。
   単発               lab_console.py --lab <CML のラボ題名> [--task <Task.md>]
       1 ラボに固定して開く(入口は /)。パックを介さない出題や動作確認に使う。
+  学習モード         lab_console.py --learn <問題 ID>
+      単発の一種。ラボと課題文は問題 ID から決まり(lab/<ID>/Task.md・問題.md)、左に Steps タブが増える。
+      課題ごとに 確認(中間チェックを 1 回)・段階式ヒント・模範解(通過後かヒント全開後)。problems/<ID>/learn.yml が中身。
 
   GET /lab?pack=&no=   … 画面(パック常駐)          GET /       … 画面(単発)
   GET /api/topo        … トポロジ(CML API の座標・リンクから起こした SVG とノード一覧)
   GET /toponotes       … 問題文の盤面の節(トポロジ／構成図)。Topology タブで結線図の下に出す
   GET /ws/console?node=<ラベル>   … そのノードのコンソール(バイト列をそのまま流す)
   GET /task            … タスク(単発のみ。--task の Markdown を問題用紙と同じ体裁で HTML 化)
+  GET /api/learn       … 学習モード(単発に --learn <問題 ID>。BL-246)= Steps タブの中身。POST /api/learn/hint・/api/learn/check
 
 設計上の約束:
   - **繋げるラボはサーバ側でしか決まらない**。パック常駐ではパックの manifest のラボ項目から
@@ -54,9 +58,10 @@ import os
 import re
 import signal
 import sys
+import tempfile
 import time
 import uuid
-from collections import defaultdict, namedtuple
+from collections import ChainMap, defaultdict, namedtuple
 from urllib.parse import urlparse
 
 import aiohttp
@@ -74,7 +79,7 @@ ASSETS = os.path.join(HERE, "assets")
 PACK_RE = re.compile(r"^PACK-[A-Za-z0-9_.-]{1,64}$")
 
 INFRA = {"external_connector", "unmanaged_switch"}      # コンソールを持たない(箱だけ描く)
-ROUTERS = {"iol-xe", "iosv", "csr1000v", "cat8000v", "iosxrv9000", "cat-sdwan-edge"}
+ROUTERS = {"iol-xe", "iosv", "csr1000v", "cat8000v", "iosxrv9000", "xrd", "cat-sdwan-edge"}
 SWITCHES = {"ioll2-xe", "iosvl2", "nxosv9000", "cat9000v-q200", "cat9000v-uadp", "vjunos-switch"}
 FIREWALLS = {"asav", "fortigate"}
 # 貼り付けの流量制御。シリアルコンソールは一度に流し込むと取りこぼす
@@ -280,6 +285,33 @@ def topo_svg(model, gap=190):
 # --------------------------------------------------------------------------
 # 繋ぐ先の解決
 # --------------------------------------------------------------------------
+LEARN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+
+
+def _view(request):
+    """リクエストから見た app。パック常駐で `?learn=<問題 ID>` が付いていれば、そのラボに固定した単発と同じ見え方を
+    重ねて返す(ポータルの教材から開く学習モード・BL-247)。それ以外は app そのもの。
+    問題 ID は書式を検査し、problems/<ID>/learn.yml がある問題だけを通す(繋ぐラボはここでしか決まらない)。"""
+    app = request.app
+    if app["fixed"]:
+        return app
+    lid = request.query.get("learn", "")
+    if not LEARN_RE.match(lid) or not os.path.exists(os.path.join(app["repo"], "problems", lid, "learn.yml")):
+        return app
+    task = None
+    for cand in ("Task.md", "問題.md"):                 # lab.sh provision が置く作業コピー(英語版が既定)
+        path = os.path.join(app["repo"], "lab", lid, cand)
+        if os.path.exists(path):
+            task = path
+            break
+    host = request.url.host or "localhost"
+    if ":" in host:
+        host = f"[{host}]"
+    nav = [("‹ Portal", f"{request.scheme}://{host}:{app['pack_port']}/", False), (lid, "", True)]
+    tgt = Target(lab_title(lid), "task?learn=" + lid, lid, None, nav, lid)
+    return ChainMap({"fixed": tgt, "task": task, "learn": lid}, app)
+
+
 def resolve(app, request):
     """リクエスト → Target。繋いでよいラボはここでしか決まらない(無効なら None)。"""
     if app["fixed"]:
@@ -331,7 +363,7 @@ async def load_topo(app, title):
 # HTTP
 # --------------------------------------------------------------------------
 async def h_page(request):
-    tgt = resolve(request.app, request)
+    tgt = resolve(_view(request), request)
     if tgt is None:
         return web.Response(status=404, content_type="text/html", text=(
             "<p>No such lab. Open a lab page of a pack and use <b>Open lab workspace</b>.</p>"))
@@ -391,11 +423,12 @@ def _alt_kw(app, part):
 
 
 async def h_task(request):
-    if not request.app["fixed"]:
+    app = _view(request)
+    if not app["fixed"]:
         return web.Response(status=404, text="not found")
-    rest, _topo = _single_task(request.app)
-    return web.Response(text=render_html.render(rest, title=request.app["fixed"].caption,
-                                                **_alt_kw(request.app, 2)),
+    rest, _topo = _single_task(app)
+    return web.Response(text=render_html.render(rest, title=app["fixed"].caption,
+                                                **_alt_kw(app, 2)),
                         content_type="text/html")
 
 
@@ -405,7 +438,7 @@ def _has_notes(app, tgt):
 
 async def h_toponotes(request):
     """問題文の盤面の節だけのページ。Topology タブが結線図の下に枠で読み込む。"""
-    app = request.app
+    app = _view(request)
     tgt = resolve(app, request)
     if tgt is None or not _has_notes(app, tgt):
         return web.Response(status=404, text="no topology section")
@@ -419,12 +452,13 @@ async def h_toponotes(request):
 
 
 async def h_topo(request):
-    tgt = resolve(request.app, request)
+    app = _view(request)
+    tgt = resolve(app, request)
     if tgt is None:
         return web.json_response({"error": "no such lab"}, status=404)
-    notes = _has_notes(request.app, tgt)      # 結線図が出せない時も、問題文の盤面の節は読めるようにする
+    notes = _has_notes(app, tgt)              # 結線図が出せない時も、問題文の盤面の節は読めるようにする
     try:
-        model = await load_topo(request.app, tgt.title)
+        model = await load_topo(app, tgt.title)
     except Exception as e:
         return web.json_response({"error": f"CML API: {e}", "notes": notes}, status=502)
     if model is None:
@@ -479,7 +513,7 @@ class Recorder:
 
 
 async def h_console(request):
-    app = request.app
+    app = _view(request)
     if not _same_origin(request):
         return web.Response(status=403, text="cross-origin")
     tgt = resolve(app, request)
@@ -560,6 +594,138 @@ async def h_console(request):
     return ws
 
 
+# --------------------------------------------------------------------------
+# 学習モード(BL-246): 課題ごとの確認・段階式ヒント・通過後の模範解
+# --------------------------------------------------------------------------
+#   単発で `--learn <問題 ID>` を付けると、左に Steps タブが出る。中身は problems/<ID>/learn.yml:
+#     steps:
+#       - id: m0t1
+#         title: {en: "...", ja: "..."}
+#         check: m0t1              # 中間チェック problems/<ID>/grading.m0t1.yml(無ければ確認ボタンなし)
+#         hints: [{en: "...", ja: "..."}, ...]     # 上から順に 1 段ずつ開く
+#         solution: {en: "...", ja: "..."}         # 確認を通過するか、ヒントを全部開いた後に見せる
+#   ヒントの本文と模範解はサーバが持ち、開いた分だけ返す(ページの中に先に入れない)。
+#   開封と確認の結果は records/learn/<問題 ID>.jsonl に残す(ノルマには数えない)。
+#   確認は既存の採点(grade.yml の checkpoint)を 1 回だけ回す。同時に 1 本(コンソールでなく管理 IF 経由)。
+def _learn_load(app):
+    with open(os.path.join(app["repo"], "problems", app["learn"], "learn.yml"), encoding="utf-8") as fh:
+        return (yaml.safe_load(fh) or {}).get("steps") or []
+
+
+def _learn_log_path(app):
+    return os.path.join(app["repo"], "records", "learn", app["learn"] + ".jsonl")
+
+
+def _learn_events(app):
+    try:
+        with open(_learn_log_path(app), encoding="utf-8") as fh:
+            return [json.loads(ln) for ln in fh if ln.strip()]
+    except FileNotFoundError:
+        return []
+
+
+def _learn_log(app, **ev):
+    path = _learn_log_path(app)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(dict(ev, t=int(time.time())), ensure_ascii=False) + "\n")
+
+
+def _learn_view(app):
+    """画面へ渡す状態。ヒントは開いた段まで、模範解は 通過済み か ヒント全開 の時だけ入れる。"""
+    opened, passed, last = defaultdict(int), set(), {}
+    for ev in _learn_events(app):
+        if ev.get("ev") == "hint":
+            opened[ev["step"]] = max(opened[ev["step"]], ev["level"])
+        elif ev.get("ev") == "check":
+            last[ev["step"]] = {"ok": ev["ok"], "lines": ev.get("lines", []), "t": ev["t"]}
+            if ev["ok"]:
+                passed.add(ev["step"])
+    out = []
+    for st in _learn_load(app):
+        sid, hints = st["id"], st.get("hints") or []
+        n = min(opened[sid], len(hints))
+        done = sid in passed
+        show_sol = bool(st.get("solution")) and (done or (hints and n >= len(hints)) or not st.get("check"))
+        out.append({"id": sid, "title": st.get("title") or {}, "check": bool(st.get("check")),
+                    "hints_total": len(hints), "hints": hints[:n], "passed": done,
+                    "last": last.get(sid), "solution": st.get("solution") if show_sol else None,
+                    "has_solution": bool(st.get("solution"))})
+    return out
+
+
+async def h_learn(request):
+    app = _view(request)
+    if not app["learn"]:
+        return web.json_response({"enabled": False})
+    return web.json_response({"enabled": True, "steps": _learn_view(app)},
+                             headers={"Cache-Control": "no-store"})
+
+
+async def h_learn_hint(request):
+    app = _view(request)
+    if not app["learn"] or not _same_origin(request):
+        return web.Response(status=403, text="forbidden")
+    sid = (await request.json()).get("step")
+    st = next((x for x in _learn_load(app) if x["id"] == sid), None)
+    if st is None:
+        return web.Response(status=404, text="no such step")
+    cur = next((v["hints"] for v in _learn_view(app) if v["id"] == sid), [])
+    if len(cur) < len(st.get("hints") or []):
+        _learn_log(app, ev="hint", step=sid, level=len(cur) + 1)
+    return web.json_response({"enabled": True, "steps": _learn_view(app)})
+
+
+_REPORT_LINE = re.compile(r"^\s*-?\s*'?\s*(\[(?:PASS|FAIL)\].*?|未充足:.*?|合計:.*?)'?\s*$")
+
+
+async def h_learn_check(request):
+    app = _view(request)
+    if not app["learn"] or not _same_origin(request):
+        return web.Response(status=403, text="forbidden")
+    sid = (await request.json()).get("step")
+    st = next((x for x in _learn_load(app) if x["id"] == sid), None)
+    if st is None or not st.get("check"):
+        return web.Response(status=404, text="no such check")
+    name = str(st["check"])
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+        return web.Response(status=400, text="bad check name")
+    if app["learn_lock"].locked():
+        return web.json_response({"busy": True})
+    async with app["learn_lock"]:
+        repo = app["repo"]
+        # vault のパスワード(lab.sh と同じ規約の値)は、プロセス置換の代わりに一時ファイルで渡して終わったら消す
+        fd, vault = tempfile.mkstemp(prefix="ccnp-learn-")
+        os.write(fd, b"CCNP\n")
+        os.close(fd)
+        proc = await asyncio.create_subprocess_exec(
+            os.path.join(repo, ".venv/bin/ansible-playbook"), os.path.join(repo, "playbooks/grade.yml"),
+            "-e", f"problem={app['learn']}", "-e", f"checkpoint={name}", "-e", "max_attempts=1",
+            "--vault-password-file", vault,
+            cwd=repo, stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        try:
+            raw, _ = await asyncio.wait_for(proc.communicate(), timeout=240)
+        except asyncio.TimeoutError:
+            proc.kill()
+            return web.json_response({"error": "check timed out"})
+        finally:
+            os.unlink(vault)
+        text = raw.decode("utf-8", "replace")
+        # 最終結果の節だけを読む(途中の試行の表示と重ならないように)
+        tail = text[text.rfind("TASK [最終結果]"):] if "TASK [最終結果]" in text else text
+        lines = [m.group(1).strip() for m in map(_REPORT_LINE.match, tail.splitlines()) if m]
+        # 画面は英語が基本なので、採点の表示から日本語の飾りを落とす(配点・合計は出さない= 通ったかどうかだけ)
+        lines = [re.sub(r"^(\[(?:PASS|FAIL)\]) \(\+\s*\d+ 点\) ", r"\1 ", ln).replace("未充足(raw):", "unmet:").replace("未充足:", "unmet:")
+                 for ln in lines if not ln.startswith("合計:")]
+        ok = "全チェック PASS で収束" in text
+        if not lines:
+            lines = ["(no result — the check could not run; see the server log)"]
+            print(text[-1500:], flush=True)
+        _learn_log(app, ev="check", step=sid, ok=ok, lines=lines)
+    return web.json_response({"enabled": True, "steps": _learn_view(app)})
+
+
 def load_cml():
     v = {}
     path = os.path.join(REPO, "group_vars", "all", "local.yml")
@@ -587,14 +753,17 @@ async def _follow_parent(app):
     app["parent_watch"] = asyncio.ensure_future(watch())
 
 
-def make_app(repo=REPO, pack_port=8899, lab=None, task=None, with_parent=None, record=True):
+def make_app(repo=REPO, pack_port=8899, lab=None, task=None, with_parent=None, record=True, learn=None):
     """lab を渡すと単発(そのラボに固定)、渡さなければパック常駐。"""
     app = web.Application()
     if with_parent:
         app["with_parent"] = with_parent
         app.on_startup.append(_follow_parent)
-    app["fixed"] = Target(lab, "task", lab, None, [], lab) if lab else None
+    app["fixed"] = Target(lab, "task", learn or lab, None, [], learn or lab) if lab else None
     app["task"] = task
+    app["repo"] = os.path.abspath(repo)
+    app["learn"] = learn                      # 学習モードの問題 ID(単発のみ)
+    app["learn_lock"] = asyncio.Lock()
     app["packs"] = os.path.join(os.path.abspath(repo), "packs")
     app["pack_port"] = pack_port
     # コンソールの操作記録の置き場(BL-243)。None = 記録しない
@@ -607,6 +776,9 @@ def make_app(repo=REPO, pack_port=8899, lab=None, task=None, with_parent=None, r
     app.router.add_get("/api/topo", h_topo)
     app.router.add_get("/toponotes", h_toponotes)
     app.router.add_get("/ws/console", h_console)
+    app.router.add_get("/api/learn", h_learn)
+    app.router.add_post("/api/learn/hint", h_learn_hint)
+    app.router.add_post("/api/learn/check", h_learn_check)
     for name in ("xterm.js", "xterm.css", "addon-fit.js"):
         app.router.add_get(f"/vendor/{name}",
                            lambda _r, p=os.path.join(ASSETS, name): web.FileResponse(p))
@@ -667,6 +839,24 @@ iframe{ border:0; width:100%; height:100%; background:var(--paper); }
 #topo .hint{ color:var(--mute); font-size:12px; margin:0; }
 #topo .err{ color:#8a3b12; margin:0; }
 #toponotes{ flex:none; height:0; border-top:1px solid var(--line); margin-top:6px; }
+/* 学習モードの Steps タブ(BL-246): 課題ごとの確認・段階式ヒント・模範解 */
+#steps{ overflow:auto; padding:12px 16px; box-sizing:border-box; }
+#steps .note{ color:var(--mute); font-size:12px; margin:0 0 10px; }
+.step{ border:1px solid var(--line); border-radius:6px; background:var(--panel); margin:0 0 10px; padding:9px 12px; }
+.step h3{ margin:0 0 6px; font-size:14px; display:flex; align-items:center; gap:8px; }
+.step h3 .badge{ font-size:11px; font-weight:600; border-radius:10px; padding:1px 8px; background:#dfe2e7; color:var(--mute); }
+.step.ok h3 .badge{ background:#d6eedd; color:#17643a; } .step.ng h3 .badge{ background:#f6ddd9; color:#8a2b22; }
+.step .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.step button{ font:inherit; font-size:12px; border:1px solid var(--line); border-radius:4px; background:#fff;
+              padding:3px 10px; cursor:pointer; color:var(--ink); }
+.step button:hover:not(:disabled){ background:#eef1f5; } .step button:disabled{ opacity:.5; cursor:default; }
+.step button.go{ border-color:var(--accent); color:var(--accent); font-weight:600; }
+.step .res, .step .hint, .step .sol{ margin:8px 0 0; font-size:12.5px; }
+.step .res div{ font-family:ui-monospace,Consolas,Menlo,monospace; white-space:pre-wrap; }
+.step .res .p{ color:#17643a; } .step .res .f{ color:#8a2b22; } .step .res .u{ color:var(--mute); padding-left:1.5em; }
+.step .hint, .step .sol{ border-left:3px solid #c9a227; padding:3px 0 3px 9px; white-space:pre-wrap; }
+.step .sol{ border-left-color:#1f9d55; font-family:ui-monospace,Consolas,Menlo,monospace; }
+.step .lbl{ font-weight:600; color:var(--mute); font-size:11px; display:block; font-family:system-ui,sans-serif; }
 #terms{ background:var(--term); }
 /* 余白は .term に持たせ、端末は余白なしの .xt に開く。fit(桁・行の計算)は端末の親の寸法を読むので、
    親に余白があるとその分だけ広く見積もり、右端の桁と最下行が隠れる(2026-10-07 実発) */
@@ -694,11 +884,13 @@ iframe{ border:0; width:100%; height:100%; background:var(--paper); }
   <nav class="tabs" id="ltabs">
     <button data-tab="task" class="on">Task</button>
     <button data-tab="topo">Topology</button>
+    <button data-tab="steps" id="stepsbtn" hidden>Steps</button>
     <span class="lab">@@CAPTION@@</span>
   </nav>
   <div class="pane">
     <iframe id="task" src="@@TASK_SRC@@" title="Task"></iframe>
     <div id="topo" hidden></div>
+    <div id="steps" hidden></div>
   </div>
 </section>
 <div id="split" title="Drag to resize · double-click to reset"></div>
@@ -731,6 +923,7 @@ function leftTab(name){
   for (const b of $('#ltabs').querySelectorAll('button')) b.classList.toggle('on', b.dataset.tab === name);
   $('#task').hidden = name !== 'task';
   $('#topo').hidden = name !== 'topo';
+  $('#steps').hidden = name !== 'steps';
   if (name === 'topo' && notesPending){ notesPending = false; addNotes(); }
 }
 // 結線図の下に、問題文の盤面の節を枠で出す。枠の高さは中身に合わせる(スクロールは Topology タブ 1 本にする)。
@@ -975,7 +1168,8 @@ window.addEventListener('message', ev => {
   let lang = null;
   const frames = () => [$('#task'), $('#toponotes')].filter(Boolean);
   const tell = f => { try { f.contentWindow.postMessage({ccnpLang: lang, ccnpHost: true}, '*'); } catch (_e) {} };
-  function paint(){ btn.hidden = false; btn.textContent = NAME[lang === 'en' ? 'ja' : 'en']; }
+  function paint(){ btn.hidden = false; btn.textContent = NAME[lang === 'en' ? 'ja' : 'en'];
+                    window.ccnpLang = lang; window.dispatchEvent(new Event('ccnp-lang')); }
   window.addEventListener('message', ev => {
     const f = frames().find(x => x.contentWindow === ev.source);
     const d = ev.data;
@@ -994,6 +1188,73 @@ window.addEventListener('message', ev => {
   try { $('#task').contentWindow.postMessage({ccnpLangAsk: true}, '*'); } catch (_e) {}
 })();
 
+// ---- 学習モード(BL-246): Steps タブ ----
+//   課題ごとに 確認(中間チェックを 1 回回す)・ヒント(1 段ずつ)・模範解(通過後かヒント全開後)。
+//   本文はサーバが開いた分だけ返す。言語は問題文の切替に合わせる(1 版しか無ければ英語)。
+let learnSteps = null, learnBusy = null;
+function learnLang(){ return window.ccnpLang === 'ja' ? 'ja' : 'en'; }
+function tr(o){ if (!o) return ''; if (typeof o === 'string') return o; return o[learnLang()] || o.en || o.ja || ''; }
+const LT = {en: {check:'Check', checking:'Checking…', hint:'Hint', sol:'Reference solution', pass:'passed', fail:'not yet',
+                 none:'self-check', note:'Each Check reads the live state of the devices (about 15 seconds). Leave configuration mode before you press it. Hints open one level at a time and are logged.',
+                 busy:'Another check is still running.'},
+            ja: {check:'確認', checking:'確認中…', hint:'ヒント', sol:'模範解', pass:'通過', fail:'未充足',
+                 none:'自己確認', note:'確認は機器のいまの状態を読みます(約 15 秒)。設定モードを抜けてから押してください。ヒントは 1 段ずつ開き、開いた段数は記録されます。',
+                 busy:'別の確認がまだ実行中です。'}};
+function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function paintSteps(){
+  if (!learnSteps) return;
+  const T = LT[learnLang()], root = $('#steps');
+  root.replaceChildren(el('p', 'note', T.note));
+  for (const st of learnSteps){
+    const box = el('div', 'step' + (st.passed ? ' ok' : (st.last && !st.last.ok ? ' ng' : '')));
+    const h = el('h3', null, tr(st.title));
+    h.append(el('span', 'badge', st.passed ? T.pass : (st.check ? (st.last ? T.fail : '—') : T.none)));
+    box.append(h);
+    const row = el('div', 'row');
+    if (st.check){
+      const b = el('button', 'go', learnBusy === st.id ? T.checking : T.check);
+      b.disabled = learnBusy !== null;
+      b.addEventListener('click', () => learnPost('check', st.id));
+      row.append(b);
+    }
+    if (st.hints_total){
+      const b = el('button', null, T.hint + ' ' + Math.min(st.hints.length + 1, st.hints_total) + '/' + st.hints_total);
+      b.disabled = st.hints.length >= st.hints_total || learnBusy !== null;
+      b.addEventListener('click', () => learnPost('hint', st.id));
+      row.append(b);
+    }
+    box.append(row);
+    if (st.last){
+      const r = el('div', 'res');
+      for (const ln of st.last.lines)
+        r.append(el('div', ln.startsWith('[PASS]') ? 'p' : ln.startsWith('[FAIL]') ? 'f' : 'u', ln));
+      box.append(r);
+    }
+    st.hints.forEach((hh, i) => { const d = el('div', 'hint'); d.append(el('span', 'lbl', T.hint + ' ' + (i + 1)), document.createTextNode(tr(hh))); box.append(d); });
+    if (st.solution){ const d = el('div', 'sol'); d.append(el('span', 'lbl', T.sol), document.createTextNode(tr(st.solution))); box.append(d); }
+    root.append(box);
+  }
+}
+async function learnPost(kind, id){
+  if (kind === 'check'){ learnBusy = id; paintSteps(); }
+  try {
+    const r = await fetch('api/learn/' + kind + '?' + Q, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({step: id})});
+    const d = await r.json();
+    if (d.busy) alert(LT[learnLang()].busy);
+    if (d.error) alert(d.error);
+    if (d.steps) learnSteps = d.steps;
+  } catch (e) { alert(String(e)); }
+  learnBusy = null; paintSteps();
+}
+(async function(){
+  try {
+    const d = await (await fetch('api/learn?' + Q)).json();
+    if (!d.enabled) return;
+    learnSteps = d.steps; $('#stepsbtn').hidden = false; paintSteps();
+  } catch (_e) {}
+})();
+window.addEventListener('ccnp-lang', paintSteps);
+
 loadTopo();
 </script>
 </body>
@@ -1010,17 +1271,29 @@ def main():
                     help="パック配信サーバのポート(左のタスクはそこの問題ページを読む)")
     ap.add_argument("--lab", help="単発: この CML ラボ題名に固定する")
     ap.add_argument("--task", help="単発: 左のタブに出すタスクの Markdown")
+    ap.add_argument("--learn", metavar="問題ID",
+                    help="単発: 学習モード(Steps タブ= 課題ごとの確認・段階式ヒント)。--lab / --task を省くと問題 ID から決める")
     ap.add_argument("--with-parent", type=int, metavar="PID",
                     help="この PID の親プロセスが終わったら自分も終わる(pack.sh serve が自分の PID を渡す)")
     ap.add_argument("--no-record", action="store_true",
                     help="コンソールの操作記録(records/console/)を書かない")
     a = ap.parse_args()
+    if a.learn:
+        if not os.path.exists(os.path.join(a.repo, "problems", a.learn, "learn.yml")):
+            sys.exit(f"problems/{a.learn}/learn.yml がありません")
+        a.lab = a.lab or lab_title(a.learn)
+        if not a.task:                            # lab.sh provision が置く作業コピー(英語版が既定・無ければ日本語版)
+            for cand in ("Task.md", "問題.md"):
+                path = os.path.join(a.repo, "lab", a.learn, cand)
+                if os.path.exists(path):
+                    a.task = path
+                    break
     if a.task and not os.path.exists(a.task):
         sys.exit(f"--task {a.task} がありません")
     mode = f"単発 lab={a.lab}" if a.lab else "パック常駐"
     ready = f"ラボのワークスペース({mode})を http://{a.bind}:{a.port}/ で待ち受け中"
     try:
-        web.run_app(make_app(a.repo, a.pack_port, a.lab, a.task, a.with_parent, not a.no_record),
+        web.run_app(make_app(a.repo, a.pack_port, a.lab, a.task, a.with_parent, not a.no_record, a.learn),
                     host=a.bind, port=a.port,
                     print=lambda *_: print(ready, flush=True))     # 待ち受けに成功してから出す
     except OSError as e:                          # ポート使用中など。長いトレースを出さず 1 行で終わる

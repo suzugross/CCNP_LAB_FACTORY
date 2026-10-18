@@ -16,7 +16,9 @@ problem.yml に `node_image_families: {SW01: iosv, RT01: iol, ...}` があれば
 """
 import argparse
 import hashlib
+import json
 import math
+import random
 import os
 import yaml
 
@@ -135,6 +137,32 @@ def task_annotation(task_text, x1, y1):
     }
 
 
+def random_macs(spec, rng):
+    """problem.yml の lab.mac_random から、その回のスイッチの MAC を決める(BL-249)。
+
+    spec = {slot: 0, nodes: [SW1, ...], collide: {pair: [SW4, SW5], prob: 0.05}}
+    - 対象ノードの slot 番ポートへ 52:54:00:XX:YY:ZZ を振る。XX はノード間で重ならない無作為な値、YY・ZZ も無作為。
+      → MAC の大小(＝STP の同点時の比較)とノード名の順が連動しない。
+    - collide の確率に当たった回だけ、pair の 2 台の XX をそろえる(YY・ZZ は別)。IOSvL2 は PAgP の装置 ID を
+      「slot 0 の MAC の XX＋8000」で作るので PAgP の ID だけが衝突し、STP のブリッジ ID は衝突しない。
+    - 検証用: 環境変数 LAB_MAC_COLLIDE=1/0 で当たり外れを強制できる。
+    """
+    nodes = list(spec["nodes"])
+    slot = int(spec.get("slot", 0))
+    first = rng.sample(range(0x10, 0xF0), len(nodes))
+    plan = {n: [first[i], rng.randrange(256), rng.randrange(256)] for i, n in enumerate(nodes)}
+    col = spec.get("collide") or {}
+    force = os.environ.get("LAB_MAC_COLLIDE", "")
+    hit = bool(col) and (force == "1" or (force != "0" and rng.random() < float(col.get("prob", 0))))
+    if hit:
+        a, b = col["pair"]
+        plan[b][0] = plan[a][0]
+        while plan[b][1:] == plan[a][1:]:
+            plan[b][1:] = [rng.randrange(256), rng.randrange(256)]
+    macs = {n: {slot: "52:54:00:%02x:%02x:%02x" % tuple(v)} for n, v in plan.items()}
+    return macs, {"collide": hit, "pair": col.get("pair"), "macs": {n: m[slot] for n, m in macs.items()}}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", required=True)
@@ -145,6 +173,8 @@ def main():
     # off= キャンバスに問題の要約注釈を貼らない(全文は Lab Notes に残る)。
     # パックのラボは盤面を開いただけで題材が割れないよう off で組む。
     ap.add_argument("--task-annotation", choices=("on", "off"), default="on")
+    # XR のノード(family=iosxr)を別の XR 機種へ差し替える(例: iosxrd= XRd。BL-250)。
+    ap.add_argument("--xr-platform", default="iosxr")
     a = ap.parse_args()
 
     pmeta = load(f"{a.repo}/problems/{a.problem}/problem.yml")
@@ -168,11 +198,25 @@ def main():
 
     # ノード単位イメージ上書き（無ければ全ノード --image-family）。
     node_fam = pmeta.get("node_image_families", {}) or {}
+    if a.xr_platform != "iosxr":
+        node_fam = {n: (a.xr_platform if f == "iosxr" else f) for n, f in node_fam.items()}
+        if a.image_family == "iosxr":
+            a.image_family = a.xr_platform
 
     def prof_of(name):
         """そのノードのイメージ family × role からプロファイルを引く。"""
         fam = node_fam.get(name, a.image_family)
         return all_profiles[fam][role_of(name)]
+
+    # プロファイルの slot_map で problem.yml の slot 番号を機種の slot に読み替える
+    # (XRd: XRv9000 基準の 3 → 1。problem.yml は機種をまたいで同じ番号で書ける・BL-250)。
+    def remap(n, slot):
+        if n in switch_set:
+            return slot
+        return (prof_of(n).get("slot_map") or {}).get(slot, slot)
+    data_links = [{**lk, "a_if": remap(lk["a"], lk["a_if"]), "b_if": remap(lk["b"], lk["b_if"])}
+                  for lk in data_links]
+    ext_links = [{**ex, "if": remap(ex["node"], ex["if"])} for ex in ext_links]
 
     # 各ノードが使う物理スロット（リンク参加分 + MGMT）。スイッチはポートを別集計。
     used = {n: set() for n in nodes_in}
@@ -188,6 +232,27 @@ def main():
     for n in nodes_in:
         if n not in console_nodes:
             used[n].add(prof_of(n)["mgmt_slot"])
+    # lab.mac_random があれば、その回の MAC を決めて lab.macs に足す(BL-249。当たり外れは生成物の mac_plan.json に残す)
+    mr = (pmeta.get("lab", {}) or {}).get("mac_random")
+    if mr:
+        rmacs, mplan = random_macs(mr, random.Random(os.environ.get("LAB_SEED") or None))
+        lab_meta = pmeta.setdefault("lab", {})
+        merged = dict(lab_meta.get("macs") or {})
+        for n, m in rmacs.items():
+            merged[n] = {**(merged.get(n) or {}), **m}
+        lab_meta["macs"] = merged
+        os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
+        with open(os.path.join(os.path.dirname(os.path.abspath(a.out)), "mac_plan.json"), "w", encoding="utf-8") as fh:
+            json.dump(mplan, fh, ensure_ascii=False, indent=1)
+    # lab.macs で MAC を固定するスロットは、未配線でもインタフェースとして定義する。
+    # (IOSvL2 は 1 番目のポートの MAC から装置 ID を作る。CML の乱数が重なると PAgP の相手 ID が衝突する)
+    for n, m in (pmeta.get("lab", {}).get("macs", {}) or {}).items():
+        if n in used:
+            used[n].update(int(s) for s in m)
+    # contiguous_slots: 渡された IF を順に名付ける機種(XRd)は、間の slot も定義して番号ずれを防ぐ
+    for n in nodes_in:
+        if prof_of(n).get("contiguous_slots") and used[n]:
+            used[n].update(range(max(used[n]) + 1))
 
     # 座標: problem.yml の lab.positions 優先(役割ベースの正準配置を生成器が埋める)
     coords = layout(nodes_in, pmeta.get("lab", {}).get("positions", {}) or {},

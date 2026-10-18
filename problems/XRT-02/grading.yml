@@ -1,0 +1,149 @@
+# XRT-02 最終確認(M2 と M3 を終えた状態。配点 M2 60 / M3 40)。学習目的のラボ= パック・ノルマの対象外。
+# 中身は課題ごとの確認(grading.<課題>.yml)を寄せ集めて配点を付け直したもの(手で保守する。課題ごとの確認を直したらここも直す)。
+# 白紙で通る項目は無い(「残っていること」は「直っていること」と同じ項目で見る)。
+# ★サーバを止めて見るチェック(noc1)は --wait-tacacs で XR01 がサーバを使い直すまで待つ(後続のログインの誤失敗を防ぐ)。
+problem: XRT-02
+total_points: 100
+checks:
+- name: M2-1 noc1 can show, ping and clear counters, and cannot configure
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-02 ssh XR01 --user noc1 --pass Noc1-Pass --pre 'SRV01:sudo -n systemctl stop tacacs_plus' --post 'SRV01:sudo -n systemctl start tacacs_plus' --wait-tacacs
+    XR01 -- 'show route 2.2.2.2/32' 'show ospf neighbor' 'show interfaces GigabitEthernet0/0/0/0 brief' 'ping 10.0.12.2 count 2' 'clear counters interface GigabitEthernet0/0/0/0' '' 'configure' 'router
+    ospf 1' 'interface Loopback99'
+  raw:
+  - regex: == LOGIN OK as noc1
+  - regex: Known via "ospf 1"
+  - regex: 2\.2\.2\.2\s+\d+\s+FULL
+  - regex: Gi0/0/0/0\s+up\s+up
+  - regex: Success rate is 100 percent
+  - not_regex: clear counters interface GigabitEthernet0/0/0/0\s*\n% This command is not authorized
+  - regex: router ospf 1\s*\n% This command is not authorized
+  - regex: interface Loopback99\s*\n% This command is not authorized
+  points: 10
+- name: M2-1 noc1 is a member of a user group of your own
+  node: XR01
+  command: show running-config username noc1
+  raw:
+  - regex: \n\s+group \S+
+  - not_regex: group (root-lr|netadmin|sysadmin|operator|cisco-support|serviceadmin|maintenance|provisioning|retrieve|read-only-tg)\s*\n
+  points: 2
+- name: 'M2-2 Telnet from RT01: only the NOC workstation (2.2.2.2) gets a login prompt'
+  node: XR01
+  exec: local
+  command: echo '## from Lo0'; .venv/bin/python topologies/login_probe.py XRT-02 telnet RT01 10.0.12.1 --source Loopback0; echo '## from LINK1'; .venv/bin/python topologies/login_probe.py XRT-02 telnet
+    RT01 10.0.12.1; echo '## from Lo100'; .venv/bin/python topologies/login_probe.py XRT-02 telnet RT01 1.1.1.1 --source Loopback100; echo '## end'
+  raw:
+  - regex: '## from Lo0(?:(?!## from)[\s\S])*== TELNET PROMPT'
+  - regex: '## from LINK1(?:(?!## from)[\s\S])*== TELNET (REFUSED|TIMEOUT)'
+  - regex: '## from Lo100(?:(?!## end)[\s\S])*== TELNET (REFUSED|TIMEOUT)'
+  points: 7
+- name: 'M2-2 XR01: SSH listens only on the management interface'
+  node: XR01
+  command: show lpts bindings brief
+  raw:
+  - regex: TCP\s+MGMT\s+Mg0/RP0/CPU0/0\s+any,22\s
+  - not_regex: TCP\s+default\s+\S+\s+any,22\s
+  points: 5
+- name: M2-3 ops1 (on SRV01 only) logs in and can configure
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-02 ssh XR01 --user ops1 --pass Ops1-Pass -- 'show user group' 'configure' 'interface Loopback99' 'description probe'
+  raw:
+  - regex: == LOGIN OK as ops1
+  - regex: netadmin
+  - regex: interface Loopback99\s*\n\S*\(config-if\)#
+  points: 4
+- name: M2-3 view1 (on SRV01 only) logs in and cannot configure
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-02 ssh XR01 --user view1 --pass View1-Pass -- 'show user group' 'configure' 'interface Loopback99'
+  raw:
+  - regex: == LOGIN OK as view1
+  - regex: read-only-tg
+  - regex: interface Loopback99\s*\n% This command is not authorized
+  points: 4
+- name: M2-3 noc1 (on XR01 only) is refused while SRV01 is up, accepted while it is down
+  node: XR01
+  exec: local
+  command: echo '## server up'; .venv/bin/python topologies/login_probe.py XRT-02 ssh XR01 --user noc1 --pass Noc1-Pass -- 'show user group'; echo '## server down'; .venv/bin/python topologies/login_probe.py
+    XRT-02 ssh XR01 --user noc1 --pass Noc1-Pass --pre 'SRV01:sudo -n systemctl stop tacacs_plus' --post 'SRV01:sudo -n systemctl start tacacs_plus' --wait-tacacs XR01 -- 'show user group'; echo '## end'
+  raw:
+  - regex: '## server up(?:(?!## server down)[\s\S])*== LOGIN FAILED as noc1'
+  - regex: '## server down(?:(?!## end)[\s\S])*== LOGIN OK as noc1'
+  points: 5
+- name: 'M2-3 XR01: the console authenticates against local accounts only'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-02 ssh XR01 -- 'show running-config line console' 'show running-config aaa'
+  raw:
+  - regex: line console[\s\S]*login authentication (\S+)[\s\S]*aaa authentication login \1 local\s*\n
+  points: 5
+- name: 'M2-4 XR01: ICMP echo to the router is policed at 50 pps, other flows untouched'
+  node: XR01
+  command: show lpts pifib hardware police location 0/0/CPU0
+  raw:
+  - regex: (?m)^ICMP-local\s+\S+\s+\d+\s+\d+\s+50\s
+  - not_regex: (?m)^(?!ICMP-local\s)\S+\s+.*\sGlobal\s
+  points: 4
+- name: 'M2-4 SRV01: a ping flood to XR01 is cut down, while monitoring pings (5 per second) all succeed'
+  node: SRV01
+  exec: shell
+  command: ping -c 5 -i 0.2 1.1.1.1 | tail -2; sudo -n ping -q -f -c 500 1.1.1.1 | tail -2
+  raw:
+  - regex: 5 packets transmitted, 5 received, 0% packet loss
+  - regex: 500 packets transmitted
+  - not_regex: 500 packets transmitted, 500 received
+  points: 5
+- name: 'M2-5 RT01: the guest network cannot reach XR01, the NOC workstation still reaches SRV01 through it'
+  node: RT01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-02 ssh RT01 -- 'ping 1.1.1.1 source Loopback100 repeat 3' 'ping 10.0.50.10 source Loopback0 repeat 3'
+  raw:
+  - regex: source Loopback100 repeat 3(?:(?!source Loopback0 )[\s\S])*Success rate is 0 percent
+  - regex: source Loopback0 repeat 3[\s\S]*Success rate is 100 percent
+  points: 4
+- name: 'M2-5 XR01: an ACL is applied inbound on LINK1 and the OSPF adjacency over LINK1 is FULL'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-02 ssh XR01 -- 'show running-config interface GigabitEthernet0/0/0/0' 'show ospf neighbor'
+  raw:
+  - regex: ipv4 access-group \S+ ingress
+  - regex: 2\.2\.2\.2\s+\d+\s+FULL
+  points: 5
+- name: 'M3-1 XR01: adjacency over LINK2, process-wide passive kept, SERVERS still passive'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-02 ssh XR01 -- 'show ospf neighbor' 'show running-config router ospf 1' 'show ospf interface GigabitEthernet0/0/0/1'
+  raw:
+  - regex: FULL[^\n]*10\.0\.21\.2\s+GigabitEthernet0/0/0/2
+  - regex: 'router ospf 1\s*\n(?: [^\n]*\n)*? passive enable\s*\n'
+  - regex: GigabitEthernet0/0/0/1 is up[\s\S]*?[Pp]assive
+  points: 14
+- name: 'M3-2 XR01: 2001:DB8::2/128 is an OSPFv3 route'
+  node: XR01
+  command: show route ipv6 2001:db8::2/128
+  raw:
+  - regex: Known via "ospf 1"
+  points: 6
+- name: 'M3-2 RT01: 2001:DB8::1/128 is an OSPF route'
+  node: RT01
+  command: show ipv6 route 2001:DB8::1/128
+  raw:
+  - regex: Known via "ospf 1"
+  points: 7
+- name: 'M3-3 RT02: only a default route from outside area 1'
+  node: RT02
+  command: show ip route ospf
+  raw:
+  - regex: O\*IA\s+0\.0\.0\.0/0
+  - not_regex: (?m)^O IA\s
+  points: 6
+- name: 'M3-3 RT01: the branch LANs arrive as 172.16.0.0/22 only'
+  node: RT01
+  command: show ip route ospf | include 172
+  raw:
+  - regex: 172\.16\.0\.0/22 is subnetted, 1 subnets
+  - regex: O IA\s+172\.16\.0\.0\s
+  - not_regex: 172\.16\.[123]\.0
+  points: 7

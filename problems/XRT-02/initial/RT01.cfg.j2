@@ -1,0 +1,38 @@
+! XRT-02 RT01(据付・変更しない)。Loopback0 = 運用端末の代わり(Telnet の許可元)・Loopback100 = ゲスト網
+ipv6 unicast-routing
+interface Loopback0
+ ip address 2.2.2.2 255.255.255.255
+ ip ospf 1 area 0
+ ipv6 address 2001:DB8::2/128
+ ipv6 ospf 1 area 0
+!
+interface Loopback100
+ description GUEST network (must not reach XR01)
+ ip address 198.51.100.1 255.255.255.0
+ ip ospf network point-to-point
+ ip ospf 1 area 0
+!
+interface {{ links[0] }}
+ description LINK1 to XR01
+ ip address 10.0.12.2 255.255.255.0
+ ip ospf 1 area 0
+ ip ospf network point-to-point
+ ipv6 address 2001:DB8:12::2/64
+ ipv6 ospf 1 area 0
+ ipv6 ospf network point-to-point
+ no shutdown
+!
+interface {{ links[1] }}
+ description LINK2 to XR01 (backup: cost 100 so that LINK1 carries the traffic)
+ ip address 10.0.21.2 255.255.255.0
+ ip ospf 1 area 0
+ ip ospf cost 100
+ ip ospf network point-to-point
+ no shutdown
+!
+router ospf 1
+ router-id 2.2.2.2
+!
+ipv6 router ospf 1
+ router-id 2.2.2.2
+!

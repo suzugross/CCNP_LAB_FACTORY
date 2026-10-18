@@ -4,7 +4,8 @@
 # 問題ではない。技術書を段階的に訳しながら読み進めるための機能。
 #
 #   ビルド: scripts/read.sh build  <ソースディレクトリ>
-#   配信:   scripts/read.sh serve  [PORT]          # 既定 8898（パックは 8899）
+#   配信:   ポータル(scripts/pack.sh serve → http://<ホスト>:8899/ の Study Materials)に一本化(2026-10-13・BL-247)。
+#           build した読み物は book.yml の shelf: の棚に載る。`read.sh serve` はポータルを起動するだけの別名。
 #   持ち出し: scripts/read.sh bundle <ソースディレクトリ> [--split]
 #           → reading/<key>-offline.html （全ページを1枚に・外部参照ゼロ）
 #             --split なら章ごとに1枚。Drive へ置いてスマホに落とせば通信なしで読める
@@ -44,10 +45,13 @@ case "$cmd" in
     "$PY" "$REPO/topologies/gen_reading.py" bundle --src "$src" "$@"
     ;;
   serve)
-    port="${1:-8898}"
-    bind="${2:-${READ_BIND:-0.0.0.0}}"
-    echo "ブラウザから http://10.1.10.6:${port}/ (LAN) / http://localhost:${port}/ (VSCode 転送)"
-    exec "$PY" -m http.server "$port" --bind "$bind" --directory "$REPO/reading"
+    # 読み物だけの配信(旧 8898)は廃止。ポータル(8899)の Study Materials から読む。
+    if (exec 3<>/dev/tcp/127.0.0.1/8899) 2>/dev/null; then
+      echo "読み物はポータルで配信中です: http://10.1.10.6:8899/ (Study Materials)"
+      exit 0
+    fi
+    echo "読み物の配信はポータルに一本化しました。ポータルを起動します(scripts/pack.sh serve)。"
+    exec "$REPO/scripts/pack.sh" serve "$@"
     ;;
   *) usage ;;
 esac

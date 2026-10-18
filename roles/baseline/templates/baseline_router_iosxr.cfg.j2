@@ -1,0 +1,42 @@
+!! ============================================================
+!! baseline (router / IOS XR)  -- config 断片 / Jinja2 テンプレート (BL-246)
+!! hostname / 管理IP(VRF MGMT) / ユーザ / SSH。CML が iosxr_config.txt として渡し、起動時に CVAC が投入する。
+!! ★前提: CML のノード定義 iosxrv9000 の設定ファイルが editable: true であること(false だと無言で捨てられ、既定設定で起動する)。
+!! SSH のホスト鍵は起動時に自動で作られる(24.3.1 実測)。IF の no shutdown は投入後の表示から消える(up が既定の表示)。
+!! ※末尾に 'end' を置かない（day0 で initial を後ろに連結するため。initial 側の最後に end を書く）
+!! ============================================================
+hostname {{ inventory_hostname }}
+!
+!! ラボ指紋: grade が採点前に照合する(IOS 版と同じ形。XR でも running-config に残る・2026-10-12 実機確認)
+alias exec labid CCNP-LAB-{{ (problem | hash('md5'))[:8] }}
+!
+username {{ ansible_user }}
+ group root-lr
+ group cisco-support
+ secret {{ ansible_ssh_pass }}
+!
+vrf MGMT
+ address-family ipv4 unicast
+ !
+!
+interface {{ mgmt_if }}
+ description === MGMT (Ansible) ===
+ vrf MGMT
+ ipv4 address {{ mgmt_ip }} {{ mgmt_mask | default('255.255.255.192') }}
+ no shutdown
+!
+ssh server v2
+ssh server vrf MGMT
+!! 既定の rate-limit 60(毎分)では、採点が続けて張る接続が reset される(2026-10-12 実発= 連続採点で
+!! 「Error reading SSH protocol banner」。出力がエラー文になり、否定条件だけのチェックが誤って通る)。
+ssh server rate-limit 600
+!! VTY は既定で 5 本(vty0〜4)。採点の接続は閉じた後もしばらく残るので、続けて採点すると埋まって
+!! 「Failed to authenticate … saw EOF」になる(同日実発)。本数を増やす。
+vty-pool default 0 30
+!
+line console
+ exec-timeout 0 0
+!
+line default
+ exec-timeout 0 0
+!
