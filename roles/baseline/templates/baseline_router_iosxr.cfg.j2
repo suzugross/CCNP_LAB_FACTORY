@@ -37,6 +37,18 @@ vty-pool default 0 30
 line console
  exec-timeout 0 0
 !
+{% if xr_node_platform | default('iosxr') == 'iosxrd' %}
+!! XRd: freeze-monitor の警告(%PLATFORM-XRD-4-FREEZE_MONITOR_CHECK_WARNING・CPU の割り当てが 100 ms 超遅れた)を抑止する。
+!! アイドルのホストでも 5〜10 分おきに 100〜300 ms で出て、コンソールの vim(edit route-policy 等)の画面に重なる
+!! (2026-10-20 ユーザ指摘)。レベル 4 なので console を warnings のままにすると表示される。抑止数は
+!! show logging suppress rule XRD-FREEZE で見える。first-boot はコミット履歴に残らないので解く側の履歴は汚れない。
+logging suppress rule XRD-FREEZE
+ alarm PLATFORM XRD FREEZE_MONITOR_CHECK_WARNING
+!
+logging suppress apply rule XRD-FREEZE
+ all-of-router
+!
+{% endif %}
 line default
  exec-timeout 0 0
 !

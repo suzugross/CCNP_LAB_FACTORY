@@ -59,6 +59,10 @@
         # BL-225: problem.yml の console_nodes= 管理 IF/SVI を持たないノード（採点・投入はコンソール）。
         # MGMT IP は従来どおり割り当てる（下流の mgmt_map[node] 参照を壊さないため・使わないだけ）。
         console_only: "{{ item in (pmeta.console_nodes | default([])) }}"
+        # XR の機種(iosxr= XRv9000 / iosxrd= XRd)。problem.yml の node_xr_platforms > -e xr_platform > iosxr。
+        # 初期設定テンプレートが機種ごとの差を出し分けるのに使う(XR 以外のノードでは使わない)。
+        xr_node_platform: "{{ (pmeta.node_xr_platforms | default({}))[item]
+                               | default(xr_platform | default('iosxr'), true) }}"
       loop: "{{ pmeta.target_nodes }}"
 
 - name: 各ノードの day0 config(baseline+initial) を描画
