@@ -1,0 +1,327 @@
+#### M4-3 の前(マルチトポロジのまま)
+show route ipv6 isis
+Wed Oct 21 15:05:24.696 UTC
+
+% No matching routes found
+
+RP/0/RP0/CPU0:XR01#
+show isis ipv6 topology
+Wed Oct 21 15:05:25.100 UTC
+
+IS-IS CORE paths to IPv6 Unicast (Level-1) routers
+System Id          Metric    Next-Hop           Interface       SNPA          
+XR01               --      
+RT01               **      
+
+IS-IS CORE paths to IPv6 Unicast (Level-2) routers
+System Id          Metric    Next-Hop           Interface       SNPA          
+XR01               --      
+RT02               **      
+RT03               **      
+RP/0/RP0/CPU0:XR01#
+show ipv6 route isis
+IPv6 Routing Table - default - 7 entries
+Codes: C - Connected, L - Local, S - Static, U - Per-user Static route
+       B - BGP, R - RIP, H - NHRP, HG - NHRP registered
+       Hg - NHRP registration summary, HE - NHRP External, I1 - ISIS L1
+       I2 - ISIS L2, IA - ISIS interarea, IS - ISIS summary, D - EIGRP
+       EX - EIGRP external, ND - ND Default, NDp - ND Prefix, DCE - Destination
+       NDr - Redirect, RL - RPL, O - OSPF Intra, OI - OSPF Inter
+       OE1 - OSPF ext 1, OE2 - OSPF ext 2, ON1 - OSPF NSSA ext 1
+       ON2 - OSPF NSSA ext 2, la - LISP alt, lr - LISP site-registrations
+       ld - LISP dyn-eid, lA - LISP away, le - LISP extranet-policy
+       lp - LISP publications, ls - LISP destinations-summary, a - Application
+       m - OMP
+I1  ::/0 [115/10]
+     via FE80::5054:FF:FED3:7FA0, Ethernet0/0
+RT01#
+ping 2001:db8:1020::1 source Loopback0
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 2001:DB8:1020::1, timeout is 2 seconds:
+Packet sent with a source address of 2001:DB8:255::11
+.....
+Success rate is 0 percent (0/5)
+RT01#
+show ipv6 route isis
+IPv6 Routing Table - default - 11 entries
+Codes: C - Connected, L - Local, S - Static, U - Per-user Static route
+       B - BGP, R - RIP, H - NHRP, HG - NHRP registered
+       Hg - NHRP registration summary, HE - NHRP External, I1 - ISIS L1
+       I2 - ISIS L2, IA - ISIS interarea, IS - ISIS summary, D - EIGRP
+       EX - EIGRP external, ND - ND Default, NDp - ND Prefix, DCE - Destination
+       NDr - Redirect, RL - RPL, O - OSPF Intra, OI - OSPF Inter
+       OE1 - OSPF ext 1, OE2 - OSPF ext 2, ON1 - OSPF NSSA ext 1
+       ON2 - OSPF NSSA ext 2, la - LISP alt, lr - LISP site-registrations
+       ld - LISP dyn-eid, lA - LISP away, le - LISP extranet-policy
+       lp - LISP publications, ls - LISP destinations-summary, a - Application
+       m - OMP
+I2  2001:DB8:13::/64 [115/1010]
+     via FE80::A8BB:CCFF:FE00:3210, Ethernet0/1
+I2  2001:DB8:255::3/128 [115/20]
+     via FE80::A8BB:CCFF:FE00:3210, Ethernet0/1
+I2  2001:DB8:1030::/64 [115/20]
+     via FE80::A8BB:CCFF:FE00:3210, Ethernet0/1
+RT02#
+#### M4-3 解
+configure
+Wed Oct 21 15:05:40.756 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+address-family ipv6 unicast
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+single-topology
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+commit
+Wed Oct 21 15:05:42.472 UTC
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show route ipv6 isis
+Wed Oct 21 15:06:24.713 UTC
+
+i L2 2001:db8:23::/64 
+      [115/20] via fe80::a8bb:ccff:fe00:3100, 00:00:40, GigabitEthernet0/0/0/1
+i L2 2001:db8:255::2/128 
+      [115/20] via fe80::a8bb:ccff:fe00:3100, 00:00:40, GigabitEthernet0/0/0/1
+i L2 2001:db8:255::3/128 
+      [115/30] via fe80::a8bb:ccff:fe00:3100, 00:00:40, GigabitEthernet0/0/0/1
+i L1 2001:db8:255::11/128 
+      [115/20] via fe80::a8bb:ccff:fe00:3000, 00:00:40, GigabitEthernet0/0/0/0
+i L1 2001:db8:1011::/64 
+      [115/20] via fe80::a8bb:ccff:fe00:3000, 00:00:40, GigabitEthernet0/0/0/0
+i L2 2001:db8:1020::/64 
+      [115/20] via fe80::a8bb:ccff:fe00:3100, 00:00:40, GigabitEthernet0/0/0/1
+i L2 2001:db8:1030::/64 
+      [115/30] via fe80::a8bb:ccff:fe00:3100, 00:00:40, GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01#
+show route ipv6 2001:db8:255::3/128
+Wed Oct 21 15:06:25.101 UTC
+
+Routing entry for 2001:db8:255::3/128
+  Known via "isis CORE", distance 115, metric 30, type level-2
+  Installed Oct 21 15:05:43.947 for 00:00:41
+  Routing Descriptor Blocks
+    fe80::a8bb:ccff:fe00:3100, from 2001:db8:255::3, via GigabitEthernet0/0/0/1
+      Route metric is 30
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+show isis adjacency detail
+Wed Oct 21 15:06:25.501 UTC
+
+IS-IS CORE Level-1 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    26   00:00:42 Yes None None
+  Area Address:           49.0001
+  Neighbor IPv4 Address:  10.0.11.2*
+  Neighbor IPv6 Address:  fe80::a8bb:ccff:fe00:3000*
+  Topology:               IPv4 Unicast
+  Topology:               IPv6 Unicast
+  BFD Status:             Neighbor Useable (BFD Not Configured)
+  Adjacency Flaps:        1
+
+Total adjacency count: 1
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT02           Gi0/0/0/1                *PtoP*         Up    23   00:00:42 Yes None None
+  Area Address:           49.0002
+  Neighbor IPv4 Address:  10.0.12.2*
+  Neighbor IPv6 Address:  fe80::a8bb:ccff:fe00:3100*
+  Topology:               IPv4 Unicast
+  Topology:               IPv6 Unicast
+  BFD Status:             Neighbor Useable (BFD Not Configured)
+  Adjacency Flaps:        1
+RT03           Gi0/0/0/2                *PtoP*         Up    25   00:00:42 Yes None None
+  Area Address:           49.0003
+  Neighbor IPv4 Address:  10.0.13.3*
+  Neighbor IPv6 Address:  fe80::a8bb:ccff:fe00:3200*
+  Topology:               IPv4 Unicast
+  Topology:               IPv6 Unicast
+  BFD Status:             Neighbor Useable (BFD Not Configured)
+  Adjacency Flaps:        1
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show isis database detail XR01.00-00
+Wed Oct 21 15:06:25.903 UTC
+
+IS-IS CORE (Level-1) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x00000006   0x515b        1158 /*            1/0/0
+  Area Address:   49.0001
+  LSP MTU:        1492
+  NLPID:          0xcc
+  NLPID:          0x8e
+  IP Address:     10.255.0.1
+  IPv6 Address:   2001:db8:255::1
+  Hostname:       XR01
+  Metric: 10         IP 10.0.11.0/24
+  Metric: 10         IP 10.255.0.1/32
+  Metric: 10         IS RT01.00
+  Metric: 10         IPv6 2001:db8:11::/64
+  Metric: 10         IPv6 2001:db8:255::1/128
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000000a   0xc22a        1158 /*            0/0/0
+  Area Address:   49.0001
+  LSP MTU:        1492
+  NLPID:          0xcc
+  NLPID:          0x8e
+  IP Address:     10.255.0.1
+  IPv6 Address:   2001:db8:255::1
+  Hostname:       XR01
+  Metric: 10         IS-Extended RT02.00
+  Metric: 1000       IS-Extended RT03.00
+  Metric: 10         IP-Extended 10.0.11.0/24
+  Metric: 10         IP-Extended 10.0.12.0/24
+  Metric: 1000       IP-Extended 10.0.13.0/24
+  Metric: 20         IP-Extended 10.11.0.0/16
+  Metric: 10         IP-Extended 10.255.0.1/32
+  Metric: 20         IP-Extended 10.255.0.11/32
+  Metric: 10         IPv6 2001:db8:11::/64
+  Metric: 10         IPv6 2001:db8:12::/64
+  Metric: 10         IPv6 2001:db8:13::/64
+  Metric: 10         IPv6 2001:db8:255::1/128
+  Metric: 20         IPv6 2001:db8:255::11/128
+  Metric: 20         IPv6 2001:db8:1011::/64
+RP/0/RP0/CPU0:XR01#
+show running-config router isis
+Wed Oct 21 15:06:26.316 UTC
+router isis CORE
+ net 49.0001.0102.5500.0001.00
+ address-family ipv4 unicast
+  metric-style wide level 2
+ !
+ address-family ipv6 unicast
+  single-topology
+ !
+ interface Loopback0
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface GigabitEthernet0/0/0/0
+  circuit-type level-1
+  point-to-point
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface GigabitEthernet0/0/0/1
+  circuit-type level-2-only
+  point-to-point
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface GigabitEthernet0/0/0/2
+  circuit-type level-2-only
+  point-to-point
+  address-family ipv4 unicast
+   metric 1000
+  !
+  address-family ipv6 unicast
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show clns neighbors
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+0102.5500.0001  Et0/0         5254.00d3.7fa0      Up     21        L1   IS-IS
+RT01#
+show ipv6 route isis
+IPv6 Routing Table - default - 8 entries
+Codes: C - Connected, L - Local, S - Static, U - Per-user Static route
+       B - BGP, R - RIP, H - NHRP, HG - NHRP registered
+       Hg - NHRP registration summary, HE - NHRP External, I1 - ISIS L1
+       I2 - ISIS L2, IA - ISIS interarea, IS - ISIS summary, D - EIGRP
+       EX - EIGRP external, ND - ND Default, NDp - ND Prefix, DCE - Destination
+       NDr - Redirect, RL - RPL, O - OSPF Intra, OI - OSPF Inter
+       OE1 - OSPF ext 1, OE2 - OSPF ext 2, ON1 - OSPF NSSA ext 1
+       ON2 - OSPF NSSA ext 2, la - LISP alt, lr - LISP site-registrations
+       ld - LISP dyn-eid, lA - LISP away, le - LISP extranet-policy
+       lp - LISP publications, ls - LISP destinations-summary, a - Application
+       m - OMP
+I1  ::/0 [115/10]
+     via FE80::5054:FF:FED3:7FA0, Ethernet0/0
+I1  2001:DB8:255::1/128 [115/20]
+     via FE80::5054:FF:FED3:7FA0, Ethernet0/0
+RT01#
+ping 2001:db8:1020::1 source Loopback0
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 2001:DB8:1020::1, timeout is 2 seconds:
+Packet sent with a source address of 2001:DB8:255::11
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+RT01#
+ping 2001:db8:1030::1 source Loopback0
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 2001:DB8:1030::1, timeout is 2 seconds:
+Packet sent with a source address of 2001:DB8:255::11
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+RT01#
+show ipv6 route isis
+IPv6 Routing Table - default - 15 entries
+Codes: C - Connected, L - Local, S - Static, U - Per-user Static route
+       B - BGP, R - RIP, H - NHRP, HG - NHRP registered
+       Hg - NHRP registration summary, HE - NHRP External, I1 - ISIS L1
+       I2 - ISIS L2, IA - ISIS interarea, IS - ISIS summary, D - EIGRP
+       EX - EIGRP external, ND - ND Default, NDp - ND Prefix, DCE - Destination
+       NDr - Redirect, RL - RPL, O - OSPF Intra, OI - OSPF Inter
+       OE1 - OSPF ext 1, OE2 - OSPF ext 2, ON1 - OSPF NSSA ext 1
+       ON2 - OSPF NSSA ext 2, la - LISP alt, lr - LISP site-registrations
+       ld - LISP dyn-eid, lA - LISP away, le - LISP extranet-policy
+       lp - LISP publications, ls - LISP destinations-summary, a - Application
+       m - OMP
+I2  2001:DB8:11::/64 [115/20]
+     via FE80::5054:FF:FE01:C124, Ethernet0/0
+I2  2001:DB8:13::/64 [115/20]
+     via FE80::5054:FF:FE01:C124, Ethernet0/0
+I2  2001:DB8:255::1/128 [115/20]
+     via FE80::5054:FF:FE01:C124, Ethernet0/0
+I2  2001:DB8:255::3/128 [115/20]
+     via FE80::A8BB:CCFF:FE00:3210, Ethernet0/1
+I2  2001:DB8:255::11/128 [115/30]
+     via FE80::5054:FF:FE01:C124, Ethernet0/0
+I2  2001:DB8:1011::/64 [115/30]
+     via FE80::5054:FF:FE01:C124, Ethernet0/0
+I2  2001:DB8:1030::/64 [115/20]
+     via FE80::A8BB:CCFF:FE00:3210, Ethernet0/1
+RT02#
+show ipv6 route isis
+IPv6 Routing Table - default - 15 entries
+Codes: C - Connected, L - Local, S - Static, U - Per-user Static route
+       B - BGP, R - RIP, H - NHRP, HG - NHRP registered
+       Hg - NHRP registration summary, HE - NHRP External, I1 - ISIS L1
+       I2 - ISIS L2, IA - ISIS interarea, IS - ISIS summary, D - EIGRP
+       EX - EIGRP external, ND - ND Default, NDp - ND Prefix, DCE - Destination
+       NDr - Redirect, RL - RPL, O - OSPF Intra, OI - OSPF Inter
+       OE1 - OSPF ext 1, OE2 - OSPF ext 2, ON1 - OSPF NSSA ext 1
+       ON2 - OSPF NSSA ext 2, la - LISP alt, lr - LISP site-registrations
+       ld - LISP dyn-eid, lA - LISP away, le - LISP extranet-policy
+       lp - LISP publications, ls - LISP destinations-summary, a - Application
+       m - OMP
+I2  2001:DB8:11::/64 [115/30]
+     via FE80::A8BB:CCFF:FE00:3110, Ethernet0/1
+I2  2001:DB8:12::/64 [115/20]
+     via FE80::A8BB:CCFF:FE00:3110, Ethernet0/1
+I2  2001:DB8:255::1/128 [115/30]
+     via FE80::A8BB:CCFF:FE00:3110, Ethernet0/1
+I2  2001:DB8:255::2/128 [115/20]
+     via FE80::A8BB:CCFF:FE00:3110, Ethernet0/1
+I2  2001:DB8:255::11/128 [115/40]
+     via FE80::A8BB:CCFF:FE00:3110, Ethernet0/1
+I2  2001:DB8:1011::/64 [115/40]
+     via FE80::A8BB:CCFF:FE00:3110, Ethernet0/1
+I2  2001:DB8:1020::/64 [115/20]
+     via FE80::A8BB:CCFF:FE00:3110, Ethernet0/1
+RT03#

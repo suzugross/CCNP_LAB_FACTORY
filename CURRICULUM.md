@@ -199,6 +199,7 @@ Catalyst Center の AI ワークフロー追加・ハードウェア/ソフト�
 | U-M1 | IOS XR 設定の管理(ターゲット/実行・履歴・ラベル・ロールバック・確認つきコミット・失敗の読み方・排他・全体差し替え) | — | — | — | — | ✗ | ✗ | ○ | — | ○ | — | 読み物 `courses/xr/`(M1・日英)・XRT-01 の M1 課題 7 本(履歴を使った TS・変更の完全な取り消しを含む) | 紙面なし。TS は 1 本(履歴に仕込む変更を増やせば生成器にできる) | BL-246 |
 | U-M2 | IOS XR 管理プレーンの保護(タスク ID・タスク/ユーザグループ・describe・MPP・TACACS+ の AAA(方式リスト・送信元・サーバの task 属性・保留)・LPTS・ACL。SPCOR 1.5.a 1.6.b 1.7.b) | — | — | — | — | ✗ | ✗ | ○ | — | — | — | 読み物 `courses/xr/`(M2・日英)・XRT-02 の M2 課題 5 本(学習モード・採点機から実際にログインして許可/拒否を見る) | 紙面なし。TS なし(送信元 IF 抜け・方式リストの順・保留を故障にすれば TS にできる) | BL-246 |
 | U-M3 | IOS XR の OSPF(階層 CLI と継承・passive の継承・OSPFv3・スタブ/完全スタブ・range。SPCOR 2.2 2.6) | — | — | — | — | ✗ | ✗ | ○ | — | ○ | — | 読み物 `courses/xr/`(M3・日英)・XRT-02 の M3 課題 3 本(継承した passive の TS を含む) | 紙面なし。NSSA・仮想リンク・認証(キーチェーン)は未作問 | BL-246 |
+| U-M4 | IOS XR の IS-IS(NET とエリア・レベルと隣接・p2p と DIS・LSP と TLV・ATT ビットと L2→L1 の漏らし(up/down ビット)・narrow/wide・単一/マルチトポロジ・XR の設定の木(IF の AF が無いと動かない)・漏らしに RPL。SPCOR 2.1 2.6) | — | — | — | — | ✗ | ✗ | ○ | — | ○ | — | 読み物 `courses/xr/`(M4・日英・技術そのものを厚く)・XRT-04 の M4 課題 4 本(書きかけの TS・metric-style の食い違いの TS を含む・XR01 は XRd) | 紙面なし。認証(hello/lsp-password・キーチェーン)・オーバーロード ビット・再配布・要約・DIS の挙動(broadcast)・複数エリア アドレスは未作問(2026-10-22= 認証・DIS・要約・複数エリアは M4 追補 `XRT-05`、オーバーロード ビットは M7 で拾う計画・design §18/§19) | BL-246 |
 | U-M5 | IOS XR のルーティング ポリシー言語(eBGP の既定の拒否・set と判定の規則・pass/drop/done・引数と apply・付け所と確認・変更時のコミット検査。SPCOR 2.5) | — | — | — | — | ✗ | ✗ | ○ | — | ○ | — | 読み物 `courses/xr/`(M5・日英)・XRT-03 の M5 課題 4 本(pass の無い方針の TS を含む・XR01 は XRd) | 紙面なし。OSPF/IS-IS 側の付け所・extcommunity は未作問 | BL-246 |
 | U-M6 | IOS XR の BGP(設定の木構造・ループバック間 iBGP と next-hop-self・iBGP に既定の拒否が無いこと・再配送に RPL・プリペンドと apply の罠・neighbor-group/af-group と継承の確認・bestpath-compare。SPCOR 2.3 2.4 2.6) | — | — | — | — | ✗ | ✗ | ○ | — | ○ | — | 読み物 `courses/xr/`(M6・日英)・XRT-03 の M6 課題 4 本(iBGP の TS を含む・XR01 は XRd) | 紙面なし。RR・コンフェデレーション・マルチパス・BGP の IPv6/VPN は未作問 | BL-246 |
 
@@ -294,6 +295,7 @@ C 群= 既存単元の薄い層。**
 
 | 日付 | U | 段階 | 成果物 | 備考 |
 |------|---|------|--------|------|
+| 2026-10-21 | U-M4 | L1 L3 | `XRT-04`(XRd 1 台+IOL 3 台・学習モード・課題 4 本)＋読み物 `courses/xr/`(M4・日英) | BL-246。先に XRv9000/XRd の比較 PoC(design §17.4)= IS-IS は全出力一致→ XRd。実機 E2E= 白紙 0 → 模範解 100(課題ごとの確認 4 本も同じ)。実測= IF に AF が無いと Disabled・narrow/wide の食い違いで ATT ビットが下りて L1 の既定経路も消える・narrow は 63 に切り詰め・IOS の隣接チェック・XR の既定はマルチトポロジ・IF メトリックは AF ごと |
 | 2026-10-18 | U-M6 | L1 L3 | `XRT-03` に RT04(社内・OSPF+iBGP)を足して M6 を同居(配点 M5 50 / M6 50)＋読み物 `courses/xr/`(M6・日英) | BL-246。実機 E2E= 白紙 0 → M5〜M6 の模範解 100(課題ごとの確認 8 本も同じ)。実測= apply の後の set が未決の経路を受け入れて漏らす(if apply で防ぐ)・prepend 0 は無効果・running-config は継承値を出さず show bgp neighbor X configuration が出どころを示す |
 | 2026-10-18 | U-M5 | L1 L3 | `XRT-03`(XRd 1 台+IOL 3 台・学習モード)＋読み物 `courses/xr/`(M5・日英) | BL-246。先に XRv9000/XRd の比較 PoC(design §14)= RPL/BGP は一致→ XRd を採用。実機 E2E= 作り直したラボで白紙 0 → 模範解 100。実測= set は暗黙の pass・変更は clear なしで効く・付け所のパラメータ数不一致はコミット失敗 |
 | 2026-10-18 | U-M3 | L1 L3 | `XRT-02` に RT02 とリンク 2 本を足して M3 を同居(配点 M2 60 / M3 40)＋読み物 `courses/xr/`(M3・日英) | BL-246。実機 E2E= 作り直したラボで白紙 0 → 模範解 100。実測= inheritance detail が継承 passive を注記しない・IPv6 表で OSPFv3 は "ospf 1" 表示 |

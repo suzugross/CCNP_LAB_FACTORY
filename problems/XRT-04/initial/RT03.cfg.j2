@@ -1,0 +1,42 @@
+! XRT-04 RT03(据付・変更しない)。バックボーン(L2 だけ・エリア 49.0003)。wide メトリックへ移行済み。
+! CORE-B(XR01 向け)は予備リンク= 設計規則どおりメトリック 1000(この機器の側だけ設定済み)。
+! IPv6 は単一トポロジ(IOS の既定)。サービス網 10.30.0.0/16 を IS-IS に載せている。
+ipv6 unicast-routing
+interface Loopback0
+ ip address 10.255.0.3 255.255.255.255
+ ipv6 address 2001:DB8:255::3/128
+ ip router isis
+ ipv6 router isis
+!
+interface Loopback1
+ description SERVICES-B
+ ip address 10.30.0.1 255.255.0.0
+ ipv6 address 2001:DB8:1030::1/64
+ ip router isis
+ ipv6 router isis
+!
+interface {{ links[0] }}
+ description CORE-B to XR01 (backup)
+ ip address 10.0.13.3 255.255.255.0
+ ipv6 address 2001:DB8:13::3/64
+ ip router isis
+ ipv6 router isis
+ isis network point-to-point
+ isis metric 1000
+ no shutdown
+!
+interface {{ links[1] }}
+ description to RT02
+ ip address 10.0.23.3 255.255.255.0
+ ipv6 address 2001:DB8:23::3/64
+ ip router isis
+ ipv6 router isis
+ isis network point-to-point
+ no shutdown
+!
+router isis
+ net 49.0003.0102.5500.0003.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+!

@@ -1,0 +1,30 @@
+! XRT-04 RT01(据付・変更しない)。エリア 49.0001 の L1 だけのルータ(古い機器= narrow メトリックのまま)。
+! IPv6 は単一トポロジ(IOS の既定)。他エリアへは XR01 の ATT ビットによる既定経路で出る。
+ipv6 unicast-routing
+interface Loopback0
+ ip address 10.255.0.11 255.255.255.255
+ ipv6 address 2001:DB8:255::11/128
+ ip router isis
+ ipv6 router isis
+!
+interface Loopback1
+ description ACCESS-LAN
+ ip address 10.11.0.1 255.255.0.0
+ ipv6 address 2001:DB8:1011::1/64
+ ip router isis
+ ipv6 router isis
+!
+interface {{ links[0] }}
+ description ACCESS to XR01
+ ip address 10.0.11.2 255.255.255.0
+ ipv6 address 2001:DB8:11::2/64
+ ip router isis
+ ipv6 router isis
+ isis network point-to-point
+ no shutdown
+!
+router isis
+ net 49.0001.0102.5500.0011.00
+ is-type level-1
+ log-adjacency-changes
+!

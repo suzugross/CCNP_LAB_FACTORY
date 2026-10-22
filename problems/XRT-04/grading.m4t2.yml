@@ -1,0 +1,47 @@
+# M4-2: バックボーン(wide)と経路を交換する。RT01(narrow の L1)は変えずに経路を保つ。CORE-B は予備(1000)。
+problem: XRT-04
+total_points: 100
+checks:
+  - name: "M4-2 XR01: learns the backbone's loopbacks and services networks at Level 2"
+    node: XR01
+    command: "show route isis"
+    raw:
+      - { regex: "i L2 10\\.255\\.0\\.2/32 " }
+      - { regex: "i L2 10\\.255\\.0\\.3/32 " }
+      - { regex: "i L2 10\\.20\\.0\\.0/16 " }
+      - { regex: "i L2 10\\.30\\.0\\.0/16 " }
+    points: 25
+  - name: "M4-2 RT03: learns area 49.0001 (XR01, RT01 and its LAN) at Level 2"
+    node: RT03
+    command: "show ip route isis"
+    raw:
+      - { regex: "i L2\\s+10\\.255\\.0\\.1/32 " }
+      - { regex: "i L2\\s+10\\.255\\.0\\.11/32 " }
+      - { regex: "i L2\\s+10\\.11\\.0\\.0/16 " }
+    points: 20
+  - name: "M4-2 RT01: keeps its Level 1 routes and has a default route towards XR01"
+    node: RT01
+    command: "show ip route isis"
+    raw:
+      - { regex: "i\\*L1\\s+0\\.0\\.0\\.0/0 \\[115/\\d+\\] via 10\\.0\\.11\\.1" }
+      - { regex: "i L1\\s+10\\.255\\.0\\.1/32 " }
+    points: 15
+  - name: "M4-2 RT01: reaches RT03's services network"
+    node: RT01
+    command: "ping 10.30.0.1 source Loopback0"
+    raw:
+      - { regex: "Success rate is (?:100|80) percent" }
+    points: 10
+  - name: "M4-2 XR01: CORE-B is advertised with metric 1000 at Level 2"
+    node: XR01
+    command: "show isis database detail level 2 XR01.00-00"
+    raw:
+      - { regex: "Metric: 1000\\s+IS-Extended RT03\\.00" }
+      - { regex: "Metric: 10\\s+IS-Extended RT02\\.00" }
+    points: 15
+  - name: "M4-2 XR01: RT03 is reached through RT02"
+    node: XR01
+    command: "show route 10.255.0.3/32"
+    raw:
+      - { regex: "10\\.0\\.12\\.2, from 10\\.255\\.0\\.3, via GigabitEthernet0/0/0/1" }
+    points: 15

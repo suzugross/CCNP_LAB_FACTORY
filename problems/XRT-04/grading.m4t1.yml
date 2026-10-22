@@ -1,0 +1,34 @@
+# M4-1: XR01 を IS-IS に参加させる(NET・レベル・p2p・IPv4/IPv6)。白紙(IF にアドレス ファミリなし)ではどれも通らない。
+problem: XRT-04
+total_points: 100
+checks:
+  - name: "M4-1 XR01: Level 1 adjacency with RT01, Level 2 adjacencies with RT02 and RT03, all point-to-point"
+    node: XR01
+    command: "show isis adjacency"
+    raw:
+      - { regex: "Level-1 adjacencies:(?:(?!Level-2)[\\s\\S])*(?:RT01|0102\\.5500\\.0011)\\s+Gi0/0/0/0\\s+\\*PtoP\\*\\s+Up" }
+      - { regex: "Level-2 adjacencies:[\\s\\S]*(?:RT02|0102\\.5500\\.0002)\\s+Gi0/0/0/1\\s+\\*PtoP\\*\\s+Up" }
+      - { regex: "Level-2 adjacencies:[\\s\\S]*(?:RT03|0102\\.5500\\.0003)\\s+Gi0/0/0/2\\s+\\*PtoP\\*\\s+Up" }
+    points: 40
+  - name: "M4-1 XR01: each link runs only its neighbour's level; IPv4 and IPv6 on Loopback0 and the three links"
+    node: XR01
+    command: "show isis interface brief"
+    raw:
+      - { regex: "Lo0\\s+Yes\\s+\\S+\\s+\\S+\\s+\\S+\\s+2/2" }
+      - { regex: "Gi0/0/0/0\\s+Yes\\s+1\\s+-\\s+\\S+\\s+2/2" }
+      - { regex: "Gi0/0/0/1\\s+Yes\\s+-\\s+1\\s+\\S+\\s+2/2" }
+      - { regex: "Gi0/0/0/2\\s+Yes\\s+-\\s+1\\s+\\S+\\s+2/2" }
+    points: 30
+  - name: "M4-1 XR01: area 49.0001 and the system ID derived from Loopback0 (0102.5500.0001)"
+    node: XR01
+    command: "show isis"
+    raw:
+      - { regex: "System Id: 0102\\.5500\\.0001\\s" }
+      - { regex: "Manual area address\\(es\\):\\s*\\n\\s*49\\.0001\\s*\\n" }
+    points: 15
+  - name: "M4-1 RT01: learns XR01's loopback at Level 1"
+    node: RT01
+    command: "show ip route isis"
+    raw:
+      - { regex: "i L1\\s+10\\.255\\.0\\.1/32 \\[115/" }
+    points: 15

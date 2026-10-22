@@ -1,0 +1,144 @@
+# XRT-04 最終確認(M4 の 4 課題を終えた状態。配点 各 25 = M4-1 10/8/4/3・M4-2 6/5/4/2/4/4・M4-3 7/5/4/4/5・M4-4 7/8/10)。
+# 学習目的のラボ= パック・ノルマの対象外。中身は課題ごとの確認(grading.<課題>.yml)を寄せ集めて配点を付け直したもの
+# (手で保守する。課題ごとの確認を直したらここも直す)。白紙で通る項目は無い(否定条件は肯定条件と同じ項目に入れている)。
+problem: XRT-04
+total_points: 100
+checks:
+- name: 'M4-1 XR01: Level 1 adjacency with RT01, Level 2 adjacencies with RT02 and RT03, all point-to-point'
+  node: XR01
+  command: show isis adjacency
+  raw:
+  - regex: Level-1 adjacencies:(?:(?!Level-2)[\s\S])*(?:RT01|0102\.5500\.0011)\s+Gi0/0/0/0\s+\*PtoP\*\s+Up
+  - regex: Level-2 adjacencies:[\s\S]*(?:RT02|0102\.5500\.0002)\s+Gi0/0/0/1\s+\*PtoP\*\s+Up
+  - regex: Level-2 adjacencies:[\s\S]*(?:RT03|0102\.5500\.0003)\s+Gi0/0/0/2\s+\*PtoP\*\s+Up
+  points: 10
+- name: 'M4-1 XR01: each link runs only its neighbour''s level; IPv4 and IPv6 on Loopback0 and the three links'
+  node: XR01
+  command: show isis interface brief
+  raw:
+  - regex: Lo0\s+Yes\s+\S+\s+\S+\s+\S+\s+2/2
+  - regex: Gi0/0/0/0\s+Yes\s+1\s+-\s+\S+\s+2/2
+  - regex: Gi0/0/0/1\s+Yes\s+-\s+1\s+\S+\s+2/2
+  - regex: Gi0/0/0/2\s+Yes\s+-\s+1\s+\S+\s+2/2
+  points: 8
+- name: 'M4-1 XR01: area 49.0001 and the system ID derived from Loopback0 (0102.5500.0001)'
+  node: XR01
+  command: show isis
+  raw:
+  - regex: 'System Id: 0102\.5500\.0001\s'
+  - regex: Manual area address\(es\):\s*\n\s*49\.0001\s*\n
+  points: 4
+- name: 'M4-1 RT01: learns XR01''s loopback at Level 1'
+  node: RT01
+  command: show ip route isis
+  raw:
+  - regex: i L1\s+10\.255\.0\.1/32 \[115/
+  points: 3
+- name: 'M4-2 XR01: learns the backbone''s loopbacks and services networks at Level 2'
+  node: XR01
+  command: show route isis
+  raw:
+  - regex: 'i L2 10\.255\.0\.2/32 '
+  - regex: 'i L2 10\.255\.0\.3/32 '
+  - regex: 'i L2 10\.20\.0\.0/16 '
+  - regex: 'i L2 10\.30\.0\.0/16 '
+  points: 6
+- name: 'M4-2 RT03: learns area 49.0001 (XR01, RT01 and its LAN) at Level 2'
+  node: RT03
+  command: show ip route isis
+  raw:
+  - regex: 'i L2\s+10\.255\.0\.1/32 '
+  - regex: 'i L2\s+10\.255\.0\.11/32 '
+  - regex: 'i L2\s+10\.11\.0\.0/16 '
+  points: 5
+- name: 'M4-2 RT01: keeps its Level 1 routes and has a default route towards XR01'
+  node: RT01
+  command: show ip route isis
+  raw:
+  - regex: i\*L1\s+0\.0\.0\.0/0 \[115/\d+\] via 10\.0\.11\.1
+  - regex: 'i L1\s+10\.255\.0\.1/32 '
+  points: 4
+- name: 'M4-2 RT01: reaches RT03''s services network'
+  node: RT01
+  command: ping 10.30.0.1 source Loopback0
+  raw:
+  - regex: Success rate is (?:100|80) percent
+  points: 2
+- name: 'M4-2 XR01: CORE-B is advertised with metric 1000 at Level 2'
+  node: XR01
+  command: show isis database detail level 2 XR01.00-00
+  raw:
+  - regex: 'Metric: 1000\s+IS-Extended RT03\.00'
+  - regex: 'Metric: 10\s+IS-Extended RT02\.00'
+  points: 4
+- name: 'M4-2 XR01: RT03 is reached through RT02'
+  node: XR01
+  command: show route 10.255.0.3/32
+  raw:
+  - regex: 10\.0\.12\.2, from 10\.255\.0\.3, via GigabitEthernet0/0/0/1
+  points: 4
+- name: 'M4-3 XR01: IPv6 routes to the loopbacks and networks of RT01, RT02 and RT03'
+  node: XR01
+  command: show route ipv6 isis
+  raw:
+  - regex: i L1 2001:db8:255::11/128
+  - regex: i L1 2001:db8:1011::/64
+  - regex: i L2 2001:db8:255::2/128
+  - regex: i L2 2001:db8:255::3/128
+  - regex: i L2 2001:db8:1020::/64
+  - regex: i L2 2001:db8:1030::/64
+  points: 7
+- name: 'M4-3 RT02: IPv6 routes to the loopbacks of XR01 and RT01 and to RT01''s access LAN'
+  node: RT02
+  command: show ipv6 route isis
+  raw:
+  - regex: I2\s+2001:DB8:255::1/128
+  - regex: I2\s+2001:DB8:255::11/128
+  - regex: I2\s+2001:DB8:1011::/64
+  points: 5
+- name: 'M4-3 RT01: reaches RT03''s services network over IPv6'
+  node: RT01
+  command: ping 2001:db8:1030::1 source Loopback0
+  raw:
+  - regex: Success rate is (?:100|80) percent
+  points: 4
+- name: 'M4-3 XR01: IPv6 traffic to RT03 goes through RT02'
+  node: XR01
+  command: show route ipv6 2001:db8:255::3/128
+  raw:
+  - regex: Known via "isis CORE"[\s\S]*via GigabitEthernet0/0/0/1
+  points: 4
+- name: 'M4-3 RT02: the IPv6 subnet of CORE-B costs what the IPv4 subnet does (1010, over both paths)'
+  node: RT02
+  command: show ipv6 route 2001:db8:13::/64
+  raw:
+  - regex: metric 1010,
+  - regex: Route count is 2/2
+  points: 5
+- name: 'M4-4 RT01: IPv4 routes to the backbone loopbacks, nothing else from outside the area, default route kept'
+  node: RT01
+  command: show ip route isis
+  raw:
+  - regex: 'i ia\s+10\.255\.0\.2/32 '
+  - regex: 'i ia\s+10\.255\.0\.3/32 '
+  - regex: 'i\*L1\s+0\.0\.0\.0/0 '
+  - not_regex: i ia\s+10\.(?!255\.0\.)
+  points: 7
+- name: 'M4-4 RT01: IPv6 routes to the backbone loopbacks, nothing else from outside the area, default route kept'
+  node: RT01
+  command: show ipv6 route isis
+  raw:
+  - regex: IA\s+2001:DB8:255::2/128
+  - regex: IA\s+2001:DB8:255::3/128
+  - regex: 'I1\s+::/0 '
+  - not_regex: IA\s+2001:DB8:(?!255::)
+  points: 8
+- name: 'M4-4 RT01: a new backbone loopback (added to RT02 for the check) reaches RT01 with no change to XR01'
+  node: RT01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-04 ssh RT01 --pre-cli 'RT02:configure terminal;;interface Loopback99;;ip address 10.255.0.99 255.255.255.255;;ipv6 address 2001:db8:255::99/128;;ip
+    router isis;;ipv6 router isis;;end' --settle 20 --post-cli 'RT02:configure terminal;;no interface Loopback99;;end' -- 'show ip route isis' 'show ipv6 route isis'
+  raw:
+  - regex: 'i ia\s+10\.255\.0\.99/32 '
+  - regex: IA\s+2001:DB8:255::99/128
+  points: 10

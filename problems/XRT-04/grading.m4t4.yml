@@ -1,0 +1,36 @@
+# M4-4: RT01 に バックボーンのループバック(/32・/128)だけを漏らす。範囲で書く(新しい機器のループバックも XR01 を変えずに届く)。
+# 3 つ目の確認は、採点のあいだだけ RT02 に Loopback99(10.255.0.99/32・2001:db8:255::99/128)を足して RT01 を見る(後で必ず消す)。
+problem: XRT-04
+total_points: 100
+checks:
+  - name: "M4-4 RT01: IPv4 routes to the backbone loopbacks, nothing else from outside the area, default route kept"
+    node: RT01
+    command: "show ip route isis"
+    raw:
+      - { regex: "i ia\\s+10\\.255\\.0\\.2/32 " }
+      - { regex: "i ia\\s+10\\.255\\.0\\.3/32 " }
+      - { regex: "i\\*L1\\s+0\\.0\\.0\\.0/0 " }
+      - { not_regex: "i ia\\s+10\\.(?!255\\.0\\.)" }
+    points: 30
+  - name: "M4-4 RT01: IPv6 routes to the backbone loopbacks, nothing else from outside the area, default route kept"
+    node: RT01
+    command: "show ipv6 route isis"
+    raw:
+      - { regex: "IA\\s+2001:DB8:255::2/128" }
+      - { regex: "IA\\s+2001:DB8:255::3/128" }
+      - { regex: "I1\\s+::/0 " }
+      - { not_regex: "IA\\s+2001:DB8:(?!255::)" }
+    points: 30
+  - name: "M4-4 RT01: a new backbone loopback (added to RT02 for the check) reaches RT01 with no change to XR01"
+    node: RT01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-04 ssh RT01
+      --pre-cli 'RT02:configure terminal;;interface Loopback99;;ip address 10.255.0.99 255.255.255.255;;ipv6 address 2001:db8:255::99/128;;ip router isis;;ipv6 router isis;;end'
+      --settle 20
+      --post-cli 'RT02:configure terminal;;no interface Loopback99;;end'
+      -- 'show ip route isis' 'show ipv6 route isis'
+    raw:
+      - { regex: "i ia\\s+10\\.255\\.0\\.99/32 " }
+      - { regex: "IA\\s+2001:DB8:255::99/128" }
+    points: 40

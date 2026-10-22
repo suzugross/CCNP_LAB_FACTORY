@@ -1,0 +1,1189 @@
+
+######## a-0: IOL の IS-IS(IPv4 だけ)。R1= L1 だけ・area 49.0001 / R2= L2 だけ・area 49.0002。どちらも p2p
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+router isis
+RT01(config-router)#
+net 49.0001.0000.0000.0011.00
+RT01(config-router)#
+is-type level-1
+RT01(config-router)#
+log-adjacency-changes
+RT01(config-router)#
+interface Loopback0
+RT01(config-if)#
+ip router isis
+RT01(config-if)#
+interface Ethernet0/0
+RT01(config-if)#
+ip router isis
+RT01(config-if)#
+isis network point-to-point
+RT01(config-if)#
+end
+RT01#
+show running-config | section isis
+ ip router isis 
+ ip router isis 
+ isis network point-to-point 
+router isis
+ net 49.0001.0000.0000.0011.00
+ is-type level-1
+ log-adjacency-changes
+RT01#
+show isis protocol
+
+Tag null:
+IS-IS Router: <Null Tag> (0x10000)
+  System Id: 0000.0000.0011.00  IS-Type: level-1  lsp-mtu: 1492
+  Manual area address(es): 
+	49.0001
+  Routing for area address(es): 
+	49.0001
+  Interfaces supported by IS-IS:
+	Ethernet0/0 - IP
+	Loopback0 - IP
+  Redistribute(CLNS):
+    static (on by default)
+    eBGP-neighbors
+  Distance for L2 CLNS routes: 110
+  RRR level: none
+  Generate narrow metrics: level-1-2
+  Accept narrow metrics:   level-1-2
+  Generate wide metrics:   none
+  Accept wide metrics:     none
+  Parallel flooding:       suppressed
+  LSP fast flooding:       disabled
+  Adjacency stagger:       disabled
+  IP/IPv6 Redistribution Limit: 10000(Default) Threshold: 75%  
+    L1 Redistributed routes: 0
+  Maintenance Mode ID:     133272947060704
+  Maintenance Mode:        disabled
+  Maintenance Mode Timer:  stopped (0)
+  Graceful Reload state:   GR_NONE
+RT01#
+show clns protocol
+
+
+
+IS-IS Router: <Null Tag> (0x10000)
+  System Id: 0000.0000.0011.00  IS-Type: level-1  lsp-mtu: 1492
+  Manual area address(es): 
+	49.0001
+  Routing for area address(es): 
+	49.0001
+  Interfaces supported by IS-IS:
+	Ethernet0/0 - IP
+	Loopback0 - IP
+  Redistribute(CLNS):
+    static (on by default)
+    eBGP-neighbors
+  Distance for L2 CLNS routes: 110
+  RRR level: none
+  Generate narrow metrics: level-1-2
+  Accept narrow metrics:   level-1-2
+  Generate wide metrics:   none
+  Accept wide metrics:     none
+  Parallel flooding:       suppressed
+  LSP fast flooding:       disabled
+  Adjacency stagger:       disabled
+
+
+
+
+RT01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+router isis
+RT02(config-router)#
+net 49.0002.0000.0000.0022.00
+RT02(config-router)#
+is-type level-2-only
+RT02(config-router)#
+log-adjacency-changes
+RT02(config-router)#
+interface Loopback0
+RT02(config-if)#
+ip router isis
+RT02(config-if)#
+interface Ethernet0/0
+RT02(config-if)#
+ip router isis
+RT02(config-if)#
+isis network point-to-point
+RT02(config-if)#
+end
+RT02#
+show running-config | section isis
+ ip router isis 
+ ip router isis 
+ isis network point-to-point 
+router isis
+ net 49.0002.0000.0000.0022.00
+ is-type level-2-only
+ log-adjacency-changes
+RT02#
+
+######## a-1: XR に IS-IS を IOS の感覚で書く(IF を並べるだけ・アドレスファミリなし)
+configure
+Wed Oct 21 14:38:09.982 UTC
+RP/0/RP0/CPU0:XRV01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XRV01(config-isis)#
+net 49.0001.0000.0000.0001.00
+RP/0/RP0/CPU0:XRV01(config-isis)#
+interface Loopback0
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+exit
+RP/0/RP0/CPU0:XRV01(config-isis)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+point-to-point
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+exit
+RP/0/RP0/CPU0:XRV01(config-isis)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+point-to-point
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+commit
+Wed Oct 21 14:38:14.094 UTC
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+end
+RP/0/RP0/CPU0:XRV01#
+show isis adjacency
+Wed Oct 21 14:38:46.948 UTC
+
+IS-IS CORE Level-1 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RP/0/RP0/CPU0:XRV01#
+show isis interface brief
+Wed Oct 21 14:38:47.338 UTC
+
+IS-IS CORE Interfaces
+    Interface      All     Adjs    Adj Topos  Adv Topos  CLNS   MTU    Prio  
+                   OK    L1   L2    Run/Cfg    Run/Cfg                L1   L2
+-----------------  ---  ---------  ---------  ---------  ----  ----  --------
+Lo0                No 
+Gi0/0/0/0          No 
+Gi0/0/0/1          No 
+RP/0/RP0/CPU0:XRV01#
+show route isis
+Wed Oct 21 14:38:47.740 UTC
+
+% No matching routes found
+
+RP/0/RP0/CPU0:XRV01#
+show isis interface GigabitEthernet0/0/0/0
+Wed Oct 21 14:38:48.141 UTC
+
+GigabitEthernet0/0/0/0      Disabled (No topologies cfg on the intf)
+RP/0/RP0/CPU0:XRV01#
+show isis
+Wed Oct 21 14:38:48.540 UTC
+
+IS-IS Router: CORE
+  System Id: 0000.0000.0001 
+  Hostname: XRV01
+  IS Levels: level-1-2
+  Manual area address(es):
+    49.0001
+  Routing for area address(es):
+  Multi-Instance Id: 0
+  Running on: RP/0/RP0/CPU0
+  Job Id: 1007
+  PID: 8548
+  Respawn count: 1
+  Started: Wed 2026 Oct 21 14:38:14.322 UTC
+  Null0 ready: Wed 2026 Oct 21 14:38:14.478 UTC
+  Protocol shutdown: No
+  System memory state: Normal
+    Last change: never
+  Memory state: Normal
+    Last change: never
+    Last/Initial memory usage/limit: 1655192/2147483648 0%
+  Memory state monitoring interval: 60 s
+  Memory usage/limit: 8439167/2147483648 0%
+  Memory usage specifics (count/bytes):
+    Nodes: 2/816
+    LSPs: 2/841
+    Links: 0/0
+    Prefixes: 0/0
+    Nets: 0/0
+    Paths: 0/0
+  LSP MTU: 1492
+  LSP Full: level-1: No, level-2: No
+  LSP fast flooding: Disabled
+    Max LSP Tx: 1000
+    PSNP Delay: 500 ms
+  PSNP interval: 50 ms
+  Non-stop forwarding: Disabled
+  Most recent startup mode: Cold Restart
+  MFI LSD registered: No
+    MFI LSD last registered: never
+  TE connection status: Down
+    TE connection up: never
+    TE connection flaps: 0
+  XTC connection status: Down
+    XTC connection up: never
+    XTC connection flaps: 0
+  BFD connection status: Up
+    BFD connection up: Wed 2026 Oct 21 14:38:15.442 UTC
+    BFD connection flaps: 0
+  BFD HA role change: never
+    BFD client HA role: none
+    BFD server HA role: none
+  Overload Bit: not configured
+  Maximum Metric: not configured
+  Topologies supported by IS-IS:
+    none
+
+    Interfaces supported by IS-IS CORE:
+    Loopback0 is disabled (active in configuration)
+    GigabitEthernet0/0/0/0 is disabled (active in configuration)
+    GigabitEthernet0/0/0/1 is disabled (active in configuration)
+RP/0/RP0/CPU0:XRV01#
+show running-config router isis
+Wed Oct 21 14:38:48.942 UTC
+router isis CORE
+ net 49.0001.0000.0000.0001.00
+ interface Loopback0
+ !
+ interface GigabitEthernet0/0/0/0
+  point-to-point
+ !
+ interface GigabitEthernet0/0/0/1
+  point-to-point
+ !
+!
+
+RP/0/RP0/CPU0:XRV01#
+show clns neighbors
+
+Tag null:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+RT01#
+show isis neighbors
+
+Tag null:
+System Id       Type Interface     IP Address      State Holdtime Circuit Id
+RT01#
+
+######## b-1: IF の下にだけ address-family ipv4 unicast を足す(プロセスには無い)
+configure
+Wed Oct 21 14:38:52.646 UTC
+RP/0/RP0/CPU0:XRV01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XRV01(config-isis)#
+interface Loopback0
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XRV01(config-isis-if-af)#
+root
+RP/0/RP0/CPU0:XRV01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XRV01(config-isis)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XRV01(config-isis-if-af)#
+root
+RP/0/RP0/CPU0:XRV01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XRV01(config-isis)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XRV01(config-isis-if-af)#
+commit
+Wed Oct 21 14:38:57.570 UTC
+RP/0/RP0/CPU0:XRV01(config-isis-if-af)#
+show configuration failed
+Wed Oct 21 14:38:58.476 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XRV01(config-isis-if-af)#
+end
+RP/0/RP0/CPU0:XRV01#
+show isis adjacency
+Wed Oct 21 14:39:31.810 UTC
+
+IS-IS CORE Level-1 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    22   00:00:33 Yes None None
+
+Total adjacency count: 1
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT02           Gi0/0/0/1                *PtoP*         Up    24   00:00:33 Yes None None
+
+Total adjacency count: 1
+RP/0/RP0/CPU0:XRV01#
+show isis interface brief
+Wed Oct 21 14:39:32.213 UTC
+
+IS-IS CORE Interfaces
+    Interface      All     Adjs    Adj Topos  Adv Topos  CLNS   MTU    Prio  
+                   OK    L1   L2    Run/Cfg    Run/Cfg                L1   L2
+-----------------  ---  ---------  ---------  ---------  ----  ----  --------
+Lo0                Yes    0    0      1/1        1/1     Up    1500    -    -
+Gi0/0/0/0          Yes    1    0      1/1        1/1     Up    1497    -    -
+Gi0/0/0/1          Yes    0    1      1/1        1/1     Up    1497    -    -
+RP/0/RP0/CPU0:XRV01#
+show route isis
+Wed Oct 21 14:39:32.613 UTC
+
+i L1 11.11.11.11/32 [115/20] via 10.0.1.2, 00:00:34, GigabitEthernet0/0/0/0
+i L2 22.22.22.22/32 [115/20] via 10.0.2.2, 00:00:33, GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XRV01#
+show isis interface GigabitEthernet0/0/0/0
+Wed Oct 21 14:39:33.015 UTC
+
+GigabitEthernet0/0/0/0      Enabled
+  Adjacency Formation:      Enabled
+  Prefix Advertisement:     Enabled
+  Bandwidth:                1000000
+  RSI SRLG:                 Not Registered
+  
+  Circuit Type:             level-1-2
+  Media Type:               P2P
+  Circuit Number:           0
+  Extended Circuit Number:  1
+  Last IIH Received:        14:39:24 (8.59 sec ago), 1496 octets
+  Last PDU Rejected:        14:38:58 (34.76 sec ago), 74 octets, L1 LSP, Wrong Adjacency State
+  Last IIH Sent:            14:39:26 (6.46 sec ago), 1497 octets
+  Sending next P2P IIH in:  2 s
+  
+  IPv4 BFD:                 Disabled
+  IPv6 BFD:                 Disabled
+  
+  Level-1                   
+    Adjacency Count:        1
+    Adjacency Flaps:        0
+    LSP Pacing Interval:    33 ms
+    PSNP Entry Queue Size:  0
+    Hello Interval:         10 s
+    Hello Multiplier:       3
+  Level-2                   
+    Adjacency Count:        0
+    Adjacency Flaps:        0
+    LSP Pacing Interval:    33 ms
+    PSNP Entry Queue Size:  0
+    Hello Interval:         10 s
+    Hello Multiplier:       3
+  
+  CLNS I/O
+    Protocol State:         Up
+    MTU:                    1497
+    SNPA:                   5254.00c7.8cc8
+    Layer-2 Multicast:
+      All ISs:              Listening
+  
+  IPv4 Unicast Topology:    Enabled
+    Adjacency Formation:    Running
+    Prefix Advertisement:   Running
+          Policy (L1/L2):   -/-
+    Metric (L1/L2):         10/10
+    Metric fallback:
+      Bandwidth (L1/L2):    Inactive/Inactive
+      Anomaly (L1/L2):      Inactive/Inactive
+    Weight (L1/L2):         0/0
+    MPLS Max Label Stack:   1/3/7/7 (PRI/BKP/SRTE/SRAT)
+    MPLS LDP Sync (L1/L2):  Disabled/Disabled
+    FRR (L1/L2):            L1 Not Enabled     L2 Not Enabled 
+      FRR Type:             None               None           
+  
+  IPv4 Address Family:      Enabled
+    Protocol State:         Up
+    Forwarding Address:     10.0.1.1
+    Global Prefix:          10.0.1.0/24
+  
+  LSP Transmission is:      idle
+  LSP Transmit Timer in:    0 ms
+  LSP Burst Size:           10 LSPs in the next 0 ms
+  LSP Rexmit Queue Size:    0
+  Adjacency Up:             14:38:58.269
+  Received CSNP complete:   14:38:58.768
+  LSP Pacing Start:         14:38:58.769
+  
+  LSP fast flooding:        Disabled
+  
+  PME Link Delays and Loss: -
+RP/0/RP0/CPU0:XRV01#
+
+######## c-1: プロセスにも address-family ipv4 unicast
+configure
+Wed Oct 21 14:39:34.558 UTC
+RP/0/RP0/CPU0:XRV01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XRV01(config-isis)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XRV01(config-isis-af)#
+commit
+Wed Oct 21 14:39:35.850 UTC
+RP/0/RP0/CPU0:XRV01(config-isis-af)#
+end
+RP/0/RP0/CPU0:XRV01#
+show isis adjacency
+Wed Oct 21 14:40:18.297 UTC
+
+IS-IS CORE Level-1 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    29   00:01:20 Yes None None
+
+Total adjacency count: 1
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT02           Gi0/0/0/1                *PtoP*         Up    24   00:01:20 Yes None None
+
+Total adjacency count: 1
+RP/0/RP0/CPU0:XRV01#
+show isis interface brief
+Wed Oct 21 14:40:18.696 UTC
+
+IS-IS CORE Interfaces
+    Interface      All     Adjs    Adj Topos  Adv Topos  CLNS   MTU    Prio  
+                   OK    L1   L2    Run/Cfg    Run/Cfg                L1   L2
+-----------------  ---  ---------  ---------  ---------  ----  ----  --------
+Lo0                Yes    0    0      1/1        1/1     Up    1500    -    -
+Gi0/0/0/0          Yes    1    0      1/1        1/1     Up    1497    -    -
+Gi0/0/0/1          Yes    0    1      1/1        1/1     Up    1497    -    -
+RP/0/RP0/CPU0:XRV01#
+show route isis
+Wed Oct 21 14:40:19.099 UTC
+
+i L1 11.11.11.11/32 [115/20] via 10.0.1.2, 00:01:20, GigabitEthernet0/0/0/0
+i L2 22.22.22.22/32 [115/20] via 10.0.2.2, 00:01:20, GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XRV01#
+show isis interface GigabitEthernet0/0/0/0
+Wed Oct 21 14:40:19.500 UTC
+
+GigabitEthernet0/0/0/0      Enabled
+  Adjacency Formation:      Enabled
+  Prefix Advertisement:     Enabled
+  Bandwidth:                1000000
+  RSI SRLG:                 Not Registered
+  
+  Circuit Type:             level-1-2
+  Media Type:               P2P
+  Circuit Number:           0
+  Extended Circuit Number:  1
+  Last IIH Received:        14:40:17 (2.08 sec ago), 1496 octets
+  Last PDU Rejected:        14:38:58 (00:01:21 ago), 74 octets, L1 LSP, Wrong Adjacency State
+  Last IIH Sent:            14:40:17 (2.11 sec ago), 1497 octets
+  Sending next P2P IIH in:  7 s
+  
+  IPv4 BFD:                 Disabled
+  IPv6 BFD:                 Disabled
+  
+  Level-1                   
+    Adjacency Count:        1
+    Adjacency Flaps:        0
+    LSP Pacing Interval:    33 ms
+    PSNP Entry Queue Size:  0
+    Hello Interval:         10 s
+    Hello Multiplier:       3
+  Level-2                   
+    Adjacency Count:        0
+    Adjacency Flaps:        0
+    LSP Pacing Interval:    33 ms
+    PSNP Entry Queue Size:  0
+    Hello Interval:         10 s
+    Hello Multiplier:       3
+  
+  CLNS I/O
+    Protocol State:         Up
+    MTU:                    1497
+    SNPA:                   5254.00c7.8cc8
+    Layer-2 Multicast:
+      All ISs:              Listening
+  
+  IPv4 Unicast Topology:    Enabled
+    Adjacency Formation:    Running
+    Prefix Advertisement:   Running
+          Policy (L1/L2):   -/-
+    Metric (L1/L2):         10/10
+    Metric fallback:
+      Bandwidth (L1/L2):    Inactive/Inactive
+      Anomaly (L1/L2):      Inactive/Inactive
+    Weight (L1/L2):         0/0
+    MPLS Max Label Stack:   1/3/7/7 (PRI/BKP/SRTE/SRAT)
+    MPLS LDP Sync (L1/L2):  Disabled/Disabled
+    FRR (L1/L2):            L1 Not Enabled     L2 Not Enabled 
+      FRR Type:             None               None           
+  
+  IPv4 Address Family:      Enabled
+    Protocol State:         Up
+    Forwarding Address:     10.0.1.1
+    Global Prefix:          10.0.1.0/24
+  
+  LSP Transmission is:      idle
+  LSP Transmit Timer in:    0 ms
+  LSP Burst Size:           10 LSPs in the next 0 ms
+  LSP Rexmit Queue Size:    0
+  Adjacency Up:             14:38:58.269
+  Received CSNP complete:   14:38:58.768
+  LSP Pacing Start:         14:38:58.769
+  
+  LSP fast flooding:        Disabled
+  
+  PME Link Delays and Loss: -
+RP/0/RP0/CPU0:XRV01#
+show isis interface GigabitEthernet0/0/0/1
+Wed Oct 21 14:40:19.901 UTC
+
+GigabitEthernet0/0/0/1      Enabled
+  Adjacency Formation:      Enabled
+  Prefix Advertisement:     Enabled
+  Bandwidth:                1000000
+  RSI SRLG:                 Not Registered
+  
+  Circuit Type:             level-1-2
+  Media Type:               P2P
+  Circuit Number:           0
+  Extended Circuit Number:  1
+  Last IIH Received:        14:40:12 (7.52 sec ago), 1496 octets
+  Last PDU Rejected:        14:38:58 (00:01:21 ago), 74 octets, L2 LSP, Wrong Adjacency State
+  Last IIH Sent:            14:40:19 (0.24 sec ago), 1497 octets
+  Sending next P2P IIH in:  7 s
+  
+  IPv4 BFD:                 Disabled
+  IPv6 BFD:                 Disabled
+  
+  Level-1                   
+    Adjacency Count:        0
+    Adjacency Flaps:        0
+    LSP Pacing Interval:    33 ms
+    PSNP Entry Queue Size:  0
+    Hello Interval:         10 s
+    Hello Multiplier:       3
+  Level-2                   
+    Adjacency Count:        1
+    Adjacency Flaps:        0
+    LSP Pacing Interval:    33 ms
+    PSNP Entry Queue Size:  0
+    Hello Interval:         10 s
+    Hello Multiplier:       3
+  
+  CLNS I/O
+    Protocol State:         Up
+    MTU:                    1497
+    SNPA:                   5254.00ff.fc7a
+    Layer-2 Multicast:
+      All ISs:              Listening
+  
+  IPv4 Unicast Topology:    Enabled
+    Adjacency Formation:    Running
+    Prefix Advertisement:   Running
+          Policy (L1/L2):   -/-
+    Metric (L1/L2):         10/10
+    Metric fallback:
+      Bandwidth (L1/L2):    Inactive/Inactive
+      Anomaly (L1/L2):      Inactive/Inactive
+    Weight (L1/L2):         0/0
+    MPLS Max Label Stack:   1/3/7/7 (PRI/BKP/SRTE/SRAT)
+    MPLS LDP Sync (L1/L2):  Disabled/Disabled
+    FRR (L1/L2):            L1 Not Enabled     L2 Not Enabled 
+      FRR Type:             None               None           
+  
+  IPv4 Address Family:      Enabled
+    Protocol State:         Up
+    Forwarding Address:     10.0.2.1
+    Global Prefix:          10.0.2.0/24
+  
+  LSP Transmission is:      idle
+  LSP Transmit Timer in:    0 ms
+  LSP Burst Size:           9 LSPs in the next 0 ms
+  LSP Rexmit Queue Size:    0
+  Adjacency Up:             14:38:58.269
+  Received CSNP complete:   14:38:58.768
+  LSP Pacing Start:         14:38:58.769
+  
+  LSP fast flooding:        Disabled
+  
+  PME Link Delays and Loss: -
+RP/0/RP0/CPU0:XRV01#
+show isis interface Loopback0
+Wed Oct 21 14:40:20.303 UTC
+
+Loopback0                   Enabled
+  Adjacency Formation:      Enabled
+  Prefix Advertisement:     Enabled
+  Bandwidth:                0
+  RSI SRLG:                 Not Registered
+  
+  Circuit Type:             level-1-2
+  Media Type:               Loop
+  Circuit Number:           0
+  Last IIH Received:        never, 0 octets
+  Last IIH Sent:            never, 0 octets
+  
+  Level-1                   
+    Adjacency Count:        0
+    Adjacency Flaps:        0
+    LSP Pacing Interval:    33 ms
+    PSNP Entry Queue Size:  0
+    Hello Interval:         10 s
+    Hello Multiplier:       3
+  Level-2                   
+    Adjacency Count:        0
+    Adjacency Flaps:        0
+    LSP Pacing Interval:    33 ms
+    PSNP Entry Queue Size:  0
+    Hello Interval:         10 s
+    Hello Multiplier:       3
+  
+  CLNS I/O
+    Protocol State:         Up
+    MTU:                    1500
+  
+  IPv4 Unicast Topology:    Enabled
+    Adjacency Formation:    Running
+    Prefix Advertisement:   Running
+          Policy (L1/L2):   -/-
+    Metric (L1/L2):         10/10
+    Metric fallback:
+      Bandwidth (L1/L2):    Inactive/Inactive
+      Anomaly (L1/L2):      Inactive/Inactive
+    Weight (L1/L2):         0/0
+    MPLS Max Label Stack:   0/0/0/0 (PRI/BKP/SRTE/SRAT)
+    MPLS LDP Sync (L1/L2):  Disabled/Disabled
+  
+  IPv4 Address Family:      Enabled
+    Protocol State:         Up
+    Forwarding Address:     0.0.0.0
+    Global Prefix:          1.1.1.1/32
+  
+  LSP Transmission is:      idle
+  LSP Transmit Timer in:    0 ms
+  LSP Burst Size:           10 LSPs in the next 0 ms
+  
+  LSP fast flooding:        Unsupported
+  
+  PME Link Delays and Loss: -
+RP/0/RP0/CPU0:XRV01#
+
+######## c-2: 状態の表示一式
+show isis
+Wed Oct 21 14:40:21.838 UTC
+
+IS-IS Router: CORE
+  System Id: 0000.0000.0001 
+  Hostname: XRV01
+  IS Levels: level-1-2
+  Manual area address(es):
+    49.0001
+  Routing for area address(es):
+    49.0001
+  Multi-Instance Id: 0
+  Running on: RP/0/RP0/CPU0
+  Job Id: 1007
+  PID: 8548
+  Respawn count: 1
+  Started: Wed 2026 Oct 21 14:38:14.322 UTC
+  Null0 ready: Wed 2026 Oct 21 14:38:14.478 UTC
+  Protocol shutdown: No
+  System memory state: Normal
+    Last change: never
+  Memory state: Normal
+    Last change: never
+    Last/Initial memory usage/limit: 1655192/2147483648 0%
+  Memory state monitoring interval: 60 s
+  Memory usage/limit: 15609278/2147483648 0%
+  Memory usage specifics (count/bytes):
+    Nodes: 4/1632
+    LSPs: 4/1683
+    Links: 4/4896
+    Prefixes: 12/4128
+    Nets: 6/3744
+    Paths: 8/768
+  LSP MTU: 1492
+  LSP Full: level-1: No, level-2: No
+  LSP fast flooding: Disabled
+    Max LSP Tx: 1000
+    PSNP Delay: 500 ms
+  PSNP interval: 50 ms
+  Non-stop forwarding: Disabled
+  Most recent startup mode: Cold Restart
+  MFI LSD registered: No
+    MFI LSD last registered: never
+  TE connection status: Down
+    TE connection up: never
+    TE connection flaps: 0
+  XTC connection status: Down
+    XTC connection up: never
+    XTC connection flaps: 0
+  BFD connection status: Up
+    BFD connection up: Wed 2026 Oct 21 14:38:15.442 UTC
+    BFD connection flaps: 0
+  BFD HA role change: never
+    BFD client HA role: none
+    BFD server HA role: none
+  Overload Bit: not configured
+  Maximum Metric: not configured
+  Topologies supported by IS-IS:
+    IPv4 Unicast
+      Rib connected
+      Level-1
+        Metric style (generate/accept): Narrow/Narrow
+        Metric: 10
+      Level-2
+        Metric style (generate/accept): Narrow/Narrow
+        Metric: 10
+      No protocols redistributed
+      Distance: 115
+      Advertise Passive Interface Prefixes Only: No
+
+    Interfaces supported by IS-IS CORE:
+    Loopback0 is running actively (active in configuration)
+    GigabitEthernet0/0/0/0 is running actively (active in configuration)
+    GigabitEthernet0/0/0/1 is running actively (active in configuration)
+RP/0/RP0/CPU0:XRV01#
+show isis protocol
+Wed Oct 21 14:40:22.241 UTC
+
+IS-IS Router: CORE
+  System Id: 0000.0000.0001 
+  Hostname: XRV01
+  IS Levels: level-1-2
+  Manual area address(es):
+    49.0001
+  Routing for area address(es):
+    49.0001
+  Multi-Instance Id: 0
+  Running on: RP/0/RP0/CPU0
+  Job Id: 1007
+  PID: 8548
+  Respawn count: 1
+  Started: Wed 2026 Oct 21 14:38:14.322 UTC
+  Null0 ready: Wed 2026 Oct 21 14:38:14.478 UTC
+  Protocol shutdown: No
+  System memory state: Normal
+    Last change: never
+  Memory state: Normal
+    Last change: never
+    Last/Initial memory usage/limit: 1655192/2147483648 0%
+  Memory state monitoring interval: 60 s
+  Memory usage/limit: 15609278/2147483648 0%
+  Memory usage specifics (count/bytes):
+    Nodes: 4/1632
+    LSPs: 4/1683
+    Links: 4/4896
+    Prefixes: 12/4128
+    Nets: 6/3744
+    Paths: 8/768
+  LSP MTU: 1492
+  LSP Full: level-1: No, level-2: No
+  LSP fast flooding: Disabled
+    Max LSP Tx: 1000
+    PSNP Delay: 500 ms
+  PSNP interval: 50 ms
+  Non-stop forwarding: Disabled
+  Most recent startup mode: Cold Restart
+  MFI LSD registered: No
+    MFI LSD last registered: never
+  TE connection status: Down
+    TE connection up: never
+    TE connection flaps: 0
+  XTC connection status: Down
+    XTC connection up: never
+    XTC connection flaps: 0
+  BFD connection status: Up
+    BFD connection up: Wed 2026 Oct 21 14:38:15.442 UTC
+    BFD connection flaps: 0
+  BFD HA role change: never
+    BFD client HA role: none
+    BFD server HA role: none
+  Overload Bit: not configured
+  Maximum Metric: not configured
+  Topologies supported by IS-IS:
+    IPv4 Unicast
+      Rib connected
+      Level-1
+        Metric style (generate/accept): Narrow/Narrow
+        Metric: 10
+      Level-2
+        Metric style (generate/accept): Narrow/Narrow
+        Metric: 10
+      No protocols redistributed
+      Distance: 115
+      Advertise Passive Interface Prefixes Only: No
+
+    Interfaces supported by IS-IS CORE:
+    Loopback0 is running actively (active in configuration)
+    GigabitEthernet0/0/0/0 is running actively (active in configuration)
+    GigabitEthernet0/0/0/1 is running actively (active in configuration)
+RP/0/RP0/CPU0:XRV01#
+show isis neighbors
+Wed Oct 21 14:40:22.640 UTC
+
+IS-IS CORE neighbors:
+System Id      Interface        SNPA           State Holdtime Type IETF-NSF
+RT01           Gi0/0/0/0        *PtoP*         Up    24       L1   Capable 
+RT02           Gi0/0/0/1        *PtoP*         Up    27       L2   Capable 
+
+Total neighbor count: 2
+RP/0/RP0/CPU0:XRV01#
+show isis adjacency detail
+Wed Oct 21 14:40:23.044 UTC
+
+IS-IS CORE Level-1 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    24   00:01:24 Yes None None
+  Area Address:           49.0001
+  Neighbor IPv4 Address:  10.0.1.2*
+  Topology:               IPv4 Unicast
+  BFD Status:             Neighbor Useable (BFD Not Configured)
+  Adjacency Flaps:        0
+
+Total adjacency count: 1
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT02           Gi0/0/0/1                *PtoP*         Up    27   00:01:24 Yes None None
+  Area Address:           49.0002
+  Neighbor IPv4 Address:  10.0.2.2*
+  Topology:               IPv4 Unicast
+  BFD Status:             Neighbor Useable (BFD Not Configured)
+  Adjacency Flaps:        0
+
+Total adjacency count: 1
+RP/0/RP0/CPU0:XRV01#
+show isis hostname
+Wed Oct 21 14:40:23.443 UTC
+
+IS-IS CORE hostnames
+Level  System ID      Dynamic Hostname
+ 1,2 * 0000.0000.0001 XRV01
+ 1     0000.0000.0011 RT01
+ 2     0000.0000.0022 RT02
+RP/0/RP0/CPU0:XRV01#
+show isis database
+Wed Oct 21 14:40:23.846 UTC
+
+IS-IS CORE (Level-1) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XRV01.00-00         * 0x00000004   0x8e4b        1115 /*            1/0/0
+RT01.00-00            0x00000005   0x8874        1114 /1200         0/0/0
+
+ Total Level-1 LSP count: 2     Local Level-1 LSP count: 1
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XRV01.00-00         * 0x00000005   0xcb36        1116 /*            0/0/0
+RT02.00-00            0x00000004   0xf599        1114 /1200         0/0/0
+
+ Total Level-2 LSP count: 2     Local Level-2 LSP count: 1
+RP/0/RP0/CPU0:XRV01#
+show isis database detail
+Wed Oct 21 14:40:24.245 UTC
+
+IS-IS CORE (Level-1) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XRV01.00-00         * 0x00000004   0x8e4b        1114 /*            1/0/0
+  Area Address:   49.0001
+  LSP MTU:        1492
+  NLPID:          0xcc
+  IP Address:     1.1.1.1
+  Hostname:       XRV01
+  Metric: 10         IP 1.1.1.1/32
+  Metric: 10         IP 10.0.1.0/24
+  Metric: 10         IP 10.0.2.0/24
+  Metric: 10         IS RT01.00
+RT01.00-00            0x00000005   0x8874        1114 /1200         0/0/0
+  Area Address:   49.0001
+  NLPID:          0xcc
+  Hostname:       RT01
+  Metric: 10         IS XRV01.00
+  IP Address:     11.11.11.11
+  Metric: 10         IP 11.11.11.11/32
+  Metric: 10         IP 10.0.1.0/24
+
+ Total Level-1 LSP count: 2     Local Level-1 LSP count: 1
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XRV01.00-00         * 0x00000005   0xcb36        1116 /*            0/0/0
+  Area Address:   49.0001
+  LSP MTU:        1492
+  NLPID:          0xcc
+  IP Address:     1.1.1.1
+  Hostname:       XRV01
+  Metric: 10         IP 1.1.1.1/32
+  Metric: 10         IP 10.0.1.0/24
+  Metric: 10         IP 10.0.2.0/24
+  Metric: 20         IP 11.11.11.11/32
+  Metric: 10         IS RT02.00
+RT02.00-00            0x00000004   0xf599        1114 /1200         0/0/0
+  Area Address:   49.0002
+  NLPID:          0xcc
+  Hostname:       RT02
+  Metric: 10         IS XRV01.00
+  IP Address:     22.22.22.22
+  Metric: 10         IP 22.22.22.22/32
+  Metric: 10         IP 10.0.2.0/24
+
+ Total Level-2 LSP count: 2     Local Level-2 LSP count: 1
+RP/0/RP0/CPU0:XRV01#
+show isis topology
+Wed Oct 21 14:40:24.648 UTC
+
+IS-IS CORE paths to IPv4 Unicast (Level-1) routers
+System Id          Metric    Next-Hop           Interface       SNPA          
+XRV01              --      
+RT01               10        RT01               Gi0/0/0/0       *PtoP*        
+
+IS-IS CORE paths to IPv4 Unicast (Level-2) routers
+System Id          Metric    Next-Hop           Interface       SNPA          
+XRV01              --      
+RT02               10        RT02               Gi0/0/0/1       *PtoP*        
+RP/0/RP0/CPU0:XRV01#
+show isis route
+Wed Oct 21 14:40:25.049 UTC
+
+IS-IS CORE IPv4 Unicast routes
+
+Codes: L1 - level 1, L2 - level 2, ia - interarea (leaked into level 1)
+       df - level 1 default (closest attached router), su - summary null
+       C - connected, S - static, R - RIP, B - BGP, O - OSPF
+       E - EIGRP, A - access/subscriber, M - mobile, a - application
+       i - IS-IS (redistributed from another instance)
+
+Maximum parallel path count: 8
+
+df 0.0.0.0/0 [0/115]
+C  1.1.1.1/32
+     is directly connected, Loopback0
+C  10.0.1.0/24
+     is directly connected, GigabitEthernet0/0/0/0
+C  10.0.2.0/24
+     is directly connected, GigabitEthernet0/0/0/1
+L1 11.11.11.11/32 [20/115]
+     via 10.0.1.2, GigabitEthernet0/0/0/0, RT01, Weight: 0
+L2 22.22.22.22/32 [20/115]
+     via 10.0.2.2, GigabitEthernet0/0/0/1, RT02, Weight: 0
+RP/0/RP0/CPU0:XRV01#
+show route ipv4
+Wed Oct 21 14:40:25.449 UTC
+
+Codes: C - connected, S - static, R - RIP, B - BGP, (>) - Diversion path
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, E - EGP
+       i - ISIS, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, su - IS-IS summary null, * - candidate default
+       U - per-user static route, o - ODR, L - local, G  - DAGR, l - LISP
+       A - access/subscriber, a - Application route
+       M - mobile route, r - RPL, t - Traffic Engineering, (!) - FRR Backup path
+       s - local SRv6 route, z - local IID route
+
+Gateway of last resort is not set
+
+L    1.1.1.1/32 is directly connected, 00:03:14, Loopback0
+C    10.0.1.0/24 is directly connected, 00:03:15, GigabitEthernet0/0/0/0
+L    10.0.1.1/32 is directly connected, 00:03:15, GigabitEthernet0/0/0/0
+C    10.0.2.0/24 is directly connected, 00:03:15, GigabitEthernet0/0/0/1
+L    10.0.2.1/32 is directly connected, 00:03:15, GigabitEthernet0/0/0/1
+i L1 11.11.11.11/32 [115/20] via 10.0.1.2, 00:01:26, GigabitEthernet0/0/0/0
+i L2 22.22.22.22/32 [115/20] via 10.0.2.2, 00:01:26, GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XRV01#
+show running-config router isis CORE
+Wed Oct 21 14:40:25.850 UTC
+router isis CORE
+ net 49.0001.0000.0000.0001.00
+ address-family ipv4 unicast
+ !
+ interface Loopback0
+  address-family ipv4 unicast
+  !
+ !
+ interface GigabitEthernet0/0/0/0
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+ interface GigabitEthernet0/0/0/1
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XRV01#
+show running-config router isis CORE inheritance detail
+Wed Oct 21 14:40:26.252 UTC
+router isis CORE
+ net 49.0001.0000.0000.0001.00
+ interface Loopback0
+  address-family ipv4 unicast
+  !
+ !
+ interface GigabitEthernet0/0/0/0
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+ interface GigabitEthernet0/0/0/1
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XRV01#
+show logging | include ISIS
+Wed Oct 21 14:40:26.655 UTC
+RP/0/RP0/CPU0:Oct 21 14:38:14.375 UTC: isis[1007]: %ROUTING-ISIS-5-PM_HA_ROLE_CHG : ISIS (CORE): ISIS HA role change: Active 
+RP/0/RP0/CPU0:Oct 21 14:38:14.375 UTC: isis[1007]: %ROUTING-ISIS-5-PM_ISSU_ROLE_CHG : ISIS (CORE): ISIS ISSU role change: Primary 
+RP/0/RP0/CPU0:Oct 21 14:38:14.525 UTC: isis[1007]: %ROUTING-ISIS-6-INFO_STARTUP_START : ISIS (CORE): Cold controlled start beginning 
+RP/0/RP0/CPU0:Oct 21 14:38:24.553 UTC: isis[1007]: %ROUTING-ISIS-6-INFO_STARTUP_FINISH : ISIS (CORE): Cold controlled start completed 
+RP/0/RP0/CPU0:XRV01#
+
+######## c-3: IOL 側
+show clns neighbors detail
+
+Tag null:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+XRV01           Et0/0         5254.00c7.8cc8      Up     28        L1   IS-IS
+  Area Address(es): 49.0001
+  IP Address(es):  10.0.1.1*
+  Uptime: 00:01:30
+  NSF capable
+  Interface name: Ethernet0/0
+RT01#
+show isis database detail
+
+Tag null:
+IS-IS Level-1 Link State Database:
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd      ATT/P/OL
+XRV01.00-00           0x00000004   0x8E4B                1109/1200      1/0/0
+  Area Address: 49.0001
+  TLV Code: 14 Length: 2 (Unsupported)
+  NLPID:        0xCC 
+  IP Address:   1.1.1.1
+  Hostname: XRV01
+  Metric: 10         IP 1.1.1.1 255.255.255.255
+  Metric: 10         IP 10.0.1.0 255.255.255.0
+  Metric: 10         IP 10.0.2.0 255.255.255.0
+  Metric: 10         IS RT01.00
+RT01.00-00          * 0x00000005   0x8874                1109/*         0/0/0
+  Area Address: 49.0001
+  NLPID:        0xCC 
+  Hostname: RT01
+  Metric: 10         IS XRV01.00
+  IP Address:   11.11.11.11
+  Metric: 10         IP 11.11.11.11 255.255.255.255
+  Metric: 10         IP 10.0.1.0 255.255.255.0
+RT01#
+show ip route isis
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is 10.0.1.1 to network 0.0.0.0
+
+i*L1  0.0.0.0/0 [115/10] via 10.0.1.1, 00:01:30, Ethernet0/0
+      1.0.0.0/32 is subnetted, 1 subnets
+i L1     1.1.1.1 [115/20] via 10.0.1.1, 00:01:30, Ethernet0/0
+      10.0.0.0/8 is variably subnetted, 3 subnets, 2 masks
+i L1     10.0.2.0/24 [115/20] via 10.0.1.1, 00:01:30, Ethernet0/0
+RT01#
+show ip route 0.0.0.0
+Routing entry for 0.0.0.0/0, supernet
+  Known via "isis", distance 115, metric 10, candidate default path, type level-1
+  Redistributing via isis
+  Last update from 10.0.1.1 on Ethernet0/0, 00:01:30 ago
+  Routing Descriptor Blocks:
+  * 10.0.1.1, from 1.1.1.1, 00:01:30 ago, via Ethernet0/0
+      Route metric is 10, traffic share count is 1
+RT01#
+ping 22.22.22.22 source 11.11.11.11
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 22.22.22.22, timeout is 2 seconds:
+Packet sent with a source address of 11.11.11.11 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/1 ms
+RT01#
+show clns neighbors detail
+
+Tag null:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+XRV01           Et0/0         5254.00ff.fc7a      Up     25        L2   IS-IS
+  Area Address(es): 49.0001
+  IP Address(es):  10.0.2.1*
+  Uptime: 00:01:33
+  NSF capable
+  Interface name: Ethernet0/0
+RT02#
+show isis database detail
+
+Tag null:
+IS-IS Level-2 Link State Database:
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd      ATT/P/OL
+XRV01.00-00           0x00000005   0xCB36                1107/1200      0/0/0
+  Area Address: 49.0001
+  TLV Code: 14 Length: 2 (Unsupported)
+  NLPID:        0xCC 
+  IP Address:   1.1.1.1
+  Hostname: XRV01
+  Metric: 10         IP 1.1.1.1 255.255.255.255
+  Metric: 10         IP 10.0.1.0 255.255.255.0
+  Metric: 10         IP 10.0.2.0 255.255.255.0
+  Metric: 20         IP 11.11.11.11 255.255.255.255
+  Metric: 10         IS RT02.00
+RT02.00-00          * 0x00000004   0xF599                1106/*         0/0/0
+  Area Address: 49.0002
+  NLPID:        0xCC 
+  Hostname: RT02
+  Metric: 10         IS XRV01.00
+  IP Address:   22.22.22.22
+  Metric: 10         IP 22.22.22.22 255.255.255.255
+  Metric: 10         IP 10.0.2.0 255.255.255.0
+RT02#
+show ip route isis
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      1.0.0.0/32 is subnetted, 1 subnets
+i L2     1.1.1.1 [115/20] via 10.0.2.1, 00:01:34, Ethernet0/0
+      10.0.0.0/8 is variably subnetted, 3 subnets, 2 masks
+i L2     10.0.1.0/24 [115/20] via 10.0.2.1, 00:01:34, Ethernet0/0
+      11.0.0.0/32 is subnetted, 1 subnets
+i L2     11.11.11.11 [115/30] via 10.0.2.1, 00:01:32, Ethernet0/0
+RT02#

@@ -67,6 +67,7 @@
 | M2 | 基本設定と管理プレーン(ユーザとタスクグループ・AAA・SSH・管理 VRF・ACL・制御プレーン保護) | 1.5.a 1.6.b 1.7.b | XR 1+IOL |
 | M3 | OSPF(v2/v3)を XR で | 2.2 2.6 | XR 1+IOL |
 | M4 | IS-IS(IPv4/IPv6・エリア・単一/マルチトポロジ・メトリック) | 2.1 2.6 | XR 1+IOL |
+| M4 追補 | IS-IS の 2 周目(認証・broadcast と DIS・要約・複数のエリア アドレス)。§18 | 2.1 2.6 | XRd 1+IOL+L2 |
 | M5 | ルーティングポリシー言語(route-map との対比・適用点) | 2.5 | XR 1+IOL |
 | M6 | BGP(隣接・アドレスファミリ・属性・パス選択・再配送) | 2.3 2.4 2.6 | XR 1+IOL |
 | M7 | 高可用性(BFD・NSF/NSR・リンク集約) | 2.8 | XR 1+IOL |
@@ -83,6 +84,11 @@
 - **実施順(2026-10-17 ユーザ合意)= M0 → M1 → M2 → M3(短く)→ M5 RPL → M6 BGP → M4 IS-IS → M7 以降**。
   XR のルーティングで一番の壁は RPL(eBGP はポリシーなしでは経路を送受しない)なので、Enterprise の知識が効く範囲で
   RPL・BGP まで先に進み、Enterprise で薄い IS-IS(読み物を厚くする単元)を後ろに回す。単元番号は変えない。
+- **IS-IS の深め方(2026-10-22 ユーザ合意)**= 深掘り専用の区画は作らず、2 段で深める。
+  ① **M4 追補**(§18)= M7 以降の流れで自然に出てこない論点(認証・broadcast と DIS・要約・複数のエリア アドレス)を、
+  M4 の盤面を広げた短い課題で拾う。② **M7 以降の盤面の IGP は IS-IS に統一**し、単元ごとに IS-IS の論点を 1〜2 個載せる
+  (M7= BFD・NSF・オーバーロード ビット・タイマー／M8= LDP と IS-IS の同期／M10= prefix-SID・TI-LFA)。
+  実施順は M4 → **M4 追補 → M7** → M8 以降。
 
 ### M1 の課題案(最初の試作)
 
@@ -378,7 +384,7 @@ CML の XRd は **XRd Control Plane**(`show version`= "cisco XRd Control Plane")
 |---|---|---|
 | M5 RPL | **XRd** | 挙動・表示・エラー文まで一致 |
 | M6 BGP | **XRd**(条件つき) | 制御プレーンは一致。ただし盤面で「XRd を通り抜ける TCP/UDP」を作らない(IOL どうしのセッションを XRd 越しに張らない・XRd 越しの SSH/traceroute を確認手段にしない)。確認は ping と XR 自身の show で |
-| M4 IS-IS | XRd(見込み) | 制御プレーンのみ。着手時に短く確認 |
+| M4 IS-IS | **XRd**(2026-10-21 確定・§17.4) | 制御プレーンのみ。比較 PoC で全出力一致 |
 | M7 高可用性 | **XRv9000** | BFD が動かない |
 | M8〜M12(MPLS 転送・L3VPN・SR の転送・L2VPN・QoS・uRPF) | **XRv9000**(見込み) | Control Plane 版は転送が最小限。着手時に確認 |
 | M13 自動化 | XRd(見込み) | netconf-yang・grpc・telemetry はあり。着手時に確認 |
@@ -478,3 +484,200 @@ RT04 の BGP は据え付け済み(`neighbor 1.1.1.1 remote-as 65000 update-sour
   iBGP には方針なしで経路が届き、コミュニティも届く。`show bgp ipv4 unicast X bestpath-compare` は負けたパスの末尾に負けた理由を出す
   (「Lower local preference than best path (path #1)」)。
 - M6-1 の確認「リンクを OSPF に入れていない」は白紙でも通るので、RT04 のルート表の肯定条件と同じ項目にまとめた。
+
+## 17. M4 IS-IS(2026-10-21 完了)
+
+**範囲= SPCOR 2.1(IS-IS の実装 IPv4/IPv6: a ルート広告・b エリアの付番・c 単一/マルチトポロジ・d メトリック)と 2.6(隣接・広告)。**
+Enterprise の CCNP では IS-IS をほぼ扱わないので、**この単元だけは技術そのものを読み物で厚く説明する**(§1 の方針)。
+ラボは新しく `XRT-04`。XR01 は XRd の見込み(§14.2)→ 着手時に XRv9000 26.1.1 と同じ手順で比べる(`poc/xr/isis_poc.sh`・盤面 `_POC-XRCMP`)。
+
+### 17.1 盤面(案)
+
+| リンク | XR01 | 相手 | アドレス |
+|---|---|---|---|
+| ACCESS | Gi0/0/0/0 | RT01(IOL・L1 だけ・area 49.0001) | 10.0.11.0/24・2001:db8:11::/64 |
+| CORE-A | Gi0/0/0/1 | RT02(IOL・L2 だけ・area 49.0002) | 10.0.12.0/24・2001:db8:12::/64 |
+| CORE-B | Gi0/0/0/2 | RT03(IOL・L2 だけ・area 49.0003) | 10.0.13.0/24・2001:db8:13::/64 |
+| (RT02─RT03) | — | RT02 Et0/1 ─ RT03 Et0/1 | 10.0.23.0/24・2001:db8:23::/64 |
+
+- XR01= L1/L2・area 49.0001。ループバックは 10.255.0.0/24 から(XR01 .1・RT01 .11・RT02 .2・RT03 .3)、IPv6 は 2001:db8:255::<同じ番号>/128。
+  システム ID はループバックから作る慣習(10.255.0.1 → 0102.5500.0001)。
+- バックボーン(RT02・RT03)は wide メトリックへ移行済み。RT03 の CORE-B 側は予備リンクとしてメトリック 1000。
+  RT02・RT03 はサービス網(10.20.0.0/16・10.30.0.0/16)も IS-IS に載せている。
+- IOL はすべて IPv6 を単一トポロジ(IOS の既定)で運用。
+
+### 17.2 課題(案)
+
+| 課題 | 中身 | ねらい(SPCOR) |
+|---|---|---|
+| M4-1 | (構築)XR01 を IS-IS に参加させる。NET は慣習どおり・RT01 と L1、バックボーンと L2。各リンクは相手のレベルだけ・p2p・ループバックはハローを出さない | NET とエリア・レベルと隣接の規則・XR の設定の木(プロセスと IF のアドレス ファミリ)(2.1.b 2.6.a) |
+| M4-2 | (TS)L2 の隣接は上がっているのにバックボーンと経路を交換しない。直す。CORE-B は予備(両方向 1000) | narrow と wide の不一致・レベルごとの metric-style・メトリックは片方向(2.1.d) |
+| M4-3 | IPv6 も IS-IS で運ぶ(IOS 側は変えない) | XR の既定はマルチトポロジ・IOS の既定は単一トポロジ(2.1.c) |
+| M4-4 | RT01 にバックボーンのループバック(/32・/128)だけを個別の経路で渡す。その他の他エリアの経路は既定経路のまま | ATT ビットと既定経路・L2→L1 の漏らし(up/down ビット)に RPL(2.1.a・M5 の再利用) |
+
+### 17.3 PoC で確かめること
+
+1. IOL(17.x)の IS-IS の可否と書式。
+2. XR で IF を並べただけ(アドレス ファミリなし)・IF にだけ AF・プロセスにも AF、の各段の見え方。
+3. 既定(metric-style・is-type・ハローのパディング・隣接のログ)。
+4. narrow/wide の不一致の症状(隣接・DB・経路・ATT ビット)。narrow のまま 1000 を書いたとき。レベルごとの wide。
+5. IPv6: IOS の単一トポロジと XR の既定の組み合わせの症状、`single-topology` での解消。IOS の adjacency-check で隣接が落ちるか。
+6. `propagate level 2 into level 1` の書式・RPL・IPv6・ATT の既定経路が残るか。
+7. XRv9000 と XRd で上の見え方が一致するか。
+
+### 17.4 PoC の結果(2026-10-21・盤面 `_POC-XRCMP` に IS-IS を載せて XRv9000 26.1.1 と XRd 26.1.1 へ同じ手順。記録 `poc/xr/isis-{xrv,xrd}-*.log`)
+
+**判定= M4 は XRd**。両機種の出力は PID・時刻・MAC・LSP の通番以外すべて一致(IS-IS は L2 で直接運ばれるので XRd のチェックサム問題にも触れない)。
+
+| 論点 | 実機の挙動 |
+|---|---|
+| IOL の IS-IS | IOL(IOS XE 17.15)で動く。既定= level-1-2・narrow(生成/受け入れとも)・IPv6 は単一トポロジ |
+| IF を並べただけ(AF なし) | `show isis interface X` = `Disabled (No topologies cfg on the intf)`・brief の All OK が `No`・隣接ゼロ |
+| IF にだけ AF(プロセスに無し) | **それだけで隣接も経路も成立**(26.1.1)。プロセスの AF はトポロジ全体の設定の置き場 |
+| XR 既定 | is-type level-1-2・Narrow/Narrow・IF メトリック 10・L1 LSP に ATT=1・IPv6 はマルチトポロジ・`log adjacency changes` なし(ADJCHANGE が出ない) |
+| broadcast(XR 既定)× p2p(IOL) | 双方隣接なし。XR の `show isis interface` に `Last PDU Rejected: … P2P IIH, P2P IIH on LAN Interface` |
+| narrow × wide(L2) | 隣接は Up・LSP も届く(相手は `IS-Extended`/`IP-Extended`)が経路ゼロ・`show isis topology` が `**`。★**XR は ATT ビットを 0 にする→ L1 ルータの既定経路も消える** |
+| `metric-style wide level 2` | L2 だけ wide。ATT=1 に戻り L1(narrow の IOL)の既定経路も復活。両レベル wide にすると narrow の L1 ルータは経路を全部失う |
+| narrow のレベルに 1000 | コミットは通る→ **63 に切り詰めて広告**・`%ROUTING-ISIS-4-WD_METRIC_NOT_CONF … Maximum narrow value 63 is used instead`。help は `<1-63> for narrow, <1-16777214> for wide` |
+| IOL が IPv4+IPv6(ST)・XR が IPv4 だけ | **IOS が隣接を張らない**(XR は `Init`・IOS 側は表示なし)。IOS の `debug isis adj-packets` = `No usable IPv6 linklocal addresses in serial IIH` |
+| XR 既定(MT)× IOS 既定(ST) | 隣接 Up(IOS は Protocol `M-ISIS`)。XR の adjacency detail= `Topology (not running): [IPv6 Unicast (neighbor doesn't participate)]`・IPv6 経路ゼロ(IOS の L1 には ATT の `::/0` だけ) |
+| `single-topology` | 解消(隣接は 1 回 flap)。★IF メトリックは AF ごと= IPv4 側だけ 1000 だとリンクの IPv6 プレフィックスは 10 で広告(SPF の経路は IPv4 の IS 到達性に従う) |
+| `propagate level 2 into level 1` | `route-policy` が必須(ポリシーなしの形は Incomplete)。AF ごとに書く・同じポリシーを両 AF に付けられる(prefix-set に v4/v6 混在可・`eq` も可)。attachpoints= `inter-area-propagate`。L1 LSP= `IP-Interarea`/`IPv6-Interarea`、IOS= `i ia`/`IA`。ATT の既定経路は残る。narrow の L1 へは 63 で頭打ち |
+| NET の付け替え | 1 コミット(`no net` + `net`)で可。全隣接がいったん落ち、古い LSP は `Purge Originator` で残り寿命 0。IOS は以後しばらく XR を system ID で表示する |
+| その他 | ループバックは Media Type `Loop`= ハローを出さない(passive は慣例)。passive にするとループバックのプレフィックスのメトリックが 0 になる。★`advertise passive-only` を入れて外すと IPv4 の `propagate` の漏らしが戻らない(両機種・`propagate` を入れ直すと戻る。原因未切り分け= 課題では使わない) |
+
+### 17.5 実装の結果(2026-10-21)
+
+- 盤面は 17.1 どおり(XR01= XRd・RT01 L1 narrow・RT02/RT03 L2 wide・IOL は全部 IPv6 単一トポロジ・RT03 の CORE-B 側は 1000)。
+  XR01 の初期設定= 同僚の書きかけ(`router isis CORE` に慣習外の NET と IF を並べただけ)。
+- 課題(17.2 から変えた点):
+  - M4-1 に「IPv4 と IPv6 の両方を Loopback0 と 3 リンクで」を入れた(IOS の隣接チェックで IPv4 だけでは張れないため)。
+    ループバックは元々ハローを出さないので「passive」は要件から外した。白紙の原因は 3 つ(AF なし・broadcast/p2p・IPv4 だけ)。
+  - M4-2 の確認に「RT01 が経路を保つ」を入れ、両レベル wide の誤答を判別(実測 55 点)。
+  - M4-3 に「リンクのサブネットも IPv4 と同じ経路」を足した= XR の AF ごとの IF メトリックを問う(`single-topology` だけの誤答は 80 点)。
+  - M4-4 の「新しいループバックも XR01 を変えずに届く」は、採点のあいだだけ RT02 に Loopback99 を足して見る(`login_probe.py` に
+    `--pre-cli`/`--post-cli`/`--settle` を追加)。/32 を列挙する誤答は 60 点。
+- 成果物= `problems/XRT-04`(課題ごとの確認 `grading.m4t1〜4.yml`・最終 `grading.yml` 各 25 点・`learn.yml`)、読み物
+  `courses/xr/{en,ja}/40-m4-isis.md`(この単元だけ技術そのものを厚く= 12 節)・実践 `41-m4-practice.md`。模範解= `poc/xr/solve_xrt04.sh`。
+- 実機 E2E= 構築直後へ戻して白紙 0(最終・課題ごと 4 本とも)→ 模範解 100(同)。`learn.yml` の模範解の文字列を逐語で流しても 100
+  (XR がサブモードをまたぐ入力を親へたどって受け付けることも確認)。ワークスペースの Check(API)でも M4-4 が通ることを確認(約 36 秒)。
+  記録 `poc/xr/expM4-*.log`。
+- 公式文書(ASR 9000 の Routing Configuration Guide「Implementing IS-IS」「Implementing Routing Policy」)と食い違いは無し。
+  文書に記述が無く実測だけに拠るもの= 17.4 の表のうち、拒否 PDU の表示・IF の AF だけで足りること・ATT の連動・63 への切り詰めと警告・
+  IOS の隣接チェックの表示・AF ごとの IF メトリック・ログの既定・NET 変更後の IOS の表示・advertise passive-only の件。
+
+### 17.6 用語の追記(2026-10-21・ユーザ指摘「Juniper や技術ブログとアドレスの呼び名が違う(NSAP など)」)
+
+読み物 §2 に、呼び名の対応表(NET・NSAP アドレス・ISO アドレス・NSEL/N-selector/SEL・システム ID)・エリアの 2 通りの言い方・
+システム ID の 2 つの流儀を足した(日英)。裏どり:
+
+| 論点 | ソース | 結果 |
+|---|---|---|
+| エリア アドレス= システム ID と SEL を除いた上位部分全体 | RFC 1142(ISO 10589 の本文)7.1.1 | 確認。XR の表示 `Area Address: 49.0001` とも一致 |
+| AFI・IDI・HO-DSP の分け方([IDP, HO-DSP] がエリア アドレス) | RFC 1237 3.2 | 確認 |
+| NET= NSEL を 00 にした NSAP・NSEL は最後の 1 オクテット・複数 NET はエリア部分だけ違ってよい | Cisco IOS「IS-IS Overview and Basic Configuration」・NX-OS コマンド リファレンス | 確認 |
+| Juniper の呼び名と置き場所(`family iso address`・推奨は lo0)・システム ID は本番では MAC 等から | Junos IS-IS User Guide / IS-IS Overview | 他ベンダの補足として記載(信頼順のソース外) |
+| AFI `49` = 私設 | フォーラム・解説サイトのみ(規格・Cisco 公式では見つからず) | 断定を「慣例として私設に使う値」に弱め、注記に「解説資料での説明」と明記 |
+
+## 18. M4 追補 — IS-IS の 2 周目(2026-10-22 設計・PoC中)
+
+**ねらい**= M4 は SPCOR 2.1 の a〜d を一通り押さえたが、SP の IGP として使い込むには薄い(認証・broadcast と DIS・要約・
+複数のエリア アドレスが手つかず。DIS・LSP は読み物だけ)。このうち M7 以降の流れで自然に出てこないものを、
+M4 の盤面を広げた短い課題で拾う(§5 の「IS-IS の深め方」①)。オーバーロード ビット・タイマー・BFD・NSF は M7 へ回す(§19)。
+
+- ラボは新しく **`XRT-05`**(XRT-04 は解答済みのまま残す)。**初期状態= M4-1〜4 を解き終えた状態**+下の仕込み。
+  M4 をもう一度解かずに M4-5 から始められるようにする(XRT-03 の M6 は M5 からの通しだったが、M4 は解き終えているため)。
+- XR01 は **XRd**(§17.4 で IS-IS は XRv9000 と一致)。約束は M4 と同じ= **設定するのは XR01 だけ**(IOS 側は据え付け)。
+- 読み物は M4 の章に 2 ページ足す= `42-m4-isis-deeper.md`(解説)と `43-m4-practice-2.md`(実践・課題文から切り出し)。
+  既存の `40-m4-isis.md` は書き換えない(読み終えた本の段落の並びを崩さない)。
+
+### 18.1 盤面(案)= XRT-04 に共用セグメントを 1 本足す
+
+| リンク | XR01 | 相手 | アドレス |
+|---|---|---|---|
+| ACCESS | Gi0/0/0/0 | RT01 Et0/0 | 10.0.11.0/24・2001:db8:11::/64(XRT-04 と同じ) |
+| CORE-A | Gi0/0/0/1 | RT02 Et0/0 | 10.0.12.0/24・2001:db8:12::/64(同) |
+| CORE-B | Gi0/0/0/2 | RT03 Et0/0 | 10.0.13.0/24・2001:db8:13::/64(同) |
+| (RT02─RT03) | — | RT02 Et0/1 ─ RT03 Et0/1 | 10.0.23.0/24・2001:db8:23::/64(同) |
+| **SVC-LAN**(新) | Gi0/0/0/3 | SW01(非管理スイッチ)に RT02 Et0/2・RT03 Et0/2 | 10.0.100.0/24・2001:db8:100::/64(.1/.2/.3) |
+
+- RT01 のアクセス LAN を 1 本の /16 から**ループバック 4 本**(10.11.1.0/24〜10.11.4.0/24・2001:db8:1011:1::/64〜:4::/64)に変える= 要約の題材。
+- 仕込み(据え付け側の設定)= RT02・RT03 のレベル 2 に HMAC-MD5 の認証(ハローと LSP/SNP の両方・鍵チェーン)。
+  RT03 の SVC-LAN 側に DIS の優先度(既定 64 より高い値)。M4-8 の案によっては RT01 にも NET を足す。
+- problem.yml は `lab.switches: [SW01]`(gen_cml_lab の非管理スイッチ)・XR01 の slot 6 → Gi0/0/0/3。
+
+### 18.2 課題(案)
+
+| 課題 | 中身 | 論点 |
+|---|---|---|
+| M4-5 | (TS)昨夜、セキュリティ部門がバックボーン(レベル 2)に認証を入れたが、XR01 の分が作業から漏れた。XR01 を合わせる。RT01(旧型・認証なし)は経路を保つ | ハローの認証と LSP/SNP の認証は別物(ハローだけ直すと隣接は上がるのに経路が来ない)・XR の鍵チェーン・**レベルを付けずに入れると L1 にも効いて RT01 の経路を失う**(暗黙の最小変更) |
+| M4-6 | SVC-LAN を IS-IS に載せる。この LAN ではレベル 2 の隣接だけを作り、**XR01 を DIS にする**(RT02・RT03 は変えない) | broadcast と p2p(M4-1 の癖で p2p にすると隣接しない)・優先度と同点時の SNPA・**IS-IS の DIS は奪い取る**(OSPF の DR と違う)・擬似ノード LSP と CSNP |
+| M4-7 | バックボーンへは RT01 のアクセス LAN を IPv4・IPv6 とも**要約 1 本ずつ**で出す。エリア 49.0001 の中は個別のまま。M4-4 のループバックの漏らしは保つ | L1→L2 の要約は L1/L2 ルータで・AF ごと・レベルの指定・要約のメトリックと破棄経路・構成要素が全部消えたら要約も消える |
+| M4-8 | エリア アドレスの付け替え(または併合)。**RT01 との L1 隣接と経路を落とさずに**行う | 複数のエリア アドレス(最大 3)・L1 隣接は共通のエリアが 1 つあれば成立・L2 LSP に載るエリアの和集合・付け替えの順序 |
+
+- **M4-8 は 2 案から PoC で選ぶ**。
+  - 案 A(付け替え)= RT01 は新旧両方の NET を持って据え付け済み。XR01 を新エリアへ移し、旧 NET を外す。
+    1 コミットで入れ替えても隣接が落ちないなら課題として薄い(§17.4 で落ちたのはシステム ID も変えたため)→ その場合は案 B。
+  - 案 B(併合)= RT01 は新しいエリア番号で据え付けられて届いた。XR01 は既存エリアのまま RT01 と L1 で隣接する。
+  - 採点の「隣接を落とさない」は、XR の `show isis adjacency-log`(隣接の状態変化の履歴)か IOS 側の隣接の Uptime で見る想定。PoC で確定。
+- 再配送(static を RPL つきでレベル 2 へ)は M4-7 に足すかを PoC 後に判断(課題が重くなるなら読み物だけ)。
+
+### 18.3 PoC で確かめること(XRd 26.1.1+IOL 17.15。XRT-05 の盤面をそのまま PoC に使う)
+
+1. 認証: XR の鍵チェーン(暗号アルゴリズム・有効期間の既定で鍵が有効か)と IOS の HMAC-MD5 の相互接続。
+   ハローだけ合わせた時の症状(隣接 Up・LSP 拒否の見え方と数え方)。SNP の認証の扱い(XR の `snp send-only` 等の選択肢と IOS の既定)。
+   レベル指定なしで LSP の認証を入れた時に、認証なしの RT01 の L1 LSP がどうなるか。
+2. XRd が broadcast の LAN で隣接・DIS 選出できるか(IS-IS のマルチキャスト MAC を受け取れるか)。優先度のレベル指定・奪い取りの見え方。
+3. 要約: レベル指定なしの既定・メトリック・XR が破棄経路(Null0)を入れるか・IPv6 の要約。M4-4 の propagate との干渉。
+4. 複数エリア: 同じシステム ID で NET を 2 つ・1 コミットで入れ替えた時に隣接が落ちるか・`adjacency-log` の内容。
+5. 白紙(初期状態)から模範解までの通しと、各課題の誤答の点数(M4 と同じく誤答を判別できるか)。
+
+### 18.4 裏どりのソース(実装時)
+
+- ASR 9000 Routing Configuration Guide「Implementing IS-IS」(認証・要約・優先度・NET)・System Security Configuration Guide の鍵チェーン。
+- RFC 5304(IS-IS の HMAC-MD5)・RFC 5310(汎用の暗号認証)・RFC 1195(IP の IS-IS)・ISO 10589(RFC 1142)の DIS と擬似ノード。
+- IOS 側= IS-IS の認証・要約の設定ガイド(IOS XE 17.x)。
+
+## 19. M7 高可用性(2026-10-22 方針・未着手)
+
+**範囲= SPCOR 2.8(a NSF/グレースフル リスタート・b NSR・c BFD・d リンク集約)。機種は XRv9000**(§14.2= XRd は BFD のセッションを作らない)。
+版は **26.1.1**(起動 約 3 分。24.3.1 は約 8 分)を `node_images` で指定する見込み。**IGP は IS-IS**(§5 の「IS-IS の深め方」②)。
+ラボは **`XRT-06`**(XRT-05 は M4 追補)。
+
+### 19.1 盤面(案)
+
+| リンク | XR01(XRv9000) | 相手 | 役割 |
+|---|---|---|---|
+| BUNDLE | Gi0/0/0/0・Gi0/0/0/1 → Bundle-Ether | RT01 Et0/0・Et0/1 → Port-channel | リンク集約(LACP) |
+| PRIMARY | Gi0/0/0/2 | SW01(IOL-L2)経由で RT02 Et0/0 | 間にスイッチ= **XR 側のポートは up のまま先が死ぬ**状況を作れる |
+| BACKUP | — | RT01 Et0/2 ─ RT02 Et0/2(メトリック大) | 予備経路 |
+
+- IS-IS はレベル 2 だけ・wide。XR01 と RT02 はループバック間で iBGP(BGP のグレースフル リスタートとオーバーロード ビットの題材)。
+
+### 19.2 課題(案)
+
+| 課題 | 中身 | SPCOR と IS-IS の論点 |
+|---|---|---|
+| M7-1 | RT01 との 2 本を LACP で 1 本の束にする。1 本だけでは使わない(最低本数) | 2.8.d・束の上の IS-IS |
+| M7-2 | (TS)束の上で IS-IS の隣接が上がらない、など。候補= XR の MTU は L2 ヘッダ込みで数える(`mtu 1500` は L3 で 1486)× IS-IS のハローのパディング・LACP のモードの食い違い | 2.8.d・ハローのパディングで MTU の食い違いを見つける IS-IS の仕組み |
+| M7-3 | RT02 への主経路が、ポートは up のまま死んでも 1 秒以内に予備へ切り替わる | 2.8.c・IS-IS に BFD・SPF/LSP 生成のタイマー |
+| M7-4 | XR01 のルーティング プロセスを再起動しても、隣接と転送を落とさない | 2.8.a・IS-IS の NSF(IETF)・BGP のグレースフル リスタート・XR のプロセス構造(M0 の復習) |
+| M7-5 | (候補)メンテナンス前に XR01 を通過経路から外す(XR01 宛ては残す)・起動直後は BGP が揃うまで通過させない | オーバーロード ビット(手動と on-startup wait-for-bgp)。起動時の挙動を採点するには再起動が要るので、課題にするかは PoC 後 |
+
+- **NSR(2.8.b)** は RP が 1 枚の XRv9000 では本来の動きをしない見込み= まず読み物で扱い、ラボ化は PoC の結果で決める。
+- 採点= M7-3 は採点中だけ SW01 の RT02 側ポートを止めて、RT01 からの連続 ping の欠落で切り替え時間を測る。
+  M7-4 は採点中だけ XR01 で `process restart`。どちらも `login_probe.py` の `--pre-cli`/`--post-cli` の延長(XR に対して打つ口が要る)。
+
+### 19.3 PoC で確かめること(XRv9000 26.1.1+IOL 17.15)
+
+1. 26.1.1 の必要 vCPU・メモリ(24.3.1 は 7 vCPU・20GB)と起動時間。日次パックのラボと同居できるか。
+2. Bundle-Ether と IOL の Port-channel(LACP)の相互接続・最低本数・食い違い(モード・MTU)の症状。
+3. BFD の下限(仮想機で 1 秒以内が安定するか)・IS-IS に張る形・束の上の BFD(メンバごとか束全体か)。
+4. `process restart isis`/`bgp` でグレースフル リスタートが効くか(IOL の隣接の Uptime がリセットされないか・ping の欠落)。IOL の IETF ヘルパーの既定。
+5. RP 1 枚での NSR の設定と表示。
+6. オーバーロード ビットの手動設定の見え方・on-startup の採点の可否。
+
+### 19.4 その先の見通し(メモ)
+
+- M8 以降も転送が要るので XRv9000 が中心。ただし XRd は公式に vRR・PCE 向けの位置づけ(§14.1)なので、M9 の VPNv4 ルート リフレクタ・
+  M10 の PCE のように**転送しない役に XRd を足せば**、XRv9000 1 台+XRd 数台で「XR 複数台」の盤面が作れる(同時 2 台の上限を回避)。

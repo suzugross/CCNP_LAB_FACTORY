@@ -1,0 +1,401 @@
+
+######## h-1: XR だけ broadcast(既定)・IOL は p2p のときの症状
+configure
+Wed Oct 21 14:52:45.890 UTC
+RP/0/RP0/CPU0:XRV01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XRV01(config-isis)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+no point-to-point
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+commit
+Wed Oct 21 14:52:47.593 UTC
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+end
+RP/0/RP0/CPU0:XRV01#
+show isis adjacency
+Wed Oct 21 14:53:30.048 UTC
+
+IS-IS CORE Level-1 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT02           Gi0/0/0/1                *PtoP*         Up    28   00:06:04 Yes None None
+
+Total adjacency count: 1
+RP/0/RP0/CPU0:XRV01#
+show isis interface GigabitEthernet0/0/0/0 | include "Media$thernet0/0/0/0 | include "Media|                          Rejected|IIH|Adjacency Cou$edia|Rejected|IIH|Adjacency Coun                          t|DIS"show isis interface GigabitEthernet0/0/0/0 | include "Medi$
+Wed Oct 21 14:53:30.449 UTC
+  Media Type:               LAN
+  Last IIH Received:        14:52:44 (46.41 sec ago), 1496 octets
+  Last PDU Rejected:        14:53:24 (6.03 sec ago), 1496 octets, P2P IIH, P2P IIH on LAN Interface
+  Last IIH Sent:            14:53:22 (7.48 sec ago), 1497 octets
+    Adjacency Count:        0
+    Priority (Local/DIS):   64/none (no DIS elected)
+    Next LAN IIH in:        1 s
+RP/0/RP0/CPU0:XRV01#
+show isis neighbors
+Wed Oct 21 14:53:30.849 UTC
+
+IS-IS CORE neighbors:
+System Id      Interface        SNPA           State Holdtime Type IETF-NSF
+RT02           Gi0/0/0/1        *PtoP*         Up    27       L2   Capable 
+
+Total neighbor count: 1
+RP/0/RP0/CPU0:XRV01#
+show clns neighbors
+
+Tag null:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+RT01#
+show isis neighbors
+
+Tag null:
+System Id       Type Interface     IP Address      State Holdtime Circuit Id
+RT01#
+show logging | include ISIS|CLNS|isis
+*Oct 21 14:53:16.092: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XRV01 (Ethernet0/0) Down, hold time expired
+RT01#
+configure
+Wed Oct 21 14:53:34.927 UTC
+RP/0/RP0/CPU0:XRV01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XRV01(config-isis)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+point-to-point
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+commit
+Wed Oct 21 14:53:36.633 UTC
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+end
+RP/0/RP0/CPU0:XRV01#
+
+######## h-2: NET を 1 回のコミットで付け替える(システム ID を慣習どおりに)
+configure
+Wed Oct 21 14:53:39.064 UTC
+RP/0/RP0/CPU0:XRV01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XRV01(config-isis)#
+no net 49.0001.0000.0000.0001.00
+RP/0/RP0/CPU0:XRV01(config-isis)#
+net 49.0001.0010.0100.1001.00
+RP/0/RP0/CPU0:XRV01(config-isis)#
+commit
+Wed Oct 21 14:53:40.766 UTC
+RP/0/RP0/CPU0:XRV01(config-isis)#
+show configuration failed
+Wed Oct 21 14:53:41.674 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XRV01(config-isis)#
+end
+RP/0/RP0/CPU0:XRV01#
+show isis adjacency
+Wed Oct 21 14:54:24.788 UTC
+
+IS-IS CORE Level-1 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    24   00:00:15 Yes None None
+
+Total adjacency count: 1
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT02           Gi0/0/0/1                *PtoP*         Up    25   00:00:13 Yes None None
+
+Total adjacency count: 1
+RP/0/RP0/CPU0:XRV01#
+show isis hostname
+Wed Oct 21 14:54:25.188 UTC
+
+IS-IS CORE hostnames
+Level  System ID      Dynamic Hostname
+ 1     0000.0000.0011 RT01
+ 2     0000.0000.0022 RT02
+ 1,2 * 0010.0100.1001 XRV01
+RP/0/RP0/CPU0:XRV01#
+show isis database
+Wed Oct 21 14:54:25.587 UTC
+
+IS-IS CORE (Level-1) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+0000.0000.0001.00-00  0x0000001e   0x7c52        0 (45)/*           1/0/0
+RT01.00-00            0x0000000f   0xab67        1184 /1200         0/0/0
+XRV01.00-00         * 0x00000003   0x4de2        1186 /*            1/0/0
+
+ Total Level-1 LSP count: 3     Local Level-1 LSP count: 1
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+0000.0000.0001.00-00  0x0000001c   0x7860        0 (46)/*           0/0/0
+RT02.00-00            0x0000000d   0x3f93        1185 /1200         0/0/0
+XRV01.00-00         * 0x00000004   0x87e8        1185 /*            0/0/0
+
+ Total Level-2 LSP count: 3     Local Level-2 LSP count: 1
+RP/0/RP0/CPU0:XRV01#
+show running-config router isis CORE | include net
+Wed Oct 21 14:54:25.992 UTC
+ net 49.0001.0010.0100.1001.00
+ interface GigabitEthernet0/0/0/0
+ interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XRV01#
+show clns neighbors
+
+Tag null:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+0010.0100.1001  Et0/0         5254.00c7.8cc8      Up     29        L1   IS-IS
+RT01#
+show isis database
+
+Tag null:
+IS-IS Level-1 Link State Database:
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd      ATT/P/OL
+0000.0000.0001.00-00  0x0000001E   0x7C52            0 (1148)/0         1/0/0
+RT01.00-00          * 0x0000000F   0xAB67                1181/*         0/0/0
+0010.0100.1001.00-00  0x00000003   0x4DE2                1182/1200      1/0/0
+RT01#
+
+######## h-3: RPL の prefix-set で eq(長さちょうど)が書けるか
+configure
+Wed Oct 21 14:54:29.660 UTC
+RP/0/RP0/CPU0:XRV01(config)#
+prefix-set LOOPS-EQ
+RP/0/RP0/CPU0:XRV01(config-pfx)#
+22.22.22.0/24 eq 32,
+RP/0/RP0/CPU0:XRV01(config-pfx)#
+2001:db8::/64 eq 128
+RP/0/RP0/CPU0:XRV01(config-pfx)#
+end-set
+RP/0/RP0/CPU0:XRV01(config)#
+commit
+Wed Oct 21 14:54:31.764 UTC
+RP/0/RP0/CPU0:XRV01(config)#
+show configuration failed
+Wed Oct 21 14:54:32.671 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XRV01(config)#
+abort
+RP/0/RP0/CPU0:XRV01#
+configure
+Wed Oct 21 14:54:35.885 UTC
+RP/0/RP0/CPU0:XRV01(config)#
+prefix-set LOOPS-GE
+RP/0/RP0/CPU0:XRV01(config-pfx)#
+22.22.22.0/24 ge 32,
+RP/0/RP0/CPU0:XRV01(config-pfx)#
+2001:db8::/64 ge 128
+RP/0/RP0/CPU0:XRV01(config-pfx)#
+end-set
+RP/0/RP0/CPU0:XRV01(config)#
+commit
+Wed Oct 21 14:54:37.992 UTC
+RP/0/RP0/CPU0:XRV01(config)#
+show configuration failed
+Wed Oct 21 14:54:38.897 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XRV01(config)#
+end
+RP/0/RP0/CPU0:XRV01#
+show rpl prefix-set LOOPS-GE
+Wed Oct 21 14:54:42.015 UTC
+prefix-set LOOPS-GE
+  22.22.22.0/24 ge 32,
+  2001:db8::/64 ge 128
+end-set
+!
+RP/0/RP0/CPU0:XRV01#
+
+######## h-4: metric の範囲(wide のとき)
+configure
+Wed Oct 21 14:54:43.530 UTC
+RP/0/RP0/CPU0:XRV01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XRV01(config-isis)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XRV01(config-isis-if-af)#
+metric ?
+  <1-16777214>  Default metric: <1-63> for narrow, <1-16777214> for wide
+  fallback      Increase the link metric when an event occurs
+  maximum       Maximum wide metric. All routers will exclude this link from their SPF
+RP/0/RP0/CPU0:XRV01(config-isis-if-af)#metric 
+% Incomplete command.
+RP/0/RP0/CPU0:XRV01(config-isis-if-af)#
+abort
+RP/0/RP0/CPU0:XRV01#
+
+######## h-5: 隣接変化のログ(log adjacency changes 後)
+configure
+Wed Oct 21 14:54:47.151 UTC
+RP/0/RP0/CPU0:XRV01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XRV01(config-isis)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+shutdown
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+commit
+Wed Oct 21 14:54:48.855 UTC
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+end
+RP/0/RP0/CPU0:XRV01#
+configure
+Wed Oct 21 14:54:56.268 UTC
+RP/0/RP0/CPU0:XRV01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XRV01(config-isis)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+no shutdown
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+commit
+Wed Oct 21 14:54:57.972 UTC
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+end
+RP/0/RP0/CPU0:XRV01#
+show logging | include ADJCHANGE | utility tail count 6
+Wed Oct 21 14:55:20.415 UTC
+RP/0/RP0/CPU0:Oct 21 14:53:40.831 UTC: isis[1007]: %ROUTING-ISIS-5-ADJCHANGE : ISIS (CORE): Adjacency to RT01 (GigabitEthernet0/0/0/0) (L1) Down, Interface state down 
+RP/0/RP0/CPU0:Oct 21 14:53:40.836 UTC: isis[1007]: %ROUTING-ISIS-5-ADJCHANGE : ISIS (CORE): Adjacency to RT02 (GigabitEthernet0/0/0/1) (L2) Down, Interface state down 
+RP/0/RP0/CPU0:Oct 21 14:54:09.342 UTC: isis[1007]: %ROUTING-ISIS-5-ADJCHANGE : ISIS (CORE): Adjacency to 49.0001.0000.0000.0011 (GigabitEthernet0/0/0/0) (L1) Up, New adjacency 
+RP/0/RP0/CPU0:Oct 21 14:54:11.171 UTC: isis[1007]: %ROUTING-ISIS-5-ADJCHANGE : ISIS (CORE): Adjacency to 49.0002.0000.0000.0022 (GigabitEthernet0/0/0/1) (L2) Up, New adjacency 
+RP/0/RP0/CPU0:Oct 21 14:54:48.936 UTC: isis[1007]: %ROUTING-ISIS-5-ADJCHANGE : ISIS (CORE): Adjacency to RT01 (GigabitEthernet0/0/0/0) (L1) Down, Interface state down 
+RP/0/RP0/CPU0:Oct 21 14:54:58.655 UTC: isis[1007]: %ROUTING-ISIS-5-ADJCHANGE : ISIS (CORE): Adjacency to RT01 (GigabitEthernet0/0/0/0) (L1) Up, New adjacency 
+RP/0/RP0/CPU0:XRV01#
+
+######## h-6: narrow のレベル(L1)に 1000 を書くと何が広告されるか
+configure
+Wed Oct 21 14:55:22.030 UTC
+RP/0/RP0/CPU0:XRV01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XRV01(config-isis)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XRV01(config-isis-if-af)#
+metric 1000 level 1
+RP/0/RP0/CPU0:XRV01(config-isis-if-af)#
+commit
+Wed Oct 21 14:55:24.138 UTC
+RP/0/RP0/CPU0:XRV01(config-isis-if-af)#
+show configuration failed
+Wed Oct 21 14:55:25.140 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XRV01(config-isis-if-af)#
+end
+RP/0/RP0/CPU0:XRV01#
+show isis database detail level 1 | include "Metric|LSPID|X$vel 1 | include "Metric|LSPID|XR                          "show isis database detail level 1 | include "Metric|LSPID|$
+Wed Oct 21 14:55:43.264 UTC
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+  Metric: 10         IS XRV01.00
+  Metric: 10         IP 11.11.11.11/32
+  Metric: 10         IP 10.0.1.0/24
+  Metric: 10         IPv6 2001:db8::11/128
+  Metric: 10         IPv6 2001:db8:1::/64
+XRV01.00-00         * 0x00000006   0xc002        1181 /*            1/0/0
+  Hostname:       XRV01
+  Metric: 0          IP 1.1.1.1/32
+  Metric: 63         IP 10.0.1.0/24
+  Metric: 63         IS RT01.00
+  Metric: 0          IPv6 2001:db8::1/128
+  Metric: 1010       IPv6-Interarea 2001:db8::22/128
+  Metric: 10         IPv6 2001:db8:1::/64
+RP/0/RP0/CPU0:XRV01#
+show isis interface GigabitEthernet0/0/0/0 | include Metric
+Wed Oct 21 14:55:43.665 UTC
+    Metric (L1/L2):         63/0
+    Metric fallback:
+    Metric (L1/L2):         10/0
+    Metric fallback:
+RP/0/RP0/CPU0:XRV01#
+show logging | utility tail count 8
+Wed Oct 21 14:55:44.065 UTC
+RP/0/RP0/CPU0:Oct 21 14:55:21.217 UTC: SSHD_[69440]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 21 14:55:21.219 UTC: SSHD_[69440]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 21 14:55:24.255 UTC: isis[1007]: %ROUTING-ISIS-4-WD_METRIC_NOT_CONF : ISIS (CORE): In the topology IPv4 Unicast GigabitEthernet0/0/0/0 has a wide metric of 1000 but level L1 is configured to generate narrow metrics.  Maximum narrow value 63 is used instead 
+RP/0/RP0/CPU0:Oct 21 14:55:24.720 UTC: config[69471]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000031' to view the changes. 
+RP/0/RP0/CPU0:Oct 21 14:55:26.749 UTC: config[69471]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 21 14:55:27.161 UTC: SSHD_[69440]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 21 14:55:42.449 UTC: SSHD_[69495]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 21 14:55:42.454 UTC: SSHD_[69495]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:XRV01#
+show isis database detail
+
+Tag null:
+IS-IS Level-1 Link State Database:
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd      ATT/P/OL
+0000.0000.0001.00-00  0x0000001E   0x7C52            0 (1070)/0         1/0/0
+ Purge Originator: 0000.0000.0001 
+  Hostname: XRV01
+RT01.00-00          * 0x00000011   0xA769                1154/*         0/0/0
+  Area Address: 49.0001
+  NLPID:        0xCC 0x8E 
+  Hostname: RT01
+  Metric: 10         IS 0010.0100.1001.00
+  IP Address:   11.11.11.11
+  Metric: 10         IP 11.11.11.11 255.255.255.255
+  Metric: 10         IP 10.0.1.0 255.255.255.0
+  IPv6 Address: 2001:DB8::11
+  Metric: 10         IPv6 2001:DB8::11/128
+  Metric: 10         IPv6 2001:DB8:1::/64
+0010.0100.1001.00-00  0x00000006   0xC002                1177/1200      1/0/0
+  Area Address: 49.0001
+  TLV Code: 14 Length: 2 (Unsupported)
+  NLPID:        0xCC 0x8E 
+  IP Address:   1.1.1.1
+  IPv6 Address: 2001:DB8::1
+  Hostname: XRV01
+  Metric: 0          IP 1.1.1.1 255.255.255.255
+  Metric: 63         IP 10.0.1.0 255.255.255.0
+  Metric: 63         IS RT01.00
+  Metric: 0          IPv6 2001:DB8::1/128
+  Metric: 1010       IPv6-Interarea 2001:DB8::22/128
+  Metric: 10         IPv6 2001:DB8:1::/64
+RT01#
+show ip route isis
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is 10.0.1.1 to network 0.0.0.0
+
+i*L1  0.0.0.0/0 [115/10] via 10.0.1.1, 00:00:46, Ethernet0/0
+      1.0.0.0/32 is subnetted, 1 subnets
+i L1     1.1.1.1 [115/10] via 10.0.1.1, 00:00:46, Ethernet0/0
+RT01#
+configure
+Wed Oct 21 14:55:47.738 UTC
+RP/0/RP0/CPU0:XRV01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XRV01(config-isis)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XRV01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XRV01(config-isis-if-af)#
+no metric 1000 level 1
+RP/0/RP0/CPU0:XRV01(config-isis-if-af)#
+commit
+Wed Oct 21 14:55:49.843 UTC
+RP/0/RP0/CPU0:XRV01(config-isis-if-af)#
+end
+RP/0/RP0/CPU0:XRV01#

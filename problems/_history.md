@@ -11,7 +11,8 @@
 
 | 出題日 | 問題ID (variant/seed) | 難 | 状態 | 得点 | メモ |
 |--------|----------------------|----|------|------|------|
-| 2026-10-18 | XRT-03 | 3 | 出題中 | - | XR トラック M5(RPL)+M6(BGP)。学習目的(tutorial)= `scripts/lab.sh learn XRT-03` のワークスペースで解く。XR01 は XRd。M6 追加で作り直し済み(白紙) |
+| 2026-10-21 | XRT-04 | 3 | 撤収済 | - | XR トラック M4(IS-IS)。学習目的(tutorial)= `scripts/lab.sh learn XRT-04` のワークスペースで解く。XR01 は XRd。E2E 後に構築直後へ戻し済み(白紙)。2026-10-22 ユーザが M4-1〜4 を全通過(学習モード・記録 `records/learn/XRT-04.jsonl`)→ 同日撤収 |
+| 2026-10-18 | XRT-03 | 3 | 撤収済 | - | XR トラック M5(RPL)+M6(BGP)。学習目的(tutorial)= `scripts/lab.sh learn XRT-03` のワークスペースで解く。XR01 は XRd。M6 追加で作り直し済み(白紙)。2026-10-21 ユーザが M5-1〜M6-4 を全通過(学習モード・記録 `records/learn/XRT-03.jsonl`)→ 2026-10-22 撤収 |
 | 2026-10-18 | XRT-02 | 3 | 出題中 | - | XR トラック M2(管理プレーン)+M3(OSPF)。学習目的(tutorial)= `scripts/lab.sh learn XRT-02` のワークスペースで解く |
 | 2026-10-12 | ENCOR-REDIST-01 | - | 撤収済 | 100 | パック PACK-20261011-C の Q3・en。発掘枠(静的・base)。RT02 に `redistribute eigrp 100`(subnets は IOL 17 で暗黙)＋`redistribute ospf 1 metric 10000 100 255 1 1500`。一発満点・所要 5:11 |
 | 2026-10-12 | GEN-STP-24828 | - | 撤収済 | 100 | パック PACK-20261011-C の Q2・en。world=mst・故障 2= SW02 Et0/0 の bpdufilter(loop guard 発動)／VLAN175 のインスタンス未割当。bpdufilter を除去し、SW01〜03 の 3 台で instance 1 に VLAN175 を割当。不整合ポート 0。一発満点・所要 21:01 |

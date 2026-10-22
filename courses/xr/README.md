@@ -15,3 +15,8 @@ IOS XR を「読み物で学ぶ → ワークスペースで実践する」た�
 |---|---|---|
 | M0 Finding your way | `00-m0-finding-your-way.md` | XRT-01 の M0 |
 | M1 Managing configuration | `10-m1-managing-configuration.md` | XRT-01 の M1 |
+| M2 Securing the management plane | `20-m2-management-plane.md` | XRT-02 の M2 |
+| M3 OSPF | `30-m3-ospf.md` | XRT-02 の M3 |
+| M4 IS-IS | `40-m4-isis.md` | XRT-04 |
+| M5 Routing Policy Language | `50-m5-rpl.md` | XRT-03 の M5 |
+| M6 BGP | `60-m6-bgp.md` | XRT-03 の M6 |

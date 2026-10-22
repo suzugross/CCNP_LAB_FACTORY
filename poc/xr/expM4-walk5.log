@@ -1,0 +1,149 @@
+configure
+Wed Oct 21 15:07:51.346 UTC
+RP/0/RP0/CPU0:XR01(config)#
+prefix-set LOOPBACKS
+RP/0/RP0/CPU0:XR01(config-pfx)#
+10.255.0.0/24 eq 32,
+RP/0/RP0/CPU0:XR01(config-pfx)#
+2001:db8:255::/64 eq 128
+RP/0/RP0/CPU0:XR01(config-pfx)#
+end-set
+RP/0/RP0/CPU0:XR01(config)#
+route-policy LEAK-LOOPBACKS
+RP/0/RP0/CPU0:XR01(config-rpl)#
+if destination in LOOPBACKS then
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+pass
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+endif
+RP/0/RP0/CPU0:XR01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+propagate level 2 into level 1 route-policy LEAK-LOOPBACKS
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+address-family ipv6 unicast
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+propagate level 2 into level 1 route-policy LEAK-LOOPBACKS
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+commit
+Wed Oct 21 15:07:58.282 UTC
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+show configuration failed
+Wed Oct 21 15:07:58.717 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis database detail XR01.00-00 level 1
+Wed Oct 21 15:08:26.492 UTC
+
+IS-IS CORE (Level-1) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x00000007   0x80c8        1173 /*            1/0/0
+  Area Address:   49.0001
+  LSP MTU:        1492
+  NLPID:          0xcc
+  NLPID:          0x8e
+  IP Address:     10.255.0.1
+  IPv6 Address:   2001:db8:255::1
+  Hostname:       XR01
+  Metric: 10         IP 10.0.11.0/24
+  Metric: 10         IP 10.255.0.1/32
+  Metric: 20         IP-Interarea 10.255.0.2/32
+  Metric: 30         IP-Interarea 10.255.0.3/32
+  Metric: 10         IS RT01.00
+  Metric: 10         IPv6 2001:db8:11::/64
+  Metric: 10         IPv6 2001:db8:255::1/128
+  Metric: 20         IPv6-Interarea 2001:db8:255::2/128
+  Metric: 30         IPv6-Interarea 2001:db8:255::3/128
+RP/0/RP0/CPU0:XR01#
+show rpl route-policy LEAK-LOOPBACKS attachpoints
+Wed Oct 21 15:08:26.890 UTC
+
+IS-IS Attachpoint: inter-area-propagate
+
+instance   afi/safi             from     to       bound by                                     
+------------------------------------------------
+CORE       IPv4/uni             Level-2  Level-1  LEAK-LOOPBACKS                           
+CORE       IPv6/uni             Level-2  Level-1  LEAK-LOOPBACKS                           
+
+RP/0/RP0/CPU0:XR01#
+show ip route isis
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is 10.0.11.1 to network 0.0.0.0
+
+i*L1  0.0.0.0/0 [115/10] via 10.0.11.1, 00:02:44, Ethernet0/0
+      10.0.0.0/8 is variably subnetted, 8 subnets, 3 masks
+i L1     10.255.0.1/32 [115/20] via 10.0.11.1, 00:02:44, Ethernet0/0
+i ia     10.255.0.2/32 [115/30] via 10.0.11.1, 00:00:29, Ethernet0/0
+i ia     10.255.0.3/32 [115/40] via 10.0.11.1, 00:00:29, Ethernet0/0
+RT01#
+show ipv6 route isis
+IPv6 Routing Table - default - 10 entries
+Codes: C - Connected, L - Local, S - Static, U - Per-user Static route
+       B - BGP, R - RIP, H - NHRP, HG - NHRP registered
+       Hg - NHRP registration summary, HE - NHRP External, I1 - ISIS L1
+       I2 - ISIS L2, IA - ISIS interarea, IS - ISIS summary, D - EIGRP
+       EX - EIGRP external, ND - ND Default, NDp - ND Prefix, DCE - Destination
+       NDr - Redirect, RL - RPL, O - OSPF Intra, OI - OSPF Inter
+       OE1 - OSPF ext 1, OE2 - OSPF ext 2, ON1 - OSPF NSSA ext 1
+       ON2 - OSPF NSSA ext 2, la - LISP alt, lr - LISP site-registrations
+       ld - LISP dyn-eid, lA - LISP away, le - LISP extranet-policy
+       lp - LISP publications, ls - LISP destinations-summary, a - Application
+       m - OMP
+I1  ::/0 [115/10]
+     via FE80::5054:FF:FED3:7FA0, Ethernet0/0
+I1  2001:DB8:255::1/128 [115/20]
+     via FE80::5054:FF:FED3:7FA0, Ethernet0/0
+IA  2001:DB8:255::2/128 [115/30]
+     via FE80::5054:FF:FED3:7FA0, Ethernet0/0
+IA  2001:DB8:255::3/128 [115/40]
+     via FE80::5054:FF:FED3:7FA0, Ethernet0/0
+RT01#
+show ip route 10.255.0.3
+Routing entry for 10.255.0.3/32
+  Known via "isis", distance 115, metric 40, type inter area
+  Redistributing via isis
+  Last update from 10.0.11.1 on Ethernet0/0, 00:00:29 ago
+  Routing Descriptor Blocks:
+  * 10.0.11.1, from 10.255.0.1, 00:00:29 ago, via Ethernet0/0
+      Route metric is 40, traffic share count is 1
+RT01#
+#### 動的: RT02 に Lo99
+Traceback (most recent call last):
+  File "/home/suzuki/ansible/CCNP01/topologies/login_probe.py", line 221, in <module>
+    main()
+  File "/home/suzuki/ansible/CCNP01/topologies/login_probe.py", line 179, in main
+    lab_user, lab_pw = os.environ["LAB_USER"], os.environ["LAB_PASS"]
+                       ~~~~~~~~~~^^^^^^^^^^^^
+  File "<frozen os>", line 685, in __getitem__
+KeyError: 'LAB_USER'
+show ip route 10.255.0.99
+% Subnet not in table
+RT01#
+show running-config interface Loopback99
+                                           ^
+% Invalid input detected at '^' marker.
+
+RT02#

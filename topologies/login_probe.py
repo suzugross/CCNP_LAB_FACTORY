@@ -15,6 +15,10 @@
       --user があればログインまで進め、`== TELNET LOGIN OK` か `== TELNET LOGIN FAILED` を足す。
   共通: --pre 'NODE:cmd' / --post 'NODE:cmd' … Linux ノードで前後にコマンドを実行する(--post は必ず実行)。
         サーバを止めた状態のログインを見るときに使う(採点は再試行されるので、--post で必ず元に戻す)。
+        --pre-cli 'NODE:line;;line' / --post-cli 'NODE:line;;line' … IOS/IOS XR の CLI に前後で行を流す
+        (`;;` で区切る。--post-cli は必ず実行)。採点のあいだだけ相手役に変化を起こすときに使う
+        (例: XRT-04 M4-4= RT02 に一時的なループバックを足し、XR01 の漏らしが範囲で書かれているかを見る)。
+        --settle N … 前段(--pre / --pre-cli)の後、本体の前に N 秒待つ(経路の伝搬待ち)。
         --wait-tacacs NODE … --post の後、NODE(IOS XR)の `show tacacs` から status=down が消えるまで待つ(最大 120 秒)。
         ★XR は応答しなかった TACACS+ サーバを保留(on-hold・status=down)にし、サーバが戻っても約 25 秒は使わない
         (24.3.1 実測)。待たないと、続くチェックのログインがローカルに落ちて誤って失敗する。
@@ -80,6 +84,20 @@ def run_linux(pid, spec, user, pw):
         print(f"== RUN {node} rc={rc}: {cmd}")
     except Exception as e:  # 失敗も出力に残す(採点はそのチェックが落ちるだけ)
         print(f"== RUN {node} FAILED: {cmd}: {type(e).__name__}: {e}")
+
+
+def run_cli(pid, spec, user, pw):
+    node, rest = spec.split(":", 1)
+    lines = [ln for ln in rest.split(";;") if ln.strip()]
+    try:
+        c = connect(mgmt_ip(pid, node), user, pw)
+        sh = Shell(c)
+        for ln in lines:
+            sh.send(ln, timeout=60)
+        c.close()
+        print(f"== CLI {node}: {len(lines)} lines")
+    except Exception as e:  # 失敗も出力に残す(採点はそのチェックが落ちるだけ)
+        print(f"== CLI {node} FAILED: {type(e).__name__}: {e}")
 
 
 def wait_tacacs(pid, node, user, pw, limit=120):
@@ -159,11 +177,16 @@ def main():
         return default
 
     lab_user, lab_pw = os.environ["LAB_USER"], os.environ["LAB_PASS"]
-    pre, post = [], []
+    pre, post, pre_cli, post_cli = [], [], [], []
+    while "--pre-cli" in a:
+        pre_cli.append(opt("--pre-cli"))
+    while "--post-cli" in a:
+        post_cli.append(opt("--post-cli"))
     while "--pre" in a:
         pre.append(opt("--pre"))
     while "--post" in a:
         post.append(opt("--post"))
+    settle = int(opt("--settle", "0"))
     user, pw, source = opt("--user"), opt("--pass"), opt("--source")
     wait_node = opt("--wait-tacacs")
     lines = []
@@ -175,6 +198,10 @@ def main():
     try:
         for s in pre:
             run_linux(pid, s, lab_user, lab_pw)
+        for s in pre_cli:
+            run_cli(pid, s, lab_user, lab_pw)
+        if settle:
+            time.sleep(settle)
         if mode == "ssh":
             do_ssh(pid, a[2], user or lab_user, pw or lab_pw, lines)
         elif mode == "telnet":
@@ -182,6 +209,8 @@ def main():
         else:
             sys.exit(f"unknown mode {mode}")
     finally:
+        for s in post_cli:
+            run_cli(pid, s, lab_user, lab_pw)
         for s in post:
             run_linux(pid, s, lab_user, lab_pw)
         if wait_node:

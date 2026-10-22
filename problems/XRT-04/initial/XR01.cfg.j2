@@ -1,0 +1,36 @@
+!! XRT-04 XR01 — M4 の出発点(わざと不完全)。同僚が IOS の感覚で IS-IS を書きかけた状態:
+!! IF を並べただけ(アドレス ファミリなし・p2p なし)・NET のシステム ID が慣習(ループバックから作る)に沿っていない。
+interface Loopback0
+ ipv4 address 10.255.0.1 255.255.255.255
+ ipv6 address 2001:db8:255::1/128
+!
+interface {{ links[3] }}
+ description ACCESS to RT01 (area 49.0001)
+ ipv4 address 10.0.11.1 255.255.255.0
+ ipv6 address 2001:db8:11::1/64
+ no shutdown
+!
+interface {{ links[4] }}
+ description CORE-A to RT02
+ ipv4 address 10.0.12.1 255.255.255.0
+ ipv6 address 2001:db8:12::1/64
+ no shutdown
+!
+interface {{ links[5] }}
+ description CORE-B to RT03 (backup)
+ ipv4 address 10.0.13.1 255.255.255.0
+ ipv6 address 2001:db8:13::1/64
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0000.0000.0001.00
+ interface Loopback0
+ !
+ interface {{ links[3] }}
+ !
+ interface {{ links[4] }}
+ !
+ interface {{ links[5] }}
+ !
+!
+end

@@ -1,0 +1,131 @@
+#### A: IF に IPv4 だけ(p2p なし)
+configure
+Wed Oct 21 14:59:38.474 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface Loopback0
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/2
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+commit
+Wed Oct 21 14:59:45.004 UTC
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Wed Oct 21 15:00:22.291 UTC
+
+IS-IS CORE Level-1 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RP/0/RP0/CPU0:XR01#
+show isis interface brief
+Wed Oct 21 15:00:22.694 UTC
+
+IS-IS CORE Interfaces
+    Interface      All     Adjs    Adj Topos  Adv Topos  CLNS   MTU    Prio  
+                   OK    L1   L2    Run/Cfg    Run/Cfg                L1   L2
+-----------------  ---  ---------  ---------  ---------  ----  ----  --------
+Lo0                Yes    0    0      1/1        1/1     Up    1500    -    -
+Gi0/0/0/0          Yes    0    0      1/1        1/1     Up    1497   64   64
+Gi0/0/0/1          Yes    0    0      1/1        1/1     Up    1497   64   64
+Gi0/0/0/2          Yes    0    0      1/1        1/1     Up    1497   64   64
+RP/0/RP0/CPU0:XR01#
+show isis interface GigabitEthernet0/0/0/0 | include "Media|Rejected|DIS"
+Wed Oct 21 15:00:23.093 UTC
+  Media Type:               LAN
+  Last PDU Rejected:        15:00:22 (0.31 sec ago), 1496 octets, P2P IIH, P2P IIH on LAN Interface
+    Priority (Local/DIS):   64/none (no DIS elected)
+    Priority (Local/DIS):   64/none (no DIS elected)
+RP/0/RP0/CPU0:XR01#
+#### B: p2p を足す(まだ IPv4 だけ)
+configure
+Wed Oct 21 15:00:24.782 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+point-to-point
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+point-to-point
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/2
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+point-to-point
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+commit
+Wed Oct 21 15:00:29.839 UTC
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Wed Oct 21 15:01:12.262 UTC
+
+IS-IS CORE Level-1 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+0102.5500.0011 Gi0/0/0/0                *PtoP*         Init  25   not up   Yes None None
+
+Total adjacency count: 1
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+0102.5500.0002 Gi0/0/0/1                *PtoP*         Init  26   not up   Yes None None
+0102.5500.0003 Gi0/0/0/2                *PtoP*         Init  24   not up   Yes None None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show isis interface GigabitEthernet0/0/0/0 | include "Media|Rejected|IIH"
+Wed Oct 21 15:01:12.664 UTC
+  Media Type:               P2P
+  Last IIH Received:        15:01:07 (4.89 sec ago), 1496 octets
+  Last PDU Rejected:        15:00:22 (49.88 sec ago), 1496 octets, P2P IIH, P2P IIH on LAN Interface
+  Last IIH Sent:            15:01:08 (3.93 sec ago), 1497 octets
+  Sending next P2P IIH in:  4 s
+RP/0/RP0/CPU0:XR01#
+show clns neighbors
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+RT01#
+show logging | include CLNS
+RT01#

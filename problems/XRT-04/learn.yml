@@ -1,0 +1,234 @@
+# XRT-04 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn XRT-04 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# ここに書いた挙動は XRd 26.1.1(+IOL 17.15)の実機で確認した(設計= problems/_drafts/XR-TRACK.design.md §17。XRv9000 26.1.1 と一致)。
+# 読み物(BL-252)= Reading タブに出す本(reading/<key>/)。各課題の read: はその本の「ページ#節」(節= data-sec)。
+reading: xr
+steps:
+  - id: m4t1
+    title: { en: "M4-1  Joining XR01 to IS-IS", ja: "M4-1  XR01 を IS-IS に参加させる" }
+    check: m4t1
+    read: [40-m4-isis#s9, 40-m4-isis#s2, 40-m4-isis#s3, 40-m4-isis#s4]
+    hints:
+      - en: "Several things are missing, and IOS XR reports each of them in a different place. Start with what IS-IS thinks of each interface. Then look at the hellos XR01 rejects. Remember that the IOS neighbours also check what XR01's hellos announce, and that they run IPv4 and IPv6. The system ID convention is in the topology section of the tasks."
+        ja: "足りないものがいくつかあり、IOS XR はそれぞれを別の場所で知らせます。まず、IS-IS が各インターフェイスをどう見ているかを確かめます。次に、XR01 が拒否しているハローを見ます。IOS のネイバーも XR01 のハローが告げる内容を確かめること、そして IOS のネイバーが IPv4 と IPv6 を動かしていることを思い出してください。システム ID の慣習は、課題のトポロジの節にあります。"
+      - en: "An interface listed under `router isis` does nothing until an address family is enabled under it: `show isis interface <name>` says `Disabled (No topologies cfg on the intf)`. IOS XR treats Ethernet as broadcast, and `show isis interface <name>` shows the last PDU it rejected (`P2P IIH on LAN Interface`). An IOS router that runs IPv4 and IPv6 in IS-IS ignores a neighbour whose hellos do not announce IPv6 as well: XR01 shows the adjacency in `Init`, and `debug isis adj-packets` on RT01 tells why. The level used on one interface is its circuit type. Guide: Routing Configuration Guide, 'Implementing IS-IS'."
+        ja: "`router isis` の下に並べたインターフェイスは、その下でアドレス ファミリを有効にするまで何もしません。`show isis interface <名前>` は `Disabled (No topologies cfg on the intf)` と表示します。IOS XR はイーサネットをブロードキャストとして扱い、`show isis interface <名前>` は最後に拒否した PDU を表示します(`P2P IIH on LAN Interface`)。IS-IS で IPv4 と IPv6 を動かしている IOS ルータは、ハローで IPv6 も告げないネイバーを相手にしません。XR01 では隣接が `Init` のままになり、RT01 の `debug isis adj-packets` が理由を示します。1 つのインターフェイスで使うレベルは、そのサーキット タイプです。ガイド: Routing Configuration Guide の「Implementing IS-IS」。"
+      - en: "Under `router isis CORE`: replace the NET with `net 49.0001.0102.5500.0001.00` (and `no net 49.0001.0000.0000.0001.00` in the same commit). Under Loopback0 and the three links: `address-family ipv4 unicast` and `address-family ipv6 unicast`. Under the three links: `point-to-point`, and `circuit-type level-1` towards RT01, `circuit-type level-2-only` towards RT02 and RT03."
+        ja: "`router isis CORE` の下で NET を `net 49.0001.0102.5500.0001.00` に置き換えます(同じコミットで `no net 49.0001.0000.0000.0001.00`)。Loopback0 と 3 本のリンクの下に `address-family ipv4 unicast` と `address-family ipv6 unicast`。3 本のリンクの下に `point-to-point`、RT01 向けに `circuit-type level-1`、RT02 と RT03 向けに `circuit-type level-2-only`。"
+    solution:
+      en: |
+        configure
+         router isis CORE
+          no net 49.0001.0000.0000.0001.00
+          net 49.0001.0102.5500.0001.00
+          interface Loopback0
+           address-family ipv4 unicast
+           address-family ipv6 unicast
+          interface GigabitEthernet0/0/0/0
+           circuit-type level-1
+           point-to-point
+           address-family ipv4 unicast
+           address-family ipv6 unicast
+          interface GigabitEthernet0/0/0/1
+           circuit-type level-2-only
+           point-to-point
+           address-family ipv4 unicast
+           address-family ipv6 unicast
+          interface GigabitEthernet0/0/0/2
+           circuit-type level-2-only
+           point-to-point
+           address-family ipv4 unicast
+           address-family ipv6 unicast
+         commit
+        end
+        Three separate faults kept every adjacency down: no address family on the interfaces (nothing ran), broadcast
+        against point-to-point (each side rejected the other's hellos), and IPv4 alone against IOS routers running both
+        protocols (the IOS adjacency check). The process-level address families are not needed yet; they hold settings
+        for a whole topology and come in M4-2 and M4-3. Loopback0 needs no `passive` to stay silent, but adding it is
+        common practice. Changing the NET resets the adjacencies, and RT01 may keep showing XR01 by its system ID for a
+        while. RT01 still has no default route at this point, and XR01 learns nothing from RT02 and RT03: that is M4-2.
+      ja: |
+        configure
+         router isis CORE
+          no net 49.0001.0000.0000.0001.00
+          net 49.0001.0102.5500.0001.00
+          interface Loopback0
+           address-family ipv4 unicast
+           address-family ipv6 unicast
+          interface GigabitEthernet0/0/0/0
+           circuit-type level-1
+           point-to-point
+           address-family ipv4 unicast
+           address-family ipv6 unicast
+          interface GigabitEthernet0/0/0/1
+           circuit-type level-2-only
+           point-to-point
+           address-family ipv4 unicast
+           address-family ipv6 unicast
+          interface GigabitEthernet0/0/0/2
+           circuit-type level-2-only
+           point-to-point
+           address-family ipv4 unicast
+           address-family ipv6 unicast
+         commit
+        end
+        隣接をすべて止めていた原因は 3 つあります。インターフェイスにアドレス ファミリが無い(何も動かない)、
+        ブロードキャストとポイントツーポイントの食い違い(互いのハローを拒否する)、IPv4 だけで両方のプロトコルを
+        動かす IOS ルータと向き合っている(IOS の隣接チェック)、の 3 つです。プロセス側のアドレス ファミリはまだ
+        要りません。トポロジ全体の設定を置く場所で、M4-2 と M4-3 で使います。Loopback0 は `passive` が無くても
+        ハローを出しませんが、付けておくのが一般的です。NET を変えると隣接はいったん落ち、RT01 はしばらく XR01 を
+        システム ID で表示し続けることがあります。この時点で RT01 にはまだ既定経路が無く、XR01 は RT02 と RT03 から
+        何も学んでいません。それが M4-2 です。
+
+  - id: m4t2
+    title: { en: "M4-2  Adjacencies up, no routes", ja: "M4-2  隣接は上がっているのに経路が無い" }
+    check: m4t2
+    read: [40-m4-isis#s7, 40-m4-isis#s6]
+    hints:
+      - en: "The adjacencies are up and the LSPs arrive, so the problem is in what the LSPs say, not in the hellos. Compare the neighbour and prefix entries in RT02's LSP with those in XR01's own LSP. RT01's missing default route depends on whether XR01 considers itself connected to the backbone."
+        ja: "隣接は上がっていて LSP も届いているので、問題はハローではなく LSP の中身にあります。RT02 の LSP にあるネイバーとプレフィックスの項目を、XR01 自身の LSP のものと比べます。RT01 に既定経路が無いのは、XR01 が自分をバックボーンにつながっているとみなしているかどうかで決まります。"
+      - en: "`show isis database detail` prints `IS`/`IP` entries for narrow metrics and `IS-Extended`/`IP-Extended` for wide ones. A router that accepts only one form skips the other, and `show isis topology` marks the routers it cannot place with `**`. `show isis` shows the metric style generated and accepted per level. The style is set per level, and RT01 accepts narrow metrics only. A narrow metric cannot exceed 63: a larger value is capped and logged (`WD_METRIC_NOT_CONF`). Guide: Routing Configuration Guide, 'Implementing IS-IS' — 'metric-style'."
+        ja: "`show isis database detail` は、ナロー メトリックの項目を `IS`/`IP`、ワイドの項目を `IS-Extended`/`IP-Extended` と表示します。片方の形式しか受け入れないルータはもう片方を読み飛ばし、`show isis topology` は位置づけられないルータに `**` を付けます。`show isis` はレベルごとに生成・受け入れるメトリックの形式を示します。形式はレベルごとに設定し、RT01 はナロー メトリックしか受け入れません。ナロー メトリックは 63 を超えられず、大きな値は切り詰められてログに残ります(`WD_METRIC_NOT_CONF`)。ガイド: Routing Configuration Guide の「Implementing IS-IS」—「metric-style」。"
+      - en: "Under `router isis CORE` → `address-family ipv4 unicast`: `metric-style wide level 2`. Under `interface GigabitEthernet0/0/0/2` → `address-family ipv4 unicast`: `metric 1000`."
+        ja: "`router isis CORE` → `address-family ipv4 unicast` の下に `metric-style wide level 2`。`interface GigabitEthernet0/0/0/2` → `address-family ipv4 unicast` の下に `metric 1000`。"
+    solution:
+      en: |
+        configure
+         router isis CORE
+          address-family ipv4 unicast
+           metric-style wide level 2
+          interface GigabitEthernet0/0/0/2
+           address-family ipv4 unicast
+            metric 1000
+         commit
+        end
+        `metric-style wide` without a level also restores the backbone, but it moves Level 1 to wide metrics too: RT01,
+        which accepts narrow metrics only, then loses every IS-IS route, the default route included. As soon as XR01
+        reaches the backbone at Level 2 it sets the ATT bit again, and RT01 gets its default route back. The metric is
+        the cost of leaving XR01; RT03 already uses 1000 on its side, so traffic from RT03 to XR01 avoided CORE-B before
+        the change. `metric 1000 level 2` is equally correct; with the circuit type set to Level 2 only, the plain form
+        applies to Level 2 alone. Written before the wide style, the same value would have been advertised as 63, with
+        a warning in the log.
+      ja: |
+        configure
+         router isis CORE
+          address-family ipv4 unicast
+           metric-style wide level 2
+          interface GigabitEthernet0/0/0/2
+           address-family ipv4 unicast
+            metric 1000
+         commit
+        end
+        レベルを付けない `metric-style wide` でもバックボーンとの交換は戻りますが、レベル 1 までワイド メトリックに
+        変わります。するとナローしか受け入れない RT01 は、既定経路も含めて IS-IS の経路をすべて失います。XR01 が
+        レベル 2 でバックボーンに届くようになった時点で ATT ビットが再び立ち、RT01 に既定経路が戻ります。メトリックは
+        XR01 から出ていくコストです。RT03 は自分の側で既に 1000 を使っているので、RT03 から XR01 への通信は変更前から
+        CORE-B を避けていました。`metric 1000 level 2` も同じく正解です。サーキット タイプがレベル 2 だけなので、
+        レベルを付けない形もレベル 2 にだけ効きます。ワイドにする前に同じ値を書いていたら、63 として広告され、
+        ログに警告が残っていました。
+
+  - id: m4t3
+    title: { en: "M4-3  IPv6", ja: "M4-3  IPv6" }
+    check: m4t3
+    read: [40-m4-isis#s8]
+    hints:
+      - en: "Every adjacency carries IPv4 and IPv6, yet no router learns an IPv6 route from XR01 or gives one to it. Ask XR01 which topologies each adjacency actually runs, and recall which way of carrying IPv6 is the default on IOS and which on IOS XR. Then check the IPv6 cost of CORE-B as XR01 advertises it."
+        ja: "どの隣接も IPv4 と IPv6 を載せているのに、XR01 から IPv6 の経路を学ぶルータも、XR01 に渡すルータもありません。各隣接で実際に動いているトポロジを XR01 に聞き、IPv6 の運び方の既定が IOS と IOS XR でどちらなのかを思い出してください。そのうえで、XR01 が広告する CORE-B の IPv6 のコストを確かめます。"
+      - en: "`show isis adjacency detail` lists `Topology (not running): [IPv6 Unicast (neighbor doesn't participate)]`, and `show clns neighbors` on RT01 shows `M-ISIS`: XR01 runs IPv6 as a topology of its own (multi-topology, the IOS XR default), while the IOS routers run single topology (the IOS default). In single topology the paths follow the shared SPF, but IOS XR still keeps a metric per address family on each interface, and the IPv6 prefix of a link is advertised with the IPv6 one. Guide: Routing Configuration Guide, 'Implementing IS-IS' — 'Single-Topology IPv6 Support' and 'Multitopology Configuration'."
+        ja: "`show isis adjacency detail` に `Topology (not running): [IPv6 Unicast (neighbor doesn't participate)]` と出て、RT01 の `show clns neighbors` は `M-ISIS` と表示します。XR01 は IPv6 を独立したトポロジ(マルチトポロジ= IOS XR の既定)で動かし、IOS ルータは単一トポロジ(IOS の既定)で動かしています。単一トポロジでは経路は共通の SPF に従いますが、IOS XR はインターフェイスごとのメトリックをアドレス ファミリごとに持ち続け、リンクの IPv6 プレフィックスは IPv6 側のメトリックで広告されます。ガイド: Routing Configuration Guide の「Implementing IS-IS」—「Single-Topology IPv6 Support」と「Multitopology Configuration」。"
+      - en: "Under `router isis CORE` → `address-family ipv6 unicast`: `single-topology`. Under `interface GigabitEthernet0/0/0/2` → `address-family ipv6 unicast`: `metric 1000`."
+        ja: "`router isis CORE` → `address-family ipv6 unicast` の下に `single-topology`。`interface GigabitEthernet0/0/0/2` → `address-family ipv6 unicast` の下に `metric 1000`。"
+    solution:
+      en: |
+        configure
+         router isis CORE
+          address-family ipv6 unicast
+           single-topology
+          interface GigabitEthernet0/0/0/2
+           address-family ipv6 unicast
+            metric 1000
+         commit
+        end
+        The IOS routers cannot be changed, so XR01 has to join their single topology. The adjacencies flap once when the
+        mode changes. With `single-topology` alone, every IPv6 route follows the IPv4 paths, because there is one SPF
+        and it uses the IPv4 neighbour metrics: XR01 already reaches 2001:db8:255::3 through RT02. Only the IPv6 subnet of
+        CORE-B differs: XR01 advertises it with the IPv6 metric of the interface, 10, so RT02 reaches 2001:db8:13::/64
+        through XR01 at cost 20, while 10.0.13.0/24 costs 1010 over two equal paths. On IOS, `isis metric` covers both
+        protocols in single topology; on IOS XR each address family keeps its own value.
+      ja: |
+        configure
+         router isis CORE
+          address-family ipv6 unicast
+           single-topology
+          interface GigabitEthernet0/0/0/2
+           address-family ipv6 unicast
+            metric 1000
+         commit
+        end
+        IOS ルータは変えられないので、XR01 が単一トポロジに合わせます。モードを変えると隣接は一度落ちて上がります。
+        `single-topology` だけでも IPv6 の経路はすべて IPv4 と同じ道を通ります。SPF は 1 つで、IPv4 のネイバーの
+        メトリックを使うからです。XR01 はすでに RT02 経由で 2001:db8:255::3 に届いています。違うのは CORE-B の IPv6 の
+        サブネットだけです。XR01 はそれをインターフェイスの IPv6 側のメトリック 10 で広告するので、RT02 は
+        2001:db8:13::/64 へ XR01 経由のコスト 20 で向かいます。一方 10.0.13.0/24 はコスト 1010 の等コスト 2 経路です。
+        IOS では単一トポロジの `isis metric` が両プロトコルに効きますが、IOS XR ではアドレス ファミリごとに別の値を持ちます。
+
+  - id: m4t4
+    title: { en: "M4-4  Loopbacks for the access router", ja: "M4-4  アクセス ルータにループバックを渡す" }
+    check: m4t4
+    read: [40-m4-isis#s10, 40-m4-isis#s6]
+    hints:
+      - en: "Level 2 routes never reach Level 1 by themselves: an L1/L2 router has to copy them down. On IOS XR what it copies is chosen by a route policy (M5). Describe the loopbacks as a range, not as a list, and remember that there are two address families."
+        ja: "レベル 2 の経路が勝手にレベル 1 へ届くことはありません。L1/L2 ルータが下へ写す必要があります。IOS XR では、何を写すかをルート ポリシー(M5)で選びます。ループバックは一覧ではなく範囲で書き、アドレス ファミリが 2 つあることを忘れないでください。"
+      - en: "Under each address family of `router isis`, `propagate level 2 into level 1 route-policy <name>` copies the Level 2 routes that the policy passes. A prefix-set entry `<prefix> eq <length>` matches the prefixes of exactly that length inside the range, and one prefix-set can hold IPv4 and IPv6 entries. Leaked routes appear on RT01 as `i ia` and `IA`, and in XR01's Level 1 LSP as `IP-Interarea`. Guide: Routing Configuration Guide, 'Implementing Routing Policy' — the IS-IS attach point 'Inter-area-propagate'."
+        ja: "`router isis` の各アドレス ファミリの下で `propagate level 2 into level 1 route-policy <名前>` を使うと、ポリシーが pass したレベル 2 の経路が写されます。prefix-set のエントリ `<プレフィックス> eq <長さ>` は、範囲の中でちょうどその長さのプレフィックスに一致します。1 つの prefix-set に IPv4 と IPv6 のエントリを入れられます。漏らした経路は RT01 では `i ia` と `IA`、XR01 のレベル 1 の LSP では `IP-Interarea` と表示されます。ガイド: Routing Configuration Guide の「Implementing Routing Policy」— IS-IS のアタッチ ポイント「Inter-area-propagate」。"
+      - en: "`prefix-set LOOPBACKS` with `10.255.0.0/24 eq 32, 2001:db8:255::/64 eq 128`. `route-policy LEAK-LOOPBACKS` with `if destination in LOOPBACKS then pass endif`. Under both address families of `router isis CORE`: `propagate level 2 into level 1 route-policy LEAK-LOOPBACKS`."
+        ja: "`prefix-set LOOPBACKS` に `10.255.0.0/24 eq 32, 2001:db8:255::/64 eq 128`。`route-policy LEAK-LOOPBACKS` に `if destination in LOOPBACKS then pass endif`。`router isis CORE` の両方のアドレス ファミリの下に `propagate level 2 into level 1 route-policy LEAK-LOOPBACKS`。"
+    solution:
+      en: |
+        configure
+         prefix-set LOOPBACKS
+           10.255.0.0/24 eq 32,
+           2001:db8:255::/64 eq 128
+         end-set
+         route-policy LEAK-LOOPBACKS
+           if destination in LOOPBACKS then
+             pass
+           endif
+         end-policy
+         router isis CORE
+          address-family ipv4 unicast
+           propagate level 2 into level 1 route-policy LEAK-LOOPBACKS
+          address-family ipv6 unicast
+           propagate level 2 into level 1 route-policy LEAK-LOOPBACKS
+         commit
+        end
+        `ge 32` and `ge 128` match the same prefixes. Listing 10.255.0.2/32 and 10.255.0.3/32 passes the first two
+        checks but not the third, which adds a loopback to RT02 for the duration of the check. `propagate` has no form
+        without a policy, so "everything" would have to be a policy with a bare `pass`. The default routes stay: XR01
+        still sets the ATT bit. `show rpl route-policy LEAK-LOOPBACKS attachpoints` lists both address families under
+        `inter-area-propagate`. The leaked prefixes carry the up/down bit, so XR01 would never return them to Level 2,
+        and neither would a second L1/L2 router of the area.
+      ja: |
+        configure
+         prefix-set LOOPBACKS
+           10.255.0.0/24 eq 32,
+           2001:db8:255::/64 eq 128
+         end-set
+         route-policy LEAK-LOOPBACKS
+           if destination in LOOPBACKS then
+             pass
+           endif
+         end-policy
+         router isis CORE
+          address-family ipv4 unicast
+           propagate level 2 into level 1 route-policy LEAK-LOOPBACKS
+          address-family ipv6 unicast
+           propagate level 2 into level 1 route-policy LEAK-LOOPBACKS
+         commit
+        end
+        `ge 32` と `ge 128` でも同じプレフィックスに一致します。10.255.0.2/32 と 10.255.0.3/32 を列挙すると、最初の
+        2 つの確認は通りますが、確認のあいだだけ RT02 にループバックを足す 3 つ目の確認で落ちます。`propagate` には
+        ポリシーなしの形が無いので、「全部」を写すにも `pass` だけのポリシーが要ります。既定経路は残ります。XR01 は
+        引き続き ATT ビットを立てるからです。`show rpl route-policy LEAK-LOOPBACKS attachpoints` は、両方のアドレス
+        ファミリを `inter-area-propagate` の下に表示します。漏らしたプレフィックスには up/down ビットが付くので、
+        XR01 がそれをレベル 2 へ戻すことはありません。同じエリアに 2 台目の L1/L2 ルータがあっても同じです。
