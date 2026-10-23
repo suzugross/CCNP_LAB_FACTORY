@@ -1,0 +1,366 @@
+
+######## 12:59:07 b-1: XR に鍵チェーン(有効期間なし)を作って状態を見る
+configure
+Thu Oct 22 12:59:08.981 UTC
+RP/0/RP0/CPU0:XR01(config)#
+key chain ISIS-L2
+RP/0/RP0/CPU0:XR01(config-ISIS-L2)#
+key 1
+RP/0/RP0/CPU0:XR01(config-ISIS-L2-1)#
+key-string password Bb0ne-2026
+RP/0/RP0/CPU0:XR01(config-ISIS-L2-1)#
+cryptographic-algorithm HMAC-MD5
+RP/0/RP0/CPU0:XR01(config-ISIS-L2-1)#
+commit
+Thu Oct 22 12:59:11.289 UTC
+
+% Failed to commit one or more configuration items during a pseudo-atomic operation. All changes made have been reverted. Please issue 'show configuration failed [inheritance]' from this session to view the errors
+RP/0/RP0/CPU0:XR01(config-ISIS-L2-1)#
+show configuration failed
+Thu Oct 22 12:59:12.703 UTC
+!! SEMANTIC ERRORS: This configuration was rejected by 
+!! the system due to semantic errors. The individual 
+!! errors with each failed configuration command can be 
+!! found below.
+
+
+key chain ISIS-L2
+ key 1
+  key-string password Bb0ne-2026
+!!% 'Key Chain Server Process' detected the 'fatal' condition 'Incorrect or NULL parameter(s)'
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config-ISIS-L2-1)#
+end
+Uncommitted changes found, commit them before exiting(yes/no/cancel)? [cancel]:
+show key chain ISIS-L2
+% Invalid input.
+Uncommitted changes found, commit them before exiting(yes/no/cancel)? [cancel]:
+show running-config key chain
+% Invalid input.
+Uncommitted changes found, commit them before exiting(yes/no/cancel)? [cancel]:
+
+######## 12:59:15 b-2: ハローの認証だけ合わせる(CORE-A・CORE-B の IF に hello-password keychain)
+configure
+Thu Oct 22 12:59:16.861 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+hello-password keychain ISIS-L2
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/2
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+hello-password keychain ISIS-L2
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+commit
+Thu Oct 22 12:59:20.198 UTC
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+show configuration failed
+Thu Oct 22 12:59:20.688 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Thu Oct 22 13:00:09.389 UTC
+
+IS-IS CORE Level-1 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    29   00:01:51 Yes None None
+
+Total adjacency count: 1
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RP/0/RP0/CPU0:XR01#
+show route ipv4 isis
+Thu Oct 22 13:00:09.789 UTC
+
+i L1 10.11.1.0/24 [115/20] via 10.0.11.2, 00:01:47, GigabitEthernet0/0/0/0
+i L1 10.11.2.0/24 [115/20] via 10.0.11.2, 00:01:47, GigabitEthernet0/0/0/0
+i L1 10.11.3.0/24 [115/20] via 10.0.11.2, 00:01:47, GigabitEthernet0/0/0/0
+i L1 10.11.4.0/24 [115/20] via 10.0.11.2, 00:01:47, GigabitEthernet0/0/0/0
+i L1 10.255.0.11/32 [115/20] via 10.0.11.2, 00:01:47, GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01#
+show route ipv6 isis
+Thu Oct 22 13:00:10.189 UTC
+
+i L1 2001:db8:255::11/128 
+      [115/20] via fe80::a8bb:ccff:fe00:3500, 00:01:47, GigabitEthernet0/0/0/0
+i L1 2001:db8:1011:1::/64 
+      [115/20] via fe80::a8bb:ccff:fe00:3500, 00:01:47, GigabitEthernet0/0/0/0
+i L1 2001:db8:1011:2::/64 
+      [115/20] via fe80::a8bb:ccff:fe00:3500, 00:01:47, GigabitEthernet0/0/0/0
+i L1 2001:db8:1011:3::/64 
+      [115/20] via fe80::a8bb:ccff:fe00:3500, 00:01:47, GigabitEthernet0/0/0/0
+i L1 2001:db8:1011:4::/64 
+      [115/20] via fe80::a8bb:ccff:fe00:3500, 00:01:47, GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01#
+show isis database
+Thu Oct 22 13:00:10.600 UTC
+
+IS-IS CORE (Level-1) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x00000006   0x496b        1093 /*            0/0/0
+RT01.00-00            0x00000002   0x4ab2        1091 /1200         0/0/0
+
+ Total Level-1 LSP count: 2     Local Level-1 LSP count: 1
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x00000007   0x8240        1093 /*            0/0/0
+
+ Total Level-2 LSP count: 1     Local Level-2 LSP count: 1
+RP/0/RP0/CPU0:XR01#
+show isis database detail RT02
+Thu Oct 22 13:00:10.992 UTC
+
+Requested LSP name 'RT02' not found in hostname table of IS-IS CORE
+
+RP/0/RP0/CPU0:XR01#
+show isis statistics
+Thu Oct 22 13:00:11.422 UTC
+
+IS-IS CORE Packet and Event Statistics
+                                              Dropped        Dropped
+  Total PDUs       Sent       Received       On Input      By Update
+    Hello:           45             29              0              -
+    CSNP:             1              1              -              0
+    PSNP:             1              5              0              0
+    LSP:              4              1              0              0
+  
+  LSP Retransmissions:           0
+  LSP Checksum Errors:           0
+  
+  IS-IS Update Queue:            0/3500
+    Total Traffic:               7
+      High Water Mark:           2
+        HWM Set:                 Thu 2026 Oct 22 12:58:17.685 UTC
+      Total Drops:               0
+  
+  IS-IS Input Queue:             0/4200
+    Total Traffic:               49
+      High Water Mark:           2
+      Total Drops:               0
+  
+  Level-1
+    LSPs sourced (new/refresh):  8/0
+    Route Calculations
+      IPv4 Unicast Total:        4
+        Full SPF Calculations:   4
+          Periodic:              0
+        Partial Route Calc:      0
+        Next Hop Calculations:   0
+      IPv6 Unicast Total:        4
+        Full SPF Calculations:   4
+          Periodic:              0
+        Partial Route Calc:      0
+        Next Hop Calculations:   0
+  Level-2
+    LSPs sourced (new/refresh):  8/0
+    Route Calculations
+      IPv4 Unicast Total:        4
+        Full SPF Calculations:   4
+          Periodic:              0
+        Partial Route Calc:      0
+        Next Hop Calculations:   0
+      IPv6 Unicast Total:        4
+        Full SPF Calculations:   4
+          Periodic:              0
+        Partial Route Calc:      0
+        Next Hop Calculations:   0
+  
+RP/0/RP0/CPU0:XR01#
+show isis interface GigabitEthernet0/0/0/1
+Thu Oct 22 13:00:11.867 UTC
+
+GigabitEthernet0/0/0/1      Enabled
+  Adjacency Formation:      Enabled
+  Prefix Advertisement:     Enabled
+  Bandwidth:                1000000
+  RSI SRLG:                 Not Registered
+  
+  Circuit Type:             level-2-only
+  Media Type:               P2P
+  Circuit Number:           0
+  Extended Circuit Number:  0
+  Last IIH Received:        12:59:15 (56.62 sec ago), 1496 octets
+  Last PDU Rejected:        13:00:08 (3.28 sec ago), 1496 octets, P2P IIH, Authentication Failed
+  Last IIH Sent:            13:00:04 (7.84 sec ago), 1497 octets
+  Sending next P2P IIH in:  606 ms
+  
+  IPv4 BFD:                 Disabled
+  IPv6 BFD:                 Disabled
+  
+  Level-2                   
+    Adjacency Count:        0
+    Adjacency Flaps:        0
+    LSP Pacing Interval:    33 ms
+    PSNP Entry Queue Size:  0
+    Hello Interval:         10 s
+    Hello Multiplier:       3
+  
+  CLNS I/O
+    Protocol State:         Up
+    MTU:                    1497
+    SNPA:                   5254.00dd.b44f
+    Layer-2 Multicast:
+      All ISs:              Listening
+  
+  IPv4 Unicast Topology:    Enabled
+    Adjacency Formation:    Running
+    Prefix Advertisement:   Running
+          Policy (L1/L2):   -/-
+    Metric (L1/L2):         0/10
+    Metric fallback:
+      Bandwidth (L1/L2):    Inactive/Inactive
+      Anomaly (L1/L2):      Inactive/Inactive
+    Weight (L1/L2):         0/0
+    MPLS Max Label Stack:   1/3/7/7 (PRI/BKP/SRTE/SRAT)
+    MPLS LDP Sync (L1/L2):  Disabled/Disabled
+    FRR (L1/L2):            L1 Not Enabled     L2 Not Enabled 
+      FRR Type:             None               None           
+  IPv6 Unicast Topology:    Enabled
+    Adjacency Formation:    Running
+    Prefix Advertisement:   Running
+          Policy (L1/L2):   -/-
+    Metric (L1/L2):         0/10
+    Metric fallback:
+      Bandwidth (L1/L2):    Inactive/Inactive
+      Anomaly (L1/L2):      Inactive/Inactive
+    Weight (L1/L2):         0/0
+    MPLS Max Label Stack:   1/3/7/7 (PRI/BKP/SRTE/SRAT)
+    MPLS LDP Sync (L1/L2):  Disabled/Disabled
+    FRR (L1/L2):            L1 Not Enabled     L2 Not Enabled 
+      FRR Type:             None               None           
+  
+  IPv4 Address Family:      Enabled
+    Protocol State:         Up
+    Forwarding Address:     10.0.12.1
+    Global Prefix:          10.0.12.0/24
+  IPv6 Address Family:      Enabled
+    Protocol State:         Up
+    Forwarding Address:     fe80::5054:ff:fedd:b44f
+    Global Prefix:          2001:db8:12::/64
+  
+  LSP Transmission is:      idle
+  LSP Transmit Timer in:    0 ms
+  LSP Burst Size:           10 LSPs in the next 0 ms
+  LSP Rexmit Queue Size:    0
+  Adjacency Up:             never
+  Received CSNP complete:   never
+  LSP Pacing Start:         never
+  
+  LSP fast flooding:        Disabled
+  
+  PME Link Delays and Loss: -
+RP/0/RP0/CPU0:XR01#
+show clns neighbors
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+RT03            Et0/1         aabb.cc00.3410      Up     28        L2   IS-IS
+RT03            Et0/2         aabb.cc00.3420      Up     7         L2   IS-IS
+RT02#
+show clns traffic
+CLNS:  Time since last clear: never
+CLNS queue depth: 0/100, drops: 0, highest: 2
+CLNS & ESIS Output: 17, Input: 141
+Dropped Protocol not enabled on interface: 0
+CLNS Local: 0, Forward: 0
+CLNS Discards:
+  Hdr Syntax: 0, Checksum: 0, Lifetime: 0, Output cngstn: 0
+  No Route: 0, Discard Route: 0, Dst Unreachable 0, Encaps. Failed: 0
+  NLP Unknown: 0, Not an IS: 0
+CLNS Options: Packets 0, total 0 , bad 0, GQOS 0, cngstn exprncd 0
+CLNS Segments:  Segmented: 0, Failed: 0
+CLNS Broadcasts: sent: 0, rcvd: 0
+Echos: Rcvd 0 requests, 0 replies
+      Sent 0 requests, 0 replies
+ESIS(sent/rcvd): ESHs: 0/0, ISHs: 17/4, RDs: 0/0, QCF: 0/0
+Tunneling (sent/rcvd): IP: 0/0, IPv6: 0/0
+Tunneling dropped (rcvd) IP/IPV6:  0
+ISO-IGRP: Querys (sent/rcvd): 0/0 Updates (sent/rcvd): 0/0
+ISO-IGRP: Router Hellos: (sent/rcvd): 0/0
+ISO-IGRP Syntax Errors: 0
+
+IS-IS: Time since last clear: never
+IS-IS: Level-2 Hellos (sent/rcvd): 25/66
+IS-IS: PTP Hellos     (sent/rcvd): 47/39
+IS-IS: Level-2 LSPs sourced (new/refresh): 5/0
+IS-IS: Level-2 LSPs flooded (sent/rcvd): 5/9
+IS-IS: LSP Retransmissions: 0
+IS-IS: Level-2 CSNPs (sent/rcvd): 1/21
+IS-IS: Level-2 PSNPs (sent/rcvd): 5/2
+IS-IS: Level-2 DR Elections: 2
+IS-IS: Level-2 SPF Calculations: 5
+IS-IS: Level-2 Partial Route Calculations: 4
+IS-IS: LSP checksum errors received: 0
+IS-IS: Adjacency process queue depth: 0/unlimited, drops: 0, highest: 2
+IS-IS: Update process LSP queue depth: 0/200, drops: 0, highest: 1
+IS-IS: Update process SNP queue depth: 0/200, drops: 0, highest: 1
+IS-IS: Decision process workq depth: 0/unlimited, drops: 0, highest: 1
+RT02#
+show isis database
+
+IS-IS Level-2 Link State Database:
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd      ATT/P/OL
+RT02.00-00          * 0x00000005   0xA865                1020/*         0/0/0
+RT03.00-00            0x00000005   0x5E5E                1019/1200      0/0/0
+RT03.01-00            0x00000001   0x8C7B                1020/1199      0/0/0
+RT02#
+show ip route isis
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 12 subnets, 3 masks
+i L2     10.0.13.0/24 [115/1010] via 10.0.100.3, 00:02:59, Ethernet0/2
+                      [115/1010] via 10.0.23.3, 00:02:59, Ethernet0/1
+i L2     10.30.0.0/16 [115/20] via 10.0.100.3, 00:02:59, Ethernet0/2
+                      [115/20] via 10.0.23.3, 00:02:59, Ethernet0/1
+i L2     10.255.0.3/32 [115/20] via 10.0.100.3, 00:02:59, Ethernet0/2
+                       [115/20] via 10.0.23.3, 00:02:59, Ethernet0/1
+RT02#
+show ip route isis
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 12 subnets, 2 masks
+i L1     10.255.0.1/32 [115/20] via 10.0.11.1, 00:01:58, Ethernet0/0
+RT01#
+show ip route 0.0.0.0
+% Network not in table
+RT01#

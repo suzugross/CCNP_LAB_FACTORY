@@ -1,0 +1,85 @@
+!! XRT-05 XR01 — M4 追補の出発点= XRT-04 の M4-1〜4 を解き終えた状態。SVC-LAN の IF はアドレスだけ(IS-IS には未参加)。
+!! バックボーン(RT02・RT03)が L2 の認証を始めたが、XR01 は未対応= M4-5 の故障。
+interface Loopback0
+ ipv4 address 10.255.0.1 255.255.255.255
+ ipv6 address 2001:db8:255::1/128
+!
+interface {{ links[3] }}
+ description ACCESS to RT01 (area 49.0001)
+ ipv4 address 10.0.11.1 255.255.255.0
+ ipv6 address 2001:db8:11::1/64
+ no shutdown
+!
+interface {{ links[4] }}
+ description CORE-A to RT02
+ ipv4 address 10.0.12.1 255.255.255.0
+ ipv6 address 2001:db8:12::1/64
+ no shutdown
+!
+interface {{ links[5] }}
+ description CORE-B to RT03 (backup)
+ ipv4 address 10.0.13.1 255.255.255.0
+ ipv6 address 2001:db8:13::1/64
+ no shutdown
+!
+interface {{ links[6] }}
+ description SVC-LAN (RT02, RT03)
+ ipv4 address 10.0.100.1 255.255.255.0
+ ipv6 address 2001:db8:100::1/64
+ no shutdown
+!
+prefix-set LOOPBACKS
+  10.255.0.0/24 eq 32,
+  2001:db8:255::/64 eq 128
+end-set
+!
+route-policy LEAK-LOOPBACKS
+  if destination in LOOPBACKS then
+    pass
+  endif
+end-policy
+!
+router isis CORE
+ net 49.0001.0102.5500.0001.00
+ address-family ipv4 unicast
+  metric-style wide level 2
+  propagate level 2 into level 1 route-policy LEAK-LOOPBACKS
+ !
+ address-family ipv6 unicast
+  single-topology
+  propagate level 2 into level 1 route-policy LEAK-LOOPBACKS
+ !
+ interface Loopback0
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[3] }}
+  circuit-type level-1
+  point-to-point
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[4] }}
+  circuit-type level-2-only
+  point-to-point
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[5] }}
+  circuit-type level-2-only
+  point-to-point
+  address-family ipv4 unicast
+   metric 1000
+  !
+  address-family ipv6 unicast
+   metric 1000
+  !
+ !
+!
+end

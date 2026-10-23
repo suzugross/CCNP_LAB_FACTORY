@@ -1,0 +1,35 @@
+# M4-8: XR01 をエリア 49.0010 へ移し 49.0001 を外す。作業中に隣接を 1 本も落とさない。
+# 4 つ目の確認= 「NET 49.0010 を足した最新のコミット」の時刻以降、XR01 の隣接ログに状態変化が無い(login_probe.py xr-adj-since)。
+# 1 コミットで NET を入れ替えると、エリアだけの変更でも XR01 の全隣接が張り直されて記録が残る(PoC 実測)。
+problem: XRT-05
+total_points: 100
+checks:
+  - name: "M4-8 XR01: area 49.0010 only, system ID 0102.5500.0001 kept"
+    node: XR01
+    command: "show isis"
+    raw:
+      - { regex: "System Id: 0102\\.5500\\.0001\\s" }
+      - { regex: "Manual area address\\(es\\):\\s*\\n\\s*49\\.0010\\s*\\n\\s*Routing for" }
+    points: 25
+  - name: "M4-8 XR01: adjacencies with RT01 (Level 1) and with RT02 and RT03 (Level 2) are up"
+    node: XR01
+    command: "show isis adjacency"
+    raw:
+      - { regex: "Level-1 adjacencies:(?:(?!Level-2)[\\s\\S])*(?:RT01|0102\\.5500\\.0011)\\s+Gi0/0/0/0\\s+\\*PtoP\\*\\s+Up" }
+      - { regex: "Level-2 adjacencies:[\\s\\S]*(?:RT02|0102\\.5500\\.0002)\\s+Gi0/0/0/1\\s+\\*PtoP\\*\\s+Up" }
+      - { regex: "Level-2 adjacencies:[\\s\\S]*(?:RT03|0102\\.5500\\.0003)\\s+Gi0/0/0/2\\s+\\*PtoP\\*\\s+Up" }
+    points: 20
+  - name: "M4-8 RT01: still reaches RT03's services network"
+    node: RT01
+    command: "ping 10.30.0.1 source Loopback0"
+    raw:
+      - { regex: "Success rate is (?:100|80) percent" }
+    points: 15
+  - name: "M4-8 XR01: no adjacency went down after the new area was configured"
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-05 xr-adj-since XR01 '^\s*net 49\.0010\.'
+    raw:
+      - { regex: "== ADJ STABLE" }
+    points: 40

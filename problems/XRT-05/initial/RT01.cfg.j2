@@ -1,0 +1,35 @@
+! XRT-05 RT01(据付・変更しない)。エリア 49.0001 の L1 だけのルータ(古い機器= narrow メトリック・認証なし)。
+! IPv6 は単一トポロジ(IOS の既定)。アクセス LAN はループバック 4 本(要約の題材)。
+! エリア 49.0001 を 49.0010 へ番号替えする計画= 新旧 2 つの NET を持って据え付け(M4-8)。
+ipv6 unicast-routing
+interface Loopback0
+ ip address 10.255.0.11 255.255.255.255
+ ipv6 address 2001:DB8:255::11/128
+ ip router isis
+ ipv6 router isis
+!
+{% for n in [1, 2, 3, 4] %}
+interface Loopback1{{ n }}
+ description ACCESS-LAN-{{ n }}
+ ip address 10.11.{{ n }}.1 255.255.255.0
+ ipv6 address 2001:DB8:1011:{{ n }}::1/64
+ ip router isis
+ ipv6 router isis
+!
+{% endfor %}
+interface {{ links[0] }}
+ description ACCESS to XR01
+ ip address 10.0.11.2 255.255.255.0
+ ipv6 address 2001:DB8:11::2/64
+ ip router isis
+ ipv6 router isis
+ isis network point-to-point
+ no shutdown
+!
+router isis
+ net 49.0001.0102.5500.0011.00
+ ! M4-8 の仕込み= エリア番号の付け替え中(新旧両方を持つ)
+ net 49.0010.0102.5500.0011.00
+ is-type level-1
+ log-adjacency-changes
+!

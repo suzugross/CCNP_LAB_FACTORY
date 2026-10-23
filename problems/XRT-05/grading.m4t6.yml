@@ -1,0 +1,37 @@
+# M4-6: SVC-LAN(broadcast)を L2 だけ・IPv4/IPv6・ハロー認証つきで IS-IS に載せ、XR01 を DIS にする(RT03 は優先度 80)。
+# 「再起動しても DIS を保つ」= 優先度が 80 より大きい(同点だと MAC の大小= 立ち上げごとに変わる)。
+# brief の L2 の隣接数に付く * は、その LAN で自分が DIS であることを示す(XRd 26.1.1 実測)。
+# ★優先度は brief では見ない: brief の Prio 列はレベルを付けない priority だけを表示し、`priority 127 level 2` は `-` のまま
+#   (2026-10-23 ユーザの解答で判明)。詳細表示の Priority (Local/DIS) はレベル付きでも正しく出る。
+problem: XRT-05
+total_points: 100
+checks:
+  - name: "M4-6 XR01: Level 2 adjacencies with RT02 and RT03 on SVC-LAN, as a LAN"
+    node: XR01
+    command: "show isis adjacency"
+    raw:
+      - { regex: "Level-2 adjacencies:[\\s\\S]*(?:RT02|0102\\.5500\\.0002)\\s+Gi0/0/0/3\\s+[0-9a-f]{4}\\.[0-9a-f]{4}\\.[0-9a-f]{4}\\s+Up" }
+      - { regex: "Level-2 adjacencies:[\\s\\S]*(?:RT03|0102\\.5500\\.0003)\\s+Gi0/0/0/3\\s+[0-9a-f]{4}\\.[0-9a-f]{4}\\.[0-9a-f]{4}\\s+Up" }
+    points: 30
+  - name: "M4-6 XR01: SVC-LAN runs Level 2 only, IPv4 and IPv6, with a priority above RT03's"
+    node: XR01
+    command: "show isis interface GigabitEthernet0/0/0/3"
+    raw:
+      - { regex: "Circuit Type:\\s+level-2-only" }
+      - { regex: "Media Type:\\s+LAN" }
+      - { regex: "Priority \\(Local/DIS\\):\\s+(?:8[1-9]|9\\d|1[01]\\d|12[0-7])/" }
+      - { regex: "IPv4 Unicast Topology:\\s+Enabled\\s*\\n\\s+Adjacency Formation:\\s+Running" }
+      - { regex: "IPv6 Unicast Topology:\\s+Enabled\\s*\\n\\s+Adjacency Formation:\\s+Running" }
+    points: 25
+  - name: "M4-6 RT02: XR01 is the designated IS of SVC-LAN"
+    node: RT02
+    command: "show clns interface Ethernet0/2"
+    raw:
+      - { regex: "DR ID: (?:XR01|0102\\.5500\\.0001)\\.\\d+" }
+    points: 25
+  - name: "M4-6 RT03: XR01 is the designated IS of SVC-LAN"
+    node: RT03
+    command: "show clns interface Ethernet0/2"
+    raw:
+      - { regex: "DR ID: (?:XR01|0102\\.5500\\.0001)\\.\\d+" }
+    points: 20

@@ -13,6 +13,12 @@
       FROM(IOS)にラボの資格情報で入り、そこから DST へ Telnet する。
       `== TELNET PROMPT`(ログイン要求が出た)/ `== TELNET REFUSED` / `== TELNET TIMEOUT` を出す。
       --user があればログインまで進め、`== TELNET LOGIN OK` か `== TELNET LOGIN FAILED` を足す。
+  login_probe.py <ID> xr-adj-since <NODE> '<regex>'
+      IOS XR の NODE で、変更の差分(`show configuration commit changes <ID>`)が regex に一致する
+      コミットのうち最新のものを探し、その時刻以降に `show isis adjacency-log` に記録された隣接の状態変化を数える。
+      `== CHANGE COMMIT <ID> at <時刻>`(見つからなければ `== CHANGE NOT FOUND`)・`== ADJ EVENTS SINCE CHANGE: n`、
+      0 件なら `== ADJ STABLE` を出す。「作業中に隣接を落とさない」を状態で見るときに使う
+      (例: XRT-05 M4-8= NET の付け替え。1 コミットで入れ替えると全隣接が張り直されて記録が残る)。
   共通: --pre 'NODE:cmd' / --post 'NODE:cmd' … Linux ノードで前後にコマンドを実行する(--post は必ず実行)。
         サーバを止めた状態のログインを見るときに使う(採点は再試行されるので、--post で必ず元に戻す)。
         --pre-cli 'NODE:line;;line' / --post-cli 'NODE:line;;line' … IOS/IOS XR の CLI に前後で行を流す
@@ -165,6 +171,49 @@ def do_telnet(pid, frm, dst, source, user, pw, lab_user, lab_pw):
     c.close()
 
 
+MONTHS = {m: i for i, m in enumerate(
+    ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1)}
+
+
+def do_xr_adj_since(pid, node, pattern, user, pw):
+    """変更を入れた最新のコミットの時刻以降に、IS-IS の隣接の状態変化が記録されていないかを数える。"""
+    import datetime
+    c = connect(mgmt_ip(pid, node), user, pw)
+    sh = Shell(c)
+    lst = sh.send("show configuration commit list detail", timeout=60)  # 件数の上限はその時点のコミット数(超えると入力エラー)
+    commits = re.findall(r"CommitId:\s+(\d+)[\s\S]*?Time:\s+\w+\s+(\w+)\s+(\d+)\s+(\d+):(\d+):(\d+)\s+(\d{4})", lst)
+    found = None
+    for cid, mon, day, hh, mm, ss, year in commits:  # 新しい順に並んでいる
+        diff = sh.send(f"show configuration commit changes {cid}", timeout=60)
+        if re.search(pattern, diff, re.M):
+            found = (cid, datetime.datetime(int(year), MONTHS[mon], int(day), int(hh), int(mm), int(ss)))
+            break
+    if not found:
+        print("== CHANGE NOT FOUND")
+        c.close()
+        return
+    cid, t0 = found
+    print(f"== CHANGE COMMIT {cid} at {t0:%Y-%m-%d %H:%M:%S}")
+    log = sh.send("show isis adjacency-log", timeout=60)
+    c.close()
+    date, events = None, []
+    for ln in log.splitlines():
+        m = re.match(r"--- \w+ (\w+) (\d+) (\d{4}) ---", ln.strip())
+        if m:
+            date = (int(m.group(3)), MONTHS[m.group(1)], int(m.group(2)))
+            continue
+        m = re.match(r"(\d+):(\d+):(\d+)\.\d+\s+(\S+)\s+(\S+)\s+(\S+ -> \S+)", ln)
+        if m and date:
+            t = datetime.datetime(*date, int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            if t >= t0:
+                events.append(ln.strip())
+    for e in events:
+        print(f"   {e}")
+    print(f"== ADJ EVENTS SINCE CHANGE: {len(events)}")
+    if not events:
+        print("== ADJ STABLE")
+
+
 def main():
     a = sys.argv[1:]
 
@@ -206,6 +255,8 @@ def main():
             do_ssh(pid, a[2], user or lab_user, pw or lab_pw, lines)
         elif mode == "telnet":
             do_telnet(pid, a[2], a[3], source, user, pw, lab_user, lab_pw)
+        elif mode == "xr-adj-since":
+            do_xr_adj_since(pid, a[2], a[3], user or lab_user, pw or lab_pw)
         else:
             sys.exit(f"unknown mode {mode}")
     finally:

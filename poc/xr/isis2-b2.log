@@ -1,0 +1,170 @@
+######## 13:00:31 b-1b: key-string clear で作り直す(有効期間なし)
+configure
+Thu Oct 22 13:00:33.232 UTC
+RP/0/RP0/CPU0:XR01(config)#
+key chain ISIS-L2
+RP/0/RP0/CPU0:XR01(config-ISIS-L2)#
+key 1
+RP/0/RP0/CPU0:XR01(config-ISIS-L2-1)#
+key-string clear Bb0ne-2026
+RP/0/RP0/CPU0:XR01(config-ISIS-L2-1)#
+commit
+Thu Oct 22 13:00:34.936 UTC
+RP/0/RP0/CPU0:XR01(config-ISIS-L2-1)#
+show configuration failed
+Thu Oct 22 13:00:35.387 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-ISIS-L2-1)#
+end
+RP/0/RP0/CPU0:XR01#
+show key chain ISIS-L2
+Thu Oct 22 13:00:37.145 UTC
+
+Key-chain: ISIS-L2 -
+
+  timezone -- local
+  Key 1 -- text "01310454550E4B5D711E18"
+    Cryptographic-Algorithm -- Not configured
+    Send lifetime -- Not configured
+    Accept lifetime -- Not configured
+
+RP/0/RP0/CPU0:XR01#
+######## b-1c: cryptographic-algorithm を足す
+configure
+Thu Oct 22 13:00:38.841 UTC
+RP/0/RP0/CPU0:XR01(config)#
+key chain ISIS-L2
+RP/0/RP0/CPU0:XR01(config-ISIS-L2)#
+key 1
+RP/0/RP0/CPU0:XR01(config-ISIS-L2-1)#
+cryptographic-algorithm HMAC-MD5
+RP/0/RP0/CPU0:XR01(config-ISIS-L2-1)#
+commit
+Thu Oct 22 13:00:40.586 UTC
+RP/0/RP0/CPU0:XR01(config-ISIS-L2-1)#
+show configuration failed
+Thu Oct 22 13:00:40.947 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-ISIS-L2-1)#
+end
+RP/0/RP0/CPU0:XR01#
+show key chain ISIS-L2
+Thu Oct 22 13:00:42.855 UTC
+
+Key-chain: ISIS-L2 -
+
+  timezone -- local
+  Key 1 -- text "01310454550E4B5D711E18"
+    Cryptographic-Algorithm -- HMAC_MD5
+    Send lifetime -- Not configured
+    Accept lifetime -- Not configured
+
+RP/0/RP0/CPU0:XR01#
+show running-config key chain
+Thu Oct 22 13:00:43.254 UTC
+key chain ISIS-L2
+ key 1
+  key-string password 01310454550E4B5D711E18
+  cryptographic-algorithm HMAC-MD5
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+######## 13:01:28 b-2b: ハロー認証だけ(LSP は未対応)の状態
+show isis adjacency
+Thu Oct 22 13:01:30.315 UTC
+
+IS-IS CORE Level-1 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    25   00:03:12 Yes None None
+
+Total adjacency count: 1
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RP/0/RP0/CPU0:XR01#
+show route ipv4 isis
+Thu Oct 22 13:01:30.742 UTC
+
+i L1 10.11.1.0/24 [115/20] via 10.0.11.2, 00:03:08, GigabitEthernet0/0/0/0
+i L1 10.11.2.0/24 [115/20] via 10.0.11.2, 00:03:08, GigabitEthernet0/0/0/0
+i L1 10.11.3.0/24 [115/20] via 10.0.11.2, 00:03:08, GigabitEthernet0/0/0/0
+i L1 10.11.4.0/24 [115/20] via 10.0.11.2, 00:03:08, GigabitEthernet0/0/0/0
+i L1 10.255.0.11/32 [115/20] via 10.0.11.2, 00:03:08, GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01#
+show isis database
+Thu Oct 22 13:01:31.128 UTC
+
+IS-IS CORE (Level-1) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x00000006   0x496b        1013 /*            0/0/0
+RT01.00-00            0x00000002   0x4ab2        1011 /1200         0/0/0
+
+ Total Level-1 LSP count: 2     Local Level-1 LSP count: 1
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x00000007   0x8240        1013 /*            0/0/0
+
+ Total Level-2 LSP count: 1     Local Level-2 LSP count: 1
+RP/0/RP0/CPU0:XR01#
+show isis interface GigabitEthernet0/0/0/1 | include "Rejected|Received|Sent"
+Thu Oct 22 13:01:31.567 UTC
+  Last IIH Received:        12:59:15 (00:02:16 ago), 1496 octets
+  Last PDU Rejected:        13:01:29 (2.18 sec ago), 1496 octets, P2P IIH, Authentication Failed
+  Last IIH Sent:            13:01:30 (0.84 sec ago), 1497 octets
+  Received CSNP complete:   never
+RP/0/RP0/CPU0:XR01#
+show isis statistics | include "Total|Hello|CSNP|PSNP|LSP:"
+Thu Oct 22 13:01:31.971 UTC
+  Total PDUs       Sent       Received       On Input      By Update
+    Hello:           73             38              0              -
+    CSNP:             1              1              -              0
+    PSNP:             1              5              0              0
+    LSP:              4              1              0              0
+    Total Traffic:               7
+      Total Drops:               0
+    Total Traffic:               76
+      Total Drops:               0
+      IPv4 Unicast Total:        4
+      IPv6 Unicast Total:        4
+      IPv4 Unicast Total:        4
+      IPv6 Unicast Total:        4
+RP/0/RP0/CPU0:XR01#
+show clns neighbors
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+RT03            Et0/1         aabb.cc00.3410      Up     26        L2   IS-IS
+RT03            Et0/2         aabb.cc00.3420      Up     8         L2   IS-IS
+RT02#
+show isis database
+
+IS-IS Level-2 Link State Database:
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd      ATT/P/OL
+RT02.00-00          * 0x00000005   0xA865                 940/*         0/0/0
+RT03.00-00            0x00000005   0x5E5E                 939/1200      0/0/0
+RT03.01-00            0x00000001   0x8C7B                 940/1199      0/0/0
+RT02#
+show ip route isis | begin Gateway
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 12 subnets, 3 masks
+i L2     10.0.13.0/24 [115/1010] via 10.0.100.3, 00:04:19, Ethernet0/2
+                      [115/1010] via 10.0.23.3, 00:04:19, Ethernet0/1
+i L2     10.30.0.0/16 [115/20] via 10.0.100.3, 00:04:19, Ethernet0/2
+                      [115/20] via 10.0.23.3, 00:04:19, Ethernet0/1
+i L2     10.255.0.3/32 [115/20] via 10.0.100.3, 00:04:19, Ethernet0/2
+                       [115/20] via 10.0.23.3, 00:04:19, Ethernet0/1
+RT02#
+show ip route isis | begin Gateway
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 12 subnets, 2 masks
+i L1     10.255.0.1/32 [115/20] via 10.0.11.1, 00:03:18, Ethernet0/0
+RT01#
+show ip route 0.0.0.0
+% Network not in table
+RT01#

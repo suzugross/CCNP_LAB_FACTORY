@@ -579,7 +579,7 @@ Enterprise の CCNP では IS-IS をほぼ扱わないので、**この単元だ
 | Juniper の呼び名と置き場所(`family iso address`・推奨は lo0)・システム ID は本番では MAC 等から | Junos IS-IS User Guide / IS-IS Overview | 他ベンダの補足として記載(信頼順のソース外) |
 | AFI `49` = 私設 | フォーラム・解説サイトのみ(規格・Cisco 公式では見つからず) | 断定を「慣例として私設に使う値」に弱め、注記に「解説資料での説明」と明記 |
 
-## 18. M4 追補 — IS-IS の 2 周目(2026-10-22 設計・PoC中)
+## 18. M4 追補 — IS-IS の 2 周目(2026-10-22 完了= 18.8)
 
 **ねらい**= M4 は SPCOR 2.1 の a〜d を一通り押さえたが、SP の IGP として使い込むには薄い(認証・broadcast と DIS・要約・
 複数のエリア アドレスが手つかず。DIS・LSP は読み物だけ)。このうち M7 以降の流れで自然に出てこないものを、
@@ -637,6 +637,83 @@ M4 の盤面を広げた短い課題で拾う(§5 の「IS-IS の深め方」①
 - ASR 9000 Routing Configuration Guide「Implementing IS-IS」(認証・要約・優先度・NET)・System Security Configuration Guide の鍵チェーン。
 - RFC 5304(IS-IS の HMAC-MD5)・RFC 5310(汎用の暗号認証)・RFC 1195(IP の IS-IS)・ISO 10589(RFC 1142)の DIS と擬似ノード。
 - IOS 側= IS-IS の認証・要約の設定ガイド(IOS XE 17.x)。
+
+### 18.5 PoC の結果(2026-10-22・XRT-05 の盤面= XRd 26.1.1+IOL 17.15。手順 `poc/xr/isis2_poc.sh`・記録 `poc/xr/isis2-*.log`)
+
+| 論点 | 実機の挙動 |
+|---|---|
+| 初期状態(バックボーンだけ認証) | XR01 は相手のハローを受けて L2 隣接が `Init` のまま(XR は認証を設定していないので検査しない・相手は XR の無認証ハローを捨てる)。L2 隣接が無いので **ATT ビットが下り、RT01 は既定経路も失う** |
+| 鍵 `key-string password <平文>` | **コミット失敗**= `'Key Chain Server Process' detected the 'fatal' condition 'Incorrect or NULL parameter(s)'`。`password` は暗号化済みの形を渡す指定で、平文は `clear`(既定)。表示は `key-string password 0131…`(暗号化して保存) |
+| 存在しない鍵チェーンを `hello-password keychain` で参照 | **コミットは通る**(RPL の未定義参照と違う)→ 受けたハローを全部捨てる= `Last PDU Rejected: … P2P IIH, Authentication Failed`。隣接は `Init` からも消える |
+| 鍵に暗号アルゴリズムが無い/有効期間が無い | どちらも**コミットは通るが鍵が使われず**、ハローは `Authentication Failed`。`show key chain` に `Cryptographic-Algorithm -- Not configured`・`Send/Accept lifetime -- Not configured`(`[Valid now]` が出ない)。両方そろえた直後に隣接 Up |
+| ハローだけ合わせた状態 | 隣接は Up。XR はバックボーンの LSP を受け入れて経路を持つ(XR に LSP の認証が無い=検査しない)。**RT02 は XR の LSP を捨てる**= バックボーンにエリア 49.0001 の経路が無い・RT02 の隣接表で XR01 がホスト名でなく `0102.5500.0001` のまま(ホスト名は LSP で運ばれるため)。RT01 は既定経路が戻るが行きだけ |
+| `lsp-password keychain … level 2` | 全経路が交換される。XR の L2 LSP に `Auth: Algorithm HMAC-MD5, Length: 17` |
+| **レベルなしの `lsp-password`**(両レベルに効く) | 認証なしの RT01 は XR の認証つき L1 LSP を受け入れる(IOS は認証を設定していなければ検査しない)。逆に XR は **RT01 が作り直した L1 LSP を `L1 LSP, Authentication Failed` で捨て、古い版を持ち続ける**= その場では何も起きず、RT01 の経路の変化が届かなくなる(寿命が切れると RT01 の経路を全部失う)。RT01 の PSNP も捨てるので LSP の再送が増える。→ 採点は M4-4 と同じく、採点中だけ RT01 に経路を足して XR に届くかで見る |
+| 共用 LAN を p2p で載せる | 隣接しない。`Last PDU Rejected: … L2 LAN IIH, LAN IIH on P2P Interface`(M4-1 の表示の逆向き) |
+| 共用 LAN(broadcast)・XRd | **XRd でも LAN の隣接・DIS 選出が成立**(IS-IS のマルチキャストを受ける)。`show isis interface` の `LAN ID: RT03.01`・`Priority (Local/DIS): 64/80` |
+| 優先度 100 | **その場で DIS を奪う**。RT03 の擬似ノード LSP(RT03.01-00)は寿命 0 で消され、XR01.01-00 が現れる。IOS 側は `DR ID: XR01.01`。レベルなしの `priority` は両レベル、`level 2` 付きは L2 だけ |
+| LAN の circuit-type を外す | L1 のハローも出す(L1 は相手がいないので `no DIS elected`)。L2 だけの相手とは問題なく L2 で隣接 |
+| `summary-prefix`(レベルなし/`level 2`) | この盤面ではどちらも L2 に要約 1 本(L1 へ要約する対象が無いため差が出ない)。XR に **Null0 の破棄経路**(`type manual summary`)。メトリックは構成要素の最小(20)。構成要素が全部消えると要約も消える。★XR は自分の L2 LSP で **IPv6 の要約を `IPv6-External` と表示**(IOS 側は普通の I2) |
+| NET を 1 コミットで入れ替え(システム ID 同じ・エリアだけ変更) | **XR01 の全隣接(RT01 の L1 も、バックボーンの L2・LAN も)が同時に落ちて張り直す**(相手が新旧両方のエリアを持っていても)。`show isis adjacency-log` に全隣接の `d -> i`→`i -> u` が同じ時刻で並ぶ |
+| NET を足す → 別のコミットで旧 NET を外す | **隣接は 1 本も落ちない**(隣接ログに変化なし) |
+| 相手(RT01)が新エリアだけ | XR の L1 隣接が `u -> d  Area addr/level differ`・`Last PDU Rejected: … Level or Area Addr mismatch`。XR に 2 つ目の NET を足すと戻る(エリアの併合) |
+| システム ID の違う NET・4 つ目のエリア | コミット失敗= `System ID must not change: 0102.5500.0001`・`Maximum area address count exceeded: maximum number of area addresses is 3` |
+| 採点の材料 | `show configuration commit list N detail` に各コミットの時刻、`show isis adjacency-log [level 1|2] [last n]` に状態変化の時刻。同じ機器の時計なので突き合わせられる |
+
+- 気づき(課題外)= XRd の管理 IF で `Duplicate IP address 10.1.10.11 … sourced by 5254.0093.c03d` が起動直後に 1 回出た(撤収直後の旧ラボの残りの可能性・SSH は正常)。
+
+### 18.6 公式文書との突き合わせ(2026-10-22・Cisco 8000/NCS 5500 の IS-IS コマンド リファレンスと設定ガイド・鍵チェーン管理・IOS XE 17.x の IS-IS セキュリティ・RFC 5304)
+
+| 論点 | 公式 | 実機 | 判定 |
+|---|---|---|---|
+| `lsp-password`/`hello-password`/`summary-prefix`/`priority` のレベル省略 | 両レベル | 同(要約は L2 で差が出ない) | 一致 |
+| `lsp-password` が SNP も認証する | 「all IS-IS LSPs … as well as for all SN PDUs」 | RT01 の PSNP を捨てて再送が増える | 一致 |
+| DIS は優先度の高い新参に奪われる・同点は MAC の大きい方 | 記載あり(NCS 5500 のリファレンス) | 奪う | 一致 |
+| NET は最大 3・システム ID は全 NET で同じ | 記載あり | コミット時に拒否 | 一致 |
+| 要約は破棄経路を入れる・メトリックは構成要素の最小 | 記載あり | 同 | 一致 |
+| `key-string [clear\|password]`(既定 clear) | 記載あり | password に平文= コミット失敗 | 一致 |
+| 暗号アルゴリズムが無いと MAC の計算・検証が無効 | 記載あり | 認証失敗 | 一致 |
+| **有効期間の無い鍵** | 設定ガイドの注記= 「無効とみなし、**設定時に拒否する**」。同じガイドの手順とコマンド リファレンスでは有効期間は任意(既定なし) | **コミットは通る**が鍵は使われない(認証失敗) | **食い違い**(無効という点は一致・「設定時に拒否」が実機と違う)→ ユーザ判断待ち。それまで課題では「有効期間が要る」ことを正解の根拠にしない |
+| IOS: プロセスの `authentication` は LSP・CSNP・PSNP、IF の `isis authentication` はハロー | 記載あり | 同 | 一致 |
+| HMAC-MD5 の TLV に鍵 ID は無い(機種間で鍵番号を合わせなくてよい) | RFC 5304 | XR と IOS とも key 1 なので未検証 | 補足に留める |
+| `show isis adjacency-log` | 記載あり(既定で記録するかは記載なし) | 既定で記録(`log adjacency changes` なし) | 実測で補う |
+
+### 18.7 PoC を受けた課題の確定案
+
+- **M4-5(認証の TS)**= 据え付け側の作業票(鍵チェーン名・鍵番号・鍵・HMAC-MD5・「2026-01-01 から無期限」)を課題文に載せる。
+  罠= `key-string password`・アルゴリズム・有効期間・ハローと LSP の 2 つ・レベル(L1 に効かせると RT01 の経路の変化が届かない)。
+  採点= L2 隣接 Up/RT02 が XR01 の LSP と RT01 側の経路を持つ/RT01 がサービス網に届く/**採点中だけ RT01 に Loopback を足して XR01 に届く**(`login_probe.py --pre-cli`)。
+  ★有効期間の件は 18.6 の食い違いの判断待ち。
+- **M4-6(LAN と DIS)**= SVC-LAN を L2 だけ・broadcast・ハロー認証つきで載せ、XR01 を DIS に(RT03 は優先度 80= 表示から自分で見つける)。
+  採点= XR01 の Gi0/0/0/3 に RT02・RT03 の L2 隣接(SNPA が MAC)/RT02 の `show clns interface` で `DR ID: XR01.01`/XR01 の LAN に L1 のハローが無い。
+- **M4-7(要約)**= IPv4 `10.11.0.0/16`・IPv6 `2001:db8:1011::/48` をバックボーンへ 1 本ずつ。採点= RT02 に /16・/48 があり /24・/64 が無い・RT01 のループバックは個別に残る。
+  誤答の判別= `level 1` だけにすると L2 に効かない。
+- **M4-8(エリアの付け替え)= 案 A に確定**。RT01 は新旧 2 つの NET(49.0001・49.0010)で据え付けておく(`initial/RT01.cfg.j2` に追加済み)。
+  要件= XR01 を 49.0010 へ移し 49.0001 を外す・作業中に XR01 の隣接を 1 本も落とさない。
+  採点= XR01 の手動エリアが 49.0010 だけ/RT01 との L1 隣接 Up/**49.0010 を初めて入れたコミットの時刻以降、隣接ログに状態変化が無い**
+  (採点機側の小さなスクリプトで commit list と adjacency-log を突き合わせる= 実装で作る)。1 コミットの入れ替えは全隣接が張り直されて落ちる。
+- 再配送は見送り(M4-7 を軽く保つ。M7 以降の盤面で必要になれば拾う)。
+
+### 18.8 実装の結果(2026-10-22)
+
+- 鍵の有効期間の食い違い(18.6)= **ユーザ判断(2026-10-22)で実機の挙動のまま出題し、読み物と模範解に注記**(公式は「設定時に拒否」・XRd 26.1.1 はコミットが通り鍵が使われない)。
+- 成果物= `problems/XRT-05`(課題ごとの確認 `grading.m4t5〜8.yml`・最終 `grading.yml` 各 25 点・`learn.yml`・課題文 日英)、
+  読み物 `courses/xr/{en,ja}/42-m4-isis-deeper.md`(認証・LAN と DIS・要約・エリア アドレス・コマンド名の 5 節。日英で見出しと段落の数を機械照合)・
+  実践 `43-m4-practice-2.md`(`course.sh` が課題文から切り出す)。模範解= `poc/xr/solve_xrt05.sh`(誤答の再現つき)。
+- 採点に `login_probe.py xr-adj-since <NODE> '<regex>'`= 差分が regex に一致する最新のコミットを探し、その時刻以降の
+  `show isis adjacency-log` の状態変化を数える(0 件で `== ADJ STABLE`)。★`show configuration commit list <n>` の n の上限は
+  その時点のコミット数(超えると入力エラー)→ 件数なしで全件を取る。
+- 課題文の M4-5 は作業指示の表(対象= 「レベル 2 のすべての IS-IS パケット」・キー チェーン・キー・HMAC-MD5・有効期間)で渡す
+  (ハローと LSP の 2 か所に分かれることは自分で見つける)。M4-6 の「再起動しても DIS を保つ」で優先度 > 80 を要求(同点は MAC で決まる)。
+  M4-8 は「隣接がダウンしたら 49.0001 だけに戻してやり直す」を課題文に明記(採点は最新の追加コミットから見る)。
+- 実機 E2E(記録 `poc/xr/expM4b-*.log`)= 白紙 0(最終・課題ごと 4 本とも)→ 模範解 100。誤答= LSP 認証のレベルなし 75・
+  要約を level 1 だけ 0・NET の 1 コミット入れ替え 60(戻してやり直すと 100)。`learn.yml` の模範解を逐語で流しても 100。
+  `lab.sh reset` で白紙 0 に戻ることも確認。★XR の `show isis interface brief` は自分が DIS の LAN で隣接数に `*`(優先度を 64 に下げると消える)。
+- ワークスペースの API(`/api/learn`)で課題文の切り出し・ヒント数・読み物の節へのリンクを確認。
+- ★2026-10-23 採点の不具合を修正(ユーザの解答で判明)= M4-6 の優先度を `show isis interface brief` の Prio 列で見ていたが、
+  この列は**レベルを付けない `priority` だけ**を表示し、`priority 127 level 2` は `-` のまま(DIS にはなっている)→ 正しい解答が落ちた。
+  詳細表示 `show isis interface <IF>` の `Circuit Type`・`Media Type`・`Priority (Local/DIS)`・AF ごとの `Adjacency Formation: Running` で見るよう変更
+  (`grading.m4t6.yml`・`grading.yml`)。E2E はレベルなしの `priority 100` しか試していなかった= 別解(レベル付き)も E2E に入れること。
 
 ## 19. M7 高可用性(2026-10-22 方針・未着手)
 

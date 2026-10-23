@@ -1,0 +1,63 @@
+! XRT-05 RT03(据付・変更しない)。バックボーン(L2 だけ・エリア 49.0003)。wide メトリック。
+! IPv6 は単一トポロジ(IOS の既定)。サービス網 10.30.0.0/16 を IS-IS に載せている。
+! ★M4-5 の仕込み= レベル 2 の認証(ハローは IF ごと・LSP/SNP はプロセスで)。鍵チェーン ISIS-L2・HMAC-MD5。
+ipv6 unicast-routing
+key chain ISIS-L2
+ key 1
+  key-string Bb0ne-2026
+!
+interface Loopback0
+ ip address 10.255.0.3 255.255.255.255
+ ipv6 address 2001:DB8:255::3/128
+ ip router isis
+ ipv6 router isis
+!
+interface Loopback1
+ description SERVICES-B
+ ip address 10.30.0.1 255.255.0.0
+ ipv6 address 2001:DB8:1030::1/64
+ ip router isis
+ ipv6 router isis
+!
+interface {{ links[0] }}
+ description CORE-B to XR01 (backup)
+ ip address 10.0.13.3 255.255.255.0
+ ipv6 address 2001:DB8:13::3/64
+ ip router isis
+ ipv6 router isis
+ isis network point-to-point
+ isis metric 1000
+ isis authentication mode md5 level-2
+ isis authentication key-chain ISIS-L2 level-2
+ no shutdown
+!
+interface {{ links[1] }}
+ description to RT02
+ ip address 10.0.23.3 255.255.255.0
+ ipv6 address 2001:DB8:23::3/64
+ ip router isis
+ ipv6 router isis
+ isis network point-to-point
+ isis authentication mode md5 level-2
+ isis authentication key-chain ISIS-L2 level-2
+ no shutdown
+!
+interface {{ links[2] }}
+ description SVC-LAN
+ ip address 10.0.100.3 255.255.255.0
+ ipv6 address 2001:DB8:100::3/64
+ ip router isis
+ ipv6 router isis
+ isis priority 80 level-2
+ isis authentication mode md5 level-2
+ isis authentication key-chain ISIS-L2 level-2
+ no shutdown
+!
+router isis
+ net 49.0003.0102.5500.0003.00
+ is-type level-2-only
+ metric-style wide
+ authentication mode md5 level-2
+ authentication key-chain ISIS-L2 level-2
+ log-adjacency-changes
+!

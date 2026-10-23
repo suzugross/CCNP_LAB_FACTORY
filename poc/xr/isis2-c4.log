@@ -1,0 +1,129 @@
+######## 13:06:19 c-4: レベル指定なしに戻し、RT01 に新しい経路を足して LSP を作り直させる
+configure
+Thu Oct 22 13:06:20.665 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+no lsp-password keychain ISIS-L2 level 2
+RP/0/RP0/CPU0:XR01(config-isis)#
+lsp-password keychain ISIS-L2
+RP/0/RP0/CPU0:XR01(config-isis)#
+commit
+Thu Oct 22 13:06:22.352 UTC
+RP/0/RP0/CPU0:XR01(config-isis)#
+end
+RP/0/RP0/CPU0:XR01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface Loopback99
+RT01(config-if)#
+ip address 10.11.99.1 255.255.255.0
+RT01(config-if)#
+ip router isis
+RT01(config-if)#
+end
+RT01#
+show route ipv4 10.11.99.0/24
+Thu Oct 22 13:07:02.986 UTC
+
+% Network not in table
+
+RP/0/RP0/CPU0:XR01#
+show isis database RT01.00-00
+Thu Oct 22 13:07:03.416 UTC
+
+IS-IS CORE (Level-1) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+RT01.00-00            0x00000002   0x4ab2        678  /1200         0/0/0
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+The requested LSP RT01.00-00 was not found in the IS-IS CORE Level-2 LSP Database
+RP/0/RP0/CPU0:XR01#
+show isis interface GigabitEthernet0/0/0/0 | include "Rejected|Received"
+Thu Oct 22 13:07:03.784 UTC
+  Last IIH Received:        13:07:00 (3.29 sec ago), 1496 octets
+  Last PDU Rejected:        13:07:02 (0.84 sec ago), 285 octets, L1 LSP, Authentication Failed
+  Received CSNP complete:   12:58:18.116
+RP/0/RP0/CPU0:XR01#
+show isis statistics | include "Hello|CSNP|PSNP|LSP:|Retrans"
+Thu Oct 22 13:07:04.182 UTC
+    Hello:          191            150              0              -
+    CSNP:             3              3              -              0
+    PSNP:            57             18              0              0
+    LSP:             64             72              0              0
+  LSP Retransmissions:           42
+RP/0/RP0/CPU0:XR01#
+show isis database
+
+IS-IS Level-1 Link State Database:
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd      ATT/P/OL
+XR01.00-00            0x0000000C   0xE5E3                1157/1200      1/0/0
+RT01.00-00          * 0x00000003   0x905B                1171/*         0/0/0
+RT01#
+show clns traffic | include LSP|PSNP|CSNP|Retrans
+IS-IS: Level-1 LSPs sourced (new/refresh): 3/0
+IS-IS: Level-1 LSPs flooded (sent/rcvd): 8/29
+IS-IS: LSP Retransmissions: 5
+IS-IS: Level-1 CSNPs (sent/rcvd): 1/1
+IS-IS: Level-1 PSNPs (sent/rcvd): 30/1
+IS-IS: LSP checksum errors received: 0
+IS-IS: Update process LSP queue depth: 0/200, drops: 0, highest: 1
+RT01#
+show ip route 10.11.99.0
+% Subnet not in table
+RT02#
+######## 13:07:08 c-5: レベル 2 だけへ戻す → RT01 の新しい経路は届くか
+configure
+Thu Oct 22 13:07:09.915 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+no lsp-password keychain ISIS-L2
+RP/0/RP0/CPU0:XR01(config-isis)#
+lsp-password keychain ISIS-L2 level 2
+RP/0/RP0/CPU0:XR01(config-isis)#
+commit
+Thu Oct 22 13:07:11.755 UTC
+RP/0/RP0/CPU0:XR01(config-isis)#
+end
+RP/0/RP0/CPU0:XR01#
+show route ipv4 10.11.99.0/24
+Thu Oct 22 13:07:43.836 UTC
+
+Routing entry for 10.11.99.0/24
+  Known via "isis CORE", distance 115, metric 20, type level-1
+  Installed Oct 22 13:07:13.050 for 00:00:30
+  Routing Descriptor Blocks
+    10.0.11.2, from 10.255.0.11, via GigabitEthernet0/0/0/0
+      Route metric is 20
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+show isis database RT01.00-00
+Thu Oct 22 13:07:44.236 UTC
+
+IS-IS CORE (Level-1) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+RT01.00-00            0x00000003   0x905b        1168 /1164         0/0/0
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+The requested LSP RT01.00-00 was not found in the IS-IS CORE Level-2 LSP Database
+RP/0/RP0/CPU0:XR01#
+show ip route 10.11.99.0
+Routing entry for 10.11.99.0/24
+  Known via "isis", distance 115, metric 30, type level-2
+  Redistributing via isis
+  Last update from 10.0.12.1 on Ethernet0/0, 00:00:33 ago
+  Routing Descriptor Blocks:
+  * 10.0.12.1, from 10.255.0.1, 00:00:33 ago, via Ethernet0/0
+      Route metric is 30, traffic share count is 1
+RT02#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+no interface Loopback99
+RT01(config)#
+end
+RT01#

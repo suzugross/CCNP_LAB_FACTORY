@@ -1,0 +1,215 @@
+# XRT-05 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn XRT-05 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# ここに書いた挙動は XRd 26.1.1(+IOL 17.15)の実機で確認した(設計= problems/_drafts/XR-TRACK.design.md §18)。
+# 読み物(BL-252)= Reading タブに出す本(reading/<key>/)。各課題の read: はその本の「ページ#節」(節= data-sec)。
+reading: xr
+steps:
+  - id: m4t5
+    title: { en: "M4-5  Authentication in the backbone", ja: "M4-5  バックボーンの認証" }
+    check: m4t5
+    read: [42-m4-isis-deeper#s1-1, 42-m4-isis-deeper#s1-2, 42-m4-isis-deeper#s1-3, 42-m4-isis-deeper#s1-4]
+    hints:
+      - en: "\"All Level 2 IS-IS packets\" means two separate things in IS-IS, configured in two different places: the hellos of each interface and the link-state database of the level. Fixing one of them changes the symptom without curing it. Build the key chain first and make sure IOS XR considers the key usable before you point anything at it. Then keep Level 1 out of it."
+        ja: "「レベル 2 のすべての IS-IS パケット」は、IS-IS では別々の場所で設定する 2 つのものを指します。各インターフェイスのハローと、そのレベルのリンクステート データベースです。片方だけ直すと、症状は変わりますが治りません。まずキー チェーンを作り、何かから参照する前に、IOS XR がそのキーを使えるとみなしているかを確かめてください。そのうえで、レベル 1 を巻き込まないようにします。"
+      - en: "`show key chain ISIS-L2` must show `[Valid now]` for the key: IOS XR commits a key without a cryptographic algorithm or without lifetimes, and then does not use it. `key-string password` expects an already encrypted string; a plain one is given with `clear`. `show isis interface <name>` shows the last PDU that XR01 rejected and why. On the IOS side, a neighbour listed by system ID instead of hostname has not accepted XR01's LSP. `lsp-password` without a level covers Level 1 as well. Guides: System Security Configuration Guide, 'Implementing Keychain Management'; Routing Configuration Guide, 'Implementing IS-IS', and the IS-IS command reference for `lsp-password` and `hello-password`."
+        ja: "`show key chain ISIS-L2` で、キーに `[Valid now]` が付いている必要があります。IOS XR は、暗号アルゴリズムの無いキーや有効期間の無いキーもコミットしますが、そのキーを使いません。`key-string password` は暗号化済みの文字列を期待します。平文は `clear` で渡します。`show isis interface <名前>` は、XR01 が最後に拒否した PDU とその理由を表示します。IOS 側で、ネイバーがホスト名ではなくシステム ID で表示されていれば、そのネイバーは XR01 の LSP を受け入れていません。レベルを付けない `lsp-password` はレベル 1 にも効きます。ガイド: System Security Configuration Guide の「Implementing Keychain Management」、Routing Configuration Guide の「Implementing IS-IS」と、IS-IS コマンド リファレンスの `lsp-password`・`hello-password`。"
+      - en: "`key chain ISIS-L2` → `key 1` → `key-string clear Bb0ne-2026`, `cryptographic-algorithm HMAC-MD5`, `accept-lifetime 00:00:00 january 01 2026 infinite`, `send-lifetime 00:00:00 january 01 2026 infinite`. Under `router isis CORE`: `lsp-password keychain ISIS-L2 level 2`. Under `interface GigabitEthernet0/0/0/1` and `interface GigabitEthernet0/0/0/2` in `router isis CORE`: `hello-password keychain ISIS-L2`."
+        ja: "`key chain ISIS-L2` → `key 1` の下に `key-string clear Bb0ne-2026`、`cryptographic-algorithm HMAC-MD5`、`accept-lifetime 00:00:00 january 01 2026 infinite`、`send-lifetime 00:00:00 january 01 2026 infinite`。`router isis CORE` の下に `lsp-password keychain ISIS-L2 level 2`。`router isis CORE` の `interface GigabitEthernet0/0/0/1` と `interface GigabitEthernet0/0/0/2` の下に `hello-password keychain ISIS-L2`。"
+    solution:
+      en: |
+        configure
+         key chain ISIS-L2
+          key 1
+           key-string clear Bb0ne-2026
+           cryptographic-algorithm HMAC-MD5
+           accept-lifetime 00:00:00 january 01 2026 infinite
+           send-lifetime 00:00:00 january 01 2026 infinite
+         router isis CORE
+          lsp-password keychain ISIS-L2 level 2
+          interface GigabitEthernet0/0/0/1
+           hello-password keychain ISIS-L2
+          interface GigabitEthernet0/0/0/2
+           hello-password keychain ISIS-L2
+         commit
+        end
+        Four things had to be right, and IOS XR reported only one of them at commit time (`key-string password` with a plain
+        string). A key without an algorithm or without lifetimes commits but is not used, and neither is a key chain name
+        that does not exist: the hellos then fail with `Authentication Failed`. Hellos alone bring the adjacencies up, and
+        XR01, which checks no LSPs yet, takes in the backbone's routes; RT02 and RT03 still discard XR01's LSPs, so the
+        backbone has no route to area 49.0001 and RT01's traffic has no way back. `lsp-password` also covers CSNPs and
+        PSNPs. Without `level 2` it covers Level 1 too: RT01 still accepts XR01's LSPs, but XR01 rejects every new LSP from
+        RT01 and keeps the old copy, which is why the last check adds a prefix to RT01 for a moment. The cisco.com keychain
+        guide says that a key without a lifetime is rejected during configuration; on IOS XRd 26.1.1 it is committed and
+        not used. Either way `show key chain` is where to look. The key ID does not need to match the IOS side: the
+        HMAC-MD5 TLV carries no key ID.
+      ja: |
+        configure
+         key chain ISIS-L2
+          key 1
+           key-string clear Bb0ne-2026
+           cryptographic-algorithm HMAC-MD5
+           accept-lifetime 00:00:00 january 01 2026 infinite
+           send-lifetime 00:00:00 january 01 2026 infinite
+         router isis CORE
+          lsp-password keychain ISIS-L2 level 2
+          interface GigabitEthernet0/0/0/1
+           hello-password keychain ISIS-L2
+          interface GigabitEthernet0/0/0/2
+           hello-password keychain ISIS-L2
+         commit
+        end
+        正しくそろえるべきものが 4 つあり、IOS XR がコミットの時点で知らせたのはそのうち 1 つだけでした(`key-string
+        password` に平文を渡したとき)。アルゴリズムの無いキーや有効期間の無いキーはコミットできても使われず、存在しない
+        キー チェーン名も同じです。そのときハローは `Authentication Failed` になります。ハローだけ合わせると隣接は上がり、
+        まだ LSP を検査していない XR01 はバックボーンのルートを取り込みます。RT02 と RT03 は XR01 の LSP を捨て続けるので、
+        バックボーンにはエリア 49.0001 へのルートが無く、RT01 の通信は戻ってこられません。`lsp-password` は CSNP と PSNP
+        も認証します。`level 2` を付けないとレベル 1 にも効きます。RT01 は XR01 の LSP を受け入れ続けますが、XR01 は RT01 の
+        新しい LSP をすべて拒否して古いコピーを持ち続けます。最後の確認で RT01 に一時的にプレフィックスを足すのはこのためです。
+        cisco.com のキー チェーンのガイドは、有効期間の無いキーは設定時に拒否されると書いていますが、IOS XRd 26.1.1 では
+        コミットされ、使われないだけです。どちらにしても確かめる場所は `show key chain` です。キー ID は IOS 側とそろえる
+        必要がありません。HMAC-MD5 の TLV にはキー ID が入らないからです。
+
+  - id: m4t6
+    title: { en: "M4-6  A shared segment and its DIS", ja: "M4-6  共有セグメントと DIS" }
+    check: m4t6
+    read: [42-m4-isis-deeper#s2-1, 42-m4-isis-deeper#s2-2, 42-m4-isis-deeper#s2-3]
+    hints:
+      - en: "SVC-LAN is not like the other three links: three routers share it. Think about which kind of IS-IS circuit that requires, which level it carries, and that the work order of M4-5 applies here as well. Then find out which router is the DIS now, and why, before you decide how to take the role for good."
+        ja: "SVC-LAN は他の 3 本のリンクとは違い、3 台のルータが共有しています。それに必要な IS-IS の回線の種類、運ぶレベル、M4-5 の作業指示がここにも適用されることを考えてください。そのうえで、いま DIS がどのルータで、なぜそうなっているのかを調べてから、その役割を確実に取る方法を決めます。"
+      - en: "A LAN interface set to `point-to-point` rejects LAN hellos (`LAN IIH on P2P Interface`). `show isis interface GigabitEthernet0/0/0/3` shows `LAN ID` (the pseudonode, named after the DIS) and `Priority (Local/DIS)`. The DIS election is pre-emptive and a tie is broken by the MAC address, which changes when a router is replaced. Priority is set per level; so is the circuit type. Guide: Routing Configuration Guide, 'Implementing IS-IS', and the IS-IS command reference for `priority` and `circuit-type`."
+        ja: "`point-to-point` にした LAN のインターフェイスは LAN ハローを拒否します(`LAN IIH on P2P Interface`)。`show isis interface GigabitEthernet0/0/0/3` は `LAN ID`(DIS の名前を持つ擬似ノード)と `Priority (Local/DIS)` を表示します。DIS の選出はプリエンプティブで、同点は MAC アドレスで決まりますが、MAC アドレスはルータを交換すると変わります。優先度はレベルごとに設定します。サーキット タイプも同じです。ガイド: Routing Configuration Guide の「Implementing IS-IS」と、IS-IS コマンド リファレンスの `priority`・`circuit-type`。"
+      - en: "Under `router isis CORE` → `interface GigabitEthernet0/0/0/3`: `circuit-type level-2-only`, `priority 100`, `hello-password keychain ISIS-L2`, `address-family ipv4 unicast`, `address-family ipv6 unicast`. No `point-to-point`."
+        ja: "`router isis CORE` → `interface GigabitEthernet0/0/0/3` の下に `circuit-type level-2-only`、`priority 100`、`hello-password keychain ISIS-L2`、`address-family ipv4 unicast`、`address-family ipv6 unicast`。`point-to-point` は付けません。"
+    solution:
+      en: |
+        configure
+         router isis CORE
+          interface GigabitEthernet0/0/0/3
+           circuit-type level-2-only
+           priority 100
+           hello-password keychain ISIS-L2
+           address-family ipv4 unicast
+           address-family ipv6 unicast
+         commit
+        end
+        RT03 was the DIS with priority 80. Any priority from 81 to 127 makes XR01 the DIS at once: the election is
+        pre-emptive, RT03 purges its pseudonode LSP (RT03.01-00 with lifetime 0) and XR01 originates XR01.01-00. With 80,
+        the tie would be decided by the MAC addresses and could change when a router is replaced or the lab rebuilt.
+        `priority 100 level 2` is equally correct; with the circuit type set to Level 2 only, the plain form only matters
+        at Level 2. Without the circuit type, XR01 also sends Level 1 hellos on the LAN, which nobody answers. Without
+        `hello-password`, RT02 and RT03 discard XR01's hellos; the LSP side is already covered by `lsp-password level 2`.
+        `show isis interface brief` marks the Level 2 adjacency count with `*` where XR01 is the DIS. XR01 now reaches
+        RT03 across the LAN at cost 20, ahead of the path through RT02 (30).
+      ja: |
+        configure
+         router isis CORE
+          interface GigabitEthernet0/0/0/3
+           circuit-type level-2-only
+           priority 100
+           hello-password keychain ISIS-L2
+           address-family ipv4 unicast
+           address-family ipv6 unicast
+         commit
+        end
+        RT03 が優先度 80 で DIS でした。81〜127 のどの優先度でも XR01 はすぐに DIS になります。選出はプリエンプティブで、
+        RT03 は擬似ノード LSP をパージし(寿命 0 の RT03.01-00)、XR01 が XR01.01-00 を生成します。80 にすると同点は MAC
+        アドレスで決まり、ルータの交換やラボの作り直しで変わり得ます。`priority 100 level 2` も同じく正解です。サーキット
+        タイプがレベル 2 だけなので、レベルを付けない形もレベル 2 でしか意味を持ちません。サーキット タイプが無いと、XR01 は
+        LAN にレベル 1 のハローも送り、誰も応答しません。`hello-password` が無いと RT02 と RT03 は XR01 のハローを捨てます。
+        LSP の側は `lsp-password level 2` ですでに足りています。`show isis interface brief` は、XR01 が DIS になっている
+        セグメントでレベル 2 の隣接数に `*` を付けます。XR01 はこれで、RT02 経由(30)よりも先に、LAN を通ってコスト 20 で
+        RT03 に届きます。
+
+  - id: m4t7
+    title: { en: "M4-7  Fewer prefixes for the backbone", ja: "M4-7  バックボーンに出すプレフィックスを減らす" }
+    check: m4t7
+    read: [42-m4-isis-deeper#s3-1, 42-m4-isis-deeper#s3-2]
+    hints:
+      - en: "Only an L1/L2 router can hand the backbone a range instead of the prefixes inside it. Think about which level must receive the range, that IPv4 and IPv6 are summarized separately, and what must stay outside the range."
+        ja: "範囲の中のプレフィックスの代わりにその範囲をバックボーンへ渡せるのは、L1/L2 ルータだけです。範囲を受け取る必要があるのはどのレベルか、IPv4 と IPv6 は別々に要約すること、範囲の外に残すべきものは何か、を考えてください。"
+      - en: "`summary-prefix` goes under each address family of `router isis`. Its level keyword names the level that receives the summary. Check the result on RT02, and on XR01 with `show route ipv4 10.11.0.0/16`: a summary is installed as a discard route. Guide: Routing Configuration Guide, 'Implementing IS-IS', and the IS-IS command reference for `summary-prefix`."
+        ja: "`summary-prefix` は `router isis` の各アドレス ファミリの下に置きます。レベルの指定は、要約を受け取るレベルを表します。結果は RT02 で確かめ、XR01 では `show route ipv4 10.11.0.0/16` で確かめます。要約は破棄ルートとして登録されます。ガイド: Routing Configuration Guide の「Implementing IS-IS」と、IS-IS コマンド リファレンスの `summary-prefix`。"
+      - en: "Under `router isis CORE` → `address-family ipv4 unicast`: `summary-prefix 10.11.0.0/16 level 2`. Under `address-family ipv6 unicast`: `summary-prefix 2001:db8:1011::/48 level 2`."
+        ja: "`router isis CORE` → `address-family ipv4 unicast` の下に `summary-prefix 10.11.0.0/16 level 2`。`address-family ipv6 unicast` の下に `summary-prefix 2001:db8:1011::/48 level 2`。"
+    solution:
+      en: |
+        configure
+         router isis CORE
+          address-family ipv4 unicast
+           summary-prefix 10.11.0.0/16 level 2
+          address-family ipv6 unicast
+           summary-prefix 2001:db8:1011::/48 level 2
+         commit
+        end
+        Without a level the summary applies to both levels and gives the same result here, because no route inside the
+        ranges enters Level 1 from above. With `level 1` alone the backbone still receives the four /24 and /64 prefixes.
+        The summary carries the lowest metric of the prefixes inside it (XR01 advertises it at 20; RT02 sees 30), and
+        XR01 installs the range towards Null0 (`type manual summary`), so traffic to an unused part of it is dropped at
+        XR01. The summary is withdrawn when the last access LAN goes down. RT01's loopback is outside the range and keeps
+        its own route, which MPLS will need in M8. In its own Level 2 LSP, IOS XR shows the IPv6 summary as
+        `IPv6-External`; the IOS routers install it as an ordinary Level 2 route.
+      ja: |
+        configure
+         router isis CORE
+          address-family ipv4 unicast
+           summary-prefix 10.11.0.0/16 level 2
+          address-family ipv6 unicast
+           summary-prefix 2001:db8:1011::/48 level 2
+         commit
+        end
+        レベルを付けないと要約は両方のレベルに効きますが、ここでは結果は同じです。範囲の中のルートが上からレベル 1 に
+        入ってくることは無いからです。`level 1` だけにすると、バックボーンは 4 つの /24 と /64 を受け取り続けます。要約は
+        範囲の中のプレフィックスのうち最も小さいメトリックを持ち(XR01 は 20 で広告し、RT02 では 30)、XR01 は範囲を
+        Null0 向けに登録します(`type manual summary`)。範囲の中の使われていない部分へのトラフィックは XR01 で捨てられます。
+        最後のアクセス LAN が落ちると要約は取り下げられます。RT01 のループバックは範囲の外にあり、個別のルートを保ちます。
+        M8 の MPLS で必要になります。IOS XR は自分のレベル 2 の LSP の中で IPv6 の要約を `IPv6-External` と表示しますが、
+        IOS ルータはそれを普通のレベル 2 のルートとして登録します。
+
+  - id: m4t8
+    title: { en: "M4-8  Renumbering the area", ja: "M4-8  エリアの番号の付け替え" }
+    check: m4t8
+    read: [42-m4-isis-deeper#s4-2, 42-m4-isis-deeper#s4-1]
+    hints:
+      - en: "A router can belong to more than one area at a time, and a Level 1 adjacency needs only one area in common. The order of the steps matters, and so does how many commits you use: on IOS XR, the way a change is committed can restart adjacencies that the change itself would not need to touch."
+        ja: "ルータは同時に複数のエリアに属することができ、レベル 1 の隣接に必要な共通のエリアは 1 つだけです。手順の順番が大事で、何回のコミットに分けるかも大事です。IOS XR では、変更のコミットの仕方によって、変更そのものとは関係の無い隣接まで張り直されることがあります。"
+      - en: "Up to three `net` commands, all with the same system ID. `show isis` lists `Manual area address(es)` (XR01's own) and `Routing for area address(es)` (the whole Level 1 area). `show isis adjacency-log` keeps the last state changes of every adjacency, with no configuration needed; look at it after each commit. Replacing the NET in a single commit restarts every adjacency of XR01. Guide: Routing Configuration Guide, 'Implementing IS-IS', and the IS-IS command reference for `net` and `show isis adjacency-log`."
+        ja: "`net` コマンドは 3 つまでで、システム ID はすべて同じです。`show isis` は `Manual area address(es)`(XR01 自身のもの)と `Routing for area address(es)`(レベル 1 エリア全体のもの)を表示します。`show isis adjacency-log` は、設定なしですべての隣接の最近の状態変化を保持しています。コミットのたびに見てください。1 つのコミットで NET を置き換えると、XR01 のすべての隣接が張り直されます。ガイド: Routing Configuration Guide の「Implementing IS-IS」と、IS-IS コマンド リファレンスの `net`・`show isis adjacency-log`。"
+      - en: "First commit, under `router isis CORE`: `net 49.0010.0102.5500.0001.00`. Check `show isis` and `show isis adjacency-log`. Second commit: `no net 49.0001.0102.5500.0001.00`."
+        ja: "1 回目のコミットで、`router isis CORE` の下に `net 49.0010.0102.5500.0001.00`。`show isis` と `show isis adjacency-log` を確かめます。2 回目のコミットで `no net 49.0001.0102.5500.0001.00`。"
+    solution:
+      en: |
+        configure
+         router isis CORE
+          net 49.0010.0102.5500.0001.00
+         commit
+        end
+        configure
+         router isis CORE
+          no net 49.0001.0102.5500.0001.00
+         commit
+        end
+        Adding the second NET changes nothing for the neighbours: XR01 and RT01 already shared 49.0001, and now share
+        49.0010 as well. Removing the old NET in a later commit leaves 49.0010 in common, so the Level 1 adjacency stays
+        up, and the Level 2 adjacencies do not depend on areas at all. Doing both in one commit (`no net` the old one and
+        `net` the new one) gives the same final configuration, but IOS XR restarts every adjacency of XR01, Level 2 and
+        the LAN included, as the adjacency log shows with one `d -> i` per neighbour at the same moment. RT01 keeps 49.0001
+        until the end of the work, so `Routing for area address(es)` on XR01 still lists both areas. A NET with another
+        system ID, or a fourth area, fails the commit.
+      ja: |
+        configure
+         router isis CORE
+          net 49.0010.0102.5500.0001.00
+         commit
+        end
+        configure
+         router isis CORE
+          no net 49.0001.0102.5500.0001.00
+         commit
+        end
+        2 つ目の NET を足しても、ネイバーにとっては何も変わりません。XR01 と RT01 はすでに 49.0001 を共有しており、
+        これで 49.0010 も共有します。後のコミットで古い NET を外しても 49.0010 が共通に残るので、レベル 1 の隣接は上がった
+        ままです。レベル 2 の隣接はそもそもエリアに依存しません。両方を 1 つのコミットで行う(古いものを `no net` して
+        新しいものを `net` する)と、最終的な設定は同じですが、IOS XR は XR01 のすべての隣接を、レベル 2 も LAN も含めて
+        張り直します。隣接ログには、ネイバーごとの `d -> i` が同じ時刻に並びます。RT01 は作業の終わりまで 49.0001 を
+        保持するので、XR01 の `Routing for area address(es)` には両方のエリアが表示されたままです。システム ID の違う NET や、
+        4 つ目のエリアは、コミットが失敗します。

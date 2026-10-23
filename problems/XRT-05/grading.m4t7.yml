@@ -1,0 +1,35 @@
+# M4-7: RT01 のアクセス LAN をバックボーンへ要約 1 本ずつで出す(IPv4 10.11.0.0/16・IPv6 2001:db8:1011::/48)。
+# RT01 のループバックは個別のまま。level 1 だけの要約ではバックボーンに効かない(誤答の判別)。
+problem: XRT-05
+total_points: 100
+checks:
+  - name: "M4-7 RT02: one IPv4 route for the access LANs, no individual /24, RT01's loopback kept"
+    node: RT02
+    command: "show ip route isis"
+    raw:
+      - { regex: "i L2\\s+10\\.11\\.0\\.0/16 " }
+      - { not_regex: "10\\.11\\.\\d+\\.0/24" }
+      - { regex: "i L2\\s+10\\.255\\.0\\.11/32 " }
+    points: 35
+  - name: "M4-7 RT02: one IPv6 route for the access LANs, no individual /64, RT01's loopback kept"
+    node: RT02
+    command: "show ipv6 route isis"
+    raw:
+      - { regex: "I2\\s+2001:DB8:1011::/48 " }
+      - { not_regex: "2001:DB8:1011:[1-4]::/64" }
+      - { regex: "I2\\s+2001:DB8:255::11/128 " }
+    points: 35
+  - name: "M4-7 XR01: the IPv4 summary is installed as a discard route"
+    node: XR01
+    command: "show route ipv4 10.11.0.0/16"
+    raw:
+      - { regex: "type manual summary" }
+      - { regex: "via Null0" }
+    points: 15
+  - name: "M4-7 XR01: the IPv6 summary is installed as a discard route"
+    node: XR01
+    command: "show route ipv6 2001:db8:1011::/48"
+    raw:
+      - { regex: "type manual summary" }
+      - { regex: "via Null0" }
+    points: 15
