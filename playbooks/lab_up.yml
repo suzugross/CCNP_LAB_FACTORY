@@ -55,6 +55,12 @@
         state: "{{ lab_state }}"
         wait: true
       register: r
+      # ★撤去は「停止(待つ)→ 消去」を続けて行うが、停止の待ちがラボの状態の切り替わりより先に返ることがあり、
+      #   消去が「Can't wipe lab: … is not stopped, but in state STARTED」で落ちる(2026-10-24 XRT-05= XRd で発生。
+      #   数秒後には STOPPED になっていた)。撤去の時だけ、間を置いて取り直す(2 回目は STOPPED から消去に進む)。
+      retries: "{{ 6 if lab_state == 'absent' else 0 }}"
+      delay: 15
+      until: r is succeeded
     - ansible.builtin.debug: { var: r }
 
     # 撤去時は MGMT IP のリースを解放（他ラボが同時稼働できるように空きを返す）

@@ -134,9 +134,22 @@ case "$cmd" in
     [ -n "$prob" ] || usage
     keep=0; [ "${3:-}" = "--keep-workspace" ] && keep=1
     echo "== CMLラボを absent（VM実体を解放）: $prob =="
-    "$PY/ansible-playbook" "$REPO/playbooks/lab_up.yml" \
-      -e problem="$prob" -e lab_state=absent --vault-password-file <(vault) || true
-    # lab_up(absent) が途中で失敗しても MGMT リースは必ず返す（冪等・保険）
+    if ! "$PY/ansible-playbook" "$REPO/playbooks/lab_up.yml" \
+      -e problem="$prob" -e lab_state=absent --vault-password-file <(vault); then
+      # ★撤去に失敗したとき、CML にラボがまだ残っていれば止める(2026-10-24 XRT-05: 残ったラボの IP を台帳だけ返して
+      #   しまい、生成物も消えて teardown をやり直せなくなった)。リースと生成物を残しておけば、やり直せて IP の二重割り当ても起きない。
+      #   ラボが CML に無い(手で消した等)ときだけ、従来どおり先へ進んでリースを返す。
+      rc=0; "$PY/python3" "$REPO/topologies/cml_lab_exists.py" --repo "$REPO" --problem "$prob" || rc=$?
+      if [ "$rc" -eq 3 ]; then
+        echo "!! 生成物が無くラボの名前が分かりません。CML の画面でラボが残っていないか確かめてください(先へ進みます)。"
+      elif [ "$rc" -ne 1 ]; then
+        echo "!! CML のラボがまだ残っているか、確かめられませんでした。MGMT リースと生成物は残しました。"
+        echo "!! 少し待ってから scripts/lab.sh teardown $prob をやり直してください。"
+        exit 1
+      fi
+      if [ "$rc" -eq 1 ]; then echo "== CML にラボは残っていません(先へ進みます) =="; fi
+    fi
+    # ラボが CML から消えたら MGMT リースを返す（冪等）
     "$PY/python3" "$REPO/topologies/mgmt_alloc.py" release --repo "$REPO" --problem "$prob" || true
     # 複合ラボ(BL-061): clab 側も destroy(clab_topology 未定義なら即スキップ)
     "$PY/python3" "$REPO/topologies/clab_ops.py" destroy --repo "$REPO" --problem "$prob" || true
