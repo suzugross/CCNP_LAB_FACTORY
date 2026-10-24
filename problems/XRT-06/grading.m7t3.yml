@@ -1,0 +1,25 @@
+# M7-3(TS): set-overload-bit の消し忘れで RT01→RT02 が予備経由。通過を戻し、起動直後は BGP がそろうまで通過させない(on-startup wait-for-bgp)。
+# ★表示は「configured, clear」の次に「interarea prefixes suppressed, …」の行が挟まる(include で絞ると見えない)。
+# ★NSF(M7-5)を入れると on-startup は process restart では効かない(§19.6-13)= 起動時の挙動は採点しない(設定の表示で見る)。
+problem: XRT-06
+total_points: 100
+checks:
+  - name: 'M7-3 XR01: its LSP no longer carries the overload bit'
+    node: XR01
+    command: 'show isis database XR01.00-00'
+    raw:
+      - { regex: 'XR01\.00-00\s+\*[^\n]*\s0/0/0' }
+    points: 30
+  - name: 'M7-3 RT01: traffic to RT02''s services goes through XR01 again'
+    node: RT01
+    command: 'show ip route 10.20.0.0'
+    raw:
+      - { regex: '10\.0\.1\.1, from 10\.255\.0\.12[^\n]*via Port-channel1' }
+      - { not_regex: 'via GigabitEthernet3' }
+    points: 40
+  - name: 'M7-3 XR01: after a restart, transit is held off until BGP has converged'
+    node: XR01
+    command: 'show isis protocol'
+    raw:
+      - { regex: 'Overload Bit[^\n]*: configured, clear\s*\n(?:[^\n]*\n){0,2}\s*on startup until BGP converges' }
+    points: 30

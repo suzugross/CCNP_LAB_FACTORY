@@ -1,0 +1,43 @@
+! XRT-06 RT01(Cat8000v 17.15・据付・変更しない)。XR01 との束(LACP active)。★lacp min-bundle は入れない(入れると RT01 が残りのメンバも止め、XR の最低本数の採点が素通りになる)・RT02 への予備経路(メトリック 1000)。
+interface Loopback0
+ ip address 10.255.0.11 255.255.255.255
+ ip router isis CORE
+!
+interface Loopback1
+ description USERS
+ ip address 10.10.0.1 255.255.0.0
+ ip router isis CORE
+!
+interface Port-channel1
+ description BUNDLE to XR01
+ ip address 10.0.1.11 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ no shutdown
+!
+interface {{ links[0] }}
+ description BUNDLE member to XR01
+ no ip address
+ channel-group 1 mode active
+ no shutdown
+!
+interface {{ links[1] }}
+ description BUNDLE member to XR01
+ no ip address
+ channel-group 1 mode active
+ no shutdown
+!
+interface {{ links[2] }}
+ description BACKUP to RT02
+ ip address 10.0.12.11 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 1000
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0011.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+!

@@ -1,0 +1,46 @@
+# M7-1(TS): RT01 との束= 仕込み 2 段(メンバの bundle id 1 がモード省略= 静的/束の mtu 1500= IP は 1486)。
+# 症状(PoC §19.6-14)= 静的のままだと XR は束 Up・RT01 はメンバを susp・ping 0%。モードを直すと IS-IS が RT01 で Init(XR が「PDU larger than our MTU」)。
+# hello-padding を切って隣接だけ上げる逃げ方は、1500 バイトの DF 付き ping で落ちる(XR01 から。RT01 からは送信元を Port-channel1 にして束に限る)。
+# ★束が壊れていても、XR01 のアドレスには予備経由(RT02 → 主経路)で届く(OL は XR01 自身のプレフィックスを妨げない)= ping は束に限って打つ。
+problem: XRT-06
+total_points: 100
+checks:
+  - name: 'M7-1 XR01: Bundle-Ether1 is up with LACP and both members active'
+    node: XR01
+    command: 'show bundle Bundle-Ether1'
+    raw:
+      - { regex: 'Status:\s+Up' }
+      - { regex: 'LACP:\s+Operational' }
+      - { regex: 'Gi0/0/0/0\s+Local\s+Active' }
+      - { regex: 'Gi0/0/0/1\s+Local\s+Active' }
+    points: 20
+  - name: 'M7-1 RT01: Port-channel1 is up with both members bundled'
+    node: RT01
+    command: 'show etherchannel summary'
+    raw:
+      - { regex: 'Po1\(RU\)\s+LACP\s+Gi1\(bndl\)\s+Gi2\(bndl\)' }
+    points: 15
+  - name: 'M7-1 XR01: IS-IS adjacency with RT01 on Bundle-Ether1 is up'
+    node: XR01
+    command: 'show isis adjacency'
+    raw:
+      - { regex: '(?:RT01|0100\.0000\.0011)\s+BE1\s+\*PtoP\*\s+Up' }
+    points: 20
+  - name: 'M7-1 RT01: reaches XR01''s loopback over the bundle'
+    node: RT01
+    command: 'show ip route 10.255.0.1'
+    raw:
+      - { regex: '\* 10\.0\.1\.1, from 10\.255\.0\.1,[^\n]*via Port-channel1' }
+    points: 10
+  - name: 'M7-1 RT01: 1500-byte IP packets to XR01 cross the bundle without fragmentation'
+    node: RT01
+    command: 'ping 10.0.1.1 source Port-channel1 size 1500 df-bit'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 15
+  - name: 'M7-1 XR01: 1500-byte IP packets to RT01 cross the bundle without fragmentation'
+    node: XR01
+    command: 'ping 10.0.1.11 size 1500 df-bit'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 20

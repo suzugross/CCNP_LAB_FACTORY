@@ -1,0 +1,273 @@
+
+######## 13:35:55 a-1: XRv9000 26.1.1 の素の状態(資源・IF)
+show version
+Fri Oct 23 13:35:57.861 UTC
+Cisco IOS XR Software, Version 26.1.1
+Copyright (c) 2013-2026 by Cisco Systems, Inc.
+
+Build Information:
+ Built By     : swtools
+ Built On     : Wed Feb 25 21:16:23 PST 2026
+ Built Host   : iox-ucs-1001
+ Workspace    : /auto/srcarchive12/prod/26.1.1/xrv9k/ws
+ Version      : 26.1.1
+ Location     : /opt/cisco/XR/packages/
+ Label        : 26.1.1
+
+cisco IOS-XRv 9000 () processor
+System uptime is 4 minutes
+
+RP/0/RP0/CPU0:XR01#
+show platform
+Fri Oct 23 13:35:58.266 UTC
+Node              Type                       State             Config state
+--------------------------------------------------------------------------------
+0/0/CPU0          R-IOSXRV9000-LC-C          IOS XR RUN        NSHUT
+0/RP0/CPU0        R-IOSXRV9000-RP-C(Active)  IOS XR RUN        NSHUT
+RP/0/RP0/CPU0:XR01#
+show memory summary
+Fri Oct 23 13:35:58.665 UTC
+
+node:      node0_RP0_CPU0
+------------------------------------------------------------------
+
+ Physical Memory: 6144M total (3184M available)
+ Application Memory : 6144M (3184M available)
+ Image: 4M (bootram: 0M)
+ Reserved: 0M, IOMem: 0M, flashfsys: 0M
+ Total shared window: 251.619M
+ Shared memory: 9828M total (9071M available)
+
+RP/0/RP0/CPU0:XR01#
+show processes cpu | include "CPU utilization"
+Fri Oct 23 13:35:59.273 UTC
+CPU utilization for one minute: 1%; five minutes: 0%; fifteen minutes: 0%
+RP/0/RP0/CPU0:XR01#
+show ipv4 interface brief
+Fri Oct 23 13:35:59.769 UTC
+
+Interface                      IP-Address      Status          Protocol Vrf-Name
+Loopback0                      10.255.0.1      Up              Up       default 
+MgmtEth0/RP0/CPU0/0            10.1.10.15      Up              Up       MGMT    
+GigabitEthernet0/0/0/0         unassigned      Up              Up       default 
+GigabitEthernet0/0/0/1         unassigned      Up              Up       default 
+GigabitEthernet0/0/0/2         10.0.2.1        Up              Up       default 
+RP/0/RP0/CPU0:XR01#
+show interfaces summary
+Fri Oct 23 13:36:00.170 UTC
+Interface Type          Total    UP       Down     Admin Down
+--------------          -----    --       ----     ----------
+ALL TYPES               6        6        0        0       
+--------------         
+IFT_GETHERNET           3        3        0        0       
+IFT_LOOPBACK            1        1        0        0       
+IFT_ETHERNET            1        1        0        0       
+IFT_NULL                1        1        0        0       
+
+
+RP/0/RP0/CPU0:XR01#
+show running-config
+Fri Oct 23 13:36:00.571 UTC
+!! Building configuration...
+!! IOS XR Configuration 26.1.1
+!! Last configuration change at Fri Oct 23 13:35:19 2026 by ZTP
+!
+hostname XR01
+username SUZUKI
+ group root-lr
+ group cisco-support
+ secret 10 $6$kkeRm1gObwq7Dm1.$ltXzHauyYCB1mNrGCm/T8imJaaYvzR0qIajDieoG.8cOIPQ0BrtAIp6l6LdLcnUKzg7rueZWZ4dC8N/0WtS.D1
+!
+vrf MGMT
+ address-family ipv4 unicast
+ !
+!
+line console
+ exec-timeout 0 0
+!
+line default
+ exec-timeout 0 0
+!
+vty-pool default 0 30
+alias exec labid CCNP-LAB-f5bb0988
+interface Loopback0
+ ipv4 address 10.255.0.1 255.255.255.255
+!
+interface MgmtEth0/RP0/CPU0/0
+ description === MGMT (Ansible) ===
+ vrf MGMT
+ ipv4 address 10.1.10.15 255.255.255.192
+!
+interface GigabitEthernet0/0/0/0
+ description BUNDLE member to RT01
+!
+interface GigabitEthernet0/0/0/1
+ description BUNDLE member to RT01
+!
+interface GigabitEthernet0/0/0/2
+ description PRIMARY to RT02 via SW01
+ ipv4 address 10.0.2.1 255.255.255.0
+!
+ssh server rate-limit 600
+ssh server v2
+ssh server vrf MGMT
+end
+
+RP/0/RP0/CPU0:XR01#
+
+######## 13:36:00 a-2: IOL 側(束は相手待ち・IS-IS は RT01-RT02 の予備経路だけ)
+show etherchannel summary
+Flags:  D - down        P/bndl - bundled in port-channel
+        I - stand-alone s/susp - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1	Po1(RD)		LACP	 Gi1(susp) Gi2(susp)
+
+RU - L3 port-channel UP State
+SU - L2 port-channel UP state
+P/bndl -  Bundled
+S/susp  - Suspended
+
+RT01#
+show lacp neighbor
+RT01#
+show clns neighbors
+Tag CORE:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+RT02            Gi3           aabb.cc00.3b20      Up     20        L2   IS-IS
+RT01#
+show ip route isis
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 8 subnets, 3 masks
+i L2     10.0.2.0/24 [115/1010] via 10.0.12.12, 00:07:55, GigabitEthernet3
+i L2     10.20.0.0/16 [115/1010] via 10.0.12.12, 00:07:55, GigabitEthernet3
+i L2     10.255.0.12/32 [115/1010] via 10.0.12.12, 00:07:55, GigabitEthernet3
+RT01#
+show interfaces Port-channel1 | include MTU|line protocol
+Port-channel1 is down, line protocol is down 
+  MTU 1500 bytes, BW 1000000 Kbit/sec, DLY 10 usec, 
+RT01#
+show isis protocol
+
+Tag CORE:
+IS-IS Router: CORE (0x10000)
+  System Id: 0100.0000.0011.00  IS-Type: level-2  lsp-mtu: 1492
+  Manual area address(es): 
+	49.0001
+  Routing for area address(es): 
+	49.0001
+  Interfaces supported by IS-IS:
+	GigabitEthernet3 - IP
+	Port-channel1 - IP
+	Loopback1 - IP
+	Loopback0 - IP
+  Redistribute(CLNS):
+    static (on by default)
+  Distance for L2 CLNS routes: 110
+  RRR level: none
+  Generate narrow metrics: none
+  Accept narrow metrics:   none
+  Generate wide metrics:   level-1-2
+  Accept wide metrics:     level-1-2
+  Parallel flooding:       suppressed
+  LSP fast flooding:       disabled
+  Adjacency stagger:       disabled
+  IP/IPv6 Redistribution Limit: 10000(Default) Threshold: 75%  
+    L2 Redistributed routes: 0
+RT01#
+show running-config | section router isis
+ ip router isis CORE
+ ip router isis CORE
+ ip router isis CORE
+ ip router isis CORE
+router isis CORE
+ net 49.0001.0100.0000.0011.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+RT01#
+show clns neighbors
+
+Tag CORE:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+RT01            Et0/2         5254.005f.2197      Up     23        L2   IS-IS
+RT02#
+show ip route isis
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 9 subnets, 3 masks
+i L2     10.10.0.0/16 [115/1010] via 10.0.12.11, 00:08:00, Ethernet0/2
+i L2     10.255.0.11/32 [115/1010] via 10.0.12.11, 00:08:00, Ethernet0/2
+RT02#
+show isis protocol
+
+Tag CORE:
+IS-IS Router: CORE (0x10000)
+  System Id: 0100.0000.0012.00  IS-Type: level-2  lsp-mtu: 1492
+  Manual area address(es): 
+	49.0001
+  Routing for area address(es): 
+	49.0001
+  Interfaces supported by IS-IS:
+	Ethernet0/2 - IP
+	Ethernet0/0 - IP
+	Loopback1 - IP
+	Loopback0 - IP
+  Redistribute(CLNS):
+    static (on by default)
+  Distance for L2 CLNS routes: 110
+  RRR level: none
+  Generate narrow metrics: none
+  Accept narrow metrics:   none
+  Generate wide metrics:   level-1-2
+  Accept wide metrics:     level-1-2
+  Parallel flooding:       suppressed
+  LSP fast flooding:       disabled
+  Adjacency stagger:       disabled
+  IP/IPv6 Redistribution Limit: 10000(Default) Threshold: 75%  
+    L2 Redistributed routes: 0
+  Maintenance Mode ID:     131379530614016
+  Maintenance Mode:        disabled
+  Maintenance Mode Timer:  stopped (0)
+  Graceful Reload state:   GR_NONE
+RT02#

@@ -28,10 +28,27 @@
         --wait-tacacs NODE … --post の後、NODE(IOS XR)の `show tacacs` から status=down が消えるまで待つ(最大 120 秒)。
         ★XR は応答しなかった TACACS+ サーバを保留(on-hold・status=down)にし、サーバが戻っても約 25 秒は使わない
         (24.3.1 実測)。待たないと、続くチェックのログインがローカルに落ちて誤って失敗する。
+        --post-settle N … 後段(--post-cli / --post / リンクの復旧)の後に N 秒待つ。採点で故障を起こしたチェックの後、
+        隣接や束が戻るのを待ってから次のチェックへ進ませる(XRT-06 M7)。
+        --fail-link A:B … CML のリンク A-B にリンク条件 loss 100 を入れ、終わったら必ず外す(両端のポートは up のまま
+        パケットだけ消える= 黙った故障)。ping-loss では --fail-at 秒後に入れ、それ以外の方式では前段で入れる。
+
+  login_probe.py <ID> ping-loss <FROM> <DST> <SRC> [--count N] [--fail-link A:B --fail-at S]
+      FROM(IOS)で `show ip route DST` を出してから `ping DST source SRC repeat N timeout 1` を流し、途中で故障を入れる。
+      落ちた ping は 1 秒待つので、連続した欠落の数 ≒ 止まった秒数。`== FAULT DURING PING`(ping の途中で故障が入った)・
+      `== PING SENT n LOST m`・`== LONGEST GAP g` を出す(XRT-06 M7-4= BFD で 1 秒以内に切り替わるか)。
+  login_probe.py <ID> log-delta <NODE[,NODE…]> '<regex>'
+      前段(--pre-cli など)より前に各 NODE の `show logging` から regex に合う行を控え、前段と --settle の後に
+      もう一度取って、新しく出た行を数える。`== NEW MATCHES <NODE>: n`、全部 0 なら `== NO NEW MATCHES`
+      (XRT-06 M7-5= XR01 で IS-IS を再起動しても相手に ADJCHANGE が出ないか)。
+  login_probe.py <ID> watch <NODE> '<command>' [--samples N --interval S]
+      先に NODE へログインしておき、それから前段(--pre-cli)を流して、すぐに command を N 回(S 秒おき)取る。
+      `== SAMPLE i at +t s` に続けて出力を出す(XRT-06 M7-5= BGP を再起動した直後に相手が経路を保持しているか)。
 """
 import os
 import re
 import sys
+import threading
 import time
 
 import paramiko
@@ -214,6 +231,62 @@ def do_xr_adj_since(pid, node, pattern, user, pw):
         print("== ADJ STABLE")
 
 
+def cml_link(pid, a, b, loss):
+    """CML のリンク a-b にリンク条件(パケットの廃棄率 loss %)を入れる。loss=None で外す。"""
+    import warnings
+    warnings.filterwarnings("ignore")
+    from virl2_client import ClientLibrary
+    title = yaml.safe_load(open(f"{REPO}/topologies/_generated/{pid}/lab.yaml"))["lab"]["title"]
+    cfg = yaml.safe_load(open(f"{REPO}/group_vars/all/local.yml"))
+    cl = ClientLibrary(f"https://{cfg['cml_host']}", cfg["cml_username"], cfg["cml_password"], ssl_verify=False)
+    lab = next(lb for lb in cl.all_labs(show_all=True) if lb.title == title)
+    link = next(lk for lk in lab.links() if {lk.node_a.label, lk.node_b.label} == {a, b})
+    if loss is None:
+        link.remove_condition()
+    else:
+        link.set_condition(loss=float(loss))
+    print(f"== LINK {a}-{b} {'loss ' + str(loss) if loss is not None else 'clear'}", flush=True)
+
+
+def do_ping_loss(pid, frm, dst, src, count, fail_link, fail_at, user, pw):
+    c = connect(mgmt_ip(pid, frm), user, pw)
+    sh = Shell(c)
+    print(sh.send(f"show ip route {dst}", timeout=30), flush=True)
+    t0, mark = time.time(), {}
+    if fail_link:
+        def inject():
+            time.sleep(fail_at)
+            try:
+                cml_link(pid, fail_link[0], fail_link[1], 100)
+                mark["t"] = time.time() - t0
+            except Exception as e:  # 失敗も出力に残す(採点はそのチェックが落ちるだけ)
+                print(f"== LINK FAILED: {type(e).__name__}: {e}", flush=True)
+        th = threading.Thread(target=inject, daemon=True)
+        th.start()
+    sh.sh.send(f"ping {dst} source {src} repeat {count} timeout 1\n")
+    out = sh.read(timeout=900)
+    t_end = time.time() - t0
+    c.close()
+    body = "".join(ln.strip() for ln in out.splitlines() if re.fullmatch(r"[!.UQMA&?]+", ln.strip() or "x"))
+    gaps = [len(m.group(0)) for m in re.finditer(r"[^!]+", body)]
+    rate = next((ln for ln in out.splitlines() if "Success rate" in ln), "(no summary)")
+    print(rate)
+    if "t" in mark:
+        print(f"== FAULT APPLIED at +{mark['t']:.1f}s, ping ended at +{t_end:.1f}s")
+        if mark["t"] < t_end:
+            print("== FAULT DURING PING")
+    print(f"== PING SENT {len(body)} LOST {len(body) - body.count('!')} GAPS {gaps}")
+    print(f"== LONGEST GAP {max(gaps, default=0)}")
+
+
+def log_lines(pid, node, pattern, user, pw):
+    c = connect(mgmt_ip(pid, node), user, pw)
+    sh = Shell(c)
+    out = sh.send("show logging", timeout=60)
+    c.close()
+    return [ln.strip() for ln in out.splitlines() if re.search(pattern, ln)]
+
+
 def main():
     a = sys.argv[1:]
 
@@ -236,6 +309,12 @@ def main():
     while "--post" in a:
         post.append(opt("--post"))
     settle = int(opt("--settle", "0"))
+    post_settle = int(opt("--post-settle", "0"))
+    fail_link = opt("--fail-link")
+    fail_link = fail_link.split(":") if fail_link else None
+    fail_at = float(opt("--fail-at", "3"))
+    count = int(opt("--count", "15000"))
+    samples, interval = int(opt("--samples", "6")), float(opt("--interval", "1"))
     user, pw, source = opt("--user"), opt("--pass"), opt("--source")
     wait_node = opt("--wait-tacacs")
     lines = []
@@ -244,14 +323,47 @@ def main():
         lines = a[i + 1:]
         a = a[:i]
     pid, mode = a[0], a[1]
-    try:
+
+    def front():
         for s in pre:
             run_linux(pid, s, lab_user, lab_pw)
         for s in pre_cli:
             run_cli(pid, s, lab_user, lab_pw)
+        if fail_link and mode != "ping-loss":
+            cml_link(pid, fail_link[0], fail_link[1], 100)
         if settle:
             time.sleep(settle)
-        if mode == "ssh":
+    try:
+        if mode == "log-delta":
+            nodes, pattern = a[2].split(","), a[3]
+            base = {n: set(log_lines(pid, n, pattern, lab_user, lab_pw)) for n in nodes}
+            front()
+            total = 0
+            for n in nodes:
+                new = [ln for ln in log_lines(pid, n, pattern, lab_user, lab_pw) if ln not in base[n]]
+                for ln in new:
+                    print(f"   {n}: {ln}")
+                print(f"== NEW MATCHES {n}: {len(new)}")
+                total += len(new)
+            if not total:
+                print("== NO NEW MATCHES")
+            return
+        if mode == "watch":
+            c = connect(mgmt_ip(pid, a[2]), user or lab_user, pw or lab_pw)
+            sh = Shell(c)
+            front()
+            t0 = time.time()
+            for i in range(samples):
+                out = sh.send(a[3], timeout=30)
+                print(f"== SAMPLE {i + 1} at +{time.time() - t0:.1f}s")
+                print(out, flush=True)
+                time.sleep(interval)
+            c.close()
+            return
+        front()
+        if mode == "ping-loss":
+            do_ping_loss(pid, a[2], a[3], a[4], count, fail_link, fail_at, user or lab_user, pw or lab_pw)
+        elif mode == "ssh":
             do_ssh(pid, a[2], user or lab_user, pw or lab_pw, lines)
         elif mode == "telnet":
             do_telnet(pid, a[2], a[3], source, user, pw, lab_user, lab_pw)
@@ -264,8 +376,15 @@ def main():
             run_cli(pid, s, lab_user, lab_pw)
         for s in post:
             run_linux(pid, s, lab_user, lab_pw)
+        if fail_link:
+            try:
+                cml_link(pid, fail_link[0], fail_link[1], None)
+            except Exception as e:
+                print(f"== LINK CLEAR FAILED: {type(e).__name__}: {e}")
         if wait_node:
             wait_tacacs(pid, wait_node, lab_user, lab_pw)
+        if post_settle:
+            time.sleep(post_settle)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,242 @@
+# XRT-06 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn XRT-06 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# ここに書いた挙動は IOS XRv 9000 26.1.1(+Cat8000v 17.15・IOL 17.15)の実機で確認した(設計= problems/_drafts/XR-TRACK.design.md §19)。
+# 読み物(BL-252)= Reading タブに出す本(reading/<key>/)。各課題の read: はその本の「ページ#節」(節= data-sec)。
+reading: xr
+steps:
+  - id: m7t1
+    title: { en: "M7-1  A bundle that shows up and carries nothing", ja: "M7-1  アップと表示されて何も運ばないバンドル" }
+    check: m7t1
+    read: [70-m7-high-availability#s1-1, 70-m7-high-availability#s1-3]
+    hints:
+      - en: "Compare what the two ends think of the bundle: XR01 and RT01 disagree about whether its members are in use, and about how large a packet the link carries. There are two separate faults, and the second one shows only after the first is fixed. RT01 is right in both cases."
+        ja: "バンドルについて両端がどう考えているかを比べてください。XR01 と RT01 は、メンバーが使用中かどうかと、リンクが運べるパケットの大きさについて、意見が食い違っています。故障は別々に 2 つあり、2 つ目は 1 つ目を直した後にしか見えません。どちらの場合も RT01 が正しいとします。"
+      - en: "`show bundle Bundle-Ether1` on XR01 shows whether LACP is operational; `show etherchannel summary` on RT01 shows `susp` for members that have no LACP partner. Look at how the members were joined to the bundle in `show running-config`: a `bundle id` without a mode has a default. Then compare `show ipv4 interface Bundle-Ether1 | include MTU` with RT01's MTU, and look at `Last PDU Rejected` in `show isis interface Bundle-Ether1`. Guides: Interface and Hardware Component Configuration Guide, 'Configuring Link Bundling'; the technical note 'MTU Behavior on Cisco IOS XR and Cisco IOS Routers'."
+        ja: "XR01 の `show bundle Bundle-Ether1` で、LACP が動作しているかが分かります。RT01 の `show etherchannel summary` は、LACP の相手がいないメンバーに `susp` を表示します。`show running-config` で、メンバーがどのようにバンドルに参加させられているかを見てください。モードの無い `bundle id` には既定値があります。そのうえで、`show ipv4 interface Bundle-Ether1 | include MTU` と RT01 の MTU を比べ、`show isis interface Bundle-Ether1` の `Last PDU Rejected` を見てください。ガイド: Interface and Hardware Component Configuration Guide の「Configuring Link Bundling」、技術ノート「MTU Behavior on Cisco IOS XR and Cisco IOS Routers」。"
+      - en: "Under `interface GigabitEthernet0/0/0/0` and `interface GigabitEthernet0/0/0/1`: `bundle id 1 mode active`. Under `interface Bundle-Ether1`: `no mtu` (the default, 1514, leaves 1500 for IP)."
+        ja: "`interface GigabitEthernet0/0/0/0` と `interface GigabitEthernet0/0/0/1` の下に `bundle id 1 mode active`。`interface Bundle-Ether1` の下に `no mtu`(既定の 1514 で、IP には 1500 が残ります)。"
+    solution:
+      en: |
+        configure
+         interface GigabitEthernet0/0/0/0
+          bundle id 1 mode active
+         interface GigabitEthernet0/0/0/1
+          bundle id 1 mode active
+         interface Bundle-Ether1
+          no mtu
+         commit
+        end
+        CHG-0917 joined the members with `bundle id 1` and no mode, which is `mode on`: static, no LACP. XR01 put both
+        members into use as soon as the ports were up and showed the bundle as up, while RT01, which runs LACP, waited for
+        LACPDUs and kept its own members suspended. `mode passive` works as well here, because RT01 is active; two passive
+        ends would never start. The change also set `mtu 1500` on the bundle to match RT01, but the IOS XR MTU includes the
+        14-byte Ethernet header, so only 1486 bytes were left for IP. IS-IS found it: RT01's hellos, padded to the full
+        1500 bytes of its MTU (1496 octets of IS-IS), were rejected with `PDU larger than our MTU`, and RT01 kept XR01 in
+        Init. `mtu 1514` is the same as `no mtu`. Turning off XR01's own hello padding changes nothing: the hellos that
+        XR01 rejects are RT01's, and the mismatch would remain for every packet larger than 1486 bytes.
+      ja: |
+        configure
+         interface GigabitEthernet0/0/0/0
+          bundle id 1 mode active
+         interface GigabitEthernet0/0/0/1
+          bundle id 1 mode active
+         interface Bundle-Ether1
+          no mtu
+         commit
+        end
+        CHG-0917 はメンバーをモードの無い `bundle id 1` で参加させていました。これは `mode on`、つまり LACP を使わない静的な
+        メンバーです。XR01 はポートがアップになるとすぐ両方のメンバーを使い始めてバンドルをアップと表示し、LACP を動作させて
+        いる RT01 は LACPDU を待ち続けて自分のメンバーを suspended のままにしていました。RT01 が active なので、ここでは
+        `mode passive` でも動作します。両端が passive では始まりません。変更ではさらに、RT01 に合わせるつもりでバンドルに
+        `mtu 1500` を設定していましたが、IOS XR の MTU は 14 バイトの Ethernet ヘッダを含むので、IP に残るのは 1486 バイト
+        でした。IS-IS がそれを見つけました。RT01 の MTU の 1500 バイトいっぱい(IS-IS で 1496 オクテット)までパディングされた
+        RT01 のハローは `PDU larger than our MTU` で拒否され、RT01 は XR01 を Init のままにしていました。`mtu 1514` は `no mtu`
+        と同じです。XR01 自身のハローのパディングを切っても何も変わりません。XR01 が拒否しているのは RT01 のハローで、
+        1486 バイトを超えるすべてのパケットについて食い違いが残ります。
+
+  - id: m7t2
+    title: { en: "M7-2  Rules for the bundle", ja: "M7-2  バンドルのルール" }
+    check: m7t2
+    read: [70-m7-high-availability#s1-2]
+    hints:
+      - en: "Two separate settings. One decides how many members the bundle needs to stay up. The other decides how quickly a member is declared dead when nothing tells XR01 so except the missing protocol packets of its partner. Think about who sends those packets, and at what rate, and who decides that rate."
+        ja: "別々の設定が 2 つあります。1 つはバンドルがアップを保つのに必要なメンバーの数を決めます。もう 1 つは、相手のプロトコル パケットが届かなくなったこと以外に XR01 に知らせるものが無いとき、メンバーをどれだけ早く死んだとみなすかを決めます。そのパケットを誰が、どの間隔で送るのか、その間隔を誰が決めるのかを考えてください。"
+      - en: "When a member's port stays up, only LACP can tell that the member is dead: the member leaves after three missing LACPDUs, 90 seconds at the default (slow) rate. The rate at which RT01 sends is requested by XR01, per member. `show lacp Bundle-Ether1` shows the period and, in the actor state, `F` when fast LACPDUs are requested. `show bundle Bundle-Ether1` shows the minimum. Guide: Interface and Hardware Component Configuration Guide, 'Configuring Link Bundling', and the command reference for `lacp period short` and `bundle minimum-active links`."
+        ja: "メンバーのポートがアップのままなら、メンバーが死んだことを伝えられるのは LACP だけです。LACPDU が 3 回届かないとメンバーは外れ、既定(slow)の間隔では 90 秒かかります。RT01 が送る間隔は、XR01 がメンバーごとに要求します。`show lacp Bundle-Ether1` は周期と、fast の LACPDU を要求しているときのアクターの状態の `F` を表示します。`show bundle Bundle-Ether1` は最低本数を表示します。ガイド: Interface and Hardware Component Configuration Guide の「Configuring Link Bundling」と、コマンド リファレンスの `lacp period short`・`bundle minimum-active links`。"
+      - en: "Under `interface Bundle-Ether1`: `bundle minimum-active links 2`. Under `interface GigabitEthernet0/0/0/0` and `interface GigabitEthernet0/0/0/1`: `lacp period short`."
+        ja: "`interface Bundle-Ether1` の下に `bundle minimum-active links 2`。`interface GigabitEthernet0/0/0/0` と `interface GigabitEthernet0/0/0/1` の下に `lacp period short`。"
+    solution:
+      en: |
+        configure
+         interface Bundle-Ether1
+          bundle minimum-active links 2
+         interface GigabitEthernet0/0/0/0
+          lacp period short
+         interface GigabitEthernet0/0/0/1
+          lacp period short
+         commit
+        end
+        When the Check shuts RT01 GigabitEthernet2, XR01's port stays up: in the lab, as behind a transport network, the
+        failure is not visible as a link-down. XR01 can only stop receiving LACPDUs. At the slow rate (one every 30
+        seconds) the member left the bundle after 72 seconds in the lab; with `lacp period short`, XR01 asks RT01 for one
+        LACPDU per second and drops the member after three missing ones. The minimum of two members then takes the whole
+        bundle down, the remaining member goes to standby, and IS-IS moves the traffic to the backup path. Without the
+        minimum, the bundle would stay up on one member. RT01 has no minimum of its own; in a real network both ends
+        should agree.
+      ja: |
+        configure
+         interface Bundle-Ether1
+          bundle minimum-active links 2
+         interface GigabitEthernet0/0/0/0
+          lacp period short
+         interface GigabitEthernet0/0/0/1
+          lacp period short
+         commit
+        end
+        Check が RT01 の GigabitEthernet2 をシャットダウンしても、XR01 のポートはアップのままです。ラボでも、伝送網を挟んだ
+        場合と同じく、障害はリンク ダウンとしては見えません。XR01 にできるのは、LACPDU が届かなくなったことに気づくことだけ
+        です。slow の間隔(30 秒に 1 回)では、ラボでメンバーが外れるまで 72 秒かかりました。`lacp period short` を入れると、
+        XR01 は RT01 に毎秒 1 回の LACPDU を要求し、3 回届かなければメンバーを外します。そのうえで最低 2 本の条件がバンドル
+        全体をダウンさせ、残りのメンバーはスタンバイになり、IS-IS がトラフィックをバックアップ パスへ移します。最低本数が
+        無ければ、バンドルは 1 本のメンバーでアップを続けます。RT01 には最低本数を設定していません。実際のネットワークでは
+        両端をそろえるべきです。
+
+  - id: m7t3
+    title: { en: "M7-3  A router that nobody sends traffic through", ja: "M7-3  誰もトラフィックを通さないルータ" }
+    check: m7t3
+    read: [70-m7-high-availability#s3-1, 70-m7-high-availability#s3-2]
+    hints:
+      - en: "XR01's adjacencies are up and its own addresses are reachable, yet the other routers route around it. Something in the information that XR01 floods tells them not to use it for transit. Find that, and find out what the maintenance meant it to do; the same setting has a form that does only that."
+        ja: "XR01 の隣接はアップで、XR01 自身のアドレスにも到達できるのに、他のルータは XR01 を避けて経路を選んでいます。XR01 がフラッディングする情報の中の何かが、XR01 を通過に使うなと伝えています。それを見つけ、メンテナンスが本来それに何をさせたかったのかを考えてください。同じ設定に、それだけを行う形があります。"
+      - en: "`show isis database` shows three flags for each LSP in the `ATT/P/OL` column. Routers do not use a router whose LSP has the overload bit for transit, but still reach the prefixes that it advertises itself. `show isis protocol` shows how the overload bit is configured and whether it is set now. The overload bit can be set permanently, for a time after start-up, or until BGP has converged after start-up. Guide: Routing Configuration Guide, 'Implementing IS-IS', and the IS-IS command reference for `set-overload-bit`."
+        ja: "`show isis database` は、各 LSP の 3 つのフラグを `ATT/P/OL` 列に表示します。ルータは、LSP にオーバーロード ビットが立っているルータを通過には使いませんが、そのルータ自身がアドバタイズするプレフィックスには到達し続けます。`show isis protocol` は、オーバーロード ビットがどう設定されていて、いま立っているかを表示します。オーバーロード ビットは、恒久的に、起動後の一定時間、または起動後に BGP が収束するまで、のいずれかで立てられます。ガイド: Routing Configuration Guide の「Implementing IS-IS」と、IS-IS コマンド リファレンスの `set-overload-bit`。"
+      - en: "Under `router isis CORE`: `set-overload-bit on-startup wait-for-bgp`. It replaces the plain `set-overload-bit`."
+        ja: "`router isis CORE` の下に `set-overload-bit on-startup wait-for-bgp`。これは、レベル指定などの無い `set-overload-bit` を置き換えます。"
+    solution:
+      en: |
+        configure
+         router isis CORE
+          set-overload-bit on-startup wait-for-bgp
+         commit
+        end
+        XR01's LSP carried the overload bit (`0/0/1` in `show isis database`), so RT01 and RT02 used the backup link between
+        them and kept reaching XR01's loopback over the bundle. The plain `set-overload-bit` is how a router is drained
+        before maintenance, and CHG-0903 left it in place. Its start-up forms are the same command with more keywords, so
+        entering the new form replaces the old one: the bit is now clear, and it will be set after a start of the IS-IS
+        process until BGP has converged. `no set-overload-bit` restores the paths but drops the protection; `on-startup`
+        with a number of seconds protects for a fixed time, not until BGP is ready. In the lab, a process restart with NSF
+        (task M7-5) does not set the start-up overload bit, while a cold start does; the Check therefore reads the
+        configuration in `show isis protocol` and does not restart anything.
+      ja: |
+        configure
+         router isis CORE
+          set-overload-bit on-startup wait-for-bgp
+         commit
+        end
+        XR01 の LSP にはオーバーロード ビットが立っていました(`show isis database` で `0/0/1`)。そのため RT01 と RT02 は互いの
+        間のバックアップ リンクを使い、XR01 のループバックにはバンドル経由で到達し続けていました。レベル指定などの無い
+        `set-overload-bit` は、メンテナンスの前にルータからトラフィックを抜くための設定で、CHG-0903 はそれを残したままでした。
+        起動時の形は同じコマンドにキーワードを足したものなので、新しい形を入れると古いものが置き換わります。ビットはいま
+        クリアで、IS-IS のプロセスが起動した後、BGP が収束するまで立ちます。`no set-overload-bit` は経路を戻しますが、保護も
+        外れます。秒数を指定した `on-startup` は、BGP の準備ができるまでではなく、決まった時間だけ保護します。ラボでは、NSF
+        (課題 M7-5)を伴うプロセスの再起動では起動時のオーバーロード ビットは立たず、冷えた起動では立ちます。そのため Check は
+        `show isis protocol` で設定を読み、何も再起動しません。
+
+  - id: m7t4
+    title: { en: "M7-4  One second on the primary path", ja: "M7-4  プライマリ パスで 1 秒" }
+    check: m7t4
+    read: [70-m7-high-availability#s2-1, 70-m7-high-availability#s2-2]
+    hints:
+      - en: "With the ports up, IS-IS waits for its hold time before it gives up on RT02. Something much faster has to watch the path and tell IS-IS. RT02 already runs it on its side and says so in its hellos; on IOS XR it is configured inside the routing protocol, not on the interface."
+        ja: "ポートがアップのままなので、IS-IS はホールド タイムが切れるまで RT02 をあきらめません。もっと速いものが経路を見張り、IS-IS に知らせる必要があります。RT02 は自分の側でそれをすでに動かしていて、ハローでもそのことを知らせています。IOS XR では、それをインターフェイスではなくルーティング プロトコルの中で設定します。"
+      - en: "BFD. On IOS XR, BFD for IS-IS is enabled per interface under `router isis`; the timers are set there as well (150 ms × 3 by default). `show bfd session` lists the sessions and their detection times; `show isis adjacency` has a BFD column; `show isis interface GigabitEthernet0/0/0/2` shows the BFD settings. Guides: Routing Configuration Guide, 'Implementing BFD' (BFD for IS-IS), and the BFD command reference."
+        ja: "BFD です。IOS XR では、IS-IS の BFD は `router isis` の下でインターフェイスごとに有効にし、タイマーもそこで設定します(既定は 150 ms × 3)。`show bfd session` はセッションと検出時間を一覧にし、`show isis adjacency` には BFD の列があり、`show isis interface GigabitEthernet0/0/0/2` は BFD の設定を表示します。ガイド: Routing Configuration Guide の「Implementing BFD」(BFD for IS-IS)と、BFD のコマンド リファレンス。"
+      - en: "Under `router isis CORE` → `interface GigabitEthernet0/0/0/2`: `bfd fast-detect ipv4`, and optionally `bfd minimum-interval 100` and `bfd multiplier 3`."
+        ja: "`router isis CORE` → `interface GigabitEthernet0/0/0/2` の下に `bfd fast-detect ipv4`。必要なら `bfd minimum-interval 100` と `bfd multiplier 3`。"
+    solution:
+      en: |
+        configure
+         router isis CORE
+          interface GigabitEthernet0/0/0/2
+           bfd minimum-interval 100
+           bfd multiplier 3
+           bfd fast-detect ipv4
+         commit
+        end
+        Without BFD, the Check lost about 22 pings in a row: IS-IS kept the adjacency until its 30-second hold time ran out.
+        With BFD the loss was one ping. XR01 runs the session with the echo function (`300ms(100ms*3)` in
+        `show bfd session`), logs `Echo function failed`, and IS-IS takes the adjacency down with `BFD session DOWN`. The
+        default interval of 150 ms is fast enough as well (450 ms to detect). RT02 announces BFD in its hellos, so once
+        XR01 also enables BFD, the adjacency requires a working session: it stays in Init while the session is down. After
+        the Check restores the link, BFD holds the session back for a few seconds (`DOWN DAMP`) before IS-IS uses the
+        primary link again.
+      ja: |
+        configure
+         router isis CORE
+          interface GigabitEthernet0/0/0/2
+           bfd minimum-interval 100
+           bfd multiplier 3
+           bfd fast-detect ipv4
+         commit
+        end
+        BFD が無いと、Check では ping が続けて約 22 個失われました。IS-IS は 30 秒のホールド タイムが切れるまで隣接を保って
+        いたからです。BFD があると、失われた ping は 1 つでした。XR01 はセッションをエコー機能で動かし(`show bfd session` で
+        `300ms(100ms*3)`)、`Echo function failed` を記録し、IS-IS は `BFD session DOWN` で隣接を落とします。既定の 150 ms の
+        間隔でも十分に速く、検出は 450 ms です。RT02 はハローで BFD を知らせているので、XR01 も BFD を有効にすると、隣接は
+        動作しているセッションを必要とします。セッションがダウンしている間、隣接は Init に留まります。Check がリンクを元に
+        戻した後、BFD は数秒セッションを待たせ(`DOWN DAMP`)、それから IS-IS がプライマリ リンクを再び使います。
+
+  - id: m7t5
+    title: { en: "M7-5  Restarting without loss", ja: "M7-5  損失なく再起動する" }
+    check: m7t5
+    read: [70-m7-high-availability#s4-1, 70-m7-high-availability#s4-2, 70-m7-high-availability#s4-3, 70-m7-high-availability#s4-4]
+    hints:
+      - en: "Restart each process yourself first and watch what RT01 and RT02 log. Then look for the IS-IS feature that lets a restarting router keep its neighbours, and its BGP counterpart. One of the two is negotiated between the peers, so configuring it is not the end of the work."
+        ja: "まず自分で各プロセスを再起動し、RT01 と RT02 が何を記録するかを見てください。そのうえで、再起動するルータが隣接ルータとの関係を保てるようにする IS-IS の機能と、それに当たる BGP の機能を探します。2 つのうち 1 つはピアの間でネゴシエーションされるので、設定しただけでは作業は終わりません。"
+      - en: "`process restart isis` and `process restart bgp` work in EXEC mode. IS-IS: non-stop forwarding (NSF), in the IETF form that IOS supports as a helper; `show isis protocol` shows the most recent startup mode. BGP: graceful restart, a capability exchanged in the OPEN message, so it applies only to sessions opened after it was configured. On RT02, `show ip bgp neighbors 10.255.0.1 | include Graceful` shows whether it was received. NSR needs a second route processor. Guides: Routing Configuration Guide, 'Implementing IS-IS' (NSF); BGP Configuration Guide (BGP graceful restart)."
+        ja: "`process restart isis` と `process restart bgp` は EXEC モードで使えます。IS-IS はノンストップ フォワーディング(NSF)で、IOS がヘルパーとして対応する IETF の形を使います。`show isis protocol` は最後の起動の種類を表示します。BGP はグレースフル リスタートで、OPEN メッセージで交換される機能なので、設定した後に開かれたセッションにだけ効きます。RT02 の `show ip bgp neighbors 10.255.0.1 | include Graceful` で、受け取られたかどうかが分かります。NSR には 2 枚目のルート プロセッサが必要です。ガイド: Routing Configuration Guide の「Implementing IS-IS」(NSF)、BGP Configuration Guide(BGP のグレースフル リスタート)。"
+      - en: "Under `router isis CORE`: `nsf ietf`. Under `router bgp 65000`: `bgp graceful-restart`. Then, in EXEC mode, reset the session with RT02: `clear bgp 10.255.0.12`."
+        ja: "`router isis CORE` の下に `nsf ietf`。`router bgp 65000` の下に `bgp graceful-restart`。そのあと EXEC モードで、RT02 とのセッションをリセットします: `clear bgp 10.255.0.12`。"
+    solution:
+      en: |
+        configure
+         router isis CORE
+          nsf ietf
+         router bgp 65000
+          bgp graceful-restart
+         commit
+        end
+        clear bgp 10.255.0.12
+        Without NSF, a restarted IS-IS process starts from nothing: its first hellos do not list its neighbours, and RT01
+        and RT02 log `Down, neighbor forgot us` and form the adjacency again. With `nsf ietf`, XR01 signals the restart in
+        its hellos (RFC 8706), the neighbours keep the adjacency and resend their databases, and XR01 logs
+        `IETF NSF controlled start` with the adjacencies `Up, NSF Restart`. IOS acts as a helper without configuration.
+        `nsf cisco` passes as well: XR01 restores the state that it saved and logs `Restored during NSF`.
+        BGP graceful restart is announced in the OPEN message: until the session with RT02 is reset, RT02 shows the
+        capability as `advertised` only, and a BGP restart makes it drop 10.30.0.0/16 for a few seconds. Any new session
+        carries the capability, including the one after the Check's own BGP restart, so a second Check passes even
+        without the reset; `clear bgp 10.255.0.12 graceful` is a reset that keeps the routes when graceful restart is
+        already in use. After the reset
+        RT02 shows `advertised and received`, and during a restart it keeps the route as stale (`S>i`) until XR01 has sent
+        its table again. NSR (`nsr`) is accepted, but with one route processor it stays `Not Ready`; it protects against the
+        failure of the active route processor, not against a process restart.
+      ja: |
+        configure
+         router isis CORE
+          nsf ietf
+         router bgp 65000
+          bgp graceful-restart
+         commit
+        end
+        clear bgp 10.255.0.12
+        NSF が無いと、再起動した IS-IS プロセスはゼロから始まります。最初のハローには隣接ルータが載っておらず、RT01 と RT02 は
+        `Down, neighbor forgot us` を記録して隣接を張り直します。`nsf ietf` があると、XR01 はハローで再起動を知らせ(RFC 8706)、
+        隣接ルータは隣接を保ってデータベースを送り直し、XR01 は `IETF NSF controlled start` と、隣接の `Up, NSF Restart` を記録
+        します。IOS は設定なしでヘルパーとして動作します。`nsf cisco` でも合格します。XR01 は保存しておいた状態を復元し、
+        `Restored during NSF` を記録します。BGP のグレースフル リスタートは OPEN メッセージで知らせます。RT02 との
+        セッションをリセットするまで、RT02 はこの機能を `advertised` としか表示せず、BGP を再起動すると数秒間 10.30.0.0/16 を
+        失います。新しいセッションはどれもこの機能を伴うので、Check 自身の BGP の再起動の後のセッションでも同じで、2 回目の
+        Check はリセットしなくても合格します。`clear bgp 10.255.0.12 graceful` は、グレースフル リスタートがすでに使われている
+        ときに、ルートを保ったままリセットします。リセットの後、RT02 は `advertised and received` と表示し、再起動の間はそのルートを stale(`S>i`)として、
+        XR01 がテーブルを送り直すまで保持します。NSR(`nsr`)は受け付けられますが、ルート プロセッサが 1 枚では `Not Ready`
+        のままです。NSR が守るのはアクティブなルート プロセッサの故障で、プロセスの再起動ではありません。

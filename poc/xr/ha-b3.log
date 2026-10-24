@@ -1,0 +1,151 @@
+
+######## 13:51:14 b3-1: 両方 passive(付け直して最初から)
+configure
+Fri Oct 23 13:51:16.849 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode passive
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode passive
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 13:51:20.174 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface range GigabitEthernet1 - 2
+RT01(config-if-range)#
+no channel-group 1
+RT01(config-if-range)#
+channel-group 1 mode passive
+RT01(config-if-range)#
+end
+RT01#
+show running-config interface GigabitEthernet1 | include channel
+ channel-group 1 mode passive
+RT01#
+13:51:24
+13:51:54
+show bundle Bundle-Ether1 | include "Status|Gi0"
+Fri Oct 23 13:51:56.171 UTC
+  Status:                                    Down
+  Gi0/0/0/0             Local            Configured   0x8000, 0x0002     1000000
+  Gi0/0/0/1             Local            Configured   0x8000, 0x0001     1000000
+RP/0/RP0/CPU0:XR01#
+13:52:25
+show bundle Bundle-Ether1 | include "Status|Gi0"
+Fri Oct 23 13:52:27.674 UTC
+  Status:                                    Down
+  Gi0/0/0/0             Local            Configured   0x8000, 0x0002     1000000
+  Gi0/0/0/1             Local            Configured   0x8000, 0x0001     1000000
+RP/0/RP0/CPU0:XR01#
+13:52:57
+show bundle Bundle-Ether1 | include "Status|Gi0"
+Fri Oct 23 13:52:59.173 UTC
+  Status:                                    Down
+  Gi0/0/0/0             Local            Configured   0x8000, 0x0002     1000000
+  Gi0/0/0/1             Local            Configured   0x8000, 0x0001     1000000
+RP/0/RP0/CPU0:XR01#
+show etherchannel summary | include Po1
+1	Po1(RD)		LACP	 Gi1(susp) Gi2(susp)
+RT01#
+
+######## 13:53:00 b3-2: RT01 を mode on(静的)・XR は passive
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface range GigabitEthernet1 - 2
+RT01(config-if-range)#
+no channel-group 1
+RT01(config-if-range)#
+channel-group 1 mode on
+                                           ^
+% Invalid input detected at '^' marker.
+
+RT01(config-if-range)#
+end
+RT01#
+show running-config interface GigabitEthernet1 | include channel
+RT01#
+show bundle Bundle-Ether1 | include "Status|Gi0"
+Fri Oct 23 13:54:06.165 UTC
+  Status:                                    Down
+  Gi0/0/0/0             Local            Configured   0x8000, 0x0002     1000000
+  Gi0/0/0/1             Local            Configured   0x8000, 0x0001     1000000
+RP/0/RP0/CPU0:XR01#
+ping 10.0.1.11 count 5
+Fri Oct 23 13:54:06.566 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.0.1.11 timeout is 2 seconds:
+UUUUU
+Success rate is 0 percent (0/5)
+RP/0/RP0/CPU0:XR01#
+show etherchannel summary | include Po1
+1	Po1(RD)			
+RT01#
+
+######## 13:54:17 b3-3: 元へ(両方 active)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface range GigabitEthernet1 - 2
+RT01(config-if-range)#
+no channel-group 1
+RT01(config-if-range)#
+channel-group 1 mode active
+RT01(config-if-range)#
+end
+RT01#
+show running-config interface GigabitEthernet1 | include channel
+ channel-group 1 mode active
+RT01#
+configure
+Fri Oct 23 13:54:23.373 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode active
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode active
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 13:54:26.681 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show bundle Bundle-Ether1 | include "Status|Gi0"
+Fri Oct 23 13:55:14.104 UTC
+  Status:                                    Up
+  Gi0/0/0/0             Local            Active       0x8000, 0x0002     1000000
+  Gi0/0/0/1             Local            Active       0x8000, 0x0001     1000000
+RP/0/RP0/CPU0:XR01#
+ping 10.0.1.11 count 5
+Fri Oct 23 13:55:14.507 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.0.1.11 timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 2/3/4 ms
+RP/0/RP0/CPU0:XR01#
+show etherchannel summary | include Po1
+1	Po1(RU)		LACP	 Gi1(bndl) Gi2(bndl)
+RT01#

@@ -1,0 +1,35 @@
+# M7-5: XR01 のルーティング プロセスを再起動しても隣接と転送を落とさない= IS-IS の NSF(ietf)と BGP のグレースフル リスタート。
+# RT02 は bgp graceful-restart を据え付け。★能力は OPEN で交換するので、XR に入れた後はセッションのやり直しが要る。
+# 2 つ目= 採点のあいだだけ XR01 で process restart isis → RT01・RT02 に ADJCHANGE が新しく出ないこと(NSF なしは「neighbor forgot us」)。
+# 3 つ目= process restart bgp の直後 1〜7 秒、RT02 が XR01 の経路 10.30.0.0/16 を持ち続けること(GR なしは数秒消える)。
+problem: XRT-06
+total_points: 100
+checks:
+  - name: 'M7-5 RT02: graceful restart is negotiated with XR01'
+    node: RT02
+    command: 'show ip bgp neighbors 10.255.0.1'
+    raw:
+      - { regex: 'Graceful Restart Capability: advertised and received' }
+    points: 20
+  - name: 'M7-5 RT01, RT02: no IS-IS adjacency change when XR01 restarts its IS-IS process (restart done for the check)'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-06 log-delta RT01,RT02 '%CLNS-5-ADJCHANGE'
+      --pre-cli 'XR01:process restart isis' --settle 35 --post-settle 10
+    raw:
+      - { regex: '== CLI XR01: 1 lines' }
+      - { regex: '== NO NEW MATCHES' }
+    points: 40
+  - name: 'M7-5 RT02: keeps XR01''s BGP route while XR01 restarts its BGP process (restart done for the check)'
+    node: RT02
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-06 watch RT02 'show ip route 10.30.0.0'
+      --pre-cli 'XR01:process restart bgp' --samples 7 --interval 1 --post-settle 25
+    raw:
+      - { regex: '== CLI XR01: 1 lines' }
+      - { regex: '== SAMPLE 7 at' }
+      - { regex: 'Known via "bgp 65000"' }
+      - { not_regex: 'not in table' }
+    points: 40

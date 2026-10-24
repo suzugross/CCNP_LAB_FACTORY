@@ -1,0 +1,667 @@
+
+######## 14:13:27 e-0: XR01-RT02 の iBGP(ループバック間)
+configure
+Fri Oct 23 14:13:29.307 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+bgp router-id 10.255.0.1
+RP/0/RP0/CPU0:XR01(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-af)#
+exit
+RP/0/RP0/CPU0:XR01(config-bgp)#
+neighbor 10.255.0.12
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+remote-as 65000
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+update-source Loopback0
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+commit
+Fri Oct 23 14:13:33.015 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+show configuration failed
+Fri Oct 23 14:13:34.122 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast summary
+Fri Oct 23 14:14:17.247 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 3
+BGP main routing table version 3
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker            3             3             3             3             3             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.12       0 65000       5       3            3    0    0 00:00:39          1
+
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast neighbors 10.255.0.12 | include "state$ors 10.255.0.12 | include "state|                          Graceful|restart"show bgp ipv4 unicast neighbors 10.255.0.12 | include "stat$
+Fri Oct 23 14:14:17.648 UTC
+  BGP state = Established, up for 00:00:39
+    Detected state: FALSE, Detection threshold: 300
+RP/0/RP0/CPU0:XR01#
+show ip bgp summary
+BGP router identifier 10.255.0.12, local AS number 65000
+BGP table version is 2, main routing table version 2
+1 network entries using 248 bytes of memory
+1 path entries using 136 bytes of memory
+1/1 BGP path/bestpath attribute entries using 296 bytes of memory
+0 BGP route-map cache entries using 0 bytes of memory
+0 BGP filter-list cache entries using 0 bytes of memory
+BGP using 680 total bytes of memory
+BGP activity 1/0 prefixes, 1/0 paths, scan interval 60 secs
+1 networks peaked at 13:26:44 Oct 23 2026 UTC (00:47:34.555 ago)
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65000       3       5        2    0    0 00:00:41        0
+RT02#
+show ip bgp neighbors 10.255.0.1 | include state|Graceful|restart
+  BGP state = Established, up for 00:00:41
+  Do log neighbor state changes (via global configuration)
+  Graceful-Restart is disabled
+Connection state is ESTAB, I/O status: 1, unread input bytes: 0            
+RT02#
+
+######## 14:14:19 e-1: NSF なしで process restart isis(RT01 の隣接と ping)
+show clns neighbors
+Tag CORE:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+XR01            Po1           0003.a004.5331      Up     20        L2   IS-IS
+RT02            Gi3           aabb.cc00.3b20      Up     22        L2   IS-IS
+RT01#
+show isis nsf
+
+Tag CORE:
+
+NSF is DISABLED
+
+RP is ACTIVE, standby not ready, RTR chkpt peer not ready, UPD chkpt peer not ready, bulk sync pending
+NSF interval timer expired (NSF restart enabled)
+Checkpointing disabled, no errors
+Local state: ACTIVE,  Peer state: DISABLED,  Config Mode: non-SSO, Operating Mode: non-SSO
+RT01#
+process restart isis
+Fri Oct 23 14:14:28.591 UTC
+RP/0/RP0/CPU0:XR01#
+14:14:28
+show processes isis | include "PID|Respawn|Process state|Las$e "PID|Respawn|Process state|Last                           started"show processes isis | include "PID|Respawn|Process state|La$
+Fri Oct 23 14:15:00.102 UTC
+                     PID: 14909
+                 Respawn: ON
+           Respawn count: 2
+            Last started: Fri Oct 23 14:14:28 2026
+           Process state: Run (last exit due to SIGTERM)
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Fri Oct 23 14:15:00.502 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           BE1                      *PtoP*         Up    25   00:00:30 Yes None None
+RT02           Gi0/0/0/2                *PtoP*         Up    27   00:00:29 Yes Up   None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show isis protocol | include -i "startup|nsf"
+Fri Oct 23 14:15:00.904 UTC
+% Can't handle special action '|'. Quitting
+% Error parsing command string. Quitting. 
+RP/0/RP0/CPU0:XR01#
+== start 14:14:22 ping 10.20.0.1 source Loopback1 repeat 20000 timeout 1
+== end 14:14:44 elapsed 21.8s symbols {'!': 19998, '.': 2} longest_gap 1 gaps [1, 1]
+Success rate is 99 percent (19998/20000), round-trip min/avg/max = 1/1/11 ms
+show clns neighbors
+Tag CORE:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+XR01            Po1           0003.a004.5331      Up     28        L2   IS-IS
+RT02            Gi3           aabb.cc00.3b20      Up     25        L2   IS-IS
+RT01#
+show logging | include ISIS|CLNS
+*Oct 23 13:27:58.205: %CLNS-6-DFT_OPT: Protocol timers for fast convergence are Enabled.
+*Oct 23 13:28:08.701: %CLNS-5-ADJCHANGE: ISIS: Adjacency to 0100.0000.0012 (GigabitEthernet3) Up, new adjacency
+*Oct 23 13:55:28.674: %CLNS-5-ADJCHANGE: ISIS: Adjacency to 0100.0000.0001 (Port-channel1) Up, new adjacency
+*Oct 23 13:56:53.760: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Down, neighbor forgot us
+*Oct 23 13:58:06.478: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Down, hold time expired
+*Oct 23 13:58:57.019: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Up, new adjacency
+*Oct 23 14:04:27.922: %BFD-6-BFD_SESS_CREATED: BFD-SYSLOG: bfd_session_created, neigh 10.0.1.1 proc:ISIS, idb:Port-channel1 handle:1 act
+*Oct 23 14:04:59.863: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Down, bfd neighbor down
+*Oct 23 14:08:11.328: %BFD-6-BFD_SESS_DESTROYED: BFD-SYSLOG: bfd_session_destroyed,  handle:1 neigh proc:ISIS, idb:Port-channel1 handle:1 active
+*Oct 23 14:08:12.996: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Up, new adjacency
+*Oct 23 14:14:28.448: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Down, neighbor forgot us
+*Oct 23 14:14:30.447: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Up, new adjacency
+RT01#
+
+######## 14:15:02 e-2: nsf ietf(XR)。IOL は既定のまま(ヘルパー)
+configure
+Fri Oct 23 14:15:04.581 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+nsf ietf
+RP/0/RP0/CPU0:XR01(config-isis)#
+commit
+Fri Oct 23 14:15:05.883 UTC
+RP/0/RP0/CPU0:XR01(config-isis)#
+show configuration failed
+Fri Oct 23 14:15:06.787 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-isis)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis protocol | include -i nsf
+Fri Oct 23 14:15:24.912 UTC
+grep: invalid option -- ' '
+Usage: grep [OPTION]... PATTERNS [FILE]...
+Try 'grep --help' for more information.
+
+RP/0/RP0/CPU0:XR01#
+process restart isis
+Fri Oct 23 14:15:31.460 UTC
+RP/0/RP0/CPU0:XR01#
+14:15:31
+show isis adjacency
+Fri Oct 23 14:16:12.975 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           BE1                      *PtoP*         Up    24   00:00:41 Yes None None
+RT02           Gi0/0/0/2                *PtoP*         Up    26   00:00:41 Yes Up   None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show isis protocol | include -i "startup|nsf|restart"
+Fri Oct 23 14:16:13.378 UTC
+% Can't handle special action '|'. Quitting
+% Error parsing command string. Quitting. 
+RP/0/RP0/CPU0:XR01#
+show logging last 20
+Fri Oct 23 14:16:13.779 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 19 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 626 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 23 14:15:03.767 UTC: SSHD_[68361]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 14:15:03.772 UTC: SSHD_[68361]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 14:15:06.404 UTC: config[68392]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000034' to view the changes. 
+RP/0/RP0/CPU0:Oct 23 14:15:08.393 UTC: config[68392]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 23 14:15:08.804 UTC: SSHD_[68361]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 14:15:24.095 UTC: SSHD_[68422]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 14:15:24.103 UTC: SSHD_[68422]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 14:15:25.325 UTC: SSHD_[68422]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 14:15:30.644 UTC: SSHD_[68456]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 14:15:30.649 UTC: SSHD_[68456]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 14:15:31.474 UTC: sysmgr_control[68484]: %OS-SYSMGR-4-PROC_RESTART_NAME : User SUZUKI (vty0) requested a restart of process isis at 0/RP0/CPU0 
+RP/0/RP0/CPU0:Oct 23 14:15:31.755 UTC: isis[1007]: %ROUTING-ISIS-5-PM_HA_ROLE_CHG : ISIS (CORE): ISIS HA role change: Active 
+RP/0/RP0/CPU0:Oct 23 14:15:31.755 UTC: isis[1007]: %ROUTING-ISIS-5-PM_ISSU_ROLE_CHG : ISIS (CORE): ISIS ISSU role change: Primary 
+RP/0/RP0/CPU0:Oct 23 14:15:31.874 UTC: SSHD_[68456]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 14:15:31.949 UTC: isis[1007]: %ROUTING-ISIS-6-INFO_STARTUP_START : ISIS (CORE): IETF NSF controlled start beginning 
+RP/0/RP0/CPU0:Oct 23 14:15:31.985 UTC: isis[1007]: %ROUTING-ISIS-5-ADJCHANGE : ISIS (CORE): Adjacency to 49.0001.0100.0000.0012 (GigabitEthernet0/0/0/2) (L2) Up, NSF Restart 
+RP/0/RP0/CPU0:Oct 23 14:15:31.991 UTC: isis[1007]: %ROUTING-ISIS-5-ADJCHANGE : ISIS (CORE): Adjacency to 49.0001.0100.0000.0011 (Bundle-Ether1) (L2) Up, NSF Restart 
+RP/0/RP0/CPU0:Oct 23 14:15:42.067 UTC: isis[1007]: %ROUTING-ISIS-6-INFO_STARTUP_FINISH : ISIS (CORE): IETF NSF controlled start completed 
+RP/0/RP0/CPU0:Oct 23 14:16:12.162 UTC: SSHD_[68547]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 14:16:12.167 UTC: SSHD_[68547]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:XR01#
+== start 14:15:25 ping 10.20.0.1 source Loopback1 repeat 20000 timeout 1
+== end 14:15:48 elapsed 23.9s symbols {'!': 20000} longest_gap 0 gaps []
+Success rate is 100 percent (20000/20000), round-trip min/avg/max = 1/1/50 ms
+show clns neighbors
+Tag CORE:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+XR01            Po1           0003.a004.5331      Up     24        L2   IS-IS
+RT02            Gi3           aabb.cc00.3b20      Up     24        L2   IS-IS
+RT01#
+show isis nsf
+
+Tag CORE:
+
+NSF is DISABLED
+
+RP is ACTIVE, standby not ready, RTR chkpt peer not ready, UPD chkpt peer not ready, bulk sync pending
+NSF interval timer expired (NSF restart enabled)
+Checkpointing disabled, no errors
+Local state: ACTIVE,  Peer state: DISABLED,  Config Mode: non-SSO, Operating Mode: non-SSO
+RT01#
+show logging | include ISIS|CLNS|NSF
+*Oct 23 13:27:58.205: %CLNS-6-DFT_OPT: Protocol timers for fast convergence are Enabled.
+*Oct 23 13:28:08.701: %CLNS-5-ADJCHANGE: ISIS: Adjacency to 0100.0000.0012 (GigabitEthernet3) Up, new adjacency
+*Oct 23 13:55:28.674: %CLNS-5-ADJCHANGE: ISIS: Adjacency to 0100.0000.0001 (Port-channel1) Up, new adjacency
+*Oct 23 13:56:53.760: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Down, neighbor forgot us
+*Oct 23 13:58:06.478: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Down, hold time expired
+*Oct 23 13:58:57.019: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Up, new adjacency
+*Oct 23 14:04:27.922: %BFD-6-BFD_SESS_CREATED: BFD-SYSLOG: bfd_session_created, neigh 10.0.1.1 proc:ISIS, idb:Port-channel1 handle:1 act
+*Oct 23 14:04:59.863: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Down, bfd neighbor down
+*Oct 23 14:08:11.328: %BFD-6-BFD_SESS_DESTROYED: BFD-SYSLOG: bfd_session_destroyed,  handle:1 neigh proc:ISIS, idb:Port-channel1 handle:1 active
+*Oct 23 14:08:12.996: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Up, new adjacency
+*Oct 23 14:14:28.448: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Down, neighbor forgot us
+*Oct 23 14:14:30.447: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Up, new adjacency
+RT01#
+show clns neighbors
+
+Tag CORE:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+XR01            Et0/0         5254.0060.fbc5      Up     29        L2   IS-IS
+RT01            Et0/2         5254.005f.2197      Up     24        L2   IS-IS
+RT02#
+
+######## 14:16:17 e-3: BGP。XR に bgp graceful-restart・RT02 は未設定 → 能力の交換は?
+configure
+Fri Oct 23 14:16:19.598 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+bgp graceful-restart
+RP/0/RP0/CPU0:XR01(config-bgp)#
+commit
+Fri Oct 23 14:16:20.898 UTC
+RP/0/RP0/CPU0:XR01(config-bgp)#
+show configuration failed
+Fri Oct 23 14:16:21.803 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-bgp)#
+end
+RP/0/RP0/CPU0:XR01#
+clear bgp ipv4 unicast 10.255.0.12
+% Incomplete command.
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast neighbors 10.255.0.12 | include "Grace$ors 10.255.0.12 | include "Gracef                          ul|restart|state"show bgp ipv4 unicast neighbors 10.255.0.12 | include "Grac$
+Fri Oct 23 14:17:11.333 UTC
+  BGP state = Established, up for 00:03:33
+  Graceful restart is enabled
+    Graceful Restart capability advertised
+      Local restart time is 120, RIB purge time is 600 seconds
+    Detected state: FALSE, Detection threshold: 300
+RP/0/RP0/CPU0:XR01#
+show ip bgp neighbors 10.255.0.1 | include Graceful|restart|state
+  BGP state = Established, up for 00:03:35
+  Do log neighbor state changes (via global configuration)
+  Graceful-Restart is disabled
+Connection state is ESTAB, I/O status: 1, unread input bytes: 0            
+RT02#
+
+######## 14:17:12 e-4: RT02 にも bgp graceful-restart → process restart bgp(RT02 で経路が stale で残るか)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+router bgp 65000
+RT02(config-router)#
+bgp graceful-restart
+All BGP sessions must be reset to take the new GR config
+
+RT02(config-router)#
+end
+RT02#
+clear ip bgp 10.255.0.1
+RT02#
+show ip bgp neighbors 10.255.0.1 | include Graceful|restart|state
+  BGP state = Established, up for 00:00:28
+    Graceful Restart Capability: advertised and received
+  Do log neighbor state changes (via global configuration)
+  Graceful-Restart is enabled, restart-time 900 seconds, stalepath-time 1800 seconds
+Connection state is ESTAB, I/O status: 1, unread input bytes: 0            
+RT02#
+process restart bgp
+Fri Oct 23 14:17:59.799 UTC
+RP/0/RP0/CPU0:XR01#
+14:17:59
+show ip bgp
+BGP table version is 2, local router ID is 10.255.0.12
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.20.0.0/16     0.0.0.0                  0         32768 i
+RT02#
+show ip bgp summary
+BGP router identifier 10.255.0.12, local AS number 65000
+BGP table version is 2, main routing table version 2
+1 network entries using 248 bytes of memory
+1 path entries using 136 bytes of memory
+1/1 BGP path/bestpath attribute entries using 296 bytes of memory
+0 BGP route-map cache entries using 0 bytes of memory
+0 BGP filter-list cache entries using 0 bytes of memory
+BGP using 680 total bytes of memory
+BGP activity 1/0 prefixes, 1/0 paths, scan interval 60 secs
+1 networks peaked at 13:26:44 Oct 23 2026 UTC (00:51:20.083 ago)
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65000       0       0        1    0    0 00:00:48 Idle
+RT02#
+show logging | include BGP
+*Oct 23 14:17:15.676: %BGP-3-NOTIFICATION: sent to neighbor 10.255.0.1 6/4 (Administrative Reset) 0 bytes 
+*Oct 23 14:17:15.676: %BGP-5-ADJCHANGE: neighbor 10.255.0.1 Down User reset
+*Oct 23 14:17:15.676: %BGP_SESSION-5-ADJCHANGE: neighbor 10.255.0.1 IPv4 Unicast topology base removed from session  User reset
+*Oct 23 14:17:16.616: %BGP-5-NBR_RESET: Neighbor 10.255.0.1 active reset (Peer closed the session)
+*Oct 23 14:17:16.616: %BGP_SESSION-5-ADJCHANGE: neighbor 10.255.0.1 IPv4 Unicast topology base removed from session  Peer closed the session
+*Oct 23 14:17:28.463: %BGP-5-ADJCHANGE: neighbor 10.255.0.1 Up 
+*Oct 23 14:17:58.952: %BGP_SESSION-5-ADJCHANGE: neighbor 10.255.0.1 IPv4 Unicast topology base removed from session  NSF peer closed the session
+*Oct 23 14:17:58.952: %BGP-5-NBR_RESET: Neighbor 10.255.0.1 reset (NSF peer closed the session)
+*Oct 23 14:17:58.952: %BGP-5-ADJCHANGE: neighbor 10.255.0.1 Down NSF peer closed the session
+RT02#
+show ip bgp summary
+BGP router identifier 10.255.0.12, local AS number 65000
+BGP table version is 2, main routing table version 2
+1 network entries using 248 bytes of memory
+1 path entries using 136 bytes of memory
+1/1 BGP path/bestpath attribute entries using 296 bytes of memory
+0 BGP route-map cache entries using 0 bytes of memory
+0 BGP filter-list cache entries using 0 bytes of memory
+BGP using 680 total bytes of memory
+BGP activity 1/0 prefixes, 1/0 paths, scan interval 60 secs
+1 networks peaked at 13:26:44 Oct 23 2026 UTC (00:52:02.267 ago)
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65000       3       5        2    0    0 00:00:40        0
+RT02#
+show logging | include BGP
+*Oct 23 14:17:15.676: %BGP-3-NOTIFICATION: sent to neighbor 10.255.0.1 6/4 (Administrative Reset) 0 bytes 
+*Oct 23 14:17:15.676: %BGP-5-ADJCHANGE: neighbor 10.255.0.1 Down User reset
+*Oct 23 14:17:15.676: %BGP_SESSION-5-ADJCHANGE: neighbor 10.255.0.1 IPv4 Unicast topology base removed from session  User reset
+*Oct 23 14:17:16.616: %BGP-5-NBR_RESET: Neighbor 10.255.0.1 active reset (Peer closed the session)
+*Oct 23 14:17:16.616: %BGP_SESSION-5-ADJCHANGE: neighbor 10.255.0.1 IPv4 Unicast topology base removed from session  Peer closed the session
+*Oct 23 14:17:28.463: %BGP-5-ADJCHANGE: neighbor 10.255.0.1 Up 
+*Oct 23 14:17:58.952: %BGP_SESSION-5-ADJCHANGE: neighbor 10.255.0.1 IPv4 Unicast topology base removed from session  NSF peer closed the session
+*Oct 23 14:17:58.952: %BGP-5-NBR_RESET: Neighbor 10.255.0.1 reset (NSF peer closed the session)
+*Oct 23 14:17:58.952: %BGP-5-ADJCHANGE: neighbor 10.255.0.1 Down NSF peer closed the session
+*Oct 23 14:18:06.086: %BGP-5-ADJCHANGE: neighbor 10.255.0.1 Up 
+RT02#
+
+######## 14:18:47 e-5: NSR(RP 1 枚)の設定と表示。設定前の BGP NSR の既定(公式どうしで食い違い)
+show bgp process | include -i "non-stop|nsr"
+Fri Oct 23 14:18:49.013 UTC
+% Can't handle special action '|'. Quitting
+% Error parsing command string. Quitting. 
+RP/0/RP0/CPU0:XR01#
+configure
+Fri Oct 23 14:18:50.523 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+nsr
+RP/0/RP0/CPU0:XR01(config-isis)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+nsr
+RP/0/RP0/CPU0:XR01(config-bgp)#
+commit
+Fri Oct 23 14:18:53.030 UTC
+RP/0/RP0/CPU0:XR01(config-bgp)#
+show configuration failed
+Fri Oct 23 14:18:53.936 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-bgp)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis nsr status
+Fri Oct 23 14:19:06.959 UTC
+
+IS-IS CORE NSR(v1a) STATUS (Not Ready):
+                    V1 Standby    V2 Active   V2 Standby
+SYNC STATUS:          FALSE(0)     FALSE(0)     FALSE(0)
+PEER CHG COUNT:              0            0            0
+UP TIME:                not up       not up       not up
+RP/0/RP0/CPU0:XR01#
+show bgp nsr
+Fri Oct 23 14:19:07.363 UTC
+
+BGP Process Information: 
+BGP is operating in STANDALONE mode
+Autonomous System number format: ASPLAIN
+Autonomous System: 65000
+Router ID: 10.255.0.1 (manually configured)
+Default Cluster ID: 10.255.0.1
+Active Cluster IDs:  10.255.0.1
+Fast external fallover enabled
+Platform Loadbalance paths max: 64
+Platform RLIMIT max: 17179869184 bytes
+Maximum limit for BMP buffer size: 3276 MB
+Default value for BMP buffer size: 2457 MB
+Current limit for BMP buffer size: 2457 MB
+Current utilization of BMP buffer limit: 0 B
+Neighbor logging is enabled
+Enforce first AS enabled
+Use SR-Policy admin/metric of color-extcomm Nexthop during path comparison: disabled
+Default local preference: 100
+Default keepalive: 60
+Graceful restart enabled
+Restart time: 120
+Stale path timeout time: 360
+RIB purge timeout time: 600
+Non-stop routing is enabled
+
+ExtComm Color Nexthop validation: RIB
+Update delay: 120
+Generic scan interval: 60
+Configured Segment-routing Local Block: [0, 0]
+In use Segment-routing Local Block: [15000, 15999]
+Platform support mix of sr-policy and native nexthop: Yes
+  Last insert into reset queue: not set, removed at not set
+Administrative Distance: external 20 internal 200 local 200
+
+
+Address family: IPv4 Unicast
+ AS based ECMP Download Delay not configured
+ OOR Flag 0 OOR Threshold 0
+ Prefix Download Delay 0
+ Inbound Route Delay 0 msec
+Dampening is not enabled
+Client reflection is enabled in global config
+Dynamic MED is Disabled
+Dynamic MED interval : 10 minutes
+Dynamic MED Timer : Not Running
+Dynamic MED Periodic Timer : Not Running
+Scan interval: 60
+Total prefixes scanned: 1
+Prefixes scanned per segment: 100000
+Number of scan segments: 1
+Nexthop resolution minimum prefix-length: 0 (not configured)
+IPv6 Nexthop resolution minimum prefix-length: 0 (not configured)
+Main Table Version: 3
+Table version synced to RIB: 3
+Table version acked by RIB: 3
+Update-gen quick-withdraw: [Enabled]
+IGP notification: IGPs notified
+RIB has converged: version 0
+RIB table prefix-limit reached ?  [No], version 0
+Permanent Network Unconfigured
+Label alloc mode: per-prefix
+BGP NSR scoped sync stats:
+   Scoped Sync last msg failed: 0
+   Scoped Sync last msg resumed: 0
+   Scoped Sync default route stopped: 0
+   Scoped Sync default route resumed: 0
+   Scoped Sync default route lookup failure: 0
+
+OC-RIB Telemetry Neighbor Outbound Attributes Pool summary:
+                           Alloc           Free          
+Pool 25:                   0               0             
+Pool 49:                   0               0             
+Pool 73:                   0               0             
+Pool 97:                   0               0             
+Pool 121:                  0               0             
+Pool 145:                  0               0             
+Pool 169:                  0               0             
+Pool 193:                  0               0             
+Pool 217:                  0               0             
+Pool 241:                  0               0             
+
+Number of Paths having particular number of OCRIB out attributes:
+                           Paths         
+1 Out Attrs:               3531690042    
+Administrative Distance: external 20 internal 200 local 200
+
+
+========== Post Failover Summary for Active instance ==========
+
+Node                Process            Read      Write    Inbound
+
+
+node0_RP0_CPU0      Speaker            0.00       0.00       0.00
+
+  Entered mode  Active Ready                  : Oct 23 14:18:06
+Current BGP NSR state - Active Ready achieved at: Oct 23 14:18:06
+BGP NSR state not ready: Wait for standby ready msg
+NSR State NOT READY notified to Rmf at: Oct 23 14:18:06
+
+Current BGP ISSU NSR state - None achieved at: ---
+
+NSR Post Failover Summary:
+
+
+NPL Statistics:
+
+  Messages Sent       : 0              ACKs Received       : 0         
+  Messages Received   : 0              ACKs Sent           : 0         
+  Send Failures       : 0              Send ACK Failures   : 0         
+  Suspends            : 0              Resumes             : 0         
+  Messages Processed  : 0              Out of sequence drops: 0              
+  Messages Send Drops : 0              Messages Recv Drops : 0              
+  Sync Send Timeouts  : 0              
+
+NPL Packet Processing Statistics:
+
+  Interval       End-Time        Avg Proc  Num of        seq num
+   (sec)                         time(us)   pkts     [start - end]
+    30                     ---       0          0  [      0 - 0      ]
+    60                     ---       0          0  [      0 - 0      ]
+   180                     ---       0          0  [      0 - 0      ]
+
+Postit Summary:
+
+  Total pending postit messages:  0
+  Neighbors with pending postits: 0
+
+
+NSR active state transitions:
+
+Timestamp            SyncGroupEvent  Event(Rcv+Snd)   OldState         NewState         ActiveEventMask
+Oct 23 14:18:06.963  StdbySynGrp     EndOfReadOnly    None             ActiveReady      0x2
+Oct 23 14:18:09.964  StdbySynGrp     EndOfConv        ActiveReady      ActiveReady      0x12
+Oct 23 14:18:09.964  ISSUSynGrp      EndOfConv        None             None             0x10
+
+Conv  Bestpath   TunnelUpd  Import     RIBUpd     Label      ReadWrite  LastUpd  
+Process: Speaker
+
+Yes   0          ---        0          0          0          0          2        
+
+
+Last Label retention event Oct 23 13:31:37.980
+VRF flags: 0x1e61
+Address Family IPv4 Unicast converged in 2 seconds.
+
+RP/0/RP0/CPU0:XR01#
+show redundancy summary
+Fri Oct 23 14:19:07.762 UTC
+    Active Node    Standby Node
+    -----------    ------------
+     0/RP0/CPU0             N/A 
+RP/0/RP0/CPU0:XR01#
+show isis protocol | include -i "nsr|nsf|startup"
+Fri Oct 23 14:19:08.163 UTC
+% Can't handle special action '|'. Quitting
+% Error parsing command string. Quitting. 
+RP/0/RP0/CPU0:XR01#
+show bgp process | include -i "non-stop|nsr"
+Fri Oct 23 14:19:08.565 UTC
+% Can't handle special action '|'. Quitting
+% Error parsing command string. Quitting. 
+RP/0/RP0/CPU0:XR01#
+process restart isis
+Fri Oct 23 14:19:15.093 UTC
+RP/0/RP0/CPU0:XR01#
+14:19:14
+show isis adjacency
+Fri Oct 23 14:19:56.599 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           BE1                      *PtoP*         Up    21   00:00:41 Yes None None
+RT02           Gi0/0/0/2                *PtoP*         Up    23   00:00:41 Yes Up   None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show logging last 20
+Fri Oct 23 14:19:57.000 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 21 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 679 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 23 14:18:53.558 UTC: config[68914]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000036' to view the changes. 
+RP/0/RP0/CPU0:Oct 23 14:18:55.440 UTC: config[68914]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 23 14:18:55.854 UTC: SSHD_[68883]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 14:19:06.147 UTC: SSHD_[68938]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 14:19:06.151 UTC: SSHD_[68938]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 14:19:08.973 UTC: SSHD_[68938]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 14:19:14.279 UTC: SSHD_[68986]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 14:19:14.284 UTC: SSHD_[68986]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 14:19:15.106 UTC: sysmgr_control[69014]: %OS-SYSMGR-4-PROC_RESTART_NAME : User SUZUKI (vty0) requested a restart of process isis at 0/RP0/CPU0 
+RP/0/RP0/CPU0:Oct 23 14:19:15.408 UTC: isis[1007]: %ROUTING-ISIS-5-PM_HA_ROLE_CHG : ISIS (CORE): ISIS HA role change: Active 
+RP/0/RP0/CPU0:Oct 23 14:19:15.408 UTC: isis[1007]: %ROUTING-ISIS-5-PM_ISSU_ROLE_CHG : ISIS (CORE): ISIS ISSU role change: Primary 
+RP/0/RP0/CPU0:Oct 23 14:19:15.507 UTC: SSHD_[68986]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 14:19:15.569 UTC: isis[1007]: %ROUTING-ISIS-5-NSR_CONFIG_ENABLE : ISIS (CORE): ISIS NSR is configured 
+RP/0/RP0/CPU0:Oct 23 14:19:15.580 UTC: isis[1007]: %ROUTING-ISIS-6-INFO_STARTUP_START : ISIS (CORE): IETF NSF controlled start beginning 
+RP/0/RP0/CPU0:Oct 23 14:19:15.600 UTC: isis[1007]: %ROUTING-ISIS-5-NSR_NOTIFY_READY : ISIS (CORE): ISIS NSR set nsr ISIS NSR not ready yet for instance ISIS_CORE. rc 0 
+RP/0/RP0/CPU0:Oct 23 14:19:15.612 UTC: isis[1007]: %ROUTING-ISIS-5-ADJCHANGE : ISIS (CORE): Adjacency to 49.0001.0100.0000.0011 (Bundle-Ether1) (L2) Up, NSF Restart 
+RP/0/RP0/CPU0:Oct 23 14:19:15.613 UTC: isis[1007]: %ROUTING-ISIS-5-ADJCHANGE : ISIS (CORE): Adjacency to 49.0001.0100.0000.0012 (GigabitEthernet0/0/0/2) (L2) Up, NSF Restart 
+RP/0/RP0/CPU0:Oct 23 14:19:25.675 UTC: isis[1007]: %ROUTING-ISIS-6-INFO_STARTUP_FINISH : ISIS (CORE): IETF NSF controlled start completed 
+RP/0/RP0/CPU0:Oct 23 14:19:55.789 UTC: SSHD_[69074]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 14:19:55.792 UTC: SSHD_[69074]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:XR01#
+== start 14:19:08 ping 10.20.0.1 source Loopback1 repeat 20000 timeout 1
+== end 14:19:32 elapsed 23.4s symbols {'!': 20000} longest_gap 0 gaps []
+Success rate is 100 percent (20000/20000), round-trip min/avg/max = 1/1/9 ms
+show clns neighbors
+Tag CORE:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+XR01            Po1           0003.a004.5331      Up     24        L2   IS-IS
+RT02            Gi3           aabb.cc00.3b20      Up     22        L2   IS-IS
+RT01#
+show logging | include ISIS|CLNS|NSF
+*Oct 23 13:27:58.205: %CLNS-6-DFT_OPT: Protocol timers for fast convergence are Enabled.
+*Oct 23 13:28:08.701: %CLNS-5-ADJCHANGE: ISIS: Adjacency to 0100.0000.0012 (GigabitEthernet3) Up, new adjacency
+*Oct 23 13:55:28.674: %CLNS-5-ADJCHANGE: ISIS: Adjacency to 0100.0000.0001 (Port-channel1) Up, new adjacency
+*Oct 23 13:56:53.760: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Down, neighbor forgot us
+*Oct 23 13:58:06.478: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Down, hold time expired
+*Oct 23 13:58:57.019: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Up, new adjacency
+*Oct 23 14:04:27.922: %BFD-6-BFD_SESS_CREATED: BFD-SYSLOG: bfd_session_created, neigh 10.0.1.1 proc:ISIS, idb:Port-channel1 handle:1 act
+*Oct 23 14:04:59.863: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Down, bfd neighbor down
+*Oct 23 14:08:11.328: %BFD-6-BFD_SESS_DESTROYED: BFD-SYSLOG: bfd_session_destroyed,  handle:1 neigh proc:ISIS, idb:Port-channel1 handle:1 active
+*Oct 23 14:08:12.996: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Up, new adjacency
+*Oct 23 14:14:28.448: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Down, neighbor forgot us
+*Oct 23 14:14:30.447: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Up, new adjacency
+RT01#

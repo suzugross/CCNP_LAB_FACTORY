@@ -1,0 +1,648 @@
+
+######## 13:36:09 b-1: 束を LACP active で作る(最低本数は既定のまま)
+configure
+Fri Oct 23 13:36:11.436 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface Bundle-Ether1
+RP/0/RP0/CPU0:XR01(config-if)#
+description BUNDLE to RT01
+RP/0/RP0/CPU0:XR01(config-if)#
+ipv4 address 10.0.1.1 255.255.255.0
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode active
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode active
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 13:36:15.557 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+show configuration failed
+Fri Oct 23 13:36:16.466 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show bundle Bundle-Ether1
+Fri Oct 23 13:36:59.667 UTC
+
+Bundle-Ether1
+  Status:                                    Up
+  Local links <active/standby/configured>:   2 / 0 / 2
+  Local bandwidth <effective/available>:     2000000 (2000000) kbps
+  MAC address (source):                      0003.a004.5331 (Chassis pool)
+  Inter-chassis link:                        No
+  Minimum active links / bandwidth:          1 / 1 kbps
+  Maximum active links:                      24
+  Wait while timer:                          2000 ms
+  Load balancing:                            
+    Link order signaling:                    Not configured
+    Hash type:                               Default
+    Locality threshold:                      None
+  LACP:                                      Operational
+    Flap suppression timer:                  Off
+    Cisco extensions:                        Disabled
+    Non-revertive:                           Disabled
+  mLACP:                                     Not configured
+  IPv4 BFD:                                  Not configured
+  IPv6 BFD:                                  Not configured
+
+  Port                  Device           State        Port ID         B/W, kbps
+  --------------------  ---------------  -----------  --------------  ----------
+  Gi0/0/0/0             Local            Active       0x8000, 0x0002     1000000
+      Link is Active
+  Gi0/0/0/1             Local            Active       0x8000, 0x0001     1000000
+      Link is Active
+RP/0/RP0/CPU0:XR01#
+show lacp Bundle-Ether1
+Fri Oct 23 13:37:00.069 UTC
+State: a - Port is marked as Aggregable.
+       s - Port is Synchronized with peer.
+       c - Port is marked as Collecting.
+       d - Port is marked as Distributing.
+       A - Device is in Active mode.
+       F - Device requests PDUs from the peer at fast rate.
+       D - Port is using default values for partner information.
+       E - Information about partner has expired.
+
+Bundle-Ether1
+
+  Port          (rate)  State    Port ID       Key    System ID
+  --------------------  -------- ------------- ------ ------------------------
+Local
+  Gi0/0/0/0        30s  ascdA--- 0x8000,0x0002 0x0001 0x8000,00-03-a0-04-53-32
+   Partner         30s  ascdA--- 0x8000,0x0002 0x0001 0x8000,00-1e-bd-aa-b2-00
+  Gi0/0/0/1        30s  ascdA--- 0x8000,0x0001 0x0001 0x8000,00-03-a0-04-53-32
+   Partner         30s  ascdA--- 0x8000,0x0003 0x0001 0x8000,00-1e-bd-aa-b2-00
+
+  Port                  Receive    Period Selection  Mux       A Churn P Churn
+  --------------------  ---------- ------ ---------- --------- ------- -------
+Local
+  Gi0/0/0/0             Current    Slow   Selected   Distrib   None    None   
+  Gi0/0/0/1             Current    Slow   Selected   Distrib   None    None   
+RP/0/RP0/CPU0:XR01#
+show interfaces Bundle-Ether1 | include "MTU|line protocol|B$1 | include "MTU|line protocol|BW                          "show interfaces Bundle-Ether1 | include "MTU|line protocol|$
+Fri Oct 23 13:37:00.468 UTC
+Bundle-Ether1 is up, line protocol is up 
+  MTU 1514 bytes, BW 2000000 Kbit (Max: 2000000 Kbit)
+RP/0/RP0/CPU0:XR01#
+show interfaces GigabitEthernet0/0/0/0 | include "MTU|line p$net0/0/0/0 | include "MTU|line pr                          otocol"show interfaces GigabitEthernet0/0/0/0 | include "MTU|line $
+Fri Oct 23 13:37:00.870 UTC
+GigabitEthernet0/0/0/0 is up, line protocol is up 
+  MTU 1514 bytes, BW 1000000 Kbit (Max: 1000000 Kbit)
+RP/0/RP0/CPU0:XR01#
+ping 10.0.1.11 count 5
+Fri Oct 23 13:37:01.272 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.0.1.11 timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 1/1/3 ms
+RP/0/RP0/CPU0:XR01#
+show etherchannel summary
+Flags:  D - down        P/bndl - bundled in port-channel
+        I - stand-alone s/susp - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1	Po1(RU)		LACP	 Gi1(bndl) Gi2(bndl)
+
+RU - L3 port-channel UP State
+SU - L2 port-channel UP state
+P/bndl -  Bundled
+S/susp  - Suspended
+
+RT01#
+show lacp neighbor
+Flags:  S - Device is requesting Slow LACPDUs 
+        F - Device is requesting Fast LACPDUs
+        A - Device is in Active mode       P - Device is in Passive mode     
+
+Channel group 1 neighbors
+
+                     LACP port                      Admin  Oper   Port    Port
+Port          Flags  Priority  Dev ID          Age  key    Key    Number  State
+Gi1           SA     32768     0003.a004.5332  11s  0x0    0x1    0x2     0x3D  
+Gi2           SA     32768     0003.a004.5332  11s  0x0    0x1    0x1     0x3D  
+RT01#
+show interfaces Port-channel1 | include MTU|line protocol|BW
+Port-channel1 is up, line protocol is up 
+  MTU 1500 bytes, BW 2000000 Kbit/sec, DLY 10 usec, 
+RT01#
+
+######## 13:37:05 b-2: 最低本数 2 → RT01 で 1 本止める(束はダウンするか)→ 戻す
+configure
+Fri Oct 23 13:37:07.395 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface Bundle-Ether1
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle minimum-active links 2
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 13:37:08.699 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+show configuration failed
+Fri Oct 23 13:37:09.604 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface GigabitEthernet2
+RT01(config-if)#
+shutdown
+RT01(config-if)#
+end
+RT01#
+show bundle Bundle-Ether1
+Fri Oct 23 13:37:30.670 UTC
+
+Bundle-Ether1
+  Status:                                    Up
+  Local links <active/standby/configured>:   2 / 0 / 2
+  Local bandwidth <effective/available>:     2000000 (2000000) kbps
+  MAC address (source):                      0003.a004.5331 (Chassis pool)
+  Inter-chassis link:                        No
+  Minimum active links / bandwidth:          2 / 1 kbps
+  Maximum active links:                      24
+  Wait while timer:                          2000 ms
+  Load balancing:                            
+    Link order signaling:                    Not configured
+    Hash type:                               Default
+    Locality threshold:                      None
+  LACP:                                      Operational
+    Flap suppression timer:                  Off
+    Cisco extensions:                        Disabled
+    Non-revertive:                           Disabled
+  mLACP:                                     Not configured
+  IPv4 BFD:                                  Not configured
+  IPv6 BFD:                                  Not configured
+
+  Port                  Device           State        Port ID         B/W, kbps
+  --------------------  ---------------  -----------  --------------  ----------
+  Gi0/0/0/0             Local            Active       0x8000, 0x0002     1000000
+      Link is Active
+  Gi0/0/0/1             Local            Active       0x8000, 0x0001     1000000
+      Link is Active
+RP/0/RP0/CPU0:XR01#
+show interfaces Bundle-Ether1 | include "line protocol"
+Fri Oct 23 13:37:31.071 UTC
+Bundle-Ether1 is up, line protocol is up 
+RP/0/RP0/CPU0:XR01#
+show logging last 20
+Fri Oct 23 13:37:31.472 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 17 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 175 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 23 13:35:57.048 UTC: SSHD_[65817]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:35:57.053 UTC: SSHD_[65817]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 13:36:01.086 UTC: SSHD_[65817]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 13:36:10.619 UTC: SSHD_[65890]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:36:10.625 UTC: SSHD_[65890]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 13:36:16.070 UTC: config[65921]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000004' to view the changes. 
+RP/0/RP0/CPU0:Oct 23 13:36:18.168 UTC: config[65921]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 23 13:36:18.581 UTC: SSHD_[65890]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 13:36:23.879 UTC: BM-DISTRIB[1267]: %L2-BM-6-ACTIVE : GigabitEthernet0/0/0/0 is Active as part of Bundle-Ether1 
+RP/0/RP0/CPU0:Oct 23 13:36:23.885 UTC: BM-DISTRIB[1267]: %L2-BM-6-ACTIVE : GigabitEthernet0/0/0/1 is Active as part of Bundle-Ether1 
+RP/0/RP0/CPU0:Oct 23 13:36:58.853 UTC: SSHD_[66187]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:36:58.858 UTC: SSHD_[66187]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 13:37:03.895 UTC: SSHD_[66187]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 13:37:06.584 UTC: SSHD_[66249]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:37:06.588 UTC: SSHD_[66249]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 13:37:09.172 UTC: config[66286]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000005' to view the changes. 
+RP/0/RP0/CPU0:Oct 23 13:37:11.211 UTC: config[66286]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 23 13:37:11.623 UTC: SSHD_[66249]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 13:37:29.858 UTC: SSHD_[66310]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:37:29.862 UTC: SSHD_[66310]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:XR01#
+show etherchannel summary
+Flags:  D - down        P/bndl - bundled in port-channel
+        I - stand-alone s/susp - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1	Po1(RU)		LACP	 Gi1(bndl) Gi2(D)
+
+RU - L3 port-channel UP State
+SU - L2 port-channel UP state
+P/bndl -  Bundled
+S/susp  - Suspended
+
+RT01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface GigabitEthernet2
+RT01(config-if)#
+no shutdown
+RT01(config-if)#
+end
+RT01#
+show bundle Bundle-Ether1 | include "Status|Local links|Gi"
+Fri Oct 23 13:38:17.508 UTC
+  Status:                                    Up
+  Local links <active/standby/configured>:   2 / 0 / 2
+  Gi0/0/0/0             Local            Active       0x8000, 0x0002     1000000
+  Gi0/0/0/1             Local            Active       0x8000, 0x0001     1000000
+RP/0/RP0/CPU0:XR01#
+
+######## 13:38:17 b-3: モードの食い違い= XR を mode on(静的)・RT01 は LACP active
+configure
+Fri Oct 23 13:38:19.041 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode on
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode on
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 13:38:22.350 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+show configuration failed
+Fri Oct 23 13:38:23.255 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show bundle Bundle-Ether1
+Fri Oct 23 13:39:26.273 UTC
+
+Bundle-Ether1
+  Status:                                    Up
+  Local links <active/standby/configured>:   2 / 0 / 2
+  Local bandwidth <effective/available>:     2000000 (2000000) kbps
+  MAC address (source):                      0003.a004.5331 (Chassis pool)
+  Inter-chassis link:                        No
+  Minimum active links / bandwidth:          2 / 1 kbps
+  Maximum active links:                      24
+  Wait while timer:                          2000 ms
+  Load balancing:                            
+    Link order signaling:                    Not configured
+    Hash type:                               Default
+    Locality threshold:                      None
+  LACP:                                      Not operational
+    Flap suppression timer:                  Off
+    Cisco extensions:                        Disabled
+    Non-revertive:                           Disabled
+  mLACP:                                     Not configured
+  IPv4 BFD:                                  Not configured
+  IPv6 BFD:                                  Not configured
+
+  Port                  Device           State        Port ID         B/W, kbps
+  --------------------  ---------------  -----------  --------------  ----------
+  Gi0/0/0/0             Local            Active       0x8000, 0x0000     1000000
+      Link is Active
+  Gi0/0/0/1             Local            Active       0x8000, 0x0000     1000000
+      Link is Active
+RP/0/RP0/CPU0:XR01#
+show interfaces Bundle-Ether1 | include "line protocol"
+Fri Oct 23 13:39:26.673 UTC
+Bundle-Ether1 is up, line protocol is up 
+RP/0/RP0/CPU0:XR01#
+ping 10.0.1.11 count 5
+Fri Oct 23 13:39:27.075 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.0.1.11 timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+RP/0/RP0/CPU0:XR01#
+show logging last 20
+Fri Oct 23 13:39:38.218 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 17 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 194 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 23 13:37:29.862 UTC: SSHD_[66310]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 13:37:31.886 UTC: SSHD_[66310]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 13:37:48.540 UTC: BM-DISTRIB[1267]: %L2-BM-6-ACTIVE : GigabitEthernet0/0/0/1 is no longer Active as part of Bundle-Ether1 (Partner is not Synchronized (Waiting, Standby, or LAG ID mismatch)) 
+RP/0/RP0/CPU0:Oct 23 13:37:48.540 UTC: BM-DISTRIB[1267]: %L2-BM-6-ACTIVE : GigabitEthernet0/0/0/0 is no longer Active as part of Bundle-Ether1 (Link is in standby state due to minimum-active link configuration (only BFD down on other members)) 
+RP/0/RP0/CPU0:Oct 23 13:37:50.397 UTC: BM-DISTRIB[1267]: %L2-BM-6-ACTIVE : GigabitEthernet0/0/0/0 is Active as part of Bundle-Ether1 
+RP/0/RP0/CPU0:Oct 23 13:37:50.403 UTC: BM-DISTRIB[1267]: %L2-BM-6-ACTIVE : GigabitEthernet0/0/0/1 is Active as part of Bundle-Ether1 
+RP/0/RP0/CPU0:Oct 23 13:38:16.697 UTC: SSHD_[66476]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:38:16.700 UTC: SSHD_[66476]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 13:38:17.921 UTC: SSHD_[66476]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 13:38:18.228 UTC: SSHD_[66511]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:38:18.232 UTC: SSHD_[66511]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 13:38:22.423 UTC: BM-DISTRIB[1267]: %L2-BM-6-ACTIVE : GigabitEthernet0/0/0/1 is no longer Active as part of Bundle-Ether1 (Link is being removed from the bundle) 
+RP/0/RP0/CPU0:Oct 23 13:38:22.423 UTC: BM-DISTRIB[1267]: %L2-BM-6-ACTIVE : GigabitEthernet0/0/0/0 is no longer Active as part of Bundle-Ether1 (Link is being removed from the bundle) 
+RP/0/RP0/CPU0:Oct 23 13:38:22.869 UTC: config[66542]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000006' to view the changes. 
+RP/0/RP0/CPU0:Oct 23 13:38:24.501 UTC: BM-DISTRIB[1267]: %L2-BM-6-ACTIVE : GigabitEthernet0/0/0/0 is Active as part of Bundle-Ether1 
+RP/0/RP0/CPU0:Oct 23 13:38:24.501 UTC: BM-DISTRIB[1267]: %L2-BM-6-ACTIVE : GigabitEthernet0/0/0/1 is Active as part of Bundle-Ether1 
+RP/0/RP0/CPU0:Oct 23 13:38:24.760 UTC: config[66542]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 23 13:38:25.172 UTC: SSHD_[66511]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 13:39:25.460 UTC: SSHD_[66591]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:39:25.464 UTC: SSHD_[66591]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:XR01#
+show etherchannel summary
+Flags:  D - down        P/bndl - bundled in port-channel
+        I - stand-alone s/susp - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1	Po1(RD)		LACP	 Gi1(susp) Gi2(susp)
+
+RU - L3 port-channel UP State
+SU - L2 port-channel UP state
+P/bndl -  Bundled
+S/susp  - Suspended
+
+RT01#
+show lacp neighbor
+RT01#
+show logging | include LINK|LACP|EC|PORT
+*Oct 23 13:27:51.658: %VUDI-6-EVENT: [serial number: 9XX0O5Q7FEC], [vUDI: C8000V:9XX0O5Q7FEC], A new vUDI has been generated
+*Oct 23 13:27:52.341: %SMART_LIC-6-EXPORT_CONTROLLED: Usage of export controlled features is not allowed
+*Oct 23 13:27:55.394: %VUDI-6-EVENT: [serial number: 9XX0O5Q7FEC], [vUDI: C8000V:9XX0O5Q7FEC], vUDI initialization is now complete
+*Oct 23 13:27:56.429: %LINK-5-UPDOWN: Interface Lsmpi0, changed state to up
+*Oct 23 13:27:56.443: %LINK-5-UPDOWN: Interface EOBC0, changed state to up
+*Oct 23 13:27:56.490: %PNP-6-PNP_GOOD_UDI_UPDATE: Good UDI [PID:C8000V,VID:,SN:9XX0O5Q7FEC] identified via (platform-registry)
+*Oct 23 13:27:56.490: %PNP-6-PNP_CDP_UPDATE: Device UDI [PID:C8000V,VID:,SN:9XX0O5Q7FEC] identified for CDP
+*Oct 23 13:27:57.192: %IOSXE_OIR-6-ONLINECARD: Card (fp) online in slot F0
+*Oct 23 13:27:57.633: %LINK-5-UPDOWN: Interface LIIN0, changed state to up
+*Oct 23 13:27:57.639: %LINK-5-CHANGED: Interface GigabitEthernet1, changed state to administratively down
+*Oct 23 13:27:57.639: %LINK-5-CHANGED: Interface GigabitEthernet2, changed state to administratively down
+*Oct 23 13:27:57.640: %LINK-5-CHANGED: Interface GigabitEthernet3, changed state to administratively down
+*Oct 23 13:27:57.640: %LINK-5-CHANGED: Interface GigabitEthernet4, changed state to administratively down
+*Oct 23 13:28:06.692: %PNP-6-PNP_BEST_UDI_UPDATE: Best UDI [PID:C8000V,VID:V00,SN:9XX0O5Q7FEC] identified via (entity-mibs)
+*Oct 23 13:28:07.525: %LINK-5-UPDOWN: Interface GigabitEthernet1, changed state to up
+*Oct 23 13:28:07.539: %LINK-5-UPDOWN: Interface GigabitEthernet2, changed state to up
+*Oct 23 13:28:07.551: %LINK-5-UPDOWN: Interface GigabitEthernet3, changed state to up
+*Oct 23 13:28:07.566: %LINK-5-UPDOWN: Interface GigabitEthernet4, changed state to up
+*Oct 23 13:35:46.909: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: SUZUKI] [Source: 10.1.10.6] [localport: 22] at 13:35:46 UTC Fri Oct 23 2026
+*Oct 23 13:36:00.774: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: SUZUKI] [Source: 10.1.10.6] [localport: 22] at 13:36:00 UTC Fri Oct 23 2026
+*Oct 23 13:36:22.933: %EC-5-MINLINKS_MET: Port-channel Port-channel1 is up as its bundled ports (1) meets min-links
+*Oct 23 13:36:22.963: %EC-5-MINLINKS_MET: Port-channel Port-channel1 is up as its bundled ports (2) meets min-links
+*Oct 23 13:36:24.961: %LINK-5-UPDOWN: Interface Port-channel1, changed state to up
+*Oct 23 13:37:03.346: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: SUZUKI] [Source: 10.1.10.6] [localport: 22] at 13:37:03 UTC Fri Oct 23 2026
+*Oct 23 13:37:11.228: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: SUZUKI] [Source: 10.1.10.6] [localport: 22] at 13:37:11 UTC Fri Oct 23 2026
+*Oct 23 13:37:14.842: %LINK-5-CHANGED: Interface GigabitEthernet2, changed state to administratively down
+*Oct 23 13:37:31.325: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: SUZUKI] [Source: 10.1.10.6] [localport: 22] at 13:37:31 UTC Fri Oct 23 2026
+*Oct 23 13:37:33.067: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: SUZUKI] [Source: 10.1.10.6] [localport: 22] at 13:37:33 UTC Fri Oct 23 2026
+*Oct 23 13:37:47.619: %LINK-5-UPDOWN: Interface GigabitEthernet2, changed state to up
+*Oct 23 13:37:49.479: %EC-5-MINLINKS_MET: Port-channel Port-channel1 is up as its bundled ports (2) meets min-links
+*Oct 23 13:38:21.507: %EC-5-MINLINKS_NOTMET: Port-channel Port-channel1 is down bundled ports (0) doesn't meet min-links
+*Oct 23 13:38:23.508: %LINK-5-UPDOWN: Interface Port-channel1, changed state to down
+*Oct 23 13:39:38.232: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success [user: SUZUKI] [Source: 10.1.10.6] [localport: 22] at 13:39:38 UTC Fri Oct 23 2026
+RT01#
+
+######## 13:39:40 b-4: XR を passive(RT01 は active)→ 上がるはず
+configure
+Fri Oct 23 13:39:42.276 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode passive
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode passive
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 13:39:45.584 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+show configuration failed
+Fri Oct 23 13:39:46.488 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show bundle Bundle-Ether1 | include "Status|Local links|Gi"
+Fri Oct 23 13:40:34.512 UTC
+  Status:                                    Up
+  Local links <active/standby/configured>:   2 / 0 / 2
+  Gi0/0/0/0             Local            Active       0x8000, 0x0002     1000000
+  Gi0/0/0/1             Local            Active       0x8000, 0x0001     1000000
+RP/0/RP0/CPU0:XR01#
+ping 10.0.1.11 count 5
+Fri Oct 23 13:40:34.912 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.0.1.11 timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 1/1/2 ms
+RP/0/RP0/CPU0:XR01#
+show etherchannel summary
+Flags:  D - down        P/bndl - bundled in port-channel
+        I - stand-alone s/susp - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1	Po1(RU)		LACP	 Gi1(bndl) Gi2(bndl)
+
+RU - L3 port-channel UP State
+SU - L2 port-channel UP state
+P/bndl -  Bundled
+S/susp  - Suspended
+
+RT01#
+
+######## 13:40:38 b-5: 両方 passive(RT01 も passive)→ 上がらないはず
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface range GigabitEthernet1 - 2
+RT01(config-if-range)#
+channel-group 1 mode passive
+Interface already configured in Port-Channel-1.
+
+% Range command terminated because it failed on GigabitEthernet1
+RT01(config-if-range)#
+end
+RT01#
+show bundle Bundle-Ether1 | include "Status|Local links|Gi"
+Fri Oct 23 13:41:28.315 UTC
+  Status:                                    Up
+  Local links <active/standby/configured>:   2 / 0 / 2
+  Gi0/0/0/0             Local            Active       0x8000, 0x0002     1000000
+  Gi0/0/0/1             Local            Active       0x8000, 0x0001     1000000
+RP/0/RP0/CPU0:XR01#
+show etherchannel summary
+Flags:  D - down        P/bndl - bundled in port-channel
+        I - stand-alone s/susp - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1	Po1(RU)		LACP	 Gi1(bndl) Gi2(bndl)
+
+RU - L3 port-channel UP State
+SU - L2 port-channel UP state
+P/bndl -  Bundled
+S/susp  - Suspended
+
+RT01#
+
+######## 13:41:29 b-6: 元へ(両方 active)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface range GigabitEthernet1 - 2
+RT01(config-if-range)#
+channel-group 1 mode active
+Interface already configured in Port-Channel-1.
+
+% Range command terminated because it failed on GigabitEthernet1
+RT01(config-if-range)#
+end
+RT01#
+configure
+Fri Oct 23 13:41:34.495 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode active
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode active
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 13:41:37.804 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+show configuration failed
+Fri Oct 23 13:41:38.710 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show bundle Bundle-Ether1 | include "Status|Local links|Gi"
+Fri Oct 23 13:42:26.721 UTC
+  Status:                                    Up
+  Local links <active/standby/configured>:   2 / 0 / 2
+  Gi0/0/0/0             Local            Active       0x8000, 0x0001     1000000
+  Gi0/0/0/1             Local            Active       0x8000, 0x0002     1000000
+RP/0/RP0/CPU0:XR01#
+ping 10.0.1.11 count 5
+Fri Oct 23 13:42:27.122 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.0.1.11 timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 2/2/4 ms
+RP/0/RP0/CPU0:XR01#
+show etherchannel summary
+Flags:  D - down        P/bndl - bundled in port-channel
+        I - stand-alone s/susp - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1	Po1(RU)		LACP	 Gi1(bndl) Gi2(bndl)
+
+RU - L3 port-channel UP State
+SU - L2 port-channel UP state
+P/bndl -  Bundled
+S/susp  - Suspended
+
+RT01#

@@ -1,0 +1,47 @@
+== RT02 の GR 表示(XR に未設定)
+show ip bgp neighbors 10.255.0.1 | include Graceful|restart
+    Graceful Restart Capability: advertised
+  Graceful-Restart is enabled, restart-time 900 seconds, stalepath-time 1800 seconds
+== M7-5 白紙
+[m7t5]     - '[FAIL] (+ 20 点) M7-5 RT02: graceful restart is negotiated with XR01'
+[m7t5]     - '        未充足(raw): {''regex'': ''Graceful Restart Capability: advertised and received''}'
+[m7t5]     - '[FAIL] (+ 40 点) M7-5 RT01, RT02: no IS-IS adjacency change when XR01 restarts its
+[m7t5]     - '        未充足(raw): {''regex'': ''== NO NEW MATCHES''}'
+[m7t5]     - '[FAIL] (+ 40 点) M7-5 RT02: keeps XR01''s BGP route while XR01 restarts its BGP
+[m7t5]     - '        未充足(raw): {''regex'': ''Known via "bgp 65000"''}'
+[m7t5]     - '        未充足(raw): {''not_regex'': ''not in table''}'
+[m7t5]     - '  合計: 0 / 100 点'
+[m7t5]     msg: ⚠ 1 回試行しても全 PASS に至らず（上の未充足を参照）
+== M7-5 誤答(GR を入れてセッションをやり直さない)
+show ip bgp neighbors 10.255.0.1 | include Graceful|restart
+    Graceful Restart Capability: advertised
+  Graceful-Restart is enabled, restart-time 900 seconds, stalepath-time 1800 seconds
+[m7t5]     - '[FAIL] (+ 20 点) M7-5 RT02: graceful restart is negotiated with XR01'
+[m7t5]     - '        未充足(raw): {''regex'': ''Graceful Restart Capability: advertised and received''}'
+[m7t5]     - '[PASS] (+ 40 点) M7-5 RT01, RT02: no IS-IS adjacency change when XR01 restarts its
+[m7t5]     - '[FAIL] (+ 40 点) M7-5 RT02: keeps XR01''s BGP route while XR01 restarts its BGP
+[m7t5]     - '        未充足(raw): {''not_regex'': ''not in table''}'
+[m7t5]     - '  合計: 40 / 100 点'
+[m7t5]     msg: ⚠ 1 回試行しても全 PASS に至らず（上の未充足を参照）
+== M7-5 正解(clear … graceful でやり直す)
+clear bgp ipv4 unicast 10.255.0.12 ?
+  long-lived-stale  Clear long-lived-stale routes
+  soft              Soft reconfig
+RP/0/RP0/CPU0:XR01#clear bgp ipv4 unicast 10.255.0.12 
+% Incomplete command.
+RP/0/RP0/CPU0:XR01#
+clear bgp ipv4 unicast 10.255.0.12 graceful
+                                                      ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR01#
+show ip bgp neighbors 10.255.0.1 | include Graceful|restart|state
+  BGP state = Established, up for 00:01:04
+    Graceful Restart Capability: advertised and received
+      Address families advertised by peer before restart:
+  Do log neighbor state changes (via global configuration)
+  Graceful-Restart is enabled, restart-time 900 seconds, stalepath-time 1800 seconds
+Connection state is ESTAB, I/O status: 1, unread input bytes: 0            
+[m7t5]     - '[PASS] (+ 20 点) M7-5 RT02: graceful restart is negotiated with XR01'
+[m7t5]     - '[PASS] (+ 40 点) M7-5 RT01, RT02: no IS-IS adjacency change when XR01 restarts its
+[m7t5]     - '[PASS] (+ 40 点) M7-5 RT02: keeps XR01''s BGP route while XR01 restarts its BGP
+[m7t5]     - '  合計: 100 / 100 点'

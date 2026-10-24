@@ -1,0 +1,55 @@
+######## 2026-10-23 13:2x IOL 17.15 ルータ(iol-xe)の LACP= 不可の記録(_POC-XRHA 1 回目)
+# day0 の 'channel-group 1 mode active' は無言で捨てられ、Port-channel1 は所属ポートなしで up/up(BW 10000・MAC 0000.0000.0000)。show etherchannel は Invalid。
+# 手で入れると 'Invalid channel group number' を返しつつ running-config には残る。show lacp internal は同じ行を無限に出し続ける(打ち切り)。
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface Ethernet0/0
+RT01(config-if)#
+channel-group 1 mode ?
+  active   Enable LACP unconditionally
+  passive  Enable LACP only if a LACP device is detected
+  <cr>     <cr>
+RT01(config-if)#channel-group 1 mode 
+RT01(config-if)#
+channel-group 1 mode active
+Invalid channel group number
+RT01(config-if)#
+end
+RT01#
+show running-config interface Ethernet0/0
+Building configuration...
+Current configuration : 108 bytes
+!
+interface Ethernet0/0
+ description BUNDLE member to XR01
+ no ip address
+ channel-group 1 mode active
+end
+RT01#
+show lacp internal
+Flags:  S - Device is requesting Slow LACPDUs 
+        F - Device is requesting Fast LACPDUs
+        A - Device is in Active mode       P - Device is in Passive mode     
+Channel group 1
+                                LACP port    Admin     Oper    Port        Port
+Port          Flags   State     Priority     Key       Key     Number      State
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+Et0/0         SA      susp      32768        0x1       0x1     0x1         0xCD  
+
+[killed]

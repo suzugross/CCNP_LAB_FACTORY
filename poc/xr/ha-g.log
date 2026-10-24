@@ -1,0 +1,167 @@
+
+######## 14:41:43 g-1: TS 候補= メンバを bundle id 1(モード省略)+束に mtu 1500 → 症状
+configure
+Fri Oct 23 14:41:45.729 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface Bundle-Ether1
+RP/0/RP0/CPU0:XR01(config-if)#
+mtu 1500
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 14:41:50.239 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+show configuration failed
+Fri Oct 23 14:41:51.245 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config interface GigabitEthernet0/0/0/0
+Fri Oct 23 14:41:53.252 UTC
+interface GigabitEthernet0/0/0/0
+ description BUNDLE member to RT01
+ bundle id 1 mode on
+!
+
+RP/0/RP0/CPU0:XR01#
+show bundle Bundle-Ether1 | include "Status|LACP|Gi0"
+Fri Oct 23 14:42:54.756 UTC
+  Status:                                    Up
+  LACP:                                      Not operational
+  mLACP:                                     Not configured
+  Gi0/0/0/0             Local            Active       0x8000, 0x0000     1000000
+  Gi0/0/0/1             Local            Active       0x8000, 0x0000     1000000
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Fri Oct 23 14:42:55.160 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT02           Gi0/0/0/2                *PtoP*         Up    26   00:04:06 Yes Up   None
+
+Total adjacency count: 1
+RP/0/RP0/CPU0:XR01#
+ping 10.0.1.11 count 5
+Fri Oct 23 14:42:55.557 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.0.1.11 timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+RP/0/RP0/CPU0:XR01#
+show etherchannel summary | include Po1
+1	Po1(RD)		LACP	 Gi1(susp) Gi2(susp)
+RT01#
+show clns neighbors
+Tag CORE:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+RT02            Gi3           aabb.cc00.3b20      Up     28        L2   IS-IS
+RT01#
+
+######## 14:43:07 g-2: モードだけ直す(active)→ 次の症状(MTU)が見えるか
+configure
+Fri Oct 23 14:43:09.951 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode active
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode active
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 14:43:13.261 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show bundle Bundle-Ether1 | include "Status|LACP|Gi0"
+Fri Oct 23 14:44:15.777 UTC
+  Status:                                    Up
+  LACP:                                      Operational
+  mLACP:                                     Not configured
+  Gi0/0/0/0             Local            Active       0x8000, 0x0002     1000000
+  Gi0/0/0/1             Local            Active       0x8000, 0x0001     1000000
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Fri Oct 23 14:44:16.178 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT02           Gi0/0/0/2                *PtoP*         Up    24   00:05:27 Yes Up   None
+
+Total adjacency count: 1
+RP/0/RP0/CPU0:XR01#
+ping 10.0.1.11 count 5
+Fri Oct 23 14:44:16.579 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.0.1.11 timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/2/3 ms
+RP/0/RP0/CPU0:XR01#
+show isis interface Bundle-Ether1 | include "MTU|Rejected"
+Fri Oct 23 14:44:17.186 UTC
+  Last PDU Rejected:        14:44:08 (8.36 sec ago), 1496 octets, P2P IIH, PDU larger than our MTU
+    MTU:                    1483 (MTU is too small: L2 lsp-mtu is 1492)
+RP/0/RP0/CPU0:XR01#
+show clns neighbors
+Tag CORE:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+XR01            Po1           0003.a004.5331      Init   28        L2   IS-IS
+RT02            Gi3           aabb.cc00.3b20      Up     21        L2   IS-IS
+RT01#
+
+######## 14:44:18 g-3: MTU を直す
+configure
+Fri Oct 23 14:44:20.268 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface Bundle-Ether1
+RP/0/RP0/CPU0:XR01(config-if)#
+no mtu
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 14:44:21.571 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Fri Oct 23 14:45:08.979 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           BE1                      *PtoP*         Up    21   00:00:41 Yes None None
+RT02           Gi0/0/0/2                *PtoP*         Up    25   00:06:20 Yes Up   None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show clns neighbors
+Tag CORE:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+XR01            Po1           0003.a004.5331      Up     24        L2   IS-IS
+RT02            Gi3           aabb.cc00.3b20      Up     26        L2   IS-IS
+RT01#

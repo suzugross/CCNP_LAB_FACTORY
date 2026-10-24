@@ -11,7 +11,8 @@
 
 | 出題日 | 問題ID (variant/seed) | 難 | 状態 | 得点 | メモ |
 |--------|----------------------|----|------|------|------|
-| 2026-10-22 | XRT-05 | 3 | 採点済 | - | XR トラック M4 の 2 周目(IS-IS を深く)。学習目的(tutorial)= `scripts/lab.sh learn XRT-05` のワークスペースで解く。XR01 は XRd。E2E 後に構築直後へ戻し済み(白紙)。2026-10-23 ユーザが M4-5〜8 を全通過(学習モード・記録 `records/learn/XRT-05.jsonl`。M4-6 は採点の不具合= brief の Prio 列で正解が落ちた回あり・同日修正)。ラボは稼働中 |
+| 2026-10-23 | XRT-06 | 3 | 出題中 | - | XR トラック M7(高可用性)。学習目的(tutorial)= `scripts/lab.sh learn XRT-06` のワークスペースで解く。XR01 は XRv9000 26.1.1・RT01 は Cat8000v。E2E 後に `lab.sh reset` で構築直後へ戻し済み(白紙 0 を確認) |
+| 2026-10-22 | XRT-05 | 3 | 撤収済 | - | XR トラック M4 の 2 周目(IS-IS を深く)。学習目的(tutorial)= `scripts/lab.sh learn XRT-05` のワークスペースで解く。XR01 は XRd。E2E 後に構築直後へ戻し済み(白紙)。2026-10-23 ユーザが M4-5〜8 を全通過(学習モード・記録 `records/learn/XRT-05.jsonl`。M4-6 は採点の不具合= brief の Prio 列で正解が落ちた回あり・同日修正)。2026-10-24 撤収(teardown の撤去が XRd の停止待ちで「not stopped」で失敗し、台帳と生成物だけ消えた → 止まっていたラボを CML の API で消去・削除。lab_up.yml の撤去に再試行、lab.sh teardown に残存の確認を追加) |
 | 2026-10-21 | XRT-04 | 3 | 撤収済 | - | XR トラック M4(IS-IS)。学習目的(tutorial)= `scripts/lab.sh learn XRT-04` のワークスペースで解く。XR01 は XRd。E2E 後に構築直後へ戻し済み(白紙)。2026-10-22 ユーザが M4-1〜4 を全通過(学習モード・記録 `records/learn/XRT-04.jsonl`)→ 同日撤収 |
 | 2026-10-18 | XRT-03 | 3 | 撤収済 | - | XR トラック M5(RPL)+M6(BGP)。学習目的(tutorial)= `scripts/lab.sh learn XRT-03` のワークスペースで解く。XR01 は XRd。M6 追加で作り直し済み(白紙)。2026-10-21 ユーザが M5-1〜M6-4 を全通過(学習モード・記録 `records/learn/XRT-03.jsonl`)→ 2026-10-22 撤収 |
 | 2026-10-18 | XRT-02 | 3 | 撤収済 | - | XR トラック M2(管理プレーン)+M3(OSPF)。学習目的(tutorial)= `scripts/lab.sh learn XRT-02` のワークスペースで解く。2026-10-23 時点で CML に無し(撤収日の記録なし) |

@@ -1,0 +1,34 @@
+# XRT-06: XR トラック M7 高可用性(束・BFD・オーバーロード ビット・グレースフル リスタート)。BL-246。設計= problems/_drafts/XR-TRACK.design.md §19
+# 学習目的のラボ(パック・ノルマの対象外)。PoC= problems/_POC-XRHA(§19.6)。
+# 盤面: XR01(IOS XRv 9000 26.1.1) Gi0/0/0/0・Gi0/0/0/1 ══ Gi1・Gi2 RT01(Cat8000v 17.15)  … BUNDLE(Bundle-Ether1 ⇔ Port-channel1・LACP)
+#        XR01 Gi0/0/0/2 ── SW01(非管理) ── Et0/0 RT02(IOL 17.15)                       … PRIMARY(間にスイッチ= XR 側は up のまま先が死ぬ)
+#        RT01 Gi3 ── Et0/2 RT02                                                        … BACKUP(メトリック 1000)
+# ★XR01 は XRv9000(XRd は BFD のセッションを作らない= §14.2)。★RT01 は Cat8000v(IOL ルータの LACP は壊れている= §19.6)。
+# 仕込み(XR01 の初期設定)= M7-1: メンバの bundle id 1(モード省略= 静的)+束の mtu 1500/M7-3: set-overload-bit の消し忘れ。
+# 採点で故障を起こす= M7-2: RT01 Gi2 を一時 shutdown/M7-4: CML のリンク条件で RT02-SW01 を loss 100/M7-5: XR01 で process restart。
+id: XRT-06
+title: "XR Track 06 — High availability"
+exam: SP
+topics: [iosxr, isis, bundle, lacp, bfd, nsf, bgp, tutorial]
+difficulty: 3
+topology: generated
+access: ssh
+target_nodes: [XR01, RT01, RT02]
+points: 100
+image_family: iol
+node_image_families: { XR01: iosxr, RT01: cat8000v }
+node_images: { XR01: iosxrv9000-26-1-1 }
+grade_attempts: 2
+# やり直し(lab.sh reset)の後に XR01 で流す行。①巻き戻しでは BGP の機能の交換(M7-5 の GR)がセッションに残るので張り直す
+# ②★XR の rollback は set-overload-bit の形の置き換え(素の形 → on-startup wait-for-bgp)を戻さない(26.1.1 実測)= 初期の素の形を入れ直す
+xr_reset_exec:
+  XR01: ['configure', 'router isis CORE', 'set-overload-bit', 'commit', 'end', 'clear bgp 10.255.0.12']
+lab:
+  switches: [SW01]
+  positions: { RT01: [-400, 0], XR01: [0, 0], SW01: [250, 0], RT02: [450, 0] }
+  links:
+    - { a: XR01, a_if: 3, b: RT01, b_if: 0 }
+    - { a: XR01, a_if: 4, b: RT01, b_if: 1 }
+    - { a: XR01, a_if: 5, b: SW01, b_if: 0 }
+    - { a: RT02, a_if: 0, b: SW01, b_if: 1 }
+    - { a: RT01, a_if: 2, b: RT02, b_if: 2 }

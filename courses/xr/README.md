@@ -20,3 +20,4 @@ IOS XR を「読み物で学ぶ → ワークスペースで実践する」た�
 | M4 IS-IS | `40-m4-isis.md`・`42-m4-isis-deeper.md`(2 周目: 認証・DIS・要約・エリア アドレス) | XRT-04・XRT-05(2 周目) |
 | M5 Routing Policy Language | `50-m5-rpl.md` | XRT-03 の M5 |
 | M6 BGP | `60-m6-bgp.md` | XRT-03 の M6 |
+| M7 High availability | `70-m7-high-availability.md`(束・BFD・オーバーロード ビット・NSF/GR/NSR) | XRT-06(XRv9000) |

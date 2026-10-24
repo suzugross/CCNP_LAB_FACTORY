@@ -1,0 +1,66 @@
+!! XRT-06 XR01 — 前任者が組んだ状態。仕込み= M7-1(メンバの bundle id 1 はモード省略= 静的・束の mtu 1500)・M7-3(set-overload-bit の消し忘れ)。
+!! BFD・NSF・BGP のグレースフル リスタート・LACP の周期・最低本数は未設定(課題で足す)。
+interface Loopback0
+ ipv4 address 10.255.0.1 255.255.255.255
+!
+interface Loopback10
+ description PLATFORM (advertised to RT02 in BGP)
+ ipv4 address 10.30.0.1 255.255.0.0
+!
+interface Bundle-Ether1
+ description BUNDLE to RT01 - MTU aligned with RT01 (1500), CHG-0917
+ mtu 1500
+ ipv4 address 10.0.1.1 255.255.255.0
+!
+interface {{ links[3] }}
+ description BUNDLE member to RT01 Gi1
+ bundle id 1
+ no shutdown
+!
+interface {{ links[4] }}
+ description BUNDLE member to RT01 Gi2
+ bundle id 1
+ no shutdown
+!
+interface {{ links[5] }}
+ description PRIMARY to RT02 via SW01
+ ipv4 address 10.0.2.1 255.255.255.0
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ set-overload-bit
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Bundle-Ether1
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[5] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+!
+router bgp 65000
+ bgp router-id 10.255.0.1
+ address-family ipv4 unicast
+  network 10.30.0.0/16
+ !
+ neighbor 10.255.0.12
+  remote-as 65000
+  update-source Loopback0
+  address-family ipv4 unicast
+  !
+ !
+!
+end

@@ -18,6 +18,11 @@
 ★XRd は初期設定(first-boot.cfg)がコミット履歴に残らず、構築直後の履歴が空(BL-250)。その時は戻り先を
   `first-boot` と記録し、やり直しは「履歴でいちばん古いコミットの手前」へ戻す(`rollback configuration to <最古の ID>`= その回も含めて取り消す)。
   XR が保持する履歴の件数を超えてコミットすると最古の分が消え、そこへは戻れなくなる(その時は作り直す)。
+★設定を戻しても、相手と交換済みの状態(BGP の OPEN で交換した機能など)はセッションに残る。problem.yml の
+  `xr_reset_exec: {<NODE>: [<CLI の行>, …]}` に書いた行を、戻した後にそのノードで順に流す(XRT-06= `clear bgp 10.255.0.12`
+  でグレースフル リスタートの交換を白紙に戻す)。configure … commit … end も書ける。
+★XR の rollback は、同じコマンドの形の置き換え(`set-overload-bit` → `set-overload-bit on-startup wait-for-bgp`)を戻さない
+  (26.1.1 実測。巻き戻しの差分にその行が出ない)。そういう行は xr_reset_exec で初期の形を入れ直す。
 """
 import argparse
 import os
@@ -101,6 +106,8 @@ def main():
     except OSError:
         print(f"ERROR no baseline recorded ({os.path.relpath(path, a.repo)}). Rebuild the lab, or record one with --id")
         return 1
+    pmeta = yaml.safe_load(open(os.path.join(a.repo, "problems", a.problem, "problem.yml"), encoding="utf-8"))
+    after = pmeta.get("xr_reset_exec") or {}
     for node in nodes:
         want = base.get(node)
         if not want:
@@ -136,6 +143,10 @@ def main():
             if not ok:
                 print(out.strip()[-1500:])
                 bad += 1
+            else:
+                for line in after.get(node, []):
+                    sh.send(line, timeout=60)
+                    print(f"[{node}] after rollback: {line}")
         finally:
             c.close()
     return 1 if bad else 0

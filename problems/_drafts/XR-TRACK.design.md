@@ -758,3 +758,145 @@ M4 の盤面を広げた短い課題で拾う(§5 の「IS-IS の深め方」①
 
 - M8 以降も転送が要るので XRv9000 が中心。ただし XRd は公式に vRR・PCE 向けの位置づけ(§14.1)なので、M9 の VPNv4 ルート リフレクタ・
   M10 の PCE のように**転送しない役に XRd を足せば**、XRv9000 1 台+XRd 数台で「XR 複数台」の盤面が作れる(同時 2 台の上限を回避)。
+
+### 19.5 公式文書・RFC での裏どり(2026-10-23・PoC の前に。xrdocs.io は取得していない)
+
+参照= NCS 5500 Routing CG/CR 26.x(IS-IS・BFD)・BGP CG/CR 26.x(NCS 5500・Cisco 8000)・ASR 9000 Routing CR(BFD)・Routing CG 7.8.x/7.11.x・
+Interface CR/CG(Link Bundling)・System Management CR(process)・XRv9000 リリースノート 24.3.1/25.1.1/26.1.1 と設置ガイド・
+技術ノート 116350(XR と IOS の MTU)/119399(IS-IS hello padding)/211432(SPF 既定の変更)・IOS XE 17.x(BFD・IEEE 802.3ad・NSF awareness・
+SR の routing-default-optimize)・RFC 4724/8706/3787/5880/5881/7130。
+
+| 論点 | 公式・RFC の記述(要旨) | PoC で見ること |
+|---|---|---|
+| XRv9000 の資源 | 24.3.1= 最小 2 コア・12GB(10G IF で 19GB 推奨)。26.1.1= ESXi 表だけで最小 4 コア・24GB(KVM 表なし) | 26.1.1 を CML の既定(7 vCPU/20GB)で動かした実使用 |
+| 束 | `bundle id N mode {active\|passive\|on}`・**mode を省くと on**(LACP なし)。最低本数を下回ると束は down。XRv9000 の LACP 周期の下限 200 ms。片側 on・片側 LACP の挙動は XR の文書に無い | on×active・passive×passive の症状 |
+| MTU | XR の `mtu` は L2 ヘッダ込み(Ethernet 既定 1514・IP は 1500)。束とメンバの MTU の関係は記載なし | `mtu 1500` の束で IS-IS の隣接 |
+| hello padding | XR・IOS とも既定で有効(IOS は MTU いっぱいまで埋める)。MTU が違うと「隣接が上がらない」(状態名の記述は無い)。padding を切るだけでは足りない | 上がらない側と状態 |
+| BFD | IS-IS の `bfd minimum-interval` 既定 150 ms・multiplier 3。ソフトウェア動作は 150 ms 以上を推奨(最小 3×50 ms)。XRv9000 固有の下限は記載なし。BLB は XRv9000 の対応表にある(6.1.2〜)・BoB は無い。ASR9K/NCS では BLB に `bfd multipath include location` が無いとセッションを作らない。`bfd bundle coexistence bob-blb` の要否は XRv9000 の記載なし | 下限・束の上の BFD・multipath の要否 |
+| 検出時間 | RFC 5880= 相手の Detect Mult × 合意した間隔(方向ごとに違い得る)。単一ホップ UDP 3784・TTL 255。micro-BFD(RFC 7130)はメンバごと・UDP 6784 | — |
+| SPF の既定 | XR= spf-interval・lsp-gen-interval とも 50/200/5000 ms。**IOS XE も routing-default-optimize で 50/200/5000 ms**(旧 5500/5500/10000。変更版は文書で 16.5.1 と 17.3.2 に割れる) | IOL 17.15 の既定 |
+| IS-IS NSF | `nsf {cisco\|ietf}` 既定無効。きっかけ= RP 切替・**管理者の process restart**・アップグレード。ietf は相手に RFC 5306(現 8706)のヘルパーが要る・相手が無ければ冷えた起動。`show isis protocol` の「Process startup mode」で判定。`process restart` は文書上 Admin EXEC | XR EXEC から打てるか・相手の隣接が切れないか |
+| IS-IS NSR | **dual RP 専用**。process restart を守るのは NSF、RP 切替を守るのは NSR。XRv9000 は Active/Standby の冗長を持たない | 設定と表示だけ(読み物で扱う) |
+| BGP GR | `bgp graceful-restart` 既定無効・OPEN で能力を交換(両側が広告して成立)・入れた後はセッションのやり直しが要る。restart 120 s・stalepath 360 s・purge 600 s。BGP の NSR は standby RP への SSO で、process restart ではネイバーが落ちる。**BGP NSR の既定が文書で食い違う**(NCS 5500 CG「既定で有効」・8000 CR「無効」) | `show bgp process` の NSR 行 |
+| IOS XE のヘルパー | IGP(IS-IS)の NSF awareness は対応イメージで自動。**BGP は `bgp graceful-restart` を入れないと能力を広告しない** | IOL・Cat8000v で |
+| オーバーロード | `set-overload-bit [on-startup {秒\|wait-for-bgp}] [level] [advertise …]`。CR は on-startup を「再起動の後」、CG は「プロセスの起動と再起動」と書き、どちらも **NSF の再起動・切替では使わない**。wait-for-bgp の上限・収束の定義は XR の文書に無い(10 分は旧 IOS の技術ノート)。OL の装置は通過に使われないが、直結のプレフィックスには届く(RFC 3787)。`show isis database` の ATT/P/OL 列 | NSF なしの process restart・clear isis process で OL が立つか |
+| プロセス | 各プロセスは保護されたアドレス空間で動き、他に影響せず個別に再起動できる(ASR 9000 Overview の HA 章) | — |
+
+- IOL 17.15 ルータ(iol-xe)の LACP は**使えない**(PoC 1 回目で実測・`poc/xr/ha-a-iol-lacp.log`)。束の相手役は Cat8000v 17.15 に替えた。
+
+### 19.6 PoC の結果(2026-10-23・盤面 `problems/_POC-XRHA`= XRv9000 26.1.1+Cat8000v 17.15+IOL 17.15。手順 `poc/xr/ha_poc.sh`・記録 `poc/xr/ha-*.log`)
+
+**盤面の変更**= RT01(束の相手)を **Cat8000v** に替えた。IOL ルータの LACP は壊れている(day0 の `channel-group` は無言で捨てられ、
+手で入れると「Invalid channel group number」を返しつつ設定には残り、`show lacp internal` は同じ行を出し続ける。`poc/xr/ha-a-iol-lacp.log`)。
+Cat8000v はデータ IF が 3 本(Gi1〜3)= 束 2 本+予備 1 本でちょうど。**Cat8000v には `mode on` が無い**(active/passive だけ)・
+**束のモードはその場で替えられない**(`no channel-group` してから付け直す)。
+
+1. **資源**= 構築 約 9〜10 分(lab.sh provision 全体)。XRv9000 26.1.1 は CML の既定(7 vCPU/20GB)で起動・XR から見えるメモリ 6GB(空き 3.2GB)。
+   この盤面を足した CML の使用量= 約 24GB(XRT-05 だけの時 4.7GB → 28.4GB/47GB)。割当 vCPU 8(XR 7+Cat8000v 1)。日次パックのラボと同居できる。
+2. **束**= active⇔active で上がる(`show bundle` Up 2/0/2・RT01 `Po1(RU)`)。passive×active も上がる。**passive⇔passive は最初から組むと上がらない**
+   (XR は Down・メンバ Configured、RT01 は susp)。**XR を `mode on`・相手 LACP**= XR は束 Up(LACP Not operational・メンバ Active)だが、
+   RT01 はメンバを susp のまま → **XR からは正常に見えて ping 0%**(片側だけ上がる TS の題材)。
+   **CML では相手のポートを shutdown しても XR 側のキャリアは落ちない**= XR は LACP の失効で抜く。既定(slow・30 s 周期)で **72 秒**、
+   XR のメンバに `lacp period short` を入れると相手に速い送信を求め(XR の Actor に F)、**6 秒以内**(測り方の刻み 5 秒)。RT01 の `lacp rate fast` も受け付ける。
+   `bundle minimum-active links 2` で 1 本抜けると束ごと Down(残り 1 本は Standby「due to minimum-active link configuration」)。
+3. **束の上の IS-IS と MTU**= 既定で隣接 Up(XR の CLNS MTU 1497)。**XR の束に `mtu 1500`**(IPv4 1486)→ XR は RT01 のハローを
+   「Last PDU Rejected … 1496 octets, P2P IIH, **PDU larger than our MTU**」で捨て、`show isis interface` は「MTU: 1483 (**MTU is too small: L2 lsp-mtu is 1492**)」。
+   XR は Holdtime expired で落とし、RT01 は XR を **Init**(neighbor forgot us)。**逆に `mtu 9000`** → XR のハロー(8983 まで埋める)を RT01 が捨て、
+   XR 側が Init・上がっては「3-way state down」で落ちる。どちらの向きも症状がはっきり出る(M7-2 の候補に使える)。
+   Cat8000v の起動ログ「%CLNS-6-DFT_OPT: Protocol timers for fast convergence are Enabled」= IOS XE の既定は 50/200/5000 ms(§19.5 と一致)。
+4. **黙った故障の作り方**= CML のリンク条件 `loss 100`(`poc/xr/cml_link.py <ID> RT02 SW01 loss 100|clear`)。両端のポートは up/up のまま
+   パケットだけ消える。採点機から CML の API で入れて戻せる(相手役の設定を触らない)。測り方= RT01 から `ping … repeat 20000 timeout 1`
+   (`poc/xr/pingloss.py`)= 落ちた ping は 1 秒待つので欠落数 ≒ 止まった秒数。
+5. **BFD**= **BFD なし**で欠落 **22 秒**(Holdtime 30 秒の残りで落ちる)。**BFD 100 ms×3**(XR= IS-IS の IF に `bfd fast-detect ipv4`・
+   RT02= IF に `bfd interval 100 min_rx 100 multiplier 3`+`isis bfd`)で欠落 **1 秒**(= 1 秒以内)。XR は単一ホップを **echo 方式**で張る
+   (`show bfd session`= Echo 300ms(100ms*3)・Async 6s(2s*3))。落ちた理由は「Echo function failed」→ IS-IS は「Down, BFD session DOWN」。
+   落ちた後は**ダンプニング**(「entered Dampened state (initial: 2000 ms …)」・`DOWN DAMP`)。`bfd minimum-interval` は 50・15・3 もコミットは通る
+   (実際の間隔は相手の 100 ms で決まる)。IOS XE の既定は `spf-interval 5 50 200` 等(routing-default-optimize)= 相手役を詰める必要はない。
+6. **BFD と隣接(RFC 6213)**= 相手がハローに BFD-enabled TLV を載せる(`isis bfd`)と XR は「**BFD Required**」になり、BFD が上がるまで
+   隣接を **Init** に留める(`show isis adjacency` の BFD 列 Init・detail に「Topology (not running): [IPv4 Unicast (BFD is down)]」
+   「Neighbor Not Useable (BFD Required)」)。相手が TLV を出さなければ「BFD Configured, but Not Required」で BFD が DOWN でも Up のまま。
+   **相手が `isis bfd` だけで IF の `bfd interval` が無い** → XR は Init で固まり、相手は XR を Down(TS の題材)。
+7. **束の上の BFD**= **Cat8000v の Port-channel は BFD を持たない**(`bfd interval` が Invalid)→ BLB はこの盤面では成立しない。
+   XR は「No resources for session … Bundle-Ether1」を出し、`bfd multipath include location 0/0/CPU0` を入れると「Lack of resources condition has cleared」
+   (XRv9000 でも ASR9K/NCS と同じく multipath が要る)。相手が TLV を出していたため束の上の隣接が Init に落ちた(片付け済み)。
+   BoB(メンバごと)は XR が受け付け、メンバは「Waiting indefinitely for peer to establish session」で束は Up のまま。
+   → **M7 の BFD は主経路(束でない IF)で扱い、束の上の BFD は読み物で説明する**。
+8. **IS-IS のグレースフル リスタート**= `process restart isis` は **XR EXEC から打てる**(文書の表記は Admin EXEC)・確認なしで即再起動
+   (「%OS-SYSMGR-4-PROC_RESTART_NAME : User … requested a restart of process isis」)。**NSF なし**= 相手(Cat8000v)は
+   「Down, **neighbor forgot us**」→ 2 秒後に Up(ping の欠落 2)。**`nsf ietf`**= XR「IETF NSF controlled start beginning」→
+   隣接は「Up, NSF Restart」→ 約 10 秒で completed。**相手のログに ADJCHANGE が出ず、ping の欠落 0**。IOS XE のヘルパーは設定なしで働く
+   (`show isis nsf` は自分が再起動する側として「NSF is DISABLED」と出るだけ)。XR 自身の隣接表の Changed は再起動で 0 に戻る
+   → **採点は相手側のログ(再起動以降に ADJCHANGE が無い)と ping の欠落で見る**。
+9. **NSR(RP 1 枚)**= `router isis … nsr` はコミットが通り「ISIS NSR is configured」だが `show isis nsr status` は **Not Ready**(standby なし)。
+   NSR と NSF を両方入れた状態の process restart も IETF NSF で処理される(欠落 0)= 公式「process restart を守るのは NSF」と一致。
+   **BGP の NSR は既定で有効**(設定前から「Non-stop routing is enabled」・NCS 5500 CG と一致・8000 CR の「無効」とは食い違う)・
+   `show bgp nsr` は「NSR state not ready: Wait for standby ready msg」。→ NSR は読み物で扱い、ラボの課題にしない。
+10. **XR の出力フィルタ**= `| include -i …` は使えない(「% Can't handle special action '|'」)。大文字小文字は正規表現で吸収する。
+11. **BGP のグレースフル リスタート**(XR が広告する経路 10.30.0.0/16 を RT02 で見る)= 両側に `bgp graceful-restart` → XR の
+    `process restart bgp` の 3 秒後、RT02 は **`S>i 10.30.0.0/16`(Stale)で経路を保持**・セッションが戻ると S が外れる(約 6 秒)。
+    **RT02 の GR を外す**と同じ時点で「% Subnet not in table」(5 秒後に戻る)。RT02 のログ「Down **NSF peer closed the session**」= ヘルパーとして扱った印。
+    能力は OPEN で交換するので、入れた後はセッションのやり直しが要る(XR 側だけ入れた時点では RT02 に「Graceful-Restart is disabled」・XR に「GR Awareness: received」)。
+    IOL 17.15 の `show running-config all` は restart-time 120・stalepath-time 360 だが、`show ip bgp neighbors` は「restart-time 900 seconds, stalepath-time 1800 seconds」と出る(表示の違い・影響なし)。
+    → **採点は XR の process restart の直後 1〜6 秒に RT02 で経路が消えないこと**(数回取って 1 回でも消えたら不合格)。
+12. **オーバーロード ビット(手動)**= `set-overload-bit` → XR の LSP が `0/0/1`(ATT/P/OL)。RT01 の 10.20.0.0/16 は予備(metric 1010・Gi3)へ、
+    **XR01 のループバック宛ては束のまま(metric 10)**= 通過だけ外れて XR 自身には届く(RFC 3787・公式と一致)。
+13. **オーバーロード ビットの起動時**(3〜13 秒刻みで LSP の ATT/P/OL と `show isis protocol` の「Most recent startup mode」「Overload Bit」を見た。`poc/xr/ha-f2.log`)=
+    | 条件 | OL |
+    |---|---|
+    | `nsf ietf`・OL の設定なし → process restart | 立たない(IETF NSF Restart) |
+    | NSF なし・OL の設定なし → process restart | **約 10 秒だけ立つ**(Cold Restart。冷えた起動で LSPDB がそろうまで= RFC 8706 の起動時の動きと整合) |
+    | NSF なし+`on-startup 60` → process restart | **約 60 秒立つ**(+49 s で set・+62 s で clear)= **process restart でも効く**(CG の「プロセスの起動と再起動」と一致。CR の「再起動の後」より広い) |
+    | NSF なし+`on-startup wait-for-bgp` → process restart | 約 10 秒で消える(BGP は再起動していない= 既に収束済み) |
+    | NSF なし+`on-startup 60` → `clear isis process` | 立たない |
+    | `nsf ietf`+`on-startup 60` → process restart | `show isis protocol` は「configured, **set**」が約 60 秒続くが、**LSP は作り直されず OL は広告されない**(公式「NSF の再起動では使わない」と実質一致・表示だけ食い違う) |
+    → M7-4 で `nsf ietf` を入れると、**on-startup は process restart では採点できない**(本物の再起動= reload は数分かかる)。
+14. **TS の連鎖**(`poc/xr/ha-g.log`)= メンバに `bundle id 1`(モード省略)→ 設定上は **`bundle id 1 mode on`** と表示・束 Up・LACP Not operational・
+    ping 0%・RT01 は susp。モードを active に直すと ping は通るが、束に `mtu 1500` が残っていれば IS-IS は RT01 で Init・XR は「PDU larger than our MTU」。
+    MTU を直して Up。**1 段直すと次の症状が見える 2 段の TS** として成立。
+
+### 19.7 PoC を受けた課題の確定案(2026-10-23)
+
+盤面= §19.1 のまま、**RT01 だけ Cat8000v**(XR01= XRv9000 26.1.1・RT02= IOL・SW01= 非管理スイッチ)。IGP= IS-IS L2・wide。XR01⇔RT02 は iBGP。
+
+| 課題 | 中身(挙動で指定) | 採点(挙動) |
+|---|---|---|
+| M7-1(TS) | 「RT01 との束は Up と表示されるのに RT01 と通信できない。IS-IS も上がらない」= 仕込み 2 段(メンバの `bundle id 1` がモード省略= 静的/束の `mtu 1500`)。RT01 側は変えない | LACP Operational・RT01 で Po1(RU)・束の上の隣接 Up・RT01→XR01 の ping |
+| M7-2 | 束の運用要件= 2 本そろわないと使わない・メンバの故障(相手のポートが落ちてもこちらのポートは up のまま)を **5 秒以内**に検知して束から外す | 採点中だけ RT01 Gi2 を shutdown → 8 秒後に XR の束が Down・IS-IS は予備へ → 戻す(`--pre-cli/--post-cli` を Cat8000v に) |
+| M7-3 | RT02 への主経路が「ポートは up のまま」死んでも **1 秒以内**に予備へ(RT02 は BFD 100 ms×3 と `isis bfd` を据え付け) | 採点中だけ CML のリンク条件 loss 100(RT02-SW01)→ RT01 の連続 ping の欠落 ≤ 2 → 戻す |
+| M7-4 | XR01 のルーティング プロセス(IS-IS・BGP)を再起動しても、隣接と転送を落とさない(RT02 は `bgp graceful-restart` を据え付け。XR 側は入れた後にセッションのやり直しが要る= 気づかせる) | 採点中だけ `process restart isis` → RT01 に ADJCHANGE が出ない・ping の欠落 0/`process restart bgp` → 1〜6 秒の間 RT02 で XR の経路が消えない |
+| M7-5 | メンテナンス前に XR01 を**通過経路から外す**(XR01 宛て・管理は残す。IF は止めない) | RT01→RT02 が予備経由・RT01→XR01 の Lo0 は束経由・束と主経路の隣接は Up のまま(メトリックで逃がす別解も挙動では通る→ レビューで OL を示す) |
+
+- **読み物で扱う(ラボにしない)**= NSR(RP 1 枚では Not Ready)・束の上の BFD(BoB/BLB と `bfd multipath include location`)・
+  on-startup(NSF と同時には process restart で効かない・冷えた起動では効く)・BFD の echo 方式とダンプニング・RFC 6213 の「BFD Required」で隣接が Init に留まる仕組み。
+- 実装で足すもの= ①採点から CML のリンク条件を入れて戻す(`cml_link.py` を `exec: local` から)②XR に対する `--pre-cli`(process restart)③採点用の ping の欠落計測(`pingloss.py` を login_probe に取り込む)④Cat8000v を学習用ラボで使う配線(初期設定テンプレートは IOS XE)。
+- 構築 約 10 分・CML 使用 約 24GB(同時 2 台の XRv9000 上限に対して 1 台)。
+
+### 19.8 実装の結果(2026-10-23)
+
+- 成果物= `problems/XRT-06`(課題ごとの確認 `grading.m7t1〜5.yml`・最終 `grading.yml`= M7-1 22・M7-2 18・M7-3 20・M7-4 20・M7-5 20・`learn.yml`・課題文 日英)、
+  読み物 `courses/xr/{en,ja}/70-m7-high-availability.md`(束・BFD・オーバーロード ビット・損失なく再起動する・コマンド名の 5 節。日英で 75 ブロック・見出し 19 を照合)・
+  実践 `71-m7-practice.md`(`course.sh` が課題文から切り出す)・Drive 同期済み。模範解= `poc/xr/solve_xrt06.sh`(誤答・別解つき)・E2E= `poc/xr/e2e_xrt06.sh`。
+- **§19.7 から変えた点**= 課題の並びを M7-1 束の TS → M7-2 束の要件 → **M7-3 オーバーロード ビットの消し忘れの TS(+ on-startup wait-for-bgp)** → M7-4 BFD → M7-5 NSF/GR にした。
+  「通過だけ外す」を最後の課題にすると、最終状態で OL が立ち、M7-3/M7-4 の切り替え試験が XR01 を通らずに素通りで合格するため。
+  消し忘れ(素の `set-overload-bit`)を初期設定に仕込み、要件は「通過を戻しつつ、起動直後は BGP がそろうまで通過させない」= 同じコマンドの形の置き換え。
+  起動時の挙動は NSF(M7-5)と両立しない(§19.6-13)ので、`show isis protocol` の表示で見る。
+- 採点で故障を起こす= `login_probe.py` に方式 3 つ(`ping-loss`= 途中で CML のリンク条件 loss 100・最長の欠落・`== FAULT DURING PING`/
+  `log-delta`= 前後の `show logging` の新しい行/`watch`= 先にログインしてから引き金を引き、直後に N 回取る)と `--fail-link A:B`・`--post-settle N`。
+  経路が XR01 経由であることも ping-loss の出力(`show ip route`)で見る(OL が残っていると素通りになる)。故障を起こす Check は 1〜2 分(学習モードの上限 240 秒の内)・最終は約 4 分。
+- 実機 E2E(記録 `poc/xr/expM7-*.log`)= 白紙 0(最終・課題ごと 5 本とも)→ 模範解 100・learn.yml の模範解を逐語で流しても 5 本とも 1 回目で 100・
+  `lab.sh reset` 後に白紙 0。誤答= 最低本数だけ 30・LACP の周期だけ 0・OL を外すだけ 70・on-startup 60 は 70・BFD なし(欠落 22)0・GR を入れてセッションをやり直さない 40。
+  別解= XR を passive・BFD の間隔は既定(150 ms × 3 で欠落 1)・`nsf cisco`(「Cisco NSF controlled start」「Restored during NSF」)も 100。
+- **実装で分かったこと**:
+  1. 白紙でも M7-1 の ping が通った= 束が壊れていても XR01 のアドレスには予備経由(RT02 → 主経路)で届く(OL は XR01 自身のプレフィックスを妨げない)。
+     → RT01 からは `source Port-channel1`、XR01 からは `ping … size 1500 df-bit`(XR の DF は `df-bit` か `donotfrag`)で束に限った。
+  2. **XR01 側でハローのパディングを切っても隣接は上がらない**= XR01 が拒否しているのは RT01 がパディングした RT01 のハロー(公式の技術ノート
+     「パディングを切るだけでは隣接は上がらない」と一致)。読み物と模範解の説明を実測に合わせて直した。
+  3. `show isis protocol` は「Overload Bit Level-2: configured, clear」と「on startup until BGP converges」の間に「interarea prefixes suppressed, …」の行を挟む
+     (`include` で絞ると見えない)= 採点の正規表現は間の行を許す。
+  4. XR のセッションのリセットは `clear bgp 10.255.0.12`(`clear bgp ipv4 unicast <ネイバー>` は soft/long-lived-stale を求めて不完全)。`… graceful` は GR を伴うハード リセット。
+     GR を入れてリセットしないと 1 回目の Check は落ちるが、Check 自身の BGP の再起動で張り直されるので 2 回目は通る(模範解に書いた)。
+  5. **XR の rollback は `set-overload-bit` → `set-overload-bit on-startup wait-for-bgp` の置き換えを戻さない**(26.1.1。巻き戻しの差分にその行が出ない)。
+     さらに巻き戻しでは BGP の機能の交換がセッションに残る。→ `xr_reset.py` に problem.yml の `xr_reset_exec`(戻した後にそのノードで流す CLI の行)を足し、
+     XRT-06 は `set-overload-bit` を入れ直して `clear bgp 10.255.0.12`。
+  6. RT01 に `lacp min-bundle 2` を入れると、1 本止めた時に RT01 が残りのメンバも止め、XR の最低本数の採点が素通りになる見込み= 入れない(テンプレートから外した)。
+  7. BFD を入れた主経路でも、`nsf ietf` の IS-IS の再起動で RT02 の隣接は落ちない(BFD のセッションは保たれる)。

@@ -1,0 +1,130 @@
+# XRT-06 最終確認(M7 の 5 課題を終えた状態。配点= M7-1 22・M7-2 18・M7-3 20・M7-4 20・M7-5 20)。
+# 学習目的のラボ= パック・ノルマの対象外。中身は課題ごとの確認(grading.<課題>.yml)を寄せ集めて配点を付け直したもの
+# (手で保守する。課題ごとの確認を直したらここも直す)。白紙で通る項目は無い。
+# ★exec: local のチェック(採点のあいだだけ故障を起こす)は、show のチェックがすべて済んだ後に並び順で走る。
+#   順= M7-2(RT01 Gi2 を止める→ 45 秒待つ)→ M7-4(RT02-SW01 を loss 100 → 45 秒待つ)→ M7-5(IS-IS を再起動)→ M7-5(BGP を再起動→ 25 秒待つ)。
+problem: XRT-06
+total_points: 100
+checks:
+- name: 'M7-1 XR01: Bundle-Ether1 is up with LACP and both members active'
+  node: XR01
+  command: show bundle Bundle-Ether1
+  raw:
+  - regex: Status:\s+Up
+  - regex: LACP:\s+Operational
+  - regex: Gi0/0/0/0\s+Local\s+Active
+  - regex: Gi0/0/0/1\s+Local\s+Active
+  points: 5
+- name: 'M7-1 RT01: Port-channel1 is up with both members bundled'
+  node: RT01
+  command: show etherchannel summary
+  raw:
+  - regex: Po1\(RU\)\s+LACP\s+Gi1\(bndl\)\s+Gi2\(bndl\)
+  points: 3
+- name: 'M7-1 XR01: IS-IS adjacency with RT01 on Bundle-Ether1 is up'
+  node: XR01
+  command: show isis adjacency
+  raw:
+  - regex: (?:RT01|0100\.0000\.0011)\s+BE1\s+\*PtoP\*\s+Up
+  points: 5
+- name: 'M7-1 RT01: reaches XR01''s loopback over the bundle'
+  node: RT01
+  command: show ip route 10.255.0.1
+  raw:
+  - regex: \* 10\.0\.1\.1, from 10\.255\.0\.1,[^\n]*via Port-channel1
+  points: 2
+- name: 'M7-1 RT01: 1500-byte IP packets to XR01 cross the bundle without fragmentation'
+  node: RT01
+  command: ping 10.0.1.1 source Port-channel1 size 1500 df-bit
+  raw:
+  - regex: Success rate is (?:100|80) percent
+  points: 3
+- name: 'M7-1 XR01: 1500-byte IP packets to RT01 cross the bundle without fragmentation'
+  node: XR01
+  command: ping 10.0.1.11 size 1500 df-bit
+  raw:
+  - regex: Success rate is (?:100|80) percent
+  points: 4
+- name: 'M7-2 XR01: Bundle-Ether1 needs two active members'
+  node: XR01
+  command: show bundle Bundle-Ether1
+  raw:
+  - regex: Minimum active links / bandwidth:\s+2 /
+  - regex: Status:\s+Up
+  points: 5
+- name: 'M7-2 XR01: the bundle goes down within seconds when one member stops carrying LACP (RT01 Gi2 shut for the check)'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-06 ssh XR01 --pre-cli 'RT01:configure terminal;;interface GigabitEthernet2;;shutdown;;end' --settle
+    9 --post-cli 'RT01:configure terminal;;interface GigabitEthernet2;;no shutdown;;end' --post-settle 45 -- 'show bundle Bundle-Ether1'
+  raw:
+  - regex: '== CLI RT01: 4 lines'
+  - regex: Status:\s+Down
+  points: 13
+- name: 'M7-3 XR01: its LSP no longer carries the overload bit'
+  node: XR01
+  command: show isis database XR01.00-00
+  raw:
+  - regex: XR01\.00-00\s+\*[^\n]*\s0/0/0
+  points: 6
+- name: 'M7-3 RT01: traffic to RT02''s services goes through XR01 again'
+  node: RT01
+  command: show ip route 10.20.0.0
+  raw:
+  - regex: 10\.0\.1\.1, from 10\.255\.0\.12[^\n]*via Port-channel1
+  - not_regex: via GigabitEthernet3
+  points: 8
+- name: 'M7-3 XR01: after a restart, transit is held off until BGP has converged'
+  node: XR01
+  command: show isis protocol
+  raw:
+  - regex: 'Overload Bit[^\n]*: configured, clear\s*\n(?:[^\n]*\n){0,2}\s*on startup until BGP converges'
+  points: 6
+- name: 'M7-4 XR01: a BFD session with RT02 on the primary link is up'
+  node: XR01
+  command: show bfd session
+  raw:
+  - regex: Gi0/0/0/2\s+10\.0\.2\.12\s[^\n]*\sUP
+  points: 5
+- name: 'M7-4 XR01: the IS-IS adjacency with RT02 uses BFD'
+  node: XR01
+  command: show isis adjacency
+  raw:
+  - regex: (?:RT02|0100\.0000\.0012)\s+Gi0/0/0/2\s+\*PtoP\*\s+Up\s+\d+\s+\S+\s+\w+\s+Up
+  points: 5
+- name: 'M7-4 RT01: a silent failure of the primary path costs at most about one second (fault injected for the check)'
+  node: RT01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-06 ping-loss RT01 10.20.0.1 Loopback1 --count 15000 --fail-link RT02:SW01 --fail-at 3 --post-settle
+    45
+  raw:
+  - regex: 10\.0\.1\.1, from 10\.255\.0\.12[^\n]*via Port-channel1
+  - regex: == FAULT DURING PING
+  - regex: == LONGEST GAP [0-2]\n
+  points: 10
+- name: 'M7-5 RT02: graceful restart is negotiated with XR01'
+  node: RT02
+  command: show ip bgp neighbors 10.255.0.1
+  raw:
+  - regex: 'Graceful Restart Capability: advertised and received'
+  points: 4
+- name: 'M7-5 RT01, RT02: no IS-IS adjacency change when XR01 restarts its IS-IS process (restart done for the check)'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-06 log-delta RT01,RT02 '%CLNS-5-ADJCHANGE' --pre-cli 'XR01:process restart isis' --settle 35 --post-settle
+    10
+  raw:
+  - regex: '== CLI XR01: 1 lines'
+  - regex: == NO NEW MATCHES
+  points: 8
+- name: 'M7-5 RT02: keeps XR01''s BGP route while XR01 restarts its BGP process (restart done for the check)'
+  node: RT02
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-06 watch RT02 'show ip route 10.30.0.0' --pre-cli 'XR01:process restart bgp' --samples 7 --interval
+    1 --post-settle 25
+  raw:
+  - regex: '== CLI XR01: 1 lines'
+  - regex: == SAMPLE 7 at
+  - regex: Known via "bgp 65000"
+  - not_regex: not in table
+  points: 8

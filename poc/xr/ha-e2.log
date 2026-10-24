@@ -1,0 +1,264 @@
+
+######## 14:20:44 e2-0: XR から BGP で広告する経路(Loopback10・IS-IS には載せない)。RT02 の GR 既定値も見る
+configure
+Fri Oct 23 14:20:46.443 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface Loopback10
+RP/0/RP0/CPU0:XR01(config-if)#
+ipv4 address 10.30.0.1 255.255.0.0
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-af)#
+network 10.30.0.0/16
+RP/0/RP0/CPU0:XR01(config-bgp-af)#
+commit
+Fri Oct 23 14:20:49.349 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-af)#
+show configuration failed
+Fri Oct 23 14:20:50.253 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-bgp-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show ip bgp
+BGP table version is 3, local router ID is 10.255.0.12
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.20.0.0/16     0.0.0.0                  0         32768 i
+ *>i  10.30.0.0/16     10.255.0.1               0    100      0 i
+RT02#
+show running-config all | include graceful
+mpls ldp graceful-restart timers neighbor-liveness 120
+mpls ldp graceful-restart timers max-recovery 120
+mpls ldp graceful-restart timers forwarding-holding 600
+ bgp graceful-restart restart-time 120
+ bgp graceful-restart stalepath-time 360
+ bgp graceful-restart
+RT02#
+show ip bgp neighbors 10.255.0.1 | include Graceful|restart|stale
+    Graceful Restart Capability: advertised and received
+      Address families advertised by peer before restart:
+  Graceful-Restart is enabled, restart-time 900 seconds, stalepath-time 1800 seconds
+RT02#
+show bgp ipv4 unicast neighbors 10.255.0.12 | include "Grace$ors 10.255.0.12 | include "Gracef                          ul|restart|stale|preserved$Graceful|restart|stale|preserved"                          show bgp ipv4 unicast neighbors 10.255.0.12 | include "Grac$
+Fri Oct 23 14:21:15.828 UTC
+  Graceful restart is enabled
+    Graceful Restart (GR Awareness): received
+    Graceful Restart capability advertised
+      Local restart time is 120, RIB purge time is 600 seconds
+      Maximum stalepath time is 360 seconds
+RP/0/RP0/CPU0:XR01#
+
+######## 14:21:15 e2-1: GR あり(両側)で process restart bgp → RT02 で S(Stale)が付いて残るか・XR の RIB/FIB は
+process restart bgp
+Fri Oct 23 14:21:17.329 UTC
+RP/0/RP0/CPU0:XR01#
+14:21:16
+14:21:19
+show ip bgp | begin Network
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.20.0.0/16     0.0.0.0                  0         32768 i
+ S>i  10.30.0.0/16     10.255.0.1               0    100      0 i
+RT02#
+show ip route 10.30.0.0
+Routing entry for 10.30.0.0/16
+  Known via "bgp 65000", distance 200, metric 0, type internal
+  Last update from 10.255.0.1 00:00:13 ago
+  Routing Descriptor Blocks:
+  * 10.255.0.1, from 10.255.0.1, 00:00:13 ago
+      opaque_ptr 0x777D3584B2E0 
+      Route metric is 0, traffic share count is 1
+      AS Hops 0
+      MPLS label: none
+RT02#
+14:21:25
+show ip bgp | begin Network
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.20.0.0/16     0.0.0.0                  0         32768 i
+ *>i  10.30.0.0/16     10.255.0.1               0    100      0 i
+RT02#
+show ip route 10.30.0.0
+Routing entry for 10.30.0.0/16
+  Known via "bgp 65000", distance 200, metric 0, type internal
+  Last update from 10.255.0.1 00:00:18 ago
+  Routing Descriptor Blocks:
+  * 10.255.0.1, from 10.255.0.1, 00:00:18 ago
+      opaque_ptr 0x777D3584B2E0 
+      Route metric is 0, traffic share count is 1
+      AS Hops 0
+      MPLS label: none
+RT02#
+14:21:30
+show ip bgp | begin Network
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.20.0.0/16     0.0.0.0                  0         32768 i
+ *>i  10.30.0.0/16     10.255.0.1               0    100      0 i
+RT02#
+show ip route 10.30.0.0
+Routing entry for 10.30.0.0/16
+  Known via "bgp 65000", distance 200, metric 0, type internal
+  Last update from 10.255.0.1 00:00:23 ago
+  Routing Descriptor Blocks:
+  * 10.255.0.1, from 10.255.0.1, 00:00:23 ago
+      opaque_ptr 0x777D3584B2E0 
+      Route metric is 0, traffic share count is 1
+      AS Hops 0
+      MPLS label: none
+RT02#
+14:21:35
+show ip bgp | begin Network
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.20.0.0/16     0.0.0.0                  0         32768 i
+ *>i  10.30.0.0/16     10.255.0.1               0    100      0 i
+RT02#
+show ip route 10.30.0.0
+Routing entry for 10.30.0.0/16
+  Known via "bgp 65000", distance 200, metric 0, type internal
+  Last update from 10.255.0.1 00:00:28 ago
+  Routing Descriptor Blocks:
+  * 10.255.0.1, from 10.255.0.1, 00:00:28 ago
+      opaque_ptr 0x777D3584B2E0 
+      Route metric is 0, traffic share count is 1
+      AS Hops 0
+      MPLS label: none
+RT02#
+show route ipv4 10.20.0.0/16
+Fri Oct 23 14:21:39.275 UTC
+
+Routing entry for 10.20.0.0/16
+  Known via "isis CORE", distance 115, metric 20, type level-2
+  Installed Oct 23 14:19:25.673 for 00:02:13
+  Routing Descriptor Blocks
+    10.0.2.12, from 10.255.0.12, via GigabitEthernet0/0/0/2
+      Route metric is 20
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+show cef ipv4 10.20.0.0/16 | include "via|path"
+Fri Oct 23 14:21:39.681 UTC
+   via 10.0.2.12/32, GigabitEthernet0/0/0/2, 6 dependencies, weight 0, class 0 [flags 0x0]
+    path-idx 0 NHID 0x0 [0x10d8b0a0 0x0]
+RP/0/RP0/CPU0:XR01#
+show ip bgp summary | begin Neighbor
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65000       4       6        3    0    0 00:00:58        1
+RT02#
+show logging | include BGP
+*Oct 23 14:21:16.480: %BGP_SESSION-5-ADJCHANGE: neighbor 10.255.0.1 IPv4 Unicast topology base removed from session  NSF peer closed the session
+*Oct 23 14:21:16.480: %BGP-5-NBR_RESET: Neighbor 10.255.0.1 reset (NSF peer closed the session)
+*Oct 23 14:21:16.480: %BGP-5-ADJCHANGE: neighbor 10.255.0.1 Down NSF peer closed the session
+*Oct 23 14:21:21.800: %BGP-5-ADJCHANGE: neighbor 10.255.0.1 Up 
+RT02#
+show bgp ipv4 unicast neighbors 10.255.0.12 | include "Grace$ors 10.255.0.12 | include "Gracef                          ul|restart|preserved|state$Graceful|restart|preserved|state"                          show bgp ipv4 unicast neighbors 10.255.0.12 | include "Grac$
+Fri Oct 23 14:22:23.333 UTC
+  BGP state = Established, up for 00:01:00
+  Graceful restart is enabled
+    Graceful Restart (GR Awareness): received
+    Graceful Restart capability advertised
+      Local restart time is 120, RIB purge time is 600 seconds
+    Detected state: FALSE, Detection threshold: 300
+RP/0/RP0/CPU0:XR01#
+
+######## 14:22:22 e2-2: RT02 の GR を外す → 同じ再起動(経路はすぐ消えるはず)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+router bgp 65000
+RT02(config-router)#
+no bgp graceful-restart
+All BGP sessions must be reset to take the new GR config
+
+RT02(config-router)#
+end
+RT02#
+clear ip bgp 10.255.0.1
+RT02#
+show ip bgp neighbors 10.255.0.1 | include Graceful|state
+  BGP state = Established, up for 00:00:24
+    Graceful Restart Capability: received
+  Do log neighbor state changes (via global configuration)
+  Graceful-Restart is disabled
+Connection state is ESTAB, I/O status: 1, unread input bytes: 0            
+RT02#
+process restart bgp
+Fri Oct 23 14:23:09.957 UTC
+RP/0/RP0/CPU0:XR01#
+14:23:09
+14:23:12
+show ip bgp | begin Network
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.20.0.0/16     0.0.0.0                  0         32768 i
+RT02#
+show ip route 10.30.0.0
+% Subnet not in table
+RT02#
+14:23:17
+show ip bgp | begin Network
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.20.0.0/16     0.0.0.0                  0         32768 i
+ *>i  10.30.0.0/16     10.255.0.1               0    100      0 i
+RT02#
+show ip route 10.30.0.0
+Routing entry for 10.30.0.0/16
+  Known via "bgp 65000", distance 200, metric 0, type internal
+  Last update from 10.255.0.1 00:00:03 ago
+  Routing Descriptor Blocks:
+  * 10.255.0.1, from 10.255.0.1, 00:00:03 ago
+      opaque_ptr 0x777D3584B2E0 
+      Route metric is 0, traffic share count is 1
+      AS Hops 0
+      MPLS label: none
+RT02#
+14:23:22
+show ip bgp | begin Network
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.20.0.0/16     0.0.0.0                  0         32768 i
+ *>i  10.30.0.0/16     10.255.0.1               0    100      0 i
+RT02#
+show ip route 10.30.0.0
+Routing entry for 10.30.0.0/16
+  Known via "bgp 65000", distance 200, metric 0, type internal
+  Last update from 10.255.0.1 00:00:08 ago
+  Routing Descriptor Blocks:
+  * 10.255.0.1, from 10.255.0.1, 00:00:08 ago
+      opaque_ptr 0x777D3584B2E0 
+      Route metric is 0, traffic share count is 1
+      AS Hops 0
+      MPLS label: none
+RT02#
+show ip bgp summary | begin Neighbor
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65000       4       5        7    0    0 00:00:51        1
+RT02#
+
+######## 14:24:06 e2-3: RT02 に GR を戻す
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+router bgp 65000
+RT02(config-router)#
+bgp graceful-restart
+All BGP sessions must be reset to take the new GR config
+
+RT02(config-router)#
+end
+RT02#
+clear ip bgp 10.255.0.1
+RT02#
+show ip bgp neighbors 10.255.0.1 | include Graceful|state
+  BGP state = Established, up for 00:00:27
+    Graceful Restart Capability: advertised and received
+  Do log neighbor state changes (via global configuration)
+  Graceful-Restart is enabled, restart-time 900 seconds, stalepath-time 1800 seconds
+Connection state is ESTAB, I/O status: 1, unread input bytes: 0            
+RT02#

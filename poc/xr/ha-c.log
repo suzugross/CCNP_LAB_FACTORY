@@ -1,0 +1,631 @@
+
+######## 13:55:18 c-1: IS-IS(L2 だけ・wide)を束と主経路に。Lo0 は passive
+configure
+Fri Oct 23 13:55:19.977 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+is-type level-2-only
+RP/0/RP0/CPU0:XR01(config-isis)#
+net 49.0001.0100.0000.0001.00
+RP/0/RP0/CPU0:XR01(config-isis)#
+log adjacency changes
+RP/0/RP0/CPU0:XR01(config-isis)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+metric-style wide
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+exit
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface Loopback0
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+passive
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+exit
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+exit
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface Bundle-Ether1
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+point-to-point
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+exit
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+exit
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/2
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+point-to-point
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+commit
+Fri Oct 23 13:55:28.495 UTC
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+show configuration failed
+Fri Oct 23 13:55:29.801 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Fri Oct 23 13:56:17.809 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           BE1                      *PtoP*         Up    28   00:00:48 Yes None None
+RT02           Gi0/0/0/2                *PtoP*         Up    25   00:00:48 Yes None None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show isis interface Bundle-Ether1
+Fri Oct 23 13:56:18.211 UTC
+
+Bundle-Ether1               Enabled
+  Adjacency Formation:      Enabled
+  Prefix Advertisement:     Enabled
+  Bandwidth:                2000000
+  Total bandwidth:          2000000
+  RSI SRLG:                 Not Registered
+  
+  Circuit Type:             level-2-only (Configured: level-1-2)
+  Media Type:               P2P
+  Circuit Number:           0
+  Extended Circuit Number:  8
+  Last IIH Received:        13:56:15 (2.27 sec ago), 1496 octets
+  Last PDU Rejected:        13:55:29 (48.61 sec ago), 117 octets, L2 LSP, Wrong Adjacency State
+  Last IIH Sent:            13:56:15 (2.35 sec ago), 1497 octets
+  Sending next P2P IIH in:  6 s
+  
+  IPv4 BFD:                 Disabled
+  IPv6 BFD:                 Disabled
+  
+  Level-2                   
+    Adjacency Count:        1
+    Adjacency Flaps:        0
+    LSP Pacing Interval:    33 ms
+    PSNP Entry Queue Size:  0
+    Hello Interval:         10 s
+    Hello Multiplier:       3
+  
+  CLNS I/O
+    Protocol State:         Up
+    MTU:                    1497
+    SNPA:                   0003.a004.5331
+    Layer-2 Multicast:
+      All ISs:              Listening
+  
+  IPv4 Unicast Topology:    Enabled
+    Adjacency Formation:    Running
+    Prefix Advertisement:   Running
+          Policy (L1/L2):   -/-
+    Metric (L1/L2):         10/10
+    Metric fallback:
+      Bandwidth (L1/L2):    Inactive/Inactive
+      Anomaly (L1/L2):      Inactive/Inactive
+    Weight (L1/L2):         0/0
+    MPLS Max Label Stack:   1/3/7/7 (PRI/BKP/SRTE/SRAT)
+    MPLS LDP Sync (L1/L2):  Disabled/Disabled
+    FRR (L1/L2):            L1 Not Enabled     L2 Not Enabled 
+      FRR Type:             None               None           
+  
+  IPv4 Address Family:      Enabled
+    Protocol State:         Up
+    Forwarding Address:     10.0.1.1
+    Global Prefix:          10.0.1.0/24
+  
+  LSP Transmission is:      idle
+  LSP Transmit Timer in:    0 ms
+  LSP Burst Size:           9 LSPs in the next 0 ms
+  LSP Rexmit Queue Size:    0
+  Adjacency Up:             13:55:29.613
+  Received CSNP complete:   13:55:30.113
+  LSP Pacing Start:         13:55:30.113
+  
+  LSP fast flooding:        Disabled
+  
+  PME Link Delays and Loss: -
+  
+  Underlying Interface List
+    IfName: Gi0/0/0/0 IfIndex: 0x6 
+    IfName: Gi0/0/0/1 IfIndex: 0x7 
+RP/0/RP0/CPU0:XR01#
+show route ipv4 isis
+Fri Oct 23 13:56:18.612 UTC
+
+i L2 10.0.12.0/24 [115/1010] via 10.0.1.11, 00:00:39, Bundle-Ether1
+                  [115/1010] via 10.0.2.12, 00:00:39, GigabitEthernet0/0/0/2
+i L2 10.10.0.0/16 [115/20] via 10.0.1.11, 00:00:39, Bundle-Ether1
+i L2 10.20.0.0/16 [115/20] via 10.0.2.12, 00:00:39, GigabitEthernet0/0/0/2
+i L2 10.255.0.11/32 [115/20] via 10.0.1.11, 00:00:39, Bundle-Ether1
+i L2 10.255.0.12/32 [115/20] via 10.0.2.12, 00:00:39, GigabitEthernet0/0/0/2
+RP/0/RP0/CPU0:XR01#
+show isis protocol
+Fri Oct 23 13:56:19.012 UTC
+
+IS-IS Router: CORE
+  System Id: 0100.0000.0001 
+  Hostname: XR01
+  IS Levels: level-2-only
+  Manual area address(es):
+    49.0001
+  Routing for area address(es):
+    49.0001
+  Multi-Instance Id: 0
+  Running on: RP/0/RP0/CPU0
+  Job Id: 1007
+  PID: 11852
+  Respawn count: 1
+  Started: Fri 2026 Oct 23 13:55:28.732 UTC
+  Null0 ready: Fri 2026 Oct 23 13:55:28.894 UTC
+  Protocol shutdown: No
+  System memory state: Normal
+    Last change: never
+  Memory state: Normal
+    Last change: never
+    Last/Initial memory usage/limit: 1655866/2147483648 0%
+  Memory state monitoring interval: 60 s
+  Memory usage/limit: 14343804/2147483648 0%
+  Memory usage specifics (count/bytes):
+    Nodes: 3/1224
+    LSPs: 3/1258
+    Links: 6/7344
+    Prefixes: 11/10120
+    Nets: 8/5120
+    Paths: 16/1536
+  LSP MTU: 1492
+  LSP Full: level-1: No, level-2: No
+  LSP fast flooding: Disabled
+    Max LSP Tx: 1000
+    PSNP Delay: 500 ms
+  PSNP interval: 50 ms
+  Non-stop forwarding: Disabled
+  Most recent startup mode: Cold Restart
+  MFI LSD registered: No
+    MFI LSD last registered: never
+  TE connection status: Down
+    TE connection up: never
+    TE connection flaps: 0
+  XTC connection status: Down
+    XTC connection up: never
+    XTC connection flaps: 0
+  BFD connection status: Up
+    BFD connection up: Fri 2026 Oct 23 13:55:29.855 UTC
+    BFD connection flaps: 0
+  BFD HA role change: never
+    BFD client HA role: none
+    BFD server HA role: none
+  Overload Bit: not configured
+  Maximum Metric: not configured
+  Topologies supported by IS-IS:
+    IPv4 Unicast
+      Rib connected
+      Level-2
+        Metric style (generate/accept): Wide/Wide
+        Metric: 10
+      No protocols redistributed
+      Distance: 115
+      Advertise Passive Interface Prefixes Only: No
+
+    Interfaces supported by IS-IS CORE:
+    Bundle-Ether1 is running actively (active in configuration)
+    Loopback0 is running passively (passive in configuration)
+    GigabitEthernet0/0/0/2 is running actively (active in configuration)
+RP/0/RP0/CPU0:XR01#
+show running-config router isis
+Fri Oct 23 13:56:19.413 UTC
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Bundle-Ether1
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface GigabitEthernet0/0/0/2
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show clns neighbors
+Tag CORE:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+XR01            Po1           0003.a004.5331      Up     24        L2   IS-IS
+RT02            Gi3           aabb.cc00.3b20      Up     24        L2   IS-IS
+RT01#
+show ip route isis
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 11 subnets, 3 masks
+i L2     10.0.2.0/24 [115/20] via 10.0.1.1, 00:00:51, Port-channel1
+i L2     10.20.0.0/16 [115/30] via 10.0.1.1, 00:00:40, Port-channel1
+i L2     10.255.0.1/32 [115/10] via 10.0.1.1, 00:00:51, Port-channel1
+i L2     10.255.0.12/32 [115/30] via 10.0.1.1, 00:00:40, Port-channel1
+RT01#
+traceroute 10.20.0.1 source Loopback1 numeric timeout 1 probe 1
+Type escape sequence to abort.
+Tracing the route to 10.20.0.1
+VRF info: (vrf in name/id, vrf out name/id)
+  1 10.0.1.1 6 msec
+  2 10.0.2.12 1 msec
+RT01#
+show clns neighbors
+
+Tag CORE:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+XR01            Et0/0         5254.0060.fbc5      Up     29        L2   IS-IS
+RT01            Et0/2         5254.005f.2197      Up     29        L2   IS-IS
+RT02#
+show ip route isis
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 11 subnets, 3 masks
+i L2     10.0.1.0/24 [115/20] via 10.0.2.1, 00:00:54, Ethernet0/0
+i L2     10.10.0.0/16 [115/30] via 10.0.2.1, 00:00:43, Ethernet0/0
+i L2     10.255.0.1/32 [115/10] via 10.0.2.1, 00:00:54, Ethernet0/0
+i L2     10.255.0.11/32 [115/30] via 10.0.2.1, 00:00:43, Ethernet0/0
+RT02#
+
+######## 13:56:23 c-2: XR の束に mtu 1500(= L3 で 1486)。RT01 は既定 1500 → パディングしたハローが合わない?
+configure
+Fri Oct 23 13:56:25.461 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface Bundle-Ether1
+RP/0/RP0/CPU0:XR01(config-if)#
+mtu 1500
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 13:56:26.764 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+show configuration failed
+Fri Oct 23 13:56:27.669 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show interfaces Bundle-Ether1 | include MTU
+Fri Oct 23 13:56:30.681 UTC
+  MTU 1500 bytes, BW 2000000 Kbit (Max: 2000000 Kbit)
+RP/0/RP0/CPU0:XR01#
+show ipv4 interface Bundle-Ether1 | include MTU
+Fri Oct 23 13:56:31.083 UTC
+  MTU is 1500 (1486 is available to IP)
+RP/0/RP0/CPU0:XR01#
+clear isis process
+Fri Oct 23 13:56:31.484 UTC
+Reset ISIS process CORE? [no]: 
+show isis adjacency
+Fri Oct 23 13:57:32.992 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT02           Gi0/0/0/2                *PtoP*         Up    29   00:02:03 Yes None None
+
+Total adjacency count: 1
+RP/0/RP0/CPU0:XR01#
+show isis interface Bundle-Ether1
+Fri Oct 23 13:57:33.393 UTC
+
+Bundle-Ether1               Enabled
+  Adjacency Formation:      Enabled
+  Prefix Advertisement:     Enabled
+  Bandwidth:                2000000
+  Total bandwidth:          2000000
+  RSI SRLG:                 Not Registered
+  
+  Circuit Type:             level-2-only (Configured: level-1-2)
+  Media Type:               P2P
+  Circuit Number:           0
+  Extended Circuit Number:  0
+  Last IIH Received:        13:56:24 (00:01:09 ago), 1496 octets
+  Last PDU Rejected:        13:57:29 (3.75 sec ago), 1496 octets, P2P IIH, PDU larger than our MTU
+  Last IIH Sent:            13:57:28 (5.37 sec ago), 1492 octets
+  Sending next P2P IIH in:  3 s
+  
+  IPv4 BFD:                 Disabled
+  IPv6 BFD:                 Disabled
+  
+  Level-2                   
+    Adjacency Count:        0
+    Adjacency Flaps:        1
+    LSP Pacing Interval:    33 ms
+    PSNP Entry Queue Size:  0
+    Hello Interval:         10 s
+    Hello Multiplier:       3
+  
+  CLNS I/O
+    Protocol State:         Up
+    MTU:                    1483 (MTU is too small: L2 lsp-mtu is 1492)
+    SNPA:                   0003.a004.5331
+    Layer-2 Multicast:
+      All ISs:              Listening
+  
+  IPv4 Unicast Topology:    Enabled
+    Adjacency Formation:    Running
+    Prefix Advertisement:   Running
+          Policy (L1/L2):   -/-
+    Metric (L1/L2):         10/10
+    Metric fallback:
+      Bandwidth (L1/L2):    Inactive/Inactive
+      Anomaly (L1/L2):      Inactive/Inactive
+    Weight (L1/L2):         0/0
+    MPLS Max Label Stack:   1/3/7/7 (PRI/BKP/SRTE/SRAT)
+    MPLS LDP Sync (L1/L2):  Disabled/Disabled
+    FRR (L1/L2):            L1 Not Enabled     L2 Not Enabled 
+      FRR Type:             None               None           
+  
+  IPv4 Address Family:      Enabled
+    Protocol State:         Up
+    Forwarding Address:     10.0.1.1
+    Global Prefix:          10.0.1.0/24
+  
+  LSP Transmission is:      idle
+  LSP Transmit Timer in:    0 ms
+  LSP Burst Size:           10 LSPs in the next 0 ms
+  LSP Rexmit Queue Size:    0
+  Adjacency Up:             never
+  Received CSNP complete:   never
+  LSP Pacing Start:         never
+  
+  LSP fast flooding:        Disabled
+  
+  PME Link Delays and Loss: -
+  
+  Underlying Interface List
+    IfName: Gi0/0/0/0 IfIndex: 0x6 
+    IfName: Gi0/0/0/1 IfIndex: 0x7 
+RP/0/RP0/CPU0:XR01#
+show isis statistics Bundle-Ether1
+Fri Oct 23 13:57:33.794 UTC
+
+Interface:                       Bundle-Ether1
+  PTP Hellos (sent/rcvd):        18/8
+  Level-2
+    LSPs (sent/rcvd):            3/2
+    CSNPs (sent/rcvd):           1/1
+    PSNPs (sent/rcvd):           1/4
+  Flooding
+    LSP Retransmissions:         0
+
+RP/0/RP0/CPU0:XR01#
+show logging last 15
+Fri Oct 23 13:57:34.194 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 17 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 387 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 23 13:55:38.973 UTC: isis[1007]: %ROUTING-ISIS-6-INFO_STARTUP_FINISH : ISIS (CORE): Cold controlled start completed 
+RP/0/RP0/CPU0:Oct 23 13:56:16.996 UTC: SSHD_[69272]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:56:17.001 UTC: SSHD_[69272]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 13:56:19.826 UTC: SSHD_[69272]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 13:56:24.647 UTC: SSHD_[69328]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:56:24.652 UTC: SSHD_[69328]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 13:56:27.255 UTC: config[69359]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000016' to view the changes. 
+RP/0/RP0/CPU0:Oct 23 13:56:29.173 UTC: config[69359]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 23 13:56:29.585 UTC: SSHD_[69328]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 13:56:29.867 UTC: SSHD_[69383]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:56:29.873 UTC: SSHD_[69383]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 13:56:31.896 UTC: SSHD_[69383]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 13:56:54.397 UTC: isis[1007]: %ROUTING-ISIS-5-ADJCHANGE : ISIS (CORE): Adjacency to RT01 (Bundle-Ether1) (L2) Down, Holdtime expired 
+RP/0/RP0/CPU0:Oct 23 13:57:32.179 UTC: SSHD_[69461]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:57:32.183 UTC: SSHD_[69461]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:XR01#
+show clns neighbors detail
+Tag CORE:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+XR01            Po1           0003.a004.5331      Init   22        L2   IS-IS
+  Area Address(es): 49.0001
+  IP Address(es):  10.0.1.1*
+  Uptime: 00:00:32
+  NSF capable
+  Interface name: Port-channel1
+RT02            Gi3           aabb.cc00.3b20      Up     29        L2   IS-IS
+  Area Address(es): 49.0001
+  IP Address(es):  10.0.12.12*
+  Uptime: 00:29:26
+  NSF capable
+  Interface name: GigabitEthernet3
+RT01#
+show clns interface Port-channel1
+Port-channel1 is up, line protocol is up
+ Attached to: isis 
+  Checksums enabled, MTU 1497, Encapsulation SAP
+  ERPDUs enabled, min. interval 10 msec.
+  CLNS fast switching disabled
+  CLNS SSE switching disabled
+  DEC compatibility mode OFF for this interface
+  Next ESH/ISH in 54 seconds
+  Routing Protocol: IS-IS
+    Circuit Type: level-1-2
+    Interface number 0x2, local circuit ID 0x8
+    Neighbor Extended Local Circuit ID: 0xA
+    Neighbor System-ID: XR01
+    P2P retransmit queue size: 0
+    P2P retransmits: 0
+    LSP fast flooding: Disabled
+    Level-2 Metric: 10, Priority: 64, Circuit ID: RT01.08
+    Level-2 IPv6 Metric: 10
+    Number of active level-2 adjacencies: 0
+    Next IS-IS Hello in 3 seconds
+    if state INIT
+RT01#
+show logging | include ISIS|CLNS
+*Oct 23 13:27:58.205: %CLNS-6-DFT_OPT: Protocol timers for fast convergence are Enabled.
+*Oct 23 13:28:08.701: %CLNS-5-ADJCHANGE: ISIS: Adjacency to 0100.0000.0012 (GigabitEthernet3) Up, new adjacency
+*Oct 23 13:55:28.674: %CLNS-5-ADJCHANGE: ISIS: Adjacency to 0100.0000.0001 (Port-channel1) Up, new adjacency
+*Oct 23 13:56:53.760: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Down, neighbor forgot us
+RT01#
+
+######## 13:57:36 c-3: 逆向き= XR の束に mtu 9000(RT01 は 1500)
+configure
+Fri Oct 23 13:57:38.254 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface Bundle-Ether1
+RP/0/RP0/CPU0:XR01(config-if)#
+mtu 9000
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 13:57:39.558 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+show configuration failed
+Fri Oct 23 13:57:40.463 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+clear isis process
+Fri Oct 23 13:57:43.493 UTC
+Reset ISIS process CORE? [no]: 
+show isis adjacency
+Fri Oct 23 13:58:44.997 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           BE1                      *PtoP*         Init  23   not up   Yes None None
+RT02           Gi0/0/0/2                *PtoP*         Up    29   00:03:15 Yes None None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show isis interface Bundle-Ether1 | include "MTU|Adjacenc|LS$ther1 | include "MTU|Adjacenc|LSP                          |pad"show isis interface Bundle-Ether1 | include "MTU|Adjacenc|L$
+Fri Oct 23 13:58:45.399 UTC
+  Adjacency Formation:      Enabled
+  Last PDU Rejected:        13:57:29 (00:01:15 ago), 1496 octets, P2P IIH, PDU larger than our MTU
+    Adjacency Count:        0
+    Adjacency Flaps:        2
+    LSP Pacing Interval:    33 ms
+    MTU:                    8983
+    Adjacency Formation:    Running
+  LSP Transmission is:      idle
+  LSP Transmit Timer in:    0 ms
+  LSP Burst Size:           10 LSPs in the next 0 ms
+  LSP Rexmit Queue Size:    0
+  Adjacency Up:             never
+  LSP Pacing Start:         never
+  LSP fast flooding:        Disabled
+RP/0/RP0/CPU0:XR01#
+show logging last 15
+Fri Oct 23 13:58:45.799 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 17 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 400 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 23 13:57:32.179 UTC: SSHD_[69461]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:57:32.183 UTC: SSHD_[69461]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 13:57:34.608 UTC: SSHD_[69461]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 13:57:37.442 UTC: SSHD_[69504]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:57:37.446 UTC: SSHD_[69504]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 13:57:40.046 UTC: config[69535]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000017' to view the changes. 
+RP/0/RP0/CPU0:Oct 23 13:57:41.970 UTC: config[69535]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 23 13:57:42.383 UTC: SSHD_[69504]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 13:57:42.679 UTC: SSHD_[69577]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:57:42.684 UTC: SSHD_[69577]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 13:57:43.906 UTC: SSHD_[69577]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 13:57:48.923 UTC: isis[1007]: %ROUTING-ISIS-5-ADJCHANGE : ISIS (CORE): Adjacency to RT01 (Bundle-Ether1) (L2) Up, New adjacency 
+RP/0/RP0/CPU0:Oct 23 13:58:14.904 UTC: isis[1007]: %ROUTING-ISIS-5-ADJCHANGE : ISIS (CORE): Adjacency to RT01 (Bundle-Ether1) (L2) Down, 3-way state down 
+RP/0/RP0/CPU0:Oct 23 13:58:44.185 UTC: SSHD_[65543]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:58:44.188 UTC: SSHD_[65543]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:XR01#
+show clns neighbors detail
+Tag CORE:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+RT02            Gi3           aabb.cc00.3b20      Up     27        L2   IS-IS
+  Area Address(es): 49.0001
+  IP Address(es):  10.0.12.12*
+  Uptime: 00:30:37
+  NSF capable
+  Interface name: GigabitEthernet3
+RT01#
+show logging | include ISIS|CLNS
+*Oct 23 13:27:58.205: %CLNS-6-DFT_OPT: Protocol timers for fast convergence are Enabled.
+*Oct 23 13:28:08.701: %CLNS-5-ADJCHANGE: ISIS: Adjacency to 0100.0000.0012 (GigabitEthernet3) Up, new adjacency
+*Oct 23 13:55:28.674: %CLNS-5-ADJCHANGE: ISIS: Adjacency to 0100.0000.0001 (Port-channel1) Up, new adjacency
+*Oct 23 13:56:53.760: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Down, neighbor forgot us
+*Oct 23 13:58:06.478: %CLNS-5-ADJCHANGE: ISIS: Adjacency to XR01 (Port-channel1) Down, hold time expired
+RT01#
+
+######## 13:58:47 c-4: 元へ(mtu を外す)
+configure
+Fri Oct 23 13:58:49.433 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface Bundle-Ether1
+RP/0/RP0/CPU0:XR01(config-if)#
+no mtu
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 13:58:50.735 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Fri Oct 23 13:59:38.146 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           BE1                      *PtoP*         Up    25   00:00:40 Yes None None
+RT02           Gi0/0/0/2                *PtoP*         Up    29   00:04:08 Yes None None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show clns neighbors
+Tag CORE:
+System Id       Interface     SNPA                State  Holdtime  Type Protocol
+XR01            Po1           0003.a004.5331      Up     29        L2   IS-IS
+RT02            Gi3           aabb.cc00.3b20      Up     20        L2   IS-IS
+RT01#

@@ -1,0 +1,357 @@
+
+######## 13:43:18 b2-1: LACP 周期 slow(既定)。RT01 Gi2 を shutdown → XR が抜くまで(CML では XR 側のキャリアは落ちない)
+show lacp Bundle-Ether1 | include "Gi0/0/0/1|Period|Slow|Fas$clude "Gi0/0/0/1|Period|Slow|Fast                          "show lacp Bundle-Ether1 | include "Gi0/0/0/1|Period|Slow|Fa$
+Fri Oct 23 13:43:20.572 UTC
+  Gi0/0/0/1        30s  ascdA--- 0x8000,0x0002 0x0001 0x8000,00-03-a0-04-53-32
+  Port                  Receive    Period Selection  Mux       A Churn P Churn
+  Gi0/0/0/0             Current    Slow   Selected   Distrib   None    None   
+  Gi0/0/0/1             Current    Slow   Selected   Distrib   None    None   
+RP/0/RP0/CPU0:XR01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface GigabitEthernet2
+RT01(config-if)#
+shutdown
+RT01(config-if)#
+end
+RT01#
+13:43:22
+== Gi0/0/0/1 left the bundle after 72 s
+show bundle Bundle-Ether1 | include "Status|Local links|Gi"
+Fri Oct 23 13:44:36.602 UTC
+  Status:                                    Down
+  Local links <active/standby/configured>:   0 / 1 / 2
+  Gi0/0/0/0             Local            Standby      0x8000, 0x0001     1000000
+  Gi0/0/0/1             Local            Configured   0x8000, 0x0002     1000000
+RP/0/RP0/CPU0:XR01#
+show logging last 6
+Fri Oct 23 13:44:37.002 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 17 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 262 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 23 13:44:31.460 UTC: BM-DISTRIB[1267]: %L2-BM-6-ACTIVE : GigabitEthernet0/0/0/1 is no longer Active as part of Bundle-Ether1 (Link is Expired; LACPDUs are not being received from the partner) 
+RP/0/RP0/CPU0:Oct 23 13:44:34.270 UTC: SSHD_[67488]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:44:34.275 UTC: SSHD_[67488]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 13:44:35.497 UTC: SSHD_[67488]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 13:44:35.785 UTC: SSHD_[67523]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:44:35.791 UTC: SSHD_[67523]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:XR01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface GigabitEthernet2
+RT01(config-if)#
+no shutdown
+RT01(config-if)#
+end
+RT01#
+show bundle Bundle-Ether1 | include "Status|Gi"
+Fri Oct 23 13:45:21.465 UTC
+  Status:                                    Up
+  Gi0/0/0/0             Local            Active       0x8000, 0x0001     1000000
+  Gi0/0/0/1             Local            Active       0x8000, 0x0002     1000000
+RP/0/RP0/CPU0:XR01#
+
+######## 13:45:21 b2-2: XR のメンバに lacp period short(相手に速い送信を求める)→ 同じ操作
+configure
+Fri Oct 23 13:45:22.975 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-if)#
+lacp period short
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-if)#
+lacp period short
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 13:45:25.482 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+show configuration failed
+Fri Oct 23 13:45:26.387 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show lacp Bundle-Ether1
+Fri Oct 23 13:45:44.400 UTC
+State: a - Port is marked as Aggregable.
+       s - Port is Synchronized with peer.
+       c - Port is marked as Collecting.
+       d - Port is marked as Distributing.
+       A - Device is in Active mode.
+       F - Device requests PDUs from the peer at fast rate.
+       D - Port is using default values for partner information.
+       E - Information about partner has expired.
+
+Bundle-Ether1
+
+  Port          (rate)  State    Port ID       Key    System ID
+  --------------------  -------- ------------- ------ ------------------------
+Local
+  Gi0/0/0/0        30s  ascdAF-- 0x8000,0x0001 0x0001 0x8000,00-03-a0-04-53-32
+   Partner          1s  ascdA--- 0x8000,0x0002 0x0001 0x8000,00-1e-bd-aa-b2-00
+  Gi0/0/0/1        30s  ascdAF-- 0x8000,0x0002 0x0001 0x8000,00-03-a0-04-53-32
+   Partner          1s  ascdA--- 0x8000,0x0003 0x0001 0x8000,00-1e-bd-aa-b2-00
+
+  Port                  Receive    Period Selection  Mux       A Churn P Churn
+  --------------------  ---------- ------ ---------- --------- ------- -------
+Local
+  Gi0/0/0/0             Current    Slow   Selected   Distrib   None    None   
+  Gi0/0/0/1             Current    Slow   Selected   Distrib   None    None   
+RP/0/RP0/CPU0:XR01#
+show lacp internal
+Flags:  S - Device is requesting Slow LACPDUs 
+        F - Device is requesting Fast LACPDUs
+        A - Device is in Active mode       P - Device is in Passive mode     
+
+Channel group 1
+                                LACP port    Admin     Oper    Port        Port
+Port          Flags   State     Priority     Key       Key     Number      State
+Gi1           SA      bndl      32768        0x1       0x1     0x2         0x3D  
+Gi2           SA      bndl      32768        0x1       0x1     0x3         0x3D  
+RT01#
+show lacp neighbor
+Flags:  S - Device is requesting Slow LACPDUs 
+        F - Device is requesting Fast LACPDUs
+        A - Device is in Active mode       P - Device is in Passive mode     
+
+Channel group 1 neighbors
+
+                     LACP port                      Admin  Oper   Port    Port
+Port          Flags  Priority  Dev ID          Age  key    Key    Number  State
+Gi1           FA     32768     0003.a004.5332  20s  0x0    0x1    0x1     0x3F  
+Gi2           FA     32768     0003.a004.5332  20s  0x0    0x1    0x2     0x3F  
+RT01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface GigabitEthernet2
+RT01(config-if)#
+shutdown
+RT01(config-if)#
+end
+RT01#
+13:45:49
+== Gi0/0/0/1 left the bundle after 6 s
+show bundle Bundle-Ether1 | include "Status|Local links|Gi"
+Fri Oct 23 13:45:57.699 UTC
+  Status:                                    Down
+  Local links <active/standby/configured>:   0 / 1 / 2
+  Gi0/0/0/0             Local            Standby      0x8000, 0x0001     1000000
+  Gi0/0/0/1             Local            Configured   0x8000, 0x0002     1000000
+RP/0/RP0/CPU0:XR01#
+show logging last 6
+Fri Oct 23 13:45:58.100 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 17 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 283 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 23 13:45:51.610 UTC: BM-DISTRIB[1267]: %L2-BM-6-ACTIVE : GigabitEthernet0/0/0/1 is no longer Active as part of Bundle-Ether1 (Link is Expired; LACPDUs are not being received from the partner) 
+RP/0/RP0/CPU0:Oct 23 13:45:55.173 UTC: SSHD_[67839]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:45:55.177 UTC: SSHD_[67839]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 23 13:45:56.397 UTC: SSHD_[67839]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 23 13:45:56.885 UTC: SSHD_[67874]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 23 13:45:56.889 UTC: SSHD_[67874]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:XR01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface GigabitEthernet2
+RT01(config-if)#
+no shutdown
+RT01(config-if)#
+end
+RT01#
+show bundle Bundle-Ether1 | include "Status|Gi"
+Fri Oct 23 13:46:42.535 UTC
+  Status:                                    Up
+  Gi0/0/0/0             Local            Active       0x8000, 0x0001     1000000
+  Gi0/0/0/1             Local            Active       0x8000, 0x0002     1000000
+RP/0/RP0/CPU0:XR01#
+
+######## 13:46:42 b2-3: RT01 側にも lacp rate fast(受け付けるか)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface range GigabitEthernet1 - 2
+RT01(config-if-range)#
+lacp rate fast
+RT01(config-if-range)#
+end
+RT01#
+show lacp internal
+Flags:  S - Device is requesting Slow LACPDUs 
+        F - Device is requesting Fast LACPDUs
+        A - Device is in Active mode       P - Device is in Passive mode     
+
+Channel group 1
+                                LACP port    Admin     Oper    Port        Port
+Port          Flags   State     Priority     Key       Key     Number      State
+Gi1           FA      bndl      32768        0x1       0x1     0x2         0x3F  
+Gi2           FA      bndl      32768        0x1       0x1     0x3         0x3F  
+RT01#
+show lacp Bundle-Ether1 | include "Gi0/0/0|Fast|Slow"
+Fri Oct 23 13:46:57.371 UTC
+  Gi0/0/0/0         1s  ascdAF-- 0x8000,0x0001 0x0001 0x8000,00-03-a0-04-53-32
+  Gi0/0/0/1         1s  ascdAF-- 0x8000,0x0002 0x0001 0x8000,00-03-a0-04-53-32
+  Gi0/0/0/0             Current    Fast   Selected   Distrib   None    None   
+  Gi0/0/0/1             Current    Fast   Selected   Distrib   None    None   
+RP/0/RP0/CPU0:XR01#
+
+######## 13:46:56 b2-4: 周期を元へ・両方 passive で 150 秒待つ
+configure
+Fri Oct 23 13:46:58.878 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-if)#
+no lacp period
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-if)#
+no lacp period
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 13:47:01.385 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface range GigabitEthernet1 - 2
+RT01(config-if-range)#
+no lacp rate
+RT01(config-if-range)#
+channel-group 1 mode passive
+Interface already configured in Port-Channel-1.
+
+% Range command terminated because it failed on GigabitEthernet1
+RT01(config-if-range)#
+end
+RT01#
+configure
+Fri Oct 23 13:47:07.137 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode passive
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode passive
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 13:47:10.445 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+13:47:10
+13:47:40
+show bundle Bundle-Ether1 | include "Status|Gi0"
+Fri Oct 23 13:47:42.855 UTC
+  Status:                                    Up
+  Gi0/0/0/0             Local            Active       0x8000, 0x0002     1000000
+  Gi0/0/0/1             Local            Active       0x8000, 0x0001     1000000
+RP/0/RP0/CPU0:XR01#
+13:48:12
+show bundle Bundle-Ether1 | include "Status|Gi0"
+Fri Oct 23 13:48:14.365 UTC
+  Status:                                    Up
+  Gi0/0/0/0             Local            Active       0x8000, 0x0002     1000000
+  Gi0/0/0/1             Local            Active       0x8000, 0x0001     1000000
+RP/0/RP0/CPU0:XR01#
+13:48:43
+show bundle Bundle-Ether1 | include "Status|Gi0"
+Fri Oct 23 13:48:45.870 UTC
+  Status:                                    Up
+  Gi0/0/0/0             Local            Active       0x8000, 0x0002     1000000
+  Gi0/0/0/1             Local            Active       0x8000, 0x0001     1000000
+RP/0/RP0/CPU0:XR01#
+13:49:15
+show bundle Bundle-Ether1 | include "Status|Gi0"
+Fri Oct 23 13:49:17.389 UTC
+  Status:                                    Up
+  Gi0/0/0/0             Local            Active       0x8000, 0x0002     1000000
+  Gi0/0/0/1             Local            Active       0x8000, 0x0001     1000000
+RP/0/RP0/CPU0:XR01#
+13:49:46
+show bundle Bundle-Ether1 | include "Status|Gi0"
+Fri Oct 23 13:49:48.902 UTC
+  Status:                                    Up
+  Gi0/0/0/0             Local            Active       0x8000, 0x0002     1000000
+  Gi0/0/0/1             Local            Active       0x8000, 0x0001     1000000
+RP/0/RP0/CPU0:XR01#
+show etherchannel summary | include Po1
+1	Po1(RU)		LACP	 Gi1(bndl) Gi2(bndl)
+RT01#
+
+######## 13:49:50 b2-5: 元へ(両方 active)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface range GigabitEthernet1 - 2
+RT01(config-if-range)#
+channel-group 1 mode active
+Interface already configured in Port-Channel-1.
+
+% Range command terminated because it failed on GigabitEthernet1
+RT01(config-if-range)#
+end
+RT01#
+configure
+Fri Oct 23 13:49:54.942 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode active
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-if)#
+no bundle id
+RP/0/RP0/CPU0:XR01(config-if)#
+bundle id 1 mode active
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Fri Oct 23 13:49:58.247 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show bundle Bundle-Ether1 | include "Status|Gi"
+Fri Oct 23 13:50:45.666 UTC
+  Status:                                    Up
+  Gi0/0/0/0             Local            Active       0x8000, 0x0001     1000000
+  Gi0/0/0/1             Local            Active       0x8000, 0x0002     1000000
+RP/0/RP0/CPU0:XR01#
+ping 10.0.1.11 count 5
+Fri Oct 23 13:50:46.066 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.0.1.11 timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 2/2/4 ms
+RP/0/RP0/CPU0:XR01#

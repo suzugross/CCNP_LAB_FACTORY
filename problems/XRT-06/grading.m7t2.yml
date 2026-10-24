@@ -1,0 +1,25 @@
+# M7-2: 束の運用要件= 2 本そろわないと使わない(bundle minimum-active links 2)・メンバの故障をポートが up のままでも数秒で検知(lacp period short)。
+# 2 つ目の確認は、採点のあいだだけ RT01 の Gi2 を止める(CML では XR 側のキャリアは落ちない= LACP の失効でしか気づけない)。
+# PoC: 既定(slow)は 72 秒抜けない/period short で 6 秒以内。最低本数なしでは 1 本で Up のまま。止めた後は必ず戻して 45 秒待つ。
+problem: XRT-06
+total_points: 100
+checks:
+  - name: 'M7-2 XR01: Bundle-Ether1 needs two active members'
+    node: XR01
+    command: 'show bundle Bundle-Ether1'
+    raw:
+      - { regex: 'Minimum active links / bandwidth:\s+2 /' }
+      - { regex: 'Status:\s+Up' }
+    points: 30
+  - name: 'M7-2 XR01: the bundle goes down within seconds when one member stops carrying LACP (RT01 Gi2 shut for the check)'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-06 ssh XR01
+      --pre-cli 'RT01:configure terminal;;interface GigabitEthernet2;;shutdown;;end' --settle 9
+      --post-cli 'RT01:configure terminal;;interface GigabitEthernet2;;no shutdown;;end' --post-settle 45
+      -- 'show bundle Bundle-Ether1'
+    raw:
+      - { regex: '== CLI RT01: 4 lines' }
+      - { regex: 'Status:\s+Down' }
+    points: 70

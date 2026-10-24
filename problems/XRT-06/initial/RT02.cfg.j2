@@ -1,0 +1,45 @@
+! XRT-06 RT02(IOL 17.15・据付・変更しない)。主経路の先(間にスイッチ)・予備経路の片端・XR01 と iBGP。
+! 主経路に BFD(100 ms × 3)と isis bfd を用意済み。BGP のグレースフル リスタートも有効。
+interface Loopback0
+ ip address 10.255.0.12 255.255.255.255
+ ip router isis CORE
+!
+interface Loopback1
+ description SERVICES
+ ip address 10.20.0.1 255.255.0.0
+ ip router isis CORE
+!
+interface {{ links[0] }}
+ description PRIMARY to XR01 via SW01
+ ip address 10.0.2.12 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ bfd interval 100 min_rx 100 multiplier 3
+ isis bfd
+ no shutdown
+!
+interface {{ links[2] }}
+ description BACKUP to RT01
+ ip address 10.0.12.12 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 1000
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0012.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+!
+router bgp 65000
+ bgp router-id 10.255.0.12
+ bgp log-neighbor-changes
+ bgp graceful-restart
+ neighbor 10.255.0.1 remote-as 65000
+ neighbor 10.255.0.1 update-source Loopback0
+ address-family ipv4
+  network 10.20.0.0 mask 255.255.0.0
+  neighbor 10.255.0.1 activate
+ exit-address-family
+!

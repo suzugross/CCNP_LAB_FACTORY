@@ -1,0 +1,428 @@
+
+######## 14:24:51 f-1: オーバーロード ビット(手動)→ RT01 から RT02 への経路は予備へ・XR01 宛ては残る
+configure
+Fri Oct 23 14:24:53.786 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+set-overload-bit
+RP/0/RP0/CPU0:XR01(config-isis)#
+commit
+Fri Oct 23 14:24:55.088 UTC
+RP/0/RP0/CPU0:XR01(config-isis)#
+show configuration failed
+Fri Oct 23 14:24:55.993 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-isis)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis database
+Fri Oct 23 14:25:09.009 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x00000018   0xff94        1188 /*            0/0/1
+RT01.00-00            0x00000018   0x1b51        851  /909          0/0/0
+RT02.00-00            0x0000000f   0x6ff7        851  /910          0/0/0
+
+ Total Level-2 LSP count: 3     Local Level-2 LSP count: 1
+RP/0/RP0/CPU0:XR01#
+show isis database
+
+Tag CORE:
+IS-IS Level-2 Link State Database:
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd      ATT/P/OL
+XR01.00-00            0x00000018   0xFF94                1185/1200      0/0/1
+RT01.00-00          * 0x00000018   0x1B51                 560/*         0/0/0
+RT02.00-00            0x0000000F   0x6FF7                 560/1200      0/0/0
+RT01#
+show ip route 10.20.0.0
+Routing entry for 10.20.0.0/16
+  Known via "isis", distance 115, metric 1010, type level-2
+  Redistributing via isis CORE
+  Last update from 10.0.12.12 on GigabitEthernet3, 00:00:14 ago
+  Routing Descriptor Blocks:
+  * 10.0.12.12, from 10.255.0.12, 00:00:14 ago, via GigabitEthernet3
+      Route metric is 1010, traffic share count is 1
+RT01#
+show ip route 10.255.0.1
+Routing entry for 10.255.0.1/32
+  Known via "isis", distance 115, metric 10, type level-2
+  Redistributing via isis CORE
+  Last update from 10.0.1.1 on Port-channel1, 00:10:40 ago
+  Routing Descriptor Blocks:
+  * 10.0.1.1, from 10.255.0.1, 00:10:40 ago, via Port-channel1
+      Route metric is 10, traffic share count is 1
+RT01#
+traceroute 10.20.0.1 source Loopback1 numeric timeout 1 probe 1
+Type escape sequence to abort.
+Tracing the route to 10.20.0.1
+VRF info: (vrf in name/id, vrf out name/id)
+  1 10.0.12.12 1 msec
+RT01#
+ping 10.255.0.1 source Loopback1
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.255.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.10.0.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/2/4 ms
+RT01#
+configure
+Fri Oct 23 14:25:13.716 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+no set-overload-bit
+RP/0/RP0/CPU0:XR01(config-isis)#
+commit
+Fri Oct 23 14:25:15.019 UTC
+RP/0/RP0/CPU0:XR01(config-isis)#
+end
+RP/0/RP0/CPU0:XR01#
+
+######## 14:25:15 f-2: on-startup wait-for-bgp → process restart isis(NSF ietf あり= 公式は NSF の再起動では使わないと書く)
+configure
+Fri Oct 23 14:25:17.440 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+set-overload-bit on-startup wait-for-bgp
+RP/0/RP0/CPU0:XR01(config-isis)#
+commit
+Fri Oct 23 14:25:18.744 UTC
+RP/0/RP0/CPU0:XR01(config-isis)#
+show configuration failed
+Fri Oct 23 14:25:19.650 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-isis)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config router isis
+Fri Oct 23 14:25:22.670 UTC
+router isis CORE
+ set-overload-bit on-startup wait-for-bgp
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ nsr
+ nsf ietf
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Bundle-Ether1
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface GigabitEthernet0/0/0/2
+  bfd minimum-interval 100
+  bfd multiplier 3
+  bfd fast-detect ipv4
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+process restart isis
+Fri Oct 23 14:25:23.070 UTC
+RP/0/RP0/CPU0:XR01#
+14:25:22
+14:25:32
+show isis database XR01.00-00
+Fri Oct 23 14:25:34.589 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x00000019   0xf99d        1194 /1187         0/0/0
+RP/0/RP0/CPU0:XR01#
+show isis protocol | include "startup|verload"
+Fri Oct 23 14:25:34.989 UTC
+  Most recent startup mode: IETF NSF Restart
+  Overload Bit Level-2: configured, clear
+      on startup until BGP converges
+RP/0/RP0/CPU0:XR01#
+14:25:44
+show isis database XR01.00-00
+Fri Oct 23 14:25:46.503 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x00000019   0xf99d        1182 /1187         0/0/0
+RP/0/RP0/CPU0:XR01#
+show isis protocol | include "startup|verload"
+Fri Oct 23 14:25:46.903 UTC
+  Most recent startup mode: IETF NSF Restart
+  Overload Bit Level-2: configured, clear
+      on startup until BGP converges
+RP/0/RP0/CPU0:XR01#
+14:25:56
+show isis database XR01.00-00
+Fri Oct 23 14:25:58.432 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x00000019   0xf99d        1170 /1187         0/0/0
+RP/0/RP0/CPU0:XR01#
+show isis protocol | include "startup|verload"
+Fri Oct 23 14:25:58.834 UTC
+  Most recent startup mode: IETF NSF Restart
+  Overload Bit Level-2: configured, clear
+      on startup until BGP converges
+RP/0/RP0/CPU0:XR01#
+
+######## 14:25:58 f-2b: NSF と NSR を外して process restart isis(冷えた起動で OL が立つか)
+configure
+Fri Oct 23 14:26:00.352 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+no nsf
+% Incomplete command.
+RP/0/RP0/CPU0:XR01(config-isis)#
+no nsr
+RP/0/RP0/CPU0:XR01(config-isis)#
+commit
+Fri Oct 23 14:26:02.057 UTC
+RP/0/RP0/CPU0:XR01(config-isis)#
+show configuration failed
+Fri Oct 23 14:26:02.963 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-isis)#
+end
+RP/0/RP0/CPU0:XR01#
+process restart isis
+Fri Oct 23 14:26:05.979 UTC
+RP/0/RP0/CPU0:XR01#
+14:26:05
+14:26:15
+show isis database XR01.00-00
+Fri Oct 23 14:26:17.491 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001a   0xfb96        1198 /*            0/0/1
+RP/0/RP0/CPU0:XR01#
+show isis protocol | include "startup|verload"
+Fri Oct 23 14:26:17.896 UTC
+  Most recent startup mode: IETF NSF Restart
+  Overload Bit Level-2: configured, clear
+      on startup until BGP converges
+RP/0/RP0/CPU0:XR01#
+14:26:27
+show isis database XR01.00-00
+Fri Oct 23 14:26:29.407 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001b   0xf59f        1188 /*            0/0/0
+RP/0/RP0/CPU0:XR01#
+show isis protocol | include "startup|verload"
+Fri Oct 23 14:26:29.807 UTC
+  Most recent startup mode: IETF NSF Restart
+  Overload Bit Level-2: configured, clear
+      on startup until BGP converges
+RP/0/RP0/CPU0:XR01#
+14:26:39
+show isis database XR01.00-00
+Fri Oct 23 14:26:41.315 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001b   0xf59f        1176 /*            0/0/0
+RP/0/RP0/CPU0:XR01#
+show isis protocol | include "startup|verload"
+Fri Oct 23 14:26:41.716 UTC
+  Most recent startup mode: IETF NSF Restart
+  Overload Bit Level-2: configured, clear
+      on startup until BGP converges
+RP/0/RP0/CPU0:XR01#
+14:26:51
+show isis database XR01.00-00
+Fri Oct 23 14:26:53.224 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001b   0xf59f        1164 /*            0/0/0
+RP/0/RP0/CPU0:XR01#
+show isis protocol | include "startup|verload"
+Fri Oct 23 14:26:53.625 UTC
+  Most recent startup mode: IETF NSF Restart
+  Overload Bit Level-2: configured, clear
+      on startup until BGP converges
+RP/0/RP0/CPU0:XR01#
+14:27:03
+show isis database XR01.00-00
+Fri Oct 23 14:27:05.141 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001b   0xf59f        1152 /*            0/0/0
+RP/0/RP0/CPU0:XR01#
+show isis protocol | include "startup|verload"
+Fri Oct 23 14:27:05.541 UTC
+  Most recent startup mode: IETF NSF Restart
+  Overload Bit Level-2: configured, clear
+      on startup until BGP converges
+RP/0/RP0/CPU0:XR01#
+14:27:15
+show isis database XR01.00-00
+Fri Oct 23 14:27:17.045 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001b   0xf59f        1140 /*            0/0/0
+RP/0/RP0/CPU0:XR01#
+show isis protocol | include "startup|verload"
+Fri Oct 23 14:27:17.446 UTC
+  Most recent startup mode: IETF NSF Restart
+  Overload Bit Level-2: configured, clear
+      on startup until BGP converges
+RP/0/RP0/CPU0:XR01#
+show isis database
+
+Tag CORE:
+IS-IS Level-2 Link State Database:
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd      ATT/P/OL
+XR01.00-00            0x0000001B   0xF59F                1137/1200      0/0/0
+RT01.00-00          * 0x00000018   0x1B51                 432/*         0/0/0
+RT02.00-00            0x00000010   0x6DF8                1170/1199      0/0/0
+RT01#
+
+######## 14:27:18 f-2c: clear isis process でも立つか
+clear isis process
+Fri Oct 23 14:27:20.695 UTC
+Reset ISIS process CORE? [no]: 
+14:27:20
+14:27:30
+show isis database XR01.00-00
+Fri Oct 23 14:27:32.237 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001b   0xf59f        1125 /*            0/0/0
+RP/0/RP0/CPU0:XR01#
+14:27:41
+show isis database XR01.00-00
+Fri Oct 23 14:27:43.756 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001b   0xf59f        1113 /*            0/0/0
+RP/0/RP0/CPU0:XR01#
+14:27:53
+show isis database XR01.00-00
+Fri Oct 23 14:27:55.279 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001b   0xf59f        1102 /*            0/0/0
+RP/0/RP0/CPU0:XR01#
+
+######## 14:27:54 f-3: on-startup 60(秒)→ process restart isis
+configure
+Fri Oct 23 14:27:56.797 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+set-overload-bit on-startup 60
+RP/0/RP0/CPU0:XR01(config-isis)#
+commit
+Fri Oct 23 14:27:58.100 UTC
+RP/0/RP0/CPU0:XR01(config-isis)#
+show configuration failed
+Fri Oct 23 14:27:59.004 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-isis)#
+end
+RP/0/RP0/CPU0:XR01#
+process restart isis
+Fri Oct 23 14:28:02.132 UTC
+RP/0/RP0/CPU0:XR01#
+14:28:01
+14:28:11
+show isis database XR01.00-00
+Fri Oct 23 14:28:13.655 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001c   0xf798        1199 /*            0/0/1
+RP/0/RP0/CPU0:XR01#
+14:28:23
+show isis database XR01.00-00
+Fri Oct 23 14:28:25.181 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001d   0xf1a1        1189 /*            0/0/0
+RP/0/RP0/CPU0:XR01#
+14:28:34
+show isis database XR01.00-00
+Fri Oct 23 14:28:36.683 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001d   0xf1a1        1177 /*            0/0/0
+RP/0/RP0/CPU0:XR01#
+14:28:46
+show isis database XR01.00-00
+Fri Oct 23 14:28:48.201 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001d   0xf1a1        1166 /*            0/0/0
+RP/0/RP0/CPU0:XR01#
+14:28:57
+show isis database XR01.00-00
+Fri Oct 23 14:28:59.726 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001d   0xf1a1        1154 /*            0/0/0
+RP/0/RP0/CPU0:XR01#
+14:29:09
+show isis database XR01.00-00
+Fri Oct 23 14:29:11.235 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001d   0xf1a1        1143 /*            0/0/0
+RP/0/RP0/CPU0:XR01#
+14:29:20
+show isis database XR01.00-00
+Fri Oct 23 14:29:22.741 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001d   0xf1a1        1131 /*            0/0/0
+RP/0/RP0/CPU0:XR01#
+14:29:32
+show isis database XR01.00-00
+Fri Oct 23 14:29:34.252 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000001d   0xf1a1        1120 /*            0/0/0
+RP/0/RP0/CPU0:XR01#
+configure
+Fri Oct 23 14:29:35.767 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+no set-overload-bit
+RP/0/RP0/CPU0:XR01(config-isis)#
+commit
+Fri Oct 23 14:29:37.070 UTC
+RP/0/RP0/CPU0:XR01(config-isis)#
+end
+RP/0/RP0/CPU0:XR01#
