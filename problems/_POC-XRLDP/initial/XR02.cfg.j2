@@ -1,0 +1,38 @@
+!! _POC-XRLDP XR02(XRd・脇の系統の P・BGP なし)。LDP は PoC の段で足す(XRd が MPLS を転送するかの確かめ)。
+interface Loopback0
+ ipv4 address 10.255.1.2 255.255.255.255
+!
+interface {{ links[3] }}
+ description to RT04
+ ipv4 address 10.1.4.2 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description to RT05
+ ipv4 address 10.1.5.2 255.255.255.0
+ no shutdown
+!
+router isis SIDE
+ is-type level-2-only
+ net 49.0002.0100.0000.1002.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[4] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+!
+end

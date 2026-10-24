@@ -1,0 +1,66 @@
+!! XRT-07 XR01 — 前任者が組んだ状態。PE-OLD(IOS)から LDP の設定を写した CHG-1021 が途中(ひな形だけ・LDP の IF は未登録)。
+!! 仕込み= M8-1: 転送アドレスが Loopback1(NMS 用・IS-IS に載せない)。認証・ラベルの絞り込み・同期・セッション保護・OAM は未設定(課題で足す)。
+interface Loopback0
+ ipv4 address 10.255.0.1 255.255.255.255
+!
+interface Loopback1
+ description NMS - reserved for the management systems, not in IS-IS
+ ipv4 address 10.255.255.1 255.255.255.255
+!
+interface Loopback100
+ description CUSTOMER-A (advertised in BGP only)
+ ipv4 address 10.30.0.1 255.255.0.0
+!
+interface {{ links[3] }}
+ description PRIMARY to RT01
+ ipv4 address 10.0.1.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description BACKUP to RT03
+ ipv4 address 10.0.3.1 255.255.255.0
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+   metric 10
+  !
+ !
+ interface {{ links[4] }}
+  point-to-point
+  address-family ipv4 unicast
+   metric 100
+  !
+ !
+!
+router bgp 65000
+ bgp router-id 10.255.0.1
+ address-family ipv4 unicast
+  network 10.30.0.0/16
+ !
+ neighbor 10.255.0.12
+  remote-as 65000
+  update-source Loopback0
+  address-family ipv4 unicast
+  !
+ !
+!
+mpls ldp
+ address-family ipv4
+  discovery transport-address 10.255.255.1
+ !
+!
+end

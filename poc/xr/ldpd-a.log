@@ -1,0 +1,127 @@
+
+######## 07:33:34 a-1: XRv9000 26.1.1 の素の状態と BGP(LDP なし)
+show version | include "Version|uptime"
+Sat Oct 24 07:33:36.134 UTC
+Cisco IOS XR Software, Version 26.1.1 LNT
+ Version      : 26.1.1
+XR01 uptime is 1 minute
+RP/0/RP0/CPU0:XR01#
+show memory summary
+Sat Oct 24 07:33:36.535 UTC
+
+node:      node0_RP0_CPU0
+------------------------------------------------------------------
+
+ Physical Memory: 48268M total (20684M available)
+ Application Memory : 48268M (20684M available)
+ Image: 4M (bootram: 0M)
+ Reserved: 0M, IOMem: 0M, flashfsys: 0M
+ Total shared window: 150.822M
+ Shared memory: 1536M total (1142M available)
+
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Sat Oct 24 07:33:37.036 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    25   00:00:29 Yes None None
+RT03           Gi0/0/0/1                *PtoP*         Up    26   00:00:29 Yes None None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast
+Sat Oct 24 07:33:37.438 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 3
+BGP main routing table version 3
+BGP NSR Initial initsync version 18446744073709551615 (Not Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*  10.30.0.0/16       0.0.0.0                  0         32768 i
+
+Processed 1 prefixes, 1 paths
+RP/0/RP0/CPU0:XR01#
+show route 10.20.0.0/16
+Sat Oct 24 07:33:37.838 UTC
+
+% Network not in table
+
+RP/0/RP0/CPU0:XR01#
+ping 10.20.0.1 source Loopback100 count 5
+Sat Oct 24 07:33:38.239 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.20.0.1 timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+RP/0/RP0/CPU0:XR01#
+
+######## 07:33:48 a-2: IOL 側(RT01 は BGP なし= 10.20/16 を知らない)
+show ip route 10.20.0.0
+% Subnet not in table
+RT01#
+show mpls ldp neighbor
+    Peer LDP Ident: 10.255.0.12:0; Local LDP Ident 10.255.0.11:0
+	TCP connection: 10.255.0.12.44693 - 10.255.0.11.646
+	State: Oper; Msgs sent/rcvd: 12/13; Downstream
+	Up time: 00:01:31
+	LDP discovery sources:
+	  Ethernet0/1, Src IP addr: 10.0.12.12
+        Addresses bound to peer LDP Ident:
+          10.255.0.12     10.20.0.1       10.0.12.12      10.0.23.12      
+RT01#
+show mpls ldp discovery
+ Local LDP Identifier:
+    10.255.0.11:0
+    Discovery Sources:
+    Interfaces:
+	Ethernet0/0 (ldp): xmit
+	Ethernet0/1 (ldp): xmit/recv
+	    LDP Id: 10.255.0.12:0
+RT01#
+show mpls forwarding-table
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+16         Pop Label  10.255.0.12/32   0             Et0/1      10.0.12.12  
+17         Pop Label  10.0.23.0/24     0             Et0/1      10.0.12.12  
+18         18         10.255.0.13/32   0             Et0/1      10.0.12.12  
+           No Label   10.255.0.13/32   0             Et0/0      10.0.1.1    
+19         No Label   10.0.3.0/24      0             Et0/0      10.0.1.1    
+20         No Label   10.255.0.1/32    358           Et0/0      10.0.1.1    
+RT01#
+show ip bgp
+BGP table version is 1, local router ID is 10.255.0.12
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *    10.20.0.0/16     0.0.0.0                  0         32768 i
+RT02#
+ping 10.30.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.30.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+.....
+Success rate is 0 percent (0/5)
+RT02#
+show mpls ldp neighbor | include Peer|State|Up time
+    Peer LDP Ident: 10.255.0.11:0; Local LDP Ident 10.255.0.12:0
+	State: Oper; Msgs sent/rcvd: 14/12; Downstream
+	Up time: 00:01:46
+    Peer LDP Ident: 10.255.0.13:0; Local LDP Ident 10.255.0.12:0
+	State: Oper; Msgs sent/rcvd: 13/12; Downstream
+	Up time: 00:01:42
+RT02#

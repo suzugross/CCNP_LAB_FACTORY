@@ -1,0 +1,94 @@
+show logging | include LDP|TCP|MD5
+*Oct 24 07:11:02.359: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:11:34.840: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:12:06.246: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:12:37.263: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:13:08.213: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:13:41.876: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:14:13.783: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:14:47.277: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:15:19.972: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:15:52.266: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:16:25.924: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:16:58.356: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:17:28.690: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:18:00.791: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:18:31.052: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:19:05.514: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:19:35.619: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:20:06.628: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:20:41.238: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:21:12.999: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+*Oct 24 07:21:46.759: %LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured
+RT03#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+mpls ldp neighbor 10.255.0.13 password LDP-CORE-7
+RT02(config)#
+end
+RT02#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT03(config)#
+mpls ldp neighbor 10.255.0.12 password LDP-CORE-7
+RT03(config)#
+end
+RT03#
+show mpls ldp neighbor | include Peer|State
+    Peer LDP Ident: 10.255.0.1:0; Local LDP Ident 10.255.0.13:0
+	State: Oper; Msgs sent/rcvd: 30/33; Downstream
+    Peer LDP Ident: 10.255.0.12:0; Local LDP Ident 10.255.0.13:0
+	State: Oper; Msgs sent/rcvd: 11/12; Downstream
+RT03#
+show mpls forwarding-table
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+16         Pop Label  10.255.0.12/32   4251          Et0/1      10.0.23.12  
+17         Pop Label  10.0.12.0/24     0             Et0/1      10.0.23.12  
+18         24002      10.255.0.11/32   0             Et0/0      10.0.3.1    
+           16         10.255.0.11/32   0             Et0/1      10.0.23.12  
+19         No Label   10.0.1.0/24      0             Et0/0      10.0.3.1    
+20         Pop Label  10.255.0.1/32    0             Et0/0      10.0.3.1    
+RT03#
+07:22:58
+07:23:44
+show mpls ldp neighbor 10.255.0.11:0 | include "Up time|stat$5.0.11:0 | include "Up time|state                          "show mpls ldp neighbor 10.255.0.11:0 | include "Up time|sta$
+Sat Oct 24 07:23:46.523 UTC
+  Up time: 00:07:45
+RP/0/RP0/CPU0:XR01#
+ping 10.20.0.1 source Loopback100 count 5
+Sat Oct 24 07:23:46.924 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.20.0.1 timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/2/4 ms
+RP/0/RP0/CPU0:XR01#
+ping 10.30.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.30.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/2/3 ms
+RT02#
+show mpls forwarding-table 10.255.0.1
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+20         20         10.255.0.1/32    236           Et0/1      10.0.23.13  
+RT02#
+show mpls ldp neighbor 10.255.0.11:0 | include "Up time|stat$5.0.11:0 | include "Up time|state                          "show mpls ldp neighbor 10.255.0.11:0 | include "Up time|sta$
+Sat Oct 24 07:24:21.631 UTC
+  Up time: 00:08:20
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32 | include via
+Sat Oct 24 07:24:22.032 UTC
+  Known via "isis CORE", distance 115, metric 30, type level-2
+    10.0.1.11, from 10.255.0.12, via GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01#
+ping 10.20.0.1 source Loopback100 count 5
+Sat Oct 24 07:24:22.435 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.20.0.1 timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/2/5 ms
+RP/0/RP0/CPU0:XR01#

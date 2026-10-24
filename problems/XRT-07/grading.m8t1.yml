@@ -1,0 +1,40 @@
+# M8-1: XR01 を LDP のコアに入れる(BGP フリー コアをお客さまの通信が通る)。仕込み= ひな形の転送アドレスが Loopback1(IS-IS に無い)。
+# 白紙= LDP の IF なし → LFIB が空・セッションなし・ping 0%。IF だけ足すと、ハローは見えるのにセッションが上がらない
+# (RT01 の discovery detail に「no route to transport addr」)。PoC §20.4-4。RT03 とのセッションは M8-2(パスワード)で見る。
+problem: XRT-07
+total_points: 100
+checks:
+  - name: 'M8-1 XR01: LDP runs on both core links'
+    node: XR01
+    command: 'show mpls interfaces'
+    raw:
+      - { regex: 'GigabitEthernet0/0/0/0\s+Yes' }
+      - { regex: 'GigabitEthernet0/0/0/1\s+Yes' }
+    points: 20
+  - name: 'M8-1 XR01: identifies itself in LDP with its Loopback0 address (LDP ID and transport address)'
+    node: XR01
+    command: 'show mpls ldp parameters'
+    raw:
+      - { regex: 'Router ID: 10\.255\.0\.1\s' }
+      - { regex: 'Transport address:\s*\n\s*IPv4: 10\.255\.0\.1\s' }
+    points: 20
+  - name: 'M8-1 RT01: the LDP session with XR01 is operational, over XR01''s Loopback0'
+    node: RT01
+    command: 'show mpls ldp neighbor 10.255.0.1'
+    raw:
+      - { regex: 'Peer LDP Ident: 10\.255\.0\.1:0' }
+      - { regex: 'TCP connection: 10\.255\.0\.1\.\d+ - 10\.255\.0\.11\.\d+' }
+      - { regex: 'State: Oper' }
+    points: 20
+  - name: 'M8-1 XR01: traffic for RT02 leaves on PRIMARY with a label'
+    node: XR01
+    command: 'show mpls forwarding prefix 10.255.0.12/32'
+    raw:
+      - { regex: '\d+\s+\d+\s+10\.255\.0\.12/32\s+Gi0/0/0/0' }
+    points: 20
+  - name: 'M8-1 XR01: customer A''s networks reach each other across the core'
+    node: XR01
+    command: 'ping 10.20.0.1 source Loopback100 count 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 20

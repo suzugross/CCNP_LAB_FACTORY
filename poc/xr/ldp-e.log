@@ -1,0 +1,458 @@
+
+######## 07:13:15 e-1: 同期なし。RT01 の XR01 側で LDP だけ止める(IS-IS は上がったまま)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface Ethernet0/0
+RT01(config-if)#
+no mpls ip
+RT01(config-if)#
+end
+RT01#
+show mpls ldp neighbor brief
+Sat Oct 24 07:13:45.163 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:03:43    1     0     3     0     8      0    
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery brief
+Sat Oct 24 07:13:45.564 UTC
+
+Local LDP Identifier: 10.255.0.1:0
+
+Discovery Source     VRF Name             Peer LDP Id          Holdtime Session
+-------------------- -------------------- -------------------- -------- -------
+Gi0/0/0/0            default              -                       -        N   
+Gi0/0/0/1            default              10.255.0.13:0           15       Y   
+
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Sat Oct 24 07:13:45.965 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    22   00:12:03 Yes None None
+RT03           Gi0/0/0/1                *PtoP*         Up    23   00:12:03 Yes None None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32
+Sat Oct 24 07:13:46.366 UTC
+
+Routing entry for 10.255.0.12/32
+  Known via "isis CORE", distance 115, metric 30, type level-2
+  Installed Oct 24 07:01:50.673 for 00:11:55
+  Routing Descriptor Blocks
+    10.0.1.11, from 10.255.0.12, via GigabitEthernet0/0/0/0
+      Route metric is 30
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding prefix 10.255.0.12/32
+Sat Oct 24 07:13:46.767 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24001  Unlabelled  10.255.0.12/32     Gi0/0/0/0    10.0.1.11       0           
+RP/0/RP0/CPU0:XR01#
+show cef 10.20.0.0/16
+Sat Oct 24 07:13:47.168 UTC
+10.20.0.0/16, version 18, internal 0x5000001 0x40 (ptr 0xf75bb58) [1], 0x400 (0xf92ea98), 0x0 (0x0)
+ Updated Oct 24 07:01:53.771
+ Prefix Len 16, traffic index 0, precedence n/a, priority 4
+  gateway array (0xf7c75b8) reference count 1, flags 0x10, source rib (7), 0 backups
+                [2 type 3 flags 0x441 (0xf86ab98) ext 0x0 (0x0)]
+  LW-LDI[type=3, refc=1, ptr=0xf92ea98, sh-ldi=0xf86ab98]
+  gateway array update type-time 1 Oct 24 07:01:53.771
+ LDI Update time Oct 24 07:13:19.277
+ LW-LDI-TS Oct 24 07:13:19.277
+
+  Level 1 - Load distribution: 0
+  [0] via 10.255.0.12/32, recursive
+
+   via 10.255.0.12/32, 3 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xf75bf18 0x0]
+    next hop 10.255.0.12/32 via 10.255.0.12/32
+
+    Load distribution: 0 (refcount 2)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    remote         
+
+RP/0/RP0/CPU0:XR01#
+ping 10.20.0.1 source Loopback100 count 5
+Sat Oct 24 07:13:47.568 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.20.0.1 timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+RP/0/RP0/CPU0:XR01#
+traceroute 10.20.0.1 source Loopback100 timeout 1
+Sat Oct 24 07:13:58.104 UTC
+
+Type escape sequence to abort.
+Tracing the route to 10.20.0.1
+
+ 1   *  *  * 
+ 2   *  *  * 
+ 3   *  *  * 
+ 4   *  *  * 
+ 5   *  *  * 
+ 6   *  *  * 
+ 7   *  *  * 
+ 8   *  *  * 
+ 9   *  *  * 
+ 10  *  *  * 
+ 11  *  *  * 
+ 12  *  *  * 
+ 13  *  *  * 
+ 14  *  *  * 
+ 15  *  *  * 
+ 16  *  *  * 
+ 17  *  *  * 
+ 18  *  *  * 
+ 19  *  *  * 
+ 20  *  *  * 
+ 21  *  *  * 
+ 22  *  *  * 
+ 23  *  *  * 
+ 24  *  *  * 
+ 25  *  *  * 
+ 26  *  *  * 
+ 27  *  *  * 
+ 28  *  *  * 
+ 29  *  *  * 
+ 30  *  *  * 
+RP/0/RP0/CPU0:XR01#
+
+######## 07:15:28 e-2: XR01 に同期(IS-IS の IF の AF の下)
+configure
+Sat Oct 24 07:15:30.648 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+mpls ldp sync
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+mpls ldp sync
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+commit
+Sat Oct 24 07:15:34.757 UTC
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+show configuration failed
+Sat Oct 24 07:15:35.661 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync
+Sat Oct 24 07:15:48.567 UTC
+
+GigabitEthernet0/0/0/0:
+  VRF: 'default' (0x60000000)
+  Sync delay: Disabled
+  Sync status: Not ready (No hello adjacency)
+
+GigabitEthernet0/0/0/1:
+  VRF: 'default' (0x60000000)
+  Sync delay: Disabled
+  Sync status: Ready
+    Peers:
+      10.255.0.13:0
+
+
+RP/0/RP0/CPU0:XR01#
+show isis interface GigabitEthernet0/0/0/0
+Sat Oct 24 07:15:48.968 UTC
+
+GigabitEthernet0/0/0/0      Enabled
+  Adjacency Formation:      Enabled
+  Prefix Advertisement:     Enabled
+  Bandwidth:                1000000
+  RSI SRLG:                 Not Registered
+  
+  Circuit Type:             level-2-only (Configured: level-1-2)
+  Media Type:               P2P
+  Circuit Number:           0
+  Extended Circuit Number:  1
+  Last IIH Received:        07:15:40 (8.43 sec ago), 1496 octets
+  Last IIH Sent:            07:15:42 (6.05 sec ago), 1497 octets
+  Sending next P2P IIH in:  3 s
+  
+  IPv4 BFD:                 Disabled
+  IPv6 BFD:                 Disabled
+  
+  Level-2                   
+    Adjacency Count:        1
+    Adjacency Flaps:        0
+    LSP Pacing Interval:    33 ms
+    PSNP Entry Queue Size:  0
+    Hello Interval:         10 s
+    Hello Multiplier:       3
+  
+  CLNS I/O
+    Protocol State:         Up
+    MTU:                    1497
+    SNPA:                   5254.0094.1641
+    Layer-2 Multicast:
+      All ISs:              Listening
+  
+  IPv4 Unicast Topology:    Enabled
+    Adjacency Formation:    Running
+    Prefix Advertisement:   Running
+          Policy (L1/L2):   -/-
+    Metric (L1/L2):         10/10
+    Metric fallback:
+      Bandwidth (L1/L2):    Inactive/Inactive
+      Anomaly (L1/L2):      Inactive/Inactive
+    Weight (L1/L2):         0/0
+    MPLS Max Label Stack:   3/3/10/10 (PRI/BKP/SRTE/SRAT)
+    MPLS LDP Sync (L1/L2):  Enabled/Enabled
+      LDPv4 Sync Status:    Not Achieved
+    FRR (L1/L2):            L1 Not Enabled     L2 Not Enabled 
+      FRR Type:             None               None           
+  
+  IPv4 Address Family:      Enabled
+    Protocol State:         Up
+    Forwarding Address:     10.0.1.1
+    Global Prefix:          10.0.1.0/24
+  
+  LSP Transmission is:      idle
+  LSP Transmit Timer in:    0 ms
+  LSP Burst Size:           9 LSPs in the next 0 ms
+  LSP Rexmit Queue Size:    0
+  Adjacency Up:             07:01:42.239
+  Received CSNP complete:   07:01:42.739
+  LSP Pacing Start:         07:01:42.740
+  
+  LSP fast flooding:        Disabled
+  
+  PME Link Delays and Loss: -
+RP/0/RP0/CPU0:XR01#
+show isis database verbose XR01.00-00
+Sat Oct 24 07:15:49.369 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x00000007   0x3bc2        1187 /*            0/0/0
+  Area Address:   49.0001
+  LSP MTU:        1492
+  NLPID:          0xcc
+  IP Address:     10.255.0.1
+  Hostname:       XR01
+  Metric: 16777214   IS-Extended RT01.00
+  Metric: 100        IS-Extended RT03.00
+  Metric: 10         IP-Extended 10.0.1.0/24
+    Prefix Attribute Flags: X:0 R:0 N:0 E:0 A:0
+  Metric: 100        IP-Extended 10.0.3.0/24
+    Prefix Attribute Flags: X:0 R:0 N:0 E:0 A:0
+  Metric: 0          IP-Extended 10.255.0.1/32
+    Prefix Attribute Flags: X:0 R:0 N:1 E:0 A:0
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32
+Sat Oct 24 07:15:49.770 UTC
+
+Routing entry for 10.255.0.12/32
+  Known via "isis CORE", distance 115, metric 210, type level-2
+  Installed Oct 24 07:15:36.885 for 00:00:12
+  Routing Descriptor Blocks
+    10.0.3.13, from 10.255.0.12, via GigabitEthernet0/0/0/1
+      Route metric is 210
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding prefix 10.255.0.12/32
+Sat Oct 24 07:15:50.171 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24001  16          10.255.0.12/32     Gi0/0/0/1    10.0.3.13       0           
+RP/0/RP0/CPU0:XR01#
+ping 10.20.0.1 source Loopback100 count 5
+Sat Oct 24 07:15:50.571 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.20.0.1 timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 3/3/5 ms
+RP/0/RP0/CPU0:XR01#
+traceroute 10.20.0.1 source Loopback100 timeout 1
+Sat Oct 24 07:15:51.173 UTC
+
+Type escape sequence to abort.
+Tracing the route to 10.20.0.1
+
+ 1   *  *  * 
+ 2  10.0.23.12 2 msec  *  2 msec 
+RP/0/RP0/CPU0:XR01#
+show isis database verbose XR01.00-00
+
+Tag CORE:
+
+IS-IS Level-2 LSP XR01.00-00
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd      ATT/P/OL
+XR01.00-00            0x00000007   0x3BC2                1178/1200      0/0/0
+  Area Address: 49.0001
+  TLV Code: 14 Length: 2 (Unsupported)
+  NLPID:        0xCC 
+  IP Address:   10.255.0.1
+  Hostname: XR01
+  Metric: 16777214   IS-Extended RT01.00
+  Metric: 100        IS-Extended RT03.00
+  Metric: 10         IP 10.0.1.0/24
+    Prefix-attr: X:0 R:0 N:0
+  Metric: 100        IP 10.0.3.0/24
+    Prefix-attr: X:0 R:0 N:0
+  Metric: 0          IP 10.255.0.1/32
+    Prefix-attr: X:0 R:0 N:1
+RT01#
+show ip route 10.255.0.12
+Routing entry for 10.255.0.12/32
+  Known via "isis", distance 115, metric 20, type level-2
+  Redistributing via isis CORE
+  Last update from 10.0.12.12 on Ethernet0/1, 00:23:28 ago
+  Routing Descriptor Blocks:
+  * 10.0.12.12, from 10.255.0.12, 00:23:28 ago, via Ethernet0/1
+      Route metric is 20, traffic share count is 1
+RT01#
+ping 10.30.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.30.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/2/4 ms
+RT02#
+
+######## 07:15:58 e-3: RT01 の LDP を戻す → 同期がそろって通常のメトリックへ戻るまで
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface Ethernet0/0
+RT01(config-if)#
+mpls ip
+RT01(config-if)#
+end
+RT01#
+show mpls ldp igp sync | include "Sync status|Peers|GigabitE$lude "Sync status|Peers|GigabitEt                          hernet"show mpls ldp igp sync | include "Sync status|Peers|Gigabit$
+Sat Oct 24 07:16:08.721 UTC
+GigabitEthernet0/0/0/0:
+  Sync status: Ready
+    Peers:
+GigabitEthernet0/0/0/1:
+  Sync status: Ready
+    Peers:
+RP/0/RP0/CPU0:XR01#
+show isis database verbose XR01.00-00 | include Metric
+Sat Oct 24 07:16:09.134 UTC
+  Metric: 10         IS-Extended RT01.00
+  Metric: 100        IS-Extended RT03.00
+  Metric: 10         IP-Extended 10.0.1.0/24
+  Metric: 100        IP-Extended 10.0.3.0/24
+  Metric: 0          IP-Extended 10.255.0.1/32
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "Sync status|Peers|GigabitE$lude "Sync status|Peers|GigabitEt                          hernet"show mpls ldp igp sync | include "Sync status|Peers|Gigabit$
+Sat Oct 24 07:16:15.647 UTC
+GigabitEthernet0/0/0/0:
+  Sync status: Ready
+    Peers:
+GigabitEthernet0/0/0/1:
+  Sync status: Ready
+    Peers:
+RP/0/RP0/CPU0:XR01#
+show isis database verbose XR01.00-00 | include Metric
+Sat Oct 24 07:16:16.046 UTC
+  Metric: 10         IS-Extended RT01.00
+  Metric: 100        IS-Extended RT03.00
+  Metric: 10         IP-Extended 10.0.1.0/24
+  Metric: 100        IP-Extended 10.0.3.0/24
+  Metric: 0          IP-Extended 10.255.0.1/32
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "Sync status|Peers|GigabitE$lude "Sync status|Peers|GigabitEt                          hernet"show mpls ldp igp sync | include "Sync status|Peers|Gigabit$
+Sat Oct 24 07:16:22.568 UTC
+GigabitEthernet0/0/0/0:
+  Sync status: Ready
+    Peers:
+GigabitEthernet0/0/0/1:
+  Sync status: Ready
+    Peers:
+RP/0/RP0/CPU0:XR01#
+show isis database verbose XR01.00-00 | include Metric
+Sat Oct 24 07:16:22.969 UTC
+  Metric: 10         IS-Extended RT01.00
+  Metric: 100        IS-Extended RT03.00
+  Metric: 10         IP-Extended 10.0.1.0/24
+  Metric: 100        IP-Extended 10.0.3.0/24
+  Metric: 0          IP-Extended 10.255.0.1/32
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "Sync status|Peers|GigabitE$lude "Sync status|Peers|GigabitEt                          hernet"show mpls ldp igp sync | include "Sync status|Peers|Gigabit$
+Sat Oct 24 07:16:29.480 UTC
+GigabitEthernet0/0/0/0:
+  Sync status: Ready
+    Peers:
+GigabitEthernet0/0/0/1:
+  Sync status: Ready
+    Peers:
+RP/0/RP0/CPU0:XR01#
+show isis database verbose XR01.00-00 | include Metric
+Sat Oct 24 07:16:29.883 UTC
+  Metric: 10         IS-Extended RT01.00
+  Metric: 100        IS-Extended RT03.00
+  Metric: 10         IP-Extended 10.0.1.0/24
+  Metric: 100        IP-Extended 10.0.3.0/24
+  Metric: 0          IP-Extended 10.255.0.1/32
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32
+Sat Oct 24 07:16:31.379 UTC
+
+Routing entry for 10.255.0.12/32
+  Known via "isis CORE", distance 115, metric 30, type level-2
+  Installed Oct 24 07:16:03.921 for 00:00:27
+  Routing Descriptor Blocks
+    10.0.1.11, from 10.255.0.12, via GigabitEthernet0/0/0/0
+      Route metric is 30
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+show logging last 20
+Sat Oct 24 07:16:31.780 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 24 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 279 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 24 07:15:35.238 UTC: config[68167]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000012' to view the changes. 
+RP/0/RP0/CPU0:Oct 24 07:15:37.066 UTC: config[68167]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 24 07:15:37.478 UTC: SSHD_[68136]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 24 07:15:47.755 UTC: SSHD_[68197]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 24 07:15:47.759 UTC: SSHD_[68197]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 24 07:15:55.701 UTC: SSHD_[68197]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 24 07:16:07.907 UTC: SSHD_[68284]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 24 07:16:07.911 UTC: SSHD_[68284]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 24 07:16:09.545 UTC: SSHD_[68284]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 24 07:16:14.829 UTC: SSHD_[68321]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 24 07:16:14.836 UTC: SSHD_[68321]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 24 07:16:16.460 UTC: SSHD_[68321]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 24 07:16:21.755 UTC: SSHD_[68358]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 24 07:16:21.759 UTC: SSHD_[68358]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 24 07:16:23.382 UTC: SSHD_[68358]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 24 07:16:28.660 UTC: SSHD_[68398]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 24 07:16:28.667 UTC: SSHD_[68398]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 24 07:16:30.295 UTC: SSHD_[68398]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 24 07:16:30.566 UTC: SSHD_[68435]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 24 07:16:30.570 UTC: SSHD_[68435]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:XR01#

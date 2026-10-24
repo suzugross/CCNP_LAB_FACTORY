@@ -1,0 +1,252 @@
+#### (a) M8-2 後に全体の既定パスワード
+show mpls ldp neighbor brief
+Sat Oct 24 09:52:38.015 UTC
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.11:0      N   N    00:05:16    2     0     3     0     8      0    
+10.255.0.13:0      N   N    00:05:07    1     0     3     0     8      0    
+RP/0/RP0/CPU0:XR01#
+configure
+Sat Oct 24 09:52:39.705 UTC
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR01(config-ldp)#
+neighbor password clear CoreLdp-2026
+RP/0/RP0/CPU0:XR01(config-ldp)#
+commit
+Sat Oct 24 09:52:41.120 UTC
+RP/0/RP0/CPU0:XR01(config-ldp)#
+end
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sat Oct 24 09:53:23.674 UTC
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:05:52    1     0     3     0     8      0    
+RP/0/RP0/CPU0:XR01#
+show logging | include "BADAUTH|NOAUTH" | utility tail -count 4
+Sat Oct 24 09:53:24.053 UTC
+tail: 4 : Enter valid path 
+RP/0/RP0/CPU0:XR01#
+configure
+Sat Oct 24 09:53:25.874 UTC
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR01(config-ldp)#
+no neighbor password
+RP/0/RP0/CPU0:XR01(config-ldp)#
+commit
+Sat Oct 24 09:53:27.295 UTC
+RP/0/RP0/CPU0:XR01(config-ldp)#
+end
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sat Oct 24 09:54:14.652 UTC
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:06:43    1     0     3     0     8      0    
+10.255.0.11:0      N   N    00:00:41    2     0     3     0     8      0    
+RP/0/RP0/CPU0:XR01#
+#### (b) 保護なしでリンク断
+09:54:25
+09:54:36
+show mpls ldp neighbor brief
+Sat Oct 24 09:54:37.635 UTC
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:07:06    1     0     3     0     8      0    
+10.255.0.11:0      N   N    00:01:04    1     0     3     0     8      0    
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "status"
+Sat Oct 24 09:54:38.126 UTC
+  Sync status: Ready
+  Sync status: Ready
+RP/0/RP0/CPU0:XR01#
+show isis adjacency | include RT01
+Sat Oct 24 09:54:38.544 UTC
+RT01           Gi0/0/0/0                *PtoP*         Up    15   00:08:36 Yes None None
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32 | include via
+Sat Oct 24 09:54:38.955 UTC
+  Known via "isis CORE", distance 115, metric 30, type level-2
+    10.0.1.11, from 10.255.0.12, via GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01#
+09:54:49
+show mpls ldp neighbor brief
+Sat Oct 24 09:54:50.728 UTC
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:07:19    1     0     3     0     8      0    
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "status"
+Sat Oct 24 09:54:51.132 UTC
+  Sync status: Not ready (No hello adjacency)
+  Sync status: Ready
+RP/0/RP0/CPU0:XR01#
+show isis adjacency | include RT01
+Sat Oct 24 09:54:51.552 UTC
+RT01           Gi0/0/0/0                *PtoP*         Up    2    00:08:49 Yes None None
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32 | include via
+Sat Oct 24 09:54:52.047 UTC
+  Known via "isis CORE", distance 115, metric 210, type level-2
+    10.0.3.13, from 10.255.0.12, via GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01#
+09:55:02
+show mpls ldp neighbor brief
+Sat Oct 24 09:55:03.935 UTC
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:07:33    1     0     3     0     8      0    
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "status"
+Sat Oct 24 09:55:04.360 UTC
+  Sync status: Not ready (No hello adjacency)
+  Sync status: Ready
+RP/0/RP0/CPU0:XR01#
+show isis adjacency | include RT01
+Sat Oct 24 09:55:04.737 UTC
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32 | include via
+Sat Oct 24 09:55:05.170 UTC
+  Known via "isis CORE", distance 115, metric 210, type level-2
+    10.0.3.13, from 10.255.0.12, via GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01#
+09:55:15
+show mpls ldp neighbor brief
+Sat Oct 24 09:55:16.872 UTC
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:07:45    1     0     3     0     8      0    
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "status"
+Sat Oct 24 09:55:17.258 UTC
+  Sync status: Not ready (No hello adjacency)
+  Sync status: Ready
+RP/0/RP0/CPU0:XR01#
+show isis adjacency | include RT01
+Sat Oct 24 09:55:17.683 UTC
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32 | include via
+Sat Oct 24 09:55:18.068 UTC
+  Known via "isis CORE", distance 115, metric 210, type level-2
+    10.0.3.13, from 10.255.0.12, via GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01#
+09:55:19
+09:55:24
+show mpls ldp neighbor brief
+Sat Oct 24 09:55:25.497 UTC
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:07:54    1     0     3     0     8      0    
+10.255.0.11:0      N   N    00:00:03    1     0     3     0     8      0    
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "status"
+Sat Oct 24 09:55:25.902 UTC
+  Sync status: Deferred   (6 sec remaining)
+  Sync status: Ready
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32 | include via
+Sat Oct 24 09:55:26.307 UTC
+  Known via "isis CORE", distance 115, metric 210, type level-2
+    10.0.3.13, from 10.255.0.12, via GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01#
+09:55:31
+show mpls ldp neighbor brief
+Sat Oct 24 09:55:33.088 UTC
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:08:02    1     0     3     0     8      0    
+10.255.0.11:0      N   N    00:00:11    1     0     3     0     8      0    
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "status"
+Sat Oct 24 09:55:33.494 UTC
+  Sync status: Ready
+  Sync status: Ready
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32 | include via
+Sat Oct 24 09:55:33.878 UTC
+  Known via "isis CORE", distance 115, metric 210, type level-2
+    10.0.3.13, from 10.255.0.12, via GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01#
+09:55:39
+show mpls ldp neighbor brief
+Sat Oct 24 09:55:40.810 UTC
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:08:09    1     0     3     0     8      0    
+10.255.0.11:0      N   N    00:00:18    1     0     3     0     8      0    
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "status"
+Sat Oct 24 09:55:41.186 UTC
+  Sync status: Ready
+  Sync status: Ready
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32 | include via
+Sat Oct 24 09:55:41.588 UTC
+  Known via "isis CORE", distance 115, metric 30, type level-2
+    10.0.1.11, from 10.255.0.12, via GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01#
+09:55:47
+show mpls ldp neighbor brief
+Sat Oct 24 09:55:48.616 UTC
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:08:17    1     0     3     0     8      0    
+10.255.0.11:0      N   N    00:00:26    1     0     3     0     8      0    
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "status"
+Sat Oct 24 09:55:49.049 UTC
+  Sync status: Ready
+  Sync status: Ready
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32 | include via
+Sat Oct 24 09:55:49.467 UTC
+  Known via "isis CORE", distance 115, metric 30, type level-2
+    10.0.1.11, from 10.255.0.12, via GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01#
+#### (c) コマンドの確かめ
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+mpls ldp label ?
+  <cr>  <cr>
+RT01(config)#mpls ldp label 
+RT01(config-ldp-lbl)#
+mpls ldp label allocate global ?
+% Unrecognized command
+RT01(config-ldp-lbl)#mpls ldp label allocate global 
+                     ^
+% Invalid input detected at '^' marker.
+RT01(config-ldp-lbl)#
+mpls ldp explicit-null ?
+% Unrecognized command
+RT01(config-ldp-lbl)#mpls ldp explicit-null 
+RT01(config)#
+end
+RT01#
+configure
+Sat Oct 24 09:55:59.210 UTC
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR01(config-ldp)#
+address-family ipv4
+RP/0/RP0/CPU0:XR01(config-ldp-af)#
+discovery targeted-hello ?
+  accept  Accept and respond to targeted hellos
+RP/0/RP0/CPU0:XR01(config-ldp-af)#discovery targeted-hello 
+% Incomplete command.
+RP/0/RP0/CPU0:XR01(config-ldp-af)#
+abort
+RP/0/RP0/CPU0:XR01#

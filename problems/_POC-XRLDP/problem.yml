@@ -1,0 +1,30 @@
+# BL-246 PoC: M8 MPLS LDP(隣接・認証とラベルの絞り込み・LDP と IS-IS の同期・セッション保護・OAM)。出題用ではない。記録= design §20
+# 盤面(§20.1)= 四角形。XR01 は PE、RT01・RT03 は BGP を動かさない P(BGP フリー コア)、RT02 は PE。
+#   XR01(XRv9000 26.1.1) Gi0/0/0/0 ── Et0/0 RT01 Et0/1 ── Et0/0 RT02   … 主経路(メトリック 10+10)
+#   XR01 Gi0/0/0/1 ── Et0/0 RT03 Et0/1 ── Et0/1 RT02                   … 予備経路(メトリック 100+100)
+#   XR01 ⇔ RT02 はループバック間で iBGP(AS 65000)。お客さまの経路= XR01 Lo100 10.30/16・RT02 Lo100 10.20/16(BGP だけ)。
+# 脇の系統(XRd が MPLS を転送するかの確かめ・主の盤面とは配線なし):
+#   RT04 Et0/0 ── Gi0/0/0/0 XR02(XRd 26.1.1) Gi0/0/0/1 ── Et0/0 RT05   … RT04 ⇔ RT05 が iBGP(AS 65100)・XR02 は BGP なし
+id: _POC-XRLDP
+title: "[PoC] XR MPLS LDP"
+exam: POC
+topics: [iosxr, poc]
+difficulty: 0
+topology: generated
+access: ssh
+target_nodes: [XR01, XR02, RT01, RT02, RT03, RT04, RT05]
+points: 0
+image_family: iol
+node_image_families: { XR01: iosxr, XR02: iosxr }
+node_xr_platforms: { XR02: iosxrd }
+node_images: { XR01: iosxrv9000-26-1-1 }
+lab:
+  positions: { XR01: [0, 0], RT01: [400, 0], RT03: [0, 240], RT02: [400, 240],
+               RT04: [-400, 480], XR02: [0, 480], RT05: [400, 480] }
+  links:
+    - { a: XR01, a_if: 3, b: RT01, b_if: 0 }
+    - { a: RT01, a_if: 1, b: RT02, b_if: 0 }
+    - { a: XR01, a_if: 4, b: RT03, b_if: 0 }
+    - { a: RT03, a_if: 1, b: RT02, b_if: 1 }
+    - { a: XR02, a_if: 3, b: RT04, b_if: 0 }
+    - { a: XR02, a_if: 4, b: RT05, b_if: 0 }

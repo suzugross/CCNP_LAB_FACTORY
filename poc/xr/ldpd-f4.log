@@ -1,0 +1,98 @@
+
+######## 07:46:51 f4: 保護+同期あり。RT01 Et0/0 で no mpls ip(IS-IS は上がったまま・セッションは targeted で残る)→ 戻す
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface Ethernet0/0
+RT01(config-if)#
+no mpls ip
+RT01(config-if)#
+end
+RT01#
+show mpls ldp neighbor 10.255.0.11:0 detail | include "Up time|state|Targeted|Gigabit"
+Sat Oct 24 07:47:21.064 UTC
+  Up time: 00:04:02
+      Targeted Hello (10.255.0.1 -> 10.255.0.11, active)
+  Peer holdtime: 180 sec; KA interval: 60 sec; Peer state: Estab
+    Enabled, state: Protecting
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync
+Sat Oct 24 07:47:21.465 UTC
+
+GigabitEthernet0/0/0/0:
+  VRF: 'default' (0x60000000)
+  Sync delay: Disabled
+  Sync status: Not ready (No hello adjacency)
+
+GigabitEthernet0/0/0/1:
+  VRF: 'default' (0x60000000)
+  Sync delay: Disabled
+  Sync status: Ready
+    Peers:
+      10.255.0.13:0
+
+
+RP/0/RP0/CPU0:XR01#
+show isis database verbose XR01.00-00 | include Metric
+Sat Oct 24 07:47:21.896 UTC
+  Metric: 16777214   IS-Extended RT01.00
+  Metric: 100        IS-Extended RT03.00
+  Metric: 10         IP-Extended 10.0.1.0/24
+  Metric: 100        IP-Extended 10.0.3.0/24
+  Metric: 0          IP-Extended 10.255.0.1/32
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32 | include via
+Sat Oct 24 07:47:22.296 UTC
+  Known via "isis CORE", distance 115, metric 210, type level-2
+    10.0.3.13, from 10.255.0.12, via GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01#
+ping 10.20.0.1 source Loopback100 count 5
+Sat Oct 24 07:47:22.696 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.20.0.1 timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+RP/0/RP0/CPU0:XR01#
+ping 10.30.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.30.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/1 ms
+RT02#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface Ethernet0/0
+RT01(config-if)#
+mpls ip
+RT01(config-if)#
+end
+RT01#
+show mpls ldp igp sync | include "Sync status"
+Sat Oct 24 07:47:44.274 UTC
+  Sync status: Ready
+  Sync status: Ready
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor 10.255.0.11:0 | include "Up time"
+Sat Oct 24 07:47:44.677 UTC
+  Up time: 00:04:25
+RP/0/RP0/CPU0:XR01#
+configure
+Sat Oct 24 07:47:45.076 UTC
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR01(config-ldp)#
+igp sync delay ?
+  on-proc-restart  Global sync up delay to be used after process restart
+  on-session-up    Interface sync-up delay after session up
+RP/0/RP0/CPU0:XR01(config-ldp)#igp sync delay 
+% Incomplete command.
+RP/0/RP0/CPU0:XR01(config-ldp)#
+igp sync delay on-session-up ?
+  <5-300>  Interface sync-up delay (seconds)
+RP/0/RP0/CPU0:XR01(config-ldp)#igp sync delay on-session-up 
+% Incomplete command.
+RP/0/RP0/CPU0:XR01(config-ldp)#
+abort
+RP/0/RP0/CPU0:XR01#

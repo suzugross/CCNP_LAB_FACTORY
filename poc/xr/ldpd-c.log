@@ -1,0 +1,293 @@
+
+######## 07:38:16 c-1: RT03 に XR01 向けのパスワード(XR01 はまだ無し)→ セッションを張り直させる
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT03(config)#
+mpls ldp neighbor 10.255.0.1 password LDP-CORE-7
+RT03(config)#
+end
+RT03#
+clear mpls ldp neighbor 10.255.0.1
+RT03#
+show mpls ldp neighbor | include Peer|State
+    Peer LDP Ident: 10.255.0.12:0; Local LDP Ident 10.255.0.13:0
+	State: Oper; Msgs sent/rcvd: 18/19; Downstream
+RT03#
+show mpls ldp discovery
+ Local LDP Identifier:
+    10.255.0.13:0
+    Discovery Sources:
+    Interfaces:
+	Ethernet0/0 (ldp): xmit/recv
+	    LDP Id: 10.255.0.1:0
+	Ethernet0/1 (ldp): xmit/recv
+	    LDP Id: 10.255.0.12:0
+RT03#
+show logging | include TCP|LDP|MD5|AUTH
+*Oct 24 07:32:43.019: %PKI-2-NON_AUTHORITATIVE_CLOCK: PKI functions can not be initialized until an authoritative time source, like NTP, can be obtained.
+*Oct 24 07:34:15.286: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is UP
+*Oct 24 07:35:02.561: %SSH-5-SSH2_USERAUTH: User 'SUZUKI' authentication for SSH2 Session from 10.1.10.6 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Oct 24 07:35:07.034: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is DOWN (TCP connection closed by peer)
+*Oct 24 07:36:19.140: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is UP
+*Oct 24 07:38:16.627: %SSH-5-SSH2_USERAUTH: User 'SUZUKI' authentication for SSH2 Session from 10.1.10.6 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Oct 24 07:38:18.651: %LDP-5-CLEAR_NBRS: Clear LDP neighbors (10.255.0.1) by SUZUKI on vty0 (10.1.10.6)
+*Oct 24 07:38:18.652: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is DOWN (User cleared session manually)
+*Oct 24 07:38:59.577: %SSH-5-SSH2_USERAUTH: User 'SUZUKI' authentication for SSH2 Session from 10.1.10.6 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+RT03#
+show mpls ldp neighbor brief
+Sat Oct 24 07:39:02.993 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.11:0      N   N    00:02:44    1     0     3     0     8      0    
+10.255.0.13:0      N   N    00:02:44    1     0     3     0     8      0    
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery
+Sat Oct 24 07:39:03.394 UTC
+
+Local LDP Identifier: 10.255.0.1:0
+Discovery Sources:
+  Interfaces:
+    GigabitEthernet0/0/0/0 : xmit/recv
+      VRF: 'default' (0x60000000)
+      LDP Id: 10.255.0.11:0, Transport address: 10.255.0.11
+          Hold time: 15 sec (local:15 sec, peer:15 sec)
+          Established: Oct 24 07:36:01.682 (00:03:01 ago)
+
+    GigabitEthernet0/0/0/1 : xmit/recv
+      VRF: 'default' (0x60000000)
+      LDP Id: 10.255.0.13:0, Transport address: 10.255.0.13
+          Hold time: 15 sec (local:15 sec, peer:15 sec)
+          Established: Oct 24 07:36:05.356 (00:02:58 ago)
+
+RP/0/RP0/CPU0:XR01#
+show logging last 15
+Sat Oct 24 07:39:03.795 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 12 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 91 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 24 07:36:42.398 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[5738]: Accepted authentication for SUZUKI from 10.1.10.6 port 34018 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:36:43.874 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[5742]: Connection closed by 10.1.10.6 port 34018 
+RP/0/RP0/CPU0:Oct 24 07:36:44.124 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[5792]: Accepted authentication for SUZUKI from 10.1.10.6 port 34032 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:36:46.546 UTC: config[67285]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000004' to view the changes. 
+RP/0/RP0/CPU0:Oct 24 07:36:48.198 UTC: config[67285]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 24 07:36:48.609 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[5796]: Connection closed by 10.1.10.6 port 34032 
+RP/0/RP0/CPU0:Oct 24 07:37:18.839 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[5927]: Accepted authentication for SUZUKI from 10.1.10.6 port 32996 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:37:21.116 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[5931]: Connection closed by 10.1.10.6 port 32996 
+RP/0/RP0/CPU0:Oct 24 07:37:51.344 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6001]: Accepted authentication for SUZUKI from 10.1.10.6 port 54476 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:37:59.540 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6005]: Connection closed by 10.1.10.6 port 54476 
+RP/0/RP0/CPU0:Oct 24 07:38:21.905 UTC: tcp[144]: %IP-TCP-3-NOAUTH : Authentication info not programmed for the packet received from 10.255.0.13:64293 to 10.255.0.1:646 
+RP/0/RP0/CPU0:Oct 24 07:38:35.906 UTC: tcp[144]: %IP-TCP-3-NOAUTH : Authentication info not programmed for the packet received from 10.255.0.13:64293 to 10.255.0.1:646 
+RP/0/RP0/CPU0:Oct 24 07:38:46.859 UTC: tcp[144]: %IP-TCP-3-NOAUTH : Authentication info not programmed for the packet received from 10.255.0.13:48394 to 10.255.0.1:646 
+RP/0/RP0/CPU0:Oct 24 07:38:59.537 UTC: tcp[144]: %IP-TCP-3-NOAUTH : Authentication info not programmed for the packet received from 10.255.0.13:64820 to 10.255.0.1:646 
+RP/0/RP0/CPU0:Oct 24 07:39:01.928 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6244]: Accepted authentication for SUZUKI from 10.1.10.6 port 33432 ssh2 
+RP/0/RP0/CPU0:XR01#
+
+######## 07:39:04 c-2: RT03 に password required(パスワードなしのセッションを一切受けない)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT03(config)#
+mpls ldp password required
+RT03(config)#
+end
+RT03#
+show mpls ldp neighbor | include Peer|State
+    Peer LDP Ident: 10.255.0.12:0; Local LDP Ident 10.255.0.13:0
+	State: Oper; Msgs sent/rcvd: 18/19; Downstream
+RT03#
+
+######## 07:39:07 c-3: XR01 に RT03 向けのパスワード
+configure
+Sat Oct 24 07:39:08.452 UTC
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR01(config-ldp)#
+neighbor 10.255.0.13:0 password clear LDP-CORE-7
+RP/0/RP0/CPU0:XR01(config-ldp)#
+commit
+Sat Oct 24 07:39:09.856 UTC
+RP/0/RP0/CPU0:XR01(config-ldp)#
+show configuration failed
+Sat Oct 24 07:39:10.259 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-ldp)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config mpls ldp
+Sat Oct 24 07:39:11.965 UTC
+mpls ldp
+ router-id 10.255.0.1
+ neighbor
+  10.255.0.13:0 password encrypted 0723057C032A3637325F5C
+ !
+ address-family ipv4
+ !
+ interface GigabitEthernet0/0/0/0
+ !
+ interface GigabitEthernet0/0/0/1
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sat Oct 24 07:39:53.773 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.11:0      N   N    00:03:34    1     0     3     0     8      0    
+10.255.0.13:0      N   N    00:00:40    1     0     3     0     8      0    
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor 10.255.0.13:0 detail
+Sat Oct 24 07:39:54.174 UTC
+
+Peer LDP Identifier: 10.255.0.13:0
+  TCP connection: 10.255.0.13:64820 - 10.255.0.1:646; MD5 on
+  Graceful Restart: No
+  Session Holdtime: 180 sec
+  State: Oper; Msgs sent/rcvd: 14/11; Downstream-Unsolicited
+  Up time: 00:00:41
+  LDP Discovery Sources:
+    IPv4: (1)
+      GigabitEthernet0/0/0/1
+    IPv6: (0)
+  Addresses bound to this peer:
+    IPv4: (3)
+      10.0.3.13      10.0.23.13     10.255.0.13    
+    IPv6: (0)
+  Peer holdtime: 180 sec; KA interval: 60 sec; Peer state: Estab
+  NSR: Disabled
+  Capabilities:
+    Sent: 
+      0x508  (MP: Point-to-Multipoint (P2MP))
+      0x509  (MP: Multipoint-to-Multipoint (MP2MP))
+      0x50b  (Typed Wildcard FEC)
+      0x50c  (MP: Multi-Topology (MT))
+    Received: 
+      0x508  (MP: Point-to-Multipoint (P2MP))
+      0x509  (MP: Multipoint-to-Multipoint (MP2MP))
+      0x50b  (Typed Wildcard FEC)
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor detail | include Peer|State|MD5|Password|password
+    Peer LDP Ident: 10.255.0.12:0; Local LDP Ident 10.255.0.13:0
+	TCP connection: 10.255.0.12.646 - 10.255.0.13.44031; MD5 on
+	Password: required, neighbor, in use
+	State: Oper; Msgs sent/rcvd: 19/20; Downstream; Last TIB rev sent 26
+	Up time: 00:07:32; UID: 1; Peer Id 0
+	Peer holdtime: 180000 ms; KA interval: 60000 ms; Peer state: estab
+    Peer LDP Ident: 10.255.0.1:0; Local LDP Ident 10.255.0.13:0
+	TCP connection: 10.255.0.1.646 - 10.255.0.13.64820; MD5 on
+	Password: required, neighbor, in use
+	State: Oper; Msgs sent/rcvd: 11/14; Downstream; Last TIB rev sent 26
+	Up time: 00:00:42; UID: 4; Peer Id 1
+	Peer holdtime: 180000 ms; KA interval: 60000 ms; Peer state: estab
+RT03#
+
+######## 07:39:56 c-4: XR01 の全体の既定パスワード(RT01 はパスワードなし)→ RT01 とのセッションはどうなるか(試したら外す)
+configure
+Sat Oct 24 07:39:57.531 UTC
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR01(config-ldp)#
+neighbor password clear LDP-CORE-7
+RP/0/RP0/CPU0:XR01(config-ldp)#
+commit
+Sat Oct 24 07:39:58.935 UTC
+RP/0/RP0/CPU0:XR01(config-ldp)#
+show configuration failed
+Sat Oct 24 07:39:59.337 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-ldp)#
+end
+RP/0/RP0/CPU0:XR01#
+clear mpls ldp neighbor 10.255.0.11
+Sat Oct 24 07:40:07.485 UTC
+Peer not found.
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sat Oct 24 07:40:49.187 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:01:36    1     0     3     0     8      0    
+
+RP/0/RP0/CPU0:XR01#
+show logging last 15
+Sat Oct 24 07:40:49.588 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 16 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 109 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 24 07:39:11.563 UTC: config[67803]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 24 07:39:12.477 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6310]: Connection closed by 10.1.10.6 port 33440 
+RP/0/RP0/CPU0:Oct 24 07:39:52.707 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6417]: Accepted authentication for SUZUKI from 10.1.10.6 port 59074 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:39:54.588 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6421]: Connection closed by 10.1.10.6 port 59074 
+RP/0/RP0/CPU0:Oct 24 07:39:56.468 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6476]: Accepted authentication for SUZUKI from 10.1.10.6 port 59084 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:39:58.989 UTC: config[67982]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000006' to view the changes. 
+RP/0/RP0/CPU0:Oct 24 07:40:00.743 UTC: config[67982]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 24 07:40:01.154 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6480]: Connection closed by 10.1.10.6 port 59084 
+RP/0/RP0/CPU0:Oct 24 07:40:01.984 UTC: tcp[144]: %IP-TCP-3-BADAUTH : Invalid MD5 digest from 10.255.0.11:62332 to 10.255.0.1:646 for vrf:default (0x60000000) 
+RP/0/RP0/CPU0:Oct 24 07:40:06.422 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6619]: Accepted authentication for SUZUKI from 10.1.10.6 port 38916 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:40:07.898 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6623]: Connection closed by 10.1.10.6 port 38916 
+RP/0/RP0/CPU0:Oct 24 07:40:15.984 UTC: tcp[144]: %IP-TCP-3-BADAUTH : Invalid MD5 digest from 10.255.0.11:62332 to 10.255.0.1:646 for vrf:default (0x60000000) 
+RP/0/RP0/CPU0:Oct 24 07:40:27.077 UTC: tcp[144]: %IP-TCP-3-BADAUTH : Invalid MD5 digest from 10.255.0.11:29035 to 10.255.0.1:646 for vrf:default (0x60000000) 
+RP/0/RP0/CPU0:Oct 24 07:40:39.624 UTC: tcp[144]: %IP-TCP-3-BADAUTH : Invalid MD5 digest from 10.255.0.11:13962 to 10.255.0.1:646 for vrf:default (0x60000000) 
+RP/0/RP0/CPU0:Oct 24 07:40:48.123 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6690]: Accepted authentication for SUZUKI from 10.1.10.6 port 48820 ssh2 
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor | include Peer|State
+    Peer LDP Ident: 10.255.0.12:0; Local LDP Ident 10.255.0.11:0
+	State: Oper; Msgs sent/rcvd: 20/21; Downstream
+RT01#
+show logging | include TCP|LDP|MD5
+*Oct 24 07:34:15.286: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is UP
+*Oct 24 07:35:07.010: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is DOWN (TCP connection closed by peer)
+*Oct 24 07:36:19.073: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is UP
+*Oct 24 07:39:58.969: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is DOWN (TCP connection closed by peer)
+RT01#
+configure
+Sat Oct 24 07:40:53.539 UTC
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR01(config-ldp)#
+no neighbor password
+RP/0/RP0/CPU0:XR01(config-ldp)#
+commit
+Sat Oct 24 07:40:54.842 UTC
+RP/0/RP0/CPU0:XR01(config-ldp)#
+show configuration failed
+Sat Oct 24 07:40:55.345 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-ldp)#
+end
+RP/0/RP0/CPU0:XR01#
+clear mpls ldp neighbor 10.255.0.11
+Sat Oct 24 07:40:57.152 UTC
+Peer not found.
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sat Oct 24 07:41:38.850 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:02:25    1     0     3     0     8      0    
+10.255.0.11:0      N   N    00:00:41    1     0     3     0     8      0    
+
+RP/0/RP0/CPU0:XR01#

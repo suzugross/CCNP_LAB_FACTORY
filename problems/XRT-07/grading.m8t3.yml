@@ -1,0 +1,35 @@
+# M8-3: コアのリンクで IS-IS は上がっているのに LDP が整っていない間は、XR01 はそのリンクで通さない(LDP と IS-IS の同期)。
+# 整ってから 10 秒は戻さない(igp sync delay on-session-up 10)。3 つ目の確認は採点のあいだだけ RT01 Et0/0 で `no mpls ip`
+# (IS-IS は上がったまま LDP だけ落ちる)→ 25 秒後に XR01 の LSP(RT01 向けが 16777214)と、お客さまの ping(RT03 経由・ラベル付き)。
+# 同期なし= XR01 は RT01 へラベルなしで投げ、BGP を持たない RT01 が捨てる(PoC §20.4-8= ping 0%)。M8-4 の後でも成り立つ(§20.4-10)。
+problem: XRT-07
+total_points: 100
+checks:
+  - name: 'M8-3 XR01: IS-IS waits for LDP on both core links'
+    node: XR01
+    command: 'show isis interface'
+    raw:
+      - { regex: 'GigabitEthernet0/0/0/0\s+Enabled(?:(?!\n(?:GigabitEthernet|Loopback))[\s\S])*?MPLS LDP Sync \(L1/L2\):\s+\w+/Enabled' }
+      - { regex: 'GigabitEthernet0/0/0/1\s+Enabled(?:(?!\n(?:GigabitEthernet|Loopback))[\s\S])*?MPLS LDP Sync \(L1/L2\):\s+\w+/Enabled' }
+    points: 25
+  - name: 'M8-3 XR01: waits 10 seconds after LDP is ready on a link'
+    node: XR01
+    command: 'show mpls ldp igp sync'
+    raw:
+      - { regex: 'GigabitEthernet0/0/0/0:\s*\n[^\n]*\n\s*Sync delay: 10 sec' }
+      - { regex: 'GigabitEthernet0/0/0/1:\s*\n[^\n]*\n\s*Sync delay: 10 sec' }
+    points: 25
+  - name: 'M8-3 XR01: moves customer traffic off PRIMARY while LDP is down on it (LDP disabled on RT01 for the check)'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-07 ssh XR01
+      --pre-cli 'RT01:configure terminal;;interface Ethernet0/0;;no mpls ip;;end' --settle 25
+      --post-cli 'RT01:configure terminal;;interface Ethernet0/0;;mpls ip;;end' --post-settle 30
+      -- 'show isis database verbose XR01.00-00' 'show mpls forwarding prefix 10.255.0.12/32' 'ping 10.20.0.1 source Loopback100 count 5'
+    raw:
+      - { regex: '== CLI RT01: 4 lines' }
+      - { regex: 'Metric: 16777214\s+IS-Extended RT01\.00' }
+      - { regex: '\d+\s+\d+\s+10\.255\.0\.12/32\s+Gi0/0/0/1' }
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 50

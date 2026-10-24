@@ -1,0 +1,81 @@
+#### 誤答 m8t4-all
+show mpls ldp neighbor 10.255.0.13:0 detail | include "Protection|state|Duration"
+Sat Oct 24 09:19:19.328 UTC
+  Peer holdtime: 180 sec; KA interval: 60 sec; Peer state: Estab
+  Session Protection:
+    Enabled, state: Incomplete
+    Duration: 600 sec
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery | include "Targeted|10.255.0.1 -"
+Sat Oct 24 09:19:19.706 UTC
+  Targeted Hellos:
+    10.255.0.1 -> 10.255.0.11 (active), xmit/recv
+    10.255.0.1 -> 10.255.0.13 (active), xmit
+RP/0/RP0/CPU0:XR01#
+[m8t4]     - '[PASS] (+ 20 点) M8-4 XR01: the session with RT01 is protected for 10 minutes at
+[m8t4]     - '[FAIL] (+ 20 点) M8-4 XR01: sends targeted hellos to RT01 only'
+[m8t4]     - '[PASS] (+ 45 点) M8-4 XR01: keeps the session and RT01''s labels while PRIMARY is
+[m8t4]     - '[PASS] (+ 15 点) M8-4 XR01: the session with RT01 was not re-established when PRIMARY
+[m8t4]     - '  合計: 80 / 100 点'
+[m8t4]     msg: ⚠ 1 回試行しても全 PASS に至らず（上の未充足を参照）
+#### 模範解 m8t4
+show mpls ldp neighbor 10.255.0.11:0 detail
+Sat Oct 24 09:21:44.545 UTC
+Peer LDP Identifier: 10.255.0.11:0
+  TCP connection: 10.255.0.11:13807 - 10.255.0.1:646
+  Graceful Restart: No
+  Session Holdtime: 180 sec
+  State: Oper; Msgs sent/rcvd: 13/15; Downstream-Unsolicited
+  Up time: 00:03:43
+  LDP Discovery Sources:
+    IPv4: (2)
+      GigabitEthernet0/0/0/0
+      Targeted Hello (10.255.0.1 -> 10.255.0.11, active)
+    IPv6: (0)
+  Addresses bound to this peer:
+    IPv4: (3)
+      10.0.1.11      10.0.12.11     10.255.0.11    
+    IPv6: (0)
+  Peer holdtime: 180 sec; KA interval: 60 sec; Peer state: Estab
+  NSR: Disabled
+  Clients: Session Protection
+  Session Protection:
+    Enabled, state: Ready
+    ACL: 'LDP-SP', Duration: 600 sec
+  Capabilities:
+    Sent: 
+      0x508  (MP: Point-to-Multipoint (P2MP))
+      0x509  (MP: Multipoint-to-Multipoint (MP2MP))
+      0x50b  (Typed Wildcard FEC)
+      0x50c  (MP: Multi-Topology (MT))
+    Received: 
+      0x508  (MP: Point-to-Multipoint (P2MP))
+      0x509  (MP: Multipoint-to-Multipoint (MP2MP))
+      0x50b  (Typed Wildcard FEC)
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery
+Sat Oct 24 09:21:44.964 UTC
+Local LDP Identifier: 10.255.0.1:0
+Discovery Sources:
+  Interfaces:
+    GigabitEthernet0/0/0/0 : xmit/recv
+      VRF: 'default' (0x60000000)
+      LDP Id: 10.255.0.11:0, Transport address: 10.255.0.11
+          Hold time: 15 sec (local:15 sec, peer:15 sec)
+          Established: Oct 24 09:20:16.105 (00:01:28 ago)
+    GigabitEthernet0/0/0/1 : xmit/recv
+      VRF: 'default' (0x60000000)
+      LDP Id: 10.255.0.13:0, Transport address: 10.255.0.13
+          Hold time: 15 sec (local:15 sec, peer:15 sec)
+          Established: Oct 24 09:09:36.300 (00:12:08 ago)
+  Targeted Hellos:
+    10.255.0.1 -> 10.255.0.11 (active), xmit/recv
+      LDP Id: 10.255.0.11:0
+          Hold time: 90 sec (local:90 sec, peer:90 sec)
+          Established: Oct 24 09:21:16.488 (00:00:28 ago)
+RP/0/RP0/CPU0:XR01#
+[m8t4]     - '[PASS] (+ 20 点) M8-4 XR01: the session with RT01 is protected for 10 minutes at
+[m8t4]     - '[PASS] (+ 20 点) M8-4 XR01: sends targeted hellos to RT01 only'
+[m8t4]     - '[PASS] (+ 45 点) M8-4 XR01: keeps the session and RT01''s labels while PRIMARY is
+[m8t4]     - '[PASS] (+ 15 点) M8-4 XR01: the session with RT01 was not re-established when PRIMARY
+[m8t4]     - '  合計: 100 / 100 点'

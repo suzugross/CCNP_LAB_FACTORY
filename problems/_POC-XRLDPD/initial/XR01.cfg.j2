@@ -1,0 +1,64 @@
+!! _POC-XRLDPD XR01(PE)。LDP は未設定(PoC の段で足す)。Loopback1 は IS-IS に載せない(LDP の既定の ID の確かめ用)。
+interface Loopback0
+ ipv4 address 10.255.0.1 255.255.255.255
+!
+interface Loopback1
+ description NMS - not advertised in IS-IS
+ ipv4 address 10.255.255.1 255.255.255.255
+!
+interface Loopback100
+ description CUSTOMER (BGP only)
+ ipv4 address 10.30.0.1 255.255.0.0
+!
+interface {{ links[3] }}
+ description PRIMARY to RT01
+ ipv4 address 10.0.1.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description BACKUP to RT03
+ ipv4 address 10.0.3.1 255.255.255.0
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+   metric 10
+  !
+ !
+ interface {{ links[4] }}
+  point-to-point
+  address-family ipv4 unicast
+   metric 100
+  !
+ !
+!
+route-policy PASS
+  pass
+end-policy
+!
+router bgp 65000
+ bgp router-id 10.255.0.1
+ address-family ipv4 unicast
+  network 10.30.0.0/16
+ !
+ neighbor 10.255.0.12
+  remote-as 65000
+  update-source Loopback0
+  address-family ipv4 unicast
+  !
+ !
+!
+end

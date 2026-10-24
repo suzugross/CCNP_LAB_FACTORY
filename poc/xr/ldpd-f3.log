@@ -1,0 +1,333 @@
+
+######## 07:45:06 f-3: XR01-RT01 を CML のリンク条件で黙って落とす(loss 100)→ 保護の間のセッションと束縛
+show mpls ldp neighbor 10.255.0.11:0 | include "Up time|Protection|State"
+Sat Oct 24 07:45:08.255 UTC
+  State: Oper; Msgs sent/rcvd: 11/12; Downstream-Unsolicited
+  Up time: 00:01:49
+RP/0/RP0/CPU0:XR01#
+SSL Verification disabled
+XR01-RT01 state=STARTED condition={'bandwidth': None, 'latency': None, 'delay_corr': None, 'limit': None, 'loss': 100.0, 'loss_corr': None, 'gap': None, 'duplicate': None, 'duplicate_corr': None, 'jitter': None, 'reorder_prob': None, 'reorder_corr': None, 'corrupt_prob': None, 'corrupt_corr': None, 'enabled': False, 'operational': {'bandwidth': 0, 'latency': 0, 'delay_corr': 0, 'limit': 0, 'loss': 100, 'loss_corr': 0, 'gap': 0, 'duplicate': 0, 'duplicate_corr': 0, 'jitter': 0, 'reorder_prob': 0, 'reorder_corr': 0, 'corrupt_prob': 0, 'corrupt_corr': 0}}
+show mpls ldp neighbor 10.255.0.11:0 detail
+Sat Oct 24 07:45:30.837 UTC
+
+Peer LDP Identifier: 10.255.0.11:0
+  TCP connection: 10.255.0.11:64095 - 10.255.0.1:646
+  Graceful Restart: No
+  Session Holdtime: 180 sec
+  State: Oper; Msgs sent/rcvd: 11/12; Downstream-Unsolicited
+  Up time: 00:02:11
+  LDP Discovery Sources:
+    IPv4: (1)
+      Targeted Hello (10.255.0.1 -> 10.255.0.11, active)
+    IPv6: (0)
+  Addresses bound to this peer:
+    IPv4: (3)
+      10.0.1.11      10.0.12.11     10.255.0.11    
+    IPv6: (0)
+  Peer holdtime: 180 sec; KA interval: 60 sec; Peer state: Estab
+  NSR: Disabled
+  Clients: Session Protection
+  Session Protection:
+    Enabled, state: Protecting
+    Duration: 86400 sec
+    Holdup timer remaining: 86392 sec
+  Capabilities:
+    Sent: 
+      0x508  (MP: Point-to-Multipoint (P2MP))
+      0x509  (MP: Multipoint-to-Multipoint (MP2MP))
+      0x50b  (Typed Wildcard FEC)
+      0x50c  (MP: Multi-Topology (MT))
+    Received: 
+      0x508  (MP: Point-to-Multipoint (P2MP))
+      0x509  (MP: Multipoint-to-Multipoint (MP2MP))
+      0x50b  (Typed Wildcard FEC)
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp bindings 10.255.0.12/32
+Sat Oct 24 07:45:31.243 UTC
+10.255.0.12/32, rev 19
+	Local binding: label: 24001
+	Remote bindings: (2 peers)
+	    Peer                Label    
+	    -----------------   ---------
+	    10.255.0.11:0       16      
+	    10.255.0.13:0       16      
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Sat Oct 24 07:45:31.644 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    2    00:12:24 Yes None None
+RT03           Gi0/0/0/1                *PtoP*         Up    25   00:12:24 Yes None None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync
+Sat Oct 24 07:45:32.045 UTC
+
+GigabitEthernet0/0/0/0:
+  VRF: 'default' (0x60000000)
+  Sync delay: Disabled
+  Sync status: Not ready (No hello adjacency)
+
+GigabitEthernet0/0/0/1:
+  VRF: 'default' (0x60000000)
+  Sync delay: Disabled
+  Sync status: Ready
+    Peers:
+      10.255.0.13:0
+
+
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32
+Sat Oct 24 07:45:32.446 UTC
+
+Routing entry for 10.255.0.12/32
+  Known via "isis CORE", distance 115, metric 210, type level-2
+  Installed Oct 24 07:45:25.686 for 00:00:06
+  Routing Descriptor Blocks
+    10.0.3.13, from 10.255.0.12, via GigabitEthernet0/0/0/1
+      Route metric is 210
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+ping 10.20.0.1 source Loopback100 count 5
+Sat Oct 24 07:45:32.856 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.20.0.1 timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 1/1/2 ms
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor 10.255.0.11:0 detail
+Sat Oct 24 07:46:01.665 UTC
+
+Peer LDP Identifier: 10.255.0.11:0
+  TCP connection: 10.255.0.11:64095 - 10.255.0.1:646
+  Graceful Restart: No
+  Session Holdtime: 180 sec
+  State: Oper; Msgs sent/rcvd: 12/13; Downstream-Unsolicited
+  Up time: 00:02:42
+  LDP Discovery Sources:
+    IPv4: (1)
+      Targeted Hello (10.255.0.1 -> 10.255.0.11, active)
+    IPv6: (0)
+  Addresses bound to this peer:
+    IPv4: (3)
+      10.0.1.11      10.0.12.11     10.255.0.11    
+    IPv6: (0)
+  Peer holdtime: 180 sec; KA interval: 60 sec; Peer state: Estab
+  NSR: Disabled
+  Clients: Session Protection
+  Session Protection:
+    Enabled, state: Protecting
+    Duration: 86400 sec
+    Holdup timer remaining: 86361 sec
+  Capabilities:
+    Sent: 
+      0x508  (MP: Point-to-Multipoint (P2MP))
+      0x509  (MP: Multipoint-to-Multipoint (MP2MP))
+      0x50b  (Typed Wildcard FEC)
+      0x50c  (MP: Multi-Topology (MT))
+    Received: 
+      0x508  (MP: Point-to-Multipoint (P2MP))
+      0x509  (MP: Multipoint-to-Multipoint (MP2MP))
+      0x50b  (Typed Wildcard FEC)
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp bindings 10.255.0.12/32
+Sat Oct 24 07:46:02.066 UTC
+10.255.0.12/32, rev 19
+	Local binding: label: 24001
+	Remote bindings: (2 peers)
+	    Peer                Label    
+	    -----------------   ---------
+	    10.255.0.11:0       16      
+	    10.255.0.13:0       16      
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Sat Oct 24 07:46:02.466 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT03           Gi0/0/0/1                *PtoP*         Up    29   00:12:55 Yes None None
+
+Total adjacency count: 1
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync
+Sat Oct 24 07:46:02.868 UTC
+
+GigabitEthernet0/0/0/0:
+  VRF: 'default' (0x60000000)
+  Sync delay: Disabled
+  Sync status: Not ready (No hello adjacency)
+
+GigabitEthernet0/0/0/1:
+  VRF: 'default' (0x60000000)
+  Sync delay: Disabled
+  Sync status: Ready
+    Peers:
+      10.255.0.13:0
+
+
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32
+Sat Oct 24 07:46:03.268 UTC
+
+Routing entry for 10.255.0.12/32
+  Known via "isis CORE", distance 115, metric 210, type level-2
+  Installed Oct 24 07:45:25.686 for 00:00:37
+  Routing Descriptor Blocks
+    10.0.3.13, from 10.255.0.12, via GigabitEthernet0/0/0/1
+      Route metric is 210
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+ping 10.20.0.1 source Loopback100 count 5
+Sat Oct 24 07:46:03.669 UTC
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.20.0.1 timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+RP/0/RP0/CPU0:XR01#
+
+######## 07:46:04 f-3b: リンクを戻す → 稼働時間・同期・主経路への戻り
+SSL Verification disabled
+XR01-RT01 state=STARTED condition={'bandwidth': None, 'latency': None, 'delay_corr': None, 'limit': None, 'loss': None, 'loss_corr': None, 'gap': None, 'duplicate': None, 'duplicate_corr': None, 'jitter': None, 'reorder_prob': None, 'reorder_corr': None, 'corrupt_prob': None, 'corrupt_corr': None, 'enabled': False, 'operational': {'bandwidth': None, 'latency': None, 'delay_corr': None, 'limit': None, 'loss': None, 'loss_corr': None, 'gap': None, 'duplicate': None, 'duplicate_corr': None, 'jitter': None, 'reorder_prob': None, 'reorder_corr': None, 'corrupt_prob': None, 'corrupt_corr': None}}
+show mpls ldp neighbor 10.255.0.11:0 | include "Up time|Protection|State"
+Sat Oct 24 07:46:11.290 UTC
+  State: Oper; Msgs sent/rcvd: 12/14; Downstream-Unsolicited
+  Up time: 00:02:52
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "Sync status|GigabitEthernet0/0/0/0"
+Sat Oct 24 07:46:11.691 UTC
+GigabitEthernet0/0/0/0:
+  Sync status: Ready
+  Sync status: Ready
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32 | include via
+Sat Oct 24 07:46:12.092 UTC
+  Known via "isis CORE", distance 115, metric 30, type level-2
+    10.0.1.11, from 10.255.0.12, via GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor 10.255.0.11:0 | include "Up time|Protection|State"
+Sat Oct 24 07:46:18.817 UTC
+  State: Oper; Msgs sent/rcvd: 12/14; Downstream-Unsolicited
+  Up time: 00:02:59
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "Sync status|GigabitEthernet0/0/0/0"
+Sat Oct 24 07:46:19.218 UTC
+GigabitEthernet0/0/0/0:
+  Sync status: Ready
+  Sync status: Ready
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32 | include via
+Sat Oct 24 07:46:19.618 UTC
+  Known via "isis CORE", distance 115, metric 30, type level-2
+    10.0.1.11, from 10.255.0.12, via GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor 10.255.0.11:0 | include "Up time|Protection|State"
+Sat Oct 24 07:46:26.207 UTC
+  State: Oper; Msgs sent/rcvd: 12/14; Downstream-Unsolicited
+  Up time: 00:03:07
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "Sync status|GigabitEthernet0/0/0/0"
+Sat Oct 24 07:46:26.608 UTC
+GigabitEthernet0/0/0/0:
+  Sync status: Ready
+  Sync status: Ready
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32 | include via
+Sat Oct 24 07:46:27.008 UTC
+  Known via "isis CORE", distance 115, metric 30, type level-2
+    10.0.1.11, from 10.255.0.12, via GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor 10.255.0.11:0 | include "Up time|Protection|State"
+Sat Oct 24 07:46:33.623 UTC
+  State: Oper; Msgs sent/rcvd: 12/14; Downstream-Unsolicited
+  Up time: 00:03:14
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "Sync status|GigabitEthernet0/0/0/0"
+Sat Oct 24 07:46:34.024 UTC
+GigabitEthernet0/0/0/0:
+  Sync status: Ready
+  Sync status: Ready
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32 | include via
+Sat Oct 24 07:46:34.425 UTC
+  Known via "isis CORE", distance 115, metric 30, type level-2
+    10.0.1.11, from 10.255.0.12, via GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor 10.255.0.11:0 | include "Up time|Protection|State"
+Sat Oct 24 07:46:41.530 UTC
+  State: Oper; Msgs sent/rcvd: 13/14; Downstream-Unsolicited
+  Up time: 00:03:22
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "Sync status|GigabitEthernet0/0/0/0"
+Sat Oct 24 07:46:41.929 UTC
+GigabitEthernet0/0/0/0:
+  Sync status: Ready
+  Sync status: Ready
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32 | include via
+Sat Oct 24 07:46:42.330 UTC
+  Known via "isis CORE", distance 115, metric 30, type level-2
+    10.0.1.11, from 10.255.0.12, via GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor 10.255.0.11:0 | include "Up time|Protection|State"
+Sat Oct 24 07:46:48.919 UTC
+  State: Oper; Msgs sent/rcvd: 13/14; Downstream-Unsolicited
+  Up time: 00:03:29
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync | include "Sync status|GigabitEthernet0/0/0/0"
+Sat Oct 24 07:46:49.320 UTC
+GigabitEthernet0/0/0/0:
+  Sync status: Ready
+  Sync status: Ready
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.12/32 | include via
+Sat Oct 24 07:46:49.721 UTC
+  Known via "isis CORE", distance 115, metric 30, type level-2
+    10.0.1.11, from 10.255.0.12, via GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01#
+show logging last 30
+Sat Oct 24 07:46:51.406 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 17 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 172 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 24 07:43:50.614 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[7831]: Connection closed by 10.1.10.6 port 53484 
+RP/0/RP0/CPU0:Oct 24 07:43:50.841 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[7889]: Accepted authentication for SUZUKI from 10.1.10.6 port 53498 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:43:53.263 UTC: config[69382]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000010' to view the changes. 
+RP/0/RP0/CPU0:Oct 24 07:43:54.815 UTC: config[69382]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 24 07:43:55.227 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[7893]: Connection closed by 10.1.10.6 port 53498 
+RP/0/RP0/CPU0:Oct 24 07:44:25.441 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8021]: Accepted authentication for SUZUKI from 10.1.10.6 port 37342 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:44:27.718 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8025]: Connection closed by 10.1.10.6 port 37342 
+RP/0/RP0/CPU0:Oct 24 07:45:02.708 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8165]: Accepted authentication for SUZUKI from 10.1.10.6 port 46296 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:45:04.623 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8169]: Connection closed by 10.1.10.6 port 46296 
+RP/0/RP0/CPU0:Oct 24 07:45:07.192 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8222]: Accepted authentication for SUZUKI from 10.1.10.6 port 46306 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:45:08.686 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8226]: Connection closed by 10.1.10.6 port 46306 
+RP/0/RP0/CPU0:Oct 24 07:45:29.773 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8285]: Accepted authentication for SUZUKI from 10.1.10.6 port 55312 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:45:33.935 UTC: isis[1003]: %ROUTING-ISIS-5-ADJCHANGE : ISIS (CORE): Adjacency to RT01 (GigabitEthernet0/0/0/0) (L2) Down, Holdtime expired 
+RP/0/RP0/CPU0:Oct 24 07:45:35.468 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8289]: Connection closed by 10.1.10.6 port 55312 
+RP/0/RP0/CPU0:Oct 24 07:46:00.703 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8428]: Accepted authentication for SUZUKI from 10.1.10.6 port 46562 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:46:04.283 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8432]: Connection closed by 10.1.10.6 port 46562 
+RP/0/RP0/CPU0:Oct 24 07:46:09.539 UTC: isis[1003]: %ROUTING-ISIS-5-ADJCHANGE : ISIS (CORE): Adjacency to RT01 (GigabitEthernet0/0/0/0) (L2) Up, New adjacency 
+RP/0/RP0/CPU0:Oct 24 07:46:10.228 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8509]: Accepted authentication for SUZUKI from 10.1.10.6 port 54684 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:46:12.505 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8517]: Connection closed by 10.1.10.6 port 54684 
+RP/0/RP0/CPU0:Oct 24 07:46:17.730 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8579]: Accepted authentication for SUZUKI from 10.1.10.6 port 54690 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:46:20.030 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8583]: Connection closed by 10.1.10.6 port 54690 
+RP/0/RP0/CPU0:Oct 24 07:46:25.244 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8648]: Accepted authentication for SUZUKI from 10.1.10.6 port 59216 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:46:27.421 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8652]: Connection closed by 10.1.10.6 port 59216 
+RP/0/RP0/CPU0:Oct 24 07:46:32.660 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8716]: Accepted authentication for SUZUKI from 10.1.10.6 port 45214 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:46:35.340 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8720]: Connection closed by 10.1.10.6 port 45214 
+RP/0/RP0/CPU0:Oct 24 07:46:40.557 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8785]: Accepted authentication for SUZUKI from 10.1.10.6 port 36092 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:46:42.742 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8789]: Connection closed by 10.1.10.6 port 36092 
+RP/0/RP0/CPU0:Oct 24 07:46:47.956 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8849]: Accepted authentication for SUZUKI from 10.1.10.6 port 36102 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:46:50.133 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8853]: Connection closed by 10.1.10.6 port 36102 
+RP/0/RP0/CPU0:Oct 24 07:46:50.344 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[8914]: Accepted authentication for SUZUKI from 10.1.10.6 port 56040 ssh2 
+RP/0/RP0/CPU0:XR01#

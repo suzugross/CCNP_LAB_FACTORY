@@ -1,0 +1,55 @@
+
+######## 07:48:38 mtu: ラベル 1 枚ぶんで 1500 バイトの DF が通るか
+show interfaces GigabitEthernet0/0/0/0 | include MTU
+Sat Oct 24 07:48:40.161 UTC
+  MTU 1514 bytes, BW 1000000 Kbit (Max: 1000000 Kbit)
+RP/0/RP0/CPU0:XR01#
+ping 10.20.0.1 source Loopback100 size 1500 df-bit count 3
+Sat Oct 24 07:48:40.562 UTC
+Type escape sequence to abort.
+Sending 3, 1500-byte ICMP Echos to 10.20.0.1 timeout is 2 seconds:
+...
+Success rate is 0 percent (0/3)
+RP/0/RP0/CPU0:XR01#
+ping 10.20.0.1 source Loopback100 size 1496 df-bit count 3
+Sat Oct 24 07:48:47.189 UTC
+Type escape sequence to abort.
+Sending 3, 1496-byte ICMP Echos to 10.20.0.1 timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 1/1/2 ms
+RP/0/RP0/CPU0:XR01#
+ping mpls ipv4 10.255.0.12/32 sweep 1490 1510 4 repeat 1
+Sat Oct 24 07:48:47.792 UTC
+
+Sending 1, [1490..1510]-byte MPLS Echos to 10.255.0.12/32,
+      timeout is 2 seconds, send interval is 0 msec:
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+  'L' - labeled output interface, 'B' - unlabeled output interface, 
+  'D' - DS Map mismatch, 'F' - no FEC mapping, 'f' - FEC mismatch,
+  'M' - malformed request, 'm' - unsupported tlvs, 'N' - no rx label, 
+  'P' - no rx intf label prot, 'p' - premature termination of LSP, 
+  'R' - transit router, 'I' - unknown upstream index,
+  'X' - unknown return code, 'x' - return code 0
+
+Type escape sequence to abort.
+
+!!!QQQ
+Success rate is 50 percent (3/6), round-trip min/avg/max = 1/1/2 ms
+RP/0/RP0/CPU0:XR01#
+ping 10.30.0.1 source Loopback100 size 1500 df-bit repeat 3
+Type escape sequence to abort.
+Sending 3, 1500-byte ICMP Echos to 10.30.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+Packet sent with the DF bit set
+...
+Success rate is 0 percent (0/3)
+RT02#
+ping 10.30.0.1 source Loopback100 size 1496 df-bit repeat 3
+Type escape sequence to abort.
+Sending 3, 1496-byte ICMP Echos to 10.30.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+Packet sent with the DF bit set
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 1/1/1 ms
+RT02#

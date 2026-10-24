@@ -1,0 +1,156 @@
+#### RT01 が XR01 から受けた束縛(M8-2 前)
+show mpls ldp bindings neighbor 10.255.0.1
+  lib entry: 10.0.1.0/24, rev 4
+	remote binding: lsr: 10.255.0.1:0, label: imp-null
+  lib entry: 10.0.3.0/24, rev 15
+	remote binding: lsr: 10.255.0.1:0, label: imp-null
+  lib entry: 10.0.12.0/24, rev 6
+	remote binding: lsr: 10.255.0.1:0, label: 24001
+  lib entry: 10.0.23.0/24, rev 10
+	remote binding: lsr: 10.255.0.1:0, label: 24004
+  lib entry: 10.30.0.0/16, rev 20
+	remote binding: lsr: 10.255.0.1:0, label: imp-null
+  lib entry: 10.30.0.1/32, rev 19
+	remote binding: lsr: 10.255.0.1:0, label: imp-null
+  lib entry: 10.255.0.1/32, rev 17
+	remote binding: lsr: 10.255.0.1:0, label: imp-null
+  lib entry: 10.255.0.11/32, rev 2
+	remote binding: lsr: 10.255.0.1:0, label: 24000
+  lib entry: 10.255.0.12/32, rev 8
+	remote binding: lsr: 10.255.0.1:0, label: 24002
+  lib entry: 10.255.0.13/32, rev 13
+	remote binding: lsr: 10.255.0.1:0, label: 24003
+  lib entry: 10.255.255.1/32, rev 18
+	remote binding: lsr: 10.255.0.1:0, label: imp-null
+RT01#
+show mpls ldp neighbor | include Peer|State
+    Peer LDP Ident: 10.255.0.12:0; Local LDP Ident 10.255.0.13:0
+	State: Oper; Msgs sent/rcvd: 26/28; Downstream
+RT03#
+show logging | include LDP|TCP
+*Oct 24 09:08:13.163: %TCP-6-BADAUTH: No MD5 digest from 10.255.255.1(57070) to 10.255.0.13(646) tableid - 0
+*Oct 24 09:08:15.162: %TCP-6-BADAUTH: No MD5 digest from 10.255.255.1(57070) to 10.255.0.13(646) tableid - 0
+*Oct 24 09:08:19.162: %TCP-6-BADAUTH: No MD5 digest from 10.255.255.1(57070) to 10.255.0.13(646) tableid - 0
+*Oct 24 09:08:27.162: %TCP-6-BADAUTH: No MD5 digest from 10.255.255.1(57070) to 10.255.0.13(646) tableid - 0
+*Oct 24 09:08:48.513: %TCP-6-BADAUTH: No MD5 digest from 10.255.255.1(51458) to 10.255.0.13(646) tableid - 0
+*Oct 24 09:08:50.514: %TCP-6-BADAUTH: No MD5 digest from 10.255.255.1(51458) to 10.255.0.13(646) tableid - 0
+*Oct 24 09:08:54.514: %TCP-6-BADAUTH: No MD5 digest from 10.255.255.1(51458) to 10.255.0.13(646) tableid - 0
+*Oct 24 09:09:02.515: %TCP-6-BADAUTH: No MD5 digest from 10.255.255.1(51458) to 10.255.0.13(646) tableid - 0
+*Oct 24 09:09:22.557: %TCP-6-BADAUTH: No MD5 digest from 10.255.255.1(30926) to 10.255.0.13(646) tableid - 0
+*Oct 24 09:09:24.585: %TCP-6-BADAUTH: No MD5 digest from 10.255.255.1(30926) to 10.255.0.13(646) tableid - 0
+*Oct 24 09:09:28.579: %TCP-6-BADAUTH: No MD5 digest from 10.255.255.1(30926) to 10.255.0.13(646) tableid - 0
+RT03#
+#### 誤答 m8t2-global
+show mpls ldp neighbor brief
+Sat Oct 24 09:11:55.205 UTC
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:00:37    1     0     3     0     8      0    
+RP/0/RP0/CPU0:XR01#
+show logging last 6
+Sat Oct 24 09:11:55.605 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 19 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 128 messages logged
+Log Buffer (2097152 bytes):
+RP/0/RP0/CPU0:Oct 24 09:11:15.955 UTC: tcp[144]: %IP-TCP-3-BADAUTH : Invalid MD5 digest from 10.255.0.11:61841 to 10.255.0.1:646 for vrf:default (0x60000000) 
+RP/0/RP0/CPU0:Oct 24 09:11:29.961 UTC: tcp[144]: %IP-TCP-3-BADAUTH : Invalid MD5 digest from 10.255.0.11:61841 to 10.255.0.1:646 for vrf:default (0x60000000) 
+RP/0/RP0/CPU0:Oct 24 09:11:40.273 UTC: tcp[144]: %IP-TCP-3-BADAUTH : Invalid MD5 digest from 10.255.0.11:41251 to 10.255.0.1:646 for vrf:default (0x60000000) 
+RP/0/RP0/CPU0:Oct 24 09:11:53.323 UTC: tcp[144]: %IP-TCP-3-BADAUTH : Invalid MD5 digest from 10.255.0.11:18460 to 10.255.0.1:646 for vrf:default (0x60000000) 
+RP/0/RP0/CPU0:XR01#
+[m8t1]     - '[FAIL] (+ 20 点) M8-1 RT01: the LDP session with XR01 is operational, over XR01''s
+[m8t1]     - '[FAIL] (+ 20 点) M8-1 XR01: traffic for RT02 leaves on PRIMARY with a label'
+[m8t1]     - '[FAIL] (+ 20 点) M8-1 XR01: customer A''s networks reach each other across the core'
+[m8t1]     - '  合計: 40 / 100 点'
+[m8t2]     - '[FAIL] (+ 40 点) M8-2 RT01: receives labels from XR01 for host routes only'
+[m8t2]     - '[FAIL] (+ 10 点) M8-2 XR01: customer A''s networks still reach each other'
+[m8t2]     - '  合計: 50 / 100 点'
+#### 模範解 m8t2
+show running-config mpls ldp
+Sat Oct 24 09:13:39.259 UTC
+mpls ldp
+ neighbor
+  10.255.0.13:0 password encrypted 00271C1401770F1642731C1C5F
+ !
+ address-family ipv4
+  label
+   local
+    allocate for host-routes
+   !
+  !
+ !
+ interface GigabitEthernet0/0/0/0
+ !
+ interface GigabitEthernet0/0/0/1
+ !
+!
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor 10.255.0.13:0
+Sat Oct 24 09:13:39.869 UTC
+Peer LDP Identifier: 10.255.0.13:0
+  TCP connection: 10.255.0.13:54652 - 10.255.0.1:646; MD5 on
+  Graceful Restart: No
+  Session Holdtime: 180 sec
+  State: Oper; Msgs sent/rcvd: 9/11; Downstream-Unsolicited
+  Up time: 00:00:43
+  LDP Discovery Sources:
+    IPv4: (1)
+      GigabitEthernet0/0/0/1
+    IPv6: (0)
+  Addresses bound to this peer:
+    IPv4: (3)
+      10.0.3.13      10.0.23.13     10.255.0.13    
+    IPv6: (0)
+RP/0/RP0/CPU0:XR01#
+show mpls ldp bindings brief
+Sat Oct 24 09:13:40.262 UTC
+Prefix              Local      Advertised  Remote Bindings
+                    Label        (peers)       (peers)    
+------------------  ---------  ----------  ---------------
+10.0.1.0/24         -                   0                2
+10.0.3.0/24         -                   0                2
+10.0.12.0/24        -                   0                2
+10.0.23.0/24        -                   0                2
+10.30.0.1/32        ImpNull             2                0
+10.255.0.1/32       ImpNull             2                2
+10.255.0.11/32      24000               2                2
+10.255.0.12/32      24002               2                2
+10.255.0.13/32      24003               2                2
+10.255.255.1/32     ImpNull             2                0
+RP/0/RP0/CPU0:XR01#
+show mpls ldp bindings neighbor 10.255.0.1
+  lib entry: 10.30.0.1/32, rev 22
+	remote binding: lsr: 10.255.0.1:0, label: imp-null
+  lib entry: 10.255.0.1/32, rev 17
+	remote binding: lsr: 10.255.0.1:0, label: imp-null
+  lib entry: 10.255.0.11/32, rev 2
+	remote binding: lsr: 10.255.0.1:0, label: 24000
+  lib entry: 10.255.0.12/32, rev 8
+	remote binding: lsr: 10.255.0.1:0, label: 24002
+  lib entry: 10.255.0.13/32, rev 13
+	remote binding: lsr: 10.255.0.1:0, label: 24003
+  lib entry: 10.255.255.1/32, rev 21
+	remote binding: lsr: 10.255.0.1:0, label: imp-null
+RT01#
+show mpls ldp neighbor 10.255.0.1 detail | include Peer|State|Password|MD5
+    Peer LDP Ident: 10.255.0.1:0; Local LDP Ident 10.255.0.13:0
+	TCP connection: 10.255.0.1.646 - 10.255.0.13.54652; MD5 on
+	Password: required, neighbor, in use
+	State: Oper; Msgs sent/rcvd: 11/9; Downstream; Last TIB rev sent 21
+	Up time: 00:00:47; UID: 3; Peer Id 1
+	Peer holdtime: 180000 ms; KA interval: 60000 ms; Peer state: estab
+RT03#
+[m8t1]     - '[PASS] (+ 20 点) M8-1 XR01: LDP runs on both core links'
+[m8t1]     - '[PASS] (+ 20 点) M8-1 XR01: identifies itself in LDP with its Loopback0 address
+[m8t1]     - '[PASS] (+ 20 点) M8-1 RT01: the LDP session with XR01 is operational, over XR01''s
+[m8t1]     - '[PASS] (+ 20 点) M8-1 XR01: traffic for RT02 leaves on PRIMARY with a label'
+[m8t1]     - '[PASS] (+ 20 点) M8-1 XR01: customer A''s networks reach each other across the core'
+[m8t1]     - '  合計: 100 / 100 点'
+[m8t2]     - '[PASS] (+ 30 点) M8-2 XR01: the LDP session with RT03 is operational and authenticated'
+[m8t2]     - '[PASS] (+ 20 点) M8-2 RT03: uses its password on the session with XR01'
+[m8t2]     - '[PASS] (+ 40 点) M8-2 RT01: receives labels from XR01 for host routes only'
+[m8t2]     - '[PASS] (+ 10 点) M8-2 XR01: customer A''s networks still reach each other'
+[m8t2]     - '  合計: 100 / 100 点'

@@ -1,0 +1,195 @@
+
+######## 07:16:38 f-1: XR01 にセッション保護(RT01 は targeted ハローを受け入れる設定なし)
+configure
+Sat Oct 24 07:16:40.937 UTC
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR01(config-ldp)#
+session protection
+RP/0/RP0/CPU0:XR01(config-ldp)#
+commit
+Sat Oct 24 07:16:42.240 UTC
+RP/0/RP0/CPU0:XR01(config-ldp)#
+show configuration failed
+Sat Oct 24 07:16:43.152 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-ldp)#
+end
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor 10.255.0.11:0 detail
+Sat Oct 24 07:17:16.066 UTC
+
+Peer LDP Identifier: 10.255.0.11:0
+  TCP connection: 10.255.0.11:32253 - 10.255.0.1:646
+  Graceful Restart: No
+  Session Holdtime: 180 sec
+  State: Oper; Msgs sent/rcvd: 10/12; Downstream-Unsolicited
+  Up time: 00:01:14
+  LDP Discovery Sources:
+    IPv4: (1)
+      GigabitEthernet0/0/0/0
+    IPv6: (0)
+  Addresses bound to this peer:
+    IPv4: (3)
+      10.0.1.11      10.0.12.11     10.255.0.11    
+    IPv6: (0)
+  Peer holdtime: 180 sec; KA interval: 60 sec; Peer state: Estab
+  NSR: Disabled
+  Session Protection:
+    Enabled, state: Incomplete
+    Duration: 86400 sec
+  Capabilities:
+    Sent: 
+      0x508  (MP: Point-to-Multipoint (P2MP))
+      0x509  (MP: Multipoint-to-Multipoint (MP2MP))
+      0x50b  (Typed Wildcard FEC)
+      0x50c  (MP: Multi-Topology (MT))
+    Received: 
+      0x508  (MP: Point-to-Multipoint (P2MP))
+      0x509  (MP: Multipoint-to-Multipoint (MP2MP))
+      0x50b  (Typed Wildcard FEC)
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery
+Sat Oct 24 07:17:16.466 UTC
+
+Local LDP Identifier: 10.255.0.1:0
+Discovery Sources:
+  Interfaces:
+    GigabitEthernet0/0/0/0 : xmit/recv
+      VRF: 'default' (0x60000000)
+      LDP Id: 10.255.0.11:0, Transport address: 10.255.0.11
+          Hold time: 15 sec (local:15 sec, peer:15 sec)
+          Established: Oct 24 07:16:01.823 (00:01:14 ago)
+
+    GigabitEthernet0/0/0/1 : xmit/recv
+      VRF: 'default' (0x60000000)
+      LDP Id: 10.255.0.13:0, Transport address: 10.255.0.13
+          Hold time: 15 sec (local:15 sec, peer:15 sec)
+          Established: Oct 24 07:07:25.755 (00:09:50 ago)
+
+  Targeted Hellos:
+    10.255.0.1 -> 10.255.0.11 (active), xmit
+          Established: N/A
+
+    10.255.0.1 -> 10.255.0.13 (active), xmit
+          Established: N/A
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sat Oct 24 07:17:16.868 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:07:14    1     0     3     0     8      0    
+10.255.0.11:0      N   N    00:01:15    1     0     3     0     8      0    
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery
+ Local LDP Identifier:
+    10.255.0.11:0
+    Discovery Sources:
+    Interfaces:
+	Ethernet0/0 (ldp): xmit/recv
+	    LDP Id: 10.255.0.1:0
+	Ethernet0/1 (ldp): xmit/recv
+	    LDP Id: 10.255.0.12:0
+RT01#
+show logging | include LDP|TAGCON
+*Oct 24 07:13:17.344: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is DOWN (LDP disabled on interface)
+*Oct 24 07:16:00.924: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is UP
+RT01#
+
+######## 07:17:18 f-2: RT01 に targeted ハローの受け入れ
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+mpls ldp discovery targeted-hello accept
+RT01(config)#
+end
+RT01#
+show mpls ldp neighbor 10.255.0.11:0 detail
+Sat Oct 24 07:17:53.063 UTC
+
+Peer LDP Identifier: 10.255.0.11:0
+  TCP connection: 10.255.0.11:32253 - 10.255.0.1:646
+  Graceful Restart: No
+  Session Holdtime: 180 sec
+  State: Oper; Msgs sent/rcvd: 11/13; Downstream-Unsolicited
+  Up time: 00:01:51
+  LDP Discovery Sources:
+    IPv4: (2)
+      GigabitEthernet0/0/0/0
+      Targeted Hello (10.255.0.1 -> 10.255.0.11, active)
+    IPv6: (0)
+  Addresses bound to this peer:
+    IPv4: (3)
+      10.0.1.11      10.0.12.11     10.255.0.11    
+    IPv6: (0)
+  Peer holdtime: 180 sec; KA interval: 60 sec; Peer state: Estab
+  NSR: Disabled
+  Clients: Session Protection
+  Session Protection:
+    Enabled, state: Ready
+    Duration: 86400 sec
+  Capabilities:
+    Sent: 
+      0x508  (MP: Point-to-Multipoint (P2MP))
+      0x509  (MP: Multipoint-to-Multipoint (MP2MP))
+      0x50b  (Typed Wildcard FEC)
+      0x50c  (MP: Multi-Topology (MT))
+    Received: 
+      0x508  (MP: Point-to-Multipoint (P2MP))
+      0x509  (MP: Multipoint-to-Multipoint (MP2MP))
+      0x50b  (Typed Wildcard FEC)
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery
+Sat Oct 24 07:17:53.463 UTC
+
+Local LDP Identifier: 10.255.0.1:0
+Discovery Sources:
+  Interfaces:
+    GigabitEthernet0/0/0/0 : xmit/recv
+      VRF: 'default' (0x60000000)
+      LDP Id: 10.255.0.11:0, Transport address: 10.255.0.11
+          Hold time: 15 sec (local:15 sec, peer:15 sec)
+          Established: Oct 24 07:16:01.823 (00:01:51 ago)
+
+    GigabitEthernet0/0/0/1 : xmit/recv
+      VRF: 'default' (0x60000000)
+      LDP Id: 10.255.0.13:0, Transport address: 10.255.0.13
+          Hold time: 15 sec (local:15 sec, peer:15 sec)
+          Established: Oct 24 07:07:25.755 (00:10:27 ago)
+
+  Targeted Hellos:
+    10.255.0.1 -> 10.255.0.11 (active), xmit/recv
+      LDP Id: 10.255.0.11:0
+          Hold time: 90 sec (local:90 sec, peer:90 sec)
+          Established: Oct 24 07:17:21.397 (00:00:32 ago)
+
+    10.255.0.1 -> 10.255.0.13 (active), xmit
+          Established: N/A
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery
+ Local LDP Identifier:
+    10.255.0.11:0
+    Discovery Sources:
+    Interfaces:
+	Ethernet0/0 (ldp): xmit/recv
+	    LDP Id: 10.255.0.1:0
+	Ethernet0/1 (ldp): xmit/recv
+	    LDP Id: 10.255.0.12:0
+    Targeted Hellos:
+	10.255.0.11 -> 10.255.0.1 (ldp):  passive, xmit/recv
+	    LDP Id: 10.255.0.1:0
+RT01#
+show mpls ldp neighbor 10.255.0.1 detail | include Up time|Addresses|Targeted|Src
+	Up time: 00:01:53; UID: 5; Peer Id 1
+	  Ethernet0/0; Src IP addr: 10.0.1.1 
+	  Targeted Hello 10.255.0.11 -> 10.255.0.1, passive;
+        Addresses bound to peer LDP Ident:
+RT01#

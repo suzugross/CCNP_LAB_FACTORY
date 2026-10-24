@@ -1,0 +1,285 @@
+
+######## 07:09:05 c-1: RT03 に XR01 向けのパスワード(XR01 はまだ無し)→ セッションを張り直させる
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT03(config)#
+mpls ldp neighbor 10.255.0.1 password LDP-CORE-7
+RT03(config)#
+end
+RT03#
+clear mpls ldp neighbor 10.255.0.1
+RT03#
+show mpls ldp neighbor | include Peer|State
+    Peer LDP Ident: 10.255.0.12:0; Local LDP Ident 10.255.0.13:0
+	State: Oper; Msgs sent/rcvd: 30/31; Downstream
+RT03#
+show mpls ldp discovery
+ Local LDP Identifier:
+    10.255.0.13:0
+    Discovery Sources:
+    Interfaces:
+	Ethernet0/0 (ldp): xmit/recv
+	    LDP Id: 10.255.0.1:0
+	Ethernet0/1 (ldp): xmit/recv
+	    LDP Id: 10.255.0.12:0
+RT03#
+show logging | include TCP|LDP|MD5|AUTH
+*Oct 24 06:52:53.106: %PKI-2-NON_AUTHORITATIVE_CLOCK: PKI functions can not be initialized until an authoritative time source, like NTP, can be obtained.
+*Oct 24 07:04:36.484: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is UP
+*Oct 24 07:05:24.098: %SSH-5-SSH2_USERAUTH: User 'SUZUKI' authentication for SSH2 Session from 10.1.10.6 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Oct 24 07:06:17.354: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is DOWN (TCP connection closed by peer)
+*Oct 24 07:07:33.951: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is UP
+*Oct 24 07:09:06.243: %SSH-5-SSH2_USERAUTH: User 'SUZUKI' authentication for SSH2 Session from 10.1.10.6 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+*Oct 24 07:09:08.262: %LDP-5-CLEAR_NBRS: Clear LDP neighbors (10.255.0.1) by SUZUKI on vty0 (10.1.10.6)
+*Oct 24 07:09:08.262: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is DOWN (User cleared session manually)
+*Oct 24 07:09:49.182: %SSH-5-SSH2_USERAUTH: User 'SUZUKI' authentication for SSH2 Session from 10.1.10.6 (tty = 0) using crypto cipher 'aes128-ctr', hmac 'hmac-sha2-256-etm@openssh.com' Succeeded
+RT03#
+show mpls ldp neighbor brief
+Sat Oct 24 07:09:53.198 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.11:0      N   N    00:02:25    1     0     3     0     8      0    
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery
+Sat Oct 24 07:09:53.598 UTC
+
+Local LDP Identifier: 10.255.0.1:0
+Discovery Sources:
+  Interfaces:
+    GigabitEthernet0/0/0/0 : xmit/recv
+      VRF: 'default' (0x60000000)
+      LDP Id: 10.255.0.11:0, Transport address: 10.255.0.11
+          Hold time: 15 sec (local:15 sec, peer:15 sec)
+          Established: Oct 24 07:07:24.071 (00:02:29 ago)
+
+    GigabitEthernet0/0/0/1 : xmit/recv
+      VRF: 'default' (0x60000000)
+      LDP Id: 10.255.0.13:0, Transport address: 10.255.0.13
+          Hold time: 15 sec (local:15 sec, peer:15 sec)
+          Established: Oct 24 07:07:25.755 (00:02:27 ago)
+
+RP/0/RP0/CPU0:XR01#
+show logging last 15
+Sat Oct 24 07:09:53.999 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 19 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 210 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 24 07:07:27.710 UTC: config[67006]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000007' to view the changes. 
+RP/0/RP0/CPU0:Oct 24 07:07:29.455 UTC: config[67006]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 24 07:07:29.867 UTC: SSHD_[66975]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 24 07:08:00.162 UTC: SSHD_[67036]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 24 07:08:00.168 UTC: SSHD_[67036]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 24 07:08:02.193 UTC: SSHD_[67036]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 24 07:08:32.471 UTC: SSHD_[67092]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 24 07:08:32.475 UTC: SSHD_[67092]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 24 07:08:40.416 UTC: SSHD_[67092]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 24 07:09:11.963 UTC: tcp[414]: %IP-TCP-3-NOAUTH : Authentication info not programmed for the packet received from 10.255.0.13:32122 to 10.255.0.1:646 
+RP/0/RP0/CPU0:Oct 24 07:09:25.964 UTC: tcp[414]: %IP-TCP-3-NOAUTH : Authentication info not programmed for the packet received from 10.255.0.13:32122 to 10.255.0.1:646 
+RP/0/RP0/CPU0:Oct 24 07:09:36.868 UTC: tcp[414]: %IP-TCP-3-NOAUTH : Authentication info not programmed for the packet received from 10.255.0.13:61725 to 10.255.0.1:646 
+RP/0/RP0/CPU0:Oct 24 07:09:48.385 UTC: tcp[414]: %IP-TCP-3-NOAUTH : Authentication info not programmed for the packet received from 10.255.0.13:17741 to 10.255.0.1:646 
+RP/0/RP0/CPU0:Oct 24 07:09:52.383 UTC: SSHD_[67200]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 24 07:09:52.389 UTC: SSHD_[67200]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:XR01#
+
+######## 07:09:53 c-2: RT03 に password required(パスワードなしのセッションを一切受けない)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT03(config)#
+mpls ldp password required
+RT03(config)#
+end
+RT03#
+show mpls ldp neighbor | include Peer|State
+    Peer LDP Ident: 10.255.0.12:0
+RT03#
+
+######## 07:09:56 c-3: XR01 に RT03 向けのパスワード
+configure
+Sat Oct 24 07:09:58.420 UTC
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR01(config-ldp)#
+neighbor 10.255.0.13:0 password clear LDP-CORE-7
+RP/0/RP0/CPU0:XR01(config-ldp)#
+commit
+Sat Oct 24 07:09:59.721 UTC
+RP/0/RP0/CPU0:XR01(config-ldp)#
+show configuration failed
+Sat Oct 24 07:10:00.526 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-ldp)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config mpls ldp
+Sat Oct 24 07:10:02.340 UTC
+mpls ldp
+ router-id 10.255.0.1
+ neighbor
+  10.255.0.13:0 password encrypted 022A206B4625201369035E
+ !
+ address-family ipv4
+ !
+ interface GigabitEthernet0/0/0/0
+ !
+ interface GigabitEthernet0/0/0/1
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sat Oct 24 07:10:43.824 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.11:0      N   N    00:03:15    1     0     3     0     8      0    
+10.255.0.13:0      N   N    00:00:41    1     0     3     0     8      0    
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor 10.255.0.13:0 detail
+Sat Oct 24 07:10:44.226 UTC
+
+Peer LDP Identifier: 10.255.0.13:0
+  TCP connection: 10.255.0.13:17741 - 10.255.0.1:646; MD5 on
+  Graceful Restart: No
+  Session Holdtime: 180 sec
+  State: Oper; Msgs sent/rcvd: 14/11; Downstream-Unsolicited
+  Up time: 00:00:42
+  LDP Discovery Sources:
+    IPv4: (1)
+      GigabitEthernet0/0/0/1
+    IPv6: (0)
+  Addresses bound to this peer:
+    IPv4: (3)
+      10.0.3.13      10.0.23.13     10.255.0.13    
+    IPv6: (0)
+  Peer holdtime: 180 sec; KA interval: 60 sec; Peer state: Estab
+  NSR: Disabled
+  Capabilities:
+    Sent: 
+      0x508  (MP: Point-to-Multipoint (P2MP))
+      0x509  (MP: Multipoint-to-Multipoint (MP2MP))
+      0x50b  (Typed Wildcard FEC)
+      0x50c  (MP: Multi-Topology (MT))
+    Received: 
+      0x508  (MP: Point-to-Multipoint (P2MP))
+      0x509  (MP: Multipoint-to-Multipoint (MP2MP))
+      0x50b  (Typed Wildcard FEC)
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor detail | include Peer|State|MD5|Password|password
+    Peer LDP Ident: 10.255.0.1:0; Local LDP Ident 10.255.0.13:0
+	TCP connection: 10.255.0.1.646 - 10.255.0.13.17741; MD5 on
+	Password: required, neighbor, in use
+	State: Oper; Msgs sent/rcvd: 11/14; Downstream; Last TIB rev sent 26
+	Up time: 00:00:43; UID: 4; Peer Id 1
+	Peer holdtime: 180000 ms; KA interval: 60000 ms; Peer state: estab
+RT03#
+
+######## 07:10:45 c-4: XR01 の全体の既定パスワード(RT01 はパスワードなし)→ RT01 とのセッションはどうなるか(試したら外す)
+configure
+Sat Oct 24 07:10:47.684 UTC
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR01(config-ldp)#
+neighbor password clear LDP-CORE-7
+RP/0/RP0/CPU0:XR01(config-ldp)#
+commit
+Sat Oct 24 07:10:48.985 UTC
+RP/0/RP0/CPU0:XR01(config-ldp)#
+show configuration failed
+Sat Oct 24 07:10:49.792 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-ldp)#
+end
+RP/0/RP0/CPU0:XR01#
+clear mpls ldp neighbor 10.255.0.11
+Sat Oct 24 07:10:57.700 UTC
+Peer not found.
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sat Oct 24 07:11:39.387 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:01:37    1     0     3     0     8      0    
+
+RP/0/RP0/CPU0:XR01#
+show logging last 15
+Sat Oct 24 07:11:39.787 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 23 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 233 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 24 07:10:44.639 UTC: SSHD_[67419]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 24 07:10:46.851 UTC: SSHD_[67454]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 24 07:10:46.855 UTC: SSHD_[67454]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 24 07:10:49.445 UTC: config[67485]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000009' to view the changes. 
+RP/0/RP0/CPU0:Oct 24 07:10:51.195 UTC: config[67485]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 24 07:10:51.609 UTC: SSHD_[67454]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 24 07:10:52.374 UTC: tcp[414]: %IP-TCP-3-BADAUTH : Invalid MD5 digest from 10.255.0.11:13032 to 10.255.0.1:646 for vrf:default (0x60000000) 
+RP/0/RP0/CPU0:Oct 24 07:10:56.890 UTC: SSHD_[67509]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 24 07:10:56.893 UTC: SSHD_[67509]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 24 07:10:58.115 UTC: SSHD_[67509]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 24 07:11:06.376 UTC: tcp[414]: %IP-TCP-3-BADAUTH : Invalid MD5 digest from 10.255.0.11:13032 to 10.255.0.1:646 for vrf:default (0x60000000) 
+RP/0/RP0/CPU0:Oct 24 07:11:16.679 UTC: tcp[414]: %IP-TCP-3-BADAUTH : Invalid MD5 digest from 10.255.0.11:52850 to 10.255.0.1:646 for vrf:default (0x60000000) 
+RP/0/RP0/CPU0:Oct 24 07:11:28.827 UTC: tcp[414]: %IP-TCP-3-BADAUTH : Invalid MD5 digest from 10.255.0.11:44199 to 10.255.0.1:646 for vrf:default (0x60000000) 
+RP/0/RP0/CPU0:Oct 24 07:11:38.574 UTC: SSHD_[67584]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 24 07:11:38.578 UTC: SSHD_[67584]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor | include Peer|State
+    Peer LDP Ident: 10.255.0.12:0; Local LDP Ident 10.255.0.11:0
+	State: Oper; Msgs sent/rcvd: 33/33; Downstream
+RT01#
+show logging | include TCP|LDP|MD5
+*Oct 24 07:04:36.484: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is UP
+*Oct 24 07:06:17.353: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is DOWN (TCP connection closed by peer)
+*Oct 24 07:07:27.850: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is UP
+*Oct 24 07:10:48.121: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is DOWN (TCP connection closed by peer)
+RT01#
+configure
+Sat Oct 24 07:11:43.460 UTC
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR01(config-ldp)#
+no neighbor password
+RP/0/RP0/CPU0:XR01(config-ldp)#
+commit
+Sat Oct 24 07:11:44.763 UTC
+RP/0/RP0/CPU0:XR01(config-ldp)#
+show configuration failed
+Sat Oct 24 07:11:45.569 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-ldp)#
+end
+RP/0/RP0/CPU0:XR01#
+clear mpls ldp neighbor 10.255.0.11
+Sat Oct 24 07:11:47.375 UTC
+Peer not found.
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sat Oct 24 07:12:28.861 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:02:26    1     0     3     0     8      0    
+10.255.0.11:0      N   N    00:00:41    1     0     3     0     8      0    
+
+RP/0/RP0/CPU0:XR01#

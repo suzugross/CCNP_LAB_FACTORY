@@ -1,0 +1,207 @@
+#### t1: 同期の遅延
+configure
+Sat Oct 24 07:34:23.281 UTC
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR01(config-ldp)#
+igp sync delay on-session-up 10
+RP/0/RP0/CPU0:XR01(config-ldp)#
+commit
+Sat Oct 24 07:34:24.583 UTC
+RP/0/RP0/CPU0:XR01(config-ldp)#
+show configuration failed
+Sat Oct 24 07:34:25.488 UTC
+% No such configuration item(s)
+RP/0/RP0/CPU0:XR01(config-ldp)#
+end
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync
+Sat Oct 24 07:34:27.196 UTC
+GigabitEthernet0/0/0/0:
+  VRF: 'default' (0x60000000)
+  Sync delay: 10 sec
+  Sync status: Ready
+    Peers:
+      10.255.0.11:0
+GigabitEthernet0/0/0/1:
+  VRF: 'default' (0x60000000)
+  Sync delay: 10 sec
+  Sync status: Ready
+    Peers:
+      10.255.0.13:0
+RP/0/RP0/CPU0:XR01#
+show running-config mpls ldp
+Sat Oct 24 07:34:27.595 UTC
+mpls ldp
+ igp sync delay on-session-up 10
+ router-id 10.255.0.1
+ neighbor
+  10.255.0.13:0 password encrypted 022A206B4625201369035E
+ !
+ session protection
+ address-family ipv4
+  label
+   local
+    allocate for host-routes
+   !
+  !
+ !
+ interface GigabitEthernet0/0/0/0
+ !
+ interface GigabitEthernet0/0/0/1
+ !
+!
+RP/0/RP0/CPU0:XR01#
+#### t2: 保護を RT01 だけに・最長 600 秒
+show mpls ldp neighbor 10.255.0.13:0 detail | include "Prote$5.0.13:0 detail | include "Protec                          tion|state|Duration"show mpls ldp neighbor 10.255.0.13:0 detail | include "Prot$
+Sat Oct 24 07:34:29.078 UTC
+  Peer holdtime: 180 sec; KA interval: 60 sec; Peer state: Estab
+  Session Protection:
+    Enabled, state: Incomplete
+    Duration: 86400 sec
+RP/0/RP0/CPU0:XR01#
+configure
+Sat Oct 24 07:34:29.478 UTC
+RP/0/RP0/CPU0:XR01(config)#
+ipv4 access-list LDP-SP
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+10 permit ipv4 host 10.255.0.11 any
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR01(config-ldp)#
+no session protection
+RP/0/RP0/CPU0:XR01(config-ldp)#
+session protection for LDP-SP duration 600
+RP/0/RP0/CPU0:XR01(config-ldp)#
+commit
+Sat Oct 24 07:34:32.384 UTC
+RP/0/RP0/CPU0:XR01(config-ldp)#
+show configuration failed
+Sat Oct 24 07:34:33.290 UTC
+% No such configuration item(s)
+RP/0/RP0/CPU0:XR01(config-ldp)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config mpls ldp
+Sat Oct 24 07:34:56.224 UTC
+mpls ldp
+ igp sync delay on-session-up 10
+ router-id 10.255.0.1
+ neighbor
+  10.255.0.13:0 password encrypted 022A206B4625201369035E
+ !
+ session protection for LDP-SP duration 600
+ address-family ipv4
+  label
+   local
+    allocate for host-routes
+   !
+  !
+ !
+ interface GigabitEthernet0/0/0/0
+ !
+ interface GigabitEthernet0/0/0/1
+ !
+!
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor 10.255.0.11:0 detail | include "Prote$5.0.11:0 detail | include "Protec                          tion|state|Duration|Target$Protection|state|Duration|Targete                          d"show mpls ldp neighbor 10.255.0.11:0 detail | include "Prot$
+Sat Oct 24 07:34:56.627 UTC
+      Targeted Hello (10.255.0.1 -> 10.255.0.11, active)
+  Peer holdtime: 180 sec; KA interval: 60 sec; Peer state: Estab
+  Clients: Session Protection
+  Session Protection:
+    Enabled, state: Ready
+    ACL: 'LDP-SP', Duration: 600 sec
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor 10.255.0.13:0 detail | include "Prote$5.0.13:0 detail | include "Protec                          tion|state|Duration|Target$Protection|state|Duration|Targete                          d"show mpls ldp neighbor 10.255.0.13:0 detail | include "Prot$
+Sat Oct 24 07:34:57.027 UTC
+  Peer holdtime: 180 sec; KA interval: 60 sec; Peer state: Estab
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery | include "Targeted|->"
+Sat Oct 24 07:34:57.428 UTC
+  Targeted Hellos:
+    10.255.0.1 -> 10.255.0.11 (active), xmit/recv
+RP/0/RP0/CPU0:XR01#
+#### t3: explicit-null
+show mpls forwarding-table 10.255.0.1
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+20         Pop Label  10.255.0.1/32    13040         Et0/0      10.0.1.1    
+RT01#
+configure
+Sat Oct 24 07:35:00.659 UTC
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR01(config-ldp)#
+address-family ipv4
+RP/0/RP0/CPU0:XR01(config-ldp-af)#
+label
+RP/0/RP0/CPU0:XR01(config-ldp-af-lbl)#
+local
+RP/0/RP0/CPU0:XR01(config-ldp-af-lbl-lcl)#
+advertise
+RP/0/RP0/CPU0:XR01(config-ldp-af-lbl-lcl-advt)#
+explicit-null
+RP/0/RP0/CPU0:XR01(config-ldp-af-lbl-lcl-advt)#
+commit
+Sat Oct 24 07:35:03.563 UTC
+RP/0/RP0/CPU0:XR01(config-ldp-af-lbl-lcl-advt)#
+show configuration failed
+Sat Oct 24 07:35:04.367 UTC
+% No such configuration item(s)
+RP/0/RP0/CPU0:XR01(config-ldp-af-lbl-lcl-advt)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config mpls ldp address-family
+% Incomplete command.
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding-table 10.255.0.1
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+20         No Label   10.255.0.1/32    13040         Et0/0      10.0.1.1    
+RT01#
+show mpls ldp bindings 10.255.0.1 32
+  lib entry: 10.255.0.1/32, rev 17
+	local binding:  label: 20
+	remote binding: lsr: 10.255.0.12:0, label: 20
+	remote binding: lsr: 10.255.0.1:0, label: exp-null
+RT01#
+traceroute mpls ipv4 10.255.0.1/32 timeout 1
+Tracing MPLS Label Switched Path to 10.255.0.1/32, timeout is 1 seconds
+Type escape sequence to abort.
+  0 10.0.12.12 MRU 1500 [Labels: 20 Exp: 0]
+L 1 10.0.12.11 MRU 1500 [Labels: explicit-null Exp: 0] 1 ms
+! 2 10.0.1.1 11 ms
+RT02#
+ping 10.30.0.1 source Loopback100 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 10.30.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/3/6 ms
+RT02#
+show mpls forwarding
+Sat Oct 24 07:35:22.185 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24000  Pop         10.255.0.13/32     Gi0/0/0/1    10.0.3.13       4308        
+24001  16          10.255.0.12/32     Gi0/0/0/0    10.0.1.11       14530       
+24002  Pop         10.255.0.11/32     Gi0/0/0/0    10.0.1.11       1276        
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding labels 0
+Sat Oct 24 07:35:22.666 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+0      Aggregate   Exp-Null-v4        
+RP/0/RP0/CPU0:XR01#
+ping 10.20.0.1 source Loopback100 count 3
+Sat Oct 24 07:35:23.067 UTC
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 10.20.0.1 timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 3/3/4 ms
+RP/0/RP0/CPU0:XR01#

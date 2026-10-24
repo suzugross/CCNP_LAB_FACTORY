@@ -1,0 +1,31 @@
+# M8-5: RT02 の運用者が MPLS の LSP ping/traceroute で XR01 までの LSP を確かめられる(XR01 が応える・XR01 からも打てる)。
+# XR01 宛ては最後までラベル付きで届ける(PHP させない= explicit-null)。`mpls oam` なしの XR01 は MPLS エコーに応えず、
+# 自分から打つと「MPLS Embedded Management Subsystem is not running」(PoC §20.4-11)。traceroute は ttl 4 で打ち切る(応えないと 30 ホップ待つ)。
+problem: XRT-07
+total_points: 100
+checks:
+  - name: 'M8-5 RT02: an MPLS LSP ping to XR01''s Loopback0 succeeds'
+    node: RT02
+    command: 'ping mpls ipv4 10.255.0.1/32 repeat 3'
+    raw:
+      - { regex: 'Success rate is 100 percent' }
+    points: 25
+  - name: 'M8-5 RT02: an MPLS LSP traceroute to XR01 ends at XR01, with the label kept to the last hop'
+    node: RT02
+    command: 'traceroute mpls ipv4 10.255.0.1/32 timeout 1 ttl 4'
+    raw:
+      - { regex: 'L 1 10\.0\.12\.11 [^\n]*explicit-null' }
+      - { regex: '! 2 10\.0\.1\.1 ' }
+    points: 35
+  - name: 'M8-5 RT01: sends XR01''s traffic with the explicit null label'
+    node: RT01
+    command: 'show mpls forwarding-table 10.255.0.1'
+    raw:
+      - { regex: 'explicit-n\s+10\.255\.0\.1/32' }
+    points: 15
+  - name: 'M8-5 XR01: an MPLS LSP ping from XR01 to RT02''s Loopback0 succeeds'
+    node: XR01
+    command: 'ping mpls ipv4 10.255.0.12/32 repeat 3'
+    raw:
+      - { regex: 'Success rate is 100 percent' }
+    points: 25

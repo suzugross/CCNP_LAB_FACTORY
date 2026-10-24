@@ -1,0 +1,284 @@
+# XRT-07 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn XRT-07 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# ここに書いた挙動は IOS XRd 26.1.1(+IOL 17.15)の実機で確認した(設計= problems/_drafts/XR-TRACK.design.md §20。
+# XRv9000 26.1.1 でも同じ結果= §20.6)。
+# 読み物(BL-252)= Reading タブに出す本(reading/<key>/)。各課題の read: はその本の「ページ#節」(節= data-sec)。
+reading: xr
+steps:
+  - id: m8t1
+    title: { en: "M8-1  A provider edge outside the label core", ja: "M8-1  ラベルのコアに入っていない PE" }
+    check: m8t1
+    read: [80-m8-mpls-ldp#s1-1, 80-m8-mpls-ldp#s2-2, 80-m8-mpls-ldp#s2-3]
+    hints:
+      - en: "Customer A's routes are in BGP, and RT01 does not run BGP: only a label can carry the traffic through RT01. CHG-1021 left LDP half done. Look at what XR01's LDP has, and at whether a session forms once LDP runs on the links. Hellos that are exchanged without a session forming point to the address that the TCP connection uses."
+        ja: "顧客 A のルートは BGP にあり、RT01 は BGP を実行していません。RT01 を通してトラフィックを運べるのはラベルだけです。CHG-1021 は LDP を中途半端なままにしています。XR01 の LDP に何があるか、リンクで LDP を動作させたときにセッションができるかを見てください。hello はやり取りされているのにセッションができないなら、TCP 接続が使うアドレスを疑ってください。"
+      - en: "On XR01, `show mpls interfaces` lists the interfaces that run LDP, `show mpls ldp discovery` the hellos received, and `show mpls ldp parameters` the LDP ID and the transport address. On RT01, `show mpls ldp discovery detail` shows the transport address that XR01 advertises and whether RT01 has a route to it. Guide: MPLS Configuration Guide, 'Implementing MPLS Label Distribution Protocol' — 'Setting Up LDP Neighbors' and 'Configuring Global Transport Address'."
+        ja: "XR01 では、`show mpls interfaces` が LDP を動作させているインターフェイスを、`show mpls ldp discovery` が受信した hello を、`show mpls ldp parameters` が LDP ID とトランスポート アドレスを表示します。RT01 の `show mpls ldp discovery detail` は、XR01 がアドバタイズしているトランスポート アドレスと、RT01 がそこへのルートを持っているかを表示します。ガイド: MPLS Configuration Guide の「Implementing MPLS Label Distribution Protocol」の「Setting Up LDP Neighbors」と「Configuring Global Transport Address」。"
+      - en: "Under `mpls ldp`: `interface GigabitEthernet0/0/0/0` and `interface GigabitEthernet0/0/0/1`. Under `mpls ldp` → `address-family ipv4`: `no discovery transport-address`. The default transport address is the LDP ID, which is Loopback0's address here."
+        ja: "`mpls ldp` の下に `interface GigabitEthernet0/0/0/0` と `interface GigabitEthernet0/0/0/1`。`mpls ldp` → `address-family ipv4` の下で `no discovery transport-address`。既定のトランスポート アドレスは LDP ID で、ここでは Loopback0 のアドレスです。"
+    solution:
+      en: |
+        configure
+         mpls ldp
+          interface GigabitEthernet0/0/0/0
+          interface GigabitEthernet0/0/0/1
+          address-family ipv4
+           no discovery transport-address
+         commit
+        end
+        CHG-1021 copied two things from PE-OLD's habits and nothing else: an LDP process without interfaces, and a
+        transport address of 10.255.255.1, the management loopback. Once LDP runs on the two links, the hellos come and
+        go, but the TCP session has to be opened between the two transport addresses, and no router in the core has a
+        route to Loopback1: RT01 says `no route to transport addr` in `show mpls ldp discovery detail`, and XR01's
+        `show mpls ldp neighbor brief` stays empty. The LDP ID itself was already right: without `router-id` under
+        `mpls ldp`, IOS XR takes the router ID of the system, which is Loopback0 here (`show router-id`). Removing the
+        line makes the transport address follow the LDP ID again; `discovery transport-address 10.255.0.1` does the
+        same explicitly. Advertising Loopback1 in IS-IS would also bring the session up, but against the rule, and the
+        LDP ID and the transport address would then differ. `mpls ldp auto-config` under the IPv4 address family of
+        `router isis CORE` is another way to enable LDP: it runs LDP on every IS-IS interface except the loopbacks.
+        With the session up, XR01 sends customer A's packets with RT01's label for 10.255.0.12/32 (`show mpls forwarding`).
+        RT01 removes the label (penultimate hop popping) and hands the packet to RT02 without ever looking at the
+        destination address, for which it has no route.
+      ja: |
+        configure
+         mpls ldp
+          interface GigabitEthernet0/0/0/0
+          interface GigabitEthernet0/0/0/1
+          address-family ipv4
+           no discovery transport-address
+         commit
+        end
+        CHG-1021 が PE-OLD から写したのは 2 つだけでした。インターフェイスの無い LDP プロセスと、管理用ループバックの
+        10.255.255.1 をトランスポート アドレスにする設定です。2 本のリンクで LDP を動作させると hello は行き来しますが、
+        TCP セッションは 2 つのトランスポート アドレスの間で開く必要があり、コアには Loopback1 へのルートを持つルータが
+        ありません。RT01 は `show mpls ldp discovery detail` に `no route to transport addr` と表示し、XR01 の
+        `show mpls ldp neighbor brief` は空のままでした。LDP ID 自体は初めから正しい値でした。`mpls ldp` の下に `router-id`
+        が無いとき、IOS XR はシステムのルータ ID を使い、ここではそれが Loopback0 です(`show router-id`)。この行を外すと、
+        トランスポート アドレスは再び LDP ID に従います。`discovery transport-address 10.255.0.1` で明示しても同じです。
+        Loopback1 を IS-IS にアドバタイズしてもセッションは上がりますが、ルールに反し、LDP ID とトランスポート アドレスが
+        食い違ったままになります。`router isis CORE` の IPv4 アドレス ファミリーの下の `mpls ldp auto-config` でも LDP を
+        有効にできます。ループバックを除くすべての IS-IS インターフェイスで LDP が動作します。
+        セッションが上がると、XR01 は顧客 A のパケットに RT01 の 10.255.0.12/32 用のラベルを付けて送ります
+        (`show mpls forwarding`)。RT01 はラベルを取り除き(ペナルティメット ホップ ポッピング)、宛先アドレスを一度も見ずに
+        パケットを RT02 へ渡します。RT01 はその宛先へのルートを持っていません。
+
+  - id: m8t2
+    title: { en: "M8-2  Authentication and the labels XR01 allocates", ja: "M8-2  認証と XR01 が割り当てるラベル" }
+    check: m8t2
+    read: [80-m8-mpls-ldp#s3-1, 80-m8-mpls-ldp#s3-2]
+    hints:
+      - en: "Two separate rules. RT03 drops the TCP segments of a session that carry no MD5 signature, and XR01's log tells you about the ones it receives. The second rule is about the prefixes that LDP binds local labels to, not about which of them it advertises to whom."
+        ja: "別々のルールが 2 つあります。RT03 は MD5 の署名が無いセッションの TCP セグメントを廃棄し、XR01 のログは受け取ったセグメントについて知らせています。2 つ目のルールは、LDP がローカル ラベルを結び付けるプレフィックスについてのもので、どれを誰にアドバタイズするかについてではありません。"
+      - en: "`show logging` on XR01 shows `%IP-TCP-3-NOAUTH` for the segments from RT03. On IOS XR the password is set per neighbour and keyed by the neighbour's LDP ID. `show mpls ldp bindings brief` on XR01 lists the local labels; `show mpls ldp bindings neighbor 10.255.0.1` on RT01 shows what RT01 receives from XR01. Guide: MPLS Configuration Guide, 'Setting Up LDP Neighbors' (the password) and 'Configuring Local Label Allocation Control'."
+        ja: "XR01 の `show logging` に、RT03 からのセグメントについて `%IP-TCP-3-NOAUTH` が出ています。IOS XR ではパスワードはネイバーごとに設定し、ネイバーの LDP ID で指定します。XR01 の `show mpls ldp bindings brief` はローカル ラベルの一覧を、RT01 の `show mpls ldp bindings neighbor 10.255.0.1` は RT01 が XR01 から受け取っているものを表示します。ガイド: MPLS Configuration Guide の「Setting Up LDP Neighbors」(パスワード)と「Configuring Local Label Allocation Control」。"
+      - en: "Under `mpls ldp`: `neighbor 10.255.0.13:0 password clear CoreLdp-2026`. Under `mpls ldp` → `address-family ipv4` → `label` → `local`: `allocate for host-routes`."
+        ja: "`mpls ldp` の下に `neighbor 10.255.0.13:0 password clear CoreLdp-2026`。`mpls ldp` → `address-family ipv4` → `label` → `local` の下に `allocate for host-routes`。"
+    solution:
+      en: |
+        configure
+         mpls ldp
+          neighbor 10.255.0.13:0 password clear CoreLdp-2026
+          address-family ipv4
+           label
+            local
+             allocate for host-routes
+         commit
+        end
+        RT03 has `mpls ldp password required` and signs every TCP segment of its LDP sessions. Without a password for
+        RT03, XR01's TCP drops those segments and logs `%IP-TCP-3-NOAUTH : Authentication info not programmed for the
+        packet received from 10.255.0.13`; RT03 logs nothing. `show running-config mpls ldp` keeps the key only in its
+        encrypted form, under a `neighbor` block. A default password for all neighbours (`neighbor password …` without
+        an LDP ID) would also reach RT01, which uses none: IOS XR resets the session with RT01 at the commit and logs
+        `%IP-TCP-3-BADAUTH : Invalid MD5 digest from 10.255.0.11`, and customer A's traffic stops.
+        By default LDP binds a local label to every prefix in the routing table that BGP did not put there: the link
+        networks, Loopback100's 10.30.0.0/16 and the loopbacks. Only the loopbacks are ever the next hop of BGP routes,
+        so only their labels are used. `allocate for host-routes` keeps the /32s; RT01 then receives bindings from
+        XR01 for /32 prefixes only. The labels for the link networks leave XR01's forwarding table a few minutes later.
+        A prefix ACL that lists the /32s works too, but must be kept up to date.
+      ja: |
+        configure
+         mpls ldp
+          neighbor 10.255.0.13:0 password clear CoreLdp-2026
+          address-family ipv4
+           label
+            local
+             allocate for host-routes
+         commit
+        end
+        RT03 は `mpls ldp password required` を設定しており、LDP セッションのすべての TCP セグメントに署名します。RT03 用の
+        パスワードが無いと、XR01 の TCP はそのセグメントを廃棄し、`%IP-TCP-3-NOAUTH : Authentication info not programmed for
+        the packet received from 10.255.0.13` を記録します。RT03 は何も記録しません。`show running-config mpls ldp` では、キーは
+        `neighbor` ブロックの下に暗号化された形でだけ残ります。すべてのネイバーに共通の既定のパスワード(LDP ID を付けない
+        `neighbor password …`)は、パスワードを使わない RT01 にも届きます。IOS XR はコミットの時点で RT01 とのセッションを
+        リセットして `%IP-TCP-3-BADAUTH : Invalid MD5 digest from 10.255.0.11` を記録し、顧客 A のトラフィックが止まります。
+        既定では LDP は、BGP が入れたものを除くルーティング テーブルのすべてのプレフィックスにローカル ラベルを結び付けます。
+        リンクのネットワーク、Loopback100 の 10.30.0.0/16、ループバックです。BGP のルートのネクストホップになるのはループバック
+        だけなので、使われるのはそのラベルだけです。`allocate for host-routes` は /32 だけを残します。RT01 が XR01 から受け取る
+        バインディングも /32 のプレフィックスだけになります。リンクのネットワークのラベルは、数分後に XR01 の転送テーブルから
+        消えます。/32 を列挙したプレフィックス ACL でも動作しますが、保守が必要です。
+
+  - id: m8t3
+    title: { en: "M8-3  Do not send traffic where labels are missing", ja: "M8-3  ラベルの無いところへ流さない" }
+    check: m8t3
+    read: [80-m8-mpls-ldp#s4-1, 80-m8-mpls-ldp#s4-2]
+    hints:
+      - en: "This is LDP-IGP synchronization: IS-IS advertises the link with a metric that keeps traffic off it until LDP is ready on that link. It is enabled in IS-IS, per interface. The 10-second wait is set in LDP."
+        ja: "これは LDP-IGP 同期です。LDP がそのリンクで準備できるまで、IS-IS はトラフィックを遠ざけるメトリックでリンクをアドバタイズします。IS-IS でインターフェイスごとに有効にします。10 秒の待ちは LDP で設定します。"
+      - en: "`show isis interface` shows `MPLS LDP Sync (L1/L2)` and the sync status of each interface; `show mpls ldp igp sync` shows the state of each link and the delay; `show isis database verbose XR01.00-00` shows the metric that XR01 advertises toward RT01. Guides: Routing Configuration Guide, 'Implementing IS-IS' — 'Configuring MPLS LDP IS-IS Synchronization'; MPLS command reference, `igp sync delay`."
+        ja: "`show isis interface` は、インターフェイスごとの `MPLS LDP Sync (L1/L2)` と同期の状態を表示します。`show mpls ldp igp sync` はリンクごとの状態と遅延を、`show isis database verbose XR01.00-00` は XR01 が RT01 に向けてアドバタイズしているメトリックを表示します。ガイド: Routing Configuration Guide の「Implementing IS-IS」の「Configuring MPLS LDP IS-IS Synchronization」、MPLS コマンド リファレンスの `igp sync delay`。"
+      - en: "Under `router isis CORE` → `interface GigabitEthernet0/0/0/0` → `address-family ipv4 unicast`: `mpls ldp sync`, and the same under `interface GigabitEthernet0/0/0/1`. Under `mpls ldp`: `igp sync delay on-session-up 10`."
+        ja: "`router isis CORE` → `interface GigabitEthernet0/0/0/0` → `address-family ipv4 unicast` の下に `mpls ldp sync`。`interface GigabitEthernet0/0/0/1` の下にも同じものを入れます。`mpls ldp` の下に `igp sync delay on-session-up 10`。"
+    solution:
+      en: |
+        configure
+         router isis CORE
+          interface GigabitEthernet0/0/0/0
+           address-family ipv4 unicast
+            mpls ldp sync
+          interface GigabitEthernet0/0/0/1
+           address-family ipv4 unicast
+            mpls ldp sync
+         mpls ldp
+          igp sync delay on-session-up 10
+         commit
+        end
+        Without synchronization, the Check's fault is a black hole. RT01 stops LDP on PRIMARY, but IS-IS stays up, so
+        PRIMARY remains XR01's best path to RT02. XR01 has no label from RT01 any more: its entry for 10.255.0.12/32 shows
+        `Unlabelled`, and customer A's packets reach RT01 as plain IP. RT01 runs no BGP and drops them (0% in the lab).
+        With `mpls ldp sync`, XR01 marks the link `Not ready (No hello adjacency)` as soon as RT01's hellos time out
+        (15 seconds), and IS-IS advertises it with metric 16777214, the largest wide metric that is still usable. The
+        traffic takes BACKUP, labelled by RT03. Only XR01's own direction matters for XR01's traffic; RT01's
+        synchronization does not apply on an interface where RT01 has turned LDP off. `igp sync delay on-session-up 10`
+        holds the link at the high metric for 10 seconds after the session comes up, so that the labels are complete
+        before traffic returns; while it runs, `show mpls ldp igp sync` shows `Sync status: Deferred`. On IOS XR it also runs
+        when the link hellos return to a session that session protection kept (Task M8-4). `mpls ldp sync level 2` passes
+        too, because the instance runs Level 2 only.
+      ja: |
+        configure
+         router isis CORE
+          interface GigabitEthernet0/0/0/0
+           address-family ipv4 unicast
+            mpls ldp sync
+          interface GigabitEthernet0/0/0/1
+           address-family ipv4 unicast
+            mpls ldp sync
+         mpls ldp
+          igp sync delay on-session-up 10
+         commit
+        end
+        同期が無いと、Check が起こす障害はブラック ホールになります。RT01 は PRIMARY で LDP を止めますが、IS-IS はアップのまま
+        なので、PRIMARY は XR01 から RT02 への最良パスのままです。XR01 には RT01 からのラベルがもう無く、10.255.0.12/32 の
+        エントリは `Unlabelled` になり、顧客 A のパケットはただの IP として RT01 に届きます。RT01 は BGP を実行していないので、
+        それを廃棄します(ラボでは 0%)。`mpls ldp sync` があると、RT01 の hello がタイムアウトした時点(15 秒)で XR01 はリンクを
+        `Not ready (No hello adjacency)` とし、IS-IS はそのリンクを 16777214 でアドバタイズします。まだ使用できる最大のワイド
+        メトリックです。トラフィックは RT03 がラベルを付けた BACKUP を通ります。XR01 のトラフィックに関係するのは XR01 自身の
+        方向だけです。RT01 の同期は、RT01 が LDP をオフにしたインターフェイスには適用されません。`igp sync delay on-session-up 10`
+        は、セッションが上がってから 10 秒間リンクを高いメトリックのままにし、ラベルがそろってからトラフィックを戻します。
+        待っている間、`show mpls ldp igp sync` は `Sync status: Deferred` を表示します。IOS XR では、セッション保護が保ったセッション
+        にリンクの hello が戻ったときにも、この待ちが働きます(課題 M8-4)。インスタンスはレベル 2 だけを実行しているので、
+        `mpls ldp sync level 2` でも通ります。
+
+  - id: m8t4
+    title: { en: "M8-4  Keep the session while PRIMARY is down", ja: "M8-4  PRIMARY が切れている間もセッションを保つ" }
+    check: m8t4
+    read: [80-m8-mpls-ldp#s5-1, 80-m8-mpls-ldp#s5-2]
+    hints:
+      - en: "LDP session protection: XR01 keeps the session alive with targeted hellos sent to RT01's LDP ID along any path, so the session and its labels survive while PRIMARY is down. Limit it to RT01, and limit how long it lasts."
+        ja: "LDP セッション保護です。XR01 は RT01 の LDP ID に向けて、どの経路でもよいのでターゲット hello を送り、セッションを維持します。これで PRIMARY が切れている間もセッションとラベルが残ります。対象を RT01 に限り、続く時間も限ってください。"
+      - en: "`show mpls ldp neighbor 10.255.0.11:0 detail` shows `Session Protection` with its state (`Incomplete`, `Ready`, `Protecting`), the ACL and the duration; `show mpls ldp discovery` lists the targeted hellos. The peers are chosen with an IPv4 access list that matches their LDP ID. Guide: MPLS Configuration Guide, 'Configuring LDP Session Protection'; command reference, `session protection`."
+        ja: "`show mpls ldp neighbor 10.255.0.11:0 detail` は、`Session Protection` の状態(`Incomplete`・`Ready`・`Protecting`)、ACL、継続時間を表示します。`show mpls ldp discovery` はターゲット hello の一覧を表示します。対象のピアは、その LDP ID に一致する IPv4 アクセス リストで選びます。ガイド: MPLS Configuration Guide の「Configuring LDP Session Protection」、コマンド リファレンスの `session protection`。"
+      - en: "`ipv4 access-list LDP-SP` with `10 permit ipv4 host 10.255.0.11 any`. Under `mpls ldp`: `session protection for LDP-SP duration 600`."
+        ja: "`ipv4 access-list LDP-SP` に `10 permit ipv4 host 10.255.0.11 any`。`mpls ldp` の下に `session protection for LDP-SP duration 600`。"
+    solution:
+      en: |
+        configure
+         ipv4 access-list LDP-SP
+          10 permit ipv4 host 10.255.0.11 any
+         mpls ldp
+          session protection for LDP-SP duration 600
+         commit
+        end
+        With session protection, XR01 adds a targeted hello adjacency to RT01's LDP ID (10.255.0.11) next to the link
+        adjacency on PRIMARY; RT01 accepts it (`mpls ldp discovery targeted-hello accept`), and the state becomes
+        `Ready`. When PRIMARY fails, the link adjacency times out after 15 seconds, but the targeted hellos and the TCP
+        session find their way through RT03 and RT02 as soon as IS-IS has moved the routes: the state turns to
+        `Protecting`, a holdup timer starts, and the bindings learned from RT01 stay. When PRIMARY returns, the session is
+        still up; the link hellos resume, the 10-second delay of Task M8-3 runs, and the traffic returns to PRIMARY (12
+        seconds after the link in the lab). Without protection, the session ends with its last hello adjacency, the labels
+        are flushed, and the session is built again after the link returns, which is what the last Check looks for in the
+        `Up time` (the traffic came back after about 20 seconds).
+        Without `duration`, the protection lasts 86400 seconds on this release; without the ACL, XR01 also sends
+        targeted hellos to RT03, which does not answer them, and the session with RT03 stays `Incomplete`.
+        Synchronization still takes PRIMARY out of use while it is down, because there is no hello adjacency on the link.
+      ja: |
+        configure
+         ipv4 access-list LDP-SP
+          10 permit ipv4 host 10.255.0.11 any
+         mpls ldp
+          session protection for LDP-SP duration 600
+         commit
+        end
+        セッション保護があると、XR01 は PRIMARY のリンク隣接の横に、RT01 の LDP ID(10.255.0.11)へのターゲット hello の隣接を
+        加えます。RT01 はそれを受け入れ(`mpls ldp discovery targeted-hello accept`)、状態は `Ready` になります。PRIMARY に障害が
+        起きると、リンク隣接は 15 秒でタイムアウトしますが、ターゲット hello と TCP セッションは、IS-IS がルートを移した時点で
+        RT03 と RT02 を通る道を見つけます。状態は `Protecting` になり、ホールドアップ タイマーが始まり、RT01 から学習した
+        バインディングは残ります。PRIMARY が戻っても、セッションはアップしたままです。リンクの hello が戻り、課題 M8-3 の
+        10 秒の待ちが働いて、トラフィックは PRIMARY に戻ります(ラボではリンクの 12 秒後)。保護が無いと、セッションは最後の
+        hello 隣接とともに終わり、ラベルは消され、リンクが戻った後にセッションが作り直されます。最後の Check が `Up time` で
+        見ているのはそこです(トラフィックが戻ったのは約 20 秒後でした)。
+        `duration` が無いと、このリリースでは保護は 86400 秒続きます。ACL が無いと、XR01 は RT03 にもターゲット hello を送り、
+        RT03 はそれに応答しないので、RT03 とのセッションは `Incomplete` のままになります。PRIMARY がダウンしている間はリンクに
+        hello 隣接が無いので、同期によって PRIMARY は引き続き使用されません。
+
+  - id: m8t5
+    title: { en: "M8-5  Verify the path and keep the label to the end", ja: "M8-5  パスを検証し、最後までラベルを保つ" }
+    check: m8t5
+    read: [80-m8-mpls-ldp#s6-1, 80-m8-mpls-ldp#s6-2]
+    hints:
+      - en: "Two separate settings. IOS XR has MPLS OAM turned off by default, both for the tests that it starts and for the ones that it answers. The second is about the label that XR01 asks its neighbours to use for its own prefixes: by default the router before XR01 removes the label."
+        ja: "別々の設定が 2 つあります。IOS XR は既定で MPLS OAM がオフで、自分が始めるテストにも、応答するテストにも使えません。2 つ目は、XR01 が自分のプレフィックスについてネイバーに使わせるラベルの話です。既定では、XR01 の手前のルータがラベルを取り除きます。"
+      - en: "Run `ping mpls ipv4 10.255.0.12/32` on XR01 and read the message. On RT02, `traceroute mpls ipv4 10.255.0.1/32` shows the label at each hop, `implicit-null` or `explicit-null`. `show mpls forwarding-table 10.255.0.1` on RT01 shows what RT01 does with the label. Guides: MPLS Configuration Guide, 'Implementing MPLS OAM' and 'Setting Up LDP Forwarding' (explicit null); command reference, `mpls oam`."
+        ja: "XR01 で `ping mpls ipv4 10.255.0.12/32` を実行し、メッセージを読んでください。RT02 の `traceroute mpls ipv4 10.255.0.1/32` はホップごとのラベル(`implicit-null` か `explicit-null` か)を表示します。RT01 の `show mpls forwarding-table 10.255.0.1` は、RT01 がラベルをどう扱っているかを表示します。ガイド: MPLS Configuration Guide の「Implementing MPLS OAM」と「Setting Up LDP Forwarding」(explicit null)、コマンド リファレンスの `mpls oam`。"
+      - en: "Globally: `mpls oam`. Under `mpls ldp` → `address-family ipv4` → `label` → `local` → `advertise`: `explicit-null`."
+        ja: "グローバルに `mpls oam`。`mpls ldp` → `address-family ipv4` → `label` → `local` → `advertise` の下に `explicit-null`。"
+    solution:
+      en: |
+        configure
+         mpls oam
+         mpls ldp
+          address-family ipv4
+           label
+            local
+             advertise
+              explicit-null
+         commit
+        end
+        Without `mpls oam`, XR01 does not answer MPLS echo requests: RT02's LSP ping times out, and its LSP traceroute
+        shows RT01 (`L`) followed by dots. XR01's own `ping mpls` stops with `MPLS Embedded Management Subsystem is not
+        running. To enable, use 'mpls oam' global config command.` IOS answers without any configuration. By default
+        XR01 advertises implicit null for its own prefixes, so RT01 pops the label and the packet reaches XR01 as plain
+        IP, with the EXP bits gone. With `explicit-null` XR01 advertises label 0 instead: RT01's forwarding table shows
+        `explicit-n`, RT02's LSP traceroute shows `explicit-null` at RT01, and the packet arrives at XR01 with a label
+        that still carries the traffic class. RT01 needed 20 to 30 seconds after the commit to switch from `Pop Label` to
+        `explicit-n`; check again after half a minute. A side effect: an ordinary traceroute from RT02's customer network
+        to XR01's now shows RT01, because RT01 no longer pops the label and can send its answer along the path.
+      ja: |
+        configure
+         mpls oam
+         mpls ldp
+          address-family ipv4
+           label
+            local
+             advertise
+              explicit-null
+         commit
+        end
+        `mpls oam` が無いと、XR01 は MPLS エコー要求に応答しません。RT02 の LSP ping はタイムアウトし、LSP traceroute は RT01(`L`)
+        の後に点が続きます。XR01 自身の `ping mpls` は `MPLS Embedded Management Subsystem is not running. To enable, use 'mpls oam'
+        global config command.` で止まります。IOS は何も設定しなくても応答します。既定では XR01 は自分のプレフィックスについて
+        implicit null をアドバタイズするので、RT01 がラベルを取り除き、パケットは EXP ビットを失ったただの IP として XR01 に
+        届きます。`explicit-null` があると、XR01 は代わりにラベル 0 をアドバタイズします。RT01 の転送テーブルは `explicit-n` を
+        表示し、RT02 の LSP traceroute は RT01 で `explicit-null` を表示し、パケットはトラフィック クラスを保ったラベルを付けたまま
+        XR01 に届きます。RT01 が `Pop Label` から `explicit-n` に切り替わるまで、コミットから 20〜30 秒かかりました。30 秒ほど
+        待ってから確かめてください。副作用として、RT02 の顧客ネットワークから XR01 の顧客ネットワークへの通常の traceroute に
+        RT01 が表示されるようになります。RT01 はもうラベルを取り除かず、自分の応答をパスに沿って送れるからです。

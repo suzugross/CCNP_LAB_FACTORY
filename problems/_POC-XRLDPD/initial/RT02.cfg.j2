@@ -1,0 +1,47 @@
+! _POC-XRLDPD RT02(IOL・PE)。XR01 と iBGP。お客さまの経路 10.20/16 は BGP だけで広告。
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+mpls ldp neighbor 10.255.0.13 password LDP-CORE-7
+!
+interface Loopback0
+ ip address 10.255.0.12 255.255.255.255
+ ip router isis CORE
+!
+interface Loopback100
+ description CUSTOMER (BGP only)
+ ip address 10.20.0.1 255.255.0.0
+!
+interface {{ links[0] }}
+ description to RT01
+ ip address 10.0.12.12 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 10
+ mpls ip
+ no shutdown
+!
+interface {{ links[1] }}
+ description to RT03
+ ip address 10.0.23.12 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 100
+ mpls ip
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0012.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+!
+router bgp 65000
+ bgp router-id 10.255.0.12
+ bgp log-neighbor-changes
+ neighbor 10.255.0.1 remote-as 65000
+ neighbor 10.255.0.1 update-source Loopback0
+ address-family ipv4
+  network 10.20.0.0 mask 255.255.0.0
+  neighbor 10.255.0.1 activate
+ exit-address-family
+!

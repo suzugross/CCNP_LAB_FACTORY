@@ -1,0 +1,121 @@
+
+######## 07:35:04 bt: 仕込みの候補= 転送アドレスだけ IS-IS に無い Lo1 へ(LDP ID は Lo0 のまま)→ 戻す
+show router-id
+Sat Oct 24 07:35:05.575 UTC
+Router-ID         Interface
+      
+10.255.0.1        Loopback0       
+
+IPv6 router id is not enabled - Configure IPv6 address on loopback interface
+RP/0/RP0/CPU0:XR01#
+configure
+Sat Oct 24 07:35:05.976 UTC
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp address-family ipv4 discovery transport-address 10.255.255.1
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sat Oct 24 07:35:06.977 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sat Oct 24 07:35:07.379 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sat Oct 24 07:35:55.293 UTC
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery
+Sat Oct 24 07:35:55.694 UTC
+
+Local LDP Identifier: 10.255.0.1:0
+Discovery Sources:
+  Interfaces:
+    GigabitEthernet0/0/0/0 : xmit/recv
+      VRF: 'default' (0x60000000)
+      LDP Id: 10.255.0.11:0, Transport address: 10.255.0.11
+          Hold time: 15 sec (local:15 sec, peer:15 sec)
+          Established: Oct 24 07:35:09.870 (00:00:45 ago)
+
+    GigabitEthernet0/0/0/1 : xmit/recv
+      VRF: 'default' (0x60000000)
+      LDP Id: 10.255.0.13:0, Transport address: 10.255.0.13
+          Hold time: 15 sec (local:15 sec, peer:15 sec)
+          Established: Oct 24 07:35:09.718 (00:00:45 ago)
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp parameters | include "Router ID|IPv4:"
+Sat Oct 24 07:35:56.097 UTC
+  Router ID: 10.255.0.1
+    IPv4: Implicit
+      IPv4: 10.255.255.1
+RP/0/RP0/CPU0:XR01#
+show logging last 8
+Sat Oct 24 07:35:56.495 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 8 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 71 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 24 07:34:13.182 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[4772]: Connection closed by 10.1.10.6 port 46538 
+RP/0/RP0/CPU0:Oct 24 07:34:53.411 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[4869]: Accepted authentication for SUZUKI from 10.1.10.6 port 49808 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:34:57.141 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[4873]: Connection closed by 10.1.10.6 port 49808 
+RP/0/RP0/CPU0:Oct 24 07:35:04.513 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[5416]: Accepted authentication for SUZUKI from 10.1.10.6 port 39586 ssh2 
+RP/0/RP0/CPU0:Oct 24 07:35:07.063 UTC: config[66912]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000002' to view the changes. 
+RP/0/RP0/CPU0:Oct 24 07:35:08.584 UTC: config[66912]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 24 07:35:08.997 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[5420]: Connection closed by 10.1.10.6 port 39586 
+RP/0/RP0/CPU0:Oct 24 07:35:54.229 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[5535]: Accepted authentication for SUZUKI from 10.1.10.6 port 49404 ssh2 
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery detail
+ Local LDP Identifier:
+    10.255.0.11:0
+    Discovery Sources:
+    Interfaces:
+	Ethernet0/0 (ldp): xmit/recv
+	    Enabled: Interface config
+	    Hello interval: 5000 ms; Transport IP addr: 10.255.0.11
+	    LDP Id: 10.255.0.1:0; no route to transport addr
+	      Src IP addr: 10.0.1.1; Transport IP addr: 10.255.255.1
+	      Hold time: 15 sec; Proposed local/peer: 15/15 sec
+	      Password: not required, none, in use
+            Clients: IPv4, mLDP 
+	Ethernet0/1 (ldp): xmit/recv
+	    Enabled: Interface config
+	    Hello interval: 5000 ms; Transport IP addr: 10.255.0.11
+	    LDP Id: 10.255.0.12:0
+	      Src IP addr: 10.0.12.12; Transport IP addr: 10.255.0.12
+	      Hold time: 15 sec; Proposed local/peer: 15/15 sec
+	      Reachable via 10.255.0.12/32
+	      Password: not required, none, in use
+            Clients: IPv4, mLDP 
+RT01#
+show logging | include LDP
+*Oct 24 07:32:19.270: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.12:0 (1) is UP
+*Oct 24 07:34:15.286: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is UP
+*Oct 24 07:35:07.010: %LDP-5-NBRCHG: LDP Neighbor 10.255.0.1:0 (2) is DOWN (TCP connection closed by peer)
+RT01#
+configure
+Sat Oct 24 07:36:00.359 UTC
+RP/0/RP0/CPU0:XR01(config)#
+no mpls ldp address-family ipv4 discovery transport-address
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sat Oct 24 07:36:01.356 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sat Oct 24 07:36:43.462 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.11:0      N   N    00:00:24    1     0     3     0     8      0    
+10.255.0.13:0      N   N    00:00:24    1     0     3     0     8      0    
+
+RP/0/RP0/CPU0:XR01#

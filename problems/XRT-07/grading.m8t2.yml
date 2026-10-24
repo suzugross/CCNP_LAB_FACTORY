@@ -1,0 +1,32 @@
+# M8-2: LDP の守り= RT03 はパスワード(MD5)の無いセッションを受けない(鍵は課題文)・XR01 はホスト経路(/32)にだけラベルを割り当てる。
+# 白紙(M8-1 後)= RT03 とのセッションなし(XR01 に %IP-TCP-3-NOAUTH)・RT01 は XR01 から /24 の束縛も受け取る。PoC §20.4-6・7。
+problem: XRT-07
+total_points: 100
+checks:
+  - name: 'M8-2 XR01: the LDP session with RT03 is operational and authenticated'
+    node: XR01
+    command: 'show mpls ldp neighbor 10.255.0.13:0'
+    raw:
+      - { regex: 'TCP connection: [^\n]*MD5 on' }
+      - { regex: 'State: Oper' }
+    points: 30
+  - name: 'M8-2 RT03: uses its password on the session with XR01'
+    node: RT03
+    command: 'show mpls ldp neighbor 10.255.0.1 detail'
+    raw:
+      - { regex: 'Password: required, neighbor, in use' }
+      - { regex: 'State: Oper' }
+    points: 20
+  - name: 'M8-2 RT01: receives labels from XR01 for host routes only'
+    node: RT01
+    command: 'show mpls ldp bindings neighbor 10.255.0.1'
+    raw:
+      - { regex: 'lib entry: 10\.255\.0\.12/32' }
+      - { not_regex: 'lib entry: [\d.]+/(?:[0-9]|[12][0-9]|3[01]),' }
+    points: 40
+  - name: 'M8-2 XR01: customer A''s networks still reach each other'
+    node: XR01
+    command: 'ping 10.20.0.1 source Loopback100 count 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 10

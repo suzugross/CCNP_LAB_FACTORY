@@ -1,0 +1,116 @@
+
+######## 07:27:01 h-1: 脇の系統。XRd(XR02)に LDP → RT04 ⇔ RT05 のお客さまの通信がラベルで XR02 を通るか
+show ip bgp
+BGP table version is 3, local router ID is 10.255.1.4
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.40.0.0/16     0.0.0.0                  0         32768 i
+ *>i  10.50.0.0/16     10.255.1.5               0    100      0 i
+RT04#
+ping 10.50.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.50.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.40.0.1 
+.....
+Success rate is 0 percent (0/5)
+RT04#
+configure
+Sat Oct 24 07:27:17.077 UTC
+RP/0/RP0/CPU0:XR02(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR02(config-ldp)#
+router-id 10.255.1.2
+RP/0/RP0/CPU0:XR02(config-ldp)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR02(config-ldp-if)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR02(config-ldp)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR02(config-ldp-if)#
+commit
+Sat Oct 24 07:27:20.095 UTC
+RP/0/RP0/CPU0:XR02(config-ldp-if)#
+show configuration failed
+Sat Oct 24 07:27:20.698 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02(config-ldp-if)#
+end
+RP/0/RP0/CPU0:XR02#
+show mpls ldp neighbor brief
+Sat Oct 24 07:28:03.716 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.1.5:0       N   N    00:00:38    1     0     3     0     6      0    
+10.255.1.4:0       N   N    00:00:38    1     0     3     0     6      0    
+
+RP/0/RP0/CPU0:XR02#
+show mpls forwarding
+Sat Oct 24 07:28:04.124 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24000  Pop         10.255.1.5/32      Gi0/0/0/1    10.1.5.5        1627        
+24001  Pop         10.255.1.4/32      Gi0/0/0/0    10.1.4.4        1627        
+RP/0/RP0/CPU0:XR02#
+show mpls interfaces
+Sat Oct 24 07:28:04.525 UTC
+Interface                  LDP      Tunnel   Static   Enabled 
+-------------------------- -------- -------- -------- --------
+GigabitEthernet0/0/0/0     Yes      No       No       Yes
+GigabitEthernet0/0/0/1     Yes      No       No       Yes
+RP/0/RP0/CPU0:XR02#
+show mpls ldp neighbor | include Peer|State
+    Peer LDP Ident: 10.255.1.2:0; Local LDP Ident 10.255.1.4:0
+	State: Oper; Msgs sent/rcvd: 9/8; Downstream
+RT04#
+show mpls forwarding-table
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+16         Pop Label  10.255.1.2/32    0             Et0/0      10.1.4.2    
+17         Pop Label  10.1.5.0/24      0             Et0/0      10.1.4.2    
+18         24000      10.255.1.5/32    0             Et0/0      10.1.4.2    
+RT04#
+ping 10.50.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.50.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.40.0.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+RT04#
+traceroute 10.50.0.1 source Loopback100 timeout 1 probe 1
+Type escape sequence to abort.
+Tracing the route to 10.50.0.1
+VRF info: (vrf in name/id, vrf out name/id)
+  1 10.1.4.2 [MPLS: Label 24000 Exp 0] 3 msec
+  2 10.1.5.5 2 msec
+RT04#
+ping mpls ipv4 10.255.1.5/32 repeat 3
+Sending 3, 72-byte MPLS Echos to 10.255.1.5/32, 
+     timeout is 2 seconds, send interval is 0 msec:
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+  'L' - labeled output interface, 'B' - unlabeled output interface, 
+  'D' - DS Map mismatch, 'F' - no FEC mapping, 'f' - FEC mismatch,
+  'M' - malformed request, 'm' - unsupported tlvs, 'N' - no label entry, 
+  'P' - no rx intf label prot, 'p' - premature termination of LSP, 
+  'R' - transit router, 'I' - unknown upstream index,
+  'l' - Label switched with FEC change, 'd' - see DDMAP for return code,
+  'X' - unknown return code, 'x' - return code 0
+
+Type escape sequence to abort.
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 1/1/2 ms
+ Total Time Elapsed 5 ms
+
+RT04#

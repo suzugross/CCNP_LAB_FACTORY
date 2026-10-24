@@ -1,0 +1,30 @@
+# XRT-07: XR トラック M8 MPLS と LDP(隣接・認証とラベルの絞り込み・LDP と IS-IS の同期・セッション保護・OAM と explicit-null)。BL-246。
+# 設計= problems/_drafts/XR-TRACK.design.md §20(PoC= _POC-XRLDP/_POC-XRLDPD・課題の確定案 §20.7)。学習目的のラボ(パック・ノルマの対象外)。
+# 盤面= 四角形。XR01 は PE、RT01・RT03 は BGP を動かさない P(BGP フリー コア)、RT02 は PE。
+#   XR01(IOS XRd 26.1.1) Gi0/0/0/0 ── Et0/0 RT01 Et0/1 ── Et0/0 RT02   … PRIMARY+CORE-A(メトリック 10+10)
+#   XR01 Gi0/0/0/1 ── Et0/0 RT03 Et0/1 ── Et0/1 RT02                   … BACKUP+CORE-B(メトリック 100+100)
+# ★XR01 は XRd= PoC で XRv9000 と全項目一致(§20.6)。XRd はラベルなしで通り抜ける TCP/UDP を壊すが、この盤面の採点は ICMP・show・XR01 宛ての LSP ping だけ。
+# 仕込み(XR01 の初期設定)= M8-1: LDP のひな形の転送アドレスが Loopback1(IS-IS に無い)・LDP の IF は未登録。
+# IOS 側は据え付け= 全台 LDP+`mpls ldp sync`・RT01 は targeted ハローを受け入れる・RT03 はパスワード必須(XR01・RT02 向けの鍵)で targeted は受けない。
+# 採点で故障を起こす= M8-3: RT01 Et0/0 で一時 `no mpls ip`/M8-4: CML のリンク条件で XR01-RT01 を loss 100。
+id: XRT-07
+title: "XR Track 07 — MPLS and LDP"
+exam: SP
+topics: [iosxr, mpls, ldp, isis, bgp, tutorial]
+difficulty: 3
+topology: generated
+access: ssh
+target_nodes: [XR01, RT01, RT02, RT03]
+points: 100
+image_family: iol
+node_image_families: { XR01: iosxr }
+node_xr_platforms: { XR01: iosxrd }
+grade_attempts: 2
+lab:
+  # 四角形(上= XR01・RT01、下= RT03・RT02)。PRIMARY が上の辺、BACKUP が左の辺
+  positions: { XR01: [0, 0], RT01: [400, 0], RT03: [0, 240], RT02: [400, 240] }
+  links:
+    - { a: XR01, a_if: 3, b: RT01, b_if: 0 }
+    - { a: RT01, a_if: 1, b: RT02, b_if: 0 }
+    - { a: XR01, a_if: 4, b: RT03, b_if: 0 }
+    - { a: RT03, a_if: 1, b: RT02, b_if: 1 }

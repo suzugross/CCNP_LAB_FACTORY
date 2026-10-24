@@ -71,7 +71,7 @@
 | M5 | ルーティングポリシー言語(route-map との対比・適用点) | 2.5 | XR 1+IOL |
 | M6 | BGP(隣接・アドレスファミリ・属性・パス選択・再配送) | 2.3 2.4 2.6 | XR 1+IOL |
 | M7 | 高可用性(BFD・NSF/NSR・リンク集約) | 2.8 | XR 1+IOL |
-| M8 | MPLS LDP(隣接・同期・セッション保護・OAM・認証とラベルフィルタ) | 3.1 1.5.d | XR 1+IOL |
+| M8 | MPLS LDP(隣接・同期・セッション保護・OAM・認証とラベルフィルタ)。§20。3.1.d Unified MPLS は M8 追補(§20.8) | 3.1 1.5.d | XRd 1+IOL 3 |
 | M9 | L3VPN(Intra-AS・共有サービス) | 4.3 | XR 1+IOL |
 | M10 | セグメントルーティング(セグメント種別・IGP 制御プレーン・TI-LFA。SR-TE・SRv6 は読み物中心) | 3.3 | XR 1〜2+IOL |
 | M11 | L2VPN とキャリアイーサネット(VLAN タグ操作・E-Line/E-LAN・EVPN) | 4.1.a 4.2 | XR 2+IOL |
@@ -386,7 +386,7 @@ CML の XRd は **XRd Control Plane**(`show version`= "cisco XRd Control Plane")
 | M6 BGP | **XRd**(条件つき) | 制御プレーンは一致。ただし盤面で「XRd を通り抜ける TCP/UDP」を作らない(IOL どうしのセッションを XRd 越しに張らない・XRd 越しの SSH/traceroute を確認手段にしない)。確認は ping と XR 自身の show で |
 | M4 IS-IS | **XRd**(2026-10-21 確定・§17.4) | 制御プレーンのみ。比較 PoC で全出力一致 |
 | M7 高可用性 | **XRv9000** | BFD が動かない |
-| M8〜M12(MPLS 転送・L3VPN・SR の転送・L2VPN・QoS・uRPF) | **XRv9000**(見込み) | Control Plane 版は転送が最小限。着手時に確認 |
+| M8〜M12(MPLS 転送・L3VPN・SR の転送・L2VPN・QoS・uRPF) | **XRv9000**(見込み) | Control Plane 版は転送が最小限。着手時に確認。★M8 は比較 PoC で差なし → XRd(§20.6) |
 | M13 自動化 | XRd(見込み) | netconf-yang・grpc・telemetry はあり。着手時に確認 |
 
 ## 15. M5 RPL(2026-10-18 設計・実装中)
@@ -918,3 +918,193 @@ Cat8000v はデータ IF が 3 本(Gi1〜3)= 束 2 本+予備 1 本でちょう�
 
 - 中断の事故: 測定の途中で会話の画面が止まり、裏で前の処理が 3.1・3.2 を進めていた(同じ XR01 に 2 つの作業が同時にコミット)。以後は
   コミットにコメント「try-it measurement (Claude)」を付け、`show configuration commit list detail` で他の作業の有無を見ながら進めた。
+
+## 20. M8 MPLS LDP(2026-10-24 完了= 課題の確定案 §20.7・実装の結果 §20.9)
+
+**範囲= SPCOR 3.1(a LDP 同期・b セッション保護・c LDP ネイバー・e MPLS OAM)と 1.5.d(LDP の認証とラベル割り当ての絞り込み)**。
+3.1.d Unified MPLS(BGP ラベル付きユニキャストで IGP の領域をまたぐ)は盤面に 2 つめの IGP 領域が要るので **M8 追補**に分ける(§20.6)。
+IS-IS の論点= **LDP と IS-IS の同期**(§5 の「IS-IS の深め方」②)。ラボは **`XRT-07`**。
+機種= **XRd 26.1.1**(PoC で XRv9000 と比べて差なし= §20.6。当初は「MPLS の転送が要るので XRv9000」と見込んでいた)。
+2026-10-24 ユーザが XRT-06 を全通過 → PoC の資源を空けるため撤収(ユーザ了承)。
+
+### 20.1 盤面(案)= 四角形。XR01 は PE、コアは BGP を動かさない
+
+| リンク | 端 | 相手 | IS-IS メトリック | 役割 |
+|---|---|---|---|---|
+| PRIMARY | XR01 Gi0/0/0/0 | RT01 Et0/0 | 10 | 主経路 |
+| CORE-A | RT01 Et0/1 | RT02 Et0/0 | 10 | 主経路 |
+| BACKUP | XR01 Gi0/0/0/1 | RT03 Et0/0 | 100 | 予備経路 |
+| CORE-B | RT03 Et0/1 | RT02 Et0/1 | 100 | 予備経路 |
+
+- XR01(XRv9000)と RT02(IOL)が PE= ループバック間で iBGP(AS 65000)。お客さまの経路(XR01 Lo100 10.30/16・RT02 Lo100 10.20/16)は BGP だけで運ぶ。
+  **RT01・RT03 は BGP を動かさない**= ラベルで運ばないとお客さまの通信は P で捨てられる(MPLS が要る理由がそのまま見える)。
+- **XR01 を P でなく PE にした理由**= 同期の効き目が XR 側に出るのは、XR が「ラベルが無いと次のルータが捨てる」位置にいる時だけ。
+  XR01 を P にして両隣が PE だと、XR の先のリンクで LDP が落ちても XR はラベルを外して隣の PE(出口)へ渡すだけで通ってしまい、XR の同期は試験に出ない。
+  XR01 が入口の PE なら、XR01–RT01 の LDP が落ちた時に XR01 はラベルなしで RT01(BGP なし)へ投げる= 捨てられる → XR の同期が要る。逆向き(RT02→XR01)は
+  RT01 が出口の XR01 へラベルなしで渡すだけなので通る。
+- セッション保護= XR01–RT01 のリンクが落ちても、XR01→RT03→RT02→RT01 の道で targeted ハローを交わしてセッションとラベルを保つ。
+- 筋書き(案)= 「IOS のルータは社内の標準どおりに組んである。XR01 は古い PE と入れ替わった新顔で、MPLS のコアにまだ入っていない」。
+  IOS 側(LDP・同期・targeted の受け入れ・RT03 のパスワード)は据え付け、学ぶ側は XR01 を標準に合わせる。
+
+### 20.2 課題(案・PoC で確定)
+
+| 課題 | 中身(挙動で指定) | SPCOR |
+|---|---|---|
+| M8-1(構築+TS) | お客さまの通信がコアを通るようにする(コアに BGP を入れない)。LDP の ID は Lo0 のアドレス。仕込み= XR01 の既定の LDP ID が IS-IS に載らないループバックになり、ハローは見えるのにセッションが上がらない(制約= そのループバックを IS-IS に載せない・全体の router-id は変えない) | 3.1.c |
+| M8-2 | LDP の守り= RT03 はパスワードの無いセッションを受けない(値は課題文で渡す)・XR01 はホスト経路(/32)にだけラベルを割り当てる | 1.5.d |
+| M8-3 | コアのリンクで IS-IS は上がっているのに LDP が上がっていない間は、XR01 はそのリンクで通さない | 3.1.a・IS-IS |
+| M8-4 | XR01–RT01 のリンクが切れても RT01 とのセッションとラベルを保つ(保つのは最長 N 分)。戻った時にセッションの張り直しを待たない | 3.1.b |
+| M8-5 | RT02 の運用者が MPLS の ping/traceroute で XR01 までの LSP を確かめられる(XR01 が応える) | 3.1.e |
+
+- 並びは「前の課題ができている」前提で積む(M8-3 の採点の迂回は RT03 とのセッション= M8-2 の後)。
+- 採点で故障を起こす(案)= M8-3: 採点中だけ RT01 の XR01 側の IF で `no mpls ip`(IS-IS は上がったまま LDP だけ落ちる)→ XR01 の LSP のメトリックと
+  お客さまの ping/M8-4: 採点中だけ CML のリンク条件 loss 100(XR01–RT01)→ セッションが残る・ラベルが残る・戻した後に稼働時間がリセットされない。
+
+### 20.3 PoC で確かめること(盤面 `problems/_POC-XRLDP`= XRv9000 26.1.1+IOL 17.15 ×3、脇に XRd 26.1.1+IOL ×2)
+
+1. 資源・構築時間。LDP なしでお客さまの通信が RT01 で捨てられること(BGP フリー コアの出発点)。
+2. XR の LDP の ID の決まり方(`mpls ldp router-id` なし= 全体の router-id か・最大のループバックか)と、ID(=転送アドレス)に届かない時の両側の表示。
+3. XR ⇔ IOS の MD5。片側だけの時の症状とログ。XR の全体の既定パスワードを入れると他の隣(パスワードなし)はどうなるか。
+4. `label local allocate for host-routes` の効き目(XR の束縛・RT01 から見た束縛・通信への影響)。
+5. 同期= XR の設定場所・広告するメトリックの値・相手の `no mpls ip` で効くか・同期なしでお客さまの通信が捨てられること・セッション保護との関係
+   (リンクのハローが無くセッションは targeted で生きている時の同期の状態)。
+6. セッション保護= IOS が targeted ハローを受け入れない時の状態・受け入れた時の Protecting の表示・束縛の保持・戻した後の稼働時間・保持時間。
+7. OAM= XR が応えるのに `mpls oam` が要るか・XR から打つのに要るか・IOS の既定・traceroute の表示。
+8. 脇の系統= XRd が LDP を張り、ラベルで転送するか(RT04 → XR02 → RT05 のお客さまの ping)。
+
+### 20.4 PoC の結果(2026-10-24・XRv9000 26.1.1+IOL 17.15。盤面 `problems/_POC-XRLDP`・手順 `poc/xr/ldp_poc.sh`・記録 `poc/xr/ldp-*.log`)
+
+公式文書の裏どり(§20.5)で「文書だけでは決まらない」とした点を中心に測った。
+
+1. **資源**= 構築 約 10 分(XR01 は起動 4 分)。XR から見えるメモリ 6GB(空き 3GB)。XRT-06 撤収後の CML にこの盤面+脇の XRd 系統を載せて余裕あり。
+2. **出発点**= LDP なしで XR01 Lo100 ⇔ RT02 Lo100 の ping は**両向きとも 0%**。RT01 は 10.20/16 を知らない(`% Subnet not in table`)。
+   RT02→XR01 向きは RT01 までラベルで届くが、XR01 の返りがラベルなしで RT01 に入って捨てられる(ping は往復が要る)。
+3. **LDP の ID**= `mpls ldp router-id` なしでも **Lo0(10.255.0.1)**。アドレス最大の Lo1(10.255.255.1)も番号最大の Lo100 も選ばれない。
+   `show router-id` = Loopback0。**XR に全体の `router-id` の設定コマンドは無い**(`router-id` は Invalid input)。
+   公式の順番(LDP の設定 → 全体の router-id(IP ARM が決める)→ 番号最大のループバック)のうち、ARM が Lo0 を選んだ形。
+   → 「既定の ID が届かないループバックになる」仕込みは作れない。
+4. **転送アドレスだけをずらす仕込み**(M8-1 に採用)= `mpls ldp address-family ipv4 discovery transport-address 10.255.255.1`。
+   コミットした瞬間に両方のセッションが落ち(RT01 に「DOWN (TCP connection closed by peer)」)、以後上がらない。
+   XR の `show mpls ldp discovery` は相手のハローを受け続け(xmit/recv・LDP Id と相手の Transport address も見える)、`show mpls ldp neighbor brief` は空。
+   **XR 自身の転送アドレスは `show mpls ldp parameters` の Transport address にだけ出る**(LDP ID は 10.255.0.1:0 のままで正しく見える)。
+   RT01 の `show mpls ldp discovery detail` に「LDP Id: 10.255.0.1:0; **no route to transport addr**」「Transport IP addr: 10.255.255.1」。
+5. **有効化**= `mpls ldp` → `interface X` だけで IPv4 も有効(既定 VRF)。40 秒以内にセッション Oper・LFIB は 24000 から。
+   お客さまの ping 100%。traceroute では**BGP を持たない P(RT01)のホップが `*`**(XR から・RT02 からとも)= 読み物の題材。
+6. **MD5**= RT03 にだけパスワード(`mpls ldp neighbor 10.255.0.1 password …`)を入れても、**既存のセッションは切れない**(`clear` で張り直させて初めて落ちる)。
+   落ちた後、XR01 に `%IP-TCP-3-NOAUTH : Authentication info not programmed for the packet received from 10.255.0.13:… to 10.255.0.1:646`(約 12 秒ごと)・RT03 は何も出さない。
+   XR01 に `mpls ldp` → `neighbor 10.255.0.13:0 password clear …`(running-config は `neighbor` の下の階層形・encrypted で保存)→ 40 秒以内に Oper・
+   XR は「TCP connection: …; **MD5 on**」、RT03 は「Password: required, neighbor, in use」。
+   **XR の全体の既定パスワード**(`mpls ldp` → `neighbor password clear …`)は、**コミットした瞬間に**パスワードなしの RT01 とのセッションを落とす
+   (XR に `%IP-TCP-3-BADAUTH : Invalid MD5 digest from 10.255.0.11`)。外せば戻る。
+   ★IOS の `mpls ldp password required`(対象の ACL なし)は**全ての相手**に効く= PoC で RT03 に入れたら RT02 とのセッションが落ち(RT03 に
+   `%LDP-4-PWD: MD5 protection is required for peer 10.255.0.12:0, no password configured` が約 30 秒ごと)、予備経路の戻りがラベルなしで RT03 に入って
+   捨てられた(BGP フリー コアの典型的な事故がそのまま起きた)。→ 本番の盤面は RT02 ⇔ RT03 にもパスワードを据え付ける。
+7. **ホスト経路だけ**= `mpls ldp` → `address-family ipv4` → `label` → `local` → `allocate for host-routes`。XR の `show mpls ldp bindings brief` で
+   /24 の Advertised(peers)が 0 になり、RT01 の `show mpls ldp bindings neighbor 10.255.0.1` は /32 だけ(XR01 の Lo0・Lo1・Lo100 の /32・コアの Lo0)。
+   通信への影響なし。リンクの /24 のローカル ラベルは数分で LFIB から消える。
+8. **同期**= `router isis CORE` → `interface X` → `address-family ipv4 unicast` → `mpls ldp sync`。
+   同期なしで RT01 の XR01 側に `no mpls ip`= XR01 は IS-IS の隣接 Up のまま RT01 経由・LFIB は **Unlabelled** → **お客さまの ping 0%**。
+   同期を入れると即座に `Sync status: Not ready (No hello adjacency)`・XR01 の LSP で RT01 向けが **Metric: 16777214** → 予備(RT03 経由・ラベル 16)へ・ping 100%。
+   RT01 の LDP を戻すと 10 秒以内に Ready・メトリック 10 に戻る。
+   `igp sync delay` の形は **`on-session-up <5-300>` と `on-proc-restart` の 2 つだけ**(素の `igp sync delay <秒>` は無い)。
+9. **セッション保護**= `mpls ldp` → `session protection`。**既定の保持時間 86400 秒(24 時間)**(公式のコマンド リファレンスの既定どおり。設定ガイドの「無期限」は 26.1.1 では違う)。
+   RT01 が targeted ハローを受け入れないと **`state: Incomplete`**(XR の discovery に `10.255.0.1 -> 10.255.0.11 (active), xmit` だけ)。
+   RT01 に `mpls ldp discovery targeted-hello accept` で **`Ready`**(Discovery Sources にリンクと Targeted Hello の 2 つ)。
+   CML のリンク条件 loss 100 で XR01–RT01 を黙って落とすと、約 20 秒で **`Protecting`・Holdup timer remaining**・RT01 からの束縛を保持・
+   戻した後も Up time が連続(2:04 → 4:01)。
+10. **保護と同期の関係**(文書で決まらなかった点)= **リンクのハローが消えると、セッションが targeted で生きていても同期は `Not ready (No hello adjacency)`**
+    (RFC 5443 の「リンクにハロー隣接があること」と同じ)。リンクを黙って落とした時は、IS-IS の保持時間切れ(+29 秒)より先に、
+    LDP のハローの保持時間切れ(+18 秒)でメトリックを上げて予備へ逃げた。RT01 で `no mpls ip`(IS-IS は上がったまま)でも同じ= M8-3 の採点は M8-4 の後でも成り立つ。
+11. **OAM**= XR01 に `mpls oam` が無いと、RT02 からの LSP ping は 0%・LSP traceroute は RT01(`L`)の先が `.` の連続。
+    XR01 から打つと「**% MPLS Embedded Management Subsystem is not running. To enable, use 'mpls oam' global config command.**」。
+    `mpls oam` を入れると両方とも成功(RT02 の trace の最後が `! 2 10.0.1.1`)。`traceroute mpls multipath` も動く(ECMP なし= Path 0 だけ)。IOS(RT01・RT02)は設定なしで応える。
+12. **MTU**= XR の IF の MTU 1514(L2 込み)。ラベル 1 枚ぶんで **1500 バイトの DF 付きは両向きとも 0%**・1496 は 100%。
+    XR の `ping mpls … sweep 1490 1510 4` は 1500 を超えると `Q`(送れない)。= 読み物の「やってみる」の題材(直すには IOS 側も要るので課題にはしない)。
+13. **XRd(脇の系統・XR02)**= LDP を張り、**ラベルを付け替えて転送する**(RT04→RT05 のお客さまの ping 100%・traceroute に `[MPLS: Label 24000]`・IOS からの LSP ping 成功)。
+    **ラベル付きの通過なら TCP も正常**(RT04→RT05 の SSH のバナーが返る・RT05 のチェックサム エラーが増えない)。XR02 の LDP を外して**ラベルなしの通過にすると壊れる**
+    (バナーが返らない・RT05 の TCP/UDP のチェックサム エラーが増える・traceroute の 2 ホップ目以降 `*`= §14.1 と同じ)。
+    → M8 は XRd でも成り立つ見込み。同じ四角形の XRd 版 `_POC-XRLDPD` で同じ手順を流して比べる(§20.5 の後)。
+
+### 20.5 公式文書・RFC での裏どり(2026-10-24・PoC と並行。xrdocs.io は取得していない)
+
+参照= MPLS Configuration Guide for ASR 9000, IOS XR 26.1.x–26.3.x(2026-09-11 更新・以下 CG)/MPLS Command Reference for ASR 9000(累積版・2026-09-11 更新・以下 CR)/
+Routing CG・CR の IS-IS 章(2026-09-08 更新)/IOS XE 17.x MPLS CG の「LDP Session Protection」「LDP MD5 Global Configuration」/
+Cisco IOS XRd Data Sheet(2026-04-09)/RFC 5036・5443・8029・8277。抽出テキストは作業場所(リポには置かない)。
+
+| 論点 | 文書 | 実機(§20.4) | 扱い |
+|---|---|---|---|
+| LDP の ID | CR: LDP の設定 → 全体の router-id → 番号最大のループバック | Lo0(ARM の選択)。全体の `router-id` の設定コマンドは無い | 実機に合わせ「XR は既定で Lo0」と書く。根拠は `show router-id` |
+| 転送アドレス | CR: 既定は LDP の ID。`address-family ipv4 discovery transport-address` | 一致。ずらすと即セッション断 | M8-1 の仕込み |
+| IF の AF | CG: 既定 VRF では IF の `address-family ipv4` は不要(後方互換) | 一致 | — |
+| 同期の値 | IS-IS CR: wide で 16777214(最大−1) | 一致 | — |
+| 同期の条件 | XR の文書は「リンク上にセッション」とだけ。RFC 5443 は「リンクにハロー隣接」 | **RFC どおり**(ハローが消えれば保護中でも Not ready) | 実機に合わせる |
+| 同期の遅延 | CR: `igp sync delay` 5–300/CG の例だけ `on-session-up` | `on-session-up <5-300>`・`on-proc-restart` だけ | 実機の形で書く |
+| 保護の既定 | CR の既定「24 時間」/同じ CR の例と CG は「無期限」 | **86400 秒** | CR の既定どおり。CG の記述との違いを読み物に注記 |
+| 保護の相手 | IOS XE CG: 両側で保護するか、片側が targeted を受け入れる。RFC 5036 §3.5.2 も同じ | 受け入れなしは Incomplete | RT01 に受け入れを据え付け |
+| MD5 | CR: `neighbor <ID>:0 password`・全体の既定は CG の例の階層形 | 一致(running-config も階層形) | — |
+| ラベルの絞り込み | CG: `label local allocate for host-routes`/広告と受け入れの絞り込みは広告側を推奨 | 一致 | — |
+| `mpls oam` | CR: 既定で無効。送る側/応える側に要るかは明記なし(SR の文書だけ「送る側の前提」) | **送る側も応える側も要る** | 実機に合わせる |
+| XRd の転送 | データシート: Control Plane は「最小限の転送」。MPLS を転送するかの明記なし | ラベル付きは正常・ラベルなしの通過で L4 チェックサムが壊れる | 比較 PoC で機種を決める |
+
+### 20.6 XRd との比較(2026-10-24・同じ四角形の XRd 版 `problems/_POC-XRLDPD`= XR01 を XRd 26.1.1 に。同じ手順 `PID=_POC-XRLDPD poc/xr/ldp_poc.sh`・記録 `poc/xr/ldpd-*.log`)
+
+- 構築 約 4 分(XRv9000 版は約 10 分)。b(既定の ID= Lo0・`show router-id`)・bt(転送アドレスの仕込み= no route to transport addr)・b2・c・d・e(同期なしで
+  Unlabelled・同期で 16777214)・f(保護の既定 86400 秒・Incomplete → Ready)・f3(Protecting・束縛の保持・同期は No hello adjacency)・f4・g(`mpls oam` は送る側も
+  応える側も要る・同じエラー文)・mtu(1500 DF は 0%・1496 は 100%・sweep の `Q`)の**中身はすべて一致**。違いは時刻・カウンタ・`show cef` の内部表示だけ。
+- 差 1 つ(課題には効かない)= c-1 で RT03 がセッションを切った直後、XRd の XR01 は古いセッションを 45 秒以上 Up と表示し続けた(`%IP-TCP-3-NOAUTH` は同じく出る)。
+  課題の初期状態は最初から RT03 がパスワード必須なので、この場面は起きない。
+- XRd の既知の弱点(§14.1)= ラベルなしで通り抜ける TCP/UDP のチェックサムを壊す。この盤面で XR01 を通り抜けるのは RT01 ⇔ RT03 だけ(等コスト)で、
+  LDP が動けばラベル付き。採点は ICMP と各機器の show と LSP ping(宛先が XR01 自身)なので影響なし。
+- **判定= M8 は XRd**(§14.2 の方針= 明らかな差が出ない単元は XRd)。XRv9000 より軽く(2 vCPU/3GB)、日次パックのラボと同居できる。
+  §14.2 の「M8〜M12 は XRv9000 見込み」は M8 について改める。M9 以降も転送の差を単元ごとに確かめる。
+
+### 20.7 PoC を受けた課題の確定案(2026-10-24)
+
+盤面= §20.1 の四角形・**XR01= XRd 26.1.1**・RT01〜RT03= IOL 17.15。IOS 側は「社内の標準どおり」で据え付け(学ぶ側は XR01 だけを触る):
+RT01= LDP・`mpls ldp sync`・targeted ハローを受け入れる/RT02= PE(XR01 と iBGP)・LDP・同期・RT03 とパスワード/RT03= LDP・同期・
+**パスワード必須**(XR01・RT02 向けの鍵)・targeted ハローは受け入れない。
+
+| 課題 | 中身(挙動で指定) | 採点(挙動) |
+|---|---|---|
+| M8-1(TS+構築) | 「XR01 は古い PE と入れ替わった。お客さまの通信がコアを通らない」。コアに BGP を入れずに両向き通す・LDP は 2 本のコアのリンクの両方で動かす・Loopback1(NMS 用)は IS-IS に載せない。仕込み= LDP のひな形が入っていて、**転送アドレスが Loopback1**(IF は未登録) | RT01 とのセッション Oper・RT01 の discovery で XR01 の転送アドレスが 10.255.0.1・XR01 の LDP の IF 2 本・RT01 に 10.255.255.1 の経路が無い・お客さまの ping 両向き |
+| M8-2 | RT03 はパスワードの無い LDP セッションを受けない(鍵は課題文)。XR01 はホスト経路(/32)にだけラベルを割り当てる | RT03 とのセッション Oper かつ MD5 on・RT01 が XR01 から受けた束縛が /32 だけ・お客さまの ping |
+| M8-3 | コアのリンクで IS-IS は上がっているのに LDP が整っていない間は、XR01 はそのリンクで通さない。LDP が整ってから 10 秒は戻さない | 2 本とも同期が有効で遅延 10 秒・採点中だけ RT01 の XR01 側で `no mpls ip` → XR01 の LSP で RT01 向け 16777214・お客さまの ping 両向き → 戻す |
+| M8-4 | PRIMARY が切れても RT01 とのセッションと RT01 から受けたラベルを保つ(最長 10 分)。RT03 は targeted を受けないので RT03 には送らない | RT01 は保護 Ready・Duration 600・RT03 には保護なし・採点中だけ CML のリンク条件 loss 100(XR01–RT01)→ Protecting・束縛の保持・お客さまの ping → 戻した後も Up time が続く |
+| M8-5 | RT02 の運用者が MPLS の LSP ping/traceroute で XR01 までの LSP を確かめられる(XR01 が応える・XR01 からも打てる)。XR01 宛ては最後までラベル付きで届ける(PHP させない= コアで付けた EXP を XR01 で使う) | RT02 の LSP ping 成功・LSP traceroute が RT01 で explicit-null・XR01 で `!`・RT01 の LFIB が explicit-n・XR01 から RT02 への LSP ping 成功 |
+
+- 並びは前の課題ができている前提で積む(M8-3・M8-4 の迂回は RT03 とのセッション= M8-2 の後)。M8-3 の採点は M8-4 の後でも成り立つ(§20.4-10)。
+- **読み物で扱う(ラボにしない)**= MTU(ラベル 1 枚で 1500 の DF が通らない・sweep)・BGP フリー コアの traceroute で P のホップが `*`(explicit-null にすると返る)・
+  XR の全体の既定パスワードがパスワードなしの相手を落とす・IOS の `password required` が全員に効く事故(§20.4-6)・LDP の ID の決まり方(XR は Lo0)。
+  いずれも「やってみる」の候補。
+- 採点で故障を起こす部品は M7 のもの(`login_probe.py` の `--pre-cli/--post-cli`・`--fail-link`・`watch`)をそのまま使う見込み。
+
+### 20.8 その先(M8 追補の案・未着手)
+
+- **Unified MPLS(3.1.d)**= XR01 の先に 2 つめの IGP 領域(アクセス)を足し、XR01 を境界にして BGP ラベル付きユニキャスト(next-hop-self)で
+  アクセスの PE のループバックをコアへ運ぶ(IGP 間の再配送なし)。M4 追補と同じく「M8 を解き終えた状態から」のラボにする想定。PoC は M8 の後。
+
+### 20.9 実装の結果(2026-10-24)
+
+- 成果物= `problems/XRT-07`(XR01= XRd 26.1.1・RT01〜RT03= IOL 17.15・課題ごとの確認 `grading.m8t1〜5.yml`・最終 `grading.yml`=
+  M8-1 25・M8-2 20・M8-3 20・M8-4 20・M8-5 15・`learn.yml`(日英)・課題文 日英)、読み物 `courses/xr/{en,ja}/80-m8-mpls-ldp.md`
+  (7 節+実践・「やってみる」5 つ・日英で 121 ブロック・見出し 23 を照合)・実践 `81-m8-practice.md`(`course.sh` が課題文から切り出す)・Drive 同期済み。
+  模範解= `poc/xr/solve_xrt07.sh`(誤答・別解つき)・E2E= `poc/xr/e2e_xrt07.sh`・記録 `poc/xr/expM8-*.log`。
+- 実機 E2E= 白紙 0(課題ごと 5 本・最終)→ 模範解 100(課題ごと・最終とも 1 回目)・learn.yml の模範解を逐語で流して最終 100・`lab.sh reset` 後に白紙 0。
+  誤答= IF だけ(転送アドレスはそのまま)20・全体の既定パスワード(RT01 が落ちる)で M8-1 40/M8-2 50・遅延なし 75・全員に保護(RT03 が Incomplete)80・
+  `mpls oam` だけ 50・解き終えた後に保護だけ外す → M8-4 0(M8-3 は 100 のまま)・同期だけ外す → M8-3 0。別解= IS-IS の `mpls ldp auto-config`・
+  転送アドレスを Lo0 に明示 → M8-1 100。provision 約 4 分。故障を起こす Check= M8-3 約 70 秒・M8-4 約 110 秒(学習モードの上限 240 秒の内)。
+- **実装で分かったこと**:
+  1. 白紙でも XR01 の LFIB にローカル ラベルが並ぶ(`mpls ldp` のプロセスがあるだけで割り当てる・出力は `Unlabelled`)。採点はラベルが数字であることを見る。
+  2. IOS の `mpls ldp sync`(据え付け)は、XR01 がまだ LDP を動かしていない間から RT01→XR01 のリンクを 16777214 にする(IP のプレフィックスも)。
+  3. M8-1 の途中(IF だけ足す)では、XR01 の転送アドレスが大きいので XR01 が TCP を開きに行き、RT03 に `%TCP-6-BADAUTH: No MD5 digest from 10.255.255.1` が出る。
+     直した後は RT03 の転送アドレスが大きくなり、RT03 が署名つきで開きに来て XR01 に `%IP-TCP-3-NOAUTH`。
+  4. **同期の遅延(on-session-up)は、セッション保護で保たれたセッションにリンクの hello が戻った時にも働く**(`Sync status: Deferred (8 sec remaining)`)。
+     保護あり= 黙った故障の 12 秒以内に Protecting・同期は Not ready で BACKUP へ(IS-IS の隣接はさらに約 10 秒残る)・戻して 12 秒で PRIMARY へ。
+     保護なし= 故障中にセッションが消え、戻した後は新しいセッション(00:00:03)→ Deferred → 約 20 秒で PRIMARY へ。
+  5. explicit-null のコミットから RT01 の LFIB が `explicit-n` になるまで 20〜30 秒。RT02 からの顧客の traceroute は、PHP では P のホップが `*`、
+     explicit-null では `10.0.12.11 [MPLS: Label 20 Exp 0]` と応える(読み物 6.2 の「やってみる」)。
+  6. 「やってみる」の 4.1 は RT01 を触らずに XR01 側で `mpls ldp` から IF を外す形にした(同期なし= Unlabelled で ping 0%・同期あり= 即 16777214 で BACKUP・切り替えの間に 3 発欠落)。
+  7. M8-2 を解いた後なら、全体の既定パスワードで落ちるのは RT01 だけ(RT03 は個別の鍵が優先され、セッションも張り直されない)。
+  8. ★作業の事故= IOS で `?` のヘルプを引くのに xrsh で「行+?」を送ると、ヘルプの後に残った行が次の行と一緒に実行され、RT01 に
+     `mpls ldp explicit-null` と `mpls ldp label`/`allocate global` が入った(気づいて外し、3 台とも初期設定どおりを確認)。IOS でヘルプを引く時は `?` を単独の行で送る。
+- **§20.7 から変えた点**= なし(課題・採点の形は確定案のまま)。読み物の 5.2 は実測(上の 4)に合わせ、遅延が保護中のセッションにも働くと書いた。

@@ -1,0 +1,36 @@
+! _POC-XRLDP RT04(IOL・脇の系統の PE)。XR02(XRd)越しに RT05 と iBGP。お客さまの経路 10.40/16 は BGP だけ。
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+!
+interface Loopback0
+ ip address 10.255.1.4 255.255.255.255
+ ip router isis SIDE
+!
+interface Loopback100
+ description CUSTOMER (BGP only)
+ ip address 10.40.0.1 255.255.0.0
+!
+interface {{ links[0] }}
+ description to XR02
+ ip address 10.1.4.4 255.255.255.0
+ ip router isis SIDE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+!
+router isis SIDE
+ net 49.0002.0100.0000.1004.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+!
+router bgp 65100
+ bgp router-id 10.255.1.4
+ bgp log-neighbor-changes
+ neighbor 10.255.1.5 remote-as 65100
+ neighbor 10.255.1.5 update-source Loopback0
+ address-family ipv4
+  network 10.40.0.0 mask 255.255.0.0
+  neighbor 10.255.1.5 activate
+ exit-address-family
+!

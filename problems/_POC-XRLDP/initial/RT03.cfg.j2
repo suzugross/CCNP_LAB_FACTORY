@@ -1,0 +1,32 @@
+! _POC-XRLDP RT03(IOL・予備経路の P・BGP なし)。LDP は有効(パスワードは PoC の段で足す)。
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+!
+interface Loopback0
+ ip address 10.255.0.13 255.255.255.255
+ ip router isis CORE
+!
+interface {{ links[0] }}
+ description BACKUP to XR01
+ ip address 10.0.3.13 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 100
+ mpls ip
+ no shutdown
+!
+interface {{ links[1] }}
+ description to RT02
+ ip address 10.0.23.13 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 100
+ mpls ip
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0013.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+!
