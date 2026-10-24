@@ -309,7 +309,9 @@ def main():
             node["ram"] = int(node_ram[name])
         nodes.append(node)
 
-    # データ面の非管理スイッチを配置（接続先ノードの重心近くに置く）。
+    # データ面の非管理スイッチを配置（problem.yml の lab.positions にあればそれ、無ければ接続先ノードの重心近く）。
+    # ★座標を書いても重心で上書きされていた(2026-10-24 修正。XRT-06 で長方形の角に置いた SW01 が辺の途中に来た)
+    sw_pos = pmeta.get("lab", {}).get("positions", {}) or {}
     for s in switches:
         neigh = []
         for lk in data_links:
@@ -317,7 +319,9 @@ def main():
                 neigh.append(coords[lk["b"]])
             elif lk["b"] == s and lk["a"] in coords:
                 neigh.append(coords[lk["a"]])
-        if neigh:
+        if s in sw_pos:
+            sx, sy = int(sw_pos[s][0]), int(sw_pos[s][1])
+        elif neigh:
             sx = sum(c[0] for c in neigh) // len(neigh)
             sy = sum(c[1] for c in neigh) // len(neigh)
         else:

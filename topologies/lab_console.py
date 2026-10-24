@@ -706,25 +706,26 @@ def _learn_texts(app):
 def _learn_reading(app, request):
     """Reading タブ(BL-252)。learn.yml の reading:(本の key)と各課題の read:(「ページ#節」)を、
     パック配信サーバの読み物の URL と見出しの文字に解く。見出しは読み物の出力 reading/<key>/book.json から。
-    (None, {}) = 読み物なし。"""
+    (None, {}, {}) = 読み物なし。3 つ目は課題ごとの「やってみる」の一覧。"""
     with open(os.path.join(app["repo"], "problems", app["learn"], "learn.yml"), encoding="utf-8") as fh:
         spec = yaml.safe_load(fh) or {}
     key = spec.get("reading")
     if not key or not LEARN_RE.match(str(key)):
-        return None, {}
+        return None, {}, {}
     try:
         with open(os.path.join(app["repo"], "reading", key, "book.json"), encoding="utf-8") as fh:
             book = json.load(fh)
     except (OSError, ValueError):
-        return None, {}
+        return None, {}, {}
     host = request.url.host or "localhost"
     if ":" in host:
         host = f"[{host}]"
     base = f"{request.scheme}://{host}:{app['pack_port']}/_read/{key}/"
     secs, titles = book.get("sections") or {}, book.get("page_titles") or {}
-    refs = {}
+    tries = book.get("tries") or {}
+    refs, step_tries = {}, {}
     for st in spec.get("steps") or []:
-        out = []
+        out, tout, seen = [], [], set()
         for ref in st.get("read") or []:
             page, _, sec = str(ref).partition("#")
             page = page if page.endswith(".html") else page + ".html"
@@ -732,19 +733,55 @@ def _learn_reading(app, request):
                 continue
             out.append({"href": base + page + (f"#{sec}" if sec else ""),
                         "page": titles[page], "sec": (secs.get(page) or {}).get(sec) or {}})
+            # その節(h2 を指していれば配下の h3 も)にある「やってみる」。課題カードのボタンから小窓で出す
+            for k, items in (tries.get(page) or {}).items():
+                if sec and k != sec and not k.startswith(sec + "-"):
+                    continue
+                for n, item in enumerate(items):
+                    if (page, k, n) in seen:
+                        continue
+                    seen.add((page, k, n))
+                    tout.append({"href": base + page + f"#{k}", "page": titles[page],
+                                 "sec": (secs.get(page) or {}).get(k) or {},
+                                 "html": {lang: _abs_links(h, base) for lang, h in item.items()}})
         refs[st["id"]] = out
-    return {"href": base + "index.html", "base": base}, refs
+        step_tries[st["id"]] = tout
+    return {"href": base + "index.html", "base": base}, refs, step_tries
+
+
+def _abs_links(fragment, base):
+    """読み物の中の相対リンク(同じ本の別ページ)を、ワークスペースから開ける絶対 URL にする。"""
+    return re.sub(r'(href|src)="(?![a-z]+:|/|#)([^"]+)"', lambda m: f'{m.group(1)}="{base}{m.group(2)}"', fragment)
+
+
+async def h_learn_readstamp(request):
+    """Reading タブが、開いている読み物のページがビルドし直されたかを知るための更新時刻(2026-10-24)。
+    同じページの別の節へは枠を読み直さずに送るので、これが無いと開いたままの古いページが表示され続ける。"""
+    app = _view(request)
+    page = request.query.get("page", "")
+    if not app["learn"] or not re.fullmatch(r"[\w.-]+\.html", page):
+        return web.json_response({"mtime": 0})
+    with open(os.path.join(app["repo"], "problems", app["learn"], "learn.yml"), encoding="utf-8") as fh:
+        key = (yaml.safe_load(fh) or {}).get("reading")
+    if not key or not LEARN_RE.match(str(key)):
+        return web.json_response({"mtime": 0})
+    try:
+        mt = os.stat(os.path.join(app["repo"], "reading", key, page)).st_mtime
+    except OSError:
+        mt = 0
+    return web.json_response({"mtime": mt}, headers={"Cache-Control": "no-store"})
 
 
 async def h_learn(request):
     app = _view(request)
     if not app["learn"]:
         return web.json_response({"enabled": False})
-    reading, refs = _learn_reading(app, request)
+    reading, refs, tries = _learn_reading(app, request)
     texts = _learn_texts(app)
     steps = _learn_view(app)
     for v in steps:
         v["read"] = refs.get(v["id"], [])
+        v["tries"] = tries.get(v["id"], [])
         v["task"] = texts["tasks"].get(v["id"], {})
         m = re.match(r"(m\d+)t", v["id"])
         v["unit"] = m.group(1) if m else ""
@@ -907,6 +944,7 @@ def make_app(repo=REPO, pack_port=8899, lab=None, task=None, with_parent=None, r
     app.router.add_post("/api/learn/hint", h_learn_hint)
     app.router.add_post("/api/learn/check", h_learn_check)
     app.router.add_post("/api/learn/reset", h_learn_reset)
+    app.router.add_get("/api/learn/readstamp", h_learn_readstamp)
     for name in ("xterm.js", "xterm.css", "addon-fit.js"):
         app.router.add_get(f"/vendor/{name}",
                            lambda _r, p=os.path.join(ASSETS, name): web.FileResponse(p))
@@ -1004,6 +1042,25 @@ iframe{ border:0; width:100%; height:100%; background:var(--paper); }
 .step .read a{ color:var(--accent); text-decoration:none; cursor:pointer; } .step .read a:hover{ text-decoration:underline; }
 .step.flash{ box-shadow:0 0 0 2px var(--accent); transition:box-shadow .3s; }
 .step .lbl{ font-weight:600; color:var(--mute); font-size:11px; display:block; font-family:system-ui,sans-serif; }
+.step button.try{ border-color:#3f8f4f; color:#2f6f3c; }
+/* 「やってみる」の小窓(2026-10-24): 課題カードのボタンで開く。モーダルにしない= 開いたままコンソールに打てる。
+   見出しをつかんで動かす・最小化・閉じる。位置は端末ごとに覚える(localStorage) */
+#trypanel{ position:fixed; z-index:40; width:min(440px, calc(100vw - 24px)); max-height:min(70vh, 640px);
+           display:flex; flex-direction:column; background:#fff; border:1px solid #3f8f4f; border-radius:6px;
+           box-shadow:0 8px 28px rgba(0,0,0,.25); font-size:13px; }
+#trypanel .tph{ flex:none; display:flex; align-items:center; gap:8px; padding:6px 8px 6px 12px; background:#eef8ef;
+                border-bottom:1px solid #cfe5d3; border-radius:6px 6px 0 0; cursor:move; user-select:none; touch-action:none; }
+#trypanel .tph b{ flex:1; color:#2f6f3c; font-size:13px; }
+#trypanel .tph button{ font:inherit; font-size:12px; border:1px solid #cfe5d3; background:#fff; border-radius:4px;
+                       padding:1px 8px; cursor:pointer; color:var(--ink); }
+#trypanel .tpb{ overflow:auto; padding:8px 14px 12px; line-height:1.6; }
+#trypanel.min .tpb{ display:none; }
+#trypanel .tpi + .tpi{ border-top:1px solid var(--line); margin-top:10px; padding-top:6px; }
+#trypanel .tps{ font-size:11.5px; color:var(--mute); margin:2px 0 4px; }
+#trypanel .tps a{ color:var(--accent); cursor:pointer; }
+#trypanel p{ margin:6px 0; } #trypanel ol, #trypanel ul{ margin:6px 0; padding-left:20px; } #trypanel li{ margin:4px 0; }
+#trypanel code{ font-family:ui-monospace,Consolas,Menlo,monospace; font-size:12px; background:#eef0f3; padding:0 3px; border-radius:3px; }
+#trypanel pre{ background:#eef0f3; padding:6px 8px; overflow:auto; }
 #terms{ background:var(--term); }
 /* 余白は .term に持たせ、端末は余白なしの .xt に開く。fit(桁・行の計算)は端末の親の寸法を読むので、
    親に余白があるとその分だけ広く見積もり、右端の桁と最下行が隠れる(2026-10-07 実発) */
@@ -1075,6 +1132,7 @@ function leftTab(name){
   $('#steps').hidden = name !== 'steps';
   $('#reading').hidden = name !== 'read';
   if (name === 'read' && !$('#reading').getAttribute('src') && learnReading) openReading(defaultReading(), false);
+  else if (name === 'read') refreshReading();
   if (name === 'topo' && notesPending){ notesPending = false; addNotes(); }
 }
 // 結線図の下に、問題文の盤面の節を枠で出す。枠の高さは中身に合わせる(スクロールは Topology タブ 1 本にする)。
@@ -1345,19 +1403,78 @@ window.addEventListener('message', ev => {
 let learnSteps = null, learnBusy = null, learnReading = null, learnRead = {};
 // 課題カード(BL-255): 課題文・単元の見出し・冒頭の約束。最初の読み込みで受け取って持っておく(確認・ヒントの応答には入らない)
 let learnTask = {}, learnUnit = {}, learnUnits = {}, learnRules = null, rulesOpen = false;
+let learnTries = {}, tryOpen = null;          // 課題ごとの「やってみる」・小窓に出している課題
 function learnLang(){ return window.ccnpLang === 'ja' ? 'ja' : 'en'; }
 function tr(o){ if (!o) return ''; if (typeof o === 'string') return o; return o[learnLang()] || o.en || o.ja || ''; }
 const LT = {en: {check:'Check', checking:'Checking…', hint:'Hint', sol:'Reference solution', pass:'passed', fail:'not yet',
                  none:'self-check', read:'Read:', rules:'Ground rules', note:'Each Check reads the live state of the devices (about 15 seconds). Leave configuration mode before you press it. Hints open one level at a time and are logged.',
                  busy:'Another check is still running.', reset:'Start over', resetting:'Resetting…',
                  resetq:'Start the whole lab over?\n\nXR01 is rolled back to the configuration it had right after the lab was built (your changes are discarded), and every task here returns to not yet checked, with no hints opened.',
-                 resetdone:'The lab is back at its starting state.'},
+                 resetdone:'The lab is back at its starting state.',
+                 tryit:'Try it', trytitle:'Try it', tryread:'Open in Reading', close:'Close', mini:'Minimise', restore:'Expand'},
             ja: {check:'確認', checking:'確認中…', hint:'ヒント', sol:'模範解', pass:'通過', fail:'未充足',
                  none:'自己確認', read:'読み物:', rules:'進め方の約束', note:'確認は機器のいまの状態を読みます(約 15 秒)。設定モードを抜けてから押してください。ヒントは 1 段ずつ開き、開いた段数は記録されます。',
                  busy:'別の確認がまだ実行中です。', reset:'最初からやり直す', resetting:'戻しています…',
                  resetq:'ラボ全体を最初からやり直しますか？\n\nXR01 をラボを作った直後の設定へ戻し(あなたの変更は消えます)、ここの課題もすべて未確認・ヒント未開封に戻します。',
-                 resetdone:'ラボを最初の状態に戻しました。'}};
+                 resetdone:'ラボを最初の状態に戻しました。',
+                 tryit:'やってみる', trytitle:'やってみる', tryread:'読み物で開く', close:'閉じる', mini:'たたむ', restore:'広げる'}};
 function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+// ---- 「やってみる」の小窓 ----
+function tryPanel(){
+  let p = $('#trypanel');
+  if (p) return p;
+  p = el('div'); p.id = 'trypanel'; p.hidden = true;
+  const h = el('div', 'tph'), t = el('b'), mn = el('button', 'mn'), cl = el('button', 'cl');
+  h.append(t, mn, cl); p.append(h, el('div', 'tpb'));
+  mn.addEventListener('click', () => { p.classList.toggle('min'); paintTry(); savePos(); });
+  cl.addEventListener('click', () => { tryOpen = null; p.hidden = true; });
+  let drag = null;                           // 見出しをつかんで動かす(枠や端末の上に出ても離さない= pointer capture)
+  h.addEventListener('pointerdown', e => {
+    if (e.target.closest('button')) return;
+    const r = p.getBoundingClientRect(); drag = {dx: e.clientX - r.left, dy: e.clientY - r.top};
+    h.setPointerCapture(e.pointerId);
+  });
+  h.addEventListener('pointermove', e => { if (drag) placeTry(e.clientX - drag.dx, e.clientY - drag.dy); });
+  h.addEventListener('pointerup', e => { if (drag){ drag = null; h.releasePointerCapture(e.pointerId); savePos(); } });
+  document.body.append(p);
+  let pos = null;
+  try { pos = JSON.parse(localStorage.getItem('ccnp.trypos') || 'null'); } catch (_e) {}
+  if (pos && typeof pos.x === 'number'){ placeTry(pos.x, pos.y); if (pos.min) p.classList.add('min'); }
+  else placeTry(window.innerWidth - Math.min(440, window.innerWidth - 24) - 16, 56);
+  return p;
+}
+function placeTry(x, y){
+  const p = $('#trypanel'), w = p.offsetWidth || 440;
+  p.style.left = Math.max(4, Math.min(x, window.innerWidth - Math.min(w, 120))) + 'px';
+  p.style.top = Math.max(4, Math.min(y, window.innerHeight - 40)) + 'px';
+}
+function savePos(){
+  const p = $('#trypanel'); if (!p) return;
+  try { localStorage.setItem('ccnp.trypos', JSON.stringify({x: p.offsetLeft, y: p.offsetTop, min: p.classList.contains('min')})); } catch (_e) {}
+}
+function openTry(id){
+  tryOpen = id; const p = tryPanel(); p.classList.remove('min'); p.hidden = false; paintTry(); savePos();
+}
+function paintTry(){
+  const p = $('#trypanel');
+  if (!p || p.hidden || !tryOpen) return;
+  const T = LT[learnLang()], st = (learnSteps || []).find(x => x.id === tryOpen);
+  p.querySelector('.tph b').textContent = T.trytitle + (st ? ' — ' + tr(st.title).split(/\s{2,}/)[0] : '');
+  p.querySelector('.mn').textContent = p.classList.contains('min') ? T.restore : T.mini;
+  p.querySelector('.cl').textContent = T.close;
+  const body = p.querySelector('.tpb'); body.replaceChildren();
+  for (const t of learnTries[tryOpen] || []){
+    const it = el('div', 'tpi'), src = el('div', 'tps');
+    src.append(document.createTextNode((tr(t.sec) || tr(t.page)) + ' · '));
+    const a = el('a', null, T.tryread); a.href = t.href;
+    a.addEventListener('click', e => { if (e.ctrlKey || e.metaKey || e.shiftKey || e.button) return; e.preventDefault(); openReading(t.href, true); });
+    src.append(a);
+    const c = el('div'); c.innerHTML = tr(t.html);
+    it.append(src, c); body.append(it);
+  }
+}
+window.addEventListener('ccnp-lang', paintTry);
+window.addEventListener('resize', () => { const p = $('#trypanel'); if (p && !p.hidden) placeTry(p.offsetLeft, p.offsetTop); });
 function paintSteps(){
   if (!learnSteps) return;
   const T = LT[learnLang()], root = $('#steps');
@@ -1401,6 +1518,11 @@ function paintSteps(){
       const b = el('button', null, T.hint + ' ' + Math.min(st.hints.length + 1, st.hints_total) + '/' + st.hints_total);
       b.disabled = st.hints.length >= st.hints_total || learnBusy !== null;
       b.addEventListener('click', () => learnPost('hint', st.id));
+      row.append(b);
+    }
+    if ((learnTries[st.id] || []).length){   // 読み物の「やってみる」(その課題の read: の節にあるもの)を小窓で
+      const b = el('button', 'try', T.tryit);
+      b.addEventListener('click', () => openTry(st.id));
       row.append(b);
     }
     box.append(row);
@@ -1459,7 +1581,8 @@ async function learnPost(kind, id){
     const d = await (await fetch('api/learn?' + Q)).json();
     if (!d.enabled) return;
     learnSteps = d.steps;
-    for (const st of d.steps){ learnRead[st.id] = st.read || []; learnTask[st.id] = st.task || {}; learnUnit[st.id] = st.unit || ''; }
+    for (const st of d.steps){ learnRead[st.id] = st.read || []; learnTask[st.id] = st.task || {}; learnUnit[st.id] = st.unit || '';
+                               learnTries[st.id] = st.tries || []; }
     learnUnits = d.units || {}; learnRules = d.rules || null;
     if (d.reading){ learnReading = d.reading; $('#readbtn').hidden = false; }
     // 課題カード(BL-255): 課題文はこのタブに入るので Task タブは出さない。Task の枠は読み込んだまま残す
@@ -1481,16 +1604,39 @@ function defaultReading(){
   const st = (learnSteps || []).find(x => !x.passed && (learnRead[x.id] || []).length);
   return st ? learnRead[st.id][0].href : learnReading.href;
 }
-function openReading(href, show){
+// 読み物をビルドし直した後も古いページを出し続けないよう、ページの更新時刻を覚えておき、変わっていたら読み直す(2026-10-24)。
+// 読み直す時は ?v=<更新時刻> を付ける(同じ URL では節の移動だけになり読み直されないため)。
+const readStamp = {};
+const pageOf = u => u ? new URL(u, location.href).pathname.split('/').pop() : '';
+async function pageStamp(href){
+  try { const d = await (await fetch('api/learn/readstamp?' + Q + '&page=' + encodeURIComponent(pageOf(href)), {cache: 'no-store'})).json();
+        return d.mtime || 0; } catch (_e) { return 0; }
+}
+function withStamp(href, mt){
+  const u = new URL(href, location.href); u.searchParams.set('v', String(Math.floor(mt))); return u.toString();
+}
+async function openReading(href, show){
   const f = $('#reading'), cur = f.getAttribute('src');
-  const strip = u => u ? u.replace(/#.*$/, '') : '';
-  if (cur && strip(cur) === strip(href) && f.contentWindow){
+  const strip = u => u ? u.replace(/[?#].*$/, '') : '';
+  const mt = await pageStamp(href);
+  if (cur && strip(cur) === strip(href) && f.contentWindow && readStamp[pageOf(href)] === mt){
     const sec = (href.split('#')[1] || '');
     try { f.contentWindow.postMessage({ccnpGoto: sec}, new URL(href).origin); } catch (_e) {}
   } else {
-    f.setAttribute('src', href);
+    readStamp[pageOf(href)] = mt; f.setAttribute('src', withStamp(href, mt));
   }
-  if (show) leftTab('read');
+  if (show) leftTab('read');                  // 開く先を決めてから切り替える(切替時の読み直し確認と競合させない)
+}
+async function refreshReading(){              // Reading タブを開いた時: いまのページがビルドし直されていれば読み直す
+  const f = $('#reading'), cur = f.getAttribute('src');
+  if (!cur) return;
+  const mt = await pageStamp(cur);
+  if (mt && readStamp[pageOf(cur)] !== mt){
+    let sec = '';
+    try { sec = (f.contentWindow.location.hash || '').slice(1); } catch (_e) {}
+    readStamp[pageOf(cur)] = mt;
+    f.setAttribute('src', withStamp(cur.replace(/#.*$/, ''), mt) + (sec ? '#' + sec : ''));
+  }
 }
 function gotoStep(id){
   leftTab('steps');

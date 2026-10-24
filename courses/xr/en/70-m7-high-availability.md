@@ -75,19 +75,94 @@ RP/0/RP0/CPU0:XR01#show bundle Bundle-Ether1
 Without the minimum, the bundle stays up on one member at half the bandwidth, which is the right choice only when
 half the bandwidth is enough. A minimum is set on each end separately; in a real network both ends should agree.
 
+:::try
+Make a member fail without its port going down, and watch how long XR01 keeps using it. Do it once before you solve
+Task M7-2, and once more after.
+
+1. In CML, select the link between XR01 GigabitEthernet0/0/0/0 and RT01 GigabitEthernet1. On its **Settings** tab,
+   set **Loss** to 100, tick **Enable** and press **Apply**. Both ports stay up, and every frame on the link is lost.
+2. On XR01, run `show bundle Bundle-Ether1` every few seconds. Note when Gi0/0/0/0 stops being `Active`, and what
+   happens to the bundle as a whole.
+3. Press **Reset** on the same tab to end the failure, and check that both members are `Active` again.
+
+What the lab measured: at the default slow rate the member left after 68 seconds (the partner's LACPDUs may be
+missing for up to 90 seconds); with `lacp period short`, within five seconds. With a minimum of two active links the
+whole bundle went down at that moment, the members went to `Standby` and then `Configured`, and RT01's traffic for
+RT02 took the backup link.
+:::
+
 ### 1.3 MTU on IOS XR
 
-The `mtu` command of IOS XR counts the Layer 2 header. An Ethernet interface or bundle has an MTU of 1514 by default,
-of which 1500 is available to IP. IOS counts only the Layer 3 part, so the same number means different things on the
-two sides:
+The `mtu` command of IOS XR counts the Layer 2 header. IOS and IOS XE count only what follows it. On Ethernet the
+header is 14 bytes: the two MAC addresses and the type field (on PPP and HDLC it is 4 bytes). Neither counts the
+4-byte frame check sequence at the end of the frame:
+
+```text
+| dest MAC 6 | source MAC 6 | type 2 |       payload (IP, MPLS, ...)       | FCS 4 |
+|<------ Layer 2 header: 14 ------->|<--------------- 1500 -------------->|
+|<-------------------------- mtu on IOS XR: 1514 ------------------------>|
+                                     |<----------- mtu on IOS: 1500 ----->|
+```
+
+So 1514 on IOS XR and 1500 on IOS describe the same frame. 1514 is the default of an Ethernet interface or a bundle
+on IOS XR, and 1500 the default on IOS. To match an IOS neighbour, give the IOS XR side 14 bytes more:
+
+| What you want | IOS side | IOS XR side |
+|---|---|---|
+| The default (1500 for IP) | `mtu 1500` (the default) | `mtu 1514` (the default) |
+| Jumbo frames (9000 for IP) | `mtu 9000` | `mtu 9014` |
+
+The trap is the opposite habit: typing the same number on both sides. Both configurations then look right, and the
+IOS XR side is 14 bytes smaller:
+
+| Typed on both sides | Available to IP on IOS | Available to IP on IOS XR |
+|---|---|---|
+| `mtu 1500` | 1500 | 1486 |
+| `mtu 9000` | 9000 | 8986 |
+
+IOS XR derives the MTU of each protocol on the interface by taking the header off. `show ipv4 interface` gives both
+numbers, and `show im database interface` lists every protocol:
+
+```console
+RP/0/RP0/CPU0:XR01#show ipv4 interface Bundle-Ether1 | include MTU
+  MTU is 1514 (1500 is available to IP)
+
+RP/0/RP0/CPU0:XR01#show im database interface GigabitEthernet0/0/0/2
+...
+Interface GigabitEthernet0/0/0/2, ifh 0x01000020 (up, 1514)
+...
+  Protocol        Caps (state, mtu)
+  --------        -----------------
+  None            ether (up, 1514)
+  arp             arp (up, 1500)
+  clns            clns (up, 1500)
+  ipv4            ipv4 (up, 1500)
+```
+
+With `mtu 1500` on the bundle, the same command shows what is left for IP:
 
 ```console
 RP/0/RP0/CPU0:XR01#show ipv4 interface Bundle-Ether1 | include MTU
   MTU is 1500 (1486 is available to IP)
 ```
 
-IS-IS notices the difference at once, because it pads its hellos to the full MTU of the interface. A neighbour with a
-smaller MTU drops the padded hellos, so the adjacency comes up on one side only:
+`ipv4 mtu`, `ipv6 mtu` and `mpls mtu` set the MTU of a single protocol. They mean the same on both systems (the
+Layer 3 size), but on IOS XR they take effect only if they fit inside what the interface `mtu` leaves: the technical
+note shows `mpls mtu 1508` staying at 1500 until the interface is given `mtu 1522`. A subinterface inherits the MTU of
+its main interface plus 4 bytes for each VLAN tag, so that IP keeps its 1500 (from the technical note; not measured
+in the lab).
+
+IS-IS takes 3 more bytes off, for the LLC header it uses on Ethernet. Measured in the lab:
+
+| `mtu` of the bundle on XR01 | Available to IP | MTU of IS-IS |
+|---|---|---|
+| 1514 (the default) | 1500 | 1497 |
+| 1500 | 1486 | 1483 |
+| 9000 | 8986 | 8983 |
+
+IS-IS notices a mismatch at once, because it pads its hellos to the full MTU of the interface (by default XR01's
+hellos were 1497 octets, RT01's 1496), and a router drops hellos larger than its own MTU. With `mtu 1500` on the
+bundle, XR01 rejects RT01's hellos, and warns as well that its largest LSPs (1492 bytes by default) no longer fit:
 
 ```console
 RP/0/RP0/CPU0:XR01#show isis interface Bundle-Ether1
@@ -98,9 +173,31 @@ RT01#show clns neighbors
 XR01            Po1           0003.a004.5331      Init   22        L2   IS-IS
 ```
 
+RT01 still receives XR01's hellos, but they do not list RT01, so RT01 stops at Init; XR01 drops the adjacency when
+its hold time runs out. With `mtu 9000` on the bundle it is the other way round: RT01 drops XR01's hellos of 8983
+octets, and XR01 stops at Init. Either way neither side reaches Up. The side with the smaller MTU drops the hellos,
+and the side with the larger MTU waits at Init.
+
 The padding exists to find exactly this mismatch. It can be turned off (`hello-padding disable` on IOS XR), but in the
 lab that changed nothing: the hellos that XR01 rejected were RT01's, padded by RT01. And wherever an adjacency is
 brought up that way, the mismatch stays: LSPs and IP packets larger than the smaller MTU are still lost.
+
+OSPF shows the same mismatch in another form. Its database description packets carry the MTU of the sending
+interface, and a router refuses those that announce a larger MTU than its own (RFC 2328), so the adjacency stays in
+ExStart or Exchange. `ip ospf mtu-ignore` on IOS and `mtu-ignore enable` on IOS XR turn that check off and, like
+turning off the padding, leave the mismatch in place. (This comes from the technical note and the RFC; the lab runs
+IS-IS and did not measure it.)
+
+Even where the routing protocols come up, packets larger than the smaller MTU are lost. Find the boundary with ping
+and the DF bit. On both systems `size` is the whole IP datagram and the option is `df-bit` (IOS XR also accepts
+`donotfrag`). At the default MTU between XR01 and RT01:
+
+```console
+RP/0/RP0/CPU0:XR01#ping 10.0.1.11 size 1500 df-bit count 3
+Success rate is 100 percent (3/3), round-trip min/avg/max = 1/2/3 ms
+RP/0/RP0/CPU0:XR01#ping 10.0.1.11 size 1501 df-bit count 3
+Success rate is 0 percent (0/3)
+```
 
 ## 2. BFD
 
@@ -155,6 +252,22 @@ If the neighbour does not announce the TLV, the adjacency comes up with BFD down
 A neighbour that announces the TLV but has no BFD timers on the interface therefore keeps the adjacency in Init for
 good.
 
+:::try
+Break the primary path silently and count how long the traffic stops. Do it once before you solve Task M7-4, and
+once more after.
+
+1. On RT01, ping RT02's services network and leave it running:
+   `ping 10.20.0.1 source Loopback1 repeat 20000 timeout 1`. Each dot is about one second without traffic.
+2. In CML, select the link between SW01 and RT02. On its **Settings** tab, set **Loss** to 100, tick **Enable** and
+   press **Apply**.
+3. When the dots stop (the traffic has moved to the backup link), press **Reset** on the same tab. Stop the ping with
+   Ctrl+Shift+6, count the dots, and read XR01's log with `show logging | include "BFD|ADJCHANGE"`.
+
+What the lab measured: without BFD the traffic stopped for 22 to 28 seconds, until the IS-IS hold time ran out (how
+long depends on when the last hello arrived before the failure). With BFD (100 ms × 3 and 250 ms × 3 were both tried)
+one reply was lost, and XR01 logged `Echo function failed`.
+:::
+
 ### 2.3 BFD and bundles
 
 On a bundle, BFD can run in two ways. **BFD over bundle members** (BoB, RFC 7130) runs one session on each member
@@ -185,6 +298,20 @@ transit path before maintenance without losing access to it: in the lab, RT01 se
 backup link at once and still reached XR01's loopback over the bundle. A bit left set after the work keeps the router
 out of every path, with no alarm.
 
+:::try
+See what the bit does to the paths. Do it after Task M7-1 (the bundle has to work) and before Task M7-3, which
+removes the bit.
+
+1. On XR01, `show isis database` shows a 1 in the OL column of XR01's own LSP.
+2. On RT01, `show ip route 10.20.0.0` and `traceroute 10.20.0.1 source Loopback1 numeric` show the path to RT02's
+   services network: over the backup link (GigabitEthernet3), not through XR01.
+3. On RT01, `ping 10.255.0.1` still reaches XR01's loopback over the bundle. An overloaded router is avoided for
+   transit, not cut off.
+
+In the lab the route had metric 1010 through GigabitEthernet3 and the traceroute reached RT02 (10.0.12.12) in a
+single hop. After Task M7-3 the same commands show the path through XR01.
+:::
+
 ### 3.2 At start-up
 
 A router that has just started has an incomplete database and, if it runs BGP, an incomplete BGP table; traffic that
@@ -209,6 +336,20 @@ the bit is actually set:
 
 A process restart without NSF counts as a cold start. With NSF configured, a process restart no longer sets the bit;
 the start-up overload is then left for cold starts, such as a reload of the whole router (not measured in the lab).
+
+:::try
+Watch the start-up overload happen. It needs a restart without NSF, so do it after Task M7-3 and before Task M7-5
+(or take `nsf` out for the test and put it back afterwards).
+
+1. On XR01, restart IS-IS with `process restart isis`.
+2. On RT01, run `show isis database XR01.00-00` every two or three seconds and watch the OL column: it shows 1 for a
+   while, then 0.
+3. On XR01, `show isis protocol` names the startup mode (`Cold Restart`) and the state of the overload bit.
+
+What the lab measured: with `on-startup wait-for-bgp` the bit appeared about five seconds after
+`process restart isis` and was gone by 13 seconds, about when XR01 logged `Cold controlled start completed` (BGP had
+not restarted and was converged); with `on-startup 60` it stayed for about 60 seconds; with NSF it was not set.
+:::
 
 ## 4. Restarting without loss
 
@@ -248,6 +389,20 @@ With `nsf cisco` the neighbours saw nothing either; XR01 logged `Cisco NSF contr
 Restart` or `Cold Restart`). XR01's own adjacency table counts the uptime from the restart either way; the neighbours' logs are
 where to look.
 
+:::try
+Watch a restart from the neighbour's side. Do it once before you solve Task M7-5, and once more after.
+
+1. On RT01, ping RT02's loopback, which goes through XR01, and leave it running:
+   `ping 10.255.0.12 source Loopback0 repeat 20000 timeout 1`. A lost reply costs one second, so the number of dots
+   is roughly the number of seconds that the traffic stopped.
+2. In another console tab, restart IS-IS on XR01 with `process restart isis`.
+3. When the ping has finished (or after you stop it with Ctrl+Shift+6), count the dots, and read RT01's log with
+   `show logging | include ADJCHANGE`.
+
+What the lab measured: without NSF, one or two replies were lost, and RT01 logged `Down, neighbor forgot us` and the
+adjacency up again two seconds later. With NSF, no reply was lost and RT01 logged no adjacency change.
+:::
+
 ### 4.3 BGP graceful restart
 
 BGP graceful restart (RFC 4724) does for BGP what NSF does for IS-IS. The restarting router keeps forwarding; its
@@ -268,6 +423,17 @@ reset (`clear bgp <neighbour>` on IOS XR), the neighbour still shows `Graceful-R
 `advertised`; when it works, IOS shows
 `Graceful Restart Capability: advertised and received`. The restart time (120 seconds by default) bounds how long
 the peers wait for the session, and the stale-path time (360 seconds) how long they keep the stale routes.
+
+:::try
+Restart BGP on XR01 and watch RT02's route to XR01's platform network. Do it once before you solve Task M7-5, and
+once more after.
+
+1. On XR01, restart BGP with `process restart bgp`.
+2. On RT02, at once and then every second or two, run `show ip bgp | include 10.30.0.0`.
+
+What the lab measured: without graceful restart the route was gone for about five seconds (no line at all); with
+graceful restart RT02 kept it, marked `S` (stale), until the session was back six to eleven seconds later.
+:::
 
 ### 4.4 NSR
 
@@ -313,7 +479,8 @@ command reference, "Implementing BFD" and "Implementing IS-IS" (BFD timers and d
 `bfd multipath include location`, `set-overload-bit` and its start-up forms, NSF, NSR on dual route processors only),
 the IOS XR *BGP* configuration guide and command reference (graceful restart and its timers, BGP NSR) and the IOS XE
 17.x guides (NSF awareness, BGP graceful restart, BFD), checked October 2026; RFC 5880, 5881, 7130, 6213, 3787, 4724
-and 8706. The following come from measurement in lab XRT-06: the static bundle that shows up, the detection times of
-LACP, the MTU messages, the BFD times and the Init state, the overload bit at start-up, the messages of an NSF restart,
+and 8706, and RFC 2328 (the MTU in OSPF database description packets). The following come from measurement in lab
+XRT-06: the static bundle that shows up, the detection times of LACP, the MTU of each protocol and the MTU messages,
+the DF-bit ping at the boundary, the BFD times and the Init state, the overload bit at start-up, the messages of an NSF restart,
 the stale routes on RT02, NSR in the `Not Ready` state, and the default of BGP NSR.
 :::

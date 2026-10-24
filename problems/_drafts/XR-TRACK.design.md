@@ -900,3 +900,21 @@ Cat8000v はデータ IF が 3 本(Gi1〜3)= 束 2 本+予備 1 本でちょう�
      XRT-06 は `set-overload-bit` を入れ直して `clear bgp 10.255.0.12`。
   6. RT01 に `lacp min-bundle 2` を入れると、1 本止めた時に RT01 が残りのメンバも止め、XR の最低本数の採点が素通りになる見込み= 入れない(テンプレートから外した)。
   7. BFD を入れた主経路でも、`nsf ietf` の IS-IS の再起動で RT02 の隣接は落ちない(BFD のセッションは保たれる)。
+
+### 19.8 「やってみる」の手順での測り直し(2026-10-24・XRT-06。解く側と同じ起こし方= CML のリンク条件・process restart・RT 側は ping と show だけ)
+
+ユーザ要望(設定をなぞるだけで実感が無い)で M7 の読み物に `:::try` を 6 つ足し、ワークスペースの課題カードの小窓にも出した。
+答え合わせの値はこの手順で測り直した(XR01 は M7 を解き終えた状態から一時的に外して測り、最後に running-config の全文が測る前と一致することを確認)。
+記録= 作業場所の e1〜e6 のログ(リポには置いていない)。
+
+| 囲み | 起こし方 | 結果 |
+|---|---|---|
+| 1.2 束 | CML のリンク条件 loss 100 を XR01 Gi0/0/0/0–RT01 Gi1 に | `lacp period short`= 5 秒以内に抜け、最小 2 本で束ごと Down(メンバは Standby→Configured)。slow= **68 秒**(PoC は RT01 のポート断で 72 秒) |
+| 2.2 BFD | loss 100 を SW01–RT02 に・RT01 から `ping 10.20.0.1 source Loopback1 repeat 40000 timeout 1` | BFD あり(250 ms×3)= 欠落 1・`Echo function failed`。BFD なし= **28 秒**(PoC は 22 秒= 保持時間 30 秒のどこで落ちたかで変わる) |
+| 3.1 OL | 素の `set-overload-bit` | RT01 の 10.20.0.0/16 は Gi3・メトリック 1010、traceroute は 1 ホップ(10.0.12.12)、XR01 の Lo0 へは届く |
+| 3.2 起動時 | `on-startup wait-for-bgp`・NSF なしで `process restart isis` | RT01 の `show isis database XR01.00-00` の OL 列= 約 5 秒後に 1、13 秒後までに 0(XR01 の `Cold controlled start completed` は +10 秒) |
+| 4.2 NSF | RT01 から Lo0→RT02 Lo0 の ping を流しつつ `process restart isis` | NSF なし= 欠落 1(PoC は 2)・RT01 に `neighbor forgot us`→2 秒後 Up。`nsf cisco`= 欠落 0・RT01 に変化なし |
+| 4.3 BGP GR | `process restart bgp`・RT02 で `show ip bgp \| include 10.30.0.0` | GR あり= `S>i` が約 11 秒(PoC は約 6 秒)。XR01 の GR を外して張り直し= 行が約 5 秒消える |
+
+- 中断の事故: 測定の途中で会話の画面が止まり、裏で前の処理が 3.1・3.2 を進めていた(同じ XR01 に 2 つの作業が同時にコミット)。以後は
+  コミットにコメント「try-it measurement (Claude)」を付け、`show configuration commit list detail` で他の作業の有無を見ながら進めた。

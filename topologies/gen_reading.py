@@ -14,6 +14,7 @@
   :::note ... :::               … 訳注ブロック（青）
   :::sic  ... :::               … 誤り・不整合の指摘ブロック（黄）
   :::orig ... :::               … 原文併記（既定は折りたたみ）
+  :::try  ... :::               … やってみる（緑。読者が自分で障害を起こして確かめる手順。書き下ろしの教材用）
   :::topo ... :::               … ネットワーク図（座標指定の SVG・下記）
   ```console ... ```            … 端末風（プロンプト行を強調）
   ![説明](img/ファイル名)        … 図版（画面キャプチャ等の画像・下記）
@@ -52,7 +53,7 @@
                        `alt_lang:` もう一方の言語。lang と合わせて en/ja の 2 言語の本になる(BL-248):
                          ページは <src>/<lang>/<file> と <src>/<alt_lang>/<file>。2 版を 1 ページに持ち、ボタンで切り替わる。
                          title・subtitle・chapters の値は {en: …, ja: …} で書ける。bundle は言語ごとに別の 1 枚を作る
-  → 出力先に book.json(ポータルが読む一覧用のメタ。節の一覧 sections・ページ題名 page_titles も)も書く
+  → 出力先に book.json(ポータルが読む一覧用のメタ。節の一覧 sections・ページ題名 page_titles・「やってみる」tries も)も書く
   ★節の目印(BL-252): h2/h3 に言語に依らない data-sec="s<n>" / "s<n>-<m>" を振る。`<ページ>.html#s2` で表示中の版の節へ飛ぶ。
     ラボのワークスペースの Reading タブ(learn.yml の read:)と実践ページのリンクが使う。2 版の見出しの並びがずれると警告する
   `<p class="tolab">…</p>`(行頭) … 配信時だけのリンク(ワークスペース・他ページの節)。持ち出しの 1 枚では落とす
@@ -170,6 +171,8 @@ body.reading .tolab a{ text-decoration:none; } body.reading .tolab a:hover{ text
 .c-sic{ background:#fdf6e3; border-left:4px solid #c08a2e; }
 .c-sic .tag{ background:#c08a2e; color:#fff; }
 .c-orig{ background:#f7f7f7; border-left:4px solid #aaa; }
+.c-try{ background:#eef8ef; border-left:4px solid #3f8f4f; }
+.c-try .tag{ background:#3f8f4f; color:#fff; }
 .c-orig summary{ cursor:pointer; color:#555; font-size:.86rem; }
 .c-orig pre,.c-orig p{ font-size:.86rem; color:#444; }
 
@@ -353,14 +356,14 @@ SIC_RE = re.compile(r"\{\{sic:(.+?)\|(.+?)\}\}", re.S)
 FENCE_RE = re.compile(r"^```")
 
 _TAGS = {"note": ("c-note", "訳注"), "sic": ("c-sic", "原典の誤り"),
-         "orig": ("c-orig", "原文")}
+         "orig": ("c-orig", "原文"), "try": ("c-try", "やってみる")}
 
 # 画面の決まり文句。book.yml の `lang: en` で英語にする(既定は日本語。訳文でない英語の教材用・BL-246)。
 # <html lang> も合わせる(読み上げ・フォント選択のため)。
 _LANG = "ja"
-_WORDS = {"ja": {"toc": "目次", "back": "↑ 目次へ", "note": "訳注", "sic": "原典の誤り", "orig": "原文", "portal": "‹ ポータル",
+_WORDS = {"ja": {"toc": "目次", "back": "↑ 目次へ", "note": "訳注", "sic": "原典の誤り", "orig": "原文", "try": "やってみる", "portal": "‹ ポータル",
                  "prev": "前のページ", "next": "次のページ"},
-          "en": {"toc": "Contents", "back": "↑ Contents", "note": "Note", "sic": "Error in the source", "orig": "Original",
+          "en": {"toc": "Contents", "back": "↑ Contents", "note": "Note", "sic": "Error in the source", "orig": "Original", "try": "Try it",
                  "portal": "‹ Portal", "prev": "Previous page", "next": "Next page"}}
 
 
@@ -622,6 +625,30 @@ def mark_sections(page_html):
     return _SEC_TOK.sub(rep, page_html), secs
 
 
+# 「やってみる」(:::try)を節ごとに取り出す(2026-10-24 ユーザ要望)。ラボのワークスペースは、課題の read: が指す節にある
+# 囲みを、課題カードのボタンから浮かぶ小窓で出す(文面は読み物の 1 か所だけに持つ)。mark_sections の後の HTML から取る
+# = 囲みの中身はまだ termify・wrap_tables の前(div を含まない)なので、最初の </div> までが中身。
+_TRY_TOK = re.compile(r'<div class="lv" data-l="(\w+)">|<h[23][^>]*\sdata-sec="([^"]+)"|'
+                      r'<div class="callout c-try">\s*(?:<span class="tag">.*?</span>)?(.*?)</div>', re.S)
+
+
+def extract_tries(marked_html):
+    """{節: [{言語: 中身の HTML}, …]}。2 版は同じ並びなので、節の中の順番で組にする。1 言語のページは言語を "" にする。"""
+    per, lang, sec = {}, "", ""
+    for m in _TRY_TOK.finditer(marked_html):
+        if m.group(1):
+            lang, sec = m.group(1), ""
+        elif m.group(2):
+            sec = m.group(2)
+        else:
+            per.setdefault(sec, {}).setdefault(lang, []).append(m.group(3).strip())
+    out = {}
+    for sec, by_lang in per.items():
+        n = max(len(v) for v in by_lang.values())
+        out[sec] = [{l: v[k] for l, v in by_lang.items() if k < len(v)} for k in range(n)]
+    return out
+
+
 # 読み物のページに足す動き(BL-252):
 #   ・`#s2` などの節の目印へ送る(いま表示中の版の見出しへ。言語を切り替えた後の hashchange でも)
 #   ・実践へのリンク(.tolab の中の /_learn?id=…)は、ラボのワークスペースの枠の中では親の Steps タブを開く合図に替える。
@@ -730,6 +757,7 @@ def build_page(src, meta, i, out_dir, mermaid_mode):
     if mermaid_mode == "local":
         out = out.replace(RH.MERMAID_CDN, "mermaid.min.js")
     out, p["_sections"] = mark_sections(out)
+    p["_tries"] = extract_tries(out)
     out = out.replace("</body>", f"{reading_nav(meta, i)}\n<script>{READ_JS}</script>\n</body>", 1)
     out = _finish_lang(lazy_images(wrap_tables(termify(out))))
     dst = os.path.join(out_dir, p["html"])
@@ -800,7 +828,9 @@ def build(src, mermaid_mode="local"):
                    "pages": len(meta["pages"]),
                    # 節の一覧(BL-252)= {ページの html: {s2: {en: 見出し, ja: 見出し}}}。ワークスペースの Reading リンクの表示名
                    "sections": {pg["html"]: pg.get("_sections", {}) for pg in meta["pages"]},
-                   "page_titles": {pg["html"]: pg["_titles"] for pg in meta["pages"]}},
+                   "page_titles": {pg["html"]: pg["_titles"] for pg in meta["pages"]},
+                   # 「やってみる」= {ページの html: {節: [{en: HTML, ja: HTML}]}}。ワークスペースの課題カードの小窓
+                   "tries": {pg["html"]: pg["_tries"] for pg in meta["pages"] if pg.get("_tries")}},
                   fh, ensure_ascii=False, indent=1)
     print(f"[reading] {len(meta['pages'])} ページ / 訳注 {total} 件 → "
           f"{os.path.relpath(out_dir, REPO)}/index.html")
