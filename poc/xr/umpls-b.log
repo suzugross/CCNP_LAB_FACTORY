@@ -1,0 +1,196 @@
+
+######## 10:32:18 b-1: XR01 にアクセスの IGP を 2 つめの IS-IS インスタンスで。Lo0 を CORE と ACCESS の両方に載せられるか
+configure
+Sat Oct 24 10:32:20.034 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis ACCESS
+RP/0/RP0/CPU0:XR01(config-isis)#
+is-type level-2-only
+RP/0/RP0/CPU0:XR01(config-isis)#
+net 49.0002.0100.0000.0001.00
+RP/0/RP0/CPU0:XR01(config-isis)#
+log adjacency changes
+RP/0/RP0/CPU0:XR01(config-isis)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+metric-style wide
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+exit
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface Loopback0
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+passive
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router isis ACCESS
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/2
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+point-to-point
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+show configuration
+Sat Oct 24 10:32:26.959 UTC
+!! Building configuration...
+!! IOS XR Configuration 26.1.1
+router isis ACCESS
+ is-type level-2-only
+ net 49.0002.0100.0000.0001.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface GigabitEthernet0/0/0/2
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sat Oct 24 10:32:27.483 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sat Oct 24 10:32:28.364 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config router isis ACCESS
+Sat Oct 24 10:33:01.455 UTC
+router isis ACCESS
+ is-type level-2-only
+ net 49.0002.0100.0000.0001.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface GigabitEthernet0/0/0/2
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show isis instance ACCESS adjacency
+Sat Oct 24 10:33:01.962 UTC
+
+IS-IS ACCESS Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT04           Gi0/0/0/2                *PtoP*         Up    23   00:00:24 Yes None None
+
+Total adjacency count: 1
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Sat Oct 24 10:33:02.346 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    22   00:01:40 Yes None None
+RT03           Gi0/0/0/1                *PtoP*         Up    24   00:01:40 Yes None None
+
+Total adjacency count: 2
+
+IS-IS ACCESS Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT04           Gi0/0/0/2                *PtoP*         Up    22   00:00:24 Yes None None
+
+Total adjacency count: 1
+RP/0/RP0/CPU0:XR01#
+show isis instance CORE interface Loopback0 | include "Loopback0|Enabled|Disabled|Adjacency"
+Sat Oct 24 10:33:02.817 UTC
+Loopback0                   Enabled
+  Adjacency Formation:      Disabled (Passive in IS-IS cfg)
+  Prefix Advertisement:     Enabled
+  IPv4 Unicast Topology:    Enabled
+    Adjacency Formation:    Disabled (Intf passive in IS-IS cfg)
+    MPLS LDP Sync (L1/L2):  Disabled/Disabled
+  IPv4 Address Family:      Enabled
+RP/0/RP0/CPU0:XR01#
+show isis instance ACCESS interface Loopback0 | include "Loopback0|Enabled|Disabled|Adjacency"
+Sat Oct 24 10:33:03.279 UTC
+Loopback0                   Enabled
+  Adjacency Formation:      Disabled (Passive in IS-IS cfg)
+  Prefix Advertisement:     Enabled
+  IPv4 Unicast Topology:    Enabled
+    Adjacency Formation:    Disabled (Intf passive in IS-IS cfg)
+    MPLS LDP Sync (L1/L2):  Disabled/Disabled
+  IPv4 Address Family:      Enabled
+RP/0/RP0/CPU0:XR01#
+show route isis
+Sat Oct 24 10:33:03.679 UTC
+
+i L2 10.0.12.0/24 [115/20] via 10.0.1.11, 00:01:11, GigabitEthernet0/0/0/0
+i L2 10.0.23.0/24 [115/120] via 10.0.1.11, 00:01:11, GigabitEthernet0/0/0/0
+i L2 10.255.0.11/32 [115/20] via 10.0.1.11, 00:01:11, GigabitEthernet0/0/0/0
+i L2 10.255.0.12/32 [115/30] via 10.0.1.11, 00:01:11, GigabitEthernet0/0/0/0
+i L2 10.255.0.13/32 [115/110] via 10.0.3.13, 00:01:16, GigabitEthernet0/0/0/1
+i L2 10.0.45.0/24 [115/20] via 10.0.14.14, 00:00:23, GigabitEthernet0/0/0/2
+i L2 10.255.0.14/32 [115/20] via 10.0.14.14, 00:00:23, GigabitEthernet0/0/0/2
+i L2 10.255.0.15/32 [115/30] via 10.0.14.14, 00:00:23, GigabitEthernet0/0/0/2
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.15/32
+Sat Oct 24 10:33:04.079 UTC
+
+Routing entry for 10.255.0.15/32
+  Known via "isis ACCESS", distance 115, metric 30, type level-2
+  Installed Oct 24 10:32:39.914 for 00:00:24
+  Routing Descriptor Blocks
+    10.0.14.14, from 10.255.0.15, via GigabitEthernet0/0/0/2
+      Route metric is 30
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+show isis neighbors
+
+Tag ACCESS:
+System Id       Type Interface     IP Address      State Holdtime Circuit Id
+XR01            L2   Et0/0         10.0.14.1       UP    21       00
+RT05            L2   Et0/1         10.0.45.15      UP    29       01
+RT04#
+show ip route 10.255.0.1
+Routing entry for 10.255.0.1/32
+  Known via "isis", distance 115, metric 10, type level-2
+  Redistributing via isis ACCESS
+  Last update from 10.0.14.1 on Ethernet0/0, 00:00:28 ago
+  Routing Descriptor Blocks:
+  * 10.0.14.1, from 10.255.0.1, 00:00:28 ago, via Ethernet0/0
+      Route metric is 10, traffic share count is 1
+RT04#
+show ip route 10.255.0.12
+% Subnet not in table
+RT04#
+show ip route 10.255.0.1
+Routing entry for 10.255.0.1/32
+  Known via "isis", distance 115, metric 20, type level-2
+  Redistributing via isis ACCESS
+  Last update from 10.0.45.14 on Ethernet0/0, 00:00:31 ago
+  Routing Descriptor Blocks:
+  * 10.0.45.14, from 10.255.0.1, 00:00:31 ago, via Ethernet0/0
+      Route metric is 20, traffic share count is 1
+RT05#
+show ip route 10.255.0.15
+% Subnet not in table
+RT01#

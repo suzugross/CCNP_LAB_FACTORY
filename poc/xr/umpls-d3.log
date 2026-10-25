@@ -1,0 +1,249 @@
+
+######## 10:39:07 d-3: XR01 を両方の RR に。LU の AF に route-reflector-client と next-hop-self(enforce-modifications はまだ無し)
+configure
+Sat Oct 24 10:39:08.634 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+neighbor 10.255.0.15
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+address-family ipv4 labeled-unicast
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+route-reflector-client
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+next-hop-self
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+neighbor 10.255.0.12
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+address-family ipv4 labeled-unicast
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+route-reflector-client
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+next-hop-self
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+commit
+Sat Oct 24 10:39:13.587 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+show configuration failed
+Sat Oct 24 10:39:13.987 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast summary
+Sat Oct 24 10:40:02.024 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 23
+BGP main routing table version 23
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker           23            23            23            23            23             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.12       0 65000      22      25           23    0    0 00:00:43          2
+10.255.0.15       0 65000      12      11           23    0    0 00:00:43          2
+
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast
+Sat Oct 24 10:40:02.430 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 23
+BGP main routing table version 23
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*>i10.20.0.0/16       10.255.0.12              0    100      0 i
+*>i10.50.0.0/16       10.255.0.15              0    100      0 i
+*>i10.255.0.12/32     10.255.0.12              0    100      0 i
+*>i10.255.0.15/32     10.255.0.15              0    100      0 i
+
+Processed 4 prefixes, 4 paths
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast labels
+Sat Oct 24 10:40:02.824 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 23
+BGP main routing table version 23
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop        Rcvd Label      Local Label
+*>i10.20.0.0/16       10.255.0.12     3               nolabel
+*>i10.50.0.0/16       10.255.0.15     3               nolabel
+*>i10.255.0.12/32     10.255.0.12     3               nolabel
+*>i10.255.0.15/32     10.255.0.15     3               nolabel
+
+Processed 4 prefixes, 4 paths
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast 10.255.0.15/32
+Sat Oct 24 10:40:03.226 UTC
+BGP routing table entry for 10.255.0.15/32
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 23           23
+Last Modified: Oct 24 10:39:18.939 for 00:00:44
+Paths: (1 available, best #1)
+  Advertised IPv4 Labeled-unicast paths to update-groups (with more than one peer):
+    0.1 
+  Path #1: Received by speaker 0
+  Advertised IPv4 Labeled-unicast paths to update-groups (with more than one peer):
+    0.1 
+  Local, (Received from a RR-client)
+    10.255.0.15 (metric 30) from 10.255.0.15 (10.255.0.15)
+      Received Label 3 
+      Origin IGP, metric 0, localpref 100, valid, internal, best, group-best, labeled-unicast
+      Received Path ID 0, Local Path ID 1, version 23
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast 10.255.0.12/32
+Sat Oct 24 10:40:03.624 UTC
+BGP routing table entry for 10.255.0.12/32
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 21           21
+Last Modified: Oct 24 10:39:17.939 for 00:00:45
+Paths: (1 available, best #1)
+  Advertised IPv4 Labeled-unicast paths to update-groups (with more than one peer):
+    0.1 
+  Path #1: Received by speaker 0
+  Advertised IPv4 Labeled-unicast paths to update-groups (with more than one peer):
+    0.1 
+  Local, (Received from a RR-client)
+    10.255.0.12 (metric 30) from 10.255.0.12 (10.255.0.12)
+      Received Label 3 
+      Origin IGP, metric 0, localpref 100, valid, internal, best, group-best, labeled-unicast
+      Received Path ID 0, Local Path ID 1, version 21
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast neighbors 10.255.0.12 advertised-routes
+Sat Oct 24 10:40:04.038 UTC
+Network            Next Hop        From            AS Path
+10.20.0.0/16       10.255.0.1      10.255.0.12     i
+10.50.0.0/16       10.255.0.15     10.255.0.15     i
+10.255.0.12/32     10.255.0.1      10.255.0.12     i
+10.255.0.15/32     10.255.0.15     10.255.0.15     i
+
+Processed 4 prefixes, 4 paths
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding
+Sat Oct 24 10:40:04.430 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24000  Pop         10.255.0.13/32     Gi0/0/0/1    10.0.3.13       2646        
+24001  16          10.255.0.12/32     Gi0/0/0/0    10.0.1.11       3570        
+24002  Pop         10.255.0.11/32     Gi0/0/0/0    10.0.1.11       4986        
+24003  16          10.255.0.15/32     Gi0/0/0/2    10.0.14.14      1681        
+24004  Pop         10.255.0.14/32     Gi0/0/0/2    10.0.14.14      742         
+RP/0/RP0/CPU0:XR01#
+show ip bgp
+BGP table version is 8, local router ID is 10.255.0.12
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.20.0.0/16     0.0.0.0                  0         32768 i
+ *>i  10.30.0.0/16     10.255.0.1               0    100      0 i
+ * i  10.50.0.0/16     10.255.0.15              0    100      0 i
+ *>   10.255.0.12/32   0.0.0.0                  0         32768 i
+ * i  10.255.0.15/32   10.255.0.15              0    100      0 i
+RT02#
+show ip bgp labels
+   Network          Next Hop      In label/Out label
+   10.20.0.0/16     0.0.0.0         imp-null/nolabel
+   10.30.0.0/16     10.255.0.1      nolabel/nolabel
+   10.50.0.0/16     10.255.0.15     nolabel/imp-null
+   10.255.0.12/32   0.0.0.0         imp-null/nolabel
+   10.255.0.15/32   10.255.0.15     nolabel/imp-null
+
+RT02#
+show ip bgp 10.255.0.15
+BGP routing table entry for 10.255.0.15/32, version 0
+Paths: (1 available, no best path)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.15 (inaccessible) from 10.255.0.1 (10.255.0.1)
+      Origin IGP, metric 0, localpref 100, valid, internal
+      Originator: 10.255.0.15, Cluster list: 10.255.0.1
+      mpls labels in/out nolabel/imp-null
+      rx pathid: 0, tx pathid: 0
+      Updated on Oct 24 2026 10:39:19 UTC
+RT02#
+show ip route 10.255.0.15
+% Subnet not in table
+RT02#
+show ip cef 10.255.0.15 detail
+0.0.0.0/0, epoch 0, flags [default route handler, default route]
+  no route
+RT02#
+show mpls forwarding-table
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+16         Pop Label  10.255.0.11/32   270           Et0/0      10.0.12.11  
+17         Pop Label  10.0.1.0/24      0             Et0/0      10.0.12.11  
+18         Pop Label  10.255.0.13/32   0             Et0/1      10.0.23.13  
+19         19         10.0.3.0/24      0             Et0/0      10.0.12.11  
+20         20         10.255.0.1/32    156210        Et0/0      10.0.12.11  
+RT02#
+show ip bgp
+BGP table version is 3, local router ID is 10.255.0.15
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ * i  10.20.0.0/16     10.255.0.12              0    100      0 i
+ *>   10.50.0.0/16     0.0.0.0                  0         32768 i
+ * i  10.255.0.12/32   10.255.0.12              0    100      0 i
+ *>   10.255.0.15/32   0.0.0.0                  0         32768 i
+RT05#
+show ip bgp labels
+   Network          Next Hop      In label/Out label
+   10.20.0.0/16     10.255.0.12     nolabel/imp-null
+   10.50.0.0/16     0.0.0.0         imp-null/nolabel
+   10.255.0.12/32   10.255.0.12     nolabel/imp-null
+   10.255.0.15/32   0.0.0.0         imp-null/nolabel
+
+RT05#
+show ip route 10.255.0.12
+% Subnet not in table
+RT05#
+show ip cef 10.255.0.12 detail
+0.0.0.0/0, epoch 0, flags [default route handler, default route]
+  no route
+RT05#

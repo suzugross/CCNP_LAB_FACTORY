@@ -72,6 +72,7 @@
 | M6 | BGP(隣接・アドレスファミリ・属性・パス選択・再配送) | 2.3 2.4 2.6 | XR 1+IOL |
 | M7 | 高可用性(BFD・NSF/NSR・リンク集約) | 2.8 | XR 1+IOL |
 | M8 | MPLS LDP(隣接・同期・セッション保護・OAM・認証とラベルフィルタ)。§20。3.1.d Unified MPLS は M8 追補(§20.8) | 3.1 1.5.d | XRd 1+IOL 3 |
+| M8 追補 | Unified MPLS(IGP の分割・境界の 2 インスタンス・BGP ラベル付きユニキャスト・RR の next-hop-self)。§21 | 3.1.d | XRd 1+IOL 5 |
 | M9 | L3VPN(Intra-AS・共有サービス) | 4.3 | XR 1+IOL |
 | M10 | セグメントルーティング(セグメント種別・IGP 制御プレーン・TI-LFA。SR-TE・SRv6 は読み物中心) | 3.3 | XR 1〜2+IOL |
 | M11 | L2VPN とキャリアイーサネット(VLAN タグ操作・E-Line/E-LAN・EVPN) | 4.1.a 4.2 | XR 2+IOL |
@@ -1082,6 +1083,7 @@ RT01= LDP・`mpls ldp sync`・targeted ハローを受け入れる/RT02= PE(XR01
 
 - **Unified MPLS(3.1.d)**= XR01 の先に 2 つめの IGP 領域(アクセス)を足し、XR01 を境界にして BGP ラベル付きユニキャスト(next-hop-self)で
   アクセスの PE のループバックをコアへ運ぶ(IGP 間の再配送なし)。M4 追補と同じく「M8 を解き終えた状態から」のラボにする想定。PoC は M8 の後。
+  → **2026-10-24 PoC 完了= §21**。
 
 ### 20.9 実装の結果(2026-10-24)
 
@@ -1108,3 +1110,123 @@ RT01= LDP・`mpls ldp sync`・targeted ハローを受け入れる/RT02= PE(XR01
   8. ★作業の事故= IOS で `?` のヘルプを引くのに xrsh で「行+?」を送ると、ヘルプの後に残った行が次の行と一緒に実行され、RT01 に
      `mpls ldp explicit-null` と `mpls ldp label`/`allocate global` が入った(気づいて外し、3 台とも初期設定どおりを確認)。IOS でヘルプを引く時は `?` を単独の行で送る。
 - **§20.7 から変えた点**= なし(課題・採点の形は確定案のまま)。読み物の 5.2 は実測(上の 4)に合わせ、遅延が保護中のセッションにも働くと書いた。
+
+## 21. M8 追補 — Unified MPLS(SPCOR 3.1.d)(2026-10-24 完了= 課題 §21.6・ユーザ判断 §21.7・実装の結果 §21.8)
+
+§20.8 の案を PoC で確かめた。盤面 `problems/_POC-XRUMPLS`(撤収済み)・手順 `poc/xr/umpls_poc.sh`(段 a〜g・mtu)・記録 `poc/xr/umpls-*.log`。
+
+### 21.1 盤面
+
+XRT-07 の四角形(XR01 は M8-1〜5 を解き終えた設定を初期設定に入れた)の XR01 の先に、アクセスの領域を足した。
+
+```
+RT05(アクセスの PE) ── RT04(アクセスの P) ── XR01(境界) ── RT01/RT03(コアの P) ── RT02(コアの PE)
+  Lo0 10.255.0.15        Lo0 10.255.0.14        Lo0 10.255.0.1                         Lo0 10.255.0.12
+  お客さま B 10.50/16    10.0.45.0/24・10.0.14.0/24(XR01 Gi0/0/0/2)                    お客さま A 10.20/16
+```
+
+- アクセスの IGP= IS-IS ACCESS(エリア 49.0002・L2 のみ・wide)。コアの IS-IS CORE とは別のインスタンスで、経路は交換しない。
+- XR01 を 2 つの PE(RT02・RT05)の BGP ラベル付きユニキャスト(以下 LU)の RR にし、反映する経路の next hop を自分にする。
+  P(RT01・RT03・RT04)は BGP を動かさず、相手の領域のループバックも知らない。
+- XRd が XR01 をラベル付きで通り抜ける TCP(PE 同士の直接の iBGP)を壊さないことを確かめた(§14.1 の弱点はラベルなしの通過だけ)。
+
+### 21.2 裏どり(資料)
+
+| 記号 | 資料 | 版 |
+|---|---|---|
+| A | Cisco TAC「Configure Unified MPLS in Cisco IOS XR」(doc 119191) | 2015(2017 改訂) |
+| B | Cisco TAC「Labeled and Unlabeled Together on one BGP Neighbor on IOS-XR」(doc 216498) | 2020-12 |
+| C | BGP Command Reference for Cisco 8000 | 2026-09 |
+| D | Cisco TAC「Cisco IOS-XR BGP with MPLS Designs」(doc 217202) | 2021 |
+| E | IS-IS の設定ガイド: Cisco 8000(24.x・累積版 2026-09)/ ASR 9000 6.5・7.8・24.x/NCS 5500 24.x/NCS 540 26.x | 各版 |
+| F | Catalyst 9500 17.14「Configuring Seamless MPLS」・Catalyst 9400 17.12「Inter-AS IPv4 BGP Label Distribution」 | 17.14・17.12 |
+| G | RFC 8277(BGP によるラベルの割り当て。RFC 3107 を廃止)・draft-ietf-mpls-seamless-mpls-07(2014・RFC にならず失効) | 2017・2014 |
+
+### 21.3 実測の結果(XRd 26.1.1・IOL 17.15)
+
+| 項目 | 資料 | 実機 | 扱い |
+|---|---|---|---|
+| LU の形 | C: 近隣の AF `ipv4 labeled-unicast` は、ルータの AF `ipv4 unicast` が前提 | 一致。近隣の AF は LU だけで足りる | — |
+| U と LU を同じ近隣に | B: 6.2.1 から可。表は 1 つ | 一致。`show bgp ipv4 unicast` に LU の経路も並ぶ。ラベルの無い経路(自分の 10.30/16)は SAFI 1 で送る | — |
+| IOS の send-label | F: 全部の経路にラベルを付けて送る | 一致。`send-label` を足すとセッションを張り直し、以後は SAFI 4 だけで送る | 据え付け側 |
+| next-hop-self(RR) | A: 「next-hop-self does not work」・`ibgp policy out enforce-modifications` が要る | **一致**。enforce なし= 反映する経路の next hop を替えない(RT02 で 10.255.0.15 の next hop が自分自身→ 再帰がループして 0%) | 課題の仕込み候補 |
+| allocate-label | A・B: 無いとローカル ラベルが無く、LU で送らない | **一致**。enforce あり・allocate なし= 反映が止まる(Not advertised to any peer)。enforce なしなら受けたラベルをそのまま渡す | 課題の仕込み候補 |
+| ラベルの番号 | 記述なし | ループバック /32 の BGP のローカル ラベルは LDP と同じ番号(24003 など)。転送表は 1 行で BGP のラベル→ LDP のラベルへ付け替え | 読み物 |
+| お客さまの経路 | B: ローカル ラベルの無い経路は NHS の LU 近隣へは送らない | `allocate-label route-policy`(/32 だけ)にすると、XR01 はループバックだけ反映し、お客さまの経路は流さない | 課題の候補 |
+| RR のクライアント | RFC 4456 | 片側だけクライアントでも通る(クライアントの経路は全員へ反映)。XR はクライアント指定の付け外しでセッションを張り直す | 採点は挙動で |
+| LSP ping | 記述なし(IOS の `fec-type bgp`) | 既定(LDP の FEC)は `Q`。`fec-type bgp` で送れるが、送信元がコアのリンクのアドレスだと相手の PE が返せない(経路が無い)→ `source <Lo0>` で成功。traceroute は向こう側の P が `*` | 読み物(やってみる) |
+| MTU | — | コアでもアクセスでもラベルは 2 枚(LDP+BGP)。DF 付きで 1492 は通り 1496 は落ちる | 読み物 |
+| XR01 の Lo0 をアクセスへ | **E が割れている**(下) | 2 つの IS-IS インスタンスに Lo0 を載せても、コミットは通り両方で広告される。A の形(Lo0 だけ接続経路として再配送・RPL で絞る)も成立(X フラグ= 外部) | **ユーザ判断待ち**(§21.7) |
+
+IS-IS の資料 E の食い違い:
+- Cisco 8000 の設定ガイド(24.x・累積版 2026-09): 「an interface can be associated with only one IS-IS instance」「Instances may not share an interface」。
+- ASR 9000 7.8・24.x/NCS 5500 24.x/NCS 540 26.x: 「Multiple IS-IS instances can exist on the same physical interface. However, you must configure different instance-id …」。古い「only a single IS-IS instance」の文は消えている。
+- どれもループバック・パッシブの IF には触れていない。XRd 26.1.1 は instance-id なしで受け付けた。
+
+IOS 側で気づいたこと(据え付けの設計に効く):
+- PE 同士の直接のセッションで自分のループバックも送ると、相手は「10.255.0.15 の next hop が 10.255.0.15」という経路を持ち、再帰がループしてお客さまの通信が 0% になる
+  → 据え付けで、直接のセッションはお客さまの経路だけ送る(prefix-list out)。
+- IOS 17.15 の labeled-unicast unique モードの既定は、資料(F の系統)どうしで食い違う。この盤面では同じプレフィックスを SAFI 1 と SAFI 4 で並べないので効かない。
+
+### 21.4 欠けた時の症状(正常な形から 1 つずつ外す・段 f)
+
+| 外したもの | RT02 から見た 10.255.0.15/32 | お客さまの通信 |
+|---|---|---|
+| `ibgp policy out enforce-modifications` | next hop 10.255.0.15(替わらない)・ラベル imp-null。お客さまの経路も XR01 から流れてくる | 0% |
+| `allocate-label` | 経路が消える(XR01 が送らない) | 0%(10.50/16 は inaccessible) |
+| RT02 向けの `next-hop-self` | enforce なしと同じ形 | 0% |
+| RT05 向けの `route-reflector-client` | 変わらない(RT02 がクライアントなので両向きに反映される) | 通る |
+
+### 21.5 PoC で決めたこと
+
+- **M8 追補も XRd**(ラベル付きの通過は TCP も正常。PE 同士の iBGP が XR01 を通り抜けて上がる)。
+- お客さまの経路は **PE 同士の直接の iBGP(据え付け)** が運び、XR01 は PE のループバックだけを LU で運ぶ(本来の Unified MPLS の形。境界にお客さまの経路を持たせない)。
+  IOS の `send-label` は全部をラベル付きにするので、XR01 を「サービスの経路は next hop を替えない RR」にする形は IOS と組み合わせにくい(サービスは M9 の VPNv4 で扱う)。
+
+### 21.6 課題の案(ラボ `XRT-08`・XRT-07 を解き終えた状態から・XR01= XRd 26.1.1)
+
+据え付け(学ぶ側は触らない)= RT04(P)・RT05(PE・XR01 と LU・RT02 と直接の iBGP)・RT02 に `send-label` と Lo0 の network と RT05 との直接の iBGP。
+XR01 の初期設定= XRT-07 の模範解+アクセスの IF のアドレス+前任者の LU の設定(近隣 2 つ・LU の AF・route-reflector-client・next-hop-self。enforce と allocate-label は無い)。
+
+| 課題 | 中身(挙動で指定) | 採点(挙動) |
+|---|---|---|
+| M8-6(構築) | 新設のアクセス網に XR01 を参加させる。アクセスの IGP は IS-IS の別インスタンス ACCESS(エリア 49.0002)・LDP も動かす。コアとアクセスの間で経路を交換しない(アクセスに見せてよいのは XR01 自身のループバックだけ) | ACCESS の隣接 Up・RT04 との LDP Oper・RT04/RT05 に 10.255.0.1 の経路・RT04 にコアの経路が無い・RT01 にアクセスの経路が無い |
+| M8-7(TS) | 「前任者が境界の BGP を入れたが、RT02 と RT05 の PE 間のセッションが上がらない」。IGP 間で再配送せず、P に BGP を入れずに、お客さま A ⇔ B を通す | RT02 の 10.255.0.15/32 が BGP・next hop 10.255.0.1・ラベル付き(RT05 も同じ)・PE 間のセッション Established・お客さまの ping 両向き・RT02 からの traceroute で RT01 のホップにラベル 2 枚 |
+| M8-8 | 境界はお客さまの経路を運ばない。XR01 がラベル付きで反映するのは PE のループバック(/32)だけ | XR01 から RT02・RT05 へ送る LU が /32 だけ・RT02 の 10.50/16 は RT05 からの 1 本だけ・お客さまの ping |
+
+- 配点の案= M8-6 30・M8-7 45・M8-8 25。M8-7 の仕込みは「enforce なし」と「allocate-label なし」の 2 段(片方だけ足すと症状が変わる)。
+- 別解(採点は挙動なので通る)= `allocate-label all`(M8-7 まで)・RPL の `set next-hop self`・Lo0 を 2 つのインスタンスに載せる(§21.7 の判断しだい)。
+- 誤答の想定= RT05 の Lo0 をコアへ再配送(RT01 に経路が出る→ M8-6/M8-7 で落とす)・enforce だけ・allocate だけ。
+- **読み物だけで扱う(やってみる)**= LSP ping の `fec-type bgp` と送信元(応答の戻り道)・traceroute で向こう側の P が `*`・MTU(ラベル 2 枚で 1492)・
+  BGP のラベルが LDP と同じ番号・draft の「核→集約は next hop を替えない」設計(この盤面は両向きとも替える= A の 2 つめの形)。
+- XRT-07 から引き継ぐ確認= お客さま A'(XR01 の 10.30/16 ⇔ RT02 の 10.20/16)が引き続き通ること(壊していないか)。
+
+### 21.7 ユーザ判断(2026-10-24 決定= 1 は案どおり「挙動で採点・模範解は Lo0 の接続経路の再配送」・2 は §21.6 の 3 本で実装へ)
+
+1. **XR01 の Lo0 をアクセス側へ載せる方法**(公式文書が製品系列で割れている。CLAUDE.md の作問の裏どり 2)。
+   案= 採点は挙動だけ(RT04 に 10.255.0.1 があり、コアの経路が無い)で、どちらの形も通す。模範解は資料 A の形(Lo0 だけ接続経路として再配送)。
+   読み物には「2 つのインスタンスに載せる形も XRd 26.1.1 では通るが、公式の記述が製品で割れている」と注記する。
+   別案= アクセスの IGP を OSPF にする(Lo0 を IS-IS と OSPF の両方に載せるのは問題なし・資料 A も OSPF)。
+2. 課題の数と並び(§21.6 の 3 本でよいか)。
+
+### 21.8 実装の結果(2026-10-24)
+
+- 成果物= `problems/XRT-08`(XR01= XRd 26.1.1・RT01〜RT05= IOL 17.15・課題ごとの確認 `grading.m8t6〜8.yml`・最終 `grading.yml`=
+  M8-6 30・M8-7 45・M8-8 25・`learn.yml`(日英)・課題文 日英)、読み物 `courses/xr/{en,ja}/82-m8-unified-mpls.md`(6 節+実践・
+  「やってみる」4 つ・図は `:::topo`)・実践 `83-m8-practice-2.md`(`course.sh` が課題文から切り出す)。
+  模範解= `poc/xr/solve_xrt08.sh`(誤答・別解つき)・逐語= `poc/xr/verbatim.py`・E2E= `poc/xr/e2e_xrt08.sh`・誤答と別解の一括= `poc/xr/e2e_variants_xrt08.sh`・
+  やってみるの実測= `poc/xr/try_xrt08.sh`・記録 `poc/xr/expM8b-*.log`。
+- 実機 E2E= 白紙 0(課題ごと・最終)→ 模範解 100(課題ごと・最終とも 1 回目)・learn.yml の模範解を逐語で流して最終 100・reset 後 0。
+  別解= Lo0 を CORE と ACCESS の両方に載せる → M8-6 100。誤答= Lo0 を載せない 40(隣接と RT01 の束縛は通る)・コアの経路をアクセスへ再配送 80・
+  enforce だけ 0・allocate-label だけ 0・allocate-label all のまま送る経路だけ絞る → M8-8 70。provision 約 4 分。
+- **実装で分かったこと**:
+  1. M8-6 の直後(仕込みのまま)、RT02 の 10.255.0.15/32 は `(inaccessible)`・`Paths: (1 available, no best path)`・ラベル imp-null。
+     PE 同士のセッションは `never Idle`。M8-7 を入れると約 30 秒で上がった。
+  2. ★`lab.sh reset` で XR01 を戻しても、相手役の BGP セッション(RT02⇔RT05・RT05⇔XR01)は保持時間の 180 秒だけ古い経路ごと残り、
+     M8-7 の確認が白紙でも 35 点になった → `xr_reset.py` の `xr_reset_exec` を IOS のノードにも流せるようにし、XRT-08 で
+     RT02 `clear ip bgp 10.255.0.15`・RT05 `clear ip bgp *`・XR01 `clear bgp 10.255.0.15` を流す(以後 reset 直後でも 0)。
+  3. 構築の直後は IOL の BGP が最良経路を選ばず、XR01 から RT02 のお客さま A への ping が 1〜2 分落ちる(既知・§16 の IOL の癖)。
+  4. 2026-10-25 ユーザ要望(「この章は難しい・利点が分からない」)で、やさしい付録 `courses/xr/{en,ja}/84-m8-appendix.md` を足した
+     (コマンド抜き・図 5 枚= ラベルの道/道の作り方 3 通りの比較/ラボで誰が何を知っているか/パケット 1 つ/境界の 2 つの仕事の 4 通り)。
+     本編 82 の冒頭と learn.yml(M8-6・M8-7 の read:)から開ける。図の道具は全角の幅を見込むようにした(日本語の名前が箱からはみ出していた)。
+

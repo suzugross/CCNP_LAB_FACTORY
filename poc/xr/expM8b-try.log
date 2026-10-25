@@ -1,0 +1,532 @@
+
+######## 12:04:55 T1(2.2): ACCESS から redistribute connected を外す
+configure
+Sat Oct 24 12:04:56.464 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis ACCESS
+RP/0/RP0/CPU0:XR01(config-isis)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+no redistribute connected
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+commit
+Sat Oct 24 12:04:58.261 UTC
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+end
+RP/0/RP0/CPU0:XR01#
+
+######## 12:05:19 T1 +20 秒のあと
+show mpls ldp neighbor brief
+Sat Oct 24 12:05:20.489 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:46:45    1     0     3     0     8      0    
+10.255.0.11:0      N   N    00:46:45    2     0     3     0     8      0    
+10.255.0.14:0      N   N    00:02:30    1     0     3     0     5      0    
+
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast summary | include 10.255
+Sat Oct 24 12:05:20.902 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+10.255.0.12       0 65000      54     102           74    0    0 00:46:42          2
+10.255.0.15       0 65000      47      93           74    0    0 00:02:26          2
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery detail
+ Local LDP Identifier:
+    10.255.0.14:0
+    Discovery Sources:
+    Interfaces:
+	Ethernet0/0 (ldp): xmit/recv
+	    Enabled: Interface config
+	    Hello interval: 5000 ms; Transport IP addr: 10.255.0.14
+	    LDP Id: 10.255.0.1:0; no route to transport addr
+	      Src IP addr: 10.0.14.1; Transport IP addr: 10.255.0.1
+	      Hold time: 15 sec; Proposed local/peer: 15/15 sec
+	      Password: not required, none, in use
+            Clients: IPv4, mLDP 
+	Ethernet0/1 (ldp): xmit/recv
+	    Enabled: Interface config
+	    Hello interval: 5000 ms; Transport IP addr: 10.255.0.14
+	    LDP Id: 10.255.0.15:0
+	      Src IP addr: 10.0.45.15; Transport IP addr: 10.255.0.15
+	      Hold time: 15 sec; Proposed local/peer: 15/15 sec
+	      Reachable via 10.255.0.15/32
+	      Password: not required, none, in use
+            Clients: IPv4, mLDP 
+RT04#
+show ip route 10.255.0.1
+% Subnet not in table
+RT04#
+show mpls ldp neighbor | include Peer|State
+    Peer LDP Ident: 10.255.0.15:0; Local LDP Ident 10.255.0.14:0
+	State: Oper; Msgs sent/rcvd: 89/91; Downstream
+    Peer LDP Ident: 10.255.0.1:0; Local LDP Ident 10.255.0.14:0
+	State: Oper; Msgs sent/rcvd: 10/13; Downstream
+RT04#
+ping 10.50.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.50.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+.....
+Success rate is 0 percent (0/5)
+RT02#
+
+######## 12:06:15 T1 +40 秒のあと
+show mpls ldp neighbor brief
+Sat Oct 24 12:06:16.870 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:47:41    1     0     3     0     8      0    
+10.255.0.11:0      N   N    00:47:41    2     0     3     0     8      0    
+10.255.0.14:0      N   N    00:03:26    1     0     3     0     5      0    
+
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast summary | include 10.255
+Sat Oct 24 12:06:17.271 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+10.255.0.12       0 65000      55     103           74    0    0 00:47:38          2
+10.255.0.15       0 65000      47      94           74    0    0 00:03:23          2
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery detail
+ Local LDP Identifier:
+    10.255.0.14:0
+    Discovery Sources:
+    Interfaces:
+	Ethernet0/0 (ldp): xmit/recv
+	    Enabled: Interface config
+	    Hello interval: 5000 ms; Transport IP addr: 10.255.0.14
+	    LDP Id: 10.255.0.1:0; no route to transport addr
+	      Src IP addr: 10.0.14.1; Transport IP addr: 10.255.0.1
+	      Hold time: 15 sec; Proposed local/peer: 15/15 sec
+	      Password: not required, none, in use
+            Clients: IPv4, mLDP 
+	Ethernet0/1 (ldp): xmit/recv
+	    Enabled: Interface config
+	    Hello interval: 5000 ms; Transport IP addr: 10.255.0.14
+	    LDP Id: 10.255.0.15:0
+	      Src IP addr: 10.0.45.15; Transport IP addr: 10.255.0.15
+	      Hold time: 15 sec; Proposed local/peer: 15/15 sec
+	      Reachable via 10.255.0.15/32
+	      Password: not required, none, in use
+            Clients: IPv4, mLDP 
+RT04#
+show ip route 10.255.0.1
+% Subnet not in table
+RT04#
+show mpls ldp neighbor | include Peer|State
+    Peer LDP Ident: 10.255.0.15:0; Local LDP Ident 10.255.0.14:0
+	State: Oper; Msgs sent/rcvd: 90/92; Downstream
+    Peer LDP Ident: 10.255.0.1:0; Local LDP Ident 10.255.0.14:0
+	State: Oper; Msgs sent/rcvd: 11/14; Downstream
+RT04#
+ping 10.50.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.50.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+.....
+Success rate is 0 percent (0/5)
+RT02#
+
+######## 12:07:32 T1 +60 秒のあと
+show mpls ldp neighbor brief
+Sat Oct 24 12:07:33.502 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:48:58    1     0     3     0     8      0    
+10.255.0.11:0      N   N    00:48:58    2     0     3     0     8      0    
+10.255.0.14:0      N   N    00:04:43    1     0     3     0     5      0    
+
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast summary | include 10.255
+Sat Oct 24 12:07:33.898 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+10.255.0.12       0 65000      57     105           74    0    0 00:48:55          2
+10.255.0.15       0 65000      47      97            0    0    0 00:00:00  Closing
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery detail
+ Local LDP Identifier:
+    10.255.0.14:0
+    Discovery Sources:
+    Interfaces:
+	Ethernet0/0 (ldp): xmit/recv
+	    Enabled: Interface config
+	    Hello interval: 5000 ms; Transport IP addr: 10.255.0.14
+	    LDP Id: 10.255.0.1:0; no route to transport addr
+	      Src IP addr: 10.0.14.1; Transport IP addr: 10.255.0.1
+	      Hold time: 15 sec; Proposed local/peer: 15/15 sec
+	      Password: not required, none, in use
+            Clients: IPv4, mLDP 
+	Ethernet0/1 (ldp): xmit/recv
+	    Enabled: Interface config
+	    Hello interval: 5000 ms; Transport IP addr: 10.255.0.14
+	    LDP Id: 10.255.0.15:0
+	      Src IP addr: 10.0.45.15; Transport IP addr: 10.255.0.15
+	      Hold time: 15 sec; Proposed local/peer: 15/15 sec
+	      Reachable via 10.255.0.15/32
+	      Password: not required, none, in use
+            Clients: IPv4, mLDP 
+RT04#
+show ip route 10.255.0.1
+% Subnet not in table
+RT04#
+show mpls ldp neighbor | include Peer|State
+    Peer LDP Ident: 10.255.0.15:0; Local LDP Ident 10.255.0.14:0
+	State: Oper; Msgs sent/rcvd: 91/93; Downstream
+    Peer LDP Ident: 10.255.0.1:0; Local LDP Ident 10.255.0.14:0
+	State: Oper; Msgs sent/rcvd: 13/16; Downstream
+RT04#
+ping 10.50.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.50.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+.....
+Success rate is 0 percent (0/5)
+RT02#
+
+######## 12:09:18 T1 +90 秒のあと
+show mpls ldp neighbor brief
+Sat Oct 24 12:09:19.843 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:50:44    1     0     3     0     8      0    
+10.255.0.11:0      N   N    00:50:44    2     0     3     0     8      0    
+
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast summary | include 10.255
+Sat Oct 24 12:09:20.257 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+10.255.0.12       0 65000      59     107           76    0    0 00:50:41          2
+10.255.0.15       0 65000      47      97            0    0    0 00:01:46  Active
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery detail
+ Local LDP Identifier:
+    10.255.0.14:0
+    Discovery Sources:
+    Interfaces:
+	Ethernet0/0 (ldp): xmit/recv
+	    Enabled: Interface config
+	    Hello interval: 5000 ms; Transport IP addr: 10.255.0.14
+	    LDP Id: 10.255.0.1:0; no route to transport addr
+	      Src IP addr: 10.0.14.1; Transport IP addr: 10.255.0.1
+	      Hold time: 15 sec; Proposed local/peer: 15/15 sec
+	      Password: not required, none, in use
+            Clients: IPv4, mLDP 
+	Ethernet0/1 (ldp): xmit/recv
+	    Enabled: Interface config
+	    Hello interval: 5000 ms; Transport IP addr: 10.255.0.14
+	    LDP Id: 10.255.0.15:0
+	      Src IP addr: 10.0.45.15; Transport IP addr: 10.255.0.15
+	      Hold time: 15 sec; Proposed local/peer: 15/15 sec
+	      Reachable via 10.255.0.15/32
+	      Password: not required, none, in use
+            Clients: IPv4, mLDP 
+RT04#
+show ip route 10.255.0.1
+% Subnet not in table
+RT04#
+show mpls ldp neighbor | include Peer|State
+    Peer LDP Ident: 10.255.0.15:0; Local LDP Ident 10.255.0.14:0
+	State: Oper; Msgs sent/rcvd: 93/95; Downstream
+RT04#
+ping 10.50.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.50.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+.....
+Success rate is 0 percent (0/5)
+RT02#
+
+######## 12:09:35 T1 戻す
+configure
+Sat Oct 24 12:09:36.324 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis ACCESS
+RP/0/RP0/CPU0:XR01(config-isis)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+redistribute connected route-policy ABR-LOOPBACK
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+commit
+Sat Oct 24 12:09:38.010 UTC
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sat Oct 24 12:10:25.116 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:51:50    1     0     3     0     8      0    
+10.255.0.11:0      N   N    00:51:50    2     0     3     0     8      0    
+10.255.0.14:0      N   N    00:00:47    1     0     3     0     5      0    
+
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast summary | include 10.255
+Sat Oct 24 12:10:25.525 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+10.255.0.12       0 65000      60     109           78    0    0 00:51:46          2
+10.255.0.15       0 65000      52     103           78    0    0 00:00:44          2
+RP/0/RP0/CPU0:XR01#
+show ip bgp summary | begin Neighbor
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65000     111      62       50    0    0 00:53:18        3
+10.255.0.15     4        65000       7       7       50    0    0 00:02:16        1
+RT02#
+ping 10.50.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.50.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+RT02#
+
+######## 12:11:58 T2(3.2): ibgp policy out enforce-modifications を外す
+configure
+Sat Oct 24 12:11:59.446 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+no ibgp policy out enforce-modifications
+RP/0/RP0/CPU0:XR01(config-bgp)#
+commit
+Sat Oct 24 12:12:00.751 UTC
+RP/0/RP0/CPU0:XR01(config-bgp)#
+end
+RP/0/RP0/CPU0:XR01#
+show ip bgp 10.255.0.15
+BGP routing table entry for 10.255.0.15/32, version 51
+Paths: (1 available, best #1, table default)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.15 (metric 20) from 10.255.0.1 (10.255.0.1)
+      Origin IGP, metric 0, localpref 100, valid, internal, best
+      Originator: 10.255.0.15, Cluster list: 10.255.0.1
+      mpls labels in/out nolabel/imp-null
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Oct 24 2026 12:12:04 UTC
+RT02#
+show ip bgp summary | begin Neighbor
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65000     115      62       51    0    0 00:53:44        3
+10.255.0.15     4        65000       7       7       51    0    0 00:02:42        1
+RT02#
+ping 10.50.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.50.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+.....
+Success rate is 0 percent (0/5)
+RT02#
+
+######## 12:12:34 T2 戻す
+configure
+Sat Oct 24 12:12:35.754 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+ibgp policy out enforce-modifications
+RP/0/RP0/CPU0:XR01(config-bgp)#
+commit
+Sat Oct 24 12:12:37.056 UTC
+RP/0/RP0/CPU0:XR01(config-bgp)#
+end
+RP/0/RP0/CPU0:XR01#
+show ip bgp 10.255.0.15
+BGP routing table entry for 10.255.0.15/32, version 52
+Paths: (1 available, best #1, table default)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.1 (metric 20) from 10.255.0.1 (10.255.0.1)
+      Origin IGP, metric 0, localpref 100, valid, internal, best
+      Originator: 10.255.0.15, Cluster list: 10.255.0.1
+      mpls labels in/out nolabel/24003
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Oct 24 2026 12:12:41 UTC
+RT02#
+show ip bgp summary | begin Neighbor
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65000     118      63       52    0    0 00:54:31        3
+10.255.0.15     4        65000       8       8       52    0    0 00:03:28        1
+RT02#
+ping 10.50.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.50.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/2/3 ms
+RT02#
+
+######## 12:13:10 T3(3.3): allocate-label を外す
+configure
+Sat Oct 24 12:13:11.709 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-af)#
+no allocate-label
+RP/0/RP0/CPU0:XR01(config-bgp-af)#
+commit
+Sat Oct 24 12:13:13.413 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast 10.255.0.15/32
+Sat Oct 24 12:13:35.629 UTC
+BGP routing table entry for 10.255.0.15/32
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 83           83
+Last Modified: Oct 24 12:13:15.939 for 00:00:19
+Paths: (1 available, best #1)
+  Not advertised to any peer
+  Path #1: Received by speaker 0
+  Not advertised to any peer
+  Local, (Received from a RR-client)
+    10.255.0.15 (metric 30) from 10.255.0.15 (10.255.0.15)
+      Received Label 3 
+      Origin IGP, metric 0, localpref 100, valid, internal, best, group-best, labeled-unicast
+      Received Path ID 0, Local Path ID 1, version 83
+RP/0/RP0/CPU0:XR01#
+show ip bgp labels
+   Network          Next Hop      In label/Out label
+   10.20.0.0/16     0.0.0.0         imp-null/nolabel
+   10.30.0.0/16     10.255.0.1      nolabel/nolabel
+   10.50.0.0/16     10.255.0.15     nolabel/nolabel
+   10.255.0.12/32   0.0.0.0         imp-null/nolabel
+
+RT02#
+ping 10.50.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.50.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+.....
+Success rate is 0 percent (0/5)
+RT02#
+show ip bgp summary | begin Neighbor
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65000     120      64       56    0    0 00:55:09        1
+10.255.0.15     4        65000       8       9        1    0    0 00:04:06        1
+RT02#
+
+######## 12:13:48 T3 戻す
+configure
+Sat Oct 24 12:13:49.829 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-af)#
+allocate-label all
+RP/0/RP0/CPU0:XR01(config-bgp-af)#
+commit
+Sat Oct 24 12:13:51.528 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show ip bgp labels
+   Network          Next Hop      In label/Out label
+   10.20.0.0/16     0.0.0.0         imp-null/nolabel
+   10.30.0.0/16     10.255.0.1      nolabel/imp-null
+   10.50.0.0/16     10.255.0.1      nolabel/24006
+                    10.255.0.15     nolabel/nolabel
+   10.255.0.12/32   0.0.0.0         imp-null/nolabel
+   10.255.0.15/32   10.255.0.1      nolabel/24003
+
+RT02#
+ping 10.50.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.50.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+RT02#
+
+######## 12:14:24 T5(5.1): RT05 から RT02 への LSP ping/traceroute
+ping mpls ipv4 10.255.0.12/32 repeat 3
+Sending 3, 72-byte MPLS Echos to 10.255.0.12/32, 
+     timeout is 2 seconds, send interval is 0 msec:
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+  'L' - labeled output interface, 'B' - unlabeled output interface, 
+  'D' - DS Map mismatch, 'F' - no FEC mapping, 'f' - FEC mismatch,
+  'M' - malformed request, 'm' - unsupported tlvs, 'N' - no label entry, 
+  'P' - no rx intf label prot, 'p' - premature termination of LSP, 
+  'R' - transit router, 'I' - unknown upstream index,
+  'l' - Label switched with FEC change, 'd' - see DDMAP for return code,
+  'X' - unknown return code, 'x' - return code 0
+
+Type escape sequence to abort.
+QQQ
+Success rate is 0 percent (0/3)
+ Total Time Elapsed 2 ms
+
+RT05#
+ping mpls ipv4 10.255.0.12/32 fec-type bgp repeat 3
+Sending 3, 72-byte MPLS Echos to BGP + Label IP FEC 10.255.0.12/32, 
+     timeout is 2 seconds, send interval is 0 msec:
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+  'L' - labeled output interface, 'B' - unlabeled output interface, 
+  'D' - DS Map mismatch, 'F' - no FEC mapping, 'f' - FEC mismatch,
+  'M' - malformed request, 'm' - unsupported tlvs, 'N' - no label entry, 
+  'P' - no rx intf label prot, 'p' - premature termination of LSP, 
+  'R' - transit router, 'I' - unknown upstream index,
+  'l' - Label switched with FEC change, 'd' - see DDMAP for return code,
+  'X' - unknown return code, 'x' - return code 0
+
+Type escape sequence to abort.
+...
+Success rate is 0 percent (0/3)
+ Total Time Elapsed 5607 ms
+
+RT05#
+ping mpls ipv4 10.255.0.12/32 fec-type bgp source 10.255.0.15 repeat 3
+Sending 3, 72-byte MPLS Echos to BGP + Label IP FEC 10.255.0.12/32, 
+     timeout is 2 seconds, send interval is 0 msec:
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+  'L' - labeled output interface, 'B' - unlabeled output interface, 
+  'D' - DS Map mismatch, 'F' - no FEC mapping, 'f' - FEC mismatch,
+  'M' - malformed request, 'm' - unsupported tlvs, 'N' - no label entry, 
+  'P' - no rx intf label prot, 'p' - premature termination of LSP, 
+  'R' - transit router, 'I' - unknown upstream index,
+  'l' - Label switched with FEC change, 'd' - see DDMAP for return code,
+  'X' - unknown return code, 'x' - return code 0
+
+Type escape sequence to abort.
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/2/2 ms
+ Total Time Elapsed 6 ms
+
+RT05#
+traceroute mpls ipv4 10.255.0.12/32 fec-type bgp source 10.255.0.15 timeout 1 ttl 6
+Tracing MPLS Label Switched Path to BGP + Label IP FEC 10.255.0.12/32, timeout is 1 seconds
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+  'L' - labeled output interface, 'B' - unlabeled output interface, 
+  'D' - DS Map mismatch, 'F' - no FEC mapping, 'f' - FEC mismatch,
+  'M' - malformed request, 'm' - unsupported tlvs, 'N' - no label entry, 
+  'P' - no rx intf label prot, 'p' - premature termination of LSP, 
+  'R' - transit router, 'I' - unknown upstream index,
+  'l' - Label switched with FEC change, 'd' - see DDMAP for return code,
+  'X' - unknown return code, 'x' - return code 0
+
+Type escape sequence to abort.
+  0 10.0.45.15 MRU 1500 [Labels: 21/24001 Exp: 0/0]
+L 1 10.0.45.14 MRU 1500 [Labels: explicit-null/24001 Exp: 0/0] 6 ms
+L 2 10.0.14.1 MRU 1500 [Labels: 16 Exp: 0] 4 ms
+. 3 *
+! 4 10.0.12.12 2 ms
+RT05#

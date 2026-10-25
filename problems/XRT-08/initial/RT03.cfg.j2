@@ -1,0 +1,37 @@
+! XRT-08(XRT-07 と同じ) RT03(IOL 17.15・据付・変更しない)。P ルータ= BGP なし。社内の標準= LDP の ID は Lo0・IS-IS と同期。
+! LDP はパスワード必須(XR01・RT02 向けの鍵)。targeted ハローは受け入れない(XR01 は RT03 にセッション保護を掛けない= M8-4)。
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+mpls ldp password required
+mpls ldp neighbor 10.255.0.1 password CoreLdp-2026
+mpls ldp neighbor 10.255.0.12 password CoreLdp-2026
+!
+interface Loopback0
+ ip address 10.255.0.13 255.255.255.255
+ ip router isis CORE
+!
+interface {{ links[0] }}
+ description BACKUP to XR01
+ ip address 10.0.3.13 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 100
+ mpls ip
+ no shutdown
+!
+interface {{ links[1] }}
+ description CORE-B to RT02
+ ip address 10.0.23.13 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 100
+ mpls ip
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0013.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+ mpls ldp sync
+!

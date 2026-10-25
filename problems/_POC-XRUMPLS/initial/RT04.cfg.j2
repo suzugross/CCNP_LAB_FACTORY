@@ -1,0 +1,30 @@
+! _POC-XRUMPLS RT04(IOL 17.15)= アクセスの P(BGP なし)。アクセスの IGP は IS-IS ACCESS(コアと別の領域・再配送なし)。LDP の ID は Lo0。
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+!
+interface Loopback0
+ ip address 10.255.0.14 255.255.255.255
+ ip router isis ACCESS
+!
+interface {{ links[0] }}
+ description ACCESS to XR01
+ ip address 10.0.14.14 255.255.255.0
+ ip router isis ACCESS
+ isis network point-to-point
+ mpls ip
+ no shutdown
+!
+interface {{ links[1] }}
+ description ACCESS to RT05
+ ip address 10.0.45.14 255.255.255.0
+ ip router isis ACCESS
+ isis network point-to-point
+ mpls ip
+ no shutdown
+!
+router isis ACCESS
+ net 49.0002.0100.0000.0014.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+!

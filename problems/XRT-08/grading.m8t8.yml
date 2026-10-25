@@ -1,0 +1,45 @@
+# M8-8: 境界はお客さまの経路を運ばない。XR01 が BGP のラベルを割り当てて反映するのは PE のループバック(/32)だけ。
+# allocate-label all のまま(M8-7 の模範解)= お客さまの経路(10.20/16・10.50/16)にもラベルが付き、反映もされる→ 落ちる。
+# 送る経路だけ絞る(LU の近隣に route-policy out)= 反映は止まるが、ローカル ラベルは割り当てたまま→ ラベルの確認で落ちる。
+problem: XRT-08
+total_points: 100
+checks:
+  - name: 'M8-8 XR01: BGP labels for the PE loopbacks only (customer A still reaches RT02 from XR01)'
+    node: XR01
+    exec: local
+    command: .venv/bin/python topologies/login_probe.py XRT-08 ssh XR01 -- 'show bgp ipv4 labeled-unicast labels' 'ping 10.20.0.1 source Loopback100 count 5'
+    raw:
+      - { regex: '10\.255\.0\.12/32\s+10\.255\.0\.12\s+3\s+\d{5}' }
+      - { regex: '10\.255\.0\.15/32\s+10\.255\.0\.15\s+3\s+\d{5}' }
+      - { regex: '10\.20\.0\.0/16\s+10\.255\.0\.12\s+3\s+nolabel' }
+      - { regex: '10\.50\.0\.0/16\s+10\.255\.0\.15\s+3\s+nolabel' }
+      - { not_regex: '10\.30\.0\.0/16\s+0\.0\.0\.0\s+nolabel\s+\d' }
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 30
+  - name: 'M8-8 XR01: reflects only loopbacks to RT02'
+    node: XR01
+    command: 'show bgp ipv4 labeled-unicast neighbors 10.255.0.12 advertised-routes'
+    raw:
+      - { regex: '10\.255\.0\.15/32\s+10\.255\.0\.1\s' }
+      - { not_regex: '10\.(?:30|50)\.0\.0/16' }
+    points: 20
+  - name: 'M8-8 XR01: reflects only loopbacks to RT05'
+    node: XR01
+    command: 'show bgp ipv4 labeled-unicast neighbors 10.255.0.15 advertised-routes'
+    raw:
+      - { regex: '10\.255\.0\.12/32\s+10\.255\.0\.1\s' }
+      - { not_regex: '10\.(?:20|30)\.0\.0/16' }
+    points: 20
+  - name: 'M8-8 RT02: learns customer B''s network from RT05 only'
+    node: RT02
+    command: 'show ip bgp 10.50.0.0'
+    raw:
+      - { regex: 'Paths: \(1 available, best #1' }
+      - { regex: 'from 10\.255\.0\.15 \(10\.255\.0\.15\)' }
+    points: 20
+  - name: 'M8-8 RT02: customer A still reaches customer B'
+    node: RT02
+    command: 'ping 10.50.0.1 source Loopback100 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 10

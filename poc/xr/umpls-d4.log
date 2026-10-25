@@ -1,0 +1,230 @@
+
+######## 10:42:39 d-4: 転送。RT02 ⇔ RT05 のループバック間・お客さま同士(お客さま B は LU で XR01 経由)・traceroute のラベル・LSP ping
+ping 10.255.0.15 source Loopback0 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.255.0.15, timeout is 2 seconds:
+Packet sent with a source address of 10.255.0.12 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/3 ms
+RT02#
+ping 10.50.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.50.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+RT02#
+traceroute 10.255.0.15 source Loopback0 timeout 1 probe 1
+Type escape sequence to abort.
+Tracing the route to 10.255.0.15
+VRF info: (vrf in name/id, vrf out name/id)
+  1 10.0.12.11 [MPLS: Labels 20/24003 Exp 0] 2 msec
+  2 10.0.1.1 [MPLS: Labels 0/24003 Exp 0] 3 msec
+  3  * 
+  4 10.0.45.15 12 msec
+RT02#
+traceroute 10.50.0.1 source Loopback100 timeout 1 probe 1
+Type escape sequence to abort.
+Tracing the route to 10.50.0.1
+VRF info: (vrf in name/id, vrf out name/id)
+  1 10.0.12.11 [MPLS: Labels 20/24006 Exp 0] 2 msec
+  2 10.0.1.1 [MPLS: Labels 0/24006 Exp 0] 2 msec
+  3  * 
+  4 10.0.45.15 2 msec
+RT02#
+ping mpls ipv4 10.255.0.15/32 repeat 3
+Sending 3, 72-byte MPLS Echos to 10.255.0.15/32, 
+     timeout is 2 seconds, send interval is 0 msec:
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+  'L' - labeled output interface, 'B' - unlabeled output interface, 
+  'D' - DS Map mismatch, 'F' - no FEC mapping, 'f' - FEC mismatch,
+  'M' - malformed request, 'm' - unsupported tlvs, 'N' - no label entry, 
+  'P' - no rx intf label prot, 'p' - premature termination of LSP, 
+  'R' - transit router, 'I' - unknown upstream index,
+  'l' - Label switched with FEC change, 'd' - see DDMAP for return code,
+  'X' - unknown return code, 'x' - return code 0
+
+Type escape sequence to abort.
+QQQ
+Success rate is 0 percent (0/3)
+ Total Time Elapsed 0 ms
+
+RT02#
+traceroute mpls ipv4 10.255.0.15/32 timeout 1
+Tracing MPLS Label Switched Path to 10.255.0.15/32, timeout is 1 seconds
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+  'L' - labeled output interface, 'B' - unlabeled output interface, 
+  'D' - DS Map mismatch, 'F' - no FEC mapping, 'f' - FEC mismatch,
+  'M' - malformed request, 'm' - unsupported tlvs, 'N' - no label entry, 
+  'P' - no rx intf label prot, 'p' - premature termination of LSP, 
+  'R' - transit router, 'I' - unknown upstream index,
+  'l' - Label switched with FEC change, 'd' - see DDMAP for return code,
+  'X' - unknown return code, 'x' - return code 0
+
+Type escape sequence to abort.
+Q 1 *
+RT02#
+ping 10.255.0.12 source Loopback0 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.255.0.12, timeout is 2 seconds:
+Packet sent with a source address of 10.255.0.15 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+RT05#
+ping 10.20.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.20.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.50.0.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/2/3 ms
+RT05#
+traceroute 10.20.0.1 source Loopback100 timeout 1 probe 1
+Type escape sequence to abort.
+Tracing the route to 10.20.0.1
+VRF info: (vrf in name/id, vrf out name/id)
+  1 10.0.45.14 [MPLS: Labels 17/24005 Exp 0] 5 msec
+  2 10.0.14.1 [MPLS: Labels 0/24005 Exp 0] 3 msec
+  3  * 
+  4 10.0.12.12 2 msec
+RT05#
+ping mpls ipv4 10.255.0.12/32 repeat 3
+Sending 3, 72-byte MPLS Echos to 10.255.0.12/32, 
+     timeout is 2 seconds, send interval is 0 msec:
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+  'L' - labeled output interface, 'B' - unlabeled output interface, 
+  'D' - DS Map mismatch, 'F' - no FEC mapping, 'f' - FEC mismatch,
+  'M' - malformed request, 'm' - unsupported tlvs, 'N' - no label entry, 
+  'P' - no rx intf label prot, 'p' - premature termination of LSP, 
+  'R' - transit router, 'I' - unknown upstream index,
+  'l' - Label switched with FEC change, 'd' - see DDMAP for return code,
+  'X' - unknown return code, 'x' - return code 0
+
+Type escape sequence to abort.
+QQQ
+Success rate is 0 percent (0/3)
+ Total Time Elapsed 0 ms
+
+RT05#
+show mpls forwarding
+Sat Oct 24 10:44:16.722 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24000  Pop         10.255.0.13/32     Gi0/0/0/1    10.0.3.13       3294        
+24001  16          10.255.0.12/32     Gi0/0/0/0    10.0.1.11       7878        
+24002  Pop         10.255.0.11/32     Gi0/0/0/0    10.0.1.11       7588        
+24003  16          10.255.0.15/32     Gi0/0/0/2    10.0.14.14      5915        
+24004  Pop         10.255.0.14/32     Gi0/0/0/2    10.0.14.14      1272        
+24005  Pop         10.20.0.0/16                    10.255.0.12     1930        
+24006  Pop         10.50.0.0/16                    10.255.0.15     1930        
+RP/0/RP0/CPU0:XR01#
+show cef 10.255.0.15/32
+Sat Oct 24 10:44:17.163 UTC
+10.255.0.15/32, version 20, internal 0x1000001 0x10 (ptr 0x8852a800) [3], 0x600 (0x8954f158), 0xa28 (0x8a5104b8)
+ Updated Oct 24 10:41:43.853 
+ local adjacency to GigabitEthernet0/0/0/2
+
+ Prefix Len 32, traffic index 0, precedence n/a, priority 1
+  gateway array (0x893e8c68) reference count 3, flags 0x68, source lsd (5), 1 backups
+                [2 type 5 flags 0x8401 (0x8a549618) ext 0x0 (0x0)]
+  LW-LDI[type=5, refc=3, ptr=0x8954f158, sh-ldi=0x8a549618]
+  gateway array update type-time 1 Oct 24 10:33:33.984
+ LDI Update time Oct 24 10:33:33.984
+ LW-LDI-TS Oct 24 10:33:33.984
+   via 10.0.14.14/32, GigabitEthernet0/0/0/2, 5 dependencies, weight 0, class 0 [flags 0x0]
+    path-idx 0 NHID 0x3 [0x8a781aa0 0x0]
+    next hop 10.0.14.14/32
+    local adjacency
+     local label 24003      labels imposed {16}
+
+    Load distribution: 0 (refcount 2)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/2    10.0.14.14     
+RP/0/RP0/CPU0:XR01#
+show cef 10.50.0.0/16
+Sat Oct 24 10:44:17.532 UTC
+10.50.0.0/16, version 59, internal 0x5000001 0x40 (ptr 0x8852a2c0) [1], 0x600 (0x8954ef58), 0xa00 (0x8a510518)
+ Updated Oct 24 10:41:43.853
+ Prefix Len 16, traffic index 0, precedence n/a, priority 4
+  gateway array (0x893e8e78) reference count 3, flags 0x78, source rib (7), 0 backups
+                [3 type 4 flags 0x8441 (0x8a5497d0) ext 0x0 (0x0)]
+  LW-LDI[type=1, refc=1, ptr=0x8954ef58, sh-ldi=0x8a5497d0]
+  gateway array update type-time 1 Oct 24 10:41:43.853
+ LDI Update time Oct 24 10:41:43.853
+ LW-LDI-TS Oct 24 10:41:43.853
+   via 10.255.0.15/32, 3 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0x8852a800 0x8857f048]
+    recursion-via-/32
+    next hop 10.255.0.15/32 via 10.255.0.15/32
+     local label 24006 
+     next hop 10.0.14.14/32 GigabitEthernet0/0/0/2 labels imposed {16 ImplNull}
+
+    Load distribution: 0 (refcount 3)
+
+    Hash  OK  Interface                 Address
+    0     Y   recursive                 10.255.0.15    
+RP/0/RP0/CPU0:XR01#
+ping mpls ipv4 10.255.0.15/32 fec-type bgp repeat 3
+Sat Oct 24 10:44:17.916 UTC
+
+Sending 3, 100-byte MPLS Echos to 10.255.0.15/32,
+      timeout is 2 seconds, send interval is 0 msec:
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+  'L' - labeled output interface, 'B' - unlabeled output interface, 
+  'D' - DS Map mismatch, 'F' - no FEC mapping, 'f' - FEC mismatch,
+  'M' - malformed request, 'm' - unsupported tlvs, 'N' - no rx label, 
+  'P' - no rx intf label prot, 'p' - premature termination of LSP, 
+  'R' - transit router, 'I' - unknown upstream index,
+  'X' - unknown return code, 'x' - return code 0
+
+Type escape sequence to abort.
+
+QQQ
+Success rate is 0 percent (0/3)
+RP/0/RP0/CPU0:XR01#
+ping mpls ipv4 10.255.0.15/32 repeat 3
+Sat Oct 24 10:44:18.318 UTC
+
+Sending 3, 100-byte MPLS Echos to 10.255.0.15/32,
+      timeout is 2 seconds, send interval is 0 msec:
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+  'L' - labeled output interface, 'B' - unlabeled output interface, 
+  'D' - DS Map mismatch, 'F' - no FEC mapping, 'f' - FEC mismatch,
+  'M' - malformed request, 'm' - unsupported tlvs, 'N' - no rx label, 
+  'P' - no rx intf label prot, 'p' - premature termination of LSP, 
+  'R' - transit router, 'I' - unknown upstream index,
+  'X' - unknown return code, 'x' - return code 0
+
+Type escape sequence to abort.
+
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 1/1/2 ms
+RP/0/RP0/CPU0:XR01#
+show ip route 10.255.0.15
+% Subnet not in table
+RT01#
+show mpls forwarding-table
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+16         Pop Label  10.255.0.12/32   8686          Et0/1      10.0.12.12  
+17         Pop Label  10.0.23.0/24     0             Et0/1      10.0.12.12  
+18         24000      10.255.0.13/32   0             Et0/0      10.0.1.1    
+           18         10.255.0.13/32   0             Et0/1      10.0.12.12  
+19         No Label   10.0.3.0/24      0             Et0/0      10.0.1.1    
+20         explicit-n 10.255.0.1/32    8551          Et0/0      10.0.1.1    
+RT01#
+show ip route 10.255.0.12
+% Subnet not in table
+RT04#
+show mpls forwarding-table
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+16         Pop Label  10.255.0.15/32   6771          Et0/1      10.0.45.15  
+17         explicit-n 10.255.0.1/32    6866          Et0/0      10.0.14.1   
+RT04#

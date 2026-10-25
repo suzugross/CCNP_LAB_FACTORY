@@ -1,0 +1,113 @@
+
+######## 10:59:42 g-1: Lo0 を ACCESS のインスタンスから外し、接続経路の再配送(Lo0 だけ)でアクセスへ載せる(公式文書 119191 の形)
+configure
+Sat Oct 24 10:59:43.612 UTC
+RP/0/RP0/CPU0:XR01(config)#
+route-policy ABR-LO0
+RP/0/RP0/CPU0:XR01(config-rpl)#
+if destination in (10.255.0.1/32) then
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+pass
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+endif
+RP/0/RP0/CPU0:XR01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XR01(config)#
+router isis ACCESS
+RP/0/RP0/CPU0:XR01(config-isis)#
+no interface Loopback0
+RP/0/RP0/CPU0:XR01(config-isis)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+redistribute connected route-policy ABR-LO0
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+commit
+Sat Oct 24 10:59:47.726 UTC
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+show configuration failed
+Sat Oct 24 10:59:48.141 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis instance ACCESS database verbose XR01.00-00
+Sat Oct 24 11:00:21.471 UTC
+
+IS-IS ACCESS (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x00000006   0xb81d        1167 /*            0/0/0
+  Area Address:   49.0002
+  LSP MTU:        1492
+  NLPID:          0xcc
+  IP Address:     10.0.14.1
+  Hostname:       XR01
+  Metric: 10         IS-Extended RT04.00
+  Metric: 10         IP-Extended 10.0.14.0/24
+    Prefix Attribute Flags: X:0 R:0 N:0 E:0 A:0
+  Metric: 0          IP-Extended 10.255.0.1/32
+    Prefix Attribute Flags: X:1 R:0 N:0 E:0 A:0
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sat Oct 24 11:00:21.862 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:28:46    1     0     3     0     8      0    
+10.255.0.11:0      N   N    00:28:41    2     0     3     0     8      0    
+10.255.0.14:0      N   N    00:26:47    1     0     3     0     5      0    
+
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast summary
+Sat Oct 24 11:00:22.263 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 43
+BGP main routing table version 43
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker           43            43            43            43            43             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.12       0 65000      45      68           43    0    0 00:21:03          2
+10.255.0.15       0 65000      44      50           43    0    0 00:01:26          2
+
+RP/0/RP0/CPU0:XR01#
+show ip route 10.255.0.1
+Routing entry for 10.255.0.1/32
+  Known via "isis", distance 115, metric 10, type level-2
+  Redistributing via isis ACCESS
+  Last update from 10.0.14.1 on Ethernet0/0, 00:00:35 ago
+  Routing Descriptor Blocks:
+  * 10.0.14.1, from 10.0.14.1, 00:00:35 ago, via Ethernet0/0
+      Route metric is 10, traffic share count is 1
+RT04#
+show ip route | include ^i
+i L2     10.255.0.1/32 [115/10] via 10.0.14.1, 00:00:35, Ethernet0/0
+i L2     10.255.0.15/32 [115/20] via 10.0.45.15, 00:29:37, Ethernet0/1
+RT04#
+show ip route 10.255.0.1
+Routing entry for 10.255.0.1/32
+  Known via "isis", distance 115, metric 20, type level-2
+  Redistributing via isis ACCESS
+  Last update from 10.0.45.14 on Ethernet0/0, 00:00:37 ago
+  Routing Descriptor Blocks:
+  * 10.0.45.14, from 10.0.14.1, 00:00:37 ago, via Ethernet0/0
+      Route metric is 20, traffic share count is 1
+RT05#
+ping 10.20.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.20.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.50.0.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/3/13 ms
+RT05#

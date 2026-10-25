@@ -1,0 +1,196 @@
+
+######## 10:40:33 d-3b: ibgp policy out enforce-modifications を足す(反映する経路に next-hop-self を効かせる)
+configure
+Sat Oct 24 10:40:35.364 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+ibgp policy out enforce-modifications
+RP/0/RP0/CPU0:XR01(config-bgp)#
+commit
+Sat Oct 24 10:40:36.664 UTC
+RP/0/RP0/CPU0:XR01(config-bgp)#
+show configuration failed
+Sat Oct 24 10:40:37.165 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-bgp)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast summary
+Sat Oct 24 10:41:10.361 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 23
+BGP main routing table version 23
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker           23            23            23            23            23             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.12       0 65000      23      28           23    0    0 00:01:51          2
+10.255.0.15       0 65000      14      14           23    0    0 00:01:51          2
+
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast
+Sat Oct 24 10:41:10.718 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 23
+BGP main routing table version 23
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*>i10.20.0.0/16       10.255.0.12              0    100      0 i
+*>i10.50.0.0/16       10.255.0.15              0    100      0 i
+*>i10.255.0.12/32     10.255.0.12              0    100      0 i
+*>i10.255.0.15/32     10.255.0.15              0    100      0 i
+
+Processed 4 prefixes, 4 paths
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast labels
+Sat Oct 24 10:41:11.117 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 23
+BGP main routing table version 23
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop        Rcvd Label      Local Label
+*>i10.20.0.0/16       10.255.0.12     3               nolabel
+*>i10.50.0.0/16       10.255.0.15     3               nolabel
+*>i10.255.0.12/32     10.255.0.12     3               nolabel
+*>i10.255.0.15/32     10.255.0.15     3               nolabel
+
+Processed 4 prefixes, 4 paths
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast neighbors 10.255.0.12 advertised-routes
+Sat Oct 24 10:41:11.530 UTC
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast 10.255.0.15/32
+Sat Oct 24 10:41:11.919 UTC
+BGP routing table entry for 10.255.0.15/32
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 23           23
+Last Modified: Oct 24 10:39:18.939 for 00:01:52
+Paths: (1 available, best #1)
+  Not advertised to any peer
+  Path #1: Received by speaker 0
+  Not advertised to any peer
+  Local, (Received from a RR-client)
+    10.255.0.15 (metric 30) from 10.255.0.15 (10.255.0.15)
+      Received Label 3 
+      Origin IGP, metric 0, localpref 100, valid, internal, best, group-best, labeled-unicast
+      Received Path ID 0, Local Path ID 1, version 23
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding
+Sat Oct 24 10:41:12.321 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24000  Pop         10.255.0.13/32     Gi0/0/0/1    10.0.3.13       2856        
+24001  16          10.255.0.12/32     Gi0/0/0/0    10.0.1.11       3842        
+24002  Pop         10.255.0.11/32     Gi0/0/0/0    10.0.1.11       5684        
+24003  16          10.255.0.15/32     Gi0/0/0/2    10.0.14.14      1953        
+24004  Pop         10.255.0.14/32     Gi0/0/0/2    10.0.14.14      848         
+RP/0/RP0/CPU0:XR01#
+show logging last 6
+Sat Oct 24 10:41:12.722 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 11 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 118 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 24 10:40:04.843 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6662]: Connection closed by 10.1.10.6 port 57790 
+RP/0/RP0/CPU0:Oct 24 10:40:34.017 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6809]: Accepted authentication for SUZUKI from 10.1.10.6 port 45576 ssh2 
+RP/0/RP0/CPU0:Oct 24 10:40:36.735 UTC: config[68302]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000006' to view the changes. 
+RP/0/RP0/CPU0:Oct 24 10:40:38.573 UTC: config[68302]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 24 10:40:39.085 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6813]: Connection closed by 10.1.10.6 port 45576 
+RP/0/RP0/CPU0:Oct 24 10:41:09.299 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6903]: Accepted authentication for SUZUKI from 10.1.10.6 port 37030 ssh2 
+RP/0/RP0/CPU0:XR01#
+show ip bgp
+BGP table version is 8, local router ID is 10.255.0.12
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.20.0.0/16     0.0.0.0                  0         32768 i
+ *>i  10.30.0.0/16     10.255.0.1               0    100      0 i
+ *>   10.255.0.12/32   0.0.0.0                  0         32768 i
+RT02#
+show ip bgp labels
+   Network          Next Hop      In label/Out label
+   10.20.0.0/16     0.0.0.0         imp-null/nolabel
+   10.30.0.0/16     10.255.0.1      nolabel/nolabel
+   10.255.0.12/32   0.0.0.0         imp-null/nolabel
+
+RT02#
+show ip route 10.255.0.15
+% Subnet not in table
+RT02#
+show ip cef 10.255.0.15 detail
+0.0.0.0/0, epoch 0, flags [default route handler, default route]
+  no route
+RT02#
+show mpls forwarding-table
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+16         Pop Label  10.255.0.11/32   270           Et0/0      10.0.12.11  
+17         Pop Label  10.0.1.0/24      0             Et0/0      10.0.12.11  
+18         Pop Label  10.255.0.13/32   0             Et0/1      10.0.23.13  
+19         19         10.0.3.0/24      0             Et0/0      10.0.12.11  
+20         20         10.255.0.1/32    156210        Et0/0      10.0.12.11  
+RT02#
+show ip bgp
+BGP table version is 3, local router ID is 10.255.0.15
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.50.0.0/16     0.0.0.0                  0         32768 i
+ *>   10.255.0.15/32   0.0.0.0                  0         32768 i
+RT05#
+show ip bgp labels
+   Network          Next Hop      In label/Out label
+   10.50.0.0/16     0.0.0.0         imp-null/nolabel
+   10.255.0.15/32   0.0.0.0         imp-null/nolabel
+
+RT05#
+show ip cef 10.255.0.12 detail
+0.0.0.0/0, epoch 0, flags [default route handler, default route]
+  no route
+RT05#

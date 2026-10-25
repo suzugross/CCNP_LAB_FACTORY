@@ -11,7 +11,8 @@
 
 | 出題日 | 問題ID (variant/seed) | 難 | 状態 | 得点 | メモ |
 |--------|----------------------|----|------|------|------|
-| 2026-10-24 | XRT-07 | 3 | 出題中 | - | XR トラック M8(MPLS と LDP)。学習目的(tutorial)= `scripts/lab.sh learn XRT-07` のワークスペースで解く。XR01 は XRd 26.1.1。E2E 後に `lab.sh reset` で構築直後へ戻し済み(白紙 0 を確認・ユーザ未着手) |
+| 2026-10-24 | XRT-08 | 3 | 撤収済 | - | XR トラック M8 追補(Unified MPLS)。学習目的(tutorial)= `scripts/lab.sh learn XRT-08` のワークスペースで解く。XR01 は XRd 26.1.1。XRT-07 を解き終えた状態から始まる。E2E 後に `lab.sh reset` で構築直後へ戻し済み(白紙 0 を確認・ユーザ未着手)。2026-10-26 撤収(CML のシャットダウンのため・ユーザ指示) |
+| 2026-10-24 | XRT-07 | 3 | 撤収済 | - | XR トラック M8(MPLS と LDP)。学習目的(tutorial)= `scripts/lab.sh learn XRT-07` のワークスペースで解く。XR01 は XRd 26.1.1。E2E 後に `lab.sh reset` で構築直後へ戻し済み(白紙 0 を確認)。ユーザが M8-1・M8-2・M8-4・M8-5 の確認を通過(記録 `records/learn/XRT-07.jsonl`・M8-3 の確認の記録なし)。2026-10-26 撤収(CML のシャットダウンのため・ユーザ指示) |
 | 2026-10-23 | XRT-06 | 3 | 撤収済 | - | XR トラック M7(高可用性)。学習目的(tutorial)= `scripts/lab.sh learn XRT-06` のワークスペースで解く。XR01 は XRv9000 26.1.1・RT01 は Cat8000v。E2E 後に `lab.sh reset` で構築直後へ戻し済み(白紙 0 を確認)。2026-10-24 ユーザが M7-1〜5 を全通過(学習モード・記録 `records/learn/XRT-06.jsonl`)→ 同日撤収(M8 の PoC の資源を空けるため・ユーザ了承) |
 | 2026-10-22 | XRT-05 | 3 | 撤収済 | - | XR トラック M4 の 2 周目(IS-IS を深く)。学習目的(tutorial)= `scripts/lab.sh learn XRT-05` のワークスペースで解く。XR01 は XRd。E2E 後に構築直後へ戻し済み(白紙)。2026-10-23 ユーザが M4-5〜8 を全通過(学習モード・記録 `records/learn/XRT-05.jsonl`。M4-6 は採点の不具合= brief の Prio 列で正解が落ちた回あり・同日修正)。2026-10-24 撤収(teardown の撤去が XRd の停止待ちで「not stopped」で失敗し、台帳と生成物だけ消えた → 止まっていたラボを CML の API で消去・削除。lab_up.yml の撤去に再試行、lab.sh teardown に残存の確認を追加) |
 | 2026-10-21 | XRT-04 | 3 | 撤収済 | - | XR トラック M4(IS-IS)。学習目的(tutorial)= `scripts/lab.sh learn XRT-04` のワークスペースで解く。XR01 は XRd。E2E 後に構築直後へ戻し済み(白紙)。2026-10-22 ユーザが M4-1〜4 を全通過(学習モード・記録 `records/learn/XRT-04.jsonl`)→ 同日撤収 |

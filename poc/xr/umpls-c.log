@@ -1,0 +1,127 @@
+
+######## 10:33:31 c-1: XR01 のアクセス側の IF で LDP。RT04 とのセッション・束縛(XR01 は host-routes だけ割り当てる)
+configure
+Sat Oct 24 10:33:32.580 UTC
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR01(config-ldp)#
+interface GigabitEthernet0/0/0/2
+RP/0/RP0/CPU0:XR01(config-ldp-if)#
+commit
+Sat Oct 24 10:33:33.887 UTC
+RP/0/RP0/CPU0:XR01(config-ldp-if)#
+show configuration failed
+Sat Oct 24 10:33:34.288 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-ldp-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sat Oct 24 10:34:17.191 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:02:42    1     0     3     0     8      0    
+10.255.0.11:0      N   N    00:02:37    2     0     3     0     8      0    
+10.255.0.14:0      N   N    00:00:43    1     0     3     0     5      0    
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp bindings 10.255.0.15/32
+Sat Oct 24 10:34:17.591 UTC
+10.255.0.15/32, rev 19
+	Local binding: label: 24003
+	Remote bindings: (1 peers)
+	    Peer                Label    
+	    -----------------   ---------
+	    10.255.0.14:0       16      
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding
+Sat Oct 24 10:34:18.023 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24000  Pop         10.255.0.13/32     Gi0/0/0/1    10.0.3.13       1688        
+24001  16          10.255.0.12/32     Gi0/0/0/0    10.0.1.11       792         
+24002  Pop         10.255.0.11/32     Gi0/0/0/0    10.0.1.11       1550        
+24003  16          10.255.0.15/32     Gi0/0/0/2    10.0.14.14      0           
+24004  Pop         10.255.0.14/32     Gi0/0/0/2    10.0.14.14      0           
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync
+Sat Oct 24 10:34:18.406 UTC
+
+GigabitEthernet0/0/0/0:
+  VRF: 'default' (0x60000000)
+  Sync delay: 10 sec
+  Sync status: Ready
+    Peers:
+      10.255.0.11:0
+
+GigabitEthernet0/0/0/1:
+  VRF: 'default' (0x60000000)
+  Sync delay: 10 sec
+  Sync status: Ready
+    Peers:
+      10.255.0.13:0
+
+GigabitEthernet0/0/0/2:
+  VRF: 'default' (0x60000000)
+  Sync delay: 10 sec
+  Sync status: Ready
+    Peers:
+      10.255.0.14:0
+
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor | include Peer|State
+    Peer LDP Ident: 10.255.0.15:0; Local LDP Ident 10.255.0.14:0
+	State: Oper; Msgs sent/rcvd: 11/13; Downstream
+    Peer LDP Ident: 10.255.0.1:0; Local LDP Ident 10.255.0.14:0
+	State: Oper; Msgs sent/rcvd: 8/11; Downstream
+RT04#
+show mpls ldp bindings 10.255.0.1 32
+  lib entry: 10.255.0.1/32, rev 11
+	local binding:  label: 17
+	remote binding: lsr: 10.255.0.15:0, label: 18
+	remote binding: lsr: 10.255.0.1:0, label: exp-null
+RT04#
+show mpls forwarding-table
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+16         Pop Label  10.255.0.15/32   0             Et0/1      10.0.45.15  
+17         explicit-n 10.255.0.1/32    0             Et0/0      10.0.14.1   
+RT04#
+show mpls forwarding-table
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+16         Pop Label  10.255.0.14/32   0             Et0/0      10.0.45.14  
+17         Pop Label  10.0.14.0/24     0             Et0/0      10.0.45.14  
+18         17         10.255.0.1/32    0             Et0/0      10.0.45.14  
+RT05#
+ping 10.255.0.1 source Loopback0 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 10.255.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.255.0.15 
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 1/1/2 ms
+RT05#
+ping mpls ipv4 10.255.0.1/32 repeat 3
+Sending 3, 72-byte MPLS Echos to 10.255.0.1/32, 
+     timeout is 2 seconds, send interval is 0 msec:
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+  'L' - labeled output interface, 'B' - unlabeled output interface, 
+  'D' - DS Map mismatch, 'F' - no FEC mapping, 'f' - FEC mismatch,
+  'M' - malformed request, 'm' - unsupported tlvs, 'N' - no label entry, 
+  'P' - no rx intf label prot, 'p' - premature termination of LSP, 
+  'R' - transit router, 'I' - unknown upstream index,
+  'l' - Label switched with FEC change, 'd' - see DDMAP for return code,
+  'X' - unknown return code, 'x' - return code 0
+
+Type escape sequence to abort.
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 1/1/2 ms
+ Total Time Elapsed 6 ms
+
+RT05#

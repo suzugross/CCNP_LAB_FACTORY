@@ -21,6 +21,8 @@
 ★設定を戻しても、相手と交換済みの状態(BGP の OPEN で交換した機能など)はセッションに残る。problem.yml の
   `xr_reset_exec: {<NODE>: [<CLI の行>, …]}` に書いた行を、戻した後にそのノードで順に流す(XRT-06= `clear bgp 10.255.0.12`
   でグレースフル リスタートの交換を白紙に戻す)。configure … commit … end も書ける。
+  IOS XR 以外のノード(相手役の IOS)も書ける。XR を戻した後に管理 IF の SSH で流す(XRT-08= 戻した直後は経路を失った
+  BGP セッションが保持時間の 180 秒だけ残り、確認が古い状態を読むので `clear ip bgp …` で消す)。
 ★XR の rollback は、同じコマンドの形の置き換え(`set-overload-bit` → `set-overload-bit on-startup wait-for-bgp`)を戻さない
   (26.1.1 実測。巻き戻しの差分にその行が出ない)。そういう行は xr_reset_exec で初期の形を入れ直す。
 """
@@ -147,6 +149,21 @@ def main():
                 for line in after.get(node, []):
                     sh.send(line, timeout=60)
                     print(f"[{node}] after rollback: {line}")
+        finally:
+            c.close()
+    # 相手役(IOS XR 以外)で流す行。XR を戻した後に流す(失敗しても戻し自体は成功扱い= 警告だけ出す)
+    for node, lines in after.items():
+        if node in nodes or not lines or bad:
+            continue
+        try:
+            c, sh = shell(a.repo, a.problem, node)
+        except Exception as e:
+            print(f"WARNING {node}: cannot log in to run the after-reset lines ({type(e).__name__}: {e})")
+            continue
+        try:
+            for line in lines:
+                sh.send(line, timeout=60)
+                print(f"[{node}] after rollback: {line}")
         finally:
             c.close()
     return 1 if bad else 0

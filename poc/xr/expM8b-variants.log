@@ -1,0 +1,129 @@
+
+######## 11:35:34
+### A: reset 直後の白紙(期待 0/0)
+== reset
+    - '[XR01] rollback to before 1000000001 (first-boot): ok'
+    - '[XR01] after rollback: clear bgp 10.255.0.15'
+    - '[RT02] after rollback: clear ip bgp 10.255.0.15'
+    - '[RT05] after rollback: clear ip bgp *'
+[m8t6]     - '[FAIL] (+ 20 点) M8-6 XR01: forms an IS-IS adjacency with RT04 on ACCESS-1'
+[m8t6]     - '[FAIL] (+ 20 点) M8-6 XR01: the LDP session with RT04 is operational'
+[m8t6]     - '[FAIL] (+ 20 点) M8-6 RT05: an MPLS LSP ping to XR01''s Loopback0 succeeds'
+[m8t6]     - '[FAIL] (+ 20 点) M8-6 RT04: learns XR01''s Loopback0 and nothing from the core'
+[m8t6]     - '[FAIL] (+ 20 点) M8-6 RT01: gets labels from XR01 for the access loopbacks, but
+[m8t6]     - '  合計: 0 / 100 点'
+[m8t7]     - '[FAIL] (+ 15 点) M8-7 RT02: learns RT05''s Loopback0 from XR01, with XR01 as next
+[m8t7]     - '[FAIL] (+ 15 点) M8-7 RT05: learns RT02''s Loopback0 from XR01, with XR01 as next
+[m8t7]     - '[FAIL] (+ 20 点) M8-7 RT02: the iBGP session with RT05 is established'
+[m8t7]     - '[FAIL] (+ 15 点) M8-7 RT02: customer A reaches customer B'
+[m8t7]     - '[FAIL] (+ 15 点) M8-7 RT05: customer B reaches customer A'
+[m8t7]     - '[FAIL] (+ 20 点) M8-7 RT02: the traffic for customer B crosses the core with two
+[m8t7]     - '  合計: 0 / 100 点'
+
+######## 11:36:57
+### B: 別解 Lo0 を 2 つのインスタンスに(期待 m8t6 100)
+== reset
+    - '[XR01] rollback to before 1000000001 (first-boot): ok'
+    - '[XR01] after rollback: clear bgp 10.255.0.15'
+    - '[RT02] after rollback: clear ip bgp 10.255.0.15'
+    - '[RT05] after rollback: clear ip bgp *'
+[m8t6]     - '  合計: 100 / 100 点'
+
+######## 11:38:41
+### C: Lo0 を載せない(期待 m8t6 20)
+== reset
+    - '[XR01] rollback to before 1000000001 (first-boot): ok'
+    - '[XR01] after rollback: clear bgp 10.255.0.15'
+    - '[RT02] after rollback: clear ip bgp 10.255.0.15'
+    - '[RT05] after rollback: clear ip bgp *'
+[m8t6]     - '[FAIL] (+ 20 点) M8-6 XR01: the LDP session with RT04 is operational'
+[m8t6]     - '[FAIL] (+ 20 点) M8-6 RT05: an MPLS LSP ping to XR01''s Loopback0 succeeds'
+[m8t6]     - '[FAIL] (+ 20 点) M8-6 RT04: learns XR01''s Loopback0 and nothing from the core'
+[m8t6]     - '  合計: 40 / 100 点'
+
+######## 11:40:23
+### D: コアの経路をアクセスへ再配送(期待 m8t6 80)
+== reset
+    - '[XR01] rollback to before 1000000001 (first-boot): ok'
+    - '[XR01] after rollback: clear bgp 10.255.0.15'
+    - '[RT02] after rollback: clear ip bgp 10.255.0.15'
+    - '[RT05] after rollback: clear ip bgp *'
+[m8t6]     - '[FAIL] (+ 20 点) M8-6 RT04: learns XR01''s Loopback0 and nothing from the core'
+[m8t6]     - '  合計: 80 / 100 点'
+
+######## 11:42:10
+### E: allocate-label だけ(期待 m8t7 0)
+== reset
+    - '[XR01] rollback to before 1000000001 (first-boot): ok'
+    - '[XR01] after rollback: clear bgp 10.255.0.15'
+    - '[RT02] after rollback: clear ip bgp 10.255.0.15'
+    - '[RT05] after rollback: clear ip bgp *'
+[m8t7]     - '[FAIL] (+ 15 点) M8-7 RT02: learns RT05''s Loopback0 from XR01, with XR01 as next
+[m8t7]     - '[FAIL] (+ 15 点) M8-7 RT05: learns RT02''s Loopback0 from XR01, with XR01 as next
+[m8t7]     - '[FAIL] (+ 20 点) M8-7 RT02: the iBGP session with RT05 is established'
+[m8t7]     - '[FAIL] (+ 15 点) M8-7 RT02: customer A reaches customer B'
+[m8t7]     - '[FAIL] (+ 15 点) M8-7 RT05: customer B reaches customer A'
+[m8t7]     - '[FAIL] (+ 20 点) M8-7 RT02: the traffic for customer B crosses the core with two
+[m8t7]     - '  合計: 0 / 100 点'
+
+######## 11:45:11
+### F: enforce だけ(期待 m8t7 0)
+== reset
+    - '[XR01] rollback to before 1000000001 (first-boot): ok'
+    - '[XR01] after rollback: clear bgp 10.255.0.15'
+    - '[RT02] after rollback: clear ip bgp 10.255.0.15'
+    - '[RT05] after rollback: clear ip bgp *'
+[m8t7]     - '[FAIL] (+ 15 点) M8-7 RT02: learns RT05''s Loopback0 from XR01, with XR01 as next
+[m8t7]     - '[FAIL] (+ 15 点) M8-7 RT05: learns RT02''s Loopback0 from XR01, with XR01 as next
+[m8t7]     - '[FAIL] (+ 20 点) M8-7 RT02: the iBGP session with RT05 is established'
+[m8t7]     - '[FAIL] (+ 15 点) M8-7 RT02: customer A reaches customer B'
+[m8t7]     - '[FAIL] (+ 15 点) M8-7 RT05: customer B reaches customer A'
+[m8t7]     - '[FAIL] (+ 20 点) M8-7 RT02: the traffic for customer B crosses the core with two
+[m8t7]     - '  合計: 0 / 100 点'
+
+######## 11:48:17
+### G: 送る経路だけ絞る(期待 m8t8 70)
+== reset
+    - '[XR01] rollback to before 1000000001 (first-boot): ok'
+    - '[XR01] after rollback: clear bgp 10.255.0.15'
+    - '[RT02] after rollback: clear ip bgp 10.255.0.15'
+    - '[RT05] after rollback: clear ip bgp *'
+[m8t8]     - '[FAIL] (+ 30 点) M8-8 XR01: BGP labels for the PE loopbacks only (customer A still
+[m8t8]     - '  合計: 70 / 100 点'
+
+######## 11:51:54
+### H: learn.yml の模範解を逐語で(期待 final 100)
+== reset
+    - '[XR01] rollback to before 1000000001 (first-boot): ok'
+    - '[XR01] after rollback: clear bgp 10.255.0.15'
+    - '[RT02] after rollback: clear ip bgp 10.255.0.15'
+    - '[RT05] after rollback: clear ip bgp *'
+m8t6 22 lines problems: []
+m8t7 7 lines problems: []
+m8t8 11 lines problems: []
+[final]     - '  合計: 100 / 100 点'
+
+######## 11:54:49
+### I: reset して白紙で残す(期待 final 0)
+== reset
+    - '[XR01] rollback to before 1000000001 (first-boot): ok'
+    - '[XR01] after rollback: clear bgp 10.255.0.15'
+    - '[RT02] after rollback: clear ip bgp 10.255.0.15'
+    - '[RT05] after rollback: clear ip bgp *'
+[final]     - '[FAIL] (+  6 点) M8-6 XR01: forms an IS-IS adjacency with RT04 on ACCESS-1'
+[final]     - '[FAIL] (+  6 点) M8-6 XR01: the LDP session with RT04 is operational'
+[final]     - '[FAIL] (+  6 点) M8-6 RT05: an MPLS LSP ping to XR01''s Loopback0 succeeds'
+[final]     - '[FAIL] (+  6 点) M8-6 RT04: learns XR01''s Loopback0 and nothing from the core'
+[final]     - '[FAIL] (+  6 点) M8-6 RT01: gets labels from XR01 for the access loopbacks, but
+[final]     - '[FAIL] (+  8 点) M8-7 RT02: learns RT05''s Loopback0 from XR01, with XR01 as next
+[final]     - '[FAIL] (+  8 点) M8-7 RT05: learns RT02''s Loopback0 from XR01, with XR01 as next
+[final]     - '[FAIL] (+  9 点) M8-7 RT02: the iBGP session with RT05 is established'
+[final]     - '[FAIL] (+  7 点) M8-7 RT02: customer A reaches customer B'
+[final]     - '[FAIL] (+  7 点) M8-7 RT05: customer B reaches customer A'
+[final]     - '[FAIL] (+  6 点) M8-7 RT02: the traffic for customer B crosses the core with two
+[final]     - '[FAIL] (+  8 点) M8-8 XR01: BGP labels for the PE loopbacks only (customer A still
+[final]     - '[FAIL] (+  5 点) M8-8 XR01: reflects only loopbacks to RT02'
+[final]     - '[FAIL] (+  5 点) M8-8 XR01: reflects only loopbacks to RT05'
+[final]     - '[FAIL] (+  4 点) M8-8 RT02: learns customer B''s network from RT05 only'
+[final]     - '[FAIL] (+  3 点) M8-8 RT02: customer A still reaches customer B'
+[final]     - '  合計: 0 / 100 点'

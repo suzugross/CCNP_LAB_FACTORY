@@ -1,0 +1,48 @@
+! XRT-08 RT05(IOL 17.15・据付・変更しない)= アクセスの PE。お客さま B の 10.50/16 は BGP だけで広告。
+!  XR01(境界)とは BGP ラベル付きユニキャスト(send-label・Lo0 とお客さま B を広告)・RT02 とは直接の iBGP でお客さまの経路だけ交換。
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+!
+interface Loopback0
+ ip address 10.255.0.15 255.255.255.255
+ ip router isis ACCESS
+!
+interface Loopback100
+ description CUSTOMER-B (advertised in BGP only)
+ ip address 10.50.0.1 255.255.0.0
+!
+interface {{ links[0] }}
+ description ACCESS-2 to RT04
+ ip address 10.0.45.15 255.255.255.0
+ ip router isis ACCESS
+ isis network point-to-point
+ isis metric 10
+ mpls ip
+ no shutdown
+!
+router isis ACCESS
+ net 49.0002.0100.0000.0015.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+!
+ip prefix-list SVC-OUT seq 5 permit 10.50.0.0/16
+!
+router bgp 65000
+ bgp router-id 10.255.0.15
+ bgp log-neighbor-changes
+ neighbor 10.255.0.1 remote-as 65000
+ neighbor 10.255.0.1 description BORDER XR01 (labeled unicast)
+ neighbor 10.255.0.1 update-source Loopback0
+ neighbor 10.255.0.12 remote-as 65000
+ neighbor 10.255.0.12 description CUSTOMER-A PE RT02 (customer routes only)
+ neighbor 10.255.0.12 update-source Loopback0
+ address-family ipv4
+  network 10.50.0.0 mask 255.255.0.0
+  network 10.255.0.15 mask 255.255.255.255
+  neighbor 10.255.0.1 activate
+  neighbor 10.255.0.1 send-label
+  neighbor 10.255.0.12 activate
+  neighbor 10.255.0.12 prefix-list SVC-OUT out
+ exit-address-family
+!

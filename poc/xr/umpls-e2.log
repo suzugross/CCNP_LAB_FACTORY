@@ -1,0 +1,143 @@
+
+######## 10:47:58 e-2: PE 同士の直接の iBGP(お客さまの経路= ipv4 unicast・ラベルなし)。TCP が XR01 をラベル付きで通り抜ける
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+router bgp 65000
+RT02(config-router)#
+neighbor 10.255.0.15 remote-as 65000
+RT02(config-router)#
+neighbor 10.255.0.15 update-source Loopback0
+RT02(config-router)#
+address-family ipv4
+RT02(config-router-af)#
+neighbor 10.255.0.15 activate
+RT02(config-router-af)#
+end
+RT02#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT05(config)#
+router bgp 65000
+RT05(config-router)#
+neighbor 10.255.0.12 remote-as 65000
+RT05(config-router)#
+neighbor 10.255.0.12 update-source Loopback0
+RT05(config-router)#
+address-family ipv4
+RT05(config-router-af)#
+neighbor 10.255.0.12 activate
+RT05(config-router-af)#
+end
+RT05#
+show ip bgp summary
+BGP router identifier 10.255.0.12, local AS number 65000
+BGP table version is 17, main routing table version 17
+5 network entries using 1240 bytes of memory
+7 path entries using 952 bytes of memory
+2/2 BGP path/bestpath attribute entries using 592 bytes of memory
+1 BGP rrinfo entries using 40 bytes of memory
+0 BGP route-map cache entries using 0 bytes of memory
+0 BGP filter-list cache entries using 0 bytes of memory
+BGP using 2824 total bytes of memory
+BGP activity 7/2 prefixes, 11/4 paths, scan interval 60 secs
+5 networks peaked at 10:39:18 Oct 24 2026 UTC (00:09:50.155 ago)
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65000      25      15       17    0    0 00:09:49        3
+10.255.0.15     4        65000       5       5       17    0    0 00:00:54        2
+RT02#
+show ip bgp 10.50.0.0
+BGP routing table entry for 10.50.0.0/16, version 16
+Paths: (2 available, best #1, table default)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.15 (metric 20) from 10.255.0.15 (10.255.0.15)
+      Origin IGP, metric 0, localpref 100, valid, internal, best
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Oct 24 2026 10:48:14 UTC
+  Refresh Epoch 1
+  Local
+    10.255.0.1 (metric 20) from 10.255.0.1 (10.255.0.1)
+      Origin IGP, metric 0, localpref 100, valid, internal
+      Originator: 10.255.0.15, Cluster list: 10.255.0.1
+      mpls labels in/out nolabel/24006
+      rx pathid: 0, tx pathid: 0
+      Updated on Oct 24 2026 10:41:43 UTC
+RT02#
+show ip bgp labels
+   Network          Next Hop      In label/Out label
+   10.20.0.0/16     0.0.0.0         imp-null/nolabel
+   10.30.0.0/16     10.255.0.1      nolabel/imp-null
+   10.50.0.0/16     10.255.0.15     nolabel/nolabel
+                    10.255.0.1      nolabel/24006
+   10.255.0.12/32   0.0.0.0         imp-null/nolabel
+   10.255.0.15/32   10.255.0.15     nolabel/nolabel
+                    10.255.0.1      nolabel/24003
+
+RT02#
+show ip cef 10.50.0.0 detail
+10.50.0.0/16, epoch 0, flags [rib only nolabel, rib defined all labels]
+  recursive via 10.255.0.15, unresolved
+  recursive-looped
+RT02#
+show ip bgp neighbors 10.255.0.15 | include BGP state|family|abel|unique
+  BGP state = Established, up for 00:00:55
+    Address family IPv4 Unicast: advertised and received
+ For address family: IPv4 Unicast
+RT02#
+show ip bgp neighbors 10.255.0.1 | include unique|Unique
+RT02#
+ping 10.50.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.50.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+.....
+Success rate is 0 percent (0/5)
+RT02#
+show ip bgp summary
+BGP router identifier 10.255.0.15, local AS number 65000
+BGP table version is 12, main routing table version 12
+5 network entries using 1240 bytes of memory
+7 path entries using 952 bytes of memory
+2/2 BGP path/bestpath attribute entries using 592 bytes of memory
+1 BGP rrinfo entries using 40 bytes of memory
+0 BGP route-map cache entries using 0 bytes of memory
+0 BGP filter-list cache entries using 0 bytes of memory
+BGP using 2824 total bytes of memory
+BGP activity 7/2 prefixes, 9/2 paths, scan interval 60 secs
+5 networks peaked at 10:41:43 Oct 24 2026 UTC (00:07:39.226 ago)
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65000      19      16       12    0    0 00:10:03        3
+10.255.0.12     4        65000       5       6       12    0    0 00:01:08        2
+RT05#
+show ip bgp 10.20.0.0
+BGP routing table entry for 10.20.0.0/16, version 11
+Paths: (2 available, best #1, table default)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.12 (metric 20) from 10.255.0.12 (10.255.0.12)
+      Origin IGP, metric 0, localpref 100, valid, internal, best
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Oct 24 2026 10:48:14 UTC
+  Refresh Epoch 1
+  Local
+    10.255.0.1 (metric 20) from 10.255.0.1 (10.255.0.1)
+      Origin IGP, metric 0, localpref 100, valid, internal
+      Originator: 10.255.0.12, Cluster list: 10.255.0.1
+      mpls labels in/out nolabel/24005
+      rx pathid: 0, tx pathid: 0
+      Updated on Oct 24 2026 10:41:43 UTC
+RT05#
+show tcp brief
+TCB       Local Address               Foreign Address             (state)
+7BE850A9C4B0  10.255.0.15.179            10.255.0.12.45959           ESTAB
+7BE8506111F8  10.255.0.15.29061          10.255.0.14.646             ESTAB
+7BE84ED14AD8  10.255.0.15.179            10.255.0.1.42092            ESTAB
+7BE850AD7458  10.1.10.20.22              10.1.10.6.40780             ESTAB
+------------  0.0.0.0.22                 *.*                         LISTEN
+------------  ::.22                      *.*                         LISTEN
+RT05#

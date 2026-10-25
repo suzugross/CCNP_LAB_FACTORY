@@ -1,0 +1,120 @@
+# XRT-08 最終確認(M8 追補の 3 課題を終えた状態。配点= M8-6 30・M8-7 45・M8-8 25)。
+# 学習目的のラボ= パック・ノルマの対象外。中身は課題ごとの確認(grading.<課題>.yml)を寄せ集めて配点を付け直したもの
+# (手で保守する。課題ごとの確認を直したらここも直す)。白紙で通る項目は無い。
+# exec: local の 2 つ(RT01 の束縛と経路・XR01 のラベルと ping)は show だけで、故障は起こさない。
+problem: XRT-08
+total_points: 100
+checks:
+- name: 'M8-6 XR01: forms an IS-IS adjacency with RT04 on ACCESS-1'
+  node: XR01
+  command: show isis adjacency
+  raw:
+  - regex: RT04\s+Gi0/0/0/2\s+\*PtoP\*\s+Up
+  points: 6
+- name: 'M8-6 XR01: the LDP session with RT04 is operational'
+  node: XR01
+  command: show mpls ldp neighbor 10.255.0.14:0
+  raw:
+  - regex: 'Peer LDP Identifier: 10\.255\.0\.14:0'
+  - regex: 'State: Oper'
+  points: 6
+- name: 'M8-6 RT05: an MPLS LSP ping to XR01''s Loopback0 succeeds'
+  node: RT05
+  command: ping mpls ipv4 10.255.0.1/32 repeat 3
+  raw:
+  - regex: Success rate is 100 percent
+  points: 6
+- name: 'M8-6 RT04: learns XR01''s Loopback0 and nothing from the core'
+  node: RT04
+  command: show ip route
+  raw:
+  - regex: i L2\s+10\.255\.0\.1/32
+  - not_regex: 10\.255\.0\.1[123]/32
+  - not_regex: 10\.0\.(?:1|3|12|23)\.0/24
+  - not_regex: 10\.255\.255\.1/32
+  - not_regex: 10\.(?:20|30)\.0\.0/16
+  points: 6
+- name: 'M8-6 RT01: gets labels from XR01 for the access loopbacks, but no route to the access network'
+  node: RT01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-08 ssh RT01 -- 'show mpls ldp bindings neighbor 10.255.0.1' 'show ip route'
+  raw:
+  - regex: 'lib entry: 10\.255\.0\.15/32'
+  - not_regex: i (?:L1|L2|ia)?\s+10\.255\.0\.1[45]/32
+  - not_regex: i (?:L1|L2|ia)?\s+10\.0\.(?:14|45)\.0/24
+  points: 6
+- name: 'M8-7 RT02: learns RT05''s Loopback0 from XR01, with XR01 as next hop and a label'
+  node: RT02
+  command: show ip bgp labels
+  raw:
+  - regex: 10\.255\.0\.15/32\s+10\.255\.0\.1\s+nolabel/\d+
+  points: 8
+- name: 'M8-7 RT05: learns RT02''s Loopback0 from XR01, with XR01 as next hop and a label'
+  node: RT05
+  command: show ip bgp labels
+  raw:
+  - regex: 10\.255\.0\.12/32\s+10\.255\.0\.1\s+nolabel/\d+
+  points: 8
+- name: 'M8-7 RT02: the iBGP session with RT05 is established'
+  node: RT02
+  command: show ip bgp summary
+  raw:
+  - regex: 10\.255\.0\.15\s+4\s+65000(?:\s+\d+){5}\s+[\dwdhm:]+\s+\d+
+  points: 9
+- name: 'M8-7 RT02: customer A reaches customer B'
+  node: RT02
+  command: ping 10.50.0.1 source Loopback100 repeat 5
+  raw:
+  - regex: Success rate is (?:100|80) percent
+  points: 7
+- name: 'M8-7 RT05: customer B reaches customer A'
+  node: RT05
+  command: ping 10.20.0.1 source Loopback100 repeat 5
+  raw:
+  - regex: Success rate is (?:100|80) percent
+  points: 7
+- name: 'M8-7 RT02: the traffic for customer B crosses the core with two labels'
+  node: RT02
+  command: traceroute 10.50.0.1 source Loopback100 timeout 1 probe 1 ttl 1 1
+  raw:
+  - regex: '10\.0\.12\.11 \[MPLS: Labels \d+/\d+'
+  points: 6
+- name: 'M8-8 XR01: BGP labels for the PE loopbacks only (customer A still reaches RT02 from XR01)'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-08 ssh XR01 -- 'show bgp ipv4 labeled-unicast labels' 'ping 10.20.0.1 source Loopback100 count 5'
+  raw:
+  - regex: 10\.255\.0\.12/32\s+10\.255\.0\.12\s+3\s+\d{5}
+  - regex: 10\.255\.0\.15/32\s+10\.255\.0\.15\s+3\s+\d{5}
+  - regex: 10\.20\.0\.0/16\s+10\.255\.0\.12\s+3\s+nolabel
+  - regex: 10\.50\.0\.0/16\s+10\.255\.0\.15\s+3\s+nolabel
+  - not_regex: 10\.30\.0\.0/16\s+0\.0\.0\.0\s+nolabel\s+\d
+  - regex: Success rate is (?:100|80) percent
+  points: 8
+- name: 'M8-8 XR01: reflects only loopbacks to RT02'
+  node: XR01
+  command: show bgp ipv4 labeled-unicast neighbors 10.255.0.12 advertised-routes
+  raw:
+  - regex: 10\.255\.0\.15/32\s+10\.255\.0\.1\s
+  - not_regex: 10\.(?:30|50)\.0\.0/16
+  points: 5
+- name: 'M8-8 XR01: reflects only loopbacks to RT05'
+  node: XR01
+  command: show bgp ipv4 labeled-unicast neighbors 10.255.0.15 advertised-routes
+  raw:
+  - regex: 10\.255\.0\.12/32\s+10\.255\.0\.1\s
+  - not_regex: 10\.(?:20|30)\.0\.0/16
+  points: 5
+- name: 'M8-8 RT02: learns customer B''s network from RT05 only'
+  node: RT02
+  command: show ip bgp 10.50.0.0
+  raw:
+  - regex: 'Paths: \(1 available, best #1'
+  - regex: from 10\.255\.0\.15 \(10\.255\.0\.15\)
+  points: 4
+- name: 'M8-8 RT02: customer A still reaches customer B'
+  node: RT02
+  command: ping 10.50.0.1 source Loopback100 repeat 5
+  raw:
+  - regex: Success rate is (?:100|80) percent
+  points: 3

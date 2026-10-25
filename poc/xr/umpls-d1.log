@@ -1,0 +1,177 @@
+
+######## 10:35:14 d-1: RT05 → XR01 に BGP ラベル付きユニキャスト(RT05 は Lo0 と お客さま B を network・send-label)。XR01 は LU の AF だけ(RR/NHS なし)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT05(config)#
+router bgp 65000
+RT05(config-router)#
+bgp router-id 10.255.0.15
+RT05(config-router)#
+bgp log-neighbor-changes
+RT05(config-router)#
+neighbor 10.255.0.1 remote-as 65000
+RT05(config-router)#
+neighbor 10.255.0.1 update-source Loopback0
+RT05(config-router)#
+address-family ipv4
+RT05(config-router-af)#
+network 10.255.0.15 mask 255.255.255.255
+RT05(config-router-af)#
+network 10.50.0.0 mask 255.255.0.0
+RT05(config-router-af)#
+neighbor 10.255.0.1 activate
+RT05(config-router-af)#
+neighbor 10.255.0.1 send-label
+RT05(config-router-af)#
+end
+RT05#
+configure
+Sat Oct 24 10:35:22.126 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+neighbor 10.255.0.15
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+remote-as 65000
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+update-source Loopback0
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+address-family ipv4 labeled-unicast
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+commit
+Sat Oct 24 10:35:24.635 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+show configuration failed
+Sat Oct 24 10:35:25.037 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast summary
+Sat Oct 24 10:36:13.682 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 8
+BGP main routing table version 8
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker            8             8             8             8             8             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.15       0 65000       2       3            8    0    0 00:00:40          0
+
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast
+Sat Oct 24 10:36:14.071 UTC
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast labels
+Sat Oct 24 10:36:14.473 UTC
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast
+Sat Oct 24 10:36:14.885 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 8
+BGP main routing table version 8
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*>i10.20.0.0/16       10.255.0.12              0    100      0 i
+*> 10.30.0.0/16       0.0.0.0                  0         32768 i
+
+Processed 2 prefixes, 2 paths
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast 10.255.0.15/32
+Sat Oct 24 10:36:15.385 UTC
+%% Network not in table
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast 10.50.0.0/16
+Sat Oct 24 10:36:15.782 UTC
+%% Network not in table
+RP/0/RP0/CPU0:XR01#
+show bgp neighbor 10.255.0.15 | include "family|abel|State|Prefix"
+Sat Oct 24 10:36:16.204 UTC
+  Previous State: Idle
+  NSR State: None
+    Address family IPv4 Labeled-unicast: advertised and received
+ For Address Family: IPv4 Labeled-unicast
+  Prefix advertised 0, suppressed 0, withdrawn 0
+  Slow Peer State: Detection-only
+RP/0/RP0/CPU0:XR01#
+show route 10.50.0.0/16
+Sat Oct 24 10:36:16.577 UTC
+
+% Network not in table
+
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding
+Sat Oct 24 10:36:16.981 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24000  Pop         10.255.0.13/32     Gi0/0/0/1    10.0.3.13       1980        
+24001  16          10.255.0.12/32     Gi0/0/0/0    10.0.1.11       1006        
+24002  Pop         10.255.0.11/32     Gi0/0/0/0    10.0.1.11       2786        
+24003  16          10.255.0.15/32     Gi0/0/0/2    10.0.14.14      663         
+24004  Pop         10.255.0.14/32     Gi0/0/0/2    10.0.14.14      212         
+RP/0/RP0/CPU0:XR01#
+show ip bgp summary
+BGP router identifier 10.255.0.15, local AS number 65000
+BGP table version is 1, main routing table version 1
+2 network entries using 496 bytes of memory
+2 path entries using 272 bytes of memory
+1/0 BGP path/bestpath attribute entries using 296 bytes of memory
+0 BGP route-map cache entries using 0 bytes of memory
+0 BGP filter-list cache entries using 0 bytes of memory
+BGP using 1064 total bytes of memory
+BGP activity 2/0 prefixes, 2/0 paths, scan interval 60 secs
+2 networks peaked at 10:35:19 Oct 24 2026 UTC (00:00:59.876 ago)
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65000       3       2        1    0    0 00:00:45        0
+RT05#
+show ip bgp
+BGP table version is 1, local router ID is 10.255.0.15
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *    10.50.0.0/16     0.0.0.0                  0         32768 i
+ *    10.255.0.15/32   0.0.0.0                  0         32768 i
+RT05#
+show ip bgp labels
+   Network          Next Hop      In label/Out label
+   10.50.0.0/16     0.0.0.0         nolabel/nolabel
+   10.255.0.15/32   0.0.0.0         nolabel/nolabel
+
+RT05#
+show ip bgp neighbors 10.255.0.1 | include family|abel|BGP state|Prefixes
+  BGP state = Established, up for 00:00:46
+    Address family IPv4 Unicast: advertised
+    ipv4 MPLS Label capability: advertised and received
+ For address family: IPv4 Unicast
+  Sending Prefix & Label
+    Prefixes Current:               0          0
+    Prefixes Total:                 0          0
+  Local Policy Denied Prefixes:    --------    -------
+RT05#

@@ -1,0 +1,105 @@
+
+######## 10:51:27 e-2b: 直接のセッションではお客さまの経路だけ送る(ループバックを送ると next hop の再帰がループする)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+ip prefix-list SVC-OUT seq 5 permit 10.20.0.0/16
+RT02(config)#
+router bgp 65000
+RT02(config-router)#
+address-family ipv4
+RT02(config-router-af)#
+neighbor 10.255.0.15 prefix-list SVC-OUT out
+RT02(config-router-af)#
+end
+RT02#
+clear ip bgp 10.255.0.15 soft out
+RT02#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT05(config)#
+ip prefix-list SVC-OUT seq 5 permit 10.50.0.0/16
+RT05(config)#
+router bgp 65000
+RT05(config-router)#
+address-family ipv4
+RT05(config-router-af)#
+neighbor 10.255.0.12 prefix-list SVC-OUT out
+RT05(config-router-af)#
+end
+RT05#
+clear ip bgp 10.255.0.12 soft out
+RT05#
+show ip bgp
+BGP table version is 24, local router ID is 10.255.0.12
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.20.0.0/16     0.0.0.0                  0         32768 i
+ *>i  10.30.0.0/16     10.255.0.1               0    100      0 i
+ *>i  10.50.0.0/16     10.255.0.15              0    100      0 i
+ * i                   10.255.0.1               0    100      0 i
+ *>   10.255.0.12/32   0.0.0.0                  0         32768 i
+ *>i  10.255.0.15/32   10.255.0.1               0    100      0 i
+RT02#
+show ip bgp 10.50.0.0
+BGP routing table entry for 10.50.0.0/16, version 24
+Paths: (2 available, best #1, table default)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.15 (metric 20) from 10.255.0.15 (10.255.0.15)
+      Origin IGP, metric 0, localpref 100, valid, internal, best
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Oct 24 2026 10:51:35 UTC
+  Refresh Epoch 1
+  Local
+    10.255.0.1 (metric 20) from 10.255.0.1 (10.255.0.1)
+      Origin IGP, metric 0, localpref 100, valid, internal
+      Originator: 10.255.0.15, Cluster list: 10.255.0.1
+      mpls labels in/out nolabel/24006
+      rx pathid: 0, tx pathid: 0
+      Updated on Oct 24 2026 10:41:43 UTC
+RT02#
+show ip cef 10.50.0.0 detail
+10.50.0.0/16, epoch 0, flags [rib only nolabel, rib defined all labels]
+  recursive via 10.255.0.15
+    recursive via 10.255.0.1 label 24003
+      nexthop 10.0.12.11 Ethernet0/0 label 20-(local:20)
+RT02#
+ping 10.50.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.50.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+RT02#
+show ip bgp
+BGP table version is 19, local router ID is 10.255.0.15
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>i  10.20.0.0/16     10.255.0.12              0    100      0 i
+ * i                   10.255.0.1               0    100      0 i
+ *>i  10.30.0.0/16     10.255.0.1               0    100      0 i
+ *>   10.50.0.0/16     0.0.0.0                  0         32768 i
+ *>i  10.255.0.12/32   10.255.0.1               0    100      0 i
+ *>   10.255.0.15/32   0.0.0.0                  0         32768 i
+RT05#
+ping 10.20.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.20.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.50.0.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+RT05#

@@ -1,0 +1,43 @@
+# M8-7: PE のループバックを BGP ラベル付きユニキャストで運び、PE 同士の iBGP(据え付け)を上げてお客さま A ⇔ B を通す。
+# 仕込み= 前任者の LU の設定に enforce-modifications と allocate-label が無い。PoC §21.4:
+#   どちらも無い= XR01 が next hop を替えずに反映(RT02 で 10.255.0.15 の next hop が自分自身・ラベル imp-null)/
+#   enforce だけ= 反映が止まる/allocate だけ= どちらも無いのと同じ形。M8-6 が済んでいないと RT05 との BGP が上がらない。
+problem: XRT-08
+total_points: 100
+checks:
+  - name: 'M8-7 RT02: learns RT05''s Loopback0 from XR01, with XR01 as next hop and a label'
+    node: RT02
+    command: 'show ip bgp labels'
+    raw:
+      - { regex: '10\.255\.0\.15/32\s+10\.255\.0\.1\s+nolabel/\d+' }
+    points: 15
+  - name: 'M8-7 RT05: learns RT02''s Loopback0 from XR01, with XR01 as next hop and a label'
+    node: RT05
+    command: 'show ip bgp labels'
+    raw:
+      - { regex: '10\.255\.0\.12/32\s+10\.255\.0\.1\s+nolabel/\d+' }
+    points: 15
+  - name: 'M8-7 RT02: the iBGP session with RT05 is established'
+    node: RT02
+    command: 'show ip bgp summary'
+    raw:
+      - { regex: '10\.255\.0\.15\s+4\s+65000(?:\s+\d+){5}\s+[\dwdhm:]+\s+\d+' }
+    points: 20
+  - name: 'M8-7 RT02: customer A reaches customer B'
+    node: RT02
+    command: 'ping 10.50.0.1 source Loopback100 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 15
+  - name: 'M8-7 RT05: customer B reaches customer A'
+    node: RT05
+    command: 'ping 10.20.0.1 source Loopback100 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 15
+  - name: 'M8-7 RT02: the traffic for customer B crosses the core with two labels'
+    node: RT02
+    command: 'traceroute 10.50.0.1 source Loopback100 timeout 1 probe 1 ttl 1 1'
+    raw:
+      - { regex: '10\.0\.12\.11 \[MPLS: Labels \d+/\d+' }
+    points: 20

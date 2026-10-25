@@ -247,12 +247,19 @@ NODE_STYLE = {                     # kind: (最小幅, 高さ, 塗り, 枠, 角�
 }
 
 
+def _tw(text):
+    """図の文字列の幅を半角何文字ぶんかで見積もる。全角(日本語など)は半角の約 1.75 倍の幅で描かれる
+    (文字数だけで見積もると、日本語の名前が箱や札からはみ出していた)。"""
+    import unicodedata
+    return sum(1.75 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in str(text))
+
+
 def _box(name, spec):
     at = spec["at"] if isinstance(spec, dict) else spec
     kind = spec.get("kind", "sw") if isinstance(spec, dict) else "sw"
     label = spec.get("label", name) if isinstance(spec, dict) else name
     w0, h, fill, stroke, r = NODE_STYLE.get(kind, NODE_STYLE["sw"])
-    w = max(w0, int(len(label) * 8.6) + 22)
+    w = max(w0, int(_tw(label) * 8.6) + 22)
     return {"x": MARGIN + at[0] * CELL_X, "y": MARGIN + at[1] * CELL_Y,
             "w": w, "h": h, "fill": fill, "stroke": stroke, "r": r, "label": label}
 
@@ -276,6 +283,7 @@ def render_topo(src_yaml):
     if not boxes:
         return "<p>(図の定義が空です)</p>"
     parts = []
+    ext = []                       # 描いたものの外形(x1, y1, x2, y2)。描画範囲(viewBox)を決める
 
     # 枠（VTP ドメイン等）は最背面に
     for fr in spec.get("frames") or []:
@@ -289,6 +297,7 @@ def render_topo(src_yaml):
         y2 = max(b["y"] + b["h"] / 2 for b in ns) + pad
         parts.append(f'<rect class="tf" x="{x1:.0f}" y="{y1:.0f}" '
                      f'width="{x2-x1:.0f}" height="{y2-y1:.0f}" rx="12"/>')
+        ext.append((x1, y1, x2, y2))
         if fr.get("label"):
             parts.append(f'<text class="tfl" x="{x1+12:.0f}" y="{y1+16:.0f}">'
                          f'{html.escape(str(fr["label"]))}</text>')
@@ -321,9 +330,10 @@ def render_topo(src_yaml):
             labels.append((x1 + (x2 - x1) * te, y1 + (y2 - y1) * te, le))
 
     for x, y, lab in labels:       # ラベルは線より前面
-        w = len(lab) * 7.4 + 10
+        w = _tw(lab) * 7.4 + 10
         parts.append(f'<rect class="tlb" x="{x-w/2:.0f}" y="{y-9:.0f}" '
                      f'width="{w:.0f}" height="18" rx="3"/>')
+        ext.append((x - w / 2, y - 9, x + w / 2, y + 9))
         parts.append(f'<text class="tlt" x="{x:.0f}" y="{y+4:.0f}">'
                      f"{html.escape(str(lab))}</text>")
 
@@ -335,10 +345,17 @@ def render_topo(src_yaml):
         parts.append(f'<text class="tn" x="{b["x"]:.0f}" y="{b["y"]+5:.0f}">'
                      f'{html.escape(b["label"])}</text>')
 
-    W = max(b["x"] + b["w"] / 2 for b in boxes.values()) + MARGIN
-    H = max(b["y"] + b["h"] / 2 for b in boxes.values()) + MARGIN
+    ext += [(b["x"] - b["w"] / 2, b["y"] - b["h"] / 2, b["x"] + b["w"] / 2, b["y"] + b["h"] / 2)
+            for b in boxes.values()]
+    # 描画範囲= 既定は原点から「いちばん右下の箱+余白」。横に長い箱や枠が原点より左・上へはみ出す時は
+    # その分だけ範囲を広げる(列 0 に名前の長い箱を置くと、枠の左上が切れていた。2026-10-25 ユーザ指摘)
+    x0 = min(0, min(e[0] for e in ext) - 8)
+    y0 = min(0, min(e[1] for e in ext) - 8)
+    right = max(max(b["x"] + b["w"] / 2 for b in boxes.values()) + MARGIN, max(e[2] for e in ext) + 8)
+    bottom = max(max(b["y"] + b["h"] / 2 for b in boxes.values()) + MARGIN, max(e[3] for e in ext) + 8)
+    W, H = right - x0, bottom - y0
     body = "\n".join(parts)
-    return (f'<div class="topo"><svg viewBox="0 0 {W:.0f} {H:.0f}" '
+    return (f'<div class="topo"><svg viewBox="{x0:.0f} {y0:.0f} {W:.0f} {H:.0f}" '
             f'width="{W:.0f}" role="img">\n{body}\n</svg></div>')
 
 

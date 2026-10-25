@@ -1,0 +1,204 @@
+# XRT-08 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn XRT-08 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# ここに書いた挙動は IOS XRd 26.1.1(+IOL 17.15)の実機で確認した(設計= problems/_drafts/XR-TRACK.design.md §21)。
+# 読み物(BL-252)= Reading タブに出す本(reading/<key>/)。各課題の read: はその本の「ページ#節」(節= data-sec)。
+reading: xr
+steps:
+  - id: m8t6
+    title: { en: "M8-6  The border joins the access network", ja: "M8-6  境界がアクセス網に参加する" }
+    check: m8t6
+    read: [84-m8-appendix#s2, 82-m8-unified-mpls#s1-1, 82-m8-unified-mpls#s2-1, 82-m8-unified-mpls#s2-2]
+    hints:
+      - en: "XR01 takes part in two IGP domains at once, each with its own IS-IS instance and its own link-state database. Think about what the access routers need from XR01 besides an adjacency: LDP opens its TCP session to the neighbour's transport address."
+        ja: "XR01 は、それぞれ独自の IS-IS インスタンスと独自のリンクステート データベースを持つ 2 つの IGP ドメインに同時に参加します。隣接関係のほかに、アクセスのルータが XR01 から何を必要とするかを考えてください。LDP は、ネイバーのトランスポート アドレスに向けて TCP セッションを開きます。"
+      - en: "`show isis adjacency` lists the adjacencies of every instance, and `show mpls ldp neighbor brief` the LDP sessions. On RT04, `show mpls ldp discovery detail` says whether RT04 has a route to XR01's transport address, and `show ip route` shows what RT04 has learned. Guides: Routing Configuration Guide, 'Implementing IS-IS' — 'Multi-Instance IS-IS' and the redistribution of routes into IS-IS; Cisco TAC document 'Configure Unified MPLS in Cisco IOS XR' (how the border's loopback reaches the other IGP)."
+        ja: "`show isis adjacency` はすべてのインスタンスの隣接関係を、`show mpls ldp neighbor brief` は LDP セッションを表示します。RT04 の `show mpls ldp discovery detail` は、RT04 が XR01 のトランスポート アドレスへのルートを持っているかを表示し、`show ip route` は RT04 が学習したものを表示します。ガイド: Routing Configuration Guide の「Implementing IS-IS」の「Multi-Instance IS-IS」と、IS-IS へのルートの再配送。Cisco TAC の文書「Configure Unified MPLS in Cisco IOS XR」(境界のループバックをもう一方の IGP に載せる方法)。"
+      - en: "A second `router isis ACCESS` with `is-type level-2-only`, `net 49.0002.0100.0000.0001.00` and `metric-style wide` under `address-family ipv4 unicast`, and GigabitEthernet0/0/0/2 as a `point-to-point` interface with `address-family ipv4 unicast` and `metric 10`. For Loopback0: a route policy that passes 10.255.0.1/32 only, and `redistribute connected route-policy <name>` under the IPv4 address family of `router isis ACCESS`. Under `mpls ldp`: `interface GigabitEthernet0/0/0/2`."
+        ja: "2 つ目の `router isis ACCESS` に `is-type level-2-only`、`net 49.0002.0100.0000.0001.00`、`address-family ipv4 unicast` の下の `metric-style wide`。GigabitEthernet0/0/0/2 を `point-to-point` のインターフェイスにし、`address-family ipv4 unicast` と `metric 10`。Loopback0 には、10.255.0.1/32 だけを通すルート ポリシーと、`router isis ACCESS` の IPv4 アドレス ファミリーの下の `redistribute connected route-policy <名前>`。`mpls ldp` の下に `interface GigabitEthernet0/0/0/2`。"
+    solution:
+      en: |
+        configure
+         route-policy ABR-LOOPBACK
+          if destination in (10.255.0.1/32) then
+           pass
+          endif
+         end-policy
+         router isis ACCESS
+          is-type level-2-only
+          net 49.0002.0100.0000.0001.00
+          log adjacency changes
+          address-family ipv4 unicast
+           metric-style wide
+           redistribute connected route-policy ABR-LOOPBACK
+          !
+          interface GigabitEthernet0/0/0/2
+           point-to-point
+           address-family ipv4 unicast
+            metric 10
+         mpls ldp
+          interface GigabitEthernet0/0/0/2
+         commit
+        end
+        Each IS-IS instance keeps its own link-state database, and nothing passes from one instance to the other unless
+        it is redistributed: there is nothing to block between CORE and ACCESS. What the access network does need is
+        XR01's Loopback0. With only ACCESS-1 in the new instance, the adjacency with RT04 comes up and the LDP hellos are
+        exchanged, but the session does not: RT04 says `no route to transport addr` in `show mpls ldp discovery detail`,
+        as RT01 did in Task M8-1, because XR01's transport address is its Loopback0. The way of Cisco's Unified MPLS
+        document is to redistribute the connected routes into the access IGP with a route policy that passes the
+        loopback only. RT04 then shows 10.255.0.1/32 as an ordinary Level 2 route; in XR01's LSP the prefix carries the
+        external flag (`X:1` in `show isis instance ACCESS database verbose`). Placing Loopback0 under both instances
+        (passive) also works on IOS XRd 26.1.1: the commit succeeds and both instances advertise it. The configuration
+        guides disagree on that form, though: those for the Cisco 8000 say that an interface belongs to one instance
+        only, those for the ASR 9000 from release 7.8 allow sharing an interface between instances with different
+        instance IDs. With the session up, XR01 also holds labels for RT04's and RT05's loopbacks and advertises them to
+        RT01 and RT03. They keep them (`show mpls ldp bindings neighbor 10.255.0.1` on RT01), but cannot use them: they
+        have no route to the access network.
+      ja: |
+        configure
+         route-policy ABR-LOOPBACK
+          if destination in (10.255.0.1/32) then
+           pass
+          endif
+         end-policy
+         router isis ACCESS
+          is-type level-2-only
+          net 49.0002.0100.0000.0001.00
+          log adjacency changes
+          address-family ipv4 unicast
+           metric-style wide
+           redistribute connected route-policy ABR-LOOPBACK
+          !
+          interface GigabitEthernet0/0/0/2
+           point-to-point
+           address-family ipv4 unicast
+            metric 10
+         mpls ldp
+          interface GigabitEthernet0/0/0/2
+         commit
+        end
+        IS-IS のインスタンスはそれぞれ独自のリンクステート データベースを持ち、再配送しない限り、一方のインスタンスから
+        もう一方へは何も渡りません。CORE と ACCESS の間で遮るものはありません。アクセス網に必要なのは XR01 の Loopback0 です。
+        新しいインスタンスに ACCESS-1 だけを入れると、RT04 との隣接関係は上がり、LDP の hello もやり取りされますが、セッションは
+        上がりません。課題 M8-1 の RT01 と同じく、RT04 は `show mpls ldp discovery detail` に `no route to transport addr` と表示します。
+        XR01 のトランスポート アドレスは Loopback0 だからです。Cisco の Unified MPLS の文書のやり方は、ループバックだけを通す
+        ルート ポリシーで、接続ルートをアクセスの IGP に再配送するものです。RT04 には 10.255.0.1/32 が通常のレベル 2 のルートとして
+        表示されます。XR01 の LSP では、このプレフィックスに外部のフラグが付きます(`show isis instance ACCESS database verbose` の `X:1`)。
+        Loopback0 を両方のインスタンスに(passive で)入れる形も、IOS XRd 26.1.1 では動作します。コミットは成功し、両方のインスタンスが
+        アドバタイズします。ただし、この形についてはコンフィギュレーション ガイドの記述が分かれています。Cisco 8000 のガイドは、
+        インターフェイスは 1 つのインスタンスにしか属せないとし、ASR 9000 のリリース 7.8 以降のガイドは、異なるインスタンス ID を
+        持つインスタンスの間でインターフェイスを共有できるとしています。
+        セッションが上がると、XR01 は RT04 と RT05 のループバックのラベルも持ち、RT01 と RT03 にもアドバタイズします。
+        RT01 と RT03 はそれを保持しますが(RT01 の `show mpls ldp bindings neighbor 10.255.0.1`)、使えません。アクセス網への
+        ルートを持っていないからです。
+
+  - id: m8t7
+    title: { en: "M8-7  Labeled unicast through the border", ja: "M8-7  境界を通るラベル付きユニキャスト" }
+    check: m8t7
+    read: [84-m8-appendix#s5, 84-m8-appendix#s7, 82-m8-unified-mpls#s3-1, 82-m8-unified-mpls#s3-2, 82-m8-unified-mpls#s3-3, 82-m8-unified-mpls#s3-4]
+    hints:
+      - en: "Start at RT02: which next hop and which label does it have for 10.255.0.15/32? CHG-1107 set next-hop-self on XR01, but an IOS XR route reflector does not apply outbound changes to the routes it reflects unless it is told to. Expect a second missing piece once the next hop changes: to send a labelled route with itself as next hop, XR01 needs a label of its own for it."
+        ja: "RT02 から始めてください。RT02 は 10.255.0.15/32 について、どのネクスト ホップとどのラベルを持っていますか。CHG-1107 は XR01 に next-hop-self を設定しましたが、IOS XR のルート リフレクタは、指示されない限り、リフレクトするルートには送信側の変更を適用しません。ネクスト ホップが変わった後に、もう 1 つ欠けているものが見つかるはずです。自分をネクスト ホップにしてラベル付きのルートを送るには、XR01 はそのルートについて自分のラベルを必要とします。"
+      - en: "On RT02, `show ip bgp 10.255.0.15` and `show ip bgp labels`. On XR01, `show bgp ipv4 labeled-unicast labels` (the Local Label column) and `show bgp ipv4 labeled-unicast neighbors 10.255.0.12 advertised-routes`. Guides: BGP Configuration Guide, BGP labeled unicast; BGP command reference, `ibgp policy out enforce-modifications` and `allocate-label`; Cisco TAC document 'Configure Unified MPLS in Cisco IOS XR', which lists what does not work and what does."
+        ja: "RT02 では `show ip bgp 10.255.0.15` と `show ip bgp labels`。XR01 では `show bgp ipv4 labeled-unicast labels`(Local Label の列)と `show bgp ipv4 labeled-unicast neighbors 10.255.0.12 advertised-routes`。ガイド: BGP Configuration Guide の BGP ラベル付きユニキャスト、BGP のコマンド リファレンスの `ibgp policy out enforce-modifications` と `allocate-label`。Cisco TAC の文書「Configure Unified MPLS in Cisco IOS XR」には、動作しないものと動作するものが挙げられています。"
+      - en: "Under `router bgp 65000`: `ibgp policy out enforce-modifications`. Under `router bgp 65000` → `address-family ipv4 unicast`: `allocate-label all`."
+        ja: "`router bgp 65000` の下に `ibgp policy out enforce-modifications`。`router bgp 65000` → `address-family ipv4 unicast` の下に `allocate-label all`。"
+    solution:
+      en: |
+        configure
+         router bgp 65000
+          ibgp policy out enforce-modifications
+          address-family ipv4 unicast
+           allocate-label all
+         commit
+        end
+        CHG-1107 had what looks like a complete route reflector: both provider edges as clients of the labeled unicast
+        family, with `next-hop-self`. After Task M8-6 the session with RT05 comes up, and XR01 reflects each loopback to
+        the other side, but unchanged: RT02 gets 10.255.0.15/32 with next hop 10.255.0.15 and RT05's own label,
+        implicit null. RT02 cannot resolve a next hop that only this route itself would reach, so the iBGP session with
+        RT05 stays down. On IOS XR, an outbound change such as `next-hop-self` is applied to reflected routes only with
+        `ibgp policy out enforce-modifications`. With that line alone, the loopbacks disappear from RT02 and RT05:
+        XR01 now has to replace RT05's label with one of its own, and without `allocate-label` it has none, so it stops
+        advertising the routes in labeled unicast. `allocate-label all` gives XR01 a local label for every route
+        (`show bgp ipv4 labeled-unicast labels`), and the loopbacks arrive with next hop 10.255.0.1 and XR01's label.
+        Either line alone leaves customer A's sites apart. RT02 now sends RT05's traffic with two labels: the LDP label
+        that brings it to XR01, and XR01's BGP label for 10.255.0.15/32 (`traceroute` shows `Labels 20/24003` at RT01).
+        XR01 swaps its BGP label for the LDP label that leads to RT05. The iBGP session between RT02 and RT05 can need
+        up to two minutes to come up after that. With `allocate-label all`, XR01 also reflects customer A's networks
+        with itself as next hop; Task M8-8 changes that.
+      ja: |
+        configure
+         router bgp 65000
+          ibgp policy out enforce-modifications
+          address-family ipv4 unicast
+           allocate-label all
+         commit
+        end
+        CHG-1107 は、一見完全なルート リフレクタの設定でした。ラベル付きユニキャストのファミリーで両方のプロバイダー エッジを
+        クライアントにし、`next-hop-self` も付いています。課題 M8-6 の後、RT05 とのセッションが上がり、XR01 はそれぞれの
+        ループバックを反対側へリフレクトしますが、変更せずにリフレクトします。RT02 は 10.255.0.15/32 を、ネクスト ホップ
+        10.255.0.15 と RT05 自身のラベル(implicit null)で受け取ります。RT02 は、このルート自身でしか到達できないネクスト ホップを
+        解決できないので、RT05 との iBGP セッションは上がらないままです。IOS XR では、`next-hop-self` のような送信側の変更は、
+        `ibgp policy out enforce-modifications` があるときにだけ、リフレクトするルートに適用されます。この行だけを入れると、
+        ループバックは RT02 と RT05 から消えます。XR01 は RT05 のラベルを自分のラベルに置き換える必要がありますが、
+        `allocate-label` が無いとラベルを持たないので、ラベル付きユニキャストでのアドバタイズをやめるからです。`allocate-label all` で、
+        XR01 はすべてのルートにローカル ラベルを割り当て(`show bgp ipv4 labeled-unicast labels`)、ループバックはネクスト ホップ
+        10.255.0.1 と XR01 のラベルで届きます。どちらか 1 行だけでは、顧客 A のサイトはつながりません。
+        RT02 は、RT05 宛てのトラフィックに 2 つのラベルを付けて送ります。XR01 まで運ぶ LDP のラベルと、XR01 の 10.255.0.15/32 用の
+        BGP のラベルです(`traceroute` は RT01 で `Labels 20/24003` を表示します)。XR01 は自分の BGP のラベルを、RT05 へ向かう LDP の
+        ラベルに付け替えます。その後、RT02 と RT05 の間の iBGP セッションが上がるまでに、最大 2 分かかることがあります。
+        `allocate-label all` では、XR01 は顧客 A のネットワークも自分をネクスト ホップにしてリフレクトします。これは課題 M8-8 で変えます。
+
+  - id: m8t8
+    title: { en: "M8-8  The border carries loopbacks only", ja: "M8-8  境界はループバックだけを運ぶ" }
+    check: m8t8
+    read: [82-m8-unified-mpls#s4-1, 82-m8-unified-mpls#s4-2, 82-m8-unified-mpls#s5-1]
+    hints:
+      - en: "With `allocate-label all`, every route in XR01's table gets a BGP label, customer A's networks included, and a route with a label of its own is reflected with XR01 as next hop. The label allocation itself can be limited."
+        ja: "`allocate-label all` では、XR01 のテーブルにあるすべてのルートが BGP のラベルを持ちます。顧客 A のネットワークも含まれます。自分のラベルを持つルートは、XR01 をネクスト ホップにしてリフレクトされます。ラベルの割り当てそのものを限定できます。"
+      - en: "`show bgp ipv4 labeled-unicast labels` on XR01; on RT02, `show ip bgp 10.50.0.0` lists the paths for customer A's new site. BGP command reference, `allocate-label` (the `route-policy` form); Routing Policy configuration guide, matching prefixes with `destination in`."
+        ja: "XR01 の `show bgp ipv4 labeled-unicast labels`。RT02 の `show ip bgp 10.50.0.0` は、顧客 A の新しいサイトへのパスの一覧を表示します。BGP のコマンド リファレンスの `allocate-label`(`route-policy` の形)、Routing Policy Configuration Guide の `destination in` によるプレフィックスの照合。"
+      - en: "A route policy that passes `destination in (10.255.0.0/24 eq 32)`, and under `router bgp 65000` → `address-family ipv4 unicast`: `allocate-label route-policy <name>` in place of `allocate-label all`."
+        ja: "`destination in (10.255.0.0/24 eq 32)` を通すルート ポリシーと、`router bgp 65000` → `address-family ipv4 unicast` の下で `allocate-label all` に代えて `allocate-label route-policy <名前>`。"
+    solution:
+      en: |
+        configure
+         route-policy LU-LOOPBACKS
+          if destination in (10.255.0.0/24 eq 32) then
+           pass
+          endif
+         end-policy
+         router bgp 65000
+          address-family ipv4 unicast
+           allocate-label route-policy LU-LOOPBACKS
+         commit
+        end
+        `allocate-label route-policy` replaces `allocate-label all`: only the routes that the policy passes get a local
+        label. A labelled route that XR01 has no label for is not sent to a labeled-unicast neighbour that gets XR01 as
+        next hop, so customer A's networks are no longer reflected: XR01 still learns them from RT02 and RT05, but shows
+        `nolabel` in the Local Label column and advertises only the two loopbacks. RT02 is left with a single path to
+        10.50.0.0/16, the one from RT05, whose next hop 10.255.0.15 it reaches over XR01's label. XR01's own
+        10.30.0.0/16 loses its label (it had implicit null) and goes to RT02 only in the plain IPv4 unicast family, which
+        that session also carries, so XR01's site still reaches RT02's. Filtering the outbound updates with a route
+        policy on the two labeled-unicast neighbours would stop the reflection as well, but XR01 would still hold labels
+        for the customer routes.
+      ja: |
+        configure
+         route-policy LU-LOOPBACKS
+          if destination in (10.255.0.0/24 eq 32) then
+           pass
+          endif
+         end-policy
+         router bgp 65000
+          address-family ipv4 unicast
+           allocate-label route-policy LU-LOOPBACKS
+         commit
+        end
+        `allocate-label route-policy` は `allocate-label all` を置き換え、ポリシーが通したルートだけがローカル ラベルを持ちます。
+        XR01 がラベルを持たないラベル付きのルートは、XR01 をネクスト ホップとして受け取るラベル付きユニキャストのネイバーには
+        送られません。そのため、顧客 A のネットワークはもうリフレクトされません。XR01 は RT02 と RT05 から引き続きそれらを学習
+        しますが、Local Label の列に `nolabel` と表示し、アドバタイズするのは 2 つのループバックだけです。RT02 に残る
+        10.50.0.0/16 へのパスは RT05 からの 1 本だけで、そのネクスト ホップ 10.255.0.15 には XR01 のラベルで到達します。
+        XR01 自身の 10.30.0.0/16 はラベル(implicit null)を失い、RT02 へは通常の IPv4 ユニキャストのファミリーだけで送られます。
+        このセッションはそのファミリーも運んでいるので、XR01 のサイトは引き続き RT02 のサイトに到達できます。
+        2 つのラベル付きユニキャストのネイバーで、ルート ポリシーにより送信するアップデートを絞っても、リフレクトは止まりますが、
+        XR01 は顧客のルートのラベルを持ったままになります。

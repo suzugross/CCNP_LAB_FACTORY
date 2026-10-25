@@ -1,0 +1,26 @@
+! _POC-XRUMPLS RT05(IOL 17.15)= アクセスの PE。お客さま B の 10.50/16 は BGP だけで広告する想定(BGP は PoC の段で足す)。
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+!
+interface Loopback0
+ ip address 10.255.0.15 255.255.255.255
+ ip router isis ACCESS
+!
+interface Loopback100
+ description CUSTOMER-B (advertised in BGP only)
+ ip address 10.50.0.1 255.255.0.0
+!
+interface {{ links[0] }}
+ description ACCESS to RT04
+ ip address 10.0.45.15 255.255.255.0
+ ip router isis ACCESS
+ isis network point-to-point
+ mpls ip
+ no shutdown
+!
+router isis ACCESS
+ net 49.0002.0100.0000.0015.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+!

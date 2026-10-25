@@ -1,0 +1,258 @@
+
+######## 10:37:46 d-2: RT02 にも send-label(XR01 との既存の ipv4 のセッション)。XR01 は 10.255.0.12 に LU の AF を足す(unicast の AF は残す)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+router bgp 65000
+RT02(config-router)#
+address-family ipv4
+RT02(config-router-af)#
+network 10.255.0.12 mask 255.255.255.255
+RT02(config-router-af)#
+neighbor 10.255.0.1 send-label
+RT02(config-router-af)#
+end
+RT02#
+configure
+Sat Oct 24 10:37:51.302 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+neighbor 10.255.0.12
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+address-family ipv4 labeled-unicast
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+commit
+Sat Oct 24 10:37:53.006 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+show configuration failed
+Sat Oct 24 10:37:53.407 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast summary
+Sat Oct 24 10:38:46.344 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 15
+BGP main routing table version 15
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker           15            15            15            15            15             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.12       0 65000      16      14           15    0    0 00:00:41          2
+10.255.0.15       0 65000       7       6           15    0    0 00:03:12          2
+
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast
+Sat Oct 24 10:38:46.747 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 15
+BGP main routing table version 15
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*>i10.20.0.0/16       10.255.0.12              0    100      0 i
+*>i10.50.0.0/16       10.255.0.15              0    100      0 i
+*>i10.255.0.12/32     10.255.0.12              0    100      0 i
+*>i10.255.0.15/32     10.255.0.15              0    100      0 i
+
+Processed 4 prefixes, 4 paths
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 labeled-unicast labels
+Sat Oct 24 10:38:47.148 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 15
+BGP main routing table version 15
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop        Rcvd Label      Local Label
+*>i10.20.0.0/16       10.255.0.12     3               nolabel
+*>i10.50.0.0/16       10.255.0.15     3               nolabel
+*>i10.255.0.12/32     10.255.0.12     3               nolabel
+*>i10.255.0.15/32     10.255.0.15     3               nolabel
+
+Processed 4 prefixes, 4 paths
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast summary
+Sat Oct 24 10:38:47.573 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 15
+BGP main routing table version 15
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker           15            15            15            15            15             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.12       0 65000      16      14           15    0    0 00:00:42          0
+
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast
+Sat Oct 24 10:38:47.947 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 15
+BGP main routing table version 15
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*>i10.20.0.0/16       10.255.0.12              0    100      0 i
+*> 10.30.0.0/16       0.0.0.0                  0         32768 i
+*>i10.50.0.0/16       10.255.0.15              0    100      0 i
+*>i10.255.0.12/32     10.255.0.12              0    100      0 i
+*>i10.255.0.15/32     10.255.0.15              0    100      0 i
+
+Processed 5 prefixes, 5 paths
+RP/0/RP0/CPU0:XR01#
+show bgp neighbor 10.255.0.12 | include "family|abel|State|Prefix|Last reset|reset"
+Sat Oct 24 10:38:48.352 UTC
+  Previous State: Idle
+  NSR State: None
+  Last read 00:00:43, Last read before reset 00:00:59
+  Last write before reset 00:01:20, attempted 19, written 19
+  Second last write before reset 00:02:20, attempted 19, written 19
+  Last write pulse rcvd before reset 00:00:59
+  Last insert into reset queue: Oct 24 10:37:49.331, removed at Oct 24 10:37:49.331
+  Last write thread event before reset 00:00:59, second last 00:01:12
+  Last KA expiry before reset 00:01:20, second last 00:02:20
+  Last KA error before reset 00:00:00, KA not sent 00:00:00
+  Last KA start before reset 00:01:20, second last 00:02:20
+    Address family IPv4 Unicast: advertised and received
+    Address family IPv4 Labeled-unicast: advertised and received
+  Prefix advertised 1, suppressed 0, withdrawn 0
+  Advertise routes with local-label via Unicast SAFI
+  Slow Peer State: Detection-only
+ For Address Family: IPv4 Labeled-unicast
+  Prefix advertised 0, suppressed 0, withdrawn 0
+  Slow Peer State: Detection-only
+  Last reset 00:00:59, due to Peer closing down the session
+  Peer reset reason: Remote closed the session 
+RP/0/RP0/CPU0:XR01#
+show logging last 20
+Sat Oct 24 10:38:48.749 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 11 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 100 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 24 10:33:35.393 UTC: config[67078]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 24 10:33:35.812 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[5589]: Connection closed by 10.1.10.6 port 47008 
+RP/0/RP0/CPU0:Oct 24 10:34:16.026 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[5722]: Accepted authentication for SUZUKI from 10.1.10.6 port 48826 ssh2 
+RP/0/RP0/CPU0:Oct 24 10:34:18.807 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[5726]: Connection closed by 10.1.10.6 port 48826 
+RP/0/RP0/CPU0:Oct 24 10:35:21.018 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[5872]: Accepted authentication for SUZUKI from 10.1.10.6 port 48272 ssh2 
+RP/0/RP0/CPU0:Oct 24 10:35:24.692 UTC: config[67369]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000003' to view the changes. 
+RP/0/RP0/CPU0:Oct 24 10:35:26.546 UTC: config[67369]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 24 10:35:27.260 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[5876]: Connection closed by 10.1.10.6 port 48272 
+RP/0/RP0/CPU0:Oct 24 10:35:33.479 UTC: bgp[1084]: %ROUTING-BGP-5-ADJCHANGE : neighbor 10.255.0.15 Up (VRF: default) (AS: 65000) 
+RP/0/RP0/CPU0:Oct 24 10:36:12.472 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6032]: Accepted authentication for SUZUKI from 10.1.10.6 port 43140 ssh2 
+RP/0/RP0/CPU0:Oct 24 10:36:17.396 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6036]: Connection closed by 10.1.10.6 port 43140 
+RP/0/RP0/CPU0:Oct 24 10:37:31.289 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6185]: Accepted authentication for SUZUKI from 10.1.10.6 port 50730 ssh2 
+RP/0/RP0/CPU0:Oct 24 10:37:34.973 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6189]: Connection closed by 10.1.10.6 port 50730 
+RP/0/RP0/CPU0:Oct 24 10:37:49.330 UTC: bgp[1084]: %ROUTING-BGP-5-ADJCHANGE : neighbor 10.255.0.12 Down - Peer closing down the session (VRF: default) (AS: 65000) 
+RP/0/RP0/CPU0:Oct 24 10:37:50.338 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6265]: Accepted authentication for SUZUKI from 10.1.10.6 port 58090 ssh2 
+RP/0/RP0/CPU0:Oct 24 10:37:53.058 UTC: config[67758]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000004' to view the changes. 
+RP/0/RP0/CPU0:Oct 24 10:37:54.620 UTC: config[67758]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 24 10:37:55.023 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6269]: Connection closed by 10.1.10.6 port 58090 
+RP/0/RP0/CPU0:Oct 24 10:38:04.874 UTC: bgp[1084]: %ROUTING-BGP-5-ADJCHANGE : neighbor 10.255.0.12 Up (VRF: default) (AS: 65000) 
+RP/0/RP0/CPU0:Oct 24 10:38:45.234 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[6434]: Accepted authentication for SUZUKI from 10.1.10.6 port 41128 ssh2 
+RP/0/RP0/CPU0:XR01#
+show ip bgp summary
+BGP router identifier 10.255.0.12, local AS number 65000
+BGP table version is 6, main routing table version 6
+3 network entries using 744 bytes of memory
+3 path entries using 408 bytes of memory
+2/2 BGP path/bestpath attribute entries using 592 bytes of memory
+0 BGP route-map cache entries using 0 bytes of memory
+0 BGP filter-list cache entries using 0 bytes of memory
+BGP using 1744 total bytes of memory
+BGP activity 3/0 prefixes, 4/1 paths, scan interval 60 secs
+3 networks peaked at 10:37:48 Oct 24 2026 UTC (00:01:02.511 ago)
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65000       5       5        6    0    0 00:00:45        1
+RT02#
+show ip bgp
+BGP table version is 6, local router ID is 10.255.0.12
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.20.0.0/16     0.0.0.0                  0         32768 i
+ *>i  10.30.0.0/16     10.255.0.1               0    100      0 i
+ *>   10.255.0.12/32   0.0.0.0                  0         32768 i
+RT02#
+show ip bgp labels
+   Network          Next Hop      In label/Out label
+   10.20.0.0/16     0.0.0.0         imp-null/nolabel
+   10.30.0.0/16     10.255.0.1      nolabel/nolabel
+   10.255.0.12/32   0.0.0.0         imp-null/nolabel
+
+RT02#
+show ip bgp neighbors 10.255.0.1 | include family|abel|BGP state|Prefixes|reset
+  BGP state = Established, up for 00:00:46
+    Address family IPv4 Unicast: advertised and received
+    ipv4 MPLS Label capability: advertised and received
+ For address family: IPv4 Unicast
+  Sending Prefix & Label
+    Prefixes Current:               2          1 (Consumes 136 bytes)
+    Prefixes Total:                 2          1
+  Local Policy Denied Prefixes:    --------    -------
+  Last reset 00:01:02, due to Peer closed the session
+RT02#
+ping 10.30.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.30.0.1, timeout is 2 seconds:
+Packet sent with a source address of 10.20.0.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/1 ms
+RT02#
