@@ -1,0 +1,33 @@
+# BL-246 PoC: M9 L3VPN(SPCOR 4.3)。記録= problems/_drafts/XR-TRACK.design.md §22。手順= poc/xr/l3vpn_poc.sh
+# 盤面= XRT-07 を解き終えた四角形(IS-IS CORE・LDP)+ VPNv4 のルート リフレクタ XR02(RT03 の先)+ お客さま/共有サーバ/インターネット役。
+#   XR01(PE・XRd) Gi0/0/0/2 CEA1(AS 65101)・Gi0/0/0/3 CEB1(AS 65201)・Gi0/0/0/4 SVC(静的)・Gi0/0/0/5 INET(AS 64500・グローバル)
+#   RT02(PE・IOL・据付)  Et0/2 CEA2(AS 65101)・Et1/0 CEB2(AS 65202)
+# XR の PE 側(VRF・PE-CE・VPNv4・RR)は PoC の段で足す。比較用に XR01 だけ XRv9000 にした版は _POC-XRL3VPNV(必要になったら作る)。
+id: _POC-XRL3VPN
+title: "[PoC] XR L3VPN"
+exam: POC
+topics: [iosxr, poc]
+difficulty: 0
+topology: generated
+access: ssh
+target_nodes: [XR01, XR02, RT01, RT02, RT03, CEA1, CEB1, SVC, INET, CEA2, CEB2]
+points: 0
+image_family: iol
+node_image_families: { XR01: iosxr, XR02: iosxr }
+node_xr_platforms: { XR01: iosxrd, XR02: iosxrd }
+lab:
+  positions: { XR01: [0, 0], RT01: [400, 0], RT03: [0, 240], RT02: [400, 240], XR02: [0, 440],
+               CEA1: [-400, -200], CEB1: [-400, -60], SVC: [-400, 80], INET: [0, -220],
+               CEA2: [800, 160], CEB2: [800, 320] }
+  links:
+    - { a: XR01, a_if: 3, b: RT01, b_if: 0 }
+    - { a: RT01, a_if: 1, b: RT02, b_if: 0 }
+    - { a: XR01, a_if: 4, b: RT03, b_if: 0 }
+    - { a: RT03, a_if: 1, b: RT02, b_if: 1 }
+    - { a: RT03, a_if: 2, b: XR02, b_if: 3 }
+    - { a: XR01, a_if: 5, b: CEA1, b_if: 0 }
+    - { a: XR01, a_if: 6, b: CEB1, b_if: 0 }
+    - { a: XR01, a_if: 7, b: SVC, b_if: 0 }
+    - { a: XR01, a_if: 8, b: INET, b_if: 0 }
+    - { a: RT02, a_if: 2, b: CEA2, b_if: 0 }
+    - { a: RT02, a_if: 4, b: CEB2, b_if: 0 }

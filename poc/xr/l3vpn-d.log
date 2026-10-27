@@ -1,0 +1,477 @@
+
+######## 08:53:36 d-1: XR02 は RR の設定なし(素の iBGP)。VRF を持たない XR が VPNv4 を受けた時に何が残るか
+show bgp vpnv4 unicast summary
+Tue Oct 27 08:53:37.978 UTC
+BGP router identifier 10.255.0.21, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0x0
+BGP main routing table version 1
+BGP NSR Initial initsync version 1 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker            1             1             1             1             1             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.1        0 65000       4       3            1    0    0 00:00:59          0
+10.255.0.12       0 65000      10       6            1    0    0 00:03:59          0
+
+RP/0/RP0/CPU0:XR02#
+show bgp vpnv4 unicast
+Tue Oct 27 08:53:38.380 UTC
+RP/0/RP0/CPU0:XR02#
+show bgp vpnv4 unicast neighbors 10.255.0.1 | include "accepted|Prefix|denied|Route refresh|retain"
+Tue Oct 27 08:53:38.811 UTC
+    Route refresh: advertised (old + new) and received (old + new)
+  Route refresh request: received 0, sent 0
+  0 accepted prefixes, 0 are bestpaths
+  Exact no. of prefixes denied: 0
+  Cumulative no. of prefixes denied: 0
+  Prefix advertised 0, suppressed 0, withdrawn 0
+RP/0/RP0/CPU0:XR02#
+show bgp vpnv4 unicast neighbors 10.255.0.12 | include "accepted|Prefix|denied"
+Tue Oct 27 08:53:39.182 UTC
+  0 accepted prefixes, 0 are bestpaths
+  Exact no. of prefixes denied: 0
+  Cumulative no. of prefixes denied: 0
+  Prefix advertised 0, suppressed 0, withdrawn 0
+RP/0/RP0/CPU0:XR02#
+show ip bgp vpnv4 all summary | begin Neighbor
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.21     4        65000       7      10        3    0    0 00:04:02        0
+172.16.12.2     4        65101      15      13        3    0    0 00:10:26        1
+172.16.22.2     4        65202      15      13        3    0    0 00:10:16        1
+RT02#
+show ip bgp vpnv4 all
+BGP table version is 3, local router ID is 10.255.0.12
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.12:101 (default for vrf CUST-A)
+ *>   10.101.2.0/24    172.16.12.2              0             0 65101 i
+Route Distinguisher: 10.255.0.12:102 (default for vrf CUST-B)
+ *>   10.102.2.0/24    172.16.22.2              0             0 65202 i
+RT02#
+
+######## 08:53:41 d-2: XR02 に retain route-target all(RR クライアントなし)
+configure
+Tue Oct 27 08:53:43.310 UTC
+RP/0/RP0/CPU0:XR02(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR02(config-bgp)#
+address-family vpnv4 unicast
+RP/0/RP0/CPU0:XR02(config-bgp-af)#
+retain route-target all
+RP/0/RP0/CPU0:XR02(config-bgp-af)#
+commit
+Tue Oct 27 08:53:45.018 UTC
+RP/0/RP0/CPU0:XR02(config-bgp-af)#
+show configuration failed
+Tue Oct 27 08:53:45.420 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02(config-bgp-af)#
+end
+RP/0/RP0/CPU0:XR02#
+show bgp vpnv4 unicast
+Tue Oct 27 08:54:08.727 UTC
+BGP router identifier 10.255.0.21, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0x0
+BGP main routing table version 5
+BGP NSR Initial initsync version 1 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.1:101
+Route Distinguisher Version: 5
+*>i10.101.1.0/24      10.255.0.1               0    100      0 65101 i
+*>i198.51.100.0/24    10.255.0.1               0    100      0 65101 i
+Route Distinguisher: 10.255.0.12:101
+Route Distinguisher Version: 2
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65101 i
+Route Distinguisher: 10.255.0.12:102
+Route Distinguisher Version: 3
+*>i10.102.2.0/24      10.255.0.12              0    100      0 65202 i
+
+Processed 4 prefixes, 4 paths
+RP/0/RP0/CPU0:XR02#
+show bgp vpnv4 unicast summary
+Tue Oct 27 08:54:09.128 UTC
+BGP router identifier 10.255.0.21, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0x0
+BGP main routing table version 5
+BGP NSR Initial initsync version 1 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker            5             5             5             5             5             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.1        0 65000       6       5            5    0    0 00:01:30          2
+10.255.0.12       0 65000      12       8            5    0    0 00:04:30          2
+
+RP/0/RP0/CPU0:XR02#
+show ip bgp vpnv4 all
+BGP table version is 3, local router ID is 10.255.0.12
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.12:101 (default for vrf CUST-A)
+ *>   10.101.2.0/24    172.16.12.2              0             0 65101 i
+Route Distinguisher: 10.255.0.12:102 (default for vrf CUST-B)
+ *>   10.102.2.0/24    172.16.22.2              0             0 65202 i
+RT02#
+
+######## 08:54:11 d-3: retain を外して、両 PE を route-reflector-client に(vpnv4 の AF の下)
+configure
+Tue Oct 27 08:54:12.579 UTC
+RP/0/RP0/CPU0:XR02(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR02(config-bgp)#
+address-family vpnv4 unicast
+RP/0/RP0/CPU0:XR02(config-bgp-af)#
+no retain route-target all
+RP/0/RP0/CPU0:XR02(config-bgp-af)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR02(config-bgp)#
+neighbor 10.255.0.1
+RP/0/RP0/CPU0:XR02(config-bgp-nbr)#
+address-family vpnv4 unicast
+RP/0/RP0/CPU0:XR02(config-bgp-nbr-af)#
+route-reflector-client
+RP/0/RP0/CPU0:XR02(config-bgp-nbr-af)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR02(config-bgp)#
+neighbor 10.255.0.12
+RP/0/RP0/CPU0:XR02(config-bgp-nbr)#
+address-family vpnv4 unicast
+RP/0/RP0/CPU0:XR02(config-bgp-nbr-af)#
+route-reflector-client
+RP/0/RP0/CPU0:XR02(config-bgp-nbr-af)#
+commit
+Tue Oct 27 08:54:18.320 UTC
+RP/0/RP0/CPU0:XR02(config-bgp-nbr-af)#
+show configuration failed
+Tue Oct 27 08:54:18.739 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:XR02#
+show bgp vpnv4 unicast
+Tue Oct 27 08:54:52.399 UTC
+BGP router identifier 10.255.0.21, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0x0
+BGP main routing table version 13
+BGP NSR Initial initsync version 1 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.1:101
+Route Distinguisher Version: 13
+*>i10.101.1.0/24      10.255.0.1               0    100      0 65101 i
+*>i198.51.100.0/24    10.255.0.1               0    100      0 65101 i
+Route Distinguisher: 10.255.0.12:101
+Route Distinguisher Version: 10
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65101 i
+Route Distinguisher: 10.255.0.12:102
+Route Distinguisher Version: 11
+*>i10.102.2.0/24      10.255.0.12              0    100      0 65202 i
+
+Processed 4 prefixes, 4 paths
+RP/0/RP0/CPU0:XR02#
+show bgp vpnv4 unicast summary
+Tue Oct 27 08:54:52.840 UTC
+BGP router identifier 10.255.0.21, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0x0
+BGP main routing table version 13
+BGP NSR Initial initsync version 1 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker           13            13            13            13            13             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.1        0 65000      10      12           13    0    0 00:00:27          2
+10.255.0.12       0 65000      18      15           13    0    0 00:00:29          2
+
+RP/0/RP0/CPU0:XR02#
+show ip bgp vpnv4 all
+BGP table version is 7, local router ID is 10.255.0.12
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.1:101
+ *>i  10.101.1.0/24    10.255.0.1               0    100      0 65101 i
+ *>i  198.51.100.0     10.255.0.1               0    100      0 65101 i
+Route Distinguisher: 10.255.0.12:101 (default for vrf CUST-A)
+ *>i  10.101.1.0/24    10.255.0.1               0    100      0 65101 i
+ *>   10.101.2.0/24    172.16.12.2              0             0 65101 i
+ *>i  198.51.100.0     10.255.0.1               0    100      0 65101 i
+Route Distinguisher: 10.255.0.12:102 (default for vrf CUST-B)
+ *>   10.102.2.0/24    172.16.22.2              0             0 65202 i
+RT02#
+show ip route vrf CUST-A bgp
+
+Routing Table: CUST-A
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/24 is subnetted, 2 subnets
+B        10.101.1.0 [200/0] via 10.255.0.1, 00:00:29
+B        10.101.2.0 [20/0] via 172.16.12.2, 00:10:30
+B     198.51.100.0/24 [200/0] via 10.255.0.1, 00:00:29
+RT02#
+show bgp vpnv4 unicast
+Tue Oct 27 08:54:56.627 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0x0
+BGP main routing table version 6
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
+Route Distinguisher Version: 6
+*> 10.101.1.0/24      172.16.11.2              0             0 65101 i
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65101 i
+*> 198.51.100.0/24    172.16.11.2              0             0 65101 i
+Route Distinguisher: 10.255.0.12:101
+Route Distinguisher Version: 5
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65101 i
+
+Processed 4 prefixes, 4 paths
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A
+Tue Oct 27 08:54:57.042 UTC
+BGP VRF CUST-A, state: Active
+BGP Route Distinguisher: 10.255.0.1:101
+VRF ID: 0x60000002
+BGP router identifier 10.255.0.1, local AS number 65000
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000002   RD version: 6
+BGP main routing table version 6
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
+Route Distinguisher Version: 6
+*> 10.101.1.0/24      172.16.11.2              0             0 65101 i
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65101 i
+*> 198.51.100.0/24    172.16.11.2              0             0 65101 i
+
+Processed 3 prefixes, 3 paths
+RP/0/RP0/CPU0:XR01#
+show bgp vpnv4 unicast rd 10.255.0.12:102
+Tue Oct 27 08:54:57.422 UTC
+RP/0/RP0/CPU0:XR01#
+
+######## 08:54:57 d-4: as-override なし。CEA2(AS 65101)の経路を XR01 は CEA1(AS 65101)へ送るか
+show bgp vrf CUST-A neighbors 172.16.11.2 advertised-routes
+Tue Oct 27 08:54:59.486 UTC
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A 10.101.2.0/24
+Tue Oct 27 08:54:59.885 UTC
+BGP routing table entry for 10.101.2.0/24, Route Distinguisher: 10.255.0.1:101
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                  6            6
+Last Modified: Oct 27 08:54:25.504 for 00:00:34
+Paths: (1 available, best #1)
+  Not advertised to any peer
+  Path #1: Received by speaker 0
+  Not advertised to any peer
+  65101
+    10.255.0.12 (metric 30) from 10.255.0.21 (10.255.0.12)
+      Received Label 23 
+      Origin IGP, metric 0, localpref 100, valid, internal, best, group-best, import-candidate, imported
+      Received Path ID 0, Local Path ID 1, version 6
+      Extended community: RT:65000:101 
+      Originator: 10.255.0.12, Cluster list: 10.255.0.21
+      Source AFI: VPNv4 Unicast, Source VRF: default, Source Route Distinguisher: 10.255.0.12:101
+RP/0/RP0/CPU0:XR01#
+show ip bgp
+BGP table version is 3, local router ID is 10.101.1.1
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.101.1.0/24    0.0.0.0                  0         32768 i
+ *>   198.51.100.0     0.0.0.0                  0         32768 i
+CEA1#
+show ip bgp neighbors 172.16.11.1 | include denied|loop|Prefixes
+    Prefixes Current:               2          0
+    Prefixes Total:                 4          0
+  Local Policy Denied Prefixes:    --------    -------
+CEA1#
+show ip bgp
+BGP table version is 4, local router ID is 10.101.2.1
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.101.1.0/24    172.16.12.1                            0 65000 65000 i
+ *>   10.101.2.0/24    0.0.0.0                  0         32768 i
+ *>   198.51.100.0     172.16.12.1                            0 65000 65000 i
+CEA2#
+
+######## 08:55:06 d-5: XR01 に as-override
+configure
+Tue Oct 27 08:55:07.713 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+neighbor 172.16.11.2
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+as-override
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+commit
+Tue Oct 27 08:55:10.219 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+show configuration failed
+Tue Oct 27 08:55:10.622 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A neighbors 172.16.11.2 advertised-routes
+Tue Oct 27 08:55:33.340 UTC
+Network            Next Hop        From            AS Path
+Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
+Route Distinguisher Version: 6
+10.101.2.0/24      172.16.11.1     10.255.0.21     65000 65101i
+
+Processed 1 prefixes, 1 paths
+RP/0/RP0/CPU0:XR01#
+show ip bgp
+BGP table version is 4, local router ID is 10.101.1.1
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.101.1.0/24    0.0.0.0                  0         32768 i
+ *>   10.101.2.0/24    172.16.11.1                            0 65000 65000 i
+ *>   198.51.100.0     0.0.0.0                  0         32768 i
+CEA1#
+ping 10.101.2.1 source Loopback10 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.101.2.1, timeout is 2 seconds:
+Packet sent with a source address of 10.101.1.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+CEA1#
+show ip bgp
+BGP table version is 4, local router ID is 10.101.2.1
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.101.1.0/24    172.16.12.1                            0 65000 65000 i
+ *>   10.101.2.0/24    0.0.0.0                  0         32768 i
+ *>   198.51.100.0     172.16.12.1                            0 65000 65000 i
+CEA2#
+ping 10.101.1.1 source Loopback10 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.101.1.1, timeout is 2 seconds:
+Packet sent with a source address of 10.101.2.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+CEA2#

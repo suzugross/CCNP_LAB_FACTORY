@@ -1,0 +1,134 @@
+
+######## 10:33:17 policy: CEB1 の近隣から入出の方針を外す → 0! と No policy → 戻す
+configure
+Tue Oct 27 10:33:17.968 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+vrf CUST-B
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+neighbor 172.16.21.2
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+no route-policy PASS in
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+no route-policy PASS out
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+commit
+Tue Oct 27 10:33:20.876 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-B summary
+Tue Oct 27 10:33:43.279 UTC
+BGP VRF CUST-B, state: Active
+BGP Route Distinguisher: 10.255.0.1:102
+VRF ID: 0x60000003
+BGP router identifier 10.255.0.1, local AS number 65000
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000003   RD version: 112
+BGP main routing table version 113
+BGP NSR Initial initsync version 8 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP is operating in STANDALONE mode.
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker          113           113           113           113           113             0
+Some configured eBGP neighbors (under default or non-default vrfs)
+do not have both inbound and outbound policies configured for IPv4 Unicast
+address family. These neighbors will default to sending and/or
+receiving no routes and are marked with '!' in the output below.
+Use the 'show bgp neighbor <nbr_address>' command for details.
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+172.16.21.2       0 65201      27      33          113    0    0 00:19:49          0!
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-B neighbors 172.16.21.2 | include "policy|$s 172.16.21.2 | include "policy|a                          ccepted|denied|No policy"show bgp vrf CUST-B neighbors 172.16.21.2 | include "policy$
+Tue Oct 27 10:33:43.680 UTC
+  eBGP neighbor with no inbound or outbound policy; defaults to 'drop'
+  0 accepted prefixes, 0 are bestpaths
+  Exact no. of prefixes denied: 0
+  Cumulative no. of prefixes denied: 1
+    No policy: 1, Failed RT match: 0
+    By ORF policy: 0, By policy: 0
+RP/0/RP0/CPU0:XR01#
+show route vrf CUST-B bgp
+Tue Oct 27 10:33:44.080 UTC
+B    10.99.1.0/24 [200/0] via 172.16.91.2 (nexthop in vrf SVC), 00:04:01
+B    10.102.2.0/24 [200/0] via 10.255.0.12 (nexthop in vrf default), 00:17:29
+RP/0/RP0/CPU0:XR01#
+show ip bgp summary | begin Neighbor
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+172.16.21.1     4        65000      33      27       12    0    0 00:19:52        0
+CEB1#
+show ip route bgp
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+Gateway of last resort is not set
+CEB1#
+configure
+Tue Oct 27 10:33:48.024 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+vrf CUST-B
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+neighbor 172.16.21.2
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+route-policy PASS in
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+route-policy PASS out
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+commit
+Tue Oct 27 10:33:50.931 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-B summary
+Tue Oct 27 10:34:23.333 UTC
+BGP VRF CUST-B, state: Active
+BGP Route Distinguisher: 10.255.0.1:102
+VRF ID: 0x60000003
+BGP router identifier 10.255.0.1, local AS number 65000
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000003   RD version: 114
+BGP main routing table version 115
+BGP NSR Initial initsync version 8 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP is operating in STANDALONE mode.
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker          115           115           115           115           115             0
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+172.16.21.2       0 65201      29      36          115    0    0 00:20:29          1
+RP/0/RP0/CPU0:XR01#
+show ip route bgp
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+Gateway of last resort is not set
+      10.0.0.0/8 is variably subnetted, 4 subnets, 2 masks
+B        10.99.1.0/24 [20/0] via 172.16.21.1, 00:00:30
+B        10.102.2.0/24 [20/0] via 172.16.21.1, 00:00:30
+CEB1#

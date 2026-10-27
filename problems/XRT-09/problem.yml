@@ -1,0 +1,39 @@
+# XRT-09: XR トラック M9 L3VPN(SPCOR 4.3)。BL-246。設計= problems/_drafts/XR-TRACK.design.md §22(PoC= _POC-XRL3VPN・_POC-XRL3VPNV)。
+# 学習目的のラボ(パック・ノルマの対象外)。初期状態= XRT-07(M8-1〜5)を解き終えた状態からグローバルの「お客さま A'」を外し、
+# VPNv4 のルート リフレクタ XR02・お客さま A/B の CE・共有サービス SVC・インターネット役 INET を足したもの。
+#   XR01(PE・XRv9000) Gi0/0/0/2 CEA1・Gi0/0/0/3 CEB1・Gi0/0/0/4 SVC・Gi0/0/0/5 INET(グローバル)  RT02(PE・IOL・据付) Et0/2 CEA2・Et1/0 CEB2
+#   XR02(RR・XRd)= RT03 の先の行き止まり(転送の道に入らない)
+# 仕込み(XR02)= M9-2: route-reflector-client が ipv4 unicast の AF の下だけ+前任者が足した retain route-target all(全部持っているのに反映しない)。
+# ★XR01 は XRv9000 26.1.1(§22.4= XRd の PE はお客さまから受けてラベルを付ける向きと通り抜けで TCP/UDP を壊す)。XR02 は XRd(転送しない)。
+# ★お客さま側の IF は説明だけ(アドレスなし)= アドレスの付いた IF の VRF 変更は公式と実機が食い違うので採点しない(§22.6-1)。
+id: XRT-09
+title: "XR Track 09 — L3VPN"
+exam: SP
+topics: [iosxr, mpls, l3vpn, vrf, bgp, rpl, tutorial]
+difficulty: 3
+topology: generated
+access: ssh
+target_nodes: [XR01, XR02, RT01, RT02, RT03, CEA1, CEB1, SVC, INET, CEA2, CEB2]
+points: 100
+image_family: iol
+node_image_families: { XR01: iosxr, XR02: iosxr }
+node_xr_platforms: { XR02: iosxrd }
+node_images: { XR01: iosxrv9000-26-1-1 }
+grade_attempts: 2
+lab:
+  # コアは XRT-07 と同じ四角形。左= XR01 のお客さま、右= RT02 のお客さま、下= RR
+  positions: { XR01: [0, 0], RT01: [400, 0], RT03: [0, 240], RT02: [400, 240], XR02: [0, 440],
+               CEA1: [-400, -200], CEB1: [-400, -60], SVC: [-400, 80], INET: [0, -220],
+               CEA2: [800, 160], CEB2: [800, 320] }
+  links:
+    - { a: XR01, a_if: 3, b: RT01, b_if: 0 }
+    - { a: RT01, a_if: 1, b: RT02, b_if: 0 }
+    - { a: XR01, a_if: 4, b: RT03, b_if: 0 }
+    - { a: RT03, a_if: 1, b: RT02, b_if: 1 }
+    - { a: RT03, a_if: 2, b: XR02, b_if: 3 }
+    - { a: XR01, a_if: 5, b: CEA1, b_if: 0 }
+    - { a: XR01, a_if: 6, b: CEB1, b_if: 0 }
+    - { a: XR01, a_if: 7, b: SVC, b_if: 0 }
+    - { a: XR01, a_if: 8, b: INET, b_if: 0 }
+    - { a: RT02, a_if: 2, b: CEA2, b_if: 0 }
+    - { a: RT02, a_if: 4, b: CEB2, b_if: 0 }

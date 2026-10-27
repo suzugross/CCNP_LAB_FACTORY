@@ -1,0 +1,165 @@
+
+######## 08:58:14 g-1: お客さま B を XR01 に(VRF を後から足す= RT の取り込み先ができた時に RR から取り直すか)
+show bgp vpnv4 unicast rd 10.255.0.12:102
+Tue Oct 27 08:58:16.018 UTC
+RP/0/RP0/CPU0:XR01#
+configure
+Tue Oct 27 08:58:17.649 UTC
+RP/0/RP0/CPU0:XR01(config)#
+vrf CUST-B
+RP/0/RP0/CPU0:XR01(config-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+import route-target
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+65000:102
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+65000:900
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+exit
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+export route-target
+RP/0/RP0/CPU0:XR01(config-vrf-export-rt)#
+65000:102
+RP/0/RP0/CPU0:XR01(config-vrf-export-rt)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01(config-if)#
+vrf CUST-B
+RP/0/RP0/CPU0:XR01(config-if)#
+ipv4 address 172.16.21.1 255.255.255.0
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+vrf CUST-B
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+rd 10.255.0.1:102
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+exit
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+neighbor 172.16.21.2
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr)#
+remote-as 65201
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+route-policy PASS in
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+route-policy PASS out
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+commit
+Tue Oct 27 08:58:27.575 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+show configuration failed
+Tue Oct 27 08:58:28.078 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vpnv4 unicast rd 10.255.0.12:102
+Tue Oct 27 08:58:37.137 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0x0
+BGP main routing table version 18
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.12:102
+Route Distinguisher Version: 15
+*>i10.102.2.0/24      10.255.0.12              0    100      0 65202 i
+
+Processed 1 prefixes, 1 paths
+RP/0/RP0/CPU0:XR01#
+show bgp vpnv4 unicast neighbors 10.255.0.21 | include "refresh|Refresh"
+Tue Oct 27 08:58:37.537 UTC
+    Route refresh: advertised (old + new) and received (old + new)
+  Update group: 0.2 Filter-group: 0.2  No Refresh request being processed
+  Route refresh request: received 1, sent 1
+  Outstanding version objects: current 0, max 2, refresh 1
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-B
+Tue Oct 27 08:59:09.332 UTC
+BGP VRF CUST-B, state: Active
+BGP Route Distinguisher: 10.255.0.1:102
+VRF ID: 0x60000004
+BGP router identifier 10.255.0.1, local AS number 65000
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000004   RD version: 20
+BGP main routing table version 20
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.1:102 (default for vrf CUST-B)
+Route Distinguisher Version: 20
+*> 10.102.1.0/24      172.16.21.2              0             0 65201 i
+*>i10.102.2.0/24      10.255.0.12              0    100      0 65202 i
+
+Processed 2 prefixes, 2 paths
+RP/0/RP0/CPU0:XR01#
+show route vrf CUST-B
+Tue Oct 27 08:59:09.747 UTC
+
+Codes: C - connected, S - static, R - RIP, B - BGP, (>) - Diversion path
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, E - EGP
+       i - ISIS, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, su - IS-IS summary null, * - candidate default
+       U - per-user static route, o - ODR, L - local, G  - DAGR, l - LISP
+       A - access/subscriber, a - Application route
+       M - mobile route, r - RPL, t - Traffic Engineering, (!) - FRR Backup path
+       s - local SRv6 route, z - local IID route
+
+Gateway of last resort is not set
+
+B    10.102.1.0/24 [20/0] via 172.16.21.2, 00:00:12
+B    10.102.2.0/24 [200/0] via 10.255.0.12 (nexthop in vrf default), 00:00:35
+C    172.16.21.0/24 is directly connected, 00:00:42, GigabitEthernet0/0/0/3
+L    172.16.21.1/32 is directly connected, 00:00:42, GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01#
+show ip bgp
+BGP table version is 3, local router ID is 10.102.1.1
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.102.1.0/24    0.0.0.0                  0         32768 i
+ *>   10.102.2.0/24    172.16.21.1                            0 65000 65202 i
+CEB1#
+ping 10.102.2.1 source Loopback10 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.102.2.1, timeout is 2 seconds:
+Packet sent with a source address of 10.102.1.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+CEB1#
+ping 10.101.1.1 source Loopback10 repeat 2
+Type escape sequence to abort.
+Sending 2, 100-byte ICMP Echos to 10.101.1.1, timeout is 2 seconds:
+Packet sent with a source address of 10.102.1.1 
+..
+Success rate is 0 percent (0/2)
+CEB1#

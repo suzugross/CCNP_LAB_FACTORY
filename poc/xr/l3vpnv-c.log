@@ -1,0 +1,392 @@
+
+######## 09:20:56 c-1: (確認) RD の無い BGP の VRF に AF を作る → コミットで拒否される(全体の vpnv4 AF も同じコミットなら一緒に戻る)
+configure
+Tue Oct 27 09:20:58.879 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+address-family vpnv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+vrf CUST-T
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+commit
+Tue Oct 27 09:21:01.785 UTC
+
+% Failed to commit one or more configuration items during a pseudo-atomic operation. All changes made have been reverted. Please issue 'show configuration failed [inheritance]' from this session to view the errors
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+show configuration failed
+Tue Oct 27 09:21:03.796 UTC
+!! SEMANTIC ERRORS: This configuration was rejected by 
+!! the system due to semantic errors. The individual 
+!! errors with each failed configuration command can be 
+!! found below.
+
+
+router bgp 65000
+ vrf CUST-T
+  address-family ipv4 unicast
+!!% 'BGP' detected the 'warning' condition 'The RD for the VRF must be present before an address family is activated'
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+abort
+RP/0/RP0/CPU0:XR01#
+
+######## 09:21:04 c-2: 全体の vpnv4 AF + VRF(RD は付いている)の AF + CE と eBGP(RPL なし)
+configure
+Tue Oct 27 09:21:06.806 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+address-family vpnv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+rd 10.255.0.1:101
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+exit
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+neighbor 172.16.11.2
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr)#
+remote-as 65101
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+show configuration
+Tue Oct 27 09:21:12.117 UTC
+!! Building configuration...
+!! IOS XR Configuration 26.1.1
+router bgp 65000
+ address-family vpnv4 unicast
+ !
+ vrf CUST-A
+  rd 10.255.0.1:101
+  address-family ipv4 unicast
+  !
+  neighbor 172.16.11.2
+   remote-as 65101
+   address-family ipv4 unicast
+   !
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Oct 27 09:21:12.519 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Tue Oct 27 09:21:13.424 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config router bgp
+Tue Oct 27 09:21:46.330 UTC
+router bgp 65000
+ bgp router-id 10.255.0.1
+ address-family ipv4 unicast
+  network 10.30.0.0/16
+ !
+ address-family vpnv4 unicast
+ !
+ neighbor 10.255.0.12
+  remote-as 65000
+  update-source Loopback0
+  address-family ipv4 unicast
+  !
+ !
+ vrf CUST-A
+  rd 10.255.0.1:101
+  address-family ipv4 unicast
+  !
+  neighbor 172.16.11.2
+   remote-as 65101
+   address-family ipv4 unicast
+   !
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A summary
+Tue Oct 27 09:21:46.732 UTC
+BGP VRF CUST-A, state: Active
+BGP Route Distinguisher: 10.255.0.1:101
+VRF ID: 0x60000002
+BGP router identifier 10.255.0.1, local AS number 65000
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000002   RD version: 2
+BGP main routing table version 2
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker            2             2             2             2             2             0
+
+Some configured eBGP neighbors (under default or non-default vrfs)
+do not have both inbound and outbound policies configured for IPv4 Unicast
+address family. These neighbors will default to sending and/or
+receiving no routes and are marked with '!' in the output below.
+Use the 'show bgp neighbor <nbr_address>' command for details.
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+172.16.11.2       0 65101       5       3            2    0    0 00:00:26          0!
+
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A
+Tue Oct 27 09:21:47.135 UTC
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A neighbors 172.16.11.2 | include "policy|$s 172.16.11.2 | include "policy|a                          ccepted|Prefix|denied|Poli$licy|accepted|Prefix|denied|Polic                          y"show bgp vrf CUST-A neighbors 172.16.11.2 | include "policy$
+Tue Oct 27 09:21:47.535 UTC
+  eBGP neighbor with no inbound or outbound policy; defaults to 'drop'
+  0 accepted prefixes, 0 are bestpaths
+  Exact no. of prefixes denied: 0
+  Cumulative no. of prefixes denied: 2
+    No policy: 2, Failed RT match: 0
+    By ORF policy: 0, By policy: 0
+  Prefix advertised 0, suppressed 0, withdrawn 0
+RP/0/RP0/CPU0:XR01#
+show ip bgp summary | begin Neighbor
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+172.16.11.1     4        65000       3       5        3    0    0 00:00:28        0
+CEA1#
+
+######## 09:21:48 c-3: RPL を付ける(PASS in/out)
+configure
+Tue Oct 27 09:21:50.631 UTC
+RP/0/RP0/CPU0:XR01(config)#
+route-policy PASS
+RP/0/RP0/CPU0:XR01(config-rpl)#
+pass
+RP/0/RP0/CPU0:XR01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+neighbor 172.16.11.2
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+route-policy PASS in
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+route-policy PASS out
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+commit
+Tue Oct 27 09:21:54.740 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+show configuration failed
+Tue Oct 27 09:21:55.645 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A summary
+Tue Oct 27 09:22:18.652 UTC
+BGP VRF CUST-A, state: Active
+BGP Route Distinguisher: 10.255.0.1:101
+VRF ID: 0x60000002
+BGP router identifier 10.255.0.1, local AS number 65000
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000002   RD version: 4
+BGP main routing table version 4
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker            4             4             4             4             4             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+172.16.11.2       0 65101       6       5            4    0    0 00:00:58          2
+
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A
+Tue Oct 27 09:22:19.053 UTC
+BGP VRF CUST-A, state: Active
+BGP Route Distinguisher: 10.255.0.1:101
+VRF ID: 0x60000002
+BGP router identifier 10.255.0.1, local AS number 65000
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000002   RD version: 4
+BGP main routing table version 4
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
+Route Distinguisher Version: 4
+*> 10.101.1.0/24      172.16.11.2              0             0 65101 i
+*> 198.51.100.0/24    172.16.11.2              0             0 65101 i
+
+Processed 2 prefixes, 2 paths
+RP/0/RP0/CPU0:XR01#
+show route vrf CUST-A
+Tue Oct 27 09:22:19.454 UTC
+
+Codes: C - connected, S - static, R - RIP, B - BGP, (>) - Diversion path
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, E - EGP
+       i - ISIS, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, su - IS-IS summary null, * - candidate default
+       U - per-user static route, o - ODR, L - local, G  - DAGR, l - LISP
+       A - access/subscriber, a - Application route
+       M - mobile route, r - RPL, t - Traffic Engineering, (!) - FRR Backup path
+       s - local SRv6 route, z - local IID route
+
+Gateway of last resort is not set
+
+B    10.101.1.0/24 [20/0] via 172.16.11.2, 00:00:22
+C    172.16.11.0/24 is directly connected, 00:02:18, GigabitEthernet0/0/0/2
+L    172.16.11.1/32 is directly connected, 00:02:18, GigabitEthernet0/0/0/2
+B    198.51.100.0/24 [20/0] via 172.16.11.2, 00:00:22
+RP/0/RP0/CPU0:XR01#
+
+######## 09:22:18 c-4: VPNv4 の近隣(RR 候補 XR02・RR の設定はまだ無い)
+configure
+Tue Oct 27 09:22:20.964 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+neighbor 10.255.0.21
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+remote-as 65000
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+update-source Loopback0
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+address-family vpnv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+commit
+Tue Oct 27 09:22:23.469 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+show configuration failed
+Tue Oct 27 09:22:24.373 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Tue Oct 27 09:22:26.286 UTC
+RP/0/RP0/CPU0:XR02(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR02(config-bgp)#
+bgp router-id 10.255.0.21
+RP/0/RP0/CPU0:XR02(config-bgp)#
+address-family vpnv4 unicast
+RP/0/RP0/CPU0:XR02(config-bgp-af)#
+exit
+RP/0/RP0/CPU0:XR02(config-bgp)#
+neighbor 10.255.0.1
+RP/0/RP0/CPU0:XR02(config-bgp-nbr)#
+remote-as 65000
+RP/0/RP0/CPU0:XR02(config-bgp-nbr)#
+update-source Loopback0
+RP/0/RP0/CPU0:XR02(config-bgp-nbr)#
+address-family vpnv4 unicast
+RP/0/RP0/CPU0:XR02(config-bgp-nbr-af)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR02(config-bgp)#
+neighbor 10.255.0.12
+RP/0/RP0/CPU0:XR02(config-bgp-nbr)#
+remote-as 65000
+RP/0/RP0/CPU0:XR02(config-bgp-nbr)#
+update-source Loopback0
+RP/0/RP0/CPU0:XR02(config-bgp-nbr)#
+address-family vpnv4 unicast
+RP/0/RP0/CPU0:XR02(config-bgp-nbr-af)#
+commit
+Tue Oct 27 09:22:32.499 UTC
+RP/0/RP0/CPU0:XR02(config-bgp-nbr-af)#
+show configuration failed
+Tue Oct 27 09:22:33.203 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:XR02#
+show bgp vpnv4 unicast summary
+Tue Oct 27 09:23:17.557 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0x0
+BGP main routing table version 4
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker            4             4             4             4             4             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000       3       4            4    0    0 00:00:34          0
+
+RP/0/RP0/CPU0:XR01#
+show bgp vpnv4 unicast
+Tue Oct 27 09:23:17.958 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0x0
+BGP main routing table version 4
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
+Route Distinguisher Version: 4
+*> 10.101.1.0/24      172.16.11.2              0             0 65101 i
+*> 198.51.100.0/24    172.16.11.2              0             0 65101 i
+
+Processed 2 prefixes, 2 paths
+RP/0/RP0/CPU0:XR01#
+show bgp vpnv4 unicast neighbors 10.255.0.21 advertised-coun$bors 10.255.0.21 advertised-count                          show bgp vpnv4 unicast neighbors 10.255.0.21 advertised-cou$
+Tue Oct 27 09:23:18.360 UTC
+No of prefixes Advertised: 2
+RP/0/RP0/CPU0:XR01#

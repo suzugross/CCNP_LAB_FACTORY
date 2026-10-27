@@ -1,0 +1,51 @@
+# M9-1: お客さま A・B の拠点 1 を XR01 に収容(VRF・RD・RT・IF・PE-CE の eBGP・XR02 とだけ VPNv4)。PoC §22.3-1〜3。
+# RPL なしは隣接が上がって「0!」(受けた数 0)= 受けた数で見る。XR02 はこの時点では仕込みのまま(反映しない)なので、届いた先は見ない。
+problem: XRT-09
+total_points: 100
+checks:
+  - name: 'M9-1 XR01: the eBGP session with CEA1 in VRF CUST-A is up and both of its routes are accepted'
+    node: XR01
+    command: 'show bgp vrf CUST-A summary'
+    raw:
+      - { regex: '172\.16\.11\.2\s+0\s+65101(?:\s+\d+){5}\s+[\dwdhm:]+\s+2(?!\S)' }
+    points: 20
+  - name: 'M9-1 XR01: the eBGP session with CEB1 in VRF CUST-B is up and its route is accepted'
+    node: XR01
+    command: 'show bgp vrf CUST-B summary'
+    raw:
+      - { regex: '172\.16\.21\.2\s+0\s+65201(?:\s+\d+){5}\s+[\dwdhm:]+\s+1(?!\S)' }
+    points: 20
+  - name: 'M9-1 XR01: a VPNv4 session with XR02 is up, and none with RT02'
+    node: XR01
+    command: 'show bgp vpnv4 unicast summary'
+    raw:
+      - { regex: '10\.255\.0\.21\s+0\s+65000(?:\s+\d+){5}\s+[\dwdhm:]+\s+\d+(?!\S)' }
+      - { not_regex: '\n10\.255\.0\.12\s' }
+    points: 20
+  - name: 'M9-1 XR01: sends the routes of both VRFs to XR02'
+    node: XR01
+    command: 'show bgp vpnv4 unicast neighbors 10.255.0.21 advertised-count'
+    raw:
+      - { regex: 'No of prefixes Advertised: (?:[3-9]|\d{2,})\b' }
+    points: 10
+  - name: 'M9-1 XR01: customer A''s routes carry RD 10.255.0.1:101 and route target 65000:101'
+    node: XR01
+    command: 'show bgp vpnv4 unicast rd 10.255.0.1:101 10.101.1.0/24'
+    raw:
+      - { regex: 'Route Distinguisher: 10\.255\.0\.1:101' }
+      - { regex: 'Extended community: RT:65000:101(?!\d)' }
+    points: 10
+  - name: 'M9-1 XR01: customer B''s routes carry RD 10.255.0.1:102 and route target 65000:102'
+    node: XR01
+    command: 'show bgp vpnv4 unicast rd 10.255.0.1:102 10.102.1.0/24'
+    raw:
+      - { regex: 'Route Distinguisher: 10\.255\.0\.1:102' }
+      - { regex: 'Extended community: RT:65000:102(?!\d)' }
+    points: 10
+  - name: 'M9-1 XR01: the VRFs import the route targets of the table'
+    node: XR01
+    command: 'show vrf all detail'
+    raw:
+      - { regex: 'VRF CUST-A;[\s\S]*?Import VPN route-target communities:\s+RT:65000:101\s+RT:65000:900\s+Export VPN route-target communities:\s+RT:65000:101(?!\d)' }
+      - { regex: 'VRF CUST-B;[\s\S]*?Import VPN route-target communities:\s+RT:65000:102\s+RT:65000:900\s+Export VPN route-target communities:\s+RT:65000:102(?!\d)' }
+    points: 10

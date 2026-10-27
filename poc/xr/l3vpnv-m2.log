@@ -1,0 +1,103 @@
+## m-4 (XRv9000): 先に VRF CUST-T だけ作ってコミット → 別のコミットで G3 を CUST-B から CUST-T へ → 30 秒 → ping
+configure
+RP/0/RP0/CPU0:XR01(config)#
+vrf CUST-T
+RP/0/RP0/CPU0:XR01(config-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+commit
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01(config-if)#
+vrf CUST-T
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+RP/0/RP0/CPU0:XR01(config-if)#
+show configuration failed
+% No such configuration item(s)
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show ipv4 vrf all interface brief | include "0/0/0/3"
+GigabitEthernet0/0/0/3         172.16.21.1     Up              Up       CUST-T  
+RP/0/RP0/CPU0:XR01#
+show route vrf CUST-T
+Codes: C - connected, S - static, R - RIP, B - BGP, (>) - Diversion path
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, E - EGP
+       i - ISIS, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, su - IS-IS summary null, * - candidate default
+       U - per-user static route, o - ODR, L - local, G  - DAGR, l - LISP
+       A - access/subscriber, a - Application route
+       M - mobile route, r - RPL, t - Traffic Engineering, (!) - FRR Backup path
+       s - local SRv6 route, z - local IID route
+Gateway of last resort is not set
+C    172.16.21.0/24 is directly connected, 00:00:34, GigabitEthernet0/0/0/3
+L    172.16.21.1/32 is directly connected, 00:00:34, GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01#
+ping vrf CUST-T 172.16.21.2 count 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 172.16.21.2 timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 9/11/15 ms
+RP/0/RP0/CPU0:XR01#
+show arp vrf CUST-T
+-------------------------------------------------------------------------------
+0/0/CPU0
+-------------------------------------------------------------------------------
+Address         Age        Hardware Addr   State      Type  Interface
+172.16.21.1     -          5254.00b6.d13e  Interface  ARPA  GigabitEthernet0/0/0/3
+172.16.21.2     00:12:39   aabb.cc00.1a00  Dynamic    ARPA  GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01#
+## m-5: 同じ IF でアドレスを付け直す
+configure
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01(config-if)#
+no ipv4 address
+RP/0/RP0/CPU0:XR01(config-if)#
+ipv4 address 172.16.21.1 255.255.255.0
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+ping vrf CUST-T 172.16.21.2 count 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 172.16.21.2 timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/5/10 ms
+RP/0/RP0/CPU0:XR01#
+## m-6: 戻す
+configure
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01(config-if)#
+no ipv4 address
+RP/0/RP0/CPU0:XR01(config-if)#
+vrf CUST-B
+RP/0/RP0/CPU0:XR01(config-if)#
+ipv4 address 172.16.21.1 255.255.255.0
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+no vrf CUST-T
+RP/0/RP0/CPU0:XR01(config)#
+commit
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+% No such configuration item(s)
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+ping vrf CUST-B 172.16.21.2 count 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 172.16.21.2 timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 1/3/5 ms
+RP/0/RP0/CPU0:XR01#

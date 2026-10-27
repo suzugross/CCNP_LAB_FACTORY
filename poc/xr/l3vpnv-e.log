@@ -1,0 +1,63 @@
+
+######## 09:25:17 e-1: XRd の PE を通る TCP/UDP。CEA2→CEA1(XR01 でラベルを外して CE へ)と CEA1→CEA2(XR01 でラベルを付ける)
+show ip traffic | include checksum|format errors
+         0 format errors, 0 checksum errors, 18 bad hop count
+  Rcvd: 0 format errors, 0 checksum errors, 0 redirects, 0 unreachable
+  Rcvd: 40 total, 0 checksum errors, 40 no port 0 finput
+  Rcvd: 471 total, 0 checksum errors, 0 no port
+  Total: 0/0, 0 checksum errors, 0 format errors
+  Rcvd: 0 total, 0 checksum errors
+CEA1#
+show ip traffic | include checksum|format errors
+         0 format errors, 0 checksum errors, 16 bad hop count
+  Rcvd: 0 format errors, 0 checksum errors, 0 redirects, 0 unreachable
+  Rcvd: 27 total, 0 checksum errors, 27 no port 0 finput
+  Rcvd: 216 total, 0 checksum errors, 0 no port
+  Total: 0/0, 0 checksum errors, 0 format errors
+  Rcvd: 0 total, 0 checksum errors
+CEA2#
+Trying 10.101.1.1, 22 ... Open
+SSH-2.0-Cisco-1.25
+TCP-OK
+Trying 10.101.2.1, 22 ... Open
+SSH-2.0-Cisco-1.25
+TCP-OK
+traceroute 10.101.1.1 source Loopback10 numeric timeout 1 probe 1 ttl 1 8
+Type escape sequence to abort.
+Tracing the route to 10.101.1.1
+VRF info: (vrf in name/id, vrf out name/id)
+  1 172.16.12.1 1 msec
+  2 10.0.12.11 [MPLS: Labels 22/24004 Exp 0] 2 msec
+  3 10.0.1.1 [MPLS: Labels 0/24004 Exp 0] 5 msec
+  4 172.16.11.2 1 msec
+CEA2#
+traceroute 10.101.2.1 source Loopback10 numeric timeout 1 probe 1 ttl 1 8
+Type escape sequence to abort.
+Tracing the route to 10.101.2.1
+VRF info: (vrf in name/id, vrf out name/id)
+  1 172.16.11.1 3 msec
+  2 10.0.1.11 [MPLS: Labels 16/22 Exp 0] 2 msec
+  3 172.16.12.1 [MPLS: Label 22 Exp 0] 2 msec
+  4 172.16.12.2 1 msec
+CEA1#
+show ip traffic | include checksum|format errors
+         0 format errors, 0 checksum errors, 18 bad hop count
+  Rcvd: 0 format errors, 0 checksum errors, 0 redirects, 1 unreachable
+  Rcvd: 41 total, 0 checksum errors, 41 no port 0 finput
+  Rcvd: 662 total, 0 checksum errors, 0 no port
+  Total: 0/0, 0 checksum errors, 0 format errors
+  Rcvd: 0 total, 0 checksum errors
+CEA1#
+show ip traffic | include checksum|format errors
+         0 format errors, 0 checksum errors, 16 bad hop count
+  Rcvd: 0 format errors, 0 checksum errors, 0 redirects, 1 unreachable
+  Rcvd: 28 total, 0 checksum errors, 28 no port 0 finput
+  Rcvd: 396 total, 0 checksum errors, 0 no port
+  Total: 0/0, 0 checksum errors, 0 format errors
+  Rcvd: 0 total, 0 checksum errors
+CEA2#
+
+######## 09:25:33 e-2: XR01 自身の VRF の TCP(XR01 から CEA1 へ telnet 22 は無いので、CEA1→XR01 の VRF アドレスへ)
+
+CEA1#
+TCP-NG

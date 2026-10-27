@@ -1,0 +1,349 @@
+
+######## 09:02:29 i-1: インターネット役とグローバルで eBGP
+configure
+Tue Oct 27 09:02:31.032 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/5
+RP/0/RP0/CPU0:XR01(config-if)#
+ipv4 address 192.0.2.1 255.255.255.0
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+route-policy INET-OUT
+RP/0/RP0/CPU0:XR01(config-rpl)#
+if destination in (198.51.100.0/24) then
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+pass
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+endif
+RP/0/RP0/CPU0:XR01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+neighbor 192.0.2.2
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+remote-as 64500
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+route-policy PASS in
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+route-policy INET-OUT out
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+commit
+Tue Oct 27 09:02:37.328 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+show configuration failed
+Tue Oct 27 09:02:37.846 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast summary
+Tue Oct 27 09:03:11.065 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 11
+BGP main routing table version 11
+BGP NSR Initial initsync version 7 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker           11            11            11            11            11             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.12       0 65000      24      25           11    0    0 00:19:26          1
+192.0.2.2         0 64500       6       3           11    0    0 00:00:11          2
+
+RP/0/RP0/CPU0:XR01#
+show route 0.0.0.0/0
+Tue Oct 27 09:03:11.466 UTC
+
+Routing entry for 0.0.0.0/0
+  Known via "bgp 65000", distance 20, metric 0, candidate default path
+  Tag 64500, type external
+  Installed Oct 27 09:02:59.623 for 00:00:11
+  Routing Descriptor Blocks
+    192.0.2.2, from 192.0.2.2, BGP external
+      Route metric is 0, Wt is 1
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+
+######## 09:03:11 i-2: CUST-A にグローバルの既定経路を取り込み(import from default-vrf)・198.51.100.0/24 をグローバルへ(export to default-vrf)
+configure
+Tue Oct 27 09:03:13.280 UTC
+RP/0/RP0/CPU0:XR01(config)#
+route-policy FROM-GLOBAL
+RP/0/RP0/CPU0:XR01(config-rpl)#
+if destination in (0.0.0.0/0) then
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+pass
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+endif
+RP/0/RP0/CPU0:XR01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XR01(config)#
+route-policy TO-GLOBAL
+RP/0/RP0/CPU0:XR01(config-rpl)#
+if destination in (198.51.100.0/24) then
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+pass
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+endif
+RP/0/RP0/CPU0:XR01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XR01(config)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+import from default-vrf route-policy FROM-GLOBAL
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+export to default-vrf route-policy TO-GLOBAL
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+show configuration
+Tue Oct 27 09:03:19.443 UTC
+!! Building configuration...
+!! IOS XR Configuration 26.1.1
+vrf CUST-A
+ address-family ipv4 unicast
+  import from default-vrf route-policy FROM-GLOBAL
+  export to default-vrf route-policy TO-GLOBAL
+ !
+!
+route-policy TO-GLOBAL
+  if destination in (198.51.100.0/24) then
+    pass
+  endif
+end-policy
+!
+route-policy FROM-GLOBAL
+  if destination in (0.0.0.0/0) then
+    pass
+  endif
+end-policy
+!
+end
+
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+commit
+Tue Oct 27 09:03:20.025 UTC
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+show configuration failed
+Tue Oct 27 09:03:20.431 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A 0.0.0.0/0
+Tue Oct 27 09:03:54.390 UTC
+BGP routing table entry for 0.0.0.0/0, Route Distinguisher: 10.255.0.1:101
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 44           44
+Last Modified: Oct 27 09:03:25.504 for 00:00:28
+Paths: (1 available, best #1)
+  Advertised to CE peers (in unique update groups):
+    172.16.11.2     
+  Path #1: Received by speaker 0
+  Advertised to CE peers (in unique update groups):
+    172.16.11.2     
+  64500
+    192.0.2.2 from 192.0.2.2 (203.0.113.10)
+      Origin IGP, localpref 100, valid, external, best, group-best, import-candidate, imported
+      Received Path ID 0, Local Path ID 1, version 44
+      Extended community: RT:65000:101 
+      Origin-AS validity: (disabled)
+      Source AFI: IPv4 Unicast, Source VRF: default, Source Route Distinguisher: 0:0:0
+RP/0/RP0/CPU0:XR01#
+show route vrf CUST-A 0.0.0.0/0
+Tue Oct 27 09:03:54.790 UTC
+
+Routing entry for 0.0.0.0/0
+  Known via "bgp 65000", distance 20, metric 0, candidate default path
+  Tag 64500, type external
+  Installed Oct 27 09:03:25.073 for 00:00:29
+  Routing Descriptor Blocks
+    192.0.2.2, from 192.0.2.2, BGP external
+      Nexthop in Vrf: "default", Table: "default", IPv4 Unicast, Table Id: 0xe0000000
+      Route metric is 0, Wt is 1
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast 198.51.100.0/24
+Tue Oct 27 09:03:55.194 UTC
+BGP routing table entry for 198.51.100.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 16           16
+Last Modified: Oct 27 09:03:25.504 for 00:00:29
+Paths: (1 available, best #1)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.255.0.12     192.0.2.2       
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.255.0.12     192.0.2.2       
+  65101
+    172.16.11.2 from 172.16.11.2 (10.101.1.1)
+      Origin IGP, metric 0, localpref 100, valid, external, best, group-best, import-candidate, imported
+      Received Path ID 0, Local Path ID 1, version 16
+      Extended community: RT:65000:101 
+      Origin-AS validity: (disabled)
+      Source AFI: VPNv4 Unicast, Source VRF: CUST-A, Source Route Distinguisher: 10.255.0.1:101
+RP/0/RP0/CPU0:XR01#
+show route 198.51.100.0/24
+Tue Oct 27 09:03:55.593 UTC
+
+Routing entry for 198.51.100.0/24
+  Known via "bgp 65000", distance 20, metric 0
+  Tag 65101, type external
+  Installed Oct 27 09:03:25.073 for 00:00:30
+  Routing Descriptor Blocks
+    172.16.11.2, from 172.16.11.2, BGP external
+      Nexthop in Vrf: "CUST-A", Table: "default", IPv4 Unicast, Table Id: 0xe0000002
+      Route metric is 0, Wt is 1
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast neighbors 192.0.2.2 advertised-routes
+Tue Oct 27 09:03:56.042 UTC
+Network            Next Hop        From            AS Path
+198.51.100.0/24    192.0.2.1       172.16.11.2     65000 65101i
+
+Processed 1 prefixes, 1 paths
+RP/0/RP0/CPU0:XR01#
+show ip bgp
+BGP table version is 4, local router ID is 203.0.113.10
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+      0.0.0.0          0.0.0.0                                0 i
+ *>   198.51.100.0     192.0.2.1                              0 65000 65101 i
+ *>   203.0.113.0      0.0.0.0                  0         32768 i
+INET#
+show ip route 0.0.0.0
+Routing entry for 0.0.0.0/0, supernet
+  Known via "bgp 65101", distance 20, metric 0, candidate default path
+  Tag 65000, type external
+  Last update from 172.16.11.1 00:00:35 ago
+  Routing Descriptor Blocks:
+  * 172.16.11.1, from 172.16.11.1, 00:00:35 ago
+      opaque_ptr 0x7F95C86BF590 
+      Route metric is 0, traffic share count is 1
+      AS Hops 2
+      Route tag 65000
+      MPLS label: none
+CEA1#
+ping 203.0.113.10 source Loopback11 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 203.0.113.10, timeout is 2 seconds:
+Packet sent with a source address of 198.51.100.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/3 ms
+CEA1#
+ping 203.0.113.10 source Loopback10 repeat 2
+Type escape sequence to abort.
+Sending 2, 100-byte ICMP Echos to 203.0.113.10, timeout is 2 seconds:
+Packet sent with a source address of 10.101.1.1 
+..
+Success rate is 0 percent (0/2)
+CEA1#
+show ip route 0.0.0.0
+% Network not in table
+CEA2#
+
+######## 09:04:08 i-3: advertise-as-vpn(取り込んだ既定経路を VPNv4 でも配る)= CEA2 にも既定経路
+configure
+Tue Oct 27 09:04:10.192 UTC
+RP/0/RP0/CPU0:XR01(config)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+import from default-vrf route-policy FROM-GLOBAL advertise-as-vpn
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+commit
+Tue Oct 27 09:04:11.895 UTC
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+show configuration failed
+Tue Oct 27 09:04:12.297 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vpnv4 unicast rd 10.255.0.1:101 0.0.0.0/0
+Tue Oct 27 09:04:45.209 UTC
+BGP routing table entry for 0.0.0.0/0, Route Distinguisher: 10.255.0.1:101
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 45           45
+    Local Label: 24006
+Last Modified: Oct 27 09:04:11.504 for 00:00:33
+Paths: (1 available, best #1)
+  Advertised to peers (in unique update groups):
+    10.255.0.21     
+  Path #1: Received by speaker 0
+  Advertised to peers (in unique update groups):
+    10.255.0.21     
+  64500
+    192.0.2.2 from 192.0.2.2 (203.0.113.10)
+      Origin IGP, localpref 100, valid, external, best, group-best, import-candidate, imported
+      Received Path ID 0, Local Path ID 1, version 45
+      Extended community: RT:65000:101 
+      Source AFI: IPv4 Unicast, Source VRF: default, Source Route Distinguisher: 0:0:0
+RP/0/RP0/CPU0:XR01#
+show ip route vrf CUST-A 0.0.0.0
+
+Routing Table: CUST-A
+Routing entry for 0.0.0.0/0, supernet
+  Known via "bgp 65000", distance 200, metric 0, candidate default path
+  Tag 64500, type internal
+  Last update from 10.255.0.1 00:00:30 ago
+  Routing Descriptor Blocks:
+  * 10.255.0.1 (default), from 10.255.0.21, 00:00:30 ago
+      opaque_ptr 0x7CD7624854E8 
+      Route metric is 0, traffic share count is 1
+      AS Hops 1
+      Route tag 64500
+      MPLS label: 24006
+      MPLS Flags: MPLS Required
+RT02#
+show ip route 0.0.0.0
+Routing entry for 0.0.0.0/0, supernet
+  Known via "bgp 65101", distance 20, metric 0, candidate default path
+  Tag 65000, type external
+  Last update from 172.16.12.1 00:00:31 ago
+  Routing Descriptor Blocks:
+  * 172.16.12.1, from 172.16.12.1, 00:00:31 ago
+      opaque_ptr 0x70A10C2B29F8 
+      Route metric is 0, traffic share count is 1
+      AS Hops 2
+      Route tag 65000
+      MPLS label: none
+CEA2#
+
+######## 09:04:49 i-4: インターネットへの TCP(XR01 でラベルなしの通り抜け・VRF→グローバル)
+telnet 203.0.113.10 22 /source-interface Loopback11
+Trying 203.0.113.10, 22 ... Open
+TCP-NG
+show ip traffic | include checksum|format errors
+         0 format errors, 0 checksum errors, 26 bad hop count
+  Rcvd: 0 format errors, 0 checksum errors, 0 redirects, 0 unreachable
+  Rcvd: 45 total, 0 checksum errors, 45 no port 0 finput
+  Rcvd: 94 total, 6 checksum errors, 0 no port
+  Total: 0/0, 0 checksum errors, 0 format errors
+  Rcvd: 0 total, 0 checksum errors
+INET#

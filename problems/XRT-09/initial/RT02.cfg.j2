@@ -1,0 +1,87 @@
+! XRT-09 RT02(IOL 17.15・据付・変更しない)= コアの PE。XRT-07 の設定からグローバルのお客さま A'(Lo100・XR01 との ipv4 iBGP)を外し、
+! お客さま A/B の VRF を足したもの。VPNv4 はルート リフレクタ XR02 とだけ。CEA2 とは as-override(同じ AS 65101 の拠点どうし)。
+! RT の約束= お客さま A 65000:101・B 65000:102・共有サービスが配る 65000:900(A と B が取り込む)。
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+mpls ldp neighbor 10.255.0.13 password CoreLdp-2026
+!
+vrf definition CUST-A
+ rd 10.255.0.12:101
+ address-family ipv4
+  route-target export 65000:101
+  route-target import 65000:101
+  route-target import 65000:900
+ exit-address-family
+!
+vrf definition CUST-B
+ rd 10.255.0.12:102
+ address-family ipv4
+  route-target export 65000:102
+  route-target import 65000:102
+  route-target import 65000:900
+ exit-address-family
+!
+interface Loopback0
+ ip address 10.255.0.12 255.255.255.255
+ ip router isis CORE
+!
+interface {{ links[0] }}
+ description CORE-A to RT01
+ ip address 10.0.12.12 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 10
+ mpls ip
+ no shutdown
+!
+interface {{ links[1] }}
+ description CORE-B to RT03
+ ip address 10.0.23.12 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 100
+ mpls ip
+ no shutdown
+!
+interface {{ links[2] }}
+ description CUST-A site 2 (CEA2)
+ vrf forwarding CUST-A
+ ip address 172.16.12.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description CUST-B site 2 (CEB2)
+ vrf forwarding CUST-B
+ ip address 172.16.22.1 255.255.255.0
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0012.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+ mpls ldp sync
+!
+router bgp 65000
+ bgp router-id 10.255.0.12
+ bgp log-neighbor-changes
+ neighbor 10.255.0.21 remote-as 65000
+ neighbor 10.255.0.21 description VPNv4 RR XR02
+ neighbor 10.255.0.21 update-source Loopback0
+ address-family ipv4
+  no neighbor 10.255.0.21 activate
+ exit-address-family
+ address-family vpnv4
+  neighbor 10.255.0.21 activate
+  neighbor 10.255.0.21 send-community extended
+ exit-address-family
+ address-family ipv4 vrf CUST-A
+  neighbor 172.16.12.2 remote-as 65101
+  neighbor 172.16.12.2 activate
+  neighbor 172.16.12.2 as-override
+ exit-address-family
+ address-family ipv4 vrf CUST-B
+  neighbor 172.16.22.2 remote-as 65202
+  neighbor 172.16.22.2 activate
+ exit-address-family
+!

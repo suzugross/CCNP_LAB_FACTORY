@@ -1,0 +1,106 @@
+## m-1 (XRv9000): G3(CUST-B・アドレスあり)の VRF を CUST-T へ変える → 30 秒待って ping
+configure
+RP/0/RP0/CPU0:XR01(config)#
+vrf CUST-T
+RP/0/RP0/CPU0:XR01(config-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01(config-if)#
+vrf CUST-T
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+RP/0/RP0/CPU0:XR01(config-if)#
+show configuration failed
+% No such configuration item(s)
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config interface GigabitEthernet0/0/0/3
+interface GigabitEthernet0/0/0/3
+ description CUST-B site 1 (CEB1)
+ vrf CUST-T
+ ipv4 address 172.16.21.1 255.255.255.0
+!
+RP/0/RP0/CPU0:XR01#
+show ipv4 vrf all interface brief | include "0/0/0/3"
+GigabitEthernet0/0/0/3         172.16.21.1     Up              Up       CUST-T  
+RP/0/RP0/CPU0:XR01#
+ping vrf CUST-T 172.16.21.2 count 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 172.16.21.2 timeout is 2 seconds:
+...
+Success rate is 0 percent (0/3)
+RP/0/RP0/CPU0:XR01#
+ping vrf CUST-B 172.16.21.2 count 2
+Type escape sequence to abort.
+Sending 2, 100-byte ICMP Echos to 172.16.21.2 timeout is 2 seconds:
+UU
+Success rate is 0 percent (0/2)
+RP/0/RP0/CPU0:XR01#
+## m-2: 外す(vrf を消す= グローバルへ)
+configure
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01(config-if)#
+no vrf
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+RP/0/RP0/CPU0:XR01(config-if)#
+show configuration failed
+% No such configuration item(s)
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config interface GigabitEthernet0/0/0/3
+interface GigabitEthernet0/0/0/3
+ description CUST-B site 1 (CEB1)
+ ipv4 address 172.16.21.1 255.255.255.0
+!
+RP/0/RP0/CPU0:XR01#
+ping 172.16.21.2 count 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 172.16.21.2 timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 1/2/3 ms
+RP/0/RP0/CPU0:XR01#
+## m-3: 戻す(CUST-B へ)
+configure
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01(config-if)#
+vrf CUST-B
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+RP/0/RP0/CPU0:XR01(config-if)#
+show configuration failed
+% No such configuration item(s)
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+RP/0/RP0/CPU0:XR01(config)#
+no vrf CUST-T
+RP/0/RP0/CPU0:XR01(config)#
+commit
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config interface GigabitEthernet0/0/0/3
+interface GigabitEthernet0/0/0/3
+ description CUST-B site 1 (CEB1)
+ vrf CUST-B
+ ipv4 address 172.16.21.1 255.255.255.0
+!
+RP/0/RP0/CPU0:XR01#
+ping vrf CUST-B 172.16.21.2 count 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 172.16.21.2 timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/3/4 ms
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-B summary | include 172.16
+172.16.21.2       0 65201      19      32           88    0    0 00:00:22          1
+RP/0/RP0/CPU0:XR01#

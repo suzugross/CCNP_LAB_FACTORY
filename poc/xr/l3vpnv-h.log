@@ -1,0 +1,544 @@
+
+######## 09:27:57 h-1: 共有サービス VRF SVC(PE-CE は静的)。10.99.1.0/24 だけ RT 65000:900 を足して配る(additive)
+configure
+Tue Oct 27 09:27:59.952 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/4
+RP/0/RP0/CPU0:XR01(config-if)#
+vrf SVC
+RP/0/RP0/CPU0:XR01(config-if)#
+ipv4 address 172.16.91.1 255.255.255.0
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+route-policy SVC-EXPORT
+RP/0/RP0/CPU0:XR01(config-rpl)#
+if destination in (10.99.1.0/24) then
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+set extcommunity rt (65000:900) additive
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+endif
+RP/0/RP0/CPU0:XR01(config-rpl)#
+pass
+RP/0/RP0/CPU0:XR01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XR01(config)#
+vrf SVC
+RP/0/RP0/CPU0:XR01(config-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+import route-target
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+65000:101
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+65000:102
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+exit
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+export route-target
+RP/0/RP0/CPU0:XR01(config-vrf-export-rt)#
+65000:999
+RP/0/RP0/CPU0:XR01(config-vrf-export-rt)#
+exit
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+export route-policy SVC-EXPORT
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router static
+RP/0/RP0/CPU0:XR01(config-static)#
+vrf SVC
+RP/0/RP0/CPU0:XR01(config-static-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-static-vrf-afi)#
+10.99.1.0/24 172.16.91.2
+RP/0/RP0/CPU0:XR01(config-static-vrf-afi)#
+10.99.2.0/24 172.16.91.2
+RP/0/RP0/CPU0:XR01(config-static-vrf-afi)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+vrf SVC
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+rd 10.255.0.1:900
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+redistribute static
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+show configuration
+Tue Oct 27 09:28:13.291 UTC
+!! Building configuration...
+!! IOS XR Configuration 26.1.1
+vrf SVC
+ address-family ipv4 unicast
+  import route-target
+   65000:101
+   65000:102
+  !
+  export route-policy SVC-EXPORT
+  export route-target
+   65000:999
+  !
+ !
+!
+interface GigabitEthernet0/0/0/4
+ vrf SVC
+ ipv4 address 172.16.91.1 255.255.255.0
+!
+route-policy SVC-EXPORT
+  if destination in (10.99.1.0/24) then
+    set extcommunity rt (65000:900) additive
+  endif
+  pass
+end-policy
+!
+router static
+ vrf SVC
+  address-family ipv4 unicast
+   10.99.1.0/24 172.16.91.2
+   10.99.2.0/24 172.16.91.2
+  !
+ !
+!
+router bgp 65000
+ vrf SVC
+  rd 10.255.0.1:900
+  address-family ipv4 unicast
+   redistribute static
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+commit
+Tue Oct 27 09:28:13.793 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+show configuration failed
+Tue Oct 27 09:28:14.798 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vrf SVC
+Tue Oct 27 09:28:47.809 UTC
+BGP VRF SVC, state: Active
+BGP Route Distinguisher: 10.255.0.1:900
+VRF ID: 0x60000004
+BGP router identifier 10.255.0.1, local AS number 65000
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000004   RD version: 38
+BGP main routing table version 38
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.1:900 (default for vrf SVC)
+Route Distinguisher Version: 38
+*> 10.99.1.0/24       172.16.91.2              0         32768 ?
+*> 10.99.2.0/24       172.16.91.2              0         32768 ?
+*> 10.101.1.0/24      172.16.11.2              0             0 65101 i
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65101 i
+*> 10.102.1.0/24      172.16.21.2              0             0 65201 i
+*>i10.102.2.0/24      10.255.0.12              0    100      0 65202 i
+*> 198.51.100.0/24    172.16.11.2              0             0 65101 i
+
+Processed 7 prefixes, 7 paths
+RP/0/RP0/CPU0:XR01#
+show bgp vrf SVC 10.99.1.0/24
+Tue Oct 27 09:28:48.211 UTC
+BGP routing table entry for 10.99.1.0/24, Route Distinguisher: 10.255.0.1:900
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 23           23
+    Local Label: 24008
+Last Modified: Oct 27 09:28:16.031 for 00:00:32
+Paths: (1 available, best #1)
+  Advertised to PE peers (in unique update groups):
+    10.255.0.21     
+  Path #1: Received by speaker 0
+  Advertised to PE peers (in unique update groups):
+    10.255.0.21     
+  Local
+    172.16.91.2 from 0.0.0.0 (10.255.0.1)
+      Origin incomplete, metric 0, localpref 100, weight 32768, valid, redistributed, best, group-best, import-candidate
+      Received Path ID 0, Local Path ID 1, version 23
+      Extended community: RT:65000:900 RT:65000:999 
+RP/0/RP0/CPU0:XR01#
+show bgp vrf SVC 10.99.2.0/24
+Tue Oct 27 09:28:48.609 UTC
+BGP routing table entry for 10.99.2.0/24, Route Distinguisher: 10.255.0.1:900
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 24           24
+    Local Label: 24009
+Last Modified: Oct 27 09:28:16.031 for 00:00:32
+Paths: (1 available, best #1)
+  Advertised to PE peers (in unique update groups):
+    10.255.0.21     
+  Path #1: Received by speaker 0
+  Advertised to PE peers (in unique update groups):
+    10.255.0.21     
+  Local
+    172.16.91.2 from 0.0.0.0 (10.255.0.1)
+      Origin incomplete, metric 0, localpref 100, weight 32768, valid, redistributed, best, group-best, import-candidate
+      Received Path ID 0, Local Path ID 1, version 24
+      Extended community: RT:65000:999 
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A
+Tue Oct 27 09:28:49.012 UTC
+BGP VRF CUST-A, state: Active
+BGP Route Distinguisher: 10.255.0.1:101
+VRF ID: 0x60000002
+BGP router identifier 10.255.0.1, local AS number 65000
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000002   RD version: 35
+BGP main routing table version 38
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
+Route Distinguisher Version: 35
+*> 10.99.1.0/24       172.16.91.2              0         32768 ?
+*> 10.101.1.0/24      172.16.11.2              0             0 65101 i
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65101 i
+*> 198.51.100.0/24    172.16.11.2              0             0 65101 i
+
+Processed 4 prefixes, 4 paths
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-B
+Tue Oct 27 09:28:49.413 UTC
+BGP VRF CUST-B, state: Active
+BGP Route Distinguisher: 10.255.0.1:102
+VRF ID: 0x60000003
+BGP router identifier 10.255.0.1, local AS number 65000
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000003   RD version: 34
+BGP main routing table version 38
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.1:102 (default for vrf CUST-B)
+Route Distinguisher Version: 34
+*> 10.99.1.0/24       172.16.91.2              0         32768 ?
+*> 10.102.1.0/24      172.16.21.2              0             0 65201 i
+*>i10.102.2.0/24      10.255.0.12              0    100      0 65202 i
+
+Processed 3 prefixes, 3 paths
+RP/0/RP0/CPU0:XR01#
+show ip route vrf CUST-A bgp
+
+Routing Table: CUST-A
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/24 is subnetted, 3 subnets
+B        10.99.1.0 [200/0] via 10.255.0.1, 00:00:35
+B        10.101.1.0 [200/0] via 10.255.0.1, 00:02:12
+B        10.101.2.0 [20/0] via 172.16.12.2, 00:17:38
+B     198.51.100.0/24 [200/0] via 10.255.0.1, 00:02:12
+RT02#
+show ip route vrf CUST-B bgp
+
+Routing Table: CUST-B
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/24 is subnetted, 3 subnets
+B        10.99.1.0 [200/0] via 10.255.0.1, 00:00:36
+B        10.102.1.0 [200/0] via 10.255.0.1, 00:01:05
+B        10.102.2.0 [20/0] via 172.16.22.2, 00:17:39
+RT02#
+show ip route bgp
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 4 subnets, 2 masks
+B        10.99.1.0/24 [20/0] via 172.16.11.1, 00:00:37
+B        10.101.2.0/24 [20/0] via 172.16.11.1, 00:03:59
+CEA1#
+ping 10.99.1.1 source Loopback10 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.99.1.1, timeout is 2 seconds:
+Packet sent with a source address of 10.101.1.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/3/6 ms
+CEA1#
+ping 10.99.2.1 source Loopback10 repeat 2
+Type escape sequence to abort.
+Sending 2, 100-byte ICMP Echos to 10.99.2.1, timeout is 2 seconds:
+Packet sent with a source address of 10.101.1.1 
+..
+Success rate is 0 percent (0/2)
+CEA1#
+ping 10.99.1.1 source Loopback10 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.99.1.1, timeout is 2 seconds:
+Packet sent with a source address of 10.101.2.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+CEA2#
+ping 10.99.1.1 source Loopback10 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.99.1.1, timeout is 2 seconds:
+Packet sent with a source address of 10.102.2.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+CEB2#
+ping 10.101.2.1 source Loopback10 repeat 2
+Type escape sequence to abort.
+Sending 2, 100-byte ICMP Echos to 10.101.2.1, timeout is 2 seconds:
+Packet sent with a source address of 10.102.2.1 
+..
+Success rate is 0 percent (0/2)
+CEB2#
+
+######## 09:29:07 h-2: additive なし(置き換え)にすると 10.99.1.0/24 の RT はどうなるか
+configure
+Tue Oct 27 09:29:09.854 UTC
+RP/0/RP0/CPU0:XR01(config)#
+route-policy SVC-EXPORT
+Tue Oct 27 09:29:10.356 UTC
+% WARNING: Policy object route-policy SVC-EXPORT exists! Reconfiguring it via CLI will replace current definition. Use abort to cancel.
+RP/0/RP0/CPU0:XR01(config-rpl)#
+if destination in (10.99.1.0/24) then
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+set extcommunity rt (65000:900)
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+endif
+RP/0/RP0/CPU0:XR01(config-rpl)#
+pass
+RP/0/RP0/CPU0:XR01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Oct 27 09:29:12.765 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Tue Oct 27 09:29:13.669 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vrf SVC 10.99.1.0/24
+Tue Oct 27 09:29:36.580 UTC
+BGP routing table entry for 10.99.1.0/24, Route Distinguisher: 10.255.0.1:900
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 40           40
+    Local Label: 24008
+Last Modified: Oct 27 09:29:13.031 for 00:00:23
+Paths: (1 available, best #1)
+  Advertised to PE peers (in unique update groups):
+    10.255.0.21     
+  Path #1: Received by speaker 0
+  Advertised to PE peers (in unique update groups):
+    10.255.0.21     
+  Local
+    172.16.91.2 from 0.0.0.0 (10.255.0.1)
+      Origin incomplete, metric 0, localpref 100, weight 32768, valid, redistributed, best, group-best, import-candidate
+      Received Path ID 0, Local Path ID 1, version 40
+      Extended community: RT:65000:900 
+RP/0/RP0/CPU0:XR01#
+show bgp vpnv4 unicast rd 10.255.0.1:900 10.99.1.0/24
+Tue Oct 27 09:29:36.980 UTC
+BGP routing table entry for 10.99.1.0/24, Route Distinguisher: 10.255.0.1:900
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 40           40
+    Local Label: 24008
+Last Modified: Oct 27 09:29:13.031 for 00:00:23
+Paths: (1 available, best #1)
+  Advertised to peers (in unique update groups):
+    10.255.0.21     
+  Path #1: Received by speaker 0
+  Advertised to peers (in unique update groups):
+    10.255.0.21     
+  Local
+    172.16.91.2 from 0.0.0.0 (10.255.0.1)
+      Origin incomplete, metric 0, localpref 100, weight 32768, valid, redistributed, best, group-best, import-candidate
+      Received Path ID 0, Local Path ID 1, version 40
+      Extended community: RT:65000:900 
+RP/0/RP0/CPU0:XR01#
+
+######## 09:29:36 h-3: 方針で落とした経路(pass しない)は輸出されないか= 10.99.2.0/24 を drop
+configure
+Tue Oct 27 09:29:38.485 UTC
+RP/0/RP0/CPU0:XR01(config)#
+route-policy SVC-EXPORT
+Tue Oct 27 09:29:38.986 UTC
+% WARNING: Policy object route-policy SVC-EXPORT exists! Reconfiguring it via CLI will replace current definition. Use abort to cancel.
+RP/0/RP0/CPU0:XR01(config-rpl)#
+if destination in (10.99.1.0/24) then
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+set extcommunity rt (65000:900) additive
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+pass
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+endif
+RP/0/RP0/CPU0:XR01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Oct 27 09:29:41.425 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Tue Oct 27 09:29:42.296 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vrf SVC
+Tue Oct 27 09:30:05.199 UTC
+BGP VRF SVC, state: Active
+BGP Route Distinguisher: 10.255.0.1:900
+VRF ID: 0x60000004
+BGP router identifier 10.255.0.1, local AS number 65000
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000004   RD version: 44
+BGP main routing table version 46
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.1:900 (default for vrf SVC)
+Route Distinguisher Version: 44
+*> 10.99.1.0/24       172.16.91.2              0         32768 ?
+*> 10.99.2.0/24       172.16.91.2              0         32768 ?
+*> 10.101.1.0/24      172.16.11.2              0             0 65101 i
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65101 i
+*> 10.102.1.0/24      172.16.21.2              0             0 65201 i
+*>i10.102.2.0/24      10.255.0.12              0    100      0 65202 i
+*> 198.51.100.0/24    172.16.11.2              0             0 65101 i
+
+Processed 7 prefixes, 7 paths
+RP/0/RP0/CPU0:XR01#
+show bgp vpnv4 unicast rd 10.255.0.1:900
+Tue Oct 27 09:30:05.600 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0x0
+BGP main routing table version 46
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.1:900 (default for vrf SVC)
+Route Distinguisher Version: 44
+*> 10.99.1.0/24       172.16.91.2              0         32768 ?
+*> 10.99.2.0/24       172.16.91.2              0         32768 ?
+*> 10.101.1.0/24      172.16.11.2              0             0 65101 i
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65101 i
+*> 10.102.1.0/24      172.16.21.2              0             0 65201 i
+*>i10.102.2.0/24      10.255.0.12              0    100      0 65202 i
+*> 198.51.100.0/24    172.16.11.2              0             0 65101 i
+
+Processed 7 prefixes, 7 paths
+RP/0/RP0/CPU0:XR01#
+show ip bgp vpnv4 all | include 10.99
+ *>i  10.99.1.0/24     10.255.0.1               0    100      0 ?
+ *>i  10.99.1.0/24     10.255.0.1               0    100      0 ?
+ *>i  10.99.1.0/24     10.255.0.1               0    100      0 ?
+RT02#
+
+######## 09:30:06 h-4: 元に戻す(additive・pass)
+configure
+Tue Oct 27 09:30:08.961 UTC
+RP/0/RP0/CPU0:XR01(config)#
+route-policy SVC-EXPORT
+Tue Oct 27 09:30:09.458 UTC
+% WARNING: Policy object route-policy SVC-EXPORT exists! Reconfiguring it via CLI will replace current definition. Use abort to cancel.
+RP/0/RP0/CPU0:XR01(config-rpl)#
+if destination in (10.99.1.0/24) then
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+set extcommunity rt (65000:900) additive
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+endif
+RP/0/RP0/CPU0:XR01(config-rpl)#
+pass
+RP/0/RP0/CPU0:XR01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Oct 27 09:30:11.862 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+
+######## 09:30:11 h-5: 同じ PE の VRF どうし(CEA1 ⇔ SVC)を通る TCP(XR01 でラベルなしの通り抜け)
+Trying 10.99.1.1, 22 ... Open
+SSH-2.0-Cisco-1.25
+TCP-OK
+show ip traffic | include checksum|format errors
+         0 format errors, 0 checksum errors, 28 bad hop count
+  Rcvd: 0 format errors, 0 checksum errors, 0 redirects, 0 unreachable
+  Rcvd: 43 total, 0 checksum errors, 43 no port 0 finput
+  Rcvd: 51 total, 0 checksum errors, 0 no port
+  Total: 0/0, 0 checksum errors, 0 format errors
+  Rcvd: 0 total, 0 checksum errors
+SVC#

@@ -1,0 +1,82 @@
+
+######## 09:32:41 j-1: 静的経路での漏らし(CUST-B の既定経路の次ホップをグローバルに)。書き方が通るか
+configure
+Tue Oct 27 09:32:43.581 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router static
+RP/0/RP0/CPU0:XR01(config-static)#
+vrf CUST-B
+RP/0/RP0/CPU0:XR01(config-static-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-static-vrf-afi)#
+0.0.0.0/0 vrf default 192.0.2.2
+RP/0/RP0/CPU0:XR01(config-static-vrf-afi)#
+show configuration
+Tue Oct 27 09:32:45.685 UTC
+!! Building configuration...
+!! IOS XR Configuration 26.1.1
+router static
+ vrf CUST-B
+  address-family ipv4 unicast
+   0.0.0.0/0 vrf default 192.0.2.2
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config-static-vrf-afi)#
+commit
+Tue Oct 27 09:32:46.191 UTC
+RP/0/RP0/CPU0:XR01(config-static-vrf-afi)#
+show configuration failed
+Tue Oct 27 09:32:47.091 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-static-vrf-afi)#
+end
+RP/0/RP0/CPU0:XR01#
+show route vrf CUST-B 0.0.0.0/0
+Tue Oct 27 09:32:50.108 UTC
+
+Routing entry for 0.0.0.0/0
+  Known via "static", distance 1, metric 0, candidate default path
+  Installed Oct 27 09:32:46.257 for 00:00:03
+  Routing Descriptor Blocks
+    192.0.2.2
+      Nexthop in Vrf: "default", Table: "default", IPv4 Unicast, Table Id: 0xe0000000
+      Route metric is 0
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+show running-config router static
+Tue Oct 27 09:32:50.508 UTC
+router static
+ vrf SVC
+  address-family ipv4 unicast
+   10.99.1.0/24 172.16.91.2
+   10.99.2.0/24 172.16.91.2
+  !
+ !
+ vrf CUST-B
+  address-family ipv4 unicast
+   0.0.0.0/0 vrf default 192.0.2.2
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+configure
+Tue Oct 27 09:32:52.019 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router static
+RP/0/RP0/CPU0:XR01(config-static)#
+vrf CUST-B
+RP/0/RP0/CPU0:XR01(config-static-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-static-vrf-afi)#
+no 0.0.0.0/0
+RP/0/RP0/CPU0:XR01(config-static-vrf-afi)#
+commit
+Tue Oct 27 09:32:54.124 UTC
+RP/0/RP0/CPU0:XR01(config-static-vrf-afi)#
+end
+RP/0/RP0/CPU0:XR01#

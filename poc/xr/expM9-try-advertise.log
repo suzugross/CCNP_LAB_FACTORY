@@ -1,0 +1,85 @@
+
+######## 10:38:13 advertise: advertise-as-vpn を外す → RT02/CEA2 の既定経路が消える → 戻す
+configure
+Tue Oct 27 10:38:13.672 UTC
+RP/0/RP0/CPU0:XR01(config)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+import from default-vrf route-policy DEFAULT-$e-policy DEFAULT-O                          NLYimport from default-vrf route-policy DEFAULT$
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+commit
+Tue Oct 27 10:38:15.375 UTC
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A 0.0.0.0/0 | include "Advertised|Not adve$0 | include "Advertised|Not adver                          tised|172.16|10.255"show bgp vrf CUST-A 0.0.0.0/0 | include "Advertised|Not adv$
+Tue Oct 27 10:38:47.775 UTC
+BGP routing table entry for 0.0.0.0/0, Route Distinguisher: 10.255.0.1:101
+  Advertised to CE peers (in unique update groups):
+    172.16.11.2     
+  Advertised to CE peers (in unique update groups):
+    172.16.11.2     
+RP/0/RP0/CPU0:XR01#
+show ip route vrf CUST-A 0.0.0.0
+Routing Table: CUST-A
+% Network not in table
+RT02#
+show ip route 0.0.0.0
+Routing entry for 0.0.0.0/0, supernet
+  Known via "bgp 65101", distance 20, metric 0, candidate default path
+  Tag 65000, type external
+  Last update from 172.16.11.1 00:09:31 ago
+  Routing Descriptor Blocks:
+  * 172.16.11.1, from 172.16.11.1, 00:09:31 ago
+      opaque_ptr 0x77A903B20F08 
+      Route metric is 0, traffic share count is 1
+      AS Hops 2
+      Route tag 65000
+      MPLS label: none
+CEA1#
+show ip route 0.0.0.0
+% Network not in table
+CEA2#
+ping 203.0.113.10 source Loopback11 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 203.0.113.10, timeout is 2 seconds:
+Packet sent with a source address of 198.51.100.129 
+.....
+Success rate is 0 percent (0/5)
+CEA2#
+configure
+Tue Oct 27 10:39:04.947 UTC
+RP/0/RP0/CPU0:XR01(config)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+import from default-vrf route-policy DEFAULT-$e-policy DEFAULT-O                          NLY advertise-as-vpnimport from default-vrf route-policy DEFAULT$
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+commit
+Tue Oct 27 10:39:06.650 UTC
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show ip route 0.0.0.0
+Routing entry for 0.0.0.0/0, supernet
+  Known via "bgp 65101", distance 20, metric 0, candidate default path
+  Tag 65000, type external
+  Last update from 172.16.12.1 00:00:58 ago
+  Routing Descriptor Blocks:
+  * 172.16.12.1, from 172.16.12.1, 00:00:58 ago
+      opaque_ptr 0x7AEC6C90C4F8 
+      Route metric is 0, traffic share count is 1
+      AS Hops 2
+      Route tag 65000
+      MPLS label: none
+CEA2#
+ping 203.0.113.10 source Loopback11 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 203.0.113.10, timeout is 2 seconds:
+Packet sent with a source address of 198.51.100.129 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/2/3 ms
+CEA2#

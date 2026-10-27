@@ -1,0 +1,285 @@
+
+######## 08:45:10 b-1: VRF CUST-A を定義し、アドレスの付いた IF に vrf を足す(アドレスは残るか・コミットは通るか)
+configure
+Tue Oct 27 08:45:12.207 UTC
+RP/0/RP0/CPU0:XR01(config)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+import route-target
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+65000:101
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+65000:900
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+exit
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+export route-target
+RP/0/RP0/CPU0:XR01(config-vrf-export-rt)#
+65000:101
+RP/0/RP0/CPU0:XR01(config-vrf-export-rt)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2
+RP/0/RP0/CPU0:XR01(config-if)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-if)#
+show configuration
+Tue Oct 27 08:45:17.336 UTC
+!! Building configuration...
+!! IOS XR Configuration 26.1.1
+vrf CUST-A
+ address-family ipv4 unicast
+  import route-target
+   65000:101
+   65000:900
+  !
+  export route-target
+   65000:101
+  !
+ !
+!
+interface GigabitEthernet0/0/0/2
+ vrf CUST-A
+!
+end
+
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Tue Oct 27 08:45:17.824 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+show configuration failed
+Tue Oct 27 08:45:18.328 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config interface GigabitEthernet0/0/0/2
+Tue Oct 27 08:45:21.327 UTC
+interface GigabitEthernet0/0/0/2
+ description CUST-A site 1 (CEA1)
+ vrf CUST-A
+ ipv4 address 172.16.11.1 255.255.255.0
+!
+
+RP/0/RP0/CPU0:XR01#
+show ipv4 vrf all interface brief
+Tue Oct 27 08:45:22.349 UTC
+
+Interface                      IP-Address      Status          Protocol Vrf-Name
+Loopback0                      10.255.0.1      Up              Up       default 
+Loopback1                      10.255.255.1    Up              Up       default 
+Loopback100                    10.30.0.1       Up              Up       default 
+MgmtEth0/RP0/CPU0/0            10.1.10.11      Up              Up       MGMT    
+GigabitEthernet0/0/0/0         10.0.1.1        Up              Up       default 
+GigabitEthernet0/0/0/1         10.0.3.1        Up              Up       default 
+GigabitEthernet0/0/0/2         172.16.11.1     Up              Up       CUST-A  
+GigabitEthernet0/0/0/3         unassigned      Up              Up       default 
+GigabitEthernet0/0/0/4         unassigned      Up              Up       default 
+GigabitEthernet0/0/0/5         unassigned      Up              Up       default 
+RP/0/RP0/CPU0:XR01#
+show route vrf CUST-A connected
+Tue Oct 27 08:45:23.060 UTC
+
+C    172.16.11.0/24 is directly connected, 00:00:05, GigabitEthernet0/0/0/2
+RP/0/RP0/CPU0:XR01#
+ping vrf CUST-A 172.16.11.2 count 3
+Tue Oct 27 08:45:23.629 UTC
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 172.16.11.2 timeout is 2 seconds:
+UUU
+Success rate is 0 percent (0/3)
+RP/0/RP0/CPU0:XR01#
+
+######## 08:45:30 b-2: 付け直し(アドレスを消して付け直す=同じコミット)
+configure
+Tue Oct 27 08:45:31.567 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2
+RP/0/RP0/CPU0:XR01(config-if)#
+no ipv4 address
+RP/0/RP0/CPU0:XR01(config-if)#
+ipv4 address 172.16.11.1 255.255.255.0
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Tue Oct 27 08:45:33.383 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+show configuration failed
+Tue Oct 27 08:45:34.097 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config interface GigabitEthernet0/0/0/2
+Tue Oct 27 08:45:37.067 UTC
+interface GigabitEthernet0/0/0/2
+ description CUST-A site 1 (CEA1)
+ vrf CUST-A
+ ipv4 address 172.16.11.1 255.255.255.0
+!
+
+RP/0/RP0/CPU0:XR01#
+show route vrf CUST-A connected
+Tue Oct 27 08:45:37.569 UTC
+
+C    172.16.11.0/24 is directly connected, 00:00:03, GigabitEthernet0/0/0/2
+RP/0/RP0/CPU0:XR01#
+ping vrf CUST-A 172.16.11.2 count 3
+Tue Oct 27 08:45:37.992 UTC
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 172.16.11.2 timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 1/1/1 ms
+RP/0/RP0/CPU0:XR01#
+
+######## 08:45:38 b-3: VPNv4 の近隣を、BGP 全体の address-family vpnv4 unicast なしで足す(コミットで止まるか)
+configure
+Tue Oct 27 08:45:39.925 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+neighbor 10.255.0.21
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+remote-as 65000
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+update-source Loopback0
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+address-family vpnv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+commit
+Tue Oct 27 08:45:42.434 UTC
+
+% Failed to commit one or more configuration items during a pseudo-atomic operation. All changes made have been reverted. Please issue 'show configuration failed [inheritance]' from this session to view the errors
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+show configuration failed
+Tue Oct 27 08:45:43.944 UTC
+!! SEMANTIC ERRORS: This configuration was rejected by 
+!! the system due to semantic errors. The individual 
+!! errors with each failed configuration command can be 
+!! found below.
+
+
+router bgp 65000
+ neighbor 10.255.0.21
+  address-family vpnv4 unicast
+!!% 'BGP' detected the 'warning' condition 'The address family has not been initialized'
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+abort
+RP/0/RP0/CPU0:XR01#
+
+######## 08:45:45 b-4: BGP の VRF を RD なしで作り、CE と eBGP(RPL なし)
+configure
+Tue Oct 27 08:45:47.240 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+exit
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+neighbor 172.16.11.2
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr)#
+remote-as 65101
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+show configuration
+Tue Oct 27 08:45:51.193 UTC
+!! Building configuration...
+!! IOS XR Configuration 26.1.1
+router bgp 65000
+ vrf CUST-A
+  address-family ipv4 unicast
+  !
+  neighbor 172.16.11.2
+   remote-as 65101
+   address-family ipv4 unicast
+   !
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Oct 27 08:45:51.676 UTC
+
+% Failed to commit one or more configuration items during a pseudo-atomic operation. All changes made have been reverted. Please issue 'show configuration failed [inheritance]' from this session to view the errors
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Tue Oct 27 08:45:53.318 UTC
+!! SEMANTIC ERRORS: This configuration was rejected by 
+!! the system due to semantic errors. The individual 
+!! errors with each failed configuration command can be 
+!! found below.
+
+
+router bgp 65000
+ vrf CUST-A
+  address-family ipv4 unicast
+!!% 'BGP' detected the 'warning' condition 'The parent address family has not been initialized'
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+Uncommitted changes found, commit them before exiting(yes/no/cancel)? [cancel]:
+show running-config router bgp
+Tue Oct 27 08:46:26.431 UTC
+router bgp 65000
+ bgp router-id 10.255.0.1
+ address-family ipv4 unicast
+  network 10.30.0.0/16
+ !
+ neighbor 10.255.0.12
+  remote-as 65000
+  update-source Loopback0
+  address-family ipv4 unicast
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A summary
+Tue Oct 27 08:46:27.031 UTC
+% None of the requested address families are configured for instance 'default'(40600)
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A
+Tue Oct 27 08:46:27.432 UTC
+% None of the requested address families are configured for instance 'default'(40600)
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A neighbors 172.16.11.2 | include "policy|accepted|Prefix|denied"
+Tue Oct 27 08:46:27.863 UTC
+% Requested VRF CUST-A is not configured for afi IPv4 Unicast.
+RP/0/RP0/CPU0:XR01#
+show ip bgp summary | begin Neighbor
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+172.16.11.1     4        65000       0       0        1    0    0 never    Idle
+CEA1#
+show ip bgp
+BGP table version is 1, local router ID is 10.101.1.1
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *    10.101.1.0/24    0.0.0.0                  0         32768 i
+ *    198.51.100.0     0.0.0.0                  0         32768 i
+CEA1#

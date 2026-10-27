@@ -1,0 +1,176 @@
+
+######## 09:19:23 a-1: 初期状態。XR01(M8 を解き終えた形)・XR02 が IS-IS に入っているか・RT02 の RR 向けセッション
+show version | include "Version|uptime"
+Tue Oct 27 09:19:26.015 UTC
+Cisco IOS XR Software, Version 26.1.1
+ Version      : 26.1.1
+System uptime is 3 minutes
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Tue Oct 27 09:19:26.417 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    24   00:00:30 Yes None None
+RT03           Gi0/0/0/1                *PtoP*         Up    24   00:00:30 Yes None None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Tue Oct 27 09:19:26.816 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.11:0      N   N    00:00:24    2     0     3     0     10     0    
+10.255.0.13:0      N   N    00:00:24    1     0     4     0     10     0    
+
+RP/0/RP0/CPU0:XR01#
+show route 10.255.0.21/32
+Tue Oct 27 09:19:27.217 UTC
+
+Routing entry for 10.255.0.21/32
+  Known via "isis CORE", distance 115, metric 110, type level-2
+  Installed Oct 27 09:19:15.066 for 00:00:12
+  Routing Descriptor Blocks
+    10.0.3.13, from 10.255.0.21, via GigabitEthernet0/0/0/1
+      Route metric is 110
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast summary
+Tue Oct 27 09:19:27.619 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 4
+BGP main routing table version 4
+BGP NSR Initial initsync version 4 (Not Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker            4             4             4             4             4             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.12       0 65000       5       4            4    0    0 00:00:21          1
+
+RP/0/RP0/CPU0:XR01#
+show running-config interface GigabitEthernet0/0/0/2
+Tue Oct 27 09:19:28.020 UTC
+interface GigabitEthernet0/0/0/2
+ description CUST-A site 1 (CEA1)
+ ipv4 address 172.16.11.1 255.255.255.0
+!
+
+RP/0/RP0/CPU0:XR01#
+show vrf all
+Tue Oct 27 09:19:28.420 UTC
+VRF                  RD                  RT                         AFI   SAFI     
+MGMT                 not set            
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Tue Oct 27 09:19:28.786 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT03           Gi0/0/0/0                *PtoP*         Up    22   00:09:10 Yes None None
+
+Total adjacency count: 1
+RP/0/RP0/CPU0:XR02#
+show route isis
+Tue Oct 27 09:19:29.183 UTC
+
+i L2 10.0.1.0/24 [115/120] via 10.0.33.13, 00:00:26, GigabitEthernet0/0/0/0
+i L2 10.0.3.0/24 [115/110] via 10.0.33.13, 00:00:26, GigabitEthernet0/0/0/0
+i L2 10.0.12.0/24 [115/120] via 10.0.33.13, 00:09:04, GigabitEthernet0/0/0/0
+i L2 10.0.23.0/24 [115/110] via 10.0.33.13, 00:09:04, GigabitEthernet0/0/0/0
+i L2 10.255.0.1/32 [115/110] via 10.0.33.13, 00:00:26, GigabitEthernet0/0/0/0
+i L2 10.255.0.11/32 [115/130] via 10.0.33.13, 00:09:04, GigabitEthernet0/0/0/0
+i L2 10.255.0.12/32 [115/120] via 10.0.33.13, 00:09:04, GigabitEthernet0/0/0/0
+i L2 10.255.0.13/32 [115/20] via 10.0.33.13, 00:09:04, GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR02#
+show running-config router bgp
+Tue Oct 27 09:19:29.584 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02#
+show ip bgp all summary
+For address family: IPv4 Unicast
+BGP router identifier 10.255.0.12, local AS number 65000
+BGP table version is 3, main routing table version 3
+2 network entries using 496 bytes of memory
+2 path entries using 272 bytes of memory
+2/2 BGP path/bestpath attribute entries using 592 bytes of memory
+2 BGP AS-PATH entries using 48 bytes of memory
+2 BGP extended community entries using 48 bytes of memory
+0 BGP route-map cache entries using 0 bytes of memory
+0 BGP filter-list cache entries using 0 bytes of memory
+BGP using 1456 total bytes of memory
+BGP activity 4/0 prefixes, 4/0 paths, scan interval 60 secs
+2 networks peaked at 09:19:06 Oct 27 2026 UTC (00:00:27.447 ago)
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65000       4       5        3    0    0 00:00:28        1
+
+For address family: VPNv4 Unicast
+BGP router identifier 10.255.0.12, local AS number 65000
+BGP table version is 3, main routing table version 3
+2 network entries using 528 bytes of memory
+2 path entries using 272 bytes of memory
+4/2 BGP path/bestpath attribute entries using 1248 bytes of memory
+2 BGP AS-PATH entries using 48 bytes of memory
+2 BGP extended community entries using 48 bytes of memory
+0 BGP route-map cache entries using 0 bytes of memory
+0 BGP filter-list cache entries using 0 bytes of memory
+BGP using 2144 total bytes of memory
+BGP activity 4/0 prefixes, 4/0 paths, scan interval 60 secs
+2 networks peaked at 09:11:09 Oct 27 2026 UTC (00:08:24.447 ago)
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.21     4        65000       0       0        1    0    0 never    Idle
+172.16.12.2     4        65101      14      12        3    0    0 00:09:32        1
+172.16.22.2     4        65202      13      12        3    0    0 00:09:18        1
+RT02#
+show ip route vrf CUST-A
+
+Routing Table: CUST-A
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/24 is subnetted, 1 subnets
+B        10.101.2.0 [20/0] via 172.16.12.2, 00:08:22
+      172.16.0.0/16 is variably subnetted, 2 subnets, 2 masks
+C        172.16.12.0/24 is directly connected, Ethernet0/2
+L        172.16.12.1/32 is directly connected, Ethernet0/2
+RT02#
+show ip route 10.255.0.21
+Routing entry for 10.255.0.21/32
+  Known via "isis", distance 115, metric 110, type level-2
+  Redistributing via isis CORE
+  Last update from 10.0.23.13 on Ethernet0/1, 00:09:16 ago
+  Routing Descriptor Blocks:
+  * 10.0.23.13, from 10.255.0.21, 00:09:16 ago, via Ethernet0/1
+      Route metric is 110, traffic share count is 1
+RT02#
+show ip bgp summary | begin Neighbor
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+172.16.11.1     4        65000       0       0        1    0    0 never    Idle
+CEA1#

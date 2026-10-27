@@ -1,0 +1,222 @@
+
+######## 09:05:51 k-1: 全体の VRF モードに rd があるか(新しい文書は vrf X / rd と書く)
+configure
+Tue Oct 27 09:05:52.696 UTC
+RP/0/RP0/CPU0:XR01(config)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-vrf)#
+rd ?
+  <1-65535>.<0-65535>:<0-65535>  4-byte AS number in asdot (X.Y) format
+  <1-65535>:                     2-byte AS number
+  <65536-4294967295>:            4-byte AS number in asplain format
+  A.B.C.D:                       IPv4 address
+RP/0/RP0/CPU0:XR01(config-vrf)#rd 
+% Incomplete command.
+RP/0/RP0/CPU0:XR01(config-vrf)#
+abort
+RP/0/RP0/CPU0:XR01#
+
+######## 09:05:54 k-2: リモートの PE から来た経路(10.101.2.0/24)をグローバルへ出せるか= allow-imported-vpn の要否
+configure
+Tue Oct 27 09:05:55.740 UTC
+RP/0/RP0/CPU0:XR01(config)#
+route-policy TO-GLOBAL
+Tue Oct 27 09:05:56.307 UTC
+% WARNING: Policy object route-policy TO-GLOBAL exists! Reconfiguring it via CLI will replace current definition. Use abort to cancel.
+RP/0/RP0/CPU0:XR01(config-rpl)#
+if destination in (198.51.100.0/24, 10.101.2.0/24) then
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+pass
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+endif
+RP/0/RP0/CPU0:XR01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Oct 27 09:05:58.349 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast 10.101.2.0/24
+Tue Oct 27 09:06:20.646 UTC
+%% Network not in table
+RP/0/RP0/CPU0:XR01#
+show route 10.101.2.0/24
+Tue Oct 27 09:06:21.021 UTC
+
+% Network not in table
+
+RP/0/RP0/CPU0:XR01#
+configure
+Tue Oct 27 09:06:23.833 UTC
+RP/0/RP0/CPU0:XR01(config)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+export to default-vrf route-policy TO-GLOBAL allow-imported-vpn
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+commit
+Tue Oct 27 09:06:25.539 UTC
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+show configuration failed
+Tue Oct 27 09:06:26.045 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast 10.101.2.0/24
+Tue Oct 27 09:06:49.112 UTC
+BGP routing table entry for 10.101.2.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 17           17
+Last Modified: Oct 27 09:06:30.504 for 00:00:18
+Paths: (1 available, best #1)
+  Not advertised to any peer
+  Path #1: Received by speaker 0
+  Not advertised to any peer
+  65101
+    10.255.0.12 (metric 30) from 10.255.0.21 (10.255.0.12)
+      Received Label 23 
+      Origin IGP, metric 0, localpref 100, valid, internal, best, group-best, import-candidate, imported
+      Received Path ID 0, Local Path ID 1, version 17
+      Extended community: RT:65000:101 
+      Originator: 10.255.0.12, Cluster list: 10.255.0.21
+      Source AFI: VPNv4 Unicast, Source VRF: CUST-A, Source Route Distinguisher: 10.255.0.1:101
+      Original Source AFI: VPNv4 Unicast, Original Source Route Distinguisher: 10.255.0.12:101
+RP/0/RP0/CPU0:XR01#
+show route 10.101.2.0/24
+Tue Oct 27 09:06:49.544 UTC
+
+Routing entry for 10.101.2.0/24
+  Known via "bgp 65000", distance 200, metric 0
+  Tag 65101, type internal
+  Installed Oct 27 09:06:30.589 for 00:00:18
+  Routing Descriptor Blocks
+    10.255.0.12, from 10.255.0.21
+      Route metric is 0, Wt is 1
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+
+######## 09:06:49 k-3: 元に戻す
+configure
+Tue Oct 27 09:06:51.223 UTC
+RP/0/RP0/CPU0:XR01(config)#
+route-policy TO-GLOBAL
+Tue Oct 27 09:06:51.949 UTC
+% WARNING: Policy object route-policy TO-GLOBAL exists! Reconfiguring it via CLI will replace current definition. Use abort to cancel.
+RP/0/RP0/CPU0:XR01(config-rpl)#
+if destination in (198.51.100.0/24) then
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+pass
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+endif
+RP/0/RP0/CPU0:XR01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XR01(config)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+export to default-vrf route-policy TO-GLOBAL
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+commit
+Tue Oct 27 09:06:55.144 UTC
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+end
+RP/0/RP0/CPU0:XR01#
+
+######## 09:06:56 k-4: 既存の VRF(CUST-B)に取り込み RT(65000:101)を足す= RR に取り直しを頼むか(送った回数の前後)
+show bgp vpnv4 unicast neighbors 10.255.0.21 | include "Route refresh request"
+Tue Oct 27 09:06:57.729 UTC
+  Route refresh request: received 1, sent 1
+RP/0/RP0/CPU0:XR01#
+configure
+Tue Oct 27 09:06:59.489 UTC
+RP/0/RP0/CPU0:XR01(config)#
+vrf CUST-B
+RP/0/RP0/CPU0:XR01(config-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+import route-target
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+65000:101
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+commit
+Tue Oct 27 09:07:01.594 UTC
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vpnv4 unicast neighbors 10.255.0.21 | include "Route refresh request"
+Tue Oct 27 09:07:13.705 UTC
+  Route refresh request: received 1, sent 1
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-B | include "10.101"
+Tue Oct 27 09:07:14.122 UTC
+*> 10.101.1.0/24      172.16.11.2              0             0 65101 i
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65101 i
+RP/0/RP0/CPU0:XR01#
+configure
+Tue Oct 27 09:07:15.918 UTC
+RP/0/RP0/CPU0:XR01(config)#
+vrf CUST-B
+RP/0/RP0/CPU0:XR01(config-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+import route-target
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+no 65000:101
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+commit
+Tue Oct 27 09:07:18.225 UTC
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-B | include "10.101"
+Tue Oct 27 09:07:30.441 UTC
+RP/0/RP0/CPU0:XR01#
+
+######## 09:07:30 k-5: PE が取り込み先の無い RT の経路を捨てた数は見えるか(XR02 に CUST-T 用の経路= RT 65000:777 を流す代わりに、RT02 の CUST-B の RT を一時的に 65000:777 に)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+vrf definition CUST-B
+RT02(config-vrf)#
+address-family ipv4
+RT02(config-vrf-af)#
+route-target export 65000:777
+RT02(config-vrf-af)#
+no route-target export 65000:102
+RT02(config-vrf-af)#
+end
+RT02#
+show bgp vpnv4 unicast rd 10.255.0.12:102
+Tue Oct 27 09:07:55.773 UTC
+RP/0/RP0/CPU0:XR01#
+show bgp vpnv4 unicast neighbors 10.255.0.21 | include "denied|Failed RT|accepted"
+Tue Oct 27 09:07:56.175 UTC
+  1 accepted prefixes, 1 are bestpaths
+  Exact no. of prefixes denied: 0
+  Cumulative no. of prefixes denied: 1
+    No policy: 0, Failed RT match: 2
+RP/0/RP0/CPU0:XR01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+vrf definition CUST-B
+RT02(config-vrf)#
+address-family ipv4
+RT02(config-vrf-af)#
+route-target export 65000:102
+RT02(config-vrf-af)#
+no route-target export 65000:777
+RT02(config-vrf-af)#
+end
+RT02#
+show bgp vrf CUST-B | include "10.102"
+Tue Oct 27 09:08:21.781 UTC
+*> 10.102.1.0/24      172.16.21.2              0             0 65201 i
+*>i10.102.2.0/24      10.255.0.12              0    100      0 65202 i
+RP/0/RP0/CPU0:XR01#

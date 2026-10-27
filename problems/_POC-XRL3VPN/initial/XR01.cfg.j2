@@ -1,0 +1,104 @@
+!! _POC-XRL3VPN XR01(PE・XRd)= XRT-07 の M8-1〜5 を解き終えた設定+お客さま側の IF。
+!! CEA1 向けの IF だけグローバルでアドレスを付けておく(VRF へ移した時にアドレスが残るかを PoC で見る)。VRF・PE-CE・VPNv4 は PoC の段で足す。
+interface Loopback0
+ ipv4 address 10.255.0.1 255.255.255.255
+!
+interface Loopback1
+ description NMS - reserved for the management systems, not in IS-IS
+ ipv4 address 10.255.255.1 255.255.255.255
+!
+interface Loopback100
+ description CUSTOMER-A (advertised in BGP only)
+ ipv4 address 10.30.0.1 255.255.0.0
+!
+interface {{ links[3] }}
+ description PRIMARY to RT01
+ ipv4 address 10.0.1.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description BACKUP to RT03
+ ipv4 address 10.0.3.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[5] }}
+ description CUST-A site 1 (CEA1)
+ ipv4 address 172.16.11.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[6] }}
+ description CUST-B site 1 (CEB1)
+ no shutdown
+!
+interface {{ links[7] }}
+ description SHARED-SERVICES (SVC)
+ no shutdown
+!
+interface {{ links[8] }}
+ description INTERNET (INET AS 64500)
+ no shutdown
+!
+ipv4 access-list LDP-SP
+ 10 permit ipv4 host 10.255.0.11 any
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+   metric 10
+   mpls ldp sync
+  !
+ !
+ interface {{ links[4] }}
+  point-to-point
+  address-family ipv4 unicast
+   metric 100
+   mpls ldp sync
+  !
+ !
+!
+router bgp 65000
+ bgp router-id 10.255.0.1
+ address-family ipv4 unicast
+  network 10.30.0.0/16
+ !
+ neighbor 10.255.0.12
+  remote-as 65000
+  update-source Loopback0
+  address-family ipv4 unicast
+  !
+ !
+!
+mpls oam
+!
+mpls ldp
+ igp sync delay on-session-up 10
+ session protection for LDP-SP duration 600
+ neighbor 10.255.0.13:0 password clear CoreLdp-2026
+ address-family ipv4
+  label
+   local
+    allocate for host-routes
+    advertise
+     explicit-null
+    !
+   !
+  !
+ !
+ interface {{ links[3] }}
+ !
+ interface {{ links[4] }}
+ !
+!
+end

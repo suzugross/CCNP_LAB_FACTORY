@@ -1,0 +1,189 @@
+
+######## 09:26:03 f-1: ラベルの割り当て方。既定(プレフィックスごと?)
+show bgp vrf CUST-A labels
+Tue Oct 27 09:26:06.071 UTC
+BGP VRF CUST-A, state: Active
+BGP Route Distinguisher: 10.255.0.1:101
+VRF ID: 0x60000002
+BGP router identifier 10.255.0.1, local AS number 65000
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000002   RD version: 6
+BGP main routing table version 6
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop        Rcvd Label      Local Label
+Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
+Route Distinguisher Version: 6
+*> 10.101.1.0/24      172.16.11.2     nolabel         24004
+*>i10.101.2.0/24      10.255.0.12     22              nolabel
+*> 198.51.100.0/24    172.16.11.2     nolabel         24005
+
+Processed 3 prefixes, 3 paths
+RP/0/RP0/CPU0:XR01#
+show bgp vpnv4 unicast labels
+Tue Oct 27 09:26:06.472 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0x0
+BGP main routing table version 6
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop        Rcvd Label      Local Label
+Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
+Route Distinguisher Version: 6
+*> 10.101.1.0/24      172.16.11.2     nolabel         24004
+*>i10.101.2.0/24      10.255.0.12     22              nolabel
+*> 198.51.100.0/24    172.16.11.2     nolabel         24005
+Route Distinguisher: 10.255.0.12:101
+Route Distinguisher Version: 5
+*>i10.101.2.0/24      10.255.0.12     22              nolabel
+
+Processed 4 prefixes, 4 paths
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding
+Tue Oct 27 09:26:06.872 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24000  20          10.255.0.21/32     Gi0/0/0/1    10.0.3.13       1377        
+24001  Pop         10.255.0.13/32     Gi0/0/0/1    10.0.3.13       1054        
+24002  16          10.255.0.12/32     Gi0/0/0/0    10.0.1.11       3072        
+24003  Pop         10.255.0.11/32     Gi0/0/0/0    10.0.1.11       812         
+24004  Unlabelled  10.101.1.0/24[V]   Gi0/0/0/2    172.16.11.2     0           
+24005  Unlabelled  198.51.100.0/24[V] Gi0/0/0/2    172.16.11.2     0           
+RP/0/RP0/CPU0:XR01#
+
+######## 09:26:05 f-2: label mode per-vrf
+configure
+Tue Oct 27 09:26:08.380 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+label mode per-vrf
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+commit
+Tue Oct 27 09:26:10.484 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+show configuration failed
+Tue Oct 27 09:26:11.390 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A labels
+Tue Oct 27 09:26:29.420 UTC
+BGP VRF CUST-A, state: Active
+BGP Route Distinguisher: 10.255.0.1:101
+VRF ID: 0x60000002
+BGP router identifier 10.255.0.1, local AS number 65000
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000002   RD version: 10
+BGP main routing table version 10
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop        Rcvd Label      Local Label
+Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
+Route Distinguisher Version: 10
+*> 10.101.1.0/24      172.16.11.2     nolabel         24006
+*>i10.101.2.0/24      10.255.0.12     22              nolabel
+*> 198.51.100.0/24    172.16.11.2     nolabel         24006
+
+Processed 3 prefixes, 3 paths
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding
+Tue Oct 27 09:26:29.820 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24000  20          10.255.0.21/32     Gi0/0/0/1    10.0.3.13       1687        
+24001  Pop         10.255.0.13/32     Gi0/0/0/1    10.0.3.13       1192        
+24002  16          10.255.0.12/32     Gi0/0/0/0    10.0.1.11       3171        
+24003  Pop         10.255.0.11/32     Gi0/0/0/0    10.0.1.11       852         
+24006  Aggregate   CUST-A: Per-VRF Aggr[V]   \
+                                      CUST-A                       0           
+RP/0/RP0/CPU0:XR01#
+show ip bgp vpnv4 vrf CUST-A labels
+   Network          Next Hop      In label/Out label
+Route Distinguisher: 10.255.0.12:101 (CUST-A)
+   10.101.1.0/24    10.255.0.1      nolabel/24006
+   10.101.2.0/24    172.16.12.2     22/nolabel
+   198.51.100.0     10.255.0.1      nolabel/24006
+
+RT02#
+ping 10.101.1.1 source Loopback10 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.101.1.1, timeout is 2 seconds:
+Packet sent with a source address of 10.101.2.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+CEA2#
+
+######## 09:26:32 f-3: 既定に戻す
+configure
+Tue Oct 27 09:26:34.832 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+no label mode
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+commit
+Tue Oct 27 09:26:36.937 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+show configuration failed
+Tue Oct 27 09:26:37.845 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A labels
+Tue Oct 27 09:26:55.876 UTC
+BGP VRF CUST-A, state: Active
+BGP Route Distinguisher: 10.255.0.1:101
+VRF ID: 0x60000002
+BGP router identifier 10.255.0.1, local AS number 65000
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000002   RD version: 14
+BGP main routing table version 14
+BGP NSR Initial initsync version 2 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop        Rcvd Label      Local Label
+Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
+Route Distinguisher Version: 14
+*> 10.101.1.0/24      172.16.11.2     nolabel         24004
+*>i10.101.2.0/24      10.255.0.12     22              nolabel
+*> 198.51.100.0/24    172.16.11.2     nolabel         24005
+
+Processed 3 prefixes, 3 paths
+RP/0/RP0/CPU0:XR01#

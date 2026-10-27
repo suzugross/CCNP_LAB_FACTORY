@@ -1235,3 +1235,167 @@ XR01 の初期設定= XRT-07 の模範解+アクセスの IF のアドレス+前
      (コマンド抜き・図 5 枚= ラベルの道/道の作り方 3 通りの比較/ラボで誰が何を知っているか/パケット 1 つ/境界の 2 つの仕事の 4 通り)。
      本編 82 の冒頭と learn.yml(M8-6・M8-7 の read:)から開ける。図の道具は全角の幅を見込むようにした(日本語の名前が箱からはみ出していた)。
 
+
+## 22. M9 L3VPN(SPCOR 4.3)(2026-10-27 設計・PoC中)
+
+**範囲= SPCOR 4.3.a Intra-AS VPN・4.3.b 共有サービス(エクストラネットとインターネット)**。4.1.b Inter-AS(オプション A/B/C)と 4.1.c CSC は
+describe 級なので読み物だけで受ける(XR の ASBR の `retain route-target all`・オプション C の LU など)。IOS の L3VPN は ENARSI-MPLS-L3VPN-01〜06 で
+済んでいるので、**XR で書き方や動きが違うところ**に絞る。ラボは **`XRT-09`**(XRT-07 を解き終えた状態から)。
+2026-10-27 ユーザが XRT-07/08 を全通過 → 撤収して PoC(ユーザ了承)。
+
+### 22.1 盤面(PoC= `problems/_POC-XRL3VPN`・XRd 版と `_POC-XRL3VPNV`・XR01 だけ XRv9000 版)
+
+- コア= XRT-07 の四角形(IS-IS CORE・LDP・同期・セッション保護・RT03 の MD5)。**XR01 と RT02 が PE**、RT01/RT03 は P。
+- **XR02= VPNv4 のルート リフレクタ(XRd)**。RT03 の先の行き止まり(10.0.33.0/24・IS-IS だけ・LDP なし)= 転送の道に入らない
+  (XRd の公式の位置づけ= vRR そのもの・§19.4 のメモ)。PE 同士は VPNv4 を直接張らず XR02 とだけ。
+- お客さま(CE は IOL・据付で変えない):
+
+| サイト | 収容 | VRF | CE の AS | 経路 |
+|---|---|---|---|---|
+| CEA1 | XR01 Gi0/0/0/2(172.16.11.0/24) | CUST-A(RT 65000:101) | 65101 | LAN 10.101.1.0/24・公開 198.51.100.0/24 |
+| CEA2 | RT02 Et0/2(172.16.12.0/24) | CUST-A | 65101(同じ AS) | LAN 10.101.2.0/24 |
+| CEB1 | XR01 Gi0/0/0/3(172.16.21.0/24) | CUST-B(RT 65000:102) | 65201 | LAN 10.102.1.0/24 |
+| CEB2 | RT02 Et1/0(172.16.22.0/24) | CUST-B | 65202 | LAN 10.102.2.0/24 |
+| SVC | XR01 Gi0/0/0/4(172.16.91.0/24・静的) | SVC | — | 共有 10.99.1.0/24(配る)・社内 10.99.2.0/24(配らない) |
+| INET | XR01 Gi0/0/0/5(192.0.2.0/24・グローバル) | — | 64500 | 既定経路・203.0.113.0/24 |
+
+- RT の約束= お客さまは自分の RT と、共有サービスが配る 65000:900 を取り込む(RT02 は据付で取り込み済み)。SVC は A・B の RT を取り込む。
+- ラボ化では XRT-07 のグローバルの「お客さま A'」(Lo100 の 10.30/16・10.20/16 と XR01⇔RT02 の ipv4 iBGP)を外す想定(VPN のお客さまと名前が紛らわしい)。
+
+### 22.2 課題(案・PoC の結果で確定する)
+
+| 課題 | 中身(挙動で指定) | 主な XR の論点 |
+|---|---|---|
+| M9-1(構築) | お客さま A の拠点 1(CEA1)を XR01 に収容する(値は課題文で渡す)。VPNv4 は XR02 とだけ張る | 全体の `address-family vpnv4 unicast`・RD は BGP の VRF の下(無いと AF を作れない)・RT は `vrf` の下・PE-CE の eBGP に RPL |
+| M9-2(TS) | 「前任者が XR02 をルート リフレクタとして入れたが、拠点どうしが通じない」。PE 同士の直接のセッションは張らない | 仕込み= XR02 の `route-reflector-client` が ipv4 の AF の下だけ+前任者が足した `retain route-target all`(全部持っているのに配らない)。直すと CEA2 には届くが CEA1 には届かない= 2 段目は **XR は CE の AS を含む経路をそもそも送らない**(as-override) |
+| M9-3(構築) | 共有サービス= SVC の 10.99.1.0/24 だけを A・B の全拠点に見せる。10.99.2.0/24 は見せない・A と B は互いに見えない・SVC から両方へ届く。SVC の経路には社内の約束どおり 65000:999 も付ける | `export route-policy` と `set extcommunity rt … additive`(無いと 65000:999 が消える)・輸出の方針では経路を落とせない・同じ PE の VRF どうしも RT だけで取り込む |
+| M9-4(構築) | インターネット= A の両拠点に既定経路・A の公開セグメントだけをインターネットへ(B は出さない) | `import from default-vrf … advertise-as-vpn`(無いと RT02 側に届かない)・`export to default-vrf`(リモートの拠点の経路は `allow-imported-vpn` が要る)・グローバルの eBGP に RPL |
+
+- 拡張の案(PoC で確かめてから)= M9-4 で A の拠点 2 にも公開セグメント(198.51.100.128/25)を持たせ、`allow-imported-vpn` を要件の側から要るようにする。
+- 読み物だけで扱う(やってみる)= ラベルの割り当て方(既定はプレフィックスごと・`label mode per-vrf` で 1 本の Aggregate)・VRF を足した時の
+  自動の取り直し(Route refresh)・取り込み先の無い経路の捨て方(PE は Failed RT match に数える)・静的経路での受け渡し(`… vrf default <次ホップ>`)・
+  Inter-AS/CSC。
+
+### 22.3 PoC の結果(2026-10-27・XRd 版。手順 `poc/xr/l3vpn_poc.sh`・記録 `poc/xr/l3vpn-{a..k}.log`・TCP の確かめ `poc/xr/tcpprobe.py`)
+
+1. **IF を VRF へ**= アドレスの付いた IF に `vrf CUST-A` を足すコミットは通り、アドレスは残ったまま VRF へ移る(README の記録どおり)。
+   直後 5 秒の ping は `UUU`、30 秒後は成功(反映待ち)。★公式文書は「先にアドレスを消さないと拒否」(§22.5)= 食い違い。
+2. **BGP の木の順序**= 全体の `address-family vpnv4 unicast` が無いと、VPNv4 の近隣も VRF の AF も「The (parent) address family has not been initialized」で拒否。
+   RD の無い VRF に AF を作ると「**The RD for the VRF must be present before an address family is activated**」で拒否(擬似アトミックで同じコミットの全体の AF も戻る)
+   → RD 抜けは黙った故障にならない(TS の題材にしない)。全体の VRF モードにも `rd` がある(新しい文書の書き方)。
+3. **PE-CE**= RPL なしは隣接が上がって「0!」・`No policy: 2`(M5 と同じ)。PASS を付けると 2 本受ける。
+4. **RR**= XR02 に RR の設定が無い(素の iBGP・VRF なし)と、VPNv4 を **受けても全部黙って捨てる**(St/PfxRcd 0・0 accepted・拒否 0)。
+   `retain route-target all` を入れると全部保持するが反映しない(RT02 に届かない)。retain を外して両 PE を vpnv4 の AF で
+   `route-reflector-client` にすると保持も反映もする(RR は既定で全部保持)。
+5. **PE の RT のふるい**= XR01 は取り込み先の無い CUST-B の経路を捨てる(`show bgp vpnv4 unicast rd 10.255.0.12:102` が空)。
+   近隣の詳細に `Failed RT match: N` で数が出る。VRF を後から足すと **自動で Route refresh を 1 回送り**、5 秒以内に取り直した。
+6. **as-override**= 無いと XR01 は CEA2(AS 65101)の経路を CEA1(AS 65101)へ **送らない**(`Not advertised to any peer`・CEA1 の受信 0)。
+   IOS の PE は送って CE 側で落とす(受け側の検査)のと違う。as-override で `65000 65000` になって届き、A の拠点間 ping 成功。
+7. **ラベル**= 既定はプレフィックスごと(24004・24005)。`label mode per-vrf` で 1 本(`Aggregate CUST-A: Per-VRF Aggr[V]`)。
+   グローバルから取り込んだ既定経路には per-prefix のままでも VRF の 1 本が付く(文書の「接続・集約・ローカルは per-vrf」どおり)。
+8. **共有サービス**= `export route-policy` で 10.99.1.0/24 に `set extcommunity rt (65000:900) additive` → RT は 900 と 999。A・B の全拠点が 10.99.1.1 に届き、
+   10.99.2.1 と相手のお客さまには届かない。**additive なしだと 999 が消えて 900 だけ**(置き換え)。方針で pass しない経路も輸出はされる(落とせない)。
+9. **インターネット**= `import from default-vrf route-policy … ` だけだと既定経路は CEA1 には配られるが VPNv4 に出ない(RT02 に届かない)。
+   `advertise-as-vpn` を付けると RT02・CEA2 に届く。`export to default-vrf` で 198.51.100.0/24 がグローバルへ → INET へ。
+   リモートの PE から来た経路(10.101.2.0/24)は **`allow-imported-vpn` が無いとグローバルへ出ない**。CEA1 の公開アドレスから INET へ ping 成功。
+   静的経路の `0.0.0.0/0 vrf default 192.0.2.2`(VRF の中で次ホップをグローバルに)もコミットが通り経路が入る。
+10. ★**XRd の転送**= ping はすべて通る。**TCP/UDP は、XR01 がお客さまから受けてラベルを付ける向き(CEA1→CEA2)と、ラベルなしで通り抜ける向き
+    (CEA1→SVC・CEA1→INET)で L4 チェックサムが壊れる**(相手の IOL の TCP/UDP の checksum errors が増える・SSH のバナーが返らない・
+    CEA1 からの traceroute は RT02 の先が `*`)。ラベルを外して CE へ出す向き(CEA2→CEA1)は正常。
+    → お客さまの traceroute や TCP が片向きだけ死ぬと、解く側が設定の誤りと取り違える。**XR01 は XRv9000 にしたい**(XRv9000 版の比較は §22.4)。
+
+### 22.4 XRv9000 との比較(2026-10-27・盤面 `_POC-XRL3VPNV`= XR01 だけ XRv9000 26.1.1・XR02 は XRd のまま。同じ手順 `PID=_POC-XRL3VPNV poc/xr/l3vpn_poc.sh a…l`・記録 `poc/xr/l3vpnv-*.log`)
+
+- **制御プレーンは §22.3 の 1〜9 がすべて同じ**(拒否の文言・RR の保持と反映・Failed RT match・Route refresh・as-override の送らない動作・
+  ラベル(既定 per-prefix 24004/24005・per-vrf で Aggregate 24006)・additive の置き換え・advertise-as-vpn・allow-imported-vpn・静的での受け渡し)。
+- **転送は XRv9000 が正常**= CEA1⇔CEA2 の TCP が両向きとも通る(SSH のバナーが返る)・traceroute が両向きとも最後まで出る・
+  CEA1⇔SVC(同じ PE の VRF どうし)・CEA1⇔INET(VRF⇔グローバル)の TCP も通る・相手の IOL の checksum errors は 0 のまま。
+- 段 l(拠点 2 の公開セグメント 198.51.100.128/25)= `allow-imported-vpn` でグローバルに入り、XR01 の CEF は RT02 へ `labels imposed {16 25}`。
+  INET⇔CEA2 の ping・TCP とも両向き正常。CEA2 から INET への traceroute は RT02→RT01(`Labels 22/24006`)→XR01→INET。
+- IF を VRF へ(公式との食い違いの補足・`l3vpnv-m*.log`)= XRv9000 でもコミットは拒否されない。グローバル→VRF・VRF→グローバル・
+  **既にある** VRF から VRF へ= アドレスを残したまま 30 秒で通る。**移し先の VRF を同じコミットで作って VRF から VRF へ移した時は、30 秒待っても通じなかった**
+  (XRd では同じコミットで作ったグローバル→VRF が通った= 原因は切り分けていない)。
+- **判定(案)= XR01 は XRv9000 26.1.1、XR02(RR)は XRd 26.1.1**。XRd の PE はお客さまの TCP/UDP を片向きだけ壊し、
+  解く側が設定の誤りと取り違える(§22.3-10)。XRv9000 は 1 台なので同時 2 台の上限に収まる(構築は約 10 分)。
+
+### 22.5 公式文書・RFC での裏どり(2026-10-27・PoC と並行。xrdocs.io は取得していない・問題集サイトは使っていない)
+
+| 論点 | 公式の記述(出典) | 実機(XRd 26.1.1) | 判定 |
+|---|---|---|---|
+| RT と RD の置き場 | RT= `vrf X / address-family ipv4 unicast / import\|export route-target`・RD= `router bgp / vrf X / rd`(Cisco 8000 BGP コマンド リファレンス)。新しい文書は `vrf X / rd` も示す(ASR 9000 BGP 設定ガイド 24.x・Cisco 8000「BGP Route Distinguisher」) | 両方ある(`vrf CUST-A / rd ?` が通る) | 一致。模範解は BGP の VRF の下(どちらが勝つかは未確認) |
+| RD の無い VRF | 公式の記述なし(RFC 4364 §4.2= VPN-IPv4 経路には RD が要る) | AF を作るコミットが拒否される | 実機で補う |
+| ★IF を VRF へ | 「VRF を付ける・外す・変える前に IPv4/IPv6 アドレスを消すこと。消さないと拒否」(NCS 5500 L3VPN 設定ガイド 7.11・ASR 9000 MPLS L3VPN 設定ガイド 7.11) | 拒否されない・アドレスは残ったまま VRF へ移り、30 秒後には通る | **食い違い(ユーザ判断 §22.6)** |
+| 全体の AF が先 | 「近隣の下に AF を作るには、BGP の全体にその AF が要る」(ASR 9000 BGP 設定ガイド 24.x) | 同じ(VRF の AF も全体の vpnv4 が要る) | 一致 |
+| RT のふるい | PE は取り込みの RT に合わない経路を RPL なしで捨てる(ASR 9000 ルーティング ポリシー 24.x)。VRF が無く RR でもない XR は経路を持たない(TAC 217202) | 同じ(素の iBGP の XR02 は 0 accepted) | 一致 |
+| RR は全部保持 | 「RR は全部の VPNv4 経路を保持する。既定の動作なので all は要らない」・RR クライアントが 1 つでもあれば RR(ASR 9000 BGP 24.x・Cisco 8000 BGP CR) | 同じ | 一致。★コマンド リファレンスの retain の既定値の欄は「全部受ける」と書き、本文・TAC と矛盾 |
+| retain route-target | オプション B の ASBR に必須・RR の分割に route-policy 形(Cisco 8000/NCS 5500 BGP CR) | RR でない XR02 に入れると保持するが反映しない(iBGP→iBGP) | 一致(反映しないのは iBGP の原則) |
+| VRF を足すと取り直す | 「新しい VRF の RT の経路を持っていなければ RR に Route refresh を送る」(同上) | 1 回送って 5 秒で取り直した | 一致 |
+| eBGP に方針 | 「eBGP の近隣は入出の方針が要る。無ければ送受しない」(VRF の例外なし)・7.5.1 から `bgp unsafe-ebgp-policy` | 同じ | 一致 |
+| as-override / allowas-in / site-of-origin | VRF の近隣の AF の下(Cisco 8000 BGP CR) | as-override で届く。★XR は as-override が無いと送らない(送る側の検査)| 一致(送らない動作は文書に明記なし・実機で補う) |
+| ラベルの割り当て | 既定= プレフィックスごと。`label mode per-vrf\|per-ce\|route-policy`(Cisco 8000/NCS 5500 BGP CR)。Cisco 8000 は per-vrf を明示すること(L3VPN 設定ガイド 7.11) | 既定 per-prefix・per-vrf で Aggregate 1 本 | 一致 |
+| 輸出の方針 | `export route-policy`。「この方針で経路は落とせない」(BGP CR)。additive の無い set は RT を置き換えるかは明記なし | 落とせない・additive なしは置き換え | 一致+実機で補う |
+| 同じ PE の VRF どうし | 「VPNv4 にする時(または PE の中で VRF から VRF へ流れる時)に輸出の RT を付ける」(ルーティング ポリシー 24.x) | RT だけで取り込む | 一致 |
+| VRF とグローバル | `vrf X / address-family ipv4 unicast / import from default-vrf route-policy P [advertise-as-vpn]`・`export to default-vrf route-policy P [allow-imported-vpn]`。方針は必須。advertise-as-vpn が無いと「PE には配らないが CE には配る」。リモートの経路は allow-imported-vpn が要る(ASR 9000 BGP 24.x・4.3.1 から)。TAC 218336 に ASR 9901 での例 | すべて同じ | 一致 |
+| 静的での受け渡し | `prefix [vrf 名] 次ホップ`(ASR 9000 静的経路 24.x・XR 12000 CR 4.3)。`vrf default` を書けるかは明記なし | 通る | 実機で補う |
+| IOS の PE | `vrf definition`・`bgp default route-target filter`(既定で有効) | — | RT02 は据付 |
+| Inter-AS/CSC | RFC 4364 §9・§10。XR のオプション B= ASBR に VRF 不要・`retain route-target all`・eBGP の VPNv4 に方針・相手 ASBR への /32 静的経路(NCS 5500 L3VPN 7.11)。オプション C= LU と `allocate-label`。CSC= VRF の近隣で LU | — | 読み物だけ |
+| XRd の転送 | XRd のデータシート= Control Plane 版は「最小限の転送(ピアリングや南向きに足りる程度)」 | §22.3-10 | XRv9000 と比べて決める |
+
+- 出典(題名・版): Cisco 8000 BGP Command Reference(累積・24.x/25.x の履歴つき)／NCS 5500/540/560 BGP Command Reference／
+  Routing Configuration Guide for ASR 9000 IOS XR 24.x(Implementing BGP・Implementing Routing Policy・Implementing Static Routes。2026-09 版)／
+  L3VPN Configuration Guide for NCS 5500 IOS XR 7.11.x／L3VPN Configuration Guide for Cisco 8000 IOS XR 7.11.x／MPLS L3VPN Configuration Guide for ASR 9000 7.11.x／
+  Cisco 8000 BGP Configuration Guide「BGP Route Distinguisher」／XR 12000 Routing Command Reference 4.3.x／TAC 217202「Cisco IOS-XR BGP with MPLS Designs」(2021)／
+  TAC 218336「Configure Route Leak between GRT and VRF with IOS XR」／IOS MPLS Command Reference(`bgp default route-target filter`)／IOS XRd Data Sheet／RFC 4364。
+
+### 22.6 ユーザ判断(2026-10-27 決定= 4 点とも案どおり。1= 採点しない・2= XR01 は XRv9000/XR02 は XRd・3= 拠点 2 の公開も入れる・4= 外す)
+
+1. **★公式と実機の食い違い(CLAUDE.md の作問の裏どり 2)= アドレスの付いた IF の VRF を変える**。公式(NCS 5500/ASR 9000 の L3VPN 設定ガイド 7.11)は
+   「先にアドレスを消さないと拒否」。実機(XRd・XRv9000 26.1.1)は拒否せず、たいていはアドレスを残したまま通じるが、通じない場合もあった(§22.4)。
+   案= **この論点は採点しない**。盤面のお客さま側の IF は最初からアドレスなしにして、課題文で「VRF とアドレス」を渡す(模範解は vrf→アドレスの順)。
+   読み物に「文書の規則と 26.1.1 の挙動」を注記する。
+2. **機種**= XR01 を XRv9000(§22.4 の判定案)・XR02 を XRd。
+3. **課題の並びと中身**= §22.2 の 4 本。M9-4 を拠点 2 の公開セグメントまで広げて `allow-imported-vpn` を要件から要るようにするか(PoC で成立を確認済み)。
+4. XRT-07 のグローバルの「お客さま A'」(10.30/16・10.20/16 と XR01⇔RT02 の ipv4 iBGP)を外すか。
+
+### 22.7 課題の確定案(2026-10-27・§22.6 の決定を受けて)
+
+**初期状態**= XRT-07 を解き終えた状態から「お客さま A'」(XR01/RT02 の Lo100 と XR01⇔RT02 の ipv4 iBGP)を外したもの+ 新しいノード。
+RT02(VRF CUST-A/B・XR02 への VPNv4)・CE 5 台・INET は据付(変えない)。XR02 は「前任者が入れた RR」= 仕込みあり。
+XR01 のお客さま側の IF は説明だけ(アドレスなし= §22.6-1)。機種= XR01 は XRv9000 26.1.1・XR02 は XRd 26.1.1。
+公開セグメントは拠点 1 が 198.51.100.0/25(CEA1)・拠点 2 が 198.51.100.128/25(CEA2)。ラボ ID は `XRT-09`。
+
+| 課題 | 中身(挙動で指定・値は課題文で渡す) | 確認(案) |
+|---|---|---|
+| M9-1(構築) | お客さま A・B の拠点 1(CEA1・CEB1)を XR01 に収容する。VRF・RD・RT・IF のアドレス・CE の AS を表で渡す。VPNv4 はルート リフレクタ XR02 とだけ張る(PE 同士は張らない) | 2 つの VRF の RD/RT・CE との隣接が Established で経路を受けている(`!` なし)・XR01⇔XR02 の VPNv4 が Established で 2 VRF の経路を送っている |
+| M9-2(TS) | 「CEA1 と CEA2(B も同じ)の LAN どうしが通じない」。XR02 を直してよい・CE と RT02 は変えない・PE 同士の VPNv4 は張らない | RT02 の両 VRF に XR01 の拠点の経路(Cluster list に XR02)・CEA1 に 10.101.2.0/24・両お客さまの拠点間 ping 両向き・XR02 の両 PE が vpnv4 の RR クライアント・A と B が互いに届かない |
+| M9-3(構築) | 共有サービス= SVC(静的)を XR01 に収容。10.99.1.0/24 だけを A・B の全拠点に見せる・10.99.2.0/24 は見せない・SVC から両方へ届く・SVC の経路には 65000:999 も付ける | RT02 の 10.99.1.0/24 の RT が 900 と 999・CEA2/CEB2 から 10.99.1.1 へ ping・10.99.2.0/24 がお客さまの VRF に無い・A⇔B 不通のまま |
+| M9-4(構築) | インターネット= INET(AS 64500)とグローバルで eBGP。A の両拠点に既定経路・A の公開セグメント 2 つだけをインターネットへ(B は出さない) | INET の BGP に 198.51.100.0/25 と 128/25 だけ・CEA1/CEA2 の公開アドレスから 203.0.113.10 へ ping・CEA2 に既定経路・B に既定経路が無い |
+
+- 配点の案= M9-1 25・M9-2 35・M9-3 20・M9-4 20。
+- M9-2 の仕込み(XR02)= 前任者が `route-reflector-client` を **ipv4 unicast の AF の下**に書き、効かないので `retain route-target all` を足した
+  (XR02 は全部持っているのに反映しない)。直すと CEA2 には届くが CEA1 には届かない= 2 段目は XR01 の as-override(M9-1 の設定の続き)。
+- 別解(挙動で採点するので通る)= retain を残したまま RR クライアントを足す・`allowas-in` は CE を変えるので不可(制約)・M9-3 の輸出 RT を
+  `export route-target` に 900 を足す形(全経路に付く= 10.99.2.0/24 も見えて落ちる)・M9-4 の静的経路での受け渡し(拠点 2 に既定経路が届かない形は落ちる)。
+- 誤答の想定= M9-3 で additive を付けない(999 が消える)・M9-4 で advertise-as-vpn なし(CEA2 に既定経路なし)・allow-imported-vpn なし(128/25 が INET に出ない)。
+- 読み物 M9(日英)= XR の L3VPN の設定の木(RD と RT の置き場・全体の AF が先)・PE-CE と RPL・RT のふるいと RR・as-override(送らない)・ラベルの割り当て方・
+  エクストラネット・VRF とグローバル・Inter-AS/CSC(describe)・IF の VRF 変更の注記(§22.6-1)。やってみる= ラベルの割り当て・Route refresh・Failed RT match・静的での受け渡し。
+
+### 22.8 実装の結果(2026-10-27)
+
+- 成果物= `problems/XRT-09`(XR01= XRv9000 26.1.1・XR02= XRd 26.1.1・RT01〜RT03/CE 4 台/SVC/INET= IOL 17.15・課題ごとの確認 `grading.m9t1〜4.yml`・
+  最終 `grading.yml`= M9-1 25・M9-2 35・M9-3 20・M9-4 20・`learn.yml`(日英・M9-2 の模範解は「On XR02:」「On XR01:」の 2 塊)・課題文 日英)、
+  読み物 `courses/xr/{en,ja}/90-m9-l3vpn.md`(7 節+実践・「やってみる」6 つ・図は `:::topo`)・実践 `91-m9-practice.md`(`course.sh` が課題文から切り出す)・
+  本の部に「VPN サービス」を足した(M9。M11 L2VPN もここに入る想定)。
+  模範解= `poc/xr/solve_xrt09.sh`(誤答・別解・undo つき)・逐語= `poc/xr/verbatim.py`(★見出し「On XRnn:」で送り先を替えるよう拡張。見出しの無い従来の模範解は従来どおり)・
+  E2E= `poc/xr/e2e_xrt09.sh`・やってみるの実測= `poc/xr/try_xrt09.sh`・記録 `poc/xr/expM9-*.log`。
+- 実機 E2E= 白紙 0(課題ごと・最終)→ 模範解 100(課題ごと・最終)・learn.yml の模範解を逐語で流して課題ごと・最終とも 100・reset 後 0(XR02 も仕込みへ戻る)。
+  誤答= M9-2 で RR だけ直す 55(CEA2 には届くが CEA1 に届かない)・M9-3 で additive なし 85・900 を VRF 全体の export に 70・M9-4 で advertise-as-vpn なし 65・
+  allow-imported-vpn なし 50。別解= XR02 の ipv4 の AF と retain を消す形 100・M9-3 で RT をすべて set する形 100。provision 約 12 分。
+- **実装で分かったこと**:
+  1. 白紙で M9-4 の「B に既定経路が無い」が通った(否定だけの確認)→ B の拠点間の経路があることを同じ確認に入れた(否定の条件は肯定の条件と組にする= README §4 の規則どおり)。
+  2. XR の `show bgp … <prefix>` は出力の最後が `Extended community: RT:… ` の行で終わり、採点は末尾の空白を落とす→ RT の後ろは `\s` でなく `(?!\d)` で見る。
+  3. ★RT のふるいの「やってみる」は M9-3 の前に限る。M9-3 以降は VRF SVC が 65000:102 も取り込むので、CUST-B から外しても XR01 は B の経路を持ち続ける
+     (最初の測定はこれで失敗)。M9-3 の前なら、外した瞬間に捨て、`clear bgp vpnv4 unicast 10.255.0.21 soft in` の後に `Failed RT match: 2`、戻すと自動で Route refresh(送った回数 2→3)・5 秒以内に戻る。
+  4. 既定(per-prefix)でも、グローバルから取り込んだ既定経路には VRF の Aggregate ラベル(24009)が付く。`label mode per-vrf` にすると CE の経路も 24009 にまとまる。
+  5. as-override を外すと XR01 は拠点 2 の 2 経路を CEA1 から **取り下げる**(送らない動作)。経路に 65101 を含まない 0/0 と 10.99.1.0/24 は送り続ける。
+  6. 学習モードの課題文の切り出し(`lab_console._learn_texts`)は 4 本とも日英で取れた。XRv9000 の XR01 と XRd の XR02 が同じラボにあっても採点・reset はそのまま動く。

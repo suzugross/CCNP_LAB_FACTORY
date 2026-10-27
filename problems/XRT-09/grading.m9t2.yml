@@ -1,0 +1,56 @@
+# M9-2: 拠点どうしを通す TS。仕込み= XR02 の RR クライアントが ipv4 の AF の下だけ+retain(全部持つが反映しない)。
+# 直すと CEA2 には届くが CEA1 には届かない= 2 段目は XR01 の as-override(XR は CE の AS を含む経路を送らない)。PoC §22.3-4〜6。
+problem: XRT-09
+total_points: 100
+checks:
+  - name: 'M9-2 RT02: learns customer A''s site 1 from XR01, reflected by XR02'
+    node: RT02
+    command: 'show ip bgp vpnv4 vrf CUST-A 10.101.1.0'
+    raw:
+      - { regex: '10\.255\.0\.1 \(metric \d+\)[\s\S]*?from 10\.255\.0\.21' }
+      - { regex: 'Cluster list: 10\.255\.0\.21' }
+    points: 15
+  - name: 'M9-2 CEA1: learns site 2 of customer A from XR01'
+    node: CEA1
+    command: 'show ip bgp'
+    raw:
+      - { regex: '10\.101\.2\.0/24\s+172\.16\.11\.1\s' }
+    points: 15
+  - name: 'M9-2 CEA1: the LAN of site 1 reaches the LAN of site 2'
+    node: CEA1
+    command: 'ping 10.101.2.1 source Loopback10 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 15
+  - name: 'M9-2 CEA2: the LAN of site 2 reaches the LAN of site 1'
+    node: CEA2
+    command: 'ping 10.101.1.1 source Loopback10 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 15
+  - name: 'M9-2 CEB1: the sites of customer B reach each other'
+    node: CEB1
+    command: 'ping 10.102.2.1 source Loopback10 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 15
+  - name: 'M9-2 CEB2: the sites of customer B reach each other (the other way)'
+    node: CEB2
+    command: 'ping 10.102.1.1 source Loopback10 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 10
+  - name: 'M9-2 CEA2: customer A learns nothing of customer B'
+    node: CEA2
+    command: 'show ip route'
+    raw:
+      - { regex: '10\.101\.1\.0' }
+      - { not_regex: '10\.102\.' }
+    points: 8
+  - name: 'M9-2 CEB1: customer B learns nothing of customer A'
+    node: CEB1
+    command: 'show ip route'
+    raw:
+      - { regex: '10\.102\.2\.0' }
+      - { not_regex: '10\.101\.' }
+    points: 7

@@ -1,0 +1,30 @@
+!! _POC-XRL3VPN XR02(VPNv4 のルート リフレクタ候補・XRd)。転送の道には入らない(RT03 の先の行き止まり)。
+!! IS-IS CORE だけ。LDP なし。BGP(VPNv4)は PoC の段で足す。
+interface Loopback0
+ ipv4 address 10.255.0.21 255.255.255.255
+!
+interface {{ links[3] }}
+ description RR-LINK to RT03
+ ipv4 address 10.0.33.21 255.255.255.0
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0021.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+   metric 10
+  !
+ !
+!
+end

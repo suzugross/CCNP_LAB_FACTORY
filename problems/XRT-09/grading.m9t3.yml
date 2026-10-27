@@ -1,0 +1,71 @@
+# M9-3: 共有サービス。10.99.1.0/24 には 65000:900 と 65000:999・他の SVC の経路は 999 だけ(additive が無いと 999 が消える)。
+# 輸出の方針は経路を落とせない= 10.99.2.0/24 を隠すのは RT(誰も 999 を取り込まない)。PoC §22.3-8。
+problem: XRT-09
+total_points: 100
+checks:
+  - name: 'M9-3 XR01: 10.99.1.0/24 leaves VRF SVC with route targets 65000:900 and 65000:999'
+    node: XR01
+    command: 'show bgp vpnv4 unicast rd 10.255.0.1:900 10.99.1.0/24'
+    raw:
+      - { regex: 'Extended community:[^\n]*RT:65000:900' }
+      - { regex: 'Extended community:[^\n]*RT:65000:999' }
+    points: 15
+  - name: 'M9-3 XR01: 10.99.2.0/24 leaves VRF SVC with route target 65000:999 only'
+    node: XR01
+    command: 'show bgp vpnv4 unicast rd 10.255.0.1:900 10.99.2.0/24'
+    raw:
+      - { regex: 'Extended community:[^\n]*RT:65000:999' }
+      - { not_regex: 'RT:65000:900' }
+    points: 10
+  - name: 'M9-3 CEA2: site 2 of customer A reaches the shared servers'
+    node: CEA2
+    command: 'ping 10.99.1.1 source Loopback10 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 10
+  - name: 'M9-3 CEB2: site 2 of customer B reaches the shared servers'
+    node: CEB2
+    command: 'ping 10.99.1.1 source Loopback10 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 10
+  - name: 'M9-3 CEA1: site 1 of customer A reaches the shared servers'
+    node: CEA1
+    command: 'ping 10.99.1.1 source Loopback10 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 10
+  - name: 'M9-3 CEB1: site 1 of customer B reaches the shared servers'
+    node: CEB1
+    command: 'ping 10.99.1.1 source Loopback10 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 5
+  - name: 'M9-3 SVC: reaches site 2 of customer A'
+    node: SVC
+    command: 'ping 10.101.2.1 source Loopback10 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 10
+  - name: 'M9-3 SVC: reaches site 2 of customer B'
+    node: SVC
+    command: 'ping 10.102.2.1 source Loopback10 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 10
+  - name: 'M9-3 CEA2: learns 10.99.1.0/24 but not 10.99.2.0/24, and nothing of customer B'
+    node: CEA2
+    command: 'show ip route'
+    raw:
+      - { regex: '10\.99\.1\.0' }
+      - { not_regex: '10\.99\.2\.0' }
+      - { not_regex: '10\.102\.' }
+    points: 10
+  - name: 'M9-3 CEB1: learns 10.99.1.0/24 but not 10.99.2.0/24, and nothing of customer A'
+    node: CEB1
+    command: 'show ip route'
+    raw:
+      - { regex: '10\.99\.1\.0' }
+      - { not_regex: '10\.99\.2\.0' }
+      - { not_regex: '10\.101\.' }
+    points: 10

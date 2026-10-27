@@ -1,0 +1,87 @@
+!! XRT-09 XR01(PE・XRv9000 26.1.1)= XRT-07 の M8-1〜5 を解き終えた設定から、グローバルのお客さま A'(Lo100・RT02 との ipv4 iBGP)を外したもの。
+!! お客さま側の IF(Gi0/0/0/2〜5)は説明だけ(アドレスなし= VRF とアドレスは M9 の課題で入れる)。BGP は未設定。
+interface Loopback0
+ ipv4 address 10.255.0.1 255.255.255.255
+!
+interface Loopback1
+ description NMS - reserved for the management systems, not in IS-IS
+ ipv4 address 10.255.255.1 255.255.255.255
+!
+interface {{ links[3] }}
+ description PRIMARY to RT01
+ ipv4 address 10.0.1.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description BACKUP to RT03
+ ipv4 address 10.0.3.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[5] }}
+ description CUST-A site 1 (CEA1)
+ no shutdown
+!
+interface {{ links[6] }}
+ description CUST-B site 1 (CEB1)
+ no shutdown
+!
+interface {{ links[7] }}
+ description SHARED-SERVICES (SVC)
+ no shutdown
+!
+interface {{ links[8] }}
+ description INTERNET (INET AS 64500)
+ no shutdown
+!
+ipv4 access-list LDP-SP
+ 10 permit ipv4 host 10.255.0.11 any
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+   metric 10
+   mpls ldp sync
+  !
+ !
+ interface {{ links[4] }}
+  point-to-point
+  address-family ipv4 unicast
+   metric 100
+   mpls ldp sync
+  !
+ !
+!
+mpls oam
+!
+mpls ldp
+ igp sync delay on-session-up 10
+ session protection for LDP-SP duration 600
+ neighbor 10.255.0.13:0 password clear CoreLdp-2026
+ address-family ipv4
+  label
+   local
+    allocate for host-routes
+    advertise
+     explicit-null
+    !
+   !
+  !
+ !
+ interface {{ links[3] }}
+ !
+ interface {{ links[4] }}
+ !
+!
+end

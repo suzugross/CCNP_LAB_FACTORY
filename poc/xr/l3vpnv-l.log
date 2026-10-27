@@ -1,0 +1,185 @@
+
+######## 09:35:22 l-1: A の拠点 2 にも公開セグメント(198.51.100.128/25)。リモートの経路をインターネットへ出す= allow-imported-vpn・戻りは XR01 でラベルを付けて RT02 へ
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CEA2(config)#
+interface Loopback11
+CEA2(config-if)#
+description PUBLIC (Internet-facing)
+CEA2(config-if)#
+ip address 198.51.100.129 255.255.255.128
+CEA2(config-if)#
+exit
+CEA2(config)#
+router bgp 65101
+CEA2(config-router)#
+address-family ipv4
+CEA2(config-router-af)#
+network 198.51.100.128 mask 255.255.255.128
+CEA2(config-router-af)#
+end
+CEA2#
+configure
+Tue Oct 27 09:35:29.914 UTC
+RP/0/RP0/CPU0:XR01(config)#
+route-policy TO-GLOBAL
+Tue Oct 27 09:35:30.414 UTC
+% WARNING: Policy object route-policy TO-GLOBAL exists! Reconfiguring it via CLI will replace current definition. Use abort to cancel.
+RP/0/RP0/CPU0:XR01(config-rpl)#
+if destination in (198.51.100.0/24, 198.51.100.1$0.0/24, 198.51.100.12                          8/25) thenif destination in (198.51.100.0/24, 198.51.100.$
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+pass
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+endif
+RP/0/RP0/CPU0:XR01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XR01(config)#
+route-policy INET-OUT
+Tue Oct 27 09:35:32.418 UTC
+% WARNING: Policy object route-policy INET-OUT exists! Reconfiguring it via CLI will replace current definition. Use abort to cancel.
+RP/0/RP0/CPU0:XR01(config-rpl)#
+if destination in (198.51.100.0/24, 198.51.100.1$0.0/24, 198.51.100.12                          8/25) thenif destination in (198.51.100.0/24, 198.51.100.$
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+pass
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+endif
+RP/0/RP0/CPU0:XR01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XR01(config)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+export to default-vrf route-policy TO-GLOBAL $policy TO-GLOBAL a                          llow-imported-vpnexport to default-vrf route-policy TO-GLOBAL$
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+commit
+Tue Oct 27 09:35:35.628 UTC
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+show configuration failed
+Tue Oct 27 09:35:36.534 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast 198.51.100.128/25
+Tue Oct 27 09:36:09.433 UTC
+BGP routing table entry for 198.51.100.128/25
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 14           14
+Last Modified: Oct 27 09:35:41.031 for 00:00:28
+Paths: (1 available, best #1)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    192.0.2.2       
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    192.0.2.2       
+  65101
+    10.255.0.12 (metric 30) from 10.255.0.21 (10.255.0.12)
+      Received Label 25 
+      Origin IGP, metric 0, localpref 100, valid, internal, best, group-best, import-candidate, imported
+      Received Path ID 0, Local Path ID 1, version 14
+      Extended community: RT:65000:101 
+      Originator: 10.255.0.12, Cluster list: 10.255.0.21
+      Source AFI: VPNv4 Unicast, Source VRF: CUST-A, Source Route Distinguisher: 10.255.0.1:101
+      Original Source AFI: VPNv4 Unicast, Original Source Route Distinguisher: 10.255.0.12:101
+RP/0/RP0/CPU0:XR01#
+show route 198.51.100.128/25
+Tue Oct 27 09:36:09.834 UTC
+
+Routing entry for 198.51.100.128/25
+  Known via "bgp 65000", distance 200, metric 0
+  Tag 65101, type internal
+  Installed Oct 27 09:35:40.718 for 00:00:29
+  Routing Descriptor Blocks
+    10.255.0.12, from 10.255.0.21
+      Route metric is 0, Wt is 1
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+show cef 198.51.100.128/25 | include "via|label|Label"
+Tue Oct 27 09:36:10.235 UTC
+   via 10.255.0.12/32, 5 dependencies, recursive [flags 0x6000]
+    recursion-via-/32
+    next hop 10.255.0.12/32 via 24002/0/21
+     next hop 10.0.1.11/32 GigabitEthernet0/0/0/0 labels imposed {16 25}
+RP/0/RP0/CPU0:XR01#
+show ip bgp
+BGP table version is 5, local router ID is 203.0.113.10
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+      0.0.0.0          0.0.0.0                                0 i
+ *>   198.51.100.0     192.0.2.1                              0 65000 65101 i
+ *>   198.51.100.128/25
+                      192.0.2.1                              0 65000 65101 i
+ *>   203.0.113.0      0.0.0.0                  0         32768 i
+INET#
+ping 198.51.100.129 source Loopback10 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 198.51.100.129, timeout is 2 seconds:
+Packet sent with a source address of 203.0.113.10 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/2/2 ms
+INET#
+ping 203.0.113.10 source Loopback11 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 203.0.113.10, timeout is 2 seconds:
+Packet sent with a source address of 198.51.100.129 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+CEA2#
+traceroute 203.0.113.10 source Loopback11 numeric timeout 1 probe 1 ttl 1 8
+Type escape sequence to abort.
+Tracing the route to 203.0.113.10
+VRF info: (vrf in name/id, vrf out name/id)
+  1 172.16.12.1 [AS 64500] 1 msec
+  2 10.0.12.11 [AS 64500] [MPLS: Labels 22/24006 Exp 0] 2 msec
+  3 10.0.1.1 [AS 64500] 11 msec
+  4 192.0.2.2 [AS 64500] 2 msec
+CEA2#
+
+######## 09:36:13 l-2: TCP(INET→CEA2= XR01 でラベルを付ける・CEA2→INET= XR01 でラベルを外してグローバルへ)
+show ip traffic | include checksum|format errors
+         0 format errors, 0 checksum errors, 26 bad hop count
+  Rcvd: 0 format errors, 0 checksum errors, 0 redirects, 2 unreachable
+  Rcvd: 31 total, 0 checksum errors, 31 no port 0 finput
+  Rcvd: 1021 total, 0 checksum errors, 0 no port
+  Total: 0/0, 0 checksum errors, 0 format errors
+  Rcvd: 0 total, 0 checksum errors
+CEA2#
+show ip traffic | include checksum|format errors
+         0 format errors, 0 checksum errors, 26 bad hop count
+  Rcvd: 0 format errors, 0 checksum errors, 0 redirects, 0 unreachable
+  Rcvd: 44 total, 0 checksum errors, 44 no port 0 finput
+  Rcvd: 311 total, 0 checksum errors, 0 no port
+  Total: 0/0, 0 checksum errors, 0 format errors
+  Rcvd: 0 total, 0 checksum errors
+INET#
+Trying 198.51.100.129, 22 ... Open
+SSH-2.0-Cisco-1.25
+TCP-OK
+Trying 203.0.113.10, 22 ... Open
+SSH-2.0-Cisco-1.25
+TCP-OK
+show ip traffic | include checksum|format errors
+         0 format errors, 0 checksum errors, 26 bad hop count
+  Rcvd: 0 format errors, 0 checksum errors, 0 redirects, 2 unreachable
+  Rcvd: 31 total, 0 checksum errors, 31 no port 0 finput
+  Rcvd: 1146 total, 0 checksum errors, 0 no port
+  Total: 0/0, 0 checksum errors, 0 format errors
+  Rcvd: 0 total, 0 checksum errors
+CEA2#
+show ip traffic | include checksum|format errors
+         0 format errors, 0 checksum errors, 26 bad hop count
+  Rcvd: 0 format errors, 0 checksum errors, 0 redirects, 0 unreachable
+  Rcvd: 44 total, 0 checksum errors, 44 no port 0 finput
+  Rcvd: 438 total, 0 checksum errors, 0 no port
+  Total: 0/0, 0 checksum errors, 0 format errors
+  Rcvd: 0 total, 0 checksum errors
+INET#

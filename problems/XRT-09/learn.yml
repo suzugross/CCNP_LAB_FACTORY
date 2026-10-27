@@ -1,0 +1,458 @@
+# XRT-09 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn XRT-09 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# ここに書いた挙動は IOS XRv 9000 26.1.1・IOS XRd 26.1.1(+IOL 17.15)の実機で確認した(設計= problems/_drafts/XR-TRACK.design.md §22)。
+# 模範解の「On XR02:」「On XR01:」の見出し= 機器ごとの塊(poc/xr/verbatim.py が見出しごとに送り先を替える)。
+# 読み物(BL-252)= Reading タブに出す本(reading/<key>/)。各課題の read: はその本の「ページ#節」(節= data-sec)。
+reading: xr
+steps:
+  - id: m9t1
+    title: { en: "M9-1  The first sites join their VPNs", ja: "M9-1  1 つ目のサイトを VPN に収容する" }
+    check: m9t1
+    read: [90-m9-l3vpn#s1-1, 90-m9-l3vpn#s1-2, 90-m9-l3vpn#s1-3, 90-m9-l3vpn#s2-1]
+    hints:
+      - en: "On IOS XR the parts of a VRF live in three places: the VRF itself with its route targets, the interface, and BGP, where the route distinguisher and the CE session are. BGP also needs the VPNv4 address family before anything VPN-related can be configured, and an eBGP neighbour exchanges nothing without route policies, in a VRF as elsewhere (Unit M5)."
+        ja: "IOS XR では、VRF の部品は 3 か所にあります。ルート ターゲットを持つ VRF そのもの、インターフェイス、そしてルート識別子と CE とのセッションがある BGP です。BGP は、VPN に関するものを設定する前に VPNv4 アドレス ファミリーも必要とします。また、eBGP のネイバーは、VRF の中でも他と同じく、ルート ポリシーが無いと何も交換しません(単元 M5)。"
+      - en: "When a commit fails, `show configuration failed` gives the reason. `show vrf CUST-A detail` shows the route targets, `show bgp vrf CUST-A summary` the CE session (a `!` after the prefix count means a missing policy), `show bgp vrf CUST-A neighbors 172.16.11.2` the `No policy:` counter, and `show bgp vpnv4 unicast summary` and `show bgp vpnv4 unicast neighbors 10.255.0.21 advertised-count` the session with XR02. Guides: L3VPN Configuration Guide (ASR 9000 or NCS 5500), 'Implementing MPLS Layer 3 VPNs' — defining the VRF, the route distinguisher and the PE-CE eBGP session; BGP Configuration Guide on address families."
+        ja: "コミットが失敗したら、`show configuration failed` が理由を表示します。`show vrf CUST-A detail` はルート ターゲットを、`show bgp vrf CUST-A summary` は CE とのセッションを表示します(プレフィックス数の後の `!` はポリシーの欠落を表します)。`show bgp vrf CUST-A neighbors 172.16.11.2` は `No policy:` のカウンタを、`show bgp vpnv4 unicast summary` と `show bgp vpnv4 unicast neighbors 10.255.0.21 advertised-count` は XR02 とのセッションを表示します。ガイド: L3VPN Configuration Guide(ASR 9000 または NCS 5500)の「Implementing MPLS Layer 3 VPNs」— VRF の定義、ルート識別子、PE-CE の eBGP セッション。アドレス ファミリーについては BGP Configuration Guide。"
+      - en: "`vrf CUST-A` → `address-family ipv4 unicast` → `import route-target` (65000:101 and 65000:900) and `export route-target` (65000:101); the same for CUST-B. Under each interface: `vrf <name>`, then `ipv4 address`. A route policy that passes everything. Under `router bgp 65000`: `bgp router-id 10.255.0.1`, `address-family vpnv4 unicast`, `neighbor 10.255.0.21` with `remote-as 65000`, `update-source Loopback0` and `address-family vpnv4 unicast`; `vrf CUST-A` with `rd 10.255.0.1:101`, `address-family ipv4 unicast`, and `neighbor 172.16.11.2` with `remote-as 65101` and the policy in and out under `address-family ipv4 unicast`; the same for CUST-B."
+        ja: "`vrf CUST-A` → `address-family ipv4 unicast` → `import route-target`(65000:101 と 65000:900)と `export route-target`(65000:101)。CUST-B も同じです。各インターフェイスの下に `vrf <名前>`、次に `ipv4 address`。すべてを通すルート ポリシー。`router bgp 65000` の下に `bgp router-id 10.255.0.1`、`address-family vpnv4 unicast`、`remote-as 65000`・`update-source Loopback0`・`address-family vpnv4 unicast` を持つ `neighbor 10.255.0.21`。`rd 10.255.0.1:101` と `address-family ipv4 unicast` を持つ `vrf CUST-A` と、その中の `remote-as 65101` で `address-family ipv4 unicast` の下に入出のポリシーを持つ `neighbor 172.16.11.2`。CUST-B も同じです。"
+    solution:
+      en: |
+        configure
+         vrf CUST-A
+          address-family ipv4 unicast
+           import route-target
+            65000:101
+            65000:900
+           !
+           export route-target
+            65000:101
+           !
+         vrf CUST-B
+          address-family ipv4 unicast
+           import route-target
+            65000:102
+            65000:900
+           !
+           export route-target
+            65000:102
+           !
+         interface GigabitEthernet0/0/0/2
+          vrf CUST-A
+          ipv4 address 172.16.11.1 255.255.255.0
+         interface GigabitEthernet0/0/0/3
+          vrf CUST-B
+          ipv4 address 172.16.21.1 255.255.255.0
+         route-policy PASS
+          pass
+         end-policy
+         router bgp 65000
+          bgp router-id 10.255.0.1
+          address-family vpnv4 unicast
+          !
+          neighbor 10.255.0.21
+           remote-as 65000
+           update-source Loopback0
+           address-family vpnv4 unicast
+           !
+          !
+          vrf CUST-A
+           rd 10.255.0.1:101
+           address-family ipv4 unicast
+           !
+           neighbor 172.16.11.2
+            remote-as 65101
+            address-family ipv4 unicast
+             route-policy PASS in
+             route-policy PASS out
+            !
+           !
+          !
+          vrf CUST-B
+           rd 10.255.0.1:102
+           address-family ipv4 unicast
+           !
+           neighbor 172.16.21.2
+            remote-as 65201
+            address-family ipv4 unicast
+             route-policy PASS in
+             route-policy PASS out
+         commit
+        end
+        The route targets belong to the VRF (`vrf` → `address-family ipv4 unicast`), the route distinguisher to BGP
+        (`router bgp` → `vrf`). IOS XR checks the order at commit time: without `address-family vpnv4 unicast` at the top
+        of BGP, neither the VPNv4 neighbour nor the VRF's address family can be configured ("The address family has not
+        been initialized", "The parent address family has not been initialized"), and the VRF's address family needs the
+        route distinguisher ("The RD for the VRF must be present before an address family is activated"). A failed commit
+        is undone as a whole, so a missing RD never leaves a VRF that silently advertises nothing. The CE sessions are
+        eBGP, so they need a policy in each direction, in a VRF as anywhere else: without them the session comes up with
+        `0!` in `show bgp vrf CUST-A summary`, and the neighbour detail counts the routes under `No policy:`. With the
+        policy, XR01 holds 10.101.1.0/24 and 198.51.100.0/25 in CUST-A and 10.102.1.0/24 in CUST-B, and sends them to
+        XR02 as VPNv4 routes with their route distinguishers and route targets (`advertised-count` 3). The interfaces
+        had no address, so `vrf` and `ipv4 address` can go in together. The configuration guides say that an interface
+        must lose its address before its VRF is changed; IOS XR 26.1.1 accepts the change with the address in place
+        (unit page, section 1.2).
+      ja: |
+        configure
+         vrf CUST-A
+          address-family ipv4 unicast
+           import route-target
+            65000:101
+            65000:900
+           !
+           export route-target
+            65000:101
+           !
+         vrf CUST-B
+          address-family ipv4 unicast
+           import route-target
+            65000:102
+            65000:900
+           !
+           export route-target
+            65000:102
+           !
+         interface GigabitEthernet0/0/0/2
+          vrf CUST-A
+          ipv4 address 172.16.11.1 255.255.255.0
+         interface GigabitEthernet0/0/0/3
+          vrf CUST-B
+          ipv4 address 172.16.21.1 255.255.255.0
+         route-policy PASS
+          pass
+         end-policy
+         router bgp 65000
+          bgp router-id 10.255.0.1
+          address-family vpnv4 unicast
+          !
+          neighbor 10.255.0.21
+           remote-as 65000
+           update-source Loopback0
+           address-family vpnv4 unicast
+           !
+          !
+          vrf CUST-A
+           rd 10.255.0.1:101
+           address-family ipv4 unicast
+           !
+           neighbor 172.16.11.2
+            remote-as 65101
+            address-family ipv4 unicast
+             route-policy PASS in
+             route-policy PASS out
+            !
+           !
+          !
+          vrf CUST-B
+           rd 10.255.0.1:102
+           address-family ipv4 unicast
+           !
+           neighbor 172.16.21.2
+            remote-as 65201
+            address-family ipv4 unicast
+             route-policy PASS in
+             route-policy PASS out
+         commit
+        end
+        ルート ターゲットは VRF(`vrf` → `address-family ipv4 unicast`)に、ルート識別子は BGP(`router bgp` → `vrf`)に属します。
+        IOS XR はコミットの時に順序を検査します。BGP の最上位に `address-family vpnv4 unicast` が無いと、VPNv4 のネイバーも VRF の
+        アドレス ファミリーも設定できません(「The address family has not been initialized」「The parent address family has not
+        been initialized」)。また、VRF のアドレス ファミリーにはルート識別子が必要です(「The RD for the VRF must be present before
+        an address family is activated」)。失敗したコミットは丸ごと取り消されるので、RD が抜けたまま何もアドバタイズしない VRF が
+        黙って残ることはありません。CE とのセッションは eBGP なので、VRF の中でも他と同じく両方向にポリシーが必要です。無いと、
+        セッションは上がりますが `show bgp vrf CUST-A summary` に `0!` と表示され、ネイバーの詳細は `No policy:` にルートを数えます。
+        ポリシーを付けると、XR01 は CUST-A に 10.101.1.0/24 と 198.51.100.0/25 を、CUST-B に 10.102.1.0/24 を持ち、それらを
+        ルート識別子とルート ターゲットを付けた VPNv4 ルートとして XR02 に送ります(`advertised-count` 3)。インターフェイスには
+        アドレスが無かったので、`vrf` と `ipv4 address` は一緒に入れられます。コンフィギュレーション ガイドは、インターフェイスの VRF を
+        変える前にアドレスを外す必要があると書いていますが、IOS XR 26.1.1 はアドレスを付けたままの変更を受け入れます(単元のページの 1.2 節)。
+
+  - id: m9t2
+    title: { en: "M9-2  The sites still cannot reach each other", ja: "M9-2  サイトどうしがまだ到達できない" }
+    check: m9t2
+    read: [90-m9-l3vpn#s2-2, 90-m9-l3vpn#s2-3, 90-m9-l3vpn#s3-1]
+    hints:
+      - en: "Follow one route from the CE of one site to the CE of the other: CEA1 → XR01 → XR02 → RT02 → CEA2, and stop where it disappears. Holding a route and passing it on are two different things for an iBGP speaker: ask what makes XR02 a route reflector, and for which address family. Once one direction works, compare what the two provider edges do with a route whose AS path already contains the CE's own AS."
+        ja: "1 つのルートを、一方のサイトの CE からもう一方のサイトの CE まで追ってください。CEA1 → XR01 → XR02 → RT02 → CEA2 と進み、ルートが消えたところで止まります。iBGP スピーカーにとって、ルートを保持することと次に渡すことは別のことです。何が XR02 をルート リフレクタにするのか、どのアドレス ファミリーについてなのかを考えてください。一方の方向が動いたら、AS パスに CE 自身の AS が既に含まれるルートを、2 つのプロバイダー エッジがそれぞれどう扱うかを比べてください。"
+      - en: "On XR02: `show bgp vpnv4 unicast`, `show bgp vpnv4 unicast summary` and `show bgp vpnv4 unicast neighbors 10.255.0.12` (the part for the VPNv4 address family says whether the neighbour is a route reflector client). On RT02: `show ip bgp vpnv4 all`. On XR01: `show bgp vrf CUST-A 10.101.2.0/24` (`Not advertised to any peer`) and `show bgp vrf CUST-A neighbors 172.16.11.2 advertised-routes`; on CEA1: `show ip bgp`. Guides: BGP Configuration Guide, route reflectors, and 'retain route-target'; BGP Command Reference, `route-reflector-client` and `as-override`."
+        ja: "XR02 で `show bgp vpnv4 unicast`、`show bgp vpnv4 unicast summary`、`show bgp vpnv4 unicast neighbors 10.255.0.12`(VPNv4 アドレス ファミリーの部分に、ネイバーがルート リフレクタのクライアントかどうかが表示されます)。RT02 で `show ip bgp vpnv4 all`。XR01 で `show bgp vrf CUST-A 10.101.2.0/24`(`Not advertised to any peer`)と `show bgp vrf CUST-A neighbors 172.16.11.2 advertised-routes`。CEA1 で `show ip bgp`。ガイド: BGP Configuration Guide のルート リフレクタと「retain route-target」。BGP Command Reference の `route-reflector-client` と `as-override`。"
+      - en: "On XR02: `route-reflector-client` under `neighbor 10.255.0.1` → `address-family vpnv4 unicast`, and the same under `neighbor 10.255.0.12`. The lines under `address-family ipv4 unicast` and `retain route-target all` can stay or go. On XR01: `as-override` under `router bgp 65000` → `vrf CUST-A` → `neighbor 172.16.11.2` → `address-family ipv4 unicast`."
+        ja: "XR02 で、`neighbor 10.255.0.1` → `address-family vpnv4 unicast` の下に `route-reflector-client`。`neighbor 10.255.0.12` の下も同じです。`address-family ipv4 unicast` の下の行と `retain route-target all` は、残しても消しても構いません。XR01 で、`router bgp 65000` → `vrf CUST-A` → `neighbor 172.16.11.2` → `address-family ipv4 unicast` の下に `as-override`。"
+    solution:
+      en: |
+        On XR02:
+        configure
+         router bgp 65000
+          neighbor 10.255.0.1
+           address-family vpnv4 unicast
+            route-reflector-client
+           !
+          !
+          neighbor 10.255.0.12
+           address-family vpnv4 unicast
+            route-reflector-client
+         commit
+        end
+        On XR01:
+        configure
+         router bgp 65000
+          vrf CUST-A
+           neighbor 172.16.11.2
+            address-family ipv4 unicast
+             as-override
+         commit
+        end
+        Two faults lie on the path, one after the other. First, XR02: a route reflector client is a property of a
+        neighbour's address family. CHG-1201 made the provider edges clients under `address-family ipv4 unicast`, which
+        they never negotiate, so for VPNv4 XR02 was an ordinary iBGP speaker without VRFs. Such a router keeps none of
+        the VPNv4 routes it receives: they match no import route target of a local VRF (`0 accepted prefixes`, and not
+        counted as denied). `retain route-target all` made XR02 keep them all, which is what the colleague saw, but an
+        iBGP speaker never passes an iBGP route on to another iBGP neighbour. With `route-reflector-client` under the
+        VPNv4 address family, XR02 reflects, and keeps every route without `retain` (a route reflector does by default).
+        RT02 then has XR01's routes with `Cluster list: 10.255.0.21`, and CEA2 learns 10.101.1.0/24 because RT02 uses
+        `as-override`. Second, XR01: CEA1 and CEA2 share AS 65101. IOS XR does not send a route to an eBGP neighbour
+        whose AS is in the route's AS path (`Not advertised to any peer`, nothing in `advertised-routes`); IOS sends it
+        and leaves the CE to drop it. `as-override` replaces 65101 with 65000 and the route goes out (`65000 65000` on
+        CEA1). `allowas-in` would have to be configured on the CE, which belongs to the customer. Customer B has a
+        different AS at each site and needs neither. The two customers stay apart because each VRF imports only its own
+        route target (and 65000:900, which nobody exports yet).
+      ja: |
+        On XR02:
+        configure
+         router bgp 65000
+          neighbor 10.255.0.1
+           address-family vpnv4 unicast
+            route-reflector-client
+           !
+          !
+          neighbor 10.255.0.12
+           address-family vpnv4 unicast
+            route-reflector-client
+         commit
+        end
+        On XR01:
+        configure
+         router bgp 65000
+          vrf CUST-A
+           neighbor 172.16.11.2
+            address-family ipv4 unicast
+             as-override
+         commit
+        end
+        経路の上に、故障が 2 つ続いて並んでいます。1 つ目は XR02 です。ルート リフレクタのクライアントは、ネイバーのアドレス
+        ファミリーごとの性質です。CHG-1201 は、プロバイダー エッジを `address-family ipv4 unicast` の下でクライアントにしましたが、
+        それらはこのアドレス ファミリーをネゴシエートしません。そのため VPNv4 については、XR02 は VRF を持たない普通の iBGP スピーカー
+        でした。このようなルータは、受け取った VPNv4 ルートを 1 つも保持しません。ローカルの VRF のインポートするルート ターゲットに
+        一致しないからです(`0 accepted prefixes`。拒否としても数えません)。`retain route-target all` によって XR02 はすべてを保持する
+        ようになり、同僚が見たのはこれですが、iBGP スピーカーは iBGP のルートを別の iBGP ネイバーへ渡すことはありません。VPNv4 の
+        アドレス ファミリーの下に `route-reflector-client` を入れると XR02 はリフレクトし、`retain` が無くてもすべてのルートを保持します
+        (ルート リフレクタの既定の動作です)。これで RT02 は `Cluster list: 10.255.0.21` の付いた XR01 のルートを持ち、RT02 は
+        `as-override` を使うので CEA2 は 10.101.1.0/24 を学習します。2 つ目は XR01 です。CEA1 と CEA2 は AS 65101 を共有しています。
+        IOS XR は、ルートの AS パスに相手の AS が含まれる eBGP ネイバーにはそのルートを送りません(`Not advertised to any peer`、
+        `advertised-routes` にも出ない)。IOS は送って、CE に捨てさせます。`as-override` は 65101 を 65000 に置き換え、ルートが送られます
+        (CEA1 では `65000 65000`)。`allowas-in` は CE で設定する必要があり、CE は顧客のものです。顧客 B はサイトごとに違う AS なので、
+        どちらも要りません。2 つの顧客が分かれたままなのは、各 VRF が自分のルート ターゲット(と、まだ誰もエクスポートしていない
+        65000:900)だけをインポートするからです。
+
+  - id: m9t3
+    title: { en: "M9-3  Shared services", ja: "M9-3  共有サービス" }
+    check: m9t3
+    read: [90-m9-l3vpn#s4-1, 90-m9-l3vpn#s4-2]
+    hints:
+      - en: "Three things are needed: SVC's networks must enter BGP in VRF SVC, each route must get the right route targets on export, and the customers' VRFs already import 65000:900. A route target that every route of a VRF carries is configured on the VRF; one that only some routes carry needs a route policy. Check what setting a route target in a policy does to the route targets that are already there."
+        ja: "必要なものは 3 つです。SVC のネットワークが VRF SVC で BGP に入ること、エクスポートの時に各ルートに正しいルート ターゲットが付くこと、そして顧客の VRF は既に 65000:900 をインポートしていることです。VRF のすべてのルートに付くルート ターゲットは VRF に設定します。一部のルートだけに付くものにはルート ポリシーが必要です。ポリシーでルート ターゲットを設定すると、既に付いているルート ターゲットがどうなるかを確かめてください。"
+      - en: "`show bgp vrf SVC 10.99.1.0/24` and `show bgp vpnv4 unicast rd 10.255.0.1:900 10.99.2.0/24` (the `Extended community:` line), `show bgp vrf CUST-A` and `show bgp vrf CUST-B`; on RT02 `show ip bgp vpnv4 all 10.99.1.0`. Guides: Routing Configuration Guide, 'Implementing Routing Policy' — the VRF import and export policies and `set extcommunity rt`; L3VPN Configuration Guide, extranet; Static Routes Configuration Guide, static routes in a VRF."
+        ja: "`show bgp vrf SVC 10.99.1.0/24` と `show bgp vpnv4 unicast rd 10.255.0.1:900 10.99.2.0/24`(`Extended community:` の行)、`show bgp vrf CUST-A` と `show bgp vrf CUST-B`。RT02 で `show ip bgp vpnv4 all 10.99.1.0`。ガイド: Routing Configuration Guide の「Implementing Routing Policy」— VRF のインポートとエクスポートのポリシー、`set extcommunity rt`。L3VPN Configuration Guide のエクストラネット。VRF のスタティック ルートについては Static Routes の設定ガイド。"
+      - en: "GigabitEthernet0/0/0/4 in `vrf SVC` with its address. `vrf SVC` → `address-family ipv4 unicast`: `import route-target` 65000:101 and 65000:102, `export route-target` 65000:999, and `export route-policy <name>`. The policy: `if destination in (10.99.1.0/24) then set extcommunity rt (65000:900) additive endif`. `router static` → `vrf SVC` → `address-family ipv4 unicast` with the two networks via 172.16.91.2. `router bgp 65000` → `vrf SVC` with `rd 10.255.0.1:900` and `redistribute static` under `address-family ipv4 unicast`."
+        ja: "GigabitEthernet0/0/0/4 を `vrf SVC` に入れてアドレスを設定。`vrf SVC` → `address-family ipv4 unicast` に、`import route-target` 65000:101 と 65000:102、`export route-target` 65000:999、`export route-policy <名前>`。ポリシーは `if destination in (10.99.1.0/24) then set extcommunity rt (65000:900) additive endif`。`router static` → `vrf SVC` → `address-family ipv4 unicast` に、2 つのネットワークを 172.16.91.2 経由で。`router bgp 65000` → `vrf SVC` に `rd 10.255.0.1:900` と、`address-family ipv4 unicast` の下の `redistribute static`。"
+    solution:
+      en: |
+        configure
+         interface GigabitEthernet0/0/0/4
+          vrf SVC
+          ipv4 address 172.16.91.1 255.255.255.0
+         route-policy SVC-EXPORT
+          if destination in (10.99.1.0/24) then
+           set extcommunity rt (65000:900) additive
+          endif
+          pass
+         end-policy
+         vrf SVC
+          address-family ipv4 unicast
+           import route-target
+            65000:101
+            65000:102
+           !
+           export route-policy SVC-EXPORT
+           export route-target
+            65000:999
+           !
+         router static
+          vrf SVC
+           address-family ipv4 unicast
+            10.99.1.0/24 172.16.91.2
+            10.99.2.0/24 172.16.91.2
+         router bgp 65000
+          vrf SVC
+           rd 10.255.0.1:900
+           address-family ipv4 unicast
+            redistribute static
+         commit
+        end
+        Every route of SVC carries 65000:999, so it is the VRF's export route target. Only 10.99.1.0/24 carries 65000:900,
+        so a route policy adds it on export. Without `additive`, `set extcommunity rt` replaces the route targets that the
+        route already has: 10.99.1.0/24 would leave with 65000:900 alone. With it, `show bgp vrf SVC 10.99.1.0/24` shows
+        `RT:65000:900 RT:65000:999`, and 10.99.2.0/24 keeps `RT:65000:999` only. An export policy cannot hold a route back:
+        a route that the policy does not pass is still exported, with the VRF's route targets. That is why 10.99.2.0/24 is
+        kept from the customers by its route targets (no customer imports 65000:999), not by the policy. The customers'
+        VRFs import 65000:900, so both sites of each customer learn 10.99.1.0/24: on RT02 through XR02, and on XR01 itself
+        by a local import from VRF SVC into CUST-A and CUST-B, which needs no remote PE. SVC imports 65000:101 and
+        65000:102 and so learns both customers, which makes the return traffic work. The customers stay apart: a route of
+        customer B that SVC imports keeps its own route target, 65000:102, and is not exported again with 65000:999.
+        Setting all route targets in the policy (both for 10.99.1.0/24, 65000:999 for the rest) works as well.
+      ja: |
+        configure
+         interface GigabitEthernet0/0/0/4
+          vrf SVC
+          ipv4 address 172.16.91.1 255.255.255.0
+         route-policy SVC-EXPORT
+          if destination in (10.99.1.0/24) then
+           set extcommunity rt (65000:900) additive
+          endif
+          pass
+         end-policy
+         vrf SVC
+          address-family ipv4 unicast
+           import route-target
+            65000:101
+            65000:102
+           !
+           export route-policy SVC-EXPORT
+           export route-target
+            65000:999
+           !
+         router static
+          vrf SVC
+           address-family ipv4 unicast
+            10.99.1.0/24 172.16.91.2
+            10.99.2.0/24 172.16.91.2
+         router bgp 65000
+          vrf SVC
+           rd 10.255.0.1:900
+           address-family ipv4 unicast
+            redistribute static
+         commit
+        end
+        SVC のすべてのルートに 65000:999 が付くので、これは VRF のエクスポートするルート ターゲットです。65000:900 が付くのは
+        10.99.1.0/24 だけなので、ルート ポリシーがエクスポートの時にそれを加えます。`additive` が無いと、`set extcommunity rt` は
+        ルートが既に持っているルート ターゲットを置き換えます。10.99.1.0/24 は 65000:900 だけを持って出ていくことになります。
+        `additive` があれば、`show bgp vrf SVC 10.99.1.0/24` は `RT:65000:900 RT:65000:999` を表示し、10.99.2.0/24 は
+        `RT:65000:999` だけを持ちます。エクスポートのポリシーはルートを止められません。ポリシーが通さないルートも、VRF の
+        ルート ターゲットを付けてエクスポートされます。10.99.2.0/24 が顧客から隠れるのは、ポリシーによってではなく、ルート ターゲット
+        によってです(65000:999 をインポートする顧客はいません)。顧客の VRF は 65000:900 をインポートするので、各顧客の両方のサイトが
+        10.99.1.0/24 を学習します。RT02 では XR02 を経由して、XR01 自身では VRF SVC から CUST-A と CUST-B へのローカルのインポートで
+        学習し、これにはリモートの PE は要りません。SVC は 65000:101 と 65000:102 をインポートするので両方の顧客を学習し、戻りの
+        トラフィックが流れます。顧客どうしは分かれたままです。SVC がインポートした顧客 B のルートは自分のルート ターゲット 65000:102 を
+        持ったままで、65000:999 を付けて再びエクスポートされることはありません。ポリシーですべてのルート ターゲットを設定する形
+        (10.99.1.0/24 には両方、残りには 65000:999)でも動作します。
+
+  - id: m9t4
+    title: { en: "M9-4  Internet access for customer A", ja: "M9-4  顧客 A のインターネット接続" }
+    check: m9t4
+    read: [90-m9-l3vpn#s5-1, 90-m9-l3vpn#s5-2]
+    hints:
+      - en: "Customer A's VRF and the global table must exchange two kinds of routes: the default route goes into the VRF, the public segments come out of it. IOS XR can leak BGP routes between a VRF and the default VRF with route policies, without static routes. For each leaked route, ask where it goes next: only to the CE on XR01, or also to RT02 as a VPN route; and whether a route that XR01 learned from another provider edge may be leaked at all."
+        ja: "顧客 A の VRF とグローバル テーブルは、2 種類のルートを交換する必要があります。デフォルト ルートは VRF に入り、公開セグメントは VRF から出ていきます。IOS XR は、スタティック ルートを使わずに、ルート ポリシーで VRF とデフォルト VRF の間で BGP のルートをリークできます。リークした各ルートについて、次にどこへ行くかを考えてください。XR01 の CE だけか、VPN のルートとして RT02 にも行くか。また、XR01 が別のプロバイダー エッジから学習したルートを、そもそもリークできるかどうかを考えてください。"
+      - en: "`show bgp vrf CUST-A 0.0.0.0/0`, on RT02 `show ip route vrf CUST-A 0.0.0.0`, `show bgp ipv4 unicast 198.51.100.128/25`, `show bgp ipv4 unicast neighbors 192.0.2.2 advertised-routes`; on INET `show ip bgp`. Guides: Routing Configuration Guide, 'Implementing BGP' — 'VRF Dynamic Route Leaking' (importing from the default VRF and exporting to it, and the keywords of both commands); Cisco TAC document 'Configure Route Leak between GRT and VRF with IOS XR'."
+        ja: "`show bgp vrf CUST-A 0.0.0.0/0`、RT02 で `show ip route vrf CUST-A 0.0.0.0`、`show bgp ipv4 unicast 198.51.100.128/25`、`show bgp ipv4 unicast neighbors 192.0.2.2 advertised-routes`。INET で `show ip bgp`。ガイド: Routing Configuration Guide の「Implementing BGP」—「VRF Dynamic Route Leaking」(デフォルト VRF からのインポートとデフォルト VRF へのエクスポート、両方のコマンドのキーワード)。Cisco TAC の文書「Configure Route Leak between GRT and VRF with IOS XR」。"
+      - en: "GigabitEthernet0/0/0/5 with its address (global). Under `router bgp 65000`: `address-family ipv4 unicast`, and `neighbor 192.0.2.2` with `remote-as 64500` and, under `address-family ipv4 unicast`, a policy that passes everything in and one that passes the two public segments out. Under `vrf CUST-A` → `address-family ipv4 unicast`: `import from default-vrf route-policy <passes 0.0.0.0/0> advertise-as-vpn` and `export to default-vrf route-policy <passes the two segments> allow-imported-vpn`."
+        ja: "GigabitEthernet0/0/0/5 にアドレス(グローバル)。`router bgp 65000` の下に `address-family ipv4 unicast` と、`remote-as 64500` を持つ `neighbor 192.0.2.2`。その `address-family ipv4 unicast` の下に、入方向にすべてを通すポリシーと、出方向に 2 つの公開セグメントを通すポリシー。`vrf CUST-A` → `address-family ipv4 unicast` の下に、`import from default-vrf route-policy <0.0.0.0/0 を通す> advertise-as-vpn` と `export to default-vrf route-policy <2 つのセグメントを通す> allow-imported-vpn`。"
+    solution:
+      en: |
+        configure
+         interface GigabitEthernet0/0/0/5
+          ipv4 address 192.0.2.1 255.255.255.0
+         route-policy TO-INTERNET
+          if destination in (198.51.100.0/25, 198.51.100.128/25) then
+           pass
+          endif
+         end-policy
+         route-policy DEFAULT-ONLY
+          if destination in (0.0.0.0/0) then
+           pass
+          endif
+         end-policy
+         route-policy CUST-A-PUBLIC
+          if destination in (198.51.100.0/25, 198.51.100.128/25) then
+           pass
+          endif
+         end-policy
+         vrf CUST-A
+          address-family ipv4 unicast
+           import from default-vrf route-policy DEFAULT-ONLY advertise-as-vpn
+           export to default-vrf route-policy CUST-A-PUBLIC allow-imported-vpn
+         router bgp 65000
+          address-family ipv4 unicast
+          !
+          neighbor 192.0.2.2
+           remote-as 64500
+           address-family ipv4 unicast
+            route-policy PASS in
+            route-policy TO-INTERNET out
+         commit
+        end
+        The default route is learned from INET in the global table and imported into CUST-A with a policy (the policy is
+        mandatory). Without `advertise-as-vpn`, the imported route goes to the CEs of XR01 only: CEA1 has a default route,
+        but XR01 does not send it to XR02, and CEA2 has none. With it, the route also leaves as a VPNv4 route with CUST-A's
+        route target (and the VRF's label), so RT02 and CEA2 learn it. The other way, `export to default-vrf` copies the
+        routes that the policy passes into the global table, but by default only the routes that XR01 learned from its
+        own CEs: 198.51.100.0/25 comes out, 198.51.100.128/25, learned from RT02 through XR02, does not.
+        `allow-imported-vpn` lets it out. In the global table it keeps its VPN next hop and labels, so the traffic from
+        INET is labelled at XR01 towards RT02. The eBGP session with INET needs its own policies; the outbound one keeps
+        everything but the two public segments from the Internet, including 10.101.0.0/16, which is in the global table
+        on no router. Customer B's VRF imports neither the leaked default route nor anything of customer A. The private
+        LANs of customer A still have no path to the Internet: INET has no route back to them, and the provider does no
+        NAT here.
+      ja: |
+        configure
+         interface GigabitEthernet0/0/0/5
+          ipv4 address 192.0.2.1 255.255.255.0
+         route-policy TO-INTERNET
+          if destination in (198.51.100.0/25, 198.51.100.128/25) then
+           pass
+          endif
+         end-policy
+         route-policy DEFAULT-ONLY
+          if destination in (0.0.0.0/0) then
+           pass
+          endif
+         end-policy
+         route-policy CUST-A-PUBLIC
+          if destination in (198.51.100.0/25, 198.51.100.128/25) then
+           pass
+          endif
+         end-policy
+         vrf CUST-A
+          address-family ipv4 unicast
+           import from default-vrf route-policy DEFAULT-ONLY advertise-as-vpn
+           export to default-vrf route-policy CUST-A-PUBLIC allow-imported-vpn
+         router bgp 65000
+          address-family ipv4 unicast
+          !
+          neighbor 192.0.2.2
+           remote-as 64500
+           address-family ipv4 unicast
+            route-policy PASS in
+            route-policy TO-INTERNET out
+         commit
+        end
+        デフォルト ルートは、グローバル テーブルで INET から学習し、ポリシーを付けて CUST-A にインポートします(ポリシーは必須です)。
+        `advertise-as-vpn` が無いと、インポートしたルートは XR01 の CE にだけ渡ります。CEA1 はデフォルト ルートを持ちますが、XR01 は
+        それを XR02 に送らず、CEA2 は持ちません。`advertise-as-vpn` があれば、ルートは CUST-A のルート ターゲット(と VRF のラベル)を
+        付けた VPNv4 ルートとしても出ていくので、RT02 と CEA2 が学習します。反対の方向では、`export to default-vrf` はポリシーが通す
+        ルートをグローバル テーブルにコピーしますが、既定では XR01 が自分の CE から学習したルートだけです。198.51.100.0/25 は出ていき、
+        RT02 から XR02 を経由して学習した 198.51.100.128/25 は出ていきません。`allow-imported-vpn` がそれを出します。グローバル テーブルの
+        中でもこのルートは VPN のネクスト ホップとラベルを持ったままなので、INET からのトラフィックは XR01 で RT02 に向けてラベルを
+        付けられます。INET との eBGP セッションには、それ自体のポリシーが必要です。出方向のポリシーは、2 つの公開セグメント以外の
+        すべてをインターネットに出しません。どのルータのグローバル テーブルにも無い 10.101.0.0/16 も含みます。顧客 B の VRF は、
+        リークしたデフォルト ルートも顧客 A のものも何もインポートしません。顧客 A のプライベートな LAN は、引き続きインターネットへの
+        経路を持ちません。INET はそこへの戻りのルートを持たず、ここではプロバイダーは NAT を行いません。

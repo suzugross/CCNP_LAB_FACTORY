@@ -50,7 +50,7 @@
 | 収集失敗の副作用 | 出力がエラー文になると、`not_regex` だけのチェックが通ってしまう。否定条件は肯定条件と同じチェックに入れる |
 | 起動直後の履歴 | 初期設定は CVAC 1 回+ZTP 2 回のコミット。最後の ZTP(`no username ztp-user`)は BOOTED の数秒後に入るので、直後にコミットすると順が混ざる・一時的に失敗する |
 | ラベル | 一意。再利用は「the specified label is already assigned to a previous commit」で拒否。失敗したコミットのラベルは消費されない |
-| VRF への移動 | アドレスを持つ IF に `vrf X` を入れてコミットすると、**アドレスは残ったまま** VRF に移る(IOS の `vrf forwarding` と逆) |
+| VRF への移動 | アドレスを持つ IF に `vrf X` を入れてコミットすると、**アドレスは残ったまま** VRF に移る(IOS の `vrf forwarding` と逆)。★公式文書(L3VPN 設定ガイド 7.11)は「先にアドレスを消さないと拒否」と書く。26.1.1 では拒否されず、移し先の VRF を同じコミットで作った VRF→VRF の移動は通じないことがあった(design §22.4) |
 | ネットワーク種別の不一致 | XR(broadcast)と IOL(point-to-point)で隣接は FULL(XR 側は FULL/DR)になるが、そのリンク経由のルートは入らない |
 | `include` の正規表現 | `| include a|b` は不可(2 つ目の `|` が次の絞り込みと解釈される)。`| include "a|b"` |
 | `show ip …` | `show ip interface brief`・`show ip route` は通る。CLI の説明は `ip  Deprecated, use ipv4 instead` |
@@ -59,3 +59,17 @@
 | eBGP とポリシー | 着信ポリシーだけだと `show bgp summary` がネイバーに `!` を付け、「both inbound and outbound policies」が無いと送受信しない旨を表示 |
 | IOL → XR の SSH | `ssh -l <user> 10.0.12.1` は「Connection … aborted: error status 0」で不可。Telnet(`telnet vrf default ipv4 server max-servers 5`)は可 |
 | 起動時間 | XRT-01 の provision 全体(構築→起動→履歴の仕込み)で 約 9.5 分 |
+
+## M9 L3VPN の PoC で分かったこと(2026-10-27・XRd/XRv9000 26.1.1・詳細 design §22)
+
+| 論点 | 実機の挙動 |
+|---|---|
+| BGP の木の順序 | 全体の `address-family vpnv4 unicast` が無いと VPNv4 の近隣も VRF の AF も拒否(「address family has not been initialized」)。RD の無い VRF に AF を作ると「The RD for the VRF must be present before an address family is activated」 |
+| RT のふるい | VRF も RR クライアントも無い XR は受けた VPNv4 を黙って全部捨てる(0 accepted・拒否 0)。PE は近隣の詳細に `Failed RT match: N`。RR クライアントが 1 つでもあれば全部保持 |
+| retain route-target all | RR でない iBGP の XR に入れると全部保持するが反映しない(iBGP→iBGP の原則どおり) |
+| as-override | 無いと XR の PE は CE の AS を含む経路を **送らない**(`Not advertised to any peer`)。IOS は送って CE が落とす |
+| VPN のラベル | 既定はプレフィックスごと。`label mode per-vrf` で `Aggregate <VRF>: Per-VRF Aggr[V]` の 1 本 |
+| 輸出の方針 | `set extcommunity rt (…) additive` が無いと `export route-target` の RT を置き換える。pass しない経路も輸出される(落とせない) |
+| VRF とグローバル | `import from default-vrf route-policy P` だけでは VPNv4 に出ない(`advertise-as-vpn`)。リモートの PE の経路は `allow-imported-vpn` が無いとグローバルへ出ない。静的は `0.0.0.0/0 vrf default <次ホップ>` |
+| ★XRd の PE の転送 | お客さまから受けてラベルを付ける向きと、ラベルなしで通り抜ける向き(VRF どうし・VRF⇔グローバル)で TCP/UDP の L4 チェックサムを壊す(ping は通る)。ラベルを外して CE へ出す向きは正常。XRv9000 は全部正常 |
+| 確かめの道具 | `poc/xr/tcpprobe.py <IOS> <宛先> [送信元 IF]`= IOS から相手の 22 番へ telnet して SSH のバナーが返るか(TCP-OK/NG) |

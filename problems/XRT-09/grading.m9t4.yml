@@ -1,0 +1,57 @@
+# M9-4: インターネット。既定経路を CUST-A に(advertise-as-vpn が無いと RT02 側に届かない)・公開 2 本をグローバルへ
+# (拠点 2 の 128/25 は allow-imported-vpn が無いと出ない)・INET には公開 2 本だけ・B に既定経路なし。PoC §22.3-9・§22.4。
+problem: XRT-09
+total_points: 100
+checks:
+  - name: 'M9-4 INET: learns customer A''s two public segments, and nothing else from AS 65000'
+    node: INET
+    command: 'show ip bgp'
+    raw:
+      - { regex: '198\.51\.100\.0/25\s+192\.0\.2\.1\s' }
+      - { regex: '198\.51\.100\.128/25\s+192\.0\.2\.1\s' }
+      - { not_regex: '\s(?:10|172)\.\S+\s+192\.0\.2\.1\s' }
+    points: 25
+  - name: 'M9-4 CEA1: the public segment of site 1 reaches the Internet'
+    node: CEA1
+    command: 'ping 203.0.113.10 source Loopback11 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 15
+  - name: 'M9-4 CEA2: the public segment of site 2 reaches the Internet'
+    node: CEA2
+    command: 'ping 203.0.113.10 source Loopback11 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 15
+  - name: 'M9-4 INET: reaches the public segment of site 2'
+    node: INET
+    command: 'ping 198.51.100.129 source Loopback10 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 10
+  - name: 'M9-4 CEA1: learns a default route from XR01'
+    node: CEA1
+    command: 'show ip route 0.0.0.0'
+    raw:
+      - { regex: 'Known via "bgp 65101"' }
+    points: 5
+  - name: 'M9-4 CEA2: learns a default route from RT02'
+    node: CEA2
+    command: 'show ip route 0.0.0.0'
+    raw:
+      - { regex: 'Known via "bgp 65101"' }
+    points: 10
+  - name: 'M9-4 CEB1: customer B keeps its VPN and has no default route'
+    node: CEB1
+    command: 'show ip route'
+    raw:
+      - { regex: '10\.102\.2\.0' }
+      - { regex: 'Gateway of last resort is not set' }
+    points: 10
+  - name: 'M9-4 CEB2: customer B keeps its VPN and has no default route (site 2)'
+    node: CEB2
+    command: 'show ip route'
+    raw:
+      - { regex: '10\.102\.1\.0' }
+      - { regex: 'Gateway of last resort is not set' }
+    points: 10
