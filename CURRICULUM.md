@@ -292,6 +292,7 @@ C 群= 既存単元の薄い層。**
 | ENCOR 350-401 | **v1.2** | 2026-09-21 | private/blueprints/350-401-ENCOR-v1.2.txt | 無線全削除・PTP 追加(3.3.a)・MSDP/bidir(3.3.d)・Catalyst Center AI(4.5)・HW/SW スイッチング項削除 |
 | ENARSI 300-410 | v1.1 | 2026-09-21 | private/blueprints/300-410-ENARSI-v1.1.txt | 1.0 35% / 2.0 20% / 3.0 20% / 4.0 25%(v1.2 は未公開・要再確認) |
 | CCIE EI Lab | v1.1 | 2026-09-21 | private/blueprints/CCIE-EI-v1.1-lab.txt | 1.0 30% / 2.0 SD 25% / 3.0 15% / 4.0 15% / 5.0 15% |
+| SPRI 300-510 | v1.1 | 2026-10-27 | private/blueprints/300-510-SPRI-v1.1.txt | 1.0 ユニキャスト 35% / 2.0 マルチキャスト 15% / 3.0 ポリシー 25% / 4.0 MPLS・SR 25%(SRv6 を含む)。XR トラックとの突き合わせ= BL-256 |
 
 ## 5. 作り込み記録(単元ごとの履歴・新しい順)
 

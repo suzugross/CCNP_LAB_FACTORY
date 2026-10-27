@@ -53,6 +53,12 @@
                        `alt_lang:` もう一方の言語。lang と合わせて en/ja の 2 言語の本になる(BL-248):
                          ページは <src>/<lang>/<file> と <src>/<alt_lang>/<file>。2 版を 1 ページに持ち、ボタンで切り替わる。
                          title・subtitle・chapters の値は {en: …, ja: …} で書ける。bundle は言語ごとに別の 1 枚を作る
+                       `toc: units` … 目次(index.html)を単元(chapters:)ごとのカードに分けて並べる(既定はページの一覧)。
+                         章の大きさがそろった教材向け。1 章に何十ページもある訳文の本は一覧のままのほうが読みやすい
+                         カードの見出しは章の名前の先頭の語(「M4 IS-IS」→ バッジ M4・名前 IS-IS)。ページ題名の同じ接頭辞は落とす
+                         `parts: [{title, chapters: [章番号]}]` … 単元を部に束ねる(部の見出し付き)。どの部にも無い単元は末尾に出る(警告)
+                         ページの種類(行の色)は pages の `kind:`(read / practice / appendix)、無ければファイル名から
+                         <src>/practice.yml(courses/ の実践ページの対応表)があれば、実践の行に課題のラボ ID を添える
   → 出力先に book.json(ポータルが読む一覧用のメタ。節の一覧 sections・ページ題名 page_titles・「やってみる」tries も)も書く
   ★節の目印(BL-252): h2/h3 に言語に依らない data-sec="s<n>" / "s<n>-<m>" を振る。`<ページ>.html#s2` で表示中の版の節へ飛ぶ。
     ラボのワークスペースの Reading タブ(learn.yml の read:)と実践ページのリンクが使う。2 版の見出しの並びがずれると警告する
@@ -226,6 +232,35 @@ body.reading .tw table{ margin:0; }
 .toc li{ margin:.3rem 0; }
 """
 
+# 目次(index.html)だけに足す。単元ごとのカードを部ごとの格子に並べる
+#   (2026-10-27 ユーザ要望「順番に羅列しているだけで分かりづらい・お目当ての単元に行きやすく」)。
+#   行の左の色= ページの種類(青= 読み物・緑= 実践・灰= 付録)。
+INDEX_CSS = """
+body.reading.rindex main{ max-width:64rem; }
+.cidx{ margin:2.4rem 0 0; line-height:1.5; letter-spacing:normal; }
+.cidx .ph{ display:flex; align-items:baseline; gap:.75rem; margin:2.8rem 0 1rem; padding:0 0 .4rem;
+  border:0; border-bottom:1px solid #c9ced6; font-size:1.02rem; line-height:1.5; color:#2c3540; }
+.cidx .ph:first-child{ margin-top:0; }
+.cidx .pr{ font-size:.8rem; font-weight:600; color:#7a8594; }
+.ugrid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(min(17.5rem, 100%), 1fr)); gap:1rem; }
+.unit{ display:flex; flex-direction:column; gap:.2rem; background:#fff; border:1px solid #d5dae1;
+  border-radius:8px; padding:.85rem .75rem .75rem; box-shadow:0 1px 3px rgba(20,30,45,.07); }
+.cidx .uh{ display:flex; align-items:center; gap:.65rem; margin:0 0 .55rem; padding:0 .15rem; border:0;
+  font-size:1.04rem; line-height:1.4; color:#111; }
+.ucode{ flex:none; min-width:2.7rem; text-align:center; font:700 .9rem/1 "Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace;
+  background:#1f2a37; color:#fff; border-radius:5px; padding:.45rem .5rem; }
+.uname{ font-weight:700; }
+.cidx a.ur{ display:flex; align-items:center; gap:.6rem; padding:.45rem .6rem; border-left:3px solid #3f7fbf;
+  border-radius:0 4px 4px 0; color:#1a1f27; text-decoration:none; font-size:.95rem; }
+.cidx a.ur:hover{ background:#eef2f7; }
+.cidx a.ur.k-practice{ border-left-color:#3f8f4f; }
+.cidx a.ur.k-practice:hover{ background:#eef8ef; }
+.cidx a.ur.k-appendix{ border-left-color:#a7b0bb; color:#4a5360; font-size:.9rem; }
+.ut{ flex:1; min-width:0; }
+.ulab{ flex:none; font:600 .74rem/1 "Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace; color:#2f6b3b;
+  background:#e3f2e5; border-radius:3px; padding:.3rem .42rem; }
+"""
+
 # 端末に見せるフェンスの言語名
 TERM_LANGS = ("console", "term", "shell")
 # プロンプト行（エスケープ済み HTML に対して当てる。> は &gt;）
@@ -379,9 +414,9 @@ _TAGS = {"note": ("c-note", "訳注"), "sic": ("c-sic", "原典の誤り"),
 # <html lang> も合わせる(読み上げ・フォント選択のため)。
 _LANG = "ja"
 _WORDS = {"ja": {"toc": "目次", "back": "↑ 目次へ", "note": "訳注", "sic": "原典の誤り", "orig": "原文", "try": "やってみる", "portal": "‹ ポータル",
-                 "prev": "前のページ", "next": "次のページ"},
+                 "prev": "前のページ", "next": "次のページ", "reading": "読み物"},
           "en": {"toc": "Contents", "back": "↑ Contents", "note": "Note", "sic": "Error in the source", "orig": "Original", "try": "Try it",
-                 "portal": "‹ Portal", "prev": "Previous page", "next": "Next page"}}
+                 "portal": "‹ Portal", "prev": "Previous page", "next": "Next page", "reading": "Reading"}}
 
 
 def set_lang(meta, lang=None):
@@ -571,7 +606,17 @@ def load_book(src):
         files = sorted(f for f in os.listdir(base)
                        if f.endswith(".md") and not f.startswith("_"))
         meta["pages"] = [{"file": f} for f in files]
+    # 実践ページ → 課題のラボ ID(courses/ の practice.yml。目次の実践の行に添える)
+    labs = {}
+    pr = os.path.join(src, "practice.yml")
+    if os.path.exists(pr):
+        import yaml
+        with open(pr, encoding="utf-8") as fh:
+            labs = {e["file"]: e.get("problem") for e in (yaml.safe_load(fh) or {}).get("pages") or []}
     for p in meta["pages"]:
+        if labs.get(p["file"]):
+            p.setdefault("lab", labs[p["file"]])
+            p.setdefault("kind", "practice")
         p["_path"] = os.path.join(base, p["file"])
         alt_path = os.path.join(src, alt, p["file"]) if two else None
         p["_alt_path"] = alt_path if alt_path and os.path.exists(alt_path) else None
@@ -783,24 +828,98 @@ def build_page(src, meta, i, out_dir, mermaid_mode):
     return dst, n
 
 
+def _unit_head(label):
+    """章の名前 → (バッジ, 名前)。先頭の語に数字があればバッジにする(「M4 IS-IS」→ M4 / IS-IS、「第1章 OSPF」→ 第1章 / OSPF)。"""
+    m = re.match(r"(\S*\d\S*)\s+(.+)$", label or "")
+    return (m.group(1), m.group(2)) if m else ("", label or "")
+
+
+def _short_title(title, code):
+    """ページ題名から単元の接頭辞を落とす(「M4 — IS-IS をさらに深く」→「IS-IS をさらに深く」)。M1 が M10 を食わないように語の切れ目を見る。"""
+    if not code:
+        return title
+    t = re.sub(rf"^{re.escape(code)}(?!\w)\s*[—–:：\-]?\s*", "", title)
+    return t or title
+
+
+def _page_kind(p):
+    if p.get("kind") in ("read", "practice", "appendix"):
+        return p["kind"]
+    f = p["file"].lower()
+    return "practice" if "practice" in f else "appendix" if "appendix" in f else "read"
+
+
+def _index_units(meta):
+    """目次の並び= [(部の名前 {言語: 文字}, [(章番号, [ページ])])]。部が無ければ名前なしの 1 つ。"""
+    units = {}
+    for p in meta["pages"]:
+        units.setdefault(_chapter_of(p), []).append(p)
+    groups, seen = [], set()
+    for part in meta.get("parts") or []:
+        keys = [str(k).zfill(2) for k in part.get("chapters") or []]
+        us = [(k, units[k]) for k in keys if k in units and k not in seen]
+        seen.update(k for k, _ in us)
+        if us:
+            groups.append((part.get("title") or "", us))
+    rest = [(k, ps) for k, ps in units.items() if k not in seen]
+    if rest:
+        if meta.get("parts"):
+            print(f"[reading] 警告: parts: のどの部にも入っていない単元 {[k for k, _ in rest]}(目次の末尾に出す)", file=sys.stderr)
+        groups.append(("", rest))
+    return groups
+
+
+def _index_cards(meta, groups, lang):
+    """単元ごとのカードを部ごとの格子に並べた HTML(空行を入れない= Markdown の生 HTML ブロックとして丸ごと通す)。"""
+    chapters = meta.get("chapters") or {}
+    out = ['<div class="cidx">']
+    for part, units in groups:
+        heads = [_unit_head(_pick(chapters.get(k), lang, k)) for k, _ in units]
+        if part:
+            codes = [c for c, _ in heads if c]
+            span = (codes[0] if len(codes) == 1 else f"{codes[0]}–{codes[-1]}") if codes else ""
+            out.append(f'<h2 class="ph"><span>{html.escape(_pick(part, lang))}</span>'
+                       + (f'<span class="pr">{html.escape(span)}</span>' if span else "") + "</h2>")
+        out.append('<div class="ugrid">')
+        for (k, pages), (code, name) in zip(units, heads):
+            out.append('<section class="unit"><h3 class="uh">'
+                       + (f'<span class="ucode">{html.escape(code)}</span>' if code else "")
+                       + f'<span class="uname">{html.escape(name)}</span></h3>')
+            for p in pages:
+                lab = f'<span class="ulab">{html.escape(p["lab"])}</span>' if p.get("lab") else ""
+                t = _short_title(p["_titles"][lang], code)
+                if t.casefold() == name.casefold():      # 見出しと同じ題名は繰り返さず、ページの種類で呼ぶ
+                    t = _w("reading")
+                out.append(f'<a class="ur k-{_page_kind(p)}" href="{p["html"]}">'
+                           f'<span class="ut">{html.escape(t)}</span>{lab}</a>')
+            out.append("</section>")
+        out.append("</div>")
+    out.append("</div>")
+    return "\n".join(out)
+
+
 def build_index(meta, out_dir):
     langs = meta["_langs"]
+    groups = _index_units(meta) if meta.get("toc") == "units" and meta.get("chapters") else None
 
     def body(lang):
         set_lang(meta, lang)
-        items = "\n".join(
-            f'<li><a href="{p["html"]}">{html.escape(p["_titles"][lang])}</a></li>'
-            for p in meta["pages"])
+        if groups:
+            toc = _index_cards(meta, groups, lang)
+        else:
+            toc = '<ul class="toc">\n' + "\n".join(
+                f'<li><a href="{p["html"]}">{html.escape(p["_titles"][lang])}</a></li>'
+                for p in meta["pages"]) + "\n</ul>"
         sub = _pick(meta.get("subtitle"), lang)
         return (f'<p class="portal"><a href="/">{_w("portal")}</a></p>\n\n# {_pick(meta["title"], lang)}\n\n'
                 + (f'<p class="lead">{html.escape(sub)}</p>\n\n' if sub else "")
-                + f'<ul class="toc">\n{items}\n</ul>\n')
+                + toc + "\n")
 
     kw = {"lang": langs[0], "alt_lang": langs[1], "alt_md": body(langs[1])} if len(langs) == 2 else {}
     first = body(langs[0])
     set_lang(meta)
-    out = RH.render(first, title=_pick(meta["title"], langs[0]), extra_css=READING_CSS,
-                    body_class="reading", allow_html=True, mermaid_mode="none", **kw)
+    out = RH.render(first, title=_pick(meta["title"], langs[0]), extra_css=READING_CSS + INDEX_CSS,
+                    body_class="reading rindex", allow_html=True, mermaid_mode="none", **kw)
     dst = os.path.join(out_dir, "index.html")
     with open(dst, "w", encoding="utf-8") as fh:
         fh.write(_finish_lang(out))
