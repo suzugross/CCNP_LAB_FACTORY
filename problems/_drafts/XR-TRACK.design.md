@@ -93,6 +93,7 @@
 - **トラック全体の段取り(2026-10-27 ユーザ方針)**= 3 段で進める。
   ① **1 周目(いまの段・BL-246)**= XR に慣れるための SPCOR 準拠の単元を、この表の計画どおり M13 まで貯める。
   ② **2 周目(BL-257)**= ひと段落したら、単元ごとに SPCOR 向けに中身を充実させる(読み物の深掘り・ラボ問・紙面問を順次)。
+     2026-10-30 決定= M0〜M9 の読み物を CLAUDE.md §6 の丁寧さ(技術そのものから・何が嬉しいのか→仕組みの図→XR の設定)に書き直すのもここで行う(手本= M10・§23.9)。
   ③ **SPRI(BL-256)**= SPCOR でやれることがなくなったら、SPRI に同じ手順で進む。調査結果は [XR-SPRI.design.md](XR-SPRI.design.md)。
   先回りして次の段の作業を始めない(SPRI の追補・新単元は ③ まで手を付けない)。
 
@@ -1399,3 +1400,224 @@ XR01 のお客さま側の IF は説明だけ(アドレスなし= §22.6-1)。�
   4. 既定(per-prefix)でも、グローバルから取り込んだ既定経路には VRF の Aggregate ラベル(24009)が付く。`label mode per-vrf` にすると CE の経路も 24009 にまとまる。
   5. as-override を外すと XR01 は拠点 2 の 2 経路を CEA1 から **取り下げる**(送らない動作)。経路に 65101 を含まない 0/0 と 10.99.1.0/24 は送り続ける。
   6. 学習モードの課題文の切り出し(`lab_console._learn_texts`)は 4 本とも日英で取れた。XRv9000 の XR01 と XRd の XR02 が同じラボにあっても採点・reset はそのまま動く。
+
+## 23. M10 セグメントルーティング(SPCOR 3.3)(2026-10-30 完了= 課題 §23.7・ユーザ判断 §23.6・実装の結果 §23.8)
+
+**範囲= SPCOR 3.3(a セグメントの種類・b SR の制御プレーン・c SR-TE・d TI-LFA・e PCE と PCC・f Flex-Algo・g SRv6)**。
+§5 の方針どおり、ラボの本線は **a・b・d**(prefix-SID・LDP からの移行・TI-LFA)。**c・e(SR-TE・PCE)は PoC で成り立てば課題にする**かをユーザ判断に回す。
+f・g(Flex-Algo・SRv6)は読み物中心(IOL が対応しなければ「やってみる」も XR だけ)。IS-IS の論点= prefix-SID・TI-LFA(§5 の「IS-IS の深め方」②)。
+ラボは **`XRT-10`**(XRT-09 を解き終えた状態から= L3VPN のお客さまを載せたまま、コアを LDP から SR に移す筋書き)。
+2026-10-29 ユーザが XRT-09 を全通過 → 撤収して PoC(ユーザ了承)。
+
+### 23.1 盤面(PoC= `problems/_POC-XRSR`= XRT-09 の写し+ `PID=_POC-XRSR poc/xr/solve_xrt09.sh` で M9 を解き終えた状態)
+
+- コア= XRT-07 以来の四角形(IS-IS CORE L2・LDP・同期・セッション保護)。XR01(PE・XRv9000 26.1.1)・RT01/RT03(P・IOL 17.15)・RT02(PE・IOL)。
+  メトリックは主経路 10(XR01–RT01–RT02)・予備 100(XR01–RT03–RT02)。RT03–XR02 は 10。
+- XR02(XRd 26.1.1)= VPNv4 の RR。転送の道に入らない行き止まり= **PCE の候補**(XRd の公式の位置づけ= vRR・PCE。§19.4)。
+- お客さま A/B・共有サービス・インターネットは M9 のまま(L3VPN の通信が移行の前後で止まらないことを見る材料)。
+- TI-LFA の見込み(机上)= XR01 が XR01–RT01 を守る時、宛先 RT02 は RT03 が素の LFA(100 < 100+20)。宛先 RT01 は RT03 からの戻りが等コスト(110=110)
+  で素の LFA にならず、PQ ノード= RT02 → 修復は「RT02 の node-SID を積んで RT03 へ」。RT03–RT02 だけ 100 にして XR01–RT03 を 10 にすると
+  P={RT03}・Q={RT02} が離れ、**adj-SID(RT03→RT02)が要る**修復になる(メトリックの置き方は PoC で決める)。
+
+### 23.2 課題(案・PoC の結果で確定する)
+
+| 課題 | 中身(挙動で指定・値は課題文で渡す) | 主な XR の論点 | SPCOR |
+|---|---|---|---|
+| M10-1(構築) | コアを LDP から SR へ移す。IOS のルータは据付で SR を有効にしてある(LDP と併存中)。XR01 に SR を入れ、お客さまの通信を止めずに SR のラベルへ乗せ替え、最後に XR01 の LDP を止める(SRGB と index は社内の約束を表で渡す) | IS-IS の AF の `segment-routing mpls`・Lo0 の `prefix-sid`・既定は LDP 優先か(`sr-prefer`)・LDP を止めた後の L3VPN | 3.3.a・3.3.b |
+| M10-2(TS) | 「XR01 から RT0x への SR のラベルが無い/通信が切れる」。仕込み案= 前任者が XR01 の SRGB を狭めた(相手の index が範囲外)か SID の衝突(PoC で症状を見て選ぶ) | SRGB と index の関係・`show isis segment-routing …` の表示・SRGB の変更の反映(再起動が要るか) | 3.3.a |
+| M10-3(構築) | XR01–RT01 のリンクが切れても、お客さまの通信の欠落を最小にする(BFD は M7 の値)。修復の経路は事前に計算しておく | `fast-reroute per-prefix` + `ti-lfa`・修復のラベル(PQ ノード/adj-SID)・`show isis fast-reroute … detail`・CEF の予備 | 3.3.d・IS-IS |
+| M10-4(構築・PoC 次第) | お客さま A の通信だけ予備経路(RT03 経由)を通す。B は最短のまま。色で流し込む | SR-TE のポリシー(色・終点・明示の segment-list)・RPL の `set extcommunity color`・automated steering | 3.3.c |
+| M10-5(構築・PoC 次第) | XR02 を PCE にし、XR01 の経路の計算を任せる(条件つきの経路)。XR02 は転送に入れない | `pce`・`distribute link-state`・PCC・過負荷ビット(M7) | 3.3.e |
+
+- 読み物だけで扱う見込み= Flex-Algo(IOL の対応次第)・SRv6(IOL は非対応の見込み= locator と uSID の考え方・XR の設定の形)・BGP の prefix-SID(RFC 8669)・
+  anycast SID・mapping server と SR-LDP の継ぎ目(PoC で成り立てば「やってみる」)・microloop avoidance。
+
+### 23.3 PoC で確かめること(盤面 `_POC-XRSR`。手順 `poc/xr/sr_poc.sh`・記録 `poc/xr/sr-*.log`)
+
+1. 資源・構築時間。M9 の模範解を流した後、L3VPN が LDP の上で通っていること(出発点)。
+2. **IOL 17.15 の SR-MPLS**= `segment-routing mpls`・`connected-prefix-sid-map`・IS-IS の `segment-routing mpls` が通るか。XR01 と SID を交換し、
+   互いの転送表に SR のラベルが載るか。IOL の TI-LFA・Flex-Algo・SRv6 の可否(コマンドが通るか)。
+3. XR の SR の設定の木= IS-IS の AF に `segment-routing mpls` が無いまま prefix-sid を書いた時・SRGB の既定と変更(再起動が要るか)・範囲外の index の扱い。
+4. **LDP と SR の併存**= 既定でどちらのラベルを積むか(XR・IOL それぞれ)・`sr-prefer`・LDP を止めた後も L3VPN が通るか・止める順序の落とし穴
+   (IOL 側の LDP 同期= LDP を止めると IS-IS のメトリックが最大になるか)。
+5. 範囲外の index・SID の衝突の症状と表示(M10-2 の仕込みを選ぶ材料)。
+6. **TI-LFA**= 四角形のメトリックで修復の経路(PQ ノード/adj-SID)がどう計算されるか・IOL が修復のラベルを正しく転送するか・
+   CML のリンク条件で切った時の欠落(BFD あり/なし × TI-LFA あり/なし。`login_probe.py` の ping-loss)。
+7. microloop avoidance の設定と表示(読み物用)。
+8. **SR-TE**= XR01 で明示経路のポリシー(RT03 経由)・BGP の色で CUST-A だけ流し込む(VPNv4 の受け入れで色を付ける)・ODN。IOL は転送だけで足りるか。
+9. **PCE**= XR02(XRd)を PCE に・XR01 を PCC に・動的な経路(条件つき)。XR02 に過負荷ビット。
+10. Flex-Algo(XR01 と IOL)・SRv6(XR01・XR02 だけ)・mapping server(RT03 の SR を外して XR01 を mapping server に)は時間があれば。
+
+### 23.4 PoC の結果(2026-10-29・XRv9000 26.1.1+IOL 17.15。盤面 `_POC-XRSR`・手順 `poc/xr/sr_poc.sh a…i`・記録 `poc/xr/sr-*.log`・欠落の測定 `poc/xr/sla_loss.py`)
+
+1. **資源・出発点**= 構築 9 分半。M9 の模範解(`PID=_POC-XRSR poc/xr/solve_xrt09.sh`)で L3VPN が LDP の上で通る(XR01 は RT02 へ `{16 22}`= RT01 の LDP ラベル+VPN ラベル)。
+2. **IOL 17.15 は SR-MPLS を持つ**= `segment-routing mpls`(下に connected-prefix-sid-map・global-block・local-block・mapping-server・set-attributes)・
+   IS-IS の `segment-routing mpls`/`prefix-sid-map`・`fast-reroute`(ti-lfa・remote-lfa)・`flex-algo`・`microloop avoidance`・`distribute link-state` が通る。
+   全体に `segment-routing srv6` の項目もある(公式の SRv6 の対応機種一覧に IOL は無い)。既定の SRGB 16000-23999・SRLB 15000-15999。
+   adj-SID は動的ラベル(22〜27 など小さい値)。XR の adj-SID は 24011 など。
+3. **XR の SR の木**= IS-IS の AF に `segment-routing mpls` が無いまま Lo0 に `prefix-sid index 1` を書くと、コミットで
+   「**Feature not supported: Segment-routing is not enabled for IPv4 Unicast**」と拒否(黙った故障にならない= TS の題材にしない)。
+   ★`segment-routing mpls` だけ入って prefix-sid を書き忘れると、XR01 は相手へ SR で送れるが、相手は XR01 へ LDP のラベルしか持たない
+   (LDP を止めると XR01 へ届かない)= 構築の確認で拾う。
+4. **LDP と SR の併存**= XR01 は既定で **LDP のラベルを積む**(SR のラベル 16012 を持っていても `{16}`)。`segment-routing mpls sr-prefer` で `{16012}`。
+   IOL は `segment-routing mpls / set-attributes / address-family ipv4 / sr-label-preferred` で SR 優先(RT02 の XR01 向き 16001)。
+   IOL は SR を持たない隣(XR01 に SR を入れる前)へは自動で LDP のラベルに継ぐ(RT01 の 16013 の一方が XR01 の LDP ラベル 24001= SR→LDP の継ぎ目)。
+5. **★移行の落とし穴= LDP を止めた後の同期**= XR01 で `no mpls ldp` だけにすると、IS-IS の IF に残った `mpls ldp sync` のせいで
+   **XR01 自身が両リンクを最大メトリック 16777214 で広告し続ける**。消すと 10/100 に戻る。
+   IOS 側(`mpls ldp sync` を全体に持つ)も LDP の相手が消えて同期が外れ、XR01 向きを 16777214 で広告する。
+   IOS は**そのリンクの LDP を外せば同期は効かなくなる**(`no mpls ip`= 「LDP not configured」で 10 に戻る・`no mpls ldp igp sync` でも同じ)。
+   → XR は「LDP 全体を消しても、IS-IS 側の同期の設定が残る限り未同期」。課題では IOS 側を据付で整え(XR01 向きの LDP を外す)、XR01 の同期の消し忘れを確認で拾う。
+   最大メトリックでも XR01 へは他に道が無いので L3VPN は通る(黙った不具合= TI-LFA の計算や予備経路の選択が狂う)。
+6. **SRGB の変更**= XR01 の `segment-routing global-block 16000 16009` は**再起動なしで約 5 秒で反映**(ISIS の SRGB_INFO「disabling SR」→「enabling SR」)。
+   BGP は `%ROUTING-BGP-2-SR_CFG_CHANGED … 'process restart bgp' needed` を出す(BGP の prefix-SID を使う時だけ関係)。
+   狭めると相手の index 11〜13 が自分の範囲外= XR01 は自分の入ラベルを作れず **相手への SR のラベルを積まない**(`show isis segment-routing label table` から消える)。
+   LDP を止めた後なので RT02 への /32 はラベルなし= VPN の経路は **unresolved・drop**(CEA1→CEA2 は `U.U.U.`)。RT01 は `%CLNS-4-SIDRANGE … out of SRGB range 10 via 10.0.1.1` を出す。
+   戻すと即座に復旧。= **M10-2 の TS の第一候補**(症状= お客さまの通信が止まる・XR01 のラベル表に相手が無い・相手の DB の SRGB と自分の SRGB の食い違い)。
+7. **SID の衝突**(RT03 の Lo0 に RT02 と同じ index 12)= XR01 はラベル表に「`label conflict: 16012 10.255.0.13/32`」・syslog
+   「Label Conflict: Prefix-SID label 16012 for algo SPF is used by 10.255.0.12/32 and 10.255.0.13/32」。**XR01 は 10.255.0.12 を採り** RT03 をラベルなしにした
+   (RFC 8660 §2.5.1 の「数値の小さい FEC が勝つ」どおり)。★**IOL(RT01)は 10.255.0.13 を採った**(RT02 の対応を捨てた)= XR01 が RT02 宛に積んだ 16012 を
+   RT01 が RT03 へ流し、L3VPN は 0%。**RFC と IOL の実装が食い違う**(§23.5・ユーザ判断)。
+8. **相手の SRGB を超える index**(XR01= 9000)= コミットは通る。XR01 自身の範囲(8000)も超えるので自分のラベル表からも消える。RT01 は XR01 宛を
+   「No Label」(LDP は止めた後)にし、XR01 へ届かない。
+9. **TI-LFA**(XR01 の両コア IF に `fast-reroute per-prefix` と `… ti-lfa`)= 保護率 100%。机上どおり= 宛先 RT01 は
+   「TI-LFA (link)・P node RT02・Label 16012・Prefix label 16011」(CEF の予備 `{16012 16011}`・Repair Node 10.255.0.12)、宛先 RT02 は素の LFA(Local-LFA)、
+   宛先 RT03 は RT01 経由で P node RT02。VPN の経路は /32 の保護をそのまま使う(再帰)。
+10. **欠落の測定**(CEA1 の udp-jitter 10 ms 間隔・XR01–RT01 にリンク条件 loss 100。BFD は XR01⇔RT01 で 100 ms × 3、echo で検出)=
+    TI-LFA なし 42 個(約 420 ms)・あり 34〜40 個。**この盤面では XR の再計算が速く(検出後 約 100 ms)、差は検出時間に埋もれる**。
+    CML のリンクを止めても(キャリア断)XRv9000 の IF は落ちず、検出は BFD の「Echo function failed」= リンク条件と同じ。
+    BFD を縮めてくり返すと BFD が dampening に入り(初回 2000 ms・次 5000 ms)、測定が乱れる。→ **採点は修復経路の状態で見る**(欠落では見ない)。
+11. **SPF を遅らせた比較**(XR01 に `spf-interval initial-wait 1000 secondary-wait 1000 maximum-wait 5000`・BFD 100 ms × 3・隣接と BFD の Up を待ってから測る)=
+    TI-LFA なし 342・467 個(**3.4〜4.7 秒**)/あり 41・34 個(**0.34〜0.41 秒= BFD の検出時間だけ**)。
+    → 大きな網の再計算の遅さを SPF の待ちで模すと効き目がはっきり出る= 読み物の「やってみる」に使う(課題の採点には使わない)。
+12. **IOL の TI-LFA**(RT01 の `router isis` に `fast-reroute per-prefix level-2 all` と `fast-reroute ti-lfa level-2`)= 隣接が安定していれば保護率 77%。
+    XR01 宛は「TI-LFA link-protecting・P node RT03(16013)・RT02 へ」(`show isis rib`)・自動の修復トンネル MPLS-SR-Tunnel。`mpls traffic-eng tunnels` は要らない。
+    IOL は既定で「Microloop Avoidance Enable State: enabled for segment-routing」と表示する。★最初の 0% は XR01 の隣接が落ちていた間に見たため(下の 14)。
+13. **adj-SID の要る修復**(XR01–RT03 を両側 10・RT03–RT02 は 100)= 机上どおり「P node RT03(ImpNull)・**Q node RT02・Label 23**(RT03→RT02 の adj-SID)」・
+    CEF の予備 `{ImplNull 23 16011}`。宛先 RT02 も同じ形(`{ImplNull 23}`)。欠落 28 個× 2 回(約 280 ms= 検出時間)。
+14. **★XR の BFD dampening**= 落とすたびに抑止が延び(初回 2000 ms・次 5000 ms… ここでは約 2 分)、その間は隣接が戻らない
+    (`show bfd session` で `DOWN DAMP`)。`bfd / dampening disable` で切れる。採点で故障を起こすなら効く(M10 は状態で採点するので起こさない)。
+15. **microloop avoidance**(XR01)= `microloop avoidance segment-routing`・`rib-update-delay 3000` がコミットでき、`show isis protocol` に
+    「Microloop avoidance: Enabled / Configuration: Type: Segment Routing, RIB update delay: 3000 msec」。
+16. **SR-TE**= 明示経路(`segment-list` に 16013・16012)のポリシー 色 100 は即 up(binding SID 24003)。VPNv4 の受け入れ(RR からの neighbor-in)で
+    RT 65000:101 の経路に色 100 を set すると CUST-A だけがポリシーに乗る(`show bgp vrf` に `C:100 (bsid:24003)`・CEF が `srte_c_100_ep_10.255.0.12`)。
+    CEA1 の traceroute は 2 番目が 10.0.3.13(RT03)、CEB1 は 10.0.1.11(RT01)のまま。IOL は転送だけで足りる。
+17. **★ODN の落とし穴**= `on-demand color 100 dynamic`(自分の IF に affinity・exclude-any)は、IS-IS に **`distribute link-state` が無いと
+    「Last error: Source node not found in topology」で down**、通信は**黙って IGP の最短経路に戻る**(CEF は {16012 22} で RT01 経由)。
+    足すと即 up(16013・16012)。ODN は自動で 2 つの候補(優先 200= 自分で計算・100= PCE に委任)を作る。
+18. **★VRF の import での色**= 公式(SR-TE 章の RPL の付け先の表)は「VRF import は match だけ」だが、26.1.1 は `vrf CUST-B / address-family ipv4 unicast /
+    import route-policy`(`set extcommunity color`)を**コミットでき、色が付き、流し込みも効いた**(`SR policy color 100, up, registered`・CEB1 の traceroute が RT03 経由)。
+    **公式と実機の食い違い**(§23.6)。neighbor-in で付けた時の表示は `not-registered` だったが、CEF は流し込まれていた。
+19. **PCE**(XR02= XRd に `pce / address ipv4 10.255.0.21` と IS-IS の `distribute link-state`・XR01 を PCC)= PCE のトポロジに 5 ノード・prefix-SID 4・adj-SID 13
+    (起動直後 40 秒は「Ready: no」)。色 201・202 の 2 本に `disjoint-path group-id 1 type link` を付けて `dynamic / pcep` にすると、PCE が
+    **201= RT01 経由(16012)・202= RT03 経由(16013・16012)**に分けた(`show pce association`= Link-Disjoint・Satisfied)。XRd で PCE は成立(転送しない役)。
+20. **Flex-Algo**(XR01 に `flex-algo 128 / advertise-definition`・Lo0 に `prefix-sid algorithm 128 index 101`)= 遅延(`metric-type delay`)はどのリンクも
+    遅延を広告していないので経路ができない。IGP メトリックに替え、IOL 3 台にも `router isis / flex-algo 128` と `connected-prefix-sid-map / address-family ipv4 algorithm 128`
+    を入れると、**IOL も参加して algorithm 128 のラベル(16111〜16113)を作る**。参加しない XR02 は除外(`show isis topology flex-algo 128` で `**`)。
+    → 盤面で Flex-Algo のラボも成り立つ(affinity での除外は未測)。
+21. 測っていないもの= SRv6(コアに IPv6 が無い。IOL にコマンドはあるが公式の対応機種一覧に無い)・mapping server(SR を持たない隣が要る)・anycast SID。読み物で扱う。
+
+### 23.5 公式文書・RFC での裏どり(2026-10-29・PoC と並行。xrdocs.io は取得していない・問題集サイトは使っていない)
+
+参照= Segment Routing Configuration Guide for ASR 9000, IOS XR 26.1.x–26.3.x(2026-09-11 更新・以下 CG)/Segment Routing Command Reference for ASR 9000(2025-12-17 更新・以下 CR)/
+SR Configuration Guide for Cisco 8000 24.x の IS-IS 章/TechNote 215215「Segment Routing Overview and Migration Guidelines」(2020)/
+IOS XE Segment Routing Configuration Guide(2026-09 更新・版の表記なし)/IOS XE 17.x IP Routing CG「SR with IS-IS v4 Node SID」/IOS XRd Data Sheet(2026-04)/
+RFC 8402・8660・8661・8664・8667・9256・9350・9855(TI-LFA・2025-10)/Cisco Live EMEA 2025 BRKSPG-3624・EMEA 2026 BRKSP-2551(信頼順 1.5)。抽出は作業場所(リポには置かない)。
+
+| 論点 | 文書 | 実機(§23.4) | 扱い |
+|---|---|---|---|
+| SRGB/SRLB の既定 | CG: 16000–23999/15000–15999。`segment-routing global-block`・`local-block`。IGP でなく `segment-routing` の下に書くのを推奨 | 一致(XR・IOL とも) | — |
+| SRGB の変更 | CG:「変更は通信を乱し、新しい範囲が全部空いていなければ再起動が要ることがある」。空いている時に即時かは明記なし | 空いていれば約 5 秒で即時(ISIS の SRGB_INFO)。BGP は process restart を求めるログ | 実機で補う |
+| prefix-SID の形 | CG/CR: IS-IS の IF の AF に `prefix-sid [algorithm N] {index\|absolute} [n-flag-clear] [explicit-null]`。既定で N フラグ | 一致(N:1) | — |
+| `segment-routing mpls` なし | CR:「IS-IS のインスタンスに SR が要る」とだけ | コミットで拒否(Feature not supported) | 実機で補う |
+| SR と LDP の既定 | 現行の CG/CR に既定の記述なし。TechNote「Cisco の実装は常に LDP 優先」・RFC 8661 §6.1「既定は LDP を選ぶべき」。`sr-prefer` | 既定 LDP・sr-prefer で SR | 一致(TechNote・RFC) |
+| IOS XE の SR 優先 | XE SR CG: `set-attributes / address-family ipv4 / sr-label-preferred` | 一致 | — |
+| 範囲外の index | RFC 8402 §3.1.2「使ってはならず、エラーを記録すべき」・RFC 8660 §2.4/§2.10.1。IOS XE CG: 範囲外はラベルを使わない。XR は記述なし | XR は黙ってラベル表から外す(ログなし)・IOL は SIDRANGE のログ | 実機で補う |
+| SID の衝突 | RFC 8660 §2.5.1: 既定の決め方(管理距離→ FEC の数値の小さい方)を実装すべき(SHOULD)・別の決め方も可(MAY)・**運用者は同じ領域に同じ決め方のルータを置かなければならない(MUST)**。XR の決め方・表示は記述なし | XR は 10.255.0.12(RFC の既定どおり)・**IOL は 10.255.0.13** | ★食い違い(XR と IOL)。RFC は許すが混在で通信が止まる= 読み物の題材。TS には使わない案(結果が実装に左右される) |
+| adj-SID | CG: 動的は動的ラベルの範囲から・再起動で変わる。手動は SRLB から・P2P のみ・既定は保護なし | XR 24011 など・IOL 22〜27 | — |
+| mapping server | CG: `segment-routing mapping-server prefix-sid-map` + IS-IS `segment-routing prefix-sid-map advertise-local`(既定は広告しない)。SRMS が要るのは SR→LDP の向きだけ(CG・RFC 8661 §3.1.1。TechNote は LDP→SR にも要ると書く) | 未測(IOL は SR を持たない隣へ自動で LDP に継ぐのを確認) | 読み物(食い違いは注記) |
+| TI-LFA の設定 | CG: IF の AF に `fast-reroute per-prefix` と `fast-reroute per-prefix ti-lfa` の 2 行。前提は IS-IS の SR。修復のラベルが 3 枚までは IGP が直接・それを超えると自動の SR-TE(`ipv4 unnumbered mpls traffic-eng Loopback` が要る) | 2 行で保護率 100%(修復は 2 枚以内) | 一致 |
+| TI-LFA の既定の保護 | CG: リンク保護。ノード保護・SRLG はタイブレーカで有効化(既定は無効)。XE: node-protecting は既定で無効、srlg-disjoint などは既定で有効 | XR は TI-LFA (link) | 一致 |
+| TI-LFA の効き目 | CG/Cisco Live: 検出 BFD で 20–50 ms・切り替え 50 ms 未満・IGP の再収束 約 500 ms。XE CG「50 ms は保証できない」 | 検出(BFD 300 ms)が支配的。再計算が速い盤面では差が小さい | 採点は状態で・やってみるは SPF を遅らせて |
+| microloop avoidance | CG: `microloop avoidance segment-routing` 既定は無効・`rib-update-delay` 既定 5000 ms | 一致(§23.4-15)。IOL は既定で有効と表示 | M10-3 に足す案 |
+| SR-TE | CG: ポリシーは (色・終点)。明示経路は `segment-list / index N mpls label L`。**head-end は IGP の IF を p2p にし、`distribute link-state` を入れてから**。色の set は neighbor-in/out・VRF export などで可 | 明示経路は distribute link-state なしでも up・**動的(ODN)は無いと down で黙って最短経路へ**(§23.4-16・17) | 一致(落とし穴として使う) |
+| 色を付ける場所 | CG の RPL の付け先の表: **VRF import は match だけ**(set 不可) | **26.1.1 は VRF import の set がコミットでき、流し込みも効く**(§23.4-18) | ★食い違い(ユーザ判断)。採点は挙動で(付ける場所を問わない)案 |
+| PCE | CG: `pce / address ipv4`・IGP の `distribute link-state` か BGP-LS でトポロジ。PCC は `segment-routing traffic-eng pcc / source-address / pce address`。「SR-PCE には XRv9000 を推奨」。データシート: XRd Control Plane は vRR・PCE 向け | XRd で成立・リンクで離す計算も Satisfied(§23.4-19) | 一致。XR02 は XRd のまま |
+| Flex-Algo | CG: `flex-algo 128-255`・定義を広告しないと働かない・遅延を広告しないリンクは除外・Flex-Algo の経路は MPLS→MPLS のエントリだけ(IP→MPLS は入らない)。XE CG: 17.3.1 から(対応機種の一覧なし) | 遅延の定義は経路なし・IGP の定義で IOL も参加(§23.4-20) | 一致。ラボ化はユーザ判断 |
+| SRv6 | CG: locator と uSID(f3216)・通過ノードは IPv6 の転送だけ。XE CG: 17.12.1a から・対応機種は ASR1000/C8000 系のみ(IOL は記載なし) | IOL にコマンドはある(未測) | 読み物 |
+
+### 23.6 ユーザ判断(2026-10-29 決定= 1〜3 とも案どおり。1= 5 本で実装・Flex-Algo は読み物+やってみる/2= 挙動で採点・注記/3= 読み物だけ)
+
+1. **課題の範囲**= §23.7 の 5 本(SR 移行+SRGB の TS/LDP の撤去/TI-LFA/SR-TE(ODN)/PCE)で実装するか。Flex-Algo は IOL も参加できる(§23.4-20)が、
+   M10 では読み物+「やってみる」に留め、課題化は 2 周目(BL-257)に回す案。
+2. **★公式と実機の食い違い= 色を VRF の import で付ける**(公式は「match だけ」・26.1.1 は set が効く。§23.4-18)。案= **採点は挙動で**(CUST-A がポリシーに乗る・B は乗らない)、
+   付ける場所は問わない。模範解は公式の付け先(RR からの受け入れ= neighbor-in)にし、読み物に「文書の表と 26.1.1 の挙動」を注記。
+3. **SID の衝突で XR と IOL が別の側を採る**(XR= RFC の既定どおり・IOL= 逆。RFC は別の決め方も許すが、運用者に揃えることを求める)。案= 読み物の題材にし、TS にはしない
+   (結果が実装に左右される)。M10-1 の TS は決定的な SRGB の食い違いにする。
+4. 機種= XR01 は XRv9000(BFD・TI-LFA の転送)・XR02 は XRd(PCE。設定ガイドは SR-PCE に XRv9000 を推すが、XRd のデータシートは PCE 向けと書き、PoC で成立)。
+5. TI-LFA は**状態で採点**(修復経路の計算・CEF の予備)。この環境では BFD の検出時間が支配的で欠落の差が出ず、故障を起こすと BFD の dampening で後が乱れるため。
+
+### 23.7 課題の確定案(2026-10-29・§23.6 の決定を受けて)
+
+**初期状態**= XRT-09 を解き終えた状態(L3VPN が LDP の上)+ IOS 側は SR の準備済み(据付= RT01〜RT03 に SR・index 11〜13・`sr-label-preferred`・
+IOS どうしの LDP は残す・**XR01 向きの IF は LDP の同期を外してある**= §23.4-5)。XR01 に仕込み= 前任者の SRGB 16000-16009(CHG のコメントつき)。
+XR02(RR・XRd)は M9 の模範解のまま。ラボ ID は `XRT-10`。
+
+| 課題 | 中身(挙動で指定・値は課題文で渡す) | 確認(案) | 配点 |
+|---|---|---|---|
+| M10-1(構築+TS) | XR01 を SR に参加させる(Lo0 の index 1・SRGB は社内の約束= 16000-23999)。XR01 発着のラベル付きの通信を SR のラベルで運ぶ。LDP は切り戻し用に残す。仕込み= 前任者の SRGB(相手の index が範囲外で SR のラベルができず、XR01 は LDP のまま) | XR01 の LSP に SRGB 16000/8000 と prefix-SID 1・XR01 の RT02 向きが {16012}・RT02 の XR01 向きが 16001・LDP の隣接 2 つが残る・両お客さまの拠点間 ping | 30 |
+| M10-2(構築) | 切り戻しの期限が過ぎた。XR01 の LDP を止める(IOS 側は待っている) | XR01 に LDP の隣接なし・**XR01 の LSP のメトリックが 10/100**(同期の消し忘れ= 16777214 を拾う)・ping | 15 |
+| M10-3(構築) | XR01 のコアの両リンクに、切れた瞬間に使う予備経路を事前に計算させる(リンク保護)。経路が切り替わる間の一時的なループも避ける | FRR の保護率 100%・RT01 の Lo0 の予備が TI-LFA で P ノード RT02・RT02 の Lo0 に予備・microloop avoidance(SR)が有効 | 20 |
+| M10-4(構築) | お客さま A の拠点間の通信だけ、XR01–RT01 のリンクを避けて通す(RT01 の保守に備える)。B は最短のまま。経路は XR01 が計算する(固定の経路を書かない)。色 100 は社内の約束 | A の経路に色 100 とポリシー up・ポリシーが動的・CEA1 の traceroute の 2 番目が RT03・CEB1 は RT01 | 20 |
+| M10-5(構築) | XR02 を PCE にし、XR01 の 2 本の経路(色 201・202・終点 RT02)を互いにリンクを共有しないように PCE に計算させる | PCEP の隣接・2 本が up で計算元が PCE・片方が RT03 経由・PCE の association が Satisfied | 15 |
+
+- 落とし穴(PoC で確認済み)= SRGB の範囲外(ラベル表から黙って消える)・`sr-prefer` なしは LDP のまま・同期の消し忘れで最大メトリック・
+  ODN は `distribute link-state` なしで黙って最短経路・PCE も `distribute link-state` が要る。
+- 読み物 M10(日英)= SR の考え方(SID の種類・SRGB と index・PHP)・XR の設定の木・LDP との併存と移行・TI-LFA(P/Q ノード・adj-SID・
+  「やってみる」= SPF を遅らせて差を見る §23.4-11)・microloop・SR-TE(色・ODN・BSID)・PCE・Flex-Algo(やってみる)・SRv6(考え方と XR の形)・
+  SID の衝突と mapping server(describe)。
+
+### 23.8 実装の結果(2026-10-30)
+
+- 成果物= `problems/XRT-10`(XR01= XRv9000 26.1.1・XR02= XRd 26.1.1・RT01〜RT03/CE 4 台/SVC/INET= IOL 17.15・`initial/XR01.commits.yml`= CHG-1301 の SRGB の仕込み・
+  課題ごとの確認 `grading.m10t1〜5.yml`・最終 `grading.yml`= M10-1 30・M10-2 15・M10-3 20・M10-4 20・M10-5 15・`learn.yml`(日英)・課題文 日英)、
+  読み物 `courses/xr/{en,ja}/a0-m10-segment-routing.md`(9 節+実践・「やってみる」7 つ・図は `:::topo`)・実践 `a1-m10-practice.md`(`course.sh` が課題文から切り出す)・
+  本の章番号は "A0"(2 桁に収まらないので英字始まり= 章とファイル名の並びを M9 の後ろに保つ)・部は「SP の中核」に入れた。
+  模範解= `poc/xr/solve_xrt10.sh`(誤答・別解つき)・E2E= `poc/xr/e2e_xrt10.sh`・記録 `poc/xr/expM10-*.log`。
+- 初期状態= XRT-09 の M9 の模範解を XR01/XR02 の初期設定に焼き込み、IOS 側に SR の準備(SRGB 既定・index 11〜13・`sr-label-preferred`・TI-LFA・
+  Flex-Algo 128 に参加(index 111〜113・定義は持たない= 読み物の「やってみる」用)・XR01 向きの IF は `no mpls ldp igp sync` と BFD 100 ms × 3)。XR01 にもコアの BFD。
+- 実機 E2E= 白紙 0(課題ごと 5 本・最終)→ 模範解 100(課題ごと・最終)。誤答= SRGB を直さない 20(RT02→XR01 の 16001 だけ通る)・sr-prefer なし 55・
+  同期の消し忘れ 65・素の LFA だけ 20(保護 3・未保護 4)・distribute link-state なし 0・離す条件なし 50(2 本とも RT01 経由)・PCE にトポロジなし 25(2 本とも down)。
+- **実装で分かったこと**:
+  1. ★`xr_reset.py` の記録がラベル付きのコミット(commits.yml の CHG-1301)を飛ばし、1 つ前の ZTP の回を戻り先にしていた
+     (`show configuration commit list` はラベルの付いた回を ID でなくラベルで表示する)→ `list detail` の `CommitId:` を読むよう修正。
+     履歴を仕込む XRT-01 のやり直しにも潜んでいた不具合(XRT-01 は reset の導入前に作ったので表に出ていなかった)。
+  2. LDP や VPN のラベルの値は構築ごとに変わる(PoC は LDP 16・VPN 22、XRT-10 は 18・26)= 学習モードと読み物の説明は値に頼らない書き方にした。
+  3. ★M10-5(PCC)の後は、`distribute link-state` を外しても ODN のポリシーは down にならない= 優先度 100 の PCE に委任した候補パスが引き継ぎ、
+     RT03 経由のまま(PCE は XR01 のリンクの affinity を知っていて避けた)。読み物の「やってみる」は M10-4 の後・M10-5 の前に行うよう書き、
+     M10-5 の後の挙動も書き添えた。
+  4. Flex-Algo のアフィニティは広告する側の向きだけに効く= XR01 側の PRIMARY だけに RED を付けると、XR01 の algorithm 128(16112)は RT03 経由になるが、
+     RT01 は XR01 宛てに PRIMARY を使い続ける(`show isis topology flex-algo 128`)。
+  5. M10-4 の後は顧客 A が PRIMARY を通らないので、TI-LFA の測定(4.3 の「やってみる」)は顧客 B で行う。
+  6. **やり直し・逐語・別解**= `lab.sh reset` 後に白紙 0(XR01 は CHG-1301 の後へ・XR02 は first-boot へ)・learn.yml の模範解を逐語で流して課題ごと 5 本と最終とも 100・
+     別解(`global-block 16000 23999` と書く・色を VRF の import で付ける)100・誤答(固定の経路= 明示の segment-list)は M10-4 で 75。
+  7. **「やってみる」の測り直し**(解く側と同じ手順。記録 `poc/xr/expM10-try*.log`)= 2.3 ブロックを縮める(両顧客 0%・ポリシーも unresolved first label で down・RT01 に SIDRANGE)/
+     3.1 sr-prefer を外す(15 秒で LDP の `{18}` に戻る)/3.2 同期を 1 本戻す(そのリンクだけ 16777214・RT02 のルートは変わらない)/
+     4.3 SPF の初回待ちを 5 秒にして顧客 B の ping(TI-LFA あり 1 個・なし 6 個の欠落、各 2 回。1 秒の待ちでは 1 対 2 で差が見えにくかったので 5 秒にした)/
+     5.3 distribute link-state を外す(M10-5 の前は down で RT01 経由へ・後は PCE の候補が引き継ぐ= 本文 3.)/6.2 離す条件を外す(2 本とも RT01 経由・グループが消える)/
+     7 Flex-Algo(16112 が RT03 経由・RT01 は PRIMARY のまま= 本文 4.)。
+  8. 4.3 の表の「SPF を 1 秒遅らせる」の PoC の値(3.4〜4.7 秒)は、変化が続くと待ちが最長 5 秒まで伸びる設定での値= 表に「1 秒、最長 5 秒まで伸びる」と書いた。
+
+### 23.9 読み物の改稿(2026-10-30・ユーザ指摘)
+
+- **指摘**: 「SR は読み物の内容が別次元に難しい」「何が嬉しいのか・どんな問題が解決できるのかがあれば分かりやすい。どういう仕組みでルーティングを
+  制御できるのかを噛み砕いてほしい」。
+- **原因の見立て**: M3〜M9 は ENARSI で知っている技術の「XR ではこう」で足りたが、SR・TI-LFA・SR ポリシー・PCE は概念そのものが初出なのに
+  同じ密度で 1 ページ(51 KB・ブループリント 7 項目)に詰めた。1 段落に新語が 7〜8 個(旧 4.1)、図はトポロジ 1 枚だけ、RFC の節番号・PoC の細部・
+  IOS XE との違いが概念の説明に混ざっていた。
+- **直し方**: 3 ページ+付録に分割(M4・M8 と同じ形)。各ページの 1 節を「何が嬉しいのか」にし(困りごと→ SR 以前の手→ SR の答え)、仕組みは
+  ラボの四角形の上でラベルを 1 ホップずつ追う(図= `:::topo` の線にリンク上のラベルを書く。根拠= PoC の traceroute `16012/24`(RT01 経由)・
+  `16012/22`(RT03 経由)= `poc/xr/sr-fg.log`)。TI-LFA は「隣に渡すだけだと送り返される(RT03 から RT01 が 110 対 110)」→「経由地を 1 つ足す」の順。
+  ページ= `a0-m10-segment-routing`(何が嬉しいか・仕組み・XR の設定・LDP からの移行= 課題 1・2)/`a2-m10-ti-lfa`(課題 3)/`a4-m10-sr-policy-pce`(課題 4・5)/
+  `a6-m10-appendix`(Flex-Algo・SRv6・SID の衝突)。実践ページも 3 枚(`a1`・`a3`・`a5`)= `course.sh` の practice.yml に `tasks:`(課題で絞る)を足した。
+  「やってみる」7 つと測定値・出力は旧ページのまま移した。learn.yml の read: と解説の節番号、task.md/task.en.md の冒頭の案内を新しいページに合わせた。
+  ラボ・採点は変えていない。日英は見出し・段落・表・囲みの数を一致させてビルド(警告なし)・Drive 同期済み。

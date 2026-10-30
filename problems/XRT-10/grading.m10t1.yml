@@ -1,0 +1,57 @@
+# M10-1: XR01 を SR に参加させ、XR01 発着のラベル付きの通信を SR のラベルに乗せる(LDP は切り戻し用に残す)。PoC §23.4-3〜6。
+# 仕込み= CHG-1301 の SRGB 16000-16009(相手の index 11〜13 が範囲外= XR01 は相手の SR のラベルを作れず LDP のまま)。
+# XR は既定で LDP のラベルを積む= sr-prefer が要る(LDP を残したまま SR を使わせる)。白紙は LDP の {16} なので SR の確認は落ちる。
+problem: XRT-10
+total_points: 100
+checks:
+  - name: 'M10-1 XR01: advertises segment routing with the global block of the convention (16000, 8000 labels) and prefix-SID index 1'
+    node: XR01
+    command: 'show isis database verbose XR01.00-00'
+    raw:
+      - { regex: 'SRGB Base: 16000 Range: 8000(?!\d)' }
+      - { regex: 'Prefix-SID Index: 1, Algorithm:0' }
+    points: 20
+  - name: 'M10-1 XR01: holds an SR label for each of RT01, RT02 and RT03'
+    node: XR01
+    command: 'show isis segment-routing label table'
+    raw:
+      - { regex: '16011\s+10\.255\.0\.11/32' }
+      - { regex: '16012\s+10\.255\.0\.12/32' }
+      - { regex: '16013\s+10\.255\.0\.13/32' }
+    points: 15
+  - name: 'M10-1 XR01: sends traffic for RT02 with RT02''s prefix SID while the LDP sessions with RT01 and RT03 stay up'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-10 ssh XR01 -- 'show cef 10.255.0.12/32 detail' 'show mpls ldp neighbor brief'
+    raw:
+      - { regex: 'via 10\.0\.1\.11/32, GigabitEthernet0/0/0/0,[^\n]*\n(?:[^\n]*\n){0,4}?\s+local label \d+\s+labels imposed \{16012\}' }
+      - { regex: '\n10\.255\.0\.11:0\s' }
+      - { regex: '\n10\.255\.0\.13:0\s' }
+    points: 25
+  - name: 'M10-1 RT02: sends traffic for XR01 with XR01''s prefix SID (16001)'
+    node: RT02
+    command: 'show ip cef 10.255.0.1 detail'
+    raw:
+      - { regex: 'nexthop 10\.0\.12\.11 Ethernet0/0 label \[?16001' }
+    points: 20
+  - name: 'M10-1 XR01, CEA1: customer A''s traffic from site 1 to site 2 rides on SR labels and gets through'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-10 ssh XR01 -- 'show cef vrf CUST-A 10.101.2.0/24 detail';
+      .venv/bin/python topologies/login_probe.py XRT-10 ssh CEA1 -- 'ping 10.101.2.1 source Loopback10 repeat 5'
+    raw:
+      - { regex: 'labels imposed \{(?:16012|ImplNull) \d+\}' }
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 10
+  - name: 'M10-1 XR01, CEB1: customer B''s traffic from site 1 to site 2 rides on SR labels and gets through'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-10 ssh XR01 -- 'show cef vrf CUST-B 10.102.2.0/24 detail';
+      .venv/bin/python topologies/login_probe.py XRT-10 ssh CEB1 -- 'ping 10.102.2.1 source Loopback10 repeat 5'
+    raw:
+      - { regex: 'labels imposed \{16012 \d+\}' }
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 10

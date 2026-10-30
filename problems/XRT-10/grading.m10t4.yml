@@ -1,0 +1,32 @@
+# M10-4: お客さま A の拠点 1→2 だけ XR01–RT01 のリンクを避ける(RT01 の保守に備える)・B は最短のまま・経路は XR01 が計算(固定の経路を書かない)。
+# 社内の約束= 色 100。PoC §23.4-16〜18= ODN(on-demand color 100 dynamic+affinity)。★distribute link-state が無いと ODN は down で黙って最短経路。
+# 色を付ける場所は問わない(公式は「VRF import は match だけ」・26.1.1 は VRF import の set も効く= §23.6-2 で挙動で採点と決定)。
+problem: XRT-10
+total_points: 100
+checks:
+  - name: 'M10-4 XR01: customer A''s route to site 2 carries color 100 and is steered into an SR policy that is up'
+    node: XR01
+    command: 'show bgp vrf CUST-A 10.101.2.0/24'
+    raw:
+      - { regex: '10\.255\.0\.12 C:100 \(bsid:\d+\)' }
+      - { regex: 'SR policy color 100, up' }
+    points: 25
+  - name: 'M10-4 XR01: the active path of the color-100 policy to RT02 is computed by XR01 itself'
+    node: XR01
+    command: 'show segment-routing traffic-eng policy color 100 detail'
+    raw:
+      - { regex: 'Color: 100, End-point: 10\.255\.0\.12' }
+      - { regex: 'Admin: up\s+Operational: up' }
+      - { regex: '\(active\)\s*\n(?:(?!\s+Preference:)[^\n]*\n)*?\s+Dynamic \(valid\)' }
+    points: 25
+  - name: 'M10-4 CEA1, CEB1: customer A''s traffic to site 2 crosses RT03 and avoids RT01; customer B''s still takes RT01'
+    node: XR01
+    exec: local
+    command: >-
+      echo '## CEA1'; .venv/bin/python topologies/login_probe.py XRT-10 ssh CEA1 -- 'traceroute 10.101.2.1 source Loopback10 numeric timeout 1 probe 1';
+      echo '## CEB1'; .venv/bin/python topologies/login_probe.py XRT-10 ssh CEB1 -- 'traceroute 10.102.2.1 source Loopback10 numeric timeout 1 probe 1'
+    raw:
+      - { regex: '## CEA1(?:(?!## CEB1)[\s\S])*?\n\s*2 10\.0\.3\.13\s(?:(?!## CEB1)[\s\S])*?172\.16\.12\.2' }
+      - { not_regex: '## CEA1(?:(?!## CEB1)[\s\S])*?10\.0\.1\.11' }
+      - { regex: '## CEB1[\s\S]*?\n\s*2 10\.0\.1\.11\s[\s\S]*?172\.16\.22\.2' }
+    points: 50

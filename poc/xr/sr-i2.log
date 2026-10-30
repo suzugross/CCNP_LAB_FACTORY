@@ -1,0 +1,152 @@
+######## i-2: XR01 の定義を IGP メトリックに・IOL 3 台に algorithm 128 の SID(1xx)
+% No such configuration item(s)
+10.255.0.11/32 index 111 range 1
+   10.255.0.11/32 index 11 range 1 
+   10.255.0.11/32 index 111 range 1 
+10.255.0.12/32 index 112 range 1
+   10.255.0.12/32 index 12 range 1 
+   10.255.0.12/32 index 112 range 1 
+10.255.0.13/32 index 113 range 1
+   10.255.0.13/32 index 13 range 1 
+   10.255.0.13/32 index 113 range 1 
+show isis flex-algo 128
+Thu Oct 29 23:35:59.459 UTC
+
+IS-IS CORE Flex-Algo Database
+
+Flex-Algo 128:
+
+  Level-2:
+    Definition Priority: 128
+    Definition Source: XR01.00, (Local)
+    Definition Equal to Local: Yes
+    Definition Metric Type: IGP
+    Definition Flex-Algo Prefix Metric: No
+    Exclude Any Affinity Bit Positions:
+    Include Any Affinity Bit Positions:
+    Include All Affinity Bit Positions:
+    Reverse Exclude Any Affinity Bit Positions:
+    Reverse Include Any Affinity Bit Positions:
+    Reverse Include All Affinity Bit Positions:
+    Exclude SRLGs:
+    Minimum Link Bandwidth: 0 kbits/sec, (0 bytes/sec)
+    Maximum Link Delay: 0 us
+    Disabled: No
+
+  Topologies supported:
+    IPv4 Unicast
+
+  Local Priority: 128
+  FRR Disabled: No
+  Microloop Avoidance Disabled: No
+  UCMP Disabled: No
+
+  Data Plane Segment Routing: Yes
+  Data Plane IP: No
+
+RP/0/RP0/CPU0:XR01#
+show isis segment-routing label table
+Thu Oct 29 23:35:59.858 UTC
+
+IS-IS CORE  IPv4 Unicast  IS Label Table
+
+Label         Prefix                   Algorithm    Interface
+----------    ----------------         ---------    ---------
+16001         10.255.0.1/32            SPF          Loopback0
+16011         10.255.0.11/32           SPF          
+16012         10.255.0.12/32           SPF          
+16013         10.255.0.13/32           SPF          
+16101         10.255.0.1/32            FA 128       Loopback0
+16111         10.255.0.11/32           FA 128       
+16112         10.255.0.12/32           FA 128       
+16113         10.255.0.13/32           FA 128       
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding | include "161[0-9][0-9]"
+Thu Oct 29 23:36:00.260 UTC
+16101  Aggregate   SR Pfx (idx 101)   default                      0           
+16111  Pop         SR Pfx (idx 111)   Gi0/0/0/0    10.0.1.11       0           
+       16112       SR Pfx (idx 111)   Gi0/0/0/1    10.0.3.13       0            (!)
+16112  16112       SR Pfx (idx 112)   Gi0/0/0/0    10.0.1.11       0           
+       16112       SR Pfx (idx 112)   Gi0/0/0/1    10.0.3.13       0            (!)
+16113  Pop         SR Pfx (idx 113)   Gi0/0/0/1    10.0.3.13       0           
+       16112       SR Pfx (idx 113)   Gi0/0/0/0    10.0.1.11       0            (!)
+RP/0/RP0/CPU0:XR01#
+show isis database verbose RT02.00-00 | include "Algo|Prefix$T02.00-00 | include "Algo|Prefix-                          SID"show isis database verbose RT02.00-00 | include "Algo|Prefi$
+Thu Oct 29 23:36:00.661 UTC
+    SR Algorithm: 
+      Algorithm: 0
+      Algorithm: 1
+      Algorithm: 128
+    Prefix-SID Index: 12, Algorithm:0, R:0 N:1 P:0 E:0 V:0 L:0
+    Prefix-SID Index: 112, Algorithm:128, R:0 N:1 P:0 E:0 V:0 L:0
+RP/0/RP0/CPU0:XR01#
+show isis flex-algo 128
+Tag CORE:
+IS-IS Flex-Algo Database
+ Flex-Algo count: 1
+ Use delay metric advertisement: Application, Legacy
+    IS-IS Level-2
+      Delay metric: Inactive
+
+Flex-Algo 128: 
+    IS-IS Level-2
+      Definition Priority: 128
+      Definition Source: XR01.00
+      Definition Equal to Local: Yes
+      Definition Metric Type: IGP
+      Definition Flex-Algo Prefix Metric: No
+      Disabled: No
+      Microloop Avoidance Timer Running: No
+   Local Priority: 128
+   FRR Disabled: No
+   Microloop Avoidance Disabled: No
+
+RT01#
+show mpls forwarding-table | include 161
+16101      Pop Label  0-10.255.0.1/32-4 (4:10:128:0)   \
+16112      Pop Label  0-10.255.0.12/32-4 (4:20:128:0)   \
+16113      16113      0-10.255.0.13/32-4 (4:120:128:0)   \
+           16113      0-10.255.0.13/32-4 (4:120:128:0)   \
+RT01#
+show isis topology flex-algo 128
+
+Tag CORE:
+
+IS-IS TID 0 paths to level-2 routers
+Flex-algo 128
+System Id            Metric     Next-Hop             Interface   SNPA
+XR01                 10         XR01                 Et0/0       5254.0015.179d 
+RT01                 --
+RT02                 10         RT02                 Et0/1       aabb.cc00.3300 
+RT03                 110        XR01                 Et0/0       5254.0015.179d 
+                                RT02                 Et0/1       aabb.cc00.3300 
+XR02                 **
+RT01#
+show mpls forwarding-table | include 161
+16101      16101      0-10.255.0.1/32-4 (4:20:128:0)   \
+16111      Pop Label  0-10.255.0.11/32-4 (4:20:128:0)   \
+16113      Pop Label  0-10.255.0.13/32-4 (4:110:128:0)   \
+RT02#
+ping mpls ipv4 10.255.0.12/32 fec-type generic
+Thu Oct 29 23:36:06.472 UTC
+
+Sending 5, 100-byte MPLS Echos to 10.255.0.12/32,
+      timeout is 2 seconds, send interval is 0 msec:
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+  'L' - labeled output interface, 'B' - unlabeled output interface, 
+  'D' - DS Map mismatch, 'F' - no FEC mapping, 'f' - FEC mismatch,
+  'M' - malformed request, 'm' - unsupported tlvs, 'N' - no rx label, 
+  'P' - no rx intf label prot, 'p' - premature termination of LSP, 
+  'R' - transit router, 'I' - unknown upstream index,
+  'X' - unknown return code, 'x' - return code 0
+
+Type escape sequence to abort.
+
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/3/5 ms
+RP/0/RP0/CPU0:XR01#
+traceroute sr-mpls 10.255.0.12/32 flex-algo 128
+                                                       ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR01#

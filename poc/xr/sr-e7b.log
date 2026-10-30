@@ -1,0 +1,120 @@
+######## e-7b: BFD dampening を切る(XR01)・XR01–RT03 を両側 10
+% No such configuration item(s)
+== adjacency+BFD up after 10s
+show isis adjacency
+Thu Oct 29 23:28:16.703 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    29   00:02:34 Yes Up   None
+RT03           Gi0/0/0/1                *PtoP*         Up    25   00:48:07 Yes Up   None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show isis fast-reroute 10.255.0.11/32 detail
+Thu Oct 29 23:28:17.105 UTC
+
+L2 10.255.0.11/32 [20/115] Label: 16011, medium priority
+   Installed Oct 29 23:27:58.497 for 00:00:19
+     via 10.0.1.11, GigabitEthernet0/0/0/0, Label: ImpNull, RT01, SRGB Base: 16000, Weight: 0
+       Backup path: TI-LFA (link), via 10.0.3.13, GigabitEthernet0/0/0/1 RT03, SRGB Base: 16000, Weight: 0, Metric: 130
+         P node: RT03.00 [10.255.0.13], Label: ImpNull
+         Q node: RT02.00 [10.255.0.12], Label: 23
+         Prefix label: 16011
+         Backup-src: RT01.00
+       P: No, TM: 130, LC: No, NP: No, D: No, SRLG: Yes
+     src RT01.00-00, 10.255.0.11
+       prefix-SID index 11, R:0 N:1 P:0 E:0 V:0 L:0, Alg:0
+RP/0/RP0/CPU0:XR01#
+show isis fast-reroute 10.255.0.12/32 detail
+Thu Oct 29 23:28:17.505 UTC
+
+L2 10.255.0.12/32 [30/115] Label: 16012, medium priority
+   Installed Oct 29 23:27:58.497 for 00:00:19
+     via 10.0.1.11, GigabitEthernet0/0/0/0, Label: 16012, RT01, SRGB Base: 16000, Weight: 0
+       Backup path: TI-LFA (link), via 10.0.3.13, GigabitEthernet0/0/0/1 RT03, SRGB Base: 16000, Weight: 0, Metric: 120
+         P node: RT03.00 [10.255.0.13], Label: ImpNull
+         Q node: RT02.00 [10.255.0.12], Label: 23
+         Prefix label: ImpNull
+         Backup-src: RT02.00
+       P: No, TM: 120, LC: No, NP: No, D: No, SRLG: Yes
+     src RT02.00-00, 10.255.0.12
+       prefix-SID index 12, R:0 N:1 P:0 E:0 V:0 L:0, Alg:0
+RP/0/RP0/CPU0:XR01#
+show cef 10.255.0.11/32 detail
+Thu Oct 29 23:28:17.906 UTC
+10.255.0.11/32, version 738, labeled SR, internal 0x1000001 0x8310 (ptr 0x1063bbc8) [1], 0x600 (0x107d4b18), 0xa20 (0x111de1d0)
+ Updated Oct 29 23:27:58.500 
+ remote adjacency to GigabitEthernet0/0/0/0
+ Prefix Len 32, traffic index 0, precedence n/a, priority 1
+  gateway array (0x106716b0) reference count 3, flags 0x500068, source rib (7), 0 backups
+                [3 type 4 flags 0x8401 (0xf18db40) ext 0x0 (0x0)]
+  LW-LDI[type=1, refc=1, ptr=0x107d4b18, sh-ldi=0xf18db40]
+  gateway array update type-time 1 Oct 29 23:27:58.500
+ LDI Update time Oct 29 23:27:58.502
+ LW-LDI-TS Oct 29 23:27:58.502
+   via 10.0.1.11/32, GigabitEthernet0/0/0/0, 4 dependencies, weight 0, class 0, protected [flags 0x400]
+    path-idx 0 bkup-idx 1 NHID 0x0 [0x112b8370 0x112b8280]
+    next hop 10.0.1.11/32
+     local label 16011      labels imposed {ImplNull}
+   via 10.0.3.13/32, GigabitEthernet0/0/0/1, 10 dependencies, weight 0, class 0, backup (TI-LFA) [flags 0xb00]
+    path-idx 1 NHID 0x0 [0x10d8bbe0 0x0]
+    next hop 10.0.3.13/32, Repair Node(s): 10.255.0.13, 10.255.0.12
+    remote adjacency
+     local label 16011      labels imposed {ImplNull 23 16011}
+
+    Load distribution: 0 (refcount 3)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    remote         
+RP/0/RP0/CPU0:XR01#
+show cef 10.255.0.12/32 detail
+Thu Oct 29 23:28:18.305 UTC
+10.255.0.12/32, version 734, labeled SR, internal 0x1000001 0x8310 (ptr 0x1063c048) [1], 0x600 (0x107d5f18), 0xa28 (0x111de308)
+ Updated Oct 29 23:27:58.500 
+ remote adjacency to GigabitEthernet0/0/0/0
+ Prefix Len 32, traffic index 0, precedence n/a, priority 1
+  gateway array (0x10671ce0) reference count 3, flags 0x500068, source rib (7), 0 backups
+                [3 type 4 flags 0x8401 (0xf18d988) ext 0x0 (0x0)]
+  LW-LDI[type=1, refc=1, ptr=0x107d5f18, sh-ldi=0xf18d988]
+  gateway array update type-time 1 Oct 29 23:27:58.500
+ LDI Update time Oct 29 23:27:58.500
+ LW-LDI-TS Oct 29 23:27:58.500
+   via 10.0.1.11/32, GigabitEthernet0/0/0/0, 8 dependencies, weight 0, class 0, protected [flags 0x400]
+    path-idx 0 bkup-idx 1 NHID 0x0 [0x112b8280 0x112b8280]
+    next hop 10.0.1.11/32
+     local label 16012      labels imposed {16012}
+   via 10.0.3.13/32, GigabitEthernet0/0/0/1, 10 dependencies, weight 0, class 0, backup (TI-LFA) [flags 0xb00]
+    path-idx 1 NHID 0x0 [0x10d8bbe0 0x0]
+    next hop 10.0.3.13/32, Repair Node(s): 10.255.0.13, 10.255.0.12
+    remote adjacency
+     local label 16012      labels imposed {ImplNull 23}
+
+    Load distribution: 0 (refcount 3)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    remote         
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding-table | include -A
+22         Pop Label  10.0.3.1-A       2280          Et0/0      10.0.3.1    
+23         Pop Label  10.0.23.12-A     0             Et0/1      10.0.23.12  
+24         Pop Label  10.0.33.21-A     0             Et0/2      10.0.33.21  
+RT03#
+-- 測定 #1(TI-LFA あり・adj-SID の修復)
+== LINK XR01-RT01 loss 100
+	Loss Source to Destination: 28
+	Loss Destination to Source: 0
+== LINK XR01-RT01 clear
+== FAULT APPLIED at +3.6s (run 15.0s)
+== LOSS SD 28 DS 0 (x10 ms: SD ~280 ms, DS ~0 ms)
+== adjacency+BFD up after 20s
+-- 測定 #2(TI-LFA あり・adj-SID の修復)
+== LINK XR01-RT01 loss 100
+	Loss Source to Destination: 28
+	Loss Destination to Source: 0
+== LINK XR01-RT01 clear
+== FAULT APPLIED at +3.6s (run 15.0s)
+== LOSS SD 28 DS 0 (x10 ms: SD ~280 ms, DS ~0 ms)
+== adjacency+BFD up after 20s
+######## e-8b: メトリックを戻す

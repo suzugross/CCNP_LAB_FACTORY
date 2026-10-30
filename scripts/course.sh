@@ -6,6 +6,9 @@
 #   scripts/course.sh <コース> sync           # ビルドして章ごとに束ね、Drive へ同期(各言語の book.yml の drive:)
 #   scripts/course.sh <コース> serve          # ビルドしてポータル(8899 の Study Materials)で読む
 #
+# practice.yml の各ページ: file・problem・title・sections(切り出す「## 見出し」の頭)・tasks(任意。1 単元の課題を
+# 何枚かに分ける時に残す課題 ["M10-1", …])。
+#
 # コース= courses/<名前>/。book.yml は 1 つ(lang: / alt_lang: の 2 言語の本)で、単元のページは言語ごとのフォルダ
 # (en/・ja/)に同じファイル名で置く。ポータルでは 1 冊として載り、ページの中のボタンで言語が切り替わる(BL-248)。
 # 実践ページ(課題文)は二重に持たない: 正本は problems/<ラボ ID>/task.en.md(英語)と task.md(日本語)。
@@ -88,7 +91,27 @@ for lang, head in spec["intro"].items():
         missing = [pre for pre in page["sections"][lang] if not any(k.startswith(pre) for k in secs)]
         if missing:
             sys.exit(f"{page['problem']} {TASK[lang]}: 節が見つからない {missing}")
-        body = task_links(page["problem"], lang, "\n".join(secs[k].rstrip() + "\n" for k in want))
+        chosen = [secs[k] for k in want]
+        if page.get("tasks"):
+            # 1 つの単元の課題を何枚かの実践ページに分ける(読み物のページの切れ目に合わせる。M10)。
+            # 「### 課題 M10-1」「### Task M10-1」の小見出しのうち tasks: に無いものを落とす(課題でない小見出しは残す)
+            keep, hit = set(page["tasks"]), set()
+
+            def pick(sec):
+                out = []
+                for chunk in re.split(r"(?m)^(?=### )", sec):
+                    m = re.match(r"### (?:Task|課題) (M\d+-\d+)\b", chunk)
+                    if m and m.group(1) not in keep:
+                        continue
+                    if m:
+                        hit.add(m.group(1))
+                    out.append(chunk)
+                return "".join(out)
+
+            chosen = [pick(s) for s in chosen]
+            if hit != keep:
+                sys.exit(f"{page['problem']} {TASK[lang]}: 課題が見つからない {sorted(keep - hit)}")
+        body = task_links(page["problem"], lang, "\n".join(s.rstrip() + "\n" for s in chosen))
         out = f"# {page['title'][lang]}\n\n{head.format(problem=page['problem']).strip()}\n\n{body}"
         with open(os.path.join(src, lang, page["file"]), "w", encoding="utf-8") as fh:
             fh.write(out)

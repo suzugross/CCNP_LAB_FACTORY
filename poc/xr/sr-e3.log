@@ -1,0 +1,239 @@
+
+######## 22:57:06 e-3: XR01 に TI-LFA(両方のコアの IF)
+configure
+Thu Oct 29 22:57:08.208 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+fast-reroute per-prefix
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+fast-reroute per-prefix ti-lfa
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+fast-reroute per-prefix
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+fast-reroute per-prefix ti-lfa
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+commit
+Thu Oct 29 22:57:13.119 UTC
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+show configuration failed
+Thu Oct 29 22:57:14.025 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis fast-reroute summary
+Thu Oct 29 22:57:37.035 UTC
+
+IS-IS CORE IPv4 Unicast FRR summary
+
+                          Critical   High       Medium     Low        Total     
+                          Priority   Priority   Priority   Priority             
+Prefixes reachable in L2
+  All paths protected     0          0          4          3          7         
+  Some paths protected    0          0          0          0          0         
+  Unprotected             0          0          0          0          0         
+  Protection coverage     0.00%      0.00%      100.00%    100.00%    100.00%   
+RP/0/RP0/CPU0:XR01#
+show isis fast-reroute 10.255.0.11/32 detail
+Thu Oct 29 22:57:37.437 UTC
+
+L2 10.255.0.11/32 [20/115] Label: 16011, medium priority
+   Installed Oct 29 22:57:13.695 for 00:00:24
+     via 10.0.1.11, GigabitEthernet0/0/0/0, Label: ImpNull, RT01, SRGB Base: 16000, Weight: 0
+       Backup path: TI-LFA (link), via 10.0.3.13, GigabitEthernet0/0/0/1 RT03, SRGB Base: 16000, Weight: 0, Metric: 220
+         P node: RT02.00 [10.255.0.12], Label: 16012
+         Prefix label: 16011
+         Backup-src: RT01.00
+       P: No, TM: 220, LC: No, NP: No, D: No, SRLG: Yes
+     src RT01.00-00, 10.255.0.11
+       prefix-SID index 11, R:0 N:1 P:0 E:0 V:0 L:0, Alg:0
+RP/0/RP0/CPU0:XR01#
+show isis fast-reroute 10.255.0.12/32 detail
+Thu Oct 29 22:57:37.837 UTC
+
+L2 10.255.0.12/32 [30/115] Label: 16012, medium priority
+   Installed Oct 29 22:57:13.695 for 00:00:24
+     via 10.0.1.11, GigabitEthernet0/0/0/0, Label: 16012, RT01, SRGB Base: 16000, Weight: 0
+       Backup path: LFA, via 10.0.3.13, GigabitEthernet0/0/0/1, Label: 16012, RT03, SRGB Base: 16000, Weight: 0, Metric: 210
+       P: No, TM: 210, LC: No, NP: Yes, D: No, SRLG: Yes
+     src RT02.00-00, 10.255.0.12
+       prefix-SID index 12, R:0 N:1 P:0 E:0 V:0 L:0, Alg:0
+RP/0/RP0/CPU0:XR01#
+show isis fast-reroute 10.255.0.13/32 detail
+Thu Oct 29 22:57:38.238 UTC
+
+L2 10.255.0.13/32 [110/115] Label: 16013, medium priority
+   Installed Oct 29 22:57:13.695 for 00:00:25
+     via 10.0.3.13, GigabitEthernet0/0/0/1, Label: ImpNull, RT03, SRGB Base: 16000, Weight: 0
+       Backup path: TI-LFA (link), via 10.0.1.11, GigabitEthernet0/0/0/0 RT01, SRGB Base: 16000, Weight: 0, Metric: 130
+         P node: RT02.00 [10.255.0.12], Label: 16012
+         Prefix label: 16013
+         Backup-src: RT03.00
+       P: No, TM: 130, LC: No, NP: No, D: No, SRLG: Yes
+     src RT03.00-00, 10.255.0.13
+       prefix-SID index 13, R:0 N:1 P:0 E:0 V:0 L:0, Alg:0
+RP/0/RP0/CPU0:XR01#
+show cef 10.255.0.11/32 detail
+Thu Oct 29 22:57:38.639 UTC
+10.255.0.11/32, version 245, labeled SR, internal 0x1000001 0x8310 (ptr 0x1063bbc8) [1], 0x600 (0x107d5d98), 0xa28 (0x110b72a0)
+ Updated Oct 29 22:57:13.716 
+ remote adjacency to GigabitEthernet0/0/0/0
+ Prefix Len 32, traffic index 0, precedence n/a, priority 1
+  gateway array (0x1066cf88) reference count 3, flags 0x500068, source rib (7), 0 backups
+                [3 type 4 flags 0x8401 (0xf18da38) ext 0x0 (0x0)]
+  LW-LDI[type=1, refc=1, ptr=0x107d5d98, sh-ldi=0xf18da38]
+  gateway array update type-time 1 Oct 29 22:57:13.716
+ LDI Update time Oct 29 22:57:13.716
+ LW-LDI-TS Oct 29 22:57:13.716
+   via 10.0.1.11/32, GigabitEthernet0/0/0/0, 4 dependencies, weight 0, class 0, protected [flags 0x400]
+    path-idx 0 bkup-idx 1 NHID 0x0 [0x11191190 0x111910a0]
+    next hop 10.0.1.11/32
+     local label 16011      labels imposed {ImplNull}
+   via 10.0.3.13/32, GigabitEthernet0/0/0/1, 8 dependencies, weight 0, class 0, backup (TI-LFA) [flags 0xb00]
+    path-idx 1 NHID 0x0 [0x10d8bbe0 0x0]
+    next hop 10.0.3.13/32, Repair Node(s): 10.255.0.12
+    remote adjacency
+     local label 16011      labels imposed {16012 16011}
+
+    Load distribution: 0 (refcount 3)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    remote         
+RP/0/RP0/CPU0:XR01#
+show cef 10.255.0.12/32 detail
+Thu Oct 29 22:57:39.039 UTC
+10.255.0.12/32, version 247, labeled SR, internal 0x1000001 0x8310 (ptr 0x1063c048) [1], 0x600 (0x107d5f98), 0xa28 (0x110b7308)
+ Updated Oct 29 22:57:13.716 
+ remote adjacency to GigabitEthernet0/0/0/0
+ Prefix Len 32, traffic index 0, precedence n/a, priority 1
+  gateway array (0x10671bd8) reference count 3, flags 0x500068, source rib (7), 0 backups
+                [2 type 5 flags 0x8401 (0xf18dcf8) ext 0x0 (0x0)]
+  LW-LDI[type=5, refc=3, ptr=0x107d5f98, sh-ldi=0xf18dcf8]
+  gateway array update type-time 1 Oct 29 22:57:13.716
+ LDI Update time Oct 29 22:57:13.716
+ LW-LDI-TS Oct 29 22:57:13.716
+   via 10.0.1.11/32, GigabitEthernet0/0/0/0, 6 dependencies, weight 0, class 0, protected [flags 0x400]
+    path-idx 0 bkup-idx 1 NHID 0x0 [0x111910a0 0x0]
+    next hop 10.0.1.11/32
+     local label 16012      labels imposed {16012}
+   via 10.0.3.13/32, GigabitEthernet0/0/0/1, 8 dependencies, weight 0, class 0, backup (Local-LFA) [flags 0x300]
+    path-idx 1 NHID 0x0 [0x10d8bbe0 0x0]
+    next hop 10.0.3.13/32
+    remote adjacency
+     local label 16012      labels imposed {16012}
+
+    Load distribution: 0 (refcount 2)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    remote         
+RP/0/RP0/CPU0:XR01#
+show cef vrf CUST-A 10.101.2.0/24 detail
+Thu Oct 29 22:57:39.442 UTC
+10.101.2.0/24, version 25, internal 0x5000001 0x30 (ptr 0x10641d08) [1], 0x600 (0x107d6098), 0xa08 (0xf154698)
+ Updated Oct 29 22:47:18.065
+ Prefix Len 24, traffic index 0, precedence n/a, priority 3
+  gateway array (0x10671398) reference count 6, flags 0x38, source rib (7), 0 backups
+                [7 type 1 flags 0x8441 (0xf18dca0) ext 0x0 (0x0)]
+  LW-LDI[type=1, refc=1, ptr=0x107d6098, sh-ldi=0xf18dca0]
+  gateway array update type-time 5 Oct 29 22:50:34.417
+ LDI Update time Oct 29 22:50:34.417
+ LW-LDI-TS Oct 29 22:50:34.417
+   via 10.255.0.12/32, 5 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xf41e598 0x0]
+    recursion-via-/32
+    next hop VRF - 'default', table - 0xe0000000
+    next hop 10.255.0.12/32 via 16012/0/21
+     next hop 10.0.1.11/32 GigabitEthernet0/0/0/0 labels imposed {16012 22}
+
+    Load distribution: 0 (refcount 7)
+
+    Hash  OK  Interface                 Address
+    0     Y   recursive                 16012/0        
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding prefix 10.255.0.11/32 detail
+Thu Oct 29 22:57:39.842 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+16011  Pop         SR Pfx (idx 11)    Gi0/0/0/0    10.0.1.11       0           
+     Updated: Oct 29 22:57:13.715
+     Path Flags: 0x400 [  BKUP-IDX:1 (0x11191190) ]
+     Version: 245, Priority: 1
+     Label Stack (Top -> Bottom): { Imp-Null }
+     NHID: 0x0, Encap-ID: N/A, Path idx: 0, Backup path idx: 1, Weight: 0
+     MAC/Encaps: 4/4, MTU: 1500
+     Outgoing Interface: GigabitEthernet0/0/0/0 (ifhandle 0x01000018)
+     Packets Switched: 0
+
+       16012       SR Pfx (idx 11)    Gi0/0/0/1    10.0.3.13       0            (!)
+     Updated: Oct 29 22:57:13.715
+     Path Flags: 0xb00 [  IDX:1 BKUP, NoFwd ]
+     Version: 245, Priority: 1
+     Label Stack (Top -> Bottom): { 16012 16011 }
+     NHID: 0x0, Encap-ID: N/A, Path idx: 1, Backup path idx: 0, Weight: 0
+     MAC/Encaps: 4/12, MTU: 1500
+     Outgoing Interface: GigabitEthernet0/0/0/1 (ifhandle 0x01000040)
+     Packets Switched: 0
+     (!): FRR pure backup
+
+  Traffic-Matrix Packets/Bytes Switched: 0/0
+RP/0/RP0/CPU0:XR01#
+
+######## 22:57:39 e-4: TI-LFA あり(XR01 だけ)・BFD あり。同じ故障
+SSL Verification disabled
+== LINK XR01-RT01 loss 100
+SSL Verification disabled
+IPSLAs Latest Operation Statistics
+	Latest RTT: 1 milliseconds
+Latest operation start time: 22:57:42 UTC Thu Oct 29 2026
+Latest operation return code: OK
+RTT Values:
+Latency one-way time:
+	Number of Latency one-way Samples: 1461
+	Source to Destination Latency one way Min/Avg/Max: 0/0/9 milliseconds
+	Destination to Source Latency one way Min/Avg/Max: 0/0/3 milliseconds
+	Source to Destination Latency one way Sum/Sum2: 1116/1268
+	Destination to Source Latency one way Sum/Sum2: 1052/1078
+	Number of SD Jitter Samples: 1459
+	Number of DS Jitter Samples: 1459
+Packet Loss Values:
+	Loss Source to Destination: 34
+	Source to Destination Loss Periods Number: 1
+	Source to Destination Loss Period Length Min/Max: 34/34
+	Source to Destination Inter Loss Period Length Min/Max: 438/1028
+	Loss Destination to Source: 5
+	Destination to Source Loss Periods Number: 1
+	Destination to Source Loss Period Length Min/Max: 5/5
+	Destination to Source Inter Loss Period Length Min/Max: 433/1028
+	Out Of Sequence: 0	Tail Drop: 0	Packet Late Arrival: 0
+Packet Skipped: 0
+Number of successes: 1
+Number of failures: 0
+== LINK XR01-RT01 clear
+== FAULT APPLIED at +3.8s (run 15.0s)
+== LOSS SD 34 DS 5 (x10 ms: SD ~340 ms, DS ~50 ms)
+show isis adjacency
+Thu Oct 29 22:58:50.585 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    29   00:00:27 Yes Up   None
+RT03           Gi0/0/0/1                *PtoP*         Up    28   00:18:41 Yes Up   None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#

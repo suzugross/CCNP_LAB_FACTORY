@@ -1,0 +1,113 @@
+######## c-8: IOS 側で XR01 向きの同期を外す(RT01= no mpls ip・RT03= no mpls ldp igp sync)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface Ethernet0/0
+RT01(config-if)#
+no mpls ip
+RT01(config-if)#
+end
+RT01#
+show mpls ldp igp sync
+    Ethernet0/0:
+	LDP not configured; LDP-IGP Synchronization enabled.
+	Sync status: sync not achieved; peer reachable.
+	Sync delay time: 0 seconds (0 seconds left)
+	IGP holddown time: infinite.
+	IGP enabled: ISIS CORE
+    Ethernet0/1:
+	LDP configured; LDP-IGP Synchronization enabled.
+	Sync status: sync achieved; peer reachable.
+	Sync delay time: 0 seconds (0 seconds left)
+	IGP holddown time: infinite.
+	Peer LDP Ident: 10.255.0.12:0
+	IGP enabled: ISIS CORE
+RT01#
+show running-config interface Ethernet0/0
+Building configuration...
+
+Current configuration : 193 bytes
+!
+interface Ethernet0/0
+ description PRIMARY to XR01
+ ip address 10.0.1.11 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point 
+ isis metric 10 level-1
+ isis metric 10 level-2
+end
+
+RT01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT03(config)#
+interface Ethernet0/0
+RT03(config-if)#
+no mpls ldp igp sync
+RT03(config-if)#
+end
+RT03#
+show mpls ldp igp sync
+    Ethernet0/0:
+	LDP configured; LDP-IGP Synchronization not enabled.
+    Ethernet0/1:
+	LDP configured; LDP-IGP Synchronization enabled.
+	Sync status: sync achieved; peer reachable.
+	Sync delay time: 0 seconds (0 seconds left)
+	IGP holddown time: infinite.
+	Peer LDP Ident: 10.255.0.12:0
+	IGP enabled: ISIS CORE
+RT03#
+show running-config interface Ethernet0/0
+Building configuration...
+
+Current configuration : 225 bytes
+!
+interface Ethernet0/0
+ description BACKUP to XR01
+ ip address 10.0.3.13 255.255.255.0
+ ip router isis CORE
+ mpls ip
+ no mpls ldp igp sync
+ isis network point-to-point 
+ isis metric 100 level-1
+ isis metric 100 level-2
+end
+
+RT03#
+show isis database verbose | include "^[A-Z]|IS-Extended"
+Thu Oct 29 22:49:21.089 UTC
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000000b   0xad0a        1130 /*            0/0/0
+  Metric: 10         IS-Extended RT01.00
+  Metric: 100        IS-Extended RT03.00
+RT01.00-00            0x00000009   0x5b61        1178 /1200         0/0/0
+  Metric: 10         IS-Extended XR01.00
+  Metric: 10         IS-Extended RT02.00
+RT02.00-00            0x00000005   0x3b0a        853  /1199         0/0/0
+  Metric: 10         IS-Extended RT01.00
+  Metric: 100        IS-Extended RT03.00
+RT03.00-00            0x0000000b   0x2c68        1182 /1200         0/0/0
+  Metric: 100        IS-Extended XR01.00
+  Metric: 100        IS-Extended RT02.00
+  Metric: 10         IS-Extended XR02.00
+XR02.00-00            0x00000005   0xdb0f        858  /1198         0/0/0
+  Metric: 10         IS-Extended RT03.00
+RP/0/RP0/CPU0:XR01#
+show isis route 10.255.0.12/32
+Thu Oct 29 22:49:21.490 UTC
+
+L2 10.255.0.12/32 [30/115]
+     via 10.0.1.11, GigabitEthernet0/0/0/0, RT01, SRGB Base: 16000, Weight: 0
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Thu Oct 29 22:49:21.891 UTC
+RP/0/RP0/CPU0:XR01#
+ping 10.101.2.1 source 10.101.1.1 repeat 20
+Type escape sequence to abort.
+Sending 20, 100-byte ICMP Echos to 10.101.2.1, timeout is 2 seconds:
+Packet sent with a source address of 10.101.1.1 
+!!!!!!!!!!!!!!!!!!!!
+Success rate is 100 percent (20/20), round-trip min/avg/max = 1/1/2 ms
+CEA1#

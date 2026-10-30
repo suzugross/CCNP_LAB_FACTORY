@@ -1,0 +1,33 @@
+# BL-246 PoC: M10 セグメントルーティング(SPCOR 3.3)。記録= problems/_drafts/XR-TRACK.design.md §23。手順= poc/xr/sr_poc.sh
+# 盤面= XRT-09 と同じ(コア四角形 IS-IS CORE・LDP+ L3VPN)。構築後に `PID=_POC-XRSR poc/xr/solve_xrt09.sh` で M9 を解き終えた状態にしてから SR を載せる。
+#   XR01(PE・XRv9000 26.1.1)  XR02(RR・XRd 26.1.1= PCE の候補)  RT01〜RT03(IOL 17.15)  CE ほか(IOL)
+id: _POC-XRSR
+title: "[PoC] XR Segment Routing"
+exam: POC
+topics: [iosxr, poc]
+difficulty: 0
+topology: generated
+access: ssh
+target_nodes: [XR01, XR02, RT01, RT02, RT03, CEA1, CEB1, SVC, INET, CEA2, CEB2]
+points: 0
+image_family: iol
+node_image_families: { XR01: iosxr, XR02: iosxr }
+node_xr_platforms: { XR02: iosxrd }
+node_images: { XR01: iosxrv9000-26-1-1 }
+lab:
+  # コアは XRT-07 と同じ四角形。左= XR01 のお客さま、右= RT02 のお客さま、下= RR
+  positions: { XR01: [0, 0], RT01: [400, 0], RT03: [0, 240], RT02: [400, 240], XR02: [0, 440],
+               CEA1: [-400, -200], CEB1: [-400, -60], SVC: [-400, 80], INET: [0, -220],
+               CEA2: [800, 160], CEB2: [800, 320] }
+  links:
+    - { a: XR01, a_if: 3, b: RT01, b_if: 0 }
+    - { a: RT01, a_if: 1, b: RT02, b_if: 0 }
+    - { a: XR01, a_if: 4, b: RT03, b_if: 0 }
+    - { a: RT03, a_if: 1, b: RT02, b_if: 1 }
+    - { a: RT03, a_if: 2, b: XR02, b_if: 3 }
+    - { a: XR01, a_if: 5, b: CEA1, b_if: 0 }
+    - { a: XR01, a_if: 6, b: CEB1, b_if: 0 }
+    - { a: XR01, a_if: 7, b: SVC, b_if: 0 }
+    - { a: XR01, a_if: 8, b: INET, b_if: 0 }
+    - { a: RT02, a_if: 2, b: CEA2, b_if: 0 }
+    - { a: RT02, a_if: 4, b: CEB2, b_if: 0 }

@@ -1,0 +1,454 @@
+
+######## 22:44:20 c-1: XR01 の Lo0 に prefix-sid index 1 を書く(IS-IS の AF に segment-routing mpls はまだ無い)。コミットは通るか・広告されるか
+configure
+Thu Oct 29 22:44:21.918 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface Loopback0
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+prefix-sid index 1
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+show configuration
+Thu Oct 29 22:44:24.022 UTC
+!! Building configuration...
+!! IOS XR Configuration 26.1.1
+router isis CORE
+ interface Loopback0
+  address-family ipv4 unicast
+   prefix-sid index 1
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+commit
+Thu Oct 29 22:44:24.525 UTC
+
+% Failed to commit one or more configuration items during a pseudo-atomic operation. All changes made have been reverted. Please issue 'show configuration failed [inheritance]' from this session to view the errors
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+show configuration failed
+Thu Oct 29 22:44:26.534 UTC
+!! SEMANTIC ERRORS: This configuration was rejected by 
+!! the system due to semantic errors. The individual 
+!! errors with each failed configuration command can be 
+!! found below.
+
+
+router isis CORE
+ interface Loopback0
+  address-family ipv4 unicast
+   prefix-sid index 1
+!!% Feature not supported: Segment-routing is not enabled for IPv4 Unicast
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+end
+Uncommitted changes found, commit them before exiting(yes/no/cancel)? [cancel]:
+show isis database verbose XR01.00-00
+Thu Oct 29 22:44:44.649 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x00000006   0xe013        943  /*            0/0/0
+  Area Address:   49.0001
+  LSP MTU:        1492
+  NLPID:          0xcc
+  IP Address:     10.255.0.1
+  Hostname:       XR01
+  Metric: 10         IS-Extended RT01.00
+  Metric: 100        IS-Extended RT03.00
+  Metric: 10         IP-Extended 10.0.1.0/24
+    Prefix Attribute Flags: X:0 R:0 N:0 E:0 A:0
+  Metric: 100        IP-Extended 10.0.3.0/24
+    Prefix Attribute Flags: X:0 R:0 N:0 E:0 A:0
+  Metric: 0          IP-Extended 10.255.0.1/32
+    Prefix Attribute Flags: X:0 R:0 N:1 E:0 A:0
+RP/0/RP0/CPU0:XR01#
+show isis segment-routing label table
+Thu Oct 29 22:44:45.050 UTC
+
+IS-IS CORE  IPv4 Unicast  IS Label Table
+
+Label         Prefix                   Algorithm    Interface
+----------    ----------------         ---------    ---------
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding | include "160[0-9][0-9]"
+Thu Oct 29 22:44:45.451 UTC
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding-table 10.255.0.1 32
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+22         explicit-n 10.255.0.1/32    2440          Et0/0      10.0.1.1    
+RT01#
+
+######## 22:44:46 c-2: IS-IS の AF に segment-routing mpls を足す
+configure
+Thu Oct 29 22:44:48.716 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+segment-routing mpls
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+commit
+Thu Oct 29 22:44:50.421 UTC
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+show configuration failed
+Thu Oct 29 22:44:51.325 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis database verbose XR01.00-00
+Thu Oct 29 22:45:14.336 UTC
+
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x00000008   0x878d        1184 /*            0/0/0
+  Area Address:   49.0001
+  LSP MTU:        1492
+  NLPID:          0xcc
+  IP Address:     10.255.0.1
+  Hostname:       XR01
+  Router Cap:     10.255.0.1 D:0 S:0
+    Segment Routing: I:1 V:0
+    SRGB Base: 16000 Range: 8000
+    Node Maximum SID Depth: 
+      Label Imposition: 10
+    SR Algorithm: 
+      Algorithm: 0
+      Algorithm: 1
+  Metric: 10         IS-Extended RT01.00
+    Local Interface ID: 6, Remote Interface ID: 1
+    Interface IP Address: 10.0.1.1
+    Neighbor IP Address: 10.0.1.11
+    Physical BW: 1000000 kbits/sec, 125000000 bytes/sec
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:24011
+  Metric: 100        IS-Extended RT03.00
+    Local Interface ID: 7, Remote Interface ID: 1
+    Interface IP Address: 10.0.3.1
+    Neighbor IP Address: 10.0.3.13
+    Physical BW: 1000000 kbits/sec, 125000000 bytes/sec
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:24013
+  Metric: 10         IP-Extended 10.0.1.0/24
+    Prefix Attribute Flags: X:0 R:0 N:0 E:0 A:0
+  Metric: 100        IP-Extended 10.0.3.0/24
+    Prefix Attribute Flags: X:0 R:0 N:0 E:0 A:0
+  Metric: 0          IP-Extended 10.255.0.1/32
+    Prefix Attribute Flags: X:0 R:0 N:1 E:0 A:0
+RP/0/RP0/CPU0:XR01#
+show isis segment-routing label table
+Thu Oct 29 22:45:14.739 UTC
+
+IS-IS CORE  IPv4 Unicast  IS Label Table
+
+Label         Prefix                   Algorithm    Interface
+----------    ----------------         ---------    ---------
+16011         10.255.0.11/32           SPF          
+16012         10.255.0.12/32           SPF          
+16013         10.255.0.13/32           SPF          
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding | include "160[0-9][0-9]|Local"
+Thu Oct 29 22:45:15.138 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+16011  Pop         SR Pfx (idx 11)    Gi0/0/0/0    10.0.1.11       0           
+16012  16012       SR Pfx (idx 12)    Gi0/0/0/0    10.0.1.11       0           
+16013  Pop         SR Pfx (idx 13)    Gi0/0/0/1    10.0.3.13       0           
+RP/0/RP0/CPU0:XR01#
+
+######## 22:45:14 c-3: 既定ではどちらのラベルを積むか(XR01 は LDP と SR の両方を持つ)
+show cef 10.255.0.12/32 detail
+Thu Oct 29 22:45:16.635 UTC
+10.255.0.12/32, version 29, labeled SR, internal 0x1000001 0x8110 (ptr 0x10641c48) [1], 0x600 (0x107d4c18), 0xa28 (0xf154ab8)
+ Updated Oct 29 22:44:56.513 
+ remote adjacency to GigabitEthernet0/0/0/0
+ Prefix Len 32, traffic index 0, precedence n/a, priority 1
+ Extensions: context-label:16012
+  gateway array (0x106715a8) reference count 3, flags 0x68, source lsd (5), 1 backups
+                [2 type 5 flags 0x8401 (0xf18da90) ext 0x0 (0x0)]
+  LW-LDI[type=5, refc=3, ptr=0x107d4c18, sh-ldi=0xf18da90]
+  gateway array update type-time 1 Oct 29 22:44:56.513
+ LDI Update time Oct 29 22:44:56.513
+ LW-LDI-TS Oct 29 22:44:56.513
+   via 10.0.1.11/32, GigabitEthernet0/0/0/0, 10 dependencies, weight 0, class 0 [flags 0x0]
+    path-idx 0 NHID 0x0 [0x10d8b280 0x0]
+    next hop 10.0.1.11/32
+    remote adjacency
+     local label 24002      labels imposed {16}
+
+    Load distribution: 0 (refcount 2)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    remote         
+RP/0/RP0/CPU0:XR01#
+show cef vrf CUST-A 10.101.2.0/24 detail
+Thu Oct 29 22:45:17.036 UTC
+10.101.2.0/24, version 5, internal 0x5000001 0x30 (ptr 0x1063df68) [1], 0x600 (0x107d52d8), 0xa08 (0xf1542d8)
+ Updated Oct 29 22:41:12.878
+ Prefix Len 24, traffic index 0, precedence n/a, priority 3
+  gateway array (0x1066f3a0) reference count 6, flags 0x38, source rib (7), 0 backups
+                [7 type 1 flags 0x8441 (0xf18d3b0) ext 0x0 (0x0)]
+  LW-LDI[type=1, refc=1, ptr=0x107d52d8, sh-ldi=0xf18d3b0]
+  gateway array update type-time 1 Oct 29 22:41:12.878
+ LDI Update time Oct 29 22:41:12.879
+ LW-LDI-TS Oct 29 22:41:12.879
+   via 10.255.0.12/32, 5 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xf41fc10 0x0]
+    recursion-via-/32
+    next hop VRF - 'default', table - 0xe0000000
+    next hop 10.255.0.12/32 via 24002/0/21
+     next hop 10.0.1.11/32 GigabitEthernet0/0/0/0 labels imposed {16 22}
+
+    Load distribution: 0 (refcount 7)
+
+    Hash  OK  Interface                 Address
+    0     Y   recursive                 24002/0        
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding prefix 10.255.0.12/32
+Thu Oct 29 22:45:17.437 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24002  16          10.255.0.12/32     Gi0/0/0/0    10.0.1.11       0           
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding-table 10.255.0.1 32 detail
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+25         22         10.255.0.1/32    0             Et0/0      10.0.12.11  
+	MAC/Encaps=14/18, MRU=1500, Label Stack{22}
+	AABBCC003510AABBCC0033008847 00016000
+	No output feature configured
+RT02#
+show ip cef 10.255.0.1 detail
+10.255.0.1/32, epoch 0
+  dflt local label info: global/25 [0x3]
+  1 RR source [no flags]
+  nexthop 10.0.12.11 Ethernet0/0 label 22-(local:25)
+RT02#
+show ip cef vrf CUST-A 10.101.1.0 detail
+10.101.1.0/24, epoch 0, flags [rib defined all labels]
+  recursive via 10.255.0.1 label 24004
+    nexthop 10.0.12.11 Ethernet0/0 label 22-(local:25)
+RT02#
+show mpls forwarding-table 10.255.0.1 32
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+22         explicit-n 10.255.0.1/32    2440          Et0/0      10.0.1.1    
+RT01#
+show mpls forwarding-table labels 16001
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+RT01#
+show mpls forwarding-table labels 16012
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+16012      Pop Label  10.255.0.12/32   0             Et0/1      10.0.12.12  
+RT01#
+
+######## 22:45:22 c-4: XR01 に sr-prefer
+configure
+Thu Oct 29 22:45:24.135 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+segment-routing mpls sr-prefer
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+commit
+Thu Oct 29 22:45:25.840 UTC
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+show configuration failed
+Thu Oct 29 22:45:26.744 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-isis-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show cef 10.255.0.12/32 detail
+Thu Oct 29 22:45:39.747 UTC
+10.255.0.12/32, version 76, labeled SR, internal 0x1000001 0x8310 (ptr 0x10641c48) [1], 0x600 (0x107d6198), 0xa28 (0xf154398)
+ Updated Oct 29 22:45:25.915 
+ remote adjacency to GigabitEthernet0/0/0/0
+ Prefix Len 32, traffic index 0, precedence n/a, priority 1
+  gateway array (0x1066d6c0) reference count 3, flags 0x68, source rib (7), 1 backups
+                [2 type 5 flags 0x8401 (0xf18d5c0) ext 0x0 (0x0)]
+  LW-LDI[type=5, refc=3, ptr=0x107d6198, sh-ldi=0xf18d5c0]
+  gateway array update type-time 1 Oct 29 22:45:25.915
+ LDI Update time Oct 29 22:45:25.915
+ LW-LDI-TS Oct 29 22:45:25.915
+   via 10.0.1.11/32, GigabitEthernet0/0/0/0, 8 dependencies, weight 0, class 0 [flags 0x0]
+    path-idx 0 NHID 0x0 [0x10d8b280 0x0]
+    next hop 10.0.1.11/32
+    remote adjacency
+     local label 16012      labels imposed {16012}
+
+    Load distribution: 0 (refcount 2)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    remote         
+RP/0/RP0/CPU0:XR01#
+show cef vrf CUST-A 10.101.2.0/24 detail
+Thu Oct 29 22:45:40.149 UTC
+10.101.2.0/24, version 5, internal 0x5000001 0x30 (ptr 0x1063df68) [1], 0x600 (0x107d52d8), 0xa08 (0xf1542d8)
+ Updated Oct 29 22:41:12.878
+ Prefix Len 24, traffic index 0, precedence n/a, priority 3
+  gateway array (0x1066f3a0) reference count 6, flags 0x38, source rib (7), 0 backups
+                [7 type 1 flags 0x441 (0xf18d3b0) ext 0x0 (0x0)]
+  LW-LDI[type=1, refc=1, ptr=0x107d52d8, sh-ldi=0xf18d3b0]
+  gateway array update type-time 5 Oct 29 22:45:25.914
+ LDI Update time Oct 29 22:45:25.914
+ LW-LDI-TS Oct 29 22:45:25.914
+   via 10.255.0.12/32, 5 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xf41e6f8 0x0]
+    recursion-via-/32
+    next hop VRF - 'default', table - 0xe0000000
+    next hop 10.255.0.12/32 via 16012/0/21
+     next hop 10.0.1.11/32 GigabitEthernet0/0/0/0 labels imposed {16012 22}
+
+    Load distribution: 0 (refcount 7)
+
+    Hash  OK  Interface                 Address
+    0     Y   recursive                 16012/0        
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding prefix 10.255.0.12/32
+Thu Oct 29 22:45:40.550 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+16012  16012       SR Pfx (idx 12)    Gi0/0/0/0    10.0.1.11       0           
+RP/0/RP0/CPU0:XR01#
+ping 10.101.2.1 source 10.101.1.1 repeat 20
+Type escape sequence to abort.
+Sending 20, 100-byte ICMP Echos to 10.101.2.1, timeout is 2 seconds:
+Packet sent with a source address of 10.101.1.1 
+!!!!!!!!!!!!!!!!!!!!
+Success rate is 100 percent (20/20), round-trip min/avg/max = 1/2/5 ms
+CEA1#
+
+######## 22:45:42 c-5: IOL に SR 優先(sr-label-preferred を試す)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+segment-routing mpls
+RT01(config-srmpls)#
+set-attributes
+RT01(config-srmpls-attr)#
+address-family ipv4
+RT01(config-srmpls-attr-af)#
+sr-label-preferred
+RT01(config-srmpls-attr-af)#
+exit-address-family
+RT01(config-srmpls-attr)#
+end
+RT01#
+show running-config | section segment-routing
+segment-routing mpls
+ !
+ set-attributes
+  address-family ipv4
+   sr-label-preferred
+  exit-address-family
+ !
+ !
+ connected-prefix-sid-map
+  address-family ipv4
+   10.255.0.11/32 index 11 range 1 
+  exit-address-family
+ !
+ segment-routing mpls
+RT01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+segment-routing mpls
+RT02(config-srmpls)#
+set-attributes
+RT02(config-srmpls-attr)#
+address-family ipv4
+RT02(config-srmpls-attr-af)#
+sr-label-preferred
+RT02(config-srmpls-attr-af)#
+exit-address-family
+RT02(config-srmpls-attr)#
+end
+RT02#
+show running-config | section segment-routing
+segment-routing mpls
+ !
+ set-attributes
+  address-family ipv4
+   sr-label-preferred
+  exit-address-family
+ !
+ !
+ connected-prefix-sid-map
+  address-family ipv4
+   10.255.0.12/32 index 12 range 1 
+  exit-address-family
+ !
+ segment-routing mpls
+RT02#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT03(config)#
+segment-routing mpls
+RT03(config-srmpls)#
+set-attributes
+RT03(config-srmpls-attr)#
+address-family ipv4
+RT03(config-srmpls-attr-af)#
+sr-label-preferred
+RT03(config-srmpls-attr-af)#
+exit-address-family
+RT03(config-srmpls-attr)#
+end
+RT03#
+show running-config | section segment-routing
+segment-routing mpls
+ !
+ set-attributes
+  address-family ipv4
+   sr-label-preferred
+  exit-address-family
+ !
+ !
+ connected-prefix-sid-map
+  address-family ipv4
+   10.255.0.13/32 index 13 range 1 
+  exit-address-family
+ !
+ segment-routing mpls
+RT03#
+show ip cef 10.255.0.1 detail
+10.255.0.1/32, epoch 0
+  dflt local label info: global/25 [0x3]
+  1 RR source [no flags]
+  nexthop 10.0.12.11 Ethernet0/0 label 22-(local:25)
+RT02#
+show ip cef vrf CUST-A 10.101.1.0 detail
+10.101.1.0/24, epoch 0, flags [rib defined all labels]
+  recursive via 10.255.0.1 label 24004
+    nexthop 10.0.12.11 Ethernet0/0 label 22-(local:25)
+RT02#
+show mpls forwarding-table 10.255.0.1 32
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+25         22         10.255.0.1/32    0             Et0/0      10.0.12.11  
+RT02#
+ping 10.101.2.1 source 10.101.1.1 repeat 20
+Type escape sequence to abort.
+Sending 20, 100-byte ICMP Echos to 10.101.2.1, timeout is 2 seconds:
+Packet sent with a source address of 10.101.1.1 
+!!!!!!!!!!!!!!!!!!!!
+Success rate is 100 percent (20/20), round-trip min/avg/max = 1/1/3 ms
+CEA1#

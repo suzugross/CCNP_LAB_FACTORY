@@ -1,0 +1,52 @@
+######## T7b: IOS の参加を入れてから
+show isis segment-routing label table
+Fri Oct 30 00:34:39.821 UTC
+
+IS-IS CORE  IPv4 Unicast  IS Label Table
+
+Label         Prefix                   Algorithm    Interface
+----------    ----------------         ---------    ---------
+16001         10.255.0.1/32            SPF          Loopback0
+16011         10.255.0.11/32           SPF          
+16012         10.255.0.12/32           SPF          
+16013         10.255.0.13/32           SPF          
+16101         10.255.0.1/32            FA 128       Loopback0
+16111         10.255.0.11/32           FA 128       
+16112         10.255.0.12/32           FA 128       
+16113         10.255.0.13/32           FA 128       
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding labels 16012
+Fri Oct 30 00:34:40.223 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+16012  16012       SR Pfx (idx 12)    Gi0/0/0/0    10.0.1.11       0           
+       16012       SR Pfx (idx 12)    Gi0/0/0/1    10.0.3.13       0            (!)
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding labels 16112
+Fri Oct 30 00:34:40.621 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+16112  16112       SR Pfx (idx 112)   Gi0/0/0/1    10.0.3.13       0           
+RP/0/RP0/CPU0:XR01#
+show isis topology flex-algo 128
+
+Tag CORE:
+
+IS-IS TID 0 paths to level-2 routers
+Flex-algo 128
+System Id            Metric     Next-Hop             Interface   SNPA
+XR01                 10         XR01                 Et0/0       5254.00d6.bf5c 
+RT01                 --
+RT02                 10         RT02                 Et0/1       aabb.cc00.3c00 
+RT03                 110        XR01                 Et0/0       5254.00d6.bf5c 
+                                RT02                 Et0/1       aabb.cc00.3c00 
+XR02                 **
+RT01#
+show mpls forwarding-table labels 16112
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+16112      Pop Label  0-10.255.0.12/32-4 (4:20:128:0)   \
+                                       0             Et0/1      10.0.12.12  
+RT01#

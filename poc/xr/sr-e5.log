@@ -1,0 +1,181 @@
+######## e-5: SPF を戻す・IOL(RT01)に TI-LFA
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+router isis CORE
+RT01(config-router)#
+fast-reroute per-prefix level-2 all
+RT01(config-router)#
+fast-reroute ti-lfa level-2
+RT01(config-router)#
+end
+RT01#
+show running-config | section router isis
+ ip router isis CORE
+ ip router isis CORE
+ ip router isis CORE
+router isis CORE
+ net 49.0001.0100.0000.0011.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+ segment-routing mpls
+ fast-reroute per-prefix level-2 all
+ fast-reroute ti-lfa level-2
+ mpls ldp sync
+RT01#
+show isis fast-reroute summary
+
+Tag CORE:
+Microloop Avoidance Enable State: enabled for segment-routing microloop avoidance
+IPv4 Fast-Reroute Protection Summary:
+
+ Prefix Counts:          Total      Protected    Coverage
+   High priority:        0          0            0%
+   Normal priority:      9          0            0%
+   Total:                9          0            0%
+
+RT01#
+show isis fast-reroute ti-lfa tunnel
+
+Tag CORE:
+Fast-Reroute TI-LFA Tunnels:
+
+Tunnel  Interface  Next Hop         End Point        Label     End Point Host
+
+RT01#
+show ip cef 10.255.0.1 detail
+10.255.0.1/32, epoch 0
+  dflt local label info: global/22 [0x3]
+  sr local label info: global/16001 [0x1B]
+  nexthop 10.0.12.12 Ethernet0/1 label 16001-(local:16001)
+RT01#
+show isis rib 10.255.0.1 255.255.255.255
+
+
+IPv4 local RIB for IS-IS process CORE
+
+IPV4 unicast topology base (TID 0, TOPOID 0x0) =================
+Repair path attributes:
+    DS - Downstream, LC - Linecard-Disjoint, NP - Node-Protecting
+    PP - Primary-Path, SR - SRLG-Disjoint
+
+
+10.255.0.1/32  prefix attr X:0 R:0 N:1  prefix SID index 1 - Bound
+  [115/L2/210] via 10.0.12.12(Ethernet0/1), from 10.255.0.1, tag 0 
+     prefix attr: X:0 R:0 N:1
+       SRGB: 16000, range: 8000 prefix-SID index: 1, R:0 N:1 P:0 E:0 V:0 L:0
+     label: 16001
+              (installed)
+RT01#
+######## e-7: XR01–RT03 を両側 10(RT03–RT02 は 100)= adj-SID の要る修復
+show isis fast-reroute 10.255.0.11/32 detail
+Thu Oct 29 23:22:37.635 UTC
+
+L2 10.255.0.11/32 [130/115] Label: 16011, medium priority
+   Installed Oct 29 23:22:07.459 for 00:00:30
+     via 10.0.3.13, GigabitEthernet0/0/0/1, Label: 16011, RT03, SRGB Base: 16000, Weight: 0
+       No FRR backup
+     src RT01.00-00, 10.255.0.11
+       prefix-SID index 11, R:0 N:1 P:0 E:0 V:0 L:0, Alg:0
+RP/0/RP0/CPU0:XR01#
+show isis fast-reroute 10.255.0.12/32 detail
+Thu Oct 29 23:22:38.035 UTC
+
+L2 10.255.0.12/32 [120/115] Label: 16012, medium priority
+   Installed Oct 29 23:22:07.459 for 00:00:31
+     via 10.0.3.13, GigabitEthernet0/0/0/1, Label: 16012, RT03, SRGB Base: 16000, Weight: 0
+       No FRR backup
+     src RT02.00-00, 10.255.0.12
+       prefix-SID index 12, R:0 N:1 P:0 E:0 V:0 L:0, Alg:0
+RP/0/RP0/CPU0:XR01#
+show cef 10.255.0.11/32 detail
+Thu Oct 29 23:22:38.436 UTC
+10.255.0.11/32, version 605, labeled SR, internal 0x1000001 0x8310 (ptr 0x1063bbc8) [1], 0x600 (0x107d5f58), 0xa28 (0xf154cf8)
+ Updated Oct 29 23:22:07.464 
+ remote adjacency to GigabitEthernet0/0/0/1
+ Prefix Len 32, traffic index 0, precedence n/a, priority 1
+  gateway array (0x106716b0) reference count 6, flags 0x68, source rib (7), 0 backups
+                [3 type 5 flags 0x8401 (0xf18d6c8) ext 0x0 (0x0)]
+  LW-LDI[type=5, refc=3, ptr=0x107d5f58, sh-ldi=0xf18d6c8]
+  gateway array update type-time 1 Oct 29 23:20:22.673
+ LDI Update time Oct 29 23:20:22.673
+ LW-LDI-TS Oct 29 23:20:22.673
+   via 10.0.3.13/32, GigabitEthernet0/0/0/1, 8 dependencies, weight 0, class 0 [flags 0x0]
+    path-idx 0 NHID 0x0 [0x10d8bbe0 0x0]
+    next hop 10.0.3.13/32
+    remote adjacency
+     local label 16011      labels imposed {16011}
+
+    Load distribution: 0 (refcount 3)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/1    remote         
+RP/0/RP0/CPU0:XR01#
+show cef 10.255.0.12/32 detail
+Thu Oct 29 23:22:38.836 UTC
+10.255.0.12/32, version 601, labeled SR, internal 0x1000001 0x8310 (ptr 0x1063c048) [1], 0x600 (0x107d5f98), 0xa28 (0xf154998)
+ Updated Oct 29 23:22:07.464 
+ remote adjacency to GigabitEthernet0/0/0/1
+ Prefix Len 32, traffic index 0, precedence n/a, priority 1
+  gateway array (0x106716b0) reference count 6, flags 0x68, source rib (7), 0 backups
+                [3 type 5 flags 0x8401 (0xf18d6c8) ext 0x0 (0x0)]
+  LW-LDI[type=5, refc=3, ptr=0x107d5f98, sh-ldi=0xf18d6c8]
+  gateway array update type-time 1 Oct 29 23:20:22.673
+ LDI Update time Oct 29 23:20:22.673
+ LW-LDI-TS Oct 29 23:20:22.673
+   via 10.0.3.13/32, GigabitEthernet0/0/0/1, 8 dependencies, weight 0, class 0 [flags 0x0]
+    path-idx 0 NHID 0x0 [0x10d8bbe0 0x0]
+    next hop 10.0.3.13/32
+    remote adjacency
+     local label 16012      labels imposed {16012}
+
+    Load distribution: 0 (refcount 3)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/1    remote         
+RP/0/RP0/CPU0:XR01#
+show cef vrf CUST-A 10.101.2.0/24 detail
+Thu Oct 29 23:22:39.239 UTC
+10.101.2.0/24, version 25, internal 0x5000001 0x30 (ptr 0x10641d08) [1], 0x600 (0x107d6098), 0xa08 (0xf154698)
+ Updated Oct 29 22:47:18.065
+ Prefix Len 24, traffic index 0, precedence n/a, priority 3
+  gateway array (0x10671398) reference count 6, flags 0x38, source rib (7), 0 backups
+                [7 type 1 flags 0x8441 (0xf18dca0) ext 0x0 (0x0)]
+  LW-LDI[type=1, refc=1, ptr=0x107d6098, sh-ldi=0xf18dca0]
+  gateway array update type-time 5 Oct 29 22:50:34.417
+ LDI Update time Oct 29 22:50:34.417
+ LW-LDI-TS Oct 29 22:50:34.417
+   via 10.255.0.12/32, 5 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xf41e598 0x0]
+    recursion-via-/32
+    next hop VRF - 'default', table - 0xe0000000
+    next hop 10.255.0.12/32 via 16012/0/21
+     next hop 10.0.3.13/32 GigabitEthernet0/0/0/1 labels imposed {16012 22}
+
+    Load distribution: 0 (refcount 7)
+
+    Hash  OK  Interface                 Address
+    0     Y   recursive                 16012/0        
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding-table | include Pop|SR|Adj|^2
+16         Pop Label  10.255.0.12/32   0             Et0/1      10.0.23.12  
+17         Pop Label  10.0.12.0/24     0             Et0/1      10.0.23.12  
+20         No Label   10.255.0.21/32   11567         Et0/2      10.0.33.21  
+21    [M]  Pop Label  10.255.0.1/32    0             Et0/0      10.0.3.1    
+22         Pop Label  10.0.3.1-A       2280          Et0/0      10.0.3.1    
+23         Pop Label  10.0.23.12-A     0             Et0/1      10.0.23.12  
+24         Pop Label  10.0.33.21-A     0             Et0/2      10.0.33.21  
+16001 [M]  Pop Label  10.255.0.1/32    0             Et0/0      10.0.3.1    
+16012      Pop Label  10.255.0.12/32   950918        Et0/1      10.0.23.12  
+A  - Adjacency SID
+RT03#
+== adjacency+BFD up after 20s
+== LINK XR01-RT01 loss 100
+	Loss Source to Destination: 26
+	Loss Destination to Source: 0
+== LINK XR01-RT01 clear
+== FAULT APPLIED at +3.6s (run 15.0s)
+== LOSS SD 26 DS 0 (x10 ms: SD ~260 ms, DS ~0 ms)
+== adjacency+BFD up after 120s
+######## e-8: メトリックを戻す

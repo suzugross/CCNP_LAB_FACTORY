@@ -1,0 +1,474 @@
+# XRT-10 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn XRT-10 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# ここに書いた挙動は IOS XRv 9000 26.1.1・IOS XRd 26.1.1(+IOL 17.15)の実機で確認した(設計= problems/_drafts/XR-TRACK.design.md §23)。
+# 模範解の「On XR02:」「On XR01:」の見出し= 機器ごとの塊(poc/xr/verbatim.py が見出しごとに送り先を替える)。
+# 読み物(BL-252)= Reading タブに出す本(reading/<key>/)。各課題の read: はその本の「ページ#節」(節= data-sec)。
+reading: xr
+steps:
+  - id: m10t1
+    title: { en: "M10-1  XR01 joins segment routing", ja: "M10-1  XR01 をセグメント ルーティングに参加させる" }
+    check: m10t1
+    read: [a0-m10-segment-routing#s2-1, a0-m10-segment-routing#s2-7, a0-m10-segment-routing#s3-1, a0-m10-segment-routing#s3-2, a0-m10-segment-routing#s3-3, a0-m10-segment-routing#s4-1]
+    hints:
+      - en: "Three things make a router an SR node in IS-IS: SR switched on in the IS-IS address family, a prefix SID on the loopback, and a global block (SRGB) that every index fits in. Compare what XR01 advertises with what the IOS routers advertise. And when a router has both an LDP label and an SR label for the same prefix, IOS XR picks one of them by default; it may not be the one you want while LDP is still running."
+        ja: "IS-IS で SR のノードになるには 3 つが要ります。IS-IS のアドレス ファミリーで SR を有効にすること、ループバックのプレフィックス SID、そしてすべてのインデックスが収まるグローバル ブロック(SRGB)です。XR01 がアドバタイズしているものと、IOS ルータがアドバタイズしているものを比べてください。また、同じプレフィックスに LDP のラベルと SR のラベルの両方があるとき、IOS XR は既定でどちらか一方を選びます。LDP がまだ動いている間は、それが望むほうとは限りません。"
+      - en: "`show configuration commit list` and `show configuration commit changes <ID>` show what CHG-1301 did. `show isis database verbose` shows each router's SRGB (`SRGB Base … Range …`) and prefix SIDs; `show isis segment-routing label table` lists the SR labels XR01 has built; `show cef 10.255.0.12/32 detail` shows the label XR01 puts on (`labels imposed`). On RT02, `show ip cef 10.255.0.1 detail`. Guides: Segment Routing Configuration Guide (ASR 9000), 'Configure Segment Routing Global Block and Segment Routing Local Block' and 'Configure Segment Routing for IS-IS Protocol' (prefix SID, and the preference between SR and LDP labels)."
+        ja: "`show configuration commit list` と `show configuration commit changes <ID>` で、CHG-1301 が何をしたかが分かります。`show isis database verbose` は各ルータの SRGB(`SRGB Base … Range …`)とプレフィックス SID を、`show isis segment-routing label table` は XR01 が作った SR のラベルを、`show cef 10.255.0.12/32 detail` は XR01 が付けるラベル(`labels imposed`)を表示します。RT02 では `show ip cef 10.255.0.1 detail`。ガイド: Segment Routing Configuration Guide(ASR 9000)の「Configure Segment Routing Global Block and Segment Routing Local Block」と「Configure Segment Routing for IS-IS Protocol」(プレフィックス SID、SR と LDP のラベルの優先)。"
+      - en: "Under `segment-routing`: `no global-block` (the default is the convention), or `global-block 16000 23999`. Under `router isis CORE` → `address-family ipv4 unicast`: `segment-routing mpls sr-prefer`. Under `router isis CORE` → `interface Loopback0` → `address-family ipv4 unicast`: `prefix-sid index 1`. One commit is fine."
+        ja: "`segment-routing` の下で `no global-block`(既定値が約束の範囲です)、または `global-block 16000 23999`。`router isis CORE` → `address-family ipv4 unicast` の下で `segment-routing mpls sr-prefer`。`router isis CORE` → `interface Loopback0` → `address-family ipv4 unicast` の下で `prefix-sid index 1`。1 回のコミットで構いません。"
+    solution:
+      en: |
+        configure
+         segment-routing
+          no global-block
+         !
+         router isis CORE
+          address-family ipv4 unicast
+           segment-routing mpls sr-prefer
+          !
+          interface Loopback0
+           address-family ipv4 unicast
+            prefix-sid index 1
+         commit
+        end
+        Three faults stood between XR01 and SR, and only the first is visible at once. CHG-1301 had set the global block to
+        16000–16009, ten labels "for ten routers". But a router turns an index into a label with its own block too (the
+        incoming label of the entry), and the indexes of RT01 to RT03 (11 to 13) do not fit in ten labels. XR01 then
+        programs no SR entry for them at all: `show isis segment-routing label table` stays empty for them, no log says
+        why, and XR01 keeps sending on LDP labels. The other routers saw the small block in XR01's LSP (`SRGB Base: 16000
+        Range: 10`) and logged `%CLNS-4-SIDRANGE` for paths through XR01. Removing `global-block` brings back the default,
+        16000–23999, which is the convention; IOS XR applies a new block within seconds, without a reload, as long as the
+        labels are free (IS-IS logs `SRGB_INFO … disabling SR`, then `… enabling SR`). Second, the prefix SID belongs to the
+        loopback in IS-IS, and IS-IS accepts it only when SR is on in the address family: without `segment-routing mpls`
+        the commit fails with "Segment-routing is not enabled for IPv4 Unicast". Third, while LDP is still running, IOS XR
+        prefers the LDP label for a prefix that has both. `show cef 10.255.0.12/32 detail` kept RT01's LDP label (a small number,
+        `{18}` in one build of the lab; LDP labels change from build to build) until `sr-prefer` was added, and then showed
+        `{16012}`. The IOS routers already prefer SR
+        (`sr-label-preferred`), so RT02 reaches XR01 on 16001 as soon as XR01 advertises its prefix SID. The VPN traffic
+        follows, because a VPN route rides on the label to the next hop's loopback: `{16012 <VPN label>}` for customer A.
+      ja: |
+        configure
+         segment-routing
+          no global-block
+         !
+         router isis CORE
+          address-family ipv4 unicast
+           segment-routing mpls sr-prefer
+          !
+          interface Loopback0
+           address-family ipv4 unicast
+            prefix-sid index 1
+         commit
+        end
+        XR01 と SR の間には 3 つの障害があり、すぐ見えるのは 1 つ目だけです。CHG-1301 はグローバル ブロックを 16000〜16009、
+        つまり「10 台ぶん」の 10 個のラベルにしていました。しかしルータは、インデックスを自分のブロックでもラベルに変えます(エントリの
+        受信ラベル)。RT01〜RT03 のインデックス(11〜13)は 10 個のラベルに収まりません。すると XR01 はそれらの SR のエントリを
+        まったく作りません。`show isis segment-routing label table` にはそれらが現れず、理由を示すログも出ず、XR01 は LDP のラベルで
+        送り続けます。他のルータは XR01 の LSP にある小さいブロック(`SRGB Base: 16000 Range: 10`)を見て、XR01 を経由するパスについて
+        `%CLNS-4-SIDRANGE` をログに出していました。`global-block` を外すと既定値の 16000〜23999 に戻り、これが約束の範囲です。
+        ラベルが空いていれば、IOS XR は新しいブロックを再起動なしで数秒のうちに適用します(IS-IS が `SRGB_INFO … disabling SR`、
+        続いて `… enabling SR` をログに出します)。2 つ目に、プレフィックス SID は IS-IS のループバックに属し、IS-IS はアドレス
+        ファミリーで SR が有効なときにだけそれを受け付けます。`segment-routing mpls` が無いと、コミットは「Segment-routing is not
+        enabled for IPv4 Unicast」で失敗します。3 つ目に、LDP がまだ動いている間は、両方のラベルを持つプレフィックスについて
+        IOS XR は LDP のラベルを優先します。`show cef 10.255.0.12/32 detail` は、`sr-prefer` を足すまで RT01 の LDP のラベル(小さな数。ある構築では
+        `{18}`。LDP のラベルは構築のたびに変わります)のままで、足すと `{16012}` を表示しました。IOS ルータは既に SR を優先している(`sr-label-preferred`)ので、
+        XR01 がプレフィックス SID をアドバタイズしたとたんに、RT02 は 16001 で XR01 に到達します。VPN のトラフィックもそれに従います。
+        VPN のルートは、ネクスト ホップのループバックへのラベルに乗るからです(顧客 A は `{16012 <VPN のラベル>}`)。
+
+  - id: m10t2
+    title: { en: "M10-2  LDP goes away", ja: "M10-2  LDP をなくす" }
+    check: m10t2
+    read: [a0-m10-segment-routing#s4-2]
+    hints:
+      - en: "Stopping LDP is one line. Then look at what IS-IS advertises for XR01's links, in XR01's own LSP. Something in IS-IS still waits for LDP."
+        ja: "LDP を止めるのは 1 行です。その後、XR01 自身の LSP で、IS-IS が XR01 のリンクについて何をアドバタイズしているかを見てください。IS-IS の中に、まだ LDP を待っているものがあります。"
+      - en: "`show isis database verbose XR01.00-00` (the `Metric:` of the `IS-Extended` lines), `show isis interface GigabitEthernet0/0/0/0`, and `show running-config router isis`. Unit M8 set up LDP-IGP synchronisation on both core links. Guides: MPLS Configuration Guide, 'Implementing MPLS Label Distribution Protocol' — LDP IGP synchronization."
+        ja: "`show isis database verbose XR01.00-00`(`IS-Extended` の行の `Metric:`)、`show isis interface GigabitEthernet0/0/0/0`、`show running-config router isis`。単元 M8 で、両方のコアのリンクに LDP-IGP 同期を設定しました。ガイド: MPLS Configuration Guide の「Implementing MPLS Label Distribution Protocol」— LDP IGP synchronization。"
+      - en: "`no mpls ldp`, and under `router isis CORE` → `interface GigabitEthernet0/0/0/0` and `interface GigabitEthernet0/0/0/1` → `address-family ipv4 unicast`: `no mpls ldp sync`."
+        ja: "`no mpls ldp`。そして `router isis CORE` → `interface GigabitEthernet0/0/0/0` と `interface GigabitEthernet0/0/0/1` → `address-family ipv4 unicast` の下で `no mpls ldp sync`。"
+    solution:
+      en: |
+        configure
+         no mpls ldp
+         router isis CORE
+          interface GigabitEthernet0/0/0/0
+           address-family ipv4 unicast
+            no mpls ldp sync
+           !
+          !
+          interface GigabitEthernet0/0/0/1
+           address-family ipv4 unicast
+            no mpls ldp sync
+         commit
+        end
+        `no mpls ldp` alone stops LDP and leaves the VPNs running: since Task M10-1 every label XR01 uses comes from SR.
+        But the two `mpls ldp sync` lines from unit M8 stay in IS-IS, and they keep doing their job: a link is
+        "synchronised" only when LDP is up on it, and LDP is now nowhere. IOS XR therefore advertises both core links with
+        the maximum metric, 16777214, in XR01's LSP. Nothing breaks here, because XR01 is an edge router with no other way
+        in, so the customers' ping goes through. But every other router now sees XR01's links as a last resort, and the
+        backup paths of Task M10-3 would be computed on wrong metrics. Removing the two lines brings back 10 and 100. The
+        IOS routers behave differently: their synchronisation ignores a link on which LDP is not configured. They were
+        prepared for this change with `no mpls ldp igp sync` on their links to XR01, so they did not raise their metric
+        when XR01's LDP went away.
+      ja: |
+        configure
+         no mpls ldp
+         router isis CORE
+          interface GigabitEthernet0/0/0/0
+           address-family ipv4 unicast
+            no mpls ldp sync
+           !
+          !
+          interface GigabitEthernet0/0/0/1
+           address-family ipv4 unicast
+            no mpls ldp sync
+         commit
+        end
+        `no mpls ldp` だけで LDP は止まり、VPN は動き続けます。課題 M10-1 以降、XR01 が使うラベルはすべて SR から来ているからです。
+        しかし、単元 M8 の 2 行の `mpls ldp sync` は IS-IS に残り、役目を果たし続けます。リンクは LDP がその上で上がっているときにだけ
+        「同期済み」になり、いまや LDP はどこにもありません。そのため IOS XR は、XR01 の LSP で両方のコアのリンクを最大のメトリック
+        16777214 でアドバタイズします。ここでは何も壊れません。XR01 は他に入り口の無いエッジのルータなので、顧客の ping は通ります。
+        しかし他のすべてのルータには XR01 のリンクが最後の手段に見え、課題 M10-3 のバックアップ パスは誤ったメトリックで計算される
+        ことになります。2 行を外すと 10 と 100 に戻ります。IOS ルータは振る舞いが違い、LDP が設定されていないリンクを同期の対象から
+        外します。IOS ルータはこの変更に備えて XR01 とのリンクに `no mpls ldp igp sync` を入れてあったので、XR01 の LDP が
+        無くなってもメトリックを上げませんでした。
+
+  - id: m10t3
+    title: { en: "M10-3  Backup paths before the failure", ja: "M10-3  障害の前にバックアップ パスを用意する" }
+    check: m10t3
+    read: [a2-m10-ti-lfa#s1-1, a2-m10-ti-lfa#s2-2, a2-m10-ti-lfa#s2-3, a2-m10-ti-lfa#s2-5, a2-m10-ti-lfa#s4]
+    hints:
+      - en: "This is IP fast reroute in IS-IS, per prefix, on each core interface. A plain loop-free alternate does not exist for every prefix in this square; the variant that uses segment routing to bring the packet to a safe point always does. The temporary loops after a change are a separate feature of IS-IS with segment routing."
+        ja: "これは IS-IS の IP 高速再ルーティングで、プレフィックスごとに、各コアのインターフェイスで設定します。この四角形では、通常のループ フリー代替パスはすべてのプレフィックスには存在しません。セグメント ルーティングを使ってパケットを安全な地点まで運ぶ方式なら、必ず存在します。変更の後の一時的なループは、セグメント ルーティングを使う IS-IS の別の機能です。"
+      - en: "`show isis fast-reroute summary` (protected and unprotected prefixes), `show isis fast-reroute 10.255.0.11/32 detail` (the backup path, its P node and labels), `show cef 10.255.0.11/32 detail` (the backup in the forwarding table) and `show isis protocol` (microloop avoidance). Guides: Segment Routing Configuration Guide, 'Configure Topology-Independent Loop-Free Alternate (TI-LFA)' and 'Configure Segment Routing Microloop Avoidance'."
+        ja: "`show isis fast-reroute summary`(保護されている/いないプレフィックス)、`show isis fast-reroute 10.255.0.11/32 detail`(バックアップ パス、その P ノードとラベル)、`show cef 10.255.0.11/32 detail`(転送テーブルのバックアップ)、`show isis protocol`(マイクロループ回避)。ガイド: Segment Routing Configuration Guide の「Configure Topology-Independent Loop-Free Alternate (TI-LFA)」と「Configure Segment Routing Microloop Avoidance」。"
+      - en: "Under `router isis CORE` → `interface GigabitEthernet0/0/0/0` → `address-family ipv4 unicast`: `fast-reroute per-prefix` and `fast-reroute per-prefix ti-lfa`; the same on GigabitEthernet0/0/0/1. Under `router isis CORE` → `address-family ipv4 unicast`: `microloop avoidance segment-routing`."
+        ja: "`router isis CORE` → `interface GigabitEthernet0/0/0/0` → `address-family ipv4 unicast` の下で `fast-reroute per-prefix` と `fast-reroute per-prefix ti-lfa`。GigabitEthernet0/0/0/1 も同じです。`router isis CORE` → `address-family ipv4 unicast` の下で `microloop avoidance segment-routing`。"
+    solution:
+      en: |
+        configure
+         router isis CORE
+          address-family ipv4 unicast
+           microloop avoidance segment-routing
+          !
+          interface GigabitEthernet0/0/0/0
+           address-family ipv4 unicast
+            fast-reroute per-prefix
+            fast-reroute per-prefix ti-lfa
+           !
+          !
+          interface GigabitEthernet0/0/0/1
+           address-family ipv4 unicast
+            fast-reroute per-prefix
+            fast-reroute per-prefix ti-lfa
+         commit
+        end
+        Both lines are needed on each interface: `fast-reroute per-prefix` turns on per-prefix protection, and `ti-lfa`
+        lets it use segment routing. With the first line alone, IS-IS finds a plain loop-free alternate for RT02's loopback
+        (RT03 reaches RT02 at 100, less than going back through XR01 at 120) but none for RT01's: RT03 reaches RT01 at 110
+        either way, so it might send the packet back over the failed link. TI-LFA computes the path that IS-IS will use
+        once it has converged, XR01 → RT03 → RT02 → RT01, and finds the point where it is safe to let the packet go:
+        RT02 is reachable from XR01 without the failed link (the P space) and reaches RT01 without it (the Q space). The
+        backup therefore pushes RT02's prefix SID on top of RT01's: `P node: RT02.00 [10.255.0.12], Label: 16012`,
+        `Prefix label: 16011`, and in CEF `backup (TI-LFA)` with `labels imposed {16012 16011}`. Every prefix is then
+        protected (`Unprotected 0`). Had the metric of BACKUP been 10 and of CORE-B 100, no router would have been in both
+        spaces, and the backup would have used RT03's adjacency SID towards RT02 instead (the page TI-LFA shows that
+        variant in section 2.3). The protection is link protection, the default; node protection is a tie-breaker that you would add.
+        Microloop avoidance is off by default; with `segment-routing` XR01 sends traffic on an explicit SR path for a
+        while after a change (5 seconds by default), until the other routers have updated their tables. The check reads
+        the state; it does not break the link (the page TI-LFA, section 3, measures the effect).
+      ja: |
+        configure
+         router isis CORE
+          address-family ipv4 unicast
+           microloop avoidance segment-routing
+          !
+          interface GigabitEthernet0/0/0/0
+           address-family ipv4 unicast
+            fast-reroute per-prefix
+            fast-reroute per-prefix ti-lfa
+           !
+          !
+          interface GigabitEthernet0/0/0/1
+           address-family ipv4 unicast
+            fast-reroute per-prefix
+            fast-reroute per-prefix ti-lfa
+         commit
+        end
+        各インターフェイスに 2 行とも必要です。`fast-reroute per-prefix` がプレフィックスごとの保護を有効にし、`ti-lfa` がそれに
+        セグメント ルーティングを使わせます。1 行目だけだと、IS-IS は RT02 のループバックには通常のループ フリー代替パスを見つけます
+        (RT03 から RT02 は 100 で、XR01 を戻る 120 より小さい)が、RT01 のループバックには見つけません。RT03 から RT01 はどちら
+        回りでも 110 なので、RT03 はパケットを障害のリンクに送り返すかもしれないからです。TI-LFA は、IS-IS が収束した後に使う
+        パス XR01 → RT03 → RT02 → RT01 を計算し、パケットを手放しても安全な地点を見つけます。RT02 は、XR01 から障害のリンクを
+        使わずに到達でき(P 空間)、RT01 にもそのリンクを使わずに到達します(Q 空間)。そこでバックアップは RT01 のプレフィックス SID の
+        上に RT02 のプレフィックス SID を積みます。`P node: RT02.00 [10.255.0.12], Label: 16012`、`Prefix label: 16011` で、
+        CEF では `backup (TI-LFA)` と `labels imposed {16012 16011}` です。これですべてのプレフィックスが保護されます
+        (`Unprotected 0`)。BACKUP のメトリックが 10 で CORE-B が 100 だったら、両方の空間に入るルータは無く、バックアップは代わりに
+        RT03 から RT02 への隣接 SID を使っていたはずです(ページ「TI-LFA」の 2.3 節にその形を載せています)。保護はリンク保護で、これが既定値です。
+        ノード保護は、自分で足すタイブレーカです。マイクロループ回避は既定で無効です。`segment-routing` を付けると、XR01 は変更の後
+        しばらく(既定で 5 秒)、他のルータがテーブルを更新し終えるまで、明示的な SR のパスでトラフィックを送ります。確認は状態を
+        読むだけで、リンクは切りません(効き目はページ「TI-LFA」の 3 節で測っています)。
+
+  - id: m10t4
+    title: { en: "M10-4  Customer A avoids PRIMARY", ja: "M10-4  顧客 A に PRIMARY を避けさせる" }
+    check: m10t4
+    read: [a4-m10-sr-policy-pce#s1-1, a4-m10-sr-policy-pce#s2-1, a4-m10-sr-policy-pce#s2-2, a4-m10-sr-policy-pce#s2-3]
+    hints:
+      - en: "An SR policy is named by its head end, a color and an end point. A BGP route whose next hop is the end point and that carries the color is steered into the policy automatically. The policy does not have to exist in advance: the head end can create it when the first route with the color arrives, and compute its path with constraints. To make the path avoid one link, mark the link."
+        ja: "SR ポリシーは、ヘッドエンド、カラー、エンドポイントで識別されます。ネクスト ホップがエンドポイントで、そのカラーを持つ BGP のルートは、自動的にそのポリシーに誘導されます。ポリシーは前もって存在する必要はありません。ヘッドエンドは、そのカラーを持つ最初のルートが届いたときにポリシーを作り、制約付きでパスを計算できます。パスに 1 本のリンクを避けさせるには、そのリンクに印を付けます。"
+      - en: "`show bgp vrf CUST-A 10.101.2.0/24` (the color and `SR policy color 100`), `show segment-routing traffic-eng policy color 100 detail` (the candidate path, its state and `Last error`), and a traceroute from CEA1. Guides: Segment Routing Configuration Guide, 'Configure SR-TE Policies' — On-Demand SR Policy (SR ODN), Automated Steering, Color-Extended Community, Affinity; and its constraint 'Before configuring SR-TE policies, use the distribute link-state command'."
+        ja: "`show bgp vrf CUST-A 10.101.2.0/24`(カラーと `SR policy color 100`)、`show segment-routing traffic-eng policy color 100 detail`(候補パス、その状態と `Last error`)、そして CEA1 からの traceroute。ガイド: Segment Routing Configuration Guide の「Configure SR-TE Policies」— On-Demand SR Policy (SR ODN)、Automated Steering、Color-Extended Community、Affinity。そしてその制約「Before configuring SR-TE policies, use the distribute link-state command」。"
+      - en: "An `extcommunity-set opaque` with 100, and a route policy that does `set extcommunity color` for routes with route target 65000:101 and passes the rest; apply it `in` on the VPNv4 address family of neighbour 10.255.0.21. `router isis CORE` → `distribute link-state`. Under `segment-routing` → `traffic-eng`: an `affinity-map` with a name at bit position 0, `interface GigabitEthernet0/0/0/0` → `affinity` → that name, and `on-demand color 100` → `dynamic` → `metric type igp` and `affinity exclude-any` → that name."
+        ja: "100 を持つ `extcommunity-set opaque` と、ルート ターゲット 65000:101 のルートに `set extcommunity color` を行い、残りを通すルート ポリシー。それをネイバー 10.255.0.21 の VPNv4 アドレス ファミリーに `in` で適用します。`router isis CORE` → `distribute link-state`。`segment-routing` → `traffic-eng` の下に、ビット位置 0 に名前を付けた `affinity-map`、`interface GigabitEthernet0/0/0/0` → `affinity` → その名前、そして `on-demand color 100` → `dynamic` → `metric type igp` と `affinity exclude-any` → その名前。"
+    solution:
+      en: |
+        configure
+         extcommunity-set opaque COLOR-100
+          100
+         end-set
+         !
+         extcommunity-set rt CUST-A-RT
+          65000:101
+         end-set
+         !
+         route-policy FROM-RR
+          if extcommunity rt matches-any CUST-A-RT then
+           set extcommunity color COLOR-100
+          endif
+          pass
+         end-policy
+         !
+         router bgp 65000
+          neighbor 10.255.0.21
+           address-family vpnv4 unicast
+            route-policy FROM-RR in
+           !
+          !
+         !
+         router isis CORE
+          distribute link-state
+         !
+         segment-routing
+          traffic-eng
+           affinity-map
+            name RT01-MAINT bit-position 0
+           !
+           interface GigabitEthernet0/0/0/0
+            affinity
+             name RT01-MAINT
+            !
+           !
+           on-demand color 100
+            dynamic
+             metric
+              type igp
+             !
+             affinity
+              exclude-any
+               name RT01-MAINT
+         commit
+        end
+        The color is an extended community on the BGP route. RT02 does not set one and the route reflector must not be
+        touched, so XR01 sets it as it receives the routes: the policy on the VPNv4 session matches customer A's route
+        target and adds color 100; customer B's routes pass unchanged. A route with color 100 and next hop 10.255.0.12 is
+        steered into the policy (color 100, end point 10.255.0.12): `show bgp vrf CUST-A 10.101.2.0/24` shows
+        `10.255.0.12 C:100 (bsid:…)` and `SR policy color 100, up`. With `on-demand color 100`, XR01 creates that policy
+        when the first route with the color arrives and computes its path itself (`Dynamic (valid)`), here with the IGP
+        metric and without any link marked RT01-MAINT. The path becomes RT03 then RT02 (`SID[0]: 16013`,
+        `SID[1]: 16012`), and CEA1's traceroute crosses 10.0.3.13 while CEB1's still crosses 10.0.1.11. Without
+        `distribute link-state`, the SR-TE process has no topology: the policy stays down with `Last error: Source node not
+        found in topology`, and the routes fall back to the IGP path through RT01 without any warning. That is the trap of
+        this task. The Segment Routing guide lists the VRF import policy among the places where a color can only be
+        matched, not set; in the lab, IOS XR 26.1.1 accepted `set extcommunity color` in a VRF import policy too and
+        steered the routes, so the check looks at the behaviour, not at the place.
+      ja: |
+        configure
+         extcommunity-set opaque COLOR-100
+          100
+         end-set
+         !
+         extcommunity-set rt CUST-A-RT
+          65000:101
+         end-set
+         !
+         route-policy FROM-RR
+          if extcommunity rt matches-any CUST-A-RT then
+           set extcommunity color COLOR-100
+          endif
+          pass
+         end-policy
+         !
+         router bgp 65000
+          neighbor 10.255.0.21
+           address-family vpnv4 unicast
+            route-policy FROM-RR in
+           !
+          !
+         !
+         router isis CORE
+          distribute link-state
+         !
+         segment-routing
+          traffic-eng
+           affinity-map
+            name RT01-MAINT bit-position 0
+           !
+           interface GigabitEthernet0/0/0/0
+            affinity
+             name RT01-MAINT
+            !
+           !
+           on-demand color 100
+            dynamic
+             metric
+              type igp
+             !
+             affinity
+              exclude-any
+               name RT01-MAINT
+         commit
+        end
+        カラーは BGP のルートの拡張コミュニティです。RT02 はカラーを付けず、ルート リフレクタは変更してはならないので、XR01 が
+        ルートを受け取るときに付けます。VPNv4 のセッションのポリシーが顧客 A のルート ターゲットに一致したらカラー 100 を足し、
+        顧客 B のルートはそのまま通します。カラー 100 でネクスト ホップが 10.255.0.12 のルートは、ポリシー(カラー 100、エンドポイント
+        10.255.0.12)に誘導されます。`show bgp vrf CUST-A 10.101.2.0/24` は `10.255.0.12 C:100 (bsid:…)` と `SR policy color 100, up`
+        を表示します。`on-demand color 100` があると、XR01 はそのカラーを持つ最初のルートが届いたときにポリシーを作り、パスを自分で
+        計算します(`Dynamic (valid)`)。ここでは IGP のメトリックで、RT01-MAINT の印の付いたリンクを使わずに計算します。パスは RT03、
+        RT02 の順になり(`SID[0]: 16013`、`SID[1]: 16012`)、CEA1 の traceroute は 10.0.3.13 を通り、CEB1 のものは 10.0.1.11 を通った
+        ままです。`distribute link-state` が無いと、SR-TE のプロセスはトポロジを持ちません。ポリシーは `Last error: Source node not
+        found in topology` で down のままになり、ルートは何の警告もなく RT01 経由の IGP のパスに戻ります。これがこの課題の罠です。
+        Segment Routing のガイドは、VRF の import のポリシーを、カラーを照合できるだけで設定できない場所に挙げています。ラボでは、
+        IOS XR 26.1.1 は VRF の import のポリシーでも `set extcommunity color` を受け付け、ルートを誘導しました。そのため確認は、
+        カラーを付けた場所ではなく動作を見ます。
+
+  - id: m10t5
+    title: { en: "M10-5  A PCE computes two disjoint paths", ja: "M10-5  PCE に互いに離れた 2 本のパスを計算させる" }
+    check: m10t5
+    read: [a4-m10-sr-policy-pce#s3-1, a4-m10-sr-policy-pce#s3-2]
+    hints:
+      - en: "Three parts: the PCE on XR02 (an address, and a topology from IS-IS), the PCC on XR01 (where the PCE is), and two policies whose dynamic path is delegated to the PCE, with a constraint that ties them together as a disjoint pair."
+        ja: "部品は 3 つです。XR02 の PCE(アドレスと、IS-IS からのトポロジ)、XR01 の PCC(PCE の場所)、そして動的なパスを PCE に委ねる 2 つのポリシーで、それらを互いに離れた組として結び付ける制約を付けます。"
+      - en: "On XR02: `show pce ipv4 peer`, `show pce ipv4 topology summary`, `show pce lsp detail` and `show pce association`. On XR01: `show segment-routing traffic-eng pcc ipv4 peer` and `show segment-routing traffic-eng policy color 201 detail`. Guides: Segment Routing Configuration Guide, 'Configure Segment Routing Path Computation Element' (SR-PCE, PCC, disjointness)."
+        ja: "XR02 で `show pce ipv4 peer`、`show pce ipv4 topology summary`、`show pce lsp detail`、`show pce association`。XR01 で `show segment-routing traffic-eng pcc ipv4 peer` と `show segment-routing traffic-eng policy color 201 detail`。ガイド: Segment Routing Configuration Guide の「Configure Segment Routing Path Computation Element」(SR-PCE、PCC、disjointness)。"
+      - en: "On XR02: `pce` → `address ipv4 10.255.0.21`, and `router isis CORE` → `distribute link-state`. On XR01, under `segment-routing` → `traffic-eng`: `pcc` → `source-address ipv4 10.255.0.1` and `pce address ipv4 10.255.0.21`; then two `policy` entries with `color 201 end-point ipv4 10.255.0.12` (and 202), `candidate-paths` → `preference 100` → `dynamic` → `pcep` (and a metric type), and under the preference `constraints` → `disjoint-path group-id 1 type link`."
+        ja: "XR02 で `pce` → `address ipv4 10.255.0.21` と、`router isis CORE` → `distribute link-state`。XR01 では `segment-routing` → `traffic-eng` の下に `pcc` → `source-address ipv4 10.255.0.1` と `pce address ipv4 10.255.0.21`。次に `color 201 end-point ipv4 10.255.0.12`(と 202)を持つ 2 つの `policy` に、`candidate-paths` → `preference 100` → `dynamic` → `pcep`(とメトリックの種類)、そして preference の下に `constraints` → `disjoint-path group-id 1 type link`。"
+    solution:
+      en: |
+        On XR02:
+        configure
+         pce
+          address ipv4 10.255.0.21
+         !
+         router isis CORE
+          distribute link-state
+         commit
+        end
+        On XR01:
+        configure
+         segment-routing
+          traffic-eng
+           pcc
+            source-address ipv4 10.255.0.1
+            pce address ipv4 10.255.0.21
+           !
+           policy DISJ-1
+            color 201 end-point ipv4 10.255.0.12
+            candidate-paths
+             preference 100
+              dynamic
+               pcep
+               !
+               metric
+                type igp
+               !
+              !
+              constraints
+               disjoint-path group-id 1 type link
+              !
+             !
+            !
+           !
+           policy DISJ-2
+            color 202 end-point ipv4 10.255.0.12
+            candidate-paths
+             preference 100
+              dynamic
+               pcep
+               !
+               metric
+                type igp
+               !
+              !
+              constraints
+               disjoint-path group-id 1 type link
+         commit
+        end
+        The PCE is a process on XR02 with an address; `distribute link-state` hands it the topology that XR02's IS-IS
+        already holds, with every router's prefix and adjacency SIDs (`show pce ipv4 topology summary`: 5 nodes, 4 prefix
+        SIDs). XR02 forwards no customer traffic: it is a dead end behind RT03, and computing paths needs no forwarding.
+        XR01 opens a PCEP session to it (`State: Up` on both sides). A candidate path with `dynamic` → `pcep` is delegated:
+        XR01 asks, the PCE computes and keeps the path up to date (`Dynamic (pce 10.255.0.21) (valid)`). The two policies
+        carry the same disjointness group, and only the PCE sees both of them at once, so it places them apart: color 201
+        on the shortest path through RT01 (16012, metric 20) and color 202 through RT03 (16013, 16012, metric 200).
+        `show pce association` reports the group as `Link-Disjoint … Status: Satisfied`. Without `distribute link-state`
+        on XR02, the PCE has no topology and both policies stay down; without the constraint, the PCE puts both on the
+        shortest path. Nothing is steered into colors 201 and 202 yet: the service that will use them does not exist.
+      ja: |
+        On XR02:
+        configure
+         pce
+          address ipv4 10.255.0.21
+         !
+         router isis CORE
+          distribute link-state
+         commit
+        end
+        On XR01:
+        configure
+         segment-routing
+          traffic-eng
+           pcc
+            source-address ipv4 10.255.0.1
+            pce address ipv4 10.255.0.21
+           !
+           policy DISJ-1
+            color 201 end-point ipv4 10.255.0.12
+            candidate-paths
+             preference 100
+              dynamic
+               pcep
+               !
+               metric
+                type igp
+               !
+              !
+              constraints
+               disjoint-path group-id 1 type link
+              !
+             !
+            !
+           !
+           policy DISJ-2
+            color 202 end-point ipv4 10.255.0.12
+            candidate-paths
+             preference 100
+              dynamic
+               pcep
+               !
+               metric
+                type igp
+               !
+              !
+              constraints
+               disjoint-path group-id 1 type link
+         commit
+        end
+        PCE は、アドレスを持つ XR02 上のプロセスです。`distribute link-state` は、XR02 の IS-IS が既に持っているトポロジを、すべての
+        ルータのプレフィックス SID と隣接 SID ごと PCE に渡します(`show pce ipv4 topology summary`: ノード 5、プレフィックス SID 4)。
+        XR02 は顧客のトラフィックを転送しません。RT03 の先の行き止まりにあり、パスの計算に転送は要りません。XR01 は XR02 に PCEP の
+        セッションを開きます(両側で `State: Up`)。`dynamic` → `pcep` の候補パスは委任されます。XR01 が依頼し、PCE がパスを計算して
+        最新に保ちます(`Dynamic (pce 10.255.0.21) (valid)`)。2 つのポリシーは同じ disjointness のグループを持ち、両方を同時に見られる
+        のは PCE だけなので、PCE はそれらを離して配置します。カラー 201 は RT01 経由の最短パス(16012、メトリック 20)、カラー 202 は
+        RT03 経由(16013、16012、メトリック 200)です。`show pce association` はグループを `Link-Disjoint … Status: Satisfied` と報告
+        します。XR02 に `distribute link-state` が無いと、PCE はトポロジを持たず、両方のポリシーは down のままです。制約が無いと、
+        PCE は両方を最短パスに置きます。カラー 201 と 202 に誘導されるものはまだありません。それらを使うサービスはまだ存在しないからです。

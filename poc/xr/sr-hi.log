@@ -1,0 +1,626 @@
+
+######## 23:32:59 h-1: XR02(XRd)を PCE に(IS-IS の LSDB を distribute link-state で渡す)・過負荷ビット
+configure
+Thu Oct 29 23:33:01.002 UTC
+RP/0/RP0/CPU0:XR02(config)#
+pce
+RP/0/RP0/CPU0:XR02(config-pce)#
+address ipv4 10.255.0.21
+RP/0/RP0/CPU0:XR02(config-pce)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR02(config-isis)#
+distribute link-state
+RP/0/RP0/CPU0:XR02(config-isis)#
+set-overload-bit
+RP/0/RP0/CPU0:XR02(config-isis)#
+commit
+Thu Oct 29 23:33:04.011 UTC
+RP/0/RP0/CPU0:XR02(config-isis)#
+show configuration failed
+Thu Oct 29 23:33:04.614 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02(config-isis)#
+end
+RP/0/RP0/CPU0:XR02#
+
+######## 23:33:06 h-2: XR01 を PCC に
+configure
+Thu Oct 29 23:33:08.217 UTC
+RP/0/RP0/CPU0:XR01(config)#
+segment-routing
+RP/0/RP0/CPU0:XR01(config-sr)#
+traffic-eng
+RP/0/RP0/CPU0:XR01(config-sr-te)#
+pcc
+RP/0/RP0/CPU0:XR01(config-sr-te-pcc)#
+source-address ipv4 10.255.0.1
+RP/0/RP0/CPU0:XR01(config-sr-te-pcc)#
+pce address ipv4 10.255.0.21
+RP/0/RP0/CPU0:XR01(config-pcc-pce)#
+commit
+Thu Oct 29 23:33:10.725 UTC
+RP/0/RP0/CPU0:XR01(config-pcc-pce)#
+show configuration failed
+Thu Oct 29 23:33:11.631 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-pcc-pce)#
+end
+RP/0/RP0/CPU0:XR01#
+show pce ipv4 peer
+Thu Oct 29 23:33:34.449 UTC
+RP/0/RP0/CPU0:XR02#
+show pce ipv4 topology summary
+Thu Oct 29 23:33:34.855 UTC
+
+PCE's topology database summary:
+--------------------------------
+
+Nodes:
+  Total:                       5
+  Topology:                    5
+  Virtual:                     0
+Prefixes:
+  Total:                       5
+  Local:                       5
+    Non-anycast:               5
+    Anycast:                   0
+  Remote:                      0
+Prefix SIDs:
+  Total:                       4
+  Regular:                     4
+  Strict:                      0
+Links:
+  Total:                       9
+  Topology:                    9
+  Virtual:                     0
+  EPE:                         0
+Adjacency SIDs:
+  Total:                      13
+  Unprotected:                 9
+  Protected:                   4
+  EPE:                         0
+
+Private Information:
+Lookup Nodes                   0
+Consistent                    no
+
+Update Stats (from IGP and/or BGP):
+  Nodes added:                 6
+  Nodes deleted:               0
+  Links added:                12
+  Links deleted:               0
+  Prefix added:               17
+  Prefix deleted:              0
+
+Topology Ready Summary:
+  Ready:                      no
+  PCEP allowed:               no
+  Last HA case:        migration
+  Timer value (sec):          40
+  Timer:
+    Running: yes
+    Remaining: 9.286348189
+
+RP/0/RP0/CPU0:XR02#
+show pce ipv4 prefix
+Thu Oct 29 23:33:35.252 UTC
+
+PCE's prefix database: 
+----------------------
+Node 1
+ Host name: XR01
+ ISIS system ID: 0100.0000.0001 level-2 Area-id: 49.0001 ASN: 0
+  Advertised Prefixes:
+   10.255.0.1
+
+Node 2
+ Host name: RT01
+ ISIS system ID: 0100.0000.0011 level-2 Area-id: 49.0001 ASN: 0
+  Advertised Prefixes:
+   10.255.0.11
+
+Node 3
+ Host name: RT03
+ ISIS system ID: 0100.0000.0013 level-2 Area-id: 49.0001 ASN: 0
+  Advertised Prefixes:
+   10.255.0.13
+
+Node 4
+ Host name: RT02
+ ISIS system ID: 0100.0000.0012 level-2 Area-id: 49.0001 ASN: 0
+  Advertised Prefixes:
+   10.255.0.12
+
+Node 5
+ Host name: XR02
+ ISIS system ID: 0100.0000.0021 level-2 Area-id: 49.0001 ASN: 0
+  Advertised Prefixes:
+   10.255.0.21
+
+RP/0/RP0/CPU0:XR02#
+show segment-routing traffic-eng pcc ipv4 peer
+Thu Oct 29 23:33:37.460 UTC
+
+PCC's peer database:
+--------------------
+
+Peer address: 10.255.0.21, 
+  Precedence: 255
+  State TCP pending
+  Capabilities: Stateless
+
+RP/0/RP0/CPU0:XR01#
+
+######## 23:33:37 h-3: PCE に計算させるポリシー 2 本(色 201・202)をリンクで離す
+configure
+Thu Oct 29 23:33:38.973 UTC
+RP/0/RP0/CPU0:XR01(config)#
+segment-routing
+RP/0/RP0/CPU0:XR01(config-sr)#
+traffic-eng
+RP/0/RP0/CPU0:XR01(config-sr-te)#
+policy DISJ-1
+RP/0/RP0/CPU0:XR01(config-sr-te-policy)#
+color 201 end-point ipv4 10.255.0.12
+RP/0/RP0/CPU0:XR01(config-sr-te-policy)#
+candidate-paths
+RP/0/RP0/CPU0:XR01(config-sr-te-policy-path)#
+preference 100
+RP/0/RP0/CPU0:XR01(config-sr-te-policy-path-pref)#
+dynamic
+RP/0/RP0/CPU0:XR01(config-sr-te-pp-info)#
+pcep
+RP/0/RP0/CPU0:XR01(config-sr-te-path-pcep)#
+exit
+RP/0/RP0/CPU0:XR01(config-sr-te-pp-info)#
+metric
+RP/0/RP0/CPU0:XR01(config-sr-te-path-metric)#
+type igp
+RP/0/RP0/CPU0:XR01(config-sr-te-path-metric)#
+exit
+RP/0/RP0/CPU0:XR01(config-sr-te-pp-info)#
+exit
+RP/0/RP0/CPU0:XR01(config-sr-te-policy-path-pref)#
+constraints
+RP/0/RP0/CPU0:XR01(config-sr-te-path-pref-const)#
+disjoint-path group-id 1 type $e l                          inkdisjoint-path group-id 1 type$
+RP/0/RP0/CPU0:XR01(config-sr-te-path-pref-const)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+segment-routing
+RP/0/RP0/CPU0:XR01(config-sr)#
+traffic-eng
+RP/0/RP0/CPU0:XR01(config-sr-te)#
+policy DISJ-2
+RP/0/RP0/CPU0:XR01(config-sr-te-policy)#
+color 202 end-point ipv4 10.255.0.12
+RP/0/RP0/CPU0:XR01(config-sr-te-policy)#
+candidate-paths
+RP/0/RP0/CPU0:XR01(config-sr-te-policy-path)#
+preference 100
+RP/0/RP0/CPU0:XR01(config-sr-te-policy-path-pref)#
+dynamic
+RP/0/RP0/CPU0:XR01(config-sr-te-pp-info)#
+pcep
+RP/0/RP0/CPU0:XR01(config-sr-te-path-pcep)#
+exit
+RP/0/RP0/CPU0:XR01(config-sr-te-pp-info)#
+metric
+RP/0/RP0/CPU0:XR01(config-sr-te-path-metric)#
+type igp
+RP/0/RP0/CPU0:XR01(config-sr-te-path-metric)#
+exit
+RP/0/RP0/CPU0:XR01(config-sr-te-pp-info)#
+exit
+RP/0/RP0/CPU0:XR01(config-sr-te-policy-path-pref)#
+constraints
+RP/0/RP0/CPU0:XR01(config-sr-te-path-pref-const)#
+disjoint-path group-id 1 type $e l                          inkdisjoint-path group-id 1 type$
+RP/0/RP0/CPU0:XR01(config-sr-te-path-pref-const)#
+commit
+Thu Oct 29 23:33:51.909 UTC
+RP/0/RP0/CPU0:XR01(config-sr-te-path-pref-const)#
+show configuration failed
+Thu Oct 29 23:33:52.815 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-sr-te-path-pref-const)#
+end
+RP/0/RP0/CPU0:XR01#
+show segment-routing traffic-eng policy color 201 detail
+Thu Oct 29 23:34:15.931 UTC
+
+SR-TE policy database
+---------------------
+
+Color: 201, End-point: 10.255.0.12
+  Name: srte_c_201_ep_10.255.0.12
+  Status:
+    Admin: up  Operational: up for 00:00:22 (since Oct 29 23:33:53.497)
+  Candidate-paths:
+    Preference: 100 (configuration) (active)
+      Name: DISJ-1
+      Requested BSID: dynamic
+      PCC info:
+        Symbolic name: cfg_DISJ-1_discr_100
+        PLSP-ID: 2
+      Constraints:
+        Protection Type: protected-preferred
+        Maximum SID Depth: 10 
+      Dynamic (pce 10.255.0.21) (valid)
+        Metric Type: IGP (IANA PCEP/IGP: 1/0), Path Accumulated Metric: 20 
+          SID[0]: 16012 [Prefix-SID, 10.255.0.12]
+  LSPs:
+    LSP[0]:
+      LSP-ID: 2 policy ID: 3 (active)
+      Local label: 24019
+      State: Programmed
+      Binding SID: 24020
+  Attributes:
+    Binding SID: 24020
+    Forward Class: Not Configured
+    Steering services disabled: no
+    Steering BGP disabled: no
+    IPv6 caps enable: yes
+    Invalidation drop enabled: no
+    Max Install Standby Candidate Paths: 0
+    Path Type: SRMPLSv4
+
+RP/0/RP0/CPU0:XR01#
+show segment-routing traffic-eng policy color 202 detail
+Thu Oct 29 23:34:16.330 UTC
+
+SR-TE policy database
+---------------------
+
+Color: 202, End-point: 10.255.0.12
+  Name: srte_c_202_ep_10.255.0.12
+  Status:
+    Admin: up  Operational: up for 00:00:23 (since Oct 29 23:33:52.492)
+  Candidate-paths:
+    Preference: 100 (configuration) (active)
+      Name: DISJ-2
+      Requested BSID: dynamic
+      PCC info:
+        Symbolic name: cfg_DISJ-2_discr_100
+        PLSP-ID: 3
+      Constraints:
+        Protection Type: protected-preferred
+        Maximum SID Depth: 10 
+      Dynamic (pce 10.255.0.21) (valid)
+        Metric Type: IGP (IANA PCEP/IGP: 1/0), Path Accumulated Metric: 200 
+          SID[0]: 16013 [Prefix-SID, 10.255.0.13]
+          SID[1]: 16012 [Prefix-SID, 10.255.0.12]
+  LSPs:
+    LSP[0]:
+      LSP-ID: 2 policy ID: 4 (active)
+      Local label: 24017
+      State: Programmed
+      Binding SID: 24018
+  Attributes:
+    Binding SID: 24018
+    Forward Class: Not Configured
+    Steering services disabled: no
+    Steering BGP disabled: no
+    IPv6 caps enable: yes
+    Invalidation drop enabled: no
+    Max Install Standby Candidate Paths: 0
+    Path Type: SRMPLSv4
+
+RP/0/RP0/CPU0:XR01#
+show running-config segment-routing
+Thu Oct 29 23:34:16.734 UTC
+segment-routing
+ traffic-eng
+  interface GigabitEthernet0/0/0/0
+   affinity
+    name AVOID
+   !
+  !
+  segment-list VIA-RT03
+   index 10 mpls label 16013
+   index 20 mpls label 16012
+  !
+  on-demand color 100
+   dynamic
+    metric
+     type igp
+    !
+    affinity
+     exclude-any
+      name AVOID
+     !
+    !
+   !
+  !
+  policy DISJ-1
+   color 201 end-point ipv4 10.255.0.12
+   candidate-paths
+    preference 100
+     dynamic
+      pcep
+      !
+      metric
+       type igp
+      !
+     !
+     constraints
+      disjoint-path group-id 1 type link
+     !
+    !
+   !
+  !
+  policy DISJ-2
+   color 202 end-point ipv4 10.255.0.12
+   candidate-paths
+    preference 100
+     dynamic
+      pcep
+      !
+      metric
+       type igp
+      !
+     !
+     constraints
+      disjoint-path group-id 1 type link
+     !
+    !
+   !
+  !
+  affinity-map
+   name AVOID bit-position 0
+  !
+  pcc
+   source-address ipv4 10.255.0.1
+   pce address ipv4 10.255.0.21
+   !
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show pce lsp detail
+Thu Oct 29 23:34:17.753 UTC
+
+PCE's tunnel database: 
+----------------------
+PCC 10.255.0.1: 
+
+Tunnel Name: bgp_c_100_ep_10.255.0.12_discr_100
+Color: 100
+Interface Name: srte_c_100_ep_10.255.0.12
+ LSPs:
+  LSP[0]:
+   source 10.255.0.1, destination 10.255.0.12, tunnel ID 2, LSP ID 0
+   State: Admin up, Operation down
+   Binding SID: None
+   Maximum SID Depth: 10
+   Preference: 100
+   Bandwidth: requested 0 kbps, applied 0 kbps
+   Affinity: exclude-any 0x1 include-any 0x0 include-all 0x0
+   Protection type: protected-preferred
+   Prefix-SID algorithm: 0 (set: 0)
+   PCEP information: 
+     PLSP-ID 0x1, flags: D:1 S:0 R:0 A:1 O:0 C:0
+   LSP Role: Single LSP
+   State-sync PCE: None
+   PCC: 10.255.0.1
+   LSP is subdelegated to: None
+   LSP is subdelegated over GRPC: None
+   Reported path: 
+     Metric type: IGP (1), Accumulated Metric 200
+      SID[0]: Node, Label 16013, Address 10.255.0.13
+      SID[1]: Node, Label 16012, Address 10.255.0.12
+   Computed path: (Local PCE)
+     Computed Time: Thu Oct 29 23:33:44 UTC 2026 (00:00:33 ago)
+     Metric type: IGP (1), Accumulated Metric 200
+      SID[0]: Node, Label 16013, Address 10.255.0.13
+      SID[1]: Node, Label 16012, Address 10.255.0.12
+   Reverse path: (Local PCE) 
+     None
+     Computed Time: Thu Oct 29 23:33:44 UTC 2026 (00:00:33 ago)
+   Recorded path: 
+     None
+   Disjoint Group Information: 
+     None
+   SR Policy Association Group:
+     Color: 100, Endpoint: 10.255.0.12
+     Policy Name: srte_c_100_ep_10.255.0.12
+     Preference: 100
+     CP Name: bgp_c_100_ep_10.255.0.12_discr_100
+  
+Tunnel Name: cfg_DISJ-1_discr_100
+Color: 201
+Interface Name: srte_c_201_ep_10.255.0.12
+ LSPs:
+  LSP[0]:
+   source 10.255.0.1, destination 10.255.0.12, tunnel ID 3, LSP ID 2
+   State: Admin up, Operation active
+   Setup type: Segment Routing
+   Binding SID: 24020
+   Maximum SID Depth: 10
+   Preference: 100
+   Bandwidth: requested 0 kbps, applied 0 kbps
+   Protection type: protected-preferred
+   Prefix-SID algorithm: 0 (set: 0)
+   PCEP information: 
+     PLSP-ID 0x2, flags: D:1 S:0 R:0 A:1 O:2 C:0
+   LSP Role: Exclude LSP
+   State-sync PCE: None
+   PCC: 10.255.0.1
+   LSP is subdelegated to: None
+   LSP is subdelegated over GRPC: None
+   Reported path: 
+     Metric type: IGP (1), Accumulated Metric 20
+      SID[0]: Node, Label 16012, Address 10.255.0.12
+   Computed path: (Local PCE)
+     Computed Time: Thu Oct 29 23:33:51 UTC 2026 (00:00:26 ago)
+     Metric type: IGP (1), Accumulated Metric 20
+      SID[0]: Node, Label 16012, Address 10.255.0.12
+   Reverse path: (Local PCE) 
+     None
+     Computed Time: Thu Oct 29 23:33:51 UTC 2026 (00:00:26 ago)
+   Recorded path: 
+     None
+   Disjoint Group Information: 
+     Type Link-Disjoint, Group 1
+   SR Policy Association Group:
+     Color: 201, Endpoint: 10.255.0.12
+     Policy Name: srte_c_201_ep_10.255.0.12
+     Preference: 100
+     CP Name: DISJ-1
+  
+Tunnel Name: cfg_DISJ-2_discr_100
+Color: 202
+Interface Name: srte_c_202_ep_10.255.0.12
+ LSPs:
+  LSP[0]:
+   source 10.255.0.1, destination 10.255.0.12, tunnel ID 4, LSP ID 2
+   State: Admin up, Operation active
+   Setup type: Segment Routing
+   Binding SID: 24018
+   Maximum SID Depth: 10
+   Preference: 100
+   Bandwidth: requested 0 kbps, applied 0 kbps
+   Protection type: protected-preferred
+   Prefix-SID algorithm: 0 (set: 0)
+   PCEP information: 
+     PLSP-ID 0x3, flags: D:1 S:0 R:0 A:1 O:2 C:0
+   LSP Role: Disjoint LSP
+   State-sync PCE: None
+   PCC: 10.255.0.1
+   LSP is subdelegated to: None
+   LSP is subdelegated over GRPC: None
+   Reported path: 
+     Metric type: IGP (1), Accumulated Metric 200
+      SID[0]: Node, Label 16013, Address 10.255.0.13
+      SID[1]: Node, Label 16012, Address 10.255.0.12
+   Computed path: (Local PCE)
+     Computed Time: Thu Oct 29 23:33:51 UTC 2026 (00:00:26 ago)
+     Metric type: IGP (1), Accumulated Metric 200
+      SID[0]: Node, Label 16013, Address 10.255.0.13
+      SID[1]: Node, Label 16012, Address 10.255.0.12
+   Reverse path: (Local PCE) 
+     None
+     Computed Time: Thu Oct 29 23:33:51 UTC 2026 (00:00:26 ago)
+   Recorded path: 
+     None
+   Disjoint Group Information: 
+     Type Link-Disjoint, Group 1
+   SR Policy Association Group:
+     Color: 202, Endpoint: 10.255.0.12
+     Policy Name: srte_c_202_ep_10.255.0.12
+     Preference: 100
+     CP Name: DISJ-2
+  
+RP/0/RP0/CPU0:XR02#
+show pce association
+Thu Oct 29 23:34:18.154 UTC
+
+PCE's association database: 
+----------------------
+Association: Type Link-Disjoint, Group 1, Not Strict
+ Associated LSPs:
+  LSP[0]:
+   PCC 10.255.0.1, tunnel name cfg_DISJ-2_discr_100,  PLSP ID 3, tunnel ID 4, LSP ID 2, Configured on PCC
+  LSP[1]:
+   PCC 10.255.0.1, tunnel name cfg_DISJ-1_discr_100,  PLSP ID 2, tunnel ID 3, LSP ID 2, Configured on PCC
+ Status: Satisfied
+RP/0/RP0/CPU0:XR02#
+
+######## 23:34:18 i-1: Flex-Algo(XR01 と IOL で設定が通るか)
+configure
+Thu Oct 29 23:34:20.364 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+flex-algo 128
+RP/0/RP0/CPU0:XR01(config-isis-flex-algo)#
+metric-type delay
+RP/0/RP0/CPU0:XR01(config-isis-flex-algo)#
+advertise-definition
+RP/0/RP0/CPU0:XR01(config-isis-flex-algo)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface Loopback0
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+prefix-sid algorithm 128 index 101
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+commit
+Thu Oct 29 23:34:24.475 UTC
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+show configuration failed
+Thu Oct 29 23:34:25.381 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis flex-algo 128
+Thu Oct 29 23:34:38.383 UTC
+
+IS-IS CORE Flex-Algo Database
+
+Flex-Algo 128:
+
+  Level-2:
+    Definition Priority: 128
+    Definition Source: XR01.00, (Local)
+    Definition Equal to Local: Yes
+    Definition Metric Type: Delay
+    Definition Flex-Algo Prefix Metric: No
+    Exclude Any Affinity Bit Positions:
+    Include Any Affinity Bit Positions:
+    Include All Affinity Bit Positions:
+    Reverse Exclude Any Affinity Bit Positions:
+    Reverse Include Any Affinity Bit Positions:
+    Reverse Include All Affinity Bit Positions:
+    Exclude SRLGs:
+    Minimum Link Bandwidth: 0 kbits/sec, (0 bytes/sec)
+    Maximum Link Delay: 0 us
+    Disabled: No
+
+  Topologies supported:
+    IPv4 Unicast
+
+  Local Priority: 128
+  FRR Disabled: No
+  Microloop Avoidance Disabled: No
+  UCMP Disabled: No
+
+  Data Plane Segment Routing: Yes
+  Data Plane IP: No
+
+RP/0/RP0/CPU0:XR01#
+show isis database verbose XR01.00-00 | include "Flex|Algo|P$R01.00-00 | include "Flex|Algo|Pr                          efix-SID"show isis database verbose XR01.00-00 | include "Flex|Algo|$
+Thu Oct 29 23:34:38.784 UTC
+    SR Algorithm: 
+      Algorithm: 0
+      Algorithm: 1
+      Algorithm: 128
+    Flex-Algo Definition: 
+      Algorithm: 128 Metric-Type: 1 Alg-type: 0 Priority: 128
+    Prefix-SID Index: 1, Algorithm:0, R:0 N:1 P:0 E:0 V:0 L:0
+    Prefix-SID Index: 101, Algorithm:128, R:0 N:1 P:0 E:0 V:0 L:0
+RP/0/RP0/CPU0:XR01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+router isis CORE
+RT01(config-router)#
+flex-algo 128
+RT01(config-isis-fa)#
+end
+RT01#
+show running-config | section flex
+ flex-algo 128
+   !
+RT01#

@@ -1,0 +1,33 @@
+# M10-3: XR01 のコアの両リンクに TI-LFA(リンク保護)と microloop avoidance(SR)。PoC §23.4-9・15。
+# 状態で採点(故障を起こさない)。宛先 RT01 は素の LFA が無い(RT03 からの戻りが等コスト)= TI-LFA で P ノード RT02 が要る。
+# 素の LFA だけ(fast-reroute per-prefix のみ)だと RT01 の Lo0 が保護されない= 保護率の確認で落ちる。
+problem: XRT-10
+total_points: 100
+checks:
+  - name: 'M10-3 XR01: every IS-IS prefix has a precomputed backup path'
+    node: XR01
+    command: 'show isis fast-reroute summary'
+    raw:
+      - { regex: 'All paths protected(?:\s+\d+){4}\s+[1-9]\d*' }
+      - { regex: 'Unprotected\s+0\s+0\s+0\s+0\s+0' }
+    points: 30
+  - name: 'M10-3 XR01: the backup for RT01''s loopback is a TI-LFA path through RT03 with RT02 as the P node'
+    node: XR01
+    command: 'show isis fast-reroute 10.255.0.11/32 detail'
+    raw:
+      - { regex: 'Backup path: TI-LFA \((?:link|node)[^)]*\), via 10\.0\.3\.13' }
+      - { regex: 'P node: RT02\.00 \[10\.255\.0\.12\], Label: 16012' }
+    points: 30
+  - name: 'M10-3 XR01: the TI-LFA backup is installed in the forwarding table'
+    node: XR01
+    command: 'show cef 10.255.0.11/32 detail'
+    raw:
+      - { regex: 'backup \(TI-LFA\)' }
+      - { regex: 'labels imposed \{16012 16011\}' }
+    points: 20
+  - name: 'M10-3 XR01: microloop avoidance uses segment routing'
+    node: XR01
+    command: 'show isis protocol'
+    raw:
+      - { regex: 'Microloop avoidance: Enabled\s+Configuration: Type: Segment Routing' }
+    points: 20

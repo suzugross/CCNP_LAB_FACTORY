@@ -1,0 +1,177 @@
+
+######## 22:54:42 e-0: BFD(XR01⇔RT01・XR01⇔RT03= 100 ms × 3)と CEA2 の SLA の応答役
+configure
+Thu Oct 29 22:54:44.036 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+bfd fast-detect ipv4
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+bfd minimum-interval 100
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+bfd multiplier 3
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+bfd fast-detect ipv4
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+bfd minimum-interval 100
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+bfd multiplier 3
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+commit
+Thu Oct 29 22:54:48.945 UTC
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+show configuration failed
+Thu Oct 29 22:54:49.851 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+end
+RP/0/RP0/CPU0:XR01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+interface Ethernet0/0
+RT01(config-if)#
+bfd interval 100 min_rx 100 multiplier 3
+RT01(config-if)#
+isis bfd
+RT01(config-if)#
+end
+RT01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT03(config)#
+interface Ethernet0/0
+RT03(config-if)#
+bfd interval 100 min_rx 100 multiplier 3
+RT03(config-if)#
+isis bfd
+RT03(config-if)#
+end
+RT03#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CEA2(config)#
+ip sla responder
+CEA2(config)#
+end
+CEA2#
+show bfd session
+Thu Oct 29 22:55:24.515 UTC
+Interface           Dest Addr           Local det time(int*mult)      State     
+                                    Echo             Async   H/W   NPU     
+------------------- --------------- ---------------- ---------------- ----------
+Gi0/0/0/0           10.0.1.11       300ms(100ms*3)   6s(2s*3)         UP        
+                                                             No    n/a            
+Gi0/0/0/1           10.0.3.13       300ms(100ms*3)   6s(2s*3)         UP        
+                                                             No    n/a            
+
+
+RP/0/RP0/CPU0:XR01#
+show isis fast-reroute summary
+Thu Oct 29 22:55:24.917 UTC
+
+IS-IS CORE IPv4 Unicast FRR summary
+
+                          Critical   High       Medium     Low        Total     
+                          Priority   Priority   Priority   Priority             
+Prefixes reachable in L2
+  All paths protected     0          0          0          0          0         
+  Some paths protected    0          0          0          0          0         
+  Unprotected             0          0          4          3          7         
+  Protection coverage     0.00%      0.00%      0.00%      0.00%      0.00%     
+RP/0/RP0/CPU0:XR01#
+
+######## 22:55:24 e-1: 基準(故障なし)
+IPSLAs Latest Operation Statistics
+	Latest RTT: 1 milliseconds
+Latest operation start time: 22:55:28 UTC Thu Oct 29 2026
+Latest operation return code: OK
+RTT Values:
+Latency one-way time:
+	Number of Latency one-way Samples: 500
+	Source to Destination Latency one way Min/Avg/Max: 0/0/3 milliseconds
+	Destination to Source Latency one way Min/Avg/Max: 0/0/4 milliseconds
+	Source to Destination Latency one way Sum/Sum2: 364/380
+	Destination to Source Latency one way Sum/Sum2: 373/393
+	Number of SD Jitter Samples: 499
+	Number of DS Jitter Samples: 499
+Packet Loss Values:
+	Loss Source to Destination: 0
+	Source to Destination Loss Periods Number: 0
+	Source to Destination Loss Period Length Min/Max: 0/0
+	Source to Destination Inter Loss Period Length Min/Max: 0/0
+	Loss Destination to Source: 0
+	Destination to Source Loss Periods Number: 0
+	Destination to Source Loss Period Length Min/Max: 0/0
+	Destination to Source Inter Loss Period Length Min/Max: 0/0
+	Out Of Sequence: 0	Tail Drop: 0	Packet Late Arrival: 0
+Packet Skipped: 0
+Number of successes: 1
+Number of failures: 0
+== LOSS SD 0 DS 0 (x10 ms: SD ~0 ms, DS ~0 ms)
+
+######## 22:55:43 e-2: TI-LFA なし・BFD あり。XR01–RT01 にリンク条件 loss 100
+SSL Verification disabled
+== LINK XR01-RT01 loss 100
+SSL Verification disabled
+IPSLAs Latest Operation Statistics
+	Latest RTT: 1 milliseconds
+Latest operation start time: 22:55:47 UTC Thu Oct 29 2026
+Latest operation return code: OK
+RTT Values:
+Latency one-way time:
+	Number of Latency one-way Samples: 1458
+	Source to Destination Latency one way Min/Avg/Max: 0/0/4 milliseconds
+	Destination to Source Latency one way Min/Avg/Max: 0/0/4 milliseconds
+	Source to Destination Latency one way Sum/Sum2: 1081/1139
+	Destination to Source Latency one way Sum/Sum2: 1088/1112
+	Number of SD Jitter Samples: 1456
+	Number of DS Jitter Samples: 1457
+Packet Loss Values:
+	Loss Source to Destination: 42
+	Source to Destination Loss Periods Number: 1
+	Source to Destination Loss Period Length Min/Max: 42/42
+	Source to Destination Inter Loss Period Length Min/Max: 430/1028
+	Loss Destination to Source: 0
+	Destination to Source Loss Periods Number: 0
+	Destination to Source Loss Period Length Min/Max: 0/0
+	Destination to Source Inter Loss Period Length Min/Max: 0/0
+	Out Of Sequence: 0	Tail Drop: 0	Packet Late Arrival: 0
+Packet Skipped: 0
+Number of successes: 1
+Number of failures: 0
+== LINK XR01-RT01 clear
+== FAULT APPLIED at +3.7s (run 15.0s)
+== LOSS SD 42 DS 0 (x10 ms: SD ~420 ms, DS ~0 ms)
+show isis adjacency
+Thu Oct 29 22:56:54.719 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    26   00:00:29 Yes Up   None
+RT03           Gi0/0/0/1                *PtoP*         Up    22   00:16:45 Yes Up   None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show bfd session
+Thu Oct 29 22:56:55.119 UTC
+Interface           Dest Addr           Local det time(int*mult)      State     
+                                    Echo             Async   H/W   NPU     
+------------------- --------------- ---------------- ---------------- ----------
+Gi0/0/0/0           10.0.1.11       300ms(100ms*3)   6s(2s*3)         UP        
+                                                             No    n/a            
+Gi0/0/0/1           10.0.3.13       300ms(100ms*3)   6s(2s*3)         UP        
+                                                             No    n/a            
+
+
+RP/0/RP0/CPU0:XR01#

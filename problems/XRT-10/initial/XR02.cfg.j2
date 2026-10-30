@@ -1,0 +1,60 @@
+!! XRT-10 XR02(VPNv4 のルート リフレクタ・XRd 26.1.1)= XRT-09 の M9-2 を解き終えた設定(PE 2 台を vpnv4 の RR クライアントに)。
+!! 転送の道には入らない(RT03 の先の行き止まり・LDP なし)。M10-5 で PCE にする。
+interface Loopback0
+ ipv4 address 10.255.0.21 255.255.255.255
+!
+interface {{ links[3] }}
+ description RR-LINK to RT03
+ ipv4 address 10.0.33.21 255.255.255.0
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0021.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+   metric 10
+  !
+ !
+!
+router bgp 65000
+ bgp router-id 10.255.0.21
+ address-family ipv4 unicast
+ !
+ address-family vpnv4 unicast
+  retain route-target all
+ !
+ neighbor 10.255.0.1
+  remote-as 65000
+  description PE XR01 (CHG-1201)
+  update-source Loopback0
+  address-family ipv4 unicast
+   route-reflector-client
+  !
+  address-family vpnv4 unicast
+   route-reflector-client
+  !
+ !
+ neighbor 10.255.0.12
+  remote-as 65000
+  description PE RT02 (CHG-1201)
+  update-source Loopback0
+  address-family ipv4 unicast
+   route-reflector-client
+  !
+  address-family vpnv4 unicast
+   route-reflector-client
+  !
+ !
+!
+end

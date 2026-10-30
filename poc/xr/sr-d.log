@@ -1,0 +1,310 @@
+
+######## 22:49:31 d-1: SRGB の既定と表示
+show isis database verbose XR01.00-00 | include "SRGB|SRLB|R$R01.00-00 | include "SRGB|SRLB|Ro                          uter Cap"show isis database verbose XR01.00-00 | include "SRGB|SRLB|$
+Thu Oct 29 22:49:33.759 UTC
+  Router Cap:     10.255.0.1 D:0 S:0
+    SRGB Base: 16000 Range: 8000
+RP/0/RP0/CPU0:XR01#
+show mpls label table summary
+Thu Oct 29 22:49:34.159 UTC
+Application                  Count  
+---------------------------- -------
+LSD(A)                       4
+BGP-VPNv4(A):bgp-default     6
+ISIS(A):CORE                 8004
+---------------------------- -------
+TOTAL                        8014
+RP/0/RP0/CPU0:XR01#
+show mpls lsd applications
+Thu Oct 29 22:49:34.560 UTC
+Application                  State    RecoveryTime    Location    
+---------------------------- -------- --------------- ------------
+LSD(A)                       Active   0/0 (0)         0/RP0/CPU0
+Static(A)                    Active   0/0 (120)       0/RP0/CPU0
+Application-Controller(A):XTC Active  0/0 (2000)      0/RP0/CPU0
+L2VPN(A)                     Active   0/0 (1800)      0/RP0/CPU0
+BFD(A)                       Active   0/0 (900)       0/RP0/CPU0
+PIM(A):pim                   Active   0/0 (300)       0/RP0/CPU0
+PIM6(A):pim6                 Active   0/0 (300)       0/RP0/CPU0
+BGP-VPNv4(A):bgp-default     Active   0/0 (600)       0/RP0/CPU0
+Static(A):ipv4_static        Active   0/0 (60)        0/RP0/CPU0
+ISIS(A):CORE                 Active   0/0 (300)       0/RP0/CPU0
+RP/0/RP0/CPU0:XR01#
+show running-config segment-routing
+Thu Oct 29 22:49:34.962 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01#
+show segment-routing local-block inconsistencies
+Thu Oct 29 22:49:35.362 UTC
+No inconsistencies
+RP/0/RP0/CPU0:XR01#
+
+######## 22:49:35 d-2: XR01 の SRGB を狭める(16000-16009= 相手の index 11〜13 は範囲外)。コミット・反映・転送
+configure
+Thu Oct 29 22:49:36.869 UTC
+RP/0/RP0/CPU0:XR01(config)#
+segment-routing
+RP/0/RP0/CPU0:XR01(config-sr)#
+global-block 16000 16009
+RP/0/RP0/CPU0:XR01(config-sr)#
+commit
+Thu Oct 29 22:49:38.171 UTC
+RP/0/RP0/CPU0:XR01(config-sr)#
+show configuration failed
+Thu Oct 29 22:49:40.481 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-sr)#
+end
+RP/0/RP0/CPU0:XR01#
+show logging last 30
+Thu Oct 29 22:50:03.505 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 26 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 317 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 29 22:47:51.698 UTC: SSHD_[67354]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 29 22:47:51.705 UTC: SSHD_[67354]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 29 22:47:52.929 UTC: SSHD_[67354]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 29 22:47:57.012 UTC: SSHD_[67387]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 29 22:47:57.017 UTC: SSHD_[67387]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 29 22:47:59.043 UTC: SSHD_[67387]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 29 22:48:03.938 UTC: SSHD_[67431]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 29 22:48:03.943 UTC: SSHD_[67431]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 29 22:48:09.357 UTC: config[67462]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000012' to view the changes. 
+RP/0/RP0/CPU0:Oct 29 22:48:11.276 UTC: config[67462]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 29 22:48:11.689 UTC: SSHD_[67431]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 29 22:48:26.970 UTC: SSHD_[67510]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 29 22:48:26.976 UTC: SSHD_[67510]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 29 22:48:28.200 UTC: SSHD_[67510]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 29 22:49:20.273 UTC: SSHD_[67572]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 29 22:49:20.279 UTC: SSHD_[67572]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 29 22:49:22.308 UTC: SSHD_[67572]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 29 22:49:32.945 UTC: SSHD_[67611]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 29 22:49:32.949 UTC: SSHD_[67611]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 29 22:49:35.775 UTC: SSHD_[67611]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 29 22:49:36.056 UTC: SSHD_[67663]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 29 22:49:36.060 UTC: SSHD_[67663]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 29 22:49:39.591 UTC: isis[1007]: %ROUTING-ISIS-6-SRGB_INFO : ISIS (CORE): SRGB (index 0, 16000 23999, SRGB_ALLOCATED, 0x1) modified to (16000 16009), global cfg change, disabling SR 
+RP/0/RP0/CPU0:Oct 29 22:49:39.591 UTC: bgp[1089]: %ROUTING-BGP-2-SR_CFG_CHANGED : SRGB range config has been changed. BGP's labels have to be re-programmed as per new range, 'process restart bgp' needed 
+RP/0/RP0/CPU0:Oct 29 22:49:40.058 UTC: config[67694]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000013' to view the changes. 
+RP/0/RP0/CPU0:Oct 29 22:49:41.986 UTC: config[67694]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 29 22:49:42.403 UTC: SSHD_[67663]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 29 22:49:44.600 UTC: isis[1007]: %ROUTING-ISIS-6-SRGB_INFO : ISIS (CORE): SRGB (index 0, 16000 16009, SRGB_ALLOCATED, 0x0) allocation complete, enabling SR 
+RP/0/RP0/CPU0:Oct 29 22:50:02.689 UTC: SSHD_[67888]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 29 22:50:02.696 UTC: SSHD_[67888]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:XR01#
+show isis database verbose XR01.00-00 | include "SRGB|SRLB|R$R01.00-00 | include "SRGB|SRLB|Ro                          uter Cap"show isis database verbose XR01.00-00 | include "SRGB|SRLB|$
+Thu Oct 29 22:50:03.908 UTC
+  Router Cap:     10.255.0.1 D:0 S:0
+    SRGB Base: 16000 Range: 10
+RP/0/RP0/CPU0:XR01#
+show isis segment-routing label table
+Thu Oct 29 22:50:04.308 UTC
+
+IS-IS CORE  IPv4 Unicast  IS Label Table
+
+Label         Prefix                   Algorithm    Interface
+----------    ----------------         ---------    ---------
+16001         10.255.0.1/32            SPF          Loopback0
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding | include "160[0-9][0-9]"
+Thu Oct 29 22:50:04.708 UTC
+16001  Aggregate   SR Pfx (idx 1)     default                      0           
+RP/0/RP0/CPU0:XR01#
+show cef 10.255.0.12/32 detail
+Thu Oct 29 22:50:06.241 UTC
+10.255.0.12/32, version 172, internal 0x1000001 0x10 (ptr 0x1063c048) [1], 0x400 (0x107d52d8), 0x0 (0x0)
+ Updated Oct 29 22:49:44.603 
+ remote adjacency to GigabitEthernet0/0/0/0
+ Prefix Len 32, traffic index 0, precedence n/a, priority 1
+  gateway array (0x106716b0) reference count 4, flags 0x0, source rib (7), 0 backups
+                [5 type 3 flags 0x8401 (0x10711b68) ext 0x0 (0x0)]
+  LW-LDI[type=3, refc=1, ptr=0x107d52d8, sh-ldi=0x10711b68]
+  gateway array update type-time 1 Oct 29 22:47:18.011
+ LDI Update time Oct 29 22:47:18.011
+ LW-LDI-TS Oct 29 22:49:39.598
+   via 10.0.1.11/32, GigabitEthernet0/0/0/0, 6 dependencies, weight 0, class 0 [flags 0x0]
+    path-idx 0 NHID 0x0 [0x10d8b0a0 0x0]
+    next hop 10.0.1.11/32
+    remote adjacency
+
+    Load distribution: 0 (refcount 5)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    remote         
+RP/0/RP0/CPU0:XR01#
+show cef vrf CUST-A 10.101.2.0/24 detail
+Thu Oct 29 22:50:06.641 UTC
+10.101.2.0/24, version 25, drop adjacency, internal 0x5000001 0x30 (ptr 0x10641d08) [1], 0x600 (0x107d6098), 0xa08 (0xf154698)
+ Updated Oct 29 22:47:18.065
+ Prefix Len 24, traffic index 0, precedence n/a, priority 3
+  gateway array (0x10671398) reference count 6, flags 0x3a, source rib (7), 0 backups
+                [7 type 1 flags 0x88401 (0xf18dca0) ext 0x0 (0x0)]
+  LW-LDI[type=1, refc=1, ptr=0x107d6098, sh-ldi=0xf18dca0]
+  gateway array update type-time 3 Oct 29 22:49:54.676
+ LDI Update time Oct 29 22:49:39.598
+ LW-LDI-TS Oct 29 22:49:39.598
+   via 10.255.0.12/32, 0 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xefa8be0 0x0]
+    recursion-via-/32
+    next hop VRF - 'default', table - 0xe0000000
+    unresolved
+     labels imposed {22}
+
+    Load distribution: 0 (refcount 7)
+
+    Hash  OK  Interface                 Address
+    0     Y   recursive                 drop           
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding prefix 10.255.0.12/32
+Thu Oct 29 22:50:07.042 UTC
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding-table 10.255.0.1 32
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+22    [M]  Pop Label  10.255.0.1/32    0             Et0/0      10.0.1.1    
+16001 [M]  Pop Label  10.255.0.1/32    0             Et0/0      10.0.1.1    
+
+[M] - Merged
+RT01#
+show isis database verbose XR01.00-00 | include SRGB|Router CAP|Segment
+  Router CAP:   10.255.0.1, D:0, S:0
+    Segment Routing: I:1 V:0, SRGB Base: 16000 Range: 10
+    Segment Routing Local Block: SRLB Base: 15000 Range: 1000
+    Segment Routing Algorithms: SPF, Strict-SPF
+RT01#
+ping 10.101.2.1 source 10.101.1.1 repeat 20
+Type escape sequence to abort.
+Sending 20, 100-byte ICMP Echos to 10.101.2.1, timeout is 2 seconds:
+Packet sent with a source address of 10.101.1.1 
+U.U.U.U.U.U.U.U.U.U.
+Success rate is 0 percent (0/20)
+CEA1#
+
+######## 22:50:31 d-3: SRGB を戻す(global-block を消す)
+configure
+Thu Oct 29 22:50:33.019 UTC
+RP/0/RP0/CPU0:XR01(config)#
+segment-routing
+RP/0/RP0/CPU0:XR01(config-sr)#
+no global-block
+RP/0/RP0/CPU0:XR01(config-sr)#
+commit
+Thu Oct 29 22:50:34.320 UTC
+RP/0/RP0/CPU0:XR01(config-sr)#
+show configuration failed
+Thu Oct 29 22:50:35.226 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-sr)#
+end
+RP/0/RP0/CPU0:XR01#
+show logging last 15
+Thu Oct 29 22:50:58.236 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 27 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 331 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Oct 29 22:50:02.696 UTC: SSHD_[67888]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 29 22:50:05.122 UTC: SSHD_[67888]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 29 22:50:05.423 UTC: SSHD_[67933]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 29 22:50:05.427 UTC: SSHD_[67933]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 29 22:50:07.456 UTC: SSHD_[67933]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 29 22:50:32.205 UTC: SSHD_[68020]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 29 22:50:32.209 UTC: SSHD_[68020]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:Oct 29 22:50:34.400 UTC: bgp[1089]: %ROUTING-BGP-2-SR_CFG_CHANGED : SRGB range config has been changed. BGP's labels have to be re-programmed as per new range, 'process restart bgp' needed 
+RP/0/RP0/CPU0:Oct 29 22:50:34.400 UTC: isis[1007]: %ROUTING-ISIS-6-SRGB_INFO : ISIS (CORE): SRGB (index 0, 16000 16009, SRGB_ALLOCATED, 0x1) modified to (16000 23999), global cfg change, disabling SR 
+RP/0/RP0/CPU0:Oct 29 22:50:34.412 UTC: isis[1007]: %ROUTING-ISIS-6-SRGB_INFO : ISIS (CORE): SRGB (index 0, 16000 23999, SRGB_ALLOCATED, 0x0) allocation complete, enabling SR 
+RP/0/RP0/CPU0:Oct 29 22:50:34.819 UTC: config[68051]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000014' to view the changes. 
+RP/0/RP0/CPU0:Oct 29 22:50:36.731 UTC: config[68051]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.6) 
+RP/0/RP0/CPU0:Oct 29 22:50:37.143 UTC: SSHD_[68020]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.6' logged out on 'vty0' 
+RP/0/RP0/CPU0:Oct 29 22:50:57.422 UTC: SSHD_[68078]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Oct 29 22:50:57.428 UTC: SSHD_[68078]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.6' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:XR01#
+show isis database verbose XR01.00-00 | include "SRGB|Router$R01.00-00 | include "SRGB|Router                           Cap"show isis database verbose XR01.00-00 | include "SRGB|Route$
+Thu Oct 29 22:50:58.638 UTC
+  Router Cap:     10.255.0.1 D:0 S:0
+    SRGB Base: 16000 Range: 8000
+RP/0/RP0/CPU0:XR01#
+show isis segment-routing label table
+Thu Oct 29 22:50:59.041 UTC
+
+IS-IS CORE  IPv4 Unicast  IS Label Table
+
+Label         Prefix                   Algorithm    Interface
+----------    ----------------         ---------    ---------
+16001         10.255.0.1/32            SPF          Loopback0
+16011         10.255.0.11/32           SPF          
+16012         10.255.0.12/32           SPF          
+16013         10.255.0.13/32           SPF          
+RP/0/RP0/CPU0:XR01#
+show cef 10.255.0.12/32 detail
+Thu Oct 29 22:51:00.564 UTC
+10.255.0.12/32, version 190, labeled SR, internal 0x1000001 0x8310 (ptr 0x1063c048) [1], 0x600 (0x107d5f98), 0xa28 (0xf154cf8)
+ Updated Oct 29 22:50:34.417 
+ remote adjacency to GigabitEthernet0/0/0/0
+ Prefix Len 32, traffic index 0, precedence n/a, priority 1
+  gateway array (0x106715a8) reference count 3, flags 0x68, source rib (7), 0 backups
+                [2 type 5 flags 0x8401 (0xf18d4b8) ext 0x0 (0x0)]
+  LW-LDI[type=5, refc=3, ptr=0x107d5f98, sh-ldi=0xf18d4b8]
+  gateway array update type-time 1 Oct 29 22:50:34.417
+ LDI Update time Oct 29 22:50:34.417
+ LW-LDI-TS Oct 29 22:50:34.417
+   via 10.0.1.11/32, GigabitEthernet0/0/0/0, 6 dependencies, weight 0, class 0 [flags 0x0]
+    path-idx 0 NHID 0x0 [0x10d8bb40 0x0]
+    next hop 10.0.1.11/32
+    remote adjacency
+     local label 16012      labels imposed {16012}
+
+    Load distribution: 0 (refcount 2)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    remote         
+RP/0/RP0/CPU0:XR01#
+show cef vrf CUST-A 10.101.2.0/24 detail
+Thu Oct 29 22:51:00.965 UTC
+10.101.2.0/24, version 25, internal 0x5000001 0x30 (ptr 0x10641d08) [1], 0x600 (0x107d6098), 0xa08 (0xf154698)
+ Updated Oct 29 22:47:18.065
+ Prefix Len 24, traffic index 0, precedence n/a, priority 3
+  gateway array (0x10671398) reference count 6, flags 0x38, source rib (7), 0 backups
+                [7 type 1 flags 0x8441 (0xf18dca0) ext 0x0 (0x0)]
+  LW-LDI[type=1, refc=1, ptr=0x107d6098, sh-ldi=0xf18dca0]
+  gateway array update type-time 5 Oct 29 22:50:34.417
+ LDI Update time Oct 29 22:50:34.417
+ LW-LDI-TS Oct 29 22:50:34.417
+   via 10.255.0.12/32, 5 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xf41e598 0x0]
+    recursion-via-/32
+    next hop VRF - 'default', table - 0xe0000000
+    next hop 10.255.0.12/32 via 16012/0/21
+     next hop 10.0.1.11/32 GigabitEthernet0/0/0/0 labels imposed {16012 22}
+
+    Load distribution: 0 (refcount 7)
+
+    Hash  OK  Interface                 Address
+    0     Y   recursive                 16012/0        
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding prefix 10.255.0.12/32
+Thu Oct 29 22:51:01.367 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+16012  16012       SR Pfx (idx 12)    Gi0/0/0/0    10.0.1.11       0           
+RP/0/RP0/CPU0:XR01#
+ping 10.101.2.1 source 10.101.1.1 repeat 20
+Type escape sequence to abort.
+Sending 20, 100-byte ICMP Echos to 10.101.2.1, timeout is 2 seconds:
+Packet sent with a source address of 10.101.1.1 
+!!!!!!!!!!!!!!!!!!!!
+Success rate is 100 percent (20/20), round-trip min/avg/max = 1/1/2 ms
+CEA1#

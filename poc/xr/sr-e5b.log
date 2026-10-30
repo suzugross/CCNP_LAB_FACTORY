@@ -1,0 +1,186 @@
+######## e-5b: 隣接が安定した状態で RT01(IOL)の TI-LFA
+show isis fast-reroute summary
+
+Tag CORE:
+Microloop Avoidance Enable State: enabled for segment-routing microloop avoidance
+IPv4 Fast-Reroute Protection Summary:
+
+ Prefix Counts:          Total      Protected    Coverage
+   High priority:        0          0            0%
+   Normal priority:      9          7            77%
+   Total:                9          7            77%
+
+RT01#
+show isis fast-reroute ti-lfa tunnel
+
+Tag CORE:
+Fast-Reroute TI-LFA Tunnels:
+
+Tunnel  Interface  Next Hop         End Point        Label     End Point Host
+MP4     Et0/0      10.0.1.1         10.255.0.13      16013     RT03             
+MP5     Et0/1      10.0.12.12       10.255.0.13      16013     RT03             
+
+RT01#
+show isis rib 10.255.0.1 255.255.255.255
+
+
+IPv4 local RIB for IS-IS process CORE
+
+IPV4 unicast topology base (TID 0, TOPOID 0x0) =================
+Repair path attributes:
+    DS - Downstream, LC - Linecard-Disjoint, NP - Node-Protecting
+    PP - Primary-Path, SR - SRLG-Disjoint
+
+
+10.255.0.1/32  prefix attr X:0 R:0 N:1  prefix SID index 1 - Bound
+  [115/L2/10] via 10.0.1.1(Ethernet0/0), from 10.255.0.1, tag 0 
+     prefix attr: X:0 R:0 N:1
+       SRGB: 16000, range: 8000 prefix-SID index: 1, R:0 N:1 P:0 E:0 V:0 L:0
+     label: implicit-null
+              (installed)
+     repair path: 10.255.0.13(MPLS-SR-Tunnel5) metric:110 (DS,SR)
+       next-hop: 10.0.12.12 (Ethernet0/1)
+       TI-LFA link-protecting
+       SRGB: 16000, range: 8000 prefix-SID index: 1, R:0 N:1 P:0 E:0 V:0 L:0
+       label: 16001
+       P node: RT03[10.255.0.13], label: 16013
+       repair source: XR01
+RT01#
+show isis rib 10.255.0.13 255.255.255.255
+
+
+IPv4 local RIB for IS-IS process CORE
+
+IPV4 unicast topology base (TID 0, TOPOID 0x0) =================
+Repair path attributes:
+    DS - Downstream, LC - Linecard-Disjoint, NP - Node-Protecting
+    PP - Primary-Path, SR - SRLG-Disjoint
+
+
+10.255.0.13/32  prefix attr X:0 R:0 N:1  prefix SID index 13 - Bound
+  [115/L2/120] via 10.0.12.12(Ethernet0/1), from 10.255.0.13, tag 0 
+     prefix attr: X:0 R:0 N:1
+       SRGB: 16000, range: 8000 prefix-SID index: 13, R:0 N:1 P:0 E:0 V:0 L:0
+     label: 16013
+              (installed)
+     repair path: 10.0.1.1(Ethernet0/0) metric:120 (PP,DS,NP,SR)
+       local LFA
+       label: 16013
+       repair source: RT03
+  [115/L2/120] via 10.0.1.1(Ethernet0/0), from 10.255.0.13, tag 0 
+     prefix attr: X:0 R:0 N:1
+       SRGB: 16000, range: 8000 prefix-SID index: 13, R:0 N:1 P:0 E:0 V:0 L:0
+     label: 16013
+              (installed)
+     repair path: 10.0.12.12(Ethernet0/1) metric:120 (PP,DS,NP,SR)
+       local LFA
+       label: 16013
+       repair source: RT03
+RT01#
+######## e-5c: IOL の TI-LFA に要るもの(mpls traffic-eng tunnels を足す)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+mpls traffic-eng tunnels
+RT01(config)#
+end
+RT01#
+show isis fast-reroute summary
+
+Tag CORE:
+Microloop Avoidance Enable State: enabled for segment-routing microloop avoidance
+IPv4 Fast-Reroute Protection Summary:
+
+ Prefix Counts:          Total      Protected    Coverage
+   High priority:        0          0            0%
+   Normal priority:      9          7            77%
+   Total:                9          7            77%
+
+RT01#
+show isis fast-reroute ti-lfa tunnel
+
+Tag CORE:
+Fast-Reroute TI-LFA Tunnels:
+
+Tunnel  Interface  Next Hop         End Point        Label     End Point Host
+MP4     Et0/0      10.0.1.1         10.255.0.13      16013     RT03             
+MP5     Et0/1      10.0.12.12       10.255.0.13      16013     RT03             
+
+RT01#
+show isis rib 10.255.0.1 255.255.255.255
+
+
+IPv4 local RIB for IS-IS process CORE
+
+IPV4 unicast topology base (TID 0, TOPOID 0x0) =================
+Repair path attributes:
+    DS - Downstream, LC - Linecard-Disjoint, NP - Node-Protecting
+    PP - Primary-Path, SR - SRLG-Disjoint
+
+
+10.255.0.1/32  prefix attr X:0 R:0 N:1  prefix SID index 1 - Bound
+  [115/L2/10] via 10.0.1.1(Ethernet0/0), from 10.255.0.1, tag 0 
+     prefix attr: X:0 R:0 N:1
+       SRGB: 16000, range: 8000 prefix-SID index: 1, R:0 N:1 P:0 E:0 V:0 L:0
+     label: implicit-null
+              (installed)
+     repair path: 10.255.0.13(MPLS-SR-Tunnel5) metric:110 (DS,SR)
+       next-hop: 10.0.12.12 (Ethernet0/1)
+       TI-LFA link-protecting
+       SRGB: 16000, range: 8000 prefix-SID index: 1, R:0 N:1 P:0 E:0 V:0 L:0
+       label: 16001
+       P node: RT03[10.255.0.13], label: 16013
+       repair source: XR01
+RT01#
+show ip cef 10.255.0.1 detail
+10.255.0.1/32, epoch 0
+  dflt local label info: global/22 [0x3]
+  sr local label info: global/16001 [0x1B]
+  nexthop 10.0.1.1 Ethernet0/0 label [implicit-null|16001](ptr:0x77B6DB7A89F8)-(local:16001)
+    repair: attached-nexthop 10.255.0.13 MPLS-SR-Tunnel5
+  nexthop 10.255.0.13 MPLS-SR-Tunnel5 label 16001-(local:16001), repair
+RT01#
+configure
+Thu Oct 29 23:27:23.615 UTC
+RP/0/RP0/CPU0:XR01(config)#
+bfd
+RP/0/RP0/CPU0:XR01(config-bfd)#
+?
+  apply-group         Apply configuration from a group
+  apply-group-append  Append apply-group configuration from a group
+  apply-group-remove  Remove a group from apply-group configuration
+  bundle              Option for BFD over Bundle
+  clear               Clear the uncommitted configuration
+  commit              Commit the configuration changes via pseudo-atomic operation
+  dampening           Configure BFD dampening intervals
+  describe            Describe a command without taking real actions
+  do                  Run an exec command
+  echo                Configure BFD echo parameters
+  end                 Exit from configure mode
+  exclude-group       Exclude apply-group configuration from a group
+  exclude-item        Negate a command or set its defaults
+  exit                Exit from this submode
+  interface           Configure BFD on an interface
+  ipv6                Ipv6 BFD checksum
+  multihop            Configure BFD multihop
+  multipath           Configure BFD multiple path
+  no                  Negate a command or set its defaults
+  pwd                 Commands used to reach current submode
+  root                Exit to the global configuration mode
+  show                Show contents of configuration
+  trap                Configure BFD trap parameters
+RP/0/RP0/CPU0:XR01(config-bfd)#
+RP/0/RP0/CPU0:XR01(config-bfd)#
+dampening ?
+  bundle-member   Configure BFD dampening for bfd over bundle per member feature
+  disable         Disable BFD dampening
+  extensions      Enable dampening extensions
+  initial-wait    Initial delay before bringing up session
+  maximum-wait    Maximum delay before bringing up session
+  secondary-wait  Secondary delay before bringing up session
+  threshold       Stability threshold to enable dampening
+RP/0/RP0/CPU0:XR01(config-bfd)#dampening 
+% Incomplete command.
+RP/0/RP0/CPU0:XR01(config-bfd)#
+abort
+RP/0/RP0/CPU0:XR01#

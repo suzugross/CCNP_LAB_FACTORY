@@ -1,0 +1,157 @@
+######## T7: Flex-Algo 128(PRIMARY を除く)
+configure
+Fri Oct 30 00:32:58.246 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+affinity-map RED bit-position 0
+RP/0/RP0/CPU0:XR01(config-isis)#
+flex-algo 128
+RP/0/RP0/CPU0:XR01(config-isis-flex-algo)#
+advertise-definition
+RP/0/RP0/CPU0:XR01(config-isis-flex-algo)#
+affinity exclude-any RED
+RP/0/RP0/CPU0:XR01(config-isis-flex-algo)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+affinity flex-algo RED
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface Loopback0
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+prefix-sid algorithm 128 index 101
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+show configuration
+Fri Oct 30 00:33:04.766 UTC
+!! Building configuration...
+!! IOS XR Configuration 26.1.1
+router isis CORE
+ affinity-map RED bit-position 0
+ flex-algo 128
+  advertise-definition
+  affinity exclude-any RED
+ !
+ interface Loopback0
+  address-family ipv4 unicast
+   prefix-sid algorithm 128 index 101
+  !
+ !
+ interface GigabitEthernet0/0/0/0
+  affinity flex-algo RED
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Fri Oct 30 00:33:05.267 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Fri Oct 30 00:33:06.172 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis flex-algo 128
+Fri Oct 30 00:33:34.188 UTC
+
+IS-IS CORE Flex-Algo Database
+
+Flex-Algo 128:
+
+  Level-2:
+    Definition Priority: 128
+    Definition Source: XR01.00, (Local)
+    Definition Equal to Local: Yes
+    Definition Metric Type: IGP
+    Definition Flex-Algo Prefix Metric: No
+    Exclude Any Affinity Bit Positions: 0
+    Include Any Affinity Bit Positions:
+    Include All Affinity Bit Positions:
+    Reverse Exclude Any Affinity Bit Positions:
+    Reverse Include Any Affinity Bit Positions:
+    Reverse Include All Affinity Bit Positions:
+    Exclude SRLGs:
+    Minimum Link Bandwidth: 0 kbits/sec, (0 bytes/sec)
+    Maximum Link Delay: 0 us
+    Disabled: No
+
+  Topologies supported:
+    IPv4 Unicast
+
+  Local Priority: 128
+  FRR Disabled: No
+  Microloop Avoidance Disabled: No
+  UCMP Disabled: No
+
+  Data Plane Segment Routing: Yes
+  Data Plane IP: No
+
+RP/0/RP0/CPU0:XR01#
+show isis segment-routing label table
+Fri Oct 30 00:33:34.589 UTC
+
+IS-IS CORE  IPv4 Unicast  IS Label Table
+
+Label         Prefix                   Algorithm    Interface
+----------    ----------------         ---------    ---------
+16001         10.255.0.1/32            SPF          Loopback0
+16011         10.255.0.11/32           SPF          
+16012         10.255.0.12/32           SPF          
+16013         10.255.0.13/32           SPF          
+16101         10.255.0.1/32            FA 128       Loopback0
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding labels 16012
+Fri Oct 30 00:33:34.989 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+16012  16012       SR Pfx (idx 12)    Gi0/0/0/0    10.0.1.11       540         
+       16012       SR Pfx (idx 12)    Gi0/0/0/1    10.0.3.13       0            (!)
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding labels 16112
+Fri Oct 30 00:33:35.389 UTC
+RP/0/RP0/CPU0:XR01#
+show isis database verbose XR01.00-00 | include "Flex|Algo|A$R01.00-00 | include "Flex|Algo|Af                          finity|ASLA|Admin"show isis database verbose XR01.00-00 | include "Flex|Algo|$
+Fri Oct 30 00:33:35.793 UTC
+    SR Algorithm: 
+      Algorithm: 0
+      Algorithm: 1
+      Algorithm: 128
+    Flex-Algo Definition: 
+      Algorithm: 128 Metric-Type: 0 Alg-type: 0 Priority: 128
+      Flex-Algo Exclude-Any Ext Admin Group:
+    Affinity: 0x00000001
+    Admin. Weight: 10
+    Ext Admin Group: Length: 32
+      Ext Admin Group: 
+      Affinity: 0x00000001
+    Prefix-SID Index: 1, Algorithm:0, R:0 N:1 P:0 E:0 V:0 L:0
+    Prefix-SID Index: 101, Algorithm:128, R:0 N:1 P:0 E:0 V:0 L:0
+RP/0/RP0/CPU0:XR01#
+show isis topology flex-algo 128
+
+Tag CORE:
+
+IS-IS TID 0 paths to level-2 routers
+Flex-algo 128
+System Id            Metric     Next-Hop             Interface   SNPA
+RT01#
+show mpls forwarding-table labels 16112
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+RT01#
+show isis flex-algo 128
+RT03#

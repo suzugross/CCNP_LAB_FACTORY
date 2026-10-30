@@ -1,0 +1,153 @@
+# XRT-10 最終確認(M10 の 5 課題を終えた状態。配点= M10-1 30・M10-2 15・M10-3 20・M10-4 20・M10-5 15)。
+# 学習目的のラボ= パック・ノルマの対象外。中身は課題ごとの確認(grading.<課題>.yml)を寄せ集めて配点を付け直したもの
+# (手で保守する= 生成した後に手で直してよい。課題ごとの確認を直したらここも直す)。
+# M10-1 の「LDP の隣接が残る」は最終状態(M10-2 で LDP を止めた後)では成り立たないので外した。白紙で通る項目は無い。
+problem: XRT-10
+total_points: 100
+checks:
+- name: 'M10-1 XR01: advertises segment routing with the global block of the convention (16000, 8000 labels) and prefix-SID index 1'
+  node: XR01
+  command: show isis database verbose XR01.00-00
+  raw:
+  - regex: 'SRGB Base: 16000 Range: 8000(?!\d)'
+  - regex: 'Prefix-SID Index: 1, Algorithm:0'
+  points: 6
+- name: 'M10-1 XR01: holds an SR label for each of RT01, RT02 and RT03'
+  node: XR01
+  command: show isis segment-routing label table
+  raw:
+  - regex: 16011\s+10\.255\.0\.11/32
+  - regex: 16012\s+10\.255\.0\.12/32
+  - regex: 16013\s+10\.255\.0\.13/32
+  points: 4
+- name: 'M10-1 XR01: sends traffic for RT02 with RT02''s prefix SID'
+  node: XR01
+  command: show cef 10.255.0.12/32 detail
+  raw:
+  - regex: via 10\.0\.1\.11/32, GigabitEthernet0/0/0/0,[^\n]*\n(?:[^\n]*\n){0,4}?\s+local label \d+\s+labels imposed \{16012\}
+  points: 6
+- name: 'M10-1 RT02: sends traffic for XR01 with XR01''s prefix SID (16001)'
+  node: RT02
+  command: show ip cef 10.255.0.1 detail
+  raw:
+  - regex: nexthop 10\.0\.12\.11 Ethernet0/0 label \[?16001
+  points: 6
+- name: 'M10-1 XR01, CEA1: customer A''s traffic from site 1 to site 2 rides on SR labels and gets through'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-10 ssh XR01 -- 'show cef vrf CUST-A 10.101.2.0/24 detail'; .venv/bin/python topologies/login_probe.py XRT-10 ssh CEA1 -- 'ping 10.101.2.1 source Loopback10 repeat 5'
+  raw:
+  - regex: labels imposed \{(?:16012|ImplNull) \d+\}
+  - regex: Success rate is (?:100|80) percent
+  points: 4
+- name: 'M10-1 XR01, CEB1: customer B''s traffic from site 1 to site 2 rides on SR labels and gets through'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-10 ssh XR01 -- 'show cef vrf CUST-B 10.102.2.0/24 detail'; .venv/bin/python topologies/login_probe.py XRT-10 ssh CEB1 -- 'ping 10.102.2.1 source Loopback10 repeat 5'
+  raw:
+  - regex: labels imposed \{16012 \d+\}
+  - regex: Success rate is (?:100|80) percent
+  points: 4
+- name: 'M10-2 XR01: has no LDP session left and still sends traffic for RT02 with SR labels'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-10 ssh XR01 -- 'show mpls ldp neighbor brief' 'show cef 10.255.0.12/32 detail'
+  raw:
+  - not_regex: \n10\.255\.0\.1[13]:0\s
+  - regex: via 10\.0\.1\.11/32, GigabitEthernet0/0/0/0,[^\n]*\n(?:[^\n]*\n){0,4}?\s+local label \d+\s+labels imposed \{16012\}
+  points: 5
+- name: 'M10-2 XR01: without LDP, still advertises its core links with their normal metrics (10 to RT01, 100 to RT03)'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-10 ssh XR01 -- 'show mpls ldp neighbor brief' 'show isis database verbose XR01.00-00'
+  raw:
+  - not_regex: \n10\.255\.0\.1[13]:0\s
+  - regex: 'Metric: 10\s+IS-Extended RT01\.00'
+  - regex: 'Metric: 100\s+IS-Extended RT03\.00'
+  points: 6
+- name: 'M10-2 CEA2, CEB2: the sites of both customers still reach site 1 after LDP is gone'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-10 ssh XR01 -- 'show mpls ldp neighbor brief'; echo '## CEA2'; .venv/bin/python topologies/login_probe.py XRT-10 ssh CEA2 -- 'ping 10.101.1.1 source Loopback10 repeat 5'; echo '## CEB2'; .venv/bin/python topologies/login_probe.py XRT-10 ssh CEB2 -- 'ping 10.102.1.1 source Loopback10 repeat 5'
+  raw:
+  - not_regex: \n10\.255\.0\.1[13]:0\s
+  - regex: '## CEA2[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## CEB2[\s\S]*?Success rate is (?:100|80) percent'
+  points: 4
+- name: 'M10-3 XR01: every IS-IS prefix has a precomputed backup path'
+  node: XR01
+  command: show isis fast-reroute summary
+  raw:
+  - regex: All paths protected(?:\s+\d+){4}\s+[1-9]\d*
+  - regex: Unprotected\s+0\s+0\s+0\s+0\s+0
+  points: 6
+- name: 'M10-3 XR01: the backup for RT01''s loopback is a TI-LFA path through RT03 with RT02 as the P node'
+  node: XR01
+  command: show isis fast-reroute 10.255.0.11/32 detail
+  raw:
+  - regex: 'Backup path: TI-LFA \((?:link|node)[^)]*\), via 10\.0\.3\.13'
+  - regex: 'P node: RT02\.00 \[10\.255\.0\.12\], Label: 16012'
+  points: 6
+- name: 'M10-3 XR01: the TI-LFA backup is installed in the forwarding table'
+  node: XR01
+  command: show cef 10.255.0.11/32 detail
+  raw:
+  - regex: backup \(TI-LFA\)
+  - regex: labels imposed \{16012 16011\}
+  points: 4
+- name: 'M10-3 XR01: microloop avoidance uses segment routing'
+  node: XR01
+  command: show isis protocol
+  raw:
+  - regex: 'Microloop avoidance: Enabled\s+Configuration: Type: Segment Routing'
+  points: 4
+- name: 'M10-4 XR01: customer A''s route to site 2 carries color 100 and is steered into an SR policy that is up'
+  node: XR01
+  command: show bgp vrf CUST-A 10.101.2.0/24
+  raw:
+  - regex: 10\.255\.0\.12 C:100 \(bsid:\d+\)
+  - regex: SR policy color 100, up
+  points: 5
+- name: 'M10-4 XR01: the active path of the color-100 policy to RT02 is computed by XR01 itself'
+  node: XR01
+  command: show segment-routing traffic-eng policy color 100 detail
+  raw:
+  - regex: 'Color: 100, End-point: 10\.255\.0\.12'
+  - regex: 'Admin: up\s+Operational: up'
+  - regex: \(active\)\s*\n(?:(?!\s+Preference:)[^\n]*\n)*?\s+Dynamic \(valid\)
+  points: 5
+- name: 'M10-4 CEA1, CEB1: customer A''s traffic to site 2 crosses RT03 and avoids RT01; customer B''s still takes RT01'
+  node: XR01
+  exec: local
+  command: echo '## CEA1'; .venv/bin/python topologies/login_probe.py XRT-10 ssh CEA1 -- 'traceroute 10.101.2.1 source Loopback10 numeric timeout 1 probe 1'; echo '## CEB1'; .venv/bin/python topologies/login_probe.py XRT-10 ssh CEB1 -- 'traceroute 10.102.2.1 source Loopback10 numeric timeout 1 probe 1'
+  raw:
+  - regex: '## CEA1(?:(?!## CEB1)[\s\S])*?\n\s*2 10\.0\.3\.13\s(?:(?!## CEB1)[\s\S])*?172\.16\.12\.2'
+  - not_regex: '## CEA1(?:(?!## CEB1)[\s\S])*?10\.0\.1\.11'
+  - regex: '## CEB1[\s\S]*?\n\s*2 10\.0\.1\.11\s[\s\S]*?172\.16\.22\.2'
+  points: 10
+- name: 'M10-5 XR02: is a PCE, and XR01 has a PCEP session with it'
+  node: XR02
+  command: show pce ipv4 peer
+  raw:
+  - regex: 'Peer address: 10\.255\.0\.1\s+State: Up'
+  points: 4
+- name: 'M10-5 XR01: the policies for colors 201 and 202 to RT02 are up, with paths computed by the PCE'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-10 ssh XR01 -- 'show segment-routing traffic-eng policy color 201 detail' 'show segment-routing traffic-eng policy color 202 detail'
+  raw:
+  - regex: 'Color: 201, End-point: 10\.255\.0\.12\s+Name:[^\n]*\s+Status:\s+Admin: up\s+Operational: up(?:(?!Color: 202)[\s\S])*?Dynamic \(pce 10\.255\.0\.21\) \(valid\)'
+  - regex: 'Color: 202, End-point: 10\.255\.0\.12\s+Name:[^\n]*\s+Status:\s+Admin: up\s+Operational: up[\s\S]*?Dynamic \(pce 10\.255\.0\.21\) \(valid\)'
+  points: 4
+- name: 'M10-5 XR01: the two paths share no link (one through RT03, the other not)'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-10 ssh XR01 -- 'show segment-routing traffic-eng policy color 201 detail' 'show segment-routing traffic-eng policy color 202 detail'
+  raw:
+  - regex: 'Color: 201(?:(?!Color: 202)[\s\S])*?10\.(?:255\.0|0\.3)\.13(?:(?!Color: 202)[\s\S])*Color: 202(?:(?!10\.(?:255\.0|0\.3)\.13)[\s\S])*$|Color: 201(?:(?!Color: 202|10\.(?:255\.0|0\.3)\.13)[\s\S])*Color: 202[\s\S]*?10\.(?:255\.0|0\.3)\.13'
+  points: 4
+- name: 'M10-5 XR02: the PCE reports the disjointness of the two paths as satisfied'
+  node: XR02
+  command: show pce association
+  raw:
+  - regex: 'Disjoint, Group \d+[^\n]*\s+Associated LSPs:[\s\S]*?Status: Satisfied'
+  points: 3

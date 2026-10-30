@@ -64,8 +64,10 @@ def shell(repo, problem, node, wait=0):
 
 
 def commit_ids(sh):
-    out = sh.send("show configuration commit list", timeout=60)
-    return re.findall(r"^\s*\d+\s+(\d{10})\s", out, re.M), out
+    # 一覧(list)はラベルの付いたコミットを ID でなくラベルで表示する(commits.yml の仕込み= CHG-1301 など)。
+    # そのままだとラベル付きの回を飛ばして 1 つ前を戻り先にし、やり直しで仕込みまで消える(XRT-10 で発覚)→ detail の CommitId を読む。
+    out = sh.send("show configuration commit list detail", timeout=60)
+    return re.findall(r"CommitId:\s*(\d{10})\b", out), out
 
 
 def main():

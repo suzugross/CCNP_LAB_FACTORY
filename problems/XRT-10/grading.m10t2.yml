@@ -1,0 +1,36 @@
+# M10-2: XR01 の LDP を止める。PoC §23.4-5= IS-IS の IF に mpls ldp sync が残ると、LDP が無いので未同期のまま
+# XR01 自身が両リンクを最大メトリック 16777214 で広告し続ける(通信は通る= 黙った不具合)。IOS 側は XR01 向きの同期を外してある(据付)。
+# 白紙は LDP の隣接があるので全部落ちる(どの確認も「LDP の隣接が無い」を含む)。
+problem: XRT-10
+total_points: 100
+checks:
+  - name: 'M10-2 XR01: has no LDP session left and still sends traffic for RT02 with SR labels'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-10 ssh XR01 -- 'show mpls ldp neighbor brief' 'show cef 10.255.0.12/32 detail'
+    raw:
+      - { not_regex: '\n10\.255\.0\.1[13]:0\s' }
+      - { regex: 'via 10\.0\.1\.11/32, GigabitEthernet0/0/0/0,[^\n]*\n(?:[^\n]*\n){0,4}?\s+local label \d+\s+labels imposed \{16012\}' }
+    points: 35
+  - name: 'M10-2 XR01: without LDP, still advertises its core links with their normal metrics (10 to RT01, 100 to RT03)'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-10 ssh XR01 -- 'show mpls ldp neighbor brief' 'show isis database verbose XR01.00-00'
+    raw:
+      - { not_regex: '\n10\.255\.0\.1[13]:0\s' }
+      - { regex: 'Metric: 10\s+IS-Extended RT01\.00' }
+      - { regex: 'Metric: 100\s+IS-Extended RT03\.00' }
+    points: 35
+  - name: 'M10-2 CEA2, CEB2: the sites of both customers still reach site 1 after LDP is gone'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-10 ssh XR01 -- 'show mpls ldp neighbor brief';
+      echo '## CEA2'; .venv/bin/python topologies/login_probe.py XRT-10 ssh CEA2 -- 'ping 10.101.1.1 source Loopback10 repeat 5';
+      echo '## CEB2'; .venv/bin/python topologies/login_probe.py XRT-10 ssh CEB2 -- 'ping 10.102.1.1 source Loopback10 repeat 5'
+    raw:
+      - { not_regex: '\n10\.255\.0\.1[13]:0\s' }
+      - { regex: '## CEA2[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## CEB2[\s\S]*?Success rate is (?:100|80) percent' }
+    points: 30

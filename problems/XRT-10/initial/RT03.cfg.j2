@@ -1,0 +1,69 @@
+! XRT-10 RT03(IOL 17.15・据付・変更しない)= XRT-09 と同じ P ルータ(BGP なし)+ ルート リフレクタ XR02 への行き止まりのリンクに SR の準備を足したもの。
+! SR= SRGB 既定・Lo0 の index 13・SR 優先・TI-LFA・Flex-Algo 128 に参加(定義は持たない・index 1xx= 読み物の「やってみる」用)。XR01 向きの IF= LDP の同期を外してある・BFD(100 ms × 3)。
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+mpls ldp password required
+mpls ldp neighbor 10.255.0.1 password CoreLdp-2026
+mpls ldp neighbor 10.255.0.12 password CoreLdp-2026
+!
+segment-routing mpls
+ !
+ set-attributes
+  address-family ipv4
+   sr-label-preferred
+  exit-address-family
+ !
+ connected-prefix-sid-map
+  address-family ipv4
+   10.255.0.13/32 index 13 range 1
+  exit-address-family
+ !
+  address-family ipv4 algorithm 128
+   10.255.0.13/32 index 113 range 1
+  exit-address-family
+!
+interface Loopback0
+ ip address 10.255.0.13 255.255.255.255
+ ip router isis CORE
+!
+interface {{ links[0] }}
+ description BACKUP to XR01
+ ip address 10.0.3.13 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 100
+ mpls ip
+ no mpls ldp igp sync
+ bfd interval 100 min_rx 100 multiplier 3
+ isis bfd
+ no shutdown
+!
+interface {{ links[1] }}
+ description CORE-B to RT02
+ ip address 10.0.23.13 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 100
+ mpls ip
+ no shutdown
+!
+interface {{ links[2] }}
+ description RR-LINK to XR02 (no LDP)
+ ip address 10.0.33.13 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 10
+ no mpls ldp igp sync
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0013.00
+ is-type level-2-only
+ metric-style wide
+ segment-routing mpls
+ fast-reroute per-prefix level-2 all
+ fast-reroute ti-lfa level-2
+ flex-algo 128
+ log-adjacency-changes
+ mpls ldp sync
+!

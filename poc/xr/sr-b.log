@@ -1,0 +1,208 @@
+
+######## 22:43:21 b-1: IOL(RT01〜RT03)に SR を入れる(connected-prefix-sid-map・IS-IS の segment-routing mpls)。LDP は残す
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+segment-routing mpls
+RT01(config-srmpls)#
+connected-prefix-sid-map
+RT01(config-srmpls-conn)#
+address-family ipv4
+RT01(config-srmpls-conn-af)#
+10.255.0.11/32 index 11 range 1
+RT01(config-srmpls-conn-af)#
+exit-address-family
+RT01(config-srmpls-conn)#
+exit
+RT01(config-srmpls)#
+exit
+RT01(config)#
+router isis CORE
+RT01(config-router)#
+segment-routing mpls
+RT01(config-router)#
+end
+RT01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+segment-routing mpls
+RT02(config-srmpls)#
+connected-prefix-sid-map
+RT02(config-srmpls-conn)#
+address-family ipv4
+RT02(config-srmpls-conn-af)#
+10.255.0.12/32 index 12 range 1
+RT02(config-srmpls-conn-af)#
+exit-address-family
+RT02(config-srmpls-conn)#
+exit
+RT02(config-srmpls)#
+exit
+RT02(config)#
+router isis CORE
+RT02(config-router)#
+segment-routing mpls
+RT02(config-router)#
+end
+RT02#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT03(config)#
+segment-routing mpls
+RT03(config-srmpls)#
+connected-prefix-sid-map
+RT03(config-srmpls-conn)#
+address-family ipv4
+RT03(config-srmpls-conn-af)#
+10.255.0.13/32 index 13 range 1
+RT03(config-srmpls-conn-af)#
+exit-address-family
+RT03(config-srmpls-conn)#
+exit
+RT03(config-srmpls)#
+exit
+RT03(config)#
+router isis CORE
+RT03(config-router)#
+segment-routing mpls
+RT03(config-router)#
+end
+RT03#
+show segment-routing mpls state
+ Segment Routing MPLS State : ENABLED
+RT01#
+show segment-routing mpls gb
+LABEL-MIN  LABEL_MAX  STATE           DEFAULT   
+16000      23999      ENABLED         Yes       
+RT01#
+show segment-routing mpls connected-prefix-sid-map ipv4
+
+               PREFIX_SID_CONN_MAP ALGO_0
+
+    Prefix/masklen   SID Type Range Flags SRGB
+    10.255.0.11/32    11 Indx     1         Y 
+
+               PREFIX_SID_PROTOCOL_ADV_MAP ALGO_0
+
+    Prefix/masklen   SID Type Range Flags SRGB Source
+    10.255.0.11/32    11 Indx     1         Y  IS-IS Level 2 0100.0000.0011
+    10.255.0.12/32    12 Indx     1         Y  IS-IS Level 2 0100.0000.0012
+    10.255.0.13/32    13 Indx     1         Y  IS-IS Level 2 0100.0000.0013
+RT01#
+show isis segment-routing prefix-sid-map
+% Incomplete command.
+
+RT01#
+show mpls forwarding-table | include SR|Pfx|160
+16012      Pop Label  10.255.0.12/32   0             Et0/1      10.0.12.12  
+16013 [M]  24001      10.255.0.13/32   0             Et0/0      10.0.1.1    
+           16013      10.255.0.13/32   0             Et0/1      10.0.12.12  
+RT01#
+show isis database verbose RT02.00-00
+
+Tag CORE:
+
+IS-IS Level-2 LSP RT02.00-00
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd      ATT/P/OL
+RT02.00-00            0x00000005   0x3B0A                1172/1200      0/0/0
+  Area Address: 49.0001
+  NLPID:        0xCC 
+  Router CAP:   10.255.0.12, D:0, S:0
+    Node-MSD 
+      MSD: 16
+    Segment Routing: I:1 V:0, SRGB Base: 16000 Range: 8000
+    Segment Routing Local Block: SRLB Base: 15000 Range: 1000
+    Segment Routing Algorithms: SPF, Strict-SPF
+  Hostname: RT02
+  Metric: 10         IS-Extended RT01.00
+    Interface IP Address: 10.0.12.12
+    Neighbor IP Address: 10.0.12.11
+    Admin. Weight: 10
+    Physical LINK BW: 10000 kbits/sec
+    Adjacency SID Value:26 F:0 B:0 V:1 L:1 S:0 P:0 Weight:0
+  Metric: 100        IS-Extended RT03.00
+    Interface IP Address: 10.0.23.12
+    Neighbor IP Address: 10.0.23.13
+    Admin. Weight: 100
+    Physical LINK BW: 10000 kbits/sec
+    Adjacency SID Value:27 F:0 B:0 V:1 L:1 S:0 P:0 Weight:0
+  IP Address:   10.255.0.12
+  Metric: 10         IP 10.0.12.0/24
+    Prefix-attr: X:0 R:0 N:0
+  Metric: 100        IP 10.0.23.0/24
+    Prefix-attr: X:0 R:0 N:0
+  Metric: 10         IP 10.255.0.12/32
+    Prefix-attr: X:0 R:0 N:1
+    Prefix-SID Index: 12, Algorithm: SPF, R:0 N:1 P:0 E:0 V:0 L:0
+RT01#
+show mpls forwarding-table 10.255.0.11 32 detail
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+19         Pop Label  10.255.0.11/32   0             Et0/0      10.0.12.11  
+	MAC/Encaps=14/14, MRU=1504, Label Stack{}
+	AABBCC003510AABBCC0033008847 
+	No output feature configured
+16011      Pop Label  10.255.0.11/32   0             Et0/0      10.0.12.11  
+	MAC/Encaps=14/14, MRU=1504, Label Stack{}
+	AABBCC003510AABBCC0033008847 
+	No output feature configured
+RT02#
+show ip cef 10.255.0.11 detail
+10.255.0.11/32, epoch 0
+  dflt local label info: global/19 [0x3]
+  sr local label info: global/16011 [0x1B]
+  nexthop 10.0.12.11 Ethernet0/0
+RT02#
+
+######## 22:44:03 b-2: XR01 から見た IOL の SID(XR01 はまだ SR なし)
+show isis database verbose | include "^[A-Z0-9]|Prefix-SID|R$ include "^[A-Z0-9]|Prefix-SID|Ro                          uter Cap|SRGB|SRLB|Segment$SID|Router Cap|SRGB|SRLB|Segment|                          Metric: [0-9]+ +IS-Extende$gment|Metric: [0-9]+ +IS-Extended                          |ADJ-SID|Adjacency SID"show isis database verbose | include "^[A-Z0-9]|Prefix-SID|$
+Thu Oct 29 22:44:05.512 UTC
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x00000006   0xe013        982  /*            0/0/0
+  Metric: 10         IS-Extended RT01.00
+  Metric: 100        IS-Extended RT03.00
+RT01.00-00            0x00000007   0x5f5f        1159 /1200         0/0/0
+  Router Cap:     10.255.0.11 D:0 S:0
+    Segment Routing: I:1 V:0
+    SRGB Base: 16000 Range: 8000
+  Metric: 10         IS-Extended XR01.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:23
+  Metric: 10         IS-Extended RT02.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:24
+    Prefix-SID Index: 11, Algorithm:0, R:0 N:1 P:0 E:0 V:0 L:0
+RT02.00-00            0x00000005   0x3b0a        1169 /1199         0/0/0
+  Router Cap:     10.255.0.12 D:0 S:0
+    Segment Routing: I:1 V:0
+    SRGB Base: 16000 Range: 8000
+  Metric: 10         IS-Extended RT01.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:26
+  Metric: 100        IS-Extended RT03.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:27
+    Prefix-SID Index: 12, Algorithm:0, R:0 N:1 P:0 E:0 V:0 L:0
+RT03.00-00            0x00000009   0x3066        1177 /1200         0/0/0
+  Router Cap:     10.255.0.13 D:0 S:0
+    Segment Routing: I:1 V:0
+    SRGB Base: 16000 Range: 8000
+  Metric: 100        IS-Extended XR01.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:22
+  Metric: 100        IS-Extended RT02.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:23
+  Metric: 10         IS-Extended XR02.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:24
+    Prefix-SID Index: 13, Algorithm:0, R:0 N:1 P:0 E:0 V:0 L:0
+XR02.00-00            0x00000005   0xdb0f        1173 /1198         0/0/0
+  Metric: 10         IS-Extended RT03.00
+RP/0/RP0/CPU0:XR01#
+show isis segment-routing label table
+Thu Oct 29 22:44:07.020 UTC
+
+IS-IS CORE  IPv4 Unicast  IS Label Table
+
+Label         Prefix                   Algorithm    Interface
+----------    ----------------         ---------    ---------
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding | include "160[0-9][0-9]"
+Thu Oct 29 22:44:07.422 UTC
+RP/0/RP0/CPU0:XR01#

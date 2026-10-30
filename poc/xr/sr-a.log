@@ -1,0 +1,191 @@
+
+######## 22:42:39 a-1: 出発点(M9 を解き終えた形)。LDP の上で L3VPN が通っているか
+show version | include "Version|uptime"
+Thu Oct 29 22:42:41.438 UTC
+Cisco IOS XR Software, Version 26.1.1
+ Version      : 26.1.1
+System uptime is 5 minutes
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Thu Oct 29 22:42:41.839 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    26   00:02:32 Yes None None
+RT03           Gi0/0/0/1                *PtoP*         Up    28   00:02:32 Yes None None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Thu Oct 29 22:42:42.241 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.13:0      N   N    00:02:26    1     0     4     0     10     0    
+10.255.0.11:0      N   N    00:02:26    2     0     3     0     10     0    
+
+RP/0/RP0/CPU0:XR01#
+show bgp vpnv4 unicast summary
+Thu Oct 29 22:42:42.642 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0x0
+BGP main routing table version 43
+BGP NSR Initial initsync version 14 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker           43            43            43            43            43             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000      12      10           43    0    0 00:01:31          3
+
+RP/0/RP0/CPU0:XR01#
+show cef 10.255.0.12/32 detail
+Thu Oct 29 22:42:44.242 UTC
+10.255.0.12/32, version 14, internal 0x1000001 0x10 (ptr 0x10641c48) [1], 0x600 (0x107d4c18), 0xa28 (0xf1544b8)
+ Updated Oct 29 22:40:28.001 
+ remote adjacency to GigabitEthernet0/0/0/0
+ Prefix Len 32, traffic index 0, precedence n/a, priority 1
+  gateway array (0x1066d6c0) reference count 3, flags 0x68, source lsd (5), 1 backups
+                [2 type 5 flags 0x8401 (0xf18d5c0) ext 0x0 (0x0)]
+  LW-LDI[type=5, refc=3, ptr=0x107d4c18, sh-ldi=0xf18d5c0]
+  gateway array update type-time 1 Oct 29 22:40:15.959
+ LDI Update time Oct 29 22:40:15.959
+ LW-LDI-TS Oct 29 22:40:15.959
+   via 10.0.1.11/32, GigabitEthernet0/0/0/0, 4 dependencies, weight 0, class 0 [flags 0x0]
+    path-idx 0 NHID 0x0 [0x10d8b280 0x0]
+    next hop 10.0.1.11/32
+    remote adjacency
+     local label 24002      labels imposed {16}
+
+    Load distribution: 0 (refcount 2)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    remote         
+RP/0/RP0/CPU0:XR01#
+show cef vrf CUST-A 10.101.2.0/24 detail
+Thu Oct 29 22:42:44.644 UTC
+10.101.2.0/24, version 5, internal 0x5000001 0x30 (ptr 0x1063df68) [1], 0x600 (0x107d52d8), 0xa08 (0xf1542d8)
+ Updated Oct 29 22:41:12.877
+ Prefix Len 24, traffic index 0, precedence n/a, priority 3
+  gateway array (0x1066f3a0) reference count 6, flags 0x38, source rib (7), 0 backups
+                [7 type 1 flags 0x8441 (0xf18d3b0) ext 0x0 (0x0)]
+  LW-LDI[type=1, refc=1, ptr=0x107d52d8, sh-ldi=0xf18d3b0]
+  gateway array update type-time 1 Oct 29 22:41:12.878
+ LDI Update time Oct 29 22:41:12.879
+ LW-LDI-TS Oct 29 22:41:12.879
+   via 10.255.0.12/32, 5 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xf41fc10 0x0]
+    recursion-via-/32
+    next hop VRF - 'default', table - 0xe0000000
+    next hop 10.255.0.12/32 via 24002/0/21
+     next hop 10.0.1.11/32 GigabitEthernet0/0/0/0 labels imposed {16 22}
+
+    Load distribution: 0 (refcount 7)
+
+    Hash  OK  Interface                 Address
+    0     Y   recursive                 24002/0        
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding prefix 10.255.0.12/32
+Thu Oct 29 22:42:45.044 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24002  16          10.255.0.12/32     Gi0/0/0/0    10.0.1.11       0           
+RP/0/RP0/CPU0:XR01#
+ping 10.101.2.1 source 10.101.1.1 repeat 20
+Type escape sequence to abort.
+Sending 20, 100-byte ICMP Echos to 10.101.2.1, timeout is 2 seconds:
+Packet sent with a source address of 10.101.1.1 
+!!!!!!!!!!!!!!!!!!!!
+Success rate is 100 percent (20/20), round-trip min/avg/max = 1/1/2 ms
+CEA1#
+
+######## 22:42:48 a-2: IOL の版と SR のコマンドの有無(? で見る)
+show version | include IOS|Version
+Cisco IOS Software [IOSXE], Linux Software (X86_64BI_LINUX-ADVENTERPRISEK9-M), Version 17.15.1, RELEASE SOFTWARE (fc4)
+RT01#
+show running-config | section segment
+RT01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+segment-routing ?
+  mpls         Segment Routing MPLS Mode
+  srv6         Segment Routing SRV6 Mode
+  traffic-eng  Segment Routing Traffic-eng Mode
+
+RT01(config)#segment-routing 
+% Incomplete command.
+
+RT01(config)#
+segment-routing mpls
+RT01(config-srmpls)#
+?
+Segment Routing MPLS configuration commands:
+  connected-prefix-sid-map  Enter Connected Prefix Sid Map  Mode
+  default                   Set a command to its defaults
+  exit                      Exit from SR configuration mode
+  global-block              SR Global Block Config
+  local-block               SR Local Block Config
+  mapping-server            Enter Segment Routing Mapping Server Mode
+  no                        Negate a command or set its defaults
+  set-attributes            Enter SR Set Attributes  Mode
+  shutdown                  SR Shutdown
+
+RT01(config-srmpls)#
+RT01(config-srmpls)#
+end
+RT01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+router isis CORE
+RT01(config-router)#
+segment-routing ?
+  mpls            Enable Segment Routing Feature using MPLS encapsulation
+  prefix-sid-map  Enable prefix-sid-map
+
+RT01(config-router)#segment-routing 
+% Incomplete command.
+
+RT01(config)#
+fast-reroute ?
+% Unrecognized command
+RT01(config)#fast-reroute 
+              ^
+% Invalid input detected at '^' marker.
+
+RT01(config)#
+flex-algo ?
+% Unrecognized command
+RT01(config)#flex-algo 
+               ^
+% Invalid input detected at '^' marker.
+
+RT01(config)#
+microloop ?
+% Unrecognized command
+RT01(config)#microloop 
+              ^
+% Invalid input detected at '^' marker.
+
+RT01(config)#
+distribute ?
+% Unrecognized command
+RT01(config)#distribute 
+               ^
+% Invalid input detected at '^' marker.
+
+RT01(config)#
+end
+RT01#

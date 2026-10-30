@@ -1,0 +1,328 @@
+
+######## 22:47:13 c-6: XR01 の LDP を止める(IS-IS の mpls ldp sync は残したまま)。相手の同期・メトリック・L3VPN
+configure
+Thu Oct 29 22:47:14.973 UTC
+RP/0/RP0/CPU0:XR01(config)#
+no mpls ldp
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Thu Oct 29 22:47:15.876 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Thu Oct 29 22:47:16.881 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis interface brief
+Thu Oct 29 22:47:49.787 UTC
+
+IS-IS CORE Interfaces
+    Interface      All     Adjs    Adj Topos  Adv Topos  CLNS   MTU    Prio  
+                   OK    L1   L2    Run/Cfg    Run/Cfg                L1   L2
+-----------------  ---  ---------  ---------  ---------  ----  ----  --------
+Lo0                Yes    -    -      0/0        1/1     No       -    -    -
+Gi0/0/0/0          Yes    -    1      1/1        1/1     Up    1497    -    -
+Gi0/0/0/1          Yes    -    1      1/1        1/1     Up    1497    -    -
+RP/0/RP0/CPU0:XR01#
+show isis mpls ldp sync
+                                  ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR01#
+show running-config router isis
+Thu Oct 29 22:47:50.590 UTC
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+  segment-routing mpls sr-prefer
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+   prefix-sid index 1
+  !
+ !
+ interface GigabitEthernet0/0/0/0
+  point-to-point
+  address-family ipv4 unicast
+   metric 10
+   mpls ldp sync
+  !
+ !
+ interface GigabitEthernet0/0/0/1
+  point-to-point
+  address-family ipv4 unicast
+   metric 100
+   mpls ldp sync
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Thu Oct 29 22:47:50.991 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    28   00:07:41 Yes None None
+RT03           Gi0/0/0/1                *PtoP*         Up    22   00:07:41 Yes None None
+
+Total adjacency count: 2
+RP/0/RP0/CPU0:XR01#
+show isis database verbose | include "^[A-Z0-9]|Prefix-SID|R$ include "^[A-Z0-9]|Prefix-SID|Ro                          uter Cap|SRGB|SRLB|Segment$SID|Router Cap|SRGB|SRLB|Segment|                          Metric: [0-9]+ +IS-Extende$gment|Metric: [0-9]+ +IS-Extended                          |ADJ-SID|Adjacency SID"show isis database verbose | include "^[A-Z0-9]|Prefix-SID|$
+Thu Oct 29 22:47:52.516 UTC
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000000a   0x5bcd        1165 /*            0/0/0
+  Router Cap:     10.255.0.1 D:0 S:0
+    Segment Routing: I:1 V:0
+    SRGB Base: 16000 Range: 8000
+  Metric: 16777214   IS-Extended RT01.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:24011
+  Metric: 16777214   IS-Extended RT03.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:24013
+    Prefix-SID Index: 1, Algorithm:0, R:0 N:1 P:0 E:0 V:0 L:0
+RT01.00-00            0x00000008   0x7767        1163 /1200         0/0/0
+  Router Cap:     10.255.0.11 D:0 S:0
+    Segment Routing: I:1 V:0
+    SRGB Base: 16000 Range: 8000
+  Metric: 16777214   IS-Extended XR01.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:23
+  Metric: 10         IS-Extended RT02.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:24
+    Prefix-SID Index: 11, Algorithm:0, R:0 N:1 P:0 E:0 V:0 L:0
+RT02.00-00            0x00000005   0x3b0a        942  /1199         0/0/0
+  Router Cap:     10.255.0.12 D:0 S:0
+    Segment Routing: I:1 V:0
+    SRGB Base: 16000 Range: 8000
+  Metric: 10         IS-Extended RT01.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:26
+  Metric: 100        IS-Extended RT03.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:27
+    Prefix-SID Index: 12, Algorithm:0, R:0 N:1 P:0 E:0 V:0 L:0
+RT03.00-00            0x0000000a   0x9c29        1163 /1200         0/0/0
+  Router Cap:     10.255.0.13 D:0 S:0
+    Segment Routing: I:1 V:0
+    SRGB Base: 16000 Range: 8000
+  Metric: 16777214   IS-Extended XR01.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:22
+  Metric: 100        IS-Extended RT02.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:23
+  Metric: 10         IS-Extended XR02.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:24
+    Prefix-SID Index: 13, Algorithm:0, R:0 N:1 P:0 E:0 V:0 L:0
+XR02.00-00            0x00000005   0xdb0f        946  /1198         0/0/0
+  Metric: 10         IS-Extended RT03.00
+RP/0/RP0/CPU0:XR01#
+show mpls ldp igp sync
+    Ethernet0/0:
+	LDP configured; LDP-IGP Synchronization enabled.
+	Sync status: sync not achieved; peer reachable.
+	Sync delay time: 0 seconds (0 seconds left)
+	IGP holddown time: infinite.
+	IGP enabled: ISIS CORE
+    Ethernet0/1:
+	LDP configured; LDP-IGP Synchronization enabled.
+	Sync status: sync achieved; peer reachable.
+	Sync delay time: 0 seconds (0 seconds left)
+	IGP holddown time: infinite.
+	Peer LDP Ident: 10.255.0.12:0
+	IGP enabled: ISIS CORE
+RT01#
+show isis database verbose RT01.00-00 | include Metric|IS-Extended
+  Metric: 16777214   IS-Extended XR01.00
+  Metric: 10         IS-Extended RT02.00
+  Metric: 16777214   IP 10.0.1.0/24
+  Metric: 10         IP 10.0.12.0/24
+  Metric: 10         IP 10.255.0.11/32
+RT01#
+show mpls ldp igp sync
+    Ethernet0/0:
+	LDP configured; LDP-IGP Synchronization enabled.
+	Sync status: sync not achieved; peer reachable.
+	Sync delay time: 0 seconds (0 seconds left)
+	IGP holddown time: infinite.
+	IGP enabled: ISIS CORE
+    Ethernet0/1:
+	LDP configured; LDP-IGP Synchronization enabled.
+	Sync status: sync achieved; peer reachable.
+	Sync delay time: 0 seconds (0 seconds left)
+	IGP holddown time: infinite.
+	Peer LDP Ident: 10.255.0.12:0
+	IGP enabled: ISIS CORE
+RT03#
+show cef 10.255.0.12/32 detail
+Thu Oct 29 22:47:57.827 UTC
+10.255.0.12/32, version 118, labeled SR, internal 0x1000001 0x8310 (ptr 0x1063c048) [1], 0x600 (0x107d52d8), 0xa28 (0xf1546f8)
+ Updated Oct 29 22:47:18.011 
+ remote adjacency to GigabitEthernet0/0/0/0
+ Prefix Len 32, traffic index 0, precedence n/a, priority 1
+  gateway array (0x1066f3a0) reference count 3, flags 0x68, source rib (7), 0 backups
+                [2 type 5 flags 0x8401 (0xf18d460) ext 0x0 (0x0)]
+  LW-LDI[type=5, refc=3, ptr=0x107d52d8, sh-ldi=0xf18d460]
+  gateway array update type-time 1 Oct 29 22:47:18.011
+ LDI Update time Oct 29 22:47:18.011
+ LW-LDI-TS Oct 29 22:47:18.011
+   via 10.0.1.11/32, GigabitEthernet0/0/0/0, 6 dependencies, weight 0, class 0 [flags 0x0]
+    path-idx 0 NHID 0x0 [0x10d8b280 0x0]
+    next hop 10.0.1.11/32
+    remote adjacency
+     local label 16012      labels imposed {16012}
+
+    Load distribution: 0 (refcount 2)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    remote         
+RP/0/RP0/CPU0:XR01#
+show cef vrf CUST-A 10.101.2.0/24 detail
+Thu Oct 29 22:47:58.228 UTC
+10.101.2.0/24, version 25, internal 0x5000001 0x30 (ptr 0x10641d08) [1], 0x600 (0x107d6098), 0xa08 (0xf154698)
+ Updated Oct 29 22:47:18.065
+ Prefix Len 24, traffic index 0, precedence n/a, priority 3
+  gateway array (0x10671398) reference count 6, flags 0x38, source rib (7), 0 backups
+                [7 type 1 flags 0x8441 (0xf18dca0) ext 0x0 (0x0)]
+  LW-LDI[type=1, refc=1, ptr=0x107d6098, sh-ldi=0xf18dca0]
+  gateway array update type-time 1 Oct 29 22:47:18.065
+ LDI Update time Oct 29 22:47:18.065
+ LW-LDI-TS Oct 29 22:47:18.065
+   via 10.255.0.12/32, 5 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xf41fd90 0x0]
+    recursion-via-/32
+    next hop VRF - 'default', table - 0xe0000000
+    next hop 10.255.0.12/32 via 16012/0/21
+     next hop 10.0.1.11/32 GigabitEthernet0/0/0/0 labels imposed {16012 22}
+
+    Load distribution: 0 (refcount 7)
+
+    Hash  OK  Interface                 Address
+    0     Y   recursive                 16012/0        
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding prefix 10.255.0.12/32
+Thu Oct 29 22:47:58.628 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+16012  16012       SR Pfx (idx 12)    Gi0/0/0/0    10.0.1.11       0           
+RP/0/RP0/CPU0:XR01#
+show ip cef vrf CUST-A 10.101.1.0 detail
+10.101.1.0/24, epoch 0, flags [rib defined all labels]
+  recursive via 10.255.0.1 label 24004
+    nexthop 10.0.12.11 Ethernet0/0 label 16001-(local:16001)
+RT02#
+show ip route 10.255.0.1
+Routing entry for 10.255.0.1/32
+  Known via "isis", distance 115, metric 16777224, type level-2
+  Redistributing via isis CORE
+  Last update from 10.0.12.11 on Ethernet0/0, 00:00:45 ago
+  Routing Descriptor Blocks:
+  * 10.0.12.11, from 10.255.0.1, 00:00:45 ago, via Ethernet0/0, merge-labels
+      Route metric is 16777224, traffic share count is 1
+      MPLS label: 16001
+      MPLS Flags: NSF
+RT02#
+ping 10.101.2.1 source 10.101.1.1 repeat 20
+Type escape sequence to abort.
+Sending 20, 100-byte ICMP Echos to 10.101.2.1, timeout is 2 seconds:
+Packet sent with a source address of 10.101.1.1 
+!!!!!!!!!!!!!!!!!!!!
+Success rate is 100 percent (20/20), round-trip min/avg/max = 1/1/2 ms
+CEA1#
+traceroute 10.101.2.1 source 10.101.1.1 numeric timeout 1 probe 1
+Type escape sequence to abort.
+Tracing the route to 10.101.2.1
+VRF info: (vrf in name/id, vrf out name/id)
+  1 172.16.11.1 [AS 64500] 2 msec
+  2 10.0.1.11 [AS 64500] [MPLS: Labels 16012/22 Exp 0] 2 msec
+  3 172.16.12.1 [AS 64500] [MPLS: Label 22 Exp 0] 1 msec
+  4 172.16.12.2 [AS 64500] 2 msec
+CEA1#
+
+######## 22:48:02 c-7: XR01 の IS-IS から mpls ldp sync を消す
+configure
+Thu Oct 29 22:48:04.755 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+no mpls ldp sync
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+router isis CORE
+RP/0/RP0/CPU0:XR01(config-isis)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-isis-if)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+no mpls ldp sync
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+commit
+Thu Oct 29 22:48:08.864 UTC
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+show configuration failed
+Thu Oct 29 22:48:09.769 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-isis-if-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show isis database verbose | include "^[A-Z0-9]|Prefix-SID|R$ include "^[A-Z0-9]|Prefix-SID|Ro                          uter Cap|SRGB|SRLB|Segment$SID|Router Cap|SRGB|SRLB|Segment|                          Metric: [0-9]+ +IS-Extende$gment|Metric: [0-9]+ +IS-Extended                          |ADJ-SID|Adjacency SID"show isis database verbose | include "^[A-Z0-9]|Prefix-SID|$
+Thu Oct 29 22:48:27.787 UTC
+IS-IS CORE (Level-2) Link State Database
+LSPID                 LSP Seq Num  LSP Checksum  LSP Holdtime/Rcvd  ATT/P/OL
+XR01.00-00          * 0x0000000b   0xad0a        1184 /*            0/0/0
+  Router Cap:     10.255.0.1 D:0 S:0
+    Segment Routing: I:1 V:0
+    SRGB Base: 16000 Range: 8000
+  Metric: 10         IS-Extended RT01.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:24011
+  Metric: 100        IS-Extended RT03.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:24013
+    Prefix-SID Index: 1, Algorithm:0, R:0 N:1 P:0 E:0 V:0 L:0
+RT01.00-00            0x00000008   0x7767        1128 /1200         0/0/0
+  Router Cap:     10.255.0.11 D:0 S:0
+    Segment Routing: I:1 V:0
+    SRGB Base: 16000 Range: 8000
+  Metric: 16777214   IS-Extended XR01.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:23
+  Metric: 10         IS-Extended RT02.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:24
+    Prefix-SID Index: 11, Algorithm:0, R:0 N:1 P:0 E:0 V:0 L:0
+RT02.00-00            0x00000005   0x3b0a        907  /1199         0/0/0
+  Router Cap:     10.255.0.12 D:0 S:0
+    Segment Routing: I:1 V:0
+    SRGB Base: 16000 Range: 8000
+  Metric: 10         IS-Extended RT01.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:26
+  Metric: 100        IS-Extended RT03.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:27
+    Prefix-SID Index: 12, Algorithm:0, R:0 N:1 P:0 E:0 V:0 L:0
+RT03.00-00            0x0000000a   0x9c29        1128 /1200         0/0/0
+  Router Cap:     10.255.0.13 D:0 S:0
+    Segment Routing: I:1 V:0
+    SRGB Base: 16000 Range: 8000
+  Metric: 16777214   IS-Extended XR01.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:22
+  Metric: 100        IS-Extended RT02.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:23
+  Metric: 10         IS-Extended XR02.00
+    ADJ-SID: F:0 B:0 V:1 L:1 S:0 P:0 weight:0 Adjacency-sid:24
+    Prefix-SID Index: 13, Algorithm:0, R:0 N:1 P:0 E:0 V:0 L:0
+XR02.00-00            0x00000005   0xdb0f        911  /1198         0/0/0
+  Metric: 10         IS-Extended RT03.00
+RP/0/RP0/CPU0:XR01#
+ping 10.101.2.1 source 10.101.1.1 repeat 20
+Type escape sequence to abort.
+Sending 20, 100-byte ICMP Echos to 10.101.2.1, timeout is 2 seconds:
+Packet sent with a source address of 10.101.1.1 
+!!!!!!!!!!!!!!!!!!!!
+Success rate is 100 percent (20/20), round-trip min/avg/max = 1/1/5 ms
+CEA1#

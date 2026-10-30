@@ -1,0 +1,34 @@
+# M10-5: XR02(XRd)を PCE に・XR01 の色 201・202(終点 RT02)の 2 本を PCE に計算させ、互いにリンクを共有させない。PoC §23.4-19。
+# PCE のトポロジは XR02 の IS-IS から(distribute link-state)。2 本は RT01 経由(16012)と RT03 経由(16013・16012)に分かれる。
+problem: XRT-10
+total_points: 100
+checks:
+  - name: 'M10-5 XR02: is a PCE, and XR01 has a PCEP session with it'
+    node: XR02
+    command: 'show pce ipv4 peer'
+    raw:
+      - { regex: 'Peer address: 10\.255\.0\.1\s+State: Up' }
+    points: 25
+  - name: 'M10-5 XR01: the policies for colors 201 and 202 to RT02 are up, with paths computed by the PCE'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-10 ssh XR01 -- 'show segment-routing traffic-eng policy color 201 detail' 'show segment-routing traffic-eng policy color 202 detail'
+    raw:
+      - { regex: 'Color: 201, End-point: 10\.255\.0\.12\s+Name:[^\n]*\s+Status:\s+Admin: up\s+Operational: up(?:(?!Color: 202)[\s\S])*?Dynamic \(pce 10\.255\.0\.21\) \(valid\)' }
+      - { regex: 'Color: 202, End-point: 10\.255\.0\.12\s+Name:[^\n]*\s+Status:\s+Admin: up\s+Operational: up[\s\S]*?Dynamic \(pce 10\.255\.0\.21\) \(valid\)' }
+    points: 25
+  - name: 'M10-5 XR01: the two paths share no link (one through RT03, the other not)'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-10 ssh XR01 -- 'show segment-routing traffic-eng policy color 201 detail' 'show segment-routing traffic-eng policy color 202 detail'
+    raw:
+      - { regex: 'Color: 201(?:(?!Color: 202)[\s\S])*?10\.(?:255\.0|0\.3)\.13(?:(?!Color: 202)[\s\S])*Color: 202(?:(?!10\.(?:255\.0|0\.3)\.13)[\s\S])*$|Color: 201(?:(?!Color: 202|10\.(?:255\.0|0\.3)\.13)[\s\S])*Color: 202[\s\S]*?10\.(?:255\.0|0\.3)\.13' }
+    points: 30
+  - name: 'M10-5 XR02: the PCE reports the disjointness of the two paths as satisfied'
+    node: XR02
+    command: 'show pce association'
+    raw:
+      - { regex: 'Disjoint, Group \d+[^\n]*\s+Associated LSPs:[\s\S]*?Status: Satisfied' }
+    points: 20

@@ -1,0 +1,59 @@
+!! XRT-09 XR02(VPNv4 のルート リフレクタ・XRd 26.1.1)。転送の道には入らない(RT03 の先の行き止まり・LDP なし)。
+!! 前任者の設定(CHG-1201)。仕込み= M9-2: route-reflector-client が ipv4 unicast の AF の下だけ(PE は ipv4 を張らない= 効かない)。
+!!   経路が残らないので前任者が retain route-target all を足した= XR02 は全部持っているのに、RR クライアントが無いので誰にも反映しない。
+interface Loopback0
+ ipv4 address 10.255.0.21 255.255.255.255
+!
+interface {{ links[3] }}
+ description RR-LINK to RT03
+ ipv4 address 10.0.33.21 255.255.255.0
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0021.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+   metric 10
+  !
+ !
+!
+router bgp 65000
+ bgp router-id 10.255.0.21
+ address-family ipv4 unicast
+ !
+ address-family vpnv4 unicast
+  retain route-target all
+ !
+ neighbor 10.255.0.1
+  remote-as 65000
+  description PE XR01 (CHG-1201)
+  update-source Loopback0
+  address-family ipv4 unicast
+   route-reflector-client
+  !
+  address-family vpnv4 unicast
+  !
+ !
+ neighbor 10.255.0.12
+  remote-as 65000
+  description PE RT02 (CHG-1201)
+  update-source Loopback0
+  address-family ipv4 unicast
+   route-reflector-client
+  !
+  address-family vpnv4 unicast
+  !
+ !
+!
+end
