@@ -1,0 +1,951 @@
+# glossary/l2vpn.yml — L2VPN とキャリア イーサネット(EVPN・Q-in-Q・イーサネット OAM を含む)
+
+# ── サービスの型と全体像 ──────────────────────────────
+- id: l2vpn
+  term: L2VPN
+  full: {en: Layer 2 VPN, ja: レイヤ 2 VPN}
+  def:
+    en: >-
+      A VPN service that carries a customer's Ethernet frames, as they are, across the provider's network, without the
+      provider taking part in the customer's routing. Point-to-point forms (VPWS) build E-Lines; multipoint forms
+      (VPLS, EVPN) build E-LANs.
+    ja: >-
+      顧客のイーサネットのフレームを、そのままプロバイダーの網の向こうへ運ぶ VPN のサービス。プロバイダーは顧客の
+      ルーティングに加わらない。ポイントツーポイントのもの(VPWS)で E-Line を、多地点のもの(VPLS、EVPN)で E-LAN を作る。
+  see: [l3vpn, vpws, vpls, evpn]
+
+- id: carrier-ethernet
+  term: {en: carrier Ethernet, ja: キャリア イーサネット}
+  def:
+    en: >-
+      Ethernet sold by service providers as a service between customer sites, with service types defined by MEF:
+      E-Line, E-LAN, E-Tree and E-Access. On an MPLS network it is built with L2VPNs.
+    ja: >-
+      サービス プロバイダーが拠点の間のサービスとして提供するイーサネット。サービスの型は MEF が定めている
+      (E-Line、E-LAN、E-Tree、E-Access)。MPLS の網では L2VPN で作る。
+  see: [mef, l2vpn, e-line, e-lan]
+
+- id: mef
+  term: MEF
+  def:
+    en: >-
+      An industry forum, founded as the Metro Ethernet Forum, that defines carrier Ethernet services. The service
+      types E-Line, E-LAN, E-Tree and E-Access are its definitions.
+    ja: >-
+      キャリア イーサネットのサービスを定める業界団体(Metro Ethernet Forum として発足)。E-Line、E-LAN、E-Tree、
+      E-Access というサービスの型は、ここの定義。
+  see: [carrier-ethernet, e-line, e-lan, e-tree, e-access]
+
+- id: e-line
+  term: E-Line
+  def:
+    en: >-
+      The MEF service type that joins exactly two sites, one to one: an Ethernet leased line. On MPLS it is built with
+      an LDP pseudowire or with EVPN-VPWS; the IETF calls the mechanism VPWS.
+    ja: >-
+      2 つの拠点を 1 対 1 でつなぐ、MEF のサービスの型。イーサネットの専用線にあたる。MPLS では LDP の疑似回線か
+      EVPN-VPWS で作り、IETF ではこの仕組みを VPWS と呼ぶ。
+  see: [vpws, pseudowire, evpn-vpws, e-lan]
+
+- id: e-lan
+  term: E-LAN
+  def:
+    en: >-
+      The MEF service type that joins many sites in one LAN, all to all: the provider's network behaves like one
+      Ethernet switch. It is built with VPLS or with EVPN.
+    ja: >-
+      多くの拠点を互いに 1 つの LAN でつなぐ、MEF のサービスの型。プロバイダーの網全体が 1 台のイーサネット スイッチの
+      ようにふるまう。VPLS か EVPN で作る。
+  see: [vpls, evpn, bridge-domain, e-line]
+
+- id: e-tree
+  term: E-Tree
+  def:
+    en: >-
+      The MEF service type with roots and leaves: a leaf talks with the roots only, never with another leaf. EVPN
+      builds it by marking the frames that come from leaf ACs and not sending them out of leaf ACs (RFC 8317).
+    ja: >-
+      根(root)と葉(leaf)を持つ、MEF のサービスの型。葉は根とだけ通信し、葉どうしは通らない。EVPN では、葉の AC から
+      来たフレームに印を付け、葉の AC へは出さないことで作る(RFC 8317)。
+  see: [e-lan, evpn]
+
+- id: e-access
+  term: E-Access
+  def:
+    en: >-
+      The MEF service type that joins a customer's port to the boundary with another operator's network (the ENNI).
+      It is point-to-point, a kind of E-Line.
+    ja: >-
+      顧客のポートと、別の事業者の網との境界(ENNI)をつなぐ、MEF のサービスの型。ポイントツーポイントで、
+      E-Line の一種。
+  see: [enni, e-line]
+
+- id: enni
+  term: ENNI
+  full: External Network-to-Network Interface
+  def:
+    en: >-
+      MEF's name for the interface between two operators' networks, where a customer's service passes from one
+      operator to the other.
+    ja: >-
+      2 つの事業者の網の間のインタフェースを指す MEF の用語。顧客のサービスは、ここで一方の事業者から他方へ渡る。
+  see: [e-access, mef]
+
+- id: vpws
+  term: VPWS
+  full: Virtual Private Wire Service
+  def:
+    en: >-
+      The IETF name for a point-to-point L2VPN, the mechanism that builds an E-Line. Its forms include the LDP
+      pseudowire and EVPN-VPWS.
+    ja: >-
+      ポイントツーポイントの L2VPN の、IETF での呼び名。E-Line を作る仕組みで、LDP の疑似回線や EVPN-VPWS がある。
+  see: [e-line, pseudowire, evpn-vpws, vpls]
+
+# ── 疑似回線(LDP) ──────────────────────────────────
+- id: pseudowire
+  term: {en: pseudowire, ja: 疑似回線}
+  aka: [PW]
+  def:
+    en: >-
+      A path between two PEs that carries a customer's frames across the MPLS core, wrapped in labels; the core sees
+      only the labels. The two PEs pair up by the PW ID, and each tells the other which pseudowire label to use.
+    ja: >-
+      顧客のフレームをラベルで包み、MPLS のコアを通して 2 台の PE の間で運ぶ通り道。コアはラベルしか見ない。両端の PE は
+      PW ID で組になり、使う疑似回線のラベルを互いに伝える。
+  see: [pw-id, pw-label, attachment-circuit, targeted-ldp]
+
+- id: pw-label
+  term: {en: pseudowire label, ja: 疑似回線のラベル}
+  def:
+    en: >-
+      The inner label that tells the far PE which pseudowire, and so which attachment circuit, a frame belongs to. The
+      receiving PE chooses it and tells the other end, by LDP or in an EVPN route, as with a VPN label in an L3VPN.
+    ja: >-
+      フレームがどの疑似回線(つまりどのアタッチメント回線)のものかを向こうの PE に示す、内側のラベル。受け取る側の
+      PE が決め、LDP か EVPN の経路で相手に伝える。L3VPN の VPN のラベルと同じ考え方。
+  see: [pseudowire, vpn-label, transport-label]
+
+- id: pw-id
+  term: PW ID
+  full: {en: pseudowire ID, ja: 疑似回線の ID}
+  aka: [VC ID]
+  def:
+    en: >-
+      The number that both PEs configure for the same LDP pseudowire; the two ends pair up only if it matches. It is
+      also called the VC ID, and in IOS XE's VPLS the VPN ID serves as the VC ID.
+    ja: >-
+      同じ LDP の疑似回線について、両端の PE が設定する番号。一致しないと組にならない。VC ID とも呼び、IOS XE の VPLS では
+      VPN ID が VC ID になる。
+  see: [pseudowire, fec-128, vpn-id]
+
+- id: pw-type
+  term: {en: PW type, ja: PW タイプ}
+  def:
+    en: >-
+      The form of the frames inside a pseudowire, signalled by both ends; if the types differ, the pseudowire does not
+      come up. Type 5 (Ethernet) carries the frame as it is; type 4 (Ethernet VLAN) assumes a VLAN tag on the frame.
+    ja: >-
+      疑似回線の中のフレームの形。両端が伝え合い、違うと疑似回線は上がらない。タイプ 5(Ethernet)はフレームをそのまま
+      運び、タイプ 4(Ethernet VLAN)は VLAN のタグが付いていることを前提にする。
+  see: [pseudowire, fec-128]
+
+- id: control-word
+  term: {en: control word, ja: コントロール ワード}
+  def:
+    en: >-
+      An optional 4-byte field between the pseudowire label and the carried frame (RFC 4385). Its first four bits are
+      zero, so core routers that look past the labels do not mistake the frame for an IP packet. The two ends signal
+      whether they use it.
+    ja: >-
+      疑似回線のラベルと運ぶフレームの間に入る、任意の 4 バイトの欄(RFC 4385)。先頭の 4 ビットが 0 なので、ラベルの奥を
+      のぞくコアのルータが、中身を IP のパケットと取り違えない。使うかどうかは両端が伝え合う。
+  see: [pseudowire, pw-type]
+
+- id: fec-128
+  term: FEC 128
+  full: PWid FEC element
+  def:
+    en: >-
+      The LDP element (type 128, the PWid FEC) that names a pseudowire by its PW ID (RFC 8077). With it, the PEs
+      exchange the pseudowire label, the PW type, the control-word flag and interface parameters such as the MTU.
+    ja: >-
+      疑似回線を PW ID で表す LDP の要素(タイプ 128、PWid FEC。RFC 8077)。これとともに PE は、疑似回線のラベル、
+      PW タイプ、コントロール ワードの有無、MTU などのインタフェースのパラメータを交換する。
+  see: [targeted-ldp, pw-id, pw-type, control-word]
+
+- id: atom
+  term: AToM
+  full: Any Transport over MPLS
+  def:
+    en: >-
+      Cisco's name for its pseudowire services over MPLS, which carry Ethernet and also other Layer 2 traffic such as
+      Frame Relay and ATM. IOS XE commands such as `show l2vpn atom vc` keep the name.
+    ja: >-
+      MPLS の上の疑似回線のサービスを指す Cisco の呼び名。イーサネットのほか、フレーム リレーや ATM なども運ぶ。
+      IOS XE の `show l2vpn atom vc` などのコマンドに名前が残っている。
+  see: [pseudowire]
+
+# ── アタッチメント回線とタグ ────────────────────────────
+- id: attachment-circuit
+  term: {en: attachment circuit, ja: アタッチメント回線}
+  aka: [AC]
+  def:
+    en: >-
+      The section between the customer's CE and the PE in an L2VPN: the port, or the VLAN on a port, whose frames the
+      PE carries. On IOS XR it is an `l2transport` sub-interface; on IOS XE, an EFP (`service instance`) or a
+      sub-interface.
+    ja: >-
+      L2VPN で、顧客の CE と PE をつなぐ区間。PE がフレームを運ぶポート、またはポートの中の VLAN。IOS XR では
+      `l2transport` のサブインタフェース、IOS XE では EFP(`service instance`)かサブインタフェース。
+  see: [cross-connect, l2transport, efp, pseudowire]
+
+- id: cross-connect
+  term: {en: cross-connect, ja: クロスコネクト}
+  aka: [xconnect]
+  def:
+    en: >-
+      The join inside a PE between an attachment circuit and a pseudowire (or another AC). Frames from one side go out
+      of the other without any MAC address lookup.
+    ja: >-
+      PE の中で、アタッチメント回線と疑似回線(または別の AC)をつなぐもの。片側から入ったフレームは、MAC アドレスを
+      見ずにもう片側へ出る。
+  see: [attachment-circuit, pseudowire]
+
+- id: l2transport
+  term: {en: l2transport sub-interface, ja: l2transport のサブインタフェース}
+  aka: [l2transport]
+  def:
+    en: >-
+      An IOS XR sub-interface (or port) declared with `l2transport`: it is used as an attachment circuit, not as a
+      Layer 3 interface, and cannot have an IP address. Its `encapsulation` picks the frames and its `rewrite` handles
+      their tags.
+    ja: >-
+      `l2transport` を付けて作る IOS XR のサブインタフェース(またはポート)。L3 の IF ではなくアタッチメント回線として
+      使い、IP アドレスは持てない。`encapsulation` で拾うフレームを、`rewrite` でタグの扱いを決める。
+  see: [attachment-circuit, tag-rewrite, efp]
+
+- id: tag-rewrite
+  term: {en: tag rewrite, ja: タグの書き換え}
+  aka: [rewrite]
+  def:
+    en: >-
+      What an attachment circuit does to the VLAN tags of the frames it picks: `pop` removes tags, `push` adds one and
+      `translate` changes them. With `symmetric`, the opposite is done on the way out; by default IOS XR keeps the tags
+      as they are.
+    ja: >-
+      アタッチメント回線が、拾ったフレームの VLAN のタグに施す操作。`pop` で外し、`push` で足し、`translate` で付け替える。
+      `symmetric` で出るときに逆の操作をする。IOS XR の既定では、タグはそのまま残る。
+  see: [l2transport, efp, q-in-q]
+  scope: ["b*-m11-*"]
+
+- id: efp
+  term: EFP
+  full: Ethernet flow point
+  def:
+    en: >-
+      IOS XE's attachment circuit in the EVC framework: a `service instance` on a port that picks frames by their tags
+      (`encapsulation`) and can rewrite the tags. It is the counterpart of IOS XR's l2transport sub-interface.
+    ja: >-
+      IOS XE の EVC の仕組みでのアタッチメント回線。ポートの上の `service instance` で、タグでフレームを拾い
+      (`encapsulation`)、タグを書き換えられる。IOS XR の l2transport のサブインタフェースにあたる。
+  see: [attachment-circuit, evc, l2transport, bridge-domain]
+
+- id: evc
+  term: EVC
+  full: Ethernet virtual connection
+  def:
+    en: >-
+      MEF's name for the association of two or more customer ports in one Ethernet service. On IOS XE, the EVC
+      framework provides the `service instance` (EFP) configuration, and an EVC name given to a service instance is
+      how CFM finds the service.
+    ja: >-
+      1 つのイーサネットのサービスで、2 つ以上の顧客のポートを結び付けたものを指す MEF の用語。IOS XE では EVC の
+      仕組みが `service instance`(EFP)の設定を提供し、service instance に付けた EVC の名前で CFM がサービスを見つける。
+  see: [efp, mef, cfm]
+
+# ── Q-in-Q ──────────────────────────────────────
+- id: q-in-q
+  term: Q-in-Q
+  def:
+    en: >-
+      Stacking a second VLAN tag outside the customer's own: the provider picks the service by the outer tag (S-VLAN)
+      and leaves the inner one (C-VLAN) untouched, so one service carries all of a customer's VLANs. The name covers
+      both the IEEE 802.1ad form (outer TPID 0x88a8) and the older form with 0x8100 outside.
+    ja: >-
+      顧客の VLAN のタグの外側に、もう 1 枚のタグを重ねること。プロバイダーは外側のタグ(S-VLAN)でサービスを選び、
+      内側(C-VLAN)には触れないので、1 つのサービスで顧客の VLAN をまとめて運べる。IEEE 802.1ad の形(外側の TPID が
+      0x88a8)にも、外側も 0x8100 の古い形にも使う呼び名。
+  see: [s-vlan, c-vlan, ieee-802-1ad, tpid]
+
+- id: ieee-802-1ad
+  term: IEEE 802.1ad
+  aka: [802.1ad]
+  def:
+    en: >-
+      The IEEE standard for provider bridges. It defines the stacked service tag: an outer S-VLAN tag with TPID 0x88a8
+      outside the customer's 802.1Q tag. On IOS XR, `encapsulation dot1ad` takes an outer tag of this kind.
+    ja: >-
+      プロバイダー ブリッジの IEEE の規格。顧客の 802.1Q のタグの外側に、TPID が 0x88a8 の S-VLAN のタグを重ねる形を
+      定める。IOS XR では `encapsulation dot1ad` でこの外側のタグを受ける。
+  see: [q-in-q, s-vlan, tpid]
+
+- id: c-vlan
+  term: C-VLAN
+  full: customer VLAN
+  def:
+    en: >-
+      In Q-in-Q, the customer's own VLAN tag, the inner one. The provider does not look at it, so the customer can add
+      VLANs without any change on the provider side.
+    ja: >-
+      Q-in-Q で、顧客自身の VLAN のタグ。内側のタグにあたる。プロバイダーはこれを見ないので、顧客はプロバイダー側を
+      変えずに VLAN を足せる。
+  see: [q-in-q, s-vlan]
+
+- id: s-vlan
+  term: S-VLAN
+  full: service VLAN
+  def:
+    en: >-
+      In Q-in-Q, the outer tag agreed between the customer and the provider; the PE picks the service by it. Under
+      IEEE 802.1ad its TPID is 0x88a8.
+    ja: >-
+      Q-in-Q で、顧客とプロバイダーが取り決めた外側のタグ。PE はこれでサービスを選ぶ。IEEE 802.1ad では、その TPID は
+      0x88a8。
+  see: [q-in-q, c-vlan, ieee-802-1ad]
+
+- id: tpid
+  term: TPID
+  full: tag protocol identifier
+  def:
+    en: >-
+      The first two bytes of a VLAN tag, which say what kind of tag it is: 0x8100 for an 802.1Q tag, 0x88a8 for an
+      802.1ad service tag.
+    ja: >-
+      VLAN のタグの先頭 2 バイトで、どの種類のタグかを示す値。802.1Q のタグは 0x8100、802.1ad のサービスのタグは 0x88a8。
+  see: [q-in-q, ieee-802-1ad]
+
+# ── E-LAN: VPLS とブリッジ ドメイン ─────────────────────
+- id: bridge-domain
+  term: {en: bridge domain, ja: ブリッジ ドメイン}
+  aka: [bridge-domain]
+  def:
+    en: >-
+      A switch inside a PE: it learns which MAC address is behind which port, sends frames for a known MAC to that
+      port only, and floods broadcasts and unknown destinations to all ports. Its ports are the customer's attachment
+      circuits and the paths to the other PEs (a VFI in VPLS, an EVI in EVPN).
+    ja: >-
+      PE の中のスイッチ。どの MAC アドレスがどのポートの先にあるかを覚え、分かっている MAC 宛てはそのポートへだけ、
+      ブロードキャストと分からない宛先は全部のポートへ送る。ポートは顧客のアタッチメント回線と、ほかの PE への道
+      (VPLS では VFI、EVPN では EVI)。
+  see: [e-lan, vfi, evi, attachment-circuit]
+
+- id: vpls
+  term: VPLS
+  full: Virtual Private LAN Service
+  def:
+    en: >-
+      A multipoint L2VPN that builds an E-LAN from bridge domains on the PEs joined by a full mesh of pseudowires. The
+      PEs learn MAC addresses from the frames themselves, and split horizon keeps the mesh free of loops (signalled with
+      LDP in RFC 4762, with BGP in RFC 4761).
+    ja: >-
+      PE のブリッジ ドメインどうしを疑似回線のフルメッシュでつないで E-LAN を作る、多地点の L2VPN。PE は MAC アドレスを
+      フレームそのものから覚え、スプリット ホライズンでメッシュのループを防ぐ(シグナリングは RFC 4762 が LDP、
+      RFC 4761 が BGP)。
+  see: [vfi, bridge-domain, l2-split-horizon, h-vpls, e-lan]
+
+- id: vfi
+  term: VFI
+  full: {en: virtual forwarding instance, ja: 仮想フォワーディング インスタンス}
+  def:
+    en: >-
+      In VPLS, a PE's set of pseudowires to the other PEs of the same VPLS, attached to a bridge domain as one member.
+      Split horizon applies among the pseudowires of one VFI.
+    ja: >-
+      VPLS で、同じ VPLS のほかの PE への、PE の疑似回線の集まり。ブリッジ ドメインの 1 つのメンバーになる。
+      同じ VFI の疑似回線どうしには、スプリット ホライズンが効く。
+  see: [vpls, bridge-domain, l2-split-horizon, vpn-id]
+
+- id: vpn-id
+  term: VPN ID
+  def:
+    en: >-
+      In IOS XE's VPLS, the number that identifies the VPLS (`vpn id` under the VFI). Every PE of the VPLS uses the same
+      value, and it becomes the VC ID of each pseudowire.
+    ja: >-
+      IOS XE の VPLS で、その VPLS を表す番号(VFI の下の `vpn id`)。VPLS のすべての PE で同じ値にし、各疑似回線の
+      VC ID にもなる。
+  see: [vfi, pw-id, vpls]
+  scope: ["b*-m11-*"]
+
+- id: l2-split-horizon
+  term: {en: split horizon, ja: スプリット ホライズン}
+  def:
+    en: >-
+      In VPLS, the rule that a PE never forwards a frame that came in on a pseudowire into another pseudowire of the
+      same VFI. It keeps the mesh free of loops, which is why the pseudowires must form a full mesh. EVPN multihoming
+      applies the same idea to an Ethernet segment with the ESI label.
+    ja: >-
+      VPLS で、疑似回線から入ったフレームを、同じ VFI の別の疑似回線へは決して送らない決まり。これでメッシュのループを
+      防ぐので、疑似回線はフルメッシュでなければならない。EVPN のマルチホームは、同じ考えを ESI ラベルでイーサネット
+      セグメントに当てはめる。
+  see: [vpls, vfi, h-vpls, esi-label]
+  scope: ["b*-m11-*"]
+
+- id: h-vpls
+  term: H-VPLS
+  full: {en: hierarchical VPLS, ja: 階層型 VPLS}
+  def:
+    en: >-
+      A VPLS in which edge devices outside the full mesh reach a hub PE over spoke pseudowires (RFC 4762). Split
+      horizon is turned off on the spoke pseudowires so that the hub can relay between them; the hub then has to
+      prevent loops.
+    ja: >-
+      フルメッシュの外にある端の機器が、スポークの疑似回線でハブの PE につながる VPLS(RFC 4762)。ハブがスポークの間を
+      中継できるようにスポークの疑似回線ではスプリット ホライズンを外すので、ループを防ぐ責任はハブが持つ。
+  see: [vpls, l2-split-horizon]
+
+- id: data-plane-learning
+  term: {en: data-plane learning, ja: データ プレーンでの学習}
+  aka: [learning in the data plane]
+  def:
+    en: >-
+      Learning where a MAC address lives from the source address of arriving frames, as a switch does. VPLS learns
+      remote MACs this way, so a frame for an unknown MAC is flooded to every PE; EVPN instead advertises MACs in BGP.
+    ja: >-
+      届いたフレームの送信元アドレスから、MAC アドレスの居場所を覚えること。スイッチと同じやり方。VPLS は遠い MAC も
+      これで覚えるので、知らない MAC 宛てのフレームは全部の PE へあふれる。EVPN は MAC を BGP で広告する。
+  see: [vpls, evpn-mac-ip-route, bum]
+
+# ── EVPN ─────────────────────────────────────────
+- id: evpn
+  term: EVPN
+  full: Ethernet VPN
+  def:
+    en: >-
+      A family of Layer 2 services built with BGP (address family `l2vpn evpn`, RFC 7432). MAC addresses, service
+      endpoints and multihoming information travel as BGP routes, with RDs, route targets and route reflectors as in an
+      L3VPN; its members include EVPN-VPWS (E-Line), E-LAN and E-Tree.
+    ja: >-
+      レイヤ 2 のサービスを BGP で作る仕組みの一族(アドレス ファミリー `l2vpn evpn`、RFC 7432)。MAC アドレス、
+      サービスの端点、マルチホームの情報を BGP の経路で運び、L3VPN と同じく RD、ルート ターゲット、ルート リフレクタを
+      使う。EVPN-VPWS(E-Line)、E-LAN、E-Tree などがある。
+  see: [evi, evpn-vpws, evpn-mac-ip-route, evpn-multihoming, vpls]
+
+- id: evpn-vpws
+  term: EVPN-VPWS
+  def:
+    en: >-
+      The point-to-point member of EVPN (RFC 8214): an E-Line whose labels are exchanged in BGP instead of targeted
+      LDP. Each end advertises a type 1 route with its AC identifier and the label to use; the data plane looks the
+      same as an LDP pseudowire.
+    ja: >-
+      EVPN のうちポイントツーポイントのもの(RFC 8214)。ラベルを targeted LDP ではなく BGP で交換する E-Line。
+      各端が、自分の AC の識別子と使うラベルを載せた種類 1 の経路を広告する。データの形は LDP の疑似回線と同じ。
+  see: [evpn, ac-identifier, evpn-ead-route, e-line]
+
+- id: evi
+  term: EVI
+  full: {en: EVPN instance, ja: EVPN インスタンス}
+  def:
+    en: >-
+      One EVPN service on the PEs, identified by a number, as a VRF is for an L3VPN. IOS XR and IOS XE can derive its RD
+      (router ID:EVI) and route target (AS number:EVI) from the number automatically.
+    ja: >-
+      EVPN の 1 つのサービスを表す番号。L3VPN の VRF にあたる。IOS XR と IOS XE は、EVI から RD(ルータ ID:EVI)と
+      ルート ターゲット(AS 番号:EVI)を自動で作れる。
+  see: [evpn, vrf, rd, route-target]
+
+- id: ac-identifier
+  term: {en: AC identifier, ja: AC の識別子}
+  def:
+    en: >-
+      In EVPN-VPWS, the number of one end of an E-Line within an EVI. Each PE sets its own end as `source` and the far
+      end as `target`, and the E-Line joins when the far end's source matches this end's target; the source travels in
+      the Ethernet tag field of the type 1 route.
+    ja: >-
+      EVPN-VPWS で、EVI の中の E-Line の一方の端の番号。各 PE は自分の端を `source`、相手の端を `target` と設定し、
+      相手の source が自分の target と一致すると E-Line がつながる。source は種類 1 の経路のイーサネット タグの欄で運ばれる。
+  see: [evpn-vpws, ethernet-tag, evpn-ead-route]
+
+- id: ethernet-tag
+  term: {en: Ethernet tag, ja: イーサネット タグ}
+  def:
+    en: >-
+      A field of EVPN routes (the Ethernet tag ID) that names a broadcast domain within an EVI. It is 0 in a
+      VLAN-based E-LAN, carries the AC identifier in EVPN-VPWS, and is all ones (4294967295) in the per-segment type 1
+      route.
+    ja: >-
+      EVPN の経路の欄(Ethernet tag ID)で、EVI の中のブロードキャスト ドメインを表す。VLAN ベースの E-LAN では 0、
+      EVPN-VPWS では AC の識別子が入り、セグメント全体の種類 1 の経路ではすべて 1(4294967295)になる。
+  see: [ac-identifier, evpn-ead-route, evi]
+  scope: ["b*-m11-*"]
+
+- id: l2-attributes-ec
+  term: {en: Layer 2 attributes extended community, ja: L2 の属性の拡張コミュニティ}
+  def:
+    en: >-
+      The extended community (type 0x06, sub-type 0x04) that an EVPN-VPWS type 1 route carries, with the Layer 2 MTU
+      and flags such as whether the control word is used (RFC 8214). IOS XR advertises an MTU of 0 by default and
+      ignores MTU mismatches.
+    ja: >-
+      EVPN-VPWS の種類 1 の経路が運ぶ拡張コミュニティ(タイプ 0x06、サブタイプ 0x04)。L2 の MTU と、コントロール ワードを
+      使うかなどのフラグを載せる(RFC 8214)。IOS XR は既定で MTU 0 を広告し、MTU の食い違いを無視する。
+  see: [evpn-vpws, extended-community, control-word]
+
+- id: evpn-ead-route
+  term: {en: Ethernet auto-discovery route, ja: イーサネットの自動検出の経路}
+  aka: [Ethernet auto-discovery, イーサネットの自動検出, type 1 route, 種類 1 の経路]
+  def:
+    en: >-
+      EVPN route type 1. In EVPN-VPWS, each end of an E-Line advertises one per EVI with its AC identifier and label.
+      For a multihomed Ethernet segment, each PE advertises one per segment and one per EVI, telling far PEs which PEs
+      reach the segment (aliasing); withdrawing the per-segment route moves all of the segment's MACs at once (mass
+      withdrawal).
+    ja: >-
+      EVPN の経路の種類 1。EVPN-VPWS では、E-Line の各端が AC の識別子とラベルを載せて EVI ごとに 1 つ広告する。
+      マルチホームのイーサネット セグメントでは、各 PE がセグメントごとと EVI ごとに広告し、どの PE からセグメントに
+      届くかを遠い PE に知らせ(エイリアシング)、セグメントごとのものを取り消すとセグメントの先の MAC が一度に
+      切り替わる(一括の取り消し)。
+  see: [evpn-vpws, ac-identifier, aliasing, mass-withdrawal]
+  scope: ["b*-m11-*"]
+
+- id: evpn-mac-ip-route
+  term: {en: MAC/IP advertisement route, ja: MAC/IP の広告の経路}
+  aka: [MAC/IP advertisement, MAC/IP の広告, type 2 route, 種類 2 の経路]
+  def:
+    en: >-
+      EVPN route type 2: it advertises one MAC address learned on a PE's attachment circuit, optionally with its IP
+      address, and the label to use for frames to it. The other PEs install the MAC from BGP before any frame from it
+      has crossed the core; with an ESI attached, the MAC is reachable through every PE of that segment.
+    ja: >-
+      EVPN の経路の種類 2。PE がアタッチメント回線で覚えた MAC アドレスを 1 つ、必要なら IP アドレスとともに、その宛先に
+      使うラベルを載せて広告する。ほかの PE は、その MAC からのフレームがコアを渡る前から BGP で MAC を入れる。ESI が
+      付いていれば、その MAC にはセグメントのどの PE からも届く。
+  see: [evpn, data-plane-learning, aliasing]
+  scope: ["b*-m11-*"]
+
+- id: evpn-imet-route
+  term: IMET
+  full: {en: inclusive multicast Ethernet tag route, ja: 包含的マルチキャストのイーサネット タグの経路}
+  aka: [inclusive multicast Ethernet tag, 包含的マルチキャストのイーサネット タグ, type 3 route, 種類 3 の経路]
+  def:
+    en: >-
+      EVPN route type 3: each PE advertises one per EVPN instance to say "send me BUM frames for this E-LAN, with this
+      label". With ingress replication, a PE copies each BUM frame once for every PE that sent one.
+    ja: >-
+      EVPN の経路の種類 3。各 PE が EVPN インスタンスごとに 1 つ広告し、「この E-LAN の BUM のフレームは、このラベルで
+      送ってほしい」と知らせる。入口での複製では、PE は BUM のフレームを、これを送ってきた PE ごとに 1 つずつコピーする。
+  see: [bum, ingress-replication, evi]
+  scope: ["b*-m11-*"]
+
+- id: evpn-es-route
+  term: {en: Ethernet segment route, ja: イーサネット セグメントの経路}
+  aka: [type 4 route, 種類 4 の経路]
+  def:
+    en: >-
+      EVPN route type 4: a PE advertises one for each Ethernet segment it is attached to. Its route target is derived
+      from the ESI, so only the PEs on the same segment import it; through it they find each other and elect the
+      designated forwarder.
+    ja: >-
+      EVPN の経路の種類 4。PE が、つながっているイーサネット セグメントごとに 1 つ広告する。ルート ターゲットが ESI から
+      作られるので、取り込むのは同じセグメントの PE だけ。これで PE どうしが互いを見つけ、指定フォワーダーを選ぶ。
+  see: [ethernet-segment, esi, designated-forwarder]
+  scope: ["b*-m11-*"]
+
+- id: bum
+  term: BUM
+  full: {en: "broadcast, unknown unicast and multicast", ja: "ブロードキャスト、宛先の分からないユニキャスト、マルチキャスト"}
+  def:
+    en: >-
+      Traffic that a bridge domain floods instead of sending to one known port: broadcasts, frames for unknown MAC
+      addresses, and multicast. In EVPN, IMET routes say where to send BUM copies, and on a multihomed segment only the
+      designated forwarder sends BUM frames to the CE.
+    ja: >-
+      ブリッジ ドメインが、分かっている 1 つのポートへではなく、あふれさせて送るトラフィック。ブロードキャスト、宛先の
+      MAC が分からないフレーム、マルチキャスト。EVPN では IMET の経路で BUM のコピーの送り先が決まり、マルチホームの
+      セグメントでは指定フォワーダーだけが BUM を CE へ送る。
+  see: [evpn-imet-route, ingress-replication, designated-forwarder]
+
+- id: ingress-replication
+  term: {en: ingress replication, ja: 入口での複製}
+  def:
+    en: >-
+      A way to deliver BUM frames without multicast in the core: the PE that receives the frame from its customer makes
+      one copy for each remote PE that sent an IMET route, and sends each copy as unicast. On IOS XE it is set with
+      `replication-type ingress`, and an EVI without a replication type stays incomplete.
+    ja: >-
+      コアにマルチキャストを使わずに BUM のフレームを届ける方法。顧客からフレームを受け取った PE が、IMET の経路を
+      送ってきた遠い PE ごとに 1 つずつコピーを作り、それぞれをユニキャストで送る。IOS XE では
+      `replication-type ingress` で設定し、複製の方式が無い EVI は Incomplete のまま。
+  see: [bum, evpn-imet-route]
+
+- id: irb
+  term: IRB
+  full: integrated routing and bridging
+  def:
+    en: >-
+      Routing and bridging on the same device: a virtual interface in a bridge domain (a BVI on IOS XR, a BDI on IOS
+      XE) routes between that bridge domain and Layer 3, so the PE can act as the gateway of an E-LAN.
+    ja: >-
+      同じ機器でルーティングとブリッジングを両方行うこと。ブリッジ ドメインの中の仮想インタフェース(IOS XR では BVI、
+      IOS XE では BDI)が、そのブリッジ ドメインと L3 の間をルーティングするので、PE が E-LAN のゲートウェイになれる。
+  see: [bridge-domain, evpn]
+
+# ── EVPN のマルチホーム ───────────────────────────────
+- id: evpn-multihoming
+  term: {en: EVPN multihoming, ja: EVPN のマルチホーム}
+  aka: [multihoming, マルチホーム]
+  def:
+    en: >-
+      Attaching one customer site to two or more PEs, built into EVPN. The PEs share an Ethernet segment, elect a
+      designated forwarder for BUM frames and use split-horizon labels, so no loop or duplicate forms; in all-active
+      mode, both links forward at the same time.
+    ja: >-
+      1 つの顧客の拠点を 2 台以上の PE に収容することを、EVPN の中に組み込んだもの。PE はイーサネット セグメントを共有し、
+      BUM のフレームの指定フォワーダーを選び、スプリット ホライズンのラベルを使うので、ループも重複も起きない。
+      all-active では両方のリンクが同時に転送する。
+  see: [ethernet-segment, designated-forwarder, all-active, single-active, esi-label]
+  scope: ["b*-m11-*"]
+
+- id: ethernet-segment
+  term: {en: Ethernet segment, ja: イーサネット セグメント}
+  def:
+    en: >-
+      In EVPN, the set of links that join one customer device or network to its PEs, named by an ESI that every PE of
+      the segment configures. Through it the PEs find each other in BGP and handle the loops and duplicates of
+      multihoming.
+    ja: >-
+      EVPN で、1 台の顧客の機器(または網)をその PE につなぐリンクの集まり。セグメントのどの PE も同じ ESI を設定して
+      名前を付ける。これで PE どうしは BGP で互いを見つけ、マルチホームのループと重複を処理する。
+  see: [esi, evpn-multihoming, evpn-es-route]
+  scope: ["b*-m11-*"]
+
+- id: esi
+  term: ESI
+  full: {en: Ethernet segment identifier, ja: イーサネット セグメント識別子}
+  aka: [イーサネット セグメントの識別子]
+  def:
+    en: >-
+      The 10-octet identifier of an Ethernet segment: one octet of type, then nine of value (type 0 is set by the
+      operator, type 3 is built from a MAC address). All PEs on the segment must use the same ESI; an ESI of all zeros
+      means a single-homed site.
+    ja: >-
+      イーサネット セグメントの 10 オクテットの識別子。1 オクテットのタイプの後に 9 オクテットの値が続く(タイプ 0 は
+      運用者が決め、タイプ 3 は MAC アドレスから作る)。セグメントのすべての PE が同じ ESI を使い、すべて 0 の ESI は
+      1 台の PE だけに収容した拠点を表す。
+  see: [ethernet-segment, evpn-es-route, esi-label]
+
+- id: all-active
+  term: all-active
+  def:
+    en: >-
+      The EVPN multihoming mode in which every PE of the Ethernet segment forwards at the same time; the CE treats its
+      links to the PEs as one bundle. Far PEs share the load among the PEs by aliasing.
+    ja: >-
+      イーサネット セグメントのすべての PE が同時に転送する、EVPN のマルチホームの方式。CE は PE へのリンクを 1 つの
+      束として扱う。遠い PE はエイリアシングで PE の間に負荷を分ける。
+  see: [single-active, aliasing, lacp-system-id, evpn-multihoming]
+
+- id: single-active
+  term: single-active
+  def:
+    en: >-
+      The EVPN multihoming mode in which only the designated forwarder forwards for a given VLAN and the other PE's
+      link waits; the CE needs no bundle across the PEs. IOS XR selects it with `load-balancing-mode single-active`.
+    ja: >-
+      VLAN ごとに指定フォワーダーだけが転送し、もう一方の PE のリンクは待機する、EVPN のマルチホームの方式。CE は PE を
+      またぐ束を必要としない。IOS XR では `load-balancing-mode single-active` で選ぶ。
+  see: [all-active, designated-forwarder, evpn-multihoming]
+
+- id: multi-chassis-lag
+  term: {en: multi-chassis link aggregation, ja: マルチシャーシのリンク アグリゲーション}
+  def:
+    en: >-
+      Making two devices look like one link-aggregation partner, so that a CE can bundle its links to both (mLACP and
+      vPC are examples). It needs a protocol of its own between the two devices; EVPN all-active multihoming reaches the
+      same result inside the VPN, with BGP.
+    ja: >-
+      2 台の機器を 1 つのリンク アグリゲーションの相手に見せ、CE が両方へのリンクを束ねられるようにする仕組み
+      (mLACP や vPC など)。2 台の間に専用のプロトコルが要る。EVPN の all-active のマルチホームは、同じことを VPN の中で
+      BGP によって実現する。
+  see: [all-active, lacp-system-id]
+
+- id: lacp-system-id
+  term: {en: LACP system ID, ja: LACP のシステム ID}
+  def:
+    en: >-
+      The identifier (a priority and a MAC address) by which an LACP partner names itself; links are bundled only if
+      their far ends report the same system ID. Two PEs that multihome a CE all-active must report the same one
+      (`lacp device-id` on IOS XE, `lacp system mac` on IOS XR).
+    ja: >-
+      LACP の相手が自分を名乗る識別子(優先度と MAC アドレス)。相手の端が同じシステム ID を名乗るリンクだけが束ねられる。
+      CE を all-active でマルチホームする 2 台の PE は、同じ ID を名乗る必要がある(IOS XE では `lacp device-id`、
+      IOS XR では `lacp system mac`)。
+  see: [all-active, multi-chassis-lag]
+
+- id: designated-forwarder
+  term: {en: designated forwarder, ja: 指定フォワーダー}
+  aka: [DF, DF election, DF の選出]
+  def:
+    en: >-
+      In EVPN multihoming, the one PE of an Ethernet segment that sends BUM frames from the core to the CE, elected per
+      EVI (or per VLAN) so that the CE gets no duplicates. By the default rule of RFC 7432, the PEs are ordered by
+      address and the VLAN modulo the number of PEs picks the DF; known unicast may be delivered by any PE.
+    ja: >-
+      EVPN のマルチホームで、コアからの BUM のフレームを CE へ送る、イーサネット セグメントの中のただ 1 台の PE。CE に
+      重複が届かないように、EVI(または VLAN)ごとに選ぶ。RFC 7432 の既定の決め方では、PE をアドレスの順に並べ、VLAN を
+      PE の台数で割った余りで DF が決まる(分かっているユニキャストは、どの PE が届けてもよい)。
+  see: [bum, evpn-es-route, single-active, ethernet-segment]
+  scope: ["b9-m11-*"]
+
+- id: aliasing
+  term: {en: aliasing, ja: エイリアシング}
+  def:
+    en: >-
+      In EVPN all-active multihoming, a far PE sending traffic for a MAC behind an Ethernet segment to any PE of that
+      segment, even if only one of them advertised the MAC. The segment's type 1 routes tell it which PEs reach the
+      segment.
+    ja: >-
+      EVPN の all-active のマルチホームで、イーサネット セグメントの先の MAC 宛てのトラフィックを、遠い PE がそのセグメントの
+      どの PE へも送れること。その MAC を広告したのが 1 台だけでもよい。どの PE がセグメントに届くかは、セグメントの
+      種類 1 の経路が知らせる。
+  see: [all-active, evpn-ead-route, mass-withdrawal]
+  scope: ["b*-m11-*"]
+
+- id: mass-withdrawal
+  term: {en: mass withdrawal, ja: 一括の取り消し}
+  def:
+    en: >-
+      In EVPN, when a PE loses its link to an Ethernet segment, it withdraws its per-segment type 1 route, and far PEs
+      remove that PE from every MAC behind the segment at once, without waiting for each MAC's type 2 route to be
+      withdrawn. One BGP update fails over all of the segment's MACs.
+    ja: >-
+      EVPN で、PE がイーサネット セグメントへのリンクを失うと、セグメントごとの種類 1 の経路を取り消し、遠い PE は
+      そのセグメントの先のすべての MAC から、その PE を一度に外す。MAC ごとの種類 2 の経路の取り消しを待たず、1 回の
+      BGP の更新で切り替わる。
+  see: [evpn-ead-route, aliasing, ethernet-segment]
+
+- id: esi-label
+  term: {en: ESI label, ja: ESI ラベル}
+  aka: [split-horizon label, スプリット ホライズンのラベル]
+  def:
+    en: >-
+      The split-horizon label that each PE advertises for an Ethernet segment. A PE that sends a BUM frame from the
+      segment to another PE of the same segment adds the receiver's ESI label, and the receiver does not send the frame
+      back out of that segment.
+    ja: >-
+      各 PE がイーサネット セグメントについて広告する、スプリット ホライズンのラベル。セグメントから来た BUM のフレームを
+      同じセグメントの別の PE へ送るときは受け手の ESI ラベルを付け、受け手はそのフレームをそのセグメントへ戻さない。
+  see: [esi, bum, l2-split-horizon, evpn-multihoming]
+
+# ── 付録の規格: PBB と G.8032 ──────────────────────────
+- id: pbb
+  term: PBB
+  full: {en: provider backbone bridges, ja: プロバイダー バックボーン ブリッジ}
+  aka: [IEEE 802.1ah, 802.1ah, MAC-in-MAC]
+  def:
+    en: >-
+      IEEE 802.1ah: it wraps the customer's whole frame in a frame with the provider's MAC addresses (B-MACs), so core
+      switches need not learn the customers' MACs. Services are told apart by a 24-bit I-SID, past the limit of 4094
+      VLANs.
+    ja: >-
+      IEEE 802.1ah。顧客のフレームを、プロバイダーの MAC アドレス(B-MAC)のフレームで丸ごと包む(MAC-in-MAC)ので、
+      コアのスイッチは顧客の MAC を覚えずに済む。サービスは 24 ビットの I-SID で区別するので、VLAN の 4094 の上限を
+      越えられる。
+  see: [pbb-evpn, q-in-q]
+
+- id: pbb-evpn
+  term: PBB-EVPN
+  def:
+    en: >-
+      EVPN combined with PBB (RFC 7623): the PEs advertise their backbone MAC addresses (B-MACs) in BGP and learn the
+      customers' MACs from frames, so BGP carries far fewer MAC routes than in plain EVPN.
+    ja: >-
+      EVPN と PBB を組み合わせたもの(RFC 7623)。PE は BGP でバックボーンの MAC アドレス(B-MAC)を広告し、顧客の MAC は
+      フレームから覚えるので、BGP が運ぶ MAC の経路は素の EVPN よりずっと少ない。
+  see: [pbb, evpn, data-plane-learning]
+
+- id: g-8032
+  term: G.8032
+  full: {en: Ethernet ring protection, ja: イーサネット リング保護}
+  def:
+    en: >-
+      The ITU-T standard for Ethernet ring protection switching (ERPS). On switches joined in a ring, one link, the
+      ring protection link (RPL), is blocked to prevent a loop and opened when another link fails; it aims at switching
+      within 50 ms.
+    ja: >-
+      ITU-T のイーサネット リング保護(ERPS)の規格。リング状につないだスイッチで、1 本のリンク(RPL、ring protection
+      link)を止めてループを防ぎ、ほかのリンクが切れると RPL を開けて迂回する。50 ms 以内の切り替えを目標にする。
+
+# ── イーサネット OAM(CFM と Y.1731) ──────────────────────
+- id: ethernet-oam
+  term: {en: Ethernet OAM, ja: イーサネット OAM}
+  def:
+    en: >-
+      Operations, administration and maintenance for Ethernet: tools that let the provider watch a service and find
+      faults in it, apart from the customer's traffic. For a service, the main tools are CFM (IEEE 802.1ag) and the
+      measurements of ITU-T Y.1731.
+    ja: >-
+      イーサネットの運用・管理・保守(operations, administration and maintenance)。顧客のトラフィックとは別に、
+      プロバイダーがサービスを見張り、故障を見つけるための道具。サービスについては CFM(IEEE 802.1ag)と ITU-T Y.1731 の
+      測定が中心。
+  see: [cfm, y-1731]
+
+- id: cfm
+  term: CFM
+  full: Connectivity Fault Management
+  aka: [IEEE 802.1ag, 802.1ag]
+  def:
+    en: >-
+      IEEE 802.1ag: monitoring points (MEPs) on an Ethernet service exchange continuity check messages along the same
+      path as the customer's frames, so a break is noticed whatever its cause. It also offers loopback (the Ethernet
+      ping) and linktrace (the Ethernet traceroute).
+    ja: >-
+      IEEE 802.1ag。イーサネットのサービスの上の監視点(MEP)が、顧客のフレームと同じ道で連続性チェックのメッセージを
+      交換するので、原因が何であれ切断に気づける。ループバック(イーサネットの ping)とリンクトレース(イーサネットの
+      traceroute)もある。
+  see: [mep, ccm, maintenance-domain, cfm-loopback, linktrace, ethernet-oam]
+
+- id: maintenance-domain
+  term: {en: maintenance domain, ja: メンテナンス ドメイン}
+  aka: [maintenance level, メンテナンス レベル]
+  def:
+    en: >-
+      In CFM, the part of the network that one party watches, with a level from 0 to 7 (IEEE 802.1ag suggests 5–7 for
+      customers, 3–4 for providers and 0–2 for operators). A MEP handles CFM frames of its own level, drops lower ones
+      and passes higher ones, so domains nest.
+    ja: >-
+      CFM で、1 つの立場の者が見張る網の範囲。0〜7 のレベルを持つ(IEEE 802.1ag の勧めは、顧客に 5〜7、プロバイダーに
+      3〜4、オペレーターに 0〜2)。MEP は自分のレベルの CFM のフレームを扱い、低いものは捨て、高いものは通すので、
+      ドメインは入れ子にできる。
+  see: [cfm, maintenance-association, mep]
+
+- id: maintenance-association
+  term: {en: maintenance association, ja: メンテナンス アソシエーション}
+  aka: [MA]
+  def:
+    en: >-
+      In CFM, one service to watch inside a maintenance domain, such as one E-Line; IOS XE calls it a service. Each has
+      its own MEPs, which learn each other from their CCMs.
+    ja: >-
+      CFM で、メンテナンス ドメインの中で見張る 1 つのサービス(たとえば 1 本の E-Line)。IOS XE では service と呼ぶ。
+      それぞれが自分の MEP を持ち、MEP どうしは CCM で互いを覚える。
+  see: [maintenance-domain, mep, ccm]
+
+- id: mep
+  term: MEP
+  full: {en: maintenance end point, ja: メンテナンスの端点}
+  def:
+    en: >-
+      A CFM monitoring point at one end of a service, in a given maintenance domain and association. It sends CCMs,
+      answers loopbacks and linktraces, and declares the other end lost when its CCMs stop.
+    ja: >-
+      サービスの一方の端に置く CFM の監視点で、メンテナンス ドメインとアソシエーションの中に置く。CCM を送り、
+      ループバックとリンクトレースに答え、相手の CCM が途絶えると相手の端を失ったと判断する。
+  see: [mep-id, up-mep, down-mep, ccm, maintenance-association]
+
+- id: mep-id
+  term: MEP ID
+  aka: [MPID]
+  def:
+    en: >-
+      The number of a MEP within its maintenance association (MPID on IOS XE). Loopback, linktrace and Y.1731
+      operations name the other end by it.
+    ja: >-
+      メンテナンス アソシエーションの中での MEP の番号(IOS XE では MPID)。ループバック、リンクトレース、Y.1731 の
+      操作は、これで相手の端を指す。
+  see: [mep, cfm-loopback, dmm]
+
+- id: up-mep
+  term: up MEP
+  def:
+    en: >-
+      A MEP that faces into the device: it sends its CCMs into the service (for example into the pseudowire towards the
+      far PE), not out of its port. Up MEPs on the attachment circuits watch the provider's part of an E-Line.
+    ja: >-
+      機器の内側を向いた MEP。CCM をポートの外へではなく、サービスの中へ(たとえば疑似回線の中を向こうの PE へ)送る。
+      アタッチメント回線の上の up MEP で、E-Line のプロバイダーの受け持ちの区間を見張る。
+  see: [down-mep, mep, efp]
+
+- id: down-mep
+  term: down MEP
+  def:
+    en: >-
+      A MEP that faces the wire: it sends its CCMs out of the port it sits on, towards the CE or the next device. It is
+      the opposite of an up MEP.
+    ja: >-
+      線の方を向いた MEP。CCM を、自分が置かれたポートから外へ(CE や隣の機器の方へ)送る。up MEP と逆の向き。
+  see: [up-mep, mep]
+
+- id: ccm
+  term: CCM
+  full: {en: continuity check message, ja: 連続性チェックのメッセージ}
+  def:
+    en: >-
+      The small Ethernet frame that a MEP sends at a fixed interval along the same path as the service's frames. The
+      other MEP keeps an entry for the sender and declares it lost after 3.5 intervals without one.
+    ja: >-
+      MEP が一定の間隔で、サービスのフレームと同じ道を通して送る小さなイーサネットのフレーム。相手の MEP は送り手を
+      表に持ち、間隔の 3.5 倍のあいだ届かないと、送り手を失ったと判断する。
+  see: [cc-interval, mep, cfm]
+
+- id: cc-interval
+  term: {en: CC interval, ja: CC の間隔}
+  def:
+    en: >-
+      How often a MEP sends CCMs; the other end is declared lost after 3.5 intervals. IOS XE's default is 10 seconds
+      (lost after 35 s); 1 second is common for service monitoring, and 100 ms or less is used for protection
+      switching.
+    ja: >-
+      MEP が CCM を送る間隔。相手の端は、間隔の 3.5 倍で失ったと判断される。IOS XE の既定は 10 秒(35 秒で判断)。
+      サービスの監視には 1 秒がよく使われ、100 ms 以下は保護の切り替えに使う。
+  see: [ccm, mep]
+
+- id: cfm-loopback
+  term: {en: CFM loopback, ja: CFM のループバック}
+  aka: [LBM, LBR]
+  def:
+    en: >-
+      The Ethernet ping of CFM: a MEP sends a loopback message (LBM) to another MEP's MAC address, and that MEP answers
+      with a loopback reply (LBR).
+    ja: >-
+      CFM のイーサネットの ping。MEP が相手の MEP の MAC アドレスへループバックのメッセージ(LBM)を送り、相手は
+      ループバックの応答(LBR)で答える。
+  see: [cfm, linktrace, mep-id]
+
+- id: linktrace
+  term: {en: linktrace, ja: リンクトレース}
+  def:
+    en: >-
+      The Ethernet traceroute of CFM: it lists each CFM-aware hop on the way to another MEP. Routers that only switch
+      labels inside a pseudowire do not see the frames, so they do not appear.
+    ja: >-
+      CFM のイーサネットの traceroute。相手の MEP までの、CFM を扱うホップを順に並べる。疑似回線の中でラベルを付け替える
+      だけのルータはフレームを見ないので、出てこない。
+  see: [cfm, cfm-loopback]
+
+- id: y-1731
+  term: Y.1731
+  def:
+    en: >-
+      The ITU-T recommendation for Ethernet OAM (also numbered G.8013) that adds performance measurements on CFM's
+      MEPs: frame delay, delay variation and frame loss. On IOS XE an IP SLA operation runs it; on IOS XR, `ethernet
+      sla` profiles do.
+    ja: >-
+      イーサネット OAM の ITU-T の勧告(G.8013 とも番号が付く)。CFM の MEP の上で、フレームの遅延、遅延の揺らぎ、
+      フレームの損失を測る。IOS XE では IP SLA の操作で、IOS XR では `ethernet sla` のプロファイルで動かす。
+  see: [dmm, cfm, ethernet-oam]
+
+- id: dmm
+  term: DMM
+  full: {en: delay measurement message, ja: 遅延の測定のメッセージ}
+  aka: [DMR]
+  def:
+    en: >-
+      Y.1731 delay measurement: one MEP sends a DMM with a time stamp, and the other answers with a DMR (delay
+      measurement reply). The time stamps give the two-way frame delay.
+    ja: >-
+      Y.1731 の遅延の測定。一方の MEP がタイムスタンプ付きの DMM を送り、相手が DMR(遅延の測定の応答)で答える。
+      タイムスタンプから、フレームの往復の遅延が分かる。
+  see: [y-1731, mep-id]

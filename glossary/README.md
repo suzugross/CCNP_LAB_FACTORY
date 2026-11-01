@@ -1,0 +1,25 @@
+# glossary/ — 読み物の用語集の辞書(BL-260)
+
+読み物(courses/ の教材・訳文の読み物)の本文に出てくる専門用語の辞書。全教材で共通の 1 つ。
+ビルド時に本文からここの語を拾い、カーソル(スマホはタップ)で説明を出す。本ごとの用語集ページ(`glossary.html`)も
+ここから作る。原稿の Markdown には何も書き足さない。
+
+- 書式と拾う規則の正典は [topologies/glossary.py](../topologies/glossary.py) の docstring。
+- ファイルは分野ごとに分ける(`*.yml` を全部読んで 1 つに合わせる)。どのファイルに置いても働きは同じ。
+- 本だけの語(非公開の本など)は、その本のソースに `glossary.yml` を置く。
+
+## 載せる語・載せない語
+
+- 載せない: CCNA レベルの語(VLAN・トランク・サブネット・MAC アドレス・ARP・ACL・NAT・DHCP・OSPF の基本など)。
+- 載せる: CCNP の読者が本文を読みながら引きたくなる語(略語・SP の用語・OS 固有の用語・規格名)。
+- 説明は 1〜3 文。日英で同じことを書く。本文(実機で確かめた内容)と食い違うことは書かない。
+  書名・章題・出典・ラボ ID・課題番号・機器名は書かない(どの文脈から引いても通じるように)。
+- 単元をまたぐと別の意味になる表記(「種類 1」など)は `scope:` でページを絞る。本ごとに意味が違う略語は `books:`。
+
+## 道具
+
+| 目的 | コマンド |
+|---|---|
+| 辞書の検査(id の重複・表記の衝突・説明の欠け・関連語の宛先) | `python3 topologies/gen_reading.py glossary` |
+| 本文に出る語の数と、辞書に無い略語の候補 | `python3 topologies/gen_reading.py glossary --src courses/xr --unknown` |
+| 反映 | いつもどおり `scripts/course.sh <名前> build`(読み物は `scripts/read.sh build`) |

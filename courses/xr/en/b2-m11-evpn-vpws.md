@@ -21,8 +21,8 @@ EVPN advertises what a pseudowire needs as BGP routes, in the address family `l2
 over as they are: RDs and route targets, route reflectors, policies. A PE needs sessions with the route reflectors only,
 not one per pair of PEs.
 
-The EVPN family also has E-LAN, E-Tree and multihoming (appendix). EVPN-VPWS is its simplest member, the E-Line. Of the
-family, this lab's XR handles EVPN-VPWS.
+The EVPN family also has E-LAN and multihoming (both in the supplement) and E-Tree (appendix). EVPN-VPWS is its simplest
+member, the E-Line. Of the family, this lab's XR handles EVPN-VPWS.
 
 ## 2. How it works
 
@@ -67,9 +67,9 @@ Follow a frame that CEB1 sends on VLAN 400. The label values were measured in on
 nodes:
   CEB1: [0, 1]
   XR01: [1.5, 1]
-  RT01: [3, 1]
-  XR03: [4.5, 1]
-  CEB3: [6, 1]
+  RT01: [3.2, 1]
+  XR03: [4.7, 1]
+  CEB3: [6.2, 1]
 links:
   - [CEB1, XR01, "tag 400 | IP"]
   - [XR01, RT01, "16003 | 24004 | frame"]

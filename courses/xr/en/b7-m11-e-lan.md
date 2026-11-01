@@ -137,12 +137,12 @@ nodes:
   CE1: [0, 1]
   XE1: [1.6, 1]
   XE2: [3.2, 1]
-  XE3: [4.8, 1]
-  CE3: [6.4, 1]
+  XE3: [5.2, 1]
+  CE3: [6.8, 1]
 links:
   - [CE1, XE1, "ARP"]
   - [XE1, XE2, "PW 210"]
-  - [XE2, XE3, "PW 210 — not sent (split horizon)"]
+  - [XE2, XE3, "PW 210\nnot sent (split horizon)"]
   - [XE3, CE3, ""]
 :::
 
@@ -272,9 +272,9 @@ its own EVI's RD.
 nodes:
   CE1: [0, 1]
   XE1: [1.7, 1]
-  P1: [3.4, 1]
-  XE3: [5.1, 1]
-  CE3: [6.8, 1]
+  P1: [4.1, 1]
+  XE3: [5.8, 1]
+  CE3: [7.5, 1]
 links:
   - [CE1, XE1, "tag 200 | IP"]
   - [XE1, P1, "LDP label | EVPN label | frame"]

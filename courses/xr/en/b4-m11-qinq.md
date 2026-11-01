@@ -127,8 +127,8 @@ single tag did not get through, and inner 10 did.
 
 ## Practice
 
-In lab **XRT-11**, work through Task M11-5. Then read the appendix for E-LAN, multihoming and the other services this
-lab's XR cannot run.
+In lab **XRT-11**, work through Task M11-5. Then read on: the supplement takes up E-LAN, multihoming and Ethernet OAM,
+which this lab's XR cannot run, in lab XRT-12, and the appendix covers E-Tree, G.8032 and 802.1ah.
 
 <p class="tolab"><a href="/_learn?id=XRT-11">Open lab XRT-11 in the workspace</a> — <a href="b5-m11-practice-3.html">Tasks</a></p>
 

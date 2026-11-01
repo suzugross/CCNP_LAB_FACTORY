@@ -20,17 +20,17 @@
 
 :::topo
 nodes:
-  CEA1: {at: [0, 1.1], label: "CEA1 (A, site 1)"}
-  CEB1: {at: [0, 2.3], label: "CEB1 (B, site 1)"}
+  CEA1: {at: [-0.1, 1.1], label: "CEA1 (A, site 1)"}
+  CEB1: {at: [-0.1, 2.3], label: "CEB1 (B, site 1)"}
   XR01: {at: [1.6, 1.7], label: "XR01 (PE)"}
   RT01: {at: [3.2, 1.0], label: "RT01 (P)"}
   RT03: {at: [3.2, 2.4], label: "RT03 (P)"}
   XR02: {at: [3.2, 3.5], label: "XR02 (RR, PCE)"}
   RT02: {at: [4.8, 1.7], label: "RT02 (PE)"}
   XR03: {at: [4.8, 0.2], label: "XR03 (PE, new)"}
-  CEA2: {at: [6.4, 1.3], label: "CEA2 (A, site 2)"}
-  CEB2: {at: [6.4, 2.2], label: "CEB2 (B, site 2)"}
-  CEB3: {at: [6.4, 0.2], label: "CEB3 (B, site 3)"}
+  CEA2: {at: [6.5, 1.3], label: "CEA2 (A, site 2)"}
+  CEB2: {at: [6.5, 2.2], label: "CEB2 (B, site 2)"}
+  CEB3: {at: [6.5, 0.2], label: "CEB3 (B, site 3)"}
 links:
   - [CEA1, XR01, "L3VPN + VLAN 100"]
   - [CEB1, XR01, "L3VPN + VLANs"]

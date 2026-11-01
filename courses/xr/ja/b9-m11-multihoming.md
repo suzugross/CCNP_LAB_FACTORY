@@ -47,7 +47,7 @@ PE の助けが無ければ、プロバイダーの網を通るループは本�
 
 ### 1.3 この技術の答え: イーサネット セグメント
 
-EVPN は、マルチホームを VPN そのものに組み込みます。1 台のお客さまの機器を複数の PE につなぐリンクの集まりが
+EVPN は、マルチホームを VPN そのものに組み込みます。1 台の顧客の機器を複数の PE につなぐリンクの集まりが
 **イーサネット セグメント**(ES)で、両方の PE が設定する識別子(ESI)で名前を付けます。ESI があると、PE は BGP で互いを
 知り、EVPN の決まり(2 章)がループと重複したフレームを取り除きます。こうして 2 本のリンクが同時に転送でき(**all-active**)、
 SW1 には 1 つの束に見えます。
@@ -214,7 +214,7 @@ XE2 の Port-channel は down のままでした。両方の PE に入れると�
 | ESI の値を表示どおりに書く(`0000.0000.0000.0000.0401`) | 受け付けない。`identifier type 0` が取るのは値の 9 オクテットを点で区切ったもの |
 
 Catalyst 8000V にあるのは `redundancy all-active` だけです。**single-active**(IOS XR やほかのプラットフォームにある)では、
-VLAN ごとに DF だけが転送し、もう一方の PE のリンクは待機します。そのときお客さまの機器は、PE をまたぐ束を必要としません。
+VLAN ごとに DF だけが転送し、もう一方の PE のリンクは待機します。そのとき顧客の機器は、PE をまたぐ束を必要としません。
 
 :::try
 セグメントのリンクを 1 本落とします。課題 M11-8 の後に行ってください。
@@ -232,7 +232,7 @@ VLAN ごとに DF だけが転送し、もう一方の PE のリンクは待機�
 ### 3.5 IOS XR では
 
 IOS XR では、セグメントを `evpn` → `interface Bundle-Ether<n>` → `ethernet-segment` → `identifier type 0 <値>` の下に
-書き、all-active が既定です。`load-balancing-mode single-active` で single-active になります。お客さまの機器にリンクを
+書き、all-active が既定です。`load-balancing-mode single-active` で single-active になります。顧客の機器にリンクを
 束ねさせるには、両方の PE の束が同じ LACP のシステム ID を持つことも必要です(束の下の `lacp system mac <MAC>`)。束の
 サブインタフェースが、アタッチメント回線としてブリッジ ドメインに入ります。
 

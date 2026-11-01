@@ -1,0 +1,179 @@
+# glossary/sp-basics.yml — SP と MPLS の基本の語(単元をまたいで使う。説明は一般的に書く)
+- id: pe
+  term: PE
+  full: {en: provider edge, ja: プロバイダー エッジ}
+  def:
+    en: >-
+      The provider's router that faces the customer's CE and holds the customer's services (VRFs, attachment
+      circuits). The core routers between PEs (P routers) only switch labels and know nothing about the services.
+    ja: >-
+      顧客の CE に面し、顧客のサービス(VRF やアタッチメント回線)を持つプロバイダーのルータ。PE の間のコアのルータ
+      (P ルータ)はラベルを付け替えるだけで、サービスのことは何も知らない。
+  see: [ce, vrf, attachment-circuit]
+
+- id: ce
+  term: CE
+  full: {en: customer edge, ja: カスタマー エッジ}
+  def:
+    en: >-
+      The customer's device (router or switch) attached to a PE. It needs no knowledge of the provider's MPLS core.
+    ja: >-
+      PE につながる顧客の機器(ルータかスイッチ)。プロバイダーの MPLS のコアについて何も知らなくてよい。
+  see: [pe]
+
+- id: ldp
+  term: LDP
+  full: Label Distribution Protocol
+  def:
+    en: >-
+      A protocol that hands out MPLS labels between routers (RFC 5036). Between neighbours it provides the transport
+      labels of an LDP core; over a targeted session it signals pseudowires.
+    ja: >-
+      ルータの間で MPLS のラベルを配るプロトコル(RFC 5036)。隣接どうしでは LDP のコアのトランスポートのラベルを配り、
+      targeted のセッションでは疑似回線をシグナリングする。
+  see: [targeted-ldp, transport-label, pseudowire]
+
+- id: targeted-ldp
+  term: targeted LDP
+  def:
+    en: >-
+      An LDP session between routers that are not directly connected: the hellos go as unicast to the other's address
+      (usually its loopback) instead of being multicast on a link. PEs use it to exchange pseudowire labels.
+    ja: >-
+      直接つながっていないルータどうしの LDP のセッション。hello をリンクにマルチキャストするのではなく、相手のアドレス
+      (ふつうはループバック)へユニキャストで送る。PE どうしが疑似回線のラベルを交換するのに使う。
+  see: [ldp, pw-label, fec-128]
+
+- id: transport-label
+  term: {en: transport label, ja: トランスポートのラベル}
+  def:
+    en: >-
+      The outer label that carries a packet across the core to the far PE, from LDP or segment routing. The core
+      routers look only at this label, and the router before the far PE usually removes it (penultimate hop popping).
+    ja: >-
+      パケットをコアの向こうの PE まで運ぶ、外側のラベル。LDP かセグメント ルーティングから来る。コアのルータは
+      このラベルだけを見て、向こうの PE の 1 つ手前のルータがふつうこれを外す(penultimate hop popping)。
+  see: [vpn-label, pw-label, prefix-sid, ldp]
+
+- id: vpn-label
+  term: {en: VPN label, ja: VPN のラベル}
+  def:
+    en: >-
+      The inner label that tells the far PE which VPN (which VRF, or which route in it) a packet belongs to. The
+      receiving PE chooses it and advertises it in BGP with the VPN route.
+    ja: >-
+      パケットがどの VPN(どの VRF、またはその中のどのルート)のものかを、向こうの PE に示す内側のラベル。
+      受け取る側の PE が決め、VPN のルートとともに BGP で広告する。
+  see: [transport-label, l3vpn, vpnv4]
+
+- id: rd
+  term: RD
+  full: {en: route distinguisher, ja: ルート識別子}
+  def:
+    en: >-
+      An 8-byte value (written like `65000:1` or `10.255.0.1:400`) put in front of a VPN prefix so that the same
+      prefix from different VPNs or PEs stays distinct in BGP. It does not decide which VRFs import the route; route
+      targets do.
+    ja: >-
+      VPN のプレフィックスの前に付ける 8 バイトの値(`65000:1` や `10.255.0.1:400` のように書く)。別の VPN や PE からの
+      同じプレフィックスを、BGP の中で区別する。どの VRF がルートを取り込むかは決めない。それを決めるのはルート ターゲット。
+  see: [route-target, vrf, vpnv4]
+
+- id: route-target
+  term: {en: route target, ja: ルート ターゲット}
+  aka: [RT]
+  def:
+    en: >-
+      A BGP extended community that tags a VPN route when it is exported; a VRF (or an EVPN instance) imports the
+      routes that carry a route target it lists. It decides which sites receive which routes.
+    ja: >-
+      VPN のルートをエクスポートするときに付ける BGP の拡張コミュニティ。VRF(や EVPN のインスタンス)は、自分が挙げた
+      ルート ターゲットの付いたルートを取り込む。どの拠点がどのルートを受け取るかを決める。
+  see: [rd, extended-community, vrf, evi]
+
+- id: route-reflector
+  term: {en: route reflector, ja: ルート リフレクタ}
+  def:
+    en: >-
+      A BGP speaker that passes iBGP routes between its clients, so each PE needs a session with the reflector only,
+      not a full mesh with every other PE. It reflects VPNv4 and EVPN routes alike and need not be in the forwarding
+      path.
+    ja: >-
+      iBGP のルートをクライアントの間で受け渡す BGP のルータ。各 PE はほかの全部の PE とのフルメッシュではなく、
+      リフレクタとのセッションだけを持てばよい。VPNv4 も EVPN も同じように反映し、転送の経路上にいる必要はない。
+  see: [pe, vpnv4, evpn]
+
+- id: vrf
+  term: VRF
+  full: VPN routing and forwarding
+  def:
+    en: >-
+      A separate routing and forwarding table inside one router; an interface in a VRF uses only that VRF's routes
+      (a management VRF is a common example). In an L3VPN, each customer has its own VRF on the PE, and its routes
+      are exchanged with the other PEs as VPNv4 routes.
+    ja: >-
+      1 台のルータの中に分けて持つ、別のルーティングと転送の表。VRF に入れたインタフェースは、その VRF の経路だけを使う
+      (管理用の VRF がよくある例)。L3VPN では PE の上に顧客ごとの VRF を持ち、その経路をほかの PE と VPNv4 の
+      ルートとして交換する。
+  see: [l3vpn, rd, route-target]
+
+- id: l3vpn
+  term: L3VPN
+  full: {en: Layer 3 VPN, ja: レイヤ 3 VPN}
+  def:
+    en: >-
+      A VPN in which the provider routes the customer's IP packets: the PE exchanges routes with the CE, keeps them in a
+      VRF and carries them across the MPLS core in BGP (RFC 4364). In an L2VPN, by contrast, the provider carries
+      frames and stays out of the customer's routing.
+    ja: >-
+      プロバイダーが顧客の IP パケットをルーティングする VPN。PE は CE とルートを交換して VRF に入れ、BGP で MPLS の
+      コアの向こうへ運ぶ(RFC 4364)。これに対し L2VPN では、プロバイダーはフレームを運び、顧客のルーティングに加わらない。
+  see: [vrf, vpnv4, l2vpn]
+
+- id: vpnv4
+  term: VPNv4
+  def:
+    en: >-
+      The BGP address family that carries IPv4 L3VPN routes. Each route is an RD plus an IPv4 prefix, and it travels
+      with its route targets and VPN label.
+    ja: >-
+      IPv4 の L3VPN のルートを運ぶ BGP のアドレス ファミリー。各ルートは RD と IPv4 のプレフィックスを合わせたもので、
+      ルート ターゲットと VPN のラベルを伴って運ばれる。
+  see: [l3vpn, rd, vpn-label]
+
+- id: extended-community
+  term: {en: extended community, ja: 拡張コミュニティ}
+  def:
+    en: >-
+      A BGP path attribute value of 8 bytes that starts with a type field (RFC 4360). Route targets travel as extended
+      communities, and EVPN uses others for its own attributes.
+    ja: >-
+      先頭に種類の欄を持つ、8 バイトの BGP のパス属性の値(RFC 4360)。ルート ターゲットは拡張コミュニティとして運ばれ、
+      EVPN も自分の属性をほかの拡張コミュニティで運ぶ。
+  see: [route-target, l2-attributes-ec]
+
+- id: segment-routing
+  term: {en: segment routing, ja: セグメント ルーティング}
+  aka: [SR]
+  def:
+    en: >-
+      A way to build MPLS paths without LDP or RSVP: the IGP itself advertises the labels (segment IDs), and a packet
+      follows the list of segments its head-end puts on it. In a plain core, the prefix SID of the far PE serves as the
+      transport label.
+    ja: >-
+      LDP や RSVP を使わずに MPLS の道を作る方法。IGP そのものがラベル(セグメント ID)を広告し、パケットは入口の
+      ルータが付けたセグメントの並びに従って進む。素のコアでは、向こうの PE のプレフィックス SID がトランスポートの
+      ラベルになる。
+  see: [prefix-sid, transport-label]
+
+- id: prefix-sid
+  term: {en: prefix SID, ja: プレフィックス SID}
+  aka: [prefix-SID]
+  def:
+    en: >-
+      A segment routing segment that stands for a prefix, usually a router's loopback. Every router forwards it along
+      the IGP's shortest path to that prefix, so it works as the transport label to that router.
+    ja: >-
+      プレフィックス(ふつうはルータのループバック)を表す、セグメント ルーティングのセグメント。どのルータもそれを
+      IGP の最短の道で運ぶので、そのルータへのトランスポートのラベルとして働く。
+  see: [segment-routing, transport-label]

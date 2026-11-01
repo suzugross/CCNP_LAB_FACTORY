@@ -69,7 +69,8 @@ Inside a domain, a **maintenance association** (MA; IOS XE calls it a *service*)
 A MEP has a direction. A **down MEP** faces the wire: it sends its CCMs out of the port, towards the CE. An **up MEP**
 faces into the device: it sends its CCMs into the service, here into the pseudowire towards the other PE. To watch the
 provider's part of the E-Line (from XE1's attachment circuit to XE3's), the MEPs are up MEPs on the attachment circuits.
-On IOS XE, a MEP on an EFP is an up MEP; the outputs show it as `Up` under `Dir`.
+In this lab, where the EFP is cross-connected to an LDP pseudowire, the MEP on the EFP is an up MEP; the outputs show it
+as `Up` under `Dir`. An EVPN E-Line is different (3.3).
 
 ### 2.3 Continuity check: CCMs and the lifetime
 

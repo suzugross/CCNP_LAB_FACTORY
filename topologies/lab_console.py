@@ -1003,6 +1003,22 @@ iframe{ border:0; width:100%; height:100%; background:var(--paper); }
 #topo{ overflow:auto; padding:14px; box-sizing:border-box; display:flex; flex-direction:column; gap:8px; }
 #topo svg{ width:100%; height:auto; margin:0 auto; display:block; flex:none; }   /* 下に盤面の節が付いても縮めない */
 #topo .hint{ color:var(--mute); font-size:12px; margin:0; }
+#topo svg{ cursor:zoom-in; }
+/* 結線図の拡大表示(2026-11-01): 図の機器以外の所をクリックすると、ウィンドウいっぱいに出す。
+   図の枠(.view)には zoom を掛けない(座標を getScreenCTM で読むため)。上の帯だけ画面の倍率に合わせる */
+#topobig{ position:fixed; inset:0; z-index:60; background:rgba(20,24,30,.55); display:flex; padding:14px; box-sizing:border-box; }
+#topobig .box{ flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; background:var(--paper);
+               border-radius:6px; box-shadow:0 10px 36px rgba(0,0,0,.35); overflow:hidden; }
+#topobig .bar{ flex:none; display:flex; align-items:center; gap:8px; padding:6px 10px; background:#dfe2e7;
+               border-bottom:1px solid var(--line); font-size:13px; zoom:var(--z); }
+#topobig .bar b{ color:var(--ink); } #topobig .bar .tip{ color:var(--mute); font-size:12px; }
+#topobig .bar .sp{ flex:1; }
+#topobig .bar button{ font:inherit; font-size:12px; min-width:2.2em; border:1px solid var(--line); border-radius:4px;
+                      background:#fff; padding:2px 8px; cursor:pointer; color:var(--ink); }
+#topobig .bar button:hover{ background:#eef0f3; }
+#topobig .view{ flex:1; min-height:0; position:relative; cursor:grab; touch-action:none; outline:none; }
+#topobig .view.drag{ cursor:grabbing; }
+#topobig .view svg{ position:absolute; inset:0; width:100%; height:100%; }
 #topo .err{ color:#8a3b12; margin:0; }
 #toponotes{ flex:none; height:0; border-top:1px solid var(--line); margin-top:6px; }
 /* 学習モードの Steps タブ(BL-246): 課題ごとの確認・段階式ヒント・模範解 */
@@ -1045,7 +1061,7 @@ iframe{ border:0; width:100%; height:100%; background:var(--paper); }
 .step button.try{ border-color:#3f8f4f; color:#2f6f3c; }
 /* 「やってみる」の小窓(2026-10-24): 課題カードのボタンで開く。モーダルにしない= 開いたままコンソールに打てる。
    見出しをつかんで動かす・最小化・閉じる。位置は端末ごとに覚える(localStorage) */
-#trypanel{ position:fixed; z-index:40; width:min(440px, calc(100vw - 24px)); max-height:min(70vh, 640px);
+#trypanel{ position:fixed; z-index:40;
            display:flex; flex-direction:column; background:#fff; border:1px solid #3f8f4f; border-radius:6px;
            box-shadow:0 8px 28px rgba(0,0,0,.25); font-size:13px; }
 #trypanel .tph{ flex:none; display:flex; align-items:center; gap:8px; padding:6px 8px 6px 12px; background:#eef8ef;
@@ -1080,7 +1096,24 @@ iframe{ border:0; width:100%; height:100%; background:var(--paper); }
 .nd.has-con:hover rect, .nd.has-con:focus-visible rect{ stroke:var(--accent); stroke-width:2.4; }
 .nd.cur rect{ stroke:var(--accent); stroke-width:3; }
 .st{ fill:#c3cad6; } .st.up{ fill:#1f9d55; }
+/* 画面の倍率(2026-11-01 ユーザ要望「ブラウザで 150% にしたくらいを既定に」)。--z は下の head のスクリプトが決める。
+   掛けるのは端末以外の部品だけ。枠(iframe)に掛けると中のページもブラウザで拡大した時と同じに描かれる。
+   端末(xterm)は zoom の下に置くとマウスの選択位置がずれるので、字の大きさに倍率を掛ける(termFont)。
+   「やってみる」の小窓は位置を px で計算しているので、箱には掛けず中身に掛け、箱の寸法を倍率で広げる */
+:root{ --z:1; }
+.tabs, #foot, #topo, #steps, #empty, #task, #reading, #trypanel > *{ zoom:var(--z); }
+#trypanel{ width:min(calc(440px * var(--z)), calc(100vw - 24px)); max-height:min(70vh, calc(640px * var(--z))); }
 </style>
+<script>
+// 画素の細かい広い画面(MacBook など)だけ大きくする。条件と曲線は読み物(gen_reading)と同じ:
+// 幅 1000px 以上かつ 2dppx 以上で、1000px で 1 倍、1200px 以上で 1.5 倍。ブラウザで 150% に拡大したままなら、
+// 拡大後の幅はおよそ 1000px なので二重には大きくならない
+function wsZoom(){
+  const hi = window.matchMedia('(min-width:1000px) and (min-resolution:2dppx), (min-width:1000px) and (-webkit-min-device-pixel-ratio:2)').matches;
+  return hi ? Math.round(Math.min(1.5, Math.max(1, (0.04 * window.innerWidth - 24) / 16)) * 100) / 100 : 1;
+}
+document.documentElement.style.setProperty('--z', String(wsZoom()));
+</script>
 </head>
 <body>
 <div id="ws">
@@ -1162,14 +1195,98 @@ async function loadTopo(){
     const p = document.createElement('p'); p.className = 'err'; p.textContent = t.error;
     $('#topo').replaceChildren(p); $('#empty').textContent = t.error;
   } else {
-    $('#topo').innerHTML = t.svg + '<p class="hint">Click a device to open its console.</p>';
+    $('#topo').innerHTML = t.svg + '<p class="hint">Click a device to open its console. Click elsewhere on the diagram to enlarge it.</p>';
     for (const n of t.nodes) if (n.console && !sessions[n.label]) addTab(n.label);
     markCurrent();
   }
   if (t.notes){ if ($('#topo').hidden) notesPending = true; else addNotes(); }
 }
 function nodeOf(e){ const g = e.target.closest('[data-node]'); return g ? g.dataset.node : null; }
-$('#topo').addEventListener('click', e => { const n = nodeOf(e); if (n) openConsole(n); });
+$('#topo').addEventListener('click', e => {
+  const n = nodeOf(e);
+  if (n) openConsole(n);
+  else if (e.target.closest('svg')) openBig();
+});
+
+// ---- 結線図の拡大表示(2026-11-01 ユーザ要望「規模が大きいと図が小さくて見づらい」) ----
+//   図を写してウィンドウいっぱいに出す。拡大・移動は viewBox を書き換える(文字も線も崩れない)。
+//   ピンチ(Mac のトラックパッド)か Ctrl+ホイールで拡大縮小、2 本指スクロールかドラッグで移動、ダブルクリックか Fit で全体、Esc で閉じる。
+//   中で機器をクリックすると、閉じてその機器のコンソールを開く
+const big = {el:null, view:null, svg:null, vb:null, home:null};
+function bigBuild(){
+  const o = el('div'); o.id = 'topobig'; o.hidden = true;
+  const box = el('div', 'box'), bar = el('div', 'bar'), view = el('div', 'view');
+  view.tabIndex = -1;
+  bar.append(el('b', null, 'Topology'),
+             el('span', 'tip', 'Pinch or Ctrl+wheel to zoom · drag to move · click a device to open its console'),
+             el('span', 'sp'));
+  for (const [t, title, f] of [['−', 'Zoom out', () => bigZoom(1 / 1.25)], ['+', 'Zoom in', () => bigZoom(1.25)],
+                               ['Fit', 'Show the whole diagram', () => bigSet(big.home.slice())], ['✕', 'Close (Esc)', bigClose]]){
+    const b = el('button', null, t); b.type = 'button'; b.title = title; b.addEventListener('click', f); bar.append(b);
+  }
+  box.append(bar, view); o.append(box);
+  o.addEventListener('click', e => { if (e.target === o) bigClose(); });           // 図の外(暗い所)で閉じる
+  o.addEventListener('keydown', e => {
+    if (e.key === 'Escape') bigClose();
+    else if (e.key === '+' || e.key === '=') bigZoom(1.25);
+    else if (e.key === '-') bigZoom(1 / 1.25);
+    else if (e.key === '0') bigSet(big.home.slice());
+    else return;
+    e.preventDefault();
+  });
+  view.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (e.ctrlKey) bigZoom(Math.exp(-Math.max(-50, Math.min(50, e.deltaY)) * 0.01), e.clientX, e.clientY);
+    else bigPan(e.deltaX, e.deltaY);
+  }, {passive: false});
+  let drag = null;                            // 4px 以上動いたらドラッグ(移動)、動かなければクリック
+  view.addEventListener('pointerdown', e => { if (e.button === 0) drag = {x: e.clientX, y: e.clientY, id: e.pointerId, moved: false}; });
+  view.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved){
+      if (Math.hypot(dx, dy) < 4) return;
+      drag.moved = true; view.setPointerCapture(drag.id); view.classList.add('drag');
+    }
+    bigPan(-dx, -dy); drag.x = e.clientX; drag.y = e.clientY;
+  });
+  const up = e => {
+    if (!drag) return;
+    const moved = drag.moved; drag = null; view.classList.remove('drag');
+    if (moved || e.type !== 'pointerup') return;
+    const n = nodeOf(e);
+    if (n){ bigClose(); openConsole(n); }
+  };
+  view.addEventListener('pointerup', up); view.addEventListener('pointercancel', up);
+  view.addEventListener('dblclick', e => { if (!nodeOf(e)) bigSet(big.home.slice()); });
+  document.body.append(o);
+  big.el = o; big.view = view;
+}
+function openBig(){
+  const src = $('#topo svg');
+  if (!src) return;
+  if (!big.el) bigBuild();
+  const svg = src.cloneNode(true);
+  svg.removeAttribute('style');               // 元の図の max-width を外す
+  for (const g of svg.querySelectorAll('[data-node]')) g.removeAttribute('tabindex');
+  big.view.replaceChildren(svg); big.svg = svg;
+  big.home = svg.getAttribute('viewBox').trim().split(/\s+/).map(Number);
+  bigSet(big.home.slice());
+  big.el.hidden = false; big.view.focus();
+}
+function bigClose(){ if (big.el) big.el.hidden = true; }
+function bigSet(vb){ big.vb = vb; big.svg.setAttribute('viewBox', vb.map(v => v.toFixed(1)).join(' ')); }
+function bigPan(dx, dy){                      // 画面の px で動かす
+  const s = big.svg.getScreenCTM().a, vb = big.vb;
+  bigSet([vb[0] + dx / s, vb[1] + dy / s, vb[2], vb[3]]);
+}
+function bigZoom(f, cx, cy){                  // f 倍に拡大。(cx, cy) の点は動かさない(省けば図の枠の中央)
+  if (cx === undefined){ const r = big.view.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2; }
+  const vb = big.vb, w = Math.min(big.home[2] * 1.5, Math.max(big.home[2] / 10, vb[2] / f)), k = w / vb[2];
+  const pt = big.svg.createSVGPoint(); pt.x = cx; pt.y = cy;
+  const p = pt.matrixTransform(big.svg.getScreenCTM().inverse());
+  bigSet([p.x - (p.x - vb[0]) * k, p.y - (p.y - vb[1]) * k, w, vb[3] * k]);
+}
 $('#topo').addEventListener('keydown', e => {
   const n = nodeOf(e); if (n && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); openConsole(n); }
 });
@@ -1191,10 +1308,20 @@ function setState(s, st){ s.dot.className = 'dot ' + st; }
 const FONT_DEFAULT = 10;
 let fontPref = FONT_DEFAULT;
 try { const v = parseInt(localStorage.getItem('ccnp-ws-font'), 10); if (v >= 7 && v <= 22) fontPref = v; } catch (_e) {}
+// 端末の字の実際の大きさ= 覚えている大きさ × 画面の倍率(端末には zoom を掛けないため)
+let zoom = wsZoom();
+const termFont = () => Math.round(fontPref * zoom);
 function fitTerm(s){
-  if (s.term.options.fontSize !== fontPref) s.term.options.fontSize = fontPref;
+  if (s.term.options.fontSize !== termFont()) s.term.options.fontSize = termFont();
   s.fit.fit();
 }
+window.addEventListener('resize', () => {
+  const z = wsZoom();
+  if (z === zoom) return;
+  zoom = z; document.documentElement.style.setProperty('--z', String(z));
+  const s = sessions[active];
+  if (s && s.term) fitTerm(s);
+});
 
 function show(label){
   active = label;
@@ -1215,7 +1342,7 @@ function openConsole(label){
     $('#terms').appendChild(s.el);
     show(label);                          // 見える状態にしてから open する(隠れた要素では寸法が取れない)
     s.term = new Terminal({
-      fontSize:fontPref, fontFamily:'Consolas,"Cascadia Mono",Menlo,"DejaVu Sans Mono",monospace',
+      fontSize:termFont(), fontFamily:'Consolas,"Cascadia Mono",Menlo,"DejaVu Sans Mono",monospace',
       cursorBlink:true, scrollback:20000,
       theme:{background:'#0c0f14', foreground:'#d8dee9', cursor:'#d8dee9', selectionBackground:'#3b5b85'}
     });

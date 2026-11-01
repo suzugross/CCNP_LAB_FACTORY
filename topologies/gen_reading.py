@@ -33,6 +33,7 @@
       - {a: SW2, b: SW5, label: "E6/0-1", t: 0.3}   # t= ラベルの位置(0=A 側, 1=B 側)
       - {a: SW1, b: SW2, la: "E2/1-2", lb: "E1/1-2"}   # 両端でポート番号が違う時は端ごとに
         # (ta/tb で位置を調整。既定 0.24 / 0.76)
+      - [XE2, XE3, "疑似回線 210\n送らない"]   # "\n"(YAML のダブルクォート内)で改行。長いラベル向け
     frames:
       - {label: "VTP ドメイン TST", nodes: [SW1, SW2, SW3]}
     :::
@@ -69,8 +70,13 @@
   <src>/img/         … 図版（任意）
   → <repo>/reading/<key>/NN-*.html ＋ index.html
 
+用語集(BL-260) — 辞書 <repo>/glossary/*.yml(＋本ごとの <src>/glossary.yml)の語を本文から拾い、カーソル(スマホはタップ)で
+  説明を出す。本文に目印は付けない。出力先に glossary.html(逆引き付きの一覧)も作り、目次とナビ帯から飛べる。束ね版は 1 枚の末尾に付ける。
+  辞書の書式と拾う規則は topologies/glossary.py の docstring が正典。`glossary: false`(book.yml)でその本だけ切る。
+
 使い方:
   python3 topologies/gen_reading.py build --src private/reading/<key>
+  python3 topologies/gen_reading.py glossary [--src <本> [--unknown]]   … 辞書の検査(本を渡すと本文に出る語・辞書に無い略語も)
   読むのはポータル(scripts/pack.sh serve → :8899 の Study Materials。book.yml の shelf: の棚に載る)
 """
 import argparse
@@ -84,6 +90,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import render_html as RH  # noqa: E402
+import glossary as GL  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_ROOT = os.path.join(REPO, "reading")
@@ -103,6 +110,9 @@ body.reading{ font-size:1.03rem; line-height:2.05; letter-spacing:.012em; }
 @media (min-width:1000px) and (min-resolution:2dppx), (min-width:1000px) and (-webkit-min-device-pixel-ratio:2){
   html{ font-size:clamp(100%, calc(4vw - 24px), 150%); }
 }
+/*  ワークスペースの Reading の枠の中では大きくしない。枠の外側(ワークスペース)が同じ条件で枠ごと拡大するので、
+    ここでも上げると二重になる(2026-11-01)。class は READ_JS が枠の中の時に付ける */
+html.framed{ font-size:100%; }
 body.reading main{ max-width:44rem; margin:0 auto; padding:1.6rem 1.2rem 7rem; }
 body.reading h1{ font-size:1.6rem; line-height:1.6; margin:1.4rem 0 1.6rem;
   padding-bottom:.55rem; border-bottom:2px solid #111; }
@@ -270,6 +280,24 @@ body.reading .tw table{ margin:0; }
   display:flex; justify-content:space-between; gap:1rem; font-size:.92rem; }
 .pager a{ text-decoration:none; }
 .toc li{ margin:.3rem 0; }
+
+/* ---- 図の拡大表示(FIG_JS)。図をクリックすると画面いっぱいに出す ---- */
+.topo svg, pre.mermaid svg, body.reading main img{ cursor:zoom-in; }
+#figbig{ position:fixed; inset:0; z-index:80; background:rgba(20,24,30,.55); display:flex; padding:.9rem;
+  box-sizing:border-box; }
+#figbig[hidden]{ display:none; }
+#figbig .fb-box{ flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; background:#fff;
+  border-radius:6px; box-shadow:0 10px 36px rgba(0,0,0,.35); overflow:hidden; }
+#figbig .fb-bar{ flex:none; display:flex; align-items:center; gap:.5rem; padding:.4rem .65rem; background:#f3f4f6;
+  border-bottom:1px solid #c9ced6; font-size:.82rem; line-height:1.4; letter-spacing:0; }
+#figbig .fb-tip{ flex:1; min-width:0; color:#5b6676; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#figbig .fb-bar button{ font:inherit; min-width:2.2em; border:1px solid #c9ced6; border-radius:4px; background:#fff;
+  padding:.1rem .5rem; cursor:pointer; color:#111; }
+#figbig .fb-bar button:hover{ background:#e9ecf0; }
+#figbig .fb-view{ flex:1; min-height:0; position:relative; margin:0; overflow:hidden; cursor:grab; touch-action:none;
+  outline:none; text-align:left; }
+#figbig .fb-view.drag{ cursor:grabbing; }
+#figbig .fb-view svg{ position:absolute; inset:0; width:100%; height:100%; max-width:none; }
 """
 
 # 目次(index.html)だけに足す。単元ごとのカードを部ごとの格子に並べる
@@ -277,6 +305,8 @@ body.reading .tw table{ margin:0; }
 #   行の左の色= ページの種類(青= 読み物・緑= 実践・灰= 付録)。
 INDEX_CSS = """
 body.reading.rindex main{ max-width:64rem; }
+body.reading .glink{ margin:.6rem 0 0; font-size:.95rem; }
+body.reading .glink span{ color:#7a8594; font-size:.86rem; }
 .cidx{ margin:2.4rem 0 0; line-height:1.5; letter-spacing:normal; }
 .cidx .ph{ display:flex; align-items:baseline; gap:.75rem; margin:2.8rem 0 1rem; padding:0 0 .4rem;
   border:0; border-bottom:1px solid #c9ced6; font-size:1.02rem; line-height:1.5; color:#2c3540; }
@@ -405,12 +435,23 @@ def render_topo(src_yaml):
             labels.append((x1 + (x2 - x1) * te, y1 + (y2 - y1) * te, le))
 
     for x, y, lab in labels:       # ラベルは線より前面
-        w = _tw(lab) * 7.4 + 10
-        parts.append(f'<rect class="tlb" x="{x-w/2:.0f}" y="{y-9:.0f}" '
-                     f'width="{w:.0f}" height="18" rx="3"/>')
-        ext.append((x - w / 2, y - 9, x + w / 2, y + 9))
-        parts.append(f'<text class="tlt" x="{x:.0f}" y="{y+4:.0f}">'
-                     f"{html.escape(str(lab))}</text>")
+        rows = str(lab).split("\n")    # "\n" で改行した長いラベルは複数行で描く
+        w = max(_tw(r) for r in rows) * 7.4 + 10
+        h = 18 * len(rows)
+        top = y - h / 2
+        parts.append(f'<rect class="tlb" x="{x-w/2:.0f}" y="{top:.0f}" '
+                     f'width="{w:.0f}" height="{h}" rx="3"/>')
+        ext.append((x - w / 2, top, x + w / 2, top + h))
+        for i, r in enumerate(rows):
+            parts.append(f'<text class="tlt" x="{x:.0f}" y="{top + 13 + 18 * i:.0f}">'
+                         f"{html.escape(r)}</text>")
+        # ラベルが機器の箱にかかると、箱が前面なので文字が切れて見える(2026-11-01 ユーザ指摘)。
+        # 描く時に気づけるよう警告する。直し方= 箱の間隔を広げるか、"\n" で改行する
+        for name, b in boxes.items():
+            if (min(x + w / 2, b["x"] + b["w"] / 2) - max(x - w / 2, b["x"] - b["w"] / 2) > 0
+                    and min(top + h, b["y"] + b["h"] / 2) - max(top, b["y"] - b["h"] / 2) > 0):
+                print(f"[topo] warning: link label {str(lab)!r} is hidden under node {name}"
+                      " (widen the gap or break the label with \\n)", file=sys.stderr)
 
     for b in boxes.values():       # ノードは最前面
         parts.append(
@@ -520,10 +561,12 @@ _TAGS = {"note": ("c-note", "訳注"), "sic": ("c-sic", "原典の誤り"),
 _LANG = "ja"
 _WORDS = {"ja": {"toc": "目次", "back": "↑ 目次へ", "note": "訳注", "sic": "原典の誤り", "orig": "原文", "try": "やってみる", "portal": "‹ ポータル",
                  "prev": "前のページ", "next": "次のページ", "reading": "読み物",
-                 "config": "設定例", "copy": "コピー", "copied": "コピーしました", "open": "(クリックで開く)"},
+                 "config": "設定例", "copy": "コピー", "copied": "コピーしました", "open": "(クリックで開く)",
+                 "glossary": "用語集"},
           "en": {"toc": "Contents", "back": "↑ Contents", "note": "Note", "sic": "Error in the source", "orig": "Original", "try": "Try it",
                  "portal": "‹ Portal", "prev": "Previous page", "next": "Next page", "reading": "Reading",
-                 "config": "Configuration", "copy": "Copy", "copied": "Copied", "open": "(click to open)"}}
+                 "config": "Configuration", "copy": "Copy", "copied": "Copied", "open": "(click to open)",
+                 "glossary": "Glossary"}}
 
 
 def set_lang(meta, lang=None):
@@ -826,6 +869,7 @@ def extract_tries(marked_html):
 READ_JS = r"""
 (function(){
   var framed = window.top !== window.self, synced = false;
+  if(framed) document.documentElement.classList.add('framed');   /* 枠の中では画面の倍率をワークスペースに任せる */
   function go(){
     var m = /^#(s\d+(?:-\d+)?)$/.exec(location.hash);
     if(!m) return;
@@ -859,6 +903,131 @@ READ_JS = r"""
 })();
 """
 
+# 図の拡大表示(2026-11-01 ユーザ要望「規模が大きいと図が小さくて見づらい」)。ページと束ねた 1 枚の両方に入れる。
+#   図(:::topo・Mermaid・本文の画像)をクリックすると写しを画面いっぱいに出す。拡大・移動は viewBox を書き換える
+#   (画像は SVG の <image> に包んで同じ扱いにする)。ピンチ・Ctrl+ホイール・+/− で拡大縮小、ドラッグ・2 本指スクロールで移動、
+#   Fit かダブルクリックで全体、Esc・✕・外側のクリックで閉じる。ワークスペースの結線図の拡大表示(lab_console)と同じ操作
+FIG_JS = r"""
+(function(){
+  var NS = 'http://www.w3.org/2000/svg';
+  var WORDS = {ja: {tip: 'ピンチか Ctrl+ホイールで拡大縮小 · ドラッグで移動', zout: '縮小', zin: '拡大', fit: '全体', close: '閉じる (Esc)'},
+               en: {tip: 'Pinch or Ctrl+wheel to zoom · drag to move', zout: 'Zoom out', zin: 'Zoom in', fit: 'Fit', close: 'Close (Esc)'}};
+  var o = null, tip, view, svg = null, vb = null, home = null, ptrs = {}, pinch = null, btns = {};
+  function words(){
+    var l = (document.body.dataset.lang || document.documentElement.lang || 'ja').slice(0, 2);
+    return WORDS[l] || WORDS.en;
+  }
+  function set(v){ vb = v; svg.setAttribute('viewBox', v.map(function(n){ return n.toFixed(1); }).join(' ')); }
+  function pan(dx, dy){                       /* 画面の px で動かす */
+    var s = svg.getScreenCTM().a;
+    set([vb[0] + dx / s, vb[1] + dy / s, vb[2], vb[3]]);
+  }
+  function zoom(f, cx, cy){                   /* f 倍に拡大。(cx, cy) の点は動かさない(省けば中央) */
+    if(cx === undefined){ var r = view.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2; }
+    var w = Math.min(home[2] * 1.5, Math.max(home[2] / 12, vb[2] / f)), k = w / vb[2];
+    var pt = svg.createSVGPoint(); pt.x = cx; pt.y = cy;
+    var p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    set([p.x - (p.x - vb[0]) * k, p.y - (p.y - vb[1]) * k, w, vb[3] * k]);
+  }
+  function close(){
+    if(!o || o.hidden) return;
+    o.hidden = true; ptrs = {}; pinch = null;
+    document.documentElement.style.overflow = '';
+  }
+  function build(){
+    o = document.createElement('div'); o.id = 'figbig'; o.hidden = true;
+    var box = document.createElement('div'), bar = document.createElement('div');
+    box.className = 'fb-box'; bar.className = 'fb-bar';
+    tip = document.createElement('span'); tip.className = 'fb-tip'; bar.appendChild(tip);
+    [['zout', '−', function(){ zoom(1 / 1.25); }], ['zin', '+', function(){ zoom(1.25); }],
+     ['fit', '', function(){ set(home.slice()); }], ['close', '✕', close]].forEach(function(d){
+      var b = document.createElement('button'); b.type = 'button'; b.dataset.label = d[1];
+      b.addEventListener('click', d[2]); bar.appendChild(b); btns[d[0]] = b;
+    });
+    view = document.createElement('div'); view.tabIndex = -1;
+    box.appendChild(bar); box.appendChild(view); o.appendChild(box);
+    o.addEventListener('click', function(e){ if(e.target === o) close(); });
+    o.addEventListener('keydown', function(e){
+      if(e.key === 'Escape') close();
+      else if(e.key === '+' || e.key === '=') zoom(1.25);
+      else if(e.key === '-') zoom(1 / 1.25);
+      else if(e.key === '0') set(home.slice());
+      else return;
+      e.preventDefault();
+    });
+    view.addEventListener('wheel', function(e){
+      e.preventDefault();
+      if(e.ctrlKey) zoom(Math.exp(-Math.max(-50, Math.min(50, e.deltaY)) * 0.01), e.clientX, e.clientY);
+      else pan(e.deltaX, e.deltaY);
+    }, {passive: false});
+    /* 指 1 本(またはマウス)= 移動、指 2 本= ピンチで拡大縮小 */
+    view.addEventListener('pointerdown', function(e){
+      if(e.pointerType === 'mouse' && e.button !== 0) return;
+      ptrs[e.pointerId] = {x: e.clientX, y: e.clientY};
+      try{ view.setPointerCapture(e.pointerId); }catch(_e){}
+      var ids = Object.keys(ptrs);
+      if(ids.length === 2){ var a = ptrs[ids[0]], b = ptrs[ids[1]]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
+    });
+    view.addEventListener('pointermove', function(e){
+      var prev = ptrs[e.pointerId];
+      if(!prev) return;
+      ptrs[e.pointerId] = {x: e.clientX, y: e.clientY};
+      var ids = Object.keys(ptrs);
+      if(ids.length >= 2){
+        var a = ptrs[ids[0]], b = ptrs[ids[1]], d = Math.hypot(a.x - b.x, a.y - b.y);
+        if(pinch) zoom(d / pinch, (a.x + b.x) / 2, (a.y + b.y) / 2);
+        pinch = d; return;
+      }
+      view.classList.add('drag');
+      pan(prev.x - e.clientX, prev.y - e.clientY);
+    });
+    function up(e){
+      delete ptrs[e.pointerId];
+      var n = Object.keys(ptrs).length;
+      if(n < 2) pinch = null;
+      if(!n) view.classList.remove('drag');
+    }
+    view.addEventListener('pointerup', up); view.addEventListener('pointercancel', up);
+    view.addEventListener('dblclick', function(){ set(home.slice()); });
+    document.body.appendChild(o);
+  }
+  function open(src){
+    var s;
+    if(src.tagName.toLowerCase() === 'img'){  /* 画像は SVG の <image> に包む */
+      var w = src.naturalWidth || src.width, h = src.naturalHeight || src.height;
+      if(!w || !h) return;
+      s = document.createElementNS(NS, 'svg'); s.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+      var im = document.createElementNS(NS, 'image');
+      im.setAttribute('href', src.currentSrc || src.src); im.setAttribute('width', w); im.setAttribute('height', h);
+      s.appendChild(im);
+    } else {
+      s = src.cloneNode(true);
+      ['style', 'width', 'height'].forEach(function(a){ s.removeAttribute(a); });
+      if(!s.getAttribute('viewBox')){ var bb = src.getBBox(); s.setAttribute('viewBox', [bb.x, bb.y, bb.width, bb.height].join(' ')); }
+    }
+    if(!o) build();
+    var t = words();
+    tip.textContent = t.tip;
+    ['zout', 'zin', 'fit', 'close'].forEach(function(k){
+      btns[k].textContent = btns[k].dataset.label || t[k]; btns[k].title = t[k];
+    });
+    view.className = 'fb-view' + (src.closest('.topo') ? ' topo' : '');   /* :::topo の線や箱の色は .topo の下で効く */
+    while(view.firstChild) view.removeChild(view.firstChild);
+    view.appendChild(s); svg = s;
+    home = s.getAttribute('viewBox').trim().split(/[\s,]+/).map(Number);
+    set(home.slice());
+    o.hidden = false; document.documentElement.style.overflow = 'hidden'; view.focus();
+  }
+  document.addEventListener('click', function(e){
+    if(e.button !== 0 || e.defaultPrevented) return;
+    var t = e.target;
+    if(!t.closest || t.closest('#figbig') || t.closest('a')) return;
+    var fig = t.closest('.topo svg') || t.closest('pre.mermaid svg') || (t.tagName === 'IMG' && t.closest('main') ? t : null);
+    if(fig) open(fig);
+  });
+})();
+"""
+
 
 # 読み物のナビ帯(BL-253・2026-10-18 ユーザ要望「ただ並べてあるだけで見づらい」)。画面の下端に固定:
 #   ‹ ポータル | ☰ いまのページ名 ▴ | ← →
@@ -889,6 +1058,8 @@ def reading_nav(meta, i):
     word = lambda k: both({l: _WORDS[l][k] for l in langs})
     p = pages[i]
     rows = [f'<a class="rn-toc" href="index.html">{word("toc")}</a>']
+    if meta.get("_gl"):            # 用語集(BL-260)は目次の隣
+        rows.append(f'<a class="rn-toc" href="glossary.html">{word("glossary")}</a>')
     # 単元(章)ごとにまとめ、まとまりの間に線を引く。いまのページがある単元は薄く色を付ける
     groups = []
     for j, pg in enumerate(pages):
@@ -920,14 +1091,20 @@ def build_page(src, meta, i, out_dir, mermaid_mode):
         kw = {"lang": langs[0], "alt_lang": langs[1], "alt_md": alt_text}
     set_lang(meta)
     # ナビ帯は読み物専用の作り(BL-253)。問題ページの横並びの帯(render の nav)は使わない
-    out = RH.render(text, title=p["title"], extra_css=READING_CSS,
+    out = RH.render(text, title=p["title"], extra_css=READING_CSS + (GL.GLOSS_CSS if meta.get("_gl") else ""),
                     body_class="reading", allow_html=True,
                     mermaid_mode=("cdn" if mermaid_mode == "local" else mermaid_mode), **kw)
     if mermaid_mode == "local":
         out = out.replace(RH.MERMAID_CDN, "mermaid.min.js")
     out, p["_sections"] = mark_sections(out)
     p["_tries"] = extract_tries(out)
-    out = out.replace("</body>", f"{reading_nav(meta, i)}\n<script>{READ_JS}</script>\n<script>{CFG_JS}</script>\n</body>", 1)
+    gl_tail = ""
+    if meta.get("_gl"):            # 用語集(BL-260)。「やってみる」の取り出しの後(ワークスペースの小窓に包みを持ち込まない)
+        out, p["_gl_hits"] = GL.annotate(out, meta["_gl"].matcher(meta["key"], p["file"]), langs[0])
+        if p["_gl_hits"]:
+            gl_tail = (GL.popup_data(meta["_gl"], {h[0] for h in p["_gl_hits"]}, "glossary.html")
+                       + f"\n<script>{GL.GLOSS_JS}</script>\n")
+    out = out.replace("</body>", f"{reading_nav(meta, i)}\n<script>{READ_JS}</script>\n<script>{CFG_JS}</script>\n<script>{FIG_JS}</script>\n{gl_tail}</body>", 1)
     out = _finish_lang(lazy_images(wrap_tables(termify(out))))
     dst = os.path.join(out_dir, p["html"])
     with open(dst, "w", encoding="utf-8") as fh:
@@ -1018,9 +1195,11 @@ def build_index(meta, out_dir):
                 f'<li><a href="{p["html"]}">{html.escape(p["_titles"][lang])}</a></li>'
                 for p in meta["pages"]) + "\n</ul>"
         sub = _pick(meta.get("subtitle"), lang)
+        n = meta.get("_gl_count")
+        glink = (f'<p class="glink"><a href="glossary.html">{_w("glossary")}</a> <span>({n})</span></p>\n\n' if n else "")
         return (f'<p class="portal"><a href="/">{_w("portal")}</a></p>\n\n# {_pick(meta["title"], lang)}\n\n'
                 + (f'<p class="lead">{html.escape(sub)}</p>\n\n' if sub else "")
-                + toc + "\n")
+                + glink + toc + "\n")
 
     kw = {"lang": langs[0], "alt_lang": langs[1], "alt_md": body(langs[1])} if len(langs) == 2 else {}
     first = body(langs[0])
@@ -1033,10 +1212,65 @@ def build_index(meta, out_dir):
     return dst
 
 
+def _sec_label(page, mark, lang):
+    """逆引きに出す節の名前= (短い名前, 見出しの全文)。見出しが番号で始まれば番号だけ(「2.1 EVI と…」→ 2.1)、無ければ詰めた見出し。"""
+    t = (page.get("_sections", {}).get(mark) or {})
+    full = t.get(lang) or t.get("") or next(iter(t.values()), mark)
+    m = re.match(r"(\d+(?:\.\d+)*)\.?\s", full)
+    return (m.group(1) if m else GL._short(full, 14)), full
+
+
+def _gl_page_ref(meta, lang, bundle_pages=None):
+    """用語集の逆引き: ページへのリンク＋節へのリンク(4 つまで)。束ね版は 1 枚の中のページの錨(#pg<n>)へ。"""
+    def ref(i, marks, lang_=lang):
+        if bundle_pages is not None:
+            return f'<a href="#pg{i}">{html.escape(bundle_pages[i]["title"])}</a>'
+        p = meta["pages"][i]
+        secs = [m for m in marks if m]
+        more = f" +{len(secs) - 4}" if len(secs) > 4 else ""
+        labels = [(m, *_sec_label(p, m, lang_)) for m in secs[:4]]
+        inner = " ".join(f'<a href="{p["html"]}#{m}" title="{html.escape(full)}">{html.escape(short)}</a>'
+                         for m, short, full in labels)
+        return (f'<a href="{p["html"]}">{html.escape(p["_titles"][lang_])}</a>'
+                + (f' <span class="gsec">{inner}{more}</span>' if inner else ""))
+    return ref
+
+
+def _load_glossary(src, meta):
+    """book.yml の glossary: false で切る。この本に効く語が 1 つも無ければ None。"""
+    if meta.get("glossary") is False:
+        return None
+    gl = GL.load(src)
+    for p in gl.problems:
+        print(f"[glossary] 警告: {p}", file=sys.stderr)
+    return gl if gl.for_book(meta["key"]) else None
+
+
+def build_glossary(meta, out_dir):
+    """用語集ページ(glossary.html)。この本に出てくる語＋その関連語を、英語の見出し語の順に。"""
+    gl, langs = meta["_gl"], meta["_langs"]
+    refs = GL.collect([(i, p.get("_gl_hits") or []) for i, p in enumerate(meta["pages"])])
+    ids = gl.closure(refs)
+
+    def body(lang):
+        return GL.page_md(gl, ids, refs, lang, _gl_page_ref(meta, lang))
+
+    kw = {"lang": langs[0], "alt_lang": langs[1], "alt_md": body(langs[1])} if len(langs) == 2 else {}
+    set_lang(meta)
+    out = RH.render(body(langs[0]), title=f'{_w("glossary")} — {_pick(meta["title"], langs[0])}',
+                    extra_css=READING_CSS + GL.GLOSS_PAGE_CSS, body_class="reading", allow_html=True,
+                    mermaid_mode="none", **kw)
+    out = out.replace("</body>", f"<script>{GL.GLOSS_PAGE_JS}</script>\n</body>", 1)
+    with open(os.path.join(out_dir, "glossary.html"), "w", encoding="utf-8") as fh:
+        fh.write(_finish_lang(out))
+    return len(ids)
+
+
 def build(src, mermaid_mode="local"):
     src = src if os.path.isabs(src) else os.path.join(REPO, src)
     meta = load_book(src)
     set_lang(meta)
+    meta["_gl"] = _load_glossary(src, meta)
     out_dir = os.path.join(OUT_ROOT, meta["key"])
     os.makedirs(out_dir, exist_ok=True)
     if mermaid_mode == "local":
@@ -1056,6 +1290,9 @@ def build(src, mermaid_mode="local"):
         if len(langs) == 2 and odd:
             print(f"[reading] 警告: {meta['pages'][i]['html']} の 2 版で見出しの並びがそろっていない(節 {odd})", file=sys.stderr)
         print(f"  {os.path.relpath(dst, REPO)}  （訳注 {n}）")
+    if meta["_gl"]:
+        meta["_gl_count"] = build_glossary(meta, out_dir)
+        print(f"  {os.path.relpath(os.path.join(out_dir, 'glossary.html'), REPO)}  （用語 {meta['_gl_count']}）")
     build_index(meta, out_dir)
     # ポータル(配信サーバのトップ・BL-247)が教材の一覧を作るためのメタ。出力先だけを見れば足りるようにする
     # (ソースは非公開側にあることもあるので、ポータルはソースを読まない)。
@@ -1068,7 +1305,7 @@ def build(src, mermaid_mode="local"):
                    "subtitle_alt": _pick(meta.get("subtitle"), langs[-1]) if len(langs) == 2 else "",
                    "shelf": meta.get("shelf", ""), "lang": langs[0], "langs": langs,
                    "order": meta.get("order", 50), "labs": meta.get("labs") or [],
-                   "pages": len(meta["pages"]),
+                   "pages": len(meta["pages"]), "glossary": meta.get("_gl_count") or 0,
                    # 節の一覧(BL-252)= {ページの html: {s2: {en: 見出し, ja: 見出し}}}。ワークスペースの Reading リンクの表示名
                    "sections": {pg["html"]: pg.get("_sections", {}) for pg in meta["pages"]},
                    "page_titles": {pg["html"]: pg["_titles"] for pg in meta["pages"]},
@@ -1102,6 +1339,23 @@ def _chapter_of(page):
     return m.group(1).zfill(2) if m else "00"
 
 
+_PAGE_LINK = re.compile(r'<a\s([^>]*?)href="([\w.-]+\.html)(?:#[^"]*)?"([^>]*)>(.*?)</a>', re.S)
+
+
+def _bundle_links(page_html, pages, book_pages):
+    """束ね版の中のページへのリンク(`b7-….html`・`….html#s2`)を付け替える。同じ 1 枚にあるページは 1 枚の中の錨(#pg<n>)へ、
+    別の 1 枚にあるページは行き先が無いので文字だけ残す(2026-11-02。付録から追補のページへのリンクが切れていた)。"""
+    idx = {p["html"]: i for i, p in enumerate(pages)}
+
+    def rep(m):
+        page = m.group(2)
+        if page in idx:
+            return f'<a {m.group(1)}href="#pg{idx[page]}"{m.group(3)}>{m.group(4)}</a>'
+        return m.group(4) if page in book_pages else m.group(0)
+
+    return _PAGE_LINK.sub(rep, page_html)
+
+
 def _assemble(meta, pages, title, dst):
     """指定ページ群を 1 枚の自己完結 HTML に組む。"""
     chunks, offset = [], 0
@@ -1128,9 +1382,31 @@ def _assemble(meta, pages, title, dst):
 
     md = "\n\n".join(chunks)
     mode = "embed" if "```mermaid" in md else "none"
-    out = RH.render(md, title=title, extra_css=READING_CSS + BUNDLE_CSS,
+    gl = meta.get("_gl")
+    out = RH.render(md, title=title, extra_css=READING_CSS + BUNDLE_CSS + (GL.GLOSS_CSS + GL.GLOSS_PAGE_CSS if gl else ""),
                     body_class="reading", allow_html=True, mermaid_mode=mode)
-    out = out.replace("<body", '<body id="top"', 1).replace("</body>", f"<script>{CFG_JS}</script>\n</body>", 1)
+    out = _bundle_links(out, pages, {p["html"] for p in meta["pages"]})
+    gl_tail = ""
+    if gl:                         # 用語集(BL-260): 吹き出し＋1 枚の末尾の用語集の節(1 枚の中で完結)
+        cache = {}
+
+        def matcher_for(k):        # ページの錨(pg<n>)ごとに、そのページの scope で拾う
+            if k not in cache:
+                cache[k] = gl.matcher(meta["key"], pages[k]["file"] if k is not None else None)
+            return cache[k]
+
+        out, hits = GL.annotate(out, matcher_for, _LANG)
+        by_page = {}
+        for h in hits:
+            if h[2].startswith("pg"):
+                by_page.setdefault(int(h[2][2:]), []).append(h)
+        refs = GL.collect(sorted(by_page.items()))
+        ids = gl.closure(refs)
+        if ids:
+            sec = GL.bundle_section(gl, ids, refs, _LANG, _gl_page_ref(meta, _LANG, pages))
+            out = out.replace("</main>", sec + "</main>", 1)
+            gl_tail = GL.popup_data(gl, set(refs), "") + f"\n<script>{GL.GLOSS_JS}</script>\n"
+    out = out.replace("<body", '<body id="top"', 1).replace("</body>", f"<script>{CFG_JS}</script>\n<script>{FIG_JS}</script>\n{gl_tail}</body>", 1)
     out = _finish_lang(inline_images(wrap_tables(termify(out)), os.path.dirname(pages[0]["_path"])))
     os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
     with open(dst, "w", encoding="utf-8") as fh:
@@ -1159,6 +1435,7 @@ def build_bundle(src, out_path=None, split=False, stage=False):
     """
     src = src if os.path.isabs(src) else os.path.join(REPO, src)
     meta = load_book(src)
+    meta["_gl"] = _load_glossary(src, meta)
     key, titles, langs = meta["key"], (meta.get("chapters") or {}), meta["_langs"]
     two = len(langs) == 2
     made = []
@@ -1191,15 +1468,21 @@ def build_bundle(src, out_path=None, split=False, stage=False):
 
 def main():
     ap = argparse.ArgumentParser(description="読み物 Markdown → HTML")
-    ap.add_argument("cmd", choices=["build", "bundle"])
-    ap.add_argument("--src", required=True, help="読み物ソースのディレクトリ")
+    ap.add_argument("cmd", choices=["build", "bundle", "glossary"])
+    ap.add_argument("--src", help="読み物ソースのディレクトリ(glossary では任意)")
     ap.add_argument("--mermaid", default="local", choices=["local", "cdn", "embed", "none"],
                     help="local= mermaid.min.js を出力先に1本置いて共有(既定)")
     ap.add_argument("--out", help="bundle の出力先(既定 reading/<key>-offline.html)")
     ap.add_argument("--split", action="store_true", help="章ごとに 1 枚に分ける")
     ap.add_argument("--stage", action="store_true",
                     help="持ち出し用ディレクトリ reading/_offline/<key>/ へ出す(--split 前提)")
+    ap.add_argument("--unknown", action="store_true", help="glossary: 本文に出るのに辞書に無い略語を並べる")
     a = ap.parse_args()
+    if a.cmd == "glossary":
+        src = a.src and (a.src if os.path.isabs(a.src) else os.path.join(REPO, a.src))
+        sys.exit(GL.check(src, a.unknown, load_book))
+    if not a.src:
+        ap.error("--src が要る")
     if a.cmd == "bundle":
         build_bundle(a.src, a.out, a.split or a.stage, a.stage)
     else:
