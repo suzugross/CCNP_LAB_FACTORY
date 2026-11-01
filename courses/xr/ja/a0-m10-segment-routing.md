@@ -208,12 +208,16 @@ VRF info: (vrf in name/id, vrf out name/id)
 ### 2.4 リンクを指定する: 隣接 SID
 
 経由地をルータで書くと、そこから先は最短パスです。特定のリンクを通らせたいときは、**隣接 SID** を使います。「このリンク
-から出よ」という命令で、1 台のルータの 1 本のリンクに付き、そのルータだけが意味を知っています(ローカル)。IS-IS が
+から出よ」という命令で、1 台のルータの 1 本のリンクに付き、そのルータの上でだけ効きます(ローカル)。IS-IS が
 リンクごとに自動で割り当て、アドバタイズします。XR01 の RT01 へのリンクは 24011、RT03 へのリンクは 24013 です(3.2 節)。
+
+そのルータでしか効かないラベルを、なぜアドバタイズするのでしょうか。他のルータが道順に書けるようにするためです。「どのルータの、どのリンクが、どの番号か」はエリアの全ルータが知りますが、転送テーブルに入れるのは持ち主だけです。番号はルータごとに振るので、別のルータが同じ番号を自分のリンクに使っていても構いません(ラボの IOL は 22〜27 のような小さい番号を振ります)。
 
 重ねるラベルには、プレフィックス SID と隣接 SID を混ぜられます。たとえば「RT03 へ行き、RT03 の RT02 へのリンクから出る」は、
 16013 の下に、RT03 の RT02 へのリンクの隣接 SID を置きます。TI-LFA は、最短パスだけでは迂回できないときにこれを使います
 (ページ「TI-LFA」)。
+
+つまり隣接 SID が効くのは、先頭のラベルとして持ち主に届いたときだけです。上の例で 16013 を先に置くのは、パケットを RT03 まで運ぶためです。RT03 は XR01 の隣なので 16013 は PHP で外れます。BACKUP のメトリックを 10 にしたときの TI-LFA の迂回は、実際に `{ImplNull 23 16011}` を積みました(23 が RT03 の RT02 へのリンク。ページ「TI-LFA」の 2.3 節)。先頭のまま別のルータに届けば、そのルータは自分の 23 として読むことになります。
 
 ### 2.5 誰が、どのパケットに、どの道順を書くか
 
@@ -283,6 +287,46 @@ router isis CORE
 IOS XE はやり方が違います。SR は全体のモード `segment-routing mpls` で有効にし、ルータ自身のループバックのプレフィックス
 SID は、そこにある表 `connected-prefix-sid-map` → `address-family ipv4` に `10.255.0.12/32 index 12 range 1` のように
 書きます。IS-IS には `router isis` の下の `segment-routing mpls` だけが要ります。ラボの IOS ルータはそのように設定されています。
+
+ここまでの置き場を、XR01 の設定としてまとめると次の形です。右の列は、その行が何をするかです。ブロックは既定値(16000〜23999)のままなので、`segment-routing` の行は要りません。続けて、ラボの IOS XE ルータ(RT02)の SR の部分を載せます。同じ部品が、別の場所にあります。
+
+:::config fold XR01(IOS XR)— IS-IS で SR を動かす最小の形(課題 M10-1 の答えに近い形)
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ address-family ipv4 unicast
+  metric-style wide      ## SR の情報は IS-IS の拡張 TLV に載るので、ワイド メトリックが前提(ラボでは最初から入っている)
+  segment-routing mpls   ## この IS-IS で SR を使う。ブロックと SID をアドバタイズし、SR のラベルを転送テーブルに入れる
+ !
+ interface Loopback0
+  passive                ## ループバックでは隣接を作らない(アドレスはアドバタイズする)
+  address-family ipv4 unicast
+   prefix-sid index 1    ## XR01 の番号。どのルータもブロックの先頭にこれを足した 16001 を、XR01 宛てのラベルにする
+  !
+ !
+!
+:::
+
+:::config RT02(IOS XE)— ラボの据え付けの設定から、SR の部分の抜粋
+segment-routing mpls                 ## SR-MPLS を全体で有効にする。IOS XE では IGP の SR より先に要る
+ !
+ set-attributes
+  address-family ipv4
+   sr-label-preferred                ## LDP と SR の両方のラベルがあれば、SR のほうを積む(4.1 節)
+  exit-address-family
+ !
+ connected-prefix-sid-map
+  address-family ipv4
+   10.255.0.12/32 index 12 range 1   ## 自分のループバックの番号(16012)。range 1 = このプレフィックス 1 つだけ
+  exit-address-family
+!
+router isis CORE
+ net 49.0001.0100.0000.0012.00
+ is-type level-2-only
+ metric-style wide                   ## IOS XR と同じく前提
+ segment-routing mpls                ## この IS-IS で SR の情報をアドバタイズする
+!
+:::
 
 IOS XR の OSPF にも、同じ 3 つの部品があります(`router ospf` の下の `segment-routing mpls`、エリアのループバックの下の
 プレフィックス SID)。ブループリントの 3 つ目の制御プレーンは BGP です。ラベル付きユニキャストのルートにプレフィックス SID
@@ -446,6 +490,44 @@ IOS は振る舞いが違います。IOS の同期は、LDP が設定されて�
 `no mpls ip` があると、`show mpls ldp igp sync` は「LDP not configured」と表示し、メトリックは通常のままです。リンクに LDP が
 設定されたまま相手を失っている間は、IOS XR と同じくメトリックは最大になります。ラボの IOS ルータは、XR01 とのリンクに
 `no mpls ldp igp sync` を入れて準備してあり、XR01 が先に LDP を止められるようにしてあります。
+
+移行を終えた XR01 の IS-IS の全体です(課題 M10-1 と M10-2 を終えた状態)。`mpls ldp` の塊は丸ごと無くなり、インターフェイスからは `mpls ldp sync` が消えています。BFD の行は単元 M7 のものです。
+
+:::config fold XR01 — 移行を終えた IS-IS の全体(課題 M10-1・M10-2 の答えを含む)
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+  segment-routing mpls sr-prefer    ## SR を有効にし、LDP のラベルもある間は SR のほうを積む(4.1 節)
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+   prefix-sid index 1               ## XR01 宛ては 16001
+  !
+ !
+ interface GigabitEthernet0/0/0/0   ## PRIMARY(RT01 へ)
+  bfd minimum-interval 100          ## 単元 M7 の BFD。障害に気づく速さを決める(ページ「TI-LFA」の 3 節)
+  bfd multiplier 3
+  bfd fast-detect ipv4
+  point-to-point
+  address-family ipv4 unicast
+   metric 10                        ## `mpls ldp sync` はもう無い。残すと 16777214 でアドバタイズされる
+  !
+ !
+ interface GigabitEthernet0/0/0/1   ## BACKUP(RT03 へ)
+  bfd minimum-interval 100
+  bfd multiplier 3
+  bfd fast-detect ipv4
+  point-to-point
+  address-family ipv4 unicast
+   metric 100
+  !
+ !
+!
+:::
 
 :::try
 わざと同期を残します。課題 M10-2 の後に行います。

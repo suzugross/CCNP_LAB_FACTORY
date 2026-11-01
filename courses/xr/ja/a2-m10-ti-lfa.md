@@ -139,6 +139,36 @@ IOS XR では、各インターフェイスに 2 行が要ります。`fast-rero
 ラボの IOS ルータも、`router isis` の下の `fast-reroute per-prefix level-2 all` と `fast-reroute ti-lfa level-2` で、自分の
 プレフィックスを保護しています(`show isis fast-reroute ti-lfa tunnel`)。
 
+XR01 と、ラボの IOS ルータ(RT01)の設定です。IOS XR はインターフェイスごとに、IOS XE は IS-IS 全体に書きます。
+
+:::config fold XR01 — 両方のコアのリンクで TI-LFA(課題 M10-3 の答えの一部)
+router isis CORE
+ interface GigabitEthernet0/0/0/0   ## PRIMARY
+  address-family ipv4 unicast
+   fast-reroute per-prefix          ## このリンクを出口に使う宛先ごとに、迂回の道を前もって計算する
+   fast-reroute per-prefix ti-lfa   ## 迂回にラベルを重ねてよい(素の LFA が無い宛先にも迂回ができる)
+  !
+ !
+ interface GigabitEthernet0/0/0/1   ## BACKUP
+  address-family ipv4 unicast
+   fast-reroute per-prefix
+   fast-reroute per-prefix ti-lfa
+  !
+ !
+!
+:::
+
+:::config RT01(IOS XE)— ラボの据え付けの設定から抜粋
+router isis CORE
+ net 49.0001.0100.0000.0011.00
+ is-type level-2-only
+ metric-style wide
+ segment-routing mpls
+ fast-reroute per-prefix level-2 all   ## レベル 2 のすべての宛先に迂回を用意する
+ fast-reroute ti-lfa level-2           ## 迂回に TI-LFA を使う
+!
+:::
+
 ## 3. 速さを決めるのは、気づくまでの時間
 
 迂回がどれだけ速く効くかは、障害を検出する速さで決まります。CML では、リンクに障害が起きても、リンクを止めても、
@@ -195,6 +225,17 @@ IOS XR には別の機能、IS-IS のアドレス ファミリーの `microloop 
 ループの無い道で送り、他のルータの表がそろってから新しい最短パスに切り替えます。`show isis protocol` は
 `Microloop avoidance: Enabled` と `Type: Segment Routing` を表示します。IOS XR では既定で無効です。IOL ルータは
 `show isis fast-reroute summary` で `enabled for segment-routing microloop avoidance` と表示します。
+
+XR01 では、IS-IS のアドレス ファミリーに 1 行です(待つ時間を変えるなら 2 行)。
+
+:::config fold XR01 — マイクロループ回避(課題 M10-3 の答えの一部)
+router isis CORE
+ address-family ipv4 unicast
+  microloop avoidance segment-routing         ## 収束の間、影響を受ける宛先をループの無い SR の道で送る
+  microloop avoidance rib-update-delay 3000   ## (任意)新しい最短パスに移るまでの時間。既定は 5000 ms
+ !
+!
+:::
 
 ## 5. コマンド名
 

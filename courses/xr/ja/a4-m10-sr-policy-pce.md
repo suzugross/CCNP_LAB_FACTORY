@@ -62,6 +62,27 @@ Color: 100, End-point: 10.255.0.12
 要りません。RT01、RT02、RT03 は、いつもどおりプレフィックス SID で転送するだけです。ポリシーの状態はヘッドエンドに
 しかありません。
 
+このポリシーの設定です。
+
+:::config XR01 — 手で書いた道順のポリシー(PoC で測った形。課題 M10-4 は道順を書かないので、その答えではありません)
+segment-routing
+ traffic-eng
+  segment-list VIA-RT03                   ## 道順(ラベルの並び)に名前を付ける
+   index 10 mpls label 16013              ## 1 枚目: まず RT03 へ。RT03 は XR01 の隣なので、PHP で実際には積まれない
+   index 20 mpls label 16012              ## 2 枚目: 次に RT02 へ。index の小さいものほど外側に積む
+  !
+  policy CUST-A-VIA-RT03                  ## ポリシーの名前(XR01 の中だけの名前)
+   color 100 end-point ipv4 10.255.0.12   ## ポリシーを識別するもの: カラーとエンドポイント(ヘッドエンドは XR01 自身)
+   candidate-paths
+    preference 100                        ## 候補パスの優先度。有効なもののうち、最も大きいものが使われる
+     explicit segment-list VIA-RT03       ## この候補パスは明示的: 上の道順を使う
+    !
+   !
+  !
+ !
+!
+:::
+
 ### 2.2 カラーで誘導する
 
 ポリシーは、何かを誘導するまでトラフィックを運びません。誘導の仕組みが**自動ステアリング**で、BGP のルートの
@@ -92,6 +113,33 @@ RP/0/RP0/CPU0:XR01#show bgp vrf CUST-A 10.101.2.0/24
 (`next hop srte_c_100_ep_10.255.0.12 labels imposed {ImplNull 22}`)。22 は VPN のラベルで、その上のラベルはポリシーが付け
 ます。顧客 B は最短パスのままです。CEA1 からの traceroute は RT03(10.0.3.13)を、CEB1 からのものは RT01(10.0.1.11)を
 通ります(前のページの 2.2 節と 2.3 節の traceroute)。
+
+カラーを付ける部分を、設定にまとめると次の形です。
+
+:::config fold XR01 — 受け取るときに顧客 A のルートにカラー 100 を付ける(課題 M10-4 の答えの一部)
+extcommunity-set opaque COLOR-100      ## カラーの値。カラーは拡張コミュニティの一種で、ここに数を書く
+  100
+end-set
+!
+extcommunity-set rt CUST-A-RT          ## 照合に使う、顧客 A のルート ターゲット(単元 M9)
+  65000:101
+end-set
+!
+route-policy FROM-RR
+  if extcommunity rt matches-any CUST-A-RT then
+    set extcommunity color COLOR-100   ## 顧客 A のルートにだけ、カラー 100 を足す
+  endif
+  pass                                 ## 残りのルートも受け入れる。IOS XR のルート ポリシーは、通すとも変えるともしなかったルートを捨てる
+end-policy
+!
+router bgp 65000
+ neighbor 10.255.0.21                  ## ルート リフレクタ(XR02)
+  address-family vpnv4 unicast
+   route-policy FROM-RR in             ## 受け取るときに適用する
+  !
+ !
+!
+:::
 
 :::note
 Segment Routing のコンフィギュレーション ガイド(IOS XR 26.x、「Configure SR-TE Policies」)は、カラーを設定できるルート
@@ -127,6 +175,38 @@ VRF の import のポリシー(`vrf CUST-B` → `address-family ipv4 unicast` �
 `SID[1]: 16012 [Prefix-SID, 10.255.0.12]`)。PRIMARY を除いたトポロジで RT02 への最短を計算すると、2.1 節で手で書いた道順と
 同じになります。IOS XR 26.1.1 のオンデマンドのポリシーは、2 つの候補パスを持ちます。ヘッドエンドが計算する優先度 200 と、
 PCE(3 節)が設定されていればそれに任せる優先度 100 です。
+
+オンデマンドのポリシーの部品を、設定にまとめると次の形です。
+
+:::config fold XR01 — PRIMARY を避けるオンデマンドのポリシー(課題 M10-4 の答えの一部)
+router isis CORE
+ distribute link-state               ## IS-IS のトポロジを SR-TE のプロセス(と PCE)に渡す。無いとポリシーは down のまま
+!
+segment-routing
+ traffic-eng
+  affinity-map
+   name RT01-MAINT bit-position 0    ## リンクの色(アフィニティ)の名前を、ビットの位置に結び付ける
+  !
+  interface GigabitEthernet0/0/0/0   ## PRIMARY
+   affinity
+    name RT01-MAINT                  ## このリンクを塗る
+   !
+  !
+  on-demand color 100                ## 雛形: カラー 100 のルートが新しいネクスト ホップで届いたら、ポリシーを作る
+   dynamic                           ## 道はヘッドエンド(XR01)が計算する
+    metric
+     type igp                        ## 何を最小にするか: IGP のメトリック
+    !
+    affinity
+     exclude-any
+      name RT01-MAINT                ## この色の付いたリンクは使わない
+     !
+    !
+   !
+  !
+ !
+!
+:::
 
 :::try
 SR-TE からトポロジを取り上げます。課題 M10-4 の後・課題 M10-5 の前に行い、課題 M10-5 の後にもう一度行います。
@@ -176,6 +256,28 @@ Adjacency SIDs:
 
 PCE は、起動してから道を計算し始めるまでに約 40 秒かかります(`Topology Ready Summary: Ready: no` とタイマー)。
 
+設定は両側に分かれます。
+
+:::config fold XR02 — PCE(課題 M10-5 の答えの一部)
+pce
+ address ipv4 10.255.0.21   ## PCE として PCEP の接続を待つアドレス(自分のループバック)
+!
+router isis CORE
+ distribute link-state      ## PCE にトポロジを渡す(2.3 節の XR01 と同じ行)
+!
+:::
+
+:::config fold XR01 — PCC(課題 M10-5 の答えの一部)
+segment-routing
+ traffic-eng
+  pcc
+   source-address ipv4 10.255.0.1   ## PCEP のセッションの送信元(自分のループバック)
+   pce address ipv4 10.255.0.21     ## 道を依頼する PCE
+  !
+ !
+!
+:::
+
 ### 3.2 交わってはならない道
 
 リンクを共有してはならない 2 つのポリシーには、両方を見る者が要ります。ヘッドエンドでは、2 つの候補パスが同じ
@@ -196,6 +298,49 @@ Association: Type Link-Disjoint, Group 1, Not Strict
 
 `Status: Satisfied` は、条件を満たす組を置けたという意味です。「Not Strict」は、離れた組が存在しないときに、PCE が
 離れていない道に戻ってもよいという意味です。strict のグループなら、むしろポリシーを down のままにします。
+
+2 本のポリシーの設定です。
+
+:::config fold XR01 — PCE に計算を任せる 2 本のポリシー(課題 M10-5 の答えの一部)
+segment-routing
+ traffic-eng
+  policy DISJ-1
+   color 201 end-point ipv4 10.255.0.12
+   candidate-paths
+    preference 100
+     dynamic
+      pcep                                 ## 道の計算を PCE に任せる
+      !
+      metric
+       type igp
+      !
+     !
+     constraints
+      disjoint-path group-id 1 type link   ## グループ 1 の他のポリシーと、リンクを共有しない
+     !
+    !
+   !
+  !
+  policy DISJ-2                            ## もう 1 本。カラーだけが違う
+   color 202 end-point ipv4 10.255.0.12
+   candidate-paths
+    preference 100
+     dynamic
+      pcep
+      !
+      metric
+       type igp
+      !
+     !
+     constraints
+      disjoint-path group-id 1 type link
+     !
+    !
+   !
+  !
+ !
+!
+:::
 
 :::try
 制約を取り去ります。課題 M10-5 の後に行います。

@@ -62,6 +62,27 @@ Color: 100, End-point: 10.255.0.12
 nothing special: RT01, RT02 and RT03 only forward on prefix SIDs, as they always do. The state of the policy lives on
 the head end only.
 
+The configuration of this policy:
+
+:::config XR01 — a policy with a hand-written path (the form measured in the PoC; Task M10-4 does not allow writing the hops, so this is not its answer)
+segment-routing
+ traffic-eng
+  segment-list VIA-RT03                   ## give the path (the order of the labels) a name
+   index 10 mpls label 16013              ## first label: to RT03 first; RT03 is XR01's neighbour, so PHP means it is not actually pushed
+   index 20 mpls label 16012              ## second label: then to RT02; the lower the index, the further out the label
+  !
+  policy CUST-A-VIA-RT03                  ## the policy's name (local to XR01)
+   color 100 end-point ipv4 10.255.0.12   ## what identifies the policy: color and end point (the head end is XR01 itself)
+   candidate-paths
+    preference 100                        ## the candidate path's preference; the highest valid one is used
+     explicit segment-list VIA-RT03       ## this candidate path is explicit: it uses the path above
+    !
+   !
+  !
+ !
+!
+:::
+
 ### 2.2 Steering by color
 
 A policy carries no traffic until something is steered into it. The steering is done by **automated steering**, which
@@ -92,6 +113,33 @@ RP/0/RP0/CPU0:XR01#show bgp vrf CUST-A 10.101.2.0/24
 (`next hop srte_c_100_ep_10.255.0.12 labels imposed {ImplNull 22}`): 22 is the VPN label, and the labels above it come
 from the policy. Customer B keeps the shortest path. A traceroute from CEA1 crosses RT03 (10.0.3.13), one from CEB1 crosses RT01 (10.0.1.11)
 (the traceroutes of sections 2.2 and 2.3 of the previous page).
+
+Put together, the part that sets the color looks like this:
+
+:::config fold XR01 — color 100 on customer A's routes as they arrive (part of the answer of Task M10-4)
+extcommunity-set opaque COLOR-100      ## the color value; a color is a kind of extended community, and the number goes here
+  100
+end-set
+!
+extcommunity-set rt CUST-A-RT          ## customer A's route target (unit M9), for matching
+  65000:101
+end-set
+!
+route-policy FROM-RR
+  if extcommunity rt matches-any CUST-A-RT then
+    set extcommunity color COLOR-100   ## add color 100 to customer A's routes only
+  endif
+  pass                                 ## accept the remaining routes too: an IOS XR route policy drops a route that it neither passes nor modifies
+end-policy
+!
+router bgp 65000
+ neighbor 10.255.0.21                  ## the route reflector (XR02)
+  address-family vpnv4 unicast
+   route-policy FROM-RR in             ## apply it on the routes received
+  !
+ !
+!
+:::
 
 :::note
 The Segment Routing configuration guide (IOS XR 26.x, "Configure SR-TE Policies") lists the attach points of a route
@@ -127,6 +175,38 @@ With it, the policy comes up at once (`Dynamic (valid)`, `SID[0]: 16013 [Prefix-
 `SID[1]: 16012 [Prefix-SID, 10.255.0.12]`). The shortest path to RT02 in the topology without PRIMARY is the same path
 that section 2.1 wrote by hand. An on-demand policy on IOS XR 26.1.1 has two candidate paths: preference 200, computed by the head end,
 and preference 100, handed to a PCE (section 3) if one is configured.
+
+Put together, the parts of an on-demand policy look like this:
+
+:::config fold XR01 — an on-demand policy that avoids PRIMARY (part of the answer of Task M10-4)
+router isis CORE
+ distribute link-state               ## hand the IS-IS topology to the SR-TE process (and to a PCE); without it the policy stays down
+!
+segment-routing
+ traffic-eng
+  affinity-map
+   name RT01-MAINT bit-position 0    ## tie a name for a link color (affinity) to a bit position
+  !
+  interface GigabitEthernet0/0/0/0   ## PRIMARY
+   affinity
+    name RT01-MAINT                  ## paint this link
+   !
+  !
+  on-demand color 100                ## the template: when a route with color 100 arrives with a new next hop, build a policy
+   dynamic                           ## the head end (XR01) computes the path
+    metric
+     type igp                        ## what to minimise: the IGP metric
+    !
+    affinity
+     exclude-any
+      name RT01-MAINT                ## do not use links with this color
+     !
+    !
+   !
+  !
+ !
+!
+:::
 
 :::try
 Take the topology away from SR-TE. Do it after Task M10-4 and before Task M10-5, then once more after Task M10-5.
@@ -176,6 +256,28 @@ Adjacency SIDs:
 
 The PCE needs about 40 seconds after it starts before it computes paths (`Topology Ready Summary: Ready: no` with a timer).
 
+The configuration is split between the two sides:
+
+:::config fold XR02 — the PCE (part of the answer of Task M10-5)
+pce
+ address ipv4 10.255.0.21   ## the address on which the PCE waits for PCEP connections (its loopback)
+!
+router isis CORE
+ distribute link-state      ## hand the topology to the PCE (the same line as on XR01 in section 2.3)
+!
+:::
+
+:::config fold XR01 — the PCC (part of the answer of Task M10-5)
+segment-routing
+ traffic-eng
+  pcc
+   source-address ipv4 10.255.0.1   ## the source of the PCEP session (its loopback)
+   pce address ipv4 10.255.0.21     ## the PCE to ask for paths
+  !
+ !
+!
+:::
+
 ### 3.2 Paths that must not meet
 
 Two policies that must share no link need someone who sees both. On the head end, the two candidate paths name the same
@@ -196,6 +298,49 @@ Association: Type Link-Disjoint, Group 1, Not Strict
 
 `Status: Satisfied` means that a pair meeting the condition could be placed. "Not Strict" means the PCE may fall back to
 paths that are not disjoint when no disjoint pair exists; a strict group would rather leave a policy down.
+
+The configuration of the two policies:
+
+:::config fold XR01 — two policies computed by the PCE (part of the answer of Task M10-5)
+segment-routing
+ traffic-eng
+  policy DISJ-1
+   color 201 end-point ipv4 10.255.0.12
+   candidate-paths
+    preference 100
+     dynamic
+      pcep                                 ## hand the path computation to the PCE
+      !
+      metric
+       type igp
+      !
+     !
+     constraints
+      disjoint-path group-id 1 type link   ## share no link with the other policies of group 1
+     !
+    !
+   !
+  !
+  policy DISJ-2                            ## the second one: only the color differs
+   color 202 end-point ipv4 10.255.0.12
+   candidate-paths
+    preference 100
+     dynamic
+      pcep
+      !
+      metric
+       type igp
+      !
+     !
+     constraints
+      disjoint-path group-id 1 type link
+     !
+    !
+   !
+  !
+ !
+!
+:::
 
 :::try
 Take away the constraint. Do it after Task M10-5.

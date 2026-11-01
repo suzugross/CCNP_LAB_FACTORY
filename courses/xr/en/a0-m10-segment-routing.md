@@ -213,13 +213,17 @@ Internet in unit M9); it has nothing to do with the labels. Three points matter:
 ### 2.4 Naming a link: adjacency SIDs
 
 A waypoint written as a router is followed by the shortest path from there. To send a packet over one particular link,
-use an **adjacency SID**: the instruction "leave through this link". It belongs to one link of one router, and only that
-router knows what it means (it is local). IS-IS allocates and advertises one per link automatically. XR01's link to RT01
+use an **adjacency SID**: the instruction "leave through this link". It belongs to one link of one router, and it works only
+on that router (it is local). IS-IS allocates and advertises one per link automatically. XR01's link to RT01
 is 24011, its link to RT03 is 24013 (section 3.2).
+
+Why advertise a label that works on one router only? So that other routers can write it into a path. Every router in the area learns which router, which link and which number, but only the owner installs it in its forwarding table. The numbers are assigned router by router, so another router may use the same number for one of its own links (the IOL routers of the lab use small numbers such as 22 to 27).
 
 A stack can mix prefix SIDs and adjacency SIDs. "Go to RT03, then leave through RT03's link to RT02", for example, puts
 the adjacency SID of RT03's link to RT02 under 16013. TI-LFA uses this when shortest paths alone cannot get around a
 failure (page "TI-LFA").
+
+An adjacency SID therefore works only when it reaches its owner as the top label. In the example above, 16013 comes first to carry the packet to RT03. RT03 is XR01's neighbour, so PHP removes 16013. With BACKUP at metric 10, the TI-LFA repair indeed pushed `{ImplNull 23 16011}`, 23 being RT03's link to RT02 (page "TI-LFA", section 2.3). Reaching another router on top, 23 would be read as that router's own label 23.
 
 ### 2.5 Who writes which path on which packets
 
@@ -289,6 +293,46 @@ IOS XE does it differently. SR is enabled in a global mode, `segment-routing mpl
 own loopbacks are written in a table there, `connected-prefix-sid-map` → `address-family ipv4`, as
 `10.255.0.12/32 index 12 range 1`. IS-IS then needs only `segment-routing mpls` under `router isis`. The IOS routers of
 the lab are configured that way.
+
+Put together as XR01's configuration, the places above look like this. The right-hand column says what each line does. The block stays at the default (16000–23999), so no `segment-routing` line is needed. Below it is the SR part of an IOS XE router of the lab (RT02): the same parts, in other places.
+
+:::config fold XR01 (IOS XR) — the smallest form of SR in IS-IS (close to the answer of Task M10-1)
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ address-family ipv4 unicast
+  metric-style wide      ## SR information rides in the extended TLVs of IS-IS, so wide metrics are required (already set in the lab)
+  segment-routing mpls   ## SR in this IS-IS: advertise the block and the SIDs, and install SR labels in the forwarding table
+ !
+ interface Loopback0
+  passive                ## no adjacency on the loopback (its address is still advertised)
+  address-family ipv4 unicast
+   prefix-sid index 1    ## XR01's number: every router uses the start of its block plus this, 16001, as the label to XR01
+  !
+ !
+!
+:::
+
+:::config RT02 (IOS XE) — the SR part of the lab's fixed configuration
+segment-routing mpls                 ## SR-MPLS for the whole router; on IOS XE it is needed before SR in the IGP
+ !
+ set-attributes
+  address-family ipv4
+   sr-label-preferred                ## with both an LDP and an SR label, push the SR one (section 4.1)
+  exit-address-family
+ !
+ connected-prefix-sid-map
+  address-family ipv4
+   10.255.0.12/32 index 12 range 1   ## the number of its own loopback (16012); range 1 = this one prefix only
+  exit-address-family
+!
+router isis CORE
+ net 49.0001.0100.0000.0012.00
+ is-type level-2-only
+ metric-style wide                   ## required, as on IOS XR
+ segment-routing mpls                ## advertise the SR information in this IS-IS
+!
+:::
 
 OSPF has the same three parts on IOS XR (`segment-routing mpls` under `router ospf`, the prefix SID under the loopback in
 the area). BGP is the third control plane of the blueprint: it can attach a prefix SID to a labelled unicast route
@@ -452,6 +496,44 @@ IOS behaves differently. Its synchronisation leaves out a link on which LDP is n
 interface, `show mpls ldp igp sync` says "LDP not configured" and the metric stays normal. While the link still has LDP
 configured but has lost its neighbour, the metric goes to the maximum, as on IOS XR. The IOS routers of the lab were
 prepared with `no mpls ldp igp sync` on their links to XR01, so that XR01 could stop LDP first.
+
+This is XR01's IS-IS after the migration (Tasks M10-1 and M10-2 done). The whole `mpls ldp` block is gone, and `mpls ldp sync` has left the interfaces. The BFD lines come from unit M7.
+
+:::config fold XR01 — IS-IS after the migration (contains the answers of Tasks M10-1 and M10-2)
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+  segment-routing mpls sr-prefer    ## SR on, and while LDP labels exist too, push the SR one (section 4.1)
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+   prefix-sid index 1               ## 16001 to reach XR01
+  !
+ !
+ interface GigabitEthernet0/0/0/0   ## PRIMARY (to RT01)
+  bfd minimum-interval 100          ## BFD from unit M7: sets how fast a failure is noticed (page TI-LFA, section 3)
+  bfd multiplier 3
+  bfd fast-detect ipv4
+  point-to-point
+  address-family ipv4 unicast
+   metric 10                        ## no more `mpls ldp sync`; left in, the link is advertised at 16777214
+  !
+ !
+ interface GigabitEthernet0/0/0/1   ## BACKUP (to RT03)
+  bfd minimum-interval 100
+  bfd multiplier 3
+  bfd fast-detect ipv4
+  point-to-point
+  address-family ipv4 unicast
+   metric 100
+  !
+ !
+!
+:::
 
 :::try
 Leave the synchronisation behind on purpose. Do it after Task M10-2.

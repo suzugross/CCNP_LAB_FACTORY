@@ -144,6 +144,36 @@ labels or more, IOS XR builds it as an automatic SR-TE policy.
 The IOS routers of the lab protect their own prefixes too, with `fast-reroute per-prefix level-2 all` and
 `fast-reroute ti-lfa level-2` under `router isis` (`show isis fast-reroute ti-lfa tunnel`).
 
+Here are XR01 and an IOS router of the lab (RT01). IOS XR configures it per interface, IOS XE for the whole IS-IS.
+
+:::config fold XR01 — TI-LFA on both core links (part of the answer of Task M10-3)
+router isis CORE
+ interface GigabitEthernet0/0/0/0   ## PRIMARY
+  address-family ipv4 unicast
+   fast-reroute per-prefix          ## for each destination that leaves through this link, compute a repair path in advance
+   fast-reroute per-prefix ti-lfa   ## the repair may stack labels (so destinations without a plain LFA get one too)
+  !
+ !
+ interface GigabitEthernet0/0/0/1   ## BACKUP
+  address-family ipv4 unicast
+   fast-reroute per-prefix
+   fast-reroute per-prefix ti-lfa
+  !
+ !
+!
+:::
+
+:::config RT01 (IOS XE) — from the lab's fixed configuration
+router isis CORE
+ net 49.0001.0100.0000.0011.00
+ is-type level-2-only
+ metric-style wide
+ segment-routing mpls
+ fast-reroute per-prefix level-2 all   ## a repair path for every level-2 destination
+ fast-reroute ti-lfa level-2           ## use TI-LFA for the repair
+!
+:::
+
 ## 3. Speed depends on detection
 
 How fast a repair works depends on how fast the failure is detected. In CML, a failed link does not take the interface
@@ -200,6 +230,17 @@ topology changes (`microloop avoidance rib-update-delay`, 5000 ms by default), X
 loop-free path written with stacked labels, and moves to the new shortest path only once the other routers' tables
 agree. `show isis protocol` reports `Microloop avoidance: Enabled` with `Type: Segment Routing`. It is off by default on
 IOS XR. The IOL routers report `enabled for segment-routing microloop avoidance` in `show isis fast-reroute summary`.
+
+On XR01 it is one line in the IS-IS address family (two, to change the delay).
+
+:::config fold XR01 — microloop avoidance (part of the answer of Task M10-3)
+router isis CORE
+ address-family ipv4 unicast
+  microloop avoidance segment-routing         ## during convergence, send the affected destinations on a loop-free SR path
+  microloop avoidance rib-update-delay 3000   ## (optional) how long before moving to the new shortest path; 5000 ms by default
+ !
+!
+:::
 
 ## 5. Command names
 

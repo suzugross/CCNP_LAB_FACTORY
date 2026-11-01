@@ -10,8 +10,10 @@ builds on the previous one.
 
 - You configure **XR01**, and in Task M10-5 also **XR02**. All the other routers are fixed; do not change them. You
   may log in to them to look. The CEs, SVC and INET belong to the customers, the shared services and the Internet.
-- No command examples are given. Each task states the behaviour that is required. Use the CLI help (`?`),
-  the `show` commands, and the Cisco IOS XR configuration guides and command references to find the commands.
+- The tasks give no command examples. Each task states the behaviour that is required. The reading pages have
+  configuration examples; the ones that have the same form as a task's answer are folded. To solve a task on your own
+  first, use the CLI help (`?`), the `show` commands, and the Cisco IOS XR configuration guides and command references
+  to find the commands.
 - The **Tasks** tab has a **Check** button for each task. It reads the live state of the devices.
   Leave configuration mode before you press it. Give IS-IS and BGP half a minute to settle after a commit.
 - Hints open one level at a time (keyword → where to look → command). Opened hints are logged.

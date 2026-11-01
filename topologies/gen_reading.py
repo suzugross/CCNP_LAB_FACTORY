@@ -16,6 +16,8 @@
   :::orig ... :::               … 原文併記（既定は折りたたみ）
   :::try  ... :::               … やってみる（緑。読者が自分で障害を起こして確かめる手順。書き下ろしの教材用）
   :::topo ... :::               … ネットワーク図（座標指定の SVG・下記）
+  :::config <見出し> ... :::     … 設定例（左に設定の行・右に注記。行末の `  ## 注記` が注記の列へ。コピーは設定の行だけ）
+  :::config fold <見出し> ... ::: … 同じく折りたたみ（課題の答えそのものになる例。見出しに「課題 … の答え」と書く）
   ```console ... ```            … 端末風（プロンプト行を強調）
   ![説明](img/ファイル名)        … 図版（画面キャプチャ等の画像・下記）
   ```mermaid ... ```            … 図（render_html の機構をそのまま使う）
@@ -92,7 +94,15 @@ OUT_ROOT = os.path.join(REPO, "reading")
 READING_CSS = """
 /* ---- 読み物テーマ: 本文は読みやすさ優先。問題用紙の無装飾ルールは適用しない ---- */
 /*  日本語の技術文なので「1行の長さを詰める・行間と段落間を広く取る」方向に振る。 */
-body.reading{ font-size:16.5px; line-height:2.05; letter-spacing:.012em; }
+body.reading{ font-size:1.03rem; line-height:2.05; letter-spacing:.012em; }
+/*  画素の細かい広い画面(MacBook など)では、ページ全体を 100%→150% に大きくする(2026-10-31 ユーザ要望「いつも 150% に拡大して
+    見ている」)。rem の基準(html の文字の大きさ)を画面の幅で上げる= ブラウザで拡大したのと同じ見え方(本文の幅も一緒に広がり、
+    1 行の字数は変わらない)。幅 1000px で 100%、1200px 以上で 150%。狭い画面(スマホ・ワークスペースの Reading の枠)は条件に
+    入らないので今のまま。ブラウザで 150% に拡大したままでも、拡大後の幅は約 1000px なので二重には大きくならない。
+    ★この大きさに付いてくるよう、文字や幅は px でなく rem で書く(図の SVG も幅を rem で出す)。 */
+@media (min-width:1000px) and (min-resolution:2dppx), (min-width:1000px) and (-webkit-min-device-pixel-ratio:2){
+  html{ font-size:clamp(100%, calc(4vw - 24px), 150%); }
+}
 body.reading main{ max-width:44rem; margin:0 auto; padding:1.6rem 1.2rem 7rem; }
 body.reading h1{ font-size:1.6rem; line-height:1.6; margin:1.4rem 0 1.6rem;
   padding-bottom:.55rem; border-bottom:2px solid #111; }
@@ -150,7 +160,7 @@ body.reading .tolab a{ text-decoration:none; } body.reading .tolab a:hover{ text
   box-shadow:0 1px 4px rgba(0,0,0,.28); }
 .termbar{ background:#2b2f36; padding:.42rem .7rem; display:flex; gap:.4rem;
   align-items:center; }
-.termbar i{ width:11px; height:11px; border-radius:50%; display:inline-block; }
+.termbar i{ width:.69rem; height:.69rem; border-radius:50%; display:inline-block; }
 .termbar i:nth-child(1){ background:#ff5f56; }
 .termbar i:nth-child(2){ background:#ffbd2e; }
 .termbar i:nth-child(3){ background:#27c93f; }
@@ -161,6 +171,8 @@ body.reading .tolab a{ text-decoration:none; } body.reading .tolab a:hover{ text
 .term code{ font-family:"Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace;
   font-size:.845rem; line-height:1.62; }
 .term .prompt{ color:#7fd28c; font-weight:600; }
+body.reading pre.code code{ font-size:.81rem; }               /* 素のコード欄(基本の 13px を rem に) */
+body.reading .term pre.code code{ font-size:.845rem; }
 .term .cmt{ color:#8b98a6; font-style:italic; }
 
 /* ---- 誤植・訳注 ---- */
@@ -196,6 +208,30 @@ body.reading .tolab a{ text-decoration:none; } body.reading .tolab a:hover{ text
 .topo .tfl{ font-family:"Segoe UI",system-ui,sans-serif; font-size:12px;
   fill:#8a7a52; font-weight:600; }
 
+/* ---- 設定例(:::config)= 左に設定の行・右に「何をする行か」。注記は選択してもコピーされない ---- */
+.cfg{ display:block; margin:1.9rem 0; border:1px solid #cfd6df; border-radius:7px; background:#fbfcfd; overflow:hidden; }
+.cfg > figcaption, .cfg > summary{ display:flex; align-items:center; gap:.55rem; padding:.45rem .75rem;
+  background:#eef1f5; border-bottom:1px solid #d9dee5; font-size:.88rem; font-weight:600; color:#2c3540; line-height:1.5; }
+.cfg > summary{ cursor:pointer; list-style:none; }
+.cfg > summary::-webkit-details-marker{ display:none; }
+.cfg > summary::before{ content:"▸"; color:#6b7685; flex:none; }
+.cfg[open] > summary::before{ content:"▾"; }
+details.cfg:not([open]) > summary{ border-bottom:0; }
+.cfg .ctag{ flex:none; font-size:.72rem; font-weight:700; letter-spacing:.05em; background:#4a5a70; color:#fff;
+  border-radius:3px; padding:.08rem .45rem; }
+.cfg .ctitle{ flex:1; min-width:0; }
+.cfg .cfold{ font-weight:400; color:#6b7685; font-size:.8rem; white-space:nowrap; }
+.cfg .ccopy{ flex:none; font:inherit; font-size:.76rem; font-weight:400; cursor:pointer; background:#fff;
+  border:1px solid #c3cad3; border-radius:4px; padding:.12rem .55rem; color:#2c3540; }
+.cfg .ccopy:hover{ background:#f3f5f8; }
+.cfg .cb{ display:grid; grid-template-columns:max-content minmax(13rem, 1fr); column-gap:1.5rem;
+  padding:.75rem .95rem; overflow-x:auto; }
+.cfg .cr{ display:contents; }
+.cfg .cc{ font-family:"Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace; font-size:.83rem; line-height:1.65;
+  white-space:pre; padding:0; background:none; border:0; color:#14202e; }
+.cfg .cn{ font-size:.82rem; line-height:1.65; color:#3f6286; user-select:none; -webkit-user-select:none; }
+.cfg .cn code{ font-size:.92em; }
+
 /* ---- 図版(画面キャプチャ等) ---- */
 body.reading main img{ display:block; max-width:100%; height:auto; margin:1.9rem auto;
   border:1px solid #d9dde3; border-radius:3px; }
@@ -213,15 +249,19 @@ body.reading .tw table{ margin:0; }
 
 /* ---- 画面が狭いとき ---- */
 @media (max-width:640px){
-  body.reading{ font-size:16px; line-height:1.95; }
+  body.reading{ font-size:1rem; line-height:1.95; }
   body.reading main{ padding:1rem .9rem 5rem; }
   body.reading h1{ font-size:1.35rem; }
   body.reading h2{ font-size:1.12rem; margin:2.7rem 0 .9rem; }
   body.reading h3{ margin:2.1rem 0 .7rem; }
-  .term code{ font-size:.76rem; }
+  .term code, body.reading .term pre.code code{ font-size:.76rem; }
   .term pre{ padding:.8rem .85rem; }
   .callout{ margin:1.6rem 0; padding:.8rem .9rem; }
   .topo{ margin:1.7rem 0; }
+  .cfg .cb{ grid-template-columns:1fr; padding:.65rem .75rem; }
+  .cfg .cc{ font-size:.76rem; }
+  .cfg .cn{ padding-left:1.2rem; margin-bottom:.3rem; font-size:.78rem; }
+  .cfg .cn:empty{ display:none; }
   .nav{ font-size:.8rem; }
 }
 
@@ -391,7 +431,7 @@ def render_topo(src_yaml):
     W, H = right - x0, bottom - y0
     body = "\n".join(parts)
     return (f'<div class="topo"><svg viewBox="{x0:.0f} {y0:.0f} {W:.0f} {H:.0f}" '
-            f'width="{W:.0f}" role="img">\n{body}\n</svg></div>')
+            f'width="{W:.0f}" style="width:{W / 16:.2f}rem" role="img">\n{body}\n</svg></div>')
 
 
 TOPO_RE = re.compile(r"^:::topo[ \t]*\n(.*?)^:::[ \t]*$", re.S | re.M)
@@ -399,6 +439,71 @@ TOPO_RE = re.compile(r"^:::topo[ \t]*\n(.*?)^:::[ \t]*$", re.S | re.M)
 
 def expand_topo(md_text):
     return TOPO_RE.sub(lambda m: "\n" + render_topo(m.group(1)) + "\n", md_text)
+
+
+# --------------------------------------------------------------------------
+# 設定例(:::config → 注記つきの設定の欄)
+#   2026-10-31 ユーザ指示「config 例を常に提示して。まとまった形で見せてもらわないと知識が断片化する」。
+#   設定の行と「何をする行か」を左右に並べる(狭い画面では注記を行の下へ)。コピーのボタンと手での選択は設定の行だけを取る。
+#   fold= 折りたたむ(課題の答えそのものになる例。見出しに「課題 … の答え」と書く)。
+#   生成する HTML には空行も </div> も入れない(markdown-it の HTML ブロックが空行で切れる・:::try の取り出しが </div> で切れる)。
+# --------------------------------------------------------------------------
+CONFIG_RE = re.compile(r"^:::config(?:[ \t]+(fold)(?=[ \t]|$))?[ \t]*([^\n]*)\n(.*?)^:::[ \t]*$", re.S | re.M)
+CFG_NOTE_RE = re.compile(r"\s+##\s?(.*)$")
+
+
+def _cfg_inline(s):
+    s = html.escape(s)
+    s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
+    return re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", s)
+
+
+def render_config(fold, title, body):
+    rows = []
+    for ln in body.rstrip("\n").split("\n"):
+        m = CFG_NOTE_RE.search(ln)
+        code, note = (ln[:m.start()], m.group(1).strip()) if m else (ln, "")
+        rows.append(f'<span class="cr"><code class="cc">{html.escape(code.rstrip()) or " "}</code>'
+                    f'<span class="cn">{_cfg_inline(note)}</span></span>')
+    head = (f'<span class="ctag">{_w("config")}</span><span class="ctitle">{_cfg_inline(title.strip())}'
+            + (f' <span class="cfold">{_w("open")}</span>' if fold else "") + "</span>"
+            f'<button type="button" class="ccopy" data-done="{_w("copied")}">{_w("copy")}</button>')
+    body_html = '<span class="cb">\n' + "\n".join(rows) + "\n</span>"
+    if fold:
+        return f'<details class="cfg">\n<summary>{head}</summary>\n{body_html}\n</details>'
+    return f'<figure class="cfg">\n<figcaption>{head}</figcaption>\n{body_html}\n</figure>'
+
+
+def expand_config(md_text):
+    return CONFIG_RE.sub(lambda m: "\n" + render_config(bool(m.group(1)), m.group(2), m.group(3)) + "\n", md_text)
+
+
+def expand_blocks(md_text):
+    """ソースの独自記法(図・設定例・囲み)を開く。設定例は囲みより先(:::try の中の設定例の閉じを囲みの閉じと取り違えない)。"""
+    return expand_containers(expand_config(expand_topo(md_text)))
+
+
+# 設定例のコピー(配信のページは http= 安全でない文脈なので clipboard API が無い→ textarea で写す)
+CFG_JS = r"""
+(function(){
+  function put(t){
+    if(navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t);
+    var ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); }catch(_e){}
+    document.body.removeChild(ta); return Promise.resolve();
+  }
+  document.querySelectorAll('.cfg .ccopy').forEach(function(b){
+    b.addEventListener('click', function(ev){
+      ev.preventDefault(); ev.stopPropagation();
+      var lines = [].map.call(b.closest('.cfg').querySelectorAll('.cc'), function(c){ return c.textContent.replace(/\s+$/, ''); });
+      put(lines.join('\n') + '\n').then(function(){
+        var o = b.textContent; b.textContent = b.dataset.done; setTimeout(function(){ b.textContent = o; }, 1500);
+      });
+    });
+  });
+})();
+"""
 
 
 # --------------------------------------------------------------------------
@@ -414,9 +519,11 @@ _TAGS = {"note": ("c-note", "訳注"), "sic": ("c-sic", "原典の誤り"),
 # <html lang> も合わせる(読み上げ・フォント選択のため)。
 _LANG = "ja"
 _WORDS = {"ja": {"toc": "目次", "back": "↑ 目次へ", "note": "訳注", "sic": "原典の誤り", "orig": "原文", "try": "やってみる", "portal": "‹ ポータル",
-                 "prev": "前のページ", "next": "次のページ", "reading": "読み物"},
+                 "prev": "前のページ", "next": "次のページ", "reading": "読み物",
+                 "config": "設定例", "copy": "コピー", "copied": "コピーしました", "open": "(クリックで開く)"},
           "en": {"toc": "Contents", "back": "↑ Contents", "note": "Note", "sic": "Error in the source", "orig": "Original", "try": "Try it",
-                 "portal": "‹ Portal", "prev": "Previous page", "next": "Next page", "reading": "Reading"}}
+                 "portal": "‹ Portal", "prev": "Previous page", "next": "Next page", "reading": "Reading",
+                 "config": "Configuration", "copy": "Copy", "copied": "Copied", "open": "(click to open)"}}
 
 
 def set_lang(meta, lang=None):
@@ -647,7 +754,7 @@ def _page_text(meta, i, lang, path, offset=0):
     set_lang(meta, lang)
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
-    text = expand_containers(expand_topo(text))
+    text = expand_blocks(text)
     text, notes = expand_sic(text, offset)
     text += notes_section(notes, offset)
     t = lambda j: html.escape(pages[j]["_titles"][lang])
@@ -820,7 +927,7 @@ def build_page(src, meta, i, out_dir, mermaid_mode):
         out = out.replace(RH.MERMAID_CDN, "mermaid.min.js")
     out, p["_sections"] = mark_sections(out)
     p["_tries"] = extract_tries(out)
-    out = out.replace("</body>", f"{reading_nav(meta, i)}\n<script>{READ_JS}</script>\n</body>", 1)
+    out = out.replace("</body>", f"{reading_nav(meta, i)}\n<script>{READ_JS}</script>\n<script>{CFG_JS}</script>\n</body>", 1)
     out = _finish_lang(lazy_images(wrap_tables(termify(out))))
     dst = os.path.join(out_dir, p["html"])
     with open(dst, "w", encoding="utf-8") as fh:
@@ -1009,7 +1116,7 @@ def _assemble(meta, pages, title, dst):
     for i, p in enumerate(pages):
         with open(p["_path"], encoding="utf-8") as fh:
             text = fh.read()
-        text = expand_containers(expand_topo(text))
+        text = expand_blocks(text)
         # ワークスペース・他ページの節へのリンク(BL-252)は配信している時だけのもの。持ち出しの 1 枚には行き先が無い
         text = re.sub(r'(?m)^<p class="tolab">.*</p>\n?', "", text)
         text, notes = expand_sic(text, offset)
@@ -1023,7 +1130,7 @@ def _assemble(meta, pages, title, dst):
     mode = "embed" if "```mermaid" in md else "none"
     out = RH.render(md, title=title, extra_css=READING_CSS + BUNDLE_CSS,
                     body_class="reading", allow_html=True, mermaid_mode=mode)
-    out = out.replace("<body", '<body id="top"', 1)
+    out = out.replace("<body", '<body id="top"', 1).replace("</body>", f"<script>{CFG_JS}</script>\n</body>", 1)
     out = _finish_lang(inline_images(wrap_tables(termify(out)), os.path.dirname(pages[0]["_path"])))
     os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
     with open(dst, "w", encoding="utf-8") as fh:
