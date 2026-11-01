@@ -1,0 +1,114 @@
+#### t-1: LDP の設定なしで targeted のセッションを張り直せるか(clear)
+show mpls ldp summary
+Sun Nov  1 02:50:13.685 UTC
+
+  AFIs      : IPv4
+  Routes    : 3 prefixes 
+  Bindings  : 12 prefixes 
+      Local     : 3 
+      Remote    : 12 
+  Neighbors : 1 
+  Adj Groups: 1
+  Hello Adj : 1 
+  Addresses : 5 
+  Interfaces: 0 LDP configured
+
+
+RP/0/RP0/CPU0:XR01#
+clear mpls ldp neighbor 10.255.0.12
+Sun Nov  1 02:50:14.084 UTC
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sun Nov  1 02:50:40.893 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.12:0      N   N    00:00:19    1     0     3     0     12     0    
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp discovery
+Sun Nov  1 02:50:41.289 UTC
+
+Local LDP Identifier: 10.255.0.1:0
+Discovery Sources:
+  Targeted Hellos:
+    10.255.0.1 -> 10.255.0.12 (active), xmit/recv
+      LDP Id: 10.255.0.12:0
+          Hold time: 90 sec (local:90 sec, peer:90 sec)
+          Established: Nov  1 02:46:34.344 (00:04:06 ago)
+
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect | include CUST
+Sun Nov  1 02:50:41.695 UTC
+CUST-B     B-300      DN   Gi0/0/0/3.300          UP       10.255.0.12     300    DN    
+CUST-B     B-310      UP   Gi0/0/0/3.310          UP       10.255.0.12     310    UP    
+CUST-B     B-410      DN   Gi0/0/0/3.410          UP       EVPN 410,3,None        DN    
+CUST-B     B-420      DN   Gi0/0/0/3.420          UP       EVPN 420,3,None        DN    
+RP/0/RP0/CPU0:XR01#
+#### t-2: 疑似回線を全部外して付け直す
+configure
+Sun Nov  1 02:50:43.354 UTC
+RP/0/RP0/CPU0:XR01(config)#
+no l2vpn xconnect group CUST-B p2p B-300
+RP/0/RP0/CPU0:XR01(config)#
+no l2vpn xconnect group CUST-B p2p B-310
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 02:50:44.760 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sun Nov  1 02:51:07.970 UTC
+
+RP/0/RP0/CPU0:XR01#
+show mpls ldp summary
+Sun Nov  1 02:51:08.362 UTC
+
+  AFIs      : IPv4
+  Routes    : 3 prefixes 
+  Bindings  : 3 prefixes 
+      Local     : 3 
+      Remote    : 0 
+  Neighbors : 0 
+  Adj Groups: 0
+  Hello Adj : 0 
+  Addresses : 5 
+  Interfaces: 0 LDP configured
+
+
+RP/0/RP0/CPU0:XR01#
+configure
+Sun Nov  1 02:51:10.377 UTC
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+xconnect group CUST-B
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc)#
+p2p B-310
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+interface GigabitEthernet0/0/0/3.310
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+neighbor ipv4 10.255.0.12 pw-id 310
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+commit
+Sun Nov  1 02:51:15.097 UTC
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+end
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sun Nov  1 02:51:48.890 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.12:0      N   N    00:00:33    1     0     3     0     12     0    
+
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect | include CUST
+Sun Nov  1 02:51:49.289 UTC
+CUST-B     B-310      UP   Gi0/0/0/3.310          UP       10.255.0.12     310    UP    
+CUST-B     B-410      DN   Gi0/0/0/3.410          UP       EVPN 410,3,None        DN    
+CUST-B     B-420      DN   Gi0/0/0/3.420          UP       EVPN 420,3,None        DN    
+RP/0/RP0/CPU0:XR01#

@@ -1,0 +1,121 @@
+# XRT-11 最終確認(M11 の 5 課題を終えた状態。配点= M11-1 20・M11-2 20・M11-3 25・M11-4 20・M11-5 15)。
+# 学習目的のラボ= パック・ノルマの対象外。中身は課題ごとの確認(grading.<課題>.yml)を寄せ集めて配点を付け直したもの
+# (手で保守する= 課題ごとの確認を直したらここも直す)。白紙で通る項目は無い(どの確認も E-Line の UP か CE の到達を含む)。
+problem: XRT-11
+total_points: 100
+checks:
+- name: 'M11-1 XR01: customer A''s E-Line is up, as pseudowire 100 to RT02'
+  node: XR01
+  command: show l2vpn xconnect
+  raw:
+  - regex: Gi0/0/0/2\.\d+\s+UP\s+10\.255\.0\.12\s+100\s+UP
+  points: 6
+- name: 'M11-1 XR01: LDP runs only to signal the pseudowire (a targeted session with RT02, none with RT01 or RT03)'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-11 ssh XR01 -- 'show mpls ldp neighbor brief' 'show l2vpn xconnect'
+  raw:
+  - regex: \n10\.255\.0\.12:0\s
+  - not_regex: \n10\.255\.0\.1[13]:0\s
+  - regex: Gi0/0/0/2\.\d+\s+UP\s+10\.255\.0\.12\s+100\s+UP
+  points: 5
+- name: 'M11-1 CEA1: reaches CEA2 over the E-Line (172.31.10.2), and customer A''s Layer 3 VPN still works'
+  node: XR01
+  exec: local
+  command: echo '## E-Line'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEA1 -- 'ping 172.31.10.2 repeat 5'; echo '## L3VPN'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEA1 -- 'ping
+    10.101.2.1 source Loopback10 repeat 5'
+  raw:
+  - regex: '## E-Line[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## L3VPN[\s\S]*?Success rate is (?:100|80) percent'
+  points: 9
+- name: 'M11-2 XR01: both E-Lines of customer B to site 2 are up (pseudowires 300 and 310 to RT02)'
+  node: XR01
+  command: show l2vpn xconnect
+  raw:
+  - regex: Gi0/0/0/3\.\d+\s+UP\s+10\.255\.0\.12\s+300\s+UP
+  - regex: Gi0/0/0/3\.\d+\s+UP\s+10\.255\.0\.12\s+310\s+UP
+  points: 8
+- name: 'M11-2 CEB1: reaches CEB2 over both E-Lines (172.31.30.2 on VLAN 300, 172.31.31.2 on VLAN 310)'
+  node: XR01
+  exec: local
+  command: echo '## 300'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.30.2 repeat 5'; echo '## 310'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.31.2
+    repeat 5'
+  raw:
+  - regex: '## 300[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 310[\s\S]*?Success rate is (?:100|80) percent'
+  points: 12
+- name: 'M11-3 XR02: reflects l2vpn evpn routes between XR01 and XR03'
+  node: XR02
+  command: show bgp l2vpn evpn summary
+  raw:
+  - regex: \n10\.255\.0\.1\s+0\s+65000(?:\s+\d+){5}\s+\S+\s+[1-9]\d*
+  - regex: \n10\.255\.0\.3\s+0\s+65000(?:\s+\d+){5}\s+\S+\s+[1-9]\d*
+  points: 5
+- name: 'M11-3 XR01, XR03: exchange EVPN routes only through XR02 (no BGP session between them; XR03''s router ID is 10.255.0.3)'
+  node: XR01
+  exec: local
+  command: echo '## XR01'; .venv/bin/python topologies/login_probe.py XRT-11 ssh XR01 -- 'show bgp l2vpn evpn summary'; echo '## XR03'; .venv/bin/python topologies/login_probe.py XRT-11 ssh XR03 -- 'show
+    bgp l2vpn evpn summary'
+  raw:
+  - regex: '## XR01[\s\S]*?\n10\.255\.0\.21\s+0\s+65000(?:\s+\d+){5}\s+\S+\s+[1-9]\d*[\s\S]*?## XR03'
+  - regex: '## XR03[\s\S]*?BGP router identifier 10\.255\.0\.3,[\s\S]*?\n10\.255\.0\.21\s+0\s+65000(?:\s+\d+){5}\s+\S+\s+[1-9]\d*'
+  - not_regex: \n10\.255\.0\.3\s+0\s+65000
+  - not_regex: '## XR03[\s\S]*\n10\.255\.0\.1\s+0\s+65000'
+  points: 4
+- name: 'M11-3 XR01, XR03: the E-Line in EVPN instance 400 is up at both ends, with the site numbers as identifiers'
+  node: XR01
+  exec: local
+  command: echo '## XR01'; .venv/bin/python topologies/login_probe.py XRT-11 ssh XR01 -- 'show l2vpn xconnect'; echo '## XR03'; .venv/bin/python topologies/login_probe.py XRT-11 ssh XR03 -- 'show l2vpn
+    xconnect'
+  raw:
+  - regex: '## XR01[\s\S]*?Gi0/0/0/3\.\d+\s+UP\s+EVPN 400,3,10\.255\.0\.3\s+UP[\s\S]*?## XR03'
+  - regex: '## XR03[\s\S]*?Gi0/0/0/1\.\d+\s+UP\s+EVPN 400,1,10\.255\.0\.1\s+UP'
+  points: 6
+- name: 'M11-3 CEB1: reaches CEB3 over the E-Line (VLAN 400 at site 1, VLAN 40 at site 3)'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.40.3 repeat 5'
+  raw:
+  - regex: Success rate is (?:100|80) percent
+  points: 10
+- name: 'M11-4 XR03: both E-Lines to site 1 (EVPN instances 410 and 420) are up, with the site numbers as identifiers'
+  node: XR03
+  command: show l2vpn xconnect
+  raw:
+  - regex: Gi0/0/0/1\.\d+\s+UP\s+EVPN 410,1,10\.255\.0\.1\s+UP
+  - regex: Gi0/0/0/1\.\d+\s+UP\s+EVPN 420,1,10\.255\.0\.1\s+UP
+  points: 6
+- name: 'M11-4 CEB1: reaches CEB3 on the E-Line of VLAN 410 ⇔ 41 (172.31.41.3)'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.41.3 repeat 5'
+  raw:
+  - regex: Success rate is (?:100|80) percent
+  points: 7
+- name: 'M11-4 CEB1: reaches CEB3 on the E-Line of VLAN 420 ⇔ 42 (172.31.42.3)'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.42.3 repeat 5'
+  raw:
+  - regex: Success rate is (?:100|80) percent
+  points: 7
+- name: 'M11-5 XR01: the Q-in-Q E-Line in EVPN instance 500 is up to XR03'
+  node: XR01
+  command: show l2vpn xconnect
+  raw:
+  - regex: Gi0/0/0/3\.\d+\s+UP\s+EVPN 500,3,10\.255\.0\.3\s+UP
+  points: 3
+- name: 'M11-5 CEB1: reaches CEB3 on inner VLANs 10 and 20 of S-VLAN 500, and on VLAN 30 that the customer adds later'
+  node: XR01
+  exec: local
+  command: echo '## 10'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.51.3 repeat 5'; echo '## 20'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.52.3
+    repeat 5'; echo '## 30'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.53.3 repeat 5'
+  raw:
+  - regex: '## 10[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 20[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 30[\s\S]*?Success rate is (?:100|80) percent'
+  points: 7
+- name: 'M11-5 CEB1: frames with only the outer tag 500 do not reach site 3, while inner VLAN 10 does'
+  node: XR01
+  exec: local
+  command: echo '## 500'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.50.3 repeat 5'; echo '## 10'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.51.3
+    repeat 5'
+  raw:
+  - regex: '## 500[\s\S]*?Success rate is 0 percent[\s\S]*?## 10[\s\S]*?Success rate is (?:100|80) percent'
+  points: 5

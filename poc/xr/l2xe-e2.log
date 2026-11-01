@@ -1,0 +1,222 @@
+
+######## 02:14:32 e2-1: XE1 の SW1 向き(Gi3)を落とす → SW1 から CE3 へ(XE2 経由で残るか)
+ping 192.168.200.3 repeat 3Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.200.3, timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/2/2 ms
+SW1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+interface GigabitEthernet3
+XE1(config-if)#
+shutdown
+XE1(config-if)#
+end
+XE1#
+show etherchannel summaryFlags:  D - down        P - bundled in port-channel
+        I - stand-alone s - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+        A - formed by Auto LAG
+
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1      Po1(SU)         LACP        Et0/0(P)        Et0/1(P)        
+
+SW1#
+show lacp neighborFlags:  S - Device is requesting Slow LACPDUs 
+        F - Device is requesting Fast LACPDUs
+        A - Device is in Active mode       P - Device is in Passive mode     
+
+Channel group 1 neighbors
+
+                     LACP port                      Admin  Oper   Port    Port
+Port          Flags  Priority  Dev ID          Age  key    Key    Number  State
+Et0/0         SA     32768     0000.0000.0001  16s  0x0    0x1    0x4     0x3D  
+Et0/1         SA     32768     0000.0000.0001   9s  0x0    0x1    0x4     0x3D  
+SW1#
+ping 192.168.200.3 repeat 10Type escape sequence to abort.
+Sending 10, 100-byte ICMP Echos to 192.168.200.3, timeout is 2 seconds:
+..........
+Success rate is 0 percent (0/10)
+SW1#
+show etherchannel summaryFlags:  D - down        P - bundled in port-channel
+        I - stand-alone s - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+        A - formed by Auto LAG
+
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1      Po1(SU)         LACP        Et0/0(P)        Et0/1(P)        
+
+SW1#
+show lacp neighborFlags:  S - Device is requesting Slow LACPDUs 
+        F - Device is requesting Fast LACPDUs
+        A - Device is in Active mode       P - Device is in Passive mode     
+
+Channel group 1 neighbors
+
+                     LACP port                      Admin  Oper   Port    Port
+Port          Flags  Priority  Dev ID          Age  key    Key    Number  State
+Et0/0         SA     32768     0000.0000.0001  57s  0x0    0x1    0x4     0x3D  
+Et0/1         SA     32768     0000.0000.0001  21s  0x0    0x1    0x4     0x3D  
+SW1#
+ping 192.168.200.3 repeat 10Type escape sequence to abort.
+Sending 10, 100-byte ICMP Echos to 192.168.200.3, timeout is 2 seconds:
+..........
+Success rate is 0 percent (0/10)
+SW1#
+show l2vpn evpn mac
+MAC Address    EVI   BD    ESI                      Ether Tag  Next Hop(s)
+-------------- ----- ----- ------------------------ ---------- ---------------
+aabb.cc00.4f00 200   200   0000.0000.0000.0000.0000 0          10.255.0.41
+aabb.cc00.5000 200   200   0000.0000.0000.0000.0000 0          10.255.0.42
+aabb.cc00.5100 200   200   0000.0000.0000.0000.0000 0          Gi2:200
+aabb.cc80.4e00 200   200   0300.0000.0000.0100.0001 0          10.255.0.42
+
+XE3#
+show bgp l2vpn evpn route-type 1
+BGP routing table entry for [1][10.255.0.1:110][00000000000000000000][1]/23, version 18
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Flag: 0x100
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.1 (metric 20) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin IGP, localpref 100, valid, internal, best
+      Rcvd Label: 24010, Local Label: None
+      Extended Community: RT:65000:110 0x604:2:0
+      Originator: 10.255.0.1, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:00:49 UTC
+BGP routing table entry for [1][10.255.0.41:120][00000000000000000000][1]/23, version 21
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.41 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 30, Local Label: None
+      Extended Community: RT:65000:120
+      Originator: 10.255.0.41, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:00:49 UTC
+BGP routing table entry for [1][10.255.0.42:1][03000000000001000001][4294967295]/23, version 41
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.42 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 0, Local Label: None
+      Extended Community: RT:65000:200 EVPN LABEL:0x0:Label-256
+      Originator: 10.255.0.42, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:09:00 UTC
+BGP routing table entry for [1][10.255.0.42:200][03000000000001000001][0]/23, version 42
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.42 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 26, Local Label: None
+      Extended Community: RT:65000:200
+      Originator: 10.255.0.42, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:09:02 UTC
+BGP routing table entry for [1][10.255.0.43:110][00000000000000000000][1]/23, version 19
+Paths: (1 available, best #1, table evi_110)
+  Flag: 0x100
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local, imported path from [1][10.255.0.1:110][00000000000000000000][1]/23 (global)
+    10.255.0.1 (metric 20) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin IGP, localpref 100, valid, internal, best
+      Rcvd Label: 24010, Local Label: None
+      Extended Community: RT:65000:110 0x604:2:0
+      Originator: 10.255.0.1, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 01:58:59 UTC
+BGP routing table entry for [1][10.255.0.43:110][00000000000000000000][3]/23, version 17
+Paths: (1 available, best #1, table evi_110)
+  Advertised to update-groups:
+     1         
+  Refresh Epoch 1
+  Local
+    :: (via default) from 0.0.0.0 (10.255.0.43)
+      Origin incomplete, localpref 100, weight 32768, valid, sourced, local, best
+      Rcvd Label: None, Local Label: 29
+      Extended Community: RT:65000:110
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 01:58:53 UTC
+BGP routing table entry for [1][10.255.0.43:120][00000000000000000000][1]/23, version 22
+Paths: (1 available, best #1, table evi_120)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local, imported path from [1][10.255.0.41:120][00000000000000000000][1]/23 (global)
+    10.255.0.41 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 30, Local Label: None
+      Extended Community: RT:65000:120
+      Originator: 10.255.0.41, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:00:49 UTC
+BGP routing table entry for [1][10.255.0.43:120][00000000000000000000][3]/23, version 20
+Paths: (1 available, best #1, table evi_120)
+  Advertised to update-groups:
+     1         
+  Refresh Epoch 1
+  Local
+    :: (via default) from 0.0.0.0 (10.255.0.43)
+      Origin incomplete, localpref 100, weight 32768, valid, sourced, local, best
+      Rcvd Label: None, Local Label: 30
+      Extended Community: RT:65000:120
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:00:46 UTC
+BGP routing table entry for [1][10.255.0.43:200][03000000000001000001][0]/23, version 66
+Paths: (1 available, best #1, table evi_200)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local, imported path from [1][10.255.0.42:200][03000000000001000001][0]/23 (global)
+    10.255.0.42 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 26, Local Label: None
+      Extended Community: RT:65000:200
+      Originator: 10.255.0.42, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:09:02 UTC
+XE3#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+interface GigabitEthernet3
+XE1(config-if)#
+no shutdown
+XE1(config-if)#
+end
+XE1#

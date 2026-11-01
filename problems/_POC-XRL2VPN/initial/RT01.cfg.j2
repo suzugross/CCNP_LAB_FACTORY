@@ -1,0 +1,43 @@
+! _POC-XRL2VPN RT01(IOL 17.15)= P ルータ。XR03(XRd の PE)の収容も。
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+mpls ldp discovery targeted-hello accept
+!
+interface Loopback0
+ ip address 10.255.0.11 255.255.255.255
+ ip router isis CORE
+!
+interface {{ links[0] }}
+ description PRIMARY to XR01
+ ip address 10.0.1.11 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 10
+ mpls ip
+ no shutdown
+!
+interface {{ links[1] }}
+ description CORE-A to RT02
+ ip address 10.0.12.11 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 10
+ mpls ip
+ no shutdown
+!
+interface {{ links[2] }}
+ description CORE to XR03
+ ip address 10.0.31.11 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 10
+ mpls ip
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0011.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+ mpls ldp sync
+!

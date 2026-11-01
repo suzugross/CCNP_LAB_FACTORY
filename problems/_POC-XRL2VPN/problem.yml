@@ -1,0 +1,35 @@
+# BL-246 PoC: M11 L2VPN とキャリア イーサネット(SPCOR 4.1.a・4.2)の機種の見極めと挙動の実測。記録= problems/_drafts/XR-TRACK.design.md §24。手順= poc/xr/l2vpn_poc.sh
+# 盤面= 四角形のコア(IS-IS CORE・LDP。パスワードやセッション保護は省いた素の形)に PE を 4 台:
+#   XR01(PE・XRv9000) Gi0/0/0/2 CE1・Gi0/0/0/3 SW1      XR02(PE・XRv9000・RT03 の先) Gi0/0/0/1 CE4・Gi0/0/0/2 SW1
+#   XR03(PE・XRd・RT01 の先) Gi0/0/0/1 CE3(XRd が L2 を転送するかを見る)   RT02(PE・IOL) Et0/2 CE2
+#   SW1(IOL-L2)= XR01 と XR02 に二重に収容する CE(EVPN のマルチホーム用)
+# CE は IOL ルータのサブインタフェースで VLAN を出し分ける(サービスごとに 192.168.<VLAN>.0/24・ホスト部= CE の番号)。PE 側の設定は PoC の段で足す。
+id: _POC-XRL2VPN
+title: "[PoC] XR L2VPN"
+exam: POC
+topics: [iosxr, poc]
+difficulty: 0
+topology: generated
+access: ssh
+target_nodes: [XR01, XR02, XR03, RT01, RT02, RT03, CE1, CE2, CE3, CE4, SW1]
+points: 0
+image_family: iol
+node_image_families: { XR01: iosxr, XR02: iosxr, XR03: iosxr }
+node_xr_platforms: { XR03: iosxrd }
+node_images: { XR01: iosxrv9000-26-1-1, XR02: iosxrv9000-26-1-1 }
+lab:
+  positions: { XR01: [0, 0], RT01: [400, 0], RT03: [0, 240], RT02: [400, 240], XR02: [0, 480], XR03: [400, -240],
+               CE1: [-400, -80], SW1: [-400, 240], CE4: [-400, 520], CE3: [800, -240], CE2: [800, 240] }
+  links:
+    - { a: XR01, a_if: 3, b: RT01, b_if: 0 }
+    - { a: RT01, a_if: 1, b: RT02, b_if: 0 }
+    - { a: XR01, a_if: 4, b: RT03, b_if: 0 }
+    - { a: RT03, a_if: 1, b: RT02, b_if: 1 }
+    - { a: RT03, a_if: 2, b: XR02, b_if: 3 }
+    - { a: RT01, a_if: 2, b: XR03, b_if: 3 }
+    - { a: XR01, a_if: 5, b: CE1, b_if: 0 }
+    - { a: XR01, a_if: 6, b: SW1, b_if: 0 }
+    - { a: XR02, a_if: 4, b: CE4, b_if: 0 }
+    - { a: XR02, a_if: 5, b: SW1, b_if: 1 }
+    - { a: XR03, a_if: 4, b: CE3, b_if: 0 }
+    - { a: RT02, a_if: 2, b: CE2, b_if: 0 }

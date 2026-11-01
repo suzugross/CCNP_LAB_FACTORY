@@ -1635,3 +1635,185 @@ XR02(RR・XRd)は M9 の模範解のまま。ラボ ID は `XRT-10`。
   §3.1= PCE と PCC(fold・M10-5)/§3.2= 離した 2 本(fold・M10-5。形は `poc/xr/sr-hi.log` の running-config)。RPL の「通すとも変えるともしなかった
   ルートは捨てる」(既定の drop)は XRT-10 の実機でも確認(`pass` の無い受け入れのポリシーで顧客 B のルートが denied・2026-10-31)。
 - XRT-10 の task.md/task.en.md の「コマンド例は示しません」を「課題の中には示さない・読み物の設定例は答えと同形なら畳んである」に書き換えた。
+
+## 24. M11 L2VPN とキャリア イーサネット(SPCOR 4.2・4.1.a)(2026-11-01 完了= 課題 §24.7・ユーザ判断 §24.5・§24.5b-8・実装の結果 §24.8)
+
+**範囲= SPCOR 4.2(a イーサネット サービス E-Line・E-Tree・E-Access・E-LAN/b 802.1ad・802.1ah・G.8032/c イーサネット OAM/d VLAN タグの操作)
+と 4.1.a EVPN**。2026-11-01 ユーザが XRT-10 の M10-1〜5 を全通過 → 撤収・M10 の設定例の後付けをコミット(58b8100)→ PoC(ユーザ指示)。
+この単元から CLAUDE.md §6 の書き方(技術そのものから丁寧に・機能ごとの設定例を `:::config` で)で最初から書く。
+
+### 24.1 PoC の盤面(`problems/_POC-XRL2VPN`・手順 `poc/xr/l2vpn_poc.sh`・記録 `poc/xr/l2vpn-*.log`)
+
+- コア= XRT-07 以来の四角形(IS-IS CORE L2・LDP・同期。PoC ではパスワードとセッション保護を省いた素の形)。RT01/RT03= P(IOL 17.15)。
+- PE を 4 台= **XR01・XR02(どちらも XRv9000 26.1.1)**・**XR03(XRd 26.1.1)**・**RT02(IOL 17.15)**。XR02 は RT03 の先、XR03 は RT01 の先。
+  XRv9000 を 2 台(同時の上限)並べたのは、EVPN のマルチホーム(1 台の CE を 2 台の PE に収容)と XR 同士の EVPN を同じ盤面で見るため。
+- CE= CE1(XR01)・CE2(RT02)・CE3(XR03)・CE4(XR02)は IOL ルータのサブインタフェースで VLAN を出し分ける(サービスごとに 192.168.<VLAN>.0/24・
+  ホスト部= CE の番号。CE4 だけ E-LAN を VLAN 201 で出す= タグの付け替えを見る材料)。SW1(IOL-L2)= XR01 と XR02 に LACP の束で二重に収容。
+- 資源= CML ホスト 50.6GB のうち 撤収後の空き 48.8GB(XRv9000 2 台で約 40GB)。
+
+### 24.2 PoC で確かめること
+
+1. **機種の見極め**: XRd(Control Plane 版)が l2transport のサブインタフェース・疑似回線・ブリッジ ドメインを受け付け、フレームを転送するか
+   (L3 では PE の向きで TCP/UDP を壊した= §22.4)。XRv9000 の L2VPN(LDP の疑似回線・EVPN-VPWS・EVPN の E-LAN・VPLS)の可否。
+2. **IOL 17.15 が相手の PE になれるか**: EVC(service instance)・`l2vpn xconnect context`・サブインタフェースの `xconnect`・VPLS(`l2vpn vfi context`)・
+   EVPN(`l2vpn evpn instance`)・CFM。CE の IOL が二重タグ(Q-in-Q)のサブインタフェースを作れるか。
+3. **E-Line(LDP の疑似回線)XR01⇔RT02**: 疑似回線が上がるか・VC タイプ(4 か 5)の既定と食い違い・MTU と control word の食い違いの症状(TS の候補)。
+4. **EVPN-VPWS XR01⇔XR02**: BGP の l2vpn evpn・source/target の食い違いの症状。
+5. **E-LAN**: EVPN の EVI を付けたブリッジ ドメイン(XR01・XR02)・VPLS(XR01⇔RT02)・タグの付け替え(CE4 の VLAN 201)・MAC の学習の表示。
+6. **EVPN のマルチホーム**: SW1 を all-active/single-active で収容(ESI・LACP の system ID)・片方の PE を落とした時の挙動。IOL-L2 の LACP が XR の束と組めるか。
+7. **E-OAM**: CFM(MEP・CC・ループバック・リンクトレース)・Y.1731 の遅延の測定。IOL 側の CFM の可否。
+8. 読み物向けの確認(時間があれば): E-Tree(EVPN の leaf)・802.1ad(dot1ad のカプセル化)・G.8032・PBB-EVPN が XRv9000 で設定として通るか。
+
+### 24.3 PoC の結果(2026-11-01・XRv9000 26.1.1×2+XRd 26.1.1+IOL 17.15。手順 `poc/xr/l2vpn_poc.sh a…i`・記録 `poc/xr/l2vpn-*.log`)
+
+**機種の見極め(いちばん大きい結果)**
+1. **XRv9000 は VPWS(ポイント ツー ポイント)だけ**。ブリッジ ドメインはローカル(AC だけ)でもコミットで拒否
+   (`VPLS Bridge domains not supported on this platform`・EVI を付けると `Maximum EVI BD configuration reached`)。`show l2vpn capability` も
+   `VPLS allowed: N`・`VPWS allowed: Y`(`Bundle AC supported: Y`・`VPWS PW redundancy supported: Y`)。→ **E-LAN(VPLS・EVPN E-LAN)・E-Tree・
+   EVPN のマルチホーム(相手の PE が足りない)は XR で手を動かせない**(l2vpn-e.log・l2vpn-e3.log)。
+2. **XRv9000 26.1.1 に CFM が無い**(`ethernet cfm` が構文ごと無い・パッケージ一覧に該当なし)。XRd も同じ。IOL ルータの CFM は service が
+   `evc`/`port` だけで、CE のサブインタフェースと同じ VLAN の EVC が作れない(`The VLAN ID (100) has already been configured`)・service instance の下に
+   MEP を置けない → **E-OAM(CFM・Y.1731)は読み物**(l2vpn-g.log・g2b・g2d)。
+3. **XRd(Control Plane 版)は L2 を転送しない**。l2transport のサブインタフェースと LDP の疑似回線は受け付け、疑似回線は up(PW type Ethernet・
+   ラベル交換済み)になるが、AC の受信 0・CE の ARP が Incomplete。rewrite を外しても同じ(l2vpn-b.log・b4・b5)。**ルート リフレクタとしては使える**
+   (XR03 を l2vpn evpn の RR にして XR01⇔XR02 の EVPN-VPWS が成立)。
+4. **IOL 17.15** は EVC・`l2vpn xconnect context`・`interface pseudowire`・VFI・`l2vpn evpn instance`(point-to-point/vlan-based)・CFM の構文をすべて受け付ける
+   (l2vpn-p.log)。**LDP の疑似回線は XRv9000 と相互に通る**(PW type Ethernet・ping/TCP 可)。**EVPN-VPWS は制御だけ通り、データは XR→IOL の向きが
+   IOL で捨てられる**(IOL の Rx drops が増える・IOL→XR は届く)。IOS は L2 属性の拡張コミュニティ(0x604)を付けず、control word のつまみも無い。
+   XR の pw-class の control-word は EVPN-VPWS に当てられない(`EVPN VPWS doesn't support this pw-class config`)。→ **EVPN は XR 同士だけ**(l2vpn-d2*.log)。
+   CE の IOL は二重タグ(`encapsulation dot1Q 400 second-dot1q 10`)のサブインタフェースを作れる。
+
+**E-Line(LDP の疑似回線)XR01⇔RT02**(l2vpn-c.log・c3)
+5. XR は AC に `rewrite ingress tag pop 1 symmetric` → 既定で PW type Ethernet(タイプ 5)・control word なし・MTU 1500。IOS 側は EVC+`l2vpn xconnect context`。
+6. **疑似回線の上の大きさの上限= IP 1478 バイト**(DF 付きで 1478 は通り 1479 は落ちる= 1478+イーサネット 14+ラベル 2 枚 8 = コアの 1500)。
+   **IOL のイーサネットは MTU を変えられない**(`does not support user settable mtu`)→ コアを広げて 1500 を通す実演はできない(読み物で式を示す)。
+   XR01 だけ 1614 に上げると XR01–RT01 の IS-IS が Init に落ちた(MTU の食い違い= M4 の論点の再確認)。
+7. **AC の MTU の食い違い**(XR01 の CE 向き IF を 9014)→ 疑似回線は両側で down。XR `Error: MTU mismatched`(MTU 9000 対 1500)・IOS `Last error: Pseudowire MTU mismatch with peer`。
+8. **相手が IOS だと、VC タイプと control word の食い違いは故障にならない**= IOS は既定で autosense(XR をタイプ 4 にすると IOS も Eth VLAN に合わせ、
+   control word を付けると IOS も on に合わせて up のまま・通信も可)(l2vpn-h.log)。
+9. **XR 同士(XR01⇔XR02 の LDP の疑似回線)だと両方とも故障になる**= タイプ 4 を片側だけ → `Error: PW type mismatched`・control word を片側だけ →
+   `Error: illegal control word`(どちらも down)(l2vpn-i.log)。★RFC 8077 の「片方が使わないなら使わない」と食い違う → 実機を正として記録(§24.4)。
+
+**EVPN-VPWS XR01⇔XR02(RR= XR03)**(l2vpn-d.log・h)
+10. BGP の l2vpn evpn(RR 経由)+ `neighbor evpn evi <EVI> target <相手の AC-ID> source <自分の AC-ID>`。RD/RT は自動(RD= ルータ ID:EVI・RT= AS:EVI)。
+    BGP の経路は種類 1(`[1][ESI 0][AC-ID]/120`)。経路が届くまで 30 秒ほど DN。L2 属性の拡張コミュニティ `0x604:2:0`(P フラグ・MTU 0)。
+11. **EVPN-VPWS は MTU の食い違いを既定で無視**(`Ignore MTU mismatch: Enabled`・`Transmit MTU zero: Enabled`。EVI に `enforce-mtu-match`・`transmit-l2-mtu`)→ MTU は故障の題材にならない。
+12. **target の食い違い**(XR02 だけ target 9)→ XR02 は DN(`neighbor None … local ready`)、XR01 は **UP のまま**(XR02 の経路の AC-ID 4 は XR01 の target と合う)
+    = 表示が非対称(TS 向き)。**RT の食い違い**(XR02 の EVI に 65000:999)→ 両側 DN。
+
+**タグの操作**(l2vpn-f.log・EVPN-VPWS の上で)
+13. 両端で VLAN が違う(110 と 111)→ 両端とも pop 1 なら通る(コアの中はタグなし= 付け替えはしなくてよい)。両端とも rewrite なし → 不通
+    (タグ 110 のまま CE4 へ)。XR02 で `translate 1-to-1 dot1q 110 symmetric` → 通る(表示 `Rewrite Tags: [110]`)。片側だけ pop・片側 translate → 不通。
+14. Q-in-Q= CE が 400/10 の二重タグ → XR01 `encapsulation dot1q 400 second-dot1q 10`+`pop 2` → 相手の VLAN 140(pop 1)へ通る。
+15. `encapsulation dot1ad 401 dot1q 10`・`push dot1q 999`・`translate 1-to-2 dot1ad 500 dot1q 403` は構文としてコミットまで通る(0x88a8 を出す CE が無いので転送は未確認)。
+
+**課題設計のための追加の測定**(判断の後・l2vpn-jk.log)
+16. **LDP の疑似回線で XR の rewrite を付け忘れる → AC の MTU が 1504 になり `Error: MTU mismatched` で down**(IOS 側も `Pseudowire MTU mismatch with peer`。
+    TAC 116453 のとおり)。ジャンボ MTU(9000)と同じエラー行で原因が 2 通り → M11-2 は「同じエラー・違う直し方」にできる。EVPN-VPWS は MTU を無視するので、
+    rewrite の非対称は「up なのに不通」になる(§24.3-13)→ M11-4 の材料。
+17. **Q-in-Q**: AC を `encapsulation dot1q 410`(外側だけ)+ pop 1 にすると内側 10・20 の二重タグをまとめて運ぶ。`exact` を付けると二重タグは落ちる。
+    `second-dot1q 10` で内側を絞れる(20 は落ちる)。`second-dot1q any` は二重タグなら内側を問わず通す。
+
+### 24.4 公式文書での裏どり(2026-11-01・サブエージェント。xrdocs.io は取得していない・問題集サイトは使っていない)
+
+- **XRv 9000 のリリース ノート(7.7.1/7.11.1/24.1.1 の Table 6)**= 対応する L2 は「L2VPN VPWS」と LAG だけ(EVPN・VPLS・CFM・G.8032 の記載なし)→ §24.3-1・2 と一致。
+  CML の参照ページ(IOS XRv 9000)= 「L2 MPLS VPN: PASS」(ポイント ツー ポイント)・転送は約 168 kbps。
+- **XRd のデータ シート(2026-04)**= Control Plane は「minimal forwarding capabilities」・用途は vRR と PCE → §24.3-3 と一致(L2 の明記はなし)。
+- **CML の参照ページ(IOL)**= 「Layer-2 switching is not supported, but layer-2 encapsulations, such as EoMPLS and L2TPv3, are supported」→ IOL の VPLS/E-LAN は転送しない見込み。
+  IOS XE の EVPN-VPWS はルータ(C8000/ASR1000)の文書に無く ASR 920 だけ → §24.3-4 と矛盾しない。
+- **TAC 116350/116453・RFC 8077**= 疑似回線の MTU は両側で一致が必要(§24.3-7 と一致)・XR の IF の MTU は L2 ヘッダ込み・タイプ 4 を片側だけ → PW type mismatched(§24.3-9 と一致)。
+  ASR 9000 の EVPN-VPWS の制約= 7.3.2 以降は MTU 0 を広告し食い違いを既定で無視(§24.3-11 と一致)。
+- **食い違い**: RFC 8077 は control word を「片方が使わないなら使わない」とするが、XR 同士では片側だけ有効にすると down(`illegal control word`)。
+  IOS は autosense で合わせる。→ 実機を正とする(読み物は「XR 同士では合わせないと上がらない・IOS は合わせてくれる」と書く)。
+- AToM の MTU の式(IOS XE 17 の MPLS ガイド)= コアの MTU ≧ お客さまの MTU + トランスポートのヘッダ + ラベルの数 × 4 → §24.3-6 の 1478 と一致。
+
+### 24.5 ユーザ判断(2026-11-01 決定= 1〜3 とも案どおり。1= VPWS に絞る/2= XRT-10 の続き+XRv9000 をもう 1 台/3= §24.6 の 5 本)
+
+1. **範囲**: XR で手を動かすのは VPWS(LDP の疑似回線・EVPN-VPWS・タグの操作・Q-in-Q)に絞り、E-LAN・E-Tree・マルチホーム・E-OAM・G.8032・802.1ah は読み物だけにするか。
+2. **盤面**: XRT-10 を解き終えた状態(SR のコア・L3VPN のお客さま)に XRv9000 をもう 1 台(PE)足すか、PoC と同じ素の盤面(LDP のコア)で作り直すか。
+   前者は「M10 で外した LDP を、疑似回線のシグナリング(targeted LDP)のためだけに戻す」筋が作れる。どちらも XRv9000 2 台(上限)。
+3. **課題案**(§24.6)の本数と TS の仕込み。
+
+### 24.5b 補足 PoC= IOS XE の仮想ルータなら(2026-11-01・ユーザの問い「IOS-XE(CSR1000v / Catalyst 8000V)だったらどうなのか」→「確かめ切る」)
+
+盤面 `problems/_POC-XRL2XE`(P1= IOL を中心にした星形のコア・PE= **XE1/XE2/XE3= Catalyst 8000V 17.15.1a** と XR01= XRv9000 26.1.1・RR= XR02(XRd)・
+CE1〜4= IOL・SW1= IOL-L2 を XE1+XE2 に束で二重に収容)。手順 `poc/xr/l2xe_poc.sh`・SW1 は telnet(`poc/xr/swsh.py`)・記録 `poc/xr/l2xe-*.log`。CSR1000v(17.3.8a)は試していない。
+
+1. **8000V はライセンスの段階を上げるまで MPLS が無い**(既定は `License Level:` 空欄= `show mpls …` が構文ごと無い)。
+   `license boot level network-advantage addon dna-advantage` → `write` → 再起動(確認に答える)で有効。登録は不要。1 台 4GB・転送の上限 20 Mbps。
+2. **EVPN の E-LAN が動く**(vlan-based・EVI 200・`bridge-domain 200` に EFP と `member evpn-instance 200`)。3 拠点で ping/TCP 可。MAC は経路の種類 2
+   (MAC と MAC/IP)・BUM の配り先は種類 3(IMET・`replication-type ingress`)。RR の XRd はそのまま反映する(l2xe-b.log)。
+3. **VPLS(LDP・VFI・3 拠点の全メッシュ)が動く**(l2xe-cd.log)。公式の「Software-based data plane is not supported」(VPLS の制約)は古い世代の文書の持ち越しとみられ、
+   8000V のデータ シートは VPLS を載せている(サブエージェントの文書調査)。
+4. XR01⇔8000V の **LDP の疑似回線は通る**。**EVPN-VPWS は 8000V 同士なら通る**が、**XR⇔8000V は IOL と同じく XR→XE の向きを XE が捨てる**
+   (制御は両側 up)= XR と IOS XE の EVPN-VPWS のデータ プレーンの相互接続の問題(l2xe-cd.log・l2xe-d3.log)。
+5. **EVPN のマルチホーム(all-active)が動く**。ES は種類 0 か 3(`identifier type 3 system-mac …`)・冗長化は all-active だけ(single-active は構文に無い=
+   公式の制約どおり)。SW1 に 1 本の束に見せるには両 PE の Port-channel に同じ `lacp device-id`。両 PE が種類 1(ES ごと・EVI ごとの A-D)と種類 4(ES 経路)を出し、
+   遠い XE3 は SW1 の MAC を ESI 付き・次ホップ 2 つ(aliasing)で持つ。片側(XE1 の Gi3)を落とすと XE3 は数秒で XE1 を外す(ES 単位の取り消し)が、
+   **IOL-L2 はリンク断を受け取らない**(CML の IOL の制約)ので SW1 は LACP の失効まで XE1 側へ振り続ける= 既定(slow)で 30 秒以上不通・`lacp rate fast` で断 約 18 秒(l2xe-e*.log)。
+   ★IOL-L2 の初期設定の `vlan 200` が効かず VLAN が無かった(VTP サーバ)→ telnet で作り直して解決。
+6. **CFM(802.1ag)と Y.1731 が動く**(LDP の疑似回線の E-Line・EVC 名付きの EFP に up MEP)。相手の MEP の学習・ループバック(`ping ethernet mpid …`)5/5・
+   リンクトレース・DMM の双方向の遅延(0.69〜1.92 ms)・相手の EFP を落とすと `Lifetime Expired`。★xconnect の EVC の service は VLAN なし
+   (`service <MA> evc <EVC>`)・VLAN 付きはブリッジ ドメイン用(取り違えると「already been configured with xconnect service」)。
+   **EVPN-VPWS の EFP の MEP は成立せず**(片側が CCM を出さない)= 公式の「EVPN EFI does not support association into EVC」の範囲とみる(深追いしていない)(l2xe-f*.log)。
+8. **ユーザ判断(2026-11-01)= 別のラボで追補**(「どれが一番実務的か」への答え= 今の SP の L2VPN の主役(EVPN の E-LAN+マルチホーム+CFM)は
+   XR で動かせない側にあり、EVPN の仕組み(経路の種類・ESI・DF)は OS を問わず持ち込める/XRT-11 に混ぜると XR⇔XE の EVPN-VPWS が通らず作り物になる)。
+   順序= **XRT-11(XR の VPWS・課題 5 本)を先に仕上げ → M11 追補= 8000V だけの小さなラボ(E-LAN・マルチホーム・CFM)**。読み物は XR の書き方を
+   8000V の実測の設定と並べて示す。8000V の PoC 盤面は撤収(追補のときに組み直す)。
+7. 示唆: E-LAN・マルチホーム・CFM は 8000V で手を動かせるが、**XR は加われない**(XRv9000 は VPWS だけ・XR⇔XE の EVPN-VPWS は通らない)。
+   8000V は 1 台 4GB なので XRv9000 2 台の XRT-11 に何台も足すとメモリが足りない(PoC= XRv9000 1+8000V 3+XRd+IOL 7 で空き 約 15GB)。
+
+### 24.6 課題案(PoC の結果から・ユーザ判断で確定する)
+
+ラボは **`XRT-11`**。PE= XR01(XRv9000)・**XR03(XRv9000 を足す)**・RT02(IOL・据付)、RR= XR02(XRd)。
+
+| 課題 | 中身(挙動で指定・値は課題文で渡す) | 主な XR の論点 | SPCOR |
+|---|---|---|---|
+| M11-1(構築) | お客さま C の拠点 1(XR01・VLAN 100)と拠点 2(RT02・据付・VLAN 200)を E-Line でつなぐ(LDP の疑似回線) | l2transport のサブインタフェース・rewrite pop(両端で VLAN が違ってよい理由)・xconnect と pw-id・(盤面 A なら)targeted LDP だけの `mpls ldp` | 4.2.a・4.2.d |
+| M11-2(TS) | 「拠点間の E-Line が上がらない/上がっているのに通らない」。仕込み案= 前任者が AC の IF にジャンボ MTU(MTU mismatched)+ 別の E-Line で rewrite の付け忘れ(up なのに不通) | `show l2vpn xconnect detail` の Error 行・MTU の数え方(XR は L2 込み)・タグの対称性 | 4.2.a・4.2.d |
+| M11-3(構築) | お客さま D の E-Line を EVPN-VPWS で(XR01⇔XR03・RR は XR02)。両端の VLAN が違う | BGP の l2vpn evpn・RR・`neighbor evpn evi … target … source`・経路の種類 1 の読み方・translate と pop | 4.1.a・4.2.a |
+| M11-4(TS) | 「EVPN-VPWS の片側だけ down」(target の食い違い= 片側は UP に見える)または XR 同士の LDP の疑似回線の control word/タイプの食い違い | 非対称な表示の読み方・`illegal control word`/`PW type mismatched` | 4.1.a |
+| M11-5(構築) | お客さま E の複数の VLAN を 1 本で運ぶ(Q-in-Q= 外側 400) | `encapsulation dot1q 400 second-dot1q …`・pop の枚数・dot1ad との違い(読み物) | 4.2.b・4.2.d |
+
+- 読み物だけ= E-LAN(VPLS・EVPN E-LAN・MAC の学習と分割ホライズン)・E-Tree・EVPN のマルチホーム(ESI・DF・all-active/single-active)・E-OAM(CFM・Y.1731)・
+  G.8032・802.1ah/PBB-EVPN・E-Access。設定例は公式文書の形で載せ、「この環境の XR では動かせない(PoC §24.3-1・2)」と明記する(CLAUDE.md §6 の「根拠は実機」の例外として扱う)。
+- 「やってみる」の候補= 疑似回線の上の大きさの上限(1478)・IOS の autosense(タイプ 4 にしても上がる)・EVPN-VPWS の MTU の無視。
+
+### 24.7 課題の確定案(2026-11-01・§24.5 の決定を受けて。値は課題文で渡す)
+
+盤面= XRT-10 を解き終えた状態(SR のコア・XR01 に LDP なし・L3VPN・SR ポリシー・PCE)+ **XR03**(XRv9000・RT01 の先・IS-IS と SR の prefix-SID index 3 は据付・BGP なし)
++ **CEB3**(お客さま B の拠点 3・L2 だけ)。L2 の E-Line は L3VPN のポートにタグ付きのサブインタフェースで相乗りさせる(CE・XR01 の Gi0/0/0/2・3・RT02 の Et0/2・Et1/0)。
+RT02 の相手側は据付のサブインタフェースの `xconnect`(LDP の疑似回線)。
+
+| 課題 | お客さま・回線 | XR01 側 | 相手側 | 中身 |
+|---|---|---|---|---|
+| M11-1(構築) | A: CEA1 VLAN 100 ⇔ CEA2 VLAN 200(172.31.10.0/24) | Gi0/0/0/2.100 | RT02 Et0/2.200・pw-id 100(据付) | LDP の疑似回線。**XR01 には M10-2 で LDP が無い**→ シグナリング(targeted LDP)のためだけに LDP を戻す・コアのリンクで LDP を動かさない(採点= RT01/RT03 と隣接しない)。L3VPN が止まらないこと |
+| M11-2(TS) | B: CEB1 300/310 ⇔ CEB2 300/310(172.31.30・31.0/24) | Gi0/0/0/3.300・.310(前任者 CHG-1401/1402) | RT02 Et1/0.300・.310・pw-id 300・310(据付) | 両方 `Error: MTU mismatched`。300= rewrite の付け忘れ(AC の MTU 1504)/310= サブインタフェースの MTU 9018(ジャンボ)→ 原因が別 |
+| M11-3(構築) | B: CEB1 VLAN 400 ⇔ CEB3 VLAN 40(172.31.40.0/24) | Gi0/0/0/3.400 | XR03 Gi0/0/0/1.40 | EVPN-VPWS・EVI 400・AC-ID= 拠点の番号(1・3)。l2vpn evpn は RR(XR02)経由だけ(XR01⇔XR03 の直接のセッションは張らない)。XR02 の設定も |
+| M11-4(TS) | B: CEB1 410/420 ⇔ CEB3 41/42(172.31.41・42.0/24) | Gi0/0/0/3.410・.420(前任者 CHG-1411・正しい) | XR03 Gi0/0/0/1.41・.42(前任者 CHG-1411) | 410= XR03 の target が 2(拠点 3 は DN・拠点 1 は UP に見える)/420= XR03 の rewrite の付け忘れ(両側 UP で不通) |
+| M11-5(構築) | B: CEB1 ⇔ CEB3 の S-VLAN 500 の中の C-VLAN 10・20(172.31.51・52.0/24) | Gi0/0/0/3.500 | XR03 Gi0/0/0/1.500 | Q-in-Q の E-Line(EVPN-VPWS・EVI 500)。**外側 500 だけの単一タグ(172.31.50.0/24)は運ばない** → `second-dot1q any`(写しで終わらないひねり) |
+
+- 拠点の番号(AC-ID の約束)= 拠点 1= 1・拠点 2= 2・拠点 3= 3。
+- 採点= 状態(`show l2vpn xconnect`・BGP の要約)+ CE からの ping(`login_probe.py`)。M11-5 は 51/52 が通り 50 が通らないことを両方見る(全部止まっても「50 不通」は満たすため)。
+- 仕込み= `XR01.commits.yml`(CHG-1401・1402・1411)・`XR03.commits.yml`(CHG-1411)。
+
+### 24.8 実装の結果(2026-11-01・ラボ XRT-11)
+
+- **作り方**: XR01・XR02 の初期設定は、XRT-10 の初期設定で一度組み、`PID=XRT-11 poc/xr/solve_xrt10.sh` で M10 を解いた実機の running-config から
+  写した(SR-TE・PCC・カラーの入れ子は手で書かない)。XR03(XRv9000・IS-IS と SR の index 3 は据付・BGP なし)・CEB3・RT01 の CORE-C(RT01 側は LDP の同期を外す)・
+  RT02 のサブインタフェースの `xconnect`(据付)・CE のサブインタフェースを足した。前任者の作業= `XR01.commits.yml`(CHG-1401・1402・1411)・`XR03.commits.yml`(CHG-1411)。
+- **実測で設計を直した点**:
+  1. **XR は `mpls ldp` の設定が無くても、疑似回線の相手と targeted LDP のセッションを張る**(起動時から LDP の設定が無い XR01 でも確認= `show running-config mpls` は
+     `mpls oam` だけ・`Interfaces: 0 LDP configured`)→ M11-1 は「LDP を戻す」ひねりが成り立たない。要件は「コアのリンクで LDP を動かさない」のまま(入れると RT01 と隣接= 採点で落とす)、
+     読み物 2.3 節の論点にした。`mpls ldp`(IF なし)を足す答えも通る(別解)。
+  2. **サブインタフェースの `mtu` は AC を親のポートより大きくできない**(サブインタフェースに 9018 → AC は 1500 のまま)→ ジャンボの仕込みはポートの `mtu 9014` に変更
+     (310 の AC が 9000・300 は 9004。ジャンボを外すと 300 は 1504 が残る= 原因が 2 つ重なる)。サブインタフェースの `mtu 1514` は AC が 1496(タグの分も引く)= 別解にならない。
+  3. 新しい PE(XR03)との l2vpn evpn のセッションは、上がってから経路がそろうまで 1 分ほど(40 秒では `None`・1 分 45 秒で全部 UP)。課題文の待ち時間は「LDP と BGP」と書いた。
+  4. Q-in-Q の拾う形の表(読み物 b4 §2.1)と、両端 rewrite なしで 2 枚のまま運ぶ形(別解・満点)。内側を列挙する形(`10,20`)は後から足す 30 を運ばない
+     → CE に 500/30(172.31.53.0/24)を足して採点で見る。
+- **E2E**: 白紙 0 → 模範解(`solve_xrt11.sh`・learn.yml の逐語= `verbatim.py`)で課題ごと 100・最終 100。M10 の状態(SR ポリシー 3 本 up・TI-LFA 全保護・L3VPN)も保たれる。
+  誤答の判別(`poc/xr/wrong_xrt11.sh`・記録 `poc/xr/expM11-wrong.log`)= コアのリンクに LDP 75・`mpls ldp` だけ(別解)100・ジャンボだけ外す 0・
+  XR01⇔XR03 の直接のセッション 65・識別子の入れ違い 75(両端が互いに矛盾しないので E-Line は通る= 約束の確認だけ落ちる)・420 の直し忘れ 65・
+  外側 500 だけ 65・内側の列挙 55。別解= 両端 rewrite なしの Q-in-Q 100。reset 後に白紙 0(2 回)。読み物の「やってみる」(b0 の rewrite 外し・b2 の XR03 の
+  rewrite 外し・b4 の second-dot1q なし)は解く側と同じ手順で測った。読み物= `courses/xr/{en,ja}/b0〜b6`(3 ページ+付録・実践 3 枚)。
+  XRT-11 は白紙で稼働中(MGMT .11-.20/.31-.33・ユーザ未着手)。

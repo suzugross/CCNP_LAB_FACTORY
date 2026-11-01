@@ -1,0 +1,108 @@
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE1(config)#
+no ip sla 10
+CE1(config)#
+end
+CE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE1(config)#
+ethernet evc E100
+CE1(config-evc)#
+exit
+CE1(config)#
+ethernet cfm domain CUST level 5
+CE1(config-ecfm)#
+service E-LINE-100 evc E100 vlan 100 direction down
+CE1(config-ecfm-srv)#
+continuity-check
+CE1(config-ecfm-srv)#
+continuity-check interval 1s
+CE1(config-ecfm-srv)#
+exit
+CE1(config-ecfm)#
+exit
+CE1(config)#
+interface Ethernet0/0
+CE1(config-if)#
+service instance 100 ethernet E100
+CE1(config-if-srv)#
+encapsulation dot1q 100
+ Invalid configuration on ServInst 100(Et0/0). The VLAN ID (100) has already been configured on interface Ethernet0/0.100
+CE1(config-if-srv)#
+cfm mep domain CUST mpid 1
+                   ^
+% Invalid input detected at '^' marker.
+
+CE1(config-if-srv)#
+end
+CE1#
+show running-config | section cfm|evc|service instance
+ethernet evc E100
+ethernet cfm ieee 
+ethernet cfm global
+ethernet cfm domain CUST level 5
+ service E-LINE-100 evc E100 vlan 100 direction down
+  continuity-check
+ service instance 100 ethernet E100
+CE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE2(config)#
+ethernet evc E100
+CE2(config-evc)#
+exit
+CE2(config)#
+ethernet cfm domain CUST level 5
+CE2(config-ecfm)#
+service E-LINE-100 evc E100 vlan 100 direction down
+CE2(config-ecfm-srv)#
+continuity-check
+CE2(config-ecfm-srv)#
+continuity-check interval 1s
+CE2(config-ecfm-srv)#
+exit
+CE2(config-ecfm)#
+exit
+CE2(config)#
+interface Ethernet0/0
+CE2(config-if)#
+service instance 100 ethernet E100
+CE2(config-if-srv)#
+encapsulation dot1q 100
+ Invalid configuration on ServInst 100(Et0/0). The VLAN ID (100) has already been configured on interface Ethernet0/0.100
+CE2(config-if-srv)#
+cfm mep domain CUST mpid 2
+                   ^
+% Invalid input detected at '^' marker.
+
+CE2(config-if-srv)#
+end
+CE2#
+show running-config | section cfm|evc|service instance
+ethernet evc E100
+ethernet cfm ieee 
+ethernet cfm global
+ethernet cfm domain CUST level 5
+ service E-LINE-100 evc E100 vlan 100 direction down
+  continuity-check
+ service instance 100 ethernet E100
+CE2#
+show ethernet cfm maintenance-points local
+Local MEPs: None
+
+Local MIPs: None
+
+CE1#
+show ethernet cfm maintenance-points remote
+CE1#
+ping 192.168.100.2 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.100.2, timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/2/2 ms
+CE1#
+ping ethernet mpid 2 domain CUST service E-LINE-100
+% No RMEP entry found in for mpid 2 at domain CUST service E-LINE-100, evc E100 vlan 100.
+CE1#

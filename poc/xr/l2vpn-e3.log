@@ -1,0 +1,289 @@
+#### e-3: XR02 の残骸
+show running-config interface GigabitEthernet0/0/0/1.201
+Sun Nov  1 00:38:29.888 UTC
+interface GigabitEthernet0/0/0/1.201 l2transport
+ rewrite ingress tag pop 1 symmetric
+!
+
+RP/0/RP0/CPU0:XR02#
+configure
+Sun Nov  1 00:38:30.382 UTC
+RP/0/RP0/CPU0:XR02(config)#
+no interface GigabitEthernet0/0/0/1.201
+RP/0/RP0/CPU0:XR02(config)#
+commit
+Sun Nov  1 00:38:31.397 UTC
+RP/0/RP0/CPU0:XR02(config)#
+end
+RP/0/RP0/CPU0:XR02#
+#### e-4: AC だけのブリッジ ドメイン(XR01: CE1 の VLAN 200 と SW1 側の VLAN 200)
+configure
+Sun Nov  1 00:38:34.473 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.200 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 200
+RP/0/RP0/CPU0:XR01(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3.200 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 200
+RP/0/RP0/CPU0:XR01(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+bridge group POC
+RP/0/RP0/CPU0:XR01(config-l2vpn-bg)#
+bridge-domain LOCAL200
+RP/0/RP0/CPU0:XR01(config-l2vpn-bg-bd)#
+interface GigabitEthernet0/0/0/2.200
+RP/0/RP0/CPU0:XR01(config-l2vpn-bg-bd-ac)#
+exit
+RP/0/RP0/CPU0:XR01(config-l2vpn-bg-bd)#
+interface GigabitEthernet0/0/0/3.200
+RP/0/RP0/CPU0:XR01(config-l2vpn-bg-bd-ac)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 00:38:41.119 UTC
+
+% Failed to commit one or more configuration items during a pseudo-atomic operation. All changes made have been reverted. Please issue 'show configuration failed [inheritance]' from this session to view the errors
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sun Nov  1 00:38:44.456 UTC
+!! SEMANTIC ERRORS: This configuration was rejected by 
+!! the system due to semantic errors. The individual 
+!! errors with each failed configuration command can be 
+!! found below.
+
+
+l2vpn
+ bridge group POC
+  bridge-domain LOCAL200
+   interface GigabitEthernet0/0/0/2.200
+!!% Invalid argument: VPLS Bridge domains not supported on this platform
+   !
+   interface GigabitEthernet0/0/0/3.200
+!!% Invalid argument: VPLS Bridge domains not supported on this platform
+   !
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+Uncommitted changes found, commit them before exiting(yes/no/cancel)? [cancel]:
+show l2vpn bridge-domain
+% Invalid input.
+Uncommitted changes found, commit them before exiting(yes/no/cancel)? [cancel]:
+#### e-5: XRv9000 の L2VPN の上限(capability)
+show l2vpn capability
+Sun Nov  1 00:38:49.098 UTC
+Capability mode: mixed-mode
+System capability:
+  VPLS Max MAC addresses: 512000 
+  VPLS Max bridge-domains: 16384 
+  VPLS Max attachment circuits: 16384 
+  VPLS Max pseudowires: 16384 
+  RSI bit size: 13 
+  Per-AC drop counters supported: Y 
+  VPLS Preferred path allowed: Y 
+  VPLS Preferred path fallback enable allowed: Y 
+  VPLS Preferred path fallback disable allowed: Y 
+  MAC withdrawal allowed: Y 
+  Max attachment circuits per bridge-domain: 4096 
+  VPLS Max virtual forwarding interfaces: 16384 
+  VPLS Max virtual forwarding interfaces per bridge-domain: 1 
+  VPLS Max pseudowires per bridge-domain: 256 
+  VPLS Max pseudowires per virtual forwarding interface: 256 
+  VPWS PW redundancy supported: Y 
+  VPLS Access PW supported: Y 
+  Bundle AC supported: Y 
+  Security config supported: Y 
+  DHCP snooping supported: N 
+  VPLS Static MAC filter supported: Y 
+  VPLS MAC configs on bridge port supported: Y 
+  VPLS Flooding config on bridge port supported: Y 
+  Flood unknown unicast disable supported: Y 
+  IGMP snooping supported: N 
+  MMRP flood optimization supported: N 
+  MMRP flood optimization max multicast address entries: 1024 [DEFAULT]
+  MMRP flood optimization max PW participants: 4096 [DEFAULT]
+  VPLS MAC Aging Default Timer Value: 300 
+  VPLS MAC Aging Min Timer Value: 300 
+  VPLS MAC Aging Max Timer Value: 30000 
+  VPWS Max attachment circuits: 16384 
+  VPWS Max pseudowires: 16384 
+  VPWS Preferred path fallback enable allowed: Y 
+  VPWS Preferred path fallback disable allowed: Y 
+  VPLS allowed: N 
+  VPLS Default MAC limit: 4000 
+  Split Horizon Group supported: Y 
+  VPLS Max MAC addresses per bridge-domain: 32768 
+  VPWS allowed: Y 
+  VPWS Max xconnects: 16384 
+  Ignore MTU Check: Y [,,,,Ether,,,,,HDLC,FR DLCI,,PPP,,,,,,,,,EFP,,,,,PWHE-L2IF,,,,]
+  Multi-segment Psweudowires supported: Y 
+  VPWS Local switcing (AC-AC XCs) supported: Y 
+  VPWS regular AC-PW Cross-connects supported: Y 
+  VPLS BGP Autodiscovery and BGP Signaling supported: N 
+  VPLS BGP Autodiscovery and LDP Signaling supported: N 
+  VPWS BGP Autodiscovery and BGP Signaling supported: Y 
+  Broadcast Storm Control supported: N 
+  Provider Backbone Bridge supported: N 
+  IB Backbone Edge Bridge supported: N 
+  I Backbone Edge Bridge supported: N 
+  B Backbone Edge Bridge supported: N 
+  Maximum i-SID per system: 2048 
+  Maximum PBB edge BD per system: 0 
+  Maximum PBB core BD per system: 0 
+  Per PBB edge BP MAC limit supported: N 
+  Per PBB core BP MAC limit supported: N 
+  Per PBB edge BP DHCP snooping supported: N 
+  Per PBB core BP DHCP snooping supported: N 
+  Per PBB edge BP IGMP snooping supported: N 
+  Per PBB core BP IGMP snooping supported: N 
+  PBB Edge Access PW supported: N 
+  PBB Core Access PW supported: N 
+  PBB Edge VFI supported: N 
+  PBB Core VFI supported: N 
+  Maximum EVPN BD per system: 0 
+  Sequencing in MPLS Core : N 
+  Sequencing in L2TP (IP) Core : N 
+  Max Interflex interfaces per cross-connect: 0 
+  Max Interflex interfaces per bridge domain: 0 
+  IPv4 Interworking : N 
+  Ethernet Interworking : N 
+  MVRP supported: N 
+  DAI supported: N 
+  IPSG supported: N 
+  MAC Secure supported: N 
+  Max BVI interface supported : 2048 
+  Max bundle attachment circuits: 8192 
+  Max global xconnect id: 73728 
+  PW-SPAN supported: N 
+  Max ethernet ring g8032: 160 [DEFAULT]
+  Max instance per ethernet ring g8032: 0 
+  Ethernet ring G8032 supported: N 
+  Ethernet ring G8032 virtual channel supported: N 
+  MAX PWHE interfaces supported : 0 
+  Interface-list supported : N 
+  MAX interface list per peer : 0 
+  MAX interfaces per interface list : 0 
+  PWHE supports interface-list : N 
+  PWHE needs interface-list : N 
+  Flow Load Balancing supported: Y 
+  CEM functionality supported: Y [DEFAULT]
+  PW-IW supported : N 
+  TCN propagation supported: N 
+  Transport Mode VLAN passthrough supported: N 
+  P2P backup supported: N 
+  PW-P2MP supported: N [DEFAULT]
+  Setup ATM PW forwarding supported: N [DEFAULT]
+  VPLS coupled-mode supported: Y 
+  Dynamic platform capability supported: N 
+  Dual XID global pool platform capability supported: Y 
+  IPv6 Pseudowires supported: N 
+  Max IPv6 Pseudowires supported: 0 
+  Bridge-domain storm-control supported: Y 
+  MIRP-lite supported: N 
+  PBB-VPLS uses bridge type flags for optimization: N [DEFAULT]
+  EVPN supported : Y 
+  PBB-EVPN supported : Y 
+  EVPN Internal-Label supported : Y 
+  EVPN Single-Home Int-Lbl supported for VxLAN: N [DEFAULT]
+  EVPN Single-Home Int-Lbl supported for MPLS: N [DEFAULT]
+  EVPN Service Group supported : N [DEFAULT]
+  Num EVPN Service Groups supported: 15000 [DEFAULT]
+  EVPN ODN/AS Headend supported : N [DEFAULT]
+  Optimized MAC Address Withdrawal supported: Y 
+  Storm-control rate unit kbps supported: Y 
+  Storm-control rate for pseudowires supported: Y 
+  Storm-control minimum rate unit kbps : 0 
+  Storm-control minimum rate unit pps : 0 
+  PWHE sub-interface supported: N 
+  Forward-class supported: N 
+  Route-Policy supported: Y 
+  BVI with PWHE subinterface supported: N 
+  Max FXC Per System: 1024 
+  Max AC Per FXC: 1024 
+  Label block size for EVPN: 4096 
+  Static MACs are supported: Y 
+  EMA MACs are supported: Y [DEFAULT]
+  EVPN evi stats are supported: N 
+  EVPN control plane only supported : Y 
+  BD FGID Alloc Retry Required : N [DEFAULT]
+  BVI Delayed Replication : N [DEFAULT]
+  ISSU checkpoint sync supported : N [DEFAULT]
+  PWHE FAT and Load-balancing : N [DEFAULT]
+  VS Max VLAN Switches: 0 
+  VS Max Ranges Per VS : 0 
+  VS BVI supported : Y 
+  Control word supported: N [DEFAULT]
+  EVPN Headend supported: N [DEFAULT]
+  EVPN Reroute Label allocation granularity : 0x0 [DEFAULT]
+  EVPN RSync Host BP Permanence : N [DEFAULT]
+  EVPN-VPWS Seamless Integration Supported : N [DEFAULT]
+  EVPN Virtual ethernet-segment supported : N [DEFAULT]
+  Max pseudowires: 0 [DEFAULT]
+  Maximum number of ethernet segments: 65535 [DEFAULT]
+  ODN RT3 over SRv6TE supported: N [DEFAULT]
+  IPv6 VxLAN supported: N [DEFAULT]
+  EVPN VPWS MSTI supported: N [DEFAULT]
+  VC type 4 on ether-type main port supported: N [DEFAULT]
+  VPWS Decoupled mode supported: N [DEFAULT]
+  Protect PW redundancy supported: N [DEFAULT]
+  BD Cached Stats supported: N [DEFAULT]
+  BD AC Cached Stats supported: N [DEFAULT]
+  BD PBB Cached Stats supported: N [DEFAULT]
+  BD EVPN Cached Stats supported: N [DEFAULT]
+  BD PW Cached Stats supported: N [DEFAULT]
+  BD VNI Cached Stats supported: N [DEFAULT]
+  FWD Cached Stats supported: N [DEFAULT]
+  Global Cached Stats supported: N [DEFAULT]
+  XC Seg Cached Stats supported: N [DEFAULT]
+  BVI Host Tracking supported: N [DEFAULT]
+Node 0/0/CPU0 capability: 
+  VPLS Max MAC addresses per port: 32768 
+  VPLS Max MAC addresses per bridge-domain: 32768 
+  VPLS Max MAC addresses: 32768 
+  VPLS Max bridge-domains: 4096 
+  VPLS Max attachment circuits: 16384 [DEFAULT]
+  VPLS Max pseudowires: 16384 [DEFAULT]
+  VPLS Bridge-port MAC limit supported: Y 
+  VPLS MAC limit action supported: Y 
+  VPLS Disable flooding per port supported: Y 
+  VPLS AC type mix per bridge-domain supported: Y 
+  Edge-core role supported: N 
+  VPLS Max attachment circuits per bridge-domain: 2048 
+  VPLS Max split-horizon groups per bridge-domain: 2 
+  VPWS Max attachment circuits: 16384 
+  VPWS Max pseudowires: 16384 
+  RSI bits: 0x0
+  Max bundle attachment circuits: 16384 
+  VPLS Max virtual forwarding interfaces: 4096 
+  VPLS Max pseudowires per bridge-domain: 4096 [DEFAULT]
+  Max global xconnect id: 32768 
+  Max BVI interfaces: 8192 
+  Max i-SID: 2048 
+  Max PBB edge BD: 2048 
+  Max PBB core BD: 2048 
+  Max EVPN BD: 1024 [DEFAULT]
+  Max DHCP bindings: 32768 
+  IPv6 Pseudowires supported: N 
+  Max PWHE main interface: 0 
+  PW Grouping supoorted: N [DEFAULT]
+  VS Max VLAN Switches: 0 [DEFAULT]
+  VS BVI supported : Y [DEFAULT]
+RP/0/RP0/CPU0:XR01#
+show l2vpn resource
+Sun Nov  1 00:38:49.605 UTC
+Memory: Normal
+RP/0/RP0/CPU0:XR01#

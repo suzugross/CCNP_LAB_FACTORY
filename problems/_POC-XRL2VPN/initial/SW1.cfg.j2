@@ -1,0 +1,29 @@
+! _POC-XRL2VPN SW1(IOL-L2 17.15)= XR01 と XR02 に二重に収容される CE。束(LACP)で両方の PE へ。VLAN 200 の SVI で E-LAN に参加。
+vlan 200
+!
+interface Port-channel1
+ description to XR01 + XR02 (EVPN multihoming)
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 200
+!
+interface {{ links[0] }}
+ description to XR01
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 200
+ channel-group 1 mode active
+ no shutdown
+!
+interface {{ links[1] }}
+ description to XR02
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 200
+ channel-group 1 mode active
+ no shutdown
+!
+interface Vlan200
+ ip address 192.168.200.5 255.255.255.0
+ no shutdown
+!

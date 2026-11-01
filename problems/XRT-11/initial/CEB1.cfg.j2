@@ -1,0 +1,67 @@
+! XRT-11 CEB1(IOL 17.15・据付・変更しない)= お客さまの CE(AS 65201)。
+interface Loopback10
+ description LAN
+ ip address 10.102.1.1 255.255.255.0
+!
+
+interface {{ links[0] }}
+ description to PE
+ ip address 172.16.21.2 255.255.255.0
+ no shutdown
+!
+router bgp 65201
+ bgp router-id 10.102.1.1
+ bgp log-neighbor-changes
+ neighbor 172.16.21.1 remote-as 65000
+ address-family ipv4
+  network 10.102.1.0 mask 255.255.255.0
+
+  neighbor 172.16.21.1 activate
+ exit-address-family
+!
+! M11= E-Line(L2)のサブインタフェース(L3VPN のポートにタグ付きで相乗り)。500/10・500/20 は二重タグ(Q-in-Q)
+interface {{ links[0] }}.300
+ description E-Line 300 to site 2
+ encapsulation dot1Q 300
+ ip address 172.31.30.1 255.255.255.0
+!
+interface {{ links[0] }}.310
+ description E-Line 310 to site 2
+ encapsulation dot1Q 310
+ ip address 172.31.31.1 255.255.255.0
+!
+interface {{ links[0] }}.400
+ description E-Line to site 3
+ encapsulation dot1Q 400
+ ip address 172.31.40.1 255.255.255.0
+!
+interface {{ links[0] }}.410
+ description E-Line 410 to site 3
+ encapsulation dot1Q 410
+ ip address 172.31.41.1 255.255.255.0
+!
+interface {{ links[0] }}.420
+ description E-Line 420 to site 3
+ encapsulation dot1Q 420
+ ip address 172.31.42.1 255.255.255.0
+!
+interface {{ links[0] }}.500
+ description single-tagged 500 (must NOT reach site 3)
+ encapsulation dot1Q 500
+ ip address 172.31.50.1 255.255.255.0
+!
+interface {{ links[0] }}.5010
+ description inner VLAN 10 in S-VLAN 500 to site 3
+ encapsulation dot1Q 500 second-dot1q 10
+ ip address 172.31.51.1 255.255.255.0
+!
+interface {{ links[0] }}.5020
+ description inner VLAN 20 in S-VLAN 500 to site 3
+ encapsulation dot1Q 500 second-dot1q 20
+ ip address 172.31.52.1 255.255.255.0
+!
+interface {{ links[0] }}.5030
+ description inner VLAN 30 in S-VLAN 500 to site 3 (a VLAN the customer adds later)
+ encapsulation dot1Q 500 second-dot1q 30
+ ip address 172.31.53.1 255.255.255.0
+!

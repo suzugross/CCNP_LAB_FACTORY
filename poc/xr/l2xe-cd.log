@@ -1,0 +1,347 @@
+
+######## 01:57:25 c-1: VPLS(LDP・VFI・VPN ID 210・BD 210)を XE1〜3 の全メッシュで。AC= service instance 210
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+l2vpn vfi context VPLS210
+XE1(config-vfi)#
+vpn id 210
+XE1(config-vfi)#
+member 10.255.0.42 encapsulation mpls
+XE1(config-vfi)#
+member 10.255.0.43 encapsulation mpls
+XE1(config-vfi)#
+exit
+XE1(config)#
+interface GigabitEthernet2
+XE1(config-if)#
+service instance 210 ethernet
+XE1(config-if-srv)#
+encapsulation dot1q 210
+XE1(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE1(config-if-srv)#
+exit
+XE1(config-if)#
+exit
+XE1(config)#
+bridge-domain 210
+XE1(config-bdomain)#
+member GigabitEthernet2 service-instance 210
+XE1(config-bdomain-efp)#
+member vfi VPLS210
+XE1(config-bdomain)#
+end
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE2(config)#
+l2vpn vfi context VPLS210
+XE2(config-vfi)#
+vpn id 210
+XE2(config-vfi)#
+member 10.255.0.41 encapsulation mpls
+XE2(config-vfi)#
+member 10.255.0.43 encapsulation mpls
+XE2(config-vfi)#
+exit
+XE2(config)#
+interface GigabitEthernet2
+XE2(config-if)#
+service instance 210 ethernet
+XE2(config-if-srv)#
+encapsulation dot1q 210
+XE2(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE2(config-if-srv)#
+exit
+XE2(config-if)#
+exit
+XE2(config)#
+bridge-domain 210
+XE2(config-bdomain)#
+member GigabitEthernet2 service-instance 210
+XE2(config-bdomain-efp)#
+member vfi VPLS210
+XE2(config-bdomain)#
+end
+XE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+l2vpn vfi context VPLS210
+XE3(config-vfi)#
+vpn id 210
+XE3(config-vfi)#
+member 10.255.0.41 encapsulation mpls
+XE3(config-vfi)#
+member 10.255.0.42 encapsulation mpls
+XE3(config-vfi)#
+exit
+XE3(config)#
+interface GigabitEthernet2
+XE3(config-if)#
+service instance 210 ethernet
+XE3(config-if-srv)#
+encapsulation dot1q 210
+XE3(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE3(config-if-srv)#
+exit
+XE3(config-if)#
+exit
+XE3(config)#
+bridge-domain 210
+XE3(config-bdomain)#
+member GigabitEthernet2 service-instance 210
+XE3(config-bdomain-efp)#
+member vfi VPLS210
+XE3(config-bdomain)#
+end
+XE3#
+show l2vpn vfi
+Legend: RT=Route-target, S=Split-horizon, Y=Yes, N=No
+
+VFI name: VPLS210, state: up, type: multipoint, signaling: LDP
+  VPN ID: 210
+  Bridge-Domain 210 attachment circuits:
+  Pseudo-port interface: pseudowire100001
+  Interface          Peer Address     VC ID        S
+  pseudowire100003   10.255.0.43      210          Y
+  pseudowire100002   10.255.0.42      210          Y
+
+XE1#
+show l2vpn atom vc
+
+                                       Service
+Interface Peer ID         VC ID      Type   Name                     Status
+--------- --------------- ---------- ------ ------------------------ ----------
+pw100002  10.255.0.42     210        vfi    VPLS210                  UP        
+pw100003  10.255.0.43     210        vfi    VPLS210                  UP        
+
+XE1#
+show bridge-domain 210
+Bridge-domain 210 (3 ports in all)
+State: UP                    Mac learning: Enabled
+Aging-Timer: 300 second(s)
+Unknown Unicast Flooding Suppression: Disabled
+Maximum address limit: 65536
+    GigabitEthernet2 service instance 210
+    vfi VPLS210 neighbor 10.255.0.42 210
+    vfi VPLS210 neighbor 10.255.0.43 210
+   AED MAC address    Policy  Tag       Age  Pseudoport
+   -----------------------------------------------------------------------------
+
+XE1#
+ping 192.168.210.2 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.210.2, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 2/2/2 ms
+CE1#
+ping 192.168.210.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.210.3, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 2/5/10 ms
+CE1#
+SSH-2.0-Cisco-1.25
+TCP-OK
+show bridge-domain 210 | include Gi|vfi|pseudowire|MAC|mac|aabb
+    GigabitEthernet2 service instance 210
+    vfi VPLS210 neighbor 10.255.0.42 210
+    vfi VPLS210 neighbor 10.255.0.43 210
+   AED MAC address    Policy  Tag       Age  Pseudoport
+   0   AABB.CC00.4F00 forward dynamic   295  GigabitEthernet2.EFP210
+                                             VC_LABEL: 27, Intf: GigabitEthernet1
+                                             VC_LABEL: 27, Intf: GigabitEthernet1
+XE1#
+
+######## 01:58:33 d-1: XE1 ⇔ XR01 の LDP の疑似回線(VLAN 100・pw-id 100)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+interface GigabitEthernet2
+XE1(config-if)#
+service instance 100 ethernet
+XE1(config-if-srv)#
+encapsulation dot1q 100
+XE1(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE1(config-if-srv)#
+exit
+XE1(config-if)#
+exit
+XE1(config)#
+l2vpn xconnect context CE1-CE4
+XE1(config-xconnect)#
+member GigabitEthernet2 service-instance 100
+XE1(config-xconnect)#
+member 10.255.0.1 100 encapsulation mpls
+XE1(config-xconnect)#
+end
+XE1#
+configure
+Sun Nov  1 01:58:39.416 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1.100 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 100
+RP/0/RP0/CPU0:XR01(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc)#
+p2p CE4-CE1
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+interface GigabitEthernet0/0/0/1.100
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+neighbor ipv4 10.255.0.41 pw-id 100
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 01:58:43.928 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sun Nov  1 01:58:45.035 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+
+######## 01:58:47 d-2: XE3 ⇔ XR01 の EVPN-VPWS(VLAN 110・EVI 110・XE3 source 3・XR01 source 1)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+interface GigabitEthernet2
+XE3(config-if)#
+service instance 110 ethernet
+XE3(config-if-srv)#
+encapsulation dot1q 110
+XE3(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE3(config-if-srv)#
+exit
+XE3(config-if)#
+exit
+XE3(config)#
+l2vpn evpn instance 110 point-to-point
+XE3(config-evpn-evi)#
+vpws context CE3-CE4
+XE3(config-evpn-vpws)#
+service target 1 source 3
+XE3(config-evpn-vpws)#
+member GigabitEthernet2 service-instance 110
+XE3(config-evpn-vpws)#
+end
+XE3#
+configure
+Sun Nov  1 01:58:54.092 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1.110 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 110
+RP/0/RP0/CPU0:XR01(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc)#
+p2p CE4-CE3
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+interface GigabitEthernet0/0/0/1.110
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+neighbor evpn evi 110 target 3 source 1
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 01:58:58.602 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sun Nov  1 01:58:59.510 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect
+Sun Nov  1 01:59:32.420 UTC
+Legend: ST = State, UP = Up, DN = Down, AD = Admin Down, UR = Unresolved,
+        SB = Standby, SR = Standby Ready, (PP) = Partially Programmed,
+        LU = Local Up, RU = Remote Up, CO = Connected, (SI) = Seamless Inactive
+
+XConnect                   Segment 1                       Segment 2                
+Group      Name       ST   Description            ST       Description            ST    
+------------------------   -----------------------------   -----------------------------
+POC        CE4-CE1    UP   Gi0/0/0/1.100          UP       10.255.0.41     100    UP    
+----------------------------------------------------------------------------------------
+POC        CE4-CE3    UP   Gi0/0/0/1.110          UP       EVPN 110,3,10.255.0.43 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+RP/0/RP0/CPU0:XR01#
+show l2vpn atom vc
+
+                                       Service
+Interface Peer ID         VC ID      Type   Name                     Status
+--------- --------------- ---------- ------ ------------------------ ----------
+pw100004  10.255.0.1      100        p2p    CE1-CE4                  UP        
+pw100002  10.255.0.42     210        vfi    VPLS210                  UP        
+pw100003  10.255.0.43     210        vfi    VPLS210                  UP        
+
+XE1#
+show l2vpn evpn vpws vc id 110 detail
+EVPN name: CE3-CE4, state: up, type: point-to-point
+  EVPN ID: 110
+  VPWS Service Instance ID: Source 3, Target 1
+  Labels: Local 29, Remote 24010
+  Next Hop Address: 10.255.0.1
+  Associated member interface Gi2 up, Gi2:110 status is up
+  Output interface: Gi1, imposed label stack {20 24010}
+  Preferred path: not configured  
+  Default path: active
+  Dataplane:
+    SSM segment/switch IDs: 20490/4105 (used), PWID: 3
+  Rx Counters
+    0 input transit packets, 0 bytes
+    0 drops
+  Tx Counters
+    0 output transit packets, 0 bytes
+    0 drops
+  5 VC FSM state transitions, Last 5 shown
+    Prov: Idle -> Prov, Sun Nov 01 01:58:53.004 (00:00:43 ago)
+    EviUp: Prov -> LocWait, Sun Nov 01 01:58:53.037 (00:00:43 ago)
+    LocUp: LocWait -> RemWait, Sun Nov 01 01:58:53.038 (00:00:43 ago)
+    RemUp: RemWait -> Act, Sun Nov 01 01:58:59.333 (00:00:37 ago)
+    DpUp: Act -> Est, Sun Nov 01 01:58:59.336 (00:00:37 ago)
+
+XE3#
+ping 192.168.100.1 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.100.1, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 9/10/11 ms
+CE4#
+ping 192.168.110.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.110.3, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+CE4#
+Trying 192.168.110.3, 22 ...
+TCP-NG
+show l2vpn evpn vpws vc id 110 detail | include packets|drops
+    0 input transit packets, 0 bytes
+    8 drops
+    0 output transit packets, 0 bytes
+    0 drops
+XE3#

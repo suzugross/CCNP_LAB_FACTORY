@@ -1,0 +1,99 @@
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE1(config)#
+interface Ethernet0/0.120
+CE1(config-subif)#
+encapsulation dot1Q 120
+CE1(config-subif)#
+ip address 192.168.120.1 255.255.255.0
+CE1(config-subif)#
+end
+CE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE3(config)#
+interface Ethernet0/0.120
+CE3(config-subif)#
+encapsulation dot1Q 120
+CE3(config-subif)#
+ip address 192.168.120.3 255.255.255.0
+CE3(config-subif)#
+end
+CE3#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+interface GigabitEthernet2
+XE1(config-if)#
+service instance 120 ethernet
+XE1(config-if-srv)#
+encapsulation dot1q 120
+XE1(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE1(config-if-srv)#
+exit
+XE1(config-if)#
+exit
+XE1(config)#
+l2vpn evpn instance 120 point-to-point
+XE1(config-evpn-evi)#
+vpws context CE1-CE3
+XE1(config-evpn-vpws)#
+service target 3 source 1
+XE1(config-evpn-vpws)#
+member GigabitEthernet2 service-instance 120
+XE1(config-evpn-vpws)#
+end
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+interface GigabitEthernet2
+XE3(config-if)#
+service instance 120 ethernet
+XE3(config-if-srv)#
+encapsulation dot1q 120
+XE3(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE3(config-if-srv)#
+exit
+XE3(config-if)#
+exit
+XE3(config)#
+l2vpn evpn instance 120 point-to-point
+XE3(config-evpn-evi)#
+vpws context CE3-CE1
+XE3(config-evpn-vpws)#
+service target 1 source 3
+XE3(config-evpn-vpws)#
+member GigabitEthernet2 service-instance 120
+XE3(config-evpn-vpws)#
+end
+XE3#
+show l2vpn evpn vpws vc id 120 detail | include state|Labels|packets|drops
+EVPN name: CE1-CE3, state: up, type: point-to-point
+  Labels: Local 30, Remote 30
+    0 input transit packets, 0 bytes
+    0 drops
+    0 output transit packets, 0 bytes
+    0 drops
+  5 VC FSM state transitions, Last 5 shown
+XE1#
+ping 192.168.120.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.120.3, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 1/1/3 ms
+CE1#
+show l2vpn evpn vpws vc id 120 detail | include packets|drops
+    0 input transit packets, 0 bytes
+    0 drops
+    0 output transit packets, 0 bytes
+    0 drops
+XE1#
+show l2vpn evpn vpws vc id 120 detail | include packets|drops
+    5 input transit packets, 646 bytes
+    0 drops
+    5 output transit packets, 666 bytes
+    0 drops
+XE3#

@@ -1,0 +1,21 @@
+# M11-2: お客さま B の拠点 1⇔2 の E-Line 2 本(前任者 CHG-1401・1402)。どちらも MTU mismatched(300= 9004・310= 9000)。
+# ジャンボ(ポートの mtu 9014)を外すと 310 だけ UP・300 は 1504 のまま(rewrite の付け忘れ)。白紙= どちらも DN= 0 点。
+problem: XRT-11
+total_points: 100
+checks:
+  - name: 'M11-2 XR01: both E-Lines of customer B to site 2 are up (pseudowires 300 and 310 to RT02)'
+    node: XR01
+    command: show l2vpn xconnect
+    raw:
+      - { regex: 'Gi0/0/0/3\.\d+\s+UP\s+10\.255\.0\.12\s+300\s+UP' }
+      - { regex: 'Gi0/0/0/3\.\d+\s+UP\s+10\.255\.0\.12\s+310\s+UP' }
+    points: 40
+  - name: 'M11-2 CEB1: reaches CEB2 over both E-Lines (172.31.30.2 on VLAN 300, 172.31.31.2 on VLAN 310)'
+    node: XR01
+    exec: local
+    command: >-
+      echo '## 300'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.30.2 repeat 5';
+      echo '## 310'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.31.2 repeat 5'
+    raw:
+      - { regex: '## 300[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 310[\s\S]*?Success rate is (?:100|80) percent' }
+    points: 60

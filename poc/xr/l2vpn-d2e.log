@@ -1,0 +1,61 @@
+#### d2-e: 逆向き(CE2→CE1)
+ping 192.168.120.1 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.120.1, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+CE2#
+show l2vpn evpn vpws vc id 120 detail | include packets|drops
+    0 input transit packets, 0 bytes
+    15 drops
+    5 output transit packets, 450 bytes
+    0 drops
+RT02#
+show l2vpn xconnect group POC xc-name CE1-CE2-EVPN detail | $C xc-name CE1-CE2-EVPN detail | i                          nclude "packets|drops"show l2vpn xconnect group POC xc-name CE1-CE2-EVPN detail |$
+Sun Nov  1 00:32:32.016 UTC
+      packets: received 15, sent 1
+      drops: illegal VLAN 0, illegal length 0
+      packets: received 1, sent 15
+RP/0/RP0/CPU0:XR01#
+#### d2-f: XR01 で EVI 120 に control word
+configure
+Sun Nov  1 00:32:34.262 UTC
+RP/0/RP0/CPU0:XR01(config)#
+evpn
+RP/0/RP0/CPU0:XR01(config-evpn)#
+evi 120
+RP/0/RP0/CPU0:XR01(config-evpn-instance)#
+control-word-enable
+                                                      ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR01(config-evpn-instance)#
+commit
+Sun Nov  1 00:32:36.068 UTC
+RP/0/RP0/CPU0:XR01(config-evpn-instance)#
+show configuration failed
+Sun Nov  1 00:32:37.274 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-evpn-instance)#
+end
+RP/0/RP0/CPU0:XR01#
+show l2vpn evpn vpws vc id 120 detail | include state|packets|drops|Control|control
+EVPN name: CE2-CE1, state: up, type: point-to-point
+    0 input transit packets, 0 bytes
+    15 drops
+    5 output transit packets, 450 bytes
+    0 drops
+  5 VC FSM state transitions, Last 5 shown
+RT02#
+ping 192.168.120.2 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.120.2, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+CE1#
+show l2vpn evpn vpws vc id 120 detail | include packets|drops
+    0 input transit packets, 0 bytes
+    20 drops
+    5 output transit packets, 450 bytes
+    0 drops
+RT02#

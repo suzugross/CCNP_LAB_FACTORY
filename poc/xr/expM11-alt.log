@@ -1,0 +1,203 @@
+#### final
+[final]     - '  合計: 100 / 100 点'
+#### try(b2): XR03 .40 の rewrite を外す
+configure
+Sun Nov  1 03:35:57.225 UTC
+RP/0/RP0/CPU0:XR03(config)#
+interface GigabitEthernet0/0/0/1.40 l2transport
+RP/0/RP0/CPU0:XR03(config-subif)#
+no rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR03(config-subif)#
+commit
+Sun Nov  1 03:35:58.730 UTC
+RP/0/RP0/CPU0:XR03(config-subif)#
+end
+RP/0/RP0/CPU0:XR03#
+show l2vpn xconnect | include B-400
+Sun Nov  1 03:36:22.490 UTC
+CUST-B     B-400      UP   Gi0/0/0/3.400          UP       EVPN 400,3,10.255.0.3  UP    
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect | include B-400
+Sun Nov  1 03:36:23.513 UTC
+CUST-B     B-400      UP   Gi0/0/0/1.40           UP       EVPN 400,1,10.255.0.1  UP    
+RP/0/RP0/CPU0:XR03#
+clear arp
+CEB1#
+ping 172.31.40.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.31.40.3, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+CEB1#
+configure
+Sun Nov  1 03:36:37.712 UTC
+RP/0/RP0/CPU0:XR03(config)#
+interface GigabitEthernet0/0/0/1.40 l2transport
+RP/0/RP0/CPU0:XR03(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR03(config-subif)#
+commit
+Sun Nov  1 03:36:39.214 UTC
+RP/0/RP0/CPU0:XR03(config-subif)#
+end
+RP/0/RP0/CPU0:XR03#
+clear arp
+CEB1#
+ping 172.31.40.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.31.40.3, timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/2/3 ms
+CEB1#
+#### 別解 m11t5-norewrite(両端 rewrite なし)
+configure
+Sun Nov  1 03:37:00.687 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3.500 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+no rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+commit
+Sun Nov  1 03:37:02.188 UTC
+RP/0/RP0/CPU0:XR01(config-subif)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Sun Nov  1 03:37:04.381 UTC
+RP/0/RP0/CPU0:XR03(config)#
+interface GigabitEthernet0/0/0/1.500 l2transport
+RP/0/RP0/CPU0:XR03(config-subif)#
+no rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR03(config-subif)#
+commit
+Sun Nov  1 03:37:05.785 UTC
+RP/0/RP0/CPU0:XR03(config-subif)#
+end
+RP/0/RP0/CPU0:XR03#
+clear arp
+CEB1#
+ping 172.31.51.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.31.51.3, timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/3 ms
+CEB1#
+ping 172.31.53.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.31.53.3, timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/2/3 ms
+CEB1#
+ping 172.31.50.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.31.50.3, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+CEB1#
+[m11t5]     - '  合計: 100 / 100 点'
+configure
+Sun Nov  1 03:38:08.749 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3.500 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+commit
+Sun Nov  1 03:38:10.349 UTC
+RP/0/RP0/CPU0:XR01(config-subif)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Sun Nov  1 03:38:12.798 UTC
+RP/0/RP0/CPU0:XR03(config)#
+interface GigabitEthernet0/0/0/1.500 l2transport
+RP/0/RP0/CPU0:XR03(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR03(config-subif)#
+commit
+Sun Nov  1 03:38:14.191 UTC
+RP/0/RP0/CPU0:XR03(config-subif)#
+end
+RP/0/RP0/CPU0:XR03#
+#### 別解 m11t2-submtu(ポート 9014 のまま、サブインタフェースを 1514)
+configure
+Sun Nov  1 03:38:17.904 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01(config-if)#
+mtu 9014
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3.300 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+mtu 1514
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3.310 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+mtu 1514
+RP/0/RP0/CPU0:XR01(config-subif)#
+commit
+Sun Nov  1 03:38:21.725 UTC
+RP/0/RP0/CPU0:XR01(config-subif)#
+show configuration failed
+Sun Nov  1 03:38:22.912 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-subif)#
+end
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect group CUST-B detail | include "XC B-3|st$ST-B detail | include "XC B-3|sta                          te is|MTU  "show l2vpn xconnect group CUST-B detail | include "XC B-3|s$
+Sun Nov  1 03:38:52.252 UTC
+Group CUST-B, XC B-300, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/3.300, state is up
+  PW: neighbor 10.255.0.12, PW ID 300, state is down ( all ready )
+      MTU          1496                           1500                          
+Group CUST-B, XC B-310, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/3.310, state is up
+  PW: neighbor 10.255.0.12, PW ID 310, state is down ( all ready )
+      MTU          1496                           1500                          
+Group CUST-B, XC B-400, state is up; Interworking none
+  AC: GigabitEthernet0/0/0/3.400, state is up
+  EVPN: neighbor 10.255.0.3, PW ID: evi 400, ac-id 3, state is up ( established )
+      MTU          9014                           unknown                       
+Group CUST-B, XC B-410, state is up; Interworking none
+  AC: GigabitEthernet0/0/0/3.410, state is up
+  EVPN: neighbor 10.255.0.3, PW ID: evi 410, ac-id 3, state is up ( established )
+      MTU          9014                           unknown                       
+Group CUST-B, XC B-420, state is up; Interworking none
+  AC: GigabitEthernet0/0/0/3.420, state is up
+  EVPN: neighbor 10.255.0.3, PW ID: evi 420, ac-id 3, state is up ( established )
+      MTU          9014                           unknown                       
+Group CUST-B, XC B-500, state is up; Interworking none
+  AC: GigabitEthernet0/0/0/3.500, state is up
+  EVPN: neighbor 10.255.0.3, PW ID: evi 500, ac-id 3, state is up ( established )
+      MTU          9014                           unknown                       
+RP/0/RP0/CPU0:XR01#
+[m11t2]     - '  合計: 0 / 100 点'
+configure
+Sun Nov  1 03:39:27.887 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01(config-if)#
+no mtu
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3.300 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+no mtu
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3.310 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+no mtu
+RP/0/RP0/CPU0:XR01(config-subif)#
+commit
+Sun Nov  1 03:39:31.700 UTC
+RP/0/RP0/CPU0:XR01(config-subif)#
+end
+RP/0/RP0/CPU0:XR01#

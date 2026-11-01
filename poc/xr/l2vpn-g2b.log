@@ -1,0 +1,200 @@
+
+######## 00:47:44 g2-0: XRd(XR03)は ethernet cfm を受け付けるか(XRv9000 26.1.1 は CFM のパッケージなし= コマンドが無い)
+configure
+Sun Nov  1 00:47:45.988 UTC
+RP/0/RP0/CPU0:XR03(config)#
+ethernet cfm
+                                    ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR03(config)#
+domain CUST level 5 id null
+                                  ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR03(config)#
+show configuration
+Sun Nov  1 00:47:47.492 UTC
+!! Building configuration...
+!! IOS XR Configuration 26.1.1
+end
+
+RP/0/RP0/CPU0:XR03(config)#
+abort
+RP/0/RP0/CPU0:XR03#
+
+######## 00:47:48 g2-1: お客さまの CE 同士(IOL)で CFM の down MEP(VLAN 100= XR01⇔RT02 の LDP の疑似回線を素通り)。CE1 mpid 1・CE2 mpid 2・レベル 5
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE1(config)#
+ethernet cfm ieee
+CE1(config)#
+ethernet cfm global
+CE1(config)#
+ethernet cfm domain CUST level 5
+CE1(config-ecfm)#
+service E-LINE-100 vlan 100 direction down
+                                    ^
+% Invalid input detected at '^' marker.
+
+CE1(config-ecfm)#
+continuity-check
+                 ^
+% Invalid input detected at '^' marker.
+
+CE1(config-ecfm)#
+continuity-check interval 1s
+                 ^
+% Invalid input detected at '^' marker.
+
+CE1(config-ecfm)#
+exit
+CE1(config)#
+exit
+CE1#
+interface Ethernet0/0
+     ^
+% Invalid input detected at '^' marker.
+
+CE1#
+ethernet cfm mep domain CUST mpid 1 vlan 100
+                     ^
+% Invalid input detected at '^' marker.
+
+CE1#
+end
+% Bad IP address or host name% Unknown command or computer name, or unable to find computer address
+CE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE2(config)#
+ethernet cfm ieee
+CE2(config)#
+ethernet cfm global
+CE2(config)#
+ethernet cfm domain CUST level 5
+CE2(config-ecfm)#
+service E-LINE-100 vlan 100 direction down
+                                    ^
+% Invalid input detected at '^' marker.
+
+CE2(config-ecfm)#
+continuity-check
+                 ^
+% Invalid input detected at '^' marker.
+
+CE2(config-ecfm)#
+continuity-check interval 1s
+                 ^
+% Invalid input detected at '^' marker.
+
+CE2(config-ecfm)#
+exit
+CE2(config)#
+exit
+CE2#
+interface Ethernet0/0
+     ^
+% Invalid input detected at '^' marker.
+
+CE2#
+ethernet cfm mep domain CUST mpid 2 vlan 100
+                     ^
+% Invalid input detected at '^' marker.
+
+CE2#
+end
+% Bad IP address or host name% Unknown command or computer name, or unable to find computer address
+CE2#
+show ethernet cfm maintenance-points local
+Local MEPs: None
+
+Local MIPs: None
+
+CE1#
+show ethernet cfm maintenance-points remote
+CE1#
+ping ethernet mpid 2 domain CUST vlan 100
+                                     ^
+% Invalid input detected at '^' marker.
+
+CE1#
+traceroute ethernet mpid 2 domain CUST vlan 100
+                                           ^
+% Invalid input detected at '^' marker.
+
+CE1#
+
+######## 00:50:22 g2-2: Y.1731 の遅延(IP SLA の ethernet y1731 delay DMM)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE1(config)#
+ip sla 10
+CE1(config-ip-sla)#
+ethernet y1731 delay DMM domain CUST vlan 100 mpid 2 cos 0 source mpid 1
+CE1(config-sla-y1731-delay)#
+frequency 10
+                              ^
+% Invalid input detected at '^' marker.
+
+CE1(config-sla-y1731-delay)#
+exit
+CE1(config)#
+ip sla schedule 10 start-time now life forever
+CE1(config)#
+end
+CE1#
+show ip sla summary
+IPSLAs Latest Operation Summary
+Codes: * active, ^ inactive, ~ pending
+All Stats are in milliseconds. Stats with u are in microseconds
+
+ID           Type        Destination       Stats       Return      Last
+                                                       Code        Run 
+-----------------------------------------------------------------------
+*10          y1731-delay Domain:CUST Vlan: -           Unknown     -            
+                         100 Mpid:2                                             
+                                                                                
+                                                                                
+                                                                                
+
+CE1#
+show ip sla statistics 10
+IPSLAs Latest Operation Statistics
+
+IPSLA operation id: 10
+Operation time to live: Forever
+
+
+CE1#
+
+######## 00:50:53 g2-3: 疑似回線を落とす(XR01 の AC を shutdown)→ CE1 の remote MEP の表示
+configure
+Sun Nov  1 00:50:55.639 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.100 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+shutdown
+RP/0/RP0/CPU0:XR01(config-subif)#
+commit
+Sun Nov  1 00:50:57.044 UTC
+RP/0/RP0/CPU0:XR01(config-subif)#
+end
+RP/0/RP0/CPU0:XR01#
+show ethernet cfm maintenance-points remote
+CE1#
+show ethernet cfm errors
+
+CE1#
+show ethernet cfm statistics | include CCM
+CE1#
+configure
+Sun Nov  1 00:51:14.511 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.100 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+no shutdown
+RP/0/RP0/CPU0:XR01(config-subif)#
+commit
+Sun Nov  1 00:51:15.916 UTC
+RP/0/RP0/CPU0:XR01(config-subif)#
+end
+RP/0/RP0/CPU0:XR01#

@@ -1,0 +1,186 @@
+show running-config extcommunity-set
+% Incomplete command.
+RP/0/RP0/CPU0:XR01#
+show running-config route-policy FROM-RR
+Sun Nov  1 02:53:15.444 UTC
+route-policy FROM-RR
+  if extcommunity rt matches-any CUST-A-RT then
+    set extcommunity color COLOR-100
+  endif
+  pass
+end-policy
+!
+
+RP/0/RP0/CPU0:XR01#
+show running-config router isis
+Sun Nov  1 02:53:15.949 UTC
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ distribute link-state
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+  microloop avoidance segment-routing
+  segment-routing mpls sr-prefer
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+   prefix-sid index 1
+  !
+ !
+ interface GigabitEthernet0/0/0/0
+  bfd minimum-interval 100
+  bfd multiplier 3
+  bfd fast-detect ipv4
+  point-to-point
+  address-family ipv4 unicast
+   fast-reroute per-prefix
+   fast-reroute per-prefix ti-lfa
+   metric 10
+  !
+ !
+ interface GigabitEthernet0/0/0/1
+  bfd minimum-interval 100
+  bfd multiplier 3
+  bfd fast-detect ipv4
+  point-to-point
+  address-family ipv4 unicast
+   fast-reroute per-prefix
+   fast-reroute per-prefix ti-lfa
+   metric 100
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show running-config segment-routing
+Sun Nov  1 02:53:16.448 UTC
+segment-routing
+ traffic-eng
+  interface GigabitEthernet0/0/0/0
+   affinity
+    name RT01-MAINT
+   !
+  !
+  on-demand color 100
+   dynamic
+    metric
+     type igp
+    !
+    affinity
+     exclude-any
+      name RT01-MAINT
+     !
+    !
+   !
+  !
+  policy DISJ-1
+   color 201 end-point ipv4 10.255.0.12
+   candidate-paths
+    preference 100
+     dynamic
+      pcep
+      !
+      metric
+       type igp
+      !
+     !
+     constraints
+      disjoint-path group-id 1 type link
+     !
+    !
+   !
+  !
+  policy DISJ-2
+   color 202 end-point ipv4 10.255.0.12
+   candidate-paths
+    preference 100
+     dynamic
+      pcep
+      !
+      metric
+       type igp
+      !
+     !
+     constraints
+      disjoint-path group-id 1 type link
+     !
+    !
+   !
+  !
+  affinity-map
+   name RT01-MAINT bit-position 0
+  !
+  pcc
+   source-address ipv4 10.255.0.1
+   pce address ipv4 10.255.0.21
+   !
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show running-config router bgp
+Sun Nov  1 02:53:16.959 UTC
+router bgp 65000
+ bgp router-id 10.255.0.1
+ address-family ipv4 unicast
+ !
+ address-family vpnv4 unicast
+ !
+ neighbor 192.0.2.2
+  remote-as 64500
+  address-family ipv4 unicast
+   route-policy PASS in
+   route-policy TO-INTERNET out
+  !
+ !
+ neighbor 10.255.0.21
+  remote-as 65000
+  update-source Loopback0
+  address-family vpnv4 unicast
+   route-policy FROM-RR in
+  !
+ !
+ vrf SVC
+  rd 10.255.0.1:900
+  address-family ipv4 unicast
+   redistribute static
+  !
+ !
+ vrf CUST-A
+  rd 10.255.0.1:101
+  address-family ipv4 unicast
+  !
+  neighbor 172.16.11.2
+   remote-as 65101
+   address-family ipv4 unicast
+    route-policy PASS in
+    route-policy PASS out
+    as-override
+   !
+  !
+ !
+ vrf CUST-B
+  rd 10.255.0.1:102
+  address-family ipv4 unicast
+  !
+  neighbor 172.16.21.2
+   remote-as 65201
+   address-family ipv4 unicast
+    route-policy PASS in
+    route-policy PASS out
+   !
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show running-config mpls
+Sun Nov  1 02:53:17.452 UTC
+mpls oam
+!
+
+RP/0/RP0/CPU0:XR01#

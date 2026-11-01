@@ -1,0 +1,58 @@
+!! _POC-XRL2VPN XR01(PE・XRv9000)= コアの IS-IS と LDP だけ。お客さま側の IF は no shutdown だけ(L2VPN は PoC の段で足す)。
+interface Loopback0
+ ipv4 address 10.255.0.1 255.255.255.255
+!
+interface {{ links[3] }}
+ description PRIMARY to RT01
+ ipv4 address 10.0.1.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description BACKUP to RT03
+ ipv4 address 10.0.3.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[5] }}
+ description CE1
+ no shutdown
+!
+interface {{ links[6] }}
+ description SW1 (dual-homed CE)
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+   metric 10
+   mpls ldp sync
+  !
+ !
+ interface {{ links[4] }}
+  point-to-point
+  address-family ipv4 unicast
+   metric 100
+   mpls ldp sync
+  !
+ !
+!
+mpls oam
+!
+mpls ldp
+ interface {{ links[3] }}
+ !
+ interface {{ links[4] }}
+ !
+!
+end

@@ -1,0 +1,50 @@
+######## b-5: XR03・RT02 とも rewrite を外す(タグ 103 を付けたまま運ぶ)
+configure
+Sun Nov  1 00:19:14.897 UTC
+RP/0/RP0/CPU0:XR03(config)#
+interface GigabitEthernet0/0/0/1.103 l2transport
+RP/0/RP0/CPU0:XR03(config-subif)#
+no rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR03(config-subif)#
+commit
+Sun Nov  1 00:19:16.405 UTC
+RP/0/RP0/CPU0:XR03(config-subif)#
+end
+RP/0/RP0/CPU0:XR03#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+interface Ethernet0/2
+RT02(config-if)#
+service instance 103 ethernet
+RT02(config-if-srv)#
+no rewrite ingress tag pop 1 symmetric
+RT02(config-if-srv)#
+end
+RT02#
+clear arp
+CE3#
+ping 192.168.103.2 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.103.2, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+CE3#
+show arp | include 192.168.103
+Internet  192.168.103.2           0   Incomplete      ARPA   
+Internet  192.168.103.3           -   aabb.cc00.4b00  ARPA   Ethernet0/0.103
+CE3#
+TCP-NG
+show l2vpn atom vc vcid 103 detail | include packets|drops
+    12 input transit packets, 768 bytes
+    0 drops, 0 seq err 
+    5 output transit packets, 410 bytes
+    0 drops
+RT02#
+show l2vpn xconnect detail | include "packets|drops|Rewrite"
+Sun Nov  1 00:20:04.350 UTC
+    Rewrite Tags: []
+      packets: received 0, sent 0
+      drops: illegal VLAN 0, illegal length 0
+      packets: received 0, sent 0
+RP/0/RP0/CPU0:XR03#

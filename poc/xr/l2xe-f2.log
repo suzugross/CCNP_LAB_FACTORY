@@ -1,0 +1,134 @@
+#### f2-1: 片付けと入れ直し(xconnect の EVC= VLAN なしの service)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+no ip sla 10
+XE1(config)#
+end
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+ethernet cfm domain CUST level 5
+XE3(config-ecfm)#
+no service E-LINE-120 evc E120 vlan 120
+Service removed for domain CUST and E-LINE-120.
+XE3(config-ecfm)#
+end
+XE3#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+ethernet cfm domain CUST level 5
+XE1(config-ecfm)#
+service E-LINE-120 evc E120
+XE1(config-ecfm-srv)#
+continuity-check
+XE1(config-ecfm-srv)#
+continuity-check interval 1s
+XE1(config-ecfm-srv)#
+end
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+interface GigabitEthernet2
+XE1(config-if)#
+service instance 120 ethernet E120
+XE1(config-if-srv)#
+cfm mep domain CUST mpid 41
+XE1(config-if-srv-ecfm-mep)#
+end
+XE1#
+show running-config | section cfm|evc E120|service instance 120
+ethernet cfm ieee 
+ethernet cfm global
+ethernet cfm domain CUST level 5
+ service E-LINE-120 evc E120
+  continuity-check
+  continuity-check interval 1s
+ethernet evc E120
+ service instance 120 ethernet E120
+  encapsulation dot1q 120
+  rewrite ingress tag pop 1 symmetric
+  cfm mep domain CUST mpid 41
+XE1#
+show l2vpn evpn vpws vc id 120 detail | include state
+EVPN name: CE1-CE3, state: up, type: point-to-point
+  8 VC FSM state transitions, Last 8 shown
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+ethernet cfm domain CUST level 5
+XE3(config-ecfm)#
+service E-LINE-120 evc E120
+XE3(config-ecfm-srv)#
+continuity-check
+XE3(config-ecfm-srv)#
+continuity-check interval 1s
+XE3(config-ecfm-srv)#
+end
+XE3#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+interface GigabitEthernet2
+XE3(config-if)#
+service instance 120 ethernet E120
+XE3(config-if-srv)#
+cfm mep domain CUST mpid 43
+XE3(config-if-srv-ecfm-mep)#
+end
+XE3#
+show running-config | section cfm|evc E120|service instance 120
+ethernet cfm ieee 
+ethernet cfm global
+ethernet cfm domain CUST level 5
+ service E-LINE-120 evc E120
+  continuity-check
+  continuity-check interval 1s
+ethernet evc E120
+ service instance 120 ethernet E120
+  encapsulation dot1q 120
+  rewrite ingress tag pop 1 symmetric
+  cfm mep domain CUST mpid 43
+XE3#
+show l2vpn evpn vpws vc id 120 detail | include state
+EVPN name: CE3-CE1, state: up, type: point-to-point
+  9 VC FSM state transitions, Last 9 shown
+XE3#
+show ethernet cfm maintenance-points local
+Local MEPs:
+--------------------------------------------------------------------------------
+MPID Domain Name                                 Lvl   MacAddress     Type  CC  
+Ofld Domain Id                                   Dir   Port           Id        
+     MA Name                                           SrvcInst       Source    
+     EVC name                                                                   
+     CCM Mode                                   
+--------------------------------------------------------------------------------
+41   CUST                                        5     001e.bdad.52bf XCON  Y
+No   CUST                                        Up    Gi2            N/A
+     E-LINE-120                                        120            Static
+     E120                                                                       
+     Multicast                                                                  
+
+Total Local MEPs: 1
+
+Local MIPs: None
+
+XE1#
+show ethernet cfm maintenance-points remote
+XE1#
+ping ethernet mpid 43 domain CUST service E-LINE-120
+% No RMEP entry found in for mpid 43 at domain CUST service E-LINE-120, evc E120.
+XE1#
+traceroute ethernet mpid 43 domain CUST service E-LINE-120
+No RMEP entry found for mpid 43 at domain CUST service E-LINE-120, evc E120. Traceroute terminated.
+XE1#
+ping 192.168.120.3 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.120.3, timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 1/1/2 ms
+CE1#

@@ -1,0 +1,23 @@
+# 起動後に入れる前任者の作業の履歴(M11-4)。お客さま B の拠点 3⇔1 の E-Line 2 本(EVPN-VPWS)の XR03 側。
+# 410= 相手の AC-ID(target)の取り違え(拠点の番号表で 1 のはずを 2)= XR03 は down・XR01 は up に見える(表示が非対称)/
+# 420= rewrite の付け忘れ= 両側 up なのに通らない(EVPN-VPWS は MTU の食い違いを既定で無視する)。
+- label: CHG-1411
+  comment: CUST-B E-Line site 3 - site 1 (EVPN-VPWS, EVI 410 and 420)
+  lines: |
+    interface GigabitEthernet0/0/0/1.41 l2transport
+     description CUST-B E-Line 410 to site 1
+     encapsulation dot1q 41
+     rewrite ingress tag pop 1 symmetric
+    interface GigabitEthernet0/0/0/1.42 l2transport
+     description CUST-B E-Line 420 to site 1
+     encapsulation dot1q 42
+    l2vpn
+     xconnect group CUST-B
+      p2p B-410
+       interface GigabitEthernet0/0/0/1.41
+       neighbor evpn evi 410 target 2 source 3
+    l2vpn
+     xconnect group CUST-B
+      p2p B-420
+       interface GigabitEthernet0/0/0/1.42
+       neighbor evpn evi 420 target 1 source 3

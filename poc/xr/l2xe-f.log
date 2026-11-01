@@ -1,0 +1,201 @@
+
+######## 02:17:57 f-1: CFM(802.1ag)の MEP を E-Line(EVPN-VPWS・XE1⇔XE3・VLAN 120)の両端の EFP に(XE1 mpid 41・XE3 mpid 43・レベル 5・CC 1 秒)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+ethernet cfm ieee
+XE1(config)#
+ethernet cfm global
+XE1(config)#
+ethernet evc E120
+XE1(config-evc)#
+exit
+XE1(config)#
+ethernet cfm domain CUST level 5
+XE1(config-ecfm)#
+no service E-LINE-120 evc E120
+Service removed for domain CUST and E-LINE-120.
+XE1(config-ecfm)#
+service E-LINE-120 evc E120 vlan 120
+EVC E120 has already been configured with xconnect service and cannot be used for evc-vlan service. Command Aborted.
+XE1(config-ecfm)#
+continuity-check
+                 ^
+% Invalid input detected at '^' marker.
+
+XE1(config-ecfm)#
+continuity-check interval 1s
+                 ^
+% Invalid input detected at '^' marker.
+
+XE1(config-ecfm)#
+exit
+XE1(config)#
+exit
+XE1#
+interface GigabitEthernet2
+      ^
+% Invalid input detected at '^' marker.
+
+XE1#
+service instance 120 ethernet E120
+            ^
+% Invalid input detected at '^' marker.
+
+XE1#
+cfm mep domain CUST mpid 41
+     ^
+% Invalid input detected at '^' marker.
+
+XE1#
+end
+% Bad IP address or host name% Unknown command or computer name, or unable to find computer address
+XE1#
+show running-config | section cfm|evc E120|service instance 120
+ethernet cfm ieee 
+ethernet cfm global
+ethernet cfm domain CUST level 5
+ethernet evc E120
+ service instance 120 ethernet E120
+  encapsulation dot1q 120
+  rewrite ingress tag pop 1 symmetric
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+ethernet cfm ieee
+XE3(config)#
+ethernet cfm global
+XE3(config)#
+ethernet evc E120
+XE3(config-evc)#
+exit
+XE3(config)#
+ethernet cfm domain CUST level 5
+XE3(config-ecfm)#
+no service E-LINE-120 evc E120
+XE3(config-ecfm)#
+service E-LINE-120 evc E120 vlan 120
+XE3(config-ecfm-srv)#
+continuity-check
+XE3(config-ecfm-srv)#
+continuity-check interval 1s
+XE3(config-ecfm-srv)#
+exit
+XE3(config-ecfm)#
+exit
+XE3(config)#
+interface GigabitEthernet2
+XE3(config-if)#
+service instance 120 ethernet E120
+EVC E120 is associated with evc-vlan CFM service BD 120. An xconnect cannot be associated with this Service Instance. Command Aborted.
+XE3(config-if)#
+cfm mep domain CUST mpid 43
+                ^
+% Invalid input detected at '^' marker.
+
+XE3(config-if)#
+end
+XE3#
+show running-config | section cfm|evc E120|service instance 120
+ethernet cfm ieee 
+ethernet cfm global
+ethernet cfm domain CUST level 5
+ service E-LINE-120 evc E120 vlan 120
+  continuity-check
+  continuity-check interval 1s
+ethernet evc E120
+ service instance 120 ethernet
+  encapsulation dot1q 120
+  rewrite ingress tag pop 1 symmetric
+XE3#
+show ethernet cfm maintenance-points local
+Local MEPs: None
+
+Local MIPs: None
+
+XE1#
+show ethernet cfm maintenance-points remote
+XE1#
+ping ethernet mpid 43 domain CUST service E-LINE-120
+% Maintenance Association E-LINE-120 is not found for domain CUST
+XE1#
+traceroute ethernet mpid 43 domain CUST service E-LINE-120
+Maintenance Association E-LINE-120 is not part of domain CUST. Traceroute terminated.
+XE1#
+
+######## 02:19:19 f-2: Y.1731 の遅延(IP SLA の ethernet y1731 delay DMM)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+ip sla 10
+XE1(config-ip-sla)#
+ethernet y1731 delay DMM domain CUST evc E120 mpid 43 cos 0 source mpid 41
+XE1(config-sla-y1731-delay)#
+frequency 10
+                              ^
+% Invalid input detected at '^' marker.
+
+XE1(config-sla-y1731-delay)#
+exit
+XE1(config)#
+ip sla schedule 10 start-time now life forever
+XE1(config)#
+end
+XE1#
+show ip sla summary
+IPSLAs Latest Operation Summary
+Codes: * active, ^ inactive, ~ pending
+All Stats are in milliseconds. Stats with u are in microseconds
+
+ID           Type        Destination       Stats       Return      Last
+                                                       Code        Run 
+-----------------------------------------------------------------------
+*10          y1731-delay Domain:CUST Evc:E -           Unknown     -            
+                         120 Mpid:43                                            
+                                                                                
+                                                                                
+                                                                                
+
+XE1#
+show ip sla statistics 10
+IPSLAs Latest Operation Statistics
+
+IPSLA operation id: 10
+Operation time to live: Forever
+
+
+XE1#
+
+######## 02:19:50 f-3: 片側(XE3)の EFP を落とす → XE1 の remote MEP・エラー
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+interface GigabitEthernet2
+XE3(config-if)#
+service instance 120 ethernet E120
+EVC E120 is associated with evc-vlan CFM service BD 120. An xconnect cannot be associated with this Service Instance. Command Aborted.
+XE3(config-if)#
+shutdown
+XE3(config-if)#
+end
+XE3#
+show ethernet cfm maintenance-points remote
+XE1#
+show ethernet cfm errors
+
+XE1#
+show ethernet cfm maintenance-points local detail | include RDI|Defect|defect
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+interface GigabitEthernet2
+XE3(config-if)#
+service instance 120 ethernet E120
+EVC E120 is associated with evc-vlan CFM service BD 120. An xconnect cannot be associated with this Service Instance. Command Aborted.
+XE3(config-if)#
+no shutdown
+XE3(config-if)#
+end
+XE3#

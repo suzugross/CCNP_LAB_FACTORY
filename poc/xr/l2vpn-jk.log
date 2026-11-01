@@ -1,0 +1,387 @@
+
+######## 01:15:35 j-1: LDP の疑似回線(XR01⇔RT02・VLAN 100)で XR01 の rewrite を付け忘れる → 状態・MTU・通信
+configure
+Sun Nov  1 01:15:36.679 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.100 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+no rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+commit
+Sun Nov  1 01:15:37.982 UTC
+RP/0/RP0/CPU0:XR01(config-subif)#
+end
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect group POC xc-name CE1-CE2 detail | inclu$C xc-name CE1-CE2 detail | includ                          e "state is|MTU|Error|PW t$include "state is|MTU|Error|PW ty                          pe|Rewrite"show l2vpn xconnect group POC xc-name CE1-CE2 detail | incl$
+Sun Nov  1 01:15:55.491 UTC
+Group POC, XC CE1-CE2, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/2.100, state is up
+    Rewrite Tags: []
+    MTU 1504; XC ID 0x2; interworking none
+  PW: neighbor 10.255.0.12, PW ID 100, state is down ( all ready )
+    PW type Ethernet, control word disabled, interworking none
+    Ignore MTU mismatch: Disabled
+    Transmit MTU zero: Disabled
+      MTU          1504                           1500                          
+      PW type      Ethernet                       Ethernet                      
+    Error: MTU mismatched
+RP/0/RP0/CPU0:XR01#
+show l2vpn atom vc vcid 100 detail | include status|MTU|error|Last
+pseudowire100004 is up, VC status is down PW type: Ethernet
+  Create time: 00:54:53, last status change time: 00:00:19
+    Last label FSM state change time: 00:00:19
+    Last peer autosense occurred at: 00:21:20
+    Last error: Pseudowire MTU mismatch with peer
+    Associated member Et0/2 is up, status is up
+      Label/status state machine              : remote invalid, LruRnd
+      Local dataplane status received         : No fault
+      BFD dataplane status received           : Not sent
+      BFD peer monitor status received        : No fault
+      Adjacency status of remote peer         : No fault
+    MTU          1500                           1504
+RT02#
+clear arp
+CE1#
+ping 192.168.100.2 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.100.2, timeout is 2 seconds:
+...
+Success rate is 0 percent (0/3)
+CE1#
+
+######## 01:16:05 j-2: 戻す
+configure
+Sun Nov  1 01:16:07.090 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.100 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+commit
+Sun Nov  1 01:16:08.392 UTC
+RP/0/RP0/CPU0:XR01(config-subif)#
+end
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect
+Sun Nov  1 01:16:26.015 UTC
+Legend: ST = State, UP = Up, DN = Down, AD = Admin Down, UR = Unresolved,
+        SB = Standby, SR = Standby Ready, (PP) = Partially Programmed,
+        LU = Local Up, RU = Remote Up, CO = Connected, (SI) = Seamless Inactive
+
+XConnect                   Segment 1                       Segment 2                
+Group      Name       ST   Description            ST       Description            ST    
+------------------------   -----------------------------   -----------------------------
+POC        CE1-CE2    UP   Gi0/0/0/2.100          UP       10.255.0.12     100    UP    
+----------------------------------------------------------------------------------------
+POC        CE1-CE2-EVPN
+                      UP   Gi0/0/0/2.120          UP       EVPN 120,2,10.255.0.12 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+POC        CE1-CE4    UP   Gi0/0/0/2.110          UP       EVPN 110,4,10.255.0.21 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+POC        QINQ       UP   Gi0/0/0/2.400          UP       EVPN 140,40,10.255.0.21 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+RP/0/RP0/CPU0:XR01#
+
+######## 01:16:26 k-1: Q-in-Q で内側の VLAN をまとめて運ぶ= AC は外側 410 だけを指定して pop 1(EVPN-VPWS XR01⇔XR02・EVI 410)。CE は 410/10 と 410/20
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE1(config)#
+interface Ethernet0/0.4110
+CE1(config-subif)#
+encapsulation dot1Q 410 second-dot1q 10
+CE1(config-subif)#
+ip address 192.168.41.1 255.255.255.0
+CE1(config-subif)#
+exit
+CE1(config)#
+interface Ethernet0/0.4120
+CE1(config-subif)#
+encapsulation dot1Q 410 second-dot1q 20
+CE1(config-subif)#
+ip address 192.168.42.1 255.255.255.0
+CE1(config-subif)#
+end
+CE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE4(config)#
+interface Ethernet0/0.4110
+CE4(config-subif)#
+encapsulation dot1Q 410 second-dot1q 10
+CE4(config-subif)#
+ip address 192.168.41.4 255.255.255.0
+CE4(config-subif)#
+exit
+CE4(config)#
+interface Ethernet0/0.4120
+CE4(config-subif)#
+encapsulation dot1Q 410 second-dot1q 20
+CE4(config-subif)#
+ip address 192.168.42.4 255.255.255.0
+CE4(config-subif)#
+end
+CE4#
+configure
+Sun Nov  1 01:16:37.550 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.410 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 410
+RP/0/RP0/CPU0:XR01(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc)#
+p2p QINQ-ALL
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+interface GigabitEthernet0/0/0/2.410
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+neighbor evpn evi 410 target 2 source 1
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 01:16:42.065 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sun Nov  1 01:16:43.176 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Sun Nov  1 01:16:47.047 UTC
+RP/0/RP0/CPU0:XR02(config)#
+interface GigabitEthernet0/0/0/1.410 l2transport
+RP/0/RP0/CPU0:XR02(config-subif)#
+encapsulation dot1q 410
+RP/0/RP0/CPU0:XR02(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR02(config-subif)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+l2vpn
+RP/0/RP0/CPU0:XR02(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc)#
+p2p QINQ-ALL
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p)#
+interface GigabitEthernet0/0/0/1.410
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p)#
+neighbor evpn evi 410 target 1 source 2
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+commit
+Sun Nov  1 01:16:51.665 UTC
+RP/0/RP0/CPU0:XR02(config)#
+show configuration failed
+Sun Nov  1 01:16:52.889 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02(config)#
+end
+RP/0/RP0/CPU0:XR02#
+show l2vpn xconnect
+Sun Nov  1 01:17:26.838 UTC
+Legend: ST = State, UP = Up, DN = Down, AD = Admin Down, UR = Unresolved,
+        SB = Standby, SR = Standby Ready, (PP) = Partially Programmed,
+        LU = Local Up, RU = Remote Up, CO = Connected, (SI) = Seamless Inactive
+
+XConnect                   Segment 1                       Segment 2                
+Group      Name       ST   Description            ST       Description            ST    
+------------------------   -----------------------------   -----------------------------
+POC        CE1-CE2    UP   Gi0/0/0/2.100          UP       10.255.0.12     100    UP    
+----------------------------------------------------------------------------------------
+POC        CE1-CE2-EVPN
+                      UP   Gi0/0/0/2.120          UP       EVPN 120,2,10.255.0.12 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+POC        CE1-CE4    UP   Gi0/0/0/2.110          UP       EVPN 110,4,10.255.0.21 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+POC        QINQ       UP   Gi0/0/0/2.400          UP       EVPN 140,40,10.255.0.21 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+POC        QINQ-ALL   UP   Gi0/0/0/2.410          UP       EVPN 410,2,10.255.0.21 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect group POC xc-name QINQ-ALL detail | incl$C xc-name QINQ-ALL detail | inclu                          de "state is|MTU|Rewrite|V$ include "state is|MTU|Rewrite|VL                          AN"show l2vpn xconnect group POC xc-name QINQ-ALL detail | inc$
+Sun Nov  1 01:17:27.325 UTC
+Group POC, XC QINQ-ALL, state is up; Interworking none
+  AC: GigabitEthernet0/0/0/2.410, state is up
+    Type VLAN; Num Ranges: 1
+    Rewrite Tags: []
+    VLAN ranges: [410, 410]
+    MTU 1500; XC ID 0xa; interworking none
+      drops: illegal VLAN 0, illegal length 0
+  EVPN: neighbor 10.255.0.21, PW ID: evi 410, ac-id 2, state is up ( established )
+    Ignore MTU mismatch: Enabled
+    Transmit MTU zero: Enabled
+      MTU          1514                           unknown                       
+RP/0/RP0/CPU0:XR01#
+ping 192.168.41.4 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.41.4, timeout is 2 seconds:
+.!!
+Success rate is 66 percent (2/3), round-trip min/avg/max = 4/4/5 ms
+CE1#
+ping 192.168.42.4 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.42.4, timeout is 2 seconds:
+.!!
+Success rate is 66 percent (2/3), round-trip min/avg/max = 3/3/4 ms
+CE1#
+
+######## 01:17:33 k-2: AC を exact にする(外側 410 だけの単一タグに限る)→ 二重タグは落ちる
+configure
+Sun Nov  1 01:17:35.216 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.410 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 410 exact
+RP/0/RP0/CPU0:XR01(config-subif)#
+commit
+Sun Nov  1 01:17:36.519 UTC
+RP/0/RP0/CPU0:XR01(config-subif)#
+show configuration failed
+Sun Nov  1 01:17:37.626 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-subif)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Sun Nov  1 01:17:41.624 UTC
+RP/0/RP0/CPU0:XR02(config)#
+interface GigabitEthernet0/0/0/1.410 l2transport
+RP/0/RP0/CPU0:XR02(config-subif)#
+encapsulation dot1q 410 exact
+RP/0/RP0/CPU0:XR02(config-subif)#
+commit
+Sun Nov  1 01:17:42.927 UTC
+RP/0/RP0/CPU0:XR02(config-subif)#
+show configuration failed
+Sun Nov  1 01:17:43.936 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02(config-subif)#
+end
+RP/0/RP0/CPU0:XR02#
+clear arp
+CE1#
+ping 192.168.41.4 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.41.4, timeout is 2 seconds:
+...
+Success rate is 0 percent (0/3)
+CE1#
+
+######## 01:18:04 k-3: 内側を 10 だけに限る(second-dot1q 10)→ 10 は通り 20 は落ちる
+configure
+Sun Nov  1 01:18:05.920 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.410 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 410 second-dot1q 10
+RP/0/RP0/CPU0:XR01(config-subif)#
+commit
+Sun Nov  1 01:18:07.222 UTC
+RP/0/RP0/CPU0:XR01(config-subif)#
+show configuration failed
+Sun Nov  1 01:18:08.228 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-subif)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Sun Nov  1 01:18:12.138 UTC
+RP/0/RP0/CPU0:XR02(config)#
+interface GigabitEthernet0/0/0/1.410 l2transport
+RP/0/RP0/CPU0:XR02(config-subif)#
+encapsulation dot1q 410 second-dot1q 10
+RP/0/RP0/CPU0:XR02(config-subif)#
+commit
+Sun Nov  1 01:18:13.452 UTC
+RP/0/RP0/CPU0:XR02(config-subif)#
+show configuration failed
+Sun Nov  1 01:18:14.546 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02(config-subif)#
+end
+RP/0/RP0/CPU0:XR02#
+clear arp
+CE1#
+ping 192.168.41.4 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.41.4, timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 3/4/5 ms
+CE1#
+ping 192.168.42.4 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.42.4, timeout is 2 seconds:
+...
+Success rate is 0 percent (0/3)
+CE1#
+
+######## 01:18:35 k-4: second-dot1q any(外側 410 の二重タグだけ・内側は何でも)
+configure
+Sun Nov  1 01:18:37.288 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.410 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 410 second-dot1q any
+RP/0/RP0/CPU0:XR01(config-subif)#
+commit
+Sun Nov  1 01:18:38.689 UTC
+RP/0/RP0/CPU0:XR01(config-subif)#
+show configuration failed
+Sun Nov  1 01:18:39.694 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-subif)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Sun Nov  1 01:18:43.433 UTC
+RP/0/RP0/CPU0:XR02(config)#
+interface GigabitEthernet0/0/0/1.410 l2transport
+RP/0/RP0/CPU0:XR02(config-subif)#
+encapsulation dot1q 410 second-dot1q any
+RP/0/RP0/CPU0:XR02(config-subif)#
+commit
+Sun Nov  1 01:18:44.742 UTC
+RP/0/RP0/CPU0:XR02(config-subif)#
+show configuration failed
+Sun Nov  1 01:18:45.758 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02(config-subif)#
+end
+RP/0/RP0/CPU0:XR02#
+clear arp
+CE1#
+ping 192.168.41.4 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.41.4, timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 3/3/4 ms
+CE1#
+ping 192.168.42.4 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.42.4, timeout is 2 seconds:
+.!!
+Success rate is 66 percent (2/3), round-trip min/avg/max = 2/2/3 ms
+CE1#

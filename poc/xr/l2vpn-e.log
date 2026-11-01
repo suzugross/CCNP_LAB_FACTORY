@@ -1,0 +1,202 @@
+
+######## 00:35:36 e-1: EVPN の E-LAN= ブリッジ ドメイン BD200 に EVI 200(XR01: CE1 の VLAN 200・XR02: CE4 の VLAN 201)。どちらも pop 1 で、BD の中ではタグなし
+configure
+Sun Nov  1 00:35:37.765 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.200 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 200
+RP/0/RP0/CPU0:XR01(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+evpn
+RP/0/RP0/CPU0:XR01(config-evpn)#
+evi 200
+RP/0/RP0/CPU0:XR01(config-evpn-instance)#
+advertise-mac
+RP/0/RP0/CPU0:XR01(config-evpn-instance-mac)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+bridge group POC
+RP/0/RP0/CPU0:XR01(config-l2vpn-bg)#
+bridge-domain BD200
+RP/0/RP0/CPU0:XR01(config-l2vpn-bg-bd)#
+interface GigabitEthernet0/0/0/2.200
+RP/0/RP0/CPU0:XR01(config-l2vpn-bg-bd-ac)#
+exit
+RP/0/RP0/CPU0:XR01(config-l2vpn-bg-bd)#
+evi 200
+RP/0/RP0/CPU0:XR01(config-l2vpn-bg-bd-evi)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 00:35:44.294 UTC
+
+% Failed to commit one or more configuration items during a pseudo-atomic operation. All changes made have been reverted. Please issue 'show configuration failed [inheritance]' from this session to view the errors
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sun Nov  1 00:35:47.012 UTC
+!! SEMANTIC ERRORS: This configuration was rejected by 
+!! the system due to semantic errors. The individual 
+!! errors with each failed configuration command can be 
+!! found below.
+
+
+l2vpn
+ bridge group POC
+  bridge-domain BD200
+   interface GigabitEthernet0/0/0/2.200
+!!% Invalid argument: VPLS Bridge domains not supported on this platform
+   !
+   evi 200
+!!% Invalid argument: Maximum EVI BD configuration reached.
+   !
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+Uncommitted changes found, commit them before exiting(yes/no/cancel)? [cancel]:
+configure
+Sun Nov  1 00:35:51.351 UTC
+RP/0/RP0/CPU0:XR02(config)#
+interface GigabitEthernet0/0/0/1.201 l2transport
+RP/0/RP0/CPU0:XR02(config-subif)#
+encapsulation dot1q 201
+RP/0/RP0/CPU0:XR02(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR02(config-subif)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+evpn
+RP/0/RP0/CPU0:XR02(config-evpn)#
+evi 200
+RP/0/RP0/CPU0:XR02(config-evpn-instance)#
+advertise-mac
+RP/0/RP0/CPU0:XR02(config-evpn-instance-mac)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+l2vpn
+RP/0/RP0/CPU0:XR02(config-l2vpn)#
+bridge group POC
+RP/0/RP0/CPU0:XR02(config-l2vpn-bg)#
+bridge-domain BD200
+RP/0/RP0/CPU0:XR02(config-l2vpn-bg-bd)#
+interface GigabitEthernet0/0/0/1.201
+RP/0/RP0/CPU0:XR02(config-l2vpn-bg-bd-ac)#
+exit
+RP/0/RP0/CPU0:XR02(config-l2vpn-bg-bd)#
+evi 200
+RP/0/RP0/CPU0:XR02(config-l2vpn-bg-bd-evi)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+commit
+Sun Nov  1 00:35:57.985 UTC
+
+% Failed to commit one or more configuration items during a pseudo-atomic operation. All changes made have been reverted. Please issue 'show configuration failed [inheritance]' from this session to view the errors
+RP/0/RP0/CPU0:XR02(config)#
+show configuration failed
+Sun Nov  1 00:36:01.001 UTC
+!! SEMANTIC ERRORS: This configuration was rejected by 
+!! the system due to semantic errors. The individual 
+!! errors with each failed configuration command can be 
+!! found below.
+
+
+l2vpn
+ bridge group POC
+  bridge-domain BD200
+   interface GigabitEthernet0/0/0/1.201
+!!% Invalid argument: VPLS Bridge domains not supported on this platform
+   !
+   evi 200
+!!% Invalid argument: Maximum EVI BD configuration reached.
+   !
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR02(config)#
+end
+Uncommitted changes found, commit them before exiting(yes/no/cancel)? [cancel]:
+ping 192.168.200.4 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.200.4, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+CE1#
+ping 192.168.200.1 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.200.1, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+CE4#
+Trying 192.168.200.4, 22 ...
+TCP-NG
+show l2vpn bridge-domain bd-name BD200
+Sun Nov  1 00:37:15.988 UTC
+RP/0/RP0/CPU0:XR01#
+show l2vpn bridge-domain bd-name BD200 detail | include "sta$name BD200 detail | include "stat                          e|MAC|EVPN|evi|ACs|PWs"show l2vpn bridge-domain bd-name BD200 detail | include "st$
+Sun Nov  1 00:37:16.508 UTC
+RP/0/RP0/CPU0:XR01#
+show evpn evi vpn-id 200 mac
+Sun Nov  1 00:37:17.000 UTC
+
+VPN-ID     Encap      MAC address    IP address                               Nexthop                                 Label    SID                                    
+---------- ---------- -------------- ---------------------------------------- --------------------------------------- -------- ---------------------------------------
+RP/0/RP0/CPU0:XR01#
+show bgp l2vpn evpn rd 10.255.0.21:200
+Sun Nov  1 00:37:17.491 UTC
+RP/0/RP0/CPU0:XR01#
+show l2vpn forwarding bridge-domain POC:BD200 mac-address lo$-domain POC:BD200 mac-address loc                          ation 0/RP0/CPU0show l2vpn forwarding bridge-domain POC:BD200 mac-address l$
+Sun Nov  1 00:37:17.902 UTC
+ To Resynchronize MAC table from the Network Processors, use the command...
+    l2vpn resynchronize forwarding mac-address-table location <r/s/i>
+
+RP/0/RP0/CPU0:XR01#
+
+######## 00:37:18 e-2: タグの付け替えを 1-to-1 の translate で(XR02 の CE4 向きを pop の代わりに translate 1-to-1 dot1q 200)→ BD の中にタグ 200 が残る形。相手 XR01 は pop のまま
+configure
+Sun Nov  1 00:37:19.755 UTC
+RP/0/RP0/CPU0:XR02(config)#
+interface GigabitEthernet0/0/0/1.201 l2transport
+RP/0/RP0/CPU0:XR02(config-subif)#
+rewrite ingress tag translate 1-to-1 dot1q 200$e 1-to-1 dot1q 200                           symmetricrewrite ingress tag translate 1-to-1 dot1q 20$
+RP/0/RP0/CPU0:XR02(config-subif)#
+commit
+Sun Nov  1 00:37:21.163 UTC
+RP/0/RP0/CPU0:XR02(config-subif)#
+show configuration failed
+Sun Nov  1 00:37:22.283 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02(config-subif)#
+end
+RP/0/RP0/CPU0:XR02#
+clear arp
+CE4#
+ping 192.168.200.1 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.200.1, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+CE4#
+configure
+Sun Nov  1 00:37:48.528 UTC
+RP/0/RP0/CPU0:XR02(config)#
+interface GigabitEthernet0/0/0/1.201 l2transport
+RP/0/RP0/CPU0:XR02(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR02(config-subif)#
+commit
+Sun Nov  1 00:37:49.935 UTC
+RP/0/RP0/CPU0:XR02(config-subif)#
+end
+RP/0/RP0/CPU0:XR02#

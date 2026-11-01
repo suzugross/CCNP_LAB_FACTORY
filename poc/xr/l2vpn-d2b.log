@@ -1,0 +1,38 @@
+ping 192.168.120.2 repeat 10
+Type escape sequence to abort.
+Sending 10, 100-byte ICMP Echos to 192.168.120.2, timeout is 2 seconds:
+..........
+Success rate is 0 percent (0/10)
+CE1#
+show arp | include 192.168.120
+Internet  192.168.120.1           -   aabb.cc00.4900  ARPA   Ethernet0/0.120
+Internet  192.168.120.2           0   Incomplete      ARPA   
+CE1#
+show l2vpn evpn vpws vc id 120 detail | include packets|drops|label
+  Output interface: Et0/0, imposed label stack {22 24011}
+    0 input transit packets, 0 bytes
+    15 drops
+    0 output transit packets, 0 bytes
+    0 drops
+RT02#
+show l2vpn xconnect group POC xc-name CE1-CE2-EVPN detail | $C xc-name CE1-CE2-EVPN detail | i                          nclude "packets|bytes|drop$il | include "packets|bytes|drops                          "show l2vpn xconnect group POC xc-name CE1-CE2-EVPN detail |$
+Sun Nov  1 00:31:28.669 UTC
+      packets: received 14, sent 0
+      bytes: received 896, sent 0
+      drops: illegal VLAN 0, illegal length 0
+      packets: received 0, sent 14
+      bytes: received 0, sent 896
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding labels 24011
+Sun Nov  1 00:31:29.182 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24011  Pop         PW(EVI=120 AC-ID=2)   \
+                                      Gi0/0/0/2.120 point2point     0           
+RP/0/RP0/CPU0:XR01#
+show arp | include 192.168.120
+Internet  192.168.120.2           -   aabb.cc00.4a00  ARPA   Ethernet0/0.120
+CE2#
+show interfaces Ethernet0/0.120 | include packets
+CE2#

@@ -1,0 +1,40 @@
+!! _POC-XRL2VPN XR03(PE・XRd・RT01 の先)= コアの IS-IS と LDP だけ。XRd が L2VPN を転送するかを CE3 で見る。
+interface Loopback0
+ ipv4 address 10.255.0.31 255.255.255.255
+!
+interface {{ links[3] }}
+ description CORE to RT01
+ ipv4 address 10.0.31.31 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description CE3
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0031.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+   metric 10
+   mpls ldp sync
+  !
+ !
+!
+mpls oam
+!
+mpls ldp
+ interface {{ links[3] }}
+ !
+!
+end

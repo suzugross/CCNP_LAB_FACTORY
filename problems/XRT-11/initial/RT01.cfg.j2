@@ -1,0 +1,69 @@
+! XRT-11 RT01(IOL 17.15・据付・変更しない)= XRT-10 と同じ P ルータ(BGP なし・SR)+ 新しい PE の XR03 を収容(LDP は張らない= 同期を外す)。
+! SR= SRGB 既定(16000-23999)・Lo0 の index 11・SR のラベルを優先(sr-label-preferred)・TI-LFA・Flex-Algo 128 に参加(定義は持たない・index 1xx= 読み物の「やってみる」用)。IOS どうしの LDP は残す。
+! XR01 向きの IF= LDP の同期を外してある(XR01 が LDP を止めても最大メトリックにしない= 移行の準備)・BFD(100 ms × 3)。
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+mpls ldp discovery targeted-hello accept
+!
+segment-routing mpls
+ !
+ set-attributes
+  address-family ipv4
+   sr-label-preferred
+  exit-address-family
+ !
+ connected-prefix-sid-map
+  address-family ipv4
+   10.255.0.11/32 index 11 range 1
+  exit-address-family
+ !
+  address-family ipv4 algorithm 128
+   10.255.0.11/32 index 111 range 1
+  exit-address-family
+!
+interface Loopback0
+ ip address 10.255.0.11 255.255.255.255
+ ip router isis CORE
+!
+interface {{ links[0] }}
+ description PRIMARY to XR01
+ ip address 10.0.1.11 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 10
+ mpls ip
+ no mpls ldp igp sync
+ bfd interval 100 min_rx 100 multiplier 3
+ isis bfd
+ no shutdown
+!
+interface {{ links[1] }}
+ description CORE-A to RT02
+ ip address 10.0.12.11 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 10
+ mpls ip
+ no shutdown
+!
+interface {{ links[2] }}
+ description CORE to XR03 (new PE)
+ ip address 10.0.31.11 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ isis metric 10
+ mpls ip
+ no mpls ldp igp sync
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0011.00
+ is-type level-2-only
+ metric-style wide
+ segment-routing mpls
+ fast-reroute per-prefix level-2 all
+ fast-reroute ti-lfa level-2
+ flex-algo 128
+ log-adjacency-changes
+ mpls ldp sync
+!

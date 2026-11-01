@@ -1,0 +1,65 @@
+show running-config pce
+Sun Nov  1 02:53:19.744 UTC
+pce
+ address ipv4 10.255.0.21
+!
+
+RP/0/RP0/CPU0:XR02#
+show running-config router isis
+Sun Nov  1 02:53:20.336 UTC
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0021.00
+ distribute link-state
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface GigabitEthernet0/0/0/0
+  point-to-point
+  address-family ipv4 unicast
+   metric 10
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR02#
+show running-config router bgp
+Sun Nov  1 02:53:20.939 UTC
+router bgp 65000
+ bgp router-id 10.255.0.21
+ address-family ipv4 unicast
+ !
+ address-family vpnv4 unicast
+  retain route-target all
+ !
+ neighbor 10.255.0.1
+  remote-as 65000
+  description PE XR01 (CHG-1201)
+  update-source Loopback0
+  address-family ipv4 unicast
+   route-reflector-client
+  !
+  address-family vpnv4 unicast
+   route-reflector-client
+  !
+ !
+ neighbor 10.255.0.12
+  remote-as 65000
+  description PE RT02 (CHG-1201)
+  update-source Loopback0
+  address-family ipv4 unicast
+   route-reflector-client
+  !
+  address-family vpnv4 unicast
+   route-reflector-client
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR02#

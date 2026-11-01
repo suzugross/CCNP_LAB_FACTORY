@@ -1,0 +1,32 @@
+! _POC-XRL2XE XE1(Cat8000v 17.15)= PE。コアの IS-IS と LDP だけ。お客さま側の IF は no shutdown だけ(L2VPN は PoC の段で足す)。
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+!
+interface Loopback0
+ ip address 10.255.0.41 255.255.255.255
+ ip router isis CORE
+!
+interface {{ links[0] }}
+ description CORE to P1
+ ip address 10.0.41.41 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+!
+interface {{ links[1] }}
+ description CE
+ no ip address
+ no shutdown
+!
+interface {{ links[2] }}
+ description SW1 (dual-homed CE)
+ no ip address
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0041.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+!

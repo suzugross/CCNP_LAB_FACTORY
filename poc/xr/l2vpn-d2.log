@@ -1,0 +1,223 @@
+
+######## 00:29:39 d2-1: IOL(RT02)を EVPN-VPWS の相手に(EVI 120・VLAN 120・XR01 source 1 ⇔ RT02 source 2)。CE1/CE2 に VLAN 120 を足す
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE1(config)#
+interface Ethernet0/0.120
+CE1(config-subif)#
+encapsulation dot1Q 120
+CE1(config-subif)#
+ip address 192.168.120.1 255.255.255.0
+CE1(config-subif)#
+end
+CE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE2(config)#
+interface Ethernet0/0.120
+CE2(config-subif)#
+encapsulation dot1Q 120
+CE2(config-subif)#
+ip address 192.168.120.2 255.255.255.0
+CE2(config-subif)#
+end
+CE2#
+configure
+Sun Nov  1 00:29:47.815 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.120 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 120
+RP/0/RP0/CPU0:XR01(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc)#
+p2p CE1-CE2-EVPN
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+interface GigabitEthernet0/0/0/2.120
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+neighbor evpn evi 120 target 2 source 1
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 00:29:52.535 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sun Nov  1 00:29:53.748 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+interface Ethernet0/2
+RT02(config-if)#
+service instance 120 ethernet
+RT02(config-if-srv)#
+encapsulation dot1q 120
+RT02(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+RT02(config-if-srv)#
+exit
+RT02(config-if)#
+exit
+RT02(config)#
+l2vpn evpn instance 120 point-to-point
+RT02(config-evpn-evi)#
+vpws context CE2-CE1
+RT02(config-evpn-vpws)#
+service target 1 source 2
+RT02(config-evpn-vpws)#
+member Ethernet0/2 service-instance 120
+RT02(config-evpn-vpws)#
+end
+RT02#
+show running-config | section l2vpn evpn
+ address-family l2vpn evpn
+  neighbor 10.255.0.31 activate
+  neighbor 10.255.0.31 send-community both
+l2vpn evpn instance 120 point-to-point
+ vpws context CE2-CE1
+  service target 1 source 2
+  member Ethernet0/2 service-instance 120
+ !
+RT02#
+show bgp l2vpn evpn summary
+BGP router identifier 10.255.0.12, local AS number 65000
+BGP table version is 2, main routing table version 2
+1 network entries using 392 bytes of memory
+1 path entries using 232 bytes of memory
+3/1 BGP path/bestpath attribute entries using 888 bytes of memory
+2 BGP rrinfo entries using 80 bytes of memory
+3 BGP extended community entries using 104 bytes of memory
+0 BGP route-map cache entries using 0 bytes of memory
+0 BGP filter-list cache entries using 0 bytes of memory
+BGP using 1696 total bytes of memory
+BGP activity 1/0 prefixes, 1/0 paths, scan interval 60 secs
+1 networks peaked at 00:30:02 Nov 1 2026 UTC (00:00:01.398 ago)
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.31     4        65000       8       6        2    0    0 00:01:33        0
+RT02#
+show l2vpn evpn vpws vc id 120 detail
+EVPN name: CE2-CE1, state: up, type: point-to-point
+  EVPN ID: 120
+  VPWS Service Instance ID: Source 2, Target 1
+  Labels: Local 27, Remote 24011
+  Next Hop Address: 10.255.0.1
+  Associated member interface Et0/2 up, Et0/2:120 status is up
+  Output interface: Et0/0, imposed label stack {22 24011}
+  Preferred path: not configured  
+  Default path: active
+  Dataplane:
+    SSM segment/switch IDs: 16394/12297 (used), PWID: 3
+  Rx Counters
+    0 input transit packets, 0 bytes
+    0 drops
+  Tx Counters
+    0 output transit packets, 0 bytes
+    0 drops
+  5 VC FSM state transitions, Last 5 shown
+    Prov: Idle -> Prov, Sun Nov 01 00:30:02.269 (00:00:33 ago)
+    EviUp: Prov -> LocWait, Sun Nov 01 00:30:02.272 (00:00:33 ago)
+    LocUp: LocWait -> RemWait, Sun Nov 01 00:30:02.277 (00:00:33 ago)
+    RemUp: RemWait -> Act, Sun Nov 01 00:30:05.061 (00:00:30 ago)
+    DpUp: Act -> Est, Sun Nov 01 00:30:05.061 (00:00:30 ago)
+
+RT02#
+show l2vpn evpn vpws vc
+% Incomplete command.
+
+RT02#
+show bgp l2vpn evpn
+BGP table version is 4, local router ID is 10.255.0.12
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.1:120
+ *>i  [1][10.255.0.1:120][00000000000000000000][1]/23
+                      10.255.0.1                    100      0 i
+Route Distinguisher: 10.255.0.12:120
+ *>i  [1][10.255.0.12:120][00000000000000000000][1]/23
+                      10.255.0.1                    100      0 i
+ *>   [1][10.255.0.12:120][00000000000000000000][2]/23
+                      ::                                 32768 ?
+RT02#
+show l2vpn xconnect
+Sun Nov  1 00:30:38.206 UTC
+Legend: ST = State, UP = Up, DN = Down, AD = Admin Down, UR = Unresolved,
+        SB = Standby, SR = Standby Ready, (PP) = Partially Programmed,
+        LU = Local Up, RU = Remote Up, CO = Connected, (SI) = Seamless Inactive
+
+XConnect                   Segment 1                       Segment 2                
+Group      Name       ST   Description            ST       Description            ST    
+------------------------   -----------------------------   -----------------------------
+POC        CE1-CE2    UP   Gi0/0/0/2.100          UP       10.255.0.12     100    UP    
+----------------------------------------------------------------------------------------
+POC        CE1-CE2-EVPN
+                      UP   Gi0/0/0/2.120          UP       EVPN 120,2,10.255.0.12 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+POC        CE1-CE4    UP   Gi0/0/0/2.110          UP       EVPN 110,4,10.255.0.21 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect group POC xc-name CE1-CE2-EVPN detail
+Sun Nov  1 00:30:38.706 UTC
+
+Group POC, XC CE1-CE2-EVPN, state is up; Interworking none
+Decoupled mode: Disabled
+  AC: GigabitEthernet0/0/0/2.120, state is up
+    Type VLAN; Num Ranges: 1
+    Rewrite Tags: []
+    VLAN ranges: [120, 120]
+    MTU 1500; XC ID 0x6; interworking none
+    Statistics:
+      packets: received 0, sent 0
+      bytes: received 0, sent 0
+      drops: illegal VLAN 0, illegal length 0
+  EVPN: neighbor 10.255.0.12, PW ID: evi 120, ac-id 2, state is up ( established )
+    XC ID 0xa0000007
+    Encapsulation MPLS
+    Encap type Ethernet, control word disabled
+    Sequencing not set
+    Ignore MTU mismatch: Enabled
+    Transmit MTU zero: Enabled
+    LSP : Up
+    Force PW UP: Inactive
+    Nexthop type: IPV4 10.255.0.12
+
+      EVPN         Local                          Remote                        
+      ------------ ------------------------------ -----------------------------
+      Label        24011                          10.255.0.12 27                            
+      MTU          1514                           unknown                       
+      Control word disabled                       disabled                      
+      AC ID        1                              2                             
+      EVPN type    Ethernet                       Ethernet                      
+
+      ------------ ------------------------------ -----------------------------
+    Create time: 01/11/2026 00:29:52 (00:00:46 ago)
+    Last time status changed: 01/11/2026 00:30:02 (00:00:36 ago)
+    Statistics:
+      packets: received 0, sent 0
+      bytes: received 0, sent 0
+RP/0/RP0/CPU0:XR01#
+ping 192.168.120.2 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.120.2, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+CE1#

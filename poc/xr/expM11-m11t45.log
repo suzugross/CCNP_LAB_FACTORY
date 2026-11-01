@@ -1,0 +1,112 @@
+#### m11t4
+show l2vpn xconnect | include B-4
+Sun Nov  1 03:00:39.897 UTC
+CUST-B     B-400      UP   Gi0/0/0/1.40           UP       EVPN 400,1,10.255.0.1  UP    
+CUST-B     B-410      UP   Gi0/0/0/1.41           UP       EVPN 410,1,10.255.0.1  UP    
+CUST-B     B-420      UP   Gi0/0/0/1.42           UP       EVPN 420,1,10.255.0.1  UP    
+RP/0/RP0/CPU0:XR03#
+ping 172.31.41.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.31.41.3, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 5/6/7 ms
+CEB1#
+ping 172.31.42.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.31.42.3, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 7/9/10 ms
+CEB1#
+#### m11t5-plain(外側 500 だけ)
+show l2vpn xconnect | include B-500
+Sun Nov  1 03:01:43.785 UTC
+CUST-B     B-500      UP   Gi0/0/0/3.500          UP       EVPN 500,3,10.255.0.3  UP    
+RP/0/RP0/CPU0:XR01#
+ping 172.31.51.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.31.51.3, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 4/6/11 ms
+CEB1#
+ping 172.31.52.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.31.52.3, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 6/7/8 ms
+CEB1#
+ping 172.31.50.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.31.50.3, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 7/8/9 ms
+CEB1#
+#### m11t5(second-dot1q any に直す)
+configure
+Sun Nov  1 03:01:54.364 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3.500 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 500 second-dot1q any
+RP/0/RP0/CPU0:XR01(config-subif)#
+commit
+Sun Nov  1 03:01:55.776 UTC
+RP/0/RP0/CPU0:XR01(config-subif)#
+show configuration failed
+Sun Nov  1 03:01:56.873 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-subif)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Sun Nov  1 03:02:00.088 UTC
+RP/0/RP0/CPU0:XR03(config)#
+interface GigabitEthernet0/0/0/1.500 l2transport
+RP/0/RP0/CPU0:XR03(config-subif)#
+encapsulation dot1q 500 second-dot1q any
+RP/0/RP0/CPU0:XR03(config-subif)#
+commit
+Sun Nov  1 03:02:01.391 UTC
+RP/0/RP0/CPU0:XR03(config-subif)#
+show configuration failed
+Sun Nov  1 03:02:02.404 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR03(config-subif)#
+end
+RP/0/RP0/CPU0:XR03#
+show l2vpn xconnect | include B-500
+Sun Nov  1 03:02:27.237 UTC
+CUST-B     B-500      UP   Gi0/0/0/3.500          UP       EVPN 500,3,10.255.0.3  UP    
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect group CUST-B xc-name B-500 detail | incl$ST-B xc-name B-500 detail | inclu                          de "VLAN|Rewrite|MTU"show l2vpn xconnect group CUST-B xc-name B-500 detail | inc$
+Sun Nov  1 03:02:27.739 UTC
+    Type VLAN; Num Ranges: 1
+    Rewrite Tags: []
+    VLAN ranges: [4096, 4096]
+    MTU 1500; XC ID 0xe; interworking none
+      drops: illegal VLAN 0, illegal length 0
+    Ignore MTU mismatch: Enabled
+    Transmit MTU zero: Enabled
+      MTU          1514                           unknown                       
+RP/0/RP0/CPU0:XR01#
+clear arp
+CEB1#
+ping 172.31.51.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.31.51.3, timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/3/7 ms
+CEB1#
+ping 172.31.52.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.31.52.3, timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/2/3 ms
+CEB1#
+ping 172.31.50.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.31.50.3, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+CEB1#

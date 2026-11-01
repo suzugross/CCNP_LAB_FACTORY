@@ -1,0 +1,32 @@
+######## b-4: 逆向き(CE2→CE3)と各所の数
+ping 192.168.103.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.103.3, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+CE2#
+show l2vpn atom vc vcid 103 detail | include packets|drops
+    12 input transit packets, 768 bytes
+    0 drops, 0 seq err 
+    5 output transit packets, 410 bytes
+    0 drops
+RT02#
+show interfaces GigabitEthernet0/0/0/1 | include "packets input|packets output"
+Sun Nov  1 00:18:55.192 UTC
+     75 packets input, 8076 bytes, 0 total input drops
+     5 packets output, 300 bytes, 0 total output drops
+RP/0/RP0/CPU0:XR03#
+show l2vpn xconnect detail | include "packets|drops"
+Sun Nov  1 00:18:55.594 UTC
+      packets: received 0, sent 0
+      drops: illegal VLAN 0, illegal length 0
+      packets: received 0, sent 0
+RP/0/RP0/CPU0:XR03#
+show mpls forwarding labels 24008
+Sun Nov  1 00:18:56.094 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24008  Pop         PW(10.255.0.12:103)   \
+                                      Gi0/0/0/1.103 point2point     0           
+RP/0/RP0/CPU0:XR03#

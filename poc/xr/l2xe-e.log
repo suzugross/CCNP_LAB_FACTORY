@@ -1,0 +1,496 @@
+
+######## 02:08:37 e-1: EVPN のマルチホーム(all-active・ES 1・種類 3 system-mac 0000.0000.0001)= SW1 の束を XE1 と XE2 の Port-channel1 で受ける。BD 200 に参加
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+l2vpn evpn ethernet-segment 1
+XE1(config-evpn-es)#
+identifier type 3 system-mac 0000.0000.0001
+XE1(config-evpn-es)#
+redundancy all-active
+XE1(config-evpn-es)#
+exit
+XE1(config)#
+interface Port-channel1
+XE1(config-if)#
+no ip address
+XE1(config-if)#
+lacp device-id 0000.0000.0001
+XE1(config-if)#
+evpn ethernet-segment 1
+XE1(config-if)#
+service instance 200 ethernet
+XE1(config-if-srv)#
+encapsulation dot1q 200
+XE1(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE1(config-if-srv)#
+exit
+XE1(config-if)#
+exit
+XE1(config)#
+interface GigabitEthernet3
+XE1(config-if)#
+no ip address
+XE1(config-if)#
+channel-group 1 mode active
+XE1(config-if)#
+exit
+XE1(config)#
+bridge-domain 200
+XE1(config-bdomain)#
+member Port-channel1 service-instance 200
+XE1(config-bdomain-efp)#
+end
+XE1#
+show running-config | section ethernet-segment|Port-channel1|GigabitEthernet3
+l2vpn evpn ethernet-segment 1
+ identifier type 3 system-mac 0000.0000.0001
+ redundancy all-active
+ member Port-channel1 service-instance 200
+interface Port-channel1
+ no ip address
+ no negotiation auto
+ evpn ethernet-segment 1
+ lacp device-id 0000.0000.0001
+ service instance 200 ethernet
+  encapsulation dot1q 200
+  rewrite ingress tag pop 1 symmetric
+ !
+interface GigabitEthernet3
+ description SW1 (dual-homed CE)
+ no ip address
+ negotiation auto
+ channel-group 1 mode active
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE2(config)#
+l2vpn evpn ethernet-segment 1
+XE2(config-evpn-es)#
+identifier type 3 system-mac 0000.0000.0001
+XE2(config-evpn-es)#
+redundancy all-active
+XE2(config-evpn-es)#
+exit
+XE2(config)#
+interface Port-channel1
+XE2(config-if)#
+no ip address
+XE2(config-if)#
+lacp device-id 0000.0000.0001
+XE2(config-if)#
+evpn ethernet-segment 1
+XE2(config-if)#
+service instance 200 ethernet
+XE2(config-if-srv)#
+encapsulation dot1q 200
+XE2(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE2(config-if-srv)#
+exit
+XE2(config-if)#
+exit
+XE2(config)#
+interface GigabitEthernet3
+XE2(config-if)#
+no ip address
+XE2(config-if)#
+channel-group 1 mode active
+XE2(config-if)#
+exit
+XE2(config)#
+bridge-domain 200
+XE2(config-bdomain)#
+member Port-channel1 service-instance 200
+XE2(config-bdomain-efp)#
+end
+XE2#
+show running-config | section ethernet-segment|Port-channel1|GigabitEthernet3
+l2vpn evpn ethernet-segment 1
+ identifier type 3 system-mac 0000.0000.0001
+ redundancy all-active
+ member Port-channel1 service-instance 200
+interface Port-channel1
+ no ip address
+ no negotiation auto
+ evpn ethernet-segment 1
+ lacp device-id 0000.0000.0001
+ service instance 200 ethernet
+  encapsulation dot1q 200
+  rewrite ingress tag pop 1 symmetric
+ !
+interface GigabitEthernet3
+ description SW1 (dual-homed CE)
+ no ip address
+ negotiation auto
+ channel-group 1 mode active
+XE2#
+show etherchannel summary
+Flags:  D - down        P/bndl - bundled in port-channel
+        I - stand-alone s/susp - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1	Po1(SU)		LACP	 Gi3(bndl)
+
+RU - L3 port-channel UP State
+SU - L2 port-channel UP state
+P/bndl -  Bundled
+S/susp  - Suspended
+
+XE1#
+show lacp neighbor
+Flags:  S - Device is requesting Slow LACPDUs 
+        F - Device is requesting Fast LACPDUs
+        A - Device is in Active mode       P - Device is in Passive mode     
+
+Channel group 1 neighbors
+
+                     LACP port                      Admin  Oper   Port    Port
+Port          Flags  Priority  Dev ID          Age  key    Key    Number  State
+Gi3           SA     32768     aabb.cc80.4e00  17s  0x0    0x1    0x1     0x3D  
+XE1#
+show l2vpn evpn ethernet-segment detail
+EVPN Ethernet Segment ID: 0300.0000.0000.0100.0001
+  Local Discriminator:    1
+  Interface:              Po1
+  Redundancy mode:        all-active
+  DF election wait time:  3 seconds
+  Split Horizon label:    16
+  State:                  Ready
+  Encapsulation:          mpls
+  Ordinal:                0
+  Core Isolation:         No
+  RD:                     10.255.0.41:1
+    Export-RTs:           65000:200 
+  Forwarder List:         10.255.0.41 10.255.0.42 
+
+XE1#
+show bgp l2vpn evpn route-type 1
+BGP routing table entry for [1][10.255.0.41:1][03000000000001000001][4294967295]/23, version 35
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Advertised to update-groups:
+     1         
+  Refresh Epoch 1
+  Local
+    :: (via default) from 0.0.0.0 (10.255.0.41)
+      Origin incomplete, localpref 100, weight 32768, valid, sourced, local, best
+      Rcvd Label: None, Local Label: 0
+      Extended Community: RT:65000:200 EVPN LABEL:0x0:Label-256
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:08:50 UTC
+BGP routing table entry for [1][10.255.0.41:120][00000000000000000000][1]/23, version 17
+Paths: (1 available, best #1, table evi_120)
+  Advertised to update-groups:
+     1         
+  Refresh Epoch 1
+  Local
+    :: (via default) from 0.0.0.0 (10.255.0.41)
+      Origin incomplete, localpref 100, weight 32768, valid, sourced, local, best
+      Rcvd Label: None, Local Label: 30
+      Extended Community: RT:65000:120
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:00:40 UTC
+BGP routing table entry for [1][10.255.0.41:120][00000000000000000000][3]/23, version 19
+Paths: (1 available, best #1, table evi_120)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local, imported path from [1][10.255.0.43:120][00000000000000000000][3]/23 (global)
+    10.255.0.43 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 30, Local Label: None
+      Extended Community: RT:65000:120
+      Originator: 10.255.0.43, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:00:46 UTC
+BGP routing table entry for [1][10.255.0.41:200][03000000000001000001][0]/23, version 41
+Paths: (2 available, best #2, table evi_200)
+  Advertised to update-groups:
+     1         
+  Refresh Epoch 1
+  Local, imported path from [1][10.255.0.42:200][03000000000001000001][0]/23 (global)
+    10.255.0.42 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, multipath(oldest)
+      Rcvd Label: 26, Local Label: None
+      Extended Community: RT:65000:200
+      Originator: 10.255.0.42, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0
+      Updated on Nov 1 2026 02:09:02 UTC
+  Refresh Epoch 1
+  Local
+    :: (via default) from 0.0.0.0 (10.255.0.41)
+      Origin incomplete, localpref 100, weight 32768, valid, sourced, local, multipath, best
+      Rcvd Label: None, Local Label: 26
+      Extended Community: RT:65000:200
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:08:52 UTC
+BGP routing table entry for [1][10.255.0.42:1][03000000000001000001][4294967295]/23, version 39
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.42 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 0, Local Label: None
+      Extended Community: RT:65000:200 EVPN LABEL:0x0:Label-256
+      Originator: 10.255.0.42, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:09:00 UTC
+BGP routing table entry for [1][10.255.0.42:200][03000000000001000001][0]/23, version 40
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.42 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 26, Local Label: None
+      Extended Community: RT:65000:200
+      Originator: 10.255.0.42, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:09:02 UTC
+BGP routing table entry for [1][10.255.0.43:120][00000000000000000000][3]/23, version 18
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.43 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 30, Local Label: None
+      Extended Community: RT:65000:120
+      Originator: 10.255.0.43, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:08:52 UTC
+XE1#
+show bgp l2vpn evpn route-type 4
+BGP routing table entry for [4][10.255.0.41:1][03000000000001000001][32][10.255.0.41]/23, version 36
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Advertised to update-groups:
+     1         
+  Refresh Epoch 1
+  Local
+    :: (via default) from 0.0.0.0 (10.255.0.41)
+      Origin incomplete, localpref 100, weight 32768, valid, sourced, local, best
+      Extended Community: EVPN ES-IMPORT:0x0:0x0:0x1
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:08:50 UTC
+BGP routing table entry for [4][10.255.0.42:1][03000000000001000001][32][10.255.0.42]/23, version 38
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.42 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Extended Community: EVPN ES-IMPORT:0x0:0x0:0x1
+      Originator: 10.255.0.42, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:09:00 UTC
+XE1#
+show etherchannel summary
+Flags:  D - down        P/bndl - bundled in port-channel
+        I - stand-alone s/susp - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1	Po1(SU)		LACP	 Gi3(bndl)
+
+RU - L3 port-channel UP State
+SU - L2 port-channel UP state
+P/bndl -  Bundled
+S/susp  - Suspended
+
+XE2#
+show l2vpn evpn ethernet-segment detail
+EVPN Ethernet Segment ID: 0300.0000.0000.0100.0001
+  Local Discriminator:    1
+  Interface:              Po1
+  Redundancy mode:        all-active
+  DF election wait time:  3 seconds
+  Split Horizon label:    16
+  State:                  Ready
+  Encapsulation:          mpls
+  Ordinal:                1
+  Core Isolation:         No
+  RD:                     10.255.0.42:1
+    Export-RTs:           65000:200 
+  Forwarder List:         10.255.0.41 10.255.0.42 
+
+XE2#
+!! connect failed: NoValidConnectionsError: [Errno None] Unable to connect to port 22 on 10.1.10.31
+show l2vpn evpn mac
+MAC Address    EVI   BD    ESI                      Ether Tag  Next Hop(s)
+-------------- ----- ----- ------------------------ ---------- ---------------
+aabb.cc00.4f00 200   200   0000.0000.0000.0000.0000 0          10.255.0.41
+aabb.cc00.5000 200   200   0000.0000.0000.0000.0000 0          10.255.0.42
+aabb.cc00.5100 200   200   0000.0000.0000.0000.0000 0          Gi2:200
+
+XE3#
+show bgp l2vpn evpn route-type 1
+BGP routing table entry for [1][10.255.0.1:110][00000000000000000000][1]/23, version 18
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Flag: 0x100
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.1 (metric 20) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin IGP, localpref 100, valid, internal, best
+      Rcvd Label: 24010, Local Label: None
+      Extended Community: RT:65000:110 0x604:2:0
+      Originator: 10.255.0.1, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:00:49 UTC
+BGP routing table entry for [1][10.255.0.41:1][03000000000001000001][4294967295]/23, version 38
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.41 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 0, Local Label: None
+      Extended Community: RT:65000:200 EVPN LABEL:0x0:Label-256
+      Originator: 10.255.0.41, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:08:50 UTC
+BGP routing table entry for [1][10.255.0.41:120][00000000000000000000][1]/23, version 21
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.41 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 30, Local Label: None
+      Extended Community: RT:65000:120
+      Originator: 10.255.0.41, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:00:49 UTC
+BGP routing table entry for [1][10.255.0.41:200][03000000000001000001][0]/23, version 39
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.41 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 26, Local Label: None
+      Extended Community: RT:65000:200
+      Originator: 10.255.0.41, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:08:52 UTC
+BGP routing table entry for [1][10.255.0.42:1][03000000000001000001][4294967295]/23, version 41
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.42 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 0, Local Label: None
+      Extended Community: RT:65000:200 EVPN LABEL:0x0:Label-256
+      Originator: 10.255.0.42, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:09:00 UTC
+BGP routing table entry for [1][10.255.0.42:200][03000000000001000001][0]/23, version 42
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    10.255.0.42 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 26, Local Label: None
+      Extended Community: RT:65000:200
+      Originator: 10.255.0.42, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:09:02 UTC
+BGP routing table entry for [1][10.255.0.43:110][00000000000000000000][1]/23, version 19
+Paths: (1 available, best #1, table evi_110)
+  Flag: 0x100
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local, imported path from [1][10.255.0.1:110][00000000000000000000][1]/23 (global)
+    10.255.0.1 (metric 20) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin IGP, localpref 100, valid, internal, best
+      Rcvd Label: 24010, Local Label: None
+      Extended Community: RT:65000:110 0x604:2:0
+      Originator: 10.255.0.1, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 01:58:59 UTC
+BGP routing table entry for [1][10.255.0.43:110][00000000000000000000][3]/23, version 17
+Paths: (1 available, best #1, table evi_110)
+  Advertised to update-groups:
+     1         
+  Refresh Epoch 1
+  Local
+    :: (via default) from 0.0.0.0 (10.255.0.43)
+      Origin incomplete, localpref 100, weight 32768, valid, sourced, local, best
+      Rcvd Label: None, Local Label: 29
+      Extended Community: RT:65000:110
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 01:58:53 UTC
+BGP routing table entry for [1][10.255.0.43:120][00000000000000000000][1]/23, version 22
+Paths: (1 available, best #1, table evi_120)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local, imported path from [1][10.255.0.41:120][00000000000000000000][1]/23 (global)
+    10.255.0.41 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 30, Local Label: None
+      Extended Community: RT:65000:120
+      Originator: 10.255.0.41, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:00:49 UTC
+BGP routing table entry for [1][10.255.0.43:120][00000000000000000000][3]/23, version 20
+Paths: (1 available, best #1, table evi_120)
+  Advertised to update-groups:
+     1         
+  Refresh Epoch 1
+  Local
+    :: (via default) from 0.0.0.0 (10.255.0.43)
+      Origin incomplete, localpref 100, weight 32768, valid, sourced, local, best
+      Rcvd Label: None, Local Label: 30
+      Extended Community: RT:65000:120
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:00:46 UTC
+BGP routing table entry for [1][10.255.0.43:200][03000000000001000001][0]/23, version 43
+Paths: (2 available, best #2, table evi_200)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local, imported path from [1][10.255.0.42:200][03000000000001000001][0]/23 (global)
+    10.255.0.42 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, multipath(oldest)
+      Rcvd Label: 26, Local Label: None
+      Extended Community: RT:65000:200
+      Originator: 10.255.0.42, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0
+      Updated on Nov 1 2026 02:09:02 UTC
+  Refresh Epoch 1
+  Local, imported path from [1][10.255.0.41:200][03000000000001000001][0]/23 (global)
+    10.255.0.41 (metric 30) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin incomplete, metric 0, localpref 100, valid, internal, multipath, best
+      Rcvd Label: 26, Local Label: None
+      Extended Community: RT:65000:200
+      Originator: 10.255.0.41, Cluster list: 10.255.0.21
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 1 2026 02:08:52 UTC
+XE3#

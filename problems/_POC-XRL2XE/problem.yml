@@ -1,0 +1,32 @@
+# BL-246 PoC: M11 L2VPN の補足= IOS XE の仮想ルータ(Catalyst 8000V 17.15)なら E-LAN・EVPN のマルチホーム・CFM が動くか(ユーザの問い 2026-11-01)。
+# 記録= problems/_drafts/XR-TRACK.design.md §24(PoC の補足)。手順= poc/xr/l2xe_poc.sh
+# 盤面= P1(IOL)を中心にした星形のコア(IS-IS CORE L2・LDP)。PE= XE1/XE2/XE3(Cat8000v)と XR01(XRv9000)。XR02(XRd)= l2vpn evpn の RR。
+#   XE1 Gi2 CE1・Gi3 SW1 / XE2 Gi2 CE2・Gi3 SW1 / XE3 Gi2 CE3 / XR01 Gi0/0/0/1 CE4。SW1(IOL-L2)= XE1 と XE2 に束(LACP)で二重に収容。
+id: _POC-XRL2XE
+title: "[PoC] IOS XE L2VPN"
+exam: POC
+topics: [iosxe, iosxr, poc]
+difficulty: 0
+topology: generated
+access: ssh
+target_nodes: [XE1, XE2, XE3, P1, XR01, XR02, CE1, CE2, CE3, CE4, SW1]
+points: 0
+image_family: iol
+node_image_families: { XE1: cat8000v, XE2: cat8000v, XE3: cat8000v, XR01: iosxr, XR02: iosxr }
+node_xr_platforms: { XR02: iosxrd }
+node_images: { XR01: iosxrv9000-26-1-1 }
+lab:
+  positions: { P1: [400, 240], XE1: [0, 0], XE2: [0, 480], XE3: [800, 0], XR01: [800, 480], XR02: [400, 560],
+               CE1: [-400, 0], SW1: [-400, 240], CE2: [-400, 480], CE3: [1200, 0], CE4: [1200, 480] }
+  links:
+    - { a: P1, a_if: 0, b: XE1, b_if: 0 }
+    - { a: P1, a_if: 1, b: XE2, b_if: 0 }
+    - { a: P1, a_if: 2, b: XE3, b_if: 0 }
+    - { a: P1, a_if: 4, b: XR01, b_if: 3 }
+    - { a: P1, a_if: 5, b: XR02, b_if: 3 }
+    - { a: XE1, a_if: 1, b: CE1, b_if: 0 }
+    - { a: XE1, a_if: 2, b: SW1, b_if: 0 }
+    - { a: XE2, a_if: 1, b: CE2, b_if: 0 }
+    - { a: XE2, a_if: 2, b: SW1, b_if: 1 }
+    - { a: XE3, a_if: 1, b: CE3, b_if: 0 }
+    - { a: XR01, a_if: 4, b: CE4, b_if: 0 }

@@ -1,0 +1,164 @@
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CEB1(config)#
+interface Ethernet0/0.5030
+CEB1(config-subif)#
+encapsulation dot1Q 500 second-dot1q 30
+CEB1(config-subif)#
+ip address 172.31.53.1 255.255.255.0
+CEB1(config-subif)#
+end
+CEB1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CEB3(config)#
+interface Ethernet0/0.5030
+CEB3(config-subif)#
+encapsulation dot1Q 500 second-dot1q 30
+CEB3(config-subif)#
+ip address 172.31.53.3 255.255.255.0
+CEB3(config-subif)#
+end
+CEB3#
+ping 172.31.53.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.31.53.3, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 2/2/3 ms
+CEB1#
+#### 列挙(second-dot1q 10,20)の形は通るか・VLAN 30 は
+configure
+Sun Nov  1 03:03:44.822 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3.500 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 500 second-dot1q 10,20
+RP/0/RP0/CPU0:XR01(config-subif)#
+commit
+Sun Nov  1 03:03:46.283 UTC
+RP/0/RP0/CPU0:XR01(config-subif)#
+show configuration failed
+Sun Nov  1 03:03:47.491 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-subif)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Sun Nov  1 03:03:50.971 UTC
+RP/0/RP0/CPU0:XR03(config)#
+interface GigabitEthernet0/0/0/1.500 l2transport
+RP/0/RP0/CPU0:XR03(config-subif)#
+encapsulation dot1q 500 second-dot1q 10,20
+RP/0/RP0/CPU0:XR03(config-subif)#
+commit
+Sun Nov  1 03:03:52.476 UTC
+RP/0/RP0/CPU0:XR03(config-subif)#
+show configuration failed
+Sun Nov  1 03:03:53.589 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR03(config-subif)#
+end
+RP/0/RP0/CPU0:XR03#
+clear arp
+CEB1#
+ping 172.31.51.3 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 172.31.51.3, timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/2/3 ms
+CEB1#
+ping 172.31.53.3 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 172.31.53.3, timeout is 2 seconds:
+...
+Success rate is 0 percent (0/3)
+CEB1#
+configure
+Sun Nov  1 03:04:22.893 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3.500 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 500 second-dot1q any
+RP/0/RP0/CPU0:XR01(config-subif)#
+commit
+Sun Nov  1 03:04:24.416 UTC
+RP/0/RP0/CPU0:XR01(config-subif)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Sun Nov  1 03:04:26.297 UTC
+RP/0/RP0/CPU0:XR03(config)#
+interface GigabitEthernet0/0/0/1.500 l2transport
+RP/0/RP0/CPU0:XR03(config-subif)#
+encapsulation dot1q 500 second-dot1q any
+RP/0/RP0/CPU0:XR03(config-subif)#
+commit
+Sun Nov  1 03:04:27.680 UTC
+RP/0/RP0/CPU0:XR03(config-subif)#
+end
+RP/0/RP0/CPU0:XR03#
+clear arp
+CEB1#
+ping 172.31.53.3 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 172.31.53.3, timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/2/3 ms
+CEB1#
+#### m11t1-ldpcore(コアのリンクで LDP)
+configure
+Sun Nov  1 03:04:48.766 UTC
+RP/0/RP0/CPU0:XR01(config)#
+mpls ldp
+RP/0/RP0/CPU0:XR01(config-ldp)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-ldp-if)#
+exit
+RP/0/RP0/CPU0:XR01(config-ldp)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-ldp-if)#
+commit
+Sun Nov  1 03:04:50.961 UTC
+RP/0/RP0/CPU0:XR01(config-ldp-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sun Nov  1 03:05:13.879 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.11:0      N   N    00:00:23    1     0     4     0     12     0    
+10.255.0.12:0      N   N    00:00:16    1     0     3     0     12     0    
+
+RP/0/RP0/CPU0:XR01#
+show cef 10.255.0.12/32 detail | include labels imposed
+Sun Nov  1 03:05:14.281 UTC
+     local label 16012      labels imposed {16012}
+     local label 16012      labels imposed {16012}
+RP/0/RP0/CPU0:XR01#
+configure
+Sun Nov  1 03:05:16.252 UTC
+RP/0/RP0/CPU0:XR01(config)#
+no mpls ldp
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 03:05:17.345 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show mpls ldp neighbor brief
+Sun Nov  1 03:05:35.461 UTC
+
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+                                        ipv4  ipv6  ipv4  ipv6  ipv4   ipv6 
+-----------------  --  ---  ----------  ----------  ----------  ------------
+10.255.0.12:0      N   N    00:00:38    1     0     3     0     12     0    
+
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect | include A-100|B-300
+                                                       ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR01#

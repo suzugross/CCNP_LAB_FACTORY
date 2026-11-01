@@ -1,0 +1,30 @@
+# M11-5: Q-in-Q の E-Line(EVI 500)。内側 10・20 と「後で足す」30 を運び、外側 500 だけのフレームは運ばない= second-dot1q any(§24.8)。
+# 外側 500 だけを書くと単一タグも運ぶ(50 が通る)/内側を列挙すると 30 が通らない。白紙= 0 点(「50 不通」は 51 の到達と組で見る)。
+problem: XRT-11
+total_points: 100
+checks:
+  - name: 'M11-5 XR01: the Q-in-Q E-Line in EVPN instance 500 is up to XR03'
+    node: XR01
+    command: show l2vpn xconnect
+    raw:
+      - { regex: 'Gi0/0/0/3\.\d+\s+UP\s+EVPN 500,3,10\.255\.0\.3\s+UP' }
+    points: 20
+  - name: 'M11-5 CEB1: reaches CEB3 on inner VLANs 10 and 20 of S-VLAN 500, and on VLAN 30 that the customer adds later'
+    node: XR01
+    exec: local
+    command: >-
+      echo '## 10'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.51.3 repeat 5';
+      echo '## 20'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.52.3 repeat 5';
+      echo '## 30'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.53.3 repeat 5'
+    raw:
+      - { regex: '## 10[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 20[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 30[\s\S]*?Success rate is (?:100|80) percent' }
+    points: 45
+  - name: 'M11-5 CEB1: frames with only the outer tag 500 do not reach site 3, while inner VLAN 10 does'
+    node: XR01
+    exec: local
+    command: >-
+      echo '## 500'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.50.3 repeat 5';
+      echo '## 10'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.51.3 repeat 5'
+    raw:
+      - { regex: '## 500[\s\S]*?Success rate is 0 percent[\s\S]*?## 10[\s\S]*?Success rate is (?:100|80) percent' }
+    points: 35

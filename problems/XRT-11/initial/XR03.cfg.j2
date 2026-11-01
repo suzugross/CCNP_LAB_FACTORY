@@ -1,0 +1,38 @@
+!! XRT-11 XR03(PE・XRv9000 26.1.1)= 新しく足した PE(RT01 の先)。コアへの参加(IS-IS CORE・SR の prefix-SID index 3)は構築チームが据え付け済み。
+!! お客さま B の拠点 3(CEB3)を Gi0/0/0/1 に収容する。BGP・L2VPN は課題で入れる(M11-4 の前任者の作業は XR03.commits.yml)。
+interface Loopback0
+ ipv4 address 10.255.0.3 255.255.255.255
+!
+interface {{ links[3] }}
+ description CORE to RT01
+ ipv4 address 10.0.31.3 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description CUST-B site 3 (CEB3)
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0003.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+  segment-routing mpls
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+   prefix-sid index 3
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+   metric 10
+  !
+ !
+!
+mpls oam
+!
+end

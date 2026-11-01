@@ -1,0 +1,92 @@
+#### 白紙(ポート 9014)
+show l2vpn xconnect group CUST-B detail | include "XC B-3|st$ST-B detail | include "XC B-3|sta                          te is|MTU  |Error"show l2vpn xconnect group CUST-B detail | include "XC B-3|s$
+Sun Nov  1 02:55:42.550 UTC
+Group CUST-B, XC B-300, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/3.300, state is up
+  PW: neighbor 10.255.0.12, PW ID 300, state is down ( all ready )
+      MTU          9004                           1500                          
+    Error: MTU mismatched
+Group CUST-B, XC B-310, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/3.310, state is up
+  PW: neighbor 10.255.0.12, PW ID 310, state is down ( all ready )
+      MTU          9000                           1500                          
+    Error: MTU mismatched
+Group CUST-B, XC B-410, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/3.410, state is up
+  EVPN: neighbor None, PW ID: evi 410, ac-id 3, state is down ( local ready )
+      MTU          9014                           unknown                       
+Group CUST-B, XC B-420, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/3.420, state is up
+  EVPN: neighbor None, PW ID: evi 420, ac-id 3, state is down ( local ready )
+      MTU          9014                           unknown                       
+RP/0/RP0/CPU0:XR01#
+#### m11t2-mtuonly(ジャンボだけ外す)
+show l2vpn xconnect group CUST-B detail | include "XC B-3|st$ST-B detail | include "XC B-3|sta                          te is|MTU  |Error"show l2vpn xconnect group CUST-B detail | include "XC B-3|s$
+Sun Nov  1 02:56:14.076 UTC
+Group CUST-B, XC B-300, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/3.300, state is up
+  PW: neighbor 10.255.0.12, PW ID 300, state is down ( all ready )
+      MTU          1504                           1500                          
+    Error: MTU mismatched
+Group CUST-B, XC B-310, state is up; Interworking none
+  AC: GigabitEthernet0/0/0/3.310, state is up
+  PW: neighbor 10.255.0.12, PW ID 310, state is up ( established )
+      MTU          1500                           1500                          
+Group CUST-B, XC B-410, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/3.410, state is up
+  EVPN: neighbor None, PW ID: evi 410, ac-id 3, state is down ( local ready )
+      MTU          1514                           unknown                       
+Group CUST-B, XC B-420, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/3.420, state is up
+  EVPN: neighbor None, PW ID: evi 420, ac-id 3, state is down ( local ready )
+      MTU          1514                           unknown                       
+RP/0/RP0/CPU0:XR01#
+show l2vpn atom vc vcid 300 detail | include status|MTU|error
+pseudowire100002 is up, VC status is down PW type: Ethernet
+  Create time: 00:21:20, last status change time: 00:01:45
+    Last error: Pseudowire MTU mismatch with peer
+    Associated member Et1/0.300 is up, status is up
+      Label/status state machine              : remote invalid, LruRnd
+      Local dataplane status received         : No fault
+      BFD dataplane status received           : Not sent
+      BFD peer monitor status received        : No fault
+      Adjacency status of remote peer         : No fault
+    MTU          1500                           1504
+RT02#
+#### m11t2(300 に rewrite)
+show l2vpn xconnect group CUST-B detail | include "XC B-3|st$ST-B detail | include "XC B-3|sta                          te is|MTU  |Error"show l2vpn xconnect group CUST-B detail | include "XC B-3|s$
+Sun Nov  1 02:56:51.056 UTC
+Group CUST-B, XC B-300, state is up; Interworking none
+  AC: GigabitEthernet0/0/0/3.300, state is up
+  PW: neighbor 10.255.0.12, PW ID 300, state is up ( established )
+      MTU          1500                           1500                          
+Group CUST-B, XC B-310, state is up; Interworking none
+  AC: GigabitEthernet0/0/0/3.310, state is up
+  PW: neighbor 10.255.0.12, PW ID 310, state is up ( established )
+      MTU          1500                           1500                          
+Group CUST-B, XC B-410, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/3.410, state is up
+  EVPN: neighbor None, PW ID: evi 410, ac-id 3, state is down ( local ready )
+      MTU          1514                           unknown                       
+Group CUST-B, XC B-420, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/3.420, state is up
+  EVPN: neighbor None, PW ID: evi 420, ac-id 3, state is down ( local ready )
+      MTU          1514                           unknown                       
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect | include B-3
+Sun Nov  1 02:56:51.519 UTC
+CUST-B     B-300      UP   Gi0/0/0/3.300          UP       10.255.0.12     300    UP    
+CUST-B     B-310      UP   Gi0/0/0/3.310          UP       10.255.0.12     310    UP    
+RP/0/RP0/CPU0:XR01#
+ping 172.31.30.2 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.31.30.2, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 1/2/3 ms
+CEB1#
+ping 172.31.31.2 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 172.31.31.2, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 2/2/3 ms
+CEB1#

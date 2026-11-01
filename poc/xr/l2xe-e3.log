@@ -1,0 +1,37 @@
+#### e3-0: 復旧の確認(e2 の最後に XE1 Gi3 を no shutdown)
+show etherchannel summary | include Po11      Po1(SU)         LACP        Et0/0(P)        Et0/1(P)        
+SW1#
+ping 192.168.200.3 repeat 5Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.200.3, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 1/2/3 ms
+SW1#
+#### e3-1: SW1 の束のメンバを lacp rate fast に
+configure terminalEnter configuration commands, one per line.  End with CNTL/Z.
+SW1(config)#
+interface range Ethernet0/0 - 1
+SW1(config-if-range)#
+lacp rate fast
+SW1(config-if-range)#
+end
+SW1#
+show lacp internal | include Et0Et0/0         FA      bndl      32768        0x1       0x1     0x1         0x3F  
+Et0/1         FA      bndl      32768        0x1       0x1     0x2         0x3F  
+SW1#
+#### e3-2: XE1 Gi3 を落とす → 直後から SW1 → CE3 の ping
+02:16:24
+ping 192.168.200.3 repeat 20Type escape sequence to abort.
+Sending 20, 100-byte ICMP Echos to 192.168.200.3, timeout is 2 seconds:
+.........!!!!!!!!!!!
+Success rate is 55 percent (11/20), round-trip min/avg/max = 1/2/3 ms
+SW1#
+show etherchannel summary | include Po11      Po1(SU)         LACP        Et0/0(s)        Et0/1(P)        
+SW1#
+#### e3-3: 戻す
+show etherchannel summary | include Po11      Po1(SU)         LACP        Et0/0(w)        Et0/1(P)        
+SW1#
+ping 192.168.200.3 repeat 5Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.200.3, timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/2/3 ms
+SW1#

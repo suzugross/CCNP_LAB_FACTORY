@@ -1,0 +1,28 @@
+# M11-4: 前任者の EVPN-VPWS 2 本(CHG-1411)。410= XR03 の target が 2(XR03 は DN・XR01 は UP に見える)/420= XR03 の rewrite の付け忘れ(両側 UP で不通)。
+# M11-3(BGP)が前提。白紙= BGP が無く両方 DN= 0 点。
+problem: XRT-11
+total_points: 100
+checks:
+  - name: 'M11-4 XR03: both E-Lines to site 1 (EVPN instances 410 and 420) are up, with the site numbers as identifiers'
+    node: XR03
+    command: show l2vpn xconnect
+    raw:
+      - { regex: 'Gi0/0/0/1\.\d+\s+UP\s+EVPN 410,1,10\.255\.0\.1\s+UP' }
+      - { regex: 'Gi0/0/0/1\.\d+\s+UP\s+EVPN 420,1,10\.255\.0\.1\s+UP' }
+    points: 30
+  - name: 'M11-4 CEB1: reaches CEB3 on the E-Line of VLAN 410 ⇔ 41 (172.31.41.3)'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.41.3 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 35
+  - name: 'M11-4 CEB1: reaches CEB3 on the E-Line of VLAN 420 ⇔ 42 (172.31.42.3)'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-11 ssh CEB1 -- 'ping 172.31.42.3 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 35

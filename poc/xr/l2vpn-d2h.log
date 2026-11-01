@@ -1,0 +1,143 @@
+configure
+Sun Nov  1 00:34:02.091 UTC
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+pw-class CW
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc)#
+encapsulation mpls
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc-mpls)#
+control-word
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc-mpls)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc)#
+p2p CE1-CE2-EVPN
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+neighbor evpn evi 120 target 2 source 1
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+pw-class CW
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+show configuration
+Sun Nov  1 00:34:07.105 UTC
+!! Building configuration...
+!! IOS XR Configuration 26.1.1
+l2vpn
+ pw-class CW
+  encapsulation mpls
+   control-word
+  !
+ !
+ xconnect group POC
+  p2p CE1-CE2-EVPN
+   neighbor evpn evi 120 target 2 source 1
+    pw-class CW
+   !
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 00:34:07.813 UTC
+
+% Failed to commit one or more configuration items during a pseudo-atomic operation. All changes made have been reverted. Please issue 'show configuration failed [inheritance]' from this session to view the errors
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sun Nov  1 00:34:11.233 UTC
+!! SEMANTIC ERRORS: This configuration was rejected by 
+!! the system due to semantic errors. The individual 
+!! errors with each failed configuration command can be 
+!! found below.
+
+
+l2vpn
+ xconnect group POC
+  p2p CE1-CE2-EVPN
+   neighbor evpn evi 120 target 2 source 1
+    pw-class CW
+!!% Invalid argument: EVPN VPWS doesn't support this pw-class config
+   !
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+Uncommitted changes found, commit them before exiting(yes/no/cancel)? [cancel]:
+show l2vpn xconnect group POC xc-name CE1-CE2-EVPN detail
+Sun Nov  1 00:34:36.129 UTC
+
+Group POC, XC CE1-CE2-EVPN, state is up; Interworking none
+Decoupled mode: Disabled
+  AC: GigabitEthernet0/0/0/2.120, state is up
+    Type VLAN; Num Ranges: 1
+    Rewrite Tags: []
+    VLAN ranges: [120, 120]
+    MTU 1500; XC ID 0x6; interworking none
+    Statistics:
+      packets: received 20, sent 5
+      bytes: received 1280, sent 360
+      drops: illegal VLAN 0, illegal length 0
+  EVPN: neighbor 10.255.0.12, PW ID: evi 120, ac-id 2, state is up ( established )
+    XC ID 0xa0000007
+    Encapsulation MPLS
+    Encap type Ethernet, control word disabled
+    Sequencing not set
+    Ignore MTU mismatch: Enabled
+    Transmit MTU zero: Enabled
+    LSP : Up
+    Force PW UP: Inactive
+    Nexthop type: IPV4 10.255.0.12
+
+      EVPN         Local                          Remote                        
+      ------------ ------------------------------ -----------------------------
+      Label        24011                          10.255.0.12 27                            
+      MTU          1514                           unknown                       
+      Control word disabled                       disabled                      
+      AC ID        1                              2                             
+      EVPN type    Ethernet                       Ethernet                      
+
+      ------------ ------------------------------ -----------------------------
+    Create time: 01/11/2026 00:29:52 (00:04:43 ago)
+    Last time status changed: 01/11/2026 00:30:02 (00:04:33 ago)
+    Statistics:
+      packets: received 5, sent 20
+      bytes: received 360, sent 1280
+RP/0/RP0/CPU0:XR01#
+show evpn evi vpn-id 120 detail | include Control
+Sun Nov  1 00:34:36.627 UTC
+   Control-Word: Disabled
+RP/0/RP0/CPU0:XR01#
+show bgp l2vpn evpn detail | include Extended|Route Dis|\[1\]
+Route Distinguisher: 10.255.0.1:120
+BGP routing table entry for [1][10.255.0.1:120][00000000000000000000][1]/23, version 3
+      Extended Community: RT:65000:120 0x604:2:0
+Route Distinguisher: 10.255.0.12:120
+BGP routing table entry for [1][10.255.0.12:120][00000000000000000000][1]/23, version 4
+  Local, imported path from [1][10.255.0.1:120][00000000000000000000][1]/23 (global)
+      Extended Community: RT:65000:120 0x604:2:0
+BGP routing table entry for [1][10.255.0.12:120][00000000000000000000][2]/23, version 2
+      Extended Community: RT:65000:120
+RT02#
+ping 192.168.120.2 repeat 10
+Type escape sequence to abort.
+Sending 10, 100-byte ICMP Echos to 192.168.120.2, timeout is 2 seconds:
+..........
+Success rate is 0 percent (0/10)
+CE1#
+show l2vpn evpn vpws vc id 120 detail | include state|packets|drops
+EVPN name: CE2-CE1, state: up, type: point-to-point
+    0 input transit packets, 0 bytes
+    30 drops
+    5 output transit packets, 450 bytes
+    0 drops
+  5 VC FSM state transitions, Last 5 shown
+RT02#

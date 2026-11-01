@@ -1,0 +1,67 @@
+#### t-3: B-300 を戻し、ジャンボを親ポート(Gi0/0/0/3)の MTU 9018 に移す(サブインタフェースの mtu は外す)
+configure
+Sun Nov  1 02:52:13.981 UTC
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+xconnect group CUST-B
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc)#
+p2p B-300
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+interface GigabitEthernet0/0/0/3.300
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+neighbor ipv4 10.255.0.12 pw-id 300
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3.310 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+no mtu
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01(config-if)#
+mtu 9018
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Sun Nov  1 02:52:19.017 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect group CUST-B detail | include "XC B|stat$ST-B detail | include "XC B|state                           is|MTU  |MTU [0-9]|Error"show l2vpn xconnect group CUST-B detail | include "XC B|sta$
+Sun Nov  1 02:52:46.823 UTC
+Group CUST-B, XC B-300, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/3.300, state is up
+    MTU 9008; XC ID 0x4; interworking none
+  PW: neighbor 10.255.0.12, PW ID 300, state is down ( all ready )
+      MTU          9008                           1500                          
+    Error: MTU mismatched
+Group CUST-B, XC B-310, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/3.310, state is up
+    MTU 9004; XC ID 0x2; interworking none
+  PW: neighbor 10.255.0.12, PW ID 310, state is down ( all ready )
+      MTU          9004                           1500                          
+    Error: MTU mismatched
+Group CUST-B, XC B-410, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/3.410, state is up
+    MTU 9004; XC ID 0x6; interworking none
+  EVPN: neighbor None, PW ID: evi 410, ac-id 3, state is down ( local ready )
+      MTU          9018                           unknown                       
+Group CUST-B, XC B-420, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/3.420, state is up
+    MTU 9004; XC ID 0x8; interworking none
+  EVPN: neighbor None, PW ID: evi 420, ac-id 3, state is down ( local ready )
+      MTU          9018                           unknown                       
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-B summary | include 172.16
+Sun Nov  1 02:52:47.332 UTC
+172.16.21.2       0 65201      12      11           54    0    0 00:06:38          1
+RP/0/RP0/CPU0:XR01#
+ping 10.102.2.1 source Loopback10 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 10.102.2.1, timeout is 2 seconds:
+Packet sent with a source address of 10.102.1.1 
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/3/4 ms
+CEB1#

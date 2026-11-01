@@ -1,0 +1,233 @@
+
+######## 00:20:46 c-1: XRv9000(XR01)に E-Line(LDP の疑似回線・相手 RT02・pw-id 100)
+configure
+Sun Nov  1 00:20:47.986 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.100 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 100
+RP/0/RP0/CPU0:XR01(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc)#
+p2p CE1-CE2
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+interface GigabitEthernet0/0/0/2.100
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+neighbor ipv4 10.255.0.12 pw-id 100
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+show configuration
+Sun Nov  1 00:20:52.691 UTC
+!! Building configuration...
+!! IOS XR Configuration 26.1.1
+interface GigabitEthernet0/0/0/2.100 l2transport
+ encapsulation dot1q 100
+ rewrite ingress tag pop 1 symmetric
+!
+l2vpn
+ xconnect group POC
+  p2p CE1-CE2
+   interface GigabitEthernet0/0/0/2.100
+   neighbor ipv4 10.255.0.12 pw-id 100
+   !
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 00:20:53.294 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sun Nov  1 00:20:54.822 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+interface Ethernet0/2
+RT02(config-if)#
+service instance 100 ethernet
+RT02(config-if-srv)#
+encapsulation dot1q 100
+RT02(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+RT02(config-if-srv)#
+exit
+RT02(config-if)#
+exit
+RT02(config)#
+l2vpn xconnect context CE1-CE2
+RT02(config-xconnect)#
+member Ethernet0/2 service-instance 100
+RT02(config-xconnect)#
+member 10.255.0.1 100 encapsulation mpls
+RT02(config-xconnect)#
+end
+RT02#
+show l2vpn xconnect
+Sun Nov  1 00:21:25.197 UTC
+Legend: ST = State, UP = Up, DN = Down, AD = Admin Down, UR = Unresolved,
+        SB = Standby, SR = Standby Ready, (PP) = Partially Programmed,
+        LU = Local Up, RU = Remote Up, CO = Connected, (SI) = Seamless Inactive
+
+XConnect                   Segment 1                       Segment 2                
+Group      Name       ST   Description            ST       Description            ST    
+------------------------   -----------------------------   -----------------------------
+POC        CE1-CE2    UP   Gi0/0/0/2.100          UP       10.255.0.12     100    UP    
+----------------------------------------------------------------------------------------
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect detail
+Sun Nov  1 00:21:25.987 UTC
+
+Group POC, XC CE1-CE2, state is up; Interworking none
+Decoupled mode: Disabled
+  AC: GigabitEthernet0/0/0/2.100, state is up
+    Type VLAN; Num Ranges: 1
+    Rewrite Tags: []
+    VLAN ranges: [100, 100]
+    MTU 1500; XC ID 0x2; interworking none
+    Statistics:
+      packets: received 0, sent 0
+      bytes: received 0, sent 0
+      drops: illegal VLAN 0, illegal length 0
+  PW: neighbor 10.255.0.12, PW ID 100, state is up ( established )
+    PW class not set, XC ID 0xa0000003
+    Encapsulation MPLS, protocol LDP
+    Source address 10.255.0.1
+    PW type Ethernet, control word disabled, interworking none
+    PW backup disable delay 0 sec
+    Sequencing not set
+    Ignore MTU mismatch: Disabled
+    Transmit MTU zero: Disabled
+    LSP : Up
+    Force PW UP: Inactive
+    Nexthop type: IPV4 10.255.0.12
+
+    PW Status TLV in use
+      MPLS         Local                          Remote                        
+      ------------ ------------------------------ -----------------------------
+      Label        24009                          26                            
+      Group ID     0x1000028                      0x4                           
+      Interface    GigabitEthernet0/0/0/2.100     CE2                           
+      MTU          1500                           1500                          
+      Control word disabled                       disabled                      
+      PW type      Ethernet                       Ethernet                      
+      VCCV CV type 0x2                            0x12                          
+                   (LSP ping verification)        (LSP ping verification)       
+      VCCV CC type 0x6                            0x6                           
+                   (router alert label)           (router alert label)          
+                   (TTL expiry)                   (TTL expiry)                  
+      ------------ ------------------------------ -----------------------------
+    Incoming Status (PW Status TLV):
+      Status code: 0x0 (Up) in Notification message
+    Outgoing Status (PW Status TLV):
+      Status code: 0x0 (Up) in Notification message
+    MIB cpwVcIndex: 2684354563
+    Create time: 01/11/2026 00:20:53 (00:00:32 ago)
+    Last time status changed: 01/11/2026 00:21:13 (00:00:12 ago)
+    Statistics:
+      packets: received 0, sent 0
+      bytes: received 0, sent 0
+RP/0/RP0/CPU0:XR01#
+show l2vpn atom vc
+
+                                       Service
+Interface Peer ID         VC ID      Type   Name                     Status
+--------- --------------- ---------- ------ ------------------------ ----------
+pw100004  10.255.0.1      100        p2p    CE1-CE2                  UP        
+pw100003  10.255.0.31     103        p2p    CE3-CE2                  DOWN      
+
+RT02#
+show l2vpn atom vc vcid 100 detail
+pseudowire100004 is up, VC status is up PW type: Ethernet
+  Create time: 00:00:25, last status change time: 00:00:15
+    Last label FSM state change time: 00:00:15
+    Last peer autosense occurred at: 00:00:15
+  Destination address: 10.255.0.1 VC ID: 100
+    Output interface: Et0/0, imposed label stack {22 24009}
+    Preferred path: not configured  
+    Default path: active
+    Next hop: 10.0.12.11
+  Member of xconnect service CE1-CE2
+    Associated member Et0/2 is up, status is up
+    Interworking type is Ethernet
+    Service id: 0xc9000004
+  Signaling protocol: LDP, peer 10.255.0.1:0 up
+    Targeted Hello: 10.255.0.12(LDP Id) -> 10.255.0.1, LDP is UP
+    Graceful restart: not configured and not enabled
+    Non stop routing: not configured and not enabled
+    PWid FEC (128), VC ID: 100
+    Status TLV support (local/remote)         : enabled/supported
+      LDP route watch                         : enabled
+      Label/status state machine              : established, LruRru
+      Local dataplane status received         : No fault
+      BFD dataplane status received           : Not sent
+      BFD peer monitor status received        : No fault
+      Status received from access circuit     : No fault
+      Status sent to access circuit           : No fault
+      Status received from pseudowire i/f     : No fault
+      Status sent to network peer             : No fault
+      Status received from network peer       : No fault
+      Adjacency status of remote peer         : No fault
+  Sequencing: receive disabled, send disabled
+  Bindings
+    Parameter    Local                          Remote
+    ------------ ------------------------------ ------------------------------
+    Label        26                             24009
+    Group ID     4                              16777256
+    Interface    CE2                            GigabitEthernet0_0_0_2.100    
+    MTU          1500                           1500
+    Control word off (configured: autosense)    off
+    PW type      Ethernet                       Ethernet
+    VCCV CV type 0x12                           0x02
+                   LSPV [2], BFD/Raw [5]          LSPV [2]                    
+    VCCV CC type 0x07                           0x06
+                   CW [1], RA [2], TTL [3]       RA [2], TTL [3]
+    Status TLV   enabled                        supported
+  Dataplane:
+    SSM segment/switch IDs: 12295/8197 (used), PWID: 2
+  Rx Counters
+    0 input transit packets, 0 bytes
+    0 drops, 0 seq err 
+  Tx Counters
+    0 output transit packets, 0 bytes
+    0 drops
+
+
+RT02#
+
+######## 00:21:28 c-2: CE1 ⇔ CE2(VLAN 100)の ping・大きいパケット・TCP
+ping 192.168.100.2 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.100.2, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 1/1/3 ms
+CE1#
+ping 192.168.100.2 size 1500 df-bit repeat 3
+Type escape sequence to abort.
+Sending 3, 1500-byte ICMP Echos to 192.168.100.2, timeout is 2 seconds:
+Packet sent with the DF bit set
+...
+Success rate is 0 percent (0/3)
+CE1#
+ping 192.168.100.2 size 1501 df-bit repeat 2
+Type escape sequence to abort.
+Sending 2, 1501-byte ICMP Echos to 192.168.100.2, timeout is 2 seconds:
+Packet sent with the DF bit set
+..
+Success rate is 0 percent (0/2)
+CE1#
+SSH-2.0-Cisco-1.25
+TCP-OK

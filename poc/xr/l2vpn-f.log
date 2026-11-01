@@ -1,0 +1,366 @@
+
+######## 00:39:54 f-1: 両端で VLAN が違う E-Line(CE4 を VLAN 111 に替える)。XR01 は 110・XR02 は 111、どちらも pop 1(EVPN-VPWS CE1-CE4)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE4(config)#
+no interface Ethernet0/0.110
+CE4(config)#
+interface Ethernet0/0.111
+CE4(config-subif)#
+encapsulation dot1Q 111
+CE4(config-subif)#
+ip address 192.168.110.4 255.255.255.0
+CE4(config-subif)#
+end
+CE4#
+configure
+Sun Nov  1 00:40:00.326 UTC
+RP/0/RP0/CPU0:XR02(config)#
+no interface GigabitEthernet0/0/0/1.110
+RP/0/RP0/CPU0:XR02(config)#
+interface GigabitEthernet0/0/0/1.111 l2transport
+RP/0/RP0/CPU0:XR02(config-subif)#
+encapsulation dot1q 111
+RP/0/RP0/CPU0:XR02(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR02(config-subif)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+l2vpn
+RP/0/RP0/CPU0:XR02(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc)#
+p2p CE4-CE1
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p)#
+no interface GigabitEthernet0/0/0/1.110
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p)#
+interface GigabitEthernet0/0/0/1.111
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+commit
+Sun Nov  1 00:40:05.342 UTC
+RP/0/RP0/CPU0:XR02(config)#
+show configuration failed
+Sun Nov  1 00:40:06.648 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02(config)#
+end
+RP/0/RP0/CPU0:XR02#
+show l2vpn xconnect
+Sun Nov  1 00:40:25.832 UTC
+Legend: ST = State, UP = Up, DN = Down, AD = Admin Down, UR = Unresolved,
+        SB = Standby, SR = Standby Ready, (PP) = Partially Programmed,
+        LU = Local Up, RU = Remote Up, CO = Connected, (SI) = Seamless Inactive
+
+XConnect                   Segment 1                       Segment 2                
+Group      Name       ST   Description            ST       Description            ST    
+------------------------   -----------------------------   -----------------------------
+POC        CE4-CE1    UP   Gi0/0/0/1.111          UP       EVPN 110,1,10.255.0.1  UP    
+----------------------------------------------------------------------------------------
+RP/0/RP0/CPU0:XR02#
+ping 192.168.110.4 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.110.4, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 2/2/3 ms
+CE1#
+
+######## 00:40:29 f-2: 両端とも rewrite を外す(タグを付けたまま運ぶ)→ CE4 には 110 のまま届く
+configure
+Sun Nov  1 00:40:31.736 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.110 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+no rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+commit
+Sun Nov  1 00:40:33.242 UTC
+RP/0/RP0/CPU0:XR01(config-subif)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Sun Nov  1 00:40:36.137 UTC
+RP/0/RP0/CPU0:XR02(config)#
+interface GigabitEthernet0/0/0/1.111 l2transport
+RP/0/RP0/CPU0:XR02(config-subif)#
+no rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR02(config-subif)#
+commit
+Sun Nov  1 00:40:37.537 UTC
+RP/0/RP0/CPU0:XR02(config-subif)#
+end
+RP/0/RP0/CPU0:XR02#
+clear arp
+CE1#
+ping 192.168.110.4 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.110.4, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+CE1#
+show l2vpn xconnect group POC xc-name CE4-CE1 detail | inclu$C xc-name CE4-CE1 detail | includ                          e "Rewrite|packets|state i$include "Rewrite|packets|state is                          |drops"show l2vpn xconnect group POC xc-name CE4-CE1 detail | incl$
+Sun Nov  1 00:41:02.964 UTC
+Group POC, XC CE4-CE1, state is up; Interworking none
+  AC: GigabitEthernet0/0/0/1.111, state is up
+    Rewrite Tags: []
+      packets: received 5, sent 6
+      drops: illegal VLAN 0, illegal length 0
+  EVPN: neighbor 10.255.0.1, PW ID: evi 110, ac-id 1, state is up ( established )
+      packets: received 6, sent 5
+RP/0/RP0/CPU0:XR02#
+
+######## 00:41:03 f-3: XR02 で translate 1-to-1(CE4 の 111 ⇔ コアでは 110)
+configure
+Sun Nov  1 00:41:04.882 UTC
+RP/0/RP0/CPU0:XR02(config)#
+interface GigabitEthernet0/0/0/1.111 l2transport
+RP/0/RP0/CPU0:XR02(config-subif)#
+rewrite ingress tag translate 1-to-1 dot1q 110$e 1-to-1 dot1q 110                           symmetricrewrite ingress tag translate 1-to-1 dot1q 11$
+RP/0/RP0/CPU0:XR02(config-subif)#
+commit
+Sun Nov  1 00:41:06.282 UTC
+RP/0/RP0/CPU0:XR02(config-subif)#
+show configuration failed
+Sun Nov  1 00:41:07.392 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02(config-subif)#
+end
+RP/0/RP0/CPU0:XR02#
+clear arp
+CE1#
+ping 192.168.110.4 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.110.4, timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/3/6 ms
+CE1#
+show l2vpn xconnect group POC xc-name CE4-CE1 detail | inclu$C xc-name CE4-CE1 detail | includ                          e "Rewrite|packets|state i$include "Rewrite|packets|state is                          "show l2vpn xconnect group POC xc-name CE4-CE1 detail | incl$
+Sun Nov  1 00:41:23.985 UTC
+Group POC, XC CE4-CE1, state is up; Interworking none
+  AC: GigabitEthernet0/0/0/1.111, state is up
+    Rewrite Tags: [110]
+      packets: received 5, sent 10
+  EVPN: neighbor 10.255.0.1, PW ID: evi 110, ac-id 1, state is up ( established )
+      packets: received 10, sent 5
+RP/0/RP0/CPU0:XR02#
+
+######## 00:41:24 f-4: 片側だけ pop(XR01 は pop・XR02 は translate のまま)= 非対称の症状
+configure
+Sun Nov  1 00:41:25.805 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.110 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+commit
+Sun Nov  1 00:41:27.209 UTC
+RP/0/RP0/CPU0:XR01(config-subif)#
+end
+RP/0/RP0/CPU0:XR01#
+clear arp
+CE1#
+ping 192.168.110.4 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.110.4, timeout is 2 seconds:
+.....
+Success rate is 0 percent (0/5)
+CE1#
+configure
+Sun Nov  1 00:41:52.331 UTC
+RP/0/RP0/CPU0:XR02(config)#
+interface GigabitEthernet0/0/0/1.111 l2transport
+RP/0/RP0/CPU0:XR02(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR02(config-subif)#
+commit
+Sun Nov  1 00:41:53.639 UTC
+RP/0/RP0/CPU0:XR02(config-subif)#
+end
+RP/0/RP0/CPU0:XR02#
+clear arp
+CE1#
+ping 192.168.110.4 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.110.4, timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/2/3 ms
+CE1#
+
+######## 00:42:06 f-5: Q-in-Q= CE1 が 400/10 の二重タグで出す → XR01 が 2 枚とも外す(pop 2)→ XR02 で CE4 の VLAN 140 へ
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE1(config)#
+interface Ethernet0/0.1400
+CE1(config-subif)#
+encapsulation dot1Q 400 second-dot1q 10
+CE1(config-subif)#
+ip address 192.168.140.1 255.255.255.0
+CE1(config-subif)#
+end
+CE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE4(config)#
+interface Ethernet0/0.140
+CE4(config-subif)#
+encapsulation dot1Q 140
+CE4(config-subif)#
+ip address 192.168.140.4 255.255.255.0
+CE4(config-subif)#
+end
+CE4#
+configure
+Sun Nov  1 00:42:15.452 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.400 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 400 second-dot1q 10
+RP/0/RP0/CPU0:XR01(config-subif)#
+rewrite ingress tag pop 2 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc)#
+p2p QINQ
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+interface GigabitEthernet0/0/0/2.400
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+neighbor evpn evi 140 target 40 source $ 40 source 1                          4neighbor evpn evi 140 target 40 source$
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 00:42:20.089 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sun Nov  1 00:42:21.173 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Sun Nov  1 00:42:25.772 UTC
+RP/0/RP0/CPU0:XR02(config)#
+interface GigabitEthernet0/0/0/1.140 l2transport
+RP/0/RP0/CPU0:XR02(config-subif)#
+encapsulation dot1q 140
+RP/0/RP0/CPU0:XR02(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR02(config-subif)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+l2vpn
+RP/0/RP0/CPU0:XR02(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc)#
+p2p QINQ
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p)#
+interface GigabitEthernet0/0/0/1.140
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p)#
+neighbor evpn evi 140 target 14 source $ 14 source 4                          0neighbor evpn evi 140 target 14 source$
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+commit
+Sun Nov  1 00:42:30.361 UTC
+RP/0/RP0/CPU0:XR02(config)#
+show configuration failed
+Sun Nov  1 00:42:31.490 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02(config)#
+end
+RP/0/RP0/CPU0:XR02#
+show l2vpn xconnect
+Sun Nov  1 00:43:05.813 UTC
+Legend: ST = State, UP = Up, DN = Down, AD = Admin Down, UR = Unresolved,
+        SB = Standby, SR = Standby Ready, (PP) = Partially Programmed,
+        LU = Local Up, RU = Remote Up, CO = Connected, (SI) = Seamless Inactive
+
+XConnect                   Segment 1                       Segment 2                
+Group      Name       ST   Description            ST       Description            ST    
+------------------------   -----------------------------   -----------------------------
+POC        CE1-CE2    UP   Gi0/0/0/2.100          UP       10.255.0.12     100    UP    
+----------------------------------------------------------------------------------------
+POC        CE1-CE2-EVPN
+                      UP   Gi0/0/0/2.120          UP       EVPN 120,2,10.255.0.12 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+POC        CE1-CE4    UP   Gi0/0/0/2.110          UP       EVPN 110,4,10.255.0.21 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+POC        QINQ       UP   Gi0/0/0/2.400          UP       EVPN 140,40,10.255.0.21 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+RP/0/RP0/CPU0:XR01#
+ping 192.168.140.4 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.140.4, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 3/3/4 ms
+CE1#
+
+######## 00:43:09 f-6: 802.1ad(外側 0x88a8)の書き方が通るか・pop 1 で外側だけ外す形・push
+configure
+Sun Nov  1 00:43:11.369 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.401 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1ad 401 dot1q 10
+RP/0/RP0/CPU0:XR01(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.402 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 402
+RP/0/RP0/CPU0:XR01(config-subif)#
+rewrite ingress tag push dot1q 999 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.403 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 403
+RP/0/RP0/CPU0:XR01(config-subif)#
+rewrite ingress tag translate 1-to-2 dot1ad 50$e 1-to-2 dot1ad 500                           dot1q 403 symmetricrewrite ingress tag translate 1-to-2 dot1ad 5$
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+show configuration
+Sun Nov  1 00:43:16.783 UTC
+!! Building configuration...
+!! IOS XR Configuration 26.1.1
+interface GigabitEthernet0/0/0/2.401 l2transport
+ encapsulation dot1ad 401 dot1q 10
+ rewrite ingress tag pop 1 symmetric
+!
+interface GigabitEthernet0/0/0/2.402 l2transport
+ encapsulation dot1q 402
+ rewrite ingress tag push dot1q 999 symmetric
+!
+interface GigabitEthernet0/0/0/2.403 l2transport
+ encapsulation dot1q 403
+ rewrite ingress tag translate 1-to-2 dot1ad 500 dot1q 403 symmetric
+!
+end
+
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 00:43:17.388 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sun Nov  1 00:43:18.393 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+abort
+RP/0/RP0/CPU0:XR01#

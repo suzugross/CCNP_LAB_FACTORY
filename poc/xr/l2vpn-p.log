@@ -1,0 +1,109 @@
+
+######## 00:10:25 p-1: RT02(IOL 17.15)が受け付ける L2VPN の書き方(試して消す)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+interface Ethernet0/2
+RT02(config-if)#
+service instance 999 ethernet
+RT02(config-if-srv)#
+encapsulation dot1q 999
+RT02(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+RT02(config-if-srv)#
+exit
+RT02(config-if)#
+no service instance 999 ethernet
+RT02(config-if)#
+exit
+RT02(config)#
+bridge-domain 999
+RT02(config-bdomain)#
+exit
+RT02(config)#
+no bridge-domain 999
+RT02(config)#
+l2vpn xconnect context PROBE
+RT02(config-xconnect)#
+exit
+RT02(config)#
+no l2vpn xconnect context PROBE
+RT02(config)#
+interface pseudowire999
+RT02(config-if)#
+encapsulation mpls
+RT02(config-if)#
+neighbor 10.255.0.1 999
+RT02(config-if)#
+exit
+RT02(config)#
+no interface pseudowire999
+RT02(config)#
+l2vpn vfi context PROBE
+RT02(config-vfi)#
+vpn id 999
+RT02(config-vfi)#
+exit
+RT02(config)#
+no l2vpn vfi context PROBE
+RT02(config)#
+l2vpn evpn
+RT02(config-evpn)#
+exit
+RT02(config)#
+no l2vpn evpn
+RT02(config)#
+l2vpn evpn instance 999 point-to-point
+RT02(config-evpn-evi)#
+exit
+RT02(config)#
+no l2vpn evpn instance 999 point-to-point
+RT02(config)#
+l2vpn evpn instance 998 vlan-based
+RT02(config-evpn-evi)#
+exit
+RT02(config)#
+no l2vpn evpn instance 998 vlan-based
+RT02(config)#
+ethernet cfm ieee
+RT02(config)#
+no ethernet cfm ieee
+RT02(config)#
+ethernet cfm global
+RT02(config)#
+no ethernet cfm global
+RT02(config)#
+interface Ethernet0/2.999
+RT02(config-subif)#
+encapsulation dot1Q 999
+RT02(config-subif)#
+xconnect 10.255.0.1 999 encapsulation mpls
+RT02(config-subif-xconn)#
+no xconnect
+RT02(config-subif)#
+exit
+RT02(config)#
+no interface Ethernet0/2.999
+RT02(config)#
+end
+RT02#
+show running-config | section l2vpn|bridge-domain|pseudowire|cfm|Ethernet0/2
+interface Ethernet0/2
+ description CE2
+ no ip address
+RT02#
+
+######## 00:10:46 p-2: CE1(IOL)で二重タグ(802.1Q-in-Q)のサブインタフェースを作れるか(試して消す)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE1(config)#
+interface Ethernet0/0.999
+CE1(config-subif)#
+encapsulation dot1Q 400 second-dot1q 10
+CE1(config-subif)#
+exit
+CE1(config)#
+no interface Ethernet0/0.999
+CE1(config)#
+end
+CE1#

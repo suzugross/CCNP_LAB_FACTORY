@@ -1,0 +1,30 @@
+# M11-1: お客さま A の E-Line(LDP の疑似回線 100・相手 RT02 は据付)。XR は LDP の設定が無くても疑似回線のための targeted のセッションを張る(§24.8)。
+# 白紙= E-Line が無い(どの確認も A の xconnect の UP か CE の ping を含む)= 0 点。コアのリンクで LDP を動かすと RT01 と隣接する(採点で落とす)。
+problem: XRT-11
+total_points: 100
+checks:
+  - name: 'M11-1 XR01: customer A''s E-Line is up, as pseudowire 100 to RT02'
+    node: XR01
+    command: show l2vpn xconnect
+    raw:
+      - { regex: 'Gi0/0/0/2\.\d+\s+UP\s+10\.255\.0\.12\s+100\s+UP' }
+    points: 30
+  - name: 'M11-1 XR01: LDP runs only to signal the pseudowire (a targeted session with RT02, none with RT01 or RT03)'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-11 ssh XR01 -- 'show mpls ldp neighbor brief' 'show l2vpn xconnect'
+    raw:
+      - { regex: '\n10\.255\.0\.12:0\s' }
+      - { not_regex: '\n10\.255\.0\.1[13]:0\s' }
+      - { regex: 'Gi0/0/0/2\.\d+\s+UP\s+10\.255\.0\.12\s+100\s+UP' }
+    points: 25
+  - name: 'M11-1 CEA1: reaches CEA2 over the E-Line (172.31.10.2), and customer A''s Layer 3 VPN still works'
+    node: XR01
+    exec: local
+    command: >-
+      echo '## E-Line'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEA1 -- 'ping 172.31.10.2 repeat 5';
+      echo '## L3VPN'; .venv/bin/python topologies/login_probe.py XRT-11 ssh CEA1 -- 'ping 10.101.2.1 source Loopback10 repeat 5'
+    raw:
+      - { regex: '## E-Line[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## L3VPN[\s\S]*?Success rate is (?:100|80) percent' }
+    points: 45

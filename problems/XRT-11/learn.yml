@@ -1,0 +1,392 @@
+# XRT-11 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn XRT-11 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# ここに書いた挙動は IOS XRv 9000 26.1.1・IOS XRd 26.1.1(+IOL 17.15)の実機で確認した(設計= problems/_drafts/XR-TRACK.design.md §24)。
+# 模範解の「On XR01:」「On XR02:」「On XR03:」の見出し= 機器ごとの塊(poc/xr/verbatim.py が見出しごとに送り先を替える)。
+# 読み物(BL-252)= Reading タブに出す本(reading/<key>/)。各課題の read: はその本の「ページ#節」(節= data-sec)。
+reading: xr
+steps:
+  - id: m11t1
+    title: { en: "M11-1  An E-Line on an LDP pseudowire", ja: "M11-1  LDP の疑似回線で E-Line を作る" }
+    check: m11t1
+    read: [b0-m11-e-line#s2-1, b0-m11-e-line#s2-2, b0-m11-e-line#s2-3, b0-m11-e-line#s2-4, b0-m11-e-line#s3-1]
+    hints:
+      - en: "Two pieces on XR01: an attachment circuit (a sub-interface that is not a Layer 3 interface and picks VLAN 100 on CEA1's port), and a point-to-point cross-connect that joins it to a pseudowire towards RT02. RT02's end carries the frame without its VLAN tag, and the two ends use different VLANs. Before adding any LDP configuration, check what XR01 does without it."
+        ja: "XR01 の部品は 2 つです。アタッチメント回線(L3 のインタフェースではなく、CEA1 のポートで VLAN 100 を拾うサブインタフェース)と、それを RT02 への疑似回線につなぐポイントツーポイントのクロスコネクトです。RT02 の端はフレームを VLAN のタグなしで運び、両端は別々の VLAN を使います。LDP の設定を足す前に、それが無い XR01 が何をするかを確かめてください。"
+      - en: "`show l2vpn xconnect` and `show l2vpn xconnect detail` (the Local and Remote columns and the `Error:` line), `show mpls ldp neighbor brief`, `show mpls ldp discovery`. On RT02: `show l2vpn atom vc vcid 100 detail`. Guides: L2VPN and Ethernet Services Configuration Guide (ASR 9000), 'Implementing Point to Point Layer 2 Services' and 'The Carrier Ethernet Model' (l2transport sub-interfaces, rewrite)."
+        ja: "`show l2vpn xconnect` と `show l2vpn xconnect detail`(Local と Remote の列、`Error:` の行)、`show mpls ldp neighbor brief`、`show mpls ldp discovery`。RT02 で `show l2vpn atom vc vcid 100 detail`。ガイド: L2VPN and Ethernet Services Configuration Guide(ASR 9000)の「Implementing Point to Point Layer 2 Services」と「The Carrier Ethernet Model」(l2transport のサブインタフェース、rewrite)。"
+      - en: "`interface GigabitEthernet0/0/0/2.100 l2transport` with `encapsulation dot1q 100` and `rewrite ingress tag pop 1 symmetric`. Then `l2vpn` → `xconnect group <name>` → `p2p <name>` → `interface GigabitEthernet0/0/0/2.100` and `neighbor ipv4 10.255.0.12 pw-id 100`. No `mpls ldp` is needed."
+        ja: "`interface GigabitEthernet0/0/0/2.100 l2transport` に `encapsulation dot1q 100` と `rewrite ingress tag pop 1 symmetric`。次に `l2vpn` → `xconnect group <名前>` → `p2p <名前>` → `interface GigabitEthernet0/0/0/2.100` と `neighbor ipv4 10.255.0.12 pw-id 100`。`mpls ldp` は要りません。"
+    solution:
+      en: |
+        configure
+         interface GigabitEthernet0/0/0/2.100 l2transport
+          encapsulation dot1q 100
+          rewrite ingress tag pop 1 symmetric
+         !
+         l2vpn
+          xconnect group CUST-A
+           p2p A-100
+            interface GigabitEthernet0/0/0/2.100
+            neighbor ipv4 10.255.0.12 pw-id 100
+         commit
+        end
+        An `l2transport` sub-interface is an attachment circuit: it picks the VLAN 100 frames on CEA1's port and hands
+        them to the cross-connect, while the untagged Layer 3 VPN on the same port carries on as before. The pseudowire's
+        label comes from LDP, but XR01 needs no `mpls ldp`: IOS XR 26.1.1 brings up a targeted LDP session to the
+        pseudowire's other end by itself (`show mpls ldp summary` shows `Interfaces: 0 LDP configured`), so LDP runs only
+        for the signalling and the transport labels stay SR's (`{16012 <PW label>}` towards RT02). Adding `mpls ldp` with
+        no interfaces also works. Adding the core links under `mpls ldp` breaks the rule: RT01 forms a session at once.
+        The rewrite matters because the two ends must signal the same MTU. RT02's sub-interface `xconnect` carries the
+        frame without its tag and signals 1500. Without `pop 1`, XR01 keeps the tag, signals 1504, and the pseudowire stays
+        down with `Error: MTU mismatched`. With the tag popped, the two ends may use different VLANs (100 and 200).
+      ja: |
+        configure
+         interface GigabitEthernet0/0/0/2.100 l2transport
+          encapsulation dot1q 100
+          rewrite ingress tag pop 1 symmetric
+         !
+         l2vpn
+          xconnect group CUST-A
+           p2p A-100
+            interface GigabitEthernet0/0/0/2.100
+            neighbor ipv4 10.255.0.12 pw-id 100
+         commit
+        end
+        `l2transport` のサブインタフェースはアタッチメント回線です。CEA1 のポートで VLAN 100 のフレームを拾ってクロスコネクトに
+        渡し、同じポートのタグなしのレイヤ 3 VPN はそのまま動き続けます。疑似回線のラベルは LDP で交換しますが、XR01 に
+        `mpls ldp` は要りません。IOS XR 26.1.1 は、疑似回線の相手と targeted LDP のセッションを自分で張ります(`show mpls ldp summary` は
+        `Interfaces: 0 LDP configured`)。そのため LDP はシグナリングだけに動き、トランスポートのラベルは SR のまま
+        (RT02 向きは `{16012 <疑似回線のラベル>}`)です。インタフェースなしの `mpls ldp` を足しても動きます。コアのリンクを
+        `mpls ldp` の下に足すと約束に反します。RT01 とすぐにセッションができます。rewrite が要るのは、両端が同じ MTU を
+        伝え合う必要があるからです。RT02 のサブインタフェースの `xconnect` はフレームをタグなしで運び、1500 を伝えます。
+        `pop 1` が無いと XR01 はタグを残して 1504 を伝え、疑似回線は `Error: MTU mismatched` で down のままです。タグを外すので、
+        両端は別々の VLAN(100 と 200)を使えます。
+
+  - id: m11t2
+    title: { en: "M11-2  Two E-Lines that never worked", ja: "M11-2  一度も動いたことのない 2 本の E-Line" }
+    check: m11t2
+    read: [b0-m11-e-line#s2-5, b0-m11-e-line#s3-2, b0-m11-e-line#s3-3]
+    hints:
+      - en: "Both pseudowires report the same error, but read the numbers behind it. Count what IOS XR puts into the MTU it signals for an attachment circuit: the parent port's MTU, the Ethernet header, and the tags it keeps. Fixing one cause may leave one of the two E-Lines down."
+        ja: "どちらの疑似回線も同じエラーを出しますが、その裏の数字を読んでください。IOS XR がアタッチメント回線について伝える MTU に何が入るかを数えます。親のポートの MTU、イーサネットのヘッダ、そして残すタグです。原因を 1 つ直しても、2 本のうち 1 本は down のまま残るかもしれません。"
+      - en: "`show l2vpn xconnect group CUST-B detail` (the MTU row and the `Error:` line, Local and Remote), `show configuration commit changes CHG-1401` and `CHG-1402`, `show interfaces GigabitEthernet0/0/0/3`. On RT02: `show l2vpn atom vc vcid 300 detail`. TAC: 'MTU Behavior on Cisco IOS XR and Cisco IOS Routers' (116350) and 'Understand IOS XR L2VPN Services and Features' (116453)."
+        ja: "`show l2vpn xconnect group CUST-B detail`(MTU の行と `Error:` の行、Local と Remote)、`show configuration commit changes CHG-1401` と `CHG-1402`、`show interfaces GigabitEthernet0/0/0/3`。RT02 で `show l2vpn atom vc vcid 300 detail`。TAC の文書「MTU Behavior on Cisco IOS XR and Cisco IOS Routers」(116350)と「Understand IOS XR L2VPN Services and Features」(116453)。"
+      - en: "Under `interface GigabitEthernet0/0/0/3`: `no mtu` (RT02 cannot take jumbo frames on these E-Lines). Under `interface GigabitEthernet0/0/0/3.300 l2transport`: `rewrite ingress tag pop 1 symmetric`."
+        ja: "`interface GigabitEthernet0/0/0/3` の下で `no mtu`(RT02 はこの E-Line でジャンボ フレームを受けられません)。`interface GigabitEthernet0/0/0/3.300 l2transport` の下で `rewrite ingress tag pop 1 symmetric`。"
+    solution:
+      en: |
+        configure
+         interface GigabitEthernet0/0/0/3
+          no mtu
+         !
+         interface GigabitEthernet0/0/0/3.300 l2transport
+          rewrite ingress tag pop 1 symmetric
+         commit
+        end
+        Both pseudowires showed `Error: MTU mismatched` against RT02's 1500, for different reasons. CHG-1402 raised the
+        port to `mtu 9014` for the customer's jumbo frames, and every attachment circuit on the port followed: 9000 for
+        310 (port MTU minus the 14-byte Ethernet header, tag popped) and 9004 for 300. With the port back at its default,
+        310 came up at 1500, but 300 still signalled 1504: CHG-1401 forgot its `rewrite`, so the AC keeps its VLAN tag and
+        counts it. Popping the tag brings 300 to 1500 as well. A sub-interface `mtu` cannot raise an AC above its parent
+        port; in the lab, `mtu 9018` on the sub-interface left the AC at 1500. The Layer 3 VPN on the same port was not
+        affected either way.
+      ja: |
+        configure
+         interface GigabitEthernet0/0/0/3
+          no mtu
+         !
+         interface GigabitEthernet0/0/0/3.300 l2transport
+          rewrite ingress tag pop 1 symmetric
+         commit
+        end
+        どちらの疑似回線も、RT02 の 1500 に対して `Error: MTU mismatched` を出していましたが、理由は別でした。CHG-1402 は顧客の
+        ジャンボ フレームのためにポートを `mtu 9014` に上げ、ポートのすべてのアタッチメント回線がそれに従いました。310 は 9000
+        (ポートの MTU からイーサネットのヘッダ 14 バイトを引き、タグは外す)、300 は 9004 です。ポートを既定に戻すと 310 は 1500 で
+        up になりましたが、300 は 1504 を伝えたままでした。CHG-1401 が `rewrite` を書き忘れたので、AC は VLAN のタグを残し、
+        それを数えるからです。タグを外すと、300 も 1500 になります。サブインタフェースの `mtu` は AC を親のポートより大きくできず、
+        ラボではサブインタフェースに `mtu 9018` を設定しても AC は 1500 のままでした。どちらの場合も、同じポートのレイヤ 3 VPN には
+        影響がありませんでした。
+
+  - id: m11t3
+    title: { en: "M11-3  An E-Line with EVPN-VPWS", ja: "M11-3  EVPN-VPWS で E-Line を作る" }
+    check: m11t3
+    read: [b2-m11-evpn-vpws#s2-1, b2-m11-evpn-vpws#s2-2, b2-m11-evpn-vpws#s2-4, b2-m11-evpn-vpws#s3-1, b2-m11-evpn-vpws#s3-2]
+    hints:
+      - en: "Three routers this time. BGP needs the EVPN address family on the route reflector and both PEs (XR03 does not run BGP yet). Each PE then needs an attachment circuit and a point-to-point cross-connect whose other end is EVPN: the EVPN instance, this end's identifier and the other end's identifier. The identifiers follow the site numbers."
+        ja: "今回は 3 台です。BGP では、ルート リフレクタと両方の PE で EVPN のアドレス ファミリーが要ります(XR03 はまだ BGP を動かしていません)。次に各 PE に、アタッチメント回線と、もう一方の端が EVPN のポイントツーポイントのクロスコネクトが要ります。EVPN インスタンス、この端の識別子、相手の端の識別子です。識別子はサイト番号に従います。"
+      - en: "On XR02: `show bgp l2vpn evpn summary`. On the PEs: `show bgp l2vpn evpn`, `show l2vpn xconnect` (`EVPN <EVI>,<target>,<PE>`; `None` until the other end's route arrives), `show evpn evi vpn-id 400 detail`. Give a new BGP session about a minute. Guide: L2VPN and Ethernet Services Configuration Guide (ASR 9000), 'EVPN Virtual Private Wire Service (VPWS)'."
+        ja: "XR02 で `show bgp l2vpn evpn summary`。PE で `show bgp l2vpn evpn`、`show l2vpn xconnect`(`EVPN <EVI>,<target>,<PE>`。相手の端の経路が届くまでは `None`)、`show evpn evi vpn-id 400 detail`。新しい BGP のセッションには 1 分ほど待ってください。ガイド: L2VPN and Ethernet Services Configuration Guide(ASR 9000)の「EVPN Virtual Private Wire Service (VPWS)」。"
+      - en: "On XR02, under `router bgp 65000`: `address-family l2vpn evpn`; under neighbor 10.255.0.1: `address-family l2vpn evpn` → `route-reflector-client`; a new neighbor 10.255.0.3 (`remote-as 65000`, `update-source Loopback0`, the same address family as a client). On XR01: `address-family l2vpn evpn` globally and under neighbor 10.255.0.21; the AC `GigabitEthernet0/0/0/3.400 l2transport` (dot1q 400, pop 1); `l2vpn` → `xconnect group` → `p2p` → the AC and `neighbor evpn evi 400 target 3 source 1`. On XR03: `bgp router-id 10.255.0.3`, the neighbor 10.255.0.21, the AC `GigabitEthernet0/0/0/1.40` (dot1q 40, pop 1) and `neighbor evpn evi 400 target 1 source 3`."
+        ja: "XR02 の `router bgp 65000` の下で `address-family l2vpn evpn`。近隣 10.255.0.1 の下で `address-family l2vpn evpn` → `route-reflector-client`。新しい近隣 10.255.0.3(`remote-as 65000`、`update-source Loopback0`、同じアドレス ファミリーをクライアントとして)。XR01 で、全体と近隣 10.255.0.21 の下に `address-family l2vpn evpn`。AC の `GigabitEthernet0/0/0/3.400 l2transport`(dot1q 400、pop 1)。`l2vpn` → `xconnect group` → `p2p` → AC と `neighbor evpn evi 400 target 3 source 1`。XR03 で `bgp router-id 10.255.0.3`、近隣 10.255.0.21、AC の `GigabitEthernet0/0/0/1.40`(dot1q 40、pop 1)と `neighbor evpn evi 400 target 1 source 3`。"
+    solution:
+      en: |
+        On XR02:
+        configure
+         router bgp 65000
+          address-family l2vpn evpn
+          !
+          neighbor 10.255.0.1
+           address-family l2vpn evpn
+            route-reflector-client
+           !
+          !
+          neighbor 10.255.0.3
+           remote-as 65000
+           description PE XR03
+           update-source Loopback0
+           address-family l2vpn evpn
+            route-reflector-client
+         commit
+        end
+        On XR01:
+        configure
+         router bgp 65000
+          address-family l2vpn evpn
+          !
+          neighbor 10.255.0.21
+           address-family l2vpn evpn
+          !
+         !
+         interface GigabitEthernet0/0/0/3.400 l2transport
+          encapsulation dot1q 400
+          rewrite ingress tag pop 1 symmetric
+         !
+         l2vpn
+          xconnect group CUST-B
+           p2p B-400
+            interface GigabitEthernet0/0/0/3.400
+            neighbor evpn evi 400 target 3 source 1
+         commit
+        end
+        On XR03:
+        configure
+         router bgp 65000
+          bgp router-id 10.255.0.3
+          address-family l2vpn evpn
+          !
+          neighbor 10.255.0.21
+           remote-as 65000
+           update-source Loopback0
+           address-family l2vpn evpn
+          !
+         !
+         interface GigabitEthernet0/0/0/1.40 l2transport
+          encapsulation dot1q 40
+          rewrite ingress tag pop 1 symmetric
+         !
+         l2vpn
+          xconnect group CUST-B
+           p2p B-400
+            interface GigabitEthernet0/0/0/1.40
+            neighbor evpn evi 400 target 1 source 3
+         commit
+        end
+        Each PE advertises one EVPN type 1 route for its end, with its `source` as the Ethernet tag and the label the other
+        end should use; the E-Line joins when the other end's tag matches this end's `target`. IOS XR derives the RD
+        (router ID:EVI) and the route target (65000:400) from the EVI, so nothing is needed under `evpn`. XR02 reflects the
+        routes on the sessions it already had for VPNv4; XR01 and XR03 have no session with each other. In the lab, the
+        new session to XR03 took about a minute before both ends left `None`, and the frames then crossed on
+        `{16003 <XR03's EVPN label>}` from XR01. EVPN-VPWS does not compare MTUs by default (`Ignore MTU mismatch:
+        Enabled`), unlike the LDP pseudowire of M11-2.
+      ja: |
+        On XR02:
+        configure
+         router bgp 65000
+          address-family l2vpn evpn
+          !
+          neighbor 10.255.0.1
+           address-family l2vpn evpn
+            route-reflector-client
+           !
+          !
+          neighbor 10.255.0.3
+           remote-as 65000
+           description PE XR03
+           update-source Loopback0
+           address-family l2vpn evpn
+            route-reflector-client
+         commit
+        end
+        On XR01:
+        configure
+         router bgp 65000
+          address-family l2vpn evpn
+          !
+          neighbor 10.255.0.21
+           address-family l2vpn evpn
+          !
+         !
+         interface GigabitEthernet0/0/0/3.400 l2transport
+          encapsulation dot1q 400
+          rewrite ingress tag pop 1 symmetric
+         !
+         l2vpn
+          xconnect group CUST-B
+           p2p B-400
+            interface GigabitEthernet0/0/0/3.400
+            neighbor evpn evi 400 target 3 source 1
+         commit
+        end
+        On XR03:
+        configure
+         router bgp 65000
+          bgp router-id 10.255.0.3
+          address-family l2vpn evpn
+          !
+          neighbor 10.255.0.21
+           remote-as 65000
+           update-source Loopback0
+           address-family l2vpn evpn
+          !
+         !
+         interface GigabitEthernet0/0/0/1.40 l2transport
+          encapsulation dot1q 40
+          rewrite ingress tag pop 1 symmetric
+         !
+         l2vpn
+          xconnect group CUST-B
+           p2p B-400
+            interface GigabitEthernet0/0/0/1.40
+            neighbor evpn evi 400 target 1 source 3
+         commit
+        end
+        各 PE は、自分の端について EVPN の種類 1 の経路を 1 つ広告します。イーサネット タグは自分の `source`、ラベルは相手に
+        付けてほしい値です。相手の端のタグがこの端の `target` と一致すると、E-Line がつながります。IOS XR は EVI から RD
+        (ルータ ID:EVI)とルート ターゲット(65000:400)を作るので、`evpn` の下には何も要りません。XR02 は、VPNv4 のために
+        すでに持っていたセッションで経路を反映し、XR01 と XR03 の間にはセッションがありません。ラボでは、XR03 との新しい
+        セッションの後、両端が `None` でなくなるまで 1 分ほどかかり、その後フレームは XR01 から `{16003 <XR03 の EVPN のラベル>}` で
+        運ばれました。EVPN-VPWS は、M11-2 の LDP の疑似回線と違い、既定で MTU を比べません(`Ignore MTU mismatch: Enabled`)。
+
+  - id: m11t4
+    title: { en: "M11-4  EVPN-VPWS that carries nothing", ja: "M11-4  何も運ばない EVPN-VPWS" }
+    check: m11t4
+    read: [b2-m11-evpn-vpws#s2-1, b2-m11-evpn-vpws#s2-5, b2-m11-evpn-vpws#s3-3]
+    hints:
+      - en: "Look at both ends of each E-Line, not one. One E-Line is UP at site 1 and down at site 3: which identifier does each end advertise, and which does it wait for? The other is UP at both ends and still carries nothing: EVPN-VPWS does not compare MTUs, so a difference in how the two attachment circuits treat the tag does not take it down."
+        ja: "各 E-Line の片方の端ではなく、両方の端を見てください。1 本はサイト 1 で UP、サイト 3 で down です。各端はどの識別子を広告し、どれを待っているでしょうか。もう 1 本は両端で UP なのに何も運びません。EVPN-VPWS は MTU を比べないので、2 つのアタッチメント回線のタグの扱いの違いでは down になりません。"
+      - en: "`show l2vpn xconnect` and `show l2vpn xconnect group CUST-B detail` on both XR01 and XR03 (`neighbor None … local ready`, the ac-id), `show bgp l2vpn evpn` (the Ethernet tag in each type 1 route), `show configuration commit changes CHG-1411` on XR03, and `show running-config interface GigabitEthernet0/0/0/1.42`."
+        ja: "XR01 と XR03 の両方で `show l2vpn xconnect` と `show l2vpn xconnect group CUST-B detail`(`neighbor None … local ready`、ac-id)、`show bgp l2vpn evpn`(各種類 1 の経路のイーサネット タグ)、XR03 で `show configuration commit changes CHG-1411` と `show running-config interface GigabitEthernet0/0/0/1.42`。"
+      - en: "On XR03: under `l2vpn` → `xconnect group CUST-B` → `p2p B-410`, replace `neighbor evpn evi 410 target 2 source 3` with `neighbor evpn evi 410 target 1 source 3`. Under `interface GigabitEthernet0/0/0/1.42 l2transport`: `rewrite ingress tag pop 1 symmetric`."
+        ja: "XR03 の `l2vpn` → `xconnect group CUST-B` → `p2p B-410` の下で、`neighbor evpn evi 410 target 2 source 3` を `neighbor evpn evi 410 target 1 source 3` に替えます。`interface GigabitEthernet0/0/0/1.42 l2transport` の下で `rewrite ingress tag pop 1 symmetric`。"
+    solution:
+      en: |
+        On XR03:
+        configure
+         l2vpn
+          xconnect group CUST-B
+           p2p B-410
+            no neighbor evpn evi 410 target 2 source 3
+            neighbor evpn evi 410 target 1 source 3
+           !
+          !
+         !
+         interface GigabitEthernet0/0/0/1.42 l2transport
+          rewrite ingress tag pop 1 symmetric
+         commit
+        end
+        Two faults, one per E-Line, both on XR03. On 410, XR03 waited for `target 2`, but site 1's end is 1. XR01 received
+        XR03's route (tag 3), which matched its own `target 3`, so XR01 showed UP; XR03 never received a route with tag 2 and
+        stayed down with `neighbor None … local ready`. Judging by XR01 alone, 410 looked fine. On 420, XR03's attachment
+        circuit kept its tag while XR01 popped its own. Both ends were UP, because EVPN-VPWS ignores the MTU difference
+        that the kept tag causes, but frames from XR01 reached CEB3 untagged and frames from CEB3 reached CEB1 with a
+        second tag, so nothing got through. Adding `pop 1` on XR03 makes the two ends treat the tag the same way.
+      ja: |
+        On XR03:
+        configure
+         l2vpn
+          xconnect group CUST-B
+           p2p B-410
+            no neighbor evpn evi 410 target 2 source 3
+            neighbor evpn evi 410 target 1 source 3
+           !
+          !
+         !
+         interface GigabitEthernet0/0/0/1.42 l2transport
+          rewrite ingress tag pop 1 symmetric
+         commit
+        end
+        障害は E-Line ごとに 1 つ、どちらも XR03 にありました。410 では、XR03 は `target 2` を待っていましたが、サイト 1 の端は 1 です。
+        XR01 は XR03 の経路(タグ 3)を受け取り、それが自分の `target 3` と一致したので UP を表示しました。XR03 はタグ 2 の経路を
+        一度も受け取らず、`neighbor None … local ready` で down のままでした。XR01 だけを見て判断すると、410 は正常に見えました。
+        420 では、XR01 が自分のタグを外す一方で、XR03 のアタッチメント回線はタグを残していました。残したタグによる MTU の違いを
+        EVPN-VPWS は無視するので両端は UP でしたが、XR01 からのフレームはタグなしで CEB3 に届き、CEB3 からのフレームはタグが
+        2 枚になって CEB1 に届いたので、何も通りませんでした。XR03 に `pop 1` を足すと、両端のタグの扱いがそろいます。
+
+  - id: m11t5
+    title: { en: "M11-5  Q-in-Q: the customer's VLANs inside S-VLAN 500", ja: "M11-5  Q-in-Q: S-VLAN 500 の中の顧客の VLAN" }
+    check: m11t5
+    read: [b4-m11-qinq#s2-1, b4-m11-qinq#s2-2, b4-m11-qinq#s3-1, b4-m11-qinq#s3-2]
+    hints:
+      - en: "The attachment circuit decides which frame forms enter the E-Line. You need double-tagged frames with outer tag 500 and any inner tag, including inner tags that do not exist yet, and not single-tagged 500. Find the `encapsulation` form that says exactly that, and test both what must pass and what must not."
+        ja: "どの形のフレームが E-Line に入るかは、アタッチメント回線が決めます。必要なのは、外側のタグが 500 で、内側のタグが何であってもよい(まだ無い内側のタグも含む)二重タグのフレームで、単一タグの 500 は含めません。それをそのまま表す `encapsulation` の形を見つけ、通るべきものと通ってはならないものの両方を試してください。"
+      - en: "Test from CEB1: `ping 172.31.51.3`, `172.31.52.3` and `172.31.53.3` (inner 10, 20 and the later 30) must succeed, `ping 172.31.50.3` (single tag 500) must fail. `show l2vpn xconnect`. Guide: L2VPN and Ethernet Services Configuration Guide (NCS 5500 or ASR 9000), 'Configure Virtual LANs in Layer 2 VPNs' (encapsulation dot1q … second-dot1q)."
+        ja: "CEB1 から試します。`ping 172.31.51.3`、`172.31.52.3`、`172.31.53.3`(内側 10、20、後から足す 30)は成功し、`ping 172.31.50.3`(単一タグの 500)は失敗する必要があります。`show l2vpn xconnect`。ガイド: L2VPN and Ethernet Services Configuration Guide(NCS 5500 か ASR 9000)の「Configure Virtual LANs in Layer 2 VPNs」(encapsulation dot1q … second-dot1q)。"
+      - en: "On XR01: `interface GigabitEthernet0/0/0/3.500 l2transport` with `encapsulation dot1q 500 second-dot1q any` and `rewrite ingress tag pop 1 symmetric`, and `p2p` → the AC and `neighbor evpn evi 500 target 3 source 1`. On XR03: the same with `GigabitEthernet0/0/0/1.500` and `target 1 source 3`."
+        ja: "XR01 で `interface GigabitEthernet0/0/0/3.500 l2transport` に `encapsulation dot1q 500 second-dot1q any` と `rewrite ingress tag pop 1 symmetric`、`p2p` → AC と `neighbor evpn evi 500 target 3 source 1`。XR03 でも同じ形で、`GigabitEthernet0/0/0/1.500` と `target 1 source 3`。"
+    solution:
+      en: |
+        On XR01:
+        configure
+         interface GigabitEthernet0/0/0/3.500 l2transport
+          encapsulation dot1q 500 second-dot1q any
+          rewrite ingress tag pop 1 symmetric
+         !
+         l2vpn
+          xconnect group CUST-B
+           p2p B-500
+            interface GigabitEthernet0/0/0/3.500
+            neighbor evpn evi 500 target 3 source 1
+         commit
+        end
+        On XR03:
+        configure
+         interface GigabitEthernet0/0/0/1.500 l2transport
+          encapsulation dot1q 500 second-dot1q any
+          rewrite ingress tag pop 1 symmetric
+         !
+         l2vpn
+          xconnect group CUST-B
+           p2p B-500
+            interface GigabitEthernet0/0/0/1.500
+            neighbor evpn evi 500 target 1 source 3
+         commit
+        end
+        `second-dot1q any` picks double-tagged frames with outer tag 500 whatever the inner tag, so VLAN 30, added later,
+        crosses without a change. Plain `encapsulation dot1q 500` picks a frame whose outer tag is 500 with or without an
+        inner tag: in the lab it also carried the single-tagged 500 (`ping 172.31.50.3` succeeded), which the task forbids.
+        Listing the inner VLANs (`second-dot1q 10,20`) carried 10 and 20 but not 30. The E-Line stays UP in every case,
+        so only traffic from the CEs tells them apart. `pop 1` removes the outer tag only; the inner tag crosses inside the
+        E-Line and XR03 puts 500 back on the way out.
+      ja: |
+        On XR01:
+        configure
+         interface GigabitEthernet0/0/0/3.500 l2transport
+          encapsulation dot1q 500 second-dot1q any
+          rewrite ingress tag pop 1 symmetric
+         !
+         l2vpn
+          xconnect group CUST-B
+           p2p B-500
+            interface GigabitEthernet0/0/0/3.500
+            neighbor evpn evi 500 target 3 source 1
+         commit
+        end
+        On XR03:
+        configure
+         interface GigabitEthernet0/0/0/1.500 l2transport
+          encapsulation dot1q 500 second-dot1q any
+          rewrite ingress tag pop 1 symmetric
+         !
+         l2vpn
+          xconnect group CUST-B
+           p2p B-500
+            interface GigabitEthernet0/0/0/1.500
+            neighbor evpn evi 500 target 1 source 3
+         commit
+        end
+        `second-dot1q any` は、外側のタグが 500 の二重タグのフレームを内側のタグを問わずに拾うので、後から足す VLAN 30 も
+        変更なしで通ります。`second-dot1q` の無い `encapsulation dot1q 500` は、外側が 500 なら内側のタグがあってもなくても
+        拾います。ラボでは単一タグの 500 も運び(`ping 172.31.50.3` が成功)、課題が禁じる形になりました。内側の VLAN を
+        列挙する形(`second-dot1q 10,20`)は 10 と 20 を運びましたが、30 は運びませんでした。どの場合も E-Line は UP のままなので、
+        違いは CE からのトラフィックでしか分かりません。`pop 1` は外側のタグだけを外し、内側のタグは E-Line の中を通って、
+        XR03 が出るときに 500 を付け直します。

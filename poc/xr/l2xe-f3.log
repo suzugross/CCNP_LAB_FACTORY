@@ -1,0 +1,216 @@
+#### f3-1: LDP の疑似回線(VLAN 130・pw-id 130)XE1⇔XE3 を EVC E130 で作り、両端に up MEP(41/43)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE1(config)#
+interface Ethernet0/0.130
+CE1(config-subif)#
+encapsulation dot1Q 130
+CE1(config-subif)#
+ip address 192.168.130.1 255.255.255.0
+CE1(config-subif)#
+end
+CE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE3(config)#
+interface Ethernet0/0.130
+CE3(config-subif)#
+encapsulation dot1Q 130
+CE3(config-subif)#
+ip address 192.168.130.3 255.255.255.0
+CE3(config-subif)#
+end
+CE3#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+ethernet evc E130
+XE1(config-evc)#
+exit
+XE1(config)#
+ethernet cfm domain CUST level 5
+XE1(config-ecfm)#
+service E-LINE-130 evc E130
+XE1(config-ecfm-srv)#
+continuity-check
+XE1(config-ecfm-srv)#
+continuity-check interval 1s
+XE1(config-ecfm-srv)#
+exit
+XE1(config-ecfm)#
+exit
+XE1(config)#
+interface GigabitEthernet2
+XE1(config-if)#
+service instance 130 ethernet E130
+XE1(config-if-srv)#
+encapsulation dot1q 130
+XE1(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE1(config-if-srv)#
+cfm mep domain CUST mpid 41
+XE1(config-if-srv-ecfm-mep)#
+exit
+XE1(config-if-srv)#
+exit
+XE1(config-if)#
+l2vpn xconnect context E130
+XE1(config-xconnect)#
+member GigabitEthernet2 service-instance 130
+XE1(config-xconnect)#
+member 10.255.0.43 130 encapsulation mpls
+XE1(config-xconnect)#
+end
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+ethernet evc E130
+XE3(config-evc)#
+exit
+XE3(config)#
+ethernet cfm domain CUST level 5
+XE3(config-ecfm)#
+service E-LINE-130 evc E130
+XE3(config-ecfm-srv)#
+continuity-check
+XE3(config-ecfm-srv)#
+continuity-check interval 1s
+XE3(config-ecfm-srv)#
+exit
+XE3(config-ecfm)#
+exit
+XE3(config)#
+interface GigabitEthernet2
+XE3(config-if)#
+service instance 130 ethernet E130
+XE3(config-if-srv)#
+encapsulation dot1q 130
+XE3(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE3(config-if-srv)#
+cfm mep domain CUST mpid 43
+XE3(config-if-srv-ecfm-mep)#
+exit
+XE3(config-if-srv)#
+exit
+XE3(config-if)#
+l2vpn xconnect context E130
+XE3(config-xconnect)#
+member GigabitEthernet2 service-instance 130
+XE3(config-xconnect)#
+member 10.255.0.41 130 encapsulation mpls
+XE3(config-xconnect)#
+end
+XE3#
+show l2vpn atom vc vcid 130
+
+                                       Service
+Interface Peer ID         VC ID      Type   Name                     Status
+--------- --------------- ---------- ------ ------------------------ ----------
+pw100005  10.255.0.43     130        p2p    E130                     UP        
+
+XE1#
+show ethernet cfm maintenance-points local
+Local MEPs:
+--------------------------------------------------------------------------------
+MPID Domain Name                                 Lvl   MacAddress     Type  CC  
+Ofld Domain Id                                   Dir   Port           Id        
+     MA Name                                           SrvcInst       Source    
+     EVC name                                                                   
+     CCM Mode                                   
+--------------------------------------------------------------------------------
+41   CUST                                        5     001e.bdad.52bf XCON  Y
+No   CUST                                        Up    Gi2            N/A
+     E-LINE-120                                        120            Static
+     E120                                                                       
+     Multicast                                                                  
+41   CUST                                        5     001e.bdad.52bf XCON  Y
+No   CUST                                        Up    Gi2            N/A
+     E-LINE-130                                        130            Static
+     E130                                                                       
+     Multicast                                                                  
+
+Total Local MEPs: 2
+
+Local MIPs: None
+
+XE1#
+show ethernet cfm maintenance-points remote
+--------------------------------------------------------------------------------
+MPID  Domain Name                                 MacAddress          IfSt  PtSt
+ Lvl  Domain ID                                   Ingress                       
+ RDI  MA Name                                     Type Id             SrvcInst  
+      EVC Name                                                        Age       
+      Local MEP Info                                                            
+--------------------------------------------------------------------------------
+43    CUST                                        001e.f6bc.0ebf      Up    Up  
+ 5    CUST                                        Gi2:(10.255.0.43, 130)        
+ -    E-LINE-130                                  XCON N/A            130       
+      E130                                                            0s
+      MPID: 41 Domain: CUST MA: E-LINE-130
+
+Total Remote MEPs: 1
+
+XE1#
+ping ethernet mpid 43 domain CUST service E-LINE-130
+Type escape sequence to abort.
+Sending 5 Ethernet CFM loopback messages to 001e.f6bc.0ebf, timeout is 5 seconds:!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+XE1#
+traceroute ethernet mpid 43 domain CUST service E-LINE-130
+Type escape sequence to abort. TTL 64. Linktrace Timeout is 5 seconds
+Tracing the route to 001e.f6bc.0ebf on Domain CUST, Level 5, service E-LINE-130, evc E130
+Traceroute sent via Gi2:(10.255.0.43, 130), path found via MPDB
+
+B = Intermediary Bridge
+! = Target Destination
+* = Per hop Timeout
+--------------------------------------------------------------------------------
+                             MAC      Ingress        Ingr Action  Relay Action  
+  Hops   Host             Forwarded   Egress         Egr Action   Previous Hop  
+--------------------------------------------------------------------------------
+B 1                    001e.bdad.52bf Gi2            IngOk        RlyMPDB       
+                       Forwarded                                  
+! 2                    001e.f6bc.0ebf                             RlyHit:MEP    
+                       Not Forwarded                              001e.bdad.52bf
+XE1#
+show ethernet cfm statistics | include MPID|Transmitted
+MPID: 41
+    Transmitted:                136   Rcvd Seq Errors:        0
+    Transmitted:                  0   Rcvd Seq Errors:        0
+MPID: 41
+    Transmitted:                 42   Rcvd Seq Errors:        0
+    Transmitted:                  0   Rcvd Seq Errors:        0
+XE1#
+show ethernet cfm maintenance-points remote
+--------------------------------------------------------------------------------
+MPID  Domain Name                                 MacAddress          IfSt  PtSt
+ Lvl  Domain ID                                   Ingress                       
+ RDI  MA Name                                     Type Id             SrvcInst  
+      EVC Name                                                        Age       
+      Local MEP Info                                                            
+--------------------------------------------------------------------------------
+41    CUST                                        001e.bdad.52bf      Up    Up  
+ 5    CUST                                        Gi2:(10.255.0.41, 130)        
+ -    E-LINE-130                                  XCON N/A            130       
+      E130                                                            0s
+      MPID: 43 Domain: CUST MA: E-LINE-130
+
+Total Remote MEPs: 1
+
+XE3#
+show ethernet cfm statistics | include MPID|Transmitted
+MPID: 43
+    Transmitted:                  0   Rcvd Seq Errors:        0
+    Transmitted:                  0   Rcvd Seq Errors:        0
+MPID: 43
+    Transmitted:                 35   Rcvd Seq Errors:        0
+    Transmitted:                  5   Rcvd Seq Errors:        0
+XE3#
+ping 192.168.130.3 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.130.3, timeout is 2 seconds:
+.!!
+Success rate is 66 percent (2/3), round-trip min/avg/max = 2/2/3 ms
+CE1#

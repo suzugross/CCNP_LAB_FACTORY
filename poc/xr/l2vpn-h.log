@@ -1,0 +1,459 @@
+
+######## 00:53:07 h-0: CE の CFM の残骸と XR01 の f-6 の残骸を片付ける
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE1(config)#
+interface Ethernet0/0
+CE1(config-if)#
+no service instance 100 ethernet E100
+CE1(config-if)#
+exit
+CE1(config)#
+no ethernet cfm domain CUST level 5
+CE1(config)#
+no ethernet evc E100
+CE1(config)#
+no ethernet cfm global
+CE1(config)#
+no ethernet cfm ieee
+CE1(config)#
+end
+CE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE2(config)#
+interface Ethernet0/0
+CE2(config-if)#
+no service instance 100 ethernet E100
+CE2(config-if)#
+exit
+CE2(config)#
+no ethernet cfm domain CUST level 5
+CE2(config)#
+no ethernet evc E100
+CE2(config)#
+no ethernet cfm global
+CE2(config)#
+no ethernet cfm ieee
+CE2(config)#
+end
+CE2#
+configure
+Sun Nov  1 00:53:19.337 UTC
+RP/0/RP0/CPU0:XR01(config)#
+no interface GigabitEthernet0/0/0/2.401
+RP/0/RP0/CPU0:XR01(config)#
+no interface GigabitEthernet0/0/0/2.402
+RP/0/RP0/CPU0:XR01(config)#
+no interface GigabitEthernet0/0/0/2.403
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 00:53:21.138 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+
+######## 00:53:22 h-1: VC タイプの食い違い= XR01 だけ transport-mode vlan(タイプ 4)・RT02 は既定(タイプ 5)
+configure
+Sun Nov  1 00:53:24.026 UTC
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+pw-class T4
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc)#
+encapsulation mpls
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc-mpls)#
+transport-mode vlan
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc-mpls)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc)#
+p2p CE1-CE2
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+neighbor ipv4 10.255.0.12 pw-id 100
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+pw-class T4
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 00:53:28.942 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sun Nov  1 00:53:30.045 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect
+Sun Nov  1 00:53:49.939 UTC
+Legend: ST = State, UP = Up, DN = Down, AD = Admin Down, UR = Unresolved,
+        SB = Standby, SR = Standby Ready, (PP) = Partially Programmed,
+        LU = Local Up, RU = Remote Up, CO = Connected, (SI) = Seamless Inactive
+
+XConnect                   Segment 1                       Segment 2                
+Group      Name       ST   Description            ST       Description            ST    
+------------------------   -----------------------------   -----------------------------
+POC        CE1-CE2    UP   Gi0/0/0/2.100          UP       10.255.0.12     100    UP    
+----------------------------------------------------------------------------------------
+POC        CE1-CE2-EVPN
+                      UP   Gi0/0/0/2.120          UP       EVPN 120,2,10.255.0.12 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+POC        CE1-CE4    UP   Gi0/0/0/2.110          UP       EVPN 110,4,10.255.0.21 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+POC        QINQ       UP   Gi0/0/0/2.400          UP       EVPN 140,40,10.255.0.21 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect group POC xc-name CE1-CE2 detail | inclu$C xc-name CE1-CE2 detail | includ                          e "state is|PW type|Error|$include "state is|PW type|Error|m                          ismatch"show l2vpn xconnect group POC xc-name CE1-CE2 detail | incl$
+Sun Nov  1 00:53:50.440 UTC
+Group POC, XC CE1-CE2, state is up; Interworking none
+  AC: GigabitEthernet0/0/0/2.100, state is up
+  PW: neighbor 10.255.0.12, PW ID 100, state is up ( established )
+    PW type Ethernet VLAN, control word disabled, interworking none
+    Ignore MTU mismatch: Disabled
+      PW type      Ethernet VLAN                  Ethernet VLAN                 
+RP/0/RP0/CPU0:XR01#
+show l2vpn atom vc vcid 100 detail | include status|type|error|Last
+pseudowire100004 is up, VC status is up PW type: Eth VLAN
+  Create time: 00:32:49, last status change time: 00:00:13
+    Last label FSM state change time: 00:00:13
+    Last peer autosense occurred at: 00:00:13
+    Associated member Et0/2 is up, status is up
+    Interworking type is Like2Like
+      Label/status state machine              : established, LruRru
+      Local dataplane status received         : No fault
+      BFD dataplane status received           : Not sent
+      BFD peer monitor status received        : No fault
+      Adjacency status of remote peer         : No fault
+    PW type      Eth VLAN                       Eth VLAN
+    VCCV CV type 0x12                           0x02
+    VCCV CC type 0x07                           0x06
+RT02#
+ping 192.168.100.2 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.100.2, timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/2/3 ms
+CE1#
+
+######## 00:53:54 h-2: control word の食い違い= XR01 だけ control-word(タイプは 5 に戻す)。RT02 は既定(autosense)
+configure
+Sun Nov  1 00:53:55.574 UTC
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+pw-class T4
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc)#
+encapsulation mpls
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc-mpls)#
+no transport-mode vlan
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc-mpls)#
+control-word
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc-mpls)#
+commit
+Sun Nov  1 00:53:58.183 UTC
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc-mpls)#
+show configuration failed
+Sun Nov  1 00:53:59.290 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc-mpls)#
+end
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect group POC xc-name CE1-CE2 detail | inclu$C xc-name CE1-CE2 detail | includ                          e "state is|PW type|Contro$include "state is|PW type|Control                           word|control word|Error"show l2vpn xconnect group POC xc-name CE1-CE2 detail | incl$
+Sun Nov  1 00:54:18.375 UTC
+Group POC, XC CE1-CE2, state is up; Interworking none
+  AC: GigabitEthernet0/0/0/2.100, state is up
+  PW: neighbor 10.255.0.12, PW ID 100, state is up ( established )
+    PW type Ethernet, control word enabled, interworking none
+      Control word enabled                        enabled                       
+      PW type      Ethernet                       Ethernet                      
+                   (control word)                 (control word)                
+RP/0/RP0/CPU0:XR01#
+show l2vpn atom vc vcid 100 detail | include status|Control|control
+pseudowire100004 is up, VC status is up PW type: Ethernet
+  Create time: 00:33:17, last status change time: 00:00:16
+    Associated member Et0/2 is up, status is up
+      Label/status state machine              : established, LruRru
+      Local dataplane status received         : No fault
+      BFD dataplane status received           : Not sent
+      BFD peer monitor status received        : No fault
+      Adjacency status of remote peer         : No fault
+    Control word on (configured: autosense)     on
+RT02#
+ping 192.168.100.2 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.100.2, timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/2/2 ms
+CE1#
+
+######## 00:54:22 h-3: 戻す(pw-class を外す)
+configure
+Sun Nov  1 00:54:23.753 UTC
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc)#
+p2p CE1-CE2
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+neighbor ipv4 10.255.0.12 pw-id 100
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+no pw-class T4
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+no l2vpn pw-class T4
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 00:54:27.164 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect
+Sun Nov  1 00:54:44.887 UTC
+Legend: ST = State, UP = Up, DN = Down, AD = Admin Down, UR = Unresolved,
+        SB = Standby, SR = Standby Ready, (PP) = Partially Programmed,
+        LU = Local Up, RU = Remote Up, CO = Connected, (SI) = Seamless Inactive
+
+XConnect                   Segment 1                       Segment 2                
+Group      Name       ST   Description            ST       Description            ST    
+------------------------   -----------------------------   -----------------------------
+POC        CE1-CE2    UP   Gi0/0/0/2.100          UP       10.255.0.12     100    UP    
+----------------------------------------------------------------------------------------
+POC        CE1-CE2-EVPN
+                      UP   Gi0/0/0/2.120          UP       EVPN 120,2,10.255.0.12 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+POC        CE1-CE4    UP   Gi0/0/0/2.110          UP       EVPN 110,4,10.255.0.21 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+POC        QINQ       UP   Gi0/0/0/2.400          UP       EVPN 140,40,10.255.0.21 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+RP/0/RP0/CPU0:XR01#
+
+######## 00:54:44 h-4: EVPN-VPWS の source/target の食い違い= XR02 の target を 9 に(本当は 1)
+configure
+Sun Nov  1 00:54:46.691 UTC
+RP/0/RP0/CPU0:XR02(config)#
+l2vpn
+RP/0/RP0/CPU0:XR02(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc)#
+p2p CE4-CE1
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p)#
+interface GigabitEthernet0/0/0/1.111
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p)#
+no neighbor evpn evi 110 target 1 sourc$get 1 source                           4no neighbor evpn evi 110 target 1 sour$
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p)#
+neighbor evpn evi 110 target 9 source 4
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+commit
+Sun Nov  1 00:54:50.093 UTC
+RP/0/RP0/CPU0:XR02(config)#
+show configuration failed
+Sun Nov  1 00:54:51.208 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02(config)#
+end
+RP/0/RP0/CPU0:XR02#
+show l2vpn xconnect
+Sun Nov  1 00:55:15.658 UTC
+Legend: ST = State, UP = Up, DN = Down, AD = Admin Down, UR = Unresolved,
+        SB = Standby, SR = Standby Ready, (PP) = Partially Programmed,
+        LU = Local Up, RU = Remote Up, CO = Connected, (SI) = Seamless Inactive
+
+XConnect                   Segment 1                       Segment 2                
+Group      Name       ST   Description            ST       Description            ST    
+------------------------   -----------------------------   -----------------------------
+POC        CE4-CE1    DN   Gi0/0/0/1.111          UP       EVPN 110,9,None        DN    
+----------------------------------------------------------------------------------------
+POC        QINQ       UP   Gi0/0/0/1.140          UP       EVPN 140,14,10.255.0.1 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+RP/0/RP0/CPU0:XR02#
+show l2vpn xconnect group POC xc-name CE4-CE1 detail | inclu$C xc-name CE4-CE1 detail | includ                          e "state is|EVPN:|neighbor$include "state is|EVPN:|neighbor|                          Label"show l2vpn xconnect group POC xc-name CE4-CE1 detail | incl$
+Sun Nov  1 00:55:16.160 UTC
+Group POC, XC CE4-CE1, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/1.111, state is up
+  EVPN: neighbor None, PW ID: evi 110, ac-id 9, state is down ( local ready )
+      Label        24013                          unknown                       
+RP/0/RP0/CPU0:XR02#
+show l2vpn xconnect group POC xc-name CE1-CE4 detail | inclu$C xc-name CE1-CE4 detail | includ                          e "state is|EVPN:|neighbor$include "state is|EVPN:|neighbor"                          show l2vpn xconnect group POC xc-name CE1-CE4 detail | incl$
+Sun Nov  1 00:55:18.199 UTC
+Group POC, XC CE1-CE4, state is up; Interworking none
+  AC: GigabitEthernet0/0/0/2.110, state is up
+  EVPN: neighbor 10.255.0.21, PW ID: evi 110, ac-id 4, state is up ( established )
+RP/0/RP0/CPU0:XR01#
+show evpn evi vpn-id 110 inclusive-multicast
+Sun Nov  1 00:55:18.696 UTC
+
+VPN-ID     Encap  EtherTag   Originating IP                          
+---------- ------ ---------- ----------------------------------------
+RP/0/RP0/CPU0:XR01#
+show bgp l2vpn evpn rd 10.255.0.21:110
+Sun Nov  1 00:55:19.197 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0x0
+BGP main routing table version 20
+BGP NSR Initial initsync version 1 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.21:110
+Route Distinguisher Version: 19
+*>i[1][0000.0000.0000.0000.0000][4]/120
+                      10.255.0.21                   100      0 i
+
+Processed 1 prefixes, 1 paths
+RP/0/RP0/CPU0:XR01#
+configure
+Sun Nov  1 00:55:21.104 UTC
+RP/0/RP0/CPU0:XR02(config)#
+l2vpn
+RP/0/RP0/CPU0:XR02(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc)#
+p2p CE4-CE1
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p)#
+no neighbor evpn evi 110 target 9 sourc$get 9 source                           4no neighbor evpn evi 110 target 9 sour$
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p)#
+neighbor evpn evi 110 target 1 source 4
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+commit
+Sun Nov  1 00:55:24.111 UTC
+RP/0/RP0/CPU0:XR02(config)#
+end
+RP/0/RP0/CPU0:XR02#
+
+######## 00:55:25 h-5: RT の食い違い= XR02 の EVI 110 の import/export を 65000:999 に
+configure
+Sun Nov  1 00:55:26.894 UTC
+RP/0/RP0/CPU0:XR02(config)#
+evpn
+RP/0/RP0/CPU0:XR02(config-evpn)#
+evi 110
+RP/0/RP0/CPU0:XR02(config-evpn-instance)#
+bgp
+RP/0/RP0/CPU0:XR02(config-evpn-instance-bgp)#
+route-target import 65000:999
+RP/0/RP0/CPU0:XR02(config-evpn-instance-bgp)#
+route-target export 65000:999
+RP/0/RP0/CPU0:XR02(config-evpn-instance-bgp)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+commit
+Sun Nov  1 00:55:29.802 UTC
+RP/0/RP0/CPU0:XR02(config)#
+show configuration failed
+Sun Nov  1 00:55:30.920 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02(config)#
+end
+RP/0/RP0/CPU0:XR02#
+show l2vpn xconnect
+Sun Nov  1 00:55:55.135 UTC
+Legend: ST = State, UP = Up, DN = Down, AD = Admin Down, UR = Unresolved,
+        SB = Standby, SR = Standby Ready, (PP) = Partially Programmed,
+        LU = Local Up, RU = Remote Up, CO = Connected, (SI) = Seamless Inactive
+
+XConnect                   Segment 1                       Segment 2                
+Group      Name       ST   Description            ST       Description            ST    
+------------------------   -----------------------------   -----------------------------
+POC        CE4-CE1    DN   Gi0/0/0/1.111          UP       EVPN 110,1,10.255.0.1  DN    
+----------------------------------------------------------------------------------------
+POC        QINQ       UP   Gi0/0/0/1.140          UP       EVPN 140,14,10.255.0.1 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+RP/0/RP0/CPU0:XR02#
+show evpn evi vpn-id 110 detail | include "RT|Route Target|6$ail | include "RT|Route Target|65                          000"show evpn evi vpn-id 110 detail | include "RT|Route Target|$
+Sun Nov  1 00:55:55.541 UTC
+   RT Auto  : 65000:110
+   Route Targets in Use           Type                 
+   65000:999                      Import               
+   65000:999                      Export               
+RP/0/RP0/CPU0:XR02#
+show l2vpn xconnect
+Sun Nov  1 00:55:57.180 UTC
+Legend: ST = State, UP = Up, DN = Down, AD = Admin Down, UR = Unresolved,
+        SB = Standby, SR = Standby Ready, (PP) = Partially Programmed,
+        LU = Local Up, RU = Remote Up, CO = Connected, (SI) = Seamless Inactive
+
+XConnect                   Segment 1                       Segment 2                
+Group      Name       ST   Description            ST       Description            ST    
+------------------------   -----------------------------   -----------------------------
+POC        CE1-CE2    UP   Gi0/0/0/2.100          UP       10.255.0.12     100    UP    
+----------------------------------------------------------------------------------------
+POC        CE1-CE2-EVPN
+                      UP   Gi0/0/0/2.120          UP       EVPN 120,2,10.255.0.12 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+POC        CE1-CE4    DN   Gi0/0/0/2.110          UP       EVPN 110,4,10.255.0.21 
+                                                                                  DN    
+----------------------------------------------------------------------------------------
+POC        QINQ       UP   Gi0/0/0/2.400          UP       EVPN 140,40,10.255.0.21 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+RP/0/RP0/CPU0:XR01#
+show bgp l2vpn evpn rd 10.255.0.21:110
+Sun Nov  1 00:55:57.697 UTC
+RP/0/RP0/CPU0:XR01#
+ping 192.168.110.4 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.110.4, timeout is 2 seconds:
+...
+Success rate is 0 percent (0/3)
+CE1#
+configure
+Sun Nov  1 00:56:07.162 UTC
+RP/0/RP0/CPU0:XR02(config)#
+no evpn evi 110
+RP/0/RP0/CPU0:XR02(config)#
+commit
+Sun Nov  1 00:56:08.065 UTC
+RP/0/RP0/CPU0:XR02(config)#
+end
+RP/0/RP0/CPU0:XR02#
+show l2vpn xconnect
+Sun Nov  1 00:56:30.850 UTC
+Legend: ST = State, UP = Up, DN = Down, AD = Admin Down, UR = Unresolved,
+        SB = Standby, SR = Standby Ready, (PP) = Partially Programmed,
+        LU = Local Up, RU = Remote Up, CO = Connected, (SI) = Seamless Inactive
+
+XConnect                   Segment 1                       Segment 2                
+Group      Name       ST   Description            ST       Description            ST    
+------------------------   -----------------------------   -----------------------------
+POC        CE4-CE1    UP   Gi0/0/0/1.111          UP       EVPN 110,1,10.255.0.1  UP    
+----------------------------------------------------------------------------------------
+POC        QINQ       UP   Gi0/0/0/1.140          UP       EVPN 140,14,10.255.0.1 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+RP/0/RP0/CPU0:XR02#
+ping 192.168.110.4 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.110.4, timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/3/5 ms
+CE1#

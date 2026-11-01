@@ -1,0 +1,191 @@
+######## i-1: XR01⇔XR02 の LDP の疑似回線(pw-id 115)
+configure
+Sun Nov  1 00:56:53.677 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/2.115 l2transport
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 115
+RP/0/RP0/CPU0:XR01(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc)#
+p2p XRXR
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+interface GigabitEthernet0/0/0/2.115
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+neighbor ipv4 10.255.0.21 pw-id 115
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 00:56:58.275 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Sun Nov  1 00:57:01.282 UTC
+RP/0/RP0/CPU0:XR02(config)#
+interface GigabitEthernet0/0/0/1.115 l2transport
+RP/0/RP0/CPU0:XR02(config-subif)#
+encapsulation dot1q 115
+RP/0/RP0/CPU0:XR02(config-subif)#
+rewrite ingress tag pop 1 symmetric
+RP/0/RP0/CPU0:XR02(config-subif)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+l2vpn
+RP/0/RP0/CPU0:XR02(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc)#
+p2p XRXR
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p)#
+interface GigabitEthernet0/0/0/1.115
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p)#
+neighbor ipv4 10.255.0.1 pw-id 115
+RP/0/RP0/CPU0:XR02(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR02(config)#
+commit
+Sun Nov  1 00:57:05.907 UTC
+RP/0/RP0/CPU0:XR02(config)#
+end
+RP/0/RP0/CPU0:XR02#
+show l2vpn xconnect group POC xc-name XRXR detail | include $C xc-name XRXR detail | include "                          state is|PW type|Error|rro$lude "state is|PW type|Error|rror                          |ontrol word|MTU  "show l2vpn xconnect group POC xc-name XRXR detail | include$
+Sun Nov  1 00:57:28.551 UTC
+Group POC, XC XRXR, state is up; Interworking none
+  AC: GigabitEthernet0/0/0/2.115, state is up
+  PW: neighbor 10.255.0.21, PW ID 115, state is up ( established )
+    PW type Ethernet, control word disabled, interworking none
+      MTU          1500                           1500                          
+      Control word disabled                       disabled                      
+      PW type      Ethernet                       Ethernet                      
+RP/0/RP0/CPU0:XR01#
+######## i-2: XR01 だけ transport-mode vlan(タイプ 4)
+configure
+Sun Nov  1 00:57:30.148 UTC
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+pw-class T4
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc)#
+encapsulation mpls
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc-mpls)#
+transport-mode vlan
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc-mpls)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+xconnect group POC
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc)#
+p2p XRXR
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p)#
+neighbor ipv4 10.255.0.21 pw-id 115
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+pw-class T4
+RP/0/RP0/CPU0:XR01(config-l2vpn-xc-p2p-pw)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 00:57:35.163 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect group POC xc-name XRXR detail | include $C xc-name XRXR detail | include "                          state is|PW type|Error|rro$lude "state is|PW type|Error|rror                          |ontrol word|MTU  "show l2vpn xconnect group POC xc-name XRXR detail | include$
+Sun Nov  1 00:57:57.891 UTC
+Group POC, XC XRXR, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/2.115, state is up
+  PW: neighbor 10.255.0.21, PW ID 115, state is down ( all ready )
+    PW type Ethernet VLAN, control word disabled, interworking none
+      MTU          1500                           1500                          
+      Control word disabled                       disabled                      
+      PW type      Ethernet VLAN                  Ethernet                      
+    Error: PW type mismatched
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect group POC xc-name XRXR detail | include $C xc-name XRXR detail | include "                          state is|PW type|Error|rro$lude "state is|PW type|Error|rror                          |ontrol word|MTU  "show l2vpn xconnect group POC xc-name XRXR detail | include$
+Sun Nov  1 00:57:59.797 UTC
+Group POC, XC XRXR, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/1.115, state is up
+  PW: neighbor 10.255.0.1, PW ID 115, state is down ( all ready )
+    PW type Ethernet, control word disabled, interworking none
+      MTU          1500                           1500                          
+      Control word disabled                       disabled                      
+      PW type      Ethernet                       Ethernet VLAN                 
+    Error: PW type mismatched
+RP/0/RP0/CPU0:XR02#
+######## i-3: XR01 だけ control-word(タイプは 5)
+configure
+Sun Nov  1 00:58:01.572 UTC
+RP/0/RP0/CPU0:XR01(config)#
+l2vpn
+RP/0/RP0/CPU0:XR01(config-l2vpn)#
+pw-class T4
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc)#
+encapsulation mpls
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc-mpls)#
+no transport-mode vlan
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc-mpls)#
+control-word
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc-mpls)#
+commit
+Sun Nov  1 00:58:04.190 UTC
+RP/0/RP0/CPU0:XR01(config-l2vpn-pwc-mpls)#
+end
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect group POC xc-name XRXR detail | include $C xc-name XRXR detail | include "                          state is|PW type|Error|rro$lude "state is|PW type|Error|rror                          |ontrol word|MTU  "show l2vpn xconnect group POC xc-name XRXR detail | include$
+Sun Nov  1 00:58:27.017 UTC
+Group POC, XC XRXR, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/2.115, state is up
+  PW: neighbor 10.255.0.21, PW ID 115, state is down ( all ready )
+    PW type Ethernet, control word enabled, interworking none
+      MTU          1500                           1500                          
+      Control word enabled                        disabled                      
+      PW type      Ethernet                       Ethernet                      
+                   (control word)                                               
+    Error: illegal control word
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect group POC xc-name XRXR detail | include $C xc-name XRXR detail | include "                          state is|PW type|Error|rro$lude "state is|PW type|Error|rror                          |ontrol word|MTU  "show l2vpn xconnect group POC xc-name XRXR detail | include$
+Sun Nov  1 00:58:28.936 UTC
+Group POC, XC XRXR, state is down; Interworking none
+  AC: GigabitEthernet0/0/0/1.115, state is up
+  PW: neighbor 10.255.0.1, PW ID 115, state is down ( all ready )
+    PW type Ethernet, control word disabled, interworking none
+      MTU          1500                           1500                          
+      Control word disabled                       enabled                       
+      PW type      Ethernet                       Ethernet                      
+                                                  (control word)                
+    Error: PW type mismatched
+    Error: illegal control word
+RP/0/RP0/CPU0:XR02#
+######## i-4: 片付け
+configure
+Sun Nov  1 00:58:30.462 UTC
+RP/0/RP0/CPU0:XR01(config)#
+no l2vpn xconnect group POC p2p XRXR
+RP/0/RP0/CPU0:XR01(config)#
+no l2vpn pw-class T4
+RP/0/RP0/CPU0:XR01(config)#
+no interface GigabitEthernet0/0/0/2.115
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  1 00:58:32.173 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Sun Nov  1 00:58:35.190 UTC
+RP/0/RP0/CPU0:XR02(config)#
+no l2vpn xconnect group POC p2p XRXR
+RP/0/RP0/CPU0:XR02(config)#
+no interface GigabitEthernet0/0/0/1.115
+RP/0/RP0/CPU0:XR02(config)#
+commit
+Sun Nov  1 00:58:36.606 UTC
+RP/0/RP0/CPU0:XR02(config)#
+end
+RP/0/RP0/CPU0:XR02#

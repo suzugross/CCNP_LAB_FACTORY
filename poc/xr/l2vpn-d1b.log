@@ -1,0 +1,84 @@
+show l2vpn xconnect
+Sun Nov  1 00:29:38.078 UTC
+Legend: ST = State, UP = Up, DN = Down, AD = Admin Down, UR = Unresolved,
+        SB = Standby, SR = Standby Ready, (PP) = Partially Programmed,
+        LU = Local Up, RU = Remote Up, CO = Connected, (SI) = Seamless Inactive
+
+XConnect                   Segment 1                       Segment 2                
+Group      Name       ST   Description            ST       Description            ST    
+------------------------   -----------------------------   -----------------------------
+POC        CE1-CE2    UP   Gi0/0/0/2.100          UP       10.255.0.12     100    UP    
+----------------------------------------------------------------------------------------
+POC        CE1-CE4    UP   Gi0/0/0/2.110          UP       EVPN 110,4,10.255.0.21 
+                                                                                  UP    
+----------------------------------------------------------------------------------------
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect group POC xc-name CE1-CE4 detail
+Sun Nov  1 00:29:38.579 UTC
+
+Group POC, XC CE1-CE4, state is up; Interworking none
+Decoupled mode: Disabled
+  AC: GigabitEthernet0/0/0/2.110, state is up
+    Type VLAN; Num Ranges: 1
+    Rewrite Tags: []
+    VLAN ranges: [110, 110]
+    MTU 1500; XC ID 0x4; interworking none
+    Statistics:
+      packets: received 2, sent 0
+      bytes: received 128, sent 0
+      drops: illegal VLAN 0, illegal length 0
+  EVPN: neighbor 10.255.0.21, PW ID: evi 110, ac-id 4, state is up ( established )
+    XC ID 0xa0000005
+    Encapsulation MPLS
+    Encap type Ethernet, control word disabled
+    Sequencing not set
+    Ignore MTU mismatch: Enabled
+    Transmit MTU zero: Enabled
+    LSP : Up
+    Force PW UP: Inactive
+    Nexthop type: IPV4 10.255.0.21
+
+      EVPN         Local                          Remote                        
+      ------------ ------------------------------ -----------------------------
+      Label        24010                          10.255.0.21 24010                         
+      MTU          1514                           unknown                       
+      Control word disabled                       disabled                      
+      AC ID        1                              4                             
+      EVPN type    Ethernet                       Ethernet                      
+
+      ------------ ------------------------------ -----------------------------
+    Create time: 01/11/2026 00:28:23 (00:01:14 ago)
+    Last time status changed: 01/11/2026 00:29:20 (00:00:18 ago)
+    Statistics:
+      packets: received 0, sent 2
+      bytes: received 0, sent 128
+RP/0/RP0/CPU0:XR01#
+show bgp l2vpn evpn
+Sun Nov  1 00:29:39.087 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0x0
+BGP main routing table version 4
+BGP NSR Initial initsync version 1 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.1:110 (default for vrf VPWS:110)
+Route Distinguisher Version: 4
+*> [1][0000.0000.0000.0000.0000][1]/120
+                      0.0.0.0                                0 i
+*>i[1][0000.0000.0000.0000.0000][4]/120
+                      10.255.0.21                   100      0 i
+Route Distinguisher: 10.255.0.21:110
+Route Distinguisher Version: 3
+*>i[1][0000.0000.0000.0000.0000][4]/120
+                      10.255.0.21                   100      0 i
+
+Processed 3 prefixes, 3 paths
+RP/0/RP0/CPU0:XR01#

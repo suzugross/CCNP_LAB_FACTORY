@@ -1,0 +1,167 @@
+#### f5-1: Y.1731 の DMM(E-LINE-130・相手 mpid 43)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+ip sla 10
+XE1(config-ip-sla)#
+ethernet y1731 delay DMM domain CUST evc E130 mpid 43 cos 0 source mpid 41
+XE1(config-sla-y1731-delay)#
+frequency 10
+                              ^
+% Invalid input detected at '^' marker.
+
+XE1(config-sla-y1731-delay)#
+exit
+XE1(config)#
+ip sla schedule 10 start-time now life forever
+XE1(config)#
+end
+XE1#
+show ip sla summary
+IPSLAs Latest Operation Summary
+Codes: * active, ^ inactive, ~ pending
+All Stats are in milliseconds. Stats with u are in microseconds
+
+ID           Type        Destination       Stats       Return      Last
+                                                       Code        Run 
+-----------------------------------------------------------------------
+*10          y1731-delay Domain:CUST Evc:E -           OK          36 seconds ag
+                         130 Mpid:43                               o            
+                                                                                
+                                                                                
+                                                                                
+
+XE1#
+show ip sla statistics 10 details
+IPSLAs Latest Operation Statistics
+
+IPSLA operation id: 10
+Delay Statistics for Y1731 Operation 10
+Type of operation: Y1731 Delay Measurement
+Latest operation start time: *02:24:00.494 UTC Sun Nov 1 2026
+Latest operation return code: OK
+Distribution Statistics:
+
+
+Interval
+ Start time:  *02:24:00.494 UTC Sun Nov 1 2026
+ Elapsed time: 37 seconds
+ Number of measurements initiated: 29
+ Number of measurements completed: 29
+ Flag: OK
+
+
+Delay:
+  Number of TwoWay observations: 24
+    Min/Avg/Max TwoWay: 688/1275/1916 (microsec)
+  Time of occurrence TwoWay: 
+    Min - *02:24:24.594 UTC Sun Nov 1 2026
+    Max - *02:24:19.594 UTC Sun Nov 1 2026
+
+ Bin TwoWay:
+	Bin Range (microsec)		Total observations
+	         0 - < 5000      		24        
+	      5000 - < 10000     		0         
+	     10000 - < 15000     		0         
+	     15000 - < 20000     		0         
+	     20000 - < 25000     		0         
+	     25000 - < 30000     		0         
+	     30000 - < 35000     		0         
+	     35000 - < 40000     		0         
+	     40000 - < 45000     		0         
+	     45000 - < 4294967295		0         
+
+Delay Variance:
+  Number of TwoWay positive observations: 10
+    Min/Avg/Max TwoWay positive: 79/575/950 (microsec)
+  Time of occurrence TwoWay positive: 
+    Min - *02:24:14.594 UTC Sun Nov 1 2026
+    Max - *02:24:04.593 UTC Sun Nov 1 2026
+  Number of TwoWay negative observations: 13
+    Min/Avg/Max TwoWay negative: 156/389/963 (microsec)
+  Time of occurrence TwoWay negative: 
+    Min - *02:24:24.594 UTC Sun Nov 1 2026
+    Max - *02:24:19.594 UTC Sun Nov 1 2026
+
+ Bin TwoWay positive:
+	Bin Range (microsec)		Total observations
+	         0 - < 5000      		10        
+	      5000 - < 10000     		0         
+	     10000 - < 15000     		0         
+	     15000 - < 20000     		0         
+	     20000 - < 25000     		0         
+	     25000 - < 30000     		0         
+	     30000 - < 35000     		0         
+	     35000 - < 40000     		0         
+	     40000 - < 45000     		0         
+	     45000 - < 4294967295		0         
+
+ Bin TwoWay negative:
+	Bin Range (microsec)		Total observations
+	         0 - < 5000      		13        
+	      5000 - < 10000     		0         
+	     10000 - < 15000     		0         
+	     15000 - < 20000     		0         
+	     20000 - < 25000     		0         
+	     25000 - < 30000     		0         
+	     30000 - < 35000     		0         
+	     35000 - < 40000     		0         
+	     40000 - < 45000     		0         
+	     45000 - < 4294967295		0         
+Operation time to live: Forever
+Operational state of entry: Active
+Last time this entry was reset: Never
+
+
+XE1#
+#### f5-2: XE3 の EFP 130 を落とす → XE1 の CFM
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+interface GigabitEthernet2
+XE3(config-if)#
+service instance 130 ethernet E130
+XE3(config-if-srv)#
+shutdown
+XE3(config-if-srv)#
+end
+XE3#
+show ethernet cfm maintenance-points remote
+XE1#
+show ethernet cfm errors
+--------------------------------------------------------------------------------
+MPID Domain Id                                   Mac Address      Type Id       
+     MA Name                                     Reason           Lvl  Age      
+     Local MEP Info                                                             
+--------------------------------------------------------------------------------
+43   CUST                                        001e.f6bc.0ebf   XCON N/A      
+     E-LINE-130                                  Lifetime Expired 5    11s
+     MPID: 41 Domain: CUST MA: E-LINE-130
+
+XE1#
+show ethernet cfm maintenance-points remote detail | include RDI|Port state|Interface status|Receive|Age
+XE1#
+show l2vpn atom vc vcid 130
+
+                                       Service
+Interface Peer ID         VC ID      Type   Name                     Status
+--------- --------------- ---------- ------ ------------------------ ----------
+pw100005  10.255.0.43     130        p2p    E130                     DOWN      
+
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+interface GigabitEthernet2
+XE3(config-if)#
+service instance 130 ethernet E130
+XE3(config-if-srv)#
+no shutdown
+XE3(config-if-srv)#
+end
+XE3#
+show ethernet cfm maintenance-points remote | include 43|Total
+43    CUST                                        001e.f6bc.0ebf      Up    Up  
+ 5    CUST                                        Gi2:(10.255.0.43, 130)        
+Total Remote MEPs: 1
+XE1#

@@ -1,0 +1,291 @@
+!! XRT-11 XR01(PE・XRv9000 26.1.1)= XRT-10 の M10-1〜5 を解き終えた設定(XRT-11 の構築中に solve_xrt10.sh を流した実機の running-config から写した)。
+!! SR のコア(SRGB 既定・index 1・sr-prefer・TI-LFA・microloop avoidance)・LDP なし・L3VPN(お客さま A の色 100= ODN で PRIMARY を避ける)・PCC(PCE= XR02)と離した 2 本の SR ポリシー。
+!! M11 の前任者の作業は XR01.commits.yml(CHG-1401・1402・1411)。
+vrf CUST-A
+ address-family ipv4 unicast
+  import from default-vrf route-policy DEFAULT-ONLY advertise-as-vpn
+  export to default-vrf route-policy CUST-A-PUBLIC allow-imported-vpn
+  import route-target
+   65000:101
+   65000:900
+  !
+  export route-target
+   65000:101
+  !
+ !
+!
+vrf CUST-B
+ address-family ipv4 unicast
+  import route-target
+   65000:102
+   65000:900
+  !
+  export route-target
+   65000:102
+  !
+ !
+!
+vrf SVC
+ address-family ipv4 unicast
+  import route-target
+   65000:101
+   65000:102
+  !
+  export route-policy SVC-EXPORT
+  export route-target
+   65000:999
+  !
+ !
+!
+interface Loopback0
+ ipv4 address 10.255.0.1 255.255.255.255
+!
+interface Loopback1
+ description NMS - reserved for the management systems, not in IS-IS
+ ipv4 address 10.255.255.1 255.255.255.255
+!
+interface {{ links[3] }}
+ description PRIMARY to RT01
+ ipv4 address 10.0.1.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description BACKUP to RT03
+ ipv4 address 10.0.3.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[5] }}
+ description CUST-A site 1 (CEA1)
+ vrf CUST-A
+ ipv4 address 172.16.11.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[6] }}
+ description CUST-B site 1 (CEB1)
+ vrf CUST-B
+ ipv4 address 172.16.21.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[7] }}
+ description SHARED-SERVICES (SVC)
+ vrf SVC
+ ipv4 address 172.16.91.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[8] }}
+ description INTERNET (INET AS 64500)
+ ipv4 address 192.0.2.1 255.255.255.0
+ no shutdown
+!
+ipv4 access-list LDP-SP
+ 10 permit ipv4 host 10.255.0.11 any
+!
+extcommunity-set rt CUST-A-RT
+  65000:101
+end-set
+!
+extcommunity-set opaque COLOR-100
+  100
+end-set
+!
+route-policy PASS
+  pass
+end-policy
+!
+route-policy SVC-EXPORT
+  if destination in (10.99.1.0/24) then
+    set extcommunity rt (65000:900) additive
+  endif
+  pass
+end-policy
+!
+route-policy TO-INTERNET
+  if destination in (198.51.100.0/25, 198.51.100.128/25) then
+    pass
+  endif
+end-policy
+!
+route-policy FROM-RR
+  if extcommunity rt matches-any CUST-A-RT then
+    set extcommunity color COLOR-100
+  endif
+  pass
+end-policy
+!
+route-policy DEFAULT-ONLY
+  if destination in (0.0.0.0/0) then
+    pass
+  endif
+end-policy
+!
+route-policy CUST-A-PUBLIC
+  if destination in (198.51.100.0/25, 198.51.100.128/25) then
+    pass
+  endif
+end-policy
+!
+router static
+ vrf SVC
+  address-family ipv4 unicast
+   10.99.1.0/24 172.16.91.2
+   10.99.2.0/24 172.16.91.2
+  !
+ !
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ distribute link-state
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+  microloop avoidance segment-routing
+  segment-routing mpls sr-prefer
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+   prefix-sid index 1
+  !
+ !
+ interface {{ links[3] }}
+  bfd minimum-interval 100
+  bfd multiplier 3
+  bfd fast-detect ipv4
+  point-to-point
+  address-family ipv4 unicast
+   fast-reroute per-prefix
+   fast-reroute per-prefix ti-lfa
+   metric 10
+  !
+ !
+ interface {{ links[4] }}
+  bfd minimum-interval 100
+  bfd multiplier 3
+  bfd fast-detect ipv4
+  point-to-point
+  address-family ipv4 unicast
+   fast-reroute per-prefix
+   fast-reroute per-prefix ti-lfa
+   metric 100
+  !
+ !
+!
+router bgp 65000
+ bgp router-id 10.255.0.1
+ address-family ipv4 unicast
+ !
+ address-family vpnv4 unicast
+ !
+ neighbor 10.255.0.21
+  remote-as 65000
+  update-source Loopback0
+  address-family vpnv4 unicast
+   route-policy FROM-RR in
+  !
+ !
+ neighbor 192.0.2.2
+  remote-as 64500
+  address-family ipv4 unicast
+   route-policy PASS in
+   route-policy TO-INTERNET out
+  !
+ !
+ vrf CUST-A
+  rd 10.255.0.1:101
+  address-family ipv4 unicast
+  !
+  neighbor 172.16.11.2
+   remote-as 65101
+   address-family ipv4 unicast
+    route-policy PASS in
+    route-policy PASS out
+    as-override
+   !
+  !
+ !
+ vrf CUST-B
+  rd 10.255.0.1:102
+  address-family ipv4 unicast
+  !
+  neighbor 172.16.21.2
+   remote-as 65201
+   address-family ipv4 unicast
+    route-policy PASS in
+    route-policy PASS out
+   !
+  !
+ !
+ vrf SVC
+  rd 10.255.0.1:900
+  address-family ipv4 unicast
+   redistribute static
+  !
+ !
+!
+mpls oam
+!
+segment-routing
+ traffic-eng
+  interface {{ links[3] }}
+   affinity
+    name RT01-MAINT
+   !
+  !
+  on-demand color 100
+   dynamic
+    metric
+     type igp
+    !
+    affinity
+     exclude-any
+      name RT01-MAINT
+     !
+    !
+   !
+  !
+  policy DISJ-1
+   color 201 end-point ipv4 10.255.0.12
+   candidate-paths
+    preference 100
+     dynamic
+      pcep
+      !
+      metric
+       type igp
+      !
+     !
+     constraints
+      disjoint-path group-id 1 type link
+     !
+    !
+   !
+  !
+  policy DISJ-2
+   color 202 end-point ipv4 10.255.0.12
+   candidate-paths
+    preference 100
+     dynamic
+      pcep
+      !
+      metric
+       type igp
+      !
+     !
+     constraints
+      disjoint-path group-id 1 type link
+     !
+    !
+   !
+  !
+  affinity-map
+   name RT01-MAINT bit-position 0
+  !
+  pcc
+   source-address ipv4 10.255.0.1
+   pce address ipv4 10.255.0.21
+   !
+  !
+ !
+!
+end
