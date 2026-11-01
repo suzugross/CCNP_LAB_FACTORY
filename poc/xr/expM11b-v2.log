@@ -1,0 +1,50 @@
+
+######## 04:52:21 v2: XE3 の EFP 210 に rewrite を足す → 拠点 2⇔3 は通り、1⇔3 は通らないはず(スプリット ホライズン)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+interface GigabitEthernet2
+XE3(config-if)#
+service instance 210 ethernet
+XE3(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE3(config-if-srv)#
+end
+XE3#
+ping 172.31.210.2 repeat 5
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/2/3 ms
+ping 172.31.210.3 repeat 5
+Success rate is 0 percent (0/5)
+ping 172.31.210.3 repeat 5
+Success rate is 80 percent (4/5), round-trip min/avg/max = 2/2/3 ms
+show bridge-domain 210
+Bridge-domain 210 (3 ports in all)
+State: UP                    Mac learning: Enabled
+Aging-Timer: 300 second(s)
+Unknown Unicast Flooding Suppression: Disabled
+Maximum address limit: 65536
+    GigabitEthernet2 service instance 210
+    vfi VPLS210 neighbor 10.255.0.41 210
+    vfi VPLS210 neighbor 10.255.0.43 210
+   AED MAC address    Policy  Tag       Age  Pseudoport
+   -----------------------------------------------------------------------------
+   0   AABB.CC00.6B00 forward dynamic   298  VPLS210.404012, VPLS 
+                                             VC_LABEL: 16, Intf: GigabitEthernet1
+   0   AABB.CC00.6A00 forward dynamic   298  GigabitEthernet2.EFP210
+   0   AABB.CC00.6900 forward dynamic   292  VPLS210.404011, VPLS 
+                                             VC_LABEL: 16, Intf: GigabitEthernet1
+XE2#
+show bridge-domain 210
+Bridge-domain 210 (2 ports in all)
+State: UP                    Mac learning: Enabled
+Aging-Timer: 300 second(s)
+Unknown Unicast Flooding Suppression: Disabled
+Maximum address limit: 65536
+    GigabitEthernet2 service instance 210
+    vfi VPLS210 neighbor 10.255.0.42 210
+   AED MAC address    Policy  Tag       Age  Pseudoport
+   -----------------------------------------------------------------------------
+   0   AABB.CC00.6A00 forward dynamic   295  VPLS210.404011, VPLS 
+                                             VC_LABEL: 17, Intf: GigabitEthernet1
+   0   AABB.CC00.6900 forward dynamic   291  GigabitEthernet2.EFP210
+XE1#

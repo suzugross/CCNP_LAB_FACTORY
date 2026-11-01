@@ -1,0 +1,121 @@
+== 中間チェック m11t9（参考点・ノルマ記録なし）: XRT-12 ==
+
+PLAY [採点準備（基準読込・接続先解決）] ****************************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [収集方式を決定（problem.yml の access。既定 ssh / telnet・console=SSH不可ノード）] ***
+ok: [localhost]
+
+TASK [接続先マップ = mgmt_map ＋ clab ノード（problem.yml の clab_nodes。BL-061 複合ラボ）] ***
+ok: [localhost]
+
+TASK [各チェックに既定(genie_os 等)と接続先を併合した checks を作る] ***********
+ok: [localhost] => (item=XE1: M11-9 XE1, XE3: each end's MEP (domain PROV, level 4, service E130) knows the other end's MEP (MEP IDs 1 and 3))
+ok: [localhost] => (item=XE1: M11-9 XE1, XE3: a CFM loopback reaches the other end's MEP)
+ok: [localhost] => (item=XE1: M11-9 XE1: notices a silent break of the E-Line within 5 seconds (the far MEP is gone at +4.6 s))
+ok: [localhost] => (item=XE1: M11-9 XE3: notices the same silent break within 5 seconds (the far MEP is gone at +4.6 s))
+ok: [localhost] => (item=XE1: M11-9 XE1: IP SLA operation 130 measures the two-way delay to MEP 3 with Y.1731, without stopping)
+
+TASK [大域不変条件（軸1）= model / invariants / 採点対象ノードを確定] **********
+ok: [localhost]
+
+TASK [shell 採点ノード(Linux)を特定（指紋照合の取得方式振分け用）] *************
+ok: [localhost]
+
+TASK [junos 採点ノード(clab)を特定（exec=junos。接続は network_cli / 指紋照合は対象外）] ***
+ok: [localhost]
+
+TASK [採点先の古い known_hosts エントリを削除] *********************************
+ok: [localhost] => (item=10.1.10.11)
+ok: [localhost] => (item=10.1.10.12)
+ok: [localhost] => (item=10.1.10.13)
+ok: [localhost] => (item=10.1.10.14)
+ok: [localhost] => (item=10.1.10.15)
+ok: [localhost] => (item=10.1.10.16)
+ok: [localhost] => (item=10.1.10.17)
+ok: [localhost] => (item=10.1.10.18)
+
+TASK [採点対象ノードに ansible_host を付与（delegate 接続用・ssh のみ。checks＋invariant の全 RIB ノード）] ***
+changed: [localhost] => (item=XE1 -> 10.1.10.11)
+ok: [localhost] => (item=XE1 -> 10.1.10.11)
+ok: [localhost] => (item=XE1 -> 10.1.10.11)
+ok: [localhost] => (item=XE1 -> 10.1.10.11)
+ok: [localhost] => (item=XE1 -> 10.1.10.11)
+
+PLAY [ラボ指紋の照合（ssh のみ。telnet は collect_telnet.py 内 / console はラボ名解決で対象外）] ***
+[WARNING]: Deprecation warnings can be disabled by setting `deprecation_warnings=False` in ansible.cfg.
+[DEPRECATION WARNING]: Importing 'to_bytes' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+[DEPRECATION WARNING]: Importing 'to_text' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+[DEPRECATION WARNING]: The `ansible.module_utils.common._collections_compat` module is deprecated. This feature will be removed from ansible-core version 2.24. Use `collections.abc` from the Python standard library instead.
+[DEPRECATION WARNING]: Passing `warnings` to `exit_json` or `fail_json` is deprecated. This feature will be removed from ansible-core version 2.23. Use `AnsibleModule.warn` instead.
+
+TASK [labid を取得（IOS）] *****************************************************
+ok: [XE1]
+
+TASK [照合（別ラボの labid が返ったら採点中止）] *******************************
+ok: [XE1] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-8c359031'
+
+PLAY [収束待ち付き採点] ********************************************************
+
+TASK [全チェック PASS まで（または最大試行まで）採点を繰り返す] ****************
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 1/1)
+
+TASK [各チェックのコマンドを Linux ノードで実行 (exec=shell) / 採点機で実行 (exec=local)] ***
+ok: [localhost] => (item=XE1: echo '## XE1'; .venv/bin/python...)
+ok: [localhost] => (item=XE1: echo '## XE1'; .venv/bin/python...)
+ok: [localhost] => (item=XE1: .venv/bin/python topologies/login_probe.py XRT-12 watch...)
+ok: [localhost] => (item=XE1: .venv/bin/python topologies/login_probe.py XRT-12 watch...)
+ok: [localhost] => (item=XE1: .venv/bin/python topologies/login_probe.py XRT-12 ssh...)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=M11-9 XE1, XE3: each end's MEP (domain PROV, level 4, service E130) knows the other end's MEP (MEP IDs 1 and 3))
+ok: [localhost] => (item=M11-9 XE1, XE3: a CFM loopback reaches the other end's MEP)
+ok: [localhost] => (item=M11-9 XE1: notices a silent break of the E-Line within 5 seconds (the far MEP is gone at +4.6 s))
+ok: [localhost] => (item=M11-9 XE3: notices the same silent break within 5 seconds (the far MEP is gone at +4.6 s))
+ok: [localhost] => (item=M11-9 XE1: IP SLA operation 130 measures the two-way delay to MEP 3 with Y.1731, without stopping)
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+changed: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+
+TASK [最終結果] ****************************************************************
+ok: [localhost] => 
+    msg:
+    - ======================================================================
+    - '[PASS] (+ 20 点) M11-9 XE1, XE3: each end''s MEP (domain PROV, level 4, service
+      E130) knows the other end''s MEP (MEP IDs 1 and 3)'
+    - '[PASS] (+ 15 点) M11-9 XE1, XE3: a CFM loopback reaches the other end''s MEP'
+    - '[PASS] (+ 20 点) M11-9 XE1: notices a silent break of the E-Line within 5 seconds
+      (the far MEP is gone at +4.6 s)'
+    - '[PASS] (+ 20 点) M11-9 XE3: notices the same silent break within 5 seconds (the
+      far MEP is gone at +4.6 s)'
+    - '[FAIL] (+ 25 点) M11-9 XE1: IP SLA operation 130 measures the two-way delay to MEP
+      3 with Y.1731, without stopping'
+    - '        未充足(raw): {''regex'': ''Latest operation return code: OK''}'
+    - ======================================================================
+    - '  合計: 75 / 100 点'
+    - ======================================================================
+
+TASK [収束したか] **************************************************************
+ok: [localhost] => 
+    msg: ⚠ 1 回試行しても全 PASS に至らず（上の未充足を参照）
+
+PLAY RECAP *********************************************************************
+XE1                        : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+localhost                  : ok=19   changed=2    unreachable=0    failed=0    skipped=14   rescued=0    ignored=0   
+

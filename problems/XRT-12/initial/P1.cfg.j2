@@ -1,0 +1,59 @@
+! XRT-12 P1(IOL 17.15・据付・変更しない)= 星形のコアの中心の P ルータ。IS-IS CORE(L2・wide)と LDP。
+! l2vpn evpn のルート リフレクタも兼ねる(XE1〜3 はクライアント。PE 側の BGP は課題 M11-7 で学ぶ側が書く)。
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+!
+interface Loopback0
+ ip address 10.255.0.51 255.255.255.255
+ ip router isis CORE
+!
+interface {{ links[0] }}
+ description CORE to XE1
+ ip address 10.0.41.51 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+!
+interface {{ links[1] }}
+ description CORE to XE2
+ ip address 10.0.42.51 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+!
+interface {{ links[2] }}
+ description CORE to XE3
+ ip address 10.0.43.51 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0051.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+!
+router bgp 65000
+ bgp router-id 10.255.0.51
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor PE peer-group
+ neighbor PE remote-as 65000
+ neighbor PE description PE (route-reflector client)
+ neighbor PE update-source Loopback0
+ neighbor 10.255.0.41 peer-group PE
+ neighbor 10.255.0.42 peer-group PE
+ neighbor 10.255.0.43 peer-group PE
+ !
+ address-family l2vpn evpn
+  neighbor PE send-community both
+  neighbor PE route-reflector-client
+  neighbor 10.255.0.41 activate
+  neighbor 10.255.0.42 activate
+  neighbor 10.255.0.43 activate
+ exit-address-family
+!

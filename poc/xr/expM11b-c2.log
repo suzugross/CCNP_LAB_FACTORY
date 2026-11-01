@@ -1,0 +1,138 @@
+
+######## 05:06:42 c2: ethernet cfm global を足す
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+ethernet cfm global
+XE1(config)#
+end
+XE1#
+show running-config | include ^ethernet cfm
+ethernet cfm ieee 
+ethernet cfm global
+ethernet cfm domain PROV level 4
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+ethernet cfm global
+XE3(config)#
+end
+XE3#
+show running-config | include ^ethernet cfm
+ethernet cfm ieee 
+ethernet cfm global
+ethernet cfm domain PROV level 4
+XE3#
+show ethernet cfm maintenance-points local
+Local MEPs:
+--------------------------------------------------------------------------------
+MPID Domain Name                                 Lvl   MacAddress     Type  CC  
+Ofld Domain Id                                   Dir   Port           Id        
+     MA Name                                           SrvcInst       Source    
+     EVC name                                                                   
+     CCM Mode                                   
+--------------------------------------------------------------------------------
+1    PROV                                        4     001e.f607.b6bf XCON  Y
+No   PROV                                        Up    Gi2            N/A
+     E130                                              130            Static
+     E130                                                                       
+     Multicast                                                                  
+Total Local MEPs: 1
+Local MIPs: None
+XE1#
+show ethernet cfm maintenance-points remote
+--------------------------------------------------------------------------------
+MPID  Domain Name                                 MacAddress          IfSt  PtSt
+ Lvl  Domain ID                                   Ingress                       
+ RDI  MA Name                                     Type Id             SrvcInst  
+      EVC Name                                                        Age       
+      Local MEP Info                                                            
+--------------------------------------------------------------------------------
+3     PROV                                        001e.14d8.53bf      Up    Up  
+ 4    PROV                                        Gi2:(10.255.0.43, 130)        
+ -    E130                                        XCON N/A            130       
+      E130                                                            6s
+      MPID: 1 Domain: PROV MA: E130
+Total Remote MEPs: 1
+XE1#
+show ethernet cfm maintenance-points local
+Local MEPs:
+--------------------------------------------------------------------------------
+MPID Domain Name                                 Lvl   MacAddress     Type  CC  
+Ofld Domain Id                                   Dir   Port           Id        
+     MA Name                                           SrvcInst       Source    
+     EVC name                                                                   
+     CCM Mode                                   
+--------------------------------------------------------------------------------
+3    PROV                                        4     001e.14d8.53bf XCON  Y
+No   PROV                                        Up    Gi2            N/A
+     E130                                              130            Static
+     E130                                                                       
+     Multicast                                                                  
+Total Local MEPs: 1
+Local MIPs: None
+XE3#
+show ethernet cfm maintenance-points remote
+--------------------------------------------------------------------------------
+MPID  Domain Name                                 MacAddress          IfSt  PtSt
+ Lvl  Domain ID                                   Ingress                       
+ RDI  MA Name                                     Type Id             SrvcInst  
+      EVC Name                                                        Age       
+      Local MEP Info                                                            
+--------------------------------------------------------------------------------
+1     PROV                                        001e.f607.b6bf      Up    Up  
+ 4    PROV                                        Gi2:(10.255.0.41, 130)        
+ -    E130                                        XCON N/A            130       
+      E130                                                            0s
+      MPID: 3 Domain: PROV MA: E130
+Total Remote MEPs: 1
+XE3#
+show ethernet cfm domain PROV
+Domain Name: PROV
+Domain ID: PROV
+Level: 4
+Total Services: 1
+  Services:
+  Type Id        Dir CC CC-int Static-rmep Crosscheck MaxMEP MA-Name
+  XCON N/A       Up  Y  10s    Disabled    Disabled   100    E130
+XE1#
+show ethernet cfm maintenance-points remote detail
+Version: IEEE-CFM
+MAC Address: 001e.14d8.53bf
+Domain Name: PROV
+Domain ID: PROV
+MA Name: E130
+Level: 4
+EVC: E130
+MPID: 3
+XCONNECT: Gi2:(10.255.0.43, 130)
+CC Lifetime(sec): 35
+Age of Last CC Message(sec): 9
+CC Packet Statistics: 4/0 (Received/Error)
+MEP interface status: Up
+MEP port status: Up
+Receive RDI: FALSE
+Total Remote MEPs: 1
+XE1#
+ping ethernet mpid 3 domain PROV service E130
+Type escape sequence to abort.
+Sending 5 Ethernet CFM loopback messages to 001e.14d8.53bf, timeout is 5 seconds:!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/3 ms
+XE1#
+traceroute ethernet mpid 3 domain PROV service E130
+Type escape sequence to abort. TTL 64. Linktrace Timeout is 5 seconds
+Tracing the route to 001e.14d8.53bf on Domain PROV, Level 4, service E130, evc E130
+Traceroute sent via Gi2:(10.255.0.43, 130), path found via MPDB
+B = Intermediary Bridge
+! = Target Destination
+* = Per hop Timeout
+--------------------------------------------------------------------------------
+                             MAC      Ingress        Ingr Action  Relay Action  
+  Hops   Host             Forwarded   Egress         Egr Action   Previous Hop  
+--------------------------------------------------------------------------------
+B 1                    001e.f607.b6bf Gi2            IngOk        RlyMPDB       
+                       Forwarded                                  
+! 2                    001e.14d8.53bf                             RlyHit:MEP    
+                       Not Forwarded                              001e.f607.b6bf
+XE1#

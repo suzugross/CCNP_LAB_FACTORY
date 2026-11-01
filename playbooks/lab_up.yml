@@ -189,6 +189,64 @@
     - ansible.builtin.debug: { msg: "{{ bc.stdout_lines | default([]) }}" }
       when: bc is not skipped
 
+# === Catalyst 8000V のライセンスの段階（problem.yml に xe_license_boot がある問題のみ・BL-246 M11 追補）===
+# 既定の段階では MPLS が無い。段階を設定・保存・再起動し、戻ったら段階と day0 の MPLS の行を確かめる(topologies/xe_license.py)。
+# 下の「戻り先の記録」より前に置く(再起動の後の設定を構築直後として控えるため)。
+- name: Catalyst 8000V のライセンスの段階を上げる（xe_license_boot がある問題のみ）
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+  tasks:
+    - ansible.builtin.include_vars: { file: "{{ repo }}/problems/{{ problem }}/problem.yml", name: pmeta_xl }
+      when: lab_state | default('started') == 'started'
+    - name: xe_license.py（SSH 待ち→段階の設定・保存・再起動→確認）
+      ansible.builtin.command:
+        argv:
+          - "{{ repo }}/.venv/bin/python3"
+          - "{{ repo }}/topologies/xe_license.py"
+          - "--repo={{ repo }}"
+          - "--problem={{ problem }}"
+      environment:
+        NODE_USER: "{{ ansible_user }}"
+        NODE_PASS: "{{ ansible_ssh_pass }}"
+      register: xel
+      changed_when: true
+      when:
+        - lab_state | default('started') == 'started'
+        - pmeta_xl.xe_license_boot is defined
+    - ansible.builtin.debug: { msg: "{{ xel.stdout_lines | default([]) }}" }
+      when: xel is not skipped
+
+# === EEM の無い機器(IOL-L2)の SSH の鍵（problem.yml に ssh_keygen_telnet がある問題のみ・BL-246 M11 追補）===
+# baseline は鍵を EEM で作るが IOL-L2 は applet ごと捨てる → telnet で入って作る(topologies/telnet_keygen.py)。
+- name: SSH の鍵を telnet で作る（ssh_keygen_telnet がある問題のみ）
+  hosts: localhost
+  gather_facts: false
+  vars:
+    repo: "{{ playbook_dir }}/.."
+  tasks:
+    - ansible.builtin.include_vars: { file: "{{ repo }}/problems/{{ problem }}/problem.yml", name: pmeta_kg }
+      when: lab_state | default('started') == 'started'
+    - name: telnet_keygen.py
+      ansible.builtin.command:
+        argv:
+          - "{{ repo }}/.venv/bin/python3"
+          - "{{ repo }}/topologies/telnet_keygen.py"
+          - "--repo={{ repo }}"
+          - "--problem={{ problem }}"
+      environment:
+        NODE_USER: "{{ ansible_user }}"
+        NODE_PASS: "{{ ansible_ssh_pass }}"
+      register: kg
+      changed_when: true
+      failed_when: false
+      when:
+        - lab_state | default('started') == 'started'
+        - pmeta_kg.ssh_keygen_telnet is defined
+    - ansible.builtin.debug: { msg: "{{ kg.stdout_lines | default([]) }}" }
+      when: kg is not skipped
+
 # === IOS XR のコミット履歴の仕込み（initial/<node>.commits.yml がある問題のみ・BL-246）===
 # day0 は 1 回のコミットとしてしか入らない。履歴を読ませる課題のために、起動後に変更を
 # 複数回に分けてコンソールからコミットする(topologies/xr_bringup.py)。
@@ -251,7 +309,7 @@
       failed_when: false
       when:
         - lab_state | default('started') == 'started'
-        - "'iosxr' in (pmeta_xr.node_image_families | default({})).values() | list"
+        - "('iosxr' in (pmeta_xr.node_image_families | default({})).values() | list) or (pmeta_xr.xe_reset_nodes is defined)"
     - ansible.builtin.debug: { msg: "{{ xrrec.stdout_lines | default([]) }}" }
       when: xrrec is not skipped
 

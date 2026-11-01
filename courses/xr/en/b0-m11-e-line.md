@@ -2,14 +2,18 @@
 
 This unit is about **L2VPN**: services that carry a customer's Ethernet frames, as they are, to the far side of the core,
 without the provider taking part in the customer's routing. It covers items 4.2 (L2VPN and carrier Ethernet) and
-4.1.a (EVPN) of the CCNP Service Provider blueprint. The unit has three pages and an appendix.
+4.1.a (EVPN) of the CCNP Service Provider blueprint. The unit has three pages, a supplement of three more pages, and an
+appendix.
 
 | Page | Contents | Tasks |
 |---|---|---|
 | This page | What L2VPN is good for, how frames are wrapped in labels, the LDP pseudowire | M11-1, M11-2 |
 | EVPN-VPWS | Building the pseudowire with BGP | M11-3, M11-4 |
 | Q-in-Q | Carrying a customer's VLANs together | M11-5 |
-| Appendix | E-LAN, E-Tree, multihoming, Ethernet OAM, G.8032, 802.1ah | — |
+| Supplement: E-LAN | Many sites in one LAN: VPLS and EVPN (lab XRT-12, Catalyst 8000V) | M11-6, M11-7 |
+| Supplement: EVPN multihoming | One site on two PEs, both links in use | M11-8 |
+| Supplement: Ethernet OAM | CFM and Y.1731 on an E-Line | M11-9 |
+| Appendix | E-Tree, G.8032, 802.1ah | — |
 
 The lab is XRT-11. It continues from lab XRT-10: the same square core, the same VPN customers, and XR01 and XR02 with the
 work of the M10 tasks done. A new provider edge (PE), XR03, has joined beyond RT01 and serves customer B's site 3. The
@@ -83,13 +87,14 @@ Ethernet services come in types by how many sites they join (MEF definitions).
 | Type | Joins | Built with, for example | This lab's XR |
 |---|---|---|---|
 | E-Line | Two sites, one to one | Pseudowire (LDP), EVPN-VPWS | Practised |
-| E-LAN | Many sites, all to all | VPLS, EVPN E-LAN | Appendix only |
+| E-LAN | Many sites, all to all | VPLS, EVPN E-LAN | Not on this XR (supplement, on Catalyst 8000V) |
 | E-Tree | Roots and leaves; leaves do not reach each other | EVPN E-Tree | Appendix only |
 | E-Access | A customer and the boundary to another operator's network | A kind of E-Line | Appendix only |
 
 The IETF name for what builds an E-Line is **VPWS** (Virtual Private Wire Service). The IOS XRv 9000 of this lab runs
 only VPWS among the L2VPN services: `show l2vpn capability` shows `VPLS allowed: N` and `VPWS allowed: Y`, and a commit of
-a bridge domain is rejected. The appendix covers E-LAN and the others.
+a bridge domain is rejected. The supplement covers E-LAN with Catalyst 8000V PEs (lab XRT-12), and the appendix the
+others.
 
 ## 2. How it works: wrapping frames in labels
 
@@ -132,6 +137,11 @@ links:
 4. RT01 sees 16012 and sends it to RT02. It is the hop before RT02, so it removes 16012.
 5. RT02 sees 16 and knows the pseudowire towards CEA2. It removes the label, puts on the AC's VLAN 200 tag and sends
    the frame to CEA2.
+
+Note that the VLAN numbers at the two ends differ: 100 and 200. A VLAN number is only a marker on the link between the
+CE and the PE, and it never appears in the core. What ties the two sites together is the PW ID (100). XR01 removes the
+tag on the way in (step 1) and RT02 puts on its own tag on the way out (step 5), so the numbers at the two ends may
+differ or be the same (2.4).
 
 In the other direction, RT02 puts on `{16001 24031}`: 16001 is the transport to XR01, and 24031 is the pseudowire label
 XR01 told RT02. The receiving side chooses the pseudowire label, as it does with a VPN label in an L3VPN.

@@ -1,0 +1,41 @@
+# M11-8: 拠点 4(SW1)を XE1・XE2 に all-active で二重に収容(ES の ESI= 0000.0000.0000.0000.0401= 種類 0 の 9 オクテット 00.00.00.00.00.00.00.04.01)。
+# SW1 が 2 本を束ねるには両 PE の Port-channel に同じ lacp device-id(片側だけだと SW1 は片方を suspended= 実測)。
+# 遠い XE3 は SW1 の MAC を ESI 付き・次ホップ 2 つで持つ(エイリアシング)。白紙= SW1 の束が down= 0 点。
+# ★SW1 の MAC は SW1 のフレームから覚える→ XE3 のエイリアシングの確認は SW1 の ping の後に置き、確認の前にも SW1 から ping して 10 秒待つ。
+problem: XRT-12
+total_points: 100
+checks:
+  - name: 'M11-8 SW1: bundles both links to XE1 and XE2 into one LACP bundle'
+    node: XE1
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-12 ssh SW1 -- 'show etherchannel summary' 'show lacp neighbor'
+    raw:
+      - { regex: 'Po1\(SU\)\s+LACP\s+Et0/0\(P\)\s+Et0/1\(P\)' }
+    points: 25
+  - name: 'M11-8 XE1, XE2: share the all-active Ethernet segment 0000.0000.0000.0000.0401'
+    node: XE1
+    exec: local
+    command: >-
+      echo '## XE1'; .venv/bin/python topologies/login_probe.py XRT-12 ssh XE1 -- 'show l2vpn evpn ethernet-segment detail';
+      echo '## XE2'; .venv/bin/python topologies/login_probe.py XRT-12 ssh XE2 -- 'show l2vpn evpn ethernet-segment detail'; echo '## END'
+    raw:
+      - { regex: '## XE1[\s\S]*?Ethernet Segment ID: 0000\.0000\.0000\.0000\.0401\s+[\s\S]*?Redundancy mode:\s+all-active[\s\S]*?Forwarder List:\s+10\.255\.0\.41 10\.255\.0\.42[\s\S]*?## XE2' }
+      - { regex: '## XE2[\s\S]*?Ethernet Segment ID: 0000\.0000\.0000\.0000\.0401\s+[\s\S]*?Redundancy mode:\s+all-active[\s\S]*?Forwarder List:\s+10\.255\.0\.41 10\.255\.0\.42[\s\S]*?## END' }
+    points: 20
+  - name: 'M11-8 SW1: reaches sites 1, 2 and 3 over the E-LAN'
+    node: XE1
+    exec: local
+    command: >-
+      for d in 1 2 3; do echo "## $d"; .venv/bin/python topologies/login_probe.py XRT-12 ssh SW1 -- "ping 172.31.200.$d repeat 5"; done; echo '## END'
+    raw:
+      - { regex: '## 1[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 2[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 3[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## END' }
+    points: 30
+  - name: 'M11-8 XE3: can send site 4''s traffic to XE1 or XE2 (SW1''s MAC behind the segment, two next hops)'
+    node: XE1
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-12 ssh XE3 --pre-cli 'SW1:ping 172.31.200.3 repeat 3' --settle 10 -- 'show l2vpn evpn mac'
+    raw:
+      - { regex: '\n[0-9a-f.]{14}\s+200\s+\d+\s+0000\.0000\.0000\.0000\.0401\s+0\s+10\.255\.0\.41\s*\n\s+10\.255\.0\.42' }
+    points: 25

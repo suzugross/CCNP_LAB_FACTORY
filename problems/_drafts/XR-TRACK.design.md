@@ -1817,3 +1817,116 @@ RT02 の相手側は据付のサブインタフェースの `xconnect`(LDP の�
   外側 500 だけ 65・内側の列挙 55。別解= 両端 rewrite なしの Q-in-Q 100。reset 後に白紙 0(2 回)。読み物の「やってみる」(b0 の rewrite 外し・b2 の XR03 の
   rewrite 外し・b4 の second-dot1q なし)は解く側と同じ手順で測った。読み物= `courses/xr/{en,ja}/b0〜b6`(3 ページ+付録・実践 3 枚)。
   XRT-11 は白紙で稼働中(MGMT .11-.20/.31-.33・ユーザ未着手)。
+
+## 25. M11 追補 — Catalyst 8000V で E-LAN・マルチホーム・CFM(SPCOR 4.2.a・4.2.c・4.1.a)(2026-11-01 実装中)
+
+§24.5b-8 のユーザ判断(XRT-11 を先に仕上げ → 8000V だけの小さなラボで追補)を受けたもの。2026-11-01 にユーザが実装を指示
+(「ラボは邪魔なら撤収してよい」→ XRT-11 は白紙のまま撤収)。**IOS XR は盤面に入らない**(XRv9000 はブリッジ ドメイン不可・CFM なし=
+§24.3-1・2、XR⇔XE の EVPN-VPWS は不通= §24.5b-4)。読み物は 8000V の実測の設定を主に、IOS XR の書き方を公式文書の形で並べる。
+
+### 25.1 盤面(ラボ `XRT-12`)
+
+- コア= **P1(IOL 17.15)を中心にした星形**(§24.5b の PoC と同じ)。IS-IS CORE L2・wide・LDP。P1 は l2vpn evpn の **RR も兼ねる**(据付。PoC は XRd だった)。
+- PE= **XE1・XE2・XE3(Catalyst 8000V 17.15.1a)**。Gi1= コア・Gi2= CE・Gi3= SW1(XE1・XE2)。データ IF は 3 本で足りる。
+- お客さま C の拠点= 1(CE1・XE1)・2(CE2・XE2)・3(CE3・XE3)・4(**SW1= IOL-L2・XE1 と XE2 に LACP の束で二重に収容**)。
+  CE は IOL ルータのサブインタフェースでサービスを出し分ける(拠点 3 の EVPN の E-LAN だけタグなし= ひねり)。
+- 8000V は既定のライセンスの段階では MPLS が無い → 構築の最後に **`license boot level network-advantage addon dna-advantage`+保存+再起動**を
+  自動化する(`topologies/xe_license.py`・problem.yml の `xe_license_boot`)。
+- 資源= 8000V 3 台(各 4GB)+IOL 5 台。XRv9000 とは同居しない。
+
+| サービス | 拠点 1(XE1 Gi2) | 拠点 2(XE2 Gi2) | 拠点 3(XE3 Gi2) | 拠点 4(SW1) | アドレス |
+|---|---|---|---|---|---|
+| E-LAN(VPLS・VPN 210)= 前任者の作り | VLAN 210 | VLAN 210 | VLAN 210 | — | 172.31.210.0/24(ホスト部= 拠点の番号) |
+| E-LAN(EVPN・EVI 200)| VLAN 200 | VLAN 200 | **タグなし** | VLAN 200(束) | 172.31.200.0/24 |
+| E-Line(LDP の疑似回線 130・据付)| VLAN 130 | — | VLAN 130 | — | 172.31.130.0/24 |
+
+### 25.2 課題(案・値は課題文で渡す。番号は XRT-11 の続き)
+
+| 課題 | 中身 | 主な論点 | SPCOR |
+|---|---|---|---|
+| M11-6(TS) | 前任者の VPLS(VPN 210)。拠点 1⇔3 だけ通じない(XE1・XE3 の VFI に互いの member が無い= ハブ アンド スポークのつもり。スプリット ホライズンで XE2 は中継しない)+もう 1 つ(PoC で決める) | VFI のフルメッシュ・スプリット ホライズン・`show l2vpn vfi`/`show bridge-domain` | 4.2.a |
+| M11-7(構築) | EVPN の E-LAN(EVI 200)を拠点 1〜3 で。BGP は RR(P1)経由。拠点 3 はタグなし | EVI と BD・EFP・種類 2/3 の経路・`replication-type ingress`・`encapsulation untagged` | 4.1.a・4.2.a・4.2.d |
+| M11-8(構築) | 拠点 4(SW1)を XE1・XE2 に all-active で二重に収容し、EVI 200 に加える。ESI は課題文で渡す | ES・ESI・`lacp device-id`・種類 1/4 の経路・エイリアシング・DF | 4.1.a |
+| M11-9(構築) | 据付の E-Line 130 を CFM で監視(MD レベル 4・MEP ID= 拠点の番号)。切れたら 5 秒以内に両端で検知+Y.1731 で往復の遅延を測り続ける | MD/MA/MEP・CC の間隔と寿命(3.5 倍)・`ping ethernet`・IP SLA の y1731 | 4.2.c |
+
+- 採点= 状態(BGP・`show l2vpn evpn mac`・`show bridge-domain`・`show ethernet cfm maintenance-points remote`・`show ip sla statistics`)+CE からの ping
+  (`login_probe.py`)。M11-9 の「5 秒以内」は採点中だけ XE3⇔P1 のリンクに CML のリンク条件(loss 100= 黙った故障)を入れて確かめる
+  (既定の CC 10 秒なら寿命 35 秒で残る・IS-IS/LDP もまだ切れない)。
+- やり直し= IOS XE は `configure replace`(構築の最後に running-config を bootflash に控える。`xr_reset.py` を IOS XE にも広げる)。
+
+### 25.3 構築して確かめること(PoC §24.5b で済んでいない点)
+
+1. ライセンスの自動化(day0 に `license boot level` を入れておけば保存+再起動だけで済むか・再起動後に day0 の MPLS の行が効いているか)。
+2. IOL の P1 が l2vpn evpn の RR になれるか(種類 1〜4 を反映するか)。
+3. 拠点 3 のタグなしの EFP(同じポートに dot1q の EFP と同居)。
+4. M11-6 の 2 つめの故障の候補(rewrite の付け忘れ= up なのに不通/VPN ID の打ち間違い= 疑似回線が上がらない)の症状。
+5. ESI の種類 0 の書式・`lacp device-id` を片側だけにした時の SW1 の束(片方 suspended のはず)。
+6. CFM の CC 1 秒と 10 秒で、黙った故障の検知の時間が採点で分かれるか。
+7. `configure replace` で構築直後へ戻るか(l2vpn evpn・ES・CFM・IP SLA を含めて)。SW1(IOL-L2)に SSH で入れるか。
+
+### 25.4 実測の結果(2026-11-01・ラボ XRT-12= Catalyst 8000V 17.15.1a+IOL 17.15。手順 `poc/xr/xrt12_poc.sh`・記録 `poc/xr/expM11b-*.log`)
+
+1. **ライセンス**: day0 に `license boot level network-advantage addon dna-advantage` を入れておくと、8000V は初回の起動で自分で
+   再起動し(uptime が数分)、`License Level: network-advantage` で上がった。day0 の MPLS・l2vpn の行も効いていた(LDP 隣接・VFI)→
+   `xe_license.py` は確かめるだけで済んだ(段階がそろわない時だけ設定・保存・再起動し、MPLS の行が欠けていれば day0 を流し直す作り)。
+   ★day0 の順序の罠= `service instance 130 ethernet E130` を `ethernet evc E130` より前に書くと EFP ごと捨てられ、その下の
+   `description` がポートの説明に化けた(初回の構築で発覚→テンプレートを直した)。
+2. **IOL の P1 が l2vpn evpn の RR になれる**(種類 1〜4 を反映)。PoC の XRd は不要になった。
+3. **SW1(IOL-L2)は EEM が無く SSH の鍵が作られない**(applet ごと捨てる)→ `topologies/telnet_keygen.py`(problem.yml の `ssh_keygen_telnet`)。
+   `vtp mode transparent` を先に書けば day0 の `vlan 200` は効いた(§24.5b-5 の対策)。
+4. **M11-6(VPLS)**: 前任者の形(XE1・XE3 は XE2 だけ+XE3 の EFP に rewrite なし)で 1⇔2 は通り、3 は誰とも通じない。XE3 は CE2 の MAC を
+   疑似回線で覚えるが CE3 の MAC を一度も覚えない(タグなしで CE3 へ出て CE3 が答えない)。rewrite を足すと 2⇔3 は通り 1⇔3 は通らない
+   (XE2 は CE1・CE3 の MAC を両方の疑似回線で覚えているのに中継しない= スプリット ホライズン・`show l2vpn vfi` の S=Y)。member を足すと全部通る。
+   候補だった VPN ID の打ち間違い(211)= その PE の疑似回線が DOWN(`local ready, LruRnd`・no remote binding)→ 読み物の表に回した。
+   ★8000V 17.15.1a の VFI の `member <PE> [vc-id] encapsulation mpls` には **no-split-horizon の選択肢が無い**(ヘルプに出ない・付けると Invalid input)。
+   公式(MPLS Configuration Guide 17.x の VPLS の章)は「The no-split-horizon keyword disables it」と書く → 公式と実機の食い違い。課題では使わない(M11-6 の
+   誤答「XE2 でスプリット ホライズンを外す」は成り立たない)。読み物は「ラボの 8000V には外す選択肢が無かった」と注記。ユーザに報告する。
+5. **M11-7(EVPN の E-LAN)**: `replication-type ingress` が無いと EVI が `State: Incomplete`・`Replication Type: Not set (global)`・
+   `EVI Down, BD Up` で、BGP が上がっていても何も通らない(課題文の「コアにマルチキャストなし・PE ごとに 1 つずつコピー」が必須の行になる)。
+   RD= ルータ ID:EVI・RT= AS:EVI(自動)。拠点 3 の `encapsulation untagged` は同じポートの dot1q の EFP と同居でき、XE3 を dot1q 200 にすると 0%。
+6. **M11-8(マルチホーム)**: 種類 0 の入力は 9 オクテットを点で区切る(`00.00.00.00.00.00.00.04.01`)。表示の形(`0000.0000.0000.0000.0401`)は
+   `Invalid input`。`lacp device-id` を XE1 だけにすると SW1 は Et0/1 を suspended(相手のシステム ID が 2 つ)・XE2 の Po1 は SD。
+   両方にすると Po1(SU) Et0/0(P) Et0/1(P)・XE3 は SW1 の MAC を ESI 0401・次ホップ 2 つで持つ(エイリアシング)・Forwarder List に 2 台・
+   序数 0/1・DF の待ち 3 秒・Split Horizon label。XE1 の Gi3 を落とすと 3 秒で XE3 の次ホップが XE2 だけになり、SW1(`lacp rate fast`)の ping は止まらない。
+7. **M11-9(CFM)**: `ethernet cfm global` が無いと MEP の CC が `I` で相手を覚えない(`ethernet cfm ieee` は書かなくてよかった)。
+   XE3⇔P1 にリンク条件 loss 100(黙った故障)→ 既定の CC(10 秒)は +10.2 秒でも相手の MEP が残る・1 秒は +3.2 秒で両端とも消える。
+   その間 P1 の IS-IS・LDP は up のまま。`watch`(1.4 秒ごと)の 4 回目= +4.6 秒で採点する。
+   ★**相手の MEP が消えると Y.1731(DMM)の操作は `Internal error` で止まったまま、MEP が戻っても再開しない**。`ip sla restart 130`(設定モード)で再開。
+   予定の無い操作に restart しても Inactive のまま(予定の書き忘れは隠れない)→ IP SLA の確認は restart してから 15 秒後に読む。
+   y1731 の下に `frequency` は無い(既定で毎秒 1 回の DMM)。
+8. `configure replace bootflash:lab-baseline.cfg force` でのやり直し= §25.6。
+
+### 25.5 公式文書での裏どり(2026-11-01・サブエージェント。cisco.com と RFC だけ・xrdocs.io は取得していない・問題集サイトは使っていない)
+
+- VPLS(MPLS Configuration Guide 17.x「Configuring Virtual Private LAN Services」)= スプリット ホライズンが既定・フルメッシュ・VC ID= VPN ID → §25.4-4 と一致。
+- EVPN(同「EVPN Single-Homing」「EVPN over MPLS with IRB」)= 「Only Ingress Replication is supported for EVPN MPLS」・RD/RT は自動。
+  replication-type の既定や Incomplete の記述は無い(例は必ず書く)→ 実機を正(§25.4-5)。章が名指しするのは ASR 1000 だけ(C8000V の記載なし)。
+- ★**ESI の種類が公式文書の中で割れる**: マルチホームの章(16.9 から持ち越しの文)は「Only type 3 ESI is supported」、IRB の章の設定例は
+  「Support both type 3 and type 0」。17.15.1a の実機は種類 0 を受け付けて広告した(§25.4-6)。→ 新しい章と実機が一致するので種類 0 で作り、
+  読み物に食い違いを注記。**ユーザに報告して判断を仰ぐ**(種類 3 に替える案あり)。
+- all-active だけ・single-active なし(公式どおり)。`lacp device-id` は IRB の章の例にあるが「両 PE で同じ値に」の文は無い → 実機で必要と確認(§25.4-6)。
+- CFM(Application Services Configuration Guide 17.x「Configuring Ethernet CFM for Cisco QFP-Based Platforms」= C8000v を名指し)= 既定の CCM 間隔 10 秒・
+  loss-threshold 3・方向の既定は up・xconnect の service は VLAN なし。EVPN の制約「EVPN EFI does not support association into EVC」「only supports
+  configuring down MEP on the EFP」「Up MEP cannot send CFM packet out from the EFI」→ §24.5b-6 の up MEP 不成立と一致。寿命 3.5 倍は NCS 520 の
+  CFM の文書と 802.1ag。レベルの推奨範囲(5〜7/3〜4/0〜2)は Cisco の文書に無く 802.1ag による。
+- Y.1731(IP Addressing Configuration Guide 17.x「Configuring IP SLAs Metro-Ethernet 3.0 (ITU-T Y.1731) Operations」)= 構文・Frame Interval 1000 が一致。
+  「CFM over cross-connect … works only if the control-word is configured」とあるが、このラボの xconnect では特に設定せず動いた。
+- IOS XR の形(ASR 9000/NCS 5500 の L2VPN ガイド・Ethernet OAM のガイドとコマンド リファレンス)= VPLS・EVPN の E-LAN・マルチホーム
+  (`lacp system mac` を両 PE で同じに= NCS 5500 の例と TAC の技術文書 2026)・CFM(★XR の CC は既定で無効= IOS XE と違う)・`ethernet sla`。読み物に反映。
+- RFC 7432(種類 1〜4・ESI の種類・DF のサービス カービング V mod N・エイリアシング・一括の取り消し・ESI ラベル)・RFC 4762(フルメッシュ・スプリット ホライズン)。
+
+### 25.6 実装の結果(2026-11-01・ラボ XRT-12)
+
+- 基盤に足したもの= `topologies/xe_license.py`(problem.yml の `xe_license_boot`)・`topologies/telnet_keygen.py`(`ssh_keygen_telnet`)・
+  `xr_reset.py` の IOS XE 対応(`xe_reset_nodes`= 構築の最後に running-config を bootflash に写し、やり直しは `configure replace … force`)・
+  `lab_up.yml` の 2 つの段・`poc/xr/verbatim.py` の見出し(`On XE1:`)と `configure terminal`。
+- 課題= M11-6〜9(§25.2 のとおり。M11-6 の 2 つめの故障は rewrite の付け忘れに確定)。配点= 各 25。読み物= `courses/xr/{en,ja}/b7・b9・bb`
+  (3 ページ)+実践 3 枚(b8・ba・bc)+付録 b6 を E-Tree・G.8032・802.1ah だけに縮めて追補の後ろへ・単元の入口 b0 の表を更新。
+- **実測で直した点**: ①IOS XE は `service instance` の下にも `bridge-domain` がある→ 模範解・読み物の設定例は `exit` で抜けてから(`!` だけだと `member` が
+  Invalid で EVI につながらない)。②MAC はフレームからしか覚えない→ MAC を読む確認(M11-7・M11-8)は ping の後に置き、確認の前にも CE から ping して 10 秒待つ。
+  ③Y.1731 は相手の MEP を失うと止まる→ IP SLA の確認は restart してから読む(§25.4-7)。④XE2 でスプリット ホライズンを外す誤答は 8000V に構文が無く成り立たない。
+- **E2E**(`poc/xr/e2e_xrt12.sh`・`wrong_xrt12.sh`・記録 `poc/xr/expM11b-verbatim.log`・`expM11b-wrong.log`・`expM11b-wrong2.log`)= 白紙 0 → 模範解 100(課題ごと・最終・逐語)・reset(configure replace)後に白紙 0(4 回)・誤答の判別(M11-6 rewrite だけ 35・メッシュだけ 30/M11-7 拠点 3 を dot1q 30・replication-type なし 0・PE どうしの直接のセッション 85/M11-8 lacp device-id が片側 0・ESI 違い 55/M11-9 CC の間隔が既定 60・ethernet cfm global なし 0)。
+  ★全 PE から replication-type を外して戻すと 40 秒では E-LAN が戻らなかった(未追跡。XE3 だけなら 30 秒で戻る= やってみるの手順)。
+- XRT-12 は E2E 後に撤収(2026-11-01・先に XRT-11 を解く・ユーザ指示)。provision 約 12 分(8000V は day0 のライセンスの行で 1 回自分で再起動)。
+- ★ユーザ判断待ち 2 点(§25.5)= ①M11-8 の ESI の種類 0(公式の 2 つの章で割れる・実機と新しい章は種類 0 を認める。替えるなら種類 3)
+  ②VPLS の no-split-horizon(公式にあるが 8000V の VFI の member に無い。課題では使っていない)。

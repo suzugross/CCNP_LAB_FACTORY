@@ -1,0 +1,35 @@
+#### try b7-2: XE3 の replication-type を外す
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+l2vpn evpn
+XE3(config-evpn)#
+no replication-type ingress
+XE3(config-evpn)#
+end
+XE3#
+show l2vpn evpn evi 200 detail | include State|Replication
+  State:             Incomplete Pending
+  Replication Type:  Not set (global)
+    State:           EVI Down, BD Up
+XE3#
+ping 172.31.200.3 repeat 5
+Success rate is 0 percent (0/5)
+ping 172.31.200.2 repeat 5
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/2/3 ms
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+l2vpn evpn
+XE3(config-evpn)#
+replication-type ingress
+XE3(config-evpn)#
+end
+XE3#
+show l2vpn evpn evi 200 detail | include State|Replication
+  State:             Established
+  Replication Type:  Ingress (global)
+    State:           Established
+XE3#
+ping 172.31.200.3 repeat 5
+Success rate is 80 percent (4/5), round-trip min/avg/max = 2/2/3 ms

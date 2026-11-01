@@ -1,0 +1,480 @@
+# XRT-12 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn XRT-12 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# ここに書いた挙動は Catalyst 8000V 17.15.1a(+IOL 17.15)の実機で確認した(設計= problems/_drafts/XR-TRACK.design.md §25)。
+# 模範解の「On XE1:」などの見出し= 機器ごとの塊(poc/xr/verbatim.py が見出しごとに送り先を替える。塊は configure terminal 〜 end)。
+# 読み物(BL-252)= Reading タブに出す本(reading/<key>/)。各課題の read: はその本の「ページ#節」(節= data-sec)。
+reading: xr
+steps:
+  - id: m11t6
+    title: { en: "M11-6  A VPLS E-LAN that never reached site 3", ja: "M11-6  サイト 3 に届いたことのない VPLS の E-LAN" }
+    check: m11t6
+    read: [b7-m11-e-lan#s2-1, b7-m11-e-lan#s2-2, b7-m11-e-lan#s2-3, b7-m11-e-lan#s2-4, b7-m11-e-lan#s2-5]
+    hints:
+      - en: "There are two faults. One keeps site 3 from receiving anything on VLAN 210; the other shows only after the first is fixed. Follow a frame from site 1: once it has crossed one pseudowire, where may a VPLS PE send it next?"
+        ja: "故障は 2 つあります。1 つはサイト 3 が VLAN 210 で何も受け取れなくしていて、もう 1 つは 1 つめを直した後にだけ現れます。サイト 1 からのフレームを追ってください。1 本の疑似回線を渡った後、VPLS の PE はそれを次にどこへ送ってよいでしょうか。"
+      - en: "`show bridge-domain 210` on each PE (which MAC addresses are learned, and on which port), `show l2vpn vfi name VPLS210` (the pseudowires and the S column), `show ethernet service instance id 210 interface GigabitEthernet2 detail` (the Rewrite line). Guide: MPLS Configuration Guide, Cisco IOS XE 17.x, 'Configuring Virtual Private LAN Services' (full mesh, split horizon)."
+        ja: "各 PE で `show bridge-domain 210`(どの MAC アドレスを、どのポートで学習しているか)、`show l2vpn vfi name VPLS210`(疑似回線と S の列)、`show ethernet service instance id 210 interface GigabitEthernet2 detail`(Rewrite の行)。ガイド: MPLS Configuration Guide, Cisco IOS XE 17.x の「Configuring Virtual Private LAN Services」(フルメッシュ、スプリット ホライズン)。"
+      - en: "On XE3, under `interface GigabitEthernet2` → `service instance 210 ethernet`: `rewrite ingress tag pop 1 symmetric`. Under `l2vpn vfi context VPLS210`: on XE1 `member 10.255.0.43 encapsulation mpls`, on XE3 `member 10.255.0.41 encapsulation mpls`."
+        ja: "XE3 の `interface GigabitEthernet2` → `service instance 210 ethernet` の下で `rewrite ingress tag pop 1 symmetric`。`l2vpn vfi context VPLS210` の下で、XE1 に `member 10.255.0.43 encapsulation mpls`、XE3 に `member 10.255.0.41 encapsulation mpls`。"
+    solution:
+      en: |
+        On XE3:
+        configure terminal
+         interface GigabitEthernet2
+          service instance 210 ethernet
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         l2vpn vfi context VPLS210
+          member 10.255.0.41 encapsulation mpls
+        end
+        On XE1:
+        configure terminal
+         l2vpn vfi context VPLS210
+          member 10.255.0.43 encapsulation mpls
+        end
+        XE3's attachment circuit kept the VLAN 210 tag: the frames went into the bridge domain tagged, while XE1 and XE2
+        pop the tag. A broadcast from site 2 reached XE3 untagged and left towards CE3 untagged, where CE3's VLAN 210
+        sub-interface does not see it; so CE3 never answered, and XE3 never learned CE3's MAC. With the tag popped, sites 2
+        and 3 reach each other. Sites 1 and 3 still do not, because the colleague built a hub and spoke: XE1 and XE3 each
+        have a pseudowire to XE2 only. XE2 does not relay between them: a VPLS PE never sends a frame that came in on a
+        pseudowire out of another pseudowire of the same VFI (split horizon, the `S Y` column of `show l2vpn vfi`). VPLS
+        needs a full mesh, so XE1 and XE3 need a pseudowire to each other. On this platform the VFI's `member` line has no
+        option to turn split horizon off (the CLI help offers none), so the missing pseudowire is the only fix.
+      ja: |
+        On XE3:
+        configure terminal
+         interface GigabitEthernet2
+          service instance 210 ethernet
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         l2vpn vfi context VPLS210
+          member 10.255.0.41 encapsulation mpls
+        end
+        On XE1:
+        configure terminal
+         l2vpn vfi context VPLS210
+          member 10.255.0.43 encapsulation mpls
+        end
+        XE3 のアタッチメント回線は VLAN 210 のタグを残していました。XE1 と XE2 はタグを外すのに、XE3 だけはタグ付きのまま
+        フレームをブリッジ ドメインに入れていました。サイト 2 からのブロードキャストはタグなしで XE3 に届き、タグなしで CE3 へ
+        出ていくので、CE3 の VLAN 210 のサブインタフェースには見えません。そのため CE3 は一度も答えず、XE3 は CE3 の MAC を
+        学習しませんでした。タグを外すと、サイト 2 と 3 は通じます。サイト 1 と 3 はまだ通じません。同僚がハブ アンド スポークで
+        作ったからです。XE1 と XE3 は、それぞれ XE2 への疑似回線しか持っていません。XE2 はその間を中継しません。VPLS の PE は、
+        疑似回線から入ってきたフレームを、同じ VFI の別の疑似回線へは決して送りません(スプリット ホライズン、
+        `show l2vpn vfi` の `S` の列の `Y`)。VPLS にはフルメッシュが要るので、XE1 と XE3 の間にも疑似回線が要ります。
+        このプラットフォームでは、VFI の `member` の行にスプリット ホライズンを外す選択肢がありません(CLI のヘルプにも
+        出ません)。直し方は、欠けている疑似回線を足すことだけです。
+
+  - id: m11t7
+    title: { en: "M11-7  An E-LAN with EVPN", ja: "M11-7  EVPN で E-LAN を作る" }
+    check: m11t7
+    read: [b7-m11-e-lan#s3-1, b7-m11-e-lan#s3-2, b7-m11-e-lan#s3-3, b7-m11-e-lan#s3-4, b7-m11-e-lan#s3-5]
+    hints:
+      - en: "Four pieces on each PE: BGP towards P1 with the EVPN address family; the global EVPN settings (how a broadcast is copied to the other PEs); an EVPN instance; and a bridge domain that joins the customer's attachment circuit to that instance. At site 3 the attachment circuit picks the frames that have no tag, so there is no tag to pop there."
+        ja: "各 PE の部品は 4 つです。P1 への BGP(EVPN のアドレス ファミリー)、EVPN の全体の設定(ブロードキャストをほかの PE へどうコピーするか)、EVPN インスタンス、そして顧客のアタッチメント回線をそのインスタンスにつなぐブリッジ ドメインです。サイト 3 のアタッチメント回線はタグの無いフレームを拾うので、そこには外すタグがありません。"
+      - en: "`show bgp l2vpn evpn summary`, `show l2vpn evpn evi 200 detail` (the State and Replication Type rows), `show bgp l2vpn evpn` (route types 2 and 3), `show l2vpn evpn mac`, `show bridge-domain 200`. Guide: MPLS Configuration Guide, Cisco IOS XE 17.x, 'EVPN Single-Homing'."
+        ja: "`show bgp l2vpn evpn summary`、`show l2vpn evpn evi 200 detail`(State と Replication Type の行)、`show bgp l2vpn evpn`(ルート タイプ 2 と 3)、`show l2vpn evpn mac`、`show bridge-domain 200`。ガイド: MPLS Configuration Guide, Cisco IOS XE 17.x の「EVPN Single-Homing」。"
+      - en: "`router bgp 65000` → `bgp router-id <Loopback0>`, `neighbor 10.255.0.51 remote-as 65000`, `neighbor 10.255.0.51 update-source Loopback0`, `address-family l2vpn evpn` → `neighbor 10.255.0.51 activate`. `l2vpn evpn` → `replication-type ingress`. `l2vpn evpn instance 200 vlan-based`. Under GigabitEthernet2: `service instance 200 ethernet` with `encapsulation dot1q 200` and `rewrite ingress tag pop 1 symmetric` (on XE3: `encapsulation untagged` and no rewrite). `bridge-domain 200` → `member GigabitEthernet2 service-instance 200` and `member evpn-instance 200`."
+        ja: "`router bgp 65000` → `bgp router-id <Loopback0>`、`neighbor 10.255.0.51 remote-as 65000`、`neighbor 10.255.0.51 update-source Loopback0`、`address-family l2vpn evpn` → `neighbor 10.255.0.51 activate`。`l2vpn evpn` → `replication-type ingress`。`l2vpn evpn instance 200 vlan-based`。GigabitEthernet2 の下に `service instance 200 ethernet` と `encapsulation dot1q 200`、`rewrite ingress tag pop 1 symmetric`(XE3 は `encapsulation untagged` で rewrite なし)。`bridge-domain 200` → `member GigabitEthernet2 service-instance 200` と `member evpn-instance 200`。"
+    solution:
+      en: |
+        On XE1:
+        configure terminal
+         router bgp 65000
+          bgp router-id 10.255.0.41
+          bgp log-neighbor-changes
+          no bgp default ipv4-unicast
+          neighbor 10.255.0.51 remote-as 65000
+          neighbor 10.255.0.51 update-source Loopback0
+          address-family l2vpn evpn
+           neighbor 10.255.0.51 activate
+           neighbor 10.255.0.51 send-community both
+          exit-address-family
+         !
+         l2vpn evpn
+          replication-type ingress
+          router-id Loopback0
+         !
+         l2vpn evpn instance 200 vlan-based
+         !
+         interface GigabitEthernet2
+          service instance 200 ethernet
+           encapsulation dot1q 200
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         bridge-domain 200
+          member GigabitEthernet2 service-instance 200
+          member evpn-instance 200
+        end
+        On XE2:
+        configure terminal
+         router bgp 65000
+          bgp router-id 10.255.0.42
+          bgp log-neighbor-changes
+          no bgp default ipv4-unicast
+          neighbor 10.255.0.51 remote-as 65000
+          neighbor 10.255.0.51 update-source Loopback0
+          address-family l2vpn evpn
+           neighbor 10.255.0.51 activate
+           neighbor 10.255.0.51 send-community both
+          exit-address-family
+         !
+         l2vpn evpn
+          replication-type ingress
+          router-id Loopback0
+         !
+         l2vpn evpn instance 200 vlan-based
+         !
+         interface GigabitEthernet2
+          service instance 200 ethernet
+           encapsulation dot1q 200
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         bridge-domain 200
+          member GigabitEthernet2 service-instance 200
+          member evpn-instance 200
+        end
+        On XE3:
+        configure terminal
+         router bgp 65000
+          bgp router-id 10.255.0.43
+          bgp log-neighbor-changes
+          no bgp default ipv4-unicast
+          neighbor 10.255.0.51 remote-as 65000
+          neighbor 10.255.0.51 update-source Loopback0
+          address-family l2vpn evpn
+           neighbor 10.255.0.51 activate
+           neighbor 10.255.0.51 send-community both
+          exit-address-family
+         !
+         l2vpn evpn
+          replication-type ingress
+          router-id Loopback0
+         !
+         l2vpn evpn instance 200 vlan-based
+         !
+         interface GigabitEthernet2
+          service instance 200 ethernet
+           encapsulation untagged
+          exit
+         exit
+         bridge-domain 200
+          member GigabitEthernet2 service-instance 200
+          member evpn-instance 200
+        end
+        Each PE learns the customer's MAC addresses on its own attachment circuit, as a switch does, and advertises them to
+        the others as route type 2 through P1; `show l2vpn evpn mac` then shows the other sites' MACs behind 10.255.0.42 and
+        10.255.0.43. A broadcast (the CEs' ARP) has no single destination, so each PE also advertises a route type 3 (IMET)
+        that says "send my copies here". `replication-type ingress` is not optional on this platform: without it the EVPN
+        instance stays `Incomplete` (`Replication Type: Not set`) and nothing passes at all. RD and route targets are
+        derived automatically (10.255.0.41:200 and 65000:200). At site 3 the EFP matches untagged frames and has nothing to
+        pop; the frames are untagged inside the bridge domain at every PE, which is why the sites may differ. A dot1q 200
+        EFP at XE3 would match nothing, since CE3 sends this E-LAN untagged. The PEs keep only one session each, to P1.
+      ja: |
+        On XE1:
+        configure terminal
+         router bgp 65000
+          bgp router-id 10.255.0.41
+          bgp log-neighbor-changes
+          no bgp default ipv4-unicast
+          neighbor 10.255.0.51 remote-as 65000
+          neighbor 10.255.0.51 update-source Loopback0
+          address-family l2vpn evpn
+           neighbor 10.255.0.51 activate
+           neighbor 10.255.0.51 send-community both
+          exit-address-family
+         !
+         l2vpn evpn
+          replication-type ingress
+          router-id Loopback0
+         !
+         l2vpn evpn instance 200 vlan-based
+         !
+         interface GigabitEthernet2
+          service instance 200 ethernet
+           encapsulation dot1q 200
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         bridge-domain 200
+          member GigabitEthernet2 service-instance 200
+          member evpn-instance 200
+        end
+        On XE2:
+        configure terminal
+         router bgp 65000
+          bgp router-id 10.255.0.42
+          bgp log-neighbor-changes
+          no bgp default ipv4-unicast
+          neighbor 10.255.0.51 remote-as 65000
+          neighbor 10.255.0.51 update-source Loopback0
+          address-family l2vpn evpn
+           neighbor 10.255.0.51 activate
+           neighbor 10.255.0.51 send-community both
+          exit-address-family
+         !
+         l2vpn evpn
+          replication-type ingress
+          router-id Loopback0
+         !
+         l2vpn evpn instance 200 vlan-based
+         !
+         interface GigabitEthernet2
+          service instance 200 ethernet
+           encapsulation dot1q 200
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         bridge-domain 200
+          member GigabitEthernet2 service-instance 200
+          member evpn-instance 200
+        end
+        On XE3:
+        configure terminal
+         router bgp 65000
+          bgp router-id 10.255.0.43
+          bgp log-neighbor-changes
+          no bgp default ipv4-unicast
+          neighbor 10.255.0.51 remote-as 65000
+          neighbor 10.255.0.51 update-source Loopback0
+          address-family l2vpn evpn
+           neighbor 10.255.0.51 activate
+           neighbor 10.255.0.51 send-community both
+          exit-address-family
+         !
+         l2vpn evpn
+          replication-type ingress
+          router-id Loopback0
+         !
+         l2vpn evpn instance 200 vlan-based
+         !
+         interface GigabitEthernet2
+          service instance 200 ethernet
+           encapsulation untagged
+          exit
+         exit
+         bridge-domain 200
+          member GigabitEthernet2 service-instance 200
+          member evpn-instance 200
+        end
+        各 PE は、スイッチと同じように自分のアタッチメント回線で顧客の MAC アドレスを学習し、P1 を介してルート タイプ 2 で
+        ほかの PE へ広告します。`show l2vpn evpn mac` には、ほかのサイトの MAC が 10.255.0.42 と 10.255.0.43 の先に見えます。
+        ブロードキャスト(CE の ARP)には宛先が 1 つではないので、各 PE は「自分宛てのコピーはここへ」というルート タイプ 3
+        (IMET)も広告します。このプラットフォームでは `replication-type ingress` は省けません。無いと EVPN インスタンスは
+        `Incomplete`(`Replication Type: Not set`)のままで、何も通りません。RD とルート ターゲットは自動で決まります
+        (10.255.0.41:200 と 65000:200)。サイト 3 の EFP はタグなしのフレームを拾い、外すものがありません。どの PE でも
+        ブリッジ ドメインの中ではフレームはタグなしなので、サイトごとに違っていてよいのです。XE3 を dot1q 200 の EFP にすると、
+        CE3 はこの E-LAN をタグなしで送るので、何にも一致しません。各 PE のセッションは P1 への 1 本だけです。
+
+  - id: m11t8
+    title: { en: "M11-8  Site 4 on two PEs (all-active)", ja: "M11-8  サイト 4 を 2 台の PE に(all-active)" }
+    check: m11t8
+    read: [b9-m11-multihoming#s2-1, b9-m11-multihoming#s2-2, b9-m11-multihoming#s2-3, b9-m11-multihoming#s3-1, b9-m11-multihoming#s3-2]
+    hints:
+      - en: "XE1 and XE2 must look like one device to SW1 twice over: to EVPN (the same Ethernet segment, so XE3 can send to either) and to LACP (the same system ID, so SW1 puts both links in one bundle). The identifier in the task is written the way IOS XE displays it; its first octet is the type."
+        ja: "XE1 と XE2 は、SW1 に対して 2 重に 1 台に見える必要があります。EVPN に対して(同じイーサネット セグメント。XE3 がどちらへも送れるように)と、LACP に対して(同じシステム ID。SW1 が両方のリンクを 1 つのバンドルに入れるように)です。課題の識別子は IOS XE が表示する形で書いてあり、先頭のオクテットはタイプです。"
+      - en: "`show l2vpn evpn ethernet-segment detail` (the Forwarder List), `show bgp l2vpn evpn route-type 4` and `route-type 1`, on SW1 `show etherchannel summary` and `show lacp neighbor` (the partner's system ID on each link), on XE3 `show l2vpn evpn mac`. Guide: MPLS Configuration Guide, Cisco IOS XE 17.x, 'EVPN Multihoming' and the example in 'EVPN over MPLS with IRB'."
+        ja: "`show l2vpn evpn ethernet-segment detail`(Forwarder List)、`show bgp l2vpn evpn route-type 4` と `route-type 1`、SW1 で `show etherchannel summary` と `show lacp neighbor`(リンクごとの相手のシステム ID)、XE3 で `show l2vpn evpn mac`。ガイド: MPLS Configuration Guide, Cisco IOS XE 17.x の「EVPN Multihoming」と、「EVPN over MPLS with IRB」の設定例。"
+      - en: "On both XE1 and XE2: `l2vpn evpn ethernet-segment 4` → `identifier type 0 00.00.00.00.00.00.00.04.01` and `redundancy all-active`. `interface Port-channel1` → `lacp device-id <the same MAC on both PEs>`, `evpn ethernet-segment 4`, `service instance 200 ethernet` (dot1q 200, pop 1). `interface GigabitEthernet3` → `channel-group 1 mode active`. `bridge-domain 200` → `member Port-channel1 service-instance 200`."
+        ja: "XE1 と XE2 の両方で `l2vpn evpn ethernet-segment 4` → `identifier type 0 00.00.00.00.00.00.00.04.01` と `redundancy all-active`。`interface Port-channel1` → `lacp device-id <両方の PE で同じ MAC>`、`evpn ethernet-segment 4`、`service instance 200 ethernet`(dot1q 200、pop 1)。`interface GigabitEthernet3` → `channel-group 1 mode active`。`bridge-domain 200` → `member Port-channel1 service-instance 200`。"
+    solution:
+      en: |
+        On XE1:
+        configure terminal
+         l2vpn evpn ethernet-segment 4
+          identifier type 0 00.00.00.00.00.00.00.04.01
+          redundancy all-active
+         !
+         interface Port-channel1
+          description to SW1 (customer C, site 4)
+          no ip address
+          lacp device-id 0000.0000.0004
+          evpn ethernet-segment 4
+          service instance 200 ethernet
+           encapsulation dot1q 200
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         interface GigabitEthernet3
+          channel-group 1 mode active
+         exit
+         bridge-domain 200
+          member Port-channel1 service-instance 200
+        end
+        On XE2:
+        configure terminal
+         l2vpn evpn ethernet-segment 4
+          identifier type 0 00.00.00.00.00.00.00.04.01
+          redundancy all-active
+         !
+         interface Port-channel1
+          description to SW1 (customer C, site 4)
+          no ip address
+          lacp device-id 0000.0000.0004
+          evpn ethernet-segment 4
+          service instance 200 ethernet
+           encapsulation dot1q 200
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         interface GigabitEthernet3
+          channel-group 1 mode active
+         exit
+         bridge-domain 200
+          member Port-channel1 service-instance 200
+        end
+        The ESI is 10 octets: one octet of type and nine of value. `0000.0000.0000.0000.0401` is type 00 followed by the
+        value 00.00.00.00.00.00.00.04.01, which is what `identifier type 0` takes. With the same ESI, XE1 and XE2 find each
+        other through route type 4 and elect a designated forwarder for VLAN 200 (only the DF sends broadcasts towards SW1,
+        so SW1 does not receive two copies). Both also advertise route type 1 for the segment, so XE3 holds SW1's MAC with
+        the ESI and both PEs as next hops, even though only one of them learned it (aliasing). The other half is LACP: each
+        PE answers SW1 with its own system ID unless `lacp device-id` is the same on both; with only XE1 set, SW1 saw two
+        partners, kept Et0/0 and suspended Et0/1. Any MAC works for the device ID as long as both PEs use the same one.
+      ja: |
+        On XE1:
+        configure terminal
+         l2vpn evpn ethernet-segment 4
+          identifier type 0 00.00.00.00.00.00.00.04.01
+          redundancy all-active
+         !
+         interface Port-channel1
+          description to SW1 (customer C, site 4)
+          no ip address
+          lacp device-id 0000.0000.0004
+          evpn ethernet-segment 4
+          service instance 200 ethernet
+           encapsulation dot1q 200
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         interface GigabitEthernet3
+          channel-group 1 mode active
+         exit
+         bridge-domain 200
+          member Port-channel1 service-instance 200
+        end
+        On XE2:
+        configure terminal
+         l2vpn evpn ethernet-segment 4
+          identifier type 0 00.00.00.00.00.00.00.04.01
+          redundancy all-active
+         !
+         interface Port-channel1
+          description to SW1 (customer C, site 4)
+          no ip address
+          lacp device-id 0000.0000.0004
+          evpn ethernet-segment 4
+          service instance 200 ethernet
+           encapsulation dot1q 200
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         interface GigabitEthernet3
+          channel-group 1 mode active
+         exit
+         bridge-domain 200
+          member Port-channel1 service-instance 200
+        end
+        ESI は 10 オクテットで、タイプが 1 オクテット、値が 9 オクテットです。`0000.0000.0000.0000.0401` はタイプ 00 に値
+        00.00.00.00.00.00.00.04.01 が続いたもので、`identifier type 0` が受け取るのはこの値です。同じ ESI を持つと、XE1 と XE2 は
+        ルート タイプ 4 で互いを見つけ、VLAN 200 の指定フォワーダー(DF)を選びます(SW1 へブロードキャストを送るのは DF だけなので、
+        SW1 に 2 つのコピーが届きません)。両方がそのセグメントのルート タイプ 1 も広告するので、XE3 は SW1 の MAC を、片方しか
+        学習していなくても、ESI 付きで両方の PE を次ホップとして持ちます(エイリアシング)。もう半分は LACP です。`lacp device-id` を
+        両方で同じにしないと、各 PE は自分のシステム ID で SW1 に答えます。XE1 だけに設定したときは、SW1 には相手が 2 つに見え、
+        Et0/0 を残して Et0/1 を suspended にしました。デバイス ID の MAC は、両方の PE で同じであれば何でも構いません。
+
+  - id: m11t9
+    title: { en: "M11-9  Watching E-Line 130 with CFM", ja: "M11-9  E-Line 130 を CFM で見張る" }
+    check: m11t9
+    read: [bb-m11-ethernet-oam#s2-1, bb-m11-ethernet-oam#s2-2, bb-m11-ethernet-oam#s2-3, bb-m11-ethernet-oam#s2-5, bb-m11-ethernet-oam#s3-1, bb-m11-ethernet-oam#s3-3]
+    hints:
+      - en: "A MEP reports a break only when the other end's continuity check messages have been missing for 3.5 times their interval. Work out what the default interval gives you against 5 seconds. CFM also has to be turned on for the whole router, not only for the domain."
+        ja: "MEP が切断を報告するのは、相手の端の連続性チェックのメッセージが、その間隔の 3.5 倍のあいだ届かなかったときだけです。既定の間隔で 5 秒に間に合うかを計算してください。また、CFM はドメインだけでなく、ルータ全体でも有効にする必要があります。"
+      - en: "`show ethernet cfm maintenance-points local` (the CC column), `show ethernet cfm maintenance-points remote`, `show ethernet cfm domain PROV`, `ping ethernet mpid <n> domain PROV service E130`, `show ip sla statistics 130 details`. Guides: Application Services Configuration Guide, Cisco IOS XE 17.x, 'Configuring Ethernet CFM for Cisco QFP-Based Platforms'; IP Addressing Configuration Guide, 'Configuring IP SLAs Metro-Ethernet 3.0 (ITU-T Y.1731) Operations'."
+        ja: "`show ethernet cfm maintenance-points local`(CC の列)、`show ethernet cfm maintenance-points remote`、`show ethernet cfm domain PROV`、`ping ethernet mpid <n> domain PROV service E130`、`show ip sla statistics 130 details`。ガイド: Application Services Configuration Guide, Cisco IOS XE 17.x の「Configuring Ethernet CFM for Cisco QFP-Based Platforms」と、IP Addressing Configuration Guide の「Configuring IP SLAs Metro-Ethernet 3.0 (ITU-T Y.1731) Operations」。"
+      - en: "On both PEs: `ethernet cfm global`; `ethernet cfm domain PROV level 4` → `service E130 evc E130` → `continuity-check` and `continuity-check interval 1s`; `interface GigabitEthernet2` → `service instance 130 ethernet E130` → `cfm mep domain PROV mpid <1 or 3>`. On XE1: `ip sla 130` → `ethernet y1731 delay DMM domain PROV evc E130 mpid 3 cos 0 source mpid 1`, then `ip sla schedule 130 start-time now life forever`."
+        ja: "両方の PE で `ethernet cfm global`。`ethernet cfm domain PROV level 4` → `service E130 evc E130` → `continuity-check` と `continuity-check interval 1s`。`interface GigabitEthernet2` → `service instance 130 ethernet E130` → `cfm mep domain PROV mpid <1 か 3>`。XE1 で `ip sla 130` → `ethernet y1731 delay DMM domain PROV evc E130 mpid 3 cos 0 source mpid 1`、続けて `ip sla schedule 130 start-time now life forever`。"
+    solution:
+      en: |
+        On XE1:
+        configure terminal
+         ethernet cfm global
+         ethernet cfm domain PROV level 4
+          service E130 evc E130
+           continuity-check
+           continuity-check interval 1s
+         !
+         interface GigabitEthernet2
+          service instance 130 ethernet E130
+           cfm mep domain PROV mpid 1
+           exit
+          exit
+         exit
+         ip sla 130
+          ethernet y1731 delay DMM domain PROV evc E130 mpid 3 cos 0 source mpid 1
+         ip sla schedule 130 start-time now life forever
+        end
+        On XE3:
+        configure terminal
+         ethernet cfm global
+         ethernet cfm domain PROV level 4
+          service E130 evc E130
+           continuity-check
+           continuity-check interval 1s
+         !
+         interface GigabitEthernet2
+          service instance 130 ethernet E130
+           cfm mep domain PROV mpid 3
+        end
+        A MEP on the EFP of an xconnect is an up MEP: it sends its continuity check messages (CCMs) into the pseudowire,
+        towards the other end, so the two MEPs watch exactly the provider's part of the E-Line. Without `ethernet cfm
+        global` the MEPs exist but stay inactive (`CC` shows `I`) and learn nothing. The service line names the EVC and no
+        VLAN: a VLAN there is for a bridge-domain service, and IOS XE refuses to mix the two. The timing is the point of the
+        task: a MEP gives up on the other end after 3.5 intervals without a CCM. The default interval of 10 seconds means 35
+        seconds; in the lab, after a silent break between XE3 and P1 (packets dropped, both ports up), the far MEP was still
+        listed 10 seconds later, while IS-IS and LDP also still looked fine. With 1 second it was gone within about 3
+        seconds, at both ends. The Y.1731 operation sends a delay measurement message (DMM) every second to MEP 3 and keeps
+        the two-way delay (about 1 ms in the lab).
+      ja: |
+        On XE1:
+        configure terminal
+         ethernet cfm global
+         ethernet cfm domain PROV level 4
+          service E130 evc E130
+           continuity-check
+           continuity-check interval 1s
+         !
+         interface GigabitEthernet2
+          service instance 130 ethernet E130
+           cfm mep domain PROV mpid 1
+           exit
+          exit
+         exit
+         ip sla 130
+          ethernet y1731 delay DMM domain PROV evc E130 mpid 3 cos 0 source mpid 1
+         ip sla schedule 130 start-time now life forever
+        end
+        On XE3:
+        configure terminal
+         ethernet cfm global
+         ethernet cfm domain PROV level 4
+          service E130 evc E130
+           continuity-check
+           continuity-check interval 1s
+         !
+         interface GigabitEthernet2
+          service instance 130 ethernet E130
+           cfm mep domain PROV mpid 3
+        end
+        xconnect の EFP の上の MEP は up MEP です。連続性チェックのメッセージ(CCM)を疑似回線の中へ、相手の端に向けて送るので、
+        2 つの MEP はちょうどプロバイダーの受け持ちの区間を見張ります。`ethernet cfm global` が無いと、MEP はあっても無効のまま
+        (`CC` が `I`)で、何も学習しません。service の行には EVC を書き、VLAN は書きません。VLAN を書くのはブリッジ ドメインの
+        サービスで、IOS XE は 2 つを混ぜるのを拒否します。課題の要は時間です。MEP は、CCM が 3.5 間隔届かないと相手の端を
+        あきらめます。既定の 10 秒の間隔なら 35 秒です。ラボで XE3 と P1 の間に黙った故障(パケットは捨てるが両方のポートは up)
+        を起こすと、10 秒後にも相手の MEP は表に残っていて、IS-IS と LDP もまだ正常に見えていました。1 秒にすると、両端とも
+        3 秒ほどで消えました。Y.1731 の操作は、MEP 3 へ毎秒、遅延の測定のメッセージ(DMM)を送り、往復の遅延(ラボでは約 1 ms)を
+        記録し続けます。

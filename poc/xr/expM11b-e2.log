@@ -1,0 +1,128 @@
+
+######## 04:56:27 e2: EVI 200(vlan-based)+BD 200。l2vpn evpn の全体設定(replication-type)は書かない。拠点 3 はタグなし
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+l2vpn evpn instance 200 vlan-based
+XE1(config-evpn-evi)#
+exit
+XE1(config)#
+interface GigabitEthernet2
+XE1(config-if)#
+service instance 200 ethernet
+XE1(config-if-srv)#
+encapsulation dot1q 200
+XE1(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE1(config-if-srv)#
+exit
+XE1(config-if)#
+exit
+XE1(config)#
+bridge-domain 200
+XE1(config-bdomain)#
+member GigabitEthernet2 service-instance 200
+XE1(config-bdomain-efp)#
+member evpn-instance 200
+XE1(config-bdomain)#
+end
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE2(config)#
+l2vpn evpn instance 200 vlan-based
+XE2(config-evpn-evi)#
+exit
+XE2(config)#
+interface GigabitEthernet2
+XE2(config-if)#
+service instance 200 ethernet
+XE2(config-if-srv)#
+encapsulation dot1q 200
+XE2(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE2(config-if-srv)#
+exit
+XE2(config-if)#
+exit
+XE2(config)#
+bridge-domain 200
+XE2(config-bdomain)#
+member GigabitEthernet2 service-instance 200
+XE2(config-bdomain-efp)#
+member evpn-instance 200
+XE2(config-bdomain)#
+end
+XE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+l2vpn evpn instance 200 vlan-based
+XE3(config-evpn-evi)#
+exit
+XE3(config)#
+interface GigabitEthernet2
+XE3(config-if)#
+service instance 200 ethernet
+XE3(config-if-srv)#
+encapsulation untagged
+XE3(config-if-srv)#
+exit
+XE3(config-if)#
+exit
+XE3(config)#
+bridge-domain 200
+XE3(config-bdomain)#
+member GigabitEthernet2 service-instance 200
+XE3(config-bdomain-efp)#
+member evpn-instance 200
+XE3(config-bdomain)#
+end
+XE3#
+ping 172.31.200.2 repeat 5
+Success rate is 0 percent (0/5)
+ping 172.31.200.3 repeat 5
+Success rate is 0 percent (0/5)
+ping 172.31.200.3 repeat 5
+Success rate is 0 percent (0/5)
+show l2vpn evpn evi 200 detail
+EVPN instance:       200 (VLAN Based)
+  RD:                10.255.0.41:200 (auto)
+  Import-RTs:        65000:200 
+  Export-RTs:        65000:200 
+  Per-EVI Label:     none
+  State:             Incomplete
+  Replication Type:  Not set (global)
+  Encapsulation:     mpls
+  IP Local Learn:    Enabled (global)
+  Adv. Def. Gateway: Disabled (global)
+  AR Flood Suppress: Enabled (global)
+  Bridge Domain:     200
+    Ethernet-Tag:    0
+    BUM Label:       none
+    Per-BD Label:    24
+    BDI Label:       none
+    State:           EVI Down, BD Up
+    Flood Suppress:  Attached
+    Access If:       
+    Pseudoports:
+      GigabitEthernet2 service instance 200
+        Routes: 1 MAC, 0 MAC/IP
+XE1#
+show bgp l2vpn evpn summary
+BGP router identifier 10.255.0.41, local AS number 65000
+BGP table version is 1, main routing table version 1
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.51     4        65000       6       6        1    0    0 00:02:19        0
+XE1#
+show bgp l2vpn evpn
+XE1#
+show l2vpn evpn mac
+MAC Address    EVI   BD    ESI                      Ether Tag  Next Hop(s)
+-------------- ----- ----- ------------------------ ---------- ---------------
+aabb.cc00.6900 200   200   0000.0000.0000.0000.0000 0          Gi2:200
+XE1#
+show l2vpn evpn imet
+                    ^
+% Invalid input detected at '^' marker.
+XE1#

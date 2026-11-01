@@ -1,0 +1,161 @@
+
+######## 05:01:09 m1: XE1・XE2 に ES 4(種類 0・all-active)と Port-channel1。lacp device-id は XE1 だけ(片側の書き忘れ)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+l2vpn evpn ethernet-segment 4
+XE1(config-evpn-es)#
+identifier type 0 00.00.00.00.00.00.00.04.01
+XE1(config-evpn-es)#
+redundancy all-active
+XE1(config-evpn-es)#
+exit
+XE1(config)#
+interface Port-channel1
+XE1(config-if)#
+no ip address
+XE1(config-if)#
+lacp device-id 0000.0000.0004
+XE1(config-if)#
+evpn ethernet-segment 4
+XE1(config-if)#
+service instance 200 ethernet
+XE1(config-if-srv)#
+encapsulation dot1q 200
+XE1(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE1(config-if-srv)#
+exit
+XE1(config-if)#
+exit
+XE1(config)#
+interface GigabitEthernet3
+XE1(config-if)#
+no ip address
+XE1(config-if)#
+channel-group 1 mode active
+XE1(config-if)#
+exit
+XE1(config)#
+bridge-domain 200
+XE1(config-bdomain)#
+member Port-channel1 service-instance 200
+XE1(config-bdomain-efp)#
+end
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE2(config)#
+l2vpn evpn ethernet-segment 4
+XE2(config-evpn-es)#
+identifier type 0 00.00.00.00.00.00.00.04.01
+XE2(config-evpn-es)#
+redundancy all-active
+XE2(config-evpn-es)#
+exit
+XE2(config)#
+interface Port-channel1
+XE2(config-if)#
+no ip address
+XE2(config-if)#
+evpn ethernet-segment 4
+XE2(config-if)#
+service instance 200 ethernet
+XE2(config-if-srv)#
+encapsulation dot1q 200
+XE2(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE2(config-if-srv)#
+exit
+XE2(config-if)#
+exit
+XE2(config)#
+interface GigabitEthernet3
+XE2(config-if)#
+no ip address
+XE2(config-if)#
+channel-group 1 mode active
+XE2(config-if)#
+exit
+XE2(config)#
+bridge-domain 200
+XE2(config-bdomain)#
+member Port-channel1 service-instance 200
+XE2(config-bdomain-efp)#
+end
+XE2#
+show etherchannel summary
+Flags:  D - down        P - bundled in port-channel
+        I - stand-alone s - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+        A - formed by Auto LAG
+Number of channel-groups in use: 1
+Number of aggregators:           1
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1      Po1(SU)         LACP        Et0/0(P)        Et0/1(s)        
+SW1#
+show lacp neighbor
+Flags:  S - Device is requesting Slow LACPDUs 
+        F - Device is requesting Fast LACPDUs
+        A - Device is in Active mode       P - Device is in Passive mode     
+Channel group 1 neighbors
+                     LACP port                      Admin  Oper   Port    Port
+Port          Flags  Priority  Dev ID          Age  key    Key    Number  State
+Et0/0         SA     32768     0000.0000.0004   0s  0x0    0x1    0x4     0x3D  
+Et0/1         SA     32768     001e.140a.fb00   0s  0x0    0x1    0x4     0xD   
+SW1#
+show etherchannel summary
+Flags:  D - down        P/bndl - bundled in port-channel
+        I - stand-alone s/susp - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+Number of channel-groups in use: 1
+Number of aggregators:           1
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1	Po1(SU)		LACP	 Gi3(bndl)
+RU - L3 port-channel UP State
+SU - L2 port-channel UP state
+P/bndl -  Bundled
+S/susp  - Suspended
+XE1#
+show lacp sys-id
+32768, 001e.f607.b600
+XE1#
+show etherchannel summary
+Flags:  D - down        P/bndl - bundled in port-channel
+        I - stand-alone s/susp - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+Number of channel-groups in use: 1
+Number of aggregators:           1
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1	Po1(SD)		LACP	 Gi3(susp)
+RU - L3 port-channel UP State
+SU - L2 port-channel UP state
+P/bndl -  Bundled
+S/susp  - Suspended
+XE2#
+show lacp sys-id
+32768, 001e.140a.fb00
+XE2#
+ping 172.31.200.3 repeat 5
+Success rate is 80 percent (4/5), round-trip min/avg/max = 2/2/3 ms

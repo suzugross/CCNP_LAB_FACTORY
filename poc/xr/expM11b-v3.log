@@ -1,0 +1,159 @@
+
+######## 04:52:53 v3: XE1⇔XE3 の member を足す(フルメッシュ)→ 全部通るはず
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+l2vpn vfi context VPLS210
+XE1(config-vfi)#
+member 10.255.0.43 encapsulation mpls
+XE1(config-vfi)#
+end
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+l2vpn vfi context VPLS210
+XE3(config-vfi)#
+member 10.255.0.41 encapsulation mpls
+XE3(config-vfi)#
+end
+XE3#
+ping 172.31.210.2 repeat 5
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/2/4 ms
+ping 172.31.210.3 repeat 5
+Success rate is 80 percent (4/5), round-trip min/avg/max = 2/2/3 ms
+ping 172.31.210.3 repeat 5
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/2/3 ms
+show l2vpn vfi name VPLS210
+Legend: RT=Route-target, S=Split-horizon, Y=Yes, N=No
+VFI name: VPLS210, state: up, type: multipoint, signaling: LDP
+  VPN ID: 210
+  Bridge-Domain 210 attachment circuits:
+  Pseudo-port interface: pseudowire100001
+  Interface          Peer Address     VC ID        S
+  pseudowire100004   10.255.0.43      210          Y
+  pseudowire100002   10.255.0.42      210          Y
+XE1#
+show bridge-domain 210
+Bridge-domain 210 (3 ports in all)
+State: UP                    Mac learning: Enabled
+Aging-Timer: 300 second(s)
+Unknown Unicast Flooding Suppression: Disabled
+Maximum address limit: 65536
+    GigabitEthernet2 service instance 210
+    vfi VPLS210 neighbor 10.255.0.42 210
+    vfi VPLS210 neighbor 10.255.0.43 210
+   AED MAC address    Policy  Tag       Age  Pseudoport
+   -----------------------------------------------------------------------------
+   0   AABB.CC00.6B00 forward dynamic   296  VPLS210.404013, VPLS 
+                                             VC_LABEL: 23, Intf: GigabitEthernet1
+   0   AABB.CC00.6A00 forward dynamic   294  VPLS210.404011, VPLS 
+                                             VC_LABEL: 17, Intf: GigabitEthernet1
+   0   AABB.CC00.6900 forward dynamic   296  GigabitEthernet2.EFP210
+XE1#
+show l2vpn atom vc vcid 210 detail
+pseudowire100002 is up, VC status is up PW type: Ethernet
+  Create time: 00:06:02, last status change time: 00:05:40
+    Last label FSM state change time: 00:05:43
+  Destination address: 10.255.0.42 VC ID: 210
+    Output interface: Gi1, imposed label stack {18 17}
+    Preferred path: not configured  
+    Default path: active
+    Next hop: 10.0.41.51
+  Member of vfi service VPLS210
+    Bridge-Domain id: 210
+    Service id: 0x40000001
+  Signaling protocol: LDP, peer 10.255.0.42:0 up
+    Targeted Hello: 10.255.0.41(LDP Id) -> 10.255.0.42, LDP is UP
+    Graceful restart: not configured and not enabled
+    Non stop routing: not configured and not enabled
+    PWid FEC (128), VC ID: 210
+    Status TLV support (local/remote)         : enabled/supported
+      LDP route watch                         : enabled
+      Label/status state machine              : established, LruRru
+      Local dataplane status received         : No fault
+      BFD dataplane status received           : Not sent
+      BFD peer monitor status received        : No fault
+      Status received from access circuit     : No fault
+      Status sent to access circuit           : No fault
+      Status received from pseudowire i/f     : No fault
+      Status sent to network peer             : No fault
+      Status received from network peer       : No fault
+      Adjacency status of remote peer         : No fault
+  Sequencing: receive disabled, send disabled
+  Bindings
+    Parameter    Local                          Remote
+    ------------ ------------------------------ ------------------------------
+    Label        16                             17
+    Group ID     n/a                            0
+    Interface                                                                 
+    MTU          1500                           1500
+    Control word on (configured: autosense)     on
+    PW type      Ethernet                       Ethernet
+    VCCV CV type 0x02                           0x02
+                   LSPV [2]                       LSPV [2]                    
+    VCCV CC type 0x06                           0x06
+                   RA [2], TTL [3]               RA [2], TTL [3]
+    Status TLV   enabled                        supported
+  SSO Descriptor: 10.255.0.42/210, local label: 16
+  Dataplane:
+    SSM segment/switch IDs: 8196/8194 (used), PWID: 1
+  Rx Counters
+    31 input transit packets, 3568 bytes
+    0 drops, 0 seq err 
+  Tx Counters
+    36 output transit packets, 4122 bytes
+    0 drops
+pseudowire100004 is up, VC status is up PW type: Ethernet
+  Create time: 00:00:31, last status change time: 00:00:28
+    Last label FSM state change time: 00:00:28
+  Destination address: 10.255.0.43 VC ID: 210
+    Output interface: Gi1, imposed label stack {17 23}
+    Preferred path: not configured  
+    Default path: active
+    Next hop: 10.0.41.51
+  Member of vfi service VPLS210
+    Bridge-Domain id: 210
+    Service id: 0x40000001
+  Signaling protocol: LDP, peer 10.255.0.43:0 up
+    Targeted Hello: 10.255.0.41(LDP Id) -> 10.255.0.43, LDP is UP
+    Graceful restart: not configured and not enabled
+    Non stop routing: not configured and not enabled
+    PWid FEC (128), VC ID: 210
+    Status TLV support (local/remote)         : enabled/supported
+      LDP route watch                         : enabled
+      Label/status state machine              : established, LruRru
+      Local dataplane status received         : No fault
+      BFD dataplane status received           : Not sent
+      BFD peer monitor status received        : No fault
+      Status received from access circuit     : No fault
+      Status sent to access circuit           : No fault
+      Status received from pseudowire i/f     : No fault
+      Status sent to network peer             : No fault
+      Status received from network peer       : No fault
+      Adjacency status of remote peer         : No fault
+  Sequencing: receive disabled, send disabled
+  Bindings
+    Parameter    Local                          Remote
+    ------------ ------------------------------ ------------------------------
+    Label        23                             23
+    Group ID     n/a                            0
+    Interface                                                                 
+    MTU          1500                           1500
+    Control word on (configured: autosense)     on
+    PW type      Ethernet                       Ethernet
+    VCCV CV type 0x02                           0x02
+                   LSPV [2]                       LSPV [2]                    
+    VCCV CC type 0x06                           0x06
+                   RA [2], TTL [3]               RA [2], TTL [3]
+    Status TLV   enabled                        supported
+  SSO Descriptor: 10.255.0.43/210, local label: 23
+  Dataplane:
+    SSM segment/switch IDs: 24586/12296 (used), PWID: 3
+  Rx Counters
+    5 input transit packets, 626 bytes
+    0 drops, 0 seq err 
+  Tx Counters
+    5 output transit packets, 646 bytes
+    0 drops
+XE1#

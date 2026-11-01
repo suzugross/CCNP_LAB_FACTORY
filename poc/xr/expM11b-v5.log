@@ -1,0 +1,49 @@
+
+######## 04:54:53 v5: 分割ホライズンの裏どり= 前任者の形(XE1・XE3 は XE2 だけ)に戻し、XE2 の BD の MAC を見る
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+l2vpn vfi context VPLS210
+XE1(config-vfi)#
+no member 10.255.0.43 encapsulation mpls
+XE1(config-vfi)#
+end
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+l2vpn vfi context VPLS210
+XE3(config-vfi)#
+no member 10.255.0.41 encapsulation mpls
+XE3(config-vfi)#
+end
+XE3#
+ping 172.31.210.3 repeat 5
+Success rate is 0 percent (0/5)
+show bridge-domain 210
+Bridge-domain 210 (3 ports in all)
+State: UP                    Mac learning: Enabled
+Aging-Timer: 300 second(s)
+Unknown Unicast Flooding Suppression: Disabled
+Maximum address limit: 65536
+    GigabitEthernet2 service instance 210
+    vfi VPLS210 neighbor 10.255.0.41 210
+    vfi VPLS210 neighbor 10.255.0.43 210
+   AED MAC address    Policy  Tag       Age  Pseudoport
+   -----------------------------------------------------------------------------
+   0   AABB.CC00.6B00 forward dynamic   280  VPLS210.404012, VPLS 
+                                             VC_LABEL: 16, Intf: GigabitEthernet1
+   0   AABB.CC00.6A00 forward dynamic   287  GigabitEthernet2.EFP210
+   0   AABB.CC00.6900 forward dynamic   297  VPLS210.404011, VPLS 
+                                             VC_LABEL: 16, Intf: GigabitEthernet1
+XE2#
+show l2vpn vfi name VPLS210 detail
+Legend: RT=Route-target, S=Split-horizon, Y=Yes, N=No
+VFI name: VPLS210, state: up, type: multipoint, signaling: LDP
+  VPN ID: 210
+  Bridge-Domain 210 attachment circuits:
+  Pseudo-port interface: pseudowire100001
+  Interface          Peer Address     VC ID        S
+  pseudowire100003   10.255.0.43      210          Y
+  pseudowire100002   10.255.0.41      210          Y
+XE2#

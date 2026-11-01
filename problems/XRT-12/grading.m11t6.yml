@@ -1,0 +1,39 @@
+# M11-6: 前任者の VPLS(VPN ID 210)。故障は 2 つ= XE3 の EFP 210 に rewrite が無い(拠点 3 が誰とも通じない)・
+# XE1 と XE3 の VFI に互いの member が無い(ハブ アンド スポークのつもり。XE2 はスプリット ホライズンで中継しない)。
+# 直し方= XE3 に pop 1 symmetric・XE1⇔XE3 の member。XE2 は変えない(8000V 17.15 の VFI の member にはスプリット ホライズンを外す
+# 選択肢が無い= 実測。C は XE2 の S=Y も見る)。白紙= 0 点。
+problem: XRT-12
+total_points: 100
+checks:
+  - name: 'M11-6 CE2: reaches site 3 over the VPLS E-LAN (172.31.210.3)'
+    node: XE1
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-12 ssh CE2 -- 'ping 172.31.210.3 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 35
+  - name: 'M11-6 CE1: reaches site 3 over the VPLS E-LAN (172.31.210.3), and site 2 still (172.31.210.2)'
+    node: XE1
+    exec: local
+    command: >-
+      echo '## 3'; .venv/bin/python topologies/login_probe.py XRT-12 ssh CE1 -- 'ping 172.31.210.3 repeat 5';
+      echo '## 2'; .venv/bin/python topologies/login_probe.py XRT-12 ssh CE1 -- 'ping 172.31.210.2 repeat 5'
+    raw:
+      - { regex: '## 3[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 2[\s\S]*?Success rate is (?:100|80) percent' }
+    points: 35
+  - name: 'M11-6 XE1, XE2, XE3: a full mesh of pseudowires in VFI VPLS210, with split horizon still on at XE2'
+    node: XE1
+    exec: local
+    command: >-
+      echo '## XE1'; .venv/bin/python topologies/login_probe.py XRT-12 ssh XE1 -- 'show l2vpn vfi name VPLS210' 'show l2vpn atom vc';
+      echo '## XE2'; .venv/bin/python topologies/login_probe.py XRT-12 ssh XE2 -- 'show l2vpn vfi name VPLS210';
+      echo '## XE3'; .venv/bin/python topologies/login_probe.py XRT-12 ssh XE3 -- 'show l2vpn vfi name VPLS210' 'show l2vpn atom vc'
+    raw:
+      - { regex: '## XE1[\s\S]*?pw\d+\s+10\.255\.0\.42\s+210\s+vfi\s+VPLS210\s+UP[\s\S]*?## XE2' }
+      - { regex: '## XE1[\s\S]*?pw\d+\s+10\.255\.0\.43\s+210\s+vfi\s+VPLS210\s+UP[\s\S]*?## XE2' }
+      - { regex: '## XE2[\s\S]*?pseudowire\d+\s+10\.255\.0\.41\s+210\s+Y[\s\S]*?## XE3' }
+      - { regex: '## XE2[\s\S]*?pseudowire\d+\s+10\.255\.0\.43\s+210\s+Y[\s\S]*?## XE3' }
+      - { regex: '## XE3[\s\S]*?pw\d+\s+10\.255\.0\.41\s+210\s+vfi\s+VPLS210\s+UP' }
+      - { regex: '## XE3[\s\S]*?pw\d+\s+10\.255\.0\.42\s+210\s+vfi\s+VPLS210\s+UP' }
+    points: 30

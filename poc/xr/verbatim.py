@@ -14,7 +14,7 @@ import yaml
 pid, host, *want = sys.argv[1:]
 repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 learn = yaml.safe_load(open(f"{repo}/problems/{pid}/learn.yml", encoding="utf-8"))
-HEAD = re.compile(r"^On (XR\d+):\s*$")
+HEAD = re.compile(r"^On ([A-Z][A-Z0-9]*\d+):\s*$")   # On XR01: / On XE1:(XRT-12= IOS XE の機器も)
 
 
 def mgmt(dev):
@@ -38,7 +38,7 @@ def blocks(sol):
             m = HEAD.match(ln)
             if m:
                 dev = m.group(1)
-            elif ln.strip() == "configure":
+            elif ln.strip() in ("configure", "configure terminal"):
                 cur = [ln]
             continue
         cur.append(ln)

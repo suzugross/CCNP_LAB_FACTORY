@@ -1,0 +1,50 @@
+! XRT-12 XE2(Catalyst 8000V 17.15.1a)= PE。学ぶ側が設定する。
+! ★8000V は既定のライセンスの段階では MPLS が無い。構築の最後に xe_license.py が保存+再起動する(problem.yml の xe_license_boot)。
+license boot level network-advantage addon dna-advantage
+!
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+!
+interface Loopback0
+ ip address 10.255.0.42 255.255.255.255
+ ip router isis CORE
+!
+interface {{ links[0] }}
+ description CORE to P1
+ ip address 10.0.42.42 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+!
+! --- お客さま C の拠点 2(CE2)。VPLS(VLAN 210)は前任者の作り ---
+interface {{ links[1] }}
+ description to CE2 (customer C, site 2)
+ no ip address
+ no shutdown
+ service instance 210 ethernet
+  description E-LAN VPLS 210
+  encapsulation dot1q 210
+  rewrite ingress tag pop 1 symmetric
+ !
+!
+interface {{ links[2] }}
+ description to SW1 (customer C, site 4)
+ no ip address
+ no shutdown
+!
+l2vpn vfi context VPLS210
+ vpn id 210
+ member 10.255.0.41 encapsulation mpls
+ member 10.255.0.43 encapsulation mpls
+!
+bridge-domain 210
+ member {{ links[1] }} service-instance 210
+ member vfi VPLS210
+!
+router isis CORE
+ net 49.0001.0100.0000.0042.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+!

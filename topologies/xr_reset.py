@@ -23,6 +23,9 @@
   でグレースフル リスタートの交換を白紙に戻す)。configure … commit … end も書ける。
   IOS XR 以外のノード(相手役の IOS)も書ける。XR を戻した後に管理 IF の SSH で流す(XRT-08= 戻した直後は経路を失った
   BGP セッションが保持時間の 180 秒だけ残り、確認が古い状態を読むので `clear ip bgp …` で消す)。
+★IOS XE の機器(problem.yml の `xe_reset_nodes: [XE1, …]`・XRT-12 の Catalyst 8000V)も戻せる(2026-11-01)。記録= running-config を
+  `bootflash:lab-baseline.cfg` に写す/戻す= `configure replace bootflash:lab-baseline.cfg force`(差分を当てる・数パス)。
+  IOS XE には XR のコミット履歴が無いので、構築直後の設定を丸ごとファイルで控える形にした。
 ★XR の rollback は、同じコマンドの形の置き換え(`set-overload-bit` → `set-overload-bit on-startup wait-for-bgp`)を戻さない
   (26.1.1 実測。巻き戻しの差分にその行が出ない)。そういう行は xr_reset_exec で初期の形を入れ直す。
 """
@@ -40,13 +43,42 @@ from login_probe import Shell, connect  # noqa: E402
 
 
 FIRST_BOOT = "first-boot"   # 構築直後の履歴が空(XRd)= 戻り先は最古のコミットの手前
+XE_FILE = "bootflash:lab-baseline.cfg"   # IOS XE の戻り先(構築直後の running-config の写し)
 
 
 def xr_nodes(repo, problem, only):
+    """戻す機器= iosxr の機器+ xe_reset_nodes(IOS XE)。"""
     pmeta = yaml.safe_load(open(os.path.join(repo, "problems", problem, "problem.yml"), encoding="utf-8"))
     fams = pmeta.get("node_image_families") or {}
-    nodes = [n for n in pmeta["target_nodes"] if fams.get(n) == "iosxr"]
+    xe = pmeta.get("xe_reset_nodes") or []
+    nodes = [n for n in pmeta["target_nodes"] if fams.get(n) == "iosxr" or n in xe]
     return [n for n in nodes if n in only.split(",")] if only else nodes
+
+
+def is_xe(repo, problem, node):
+    pmeta = yaml.safe_load(open(os.path.join(repo, "problems", problem, "problem.yml"), encoding="utf-8"))
+    return node in (pmeta.get("xe_reset_nodes") or [])
+
+
+def xe_record(sh):
+    ask = r"(\?|\[confirm\])\s*$"   # Destination filename [lab-baseline.cfg]? / Do you want to over write? [confirm]
+    out = sh.send(f"copy running-config {XE_FILE}", timeout=60, until=ask)
+    for _ in range(3):
+        if re.search(ask, out):
+            more = sh.send("", timeout=60, until=ask)
+            out += more
+            if not re.search(ask, more):
+                break
+        else:
+            break
+    return bool(re.search(r"bytes copied|\[OK\]", out)), out
+
+
+def xe_reset(sh):
+    out = sh.send(f"configure replace {XE_FILE} force", timeout=600,
+                  until=r"(Rollback Done|[Aa]bort|[Ff]ailed|not found).*\n.*[#>]\s*$")
+    ok = "Rollback Done" in out and not re.search(r"[Aa]borted|[Ff]ailed", out)
+    return ok, out
 
 
 def shell(repo, problem, node, wait=0):
@@ -87,6 +119,23 @@ def main():
     if a.cmd == "record":
         base = {}
         for node in nodes:
+            if is_xe(a.repo, a.problem, node):
+                try:
+                    c, sh = shell(a.repo, a.problem, node, wait=300)
+                    ok, out = xe_record(sh)
+                    c.close()
+                except Exception as e:
+                    print(f"ERROR {node}: {type(e).__name__}: {e}")
+                    bad += 1
+                    continue
+                if not ok:
+                    print(f"ERROR {node}: could not copy the running-config to {XE_FILE}")
+                    print(out.strip()[-800:])
+                    bad += 1
+                    continue
+                base[node] = XE_FILE
+                print(f"[{node}] baseline config {XE_FILE}")
+                continue
             try:
                 c, sh = shell(a.repo, a.problem, node, wait=300)
                 ids, out = commit_ids(sh)
@@ -125,6 +174,17 @@ def main():
             bad += 1
             continue
         try:
+            if want == XE_FILE:
+                ok, out = xe_reset(sh)
+                print(f"[{node}] configure replace {XE_FILE}: {'ok' if ok else 'FAILED'}")
+                if not ok:
+                    print(out.strip()[-1500:])
+                    bad += 1
+                else:
+                    for line in after.get(node, []):
+                        sh.send(line, timeout=60)
+                        print(f"[{node}] after replace: {line}")
+                continue
             ids, _ = commit_ids(sh)
             if want == FIRST_BOOT:
                 if not ids:

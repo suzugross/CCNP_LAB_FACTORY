@@ -1,0 +1,104 @@
+
+######## 04:53:35 v4: (候補 B) XE3 の VPN ID を 211 にした時の症状 → 戻す
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+l2vpn vfi context VPLS210
+XE3(config-vfi)#
+vpn id 211
+XE3(config-vfi)#
+end
+XE3#
+show running-config | section vfi
+l2vpn vfi context VPLS210 
+ vpn id 211
+ member 10.255.0.42 encapsulation mpls
+ member 10.255.0.41 encapsulation mpls
+ member vfi VPLS210
+XE3#
+ping 172.31.210.2 repeat 5
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/2/3 ms
+ping 172.31.210.3 repeat 5
+Success rate is 0 percent (0/5)
+ping 172.31.210.3 repeat 5
+Success rate is 0 percent (0/5)
+show l2vpn vfi name VPLS210
+Legend: RT=Route-target, S=Split-horizon, Y=Yes, N=No
+VFI name: VPLS210, state: up, type: multipoint, signaling: LDP
+  VPN ID: 211
+  Bridge-Domain 210 attachment circuits:
+  Pseudo-port interface: pseudowire100007
+  Interface          Peer Address     VC ID        S
+  pseudowire100006   10.255.0.42      211          Y
+  pseudowire100005   10.255.0.41      211          Y
+XE3#
+show l2vpn atom vc
+                                       Service
+Interface Peer ID         VC ID      Type   Name                     Status
+--------- --------------- ---------- ------ ------------------------ ----------
+pw100003  10.255.0.41     130        p2p    E130                     UP        
+pw100005  10.255.0.41     211        vfi    VPLS210                  DOWN      
+pw100006  10.255.0.42     211        vfi    VPLS210                  DOWN      
+XE3#
+show l2vpn atom vc
+                                       Service
+Interface Peer ID         VC ID      Type   Name                     Status
+--------- --------------- ---------- ------ ------------------------ ----------
+pw100002  10.255.0.41     210        vfi    VPLS210                  UP        
+pw100003  10.255.0.43     210        vfi    VPLS210                  DOWN      
+XE2#
+show l2vpn atom vc vcid 210 detail | include Peer|state|Status|status|error|Last
+pseudowire100002 is up, VC status is up PW type: Ethernet
+  Create time: 00:06:50, last status change time: 00:06:42
+    Last label FSM state change time: 00:06:39
+    Status TLV support (local/remote)         : enabled/supported
+      Label/status state machine              : established, LruRru
+      Local dataplane status received         : No fault
+      BFD dataplane status received           : Not sent
+      BFD peer monitor status received        : No fault
+      Status received from access circuit     : No fault
+      Status sent to access circuit           : No fault
+      Status received from pseudowire i/f     : No fault
+      Status sent to network peer             : No fault
+      Status received from network peer       : No fault
+      Adjacency status of remote peer         : No fault
+    Status TLV   enabled                        supported
+pseudowire100003 is up, VC status is down PW type: Ethernet
+  Create time: 00:06:50, last status change time: 00:00:48
+    Last label FSM state change time: 00:00:47
+    Last error: Local access circuit is not ready for label advertise
+    Status TLV support (local/remote)         : enabled/None (no remote binding
+      Label/status state machine              : local ready, LruRnd
+      Local dataplane status received         : No fault
+      BFD dataplane status received           : Not sent
+      BFD peer monitor status received        : No fault
+      Status received from access circuit     : No fault
+      Status sent to access circuit           : DOWN(hard-down)
+      Status received from pseudowire i/f     : No fault
+      Status sent to network peer             : No fault
+      Status received from network peer       : None (no remote binding)
+      Adjacency status of remote peer         : None (no remote binding)
+    Status TLV   enabled                        None (no remote binding)
+XE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+l2vpn vfi context VPLS210
+XE3(config-vfi)#
+vpn id 210
+XE3(config-vfi)#
+end
+XE3#
+show running-config | section vfi
+l2vpn vfi context VPLS210 
+ vpn id 210
+ member 10.255.0.41 encapsulation mpls
+ member 10.255.0.42 encapsulation mpls
+ member vfi VPLS210
+XE3#
+ping 172.31.210.2 repeat 5
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/2/3 ms
+ping 172.31.210.3 repeat 5
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/4/15 ms
+ping 172.31.210.3 repeat 5
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/2/2 ms
