@@ -302,7 +302,7 @@ links:
 設定は 4 つの部分からなります。ルート リフレクタへの BGP、EVPN の全体の設定、EVPN インスタンス、アタッチメント回線を
 インスタンスにつなぐブリッジ ドメインです。
 
-:::config fold Catalyst 8000V(IOS XE 17.15)— 課題 M11-7 の答えのうち XE1 の分
+:::config fold Catalyst 8000V(IOS XE 17.15)— EVPN の E-LAN(EVI 200)の XE1 の分
 router bgp 65000
  bgp router-id 10.255.0.41                         ## Loopback0
  no bgp default ipv4-unicast                       ## この PE が BGP で運ぶのは EVPN だけ

@@ -64,7 +64,7 @@ the head end only.
 
 The configuration of this policy:
 
-:::config XR01 — a policy with a hand-written path (the form measured in the PoC; Task M10-4 does not allow writing the hops, so this is not its answer)
+:::config XR01 — a policy with a hand-written path
 segment-routing
  traffic-eng
   segment-list VIA-RT03                   ## give the path (the order of the labels) a name
@@ -116,7 +116,7 @@ from the policy. Customer B keeps the shortest path. A traceroute from CEA1 cros
 
 Put together, the part that sets the color looks like this:
 
-:::config fold XR01 — color 100 on customer A's routes as they arrive (part of the answer of Task M10-4)
+:::config fold XR01 — color 100 on customer A's routes as they arrive
 extcommunity-set opaque COLOR-100      ## the color value; a color is a kind of extended community, and the number goes here
   100
 end-set
@@ -178,7 +178,7 @@ and preference 100, handed to a PCE (section 3) if one is configured.
 
 Put together, the parts of an on-demand policy look like this:
 
-:::config fold XR01 — an on-demand policy that avoids PRIMARY (part of the answer of Task M10-4)
+:::config fold XR01 — an on-demand policy that avoids PRIMARY
 router isis CORE
  distribute link-state               ## hand the IS-IS topology to the SR-TE process (and to a PCE); without it the policy stays down
 !
@@ -258,7 +258,7 @@ The PCE needs about 40 seconds after it starts before it computes paths (`Topolo
 
 The configuration is split between the two sides:
 
-:::config fold XR02 — the PCE (part of the answer of Task M10-5)
+:::config fold XR02 — the PCE
 pce
  address ipv4 10.255.0.21   ## the address on which the PCE waits for PCEP connections (its loopback)
 !
@@ -267,7 +267,7 @@ router isis CORE
 !
 :::
 
-:::config fold XR01 — the PCC (part of the answer of Task M10-5)
+:::config fold XR01 — the PCC
 segment-routing
  traffic-eng
   pcc
@@ -301,7 +301,7 @@ paths that are not disjoint when no disjoint pair exists; a strict group would r
 
 The configuration of the two policies:
 
-:::config fold XR01 — two policies computed by the PCE (part of the answer of Task M10-5)
+:::config fold XR01 — two policies computed by the PCE
 segment-routing
  traffic-eng
   policy DISJ-1

@@ -299,7 +299,7 @@ frame is untagged, and each EFP adds or removes what its own site uses.
 The configuration has four parts: BGP towards the route reflector, the global EVPN settings, the EVPN instance, and the
 bridge domain that joins the attachment circuit to the instance.
 
-:::config fold Catalyst 8000V (IOS XE 17.15) — XE1's part of the answer to Task M11-7
+:::config fold Catalyst 8000V (IOS XE 17.15) — XE1's part of the EVPN E-LAN (EVI 200)
 router bgp 65000
  bgp router-id 10.255.0.41                         ## Loopback0
  no bgp default ipv4-unicast                       ## this PE carries only EVPN in BGP

@@ -108,7 +108,7 @@ EVPN-VPWS では、IOS XR は既定で MTU を比べません。詳細には `Ig
 
 EVPN-VPWS は、BGP の `l2vpn evpn`、AC のサブインタフェース、`l2vpn` の下のクロスコネクトの 3 か所に書きます。
 
-:::config fold XR01(IOS XR)— EVPN-VPWS の E-Line(課題 M11-3 の XR01 の答え)
+:::config fold XR01(IOS XR)— EVPN-VPWS の E-Line
 router bgp 65000
  address-family l2vpn evpn                         ## BGP 全体で EVPN のアドレス ファミリーを使う
  !
@@ -135,7 +135,7 @@ l2vpn
 XR03 は、BGP を初めて動かすので、`router bgp 65000` に `bgp router-id 10.255.0.3` と、XR02 への近隣(`remote-as`・
 `update-source Loopback0`)が要ります。AC とクロスコネクトは、`target 1 source 3` で XR01 と対になります。
 
-:::config fold XR02(IOS XR)— ルート リフレクタに EVPN を足す(課題 M11-3 の XR02 の答え)
+:::config fold XR02(IOS XR)— ルート リフレクタに EVPN を足す
 router bgp 65000
  address-family l2vpn evpn                         ## RR も BGP 全体で EVPN を使う
  !

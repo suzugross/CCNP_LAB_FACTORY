@@ -296,7 +296,7 @@ the lab are configured that way.
 
 Put together as XR01's configuration, the places above look like this. The right-hand column says what each line does. The block stays at the default (16000–23999), so no `segment-routing` line is needed. Below it is the SR part of an IOS XE router of the lab (RT02): the same parts, in other places.
 
-:::config fold XR01 (IOS XR) — the smallest form of SR in IS-IS (close to the answer of Task M10-1)
+:::config fold XR01 (IOS XR) — the smallest form of SR in IS-IS
 router isis CORE
  is-type level-2-only
  net 49.0001.0100.0000.0001.00
@@ -499,7 +499,7 @@ prepared with `no mpls ldp igp sync` on their links to XR01, so that XR01 could 
 
 This is XR01's IS-IS after the migration (Tasks M10-1 and M10-2 done). The whole `mpls ldp` block is gone, and `mpls ldp sync` has left the interfaces. The BFD lines come from unit M7.
 
-:::config fold XR01 — IS-IS after the migration (contains the answers of Tasks M10-1 and M10-2)
+:::config fold XR01 — IS-IS after the migration
 router isis CORE
  is-type level-2-only
  net 49.0001.0100.0000.0001.00

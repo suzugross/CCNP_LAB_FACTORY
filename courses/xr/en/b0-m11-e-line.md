@@ -199,7 +199,7 @@ In an E-Line, the MTU counts in three places.
 
 An E-Line is written in two places: the AC sub-interface, and the cross-connect under `l2vpn`.
 
-:::config fold XR01 (IOS XR) — an E-Line on an LDP pseudowire (the answer to Task M11-1)
+:::config fold XR01 (IOS XR) — an E-Line on an LDP pseudowire
 interface GigabitEthernet0/0/0/2.100 l2transport   ## l2transport= used as an AC, not a Layer 3 interface; it cannot have an IP address
  encapsulation dot1q 100                           ## pick the frames of VLAN 100 on this port
  rewrite ingress tag pop 1 symmetric               ## remove the tag on the way in, put it back on the way out; the pseudowire carries untagged frames

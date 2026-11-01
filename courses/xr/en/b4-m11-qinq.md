@@ -66,7 +66,7 @@ in the same way.
 
 ### 3.1 Where the configuration goes
 
-:::config fold XR01 (IOS XR) — an E-Line that carries S-VLAN 500 whatever the inner tag (XR01's part of the answer to Task M11-5)
+:::config fold XR01 (IOS XR) — an E-Line that carries S-VLAN 500 whatever the inner tag
 interface GigabitEthernet0/0/0/3.500 l2transport
  encapsulation dot1q 500 second-dot1q any          ## pick double-tagged frames with outer 500 (any inner tag; not single-tagged 500)
  rewrite ingress tag pop 1 symmetric               ## remove the outer tag only; the customer's inner tag is carried

@@ -141,7 +141,7 @@ IOS XR では、各インターフェイスに 2 行が要ります。`fast-rero
 
 XR01 と、ラボの IOS ルータ(RT01)の設定です。IOS XR はインターフェイスごとに、IOS XE は IS-IS 全体に書きます。
 
-:::config fold XR01 — 両方のコアのリンクで TI-LFA(課題 M10-3 の答えの一部)
+:::config fold XR01 — 両方のコアのリンクで TI-LFA
 router isis CORE
  interface GigabitEthernet0/0/0/0   ## PRIMARY
   address-family ipv4 unicast
@@ -228,7 +228,7 @@ IOS XR には別の機能、IS-IS のアドレス ファミリーの `microloop 
 
 XR01 では、IS-IS のアドレス ファミリーに 1 行です(待つ時間を変えるなら 2 行)。
 
-:::config fold XR01 — マイクロループ回避(課題 M10-3 の答えの一部)
+:::config fold XR01 — マイクロループ回避
 router isis CORE
  address-family ipv4 unicast
   microloop avoidance segment-routing         ## 収束の間、影響を受ける宛先をループの無い SR の道で送る

@@ -108,7 +108,7 @@ compare MTUs, set `transmit-l2-mtu` and `enforce-mtu-match` under the EVI.
 
 EVPN-VPWS is written in three places: BGP's `l2vpn evpn`, the AC sub-interface, and the cross-connect under `l2vpn`.
 
-:::config fold XR01 (IOS XR) — an EVPN-VPWS E-Line (XR01's part of the answer to Task M11-3)
+:::config fold XR01 (IOS XR) — an EVPN-VPWS E-Line
 router bgp 65000
  address-family l2vpn evpn                         ## use the EVPN address family in BGP as a whole
  !
@@ -135,7 +135,7 @@ l2vpn
 XR03 runs BGP for the first time, so `router bgp 65000` needs `bgp router-id 10.255.0.3` and the neighbor XR02
 (`remote-as`, `update-source Loopback0`). Its AC and cross-connect pair with XR01 by `target 1 source 3`.
 
-:::config fold XR02 (IOS XR) — adding EVPN to the route reflector (XR02's part of the answer to Task M11-3)
+:::config fold XR02 (IOS XR) — adding EVPN to the route reflector
 router bgp 65000
  address-family l2vpn evpn                         ## the RR uses EVPN in BGP as a whole too
  !

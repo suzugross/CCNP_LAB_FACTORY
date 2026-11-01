@@ -290,7 +290,7 @@ SID は、そこにある表 `connected-prefix-sid-map` → `address-family ipv4
 
 ここまでの置き場を、XR01 の設定としてまとめると次の形です。右の列は、その行が何をするかです。ブロックは既定値(16000〜23999)のままなので、`segment-routing` の行は要りません。続けて、ラボの IOS XE ルータ(RT02)の SR の部分を載せます。同じ部品が、別の場所にあります。
 
-:::config fold XR01(IOS XR)— IS-IS で SR を動かす最小の形(課題 M10-1 の答えに近い形)
+:::config fold XR01(IOS XR)— IS-IS で SR を動かす最小の形
 router isis CORE
  is-type level-2-only
  net 49.0001.0100.0000.0001.00
@@ -493,7 +493,7 @@ IOS は振る舞いが違います。IOS の同期は、LDP が設定されて�
 
 移行を終えた XR01 の IS-IS の全体です(課題 M10-1 と M10-2 を終えた状態)。`mpls ldp` の塊は丸ごと無くなり、インターフェイスからは `mpls ldp sync` が消えています。BFD の行は単元 M7 のものです。
 
-:::config fold XR01 — 移行を終えた IS-IS の全体(課題 M10-1・M10-2 の答えを含む)
+:::config fold XR01 — 移行を終えた IS-IS の全体
 router isis CORE
  is-type level-2-only
  net 49.0001.0100.0000.0001.00

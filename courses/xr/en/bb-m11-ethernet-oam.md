@@ -133,7 +133,7 @@ Operational state of entry: Active
 Three parts: CFM on as a whole, the domain with its service, and the MEP on the attachment circuit. The E-Line's EFP is
 already named for the EVC `E130` (`service instance 130 ethernet E130`), which is how the service finds it.
 
-:::config fold Catalyst 8000V (IOS XE 17.15) — XE1's part of the answer to Task M11-9 (XE3 has MPID 3 and no IP SLA)
+:::config fold Catalyst 8000V (IOS XE 17.15) — XE1's part of CFM and Y.1731 delay measurement on E-Line 130 (XE3 has MPID 3 and no IP SLA)
 ethernet cfm global                                ## turn CFM on for the router; without it the MEPs stay inactive
 ethernet cfm domain PROV level 4                   ## the provider's domain
  service E130 evc E130                             ## the MA for E-Line 130; an xconnect EVC takes no VLAN here

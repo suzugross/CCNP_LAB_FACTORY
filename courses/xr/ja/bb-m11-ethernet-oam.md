@@ -134,7 +134,7 @@ Operational state of entry: Active
 3 つの部分からなります。CFM を全体で有効にすること、ドメインとそのサービス、そしてアタッチメント回線の上の MEP です。
 E-Line の EFP は、すでに EVC `E130` の名前が付いていて(`service instance 130 ethernet E130`)、サービスはそれで EFP を見つけます。
 
-:::config fold Catalyst 8000V(IOS XE 17.15)— 課題 M11-9 の答えのうち XE1 の分(XE3 は MPID 3 で IP SLA なし)
+:::config fold Catalyst 8000V(IOS XE 17.15)— E-Line 130 の CFM と Y.1731 の遅延測定の XE1 の分(XE3 は MPID 3 で IP SLA なし)
 ethernet cfm global                                ## ルータ全体で CFM を有効に。無いと MEP は無効のまま
 ethernet cfm domain PROV level 4                   ## プロバイダーのドメイン
  service E130 evc E130                             ## E-Line 130 の MA。xconnect の EVC には VLAN を書かない

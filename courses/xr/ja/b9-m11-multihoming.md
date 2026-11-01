@@ -156,7 +156,7 @@ BUM のフレームを XE2 へ送るとき、XE2 のスプリット ホライズ
 2 台の PE は、セグメントについて同じ設定を持ちます。ESI と冗長化の方式、セグメントに属する Port-channel、そして
 Port-channel の上の EFP を E-LAN のブリッジ ドメインに入れることです。
 
-:::config fold Catalyst 8000V(IOS XE 17.15)— 課題 M11-8 の答えのうち XE1 の分(XE2 も同じ)
+:::config fold Catalyst 8000V(IOS XE 17.15)— 拠点 4 を all-active で二重に収容する XE1 の分(XE2 も同じ)
 l2vpn evpn ethernet-segment 4                      ## セグメント。4 はローカルな番号(識別のための数)にすぎない
  identifier type 0 00.00.00.00.00.00.00.04.01      ## 9 オクテットの値。0000.0000.0000.0000.0401 と表示される
  redundancy all-active                             ## 両方の PE が転送する(このプラットフォームではこれだけ)

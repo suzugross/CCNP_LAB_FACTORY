@@ -146,7 +146,7 @@ The IOS routers of the lab protect their own prefixes too, with `fast-reroute pe
 
 Here are XR01 and an IOS router of the lab (RT01). IOS XR configures it per interface, IOS XE for the whole IS-IS.
 
-:::config fold XR01 — TI-LFA on both core links (part of the answer of Task M10-3)
+:::config fold XR01 — TI-LFA on both core links
 router isis CORE
  interface GigabitEthernet0/0/0/0   ## PRIMARY
   address-family ipv4 unicast
@@ -233,7 +233,7 @@ IOS XR. The IOL routers report `enabled for segment-routing microloop avoidance`
 
 On XR01 it is one line in the IS-IS address family (two, to change the delay).
 
-:::config fold XR01 — microloop avoidance (part of the answer of Task M10-3)
+:::config fold XR01 — microloop avoidance
 router isis CORE
  address-family ipv4 unicast
   microloop avoidance segment-routing         ## during convergence, send the affected destinations on a loop-free SR path

@@ -64,7 +64,7 @@ links:
 
 ### 3.1 設定の置き場
 
-:::config fold XR01(IOS XR)— S-VLAN 500 の中を内側を問わず運ぶ E-Line(課題 M11-5 の XR01 の答え)
+:::config fold XR01(IOS XR)— S-VLAN 500 の中を内側を問わず運ぶ E-Line
 interface GigabitEthernet0/0/0/3.500 l2transport
  encapsulation dot1q 500 second-dot1q any          ## 外側 500 の二重タグだけを拾う(内側は問わない。単一タグの 500 は拾わない)
  rewrite ingress tag pop 1 symmetric               ## 外側だけ外す。内側の顧客のタグは残して運ぶ

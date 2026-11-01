@@ -64,7 +64,7 @@ Color: 100, End-point: 10.255.0.12
 
 このポリシーの設定です。
 
-:::config XR01 — 手で書いた道順のポリシー(PoC で測った形。課題 M10-4 は道順を書かないので、その答えではありません)
+:::config XR01 — 手で書いた道順のポリシー
 segment-routing
  traffic-eng
   segment-list VIA-RT03                   ## 道順(ラベルの並び)に名前を付ける
@@ -116,7 +116,7 @@ RP/0/RP0/CPU0:XR01#show bgp vrf CUST-A 10.101.2.0/24
 
 カラーを付ける部分を、設定にまとめると次の形です。
 
-:::config fold XR01 — 受け取るときに顧客 A のルートにカラー 100 を付ける(課題 M10-4 の答えの一部)
+:::config fold XR01 — 受け取るときに顧客 A のルートにカラー 100 を付ける
 extcommunity-set opaque COLOR-100      ## カラーの値。カラーは拡張コミュニティの一種で、ここに数を書く
   100
 end-set
@@ -178,7 +178,7 @@ PCE(3 節)が設定されていればそれに任せる優先度 100 です。
 
 オンデマンドのポリシーの部品を、設定にまとめると次の形です。
 
-:::config fold XR01 — PRIMARY を避けるオンデマンドのポリシー(課題 M10-4 の答えの一部)
+:::config fold XR01 — PRIMARY を避けるオンデマンドのポリシー
 router isis CORE
  distribute link-state               ## IS-IS のトポロジを SR-TE のプロセス(と PCE)に渡す。無いとポリシーは down のまま
 !
@@ -258,7 +258,7 @@ PCE は、起動してから道を計算し始めるまでに約 40 秒かかり
 
 設定は両側に分かれます。
 
-:::config fold XR02 — PCE(課題 M10-5 の答えの一部)
+:::config fold XR02 — PCE
 pce
  address ipv4 10.255.0.21   ## PCE として PCEP の接続を待つアドレス(自分のループバック)
 !
@@ -267,7 +267,7 @@ router isis CORE
 !
 :::
 
-:::config fold XR01 — PCC(課題 M10-5 の答えの一部)
+:::config fold XR01 — PCC
 segment-routing
  traffic-eng
   pcc
@@ -301,7 +301,7 @@ Association: Type Link-Disjoint, Group 1, Not Strict
 
 2 本のポリシーの設定です。
 
-:::config fold XR01 — PCE に計算を任せる 2 本のポリシー(課題 M10-5 の答えの一部)
+:::config fold XR01 — PCE に計算を任せる 2 本のポリシー
 segment-routing
  traffic-eng
   policy DISJ-1

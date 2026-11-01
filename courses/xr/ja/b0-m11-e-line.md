@@ -192,7 +192,7 @@ E-Line では、MTU が 3 か所で効きます。
 
 E-Line は、AC のサブインタフェースと、`l2vpn` の下のクロスコネクトの 2 か所に書きます。
 
-:::config fold XR01(IOS XR)— LDP の疑似回線の E-Line(課題 M11-1 の答え)
+:::config fold XR01(IOS XR)— LDP の疑似回線の E-Line
 interface GigabitEthernet0/0/0/2.100 l2transport   ## l2transport= L3 の IF ではなく AC として使う。IP アドレスは持てない
  encapsulation dot1q 100                           ## このポートで VLAN 100 のフレームを拾う
  rewrite ingress tag pop 1 symmetric               ## 入るときにタグを外し、出るときに付け直す。疑似回線にはタグなしで載る

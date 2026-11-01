@@ -155,7 +155,7 @@ segment.
 Both PEs carry the same configuration for the segment: the ESI and the redundancy mode, a Port-channel that belongs to
 the segment, and an EFP on the Port-channel in the bridge domain of the E-LAN.
 
-:::config fold Catalyst 8000V (IOS XE 17.15) — XE1's part of the answer to Task M11-8 (XE2 has the same)
+:::config fold Catalyst 8000V (IOS XE 17.15) — XE1's part of dual-homing site 4 all-active (XE2 has the same)
 l2vpn evpn ethernet-segment 4                      ## the segment; 4 is only a local number (the discriminator)
  identifier type 0 00.00.00.00.00.00.00.04.01      ## the 9-octet value; shown as 0000.0000.0000.0000.0401
  redundancy all-active                             ## both PEs forward (the only mode on this platform)
