@@ -1,0 +1,54 @@
+# S-4: EVPN の E-LAN(EVI 340・vlan-based・RT 65000:3400 だけ)= 拠点 1・2・3(VLAN 340)。BGP は RR(RR1)経由だけ・ルータ ID= Lo0。
+# ★段 1 は確立だけを見る(replication-type が無いと PE が経路を出さず、受けた数が 0 になる)。replication-type ingress が無いと EVI が Incomplete(M11 追補の実測)。RT を書かないと自動の 65000:340 になる= 段 2 で落ちる。
+# ★MAC は CE のフレームからしか覚えない→ MAC の確認の前に CE から ping して 10 秒待つ(XRT-12 の実測)。
+problem: XRT-13
+total_points: 100
+checks:
+  - name: 'S-4 step 1  RR1: L2VPN EVPN sessions with XE1, XE2 and XE3 are established'
+    node: RR1
+    command: show bgp l2vpn evpn summary
+    raw:
+      - { regex: '\n10\.255\.0\.41\s+4\s+65000(?:\s+\d+){5}\s+\S+\s+\d+(?:\s|$)' }
+      - { regex: '\n10\.255\.0\.42\s+4\s+65000(?:\s+\d+){5}\s+\S+\s+\d+(?:\s|$)' }
+      - { regex: '\n10\.255\.0\.43\s+4\s+65000(?:\s+\d+){5}\s+\S+\s+\d+(?:\s|$)' }
+    points: 15
+  - name: 'S-4 step 1  XE1, XE2, XE3: L2VPN EVPN to RR1 only, with Loopback0 as the BGP router ID'
+    node: XE1
+    exec: local
+    command: >-
+      for n in 1 2 3; do echo "## XE$n"; .venv/bin/python topologies/login_probe.py XRT-13 ssh XE$n -- 'show bgp l2vpn evpn summary'; done; echo '## END'
+    raw:
+      - { regex: '## XE1(?:(?!## )[\s\S])*?BGP router identifier 10\.255\.0\.41,(?:(?!## )[\s\S])*?\n10\.255\.0\.52\s+4\s+65000' }
+      - { regex: '## XE2(?:(?!## )[\s\S])*?BGP router identifier 10\.255\.0\.42,(?:(?!## )[\s\S])*?\n10\.255\.0\.52\s+4\s+65000' }
+      - { regex: '## XE3(?:(?!## )[\s\S])*?BGP router identifier 10\.255\.0\.43,(?:(?!## )[\s\S])*?\n10\.255\.0\.52\s+4\s+65000' }
+      - { not_regex: '\n10\.255\.0\.4[123]\s+4\s+65000' }
+    points: 10
+  - name: 'S-4 step 2  XE1, XE2, XE3: EVPN instance 340 is established, with route target 65000:3400 only, and ingress replication'
+    node: XE1
+    exec: local
+    command: >-
+      for n in 1 2 3; do echo "## XE$n"; .venv/bin/python topologies/login_probe.py XRT-13 ssh XE$n -- 'show l2vpn evpn evi 340 detail'; done; echo '## END'
+    raw:
+      - { regex: '## XE1(?:(?!## )[\s\S])*?Import-RTs:\s+65000:3400\s*\n\s*Export-RTs:\s+65000:3400\s*\n(?:(?!## )[\s\S])*?Replication Type:\s+Ingress(?:(?!## )[\s\S])*?State:\s+Established' }
+      - { regex: '## XE2(?:(?!## )[\s\S])*?Import-RTs:\s+65000:3400\s*\n\s*Export-RTs:\s+65000:3400\s*\n(?:(?!## )[\s\S])*?Replication Type:\s+Ingress(?:(?!## )[\s\S])*?State:\s+Established' }
+      - { regex: '## XE3(?:(?!## )[\s\S])*?Import-RTs:\s+65000:3400\s*\n\s*Export-RTs:\s+65000:3400\s*\n(?:(?!## )[\s\S])*?Replication Type:\s+Ingress(?:(?!## )[\s\S])*?State:\s+Established' }
+    points: 25
+  - name: 'S-4 end to end  sites 1, 2 and 3 reach each other over the EVPN E-LAN (172.31.34.0/24)'
+    node: XE1
+    exec: local
+    command: >-
+      echo '## 1-2'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE1 -- 'ping 172.31.34.2 repeat 5';
+      echo '## 1-3'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE1 -- 'ping 172.31.34.3 repeat 5';
+      echo '## 2-3'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE2 -- 'ping 172.31.34.3 repeat 5'
+    raw:
+      - { regex: '## 1-2[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 1-3[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 2-3[\s\S]*?Success rate is (?:100|80) percent' }
+    points: 35
+  - name: 'S-4 step 3  XE1: learns the MAC addresses of sites 2 and 3 through BGP'
+    node: XE1
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-13 ssh XE1 --pre-cli 'CE2:ping 172.31.34.1 repeat 3' --pre-cli 'CE3:ping 172.31.34.1 repeat 3' --settle 10 -- 'show l2vpn evpn mac'
+    raw:
+      - { regex: '\n[0-9a-f.]{14}\s+340\s+\d+\s+0000\.0000\.0000\.0000\.0000\s+0\s+10\.255\.0\.42\s' }
+      - { regex: '\n[0-9a-f.]{14}\s+340\s+\d+\s+0000\.0000\.0000\.0000\.0000\s+0\s+10\.255\.0\.43\s' }
+    points: 15

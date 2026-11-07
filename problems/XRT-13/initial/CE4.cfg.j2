@@ -1,0 +1,30 @@
+! XRT-13 CE4(IOL 17.15)= 顧客 D の CE(拠点 4)。据え付け(学ぶ側は変更しない)。サービスごとのサブインタフェース。
+interface {{ links[0] }}
+ description to PE (provider)
+ no ip address
+ no shutdown
+!
+interface {{ links[0] }}.310
+ description L3VPN (provider VRF CUST-D)
+ encapsulation dot1Q 310
+ ip address 172.20.4.1 255.255.255.0
+!
+interface Loopback300
+ description site 4 LAN
+ ip address 10.30.4.1 255.255.255.0
+!
+interface {{ links[0] }}.321
+ description E-Line to the other site
+ encapsulation dot1Q 321
+ ip address 172.31.32.4 255.255.255.0
+!
+router bgp 65104
+ bgp router-id 10.30.4.1
+ bgp log-neighbor-changes
+ neighbor 172.20.4.254 remote-as 65000
+ !
+ address-family ipv4
+  network 10.30.4.0 mask 255.255.255.0
+  neighbor 172.20.4.254 activate
+ exit-address-family
+!

@@ -1,0 +1,292 @@
+
+######## 21:53:19 cfg: 設定例の元(各 PE のサービスの部分)
+show running-config | section vrf definition|interface GigabitEthernet2|router bgp|l2vpn|bridge-domain
+vrf definition A
+ rd 10.255.0.41:100
+ !
+ address-family ipv4
+  route-target export 65000:100
+  route-target import 65000:100
+ exit-address-family
+vrf definition MGMT
+ rd 65001:1
+ !
+ address-family ipv4
+ exit-address-family
+l2vpn evpn
+ replication-type ingress
+ router-id Loopback0
+l2vpn evpn instance 200 vlan-based
+l2vpn vfi context VPLS210 
+ vpn id 210
+ member 10.255.0.43 encapsulation mpls
+ member 10.255.0.42 encapsulation mpls
+bridge-domain 200 
+ member GigabitEthernet2 service-instance 200
+ member evpn-instance 200
+bridge-domain 210 
+ member GigabitEthernet2 service-instance 210
+ member vfi VPLS210
+interface GigabitEthernet2
+ description to CE1 (site 1)
+ no ip address
+ negotiation auto
+ service instance 130 ethernet
+  encapsulation dot1q 130
+  rewrite ingress tag pop 1 symmetric
+ !
+ service instance 200 ethernet
+  encapsulation dot1q 200
+  rewrite ingress tag pop 1 symmetric
+ !
+ service instance 210 ethernet
+  encapsulation dot1q 210
+  rewrite ingress tag pop 1 symmetric
+ !
+interface GigabitEthernet2.100
+ encapsulation dot1Q 100
+ vrf forwarding A
+ ip address 172.16.1.254 255.255.255.0
+router bgp 65000
+ bgp router-id 10.255.0.41
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.255.0.52 remote-as 65000
+ neighbor 10.255.0.52 update-source Loopback0
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family vpnv4
+  neighbor 10.255.0.52 activate
+  neighbor 10.255.0.52 send-community both
+ exit-address-family
+ !
+ address-family l2vpn evpn
+  neighbor 10.255.0.52 activate
+  neighbor 10.255.0.52 send-community both
+ exit-address-family
+ !
+ address-family ipv4 vrf A
+  neighbor 172.16.1.1 remote-as 65001
+  neighbor 172.16.1.1 activate
+ exit-address-family
+l2vpn xconnect context CE1-CE4
+ member GigabitEthernet2 service-instance 130 
+ member 10.255.0.1 130 encapsulation mpls
+XE1#
+show running-config | section vrf definition|interface GigabitEthernet2|router bgp|l2vpn|bridge-domain
+vrf definition A
+ rd 10.255.0.42:100
+ !
+ address-family ipv4
+  route-target export 65000:100
+  route-target import 65000:100
+ exit-address-family
+vrf definition MGMT
+ rd 65001:1
+ !
+ address-family ipv4
+ exit-address-family
+l2vpn evpn
+ replication-type ingress
+ router-id Loopback0
+l2vpn evpn instance 200 vlan-based
+l2vpn vfi context VPLS210 
+ vpn id 210
+ member 10.255.0.43 encapsulation mpls
+ member 10.255.0.41 encapsulation mpls
+bridge-domain 200 
+ member GigabitEthernet2 service-instance 200
+ member evpn-instance 200
+bridge-domain 210 
+ member GigabitEthernet2 service-instance 210
+ member vfi VPLS210
+interface GigabitEthernet2
+ description to CE2 (site 2)
+ no ip address
+ negotiation auto
+ service instance 140 ethernet
+  encapsulation dot1q 140
+  rewrite ingress tag pop 1 symmetric
+ !
+ service instance 200 ethernet
+  encapsulation dot1q 200
+  rewrite ingress tag pop 1 symmetric
+ !
+ service instance 210 ethernet
+  encapsulation dot1q 210
+  rewrite ingress tag pop 1 symmetric
+ !
+interface GigabitEthernet2.100
+ encapsulation dot1Q 100
+ vrf forwarding A
+ ip address 172.16.2.254 255.255.255.0
+router bgp 65000
+ bgp router-id 10.255.0.42
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.255.0.52 remote-as 65000
+ neighbor 10.255.0.52 update-source Loopback0
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family vpnv4
+  neighbor 10.255.0.52 activate
+  neighbor 10.255.0.52 send-community both
+ exit-address-family
+ !
+ address-family l2vpn evpn
+  neighbor 10.255.0.52 activate
+  neighbor 10.255.0.52 send-community both
+ exit-address-family
+ !
+ address-family ipv4 vrf A
+  neighbor 172.16.2.1 remote-as 65002
+  neighbor 172.16.2.1 activate
+ exit-address-family
+l2vpn evpn instance 140 point-to-point
+ vpws context CE2-CE3
+  service target 3 source 2
+  member GigabitEthernet2 service-instance 140
+ !
+XE2#
+show running-config | section vrf definition|interface GigabitEthernet2|router bgp|l2vpn|bridge-domain
+vrf definition MGMT
+ rd 65001:1
+ !
+ address-family ipv4
+ exit-address-family
+l2vpn evpn
+ replication-type ingress
+ router-id Loopback0
+l2vpn evpn instance 200 vlan-based
+l2vpn vfi context VPLS210 
+ vpn id 210
+ member 10.255.0.42 encapsulation mpls
+ member 10.255.0.41 encapsulation mpls
+bridge-domain 200 
+ member GigabitEthernet2 service-instance 200
+ member evpn-instance 200
+bridge-domain 210 
+ member GigabitEthernet2 service-instance 210
+ member vfi VPLS210
+interface GigabitEthernet2
+ description to CE3 (site 3)
+ no ip address
+ negotiation auto
+ service instance 140 ethernet
+  encapsulation dot1q 140
+  rewrite ingress tag pop 1 symmetric
+ !
+ service instance 200 ethernet
+  encapsulation dot1q 200
+  rewrite ingress tag pop 1 symmetric
+ !
+ service instance 210 ethernet
+  encapsulation dot1q 210
+  rewrite ingress tag pop 1 symmetric
+ !
+router bgp 65000
+ bgp router-id 10.255.0.43
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.255.0.52 remote-as 65000
+ neighbor 10.255.0.52 update-source Loopback0
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family vpnv4
+  neighbor 10.255.0.52 activate
+  neighbor 10.255.0.52 send-community both
+ exit-address-family
+ !
+ address-family l2vpn evpn
+  neighbor 10.255.0.52 activate
+  neighbor 10.255.0.52 send-community both
+ exit-address-family
+l2vpn evpn instance 140 point-to-point
+ vpws context CE3-CE2
+  service target 2 source 3
+  member GigabitEthernet2 service-instance 140
+ !
+XE3#
+show running-config vrf
+Wed Nov  4 21:53:26.133 UTC
+vrf A
+ address-family ipv4 unicast
+  import route-target
+   65000:100
+  !
+  export route-target
+   65000:100
+  !
+ !
+!
+vrf MGMT
+ address-family ipv4 unicast
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show running-config interface GigabitEthernet0/0/0/1*
+Wed Nov  4 21:53:26.533 UTC
+interface GigabitEthernet0/0/0/1
+ description to CE4 (site 4)
+!
+interface GigabitEthernet0/0/0/1.100
+ vrf A
+ ipv4 address 172.16.4.254 255.255.255.0
+ encapsulation dot1q 100
+!
+interface GigabitEthernet0/0/0/1.130 l2transport
+ encapsulation dot1q 130
+ rewrite ingress tag pop 1 symmetric
+!
+
+RP/0/RP0/CPU0:XR01#
+show running-config router bgp
+Wed Nov  4 21:53:26.935 UTC
+router bgp 65000
+ bgp router-id 10.255.0.1
+ address-family vpnv4 unicast
+ !
+ neighbor 10.255.0.52
+  remote-as 65000
+  update-source Loopback0
+  address-family vpnv4 unicast
+  !
+ !
+ vrf A
+  rd 10.255.0.1:100
+  address-family ipv4 unicast
+  !
+  neighbor 172.16.4.1
+   remote-as 65004
+   address-family ipv4 unicast
+    route-policy PASS in
+    route-policy PASS out
+   !
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show running-config l2vpn
+Wed Nov  4 21:53:27.334 UTC
+l2vpn
+ xconnect group SVC
+  p2p CE4-CE1
+   interface GigabitEthernet0/0/0/1.130
+   neighbor ipv4 10.255.0.41 pw-id 130
+   !
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show running-config route-policy
+% Incomplete command.
+RP/0/RP0/CPU0:XR01#

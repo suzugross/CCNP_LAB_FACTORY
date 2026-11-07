@@ -1,0 +1,201 @@
+
+######## 21:54:02 f1: XE2 の VRF A の輸入 RT を 65000:101 に(輸出は 65000:100 のまま)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE2(config)#
+vrf definition A
+XE2(config-vrf)#
+address-family ipv4
+XE2(config-vrf-af)#
+no route-target import 65000:100
+XE2(config-vrf-af)#
+route-target import 65000:101
+XE2(config-vrf-af)#
+end
+XE2#
+show ip route vrf A | begin Gateway
+Gateway of last resort is not set
+
+      10.0.0.0/24 is subnetted, 1 subnets
+B        10.100.2.0 [20/0] via 172.16.2.1, 00:08:53
+      172.16.0.0/16 is variably subnetted, 2 subnets, 2 masks
+C        172.16.2.0/24 is directly connected, GigabitEthernet2.100
+L        172.16.2.254/32 is directly connected, GigabitEthernet2.100
+XE2#
+show bgp vpnv4 unicast all | begin Network
+     Network          Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.42:100 (default for vrf A)
+ *>   10.100.2.0/24    172.16.2.1               0             0 65002 i
+XE2#
+ping 10.100.1.1 source Loopback100 repeat 3
+                                   ^
+% Invalid input detected at '^' marker.
+
+XE2#
+show ip bgp | begin Network
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.100.2.0/24    0.0.0.0                  0         32768 i
+CE2#
+ping 10.100.1.1 source Loopback100 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Packet sent with a source address of 10.100.2.1 
+...
+Success rate is 0 percent (0/3)
+CE2#
+show ip route vrf A | begin Gateway
+Gateway of last resort is not set
+
+      10.0.0.0/24 is subnetted, 3 subnets
+B        10.100.1.0 [20/0] via 172.16.1.1, 00:09:16
+B        10.100.2.0 [200/0] via 10.255.0.42, 00:09:04
+B        10.100.4.0 [200/0] via 10.255.0.1, 00:08:22
+      172.16.0.0/16 is variably subnetted, 2 subnets, 2 masks
+C        172.16.1.0/24 is directly connected, GigabitEthernet2.100
+L        172.16.1.254/32 is directly connected, GigabitEthernet2.100
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE2(config)#
+vrf definition A
+XE2(config-vrf)#
+address-family ipv4
+XE2(config-vrf-af)#
+no route-target import 65000:101
+XE2(config-vrf-af)#
+route-target import 65000:100
+XE2(config-vrf-af)#
+end
+XE2#
+ping 10.100.1.1 source Loopback100 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Packet sent with a source address of 10.100.2.1 
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/2/3 ms
+CE2#
+
+######## 21:54:52 f2: P1 の XR01 向きの IF から mpls ip を外す(XR01 への道にラベルが無くなる)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+P1(config)#
+interface Ethernet1/0
+P1(config-if)#
+no mpls ip
+P1(config-if)#
+end
+P1#
+show mpls forwarding-table 10.255.0.1 32
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+24         20         10.255.0.1/32    0             Gi1        10.0.41.51  
+XE1#
+show ip cef vrf A 10.100.4.0 255.255.255.0 detail
+10.100.4.0/24, epoch 0, flags [rib defined all labels]
+  recursive via 10.255.0.1 label 24009
+    nexthop 10.0.41.51 GigabitEthernet1 label 20-(local:24)
+XE1#
+show l2vpn atom vc
+
+                                       Service
+Interface Peer ID         VC ID      Type   Name                     Status
+--------- --------------- ---------- ------ ------------------------ ----------
+pw100001  10.255.0.1      130        p2p    CE1-CE4                  DOWN      
+pw100003  10.255.0.42     210        vfi    VPLS210                  UP        
+pw100004  10.255.0.43     210        vfi    VPLS210                  UP        
+
+XE1#
+show l2vpn atom vc vcid 130 detail | include state|Status|status|label|Label
+pseudowire100001 is up, VC status is down PW type: Ethernet
+  Create time: 00:07:40, last status change time: 00:00:22
+    Last label FSM state change time: 00:07:28
+    Output interface: Gi1, imposed label stack {20 24010}
+    Associated member Gi2 is up, status is up
+    Status TLV support (local/remote)         : enabled/supported
+      Label/status state machine              : established, LruRrd
+      Local dataplane status received         : No fault
+      BFD dataplane status received           : Not sent
+      BFD peer monitor status received        : No fault
+      Status received from access circuit     : No fault
+      Status sent to access circuit           : DOWN(pw-tx-fault)
+      Status received from pseudowire i/f     : No fault
+      Status sent to network peer             : No fault
+      Status received from network peer       : DOWN(pw-tx-fault)
+      Adjacency status of remote peer         : No fault
+    Label        26                             24010
+    Status TLV   enabled                        supported
+  SSO Descriptor: 10.255.0.1/130, local label: 26
+XE1#
+show ip bgp | begin Network
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.100.1.0/24    0.0.0.0                  0         32768 i
+ *>   10.100.2.0/24    172.16.1.254                           0 65000 65002 i
+ *>   10.100.4.0/24    172.16.1.254                           0 65000 65004 i
+CE1#
+ping 10.100.4.1 source Loopback100 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 10.100.4.1, timeout is 2 seconds:
+Packet sent with a source address of 10.100.1.1 
+...
+Success rate is 0 percent (0/3)
+CE1#
+ping 192.168.130.4 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.130.4, timeout is 2 seconds:
+...
+Success rate is 0 percent (0/3)
+CE1#
+show mpls forwarding prefix 10.255.0.41/32
+Wed Nov  4 21:55:34.830 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24004  Unlabelled  10.255.0.41/32     Gi0/0/0/0    10.0.1.51       136         
+RP/0/RP0/CPU0:XR01#
+show l2vpn xconnect
+Wed Nov  4 21:55:35.231 UTC
+Legend: ST = State, UP = Up, DN = Down, AD = Admin Down, UR = Unresolved,
+        SB = Standby, SR = Standby Ready, (PP) = Partially Programmed,
+        LU = Local Up, RU = Remote Up, CO = Connected, (SI) = Seamless Inactive
+
+XConnect                   Segment 1                       Segment 2                
+Group      Name       ST   Description            ST       Description            ST    
+------------------------   -----------------------------   -----------------------------
+SVC        CE4-CE1    DN   Gi0/0/0/1.130          UP       10.255.0.41     130    DN    
+----------------------------------------------------------------------------------------
+RP/0/RP0/CPU0:XR01#
+show route vrf A 10.100.1.0/24
+Wed Nov  4 21:55:35.632 UTC
+
+Routing entry for 10.100.1.0/24
+  Known via "bgp 65000", distance 200, metric 0
+  Tag 65001, type internal
+  Installed Nov  4 21:45:24.841 for 00:10:10
+  Routing Descriptor Blocks
+    10.255.0.41, from 10.255.0.52
+      Nexthop in Vrf: "default", Table: "default", IPv4 Unicast, Table Id: 0xe0000000
+      Route metric is 0, Wt is 1
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+P1(config)#
+interface Ethernet1/0
+P1(config-if)#
+mpls ip
+P1(config-if)#
+end
+P1#
+ping 10.100.4.1 source Loopback100 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 10.100.4.1, timeout is 2 seconds:
+Packet sent with a source address of 10.100.1.1 
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 9/9/10 ms
+CE1#
+ping 192.168.130.4 repeat 3
+Type escape sequence to abort.
+Sending 3, 100-byte ICMP Echos to 192.168.130.4, timeout is 2 seconds:
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 9/9/10 ms
+CE1#

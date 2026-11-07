@@ -1,0 +1,173 @@
+
+######## 21:53:32 rr: P1 は BGP を持たない・RR1 は経路を配るだけ(転送の道の外)
+show running-config | include ^router
+router isis CORE
+P1#
+show ip bgp summary
+% BGP not active
+
+P1#
+show bgp vpnv4 unicast all summary
+% BGP not active
+
+P1#
+show mpls forwarding-table
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+16         No Label   10.255.0.52/32   19519         Et1/1      10.0.52.52  
+17         Pop Label  10.255.0.41/32   19183         Et0/0      10.0.41.41  
+18         Pop Label  10.255.0.42/32   11124         Et0/1      10.0.42.42  
+19         Pop Label  10.255.0.43/32   9378          Et0/2      10.0.43.43  
+20         Pop Label  10.255.0.1/32    7094          Et1/0      10.0.1.1    
+P1#
+show ip route summary
+IP routing table name is default (0x0)
+IP routing table maximum-paths is 32
+Route Source    Networks    Subnets     Replicates  Overhead    Memory (bytes)
+connected       0           11          0           1232        3432
+static          0           0           0           0           0
+application     0           0           0           0           0
+isis CORE       0           5           0           560         1560
+  Level 1: 0 Level 2: 5 Inter-area: 0
+internal        1                                               1592
+Total           1           16          0           1792        6584
+
+P1#
+show running-config | include ^router|^mpls
+router isis CORE
+router bgp 65000
+RR1#
+show running-config | section router bgp
+router bgp 65000
+ bgp router-id 10.255.0.52
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor PE peer-group
+ neighbor PE remote-as 65000
+ neighbor PE description PE (route-reflector client)
+ neighbor PE update-source Loopback0
+ neighbor 10.255.0.1 peer-group PE
+ neighbor 10.255.0.41 peer-group PE
+ neighbor 10.255.0.42 peer-group PE
+ neighbor 10.255.0.43 peer-group PE
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family vpnv4
+  neighbor PE send-community both
+  neighbor PE route-reflector-client
+  neighbor 10.255.0.1 activate
+  neighbor 10.255.0.41 activate
+  neighbor 10.255.0.42 activate
+  neighbor 10.255.0.43 activate
+ exit-address-family
+ !
+ address-family l2vpn evpn
+  neighbor PE send-community both
+  neighbor PE route-reflector-client
+  neighbor 10.255.0.41 activate
+  neighbor 10.255.0.42 activate
+  neighbor 10.255.0.43 activate
+ exit-address-family
+RR1#
+show bgp vpnv4 unicast all summary | begin Neighbor
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.1      4        65000      13      17        4    0    0 00:09:36        1
+10.255.0.41     4        65000      20      29        4    0    0 00:10:04        1
+10.255.0.42     4        65000      19      31        4    0    0 00:09:56        1
+10.255.0.43     4        65000      18      32        4    0    0 00:09:47        0
+RR1#
+show bgp l2vpn evpn summary | begin Neighbor
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.41     4        65000      20      29       12    0    0 00:10:04        3
+10.255.0.42     4        65000      19      31       12    0    0 00:09:56        4
+10.255.0.43     4        65000      18      32       12    0    0 00:09:47        4
+RR1#
+show bgp vpnv4 unicast all
+BGP table version is 4, local router ID is 10.255.0.52
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.1:100
+ *>i  10.100.4.0/24    10.255.0.1               0    100      0 65004 i
+Route Distinguisher: 10.255.0.41:100
+ *>i  10.100.1.0/24    10.255.0.41              0    100      0 65001 i
+Route Distinguisher: 10.255.0.42:100
+ *>i  10.100.2.0/24    10.255.0.42              0    100      0 65002 i
+RR1#
+show bgp vpnv4 unicast all 10.100.2.0/24
+BGP routing table entry for 10.255.0.42:100:10.100.2.0/24, version 3
+Paths: (1 available, best #1, no table)
+  Flag: 0x100
+  Advertised to update-groups:
+     2         
+  Refresh Epoch 1
+  65002, (Received from a RR-client)
+    10.255.0.42 (metric 30) (via default) from 10.255.0.42 (10.255.0.42)
+      Origin IGP, metric 0, localpref 100, valid, internal, best
+      Extended Community: RT:65000:100
+      mpls labels in/out nolabel/25
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 4 2026 21:45:12 UTC
+RR1#
+show mpls interfaces
+Interface              IP            Tunnel   BGP Static Operational
+RR1#
+show mpls ldp neighbor
+RR1#
+show ip vrf
+  Name                             Default RD            Interfaces
+  MGMT                             65001:1               Et0/3
+RR1#
+show bgp vpnv4 unicast all 10.100.2.0/24
+BGP routing table entry for 10.255.0.41:100:10.100.2.0/24, version 4
+Paths: (1 available, best #1, table A)
+  Flag: 0x100
+  Advertised to update-groups:
+     3         
+  Refresh Epoch 2
+  65002, imported path from 10.255.0.42:100:10.100.2.0/24 (global)
+    10.255.0.42 (metric 30) (via default) from 10.255.0.52 (10.255.0.52)
+      Origin IGP, metric 0, localpref 100, valid, internal, best
+      Extended Community: RT:65000:100
+      Originator: 10.255.0.42, Cluster list: 10.255.0.52
+      mpls labels in/out nolabel/25
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 4 2026 21:45:12 UTC
+BGP routing table entry for 10.255.0.42:100:10.100.2.0/24, version 3
+Paths: (1 available, best #1, no table)
+  Flag: 0x100
+  Not advertised to any peer
+  Refresh Epoch 2
+  65002
+    10.255.0.42 (metric 30) (via default) from 10.255.0.52 (10.255.0.52)
+      Origin IGP, metric 0, localpref 100, valid, internal, best
+      Extended Community: RT:65000:100
+      Originator: 10.255.0.42, Cluster list: 10.255.0.52
+      mpls labels in/out nolabel/25
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 4 2026 21:45:12 UTC
+XE1#
+show ip cef vrf A 10.100.2.0 255.255.255.0 detail
+10.100.2.0/24, epoch 0, flags [rib defined all labels]
+  recursive via 10.255.0.42 label 25
+    nexthop 10.0.41.51 GigabitEthernet1 label 18-(local:22)
+XE1#
+show mpls forwarding-table 10.255.0.52 32
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+21         16         10.255.0.52/32   0             Gi1        10.0.41.51  
+XE1#
+traceroute 10.255.0.42 source Loopback0 probe 1 timeout 2
+Type escape sequence to abort.
+Tracing the route to 10.255.0.42
+VRF info: (vrf in name/id, vrf out name/id)
+  1 10.0.41.51 [MPLS: Label 18 Exp 0] 1 msec
+  2 10.0.42.42 14 msec
+XE1#

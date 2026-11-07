@@ -58,10 +58,14 @@ def task_links(problem, lang, text):
         return text
     learn = yaml.safe_load(open(lpath, encoding="utf-8")) or {}
     reads = {st["id"]: st.get("read") or [] for st in learn.get("steps") or []}
+    # M 番号を持たない課題(「S-1」など・BL-261)は、課題名の頭(title.en が「S-1  …」)で learn.yml の課題を引く
+    by_title = {str((st.get("title") or {}).get("en", "")).split()[0]: st["id"] for st in learn.get("steps") or [] if st.get("title")}
     cache = {}
 
     def rep(m):
-        sid = f"m{m.group(1)}t{m.group(2)}"
+        tid = m.group(1)
+        mm = re.match(r"M(\d+)-(\d+)$", tid)
+        sid = f"m{mm.group(1)}t{mm.group(2)}" if mm else by_title.get(tid, "")
         if sid not in reads:
             return m.group(0)
         parts = [f'<a href="/_learn?id={problem}&amp;step={sid}">{WORD[lang][0]}</a>']
@@ -78,7 +82,7 @@ def task_links(problem, lang, text):
             parts.append(f"{WORD[lang][1]} " + " · ".join(refs))
         return m.group(0) + '\n<p class="tolab">' + " — ".join(parts) + "</p>\n"
 
-    return re.sub(r"(?m)^### (?:Task|課題) M(\d+)-(\d+)\b.*$", rep, text)
+    return re.sub(r"(?m)^### (?:Task|課題) ((?:M\d+|[A-Z])-\d+)\b.*$", rep, text)
 
 
 for lang, head in spec["intro"].items():
@@ -100,7 +104,7 @@ for lang, head in spec["intro"].items():
             def pick(sec):
                 out = []
                 for chunk in re.split(r"(?m)^(?=### )", sec):
-                    m = re.match(r"### (?:Task|課題) (M\d+-\d+)\b", chunk)
+                    m = re.match(r"### (?:Task|課題) ((?:M\d+|[A-Z])-\d+)\b", chunk)
                     if m and m.group(1) not in keep:
                         continue
                     if m:

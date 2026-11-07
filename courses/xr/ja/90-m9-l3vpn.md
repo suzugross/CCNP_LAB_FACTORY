@@ -1,15 +1,23 @@
-# M9 — L3VPN
+# M9 — L3VPN の仕組み
 
-プロバイダーは、顧客ごとにコアをまたぐプライベートなネットワークを提供し、顧客どうしが同じアドレスを使っていても互いを分けておきます。
-これが MPLS のレイヤ 3 VPN(L3VPN)です。このページは CCNP Service Provider のブループリントの 4.3 にあたります。1 つのプロバイダーの
-中の L3VPN(4.3.a)と、共有サービス、つまりエクストラネットとインターネット接続(4.3.b)です。プロバイダーの間の VPN(Inter-AS、4.1.b)と、
-顧客そのものがプロバイダーである場合(CSC、4.1.c)は最後に説明します。IOS の L3VPN は Enterprise のトラックで学んでいるので、
-このページは IOS XR が独自のやり方をするところに絞ります。
+この単元では、プロバイダーのコアの上に、顧客ごとのプライベートなネットワークを作ります。MPLS のレイヤ 3 VPN(L3VPN)です。
+CCNP Service Provider のブループリントの 4.3 にあたります。1 つのプロバイダーの中の L3VPN(4.3.a)と、共有サービス、つまり
+エクストラネットとインターネット接続(4.3.b)です。プロバイダーの間の VPN(4.1.b)と CSC(4.1.c)は付録で説明します。
+単元は 3 つのページと付録に分かれています。
 
-ラボは XRT-09 です。コアはラボ XRT-07 と同じで、XR01 と RT02 がプロバイダー エッジ(PE)、RT01 と RT03 がコアのルータで、IS-IS と
-LDP が動いています。新しいのは XR02 で、VPN のルートのためのルート リフレクタです。このページの出力は、IOS XRv 9000 26.1.1(XR01)、
-IOS XRd 26.1.1(XR02)、IOL 上の IOS XE 17.15(他のルータ)で取得しました。XR01 を XRd にして同じ手順を流しても、制御プレーンは
-同じ結果でした。ここで XR01 を XRv 9000 にした理由は 2.3 節にあります。
+| ページ | 中身 | 課題 |
+|---|---|---|
+| このページ | L3VPN で何が嬉しいか、1 つのパケットを 1 ホップずつ追う仕組み、IOS XR での組み方 | M9-1 |
+| ルート リフレクタと同じ AS のサイト | PE どうしを 1 か所で結ぶ、同じ AS 番号のサイトをつなぐ | M9-2 |
+| 共有サービスとインターネット | 顧客を分けたまま共有のサーバを見せる、VPN からインターネットへ出す | M9-3、M9-4 |
+| 付録 | ラベルの割り当て方、プロバイダーの間の VPN、コマンドの対応 | — |
+
+章 C0「サービスを並べて見る」では、L3VPN をほかのサービスと並べて、外側のラベル(道)と内側のラベル(入れ物)を見ました。
+この単元は L3VPN だけを、もう一段深く見ます。
+
+ラボは XRT-09 です。コアはラボ XRT-07 と同じで、XR01 と RT02 がプロバイダー エッジ(PE)、RT01 と RT03 がコアのルータ(P)で、
+IS-IS と LDP が動いています。新しいのは XR02 で、VPN のルートのためのルート リフレクタです。このページの出力は、
+IOS XRv 9000 26.1.1(XR01)、IOS XRd 26.1.1(XR02)、IOL 上の IOS XE 17.15(他のルータ)で取得しました。
 
 :::topo
 nodes:
@@ -41,34 +49,445 @@ frames:
 :::
 
 顧客 A は 2 つのサイトを持ち、それぞれの PE の背後にあって、どちらも AS 65101 です。顧客 B も 2 つのサイトを持ち、AS は 65201 と
-65202 です。SVC にはプロバイダーの共有サーバがあり、INET はインターネットの役です。ルート リフレクタ XR02 は RT03 の先にぶら下がり、
-どの顧客のパケットの経路にも入りません。
+65202 です。SVC にはプロバイダーの共有サーバがあり、INET はインターネットの役です(どちらもページ「共有サービスと
+インターネット」)。ルート リフレクタ XR02 は RT03 の先にぶら下がり、どの顧客のパケットの経路にも入りません。
 
-## 1. IOS XR の VRF
+## 1. 何が嬉しいのか
 
-### 1.1 部品
+### 1.1 困りごと: 顧客ごとのネットワークを、1 つのコアで
 
-部品はどのプラットフォームでも同じです。**VRF**(VPN routing and forwarding instance)は、PE の上の独立したルーティング テーブルで、
-1 つの顧客のインターフェイスがそこに入ります。**ルート識別子**(RD)は、顧客のプレフィックスが VRF から出ていくときにその前に付ける
-8 バイトです。これで 2 つの顧客の 10.0.0.0/24 は、BGP の中で 2 つの別のルートのままでいられます。こうしてできるのが VPN-IPv4(VPNv4)の
-ルートで、RFC 4364 の 4.2 節が定義しています。**ルート ターゲット**(RT)は、エクスポートのときにルートに付ける拡張コミュニティです。
-PE は、ルートのターゲットのどれかをインポートする VRF に、そのルートをインポートします(RFC 4364 の 4.3.1 節)。RD はルートを一意にし、
-RT は行き先を決めます。
+顧客 A は 2 つのサイトを持ち、その間をつなぎたいと考えています。顧客 B も同じです。どちらの顧客も、社内のアドレスを
+自分で決めています。10.0.0.0/8 のようなプライベート アドレスは誰でも使えるので、別の顧客と同じアドレスを使っていることも
+珍しくありません。
 
-CEA1 からサイト 2 へ向かう顧客 A のパケットは、コアをラベル 2 つで渡ります。下のラベルが **VPN ラベル**です。RT02 が選んでルートと一緒に
-BGP でアドバタイズしたもので、パケットがどの VRF のものかを RT02 に伝えます。上のラベルは LDP のトランスポートのラベルで、単元 M8 と
-まったく同じように、パケットを RT02 のループバックまで運びます。コアのルータは上のラベルだけでスイッチングし、顧客のアドレスは
-見ません。
+プロバイダーには、次の 3 つが求められます。
 
-### 1.2 部品の置き場所
+- **分ける**: 顧客 A のパケットが顧客 B のサイトに届いてはならず、A の経路が B に見えてもいけません。
+- **重なってよい**: 2 つの顧客が同じアドレスを使っていても、それぞれのパケットを自分のサイトへ届けます。
+- **増やせる**: 顧客とサイトが増えても、触る機器が少なく、コアのルータの仕事が増えないようにします。
 
-IOS では、RD と RT は `vrf definition` の下にまとめて書きます。IOS XR はこれを分けます。
+### 1.2 それ以前の手
 
-- RT は VRF に属します。`vrf <名前>` → `address-family ipv4 unicast` → `import route-target` と
-  `export route-target` で、どちらも 1 行に 1 つのルート ターゲットを書くサブモードです。
-- インターフェイスは `vrf <名前>` で VRF に入ります。
-- RD は BGP に属します。`router bgp <AS>` → `vrf <名前>` → `rd` で、その VRF の CE のネイバーも同じ `vrf` の下に
+L3VPN の前には、主に 2 つの手がありました。
+
+- **サイトの間に回線を引く**: プロバイダーは専用線や、フレーム リレー・ATM の仮想回線を売り、ルーティングは顧客が自分の
+  ルータで行います。プロバイダーは顧客のアドレスを見ないので、分けることも重なりも問題になりません。ところが、サイトを
+  すべて直接つなぐには、サイトの数を N として N(N−1)/2 本の回線が要り(RFC 4110 の 1.3.3 節)、サイトを 1 つ足すたびに、
+  既存のサイトへの回線を足すことになります。
+- **プロバイダーのルータが顧客の経路を持つ**: プロバイダーのルータが顧客の経路を学習してルーティングすれば、サイトを足すのは
+  1 か所で済みます。ところが、ルーティング テーブルが 1 つなら、同じアドレスを 2 つは持てません。分けるには、顧客ごとに
+  フィルタを書き続けるか、顧客ごとに専用のルータを置くことになります。コアのすべてのルータが、すべての顧客の経路を持つことにも
+  なります。
+
+### 1.3 L3VPN の答え
+
+L3VPN は、2 つ目の手(プロバイダーが顧客の経路を持つ)から困りごとを取り除いたものです。RFC 4364 はこれを
+「ピア モデル」と呼び、CE どうしはルーティングで向き合わない、と書いています(1 節)。
+
+| 困りごと | L3VPN の答え | 節 |
+|---|---|---|
+| 顧客を分けたい | PE が顧客ごとに別のルーティング テーブル(VRF)を持つ | 2.1 |
+| 同じアドレスを BGP の中で区別したい | 経路の前に番号(RD)を付ける | 2.2 |
+| どの経路をどの VRF に入れるかを決めたい | 経路に荷札(RT)を付け、荷札で取り込む | 2.3 |
+| サイトを足すたびに多くの機器を触りたくない | PE どうしが BGP で経路を配る(VPNv4)。触るのはサイトをつなぐ PE だけ | 2.4 |
+| コアに顧客の経路を持たせたくない | コアはラベルだけで運ぶ(ラベル 2 枚) | 2.5 |
+
+## 2. 仕組み: 1 つのパケットを 1 ホップずつ
+
+### 2.1 PE の中の別のテーブル: VRF
+
+PE は、グローバルのルーティング テーブルとは別に、顧客ごとのルーティング テーブルを持ちます。これが **VRF**(VPN routing and
+forwarding instance)です(RFC 4364 の 3 節)。顧客のインターフェイスを VRF に入れると、そのインターフェイスから入った
+パケットは、その VRF のテーブルで宛先を引かれます。
+
+XR01 では、CEA1 につながるインターフェイスが VRF CUST-A に、CEB1 につながるインターフェイスが VRF CUST-B に入っています。
+CUST-A のテーブルにあるのは、顧客 A の経路だけです(4 つの課題を終えたラボから、顧客 A のサイトの行だけを抜き出しています)。
+
+```console
+RP/0/RP0/CPU0:XR01#show route vrf CUST-A
+...
+B    10.101.1.0/24 [20/0] via 172.16.11.2, 00:02:33
+B    10.101.2.0/24 [200/0] via 10.255.0.12 (nexthop in vrf default), 00:02:33
+C    172.16.11.0/24 is directly connected, 00:02:51, GigabitEthernet0/0/0/2
+L    172.16.11.1/32 is directly connected, 00:02:51, GigabitEthernet0/0/0/2
+```
+
+10.101.1.0/24 は CEA1 から eBGP で学んだサイト 1 の経路、10.101.2.0/24 はサイト 2 の経路で、ネクスト ホップは RT02 の
+ループバック 10.255.0.12 です。`nexthop in vrf default` は、そのネクスト ホップをグローバル テーブルで引くことを表します。
+顧客の経路は VRF に、そこへ行く道(RT02 のループバック)はグローバル テーブルにある、という 2 段の構えが、2.5 節の
+ラベル 2 枚になります。
+
+顧客 B の経路は CUST-A にありません。XR01 のグローバル テーブルにも、顧客の経路はありません。
+
+```console
+RP/0/RP0/CPU0:XR01#show route 10.101.2.0/24
+% Network not in table
+```
+
+### 2.2 経路に番号を付ける: RD
+
+PE どうしは、すべての顧客の経路を 1 つの BGP で配ります。2 つの顧客が同じ 10.101.2.0/24 を使っていると、BGP の中では
+1 つのプレフィックスの 2 本の経路になり、どちらか 1 本しか選ばれません。
+
+そこで PE は、VRF の経路を BGP に出すとき、
+その前に 8 バイトの**ルート識別子**(RD)を付けます。RD と IPv4 のアドレスを合わせた 12 バイトが VPN-IPv4 のアドレスで、
+RFC 4364 の 4.1 節が定義しています。BGP の中では、RD が違えば別のプレフィックスです。
+
+RD の書き方にはいくつかの形があり(4.2 節)、「AS 番号:番号」か「IP アドレス:番号」がよく使われます。ラボは
+「PE のループバック:番号」で、XR01 の CUST-A は 10.255.0.1:101、RT02 の CUST-A は 10.255.0.12:101 です。RFC は、RD は
+同じプレフィックスに別の経路を作るためだけのもので、経路の出どころも、どの VPN に配るかも表さない、と書いています
+(4.1 節)。どの VRF が経路を取り込むかは、RD では決まりません(2.3 節)。
+
+ラボで、顧客 B のサイト 2(CEB2)にも、顧客 A のサイト 2 と同じ 10.101.2.0/24 を置いてみました(ループバックを足して
+BGP でアドバタイズし、測った後で消しました)。ルート リフレクタ XR02 は、2 本を RD で分けて持ちます。
+
+```console
+RP/0/RP0/CPU0:XR02#show bgp vpnv4 unicast | include "Route Distinguisher|10.101.2.0"
+...
+Route Distinguisher: 10.255.0.12:101
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65101 i
+Route Distinguisher: 10.255.0.12:102
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65202 i
+```
+
+XR01 は、顧客 A の方を CUST-A に、顧客 B の方を CUST-B に取り込みます。RT02 は 2 本に別の VPN のラベル(22 と 26)を
+付けているので、同じ宛先へのパケットが、顧客ごとに別のサイトに着きます。
+
+```console
+RP/0/RP0/CPU0:XR01#show cef vrf CUST-A 10.101.2.0/24
+...
+     next hop 10.0.1.11/32 GigabitEthernet0/0/0/0 labels imposed {16 22}
+RP/0/RP0/CPU0:XR01#show cef vrf CUST-B 10.101.2.0/24
+...
+     next hop 10.0.1.11/32 GigabitEthernet0/0/0/0 labels imposed {16 26}
+
+CEA1#traceroute 10.101.2.1 source Loopback10 numeric timeout 1 probe 1
+  1 172.16.11.1 [AS 64500] 7 msec
+  2 10.0.1.11 [AS 64500] [MPLS: Labels 16/22 Exp 0] 10 msec
+  3 172.16.12.1 [AS 64500] [MPLS: Label 22 Exp 0] 10 msec
+  4 172.16.12.2 [AS 64500] 9 msec
+CEB1#traceroute 10.101.2.1 source Loopback10 numeric timeout 1 probe 1
+  1 172.16.21.1 6 msec
+  2 10.0.1.11 [MPLS: Labels 16/26 Exp 0] 8 msec
+  3 172.16.22.1 [MPLS: Label 26 Exp 0] 9 msec
+  4 172.16.22.2 10 msec
+```
+
+最後のホップは、顧客 A では CEA2(172.16.12.2)、顧客 B では CEB2(172.16.22.2)です。コアの RT01 から見ると、どちらも
+「RT02 へ、16」のパケットで、違うのは内側のラベルだけです。
+
+:::try
+同じアドレスを 2 つの顧客に置いてみます。課題 M9-2 の後に行い、最後に必ず元に戻します(CEB2 は据え付けのルータです)。
+
+1. CEB2 で、`interface Loopback11` に `ip address 10.101.2.1 255.255.255.0` を設定し、`router bgp 65202` →
+   `address-family ipv4` の下に `network 10.101.2.0 mask 255.255.255.0` を足します。
+2. 1 分待ってから、XR02 で `show bgp vpnv4 unicast` を、XR01 で `show cef vrf CUST-A 10.101.2.0/24` と
+   `show cef vrf CUST-B 10.101.2.0/24` を実行します。CEA1 と CEB1 で、それぞれ
+   `traceroute 10.101.2.1 source Loopback10 numeric` を実行します。
+3. CEB2 の `network` の行と Loopback11 を消します。
+
+ラボで測った結果: 1 分以内に、XR02 は 10.101.2.0/24 を RD 10.255.0.12:101 と 10.255.0.12:102 の 2 本で持ちました。XR01 は
+CUST-A では 22、CUST-B では 26 を積み、CEA1 の traceroute は CEA2 に、CEB1 の traceroute は CEB2 に着きました。消してから
+30 秒以内に、CUST-B の 10.101.2.0/24 は無くなりました。
+:::
+
+### 2.3 経路に荷札を付ける: RT
+
+経路をどの VRF に入れるかは、**ルート ターゲット**(RT)が決めます。RT は BGP の拡張コミュニティで、PE は VRF の経路を
+BGP に出すとき、その VRF の**輸出**の RT を付けます。受け取った PE は、経路の RT のどれかが VRF の**輸入**の RT の
+どれかと一致すれば、その VRF に経路を取り込みます(RFC 4364 の 4.3.1 節)。
+
+```console
+RP/0/RP0/CPU0:XR01#show vrf CUST-A detail
+VRF CUST-A; RD 10.255.0.1:101; VPN ID not set
+VRF mode: Regular
+Description not set
+Interfaces:
+  GigabitEthernet0/0/0/2
+Address family IPV4 Unicast
+  Import VPN route-target communities:
+    RT:65000:101
+    RT:65000:900
+  Export VPN route-target communities:
+    RT:65000:101
+  No import route policy
+  No export route policy
+...
+```
+
+CUST-A は、自分の経路に 65000:101 を付けて出し、65000:101 の付いた経路を取り込みます。RT02 の CUST-A も同じ値なので、
+2 つのサイトの経路が互いの VRF に入ります。65000:900 は共有サービスのための荷札です(ページ「共有サービスと
+インターネット」)。
+
+RD と RT は、どちらも「:」で区切った同じ見た目の値ですが、役目は別です。
+
+| | RD | RT |
+|---|---|---|
+| 何のため | 同じアドレスの経路を、BGP の中で区別する | 経路をどの VRF に入れるかを決める |
+| どこにあるか | 経路のアドレスの一部(VPN-IPv4 のアドレスの頭) | 経路の属性(拡張コミュニティ) |
+| 1 つの経路に | 1 つ | いくつでも |
+| ラボの決め方 | PE と VRF ごと(10.255.0.1:101、10.255.0.12:101) | 顧客ごと(A は 65000:101、B は 65000:102) |
+
+PE は、自分のどの VRF にも取り込まない経路を、受け取ったときに捨てます(RFC 4364 の 4.3.2 節)。顧客がつながっていない PE
+は、その顧客の経路を持ちません(3.4 節)。
+
+### 2.4 PE どうしで配る: VPNv4 と VPN のラベル
+
+PE どうしは、ループバックの間の iBGP で、VPN-IPv4 のアドレス ファミリー(VPNv4)を使って経路を配ります。VPNv4 の経路は、
+RD つきのプレフィックス、RT、ネクスト ホップ、そして **VPN のラベル**を運びます。XR01 が受け取ったサイト 2 の経路です。
+
+```console
+RP/0/RP0/CPU0:XR01#show bgp vpnv4 unicast rd 10.255.0.12:101 10.101.2.0/24
+BGP routing table entry for 10.101.2.0/24, Route Distinguisher: 10.255.0.12:101
+...
+Paths: (1 available, best #1)
+  Not advertised to any peer
+  Path #1: Received by speaker 0
+  Not advertised to any peer
+  65101
+    10.255.0.12 (metric 30) from 10.255.0.21 (10.255.0.12)
+      Received Label 22
+      Origin IGP, metric 0, localpref 100, valid, internal, best, group-best, import-candidate, not-in-vrf
+      Received Path ID 0, Local Path ID 1, version 8
+      Extended community: RT:65000:101
+      Originator: 10.255.0.12, Cluster list: 10.255.0.21
+```
+
+- RD 10.255.0.12:101 は RT02 の CUST-A の RD、ネクスト ホップ 10.255.0.12 は RT02 のループバックです。
+- `Received Label 22` が VPN のラベルで、RT02 が選んで経路と一緒に送ってきたものです。
+- `RT:65000:101` が顧客 A の荷札です。
+- `from 10.255.0.21` と `Cluster list` は、ルート リフレクタ XR02 から届いたことを表します(次のページ)。
+- `not-in-vrf` は、受け取ったままのコピーであることを表します。XR01 はこれを自分の RD 10.255.0.1:101 の下にコピーして
+  CUST-A に入れ、`show bgp vrf CUST-A` が並べるのはそちらです。
+
+VPN のラベルは、経路を出した PE、つまりパケットの出口になる PE が選びます(RFC 4364 の 4.3.2 節)。RT02 のラベルの表を見ると、
+22 が何を指しているかが分かります(VPN のラベルの行だけを抜き出しています)。
+
+```console
+RT02#show mpls forwarding-table
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop
+Label      Label      or Tunnel Id     Switched      interface
+...
+22         No Label   10.101.2.0/24[V] 5230          Et0/2      172.16.12.2
+23         No Label   198.51.100.128/25[V]   \
+                                       2280          Et0/2      172.16.12.2
+24         No Label   10.102.2.0/24[V] 4788          Et1/0      172.16.22.2
+```
+
+22 は CUST-A の 10.101.2.0/24 です(`[V]` は VRF のプレフィックスの印)。RT02 は 22 で受けたパケットのラベルを外し、
+宛先を引き直さずに CEA2 へ送ります。経路ごとにラベルを割り当てる方式で、IOS XR と IOS XE の既定です(付録 1 節)。
+24 は顧客 B のサイト 2 の経路です。
+
+### 2.5 パケットを追う: ラベル 2 枚
+
+顧客 A のパケットを、CEA1(10.101.1.1)から CEA2(10.101.2.1)まで追います。
+
+1. CEA1 は、パケットを XR01 へ送ります。ふつうの IP パケットです。
+2. XR01 は、パケットが入ってきたインターフェイスから VRF CUST-A を選び、10.101.2.0/24 を見つけます。ネクスト ホップは
+   RT02、VPN のラベルは 22 です。次に、グローバル テーブルで RT02 のループバックへの道を引きます。最短パスの次のホップは
+   RT01 で、RT01 は LDP で「RT02 へはこのラベルで」と 16 を伝えています。XR01 は 22 の上に 16 を積み、RT01 へ送ります。
+3. RT01 は、いちばん上の 16 だけを見ます。RT02 の 1 つ手前なので、16 を外して(PHP。M8)RT02 へ送ります。
+4. RT02 は、残った 22 を見て、ラベルを外し、CEA2 へ送ります。
+
+:::topo
+nodes:
+  CEA1: {at: [0, 1], kind: host}
+  XR01: [1.3, 1]
+  RT01: [2.6, 0.15]
+  RT03: [2.6, 1.85]
+  RT02: [3.9, 1]
+  CEA2: {at: [5.2, 1], kind: host}
+links:
+  - [CEA1, XR01, "IP"]
+  - [XR01, RT01, "16 | 22"]
+  - [RT01, RT02, "22"]
+  - [RT02, CEA2, "IP"]
+  - {a: XR01, b: RT03, style: dashed}
+  - {a: RT03, b: RT02, style: dashed}
+:::
+
+線の上の数字は、そのリンクを通るときに付いているラベルで、左がいちばん上です。XR01 の転送テーブルと、CML のリンクで
+捕まえたパケット(行を短くしています)、CEA1 からの traceroute が、同じものを示します。
+
+```console
+RP/0/RP0/CPU0:XR01#show cef vrf CUST-A 10.101.2.0/24
+10.101.2.0/24, version 7, internal 0x5000001 0x30 (ptr 0xf79a398) [1], 0x600 (0xf92f398), 0xa08 (0xf318218)
+...
+   via 10.255.0.12/32, 5 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xeda0c10 0x0]
+    recursion-via-/32
+    next hop VRF - 'default', table - 0xe0000000
+    next hop 10.255.0.12/32 via 24002/0/21
+     next hop 10.0.1.11/32 GigabitEthernet0/0/0/0 labels imposed {16 22}
+
+# XR01 → RT01 の線
+MPLS (label 16, ttl 254) (label 22, [S], ttl 254) 10.101.1.1 > 10.101.2.1: ICMP echo request
+# RT01 → RT02 の線
+MPLS (label 22, [S], ttl 253) 10.101.1.1 > 10.101.2.1: ICMP echo request
+
+CEA1#traceroute 10.101.2.1 source Loopback10 numeric timeout 1 probe 1
+  1 172.16.11.1 [AS 64500] 4 msec
+  2 10.0.1.11 [AS 64500] [MPLS: Labels 16/22 Exp 0] 1 msec
+  3 172.16.12.1 [AS 64500] [MPLS: Label 22 Exp 0] 3 msec
+  4 172.16.12.2 [AS 64500] 1 msec
+```
+
+`next hop VRF - 'default'` が、2.1 節の 2 段の構えです。VRF の経路のネクスト ホップ(RT02)を、グローバル テーブルで引いて
+います。`[AS 64500]` は IOS の traceroute が CEA1 の BGP の表から添える AS 番号(インターネットの AS)で、ラベルとは関係
+ありません。
+
+戻りのパケット(CEA2 から CEA1)も、同じ形です。RT02 は、XR01 が CEA1 の経路に割り当てた VPN のラベル 24004 の上に、
+XR01 のループバックへの RT01 のラベル 22 を積みます。RT01 は 22 を外さず、0 に替えて XR01 へ送ります。0 は explicit null
+で、XR01 が M8 の課題で「外さずに 0 を付けて渡して」と頼んでいるからです(M8 の MPLS OAM と explicit null)。
+
+:::topo
+nodes:
+  CEA2: {at: [0, 1], kind: host}
+  RT02: [1.3, 1]
+  RT01: [2.6, 0.15]
+  RT03: [2.6, 1.85]
+  XR01: [3.9, 1]
+  CEA1: {at: [5.2, 1], kind: host}
+links:
+  - [CEA2, RT02, "IP"]
+  - [RT02, RT01, "22 | 24004"]
+  - [RT01, XR01, "0 | 24004"]
+  - [XR01, CEA1, "IP"]
+  - {a: RT02, b: RT03, style: dashed}
+  - {a: RT03, b: XR01, style: dashed}
+:::
+
+```console
+# RT02 → RT01 の線
+MPLS (label 22, ttl 254) (label 24004, [S], ttl 254) 10.101.2.1 > 10.101.1.1: ICMP echo reply
+# RT01 → XR01 の線
+MPLS (label 0, ttl 253) (label 24004, [S], ttl 254) 10.101.2.1 > 10.101.1.1: ICMP echo reply
+```
+
+行きの 22 と帰りの 22 は、別のものです。行きの 22 は RT02 が CUST-A の経路に選んだ VPN のラベル、帰りの 22 は RT01 が
+XR01 のループバックに選んだ LDP のラベルです。ラベルの番号は、それを選んだルータの中でだけ意味を持ちます。
+
+### 2.6 押さえどころ
+
+- **コアは顧客を知りません**。RT01 は顧客の経路も BGP も持たず、ラベルの表にあるのはループバックとリンクだけです。
+  RFC 4364 も、P ルータは VPN ごとの経路の情報を一切持たなくてよい、と書いています(1.5 節)。
+
+  ```console
+  RT01#show ip route 10.101.2.1
+  % Subnet not in table
+  RT01#show ip bgp summary
+  % BGP not active
+  ```
+
+- **外側のラベルは道、内側のラベルは出口の PE の入れ物**です。外側(16)は LDP が配り、RT02 まで運びます。内側(22)は
+  RT02 が BGP で配り、RT02 の中で行き先を決めます。道を LDP から SR に替えても(M10)、内側は変わりません。
+- **RD は区別、RT は行き先**です。RD は BGP の中で経路を一意にし、RT はどの VRF に入れるかを決めます。
+
+## 3. IOS XR で組む
+
+### 3.1 部品の置き場
+
+部品はどの OS でも同じですが、IOS XR は置き場を分けます。IOS では RD と RT を `vrf definition` の下にまとめて書きます。
+
+- **RT は VRF に属します**。`vrf <名前>` → `address-family ipv4 unicast` → `import route-target` と `export route-target` で、
+  どちらも 1 行に 1 つのルート ターゲットを書くサブモードです。
+- **インターフェイス**は `vrf <名前>` で VRF に入ります。
+- **RD は BGP に属します**。`router bgp <AS>` → `vrf <名前>` → `rd` で、その VRF の CE のネイバーも同じ `vrf` の下に
   置きます。
+- **PE どうし**は、BGP の最上位の `address-family vpnv4 unicast` と、ネイバーの下の同じアドレス ファミリーです。
+
+顧客 A のサイト 1 を XR01 に収容する設定です。顧客 B も、値を変えて同じ形です。
+
+:::config fold XR01 — 顧客 A のサイト 1 を VRF に収容する
+vrf CUST-A                                    ## 入れ物。RT は VRF の下に書く
+ address-family ipv4 unicast
+  import route-target                         ## この荷札の付いた経路を取り込む
+   65000:101
+   65000:900                                  ## 共有サービスの荷札(ページ「共有サービスとインターネット」)
+  !
+  export route-target                         ## この VRF の経路に付ける荷札
+   65000:101
+  !
+ !
+!
+interface GigabitEthernet0/0/0/2              ## CEA1 へのインターフェイス
+ vrf CUST-A                                   ## 先に VRF に入れてから、アドレスを付ける
+ ipv4 address 172.16.11.1 255.255.255.0
+!
+route-policy PASS                             ## eBGP はポリシーが無いと何も交換しない(M5)
+  pass
+end-policy
+!
+router bgp 65000
+ bgp router-id 10.255.0.1
+ address-family vpnv4 unicast                 ## 最上位の VPNv4。これが無いと下の 2 つが入らない(3.2 節)
+ !
+ neighbor 10.255.0.21                         ## ルート リフレクタ XR02 とだけ VPNv4 を交換する
+  remote-as 65000
+  update-source Loopback0
+  address-family vpnv4 unicast
+  !
+ !
+ vrf CUST-A
+  rd 10.255.0.1:101                           ## RD は BGP の VRF の下(IOS は vrf definition の下)
+  address-family ipv4 unicast                 ## RD が先に要る(3.2 節)
+  !
+  neighbor 172.16.11.2                        ## CEA1 との eBGP
+   remote-as 65101
+   address-family ipv4 unicast
+    route-policy PASS in
+    route-policy PASS out
+   !
+  !
+ !
+!
+:::
+
+同じことを、RT02 は IOS XE で次のように書いています(ラボの据え付けの設定から抜粋)。RD と RT が `vrf definition` に
+まとまり、CE のネイバーは BGP の `address-family ipv4 vrf` の下です。
+
+:::config RT02(IOS XE)— 顧客 A のサイト 2(据え付けの設定から抜粋)
+vrf definition CUST-A
+ rd 10.255.0.12:101                           ## IOS XE の RD は VRF の下
+ address-family ipv4
+  route-target export 65000:101
+  route-target import 65000:101
+  route-target import 65000:900
+ exit-address-family
+!
+interface Ethernet0/2
+ description CUST-A site 2 (CEA2)
+ vrf forwarding CUST-A                        ## IOS XE は、VRF を変えるとアドレスが消える
+ ip address 172.16.12.1 255.255.255.0
+!
+router bgp 65000
+ neighbor 10.255.0.21 remote-as 65000
+ neighbor 10.255.0.21 update-source Loopback0
+ address-family ipv4
+  no neighbor 10.255.0.21 activate            ## IPv4 のユニキャストは交換しない
+ exit-address-family
+ address-family vpnv4
+  neighbor 10.255.0.21 activate
+  neighbor 10.255.0.21 send-community extended   ## RT は拡張コミュニティ
+ exit-address-family
+ address-family ipv4 vrf CUST-A
+  neighbor 172.16.12.2 remote-as 65101
+  neighbor 172.16.12.2 activate
+  neighbor 172.16.12.2 as-override             ## 次のページ
+ exit-address-family
+!
+:::
+
+:::note
+NCS 5500 と ASR 9000 の L3VPN のコンフィギュレーション ガイド(リリース 7.11)は、インターフェイスの VRF を割り当てる・外す・変える前に、
+その IPv4 と IPv6 のアドレスを外す必要があり、外さないと変更は拒否されると書いています。ラボでは、IOS XR 26.1.1(XRv 9000 と XRd の
+どちらも)がアドレスを付けたままの変更を受け付け、アドレスも残しました。インターフェイスをグローバル テーブルから VRF へ、その逆へ、
+または既にある別の VRF へ移すのは、数秒後には動きました。同じコミットで作った VRF へ移した 1 回のテストでは、隣と通信できない
+ままでした。ガイドに従ってください。ラボ XRT-09 では顧客側のインターフェイスにアドレスが無いので、`vrf` と `ipv4 address` を
+一緒に入れます。
+:::
+
+### 3.2 コミットの順序の検査
 
 IOS XR は、コミットのときにこれらの部品の順序を検査します。BGP は、VPNv4 のネイバーや VRF のアドレス ファミリーを置く前に、最上位に
 `address-family vpnv4 unicast` を必要とします。また、BGP の中の VRF のアドレス ファミリーには、先に RD が必要です。エラーは
@@ -85,16 +504,7 @@ IOS XR は、コミットのときにこれらの部品の順序を検査しま�
 `vrf <名前>` の直下にも書いており、IOS XR 26.1.1 はそこでも受け付けます。このページは、コマンド リファレンスの形どおり RD を BGP に
 置きます。
 
-:::note
-NCS 5500 と ASR 9000 の L3VPN のコンフィギュレーション ガイド(リリース 7.11)は、インターフェイスの VRF を割り当てる・外す・変える前に、
-その IPv4 と IPv6 のアドレスを外す必要があり、外さないと変更は拒否されると書いています。ラボでは、IOS XR 26.1.1(XRv 9000 と XRd の
-どちらも)がアドレスを付けたままの変更を受け付け、アドレスも残しました。インターフェイスをグローバル テーブルから VRF へ、その逆へ、
-または既にある別の VRF へ移すのは、数秒後には動きました。同じコミットで作った VRF へ移した 1 回のテストでは、隣と通信できない
-ままでした。ガイドに従ってください。ラボ XRT-09 では顧客側のインターフェイスにアドレスが無いので、`vrf` と `ipv4 address` を
-一緒に入れます。
-:::
-
-### 1.3 CE とのセッション
+### 3.3 CE とのセッション
 
 PE はふつう、VRF の中で eBGP を使って CE から顧客のルートを学習します。単元 M5 のことはすべてそのまま当てはまります。IOS XR の
 eBGP のネイバーは、両方向にルート ポリシーを持つまでルートを交換せず、VRF も例外ではありません。セッションは上がり、ルートは
@@ -137,83 +547,7 @@ CEB1 のルートを `No policy: 1` に数え、CEB1 の BGP のルートは消�
 行を戻してから 30 秒以内に、XR01 は再びルートを受け入れ、CEB1 にもルートが戻りました。
 :::
 
-## 2. プロバイダー エッジの間の VPN のルート
-
-### 2.1 VPNv4
-
-PE は、ループバックの間の iBGP の VPNv4 アドレス ファミリーで VPN のルートを交換します。VPNv4 のルートは、RD、プレフィックス、
-ルート ターゲット、VPN ラベルを運びます。ネクスト ホップは PE の Loopback0 で、LDP がそこへのラベルを持っています。
-
-```console
-RP/0/RP0/CPU0:XR01#show bgp vpnv4 unicast rd 10.255.0.12:101 10.101.2.0/24
-BGP routing table entry for 10.101.2.0/24, Route Distinguisher: 10.255.0.12:101
-...
-Paths: (1 available, best #1)
-  Not advertised to any peer
-  Path #1: Received by speaker 0
-  Not advertised to any peer
-  65101
-    10.255.0.12 (metric 30) from 10.255.0.21 (10.255.0.12)
-      Received Label 22
-      Origin IGP, metric 0, localpref 100, valid, internal, best, group-best, import-candidate, not-in-vrf
-      Extended community: RT:65000:101
-      Originator: 10.255.0.12, Cluster list: 10.255.0.21
-```
-
-これは、XR01 が受け取ったままの顧客 A のサイト 2 です。RT02 の RD、ネクスト ホップとしての RT02 のループバック、RT02 の VPN ラベル 22、
-ルート ターゲット 65000:101 を持っています。XR02 から届きました(`Cluster list`)。`not-in-vrf` は受け取ったコピーであることを表します。
-XR01 はこれを自分の RD 10.255.0.1:101 の下のコピーとして CUST-A にインポートし、`show bgp vrf CUST-A` が並べるのはそちらです。
-
-IOS XR は既定で、プレフィックスごとに VPN ラベルを割り当てます(**per-prefix**)。BGP の中の VRF のアドレス ファミリーの下に
-`label mode per-vrf` を置くと、VRF 全体でラベルが 1 つになります。PE はそのとき、IOS XR が常に VRF ごとのラベルを付けるルート
-(接続、集約、ローカルのルート)と同じように、宛先を VRF のテーブルで引き直します。`show mpls forwarding` に違いが出ます。
-
-```console
-RP/0/RP0/CPU0:XR01#show bgp vrf CUST-A labels
-   Network            Next Hop        Rcvd Label      Local Label
-Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
-*> 0.0.0.0/0          192.0.2.2       nolabel         24009
-*> 10.101.1.0/24      172.16.11.2     nolabel         24004
-*>i10.101.2.0/24      10.255.0.12     22              nolabel
-*> 198.51.100.0/25    172.16.11.2     nolabel         24005
-*>i198.51.100.128/25  10.255.0.12     23              nolabel
-
-RP/0/RP0/CPU0:XR01#show mpls forwarding
-Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes
-Label  Label       or ID              Interface                    Switched
------- ----------- ------------------ ------------ --------------- ------------
-24000  20          10.255.0.21/32     Gi0/0/0/1    10.0.3.13       5123
-24001  Pop         10.255.0.13/32     Gi0/0/0/1    10.0.3.13       4106
-24002  16          10.255.0.12/32     Gi0/0/0/0    10.0.1.11       16120
-24003  Pop         10.255.0.11/32     Gi0/0/0/0    10.0.1.11       2986
-24004  Unlabelled  10.101.1.0/24[V]   Gi0/0/0/2    172.16.11.2     0
-24005  Unlabelled  198.51.100.0/25[V] Gi0/0/0/2    172.16.11.2     0
-24006  Unlabelled  10.102.1.0/24[V]   Gi0/0/0/3    172.16.21.2     0
-24007  Unlabelled  10.99.1.0/24[V]    Gi0/0/0/4    172.16.91.2     500
-24008  Unlabelled  10.99.2.0/24[V]    Gi0/0/0/4    172.16.91.2     0
-24009  Aggregate   CUST-A: Per-VRF Aggr[V]   \
-                                      CUST-A                       2500
-```
-
-これは 4 つの課題をすべて終えたラボです。CE からのルートはそれぞれ自分のラベルを持ち、XR01 はそのラベルを外して、ラベルなしで CE へ
-送ります(`[V]` は VRF のプレフィックスの印です)。課題 M9-4 で XR01 がグローバル テーブルからインポートするデフォルト ルートは
-CE から来たものではないので、per-prefix のモードでも VRF の集約のラベル 24009 が付きます。
-
-:::try
-CUST-A のラベルを 1 つにしてみます。課題 M9-2 の後に行います(ラボでは課題 M9-4 の後に測りました)。
-
-1. XR01 の `router bgp 65000` → `vrf CUST-A` → `address-family ipv4 unicast` の下に `label mode per-vrf` を設定して
-   コミットします。
-2. XR01 で `show bgp vrf CUST-A labels` と `show mpls forwarding` を、RT02 で
-   `show ip bgp vpnv4 vrf CUST-A labels` を、CEA2 で `ping 10.101.1.1 source Loopback10` を実行します。
-3. `label mode` を外してコミットします。
-
-ラボで測った結果: XR01 が CEA1 から学習したルートはすべて、インポートしたデフォルト ルートのために VRF が既に持っていたラベル 24009 に
-なり、24004 と 24005 は `show mpls forwarding` から消えました。20 秒以内に RT02 はそれらに `nolabel/24009` を表示し、ping は
-通りました。`label mode` を外すと、ルートは再び 24004 と 24005 になりました。
-:::
-
-### 2.2 ルート ターゲットによるフィルタリング
+### 3.4 ルート ターゲットによるふるい
 
 PE は、自分が使える VPN のルートだけを保持します。ルート ターゲットがローカルの VRF のインポートするルート ターゲットのどれにも
 一致しないルートは、ポリシーが無くても受信したときに捨てられ、ネイバーの詳細がそれを数えます。
@@ -255,314 +589,36 @@ XR01 がルートを捨て、もう一度求めるところを見ます。課題
 カウンタは 3 になり、5 秒以内に 10.102.2.0/24 が再び CUST-B に入りました。CEB1 は CEB2 に到達できました。
 :::
 
-### 2.3 VPNv4 のルート リフレクタ
+### 3.5 確かめる順番
 
-PE の間を VPNv4 のセッションのフル メッシュで結ぶと、その数は PE の数の 2 乗で増えるので、プロバイダーはルート リフレクタを使います。
-ルート リフレクタは、インポートする VRF があってもなくても、すべての VPNv4 のルートを保持しなければならない唯一のルータです。
-IOS XR では既定でそうし、クライアントを 1 つ持った時点でルート リフレクタになります。クライアントは、ネイバーのアドレス ファミリーごとの
-性質です。`route-reflector-client` は `neighbor` → `address-family vpnv4 unicast` の下に置きます。別のアドレス ファミリーの
-下に書いても、VPNv4 には何も効きません。
+止まったときは、下の段から順に確かめます(章 C0 の「組み立て順」の段 4 と同じ考え方です)。上の段の症状は、たいてい下の段の
+誤りから来ます。
 
-VRF も VPNv4 のクライアントも持たない iBGP スピーカーは、何も保持しません。その状態の XR02 は、送られたルートを 1 つも受け入れず、
-拒否としても数えませんでした。
-
-```console
-RP/0/RP0/CPU0:XR02#show bgp vpnv4 unicast summary
-...
-Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
-10.255.0.1        0 65000       4       3            1    0    0 00:00:37          0
-10.255.0.12       0 65000       6       3            1    0    0 00:00:39          0
-
-RP/0/RP0/CPU0:XR02#show bgp vpnv4 unicast neighbors 10.255.0.1 | include "accepted|denied"
-  0 accepted prefixes, 0 are bestpaths
-  Exact no. of prefixes denied: 0
-  Cumulative no. of prefixes denied: 0
-```
-
-これは PoC で、ルート リフレクタの行も `retain` も無い XR02 に、XR01 が 2 つのルートを送っている間に取得しました。XR02 がルート
-リフレクタになると、`show bgp vpnv4 unicast neighbors` は、設定のあるアドレス ファミリーごとの部分に `Route-Reflector Client` を
-表示します。VPNv4 の部分にあるものを見てください。
-
-`address-family vpnv4 unicast` の下の `retain route-target all` は、どの VRF もインポートしない VPNv4 のルートをルータに保持させます。
-XR02 はそれですべてのルートを持ちましたが、やはり 1 つも渡しませんでした。iBGP スピーカーは iBGP のルートを別の iBGP ネイバーへ
-送らず、それを変えるのはクライアントだけです。このコマンドは、VRF を持たないルートを保持しなければならない Inter-AS のオプション B の
-境界ルータ(6 節)のためのものです。`route-policy` の形を使うと、ルート リフレクタが一部のルート ターゲットだけを保持し、VPN を複数の
-リフレクタに分けられます。
-
-XR02 は IOS XRd で動いています。Cisco は XRd を、ルート リフレクタなど転送パスの外の役割向けに、制御プレーンの形で提供しています。
-このラボの XR01 には向きません。XR01 を XRd にした PoC では、ping は両方向に通りましたが、XRd が CE から受けてラベルを付けて送った
-TCP と UDP のパケット、2 つの VRF の間や VRF とグローバル テーブルの間でルーティングしたパケットは、チェックサムが壊れて届きました。
-CEA1 からの traceroute は最初の数ホップの先で止まりました。XRd がラベル付きで受けて CE へ送ったパケットは無傷でした。
-IOS XRv 9000 は、これらをすべて正しく転送しました。
-
-## 3. 同じ AS の 2 つのサイト
-
-### 3.1 AS のオーバーライド
-
-顧客 A は、両方のサイトで AS 65101 を使っています。サイト 2 のルートは AS パス 65101 で XR01 に届き、CEA1 はそれをループとして
-捨てるはずです。IOS と IOS XR はこれを違う方法で扱います。IOS の PE はルートを送り、CE が捨てます。IOS XR はそもそも送りません。
-送る前に、AS パスと相手の AS を照らし合わせます。
-
-```console
-RP/0/RP0/CPU0:XR01#show bgp vrf CUST-A 10.101.2.0/24
-BGP routing table entry for 10.101.2.0/24, Route Distinguisher: 10.255.0.1:101
-...
-Paths: (1 available, best #1)
-  Not advertised to any peer
-  Path #1: Received by speaker 0
-  Not advertised to any peer
-  65101
-    10.255.0.12 (metric 30) from 10.255.0.21 (10.255.0.12)
-...
-RP/0/RP0/CPU0:XR01#show bgp vrf CUST-A neighbors 172.16.11.2 advertised-routes
-Network            Next Hop        From            AS Path
-Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
-0.0.0.0/0          172.16.11.1     192.0.2.2       65000 64500i
-10.99.1.0/24       172.16.11.1     0.0.0.0         65000?
-```
-
-XR01 が CEA1 に送るものから、サイト 2 の 2 つのルート(10.101.2.0/24 と 198.51.100.128/25、どちらもパス 65101)が抜けています。
-パスに 65101 を含まないルートは出ていきます。これは課題 M9-4 の後に `as-override` を外して取得しました。
-
-CE のネイバーのアドレス ファミリーの下の `as-override` は、パスの中の顧客の AS をプロバイダーの AS に置き換え、ルートは `65000 65000` で
-出ていきます。代わりの `allowas-in` は受け取る側のルータ、つまり CE で設定するもので、CE は顧客のものです。1 つのサイトが 2 つの PE に
-つながっていると、AS を置き換えたルートは、来たサイトへ戻ることを止められなくなります。同じネイバーの下の `site-of-origin` は、
-サイトのルートに拡張コミュニティで印を付け、IOS XR はその印の付いたルートを、同じ印を持つネイバーへ送り返しません。
-
-:::try
-オーバーライドを外してみます。課題 M9-2 の後に行います。
-
-1. XR01 で、CUST-A のネイバー 172.16.11.2 から `as-override` を外してコミットします。
-2. XR01 で `show bgp vrf CUST-A 10.101.2.0/24` と
-   `show bgp vrf CUST-A neighbors 172.16.11.2 advertised-routes` を、CEA1 で `show ip bgp` を実行します。
-3. `as-override` を戻してコミットします。
-
-ラボで測った結果: 20 秒以内に、XR01 はサイト 2 のルートに `Not advertised to any peer` を表示し、それらは `advertised-routes` から
-消え、CEA1 からも無くなりました。XR01 は、パスに 65101 を含んだまま送るのではなく、取り消したのです。行を戻すと、CEA1 は再び
-`65000 65000` でそれらを持ちました。
-:::
-
-## 4. 共有サービス
-
-### 4.1 インポートとエクスポートのルート ポリシー
-
-**エクストラネット**は、VPN どうしに一部のルートだけを共有させます。ルート ターゲットだけだと、VRF はすべてのルートを同じターゲットで
-エクスポートします。1 つのルートにだけ別のターゲットを付けるには、IOS XR は VRF のアドレス ファミリーにルート ポリシーを付けます。
-`export route-policy` は VRF から出ていくルートに、`import route-policy` は VRF に入ってくるルートに働きます。
-
-ラボでは、共有サービスのすべてのルートに VRF のエクスポートするルート ターゲット 65000:999 が付き、10.99.1.0/24 にはさらに、顧客の VRF が
-インポートする 65000:900 が付きます。ポリシーは、そのプレフィックスにだけ追加のターゲットを付けます。
-
-```text
-route-policy SVC-EXPORT
-  if destination in (10.99.1.0/24) then
-    set extcommunity rt (65000:900) additive
-  endif
-  pass
-end-policy
-```
-
-`additive` が肝心です。これが無いと、`set extcommunity rt` はルートが既に持っているルート ターゲットを置き換え、10.99.1.0/24 は
-65000:900 だけを持って出ていきます。
-
-```console
-RP/0/RP0/CPU0:XR01#show bgp vrf SVC 10.99.1.0/24 | include Extended
-      Extended community: RT:65000:900
-
-RP/0/RP0/CPU0:XR01#show bgp vrf SVC 10.99.1.0/24 | include Extended
-      Extended community: RT:65000:900 RT:65000:999
-```
-
-1 つ目の出力は `additive` の無いポリシー、2 つ目はあるポリシーです。
-
-エクスポートのポリシーはルートを止められません。コマンド リファレンスがそう書いており、ラボでも、ポリシーが通さなかったルートは
-VRF のルート ターゲットを付けて VRF から出ていきました。10.99.2.0/24 を顧客から隠しているのは、ポリシーではなく、どの顧客も
-インポートしないそのルート ターゲットです。インポートのポリシーは 2 段のフィルタの 2 段目で、VRF のインポートするルート ターゲットに
-既に一致したルートだけを見ます。
-
-### 4.2 1 つの PE の複数の VRF
-
-共有サービスと顧客 A・B は、どれも XR01 に VRF を持っています。それらの間でも、ルート ターゲットは 2 つの PE の間と同じように働きます。
-XR01 は、リモートの PE を介さずに、自分で 10.99.1.0/24 を SVC から CUST-A と CUST-B にインポートし、SVC は両方の顧客のルートを
-インポートするので、戻りのトラフィックにも経路があります。それでも顧客どうしは互いに見えません。SVC がインポートした顧客 B のルートは
-自分のルート ターゲット 65000:102 を持ったままで、SVC のもので再びエクスポートされることはありません。
-
-```console
-RP/0/RP0/CPU0:XR01#show bgp vrf CUST-A
-   Network            Next Hop            Metric LocPrf Weight Path
-Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
-*> 0.0.0.0/0          192.0.2.2                              0 64500 i
-*> 10.99.1.0/24       172.16.91.2              0         32768 ?
-*> 10.101.1.0/24      172.16.11.2              0             0 65101 i
-*>i10.101.2.0/24      10.255.0.12              0    100      0 65101 i
-*> 198.51.100.0/25    172.16.11.2              0             0 65101 i
-*>i198.51.100.128/25  10.255.0.12              0    100      0 65101 i
-
-RP/0/RP0/CPU0:XR01#show route vrf CUST-B bgp
-B    10.99.1.0/24 [200/0] via 172.16.91.2 (nexthop in vrf SVC), 00:04:01
-B    10.102.2.0/24 [200/0] via 10.255.0.12 (nexthop in vrf default), 00:17:29
-```
-
-CUST-A の中で、10.99.1.0/24 は SVC のアドレスをネクスト ホップに持ち、重みはローカルのルートのものです。同じルータの VRF SVC から
-インポートしたからです。ルーティング テーブルは、ネクスト ホップがどこにあるかを示します。共有サーバでは VRF SVC に、RT02 からの
-ルートではグローバル テーブル(`vrf default`)にあり、そのネクスト ホップは RT02 のループバックです。
-
-:::try
-`additive` を外してみます。課題 M9-3 の後に行います。
-
-1. XR01 で、ルート ポリシー SVC-EXPORT を `additive` の無い `set extcommunity rt (65000:900)` で入れ直し、
-   コミットします。
-2. XR01 で `show bgp vrf SVC 10.99.1.0/24` を、RT02 で `show ip bgp vpnv4 all 10.99.1.0` を、CEA2 で
-   `ping 10.99.1.1 source Loopback10` を実行します。
-3. `additive` を戻してコミットします。
-
-ラボで測った結果: 10.99.1.0/24 は `RT:65000:900` だけを持って出ていき、RT02 のコピーも同じでした。ping は通り続けました。顧客は
-65000:900 をインポートするので、顧客から見えるものは何も変わりません。壊れたのはプロバイダーの規約で、65000:999 に頼るものがあれば
-そこで気づきます。`additive` を戻すと、ルートは再び 2 つのルート ターゲットを持ちました。
-:::
-
-## 5. インターネット接続
-
-### 5.1 VRF とグローバル テーブルの間
-
-顧客 A の公開セグメントはインターネットに到達する必要があり、XR01 はインターネットを INET からグローバル テーブルで学習します。
-IOS XR は、VRF のアドレス ファミリーの下の 2 つのコマンドで、VRF とグローバル テーブル(デフォルト VRF)の間で BGP のルートを
-リークします。どちらもルート ポリシーが必須です。
-
-- `import from default-vrf route-policy <名前>` は、グローバルのルートを VRF に取り込みます。ルートは VRF の CE に渡り、
-  `advertise-as-vpn` があれば、VRF のルート ターゲットを付けた VPNv4 のルートとして他の PE にも渡ります。これが無いと、CEA1 は
-  デフォルト ルートを持ち、RT02 の背後の CEA2 は持ちませんでした。
-- `export to default-vrf route-policy <名前>` は、VRF のルートをグローバル テーブルにコピーし、そこから INET へ送れるように
-  します。既定でエクスポートされるのは、XR01 が自分の CE から学習したルートだけです。サイト 2 の 198.51.100.128/25 のように
-  別の PE から学習したルートには、`allow-imported-vpn` が必要です。
-
-```console
-RP/0/RP0/CPU0:XR01#show route vrf CUST-A 0.0.0.0/0
-Routing entry for 0.0.0.0/0
-  Known via "bgp 65000", distance 20, metric 0, candidate default path
-  Tag 64500, type external
-  ...
-  Routing Descriptor Blocks
-    192.0.2.2, from 192.0.2.2, BGP external
-      Nexthop in Vrf: "default", Table: "default", IPv4 Unicast, Table Id: 0xe0000000
-
-RP/0/RP0/CPU0:XR01#show bgp ipv4 unicast 198.51.100.128/25
-BGP routing table entry for 198.51.100.128/25
-...
-  Advertised IPv4 Unicast paths to peers (in unique update groups):
-    192.0.2.2
-  65101
-    10.255.0.12 (metric 30) from 10.255.0.21 (10.255.0.12)
-      Received Label 23
-      Origin IGP, metric 0, localpref 100, valid, internal, best, group-best, import-candidate, imported
-      Extended community: RT:65000:101
-      Originator: 10.255.0.12, Cluster list: 10.255.0.21
-      Source AFI: VPNv4 Unicast, Source VRF: CUST-A, Source Route Distinguisher: 10.255.0.1:101
-      Original Source AFI: VPNv4 Unicast, Original Source Route Distinguisher: 10.255.0.12:101
-```
-
-CUST-A のデフォルト ルートは、グローバル テーブルの INET を指しています。サイト 2 の公開セグメントは CUST-A からエクスポートされて
-グローバルの BGP テーブルにあり、XR01 はそれを INET へ送ります。
-
-スタティック ルートでも、1 つのプレフィックスについて同じことができます。`router static` → `vrf CUST-A` の中で、
-`0.0.0.0/0 vrf default 192.0.2.2` のようなルートは、ネクスト ホップをグローバル テーブルに持ちます。BGP のリークと違い、VRF の BGP に
-再配送しない限り、XR01 の CE にしか届きません。
-
-### 5.2 パケットを追う
-
-グローバル テーブルの中でも、サイト 2 のセグメントは VPN のネクスト ホップとラベルを持ったままです。INET から 198.51.100.129 へのパケットは、
-XR01 で RT02 へのトランスポートのラベルと RT02 の VPN ラベルを付けられ、RT02 が CUST-A の中で届けます。
-
-```console
-RP/0/RP0/CPU0:XR01#show cef 198.51.100.128/25
-198.51.100.128/25, version 61, internal 0x5000001 0x40 (ptr 0xf7974e8) [1], 0x600 (0xf92fd58), 0xa08 (0xf3357b8)
-...
-   via 10.255.0.12/32, 5 dependencies, recursive [flags 0x6000]
-    path-idx 0 NHID 0x0 [0xedbdd90 0x0]
-    recursion-via-/32
-    next hop 10.255.0.12/32 via 24002/0/21
-     next hop 10.0.1.11/32 GigabitEthernet0/0/0/0 labels imposed {16 23}
-
-INET#traceroute 198.51.100.129 source Loopback10 numeric timeout 1 probe 1
-  1 192.0.2.1 4 msec
-  2 10.0.1.11 [MPLS: Labels 16/23 Exp 0] 2 msec
-  3 172.16.12.1 [MPLS: Label 23 Exp 0] 1 msec
-  4 172.16.12.2 2 msec
-```
-
-16 は RT02 のループバックに対する RT01 の LDP のラベルで、23 は 198.51.100.128/25 に対する RT02 の VPN ラベルです。RT02 が次のルータ
-なので RT01 は上のラベルを外し、RT02(ホップ 3)は VPN ラベルだけを受け取ります。逆の方向、CEA2 から INET へは、RT02 がいちばん下に
-XR01 の集約のラベル 24009 を付けてパケットを XR01 へ送ります。XR01 は CUST-A で宛先を引き、ネクスト ホップがグローバル テーブルにある
-デフォルト ルートを見つけて、パケットを INET へ送ります。
-
-```console
-CEA2#traceroute 203.0.113.10 source Loopback11 numeric timeout 1 probe 1
-  1 172.16.12.1 [AS 64500] 0 msec
-  2 10.0.12.11 [AS 64500] [MPLS: Labels 22/24009 Exp 0] 2 msec
-  3 10.0.1.1 [AS 64500] 3 msec
-  4 192.0.2.2 [AS 64500] 2 msec
-```
-
-:::try
-`advertise-as-vpn` を外してみます。課題 M9-4 の後に行います。
-
-1. XR01 の `vrf CUST-A` → `address-family ipv4 unicast` の下で、`import from default-vrf` の行を `advertise-as-vpn` 無しで
-   入れ直してコミットします。
-2. XR01 で `show bgp vrf CUST-A 0.0.0.0/0` を、RT02 で `show ip route vrf CUST-A 0.0.0.0` を、CEA1 と CEA2 で
-   `show ip route 0.0.0.0` を、CEA2 で `ping 203.0.113.10 source Loopback11` を実行します。
-3. `advertise-as-vpn` を戻してコミットします。
-
-ラボで測った結果: XR01 は、デフォルト ルートを自分の CE にだけアドバタイズしていると表示しました(`Advertised to CE peers` があり、
-`PE peers` が無い)。RT02 と CEA2 からはそれが消え(`% Network not in table`)、CEA1 には残り、CEA2 からの ping は失敗しました。
-キーワードを戻してから 1 分以内に、CEA2 は再びデフォルト ルートを持ち、ping は通りました。
-:::
-
-## 6. プロバイダーの間
-
-VPN が 2 つのプロバイダーにまたがるとき、RFC 4364(10 節)は 3 つのつなぎ方を挙げています。
-
-- **オプション A**: 2 つのプロバイダーの境界ルータ(ASBR)が PE と CE として向き合い、VPN ごとに 1 つの VRF と 1 つのインターフェイス
-  またはサブインターフェイスを持ち、その間はただの IP です。簡単ですが、VPN の数だけ規模が増えます。
-- **オプション B**: ASBR は eBGP で VPNv4 のルートをラベル付きで交換し、VRF を持ちません。IOS XR の ASBR には、VRF の無い
-  VPNv4 のルートを保持するための `retain route-target all`(またはポリシー)、eBGP の VPNv4 のセッションのルート ポリシー、
-  ラベル付きのトラフィックを転送するための相手の ASBR への /32 のスタティック ルートが必要です。
-- **オプション C**: ASBR は PE のループバックだけを BGP ラベル付きユニキャスト(単元 M8 の Unified MPLS)で運び、2 つのプロバイダーの
-  ルート リフレクタがマルチホップの eBGP で VPNv4 のルートを交換します。
-
-**Carrier Supporting Carrier**(CSC、RFC 4364 の 9 節)では、VPN の顧客そのものがプロバイダーです。VPN は顧客のキャリアのループバック
-だけをラベル付きで運び(CSC-CE に向けたラベル付きユニキャスト、または VRF の中の LDP)、顧客のキャリアはその上で自分の VPN を
-動かします。
-
-## 7. コマンドの対応
-
-| IOS | IOS XR |
-|---|---|
-| `rd` と `route-target` を持つ `vrf definition <名前>` | `import route-target` / `export route-target` を持つ `vrf <名前>`。`rd` は `router bgp` → `vrf <名前>` の下 |
-| `vrf forwarding <名前>`(アドレスを外す) | インターフェイスの下の `vrf <名前>` |
-| `address-family vpnv4` + `neighbor … activate` | BGP の最上位とネイバーの下の `address-family vpnv4 unicast` |
-| `address-family ipv4 vrf <名前>` | `router bgp` の下の `vrf <名前>` → `address-family ipv4 unicast` |
-| `neighbor … as-override` | ネイバーのアドレス ファミリーの下の `as-override` |
-| `route-target export` + `export map <route-map>` | `export route-target` + `export route-policy <名前>` |
-| `bgp default route-target filter`(既定で有効) | 常に有効。`retain route-target` |
-| `show ip bgp vpnv4 all` / `vrf <名前>` | `show bgp vpnv4 unicast` / `show bgp vrf <名前>` |
-| `show ip route vrf <名前>` | `show route vrf <名前>` |
+| 段 | 確かめること | XR01 で |
+|---|---|---|
+| 道 | 出口の PE のループバックへのラベルがある | `show mpls forwarding`(10.255.0.12/32 の行) |
+| PE どうし | VPNv4 のセッションが上がり、ルートを受けている | `show bgp vpnv4 unicast summary` |
+| 入れ物 | VRF の RT が正しい | `show vrf CUST-A detail` |
+| 収容 | CE とのセッションが上がり、`!` が無い | `show bgp vrf CUST-A summary` |
+| 経路 | 相手のサイトの経路が届き、VRF に入っている | `show bgp vpnv4 unicast rd <相手の RD>`、`show bgp vrf CUST-A` |
+| 転送 | 2 枚のラベルを積んでいる | `show cef vrf CUST-A <宛先>`(`labels imposed`) |
+| 端から端 | 顧客のサイトどうしで届く | CE から `ping`・`traceroute`(送信元は LAN のアドレス) |
 
 ## 実践
 
-ラボ **XRT-09** で M9 の課題に取り組みます。XR01 は IOS XRv 9000 なので、ラボの構築に約 10 分かかります。
+ラボ **XRT-09** で課題 M9-1 に取り組みます。XR01 は IOS XRv 9000 なので、ラボの構築に約 10 分かかります。
 
-<p class="tolab"><a href="/_learn?id=XRT-09">ワークスペースでラボ XRT-09 を開く</a> — <a href="91-m9-practice.html">課題</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-09">ワークスペースでラボ XRT-09 を開く</a> — <a href="91-m9-practice.html">課題 M9-1</a></p>
 
 :::note
-出典: Cisco 8000(累積版、2026 年)と NCS 5500 の BGP のコマンド リファレンス(ルート識別子と `rd auto`、`retain route-target`、
-`as-override`、`allowas-in`、`site-of-origin`、`label mode`、`export route-policy`)。ASR 9000 の Routing Configuration Guide、
-IOS XR 24.x(2026 年。アドレス ファミリー、ルート リフレクタと `retain route-target`、新しい VRF のためのルート リフレッシュ、
-`advertise-as-vpn` と `allow-imported-vpn` による VRF の動的なルートのリーク、VRF のインポートとエクスポートのルーティング ポリシー、
-別の VRF へのスタティック ルート)。NCS 5500 と Cisco 8000 の L3VPN のコンフィギュレーション ガイドと ASR 9000 の MPLS L3VPN の
-ガイド、リリース 7.11(インターフェイスの VRF、Inter-AS のオプション B、CSC)。Cisco 8000 のガイド「BGP Route Distinguisher」。
-Cisco の TAC 文書「Cisco IOS-XR BGP with MPLS Designs」(2021 年)と「Configure Route Leak between GRT and VRF with IOS XR」。
-IOS XRd のデータ シート。RFC 4364。いずれも 2026 年 10 月に確認。次の項目は、ラボ XRT-09 とその PoC での実測によるものです。
-コミットのエラー、VRF の変更で残るインターフェイスのアドレス、捨てられたルートとそのカウンタ、ルート リフレッシュ、クライアントの無い
-ルート リフレクタと `retain` のあるルート リフレクタ、送る前の AS パスの検査、ラベル、`additive` の無いときに置き換わるルート ターゲット、
-ポリシーが通さないルートのエクスポート、リーク、PE としての XRd の転送。
+出典: RFC 4364(1 節・1.5 節・3 節・4.1〜4.3 節)と RFC 4110(1.3.3 節)。Cisco 8000(累積版、2026 年)と NCS 5500 の BGP のコマンド
+リファレンス(ルート識別子と `rd auto`、`retain route-target`、`as-override`、`allowas-in`、`site-of-origin`、`label mode`、
+`export route-policy`)。ASR 9000 の Routing Configuration Guide、IOS XR 24.x(2026 年。アドレス ファミリー、ルート リフレクタと
+`retain route-target`、新しい VRF のためのルート リフレッシュ、`advertise-as-vpn` と `allow-imported-vpn` による VRF の動的なルートの
+リーク、VRF のインポートとエクスポートのルーティング ポリシー、別の VRF へのスタティック ルート)。NCS 5500 と Cisco 8000 の L3VPN の
+コンフィギュレーション ガイドと ASR 9000 の MPLS L3VPN のガイド、リリース 7.11(インターフェイスの VRF、Inter-AS のオプション B、CSC)。
+Cisco 8000 のガイド「BGP Route Distinguisher」。Cisco の TAC 文書「Cisco IOS-XR BGP with MPLS Designs」(2021 年)と「Configure Route
+Leak between GRT and VRF with IOS XR」。IOS XRd のデータ シート。いずれも 2026 年 10〜11 月に確認。次の項目は、ラボ XRT-09 とその PoC での
+実測によるものです。コミットのエラー、VRF の変更で残るインターフェイスのアドレス、捨てられたルートとそのカウンタ、ルート リフレッシュ、
+ラベルと線の上のパケット(CML のリンクのキャプチャ)、重なるアドレスの扱い。
 :::

@@ -1,0 +1,42 @@
+! _POC-XRVPWS SW1(IOL-L2 17.15・据付)= お客さま E の拠点 4。XE1 と XE2 に LACP の束で二重に収容(XRT-12 と同じ形)。
+! VLAN 150= EVPN-VPWS・160= LDP の疑似回線。どちらも SVI で拠点 3(CE3)と話す。★IOL-L2 は VTP サーバのままだと day0 の vlan が効かない→ transparent。
+vtp mode transparent
+vlan 150
+ name ELINE-EVPN
+vlan 160
+ name ELINE-LDP
+!
+interface Port-channel1
+ description to XE1 + XE2 (one bundle)
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 150,160
+!
+interface {{ links[0] }}
+ description to XE1
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 150,160
+ channel-group 1 mode active
+ lacp rate fast
+ no shutdown
+!
+interface {{ links[1] }}
+ description to XE2
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 150,160
+ channel-group 1 mode active
+ lacp rate fast
+ no shutdown
+!
+interface Vlan150
+ description E-Line (EVPN-VPWS) to site 3
+ ip address 172.31.150.4 255.255.255.0
+ no shutdown
+!
+interface Vlan160
+ description E-Line (LDP pseudowire) to site 3
+ ip address 172.31.160.4 255.255.255.0
+ no shutdown
+!

@@ -1,0 +1,30 @@
+! _POC-XRVPWS XE2(Catalyst 8000V 17.15)= PE。コアの IS-IS と LDP だけ。サービスは PoC の段で足す。
+! ★8000V は既定のライセンスの段階では MPLS が無い。構築の最後に xe_license.py が保存+再起動する(problem.yml の xe_license_boot)。
+license boot level network-advantage addon dna-advantage
+!
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+!
+interface Loopback0
+ ip address 10.255.0.42 255.255.255.255
+ ip router isis CORE
+!
+interface {{ links[0] }}
+ description CORE to P1
+ ip address 10.0.42.42 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+!
+interface {{ links[2] }}
+ description to SW1 (site 4)
+ no ip address
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0042.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+!

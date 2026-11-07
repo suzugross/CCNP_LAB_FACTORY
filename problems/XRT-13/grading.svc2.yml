@@ -1,0 +1,29 @@
+# S-2: VPWS(LDP の疑似回線・PW ID 320)= 拠点 3(XE3・VLAN 320)⇔ 拠点 4(XR01・VLAN 321)。両端の VLAN が違う= rewrite で外して運ぶ。BGP は使わない。
+problem: XRT-13
+total_points: 100
+checks:
+  - name: 'S-2 step 2  XE3: the pseudowire to XR01 with ID 320 is UP'
+    node: XE3
+    command: show l2vpn atom vc
+    raw:
+      - { regex: 'pw\d+\s+10\.255\.0\.1\s+320\s+p2p\s+\S+\s+UP' }
+    points: 20
+  - name: 'S-2 step 2  XR01: a cross-connect joins the VLAN 321 attachment circuit to the pseudowire to XE3 (ID 320), all UP'
+    node: XR01
+    command: show l2vpn xconnect
+    raw:
+      - { regex: 'UP\s+Gi0/0/0/1\.\d+\s+UP\s+10\.255\.0\.43\s+320\s+UP' }
+    points: 20
+  - name: 'S-2 step 2  XE3: the pseudowire is signalled over a targeted LDP session with XR01'
+    node: XE3
+    command: show mpls ldp neighbor 10.255.0.1
+    raw:
+      - { regex: 'Targeted Hello 10\.255\.0\.43 -> 10\.255\.0\.1' }
+    points: 10
+  - name: 'S-2 end to end  CE3 (VLAN 320) reaches CE4 (VLAN 321) over the E-Line (172.31.32.4)'
+    node: XE3
+    exec: local
+    command: .venv/bin/python topologies/login_probe.py XRT-13 ssh CE3 -- 'ping 172.31.32.4 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 50

@@ -1,0 +1,40 @@
+! XRT-13 CE2(IOL 17.15)= 顧客 D の CE(拠点 2)。据え付け(学ぶ側は変更しない)。サービスごとのサブインタフェース。
+interface {{ links[0] }}
+ description to PE (provider)
+ no ip address
+ no shutdown
+!
+interface {{ links[0] }}.310
+ description L3VPN (provider VRF CUST-D)
+ encapsulation dot1Q 310
+ ip address 172.20.2.1 255.255.255.0
+!
+interface Loopback300
+ description site 2 LAN
+ ip address 10.30.2.1 255.255.255.0
+!
+interface {{ links[0] }}.330
+ description E-LAN (VPLS)
+ encapsulation dot1Q 330
+ ip address 172.31.33.2 255.255.255.0
+!
+interface {{ links[0] }}.340
+ description E-LAN (EVPN)
+ encapsulation dot1Q 340
+ ip address 172.31.34.2 255.255.255.0
+!
+interface {{ links[0] }}.350
+ description E-Line (EVPN-VPWS)
+ encapsulation dot1Q 350
+ ip address 172.31.35.2 255.255.255.0
+!
+router bgp 65102
+ bgp router-id 10.30.2.1
+ bgp log-neighbor-changes
+ neighbor 172.20.2.254 remote-as 65000
+ !
+ address-family ipv4
+  network 10.30.2.0 mask 255.255.255.0
+  neighbor 172.20.2.254 activate
+ exit-address-family
+!

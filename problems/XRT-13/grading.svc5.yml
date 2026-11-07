@@ -1,0 +1,35 @@
+# S-5: EVPN-VPWS(EVI 350)= 拠点 1(XE1・VLAN 350)⇔ 拠点 2(XE2・VLAN 350)。端の識別子= 拠点の番号(XE1= source 1 target 2)。LDP は使わない。
+# 前提= S-4 の段 1(l2vpn evpn の iBGP)。8000V 同士の EVPN-VPWS は通る(XR⇔XE は不通= §24.5b)。
+problem: XRT-13
+total_points: 100
+checks:
+  - name: 'S-5 step 2  XE1: EVPN-VPWS in EVPN instance 350 is up with source 1 and target 2, and no LDP pseudowire carries it'
+    node: XE1
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-13 ssh XE1 -- 'show l2vpn evpn vpws vc id 350 detail' 'show l2vpn atom vc'
+    raw:
+      - { regex: 'state: up' }
+      - { regex: 'Source 1, Target 2' }
+      - { not_regex: '\s350\s+p2p\s' }
+    points: 20
+  - name: 'S-5 step 2  XE2: EVPN-VPWS in EVPN instance 350 is up with source 2 and target 1'
+    node: XE2
+    command: show l2vpn evpn vpws vc id 350 detail
+    raw:
+      - { regex: 'state: up' }
+      - { regex: 'Source 2, Target 1' }
+    points: 20
+  - name: 'S-5 step 1  XE1: learns the far end (2) of EVPN instance 350 from a BGP type 1 route'
+    node: XE1
+    command: show bgp l2vpn evpn route-type 1
+    raw:
+      - { regex: '\[1\]\[[0-9.]+:\d+\]\[0{20}\]\[2\]/\d+' }
+    points: 10
+  - name: 'S-5 end to end  CE1 reaches CE2 over the EVPN-VPWS E-Line (172.31.35.2)'
+    node: XE1
+    exec: local
+    command: .venv/bin/python topologies/login_probe.py XRT-13 ssh CE1 -- 'ping 172.31.35.2 repeat 5'
+    raw:
+      - { regex: 'Success rate is (?:100|80) percent' }
+    points: 50

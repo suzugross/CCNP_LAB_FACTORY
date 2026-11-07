@@ -1,0 +1,92 @@
+
+######## 21:56:45 ce: お客さまから見た網(CE1 の ARP と BGP)
+show ip arp
+Protocol  Address          Age (min)  Hardware Addr   Type   Interface
+Internet  172.16.1.1              -   aabb.cc00.8b00  ARPA   Ethernet0/0.100
+Internet  172.16.1.254           11   5254.00b5.ceb7  ARPA   Ethernet0/0.100
+Internet  192.168.130.1           -   aabb.cc00.8b00  ARPA   Ethernet0/0.130
+Internet  192.168.130.4           8   aabb.cc00.8e00  ARPA   Ethernet0/0.130
+Internet  192.168.200.1           -   aabb.cc00.8b00  ARPA   Ethernet0/0.200
+Internet  192.168.200.2           5   aabb.cc00.8c00  ARPA   Ethernet0/0.200
+Internet  192.168.200.3           5   aabb.cc00.8d00  ARPA   Ethernet0/0.200
+Internet  192.168.210.1           -   aabb.cc00.8b00  ARPA   Ethernet0/0.210
+Internet  192.168.210.2           6   aabb.cc00.8c00  ARPA   Ethernet0/0.210
+Internet  192.168.210.3           6   aabb.cc00.8d00  ARPA   Ethernet0/0.210
+CE1#
+show ip bgp | begin Network
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.100.1.0/24    0.0.0.0                  0         32768 i
+ *>   10.100.2.0/24    172.16.1.254                           0 65000 65002 i
+ *>   10.100.4.0/24    172.16.1.254                           0 65000 65004 i
+CE1#
+show ip route bgp | begin Gateway
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 4 subnets, 2 masks
+B        10.100.2.0/24 [20/0] via 172.16.1.254, 00:11:35
+B        10.100.4.0/24 [20/0] via 172.16.1.254, 00:10:52
+CE1#
+ping mpls ipv4 10.255.0.42/32 repeat 2
+Sending 2, 72-byte MPLS Echos to 10.255.0.42/32, 
+     timeout is 2 seconds, send interval is 0 msec:
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+  'L' - labeled output interface, 'B' - unlabeled output interface, 
+  'D' - DS Map mismatch, 'F' - no FEC mapping, 'f' - FEC mismatch,
+  'M' - malformed request, 'm' - unsupported tlvs, 'N' - no label entry, 
+  'P' - no rx intf label prot, 'p' - premature termination of LSP, 
+  'R' - transit router, 'I' - unknown upstream index,
+  'l' - Label switched with FEC change, 'd' - see DDMAP for return code,
+  'X' - unknown return code, 'x' - return code 0
+
+Type escape sequence to abort.
+!!
+Success rate is 100 percent (2/2), round-trip min/avg/max = 2/16/31 ms
+ Total Time Elapsed 34 ms
+
+XE1#
+traceroute mpls ipv4 10.255.0.42/32
+Tracing MPLS Label Switched Path to 10.255.0.42/32, timeout is 2 seconds
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+  'L' - labeled output interface, 'B' - unlabeled output interface, 
+  'D' - DS Map mismatch, 'F' - no FEC mapping, 'f' - FEC mismatch,
+  'M' - malformed request, 'm' - unsupported tlvs, 'N' - no label entry, 
+  'P' - no rx intf label prot, 'p' - premature termination of LSP, 
+  'R' - transit router, 'I' - unknown upstream index,
+  'l' - Label switched with FEC change, 'd' - see DDMAP for return code,
+  'X' - unknown return code, 'x' - return code 0
+
+Type escape sequence to abort.
+  0 10.0.41.41 MRU 1500 [Labels: 18 Exp: 0]
+L 1 10.0.41.51 MRU 1500 [Labels: implicit-null Exp: 0] 7 ms
+! 2 10.0.42.42 2 ms
+XE1#
+show mpls forwarding-table 10.255.0.42 32
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+22         18         10.255.0.42/32   0             Gi1        10.0.41.51  
+XE1#
+show mpls ldp neighbor | include Peer|TCP|Targeted|Src
+    Peer LDP Ident: 10.255.0.51:0; Local LDP Ident 10.255.0.41:0
+	TCP connection: 10.255.0.51.32023 - 10.255.0.41.646
+	  GigabitEthernet1, Src IP addr: 10.0.41.51
+    Peer LDP Ident: 10.255.0.1:0; Local LDP Ident 10.255.0.41:0
+	TCP connection: 10.255.0.1.646 - 10.255.0.41.32674
+	  Targeted Hello 10.255.0.41 -> 10.255.0.1, active, passive
+    Peer LDP Ident: 10.255.0.42:0; Local LDP Ident 10.255.0.41:0
+	TCP connection: 10.255.0.42.45579 - 10.255.0.41.646
+	  Targeted Hello 10.255.0.41 -> 10.255.0.42, active, passive
+    Peer LDP Ident: 10.255.0.43:0; Local LDP Ident 10.255.0.41:0
+	TCP connection: 10.255.0.43.37429 - 10.255.0.41.646
+	  Targeted Hello 10.255.0.41 -> 10.255.0.43, active, passive
+XE1#
+show bgp vpnv4 unicast all summary | begin Neighbor
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.52     4        65000      34      23        6    0    0 00:13:17        2
+172.16.1.1      4        65001      18      17        6    0    0 00:11:49        1
+XE1#
+show bgp l2vpn evpn summary | begin Neighbor
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.52     4        65000      34      23       20    0    0 00:13:17        6
+XE1#

@@ -657,8 +657,16 @@ def _learn_view(app):
     return out
 
 
-_TASK_HEAD = re.compile(r"^### (?:Task|課題) M(\d+)-(\d+)\b.*$", re.M)
+_TASK_HEAD = re.compile(r"^### (?:Task|課題) ((?:M\d+|[A-Z])-\d+)\b.*$", re.M)
 _UNIT_HEAD = re.compile(r"^## (M(\d+)\b.*)$", re.M)
+_ANY_HEAD = re.compile(r"^## (.+)$", re.M)
+
+
+def _task_sid(tid, by_title):
+    """課題の見出しの番号 → learn.yml の課題 ID。「M2-1」は規約どおり m2t1。M 番号を持たない課題(「S-1」など・BL-261)は
+    learn.yml の title.en の頭(「S-1  …」)で引く。"""
+    m = re.match(r"M(\d+)-(\d+)$", tid)
+    return f"m{m.group(1)}t{m.group(2)}" if m else by_title.get(tid, "")
 
 
 def _learn_texts(app):
@@ -675,30 +683,47 @@ def _learn_texts(app):
         files[own] = app["task"]
         if alt:
             files[alt[1]] = os.path.join(d, _PAIR[name][2])
-    out = {"rules": {}, "units": {}, "tasks": {}}
+    out = {"rules": {}, "units": {}, "tasks": {}, "task_unit": {}}
     html_ = lambda md: render_html.md_to_body(md, allow_html=True)[0] if md.strip() else ""
+    try:
+        by_title = {str((st.get("title") or {}).get("en", "")).split()[0]: st["id"]
+                    for st in _learn_load(app) if (st.get("title") or {}).get("en")}
+    except (OSError, IndexError):
+        by_title = {}
     for lang, path in files.items():
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
         parts = re.split(r"(?m)^(?=## )", text)
         head = re.sub(r"(?m)^# .*\n?", "", parts[0], count=1)
-        rules = [head]
+        rules = []
+        rules.append(head)
+        n_other = 0
         for part in parts[1:]:
             um = _UNIT_HEAD.match(part)
-            if not um:
+            if um:
+                uid, title = f"m{um.group(2)}", um.group(1)
+            elif _TASK_HEAD.search(part) and not re.match(r"## (Topology|トポロジ)", part):
+                # M 番号を持たない単元(「## The services side by side」の下に「### Task S-1」…)も単元として扱う
+                n_other += 1
+                uid, title = f"u{n_other}", _ANY_HEAD.match(part).group(1)
+                um = _ANY_HEAD.match(part)
+            else:
                 if not re.match(r"## (Topology|トポロジ)", part):
                     rules.append(part)
                 continue
-            uid = f"m{um.group(2)}"
             body = part[um.end():]
             first = _TASK_HEAD.search(body)
             u = out["units"].setdefault(uid, {"title": {}, "intro": {}})
-            u["title"][lang] = um.group(1).strip()
+            u["title"][lang] = title.strip()
             u["intro"][lang] = html_(body[:first.start()] if first else body)
             heads = list(_TASK_HEAD.finditer(body))
             for k, m in enumerate(heads):
                 end = heads[k + 1].start() if k + 1 < len(heads) else len(body)
-                out["tasks"].setdefault(f"m{m.group(1)}t{m.group(2)}", {})[lang] = html_(body[m.end():end])
+                sid = _task_sid(m.group(1), by_title)
+                if not sid:
+                    continue
+                out["tasks"].setdefault(sid, {})[lang] = html_(body[m.end():end])
+                out["task_unit"][sid] = uid
         out["rules"][lang] = html_("\n".join(rules))
     return out
 
@@ -784,7 +809,7 @@ async def h_learn(request):
         v["tries"] = tries.get(v["id"], [])
         v["task"] = texts["tasks"].get(v["id"], {})
         m = re.match(r"(m\d+)t", v["id"])
-        v["unit"] = m.group(1) if m else ""
+        v["unit"] = texts["task_unit"].get(v["id"]) or (m.group(1) if m else "")
     return web.json_response({"enabled": True, "steps": steps, "reading": reading,
                               "rules": texts["rules"], "units": texts["units"]},
                              headers={"Cache-Control": "no-store"})

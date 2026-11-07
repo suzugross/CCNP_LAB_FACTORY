@@ -1,0 +1,36 @@
+!! _POC-XRSVC XR01(XRv9000 26.1.1)= PE。コアの IS-IS と LDP だけ。サービスは PoC の段で足す。
+interface Loopback0
+ ipv4 address 10.255.0.1 255.255.255.255
+!
+interface {{ links[3] }}
+ description CORE to P1
+ ipv4 address 10.0.1.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description to CE4 (site 4)
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+!
+mpls ldp
+ interface {{ links[3] }}
+ !
+!
+end

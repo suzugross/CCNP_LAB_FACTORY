@@ -1,0 +1,56 @@
+
+######## 23:57:55 ldpf-1: 切り替え= SW1 から ping を流しながら XE1 の Gi3 を落とす→戻す(主の PW が落ちて予備へ)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+interface GigabitEthernet3
+XE1(config-if)#
+shutdown
+XE1(config-if)#
+end
+XE1#
+show l2vpn atom vc
+
+                                       Service
+Interface Peer ID         VC ID      Type   Name                     Status
+--------- --------------- ---------- ------ ------------------------ ----------
+pw100001  10.255.0.41     161        p2p    SITE3-SITE4-LDP          DOWN      
+pw100002  10.255.0.42     162        p2p    SITE3-SITE4-LDP          UP        
+
+XE3#
+show xconnect all
+Legend:    XC ST=Xconnect State  S1=Segment1 State  S2=Segment2 State
+  UP=Up       DN=Down            AD=Admin Down      IA=Inactive
+  SB=Standby  HS=Hot Standby     RV=Recovering      NH=No Hardware
+
+XC ST  Segment 1                         S1 Segment 2                         S2
+------+---------------------------------+--+---------------------------------+--
+IA pri   ac Gi2:160(Eth VLAN)            UP mpls 10.255.0.41:161              DN
+UP pri   ac Gi2:160(Eth VLAN)            UP mpls 10.255.0.42:162              UP
+XE3#
+Success rate is 99 percent (14955/15000), round-trip min/avg/max = 1/2/97 ms
+sent 15000 lost 45 runs [20, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] longest 20
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+interface GigabitEthernet3
+XE1(config-if)#
+no shutdown
+XE1(config-if)#
+end
+XE1#
+show l2vpn atom vc
+
+                                       Service
+Interface Peer ID         VC ID      Type   Name                     Status
+--------- --------------- ---------- ------ ------------------------ ----------
+pw100001  10.255.0.41     161        p2p    SITE3-SITE4-LDP          UP        
+pw100002  10.255.0.42     162        p2p    SITE3-SITE4-LDP          STANDBY   
+
+XE3#
+ping 172.31.160.3 repeat 10
+Type escape sequence to abort.
+Sending 10, 100-byte ICMP Echos to 172.31.160.3, timeout is 2 seconds:
+..........
+Success rate is 0 percent (0/10)
+SW1#

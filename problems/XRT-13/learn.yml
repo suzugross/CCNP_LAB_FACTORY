@@ -1,0 +1,709 @@
+# XRT-13 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn XRT-13 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# ここに書いた挙動は Catalyst 8000V 17.15.1a・IOS XRv 9000 26.1.1(+IOL 17.15)の実機で確認した(設計= problems/_drafts/XR-TRACK.design.md §26)。
+# 模範解の「On XE1:」などの見出し= 機器ごとの塊(poc/xr/verbatim.py が見出しごとに送り先を替える。塊は configure [terminal] 〜 end)。
+# 読み物= Reading タブに出す本(reading/xr/)。各課題の read: はその本の「ページ#節」(節= data-sec)。
+reading: xr
+steps:
+  - id: svc1
+    title: { en: "S-1  An IP VPN for sites 2, 3 and 4", ja: "S-1  サイト 2、3、4 の IP VPN" }
+    check: svc1
+    read: [c0-svc-map#s2-1, c0-svc-map#s2-3, c1-svc-assembly#s1-2, c1-svc-assembly#s3, c1-svc-assembly#s4-1]
+    hints:
+      - en: "Build it in the order of the Build order page: first the iBGP session from each provider edge to RR1 with the VPNv4 family, then the VRF (RD and RT), then the customer's port in the VRF and the routes from the CE. Site 3's CE speaks no routing protocol, so its provider edge has to know that LAN by itself and hand it to BGP. On XR01, remember what eBGP does without a policy."
+        ja: "「組み立て順」のページの順で組みます。まず各プロバイダー エッジから RR1 への iBGP に VPNv4 のファミリー、次に VRF(RD と RT)、最後にお客さまのポートを VRF に入れて CE から経路を受けます。サイト 3 の CE はルーティング プロトコルを話さないので、その PE が自分でその LAN を知り、BGP に渡す必要があります。XR01 では、ポリシーの無い eBGP が何をするかを思い出してください。"
+      - en: "On RR1: `show bgp vpnv4 unicast all summary` (step 1) and `show bgp vpnv4 unicast all 10.30.3.0/24` (step 2: the RD and the RT). On the provider edges: `show ip route vrf CUST-D` (IOS XE) or `show route vrf CUST-D` (IOS XR), and `show bgp vpnv4 unicast all labels`. Guides: the IOS XE 17.x MPLS configuration guide, its chapter on MPLS VPNs; for IOS XR, L3VPN Configuration Guide (ASR 9000 or NCS 5500), 'Implementing MPLS Layer 3 VPNs'; Static Routes Configuration Guide, static routes in a VRF."
+        ja: "RR1 で `show bgp vpnv4 unicast all summary`(段 1)と `show bgp vpnv4 unicast all 10.30.3.0/24`(段 2: RD と RT)。プロバイダー エッジで `show ip route vrf CUST-D`(IOS XE)か `show route vrf CUST-D`(IOS XR)と `show bgp vpnv4 unicast all labels`。ガイド: IOS XE 17.x の MPLS のコンフィギュレーション ガイドの MPLS VPN の章。IOS XR は L3VPN Configuration Guide(ASR 9000 か NCS 5500)の「Implementing MPLS Layer 3 VPNs」。VRF の静的経路は Static Routes Configuration Guide。"
+      - en: "XE2 and XE3: `vrf definition CUST-D` (`rd 10.255.0.42:310` / `10.255.0.43:310`, `route-target export` and `import 65000:310`), `interface GigabitEthernet2.310` (`encapsulation dot1Q 310`, `vrf forwarding CUST-D`, the .254 address), `router bgp 65000` with the router ID, the neighbor 10.255.0.52 (update-source Loopback0) and `address-family vpnv4`. XE2: `address-family ipv4 vrf CUST-D` with the neighbor 172.20.2.1 (AS 65102). XE3: `ip route vrf CUST-D 10.30.3.0 255.255.255.0 172.20.3.1` and `redistribute static` under `address-family ipv4 vrf CUST-D`. XR01: `vrf CUST-D` with the import and export route target, `GigabitEthernet0/0/0/1.310` in the VRF, `route-policy PASS`, and `router bgp 65000` → `vrf CUST-D` → `rd 10.255.0.1:310` and the neighbor 172.20.4.1 (AS 65104) with the policy in and out."
+        ja: "XE2 と XE3: `vrf definition CUST-D`(`rd 10.255.0.42:310` / `10.255.0.43:310`、`route-target export` と `import 65000:310`)、`interface GigabitEthernet2.310`(`encapsulation dot1Q 310`、`vrf forwarding CUST-D`、.254 のアドレス)、`router bgp 65000` にルータ ID、近隣 10.255.0.52(update-source Loopback0)と `address-family vpnv4`。XE2: `address-family ipv4 vrf CUST-D` に近隣 172.20.2.1(AS 65102)。XE3: `ip route vrf CUST-D 10.30.3.0 255.255.255.0 172.20.3.1` と、`address-family ipv4 vrf CUST-D` の下の `redistribute static`。XR01: インポートとエクスポートのルート ターゲットを持つ `vrf CUST-D`、VRF に入れた `GigabitEthernet0/0/0/1.310`、`route-policy PASS`、`router bgp 65000` → `vrf CUST-D` → `rd 10.255.0.1:310` と、ポリシーを両方向に付けた近隣 172.20.4.1(AS 65104)。"
+    solution:
+      en: |
+        On XE2:
+        configure terminal
+         vrf definition CUST-D
+          rd 10.255.0.42:310
+          address-family ipv4
+           route-target export 65000:310
+           route-target import 65000:310
+          exit-address-family
+         exit
+         interface GigabitEthernet2.310
+          encapsulation dot1Q 310
+          vrf forwarding CUST-D
+          ip address 172.20.2.254 255.255.255.0
+         exit
+         router bgp 65000
+          bgp router-id 10.255.0.42
+          bgp log-neighbor-changes
+          no bgp default ipv4-unicast
+          neighbor 10.255.0.52 remote-as 65000
+          neighbor 10.255.0.52 update-source Loopback0
+          address-family vpnv4
+           neighbor 10.255.0.52 activate
+           neighbor 10.255.0.52 send-community both
+          exit-address-family
+          address-family ipv4 vrf CUST-D
+           neighbor 172.20.2.1 remote-as 65102
+           neighbor 172.20.2.1 activate
+          exit-address-family
+        end
+        On XE3:
+        configure terminal
+         vrf definition CUST-D
+          rd 10.255.0.43:310
+          address-family ipv4
+           route-target export 65000:310
+           route-target import 65000:310
+          exit-address-family
+         exit
+         interface GigabitEthernet2.310
+          encapsulation dot1Q 310
+          vrf forwarding CUST-D
+          ip address 172.20.3.254 255.255.255.0
+         exit
+         ip route vrf CUST-D 10.30.3.0 255.255.255.0 172.20.3.1
+         router bgp 65000
+          bgp router-id 10.255.0.43
+          bgp log-neighbor-changes
+          no bgp default ipv4-unicast
+          neighbor 10.255.0.52 remote-as 65000
+          neighbor 10.255.0.52 update-source Loopback0
+          address-family vpnv4
+           neighbor 10.255.0.52 activate
+           neighbor 10.255.0.52 send-community both
+          exit-address-family
+          address-family ipv4 vrf CUST-D
+           redistribute static
+          exit-address-family
+        end
+        On XR01:
+        configure
+         vrf CUST-D
+          address-family ipv4 unicast
+           import route-target
+            65000:310
+           !
+           export route-target
+            65000:310
+           !
+          !
+         !
+         interface GigabitEthernet0/0/0/1.310
+          encapsulation dot1q 310
+          vrf CUST-D
+          ipv4 address 172.20.4.254 255.255.255.0
+         !
+         route-policy PASS
+          pass
+         end-policy
+         !
+         router bgp 65000
+          bgp router-id 10.255.0.1
+          address-family vpnv4 unicast
+          !
+          neighbor 10.255.0.52
+           remote-as 65000
+           update-source Loopback0
+           address-family vpnv4 unicast
+           !
+          !
+          vrf CUST-D
+           rd 10.255.0.1:310
+           address-family ipv4 unicast
+           !
+           neighbor 172.20.4.1
+            remote-as 65104
+            address-family ipv4 unicast
+             route-policy PASS in
+             route-policy PASS out
+         commit
+        end
+        Each part is one step. Step 1 is the iBGP session to RR1 with the VPNv4 family: without it a provider edge has no way
+        to find the others. Step 2 is the VRF: the route target 65000:310 is what makes the three provider edges members of one
+        VPN; the route distinguisher only keeps their routes apart. Step 3 connects the customer. XE2 and XR01 take the site LAN
+        from the CE in eBGP. At site 3 the CE has only a default route, so XE3 learns 10.30.3.0/24 from a static route in the
+        VRF and redistributes it into BGP (a `network` statement under the VRF's address family would also do). On XR01 the
+        eBGP session with CE4 comes up without a policy, but no route is sent or accepted until `route-policy` is applied in
+        both directions. XE1 takes no part in this service.
+      ja: |
+        On XE2:
+        configure terminal
+         vrf definition CUST-D
+          rd 10.255.0.42:310
+          address-family ipv4
+           route-target export 65000:310
+           route-target import 65000:310
+          exit-address-family
+         exit
+         interface GigabitEthernet2.310
+          encapsulation dot1Q 310
+          vrf forwarding CUST-D
+          ip address 172.20.2.254 255.255.255.0
+         exit
+         router bgp 65000
+          bgp router-id 10.255.0.42
+          bgp log-neighbor-changes
+          no bgp default ipv4-unicast
+          neighbor 10.255.0.52 remote-as 65000
+          neighbor 10.255.0.52 update-source Loopback0
+          address-family vpnv4
+           neighbor 10.255.0.52 activate
+           neighbor 10.255.0.52 send-community both
+          exit-address-family
+          address-family ipv4 vrf CUST-D
+           neighbor 172.20.2.1 remote-as 65102
+           neighbor 172.20.2.1 activate
+          exit-address-family
+        end
+        On XE3:
+        configure terminal
+         vrf definition CUST-D
+          rd 10.255.0.43:310
+          address-family ipv4
+           route-target export 65000:310
+           route-target import 65000:310
+          exit-address-family
+         exit
+         interface GigabitEthernet2.310
+          encapsulation dot1Q 310
+          vrf forwarding CUST-D
+          ip address 172.20.3.254 255.255.255.0
+         exit
+         ip route vrf CUST-D 10.30.3.0 255.255.255.0 172.20.3.1
+         router bgp 65000
+          bgp router-id 10.255.0.43
+          bgp log-neighbor-changes
+          no bgp default ipv4-unicast
+          neighbor 10.255.0.52 remote-as 65000
+          neighbor 10.255.0.52 update-source Loopback0
+          address-family vpnv4
+           neighbor 10.255.0.52 activate
+           neighbor 10.255.0.52 send-community both
+          exit-address-family
+          address-family ipv4 vrf CUST-D
+           redistribute static
+          exit-address-family
+        end
+        On XR01:
+        configure
+         vrf CUST-D
+          address-family ipv4 unicast
+           import route-target
+            65000:310
+           !
+           export route-target
+            65000:310
+           !
+          !
+         !
+         interface GigabitEthernet0/0/0/1.310
+          encapsulation dot1q 310
+          vrf CUST-D
+          ipv4 address 172.20.4.254 255.255.255.0
+         !
+         route-policy PASS
+          pass
+         end-policy
+         !
+         router bgp 65000
+          bgp router-id 10.255.0.1
+          address-family vpnv4 unicast
+          !
+          neighbor 10.255.0.52
+           remote-as 65000
+           update-source Loopback0
+           address-family vpnv4 unicast
+           !
+          !
+          vrf CUST-D
+           rd 10.255.0.1:310
+           address-family ipv4 unicast
+           !
+           neighbor 172.20.4.1
+            remote-as 65104
+            address-family ipv4 unicast
+             route-policy PASS in
+             route-policy PASS out
+         commit
+        end
+        部品はそれぞれ 1 つの段です。段 1 は RR1 への iBGP の VPNv4 のファミリーで、これが無いとプロバイダー エッジはほかの PE を
+        見つけられません。段 2 は VRF です。3 台のプロバイダー エッジを 1 つの VPN の仲間にしているのはルート ターゲット 65000:310 で、
+        ルート識別子は経路を互いに区別するだけです。段 3 でお客さまをつなぎます。XE2 と XR01 は、CE から eBGP でサイトの LAN を
+        受け取ります。サイト 3 の CE はデフォルト ルートしか持たないので、XE3 は VRF の静的経路で 10.30.3.0/24 を知り、それを BGP に
+        再配送します(VRF のアドレス ファミリーの下の `network` でも構いません)。XR01 では、CE4 との eBGP はポリシーが無くても
+        上がりますが、`route-policy` を両方向に付けるまで経路を送りも受けもしません。XE1 はこのサービスに加わりません。
+  - id: svc2
+    title: { en: "S-2  An E-Line on an LDP pseudowire (sites 3 and 4)", ja: "S-2  LDP の疑似回線による E-Line(サイト 3 と 4)" }
+    check: svc2
+    read: [c0-svc-map#s2-3, c0-svc-map#s3-3, c1-svc-assembly#s4-2]
+    hints:
+      - en: "This service has no step 1: you name the far provider edge inside the container, and the two provider edges set up a targeted LDP session by themselves. The two sites use different VLANs. Ask yourself whether the VLAN tag is carried on the pseudowire, and where it is removed and added."
+        ja: "このサービスには段 1 がありません。入れ物の中で遠くのプロバイダー エッジを名指しすると、2 台は自分で targeted LDP のセッションを張ります。2 つのサイトは別々の VLAN を使います。VLAN のタグは疑似回線の上で運ばれるのか、どこで外し、どこで付けるのかを考えてください。"
+      - en: "On XE3: `show l2vpn atom vc vcid 320 detail`, `show mpls ldp neighbor 10.255.0.1`. On XR01: `show l2vpn xconnect detail` (the AC, the PW and the `Error:` line). Guides: the IOS XE 17.x MPLS configuration guide, its chapter on Any Transport over MPLS (Ethernet over MPLS); for IOS XR, L2VPN and Ethernet Services Configuration Guide (ASR 9000), 'Implementing Point to Point Layer 2 Services' and 'The Carrier Ethernet Model'."
+        ja: "XE3 で `show l2vpn atom vc vcid 320 detail`、`show mpls ldp neighbor 10.255.0.1`。XR01 で `show l2vpn xconnect detail`(AC、PW、`Error:` の行)。ガイド: IOS XE 17.x の MPLS のコンフィギュレーション ガイドの Any Transport over MPLS(Ethernet over MPLS)の章。IOS XR は L2VPN and Ethernet Services Configuration Guide(ASR 9000)の「Implementing Point to Point Layer 2 Services」と「The Carrier Ethernet Model」。"
+      - en: "XE3: `service instance 320 ethernet` on GigabitEthernet2 (`encapsulation dot1q 320`, `rewrite ingress tag pop 1 symmetric`), then `l2vpn xconnect context <name>` with `member GigabitEthernet2 service-instance 320` and `member 10.255.0.1 320 encapsulation mpls`. XR01: `interface GigabitEthernet0/0/0/1.321 l2transport` (`encapsulation dot1q 321`, the same rewrite), then `l2vpn` → `xconnect group <name>` → `p2p <name>` → the interface and `neighbor ipv4 10.255.0.43 pw-id 320`."
+        ja: "XE3: GigabitEthernet2 に `service instance 320 ethernet`(`encapsulation dot1q 320`、`rewrite ingress tag pop 1 symmetric`)。次に `l2vpn xconnect context <名前>` に `member GigabitEthernet2 service-instance 320` と `member 10.255.0.1 320 encapsulation mpls`。XR01: `interface GigabitEthernet0/0/0/1.321 l2transport`(`encapsulation dot1q 321`、同じ rewrite)。次に `l2vpn` → `xconnect group <名前>` → `p2p <名前>` → そのインタフェースと `neighbor ipv4 10.255.0.43 pw-id 320`。"
+    solution:
+      en: |
+        On XE3:
+        configure terminal
+         interface GigabitEthernet2
+          service instance 320 ethernet
+           encapsulation dot1q 320
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         l2vpn xconnect context CE3-CE4
+          member GigabitEthernet2 service-instance 320
+          member 10.255.0.1 320 encapsulation mpls
+        end
+        On XR01:
+        configure
+         interface GigabitEthernet0/0/0/1.321 l2transport
+          encapsulation dot1q 321
+          rewrite ingress tag pop 1 symmetric
+         !
+         l2vpn
+          xconnect group CUST-D
+           p2p CE4-CE3
+            interface GigabitEthernet0/0/0/1.321
+            neighbor ipv4 10.255.0.43 pw-id 320
+         commit
+        end
+        The container is a cross-connect with two ends: the attachment circuit and a pseudowire to the named provider edge.
+        Naming 10.255.0.1 on XE3 and 10.255.0.43 on XR01 with the same ID 320 is all the signalling configuration there is:
+        each provider edge starts targeted LDP towards the address it names, and the two exchange their pseudowire labels. The
+        VLAN number lives only on each site link. Each provider edge pops the tag on the way in and pushes its own on the way
+        out, so VLAN 320 at site 3 and VLAN 321 at site 4 meet on one line.
+      ja: |
+        On XE3:
+        configure terminal
+         interface GigabitEthernet2
+          service instance 320 ethernet
+           encapsulation dot1q 320
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         l2vpn xconnect context CE3-CE4
+          member GigabitEthernet2 service-instance 320
+          member 10.255.0.1 320 encapsulation mpls
+        end
+        On XR01:
+        configure
+         interface GigabitEthernet0/0/0/1.321 l2transport
+          encapsulation dot1q 321
+          rewrite ingress tag pop 1 symmetric
+         !
+         l2vpn
+          xconnect group CUST-D
+           p2p CE4-CE3
+            interface GigabitEthernet0/0/0/1.321
+            neighbor ipv4 10.255.0.43 pw-id 320
+         commit
+        end
+        入れ物は 2 つの端を持つクロスコネクトです。アタッチメント回線と、名指ししたプロバイダー エッジへの疑似回線です。XE3 で
+        10.255.0.1 を、XR01 で 10.255.0.43 を、同じ ID 320 で名指しすることが、シグナリングの設定のすべてです。各プロバイダー エッジは
+        名指しした相手へ targeted LDP を始め、2 台は互いの疑似回線のラベルを交換します。VLAN の番号は、それぞれのサイトのリンクの
+        中だけにあります。各プロバイダー エッジは入るときにタグを外し、出るときに自分の側のタグを付けるので、サイト 3 の VLAN 320 と
+        サイト 4 の VLAN 321 が 1 本の回線でつながります。
+  - id: svc3
+    title: { en: "S-3  An E-LAN on VPLS (sites 1, 2 and 3)", ja: "S-3  VPLS による E-LAN(サイト 1、2、3)" }
+    check: svc3
+    read: [c0-svc-map#s2-2, c0-svc-map#s2-3, c1-svc-assembly#s4-3]
+    hints:
+      - en: "VPLS names its peers too, so there is no step 1. The container has two parts: a set of pseudowires, and a switch inside the provider edge that joins them with the customer's port. Think about which provider edges each one must name, given that a VPLS provider edge never forwards a frame from one pseudowire into another."
+        ja: "VPLS も相手を名指しするので、段 1 はありません。入れ物は 2 つの部品です。疑似回線の束と、それをお客さまのポートとつなぐ、プロバイダー エッジの中のスイッチです。VPLS のプロバイダー エッジは、ある疑似回線から来たフレームを別の疑似回線へ送らないことを踏まえて、各プロバイダー エッジがどの相手を名指しすべきかを考えてください。"
+      - en: "`show l2vpn vfi`, `show l2vpn atom vc`, `show bridge-domain` (the members and the MAC table). Guide: MPLS Configuration Guide, Cisco IOS XE 17.x, 'Configuring Virtual Private LAN Services' (the VFI, the bridge domain, full mesh, split horizon)."
+        ja: "`show l2vpn vfi`、`show l2vpn atom vc`、`show bridge-domain`(メンバーと MAC のテーブル)。ガイド: MPLS Configuration Guide, Cisco IOS XE 17.x の「Configuring Virtual Private LAN Services」(VFI、ブリッジ ドメイン、フルメッシュ、スプリット ホライズン)。"
+      - en: "On each of XE1, XE2 and XE3: `l2vpn vfi context <name>` with `vpn id 330` and one `member <address> encapsulation mpls` for each of the two other provider edges; `service instance 330 ethernet` on GigabitEthernet2 (`encapsulation dot1q 330`, `rewrite ingress tag pop 1 symmetric`); `bridge-domain 330` with `member GigabitEthernet2 service-instance 330` and `member vfi <name>`."
+        ja: "XE1、XE2、XE3 のそれぞれで: `l2vpn vfi context <名前>` に `vpn id 330` と、ほかの 2 台のプロバイダー エッジのそれぞれに 1 つずつ `member <アドレス> encapsulation mpls`。GigabitEthernet2 に `service instance 330 ethernet`(`encapsulation dot1q 330`、`rewrite ingress tag pop 1 symmetric`)。`bridge-domain 330` に `member GigabitEthernet2 service-instance 330` と `member vfi <名前>`。"
+    solution:
+      en: |
+        On XE1:
+        configure terminal
+         l2vpn vfi context VPLS330
+          vpn id 330
+          member 10.255.0.42 encapsulation mpls
+          member 10.255.0.43 encapsulation mpls
+         exit
+         interface GigabitEthernet2
+          service instance 330 ethernet
+           encapsulation dot1q 330
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         bridge-domain 330
+          member GigabitEthernet2 service-instance 330
+          member vfi VPLS330
+        end
+        On XE2:
+        configure terminal
+         l2vpn vfi context VPLS330
+          vpn id 330
+          member 10.255.0.41 encapsulation mpls
+          member 10.255.0.43 encapsulation mpls
+         exit
+         interface GigabitEthernet2
+          service instance 330 ethernet
+           encapsulation dot1q 330
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         bridge-domain 330
+          member GigabitEthernet2 service-instance 330
+          member vfi VPLS330
+        end
+        On XE3:
+        configure terminal
+         l2vpn vfi context VPLS330
+          vpn id 330
+          member 10.255.0.41 encapsulation mpls
+          member 10.255.0.42 encapsulation mpls
+         exit
+         interface GigabitEthernet2
+          service instance 330 ethernet
+           encapsulation dot1q 330
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         bridge-domain 330
+          member GigabitEthernet2 service-instance 330
+          member vfi VPLS330
+        end
+        The VFI is the bundle of pseudowires, and the bridge domain is the switch that joins them with the attachment
+        circuit. Every provider edge names both of the others: a VPLS provider edge does not relay a frame from one pseudowire
+        to another (split horizon), so a site reaches only the sites whose provider edge its own provider edge has a pseudowire
+        to. The VPN ID 330 becomes the VC ID of the pseudowires and has to match on all three. Nothing here uses BGP; the
+        provider edges find each other only because they are named. Adding a fourth site would mean a new `member` line on
+        every existing provider edge.
+      ja: |
+        On XE1:
+        configure terminal
+         l2vpn vfi context VPLS330
+          vpn id 330
+          member 10.255.0.42 encapsulation mpls
+          member 10.255.0.43 encapsulation mpls
+         exit
+         interface GigabitEthernet2
+          service instance 330 ethernet
+           encapsulation dot1q 330
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         bridge-domain 330
+          member GigabitEthernet2 service-instance 330
+          member vfi VPLS330
+        end
+        On XE2:
+        configure terminal
+         l2vpn vfi context VPLS330
+          vpn id 330
+          member 10.255.0.41 encapsulation mpls
+          member 10.255.0.43 encapsulation mpls
+         exit
+         interface GigabitEthernet2
+          service instance 330 ethernet
+           encapsulation dot1q 330
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         bridge-domain 330
+          member GigabitEthernet2 service-instance 330
+          member vfi VPLS330
+        end
+        On XE3:
+        configure terminal
+         l2vpn vfi context VPLS330
+          vpn id 330
+          member 10.255.0.41 encapsulation mpls
+          member 10.255.0.42 encapsulation mpls
+         exit
+         interface GigabitEthernet2
+          service instance 330 ethernet
+           encapsulation dot1q 330
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         bridge-domain 330
+          member GigabitEthernet2 service-instance 330
+          member vfi VPLS330
+        end
+        VFI は疑似回線の束で、ブリッジ ドメインはそれをアタッチメント回線とつなぐスイッチです。どのプロバイダー エッジも、ほかの
+        2 台の両方を名指しします。VPLS のプロバイダー エッジは、ある疑似回線から来たフレームを別の疑似回線へ中継しない(スプリット
+        ホライズン)ので、サイトが到達できるのは、自分のプロバイダー エッジが疑似回線を持つ相手のサイトだけです。VPN ID 330 は
+        疑似回線の VC ID になり、3 台で一致している必要があります。ここでは BGP を使いません。プロバイダー エッジは、名指しされて
+        いるからこそ互いを見つけます。4 つめのサイトを足すと、既存のすべてのプロバイダー エッジに `member` の行が 1 つずつ増えます。
+  - id: svc4
+    title: { en: "S-4  An E-LAN on EVPN (sites 1, 2 and 3)", ja: "S-4  EVPN による E-LAN(サイト 1、2、3)" }
+    check: svc4
+    read: [c0-svc-map#s2-2, c0-svc-map#s2-3, c1-svc-assembly#s3, c1-svc-assembly#s4-4]
+    hints:
+      - en: "This service finds its peers in BGP, so step 1 is back: an address family on the iBGP session to RR1 (XE1 has no BGP yet). The container is a bridge domain again, with an EVPN instance where VPLS had the VFI. The route target plan differs from what the EVPN instance would pick by itself. And think about how a broadcast reaches the other provider edges when the core carries no multicast."
+        ja: "このサービスは BGP で相手を見つけるので、段 1 が戻ってきます。RR1 への iBGP のアドレス ファミリーです(XE1 にはまだ BGP がありません)。入れ物は再びブリッジ ドメインで、VPLS で VFI があった場所に EVPN インスタンスが入ります。ルート ターゲットの計画は、EVPN インスタンスが自分で選ぶものとは違います。コアがマルチキャストを運ばないとき、ブロードキャストがどうやってほかのプロバイダー エッジに届くかも考えてください。"
+      - en: "On RR1: `show bgp l2vpn evpn summary`. On the provider edges: `show l2vpn evpn evi 340 detail` (Import-RTs, Export-RTs, Replication Type, State, Peers), `show bgp l2vpn evpn route-type 3`, `show l2vpn evpn mac`. Guide: MPLS Configuration Guide, Cisco IOS XE 17.x, 'EVPN Single-Homing' (its configuration example); the CLI help (`?`) under `l2vpn evpn instance`."
+        ja: "RR1 で `show bgp l2vpn evpn summary`。プロバイダー エッジで `show l2vpn evpn evi 340 detail`(Import-RTs、Export-RTs、Replication Type、State、Peers)、`show bgp l2vpn evpn route-type 3`、`show l2vpn evpn mac`。ガイド: MPLS Configuration Guide, Cisco IOS XE 17.x の「EVPN Single-Homing」(その設定例)。`l2vpn evpn instance` の下の CLI のヘルプ(`?`)。"
+      - en: "XE1: `router bgp 65000` with `bgp router-id 10.255.0.41`, `no bgp default ipv4-unicast`, the neighbor 10.255.0.52 (update-source Loopback0) and `address-family l2vpn evpn` (activate, `send-community both`). XE2 and XE3: the same address family under the existing `router bgp 65000`. On all three: `l2vpn evpn` → `replication-type ingress` and `router-id Loopback0`; `l2vpn evpn instance 340 vlan-based` → `route-target export 65000:3400`, `route-target import 65000:3400` and `no auto-route-target`; `service instance 340 ethernet` on GigabitEthernet2 (`encapsulation dot1q 340`, pop 1 symmetric); `bridge-domain 340` with the service instance and `member evpn-instance 340`."
+        ja: "XE1: `router bgp 65000` に `bgp router-id 10.255.0.41`、`no bgp default ipv4-unicast`、近隣 10.255.0.52(update-source Loopback0)と `address-family l2vpn evpn`(activate、`send-community both`)。XE2 と XE3: 既存の `router bgp 65000` の下に同じアドレス ファミリー。3 台すべてで: `l2vpn evpn` → `replication-type ingress` と `router-id Loopback0`。`l2vpn evpn instance 340 vlan-based` → `route-target export 65000:3400`、`route-target import 65000:3400`、`no auto-route-target`。GigabitEthernet2 に `service instance 340 ethernet`(`encapsulation dot1q 340`、pop 1 symmetric)。`bridge-domain 340` にその service instance と `member evpn-instance 340`。"
+    solution:
+      en: |
+        On XE1:
+        configure terminal
+         router bgp 65000
+          bgp router-id 10.255.0.41
+          bgp log-neighbor-changes
+          no bgp default ipv4-unicast
+          neighbor 10.255.0.52 remote-as 65000
+          neighbor 10.255.0.52 update-source Loopback0
+          address-family l2vpn evpn
+           neighbor 10.255.0.52 activate
+           neighbor 10.255.0.52 send-community both
+          exit-address-family
+         exit
+         l2vpn evpn
+          replication-type ingress
+          router-id Loopback0
+         exit
+         l2vpn evpn instance 340 vlan-based
+          route-target export 65000:3400
+          route-target import 65000:3400
+          no auto-route-target
+         exit
+         interface GigabitEthernet2
+          service instance 340 ethernet
+           encapsulation dot1q 340
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         bridge-domain 340
+          member GigabitEthernet2 service-instance 340
+          member evpn-instance 340
+        end
+        On XE2:
+        configure terminal
+         router bgp 65000
+          address-family l2vpn evpn
+           neighbor 10.255.0.52 activate
+           neighbor 10.255.0.52 send-community both
+          exit-address-family
+         exit
+         l2vpn evpn
+          replication-type ingress
+          router-id Loopback0
+         exit
+         l2vpn evpn instance 340 vlan-based
+          route-target export 65000:3400
+          route-target import 65000:3400
+          no auto-route-target
+         exit
+         interface GigabitEthernet2
+          service instance 340 ethernet
+           encapsulation dot1q 340
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         bridge-domain 340
+          member GigabitEthernet2 service-instance 340
+          member evpn-instance 340
+        end
+        On XE3:
+        configure terminal
+         router bgp 65000
+          address-family l2vpn evpn
+           neighbor 10.255.0.52 activate
+           neighbor 10.255.0.52 send-community both
+          exit-address-family
+         exit
+         l2vpn evpn
+          replication-type ingress
+          router-id Loopback0
+         exit
+         l2vpn evpn instance 340 vlan-based
+          route-target export 65000:3400
+          route-target import 65000:3400
+          no auto-route-target
+         exit
+         interface GigabitEthernet2
+          service instance 340 ethernet
+           encapsulation dot1q 340
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         bridge-domain 340
+          member GigabitEthernet2 service-instance 340
+          member evpn-instance 340
+        end
+        Compared with S-3, the list of named provider edges is gone and step 1's BGP takes its place: each provider edge
+        sends its customer MACs (type 2 routes) and its 'send me BUM with this label' (type 3) to RR1, and imports what carries
+        route target 65000:3400. Without explicit route targets the instance would use 65000:340 (AS:EVI). Writing
+        `route-target` lines only adds 65000:3400: the automatic 65000:340 stays (`show l2vpn evpn evi 340 detail` lists both)
+        until `no auto-route-target` turns it off, so 'no other' takes all three lines, on every provider edge. `replication-type ingress` makes the provider
+        edge copy BUM frames to each remote provider edge; without it the instance stays Incomplete and nothing passes. Adding a
+        fourth site would change nothing on the existing provider edges.
+      ja: |
+        On XE1:
+        configure terminal
+         router bgp 65000
+          bgp router-id 10.255.0.41
+          bgp log-neighbor-changes
+          no bgp default ipv4-unicast
+          neighbor 10.255.0.52 remote-as 65000
+          neighbor 10.255.0.52 update-source Loopback0
+          address-family l2vpn evpn
+           neighbor 10.255.0.52 activate
+           neighbor 10.255.0.52 send-community both
+          exit-address-family
+         exit
+         l2vpn evpn
+          replication-type ingress
+          router-id Loopback0
+         exit
+         l2vpn evpn instance 340 vlan-based
+          route-target export 65000:3400
+          route-target import 65000:3400
+          no auto-route-target
+         exit
+         interface GigabitEthernet2
+          service instance 340 ethernet
+           encapsulation dot1q 340
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         bridge-domain 340
+          member GigabitEthernet2 service-instance 340
+          member evpn-instance 340
+        end
+        On XE2:
+        configure terminal
+         router bgp 65000
+          address-family l2vpn evpn
+           neighbor 10.255.0.52 activate
+           neighbor 10.255.0.52 send-community both
+          exit-address-family
+         exit
+         l2vpn evpn
+          replication-type ingress
+          router-id Loopback0
+         exit
+         l2vpn evpn instance 340 vlan-based
+          route-target export 65000:3400
+          route-target import 65000:3400
+          no auto-route-target
+         exit
+         interface GigabitEthernet2
+          service instance 340 ethernet
+           encapsulation dot1q 340
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         bridge-domain 340
+          member GigabitEthernet2 service-instance 340
+          member evpn-instance 340
+        end
+        On XE3:
+        configure terminal
+         router bgp 65000
+          address-family l2vpn evpn
+           neighbor 10.255.0.52 activate
+           neighbor 10.255.0.52 send-community both
+          exit-address-family
+         exit
+         l2vpn evpn
+          replication-type ingress
+          router-id Loopback0
+         exit
+         l2vpn evpn instance 340 vlan-based
+          route-target export 65000:3400
+          route-target import 65000:3400
+          no auto-route-target
+         exit
+         interface GigabitEthernet2
+          service instance 340 ethernet
+           encapsulation dot1q 340
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         bridge-domain 340
+          member GigabitEthernet2 service-instance 340
+          member evpn-instance 340
+        end
+        S-3 と比べると、名指しの一覧が消え、代わりに段 1 の BGP が入ります。各プロバイダー エッジは、お客さまの MAC(種類 2 の経路)と
+        「BUM はこのラベルで送って」(種類 3)を RR1 へ送り、ルート ターゲット 65000:3400 の付いた経路を取り込みます。ルート ターゲットを
+        書かなければ、インスタンスは 65000:340(AS:EVI)を使います。`route-target` の行を書いても 65000:3400 が足されるだけで、自動の
+        65000:340 は残ります(`show l2vpn evpn evi 340 detail` に両方が並ぶ)。`no auto-route-target` で止めるまで残るので、「ほかは使わない」には
+        すべてのプロバイダー エッジで 3 行とも要ります。`replication-type ingress` は、BUM のフレームを遠くのプロバイダー エッジのそれぞれへコピーさせます。これが
+        無いとインスタンスは Incomplete のままで、何も通りません。4 つめのサイトを足しても、既存のプロバイダー エッジの設定は変わりません。
+  - id: svc5
+    title: { en: "S-5  An E-Line on EVPN-VPWS (sites 1 and 2)", ja: "S-5  EVPN-VPWS による E-Line(サイト 1 と 2)" }
+    check: svc5
+    read: [c0-svc-map#s2-3, c1-svc-assembly#s4-5]
+    hints:
+      - en: "The same cable as S-2, but the provider edges find each other in BGP (the address family from S-4 is already there). You do not name the far provider edge; you name the two ends of the line."
+        ja: "S-2 と同じケーブルですが、プロバイダー エッジは BGP で互いを見つけます(S-4 のアドレス ファミリーがもうあります)。遠くのプロバイダー エッジは名指ししません。名指しするのは回線の 2 つの端です。"
+      - en: "`show l2vpn evpn vpws vc id 350 detail` (state, Source and Target, Labels), `show bgp l2vpn evpn route-type 1`. Guide: MPLS Configuration Guide, Cisco IOS XE 17.x, 'EVPN VPWS'."
+        ja: "`show l2vpn evpn vpws vc id 350 detail`(state、Source と Target、Labels)、`show bgp l2vpn evpn route-type 1`。ガイド: MPLS Configuration Guide, Cisco IOS XE 17.x の「EVPN VPWS」。"
+      - en: "XE1: `service instance 350 ethernet` on GigabitEthernet2 (dot1q 350, pop 1 symmetric), then `l2vpn evpn instance 350 point-to-point` → `vpws context <name>` → `service target 2 source 1` and `member GigabitEthernet2 service-instance 350`. XE2: the same with `service target 1 source 2`."
+        ja: "XE1: GigabitEthernet2 に `service instance 350 ethernet`(dot1q 350、pop 1 symmetric)。次に `l2vpn evpn instance 350 point-to-point` → `vpws context <名前>` → `service target 2 source 1` と `member GigabitEthernet2 service-instance 350`。XE2: 同じ形で `service target 1 source 2`。"
+    solution:
+      en: |
+        On XE1:
+        configure terminal
+         interface GigabitEthernet2
+          service instance 350 ethernet
+           encapsulation dot1q 350
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         l2vpn evpn instance 350 point-to-point
+          vpws context CE1-CE2
+           service target 2 source 1
+           member GigabitEthernet2 service-instance 350
+        end
+        On XE2:
+        configure terminal
+         interface GigabitEthernet2
+          service instance 350 ethernet
+           encapsulation dot1q 350
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         l2vpn evpn instance 350 point-to-point
+          vpws context CE2-CE1
+           service target 1 source 2
+           member GigabitEthernet2 service-instance 350
+        end
+        Set next to S-2, `member 10.255.0.1 320 encapsulation mpls` (naming the far provider edge) becomes
+        `service target 2 source 1` (naming only the ends). Each provider edge advertises its own end in a type 1 route with
+        the end number as the Ethernet tag; the other provider edge imports it by the route target (automatic here,
+        65000:350) and learns from it both who holds end 2 and the label to use. To the customer, S-2 and S-5 are the same
+        cable.
+      ja: |
+        On XE1:
+        configure terminal
+         interface GigabitEthernet2
+          service instance 350 ethernet
+           encapsulation dot1q 350
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         l2vpn evpn instance 350 point-to-point
+          vpws context CE1-CE2
+           service target 2 source 1
+           member GigabitEthernet2 service-instance 350
+        end
+        On XE2:
+        configure terminal
+         interface GigabitEthernet2
+          service instance 350 ethernet
+           encapsulation dot1q 350
+           rewrite ingress tag pop 1 symmetric
+          exit
+         exit
+         l2vpn evpn instance 350 point-to-point
+          vpws context CE2-CE1
+           service target 1 source 2
+           member GigabitEthernet2 service-instance 350
+        end
+        S-2 と並べると、`member 10.255.0.1 320 encapsulation mpls`(遠くのプロバイダー エッジの名指し)が `service target 2 source 1`
+        (端の名指しだけ)に変わります。各プロバイダー エッジは、自分の端を、端の番号をイーサネット タグにした種類 1 の経路で広告します。
+        もう一方のプロバイダー エッジはそれをルート ターゲット(ここでは自動の 65000:350)で取り込み、端 2 をどの PE が持つかと、
+        使うラベルの両方を知ります。お客さまから見ると、S-2 と S-5 は同じケーブルです。

@@ -1,0 +1,177 @@
+
+######## 00:58:21 perce: CUST-A を label mode per-ce に → 戻す
+configure
+Sat Nov  7 00:58:22.449 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+label mode per-ce
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+commit
+Sat Nov  7 00:58:24.554 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A labels
+Sat Nov  7 00:58:47.005 UTC
+BGP VRF CUST-A, state: Active
+BGP Route Distinguisher: 10.255.0.1:101
+VRF ID: 0x60000002
+BGP router identifier 10.255.0.1, local AS number 65000
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000002   RD version: 60
+BGP main routing table version 60
+BGP NSR Initial initsync version 13 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop        Rcvd Label      Local Label
+Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
+Route Distinguisher Version: 60
+*> 0.0.0.0/0          192.0.2.2       nolabel         24009
+*> 10.101.1.0/24      172.16.11.2     nolabel         24010
+*>i10.101.2.0/24      10.255.0.12     22              nolabel
+*> 198.51.100.0/25    172.16.11.2     nolabel         24010
+*>i198.51.100.128/25  10.255.0.12     23              nolabel
+Processed 5 prefixes, 5 paths
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding
+Sat Nov  7 00:58:47.405 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24000  20          10.255.0.21/32     Gi0/0/0/1    10.0.3.13       3391        
+24001  Pop         10.255.0.13/32     Gi0/0/0/1    10.0.3.13       2158        
+24002  16          10.255.0.12/32     Gi0/0/0/0    10.0.1.11       12468       
+24003  Pop         10.255.0.11/32     Gi0/0/0/0    10.0.1.11       1538        
+24006  Unlabelled  10.102.1.0/24[V]   Gi0/0/0/3    172.16.21.2     0           
+24007  Unlabelled  10.99.1.0/24[V]    Gi0/0/0/4    172.16.91.2     500         
+24008  Unlabelled  10.99.2.0/24[V]    Gi0/0/0/4    172.16.91.2     0           
+24009  Aggregate   CUST-A: Per-VRF Aggr[V]   \
+                                      CUST-A                       2000        
+24010  Unlabelled  No ID              Gi0/0/0/2    172.16.11.2     0           
+       Aggregate   No ID              CUST-A                       0            (!)
+RP/0/RP0/CPU0:XR01#
+show ip bgp vpnv4 vrf CUST-A labels
+   Network          Next Hop      In label/Out label
+Route Distinguisher: 10.255.0.12:101 (CUST-A)
+   0.0.0.0          10.255.0.1      nolabel/24009
+   10.99.1.0/24     10.255.0.1      nolabel/24007
+   10.101.1.0/24    10.255.0.1      nolabel/24010
+   10.101.2.0/24    172.16.12.2     22/nolabel
+   198.51.100.0/25  10.255.0.1      nolabel/24010
+   198.51.100.128/25
+                   172.16.12.2     23/nolabel
+RT02#
+ping 10.101.1.1 source Loopback10 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.101.1.1, timeout is 2 seconds:
+Packet sent with a source address of 10.101.2.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 9/10/11 ms
+CEA2#
+ping 198.51.100.1 source Loopback11 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 198.51.100.1, timeout is 2 seconds:
+Packet sent with a source address of 198.51.100.129 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 8/10/12 ms
+CEA2#
+configure
+Sat Nov  7 00:58:52.879 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+no label mode
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+commit
+Sat Nov  7 00:58:54.983 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A labels
+Sat Nov  7 00:59:17.397 UTC
+BGP VRF CUST-A, state: Active
+BGP Route Distinguisher: 10.255.0.1:101
+VRF ID: 0x60000002
+BGP router identifier 10.255.0.1, local AS number 65000
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000002   RD version: 64
+BGP main routing table version 64
+BGP NSR Initial initsync version 13 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop        Rcvd Label      Local Label
+Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
+Route Distinguisher Version: 64
+*> 0.0.0.0/0          192.0.2.2       nolabel         24009
+*> 10.101.1.0/24      172.16.11.2     nolabel         24004
+*>i10.101.2.0/24      10.255.0.12     22              nolabel
+*> 198.51.100.0/25    172.16.11.2     nolabel         24005
+*>i198.51.100.128/25  10.255.0.12     23              nolabel
+Processed 5 prefixes, 5 paths
+RP/0/RP0/CPU0:XR01#
+
+######## 00:59:18 perce-xe: IOS XE の書き方(RT02 の CUST-B を VRF ごとに → 戻す)
+show ip bgp vpnv4 vrf CUST-B labels
+   Network          Next Hop      In label/Out label
+Route Distinguisher: 10.255.0.12:102 (CUST-B)
+   10.99.1.0/24     10.255.0.1      nolabel/24007
+   10.102.1.0/24    10.255.0.1      nolabel/24006
+   10.102.2.0/24    172.16.22.2     24/nolabel
+RT02#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+mpls label mode vrf CUST-B protocol bgp-vpnv4 per-vrf
+RT02(config)#
+end
+RT02#
+show ip bgp vpnv4 vrf CUST-B labels
+   Network          Next Hop      In label/Out label
+Route Distinguisher: 10.255.0.12:102 (CUST-B)
+   10.99.1.0/24     10.255.0.1      nolabel/24007
+   10.102.1.0/24    10.255.0.1      nolabel/24006
+   10.102.2.0/24    172.16.22.2     IPv4 VRF Aggr:27/nolabel
+RT02#
+show mpls forwarding-table vrf CUST-B
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+24         No Label   10.102.2.0/24[V] 0             drop       
+26         No Label   10.101.2.0/24[V] 0             drop       
+27         No Label   IPv4 VRF[V]      0             aggregate/CUST-B 
+RT02#
+ping 10.102.2.1 source Loopback10 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.102.2.1, timeout is 2 seconds:
+Packet sent with a source address of 10.102.1.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+CEB1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+no mpls label mode vrf CUST-B protocol bgp-vpnv4 per-vrf
+RT02(config)#
+end
+RT02#
+show ip bgp vpnv4 vrf CUST-B labels
+   Network          Next Hop      In label/Out label
+Route Distinguisher: 10.255.0.12:102 (CUST-B)
+   10.99.1.0/24     10.255.0.1      nolabel/24007
+   10.102.1.0/24    10.255.0.1      nolabel/24006
+   10.102.2.0/24    172.16.22.2     24/nolabel
+RT02#

@@ -8,7 +8,7 @@ steps:
   - id: m9t1
     title: { en: "M9-1  The first sites join their VPNs", ja: "M9-1  1 つ目のサイトを VPN に収容する" }
     check: m9t1
-    read: [90-m9-l3vpn#s1-1, 90-m9-l3vpn#s1-2, 90-m9-l3vpn#s1-3, 90-m9-l3vpn#s2-1]
+    read: [90-m9-l3vpn#s2-1, 90-m9-l3vpn#s2-2, 90-m9-l3vpn#s2-3, 90-m9-l3vpn#s2-4, 90-m9-l3vpn#s3-1, 90-m9-l3vpn#s3-3, 90-m9-l3vpn#s3-5]
     hints:
       - en: "On IOS XR the parts of a VRF live in three places: the VRF itself with its route targets, the interface, and BGP, where the route distinguisher and the CE session are. BGP also needs the VPNv4 address family before anything VPN-related can be configured, and an eBGP neighbour exchanges nothing without route policies, in a VRF as elsewhere (Unit M5)."
         ja: "IOS XR では、VRF の部品は 3 か所にあります。ルート ターゲットを持つ VRF そのもの、インターフェイス、そしてルート識別子と CE とのセッションがある BGP です。BGP は、VPN に関するものを設定する前に VPNv4 アドレス ファミリーも必要とします。また、eBGP のネイバーは、VRF の中でも他と同じく、ルート ポリシーが無いと何も交換しません(単元 M5)。"
@@ -91,7 +91,7 @@ steps:
         XR02 as VPNv4 routes with their route distinguishers and route targets (`advertised-count` 3). The interfaces
         had no address, so `vrf` and `ipv4 address` can go in together. The configuration guides say that an interface
         must lose its address before its VRF is changed; IOS XR 26.1.1 accepts the change with the address in place
-        (unit page, section 1.2).
+        (page *How L3VPN works*, the note in section 3.1).
       ja: |
         configure
          vrf CUST-A
@@ -164,12 +164,12 @@ steps:
         ポリシーを付けると、XR01 は CUST-A に 10.101.1.0/24 と 198.51.100.0/25 を、CUST-B に 10.102.1.0/24 を持ち、それらを
         ルート識別子とルート ターゲットを付けた VPNv4 ルートとして XR02 に送ります(`advertised-count` 3)。インターフェイスには
         アドレスが無かったので、`vrf` と `ipv4 address` は一緒に入れられます。コンフィギュレーション ガイドは、インターフェイスの VRF を
-        変える前にアドレスを外す必要があると書いていますが、IOS XR 26.1.1 はアドレスを付けたままの変更を受け入れます(単元のページの 1.2 節)。
+        変える前にアドレスを外す必要があると書いていますが、IOS XR 26.1.1 はアドレスを付けたままの変更を受け入れます(ページ「L3VPN の仕組み」の 3.1 節の補足)。
 
   - id: m9t2
     title: { en: "M9-2  The sites still cannot reach each other", ja: "M9-2  サイトどうしがまだ到達できない" }
     check: m9t2
-    read: [90-m9-l3vpn#s2-2, 90-m9-l3vpn#s2-3, 90-m9-l3vpn#s3-1]
+    read: [90-m9-l3vpn#s3-4, 92-m9-rr-same-as#s2-1, 92-m9-rr-same-as#s2-2, 92-m9-rr-same-as#s2-4, 92-m9-rr-same-as#s3-1, 92-m9-rr-same-as#s3-2]
     hints:
       - en: "Follow one route from the CE of one site to the CE of the other: CEA1 → XR01 → XR02 → RT02 → CEA2, and stop where it disappears. Holding a route and passing it on are two different things for an iBGP speaker: ask what makes XR02 a route reflector, and for which address family. Once one direction works, compare what the two provider edges do with a route whose AS path already contains the CE's own AS."
         ja: "1 つのルートを、一方のサイトの CE からもう一方のサイトの CE まで追ってください。CEA1 → XR01 → XR02 → RT02 → CEA2 と進み、ルートが消えたところで止まります。iBGP スピーカーにとって、ルートを保持することと次に渡すことは別のことです。何が XR02 をルート リフレクタにするのか、どのアドレス ファミリーについてなのかを考えてください。一方の方向が動いたら、AS パスに CE 自身の AS が既に含まれるルートを、2 つのプロバイダー エッジがそれぞれどう扱うかを比べてください。"
@@ -256,7 +256,7 @@ steps:
   - id: m9t3
     title: { en: "M9-3  Shared services", ja: "M9-3  共有サービス" }
     check: m9t3
-    read: [90-m9-l3vpn#s4-1, 90-m9-l3vpn#s4-2]
+    read: [94-m9-shared-internet#s2-1, 94-m9-shared-internet#s2-2, 94-m9-shared-internet#s2-3, 94-m9-shared-internet#s2-4, 94-m9-shared-internet#s3-1]
     hints:
       - en: "Three things are needed: SVC's networks must enter BGP in VRF SVC, each route must get the right route targets on export, and the customers' VRFs already import 65000:900. A route target that every route of a VRF carries is configured on the VRF; one that only some routes carry needs a route policy. Check what setting a route target in a policy does to the route targets that are already there."
         ja: "必要なものは 3 つです。SVC のネットワークが VRF SVC で BGP に入ること、エクスポートの時に各ルートに正しいルート ターゲットが付くこと、そして顧客の VRF は既に 65000:900 をインポートしていることです。VRF のすべてのルートに付くルート ターゲットは VRF に設定します。一部のルートだけに付くものにはルート ポリシーが必要です。ポリシーでルート ターゲットを設定すると、既に付いているルート ターゲットがどうなるかを確かめてください。"
@@ -358,7 +358,7 @@ steps:
   - id: m9t4
     title: { en: "M9-4  Internet access for customer A", ja: "M9-4  顧客 A のインターネット接続" }
     check: m9t4
-    read: [90-m9-l3vpn#s5-1, 90-m9-l3vpn#s5-2]
+    read: [94-m9-shared-internet#s2-5, 94-m9-shared-internet#s2-6, 94-m9-shared-internet#s3-2, 96-m9-appendix#s1-2]
     hints:
       - en: "Customer A's VRF and the global table must exchange two kinds of routes: the default route goes into the VRF, the public segments come out of it. IOS XR can leak BGP routes between a VRF and the default VRF with route policies, without static routes. For each leaked route, ask where it goes next: only to the CE on XR01, or also to RT02 as a VPN route; and whether a route that XR01 learned from another provider edge may be leaked at all."
         ja: "顧客 A の VRF とグローバル テーブルは、2 種類のルートを交換する必要があります。デフォルト ルートは VRF に入り、公開セグメントは VRF から出ていきます。IOS XR は、スタティック ルートを使わずに、ルート ポリシーで VRF とデフォルト VRF の間で BGP のルートをリークできます。リークした各ルートについて、次にどこへ行くかを考えてください。XR01 の CE だけか、VPN のルートとして RT02 にも行くか。また、XR01 が別のプロバイダー エッジから学習したルートを、そもそもリークできるかどうかを考えてください。"

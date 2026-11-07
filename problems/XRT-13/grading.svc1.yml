@@ -1,0 +1,76 @@
+# S-1: L3VPN(VRF CUST-D・RD <Lo0>:310・RT 65000:310)を拠点 2・3・4 で。拠点 3 は CE3 が既定経路だけ= XE3 に VRF の静的経路+BGP へ。
+# 段ごとに分けた確認(段 1= RR との VPNv4 のセッション/段 2= 入れ物(PE の VRF の RD・RT)/段 3= 収容(静的経路・RR に届く経路・CE との eBGP)/通し= CE 間の ping)。
+# ★段 1 は確立だけを見る(受けた経路の数は見ない= 段 3 の誤りで段 1 が落ちないように。2026-11-03 の誤答の判別で直した)。白紙= 0 点。
+problem: XRT-13
+total_points: 100
+checks:
+  - name: 'S-1 step 1  RR1: VPNv4 sessions with XE2, XE3 and XR01 are established'
+    node: RR1
+    command: show bgp vpnv4 unicast all summary
+    raw:
+      - { regex: '\n10\.255\.0\.42\s+4\s+65000(?:\s+\d+){5}\s+\S+\s+\d+(?:\s|$)' }
+      - { regex: '\n10\.255\.0\.43\s+4\s+65000(?:\s+\d+){5}\s+\S+\s+\d+(?:\s|$)' }
+      - { regex: '\n10\.255\.0\.1\s+4\s+65000(?:\s+\d+){5}\s+\S+\s+\d+(?:\s|$)' }
+    points: 15
+  - name: 'S-1 step 1  XE2, XE3, XR01: VPNv4 to RR1 only, with Loopback0 as the BGP router ID'
+    node: XE2
+    exec: local
+    command: >-
+      echo '## XE2'; .venv/bin/python topologies/login_probe.py XRT-13 ssh XE2 -- 'show bgp vpnv4 unicast all summary';
+      echo '## XE3'; .venv/bin/python topologies/login_probe.py XRT-13 ssh XE3 -- 'show bgp vpnv4 unicast all summary';
+      echo '## XR01'; .venv/bin/python topologies/login_probe.py XRT-13 ssh XR01 -- 'show bgp vpnv4 unicast summary'; echo '## END'
+    raw:
+      - { regex: '## XE2[\s\S]*?BGP router identifier 10\.255\.0\.42,[\s\S]*?\n10\.255\.0\.52\s+4\s+65000[\s\S]*?## XE3' }
+      - { regex: '## XE3[\s\S]*?BGP router identifier 10\.255\.0\.43,[\s\S]*?\n10\.255\.0\.52\s+4\s+65000[\s\S]*?## XR01' }
+      - { regex: '## XR01[\s\S]*?BGP router identifier 10\.255\.0\.1,[\s\S]*?\n10\.255\.0\.52\s+0\s+65000[\s\S]*?## END' }
+      - { not_regex: '\n10\.255\.0\.(?:4[123]|1)\s+[04]\s+65000' }
+    points: 10
+  - name: 'S-1 step 2  XE2, XE3, XR01: VRF CUST-D with RD <its Loopback0>:310, importing and exporting RT 65000:310'
+    node: XE2
+    exec: local
+    command: >-
+      echo '## XE2'; .venv/bin/python topologies/login_probe.py XRT-13 ssh XE2 -- 'show vrf detail CUST-D';
+      echo '## XE3'; .venv/bin/python topologies/login_probe.py XRT-13 ssh XE3 -- 'show vrf detail CUST-D';
+      echo '## XR01'; .venv/bin/python topologies/login_probe.py XRT-13 ssh XR01 -- 'show vrf CUST-D detail'; echo '## END'
+    raw:
+      - { regex: '## XE2(?:(?!## )[\s\S])*?default RD 10\.255\.0\.42:310;(?:(?!## )[\s\S])*?Export VPN route-target communities\s+(?:RT:\S+\s+)*?RT:65000:310\s(?:(?!## )[\s\S])*?Import VPN route-target communities\s+(?:RT:\S+\s+)*?RT:65000:310\s' }
+      - { regex: '## XE3(?:(?!## )[\s\S])*?default RD 10\.255\.0\.43:310;(?:(?!## )[\s\S])*?Export VPN route-target communities\s+(?:RT:\S+\s+)*?RT:65000:310\s(?:(?!## )[\s\S])*?Import VPN route-target communities\s+(?:RT:\S+\s+)*?RT:65000:310\s' }
+      - { regex: '## XR01(?:(?!## )[\s\S])*?RD 10\.255\.0\.1:310;(?:(?!## )[\s\S])*?Import VPN route-target communities:\s+(?:RT:\S+\s+)*?RT:65000:310\s(?:(?!## )[\s\S])*?Export VPN route-target communities:\s+(?:RT:\S+\s+)*?RT:65000:310\s' }
+    points: 20
+  - name: 'S-1 step 3  XE3: reaches site 3''s LAN by a static route in VRF CUST-D (CE3 runs no routing protocol)'
+    node: XE3
+    command: show ip route vrf CUST-D 10.30.3.0
+    raw:
+      - { regex: 'Known via "static"' }
+    points: 5
+  - name: 'S-1 step 3  RR1: receives each site LAN from its PE, with RD <its Loopback0>:310 and RT 65000:310'
+    node: RR1
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-13 ssh RR1 -- 'show bgp vpnv4 unicast all 10.30.2.0/24' 'show bgp vpnv4 unicast all 10.30.3.0/24' 'show bgp vpnv4 unicast all 10.30.4.0/24'
+    raw:
+      - { regex: 'entry for 10\.255\.0\.42:310:10\.30\.2\.0/24(?:(?!entry for)[\s\S])*?RT:65000:310' }
+      - { regex: 'entry for 10\.255\.0\.43:310:10\.30\.3\.0/24(?:(?!entry for)[\s\S])*?RT:65000:310' }
+      - { regex: 'entry for 10\.255\.0\.1:310:10\.30\.4\.0/24(?:(?!entry for)[\s\S])*?RT:65000:310' }
+    points: 10
+  - name: 'S-1 step 3  CE2, CE4: learn the LANs of the other two sites in eBGP from the provider'
+    node: XE2
+    exec: local
+    command: >-
+      echo '## CE2'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE2 -- 'show ip route bgp'; echo '## CE4'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE4 -- 'show ip route bgp'; echo '## END'
+    raw:
+      - { regex: '## CE2[\s\S]*?B\s+10\.30\.3\.0(?:/24)?\s+\[20/0\] via 172\.20\.2\.254[\s\S]*?## CE4' }
+      - { regex: '## CE2[\s\S]*?B\s+10\.30\.4\.0(?:/24)?\s+\[20/0\] via 172\.20\.2\.254[\s\S]*?## CE4' }
+      - { regex: '## CE4[\s\S]*?B\s+10\.30\.2\.0(?:/24)?\s+\[20/0\] via 172\.20\.4\.254[\s\S]*?## END' }
+      - { regex: '## CE4[\s\S]*?B\s+10\.30\.3\.0(?:/24)?\s+\[20/0\] via 172\.20\.4\.254[\s\S]*?## END' }
+    points: 10
+  - name: 'S-1 end to end  sites 2, 3 and 4 reach each other''s LANs (10.30.<site>.0/24)'
+    node: XE2
+    exec: local
+    command: >-
+      echo '## 2-3'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE2 -- 'ping 10.30.3.1 source Loopback300 repeat 5';
+      echo '## 2-4'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE2 -- 'ping 10.30.4.1 source Loopback300 repeat 5';
+      echo '## 4-3'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE4 -- 'ping 10.30.3.1 source Loopback300 repeat 5'
+    raw:
+      - { regex: '## 2-3[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 2-4[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 4-3[\s\S]*?Success rate is (?:100|80) percent' }
+    points: 30

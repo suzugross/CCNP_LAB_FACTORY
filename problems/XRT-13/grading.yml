@@ -1,0 +1,90 @@
+# XRT-13 最終確認(S-1〜S-5 を終えた状態。配点= 各課題 20= 入れ物の確認 10+通しの ping 10)。
+# 学習目的のラボ= パック・ノルマの対象外。中身は課題ごとの確認(grading.svc<n>.yml)から選んで配点を付け直したもの
+# (手で保守する= 課題ごとの確認を直したらここも直す)。白紙で通る項目は無い。
+problem: XRT-13
+total_points: 100
+checks:
+- name: 'S-1 step 2  XE2, XE3, XR01: VRF CUST-D with RD <its Loopback0>:310, importing and exporting RT 65000:310'
+  node: XE2
+  exec: local
+  command: echo '## XE2'; .venv/bin/python topologies/login_probe.py XRT-13 ssh XE2 -- 'show vrf detail CUST-D'; echo '## XE3'; .venv/bin/python topologies/login_probe.py XRT-13 ssh XE3 -- 'show vrf detail
+    CUST-D'; echo '## XR01'; .venv/bin/python topologies/login_probe.py XRT-13 ssh XR01 -- 'show vrf CUST-D detail'; echo '## END'
+  raw:
+  - regex: '## XE2(?:(?!## )[\s\S])*?default RD 10\.255\.0\.42:310;(?:(?!## )[\s\S])*?Export VPN route-target communities\s+(?:RT:\S+\s+)*?RT:65000:310\s(?:(?!## )[\s\S])*?Import VPN route-target communities\s+(?:RT:\S+\s+)*?RT:65000:310\s'
+  - regex: '## XE3(?:(?!## )[\s\S])*?default RD 10\.255\.0\.43:310;(?:(?!## )[\s\S])*?Export VPN route-target communities\s+(?:RT:\S+\s+)*?RT:65000:310\s(?:(?!## )[\s\S])*?Import VPN route-target communities\s+(?:RT:\S+\s+)*?RT:65000:310\s'
+  - regex: '## XR01(?:(?!## )[\s\S])*?RD 10\.255\.0\.1:310;(?:(?!## )[\s\S])*?Import VPN route-target communities:\s+(?:RT:\S+\s+)*?RT:65000:310\s(?:(?!## )[\s\S])*?Export VPN route-target communities:\s+(?:RT:\S+\s+)*?RT:65000:310\s'
+  points: 10
+- name: S-1 end to end  sites 2, 3 and 4 reach each other's LANs (10.30.<site>.0/24)
+  node: XE2
+  exec: local
+  command: echo '## 2-3'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE2 -- 'ping 10.30.3.1 source Loopback300 repeat 5'; echo '## 2-4'; .venv/bin/python topologies/login_probe.py XRT-13 ssh
+    CE2 -- 'ping 10.30.4.1 source Loopback300 repeat 5'; echo '## 4-3'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE4 -- 'ping 10.30.3.1 source Loopback300 repeat 5'
+  raw:
+  - regex: '## 2-3[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 2-4[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 4-3[\s\S]*?Success rate is (?:100|80) percent'
+  points: 10
+- name: 'S-2 step 2  XR01: a cross-connect joins the VLAN 321 attachment circuit to the pseudowire to XE3 (ID 320), all UP'
+  node: XR01
+  command: show l2vpn xconnect
+  raw:
+  - regex: UP\s+Gi0/0/0/1\.\d+\s+UP\s+10\.255\.0\.43\s+320\s+UP
+  points: 10
+- name: S-2 end to end  CE3 (VLAN 320) reaches CE4 (VLAN 321) over the E-Line (172.31.32.4)
+  node: XE3
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-13 ssh CE3 -- 'ping 172.31.32.4 repeat 5'
+  raw:
+  - regex: Success rate is (?:100|80) percent
+  points: 10
+- name: 'S-3 step 2  XE1, XE2, XE3: VPN ID 330 has an UP pseudowire to each of the other two PEs'
+  node: XE1
+  exec: local
+  command: for n in 1 2 3; do echo "## XE$n"; .venv/bin/python topologies/login_probe.py XRT-13 ssh XE$n -- 'show l2vpn atom vc'; done; echo '## END'
+  raw:
+  - regex: '## XE1(?:(?!## )[\s\S])*?pw\d+\s+10\.255\.0\.42\s+330\s+vfi\s+\S+\s+UP'
+  - regex: '## XE1(?:(?!## )[\s\S])*?pw\d+\s+10\.255\.0\.43\s+330\s+vfi\s+\S+\s+UP'
+  - regex: '## XE2(?:(?!## )[\s\S])*?pw\d+\s+10\.255\.0\.41\s+330\s+vfi\s+\S+\s+UP'
+  - regex: '## XE2(?:(?!## )[\s\S])*?pw\d+\s+10\.255\.0\.43\s+330\s+vfi\s+\S+\s+UP'
+  - regex: '## XE3(?:(?!## )[\s\S])*?pw\d+\s+10\.255\.0\.41\s+330\s+vfi\s+\S+\s+UP'
+  - regex: '## XE3(?:(?!## )[\s\S])*?pw\d+\s+10\.255\.0\.42\s+330\s+vfi\s+\S+\s+UP'
+  points: 10
+- name: S-3 end to end  sites 1, 2 and 3 reach each other over the VPLS E-LAN (172.31.33.0/24)
+  node: XE1
+  exec: local
+  command: echo '## 1-2'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE1 -- 'ping 172.31.33.2 repeat 5'; echo '## 1-3'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE1 -- 'ping 172.31.33.3
+    repeat 5'; echo '## 2-3'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE2 -- 'ping 172.31.33.3 repeat 5'
+  raw:
+  - regex: '## 1-2[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 1-3[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 2-3[\s\S]*?Success rate is (?:100|80) percent'
+  points: 10
+- name: 'S-4 step 2  XE1, XE2, XE3: EVPN instance 340 is established, with route target 65000:3400 only, and ingress replication'
+  node: XE1
+  exec: local
+  command: for n in 1 2 3; do echo "## XE$n"; .venv/bin/python topologies/login_probe.py XRT-13 ssh XE$n -- 'show l2vpn evpn evi 340 detail'; done; echo '## END'
+  raw:
+  - regex: '## XE1(?:(?!## )[\s\S])*?Import-RTs:\s+65000:3400\s*\n\s*Export-RTs:\s+65000:3400\s*\n(?:(?!## )[\s\S])*?Replication Type:\s+Ingress(?:(?!## )[\s\S])*?State:\s+Established'
+  - regex: '## XE2(?:(?!## )[\s\S])*?Import-RTs:\s+65000:3400\s*\n\s*Export-RTs:\s+65000:3400\s*\n(?:(?!## )[\s\S])*?Replication Type:\s+Ingress(?:(?!## )[\s\S])*?State:\s+Established'
+  - regex: '## XE3(?:(?!## )[\s\S])*?Import-RTs:\s+65000:3400\s*\n\s*Export-RTs:\s+65000:3400\s*\n(?:(?!## )[\s\S])*?Replication Type:\s+Ingress(?:(?!## )[\s\S])*?State:\s+Established'
+  points: 10
+- name: S-4 end to end  sites 1, 2 and 3 reach each other over the EVPN E-LAN (172.31.34.0/24)
+  node: XE1
+  exec: local
+  command: echo '## 1-2'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE1 -- 'ping 172.31.34.2 repeat 5'; echo '## 1-3'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE1 -- 'ping 172.31.34.3
+    repeat 5'; echo '## 2-3'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE2 -- 'ping 172.31.34.3 repeat 5'
+  raw:
+  - regex: '## 1-2[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 1-3[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 2-3[\s\S]*?Success rate is (?:100|80) percent'
+  points: 10
+- name: 'S-5 step 2  XE1: EVPN-VPWS in EVPN instance 350 is up with source 1 and target 2, and no LDP pseudowire carries it'
+  node: XE1
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-13 ssh XE1 -- 'show l2vpn evpn vpws vc id 350 detail' 'show l2vpn atom vc'
+  raw:
+  - regex: 'state: up'
+  - regex: Source 1, Target 2
+  - not_regex: \s350\s+p2p\s
+  points: 10
+- name: S-5 end to end  CE1 reaches CE2 over the EVPN-VPWS E-Line (172.31.35.2)
+  node: XE1
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-13 ssh CE1 -- 'ping 172.31.35.2 repeat 5'
+  raw:
+  - regex: Success rate is (?:100|80) percent
+  points: 10

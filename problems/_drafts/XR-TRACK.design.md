@@ -1930,3 +1930,297 @@ RT02 の相手側は据付のサブインタフェースの `xconnect`(LDP の�
 - XRT-12 は E2E 後に撤収(2026-11-01・先に XRT-11 を解く・ユーザ指示)。provision 約 12 分(8000V は day0 のライセンスの行で 1 回自分で再起動)。
 - ★ユーザ判断待ち 2 点(§25.5)= ①M11-8 の ESI の種類 0(公式の 2 つの章で割れる・実機と新しい章は種類 0 を認める。替えるなら種類 3)
   ②VPLS の no-split-horizon(公式にあるが 8000V の VFI の member に無い。課題では使っていない)。
+
+## 26. MPLS サービスのまとめ直し(BL-261)(2026-11-03 起票・M12 の前に挟む)
+
+### 26.1 経緯と見立て
+
+2026-11-03 ユーザ申告「MPLS 関連が難しかった。何が何だか、どれがどう違うのか、どうやって設定するのか、あまり身についていない」。
+重点としてユーザが選んだもの= **(b) サービスの違い(L3VPN・VPWS・VPLS・EVPN)** と **(c) 設定の組み立て方(何をどの順で入れるか)**。
+(a) ラベルの配り方の違い(LDP・BGP ラベル付きユニキャスト・SR)と (d) 全体像は選ばなかった。
+
+見立て(チャットでユーザに説明済み):
+1. 10/24〜11/01 の 9 日で M8・M8 追補・M9・M10・M11(+追補)= 量と速さ。どれもラベルを使うので互いに似て見える。
+2. 土台の読み物(M8・M8 追補・M9)は CLAUDE.md §6 の決まり(技術そのものから・設定例を常に)より前の書き方で、`:::config` が 0。
+3. サービスを横に並べて比べるページがない(単元ごとに 1 つずつ説明しただけ)。
+4. ラボは前の単元を解き終えた状態から始まり、課題は 1 か所の追加か故障 → 白紙から通して組んだことがない。
+   記録= XRT-07 の 5 課題を約 40 分・XRT-08 の 3 課題を約 35 分で通過(足りない 1 か所を調べれば通れる作り)。
+SPCOR の配点= 3.0 MPLS と SR 20%・4.0 サービス 20%。
+
+### 26.2 方針
+
+- M12 はこの後に回す。§5 の「先回りしない」の例外として、BL-257(2 周目)のうち **M9 L3VPN の読み物の書き直し**をここへ前倒しする
+  (ユーザ了承 2026-11-03)。M8(運ぶ層)の書き直しは BL-257 に残す。
+- 運ぶ層(IGP+LDP)は出来ている前提にし、サービスに絞る(ユーザの重点が (b)(c) のため)。
+
+### 26.3 中身(案)
+
+1. **地図のページ**(読み物・日英)= 4 つのサービスを同じ枠で並べる。
+   - 枠= ①お客さまから見ると何か(ルータ/1 本の線/スイッチ) ②PE が覚えるもの ③内側のラベルの意味 ④PE 同士の話し方 ⑤お客さまをつなぐ所。
+   - 組み立ての共通の順= 0 土台を確かめる → 1 PE 同士の話し合い → 2 サービスの入れ物 → 3 お客さまの収容 → 4 下から順に確かめる。
+     4 つのサービスは同じ骨組みで、違うのは各段の中身、と見せる。
+   - 1 つの盤面で 1 つのパケット/フレームを 1 ホップずつ追い、ラベルの積み方を比べる(根拠は実測)。
+   - 同じ盤面の上の最小の設定例を `:::config` で並べる(IOS XR と IOS XE)。
+2. **白紙から組むラボ**(XRT-13 の予定)= コアは出来ていてサービスは何もない状態から、4 つを順に組む。同じ CE の組に VLAN を分けて載せ、
+   違いがサービスだけになるようにする。やり直しは `lab.sh reset`。値を変えてやり直せる生成器にするかは後で決める。
+3. **M9 の読み物の書き直し**(何が嬉しいか → 仕組み → 設定例)。
+4. **紙面**(ホップごとのラベルの積み方・`show` の読み方)。
+- 順番= 1 → 2 → 3 → 4(地図で全体をつかみ、すぐ手で組む)。
+
+### 26.4 盤面の案(2026-11-03 ユーザ決定= 案 1)
+
+実測済みの制約= XRv9000 は VPWS だけ(ブリッジ ドメインなし・§24.3)/XRd は L2 を転送しない/XR⇔IOS XE の EVPN-VPWS は XR→XE が捨てられる
+(§24.5b-4)/XR⇔8000V の LDP の疑似回線は通る/8000V は 4 つとも動く(§24.5b)/資源= XRv9000 1+8000V 3+XRd+IOL 7 で空き約 15GB。
+
+- **案 1(推奨)**= 8000V×3(XE1〜3)が主役で 4 つとも組む+XRv9000×1(XR01)が L3VPN と LDP の VPWS に加わり、同じ枠の XR の書き方を並べる。
+  P1= IOL(P 兼 RR)・CE= IOL。理由= 同じ PE の組・同じ CE の間で 4 つを順に組むと違いがサービスだけになる。XR の仮想機は E-LAN を
+  転送できないので主役にできない。
+- 案 2= XR だけ(XRv9000×2)。L3VPN と VPWS(LDP・EVPN-VPWS)だけ手で組み、VPLS・EVPN の E-LAN は読み物だけ。
+- 案 3= IOS XE だけ(8000V×3)。XR は使わない。
+
+### 26.5 PoC(2026-11-03 着手)
+
+盤面 `problems/_POC-XRSVC`= P1(IOL・P 兼 RR= vpnv4 と l2vpn evpn・据付)を中心にした星形。PE= XE1〜3(8000V 17.15)・XR01(XRv9000 26.1.1)。
+CE1〜4(IOL)は VLAN でサービスを出し分ける(CE 側は据付)。手順 `poc/xr/svc_poc.sh <段>`・記録 `poc/xr/expSVC-<段>.log`・pcap は `poc/xr/pcap/`。
+
+| VLAN | サービス | 拠点(PE) | アドレス |
+|---|---|---|---|
+| 100 | L3VPN(VRF A・PE-CE は eBGP) | 1(XE1)・2(XE2)・4(XR01) | PE-CE 172.16.<拠点>.0/24(CE .1・PE .254)・CE の LAN= Loopback100 10.100.<拠点>.1/24・CE の AS 6500<拠点> |
+| 130 | VPWS(LDP の疑似回線・pw-id 130) | 1(XE1)⇔ 4(XR01) | 192.168.130.0/24(ホスト部= 拠点) |
+| 140 | VPWS(EVPN・EVI 140) | 2(XE2)⇔ 3(XE3) | 192.168.140.0/24 |
+| 200 | EVPN の E-LAN(EVI 200・vlan-based) | 1・2・3(XE1〜3) | 192.168.200.0/24 |
+| 210 | VPLS(VFI VPLS210・LDP) | 1・2・3(XE1〜3) | 192.168.210.0/24 |
+
+確かめること:
+1. 8000V の 1 本の IF に L3 のサブインタフェース(Gi2.100・VRF)と service instance(130/140/200/210)が同居できるか。
+2. 4 つ(+EVPN-VPWS)が同じ盤面で同時に動くか。XR01 が L3VPN と LDP の VPWS に加われるか(XR⇔XE)。
+3. 線の上のラベル= CML のリンクの捕獲(`poc/xr/cml_cap.py`)で、入口 PE→P1 の線は 2 枚(運ぶ+サービス)・P1→出口 PE の線は PHP で 1 枚か。
+   サービスごとに内側のラベルが何を指すか(PE のラベル表 `show mpls forwarding-table` の行と突き合わせる)。
+4. 「PE が覚えるもの」の表示= VRF の経路表/疑似回線だけ/ブリッジ ドメインの MAC(疑似回線から学ぶ)/EVPN の MAC(BGP の種類 2)。
+5. CE からの traceroute に MPLS のラベルが出るか(L3VPN だけ)。
+6. 設定例の元= 各 PE の running-config(段 `cfg`)。
+
+### 26.6 実測の結果(2026-11-03・`_POC-XRSVC`・記録 `poc/xr/expSVC-*.log`・pcap は `poc/xr/pcap/`)
+
+1. 8000V の Gi2 に L3 のサブインタフェース(Gi2.100・VRF A)と service instance 130/140/200/210 が**同居できた**(L3VPN と L2 が同時に通る)。
+2. **5 つとも同時に稼働**= L3VPN(XE1・XE2・XR01)・VPWS LDP(XE1⇔XR01)・VPWS EVPN(XE2⇔XE3)・VPLS(XE1〜3)・EVPN の E-LAN(XE1〜3)。
+   ping は初回の 1 つ落ち(ARP)以外すべて通過。XR⇔8000V の L3VPN と LDP の疑似回線は問題なし。
+3. **線の上**(CML のリンクの捕獲)= 入口 PE→P1 は 2 枚・P1→出口 PE は 1 枚(PHP)。**外側はサービスによらず同じ**(XE2 行き= 17)。
+   CE1→CE2: L3VPN `{17, 23}`+IP/VPLS `{17, 25}`+CW+フレーム/EVPN `{17, 28}`+フレーム。CE1→CE4 VPWS `{19, 24008}`+フレーム。
+   CE2→CE3 EVPN-VPWS `{18, 23}`+CW+VLAN 0 のタグ+フレーム。L2 のフレームはタグなし(rewrite pop)。
+   コントロール ワード= VPLS(8000V 同士の LDP)と EVPN-VPWS(8000V 同士)に有り・EVPN の E-LAN と XE⇔XR の LDP の VPWS に無し。
+   ★EVPN-VPWS(8000V)は VLAN 0 のタグ(`8100 0000`)を付けて運ぶ(読み物は注記どまり。XR→XE の EVPN-VPWS が捨てられる件との関係は未確認)。
+4. **内側のラベル= 受け取る PE が決めた入れ物の番号**。XE1 の `show mpls forwarding-table`= 23→VRF A の 10.100.1.0/24(Gi2.100)・
+   24→l2ckt(1)(Gi2= VPWS)・25/26→l2ckt(2)(3)(VPLS の疑似回線→ブリッジ ドメイン)・27→evpn(mc:bd 200)(BUM)・28→evpn(uc:bd 200)。
+   XR01= 24007→VRF A の 10.100.4.0/24・24008→PW(10.255.0.41:130)。★XE1 と XE2 がどちらも 23 を VPN のラベルにした= ラベルは PE ごとの意味。
+5. CE の traceroute に MPLS のラベルが出る(L3VPN だけ)= CE1→CE4 の 2 ホップ目 P1 `[MPLS: Labels 19/24007]`・3 ホップ目 XR01 `[Label 24007]`。
+6. EVPN の RT は書かなくても自動(E-LAN= 65000:200・EVPN-VPWS= 65000:140= AS:EVI)。VPLS の VFI は相手を `member` で名指し(BGP なし)。
+7. ★`virl2_client` 2.10 の `download_capture` は CML 2.8.1 で 404(リンクの ID で取りに行く)→ `/pcap/<捕獲のキー>` で取る(`poc/xr/cml_cap.py`)。
+
+見えた骨組み(読み物の軸にする)= **相手の見つけ方が 2 通り**: LDP で運ぶもの(VPWS・VPLS)は入れ物の中で相手の PE を名指しし、
+targeted LDP が自動で張られる/BGP で運ぶもの(L3VPN・EVPN)は RR への iBGP のアドレス ファミリを足し、RT で仲間を見つける。
+8. **故障の表れ方(読み物の「止まったときの見当」の根拠)**(`expSVC-fail.log`):
+   - XE2 の VRF A の輸入 RT だけ 65000:101 に= XE2 の VRF には自分の経路だけ(`show bgp vpnv4 unicast all` も自分の RD だけ)・XE1 には 10.100.2.0/24 が残る→ CE2 から 0%。戻すと即 100%。
+   - P1 の XR01 向き IF の `no mpls ip`= XR01 の 10.255.0.41/32 が `Unlabelled`・XE1 は 19 を付け続ける(P1 で道が切れる)→ L3VPN は経路が残ったまま 0%・
+     LDP の疑似回線は XR01 が `DN`、XE1 は `VC status is down`(`Status received from network peer: DOWN(pw-tx-fault)`)。戻すと 40 秒以内に両方 100%。
+   (PoC の盤面 `_POC-XRSVC` は 2026-11-03 に撤収済み。problems/_POC-XRSVC は再利用のため保持)
+
+### 26.7 読み物(2026-11-03 完了・Drive 同期済み)
+
+`courses/xr/{en,ja}/c0-svc-map.md`(サービスを並べて見る= 4 つの問い・CE の ARP・PE が覚えるもの・名指しか BGP か・
+線の上のラベル(pcap)・受け取る PE のラベル表・まとめの表)と `c1-svc-assembly.md`(組み立て順= 段 0〜4・`:::config` 9 個・
+下から確かめる表・止まったときの見当(実測 8 行)・IOS XE と IOS XR の対応)。章 "C0"(M 番号なし)・部「SP の中核とサービス」の末尾。
+日英で見出し 14/15・段落 44/23 が一致。設定例は PoC の running-config から(XE1・XE2・XR01)。
+
+### 26.8 ラボ XRT-13 の課題案(2026-11-03 ユーザ了承= 5 本)
+
+- 盤面= `_POC-XRSVC` と同じ(PE= XE1〜3+XR01・P1= P 兼 RR を据付・CE を据付)。**初期状態= コア(IS-IS・LDP)と RR だけ**。PE には BGP もサービスも無い。
+- 値は読み物の設定例と変える(別の顧客・VLAN 3xx・RT 65000:3xx)。拠点の組も変える(設定例の写しで終わらせない= §6)。
+- 採点は課題ごとに段で分ける(段 1= RR との iBGP の AF/段 2= 入れ物/段 3= 収容/通し= CE 間の ping)→ 採点結果で「どの段で止まったか」が分かる。
+  課題文には段の順を書かない(ヒント控えめの方針。順は読み物で学ぶ)。やり直しは固定値+`lab.sh reset`(生成器は後で検討)。
+
+| 課題 | サービス | 拠点(PE) | ねらい |
+|---|---|---|---|
+| S-1 | L3VPN | 2(XE2)・3(XE3)・4(XR01) | 段 1〜3 を通して。XR の拠点は eBGP にポリシーが要る |
+| S-2 | VPWS(LDP) | 3(XE3)⇔ 4(XR01) | 名指し。OS をまたぐ |
+| S-3 | VPLS | 1・2・3 | 名指しの全メッシュ |
+| S-4 | EVPN の E-LAN | 1・2・3 | BGP で見つけ合う。段 1 の l2vpn evpn と replication-type |
+| S-5 | VPWS(EVPN) | 1(XE1)⇔ 2(XE2) | S-2 と同じ E-Line を BGP で |
+
+読み物に足す「やってみる」の候補= CML の画面でリンクのキャプチャを取りラベルの枚数を数える/拠点を 1 つ足すとき VPLS と EVPN で既存の PE の何行が変わるか。
+
+### 26.9 実装の結果(2026-11-03・ラボ XRT-13)
+
+- 盤面= `_POC-XRSVC` と同じ(初期設定は PoC から・コメントだけ替え)。顧客 D・VLAN 3xx。provision 約 15 分(8000V はライセンスの行で 1 回自分で再起動)。
+- 課題のひねり(設定例の写しで終わらせない)= S-1 拠点 3 の CE は BGP を話さない(XE3 に VRF の静的経路+再配送)/S-2 両端の VLAN が違う(320・321)/
+  S-4 RT を 65000:3400 だけに(★下の実測)/S-3・S-5 は値と拠点の組だけ変える。
+- 採点= 課題ごとに「段 1・段 2・段 3・通し」に分けた確認(`grading.svc1〜5.yml`)+最終(`grading.yml`= 各課題 20)。
+  ★段 1(RR とのセッション)は**確立だけ**を見る。最初は「受けた経路の数が 0 でない」まで見ていて、段 3 の誤り(XR のポリシー忘れ・静的経路の渡し忘れ・
+  replication-type の欠落)で段 1 まで落ちた → 確立だけに直した。S-1 の段 2 も「RR に届く経路」から「PE の VRF の RD と RT」(`show vrf detail`/`show vrf … detail`)へ。
+  RR に届く経路は段 3 の確認にした(CE から受けて初めて出る)。
+- 実践ページ= `courses/xr/*/c2-svc-practice.md`(課題文から切り出し)。★`scripts/course.sh` の切り出しが課題番号を「M11-6」の形だと決め打ちしていた →
+  「S-1」の形も拾い、learn.yml の課題は title.en の頭で引くように広げた(既存の実践ページの出力は不変を確認)。
+- ★**8000V 17.15.1a の EVPN の RT**(実測+公式で一致)= EVI に `route-target export/import` を書いても**自動の RT(AS:EVI= 65000:340)は消えず足されるだけ**
+  (`Import-RTs: 65000:3400 65000:340`)。`no auto-route-target` で自動の分が消える。公式= MPLS Configuration Guide, IOS XE 17.x「EVPN Single-Homing」の例が
+  `route-target both` と `no auto-route-target` の組、Catalyst 9400 の EVPN VXLAN ガイド(17.1)は「Removes the automatically generated route-targets」。
+  ★さらに `no auto-route-target` のまま手の RT を最後の 1 つまで消すのは拒否(`% Cannot remove route-target because 'auto-route-target' is disabled.`)。
+  → S-4 の「65000:3400 だけ」はこの 3 行で満たす(書かないと段 2 だけ落ちて 75 点)。読み物 c1 の 4.4 にはまだ書いていない(課題の答えになるため。解き終えた後に足すか判断)。
+- E2E(`poc/xr/e2e_xrt13.sh`・`wrong_xrt13.sh`・記録 `poc/xr/expS13-*.log`)= 白紙 0(課題ごと・最終)→ 模範解を逐語で課題ごとに 100 → 最終 100。
+  誤答(w1〜w7)= w1 XR のポリシー忘れ/w2 静的経路を BGP へ渡さない/w3 XR の AC の rewrite 忘れ(`Error: MTU mismatched`= XR 1504 対 XE 1500。8000V 相手でも同じ)/
+  w4 VPLS のハブ アンド スポーク/w5 自動の RT を止めない/w6 replication-type なし/w7 EVPN-VPWS の target と source の取り違え。どれも落ちて、戻すと 100。
+
+### 26.10 RR を P1 から専用の RR1 へ分ける(2026-11-04・ユーザ指摘→作り直し)
+
+- 経緯= ユーザ「P1 に BGP の RR をさせたら、MPLS の醍醐味感が薄まりませんか？」→ 同意。転送は今も BGP を使わない(P1 は VRF なし・LFIB は
+  PE のループバックだけ)が、制御面で P1 が全 VPN の経路を BGP の表に抱え、**BGP を持たないコア**が盤面で見えない。読み物も「P1 の BGP は RR のためで
+  転送には使わない」と括弧書きで言い訳していた。M9〜M11(XRT-09〜11)は RR を別の XR02 にしていて、XRT-12・13 だけ台数を減らすため P1 に兼ねさせていた。
+  XRT-13 はユーザが S-1〜S-3 を通過済みだったが「気にしなくていいので修正願います」で作り直し(その時点の PE の設定は scratchpad に控えた)。
+- 盤面= RR1(IOL 17.15・Lo0 10.255.0.52)を P1 の脇に 1 本(P1 Ethernet1/1 ─ RR1 Ethernet0/0・10.0.52.0/24)。RR1 は IS-IS だけ(LDP なし= 経路を配るだけ)。
+  P1 から `router bgp` を削除。`_POC-XRSVC` と XRT-13 の両方。★IOL の Ethernet0/3(a_if 3)は管理用= ここにつなぐと CML の取り込みが
+  「interface P1-i3 is also connected to link l4」で失敗 → a_if 5(Et1/1)。
+- 実測(PoC を全段取り直し・旧い出力は捨てた。`poc/xr/expSVC-*.log`)= P1 は `% BGP not active`・`show running-config | include ^router` は IS-IS だけ。
+  P1 の LFIB の 16= RR1 の Lo `No Label`(RR1 に LDP が無い)・17〜20= PE。**ラベルは全部ずれた**(IOL の RR1 が 8000V より先に上がり 16 を取る)→ 読み物の
+  出力(ARP・MAC・ラベルの表・キャプチャ・traceroute)を全部差し替え(CE の MAC も 8b00〜8e00 にずれた)。PE → RR1 の BGP は P1 までラベル 16 に載り、P1 が
+  外して渡す(キャプチャで確認)。RR1= VRF なし・`show mpls interfaces` が空・VPNv4 の表に全拠点(no table)。XE1 の拠点 2 の経路= from 10.255.0.52・
+  Originator 10.255.0.42・Cluster list 10.255.0.52・CEF は 18/25 で P1 へ(RR1 を通らない)。★IOS の RR は LDP なしでも VPNv4・EVPN を反射できる
+  (ネクスト ホップは IGP で解決)。故障 2 種(RT の輸入違い・P1 の XR01 向きの `mpls ip` なし)の表れ方は前と同じ。PE の設定は RR の宛先(.51 → .52)だけが変わる。
+- 裏どり= RFC 4364(コアのルータは VPN の経路を知らなくてよい)/Cisco IOS XRv 9000 Router Installation and Configuration Guide「Control Plane Specific
+  Features」(vRR is not part of the forwarding path)・XRv 9000 Data Sheet(vRR)。「BGP-free core」という呼び名は公式文書では見つからず、コミュニティの用語
+  (読み物では呼び名として紹介するだけ)。
+- 読み物= c0 に 3.5 節「RR は道の外に置く: BGP を持たないコア」(P1 に BGP なし → 何が嬉しいか → RR1 はネクスト ホップを変えない → パケットは RR1 を通らない →
+  RR1 を通るのは BGP だけ → RR1 は MPLS なし)・3.1 の P1 の説明と 16 の行・図に RR1・まとめに 1 文。c1 の段 1 に RR1 の設定例(running-config から)。
+- ラボ= 課題文(日英: 据え付けに RR1・リンク表と機器表・「P1 と RR1 の間は IS-IS だけ・P1 は BGP なし」・S-1/S-4 の「ルート リフレクタ RR1」)・
+  `grading.svc1`/`svc4`(RR1 で見る・PE の近隣は 10.255.0.52)・learn.yml(RR1・10.255.0.52)。
+- E2E(2026-11-04・`poc/xr/expS13-*.log`)= 白紙 0(課題ごと・最終)→ 模範解を逐語で課題ごとに 100 → 最終 100。誤答 w1〜w7 は前回と同じ点で落ちて戻すと 100。
+  **w8 を追加**= XE3 が RR1 でなく P1(10.255.0.51)に iBGP を張る(前の盤面の癖)→ P1 は BGP なしで Idle のまま → S-1・S-4 とも段 1 から落ちて 25 点・戻すと 100。
+  reset 後は全部 0。ワークスペースの課題カードは再起動なしで新しい課題文(RR1)を出す(学習の記録は reset で退避)。
+
+### 26.11 EVPN-VPWS は何が嬉しいか(2026-11-06〜07・ユーザ質問→読み物 1 ページ+PoC)
+
+- 経緯= ユーザが XRT-13 全通過の後「EVPN-VPWS と普通の VPWS の嬉しさの違いがピンとこない」。1 本の線・片側 1 台の PE(S-2・S-5)では運ばれ方が同じなので
+  差が見えない。差が出るのは ①拠点を 2 台の PE につなぐとき ②道を SR にして LDP をなくすとき(③相手の PE の住所を書かない)→ ユーザ「どちらも進めます」
+  (読み物に足す+マルチホームの PoC)。
+- 裏どり= ★IOS XE 17.x の MPLS のガイドの「EVPN Multihoming」の章は E-LAN 向けで、VPWS・point-to-point の記述が無い(制限= all-active のみ・
+  single-active なし・type 3 ESI のみ等)。「EVPN Single-Homing」の章も VPWS は無し。IOS XE の EVPN-VPWS は ASR 900/NCS 4200 の「EVPN-VPWS
+  Single Homed」の章だけ。IOS XR(ASR 9000 24.x)の L2VPN ガイドは EVPN-VPWS の single-homing と multi-homing を載せる。RFC 8214 の要約が
+  「single-active / all-active redundancy with flow-based load-balancing」を嬉しさとして挙げる。PW の冗長の書き方= IOS XE の `member … encapsulation
+  mpls group <名前> priority <n>`(Catalyst 9500 のコマンド リファレンス・ASR 900 の L2VPN Protocol-Based CLIs)。
+- 盤面= `_POC-XRVPWS`(P1= P だけ・RR1= l2vpn evpn の RR・XE1〜3= 8000V 17.15.1a・SW1= IOL-L2 を XE1・XE2 に LACP の束・CE3)。手順
+  `poc/xr/vpws_poc.sh`(a/bgp/mh/rate/mhf/mhf3/ldp/ldpf/sr/cfg)・記録 `poc/xr/expVPWS-*.log`。撤収済み。
+- ★**実測(8000V の EVPN-VPWS のマルチホーム= 公式に記述なし・受け付けて動くが規格どおりではない)**= ES(type 0・all-active・`lacp device-id`)を束に付け、
+  point-to-point の EVI の member に束を入れられる。SW1 の束は 2 本とも P・ping 通る・ES の Forwarder List に 2 台。ただし ①種類 1(EVI ごと)の経路の
+  ESI が 0 のまま ②種類 1 の ES ごとの経路は出ない(XE3 で見えず) ③XE3 は 2 本の経路を multipath と表示するが VC の次の行き先は 1 台だけ ④PE が戻る
+  たびに最後に届いた経路の PE へ乗り換える(RemDn→RemUp が一瞬・ping の連続した落ちなし)。束の両方の線から入るフレームは届く(SW1 の Et0/1= XE2 側へ
+  100 発→ 100%)。切り替え= XE3 が使っている PE の線を落とすと最長 4 発(約 4 秒・CML は片側の shutdown が相手に伝わらず LACP の 3 秒待ちが大半)・
+  落ちた PE の種類 1 の経路は取り下げ(0 available)。使っていない側を落とすと連続した落ちなし。平常時も 15000 発に 30 発前後 1 発ずつ落ちる(原因は未調査)。
+- ★**実測(LDP の疑似回線の主と予備)**= XE3 に `group SITE4 priority 1/2` で XE1 を主・XE2 を予備 → UP/STANDBY。**SW1 の束が XE2 側へ流すと 0%**
+  (XE2 は予備の線へ送る= Tx が増える・`Status sent to access circuit: DOWN(standby)`・XE3 が捨てる)。SW1 の XE2 側の線を止めると 100%。主の XE1 の線を
+  落とすと XE3 は主を DN・予備を UP にして通る。XE1 が戻ると主へ戻り(revertive)、また 0%。= CE 側の束を予備に合わせる別の仕組み(MC-LAG など)が要る
+  (この盤面では入れていない・mLACP/ICCP は未検証)。
+- ★**実測(SR)**= IOL の P1 も IS-IS の SR(`connected-prefix-sid-map`・`router isis` の `segment-routing mpls`)が動く。コアのリンクの `mpls ip` を外すと
+  P1 の LDP は 0 本・道は 16041 など。EVPN-VPWS は {16041 23} で通る。LDP の疑似回線も SR の道の上で UP だが、XE3 に XE1・XE2 との targeted の LDP が残る。
+  疑似回線を消すと XE3 の LDP は 0 本。
+- 読み物= `courses/xr/*/c3-evpn-vpws.md`(章 C0 の 4 ページ目・実践の後)。何が嬉しいか(困りごと→主と予備→ES)→仕組み(端の番号の種類 1・ES の種類 4)
+  →同じ盤面で 2 つ(設定例・束・切り替え・主と予備で 0%)→SR で LDP を外す→まとめ。8000V が規格どおりでない点は :::note。c0 の冒頭の表と 2.3 節から案内。
+  ラボ(課題)は作っていない= 2026-11-07 ユーザ判断で今度に見送り(BL-262。候補= この盤面で「拠点を 2 台にする」「LDP を外す」課題)。
+
+### 26.12 M9 L3VPN の読み物の書き直し(2026-11-07 着手・BL-261 ③・ユーザ了承)
+
+- 経緯= BL-261 の順番(地図 → XRT-13 → **M9 の書き直し** → 紙面)の 3 段目。旧 M9(1 ページ 39 KB・7 節)は CLAUDE.md §6 より前の書き方で、
+  `:::config` が 0・「IOS XR の VRF」から入る XR 中心の構成・「何が嬉しいか」が無い・仕組みの図がトポロジ 1 枚だけ。
+  章 C0(c0・c1)は 4 つのサービスを並べる入門で、L3VPN の細部(RR・as-override・共有サービス・インターネット)は M9 にしか無い
+  → M9 を L3VPN 本体の単元として深め、c0/c1 から重ねて書かない(c0 の 3.1〜3.2 は案内でつなぐ)。
+- **形(M10 にならう= 3 ページ+付録・実践も 3 枚)**:
+
+  | ページ | 中身 | 課題 |
+  |---|---|---|
+  | `90-m9-l3vpn`(L3VPN の仕組み) | 何が嬉しいか(重なるアドレス・分離・オーバーレイ/ピア モデルの困りごと)→ VRF・RD・RT・VPNv4・2 枚のラベルを盤面で 1 ホップずつ → IOS XR の部品の置き場・PE-CE・RT のふるい | M9-1 |
+  | `92-m9-rr-same-as`(RR と同じ AS のサイト) | フル メッシュの困りごと → VPNv4 の RR(全部持つ・AF ごとのクライアント・道の外)→ AS パスの検査と as-override・site-of-origin | M9-2 |
+  | `94-m9-shared-internet`(共有サービスとインターネット) | RT の組み合わせでつながり方を決める(ハブとスポーク・非推移)→ 1 経路だけ荷札を足す(additive)→ 同じ PE の VRF どうし → VRF とグローバルの間 → パケットを追う | M9-3・M9-4 |
+  | `96-m9-appendix`(付録) | VPN ラベルの割り当て方(per-prefix・per-vrf・per-ce)・Inter-AS A/B/C・CSC・IF の VRF を変えるとき(公式と実機の食い違い §22.6-1)・コマンドの対応 | — |
+
+  実践= `91-m9-practice`(M9-1)・`93-m9-practice-2`(M9-2)・`95-m9-practice-3`(M9-3・M9-4)。旧「やってみる」6 つと測定値は該当ページへ移す。
+- 設定例= `:::config`。課題の答えと同じ形のもの(M9-1 の VRF/IF/BGP・M9-2 の RR と as-override・M9-3 の輸出の方針・M9-4 のリーク)は `fold`。
+  IOS XE の対比は RT02 の据え付けの設定(実機の running-config)。根拠= learn.yml の模範解(逐語で 100)と §26.12 の測り直し。
+- 測り直し(2026-11-07)= XRT-09 を provision → `solve_xrt09.sh`(全課題)→ `poc/xr/m9rw_poc.sh out1 cap overlap soo perce out3 cfg`・
+  記録 `poc/xr/expM9R-*.log`・pcap `poc/xr/pcap/m9-*.pcap` → reset → 撤収。測るもの= 両向きの traceroute と線の上のラベル(行き 16/22・帰りは
+  XR01 の explicit-null で 0)/RT02 のラベルの表(内側のラベル= 受け取る PE の VRF の経路)/RR の VPNv4 表(両方の RD)/P が顧客の経路を持たない/
+  **重なるアドレス**(CEB2 にも 10.101.2.0/24 を置いて RD で別の経路のまま・VRF ごとに正しい側へ)/site-of-origin(RT02 に届く・同じ値で送らない)/
+  per-ce/設定例の元の running-config。
+- ラボ・採点は変えない。learn.yml の read: と task.md/task.en.md の冒頭の案内・「コマンド例は示しません」(XRT-10 と同じ言い回しへ)を新しいページに合わせる。
+
+**26.12 の結果(2026-11-07)**:
+- 成果物= `courses/xr/{en,ja}/90-m9-l3vpn`(L3VPN の仕組み= 何が嬉しいか・VRF/RD/RT/VPNv4・2 枚のラベルを 1 ホップずつ(行きと帰りの 2 図)・
+  重なるアドレスの実演・押さえどころ・XR の置き場と IOS XE の対比・確かめる順番)/`92-m9-rr-same-as`(RR は全部持つ・AF ごとのクライアント・道の外・
+  as-override・site-of-origin)/`94-m9-shared-internet`(RT の組み合わせ・取り込みはつながらない・additive・同じ PE の VRF・VRF とグローバル・
+  パケットを追う・スタティックでの受け渡し)/`96-m9-appendix`(ラベルの割り当て方 3 方式・Inter-AS・CSC・コマンドの対応)。
+  実践= `91`(M9-1)・`93`(M9-2)・`95`(M9-3・M9-4)= practice.yml の `tasks:`。設定例 `:::config` 10 個(課題の答えと同じ形の 6 個は fold)。
+  旧「やってみる」6 つは測定値ごと各ページへ移し、新しく 1 つ(同じアドレスを 2 つの顧客に)。日英の見出し・段落・表・囲みの並びは機械で一致を確認。
+  learn.yml の read: と解説の節番号の参照・task.md/task.en.md の冒頭(ページの案内・「コマンド例」の言い回しを XRT-10 と同じに)を更新。ラボ・採点は不変。
+- 測り直し= `poc/xr/m9rw_poc.sh`(out1・cap・overlap・soo・perce・out3・cfg・xevrf)・記録 `poc/xr/expM9R-*.log`・pcap `poc/xr/pcap/m9-{A,B}-*.pcap`。
+  XRT-09 を provision → `solve_xrt09.sh` → 採点 100(★採点が学習ノルマに 1 行記録した→取り消し)→ 測定 → 撤収。
+  1. 線の上= 行き XR01→RT01 `16|22`・RT01→RT02 `22`(PHP)/帰り RT02→RT01 `22|24004`・RT01→XR01 `0|24004`(XR01 の explicit-null= XRT-07 の M8-5)。
+     行きの 22(RT02 の VPN ラベル)と帰りの 22(RT01 の LDP のラベル)は別物。顧客 B は `16|24`・帰り `22|24006`。ラベルの値は 10/27 の E2E と同じ。
+  2. RT02 のラベルの表= 22→10.101.2.0/24[V]・23→198.51.100.128/25[V]・24→10.102.2.0/24[V](IOS XE も既定はプレフィックスごと)。P の RT01 は
+     `% Subnet not in table`・`% BGP not active`。XR02 は全 RD を保持(10.99.2.0/24 も)・ラベルの表は空・`show route` に VPN の経路なし。RT02 は 10.99.2.0/24 を持たない。
+  3. ★重なるアドレス= CEB2 に 10.101.2.0/24 を足す → 1 分以内に XR02 が RD 10.255.0.12:101 と :102 の 2 本・XR01 の CUST-A は {16 22}・CUST-B は {16 26}・
+     traceroute の最後のホップが CEA2/CEB2 に分かれる。**SVC(両方の顧客を取り込む)の表で選ばれたのは 1 本(顧客 A)だけ**= 共有サービスは顧客の
+     アドレスが重ならないことが前提(読み物 94 の 2.2 節)。消して 30 秒以内に戻る。採点への影響なし(該当チェックは肯定の ping だけ)。
+  4. site-of-origin= XR01 の CEA1 に `site-of-origin 65101:1` → RT02 で `Extended Community: SoO:65101:1 RT:65000:101`。RT02 の CEA2 にも
+     `neighbor 172.16.12.2 soo 65101:1` → RT02 は 10.101.1.0/24 を CEA2 に送らない(`Not advertised to any peer`)。★逆向き(RT02 が CEA2 の経路に印を付けて
+     XR01 が CEA1 に送らない)は起きなかった= IOS XE は設定後に受け直していない経路に印を付けない(clear していない)。読み物は送らない側だけを書いた。
+  5. per-ce= CEA1 の 2 経路が 24010 にまとまる・行き先は Gi0/0/0/2 の CEA1・2 行目に `Aggregate … (!)`(予備)。IOS XE の per-vrf=
+     `mpls label mode vrf CUST-B protocol bgp-vpnv4 per-vrf`(グローバル)で `IPv4 VRF Aggr:27`・27→`aggregate/CUST-B`。
+  6. IOS XE でアドレスの付いた IF に `vrf forwarding` → `% Interface Loopback99 IPv4 disabled and address(es) removed due to disabling VRF CUST-B`(アドレスが消える)。
+- 本文の直し(裏づけの弱い言い切りを外した)= 旧 M9 の「IOS の PE は送って CE が捨てる」(未測定)を外し、XR が送る前に検査することだけを書いた。
+  旧 M9 の「VPN-IPv4 は RFC 4364 の 4.2 節が定義」は誤り(4.1 節が VPN-IPv4・4.2 節は RD の符号化)→ 4.1 節に直した(RFC 4364 全文で確認・サブエージェント)。
+  ラベルの割り当て方の per-ce の挙動は公式文書の明文が取れなかった(Cisco 8000 の L3VPN ガイド 26.x は per-CE が 26.3.1 から使えるとだけ)→ 実機のラベルの表で言える範囲だけを書いた。
+
+### 26.13 紙面(BL-261 ④)— ラベルの積み方と表の読み(2026-11-07 着手・ユーザ決定)
+
+- ユーザ決定(2026-11-07)= 範囲は ①〜③ を先に(故障の読み方は BL-263 へ見送り)・出し方は**毎日のパックに混ぜる**(units.yml の U-M9・U-M11 に載せ、
+  単元ローテーションで回る)+ SP だけを解く日のために `--profile sp`。
+- 器= `topologies/gen_paper_spvpn.py`(gen_paper_mcq の KB ファミリ・shape `spvpn`)。問題文は日本語で生成し、出題時に英訳する(紙面の英語出題の手順どおり)。
+- 種類(kind):
+  | kind | 枠 | 形 | 問うこと |
+  |---|---|---|---|
+  | `l3_stack` | 思考 | read(単一選択) | L3VPN の 1 つのパケットが、指定した 1 区間の上で運ぶラベルの積み方 |
+  | `l2_stack` | 思考 | read(単一選択) | VPWS(LDP・EVPN)・VPLS・EVPN の E-LAN で、同じく 1 区間のラベル |
+  | `owner` | 瞬発 | select・allthat | 線の上で捕まえた 2 枚のラベルを、それぞれ誰が決め、入口 PE がどうやって知ったか |
+  | `lfib` | 瞬発 | match | 出口 PE のラベル表の行(サービスの行と運ぶ層の行)を、届いたパケットの扱いに対応づける |
+- 盤面は 2 つ。どちらも実測だけを使う(図の出力は記録から行を抜き出して削るだけ・手で作らない。selftest が記録の中に同じ行があるかを照合する):
+  - **5 サービスの盤面**(`_POC-XRSVC`・2026-11-04 の取り直し= RR1 を分けた後)= XE1・XE2・XE3(Catalyst 8000V)・XR01(XRv9000)・P1・RR1。
+    記録 `poc/xr/expSVC-{l3,pw,vp,el,ev,lbl}.log`・キャプチャ `poc/xr/pcap/{l3,vpws,vpls,elan,evpws}-*.pcap`。
+  - **M9 の盤面**(XRT-09・2026-11-07)= XR01・RT01・RT02・RT03・XR02(RR)。記録 `poc/xr/expM9R-out1.log`・キャプチャ `poc/xr/pcap/m9-{A,B}-*.pcap`。
+- 場面(線の上の実測。左が外側):
+  | 場面 | 通り道 | 入口→P | P→出口 | 入口 PE が内側を知る元 |
+  |---|---|---|---|---|
+  | L3VPN CE1→CE2 | XE1→P1→XE2 | 18 \| 25 | 25 | BGP(RR1 が反射)`show bgp vpnv4 unicast all labels` |
+  | L3VPN CE2→CE1(応答) | XE2→P1→XE1 | 17 \| 25 | 25 | 出口 XE1 の In label 25 |
+  | L3VPN CE1→CE4 | XE1→P1→XR01 | 20 \| 24009 | 24009 | 同上(1 区間目は XE1 の CEF でも実測・P1→XR01 の PHP は VPWS のキャプチャで実測) |
+  | VPWS CE1→CE4 | XE1→P1→XR01 | 20 \| 24010 | 24010 | targeted LDP(`show l2vpn atom vc vcid 130 detail` の Bindings) |
+  | VPWS CE4→CE1(応答) | XR01→P1→XE1 | 17 \| 26 | 26 | XR01 の `show l2vpn xconnect detail` の Remote 26 |
+  | VPLS CE1→CE2 | XE1→P1→XE2 | 18 \| 27 | 27 | XE1 の `show bridge-domain 210` の MAC ごとの VC_LABEL(CE3 宛ては 26) |
+  | E-LAN CE1→CE2 | XE1→P1→XE2 | 18 \| 30 | 30 | タイプ 2 の Label1 30(BUM はタイプ 3 の PMSI の 29) |
+  | EVPN-VPWS CE2→CE3 | XE2→P1→XE3 | 19 \| 25 | 25 | `show l2vpn evpn vpws vc id 140 detail`(Local 26・Remote 25) |
+  | EVPN-VPWS CE3→CE2(応答) | XE3→P1→XE2 | 18 \| 26 | 26 | 出口 XE2 の Local 26 |
+  | L3VPN CEA1→CEA2 | XR01→RT01→RT02 | 16 \| 22 | 22 | `show bgp vrf CUST-A labels`(XR02 が反射) |
+  | L3VPN CEA2→CEA1(応答) | RT02→RT01→XR01 | 22 \| 24004 | **0 \| 24004** | RT02 の `show ip bgp vpnv4 all labels`。XR01 が explicit null を広告(RT01 の表に `explicit-n`) |
+  | L3VPN CEB1→CEB2 | XR01→RT01→RT02 | 16 \| 24 | 24 | 出口 RT02 の表の 24 |
+  | L3VPN CEB2→CEB1(応答) | RT02→RT01→XR01 | 22 \| 24006 | **0 \| 24006** | RT02 の `show ip bgp vpnv4 all labels` |
+- 誤りの選択肢の作り方(よくある取り違え)= 外側と内側を逆に書く/入口 PE の表の Local(自分が決めた番号。XE1 の 10.255.0.42 は 22)を外側に使う/
+  逆向きの外側(P が入口 PE に割り当てた番号)を使う/P→出口の区間に外側を残す(PHP を忘れる)・逆に explicit null の区間で外側を外す/
+  内側に入口 PE 自身が決めた番号を使う/VPLS で別の宛先(CE3)の VC_LABEL を使う/E-LAN で BUM のラベルを使う/ラベルなし。
+  正解と同じ並びになった誤りは捨てる(XE1 と XE2 がどちらも 25 を VPN のラベルにしているため、L3VPN CE1→CE2 では「入口自身の番号」が正解と同じになる)。
+- 裏どり= 線の上は CML のリンクの捕獲(上の表)。表の読み方は記録の出力そのもの。規定= RFC 3032 §2.1(ラベル 0 は IPv4 explicit null)・
+  RFC 3031(PHP)・RFC 4364(VPN のラベルは出口 PE が割り当てて BGP で配る)・RFC 4447(疑似回線のラベルは targeted LDP で相手の PE が配る)・
+  RFC 4762(VPLS)・RFC 7432(E-LAN: MAC/IP 広告ルートの Label1・Inclusive Multicast Ethernet Tag ルートの PMSI のラベル)・RFC 8214(EVPN-VPWS)。
+- 対象外(BL-263 へ)= 故障の出力から原因を当てる問題。
+- **実装の結果(2026-11-07)**= `topologies/gen_paper_spvpn.py`(KB ファミリ・`gen_paper_mcq` の KB_FAMILIES に登録)。場面 13(5 サービスの盤面 9・M9 の盤面 4)×区間 2・
+  ラベル表 3 枚(XE1・M9 の XR01・M9 の RT02)。図の出力 20 個は記録の行番号から機械で写した(手で打たない)。selftest= 200 件+図の照合 20/20+場面ごとに
+  「入口の表の Outgoing= 1 区間目の外側・Local= ing_local・P の表の Pop/explicit-n= 2 区間目」を図から導いて実測と照合(13 場面とも一致)+区間ごとの
+  「必ず入れる誤り」(1 区間目= Local の列を外側に使う・2 区間目= PHP を忘れる/explicit null の区間で外側を外す)が肢に入るか。
+  パックの解答欄の読み取り(選択・すべて選べ・組み合わせ)と HTML の描画を確認。units.yml= U-M9(`spvpn/l3_stack`・`owner`・`lfib`)・
+  U-M11(`spvpn/l2_stack`・`owner`・`lfib`)・profile `sp`。単元ローテーションでは思考枠・瞬発枠とも U-M11 → U-M9 が次の先頭(未出題のため)。
+  mixed(思考枠)は THINK_KINDS だけ、speed(瞬発枠)は SPEED_KINDS だけを引くことを確認。問題文は日本語で生成し、出題時に英訳する(他の紙面と同じ)。
+

@@ -1,0 +1,192 @@
+
+######## 00:04:00 cfg: 設定例の元
+show running-config | section l2vpn|interface Port-channel1|interface GigabitEthernet2|interface GigabitEthernet3|router bgp|segment-routing
+l2vpn evpn
+ replication-type ingress
+ router-id Loopback0
+l2vpn evpn ethernet-segment 4
+ identifier type 0 00.00.00.00.00.00.00.04.01
+ redundancy all-active
+interface Port-channel1
+ description to SW1 (site 4)
+ no ip address
+ no negotiation auto
+ evpn ethernet-segment 4
+ lacp device-id 0000.0000.0004
+ service instance 150 ethernet
+  encapsulation dot1q 150
+  rewrite ingress tag pop 1 symmetric
+ !
+ service instance 160 ethernet
+  encapsulation dot1q 160
+  rewrite ingress tag pop 1 symmetric
+ !
+interface GigabitEthernet2
+ no ip address
+ shutdown
+ negotiation auto
+interface GigabitEthernet3
+ description to SW1 (site 4)
+ no ip address
+ negotiation auto
+ channel-group 1 mode active
+segment-routing mpls
+ !
+ connected-prefix-sid-map
+  address-family ipv4
+   10.255.0.41/32 index 41 range 1 
+  exit-address-family
+ !
+ segment-routing mpls
+router bgp 65000
+ bgp router-id 10.255.0.41
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.255.0.52 remote-as 65000
+ neighbor 10.255.0.52 update-source Loopback0
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family l2vpn evpn
+  neighbor 10.255.0.52 activate
+  neighbor 10.255.0.52 send-community both
+ exit-address-family
+l2vpn xconnect context SITE4-SITE3-LDP
+ member Port-channel1 service-instance 160 
+ member 10.255.0.43 161 encapsulation mpls
+l2vpn evpn instance 150 point-to-point
+ vpws context SITE4-SITE3
+  service target 3 source 4
+  member Port-channel1 service-instance 150
+ !
+XE1#
+show running-config | section l2vpn|interface Port-channel1|interface GigabitEthernet2|interface GigabitEthernet3|router bgp|segment-routing
+l2vpn evpn
+ replication-type ingress
+ router-id Loopback0
+l2vpn evpn ethernet-segment 4
+ identifier type 0 00.00.00.00.00.00.00.04.01
+ redundancy all-active
+interface Port-channel1
+ description to SW1 (site 4)
+ no ip address
+ no negotiation auto
+ evpn ethernet-segment 4
+ lacp device-id 0000.0000.0004
+ service instance 150 ethernet
+  encapsulation dot1q 150
+  rewrite ingress tag pop 1 symmetric
+ !
+ service instance 160 ethernet
+  encapsulation dot1q 160
+  rewrite ingress tag pop 1 symmetric
+ !
+interface GigabitEthernet2
+ no ip address
+ shutdown
+ negotiation auto
+interface GigabitEthernet3
+ description to SW1 (site 4)
+ no ip address
+ negotiation auto
+ channel-group 1 mode active
+segment-routing mpls
+ !
+ connected-prefix-sid-map
+  address-family ipv4
+   10.255.0.42/32 index 42 range 1 
+  exit-address-family
+ !
+ segment-routing mpls
+router bgp 65000
+ bgp router-id 10.255.0.42
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.255.0.52 remote-as 65000
+ neighbor 10.255.0.52 update-source Loopback0
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family l2vpn evpn
+  neighbor 10.255.0.52 activate
+  neighbor 10.255.0.52 send-community both
+ exit-address-family
+l2vpn xconnect context SITE4-SITE3-LDP
+ member Port-channel1 service-instance 160 
+ member 10.255.0.43 162 encapsulation mpls
+l2vpn evpn instance 150 point-to-point
+ vpws context SITE4-SITE3
+  service target 3 source 4
+  member Port-channel1 service-instance 150
+ !
+XE2#
+show running-config | section l2vpn|interface Port-channel1|interface GigabitEthernet2|interface GigabitEthernet3|router bgp|segment-routing
+l2vpn evpn
+ replication-type ingress
+ router-id Loopback0
+interface GigabitEthernet2
+ description to CE3 (site 3)
+ no ip address
+ negotiation auto
+ service instance 150 ethernet
+  encapsulation dot1q 150
+  rewrite ingress tag pop 1 symmetric
+ !
+ service instance 160 ethernet
+  encapsulation dot1q 160
+  rewrite ingress tag pop 1 symmetric
+ !
+interface GigabitEthernet3
+ no ip address
+ shutdown
+ negotiation auto
+segment-routing mpls
+ !
+ connected-prefix-sid-map
+  address-family ipv4
+   10.255.0.43/32 index 43 range 1 
+  exit-address-family
+ !
+ segment-routing mpls
+router bgp 65000
+ bgp router-id 10.255.0.43
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.255.0.52 remote-as 65000
+ neighbor 10.255.0.52 update-source Loopback0
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family l2vpn evpn
+  neighbor 10.255.0.52 activate
+  neighbor 10.255.0.52 send-community both
+ exit-address-family
+l2vpn evpn instance 150 point-to-point
+ vpws context SITE3-SITE4
+  service target 4 source 3
+  member GigabitEthernet2 service-instance 150
+ !
+XE3#
+show running-config | section segment-routing|router isis
+ ip router isis CORE
+ ip router isis CORE
+ ip router isis CORE
+ ip router isis CORE
+ ip router isis CORE
+segment-routing mpls
+ !
+ connected-prefix-sid-map
+  address-family ipv4
+   10.255.0.51/32 index 51 range 1 
+  exit-address-family
+ !
+router isis CORE
+ net 49.0001.0100.0000.0051.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+ segment-routing mpls
+P1#

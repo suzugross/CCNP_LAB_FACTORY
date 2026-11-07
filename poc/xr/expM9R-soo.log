@@ -1,0 +1,234 @@
+
+######## 00:55:33 soo: XR01 で CEA1 に site-of-origin を付ける → RT02 に SoO が届く。RT02 で CEA2 にも同じ値 → 同じサイトとみなして送らない → 戻す
+configure
+Sat Nov  7 00:55:34.735 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+neighbor 172.16.11.2
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+site-of-origin 65101:1
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+commit
+Sat Nov  7 00:55:37.253 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show ip bgp vpnv4 vrf CUST-A 10.101.1.0
+BGP routing table entry for 10.255.0.12:101:10.101.1.0/24, version 20
+Paths: (1 available, best #1, table CUST-A)
+  Advertised to update-groups:
+     1         
+  Refresh Epoch 1
+  65101, imported path from 10.255.0.1:101:10.101.1.0/24 (global)
+    10.255.0.1 (metric 20) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin IGP, metric 0, localpref 100, valid, internal, best
+      Extended Community: SoO:65101:1 RT:65000:101
+      Originator: 10.255.0.1, Cluster list: 10.255.0.21
+      mpls labels in/out nolabel/24004
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 7 2026 00:55:39 UTC
+RT02#
+show ip bgp 10.101.1.0
+BGP routing table entry for 10.101.1.0/24, version 4
+Paths: (1 available, best #1, table default)
+  Not advertised to any peer
+  Refresh Epoch 1
+  65000 65000
+    172.16.12.1 from 172.16.12.1 (10.255.0.12)
+      Origin IGP, localpref 100, valid, external, best
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 7 2026 00:55:39 UTC
+CEA2#
+show bgp vrf CUST-A 10.101.1.0/24
+Sat Nov  7 00:56:13.099 UTC
+BGP routing table entry for 10.101.1.0/24, Route Distinguisher: 10.255.0.1:101
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 49           49
+    Local Label: 24004
+Last Modified: Nov  7 00:55:39.348 for 00:00:33
+Paths: (1 available, best #1)
+  Advertised to PE peers (in unique update groups):
+    10.255.0.21     
+  Path #1: Received by speaker 0
+  Advertised to PE peers (in unique update groups):
+    10.255.0.21     
+  65101
+    172.16.11.2 from 172.16.11.2 (10.101.1.1)
+      Origin IGP, metric 0, localpref 100, valid, external, best, group-best, import-candidate
+      Received Path ID 0, Local Path ID 1, version 49
+      Extended community: SoO:65101:1 RT:65000:101 
+      Origin-AS validity: (disabled)
+RP/0/RP0/CPU0:XR01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+router bgp 65000
+RT02(config-router)#
+address-family ipv4 vrf CUST-A
+RT02(config-router-af)#
+neighbor 172.16.12.2 soo 65101:1
+RT02(config-router-af)#
+end
+RT02#
+show ip bgp vpnv4 vrf CUST-A 10.101.1.0
+BGP routing table entry for 10.255.0.12:101:10.101.1.0/24, version 20
+Paths: (1 available, best #1, table CUST-A)
+  Not advertised to any peer
+  Refresh Epoch 1
+  65101, imported path from 10.255.0.1:101:10.101.1.0/24 (global)
+    10.255.0.1 (metric 20) (via default) from 10.255.0.21 (10.255.0.21)
+      Origin IGP, metric 0, localpref 100, valid, internal, best
+      Extended Community: SoO:65101:1 RT:65000:101
+      Originator: 10.255.0.1, Cluster list: 10.255.0.21
+      mpls labels in/out nolabel/24004
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 7 2026 00:55:39 UTC
+RT02#
+show ip bgp vpnv4 vrf CUST-A neighbors 172.16.12.2 advertised-routes
+BGP table version is 21, local router ID is 10.255.0.12
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+     Network          Next Hop            Metric LocPrf Weight Path
+Route Distinguisher: 10.255.0.12:101 (default for vrf CUST-A)
+ *>i  0.0.0.0          10.255.0.1                    100      0 64500 i
+ *>i  10.99.1.0/24     10.255.0.1               0    100      0 ?
+Total number of prefixes 2 
+RT02#
+show ip bgp
+BGP table version is 9, local router ID is 10.101.2.1
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   0.0.0.0          172.16.12.1                            0 65000 64500 i
+ *>   10.99.1.0/24     172.16.12.1                            0 65000 ?
+ *>   10.101.2.0/24    0.0.0.0                  0         32768 i
+ *>   198.51.100.128/25
+                      0.0.0.0                  0         32768 i
+CEA2#
+show bgp vrf CUST-A 10.101.2.0/24
+Sat Nov  7 00:57:06.884 UTC
+BGP routing table entry for 10.101.2.0/24, Route Distinguisher: 10.255.0.1:101
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 11           11
+Last Modified: Nov  7 00:46:23.348 for 00:10:43
+Paths: (1 available, best #1)
+  Advertised to CE peers (in unique update groups):
+    172.16.11.2     
+  Path #1: Received by speaker 0
+  Advertised to CE peers (in unique update groups):
+    172.16.11.2     
+  65101
+    10.255.0.12 (metric 30) from 10.255.0.21 (10.255.0.12)
+      Received Label 22 
+      Origin IGP, metric 0, localpref 100, valid, internal, best, group-best, import-candidate, imported
+      Received Path ID 0, Local Path ID 1, version 11
+      Extended community: RT:65000:101 
+      Originator: 10.255.0.12, Cluster list: 10.255.0.21
+      Source AFI: VPNv4 Unicast, Source VRF: default, Source Route Distinguisher: 10.255.0.12:101
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A neighbors 172.16.11.2 advertised-routes
+Sat Nov  7 00:57:07.285 UTC
+Network            Next Hop        From            AS Path
+Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
+Route Distinguisher Version: 50
+0.0.0.0/0          172.16.11.1     192.0.2.2       65000 64500i
+10.99.1.0/24       172.16.11.1     0.0.0.0         65000?
+10.101.2.0/24      172.16.11.1     10.255.0.21     65000 65101i
+198.51.100.128/25  172.16.11.1     10.255.0.21     65000 65101i
+Processed 4 prefixes, 4 paths
+RP/0/RP0/CPU0:XR01#
+show ip bgp
+BGP table version is 7, local router ID is 10.101.1.1
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   0.0.0.0          172.16.11.1                            0 65000 64500 i
+ *>   10.99.1.0/24     172.16.11.1                            0 65000 ?
+ *>   10.101.1.0/24    0.0.0.0                  0         32768 i
+ *>   10.101.2.0/24    172.16.11.1                            0 65000 65000 i
+ *>   198.51.100.0/25  0.0.0.0                  0         32768 i
+ *>   198.51.100.128/25
+                      172.16.11.1                            0 65000 65000 i
+CEA1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT02(config)#
+router bgp 65000
+RT02(config-router)#
+address-family ipv4 vrf CUST-A
+RT02(config-router-af)#
+no neighbor 172.16.12.2 soo 65101:1
+RT02(config-router-af)#
+end
+RT02#
+configure
+Sat Nov  7 00:57:13.838 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+vrf CUST-A
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+neighbor 172.16.11.2
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+no site-of-origin 65101:1
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+commit
+Sat Nov  7 00:57:16.352 UTC
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+end
+RP/0/RP0/CPU0:XR01#
+show ip bgp
+BGP table version is 7, local router ID is 10.101.1.1
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   0.0.0.0          172.16.11.1                            0 65000 64500 i
+ *>   10.99.1.0/24     172.16.11.1                            0 65000 ?
+ *>   10.101.1.0/24    0.0.0.0                  0         32768 i
+ *>   10.101.2.0/24    172.16.11.1                            0 65000 65000 i
+ *>   198.51.100.0/25  0.0.0.0                  0         32768 i
+ *>   198.51.100.128/25
+                      172.16.11.1                            0 65000 65000 i
+CEA1#
+show ip bgp
+BGP table version is 11, local router ID is 10.101.2.1
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   0.0.0.0          172.16.12.1                            0 65000 64500 i
+ *>   10.99.1.0/24     172.16.12.1                            0 65000 ?
+ *>   10.101.1.0/24    172.16.12.1                            0 65000 65000 i
+ *>   10.101.2.0/24    0.0.0.0                  0         32768 i
+ *>   198.51.100.0/25  172.16.12.1                            0 65000 65000 i
+ *>   198.51.100.128/25
+                      0.0.0.0                  0         32768 i
+CEA2#

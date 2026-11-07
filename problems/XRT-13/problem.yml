@@ -1,0 +1,40 @@
+# XRT-13: XR トラック「MPLS のサービスを並べて見る」(章 C0)の実践= 白紙から 4 つのサービスを組む(L3VPN・VPWS(LDP)・VPLS・EVPN の E-LAN・EVPN-VPWS)。BL-261。
+# 設計= problems/_drafts/XR-TRACK.design.md §26(PoC= §26.5〜26.6 の _POC-XRSVC と同じ盤面)。学習目的のラボ(パック・ノルマの対象外)。
+# 盤面= P1(IOL・P ルータだけ= BGP なし・据付)を中心にした星形。RR(vpnv4 と l2vpn evpn)は RR1(IOL・据付)で、P1 の脇に 1 本でつなぐ(転送の道の外)。PE= XE1/XE2/XE3(Cat8000v)と XR01(XRv9000 26.1.1)。CE1〜4(IOL)は据付。
+# 初期状態= コア(IS-IS CORE・LDP)と RR1 だけ。PE には BGP もサービスも無い。値は読み物の設定例と変えてある(顧客 D・VLAN 3xx)。
+#   VLAN 310= L3VPN(拠点 2・3・4。拠点 3 の CE は BGP を話さない)/320・321= VPWS LDP(拠点 3 は 320・拠点 4 は 321)/330= VPLS(1〜3)/
+#   340= EVPN の E-LAN(1〜3・RT 65000:3400 を指定)/350= EVPN-VPWS(1⇔2)
+id: XRT-13
+title: "XR Track 13 — The MPLS Services Side by Side"
+exam: SP
+topics: [iosxr, iosxe, mpls, l3vpn, l2vpn, vpws, vpls, evpn, tutorial]
+difficulty: 3
+topology: generated
+access: ssh
+target_nodes: [XE1, XE2, XE3, P1, XR01, CE1, CE2, CE3, CE4, RR1]
+points: 100
+image_family: iol
+node_image_families: { XE1: cat8000v, XE2: cat8000v, XE3: cat8000v, XR01: iosxr }
+node_images: { XR01: iosxrv9000-26-1-1 }
+grade_attempts: 2
+# 8000V のライセンスの段階(既定は空欄= MPLS が無い)。構築の最後に xe_license.py が保存+再起動する
+xe_license_boot:
+  level: network-advantage addon dna-advantage
+  nodes: [XE1, XE2, XE3]
+# lab.sh reset で構築直後へ戻す IOS XE の機器(configure replace。xr_reset.py)。XR01 はコミットの履歴で戻す
+xe_reset_nodes: [XE1, XE2, XE3]
+lab:
+  # 中央= P1、左= 拠点 1・2(XE1・XE2)、右= 拠点 3・4(XE3・XR01)、P1 の上= RR1
+  positions: { P1: [400, 240], XE1: [0, 0], XE2: [0, 480], XE3: [800, 0], XR01: [800, 480],
+               CE1: [-400, 0], CE2: [-400, 480], CE3: [1200, 0], CE4: [1200, 480],
+               RR1: [400, -120] }
+  links:
+    - { a: P1, a_if: 0, b: XE1, b_if: 0 }
+    - { a: P1, a_if: 1, b: XE2, b_if: 0 }
+    - { a: P1, a_if: 2, b: XE3, b_if: 0 }
+    - { a: P1, a_if: 4, b: XR01, b_if: 3 }
+    - { a: P1, a_if: 5, b: RR1, b_if: 0 }
+    - { a: XE1, a_if: 1, b: CE1, b_if: 0 }
+    - { a: XE2, a_if: 1, b: CE2, b_if: 0 }
+    - { a: XE3, a_if: 1, b: CE3, b_if: 0 }
+    - { a: XR01, a_if: 4, b: CE4, b_if: 0 }

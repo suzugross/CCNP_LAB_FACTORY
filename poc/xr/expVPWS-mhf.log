@@ -1,0 +1,220 @@
+
+######## 23:45:43 mhf-1: 切り替え= SW1 から CE3 へ ping を流しながら、XE1 の SW1 向きの線(Gi3)を落とす→戻す
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+interface GigabitEthernet3
+XE1(config-if)#
+shutdown
+XE1(config-if)#
+end
+XE1#
+show l2vpn evpn vpws vc id 150 detail
+EVPN name: SITE3-SITE4, state: up, type: point-to-point
+  EVPN ID: 150
+  VPWS Service Instance ID: Source 3, Target 4
+  Labels: Local 23, Remote 23
+  Next Hop Address: 10.255.0.42
+  Associated member interface Gi2 up, Gi2:150 status is up
+  Output interface: Gi1, imposed label stack {19 23}
+  Preferred path: not configured  
+  Default path: active
+  Dataplane:
+    SSM segment/switch IDs: 12291/4096 (used), PWID: 1
+  Rx Counters
+    13313 input transit packets, 1863658 bytes
+    0 drops
+  Tx Counters
+    13311 output transit packets, 1916730 bytes
+    0 drops
+  8 VC FSM state transitions, Last 8 shown
+    Prov: Idle -> Prov, Fri Nov 06 23:43:33.535 (00:02:59 ago)
+    EviUp: Prov -> LocWait, Fri Nov 06 23:43:33.536 (00:02:59 ago)
+    LocUp: LocWait -> RemWait, Fri Nov 06 23:43:33.536 (00:02:59 ago)
+    RemUp: RemWait -> Act, Fri Nov 06 23:43:33.653 (00:02:59 ago)
+    DpUp: Act -> Est, Fri Nov 06 23:43:33.659 (00:02:59 ago)
+    RemDn: Est -> RemWait, Fri Nov 06 23:43:40.902 (00:02:51 ago)
+    RemUp: RemWait -> Act, Fri Nov 06 23:43:40.902 (00:02:51 ago)
+    DpUp: Act -> Est, Fri Nov 06 23:43:40.906 (00:02:51 ago)
+
+XE3#
+show bgp l2vpn evpn route-type 1
+BGP routing table entry for [1][10.255.0.42:150][00000000000000000000][4]/23, version 5
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Flag: 0x100
+  Not advertised to any peer
+  Refresh Epoch 2
+  Local
+    10.255.0.42 (metric 30) (via default) from 10.255.0.52 (10.255.0.52)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 23, Local Label: None
+      Extended Community: RT:65000:150
+      Originator: 10.255.0.42, Cluster list: 10.255.0.52
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 6 2026 23:43:40 UTC
+BGP routing table entry for [1][10.255.0.43:150][00000000000000000000][3]/23, version 2
+Paths: (1 available, best #1, table evi_150)
+  Advertised to update-groups:
+     1         
+  Refresh Epoch 1
+  Local
+    :: (via default) from 0.0.0.0 (10.255.0.43)
+      Origin incomplete, localpref 100, weight 32768, valid, sourced, local, best
+      Rcvd Label: None, Local Label: 23
+      Extended Community: RT:65000:150
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 6 2026 23:43:33 UTC
+BGP routing table entry for [1][10.255.0.43:150][00000000000000000000][4]/23, version 8
+Paths: (1 available, best #1, table evi_150)
+  Not advertised to any peer
+  Refresh Epoch 2
+  Local, imported path from [1][10.255.0.42:150][00000000000000000000][4]/23 (global)
+    10.255.0.42 (metric 30) (via default) from 10.255.0.52 (10.255.0.52)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 23, Local Label: None
+      Extended Community: RT:65000:150
+      Originator: 10.255.0.42, Cluster list: 10.255.0.52
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 6 2026 23:43:40 UTC
+XE3#
+Success rate is 99 percent (14969/15000), round-trip min/avg/max = 1/2/35 ms
+sent 15000 lost 31 runs [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] longest 1
+show etherchannel summary
+Flags:  D - down        P - bundled in port-channel
+        I - stand-alone s - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+        A - formed by Auto LAG
+
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1      Po1(SU)         LACP        Et0/0(s)        Et0/1(P)        
+
+SW1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+interface GigabitEthernet3
+XE1(config-if)#
+no shutdown
+XE1(config-if)#
+end
+XE1#
+Success rate is 99 percent (14968/15000), round-trip min/avg/max = 1/2/62 ms
+sent 15000 lost 32 runs [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] longest 1
+show l2vpn evpn vpws vc id 150 detail
+EVPN name: SITE3-SITE4, state: up, type: point-to-point
+  EVPN ID: 150
+  VPWS Service Instance ID: Source 3, Target 4
+  Labels: Local 23, Remote 23
+  Next Hop Address: 10.255.0.41
+  Associated member interface Gi2 up, Gi2:150 status is up
+  Output interface: Gi1, imposed label stack {18 23}
+  Preferred path: not configured  
+  Default path: active
+  Dataplane:
+    SSM segment/switch IDs: 4100/4096 (used), PWID: 1
+  Rx Counters
+    30845 input transit packets, 4318138 bytes
+    0 drops
+  Tx Counters
+    30843 output transit packets, 4441338 bytes
+    0 drops
+  11 VC FSM state transitions, Last 10 shown
+    EviUp: Prov -> LocWait, Fri Nov 06 23:43:33.537 (00:04:35 ago)
+    LocUp: LocWait -> RemWait, Fri Nov 06 23:43:33.537 (00:04:35 ago)
+    RemUp: RemWait -> Act, Fri Nov 06 23:43:33.654 (00:04:35 ago)
+    DpUp: Act -> Est, Fri Nov 06 23:43:33.660 (00:04:35 ago)
+    RemDn: Est -> RemWait, Fri Nov 06 23:43:40.903 (00:04:28 ago)
+    RemUp: RemWait -> Act, Fri Nov 06 23:43:40.903 (00:04:28 ago)
+    DpUp: Act -> Est, Fri Nov 06 23:43:40.907 (00:04:28 ago)
+    RemDn: Est -> RemWait, Fri Nov 06 23:47:26.579 (00:00:42 ago)
+    RemUp: RemWait -> Act, Fri Nov 06 23:47:26.579 (00:00:42 ago)
+    DpUp: Act -> Est, Fri Nov 06 23:47:26.598 (00:00:42 ago)
+
+XE3#
+show etherchannel summary
+Flags:  D - down        P - bundled in port-channel
+        I - stand-alone s - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+        A - formed by Auto LAG
+
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1      Po1(SU)         LACP        Et0/0(P)        Et0/1(P)        
+
+SW1#
+
+######## 23:48:11 mhf-2: XE2 側も同じ(どちらの PE が落ちても通るか)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE2(config)#
+interface GigabitEthernet3
+XE2(config-if)#
+shutdown
+XE2(config-if)#
+end
+XE2#
+Success rate is 99 percent (14965/15000), round-trip min/avg/max = 1/2/110 ms
+sent 15000 lost 35 runs [1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] longest 2
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE2(config)#
+interface GigabitEthernet3
+XE2(config-if)#
+no shutdown
+XE2(config-if)#
+end
+XE2#
+show etherchannel summary
+Flags:  D - down        P - bundled in port-channel
+        I - stand-alone s - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+        A - formed by Auto LAG
+
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1      Po1(SU)         LACP        Et0/0(P)        Et0/1(P)        
+
+SW1#
+ping 172.31.150.3 repeat 10
+Type escape sequence to abort.
+Sending 10, 100-byte ICMP Echos to 172.31.150.3, timeout is 2 seconds:
+.!!!!!!!!!
+Success rate is 90 percent (9/10), round-trip min/avg/max = 1/7/47 ms
+SW1#

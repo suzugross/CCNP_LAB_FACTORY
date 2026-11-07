@@ -1,0 +1,170 @@
+
+######## 23:53:16 ldp-1: LDP の疑似回線で同じ形を作る(VLAN 160)。XE1= PW 161・XE2= PW 162 で XE3 へ。XE3 は XE1 を主・XE2 を予備
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+interface Port-channel1
+XE1(config-if)#
+service instance 160 ethernet
+XE1(config-if-srv)#
+encapsulation dot1q 160
+XE1(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE1(config-if-srv)#
+exit
+XE1(config-if)#
+exit
+XE1(config)#
+l2vpn xconnect context SITE4-SITE3-LDP
+XE1(config-xconnect)#
+member Port-channel1 service-instance 160
+XE1(config-xconnect)#
+member 10.255.0.43 161 encapsulation mpls
+XE1(config-xconnect)#
+end
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE2(config)#
+interface Port-channel1
+XE2(config-if)#
+service instance 160 ethernet
+XE2(config-if-srv)#
+encapsulation dot1q 160
+XE2(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE2(config-if-srv)#
+exit
+XE2(config-if)#
+exit
+XE2(config)#
+l2vpn xconnect context SITE4-SITE3-LDP
+XE2(config-xconnect)#
+member Port-channel1 service-instance 160
+XE2(config-xconnect)#
+member 10.255.0.43 162 encapsulation mpls
+XE2(config-xconnect)#
+end
+XE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+interface GigabitEthernet2
+XE3(config-if)#
+service instance 160 ethernet
+XE3(config-if-srv)#
+encapsulation dot1q 160
+XE3(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE3(config-if-srv)#
+exit
+XE3(config-if)#
+exit
+XE3(config)#
+l2vpn xconnect context SITE3-SITE4-LDP
+XE3(config-xconnect)#
+member GigabitEthernet2 service-instance 160
+XE3(config-xconnect)#
+member 10.255.0.41 161 encapsulation mpls group SITE4 priority 1
+XE3(config-xconnect)#
+member 10.255.0.42 162 encapsulation mpls group SITE4 priority 2
+XE3(config-xconnect)#
+end
+XE3#
+show running-config | section xconnect
+l2vpn xconnect context SITE3-SITE4-LDP
+ member GigabitEthernet2 service-instance 160 
+ member 10.255.0.41 161 encapsulation mpls group SITE4 priority 1
+ member 10.255.0.42 162 encapsulation mpls group SITE4 priority 2
+XE3#
+
+######## 23:54:14 ldp-2: 確かめる(主と予備・ping)
+show l2vpn atom vc
+
+                                       Service
+Interface Peer ID         VC ID      Type   Name                     Status
+--------- --------------- ---------- ------ ------------------------ ----------
+pw100001  10.255.0.41     161        p2p    SITE3-SITE4-LDP          UP        
+pw100002  10.255.0.42     162        p2p    SITE3-SITE4-LDP          STANDBY   
+
+XE3#
+show xconnect all
+Legend:    XC ST=Xconnect State  S1=Segment1 State  S2=Segment2 State
+  UP=Up       DN=Down            AD=Admin Down      IA=Inactive
+  SB=Standby  HS=Hot Standby     RV=Recovering      NH=No Hardware
+
+XC ST  Segment 1                         S1 Segment 2                         S2
+------+---------------------------------+--+---------------------------------+--
+UP pri   ac Gi2:160(Eth VLAN)            UP mpls 10.255.0.41:161              UP
+IA pri   ac Gi2:160(Eth VLAN)            UP mpls 10.255.0.42:162              SB
+XE3#
+show mpls ldp neighbor | include Peer|Targeted
+    Peer LDP Ident: 10.255.0.51:0; Local LDP Ident 10.255.0.43:0
+    Peer LDP Ident: 10.255.0.41:0; Local LDP Ident 10.255.0.43:0
+	  Targeted Hello 10.255.0.43 -> 10.255.0.41, active, passive
+    Peer LDP Ident: 10.255.0.42:0; Local LDP Ident 10.255.0.43:0
+	  Targeted Hello 10.255.0.43 -> 10.255.0.42, active, passive
+XE3#
+show l2vpn atom vc
+
+                                       Service
+Interface Peer ID         VC ID      Type   Name                     Status
+--------- --------------- ---------- ------ ------------------------ ----------
+pw100001  10.255.0.43     161        p2p    SITE4-SITE3-LDP          UP        
+
+XE1#
+show l2vpn atom vc
+
+                                       Service
+Interface Peer ID         VC ID      Type   Name                     Status
+--------- --------------- ---------- ------ ------------------------ ----------
+pw100001  10.255.0.43     162        p2p    SITE4-SITE3-LDP          STANDBY   
+
+XE2#
+ping 172.31.160.3 repeat 10
+Type escape sequence to abort.
+Sending 10, 100-byte ICMP Echos to 172.31.160.3, timeout is 2 seconds:
+..........
+Success rate is 0 percent (0/10)
+SW1#
+show etherchannel summary
+Flags:  D - down        P - bundled in port-channel
+        I - stand-alone s - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+        A - formed by Auto LAG
+
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1      Po1(SU)         LACP        Et0/0(P)        Et0/1(P)        
+
+SW1#
+show interfaces Ethernet0/0 | include packets output
+     23096 packets output, 2702708 bytes, 0 underruns
+SW1#
+show interfaces Ethernet0/1 | include packets output
+     40952 packets output, 4840626 bytes, 0 underruns
+SW1#
+ping 172.31.160.3 repeat 20
+Type escape sequence to abort.
+Sending 20, 100-byte ICMP Echos to 172.31.160.3, timeout is 2 seconds:
+....................
+Success rate is 0 percent (0/20)
+SW1#
+show interfaces Ethernet0/0 | include packets output
+     23143 packets output, 2706323 bytes, 0 underruns
+SW1#
+show interfaces Ethernet0/1 | include packets output
+     40975 packets output, 4843609 bytes, 0 underruns
+SW1#

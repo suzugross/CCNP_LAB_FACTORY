@@ -1,0 +1,122 @@
+
+######## 23:41:29 a: 版・IS-IS・LDP・RR1・SW1 の束(まだ PE 側の束は無い)
+show version | include Version
+Cisco IOS XE Software, Version 17.15.01a
+Cisco IOS Software [IOSXE], Virtual XE Software (X86_64_LINUX_IOSD-UNIVERSALK9-M), Version 17.15.1a, RELEASE SOFTWARE (fc1)
+licensed under the GNU General Public License ("GPL") Version 2.0.  The
+software code licensed under GPL Version 2.0 is free software that comes
+GPL code under the terms of GPL Version 2.0.  For more details, see the
+XE1#
+show isis neighbors
+
+Tag CORE:
+System Id       Type Interface     IP Address      State Holdtime Circuit Id
+P1              L2   Gi1           10.0.41.51      UP    21       01
+XE1#
+show mpls ldp neighbor | include Peer
+    Peer LDP Ident: 10.255.0.51:0; Local LDP Ident 10.255.0.41:0
+XE1#
+show version | include Version
+Cisco IOS XE Software, Version 17.15.01a
+Cisco IOS Software [IOSXE], Virtual XE Software (X86_64_LINUX_IOSD-UNIVERSALK9-M), Version 17.15.1a, RELEASE SOFTWARE (fc1)
+licensed under the GNU General Public License ("GPL") Version 2.0.  The
+software code licensed under GPL Version 2.0 is free software that comes
+GPL code under the terms of GPL Version 2.0.  For more details, see the
+XE2#
+show isis neighbors
+
+Tag CORE:
+System Id       Type Interface     IP Address      State Holdtime Circuit Id
+P1              L2   Gi1           10.0.42.51      UP    28       02
+XE2#
+show mpls ldp neighbor | include Peer
+    Peer LDP Ident: 10.255.0.51:0; Local LDP Ident 10.255.0.42:0
+XE2#
+show version | include Version
+Cisco IOS XE Software, Version 17.15.01a
+Cisco IOS Software [IOSXE], Virtual XE Software (X86_64_LINUX_IOSD-UNIVERSALK9-M), Version 17.15.1a, RELEASE SOFTWARE (fc1)
+licensed under the GNU General Public License ("GPL") Version 2.0.  The
+software code licensed under GPL Version 2.0 is free software that comes
+GPL code under the terms of GPL Version 2.0.  For more details, see the
+XE3#
+show isis neighbors
+
+Tag CORE:
+System Id       Type Interface     IP Address      State Holdtime Circuit Id
+P1              L2   Gi1           10.0.43.51      UP    22       03
+XE3#
+show mpls ldp neighbor | include Peer
+    Peer LDP Ident: 10.255.0.51:0; Local LDP Ident 10.255.0.43:0
+XE3#
+show isis neighbors
+
+Tag CORE:
+System Id       Type Interface     IP Address      State Holdtime Circuit Id
+XE1             L2   Et0/0         10.0.41.41      UP    24       01
+XE2             L2   Et0/1         10.0.42.42      UP    23       01
+XE3             L2   Et0/2         10.0.43.43      UP    27       01
+RR1             L2   Et1/1         10.0.52.52      UP    22       01
+P1#
+show mpls forwarding-table
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+16         No Label   10.255.0.52/32   1998          Et1/1      10.0.52.52  
+17         Pop Label  10.255.0.43/32   0             Et0/2      10.0.43.43  
+18         Pop Label  10.255.0.41/32   0             Et0/0      10.0.41.41  
+19         Pop Label  10.255.0.42/32   0             Et0/1      10.0.42.42  
+P1#
+show ip bgp summary
+% BGP not active
+
+P1#
+show isis neighbors
+
+Tag CORE:
+System Id       Type Interface     IP Address      State Holdtime Circuit Id
+P1              L2   Et0/0         10.0.52.51      UP    24       06
+RR1#
+show bgp l2vpn evpn summary
+BGP router identifier 10.255.0.52, local AS number 65000
+BGP table version is 1, main routing table version 1
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.255.0.41     4        65000       0       0        1    0    0 never    Idle
+10.255.0.42     4        65000       0       0        1    0    0 never    Idle
+10.255.0.43     4        65000       0       0        1    0    0 never    Idle
+RR1#
+show etherchannel summary
+Flags:  D - down        P - bundled in port-channel
+        I - stand-alone s - suspended
+        H - Hot-standby (LACP only)
+        R - Layer3      S - Layer2
+        U - in use      f - failed to allocate aggregator
+
+        M - not in use, minimum links not met
+        u - unsuitable for bundling
+        w - waiting to be aggregated
+        d - default port
+
+        A - formed by Auto LAG
+
+
+Number of channel-groups in use: 1
+Number of aggregators:           1
+
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1      Po1(SD)         LACP        Et0/0(s)        Et0/1(s)        
+
+SW1#
+show vlan brief
+
+VLAN Name                             Status    Ports
+---- -------------------------------- --------- -------------------------------
+1    default                          active    Et0/0, Et0/1, Et0/2, Et0/3, Et1/0, Et1/1, Et1/2, Et1/3, Et2/0, Et2/1, Et2/2, Et2/3, Et3/0, Et3/1, Et3/2
+150  ELINE-EVPN                       active    
+160  ELINE-LDP                        active    
+999  MGMT                             active    Et3/3
+1002 fddi-default                     act/unsup 
+1003 token-ring-default               act/unsup 
+1004 fddinet-default                  act/unsup 
+1005 trnet-default                    act/unsup 
+SW1#

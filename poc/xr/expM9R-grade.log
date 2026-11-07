@@ -1,0 +1,393 @@
+
+PLAY [採点準備（基準読込・接続先解決）] ****************************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [収集方式を決定（problem.yml の access。既定 ssh / telnet・console=SSH不可ノード）] ***
+ok: [localhost]
+
+TASK [接続先マップ = mgmt_map ＋ clab ノード（problem.yml の clab_nodes。BL-061 複合ラボ）] ***
+ok: [localhost]
+
+TASK [各チェックに既定(genie_os 等)と接続先を併合した checks を作る] ***********
+ok: [localhost] => (item=XR01: M9-1 XR01: the eBGP session with CEA1 in VRF CUST-A is up and both of its routes are accepted)
+ok: [localhost] => (item=XR01: M9-1 XR01: the eBGP session with CEB1 in VRF CUST-B is up and its route is accepted)
+ok: [localhost] => (item=XR01: M9-1 XR01: a VPNv4 session with XR02 is up, and none with RT02)
+ok: [localhost] => (item=XR01: M9-1 XR01: sends the routes of both VRFs to XR02)
+ok: [localhost] => (item=XR01: M9-1 XR01: customer A's routes carry RD 10.255.0.1:101 and route target 65000:101)
+ok: [localhost] => (item=XR01: M9-1 XR01: customer B's routes carry RD 10.255.0.1:102 and route target 65000:102)
+ok: [localhost] => (item=XR01: M9-1 XR01: the VRFs import the route targets of the table)
+ok: [localhost] => (item=RT02: M9-2 RT02: learns customer A's site 1 from XR01, reflected by XR02)
+ok: [localhost] => (item=CEA1: M9-2 CEA1: learns site 2 of customer A from XR01)
+ok: [localhost] => (item=CEA1: M9-2 CEA1: the LAN of site 1 reaches the LAN of site 2)
+ok: [localhost] => (item=CEA2: M9-2 CEA2: the LAN of site 2 reaches the LAN of site 1)
+ok: [localhost] => (item=CEB1: M9-2 CEB1: the sites of customer B reach each other)
+ok: [localhost] => (item=CEB2: M9-2 CEB2: the sites of customer B reach each other (the other way))
+ok: [localhost] => (item=CEA2: M9-2 CEA2: customer A learns nothing of customer B)
+ok: [localhost] => (item=CEB1: M9-2 CEB1: customer B learns nothing of customer A)
+ok: [localhost] => (item=XR01: M9-3 XR01: 10.99.1.0/24 leaves VRF SVC with route targets 65000:900 and 65000:999)
+ok: [localhost] => (item=XR01: M9-3 XR01: 10.99.2.0/24 leaves VRF SVC with route target 65000:999 only)
+ok: [localhost] => (item=CEA2: M9-3 CEA2: site 2 of customer A reaches the shared servers)
+ok: [localhost] => (item=CEB2: M9-3 CEB2: site 2 of customer B reaches the shared servers)
+ok: [localhost] => (item=CEA1: M9-3 CEA1: site 1 of customer A reaches the shared servers)
+ok: [localhost] => (item=CEB1: M9-3 CEB1: site 1 of customer B reaches the shared servers)
+ok: [localhost] => (item=SVC: M9-3 SVC: reaches site 2 of customer A)
+ok: [localhost] => (item=SVC: M9-3 SVC: reaches site 2 of customer B)
+ok: [localhost] => (item=CEA2: M9-3 CEA2: learns 10.99.1.0/24 but not 10.99.2.0/24, and nothing of customer B)
+ok: [localhost] => (item=CEB1: M9-3 CEB1: learns 10.99.1.0/24 but not 10.99.2.0/24, and nothing of customer A)
+ok: [localhost] => (item=INET: M9-4 INET: learns customer A's two public segments, and nothing else from AS 65000)
+ok: [localhost] => (item=CEA1: M9-4 CEA1: the public segment of site 1 reaches the Internet)
+ok: [localhost] => (item=CEA2: M9-4 CEA2: the public segment of site 2 reaches the Internet)
+ok: [localhost] => (item=INET: M9-4 INET: reaches the public segment of site 2)
+ok: [localhost] => (item=CEA1: M9-4 CEA1: learns a default route from XR01)
+ok: [localhost] => (item=CEA2: M9-4 CEA2: learns a default route from RT02)
+ok: [localhost] => (item=CEB1: M9-4 CEB1: customer B keeps its VPN and has no default route)
+ok: [localhost] => (item=CEB2: M9-4 CEB2: customer B keeps its VPN and has no default route (site 2))
+
+TASK [大域不変条件（軸1）= model / invariants / 採点対象ノードを確定] **********
+ok: [localhost]
+
+TASK [shell 採点ノード(Linux)を特定（指紋照合の取得方式振分け用）] *************
+ok: [localhost]
+
+TASK [junos 採点ノード(clab)を特定（exec=junos。接続は network_cli / 指紋照合は対象外）] ***
+ok: [localhost]
+
+TASK [採点先の古い known_hosts エントリを削除] *********************************
+ok: [localhost] => (item=10.1.10.11)
+ok: [localhost] => (item=10.1.10.12)
+ok: [localhost] => (item=10.1.10.13)
+ok: [localhost] => (item=10.1.10.14)
+ok: [localhost] => (item=10.1.10.15)
+ok: [localhost] => (item=10.1.10.16)
+ok: [localhost] => (item=10.1.10.17)
+ok: [localhost] => (item=10.1.10.18)
+ok: [localhost] => (item=10.1.10.19)
+ok: [localhost] => (item=10.1.10.20)
+ok: [localhost] => (item=10.1.10.31)
+
+TASK [採点対象ノードに ansible_host を付与（delegate 接続用・ssh のみ。checks＋invariant の全 RIB ノード）] ***
+changed: [localhost] => (item=XR01 -> 10.1.10.11)
+ok: [localhost] => (item=XR01 -> 10.1.10.11)
+ok: [localhost] => (item=XR01 -> 10.1.10.11)
+ok: [localhost] => (item=XR01 -> 10.1.10.11)
+ok: [localhost] => (item=XR01 -> 10.1.10.11)
+ok: [localhost] => (item=XR01 -> 10.1.10.11)
+ok: [localhost] => (item=XR01 -> 10.1.10.11)
+changed: [localhost] => (item=RT02 -> 10.1.10.14)
+changed: [localhost] => (item=CEA1 -> 10.1.10.16)
+ok: [localhost] => (item=CEA1 -> 10.1.10.16)
+changed: [localhost] => (item=CEA2 -> 10.1.10.20)
+changed: [localhost] => (item=CEB1 -> 10.1.10.17)
+changed: [localhost] => (item=CEB2 -> 10.1.10.31)
+ok: [localhost] => (item=CEA2 -> 10.1.10.20)
+ok: [localhost] => (item=CEB1 -> 10.1.10.17)
+ok: [localhost] => (item=XR01 -> 10.1.10.11)
+ok: [localhost] => (item=XR01 -> 10.1.10.11)
+ok: [localhost] => (item=CEA2 -> 10.1.10.20)
+ok: [localhost] => (item=CEB2 -> 10.1.10.31)
+ok: [localhost] => (item=CEA1 -> 10.1.10.16)
+ok: [localhost] => (item=CEB1 -> 10.1.10.17)
+changed: [localhost] => (item=SVC -> 10.1.10.18)
+ok: [localhost] => (item=SVC -> 10.1.10.18)
+ok: [localhost] => (item=CEA2 -> 10.1.10.20)
+ok: [localhost] => (item=CEB1 -> 10.1.10.17)
+changed: [localhost] => (item=INET -> 10.1.10.19)
+ok: [localhost] => (item=CEA1 -> 10.1.10.16)
+ok: [localhost] => (item=CEA2 -> 10.1.10.20)
+ok: [localhost] => (item=INET -> 10.1.10.19)
+ok: [localhost] => (item=CEA1 -> 10.1.10.16)
+ok: [localhost] => (item=CEA2 -> 10.1.10.20)
+ok: [localhost] => (item=CEB1 -> 10.1.10.17)
+ok: [localhost] => (item=CEB2 -> 10.1.10.31)
+
+TASK [IOS XR ノードは become しない（problem.yml の node_image_families が iosxr のノード）] ***
+changed: [localhost] => (item=XR01)
+
+PLAY [ラボ指紋の照合（ssh のみ。telnet は collect_telnet.py 内 / console はラボ名解決で対象外）] ***
+[WARNING]: Deprecation warnings can be disabled by setting `deprecation_warnings=False` in ansible.cfg.
+[DEPRECATION WARNING]: Importing 'to_bytes' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+[DEPRECATION WARNING]: Importing 'to_text' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+[DEPRECATION WARNING]: The `ansible.module_utils.common._collections_compat` module is deprecated. This feature will be removed from ansible-core version 2.24. Use `collections.abc` from the Python standard library instead.
+[DEPRECATION WARNING]: Passing `warnings` to `exit_json` or `fail_json` is deprecated. This feature will be removed from ansible-core version 2.23. Use `AnsibleModule.warn` instead.
+
+TASK [labid を取得（IOS）] *****************************************************
+ok: [XR01]
+ok: [CEA2]
+ok: [CEB1]
+ok: [RT02]
+ok: [CEA1]
+ok: [CEB2]
+ok: [SVC]
+ok: [INET]
+
+TASK [照合（別ラボの labid が返ったら採点中止）] *******************************
+ok: [RT02] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-82e65283'
+ok: [CEB1] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-82e65283'
+ok: [XR01] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-82e65283'
+ok: [CEA1] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-82e65283'
+ok: [CEA2] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-82e65283'
+ok: [CEB2] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-82e65283'
+ok: [SVC] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-82e65283'
+ok: [INET] => 
+    changed: false
+    msg: 'labid OK: CCNP-LAB-82e65283'
+
+PLAY [収束待ち付き採点] ********************************************************
+
+TASK [全チェック PASS まで（または最大試行まで）採点を繰り返す] ****************
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 1/2)
+included: /home/suzuki/ansible/CCNP01/playbooks/_grade_attempt.yml for localhost => (item=attempt 2/2)
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> XR01] => (item=XR01: show bgp vrf CUST-A summary)
+ok: [localhost -> XR01] => (item=XR01: show bgp vrf CUST-B summary)
+ok: [localhost -> XR01] => (item=XR01: show bgp vpnv4 unicast summary)
+ok: [localhost -> XR01] => (item=XR01: show bgp vpnv4 unicast neighbors 10.255.0.21 advertised-count)
+ok: [localhost -> XR01] => (item=XR01: show bgp vpnv4 unicast rd 10.255.0.1:101 10.101.1.0/24)
+ok: [localhost -> XR01] => (item=XR01: show bgp vpnv4 unicast rd 10.255.0.1:102 10.102.1.0/24)
+ok: [localhost -> XR01] => (item=XR01: show vrf all detail)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp vpnv4 vrf CUST-A 10.101.1.0)
+ok: [localhost -> CEA1] => (item=CEA1: show ip bgp)
+ok: [localhost -> CEA1] => (item=CEA1: ping 10.101.2.1 source Loopback10 repeat 5)
+ok: [localhost -> CEA2] => (item=CEA2: ping 10.101.1.1 source Loopback10 repeat 5)
+ok: [localhost -> CEB1] => (item=CEB1: ping 10.102.2.1 source Loopback10 repeat 5)
+ok: [localhost -> CEB2] => (item=CEB2: ping 10.102.1.1 source Loopback10 repeat 5)
+ok: [localhost -> CEA2] => (item=CEA2: show ip route)
+ok: [localhost -> CEB1] => (item=CEB1: show ip route)
+ok: [localhost -> XR01] => (item=XR01: show bgp vpnv4 unicast rd 10.255.0.1:900 10.99.1.0/24)
+ok: [localhost -> XR01] => (item=XR01: show bgp vpnv4 unicast rd 10.255.0.1:900 10.99.2.0/24)
+ok: [localhost -> CEA2] => (item=CEA2: ping 10.99.1.1 source Loopback10 repeat 5)
+ok: [localhost -> CEB2] => (item=CEB2: ping 10.99.1.1 source Loopback10 repeat 5)
+ok: [localhost -> CEA1] => (item=CEA1: ping 10.99.1.1 source Loopback10 repeat 5)
+ok: [localhost -> CEB1] => (item=CEB1: ping 10.99.1.1 source Loopback10 repeat 5)
+ok: [localhost -> SVC] => (item=SVC: ping 10.101.2.1 source Loopback10 repeat 5)
+ok: [localhost -> SVC] => (item=SVC: ping 10.102.2.1 source Loopback10 repeat 5)
+ok: [localhost -> CEA2] => (item=CEA2: show ip route)
+ok: [localhost -> CEB1] => (item=CEB1: show ip route)
+ok: [localhost -> INET] => (item=INET: show ip bgp)
+ok: [localhost -> CEA1] => (item=CEA1: ping 203.0.113.10 source Loopback11 repeat 5)
+ok: [localhost -> CEA2] => (item=CEA2: ping 203.0.113.10 source Loopback11 repeat 5)
+ok: [localhost -> INET] => (item=INET: ping 198.51.100.129 source Loopback10 repeat 5)
+ok: [localhost -> CEA1] => (item=CEA1: show ip route 0.0.0.0)
+ok: [localhost -> CEA2] => (item=CEA2: show ip route 0.0.0.0)
+ok: [localhost -> CEB1] => (item=CEB1: show ip route)
+ok: [localhost -> CEB2] => (item=CEB2: show ip route)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=M9-1 XR01: the eBGP session with CEA1 in VRF CUST-A is up and both of its routes are accepted)
+ok: [localhost] => (item=M9-1 XR01: the eBGP session with CEB1 in VRF CUST-B is up and its route is accepted)
+ok: [localhost] => (item=M9-1 XR01: a VPNv4 session with XR02 is up, and none with RT02)
+ok: [localhost] => (item=M9-1 XR01: sends the routes of both VRFs to XR02)
+ok: [localhost] => (item=M9-1 XR01: customer A's routes carry RD 10.255.0.1:101 and route target 65000:101)
+ok: [localhost] => (item=M9-1 XR01: customer B's routes carry RD 10.255.0.1:102 and route target 65000:102)
+ok: [localhost] => (item=M9-1 XR01: the VRFs import the route targets of the table)
+ok: [localhost] => (item=M9-2 RT02: learns customer A's site 1 from XR01, reflected by XR02)
+ok: [localhost] => (item=M9-2 CEA1: learns site 2 of customer A from XR01)
+ok: [localhost] => (item=M9-2 CEA1: the LAN of site 1 reaches the LAN of site 2)
+ok: [localhost] => (item=M9-2 CEA2: the LAN of site 2 reaches the LAN of site 1)
+ok: [localhost] => (item=M9-2 CEB1: the sites of customer B reach each other)
+ok: [localhost] => (item=M9-2 CEB2: the sites of customer B reach each other (the other way))
+ok: [localhost] => (item=M9-2 CEA2: customer A learns nothing of customer B)
+ok: [localhost] => (item=M9-2 CEB1: customer B learns nothing of customer A)
+ok: [localhost] => (item=M9-3 XR01: 10.99.1.0/24 leaves VRF SVC with route targets 65000:900 and 65000:999)
+ok: [localhost] => (item=M9-3 XR01: 10.99.2.0/24 leaves VRF SVC with route target 65000:999 only)
+ok: [localhost] => (item=M9-3 CEA2: site 2 of customer A reaches the shared servers)
+ok: [localhost] => (item=M9-3 CEB2: site 2 of customer B reaches the shared servers)
+ok: [localhost] => (item=M9-3 CEA1: site 1 of customer A reaches the shared servers)
+ok: [localhost] => (item=M9-3 CEB1: site 1 of customer B reaches the shared servers)
+ok: [localhost] => (item=M9-3 SVC: reaches site 2 of customer A)
+ok: [localhost] => (item=M9-3 SVC: reaches site 2 of customer B)
+ok: [localhost] => (item=M9-3 CEA2: learns 10.99.1.0/24 but not 10.99.2.0/24, and nothing of customer B)
+ok: [localhost] => (item=M9-3 CEB1: learns 10.99.1.0/24 but not 10.99.2.0/24, and nothing of customer A)
+ok: [localhost] => (item=M9-4 INET: learns customer A's two public segments, and nothing else from AS 65000)
+ok: [localhost] => (item=M9-4 CEA1: the public segment of site 1 reaches the Internet)
+ok: [localhost] => (item=M9-4 CEA2: the public segment of site 2 reaches the Internet)
+ok: [localhost] => (item=M9-4 INET: reaches the public segment of site 2)
+ok: [localhost] => (item=M9-4 CEA1: learns a default route from XR01)
+ok: [localhost] => (item=M9-4 CEA2: learns a default route from RT02)
+ok: [localhost] => (item=M9-4 CEB1: customer B keeps its VPN and has no default route)
+ok: [localhost] => (item=M9-4 CEB2: customer B keeps its VPN and has no default route (site 2))
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+changed: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+
+TASK [各チェックの show を対象ノードから取得 (exec=ios)] ***********************
+ok: [localhost -> XR01] => (item=XR01: show bgp vrf CUST-A summary)
+ok: [localhost -> XR01] => (item=XR01: show bgp vrf CUST-B summary)
+ok: [localhost -> XR01] => (item=XR01: show bgp vpnv4 unicast summary)
+ok: [localhost -> XR01] => (item=XR01: show bgp vpnv4 unicast neighbors 10.255.0.21 advertised-count)
+ok: [localhost -> XR01] => (item=XR01: show bgp vpnv4 unicast rd 10.255.0.1:101 10.101.1.0/24)
+ok: [localhost -> XR01] => (item=XR01: show bgp vpnv4 unicast rd 10.255.0.1:102 10.102.1.0/24)
+ok: [localhost -> XR01] => (item=XR01: show vrf all detail)
+ok: [localhost -> RT02] => (item=RT02: show ip bgp vpnv4 vrf CUST-A 10.101.1.0)
+ok: [localhost -> CEA1] => (item=CEA1: show ip bgp)
+ok: [localhost -> CEA1] => (item=CEA1: ping 10.101.2.1 source Loopback10 repeat 5)
+ok: [localhost -> CEA2] => (item=CEA2: ping 10.101.1.1 source Loopback10 repeat 5)
+ok: [localhost -> CEB1] => (item=CEB1: ping 10.102.2.1 source Loopback10 repeat 5)
+ok: [localhost -> CEB2] => (item=CEB2: ping 10.102.1.1 source Loopback10 repeat 5)
+ok: [localhost -> CEA2] => (item=CEA2: show ip route)
+ok: [localhost -> CEB1] => (item=CEB1: show ip route)
+ok: [localhost -> XR01] => (item=XR01: show bgp vpnv4 unicast rd 10.255.0.1:900 10.99.1.0/24)
+ok: [localhost -> XR01] => (item=XR01: show bgp vpnv4 unicast rd 10.255.0.1:900 10.99.2.0/24)
+ok: [localhost -> CEA2] => (item=CEA2: ping 10.99.1.1 source Loopback10 repeat 5)
+ok: [localhost -> CEB2] => (item=CEB2: ping 10.99.1.1 source Loopback10 repeat 5)
+ok: [localhost -> CEA1] => (item=CEA1: ping 10.99.1.1 source Loopback10 repeat 5)
+ok: [localhost -> CEB1] => (item=CEB1: ping 10.99.1.1 source Loopback10 repeat 5)
+ok: [localhost -> SVC] => (item=SVC: ping 10.101.2.1 source Loopback10 repeat 5)
+ok: [localhost -> SVC] => (item=SVC: ping 10.102.2.1 source Loopback10 repeat 5)
+ok: [localhost -> CEA2] => (item=CEA2: show ip route)
+ok: [localhost -> CEB1] => (item=CEB1: show ip route)
+ok: [localhost -> INET] => (item=INET: show ip bgp)
+ok: [localhost -> CEA1] => (item=CEA1: ping 203.0.113.10 source Loopback11 repeat 5)
+ok: [localhost -> CEA2] => (item=CEA2: ping 203.0.113.10 source Loopback11 repeat 5)
+ok: [localhost -> INET] => (item=INET: ping 198.51.100.129 source Loopback10 repeat 5)
+ok: [localhost -> CEA1] => (item=CEA1: show ip route 0.0.0.0)
+ok: [localhost -> CEA2] => (item=CEA2: show ip route 0.0.0.0)
+ok: [localhost -> CEB1] => (item=CEB1: show ip route)
+ok: [localhost -> CEB2] => (item=CEB2: show ip route)
+
+TASK [結果 JSON を組み立て（checks にこの試行の stdout を併合）] ***************
+ok: [localhost] => (item=M9-1 XR01: the eBGP session with CEA1 in VRF CUST-A is up and both of its routes are accepted)
+ok: [localhost] => (item=M9-1 XR01: the eBGP session with CEB1 in VRF CUST-B is up and its route is accepted)
+ok: [localhost] => (item=M9-1 XR01: a VPNv4 session with XR02 is up, and none with RT02)
+ok: [localhost] => (item=M9-1 XR01: sends the routes of both VRFs to XR02)
+ok: [localhost] => (item=M9-1 XR01: customer A's routes carry RD 10.255.0.1:101 and route target 65000:101)
+ok: [localhost] => (item=M9-1 XR01: customer B's routes carry RD 10.255.0.1:102 and route target 65000:102)
+ok: [localhost] => (item=M9-1 XR01: the VRFs import the route targets of the table)
+ok: [localhost] => (item=M9-2 RT02: learns customer A's site 1 from XR01, reflected by XR02)
+ok: [localhost] => (item=M9-2 CEA1: learns site 2 of customer A from XR01)
+ok: [localhost] => (item=M9-2 CEA1: the LAN of site 1 reaches the LAN of site 2)
+ok: [localhost] => (item=M9-2 CEA2: the LAN of site 2 reaches the LAN of site 1)
+ok: [localhost] => (item=M9-2 CEB1: the sites of customer B reach each other)
+ok: [localhost] => (item=M9-2 CEB2: the sites of customer B reach each other (the other way))
+ok: [localhost] => (item=M9-2 CEA2: customer A learns nothing of customer B)
+ok: [localhost] => (item=M9-2 CEB1: customer B learns nothing of customer A)
+ok: [localhost] => (item=M9-3 XR01: 10.99.1.0/24 leaves VRF SVC with route targets 65000:900 and 65000:999)
+ok: [localhost] => (item=M9-3 XR01: 10.99.2.0/24 leaves VRF SVC with route target 65000:999 only)
+ok: [localhost] => (item=M9-3 CEA2: site 2 of customer A reaches the shared servers)
+ok: [localhost] => (item=M9-3 CEB2: site 2 of customer B reaches the shared servers)
+ok: [localhost] => (item=M9-3 CEA1: site 1 of customer A reaches the shared servers)
+ok: [localhost] => (item=M9-3 CEB1: site 1 of customer B reaches the shared servers)
+ok: [localhost] => (item=M9-3 SVC: reaches site 2 of customer A)
+ok: [localhost] => (item=M9-3 SVC: reaches site 2 of customer B)
+ok: [localhost] => (item=M9-3 CEA2: learns 10.99.1.0/24 but not 10.99.2.0/24, and nothing of customer B)
+ok: [localhost] => (item=M9-3 CEB1: learns 10.99.1.0/24 but not 10.99.2.0/24, and nothing of customer A)
+ok: [localhost] => (item=M9-4 INET: learns customer A's two public segments, and nothing else from AS 65000)
+ok: [localhost] => (item=M9-4 CEA1: the public segment of site 1 reaches the Internet)
+ok: [localhost] => (item=M9-4 CEA2: the public segment of site 2 reaches the Internet)
+ok: [localhost] => (item=M9-4 INET: reaches the public segment of site 2)
+ok: [localhost] => (item=M9-4 CEA1: learns a default route from XR01)
+ok: [localhost] => (item=M9-4 CEA2: learns a default route from RT02)
+ok: [localhost] => (item=M9-4 CEB1: customer B keeps its VPN and has no default route)
+ok: [localhost] => (item=M9-4 CEB2: customer B keeps its VPN and has no default route (site 2))
+
+TASK [grade_input.json を書き出し（invariants 有=dict / 無=従来 list）] ********
+changed: [localhost]
+
+TASK [採点スクリプト実行（--gate: 全 PASS で rc=0 / 未充足で rc=3）] ***********
+ok: [localhost]
+
+TASK [この試行の結果を記録] ****************************************************
+ok: [localhost]
+
+TASK [最終結果] ****************************************************************
+ok: [localhost] => 
+    msg:
+    - ======================================================================
+    - '[PASS] (+  5 点) M9-1 XR01: the eBGP session with CEA1 in VRF CUST-A is up and both
+      of its routes are accepted'
+    - '[PASS] (+  4 点) M9-1 XR01: the eBGP session with CEB1 in VRF CUST-B is up and its
+      route is accepted'
+    - '[PASS] (+  4 点) M9-1 XR01: a VPNv4 session with XR02 is up, and none with RT02'
+    - '[PASS] (+  3 点) M9-1 XR01: sends the routes of both VRFs to XR02'
+    - '[PASS] (+  3 点) M9-1 XR01: customer A''s routes carry RD 10.255.0.1:101 and route
+      target 65000:101'
+    - '[PASS] (+  3 点) M9-1 XR01: customer B''s routes carry RD 10.255.0.1:102 and route
+      target 65000:102'
+    - '[PASS] (+  3 点) M9-1 XR01: the VRFs import the route targets of the table'
+    - '[PASS] (+  6 点) M9-2 RT02: learns customer A''s site 1 from XR01, reflected by
+      XR02'
+    - '[PASS] (+  5 点) M9-2 CEA1: learns site 2 of customer A from XR01'
+    - '[PASS] (+  6 点) M9-2 CEA1: the LAN of site 1 reaches the LAN of site 2'
+    - '[PASS] (+  5 点) M9-2 CEA2: the LAN of site 2 reaches the LAN of site 1'
+    - '[PASS] (+  5 点) M9-2 CEB1: the sites of customer B reach each other'
+    - '[PASS] (+  4 点) M9-2 CEB2: the sites of customer B reach each other (the other
+      way)'
+    - '[PASS] (+  2 点) M9-2 CEA2: customer A learns nothing of customer B'
+    - '[PASS] (+  2 点) M9-2 CEB1: customer B learns nothing of customer A'
+    - '[PASS] (+  4 点) M9-3 XR01: 10.99.1.0/24 leaves VRF SVC with route targets 65000:900
+      and 65000:999'
+    - '[PASS] (+  2 点) M9-3 XR01: 10.99.2.0/24 leaves VRF SVC with route target 65000:999
+      only'
+    - '[PASS] (+  2 点) M9-3 CEA2: site 2 of customer A reaches the shared servers'
+    - '[PASS] (+  2 点) M9-3 CEB2: site 2 of customer B reaches the shared servers'
+    - '[PASS] (+  2 点) M9-3 CEA1: site 1 of customer A reaches the shared servers'
+    - '[PASS] (+  1 点) M9-3 CEB1: site 1 of customer B reaches the shared servers'
+    - '[PASS] (+  2 点) M9-3 SVC: reaches site 2 of customer A'
+    - '[PASS] (+  2 点) M9-3 SVC: reaches site 2 of customer B'
+    - '[PASS] (+  2 点) M9-3 CEA2: learns 10.99.1.0/24 but not 10.99.2.0/24, and nothing
+      of customer B'
+    - '[PASS] (+  1 点) M9-3 CEB1: learns 10.99.1.0/24 but not 10.99.2.0/24, and nothing
+      of customer A'
+    - '[PASS] (+  5 点) M9-4 INET: learns customer A''s two public segments, and nothing
+      else from AS 65000'
+    - '[PASS] (+  3 点) M9-4 CEA1: the public segment of site 1 reaches the Internet'
+    - '[PASS] (+  3 点) M9-4 CEA2: the public segment of site 2 reaches the Internet'
+    - '[PASS] (+  2 点) M9-4 INET: reaches the public segment of site 2'
+    - '[PASS] (+  1 点) M9-4 CEA1: learns a default route from XR01'
+    - '[PASS] (+  2 点) M9-4 CEA2: learns a default route from RT02'
+    - '[PASS] (+  2 点) M9-4 CEB1: customer B keeps its VPN and has no default route'
+    - '[PASS] (+  2 点) M9-4 CEB2: customer B keeps its VPN and has no default route (site
+      2)'
+    - ======================================================================
+    - '  合計: 100 / 100 点'
+    - ======================================================================
+
+TASK [収束したか] **************************************************************
+ok: [localhost] => 
+    msg: ✅ 全チェック PASS で収束
+
+PLAY RECAP *********************************************************************
+CEA1                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+CEA2                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+CEB1                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+CEB2                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+INET                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+RT02                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+SVC                        : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+XR01                       : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+localhost                  : ok=26   changed=4    unreachable=0    failed=0    skipped=21   rescued=0    ignored=0   
+
+[ノルマ] 記録: 2026-11-07 lab XRT-09 (vpn) ok 100/100点
+== 学習ノルマ 2026-11-07 (JST・04:00 切替) ==
+  紙面  ░░░░░░░░░░ 0/10 問
+  ラボ  ███░░░░░░░ 1/3 問   ジャンル 1/3 [vpn]
+  残り: 紙面 あと10問 / ラボ あと2問 / 未消化ジャンル igp・bgp・services・security から2つ

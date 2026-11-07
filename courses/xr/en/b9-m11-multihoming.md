@@ -148,6 +148,40 @@ on SW1's segment; if it is the DF, it would send the frame back down to SW1. To 
 that came from segment 0401, it adds XE2's split-horizon label; XE2 sees it and does not send the frame out of that
 segment.
 
+### 2.6 The route types at a glance
+
+The number at the start of each line of `show bgp l2vpn evpn` (`[1]`, `[2]`, …) is the route type. The type is the format
+of the message, and it also decides what the PE is saying with the route. An L3VPN needed one kind of route ("prefix X
+is behind me; send with this label"). An L2 service has several things to tell, so EVPN numbers its formats. The four
+types of this unit:
+
+| Type | Name | What the PE says | How many per PE |
+|---|---|---|---|
+| 2 | MAC/IP advertisement | "This MAC is behind me; for frames to it, use this label" | One per learned MAC (plus one with the IP when the IP is known) |
+| 3 | IMET | "I am in this E-LAN; send me a copy of BUM frames with this label" | One per EVI |
+| 4 | Ethernet segment route | "I am attached to this segment" | One per segment |
+| 1 | Ethernet auto-discovery | "This segment is reachable through me too" (in EVPN-VPWS: "here is my end of the E-Line") | One per segment, and one per EVI |
+
+In short: type 2 is about MACs, type 3 about BUM, and types 1 and 4 about Ethernet segments.
+
+Which types appear depends on the service:
+
+- **E-LAN with every site on one PE: types 2 and 3 only.** In switch terms, type 2 hands out the contents of the MAC
+  address table in BGP, and type 3 builds the list of copies to make when flooding. The `Peers` lines of
+  `show l2vpn evpn evi <EVI> detail` (`1 MAC, 1 MAC/IP, 1 IMET, 0 EAD` on the previous page) count the routes received
+  from each PE by type: MAC and MAC/IP are type 2, IMET is type 3, EAD is type 1.
+- **Multihoming adds types 4 and 1.** Type 4 stays among the PEs of the segment (XE3 does not import it): XE1 and XE2
+  find each other and elect the DF. Type 1 speaks to the far PEs: XE3 learns that 0401 is reachable through both XE1
+  and XE2, which gives aliasing and mass withdrawal. The type 2 route for SW1's MAC carries ESI 0401, and that ties it to
+  the type 1 routes.
+- **EVPN-VPWS (E-Line): type 1 only.** It only joins two ends, so there is no MAC to learn and nothing to flood. All a PE
+  has to say is "my end of the E-Line is AC identifier 1, and here is the label", and it says it in the format of a
+  per-EVI type 1 route, with the AC identifier in the Ethernet tag field.
+
+Type 1 shows up in both EVPN-VPWS and multihoming because it is one format with different uses. The Ethernet tag tells
+them apart: the AC identifier in EVPN-VPWS, 4294967295 in the per-segment route, and 0 in the per-EVI route of a
+VLAN-based E-LAN.
+
 ## 3. Configuring it on IOS XE
 
 ### 3.1 The configuration

@@ -1,0 +1,45 @@
+! _POC-XRVPWS P1(IOL 17.15)= 星形のコアの中心の P ルータ。IS-IS と LDP だけで、BGP は持たない(RR は RR1 に分けた。2026-11-04)。
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+!
+interface Loopback0
+ ip address 10.255.0.51 255.255.255.255
+ ip router isis CORE
+!
+interface {{ links[0] }}
+ description CORE to XE1
+ ip address 10.0.41.51 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+!
+interface {{ links[1] }}
+ description CORE to XE2
+ ip address 10.0.42.51 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+!
+interface {{ links[2] }}
+ description CORE to XE3
+ ip address 10.0.43.51 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+!
+interface {{ links[5] }}
+ description to RR1 (route reflector, off the forwarding path)
+ ip address 10.0.52.51 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0051.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+!

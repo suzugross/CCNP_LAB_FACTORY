@@ -1,0 +1,421 @@
+
+######## 21:44:45 l3-1: L3VPN(VRF A・VLAN 100)を XE1・XE2 に。入れ物= VRF・収容= Gi2.100 を VRF に入れて eBGP
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+vrf definition A
+XE1(config-vrf)#
+rd 10.255.0.41:100
+XE1(config-vrf)#
+address-family ipv4
+XE1(config-vrf-af)#
+route-target export 65000:100
+XE1(config-vrf-af)#
+route-target import 65000:100
+XE1(config-vrf-af)#
+exit-address-family
+XE1(config-vrf)#
+exit
+XE1(config)#
+interface GigabitEthernet2.100
+XE1(config-subif)#
+encapsulation dot1Q 100
+XE1(config-subif)#
+vrf forwarding A
+XE1(config-subif)#
+ip address 172.16.1.254 255.255.255.0
+XE1(config-subif)#
+exit
+XE1(config)#
+router bgp 65000
+XE1(config-router)#
+address-family ipv4 vrf A
+XE1(config-router-af)#
+neighbor 172.16.1.1 remote-as 65001
+XE1(config-router-af)#
+neighbor 172.16.1.1 activate
+XE1(config-router-af)#
+end
+XE1#
+show running-config | section vrf definition A|interface GigabitEthernet2|router bgp
+vrf definition A
+ rd 10.255.0.41:100
+ !
+ address-family ipv4
+  route-target export 65000:100
+  route-target import 65000:100
+ exit-address-family
+interface GigabitEthernet2
+ description to CE1 (site 1)
+ no ip address
+ negotiation auto
+interface GigabitEthernet2.100
+ encapsulation dot1Q 100
+ vrf forwarding A
+ ip address 172.16.1.254 255.255.255.0
+router bgp 65000
+ bgp router-id 10.255.0.41
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.255.0.52 remote-as 65000
+ neighbor 10.255.0.52 update-source Loopback0
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family vpnv4
+  neighbor 10.255.0.52 activate
+  neighbor 10.255.0.52 send-community both
+ exit-address-family
+ !
+ address-family l2vpn evpn
+  neighbor 10.255.0.52 activate
+  neighbor 10.255.0.52 send-community both
+ exit-address-family
+ !
+ address-family ipv4 vrf A
+  neighbor 172.16.1.1 remote-as 65001
+  neighbor 172.16.1.1 activate
+ exit-address-family
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE2(config)#
+vrf definition A
+XE2(config-vrf)#
+rd 10.255.0.42:100
+XE2(config-vrf)#
+address-family ipv4
+XE2(config-vrf-af)#
+route-target export 65000:100
+XE2(config-vrf-af)#
+route-target import 65000:100
+XE2(config-vrf-af)#
+exit-address-family
+XE2(config-vrf)#
+exit
+XE2(config)#
+interface GigabitEthernet2.100
+XE2(config-subif)#
+encapsulation dot1Q 100
+XE2(config-subif)#
+vrf forwarding A
+XE2(config-subif)#
+ip address 172.16.2.254 255.255.255.0
+XE2(config-subif)#
+exit
+XE2(config)#
+router bgp 65000
+XE2(config-router)#
+address-family ipv4 vrf A
+XE2(config-router-af)#
+neighbor 172.16.2.1 remote-as 65002
+XE2(config-router-af)#
+neighbor 172.16.2.1 activate
+XE2(config-router-af)#
+end
+XE2#
+show running-config | section vrf definition A|interface GigabitEthernet2|router bgp
+vrf definition A
+ rd 10.255.0.42:100
+ !
+ address-family ipv4
+  route-target export 65000:100
+  route-target import 65000:100
+ exit-address-family
+interface GigabitEthernet2
+ description to CE2 (site 2)
+ no ip address
+ negotiation auto
+interface GigabitEthernet2.100
+ encapsulation dot1Q 100
+ vrf forwarding A
+ ip address 172.16.2.254 255.255.255.0
+router bgp 65000
+ bgp router-id 10.255.0.42
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ neighbor 10.255.0.52 remote-as 65000
+ neighbor 10.255.0.52 update-source Loopback0
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family vpnv4
+  neighbor 10.255.0.52 activate
+  neighbor 10.255.0.52 send-community both
+ exit-address-family
+ !
+ address-family l2vpn evpn
+  neighbor 10.255.0.52 activate
+  neighbor 10.255.0.52 send-community both
+ exit-address-family
+ !
+ address-family ipv4 vrf A
+  neighbor 172.16.2.1 remote-as 65002
+  neighbor 172.16.2.1 activate
+ exit-address-family
+XE2#
+
+######## 21:45:04 l3-2: XR01 に(VRF A・Gi0/0/0/1.100・eBGP は RPL が要る)
+configure
+Wed Nov  4 21:45:06.396 UTC
+RP/0/RP0/CPU0:XR01(config)#
+vrf A
+RP/0/RP0/CPU0:XR01(config-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+import route-target
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+65000:100
+RP/0/RP0/CPU0:XR01(config-vrf-import-rt)#
+exit
+RP/0/RP0/CPU0:XR01(config-vrf-af)#
+export route-target
+RP/0/RP0/CPU0:XR01(config-vrf-export-rt)#
+65000:100
+RP/0/RP0/CPU0:XR01(config-vrf-export-rt)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1.100
+RP/0/RP0/CPU0:XR01(config-subif)#
+encapsulation dot1q 100
+RP/0/RP0/CPU0:XR01(config-subif)#
+vrf A
+RP/0/RP0/CPU0:XR01(config-subif)#
+ipv4 address 172.16.4.254 255.255.255.0
+RP/0/RP0/CPU0:XR01(config-subif)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+route-policy PASS
+RP/0/RP0/CPU0:XR01(config-rpl)#
+pass
+RP/0/RP0/CPU0:XR01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+vrf A
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+rd 10.255.0.1:100
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-af)#
+exit
+RP/0/RP0/CPU0:XR01(config-bgp-vrf)#
+neighbor 172.16.4.1
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr)#
+remote-as 65004
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+route-policy PASS in
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+route-policy PASS out
+RP/0/RP0/CPU0:XR01(config-bgp-vrf-nbr-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Wed Nov  4 21:45:17.729 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Wed Nov  4 21:45:18.834 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+
+######## 21:46:05 l3-3: 確かめる(CE の LAN 同士)
+show ip bgp
+BGP table version is 4, local router ID is 10.100.1.1
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.100.1.0/24    0.0.0.0                  0         32768 i
+ *>   10.100.2.0/24    172.16.1.254                           0 65000 65002 i
+ *>   10.100.4.0/24    172.16.1.254                           0 65000 65004 i
+CE1#
+ping 10.100.2.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.100.2.1, timeout is 2 seconds:
+Packet sent with a source address of 10.100.1.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/2/3 ms
+CE1#
+ping 10.100.4.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.100.4.1, timeout is 2 seconds:
+Packet sent with a source address of 10.100.1.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/3 ms
+CE1#
+traceroute 10.100.4.1 source Loopback100 probe 1 timeout 2
+Type escape sequence to abort.
+Tracing the route to 10.100.4.1
+VRF info: (vrf in name/id, vrf out name/id)
+  1 172.16.1.254 16 msec
+  2 10.0.41.51 [MPLS: Labels 20/24009 Exp 0] 2 msec
+  3 10.0.1.1 [MPLS: Label 24009 Exp 0] 7 msec
+  4 172.16.4.1 2 msec
+CE1#
+traceroute 10.100.2.1 source Loopback100 probe 1 timeout 2
+Type escape sequence to abort.
+Tracing the route to 10.100.2.1
+VRF info: (vrf in name/id, vrf out name/id)
+  1 172.16.1.254 1 msec
+  2 10.0.41.51 [MPLS: Labels 18/25 Exp 0] 2 msec
+  3 172.16.2.254 [MPLS: Label 25 Exp 0] 17 msec
+  4 172.16.2.1 4 msec
+CE1#
+
+######## 21:47:25 l3-4: PE が覚えたもの・ラベル
+show ip route vrf A
+
+Routing Table: A
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/24 is subnetted, 3 subnets
+B        10.100.1.0 [20/0] via 172.16.1.1, 00:02:26
+B        10.100.2.0 [200/0] via 10.255.0.42, 00:02:14
+B        10.100.4.0 [200/0] via 10.255.0.1, 00:01:32
+      172.16.0.0/16 is variably subnetted, 2 subnets, 2 masks
+C        172.16.1.0/24 is directly connected, GigabitEthernet2.100
+L        172.16.1.254/32 is directly connected, GigabitEthernet2.100
+XE1#
+show bgp vpnv4 unicast all labels
+   Network          Next Hop      In label/Out label
+Route Distinguisher: 10.255.0.1:100
+   10.100.4.0/24    10.255.0.1      nolabel/24009
+Route Distinguisher: 10.255.0.41:100 (A)
+   10.100.1.0/24    172.16.1.1      25/nolabel
+   10.100.2.0/24    10.255.0.42     nolabel/25
+   10.100.4.0/24    10.255.0.1      nolabel/24009
+Route Distinguisher: 10.255.0.42:100
+   10.100.2.0/24    10.255.0.42     nolabel/25
+
+XE1#
+show ip cef vrf A 10.100.2.0 255.255.255.0 detail
+10.100.2.0/24, epoch 0, flags [rib defined all labels]
+  recursive via 10.255.0.42 label 25
+    nexthop 10.0.41.51 GigabitEthernet1 label 18-(local:22)
+XE1#
+show ip cef vrf A 10.100.4.0 255.255.255.0 detail
+10.100.4.0/24, epoch 0, flags [rib defined all labels]
+  recursive via 10.255.0.1 label 24009
+    nexthop 10.0.41.51 GigabitEthernet1 label 20-(local:24)
+XE1#
+show mpls forwarding-table vrf A
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+25         No Label   10.100.1.0/24[V] 2080          Gi2.100    172.16.1.1  
+XE1#
+show route vrf A
+Wed Nov  4 21:47:30.676 UTC
+
+Codes: C - connected, S - static, R - RIP, B - BGP, (>) - Diversion path
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, E - EGP
+       i - ISIS, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, su - IS-IS summary null, * - candidate default
+       U - per-user static route, o - ODR, L - local, G  - DAGR, l - LISP
+       A - access/subscriber, a - Application route
+       M - mobile route, r - RPL, t - Traffic Engineering, (!) - FRR Backup path
+       s - local SRv6 route, z - local IID route
+
+Gateway of last resort is not set
+
+B    10.100.1.0/24 [200/0] via 10.255.0.41 (nexthop in vrf default), 00:02:05
+B    10.100.2.0/24 [200/0] via 10.255.0.42 (nexthop in vrf default), 00:02:05
+B    10.100.4.0/24 [20/0] via 172.16.4.1, 00:01:35
+C    172.16.4.0/24 is directly connected, 00:02:12, GigabitEthernet0/0/0/1.100
+L    172.16.4.254/32 is directly connected, 00:02:12, GigabitEthernet0/0/0/1.100
+RP/0/RP0/CPU0:XR01#
+show bgp vpnv4 unicast labels
+Wed Nov  4 21:47:31.077 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0x0
+BGP main routing table version 9
+BGP NSR Initial initsync version 1 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop        Rcvd Label      Local Label
+Route Distinguisher: 10.255.0.1:100 (default for vrf A)
+Route Distinguisher Version: 9
+*>i10.100.1.0/24      10.255.0.41     25              nolabel
+*>i10.100.2.0/24      10.255.0.42     25              nolabel
+*> 10.100.4.0/24      172.16.4.1      nolabel         24009
+Route Distinguisher: 10.255.0.41:100
+Route Distinguisher Version: 2
+*>i10.100.1.0/24      10.255.0.41     25              nolabel
+Route Distinguisher: 10.255.0.42:100
+Route Distinguisher Version: 3
+*>i10.100.2.0/24      10.255.0.42     25              nolabel
+
+Processed 5 prefixes, 5 paths
+RP/0/RP0/CPU0:XR01#
+show cef vrf A 10.100.1.0/24 detail
+Wed Nov  4 21:47:31.484 UTC
+10.100.1.0/24, version 3, internal 0x5000001 0x30 (ptr 0xf5f50c8) [1], 0x600 (0xf8b2098), 0xa08 (0xef9f3f8)
+ Updated Nov  4 21:45:32.834
+ Prefix Len 24, traffic index 0, precedence n/a, priority 3
+  gateway array (0xf636f00) reference count 1, flags 0x38, source rib (7), 0 backups
+                [2 type 1 flags 0x8441 (0xefd8358) ext 0x0 (0x0)]
+  LW-LDI[type=1, refc=1, ptr=0xf8b2098, sh-ldi=0xefd8358]
+  gateway array update type-time 1 Nov  4 21:45:32.834
+ LDI Update time Nov  4 21:45:32.834
+ LW-LDI-TS Nov  4 21:45:32.834
+   via 10.255.0.41/32, 3 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xf1607a8 0x0]
+    recursion-via-/32
+    next hop VRF - 'default', table - 0xe0000000
+    next hop 10.255.0.41/32 via 24004/0/21
+     next hop 10.0.1.51/32 GigabitEthernet0/0/0/0 labels imposed {17 25}
+
+    Load distribution: 0 (refcount 2)
+
+    Hash  OK  Interface                 Address
+    0     Y   recursive                 24004/0        
+RP/0/RP0/CPU0:XR01#
+show mpls forwarding
+Wed Nov  4 21:47:31.884 UTC
+Local  Outgoing    Prefix             Outgoing     Next Hop        Bytes       
+Label  Label       or ID              Interface                    Switched    
+------ ----------- ------------------ ------------ --------------- ------------
+24000  16          10.255.0.52/32     Gi0/0/0/0    10.0.1.51       1089        
+24001  Pop         10.255.0.51/32     Gi0/0/0/0    10.0.1.51       432         
+24002  19          10.255.0.43/32     Gi0/0/0/0    10.0.1.51       0           
+24003  18          10.255.0.42/32     Gi0/0/0/0    10.0.1.51       0           
+24004  17          10.255.0.41/32     Gi0/0/0/0    10.0.1.51       928         
+24005  Pop         10.0.52.0/24       Gi0/0/0/0    10.0.1.51       0           
+24006  Pop         10.0.43.0/24       Gi0/0/0/0    10.0.1.51       0           
+24007  Pop         10.0.42.0/24       Gi0/0/0/0    10.0.1.51       0           
+24008  Pop         10.0.41.0/24       Gi0/0/0/0    10.0.1.51       0           
+24009  Unlabelled  10.100.4.0/24[V]   Gi0/0/0/1.100 172.16.4.1      0           
+RP/0/RP0/CPU0:XR01#

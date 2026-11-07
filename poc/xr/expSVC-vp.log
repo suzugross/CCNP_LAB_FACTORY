@@ -1,0 +1,160 @@
+
+######## 21:49:32 vp-1: VPLS(VLAN 210・VFI VPLS210・LDP の疑似回線を全 PE と)= XE1〜3。入れ物= VFI+ブリッジ ドメイン
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+l2vpn vfi context VPLS210
+XE1(config-vfi)#
+vpn id 210
+XE1(config-vfi)#
+member 10.255.0.42 encapsulation mpls
+XE1(config-vfi)#
+member 10.255.0.43 encapsulation mpls
+XE1(config-vfi)#
+exit
+XE1(config)#
+interface GigabitEthernet2
+XE1(config-if)#
+service instance 210 ethernet
+XE1(config-if-srv)#
+encapsulation dot1q 210
+XE1(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE1(config-if-srv)#
+exit
+XE1(config-if)#
+exit
+XE1(config)#
+bridge-domain 210
+XE1(config-bdomain)#
+member GigabitEthernet2 service-instance 210
+XE1(config-bdomain-efp)#
+member vfi VPLS210
+XE1(config-bdomain)#
+end
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE2(config)#
+l2vpn vfi context VPLS210
+XE2(config-vfi)#
+vpn id 210
+XE2(config-vfi)#
+member 10.255.0.41 encapsulation mpls
+XE2(config-vfi)#
+member 10.255.0.43 encapsulation mpls
+XE2(config-vfi)#
+exit
+XE2(config)#
+interface GigabitEthernet2
+XE2(config-if)#
+service instance 210 ethernet
+XE2(config-if-srv)#
+encapsulation dot1q 210
+XE2(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE2(config-if-srv)#
+exit
+XE2(config-if)#
+exit
+XE2(config)#
+bridge-domain 210
+XE2(config-bdomain)#
+member GigabitEthernet2 service-instance 210
+XE2(config-bdomain-efp)#
+member vfi VPLS210
+XE2(config-bdomain)#
+end
+XE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+l2vpn vfi context VPLS210
+XE3(config-vfi)#
+vpn id 210
+XE3(config-vfi)#
+member 10.255.0.41 encapsulation mpls
+XE3(config-vfi)#
+member 10.255.0.42 encapsulation mpls
+XE3(config-vfi)#
+exit
+XE3(config)#
+interface GigabitEthernet2
+XE3(config-if)#
+service instance 210 ethernet
+XE3(config-if-srv)#
+encapsulation dot1q 210
+XE3(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE3(config-if-srv)#
+exit
+XE3(config-if)#
+exit
+XE3(config)#
+bridge-domain 210
+XE3(config-bdomain)#
+member GigabitEthernet2 service-instance 210
+XE3(config-bdomain-efp)#
+member vfi VPLS210
+XE3(config-bdomain)#
+end
+XE3#
+ping 192.168.210.2 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.210.2, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 2/2/2 ms
+CE1#
+ping 192.168.210.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.210.3, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 2/2/3 ms
+CE1#
+
+######## 21:50:31 vp-2: PE が覚えたもの・ラベル
+show l2vpn vfi
+Legend: RT=Route-target, S=Split-horizon, Y=Yes, N=No
+
+VFI name: VPLS210, state: up, type: multipoint, signaling: LDP
+  VPN ID: 210
+  Bridge-Domain 210 attachment circuits:
+  Pseudo-port interface: pseudowire100002
+  Interface          Peer Address     VC ID        S
+  pseudowire100004   10.255.0.43      210          Y
+  pseudowire100003   10.255.0.42      210          Y
+
+XE1#
+show l2vpn atom vc
+
+                                       Service
+Interface Peer ID         VC ID      Type   Name                     Status
+--------- --------------- ---------- ------ ------------------------ ----------
+pw100001  10.255.0.1      130        p2p    CE1-CE4                  UP        
+pw100003  10.255.0.42     210        vfi    VPLS210                  UP        
+pw100004  10.255.0.43     210        vfi    VPLS210                  UP        
+
+XE1#
+show bridge-domain 210
+Bridge-domain 210 (3 ports in all)
+State: UP                    Mac learning: Enabled
+Aging-Timer: 300 second(s)
+Unknown Unicast Flooding Suppression: Disabled
+Maximum address limit: 65536
+    GigabitEthernet2 service instance 210
+    vfi VPLS210 neighbor 10.255.0.42 210
+    vfi VPLS210 neighbor 10.255.0.43 210
+   AED MAC address    Policy  Tag       Age  Pseudoport
+   -----------------------------------------------------------------------------
+   0   AABB.CC00.8C00 forward dynamic   295  VPLS210.404012, VPLS 
+                                             VC_LABEL: 27, Intf: GigabitEthernet1
+   0   AABB.CC00.8D00 forward dynamic   297  VPLS210.404013, VPLS 
+                                             VC_LABEL: 26, Intf: GigabitEthernet1
+   0   AABB.CC00.8B00 forward dynamic   298  GigabitEthernet2.EFP210
+
+XE1#
+show mpls forwarding-table | include l2ckt
+26         No Label   l2ckt(1)         606           Gi2        point2point 
+27         No Label   l2ckt(2)         82            none       point2point 
+28         No Label   l2ckt(3)         0             none       point2point 
+XE1#

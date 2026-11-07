@@ -63,6 +63,7 @@ import gen_paper_rtbasic as grt   # noqa: E402  (rtbasic=経路選択の基礎 A
 import gen_paper_cloze as gcl  # noqa: E402  (cloze=解説穴埋め形・BL-191)
 import gen_paper_stp as gst  # noqa: E402  (stp=STP 選択問・単元 U-A3 の P2・BL-216)
 import gen_paper_fhrp as gfh  # noqa: E402  (fhrp=FHRP の経路全記入・単元 U-A6・BL-228)
+import gen_paper_spvpn as gsp  # noqa: E402  (spvpn=MPLS のサービスとラベル・単元 U-M9/U-M11・BL-261)
 # ★svc 型ファミリ(事実ベース＋小さな真偽関数・紙面専用)の共通レジストリ(2026-09-18・BL-176 計画)。
 #   shape 名 → module。新ファミリはここに 1 行足すだけで pick/forms/render/lint/obfuscate/
 #   瞬発力枠(--shape speed)/思考系枠(mixed の kbthink)の全経路に乗る。module の規約は
@@ -70,7 +71,7 @@ import gen_paper_fhrp as gfh  # noqa: E402  (fhrp=FHRP の経路全記入・単�
 #   answer_body/pick_count/CORE/TITLES)＋ SPEED_KINDS / THINK_KINDS(任意。無ければ全 kind が瞬発力枠)
 #   ＋ SPEED_FORMS={kind: [forms]}(任意。瞬発力枠でその kind に使う形を絞る・BL-186)。
 KB_FAMILIES = {"svc": gsv, "fhs": gpf, "ospfdbg": god, "dhcp6": gd6, "dmvpn": gdm, "eigrpkb": gek,
-               "bgppol": gbp, "rtbasic": grt, "cloze": gcl, "stp": gst, "fhrp": gfh}
+               "bgppol": gbp, "rtbasic": grt, "cloze": gcl, "stp": gst, "fhrp": gfh, "spvpn": gsp}
 import gen_paper_pref as gpr   # noqa: E402  (pref=OSPF/EIGRP 経路選好・BL-127)
 import gen_paper_ospfbgp as gob  # noqa: E402  (ospfbgp=OSPF→BGP 再配送の範囲・BL-163)
 
@@ -7172,7 +7173,7 @@ SVC_TITLES = {
 
 
 KB_TITLES = {"svc": SVC_TITLES, "fhs": gpf.TITLES, "ospfdbg": god.TITLES, "dhcp6": gd6.TITLES, "dmvpn": gdm.TITLES, "eigrpkb": gek.TITLES,
-             "bgppol": gbp.TITLES, "rtbasic": grt.TITLES, "cloze": gcl.TITLES, "stp": gst.TITLES, "fhrp": gfh.TITLES}
+             "bgppol": gbp.TITLES, "rtbasic": grt.TITLES, "cloze": gcl.TITLES, "stp": gst.TITLES, "fhrp": gfh.TITLES, "spvpn": gsp.TITLES}
 
 
 def question_md_kb(shape, d, choices, stamp, form):
@@ -8101,7 +8102,7 @@ def main():
                     choices=["chain", "ring", "pbr", "urpf", "bgpdbg", "mploop",
                              "riploop", "leakmap", "ospfv3pl", "v6redist",
                              "aaa", "acl", "aclv6", "bgpbest", "copp", "pref",
-                             "ospfbgp", "mpls", "svc", "fhs", "ospfdbg", "dhcp6", "dmvpn", "eigrpkb", "bgppol", "rtbasic", "cloze", "stp", "fhrp", "speed", "mixed"],
+                             "ospfbgp", "mpls", "svc", "fhs", "ospfdbg", "dhcp6", "dmvpn", "eigrpkb", "bgppol", "rtbasic", "cloze", "stp", "fhrp", "spvpn", "speed", "mixed"],
                     default="chain",
                     help="chain=再配送欠落/誤設定系(既定) / ring=再配送リングの定常ループ(難5)"
                          " / riploop=RIP⇄OSPF 対策が効いていない型(BL-116)"
@@ -8298,6 +8299,7 @@ def main():
     results = []
     seen_q = set()          # ★BL-185: 同一設問の重複排除(speed 枠)
     speed_used = set()      # ★BL-185 二次是正: speed 枠は同じ (shape, kind) を 1 実行で 2 度引かない
+    think_used = set()      # ★BL-261(2026-11-07): 許可された思考系 kind から直接引くときも、1 実行の中で同じ kind を続けて引かない
     for i, qseed in enumerate(qseeds):
         if len(results) >= a.count:
             break
@@ -8343,7 +8345,11 @@ def main():
             if kb_think_pool:
                 shape_i = "kbthink_direct"
             if shape_i == "kbthink_direct":
-                shape_i, kind = roll.choice(kb_think_pool)
+                _fresh = [x for x in kb_think_pool if x not in think_used] or kb_think_pool
+                if not [x for x in kb_think_pool if x not in think_used]:
+                    think_used.clear()
+                shape_i, kind = roll.choice(_fresh)
+                think_used.add((shape_i, kind))
             elif shape_i == "kbthink":
                 fams = sorted(sh for sh, m in KB_FAMILIES.items()
                               if getattr(m, "THINK_KINDS", None))

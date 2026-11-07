@@ -1,0 +1,238 @@
+
+######## 01:00:35 cfg: 設定例の元(全課題を解き終えた状態)
+show running-config vrf
+Sat Nov  7 01:00:36.120 UTC
+vrf SVC
+ address-family ipv4 unicast
+  import route-target
+   65000:101
+   65000:102
+  !
+  export route-policy SVC-EXPORT
+  export route-target
+   65000:999
+  !
+ !
+!
+vrf MGMT
+ address-family ipv4 unicast
+ !
+!
+vrf CUST-A
+ address-family ipv4 unicast
+  import from default-vrf route-policy DEFAULT-ONLY advertise-as-vpn
+  import route-target
+   65000:101
+   65000:900
+  !
+  export to default-vrf route-policy CUST-A-PUBLIC allow-imported-vpn
+  export route-target
+   65000:101
+  !
+ !
+!
+vrf CUST-B
+ address-family ipv4 unicast
+  import route-target
+   65000:102
+   65000:900
+  !
+  export route-target
+   65000:102
+  !
+ !
+!
+RP/0/RP0/CPU0:XR01#
+show running-config interface GigabitEthernet0/0/0/2
+Sat Nov  7 01:00:36.521 UTC
+interface GigabitEthernet0/0/0/2
+ description CUST-A site 1 (CEA1)
+ vrf CUST-A
+ ipv4 address 172.16.11.1 255.255.255.0
+!
+RP/0/RP0/CPU0:XR01#
+show running-config interface GigabitEthernet0/0/0/3
+Sat Nov  7 01:00:36.925 UTC
+interface GigabitEthernet0/0/0/3
+ description CUST-B site 1 (CEB1)
+ vrf CUST-B
+ ipv4 address 172.16.21.1 255.255.255.0
+!
+RP/0/RP0/CPU0:XR01#
+show running-config interface GigabitEthernet0/0/0/4
+Sat Nov  7 01:00:37.320 UTC
+interface GigabitEthernet0/0/0/4
+ description SHARED-SERVICES (SVC)
+ vrf SVC
+ ipv4 address 172.16.91.1 255.255.255.0
+!
+RP/0/RP0/CPU0:XR01#
+show running-config interface GigabitEthernet0/0/0/5
+Sat Nov  7 01:00:37.721 UTC
+interface GigabitEthernet0/0/0/5
+ description INTERNET (INET AS 64500)
+ ipv4 address 192.0.2.1 255.255.255.0
+!
+RP/0/RP0/CPU0:XR01#
+show running-config route-policy
+% Incomplete command.
+RP/0/RP0/CPU0:XR01#
+show running-config router static
+Sat Nov  7 01:00:38.525 UTC
+router static
+ vrf SVC
+  address-family ipv4 unicast
+   10.99.1.0/24 172.16.91.2
+   10.99.2.0/24 172.16.91.2
+  !
+ !
+!
+RP/0/RP0/CPU0:XR01#
+show running-config router bgp
+Sat Nov  7 01:00:38.926 UTC
+router bgp 65000
+ bgp router-id 10.255.0.1
+ address-family ipv4 unicast
+ !
+ address-family vpnv4 unicast
+ !
+ neighbor 192.0.2.2
+  remote-as 64500
+  address-family ipv4 unicast
+   route-policy PASS in
+   route-policy TO-INTERNET out
+  !
+ !
+ neighbor 10.255.0.21
+  remote-as 65000
+  update-source Loopback0
+  address-family vpnv4 unicast
+  !
+ !
+ vrf SVC
+  rd 10.255.0.1:900
+  address-family ipv4 unicast
+   redistribute static
+  !
+ !
+ vrf CUST-A
+  rd 10.255.0.1:101
+  address-family ipv4 unicast
+  !
+  neighbor 172.16.11.2
+   remote-as 65101
+   address-family ipv4 unicast
+    route-policy PASS in
+    route-policy PASS out
+    as-override
+   !
+  !
+ !
+ vrf CUST-B
+  rd 10.255.0.1:102
+  address-family ipv4 unicast
+  !
+  neighbor 172.16.21.2
+   remote-as 65201
+   address-family ipv4 unicast
+    route-policy PASS in
+    route-policy PASS out
+   !
+  !
+ !
+!
+RP/0/RP0/CPU0:XR01#
+show running-config router bgp
+Sat Nov  7 01:00:40.874 UTC
+router bgp 65000
+ bgp router-id 10.255.0.21
+ address-family ipv4 unicast
+ !
+ address-family vpnv4 unicast
+  retain route-target all
+ !
+ neighbor 10.255.0.1
+  remote-as 65000
+  description PE XR01 (CHG-1201)
+  update-source Loopback0
+  address-family ipv4 unicast
+   route-reflector-client
+  !
+  address-family vpnv4 unicast
+   route-reflector-client
+  !
+ !
+ neighbor 10.255.0.12
+  remote-as 65000
+  description PE RT02 (CHG-1201)
+  update-source Loopback0
+  address-family ipv4 unicast
+   route-reflector-client
+  !
+  address-family vpnv4 unicast
+   route-reflector-client
+  !
+ !
+!
+RP/0/RP0/CPU0:XR02#
+show running-config | section ^vrf definition
+vrf definition CUST-A
+ rd 10.255.0.12:101
+ !
+ address-family ipv4
+  route-target export 65000:101
+  route-target import 65000:101
+  route-target import 65000:900
+ exit-address-family
+vrf definition CUST-B
+ rd 10.255.0.12:102
+ !
+ address-family ipv4
+  route-target export 65000:102
+  route-target import 65000:102
+  route-target import 65000:900
+ exit-address-family
+vrf definition MGMT
+ rd 65001:1
+ !
+ address-family ipv4
+ exit-address-family
+RT02#
+show running-config | section ^router bgp
+router bgp 65000
+ bgp router-id 10.255.0.12
+ bgp log-neighbor-changes
+ neighbor 10.255.0.21 remote-as 65000
+ neighbor 10.255.0.21 description VPNv4 RR XR02
+ neighbor 10.255.0.21 update-source Loopback0
+ !
+ address-family ipv4
+  no neighbor 10.255.0.21 activate
+ exit-address-family
+ !
+ address-family vpnv4
+  neighbor 10.255.0.21 activate
+  neighbor 10.255.0.21 send-community extended
+ exit-address-family
+ !
+ address-family ipv4 vrf CUST-A
+  neighbor 172.16.12.2 remote-as 65101
+  neighbor 172.16.12.2 activate
+  neighbor 172.16.12.2 as-override
+ exit-address-family
+ !
+ address-family ipv4 vrf CUST-B
+  neighbor 172.16.22.2 remote-as 65202
+  neighbor 172.16.22.2 activate
+ exit-address-family
+RT02#
+show running-config interface Ethernet0/2
+Building configuration...
+Current configuration : 124 bytes
+!
+interface Ethernet0/2
+ description CUST-A site 2 (CEA2)
+ vrf forwarding CUST-A
+ ip address 172.16.12.1 255.255.255.0
+end
+RT02#

@@ -1,4 +1,4 @@
-# M9 — Practice
+# M9 — Practice 1: the first sites
 
 These are the tasks of lab **XRT-09**, shown here so that you can read them away from the lab.
 Do them in the lab workspace: the **Tasks** tab there has a Check button, staged hints and,
@@ -8,8 +8,10 @@ once a task passes, a reference solution for each task. No command examples are 
 
 - You configure **XR01**, and from Task M9-2 also **XR02**. All the other routers are fixed; do not change them. You
   may log in to them to look. The CEs, SVC and INET belong to the customers, the shared services and the Internet.
-- No command examples are given. Each task states the behaviour that is required. Use the CLI help (`?`),
-  the `show` commands, and the Cisco IOS XR configuration guides and command references to find the commands.
+- The tasks give no command examples. Each task states the behaviour that is required. The reading pages have
+  configuration examples; the ones that have the same form as a task's answer are folded. To solve a task on your own
+  first, use the CLI help (`?`), the `show` commands, and the Cisco IOS XR configuration guides and command references
+  to find the commands.
 - The **Tasks** tab has a **Check** button for each task. It reads the live state of the devices.
   Leave configuration mode before you press it. A BGP session with an IOS router can take up to a minute to come up,
   and an IOS router up to a minute more to pass on a route it has just learned.
@@ -63,7 +65,7 @@ once a task passes, a reference solution for each task. No command examples are 
 ## M9 — L3VPN
 
 ### Task M9-1
-<p class="tolab"><a href="/_learn?id=XRT-09&amp;step=m9t1">Open in the lab workspace</a> — Read: <a href="90-m9-l3vpn.html#s1-1">1.1 The parts</a> · <a href="90-m9-l3vpn.html#s1-2">1.2 Where each part goes</a> · <a href="90-m9-l3vpn.html#s1-3">1.3 The session with the CE</a> · <a href="90-m9-l3vpn.html#s2-1">2.1 VPNv4</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-09&amp;step=m9t1">Open in the lab workspace</a> — Read: <a href="90-m9-l3vpn.html#s2-1">2.1 A separate table in the PE: the VRF</a> · <a href="90-m9-l3vpn.html#s2-2">2.2 A number on the route: the RD</a> · <a href="90-m9-l3vpn.html#s2-3">2.3 A tag on the route: the RT</a> · <a href="90-m9-l3vpn.html#s2-4">2.4 Between the PEs: VPNv4 and the VPN label</a> · <a href="90-m9-l3vpn.html#s3-1">3.1 Where each part goes</a> · <a href="90-m9-l3vpn.html#s3-3">3.3 The session with the CE</a> · <a href="90-m9-l3vpn.html#s3-5">3.5 The order to check in</a></p>
 
 
 Customers A and B are new VPN customers. Their second sites are already in service on RT02; their first sites are
@@ -76,41 +78,3 @@ connected to XR01.
 - XR01 must exchange VPN routes with the route reflector XR02 only, over a session from its Loopback0. Do not create a
   VPNv4 session between XR01 and RT02.
 - Do not change XR02 in this task.
-
-### Task M9-2
-<p class="tolab"><a href="/_learn?id=XRT-09&amp;step=m9t2">Open in the lab workspace</a> — Read: <a href="90-m9-l3vpn.html#s2-2">2.2 Route-target filtering</a> · <a href="90-m9-l3vpn.html#s2-3">2.3 A route reflector for VPNv4</a> · <a href="90-m9-l3vpn.html#s3-1">3.1 AS override</a></p>
-
-
-After Task M9-1, the sites of the same customer still cannot reach each other. A colleague set XR02 up as the VPNv4
-route reflector of XR01 and RT02 under change CHG-1201, and reported that XR02 holds the routes of both provider edges.
-
-- Make the LANs of the two sites of each customer reach each other in both directions: 10.101.1.0/24 and
-  10.101.2.0/24, 10.102.1.0/24 and 10.102.2.0/24.
-- Customers A and B must not reach each other.
-- You may change XR01 and XR02. Do not change the CEs or RT02, and do not create a VPNv4 session between XR01 and RT02.
-
-### Task M9-3
-<p class="tolab"><a href="/_learn?id=XRT-09&amp;step=m9t3">Open in the lab workspace</a> — Read: <a href="90-m9-l3vpn.html#s4-1">4.1 Route policies on import and export</a> · <a href="90-m9-l3vpn.html#s4-2">4.2 Several VRFs on one PE</a></p>
-
-
-The provider offers shared services from SVC, behind XR01. The servers are on 10.99.1.0/24; 10.99.2.0/24 is internal
-to the provider.
-
-- Connect SVC to XR01 in the VRF SVC of the table. XR01 reaches SVC's networks by static routes.
-- Every site of customers A and B must reach 10.99.1.0/24, and SVC must reach every site of both customers. No
-  customer site may learn 10.99.2.0/24. Customers A and B must still not reach each other.
-- The provider's convention for the routes of SVC: every route carries route target 65000:999, and 10.99.1.0/24 carries
-  65000:900 in addition. No other route of SVC may carry 65000:900.
-
-### Task M9-4
-<p class="tolab"><a href="/_learn?id=XRT-09&amp;step=m9t4">Open in the lab workspace</a> — Read: <a href="90-m9-l3vpn.html#s5-1">5.1 Between a VRF and the global table</a> · <a href="90-m9-l3vpn.html#s5-2">5.2 Following a packet</a></p>
-
-
-Customer A buys Internet access for its public segments, 198.51.100.0/25 at site 1 and 198.51.100.128/25 at site 2.
-INET (AS 64500) is connected to XR01 in the global routing table and advertises a default route and 203.0.113.0/24.
-
-- Run eBGP between XR01 and INET, in the global routing table.
-- Both sites of customer A must learn a default route, and their public segments must reach 203.0.113.0/24 in both
-  directions.
-- INET must learn customer A's two public segments, and no other route from AS 65000.
-- Customer B must not learn a default route.

@@ -1,0 +1,170 @@
+
+######## 21:48:27 ev-1: VPWS(EVPN・VLAN 140・EVI 140)= XE2 ⇔ XE3。入れ物= l2vpn evpn instance … point-to-point
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE2(config)#
+l2vpn evpn
+XE2(config-evpn)#
+replication-type ingress
+XE2(config-evpn)#
+router-id Loopback0
+XE2(config-evpn)#
+exit
+XE2(config)#
+interface GigabitEthernet2
+XE2(config-if)#
+service instance 140 ethernet
+XE2(config-if-srv)#
+encapsulation dot1q 140
+XE2(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE2(config-if-srv)#
+exit
+XE2(config-if)#
+exit
+XE2(config)#
+l2vpn evpn instance 140 point-to-point
+XE2(config-evpn-evi)#
+vpws context CE2-CE3
+XE2(config-evpn-vpws)#
+service target 3 source 2
+XE2(config-evpn-vpws)#
+member GigabitEthernet2 service-instance 140
+XE2(config-evpn-vpws)#
+end
+XE2#
+show running-config | section l2vpn evpn
+l2vpn evpn
+ replication-type ingress
+ router-id Loopback0
+ address-family l2vpn evpn
+  neighbor 10.255.0.52 activate
+  neighbor 10.255.0.52 send-community both
+l2vpn evpn instance 140 point-to-point
+ vpws context CE2-CE3
+  service target 3 source 2
+  member GigabitEthernet2 service-instance 140
+ !
+XE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+l2vpn evpn
+XE3(config-evpn)#
+replication-type ingress
+XE3(config-evpn)#
+router-id Loopback0
+XE3(config-evpn)#
+exit
+XE3(config)#
+interface GigabitEthernet2
+XE3(config-if)#
+service instance 140 ethernet
+XE3(config-if-srv)#
+encapsulation dot1q 140
+XE3(config-if-srv)#
+rewrite ingress tag pop 1 symmetric
+XE3(config-if-srv)#
+exit
+XE3(config-if)#
+exit
+XE3(config)#
+l2vpn evpn instance 140 point-to-point
+XE3(config-evpn-evi)#
+vpws context CE3-CE2
+XE3(config-evpn-vpws)#
+service target 2 source 3
+XE3(config-evpn-vpws)#
+member GigabitEthernet2 service-instance 140
+XE3(config-evpn-vpws)#
+end
+XE3#
+show running-config | section l2vpn evpn
+l2vpn evpn
+ replication-type ingress
+ router-id Loopback0
+ address-family l2vpn evpn
+  neighbor 10.255.0.52 activate
+  neighbor 10.255.0.52 send-community both
+l2vpn evpn instance 140 point-to-point
+ vpws context CE3-CE2
+  service target 2 source 3
+  member GigabitEthernet2 service-instance 140
+ !
+XE3#
+ping 192.168.140.3 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 192.168.140.3, timeout is 2 seconds:
+.!!!!
+Success rate is 80 percent (4/5), round-trip min/avg/max = 2/2/3 ms
+CE2#
+
+######## 21:49:29 ev-2: PE が覚えたもの・ラベル
+show l2vpn evpn vpws vc id 140 detail
+EVPN name: CE2-CE3, state: up, type: point-to-point
+  EVPN ID: 140
+  VPWS Service Instance ID: Source 2, Target 3
+  Labels: Local 26, Remote 25
+  Next Hop Address: 10.255.0.43
+  Associated member interface Gi2 up, Gi2:140 status is up
+  Output interface: Gi1, imposed label stack {19 25}
+  Preferred path: not configured  
+  Default path: active
+  Dataplane:
+    SSM segment/switch IDs: 4097/4096 (used), PWID: 1
+  Rx Counters
+    0 input transit packets, 0 bytes
+    0 drops
+  Tx Counters
+    0 output transit packets, 0 bytes
+    0 drops
+  5 VC FSM state transitions, Last 5 shown
+    Prov: Idle -> Prov, Wed Nov 04 21:48:34.523 (00:00:56 ago)
+    EviUp: Prov -> LocWait, Wed Nov 04 21:48:34.541 (00:00:56 ago)
+    LocUp: LocWait -> RemWait, Wed Nov 04 21:48:34.543 (00:00:56 ago)
+    RemUp: RemWait -> Act, Wed Nov 04 21:48:42.666 (00:00:48 ago)
+    DpUp: Act -> Est, Wed Nov 04 21:48:42.739 (00:00:48 ago)
+
+XE2#
+show bgp l2vpn evpn route-type 1
+BGP routing table entry for [1][10.255.0.42:140][00000000000000000000][2]/23, version 2
+Paths: (1 available, best #1, table evi_140)
+  Advertised to update-groups:
+     1         
+  Refresh Epoch 1
+  Local
+    :: (via default) from 0.0.0.0 (10.255.0.42)
+      Origin incomplete, localpref 100, weight 32768, valid, sourced, local, best
+      Rcvd Label: None, Local Label: 26
+      Extended Community: RT:65000:140
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 4 2026 21:48:34 UTC
+BGP routing table entry for [1][10.255.0.42:140][00000000000000000000][3]/23, version 4
+Paths: (1 available, best #1, table evi_140)
+  Flag: 0x100
+  Not advertised to any peer
+  Refresh Epoch 2
+  Local, imported path from [1][10.255.0.43:140][00000000000000000000][3]/23 (global)
+    10.255.0.43 (metric 30) (via default) from 10.255.0.52 (10.255.0.52)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 25, Local Label: None
+      Extended Community: RT:65000:140
+      Originator: 10.255.0.43, Cluster list: 10.255.0.52
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 4 2026 21:48:42 UTC
+BGP routing table entry for [1][10.255.0.43:140][00000000000000000000][3]/23, version 3
+Paths: (1 available, best #1, table EVPN-BGP-Table)
+  Flag: 0x100
+  Not advertised to any peer
+  Refresh Epoch 2
+  Local
+    10.255.0.43 (metric 30) (via default) from 10.255.0.52 (10.255.0.52)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Rcvd Label: 25, Local Label: None
+      Extended Community: RT:65000:140
+      Originator: 10.255.0.43, Cluster list: 10.255.0.52
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 4 2026 21:48:42 UTC
+XE2#
+show mpls forwarding-table | include evpn|EVPN|140
+XE2#

@@ -1,0 +1,38 @@
+# S-3: VPLS(VPN ID 330・LDP)= 拠点 1・2・3(VLAN 330)。名指しの全メッシュ(ハブ アンド スポークはスプリット ホライズンで通らない)。
+# ★service instance の番号は自由(課題で指定しない)→ ブリッジ ドメインの確認は「同じブリッジ ドメインに EFP と VC 330 の疑似回線」で見る。
+problem: XRT-13
+total_points: 100
+checks:
+  - name: 'S-3 step 2  XE1, XE2, XE3: VPN ID 330 has an UP pseudowire to each of the other two PEs'
+    node: XE1
+    exec: local
+    command: >-
+      for n in 1 2 3; do echo "## XE$n"; .venv/bin/python topologies/login_probe.py XRT-13 ssh XE$n -- 'show l2vpn atom vc'; done; echo '## END'
+    raw:
+      - { regex: '## XE1(?:(?!## )[\s\S])*?pw\d+\s+10\.255\.0\.42\s+330\s+vfi\s+\S+\s+UP' }
+      - { regex: '## XE1(?:(?!## )[\s\S])*?pw\d+\s+10\.255\.0\.43\s+330\s+vfi\s+\S+\s+UP' }
+      - { regex: '## XE2(?:(?!## )[\s\S])*?pw\d+\s+10\.255\.0\.41\s+330\s+vfi\s+\S+\s+UP' }
+      - { regex: '## XE2(?:(?!## )[\s\S])*?pw\d+\s+10\.255\.0\.43\s+330\s+vfi\s+\S+\s+UP' }
+      - { regex: '## XE3(?:(?!## )[\s\S])*?pw\d+\s+10\.255\.0\.41\s+330\s+vfi\s+\S+\s+UP' }
+      - { regex: '## XE3(?:(?!## )[\s\S])*?pw\d+\s+10\.255\.0\.42\s+330\s+vfi\s+\S+\s+UP' }
+    points: 30
+  - name: 'S-3 step 3  XE1, XE2, XE3: the customer port (VLAN 330) and the VFI are in one bridge domain'
+    node: XE1
+    exec: local
+    command: >-
+      for n in 1 2 3; do echo "## XE$n"; .venv/bin/python topologies/login_probe.py XRT-13 ssh XE$n -- 'show bridge-domain'; done; echo '## END'
+    raw:
+      - { regex: '## XE1(?:(?!## )[\s\S])*?Bridge-domain \d+[^\n]*\n(?:(?!## |Bridge-domain)[\s\S])*?(?:GigabitEthernet2 service instance \d+\s*\n(?:(?!## |Bridge-domain)[\s\S])*?vfi \S+ neighbor 10\.255\.0\.4[23] 330|vfi \S+ neighbor 10\.255\.0\.4[23] 330(?:(?!## |Bridge-domain)[\s\S])*?GigabitEthernet2 service instance \d+)' }
+      - { regex: '## XE2(?:(?!## )[\s\S])*?Bridge-domain \d+[^\n]*\n(?:(?!## |Bridge-domain)[\s\S])*?(?:GigabitEthernet2 service instance \d+\s*\n(?:(?!## |Bridge-domain)[\s\S])*?vfi \S+ neighbor 10\.255\.0\.4[13] 330|vfi \S+ neighbor 10\.255\.0\.4[13] 330(?:(?!## |Bridge-domain)[\s\S])*?GigabitEthernet2 service instance \d+)' }
+      - { regex: '## XE3(?:(?!## )[\s\S])*?Bridge-domain \d+[^\n]*\n(?:(?!## |Bridge-domain)[\s\S])*?(?:GigabitEthernet2 service instance \d+\s*\n(?:(?!## |Bridge-domain)[\s\S])*?vfi \S+ neighbor 10\.255\.0\.4[12] 330|vfi \S+ neighbor 10\.255\.0\.4[12] 330(?:(?!## |Bridge-domain)[\s\S])*?GigabitEthernet2 service instance \d+)' }
+    points: 20
+  - name: 'S-3 end to end  sites 1, 2 and 3 reach each other over the VPLS E-LAN (172.31.33.0/24)'
+    node: XE1
+    exec: local
+    command: >-
+      echo '## 1-2'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE1 -- 'ping 172.31.33.2 repeat 5';
+      echo '## 1-3'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE1 -- 'ping 172.31.33.3 repeat 5';
+      echo '## 2-3'; .venv/bin/python topologies/login_probe.py XRT-13 ssh CE2 -- 'ping 172.31.33.3 repeat 5'
+    raw:
+      - { regex: '## 1-2[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 1-3[\s\S]*?Success rate is (?:100|80) percent[\s\S]*?## 2-3[\s\S]*?Success rate is (?:100|80) percent' }
+    points: 50

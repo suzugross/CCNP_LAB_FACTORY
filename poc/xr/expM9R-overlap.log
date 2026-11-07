@@ -1,0 +1,193 @@
+
+######## 00:53:42 overlap: 顧客 B のサイト 2 にも 10.101.2.0/24 を置く(顧客 A のサイト 2 と同じ)→ RD で別の経路のまま・VRF ごとに正しい方へ → 戻す
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CEB2(config)#
+interface Loopback11
+CEB2(config-if)#
+ip address 10.101.2.1 255.255.255.0
+CEB2(config-if)#
+exit
+CEB2(config)#
+router bgp 65202
+CEB2(config-router)#
+address-family ipv4
+CEB2(config-router-af)#
+network 10.101.2.0 mask 255.255.255.0
+CEB2(config-router-af)#
+end
+CEB2#
+show bgp vpnv4 unicast | include "Route Distinguisher|10.101.2.0"
+Sat Nov  7 00:54:48.352 UTC
+Route Distinguisher: 10.255.0.1:101
+Route Distinguisher Version: 16
+Route Distinguisher: 10.255.0.1:102
+Route Distinguisher Version: 13
+Route Distinguisher: 10.255.0.1:900
+Route Distinguisher Version: 15
+Route Distinguisher: 10.255.0.12:101
+Route Distinguisher Version: 9
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65101 i
+Route Distinguisher: 10.255.0.12:102
+Route Distinguisher Version: 17
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65202 i
+RP/0/RP0/CPU0:XR02#
+show bgp vpnv4 unicast | include "Route Distinguisher|10.101$lude "Route Distinguisher|10.101.                          2.0"show bgp vpnv4 unicast | include "Route Distinguisher|10.10$
+Sat Nov  7 00:54:49.604 UTC
+Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
+Route Distinguisher Version: 42
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65101 i
+Route Distinguisher: 10.255.0.1:102 (default for vrf CUST-B)
+Route Distinguisher Version: 46
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65202 i
+Route Distinguisher: 10.255.0.1:900 (default for vrf SVC)
+Route Distinguisher Version: 45
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65101 i
+Route Distinguisher: 10.255.0.12:101
+Route Distinguisher Version: 9
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65101 i
+Route Distinguisher: 10.255.0.12:102
+Route Distinguisher Version: 44
+*>i10.101.2.0/24      10.255.0.12              0    100      0 65202 i
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-A 10.101.2.0/24
+Sat Nov  7 00:54:50.004 UTC
+BGP routing table entry for 10.101.2.0/24, Route Distinguisher: 10.255.0.1:101
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 11           11
+Last Modified: Nov  7 00:46:23.348 for 00:08:26
+Paths: (1 available, best #1)
+  Advertised to CE peers (in unique update groups):
+    172.16.11.2     
+  Path #1: Received by speaker 0
+  Advertised to CE peers (in unique update groups):
+    172.16.11.2     
+  65101
+    10.255.0.12 (metric 30) from 10.255.0.21 (10.255.0.12)
+      Received Label 22 
+      Origin IGP, metric 0, localpref 100, valid, internal, best, group-best, import-candidate, imported
+      Received Path ID 0, Local Path ID 1, version 11
+      Extended community: RT:65000:101 
+      Originator: 10.255.0.12, Cluster list: 10.255.0.21
+      Source AFI: VPNv4 Unicast, Source VRF: default, Source Route Distinguisher: 10.255.0.12:101
+RP/0/RP0/CPU0:XR01#
+show bgp vrf CUST-B 10.101.2.0/24
+Sat Nov  7 00:54:50.406 UTC
+BGP routing table entry for 10.101.2.0/24, Route Distinguisher: 10.255.0.1:102
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 46           46
+Last Modified: Nov  7 00:53:46.348 for 00:01:04
+Paths: (1 available, best #1)
+  Advertised to CE peers (in unique update groups):
+    172.16.21.2     
+  Path #1: Received by speaker 0
+  Advertised to CE peers (in unique update groups):
+    172.16.21.2     
+  65202
+    10.255.0.12 (metric 30) from 10.255.0.21 (10.255.0.12)
+      Received Label 26 
+      Origin IGP, metric 0, localpref 100, valid, internal, best, group-best, import-candidate, imported
+      Received Path ID 0, Local Path ID 1, version 46
+      Extended community: RT:65000:102 
+      Originator: 10.255.0.12, Cluster list: 10.255.0.21
+      Source AFI: VPNv4 Unicast, Source VRF: default, Source Route Distinguisher: 10.255.0.12:102
+RP/0/RP0/CPU0:XR01#
+show cef vrf CUST-A 10.101.2.0/24
+Sat Nov  7 00:54:50.805 UTC
+10.101.2.0/24, version 7, internal 0x5000001 0x30 (ptr 0xf79a398) [1], 0x600 (0xf92f398), 0xa08 (0xf318218)
+ Updated Nov  7 00:46:23.788
+ Prefix Len 24, traffic index 0, precedence n/a, priority 3
+  gateway array (0xf7c94a8) reference count 7, flags 0x38, source rib (7), 0 backups
+                [8 type 1 flags 0x8441 (0xf351358) ext 0x0 (0x0)]
+  LW-LDI[type=1, refc=1, ptr=0xf92f398, sh-ldi=0xf351358]
+  gateway array update type-time 1 Nov  7 00:46:23.787
+ LDI Update time Nov  7 00:46:23.787
+ LW-LDI-TS Nov  7 00:46:23.787
+   via 10.255.0.12/32, 5 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xeda0c10 0x0]
+    recursion-via-/32
+    next hop VRF - 'default', table - 0xe0000000
+    next hop 10.255.0.12/32 via 24002/0/21
+     next hop 10.0.1.11/32 GigabitEthernet0/0/0/0 labels imposed {16 22}
+    Load distribution: 0 (refcount 8)
+    Hash  OK  Interface                 Address
+    0     Y   recursive                 24002/0        
+RP/0/RP0/CPU0:XR01#
+show cef vrf CUST-B 10.101.2.0/24
+Sat Nov  7 00:54:51.206 UTC
+10.101.2.0/24, version 16, internal 0x5000001 0x30 (ptr 0xf797468) [1], 0x600 (0xf92ff18), 0xa08 (0xf318878)
+ Updated Nov  7 00:53:46.173
+ Prefix Len 24, traffic index 0, precedence n/a, priority 3
+  gateway array (0xf7c94a8) reference count 7, flags 0x38, source rib (7), 0 backups
+                [8 type 1 flags 0x8441 (0xf351358) ext 0x0 (0x0)]
+  LW-LDI[type=1, refc=1, ptr=0xf92ff18, sh-ldi=0xf351358]
+  gateway array update type-time 1 Nov  7 00:46:23.787
+ LDI Update time Nov  7 00:46:23.787
+ LW-LDI-TS Nov  7 00:53:46.173
+   via 10.255.0.12/32, 5 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xeda0c10 0x0]
+    recursion-via-/32
+    next hop VRF - 'default', table - 0xe0000000
+    next hop 10.255.0.12/32 via 24002/0/21
+     next hop 10.0.1.11/32 GigabitEthernet0/0/0/0 labels imposed {16 26}
+    Load distribution: 0 (refcount 8)
+    Hash  OK  Interface                 Address
+    0     Y   recursive                 24002/0        
+RP/0/RP0/CPU0:XR01#
+show ip bgp vpnv4 all | include Route Distinguisher|10.101.2.0
+Route Distinguisher: 10.255.0.1:101
+Route Distinguisher: 10.255.0.1:102
+Route Distinguisher: 10.255.0.1:900
+Route Distinguisher: 10.255.0.12:101 (default for vrf CUST-A)
+ *>   10.101.2.0/24    172.16.12.2              0             0 65101 i
+Route Distinguisher: 10.255.0.12:102 (default for vrf CUST-B)
+ *>   10.101.2.0/24    172.16.22.2              0             0 65202 i
+RT02#
+traceroute 10.101.2.1 source Loopback10 numeric timeout 1 probe 1
+Type escape sequence to abort.
+Tracing the route to 10.101.2.1
+VRF info: (vrf in name/id, vrf out name/id)
+  1 172.16.11.1 [AS 64500] 7 msec
+  2 10.0.1.11 [AS 64500] [MPLS: Labels 16/22 Exp 0] 10 msec
+  3 172.16.12.1 [AS 64500] [MPLS: Label 22 Exp 0] 10 msec
+  4 172.16.12.2 [AS 64500] 9 msec
+CEA1#
+traceroute 10.101.2.1 source Loopback10 numeric timeout 1 probe 1
+Type escape sequence to abort.
+Tracing the route to 10.101.2.1
+VRF info: (vrf in name/id, vrf out name/id)
+  1 172.16.21.1 6 msec
+  2 10.0.1.11 [MPLS: Labels 16/26 Exp 0] 8 msec
+  3 172.16.22.1 [MPLS: Label 26 Exp 0] 9 msec
+  4 172.16.22.2 10 msec
+CEB1#
+ping 10.101.2.1 source Loopback10 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.101.2.1, timeout is 2 seconds:
+Packet sent with a source address of 10.102.1.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 9/9/11 ms
+CEB1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CEB2(config)#
+router bgp 65202
+CEB2(config-router)#
+address-family ipv4
+CEB2(config-router-af)#
+no network 10.101.2.0 mask 255.255.255.0
+CEB2(config-router-af)#
+exit
+CEB2(config-router)#
+exit
+CEB2(config)#
+no interface Loopback11
+CEB2(config)#
+end
+CEB2#
+show bgp vrf CUST-B 10.101.2.0/24
+Sat Nov  7 00:55:33.254 UTC
+%% Network not in table
+RP/0/RP0/CPU0:XR01#

@@ -1,15 +1,19 @@
 # XR Track 09 — L3VPN
 
 This lab is the practice part of unit **M9 L3VPN** of the XR track. It continues where lab XRT-07 ended: the core is
-the same, and XR01 starts with the work of tasks M8-1 to M8-5 done. Read the unit page *M9 — L3VPN* first, then work
-through the tasks here, in order. Each task builds on the previous one.
+the same, and XR01 starts with the work of tasks M8-1 to M8-5 done. The unit has three pages and an appendix:
+*How L3VPN works* (task M9-1), *Route reflectors and sites in the same AS* (task M9-2) and *Shared services and the
+Internet* (tasks M9-3 and M9-4). Read each page before its tasks, and work through the tasks here, in order. Each task
+builds on the previous one.
 
 ## Ground rules
 
 - You configure **XR01**, and from Task M9-2 also **XR02**. All the other routers are fixed; do not change them. You
   may log in to them to look. The CEs, SVC and INET belong to the customers, the shared services and the Internet.
-- No command examples are given. Each task states the behaviour that is required. Use the CLI help (`?`),
-  the `show` commands, and the Cisco IOS XR configuration guides and command references to find the commands.
+- The tasks give no command examples. Each task states the behaviour that is required. The reading pages have
+  configuration examples; the ones that have the same form as a task's answer are folded. To solve a task on your own
+  first, use the CLI help (`?`), the `show` commands, and the Cisco IOS XR configuration guides and command references
+  to find the commands.
 - The **Tasks** tab has a **Check** button for each task. It reads the live state of the devices.
   Leave configuration mode before you press it. A BGP session with an IOS router can take up to a minute to come up,
   and an IOS router up to a minute more to pass on a route it has just learned.

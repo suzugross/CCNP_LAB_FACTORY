@@ -1,0 +1,321 @@
+
+######## 00:00:59 sr-1: 道を SR に(IS-IS の SR・ループバックに SID)= P1・XE1〜3。まだ LDP も残す
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+P1(config)#
+segment-routing mpls
+P1(config-srmpls)#
+connected-prefix-sid-map
+P1(config-srmpls-conn)#
+address-family ipv4
+P1(config-srmpls-conn-af)#
+10.255.0.51/32 index 51 range 1
+P1(config-srmpls-conn-af)#
+exit-address-family
+P1(config-srmpls-conn)#
+exit
+P1(config-srmpls)#
+exit
+P1(config)#
+router isis CORE
+P1(config-router)#
+segment-routing mpls
+P1(config-router)#
+end
+P1#
+show segment-routing mpls connected-prefix-sid-map ipv4
+
+               PREFIX_SID_CONN_MAP ALGO_0
+
+    Prefix/masklen   SID Type Range Flags SRGB
+    10.255.0.51/32    51 Indx     1         Y 
+P1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+segment-routing mpls
+XE1(config-srmpls)#
+connected-prefix-sid-map
+XE1(config-srmpls-conn)#
+address-family ipv4
+XE1(config-srmpls-conn-af)#
+10.255.0.41/32 index 41 range 1
+XE1(config-srmpls-conn-af)#
+exit-address-family
+XE1(config-srmpls-conn)#
+exit
+XE1(config-srmpls)#
+exit
+XE1(config)#
+router isis CORE
+XE1(config-router)#
+segment-routing mpls
+XE1(config-router)#
+end
+XE1#
+show segment-routing mpls connected-prefix-sid-map ipv4
+
+               PREFIX_SID_CONN_MAP ALGO_0
+
+    Prefix/masklen   SID Type Range Flags SRGB
+    10.255.0.41/32    41 Indx     1         Y 
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE2(config)#
+segment-routing mpls
+XE2(config-srmpls)#
+connected-prefix-sid-map
+XE2(config-srmpls-conn)#
+address-family ipv4
+XE2(config-srmpls-conn-af)#
+10.255.0.42/32 index 42 range 1
+XE2(config-srmpls-conn-af)#
+exit-address-family
+XE2(config-srmpls-conn)#
+exit
+XE2(config-srmpls)#
+exit
+XE2(config)#
+router isis CORE
+XE2(config-router)#
+segment-routing mpls
+XE2(config-router)#
+end
+XE2#
+show segment-routing mpls connected-prefix-sid-map ipv4
+
+               PREFIX_SID_CONN_MAP ALGO_0
+
+    Prefix/masklen   SID Type Range Flags SRGB
+    10.255.0.42/32    42 Indx     1         Y 
+XE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+segment-routing mpls
+XE3(config-srmpls)#
+connected-prefix-sid-map
+XE3(config-srmpls-conn)#
+address-family ipv4
+XE3(config-srmpls-conn-af)#
+10.255.0.43/32 index 43 range 1
+XE3(config-srmpls-conn-af)#
+exit-address-family
+XE3(config-srmpls-conn)#
+exit
+XE3(config-srmpls)#
+exit
+XE3(config)#
+router isis CORE
+XE3(config-router)#
+segment-routing mpls
+XE3(config-router)#
+end
+XE3#
+show segment-routing mpls connected-prefix-sid-map ipv4
+
+               PREFIX_SID_CONN_MAP ALGO_0
+
+    Prefix/masklen   SID Type Range Flags SRGB
+    10.255.0.43/32    43 Indx     1         Y 
+XE3#
+show isis segment-routing prefix-sid-map active-policy
+                                              ^
+% Invalid input detected at '^' marker.
+
+XE3#
+show mpls forwarding-table labels 16000 23999
+                                            ^
+% Invalid input detected at '^' marker.
+
+XE3#
+show mpls forwarding-table 10.255.0.41 32 detail
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+21         18         10.255.0.41/32   0             Gi1        10.0.43.51  
+	MAC/Encaps=14/18, MRU=1500, Label Stack{18}
+	AABBCC0096205254000E09598847 00012000
+	No output feature configured
+16041      16041      10.255.0.41/32   0             Gi1        10.0.43.51  
+	MAC/Encaps=14/18, MRU=1500, Label Stack{16041}
+	AABBCC0096205254000E09598847 03EA9000
+	No output feature configured
+XE3#
+
+######## 00:01:56 sr-2: コアのリンクから LDP を外す(P1 の全 IF・XE1〜3 の Gi1)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+P1(config)#
+interface Ethernet0/0
+P1(config-if)#
+no mpls ip
+P1(config-if)#
+interface Ethernet0/1
+P1(config-if)#
+no mpls ip
+P1(config-if)#
+interface Ethernet0/2
+P1(config-if)#
+no mpls ip
+P1(config-if)#
+end
+P1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE1(config)#
+interface GigabitEthernet1
+XE1(config-if)#
+no mpls ip
+XE1(config-if)#
+end
+XE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE2(config)#
+interface GigabitEthernet1
+XE2(config-if)#
+no mpls ip
+XE2(config-if)#
+end
+XE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+interface GigabitEthernet1
+XE3(config-if)#
+no mpls ip
+XE3(config-if)#
+end
+XE3#
+
+######## 00:02:49 sr-3: 確かめる= 道は SR のラベル。LDP は疑似回線のための targeted だけが残る。EVPN-VPWS は LDP なし
+show mpls ldp neighbor
+P1#
+show mpls forwarding-table
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+20         Pop Label  10.0.41.41-A     0             Et0/0      10.0.41.41  
+21         Pop Label  10.0.42.42-A     0             Et0/1      10.0.42.42  
+22         Pop Label  10.0.43.43-A     0             Et0/2      10.0.43.43  
+23         Pop Label  10.0.52.52-A     0             Et1/1      10.0.52.52  
+16041      Pop Label  10.255.0.41/32   582           Et0/0      10.0.41.41  
+16042      Pop Label  10.255.0.42/32   506           Et0/1      10.0.42.42  
+16043      Pop Label  10.255.0.43/32   1088          Et0/2      10.0.43.43  
+
+A  - Adjacency SID
+P1#
+show mpls ldp neighbor | include Peer|Targeted|Src
+    Peer LDP Ident: 10.255.0.41:0; Local LDP Ident 10.255.0.43:0
+	  Targeted Hello 10.255.0.43 -> 10.255.0.41, active, passive
+    Peer LDP Ident: 10.255.0.42:0; Local LDP Ident 10.255.0.43:0
+	  Targeted Hello 10.255.0.43 -> 10.255.0.42, active, passive
+XE3#
+show mpls forwarding-table 10.255.0.41 32
+Local      Outgoing   Prefix           Bytes Label   Outgoing   Next Hop    
+Label      Label      or Tunnel Id     Switched      interface              
+21    [M]  16041      10.255.0.41/32   0             Gi1        10.0.43.51  
+16041 [M]  16041      10.255.0.41/32   0             Gi1        10.0.43.51  
+
+[M] - Merged
+XE3#
+show l2vpn atom vc
+
+                                       Service
+Interface Peer ID         VC ID      Type   Name                     Status
+--------- --------------- ---------- ------ ------------------------ ----------
+pw100001  10.255.0.41     161        p2p    SITE3-SITE4-LDP          UP        
+pw100002  10.255.0.42     162        p2p    SITE3-SITE4-LDP          STANDBY   
+
+XE3#
+show l2vpn evpn vpws vc id 150 detail
+EVPN name: SITE3-SITE4, state: up, type: point-to-point
+  EVPN ID: 150
+  VPWS Service Instance ID: Source 3, Target 4
+  Labels: Local 23, Remote 23
+  Next Hop Address: 10.255.0.41
+  Associated member interface Gi2 up, Gi2:150 status is up
+  Output interface: Gi1, imposed label stack {16041 23}
+  Preferred path: not configured  
+  Default path: active
+  Dataplane:
+    SSM segment/switch IDs: 20494/4096 (used), PWID: 1
+  Rx Counters
+    60805 input transit packets, 8512538 bytes
+    0 drops
+  Tx Counters
+    60803 output transit packets, 8755578 bytes
+    0 drops
+  23 VC FSM state transitions, Last 10 shown
+    DpUp: Act -> Est, Fri Nov 06 23:49:42.759 (00:13:11 ago)
+    RemDn: Est -> RemWait, Fri Nov 06 23:51:08.845 (00:11:45 ago)
+    RemUp: RemWait -> Act, Fri Nov 06 23:51:08.845 (00:11:45 ago)
+    DpUp: Act -> Est, Fri Nov 06 23:51:08.848 (00:11:45 ago)
+    RemDn: Est -> RemWait, Fri Nov 06 23:52:11.946 (00:10:42 ago)
+    RemUp: RemWait -> Act, Fri Nov 06 23:52:11.946 (00:10:42 ago)
+    DpUp: Act -> Est, Fri Nov 06 23:52:11.949 (00:10:42 ago)
+    RemDn: Est -> RemWait, Fri Nov 06 23:59:36.536 (00:03:17 ago)
+    RemUp: RemWait -> Act, Fri Nov 06 23:59:36.536 (00:03:17 ago)
+    DpUp: Act -> Est, Fri Nov 06 23:59:36.538 (00:03:17 ago)
+
+XE3#
+ping 172.31.150.3 repeat 10
+Type escape sequence to abort.
+Sending 10, 100-byte ICMP Echos to 172.31.150.3, timeout is 2 seconds:
+!!!!!!!!!!
+Success rate is 100 percent (10/10), round-trip min/avg/max = 2/2/2 ms
+SW1#
+ping 172.31.160.3 repeat 10
+Type escape sequence to abort.
+Sending 10, 100-byte ICMP Echos to 172.31.160.3, timeout is 2 seconds:
+..........
+Success rate is 0 percent (0/10)
+SW1#
+
+######## 00:03:17 sr-4: 疑似回線を消すと、XE3 の LDP は何も残らない(EVPN-VPWS はそのまま)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+XE3(config)#
+no l2vpn xconnect context SITE3-SITE4-LDP
+XE3(config)#
+end
+XE3#
+show mpls ldp neighbor
+XE3#
+show l2vpn evpn vpws vc id 150 detail
+EVPN name: SITE3-SITE4, state: up, type: point-to-point
+  EVPN ID: 150
+  VPWS Service Instance ID: Source 3, Target 4
+  Labels: Local 23, Remote 23
+  Next Hop Address: 10.255.0.41
+  Associated member interface Gi2 up, Gi2:150 status is up
+  Output interface: Gi1, imposed label stack {16041 23}
+  Preferred path: not configured  
+  Default path: active
+  Dataplane:
+    SSM segment/switch IDs: 20494/4096 (used), PWID: 1
+  Rx Counters
+    60815 input transit packets, 8513938 bytes
+    0 drops
+  Tx Counters
+    60813 output transit packets, 8757018 bytes
+    0 drops
+  23 VC FSM state transitions, Last 10 shown
+    DpUp: Act -> Est, Fri Nov 06 23:49:42.759 (00:13:58 ago)
+    RemDn: Est -> RemWait, Fri Nov 06 23:51:08.845 (00:12:32 ago)
+    RemUp: RemWait -> Act, Fri Nov 06 23:51:08.845 (00:12:32 ago)
+    DpUp: Act -> Est, Fri Nov 06 23:51:08.848 (00:12:32 ago)
+    RemDn: Est -> RemWait, Fri Nov 06 23:52:11.946 (00:11:29 ago)
+    RemUp: RemWait -> Act, Fri Nov 06 23:52:11.946 (00:11:29 ago)
+    DpUp: Act -> Est, Fri Nov 06 23:52:11.949 (00:11:29 ago)
+    RemDn: Est -> RemWait, Fri Nov 06 23:59:36.536 (00:04:04 ago)
+    RemUp: RemWait -> Act, Fri Nov 06 23:59:36.536 (00:04:04 ago)
+    DpUp: Act -> Est, Fri Nov 06 23:59:36.538 (00:04:04 ago)
+
+XE3#
+ping 172.31.150.3 repeat 10
+Type escape sequence to abort.
+Sending 10, 100-byte ICMP Echos to 172.31.150.3, timeout is 2 seconds:
+!!!!!!!!!!
+Success rate is 100 percent (10/10), round-trip min/avg/max = 1/2/3 ms
+SW1#
