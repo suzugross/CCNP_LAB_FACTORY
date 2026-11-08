@@ -12,8 +12,7 @@ unit has three pages and an appendix:
 | Appendix | The flexible algorithm, SRv6, SID conflicts | — |
 
 The lab is XRT-10. It continues lab XRT-09: the same square core, the same VPN customers, and XR01 and XR02 with the M9
-tasks done. The IOS routers are already running SR; XR01 is the last router to move from LDP. The outputs were captured
-on IOS XRv 9000 26.1.1 (XR01), IOS XRd 26.1.1 (XR02) and IOS XE 17.15 on IOL (the other routers).
+tasks done. The IOS routers are already running SR; XR01 is the last router to move from LDP.
 
 :::topo
 nodes:
@@ -408,7 +407,7 @@ Changing the block takes effect at once, without a reload, as long as the new la
 ```
 
 The BGP line matters only when BGP uses prefix SIDs. The guides warn that a change of block disrupts traffic and needs a
-reload when the new labels are already in use; in the lab, the labels were free and the change took about five seconds.
+reload when the new labels are already in use; in the lab, the labels are free and the change takes about five seconds.
 
 :::try
 Shrink the block again once LDP is gone. Do it after Task M10-2.
@@ -418,7 +417,7 @@ Shrink the block again once LDP is gone. Do it after Task M10-2.
    `show logging last 10`. On CEA1, run `ping 10.101.2.1 source Loopback10`. On RT01, run `show logging | include SID`.
 3. Remove the line (`no global-block`) and commit, and run the same commands again.
 
-What the lab measured: within 15 seconds XR01's label table held only its own prefix (16001). In CEF, the VPN routes of
+An example result: within 15 seconds XR01's label table held only its own prefix (16001). In CEF, the VPN routes of
 both customers became `unresolved` with a `drop adjacency`, and customer A's SR policy went down with
 `Last error: unresolved first label (16013)`. The pings from CEA1 and CEB1 to site 2 failed (0 percent), and RT01 logged
 `%CLNS-4-SIDRANGE: Prefix-sid index 13 for 10.255.0.13/32 is out of SRGB range 10 via 10.0.1.1`. With the line removed,
@@ -433,7 +432,7 @@ SR and LDP run side by side without trouble: they take labels from different ran
 protocols. But a router that has both labels for a prefix must choose which one to put on a packet. RFC 8661 says that by
 default the LDP label should be chosen, and IOS XR does that.
 
-So enabling SR in IS-IS is not enough: XR01 keeps sending on LDP labels. In the lab it kept RT01's LDP label towards RT02
+So enabling SR in IS-IS is not enough: XR01 keeps sending on LDP labels. Towards RT02 it keeps RT01's LDP label
 (`labels imposed {18}` in one build; LDP labels change from build to build). `segment-routing mpls sr-prefer` in the
 IS-IS address family reverses the choice:
 
@@ -468,7 +467,7 @@ See the default preference. Do it after Task M10-1, while LDP is still running.
 2. On XR01, run `show cef 10.255.0.12/32 detail` and `show cef vrf CUST-A 10.101.2.0/24 detail`.
 3. Put `sr-prefer` back, commit, and run the same commands.
 
-What the lab measured: within 15 seconds of the commit, XR01 went back to RT01's LDP label: `labels imposed {18}`
+An example result: within 15 seconds of the commit, XR01 went back to RT01's LDP label: `labels imposed {18}`
 towards RT02, and `{18 26}` for customer A's route. With `sr-prefer` back, it showed `{16012}` and `{16012 26}` again
 (the LDP label and the VPN label are those of one build of the lab; they change from build to build).
 :::
@@ -544,7 +543,7 @@ Leave the synchronisation behind on purpose. Do it after Task M10-2.
    `show ip route 10.255.0.1`.
 3. Remove the line and commit.
 
-What the lab measured: XR01 advertised the link to RT03 with 16777214 and the link to RT01 with 10. RT02 saw the same
+An example result: XR01 advertised the link to RT03 with 16777214 and the link to RT01 with 10. RT02 saw the same
 in XR01's LSP and kept its route to 10.255.0.1 through RT01 at metric 20, with its own TI-LFA repair path through RT03.
 With the line removed, the metric of the link to RT03 went back to 100.
 :::
@@ -568,7 +567,8 @@ When you are done, go on to the next page, "TI-LFA".
 <p class="tolab"><a href="/_learn?id=XRT-10">Open lab XRT-10 in the workspace</a> — <a href="a1-m10-practice.html">The tasks</a></p>
 
 :::note
-Sources: the Segment Routing Configuration Guide for the ASR 9000, IOS XR 26.1.x–26.3.x (2026: SRGB and SRLB, SR for
+The outputs on this page come from IOS XRv 9000 26.1.1 (XR01), IOS XRd 26.1.1 (XR02) and IOS XE 17.15 on IOL (the other
+routers). Sources: the Segment Routing Configuration Guide for the ASR 9000, IOS XR 26.1.x–26.3.x (2026: SRGB and SRLB, SR for
 IS-IS, mapping server) and its command reference (2025); the Cisco 8000 SR guide, release 24.x (IS-IS); the IOS XE Segment
 Routing Configuration Guide (2026: SR with IS-IS); TAC document "Segment Routing Overview and Migration Guidelines"
 (2020); RFC 8402, 8660, 8661, 8667 and 8669. All checked October 2026. The following come from measurement in lab XRT-10

@@ -143,9 +143,9 @@ router bgp 65000
 
 :::note
 Segment Routing のコンフィギュレーション ガイド(IOS XR 26.x、「Configure SR-TE Policies」)は、カラーを設定できるルート
-ポリシーの付け先を挙げ、VRF の import のポリシーを、照合はできるが設定はできない場所としています。ラボでは、IOS XR 26.1.1 は
+ポリシーの付け先を挙げ、VRF の import のポリシーを、照合はできるが設定はできない場所としています。それでも IOS XR 26.1.1 は、
 VRF の import のポリシー(`vrf CUST-B` → `address-family ipv4 unicast` → `import route-policy`)でも `set extcommunity color` を
-受け付け、ルートにカラーを付け、ポリシーに誘導しました(`SR policy color 100, up, registered`)。ラボ XRT-10 はどちらの
+受け付け、ルートにカラーを付けてポリシーに誘導します(`SR policy color 100, up, registered`)。ラボ XRT-10 はどちらの
 場所も受け付けます。模範解はガイドに従い、VPNv4 のセッションでカラーを付けます。
 :::
 
@@ -216,7 +216,7 @@ SR-TE からトポロジを取り上げます。課題 M10-4 の後・課題 M10
    `traceroute 10.101.2.1 source Loopback10 numeric` を実行します。
 3. 行を戻してコミットし、同じコマンドをもう一度実行します。
 
-ラボで測った結果: 課題 M10-5 の前では、ポリシーは `Last error: Source node not found in topology` で down になり、BGP の
+結果の例: 課題 M10-5 の前では、ポリシーは `Last error: Source node not found in topology` で down になり、BGP の
 ルートはバインディング SID を失い、顧客 A のトラフィックは RT01 経由に戻りました。課題 M10-5 の後では、同じ手順で顧客から
 見えるものは何も変わりませんでした。優先度 200 の候補パスは同じエラーで inactive になり、XR02 に任せた優先度 100 のものが
 引き継ぎ(`Dynamic (pce 10.255.0.21) (valid)`)、CEA1 の traceroute は RT03 を通ったままでした。PCE も PRIMARY の
@@ -283,7 +283,7 @@ segment-routing
 リンクを共有してはならない 2 つのポリシーには、両方を見る者が要ります。ヘッドエンドでは、2 つの候補パスが同じ
 **disjointness のグループ**を名指し(`constraints` → `disjoint-path group-id 1 type link`)、PCE がそれらを離して置きます。
 ラボでは、PCE はカラー 201 を RT01 経由の最短パス(16012、メトリック 20)に、カラー 202 を RT03 経由(16013 の次に 16012、
-メトリック 200)に置きました。
+メトリック 200)に置きます。
 
 ```console
 RP/0/RP0/CPU0:XR02#show pce association
@@ -350,7 +350,7 @@ segment-routing
    `show pce association` と `show pce lsp detail` を実行します。
 3. 制約を戻してコミットします。
 
-ラボで測った結果: 両方のポリシーが RT01 経由の最短パス(`SID[0]: 16012`、メトリック 20)に移りました。`show pce association`
+結果の例: 両方のポリシーが RT01 経由の最短パス(`SID[0]: 16012`、メトリック 20)に移りました。`show pce association`
 にはグループが無くなり、`show pce lsp detail` は両方の道を `LSP Role: Single LSP` と表示しました。制約を戻すと、30 秒以内に
 カラー 202 は再び RT03 経由(16013、16012、メトリック 200)に移りました。
 :::

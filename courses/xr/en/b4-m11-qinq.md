@@ -26,8 +26,8 @@ of 0x8100.
 
 ### 2.1 Which frames an AC picks
 
-The `encapsulation` of an AC sub-interface sets which frame forms it picks. In the lab, the CE sent a single tag of 500,
-double tags of 500/10 and 500/20, and 500/30 to be added later.
+The `encapsulation` of an AC sub-interface sets which frame forms it picks. With the CE sending a single tag of 500,
+double tags of 500/10 and 500/20, and 500/30 to be added later, each form picks the following.
 
 | `encapsulation` | 500 only (single) | 500/10, 500/20 | 500/30 |
 |---|---|---|---|
@@ -83,10 +83,10 @@ l2vpn
 :::
 
 XR03 has the same form, with `target 1 source 3`. With no `rewrite` at either end, carrying both tags as they are, it
-also works (checked in the lab); then the outer tags at the two ends must be the same number.
+also works; then the outer tags at the two ends must be the same number.
 
-To take an outer tag of 802.1ad's 0x88a8, use `encapsulation dot1ad`. The following forms committed on the lab's IOS
-XRv 9000 (there is no CE that sends 0x88a8, so forwarding was not checked).
+To take an outer tag of 802.1ad's 0x88a8, use `encapsulation dot1ad`. IOS XRv 9000 commits the following forms (this
+lab has no CE that sends 0x88a8, so they are shown for the syntax only).
 
 :::config IOS XR — when the outer tag is 802.1ad (syntax checked only)
 interface GigabitEthernet0/0/0/2.401 l2transport
@@ -112,7 +112,7 @@ See what is carried without `second-dot1q any`. Do this after Task M11-5.
 2. From CEB1, run `ping 172.31.50.3` (single tag) and `ping 172.31.51.3` (inner 10).
 3. Put `second-dot1q any` back, commit, and run them again.
 
-Measured in the lab: without `second-dot1q`, both the single-tagged 500 and inner 10 got through. With `any` back, the
+An example result: without `second-dot1q`, both the single-tagged 500 and inner 10 got through. With `any` back, the
 single tag did not get through, and inner 10 did.
 :::
 

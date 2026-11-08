@@ -3,8 +3,6 @@
 In M0 you met the rule that nothing takes effect until you `commit`. This unit is about what that rule buys you:
 a change is applied as a unit, it can be refused as a unit, it is recorded, and it can be taken back.
 
-Everything shown here was captured on IOS XRv 9000 release 24.3.1.
-
 ## 1. Two configurations
 
 There are always two configurations in play.
@@ -157,7 +155,7 @@ or `minutes`), it becomes permanent. If you do not, the router rolls it back by 
 2    1000000010            SUZUKI    con0_RP0_CPU0       CLI         Mon Oct 12 13:20:12 2026
 ```
 
-Two details, both measured on this release, decide whether this works for you.
+Two details decide whether this works for you.
 
 - **Stay in configuration mode.** Leaving it (`end`, `exit`) cancels a pending confirmed commit immediately.
   The router does not wait for the timer. If your plan is "commit confirmed, drop out to EXEC, test, come back
@@ -239,6 +237,7 @@ Go back to lab **XRT-01** and do the M1 tasks. Finish the M0 tasks first; some M
 <p class="tolab"><a href="/_learn?id=XRT-01">Open lab XRT-01 in the workspace</a> — <a href="11-m1-practice.html">The tasks</a></p>
 
 :::note
+Everything shown here was captured on IOS XRv 9000 release 24.3.1.
 The commit and rollback commands in this unit are not described in the current ASR 9000 *System Setup Command Reference*,
 where one would look for them first (checked October 2026; the other volumes were not searched). The descriptions here come from the CLI help and from measurement on 24.3.1.
 On another release, check the behaviour before you rely on it — above all the two details in section 5.

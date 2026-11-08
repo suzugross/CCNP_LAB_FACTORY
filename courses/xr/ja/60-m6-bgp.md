@@ -4,8 +4,6 @@ BGP はもう知っています。セッション、属性、パス選択です�
 IOS から持ち込んだ習慣が裏目に出る場所です。M5 の上に積み上げます。IOS XR では、BGP のルートに対して行うことの大半を
 ルート ポリシーで行います。
 
-この単元の出力は、IOS XRd 26.1.1(ラボ XRT-03)で取得したものです。同じ BGP のコマンドは IOS XRv 9000 26.1.1 でも同じ結果になりました。
-
 ## 1. 設定の組み立て
 
 IOS では、ネイバーを `neighbor … remote-as` で作り、アドレス ファミリごとに `neighbor … activate` で有効にします。
@@ -103,8 +101,8 @@ end-policy
 
 「ISP-OUT が許すものを、プリペンドして」と読めます。そうではありません。ISP-OUT が drop したルートは破棄されます。
 しかし ISP-OUT が pass しなかったルートは、未決のまま ISP-OUT の終わりに達し、B-OUT に戻るだけです。そこで `prepend` が
-それを書き換え、書き換えたルートは受け入れられます(M5)。ラボで測ると、ISP-B は ISP-A から学習したすべてのルートと、
-「ISP-B にアナウンスしない」印の付いた顧客のルートを、すべてプリペンドされた状態で受け取りました。
+それを書き換え、書き換えたルートは受け入れられます(M5)。その結果、ISP-B は ISP-A から学習したすべてのルートと、
+「ISP-B にアナウンスしない」印の付いた顧客のルートを、すべてプリペンドされた状態で受け取ります。
 
 正しい書き方は 2 つです。
 
@@ -187,6 +185,7 @@ RP/0/RP0/CPU0:XR01#show bgp ipv4 unicast 11.0.0.0/8 bestpath-compare
 <p class="tolab"><a href="/_learn?id=XRT-03">ラボ XRT-03 をワークスペースで開く</a> — <a href="61-m6-practice.html">課題</a></p>
 
 :::note
+この単元の出力は、IOS XRd 26.1.1(ラボ XRT-03)で取得したものです。同じ BGP のコマンドは IOS XRv 9000 26.1.1 でも同じ結果になりました。
 出典: ASR 9000 向け IOS XR の *Routing Configuration Guide*、*Implementing BGP* と *Implementing Routing Policy*(2026 年 10 月に確認)。
 次は IOS XRd 26.1.1 の実測によるものです: 4 節の `apply` の罠、プリペンドの回数 0、`send-community-ebgp` なしで iBGP に
 コミュニティが送られること、実行コンフィギュレーションが継承した値を表示しないこと。

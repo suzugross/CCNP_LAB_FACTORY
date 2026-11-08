@@ -143,9 +143,9 @@ router bgp 65000
 
 :::note
 The Segment Routing configuration guide (IOS XR 26.x, "Configure SR-TE Policies") lists the attach points of a route
-policy where a color can be set, and gives the VRF import policy as one where it can only be matched. In the lab,
-IOS XR 26.1.1 accepted `set extcommunity color` in a VRF import policy (`vrf CUST-B` → `address-family ipv4 unicast` →
-`import route-policy`), put the color on the route and steered it into the policy (`SR policy color 100, up,
+policy where a color can be set, and gives the VRF import policy as one where it can only be matched. Even so,
+IOS XR 26.1.1 accepts `set extcommunity color` in a VRF import policy (`vrf CUST-B` → `address-family ipv4 unicast` →
+`import route-policy`), puts the color on the route and steers it into the policy (`SR policy color 100, up,
 registered`). Lab XRT-10 accepts either place; the reference solution follows the guide and sets the color on the VPNv4 session.
 :::
 
@@ -216,7 +216,7 @@ Take the topology away from SR-TE. Do it after Task M10-4 and before Task M10-5,
    CEA1, run `traceroute 10.101.2.1 source Loopback10 numeric`.
 3. Put the line back and commit, and run the same commands again.
 
-What the lab measured: before Task M10-5, the policy went down with `Last error: Source node not found in topology`, the
+An example result: before Task M10-5, the policy went down with `Last error: Source node not found in topology`, the
 BGP route lost its binding SID, and the traffic of customer A went back through RT01. After Task M10-5, the same step
 changed nothing that the customer could see: the candidate path with preference 200 became inactive with the same
 error, the one with preference 100, handed to XR02, took over (`Dynamic (pce 10.255.0.21) (valid)`), and CEA1's
@@ -282,7 +282,7 @@ segment-routing
 
 Two policies that must share no link need someone who sees both. On the head end, the two candidate paths name the same
 **disjointness group** (`constraints` → `disjoint-path group-id 1 type link`), and the PCE places them apart. In the lab,
-the PCE put color 201 on the shortest path through RT01 (16012, metric 20) and color 202 through RT03 (16013 then 16012,
+the PCE puts color 201 on the shortest path through RT01 (16012, metric 20) and color 202 through RT03 (16013 then 16012,
 metric 200):
 
 ```console
@@ -350,7 +350,7 @@ Take away the constraint. Do it after Task M10-5.
    `show pce association` and `show pce lsp detail`.
 3. Put the constraints back and commit.
 
-What the lab measured: both policies moved to the shortest path through RT01 (`SID[0]: 16012`, metric 20).
+An example result: both policies moved to the shortest path through RT01 (`SID[0]: 16012`, metric 20).
 `show pce association` no longer listed the group, and `show pce lsp detail` showed both paths as `LSP Role: Single LSP`.
 With the constraints back, color 202 moved to RT03 again (16013, 16012, metric 200) within 30 seconds.
 :::

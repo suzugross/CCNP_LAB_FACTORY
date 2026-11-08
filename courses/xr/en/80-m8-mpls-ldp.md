@@ -7,10 +7,6 @@ a path with MPLS OAM. In the CCNP Service Provider blueprint this is section 3.1
 protection, neighbours and MPLS OAM) and 1.5.d (LDP authentication and label allocation filtering). Unified MPLS,
 also in 3.1, comes in a follow-up unit.
 
-The outputs on this page were captured on IOS XRd 26.1.1 with three IOS XE 17.15 routers on IOL (lab XRT-07). The
-same steps on IOS XRv 9000 26.1.1 gave the same results. Times in seconds are measured in that lab, not guaranteed
-values.
-
 ## 1. Labels in a provider core
 
 ### 1.1 A core without BGP
@@ -123,7 +119,7 @@ runs LDP on every IS-IS interface. `show mpls ldp interface brief` then shows th
 ### 2.3 The LDP ID and the transport address
 
 IOS XR chooses the LDP ID in this order: `router-id` under `mpls ldp`, then the router ID of the system. The router ID
-of the system is in `show router-id`; release 26.1.1 has no global command to set it. In the lab it was Loopback0
+of the system is in `show router-id`; release 26.1.1 has no global command to set it. On XR01 it is Loopback0
 (10.255.0.1), although Loopback1 has a higher address and Loopback100 a higher number. The configuration guide
 recommends setting `router-id` under `mpls ldp`, so that a change elsewhere does not move the LDP ID.
 
@@ -180,7 +176,7 @@ See what a default password does to a neighbour that has none. Do it after Task 
 3. Remove the line again with `no neighbor password`, commit, and check that the session with RT01 returns within a
    minute.
 
-What the lab measured: at the commit the session with RT01 went down, and XR01 logged
+An example result: at the commit the session with RT01 went down, and XR01 logged
 `%IP-TCP-3-BADAUTH : Invalid MD5 digest from 10.255.0.11` every 10 to 14 seconds. The session with RT03 stayed up,
 because its own key overrides the default. Customer A's traffic stopped until the line was removed.
 :::
@@ -254,7 +250,7 @@ Make LDP fail on PRIMARY while IS-IS stays up. Do it once before Task M8-3 and o
    `ping 10.20.0.1 source Loopback100 count 5`.
 3. Put `interface GigabitEthernet0/0/0/0` back under `mpls ldp` and commit.
 
-What the lab measured: before Task M8-3, the entry stayed on Gi0/0/0/0 as `Unlabelled`, the metric toward RT01 stayed
+An example result: before Task M8-3, the entry stayed on Gi0/0/0/0 as `Unlabelled`, the metric toward RT01 stayed
 10, and the ping lost every packet. After Task M8-3, XR01 advertised the link to RT01 with metric 16777214 at once, the
 route moved to BACKUP, and the ping lost three packets while the routes moved, then went through.
 :::
@@ -296,13 +292,13 @@ RP/0/RP0/CPU0:XR01#show isis database verbose XR01.00-00
 ```
 
 `igp sync delay on-session-up <5-300>` under `mpls ldp` holds the link at the high metric for that many seconds once
-LDP is ready on it again; while it runs, the state reads `Deferred (8 sec remaining)`. In the lab it ran after a new
-session and also when the link hellos returned to a session that session protection had kept (section 5.2). Release
-26.1.1 has a second form, `on-proc-restart`, for the start of the LDP process, and no plain `igp sync delay <seconds>`.
+LDP is ready on it again; while it runs, the state reads `Deferred (8 sec remaining)`. It runs after a new session and
+also when the link hellos return to a session that session protection has kept (section 5.2). Release 26.1.1 has a
+second form, `on-proc-restart`, for the start of the LDP process, and no plain `igp sync delay <seconds>`.
 
 Each router decides only for its own direction of the link. XR01's synchronization keeps XR01's traffic off the link;
-RT01's keeps RT01's. On IOS, `mpls ldp sync` under `router isis` enables it on every interface that runs LDP. In the
-lab, while XR01 had no LDP at all, RT01 already advertised its link to XR01 with 16777214.
+RT01's keeps RT01's. On IOS, `mpls ldp sync` under `router isis` enables it on every interface that runs LDP. RT01
+has it, so while XR01 has no LDP at all, RT01 already advertises its link to XR01 with 16777214.
 
 ## 5. Session protection
 
@@ -352,15 +348,15 @@ the targeted hellos as `xmit` only.
 ### 5.2 Protection and synchronization together
 
 Session protection keeps the session, not the link. While PRIMARY is down, there is no hello adjacency on it, so
-synchronization keeps it at the high metric, and the traffic uses BACKUP. In the lab, the link hellos timed out and
-the traffic moved to BACKUP within 12 seconds of a silent failure, while the IS-IS adjacency on PRIMARY stayed up for
-about ten seconds more. Synchronization moves the traffic as soon as LDP loses the link, whether the session survives
+synchronization keeps it at the high metric, and the traffic uses BACKUP. After a silent failure, the link hellos time
+out and the traffic moves to BACKUP within 12 seconds, while the IS-IS adjacency on PRIMARY stays up for about ten
+seconds more. Synchronization moves the traffic as soon as LDP loses the link, whether the session survives
 or not.
 
 When PRIMARY returns, the session is still there with all of RT01's labels. The link hellos resume, the 10-second
-delay runs (`Sync status: Deferred (8 sec remaining)`), and in the lab the traffic was back on PRIMARY 12 seconds
-after the link. Without protection, the session had ended during the failure, a new one had to be built first, and
-the traffic came back after about 20 seconds. The difference grows with the number of labels to exchange.
+delay runs (`Sync status: Deferred (8 sec remaining)`), and the traffic is back on PRIMARY 12 seconds after the link.
+Without protection, the session has ended during the failure, a new one has to be built first, and the traffic comes
+back after about 20 seconds. The difference grows with the number of labels to exchange.
 
 :::try
 Cut PRIMARY without its ports going down, and watch the session to RT01. Do it after Task M8-4.
@@ -372,7 +368,7 @@ Cut PRIMARY without its ports going down, and watch the session to RT01. Do it a
 3. Press **Reset** on the same tab. Run `show mpls ldp neighbor 10.255.0.11:0` and compare the `Up time` with the one
    before the failure.
 
-What the lab measured: within 12 seconds the state turned to `Protecting`, with a `Holdup timer remaining` counting
+An example result: within 12 seconds the state turned to `Protecting`, with a `Holdup timer remaining` counting
 down from the duration, and the binding from 10.255.0.11:0 stayed. The route to RT02 moved to BACKUP while the IS-IS
 adjacency with RT01 was still up. After the reset, the `Up time` simply went on, and the route returned to PRIMARY
 after the 10-second delay. Without protection the session ended during the failure and was new after the reset.
@@ -440,7 +436,7 @@ L 1 10.0.12.11 MRU 1500 [Labels: explicit-null Exp: 0] 1 ms
 ! 2 10.0.1.1 3 ms
 ```
 
-In the lab, RT01 took 20 to 30 seconds after XR01's commit to switch from `Pop Label` to `explicit-n`.
+RT01 switches from `Pop Label` to `explicit-n` 20 to 30 seconds after XR01's commit.
 
 :::try
 Compare an ordinary traceroute through the core before and after Task M8-5.
@@ -448,7 +444,7 @@ Compare an ordinary traceroute through the core before and after Task M8-5.
 1. On RT02, run `traceroute 10.30.0.1 source Loopback100 timeout 1 probe 1 ttl 1 4`.
 2. After Task M8-5, wait half a minute and run it again.
 
-What the lab measured: before, the first hop was `*` and the second was XR01 (10.0.1.1). After, the first hop was
+An example result: before, the first hop was `*` and the second was XR01 (10.0.1.1). After, the first hop was
 `10.0.12.11 [MPLS: Label 20 Exp 0]`. A core router that drops a labelled packet for its TTL can send its
 time-exceeded message on along the path, and the egress routes it back. With PHP, RT01's next step for label 20 was
 to pop it, and no answer came back; with label 0 to swap, RT01's answer reached RT02 through XR01. RT01 itself has no
@@ -481,7 +477,7 @@ Find the largest packet that crosses the core with a label.
 2. Run `ping mpls ipv4 10.255.0.12/32 sweep 1490 1510 4 repeat 1` and read where the `!` turn into `Q`.
 3. Ping RT02's Loopback0 from XR01's Loopback0 with `size 1500 df-bit`.
 
-What the lab measured: 1500 bytes failed in both directions and 1496 passed. The sweep sent 1490 to 1498 and could not
+An example result: 1500 bytes failed in both directions and 1496 passed. The sweep sent 1490 to 1498 and could not
 send 1502 and more. The loopback-to-loopback ping of 1500 bytes failed as well, because XR01 puts a label on its own
 traffic to an LDP prefix too.
 :::
@@ -511,6 +507,10 @@ Go to lab **XRT-07** and do the M8 tasks. The lab uses IOS XRd, which takes abou
 <p class="tolab"><a href="/_learn?id=XRT-07">Open lab XRT-07 in the workspace</a> — <a href="81-m8-practice.html">The tasks</a></p>
 
 :::note
+The outputs on this page were captured on IOS XRd 26.1.1 with three IOS XE 17.15 routers on IOL (lab XRT-07). The
+same steps on IOS XRv 9000 26.1.1 gave the same results. Times in seconds are measured in that lab, not guaranteed
+values.
+
 Sources: the IOS XR *MPLS* configuration guide (ASR 9000, releases 26.1.x to 26.3.x) and command reference,
 "Implementing MPLS Label Distribution Protocol" (enabling LDP and the implicit IPv4 address family, the order for the
 router ID, the transport address, the neighbour password and the default password, label allocation, advertisement

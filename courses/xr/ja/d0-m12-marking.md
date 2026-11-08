@@ -1,50 +1,8 @@
 # M12 — マーキングと MPLS の QoS のモデル
 
-この単元では、プロバイダーのコアを流れるパケットを、扱いで分けることと、悪いパケットから守ることを扱います。
-CCNP Service Provider のブループリントでは、4.5 の QoS サービスの実装(分類とマーキング、輻輳回避・ポリシング・シェーピング)と、
-1.7 のデータプレーンのセキュリティの実装(uRPF・ACL・RTBH・MACsec)にあたります。1.4 の QoS アーキテクチャ(MPLS の QoS の
-モデル、TE の QoS、DiffServ と IntServ、信頼の境界、IPv6 のフロー ラベル)も、このページと付録で説明します。
-単元は 3 つのページと付録に分かれています。
-
-| ページ | 中身 | 課題 |
-|---|---|---|
-| このページ | 印で扱いを分けると何が嬉しいか、DSCP と EXP、ラベルの上の印を 1 ホップずつ追う、3 つのモデル、IOS XR での組み方 | M12-1 |
-| ポリシングとシェーピング | 契約の速さで絞る、出口で待たせて均す、優先して送る | M12-2、M12-3 |
-| データプレーンの保護 | 偽の送信元を落とす(uRPF)、基盤を守る ACL、攻撃を遠隔で捨てる(RTBH) | M12-4、M12-5 |
-| 付録 | TE と QoS(DS-TE ほか)、IntServ と RSVP、IPv6 のフロー ラベル、MACsec、XRv 9000 の対応 | — |
-
-ラボは XRT-14 です。P1 を挟んで、XR01 と PE2 がプロバイダー エッジ(PE)です。XR01 はインターネットとの接続点も兼ねます。
-P1 は BGP を持たないコアのルータで、RR1 はルート リフレクタです。RR1 は P1 の脇にぶら下がり、顧客のパケットの経路には
-入りません。このページの出力は、IOS XRv 9000 26.1.1(XR01)、IOS XRd 26.1.1(RR1)、IOL 上の IOS XE 17.15(他のルータ)で
-取得しました。
-
-:::topo
-nodes:
-  CE1: {at: [0, 0], label: "CE1 (A のサイト 1)"}
-  CUST1: {at: [0, 1.2], label: "CUST1"}
-  INET: {at: [1.6, 2.2], label: "INET (インターネット)"}
-  XR01: {at: [1.6, 0.6], label: "XR01 (PE)"}
-  RR1: {at: [3.2, -0.6], label: "RR1 (RR)"}
-  P1: {at: [3.2, 0.6], label: "P1 (P)"}
-  PE2: {at: [4.8, 0.6], label: "PE2 (PE)"}
-  CE2: {at: [6.4, 0], label: "CE2 (A のサイト 2)"}
-  CUST2: {at: [6.4, 1.2], label: "CUST2"}
-links:
-  - [CE1, XR01, "VRF A"]
-  - [CUST1, XR01, "global"]
-  - [INET, XR01, "global"]
-  - [XR01, P1, "CORE-1"]
-  - [P1, PE2, "CORE-2"]
-  - [P1, RR1, "RR-LINK"]
-  - [PE2, CE2, "VRF A"]
-  - [PE2, CUST2, "global"]
-frames:
-  - {label: "AS 65000 (IS-IS CORE、LDP)", nodes: [XR01, P1, PE2, RR1]}
-:::
-
-顧客 A は 2 つのサイトを持ち、L3VPN(VRF A)でつながっています。サイト 1 には電話と PC、サイト 2 には音声サーバと業務の
-システムがあります。CUST1 と CUST2 はインターネットへの接続を買った顧客で、INET はインターネットの役です(ページ
-「データプレーンの保護」)。
+前のページでは、QoS の部品が 1 台のルータの中でどう並ぶかを見ました。このページでは、最初の 2 つの仕事、仕分けと印を
+扱います。どこで印を付けるか、MPLS のコアで印がラベルの上をどう運ばれるか、顧客の印とプロバイダーの印をどう分けるかです。
+ブループリントの 4.5.a(分類とマーキング)と、1.4 の QoS アーキテクチャにあたります。盤面は前のページの XRT-14 です。
 
 ## 1. 何が嬉しいのか
 
@@ -124,8 +82,8 @@ MPLS のコアのルータは、パケットのいちばん上のラベルだけ
 
 ### 2.4 線の上で追う: 方策が何も無いとき
 
-顧客 A のサイト 1 からサイト 2 へ、3 種類のパケットを送ります。宛先ごとに、CE1 が EF・AF11・印なしを付けます。XR01 にも PE2 にも
-QoS のポリシーを入れていない状態で、線の上のパケットを CML のリンクで捕まえました。
+顧客 A のサイト 1 からサイト 2 へ、3 種類のパケットを送ります。宛先ごとに、CE1 が EF・AF11・印なしを付けます。次の出力は、
+XR01 にも PE2 にも QoS のポリシーを入れていない状態での、線の上のパケットです。
 
 :::topo
 nodes:
@@ -170,7 +128,8 @@ IP (tos 0xb8, ttl 252, proto ICMP (1)) 10.46.0.1 > 10.46.0.2: ICMP echo request,
 
 プロバイダーは、顧客の DSCP とは別の、自分のクラス分けでコアを運用したいことがあります。顧客は自社の DSCP を自分の
 決まりで付けていて、それをサイトの間でそのまま運んでほしいと考えます。この 2 つの印(顧客の DSCP とプロバイダーの EXP)の
-関係を、RFC 3270 は 3 つのモデルで整理しています(2.6 節。TTL の扱いも同じ 3 つで、RFC 3443)。
+関係を、RFC 3270 は 2 つのモデル(ユニフォームとパイプ)で整理し、パイプの変形としてショート パイプも定めています(2.6 節)。
+このページでは、この 3 つを並べて「3 つのモデル」と呼びます。TTL の扱いにも同じモデルがあります(RFC 3443)。
 
 | モデル | 入口の PE(IP → ラベル) | コア | 出口の PE(ラベル → IP) |
 |---|---|---|---|
@@ -243,7 +202,7 @@ CE1#traceroute 10.100.2.1 source Loopback100 probe 1 timeout 2
   4 172.16.2.1 2 msec
 ```
 
-3 ホップ目のラベルが `0/21` なのは、この測定のときに PE2 が explicit null を広告していたからです(2.6 節)。
+3 ホップ目のラベルが `0/21` なのは、このとき PE2 が explicit null を広告していたからです(2.6 節)。
 
 XR01 で `mpls ip-ttl-propagate disable` にすると、XR01 は積むラベルの TTL を 255 にします。コアの中で TTL が尽きなくなり、
 P1(10.0.1.51)が traceroute から消えました。コアの作りを顧客から隠したいプロバイダーが使います(パイプの TTL)。
@@ -321,6 +280,12 @@ interface GigabitEthernet0/0/0/1              ## CE1 へのインターフェイ
 作り(`class-map match-all` で `match dscp ef` と宛先の ACL を組み合わせる、か、先に音声網宛ての EF のクラスを置いて残りの EF を
 後ろのクラスで拾う)、そこで `set dscp default` にします。
 
+そのクラスに `set mpls experimental imposition` を書かないと、EXP には**書き換えた後の** DSCP の上位 3 ビットが写ります。
+XRv 9000 では、`set dscp default` だけを書いたクラスの EF は、P1 で EXP 0 と数えられました(書き換える前の EF の 5 では
+ありません)。ただし、2.4 節で引いた公式文書の記述は、書き換えの前と後のどちらが写るかまでは書いていません。そのため、書き換えるクラスにも
+`imposition` を書いて、EXP を既定の写り方に頼らずに決めておくのが安全です(後で DSCP の書き換え先を変えても、EXP が
+一緒に変わりません)。
+
 IOS XE で同じことをすると次のようになります(ラボの PE2 の据え付けの設定から)。`end-class-map` は無く、`set mpls experimental
 imposition` の書き方は同じです。
 
@@ -348,22 +313,59 @@ interface Ethernet0/1
 XR01 は、コア側の入力で外側のラベルの EXP を読んで qos-group に移し、CE1 側の出力で qos-group を DSCP に写します。
 PHP のままだと付け替えが届かないので(2.6 節)、XR01 から explicit null を広告します。
 
+設定は 3 つの塊に分かれ、CE2 からサイト 1 へのパケットに次の順で効きます。① は LDP の設定で、パケットが来る前に P1 の
+動きを変えておきます。② と ③ は QoS のポリシーで、XR01 を通るパケットに入力・出力の順に効きます。図の番号は下の設定例の
+注記の番号と同じで、図の番号にカーソルを置くと(スマホでは押すと)、その塊の設定が出ます。
+
+:::walk
+legend: 線の上のパケットは左が外側。tc がラベルの EXP。橙は書き換わった印。
+rows:
+  - {node: CE2, kind: host, say: ["~音声に EF を付けて送る"]}
+  - {wire: "[[IP DSCP EF]]"}
+  - {node: PE2, say: ["~入力の CE-IN で、EF に EXP 5 を付けてラベルを 2 枚積む", "_(3.2 節の PE2 の設定)"]}
+  - {wire: "[[=18 tc 5]] [[=24007 tc 5]] [[IP EF]] _外側= XR01 行き・内側= VRF A の経路"}
+  - {node: P1, say: ["~外側の EXP を 5 → 0 に付け替える(コアでの格下げ。2.6 節)", "XR01 の 1 つ手前でも、①の広告があるので外側を外さず、ラベル 0 に替えて渡す"]}
+  - {wire: "[[!0 tc 0]] [[=24007 tc 5]] [[IP EF]] ^← 付け替えた 0 が届く", gap: 16}
+  - panel: XR01
+    sub: 出口の PE
+    items:
+      - ref: 1
+        to: P1
+        code: mpls ldp … label local advertise explicit-null
+        say: ["P1 へ「自分宛ては外さず 0 を付けて渡して」と広告する。パケットが来る前から効いている"]
+      - ref: 2
+        head: "**Gi0/0/0/0(P1 側)の入力** `service-policy input CORE-IN`"
+        say: ["クラスを上から調べ、最初に当たったクラスの動作をする。読むのはいちばん上のラベルの EXP"]
+        match:
+          - ["class EXP5  match mpls experimental topmost 5", false, 当たらない]
+          - ["class EXP0  match mpls experimental topmost 0", true, "当たる → `set qos-group 7`"]
+      - say: ["~ラベルを外し、VRF A の経路で出口(Gi0/0/0/1)を決める。ここは QoS ではない", "[[IP EF]] [[~qos-group 7]] qos-group は装置の中だけの印。線には出ない"]
+      - ref: 3
+        head: "**Gi0/0/0/1(CE1 側)の出力** `service-policy output CE-OUT-UNIFORM`"
+        match:
+          - ["class QG7  match qos-group 7", true, "当たる → `set dscp default`"]
+  - {wire: "[[!IP DSCP 0]] ^コアでの格下げが顧客にも見える(ユニフォーム)"}
+  - {node: CE1, kind: host, say: ["~サイト 1 に DSCP 0 で届く"]}
+  - aside: "①を書かないと(PHP のまま)"
+    say: ["~P1 が外側を外す → [[=24007 tc 5]] [[IP EF]] ~→ ②は 5 を読む → ③に当たらない → CE1 には EF のまま"]
+:::
+
 :::config fold XR01 — 出口でコアの EXP を顧客の DSCP に写し戻す(ユニフォーム)
 mpls ldp
  address-family ipv4
   label
    local
     advertise
-     explicit-null                            ## 自分のループバックに、0 を付けたまま渡してと頼む(PHP をやめる)
+     explicit-null                            ## ① 自分のループバックに、0 を付けたまま渡してと頼む(PHP をやめる)
 !
-class-map match-any EXP5
+class-map match-any EXP5                      ## ②
  match mpls experimental topmost 5            ## コア側の入力では、いちばん上のラベルの EXP が読める
  end-class-map
-class-map match-any EXP0
+class-map match-any EXP0                      ## ②
  match mpls experimental topmost 0
  end-class-map
 !
-policy-map CORE-IN
+policy-map CORE-IN                            ## ②
  class EXP5
   set qos-group 5                             ## 読んだ EXP を、装置の中の印に移す(入力でだけ付けられる)
  !
@@ -372,26 +374,26 @@ policy-map CORE-IN
  !
  end-policy-map
 !
-class-map match-any QG7
+class-map match-any QG7                       ## ③
  match qos-group 7                            ## 出力でだけ読める
  end-class-map
 !
-policy-map CE-OUT-UNIFORM
+policy-map CE-OUT-UNIFORM                     ## ③
  class QG7
   set dscp default                            ## コアで 0 にされたものは、顧客にも 0 で渡す
  !
  end-policy-map
 !
-interface GigabitEthernet0/0/0/0              ## P1 へのインターフェイス
+interface GigabitEthernet0/0/0/0              ## ② P1 へのインターフェイス
  service-policy input CORE-IN
 !
-interface GigabitEthernet0/0/0/1              ## CE1 へのインターフェイス
+interface GigabitEthernet0/0/0/1              ## ③ CE1 へのインターフェイス
  service-policy output CE-OUT-UNIFORM
 :::
 
-ラボで測った結果: explicit null を広告する前は、XR01 に届くラベルは内側の 1 枚(`label 24007, tc 5`)で、CORE-IN は EXP 5 と
-数え、CE1 には EF のまま届きました。広告した後は `label 0 (IPv4 explicit NULL), tc 0` が付いて届き、EXP0 のクラスに数えられ、
-CE1 には DSCP 0 で届きました。
+explicit null を広告する前は、XR01 に届くラベルは内側の 1 枚(`label 24007, tc 5`)で、CORE-IN は EXP 5 と数え、CE1 には
+EF のまま届きます。広告した後は `label 0 (IPv4 explicit NULL), tc 0` が付いて届き、EXP0 のクラスに数えられ、CE1 には DSCP 0 で
+届きます。
 
 ```console
 # P1 → XR01 の線(XR01 が explicit null を広告した後)
@@ -441,7 +443,7 @@ Class VOICE
 3. P1 で `show policy-map interface Ethernet0/0 input` を見ます。業務のパケット(AF21)は、どのクラスに数えられたでしょうか。
 4. XR01 のポリシーを戻します。
 
-ラボで測った結果: `COUNT-EXP` の EXP5・EXP3・EXP1・EXP0 はどれも 0 のままで、`class-default` が 11 増えました(10 発と、
+結果の例: `COUNT-EXP` の EXP5・EXP3・EXP1・EXP0 はどれも 0 のままで、`class-default` が 11 増えました(10 発と、
 ほかのパケット 1 つ)。AF21 の上位 3 ビットの 2 が EXP に写り、P1 の数えるクラスのどれにも当たらなかったからです。
 :::
 
@@ -462,6 +464,7 @@ Class VOICE
 <p class="tolab"><a href="/_learn?id=XRT-14">ワークスペースでラボ XRT-14 を開く</a> — <a href="d1-m12-practice.html">課題 M12-1</a></p>
 
 :::note
+このページの出力は、IOS XRv 9000 26.1.1(XR01)、IOS XRd 26.1.1(RR1)、IOL 上の IOS XE 17.15(他のルータ)で取得しました。
 出典: RFC 2474(3 節・4 節)、RFC 2475(2 節)、RFC 2597(2 節・6 節)、RFC 3246(2 節)、RFC 1633、RFC 2205、RFC 3270(1.2 節・1.3 節・
 2.6 節)、RFC 3443(3 節)、RFC 5462。ASR 9000 の Modular QoS Configuration Guide と Modular QoS Command Reference(IOS XR 24.x。
 既定のマーキング、qos-group と discard-class の向き、1 クラスの set の数、MPLS QoS の 3 つのモードの表と出口の PE の例)、ASR 9000 の

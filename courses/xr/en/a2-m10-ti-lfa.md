@@ -91,8 +91,8 @@ TI-LFA chooses the waypoint from two sets:
 If a router is in both, it is enough to use it as the waypoint. There are two labels: "to the waypoint" and "to the
 destination". The outputs call that router the P node. Here it is RT02, and 16012 in section 2.2 is its label.
 
-Sometimes no router is in both. In the PoC, with BACKUP's metric at 10 and CORE-B still at 100, going from RT03 to RT02
-back through XR01 and PRIMARY became cheaper (10 + 10 + 10 = 30), and RT02 left the P space. TI-LFA then joins the last
+Sometimes no router is in both. With BACKUP's metric set to 10 and CORE-B left at 100, going from RT03 to RT02 back
+through XR01 and PRIMARY becomes cheaper (10 + 10 + 10 = 30), and RT02 leaves the P space. TI-LFA then joins the last
 router of the P space (RT03) to the first router of the Q space (RT02) with an adjacency SID that names the link:
 
 ```console
@@ -103,7 +103,7 @@ router of the P space (RT03) to the first router of the Q space (RT02) with an a
 ```
 
 Label 23 is RT03's adjacency SID for its link to RT02 (CORE-B) (`show mpls forwarding-table` on RT03 lists it as
-`10.0.23.12-A`). RT03 is XR01's neighbour, so no label is pushed for RT03 (`ImpNull`). In the CEF entry the backup read
+`10.0.23.12-A`). RT03 is XR01's neighbour, so no label is pushed for RT03 (`ImpNull`). In the CEF entry the backup is
 `{ImplNull 23 16011}`.
 
 ### 2.4 In the square
@@ -180,8 +180,8 @@ How fast a repair works depends on how fast the failure is detected. In CML, a f
 down on IOS XRv 9000, even when the link is stopped: IS-IS would wait for its hello hold time, 30 seconds. BFD (unit M7)
 brings that down to the BFD detection time, 300 ms with 100 ms × 3 as in the lab.
 
-The lab measured customer A's traffic from CEA1 to CEA2 every 10 ms while a link condition dropped every packet on
-PRIMARY:
+Customer A's traffic from CEA1 to CEA2, sent every 10 ms, loses this many packets while a link condition drops every
+packet on PRIMARY:
 
 | On XR01 | Lost (10 ms each) |
 |---|---|
@@ -191,11 +191,12 @@ PRIMARY:
 | BFD and TI-LFA, SPF delayed (1 s, growing up to 5 s) | 41 and 34 |
 
 In this small network IS-IS converges about 100 ms after BFD has spoken, so TI-LFA saves little: the detection time
-dominates. The difference shows when convergence is slow, as it is in a large network with many prefixes. The lab
-imitated that by delaying SPF (`spf-interval`: a first wait of 1 s that grows, up to 5 s, while changes follow each
-other, as they did during the tests). With TI-LFA the outage stays at the detection time whatever IS-IS does.
+dominates. The difference shows when convergence is slow, as it is in a large network with many prefixes. The last
+two rows of the table imitate that by delaying SPF (`spf-interval`: a first wait of 1 s that grows, up to 5 s, while
+changes follow each other, as they did during the tests). With TI-LFA the outage stays at the detection time whatever
+IS-IS does.
 
-Two more things showed up. BFD on IOS XR dampens a session that flaps: after each failure it waits longer before
+Two more things are worth knowing. BFD on IOS XR dampens a session that flaps: after each failure it waits longer before
 bringing the session up again (2 seconds, then 5, and up to two minutes in the lab), and IS-IS waits with it. Wait a
 couple of minutes between two tries, or disable dampening (`bfd` → `dampening disable`). And the guides do not promise
 50 ms: the IOS XE guide states that TI-LFA "cannot guarantee 50ms".
@@ -212,7 +213,7 @@ Measure TI-LFA yourself with a ping. Do it after Task M10-3.
    and do step 2 again.
 4. Put the `fast-reroute` lines back and remove `spf-interval`, and commit.
 
-What the lab measured: with TI-LFA, one ping was lost each time; without it, six were lost each time (twice each). The
+An example result: with TI-LFA, one ping was lost each time; without it, six were lost each time (twice each). The
 ping timeout is one second, so one lost ping means an outage shorter than a second (BFD's 300 ms), and six mean the
 five-second wait before SPF on top of it. With the normal SPF timers and TI-LFA, one ping was lost too. After each
 failure, BFD dampening kept the adjacency with RT01 down for 40 to 120 seconds once the link condition was cleared.

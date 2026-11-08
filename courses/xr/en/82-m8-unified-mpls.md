@@ -6,9 +6,6 @@ joins them with BGP, which carries the loopbacks of the provider edges together 
 3.1.d of the CCNP Service Provider blueprint. It continues lab XRT-07: the core is the same, and a new access network
 hangs off XR01.
 
-The outputs on this page were captured on IOS XRd 26.1.1 with five IOS XE 17.15 routers on IOL (lab XRT-08). Times in
-seconds are measured in that lab, not guaranteed values.
-
 <p class="tolab"><a href="84-m8-appendix.html">An easier start with pictures: M8 — Appendix: Unified MPLS in pictures</a></p>
 
 ## 1. One network, several IGP domains
@@ -107,8 +104,8 @@ RT04's table has only the access network, and RT01's only the core.
 Whether one interface can belong to two IS-IS instances is not described the same way in every guide. The IS-IS
 configuration guides for the Cisco 8000 (releases 24.x and the cumulative guide of 2026) say that an interface can be
 associated with only one instance. Those for the ASR 9000 from release 7.8, the NCS 5500 and the NCS 540 say that
-several instances can share an interface if they have different instance IDs. In the lab, IOS XRd 26.1.1 accepted
-Loopback0 (passive) under both instances without an instance ID, and both advertised it. This page uses the form of
+several instances can share an interface if they have different instance IDs. IOS XRd 26.1.1 accepts Loopback0
+(passive) under both instances without an instance ID, and both advertise it. This page uses the form of
 Cisco's Unified MPLS document instead (section 2.2).
 :::
 
@@ -160,7 +157,7 @@ See what the access network does without XR01's loopback. Do it after Task M8-6.
    `show mpls ldp discovery detail` and `show ip route 10.255.0.1` on RT04.
 3. Put the line back and commit. Check that the session with RT04 returns.
 
-What the lab measured: RT04 lost its route to 10.255.0.1 at once, and its discovery showed
+An example result: RT04 lost its route to 10.255.0.1 at once, and its discovery showed
 `LDP Id: 10.255.0.1:0; no route to transport addr`. The LDP session that already existed did not end at once: it was
 still `Oper` on both sides two and a half minutes later, and gone after four and a half. The BGP session between XR01
 and RT05 closed after about two and a half minutes. Customer A's traffic stopped at once, because RT05 could no longer
@@ -203,8 +200,8 @@ nothing in the core can reach. The border has to set itself as the next hop.
 On IOS XR, `next-hop-self` under the neighbour address family is not applied to the routes that the router reflects.
 Cisco's TAC document lists "next-hop-self does not work" among the solutions that do not work, and starts its working
 list with `ibgp policy out enforce-modifications`, a global line under `router bgp` that lets outbound changes apply
-to reflected iBGP routes. It is disabled by default. In the lab, with `route-reflector-client` and `next-hop-self` but
-without that line, RT02 received the route unchanged:
+to reflected iBGP routes. It is disabled by default. With `route-reflector-client` and `next-hop-self` but without
+that line, RT02 receives the route unchanged:
 
 ```console
 RT02#show ip bgp 10.255.0.15
@@ -227,7 +224,7 @@ Take the enforcement away once everything works. Do it after Task M8-7.
 2. On RT02, run `show ip bgp 10.255.0.15`, `show ip bgp summary` and `ping 10.50.0.1 source Loopback100`.
 3. Put the line back and commit. Check the same three commands again.
 
-What the lab measured: RT02 kept one path for 10.255.0.15/32, with next hop 10.255.0.15 and label `imp-null`.
+An example result: RT02 kept one path for 10.255.0.15/32, with next hop 10.255.0.15 and label `imp-null`.
 This time IOS showed it as `best` (in the initial state of Task M8-7 the same path was `(inaccessible)`), but the ping
 lost every packet: a route whose next hop is its own destination leads nowhere. The session between RT02 and RT05
 still showed as up, because its hold time had not run out. After the line went back, RT02 had next hop 10.255.0.1 and
@@ -275,7 +272,7 @@ Take the label allocation away once everything works. Do it after Task M8-7.
    `ping 10.50.0.1 source Loopback100`.
 3. Put the line back and commit.
 
-What the lab measured: XR01 showed `Not advertised to any peer` for 10.255.0.15/32, and RT02's
+An example result: XR01 showed `Not advertised to any peer` for 10.255.0.15/32, and RT02's
 `show ip bgp labels` no longer had the loopback. 10.50.0.0/16 was left with the path from RT05, whose next hop RT02 could
 not reach, and the ping lost every packet. After the line went back, both returned with XR01's labels (24003 and 24006),
 and the ping went through.
@@ -330,9 +327,9 @@ RT02#show ip cef 10.50.0.0 detail
 The TCP session between RT02 and RT05 itself crosses XR01 with labels. Before Task M8-7 the session cannot form, because
 neither PE has a usable route to the other's loopback.
 
-A PE must not send its own loopback in that session. In the PoC for this lab, RT05 did: RT02 then had a second path to
-10.255.0.15/32, from RT05, with 10.255.0.15 as its own next hop. RT02's routing pointed the loopback at itself, and
-customer A's traffic stopped (`recursive via 10.255.0.15, unresolved` and `recursive-looped` in `show ip cef`). The
+A PE must not send its own loopback in that session. If RT05 sends its loopback there, RT02 gets a second path to
+10.255.0.15/32, from RT05, with 10.255.0.15 as its own next hop. RT02's routing then points the loopback at itself, and
+customer A's traffic stops (`recursive via 10.255.0.15, unresolved` and `recursive-looped` in `show ip cef`). The
 fixed routers of the lab send only the customer routes in that session.
 
 Why not let XR01 reflect the customer routes as well, with the next hop unchanged? Because IOS sends every route with a
@@ -408,7 +405,7 @@ Test the path from RT05 to RT02 with MPLS OAM. Do it after Task M8-7.
    `fec-type bgp source 10.255.0.15`.
 2. Run `traceroute mpls ipv4 10.255.0.12/32 fec-type bgp source 10.255.0.15 timeout 1 ttl 6`.
 
-What the lab measured: the ping without a FEC type was not sent (`QQQ`), because RT05 has no LDP label for
+An example result: the ping without a FEC type was not sent (`QQQ`), because RT05 has no LDP label for
 10.255.0.12/32. With `fec-type bgp` the requests went out and no reply came back; with the source 10.255.0.15 all three
 succeeded. The traceroute showed `21/24001` leaving RT05, `explicit-null/24001` at RT04, label 16 at XR01, `.` at RT01,
 which has no route back to RT05, and `!` at RT02.
@@ -451,6 +448,9 @@ and starts where lab XRT-07 ended.
 <p class="tolab"><a href="/_learn?id=XRT-08">Open lab XRT-08 in the workspace</a> — <a href="83-m8-practice-2.html">The tasks</a></p>
 
 :::note
+The outputs on this page were captured on IOS XRd 26.1.1 with five IOS XE 17.15 routers on IOL (lab XRT-08). Times in
+seconds are measured in that lab, not guaranteed values.
+
 Sources: Cisco TAC documents "Configure Unified MPLS in Cisco IOS XR" (2015, revised 2017; the purpose of Unified MPLS,
 next-hop-self and `ibgp policy out enforce-modifications`, `allocate-label`, the redistribution of the border's
 loopback with RPL), "Labeled and Unlabeled Together on one BGP Neighbor on IOS-XR" (2020; one table, both families on

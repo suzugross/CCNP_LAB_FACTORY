@@ -4,8 +4,6 @@
 OSPF や VRF、スタティック ルーティングは教えません。それらは既に知っているはずです。
 ここで扱うのは、IOS XR がそれらをどこに置いているか、どう表示するか、打ったことのないコマンドをどう探すか、です。
 
-掲載した出力は、すべて IOS XRv 9000 のリリース 24.3.1 で採ったものです。
-
 ## 1. どこにログインしているのか
 
 ```console
@@ -138,7 +136,7 @@ interface GigabitEthernet0/0/0/1
 
 :::note
 IOS では、`vrf forwarding` を入れるとインターフェイスの IP アドレスが外れ、入れ直す必要があります。
-この IOS XR のリリースでは、アドレスを持つインターフェイスを VRF に移してもアドレスは残りました。
+IOS XR のリリース 24.3.1 では、アドレスを持つインターフェイスを VRF に移してもアドレスは残りました。
 どちらの記憶にも頼らず、結果を見て確認します。
 :::
 
@@ -312,3 +310,7 @@ Interface and Hardware Component Configuration Guide の「Configuring Ethernet 
 変更する前に、何が入っているかを調べます。
 
 <p class="tolab"><a href="/_learn?id=XRT-01">ワークスペースでラボ XRT-01 を開く</a> — <a href="01-m0-practice.html">課題の一覧</a></p>
+
+:::note
+掲載した出力は、すべて IOS XRv 9000 のリリース 24.3.1 で採ったものです。
+:::

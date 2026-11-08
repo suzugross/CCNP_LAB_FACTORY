@@ -16,8 +16,7 @@ Chapter C0, *The MPLS services side by side*, set L3VPN next to the other servic
 path) and its inner label (the container). This unit looks at L3VPN alone, one level deeper.
 
 The lab is XRT-09. Its core is the one of lab XRT-07: XR01 and RT02 are the provider edges (PEs), RT01 and RT03 the
-core routers (Ps), with IS-IS and LDP. XR02 is new: a route reflector for VPN routes. The outputs on this page were
-captured on IOS XRv 9000 26.1.1 (XR01), IOS XRd 26.1.1 (XR02) and IOS XE 17.15 on IOL (the other routers).
+core routers (Ps), with IS-IS and LDP. XR02 is new: a route reflector for VPN routes.
 
 :::topo
 nodes:
@@ -100,7 +99,7 @@ forwarding instance; RFC 4364, section 3). Once a customer interface is in a VRF
 up in that VRF's table.
 
 On XR01, the interface to CEA1 is in VRF CUST-A and the interface to CEB1 is in VRF CUST-B. The table of CUST-A holds
-customer A's routes only (taken from the lab after all four tasks, with only the lines for customer A's sites):
+customer A's routes only (after all four tasks, with only the lines for customer A's sites):
 
 ```console
 RP/0/RP0/CPU0:XR01#show route vrf CUST-A
@@ -136,8 +135,8 @@ lab uses "the PE's loopback:number": XR01's CUST-A is 10.255.0.1:101 and RT02's 
 that the RD exists only to make distinct routes for a common prefix, and tells neither where the route came from nor
 which VPNs it goes to (section 4.1). Which VRF imports a route is not decided by the RD (section 2.3).
 
-In the lab, customer B's site 2 (CEB2) was given the same 10.101.2.0/24 as customer A's site 2 (a loopback advertised
-in BGP, removed after the measurement). The route reflector XR02 holds the two apart by their RDs:
+Here customer B's site 2 (CEB2) has been given the same 10.101.2.0/24 as customer A's site 2 (a loopback advertised in
+BGP; the *Try it* below adds it and removes it again). The route reflector XR02 holds the two apart by their RDs:
 
 ```console
 RP/0/RP0/CPU0:XR02#show bgp vpnv4 unicast | include "Route Distinguisher|10.101.2.0"
@@ -184,7 +183,7 @@ Put the same address in two customers. Do it after Task M9-2, and always undo it
    `traceroute 10.101.2.1 source Loopback10 numeric`.
 3. Remove the `network` line and Loopback11 from CEB2.
 
-What the lab measured: within a minute XR02 held 10.101.2.0/24 twice, under RDs 10.255.0.12:101 and 10.255.0.12:102.
+An example result: within a minute XR02 held 10.101.2.0/24 twice, under RDs 10.255.0.12:101 and 10.255.0.12:102.
 XR01 imposed 22 in CUST-A and 26 in CUST-B; the traceroute from CEA1 ended at CEA2 and the one from CEB1 at CEB2. Within
 30 seconds of the removal, CUST-B's 10.101.2.0/24 was gone.
 :::
@@ -485,11 +484,11 @@ router bgp 65000
 
 :::note
 The L3VPN configuration guides for the NCS 5500 and the ASR 9000 (release 7.11) say that an interface must lose its
-IPv4 and IPv6 addresses before its VRF is assigned, removed or changed, and that the change is rejected otherwise. In
-the lab, IOS XR 26.1.1 (both XRv 9000 and XRd) accepted the change with the address in place, and kept the address.
-Moving an interface from the global table into a VRF, back again, or into another existing VRF worked after a few
-seconds; moving it into a VRF created in the same commit left it unable to reach its neighbour in one test. Follow the
-guides: in lab XRT-09 the customer interfaces have no address, so `vrf` and `ipv4 address` go in together.
+IPv4 and IPv6 addresses before its VRF is assigned, removed or changed, and that the change is rejected otherwise.
+IOS XR 26.1.1 (both XRv 9000 and XRd) accepts the change with the address in place, and keeps the address. Moving an
+interface from the global table into a VRF, back again, or into another existing VRF works after a few seconds; moving
+it into a VRF created in the same commit can leave it unable to reach its neighbour. Follow the guides: in lab XRT-09
+the customer interfaces have no address, so `vrf` and `ipv4 address` go in together.
 :::
 
 ### 3.2 The commit checks the order
@@ -547,7 +546,7 @@ See what the session with a CE does without policies. Do it after Task M9-1.
    `show ip bgp summary` and `show ip route bgp`.
 3. Put the two lines back and commit, and run the same commands again.
 
-What the lab measured: the session stayed up and was not reset (its up time kept counting). XR01 showed `0!` and
+An example result: the session stayed up and was not reset (its up time kept counting). XR01 showed `0!` and
 counted CEB1's route under `No policy: 1`, and CEB1's BGP routes were gone: it received nothing either
 (`State/PfxRcd 0`). Within 30 seconds of the lines going back, XR01 accepted the route again and CEB1 had its routes
 back.
@@ -567,9 +566,8 @@ RP/0/RP0/CPU0:XR01#show bgp vpnv4 unicast neighbors 10.255.0.21 | include "refre
 ```
 
 A PE that drops routes may need them later. When a new VRF is configured, or an import route target is added that the
-PE holds no routes for, IOS XR asks its neighbours to send their routes again (a BGP **route refresh**). In the lab the
-routes of customer B arrived within five seconds of the VRF's commit, and `show bgp vpnv4 unicast neighbors` counted
-the refresh:
+PE holds no routes for, IOS XR asks its neighbours to send their routes again (a BGP **route refresh**). The routes of
+customer B arrive within five seconds of the VRF's commit, and `show bgp vpnv4 unicast neighbors` counts the refresh:
 
 ```console
 RP/0/RP0/CPU0:XR01#show bgp vpnv4 unicast neighbors 10.255.0.21 | include "refresh request|Failed RT"
@@ -577,8 +575,8 @@ RP/0/RP0/CPU0:XR01#show bgp vpnv4 unicast neighbors 10.255.0.21 | include "refre
     No policy: 0, Failed RT match: 2
 ```
 
-Here 65000:102 had just been added back to CUST-B's import route targets. In the PoC, configuring the VRF CUST-B from
-scratch did the same: one route refresh, and customer B's routes within five seconds.
+Here 65000:102 had just been added back to CUST-B's import route targets. Configuring the VRF CUST-B from scratch does
+the same: one route refresh, and customer B's routes within five seconds.
 
 :::try
 Watch XR01 drop routes and ask for them again. Do it after Task M9-2 and before Task M9-3: from Task M9-3 on, VRF
@@ -591,7 +589,7 @@ SVC imports 65000:102 too, and XR01 keeps customer B's routes for it.
    step 1.
 4. Put 65000:102 back and commit. Run the command of step 1 and `show bgp vrf CUST-B`.
 
-What the lab measured: XR01 dropped 10.102.2.0/24 at once; the table of RD 10.255.0.12:102 was empty. After the soft
+An example result: XR01 dropped 10.102.2.0/24 at once; the table of RD 10.255.0.12:102 was empty. After the soft
 refresh, the neighbour detail showed `Failed RT match: 2`, and the refresh requests sent had gone from 0 to 2. With
 65000:102 back, the counter went to 3 and 10.102.2.0/24 was in CUST-B again within five seconds; CEB1 reached CEB2.
 :::
@@ -618,16 +616,17 @@ Go to lab **XRT-09** and do Task M9-1. XR01 is an IOS XRv 9000, so the lab takes
 <p class="tolab"><a href="/_learn?id=XRT-09">Open lab XRT-09 in the workspace</a> — <a href="91-m9-practice.html">Task M9-1</a></p>
 
 :::note
-Sources: RFC 4364 (sections 1, 1.5, 3 and 4.1 to 4.3) and RFC 4110 (section 1.3.3). The BGP command references for the
-Cisco 8000 (cumulative, 2026) and the NCS 5500 (route distinguisher and `rd auto`, `retain route-target`, `as-override`,
-`allowas-in`, `site-of-origin`, `label mode`, `export route-policy`); the Routing Configuration Guide for the ASR 9000,
-IOS XR 24.x (2026: address families, route reflectors and `retain route-target`, route refresh for a new VRF, VRF dynamic
-route leaking with `advertise-as-vpn` and `allow-imported-vpn`, the routing policy for VRF import and export, static
-routes into another VRF); the L3VPN configuration guides for the NCS 5500 and the Cisco 8000 and the MPLS L3VPN guide for
-the ASR 9000, release 7.11 (VRF on an interface, Inter-AS option B, CSC); the Cisco 8000 guide "BGP Route
-Distinguisher"; Cisco TAC documents "Cisco IOS-XR BGP with MPLS Designs" (2021) and "Configure Route Leak between GRT
-and VRF with IOS XR"; the IOS XRd data sheet. All checked October and November 2026. The following come from
-measurement in lab XRT-09 and its PoC: the commit errors, the interface address kept in a VRF change, the dropped routes
-and their counters, the route refresh, the labels and the packets on the links (CML link capture), and the handling of
-overlapping addresses.
+The outputs on this page were captured on IOS XRv 9000 26.1.1 (XR01), IOS XRd 26.1.1 (XR02) and IOS XE 17.15 on IOL (the
+other routers). Sources: RFC 4364 (sections 1, 1.5, 3 and 4.1 to 4.3) and RFC 4110 (section 1.3.3). The BGP command
+references for the Cisco 8000 (cumulative, 2026) and the NCS 5500 (route distinguisher and `rd auto`,
+`retain route-target`, `as-override`, `allowas-in`, `site-of-origin`, `label mode`, `export route-policy`); the Routing
+Configuration Guide for the ASR 9000, IOS XR 24.x (2026: address families, route reflectors and `retain route-target`,
+route refresh for a new VRF, VRF dynamic route leaking with `advertise-as-vpn` and `allow-imported-vpn`, the routing
+policy for VRF import and export, static routes into another VRF); the L3VPN configuration guides for the NCS 5500 and
+the Cisco 8000 and the MPLS L3VPN guide for the ASR 9000, release 7.11 (VRF on an interface, Inter-AS option B, CSC);
+the Cisco 8000 guide "BGP Route Distinguisher"; Cisco TAC documents "Cisco IOS-XR BGP with MPLS Designs" (2021) and
+"Configure Route Leak between GRT and VRF with IOS XR"; the IOS XRd data sheet. All checked October and November 2026.
+The following come from measurement in lab XRT-09 and its PoC: the commit errors, the interface address kept in a VRF
+change, the dropped routes and their counters, the route refresh, the labels and the packets on the links (CML link
+capture), and the handling of overlapping addresses.
 :::

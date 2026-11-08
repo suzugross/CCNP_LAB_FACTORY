@@ -14,8 +14,7 @@ questions. Nothing new is introduced.
 | Practice | In lab XRT-13, build five services from a network that has only a core (tasks S-1 to S-5) |
 | What EVPN-VPWS buys you | The same E-Line as an LDP pseudowire and as EVPN-VPWS: when a site is on two PEs, and when the road moves to SR |
 
-The output was taken on the following topology, built for this page. The PEs are three Catalyst 8000V (IOS XE 17.15.1a) and
-one IOS XRv 9000 (26.1.1). P1, RR1 and the CEs are IOL running IOS XE 17.15. Label values change from one build to the next.
+This page uses the following topology. Label values change from one build to the next.
 
 :::topo
 nodes:
@@ -231,8 +230,8 @@ you shows when a site is attached to two PEs, and when LDP is removed from the c
 
 ### 3.1 The same road for three services
 
-We pinged from CE1 to CE2 the same way over L3VPN, VPLS and EVPN, and captured packets on the XE1 → P1 and P1 → XE2 links
-(CML link capture). All three take the same road: CE1 → XE1 → P1 → XE2 → CE2.
+Compare the packets on the XE1 → P1 and P1 → XE2 links (CML link capture) when CE1 pings CE2 the same way over L3VPN,
+VPLS and EVPN. All three take the same road: CE1 → XE1 → P1 → XE2 → CE2.
 
 :::topo
 nodes:
@@ -257,7 +256,7 @@ links:
 
 (CW is the control word. Section 3.4)
 
-These are the captured packets (lines shortened).
+The packets look like this (lines shortened).
 
 ```console
 # XE1 → P1 link
@@ -373,7 +372,7 @@ What sits under the inner label also differs by service.
 - **L3VPN** carries an IP packet. XE1 strips the Ethernet header of the frame it received from CE1 and carries only the IP.
   XE2 looks up its routing table and then puts on a new Ethernet header towards CE2.
 - **The L2 services** carry the customer's Ethernet frame itself. The destination and source MACs are those of CE1 and the
-  remote CE. The frame captured on the VPWS link began with an Ethernet header to `aabb.cc00.8e00` (CE4) from `aabb.cc00.8b00` (CE1).
+  remote CE. On the VPWS link, the frame begins with an Ethernet header to `aabb.cc00.8e00` (CE4) from `aabb.cc00.8b00` (CE1).
 
 In all four L2 services the frames travelled with the VLAN tag removed, because the PE does
 `rewrite ingress tag pop 1 symmetric` on the AC. A tag is a marker only within each site's link and never appears in the core (M11).
@@ -457,7 +456,7 @@ Paths: (1 available, best #1, table A)
 (The entry for RD 10.255.0.42:100 is omitted.)
 
 So XE1 puts packets for this route on the road to XE2 (outer 18, inner 25) and sends them to P1. They never pass RR1, just as
-in the packets captured in section 3.1.
+in the packets in section 3.1.
 
 ```console
 XE1#show ip cef vrf A 10.100.2.0 255.255.255.0 detail
@@ -508,3 +507,8 @@ A P router looks only at the outer label, so it needs no service configuration a
 it can stay off the road.
 
 The next page looks at where these differences show up in the configuration, in build order.
+
+:::note
+The outputs on this page were taken on a topology built for it: the PEs are three Catalyst 8000V (IOS XE 17.15.1a) and one
+IOS XRv 9000 (26.1.1), and P1, RR1 and the CEs are IOL running IOS XE 17.15.
+:::

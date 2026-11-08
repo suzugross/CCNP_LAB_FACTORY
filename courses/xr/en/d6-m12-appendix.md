@@ -97,9 +97,9 @@ length and so on; twelve types in section 4.2.2 of RFC 8955), and the actions ar
 0 meaning drop; steering into a VRF; re-marking the DSCP and so on; section 7).
 
 IOS XR writes rules in the same MQC form as QoS (`class-map type traffic` and `policy-map type pbr`) and hands them out
-under `flowspec`. The form tried in this lab is below (RR1 builds and sends the rules; XR01 receives them).
+under `flowspec`. The form on this board is below (RR1 builds and sends the rules; XR01 receives them).
 
-:::config RR1 (XRd) and XR01 — send and receive FlowSpec rules (as tried; XRv 9000 cannot apply them)
+:::config RR1 (XRd) and XR01 — send and receive FlowSpec rules (XRv 9000 cannot apply them)
 class-map type traffic match-all FS-ATTACK   ## The conditions (RR1)
  match destination-address ipv4 198.51.100.129 255.255.255.255
  match protocol icmp

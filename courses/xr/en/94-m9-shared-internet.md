@@ -135,8 +135,8 @@ BGP routing table entry for 10.99.2.0/24, Route Distinguisher: 10.255.0.1:900
       Extended community: RT:65000:999
 ```
 
-An export policy cannot hold a route back: the command reference says so, and in the lab a route that the policy did
-not pass still left the VRF with the VRF's route targets. 10.99.2.0/24 is kept from the customers by its route target,
+An export policy cannot hold a route back: the command reference says so, and a route that the policy does not pass
+still leaves the VRF with the VRF's route targets. 10.99.2.0/24 is kept from the customers by its route target,
 which no customer imports, not by the policy. An import policy is the second of two filters: it sees only the routes
 that already match an import route target of the VRF.
 
@@ -149,7 +149,7 @@ Take `additive` away. Do it after Task M9-3.
    `ping 10.99.1.1 source Loopback10`.
 3. Put `additive` back and commit.
 
-What the lab measured: 10.99.1.0/24 left with `RT:65000:900` alone, and RT02's copies showed the same. The ping still
+An example result: 10.99.1.0/24 left with `RT:65000:900` alone, and RT02's copies showed the same. The ping still
 went through: the customers import 65000:900, so nothing that they see changes. What broke is the provider's
 convention, which anything that relies on 65000:999 would notice. With `additive` back, the route carried both route
 targets again.
@@ -301,7 +301,7 @@ Take `advertise-as-vpn` away. Do it after Task M9-4.
    run `show ip route 0.0.0.0`, and on CEA2 `ping 203.0.113.10 source Loopback11`.
 3. Put `advertise-as-vpn` back and commit.
 
-What the lab measured: XR01 showed the default route as advertised to its CE only (`Advertised to CE peers`, no
+An example result: XR01 showed the default route as advertised to its CE only (`Advertised to CE peers`, no
 `PE peers`). RT02 and CEA2 lost it (`% Network not in table`), CEA1 kept it, and the ping from CEA2 failed. Within a
 minute of the keyword going back, CEA2 had the default route again and the ping went through.
 :::

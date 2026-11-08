@@ -1,0 +1,76 @@
+# glossary/mpls.yml — MPLS とトラフィック エンジニアリングの語(単元をまたいで使う。説明は一般的に書く)
+# 2026-11-08 M12 の語として作り始めた。P2(M8 の LDP・Unified MPLS)の語もここに足す。
+# ★LSP は IS-IS の LSP(link state PDU)と表記が重なり、M8・M10 のページでは両方の意味で出てくる。いまは M12 のページだけで
+#   拾う(P2 で IS-IS の LSP を別の項目にして、ページの分け方を決める。設計書 §11)。
+
+- id: php
+  term: PHP
+  full: penultimate hop popping
+  def:
+    en: >-
+      The router one hop before the egress removes the top label, so the egress receives the packet without it and
+      needs only one lookup. The egress asks for this by advertising implicit null (label 3). The EXP of the removed
+      label is not copied to the label or IP header below it.
+    ja: >-
+      出口の 1 つ手前のルータが、いちばん上のラベルを外すこと。出口は外れた状態で受け取るので、引き当てが 1 回で済む。
+      出口は implicit null(ラベル 3)を広告してこれを頼む。外したラベルの EXP は、下のラベルにも IP ヘッダにも写らない。
+  see: [explicit-null, transport-label, mpls-exp]
+
+- id: explicit-null
+  term: explicit null
+  def:
+    en: >-
+      A reserved label (0 for IPv4, 2 for IPv6) that the egress advertises instead of implicit null. The router
+      before it then swaps the top label for 0 instead of popping it, so the label, and its EXP, reach the egress.
+    ja: >-
+      出口が implicit null の代わりに広告する予約済みのラベル(IPv4 は 0、IPv6 は 2)。手前のルータはいちばん上の
+      ラベルを外さずに 0 に替えて送るので、ラベルとその EXP が出口まで届く。
+  see: [php, mpls-exp, pipe-model]
+
+- id: lsp
+  term: LSP
+  full: {en: label switched path, ja: ラベル スイッチド パス}
+  scope: ["d*-m12-*"]
+  def:
+    en: >-
+      The path a labelled packet follows through an MPLS network from the ingress to the egress, set up by LDP,
+      RSVP-TE or segment routing.
+    ja: >-
+      ラベルの付いたパケットが、MPLS の網の入口から出口までたどる道。LDP・RSVP-TE・セグメント ルーティングで作る。
+  see: [e-lsp, rsvp-te, ldp]
+
+- id: te
+  term: TE
+  full: {en: traffic engineering, ja: トラフィック エンジニアリング}
+  def:
+    en: >-
+      Steering traffic onto paths other than the IGP's shortest path, for example to use spare links or to reserve
+      bandwidth. In MPLS it is done with RSVP-TE tunnels or segment-routing policies.
+    ja: >-
+      IGP の最短経路とは別の道へトラフィックを向けること(空いたリンクを使う・帯域を予約するなど)。MPLS では RSVP-TE
+      のトンネルや、セグメント ルーティングのポリシーで行う。
+  see: [rsvp-te, ds-te, segment-routing]
+
+- id: rsvp
+  term: RSVP
+  full: Resource Reservation Protocol
+  def:
+    en: >-
+      The reservation protocol of IntServ (RFC 2205): one-way, receiver-oriented and soft-state (the state disappears
+      unless refreshed). It is not a routing protocol; it reserves along the path that routing chose. Its extension
+      RSVP-TE reserves bandwidth for MPLS TE LSPs.
+    ja: >-
+      IntServ の予約の手順(RFC 2205)。片方向で、受け手が予約を求め、送り直さないと状態が消える(soft state)。ルーティング
+      プロトコルではなく、ルーティングが決めた道に沿って予約する。拡張の RSVP-TE が、MPLS の TE の LSP の帯域を予約する。
+  see: [rsvp-te, intserv]
+
+- id: rsvp-te
+  term: RSVP-TE
+  def:
+    en: >-
+      RSVP extended for MPLS traffic engineering: it signals an LSP along an explicit or computed path and reserves
+      bandwidth for it on each link. What is reserved is the provider's LSP, not a customer's flow.
+    ja: >-
+      MPLS のトラフィック エンジニアリングのために拡張した RSVP。決めた道(または計算した道)に沿って LSP をシグナリング
+      し、リンクごとに帯域を予約する。予約するのは顧客の流れではなく、プロバイダーの LSP。
+  see: [rsvp, te, ds-te]

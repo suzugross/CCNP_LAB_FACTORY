@@ -1,0 +1,187 @@
+# glossary/dp-security.yml — データプレーンの保護の語(uRPF・インフラ ACL・RTBH・ABF・FlowSpec・MACsec)
+# ACL・Null0・DDoS など基礎の語は basics.yml に置く(2026-11-08 から CCNA の範囲の語も載せる)。
+
+- id: urpf
+  term: uRPF
+  full: Unicast Reverse Path Forwarding
+  def:
+    en: >-
+      A check that looks up a packet's source address in the FIB and drops the packet if the source is not
+      plausible (RFC 3704). Strict mode needs the route to the source to point out of the receiving interface; loose
+      mode needs only some route. The default route does not count unless `allow-default` is configured.
+    ja: >-
+      入ってきたパケットの送信元のアドレスを FIB で引き、ありえない送信元なら落とす確認(RFC 3704)。厳格モードは
+      送信元へのルートが受けたインターフェイスを向くことを、緩いモードはどこかにルートがあることを求める。既定ルートは、
+      `allow-default` を付けない限り数えない。
+  see: [urpf-strict, urpf-loose, rtbh-source]
+
+- id: urpf-strict
+  term: {en: strict uRPF, ja: 厳格な uRPF}
+  def:
+    en: >-
+      uRPF that passes a packet only if the route to its source points out of the interface it arrived on
+      (`reachable-via rx`). It suits single-homed customers, where paths are symmetric; with asymmetric paths it
+      drops legitimate traffic too.
+    ja: >-
+      送信元へのルートが、パケットの入ってきたインターフェイスを向くときだけ通す uRPF(`reachable-via rx`)。経路が
+      対称になる、1 本だけで接続している顧客に向く。経路が非対称だと、正しいパケットも落とす。
+  see: [urpf, urpf-loose]
+
+- id: urpf-loose
+  term: {en: loose uRPF, ja: 緩い uRPF}
+  def:
+    en: >-
+      uRPF that passes a packet if there is any route to its source, whatever the interface (`reachable-via any`).
+      It is used at borders where paths can be asymmetric, drops sources with no route at all, and is what
+      source-based RTBH relies on.
+    ja: >-
+      送信元へのルートがどこかにあれば、インターフェイスを問わず通す uRPF(`reachable-via any`)。経路が非対称に
+      なりうる境界で使う。どこにもルートの無い送信元を落とし、送信元で捨てる RTBH もこれを使う。
+  see: [urpf, urpf-strict, rtbh-source]
+
+- id: infrastructure-acl
+  term: {en: infrastructure ACL, ja: インフラ ACL}
+  aka: [iACL]
+  def:
+    en: >-
+      An ACL at the network's entrance that protects the provider's own addresses (loopbacks, core links), which
+      outside traffic never needs to reach. Cisco recommends four parts: drop spoofed sources, permit what the
+      infrastructure needs (such as BGP with the neighbour), deny everything else to the infrastructure, and permit
+      transit traffic.
+    ja: >-
+      外から届く必要の無い、プロバイダー自身のアドレス(ループバック・コアのリンク)を、網の入口で守る ACL。Cisco は
+      4 つの部分で組むことを勧めている。①送信元を偽ったものを捨てる、②基盤宛てでも必要なもの(相手との BGP など)を
+      許す、③それ以外の基盤宛てを捨てる、④通過するパケットを許す。
+  see: [urpf]
+
+- id: rtbh
+  term: RTBH
+  full: Remotely Triggered Black Hole
+  def:
+    en: >-
+      Dropping traffic for an address on every edge router by registering it in one place (RFC 5635). A trigger
+      router advertises the address in BGP with its next hop rewritten to a discard address that every edge router
+      routes to Null0, plus a community and `no-export`. Dropping by destination stops the attack but also cuts the
+      target off from everyone.
+    ja: >-
+      1 か所で登録したアドレスへのパケットを、縁のルータ全部で捨てる仕組み(RFC 5635)。起点のルータがそのアドレスを、
+      ネクスト ホップを捨て先(縁のルータ全部が Null0 に向けているアドレス)に書き換え、コミュニティと `no-export` を
+      付けて BGP で配る。宛先で捨てると攻撃は止まるが、その宛先は誰からも届かなくなる。
+  see: [rtbh-source, discard-address, rtbh-trigger, blackhole-community]
+
+- id: rtbh-source
+  term: {en: source-based RTBH, ja: 送信元の RTBH}
+  def:
+    en: >-
+      RTBH against an attacker's source address (RFC 5635): the route to the source is pointed at the discard, and
+      loose uRPF on the edge routers then drops packets from it, while the target stays reachable from other
+      sources. IOS XR uRPF does not follow a recursive next hop to Null0, so the edge needs RPL `set next-hop
+      discard`.
+    ja: >-
+      攻撃元の送信元のアドレスに使う RTBH(RFC 5635)。送信元へのルートを捨て先に向け、縁のルータの緩い uRPF で、
+      そこから来たパケットを落とす。攻撃を受けた宛先は、ほかの送信元からは届いたまま。IOS XR の uRPF は Null0 への
+      再帰的な参照をしないので、縁で RPL の `set next-hop discard` が要る。
+  see: [rtbh, urpf-loose]
+
+- id: discard-address
+  term: {en: discard address, ja: 捨て先}
+  def:
+    en: >-
+      In RTBH, an unused address (192.0.2.1/32 is common) that every edge router routes to Null0 with a static route.
+      Traffic to a route whose next hop is rewritten to it is dropped at the edge.
+    ja: >-
+      RTBH で、縁のルータ全部がスタティック ルートで Null0 に向けておく、使っていないアドレス(192.0.2.1/32 が
+      よく使われる)。ネクスト ホップをこれに書き換えたルートの宛先へのパケットは、縁で捨てられる。
+  see: [rtbh]
+
+- id: rtbh-trigger
+  term: {en: trigger router, ja: 起点のルータ}
+  aka: [RTBH trigger, trigger, 起点]
+  scope: ["d*-m12-*"]                  # 「trigger」「起点」は一般語
+  def:
+    en: >-
+      In RTBH, the router where the addresses to drop are registered (as tagged static routes) and from which they
+      are advertised in BGP with the rewritten next hop and the community. It does not have to be in the traffic
+      path.
+    ja: >-
+      RTBH で、捨てたいアドレスを(目印のタグを付けたスタティック ルートで)登録し、書き換えたネクスト ホップと
+      コミュニティを付けて BGP で配るルータ。パケットの通り道にいる必要はない。
+  see: [rtbh, discard-address]
+
+- id: blackhole-community
+  term: BLACKHOLE
+  full: {en: BLACKHOLE community, ja: BLACKHOLE コミュニティ}
+  def:
+    en: >-
+      The well-known BGP community 65535:666, defined in RFC 7999 for asking a neighbour to drop traffic to a
+      prefix. The receiver is advised to add `no-export` or `no-advertise` so that the prefix does not spread.
+    ja: >-
+      プレフィックス宛てのパケットを捨てるよう相手に頼むために RFC 7999 が決めた、well-known の BGP コミュニティ
+      65535:666。受け取った側は、広がらないように `no-export` か `no-advertise` を付けることが勧められている。
+  see: [rtbh]
+
+- id: scrubbing-centre
+  term: {en: scrubbing centre, ja: スクラビング センター}
+  aka: [scrubbing center, 洗浄の装置]
+  def:
+    en: >-
+      A facility that receives the traffic for a destination under attack, removes the attack traffic and passes the
+      rest on. Instead of simply dropping the traffic, a provider can steer it there (with ABF or FlowSpec, for
+      example).
+    ja: >-
+      攻撃を受けている宛先へのパケットを受け取り、攻撃のパケットを取り除いて残りを先へ渡す設備。ただ捨てる代わりに、
+      パケットをここへ寄せる(ABF や FlowSpec などで)。
+  see: [abf, flowspec]
+
+- id: abf
+  term: ABF
+  full: ACL Based Forwarding
+  def:
+    en: >-
+      An IOS XR feature that writes a next hop into an ACL line (`nexthop1`), so matching packets are forwarded there
+      regardless of the routing table, for example to steer attack traffic to a scrubbing centre. It takes effect
+      before the normal route lookup.
+    ja: >-
+      ACL の行にネクスト ホップ(`nexthop1`)を書き、一致したパケットをルーティング テーブルと関係なくそこへ送る
+      IOS XR の機能。攻撃のパケットを洗浄の装置へ寄せる、といった使い方をする。ふつうのルートの引き当てより先に効く。
+  see: [scrubbing-centre, flowspec]
+
+- id: flowspec
+  term: BGP FlowSpec
+  aka: [FlowSpec]
+  def:
+    en: >-
+      Distributing traffic filters by BGP (RFC 8955): the NLRI carries the match conditions (destination and source
+      prefixes, protocol, ports, DSCP and so on), and extended communities carry the action (a rate limit, where 0
+      means drop; redirect to a VRF; re-mark the DSCP). The side that builds and sends the rules is the controller;
+      routers that install them in their hardware are clients.
+    ja: >-
+      パケットのフィルタを BGP で配る仕組み(RFC 8955)。NLRI が条件(宛先・送信元のプレフィックス、プロトコル、ポート、
+      DSCP など)を、拡張コミュニティが動作(速さの上限= 0 なら捨てる、VRF への寄せ、DSCP の付け替え)を運ぶ。規則を
+      作って配る側を controller、受け取って自分のハードウェアに入れる側を client と呼ぶ。
+  see: [rtbh, extended-community, abf]
+
+- id: macsec
+  term: MACsec
+  full: IEEE 802.1AE
+  def:
+    en: >-
+      Hop-by-hop encryption and integrity protection of Ethernet frames between neighbouring devices (IEEE 802.1AE).
+      Unlike IPsec, it protects the frames themselves, below IP. Keys are exchanged with MKA, and support depends on
+      the hardware.
+    ja: >-
+      となりの機器との間のイーサネットのフレームを、1 ホップごとに暗号化して改ざんを防ぐ規格(IEEE 802.1AE)。IPsec と
+      違い、IP より下のフレームそのものを守る。鍵は MKA で交換し、対応はハードウェアで決まる。
+  see: [mka]
+
+- id: mka
+  term: MKA
+  full: MACsec Key Agreement
+  def:
+    en: >-
+      The protocol that creates, distributes and manages the keys MACsec uses (defined in IEEE 802.1X-2010, running
+      over EAPOL). With a pre-shared key it is configured from a key chain.
+    ja: >-
+      MACsec が使う鍵を作り、配り、管理するプロトコル(IEEE 802.1X-2010 で定義。EAPOL の上で動く)。事前共有鍵なら
+      key chain から設定する。
+  see: [macsec]

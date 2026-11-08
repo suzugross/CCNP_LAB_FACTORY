@@ -137,8 +137,8 @@ If XE1 loses its link to SW1, it withdraws its type 1 route for the segment. XE3
 behind that segment at once, without waiting for each MAC's type 2 route to be withdrawn (**mass withdrawal**). A
 segment with a thousand MACs fails over with one BGP update.
 
-In the lab, XE1's Gi3 was shut down while SW1 was pinging CE3. Three seconds later XE3 listed SW1's MAC behind XE2 only,
-SW1 had taken Et0/0 out of its bundle, and the ping kept going. When Gi3 came back, both next hops returned.
+Shut down XE1's Gi3 while SW1 is pinging CE3: three seconds later XE3 lists SW1's MAC behind XE2 only, SW1 has taken
+Et0/0 out of its bundle, and the ping keeps going. When Gi3 comes back, both next hops return.
 
 ### 2.5 Split horizon on the segment
 
@@ -218,7 +218,7 @@ PE.
 
 LACP bundles only links whose other end reports the same **system ID**. Left alone, XE1 and XE2 each report their own,
 and SW1 sees two partners. `lacp device-id` sets the ID the PE reports on that Port-channel; any MAC address works as
-long as both PEs use the same one. In the lab, with the line on XE1 only:
+long as both PEs use the same one. With the line on XE1 only:
 
 ```console
 SW1#show etherchannel summary
@@ -242,7 +242,7 @@ Port-channel stayed down. With the line on both PEs, SW1 showed `Et0/0(P) Et0/1(
 
 ### 3.4 What goes wrong
 
-| Mistake | What the lab showed |
+| Mistake | What it looks like |
 |---|---|
 | `lacp device-id` on one PE only, or different on the two | SW1 bundles one link and suspends the other; the other PE's Port-channel stays down |
 | A different ESI on the two PEs (for example type 3 on one) | Each PE is alone on its segment; the far PE no longer has two next hops for SW1's MAC |
@@ -259,7 +259,7 @@ Fail one link of the segment. Do this after Task M11-8.
    `show etherchannel summary`.
 3. On XE1, bring GigabitEthernet3 back up and look again after half a minute.
 
-Measured in the lab: within 3 seconds XE3 listed SW1's MAC behind 10.255.0.42 only, SW1 showed Et0/0 waiting (`w`) and
+An example result: within 3 seconds XE3 listed SW1's MAC behind 10.255.0.42 only, SW1 showed Et0/0 waiting (`w`) and
 then suspended (`s`), and the ping did not stop. In this lab SW1 runs `lacp rate fast`; IOL-L2 does not see the far end of
 a link go down, so it relies on LACP to notice.
 :::

@@ -15,8 +15,7 @@
 | 付録 | E-Tree、G.8032、802.1ah | — |
 
 ラボは XRT-11 です。ラボ XRT-10 の続きで、同じ四角形のコア、同じ VPN の顧客、M10 の課題を終えた XR01 と XR02 です。
-新しいプロバイダー エッジ(PE)の XR03 が RT01 の先に加わり、顧客 B のサイト 3 を収容しています。出力は IOS XRv 9000 26.1.1
-(XR01、XR03)、IOS XRd 26.1.1(XR02)、IOL 上の IOS XE 17.15(他のルータ)で取得しました。
+新しいプロバイダー エッジ(PE)の XR03 が RT01 の先に加わり、顧客 B のサイト 3 を収容しています。
 
 :::topo
 nodes:
@@ -112,8 +111,8 @@ PW ID は 100 です。
 
 ### 2.2 1 ホップずつ: CEA1 から CEA2 へ
 
-CEA1 が VLAN 100 で送ったフレームが CEA2 に届くまでを追います。ラベルの値は、ラボのある構築で測ったものです
-(疑似回線のラベルは構築のたびに変わります)。
+CEA1 が VLAN 100 で送ったフレームが CEA2 に届くまでを追います。ラベルの値は一例です(疑似回線のラベルは構築のたびに
+変わります)。
 
 :::topo
 nodes:
@@ -181,7 +180,7 @@ E-Line では、MTU が 3 か所で効きます。
   イーサネットのヘッダ(14 バイト)を引き、外さずに残すタグ 1 枚ごとに 4 バイトを足した値です。ポートが既定の 1514 なら、
   `pop 1` の AC は 1500、タグを残した AC は 1504 です。IOS XE は L2 のヘッダを数えずに 1500 と伝えます。
 - **ポートの MTU**: 親のポートの MTU を上げると、そのポートのすべての AC の MTU が上がります。サブインタフェースの `mtu` は
-  親を超えられず、ラボでは 9018 と設定しても AC は 1500 のままでした。
+  親を超えられず、9018 と設定しても AC は 1500 のままです。
 - **コアの MTU**: 包んだフレームは、顧客のパケットにイーサネットのヘッダ(14)とラベル(1 枚 4)を足した大きさになり、
   コアで分割はされません。ラボのコアは 1500 なので、DF ビット付きで通るのは IP で 1478 バイトまででした(1478 + 14 + 8 = 1500)。
   実際の網では、コアの MTU を顧客の MTU より大きくします。IOL のイーサネットは MTU を変えられないので、このラボでは扱いません。
@@ -252,7 +251,7 @@ RT02 では `show l2vpn atom vc` と `show l2vpn atom vc vcid 100 detail` で同
 
 ### 3.3 上がらないときの読み方
 
-疑似回線が上がらないとき、IOS XR の詳細の最後に `Error:` の行が出ます。ラボで起こした食い違いと、その表示です。
+疑似回線が上がらないとき、IOS XR の詳細の最後に `Error:` の行が出ます。食い違いごとの表示は次のとおりです。
 
 | 食い違い | XR の表示(相手も XR) | 相手が IOS XE のとき |
 |---|---|---|
@@ -271,7 +270,7 @@ RT02 では `show l2vpn atom vc` と `show l2vpn atom vc vcid 100 detail` で同
 2. XR01 で `show l2vpn xconnect detail`、RT02 で `show l2vpn atom vc vcid 100 detail` を実行し、CEA1 から `ping 172.31.10.2` を実行します。
 3. rewrite を戻してコミットし、同じコマンドをもう一度実行します。
 
-ラボで測った結果: XR01 の AC の MTU は 1504 になり、疑似回線は `Error: MTU mismatched` で down になりました(RT02 は
+結果の例: XR01 の AC の MTU は 1504 になり、疑似回線は `Error: MTU mismatched` で down になりました(RT02 は
 `Last error: Pseudowire MTU mismatch with peer`、MTU の列は 1500 と 1504)。ping は失敗しました。戻すと 30 秒以内に up になりました。
 :::
 
@@ -293,6 +292,7 @@ RT02 では `show l2vpn atom vc` と `show l2vpn atom vc vcid 100 detail` で同
 <p class="tolab"><a href="/_learn?id=XRT-11">ワークスペースでラボ XRT-11 を開く</a> — <a href="b1-m11-practice.html">課題</a></p>
 
 :::note
+このページの出力は、IOS XRv 9000 26.1.1(XR01、XR03)、IOS XRd 26.1.1(XR02)、IOL 上の IOS XE 17.15(他のルータ)で取得しました。
 出典: L2VPN and Ethernet Services Configuration Guide for the ASR 9000, IOS XR 25.x(2025。ポイントツーポイントのレイヤ 2 サービス、
 キャリア イーサネットのモデル)と、そのコマンド リファレンス。IOS XRv 9000 のリリース ノート 24.1.1(対応する L2VPN は VPWS)。
 IOS XE 17 の MPLS Configuration Guide(Any Transport over MPLS、L2VPN Protocol-Based CLIs)。TAC の文書「MTU Behavior on Cisco IOS XR

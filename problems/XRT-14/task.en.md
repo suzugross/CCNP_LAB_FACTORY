@@ -17,6 +17,8 @@ builds on the previous one.
   Leave configuration mode before you press it. A check sends test traffic and counts it, so it takes one to three
   minutes.
 - Hints open one level at a time (keyword → where to look → command). Opened hints are logged.
+- Each task also has a **How to verify** button: an example of checking your work in order (is it in → send traffic and count →
+  count where it arrives → did anything else break). Open it whenever you like; it is not logged. Verify by hand before you press Check.
 - XR01 runs **IOS XRv 9000** 26.1.1. Its QoS policy counters catch up some tens of seconds after the traffic.
   RR1 runs **IOS XRd** 26.1.1, the container form of IOS XR: it is the route reflector, outside the forwarding path.
 - The inputs of CE1 and CE2, and the input of P1 on the XR01 side, have fixed QoS policies that only count the packets

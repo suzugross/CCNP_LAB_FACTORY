@@ -19,8 +19,8 @@ do with it. How many labels the PE allocates decides how many labels it holds an
 | per-VRF | one VRF | is looked up again in the VRF table | one |
 
 Whatever the mode, a route that the PE did not learn from a CE gets the per-VRF (aggregate) label. The command
-reference names connected, aggregate and local routes, and in the lab the default route imported from the global table
-got it too. There is no CE to send such a packet to next, so the only way is to look the destination up in the VRF
+reference names connected, aggregate and local routes, and the default route imported from the global table gets it
+too. There is no CE to send such a packet to next, so the only way is to look the destination up in the VRF
 table again.
 
 ### 1.2 In the lab
@@ -102,7 +102,7 @@ With this on RT02, the label of CEB2's route became `IPv4 VRF Aggr:27`, and 27 i
 24.
 
 :::try
-Give CUST-A a single label. Do this after Task M9-2 (in the lab it was measured after Task M9-4).
+Give CUST-A a single label. Do this after Task M9-2 (the result below is after Task M9-4).
 
 1. On XR01, under `router bgp 65000` → `vrf CUST-A` → `address-family ipv4 unicast`, configure `label mode per-vrf`
    and commit.
@@ -110,7 +110,7 @@ Give CUST-A a single label. Do this after Task M9-2 (in the lab it was measured 
    RT02, and `ping 10.101.1.1 source Loopback10` on CEA2.
 3. Remove `label mode` and commit.
 
-Measured in the lab: every route XR01 had learned from CEA1 took the label 24009, which the VRF already had for the
+An example result: every route XR01 had learned from CEA1 took the label 24009, which the VRF already had for the
 imported default route, and 24004 and 24005 left `show mpls forwarding`. Within 20 seconds RT02 showed `nolabel/24009`
 for them, and the ping went through. With `label mode` removed, the routes were back on 24004 and 24005.
 :::

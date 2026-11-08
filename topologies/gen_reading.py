@@ -16,6 +16,7 @@
   :::orig ... :::               … 原文併記（既定は折りたたみ）
   :::try  ... :::               … やってみる（緑。読者が自分で障害を起こして確かめる手順。書き下ろしの教材用）
   :::topo ... :::               … ネットワーク図（座標指定の SVG・下記）
+  :::walk ... :::               … 1 ホップずつ追う図（設定の塊がパケットにどの順で効くか・下記。番号の所で設定例の行が出る）
   :::config <見出し> ... :::     … 設定例（左に設定の行・右に注記。行末の `  ## 注記` が注記の列へ。コピーは設定の行だけ）
   :::config fold <見出し> ... ::: … 同じく折りたたみ（課題の答えそのものになる例。見出しに「課題 … の答え」と書く）
   ```console ... ```            … 端末風（プロンプト行を強調）
@@ -37,6 +38,35 @@
     frames:
       - {label: "VTP ドメイン TST", nodes: [SW1, SW2, SW3]}
     :::
+
+:::walk — 入り組んだ設定(塊が別々の場所にあり、1 つのパケットに順に効く)を、パケットの道筋の上で見せる（YAML）。
+  2026-11-08 ユーザ指示「入り組んだコンフィグは図で解説してほしい」。上から下へ 1 行ずつ積む:
+
+    :::walk
+    legend: 線の上のパケットは左が外側。橙は書き換わった印。     # 図の上の凡例(任意)
+    rows:
+      - {node: CE2, kind: host, say: ["~音声に EF を付けて送る"]}   # 機器。say= 右に書く行(1〜2 行)
+      - {wire: "[[=18  tc 5]] [[IP  EF]] _外側= XR01 行き"}        # 線の上のパケット(1 行の文字列か行の並び)
+      - panel: XR01                                               # 機器を広げた枠。中に設定の塊を効く順に
+        sub: 出口の PE
+        items:
+          - {ref: 1, to: P1, code: "mpls ldp … explicit-null", say: ["P1 へ…と広告する"]}   # to= 制御の塊。破線で機器へ
+          - ref: 2                                                # 番号つきの塊(設定例の注記の ② と結ぶ)
+            head: "**Gi0/0/0/0 の入力** `service-policy input CORE-IN`"
+            say: ["_クラスを上から調べる"]
+            match:                                                # [行, 当たったか, 結果]
+              - ["class EXP5  match mpls experimental topmost 5", false, 当たらない]
+              - ["class EXP0  match mpls experimental topmost 0", true, "当たる → `set qos-group 7`"]
+            then: ["→ 当たった後に続く動作の行(任意)"]
+          - {say: ["~ここは QoS ではない", "[[IP  EF]] [[~qos-group 7]]"]}   # 番号なし= 破線の段
+      - {aside: "①を書かないと", say: ["~P1 が外す → [[=24007  tc 5]] ~→ ②は 5 を読む"]}  # 図の下の別の場合
+    :::
+
+  行の中の書き方: [[小箱]](先頭 = ラベル・! 書き換わった印(橙)・~ 装置の中だけの印(紫の破線)・無し= IP)。
+  文の頭の ~ 薄く・_ 小さく薄く・^ 橙の太字・+ 緑の太字。`コード`・**太字**。①〜⑨ は青い番号。
+  ★番号(ref と文中の①〜⑨)は、図の後ろの :::config(同じ章= 次の h2 か次の :::walk まで。設定例が節をまたいでよい)の、
+    注記の頭に同じ番号を付けた行と結ぶ。同じ番号の塊を図に 2 回置いてもよい(親のポリシーの入口と出口など)。
+    カーソルを置く(スマホは押す)と、その行と親の階層の行(塊の頭に付ければ塊ごと)を小窓に出し、設定例の行にも色を付ける。
 
 ★Mermaid(dagre)の自動配置は、環状・メッシュのトポロジだと線が交差して読めなくなる
   （実例: 正方形＋対角線の 4 台メッシュが縦一列に潰れた・2026-09-29 ユーザ指摘）。
@@ -217,6 +247,25 @@ body.reading .term pre.code code{ font-size:.845rem; }
 .topo .tf{ fill:#f8f5ee; stroke:#c3b48c; stroke-width:1.4; stroke-dasharray:7 5; }
 .topo .tfl{ font-family:"Segoe UI",system-ui,sans-serif; font-size:12px;
   fill:#8a7a52; font-weight:600; }
+
+/* ---- 1 ホップずつ追う図(:::walk)と、番号の所に出す設定の小窓(WALK_JS) ---- */
+svg.wk .wk-ref{ cursor:pointer; }
+svg.wk g.wk-ref:hover .wk-box, svg.wk g.wk-ref.on .wk-box{ stroke:#3f7fbf; stroke-width:2.2; }
+svg.wk tspan.wk-ref:hover, svg.wk tspan.wk-ref.on{ text-decoration:underline; }
+#wkpop{ position:fixed; z-index:90; box-sizing:border-box; width:max-content; max-width:min(40rem, calc(100vw - 16px));
+  background:#fff; color:#111; border:1px solid #c3c9d2; border-radius:7px; box-shadow:0 6px 24px rgba(20,30,45,.18);
+  padding:.5rem .7rem .6rem; font-size:.84rem; line-height:1.6; letter-spacing:0; text-align:left;
+  max-height:calc(100vh - 16px); overflow:auto; }
+#wkpop[hidden]{ display:none; }
+#wkpop .wp-h{ display:flex; gap:.45rem; align-items:baseline; margin:0 0 .35rem; }
+#wkpop .wp-n{ color:#3f7fbf; font-weight:700; font-size:1rem; }
+#wkpop .wp-t{ color:#5b6676; font-size:.8rem; }
+#wkpop pre{ margin:0; padding:.45rem .65rem; background:#fbfcfd; border:1px solid #dfe4ea; border-radius:5px;
+  font-family:"Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace; font-size:.78rem; line-height:1.55;
+  white-space:pre; overflow-x:auto; color:#14202e; }
+#wkpop pre .wp-sep{ color:#9aa3ad; }
+.cfg .cn .cref{ color:#3f7fbf; font-weight:700; margin-right:.15em; }
+.cfg .cr.wk-hl > .cc, .cfg .cr.wk-hl > .cn{ background:#fff3c4; }
 
 /* ---- 設定例(:::config)= 左に設定の行・右に「何をする行か」。注記は選択してもコピーされない ---- */
 .cfg{ display:block; margin:1.9rem 0; border:1px solid #cfd6df; border-radius:7px; background:#fbfcfd; overflow:hidden; }
@@ -483,6 +532,263 @@ def expand_topo(md_text):
 
 
 # --------------------------------------------------------------------------
+# 1 ホップずつ追う図(:::walk → SVG)。書き方は冒頭の docstring。
+#   2026-11-08 ユーザ指示「入り組んだコンフィグは図で解説してほしい」「図中の箇所に該当する config がホバーで出ると良い」。
+#   縦に積む(本文の幅 44rem に 1 対 1 で収まる幅 700)。文字の幅は見積もり(全角 1em・半角 0.56em)で並べるので、
+#   1 行の中で文の後ろに小箱を置く時は余白を多めに取る。図の中の番号と設定例の行の結び付けは WALK_JS が行う。
+# --------------------------------------------------------------------------
+WALK_RE = re.compile(r"^:::walk[ \t]*\n(.*?)^:::[ \t]*$", re.S | re.M)
+WK_GLYPHS = "①②③④⑤⑥⑦⑧⑨"
+WK_W, WK_SX, WK_RX = 700, 60, 140          # 図の幅・機器の列の中心・右の列の左端
+WK_SANS = '"Segoe UI",system-ui,"Hiragino Sans","Noto Sans CJK JP",sans-serif'
+WK_MONO = '"Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace'
+WK_INK, WK_MUTED, WK_BLUE, WK_HOT = "#1b2430", "#6b7685", "#3f7fbf", "#8a4b0f"
+WK_CHIP = {"": ("#ffffff", "#8f99a6", WK_INK, None), "=": ("#e8eef6", "#8da2bd", WK_INK, None),
+           "!": ("#fff1e0", "#d9822b", WK_HOT, None), "~": ("#f3eefb", "#8a6cc2", "#4b3480", "4 3")}
+WK_TONE = {"~": {"fill": WK_MUTED}, "_": {"fill": WK_MUTED, "size": 11.5}, "^": {"fill": WK_HOT, "weight": 600},
+           "+": {"fill": "#2f7d3b", "weight": 600}, "-": {"fill": "#9aa3ad"}}
+WK_CHIP_RE = re.compile(r"\[\[([=!~]?)(.*?)\]\]")
+WK_INLINE_RE = re.compile(r"(`[^`]+`|\*\*[^*]+\*\*|[①-⑨])")
+
+
+def _wk_w(s, size, mono=False):
+    """文字列の幅の見積もり(px)。"""
+    import unicodedata
+    w = 0.0
+    for c in s:
+        ea = unicodedata.east_asian_width(c)
+        if ea in ("W", "F"):
+            w += size
+        elif ea == "A" and not c.isascii():     # →・✓・…など。フォントで幅が変わるので中間を取る
+            w += size * 0.85
+        elif c == " " and not mono:
+            w += size * 0.3
+        else:
+            w += size * (0.6 if mono else 0.56)
+    return w
+
+
+def _wk_text(x, y, s, size=13, base=None, anchor="start"):
+    """1 つの <text> に、`コード`・**太字**・①〜⑨ を tspan で入れる。(svg, 見積もった幅)。"""
+    base = dict({"fill": WK_INK, "weight": 400}, **(base or {}))
+    spans, w = [], 0.0
+    for piece in WK_INLINE_RE.split(s):
+        if not piece:
+            continue
+        a, mono, cls = dict(base), False, ""
+        if piece.startswith("`") and piece.endswith("`") and len(piece) > 1:
+            piece, mono = piece[1:-1], True
+        elif piece.startswith("**") and piece.endswith("**") and len(piece) > 4:
+            piece, a["weight"] = piece[2:-2], 600
+        elif piece in WK_GLYPHS:
+            a, cls = {"fill": WK_BLUE, "weight": 700}, f' class="wk-ref" data-ref="{WK_GLYPHS.index(piece) + 1}"'
+        spans.append(f'<tspan{cls} font-family=\'{WK_MONO if mono else WK_SANS}\' fill="{a["fill"]}" '
+                     f'font-weight="{a["weight"]}">{html.escape(piece)}</tspan>')
+        w += _wk_w(piece, size, mono)
+    return (f'<text x="{x:.1f}" y="{y:.1f}" font-size="{size}" text-anchor="{anchor}" xml:space="preserve">'
+            + "".join(spans) + "</text>"), w
+
+
+def _wk_chip(x, cy, kind, s, size=12):
+    fill, stroke, ink, dash = WK_CHIP[kind]
+    w = _wk_w(s, size, True) + 16
+    d = f' stroke-dasharray="{dash}"' if dash else ""
+    return (f'<rect x="{x:.1f}" y="{cy - 11:.1f}" width="{w:.1f}" height="22" rx="3" fill="{fill}" stroke="{stroke}" '
+            f'stroke-width="1.2"{d}/><text x="{x + w / 2:.1f}" y="{cy + 4.5:.1f}" font-size="{size}" text-anchor="middle" '
+            f'font-family=\'{WK_MONO}\' fill="{ink}" xml:space="preserve">{html.escape(s)}</text>'), w
+
+
+def _wk_line(x, y, line, size=13, base=None):
+    """1 行(小箱と文の混在)を描く。y は文字のベースライン。(svg の並び, 右端)。"""
+    parts, pos = [], 0
+    for m in list(WK_CHIP_RE.finditer(line)) + [None]:
+        seg = line[pos:m.start()] if m else line[pos:]
+        if seg.strip():
+            lead = len(seg) - len(seg.lstrip(" "))
+            x += lead * size * 0.3
+            seg = seg.strip(" ")
+            b, sz = dict(base or {}), size
+            if seg[0] in WK_TONE:
+                tone = WK_TONE[seg[0]]
+                seg, sz = seg[1:].lstrip(" "), tone.get("size", size)
+                b.update({k: v for k, v in tone.items() if k != "size"})
+            svg, w = _wk_text(x, y, seg, sz, b)
+            parts.append(svg)
+            x += w * 1.08 + 8               # 後ろに小箱が来ても重ならないよう、見積もりより広めに空ける
+        elif seg:
+            x += 2
+        if m:
+            svg, w = _wk_chip(x, y - 4.5, m.group(1), m.group(2), size=min(12, size))
+            parts.append(svg)
+            x += w + 4
+            pos = m.end()
+    return parts, x
+
+
+def _wk_lines(v):
+    return [] if v is None else ([str(v)] if not isinstance(v, list) else [str(s) for s in v])
+
+
+def _wk_badge(cx, cy, n, r=10):
+    return (f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r}" fill="{WK_BLUE}"/>'
+            f'<text x="{cx:.1f}" y="{cy + r * 0.45:.1f}" font-size="{r * 1.25:.1f}" font-family=\'{WK_SANS}\' '
+            f'fill="#fff" font-weight="700" text-anchor="middle">{n}</text>')
+
+
+def _wk_rect(x, y, w, h, fill, stroke, rx=6, sw=1.2, dash=None, cls=""):
+    d = f' stroke-dasharray="{dash}"' if dash else ""
+    c = f' class="{cls}"' if cls else ""
+    return (f'<rect{c} x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" rx="{rx}" fill="{fill}" '
+            f'stroke="{stroke}" stroke-width="{sw}"{d}/>')
+
+
+def _wk_arrow(x, y1, y2, color="#44506080", sw=1.7):
+    k = 1 if y2 > y1 else -1
+    return (f'<line x1="{x}" y1="{y1:.1f}" x2="{x}" y2="{y2:.1f}" stroke="{color}" stroke-width="{sw}"/>'
+            f'<path d="M{x - 5},{y2 - 8 * k:.1f} L{x},{y2:.1f} L{x + 5},{y2 - 8 * k:.1f}" fill="none" '
+            f'stroke="{color}" stroke-width="{sw}"/>')
+
+
+def render_walk(src_yaml):
+    import yaml
+    spec = yaml.safe_load(src_yaml) or {}
+    W, SX, RX = WK_W, WK_SX, WK_RX
+    out, nodes, arrows = [], {}, []
+    y = 12
+    if spec.get("legend"):
+        out += _wk_line(RX, 18, "_" + str(spec["legend"]))[0]
+        y = 30
+    prev = None                                  # 道筋の線の始点(直前の機器・枠の下端)
+
+    def flow_to(top):
+        if prev is not None:
+            out.append(_wk_arrow(SX, prev, top))
+
+    for row in spec.get("rows") or []:
+        if "node" in row:                        # 機器
+            host = row.get("kind") == "host"
+            say = _wk_lines(row.get("say"))
+            lh = [26 if WK_CHIP_RE.search(ln) else 18 for ln in say]
+            h = max(34, sum(lh) + 4)
+            flow_to(y)
+            by = y + (h - 34) / 2
+            out.append(_wk_rect(SX - 40, by, 80, 34, "#ffffff" if host else "#eef1f5",
+                                "#5a6472" if host else "#2f3b4a", rx=16 if host else 5, sw=1.6))
+            out.append(_wk_text(SX, by + 22, str(row["node"]), 14, {"weight": 600}, anchor="middle")[0])
+            nodes[str(row["node"])] = by + 17
+            yy = y + h / 2 - sum(lh) / 2
+            for ln, l in zip(say, lh):
+                out += _wk_line(RX, yy + l / 2 + 4.5, ln)[0]
+                yy += l
+            y += h
+            prev = y
+        elif "wire" in row:                      # 線の上のパケット
+            lines = _wk_lines(row["wire"])
+            for i, ln in enumerate(lines):
+                out += _wk_line(RX, y + 24.5 + 26 * i, ln)[0]
+            y += 40 + 26 * (len(lines) - 1)
+        elif "panel" in row:                     # 機器を広げた枠
+            top = y
+            flow_to(top)
+            at = len(out)
+            out.append("")
+            out.append(_wk_text(34, top + 24, str(row["panel"]), 14, {"weight": 600})[0])
+            if row.get("sub"):
+                out.append(_wk_text(34, top + 42, str(row["sub"]), 11.5, {"fill": WK_MUTED})[0])
+            cy, last = top + 54, None
+            items = row.get("items") or []
+            for it in items:
+                if it.get("to"):                 # 制御の塊(枠の見出しの右・破線で機器へ)
+                    ux, uy = 118, top + 10
+                    say = _wk_lines(it.get("say"))
+                    uh = 30 + 19 * len(say)
+                    g = [_wk_rect(ux, uy, W - 26 - ux, uh, "#f2f7fc", WK_BLUE, dash="5 4", cls="wk-box")]
+                    if it.get("ref"):
+                        g.append(_wk_badge(ux + 18, uy + 15, it["ref"]))
+                    g += _wk_line(ux + 36, uy + 20, "`" + str(it.get("code", "")) + "`", 12)[0] if it.get("code") else []
+                    for i, ln in enumerate(say):
+                        g += _wk_line(ux + 36, uy + 39 + 19 * i, ln, 11.5, {"fill": WK_BLUE})[0]
+                    out.append(f'<g class="wk-ref" data-ref="{it["ref"]}">' + "".join(g) + "</g>" if it.get("ref")
+                               else "".join(g))
+                    arrows.append((ux, uy + 24, str(it["to"])))
+                    cy = max(cy, uy + uh + 14)
+                    continue
+                if last is not None:
+                    out.append(_wk_arrow(SX, last, cy + 26))
+                    cy += 26
+                g = []
+                if it.get("ref"):                # 番号つきの塊
+                    say, match, then = _wk_lines(it.get("say")), it.get("match") or [], _wk_lines(it.get("then"))
+                    gap = lambda ln: 26 if WK_CHIP_RE.search(ln) else 18
+                    h = 30 + sum(gap(ln) for ln in say + then) + 20 * len(match) + (6 if match else 0)
+                    h += 8 if any(WK_CHIP_RE.search(ln) for ln in say + then) else 0   # 小箱の行の下に余白
+                    h += 4 if then and match else 0
+                    g.append(_wk_rect(36, cy, W - 62, h, "#ffffff", "#c9d2dd", cls="wk-box"))
+                    g.append(_wk_badge(54, cy + 18, it["ref"]))
+                    g += _wk_line(72, cy + 23, str(it.get("head", "")))[0]
+                    yy = cy + 23
+                    for ln in say:
+                        yy += gap(ln)
+                        g += _wk_line(72, yy, ln, 11.5, {"fill": WK_MUTED})[0]
+                    rx_ = max(300, 72 + max([_wk_w(str(m[0]), 12, True) for m in match] or [0]) + 24)
+                    for code, hit, res in match:
+                        yy += 20
+                        if hit:
+                            g.append(_wk_rect(66, yy - 14, W - 102, 20, "#eaf5ec", "#eaf5ec", rx=3, sw=0))
+                        g.append(_wk_text(72, yy, "`" + str(code) + "`", 12,
+                                          None if hit else {"fill": "#9aa3ad"})[0])
+                        g += _wk_line(rx_, yy, ("+✓ " if hit else "-✗ ") + str(res), 12)[0]
+                    for ln in then:
+                        yy += gap(ln) + (4 if ln is then[0] and match else 0)
+                        g += _wk_line(72, yy, ln, 12)[0]
+                    out.append(f'<g class="wk-ref" data-ref="{it["ref"]}">' + "".join(g) + "</g>")
+                else:                            # 番号なしの段(QoS ではない処理など)
+                    say = _wk_lines(it.get("say"))
+                    lh = [26 if WK_CHIP_RE.search(ln) or i else 22 for i, ln in enumerate(say)]
+                    h = 14 + sum(lh)
+                    out.append(_wk_rect(36, cy, W - 62, h, "#fbfbfb", "#b8c0ca", dash="5 4"))
+                    yy = cy - 1
+                    for ln, l in zip(say, lh):
+                        yy += l
+                        out += _wk_line(54, yy, ln, 12.5)[0]
+                last = cy + h
+                cy += h
+            bot = (last if last is not None else cy) + 14
+            out[at] = _wk_rect(20, top, W - 30, bot - top, "#f7f9fc", "#2f3b4a", rx=10, sw=1.6)
+            y = bot
+            prev = y
+        elif "aside" in row:                     # 図の下の別の場合
+            y += 22
+            say = _wk_lines(row.get("say"))
+            h = 42 + 26 * len(say)
+            out.append(_wk_rect(20, y, W - 30, h, "#f4f4f2", "#c9c4b4", rx=8, dash="6 4"))
+            out += _wk_line(34, y + 23, str(row["aside"]), 12.5, {"fill": "#5f5a4a", "weight": 600})[0]
+            for i, ln in enumerate(say):
+                out += _wk_line(34, y + 53 + 26 * i, ln, 12)[0]
+            y += h
+            prev = None
+        if row.get("gap"):
+            y += float(row["gap"])
+    ax = 112
+    for ux, uy, to in arrows:                    # 制御の塊 → 機器(破線)
+        ny = nodes.get(to)
+        if ny is None:
+            print(f"[walk] warning: unknown node {to!r} in `to:`", file=sys.stderr)
+            continue
+        out.append(f'<path d="M{ux},{uy:.1f} L{ax},{uy:.1f} L{ax},{ny:.1f} L{SX + 44},{ny:.1f}" fill="none" '
+                   f'stroke="{WK_BLUE}" stroke-width="1.4" stroke-dasharray="5 4"/>'
+                   f'<path d="M{SX + 52},{ny - 5:.1f} L{SX + 43},{ny:.1f} L{SX + 52},{ny + 5:.1f}" fill="none" '
+                   f'stroke="{WK_BLUE}" stroke-width="1.4"/>')
+    H = y + 10
+    return (f'<div class="topo walk"><svg class="wk" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H:.0f}" '
+            f'width="{W}" style="width:{W / 16:.2f}rem" role="img">' + "".join(out) + "</svg></div>")
+
+
+def expand_walk(md_text):
+    return WALK_RE.sub(lambda m: "\n" + render_walk(m.group(1)) + "\n", md_text)
+
+
+# --------------------------------------------------------------------------
 # 設定例(:::config → 注記つきの設定の欄)
 #   2026-10-31 ユーザ指示「config 例を常に提示して。まとまった形で見せてもらわないと知識が断片化する」。
 #   設定の行と「何をする行か」を左右に並べる(狭い画面では注記を行の下へ)。コピーのボタンと手での選択は設定の行だけを取る。
@@ -499,13 +805,45 @@ def _cfg_inline(s):
     return re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", s)
 
 
+def _cfg_refs(rows):
+    """:::walk の番号との結び付け。注記の頭に①〜⑨を付けた行と、その親の階層の行・子の行(字下げで判断)に番号を持たせる。"""
+    ind = [len(c) - len(c.lstrip(" ")) for c, _n in rows]
+    real = [bool(c.strip()) and c.strip() != "!" for c, _n in rows]
+    refs = [set() for _ in rows]
+    for i, (code, note) in enumerate(rows):
+        if not note or note[0] not in WK_GLYPHS:
+            continue
+        n = WK_GLYPHS.index(note[0]) + 1
+        refs[i].add(n)
+        for j in range(i + 1, len(rows)):        # 子(字下げの深い行)。XR の RPL などの締め(end-policy・end-set)も塊に入れる
+            if not rows[j][0].strip() or (ind[j] <= ind[i] and rows[j][0].strip()):
+                if ind[j] == ind[i] and rows[j][0].strip().startswith("end-"):
+                    refs[j].add(n)
+                break
+            refs[j].add(n)
+        cur = ind[i]
+        for j in range(i - 1, -1, -1):           # 親(字下げの浅い行をたどる)
+            if cur == 0:
+                break
+            if real[j] and ind[j] < cur:
+                refs[j].add(n)
+                cur = ind[j]
+    return refs
+
+
 def render_config(fold, title, body):
-    rows = []
+    parsed = []
     for ln in body.rstrip("\n").split("\n"):
         m = CFG_NOTE_RE.search(ln)
-        code, note = (ln[:m.start()], m.group(1).strip()) if m else (ln, "")
-        rows.append(f'<span class="cr"><code class="cc">{html.escape(code.rstrip()) or " "}</code>'
-                    f'<span class="cn">{_cfg_inline(note)}</span></span>')
+        parsed.append((ln[:m.start()], m.group(1).strip()) if m else (ln, ""))
+    rows = []
+    for (code, note), refs in zip(parsed, _cfg_refs(parsed)):
+        note_html = _cfg_inline(note)
+        if note and note[0] in WK_GLYPHS:
+            note_html = f'<span class="cref">{note[0]}</span>' + note_html[1:]
+        ref = f' data-ref="{" ".join(str(n) for n in sorted(refs))}"' if refs else ""
+        rows.append(f'<span class="cr"{ref}><code class="cc">{html.escape(code.rstrip()) or " "}</code>'
+                    f'<span class="cn">{note_html}</span></span>')
     head = (f'<span class="ctag">{_w("config")}</span><span class="ctitle">{_cfg_inline(title.strip())}'
             + (f' <span class="cfold">{_w("open")}</span>' if fold else "") + "</span>"
             f'<button type="button" class="ccopy" data-done="{_w("copied")}">{_w("copy")}</button>')
@@ -521,7 +859,7 @@ def expand_config(md_text):
 
 def expand_blocks(md_text):
     """ソースの独自記法(図・設定例・囲み)を開く。設定例は囲みより先(:::try の中の設定例の閉じを囲みの閉じと取り違えない)。"""
-    return expand_containers(expand_config(expand_topo(md_text)))
+    return expand_containers(expand_config(expand_walk(expand_topo(md_text))))
 
 
 # 設定例のコピー(配信のページは http= 安全でない文脈なので clipboard API が無い→ textarea で写す)
@@ -1021,10 +1359,136 @@ FIG_JS = r"""
   document.addEventListener('click', function(e){
     if(e.button !== 0 || e.defaultPrevented) return;
     var t = e.target;
-    if(!t.closest || t.closest('#figbig') || t.closest('a')) return;
+    if(!t.closest || t.closest('#figbig') || t.closest('a') || t.closest('.wk-ref')) return;   /* 図の番号は設定の小窓(WALK_JS) */
     var fig = t.closest('.topo svg') || t.closest('pre.mermaid svg') || (t.tagName === 'IMG' && t.closest('main') ? t : null);
     if(fig) open(fig);
   });
+})();
+"""
+
+
+# :::walk の番号 → 設定例の行(2026-11-08 ユーザ要望「図中の箇所に該当する config がホバーで(辞書のように)出ると良い」)。
+#   図と設定例の結び付け= 図の後ろ・同じ章(次の h2 か次の図)までの設定例(2 言語の版はそれぞれの中で結ぶ)。
+#   出し方は用語集(GLOSS_JS)にそろえる: カーソルを 0.3 秒置くと出す・押す(スマホはタップ)と固定・外側を押すか Esc で閉じる。
+#   拡大表示(FIG_JS)の中の図でも出す(写しの svg も data-walk を持つ)。押した所は pointerdown で覚える
+#   (拡大表示は移動のためにポインタを捕まえるので、click の宛先が図の部品にならない)。
+WALK_JS = r"""
+(function(){
+  var figs = document.querySelectorAll('svg.wk');
+  if(!figs.length) return;
+  [].forEach.call(figs, function(svg, k){
+    var id = 'wk' + k, n = svg.closest('.walk');
+    svg.setAttribute('data-walk', id);
+    for(n = n && n.nextElementSibling; n && n.tagName !== 'H2' && !n.classList.contains('walk'); n = n.nextElementSibling){
+      if(n.classList.contains('cfg')) n.setAttribute('data-walk', id);
+    }
+  });
+  var fine = !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
+  var G = '①②③④⑤⑥⑦⑧⑨';
+  var pop = null, anchor = null, pinned = false, tShow = null, tHide = null, hoverEl = null, lit = [], down = null;
+  function make(){
+    pop = document.createElement('div'); pop.id = 'wkpop'; pop.hidden = true; pop.setAttribute('role', 'dialog');
+    document.body.appendChild(pop);
+    pop.addEventListener('mouseenter', function(){ clearTimeout(tHide); });
+    pop.addEventListener('mouseleave', function(){ if(!pinned) hideSoon(); });
+  }
+  function fill(el){
+    var svg = el.closest('svg.wk'), n = el.getAttribute('data-ref');
+    var cfgs = svg ? document.querySelectorAll('.cfg[data-walk="' + svg.getAttribute('data-walk') + '"]') : [];
+    var box = document.createDocumentFragment(), found = false;
+    [].forEach.call(cfgs, function(c){
+      var rows = [].slice.call(c.querySelectorAll('.cr')), last = -1, lines = [];
+      rows.forEach(function(r, i){
+        if((' ' + (r.getAttribute('data-ref') || '') + ' ').indexOf(' ' + n + ' ') < 0) return;
+        var code = r.querySelector('.cc').textContent.replace(/\s+$/, '');
+        if(last >= 0 && i > last + 1 && lines.length && lines[lines.length - 1] !== '!'){
+          var ind = code.length - code.replace(/^ +/, '').length;
+          lines.push(ind ? '\u0000' + new Array(ind + 1).join(' ') + '\u2026' : '\u0000!');
+        }
+        lines.push(code);
+        last = i; lit.push(r);
+      });
+      if(!lines.length) return;
+      found = true;
+      var h = document.createElement('div'); h.className = 'wp-h';
+      var b = document.createElement('span'); b.className = 'wp-n'; b.textContent = G.charAt(n - 1);
+      var t = document.createElement('span'); t.className = 'wp-t';
+      var ct = c.querySelector('.ctitle');
+      if(ct){ ct = ct.cloneNode(true); var f = ct.querySelector('.cfold'); if(f) f.parentNode.removeChild(f); t.textContent = ct.textContent.trim(); }
+      h.appendChild(b); h.appendChild(t); box.appendChild(h);
+      var pre = document.createElement('pre');
+      lines.forEach(function(l, i){
+        if(i) pre.appendChild(document.createTextNode('\n'));
+        if(l.charAt(0) === '\u0000'){ var s = document.createElement('span'); s.className = 'wp-sep'; s.textContent = l.slice(1); pre.appendChild(s); }
+        else pre.appendChild(document.createTextNode(l));
+      });
+      box.appendChild(pre);
+    });
+    if(!found) return false;
+    while(pop.firstChild) pop.removeChild(pop.firstChild);
+    pop.appendChild(box);
+    lit.forEach(function(r){ r.classList.add('wk-hl'); });
+    return true;
+  }
+  function place(){
+    if(!anchor || !pop || pop.hidden) return;
+    var r = anchor.getBoundingClientRect(), vw = document.documentElement.clientWidth, vh = window.innerHeight, m = 8;
+    if(r.bottom < 0 || r.top > vh){ hide(); return; }
+    pop.style.left = '0px'; pop.style.top = '0px';
+    var pw = pop.offsetWidth, ph = pop.offsetHeight, left, top;
+    var svg = anchor.closest('svg.wk'), sr = svg ? svg.getBoundingClientRect() : r;
+    var side = Math.min(Math.max(m, r.top), Math.max(m, vh - ph - m));
+    if(vw - sr.right - 2 * m >= pw){ left = sr.right + m; top = side; }          /* 図の横に余白があれば横へ(図を隠さない) */
+    else if(sr.left - 2 * m >= pw){ left = sr.left - pw - m; top = side; }
+    else {                                                                      /* 無ければ番号の下(入らなければ上) */
+      top = r.bottom + 6;
+      if(top + ph > vh - m && r.top - 6 - ph >= m) top = r.top - 6 - ph;
+      left = Math.max(m, Math.min(r.left, vw - pw - m));
+    }
+    pop.style.left = left + 'px';
+    pop.style.top = Math.max(m, top) + 'px';
+  }
+  function unlit(){ lit.forEach(function(r){ r.classList.remove('wk-hl'); }); lit = []; }
+  function show(el, pin){
+    if(!pop) make();
+    clearTimeout(tShow); clearTimeout(tHide);
+    if(anchor) anchor.classList.remove('on');
+    unlit();
+    if(!fill(el)){ anchor = null; pop.hidden = true; return; }
+    anchor = el; pinned = !!pin;
+    /* カーソルで出している間は小窓がカーソルを遮らない(下の図の番号へそのまま移れる)。押して固定したら触れる */
+    pop.style.pointerEvents = pinned ? 'auto' : 'none';
+    pop.hidden = false; el.classList.add('on'); place();
+  }
+  function hide(){
+    clearTimeout(tShow); clearTimeout(tHide);
+    if(pop) pop.hidden = true;
+    if(anchor) anchor.classList.remove('on');
+    unlit(); anchor = null; pinned = false;
+  }
+  function hideSoon(){ clearTimeout(tHide); tHide = setTimeout(hide, 250); }
+  function refOf(t){ return t && t.closest ? t.closest('svg.wk .wk-ref') : null; }
+  if(fine){
+    document.addEventListener('mousemove', function(e){
+      if(e.movementX === 0 && e.movementY === 0) return;
+      var g = refOf(e.target);
+      if(g === hoverEl) return;
+      hoverEl = g; clearTimeout(tShow);
+      if(g){ clearTimeout(tHide); if(anchor !== g) tShow = setTimeout(function(){ show(g, false); }, 300); }
+      else if(anchor && !pinned && !(pop && pop.contains(e.target))) hideSoon();
+    });
+  }
+  document.addEventListener('pointerdown', function(e){ down = {t: e.target, x: e.clientX, y: e.clientY}; }, true);
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    if(down && t.closest && t.closest('#figbig') && Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y) < 6) t = down.t;
+    var g = refOf(t);
+    if(g){ if(anchor === g && pinned){ hide(); return; } show(g, true); return; }
+    if(pop && !pop.hidden && !pop.contains(e.target)) hide();
+  });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') hide(); });
+  window.addEventListener('scroll', place, {passive: true});
+  window.addEventListener('resize', place);
 })();
 """
 
@@ -1104,7 +1568,7 @@ def build_page(src, meta, i, out_dir, mermaid_mode):
         if p["_gl_hits"]:
             gl_tail = (GL.popup_data(meta["_gl"], {h[0] for h in p["_gl_hits"]}, "glossary.html")
                        + f"\n<script>{GL.GLOSS_JS}</script>\n")
-    out = out.replace("</body>", f"{reading_nav(meta, i)}\n<script>{READ_JS}</script>\n<script>{CFG_JS}</script>\n<script>{FIG_JS}</script>\n{gl_tail}</body>", 1)
+    out = out.replace("</body>", f"{reading_nav(meta, i)}\n<script>{READ_JS}</script>\n<script>{CFG_JS}</script>\n<script>{FIG_JS}</script>\n<script>{WALK_JS}</script>\n{gl_tail}</body>", 1)
     out = _finish_lang(lazy_images(wrap_tables(termify(out))))
     dst = os.path.join(out_dir, p["html"])
     with open(dst, "w", encoding="utf-8") as fh:
@@ -1406,7 +1870,7 @@ def _assemble(meta, pages, title, dst):
             sec = GL.bundle_section(gl, ids, refs, _LANG, _gl_page_ref(meta, _LANG, pages))
             out = out.replace("</main>", sec + "</main>", 1)
             gl_tail = GL.popup_data(gl, set(refs), "") + f"\n<script>{GL.GLOSS_JS}</script>\n"
-    out = out.replace("<body", '<body id="top"', 1).replace("</body>", f"<script>{CFG_JS}</script>\n<script>{FIG_JS}</script>\n{gl_tail}</body>", 1)
+    out = out.replace("<body", '<body id="top"', 1).replace("</body>", f"<script>{CFG_JS}</script>\n<script>{FIG_JS}</script>\n<script>{WALK_JS}</script>\n{gl_tail}</body>", 1)
     out = _finish_lang(inline_images(wrap_tables(termify(out)), os.path.dirname(pages[0]["_path"])))
     os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
     with open(dst, "w", encoding="utf-8") as fh:

@@ -91,9 +91,9 @@ XRv 9000 26.1.1 には、`key chain` の下の `macsec` はありましたが、
 動作は拡張コミュニティ(速さの上限= 0 なら捨てる、VRF への寄せ、DSCP の付け替えなど。7 節)です。
 
 IOS XR では、規則を QoS と同じ MQC の形で書き(`class-map type traffic` と `policy-map type pbr`)、`flowspec` の下で配ります。
-このラボで試した形は次のとおりです(RR1 が規則を作って配り、XR01 が受け取る)。
+この盤面での形は次のとおりです(RR1 が規則を作って配り、XR01 が受け取る)。
 
-:::config RR1(XRd)と XR01 — FlowSpec の規則を配る・受け取る(試した設定。XRv 9000 は規則を当てられない)
+:::config RR1(XRd)と XR01 — FlowSpec の規則を配る・受け取る(XRv 9000 は規則を当てられない)
 class-map type traffic match-all FS-ATTACK   ## 条件(RR1)
  match destination-address ipv4 198.51.100.129 255.255.255.255
  match protocol icmp

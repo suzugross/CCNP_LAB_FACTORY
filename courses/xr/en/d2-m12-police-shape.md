@@ -2,8 +2,7 @@
 
 The previous page marked the packets to tell the core which class they belong to. This page uses those marks to decide
 quantities: what to do with traffic beyond the contracted rate (policing), and how to line packets up at a busy exit
-(shaping and queuing). It covers 4.5.b of the blueprint (congestion avoidance, traffic policing and shaping). The output
-was taken on the same board as the previous page.
+(shaping and queuing). It covers 4.5.b of the blueprint (congestion avoidance, traffic policing and shaping).
 
 ## 1. What it is good for
 
@@ -130,7 +129,9 @@ what is left equally.
 
 "Shape each customer to 2 Mbps, and within those 2 Mbps send voice first" takes a policy in two tiers.
 
-- **Parent**: shapes all packets (`class-default`) to 2 Mbps. A parent policy in IOS XR can only have `class-default`.
+- **Parent**: shapes all packets (`class-default`) to 2 Mbps. Give the parent only `class-default`. A packet enters only
+  one class at each level, so a packet that matches another class in the parent never passes through the child and
+  never enters the priority queue (IOS XRv 9000 commits such a parent without an error).
 - **Child**: builds the queues per class (the priority one and the rest) within the 2 Mbps the parent sends. Write
   `service-policy <child>` under the parent's `class-default` (without the `input`/`output` keyword).
 
@@ -227,8 +228,43 @@ Child Policer Violate: DROP
 The parent shapes to 100 kbps; the child gives EF priority (up to 32 kbps). For the child's remaining class, it sets the
 queue length.
 
+The parent and the child are nested by name: the interface points to the parent, and the parent's class-default
+points to the child. The figure follows the packets towards site 1; rest the pointer on a number (or tap it on a phone)
+to see that part of the configuration.
+
+:::walk
+rows:
+  - {node: P1, say: ["~Voice (EF) and 1000-byte data for site 1 arrive"]}
+  - {wire: "[[IP EF]] [[IP data]] [[IP data]]"}
+  - panel: XR01
+    sub: exit to site 1 (Gi0/0/0/1 output)
+    items:
+      - ref: 1
+        head: "**Parent** `service-policy output CE-OUT`"
+        say: ["The parent has class-default only: every packet enters it and goes to the child"]
+        match:
+          - ["class class-default", true, "all → `service-policy CE-OUT-CHILD`"]
+      - ref: 2
+        head: "**Child** `policy-map CE-OUT-CHILD` sorts and queues what the parent hands over"
+        match:
+          - ["class VOICE  match dscp ef", true, "EF → priority queue"]
+          - ["class class-default", true, "data → queue for the rest"]
+        then:
+          - "[[IP EF]] priority queue (`priority level 1`, capped by `police rate 32 kbps`)"
+          - "[[IP data]] [[IP data]] queue for the rest (`queue-limit 20 packets`)"
+      - ref: 3
+        head: "**The parent's shaper** `shape average 100 kbps`"
+        say: ["Sends what the child's queues give, at 100 kbps for the whole exit; the excess waits"]
+  - {wire: "[[IP EF]] [[IP data]] _100 kbps in all"}
+  - {node: CE1, kind: host}
+  - aside: "If the parent has a class other than class-default"
+    say:
+      - "~A packet that enters that class in the parent skips the child: it never reaches the priority"
+      - "~queue and waits in the queue for the rest. The configuration still commits"
+:::
+
 :::config fold XR01 — shape the exit to site 1 and send voice first
-policy-map CE-OUT-CHILD                       ## The child decides the order
+policy-map CE-OUT-CHILD                       ## ② The child decides the order
  class VOICE
   priority level 1                            ## The priority queue
   police rate 32 kbps                         ## Priority needs an upper limit
@@ -239,14 +275,14 @@ policy-map CE-OUT-CHILD                       ## The child decides the order
  !
  end-policy-map
 !
-policy-map CE-OUT                             ## The parent decides the amount; it can only have class-default
+policy-map CE-OUT                             ## ① The parent decides the amount; class-default only
  class class-default
-  shape average 100 kbps
+  shape average 100 kbps                      ## ③ the rate of the whole exit
   service-policy CE-OUT-CHILD                 ## Put the child in, without input/output
  !
  end-policy-map
 !
-interface GigabitEthernet0/0/0/1
+interface GigabitEthernet0/0/0/1              ## ① apply the parent to the output
  service-policy output CE-OUT
 :::
 
@@ -296,14 +332,14 @@ policy-map CE-OUT-CHILD
  end-policy-map
 :::
 
-XRv 9000 accepts this configuration, but `RED random drops` and `Taildropped` in `show policy-map interface` stayed at
-0, and no drops were shown (section 2.7). On real ASR 9000 routers and the like, these counts rise.
+XRv 9000 accepts this configuration, but the counts where WRED shows its drops, `RED random drops` and `Taildropped` in
+`show policy-map interface`, stayed at 0 (section 2.7).
 
 ### 3.4 Writing it in IOS XE
 
 In IOS XE, the differences are the unit of a policer's rates (bps by default) and the way the excess is re-marked.
 
-:::config PE2 (IOS XE) — a two-rate, three-colour policer for business data (tried in the lab for comparison)
+:::config PE2 (IOS XE) — a two-rate, three-colour policer for business data
 policy-map POLICE-DATA
  class DATA
   police cir 256000 pir 512000                ## Written in bps
@@ -312,8 +348,8 @@ policy-map POLICE-DATA
    violate-action drop
 :::
 
-Applied for a moment on PE2 in the lab, `show policy-map POLICE-DATA` showed `police cir 256000 bc 8000 pir 512000 be
-16000`, adding the default bursts (bc and be, in bytes).
+Once it is applied, `show policy-map POLICE-DATA` shows `police cir 256000 bc 8000 pir 512000 be 16000`, adding the
+default bursts (bc and be, in bytes).
 
 ### 3.5 Checking it
 
@@ -334,7 +370,7 @@ configuration).
 3. Look at `show policy-map interface GigabitEthernet0/0/0/1 input` on XR01 straight away, and again 30 seconds later.
    On CE2, look at `show policy-map interface Ethernet0/0 input`.
 
-Measured in the lab: looked at straight away, XR01's counts for the DATA class were 0, Matched and every colour alike.
+An example result: looked at straight away, XR01's counts for the DATA class were 0, Matched and every colour alike.
 Thirty seconds later they were Matched 924, with 15 conforming, 15 exceeding and 894 violating (dropped). CE2's
 `COUNT-DSCP` counted 15 in D-AF21 and 15 in D-AF22, matching XR01's conform and exceed counts.
 :::
@@ -347,6 +383,7 @@ shaping and priority of this page.
 <p class="tolab"><a href="/_learn?id=XRT-14">Open lab XRT-14 in the workspace</a> — <a href="d3-m12-practice-2.html">Tasks M12-2 and M12-3</a></p>
 
 :::note
+The output on this page was taken on the same board as the previous page.
 Sources: RFC 2698 (trTCM), RFC 2597 (section 4), RFC 3246 (section 2). The ASR 9000 Modular QoS Configuration Guide and
 Modular QoS Command Reference (IOS XR 24.x: the syntax and units of `police`, the 64 kbps minimum and default burst,
 `shape average`, `priority level` and its policer, `bandwidth remaining`, `queue-limit`, `random-detect` and its queue

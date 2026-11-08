@@ -12,8 +12,7 @@
 | 付録 | フレキシブル アルゴリズム、SRv6、SID の衝突 | — |
 
 ラボは XRT-10 です。ラボ XRT-09 の続きで、同じ四角形のコア、同じ VPN の顧客、M9 の課題を終えた XR01 と XR02 です。
-IOS ルータは既に SR を動かしていて、XR01 が LDP から移る最後のルータです。出力は IOS XRv 9000 26.1.1(XR01)、
-IOS XRd 26.1.1(XR02)、IOL 上の IOS XE 17.15(他のルータ)で取得しました。
+IOS ルータは既に SR を動かしていて、XR01 が LDP から移る最後のルータです。
 
 :::topo
 nodes:
@@ -401,7 +400,7 @@ RT01#show logging | include SID
 ```
 
 BGP の行が関係するのは、BGP がプレフィックス SID を使うときだけです。ガイドは、ブロックの変更は通信を乱し、新しい
-ラベルが既に使われていれば再起動が要ると警告しています。ラボではラベルが空いていて、変更は約 5 秒で済みました。
+ラベルが既に使われていれば再起動が要ると警告しています。ラボではラベルが空いていて、変更は約 5 秒で済みます。
 
 :::try
 LDP が無くなった後で、もう一度ブロックを縮めます。課題 M10-2 の後に行います。
@@ -411,7 +410,7 @@ LDP が無くなった後で、もう一度ブロックを縮めます。課題 
    CEA1 で `ping 10.101.2.1 source Loopback10` を、RT01 で `show logging | include SID` を実行します。
 3. 行を外して(`no global-block`)コミットし、同じコマンドをもう一度実行します。
 
-ラボで測った結果: 15 秒以内に、XR01 のラベルの表には自分のプレフィックス(16001)だけが残りました。CEF では両方の顧客の
+結果の例: 15 秒以内に、XR01 のラベルの表には自分のプレフィックス(16001)だけが残りました。CEF では両方の顧客の
 VPN のルートが `unresolved` と `drop adjacency` になり、顧客 A の SR ポリシーは `Last error: unresolved first label (16013)` で
 down になりました。CEA1 と CEB1 からサイト 2 への ping は失敗し(0 percent)、RT01 は
 `%CLNS-4-SIDRANGE: Prefix-sid index 13 for 10.255.0.13/32 is out of SRGB range 10 via 10.0.1.1` をログに出しました。行を外すと、
@@ -426,8 +425,8 @@ SR と LDP は、問題なく並んで動きます。ラベルを別々の範囲
 あるプレフィックスに両方のラベルを持つルータは、パケットにどちらを付けるかを選ばなければなりません。RFC 8661 は、
 既定では LDP のラベルを選ぶべきだとしていて、IOS XR はそうします。
 
-そのため、IS-IS で SR を有効にしただけでは、XR01 は LDP のラベルで送り続けます。ラボでは、RT02 に向けて RT01 の LDP の
-ラベルのままでした(ある構築では `labels imposed {18}`。LDP のラベルは構築のたびに変わります)。IS-IS のアドレス ファミリー
+そのため、IS-IS で SR を有効にしただけでは、XR01 は LDP のラベルで送り続けます。RT02 に向けては RT01 の LDP の
+ラベルのままです(ある構築では `labels imposed {18}`。LDP のラベルは構築のたびに変わります)。IS-IS のアドレス ファミリー
 の `segment-routing mpls sr-prefer` が、この選択を逆にします。
 
 ```console
@@ -462,7 +461,7 @@ LDP への向きだけだとしています。
 2. XR01 で `show cef 10.255.0.12/32 detail` と `show cef vrf CUST-A 10.101.2.0/24 detail` を実行します。
 3. `sr-prefer` を戻してコミットし、同じコマンドを実行します。
 
-ラボで測った結果: コミットから 15 秒以内に、XR01 は RT01 の LDP のラベルに戻りました。RT02 に向けて `labels imposed {18}`、
+結果の例: コミットから 15 秒以内に、XR01 は RT01 の LDP のラベルに戻りました。RT02 に向けて `labels imposed {18}`、
 顧客 A のルートは `{18 26}` です。`sr-prefer` を戻すと、再び `{16012}` と `{16012 26}` を表示しました(LDP のラベルと VPN の
 ラベルはある構築のもので、構築のたびに変わります)。
 :::
@@ -538,7 +537,7 @@ router isis CORE
    `show ip route 10.255.0.1` を実行します。
 3. 行を外してコミットします。
 
-ラボで測った結果: XR01 は RT03 へのリンクを 16777214、RT01 へのリンクを 10 でアドバタイズしました。RT02 も XR01 の LSP で
+結果の例: XR01 は RT03 へのリンクを 16777214、RT01 へのリンクを 10 でアドバタイズしました。RT02 も XR01 の LSP で
 同じものを見て、10.255.0.1 へのルートは RT01 経由のメトリック 20 のまま、自分の TI-LFA の迂回の道は RT03 経由でした。
 行を外すと、RT03 へのリンクのメトリックは 100 に戻りました。
 :::
@@ -562,6 +561,7 @@ router isis CORE
 <p class="tolab"><a href="/_learn?id=XRT-10">ワークスペースでラボ XRT-10 を開く</a> — <a href="a1-m10-practice.html">課題</a></p>
 
 :::note
+このページの出力は、IOS XRv 9000 26.1.1(XR01)、IOS XRd 26.1.1(XR02)、IOL 上の IOS XE 17.15(他のルータ)で取得しました。
 出典: Segment Routing Configuration Guide for the ASR 9000, IOS XR 26.1.x–26.3.x(2026。SRGB と SRLB、IS-IS の SR、マッピング
 サーバ)とそのコマンド リファレンス(2025)。Cisco 8000 の SR のガイド、リリース 24.x(IS-IS)。IOS XE Segment Routing
 Configuration Guide(2026。IS-IS の SR)。TAC の文書「Segment Routing Overview and Migration Guidelines」(2020)。RFC 8402、

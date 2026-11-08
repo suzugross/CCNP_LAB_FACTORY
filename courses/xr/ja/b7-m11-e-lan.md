@@ -14,8 +14,7 @@
 ラボは **XRT-12** です。IOS XRv 9000 はブリッジ ドメインを拒否し、CFM もない(付録)ので、ここでは PE を
 **Catalyst 8000V**(IOS XE 17.15.1a)にしています。EVPN と CFM の仕組みは OS によりません。経路の種類、イーサネット
 セグメント、メンテナンス レベルは IOS XR でも同じです。各節では、IOS XE の形の後に、IOS XR の形を Cisco の
-コンフィギュレーション ガイドの形で示します。出力は Catalyst 8000V 17.15.1a(XE1〜XE3)と IOL の IOS XE 17.15
-(P1、CE、SW1)で取りました。
+コンフィギュレーション ガイドの形で示します。
 
 :::topo
 nodes:
@@ -108,8 +107,8 @@ links:
 4. CE3 は CE1 の MAC 宛てのユニキャストで答えます。XE3 はその MAC が XE1 からの疑似回線の先にあると知っているので、
    答えはそこへだけ送ります。
 
-PE は、スイッチと同じように、フレームそのものから MAC アドレスを覚えます(データ プレーンでの学習)。ラボでは、XE1 の
-ブリッジ ドメインに、自分の拠点の MAC は EFP に、遠い拠点の MAC は疑似回線に、という形で出ました。
+PE は、スイッチと同じように、フレームそのものから MAC アドレスを覚えます(データ プレーンでの学習)。XE1 の
+ブリッジ ドメインには、自分の拠点の MAC は EFP に、遠い拠点の MAC は疑似回線に、という形で出ます。
 
 ```console
 XE1#show bridge-domain 210
@@ -148,8 +147,8 @@ links:
   - [XE3, CE3, ""]
 :::
 
-ラボでは、XE2 が CE1 と CE3 の MAC をそれぞれの疑似回線で覚えていたのに、CE1 から CE3 への ping は通りませんでした。XE2 は
-CE3 がどこにいるかを知っていながら、そこへフレームを送らなかったのです。`show l2vpn vfi` は、スプリット ホライズンを
+このとき、XE2 は CE1 と CE3 の MAC をそれぞれの疑似回線で覚えているのに、CE1 から CE3 への ping は通りません。XE2 は
+CE3 がどこにいるかを知っていながら、そこへフレームを送らないのです。`show l2vpn vfi` は、スプリット ホライズンを
 `S` の列の `Y` で示します。
 
 ```console
@@ -165,8 +164,8 @@ VFI name: VPLS210, state: up, type: multipoint, signaling: LDP
 ```
 
 ハブ アンド スポークを意図して作ることもあります(H-VPLS。ハブのスポーク向きの疑似回線でスプリット ホライズンを外す)が、
-そのときはハブがループを防ぐ責任を持ちます。素の VPLS では、フルメッシュそのものがループの防止です。(ラボの
-Catalyst 8000V の VFI の `member` の行には、スプリット ホライズンを外す選択肢はありませんでした。)
+そのときはハブがループを防ぐ責任を持ちます。素の VPLS では、フルメッシュそのものがループの防止です。(Catalyst 8000V の
+VFI の `member` の行には、スプリット ホライズンを外す選択肢がありません。)
 
 ### 2.4 IOS XE での VPLS の設定
 
@@ -198,7 +197,7 @@ IOS XRv 9000 は、ブリッジ ドメインをコミットで拒否します(`V
 - `show l2vpn atom vc`: 疑似回線ごとの状態(`UP`/`DOWN`)。
 - `show bridge-domain <BD>`: メンバーと、覚えた MAC アドレスと、それを覚えたポート。
 
-ラボで 1 か所だけ間違えたときの見え方です。
+1 か所だけ間違えたときの見え方です。
 
 | 間違い | 疑似回線 | 何が何に届くか |
 |---|---|---|
@@ -219,7 +218,7 @@ IOS XRv 9000 は、ブリッジ ドメインをコミットで拒否します(`V
 2. CE1 で `clear arp-cache` と `ping 172.31.210.3` を実行します。XE2 で `show bridge-domain 210` を実行します。
 3. 2 つの member を戻して、もう一度 ping します。
 
-ラボでの結果: ping は通らず(0 percent)、そのとき XE2 のブリッジ ドメインには CE1 と CE3 の MAC が、それぞれの疑似回線の
+結果の例: ping は通らず(0 percent)、そのとき XE2 のブリッジ ドメインには CE1 と CE3 の MAC が、それぞれの疑似回線の
 先として入っていました。member を戻すと ping は通りました。
 :::
 
@@ -383,8 +382,8 @@ ESI の列が 0 なのは、どの拠点も 1 台の PE にしか収容されて
 ### 3.6 うまくいかないとき
 
 - **複製の方式が無い。** `l2vpn evpn` の下に `replication-type ingress` が無いと、EVI は `State: Incomplete` のまま
-  (`Replication Type: Not set (global)`、`EVI Down, BD Up`)です。ラボでは、BGP が上がっている PE どうしの間でも、何も
-  通りませんでした。BUM の送り方が決まるまで、PE は E-LAN に加わりません。IOS XE のガイドの例は必ずこれを設定していて、
+  (`Replication Type: Not set (global)`、`EVI Down, BD Up`)です。BGP が上がっている PE どうしの間でも、何も
+  通りません。BUM の送り方が決まるまで、PE は E-LAN に加わりません。IOS XE のガイドの例は必ずこれを設定していて、
   EVPN の章には、MPLS 上の EVPN で使えるのは入口での複製だけと書かれています。
 - **タグなしの拠点。** 拠点 3 では、顧客はこの E-LAN をタグなしで送ります。そこの EFP は `encapsulation untagged` で、
   外すものはありません。XE3 を `encapsulation dot1q 200` の EFP にすると何にも一致せず、拠点 3 は誰とも通じませんでした
@@ -403,7 +402,7 @@ ESI の列が 0 なのは、どの拠点も 1 台の PE にしか収容されて
 2. XE3 で `show l2vpn evpn evi 200 detail` を実行します。CE1 で `clear arp-cache` と `ping 172.31.200.3` を実行します。
 3. 行を戻して 30 秒ほど待ち、同じコマンドをもう一度実行します。
 
-ラボでの結果: XE3 の EVI は `Incomplete Pending`(`Replication Type: Not set (global)`、`EVI Down, BD Up`)になり、
+結果の例: XE3 の EVI は `Incomplete Pending`(`Replication Type: Not set (global)`、`EVI Down, BD Up`)になり、
 CE1 から拠点 3 への ping は通らず(0 percent)、拠点 2 は答えていました。行を戻すと EVI は `Established` に戻り、ping は
 通りました。
 :::
@@ -427,6 +426,7 @@ CE1 から拠点 3 への ping は通らず(0 percent)、拠点 2 は答えて�
 <p class="tolab"><a href="/_learn?id=XRT-12">ワークスペースでラボ XRT-12 を開く</a> — <a href="b8-m11-practice-4.html">課題</a></p>
 
 :::note
+このページの出力は、Catalyst 8000V 17.15.1a(XE1〜XE3)と IOL 上の IOS XE 17.15(P1、CE、SW1)で取得しました。
 出典: MPLS Configuration Guide, Cisco IOS XE 17.x(Configuring Virtual Private LAN Services、EVPN Single-Homing、EVPN over
 MPLS with IRB)。EVPN の章が名指ししているのは ASR 1000 で、このラボはそれを Catalyst 8000V で動かしました。L2VPN and
 Ethernet Services Configuration Guide for the ASR 9000, IOS XR 25.x(Implementing Multipoint Layer 2 Services)と 7.10.x

@@ -5,8 +5,6 @@ M4 の最初のページでは、どの IS-IS ネットワークにも要るも�
 エリア アドレスです。オーバーロード、タイマー、BFD、グレースフル リスタートは M7(高可用性)で、MPLS とセグメント
 ルーティングのための IS-IS の拡張は M8 と M10 で扱います。
 
-このページの出力は、IOS XRd 26.1.1 と IOL 上の IOS XE 17.15 で取ったものです(ラボ XRT-05)。
-
 ## 1. 認証
 
 ### 1.1 何を認証するか
@@ -268,6 +266,7 @@ adjacency-log` は、設定なしでレベルごとに直近 100 件の状態変
 <p class="tolab"><a href="/_learn?id=XRT-05">ワークスペースでラボ XRT-05 を開く</a> — <a href="43-m4-practice-2.html">課題</a></p>
 
 :::note
+このページの出力は、IOS XRd 26.1.1 と IOL 上の IOS XE 17.15 で取ったものです(ラボ XRT-05)。
 出典: Cisco 8000 と NCS 5500 の IOS XR *IS-IS コマンド リファレンス*(`lsp-password` と `hello-password`・レベルを
 付けないと両方のレベル・`lsp-password` が SNP も認証すること・`summary-prefix` とそのメトリックと破棄ルート・`priority`
 とプリエンプティブな DIS・NET は 3 つまででシステム ID は 1 つ・`show isis adjacency-log`)、IOS XR の*キー チェーン

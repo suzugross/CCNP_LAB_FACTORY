@@ -1,0 +1,115 @@
+# glossary/basics.yml — 単元で使う基礎の語(CCNA・CCNP Enterprise の範囲。IP・転送・経路・セキュリティの基本)
+# ★2026-11-08 ユーザ指示で方針を転換: 「CCNA でやったから」を理由に載せないことはしない。単元で使う基礎の語なら載せる。
+#   最初は M12(QoS とデータプレーンの保護)の本文に出る語から。ほかの単元の基礎の語は、その単元を書く・追記する時に足す。
+# 一般語に当たる表記は scope でページを絞る(この表の語は略語なので、今のところ絞っていない)。
+
+- id: tcp
+  term: TCP
+  full: Transmission Control Protocol
+  def:
+    en: >-
+      The transport protocol that delivers a byte stream reliably and in order, resending what is lost. A TCP sender
+      slows down when it detects loss, which is why tail drop makes many sessions slow down at once and why WRED
+      drops a few packets early instead.
+    ja: >-
+      バイトの流れを、欠けたら送り直して、確実に順番どおり届けるトランスポートのプロトコル。送り手は欠落に気づくと速さを落とす。
+      そのため、テール ドロップは多くのセッションを一斉に遅くし、WRED は早めに少しずつ捨てる。
+  see: [tail-drop, wred]
+
+- id: ttl
+  term: TTL
+  full: {en: Time to Live, ja: 生存時間}
+  def:
+    en: >-
+      A hop count carried in the IP header (Hop Limit in IPv6) and in each MPLS label. Each router lowers it by one
+      and discards the packet when it runs out, which ends forwarding loops; traceroute uses it to find each hop in
+      turn.
+    ja: >-
+      IP のヘッダ(IPv6 では Hop Limit)と MPLS のラベルごとに載る、残りのホップ数。ルータごとに 1 減らし、尽きたパケットは
+      捨てる。これで転送のループが終わる。traceroute はこれを使って 1 ホップずつ調べる。
+
+- id: acl
+  term: ACL
+  full: {en: access control list, ja: アクセス制御リスト}
+  def:
+    en: >-
+      An ordered list of permit and deny lines that matches packets by fields such as addresses, protocol and ports.
+      It is checked from the top and the first matching line decides; a packet that matches no line is denied. It
+      filters traffic on an interface, and other features use it to select traffic.
+    ja: >-
+      アドレス・プロトコル・ポートなどでパケットを照合する、許可(permit)と拒否(deny)の行の並び。上から調べて最初に当たった
+      行で決まり、どの行にも当たらなければ拒否される。インターフェイスで通信を絞るほか、ほかの機能が対象の通信を選ぶのにも使う。
+  see: [infrastructure-acl]
+
+- id: null0
+  term: Null0
+  def:
+    en: >-
+      A virtual interface that discards every packet routed to it. A route that points to Null0 makes the router drop
+      the traffic for that prefix; it is used to discard attack traffic (RTBH) and to keep a summary route from
+      looping.
+    ja: >-
+      経路で送られたパケットをすべて捨てる仮想のインターフェイス。Null0 を指す経路で、その宛先への通信を捨てられる。攻撃の
+      通信を捨てる(RTBH)ほか、要約経路がループしないようにするのにも使う。
+  see: [rtbh, discard-address]
+
+- id: ddos
+  term: DDoS
+  full: {en: distributed denial of service, ja: 分散型サービス拒否}
+  def:
+    en: >-
+      An attack that floods a target with traffic from many sources at once, to use up its link, its CPU or its
+      sessions. The sources are many and often forged, so blocking them one by one does not work; a provider drops the
+      traffic towards the target (RTBH) or diverts it to be cleaned.
+    ja: >-
+      多数の送信元から一斉に通信を送りつけ、標的の回線・CPU・セッションを使い切らせる攻撃。送信元が多く、偽りのことも多いので、
+      1 つずつ止めても効かない。プロバイダーは、標的宛ての通信を捨てる(RTBH)か、洗浄の装置へ迂回させる。
+  see: [rtbh, scrubbing-centre, urpf]
+
+- id: ecmp
+  term: ECMP
+  full: {en: equal-cost multipath, ja: 等コスト マルチパス}
+  def:
+    en: >-
+      Using several best paths of equal cost to the same destination at once. The router spreads the traffic over
+      them, usually per flow by a hash of the addresses and ports, so that the packets of one flow keep to one path.
+    ja: >-
+      同じ宛先への、コストの等しい最良の経路を複数同時に使うこと。ルータは、ふつうはアドレスとポートのハッシュで流れごとに
+      振り分け、1 つの流れのパケットは 1 本の経路を通る。
+
+- id: fib
+  term: FIB
+  full: {en: Forwarding Information Base, ja: 転送情報ベース}
+  def:
+    en: >-
+      The table the data plane uses to forward packets, built in advance from the best routes of the routing table
+      (RIB). uRPF checks a packet's source address against it.
+    ja: >-
+      データプレーンがパケットを転送するときに引く表。経路表(RIB)の最良経路から前もって作る。uRPF はパケットの送信元
+      アドレスをこの表で調べる。
+  see: [cef, urpf]
+
+- id: cef
+  term: CEF
+  full: Cisco Express Forwarding
+  def:
+    en: >-
+      Cisco's forwarding method that switches packets with a FIB and an adjacency table prepared in advance from the
+      routing table, instead of looking up the routing table for each packet. Features that act in the forwarding
+      path, such as uRPF, rely on it.
+    ja: >-
+      経路表から前もって作った FIB と隣接テーブルでパケットを転送する、Cisco の転送の方式。パケットごとに経路表を引かない。
+      uRPF のような転送の段で働く機能は、これに頼る。
+  see: [fib, urpf]
+
+- id: igp
+  term: IGP
+  full: {en: interior gateway protocol, ja: 内部ゲートウェイ プロトコル}
+  def:
+    en: >-
+      A routing protocol used inside one autonomous system, such as OSPF or IS-IS (EIGRP and RIP are others). In a
+      provider's core, the IGP carries the routers' loopbacks and links, while BGP carries the customer and Internet
+      routes.
+    ja: >-
+      1 つの自律システムの中で使うルーティング プロトコル。OSPF・IS-IS など(EIGRP・RIP も)。プロバイダーのコアでは、IGP が
+      ルータのループバックとリンクを運び、顧客とインターネットの経路は BGP が運ぶ。

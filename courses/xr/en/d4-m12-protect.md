@@ -3,7 +3,7 @@
 The previous two pages treated good packets differently. This page drops the packets that should not arrive at all:
 packets with a forged source, packets aimed at the provider's infrastructure, and packets to a destination under
 attack. It covers 1.7 of the blueprint (implementing data-plane security: uRPF, ACLs, RTBH, MACsec), and touches on
-BGP FlowSpec (1.5.f) and DDoS (1.6.d). The output was taken on the same board as the previous pages.
+BGP FlowSpec (1.5.f) and DDoS (1.6.d).
 
 ## 1. What it is good for
 
@@ -105,8 +105,8 @@ routers (RFC 5635, section 4). The route to the attacker points to the discard a
 The destination under attack stays reachable from other sources.
 
 Here IOS and IOS XR differ. IOS drops by uRPF when the route to the source points to Null0 through 192.0.2.1 (a Cisco
-white paper, 2005). IOS XR on the ASR 9000 does not do a "recursive lookup to Null0" for uRPF (TAC document 116386). The
-XRv 9000 in this lab behaved the same.
+white paper, 2005). IOS XR on the ASR 9000 does not do a "recursive lookup to Null0" for uRPF (TAC document 116386).
+XRv 9000 behaves the same.
 
 | Route to the attacker (203.0.113.66) as XR01 received it | XR01's route | With loose uRPF on the INET side |
 |---|---|---|
@@ -190,8 +190,47 @@ BGP packets with INET were counted on line 20.
 
 On the trigger router (RR1), rewrite the tagged static routes with RPL and put them into BGP.
 
+The RTBH configuration spans two routers: RR1 in this section and XR01 in section 3.4. The figure follows the route from
+RR1 to XR01, and then an attack packet that arrives afterwards; rest the pointer on a number (or tap it on a phone) to
+see that part of the configuration.
+
+:::walk
+legend: "On the wire: the route that BGP hands out. Orange: rewritten attributes."
+rows:
+  - panel: RR1
+    sub: trigger
+    items:
+      - ref: 1
+        head: "**Register the address to drop** `router static`"
+        then: ["`198.51.100.130/32 Null0 tag 666`  with the marker tag 666"]
+      - ref: 2
+        head: "**Into BGP** `redistribute static route-policy RTBH-TRIGGER`"
+        match:
+          - ["if tag eq 666", true, match]
+          - ["else", false, "other static routes: drop"]
+        then:
+          - "→ `set next-hop 192.0.2.1`  rewrite to the discard address"
+          - "→ `set community (65000:666, no-export)`  the edges' mark; stays out of other ASes"
+  - {wire: "[[=198.51.100.130/32]] [[!NH 192.0.2.1]] [[!65000:666 no-export]] _iBGP to the edges"}
+  - panel: XR01
+    sub: border (towards INET)
+    items:
+      - ref: 3
+        head: "**Check on receipt** `route-policy FROM-RR in`"
+        say: ["Routes from RR1 (10.255.0.52) go through the inbound RPL"]
+        match:
+          - ["if community matches-any RTBH", true, "matches 65000:666"]
+        then: ["→ `set next-hop discard`  straight to Null0; other routes `pass` as they are"]
+      - say: ["~RIB and CEF: 198.51.100.130/32 is directly connected, via Null0 (null0 adjacency)"]
+      - say: ["[[IP → 198.51.100.130]] ~an attack packet from INET", "~is dropped where it enters XR01 and never reaches CUST2 (behind PE2)"]
+  - aside: "Without ③ (only RR1's rewrite)"
+    say:
+      - "~XR01's route points to Null0 through 192.0.2.1 (as on PE2)"
+      - "~Source-based RTBH (loose uRPF) then fails: IOS XR does not follow Null0 recursively (2.4)"
+:::
+
 :::config RR1 — hand out the static routes tagged 666 as routes towards the discard address
-route-policy RTBH-TRIGGER
+route-policy RTBH-TRIGGER                     ## ②
   if tag eq 666 then                          ## Only the tagged static routes
     set next-hop 192.0.2.1                    ## Rewrite to the discard address (every edge router has 192.0.2.1/32 → Null0)
     set community (65000:666, no-export)      ## The mark the edges pick up, and the mark that stays out of other ASes
@@ -203,12 +242,12 @@ end-policy
 !
 router static
  address-family ipv4 unicast
-  192.0.2.1/32 Null0                          ## The discard address here too (to resolve the rewritten next hop)
-  198.51.100.130/32 Null0 tag 666             ## Register the address to drop
+  192.0.2.1/32 Null0                          ## ② The discard address here too (to resolve the rewritten next hop)
+  198.51.100.130/32 Null0 tag 666             ## ① Register the address to drop
 !
 router bgp 65000
  address-family ipv4 unicast
-  redistribute static route-policy RTBH-TRIGGER
+  redistribute static route-policy RTBH-TRIGGER  ## ②
 :::
 
 An IOS edge router (PE2 in this lab) resolves the received next hop 192.0.2.1 with its static route to Null0.
@@ -225,11 +264,11 @@ PE2#show ip cef 198.51.100.130 255.255.255.255 detail
 On XR01, point the marked routes received from RR1 straight at Null0.
 
 :::config fold XR01 — drop the marked routes directly
-community-set RTBH
+community-set RTBH                            ## ③
   65000:666
 end-set
 !
-route-policy FROM-RR
+route-policy FROM-RR                          ## ③
   if community matches-any RTBH then
     set next-hop discard                      ## Straight to Null0; source-based uRPF drops with this too
   endif
@@ -239,7 +278,7 @@ end-policy
 router bgp 65000
  neighbor 10.255.0.52                         ## RR1
   address-family ipv4 unicast
-   route-policy FROM-RR in
+   route-policy FROM-RR in                    ## ③
 :::
 
 ```console
@@ -282,7 +321,7 @@ and it cannot be used for L3VPN iBGP routes.
 routing table says. One use is to steer the packets to a destination under attack to a cleaning device (a scrubbing
 centre) instead of dropping them.
 
-:::config XR01 — steer the packets to the destination under attack to a cleaner (towards CUST1) (as tried)
+:::config XR01 — steer the packets to the destination under attack to a cleaner (towards CUST1)
 ipv4 access-list TO-SCRUB
  10 permit ipv4 any host 198.51.100.130 nexthop1 ipv4 172.20.1.1   ## On a match, send to 172.20.1.1
  20 permit ipv4 any any                       ## Forward the rest normally
@@ -291,7 +330,7 @@ interface GigabitEthernet0/0/0/3
  ipv4 access-group TO-SCRUB ingress hardware-count
 :::
 
-Measured in the lab: 20 packets sent from INET to 198.51.100.130 matched line 10 (`20 hw matches (next-hop:
+With this ACL applied, 20 packets sent from INET to 198.51.100.130 matched line 10 (`20 hw matches (next-hop:
 addr=172.20.1.1, vrf name=default)`), and 20 packets left XR01's interface towards CUST1. ABF acted first even though
 RTBH pointed 198.51.100.130 at Null0.
 
@@ -300,10 +339,10 @@ RTBH pointed 198.51.100.130 at Null0.
 can cut finely, as in "only this UDP port to this destination". The side that builds and sends the rules is the
 controller; the side that receives them and puts them into its own hardware is the client.
 
-In this lab, RR1 (XRd) was tried as the controller and XR01 as the client. The rule (ICMP to 198.51.100.129 at 0 bps)
-reached XR01, and `show flowspec ipv4 detail` showed `Traffic-rate: 0 bps`, but the packets were not dropped. XRv 9000
-cannot apply rules as a client (the same as an answer on the Cisco Community; FlowSpec is not in the official support
-table either). The mechanism and the form of the configuration are in the appendix.
+With RR1 (XRd) as the controller and XR01 as the client, the rule (ICMP to 198.51.100.129 at 0 bps) reached XR01, and
+`show flowspec ipv4 detail` showed `Traffic-rate: 0 bps`, but the packets were not dropped. XRv 9000 cannot apply rules
+as a client (the same as an answer on the Cisco Community; FlowSpec is not in the official support table either). The
+mechanism and the form of the configuration are in the appendix.
 
 :::try
 With ABF, steer the packets to the destination under attack instead of dropping them. Do it after Task M12-5, and always
@@ -315,7 +354,7 @@ put things back at the end.
    `ping 198.51.100.130 source Loopback0 repeat 20 timeout 1` on INET, and look again. Look at the ACL counts too.
 3. Remove line 45 and commit.
 
-Measured in the lab: across the 20 pings, `packets output` on GigabitEthernet0/0/0/2 went from 26 to 46, and line 45
+An example result: across the 20 pings, `packets output` on GigabitEthernet0/0/0/2 went from 26 to 46, and line 45
 showed `(20 hw matches) (next-hop: addr=172.20.1.1, vrf name=default)`. INET's ping success rate was 0 (CUST1, the
 cleaner, does not own the address, so nothing replies). ABF acted first even for a destination that RTBH pointed at
 Null0.
@@ -328,6 +367,7 @@ Do Tasks M12-4 and M12-5 in lab **XRT-14**.
 <p class="tolab"><a href="/_learn?id=XRT-14">Open lab XRT-14 in the workspace</a> — <a href="d5-m12-practice-3.html">Tasks M12-4 and M12-5</a></p>
 
 :::note
+The output on this page was taken on the same board as the previous pages.
 Sources: RFC 3704 (sections 2.2 to 2.5), RFC 8704 (section 3), RFC 5635 (sections 3 and 4), RFC 7999 (sections 2, 3 and 5),
 RFC 3882, RFC 8955. The ASR 9000 IP Addresses and Services Command Reference and Configuration Guide (IOS XR 24.x:
 `ipv4 verify unicast source reachable-via`, strict and loose, `ipv4 access-group … hardware-count`, object-groups, ABF),

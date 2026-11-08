@@ -14,8 +14,7 @@ blueprint.
 The lab is **XRT-12**. IOS XRv 9000 refuses bridge domains and has no CFM (appendix), so the PEs here are
 **Catalyst 8000V** routers running IOS XE 17.15.1a. The mechanisms of EVPN and CFM do not depend on the OS: the route
 types, the Ethernet segment and the maintenance levels are the same on IOS XR. Each section shows the IOS XR form after
-the IOS XE one, in the form of Cisco's configuration guides. The outputs come from Catalyst 8000V 17.15.1a (XE1 to XE3)
-and IOS XE 17.15 on IOL (P1, the CEs, SW1).
+the IOS XE one, in the form of Cisco's configuration guides.
 
 :::topo
 nodes:
@@ -106,8 +105,8 @@ links:
 4. CE3 answers with a unicast frame to CE1's MAC. XE3 already knows that MAC is behind the pseudowire from XE1, and sends
    the answer there only.
 
-The PEs learn MAC addresses from the frames themselves, as switches do (learning in the data plane). In the lab, XE1's
-bridge domain then shows the local MAC on the EFP and the remote one on a pseudowire:
+The PEs learn MAC addresses from the frames themselves, as switches do (learning in the data plane). XE1's bridge
+domain then shows the local MAC on the EFP and the remote one on a pseudowire:
 
 ```console
 XE1#show bridge-domain 210
@@ -146,8 +145,8 @@ links:
   - [XE3, CE3, ""]
 :::
 
-In the lab, CE1's ping to CE3 failed although XE2 had learned both CE1's and CE3's MACs, each on its pseudowire: XE2
-knew where CE3 was, and still would not send the frame there. `show l2vpn vfi` marks split horizon with `S` = `Y`:
+Then CE1's ping to CE3 fails, although XE2 has learned both CE1's and CE3's MACs, each on its pseudowire: XE2 knows
+where CE3 is, and still will not send the frame there. `show l2vpn vfi` marks split horizon with `S` = `Y`:
 
 ```console
 XE2#show l2vpn vfi name VPLS210
@@ -163,7 +162,7 @@ VFI name: VPLS210, state: up, type: multipoint, signaling: LDP
 
 A hub and spoke can be built on purpose (H-VPLS, with split horizon turned off on the hub's spoke pseudowires), but
 then the hub is in charge of preventing loops. In a plain VPLS, the full mesh is the loop protection. (The `member` line
-of the Catalyst 8000V's VFI offered no option to turn split horizon off in the lab.)
+of the Catalyst 8000V's VFI has no option to turn split horizon off.)
 
 ### 2.4 Configuring VPLS on IOS XE
 
@@ -195,7 +194,7 @@ this track refuses the bridge domain at commit (`VPLS Bridge domains not support
 - `show l2vpn atom vc`: each pseudowire's state (`UP`/`DOWN`).
 - `show bridge-domain <BD>`: the members and the learned MAC addresses, with the port each was learned on.
 
-What the lab showed when one thing was wrong:
+What shows when one thing is wrong:
 
 | Mistake | Pseudowires | What reaches what |
 |---|---|---|
@@ -216,7 +215,7 @@ See split horizon at work. Do this after Task M11-6.
 2. On CE1, run `clear arp-cache` and `ping 172.31.210.3`. On XE2, run `show bridge-domain 210`.
 3. Put both members back and ping again.
 
-Measured in the lab: the ping failed (0 percent), while XE2's bridge domain held CE1's and CE3's MACs, each on its
+An example result: the ping failed (0 percent), while XE2's bridge domain held CE1's and CE3's MACs, each on its
 pseudowire. With the members back, the ping succeeded.
 :::
 
@@ -379,8 +378,8 @@ The ESI column is 0 because each of these sites is attached to one PE only. The 
 ### 3.6 What goes wrong
 
 - **No replication type.** Without `replication-type ingress` under `l2vpn evpn`, the EVI stays `State: Incomplete` with
-  `Replication Type: Not set (global)` and `EVI Down, BD Up`. In the lab nothing passed at all, not even between two
-  PEs that had BGP up: the PE does not take part in the E-LAN until it knows how to send BUM. The IOS XE guide's examples
+  `Replication Type: Not set (global)` and `EVI Down, BD Up`. Nothing passes at all, not even between two PEs that
+  have BGP up: the PE does not take part in the E-LAN until it knows how to send BUM. The IOS XE guide's examples
   always set it, and its EVPN chapter states that only ingress replication is supported for EVPN over MPLS.
 - **A site without a tag.** At site 3 the customer sends this E-LAN untagged. The EFP there is `encapsulation untagged`,
   with nothing to pop. An EFP with `encapsulation dot1q 200` at XE3 matched nothing, and site 3 reached nobody (0
@@ -399,7 +398,7 @@ See how much the replication type matters. Do this after Task M11-7.
 2. On XE3, run `show l2vpn evpn evi 200 detail`. On CE1, run `clear arp-cache` and `ping 172.31.200.3`.
 3. Put the line back, wait half a minute, and run the same commands again.
 
-Measured in the lab: XE3's EVI went to `Incomplete Pending` with `Replication Type: Not set (global)` and `EVI Down,
+An example result: XE3's EVI went to `Incomplete Pending` with `Replication Type: Not set (global)` and `EVI Down,
 BD Up`, and CE1's ping to site 3 failed (0 percent) while site 2 still answered. With the line back, the EVI was
 `Established` again and the ping succeeded.
 :::
@@ -423,6 +422,7 @@ In lab **XRT-12**, work through tasks M11-6 and M11-7. Then go on to the next pa
 <p class="tolab"><a href="/_learn?id=XRT-12">Open lab XRT-12 in the workspace</a> — <a href="b8-m11-practice-4.html">Tasks</a></p>
 
 :::note
+The outputs on this page come from Catalyst 8000V 17.15.1a (XE1 to XE3) and IOS XE 17.15 on IOL (P1, the CEs, SW1).
 Sources: MPLS Configuration Guide, Cisco IOS XE 17.x (Configuring Virtual Private LAN Services; EVPN Single-Homing; EVPN
 over MPLS with IRB). The EVPN chapters name the ASR 1000; this lab ran them on the Catalyst 8000V. L2VPN and Ethernet
 Services Configuration Guide for the ASR 9000, IOS XR 25.x (Implementing Multipoint Layer 2 Services) and 7.10.x (EVPN

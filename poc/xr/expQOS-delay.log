@@ -1,0 +1,166 @@
+
+######## 04:14:40 0: XR01 の CE1 側のポート(reset 直後= 方策なし)
+show running-config interface GigabitEthernet0/0/0/1
+Sun Nov  8 04:14:43.216 UTC
+interface GigabitEthernet0/0/0/1
+ description to CE1 (VRF A)
+ vrf A
+ ipv4 address 172.16.1.254 255.255.255.0
+!
+
+RP/0/RP0/CPU0:XR01#
+show running-config policy-map
+Sun Nov  8 04:14:43.616 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01#
+
+######## 04:14:42 A: 方策なし・負荷なし
+Sending 20, 1000-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Success rate is 100 percent (20/20), round-trip min/avg/max = 9/10/12 ms
+Sending 20, 100-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Success rate is 100 percent (20/20), round-trip min/avg/max = 10/10/12 ms
+Sending 20, 1000-byte ICMP Echos to 10.46.1.1, timeout is 2 seconds:
+Success rate is 100 percent (20/20), round-trip min/avg/max = 8/10/11 ms
+
+######## 04:14:45 B: 方策なし・負荷中
+Sending 10, 1000-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Success rate is 100 percent (10/10), round-trip min/avg/max = 1/4/38 ms
+Sending 10, 100-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Success rate is 100 percent (10/10), round-trip min/avg/max = 1/1/2 ms
+Sending 10, 1000-byte ICMP Echos to 10.46.1.1, timeout is 2 seconds:
+Success rate is 100 percent (10/10), round-trip min/avg/max = 1/1/2 ms
+
+######## 04:16:51 設定: 2.3 節と同じ整形(親 100 kbps・子= EF を優先+32 kbps・残りは 20 個のキュー)
+configure
+Sun Nov  8 04:16:54.457 UTC
+Current Configuration Session  Line       User     Date                     Lock
+00001000-0000e1f7-00000000     con0_RP0_C SUZUKI   Sun Nov  8 00:38:58 2026 
+RP/0/RP0/CPU0:XR01(config)#
+class-map match-any VOICE
+RP/0/RP0/CPU0:XR01(config-cmap)#
+match dscp ef
+RP/0/RP0/CPU0:XR01(config-cmap)#
+end-class-map
+RP/0/RP0/CPU0:XR01(config)#
+policy-map CE-OUT-CHILD
+RP/0/RP0/CPU0:XR01(config-pmap)#
+class VOICE
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+priority level 1
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+police rate 32 kbps
+RP/0/RP0/CPU0:XR01(config-pmap-c-police)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap)#
+class class-default
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+queue-limit 20 packets
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap)#
+end-policy-map
+RP/0/RP0/CPU0:XR01(config)#
+policy-map CE-OUT
+RP/0/RP0/CPU0:XR01(config-pmap)#
+class class-default
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+shape average 100 kbps
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+service-policy CE-OUT-CHILD
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap)#
+end-policy-map
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-if)#
+service-policy output CE-OUT
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sun Nov  8 04:17:03.884 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sun Nov  8 04:17:04.805 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+Shape Info: rate 100 kbps, burst 1250 bytes,
+QueueID: N/A
+QueueID: 56 (Priority 1)
+Queue Limit: 0 kbytes
+QueueID: 57 (Priority Normal)
+Queue Limit: 5 kbytes (20 packets)
+
+######## 04:17:06 C: 整形・負荷なし
+Sending 20, 1000-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Success rate is 100 percent (20/20), round-trip min/avg/max = 1/72/82 ms
+Sending 20, 100-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Success rate is 100 percent (20/20), round-trip min/avg/max = 1/3/9 ms
+Sending 20, 1000-byte ICMP Echos to 10.46.1.1, timeout is 2 seconds:
+Success rate is 70 percent (14/20), round-trip min/avg/max = 1/1/2 ms
+
+######## 04:17:22 D: 整形・負荷中
+Sending 10, 1000-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Success rate is 100 percent (10/10), round-trip min/avg/max = 1/45/82 ms
+Sending 10, 100-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Success rate is 100 percent (10/10), round-trip min/avg/max = 1/1/4 ms
+Sending 10, 1000-byte ICMP Echos to 10.46.1.1, timeout is 2 seconds:
+Success rate is 70 percent (7/10), round-trip min/avg/max = 2/2/2 ms
+Class class-default
+  Classification statistics          (packets/bytes)     (rate - kbps)
+    Matched             :                2301/2333418              0
+    Transmitted         :                1327/1341886              0
+    Total Dropped       :                 974/991532               0
+  Policy CE-OUT-CHILD Class VOICE
+    Classification statistics          (packets/bytes)     (rate - kbps)
+      Matched             :                  21/21378                0
+      Transmitted         :                  15/15270                0
+      Total Dropped       :                   6/6108                 0
+    Policing statistics                (packets/bytes)     (rate - kbps) 
+      Policed(conform)    :                  15/15270                0
+      Policed(exceed)     :                   6/6108                 0
+      Policed(violate)    :                   0/0                    0
+      Taildropped(packets/bytes)           : 0/0
+  Policy CE-OUT-CHILD Class class-default
+    Classification statistics          (packets/bytes)     (rate - kbps)
+      Matched             :                2280/2312040              0
+      Transmitted         :                1312/1326616              0
+      Total Dropped       :                 968/985424               0
+      Taildropped(packets/bytes)           : 968/985424
+
+######## 04:19:56 D2: 整形・負荷中(もう 1 回)
+Sending 10, 1000-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Success rate is 100 percent (10/10), round-trip min/avg/max = 1/62/82 ms
+Sending 10, 100-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Success rate is 100 percent (10/10), round-trip min/avg/max = 1/1/2 ms
+Sending 10, 1000-byte ICMP Echos to 10.46.1.1, timeout is 2 seconds:
+Success rate is 70 percent (7/10), round-trip min/avg/max = 1/2/4 ms
+
+######## 04:22:29 E: 整形を外す
+show running-config interface GigabitEthernet0/0/0/1
+interface GigabitEthernet0/0/0/1
+
+######## 04:22:37 E1: 方策なし・負荷なし
+Sending 20, 1000-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Success rate is 100 percent (20/20), round-trip min/avg/max = 1/1/2 ms
+Sending 20, 100-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Success rate is 100 percent (20/20), round-trip min/avg/max = 1/1/2 ms
+
+######## 04:22:39 E2: 方策なし・負荷なし
+Sending 20, 1000-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Success rate is 100 percent (20/20), round-trip min/avg/max = 1/1/3 ms
+Sending 20, 100-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Success rate is 100 percent (20/20), round-trip min/avg/max = 1/1/2 ms
+
+######## 04:22:41 E3: 方策なし・負荷なし
+Sending 20, 1000-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Success rate is 100 percent (20/20), round-trip min/avg/max = 1/2/8 ms
+Sending 20, 100-byte ICMP Echos to 10.100.1.1, timeout is 2 seconds:
+Success rate is 100 percent (20/20), round-trip min/avg/max = 1/1/2 ms

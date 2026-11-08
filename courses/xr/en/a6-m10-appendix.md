@@ -29,8 +29,8 @@ part and follow it. A router that does not take part is left out of that algorit
 
 On IOS XR, the definition is `router isis` → `flex-algo 128` → `metric-type`, `affinity`, `advertise-definition`; the SID
 is `prefix-sid algorithm 128 index <n>` under the loopback. A definition on delay needs delay values on the links
-(`performance-measurement`), and a link without one is left out. In the PoC, `metric-type delay` with no delay advertised
-gave no path at all.
+(`performance-measurement`), and a link without one is left out. With `metric-type delay` and no delay advertised, no
+path is built at all.
 
 The IOS routers of the lab take part in algorithm 128 with prefix-SID indexes 111 to 113, and advertise no definition.
 XR02 does not take part. Only MPLS-to-MPLS entries are installed for a flexible algorithm, so IP traffic reaches one
@@ -46,7 +46,7 @@ Define algorithm 128 so that it avoids PRIMARY. Do it after Task M10-5.
    and `show mpls forwarding labels 16112`. On RT01, run `show isis topology flex-algo 128`.
 3. Remove what you added and commit.
 
-What the lab measured: XR01 advertised the definition (`Exclude Any Affinity Bit Positions: 0`) and built labels 16101
+An example result: XR01 advertised the definition (`Exclude Any Affinity Bit Positions: 0`) and built labels 16101
 to 16113 for algorithm 128. Label 16012 (algorithm 0) left through GigabitEthernet0/0/0/0 towards RT01, and label 16112
 (algorithm 128) through GigabitEthernet0/0/0/1 towards RT03. RT01 still reached XR01 over PRIMARY in algorithm 128
 (`show isis topology flex-algo 128`): the affinity is an attribute of the direction that XR01 advertises, not of the
@@ -81,14 +81,14 @@ router has to pick one of them for that label. RFC 8660 gives a default rule: th
 then the smallest prefix value. The rule is a SHOULD, though: an implementation may use another one, and RFC 8660 then
 requires the operator to run routers with the same rule in one IGP area.
 
-In the PoC of this unit, RT03 advertised index 12 for its own loopback, the index of RT02. XR01 followed the default
-rule: it kept 16012 for 10.255.0.12, the smaller prefix, left 10.255.0.13 without a label, and logged
+Say RT03 advertises index 12 for its own loopback, the index of RT02. XR01 follows the default rule: it keeps 16012
+for 10.255.0.12, the smaller prefix, leaves 10.255.0.13 without a label, and logs
 `Label Conflict: Prefix-SID label 16012 for algo SPF is used by 10.255.0.12/32 and 10.255.0.13/32`. RT01, an IOS router,
-chose the other way: it mapped 16012 to 10.255.0.13.
+chooses the other way: it maps 16012 to 10.255.0.13.
 
-XR01 sent customer A's traffic to RT01 with 16012 for RT02, RT01 forwarded it towards RT03, and the VPN stopped. Taken
-one at a time, every router made a sensible choice. But the routers chose differently from each other, so across the
-network as a whole the path did not join up.
+XR01 sends customer A's traffic to RT01 with 16012 for RT02, RT01 forwards it towards RT03, and the VPN stops. Taken
+one at a time, every router makes a sensible choice. But the routers choose differently from each other, so across the
+network as a whole the path does not join up.
 
 :::note
 Sources: the Segment Routing Configuration Guide for the ASR 9000, IOS XR 26.1.x–26.3.x (2026: flexible algorithm,

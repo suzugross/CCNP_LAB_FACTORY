@@ -4,8 +4,6 @@ This unit is for an engineer who is fluent on IOS and IOS XE and is sitting in f
 It does not teach OSPF, VRFs or static routing. You know those. It teaches where IOS XR keeps them,
 how to look at them, and how to find a command you have never typed.
 
-Everything shown here was captured on IOS XRv 9000 release 24.3.1.
-
 ## 1. What you are logged in to
 
 ```console
@@ -139,7 +137,7 @@ interface GigabitEthernet0/0/0/1
 
 :::note
 On IOS, `vrf forwarding` removes the IP address from the interface and you have to put it back.
-On this release of IOS XR, moving an addressed interface into a VRF kept the address. Do not rely on either memory.
+On IOS XR release 24.3.1, moving an addressed interface into a VRF kept the address. Do not rely on either memory.
 Look at the result.
 :::
 
@@ -313,3 +311,7 @@ Open lab **XRT-01** in the workspace and do the M0 tasks. XR01 has been left hal
 Work out what is there before you change it.
 
 <p class="tolab"><a href="/_learn?id=XRT-01">Open lab XRT-01 in the workspace</a> — <a href="01-m0-practice.html">The tasks</a></p>
+
+:::note
+Everything shown here was captured on IOS XRv 9000 release 24.3.1.
+:::

@@ -26,9 +26,9 @@ frames:
 ### 1.1 誰も気づかない切断
 
 XE3 と P1 の間のリンクが、両方のポートは up のまま、パケットを全部捨て始めたとします。通信事業者の伝送装置の中の故障や、
-途中の機器の混雑や設定の誤りです。どのインタフェースも down にならないので、すぐに反応するものはありません。ラボでは、
-そういう故障(CML のリンク条件で 100 % の廃棄)を XE3 と P1 の間に入れました。10 秒後も P1 の IS-IS と LDP は隣接を up と
-表示し、疑似回線も両端で UP のままでした。その間、顧客の通信は止まっていました。
+途中の機器の混雑や設定の誤りです。どのインタフェースも down にならないので、すぐに反応するものはありません。
+そういう故障(CML のリンク条件で 100 % の廃棄)を XE3 と P1 の間に入れると、10 秒後も P1 の IS-IS と LDP は隣接を up と
+表示し、疑似回線も両端で UP のままです。その間、顧客の通信は止まっています。
 
 ### 1.2 それまでの手: ルーティング プロトコルか、顧客を待つ
 
@@ -111,8 +111,8 @@ XE1 自身(`B`= 転送したブリッジ)、次に MEP 3(`!`)です。P1 は出�
 ### 2.5 Y.1731: 遅延を測る
 
 Y.1731 の **遅延の測定**では、一方の MEP が相手に DMM(遅延の測定のメッセージ)を送り、相手は DMR で答えます。タイムスタンプ
-から、フレームの往復の遅延が分かります。IOS XE では IP SLA の操作がこれを動かし、統計を取ります。ラボでは毎秒 1 つの DMM を
-送り、往復の遅延は 0.7〜1.9 ms ほどでした。
+から、フレームの往復の遅延が分かります。IOS XE では IP SLA の操作がこれを動かし、統計を取ります。次の操作は毎秒 1 つの
+DMM を送り、往復の遅延は 0.7〜1.9 ms ほどです。
 
 ```console
 XE1#show ip sla statistics 130 details
@@ -184,14 +184,14 @@ Total Remote MEPs: 1
 
 ### 3.3 うまくいかないとき
 
-| 間違い | ラボで見えたこと |
+| 間違い | 見え方 |
 |---|---|
 | `ethernet cfm global` が無い | MEP はあるが `CC` が `I` で、相手の MEP を一度も覚えない |
-| CC の間隔が既定のまま | 黙った故障に気づくのは 35 秒後(ラボでは 10 秒後も表に残っていた) |
-| xconnect なのに `service … evc … vlan <n>` | 拒否される。service の行の VLAN はブリッジ ドメインのサービス用(PoC で確認) |
+| CC の間隔が既定のまま | 黙った故障に気づくのは 35 秒後(10 秒後も表に残っている) |
+| xconnect なのに `service … evc … vlan <n>` | 拒否される。service の行の VLAN はブリッジ ドメインのサービス用 |
 | Y.1731 が動いている間に相手の端を失う | 操作は `Latest operation return code: Internal error` で止まり、MEP 3 が戻っても再開しなかった。設定モードの `ip sla restart 130` で再開した |
 
-PoC では、EVPN-VPWS の E-Line の EFP に置いた up MEP は成立しませんでした(片方の端が CCM を出さない)。QFP 系のプラットフォーム
+EVPN-VPWS の E-Line の EFP に置いた up MEP は成立しません(片方の端が CCM を出さない)。QFP 系のプラットフォーム
 の IOS XE の CFM の章(C8000v を名指ししている)には、その制約があります。EVPN の EFI は EVC に関連付けられない、EVPN の場面で
 EFP に置けるのは down MEP だけ、up MEP は EFI から相手の拠点へ CFM のパケットを送れない、というものです。このラボが LDP の
 疑似回線を見張るのはそのためです。
@@ -206,7 +206,7 @@ EFP に置けるのは down MEP だけ、up MEP は EFI から相手の拠点へ
    実行して、もう一度統計を見ます。
 4. 比べるために、両方の PE の `continuity-check interval 1s` を消して、1〜3 を繰り返します。終わったら行を戻します。
 
-ラボでの結果: 1 秒なら、MEP 3 は 3 秒ほどで消え、そのとき P1 はまだ XE3 を IS-IS の隣接に持っていました。既定の間隔では、
+結果の例: 1 秒なら、MEP 3 は 3 秒ほどで消え、そのとき P1 はまだ XE3 を IS-IS の隣接に持っていました。既定の間隔では、
 10 秒後も MEP 3 は表に残っていました。切断の後、Y.1731 の操作は restart するまで `Internal error` のままでした。
 :::
 
@@ -238,6 +238,7 @@ CCM を送りません。Y.1731 の測定は `ethernet sla` のプロファイ�
 <p class="tolab"><a href="/_learn?id=XRT-12">ワークスペースでラボ XRT-12 を開く</a> — <a href="bc-m11-practice-6.html">課題</a></p>
 
 :::note
+xconnect のサービスで VLAN が拒否されること、EVPN-VPWS の E-Line で up MEP が成立しないことは、PoC で確かめました。
 出典: Application Services Configuration Guide, Cisco IOS XE 17.x(Configuring Ethernet CFM for Cisco QFP-Based Platforms。
 C8000v を名指しし、既定の間隔 10 秒と EVPN の制約を載せている)。IP Addressing Configuration Guide, Cisco IOS XE 17.x
 (Configuring IP SLAs Metro-Ethernet 3.0 (ITU-T Y.1731) Operations)。Interface and Hardware Component Configuration Guide for

@@ -2,7 +2,7 @@
 
 前のページでは、パケットに印を付けて、どのクラスかをコアに伝えました。このページでは、その印を使って、量を決めます。
 契約の速さを超えた分をどうするか(ポリシング)、混んだ出口でどう並べるか(シェーピングとキュー)です。ブループリントの
-4.5.b(輻輳回避、トラフィック ポリシング、シェーピング)にあたります。出力は前のページと同じ盤面で取得しました。
+4.5.b(輻輳回避、トラフィック ポリシング、シェーピング)にあたります。
 
 ## 1. 何が嬉しいのか
 
@@ -125,7 +125,9 @@ Class class-default
 
 「顧客ごとに 2 Mbps に整形し、その 2 Mbps の中で音声を優先する」には、2 段のポリシーが要ります。
 
-- **親**: 全部のパケット(`class-default`)を 2 Mbps に整形する。IOS XR の親のポリシーに書けるのは `class-default` だけです。
+- **親**: 全部のパケット(`class-default`)を 2 Mbps に整形する。親には `class-default` だけを書きます。パケットは階層ごとに
+  1 つのクラスにしか入らないので、親でほかのクラスに入ったパケットは子を通らず、優先キューにも入りません(IOS XRv 9000 は、
+  この形もエラーなくコミットします)。
 - **子**: 親が送り出す 2 Mbps の中で、クラスごとのキュー(優先と残り)を作る。親の `class-default` に `service-policy <子>` と
   書きます(向きの `input`/`output` は付けません)。
 
@@ -218,8 +220,40 @@ Child Policer Violate: DROP
 
 親で 100 kbps に整形し、子で EF を優先(上限 32 kbps)にします。子の残りのクラスには、キューの長さを決めています。
 
+親と子のポリシーは、名前で入れ子になります。インターフェイスが親を指し、親の class-default が子を指します。図は、サイト 1 へ
+向かうパケットが通る順です。図の番号にカーソルを置くと(スマホでは押すと)、その部分の設定が出ます。
+
+:::walk
+rows:
+  - {node: P1, say: ["~サイト 1 宛ての音声(EF)と、1000 バイトのデータが来る"]}
+  - {wire: "[[IP EF]] [[IP データ]] [[IP データ]]"}
+  - panel: XR01
+    sub: サイト 1 への出口(Gi0/0/0/1 の出力)
+    items:
+      - ref: 1
+        head: "**親** `service-policy output CE-OUT`"
+        say: ["親のクラスは class-default だけ。どのパケットもここに入り、書いてある子へ渡る"]
+        match:
+          - ["class class-default", true, "全部 → `service-policy CE-OUT-CHILD`"]
+      - ref: 2
+        head: "**子** `policy-map CE-OUT-CHILD` 親から来たパケットを仕分けて並べる"
+        match:
+          - ["class VOICE  match dscp ef", true, "EF → 優先キュー"]
+          - ["class class-default", true, "データ → 残りのキュー"]
+        then:
+          - "[[IP EF]] 優先キュー(`priority level 1`・上限 `police rate 32 kbps`)"
+          - "[[IP データ]] [[IP データ]] 残りのキュー(`queue-limit 20 packets`)"
+      - ref: 3
+        head: "**親の整形** `shape average 100 kbps`"
+        say: ["子のキューから選ばれたパケットを、出口全体で 100 kbps に抑えて送る。超えた分は待つ"]
+  - {wire: "[[IP EF]] [[IP データ]] _合わせて 100 kbps まで"}
+  - {node: CE1, kind: host}
+  - aside: "親に class-default 以外のクラスを書くと"
+    say: ["~親でそのクラスに入ったパケットは子を通らない → 優先キューに入らず、残りのキューで待つ(コミットは通る)"]
+:::
+
 :::config fold XR01 — サイト 1 への出口を整形し、音声を優先する
-policy-map CE-OUT-CHILD                       ## 子= 順番
+policy-map CE-OUT-CHILD                       ## ② 子= 順番
  class VOICE
   priority level 1                            ## 優先キュー
   police rate 32 kbps                         ## 優先には上限が要る
@@ -230,14 +264,14 @@ policy-map CE-OUT-CHILD                       ## 子= 順番
  !
  end-policy-map
 !
-policy-map CE-OUT                             ## 親= 量。書けるのは class-default だけ
+policy-map CE-OUT                             ## ① 親= 量。クラスは class-default だけ
  class class-default
-  shape average 100 kbps
+  shape average 100 kbps                      ## ③ 出口全体の速さ
   service-policy CE-OUT-CHILD                 ## 子を入れる。input/output は付けない
  !
  end-policy-map
 !
-interface GigabitEthernet0/0/0/1
+interface GigabitEthernet0/0/0/1              ## ① 親を出力に当てる
  service-policy output CE-OUT
 :::
 
@@ -286,14 +320,14 @@ policy-map CE-OUT-CHILD
  end-policy-map
 :::
 
-XRv 9000 はこの設定を受け付けますが、`show policy-map interface` の `RED random drops` も `Taildropped` も 0 のままで、
-捨てた数が出ませんでした(2.7 節)。実機の ASR 9000 などでは、ここで数が増えます。
+XRv 9000 はこの設定を受け付けますが、WRED が捨てた数を示す `show policy-map interface` の `RED random drops` と
+`Taildropped` は、0 のままでした(2.7 節)。
 
 ### 3.4 IOS XE で書くと
 
 IOS XE の書き方の違いは、ポリサの速さの単位(既定は bps)と、超過の付け替えの書き方です。
 
-:::config PE2(IOS XE)— 業務のデータに 2 速度 3 色のポリサ(比較のためにラボで試した設定)
+:::config PE2(IOS XE)— 業務のデータに 2 速度 3 色のポリサ
 policy-map POLICE-DATA
  class DATA
   police cir 256000 pir 512000                ## bps で書く
@@ -302,8 +336,8 @@ policy-map POLICE-DATA
    violate-action drop
 :::
 
-ラボの PE2 に一時的に当てると、`show policy-map POLICE-DATA` は `police cir 256000 bc 8000 pir 512000 be 16000` と、
-バーストの既定値(bc・be、バイト)を足して表示しました。
+当てると、`show policy-map POLICE-DATA` は `police cir 256000 bc 8000 pir 512000 be 16000` と、バーストの既定値(bc・be、
+バイト)を足して表示します。
 
 ### 3.5 確かめ方
 
@@ -323,7 +357,7 @@ policy-map POLICE-DATA
 3. すぐに XR01 で `show policy-map interface GigabitEthernet0/0/0/1 input` を見て、30 秒後にもう一度見ます。CE2 で
    `show policy-map interface Ethernet0/0 input` を見ます。
 
-ラボで測った結果: すぐに見た XR01 の数は、DATA のクラスの Matched も色ごとの数も 0 でした。30 秒後には Matched 924、
+結果の例: すぐに見た XR01 の数は、DATA のクラスの Matched も色ごとの数も 0 でした。30 秒後には Matched 924、
 適合 15・超過 15・違反 894(捨てた)になりました。CE2 の `COUNT-DSCP` は D-AF21 を 15、D-AF22 を 15 と数え、XR01 の適合と
 超過の数に一致しました。
 :::
@@ -336,6 +370,7 @@ policy-map POLICE-DATA
 <p class="tolab"><a href="/_learn?id=XRT-14">ワークスペースでラボ XRT-14 を開く</a> — <a href="d3-m12-practice-2.html">課題 M12-2、M12-3</a></p>
 
 :::note
+このページの出力は、前のページと同じ盤面で取得しました。
 出典: RFC 2698(trTCM)、RFC 2597(4 節)、RFC 3246(2 節)。ASR 9000 の Modular QoS Configuration Guide と Modular QoS Command Reference
 (IOS XR 24.x。`police` の構文と単位・最小 64 kbps・既定のバースト、`shape average`、`priority level` とポリサ、`bandwidth remaining`、
 `queue-limit`、`random-detect` とキューの要件、階層のポリシーの決まり)。IOS XRv 9000 の Installation and Configuration Guide

@@ -5,8 +5,6 @@ every day and that the later units do not bring up again on their own: authentic
 DIS, summarization, and area addresses. Overload, timers, BFD and graceful restart come with M7 (high availability),
 and the IS-IS extensions for MPLS and segment routing with M8 and M10.
 
-The outputs on this page were captured on IOS XRd 26.1.1 and IOS XE 17.15 on IOL (lab XRT-05).
-
 ## 1. Authentication
 
 ### 1.1 What is authenticated
@@ -270,6 +268,7 @@ Go to lab **XRT-05** and do the second series of M4 tasks. It starts where XRT-0
 <p class="tolab"><a href="/_learn?id=XRT-05">Open lab XRT-05 in the workspace</a> — <a href="43-m4-practice-2.html">The tasks</a></p>
 
 :::note
+The outputs on this page were captured on IOS XRd 26.1.1 and IOS XE 17.15 on IOL (lab XRT-05).
 Sources: the IOS XR *IS-IS command reference* for Cisco 8000 and NCS 5500 (`lsp-password` and `hello-password`, both
 levels when none is given, SNPs covered by `lsp-password`, `summary-prefix` with its metric and discard route, `priority`
 and the pre-emptive DIS, at most three NETs with one system ID, `show isis adjacency-log`) and the IOS XR *keychain

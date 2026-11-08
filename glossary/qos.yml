@@ -1,0 +1,672 @@
+# glossary/qos.yml — QoS の語(DiffServ・MPLS の QoS のモデル・ポリシングとシェーピング・キュー・TE の QoS・IntServ)
+# ★CCNA の範囲の語も、単元で使うなら載せる(2026-11-08 ユーザ指示で方針を転換。それまでは DSCP・PHB・ポリシング/シェーピング・
+#   信頼の境界だけを例外にしていた)。クラス・キューのような一般語に当たる表記は scope で QoS のページに絞る。
+# 短い略語・一般語に当たる表記は scope でページを絞る(BC は DS-TE、Bc はバースト、conform などはポリサの色)。
+
+# ---------------------------------------------------------------- DiffServ と印
+- id: diffserv
+  term: DiffServ
+  full: Differentiated Services
+  def:
+    en: >-
+      A QoS architecture that decides treatment by a mark in each packet instead of keeping per-flow state
+      (RFC 2475). The edge classifies and marks packets; core routers only read the mark and apply the per-hop
+      behaviour (PHB) chosen for it.
+    ja: >-
+      流れごとの状態を持たず、パケットに付けた印で扱いを決める QoS の考え方(RFC 2475)。縁のルータが分類して印を付け、
+      コアのルータは印だけを見て、その印に当てた振る舞い(PHB)で扱う。
+  see: [phb, dscp, intserv, trust-boundary]
+
+- id: intserv
+  term: IntServ
+  full: Integrated Services
+  def:
+    en: >-
+      A QoS architecture that reserves resources for each application flow and guarantees its treatment
+      (RFC 1633), with RSVP as the reservation protocol. Every router on the path keeps per-flow state, which does
+      not scale to a provider's core.
+    ja: >-
+      アプリケーションの流れごとに資源を予約し、扱いを保証する QoS の考え方(RFC 1633)。予約の手順は RSVP。
+      道すがらのルータが流れごとの状態を持つので、プロバイダーのコアでは規模が合わない。
+  see: [rsvp, diffserv]
+
+- id: phb
+  term: PHB
+  full: {en: per-hop behavior, ja: ホップごとの振る舞い}
+  aka: [per-hop behaviour]
+  def:
+    en: >-
+      The forwarding treatment (which queue, priority, which packets to drop first) that a DiffServ router gives to
+      all packets carrying the same mark. Examples are EF, the AF classes and the default (best effort).
+    ja: >-
+      DiffServ のルータが、同じ印のパケットにまとめて与える転送の扱い(どのキューか・優先か・どれを先に捨てるか)。
+      EF・AF のクラス・既定(ベスト エフォート)などがある。
+  see: [diffserv, dscp, ef, af, be]
+
+- id: dscp
+  term: DSCP
+  full: DiffServ Code Point
+  def:
+    en: >-
+      The upper 6 bits of the IPv4 ToS byte or the IPv6 Traffic Class byte, used as the DiffServ mark (RFC 2474);
+      the other 2 bits are ECN. Its top 3 bits sit where IP Precedence was, and without a policy these 3 bits are
+      copied into the EXP of the labels a router pushes.
+    ja: >-
+      IPv4 の ToS、IPv6 の Traffic Class の 8 ビットのうち上位 6 ビットで、DiffServ の印に使う(RFC 2474)。残りの
+      2 ビットは ECN。上位 3 ビットは IP Precedence と同じ位置で、方策が無ければこの 3 ビットが、積むラベルの EXP に写る。
+  see: [phb, ef, af, cs, mpls-exp, ecn]
+
+- id: ef
+  term: EF
+  full: Expedited Forwarding
+  def:
+    en: >-
+      The PHB for low delay, low jitter and low loss up to a set rate (RFC 3246), used for voice. Its DSCP is 46
+      (binary 101110), so its top 3 bits are 5.
+    ja: >-
+      決まった速さまで、遅れ・揺れ・欠落を小さく運ぶ PHB(RFC 3246)。音声に使う。DSCP は 46(2 進で 101110)で、
+      上位 3 ビットは 5。
+  see: [dscp, phb, priority-queue]
+
+- id: af
+  term: AF
+  full: Assured Forwarding
+  aka: [AF11, AF12, AF13, AF21, AF22, AF23, AF31, AF32, AF33, AF41, AF42, AF43]
+  def:
+    en: >-
+      A group of PHBs with four classes and three drop precedences (RFC 2597). In AFxy, x is the class and y the
+      drop precedence: under congestion AF12 is dropped before AF11. Packets of one class must not be reordered, so
+      traffic over the contract can be re-marked within its class (AF11 → AF12) instead of dropped.
+    ja: >-
+      4 つのクラスと 3 段の捨てられやすさを組み合わせた PHB の群(RFC 2597)。AFxy の x がクラス、y が捨てられやすさで、
+      混めば AF12 が AF11 より先に捨てられる。同じクラスの中では順番を入れ替えないので、契約を超えた分を、捨てずに
+      同じクラスの中で付け替えて運べる(AF11 → AF12)。
+  see: [dscp, phb, wred, trtcm]
+
+- id: cs
+  term: CS
+  full: {en: class selector, ja: クラス セレクタ}
+  aka: [CS0, CS1, CS2, CS3, CS4, CS5, CS6, CS7]
+  def:
+    en: >-
+      The DSCP values of the form xxx000 (CS0 to CS7), kept for partial compatibility with IP Precedence
+      (RFC 2474). CS6 (48) is commonly used for network control such as routing protocols.
+    ja: >-
+      xxx000 の形の DSCP の値(CS0〜CS7)。IP Precedence との互換を(部分的に)保つために決められた(RFC 2474)。
+      CS6(48)は、ルーティング プロトコルなどのネットワークの制御によく使う。
+  see: [dscp]
+
+- id: be
+  term: BE
+  full: {en: best effort, ja: ベスト エフォート}
+  def:
+    en: >-
+      The default PHB (DSCP 0): ordinary forwarding with no special treatment.
+    ja: >-
+      既定の PHB(DSCP 0)。特別な扱いのない、ふつうの転送。
+  see: [phb, dscp]
+
+- id: ecn
+  term: ECN
+  full: Explicit Congestion Notification
+  def:
+    en: >-
+      The lower 2 bits of the IPv4 ToS / IPv6 Traffic Class byte (RFC 3168). A congested router may set the CE
+      (Congestion Experienced) codepoint on packets of ECN-capable transports instead of dropping them, and the end
+      systems slow down as they would for a single lost packet.
+    ja: >-
+      IPv4 の ToS、IPv6 の Traffic Class の下位 2 ビット(RFC 3168)。混んだルータは、ECN に対応した通信のパケットを
+      捨てる代わりに CE(Congestion Experienced)の印を付けてよく、端末は 1 つ落ちたときと同じように送る速さを下げる。
+  see: [dscp, congestion-avoidance]
+
+- id: trust-boundary
+  term: {en: trust boundary, ja: 信頼の境界}
+  def:
+    en: >-
+      The point where a network stops believing the marks set by the device that sent the packet. A provider's PE
+      re-classifies what it receives from the customer and re-marks whatever the contract does not allow before
+      the traffic enters the core.
+    ja: >-
+      送ってきた機器が付けた印を、そのまま信じるのをやめる地点。プロバイダーの PE は、顧客から受け取ったパケットを
+      分類し直し、契約に合わない印を付け直してからコアへ入れる。
+  see: [dscp, diffserv]
+
+- id: tos
+  term: ToS
+  full: {en: Type of Service, ja: サービス タイプ}
+  def:
+    en: >-
+      The 8-bit field in the IPv4 header that carries the treatment mark (Traffic Class in IPv6). DiffServ uses its
+      upper 6 bits as the DSCP and the lower 2 bits for ECN; the older IP Precedence used its upper 3 bits.
+    ja: >-
+      IPv4 のヘッダの 8 ビットの欄で、扱いの印を運ぶ(IPv6 では Traffic Class)。DiffServ は上位 6 ビットを DSCP、下位 2 ビットを
+      ECN に使う。以前の IP Precedence は上位 3 ビットを使っていた。
+  see: [dscp, ip-precedence, ecn]
+
+- id: ip-precedence
+  term: IP Precedence
+  scope: ["d*-m12-*"]
+  def:
+    en: >-
+      The older use of the upper 3 bits of the IPv4 ToS byte as a priority mark from 0 to 7. DSCP replaced it and
+      keeps those 3 bits in the same place, so the class selector values (CS0 to CS7) line up with the precedence
+      values.
+    ja: >-
+      IPv4 の ToS の上位 3 ビットを、0〜7 の優先度の印として使った以前の決まり。DSCP がこれを置き換え、その 3 ビットを同じ
+      位置に残したので、クラス セレクタ(CS0〜CS7)の値は precedence の値と並ぶ。
+  see: [tos, dscp, cs]
+
+# ---------------------------------------------------------------- MPLS の QoS
+- id: mpls-exp
+  term: EXP
+  aka: [TC]
+  books: [xr]                          # 別の本では TC が STP のトポロジ変更(TC BPDU)
+  def:
+    en: >-
+      The 3 bits in an MPLS label entry that carry the class mark, so core routers can choose the treatment
+      without reading the IP header. RFC 5462 renamed the field Traffic Class (TC). Without a policy, Cisco routers
+      copy the top 3 bits of the DSCP into the EXP of every label they push.
+    ja: >-
+      MPLS のラベルの中で、扱いの印を運ぶ 3 ビット。コアのルータは IP ヘッダを読まずに、これで扱いを決める。
+      RFC 5462 で名前が Traffic Class(TC)に変わった。方策が無ければ、Cisco のルータは積むラベル全部の EXP に
+      DSCP の上位 3 ビットを写す。
+  see: [dscp, e-lsp, uniform-model, php]
+
+- id: e-lsp
+  term: E-LSP
+  def:
+    en: >-
+      An LSP whose per-hop behaviour is read from the EXP (TC) bits, so one LSP can carry up to eight classes
+      (RFC 3270). Ordinary MPLS cores work this way.
+    ja: >-
+      EXP(TC)の 3 ビットで PHB を決める LSP。1 本の LSP で最大 8 つのクラスを運べる(RFC 3270)。ふつうの MPLS の
+      コアはこの形。
+  see: [l-lsp, mpls-exp, lsp]
+
+- id: l-lsp
+  term: L-LSP
+  def:
+    en: >-
+      An LSP set up for each class, so the label itself tells the class (its scheduling); the EXP bits then carry
+      only the drop precedence (RFC 3270). It needs a separate label for each class.
+    ja: >-
+      クラスごとに別に張る LSP。ラベルそのものがクラス(キューの扱い)を表し、EXP は捨てられやすさだけを運ぶ
+      (RFC 3270)。クラスの数だけラベルが要る。
+  see: [e-lsp]
+
+- id: uniform-model
+  term: {en: uniform model, ja: ユニフォーム モデル}
+  aka: [uniform, ユニフォーム]
+  scope: ["d*-m12-*"]
+  def:
+    en: >-
+      The MPLS DiffServ model with one mark across the whole network (RFC 3270): the ingress derives the EXP from
+      the DSCP, and the egress copies the EXP back to the DSCP, so a re-marking in the core shows to the customer.
+      The TTL has the same model (RFC 3443), and it is the TTL's default.
+    ja: >-
+      網全体で印が 1 つという、MPLS の DiffServ のモデル(RFC 3270)。入口は DSCP から EXP を決め、出口は EXP を
+      DSCP に写し戻すので、コアでの付け替えが顧客にも見える。TTL にも同じモデルがあり(RFC 3443)、TTL の既定はこれ。
+  see: [pipe-model, short-pipe-model, mpls-exp]
+
+- id: pipe-model
+  term: {en: pipe model, ja: パイプ モデル}
+  aka: [pipe, パイプ]
+  scope: ["d*-m12-*"]
+  def:
+    en: >-
+      The MPLS DiffServ model that carries the customer's DSCP untouched, like cargo in a tunnel, and marks only
+      the labels by the provider's policy (RFC 3270). The egress PE chooses its exit queue by the EXP it received,
+      so RFC 3270 says it works only without PHP. For the TTL, the pipe model hides the core hops from traceroute.
+    ja: >-
+      顧客の DSCP をトンネルの中の荷物として触らずに運び、プロバイダーの方針でラベルにだけ印を付ける MPLS の
+      DiffServ のモデル(RFC 3270)。出口の PE は受け取った EXP で出口のキューを決めるので、RFC 3270 は PHP なしでだけ
+      動くとしている。TTL のパイプでは、コアのホップが traceroute に見えなくなる。
+  see: [uniform-model, short-pipe-model, php, explicit-null]
+
+- id: short-pipe-model
+  term: {en: short pipe model, ja: ショート パイプ モデル}
+  aka: [short pipe, short-pipe, ショート パイプ]
+  scope: ["d*-m12-*"]
+  def:
+    en: >-
+      A variant of the pipe model (RFC 3270): the customer's DSCP is carried untouched as in pipe, but the egress
+      PE chooses its exit queue by the customer's DSCP rather than by the EXP. Because the egress does not need the
+      outer label's EXP, it works with PHP.
+    ja: >-
+      パイプ モデルの変形(RFC 3270)。顧客の DSCP を触らずに運ぶのはパイプと同じで、出口の PE は EXP ではなく
+      顧客の DSCP で出口のキューを決める。外側のラベルの EXP が要らないので、PHP のままで動く。
+  see: [pipe-model, uniform-model]
+
+# ---------------------------------------------------------------- 書き方(MQC)と装置の中の印
+- id: mqc
+  term: MQC
+  full: Modular QoS CLI
+  def:
+    en: >-
+      The three-part way QoS is written in IOS, IOS XE and IOS XR: `class-map` (which packets), `policy-map` (what
+      to do with each class) and `service-policy` (apply it to an interface in one direction). IOS XR closes them
+      with `end-class-map` and `end-policy-map`.
+    ja: >-
+      IOS・IOS XE・IOS XR で QoS を書く 3 段の形。`class-map`(どのパケットか)、`policy-map`(クラスごとに何を
+      するか)、`service-policy`(向きを付けてインターフェイスに当てる)。IOS XR は `end-class-map`・`end-policy-map`
+      で終わりを書く。
+  see: [qos-group]
+
+- id: qos-group
+  term: qos-group
+  def:
+    en: >-
+      A number that exists only inside the router and never goes on the wire. It is set in an input policy and
+      read with `match qos-group` in an output policy, to carry what was learned on input (for example the EXP from
+      the core) to the output side.
+    ja: >-
+      装置の中だけにある番号で、線の上には出ない。入力のポリシーで付け、出力のポリシーで `match qos-group` で読む。
+      入力で読んだこと(コアから来た EXP など)を、出力まで運ぶのに使う。
+  see: [discard-class, mqc]
+
+- id: discard-class
+  term: discard-class
+  def:
+    en: >-
+      Like qos-group, an internal marker that is not carried in the packet: set on input, and used on output to
+      choose which packets to drop first, for example with WRED thresholds per discard class (`random-detect
+      discard-class`).
+    ja: >-
+      qos-group と同じく、パケットには載らない装置の中の印。入力で付け、出力でどれを先に捨てるかを選ぶのに使う
+      (`random-detect discard-class` で WRED のしきい値を分けるなど)。
+  see: [qos-group, wred]
+
+- id: qos-class
+  term: {en: class, ja: クラス}
+  scope: ["d*-m12-*"]                  # 一般語。別の単元・別の本では「クラスタ」「アドレスのクラス」などに当たる
+  def:
+    en: >-
+      In QoS, a group of packets that get the same treatment. In MQC, a `class-map` names the group and the
+      conditions for joining it; a policy checks its classes from the top, puts each packet in the first one it
+      matches, and sends the rest to `class-default`. A class only sorts; what happens to it is written in the policy.
+    ja: >-
+      QoS で、同じ扱いを受けるパケットの組。MQC では `class-map` が組の名前と入る条件を決め、ポリシーはクラスを上から調べて、
+      パケットを最初に当たったクラスに入れる(どれにも当たらなければ `class-default`)。クラスは仕分けるだけで、扱いはポリシーに書く。
+  see: [mqc, qos-queue, qos-group]
+
+# ---------------------------------------------------------------- ポリシングとシェーピング
+- id: policing
+  term: {en: policing, ja: ポリシング}
+  aka: [policer, traffic policing, ポリサ, トラフィック ポリシング]
+  def:
+    en: >-
+      Measuring the rate of traffic with a token bucket and acting on each packet at once: within the set rate (a
+      customer's contract, for example) it is sent; beyond it, it is dropped or re-marked. It adds no delay, but the
+      excess is handled on the spot (compare shaping).
+    ja: >-
+      トークン バケツで速さを測り、パケットごとにその場で処理すること。決めた速さ(顧客との契約など)に収まれば送り、
+      超えれば捨てるか印を付け替える。待たせないので遅れは増えないが、超えた分はその場で処理される(シェーピングとの違い)。
+  see: [token-bucket, shaping, policer-colours, cir]
+
+- id: shaping
+  term: {en: shaping, ja: シェーピング}
+  aka: [shaper, traffic shaping, シェーパ, トラフィック シェーピング]
+  def:
+    en: >-
+      Holding the output rate to a set value by queuing the packets that exceed it and sending them a little
+      later. It is gentler on TCP than dropping, at the cost of extra delay.
+    ja: >-
+      決めた速さを超えるパケットをキューで待たせて少し後に送り、出ていく速さを均すこと。捨てるより TCP にやさしいが、
+      遅れが増える。
+  see: [policing, token-bucket, hqos]
+
+- id: token-bucket
+  term: {en: token bucket, ja: トークン バケツ}
+  def:
+    en: >-
+      The model policers and shapers use to measure rate: tokens fill a bucket at the committed rate (CIR) up to its
+      size (the burst, Bc), and a packet may pass when there are tokens for its length. Over time, at most
+      CIR × time + Bc passes.
+    ja: >-
+      ポリサとシェーパが速さを測る仕組み。バケツに契約の速さ(CIR)でトークンが貯まり(容量はバースト= Bc)、パケットは
+      その長さ分のトークンがあれば通れる。長い目で見ると、通るのは CIR × 時間 + Bc まで。
+  see: [cir, bc, policing, shaping]
+
+- id: cir
+  term: CIR
+  full: Committed Information Rate
+  def:
+    en: >-
+      The contracted rate: the rate at which tokens fill the bucket of a policer or shaper. Traffic within the CIR
+      conforms.
+    ja: >-
+      契約の速さ。ポリサやシェーパのバケツにトークンが貯まる速さで、CIR に収まる分が適合(conform)になる。
+  see: [pir, token-bucket, bc]
+
+- id: pir
+  term: PIR
+  full: Peak Information Rate
+  def:
+    en: >-
+      The second, higher rate of a two-rate policer (RFC 2698): traffic over the CIR but within the PIR exceeds, and
+      traffic over the PIR violates.
+    ja: >-
+      2 速度のポリサの、2 つ目の高い方の速さ(RFC 2698)。CIR を超えても PIR に収まる分が超過(exceed)、PIR を超える分が
+      違反(violate)になる。
+  see: [cir, trtcm]
+
+- id: bc
+  term: Bc
+  full: committed burst
+  scope: ["d2-*"]                      # DS-TE の BC(Bandwidth Constraint)と表記が重なる
+  def:
+    en: >-
+      The size of the CIR bucket of a policer or shaper: how much may be sent at once in a burst. If it is not
+      configured, the router picks a default (IOS XE shows it as `bc`, in bytes).
+    ja: >-
+      ポリサやシェーパの CIR のバケツの容量。一度に固めて送ってよい量。書かなければ装置が既定値を選ぶ(IOS XE は
+      `bc` としてバイトで表示する)。
+  see: [cir, token-bucket]
+
+- id: single-rate-policer
+  term: {en: "single rate, two colours", ja: 1 速度 2 色}
+  aka: [single rate two colours, single rate and two colours]
+  def:
+    en: >-
+      The simplest policer: one bucket filled at the CIR, so each packet either conforms or exceeds, and each of the
+      two gets its own action (typically send and drop). IOS XR writes it as `police rate` with `conform-action` and
+      `exceed-action`.
+    ja: >-
+      いちばん簡単なポリサ。バケツは 1 つで CIR で貯まり、パケットは適合か超過のどちらかになって、それぞれに動作を
+      決める(ふつうは送ると捨てる)。IOS XR では `police rate` に `conform-action` と `exceed-action` を書く。
+  see: [trtcm, policer-colours, token-bucket]
+
+- id: trtcm
+  term: {en: trTCM, ja: 2 速度 3 色}
+  full: {en: two rate three color marker, ja: two rate three color marker}
+  aka: [two rates three colours, two rates and three colours, two-rate three-colour]
+  def:
+    en: >-
+      A policer with two buckets (RFC 2698): one fills at the CIR, the other at the PIR. Each packet gets one of
+      three colours (conform, exceed or violate), and each colour gets its own action, typically send, re-mark and
+      send, and drop.
+    ja: >-
+      バケツを 2 つ持つポリサ(RFC 2698)。1 つは CIR、もう 1 つは PIR で貯まる。パケットは適合・超過・違反の 3 色の
+      どれかになり、色ごとに動作を決める(ふつうは、送る・印を付け替えて送る・捨てる)。
+  see: [policer-colours, cir, pir, single-rate-policer]
+
+- id: policer-colours
+  term: {en: conform / exceed / violate, ja: 適合・超過・違反}
+  aka: [conform, conforming, conformed, exceed, exceeding, exceeded, violate, violating, 適合, 超過, 違反]
+  scope: ["d2-*", "d3-*"]              # 一般語なので、ポリサを扱うページだけで拾う
+  def:
+    en: >-
+      The three results ("colours") a policer gives a packet. Conform: within the CIR. Exceed: over the CIR (with two
+      rates, still within the PIR). Violate: over the PIR as well. A single-rate, two-colour policer has only
+      conform and exceed.
+    ja: >-
+      ポリサがパケットに付ける判定(色)。適合= CIR に収まる。超過= CIR を超える(2 速度なら PIR には収まる)。違反=
+      PIR も超える。1 速度 2 色のポリサには適合と超過しかない。
+  see: [trtcm, single-rate-policer, policing]
+
+# ---------------------------------------------------------------- キューと輻輳回避
+- id: priority-queue
+  term: {en: priority queue, ja: 優先キュー}
+  aka: [優先の列]
+  def:
+    en: >-
+      An exit queue that is always served before the others, so its packets (typically voice, EF) do not wait even
+      when the link is busy. Because it could starve every other queue, it is always capped with a policer. IOS XR
+      writes it as `priority level 1`; IOS calls it LLQ.
+    ja: >-
+      ほかのキューより必ず先に送られる出口のキュー。混んでいても、中のパケット(ふつうは音声の EF)は待たない。ほかの
+      キューを止めてしまいかねないので、必ずポリサで上限を付ける。IOS XR では `priority level 1`、IOS では LLQ と呼ぶ。
+  see: [llq, ef, hqos]
+
+- id: llq
+  term: LLQ
+  full: Low Latency Queuing
+  def:
+    en: >-
+      The priority queue of IOS: a single strict-priority queue added to class-based weighted fair queuing (CBWFQ),
+      configured with `priority` in a class. The other classes share the rest with `bandwidth` or `bandwidth
+      remaining`.
+    ja: >-
+      IOS の優先キュー。クラスごとのキュー(CBWFQ)に、厳格に優先する 1 つのキューを足したもので、クラスに `priority`
+      と書く。ほかのクラスは、残りを `bandwidth` や `bandwidth remaining` で分け合う。
+  see: [priority-queue]
+
+- id: hqos
+  term: {en: hierarchical QoS, ja: 階層の QoS}
+  aka: [H-QoS, hierarchical policy, hierarchical policies, 階層のポリシー, 2 段のポリシー]
+  def:
+    en: >-
+      A QoS policy in two (or more) levels: the parent shapes all traffic to one rate (for example a customer's
+      contracted rate), and a child policy placed in the parent's `class-default` builds the per-class queues within
+      that rate. The parent decides the amount; the child decides the order.
+    ja: >-
+      2 段(以上)の QoS のポリシー。親が全部のパケットを 1 つの速さ(顧客の契約の速さなど)に整形し、親の
+      `class-default` に入れた子が、その速さの中でクラスごとのキューを作る。親が量を、子が順番を決める。
+  see: [shaping, priority-queue]
+
+- id: tail-drop
+  term: {en: tail drop, ja: テール ドロップ}
+  def:
+    en: >-
+      Dropping arriving packets because the queue is full. All the TCP sessions through the queue lose packets at
+      once, slow down together and speed up together, so the link is used in waves.
+    ja: >-
+      キューが満杯なので、来たパケットを末尾で捨てること。キューを通る TCP のセッションが一斉に欠落を受けて一斉に
+      速さを落とし、一斉に戻るので、回線が波打つように使われる。
+  see: [wred, congestion-avoidance]
+
+- id: red
+  term: RED
+  full: Random Early Detection
+  def:
+    en: >-
+      Starting to drop a few packets at random once the queue grows past a minimum threshold, with the probability
+      rising towards a maximum threshold, so that TCP senders slow down before the queue fills.
+    ja: >-
+      キューの長さが最小のしきい値を超えたら確率で少しずつ捨て始め、最大のしきい値に近づくほど確率を上げること。
+      キューが満杯になる前に、TCP の送り手に速さを落とさせる。
+  see: [wred, tail-drop]
+
+- id: wred
+  term: WRED
+  full: Weighted Random Early Detection
+  def:
+    en: >-
+      RED with different thresholds for each mark (DSCP, EXP, discard-class), so that, for example, AF12 is dropped
+      earlier than AF11 when congestion begins. It works only in a class that has a queue (`shape`, `bandwidth` or
+      `bandwidth remaining`); IOS XR writes it with `random-detect`.
+    ja: >-
+      印(DSCP・EXP・discard-class)ごとにしきい値を変えた RED。たとえば混み始めたとき、AF12 を AF11 より先に捨てる。
+      キューのあるクラス(`shape`・`bandwidth`・`bandwidth remaining` のどれか)でだけ動き、IOS XR では `random-detect`
+      で書く。
+  see: [red, congestion-avoidance, af, discard-class]
+
+- id: congestion-avoidance
+  term: {en: congestion avoidance, ja: 輻輳回避}
+  def:
+    en: >-
+      Dropping a little traffic early, before a queue overflows, to avoid the waves that tail drop causes. WRED is
+      the usual tool.
+    ja: >-
+      キューがあふれる前に少しずつ捨てて、テール ドロップが起こす波を避けること。ふつうは WRED を使う。
+  see: [wred, tail-drop, ecn]
+
+- id: qos-queue
+  term: {en: queue, ja: キュー}
+  scope: ["d*-m12-*"]                  # 別の本では「入力キュー」など、出口の列でない意味でも出る
+  def:
+    en: >-
+      A line of packets waiting to be sent from an exit. A class has a queue of its own when the output policy gives
+      it a queuing action (`priority`, `bandwidth remaining`, `queue-limit` and others). Packets wait in it only while
+      the exit is busy, and when it is full, new arrivals are dropped at its tail.
+    ja: >-
+      出口から送り出されるのを待つパケットの列。出力のポリシーでキューの動作(`priority`・`bandwidth remaining`・`queue-limit`
+      など)を書いたクラスが、自分のキューを持つ。パケットが待つのは出口が混んでいる間だけで、満杯になると新しく来たものが末尾で捨てられる。
+  see: [qos-scheduler, priority-queue, tail-drop, congestion]
+
+- id: qos-scheduler
+  term: {en: scheduler, ja: スケジューラ}
+  scope: ["d*-m12-*"]
+  def:
+    en: >-
+      The part of an exit that picks the queue that sends the next packet. The priority queue is served whenever it
+      holds a packet; the other queues share what is left by their shares (`bandwidth remaining`), and a shaper sets
+      the overall pace.
+    ja: >-
+      出口で、次のパケットをどのキューから送るかを選ぶ仕組み。優先キューはパケットがあればいつも先に送り、ほかのキューは残りを
+      割合(`bandwidth remaining`)で分ける。全体の速さはシェーパが決める。
+  see: [qos-queue, priority-queue, shaping]
+
+- id: fifo
+  term: FIFO
+  full: {en: first in, first out, ja: 先入れ先出し}
+  def:
+    en: >-
+      Sending packets from a single queue in the order they arrived, the usual behaviour of an exit with no QoS
+      policy. Every packet waits behind those that came first, and when the queue is full, new arrivals are dropped
+      at its tail.
+    ja: >-
+      1 本のキューから、来た順にパケットを送ること。QoS のポリシーが無い出口のふつうの振る舞い。どのパケットも先に来たものの
+      後ろで待ち、キューが満杯なら新しく来たものが末尾で捨てられる。
+  see: [qos-queue, tail-drop]
+
+- id: congestion
+  term: {en: congestion, ja: 輻輳}
+  def:
+    en: >-
+      The state of an exit when packets arrive for it faster than it can send them, typically from a fast link to a
+      slower one or from many links to one. Queues grow, delay increases, and packets are dropped once the queues are
+      full.
+    ja: >-
+      出口に、送り出せるより速くパケットが来ている状態。速い回線から遅い回線へ、多くの回線から 1 本へ流れるときに起こる。
+      キューが伸びて遅れが増え、キューが満杯になるとパケットが捨てられる。
+  see: [qos-queue, congestion-avoidance, tail-drop]
+
+# ---------------------------------------------------------------- TE と QoS(DS-TE)
+- id: ds-te
+  term: DS-TE
+  full: DiffServ-aware TE
+  def:
+    en: >-
+      TE that splits bandwidth reservations by class (RFC 4124). Each Class-Type (CT) has its own bandwidth limits
+      on each link (bandwidth constraints, BC), and an LSP reserves within the limit of its CT; how the limits apply
+      is set by a bandwidth constraint model (MAM or RDM).
+    ja: >-
+      TE の帯域の予約をクラスごとに分けたもの(RFC 4124)。トラフィックの種類(CT)ごとにリンクで予約してよい帯域の
+      上限(BC)を決め、LSP は自分の CT の上限の中で予約する。上限の当て方は帯域制約モデル(MAM か RDM)で決める。
+  see: [class-type, bandwidth-constraint, te-class, mam, rdm, te]
+
+- id: class-type
+  term: CT
+  full: Class-Type
+  scope: ["d6-*"]
+  def:
+    en: >-
+      In DS-TE, a group of traffic whose LSPs share one set of bandwidth limits; up to 8 (CT0 to CT7) (RFC 4124).
+    ja: >-
+      DS-TE で、帯域の上限を共にする LSP のまとまり(トラフィックの種類)。最大 8 つ(CT0〜CT7)(RFC 4124)。
+  see: [ds-te, te-class, bandwidth-constraint]
+
+- id: bandwidth-constraint
+  term: BC
+  full: Bandwidth Constraint
+  aka: [bandwidth constraint model, 帯域制約モデル]
+  scope: ["d6-*"]                      # ポリサのバースト Bc と表記が重なる
+  def:
+    en: >-
+      In DS-TE, a limit on the bandwidth that may be reserved on a link; up to 8 (BC0 to BC7). Which Class-Types each
+      limit applies to is decided by the bandwidth constraint model, MAM or RDM.
+    ja: >-
+      DS-TE で、リンクで予約してよい帯域の上限。最大 8 つ(BC0〜BC7)。どの上限をどの CT に当てるかは、帯域制約モデル
+      (MAM か RDM)で決まる。
+  see: [ds-te, mam, rdm, class-type]
+
+- id: te-class
+  term: TE-Class
+  def:
+    en: >-
+      In DS-TE, a pair of a Class-Type and a preemption priority; up to 8 (RFC 4124).
+    ja: >-
+      DS-TE で、CT と割り込み(preemption)の優先度の組。最大 8 つ(RFC 4124)。
+  see: [class-type, preemption, ds-te]
+
+- id: preemption
+  term: {en: preemption, ja: プリエンプション}
+  aka: [割り込み]
+  scope: ["d6-*"]                      # 「割り込み」は一般語
+  def:
+    en: >-
+      In TE, letting a higher-priority LSP take the bandwidth reserved by a lower-priority LSP when a link has too
+      little left. In DS-TE with RDM, this is what keeps a class's share safe from the classes below it.
+    ja: >-
+      TE で、リンクの帯域が足りないとき、優先度の高い LSP が低い LSP の予約した帯域を奪うこと。DS-TE の RDM では、
+      これで下のクラスからクラスの取り分を守る。
+  see: [te-class, rsvp-te, rdm]
+
+- id: mam
+  term: MAM
+  full: Maximum Allocation Model
+  def:
+    en: >-
+      A DS-TE bandwidth constraint model in which each Class-Type has its own limit: reservations of CTc go up to
+      BCc (RFC 4125). Classes never compete for bandwidth, but bandwidth one class leaves unused cannot be used by
+      another. The limits may add up to more than the link's reservable bandwidth.
+    ja: >-
+      CT ごとに専用の上限を持つ DS-TE の帯域制約モデル(RFC 4125)。CTc の予約は BCc まで。クラスの間で帯域を
+      奪い合わないが、使われていない帯域をほかのクラスが使えない。上限の合計がリンクの予約可能な帯域を超えてもよい。
+  see: [rdm, ds-te, bandwidth-constraint]
+
+- id: rdm
+  term: RDM
+  full: Russian Dolls Model
+  def:
+    en: >-
+      A DS-TE bandwidth constraint model with nested limits (RFC 4127): BC0 is all the reservable bandwidth, CT7 is
+      limited by BC7, CT6 and CT7 together by BC6, and so on. Unused bandwidth can be used by lower classes, so
+      protecting a class needs preemption. It is the default model of DS-TE in IOS XR.
+    ja: >-
+      上限を入れ子にした DS-TE の帯域制約モデル(RFC 4127)。BC0 = 予約可能な全帯域、CT7 は BC7 まで、CT6 と CT7 の
+      合計は BC6 まで…と続く。使われていない帯域を下のクラスが使えるので、クラスを守るには割り込み(preemption)が要る。
+      IOS XR の DS-TE の既定のモデル。
+  see: [mam, ds-te, preemption]
+
+- id: cbts
+  term: CBTS
+  full: Class-Based Tunnel Selection
+  def:
+    en: >-
+      The IOS XE feature that sends packets into one of several TE tunnels to the same destination by their EXP
+      value: each member of an `exp-bundle` carries the EXP values set with `tunnel mpls traffic-eng exp`. One EXP
+      value cannot be split over several tunnels.
+    ja: >-
+      同じ宛先への複数の TE のトンネルに、EXP の値でパケットを振り分ける IOS XE の機能。束ね役(`exp-bundle master`)
+      に入れた各トンネルに、運ぶ EXP の値を `tunnel mpls traffic-eng exp` で決める。1 つの EXP の値を複数のトンネルに
+      分けることはできない。
+  see: [pbts, ds-te]
+
+- id: pbts
+  term: PBTS
+  full: Policy-Based Tunnel Selection
+  def:
+    en: >-
+      The IOS XR feature that steers traffic into TE tunnels by class: packets are classified (precedence, EXP, DSCP
+      and so on) into a `forward-class`, and each tunnel carries one `forward-class` (a tunnel without one takes 0).
+    ja: >-
+      クラスごとにトラフィックを TE のトンネルへ入れる IOS XR の機能。パケットを分類(precedence・EXP・DSCP など)して
+      `forward-class` を付け、その `forward-class` を決めたトンネルへ送る。1 つのトンネルに付けられる `forward-class`
+      は 1 つで、付けないトンネルは 0。
+  see: [cbts, ds-te]
+
+# ---------------------------------------------------------------- IPv6
+- id: flow-label
+  term: {en: flow label, ja: フロー ラベル}
+  def:
+    en: >-
+      A 20-bit field in the IPv6 header (RFC 6437) that the sender sets to the same value for all packets of a flow
+      (0 means unlabelled). With the source and destination addresses it identifies the flow without reading ports,
+      mainly for ECMP and link-bundle hashing. It is separate from the DSCP and does not decide treatment.
+    ja: >-
+      IPv6 のヘッダの 20 ビットの欄(RFC 6437)。送り手が、同じ流れのパケットに同じ値を付ける(0 はラベルなし)。
+      送信元・宛先のアドレスと合わせて、ポートを読まずに流れを見分けられ、主に等コストの道(ECMP)やリンクの束への
+      振り分けのハッシュに使う。DSCP とは別の欄で、扱いは決めない。
+  see: [dscp]

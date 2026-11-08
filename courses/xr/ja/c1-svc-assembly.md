@@ -3,8 +3,7 @@
 前のページで、4 つのサービスの違いは「入れ物が何か」と「その番号をどう伝えるか」の 2 つだと分かりました。
 このページでは、同じことを設定の側から見ます。4 つとも、**同じ 5 つの段を同じ順で**組めます。違うのは各段に書く中身です。
 
-設定例は前のページと同じ盤面のもので、PoC で入れて動いた running-config から切り出しています。IOS XE は XE1(拠点 1)、
-IOS XR は XR01(拠点 4)です。
+設定例は前のページと同じ盤面のものです。IOS XE は XE1(拠点 1)、IOS XR は XR01(拠点 4)です。
 
 ## 1. 何が嬉しいのか
 
@@ -296,7 +295,7 @@ LDP の疑似回線(4.2 節)と比べると、`member 10.255.0.1 130 encapsulati
 
 これまでの単元で実際に起こした書き忘れを、止まる段で並べます。どれも、その段の表示で見つかります。
 
-| 段 | 書き忘れ・食い違い | 表れ方 | 測った単元 |
+| 段 | 書き忘れ・食い違い | 表れ方 | 出てきた所 |
 |---|---|---|---|
 | 0 | 相手の PE への道にラベルが無い | L3VPN は経路が届いたまま通らない。疑似回線は down(IOS XR は `DN`、IOS XE は相手から `pw-tx-fault`) | このページの盤面 |
 | 2 | L3VPN の RT の輸入が相手の輸出と合っていない | 輸入を間違えた PE の VRF にだけ相手の経路が入らない。反対側には入るので、片側だけ見えて通じない | このページの盤面 |
@@ -320,3 +319,7 @@ LDP の疑似回線(4.2 節)と比べると、`member 10.255.0.1 130 encapsulati
 | 2 VPWS | `l2vpn xconnect context` → `member <相手> <VC ID> encapsulation mpls` | `l2vpn` → `xconnect group` → `p2p` → `neighbor ipv4 <相手> pw-id <ID>` |
 | 3 L2 | `service instance <n> ethernet` → `encapsulation dot1q`、`rewrite` | `interface <IF>.<n> l2transport` → `encapsulation dot1q`、`rewrite` |
 | 2 E-LAN | `bridge-domain` → `member vfi`/`member evpn-instance` | この盤面の IOS XRv 9000 はブリッジ ドメインを使えない(M11 付録) |
+
+:::note
+設定例は、PoC で入れて動いた running-config から切り出しています。
+:::

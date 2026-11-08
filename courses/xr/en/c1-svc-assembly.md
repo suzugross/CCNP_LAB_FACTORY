@@ -4,8 +4,7 @@ The previous page showed that the four services differ in two things: what the c
 This page looks at the same thing from the configuration side. All four can be built in **the same five steps, in the same
 order**. What differs is what you write in each step.
 
-The configuration examples come from the same topology as the previous page, cut from the running-config that was entered and
-worked in the PoC. IOS XE is XE1 (site 1); IOS XR is XR01 (site 4).
+The configuration examples are on the same topology as the previous page. IOS XE is XE1 (site 1); IOS XR is XR01 (site 4).
 
 ## 1. Why bother
 
@@ -299,7 +298,7 @@ When you have finished writing, check from the bottom step up. A problem that sh
 
 These are mistakes actually made in earlier units, sorted by the step where they stop things. Each shows up in that step's output.
 
-| Step | Missing or mismatched | How it shows | Measured in |
+| Step | Missing or mismatched | How it shows | Seen in |
 |---|---|---|---|
 | 0 | No label on the road to the remote PE | L3VPN keeps its routes but nothing passes. The pseudowire goes down (`DN` on IOS XR, `pw-tx-fault` from the peer on IOS XE) | This page's topology |
 | 2 | An L3VPN RT import that does not match the other side's export | Only the PE with the wrong import lacks the remote routes in its VRF. The other side has them, so routes show on one side and nothing gets through | This page's topology |
@@ -323,3 +322,7 @@ and nothing passes. When something is up but nothing passes, suspect the tag han
 | 2 VPWS | `l2vpn xconnect context` → `member <peer> <VC ID> encapsulation mpls` | `l2vpn` → `xconnect group` → `p2p` → `neighbor ipv4 <peer> pw-id <ID>` |
 | 3 L2 | `service instance <n> ethernet` → `encapsulation dot1q`, `rewrite` | `interface <IF>.<n> l2transport` → `encapsulation dot1q`, `rewrite` |
 | 2 E-LAN | `bridge-domain` → `member vfi` / `member evpn-instance` | The IOS XRv 9000 on this topology cannot use bridge domains (M11 appendix) |
+
+:::note
+The configuration examples are cut from the running-config that was entered and worked in the PoC.
+:::

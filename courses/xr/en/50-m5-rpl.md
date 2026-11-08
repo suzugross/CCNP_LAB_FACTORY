@@ -4,9 +4,6 @@ On IOS you filter and change routes with prefix lists, AS-path access lists, com
 IOS XR replaces all of them with one language, the Routing Policy Language (RPL). You will meet it before you get
 very far with BGP on IOS XR, because without a policy an eBGP neighbour exchanges nothing.
 
-The outputs in this unit were captured on IOS XRd 26.1.1 (lab XRT-03). The same commands gave the same results on
-IOS XRv 9000 26.1.1.
-
 ## 1. Why a policy is required
 
 IOS XR follows RFC 8212: an eBGP neighbour with no inbound policy accepts no routes, and with no outbound policy
@@ -104,11 +101,11 @@ And the rule that matters most:
 **A route that reaches `end-policy` without being passed, done or changed by a `set` is dropped.**
 
 So the policy above accepts the /24 prefixes it tags and the one /25 it passes. Everything else reaches the end
-and is dropped, with no line saying so. The lab measured both halves of the rule:
+and is dropped, with no line saying so. Two small policies show both halves of the rule:
 
-- A policy with only `set local-preference 150` accepted every route, each with local preference 150.
-- A policy with only `if destination in (11.0.0.0/8) then set local-preference 150 endif` accepted 11.0.0.0/8 and
-  dropped everything else.
+- A policy with only `set local-preference 150` accepts every route, each with local preference 150.
+- A policy with only `if destination in (11.0.0.0/8) then set local-preference 150 endif` accepts 11.0.0.0/8 and
+  drops everything else.
 
 This is where IOS habits mislead. A route map also ends with an implicit deny, but a policy written as "drop what is
 bad" — `if destination in PRIVATE then drop endif` — reads like a complete filter and accepts nothing at all. It needs
@@ -190,7 +187,7 @@ on that neighbour; without it, `received routes` answers that inbound soft recon
 ## 6. Changing a policy
 
 A change to a policy or a set takes effect when you commit it. XR01 runs the routes it already holds through the new
-policy; no `clear bgp` is needed. In the lab a prefix added to an attached prefix-set showed up in the BGP table
+policy; no `clear bgp` is needed. A prefix added to an attached prefix-set shows up in the BGP table
 within seconds.
 
 The commit checks the whole picture, and refuses what cannot work:
@@ -226,6 +223,8 @@ Go to lab **XRT-03** and do the M5 tasks.
 <p class="tolab"><a href="/_learn?id=XRT-03">Open lab XRT-03 in the workspace</a> — <a href="51-m5-practice.html">The tasks</a></p>
 
 :::note
+The outputs in this unit were captured on IOS XRd 26.1.1 (lab XRT-03). The same commands gave the same results on
+IOS XRv 9000 26.1.1.
 Source: the IOS XR *Routing Configuration Guide* for the ASR 9000, *Implementing Routing Policy*, checked October 2026.
 The following come from measurement on IOS XRd 26.1.1 and IOS XRv 9000 26.1.1: the wording of the summary and the
 neighbour detail, a route changed by `set` being accepted without `pass`, a change taking effect without `clear bgp`,

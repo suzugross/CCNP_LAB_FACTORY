@@ -5,8 +5,6 @@ from where, and how much traffic aimed at the router itself it will take. IOS XR
 The answers are built differently, and two of them — rights and traffic to the router — are already in place
 before you configure anything.
 
-Everything shown here was captured on IOS XRv 9000 release 24.3.1.
-
 ## 1. Rights are task IDs
 
 IOS gives a user a privilege level from 0 to 15 and maps commands onto levels. IOS XR has no levels.
@@ -120,7 +118,7 @@ same configuration by interface.
 ### Do not lock yourself out
 
 MPP is the first feature in this track that can cut off the session you are typing in. This is what
-`commit confirmed` (M1) is for. One more detail from the lab:
+`commit confirmed` (M1) is for. One more detail:
 
 - If you **leave configuration mode** while a confirmed commit is pending, it is rolled back at once (M1).
 - If the **session drops** instead — you lock yourself out — the trial stays in place until the timer runs out,
@@ -174,8 +172,8 @@ A TACACS+ server gives an IOS XR user its rights in the attribute `task`. The va
 user groups, or both; Cisco's guide gives `task = "rwx:bgp,#operator"` as an example. `#` introduces a **user group**.
 After login, `show user group` shows the groups the server assigned, and `show user tasks` the resulting tasks.
 
-In the lab, the users from the server received their tasks even before any `aaa authorization` line was configured:
-the router made a second request for every login. The configuration guides use `aaa authorization exec` in their
+The users from the server receive their tasks even before any `aaa authorization` line is configured:
+the router makes a second request for every login. The configuration guides use `aaa authorization exec` in their
 examples. Configure it if you want the behaviour to be explicit, and test it on your release.
 
 ### The console
@@ -193,7 +191,7 @@ Server: 10.0.50.10/49 opens=52 closes=47 aborts=8 errors=0
 	idle-timeout=0 on-hold=true
 ```
 
-In the lab, logins kept falling back to local accounts for about 25 seconds after the server was running again.
+Logins keep falling back to local accounts for about 25 seconds after the server is running again.
 The hold is configurable (`holddown-time`, globally or per server). Remember this when you test a fallback:
 start the server again, then wait until `status=up` before you test the server path.
 
@@ -250,7 +248,7 @@ ACLs work as on IOS, with a different notation:
 
 What an ACL does to traffic is the same as on IOS. An inbound ACL on an interface also filters traffic addressed to
 the router. A list that ends in the implicit deny drops the OSPF hellos from the neighbour too, and the adjacency
-goes down when the dead timer expires. In the lab, an inbound ACL that permitted only TCP took the OSPF adjacency on
+goes down when the dead timer expires. An inbound ACL that permits only TCP, for example, takes the OSPF adjacency on
 that link down.
 
 ## 6. What changes in your habits
@@ -271,6 +269,7 @@ how the checks reach it. Plan each risky change as a confirmed commit.
 <p class="tolab"><a href="/_learn?id=XRT-02">Open lab XRT-02 in the workspace</a> — <a href="21-m2-practice.html">The tasks</a></p>
 
 :::note
+Everything shown here was captured on IOS XRv 9000 release 24.3.1.
 Sources: the IOS XR configuration guides for the ASR 9000 (System Security: *Configuring AAA Services*,
 *Implementing Management Plane Protection*; IP Addresses and Services: *Implementing LPTS*) and their command
 references, checked October 2026. The following come from measurement on 24.3.1, not from the documentation:

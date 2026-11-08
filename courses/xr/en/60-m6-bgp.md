@@ -4,9 +4,6 @@ You know BGP: sessions, attributes, path selection. This unit is about how IOS X
 where the IOS habits you bring lead you astray. It builds on M5: on IOS XR, most of what you do to BGP routes is done
 with route policies.
 
-The outputs in this unit were captured on IOS XRd 26.1.1 (lab XRT-03). The same BGP commands gave the same results on
-IOS XRv 9000 26.1.1.
-
 ## 1. How the configuration is laid out
 
 On IOS, a neighbour is created with `neighbor … remote-as` and then activated per address family with
@@ -106,7 +103,7 @@ end-policy
 
 It reads as "what ISP-OUT allows, prepended". It is not. A route that ISP-OUT drops is dropped. But a route that
 ISP-OUT does not pass simply reaches the end of ISP-OUT, undecided, and returns to B-OUT. There `prepend` changes it,
-and a changed route is accepted (M5). Measured in the lab, ISP-B received every route learnt from ISP-A, and the
+and a changed route is accepted (M5). As a result, ISP-B receives every route learnt from ISP-A, and the
 customer route marked "do not announce to ISP-B", all of them prepended.
 
 Two correct forms:
@@ -191,6 +188,8 @@ Go to lab **XRT-03** and do the M6 tasks, after the M5 tasks.
 <p class="tolab"><a href="/_learn?id=XRT-03">Open lab XRT-03 in the workspace</a> — <a href="61-m6-practice.html">The tasks</a></p>
 
 :::note
+The outputs in this unit were captured on IOS XRd 26.1.1 (lab XRT-03). The same BGP commands gave the same results on
+IOS XRv 9000 26.1.1.
 Source: the IOS XR *Routing Configuration Guide* for the ASR 9000, *Implementing BGP* and *Implementing Routing Policy*,
 checked October 2026. The following come from measurement on IOS XRd 26.1.1: the `apply` trap in section 4, a prepend
 count of 0, communities sent to iBGP without `send-community-ebgp`, and the running configuration not showing

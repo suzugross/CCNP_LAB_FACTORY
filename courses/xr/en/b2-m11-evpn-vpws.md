@@ -61,7 +61,7 @@ received XR01's route (tag 1) and imported it under its own EVI's RD.
 
 ### 2.3 One hop at a time: CEB1 to CEB3
 
-Follow a frame that CEB1 sends on VLAN 400. The label values were measured in one build of the lab.
+Follow a frame that CEB1 sends on VLAN 400. The label values are one example.
 
 :::topo
 nodes:
@@ -92,8 +92,8 @@ The PEs exchange `l2vpn evpn` routes with the route reflector XR02 only. XR02 ha
 M9; adding the `l2vpn evpn` address family to the same sessions makes it reflect EVPN routes too. XR02 is IOS XRd and
 takes no part in forwarding, so XRd can do the job.
 
-With the new PE, XR03, the routes took about a minute to settle in the lab after the session came up. Right after the
-session comes up, both ends of the E-Line still show `None`.
+With the new PE, XR03, the routes take about a minute to settle in this lab after the session comes up. Right after
+the session comes up, both ends of the E-Line still show `None`.
 
 ### 2.5 MTU and the control word
 
@@ -173,7 +173,7 @@ the MTU is handled.
 
 ### 3.3 Down, or up but not passing traffic
 
-The mismatches made in the lab, and what they showed:
+What each mismatch shows:
 
 | Mismatch | This end | The other end | Traffic |
 |---|---|---|---|
@@ -197,7 +197,7 @@ See what an AC that does not pop its tag looks like. Do this after Task M11-4.
 2. Run `show l2vpn xconnect` on XR01 and XR03, and `ping 172.31.40.3` on CEB1.
 3. Put the rewrite back, commit, and run the same commands again.
 
-Measured in the lab: both ends stayed UP, and the ping failed (0 percent).
+An example result: both ends stayed UP, and the ping failed (0 percent).
 With the rewrite back, the ping succeeded (100 percent).
 :::
 

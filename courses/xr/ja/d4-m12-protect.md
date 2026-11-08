@@ -3,7 +3,6 @@
 前の 2 つのページでは、正しいパケットを扱いで分けました。このページでは、来てはいけないパケットを落とします。送信元を偽った
 パケット、プロバイダーの基盤を狙うパケット、攻撃を受けている宛先へのパケットです。ブループリントの 1.7(データプレーンの
 セキュリティの実装= uRPF・ACL・RTBH・MACsec)にあたります。BGP FlowSpec(1.5.f)と DDoS(1.6.d)にも触れます。
-出力は前のページと同じ盤面で取得しました。
 
 ## 1. 何が嬉しいのか
 
@@ -97,7 +96,7 @@ RFC 7999 は、BLACKHOLE という印(65535:666)を決め、受け取った側�
 
 ここに、IOS と IOS XR の違いがあります。IOS は、送信元へのルートが 192.0.2.1 を経由して Null0 を向いていれば uRPF で
 落とします(Cisco のホワイト ペーパー、2005 年)。IOS XR の ASR 9000 は、uRPF で「Null0 への再帰的な参照」をしません
-(TAC 文書 116386)。このラボの XRv 9000 も同じでした。
+(TAC 文書 116386)。XRv 9000 も同じです。
 
 | XR01 が受け取った攻撃元(203.0.113.66)のルート | XR01 の経路 | INET 側に緩い uRPF を入れたとき |
 |---|---|---|
@@ -179,8 +178,46 @@ RP/0/RP0/CPU0:XR01#show access-lists ipv4 FROM-INTERNET hardware ingress locatio
 
 起点のルータ(RR1)で、目印のタグの付いたスタティック ルートを、RPL で書き換えて BGP に出します。
 
+RTBH の設定は 2 台にまたがります(この節の RR1 と、3.4 節の XR01)。図は、経路が RR1 から XR01 へ届き、その後に来た攻撃の
+パケットが捨てられるまでの順です。図の番号にカーソルを置くと(スマホでは押すと)、その部分の設定が出ます。
+
+:::walk
+legend: 線の上は BGP で配る経路と、その属性。橙は書き換えた属性。
+rows:
+  - panel: RR1
+    sub: 起点
+    items:
+      - ref: 1
+        head: "**捨てたい宛先を登録する** `router static`"
+        then: ["`198.51.100.130/32 Null0 tag 666`  目印のタグ 666 を付ける"]
+      - ref: 2
+        head: "**BGP に出す** `redistribute static route-policy RTBH-TRIGGER`"
+        match:
+          - ["if tag eq 666", true, 当たる]
+          - ["else", false, "ほかのスタティック ルートは drop"]
+        then:
+          - "→ `set next-hop 192.0.2.1`  捨て先へ書き換える"
+          - "→ `set community (65000:666, no-export)`  縁で拾う印と、ほかの AS へ出さない印"
+  - {wire: "[[=198.51.100.130/32]] [[!NH 192.0.2.1]] [[!65000:666 no-export]] _iBGP で縁へ"}
+  - panel: XR01
+    sub: 境界(INET との境)
+    items:
+      - ref: 3
+        head: "**受け取るときに調べる** `route-policy FROM-RR in`"
+        say: ["RR1(10.255.0.52)からの経路を、入口の RPL で調べる"]
+        match:
+          - ["if community matches-any RTBH", true, "65000:666 に当たる"]
+        then: ["→ `set next-hop discard`  直接 Null0 へ。ほかの経路は `pass` でそのまま"]
+      - say: ["~経路表と CEF: 198.51.100.130/32 は directly connected, via Null0(null0 adjacency)"]
+      - say: ["[[IP → 198.51.100.130]] ~INET から来た攻撃のパケット", "~XR01 の入口で捨てられ、CUST2(PE2 の先)には届かない"]
+  - aside: "③を書かないと(RR1 の書き換えだけ)"
+    say:
+      - "~XR01 の経路は 192.0.2.1 経由で Null0 を向く(PE2 と同じ)"
+      - "~送信元で捨てる RTBH(緩い uRPF)は、IOS XR では Null0 を再帰でたどらないので効かない(2.4 節)"
+:::
+
 :::config RR1 — タグ 666 のスタティック ルートを、捨て先を向いたルートとして配る
-route-policy RTBH-TRIGGER
+route-policy RTBH-TRIGGER                     ## ②
   if tag eq 666 then                          ## 目印の付いたスタティック ルートだけ
     set next-hop 192.0.2.1                    ## 捨て先へ書き換える(縁のルータ全部に 192.0.2.1/32 → Null0)
     set community (65000:666, no-export)      ## 縁で拾う印と、ほかの AS へ出さない印
@@ -192,12 +229,12 @@ end-policy
 !
 router static
  address-family ipv4 unicast
-  192.0.2.1/32 Null0                          ## 自分にも捨て先を置く(書き換えたネクスト ホップを解決するため)
-  198.51.100.130/32 Null0 tag 666             ## 捨てたいアドレスを登録する
+  192.0.2.1/32 Null0                          ## ② 自分にも捨て先を置く(書き換えたネクスト ホップを解決するため)
+  198.51.100.130/32 Null0 tag 666             ## ① 捨てたいアドレスを登録する
 !
 router bgp 65000
  address-family ipv4 unicast
-  redistribute static route-policy RTBH-TRIGGER
+  redistribute static route-policy RTBH-TRIGGER  ## ②
 :::
 
 IOS の縁のルータ(このラボの PE2)は、受け取ったルートのネクスト ホップ 192.0.2.1 を、Null0 へのスタティック ルートで
@@ -215,11 +252,11 @@ PE2#show ip cef 198.51.100.130 255.255.255.255 detail
 XR01 で、RR1 から受け取ったルートのうち印の付いたものを、直接 Null0 に向けます。
 
 :::config fold XR01 — 印の付いたルートを直接捨てる
-community-set RTBH
+community-set RTBH                            ## ③
   65000:666
 end-set
 !
-route-policy FROM-RR
+route-policy FROM-RR                          ## ③
   if community matches-any RTBH then
     set next-hop discard                      ## 直接 Null0 へ。送信元の uRPF もこれで落ちる
   endif
@@ -229,7 +266,7 @@ end-policy
 router bgp 65000
  neighbor 10.255.0.52                         ## RR1
   address-family ipv4 unicast
-   route-policy FROM-RR in
+   route-policy FROM-RR in                    ## ③
 :::
 
 ```console
@@ -272,7 +309,7 @@ RP/0/RP0/CPU0:XR01#show cef 198.51.100.130/32
 送ります。攻撃を受けている宛先へのパケットを、捨てる代わりに、洗浄の装置(スクラビング センター)へ寄せる、といった
 使い方です。
 
-:::config XR01 — 攻撃を受けている宛先へのパケットを、洗浄の役(CUST1 の側)へ寄せる(試した設定)
+:::config XR01 — 攻撃を受けている宛先へのパケットを、洗浄の役(CUST1 の側)へ寄せる
 ipv4 access-list TO-SCRUB
  10 permit ipv4 any host 198.51.100.130 nexthop1 ipv4 172.20.1.1   ## 一致したら 172.20.1.1 へ送る
  20 permit ipv4 any any                       ## 残りはふつうに転送
@@ -281,7 +318,7 @@ interface GigabitEthernet0/0/0/3
  ipv4 access-group TO-SCRUB ingress hardware-count
 :::
 
-ラボで測った結果: INET から 198.51.100.130 へ 20 発送ると、10 行目が 20 発に一致し(`20 hw matches (next-hop: addr=172.20.1.1,
+この ACL を当てて INET から 198.51.100.130 へ 20 発送ると、10 行目が 20 発に一致し(`20 hw matches (next-hop: addr=172.20.1.1,
 vrf name=default)`)、XR01 の CUST1 側のインターフェイスから 20 発出ていきました。RTBH で 198.51.100.130 を Null0 に向けて
 いても、ABF が先に効きました。
 
@@ -290,8 +327,8 @@ vrf name=default)`)、XR01 の CUST1 側のインターフェイスから 20 発
 この UDP のポートだけ」のように細かく切れます。規則を作って配る側を controller、受け取って自分のハードウェアに入れる側を
 client と呼びます。
 
-このラボで、RR1(XRd)を controller、XR01 を client にして試しました。規則(198.51.100.129 宛ての ICMP を 0 bps に)は XR01 に
-届き、`show flowspec ipv4 detail` に `Traffic-rate: 0 bps` と出ましたが、パケットは落ちませんでした。XRv 9000 は client として
+RR1(XRd)を controller、XR01 を client にすると、規則(198.51.100.129 宛ての ICMP を 0 bps に)は XR01 に届き、
+`show flowspec ipv4 detail` に `Traffic-rate: 0 bps` と出ましたが、パケットは落ちませんでした。XRv 9000 は client として
 規則を当てられません(Cisco Community の回答と同じ。公式の対応表にも FlowSpec はありません)。仕組みと設定の形は付録に
 まとめます。
 
@@ -304,7 +341,7 @@ ABF で、攻撃を受けている宛先へのパケットを、捨てる代わ�
    `ping 198.51.100.130 source Loopback0 repeat 20 timeout 1` を実行し、もう一度見ます。ACL の数も見ます。
 3. 45 行目を消してコミットします。
 
-ラボで測った結果: 20 発の送信の前後で、GigabitEthernet0/0/0/2 の `packets output` は 26 から 46 に増え、45 行目は
+結果の例: 20 発の送信の前後で、GigabitEthernet0/0/0/2 の `packets output` は 26 から 46 に増え、45 行目は
 `(20 hw matches) (next-hop: addr=172.20.1.1, vrf name=default)` でした。INET の ping の成功率は 0 です(洗浄役の CUST1 は
 このアドレスを持たないので応答しない)。RTBH で Null0 に向けた宛先でも、ABF が先に効きました。
 :::
@@ -316,6 +353,7 @@ ABF で、攻撃を受けている宛先へのパケットを、捨てる代わ�
 <p class="tolab"><a href="/_learn?id=XRT-14">ワークスペースでラボ XRT-14 を開く</a> — <a href="d5-m12-practice-3.html">課題 M12-4、M12-5</a></p>
 
 :::note
+このページの出力は、前のページと同じ盤面で取得しました。
 出典: RFC 3704(2.2〜2.5 節)、RFC 8704(3 節)、RFC 5635(3 節・4 節)、RFC 7999(2・3・5 節)、RFC 3882、RFC 8955。ASR 9000 の IP Addresses and
 Services Command Reference と Configuration Guide(IOS XR 24.x。`ipv4 verify unicast source reachable-via`、厳格と緩い、`ipv4 access-group … hardware-count`、
 object-group、ABF)、ASR 9000 の Routing Configuration Guide(IOS XR 7.10.x。RTBH と `set next-hop discard`)と Cisco 8000 の RPL のコマンド

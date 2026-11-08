@@ -16,8 +16,7 @@ appendix.
 | Appendix | E-Tree, G.8032, 802.1ah | — |
 
 The lab is XRT-11. It continues from lab XRT-10: the same square core, the same VPN customers, and XR01 and XR02 with the
-work of the M10 tasks done. A new provider edge (PE), XR03, has joined beyond RT01 and serves customer B's site 3. The
-outputs come from IOS XRv 9000 26.1.1 (XR01, XR03), IOS XRd 26.1.1 (XR02) and IOS XE 17.15 on IOL (the other routers).
+work of the M10 tasks done. A new provider edge (PE), XR03, has joined beyond RT01 and serves customer B's site 3.
 
 :::topo
 nodes:
@@ -114,8 +113,8 @@ PW ID is 100.
 
 ### 2.2 One hop at a time: CEA1 to CEA2
 
-Follow a frame that CEA1 sends on VLAN 100 until it reaches CEA2. The label values were measured in one build of the lab
-(the pseudowire labels change from build to build).
+Follow a frame that CEA1 sends on VLAN 100 until it reaches CEA2. The label values are one example (the pseudowire
+labels change from build to build).
 
 :::topo
 nodes:
@@ -187,7 +186,7 @@ In an E-Line, the MTU counts in three places.
   default of 1514, an AC with `pop 1` has 1500, and an AC that keeps its tag has 1504. IOS XE does not count the Layer 2
   header and signals 1500.
 - **The port MTU**: raising the parent port's MTU raises the MTU of every AC on the port. A sub-interface `mtu` cannot
-  exceed its parent: in the lab, with `mtu 9018` on the sub-interface, the AC stayed at 1500.
+  exceed its parent: with `mtu 9018` on the sub-interface, the AC stays at 1500.
 - **The core MTU**: the wrapped frame is the customer's packet plus an Ethernet header (14) and the labels (4 each), and
   the core does not fragment it. The lab's core is at 1500, so with the DF bit set, IP packets got through up to 1478
   bytes (1478 + 14 + 8 = 1500). Real networks run the core at a larger MTU than the customer's. IOL cannot change the
@@ -260,8 +259,7 @@ On RT02, `show l2vpn atom vc` and `show l2vpn atom vc vcid 100 detail` tell the 
 
 ### 3.3 Reading a pseudowire that stays down
 
-When a pseudowire does not come up, IOS XR's detail ends with an `Error:` line. The mismatches made in the lab, and what
-they showed:
+When a pseudowire does not come up, IOS XR's detail ends with an `Error:` line. What each mismatch shows:
 
 | Mismatch | XR shows (XR at the other end) | With IOS XE at the other end |
 |---|---|---|
@@ -280,7 +278,7 @@ See how an AC that forgot to pop its tag stops the pseudowire. Do this after Tas
 2. Run `show l2vpn xconnect detail` on XR01 and `show l2vpn atom vc vcid 100 detail` on RT02, and `ping 172.31.10.2` from CEA1.
 3. Put the rewrite back, commit, and run the same commands again.
 
-Measured in the lab: XR01's AC MTU became 1504, and the pseudowire went down with `Error: MTU mismatched` (RT02:
+An example result: XR01's AC MTU became 1504, and the pseudowire went down with `Error: MTU mismatched` (RT02:
 `Last error: Pseudowire MTU mismatch with peer`, MTU rows 1500 and 1504). The ping failed. With the rewrite back, it came
 up within 30 seconds.
 :::
@@ -303,6 +301,8 @@ Go to lab **XRT-11** and work through tasks M11-1 and M11-2. XR01 and XR03 are I
 <p class="tolab"><a href="/_learn?id=XRT-11">Open lab XRT-11 in the workspace</a> — <a href="b1-m11-practice.html">Tasks</a></p>
 
 :::note
+The outputs on this page come from IOS XRv 9000 26.1.1 (XR01, XR03), IOS XRd 26.1.1 (XR02) and IOS XE 17.15 on IOL (the
+other routers).
 Sources: L2VPN and Ethernet Services Configuration Guide for the ASR 9000, IOS XR 25.x (2025; point-to-point Layer 2
 services, the carrier Ethernet model) and its command reference. Release notes of the IOS XRv 9000, 24.1.1 (the L2VPN it
 supports is VPWS). IOS XE 17 MPLS Configuration Guide (Any Transport over MPLS, L2VPN Protocol-Based CLIs). TAC documents

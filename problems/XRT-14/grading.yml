@@ -52,13 +52,21 @@ checks:
   - regex: == COUNT CE1 D-AF11 (?:9|10)\n
   - regex: == COUNT CE1 D-BE (?:9|[1-9]\d)\n
   points: 12
-- name: 'M12-3 XR01: traffic to site 1 is shaped to 2 Mbps, with voice in the priority queue policed at 512 kbps'
+- name: 'M12-3 XR01: traffic to site 1 is shaped to 2 Mbps, with a priority queue policed at 512 kbps'
   node: XR01
   command: show qos interface GigabitEthernet0/0/0/1 output
   raw:
   - regex: 'Shape Info: rate 2000 kbps'
   - regex: '\(Priority 1\)[\s\S]*?Conform: 512 kbps'
-  points: 8
+  points: 4
+- name: 'M12-3 XR01: voice from the core is counted in the priority queue on the site 1 exit'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/qos_probe.py XRT-14 run --clear 'XR01:clear qos counters interface GigabitEthernet0/0/0/1 output' --send 'CE2:ping 10.46.1.1 source Loopback46 repeat 10'
+    --wait 30 --show 'XR01:show qos interface GigabitEthernet0/0/0/1 output' --show 'XR01:show policy-map interface GigabitEthernet0/0/0/1 output'
+  raw:
+  - regex: 'QueueID: (\d+) \(Priority 1\)[\s\S]*?== SHOW XR01: show policy-map[\s\S]*?Matched\s*:\s*(?:9|[1-9]\d+)/\d+(?:(?!Matched)[\s\S])*?Queue ID\s*:\s*\1\s'
+  points: 4
 - name: 'M12-4 CUST1 side: only sources in the customer allocation get through (an internet address and an unrouted address are dropped)'
   node: XR01
   exec: local

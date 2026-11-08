@@ -2,8 +2,6 @@
 
 OSPF はもう知っています。この単元で扱うのは、IOS XR での書き方と、IOS から持ち込んだ習慣が裏目に出る 3 つの場所だけです。
 
-ここに示す出力は、すべて IOS XRv 9000 リリース 24.3.1 で取得したものです。
-
 ## 1. 1 つのブロック、3 つの階層
 
 IOS では、OSPF は 2 か所に住んでいます。`router ospf` のブロックと、インターフェイス(`ip ospf …` の行)です。
@@ -54,8 +52,8 @@ GigabitEthernet0/0/0/2 is up, line protocol is up
     No Hellos (Passive interface)
 ```
 
-`show running-config router ospf 1 inheritance detail` は継承した値を表示するためのものです。このリリースでは、
-継承した passive に何の注記も付きませんでした。実際に効いている状態は `show ospf interface` で読みます。
+`show running-config router ospf 1 inheritance detail` は継承した値を表示するためのものです。リリース 24.3.1 では、
+継承した passive に何の注記も付きません。実際に効いている状態は `show ospf interface` で読みます。
 
 プロセス単位の `passive enable` と、隣接関係を作るべきリンクでの `passive disable` の組み合わせは、よくある設計です。
 新しいインターフェイスは、誰かが決めるまで黙っています。黙っているリンクを、プロセス単位の行を消して「直す」前に、このことを思い出します。
@@ -76,7 +74,7 @@ Gi0/0/0/3          1     1               10.0.23.1/24       1     P2P   0/0
 OSPFv3 は別のプロセス `router ospfv3` で、同じ 3 つの階層と同じ継承を持ちます。
 show コマンドも名前に従います。`show ospfv3 neighbor`、`show ospfv3 interface`、`show ospfv3 database` です。
 
-ラボで分かったことが 2 つあります。
+見ておく点が 2 つあります。
 
 - M0 のネットワーク タイプの罠は同じように働きます。XR01 が既定のブロードキャスト、RT01 がポイントツーポイントだと、
   隣接関係は FULL/DR になり、ルートは入りません。
@@ -128,6 +126,7 @@ OSPF への再配送とルートのフィルタは、IOS XR ではルート ポ�
 <p class="tolab"><a href="/_learn?id=XRT-02">ワークスペースでラボ XRT-02 を開く</a> — <a href="31-m3-practice.html">課題の一覧</a></p>
 
 :::note
+ここに示す出力は、すべて IOS XRv 9000 リリース 24.3.1 で取得したものです。
 出典: ASR 9000 向け IOS XR *Routing Configuration Guide* の *Implementing OSPF*(OSPF Hierarchical CLI and CLI Inheritance)、2026 年 10 月に確認。
 次の点は 24.3.1 の実測によります。`inheritance detail` が継承した passive を注記しないこと、IPv6 のテーブルで OSPFv3 のルートが `ospf` と表示されること。
 :::

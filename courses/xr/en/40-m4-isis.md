@@ -4,9 +4,6 @@ The CCNP Enterprise track teaches OSPF and EIGRP and barely mentions IS-IS. Most
 and the later units of this track (MPLS, segment routing) build on it. So this unit does what the others do not:
 it explains the protocol itself first, comparing it with OSPF where that helps, and then shows how IOS XR writes it.
 
-The outputs in this unit were captured on IOS XRd 26.1.1 and IOS XE 17.15 on IOL (lab XRT-04). The same IS-IS commands gave
-the same results on IOS XRv 9000 26.1.1.
-
 ## 1. What is different about IS-IS
 
 IS-IS is a link-state protocol like OSPF: every router floods a description of itself, every router holds the same
@@ -184,8 +181,8 @@ IOS XR still generate narrow metrics by default.
 
 The two forms are not translated. A router that accepts only narrow metrics skips TLV 22 and 135, and one that accepts
 only wide metrics skips TLV 2, 128 and 130. Two such routers still form an adjacency (hellos carry no metrics) and still
-exchange LSPs, but each ignores what the other says about its neighbours and prefixes. In the lab, XR01 still on
-narrow metrics holds RT02's LSP, written in the wide form:
+exchange LSPs, but each ignores what the other says about its neighbours and prefixes. For example, XR01, still on
+narrow metrics, holds RT02's LSP, written in the wide form:
 
 ```console
 RP/0/RP0/CPU0:XR01#show isis database detail level 2 RT02.00-00
@@ -334,7 +331,7 @@ Gi0/0/0/1          Yes    -    1      2/2        2/2     Up    1497    -    -
 Gi0/0/0/2          Yes    -    1      2/2        2/2     Up    1497    -    -
 ```
 
-A few more things measured in the lab:
+A few more points:
 
 - A loopback never sends hellos (its media type is `Loop`). `passive` on it is common practice, not a requirement.
 - Adjacency changes are not logged by default (`log adjacency changes` turns that on).
@@ -404,6 +401,8 @@ Go to lab **XRT-04** and do the M4 tasks.
 <p class="tolab"><a href="/_learn?id=XRT-04">Open lab XRT-04 in the workspace</a> — <a href="41-m4-practice.html">The tasks</a></p>
 
 :::note
+The outputs in this unit were captured on IOS XRd 26.1.1 and IOS XE 17.15 on IOL (lab XRT-04). The same IS-IS commands
+gave the same results on IOS XRv 9000 26.1.1.
 Sources: RFC 1142 (the text of ISO 10589; the area address in 7.1.1), RFC 1237 (the NSAP format), the IOS
 *IS-IS Overview and Basic Configuration* guide (the NET and its selector), the Junos *IS-IS User Guide* (Juniper's
 names and placement, and its advice on system IDs), the IOS XR *Routing Configuration Guide* for the ASR 9000, *Implementing IS-IS* (defaults: every instance is

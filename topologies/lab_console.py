@@ -605,6 +605,7 @@ async def h_console(request):
 #         check: m0t1              # 中間チェック problems/<ID>/grading.m0t1.yml(無ければ確認ボタンなし)
 #         hints: [{en: "...", ja: "..."}, ...]     # 上から順に 1 段ずつ開く
 #         solution: {en: "...", ja: "..."}         # 確認を通過するか、ヒントを全部開いた後に見せる
+#         verify: {en: "<Markdown>", ja: "..."}     # 確かめ方の例(BL-266)。いつでもボタンで開け、開いても記録しない
 #         read: [20-m2-management-plane#s1]        # この課題の背景の節(BL-252)。「ページ#節」(節= 読み物の data-sec)
 #     reading: xr                  # Reading タブに出す読み物(reading/<key>/)。無ければ Reading タブは出ない
 #   ヒントの本文と模範解はサーバが持ち、開いた分だけ返す(ページの中に先に入れない)。
@@ -728,6 +729,19 @@ def _learn_texts(app):
     return out
 
 
+def _learn_verify(app):
+    """確かめ方の例(BL-266)。learn.yml の各課題の verify:(言語ごとの Markdown)を HTML にする。
+    ヒントと違って隠す物ではないので、最初の読み込みで全部渡す(開いても記録しない)。"""
+    out = {}
+    for st in _learn_load(app):
+        v = st.get("verify") or {}
+        if isinstance(v, str):
+            v = {"en": v}
+        out[st["id"]] = {lang: render_html.md_to_body(md, allow_html=True)[0]
+                         for lang, md in v.items() if str(md).strip()}
+    return out
+
+
 def _learn_reading(app, request):
     """Reading タブ(BL-252)。learn.yml の reading:(本の key)と各課題の read:(「ページ#節」)を、
     パック配信サーバの読み物の URL と見出しの文字に解く。見出しは読み物の出力 reading/<key>/book.json から。
@@ -803,11 +817,13 @@ async def h_learn(request):
         return web.json_response({"enabled": False})
     reading, refs, tries = _learn_reading(app, request)
     texts = _learn_texts(app)
+    verify = _learn_verify(app)
     steps = _learn_view(app)
     for v in steps:
         v["read"] = refs.get(v["id"], [])
         v["tries"] = tries.get(v["id"], [])
         v["task"] = texts["tasks"].get(v["id"], {})
+        v["verify"] = verify.get(v["id"], {})
         m = re.match(r"(m\d+)t", v["id"])
         v["unit"] = texts["task_unit"].get(v["id"]) or (m.group(1) if m else "")
     return web.json_response({"enabled": True, "steps": steps, "reading": reading,
@@ -1084,6 +1100,9 @@ iframe{ border:0; width:100%; height:100%; background:var(--paper); }
 .step.flash{ box-shadow:0 0 0 2px var(--accent); transition:box-shadow .3s; }
 .step .lbl{ font-weight:600; color:var(--mute); font-size:11px; display:block; font-family:system-ui,sans-serif; }
 .step button.try{ border-color:#3f8f4f; color:#2f6f3c; }
+.step button.verify{ border-color:#3b6fb6; color:#2c5a99; } .step button.verify.on{ background:#e8f0fb; }
+.step .vbox{ margin:8px 0 0; border-left:3px solid #3b6fb6; padding:3px 0 3px 9px; }
+.step .vbox .ttext{ margin:2px 0 0; } .step .vbox .ttext pre{ font-size:11.5px; line-height:1.45; }
 /* 「やってみる」の小窓(2026-10-24): 課題カードのボタンで開く。モーダルにしない= 開いたままコンソールに打てる。
    見出しをつかんで動かす・最小化・閉じる。位置は端末ごとに覚える(localStorage) */
 #trypanel{ position:fixed; z-index:40;
@@ -1556,20 +1575,21 @@ let learnSteps = null, learnBusy = null, learnReading = null, learnRead = {};
 // 課題カード(BL-255): 課題文・単元の見出し・冒頭の約束。最初の読み込みで受け取って持っておく(確認・ヒントの応答には入らない)
 let learnTask = {}, learnUnit = {}, learnUnits = {}, learnRules = null, rulesOpen = false;
 let learnTries = {}, tryOpen = null;          // 課題ごとの「やってみる」・小窓に出している課題
+let learnVerify = {}, verifyOpen = new Set();  // 確かめ方の例(BL-266)・開いている課題(記録しない)
 function learnLang(){ return window.ccnpLang === 'ja' ? 'ja' : 'en'; }
 function tr(o){ if (!o) return ''; if (typeof o === 'string') return o; return o[learnLang()] || o.en || o.ja || ''; }
 const LT = {en: {check:'Check', checking:'Checking…', hint:'Hint', sol:'Reference solution', pass:'passed', fail:'not yet',
-                 none:'self-check', read:'Read:', rules:'Ground rules', note:'Each Check reads the live state of the devices (about 15 seconds). Leave configuration mode before you press it. Hints open one level at a time and are logged.',
+                 none:'self-check', read:'Read:', rules:'Ground rules', note:'Each Check reads the live state of the devices (about 15 seconds). Leave configuration mode before you press it. Hints open one level at a time and are logged. How to verify opens at any time and is not logged.',
                  busy:'Another check is still running.', reset:'Start over', resetting:'Resetting…',
                  resetq:'Start the whole lab over?\n\nXR01 is rolled back to the configuration it had right after the lab was built (your changes are discarded), and every task here returns to not yet checked, with no hints opened.',
                  resetdone:'The lab is back at its starting state.',
-                 tryit:'Try it', trytitle:'Try it', tryread:'Open in Reading', close:'Close', mini:'Minimise', restore:'Expand'},
+                 verify:'How to verify', tryit:'Try it', trytitle:'Try it', tryread:'Open in Reading', close:'Close', mini:'Minimise', restore:'Expand'},
             ja: {check:'確認', checking:'確認中…', hint:'ヒント', sol:'模範解', pass:'通過', fail:'未充足',
-                 none:'自己確認', read:'読み物:', rules:'進め方の約束', note:'確認は機器のいまの状態を読みます(約 15 秒)。設定モードを抜けてから押してください。ヒントは 1 段ずつ開き、開いた段数は記録されます。',
+                 none:'自己確認', read:'読み物:', rules:'進め方の約束', note:'確認は機器のいまの状態を読みます(約 15 秒)。設定モードを抜けてから押してください。ヒントは 1 段ずつ開き、開いた段数は記録されます。確かめ方はいつでも開け、記録されません。',
                  busy:'別の確認がまだ実行中です。', reset:'最初からやり直す', resetting:'戻しています…',
                  resetq:'ラボ全体を最初からやり直しますか？\n\nXR01 をラボを作った直後の設定へ戻し(あなたの変更は消えます)、ここの課題もすべて未確認・ヒント未開封に戻します。',
                  resetdone:'ラボを最初の状態に戻しました。',
-                 tryit:'やってみる', trytitle:'やってみる', tryread:'読み物で開く', close:'閉じる', mini:'たたむ', restore:'広げる'}};
+                 verify:'確かめ方', tryit:'やってみる', trytitle:'やってみる', tryread:'読み物で開く', close:'閉じる', mini:'たたむ', restore:'広げる'}};
 function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 // ---- 「やってみる」の小窓 ----
 function tryPanel(){
@@ -1672,6 +1692,12 @@ function paintSteps(){
       b.addEventListener('click', () => learnPost('hint', st.id));
       row.append(b);
     }
+    const vh = tr(learnVerify[st.id]);
+    if (vh){                                 // 確かめ方の例(BL-266)。開閉はこのページの中だけ(サーバに記録しない)
+      const b = el('button', 'verify' + (verifyOpen.has(st.id) ? ' on' : ''), T.verify);
+      b.addEventListener('click', () => { verifyOpen.has(st.id) ? verifyOpen.delete(st.id) : verifyOpen.add(st.id); paintSteps(); });
+      row.append(b);
+    }
     if ((learnTries[st.id] || []).length){   // 読み物の「やってみる」(その課題の read: の節にあるもの)を小窓で
       const b = el('button', 'try', T.tryit);
       b.addEventListener('click', () => openTry(st.id));
@@ -1697,6 +1723,10 @@ function paintSteps(){
       for (const ln of st.last.lines)
         r.append(el('div', ln.startsWith('[PASS]') ? 'p' : ln.startsWith('[FAIL]') ? 'f' : 'u', ln));
       box.append(r);
+    }
+    if (vh && verifyOpen.has(st.id)){
+      const d = el('div', 'vbox'); d.append(el('span', 'lbl', T.verify));
+      const b = el('div', 'ttext'); b.innerHTML = vh; d.append(b); box.append(d);
     }
     st.hints.forEach((hh, i) => { const d = el('div', 'hint'); d.append(el('span', 'lbl', T.hint + ' ' + (i + 1)), document.createTextNode(tr(hh))); box.append(d); });
     if (st.solution){ const d = el('div', 'sol'); d.append(el('span', 'lbl', T.sol), document.createTextNode(tr(st.solution))); box.append(d); }
@@ -1734,7 +1764,7 @@ async function learnPost(kind, id){
     if (!d.enabled) return;
     learnSteps = d.steps;
     for (const st of d.steps){ learnRead[st.id] = st.read || []; learnTask[st.id] = st.task || {}; learnUnit[st.id] = st.unit || '';
-                               learnTries[st.id] = st.tries || []; }
+                               learnTries[st.id] = st.tries || []; learnVerify[st.id] = st.verify || {}; }
     learnUnits = d.units || {}; learnRules = d.rules || null;
     if (d.reading){ learnReading = d.reading; $('#readbtn').hidden = false; }
     // 課題カード(BL-255): 課題文はこのタブに入るので Task タブは出さない。Task の枠は読み込んだまま残す

@@ -1,51 +1,9 @@
 # M12 — Marking and the MPLS QoS models
 
-This unit is about treating the packets that cross the provider's core differently, and about protecting the core
-from the packets that should not be there. In the CCNP Service Provider blueprint, it covers 4.5, implementing QoS
-services (classification and marking; congestion avoidance, policing and shaping), and 1.7, implementing data-plane
-security (uRPF, ACLs, RTBH, MACsec). The QoS architecture of 1.4 (the MPLS QoS models, MPLS TE QoS, DiffServ and
-IntServ, trust boundaries, the IPv6 flow label) is explained on this page and in the appendix.
-The unit has three pages and an appendix.
-
-| Page | Contents | Tasks |
-|---|---|---|
-| This page | What marks are good for, DSCP and EXP, following the marks on the labels hop by hop, the three models, building it in IOS XR | M12-1 |
-| Policing and shaping | Holding traffic to a contracted rate, evening it out at an exit, sending some of it first | M12-2, M12-3 |
-| Protecting the data plane | Dropping forged sources (uRPF), an ACL that protects the infrastructure, dropping an attack from afar (RTBH) | M12-4, M12-5 |
-| Appendix | TE and QoS (DS-TE and others), IntServ and RSVP, the IPv6 flow label, MACsec, what IOS XRv 9000 supports | — |
-
-The lab is XRT-14. XR01 and PE2 are the provider edges (PEs), on either side of P1. XR01 is also the border with the
-Internet. P1 is a core router without BGP, and RR1 is the route reflector. RR1 hangs off P1 and is on no customer's
-path. The output on this page was taken on IOS XRv 9000 26.1.1 (XR01), IOS XRd 26.1.1 (RR1) and IOS XE 17.15 on IOL
-(the other routers).
-
-:::topo
-nodes:
-  CE1: {at: [0, 0], label: "CE1 (A site 1)"}
-  CUST1: {at: [0, 1.2], label: "CUST1"}
-  INET: {at: [1.6, 2.2], label: "INET (Internet)"}
-  XR01: {at: [1.6, 0.6], label: "XR01 (PE)"}
-  RR1: {at: [3.2, -0.6], label: "RR1 (RR)"}
-  P1: {at: [3.2, 0.6], label: "P1 (P)"}
-  PE2: {at: [4.8, 0.6], label: "PE2 (PE)"}
-  CE2: {at: [6.4, 0], label: "CE2 (A site 2)"}
-  CUST2: {at: [6.4, 1.2], label: "CUST2"}
-links:
-  - [CE1, XR01, "VRF A"]
-  - [CUST1, XR01, "global"]
-  - [INET, XR01, "global"]
-  - [XR01, P1, "CORE-1"]
-  - [P1, PE2, "CORE-2"]
-  - [P1, RR1, "RR-LINK"]
-  - [PE2, CE2, "VRF A"]
-  - [PE2, CUST2, "global"]
-frames:
-  - {label: "AS 65000 (IS-IS CORE, LDP)", nodes: [XR01, P1, PE2, RR1]}
-:::
-
-Customer A has two sites, joined by an L3VPN (VRF A). Site 1 has phones and PCs; site 2 has a voice server and the
-business systems. CUST1 and CUST2 are customers who bought Internet access, and INET plays the Internet (page
-*Protecting the data plane*).
+The previous page laid out the parts of QoS inside one router. This page is about the first two jobs, sorting and
+marking: where the marks are set, how the MPLS core carries them on the labels, and how the customer's marks are kept
+apart from the provider's. It covers 4.5.a of the blueprint (classification and marking) and the QoS architecture of
+1.4. The board is XRT-14, shown on the previous page.
 
 ## 1. What it is good for
 
@@ -132,7 +90,7 @@ destination, whatever the class.
 ### 2.4 On the wire: with no policy at all
 
 Send three kinds of packet from customer A's site 1 to site 2. By destination, CE1 marks them EF, AF11 or not at all.
-With no QoS policy on XR01 or PE2, the packets on the links were captured on CML.
+The output below shows the packets on the links, with no QoS policy on XR01 or PE2.
 
 :::topo
 nodes:
@@ -179,7 +137,9 @@ label(s)" (an IOS TAC document). When a label is popped, the DSCP is not rewritt
 
 A provider may want to run its core on its own classes, apart from the customer's DSCP. The customer marks DSCP by its
 own rules and wants it carried between its sites unchanged. RFC 3270 sorts out the relation between these two marks
-(the customer's DSCP and the provider's EXP) into three models (section 2.6; TTL has the same three, in RFC 3443).
+(the customer's DSCP and the provider's EXP) into two models, uniform and pipe, and also defines short pipe as a variation
+of pipe (section 2.6). This page sets the three side by side and calls them the three models. TTL has the same models
+(RFC 3443).
 
 | Model | Ingress PE (IP → label) | Core | Egress PE (label → IP) |
 |---|---|---|---|
@@ -255,7 +215,7 @@ CE1#traceroute 10.100.2.1 source Loopback100 probe 1 timeout 2
   4 172.16.2.1 2 msec
 ```
 
-The label on the third hop is `0/21` because PE2 was advertising explicit null when this was measured (section 2.6).
+The label on the third hop is `0/21` because PE2 was advertising explicit null at the time (section 2.6).
 
 With `mpls ip-ttl-propagate disable` on XR01, XR01 sets the TTL of the labels it pushes to 255. The TTL no longer runs
 out inside the core, and P1 (10.0.1.51) disappeared from the traceroute. Providers that want to hide the shape of their
@@ -338,6 +298,12 @@ class for "EF not towards the voice network" (combine `match dscp ef` with an AC
 `class-map match-all`, or put a class for EF towards the voice network first and catch the remaining EF in a later
 class) and use `set dscp default` there.
 
+If that class has no `set mpls experimental imposition`, the EXP is a copy of the top three bits of the DSCP **after**
+the rewrite. On XRv 9000, EF in a class with only `set dscp default` was counted as EXP 0 at P1 (not 5, the value of
+EF before the rewrite). The official text quoted in section 2.4, however, does not say whether the value before or
+after the rewrite is copied. So it is safer to write `imposition` in a re-marking class too, and set the EXP without relying on
+the default copy (if you later change what the DSCP is rewritten to, the EXP does not change with it).
+
 The same thing in IOS XE looks like this (from the fixed configuration of PE2 in the lab). There is no
 `end-class-map`, and `set mpls experimental imposition` is written the same way.
 
@@ -366,22 +332,60 @@ XR01 reads the EXP of the outer label on its core-facing input and moves it into
 into the DSCP on its output towards CE1. With PHP the re-marking would not arrive (section 2.6), so XR01 advertises
 explicit null.
 
+The configuration falls into three chunks, which act on a packet from CE2 to site 1 in this order. ① is LDP
+configuration: it changes what P1 does before any packet comes. ② and ③ are QoS policies that act on a packet passing
+through XR01, on input and then on output. The numbers in the figure are the numbers in the notes of the configuration
+below; rest the pointer on a number in the figure (or tap it on a phone) to see that chunk of the configuration.
+
+:::walk
+legend: "Packets on the wire: outer label first; tc is a label's EXP. Orange: a mark that was changed."
+rows:
+  - {node: CE2, kind: host, say: ["~Sends voice marked EF"]}
+  - {wire: "[[IP DSCP EF]]"}
+  - {node: PE2, say: ["~Input CE-IN puts EXP 5 on EF and pushes two labels", "_(PE2's configuration in section 3.2)"]}
+  - {wire: "[[=18 tc 5]] [[=24007 tc 5]] [[IP EF]] _outer: to XR01; inner: VRF A's route"}
+  - {node: P1, say: ["~Re-marks the outer EXP from 5 to 0 (demotion in the core; 2.6)", "Swaps the outer label for label 0 instead of popping it (because of ①)"]}
+  - {wire: "[[!0 tc 0]] [[=24007 tc 5]] [[IP EF]] ^← the re-marked 0 arrives", gap: 16}
+  - panel: XR01
+    sub: egress PE
+    items:
+      - ref: 1
+        to: P1
+        code: mpls ldp … label local advertise explicit-null
+        say: ["Asks P1 to hand packets for XR01 over with label 0 on (no PHP).", "It is in place before any packet comes."]
+      - ref: 2
+        head: "**Input on Gi0/0/0/0 (to P1)** `service-policy input CORE-IN`"
+        say: ["Classes are checked from the top and the first match acts. It reads the top label's EXP"]
+        match:
+          - ["class EXP5  match mpls experimental topmost 5", false, no match]
+          - ["class EXP0  match mpls experimental topmost 0", true, "match → `set qos-group 7`"]
+      - say: ["~Pops the labels and picks the exit (Gi0/0/0/1) from VRF A's routes. This is not QoS", "[[IP EF]] [[~qos-group 7]] internal to the router; never on the wire"]
+      - ref: 3
+        head: "**Output on Gi0/0/0/1 (to CE1)** `service-policy output CE-OUT-UNIFORM`"
+        match:
+          - ["class QG7  match qos-group 7", true, "match → `set dscp default`"]
+  - {wire: "[[!IP DSCP 0]] ^The core's demotion shows to the customer (uniform)"}
+  - {node: CE1, kind: host, say: ["~Reaches site 1 with DSCP 0"]}
+  - aside: "Without ① (PHP stays)"
+    say: ["~P1 pops the outer label → [[=24007 tc 5]] [[IP EF]] ~→ ② reads 5 → ③ no match → CE1 gets EF"]
+:::
+
 :::config fold XR01 — copy the core's EXP back into the customer's DSCP at the egress (uniform)
 mpls ldp
  address-family ipv4
   label
    local
     advertise
-     explicit-null                            ## Ask for my loopback to be handed over with label 0 still on (no PHP)
+     explicit-null                            ## ① Ask for my loopback to be handed over with label 0 still on (no PHP)
 !
-class-map match-any EXP5
+class-map match-any EXP5                      ## ②
  match mpls experimental topmost 5            ## On the core-facing input, the EXP of the top label can be read
  end-class-map
-class-map match-any EXP0
+class-map match-any EXP0                      ## ②
  match mpls experimental topmost 0
  end-class-map
 !
-policy-map CORE-IN
+policy-map CORE-IN                            ## ②
  class EXP5
   set qos-group 5                             ## Move the EXP read into the router's internal mark (input only)
  !
@@ -390,26 +394,26 @@ policy-map CORE-IN
  !
  end-policy-map
 !
-class-map match-any QG7
+class-map match-any QG7                       ## ③
  match qos-group 7                            ## Readable on output only
  end-class-map
 !
-policy-map CE-OUT-UNIFORM
+policy-map CE-OUT-UNIFORM                     ## ③
  class QG7
   set dscp default                            ## What the core set to 0 goes to the customer as 0 too
  !
  end-policy-map
 !
-interface GigabitEthernet0/0/0/0              ## The interface to P1
+interface GigabitEthernet0/0/0/0              ## ② The interface to P1
  service-policy input CORE-IN
 !
-interface GigabitEthernet0/0/0/1              ## The interface to CE1
+interface GigabitEthernet0/0/0/1              ## ③ The interface to CE1
  service-policy output CE-OUT-UNIFORM
 :::
 
-Measured in the lab: before explicit null was advertised, the packets reached XR01 with only the inner label
-(`label 24007, tc 5`); CORE-IN counted them as EXP 5, and CE1 received them still EF. After it was advertised, they
-arrived with `label 0 (IPv4 explicit NULL), tc 0` on top, were counted in the EXP0 class, and reached CE1 with DSCP 0.
+Before explicit null is advertised, the packets reach XR01 with only the inner label (`label 24007, tc 5`); CORE-IN
+counts them as EXP 5, and CE1 receives them still EF. After it is advertised, they arrive with
+`label 0 (IPv4 explicit NULL), tc 0` on top, are counted in the EXP0 class, and reach CE1 with DSCP 0.
 
 ```console
 # On the P1 → XR01 link (after XR01 advertised explicit null)
@@ -461,7 +465,7 @@ the end.
 3. On P1, look at `show policy-map interface Ethernet0/0 input`. Which class counted the business packets (AF21)?
 4. Put XR01's policy back.
 
-Measured in the lab: `COUNT-EXP`'s EXP5, EXP3, EXP1 and EXP0 all stayed at 0, and `class-default` rose by 11 (the ten
+An example result: `COUNT-EXP`'s EXP5, EXP3, EXP1 and EXP0 all stayed at 0, and `class-default` rose by 11 (the ten
 packets and one other). The top three bits of AF21, 2, were copied into the EXP, which matched none of P1's counting
 classes.
 :::
@@ -483,6 +487,8 @@ Do Task M12-1 in lab **XRT-14**. XR01 is IOS XRv 9000, so the lab takes about te
 <p class="tolab"><a href="/_learn?id=XRT-14">Open lab XRT-14 in the workspace</a> — <a href="d1-m12-practice.html">Task M12-1</a></p>
 
 :::note
+The output on this page was taken on IOS XRv 9000 26.1.1 (XR01), IOS XRd 26.1.1 (RR1) and IOS XE 17.15 on IOL (the
+other routers).
 Sources: RFC 2474 (sections 3 and 4), RFC 2475 (section 2), RFC 2597 (sections 2 and 6), RFC 3246 (section 2), RFC 1633,
 RFC 2205, RFC 3270 (sections 1.2, 1.3 and 2.6), RFC 3443 (section 3), RFC 5462. The ASR 9000 Modular QoS Configuration Guide
 and Modular QoS Command Reference (IOS XR 24.x: default marking, the directions of qos-group and discard-class, the number

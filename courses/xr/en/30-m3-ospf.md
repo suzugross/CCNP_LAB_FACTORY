@@ -3,8 +3,6 @@
 You know OSPF. This unit is only about how IOS XR lets you write it down, and about three places where the
 habits you bring from IOS lead you astray.
 
-Everything shown here was captured on IOS XRv 9000 release 24.3.1.
-
 ## 1. One block, three levels
 
 On IOS, OSPF lives in two places: the `router ospf` block and the interfaces (`ip ospf …` lines).
@@ -55,7 +53,7 @@ GigabitEthernet0/0/0/2 is up, line protocol is up
     No Hellos (Passive interface)
 ```
 
-`show running-config router ospf 1 inheritance detail` is meant to show inherited values. On this release it did
+`show running-config router ospf 1 inheritance detail` is meant to show inherited values. On release 24.3.1 it does
 not mark the inherited passive at all. Read the effective state from `show ospf interface`.
 
 A process-level `passive enable` with `passive disable` on the links that should form adjacencies is a common design:
@@ -78,7 +76,7 @@ Gi0/0/0/3          1     1               10.0.23.1/24       1     P2P   0/0
 OSPFv3 is a separate process, `router ospfv3`, with the same three levels and the same inheritance.
 The show commands follow the name: `show ospfv3 neighbor`, `show ospfv3 interface`, `show ospfv3 database`.
 
-Two observations from the lab:
+Two things to notice:
 
 - The network-type trap from M0 works the same way. With XR01 on the default broadcast type and RT01 on
   point-to-point, the adjacency reaches FULL/DR and no route is installed.
@@ -131,6 +129,7 @@ Go to lab **XRT-02** and do the M3 tasks, after the M2 tasks.
 <p class="tolab"><a href="/_learn?id=XRT-02">Open lab XRT-02 in the workspace</a> — <a href="31-m3-practice.html">The tasks</a></p>
 
 :::note
+Everything shown here was captured on IOS XRv 9000 release 24.3.1.
 Source: the IOS XR *Routing Configuration Guide* for the ASR 9000, *Implementing OSPF* (OSPF Hierarchical CLI and CLI
 Inheritance), checked October 2026. The following come from measurement on 24.3.1: `inheritance detail` not marking
 the inherited passive, and OSPFv3 routes shown as `ospf` in the IPv6 table.

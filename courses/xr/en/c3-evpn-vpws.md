@@ -9,8 +9,7 @@ The difference shows in two situations. This page puts both ways side by side on
 - When a customer site is attached to two PEs
 - When the core road moves to SR and LDP is removed from the network
 
-The output was taken on the following topology, built for this page. The PEs are three Catalyst 8000V (IOS XE 17.15.1a).
-P1, RR1 and CE3 are IOL running IOS XE 17.15, and SW1 is IOL-L2. P1 is only a P router and does not run BGP.
+This page uses the following topology. P1 is only a P router and does not run BGP.
 
 :::topo
 nodes:
@@ -198,7 +197,7 @@ l2vpn evpn instance 150 point-to-point
   member GigabitEthernet2 service-instance 150
 :::
 
-If the two PEs do not share the `lacp device-id`, SW1 sees two partners and stops one link of the bundle (measured in the
+If the two PEs do not share the `lacp device-id`, SW1 sees two partners and stops one link of the bundle (see the
 M11 add-on). With the same ID, both links of SW1's bundle are `P` (bundled).
 
 ```console
@@ -222,11 +221,11 @@ SW1#show interfaces Ethernet0/1 | include packets output
      56301 packets output, 6653073 bytes, 0 underruns
 ```
 
-(The lines in the middle of the ping are omitted. These counts were taken after the road moved to SR in section 4. Which
+(The lines in the middle of the ping are omitted. These counts are from after the road moved to SR in section 4. Which
 link SW1 uses has nothing to do with how the core road is built.)
 
-The failover was measured too. While SW1 sent 15000 pings with a one-second timeout to CE3, a PE's link to SW1 was taken
-down. The number of pings lost in a row is roughly the length of the break in seconds. Even in normal running, a single
+Next, the failover: a PE's link to SW1 is taken down while SW1 sends 15000 pings with a one-second timeout to CE3.
+The number of pings lost in a row is roughly the length of the break in seconds. Even in normal running, a single
 ping is lost now and then.
 
 | Link taken down | PE that XE3 was using | Pings lost in a row |
@@ -426,3 +425,8 @@ lets both the road and the E-Line run without LDP, and LDP can leave the network
 In a sentence: **EVPN-VPWS is the way to bring the E-Line into the EVPN family.** Multihoming and running without LDP
 sit on the same BGP as L3VPN and the E-LAN. On the other hand, with a few PEs and a few lines, an LDP pseudowire is
 simpler, as there is no BGP EVPN to set up.
+
+:::note
+The outputs on this page were taken on a topology built for it: the PEs are three Catalyst 8000V (IOS XE 17.15.1a), P1,
+RR1 and CE3 are IOL running IOS XE 17.15, and SW1 is IOL-L2.
+:::

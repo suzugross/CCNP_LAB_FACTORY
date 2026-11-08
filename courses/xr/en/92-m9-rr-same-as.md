@@ -99,8 +99,8 @@ RP/0/RP0/CPU0:XR02#show bgp vpnv4 unicast neighbors 10.255.0.1 | include "accept
   Cumulative no. of prefixes denied: 0
 ```
 
-This was captured in the PoC, with XR02 configured without any route reflector line and without `retain`, while XR01
-was sending it two routes. Once XR02 is a route reflector, `show bgp vpnv4 unicast neighbors` prints
+The output above is from XR02 with no route reflector line and no `retain`, while XR01 was sending it two routes. Once
+XR02 is a route reflector, `show bgp vpnv4 unicast neighbors` prints
 `Route-Reflector Client` in the part of each address family where it is configured, so look at the one under VPNv4.
 
 `retain route-target all` under `address-family vpnv4 unicast` makes a router keep VPNv4 routes that no VRF imports.
@@ -133,7 +133,7 @@ router does not double as one. XR02 in this lab also sits at a dead end beyond R
 XR02 runs IOS XRd. Cisco offers XRd in a control-plane form for route reflectors and other roles off the forwarding
 path.
 
-It is not suitable as XR01 in this lab: in the PoC with XRd as XR01, ping passed both ways, but TCP and UDP
+It is not suitable as XR01 in this lab: with XRd as XR01, ping passed both ways, but TCP and UDP
 packets that XRd received from a CE and sent on with labels, or routed between two VRFs or between a VRF and the global
 table, arrived with a bad checksum. Traceroutes from CEA1 stopped after the first hops. Packets that XRd received with
 labels and sent to a CE were intact. IOS XRv 9000 forwarded all of them correctly.
@@ -162,7 +162,7 @@ Route Distinguisher: 10.255.0.1:101 (default for vrf CUST-A)
 ```
 
 The two routes from site 2 (10.101.2.0/24 and 198.51.100.128/25, both with path 65101) are missing from what XR01 sends
-to CEA1; the routes without 65101 in their path go out. This was captured after Task M9-4 with `as-override` removed.
+to CEA1; the routes without 65101 in their path go out. The output above is with `as-override` removed after Task M9-4.
 
 `as-override` under the CE neighbour's address family replaces the customer's AS in the path with the provider's, and
 the route goes out with `65000 65000`. That is how site 2's routes look in CEA1's BGP table:
@@ -190,7 +190,7 @@ SoO to the routes it receives from a CE, and does not send a route with that mar
 4364 says that a route must never be distributed to a CE of the site that its Site of Origin attribute identifies
 (section 8).
 
-In the lab, with SoO 65101:1 on XR01's neighbour CEA1, site 1's route arrived at RT02 with the mark:
+With SoO 65101:1 on XR01's neighbour CEA1, site 1's route arrived at RT02 with the mark:
 
 ```console
 RT02#show ip bgp vpnv4 vrf CUST-A 10.101.1.0
@@ -225,7 +225,7 @@ Total number of prefixes 2
 ```
 
 Each site in the lab is attached to one PE only, so an SoO normally changes nothing here. The same value on two sites
-was only to watch the mark work (it was removed after the measurement).
+was only to watch the mark work (RT02's fixed configuration has no SoO).
 
 ## 3. Building it on IOS XR
 
@@ -282,7 +282,7 @@ Take the override away. Do it after Task M9-2.
    `show bgp vrf CUST-A neighbors 172.16.11.2 advertised-routes`. On CEA1, run `show ip bgp`.
 3. Put `as-override` back and commit.
 
-What the lab measured: within 20 seconds, XR01 showed `Not advertised to any peer` for the routes of site 2, they were
+An example result: within 20 seconds, XR01 showed `Not advertised to any peer` for the routes of site 2, they were
 gone from `advertised-routes`, and CEA1 no longer had them. XR01 withdrew them, rather than sending them with 65101 in
 the path. With the line back, CEA1 had them again with `65000 65000`.
 :::

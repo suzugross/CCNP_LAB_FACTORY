@@ -26,9 +26,9 @@ frames:
 
 Suppose the link between XE3 and P1 starts dropping every packet while both ports stay up: a fault inside a carrier's
 transmission system, or a congested or misprogrammed device on the way. No interface goes down, so nothing reacts at
-once. In the lab, such a fault (a CML link condition of 100 % loss) was set between XE3 and P1: ten seconds later,
-IS-IS and LDP on P1 still showed their neighbours up, and the pseudowire was still UP at both ends. The customer's
-traffic, meanwhile, was gone.
+once. Set such a fault between XE3 and P1 (a CML link condition of 100 % loss), and ten seconds later IS-IS and LDP on
+P1 still show their neighbours up, and the pseudowire is still UP at both ends. The customer's traffic, meanwhile, is
+gone.
 
 ### 1.2 Before: wait for the routing protocols, or for the customer
 
@@ -111,8 +111,8 @@ and never sees the Ethernet frames.
 ### 2.5 Y.1731: measuring delay
 
 Y.1731's **delay measurement** sends a DMM (delay measurement message) from one MEP to the other, which answers with a
-DMR; the time stamps give the two-way frame delay. On IOS XE an IP SLA operation runs it and keeps statistics. In the lab
-it sent one DMM per second, and the two-way delay was about 0.7 to 1.9 ms:
+DMR; the time stamps give the two-way frame delay. On IOS XE an IP SLA operation runs it and keeps statistics. The
+operation below sends one DMM per second, and the two-way delay is about 0.7 to 1.9 ms:
 
 ```console
 XE1#show ip sla statistics 130 details
@@ -184,14 +184,14 @@ Total Remote MEPs: 1
 
 ### 3.3 What goes wrong
 
-| Mistake | What the lab showed |
+| Mistake | What it looks like |
 |---|---|
 | No `ethernet cfm global` | The MEPs exist with `CC` = `I`, and no remote MEP is ever learned |
-| The default CC interval | A silent break is noticed after 35 s (still listed after 10 s in the lab) |
-| `service … evc … vlan <n>` for an xconnect | Refused: a VLAN on the service line is for a bridge-domain service (seen in the PoC) |
+| The default CC interval | A silent break is noticed after 35 s (still listed after 10 s) |
+| `service … evc … vlan <n>` for an xconnect | Refused: a VLAN on the service line is for a bridge-domain service |
 | The other end lost while Y.1731 runs | The operation stopped with `Latest operation return code: Internal error` and did not start again when MEP 3 came back; `ip sla restart 130` (in configuration mode) started it again |
 
-In the PoC, an up MEP on the EFP of an EVPN-VPWS E-Line did not work (one end sent no CCMs). The IOS XE CFM chapter for
+An up MEP on the EFP of an EVPN-VPWS E-Line does not work (one end sends no CCMs). The IOS XE CFM chapter for
 QFP-based platforms (which names the C8000v) lists the restriction: an EVPN EFI cannot be associated with an EVC, only
 down MEPs are supported on the EFP in an EVPN scenario, and an up MEP cannot send CFM packets from the EFI to the peer
 site. This lab watches the LDP pseudowire for that reason.
@@ -206,7 +206,7 @@ Make the break that nobody notices. Do this after Task M11-9.
    `ip sla restart 130` in configuration mode, and look at the statistics again.
 4. To compare, remove `continuity-check interval 1s` on both PEs and repeat steps 1 to 3. Put the line back afterwards.
 
-Measured in the lab: with 1 s, MEP 3 was gone within about 3 seconds, while P1 still listed XE3 as an IS-IS neighbour.
+An example result: with 1 s, MEP 3 was gone within about 3 seconds, while P1 still listed XE3 as an IS-IS neighbour.
 With the default interval, MEP 3 was still listed after 10 seconds. After the break, the Y.1731 operation showed
 `Internal error` until it was restarted.
 :::
@@ -239,6 +239,7 @@ In lab **XRT-12**, work through Task M11-9. This completes the M11 supplement; t
 <p class="tolab"><a href="/_learn?id=XRT-12">Open lab XRT-12 in the workspace</a> — <a href="bc-m11-practice-6.html">Tasks</a></p>
 
 :::note
+The refused VLAN on an xconnect service and the up MEP that does not work on EVPN-VPWS come from the PoC.
 Sources: Application Services Configuration Guide, Cisco IOS XE 17.x (Configuring Ethernet CFM for Cisco QFP-Based
 Platforms; it names the C8000v, gives the default interval of 10 s, and lists the EVPN restriction). IP Addressing
 Configuration Guide, Cisco IOS XE 17.x (Configuring IP SLAs Metro-Ethernet 3.0 (ITU-T Y.1731) Operations). Interface and

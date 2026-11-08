@@ -1,5 +1,7 @@
 # XRT-14 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn XRT-14 が読む。
 # hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# verify= 確かめ方の例(BL-266)。いつでも開け、記録しない。結果を観る手順(入ったか → 流して数える → 届いた先 → 壊していないか)までで、
+# 落とし穴の名前や直し方は書かない(それはヒントと模範解の役目)。出力の例は実機の記録(poc/xr/expM12-*.log・ラボの実測)から。
 # ここに書いた挙動は IOS XRv 9000 26.1.1・IOS XRd 26.1.1(+IOL 17.15)の実機で確認した(設計= problems/_drafts/XR-TRACK.design.md §27)。
 # 模範解の「On XR01:」「On RR1:」の見出し= 機器ごとの塊(poc/xr/verbatim.py が見出しごとに送り先を替える)。
 # 読み物(BL-252)= Reading タブに出す本(reading/<key>/)。各課題の read: はその本の「ページ#節」(節= data-sec)。
@@ -16,6 +18,97 @@ steps:
         ja: "`show qos interface GigabitEthernet0/0/0/1 input`(`Child Mark:` の行)、`show policy-map interface GigabitEthernet0/0/0/1 input`(30 秒ほど待つ)。P1 で `show policy-map interface Ethernet0/0 input`。CE2 で `show policy-map interface Ethernet0/0 input`。ガイド: Modular QoS Configuration Guide(ASR 9000)の「Configuring Modular QoS Packet Classification and Marking」。"
       - en: "An `ipv4 access-list` for 10.46.0.0/16; `class-map match-all` with `match dscp ef` and `match access-group ipv4 <ACL>`; a second class for the remaining EF; one for `match dscp af21`. In the `policy-map`: `set mpls experimental imposition 5`, `set dscp default` with `imposition 0`, `imposition 3`, and `imposition 0` in `class-default`. Then `service-policy input` on GigabitEthernet0/0/0/1."
         ja: "10.46.0.0/16 の `ipv4 access-list`。`match dscp ef` と `match access-group ipv4 <ACL>` の `class-map match-all`。残りの EF のための 2 つ目のクラス。`match dscp af21` のクラス。`policy-map` の中は `set mpls experimental imposition 5`、`set dscp default` と `imposition 0`、`imposition 3`、`class-default` に `imposition 0`。最後に GigabitEthernet0/0/0/1 に `service-policy input`。"
+    verify:
+      en: |
+        **1. Is it in?** (XR01)
+
+        - `show qos interface GigabitEthernet0/0/0/1 input` shows how the policy was programmed into the data plane.
+          Compare the order of the classes and each class's `Child Mark:` line with the requirements
+          (`set exp-imp <n>` is the EXP of every label pushed, `set dscp <n>` rewrites the DSCP; 0 is default).
+
+        **2. Send traffic** (CE1)
+
+        - Ten of each: `ping 10.46.2.1 source Loopback46 repeat 10` (EF to the voice network),
+          `ping 10.21.2.1 source Loopback21 repeat 10` (AF21), `ping 10.100.2.1 source Loopback100 repeat 10`
+          (EF to the LAN). All three should reach 100 percent.
+        - Zero the counters first on the devices you count on (`clear counters Ethernet0/0` on IOS XE,
+          `clear qos counters interface GigabitEthernet0/0/0/1 input` on XR01), so that the increase is easy to read.
+
+        **3. Count at the ingress** (XR01)
+
+        - Wait about 30 seconds, then `show policy-map interface GigabitEthernet0/0/0/1 input`. Each class's `Matched`
+          should rise by the 10 you aimed at it: this tells you which class each kind of packet fell into. Right after
+          sending, it still shows 0.
+
+        **4. Count in the core** (P1)
+
+        - `show policy-map interface Ethernet0/0 input` (the fixed `COUNT-EXP`). EXP5 and EXP3 should show 10 each,
+          EXP1 0, and EXP0 10 or more (it may count other traffic too). If the three add up to less than you sent,
+          the rest is in `class-default`: an EXP that is none of 5, 3, 1 and 0 (with no policy, AF21 gives 2, for example).
+
+        Example (P1 after the three kinds were sent twice; excerpt):
+
+        ```
+            Class-map: EXP5 (match-any)
+              20 packets, 2440 bytes
+            Class-map: EXP3 (match-any)
+              20 packets, 2440 bytes
+            Class-map: EXP1 (match-any)
+              0 packets, 0 bytes
+            Class-map: EXP0 (match-any)
+              20 packets, 2440 bytes
+        ```
+
+        **5. Count where it arrives** (CE2)
+
+        - `show policy-map interface Ethernet0/0 input` (the fixed `COUNT-DSCP`). D-EF, D-AF21 and D-BE should show
+          10 each. D-EF at 20 means the LAN's EF was not rewritten. D-AF21 at 0 means the AF21 DSCP was changed too,
+          which the task does not allow.
+      ja: |
+        **1. 入ったか**(XR01)
+
+        - `show qos interface GigabitEthernet0/0/0/1 input` は、ポリシーがデータプレーンにどう入ったかを示します。
+          クラスが上から並ぶ順と、各クラスの `Child Mark:` の行を、要件と突き合わせます
+          (`set exp-imp <n>` は積むラベル全部の EXP、`set dscp <n>` は DSCP の書き換えです。0 は default)。
+
+        **2. 流す**(CE1)
+
+        - 3 種類を 10 発ずつ送ります。`ping 10.46.2.1 source Loopback46 repeat 10`(音声網宛ての EF)、
+          `ping 10.21.2.1 source Loopback21 repeat 10`(AF21)、`ping 10.100.2.1 source Loopback100 repeat 10`
+          (LAN 宛ての EF)。3 つとも 100 percent になること。
+        - 数える機器では、先に数を 0 にしておくと増えた分が読みやすくなります(IOS XE は `clear counters Ethernet0/0`、
+          XR01 は `clear qos counters interface GigabitEthernet0/0/0/1 input`)。
+
+        **3. 入口で数える**(XR01)
+
+        - 30 秒ほど待ってから `show policy-map interface GigabitEthernet0/0/0/1 input`。各クラスの `Matched` が、
+          狙ったとおりに 10 ずつ増えたかを見ます。どの種類のパケットがどのクラスに入ったかが分かります。
+          流してすぐは 0 のままです。
+
+        **4. コアで数える**(P1)
+
+        - `show policy-map interface Ethernet0/0 input`(据え付けの `COUNT-EXP`)。EXP5 と EXP3 が 10 ずつ、EXP1 が 0、
+          EXP0 が 10 以上(ほかの通信も数えることがあります)。3 つの合計が送った数より少なければ、残りは `class-default`
+          に入っています。EXP が 5・3・1・0 のどれでもないということです(たとえばポリシーが無いと、AF21 は 2 になります)。
+
+        例(3 種類を 2 回ずつ送った後の P1。抜粋):
+
+        ```
+            Class-map: EXP5 (match-any)
+              20 packets, 2440 bytes
+            Class-map: EXP3 (match-any)
+              20 packets, 2440 bytes
+            Class-map: EXP1 (match-any)
+              0 packets, 0 bytes
+            Class-map: EXP0 (match-any)
+              20 packets, 2440 bytes
+        ```
+
+        **5. 届いた先で数える**(CE2)
+
+        - `show policy-map interface Ethernet0/0 input`(据え付けの `COUNT-DSCP`)。D-EF・D-AF21・D-BE が 10 ずつ。
+          D-EF が 20 なら、LAN 宛ての EF が書き換わっていません。D-AF21 が 0 なら、AF21 の DSCP まで変えています
+          (課題はそれを認めていません)。
     solution:
       en: |
         On XR01:
@@ -121,6 +214,112 @@ steps:
         ja: "`show qos interface GigabitEthernet0/0/0/1 input`(`Policer Profile`、`Conform`、`Peak`、`Child Policer Exceed`)、`show policy-map interface GigabitEthernet0/0/0/1 input`(`Policed(conform/exceed/violate)`。30 秒ほど待つ)。CE2 で `show policy-map interface Ethernet0/0 input`(D-AF21 と D-AF22)。コマンド リファレンス: Modular QoS Command Reference(ASR 9000)の `police rate`。"
       - en: "In `policy-map CE1-IN` → `class DATA`: `police rate 256 kbps peak-rate 512 kbps`, then `conform-action transmit`, `exceed-action set dscp af22`, `violate-action drop`."
         ja: "`policy-map CE1-IN` → `class DATA` の下で `police rate 256 kbps peak-rate 512 kbps`、続けて `conform-action transmit`、`exceed-action set dscp af22`、`violate-action drop`。"
+    verify:
+      en: |
+        **1. Is it in?** (XR01)
+
+        - In `show qos interface GigabitEthernet0/0/0/1 input`, read the business-data class. `Policer Profile: … (TrTCM)`
+          is a two-rate, three-colour policer, `Conform:` and `Peak:` are the two rates, and the
+          `Child Policer Conform/Exceed/Violate:` lines are the action for each colour (`set dscp 20` is AF22, `DROP` drops).
+
+        Example (excerpt):
+
+        ```
+        Policer Profile: 0 (TrTCM)
+        Conform: 256 kbps (256 kbps) Burst: 3200 bytes (0 Default)
+        Peak: 512 kbps (512 kbps) Burst: 6400 bytes (0 Default)
+        Child Policer Conform: set exp-imp 3
+        Child Policer Exceed: set exp-imp 3   set dscp 20
+        Child Policer Violate: DROP
+        ```
+
+        **2. Send more than the rates allow** (CE1)
+
+        - `ping 10.21.2.1 source Loopback21 repeat 1000 size 500 timeout 0`. With `timeout 0` the router sends the next
+          packet without waiting for the reply, which goes well past 512 kbps. It reports `0 percent`, but the packets
+          did go out: you count them on the receiving side.
+        - Then `ping 10.46.2.1 source Loopback46 repeat 10` (voice).
+
+        **3. Count each colour at the ingress** (XR01)
+
+        - Wait about 30 seconds, then `show policy-map interface GigabitEthernet0/0/0/1 input`. In the business-data class,
+          `Policed(conform)`, `Policed(exceed)` and `Policed(violate)` are the three colours. All three rising means both
+          rates are working.
+
+        Example (30 seconds after the burst; excerpt. Right after it, every line was 0):
+
+        ```
+        Class DATA
+          Classification statistics          (packets/bytes)     (rate - kbps)
+            Matched             :                 924/478632               0
+            Total Dropped       :                 894/463092               0
+          Policing statistics                (packets/bytes)     (rate - kbps)
+            Policed(conform)    :                  15/7770                 0
+            Policed(exceed)     :                  15/7770                 0
+            Policed(violate)    :                 894/463092               0
+        ```
+
+        **4. Count where it arrives** (CE2)
+
+        - `show policy-map interface Ethernet0/0 input`. D-AF21 matches the conform count and D-AF22 the exceed count
+          (15 and 15 in the example above). The violating packets never arrive.
+
+        **5. Did anything else break?**
+
+        - The voice ping is at 100 percent (voice is in another class and never meets the policer).
+        - Run the checks of task M12-1 again (P1 and CE2). After changing a policy, confirm the earlier behaviour too.
+      ja: |
+        **1. 入ったか**(XR01)
+
+        - `show qos interface GigabitEthernet0/0/0/1 input` の業務のクラスを読みます。`Policer Profile: … (TrTCM)` が
+          2 速度 3 色のポリサ、`Conform:` と `Peak:` が 2 つの速さ、`Child Policer Conform/Exceed/Violate:` の行が
+          色ごとの動作です(`set dscp 20` は AF22、`DROP` は捨てる)。
+
+        例(抜粋):
+
+        ```
+        Policer Profile: 0 (TrTCM)
+        Conform: 256 kbps (256 kbps) Burst: 3200 bytes (0 Default)
+        Peak: 512 kbps (512 kbps) Burst: 6400 bytes (0 Default)
+        Child Policer Conform: set exp-imp 3
+        Child Policer Exceed: set exp-imp 3   set dscp 20
+        Child Policer Violate: DROP
+        ```
+
+        **2. 速さを超える量を流す**(CE1)
+
+        - `ping 10.21.2.1 source Loopback21 repeat 1000 size 500 timeout 0`。`timeout 0` は応答を待たずに次を送るので、
+          512 kbps を大きく超えます。成功率は `0 percent` と出ますが、パケットは送れています。数えるのは受け取った側です。
+        - 続けて `ping 10.46.2.1 source Loopback46 repeat 10`(音声)。
+
+        **3. 入口で色ごとに数える**(XR01)
+
+        - 30 秒ほど待ってから `show policy-map interface GigabitEthernet0/0/0/1 input`。業務のクラスの
+          `Policed(conform)`・`Policed(exceed)`・`Policed(violate)` が 3 色の内訳です。3 つとも増えていれば、
+          2 つの速さが両方効いています。
+
+        例(流してから 30 秒後。抜粋。流した直後はどの行も 0 でした):
+
+        ```
+        Class DATA
+          Classification statistics          (packets/bytes)     (rate - kbps)
+            Matched             :                 924/478632               0
+            Total Dropped       :                 894/463092               0
+          Policing statistics                (packets/bytes)     (rate - kbps)
+            Policed(conform)    :                  15/7770                 0
+            Policed(exceed)     :                  15/7770                 0
+            Policed(violate)    :                 894/463092               0
+        ```
+
+        **4. 届いた先で数える**(CE2)
+
+        - `show policy-map interface Ethernet0/0 input`。D-AF21 が conform の数、D-AF22 が exceed の数と同じになります
+          (上の例では 15 と 15)。違反の分は届きません。
+
+        **5. 壊していないか**
+
+        - 音声の ping が 100 percent(音声は別のクラスなので、ポリサを通りません)。
+        - 課題 M12-1 の確かめ方(P1 と CE2 の数)をもう一度通します。ポリシーを書き換えた後は、前の課題の動作も確かめ直します。
     solution:
       en: |
         On XR01:
@@ -177,6 +376,87 @@ steps:
         ja: "CE1 で `show policy-map interface Ethernet0/0 input`。XR01 で `show mpls ldp bindings 10.255.0.1/32`、P1 で `show mpls forwarding-table 10.255.0.1 32`(Pop か explicit-n か)。`show policy-map interface GigabitEthernet0/0/0/0 input`、`show qos interface GigabitEthernet0/0/0/1 output`。ガイド: Modular QoS Configuration Guide(ASR 9000)の「Modular QoS Deployment Scenarios」(MPLS QoS= uniform・pipe・short pipe)と「Configuring Modular QoS Congestion Management」(階層のポリシー)、MPLS Command Reference の LDP の `explicit-null`。"
       - en: "`mpls ldp` → `address-family ipv4` → `label local advertise explicit-null`. Classes on `match mpls experimental topmost` 5, 3, 1, 0 in an input policy on GigabitEthernet0/0/0/0 that `set qos-group`; classes on `match qos-group` in a child policy that `set dscp` (and, for voice, `priority level 1` with `police rate 512 kbps`); a parent with only `class class-default`, `shape average 2 mbps` and `service-policy <child>`, applied as `service-policy output` on GigabitEthernet0/0/0/1."
         ja: "`mpls ldp` → `address-family ipv4` → `label local advertise explicit-null`。`match mpls experimental topmost` の 5・3・1・0 のクラスで `set qos-group` する入力のポリシーを GigabitEthernet0/0/0/0 に。`match qos-group` のクラスで `set dscp` する子のポリシー(音声には `priority level 1` と `police rate 512 kbps` も)。`class class-default` だけを持ち、`shape average 2 mbps` と `service-policy <子>` を書いた親を、GigabitEthernet0/0/0/1 に `service-policy output` で。"
+    verify:
+      en: |
+        **1. Is it in?** (XR01)
+
+        - `show qos interface GigabitEthernet0/0/0/1 output`. `Shape Info: rate 2000 kbps` is the shaping of the whole
+          exit, `QueueID: … (Priority 1)` on the voice class is the priority queue, the `Conform: 512 kbps` under it is
+          the cap on priority, and each class's `set dscp <n>` is the rewrite (46 is EF, 18 AF21, 10 AF11, 0 default).
+        - If you applied policies on other interfaces or directions too, read each of them with
+          `show qos interface <interface> input` or `output`.
+
+        Example (excerpt):
+
+        ```
+        Shape Info: rate 2000 kbps, burst 25000 bytes,
+        QueueID: 32 (Priority 1)
+        Conform: 512 kbps (512 kbps) Burst: 6400 bytes (0 Default)
+        Child Policer Conform: set dscp 46
+        ```
+
+        **2. Send traffic** (CE2, towards site 1)
+
+        - `ping 10.46.1.1 source Loopback46 repeat 10` (EF), `ping 10.21.1.1 source Loopback21 repeat 10` (AF21, which
+          P1 downgrades to EXP 1), `ping 10.100.1.1 source Loopback100 repeat 10` (no mark).
+
+        **3. Count where it arrives** (CE1)
+
+        - `show policy-map interface Ethernet0/0 input`. D-EF 10, D-AF11 10, D-BE 10 or more, D-AF21 0.
+        - If D-AF21 shows 10, XR01 is not seeing P1's downgrade. Find out which EXP the business traffic carries when it
+          reaches XR01: if you count by EXP on the core-facing input, `show policy-map interface GigabitEthernet0/0/0/0 input`.
+
+        **4. Count at the exit** (XR01)
+
+        - Wait about 30 seconds, then `show policy-map interface GigabitEthernet0/0/0/1 output`: voice should be counted
+          in the priority class, and read `Matched` and `Total Dropped` for each class.
+        - On this XRv 9000 a queue holds only about one packet, so you cannot see priority as a difference in delay
+          (measured in the PoC). Confirm it with the counts and with `show qos interface`.
+
+        **5. Did anything else break?**
+
+        - All three pings from CE2 are at 100 percent.
+        - Run the checks of tasks M12-1 and M12-2 again (the direction from site 1).
+      ja: |
+        **1. 入ったか**(XR01)
+
+        - `show qos interface GigabitEthernet0/0/0/1 output`。`Shape Info: rate 2000 kbps` が出口全体の整形、音声のクラスの
+          `QueueID: … (Priority 1)` が優先キュー、その下の `Conform: 512 kbps` が優先の上限、各クラスの `set dscp <n>` が
+          書き換えです(46 は EF、18 は AF21、10 は AF11、0 は default)。
+        - ほかのインターフェイスや向きにもポリシーを当てたなら、それぞれ `show qos interface <インターフェイス> input` か
+          `output` で入り方を見ます。
+
+        例(抜粋):
+
+        ```
+        Shape Info: rate 2000 kbps, burst 25000 bytes,
+        QueueID: 32 (Priority 1)
+        Conform: 512 kbps (512 kbps) Burst: 6400 bytes (0 Default)
+        Child Policer Conform: set dscp 46
+        ```
+
+        **2. 流す**(CE2 からサイト 1 へ)
+
+        - `ping 10.46.1.1 source Loopback46 repeat 10`(EF)、`ping 10.21.1.1 source Loopback21 repeat 10`(AF21。
+          P1 が EXP 1 に格下げします)、`ping 10.100.1.1 source Loopback100 repeat 10`(印なし)。
+
+        **3. 届いた先で数える**(CE1)
+
+        - `show policy-map interface Ethernet0/0 input`。D-EF 10、D-AF11 10、D-BE 10 以上、D-AF21 0。
+        - D-AF21 が 10 なら、XR01 は P1 の格下げを見ていません。業務の通信が XR01 に届いた時点の EXP を確かめます
+          (コア側の入力で EXP ごとに数えているなら `show policy-map interface GigabitEthernet0/0/0/0 input`)。
+
+        **4. 出口で数える**(XR01)
+
+        - 30 秒ほど待ってから `show policy-map interface GigabitEthernet0/0/0/1 output`。音声が優先のクラスで数えられて
+          いるか、クラスごとの `Matched` と `Total Dropped` を読みます。
+        - この XRv 9000 では、キューに 1 個分ほどしか溜まらないため、優先の効き目を遅れの差では見られません(PoC で実測)。
+          数と `show qos interface` で確かめます。
+
+        **5. 壊していないか**
+
+        - CE2 からの 3 種類の ping が 100 percent。
+        - 課題 M12-1・M12-2 の確かめ方(サイト 1 からの向き)をもう一度通します。
     solution:
       en: |
         On XR01:
@@ -266,9 +546,11 @@ steps:
         router, carries the class between the two (it is set on input and matched on output only). The trap is PHP: XR01
         advertises implicit null by default, so P1 pops the outer label, the one it downgraded, and XR01 sees only the VPN
         label with PE2's EXP 3. Site 1 then gets AF21. With explicit null, P1 swaps the outer label for label 0, the EXP 1
-        survives to XR01, and site 1 gets AF11. The parent policy shapes the whole exit (`class-default` is the only class
-        a parent may have); the child queues inside the 2 Mbps, and voice goes to the priority queue (`QueueID … (Priority
-        1)`), whose policer keeps it from starving the rest. In that class, `set dscp ef` is applied as the policer's conform
+        survives to XR01, and site 1 gets AF11. The parent policy shapes the whole exit and has only `class-default`: a
+        packet enters one class at each level, so a packet that matched another class in the parent would never pass
+        through the child (the commit goes through, but voice would then miss the priority queue). The child queues inside
+        the 2 Mbps, and voice goes to the priority queue (`QueueID … (Priority 1)`), whose policer keeps it from starving
+        the rest. In that class, `set dscp ef` is applied as the policer's conform
         action (`Child Policer Conform: set dscp 46`). The classes with no queuing action share the queue of
         `class-default` (`QueueID: 33 (class-default)`). EXP 0 is mapped to qos-group 9 rather than 0, because 0 is
         also the group of every packet that no input policy marked.
@@ -359,8 +641,9 @@ steps:
         出力で書くので、その間を、装置の中だけの印の `qos-group` で運びます(付けるのは入力だけ、読むのは出力だけ)。罠は PHP
         です。XR01 は既定で implicit null を広告するので、P1 は外側のラベル、つまり自分が格下げしたラベルを外し、XR01 には PE2 の
         EXP 3 の付いた VPN のラベルだけが届きます。するとサイト 1 には AF21 で届きます。explicit null にすると、P1 は外側を
-        ラベル 0 に替えて送り、EXP 1 が XR01 まで残って、サイト 1 には AF11 で届きます。親のポリシーは出口の全部を整形します
-        (親に書けるクラスは `class-default` だけ)。子は 2 Mbps の中でキューを作り、音声は優先キューに入ります
+        ラベル 0 に替えて送り、EXP 1 が XR01 まで残って、サイト 1 には AF11 で届きます。親のポリシーは出口の全部を整形し、
+        クラスは `class-default` だけです。パケットは階層ごとに 1 つのクラスにしか入らないので、親でほかのクラスに入ったパケットは
+        子を通りません(コミットは通りますが、音声が優先キューに入らなくなります)。子は 2 Mbps の中でキューを作り、音声は優先キューに入ります
         (`QueueID … (Priority 1)`)。そのポリサが、音声がほかのキューを干上がらせないようにします。このクラスの `set dscp ef` は、
         ポリサの適合の動作として入ります(`Child Policer Conform: set dscp 46`)。キューの動作を持たないクラスは、`class-default` の
         キューを共有します(`QueueID: 33 (class-default)`)。EXP 0 を qos-group 0 では
@@ -377,6 +660,90 @@ steps:
         ja: "`show cef ipv4 interface GigabitEthernet0/0/0/2 detail`(`RPF mode`)、`show cef ipv4 drops`(`RPF drops`)、`show route 0.0.0.0/0`、`show access-lists ipv4 <名前> hardware ingress location 0/0/CPU0`。CUST2 で `show ip traffic`(Rcvd の下の echo の数)。ガイド: IP Addresses and Services Configuration Guide(ASR 9000)の「Implementing Cisco Express Forwarding」(unicast RPF)と「Implementing Access Lists and Prefix Lists」。"
       - en: "GigabitEthernet0/0/0/2: `ipv4 verify unicast source reachable-via rx`. GigabitEthernet0/0/0/3: `ipv4 verify unicast source reachable-via any` (no `allow-default`). An `ipv4 access-list` that permits TCP port 179 between 10.0.100.100 and 10.0.100.1 both ways, denies `10.0.0.0/16` and `10.255.0.0/24`, and permits the rest, applied with `ipv4 access-group <name> ingress hardware-count`."
         ja: "GigabitEthernet0/0/0/2 に `ipv4 verify unicast source reachable-via rx`。GigabitEthernet0/0/0/3 に `ipv4 verify unicast source reachable-via any`(`allow-default` なし)。10.0.100.100 と 10.0.100.1 の間の TCP 179 を両向きに許し、`10.0.0.0/16` と `10.255.0.0/24` を拒み、残りを許す `ipv4 access-list` を、`ipv4 access-group <名前> ingress hardware-count` で当てる。"
+    verify:
+      en: |
+        **1. Is it in?** (XR01)
+
+        - `show cef ipv4 interface GigabitEthernet0/0/0/2 detail`, and the same for GigabitEthernet0/0/0/3 on the INET
+          side. Read `IP unicast RPF check is enabled` and the `RPF mode` line (strict or loose).
+
+        Example (strict on the CUST1 side; excerpt):
+
+        ```
+          IP unicast RPF check is enabled
+          RPF mode strict
+        ```
+
+        - For the ACL, `show access-lists ipv4 <name> hardware ingress location 0/0/CPU0` gives a `(n hw matches)` count
+          on each line. Without `hardware`, you see only what the software handled.
+
+        **2. Send spoofed sources and count on the destination**
+
+        - The ping success rate cannot tell you whether uRPF dropped a packet. With a spoofed source, the reply goes to
+          the spoofed address, so the ping shows `0 percent` even when the packets got through. Count on the destination
+          instead: on CUST2, compare the `echo` count under `Rcvd:` in `show ip traffic` before and after.
+        - From CUST1, `ping 198.51.100.129 source Loopback0 repeat 10 timeout 1`, then the same with `Loopback9` and
+          `Loopback10`: CUST2's echo count should rise by 10, 0 and 0.
+        - From INET, the same with `Loopback0`, `Loopback97` and `Loopback98`: 10, 10 and 0.
+        - Measured in the lab: with no uRPF, the ping from CUST1's Loopback9 showed `Success rate is 0 percent (0/10)`,
+          yet CUST2's echo count went from 1041 to 1051. All ten had arrived.
+        - For reference, the drops by uRPF also appear in `RPF drops` in XR01's `show cef ipv4 drops` (a total for
+          the whole router, not per interface).
+
+        **3. The infrastructure ACL**
+
+        - From INET, `ping 10.255.0.1 repeat 3 timeout 1`, `ping 10.255.0.2 repeat 3 timeout 1` and
+          `ping 10.0.2.2 repeat 3 timeout 1` show 0 percent, and `ping 198.51.100.129 source Loopback0 repeat 5`
+          shows 100 percent.
+        - On XR01, the `hw matches` of the deny lines rise when you send.
+
+        **4. Did anything else break?**
+
+        - BGP with INET: on INET, `show ip bgp summary`. The last column of the 10.0.100.1 line should be a number (the
+          routes received); `Idle` or `Active` means the session is down. A session that is already up does not drop the
+          moment an ACL is applied: look again after the hold time (180 seconds by default) has passed.
+        - Traffic to the customers (the `198.51.100.129` pings above) still gets through.
+      ja: |
+        **1. 入ったか**(XR01)
+
+        - `show cef ipv4 interface GigabitEthernet0/0/0/2 detail` と、INET 側の GigabitEthernet0/0/0/3 の同じもの。
+          `IP unicast RPF check is enabled` と、`RPF mode` の行(厳格か緩いか)を読みます。
+
+        例(CUST1 側に厳格を入れたとき。抜粋):
+
+        ```
+          IP unicast RPF check is enabled
+          RPF mode strict
+        ```
+
+        - ACL は `show access-lists ipv4 <名前> hardware ingress location 0/0/CPU0` で、行ごとに `(n hw matches)` の数が
+          出ます。`hardware` を付けないと、ソフトウェアで処理した分しか見えません。
+
+        **2. 偽装した送信元を流し、宛ての側で数える**
+
+        - uRPF で落ちたかどうかは、ping の成功率では判断できません。送信元を偽装すると応答は偽装したアドレスへ返るので、
+          パケットが通っていても `0 percent` になります。代わりに宛ての側で数えます。CUST2 で `show ip traffic` の
+          `Rcvd:` の下の `echo` の数を、流す前と後で比べます。
+        - CUST1 から `ping 198.51.100.129 source Loopback0 repeat 10 timeout 1`、続けて `Loopback9`・`Loopback10` で
+          同じもの。CUST2 の echo の増分は 10・0・0 になるはずです。
+        - INET から `Loopback0`・`Loopback97`・`Loopback98` で同じもの。10・10・0。
+        - ラボで測った結果: uRPF が無いとき、CUST1 の Loopback9 からの ping は `Success rate is 0 percent (0/10)` でしたが、
+          CUST2 の echo の数は 1041 から 1051 に増えていました。10 発とも届いていたということです。
+        - 参考: uRPF が落とした分は、XR01 の `show cef ipv4 drops` の `RPF drops` にも数えられます(機器全体の合計で、
+          インターフェイスごとではありません)。
+
+        **3. インフラ ACL**
+
+        - INET から `ping 10.255.0.1 repeat 3 timeout 1`・`ping 10.255.0.2 repeat 3 timeout 1`・`ping 10.0.2.2 repeat 3 timeout 1`
+          が 0 percent、`ping 198.51.100.129 source Loopback0 repeat 5` が 100 percent。
+        - XR01 で、捨てる行の `hw matches` が、流すたびに増えるか。
+
+        **4. 壊していないか**
+
+        - INET との BGP: INET で `show ip bgp summary`。10.0.100.1 の行の最後の欄が数字(受け取った経路の数)なら張れています。
+          `Idle` や `Active` なら切れています。ACL を当てた瞬間には、張れているセッションはすぐには切れません。
+          ホールド タイム(既定 180 秒)が過ぎてから、もう一度見ます。
+        - 顧客への通信(上の `198.51.100.129` 宛ての ping)が通ること。
     solution:
       en: |
         On XR01:
@@ -448,6 +815,58 @@ steps:
         ja: "XR01 で `show cef 203.0.113.66/32`(`recursive` か `null0 adjacency` か)、`show bgp ipv4 unicast 203.0.113.66/32`、`show cef ipv4 drops`。RR1 で `show running-config route-policy RTBH-TRIGGER`。INET で `show ip bgp`。ガイド: Routing Configuration Guide(ASR 9000)の「Remotely Triggered Null Route Filtering with RPL Next-hop Discard Configuration」、TAC 文書 116386、RFC 5635 の 4 節。"
       - en: "On XR01: a `community-set` with 65000:666 and a `route-policy` with `if community matches-any <set> then set next-hop discard endif` and `pass`, applied with `route-policy <name> in` under neighbor 10.255.0.52 → `address-family ipv4 unicast`. On RR1: add `no-export` to the `set community` of RTBH-TRIGGER, keeping `set next-hop 192.0.2.1` for PE2."
         ja: "XR01 で、65000:666 の `community-set` と、`if community matches-any <セット> then set next-hop discard endif` と `pass` の `route-policy` を作り、近隣 10.255.0.52 → `address-family ipv4 unicast` の下に `route-policy <名前> in` で当てる。RR1 で、RTBH-TRIGGER の `set community` に `no-export` を足す。PE2 のために `set next-hop 192.0.2.1` は残す。"
+    verify:
+      en: |
+        **1. What the trigger hands out** (RR1 → XR01)
+
+        - On RR1 and on XR01, `show bgp ipv4 unicast 203.0.113.66/32`. Read the next hop and the `Community:` line.
+          On XR01, also see how the next hop looks once XR01 has accepted the route.
+        - On XR01, `show cef 203.0.113.66/32` shows where XR01 actually forwards (uRPF also looks at this table).
+
+        **2. Send traffic and count on the destination**
+
+        - From INET, posing as the attacker: `ping 198.51.100.129 source Loopback66 repeat 10 timeout 1`. CUST2's echo
+          count rises by 0.
+        - To the victim: `ping 198.51.100.130 source Loopback0 repeat 10 timeout 1`. 0.
+        - Ordinary traffic: `ping 198.51.100.129 source Loopback0 repeat 10 timeout 1`. 10.
+        - (On CUST2, compare the `echo` count under `Rcvd:` in `show ip traffic` before and after, as in task M12-4.)
+
+        **3. Nothing leaks to the internet** (INET)
+
+        - `show ip bgp 198.51.100.130/32` and `show ip bgp 203.0.113.66/32` both give `% Network not in table`.
+
+        **4. The mechanism still works as designed**
+
+        - Register a new address on RR1 (for example `203.0.113.77/32 Null0 tag 666` under `router static`,
+          `address-family ipv4 unicast`), wait about 30 seconds, send from INET's `Loopback77`, and check that it is
+          dropped without touching XR01. Remove it from RR1 when you are done.
+        - On PE2, `show ip cef 198.51.100.130 255.255.255.255 detail` shows `recursive via 192.0.2.1` and
+          `attached to Null0`: PE2 still drops through the discard address.
+      ja: |
+        **1. 起点が配っているもの**(RR1 → XR01)
+
+        - RR1 と XR01 で `show bgp ipv4 unicast 203.0.113.66/32`。次ホップと `Community:` の行を読みます。XR01 では、
+          受け取った後の次ホップの見え方も確かめます。
+        - XR01 の `show cef 203.0.113.66/32` は、XR01 が実際にどこへ転送するかを示します(uRPF もこの表を見ます)。
+
+        **2. 流して、宛ての側で数える**
+
+        - INET から攻撃元を名乗って `ping 198.51.100.129 source Loopback66 repeat 10 timeout 1`。CUST2 の echo の増分は 0。
+        - 攻撃を受けている宛てへ `ping 198.51.100.130 source Loopback0 repeat 10 timeout 1`。0。
+        - 普通の通信 `ping 198.51.100.129 source Loopback0 repeat 10 timeout 1`。10。
+        - (CUST2 で `show ip traffic` の `Rcvd:` の下の `echo` の数を、前と後で比べます。課題 M12-4 と同じです)
+
+        **3. インターネットへ漏れていないか**(INET)
+
+        - `show ip bgp 198.51.100.130/32` と `show ip bgp 203.0.113.66/32` が、どちらも `% Network not in table`。
+
+        **4. 仕組みのままか**
+
+        - RR1 で新しいアドレスを登録し(例: `router static` の `address-family ipv4 unicast` で
+          `203.0.113.77/32 Null0 tag 666`)、30 秒ほど待ってから INET の `Loopback77` から流し、XR01 を触らずに落ちるかを
+          見ます。確かめたら RR1 から消します。
+        - PE2 で `show ip cef 198.51.100.130 255.255.255.255 detail` が `recursive via 192.0.2.1` と `attached to Null0`。
+          PE2 は従来どおり、捨て先を経由して捨てています。
     solution:
       en: |
         On XR01:

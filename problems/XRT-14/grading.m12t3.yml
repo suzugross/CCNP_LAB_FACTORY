@@ -1,6 +1,9 @@
 # M12-3: 出口 PE のユニフォーム+整形と優先。P1 は PE2 から来た EXP 3 を 1 に格下げする(据付の DOWNGRADE)。CE2 が 3 種類を 10 発ずつ送り、
 # 拠点 1 に届いた DSCP を CE1 の入力(据付の COUNT-DSCP)で数える= EF・AF11(格下げされた業務)・BE。★PHP のままだと格下げが届かず AF21 で届く(explicit null が要る)。
-# 形= show qos interface の出力(親の整形 2000 kbps・優先のキューと 512 kbps のポリサ)。白紙= 0 点。
+# 形= show qos interface の出力(親の整形 2000 kbps・優先のキューと 512 kbps のポリサ)。
+# 挙動= CE2 の音声 10 発が XR01 の出口で優先キューのクラスに数えられる(show qos interface の Priority 1 の QueueID と、show policy-map interface で
+# Matched が 9 以上のクラスの Queue ID を後方参照で突き合わせる)。★2026-11-08 追加= 親に印のクラス(match qos-group)を並べると、音声は親のクラスに入って子を通らず、
+# 通常キュー(class-default のキュー)へ行くが、形のチェックだけでは通っていた(ユーザの解答で判明・XRv9000 はその形もコミットする)。白紙= 0 点。
 problem: XRT-14
 total_points: 100
 checks:
@@ -16,10 +19,20 @@ checks:
       - { regex: '== COUNT CE1 D-AF11 (?:9|10)\n' }
       - { regex: '== COUNT CE1 D-BE (?:9|[1-9]\d)\n' }
     points: 60
-  - name: 'M12-3 XR01: traffic to site 1 is shaped to 2 Mbps, with voice in the priority queue policed at 512 kbps'
+  - name: 'M12-3 XR01: traffic to site 1 is shaped to 2 Mbps, with a priority queue policed at 512 kbps'
     node: XR01
     command: show qos interface GigabitEthernet0/0/0/1 output
     raw:
       - { regex: 'Shape Info: rate 2000 kbps' }
       - { regex: '\(Priority 1\)[\s\S]*?Conform: 512 kbps' }
-    points: 40
+    points: 20
+  - name: 'M12-3 XR01: voice from the core is counted in the priority queue on the site 1 exit'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/qos_probe.py XRT-14 run --clear 'XR01:clear qos counters interface GigabitEthernet0/0/0/1 output'
+      --send 'CE2:ping 10.46.1.1 source Loopback46 repeat 10' --wait 30
+      --show 'XR01:show qos interface GigabitEthernet0/0/0/1 output' --show 'XR01:show policy-map interface GigabitEthernet0/0/0/1 output'
+    raw:
+      - { regex: 'QueueID: (\d+) \(Priority 1\)[\s\S]*?== SHOW XR01: show policy-map[\s\S]*?Matched\s*:\s*(?:9|[1-9]\d+)/\d+(?:(?!Matched)[\s\S])*?Queue ID\s*:\s*\1\s' }
+    points: 20
