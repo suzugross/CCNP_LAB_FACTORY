@@ -51,7 +51,8 @@ the routing table (the CEF FIB, to be exact).
   attached by a single link.
 - **Loose**: passes the packet if there is a route to the source anywhere. Where it points does not matter. It is used
   where routing can be asymmetric (borders with several providers). Addresses with no route anywhere (unused numbers,
-  private numbers and so on) are dropped.
+  private numbers and so on) are dropped. A route to the source that points to Null0 does not count as a valid route
+  either, so the packet is dropped (source-based RTBH in 2.4 relies on this).
 
 With a default route, every address "has a route". So the default route is normally not counted, and `allow-default`
 makes it count.
@@ -100,9 +101,20 @@ provider completes the attacker's job for them, which is the limit of RTBH.
 
 ### 2.4 RTBH: dropping by source
 
-If the attacker's address is known, register it the same way and turn on **loose uRPF** at the entrance of the edge
-routers (RFC 5635, section 4). The route to the attacker points to the discard address, so packets from there fail uRPF.
-The destination under attack stays reachable from other sources.
+If the attacker's address is known, you can drop only the packets from that attacker and keep the destination under
+attack reachable (RFC 5635, section 4). Register the attacker's address the same way as for dropping by destination, and
+turn on **loose uRPF** at the entrance of the edge routers.
+
+RTBH alone does not do this. A router forwards on the destination alone, so a packet from the attacker is forwarded on
+the route to its destination (the customer under attack). Pointing the route to the attacker at Null0 changes nothing,
+because nothing looks that route up.
+
+uRPF also looks up the source in the routing table. That is the first time the route to the attacker is used, and since
+it points to Null0, the packet is dropped (2.1). Routes to other sources are ordinary routes, so packets from them pass.
+RTBH writes "which sources to drop" into the routing table, and uRPF reads it and drops.
+
+At a border you cannot tell which interface a packet will come in on, so loose uRPF is used, not strict. Loose uRPF asks
+only whether there is a valid route, so only the sources pointed at Null0 are dropped.
 
 Here IOS and IOS XR differ. IOS drops by uRPF when the route to the source points to Null0 through 192.0.2.1 (a Cisco
 white paper, 2005). IOS XR on the ASR 9000 does not do a "recursive lookup to Null0" for uRPF (TAC document 116386).
@@ -116,6 +128,37 @@ XRv 9000 behaves the same.
 In IOS XR, the RPL action `set next-hop discard` points a received route straight at Null0. Source-based RTBH on IOS XR
 needs it.
 
+The figure follows the attacker's route to XR01, and then the attacker's packet until it is dropped at XR01's entrance.
+
+:::walk
+legend: "On the wire: the route that BGP hands out. Orange: rewritten attributes."
+rows:
+  - panel: RR1
+    sub: trigger
+    items:
+      - say: ["**Register the attacker**  `203.0.113.66/32 Null0 tag 666`", "~Into BGP through the same RPL as for dropping by destination: next hop and mark"]
+  - {wire: "[[=203.0.113.66/32]] [[!NH 192.0.2.1]] [[!65000:666 no-export]] _iBGP to the edges"}
+  - panel: XR01
+    sub: border (towards INET)
+    items:
+      - say: ["**Receive the route**  mark 65000:666 → `set next-hop discard`", "~RIB: 203.0.113.66/32 is directly connected, via Null0"]
+      - say: ["[[IP 203.0.113.66 → 198.51.100.129]] ~a packet from the attacker comes in from INET"]
+      - say: ["**Source lookup at the entrance** (loose uRPF, INET side)  203.0.113.66 → Null0", "^✗ Not a valid route → dropped. Nothing reaches CUST2"]
+  - aside: A packet from another source
+    say:
+      - "[[IP 203.0.113.1 → 198.51.100.129]] ~the route to the source is 203.0.113.0/24 → INET"
+      - "+✓ A valid route, so it passes and is forwarded to CUST2 on its destination"
+  - aside: Without uRPF
+    say:
+      - "~Nothing looks up the source. The route to the attacker is never used, even though it points to Null0"
+      - "~→ forwarded on the route to the destination (198.51.100.129): the attacker's packets reach CUST2"
+  - aside: "Without `set next-hop discard` (only RR1's rewrite)"
+    say:
+      - "~The route is two steps: 203.0.113.66 → 192.0.2.1 → Null0 (recursive)"
+      - "~IOS XR's uRPF does not follow the second step and counts it as a valid route"
+      - "~→ the attacker's packets reach CUST2 (the first row of the table above)"
+:::
+
 ### 2.5 Key points
 
 - Strict for single-homed customers, loose at the border. The default route does not count by default
@@ -123,7 +166,8 @@ needs it.
 - An infrastructure ACL has four parts. Do not forget to permit your own BGP.
 - RTBH is "hand out a /32 that points to the discard address, by BGP", with a mark and `no-export`. Dropping by
   destination makes that destination unreachable for everyone.
-- To drop by source, loose uRPF at the edge. IOS XR needs `set next-hop discard`.
+- To drop by source, loose uRPF at the edge. RTBH points the route to the attacker at Null0, and uRPF reads it and
+  drops. IOS XR needs `set next-hop discard`.
 
 ## 3. Building it in IOS XR
 
