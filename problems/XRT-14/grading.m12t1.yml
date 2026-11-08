@@ -1,0 +1,28 @@
+# M12-1: 信頼の境界とマーキング。CE1 が 3 種類(音声網宛ての EF・業務宛ての AF21・LAN 宛ての契約外の EF)を 10 発ずつ送り、
+# コアの EXP を P1 の入力(据付の COUNT-EXP)で、拠点 2 に届いた DSCP を CE2 の入力(据付の COUNT-DSCP)で数える。
+# 白紙= EXP は DSCP の上位 3 ビットの写し(EF → 5 が 20・AF21 → 2 で 3 は 0)・CE2 の EF が 20 で BE が 0 → 0 点。
+problem: XRT-14
+total_points: 100
+checks:
+  - name: 'M12-1 P1: in the core, voice travels with EXP 5, business data with EXP 3 and everything else with EXP 0'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/qos_probe.py XRT-14 run --clear 'P1:clear counters' --send 'CE1:ping 10.46.2.1 source Loopback46 repeat 10;;ping 10.21.2.1 source Loopback21 repeat 10;;ping 10.100.2.1 source Loopback100 repeat 10'
+      --count 'P1:Ethernet0/0:input'
+    raw:
+      - { regex: '== COUNT P1 EXP5 (?:9|10)\n' }
+      - { regex: '== COUNT P1 EXP3 (?:9|10)\n' }
+      - { regex: '== COUNT P1 EXP0 (?:9|[1-9]\d)\n' }
+    points: 50
+  - name: 'M12-1 CE2: site 2 receives voice as EF, business data as AF21, and the out-of-contract EF as DSCP 0'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/qos_probe.py XRT-14 run --clear 'CE2:clear counters' --send 'CE1:ping 10.46.2.1 source Loopback46 repeat 10;;ping 10.21.2.1 source Loopback21 repeat 10;;ping 10.100.2.1 source Loopback100 repeat 10'
+      --count 'CE2:Ethernet0/0:input'
+    raw:
+      - { regex: '== COUNT CE2 D-EF (?:9|10)\n' }
+      - { regex: '== COUNT CE2 D-AF21 (?:9|10)\n' }
+      - { regex: '== COUNT CE2 D-BE (?:9|[1-9]\d)\n' }
+    points: 50

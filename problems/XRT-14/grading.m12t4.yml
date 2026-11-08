@@ -1,0 +1,36 @@
+# M12-4: 偽装の送信元とインフラ ACL。送信元ごとに CUST2(198.51.100.129)へ 10 発送り、CUST2 が受けた echo の数で XR01 で落ちたかを見る。
+# CUST1= 割り当て内(Lo0)は届く・インターネットの番号(Lo9 203.0.113.99)と経路のない番号(Lo10 10.99.99.1)は落ちる= 厳格(既定経路が INET を向くので緩いでは Lo9 が通る)。
+# INET= Lo0 は届く・マルチホームのお客さまの番号(Lo97 198.51.100.200= 経路はコアを向く)も届く= 緩い・経路のない番号(Lo98)は落ちる= allow-default なし。
+# インフラ ACL= INET から SP のループバックとコアのリンクへは届かない・お客さまへは届く・BGP は保つ・hardware-count。白紙= 0 点。
+problem: XRT-14
+total_points: 100
+checks:
+  - name: 'M12-4 CUST1 side: only sources in the customer allocation get through (an internet address and an unrouted address are dropped)'
+    node: XR01
+    exec: local
+    command: >-
+      echo '## Lo0'; .venv/bin/python topologies/qos_probe.py XRT-14 run --echo CUST2 --send 'CUST1:ping 198.51.100.129 source Loopback0 repeat 10 timeout 1'; echo '## Lo9'; .venv/bin/python topologies/qos_probe.py XRT-14 run --echo CUST2 --send 'CUST1:ping 198.51.100.129 source Loopback9 repeat 10 timeout 1'; echo '## Lo10'; .venv/bin/python topologies/qos_probe.py XRT-14 run --echo CUST2 --send 'CUST1:ping 198.51.100.129 source Loopback10 repeat 10 timeout 1'
+    raw:
+      - { regex: '## Lo0[\s\S]*?== ECHO CUST2 \+(?:9|10)\n[\s\S]*?## Lo9[\s\S]*?== ECHO CUST2 \+0\n[\s\S]*?## Lo10[\s\S]*?== ECHO CUST2 \+0\n' }
+    points: 30
+  - name: 'M12-4 INET side: routed sources get through whichever way their route points, an unrouted source is dropped, and the default route does not count'
+    node: XR01
+    exec: local
+    command: >-
+      echo '## Lo0'; .venv/bin/python topologies/qos_probe.py XRT-14 run --echo CUST2 --send 'INET:ping 198.51.100.129 source Loopback0 repeat 10 timeout 1'; echo '## Lo97'; .venv/bin/python topologies/qos_probe.py XRT-14 run --echo CUST2 --send 'INET:ping 198.51.100.129 source Loopback97 repeat 10 timeout 1'; echo '## Lo98'; .venv/bin/python topologies/qos_probe.py XRT-14 run --echo CUST2 --send 'INET:ping 198.51.100.129 source Loopback98 repeat 10 timeout 1'
+    raw:
+      - { regex: '## Lo0[\s\S]*?== ECHO CUST2 \+(?:9|10)\n[\s\S]*?## Lo97[\s\S]*?== ECHO CUST2 \+(?:9|10)\n[\s\S]*?## Lo98[\s\S]*?== ECHO CUST2 \+0\n' }
+    points: 30
+  - name: 'M12-4 INET side: the internet cannot reach the provider loopbacks or core links, customers stay reachable, BGP stays up, and the ACL counts in hardware'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-14 ssh INET -- 'ping 10.255.0.1 repeat 3 timeout 1' 'ping 10.255.0.2 repeat 3 timeout 1' 'ping 10.0.2.2 repeat 3 timeout 1'
+      'ping 198.51.100.129 source Loopback0 repeat 5' 'show ip bgp summary | include ^10.0.100.1';
+      .venv/bin/python topologies/login_probe.py XRT-14 ssh XR01 -- 'show running-config interface GigabitEthernet0/0/0/3'
+    raw:
+      - { regex: 'ping 10\.255\.0\.1 repeat 3[\s\S]*?Success rate is 0 percent[\s\S]*?ping 10\.255\.0\.2 repeat 3[\s\S]*?Success rate is 0 percent[\s\S]*?ping 10\.0\.2\.2 repeat 3[\s\S]*?Success rate is 0 percent' }
+      - { regex: 'ping 198\.51\.100\.129 source Loopback0 repeat 5[\s\S]*?Success rate is (?:100|80) percent' }
+      - { regex: '\n10\.0\.100\.1\s+4\s+65000(?:\s+\d+){5}\s+\S+\s+\d+\s*\n' }
+      - { regex: 'ipv4 access-group \S+ ingress hardware-count' }
+    points: 40

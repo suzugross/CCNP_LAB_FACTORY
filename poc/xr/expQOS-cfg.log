@@ -1,0 +1,242 @@
+
+######## 10:14:04 cfg: 設定例の元(running-config)
+show running-config class-map
+Sat Nov  7 10:14:05.058 UTC
+class-map match-any QG7
+ match qos-group 7 
+ end-class-map
+! 
+class-map match-any BULK
+ match dscp af11 
+ end-class-map
+! 
+class-map match-any EXP0
+ match mpls experimental topmost 0 
+ end-class-map
+! 
+class-map match-any EXP5
+ match mpls experimental topmost 5 
+ end-class-map
+! 
+class-map match-any VOICE
+ match dscp ef 
+ end-class-map
+! 
+
+RP/0/RP0/CPU0:XR01#
+show running-config policy-map
+Sat Nov  7 10:14:05.460 UTC
+policy-map CE-IN
+ class VOICE
+  set mpls experimental imposition 5
+  set qos-group 5
+ ! 
+ class BULK
+  set mpls experimental imposition 2
+  police rate 64 kbps peak-rate 1 mbps 
+   conform-action transmit
+   exceed-action set dscp af12
+   violate-action drop
+  ! 
+ ! 
+ class class-default
+  set mpls experimental imposition 0
+ ! 
+ end-policy-map
+! 
+policy-map CE-OUT
+ class class-default
+  service-policy CE-OUT-CHILD
+  shape average 100 kbps 
+ ! 
+ end-policy-map
+! 
+policy-map CORE-IN
+ class EXP5
+  set qos-group 5
+ ! 
+ class EXP0
+  set qos-group 7
+ ! 
+ class class-default
+ ! 
+ end-policy-map
+! 
+policy-map CE-OUT-CHILD
+ class VOICE
+  priority level 1 
+  police rate 32 kbps 
+  ! 
+ ! 
+ class class-default
+  queue-limit 20 packets 
+  random-detect dscp af11 10 packets 20 packets 
+  random-detect dscp default 5 packets 10 packets 
+ ! 
+ end-policy-map
+! 
+policy-map CE-OUT-UNIFORM
+ class QG7
+  set dscp default
+ ! 
+ class class-default
+ ! 
+ end-policy-map
+! 
+
+RP/0/RP0/CPU0:XR01#
+show running-config interface
+Sat Nov  7 10:14:05.860 UTC
+interface Loopback0
+ ipv4 address 10.255.0.1 255.255.255.255
+!
+interface MgmtEth0/RP0/CPU0/0
+ description === MGMT (Ansible) ===
+ vrf MGMT
+ ipv4 address 10.1.10.11 255.255.255.192
+!
+interface GigabitEthernet0/0/0/0
+ description CORE to P1
+ service-policy input CORE-IN
+ ipv4 address 10.0.1.1 255.255.255.0
+ load-interval 30
+!
+interface GigabitEthernet0/0/0/1
+ description to CE1 (VRF A)
+ service-policy input CE-IN
+ service-policy output CE-OUT
+ vrf A
+ ipv4 address 172.16.1.254 255.255.255.0
+ load-interval 30
+!
+interface GigabitEthernet0/0/0/2
+ description to CUST1 (internet customer, single-homed)
+ ipv4 address 172.20.1.254 255.255.255.0
+!
+interface GigabitEthernet0/0/0/3
+ description to INET (internet peer AS 64500)
+ ipv4 address 10.0.100.1 255.255.255.0
+ ipv4 verify unicast source reachable-via any
+!
+
+RP/0/RP0/CPU0:XR01#
+show running-config route-policy
+% Incomplete command.
+RP/0/RP0/CPU0:XR01#
+show running-config router bgp
+Sat Nov  7 10:14:06.662 UTC
+router bgp 65000
+ bgp router-id 10.255.0.1
+ address-family ipv4 unicast
+  network 198.51.100.0/25
+ !
+ address-family vpnv4 unicast
+ !
+ address-family ipv4 flowspec
+ !
+ neighbor 10.255.0.52
+  remote-as 65000
+  description RR1
+  update-source Loopback0
+  address-family ipv4 unicast
+   next-hop-self
+  !
+  address-family vpnv4 unicast
+  !
+  address-family ipv4 flowspec
+  !
+ !
+ neighbor 10.0.100.100
+  remote-as 64500
+  description INET
+  address-family ipv4 unicast
+   route-policy PASS in
+   route-policy PASS out
+  !
+ !
+ vrf A
+  rd 10.255.0.1:100
+  address-family ipv4 unicast
+  !
+  neighbor 172.16.1.1
+   remote-as 65001
+   address-family ipv4 unicast
+    route-policy PASS in
+    route-policy PASS out
+   !
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show running-config ipv4 access-list
+Sat Nov  7 10:14:07.063 UTC
+ipv4 access-list IACL
+ 10 permit tcp host 10.0.100.100 host 10.0.100.1 eq bgp
+ 20 permit tcp host 10.0.100.100 eq bgp host 10.0.100.1
+ 30 deny ipv4 any 10.0.0.0/16
+ 40 deny ipv4 any 10.255.0.0/24
+ 50 permit ipv4 any any
+!
+ipv4 access-list TO-SCRUB
+ 10 permit ipv4 any host 198.51.100.130 nexthop1 ipv4 172.20.1.1
+ 20 permit ipv4 any any
+!
+
+RP/0/RP0/CPU0:XR01#
+show running-config route-policy
+% Incomplete command.
+RP/0/RP0/CPU0:RR1#
+show running-config router static
+Sat Nov  7 10:14:09.213 UTC
+router static
+ address-family ipv4 unicast
+  192.0.2.1/32 Null0
+  198.51.100.130/32 Null0 tag 666
+  203.0.113.66/32 Null0 tag 666
+ !
+!
+
+RP/0/RP0/CPU0:RR1#
+show running-config router bgp
+Sat Nov  7 10:14:09.715 UTC
+router bgp 65000
+ bgp router-id 10.255.0.52
+ address-family ipv4 unicast
+  redistribute static route-policy RTBH-TRIGGER
+ !
+ address-family vpnv4 unicast
+ !
+ address-family ipv4 flowspec
+ !
+ neighbor-group PE
+  remote-as 65000
+  update-source Loopback0
+  address-family ipv4 unicast
+   route-reflector-client
+  !
+  address-family vpnv4 unicast
+   route-reflector-client
+  !
+ !
+ neighbor 10.255.0.1
+  use neighbor-group PE
+  description PE XR01
+  address-family ipv4 flowspec
+   route-reflector-client
+  !
+ !
+ neighbor 10.255.0.2
+  use neighbor-group PE
+  description PE PE2
+ !
+!
+
+RP/0/RP0/CPU0:RR1#
+show running-config | section policy-map|class-map
+class-map match-any EXP5
+ match mpls experimental topmost 5 
+policy-map REMARK
+ class EXP5
+  set mpls experimental topmost 0
+P1#

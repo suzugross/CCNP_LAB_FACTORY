@@ -1,0 +1,173 @@
+
+######## 09:29:01 mark: CE に「音声の宛て」「大量の宛て」を足し、CE の出口で宛てごとに DSCP を付ける(試験用のトラフィック)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE1(config)#
+interface Loopback46
+CE1(config-if)#
+ip address 10.46.0.1 255.255.255.255
+CE1(config-if)#
+interface Loopback10
+CE1(config-if)#
+ip address 10.10.0.1 255.255.255.255
+CE1(config-if)#
+ip access-list extended TO-VOICE
+CE1(config-ext-nacl)#
+permit ip any host 10.46.0.2
+CE1(config-ext-nacl)#
+ip access-list extended TO-BULK
+CE1(config-ext-nacl)#
+permit ip any host 10.10.0.2
+CE1(config-ext-nacl)#
+class-map match-any TO-VOICE
+CE1(config-cmap)#
+match access-group name TO-VOICE
+CE1(config-cmap)#
+class-map match-any TO-BULK
+CE1(config-cmap)#
+match access-group name TO-BULK
+CE1(config-cmap)#
+policy-map MARK
+CE1(config-pmap)#
+class TO-VOICE
+CE1(config-pmap-c)#
+set dscp ef
+CE1(config-pmap-c)#
+class TO-BULK
+CE1(config-pmap-c)#
+set dscp af11
+CE1(config-pmap-c)#
+exit
+CE1(config-pmap)#
+exit
+CE1(config)#
+interface Ethernet0/0
+CE1(config-if)#
+service-policy output MARK
+CE1(config-if)#
+router bgp 65001
+CE1(config-router)#
+address-family ipv4
+CE1(config-router-af)#
+network 10.46.0.1 mask 255.255.255.255
+CE1(config-router-af)#
+network 10.10.0.1 mask 255.255.255.255
+CE1(config-router-af)#
+end
+CE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE2(config)#
+interface Loopback46
+CE2(config-if)#
+ip address 10.46.0.2 255.255.255.255
+CE2(config-if)#
+interface Loopback10
+CE2(config-if)#
+ip address 10.10.0.2 255.255.255.255
+CE2(config-if)#
+ip access-list extended TO-VOICE
+CE2(config-ext-nacl)#
+permit ip any host 10.46.0.1
+CE2(config-ext-nacl)#
+ip access-list extended TO-BULK
+CE2(config-ext-nacl)#
+permit ip any host 10.10.0.1
+CE2(config-ext-nacl)#
+class-map match-any TO-VOICE
+CE2(config-cmap)#
+match access-group name TO-VOICE
+CE2(config-cmap)#
+class-map match-any TO-BULK
+CE2(config-cmap)#
+match access-group name TO-BULK
+CE2(config-cmap)#
+policy-map MARK
+CE2(config-pmap)#
+class TO-VOICE
+CE2(config-pmap-c)#
+set dscp ef
+CE2(config-pmap-c)#
+class TO-BULK
+CE2(config-pmap-c)#
+set dscp af11
+CE2(config-pmap-c)#
+exit
+CE2(config-pmap)#
+exit
+CE2(config)#
+interface Ethernet0/0
+CE2(config-if)#
+service-policy output MARK
+CE2(config-if)#
+router bgp 65002
+CE2(config-router)#
+address-family ipv4
+CE2(config-router-af)#
+network 10.46.0.2 mask 255.255.255.255
+CE2(config-router-af)#
+network 10.10.0.2 mask 255.255.255.255
+CE2(config-router-af)#
+end
+CE2#
+show ip bgp
+BGP table version is 7, local router ID is 10.100.1.1
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   10.10.0.1/32     0.0.0.0                  0         32768 i
+ *>   10.10.0.2/32     172.16.1.254                           0 65000 65002 i
+ *>   10.46.0.1/32     0.0.0.0                  0         32768 i
+ *>   10.46.0.2/32     172.16.1.254                           0 65000 65002 i
+ *>   10.100.1.0/24    0.0.0.0                  0         32768 i
+ *>   10.100.2.0/24    172.16.1.254                           0 65000 65002 i
+CE1#
+ping 10.46.0.2 source Loopback46 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.46.0.2, timeout is 2 seconds:
+Packet sent with a source address of 10.46.0.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+CE1#
+ping 10.10.0.2 source Loopback10 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.10.0.2, timeout is 2 seconds:
+Packet sent with a source address of 10.10.0.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+CE1#
+show policy-map interface Ethernet0/0 output
+ Ethernet0/0 
+
+  Service-policy output: MARK
+
+    Class-map: TO-VOICE (match-any)  
+      5 packets, 570 bytes
+      5 minute offered rate 0000 bps, drop rate 0000 bps
+      Match: access-group name TO-VOICE
+        5 packets, 570 bytes
+        5 minute rate 0 bps
+      QoS Set
+        dscp ef
+          Packets marked 5
+
+    Class-map: TO-BULK (match-any)  
+      5 packets, 570 bytes
+      5 minute offered rate 0000 bps, drop rate 0000 bps
+      Match: access-group name TO-BULK
+        5 packets, 570 bytes
+        5 minute rate 0 bps
+      QoS Set
+        dscp af11
+          Packets marked 5
+
+    Class-map: class-default (match-any)  
+      9 packets, 985 bytes
+      5 minute offered rate 0000 bps, drop rate 0000 bps
+      Match: any 
+CE1#

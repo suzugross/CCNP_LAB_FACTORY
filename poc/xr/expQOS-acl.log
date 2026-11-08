@@ -1,0 +1,137 @@
+
+######## 10:09:30 acl: インフラ ACL= INET から SP のアドレス(コア 10.0.0.0/16・ループバック 10.255.0.0/24)宛てを落とし、BGP と他は通す。★object-group は XRv9000 で不可(実測)→ 行で書く
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+INET(config)#
+ip route 10.0.0.0 255.0.0.0 10.0.100.1
+INET(config)#
+end
+INET#
+Success rate is 100 percent (5/5), round-trip min/avg/max = 6/6/8 ms
+Success rate is 100 percent (5/5), round-trip min/avg/max = 5/6/8 ms
+configure
+Sat Nov  7 10:09:36.319 UTC
+RP/0/RP0/CPU0:XR01(config)#
+ipv4 access-list IACL
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+10 permit tcp host 10.0.100.100 host 10.0.1$100 host 10.0.10                          0.1 eq bgp10 permit tcp host 10.0.100.100 host 10.0.$
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+20 permit tcp host 10.0.100.100 eq bgp host$100 eq bgp host                           10.0.100.120 permit tcp host 10.0.100.100 eq bgp hos$
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+30 deny ipv4 any 10.0.0.0/16
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+40 deny ipv4 any 10.255.0.0/24
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+50 permit ipv4 any any
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+exit
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01(config-if)#
+ipv4 access-group IACL ingress hardware-count
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sat Nov  7 10:09:40.846 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sat Nov  7 10:09:41.754 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+Success rate is 0 percent (0/5)
+Success rate is 0 percent (0/5)
+Success rate is 100 percent (5/5), round-trip min/avg/max = 9/9/10 ms
+show ip bgp summary | include 10.0.100.1
+10.0.100.1      4        65000      55      60        4    0    0 00:50:04        2
+INET#
+show access-lists ipv4 IACL
+Sat Nov  7 10:10:24.010 UTC
+ipv4 access-list IACL
+ 10 permit tcp host 10.0.100.100 host 10.0.100.1 eq bgp
+ 20 permit tcp host 10.0.100.100 eq bgp host 10.0.100.1
+ 30 deny ipv4 any 10.0.0.0 0.0.255.255
+ 40 deny ipv4 any 10.255.0.0 0.0.0.255
+ 50 permit ipv4 any any
+RP/0/RP0/CPU0:XR01#
+show access-lists ipv4 IACL hardware ingress location 0/0/CP$hardware ingress location 0/0/CPU                          0show access-lists ipv4 IACL hardware ingress location 0/0/C$
+Sat Nov  7 10:10:24.411 UTC
+ipv4 access-list IACL
+ 10 permit tcp host 10.0.100.100 host 10.0.100.1 eq bgp
+ 20 permit tcp host 10.0.100.100 eq bgp host 10.0.100.1 (1 hw match)
+ 30 deny ipv4 any 10.0.0.0 0.0.255.255 (5 hw matches)
+ 40 deny ipv4 any 10.255.0.0 0.0.0.255 (5 hw matches)
+ 50 permit ipv4 any any (5 hw matches)
+RP/0/RP0/CPU0:XR01#
+show running-config interface GigabitEthernet0/0/0/3
+Sat Nov  7 10:10:24.813 UTC
+interface GigabitEthernet0/0/0/3
+ description to INET (internet peer AS 64500)
+ ipv4 address 10.0.100.1 255.255.255.0
+ ipv4 verify unicast source reachable-via any
+ ipv4 access-group IACL ingress hardware-count
+!
+
+RP/0/RP0/CPU0:XR01#
+
+######## 10:10:25 abf: ACL で次ホップを変える(攻撃される宛てを洗浄の役= CUST1 へ寄せる)の可否。★ACL の名前 ABF は予約語(実測)
+configure
+Sat Nov  7 10:10:26.287 UTC
+RP/0/RP0/CPU0:XR01(config)#
+ipv4 access-list TO-SCRUB
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+10 permit ipv4 any host 198.51.100.130 next$51.100.130 nexth                          op1 ipv4 172.20.1.110 permit ipv4 any host 198.51.100.130 nex$
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+20 permit ipv4 any any
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+exit
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01(config-if)#
+no ipv4 access-group IACL ingress
+RP/0/RP0/CPU0:XR01(config-if)#
+ipv4 access-group TO-SCRUB ingress
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sat Nov  7 10:10:29.998 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sat Nov  7 10:10:30.901 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+Success rate is 0 percent (0/10)
+Success rate is 100 percent (5/5), round-trip min/avg/max = 8/9/10 ms
+   CUST1(洗浄役)が受けた echo: 15 → 15 / CUST2: 1211 → 1216
+show access-lists ipv4 TO-SCRUB
+Sat Nov  7 10:10:52.949 UTC
+ipv4 access-list TO-SCRUB
+ 10 permit ipv4 any host 198.51.100.130 nexthop1 ipv4 172.20.1.1
+ 20 permit ipv4 any any
+RP/0/RP0/CPU0:XR01#
+configure
+Sat Nov  7 10:10:54.426 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01(config-if)#
+no ipv4 access-group TO-SCRUB ingress
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sat Nov  7 10:10:56.131 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sat Nov  7 10:10:57.051 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#

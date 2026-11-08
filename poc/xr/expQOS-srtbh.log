@@ -1,0 +1,157 @@
+
+######## 10:06:12 srtbh: 送信元で捨てる= 攻撃元 203.0.113.66 を同じ仕組みで捨て先へ向け、XR01 の INET 側に緩い uRPF
+configure
+Sat Nov  7 10:06:13.434 UTC
+RP/0/RP0/CPU0:RR1(config)#
+router static
+RP/0/RP0/CPU0:RR1(config-static)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:RR1(config-static-afi)#
+203.0.113.66/32 Null0 tag 666
+RP/0/RP0/CPU0:RR1(config-static-afi)#
+root
+RP/0/RP0/CPU0:RR1(config)#
+commit
+Sat Nov  7 10:06:15.541 UTC
+RP/0/RP0/CPU0:RR1(config)#
+show configuration failed
+Sat Nov  7 10:06:15.944 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:RR1(config)#
+end
+RP/0/RP0/CPU0:RR1#
+show route 203.0.113.66/32
+Sat Nov  7 10:06:33.474 UTC
+
+Routing entry for 203.0.113.66/32
+  Known via "bgp 65000", distance 200, metric 0, type internal
+  Installed Nov  7 10:06:15.551 for 00:00:17
+  Routing Descriptor Blocks
+    directly connected, via Null0
+      Route metric is 0, Wt is 1
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+show cef 203.0.113.66/32
+Sat Nov  7 10:06:33.876 UTC
+203.0.113.66/32, version 28, null0 adjacency, internal 0x5000001 0x40 (ptr 0x1063e6c8) [1], 0x400 (0x107d5618), 0x0 (0x0)
+ Updated Nov  7 10:06:15.554
+ Prefix Len 32, traffic index 0, precedence n/a, priority 4
+  gateway array (0x1066f4a8) reference count 2, flags 0x0, source rib (7), 0 backups
+                [3 type 3 flags 0x8401 (0x10711488) ext 0x0 (0x0)]
+  LW-LDI[type=3, refc=1, ptr=0x107d5618, sh-ldi=0x10711488]
+  gateway array update type-time 1 Nov  7 10:05:24.557
+ LDI Update time Nov  7 10:05:24.557
+ LW-LDI-TS Nov  7 10:06:15.554
+   via 0.0.0.0/32, Null0, 5 dependencies, weight 0, class 0 [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xea74098 0x0]
+    next hop 0.0.0.0/32
+     null0 adjacency
+
+    Load distribution: 0 (refcount 3)
+
+    Hash  OK  Interface                 Address
+    0     Y   recursive                 null0          
+RP/0/RP0/CPU0:XR01#
+(uRPF なし) Loopback0: Success rate is 100 percent (10/10), round-trip min/avg/max = 2/3/7 ms
+   CUST2 が受けた echo: 1151 → 1161
+(uRPF なし) Loopback66: Success rate is 0 percent (0/10)
+   CUST2 が受けた echo: 1161 → 1171
+configure
+Sat Nov  7 10:06:56.073 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:XR01(config-if)#
+ipv4 verify unicast source reachable-via any
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sat Nov  7 10:06:57.778 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sat Nov  7 10:06:58.589 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+(緩い uRPF) Loopback0: Success rate is 100 percent (10/10), round-trip min/avg/max = 2/3/4 ms
+   CUST2 が受けた echo: 1171 → 1181
+(緩い uRPF) Loopback66: Success rate is 0 percent (0/10)
+   CUST2 が受けた echo: 1181 → 1181
+  Null0 drops          packets :               0
+  RPF drops            packets :               0
+  Null0 drops          packets :              10
+  RPF drops            packets :              45
+
+######## 10:07:22 srtbh-2: 同じことを次ホップ 192.0.2.1(→ Null0 への再帰)の形で= XR01 の入力の discard を外し、起点で次ホップを書く
+configure
+Sat Nov  7 10:07:23.622 UTC
+RP/0/RP0/CPU0:RR1(config)#
+route-policy RTBH-TRIGGER
+Sat Nov  7 10:07:24.123 UTC
+% WARNING: Policy object route-policy RTBH-TRIGGER exists! Reconfiguring it via CLI will replace current definition. Use abort to cancel.
+RP/0/RP0/CPU0:RR1(config-rpl)#
+if tag eq 666 then
+RP/0/RP0/CPU0:RR1(config-rpl-if)#
+set next-hop 192.0.2.1
+RP/0/RP0/CPU0:RR1(config-rpl-if)#
+set community (no-export, 65000:666)
+RP/0/RP0/CPU0:RR1(config-rpl-if)#
+pass
+RP/0/RP0/CPU0:RR1(config-rpl-if)#
+else
+RP/0/RP0/CPU0:RR1(config-rpl-else)#
+drop
+RP/0/RP0/CPU0:RR1(config-rpl-else)#
+endif
+RP/0/RP0/CPU0:RR1(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:RR1(config)#
+commit
+Sat Nov  7 10:07:27.784 UTC
+RP/0/RP0/CPU0:RR1(config)#
+show configuration failed
+Sat Nov  7 10:07:28.168 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:RR1(config)#
+end
+RP/0/RP0/CPU0:RR1#
+configure
+Sat Nov  7 10:07:30.808 UTC
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+neighbor 10.255.0.52
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+no route-policy FROM-RR in
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sat Nov  7 10:07:33.319 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sat Nov  7 10:07:34.224 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+  Known via "bgp 65000", distance 200, metric 0, type internal
+  [0] via 192.0.2.1/32, recursive
+   via 192.0.2.1/32, 3 dependencies, recursive [flags 0x6000]
+    next hop 192.0.2.1/32 via 192.0.2.1/32
+    0     Y   recursive                 null0          
+(緩い uRPF・192.0.2.1 の再帰) Loopback0: Success rate is 100 percent (10/10), round-trip min/avg/max = 9/10/12 ms
+   CUST2 が受けた echo: 1181 → 1191
+(緩い uRPF・192.0.2.1 の再帰) Loopback66: Success rate is 0 percent (0/10)
+   CUST2 が受けた echo: 1191 → 1201
+  Null0 drops          packets :               0
+  RPF drops            packets :               0
+  Null0 drops          packets :              10
+  RPF drops            packets :              50

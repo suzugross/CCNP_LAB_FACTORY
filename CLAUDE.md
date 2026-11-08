@@ -79,7 +79,7 @@
 
 | 目的 | コマンド |
 |---|---|
-| 手元で読む | `scripts/read.sh build <src>` → ポータル `http://10.1.10.6:8899/` の Study Materials（`scripts/pack.sh serve`。棚は `book.yml` の `shelf:`） |
+| 手元で読む | `scripts/read.sh build <src>` → ポータル `http://10.1.10.3:8899/` の Study Materials（`scripts/pack.sh serve`。棚は `book.yml` の `shelf:`） |
 | 章ごとに 1 枚へ束ねる | `scripts/read.sh bundle <src> --split` |
 | クラウドへ反映 | `scripts/read.sh sync <src>` |
 

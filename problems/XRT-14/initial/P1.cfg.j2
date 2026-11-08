@@ -1,0 +1,58 @@
+! XRT-14 P1(IOL 17.15)= P ルータ。IS-IS と LDP だけで、BGP は持たない。RR1 への線は MPLS を動かさない(道の外)。
+! 据付の方策= Et0/0 の入力(XR01 から)で EXP ごとに数えるだけ(採点が数える・M12-1)/Et0/1 の入力(PE2 から)で EXP 3 → 1 に格下げ(混雑時の扱いの模擬・M12-3)。
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+!
+class-map match-any EXP5
+ match mpls experimental topmost 5
+class-map match-any EXP3
+ match mpls experimental topmost 3
+class-map match-any EXP1
+ match mpls experimental topmost 1
+class-map match-any EXP0
+ match mpls experimental topmost 0
+!
+policy-map COUNT-EXP
+ class EXP5
+ class EXP3
+ class EXP1
+ class EXP0
+policy-map DOWNGRADE
+ class EXP3
+  set mpls experimental topmost 1
+!
+interface Loopback0
+ ip address 10.255.0.51 255.255.255.255
+ ip router isis CORE
+!
+interface {{ links[0] }}
+ description CORE to XR01
+ ip address 10.0.1.51 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ service-policy input COUNT-EXP
+ no shutdown
+!
+interface {{ links[1] }}
+ description CORE to PE2
+ ip address 10.0.2.51 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ service-policy input DOWNGRADE
+ no shutdown
+!
+interface {{ links[2] }}
+ description to RR1 (route reflector, off the forwarding path)
+ ip address 10.0.52.51 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0051.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+!

@@ -1,0 +1,118 @@
+# XRT-14 最終確認(M12-1〜5 を終えた状態。配点= 各課題 20)。学習目的のラボ= パック・ノルマの対象外。
+# 中身は課題ごとの確認(grading.m12t<n>.yml)を写して配点を付け直したもの(scripts で機械的に組んだ・課題ごとの確認を直したらここも組み直す)。
+# 白紙で通る項目は無い(2026-11-07 実測= 課題ごとに 0 点)。確認は試験のトラフィックを流して数えるので、全部で 10 分ほどかかる。
+problem: XRT-14
+total_points: 100
+checks:
+- name: 'M12-1 P1: in the core, voice travels with EXP 5, business data with EXP 3 and everything else with EXP 0'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/qos_probe.py XRT-14 run --clear 'P1:clear counters' --send 'CE1:ping 10.46.2.1 source Loopback46 repeat 10;;ping 10.21.2.1 source Loopback21 repeat 10;;ping 10.100.2.1
+    source Loopback100 repeat 10' --count 'P1:Ethernet0/0:input'
+  raw:
+  - regex: == COUNT P1 EXP5 (?:9|10)\n
+  - regex: == COUNT P1 EXP3 (?:9|10)\n
+  - regex: == COUNT P1 EXP0 (?:9|[1-9]\d)\n
+  points: 10
+- name: 'M12-1 CE2: site 2 receives voice as EF, business data as AF21, and the out-of-contract EF as DSCP 0'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/qos_probe.py XRT-14 run --clear 'CE2:clear counters' --send 'CE1:ping 10.46.2.1 source Loopback46 repeat 10;;ping 10.21.2.1 source Loopback21 repeat 10;;ping 10.100.2.1
+    source Loopback100 repeat 10' --count 'CE2:Ethernet0/0:input'
+  raw:
+  - regex: == COUNT CE2 D-EF (?:9|10)\n
+  - regex: == COUNT CE2 D-AF21 (?:9|10)\n
+  - regex: == COUNT CE2 D-BE (?:9|[1-9]\d)\n
+  points: 10
+- name: 'M12-2 XR01: the business-data policer on the site 1 port runs at 256 kbps and peaks at 512 kbps, marks the excess AF22 and drops the violation'
+  node: XR01
+  command: show qos interface GigabitEthernet0/0/0/1 input
+  raw:
+  - regex: 'Conform: 256 kbps[^\n]*\n[\s\S]{0,40}?Peak: 512 kbps[\s\S]*?Child Policer Exceed:[^\n]*set dscp 20[^\n]*\n\s*Child Policer Violate: DROP'
+  points: 8
+- name: 'M12-2 CE2: a burst of business data arrives partly as AF21 and partly as AF22, the rest is dropped on XR01, and voice is unaffected'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/qos_probe.py XRT-14 run --clear 'CE2:clear counters' --clear 'XR01:clear qos counters interface GigabitEthernet0/0/0/1 input' --send 'CE1:ping 10.21.2.1 source Loopback21
+    repeat 1000 size 500 timeout 0;;ping 10.46.2.1 source Loopback46 repeat 10' --wait 30 --count 'CE2:Ethernet0/0:input' --count 'XR01:GigabitEthernet0/0/0/1:input'
+  raw:
+  - regex: == COUNT CE2 D-AF21 [1-9]\d*\n
+  - regex: == COUNT CE2 D-AF22 [1-9]\d*\n
+  - regex: == COUNT XR01 \S+\.violate [1-9]\d*\n
+  - regex: ping 10\.46\.2\.1 source Loopback46 repeat 10 => Success rate is (?:100|90) percent
+  points: 12
+- name: 'M12-3 CE1: site 1 receives voice as EF, business data downgraded in the core as AF11, and the rest as DSCP 0'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/qos_probe.py XRT-14 run --clear 'CE1:clear counters' --send 'CE2:ping 10.46.1.1 source Loopback46 repeat 10;;ping 10.21.1.1 source Loopback21 repeat 10;;ping 10.100.1.1
+    source Loopback100 repeat 10' --count 'CE1:Ethernet0/0:input'
+  raw:
+  - regex: == COUNT CE1 D-EF (?:9|10)\n
+  - regex: == COUNT CE1 D-AF21 0\n
+  - regex: == COUNT CE1 D-AF11 (?:9|10)\n
+  - regex: == COUNT CE1 D-BE (?:9|[1-9]\d)\n
+  points: 12
+- name: 'M12-3 XR01: traffic to site 1 is shaped to 2 Mbps, with voice in the priority queue policed at 512 kbps'
+  node: XR01
+  command: show qos interface GigabitEthernet0/0/0/1 output
+  raw:
+  - regex: 'Shape Info: rate 2000 kbps'
+  - regex: '\(Priority 1\)[\s\S]*?Conform: 512 kbps'
+  points: 8
+- name: 'M12-4 CUST1 side: only sources in the customer allocation get through (an internet address and an unrouted address are dropped)'
+  node: XR01
+  exec: local
+  command: echo '## Lo0'; .venv/bin/python topologies/qos_probe.py XRT-14 run --echo CUST2 --send 'CUST1:ping 198.51.100.129 source Loopback0 repeat 10 timeout 1'; echo '## Lo9'; .venv/bin/python topologies/qos_probe.py
+    XRT-14 run --echo CUST2 --send 'CUST1:ping 198.51.100.129 source Loopback9 repeat 10 timeout 1'; echo '## Lo10'; .venv/bin/python topologies/qos_probe.py XRT-14 run --echo CUST2 --send 'CUST1:ping 198.51.100.129
+    source Loopback10 repeat 10 timeout 1'
+  raw:
+  - regex: '## Lo0[\s\S]*?== ECHO CUST2 \+(?:9|10)\n[\s\S]*?## Lo9[\s\S]*?== ECHO CUST2 \+0\n[\s\S]*?## Lo10[\s\S]*?== ECHO CUST2 \+0\n'
+  points: 6
+- name: 'M12-4 INET side: routed sources get through whichever way their route points, an unrouted source is dropped, and the default route does not count'
+  node: XR01
+  exec: local
+  command: echo '## Lo0'; .venv/bin/python topologies/qos_probe.py XRT-14 run --echo CUST2 --send 'INET:ping 198.51.100.129 source Loopback0 repeat 10 timeout 1'; echo '## Lo97'; .venv/bin/python topologies/qos_probe.py
+    XRT-14 run --echo CUST2 --send 'INET:ping 198.51.100.129 source Loopback97 repeat 10 timeout 1'; echo '## Lo98'; .venv/bin/python topologies/qos_probe.py XRT-14 run --echo CUST2 --send 'INET:ping 198.51.100.129
+    source Loopback98 repeat 10 timeout 1'
+  raw:
+  - regex: '## Lo0[\s\S]*?== ECHO CUST2 \+(?:9|10)\n[\s\S]*?## Lo97[\s\S]*?== ECHO CUST2 \+(?:9|10)\n[\s\S]*?## Lo98[\s\S]*?== ECHO CUST2 \+0\n'
+  points: 6
+- name: 'M12-4 INET side: the internet cannot reach the provider loopbacks or core links, customers stay reachable, BGP stays up, and the ACL counts in hardware'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-14 ssh INET -- 'ping 10.255.0.1 repeat 3 timeout 1' 'ping 10.255.0.2 repeat 3 timeout 1' 'ping 10.0.2.2 repeat 3 timeout 1' 'ping 198.51.100.129
+    source Loopback0 repeat 5' 'show ip bgp summary | include ^10.0.100.1'; .venv/bin/python topologies/login_probe.py XRT-14 ssh XR01 -- 'show running-config interface GigabitEthernet0/0/0/3'
+  raw:
+  - regex: ping 10\.255\.0\.1 repeat 3[\s\S]*?Success rate is 0 percent[\s\S]*?ping 10\.255\.0\.2 repeat 3[\s\S]*?Success rate is 0 percent[\s\S]*?ping 10\.0\.2\.2 repeat 3[\s\S]*?Success rate is 0 percent
+  - regex: ping 198\.51\.100\.129 source Loopback0 repeat 5[\s\S]*?Success rate is (?:100|80) percent
+  - regex: \n10\.0\.100\.1\s+4\s+65000(?:\s+\d+){5}\s+\S+\s+\d+\s*\n
+  - regex: ipv4 access-group \S+ ingress hardware-count
+  points: 8
+- name: 'M12-5 XR01: traffic from the attacker (203.0.113.66) and to the victim (198.51.100.130) is dropped, other internet traffic still arrives'
+  node: XR01
+  exec: local
+  command: echo '## Lo66'; .venv/bin/python topologies/qos_probe.py XRT-14 run --echo CUST2 --send 'INET:ping 198.51.100.129 source Loopback66 repeat 10 timeout 1'; echo '## victim'; .venv/bin/python topologies/qos_probe.py
+    XRT-14 run --echo CUST2 --send 'INET:ping 198.51.100.130 source Loopback0 repeat 10 timeout 1'; echo '## Lo0'; .venv/bin/python topologies/qos_probe.py XRT-14 run --echo CUST2 --send 'INET:ping 198.51.100.129
+    source Loopback0 repeat 10 timeout 1'
+  raw:
+  - regex: '## Lo66[\s\S]*?== ECHO CUST2 \+0\n[\s\S]*?## victim[\s\S]*?== ECHO CUST2 \+0\n[\s\S]*?## Lo0[\s\S]*?== ECHO CUST2 \+(?:9|10)\n'
+  points: 10
+- name: 'M12-5 INET and PE2: the blackholed /32 routes are not advertised to the internet, and PE2 still drops the victim traffic through 192.0.2.1'
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/login_probe.py XRT-14 ssh INET -- 'show ip bgp 198.51.100.130/32' 'show ip bgp 203.0.113.66/32'; .venv/bin/python topologies/login_probe.py XRT-14 ssh PE2 -- 'show
+    ip cef 198.51.100.130 255.255.255.255 detail'
+  raw:
+  - regex: show ip bgp 198\.51\.100\.130/32\s*\n% Network not in table[\s\S]*?show ip bgp 203\.0\.113\.66/32\s*\n% Network not in table
+  - regex: recursive via 192\.0\.2\.1\s*\n\s*attached to Null0
+  points: 5
+- name: M12-5 a new attacker tagged on RR1 (203.0.113.77) is dropped on XR01 without any change to XR01
+  node: XR01
+  exec: local
+  command: .venv/bin/python topologies/qos_probe.py XRT-14 run --pre-cli 'RR1:configure;;router static;;address-family ipv4 unicast;;203.0.113.77/32 Null0 tag 666;;root;;commit;;end' --settle 30 --post-cli
+    'RR1:configure;;router static;;address-family ipv4 unicast;;no 203.0.113.77/32 Null0 tag 666;;root;;commit;;end' --echo CUST2 --send 'INET:ping 198.51.100.129 source Loopback77 repeat 10 timeout 1'
+    --show 'XR01:show bgp ipv4 unicast 203.0.113.77/32'
+  raw:
+  - regex: == ECHO CUST2 \+0\n
+  - regex: BGP routing table entry for 203\.0\.113\.77/32
+  points: 5

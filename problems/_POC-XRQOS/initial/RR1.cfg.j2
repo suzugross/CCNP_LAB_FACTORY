@@ -1,0 +1,59 @@
+!! _POC-XRQOS RR1(XRd 26.1.1)= ルート リフレクタ(ipv4 unicast・vpnv4)兼 RTBH の起点。P1 の脇の行き止まり(お客さまの通信は通らない・LDP なし)。
+!! RTBH の起点の設定(静的経路のタグ → RPL で次ホップと印)は PoC の段で足す。捨て先 192.0.2.1 だけ据付。
+interface Loopback0
+ ipv4 address 10.255.0.52 255.255.255.255
+!
+interface {{ links[3] }}
+ description to P1 (off the forwarding path)
+ ipv4 address 10.0.52.52 255.255.255.0
+ no shutdown
+!
+router static
+ address-family ipv4 unicast
+  192.0.2.1/32 Null0
+ !
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0052.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+!
+router bgp 65000
+ bgp router-id 10.255.0.52
+ address-family ipv4 unicast
+ !
+ address-family vpnv4 unicast
+ !
+ neighbor-group PE
+  remote-as 65000
+  update-source Loopback0
+  address-family ipv4 unicast
+   route-reflector-client
+  !
+  address-family vpnv4 unicast
+   route-reflector-client
+  !
+ !
+ neighbor 10.255.0.1
+  use neighbor-group PE
+  description PE XR01
+ !
+ neighbor 10.255.0.2
+  use neighbor-group PE
+  description PE PE2
+ !
+!
+end

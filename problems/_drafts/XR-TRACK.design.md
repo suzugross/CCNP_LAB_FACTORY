@@ -2224,3 +2224,188 @@ targeted LDP が自動で張られる/BGP で運ぶもの(L3VPN・EVPN)は RR �
   U-M11(`spvpn/l2_stack`・`owner`・`lfib`)・profile `sp`。単元ローテーションでは思考枠・瞬発枠とも U-M11 → U-M9 が次の先頭(未出題のため)。
   mixed(思考枠)は THINK_KINDS だけ、speed(瞬発枠)は SPEED_KINDS だけを引くことを確認。問題文は日本語で生成し、出題時に英訳する(他の紙面と同じ)。
 
+
+## 27. M12 データプレーンの保護と QoS(SPCOR 1.7・4.5・1.4)(2026-11-07 完了= PoC §27.3・ユーザ判断 §27.5・課題 §27.6・実装の結果 §27.7)
+
+**範囲= SPCOR 1.7(a uRPF/b ACL/c RTBH/d MACsec)・4.5(a 分類とマーキング/b 輻輳回避・ポリシング・シェーピング)**に、
+説明の項目 **1.4(a MPLS の QoS のモデル= パイプ・ショート パイプ・ユニフォーム/b TE の QoS= MAM・RDM・CBTS・PBTS・DS-TE/c DiffServ と IntServ/
+d 企業と SP の信頼の境界/e IPv6 のフロー ラベル)**を読み物で載せる(BL-264 の題材①)。関連= 1.6.d DDoS・1.5.f FlowSpec(RTBH との対比で読み物)。
+引き継ぎ(2026-11-07)= ①1.4 の MPLS QoS のモデルを読み物へ(EXP と DSCP の区間ごとの変化を CML のリンクの捕獲で実測)②PoC の最初に XR の QoS が
+この環境で動くかを確かめる(無ライセンスの XRv9000 は 200 kbps)③読み物を書きながら出典の照合表を作る(BL-264)④紙面は spvpn より 1 段難しく。
+CLAUDE.md §6 の書き方(技術そのものから・何が嬉しいか→仕組み→XR の設定・機能ごとの設定例 `:::config`)で最初から書く。
+M2-5(手書きの ACL で偽装の送信元を落とした)とつなげる= uRPF はルーティング表で同じことを自動でやる。
+
+### 27.1 PoC の盤面(`problems/_POC-XRQOS`・手順 `poc/xr/qos_poc.sh`・記録 `poc/xr/expQOS-*.log`・pcap は `poc/xr/pcap/qos-*`)
+
+```
+                 RR1(XRd・RR 兼 RTBH の起点・道の外)
+                  |
+ CE1 ─ XR01 ═══ P1 ═══ PE2 ─ CE2        VRF A(L3VPN)= CE1 ⇔ CE2
+CUST1 ─┘ │              └─ CUST2       グローバル(インターネット)= CUST1・CUST2・INET
+        INET
+```
+- XR01= **XRv9000 26.1.1**(PE 兼インターネットの出入り口。QoS・uRPF・RTBH・ACL はここで見る)。P1= IOL(P・BGP なし)。PE2= IOL の PE。
+  RR1= **XRd 26.1.1**(ipv4 unicast と vpnv4 の RR 兼 RTBH の起点= 制御だけ)。CE1・CE2(VRF A・eBGP)・CUST1(XR01 の単一収容のお客さま・静的)・
+  CUST2(PE2 のお客さま・攻撃される側)・INET(インターネット役・AS 64500・攻撃する側)は IOL。
+- アドレス= Lo0 XR01 10.255.0.1・PE2 10.255.0.2・P1 10.255.0.51・RR1 10.255.0.52/コア XR01–P1 10.0.1.0/24・P1–PE2 10.0.2.0/24・P1–RR1 10.0.52.0/24/
+  VRF A= PE-CE 172.16.<拠点>.0/24(CE .1・PE .254)・CE の LAN Lo100 10.100.<拠点>.1/24・AS 6500<拠点>/
+  インターネット= CUST1 198.51.100.0/25(XR01–CUST1 172.20.1.0/24)・CUST2 198.51.100.128/25(PE2–CUST2 172.20.2.0/24・攻撃される宛て 198.51.100.130)・
+  INET 203.0.113.0/24(XR01–INET 10.0.100.0/24・攻撃元 203.0.113.66)・捨て先 192.0.2.1/32 → Null0(XR01・PE2・RR1)・RTBH の印 65000:666。
+- グローバルの経路も BGP の次ホップ(Lo0)へ LDP のラベルで運ぶ= P1 で PHP → PE2 にはラベルなしで届く(EXP が消える場面を見る材料)。
+
+### 27.2 PoC で確かめること
+
+1. **XRv9000 の QoS の可否**: class-map/policy-map の分類(dscp・precedence・access-group・mpls experimental topmost・qos-group)・マーキング
+   (set dscp・set mpls experimental imposition/topmost・set qos-group・set discard-class)・ポリサ(1 速度 2 色・2 速度 3 色・動作)・シェーパ・
+   キュー(priority level・bandwidth remaining・queue-limit)・WRED(random-detect)・階層(親で shape・子でキュー)が入力/出力でコミットできるか・効くか・
+   カウンタ(`show policy-map interface`)が動くか。200 kbps の制限がどこで効くか(ポリサ・シェーパの手前か後か)。
+2. **MPLS の QoS のモデル**(線の上の実測): 方策なしの既定(ラベルを付ける時に IP の優先度を EXP に写すか)・`set mpls experimental imposition`・
+   P での EXP の付け替え・PHP で外側が外れた時に EXP がどうなるか・explicit null で残るか・出口 PE(XR01)で EXP→qos-group→DSCP/キュー
+   (ユニフォーム・パイプ・ショート パイプの作り方)。TTL の扱い(`mpls ip-ttl-propagate disable`)も。
+3. **uRPF**: 厳格(rx)と緩い(any)・`allow-default`・`allow-self-ping`・VRF の IF・落ちた数の表示。偽装の送信元(経路あり/なし)で厳格と緩いの差。
+4. **RTBH**: 宛先(RR1 で静的経路+タグ → RPL で次ホップ 192.0.2.1+印 → XR01 で Null0)・XR の RPL の `set next-hop discard` の有無・
+   送信元(攻撃元を捨て先に向け、XR01 の INET 側で緩い uRPF)・お客さまが印を付けて送る形。
+5. **ACL**: インフラ ACL(外からコアのアドレス宛てを落とす・BGP は通す)・object-group・カウンタ・ABF(ACL で次ホップを変える)の可否。
+6. **MACsec**(見込み= 不可)と **FlowSpec**(見込み= 制御側だけ)の可否の確認だけ。
+
+### 27.3 PoC の結果(2026-11-07・XRv9000 26.1.1+XRd 26.1.1+IOL 17.15。手順 `poc/xr/qos_poc.sh <段>`・記録 `poc/xr/expQOS-<段>.log`・pcap は `poc/xr/pcap/qos-*`・解析 `poc/xr/pcap_qos.py`)
+
+**盤面の作りで踏んだ罠**
+- ★XR の初期設定(CVAC の iosxr_config.txt)で `vrf A` の定義を `interface Loopback0` の後ろに置くと、**Loopback0 の下の `vrf A`** と解釈され、VRF の定義が消えて
+  Loopback0 が VRF A に入った(LDP の ID 0.0.0.0・iBGP Idle)。`!` では下の階層から抜けない → VRF の定義はファイルの先頭に置く(テンプレートを直した)。
+- IOS の PE が静的経路を `network` で広告すると次ホップがお客さまのアドレスのまま出る → RR へ `next-hop-self`(据付に入れた)。
+
+**XRv9000 の QoS の可否**(いちばん大きい結果)
+1. **200 kbps の制限は効いていない**: 方策なしで 1000 バイトの ping を約 4 Mbps(501 pps)通した(`thr`・IOL の生成量が上限)。公式(ライセンスの章・25.1.1 のリリース ノート)は
+   「無ライセンスは 200 Kbps」、CML の参照ページは実測 168 kbps と書く → **公式と実機の食い違い**(版か CML の版か不明)。教材では数字を断定しない・帯域を測る課題は作らない。
+2. **分類とマーキングは全部効く**: `match dscp`・`match mpls experimental topmost`・`match qos-group`(出力)・`set mpls experimental imposition`・`set qos-group`(入力)・`set dscp`。
+   カウンタ(`show policy-map interface`)は **約 10〜30 秒遅れて** 反映する(流してすぐ見ると 0)→ 採点は待ってから見る。
+3. ★**1 つの class の印は 2 種類まで**: EXP と qos-group を付けた class のポリサに `exceed-action set dscp` を足すと `only two mark types are allowed per class` でコミット拒否
+   (ASR 9000 のガイドの "Choose only two set commands per class" と一致)。
+4. **ポリサ**: 1 速度 2 色・2 速度 3 色とも効く。既定のバースト 1600 バイト・単位は kbps/mbps。2 速度 3 色で超過を AF12 に付け替え → XR01 の内訳(適合 5・超過 41・違反 789 は廃棄)と
+   CE2 の入力で DSCP ごとに数えた数(AF11 5・AF12 41)が 1 発単位で一致(採点に使える)。
+5. **シェーパと優先キュー**: 親で `shape average 100 kbps`+子で `priority level 1`+`police` がプログラムされ(`show qos interface`= Priority 1 のキューと通常のキュー)、**量は絞れる**
+   (11878 発のうち 205 発・約 76 kbps を送り、残りは末尾廃棄)。優先のクラスも数える(EF 50 発・32 kbps のポリサで 3 発超過)。★ただし**キューは 1 個分しか溜まらない**
+   (1000 バイトの ping が最大 82 ms= 100 kbps で 1 個分・100 バイトの ping は 2 ms・`show controllers dpa tm queue` は Q-Limit 0)→ 遅れの差で優先を見せる体感型は作れない。カウンタで採点する。
+6. **WRED は入るが確かめられない**: `random-detect default`・`random-detect dscp af11 10 packets 20 packets` はコミットできるが、RED の廃棄・末尾廃棄とも 0 と表示される
+   (12490 発のうち 190 発しか出ていないのに Total Dropped 0)。公式の対応表にも WRED は無い → **WRED は読み物だけ**。
+
+**MPLS の QoS のモデル**(線の上の実測・L3VPN の CE1⇔CE2 とグローバルの CUST1→CUST2)
+| 場面 | 入口 PE → P1 | P1 → 出口 PE | 出口 PE → CE の DSCP |
+|---|---|---|---|
+| 方策なし(XR01 も PE2 も) | `16/tc5 \| 23/tc5`(EF)・tc1(AF11)・tc0(印なし)= DSCP の上位 3 ビットを積んだ全部のラベルへ | `23/tc5`(PHP) | EF のまま |
+| XR01 で AF11 → `imposition 2` | `16/tc2 \| 24/tc2` | `24/tc2` | AF11 のまま(パイプ/ショート パイプの入口) |
+| P1 で EXP 5 → 0(外側)・PE2 は PHP | `16/tc5 \| 23/tc5` | **`23/tc5`**(付け替えは外側ごと消えた) | EF のまま |
+| 同上・PE2 が explicit null | 同上 | **`0/tc0 \| 23/tc5`** | EF のまま(IOS の出口は既定で DSCP を変えない) |
+| 逆向き・XR01 が出口・PHP のまま | — | `24007/tc5` | EF のまま(コアの付け替えは届かない) |
+| 逆向き・XR01 が explicit null(`label local advertise explicit-null`)+コア側の入力で topmost の EXP → qos-group・CE 側の出力で qos-group → `set dscp` | — | `0/tc0 \| 24007/tc5` | **BE**(ユニフォーム= コアの付け替えがお客さまの DSCP に写った) |
+| グローバル(ラベル 1 枚) | `16/tc0` | ラベルなし(PHP)/explicit null なら `0/tc0` | — |
+- ★**PHP で外側を外すと、P で付け替えた EXP は消える**(IOL の P は下のラベルに写さない。IOS の TAC 47815「disposition で EXP は下に写らない」と一致・XR の公式記述は無い)。
+  → RFC 3270 のパイプ(§2.6.2「PHP なしでのみ」)とユニフォームでコアの付け替えを出口まで運ぶには **explicit null** が要る。ショート パイプは PHP のままでよい(出口はお客さまの DSCP で扱う)。
+- 出口 PE の作り方は ASR 9000 のガイドの例どおり(入力で `set qos-group`・出力で `match qos-group`)。XRv9000 で `match qos-group` は出力で効いた。
+- **TTL**: 既定は伝える(CE からの traceroute に P1 が `[MPLS: Labels 16/21 Exp 0]` で見える)。XR01 で `mpls ip-ttl-propagate disable` → グローバル・VRF とも P1 が消える。
+  ★PE2 が PHP の間はグローバルの traceroute で P1 が `*`(BGP を持たない P は外す時に自分の経路表で返事を出し、お客さまの宛てを知らない)・explicit null の後は P1 が返事をした(実測は前後の比較だけ・仕組みは要確認)。
+
+**uRPF**(XR01 の CUST1 側・送信元= 割り当て内/インターネットの番号を名乗る/どこにも経路のない番号。CUST2 が受けた echo の数で判定)
+| 設定 | 割り当て内 | インターネットの番号 | 経路なし |
+|---|---|---|---|
+| なし | 通る | 通る | 通る |
+| `reachable-via rx`(厳格) | 通る | 落ちる | 落ちる |
+| `reachable-via any`(緩い) | 通る | 通る | 落ちる |
+| 緩い+既定経路あり | 通る | 通る | 落ちる(既定経路は数えない) |
+| 緩い+`allow-default` | 通る | 通る | 通る |
+- 数は `show cef ipv4 drops` の RPF drops(遅れて増える)・`show cef ipv4 interface … detail` に `RPF mode strict`。
+
+**RTBH**(INET → 攻撃される宛て 198.51.100.130・RR1= XRd が起点)
+- 宛てで捨てる(古典)= RR1 で `198.51.100.130/32 Null0 tag 666`+`redistribute static route-policy`(タグ 666 → 次ホップ 192.0.2.1・no-export と 65000:666)→ XR01・PE2 とも
+  192.0.2.1 経由の再帰で Null0。INET から攻撃される宛ては 0%・同じお客さまの別の宛ては 100%。no-export で INET へ /32 は出ない。
+- `set next-hop discard`= XR01 の RR からの入力の RPL で印 65000:666 の経路に適用 → BGP に `(discarded)`・経路は `directly connected, via Null0`・CEF は null0 adjacency。
+- ★**送信元で捨てる(攻撃元 203.0.113.66 を捨て先へ+INET 側に緩い uRPF)は `set next-hop discard` の形でだけ効いた**。192.0.2.1 への再帰の形では緩い uRPF が通してしまう
+  (CUST2 に 10 発とも届いた)。ASR 9000 の TAC 116386「uRPF は null0 への再帰を引けない→ discard を使う」と一致・IOS のホワイト ペーパー(2005)の手順は XR ではそのまま効かない。
+
+**ACL**
+- インフラ ACL(INET 側の入力・BGP を許可・コア 10.0.0.0/16 とループバック 10.255.0.0/24 宛てを拒否・他は許可)は効く。`ipv4 access-group IACL ingress hardware-count` で
+  `show access-lists ipv4 IACL hardware ingress location 0/0/CPU0` に行ごとの一致数(付けないとハードの数は出ない)。BGP のセッションは保たれる。
+- ★**object-group は XRv9000 で不可**(`Object groups not supported on this platform`)。★ACL の名前 `ABF` は予約語で拒否。
+- **ABF**(`nexthop1 ipv4 172.20.1.1`)は効く= 攻撃される宛ての 20 発を CUST1 側へ寄せた(RTBH で Null0 に向けた宛てでも ABF が先に効く)。
+
+**MACsec・FlowSpec**
+- MACsec= `macsec-policy`・IF の `macsec psk-keychain` が構文に無い(key chain の下の `macsec` だけある)→ **読み物だけ**。
+- FlowSpec= RR1(XRd)が配る側として規則を作り、XR01 が `address-family ipv4 flowspec` で受けて `show flowspec ipv4 detail` に `Traffic-rate: 0 bps` まで入るが、
+  **通信は落ちない**(`local-install interface-all` でも 10 発とも届いた)→ XRv9000 は適用できない(コミュニティの回答と一致)。**読み物+配る側の設定と表示まで**。
+
+### 27.4 公式文書・RFC での裏どり(2026-11-07・サブエージェント。xrdocs.io は取得していない・問題集サイトは使っていない)
+
+- XRv 9000: ライセンスの章(2026-09-11 更新)"Rate limitations of 200 Kbps for throughput for all interfaces."・25.1.1 のリリース ノート Table 3 の QoS は
+  "Bi-directional Policing and Marking"・"Hierarchical Policers"・"QoS on IPv4 GRE Tunnels" だけ(シェーピング・WRED の行なし。"Not all features … may be supported.")・
+  "ACL Based Forwarding (ABF)"・データシート(2018)"Hierarchical QoS (H-QoS), access control list (ACL), … and Unicast Reverse Path Forwarding (uRPF)"・
+  データプレーンの章に traffic manager のキュー(優先 1+通常 7)。MACsec・FlowSpec の記載なし。
+- ASR 9000 Modular QoS(24.x)と Command Reference: set qos-group/discard-class は入力だけ・match は出力だけ・"Choose only two set commands per class"・
+  police の最小 64 kbps・既定のバースト 100 ms 分・priority には policer・WRED はキューのあるクラスに・親は class-default だけ。MPLS QoS の 3 つのモードの表と出口 PE の例(qos-group)。
+  既定= "the router does not modify the IP precedence or DSCP without a policy-map"・L3 の IF でラベルを付ける時は優先度/DSCP を EXP に使う。
+- PHP の EXP= IOS の TAC 47815(2008)"At label disposition, the EXP bits are not copied down to the newly exposed label EXP bits."・Cisco 8000 の流れ図も同じ。XR の公式記述なし。
+- TTL= ASR 9000 MPLS Command Reference `mpls ip-ttl-propagate disable [forwarded | local]`(既定は伝える)。
+- uRPF= `ipv4 verify unicast source reachable-via {any | rx} [allow-default] [allow-self-ping]`・RFC 3704 §2.2〜2.5・RFC 8704 §3。
+- RTBH= ASR 9000 Routing(7.10.x)"Remotely Triggered Null Route Filtering with RPL Next-hop Discard"・TAC 116386(2013)"the router is unable to do recursive lookup to null0"・
+  RFC 5635(§3.2 捨て先は 192.0.2.0/24・§4 送信元ベース)・RFC 7999(BLACKHOLE 65535:666)・RFC 3882。★RFC 5635 §4 "some vendors also verify that the destination route does not point
+  to an invalid next-hop" は文脈上「送信元の経路」のはず(読み物で sic の候補)。
+- ACL= ASR 9000 IP Addresses and Services(24.x)`hardware-count`・object-group・ABF・インフラ ACL の 4 部構成(TAC 43920)。
+- RFC 3270(E-LSP/L-LSP・§2.6 パイプ/ショート パイプ/ユニフォーム)・3443(TTL)・2474/2475・2597・3246・1633/2205・4124/4125/4127・6437・5462(EXP→TC の改名)・CBTS/PBTS の公式の章。
+- **公式と実機の食い違い**(ユーザに報告): ①200 kbps(公式)と約 4 Mbps 通った(実測) ②対応表にシェーピングが無いが実機は量を絞る(キューは浅い)・WRED は入るが数が出ない。
+  どちらも正誤の題材にしない(CLAUDE.md の裏どりの決まり 2)。
+
+### 27.5 ユーザ判断(2026-11-07 決定= 1〜4 とも案どおり。課題は 5 本・盤面は PoC と同じ形= XRT-14)
+
+1. **範囲の切り方**= ラボで手を動かす= 分類とマーキング・ポリサ・シェーパと優先(カウンタで採点・遅れでは採点しない)・出口 PE のモデル(explicit null)・uRPF・インフラ ACL・RTBH。
+   **読み物だけ**= WRED(輻輳回避)・MACsec・FlowSpec の適用(配る側と表示は「やってみる」)・ABF(「やってみる」)・1.4 の TE の QoS(DS-TE・MAM・RDM・CBTS・PBTS)・DiffServ と IntServ・IPv6 のフロー ラベル。
+2. **盤面**= PoC と同じ(XR01= XRv9000・RR1= XRd の RR 兼 RTBH の起点・IOL 7 台)をラボ `XRT-14` にする。サービスの土台(IS-IS・LDP・iBGP・VRF A・PE-CE)は据付・学ぶ側は XR01 と RR1 を設定。
+3. **課題案(5 本)**:
+   | 課題 | ねらい(SPCOR) | 採点 |
+   |---|---|---|
+   | M12-1 信頼の境界とマーキング= お客さまの印のうち契約の宛て以外の EF は BE へ戻し、クラスごとに指定の EXP で運ぶ(DSCP はそのまま) | 4.5.a・1.4.d・1.4.a(入口) | P1 の入力で EXP ごとに数える+CE2 の入力で DSCP ごとに数える(据付の観測用の方策) |
+   | M12-2 契約の速度= 大量のクラスを 2 速度 3 色で絞り、超過は付け替え・違反は捨てる(1 つの class の印は 2 種類まで、に当たる値の組み) | 4.5.b | XR01 の内訳+CE2 の DSCP ごとの数 |
+   | M12-3 出口 PE= コアで格下げされた分をお客さまの DSCP にも写す(ユニフォーム)+CE1 への出口を整形して優先を付ける | 1.4.a・4.5.b | CE1 の入力の DSCP ごとの数(PHP のままだと届かない= explicit null に気づくか)+優先/通常のカウンタ |
+   | M12-4 偽装の送信元= 単一収容のお客さまは厳格・インターネット側は緩い(既定経路を数えない)+インフラ ACL(BGP は保つ・行ごとの数を出す) | 1.7.a・1.7.b | 偽装の 3 種を送って CUST2 が受けた数+ACL の hw の数+BGP の確立 |
+   | M12-5 RTBH の TS= 前任者が IOS の手順どおりに組んだ RTBH(宛てで捨てるのは効くが、送信元で捨てるのが効かない)を直す | 1.7.c | 宛て・送信元の両方で落ちること+攻撃されない宛ては通ること |
+4. **紙面**(引き継ぎ ④)= ラボの後。読み物を書きながら出典の照合表(BL-264)を作り、確定した事実から spvpn より 1 段難しい問(モデルの区別・PHP と explicit null・uRPF の表・RTBH の 2 つの形)。
+
+### 27.6 課題の確定案(2026-11-07・§27.5 の決定を受けて。値は課題文で渡す・読み物の設定例とは値を変える)
+
+盤面= PoC と同じ(§27.1)。学ぶ側が設定するのは XR01(M12-1〜5)と RR1(M12-5)。据付に足すもの:
+- CE1/CE2 の印付け(出口)= 宛てごとに音声サーバ 10.46.0.0/24 → EF・業務システム 10.21.0.0/24 → AF21・LAN 10.100.<相手>.0/24 → CE1 は **EF(契約外)**・CE2 は印なし。
+  CE の LAN= Lo46 10.46.0.<拠点>/32・Lo21 10.21.0.<拠点>/32・Lo100 10.100.<拠点>.1/24(BGP で広告)。
+- 観測用の方策(採点が数える)= CE1・CE2 の入力で DSCP ごと(EF・AF21・AF22・AF11・BE)・P1 の Et0/0 の入力(XR01 から)で EXP ごと(5・3・1・0)。
+- PE2 の CE2 側の入力= EF → EXP 5・AF21 → EXP 3・他 → 0(XR01 の M12-1 と同じ約束の反対側)。
+- P1 の Et0/1 の入力(PE2 から)= **EXP 3 → 1 に格下げ**(混雑時の扱いの模擬・常時)。
+- INET= XR01 へ既定経路を広告(default-originate)・10.0.0.0/8 → XR01 の静的経路(インフラ ACL の試験用)・Lo66 203.0.113.66(攻撃元)・Lo77 203.0.113.77(採点が起点に足す攻撃元)・
+  Lo97 198.51.100.200(インターネット経由で戻るマルチホームのお客さまの番号)・Lo98 100.64.0.98(どこにも経路のない番号)。
+- RR1 の仕込み(XRd の commits.yml・CHG-1501)= 前任者の RTBH= RPL でタグ 666 → 次ホップ 192.0.2.1・印 65000:666(**no-export なし**)・
+  `redistribute static`・静的経路 198.51.100.130/32 と 203.0.113.66/32 → Null0 tag 666。XR01・PE2 には 192.0.2.1/32 → Null0(据付)。
+
+| 課題 | 要件(要旨) | 模範解の要点 | 採点(`topologies/qos_probe.py` が数えて `== COUNT …` を出す) |
+|---|---|---|---|
+| M12-1 | 拠点 1 の EF は音声サーバ宛てだけ(他の EF は DSCP 0)・ほかの DSCP は変えない・コアの EXP= 音声 5・業務 3・他 0 | XR01 Gi0/0/0/1 入力= `match-all`(dscp ef+宛ての ACL)→ imposition 5/EF → `set dscp default`+imposition 0/AF21 → 3/default → 0 | CE1 から 3 種×10 → P1 の EXP 5=10・3=10・0=10、CE2 の EF=10・AF21=10・BE=10 |
+| M12-2 | 業務(AF21)を CIR 256 kbps・PIR 512 kbps。超過は AF22、違反は捨てる。音声は影響を受けない | 業務の class に 2 速度 3 色(exceed set dscp af22)。★qos-group も付けると印が 3 種類で拒否 | `show qos interface … input` に 256/512・exceed の set dscp 20+業務を流して CE2 に AF21 と AF22・XR01 の violate>0・音声 10/10 |
+| M12-3 | P1 が業務を EXP 1 に格下げすることがある。拠点 1 では EXP に合わせた DSCP で受け取る(5= EF・3= AF21・1= AF11・0= BE)+拠点 1 への出口を 2 Mbps に整形し、音声を優先(上限 512 kbps) | XR01 が explicit null を広告(★PHP だと格下げが消える)・コア側入力で EXP → qos-group・CE1 側出力= 親 shape 2 mbps+子(qos-group → set dscp・音声は priority level 1+police 512 kbps) | CE2 から 3 種×10 → CE1 の EF=10・AF11=10・BE=10・AF21=0+`show qos interface … output` に 2000 kbps と Priority 1 |
+| M12-4 | CUST1 からは割り当て以外の送信元を落とす。INET からは経路のない送信元を落とす(既定経路は数えない・経路の非対称があるので向きは問わない)。インフラ ACL= INET から SP のコア(10.0.0.0/16)とループバック(10.255.0.0/24)宛てを落とす・BGP と通過は通す・行ごとの一致数をハードで数える | CUST1 側 `reachable-via rx`・INET 側 `reachable-via any`・ACL+`hardware-count` | CUST1 の 3 つの送信元・INET の 3 つの送信元(Lo0 通る・Lo97 通る・Lo98 落ちる)を CUST2 が受けた数で/INET → 10.255.0.1・10.0.2.2 不通・BGP 確立・hw match |
+| M12-5 | 前任者の RTBH の TS= 攻撃元 203.0.113.66 からの通信を XR01 の入口で落とす・攻撃される宛ても XR01 で落とす・印の付いた経路をインターネットへ出さない・起点(RR1 の静的経路のタグ)の仕組みはそのまま・XR01 に個々のアドレスを書かない・PE2 の動きは変えない | XR01 の RR1 からの入力の RPL で印 → `set next-hop discard`・RR1 の RPL に no-export(か XR01 の INET への出力で印を落とす) | 攻撃元 Lo66 → CUST2 に届かない・Lo0 は届く/宛て 198.51.100.130 → XR01 で Null0・INET に /32 が無い・PE2 は 192.0.2.1 経由の Null0/採点が RR1 に 203.0.113.77 を足して同じく落ちるか(終わったら外す) |
+
+### 27.7 実装の結果(2026-11-07・ラボ XRT-14)
+
+- 成果物= `problems/XRT-14/`(problem.yml・initial 9 台・grading.yml と grading.m12t1〜5.yml・learn.yml・task.md・task.en.md)・読み物 `courses/xr/{en,ja}/d0〜d6`
+  (章 "D0"= M12・3 ページ+付録+実践 3 枚・設定例 `:::config` 14(うち fold 6)・やってみる 3)・Drive 同期済み。
+- 採点の道具= `topologies/qos_probe.py`(login_probe.py の SSH を流用。--clear → --send → --wait → --count/--echo → --show を 1 回で・`== COUNT <機器> <クラス> <数>`・
+  `== ECHO <機器> +n`)。採点は相手の機器(CE1/CE2 の入力の `COUNT-DSCP`・P1 の Et0/0 の入力の `COUNT-EXP`)と CUST2 が受けた echo の数で数える。XR01 の数は 30 秒待つ。
+  M12-5 は採点が RR1 に 203.0.113.77/32 tag 666 を足して(--pre-cli)落ちるかを見て、必ず外す(--post-cli)。最終の確認は 12 項目・約 10 分。
+- 盤面の作り= PoC の盤面に、CE の印付け(宛てごと)・観測用の方策・PE2 の EXP の付け方・P1 の格下げ(EXP 3 → 1)・INET の既定経路と試験用の送信元・
+  RR1 の前任者の RTBH の起点(day0 に入れた。XRd に commits.yml の前例が無いので履歴にはしない= 課題文も変更番号で指さない)。
+- 実機 E2E(`poc/xr/e2e_xrt14.sh`・`poc/xr/wrong_xrt14.sh`・記録 `poc/xr/expM12-{blank,solved,wrong}.log`)= 白紙 0(課題ごと・最終)→ 模範解 100(課題ごと)・
+  逐語の模範解(verbatim.py・RR1 の塊も)→ 最終 100・reset 後に白紙 0。誤答の判別= M12-1 EF を全部 0 に 50・契約外の EF を戻さない 50・業務の EXP なし 50/
+  M12-2 qos-group も付ける= コミット拒否(`only two mark types are allowed per class`)・1 速度 2 色 0/M12-3 explicit null なし 40・整形なし 60/
+  M12-4 CUST1 側も緩い 70・INET 側も厳格 70・allow-default 70・ACL なし 60/M12-5 no-export だけ直す 25・discard だけ 75・XR01 に静的経路 75。
+- 実測で直したこと= 既定のバーストは 256 kbps に 3200 バイト・512 kbps に 6400 バイト(100 ms 分)・64 kbps は 1600 バイト(表示)/優先のクラスの `set dscp` は
+  ポリサの適合の動作として入る(`Child Policer Conform: set dscp 46`)/キューの動作の無いクラスは class-default のキューを共有(`QueueID: 33 (class-default)`)/
+  IOS XE の `police cir 256000 pir 512000` は `bc 8000 be 16000` を足して表示。
+- 読み物の「やってみる」は解く側と同じ手順で測った(`poc/xr/try_xrt14.sh`・記録 `poc/xr/expM12-try.log`)= 方策なしの AF21 は P1 のどの EXP のクラスにも入らない/
+  ポリサの数はすぐは 0・30 秒後に適合 15・超過 15・違反 894 で CE2 の AF21 15・AF22 15 と一致/ABF の 45 行目で 20 発が CUST1 側へ。
+- XRT-14 は白紙で稼働中(MGMT .11〜.19・ユーザ未着手)。ワークスペース= `http://<host>:8899/_learn?id=XRT-14`。

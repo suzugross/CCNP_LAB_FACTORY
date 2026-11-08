@@ -1,0 +1,131 @@
+
+######## 09:56:51 wred: 子の class-default に WRED(既定・DSCP ごと)
+configure
+Sat Nov  7 09:56:52.790 UTC
+RP/0/RP0/CPU0:XR01(config)#
+policy-map CE-OUT-CHILD
+RP/0/RP0/CPU0:XR01(config-pmap)#
+class class-default
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+random-detect default
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap)#
+end-policy-map
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sat Nov  7 09:56:55.299 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sat Nov  7 09:56:56.204 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Sat Nov  7 09:56:59.214 UTC
+RP/0/RP0/CPU0:XR01(config)#
+policy-map CE-OUT-CHILD
+RP/0/RP0/CPU0:XR01(config-pmap)#
+class class-default
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+no random-detect default
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+random-detect dscp af11 10 packets 20 packets
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+random-detect dscp default 5 packets 10 packe$ packets 10 packet                          srandom-detect dscp default 5 packets 10 pack$
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap)#
+end-policy-map
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sat Nov  7 09:57:02.522 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sat Nov  7 09:57:03.428 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config policy-map CE-OUT-CHILD
+Sat Nov  7 09:57:06.336 UTC
+policy-map CE-OUT-CHILD
+ class VOICE
+  priority level 1 
+  police rate 32 kbps 
+  ! 
+ ! 
+ class class-default
+  queue-limit 20 packets 
+  random-detect dscp af11 10 packets 20 packets 
+  random-detect dscp default 5 packets 10 packets 
+ ! 
+ end-policy-map
+! 
+
+RP/0/RP0/CPU0:XR01#
+clear qos counters interface GigabitEthernet0/0/0/1 output
+Sat Nov  7 09:57:06.742 UTC
+RP/0/RP0/CPU0:XR01#
+Success rate is 94 percent (47/50), round-trip min/avg/max = 1/1/2 ms
+Success rate is 100 percent (10/10), round-trip min/avg/max = 2/2/3 ms
+show policy-map interface GigabitEthernet0/0/0/1 output
+Sat Nov  7 09:57:44.610 UTC
+
+GigabitEthernet0/0/0/1 output: CE-OUT
+
+Class class-default
+  Classification statistics          (packets/bytes)     (rate - kbps)
+    Matched             :               12540/12711720             0
+    Transmitted         :                 237/189966               0
+    Total Dropped       :                   3/354                  0
+
+  Policy CE-OUT-CHILD Class VOICE
+    Classification statistics          (packets/bytes)     (rate - kbps)
+      Matched             :                  50/5900                 0
+      Transmitted         :                  47/5546                 0
+      Total Dropped       :                   3/354                  0
+    Policing statistics                (packets/bytes)     (rate - kbps) 
+      Policed(conform)    :                  47/5546                 0
+      Policed(exceed)     :                   3/354                  0
+      Policed(violate)    :                   0/0                    0
+      Policed and dropped :                   3/354                
+      Policed and dropped(parent policer)  : N/A
+    Queueing statistics
+      Queue ID                             : 64 
+      High watermark                       : N/A 
+      Inst-queue-len                       : N/A 
+      Avg-queue-len                        : N/A 
+      Taildropped(packets/bytes)           : 0/0
+      Queue(conform)      :                  47/5546                 0
+      RED random drops(packets/bytes)      : 0/0
+
+
+  Policy CE-OUT-CHILD Class class-default
+    Classification statistics          (packets/bytes)     (rate - kbps)
+      Matched             :               12490/12705820             0
+      Transmitted         :                 190/184420               0
+      Total Dropped       :                   0/0                    0
+    Queueing statistics
+      Queue ID                             : 65 
+      High watermark                       : N/A 
+      Inst-queue-len                       : N/A 
+      Avg-queue-len                        : N/A 
+      Taildropped(packets/bytes)           : 0/0
+      Queue(conform)      :                 190/184420               0
+      RED random drops(packets/bytes)      : 0/0
+
+      WRED profile for WRED Curve 1
+      RED Transmitted (packets/bytes)            : N/A
+      RED random drops(packets/bytes)            : 0/0
+      RED maxthreshold drops(packets/bytes)      : N/A 
+      RED ecn marked & transmitted(packets/bytes): N/A 
+      WRED profile for WRED Curve 2
+      RED Transmitted (packets/bytes)            : N/A
+      RED random drops(packets/bytes)            : 0/0
+      RED maxthreshold drops(packets/bytes)      : N/A 
+      RED ecn marked & transmitted(packets/bytes): N/A 
+RP/0/RP0/CPU0:XR01#

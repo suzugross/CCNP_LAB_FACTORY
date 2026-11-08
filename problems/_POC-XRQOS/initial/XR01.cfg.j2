@@ -1,0 +1,108 @@
+!! _POC-XRQOS XR01(XRv9000 26.1.1)= PE 兼インターネットの出入り口。サービスの土台まで(IS-IS・LDP・VRF A・iBGP・INET と CE1 の eBGP)。
+!! QoS・uRPF・RTBH・ACL は PoC の段で足す。
+!! ★VRF の定義は先頭に置く(interface の後ろに置くと、その IF の下の `vrf A` と解釈されて定義が消える= 2026-11-07 実測)。
+vrf A
+ address-family ipv4 unicast
+  import route-target
+   65000:100
+  !
+  export route-target
+   65000:100
+  !
+ !
+!
+interface Loopback0
+ ipv4 address 10.255.0.1 255.255.255.255
+!
+interface {{ links[3] }}
+ description CORE to P1
+ ipv4 address 10.0.1.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description to CE1 (VRF A)
+ vrf A
+ ipv4 address 172.16.1.254 255.255.255.0
+ no shutdown
+!
+interface {{ links[5] }}
+ description to CUST1 (internet customer, single-homed)
+ ipv4 address 172.20.1.254 255.255.255.0
+ no shutdown
+!
+interface {{ links[6] }}
+ description to INET (internet peer AS 64500)
+ ipv4 address 10.0.100.1 255.255.255.0
+ no shutdown
+!
+router static
+ address-family ipv4 unicast
+  192.0.2.1/32 Null0
+  198.51.100.0/25 172.20.1.1
+ !
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+!
+mpls ldp
+ interface {{ links[3] }}
+ !
+!
+route-policy PASS
+  pass
+end-policy
+!
+router bgp 65000
+ bgp router-id 10.255.0.1
+ address-family ipv4 unicast
+  network 198.51.100.0/25
+ !
+ address-family vpnv4 unicast
+ !
+ neighbor 10.255.0.52
+  remote-as 65000
+  description RR1
+  update-source Loopback0
+  address-family ipv4 unicast
+   next-hop-self
+  !
+  address-family vpnv4 unicast
+  !
+ !
+ neighbor 10.0.100.100
+  remote-as 64500
+  description INET
+  address-family ipv4 unicast
+   route-policy PASS in
+   route-policy PASS out
+  !
+ !
+ vrf A
+  rd 10.255.0.1:100
+  address-family ipv4 unicast
+  !
+  neighbor 172.16.1.1
+   remote-as 65001
+   address-family ipv4 unicast
+    route-policy PASS in
+    route-policy PASS out
+   !
+  !
+ !
+!
+end

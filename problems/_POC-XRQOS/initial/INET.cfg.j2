@@ -1,0 +1,24 @@
+! _POC-XRQOS INET(IOL 17.15)= インターネット役(AS 64500)。203.0.113.0/24 を広告。Loopback66 203.0.113.66= 攻撃元。
+interface {{ links[0] }}
+ description to XR01 (SP AS 65000)
+ ip address 10.0.100.100 255.255.255.0
+ no shutdown
+!
+interface Loopback0
+ description internet
+ ip address 203.0.113.1 255.255.255.0
+!
+interface Loopback66
+ description attacker
+ ip address 203.0.113.66 255.255.255.255
+!
+router bgp 64500
+ bgp router-id 203.0.113.1
+ bgp log-neighbor-changes
+ neighbor 10.0.100.1 remote-as 65000
+ !
+ address-family ipv4
+  network 203.0.113.0 mask 255.255.255.0
+  neighbor 10.0.100.1 activate
+ exit-address-family
+!

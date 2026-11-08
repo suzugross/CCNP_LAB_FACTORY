@@ -1,0 +1,234 @@
+
+######## 10:54:27 p1: XR01 の CE1-IN を外して、AF21 が P1 のどのクラスに数えられるか
+Success rate is 100 percent (10/10), round-trip min/avg/max = 9/9/10 ms
+show policy-map interface Ethernet0/0 input
+ Ethernet0/0 
+
+  Service-policy input: COUNT-EXP
+
+    Class-map: EXP5 (match-any)  
+      0 packets, 0 bytes
+      5 minute offered rate 0000 bps
+      Match: mpls experimental topmost 5 
+        0 packets, 0 bytes
+        5 minute rate 0 bps
+
+    Class-map: EXP3 (match-any)  
+      0 packets, 0 bytes
+      5 minute offered rate 0000 bps
+      Match: mpls experimental topmost 3 
+        0 packets, 0 bytes
+        5 minute rate 0 bps
+
+    Class-map: EXP1 (match-any)  
+      0 packets, 0 bytes
+      5 minute offered rate 0000 bps
+      Match: mpls experimental topmost 1 
+        0 packets, 0 bytes
+        5 minute rate 0 bps
+
+    Class-map: EXP0 (match-any)  
+      0 packets, 0 bytes
+      5 minute offered rate 0000 bps
+      Match: mpls experimental topmost 0 
+        0 packets, 0 bytes
+        5 minute rate 0 bps
+
+    Class-map: class-default (match-any)  
+      11 packets, 1304 bytes
+      5 minute offered rate 0000 bps, drop rate 0000 bps
+      Match: any 
+P1#
+
+######## 10:56:40 p2: ポリサの 3 色を送った側と受けた側で(すぐと 30 秒後)
+Success rate is 0 percent (0/1000)
+== すぐ
+Class DATA
+  Classification statistics          (packets/bytes)     (rate - kbps)
+    Matched             :                   0/0                    0
+    Transmitted         : N/A 
+    Total Dropped       :                   0/0                    0
+  Policing statistics                (packets/bytes)     (rate - kbps) 
+    Policed(conform)    :                   0/0                    0
+    Policed(exceed)     :                   0/0                    0
+    Policed(violate)    :                   0/0                    0
+    Policed and dropped :                   0/0                  
+Class class-default
+== 30 秒後
+Class DATA
+  Classification statistics          (packets/bytes)     (rate - kbps)
+    Matched             :                 924/478632               0
+    Transmitted         : N/A 
+    Total Dropped       :                 894/463092               0
+  Policing statistics                (packets/bytes)     (rate - kbps) 
+    Policed(conform)    :                  15/7770                 0
+    Policed(exceed)     :                  15/7770                 0
+    Policed(violate)    :                 894/463092               0
+    Policed and dropped :                 894/463092             
+Class class-default
+show policy-map interface Ethernet0/0 input
+ Ethernet0/0 
+
+  Service-policy input: COUNT-DSCP
+
+    Class-map: D-EF (match-any)  
+      0 packets, 0 bytes
+      5 minute offered rate 0000 bps
+      Match:  dscp ef (46)
+        0 packets, 0 bytes
+        5 minute rate 0 bps
+
+    Class-map: D-AF21 (match-any)  
+      15 packets, 7710 bytes
+      5 minute offered rate 0000 bps
+      Match:  dscp af21 (18)
+        15 packets, 7710 bytes
+        5 minute rate 0 bps
+
+    Class-map: D-AF22 (match-any)  
+      15 packets, 7710 bytes
+      5 minute offered rate 0000 bps
+      Match:  dscp af22 (20)
+        15 packets, 7710 bytes
+        5 minute rate 0 bps
+
+    Class-map: D-AF11 (match-any)  
+      0 packets, 0 bytes
+      5 minute offered rate 0000 bps
+      Match:  dscp af11 (10)
+        0 packets, 0 bytes
+        5 minute rate 0 bps
+
+    Class-map: D-BE (match-any)  
+      0 packets, 0 bytes
+      5 minute offered rate 0000 bps
+      Match:  dscp default (0)
+        0 packets, 0 bytes
+        5 minute rate 0 bps
+
+    Class-map: class-default (match-any)  
+      2 packets, 133 bytes
+      5 minute offered rate 0000 bps, drop rate 0000 bps
+      Match: any 
+CE2#
+
+######## 10:59:20 acl: INET から基盤へ 5 発ずつ → ACL の行ごとの hw の数
+Success rate is 0 percent (0/5)
+Success rate is 0 percent (0/5)
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+show access-lists ipv4 FROM-INTERNET hardware ingress locati$INTERNET hardware ingress locatio                          n 0/0/CPU0show access-lists ipv4 FROM-INTERNET hardware ingress locat$
+Sat Nov  7 10:59:50.235 UTC
+ipv4 access-list FROM-INTERNET
+ 10 permit tcp host 10.0.100.100 host 10.0.100.1 eq bgp
+ 20 permit tcp host 10.0.100.100 eq bgp host 10.0.100.1 (27 hw matches)
+ 30 deny ipv4 any 10.0.0.0 0.0.255.255 (8 hw matches)
+ 40 deny ipv4 any 10.255.0.0 0.0.0.255 (11 hw matches)
+ 50 permit ipv4 any any (40 hw matches)
+RP/0/RP0/CPU0:XR01#
+show access-lists ipv4 FROM-INTERNET
+Sat Nov  7 10:59:50.633 UTC
+ipv4 access-list FROM-INTERNET
+ 10 permit tcp host 10.0.100.100 host 10.0.100.1 eq bgp
+ 20 permit tcp host 10.0.100.100 eq bgp host 10.0.100.1
+ 30 deny ipv4 any 10.0.0.0 0.0.255.255
+ 40 deny ipv4 any 10.255.0.0 0.0.0.255
+ 50 permit ipv4 any any (10 matches)
+RP/0/RP0/CPU0:XR01#
+
+######## 10:59:49 p3: ABF= FROM-INTERNET に 45 行目(攻撃される宛てを CUST1 へ)を足す → Gi0/0/0/2 の出力の数
+% No such configuration item(s)
+show interfaces GigabitEthernet0/0/0/2 | include packets out$net0/0/0/2 | include packets outp                          utshow interfaces GigabitEthernet0/0/0/2 | include packets ou$
+Sat Nov  7 10:59:57.366 UTC
+     26 packets output, 2748 bytes, 0 total output drops
+RP/0/RP0/CPU0:XR01#
+Success rate is 0 percent (0/20)
+show interfaces GigabitEthernet0/0/0/2 | include packets out$net0/0/0/2 | include packets outp                          utshow interfaces GigabitEthernet0/0/0/2 | include packets ou$
+Sat Nov  7 11:00:35.774 UTC
+     46 packets output, 5028 bytes, 0 total output drops
+RP/0/RP0/CPU0:XR01#
+show access-lists ipv4 FROM-INTERNET hardware ingress locati$INTERNET hardware ingress locatio                          n 0/0/CPU0show access-lists ipv4 FROM-INTERNET hardware ingress locat$
+Sat Nov  7 11:00:36.174 UTC
+ipv4 access-list FROM-INTERNET
+ 10 permit tcp host 10.0.100.100 host 10.0.100.1 eq bgp
+ 20 permit tcp host 10.0.100.100 eq bgp host 10.0.100.1 (28 hw matches)
+ 30 deny ipv4 any 10.0.0.0 0.0.255.255 (8 hw matches)
+ 40 deny ipv4 any 10.255.0.0 0.0.0.255 (11 hw matches)
+ 45 permit ipv4 any host 198.51.100.130 (20 hw matches) (next-hop: addr=172.20.1.1, vrf name=default)
+ 50 permit ipv4 any any (40 hw matches)
+RP/0/RP0/CPU0:XR01#
+
+######## 11:00:38 xe: IOS XE(PE2)の 2 速度 3 色の書き方が通るか(CUST2 側の入力に一時的に当てて外す)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+PE2(config)#
+policy-map POLICE-DATA
+PE2(config-pmap)#
+class DATA
+PE2(config-pmap-c)#
+police cir 256000 pir 512000
+PE2(config-pmap-c-police)#
+conform-action transmit
+PE2(config-pmap-c-police)#
+exceed-action set-dscp-transmit af22
+PE2(config-pmap-c-police)#
+violate-action drop
+PE2(config-pmap-c-police)#
+end
+PE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+PE2(config)#
+interface Ethernet0/2
+PE2(config-if)#
+service-policy input POLICE-DATA
+PE2(config-if)#
+end
+PE2#
+show policy-map POLICE-DATA
+  Policy Map POLICE-DATA
+    Class DATA
+     police cir 256000 bc 8000 pir 512000 be 16000
+       conform-action transmit 
+       exceed-action set-dscp-transmit af22
+       violate-action drop 
+PE2#
+show policy-map interface Ethernet0/2 input
+ Ethernet0/2 
+
+  Service-policy input: POLICE-DATA
+
+    Class-map: DATA (match-any)  
+      0 packets, 0 bytes
+      5 minute offered rate 0000 bps, drop rate 0000 bps
+      Match:  dscp af21 (18)
+        0 packets, 0 bytes
+        5 minute rate 0 bps
+      police:
+          cir 256000 bps, bc 8000 bytes
+          pir 512000 bps, be 16000 bytes
+        conformed 0 packets, 0 bytes; actions:
+          transmit 
+        exceeded 0 packets, 0 bytes; actions:
+          set-dscp-transmit af22
+        violated 0 packets, 0 bytes; actions:
+          drop 
+        conformed 0000 bps, exceeded 0000 bps, violated 0000 bps
+
+    Class-map: class-default (match-any)  
+      0 packets, 0 bytes
+      5 minute offered rate 0000 bps, drop rate 0000 bps
+      Match: any 
+PE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+PE2(config)#
+interface Ethernet0/2
+PE2(config-if)#
+no service-policy input POLICE-DATA
+PE2(config-if)#
+exit
+PE2(config)#
+no policy-map POLICE-DATA
+PE2(config)#
+end
+PE2#

@@ -1,0 +1,90 @@
+
+######## 09:52:06 shape: XR01 の CE1 側の出力= 親で 100 kbps に整形・子で EF を優先(priority level 1+ポリサ)・残りは既定のキュー
+configure
+Sat Nov  7 09:52:08.009 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-if)#
+no service-policy output CE-OUT-UNIFORM
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+policy-map CE-OUT-CHILD
+RP/0/RP0/CPU0:XR01(config-pmap)#
+class VOICE
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+priority level 1
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+police rate 32 kbps
+RP/0/RP0/CPU0:XR01(config-pmap-c-police)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap)#
+class class-default
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+queue-limit 20 packets
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap)#
+end-policy-map
+RP/0/RP0/CPU0:XR01(config)#
+policy-map CE-OUT
+RP/0/RP0/CPU0:XR01(config-pmap)#
+class class-default
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+shape average 100 kbps
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+service-policy CE-OUT-CHILD
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap)#
+end-policy-map
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-if)#
+service-policy output CE-OUT
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sat Nov  7 09:52:17.334 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sat Nov  7 09:52:18.239 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show qos interface GigabitEthernet0/0/0/1 output
+Sat Nov  7 09:52:21.145 UTC
+Interface: GigabitEthernet0_0_0_1 output 
+Bandwidth configured: 100 kbps Bandwidth programmed: 100 kbps
+ANCP user configured: 0 kbps ANCP programmed in HW: 0 kbps
+Port Shaper programmed in HW: 100 kbps 
+Policy: CE-OUT Total number of classes: 3
+----------------------------------------------------------------------
+Level: 0 Policy: CE-OUT Class: class-default
+Bandwidth: 0 kbps, BW sum for Level 0: 0 kbps, Excess Ratio: 1
+Shape Info: rate 100 kbps, burst 1250 bytes,
+QueueID: N/A
+----------------------------------------------------------------------
+Level: 1 Policy: CE-OUT-CHILD Class: VOICE
+Bandwidth: 0 kbps, BW sum for Level 1: 0 kbps, Excess Ratio: 0
+Parent Policy: CE-OUT Class: class-default
+QueueID: 32 (Priority 1)
+Queue Limit: 0 kbytes
+Policer Profile: 0 (Single)
+Conform: 32 kbps (32 kbps) Burst: 1600 bytes (0 Default)
+Child Policer Conform: TX
+Child Policer Exceed: DROP
+Child Policer Violate: DROP
+----------------------------------------------------------------------
+Level: 1 Policy: CE-OUT-CHILD Class: class-default
+Bandwidth: 0 kbps, BW sum for Level 1: 0 kbps, Excess Ratio: 1
+Parent Policy: CE-OUT Class: class-default
+QueueID: 33 (Priority Normal)
+Queue Limit: 5 kbytes (20 packets)
+----------------------------------------------------------------------
+RP/0/RP0/CPU0:XR01#

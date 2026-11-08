@@ -1,0 +1,40 @@
+// 制御ホストの開発コンテナ(BL-265)。VS Code の Dev Containers 拡張で開く。
+// 手順と確認項目は problems/_drafts/CTRL-HOST-MAC.design.md。
+{
+  "name": "ccnp-ctrl",
+  // ビルドの文脈は .devcontainer/ だけ。リポの残り(PVT・資格情報を含む)はビルドに渡さない。
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".",
+    "args": { "USERNAME": "suzuki", "USER_UID": "1000", "USER_GID": "1000" }
+  },
+  // Mac の 1 つのフォルダ(~/ccnp-home)を、コンテナのホーム /home/suzuki として見せる。
+  // リポはその中の ansible/CCNP01(旧制御ホストと同じパス)。~/.ssh・~/.claude・~/.config/rclone もこのフォルダに入る。
+  "workspaceMount": "source=${localEnv:HOME}/ccnp-home,target=/home/suzuki,type=bind",
+  "workspaceFolder": "/home/suzuki/ansible/CCNP01",
+  "remoteUser": "suzuki",
+  "containerUser": "suzuki",
+  "updateRemoteUserUID": false,
+  // 機器・CML へはコンテナから Mac のアドレスで出ていく(Mac が 10.1.10.0/26 にいること)。
+  // 配信サーバ(8899)とワークスペース(8897)は LAN に公開する。番号を変えると、配信サーバがワークスペースへ
+  // 案内する URL がずれるので同じ番号のまま公開する。
+  "runArgs": ["--name", "ccnp-ctrl", "--hostname", "ccnp-ctrl",
+              "-p", "8899:8899", "-p", "8897:8897"],
+  "init": true,
+  // VS Code の窓を閉じてもコンテナは止めない(配信サーバと夜間のパック作成を続けるため)。
+  "shutdownAction": "none",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "redhat.ansible",
+        "redhat.vscode-yaml",
+        "bierner.markdown-mermaid",
+        "oderwat.indent-rainbow"
+      ]
+    }
+  }
+}

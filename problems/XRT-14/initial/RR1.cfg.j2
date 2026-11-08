@@ -1,0 +1,73 @@
+!! XRT-14 RR1(XRd 26.1.1)= ルート リフレクタ(ipv4 unicast・vpnv4)兼 RTBH の起点。P1 の脇の行き止まり(お客さまの通信は通らない・LDP なし)。
+!! 前任者が作った RTBH の起点(M12-5 の仕込み)= 静的経路にタグ 666 を付けると、RPL で次ホップを捨て先 192.0.2.1 に書き換え、印 65000:666 を付けて
+!!   PE へ配る。★no-export が無い(印の付いた /32 がインターネットへ漏れる)・XR01 の入口の緩い uRPF は 192.0.2.1 への再帰を落とさない(§27.3)。
+interface Loopback0
+ ipv4 address 10.255.0.52 255.255.255.255
+!
+interface {{ links[3] }}
+ description to P1 (off the forwarding path)
+ ipv4 address 10.0.52.52 255.255.255.0
+ no shutdown
+!
+route-policy RTBH-TRIGGER
+  if tag eq 666 then
+    set next-hop 192.0.2.1
+    set community (65000:666)
+    pass
+  else
+    drop
+  endif
+end-policy
+!
+router static
+ address-family ipv4 unicast
+  192.0.2.1/32 Null0
+  198.51.100.130/32 Null0 tag 666
+  203.0.113.66/32 Null0 tag 666
+ !
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0052.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+!
+router bgp 65000
+ bgp router-id 10.255.0.52
+ address-family ipv4 unicast
+  redistribute static route-policy RTBH-TRIGGER
+ !
+ address-family vpnv4 unicast
+ !
+ neighbor-group PE
+  remote-as 65000
+  update-source Loopback0
+  address-family ipv4 unicast
+   route-reflector-client
+  !
+  address-family vpnv4 unicast
+   route-reflector-client
+  !
+ !
+ neighbor 10.255.0.1
+  use neighbor-group PE
+  description PE XR01
+ !
+ neighbor 10.255.0.2
+  use neighbor-group PE
+  description PE PE2
+ !
+!
+end

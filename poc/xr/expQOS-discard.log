@@ -1,0 +1,137 @@
+
+######## 10:05:06 discard: XR01 の入力の RPL で、印 65000:666 の経路を set next-hop discard(起点は印だけ付け、次ホップは書き換えない)
+configure
+Sat Nov  7 10:05:07.487 UTC
+RP/0/RP0/CPU0:RR1(config)#
+route-policy RTBH-TRIGGER
+Sat Nov  7 10:05:07.988 UTC
+% WARNING: Policy object route-policy RTBH-TRIGGER exists! Reconfiguring it via CLI will replace current definition. Use abort to cancel.
+RP/0/RP0/CPU0:RR1(config-rpl)#
+if tag eq 666 then
+RP/0/RP0/CPU0:RR1(config-rpl-if)#
+set community (no-export, 65000:666)
+RP/0/RP0/CPU0:RR1(config-rpl-if)#
+pass
+RP/0/RP0/CPU0:RR1(config-rpl-if)#
+else
+RP/0/RP0/CPU0:RR1(config-rpl-else)#
+drop
+RP/0/RP0/CPU0:RR1(config-rpl-else)#
+endif
+RP/0/RP0/CPU0:RR1(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:RR1(config)#
+commit
+Sat Nov  7 10:05:11.198 UTC
+RP/0/RP0/CPU0:RR1(config)#
+show configuration failed
+Sat Nov  7 10:05:11.701 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:RR1(config)#
+end
+RP/0/RP0/CPU0:RR1#
+configure
+Sat Nov  7 10:05:14.337 UTC
+RP/0/RP0/CPU0:XR01(config)#
+community-set RTBH
+RP/0/RP0/CPU0:XR01(config-comm)#
+65000:666
+RP/0/RP0/CPU0:XR01(config-comm)#
+end-set
+RP/0/RP0/CPU0:XR01(config)#
+route-policy FROM-RR
+RP/0/RP0/CPU0:XR01(config-rpl)#
+if community matches-any RTBH then
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+set next-hop discard
+RP/0/RP0/CPU0:XR01(config-rpl-if)#
+endif
+RP/0/RP0/CPU0:XR01(config-rpl)#
+pass
+RP/0/RP0/CPU0:XR01(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:XR01(config)#
+router bgp 65000
+RP/0/RP0/CPU0:XR01(config-bgp)#
+neighbor 10.255.0.52
+RP/0/RP0/CPU0:XR01(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+route-policy FROM-RR in
+RP/0/RP0/CPU0:XR01(config-bgp-nbr-af)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sat Nov  7 10:05:20.455 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sat Nov  7 10:05:21.360 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show bgp ipv4 unicast 198.51.100.130/32
+Sat Nov  7 10:05:39.149 UTC
+BGP routing table entry for 198.51.100.130/32
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                  8            8
+Last Modified: Nov  7 10:05:24.660 for 00:00:14
+Paths: (1 available, best #1, not advertised to EBGP peer)
+  Not advertised to any peer
+  Path #1: Received by speaker 0
+  Not advertised to any peer
+  Local
+    10.255.0.52 (discarded) from 10.255.0.52 (10.255.0.52)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best, group-best
+      Received Path ID 0, Local Path ID 1, version 8
+      Community: 65000:666 no-export
+RP/0/RP0/CPU0:XR01#
+show route 198.51.100.130/32
+Sat Nov  7 10:05:39.549 UTC
+
+Routing entry for 198.51.100.130/32
+  Known via "bgp 65000", distance 200, metric 0, type internal
+  Installed Nov  7 10:05:24.554 for 00:00:15
+  Routing Descriptor Blocks
+    directly connected, via Null0
+      Route metric is 0, Wt is 1
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+show cef 198.51.100.130/32
+Sat Nov  7 10:05:39.951 UTC
+198.51.100.130/32, version 27, null0 adjacency, internal 0x5000001 0x40 (ptr 0x1063ed48) [1], 0x400 (0x107d55d8), 0x0 (0x0)
+ Updated Nov  7 10:05:24.557
+ Prefix Len 32, traffic index 0, precedence n/a, priority 4
+  gateway array (0x1066f4a8) reference count 1, flags 0x0, source rib (7), 0 backups
+                [2 type 3 flags 0x8401 (0x10711488) ext 0x0 (0x0)]
+  LW-LDI[type=3, refc=1, ptr=0x107d55d8, sh-ldi=0x10711488]
+  gateway array update type-time 1 Nov  7 10:05:24.557
+ LDI Update time Nov  7 10:05:24.557
+ LW-LDI-TS Nov  7 10:05:24.557
+   via 0.0.0.0/32, Null0, 5 dependencies, weight 0, class 0 [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xea74098 0x0]
+    next hop 0.0.0.0/32
+     null0 adjacency
+
+    Load distribution: 0 (refcount 2)
+
+    Hash  OK  Interface                 Address
+    0     Y   recursive                 null0          
+RP/0/RP0/CPU0:XR01#
+ping 198.51.100.130 source Loopback0 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 198.51.100.130, timeout is 2 seconds:
+Packet sent with a source address of 203.0.113.1 
+.....
+Success rate is 0 percent (0/5)
+INET#
+ping 198.51.100.129 source Loopback0 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 198.51.100.129, timeout is 2 seconds:
+Packet sent with a source address of 203.0.113.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/3/4 ms
+INET#

@@ -1,0 +1,167 @@
+
+######## 10:04:15 rtbh: 宛てで捨てる= RR1(XRd)で静的経路にタグ 666 → RPL で次ホップ 192.0.2.1 と印 → XR01・PE2 は 192.0.2.1 → Null0
+configure
+Sat Nov  7 10:04:16.919 UTC
+RP/0/RP0/CPU0:RR1(config)#
+route-policy RTBH-TRIGGER
+RP/0/RP0/CPU0:RR1(config-rpl)#
+if tag eq 666 then
+RP/0/RP0/CPU0:RR1(config-rpl-if)#
+set next-hop 192.0.2.1
+RP/0/RP0/CPU0:RR1(config-rpl-if)#
+set community (no-export, 65000:666)
+RP/0/RP0/CPU0:RR1(config-rpl-if)#
+pass
+RP/0/RP0/CPU0:RR1(config-rpl-if)#
+else
+RP/0/RP0/CPU0:RR1(config-rpl-else)#
+drop
+RP/0/RP0/CPU0:RR1(config-rpl-else)#
+endif
+RP/0/RP0/CPU0:RR1(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:RR1(config)#
+router static
+RP/0/RP0/CPU0:RR1(config-static)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:RR1(config-static-afi)#
+198.51.100.130/32 Null0 tag 666
+RP/0/RP0/CPU0:RR1(config-static-afi)#
+root
+RP/0/RP0/CPU0:RR1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:RR1(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:RR1(config-bgp-af)#
+redistribute static route-policy RTBH-TRIGGER
+RP/0/RP0/CPU0:RR1(config-bgp-af)#
+root
+RP/0/RP0/CPU0:RR1(config)#
+commit
+Sat Nov  7 10:04:24.239 UTC
+RP/0/RP0/CPU0:RR1(config)#
+show configuration failed
+Sat Nov  7 10:04:24.641 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:RR1(config)#
+end
+RP/0/RP0/CPU0:RR1#
+show bgp ipv4 unicast 198.51.100.130/32
+Sat Nov  7 10:04:42.436 UTC
+BGP routing table entry for 198.51.100.130/32
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 10           10
+Last Modified: Nov  7 10:04:26.211 for 00:00:16
+Paths: (1 available, best #1, not advertised to EBGP peer)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.255.0.2      10.255.0.1      
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.255.0.2      10.255.0.1      
+  Local
+    192.0.2.1 from 0.0.0.0 (10.255.0.52)
+      Origin incomplete, metric 0, localpref 100, weight 32768, valid, redistributed, best, group-best
+      Received Path ID 0, Local Path ID 1, version 10
+      Community: 65000:666 no-export
+RP/0/RP0/CPU0:RR1#
+show bgp ipv4 unicast 198.51.100.130/32
+Sat Nov  7 10:04:43.866 UTC
+BGP routing table entry for 198.51.100.130/32
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                  6            6
+Last Modified: Nov  7 10:04:26.660 for 00:00:17
+Paths: (1 available, best #1, not advertised to EBGP peer)
+  Not advertised to any peer
+  Path #1: Received by speaker 0
+  Not advertised to any peer
+  Local
+    192.0.2.1 from 10.255.0.52 (10.255.0.52)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best, group-best
+      Received Path ID 0, Local Path ID 1, version 6
+      Community: 65000:666 no-export
+RP/0/RP0/CPU0:XR01#
+show route 198.51.100.130/32
+Sat Nov  7 10:04:44.266 UTC
+
+Routing entry for 198.51.100.130/32
+  Known via "bgp 65000", distance 200, metric 0, type internal
+  Installed Nov  7 10:04:26.268 for 00:00:18
+  Routing Descriptor Blocks
+    192.0.2.1, from 10.255.0.52
+      Route metric is 0, Wt is 1
+  No advertising protos. 
+RP/0/RP0/CPU0:XR01#
+show cef 198.51.100.130/32
+Sat Nov  7 10:04:44.667 UTC
+198.51.100.130/32, version 23, internal 0x5000001 0x40 (ptr 0x1063ed48) [1], 0x400 (0x107d55d8), 0x0 (0x0)
+ Updated Nov  7 10:04:26.271
+ Prefix Len 32, traffic index 0, precedence n/a, priority 4
+  gateway array (0x1066f4a8) reference count 1, flags 0x10, source rib (7), 0 backups
+                [2 type 3 flags 0x8441 (0x10711488) ext 0x0 (0x0)]
+  LW-LDI[type=3, refc=1, ptr=0x107d55d8, sh-ldi=0x10711488]
+  gateway array update type-time 1 Nov  7 10:04:26.271
+ LDI Update time Nov  7 10:04:26.271
+ LW-LDI-TS Nov  7 10:04:26.271
+
+  Level 1 - Load distribution: 0
+  [0] via 192.0.2.1/32, recursive
+
+   via 192.0.2.1/32, 3 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0x106429b8 0x0]
+    next hop 192.0.2.1/32 via 192.0.2.1/32
+
+    Load distribution: 0 (refcount 2)
+
+    Hash  OK  Interface                 Address
+    0     Y   recursive                 null0          
+
+RP/0/RP0/CPU0:XR01#
+show ip bgp 198.51.100.130/32
+BGP routing table entry for 198.51.100.130/32, version 5
+Paths: (1 available, best #1, table default, not advertised to EBGP peer)
+  Not advertised to any peer
+  Refresh Epoch 1
+  Local
+    192.0.2.1 from 10.255.0.52 (10.255.0.52)
+      Origin incomplete, metric 0, localpref 100, valid, internal, best
+      Community: 65000:666 no-export
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 7 2026 10:04:26 UTC
+PE2#
+show ip cef 198.51.100.130 255.255.255.255 detail
+198.51.100.130/32, epoch 0, flags [rib only nolabel, rib defined all labels]
+  recursive via 192.0.2.1
+    attached to Null0
+PE2#
+show ip bgp
+BGP table version is 4, local router ID is 203.0.113.1
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   198.51.100.0/25  10.0.100.1               0             0 65000 i
+ *>   198.51.100.128/25
+                      10.0.100.1                             0 65000 i
+ *>   203.0.113.0      0.0.0.0                  0         32768 i
+INET#
+ping 198.51.100.130 source Loopback0 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 198.51.100.130, timeout is 2 seconds:
+Packet sent with a source address of 203.0.113.1 
+.....
+Success rate is 0 percent (0/5)
+INET#
+ping 198.51.100.129 source Loopback0 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 198.51.100.129, timeout is 2 seconds:
+Packet sent with a source address of 203.0.113.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/3/4 ms
+INET#

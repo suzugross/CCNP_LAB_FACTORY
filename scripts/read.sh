@@ -47,7 +47,7 @@ case "$cmd" in
   serve)
     # 読み物だけの配信(旧 8898)は廃止。ポータル(8899)の Study Materials から読む。
     if (exec 3<>/dev/tcp/127.0.0.1/8899) 2>/dev/null; then
-      echo "読み物はポータルで配信中です: http://10.1.10.6:8899/ (Study Materials)"
+      echo "読み物はポータルで配信中です: http://10.1.10.3:8899/ (Study Materials)"
       exit 0
     fi
     echo "読み物の配信はポータルに一本化しました。ポータルを起動します(scripts/pack.sh serve)。"

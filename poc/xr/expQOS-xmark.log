@@ -1,0 +1,208 @@
+
+######## 09:36:57 xmark: XR01 の CE1 側の入力で分類して EXP を付ける(DSCP は触らない= パイプ/ショート パイプの入口)。qos-group も付ける
+configure
+Sat Nov  7 09:36:58.686 UTC
+RP/0/RP0/CPU0:XR01(config)#
+class-map match-any VOICE
+RP/0/RP0/CPU0:XR01(config-cmap)#
+match dscp ef
+RP/0/RP0/CPU0:XR01(config-cmap)#
+end-class-map
+RP/0/RP0/CPU0:XR01(config)#
+class-map match-any BULK
+RP/0/RP0/CPU0:XR01(config-cmap)#
+match dscp af11
+RP/0/RP0/CPU0:XR01(config-cmap)#
+end-class-map
+RP/0/RP0/CPU0:XR01(config)#
+policy-map CE-IN
+RP/0/RP0/CPU0:XR01(config-pmap)#
+class VOICE
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+set mpls experimental imposition 5
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+set qos-group 5
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap)#
+class BULK
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+set mpls experimental imposition 2
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+set qos-group 2
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap)#
+class class-default
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+set mpls experimental imposition 0
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap)#
+end-policy-map
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:XR01(config-if)#
+service-policy input CE-IN
+RP/0/RP0/CPU0:XR01(config-if)#
+root
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sat Nov  7 09:37:08.014 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sat Nov  7 09:37:08.931 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config policy-map CE-IN
+Sat Nov  7 09:37:12.044 UTC
+policy-map CE-IN
+ class VOICE
+  set mpls experimental imposition 5
+  set qos-group 5
+ ! 
+ class BULK
+  set mpls experimental imposition 2
+  set qos-group 2
+ ! 
+ class class-default
+  set mpls experimental imposition 0
+ ! 
+ end-policy-map
+! 
+
+RP/0/RP0/CPU0:XR01#
+show qos interface GigabitEthernet0/0/0/1 input
+Sat Nov  7 09:37:12.445 UTC
+Interface: GigabitEthernet0_0_0_1 input 
+Bandwidth configured: 1000000 kbps Bandwidth programmed: 1000000 kbps
+ANCP user configured: 0 kbps ANCP programmed in HW: 0 kbps
+Port Shaper programmed in HW: 0 kbps 
+Policy: CE-IN Total number of classes: 3
+----------------------------------------------------------------------
+Level: 0 Policy: CE-IN Class: VOICE
+Bandwidth: 0 kbps, BW sum for Level 0: 0 kbps, Excess Ratio: 0
+QueueID: 25 (Port Default)
+Child Mark: set exp-imp 5   set qos-grp 5   
+----------------------------------------------------------------------
+Level: 0 Policy: CE-IN Class: BULK
+Bandwidth: 0 kbps, BW sum for Level 0: 0 kbps, Excess Ratio: 0
+QueueID: 25 (Port Default)
+Child Mark: set exp-imp 2   set qos-grp 2   
+----------------------------------------------------------------------
+Level: 0 Policy: CE-IN Class: class-default
+Bandwidth: 0 kbps, BW sum for Level 0: 0 kbps, Excess Ratio: 0
+QueueID: 25 (Port Default)
+Child Mark: set exp-imp 0   
+----------------------------------------------------------------------
+RP/0/RP0/CPU0:XR01#
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/2/2 ms
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/3/6 ms
+!!!
+Success rate is 100 percent (3/3), round-trip min/avg/max = 2/2/3 ms
+saved poc/xr/pcap/qos-imp-XR01-P1.pcap 200 5991
+saved poc/xr/pcap/qos-imp-P1-PE2.pcap 200 7927
+saved poc/xr/pcap/qos-imp-PE2-CE2.pcap 200 2516
+saved poc/xr/pcap/qos-imp-XR01-CE1.pcap 200 2516
+---- poc/xr/pcap/qos-imp-XR01-P1.pcap(ICMP・ラベル/TC の積み方は左が外側)
+16/tc5/ttl254 | 23/tc5/ttl254                DSCP EF(tos 0xb8) ttl254 10.46.0.1>10.46.0.2 req
+24007/tc5/ttl253                             DSCP EF(tos 0xb8) ttl254 10.46.0.2>10.46.0.1 rep
+16/tc5/ttl254 | 23/tc5/ttl254                DSCP EF(tos 0xb8) ttl254 10.46.0.1>10.46.0.2 req
+24007/tc5/ttl253                             DSCP EF(tos 0xb8) ttl254 10.46.0.2>10.46.0.1 rep
+16/tc5/ttl254 | 23/tc5/ttl254                DSCP EF(tos 0xb8) ttl254 10.46.0.1>10.46.0.2 req
+24007/tc5/ttl253                             DSCP EF(tos 0xb8) ttl254 10.46.0.2>10.46.0.1 rep
+16/tc2/ttl254 | 24/tc2/ttl254                DSCP AF11(tos 0x28) ttl254 10.10.0.1>10.10.0.2 req
+24008/tc1/ttl253                             DSCP AF11(tos 0x28) ttl254 10.10.0.2>10.10.0.1 rep
+16/tc2/ttl254 | 24/tc2/ttl254                DSCP AF11(tos 0x28) ttl254 10.10.0.1>10.10.0.2 req
+24008/tc1/ttl253                             DSCP AF11(tos 0x28) ttl254 10.10.0.2>10.10.0.1 rep
+16/tc2/ttl254 | 24/tc2/ttl254                DSCP AF11(tos 0x28) ttl254 10.10.0.1>10.10.0.2 req
+24008/tc1/ttl253                             DSCP AF11(tos 0x28) ttl254 10.10.0.2>10.10.0.1 rep
+16/tc0/ttl254 | 21/tc0/ttl254                DSCP BE(tos 0x00) ttl254 10.100.1.1>10.100.2.1 req
+24006/tc0/ttl253                             DSCP BE(tos 0x00) ttl254 10.100.2.1>10.100.1.1 rep
+16/tc0/ttl254 | 21/tc0/ttl254                DSCP BE(tos 0x00) ttl254 10.100.1.1>10.100.2.1 req
+24006/tc0/ttl253                             DSCP BE(tos 0x00) ttl254 10.100.2.1>10.100.1.1 rep
+16/tc0/ttl254 | 21/tc0/ttl254                DSCP BE(tos 0x00) ttl254 10.100.1.1>10.100.2.1 req
+24006/tc0/ttl253                             DSCP BE(tos 0x00) ttl254 10.100.2.1>10.100.1.1 rep
+---- poc/xr/pcap/qos-imp-P1-PE2.pcap(ICMP・ラベル/TC の積み方は左が外側)
+23/tc5/ttl253                                DSCP EF(tos 0xb8) ttl254 10.46.0.1>10.46.0.2 req
+18/tc5/ttl254 | 24007/tc5/ttl254             DSCP EF(tos 0xb8) ttl254 10.46.0.2>10.46.0.1 rep
+23/tc5/ttl253                                DSCP EF(tos 0xb8) ttl254 10.46.0.1>10.46.0.2 req
+18/tc5/ttl254 | 24007/tc5/ttl254             DSCP EF(tos 0xb8) ttl254 10.46.0.2>10.46.0.1 rep
+23/tc5/ttl253                                DSCP EF(tos 0xb8) ttl254 10.46.0.1>10.46.0.2 req
+18/tc5/ttl254 | 24007/tc5/ttl254             DSCP EF(tos 0xb8) ttl254 10.46.0.2>10.46.0.1 rep
+24/tc2/ttl253                                DSCP AF11(tos 0x28) ttl254 10.10.0.1>10.10.0.2 req
+18/tc1/ttl254 | 24008/tc1/ttl254             DSCP AF11(tos 0x28) ttl254 10.10.0.2>10.10.0.1 rep
+24/tc2/ttl253                                DSCP AF11(tos 0x28) ttl254 10.10.0.1>10.10.0.2 req
+18/tc1/ttl254 | 24008/tc1/ttl254             DSCP AF11(tos 0x28) ttl254 10.10.0.2>10.10.0.1 rep
+24/tc2/ttl253                                DSCP AF11(tos 0x28) ttl254 10.10.0.1>10.10.0.2 req
+18/tc1/ttl254 | 24008/tc1/ttl254             DSCP AF11(tos 0x28) ttl254 10.10.0.2>10.10.0.1 rep
+21/tc0/ttl253                                DSCP BE(tos 0x00) ttl254 10.100.1.1>10.100.2.1 req
+18/tc0/ttl254 | 24006/tc0/ttl254             DSCP BE(tos 0x00) ttl254 10.100.2.1>10.100.1.1 rep
+21/tc0/ttl253                                DSCP BE(tos 0x00) ttl254 10.100.1.1>10.100.2.1 req
+18/tc0/ttl254 | 24006/tc0/ttl254             DSCP BE(tos 0x00) ttl254 10.100.2.1>10.100.1.1 rep
+21/tc0/ttl253                                DSCP BE(tos 0x00) ttl254 10.100.1.1>10.100.2.1 req
+18/tc0/ttl254 | 24006/tc0/ttl254             DSCP BE(tos 0x00) ttl254 10.100.2.1>10.100.1.1 rep
+---- poc/xr/pcap/qos-imp-PE2-CE2.pcap(ICMP・ラベル/TC の積み方は左が外側)
+(ラベルなし)                                      DSCP EF(tos 0xb8) ttl252 10.46.0.1>10.46.0.2 req
+(ラベルなし)                                      DSCP EF(tos 0xb8) ttl255 10.46.0.2>10.46.0.1 rep
+(ラベルなし)                                      DSCP EF(tos 0xb8) ttl252 10.46.0.1>10.46.0.2 req
+(ラベルなし)                                      DSCP EF(tos 0xb8) ttl255 10.46.0.2>10.46.0.1 rep
+(ラベルなし)                                      DSCP EF(tos 0xb8) ttl252 10.46.0.1>10.46.0.2 req
+(ラベルなし)                                      DSCP EF(tos 0xb8) ttl255 10.46.0.2>10.46.0.1 rep
+(ラベルなし)                                      DSCP AF11(tos 0x28) ttl252 10.10.0.1>10.10.0.2 req
+(ラベルなし)                                      DSCP AF11(tos 0x28) ttl255 10.10.0.2>10.10.0.1 rep
+(ラベルなし)                                      DSCP AF11(tos 0x28) ttl252 10.10.0.1>10.10.0.2 req
+(ラベルなし)                                      DSCP AF11(tos 0x28) ttl255 10.10.0.2>10.10.0.1 rep
+(ラベルなし)                                      DSCP AF11(tos 0x28) ttl252 10.10.0.1>10.10.0.2 req
+(ラベルなし)                                      DSCP AF11(tos 0x28) ttl255 10.10.0.2>10.10.0.1 rep
+(ラベルなし)                                      DSCP BE(tos 0x00) ttl252 10.100.1.1>10.100.2.1 req
+(ラベルなし)                                      DSCP BE(tos 0x00) ttl255 10.100.2.1>10.100.1.1 rep
+(ラベルなし)                                      DSCP BE(tos 0x00) ttl252 10.100.1.1>10.100.2.1 req
+(ラベルなし)                                      DSCP BE(tos 0x00) ttl255 10.100.2.1>10.100.1.1 rep
+(ラベルなし)                                      DSCP BE(tos 0x00) ttl252 10.100.1.1>10.100.2.1 req
+(ラベルなし)                                      DSCP BE(tos 0x00) ttl255 10.100.2.1>10.100.1.1 rep
+---- poc/xr/pcap/qos-imp-XR01-CE1.pcap(ICMP・ラベル/TC の積み方は左が外側)
+(ラベルなし)                                      DSCP EF(tos 0xb8) ttl255 10.46.0.1>10.46.0.2 req
+(ラベルなし)                                      DSCP EF(tos 0xb8) ttl252 10.46.0.2>10.46.0.1 rep
+(ラベルなし)                                      DSCP EF(tos 0xb8) ttl255 10.46.0.1>10.46.0.2 req
+(ラベルなし)                                      DSCP EF(tos 0xb8) ttl252 10.46.0.2>10.46.0.1 rep
+(ラベルなし)                                      DSCP EF(tos 0xb8) ttl255 10.46.0.1>10.46.0.2 req
+(ラベルなし)                                      DSCP EF(tos 0xb8) ttl252 10.46.0.2>10.46.0.1 rep
+(ラベルなし)                                      DSCP AF11(tos 0x28) ttl255 10.10.0.1>10.10.0.2 req
+(ラベルなし)                                      DSCP AF11(tos 0x28) ttl252 10.10.0.2>10.10.0.1 rep
+(ラベルなし)                                      DSCP AF11(tos 0x28) ttl255 10.10.0.1>10.10.0.2 req
+(ラベルなし)                                      DSCP AF11(tos 0x28) ttl252 10.10.0.2>10.10.0.1 rep
+(ラベルなし)                                      DSCP AF11(tos 0x28) ttl255 10.10.0.1>10.10.0.2 req
+(ラベルなし)                                      DSCP AF11(tos 0x28) ttl252 10.10.0.2>10.10.0.1 rep
+(ラベルなし)                                      DSCP BE(tos 0x00) ttl255 10.100.1.1>10.100.2.1 req
+(ラベルなし)                                      DSCP BE(tos 0x00) ttl252 10.100.2.1>10.100.1.1 rep
+(ラベルなし)                                      DSCP BE(tos 0x00) ttl255 10.100.1.1>10.100.2.1 req
+(ラベルなし)                                      DSCP BE(tos 0x00) ttl252 10.100.2.1>10.100.1.1 rep
+(ラベルなし)                                      DSCP BE(tos 0x00) ttl255 10.100.1.1>10.100.2.1 req
+(ラベルなし)                                      DSCP BE(tos 0x00) ttl252 10.100.2.1>10.100.1.1 rep
+show policy-map interface GigabitEthernet0/0/0/1 input
+Sat Nov  7 09:37:36.299 UTC
+
+GigabitEthernet0/0/0/1 input: CE-IN
+
+Class VOICE
+  Classification statistics          (packets/bytes)     (rate - kbps)
+    Matched             :                   3/354                  0
+    Transmitted         : N/A 
+    Total Dropped       :                   0/0                    0
+Class BULK
+  Classification statistics          (packets/bytes)     (rate - kbps)
+    Matched             :                   3/354                  0
+    Transmitted         : N/A 
+    Total Dropped       :                   0/0                    0
+Class class-default
+  Classification statistics          (packets/bytes)     (rate - kbps)
+    Matched             :                   3/354                  0
+    Transmitted         : N/A 
+    Total Dropped       :                   0/0                    0
+RP/0/RP0/CPU0:XR01#

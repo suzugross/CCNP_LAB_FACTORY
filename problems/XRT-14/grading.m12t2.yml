@@ -1,0 +1,25 @@
+# M12-2: 業務(AF21)の 2 速度 3 色(CIR 256 kbps・PIR 512 kbps・超過は AF22・違反は捨てる)。音声は影響を受けない。
+# 形= show qos interface の入力(XRv9000 の表示= Conform/Peak の速度・Child Policer Exceed に set dscp 20)/挙動= CE1 から業務を間を空けずに 1000 発 →
+# CE2 に AF21 と AF22 の両方が届き、XR01 で違反が捨てられる(★XR の方策のカウンタは遅れるので 30 秒待って数える)。白紙= 0 点。
+problem: XRT-14
+total_points: 100
+checks:
+  - name: 'M12-2 XR01: the business-data policer on the site 1 port runs at 256 kbps and peaks at 512 kbps, marks the excess AF22 and drops the violation'
+    node: XR01
+    command: show qos interface GigabitEthernet0/0/0/1 input
+    raw:
+      - { regex: 'Conform: 256 kbps[^\n]*\n[\s\S]{0,40}?Peak: 512 kbps[\s\S]*?Child Policer Exceed:[^\n]*set dscp 20[^\n]*\n\s*Child Policer Violate: DROP' }
+    points: 40
+  - name: 'M12-2 CE2: a burst of business data arrives partly as AF21 and partly as AF22, the rest is dropped on XR01, and voice is unaffected'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/qos_probe.py XRT-14 run --clear 'CE2:clear counters' --clear 'XR01:clear qos counters interface GigabitEthernet0/0/0/1 input'
+      --send 'CE1:ping 10.21.2.1 source Loopback21 repeat 1000 size 500 timeout 0;;ping 10.46.2.1 source Loopback46 repeat 10'
+      --wait 30 --count 'CE2:Ethernet0/0:input' --count 'XR01:GigabitEthernet0/0/0/1:input'
+    raw:
+      - { regex: '== COUNT CE2 D-AF21 [1-9]\d*\n' }
+      - { regex: '== COUNT CE2 D-AF22 [1-9]\d*\n' }
+      - { regex: '== COUNT XR01 \S+\.violate [1-9]\d*\n' }
+      - { regex: 'ping 10\.46\.2\.1 source Loopback46 repeat 10 => Success rate is (?:100|90) percent' }
+    points: 60

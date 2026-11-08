@@ -11,7 +11,7 @@
   family 内で router/switch は各々のイメージを使う（[[ccnp-image-policy]] の発展）。
 
 ## 2. 管理アクセス (MGMT) — 10.1.10.0/26
-Ansible 実行ホスト=10.1.10.6、CML=10.1.10.10。各ノードは管理スイッチ→
+Ansible 実行ホスト=10.1.10.3(MacBook の Docker 開発コンテナ。機器から見える送信元は Mac のこのアドレス。2026-11-08 までは VM の 10.1.10.6)、CML=10.1.10.10。各ノードは管理スイッチ→
 External Connector(System Bridge) 経由でこのセグメントに載る。
 
 mgmt IP は固定でなく **動的プール**（`target_nodes` 順に割当。group_vars の

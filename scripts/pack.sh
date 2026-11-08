@@ -66,13 +66,13 @@ case "$cmd" in
     ;;
   serve)
     # Windows 側のブラウザから開くための配信。
-    # ★2026-09-21 ユーザ指示: LAN(10.1.10.6:<PORT>)から直接開けるように、既定で 0.0.0.0 に bind する
+    # ★2026-09-21 ユーザ指示: LAN(制御ホスト 10.1.10.3:<PORT>。2026-11-08 に Mac へ移る前は 10.1.10.6)から直接開けるように、既定で 0.0.0.0 に bind する
     #   (VSCode のポート転送越しの http://localhost:<PORT>/ も従来どおり使える)。
     #   127.0.0.1 だけに戻すなら: scripts/pack.sh serve 8899 127.0.0.1  (または PACK_BIND=127.0.0.1)
     port="${1:-8899}"
     bind="${2:-${PACK_BIND:-0.0.0.0}}"
     cport="${PACK_CONSOLE_PORT:-8897}"
-    echo "Windows のブラウザから http://10.1.10.6:${port}/ (LAN) または http://localhost:${port}/ (VSCode 転送) で開けます"
+    echo "別の端末のブラウザから http://10.1.10.3:${port}/ (LAN) または http://localhost:${port}/ (VSCode 転送) で開けます"
     # ラボのワークスペース(コンソール中継)を同じ bind で一緒に上げる。配信サーバ(下の exec で
     # このシェルと同じ PID になる)が終われば --with-parent で自分も終わる。配信サーバが
     # ポート使用中などで即終了した時も居残らないよう、親の PID はここから渡す。

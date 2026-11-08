@@ -1,0 +1,42 @@
+! XRT-14 INET(IOL 17.15)= インターネット役(AS 64500)。203.0.113.0/24 と既定経路を XR01 へ広告(トランジット)。
+! 試験用の送信元= Lo66 203.0.113.66(攻撃元・M12-5)・Lo77 203.0.113.77(採点が起点に足す攻撃元・M12-5)・
+!   Lo97 198.51.100.200(マルチホームのお客さまの番号= インターネット経由で戻る通信・M12-4)・Lo98 100.64.0.98(どこにも経路のない番号・M12-4)。
+! 10.0.0.0/8 → XR01 の静的経路= SP の基盤のアドレスを外から狙う通信の試験用(M12-4)。
+interface {{ links[0] }}
+ description to XR01 (SP AS 65000)
+ ip address 10.0.100.100 255.255.255.0
+ no shutdown
+!
+interface Loopback0
+ description internet
+ ip address 203.0.113.1 255.255.255.0
+!
+interface Loopback66
+ description attacker
+ ip address 203.0.113.66 255.255.255.255
+!
+interface Loopback77
+ description another attacker
+ ip address 203.0.113.77 255.255.255.255
+!
+interface Loopback97
+ description multihomed customer of the SP (returns over the internet)
+ ip address 198.51.100.200 255.255.255.255
+!
+interface Loopback98
+ description unrouted source
+ ip address 100.64.0.98 255.255.255.255
+!
+ip route 10.0.0.0 255.0.0.0 10.0.100.1
+!
+router bgp 64500
+ bgp router-id 203.0.113.1
+ bgp log-neighbor-changes
+ neighbor 10.0.100.1 remote-as 65000
+ !
+ address-family ipv4
+  network 203.0.113.0 mask 255.255.255.0
+  neighbor 10.0.100.1 activate
+  neighbor 10.0.100.1 default-originate
+ exit-address-family
+!

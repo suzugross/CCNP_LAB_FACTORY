@@ -1,0 +1,190 @@
+== [1/3] build_topology (_POC-XRQOS, variant=base) ==
+
+PLAY [問題メタ読込み・対象ノード展開] ******************************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.file] ****************************************************
+changed: [localhost]
+
+TASK [MGMT IP をリース台帳から割当（mgmt_alloc.py → mgmt_map.yml）] ************
+changed: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    alloc.stdout_lines:
+    - '[mgmt_alloc] 割当: _POC-XRQOS → .11-.19 (空き残 31個)'
+    - '[mgmt_alloc] wrote /home/suzuki/ansible/CCNP01/playbooks/../topologies/_generated/_POC-XRQOS/mgmt_map.yml'
+
+TASK [割当結果(mgmt_map.yml)を読み込む] ****************************************
+ok: [localhost]
+
+TASK [対象ノードを _gen グループへ（mgmt_ip と image_family を付与）] **********
+changed: [localhost] => (item=XR01)
+changed: [localhost] => (item=P1)
+changed: [localhost] => (item=PE2)
+changed: [localhost] => (item=RR1)
+changed: [localhost] => (item=CE1)
+changed: [localhost] => (item=CE2)
+changed: [localhost] => (item=CUST1)
+changed: [localhost] => (item=CUST2)
+changed: [localhost] => (item=INET)
+
+PLAY [各ノードの day0 config(baseline+initial) を描画] *************************
+[WARNING]: Host 'CE1' is using the discovered Python interpreter at '/home/suzuki/ansible/CCNP01/.venv/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+
+TASK [baseline(role別) + initial を結合して day0 を生成（params をテンプレ文脈に渡す）] ***
+changed: [CE1]
+[WARNING]: Host 'XR01' is using the discovered Python interpreter at '/home/suzuki/ansible/CCNP01/.venv/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+changed: [XR01]
+[WARNING]: Host 'PE2' is using the discovered Python interpreter at '/home/suzuki/ansible/CCNP01/.venv/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+changed: [PE2]
+[WARNING]: Host 'RR1' is using the discovered Python interpreter at '/home/suzuki/ansible/CCNP01/.venv/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+[WARNING]: Host 'P1' is using the discovered Python interpreter at '/home/suzuki/ansible/CCNP01/.venv/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+[WARNING]: Host 'INET' is using the discovered Python interpreter at '/home/suzuki/ansible/CCNP01/.venv/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+[WARNING]: Host 'CUST1' is using the discovered Python interpreter at '/home/suzuki/ansible/CCNP01/.venv/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+[WARNING]: Host 'CE2' is using the discovered Python interpreter at '/home/suzuki/ansible/CCNP01/.venv/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+[WARNING]: Host 'CUST2' is using the discovered Python interpreter at '/home/suzuki/ansible/CCNP01/.venv/bin/python3.12', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+changed: [RR1]
+changed: [P1]
+changed: [INET]
+changed: [CUST1]
+changed: [CE2]
+changed: [CUST2]
+
+PLAY [lab.yaml を生成] *********************************************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.set_fact] ************************************************
+ok: [localhost]
+
+TASK [gen_cml_lab.py で組み立て] ***********************************************
+changed: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    gen.stdout: 'wrote /home/suzuki/ansible/CCNP01/playbooks/../topologies/_generated/_POC-XRQOS/lab.yaml:
+      11 nodes, 18 links (family=iol)'
+
+PLAY RECAP *********************************************************************
+CE1                        : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+CE2                        : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+CUST1                      : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+CUST2                      : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+INET                       : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+P1                         : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+PE2                        : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+RR1                        : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+XR01                       : ok=1    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+localhost                  : ok=10   changed=4    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   
+
+== [2/3] lab_up (CML 起動) ==
+
+PLAY [CML にラボを構築・起動] **************************************************
+
+TASK [lab.yaml の存在確認] *****************************************************
+ok: [localhost]
+
+TASK [ansible.builtin.assert] **************************************************
+ok: [localhost] => 
+    changed: false
+    msg: All assertions passed
+
+TASK [起動前プリフライト（割当 IP の生存確認）] ********************************
+ok: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    pf.stdout_lines:
+    - '[preflight] OK: 割当 9 IP はすべて未使用(CCNP-LAB-d77f9b13 新規起動可)'
+
+TASK [ラボを started に] *******************************************************
+changed: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    r:
+      changed: true
+      failed: false
+
+TASK [未起動ノードのフォロー（全ノード BOOTED 待ち）] **************************
+ok: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    fix.stdout_lines:
+    - all 11 nodes BOOTED
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.command] *************************************************
+ok: [localhost] => (item=10.1.10.11)
+ok: [localhost] => (item=10.1.10.12)
+ok: [localhost] => (item=10.1.10.13)
+ok: [localhost] => (item=10.1.10.14)
+ok: [localhost] => (item=10.1.10.15)
+ok: [localhost] => (item=10.1.10.16)
+ok: [localhost] => (item=10.1.10.17)
+ok: [localhost] => (item=10.1.10.18)
+ok: [localhost] => (item=10.1.10.19)
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+[WARNING]: Could not match supplied host pattern, ignoring: _bringup
+
+PLAY [data IF を no shutdown（bringup_data_ifs 問題のみ）] *********************
+skipping: no hosts matched
+
+PLAY [console 経由の CVAC後 bringup（bringup_console 問題のみ）] ***************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+PLAY [Catalyst 8000V のライセンスの段階を上げる（xe_license_boot がある問題のみ）] ***
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+PLAY [SSH の鍵を telnet で作る（ssh_keygen_telnet がある問題のみ）] ************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+PLAY [IOS XR のコミット履歴を仕込む（commits.yml がある問題のみ）] *************
+
+TASK [commits.yml の有無] ******************************************************
+ok: [localhost]
+
+PLAY [IOS XR の戻り先のコミットを記録する] *************************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+TASK [xr_reset.py record] ******************************************************
+changed: [localhost]
+
+TASK [ansible.builtin.debug] ***************************************************
+ok: [localhost] => 
+    msg:
+    - '[XR01] baseline commit 1000000003'
+    - '[RR1] baseline commit first-boot'
+
+PLAY [Zabbix 監視ホスト登録（monitoring 問題のみ）] ****************************
+
+TASK [ansible.builtin.include_vars] ********************************************
+ok: [localhost]
+
+PLAY RECAP *********************************************************************
+localhost                  : ok=20   changed=2    unreachable=0    failed=0    skipped=13   rescued=0    ignored=0   
+
+_POC-XRQOS: clab_topology 未定義 → containerlab はスキップ
+== [3/3] 作業フォルダ作成: /home/suzuki/ansible/CCNP01/lab/_POC-XRQOS ==
+   
+完了。VSCodeで開いた CCNP01 ツリーの lab/_POC-XRQOS/ を編集（問題.md 同梱）。SSH: SUZUKI/CCNP・mgmt .11〜。

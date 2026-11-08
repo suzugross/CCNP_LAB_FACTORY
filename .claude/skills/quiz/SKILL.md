@@ -120,7 +120,7 @@ scripts/pack.sh close  --today                            # 全ラボ撤収
   コンソールは CML のコンソールと**共有**(同じ画面が映る)なので、採点はユーザの操作が止まってから走らせる。
   問題文の盤面の節(トポロジ／構成図)は、ワークスペースでは Task でなく **Topology タブ**(結線図の下)に出る。
   リンクが無い旧パックは `scripts/pack.sh render <PACK-ID>` で付く。
-- **提示は index.html の URL を伝える**(`http://10.1.10.6:8899/<PACK-ID>/index.html`。VSCode の転送越しなら
+- **提示は index.html の URL を伝える**(`http://10.1.10.3:8899/<PACK-ID>/index.html`。VSCode の転送越しなら
   `http://localhost:8899/…` でも可。2026-09-21 から serve は LAN に bind)。
   task.md 全文貼りは不要(HTML が問題用紙そのもの)。
 - **選定方針(ユーザ指示)**: 純粋な Cisco 問題のみ・**ラボは TS 中心**。

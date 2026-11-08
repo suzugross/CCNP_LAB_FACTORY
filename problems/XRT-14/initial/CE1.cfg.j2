@@ -1,0 +1,72 @@
+! XRT-14 CE1(IOL 17.15)= VRF A のお客さまの CE(拠点 1)。LAN= Lo100 10.100.1.1/24・電話/音声サーバ= Lo46 10.46.1.1・業務システム= Lo21 10.21.1.1。
+! 出口の方策 MARK= 宛てごとに印を付けて送る(音声網 10.46.2.0/24 → EF・業務 10.21.2.0/24 → AF21・LAN 宛て(10.100.2.0/24)にも EF を付ける(お客さまの PC が勝手に付ける= 契約外))。
+! 入口の方策 COUNT-DSCP= 受けたものを DSCP ごとに数えるだけ(採点が数える)。
+ip access-list extended TO-VOICE
+ permit ip any 10.46.2.0 0.0.0.255
+ip access-list extended TO-DATA
+ permit ip any 10.21.2.0 0.0.0.255
+ip access-list extended TO-LAN
+ permit ip any 10.100.2.0 0.0.0.255
+!
+class-map match-any TO-VOICE
+ match access-group name TO-VOICE
+class-map match-any TO-DATA
+ match access-group name TO-DATA
+class-map match-any TO-LAN
+ match access-group name TO-LAN
+class-map match-any D-EF
+ match dscp ef
+class-map match-any D-AF21
+ match dscp af21
+class-map match-any D-AF22
+ match dscp af22
+class-map match-any D-AF11
+ match dscp af11
+class-map match-any D-BE
+ match dscp default
+!
+policy-map MARK
+ class TO-VOICE
+  set dscp ef
+ class TO-DATA
+  set dscp af21
+ class TO-LAN
+  set dscp ef
+policy-map COUNT-DSCP
+ class D-EF
+ class D-AF21
+ class D-AF22
+ class D-AF11
+ class D-BE
+!
+interface {{ links[0] }}
+ description to PE
+ ip address 172.16.1.1 255.255.255.0
+ service-policy input COUNT-DSCP
+ service-policy output MARK
+ no shutdown
+!
+interface Loopback100
+ description site 1 LAN
+ ip address 10.100.1.1 255.255.255.0
+!
+interface Loopback46
+ description site 1 voice
+ ip address 10.46.1.1 255.255.255.255
+!
+interface Loopback21
+ description site 1 business system
+ ip address 10.21.1.1 255.255.255.255
+!
+router bgp 65001
+ bgp router-id 10.100.1.1
+ bgp log-neighbor-changes
+ neighbor 172.16.1.254 remote-as 65000
+ !
+ address-family ipv4
+  network 10.100.1.0 mask 255.255.255.0
+  network 10.46.1.1 mask 255.255.255.255
+  network 10.21.1.1 mask 255.255.255.255
+  neighbor 172.16.1.254 activate
+ exit-address-family
+!

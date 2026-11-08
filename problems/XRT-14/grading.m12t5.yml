@@ -1,0 +1,36 @@
+# M12-5: RTBH の TS。前任者の起点(RR1= タグ 666 → 次ホップ 192.0.2.1・印 65000:666・no-export なし)のまま、
+# 攻撃元 203.0.113.66 からの通信を XR01 の入口で落とし(★192.0.2.1 への再帰は XR の緩い uRPF を通る→ set next-hop discard)、攻撃される宛ても落とす。
+# 印の付いた /32 をインターネットへ出さない・PE2 は従来どおり 192.0.2.1 経由で捨てる・起点に新しい攻撃元を足しても同じく落ちる(採点が RR1 に足して外す)。
+# 白紙= 攻撃元が届く・INET に /32・新しい攻撃元が届く → 0 点。
+problem: XRT-14
+total_points: 100
+checks:
+  - name: 'M12-5 XR01: traffic from the attacker (203.0.113.66) and to the victim (198.51.100.130) is dropped, other internet traffic still arrives'
+    node: XR01
+    exec: local
+    command: >-
+      echo '## Lo66'; .venv/bin/python topologies/qos_probe.py XRT-14 run --echo CUST2 --send 'INET:ping 198.51.100.129 source Loopback66 repeat 10 timeout 1'; echo '## victim'; .venv/bin/python topologies/qos_probe.py XRT-14 run --echo CUST2 --send 'INET:ping 198.51.100.130 source Loopback0 repeat 10 timeout 1'; echo '## Lo0'; .venv/bin/python topologies/qos_probe.py XRT-14 run --echo CUST2 --send 'INET:ping 198.51.100.129 source Loopback0 repeat 10 timeout 1'
+    raw:
+      - { regex: '## Lo66[\s\S]*?== ECHO CUST2 \+0\n[\s\S]*?## victim[\s\S]*?== ECHO CUST2 \+0\n[\s\S]*?## Lo0[\s\S]*?== ECHO CUST2 \+(?:9|10)\n' }
+    points: 50
+  - name: 'M12-5 INET and PE2: the blackholed /32 routes are not advertised to the internet, and PE2 still drops the victim traffic through 192.0.2.1'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-14 ssh INET -- 'show ip bgp 198.51.100.130/32' 'show ip bgp 203.0.113.66/32';
+      .venv/bin/python topologies/login_probe.py XRT-14 ssh PE2 -- 'show ip cef 198.51.100.130 255.255.255.255 detail'
+    raw:
+      - { regex: 'show ip bgp 198\.51\.100\.130/32\s*\n% Network not in table[\s\S]*?show ip bgp 203\.0\.113\.66/32\s*\n% Network not in table' }
+      - { regex: 'recursive via 192\.0\.2\.1\s*\n\s*attached to Null0' }
+    points: 25
+  - name: 'M12-5 a new attacker tagged on RR1 (203.0.113.77) is dropped on XR01 without any change to XR01'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/qos_probe.py XRT-14 run --pre-cli 'RR1:configure;;router static;;address-family ipv4 unicast;;203.0.113.77/32 Null0 tag 666;;root;;commit;;end' --settle 30
+      --post-cli 'RR1:configure;;router static;;address-family ipv4 unicast;;no 203.0.113.77/32 Null0 tag 666;;root;;commit;;end'
+      --echo CUST2 --send 'INET:ping 198.51.100.129 source Loopback77 repeat 10 timeout 1' --show 'XR01:show bgp ipv4 unicast 203.0.113.77/32'
+    raw:
+      - { regex: '== ECHO CUST2 \+0\n' }
+      - { regex: 'BGP routing table entry for 203\.0\.113\.77/32' }
+    points: 25

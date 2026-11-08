@@ -1,0 +1,156 @@
+
+######## 09:42:27 police: XR01 の CE1 側の入力で BULK(AF11)を 64 kbps に(1 速度 2 色)→ 2 速度 3 色(超過は AF12 に付け替え)。カウンタは 30 秒待って見る
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE2(config)#
+class-map match-any D-EF
+CE2(config-cmap)#
+match dscp ef
+CE2(config-cmap)#
+class-map match-any D-AF11
+CE2(config-cmap)#
+match dscp af11
+CE2(config-cmap)#
+class-map match-any D-AF12
+CE2(config-cmap)#
+match dscp af12
+CE2(config-cmap)#
+class-map match-any D-BE
+CE2(config-cmap)#
+match dscp default
+CE2(config-cmap)#
+policy-map MONITOR
+CE2(config-pmap)#
+class D-EF
+CE2(config-pmap-c)#
+class D-AF11
+CE2(config-pmap-c)#
+class D-AF12
+CE2(config-pmap-c)#
+class D-BE
+CE2(config-pmap-c)#
+exit
+CE2(config-pmap)#
+exit
+CE2(config)#
+interface Ethernet0/0
+CE2(config-if)#
+service-policy input MONITOR
+CE2(config-if)#
+end
+CE2#
+configure
+Sat Nov  7 09:42:37.207 UTC
+RP/0/RP0/CPU0:XR01(config)#
+policy-map CE-IN
+RP/0/RP0/CPU0:XR01(config-pmap)#
+class BULK
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+police rate 64 kbps
+RP/0/RP0/CPU0:XR01(config-pmap-c-police)#
+conform-action transmit
+RP/0/RP0/CPU0:XR01(config-pmap-c-police)#
+exceed-action drop
+RP/0/RP0/CPU0:XR01(config-pmap-c-police)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap)#
+end-policy-map
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sat Nov  7 09:42:40.916 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sat Nov  7 09:42:41.721 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+Class BULK
+  Classification statistics          (packets/bytes)     (rate - kbps)
+    Matched             :                 876/453768               0
+    Transmitted         : N/A 
+    Total Dropped       :                 871/451178               0
+  Policing statistics                (packets/bytes)     (rate - kbps) 
+    Policed(conform)    :                   5/2590                 0
+    Policed(exceed)     :                 871/451178               0
+    Policed(violate)    :                   0/0                    0
+    Policed and dropped :                 871/451178             
+Class class-default
+  CE2 受信 D-EF packets, pkts
+  CE2 受信 packets, Class-map: pkts
+  CE2 受信 packets, 5 pkts
+  CE2 受信 D-AF12 packets, pkts
+  CE2 受信 packets, Class-map: pkts
+  CE2 受信 packets, 0 pkts
+  CE2 受信 class-default packets, pkts
+
+######## 09:45:22 police-2: 2 速度 3 色(CIR 64k・PIR 128k・超過は AF12)。★1 つの class の印は 2 種類まで→ BULK の qos-group を外す
+configure
+Sat Nov  7 09:45:23.345 UTC
+RP/0/RP0/CPU0:XR01(config)#
+policy-map CE-IN
+RP/0/RP0/CPU0:XR01(config-pmap)#
+class BULK
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+no set qos-group 2
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+no police
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+police rate 64 kbps peak-rate 128 kbps
+RP/0/RP0/CPU0:XR01(config-pmap-c-police)#
+conform-action transmit
+RP/0/RP0/CPU0:XR01(config-pmap-c-police)#
+exceed-action set dscp af12
+RP/0/RP0/CPU0:XR01(config-pmap-c-police)#
+violate-action drop
+RP/0/RP0/CPU0:XR01(config-pmap-c-police)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap-c)#
+exit
+RP/0/RP0/CPU0:XR01(config-pmap)#
+end-policy-map
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Sat Nov  7 09:45:28.258 UTC
+RP/0/RP0/CPU0:XR01(config)#
+show configuration failed
+Sat Nov  7 09:45:29.164 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+Class BULK
+  Classification statistics          (packets/bytes)     (rate - kbps)
+    Matched             :                 838/434084               0
+    Transmitted         : N/A 
+    Total Dropped       :                 832/430976               0
+  Policing statistics                (packets/bytes)     (rate - kbps) 
+    Policed(conform)    :                   5/2590                 0
+    Policed(exceed)     :                   1/518                  0
+    Policed(violate)    :                 832/430976               0
+    Policed and dropped :                 832/430976             
+Class class-default
+  CE2 受信 D-EF packets, pkts
+  CE2 受信 packets, Class-map: pkts
+  CE2 受信 packets, 5 pkts
+  CE2 受信 D-AF12 packets, pkts
+  CE2 受信 packets, Class-map: pkts
+  CE2 受信 packets, 0 pkts
+  CE2 受信 class-default packets, pkts
+
+######## 09:48:10 police-3: ポリサの値の単位と最小値・バーストの既定(show qos interface)
+Level: 0 Policy: CE-IN Class: BULK
+Bandwidth: 0 kbps, BW sum for Level 0: 0 kbps, Excess Ratio: 0
+QueueID: 25 (Port Default)
+Policer Profile: 0 (TrTCM)
+Conform: 64 kbps (64 kbps) Burst: 1600 bytes (0 Default)
+Peak: 128 kbps (128 kbps) Burst: 1600 bytes (0 Default)
+Child Policer Conform: set exp-imp 2   
+Child Policer Exceed: set exp-imp 2   set dscp 12  
+Child Policer Violate: DROP
+----------------------------------------------------------------------
+Level: 0 Policy: CE-IN Class: class-default

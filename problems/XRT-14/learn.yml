@@ -1,0 +1,536 @@
+# XRT-14 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn XRT-14 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# ここに書いた挙動は IOS XRv 9000 26.1.1・IOS XRd 26.1.1(+IOL 17.15)の実機で確認した(設計= problems/_drafts/XR-TRACK.design.md §27)。
+# 模範解の「On XR01:」「On RR1:」の見出し= 機器ごとの塊(poc/xr/verbatim.py が見出しごとに送り先を替える)。
+# 読み物(BL-252)= Reading タブに出す本(reading/<key>/)。各課題の read: はその本の「ページ#節」(節= data-sec)。
+reading: xr
+steps:
+  - id: m12t1
+    title: { en: "M12-1  Trust only the EF in the contract", ja: "M12-1  契約の EF だけを信じる" }
+    check: m12t1
+    read: [d0-m12-marking#s2-2, d0-m12-marking#s2-3, d0-m12-marking#s2-4, d0-m12-marking#s3-1, d0-m12-marking#s3-2, d0-m12-marking#s3-5]
+    hints:
+      - en: "One input policy on the site 1 port. EF has to be split in two by destination, and the order of the classes matters: a policy checks its classes from the top. Without a policy, the EXP is a copy of the top three bits of the DSCP; check what that gives for AF21."
+        ja: "サイト 1 のポートの入力に、ポリシーを 1 つ当てます。EF は宛先で 2 つに分ける必要があり、クラスの順番が効きます(ポリシーはクラスを上から調べます)。ポリシーが無いと、EXP は DSCP の上位 3 ビットの写しです。AF21 ならいくつになるかを確かめてください。"
+      - en: "`show qos interface GigabitEthernet0/0/0/1 input` (the `Child Mark:` lines), `show policy-map interface GigabitEthernet0/0/0/1 input` (wait half a minute). On P1: `show policy-map interface Ethernet0/0 input`. On CE2: `show policy-map interface Ethernet0/0 input`. Guide: Modular QoS Configuration Guide (ASR 9000), 'Configuring Modular QoS Packet Classification and Marking'."
+        ja: "`show qos interface GigabitEthernet0/0/0/1 input`(`Child Mark:` の行)、`show policy-map interface GigabitEthernet0/0/0/1 input`(30 秒ほど待つ)。P1 で `show policy-map interface Ethernet0/0 input`。CE2 で `show policy-map interface Ethernet0/0 input`。ガイド: Modular QoS Configuration Guide(ASR 9000)の「Configuring Modular QoS Packet Classification and Marking」。"
+      - en: "An `ipv4 access-list` for 10.46.0.0/16; `class-map match-all` with `match dscp ef` and `match access-group ipv4 <ACL>`; a second class for the remaining EF; one for `match dscp af21`. In the `policy-map`: `set mpls experimental imposition 5`, `set dscp default` with `imposition 0`, `imposition 3`, and `imposition 0` in `class-default`. Then `service-policy input` on GigabitEthernet0/0/0/1."
+        ja: "10.46.0.0/16 の `ipv4 access-list`。`match dscp ef` と `match access-group ipv4 <ACL>` の `class-map match-all`。残りの EF のための 2 つ目のクラス。`match dscp af21` のクラス。`policy-map` の中は `set mpls experimental imposition 5`、`set dscp default` と `imposition 0`、`imposition 3`、`class-default` に `imposition 0`。最後に GigabitEthernet0/0/0/1 に `service-policy input`。"
+    solution:
+      en: |
+        On XR01:
+        configure
+         ipv4 access-list VOICE-NET
+          10 permit ipv4 any 10.46.0.0/16
+         !
+         class-map match-all VOICE
+          match dscp ef
+          match access-group ipv4 VOICE-NET
+          end-class-map
+         !
+         class-map match-any NOT-VOICE-EF
+          match dscp ef
+          end-class-map
+         !
+         class-map match-any DATA
+          match dscp af21
+          end-class-map
+         !
+         policy-map CE1-IN
+          class VOICE
+           set mpls experimental imposition 5
+          !
+          class NOT-VOICE-EF
+           set dscp default
+           set mpls experimental imposition 0
+          !
+          class DATA
+           set mpls experimental imposition 3
+          !
+          class class-default
+           set mpls experimental imposition 0
+          !
+          end-policy-map
+         !
+         interface GigabitEthernet0/0/0/1
+          service-policy input CE1-IN
+         commit
+        end
+        The provider edge is the trust boundary: it decides which of the customer's marks it believes before the packet
+        enters the core. `match-all` makes VOICE "EF and to the voice network". A policy checks its classes from the top,
+        so NOT-VOICE-EF only sees the EF that VOICE did not take; it rewrites the DSCP to 0 and gives it EXP 0.
+        `imposition` sets the EXP of every label pushed (the transport label and the VPN label). Without a policy, IOS XR
+        copies the top three bits of the DSCP: EF gives 5 and AF21 gives 2, not 3, so P1 counts the business traffic in
+        no EXP class. AF21 keeps its DSCP; only its EXP is the provider's choice (the ingress half of the pipe and short
+        pipe models). A single class with `match dscp ef` that set EXP 5 would also carry the LAN's EF as voice.
+      ja: |
+        On XR01:
+        configure
+         ipv4 access-list VOICE-NET
+          10 permit ipv4 any 10.46.0.0/16
+         !
+         class-map match-all VOICE
+          match dscp ef
+          match access-group ipv4 VOICE-NET
+          end-class-map
+         !
+         class-map match-any NOT-VOICE-EF
+          match dscp ef
+          end-class-map
+         !
+         class-map match-any DATA
+          match dscp af21
+          end-class-map
+         !
+         policy-map CE1-IN
+          class VOICE
+           set mpls experimental imposition 5
+          !
+          class NOT-VOICE-EF
+           set dscp default
+           set mpls experimental imposition 0
+          !
+          class DATA
+           set mpls experimental imposition 3
+          !
+          class class-default
+           set mpls experimental imposition 0
+          !
+          end-policy-map
+         !
+         interface GigabitEthernet0/0/0/1
+          service-policy input CE1-IN
+         commit
+        end
+        プロバイダー エッジは信頼の境界です。パケットをコアに入れる前に、顧客の印のどれを信じるかを決めます。`match-all` で、
+        VOICE は「EF で、かつ音声網宛て」になります。ポリシーはクラスを上から調べるので、NOT-VOICE-EF に来るのは VOICE が
+        拾わなかった EF だけです。そこで DSCP を 0 に書き換え、EXP 0 を付けます。`imposition` は、積むラベル全部(トランス
+        ポートのラベルと VPN のラベル)の EXP を決めます。ポリシーが無いと、IOS XR は DSCP の上位 3 ビットを写します。EF は 5 に
+        なりますが、AF21 は 3 ではなく 2 になるので、P1 は業務の通信をどの EXP のクラスにも数えません。AF21 の DSCP はそのままで、
+        EXP だけがプロバイダーの選んだ値です(パイプとショート パイプの入口)。`match dscp ef` だけのクラス 1 つで EXP 5 を付けると、
+        LAN の EF も音声として運ばれます。
+
+  - id: m12t2
+    title: { en: "M12-2  A committed and a peak rate", ja: "M12-2  契約の速さと最大の速さ" }
+    check: m12t2
+    read: [d2-m12-police-shape#s2-1, d2-m12-police-shape#s2-2, d2-m12-police-shape#s3-1, d2-m12-police-shape#s3-5, d0-m12-marking#s3-5]
+    hints:
+      - en: "Two rates make three colours. Put the policer in the class that already carries the business traffic, so that voice is not affected. Count the marks in that class: the excess action marks too, and a class may carry only two kinds of mark."
+        ja: "速さが 2 つなら色は 3 つです。ポリサは、業務の通信がすでに入っているクラスに入れます。そうすれば音声は影響を受けません。そのクラスの印の種類を数えてください。超過の動作も印を付け、1 つのクラスに付けられる印は 2 種類までです。"
+      - en: "`show qos interface GigabitEthernet0/0/0/1 input` (`Policer Profile`, `Conform`, `Peak`, `Child Policer Exceed`), `show policy-map interface GigabitEthernet0/0/0/1 input` (`Policed(conform/exceed/violate)`; wait half a minute). On CE2: `show policy-map interface Ethernet0/0 input` (D-AF21 and D-AF22). Command reference: Modular QoS Command Reference (ASR 9000), `police rate`."
+        ja: "`show qos interface GigabitEthernet0/0/0/1 input`(`Policer Profile`、`Conform`、`Peak`、`Child Policer Exceed`)、`show policy-map interface GigabitEthernet0/0/0/1 input`(`Policed(conform/exceed/violate)`。30 秒ほど待つ)。CE2 で `show policy-map interface Ethernet0/0 input`(D-AF21 と D-AF22)。コマンド リファレンス: Modular QoS Command Reference(ASR 9000)の `police rate`。"
+      - en: "In `policy-map CE1-IN` → `class DATA`: `police rate 256 kbps peak-rate 512 kbps`, then `conform-action transmit`, `exceed-action set dscp af22`, `violate-action drop`."
+        ja: "`policy-map CE1-IN` → `class DATA` の下で `police rate 256 kbps peak-rate 512 kbps`、続けて `conform-action transmit`、`exceed-action set dscp af22`、`violate-action drop`。"
+    solution:
+      en: |
+        On XR01:
+        configure
+         policy-map CE1-IN
+          class DATA
+           police rate 256 kbps peak-rate 512 kbps
+            conform-action transmit
+            exceed-action set dscp af22
+            violate-action drop
+           !
+          !
+          end-policy-map
+         commit
+        end
+        A two-rate, three-colour policer (RFC 2698) fills one bucket at the committed rate and one at the peak rate. What
+        finds a token in the first bucket conforms and goes as it is; what finds one only in the second exceeds and is
+        re-marked AF22, which stays in the same AF class, so the order is kept and only the drop precedence rises; the rest
+        violates and is dropped. `show qos interface` shows `TrTCM`, the two rates, and `set dscp 20` (AF22) on the exceed
+        line, after the class's own `set exp-imp 3`. That makes two kinds of mark in the class, the limit on IOS XRv 9000:
+        adding `set qos-group` to the class, for example, is refused with `only two mark types are allowed per class`.
+        Without a `burst`, XRv 9000 chose 3200 bytes for 256 kbps and 6400 bytes for 512 kbps (100 ms of each). Voice is in
+        another class, so the policer never sees it.
+      ja: |
+        On XR01:
+        configure
+         policy-map CE1-IN
+          class DATA
+           police rate 256 kbps peak-rate 512 kbps
+            conform-action transmit
+            exceed-action set dscp af22
+            violate-action drop
+           !
+          !
+          end-policy-map
+         commit
+        end
+        2 速度 3 色のポリサ(RFC 2698)は、1 つのバケツを契約の速さで、もう 1 つを最大の速さで満たします。1 つ目のバケツに
+        トークンがあれば適合で、そのまま運びます。2 つ目にしか無ければ超過で、AF22 に付け替えて運びます。AF22 は同じ AF の
+        クラスのままなので、順番は保たれ、捨てられやすさだけが上がります。残りは違反で、捨てます。`show qos interface` には
+        `TrTCM`、2 つの速さ、超過の行の `set dscp 20`(AF22)が、クラスの `set exp-imp 3` の後に出ます。これでクラスの印は
+        2 種類で、IOS XRv 9000 の上限です。たとえばこのクラスに `set qos-group` を足すと、`only two mark types are allowed per
+        class` で拒まれます。`burst` を書かないと、XRv 9000 は 256 kbps に 3200 バイト、512 kbps に 6400 バイト(それぞれ 100 ms 分)を
+        選びました。音声は別のクラスにあるので、ポリサは音声を見ません。
+
+  - id: m12t3
+    title: { en: "M12-3  The core's marks at site 1, shaped", ja: "M12-3  コアの印をサイト 1 へ、整形して" }
+    check: m12t3
+    read: [d0-m12-marking#s2-5, d0-m12-marking#s2-6, d0-m12-marking#s3-3, d2-m12-police-shape#s2-4, d2-m12-police-shape#s2-5, d2-m12-police-shape#s3-2]
+    hints:
+      - en: "Three parts: read the EXP where the packets come in from the core, use it where they leave towards site 1, and shape that exit with voice first. A mark read on input reaches an output policy only through something internal to the router. Then check which label is on top when the packets reach XR01: P1 downgrades the outer label."
+        ja: "部品は 3 つです。コアから入ってくる所で EXP を読み、サイト 1 へ出ていく所でそれを使い、その出口を音声を先にして整形します。入力で読んだ印を出力のポリシーへ渡すには、装置の中だけの印を通します。次に、パケットが XR01 に着いたとき、いちばん上にあるのはどのラベルかを確かめてください。P1 が格下げするのは外側のラベルです。"
+      - en: "On CE1: `show policy-map interface Ethernet0/0 input`. On XR01: `show mpls ldp bindings 10.255.0.1/32` and, on P1, `show mpls forwarding-table 10.255.0.1 32` (Pop or explicit-n); `show policy-map interface GigabitEthernet0/0/0/0 input`; `show qos interface GigabitEthernet0/0/0/1 output`. Guides: Modular QoS Configuration Guide (ASR 9000), 'Modular QoS Deployment Scenarios' (MPLS QoS: uniform, pipe and short pipe) and 'Configuring Modular QoS Congestion Management' (hierarchical policies); MPLS Command Reference, LDP `explicit-null`."
+        ja: "CE1 で `show policy-map interface Ethernet0/0 input`。XR01 で `show mpls ldp bindings 10.255.0.1/32`、P1 で `show mpls forwarding-table 10.255.0.1 32`(Pop か explicit-n か)。`show policy-map interface GigabitEthernet0/0/0/0 input`、`show qos interface GigabitEthernet0/0/0/1 output`。ガイド: Modular QoS Configuration Guide(ASR 9000)の「Modular QoS Deployment Scenarios」(MPLS QoS= uniform・pipe・short pipe)と「Configuring Modular QoS Congestion Management」(階層のポリシー)、MPLS Command Reference の LDP の `explicit-null`。"
+      - en: "`mpls ldp` → `address-family ipv4` → `label local advertise explicit-null`. Classes on `match mpls experimental topmost` 5, 3, 1, 0 in an input policy on GigabitEthernet0/0/0/0 that `set qos-group`; classes on `match qos-group` in a child policy that `set dscp` (and, for voice, `priority level 1` with `police rate 512 kbps`); a parent with only `class class-default`, `shape average 2 mbps` and `service-policy <child>`, applied as `service-policy output` on GigabitEthernet0/0/0/1."
+        ja: "`mpls ldp` → `address-family ipv4` → `label local advertise explicit-null`。`match mpls experimental topmost` の 5・3・1・0 のクラスで `set qos-group` する入力のポリシーを GigabitEthernet0/0/0/0 に。`match qos-group` のクラスで `set dscp` する子のポリシー(音声には `priority level 1` と `police rate 512 kbps` も)。`class class-default` だけを持ち、`shape average 2 mbps` と `service-policy <子>` を書いた親を、GigabitEthernet0/0/0/1 に `service-policy output` で。"
+    solution:
+      en: |
+        On XR01:
+        configure
+         mpls ldp
+          address-family ipv4
+           label
+            local
+             advertise
+              explicit-null
+         !
+         class-map match-any CORE-EXP5
+          match mpls experimental topmost 5
+          end-class-map
+         class-map match-any CORE-EXP3
+          match mpls experimental topmost 3
+          end-class-map
+         class-map match-any CORE-EXP1
+          match mpls experimental topmost 1
+          end-class-map
+         class-map match-any CORE-EXP0
+          match mpls experimental topmost 0
+          end-class-map
+         !
+         policy-map CORE-IN
+          class CORE-EXP5
+           set qos-group 5
+          !
+          class CORE-EXP3
+           set qos-group 3
+          !
+          class CORE-EXP1
+           set qos-group 1
+          !
+          class CORE-EXP0
+           set qos-group 9
+          !
+          end-policy-map
+         !
+         class-map match-any QG5
+          match qos-group 5
+          end-class-map
+         class-map match-any QG3
+          match qos-group 3
+          end-class-map
+         class-map match-any QG1
+          match qos-group 1
+          end-class-map
+         class-map match-any QG9
+          match qos-group 9
+          end-class-map
+         !
+         policy-map CE1-OUT-CHILD
+          class QG5
+           priority level 1
+           police rate 512 kbps
+           !
+           set dscp ef
+          !
+          class QG3
+           set dscp af21
+          !
+          class QG1
+           set dscp af11
+          !
+          class QG9
+           set dscp default
+          !
+          end-policy-map
+         !
+         policy-map CE1-OUT
+          class class-default
+           shape average 2 mbps
+           service-policy CE1-OUT-CHILD
+          !
+          end-policy-map
+         !
+         interface GigabitEthernet0/0/0/0
+          service-policy input CORE-IN
+         !
+         interface GigabitEthernet0/0/0/1
+          service-policy output CE1-OUT
+         commit
+        end
+        This is the uniform model's egress: the core's EXP is copied back into the customer's DSCP. The EXP can only be read
+        on the core-facing input, and the DSCP is written on the site-facing output, so `qos-group`, a mark internal to the
+        router, carries the class between the two (it is set on input and matched on output only). The trap is PHP: XR01
+        advertises implicit null by default, so P1 pops the outer label, the one it downgraded, and XR01 sees only the VPN
+        label with PE2's EXP 3. Site 1 then gets AF21. With explicit null, P1 swaps the outer label for label 0, the EXP 1
+        survives to XR01, and site 1 gets AF11. The parent policy shapes the whole exit (`class-default` is the only class
+        a parent may have); the child queues inside the 2 Mbps, and voice goes to the priority queue (`QueueID … (Priority
+        1)`), whose policer keeps it from starving the rest. In that class, `set dscp ef` is applied as the policer's conform
+        action (`Child Policer Conform: set dscp 46`). The classes with no queuing action share the queue of
+        `class-default` (`QueueID: 33 (class-default)`). EXP 0 is mapped to qos-group 9 rather than 0, because 0 is
+        also the group of every packet that no input policy marked.
+      ja: |
+        On XR01:
+        configure
+         mpls ldp
+          address-family ipv4
+           label
+            local
+             advertise
+              explicit-null
+         !
+         class-map match-any CORE-EXP5
+          match mpls experimental topmost 5
+          end-class-map
+         class-map match-any CORE-EXP3
+          match mpls experimental topmost 3
+          end-class-map
+         class-map match-any CORE-EXP1
+          match mpls experimental topmost 1
+          end-class-map
+         class-map match-any CORE-EXP0
+          match mpls experimental topmost 0
+          end-class-map
+         !
+         policy-map CORE-IN
+          class CORE-EXP5
+           set qos-group 5
+          !
+          class CORE-EXP3
+           set qos-group 3
+          !
+          class CORE-EXP1
+           set qos-group 1
+          !
+          class CORE-EXP0
+           set qos-group 9
+          !
+          end-policy-map
+         !
+         class-map match-any QG5
+          match qos-group 5
+          end-class-map
+         class-map match-any QG3
+          match qos-group 3
+          end-class-map
+         class-map match-any QG1
+          match qos-group 1
+          end-class-map
+         class-map match-any QG9
+          match qos-group 9
+          end-class-map
+         !
+         policy-map CE1-OUT-CHILD
+          class QG5
+           priority level 1
+           police rate 512 kbps
+           !
+           set dscp ef
+          !
+          class QG3
+           set dscp af21
+          !
+          class QG1
+           set dscp af11
+          !
+          class QG9
+           set dscp default
+          !
+          end-policy-map
+         !
+         policy-map CE1-OUT
+          class class-default
+           shape average 2 mbps
+           service-policy CE1-OUT-CHILD
+          !
+          end-policy-map
+         !
+         interface GigabitEthernet0/0/0/0
+          service-policy input CORE-IN
+         !
+         interface GigabitEthernet0/0/0/1
+          service-policy output CE1-OUT
+         commit
+        end
+        ユニフォームの出口です。コアの EXP を、顧客の DSCP に写し戻します。EXP はコア側の入力でしか読めず、DSCP はサイト側の
+        出力で書くので、その間を、装置の中だけの印の `qos-group` で運びます(付けるのは入力だけ、読むのは出力だけ)。罠は PHP
+        です。XR01 は既定で implicit null を広告するので、P1 は外側のラベル、つまり自分が格下げしたラベルを外し、XR01 には PE2 の
+        EXP 3 の付いた VPN のラベルだけが届きます。するとサイト 1 には AF21 で届きます。explicit null にすると、P1 は外側を
+        ラベル 0 に替えて送り、EXP 1 が XR01 まで残って、サイト 1 には AF11 で届きます。親のポリシーは出口の全部を整形します
+        (親に書けるクラスは `class-default` だけ)。子は 2 Mbps の中でキューを作り、音声は優先キューに入ります
+        (`QueueID … (Priority 1)`)。そのポリサが、音声がほかのキューを干上がらせないようにします。このクラスの `set dscp ef` は、
+        ポリサの適合の動作として入ります(`Child Policer Conform: set dscp 46`)。キューの動作を持たないクラスは、`class-default` の
+        キューを共有します(`QueueID: 33 (class-default)`)。EXP 0 を qos-group 0 では
+        なく 9 にしたのは、入力のポリシーが何も付けなかったパケットも、すべて qos-group 0 だからです。
+
+  - id: m12t4
+    title: { en: "M12-4  Sources that should not be there", ja: "M12-4  そこから来るはずのない送信元" }
+    check: m12t4
+    read: [d4-m12-protect#s2-1, d4-m12-protect#s2-2, d4-m12-protect#s3-1, d4-m12-protect#s3-2, d4-m12-protect#s3-5]
+    hints:
+      - en: "Two kinds of reverse-path check, one per side. On a single-homed customer, the route back to a source must point out of the interface the packet came in on; at the Internet border, a route anywhere will do. XR01 now has a default route from INET: decide whether it should count. The ACL has four parts, and the BGP session with INET is one of the things it must let in."
+        ja: "送信元の確かめ方は 2 種類で、側ごとに 1 つです。1 本だけの顧客では、送信元へのルートが、パケットの入ってきたインターフェイスを向く必要があります。インターネットとの境界では、どこかにルートがあれば足ります。XR01 には INET からの既定ルートがあります。それを数えるかどうかを決めてください。ACL は 4 つの部分からなり、INET との BGP も、通すべきものの 1 つです。"
+      - en: "`show cef ipv4 interface GigabitEthernet0/0/0/2 detail` (`RPF mode`), `show cef ipv4 drops` (`RPF drops`), `show route 0.0.0.0/0`, `show access-lists ipv4 <name> hardware ingress location 0/0/CPU0`. On CUST2: `show ip traffic` (the echo count under Rcvd). Guides: IP Addresses and Services Configuration Guide (ASR 9000), 'Implementing Cisco Express Forwarding' (unicast RPF) and 'Implementing Access Lists and Prefix Lists'."
+        ja: "`show cef ipv4 interface GigabitEthernet0/0/0/2 detail`(`RPF mode`)、`show cef ipv4 drops`(`RPF drops`)、`show route 0.0.0.0/0`、`show access-lists ipv4 <名前> hardware ingress location 0/0/CPU0`。CUST2 で `show ip traffic`(Rcvd の下の echo の数)。ガイド: IP Addresses and Services Configuration Guide(ASR 9000)の「Implementing Cisco Express Forwarding」(unicast RPF)と「Implementing Access Lists and Prefix Lists」。"
+      - en: "GigabitEthernet0/0/0/2: `ipv4 verify unicast source reachable-via rx`. GigabitEthernet0/0/0/3: `ipv4 verify unicast source reachable-via any` (no `allow-default`). An `ipv4 access-list` that permits TCP port 179 between 10.0.100.100 and 10.0.100.1 both ways, denies `10.0.0.0/16` and `10.255.0.0/24`, and permits the rest, applied with `ipv4 access-group <name> ingress hardware-count`."
+        ja: "GigabitEthernet0/0/0/2 に `ipv4 verify unicast source reachable-via rx`。GigabitEthernet0/0/0/3 に `ipv4 verify unicast source reachable-via any`(`allow-default` なし)。10.0.100.100 と 10.0.100.1 の間の TCP 179 を両向きに許し、`10.0.0.0/16` と `10.255.0.0/24` を拒み、残りを許す `ipv4 access-list` を、`ipv4 access-group <名前> ingress hardware-count` で当てる。"
+    solution:
+      en: |
+        On XR01:
+        configure
+         interface GigabitEthernet0/0/0/2
+          ipv4 verify unicast source reachable-via rx
+         !
+         interface GigabitEthernet0/0/0/3
+          ipv4 verify unicast source reachable-via any
+         !
+         ipv4 access-list FROM-INTERNET
+          10 permit tcp host 10.0.100.100 host 10.0.100.1 eq bgp
+          20 permit tcp host 10.0.100.100 eq bgp host 10.0.100.1
+          30 deny ipv4 any 10.0.0.0/16
+          40 deny ipv4 any 10.255.0.0/24
+          50 permit ipv4 any any
+         !
+         interface GigabitEthernet0/0/0/3
+          ipv4 access-group FROM-INTERNET ingress hardware-count
+         commit
+        end
+        Strict uRPF (`rx`) passes a packet only if the route to its source points out of the interface it came in on,
+        which is exactly "an address that should arrive from CUST1": 198.51.100.0/25 points to CUST1, while 203.0.113.99
+        points to INET and 10.99.99.1 matches only the default route towards INET. Loose uRPF there would let 203.0.113.99
+        through. At the border, strict would drop the multihomed customer's 198.51.100.200, whose route points into the
+        core, so loose (`any`) is the one: it asks only for a route, and the default route does not count unless
+        `allow-default` is added (100.64.0.98 is dropped). The ACL follows the four parts of an infrastructure ACL: the
+        BGP session in both directions, then the provider's own addresses, then everything else. Without lines 10 and 20,
+        the session to INET would drop when its hold time ran out. `hardware-count` makes the hardware count each line;
+        without it, `show access-lists … hardware` has no counts. On XRv 9000, `object-group` is not supported, so the
+        ranges are written as lines.
+      ja: |
+        On XR01:
+        configure
+         interface GigabitEthernet0/0/0/2
+          ipv4 verify unicast source reachable-via rx
+         !
+         interface GigabitEthernet0/0/0/3
+          ipv4 verify unicast source reachable-via any
+         !
+         ipv4 access-list FROM-INTERNET
+          10 permit tcp host 10.0.100.100 host 10.0.100.1 eq bgp
+          20 permit tcp host 10.0.100.100 eq bgp host 10.0.100.1
+          30 deny ipv4 any 10.0.0.0/16
+          40 deny ipv4 any 10.255.0.0/24
+          50 permit ipv4 any any
+         !
+         interface GigabitEthernet0/0/0/3
+          ipv4 access-group FROM-INTERNET ingress hardware-count
+         commit
+        end
+        厳格な uRPF(`rx`)は、送信元へのルートが、パケットの入ってきたインターフェイスを向くときだけ通します。これがちょうど
+        「CUST1 から届くはずのアドレス」です。198.51.100.0/25 は CUST1 を向き、203.0.113.99 は INET を向き、10.99.99.1 は INET への
+        既定ルートにしか一致しません。ここを緩いにすると、203.0.113.99 が通ります。境界で厳格にすると、ルートがコアを向く
+        マルチホームの顧客の 198.51.100.200 が落ちるので、緩い(`any`)にします。緩いはルートがあるかだけを見て、`allow-default`
+        を付けない限り既定ルートは数えません(100.64.0.98 は落ちる)。ACL はインフラ ACL の 4 つの部分に沿っています。両向きの
+        BGP、次にプロバイダー自身のアドレス、最後に残りです。10 行目と 20 行目が無いと、INET とのセッションは保持時間が切れた
+        ところで落ちます。`hardware-count` で、ハードウェアが行ごとに数えます。付けないと、`show access-lists … hardware` に数が
+        出ません。XRv 9000 では `object-group` が使えないので、範囲は行で書きます。
+
+  - id: m12t5
+    title: { en: "M12-5  A blackhole that lets the attacker through", ja: "M12-5  攻撃元を通してしまうブラックホール" }
+    check: m12t5
+    read: [d4-m12-protect#s2-3, d4-m12-protect#s2-4, d4-m12-protect#s3-3, d4-m12-protect#s3-4, d4-m12-protect#s3-5]
+    hints:
+      - en: "Compare how XR01 resolves the attacker's route with what uRPF needs. The trigger rewrites the next hop to 192.0.2.1, which resolves to Null0 through a static route; that works for the destination, but look at what uRPF does with a recursive route to Null0 on IOS XR. Then look at what INET has learned."
+        ja: "XR01 が攻撃元のルートをどう解決しているかと、uRPF が必要とするものを比べてください。起点はネクスト ホップを 192.0.2.1 に書き換え、それがスタティック ルートで Null0 に解決されます。宛先にはこれで効きますが、IOS XR の uRPF が Null0 への再帰的なルートをどう扱うかを確かめてください。次に、INET が何を学んでいるかを見てください。"
+      - en: "On XR01: `show cef 203.0.113.66/32` (`recursive` or `null0 adjacency`), `show bgp ipv4 unicast 203.0.113.66/32`, `show cef ipv4 drops`. On RR1: `show running-config route-policy RTBH-TRIGGER`. On INET: `show ip bgp`. Guides: Routing Configuration Guide (ASR 9000), 'Remotely Triggered Null Route Filtering with RPL Next-hop Discard Configuration'; TAC document 116386; RFC 5635, section 4."
+        ja: "XR01 で `show cef 203.0.113.66/32`(`recursive` か `null0 adjacency` か)、`show bgp ipv4 unicast 203.0.113.66/32`、`show cef ipv4 drops`。RR1 で `show running-config route-policy RTBH-TRIGGER`。INET で `show ip bgp`。ガイド: Routing Configuration Guide(ASR 9000)の「Remotely Triggered Null Route Filtering with RPL Next-hop Discard Configuration」、TAC 文書 116386、RFC 5635 の 4 節。"
+      - en: "On XR01: a `community-set` with 65000:666 and a `route-policy` with `if community matches-any <set> then set next-hop discard endif` and `pass`, applied with `route-policy <name> in` under neighbor 10.255.0.52 → `address-family ipv4 unicast`. On RR1: add `no-export` to the `set community` of RTBH-TRIGGER, keeping `set next-hop 192.0.2.1` for PE2."
+        ja: "XR01 で、65000:666 の `community-set` と、`if community matches-any <セット> then set next-hop discard endif` と `pass` の `route-policy` を作り、近隣 10.255.0.52 → `address-family ipv4 unicast` の下に `route-policy <名前> in` で当てる。RR1 で、RTBH-TRIGGER の `set community` に `no-export` を足す。PE2 のために `set next-hop 192.0.2.1` は残す。"
+    solution:
+      en: |
+        On XR01:
+        configure
+         community-set RTBH
+           65000:666
+         end-set
+         !
+         route-policy FROM-RR
+           if community matches-any RTBH then
+             set next-hop discard
+           endif
+           pass
+         end-policy
+         !
+         router bgp 65000
+          neighbor 10.255.0.52
+           address-family ipv4 unicast
+            route-policy FROM-RR in
+         commit
+        end
+        On RR1:
+        configure
+         route-policy RTBH-TRIGGER
+           if tag eq 666 then
+             set next-hop 192.0.2.1
+             set community (65000:666, no-export)
+             pass
+           else
+             drop
+           endif
+         end-policy
+         commit
+        end
+        The destination half worked as it was: the /32 to the victim beats the customer's /25, and its next hop 192.0.2.1
+        resolves to Null0. The source half did not: source-based RTBH relies on loose uRPF failing for a source whose route
+        points to the discard interface, but IOS XR's uRPF does not follow a recursive route to Null0 (TAC 116386; IOS
+        does), so the attacker's packets passed. `set next-hop discard` in XR01's inbound policy points the route straight
+        at Null0 (`(discarded)` in `show bgp`, `null0 adjacency` in CEF), and loose uRPF then drops the attacker. It keys
+        on the community, so a new address tagged on RR1 is handled without touching XR01. PE2 still resolves 192.0.2.1
+        itself, which is why the trigger keeps rewriting the next hop. The trigger also forgot `no-export`: XR01 passed
+        the tagged /32 routes to INET with its permissive outbound policy. With `no-export`, they stay inside AS 65000
+        (RFC 7999 asks for NO_EXPORT or NO_ADVERTISE on blackhole routes). Dropping the community in XR01's policy towards
+        INET also works.
+      ja: |
+        On XR01:
+        configure
+         community-set RTBH
+           65000:666
+         end-set
+         !
+         route-policy FROM-RR
+           if community matches-any RTBH then
+             set next-hop discard
+           endif
+           pass
+         end-policy
+         !
+         router bgp 65000
+          neighbor 10.255.0.52
+           address-family ipv4 unicast
+            route-policy FROM-RR in
+         commit
+        end
+        On RR1:
+        configure
+         route-policy RTBH-TRIGGER
+           if tag eq 666 then
+             set next-hop 192.0.2.1
+             set community (65000:666, no-export)
+             pass
+           else
+             drop
+           endif
+         end-policy
+         commit
+        end
+        宛先の方は、そのままで効いていました。攻撃を受けた宛先の /32 は顧客の /25 より優先され、そのネクスト ホップ 192.0.2.1 は
+        Null0 に解決されます。送信元の方は効いていませんでした。送信元の RTBH は「ルートが捨て先を向く送信元は緩い uRPF で
+        落ちる」ことに頼りますが、IOS XR の uRPF は Null0 への再帰的なルートをたどりません(TAC 116386。IOS はたどる)。そのため、
+        攻撃元のパケットが通っていました。XR01 の入力のポリシーで `set next-hop discard` にすると、ルートが直接 Null0 を向き
+        (`show bgp` に `(discarded)`、CEF に `null0 adjacency`)、緩い uRPF が攻撃元を落とします。印で判断するので、RR1 に
+        新しいアドレスを登録しても、XR01 は変えずに済みます。PE2 は引き続き自分で 192.0.2.1 を解決するので、起点はネクスト
+        ホップの書き換えを続けます。起点は `no-export` も忘れていました。XR01 は、何でも通す出力のポリシーで、印の付いた /32 を
+        INET へ渡していました。`no-export` を付ければ AS 65000 の中に留まります(RFC 7999 は、ブラックホールのルートに NO_EXPORT か
+        NO_ADVERTISE を付けるよう求めています)。XR01 の INET への出力のポリシーで印の付いたルートを落としても構いません。
