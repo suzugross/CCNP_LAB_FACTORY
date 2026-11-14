@@ -1,0 +1,31 @@
+# M13-5: NetFlow/IPFIX(PE2 → SRV01 の nfcapd・4739)。CE1 の Lo100 から XR01 の Lo0 へ乱数の大きさで 37 発 → nfdump でその大きさのフローのパケット数(最大 100 秒待つ)。
+# 機器側= 輸出は IPFIX・宛先 10.0.50.10:4739・送信元 Loopback0/モニタは Gi2 の入力・active 60 秒以下/レコードの項目(テンプレート)。白紙= 0 点(フローは 100 秒待って 0)。
+problem: XRT-15
+total_points: 100
+checks:
+  - name: 'M13-5 SRV01: the traffic that customer A sends in on PE2 arrives at the collector as an IPFIX flow record with the right packet count'
+    node: PE2
+    exec: local
+    command: .venv/bin/python topologies/nms_probe.py XRT-15 flow CE1 Loopback100 10.255.0.1 SRV01 /var/cache/nfdump/lab --count 37 --wait 100
+    raw:
+      - { regex: '== FLOW PACKETS (?:3[7-9]|[4-9]\d|\d{3,})\b' }
+    points: 60
+  - name: 'M13-5 PE2: IPFIX from Loopback0 to 10.0.50.10 port 4739, on GigabitEthernet2 input, active flows reported within 60 seconds, with the required fields'
+    node: PE2
+    exec: local
+    command: >-
+      .venv/bin/python topologies/login_probe.py XRT-15 ssh PE2 --
+      'show flow exporter' 'show flow monitor' 'show flow interface GigabitEthernet2' 'show flow exporter templates'
+    raw:
+      - { regex: 'Export protocol:\s+IPFIX \(Version 10\)[\s\S]*?Destination IP address:\s+10\.0\.50\.10[\s\S]*?Source Interface:\s+Loopback0[\s\S]*?Destination Port:\s+4739' }
+      - { regex: 'Active Timeout:\s+(?:[1-9]|[1-5]\d|60) secs' }
+      - { regex: 'Interface GigabitEthernet2\s*\n\s+FNF:\s+monitor:\s+\S+\s*\n\s+direction:\s+Input' }
+      - { regex: '\| ipv4 source address ' }
+      - { regex: '\| ipv4 destination address ' }
+      - { regex: '\| ip protocol ' }
+      - { regex: '\| transport source-port ' }
+      - { regex: '\| transport destination-port ' }
+      - { regex: '\| interface input snmp ' }
+      - { regex: '\| counter bytes' }
+      - { regex: '\| counter packets' }
+    points: 40

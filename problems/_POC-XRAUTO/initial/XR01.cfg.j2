@@ -1,0 +1,36 @@
+!! _POC-XRAUTO XR01(XRv9000 26.1.1)。IS-IS(L2)まで据付。自動化・アシュアランスの設定は PoC の段で足す。
+interface Loopback0
+ ipv4 address 10.255.0.1 255.255.255.255
+!
+interface {{ links[3] }}
+ description to RT01
+ ipv4 address 10.0.11.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description to SRV01 (collector 10.0.50.10)
+ ipv4 address 10.0.50.1 255.255.255.0
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[4] }}
+  passive
+  address-family ipv4 unicast
+  !
+ !
+!

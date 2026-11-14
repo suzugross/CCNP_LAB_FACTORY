@@ -1,0 +1,33 @@
+! XRT-15 PE2(Catalyst 8000V 17.15.1a)= PE。学ぶ側が設定する(M13-2 RESTCONF・M13-5 NetFlow/IPFIX)。
+interface Loopback0
+ ip address 10.255.0.2 255.255.255.255
+ ip router isis CORE
+!
+interface {{ links[0] }}
+ description CORE to XR01
+ ip address 10.0.12.2 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ no shutdown
+!
+interface {{ links[1] }}
+ description to CE1 (customer A access)
+ ip address 172.16.1.254 255.255.255.0
+ no shutdown
+!
+interface {{ links[2] }}
+ description NMS segment (SRV01 10.0.50.10)
+ ip address 10.0.50.2 255.255.255.0
+ ip router isis CORE
+ no shutdown
+!
+ip route 192.168.100.0 255.255.255.0 172.16.1.1
+!
+router isis CORE
+ net 49.0001.0100.0000.0002.00
+ is-type level-2-only
+ metric-style wide
+ passive-interface Loopback0
+ passive-interface {{ links[2] }}
+ redistribute static ip
+!

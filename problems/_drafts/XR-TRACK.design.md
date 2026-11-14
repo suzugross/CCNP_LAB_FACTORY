@@ -2488,3 +2488,223 @@ CUST1 ─┘ │              └─ CUST2       グローバル(インターネ
   図= RR1 の登録 → 経路(NH 192.0.2.1・印)→ XR01 で discard → 攻撃元のパケット → 入口で送信元を引く(緩い uRPF)で捨てる。別の場合= ほかの送信元(203.0.113.1 は通る)・
   uRPF なし(宛先で転送されて届く)・discard なし(再帰を XR の uRPF がたどらず届く= 表の 1 行目)。値は PoC と M12-5 の採点(203.0.113.66/.1 → 198.51.100.129)と同じ。
   uRPF は入口で転送より先に効くので、図は「宛先で引く」を並べず、宛先だけなら届くことは「uRPF なし」の別の場合に置いた。2.5 節のまとめに分担の 1 文。
+
+## 30. M13 自動化とアシュアランス(SPCOR 5.0)(2026-11-10 着手・PoC 中)
+
+- きっかけ: ユーザが XRT-14(M12)を全課題通過(2026-11-10)→ XRT-14 撤収 → 1 周目の最後の単元 M13 へ(ユーザ了承「進めてください」)。
+- **範囲= SPCOR 5.0(配点 15%)**。ラボ= **5.7 gRPC/gNMI(ダイヤルイン/アウト・TCP・TLS・mTLS の証明書)・5.8 NetFlow/IPFIX・5.9 NETCONF/RESTCONF・
+  5.10 SNMP v2c/v3**。読み物と知識問= 5.1 プログラマブルな API・5.2 REST API で設定する外部スクリプトの読解・5.3 NSO・5.4 YANG・5.5 Ansible/Terraform・
+  5.6 セキュア ZTP(BL-264 の照合表をこの単元の読み物を書きながら作る)。
+- 既にある資産(IOS 系・単元は別)= NETAUTO-03(RESTCONF・Cat8000V)・gen_fnf_ts(Flexible NetFlow の TS)・gen_snmpv3_ts(Zabbix の SNMPv3 TS)・
+  Ansible 道場。M13 は XR の側から組み直す(IOS 系の資産は付録の対比か、旧教材の載せ替え BL-259 で)。
+- 書き方は最初から CLAUDE.md §6 の規定どおり: 見取り図のページ(d00 の型= 部品の関係とデータの流れ)・何が嬉しいか → 仕組み → XR の設定・機能ごとの `:::config`・
+  入り組んだ設定に `:::walk`(テレメトリの sensor-group → destination-group → subscription はちょうど当てはまる)・確かめ方の例(BL-266)・用語集・実測の出どころは末尾の出典へ。
+- 解く場所: ワークスペースのコンソールで Linux の収集役(SRV01)に入り、そこから gnmic・NETCONF のクライアント・snmpwalk などを使う(XRT-02 の SRV01 と同じ形)。
+  ワークスペースにホストのシェルが無い件(BL-259)を、盤面の中の Linux で受ける。
+
+### 30.1 PoC の盤面(`problems/_POC-XRAUTO`・手順 `poc/xr/auto_poc.sh`・記録 `poc/xr/expAUTO-*.log`)
+
+```
+          XR01(XRv9000 26.1.1)
+         /  Gi0/0/0/0     Gi0/0/0/1 \
+ RT01(IOL)                         SRV01(Ubuntu 24.04・収集役)
+         \  Gi0/0/0/0     Gi0/0/0/1 /
+          XR02(XRd 26.1.1)
+```
+- アドレス= Lo0 XR01 10.255.0.1・XR02 10.255.0.2・RT01 10.255.0.11/XR01–RT01 10.0.11.0/24・XR02–RT01 10.0.21.0/24(XR が .1)/
+  XR01–SRV01 10.0.50.0/24・XR02–SRV01 10.0.60.0/24(XR が .1・SRV01 が .10)/RT01 Lo100 198.51.100.1/24(試験のトラフィックの発信元)。IGP= IS-IS L2。
+- SRV01 の道具(cloud-init で導入・起動はしない)= gnmic 0.49.1・telegraf 1.32.3(cisco_telemetry_mdt= Cisco のダイヤルアウトの受け手・TCP と gRPC)・
+  nfdump(nfcapd= v9/IPFIX の受け手)・snmp/snmptrapd・python3-ncclient・openssl・tcpdump・jq。
+- XR01 と XR02 で同じ手順を流して、M13 のラボを XRd で組めるか(XRv9000 は同時 2 台が上限・起動 8 分)を決める。NetFlow は転送の処理が要るので XRv9000 の見込み。
+
+### 30.2 PoC で確かめること
+
+1. **NETCONF**: 最小の設定(`netconf-yang agent ssh`・`ssh server netconf`)・ポート 830・hello の能力(モデルの一覧= ネイティブ/UM/OpenConfig)・
+   get-config(running)・edit-config → candidate → commit(XR は candidate を持つか・confirmed-commit)・`show netconf-yang clients/statistics`・
+   NETCONF で入れた設定が CLI のコミット履歴にどう残るか(M1 のロールバックとつながる)。
+2. **RESTCONF**: XR で使えるか(見込み= 使えない)。使えなければ RESTCONF は Cat8000V で受けるか、読み物と紙面で受けるかをユーザ判断に回す。
+3. **gRPC と gNMI のダイヤルイン**: `grpc` の有効化(ポート・no-tls・TLS・tls-mutual・アドレスファミリ・VRF)の今の構文・自己署名の証明書(ems.pem)の取り出し方・
+   gnmic の capabilities/get/set/subscribe(STREAM の SAMPLE・ON_CHANGE・ONCE/POLL)・パスの書き方(OpenConfig とネイティブ)・mTLS の手順(SRV01 で CA を作る → XR に何を置くか)。
+4. **テレメトリのダイヤルアウト**: sensor-group・destination-group・subscription の 3 つの塊・エンコード(self-describing-gpb・gpb・json)・
+   プロトコル(tcp・grpc no-tls・grpc tls)・source-interface・受け手(telegraf)で値が読めるか・`show telemetry model-driven …` の状態の読み方・
+   受け手が止まった時・名前を取り違えた時の表示(TS の材料)。TLS の CA をどこに置くか。
+5. **NetFlow/IPFIX**: exporter-map・monitor-map・sampler-map の 3 つの塊と IF への付け方・v9 と IPFIX・サンプラは必須か・
+   `show flow monitor … cache`・`show flow exporter …`・nfcapd で受けて nfdump で読めるか・テンプレートの間隔。XRv9000 と XRd の可否。
+6. **SNMP**: v2c(コミュニティ+ACL+view)・v3(グループ・ユーザ・auth/priv・engine ID)・トラップ/インフォーム(v3)・`ifindex persist`・
+   snmpwalk/snmpget で読めるか・XR の書き方の違い(SystemOwner など)。
+7. 共通: 管理 VRF での受け付け(NETCONF/gRPC/SNMP を Mgmt の VRF で受ける形)・LPTS/MPP(M2)との関係・採点に使える show と、SRV01 の側の観測(受けた数)。
+
+### 30.3 単元の形(案・PoC の後に確定)
+
+- 読み物 章 "E0"(`e00`〜): 見取り図(管理の 3 つの道= 設定する道〔CLI・NETCONF・gNMI Set〕/ 見る道〔SNMP の poll・gNMI の Subscribe・ダイヤルアウト〕/ 流れを数える道〔NetFlow/IPFIX〕・
+  モデル〔YANG〕と運ぶもの〔NETCONF/RESTCONF/gNMI〕の区別)→ NETCONF と YANG → gRPC/gNMI とテレメトリ(TLS・mTLS)→ NetFlow/IPFIX → SNMP → 付録(NSO・Ansible/Terraform・
+  セキュア ZTP・REST スクリプトの読み方)。
+- ラボ `XRT-15`(予定): XR01 1 台(XRd で足りるなら XRd)+ SRV01 + IOL。課題は 5 本前後= NETCONF で設定と取得・gNMI のダイヤルイン(TLS)・ダイヤルアウト(+ mTLS)・NetFlow・SNMP v3。
+  採点= 機器の show と SRV01 の側の観測(受けた数・値)。
+
+### 30.4 PoC の結果(2026-11-10・XRv9000 26.1.1 と XRd 26.1.1 に同じ手順。手順 `poc/xr/auto_poc.sh`・記録 `poc/xr/expAUTO-*.log`・道具 `poc/xr/lxsh.py`(Linux へ SSH)・`poc/xr/nc_probe.py`(ncclient))
+
+**XRv9000 と XRd の差は無かった**(NETCONF・gNMI・テレメトリ・SNMP の設定・表示・エラー文まで一致。NetFlow はどちらも無い)→ M13 の XR は **XRd** で足りる。
+
+| 論点 | 結果 | 記録 |
+|---|---|---|
+| NETCONF | `ssh server netconf vrf default`+`netconf-yang agent ssh` で 830 番が開く。hello の能力= base:1.1・candidate・confirmed-commit:1.1・rollback-on-error・validate:1.1・notification・interleave(XRv9000 1093 個/XRd 857 個のモデル。UM 257/220・OpenConfig 53/54)。UM のモデル(`Cisco-IOS-XR-um-interface-cfg`)で get-config・edit-config(candidate)→ commit が通る。コミット履歴に **Line= netconf・Client= YANG Frame** で 1 行残る(M1 のロールバックとつながる)。OpenConfig の get(state)も通る | expAUTO-nc |
+| confirmed-commit | NETCONF で confirmed-commit を出してセッションを閉じると、**4 秒後に XR が自動で取り消し**(履歴に Line= rollback・Client= Rollback)= RFC 6241 どおり(persist なしはセッション終了で取り消し)。その間は CLI のコミットが「Another configuration session had a lock」で失敗(試行のセッションが running を握る) | expAUTO-ncconf・expAUTO-gi の XR01 |
+| RESTCONF | **XRv9000・XRd・IOL とも `restconf` のコマンドが無い**(Invalid input)。hello に `ietf-restconf` のモデルは載るが、サーバの設定は無い。この環境で動くのは Cat8000V だけ(NETAUTO-03 で確認済み) | expAUTO-iolrc |
+| gRPC(サーバ) | 従来の書式 `grpc` / `port 57400` / `no-tls` / `address-family ipv4` が 26.1.1 で通る。`show grpc` で TLS・TLS mutual・Certificate common name(ems.cisco.com)・Listen addresses。`show grpc status` は無い。gRPC を有効にした時点で `/misc/config/grpc/` に ems.pem・ems.key・ca.cert(自己署名・CN と SAN= ems.cisco.com・20 年)ができる | expAUTO-gi |
+| gNMI のダイヤルイン | capabilities の encodings は **JSON_IETF だけ**(gnmic の既定 JSON は Get で「unsupported get-request encoding: JSON」→ `-e json_ietf`)。OpenConfig のパスの Get・Subscribe(ONCE・STREAM の SAMPLE 10 秒・ON_CHANGE)が通る。ネイティブの `Cisco-IOS-XR-infra-statsd-oper:infra-statistics/…/latest/generic-counters` は Get が NotFound・購読は無言(26.1.1 で使えないパス)。Set は UM のパスで通る(履歴に Line= ems・Client= YANG Frame)。OpenConfig の Set は config/name・type が要る(エラー文が機種で違う: XRv9000「Leaf 'name' inside the 'config' container must also be set」/XRd「Leaf 'type' is mandatory」) | expAUTO-gi・gi2・gset |
+| TLS(ダイヤルイン) | `no no-tls` で TLS。TLS の相手に平文で行くと「error reading server preface: EOF」。ems.pem を CA に渡しても宛先が IP だと検証で落ちる→ `--tls-server-name ems.cisco.com` で通る(または `--skip-verify`)。ems.pem は `openssl s_client` で取り出せる | expAUTO-tlsin |
+| mTLS(ダイヤルイン) | `tls-mutual` で、証明書なし→「tls: certificate required」・自前の CA の証明書→「tls: bad certificate」。**XR が信頼する CA は `/misc/config/grpc/ca.cert`**: 自前の CA に差し替えて `process restart emsd` で通る(差し替えだけでは効かない)。`no-tls` で再起動しようとすると「Remove grpc tls mutual first!」で拒否。他の CA の自己署名は bad certificate のまま。emsd の再起動でダイヤルアウトは止まらない | expAUTO-mtls・mtls2 |
+| ダイヤルアウト | destination-group・sensor-group・subscription の 3 つ。`protocol tcp`・`protocol grpc no-tls`・`protocol grpc tls-hostname collector.lab` が両機種で telegraf(cisco_telemetry_mdt)に届く(10 秒ごと・source-interface Loopback0 で XR の名前がタグに出る)。TLS の CA は `/misc/config/grpc/dialout/dialout.pem`(`copy http://… harddisk:` → `run cp` で置ける。`copy` で直接 /misc/config に置くと「path outside filesystem」)。**受け手が無いと State: NA、つながると ACTIVE**。使えないパスは sensor-group が「Not Resolved / Invalid sensor path」・購読の Sensor groups の State が Partial。**受け手がクライアント証明書を求める形(ダイヤルアウトの mTLS)は NA のまま**(XR はダイヤルアウトでクライアント証明書を出さない) | expAUTO-go・go2・tlsout・copy |
+| NetFlow/IPFIX | **XRv9000 26.1.1・XRd 26.1.1 とも `flow exporter-map`・`sampler-map` が無い**(`flow` は FlowSpec)。XRd は `xr-netflow-stubs` だけ・XRv9000 はブート イメージ 1 つ(`xrv9k-xr-26.1.1`)。IOL の Flexible NetFlow(record・exporter・monitor)で **IPFIX(版 10)を nfcapd が受け、nfdump でフローが読める**(30 発/20 発)。IOL の monitor に `cache timeout` が無い(既定= active 1800 秒・inactive 15 秒)。sys-uptime の時刻は nfdump で 1970 年になる(絶対時刻は無い) | expAUTO-nf・nfpkg・nfios・nfios2 |
+| SNMP | 両機種で v2c(community+ACL)・v3(authPriv・SHA・AES 128)・`ifindex persist`。running-config で v3 のパスワードは encrypted に変わる。**ACL で外すと v2c は無応答・XR の `show snmp` は「Unknown community name」で数える**。v3 は ACL の影響なし・パスワード違いは「Authentication failure」。**v3 のトラップはグループに notify のビューが無いと出ない**(Trap PDUs 0)→ `notify VIEW-ALL` で linkDown/linkUp が届く。受け手(snmptrapd)は送り手の engineID 付きでユーザを作る(`createUser -e 0x<engineID>`)。ループバックの shutdown ではトラップが出ない。MPP の設定なしで帯域内の IF の SNMP に応答(LPTS の結び付けが default VRF の any) | expAUTO-sn・sn2〜sn5 |
+
+- 収集役の作り(盤面の SRV01 にそのまま使える): gnmic 0.49.1・telegraf 1.32.3・nfdump 1.7.3・snmp/snmptrapd 5.9.4・python3-ncclient を cloud-init で導入。
+  ★Ubuntu の snmptrapd は systemd のソケット(snmptrapd.socket)が 162 番を握る→ 止めてから自前で起動。★nfcapd を止めた直後に起動すると「Address already in use」。
+
+### 30.5 公式文書での裏どり(2026-11-10・サブエージェント。cisco.com の 24.x〜26.3 の累積版と RFC。xrdocs.io・問題集サイトは使っていない)
+
+- 使った文書: Programmability CG(Cisco 8000 累積版 2026-06・ASR 9000 26.x)・Programmability CR(Cisco 8000)・System Management CG の NETCONF の章(ASR 9000 26.x)と SNMP の章
+  (NCS 5500 26.x・Cisco 8000 累積版)・Telemetry CG(Cisco 8000 累積版 2026-09・NCS 5500 26.x)・NetFlow CG(ASR 9000 26.x・Cisco 8000)・XRv 9000 の設置ガイドとリリース ノート 26.1.1・
+  XRd のデータシートとリリース ノート(26.1.1・7.7.1・7.8.1)・Cisco の YANG の公開集(github.com/YangModels の vendor/cisco/xr/2611 の capability ファイル)。調べた文書のテキストは作業用の一時領域にだけ置いた。
+- **公式と実機が合ったもの**: NETCONF の最小の設定と hello の能力・`show netconf-yang clients/statistics`/gRPC の `port`(57344〜57999・既定 57400)・`no-tls`・`tls-mutual`・自己署名の ems.pem(CN ems.cisco.com)の置き場/
+  ダイヤルアウトの 3 つの塊と `protocol tcp | grpc no-tls | grpc tls-hostname`・CA の置き場 `/misc/config/grpc/dialout/`・State の Active/NA/SNMPv3 の書式(`auth sha clear … priv aes 128 clear …`)・`ifindex persist`。
+- **公式に書かれていなかったこと(実機で決めた)**: XR に RESTCONF が無いこと(文書は「YANG の運び手は NETCONF と gRPC」とだけ書く。8000 のガイドに 1 か所だけ「NETCONF or RESTCONF」の誤記らしい文)/
+  XRv9000・XRd に NetFlow が無いこと(どの文書にも可否の記述なし。XRd 7.7.1 のリリース ノートの機能一覧に NetFlow が無い)/mTLS で XR がクライアントを検証する CA の置き場(ca.cert)と、差し替えに emsd の再起動が要ること/
+  ダイヤルアウトでクライアント証明書を出さないこと/v3 のトラップに notify のビューが要ること(書式に notify はあるが、無いと出ないとは書いていない)。
+- **公式と実機が食い違ったもの**: SNMP は「既定で管理 IF だけ・帯域内は MPP で」(NCS 5500 26.x)とあるが、26.1.1 の XRv9000・XRd は MPP の設定なしで帯域内に応答した(版差か機種差。**出題の正誤には使わない**・読み物は「MPP で受ける IF を絞る」の書き方に留める)。
+- **版で変わる事柄(出題の正誤に使わない)**: 25.4.1 から SNMPv3 の DES/3DES 不可(AES にする)・gRPC の名前付きサーバと SSL プロファイル(Cisco 8000 の文書だけ・25.4.1)・
+  26.3.1 の `secure-v3` と v1/v2c の非推奨の警告・TLS 1.0/1.1 の非推奨・gNMI のサブモード(`grpc gnmi port 9339`・24.1.1)。
+- 文書の誤記(引用するときの注意): Telemetry CG(Cisco 8000)の手順に `address family ipv4`(ハイフンなし)・Programmability CG に「Release 2.4.4.1」・System Management CG(ASR 9000)の例に `netconf agent ssh`(正しくは `netconf-yang agent ssh`)・
+  gNMI の Subscribe の導入版が表で 24.2.1(テレメトリのガイドと食い違い)。
+- 実装時に追加で裏どりするもの: IOS XE の Flexible NetFlow と RESTCONF(Cat8000V 17.15 の設定ガイド)・RFC 6241/6242(NETCONF)・8040(RESTCONF)・7011(IPFIX)・3414/3826(SNMPv3 の USM と AES)・gNMI の仕様(openconfig)。
+
+### 30.6 ユーザ判断待ち(2026-11-10)
+
+1. **NetFlow と RESTCONF の置き場**: XR では両方とも扱えない。案 A(推奨)= 盤面に **Cat8000V を 1 台**足し、NetFlow/IPFIX と RESTCONF をそこで(XR01 は XRd なので重さは XRT-12 より軽い)。
+   案 B= IOL で NetFlow だけ(RESTCONF は読み物と紙面)。
+2. **課題の数と形**(案 A の場合 6 本): ① NETCONF で XR を設定し、履歴で確かめる ② RESTCONF(Cat8000V)・外部スクリプトの読解(5.2= 渡した Python のスクリプトが動くように機器側を整える)
+   ③ gNMI のダイヤルイン(TLS → mTLS。CA の差し替え)④ テレメトリのダイヤルアウト(TCP と TLS。受け手は渡す)⑤ NetFlow/IPFIX(Cat8000V → nfcapd)⑥ SNMPv3 とトラップ(engineID・notify)。
+   うち 1〜2 本は「前任者の設定が届かない」TS にする(候補= 使えないセンサー パス・notify のビューなし・tls-hostname の取り違え・受け手のポート違い)。
+3. **解く場所**: ワークスペースのコンソールで SRV01(Ubuntu)に入る。道具は入れて渡し、使い方は見せない(調べる)。NETCONF/RESTCONF のスクリプトは白紙から書くか、穴あき(足場)を渡すか。
+
+### 30.7 ユーザ判断(2026-11-10 決定= 3 つとも推奨案)
+
+1. NetFlow/IPFIX と RESTCONF は **Cat8000V を 1 台足して**そこで扱う。XR は XRd。
+2. SRV01 の道具は入れて渡すだけ(gnmic・curl・snmpget・nfdump などの使い方は自分で調べる)。**NETCONF だけ ncclient の短い雛形**を渡す。
+3. 6 本のうち **2 本を TS**(前任者の設定が届かない)にする。
+
+### 30.8 ラボ `XRT-15` の盤面と課題(案・Cat8000V の PoC で確定)
+
+```
+ CE1(IOL)── PE2(Cat8000V)══ XR01(XRd)        ══ = コア(IS-IS L2)
+                 │               │
+                 └──── SW1 ──────┴── SRV01(Ubuntu・NMS)   SW1 = NMS の区画 10.0.50.0/24(非管理スイッチ)
+```
+- **NMS の区画を共用セグメント(SW1)にする**: SRV01 から XR01・PE2 へは同じ L2 で直に届く(XRd を通り抜ける TCP/UDP を作らない= §14.1)。
+  XR01 10.0.50.1・PE2 10.0.50.2・SRV01 10.0.50.10。IS-IS では passive。SRV01 は各機器の Lo0 へ区画の上の相手を次ホップにする。
+- コア XR01 Gi0/0/0/0 ─ PE2 Gi1(10.0.12.0/24)・お客さま PE2 Gi2 ─ CE1 Et0/0(172.16.1.0/24)・CE1 Lo100(試験のトラフィックの発信元)。
+  トラップの試験用に XR01 Gi0/0/0/2 ─ CE1 Et0/1(予備の線)。
+- 課題(案): M13-1 NETCONF(XR01・雛形の ncclient で candidate → commit。採点= 設定+コミット履歴の Line= netconf)/
+  M13-2 RESTCONF(PE2・渡した Python のスクリプトが動くように機器側を整える= 5.2 の読解。採点= スクリプトが入れる設定と restconf の有効化)/
+  M13-3 gNMI のダイヤルイン(XR01・TLS → mTLS。CA の差し替え。採点= SRV01 から証明書ありで通る・なしと平文で落ちる)/
+  **M13-4 テレメトリの TS**(XR01・前任者のダイヤルアウトが telegraf に届かない。故障= 使えないセンサー パス・tls-hostname の取り違え・CA の置き忘れ)/
+  M13-5 NetFlow/IPFIX(PE2 → SRV01 の nfcapd。採点= CE1 から流した数のフローが nfdump に出る)/
+  **M13-6 SNMP の TS**(XR01・v3 のトラップが届かない。故障= グループに notify のビューなし ほか。採点= 予備の線を落として linkDown/linkUp が snmptrapd に届く)。
+
+### 30.9 Cat8000V と TS の故障の PoC(2026-11-10・XRT-15 の盤面そのもの。記録 `poc/xr/expXRT15-*.log`)
+
+- **RESTCONF(8000V 17.15.1a)**: 白紙ではスクリプトが「接続できない」。`username nms-api privilege 15 secret …`+`ip http secure-server`+`restconf` で
+  GET 200・PATCH 204(有効にしてから約 1 分は答えない= NETAUTO-03 と同じ)。`ip http authentication local` は無くても通る。**権限 1 のユーザは 403 access denied**
+  (権限 15 が要る)。平文の HTTP は `no ip http server` のまま閉じている(curl は 000)。`show platform software yang-management process` で nginx・confd が Running。
+- **IPFIX(8000V)**: record・exporter(`export-protocol ipfix`・`transport udp 4739`・`source Loopback0`)・monitor(`cache timeout active 60`。範囲 1〜604800)・
+  `ip flow monitor … input`。nfcapd が受け、nfdump に 37 発が 1 フロー(絶対時刻つき)で出るまで 50 秒。白紙は 0。テンプレートは `show flow exporter <名前> templates`。
+- **NETCONF の雛形**: 埋めた形(UM の interface-cfg と if-ip-address-cfg の名前空間・candidate・commit)で Loopback100 が入り、`nms_probe.py xr-commit` が line=netconf を特定。
+- **gNMI の mTLS(XRd)**: 採点の道具で 平文 FAIL・証明書なし FAIL・NMS の CA のクライアント証明書 OK(§30.4 と同じ手順= ca.cert の差し替え+emsd の再起動)。
+- **テレメトリの TS**: 故障 3 つ(センサー パス・tls-hostname・dialout.pem)は**どれも単独で効く**。パスを直すと Sensor Path State が Resolved になるが宛先は NA のまま→
+  CA を置いても名前違いで NA(理由は `show grpc trace ems` に「authentication handshake failed」とサーバ名)→ 名前を直すと 30 秒以内に Active。
+  名前違いの間は**購読の State は ACTIVE・宛先の State が NA**(購読の欄だけ見ると見落とす)。`protocol grpc`(tls-hostname なし)でも通る(証明書の SAN に IP 10.0.50.10)。
+  CA を外しても既存の接続は続く→ 受け手の再起動で張り直させると NA・CA を戻すと 1 分以内に XR が自分で張り直して Active。telegraf は 10 秒ごとに 2 行(17 項目の数の行と carrier_transitions の行)。
+- **SNMP の TS**: ACL の相手違い→ v2c は無応答・`show snmp` の Unknown community name が増える。グループに notify なし→ Trap PDUs 0。
+  ★**ホストの行の auth → priv は、上書き(no を付けずに priv を入れる)でも、同じコミットで no auth+priv でも、running-config は priv になるのに `show snmp host` は「v3 auth」のまま**で
+  トラップが出ない(XRd 26.1.1)。**消してコミット → 入れてコミット**でだけ動作が変わる。文書に記述なし・版固有の癖とみなし、**出題の故障に使わない**(当初案の 3 つ目の故障から外した)。
+  読み物では落とし穴として「`show snmp host` と running-config を見比べる」を書き、やり直し(xr_reset_exec)ではホストを消して入れ直す。ユーザに報告する。
+- engineID の固定 `snmp-server engineID local 00:00:00:09:03:00:00:00:0a:ff:00:01`(初期設定の先頭)→ `show snmp engineid` は 00000009030000000aff0001。受け手は `createUser -e 0x…`。
+- 採点の道具 `topologies/nms_probe.py`(linux・netconf・gnmi・mdt・flow・trap・xr-commit)。課題ごとの確認は解いた盤面で 6 本とも 100 点(`poc/xr/expXRT15-cp-solved.log`)。
+
+### 30.10 公式と実機の食い違い: SNMPv3 の notify のビュー(2026-11-10・ユーザ判断= 注記して故障に使う)
+
+- **公式**: NCS 5500 System Management Command Reference の `snmp-server group` は、`snmp-server host` がユーザ用の notify のビューを自動で作ってグループに足す、
+  手で設定しないよう勧める、と書く(読み物 e4 の書き手が確認)。
+- **実機(XRd 26.1.1・XRv9000 26.1.1)**: notify なしのグループは `show snmp group` の notifyview が空で、トラップは 1 つも出ない(Trap PDUs 0)。
+  host を消してコミット → 入れてコミット、user も消して入れ直す(group → user → host を別々のコミット)のどの順でも自動では作られない。`notify <view>` を書くと出る
+  (`poc/xr/expXRT15-notify.log`・expAUTO-sn*・expXRT15-sn*)。
+- **扱い**: CLAUDE.md の規則(食い違いは勝手に決めず報告・決まるまで出題しない)に従い、**M13-6 の故障から notify のビューを外した**。
+  前任者の設定に `notify NMS-VIEW` を入れておき、代わりの故障= **linkdown のトラップの種類が無い**(linkup だけ・`snmp-server traps snmp linkdown` を足す)。
+  実測= 種類が linkup だけ → linkDown 0・linkUp 1/種類なし → 0・0/両方 → 1・1(`poc/xr/expXRT15-traptype.log`)。読み物 e4 は「この版では notify を書かないと出なかった」と
+  観察として書き、出典(:::note)に両方を記す。ユーザが判断したら、M13-6 に notify の故障を戻すか決める。
+- **ユーザ判断(2026-11-10)= 案 2「注記を前提に故障へ戻す」**。読み物 e4 §2.8 の本文と出典に食い違いの注記があり、機器の出力(`show snmp group` の
+  notifyview が空・Trap PDUs 0)から原因をたどれるため。M13-6 の 2 つ目の故障を **グループに notify のビューなし** に替え、linkdown の種類は前任者の
+  設定に戻した。課題文の症状=「トラップの受け手には何も届かない」。ヒント 2 段目で読み物 2.8 節の注記へ誘導、模範解= `snmp-server group NMS-V3 v3 priv
+  read NMS-VIEW notify NMS-VIEW`。故障の説明はテンプレートの Jinja のコメントへ移した(`!!` のコメントは CML の day0 に残り、キャンバスの設定から読めるため。
+  XR の running-config には残らない)。採点は挙動のまま(linkDown/linkUp が届く)。
+- 同日の E2E で分かったこと(8000V): 使用中のエクスポータの `export-protocol` は変えられない(「Failed to change export protocol: Object is in use」)。
+  インタフェースからモニタを外すだけでは足りず、**モニタからエクスポータを外して**から変える(`poc/xr/expXRT15-e2e-t5.log`)。v9 のまま 4739 へ送ると nfcapd は受ける。
+
+### 30.11 実装の結果(2026-11-10・ラボ XRT-15)
+
+- **ラボ `XRT-15`**(盤面= §30.8・XR01 XRd・PE2 Cat8000V・CE1 IOL・SRV01 Ubuntu の NMS・SW1)。`problems/XRT-15/`= problem.yml(xe_reset_nodes PE2・xr_reset_exec= XR01 の
+  証明書のファイルを消して emsd を再起動・SNMP の host を消して入れ直す)・initial(SRV01.sh.j2= 受け手 3 つ・PKI・雛形)・task.md/task.en.md・learn.yml(課題 6 本・ヒント 3 段・
+  模範解・確かめ方の例)・grading.yml(配点 15/15/20/20/15/15)と課題ごとの grading.m13t1〜6.yml。白紙で稼働中(MGMT .11-.14)・ユーザ未着手。
+- 課題の確定: M13-1 NETCONF(雛形の ncclient・コミット履歴が netconf)/M13-2 RESTCONF(スクリプトは変えない・権限 15・平文の HTTP は閉じたまま)/M13-3 gNMI の相互 TLS/
+  **M13-4 テレメトリの TS**(故障= 使えないセンサー パス・tls-hostname の取り違え・dialout.pem なし)/M13-5 IPFIX/**M13-6 SNMP の TS**(故障= ACL の相手違い・
+  **グループに notify のビューなし**。一度は公式と実機の食い違いのため外して linkdown の種類なしに替えたが、ユーザ判断で注記を前提に戻した= §30.10。
+  「host の auth/priv」は版固有の癖のため外した= §30.9)。
+- **採点の道具 `topologies/nms_probe.py`**: linux(Linux でコマンド)・netconf(hello と candidate)・gnmi(平文/証明書なし/証明書ありの 3 通り)・mdt(telegraf の JSON の直近の行と
+  パケットの数)・flow(乱数の大きさの ping を流して nfdump でそのフローのパケット数)・trap(IF を落として戻し、受け手の新しい行の linkDown/linkUp)・xr-commit(変更を含む最新の
+  コミットの Line/Client)。login_probe の部品(connect・mgmt_ip・Shell)を使う。
+- **実機 E2E**(`poc/xr/e2e_xrt15.sh`・`solve_xrt15.sh`・`nc_fill_xrt15.py`・記録 `poc/xr/expXRT15-e2e-*.log`): 白紙= 6 本とも 0/誤答= m13t1-cli 40・m13t2-priv1 20・m13t3-tls 0・
+  m13t3-nocert 30・m13t4-path 0・m13t4-noca 0・m13t5-v9 0(v9 のまま 4739 なら 60)・m13t6-acl 40/模範解= 6 本とも 100・最終 100/`lab.sh reset` の後= 6 本とも 0。
+  E2E の後に SRV01 の /tmp と受け手のログ・XR01 の harddisk: の写しを片付けた。
+- **2026-11-10 M13-6 の故障を notify のビューなしに替えた後**(§30.10。XRT-15 を撤収して組み直し・記録 `poc/xr/expXRT15-nv-*.log`): day0 に故障の説明なし・
+  `show snmp group` の NMS-V3 の notifyview が空/白紙= 0・ACL だけ= 40・notify だけ(reset の後)= 60・両方= 100/`lab.sh reset` の後= 0(reset のフックで host を
+  入れ直した後でも notify を足すだけで届く)。SRV01 のトラップのログを空にした。読み物を組み直し、Drive も再同期(実践ページの症状の文)。
+- **読み物 章 E0**(日英・サブエージェント 5 人が分担・私が規則の機械点検とビルド): `e00-m13-map`(見取り図= 4 つの仕事・3 層・接続を始める側・TLS で誰が何を示すか・XRT-15 の分担)/
+  `e0-m13-netconf-yang`(walk 2= NETCONF の 1 つの変更・RESTCONF の 1 つの要求)/`e2-m13-gnmi-telemetry`(walk 2= 相互 TLS のダイヤルイン・ダイヤルアウト)/
+  `e4-m13-flow-snmp`(walk 2= FNF・SNMPv3 のトラップ)/`e6-m13-appendix`(API の一覧・YANG の掘り下げ・NSO・Ansible と Terraform・セキュア ZTP・確かめた表・コマンドの対応)。
+  実践ページ e1/e3/e5 は practice.yml から切り出し。book.yml に章 E0・部「自動化とアシュアランス」・labs に XRT-15。ビルドは警告 0・節の目印は learn.yml の read: とすべて一致。
+  Drive への持ち出し(`scripts/course.sh xr sync`)は 2026-11-10 にユーザの了承を得て実施。
+- 書き手の申告で裏が取り切れていない点(本文では断定していない): Terraform は実行していない(属性名は provider 0.7.1 の文書で照合)・Ansible は `state: rendered` で機器なしに実行・
+  セキュア ZTP は試していない・8000V の NETCONF/gNMI/テレメトリ/SNMP は未測定(表は Not tried)・確認つきコミットの自動取り消しは XRv9000 だけで測定。
+  ★`Cisco-IOS-XR-shellutil-oper:system-time/uptime` はセンサー パスとして XRd で Resolved を確認(2026-11-10・`poc/xr/expXRT15-pathcheck.log`)。
+- 用語集 `glossary/automation.yml`(72 語・計 243 語)。照合表 `curriculum/U-M13-automation.sources.md`(108 項目・確定 98)= BL-264 の材料。
+
+### 30.12 やり直しでサーバも戻す・採点を確認の後に届いたものだけで数える(2026-11-14・ユーザ指摘)
+
+- **指摘**: XRT-15 は SRV01 の上でも作業する(M13-1 で雛形 `~/m13/nc_edit.py` をその場で埋める・M13-3/M13-4 で CA を XR01 へ運ぶために
+  SRV01 でファイルを配るプログラムを動かす)のに、`lab.sh reset` は「サーバは課題で変えない約束」で SRV01 を戻していなかった。
+  §30.11 の「reset の後= 0 点」は点数しか見ておらず、サーバに残る物(埋めた雛形・受け手のログ・動かしたままの http.server)を見ていなかった。
+- **仕組み(汎用)**: problem.yml に `linux_reset_exec: {<NODE>: [<シェルのコマンド>, …]}`。`topologies/xr_reset.py` が XR と IOS XE を戻した
+  **後に**管理 IF の SSH(ラボのアカウント・bash -lc)で流す(終了コードが 0 以外なら失敗)。後に流すのは、戻す前の XR が送ったもの
+  (テレメトリ)を残さないため。ワークスペースの確認の文は、戻す機器の名前を problem.yml から組み立てる(iosxr・xe_reset_nodes・
+  linux_reset_exec。それまで「XR01 を戻す」で固定= XRT-12 は XE1〜3 なのに XR01 と出ていた)。
+- **XRT-15 の中身**: 構築の最後(SRV01.sh.j2)にホーム全体と受け手の設定(telegraf.conf・snmptrapd-lab.conf)を `/var/lib/lab-pristine` へ控え、
+  `/usr/local/sbin/lab-reset` を置く。linux_reset_exec= `sudo -n /usr/local/sbin/lab-reset`。中身= ① 学ぶ側の gnmic・python3・ssh と
+  だれのものでも http.server を止める(受け手の 3 つは止めない)② ホームを控えへ rsync --delete(シェルの履歴は残す)・/tmp の学ぶ側の
+  ファイルを消す ③ 受け手を止め、設定を控えへ戻し、mdt.json・トラップのログ・nfcapd のファイルを空にして起動し直す。
+  XR01 は xr_reset_exec に、harddisk: の一番上の PEM の形(先頭が -----BEGIN)のファイルを消す行を足した(運んだ写しの名前は自由なため)。
+  課題文の「進め方の約束」に、最初からやり直すと SRV01 のホーム(雛形を含む)・受け手の記録も戻り、起動したプログラムは止まると書いた。
+- **採点**: M13-4 の SRV01 の確認= `nms_probe.py mdt --fresh 30`(ファイルの大きさを控えて 30 秒待ち、その間に書き足された行だけを読む。
+  それまでは直近 40 秒の行= 確認を押す前に届いた行でも通った)。M13-5= ping の大きさを nfcapd のファイルにまだ無い値から選び、
+  確認を始めた後に書き終わったファイル(`find -newermt @<開始>`・nfcapd は 1 分ごとに閉じる)だけを読む(それまでは全ファイル・大きさの偶然の
+  一致 1/300 で前の確認のフローを数え得た)。M13-6 のトラップは前から「確認の後に増えた行」だけ。
+- **ワークスペースの再起動**: lab_console.py の変更を効かせるため、ポータル(`scripts/pack.sh serve`)ごと切り離して起動し直した
+  (ワークスペースは --with-parent で配信サーバの直接の子であることを確かめるため、単独では起こせない)。
+- **実機 E2E**(`poc/xr/e2e_reset_xrt15.sh`・記録 `poc/xr/expXRT15-reset-e2e.log`): 白紙の最終= 0/模範解+痕跡(雛形の書き換え・ホームと /tmp の
+  ファイル・~/.gnmic.yml・http.server)→ 最終= 100/XR01 の送信だけ止めて直後に M13-4= 0(SRV01 の側も FAIL= 確認の後の窓が効く)/フローの確認=
+  37 発で 37(確認の後に閉じたファイル 1 つ)/reset → SRV01 の [ok]・ホームの m13+pki が控えと一致・http.server なし・/tmp と ~ の痕跡なし・
+  mdt.json 0・nfcapd のファイルは新しい 1 つだけ・XR01 の harddisk: の PEM なし/直後の課題ごとの確認= 6 本とも 0/もう一度 模範解 → 100/
+  reset → 0。snmptrapd のログは起動のたびに MIB が無いという警告を約 40 KB 書く(構築直後も同じ= トラップの行は残らない)。
+- ★**E2E の後は reset でなく組み直す**: XR のコミット履歴は reset(ロールバック)で消えず、E2E の模範解のコミット(NETCONF の 2 件など 27 件)が
+  残っていた= `show configuration commit changes` で答えが読める(M13-1 は履歴を見に行く課題)。2026-11-14 に撤収して組み直し、履歴が空の白紙で
+  渡した(採点は走らせていない= トラップの確認は IF を落とすコミットを作るため)。

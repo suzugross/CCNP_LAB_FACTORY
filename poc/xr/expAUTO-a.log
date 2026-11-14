@@ -1,0 +1,116 @@
+
+######## 13:02:00 a: 版・土台(IS-IS)・到達性・SRV01 の道具
+show version | include Version
+Tue Nov 10 13:02:01.161 UTC
+Cisco IOS XR Software, Version 26.1.1
+ Version      : 26.1.1
+RP/0/RP0/CPU0:XR01#
+show isis adjacency
+Tue Nov 10 13:02:01.568 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    27   00:03:44 Yes None None
+
+Total adjacency count: 1
+RP/0/RP0/CPU0:XR01#
+show route ipv4 | include "^[ILC]"
+Tue Nov 10 13:02:01.981 UTC
+Codes: C - connected, S - static, R - RIP, B - BGP, (>) - Diversion path
+C    10.0.11.0/24 is directly connected, 00:03:45, GigabitEthernet0/0/0/0
+L    10.0.11.1/32 is directly connected, 00:03:45, GigabitEthernet0/0/0/0
+C    10.0.50.0/24 is directly connected, 00:03:45, GigabitEthernet0/0/0/1
+L    10.0.50.1/32 is directly connected, 00:03:45, GigabitEthernet0/0/0/1
+L    10.255.0.1/32 is directly connected, 00:03:44, Loopback0
+RP/0/RP0/CPU0:XR01#
+show version | include Version
+Tue Nov 10 13:02:03.754 UTC
+Cisco IOS XR Software, Version 26.1.1 LNT
+ Version      : 26.1.1
+RP/0/RP0/CPU0:XR02#
+show isis adjacency
+Tue Nov 10 13:02:04.158 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+RT01           Gi0/0/0/0                *PtoP*         Up    29   00:11:52 Yes None None
+
+Total adjacency count: 1
+RP/0/RP0/CPU0:XR02#
+show route ipv4 | include "^[ILC]"
+Tue Nov 10 13:02:04.560 UTC
+Codes: C - connected, S - static, R - RIP, B - BGP, (>) - Diversion path
+C    10.0.21.0/24 is directly connected, 00:11:53, GigabitEthernet0/0/0/0
+L    10.0.21.1/32 is directly connected, 00:11:53, GigabitEthernet0/0/0/0
+C    10.0.60.0/24 is directly connected, 00:11:53, GigabitEthernet0/0/0/1
+L    10.0.60.1/32 is directly connected, 00:11:53, GigabitEthernet0/0/0/1
+L    10.255.0.2/32 is directly connected, 00:11:54, Loopback0
+RP/0/RP0/CPU0:XR02#
+show isis neighbors
+
+Tag CORE:
+System Id       Type Interface     IP Address      State Holdtime Circuit Id
+XR01            L2   Et0/0         10.0.11.1       UP    23       00
+XR02            L2   Et0/1         10.0.21.1       UP    20       00
+RT01#
+ping 10.0.50.10 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.0.50.10, timeout is 2 seconds:
+Packet sent with a source address of 198.51.100.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 2/3/6 ms
+RT01#
+ping 10.0.60.10 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.0.60.10, timeout is 2 seconds:
+Packet sent with a source address of 198.51.100.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+RT01#
+$ cat /var/tmp/ccnp-cloudinit-done
+2026-11-10T12:52:55+00:00
+[rc=0]
+$ tail -5 /var/log/ccnp-init.log
+   date : 2026-10-21T17:17:21Z
+ gitURL : https://github.com/openconfig/gnmic
+   docs : https://gnmic.openconfig.net
+Telegraf 1.32.3 (git: HEAD@2fd5bf4f)
+nfcapd: Version: 1.7.3-release Options: NSEL-NEL Date: Mon Apr 1 09:36:05 2024
+[rc=0]
+$ gnmic version | head -3
+version : 0.49.1
+ commit : 6d15e934
+   date : 2026-10-21T17:17:21Z
+[rc=0]
+$ telegraf --version
+Telegraf 1.32.3 (git: HEAD@2fd5bf4f)
+[rc=0]
+$ nfcapd -V
+nfcapd: Version: 1.7.3-release Options: NSEL-NEL Date: Mon Apr 1 09:36:05 2024
+[rc=0]
+$ ping -c 2 10.255.0.1
+PING 10.255.0.1 (10.255.0.1) 56(84) bytes of data.
+64 bytes from 10.255.0.1: icmp_seq=1 ttl=255 time=1.97 ms
+64 bytes from 10.255.0.1: icmp_seq=2 ttl=255 time=3.46 ms
+
+--- 10.255.0.1 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1002ms
+rtt min/avg/max/mdev = 1.965/2.714/3.463/0.749 ms
+[rc=0]
+$ ping -c 2 10.255.0.2
+PING 10.255.0.2 (10.255.0.2) 56(84) bytes of data.
+64 bytes from 10.255.0.2: icmp_seq=1 ttl=255 time=0.931 ms
+64 bytes from 10.255.0.2: icmp_seq=2 ttl=255 time=0.880 ms
+
+--- 10.255.0.2 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1048ms
+rtt min/avg/max/mdev = 0.880/0.905/0.931/0.025 ms
+[rc=0]
+$ ip -br addr
+lo               UNKNOWN        127.0.0.1/8 ::1/128 
+ens2             UP             10.1.10.14/26 fe80::5054:ff:fe8f:d3d5/64 
+ens3             UP             10.0.50.10/24 fe80::5054:ff:fe4f:9d8d/64 
+ens4             UP             10.0.60.10/24 fe80::5054:ff:fea1:df0d/64 
+[rc=0]

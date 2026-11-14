@@ -91,6 +91,12 @@
 - **新問題の複合ラボ化**: パックに `clab/` (topo+startup-config) を置き problem.yml に
   `clab_topology:`+`clab_nodes:` を書くだけ(採点は exec: junos + parser: json)
 - **接続情報**: group_vars/all/local.yml の `clab_*` / szk-cl01 は鍵認証済 / EVO は admin/admin@123
+- ★**2026-11-14 から管理網へは踏み台で入る**: 制御ホストが Mac(10.1.10.3・Wi-Fi)へ移り、szk-cl01 はホスト機の内蔵 Wi-Fi に
+  VMware のブリッジでつながるため、172.20.20.0/24 への経路は使えない(Wi-Fi ブリッジが宛先 IP で VM に配り、奥のアドレス宛てを捨てる)。
+  コンテナの `~/.ssh/config` の `ProxyJump suzuki@10.1.10.9` と、local.yml の `clab_mgmt_jump`(grade.yml が junos ノードを
+  libssh＋ProxyCommand でつなぐ)で通す。経緯は `CTRL-HOST-MAC.design.md` §4.1 の 4・§5.1 の 6
+- ★**2026-11-14 ユーザ方針= CML と containerlab は基本切り離して運用する**(Cisco 重点の検証は CML、Juniper 中心のマルチベンダは
+  containerlab)。この文書の複合ラボ(br-cml・LAN-IX の ext-conn)は既存問のための仕組みとして残す。単独運用の基盤と FRR・Arista cEOS の取り込みは BL-274
 
 ## 4. 未確認事項(次回確認)
 - ~~制御ホストからのルート追加後の実疎通~~ → 解決済(直達・NETCONF まで実証)

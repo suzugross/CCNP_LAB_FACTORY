@@ -1,0 +1,26 @@
+# POC-CLABFRR-01 の containerlab トポロジ(CML を使わない・BL-274 ②)。
+# jun01= 白紙(mgmt と admin は vrnetlab の init.conf)。eth1 → et-0/0/0。
+# frr1 = kind: frr(containerlab 0.80 から・2026-11-14 に 0.83 で切り替え)。containerlab 向けのイメージで SSH admin/admin → vtysh。
+name: ccnp-clabfrr
+topology:
+  nodes:
+    jun01:
+      kind: juniper_vjunosevolved
+      image: vrnetlab/juniper_vjunosevolved:26.2R1.7-EVO
+      mgmt-ipv4: 172.20.20.11
+    frr1:
+      kind: frr
+      image: quay.io/frrouting/frr:containerlab-10.7.1
+      mgmt-ipv4: 172.20.20.12
+      startup-config: frr1/frr.conf   # containerlab が clab-ccnp-clabfrr/frr1/config/ に写して /etc/frr に渡す
+      daemons: [ospfd]                # 書いたものだけ動く(zebra・staticd・mgmtd・watchfrr は常に動く)
+  links:
+    # ★MTU を 1500 にそろえる。containerlab の veth の既定は 9500 で、Junos の et- は IP の MTU 1500。
+    #   OSPF は DBD で MTU を照合するので、そのままだと両側とも ExStart で止まる(2026-11-14 実測)。
+    - type: veth
+      mtu: 1500
+      endpoints:
+        - node: jun01
+          interface: eth1
+        - node: frr1
+          interface: eth1

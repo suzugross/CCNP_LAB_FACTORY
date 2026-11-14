@@ -1,0 +1,38 @@
+#### m13t5-v9
+== m13t5-v9
+[m13t5]     - '[FAIL] (+ 60 点) M13-5 SRV01: the traffic that customer A sends in on PE2 arrives
+[m13t5]     - '        未充足(raw): {''regex'': ''== FLOW PACKETS (?:3[7-9]|[4-9]\\d|\\d{3,})\\b''}'
+[m13t5]     - '[FAIL] (+ 40 点) M13-5 PE2: IPFIX from Loopback0 to 10.0.50.10 port 4739, on GigabitEthernet2
+[m13t5]     - '        未充足(raw): {''regex'': ''Export protocol:\\s+IPFIX \\(Version 10\\)[\\s\\S]*?Destination
+[m13t5]     - '  合計: 0 / 100 点'
+[m13t5]     msg: ⚠ 1 回試行しても全 PASS に至らず（上の未充足を参照）
+#### m13t5
+== m13t5
+% Flow Exporter: Failed to change export protocol: Object is in use
+[m13t5]     - '[FAIL] (+ 60 点) M13-5 SRV01: the traffic that customer A sends in on PE2 arrives
+[m13t5]     - '        未充足(raw): {''regex'': ''== FLOW PACKETS (?:3[7-9]|[4-9]\\d|\\d{3,})\\b''}'
+[m13t5]     - '[FAIL] (+ 40 点) M13-5 PE2: IPFIX from Loopback0 to 10.0.50.10 port 4739, on GigabitEthernet2
+[m13t5]     - '        未充足(raw): {''regex'': ''Export protocol:\\s+IPFIX \\(Version 10\\)[\\s\\S]*?Destination
+[m13t5]     - '  合計: 0 / 100 点'
+[m13t5]     msg: ⚠ 1 回試行しても全 PASS に至らず（上の未充足を参照）
+#### m13t5 (モニタを外してから直す)
+export-protocol ipfix
+% Flow Exporter: Failed to change export protocol: Object is in use
+show flow exporter FE-NMS | include protocol|Port
+  Export protocol:          NetFlow Version 9
+    Destination Port:       4739
+    Source Port:            53711
+[m13t5]     - '[PASS] (+ 60 点) M13-5 SRV01: the traffic that customer A sends in on PE2 arrives
+[m13t5]     - '[FAIL] (+ 40 点) M13-5 PE2: IPFIX from Loopback0 to 10.0.50.10 port 4739, on GigabitEthernet2
+[m13t5]     - '        未充足(raw): {''regex'': ''Export protocol:\\s+IPFIX \\(Version 10\\)[\\s\\S]*?Destination
+[m13t5]     - '  合計: 60 / 100 点'
+[m13t5]     msg: ⚠ 1 回試行しても全 PASS に至らず（上の未充足を参照）
+#### m13t5 (モニタからエクスポータを外して直す)
+export-protocol ipfix
+show flow exporter FE-NMS | include protocol|Port
+  Export protocol:          IPFIX (Version 10)
+    Destination Port:       4739
+    Source Port:            53711
+[m13t5]     - '[PASS] (+ 60 点) M13-5 SRV01: the traffic that customer A sends in on PE2 arrives
+[m13t5]     - '[PASS] (+ 40 点) M13-5 PE2: IPFIX from Loopback0 to 10.0.50.10 port 4739, on GigabitEthernet2
+[m13t5]     - '  合計: 100 / 100 点'

@@ -11,6 +11,16 @@
                                               素の一覧は /?raw=1
   GET  /_read/<key>/…                      … 教材(読み物)。<repo>/reading/ の静的配信(読み物ビルダーの出力)。
                                               ポータルの教材の区画はここへ飛ぶ。一覧のもとは reading/<key>/book.json。
+  GET  /_stp/                              … STP パズル(BL-268)の画面= games/stp/index.html
+  GET|POST /_api/stp/<名前>                … STP パズルの API(stp_puzzle.api: state/puzzle/result/seen/reset)。
+                                              進み具合は topologies/_state/stp_puzzle.json(git 除外)。
+  GET  /_stp_path/                         … STP 経路づくり(BL-270)の画面= games/stp-path/index.html
+  GET|POST /_api/stp_path/<名前>           … STP 経路づくりの API(stp_path.api: state/puzzle/eval/result/seen/reset)。
+                                              進み具合は topologies/_state/stp_path.json(git 除外)。
+  GET  /_route_path/                       … ルーティング経路づくり(BL-271)の画面= games/route-path/index.html
+  GET|POST /_api/route_path/<名前>         … ルーティング経路づくりの API(route_path.api: state/puzzle/eval/result/seen/reset)。
+                                              進み具合は topologies/_state/route_path.json(git 除外)。
+  GET  /_games/lib/<名前>.js               … ゲームの共通部品(games/_lib/*.js)
   GET  /_learn?id=<問題 ID>                … 学習モードのワークスペース(lab_console.py の /lab?learn=…)へ転送。
                                               ワークスペースが無効・未起動なら案内を返す。
   GET  /_lab?pack=<PACK-ID>&no=<N>         … ラボのワークスペース(lab_console.py・別ポート)へ転送(BL-234)。
@@ -39,6 +49,7 @@
 
 import argparse
 import datetime
+import json
 import os
 import re
 import socket
@@ -50,6 +61,9 @@ from urllib.parse import urlparse, parse_qs, urlencode
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_pack                                        # noqa: E402
 import pack_home                                       # noqa: E402
+import route_path                                      # noqa: E402
+import stp_path                                        # noqa: E402
+import stp_puzzle                                      # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PACK_RE = re.compile(r"^PACK-[A-Za-z0-9_.-]{1,64}$")
@@ -170,6 +184,38 @@ class Handler(SimpleHTTPRequestHandler):
             self.audit("load", parse_qs(urlparse(self.path).query).get(
                 "pack", [""])[0], no)
             return self._json(200, sec)
+        if u.path == "/_stp":
+            self.send_response(302)
+            self.send_header("Location", "/_stp/")
+            self.send_header("Content-Length", "0")
+            return self.end_headers()
+        if u.path == "/_stp/":
+            return self._file(os.path.join(self.repo, "games", "stp", "index.html"), "text/html; charset=utf-8")
+        if u.path.startswith("/_api/stp/"):
+            return self._stp("GET", u)
+        if u.path == "/_stp_path":
+            self.send_response(302)
+            self.send_header("Location", "/_stp_path/")
+            self.send_header("Content-Length", "0")
+            return self.end_headers()
+        if u.path == "/_stp_path/":
+            return self._file(os.path.join(self.repo, "games", "stp-path", "index.html"), "text/html; charset=utf-8")
+        if u.path.startswith("/_api/stp_path/"):
+            return self._stp("GET", u, stp_path, "/_api/stp_path/")
+        if u.path == "/_route_path":
+            self.send_response(302)
+            self.send_header("Location", "/_route_path/")
+            self.send_header("Content-Length", "0")
+            return self.end_headers()
+        if u.path == "/_route_path/":
+            return self._file(os.path.join(self.repo, "games", "route-path", "index.html"), "text/html; charset=utf-8")
+        if u.path.startswith("/_api/route_path/"):
+            return self._stp("GET", u, route_path, "/_api/route_path/")
+        if u.path.startswith("/_games/lib/"):
+            name = u.path[len("/_games/lib/"):]
+            if not re.match(r"^[a-z0-9_-]{1,40}\.js$", name):
+                return self._json(404, "not found")
+            return self._file(os.path.join(self.repo, "games", "_lib", name), "text/javascript; charset=utf-8")
         if u.path == "/_lab":
             return self._lab(parse_qs(u.query))
         if u.path == "/_learn":
@@ -180,6 +226,34 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             return self.end_headers()
         return SimpleHTTPRequestHandler.do_GET(self)
+
+    def _file(self, path, ctype):
+        try:
+            with open(path, "rb") as fh:
+                body = fh.read()
+        except OSError:
+            return self._json(404, "not found")
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _stp(self, method, u, mod=stp_puzzle, prefix="/_api/stp/"):
+        """ゲームの API。中身は stp_puzzle.api / stp_path.api / route_path.api(本文は JSON・16 KB まで)。"""
+        body = b""
+        if method == "POST":
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > 16 * 1024:
+                return self._json(413, "本文が大きすぎます")
+            body = self.rfile.read(n)
+        code, obj = mod.api(method, u.path[len(prefix):], parse_qs(u.query), body)
+        data = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def translate_path(self, path):
         """/_read/… だけ <repo>/reading/ から配信する(それ以外は従来どおり packs/)。
@@ -239,6 +313,12 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         p = urlparse(self.path).path
+        if p.startswith("/_api/stp/"):
+            return self._stp("POST", urlparse(self.path))
+        if p.startswith("/_api/stp_path/"):
+            return self._stp("POST", urlparse(self.path), stp_path, "/_api/stp_path/")
+        if p.startswith("/_api/route_path/"):
+            return self._stp("POST", urlparse(self.path), route_path, "/_api/route_path/")
         if p == "/_api/check":
             return self._check()
         if p != "/_api/sheet":

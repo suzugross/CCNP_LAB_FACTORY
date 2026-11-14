@@ -17,6 +17,33 @@
   tasks:
     - ansible.builtin.include_vars: { file: "{{ problem_dir }}/problem.yml", name: pmeta }
 
+    # ★誤ったラボの採点の防止(containerlab)。CML の labid の照合は IOS の設定に焼いた指紋を見るが、Junos を白紙から
+    #   組ませる問題では指紋を置けない。管理網は全ラボ共通なので、szk-cl01 の docker のラベルで「この問題のラボが動き、
+    #   clab_nodes のアドレスと合う」ことを確かめ、外れたら採点しない(clab_topology を持つ問題すべて=複合ラボも)。
+    - name: containerlab のラボを照合（clab_ops.py verify。外れたら採点を中止）
+      ansible.builtin.command:
+        argv: ["{{ repo }}/.venv/bin/python3", "{{ repo }}/topologies/clab_ops.py", "verify",
+               "--repo", "{{ repo }}", "--problem", "{{ problem }}"]
+      register: clab_verify
+      changed_when: false
+      failed_when: false
+      when: pmeta.clab_topology is defined
+
+    - name: containerlab のラボの照合結果
+      ansible.builtin.assert:
+        that: clab_verify.rc == 0
+        fail_msg: "{{ (clab_verify.stdout_lines | default([])) + (clab_verify.stderr_lines | default([])) }}"
+        success_msg: "{{ clab_verify.stdout | default('') }}"
+      when: pmeta.clab_topology is defined
+
+    # containerlab だけの問題(platform: clab・BL-274)は CML の生成物が無いので、採点の置き場をここで作る(照合が通った後)
+    - name: 採点の置き場 topologies/_generated/<ID>/ を用意（containerlab だけの問題）
+      ansible.builtin.file:
+        path: "{{ repo }}/topologies/_generated/{{ problem }}"
+        state: directory
+        mode: "0755"
+      when: (pmeta.platform | default('cml')) == 'clab'
+
     - name: variant パラメータを読み込む（params/<variant>.yml。無ければ未定義＝従来問題はparams不使用）
       ansible.builtin.include_vars:
         file: "{{ problem_dir }}/params/{{ variant | default('base') }}.yml"
@@ -38,6 +65,12 @@
              ((problem_dir ~ '/grading.yml.j2') is exists | ternary(repo ~ '/topologies/_generated/' ~ problem ~ '/grading.rendered.yml', problem_dir ~ '/grading.yml')) }}
         name: grading
     - ansible.builtin.include_vars: { file: "{{ repo }}/topologies/_generated/{{ problem }}/mgmt_map.yml", name: mgmt_map }
+      when: (pmeta.platform | default('cml')) != 'clab'
+
+    - name: containerlab だけの問題は CML の mgmt_map を持たない（接続先は clab_nodes だけ）
+      ansible.builtin.set_fact:
+        mgmt_map: {}
+      when: (pmeta.platform | default('cml')) == 'clab'
 
     - name: 収集方式を決定（problem.yml の access。既定 ssh / telnet・console=SSH不可ノード）
       ansible.builtin.set_fact:
@@ -75,6 +108,21 @@
                          | selectattr('exec', 'equalto', 'junos')
                          | map(attribute='node') | unique | list }}"
 
+    # BL-274 ②: Arista EOS(cEOS)は junos と同じ network_cli、FRR は SSH を持たないので採点機から
+    #   clab_ops.py exec(szk-cl01 の docker exec で vtysh)で集める(_graded には入れない)。
+    - name: eos・frr 採点ノード(clab)を特定（exec=eos / exec=frr）
+      ansible.builtin.set_fact:
+        eos_nodes: "{{ grading.checks | default([]) | selectattr('exec', 'defined')
+                       | selectattr('exec', 'equalto', 'eos')
+                       | map(attribute='node') | unique | list }}"
+        frr_nodes: "{{ grading.checks | default([]) | selectattr('exec', 'defined')
+                       | selectattr('exec', 'equalto', 'frr')
+                       | map(attribute='node') | unique | list }}"
+
+    - name: clab の採点ノード(IOS として登録しない)
+      ansible.builtin.set_fact:
+        clab_exec_nodes: "{{ junos_nodes + eos_nodes + frr_nodes }}"
+
     # ★採点先の古い SSH ホスト鍵を消す(2026-10-15 実発)。IOL は起動のたびに鍵を作り直すので、ラボを CML の画面から
     #   止めて再開すると known_hosts の鍵と食い違い、paramiko は host_key_checking=False でも「host key mismatch」で
     #   接続を拒む → その回の出力がエラー文になり、チェックが FAIL する。lab_up は起動時に消しているが、
@@ -95,7 +143,7 @@
         labid_exec: "{{ 'shell' if item in shell_nodes else 'ios' }}"
       loop: "{{ (checks | default([]) | map(attribute='node') | list) + rib_nodes | unique | list }}"
       loop_control: { label: "{{ item }} -> {{ hostmap[item] }}" }
-      when: access == 'ssh' and item not in junos_nodes
+      when: access == 'ssh' and item not in clab_exec_nodes
 
     # IOS XR ノード(BL-246): 収集は IOS と同じ ios_command で通るが、特権昇格(enable)は無い。
     #   become したままだと接続直後に `show privilege` を打って失敗し、その回の出力がエラー文になる
@@ -111,22 +159,36 @@
                 | select('in', (checks | default([]) | map(attribute='node') | list) + (rib_nodes | default([]))) | list }}"
       when: access == 'ssh'
 
-    - name: junos ノードを登録（clab 側。vault の IOS 用接続変数をホスト変数で上書き）
+    - name: junos・eos ノードを登録（clab 側。vault の IOS 用接続変数をホスト変数で上書き）
       ansible.builtin.add_host:
         name: "{{ item }}"
         groups: _graded
         ansible_host: "{{ hostmap[item] }}"
-        labid_exec: junos
+        labid_exec: "{{ 'eos' if item in eos_nodes else 'junos' }}"
         ansible_connection: ansible.netcommon.network_cli
-        ansible_network_os: junipernetworks.junos.junos
-        ansible_user: "{{ clab_node_username | default('admin') }}"
-        ansible_password: "{{ clab_node_password | default('admin@123') }}"
-        ansible_ssh_pass: "{{ clab_node_password | default('admin@123') }}"
-        ansible_become: false
+        ansible_network_os: "{{ 'arista.eos.eos' if item in eos_nodes else 'junipernetworks.junos.junos' }}"
+        # 認証: junos= vrnetlab の既定(local.yml の clab_node_*)・eos= containerlab の cEOS の既定 admin/admin
+        ansible_user: "{{ (clab_eos_username | default('admin')) if item in eos_nodes else (clab_node_username | default('admin')) }}"
+        ansible_password: "{{ (clab_eos_password | default('admin')) if item in eos_nodes else (clab_node_password | default('admin@123')) }}"
+        ansible_ssh_pass: "{{ (clab_eos_password | default('admin')) if item in eos_nodes else (clab_node_password | default('admin@123')) }}"
+        # ★EOS は enable する: containerlab の cEOS の既定の設定は `username admin privilege 15` だけで
+        #   `aaa authorization exec default local` が無く、ログインすると特権レベル 1(`>`)になる
+        #   (show running-config が「% Incomplete command」・2026-11-14 cEOS 4.37.0F で実測)。enable secret は無いので素通り。
+        ansible_become: "{{ item in eos_nodes }}"
+        ansible_become_method: enable
         # clab ラボは deploy のたびにホスト鍵が変わる(使い捨てVM)ため照合しない
         ansible_host_key_checking: false
-      loop: "{{ junos_nodes }}"
-      loop_control: { label: "{{ item }} -> {{ hostmap[item] }} (junos)" }
+        # 制御ホストから clab の管理網へ経路で届かない時(Wi-Fi のブリッジ越し等)は、clab ホストを踏み台にする。
+        #   local.yml の clab_mgmt_jump(例 user@host)があれば ProxyCommand で通す。
+        #   ★network_cli の paramiko はホスト変数の proxy_command を読まない(netcommon の内部実装が direct の値しか
+        #   受け取らない・2026-11-14 実測で直接 TCP をつなぎに行き時間切れ)→ 踏み台の時だけ libssh にする。
+        #   vault の ansible_network_cli_ssh_type: paramiko(IOS 用)はホスト変数で上書きされる。
+        ansible_network_cli_ssh_type: "{{ 'libssh' if (clab_mgmt_jump | default('')) else omit }}"
+        ansible_libssh_proxy_command: >-
+          {{ ('ssh -o BatchMode=yes -o ConnectTimeout=10 -W %h:%p ' ~ clab_mgmt_jump)
+             if (clab_mgmt_jump | default('')) else omit }}
+      loop: "{{ junos_nodes + eos_nodes }}"
+      loop_control: { label: "{{ item }} -> {{ hostmap[item] }} ({{ 'eos' if item in eos_nodes else 'junos' }})" }
       when: access == 'ssh'
 
     # ★BL-225: 採点前フック。problem.yml に `pre_grade: <repo 相対のスクリプト>` があれば、

@@ -1,0 +1,23 @@
+# M13-4: テレメトリの TS(前任者のダイヤルアウト)。故障= 使えないセンサー パス・tls-hostname の取り違え・dialout.pem なし(design §30.8・PoC は expXRT15-mdt*)。
+# XR01 の SUB-IF が ACTIVE・宛先が Active で TLS・NMS の telegraf に直近 40 秒の SUB-IF の行があり、Gi0/0/0/0 のパケットの数が入っている。白紙= 0 点。
+problem: XRT-15
+total_points: 100
+checks:
+  - name: 'M13-4 XR01: subscription SUB-IF is active every 10 seconds, its sensor paths resolve, and the destination is active over TLS'
+    node: XR01
+    exec: local
+    command: .venv/bin/python topologies/login_probe.py XRT-15 ssh XR01 -- 'show telemetry model-driven subscription SUB-IF'
+    raw:
+      - { regex: 'Subscription:\s+SUB-IF[\s\S]*?State:\s+ACTIVE' }
+      - { regex: 'Sample Interval:\s+10000 ms' }
+      - { not_regex: 'Not Resolved' }
+      - { regex: 'Destination Port:\s+57500[\s\S]*?Transport:\s+grpc\s*\n\s+State:\s+Active\s*\n\s+TLS :\s+(?!False)\S+' }
+    points: 40
+  - name: 'M13-4 SRV01: the collector receives the packet counters of XR01''s interfaces through SUB-IF during the check (30 seconds)'
+    node: XR01
+    exec: local
+    command: .venv/bin/python topologies/nms_probe.py XRT-15 mdt SRV01 /var/log/telegraf/mdt.json --source XR01 --sub SUB-IF --within 40 --fresh 30 --iface GigabitEthernet0/0/0/0
+    raw:
+      - { regex: '== MDT RECENT [1-9]\d*' }
+      - { regex: '== MDT IF GigabitEthernet0/0/0/0 PACKETS yes' }
+    points: 60

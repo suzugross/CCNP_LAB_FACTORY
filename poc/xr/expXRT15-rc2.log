@@ -1,0 +1,36 @@
+######## 14:25:48 rc-d: nms-api を権限 1 に・ip http authentication local を外す
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+PE2(config)#
+no ip http authentication local
+PE2(config)#
+username nms-api privilege 1 secret Api-Pass-15
+PE2(config)#
+end
+PE2#
+== CMD 1 rc=1: python3 ~/m13/rc_customer_lo.py
+GET hostname -> 403 {
+  "ietf-restconf:errors": {
+    "error": [
+      {
+        "error-type": "application",
+        "error-tag": "access-denied",
+        "error-message": "access denied"
+      }
+    ]
+  }
+}
+stopped: PE2 did not answer the RESTCONF GET
+######## 14:26:01 rc-e: 権限 15 に戻す
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+PE2(config)#
+username nms-api privilege 15 secret Api-Pass-15
+PE2(config)#
+end
+PE2#
+== CMD 1 rc=0: python3 ~/m13/rc_customer_lo.py
+GET hostname -> 200 {
+  "Cisco-IOS-XE-native:hostname": "PE2"
+}
+PATCH Loopback200 -> 204 

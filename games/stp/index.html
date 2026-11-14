@@ -1,0 +1,901 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>STP Puzzle</title>
+<!--
+  STP パズル(BL-268)の画面。配信は pack_server.py の /_stp/、データは /_api/stp/*(topologies/stp_puzzle.py)。
+  盤面・正解・解説はサーバが stp_model から作って渡す。答え合わせはこのページの中で行い、クリアだけをサーバへ記録する。
+  試験用の URL 引数: ?demo=fill|check|wrong|sheet(記録しない・鍵を無視)・?autotest=1(全ステージを解いて配置も検査)・?lang=ja
+-->
+<style>
+:root{
+  --paper:#eceef1; --card:#fff; --ink:#15171a; --sub:#5f6670; --line:#d6d9de; --link:#0645ad;
+  --root:#1f63c6; --desg:#2a7d3a; --altn:#c96a12; --back:#7b45a8;
+  --ok:#2a7d3a; --ng:#c62828; --star:#e0a400;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--paper);color:var(--ink)}
+body{font-family:"Segoe UI","Yu Gothic UI",Meiryo,"Hiragino Kaku Gothic ProN",system-ui,sans-serif;
+  font-size:15px;line-height:1.55;-webkit-text-size-adjust:100%}
+button{font:inherit;color:inherit;cursor:pointer}
+code{font-family:Consolas,"DejaVu Sans Mono",Menlo,monospace;font-size:.88em;background:#f1f3f5;border-radius:3px;padding:0 .25em}
+header.bar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:.5rem;padding:.55rem 16px;
+  background:var(--card);border-bottom:1px solid var(--line)}
+header.bar .ttl{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header.bar button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:.2rem .6rem;font-size:.85rem}
+header.bar button[hidden]{display:none}
+main{max-width:560px;margin:0 auto;padding:12px 16px 120px}
+.view[hidden]{display:none}
+a{color:var(--link)}
+
+/* ホーム */
+.intro{color:var(--sub);font-size:.9rem;margin:.2rem 0 1rem}
+.stage{display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:.75rem .9rem;margin:0 0 .6rem}
+.stage .top{display:flex;align-items:baseline;gap:.5rem}
+.stage .no{font-weight:700;color:var(--sub);min-width:1.4em}
+.stage .nm{font-weight:600;flex:1}
+.stage .st{color:var(--star);font-size:.85rem;white-space:nowrap}
+.stage .sb{color:var(--sub);font-size:.85rem;margin:.15rem 0 .35rem 1.9em}
+.stage .lv{margin-left:1.9em;display:flex;gap:.3rem;align-items:center}
+.stage .lv i{width:.7rem;height:.7rem;border-radius:50%;border:1.5px solid #b9bec5;display:inline-block}
+.stage .lv i.c{background:var(--desg);border-color:var(--desg)}
+.stage .lv i.r{background:#b9bec5;border-color:#b9bec5}
+.stage .lv .rs{margin-left:auto;font-size:.78rem;color:var(--sub);border:0;background:none;padding:0;text-decoration:underline}
+.stage.locked{opacity:.55}
+.stage.locked .nm::after{content:" \1F512";font-size:.8em}
+.resetall{margin-top:1.4rem;font-size:.85rem;color:var(--sub)}
+.resetall button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:.25rem .7rem;font-size:.85rem}
+
+/* チュートリアル */
+.tcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:1rem 1rem .6rem}
+.tcard .kick{font-size:.8rem;color:var(--sub)}
+.tcard h2{font-size:1.15rem;margin:.15rem 0 .6rem}
+.tcard p{margin:.5rem 0}
+.tcard ul{margin:.4rem 0;padding-left:1.25rem}
+.tcard li{margin:.15rem 0}
+.tcard .ex{margin:.6rem -.4rem 0;border-top:1px dashed var(--line);padding-top:.4rem}
+.tnav{display:flex;align-items:center;gap:.5rem;margin-top:.8rem}
+.tnav .dots{flex:1;text-align:center;letter-spacing:.25rem;color:#b9bec5}
+.tnav .dots b{color:var(--ink)}
+.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:.5rem 1rem;font-weight:600}
+.btn.pri{background:var(--root);border-color:var(--root);color:#fff}
+.btn:disabled{opacity:.45;cursor:default}
+
+/* 盤面 */
+.lvbar{display:flex;gap:.4rem;align-items:center;margin:.1rem 0 .5rem;flex-wrap:wrap}
+.lvbar button{min-width:2.4rem;border:1px solid var(--line);background:#fff;border-radius:8px;padding:.2rem .4rem;font-size:.85rem;line-height:1.2}
+.lvbar button.on{border-color:var(--ink);font-weight:700}
+.lvbar button small{display:block;color:var(--star);font-size:.65rem;min-height:.8rem}
+.lvbar button:disabled{opacity:.4}
+.vtabs{display:flex;gap:.4rem;margin:.2rem 0 .4rem}
+.vtabs button{flex:1;border:1px solid var(--line);background:#fff;border-radius:8px;padding:.35rem;font-weight:600}
+.vtabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.vtabs button .f{font-weight:400;font-size:.78rem;opacity:.8;margin-left:.3rem}
+.board{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;touch-action:manipulation}
+.board svg{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:none}
+.legend{display:flex;flex-wrap:wrap;gap:.3rem .8rem;font-size:.78rem;color:var(--sub);margin:.45rem .2rem 0}
+.legend span{display:inline-flex;align-items:center;gap:.25rem}
+.legend svg{width:16px;height:16px}
+.facts{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.55rem .8rem;margin-top:.6rem;font-size:.88rem}
+.facts p{margin:.2rem 0}
+.facts pre{margin:.3rem 0;font-size:.8rem;background:#f6f7f9;border-radius:6px;padding:.4rem .6rem;overflow-x:auto}
+.result{margin-top:.7rem;border-radius:10px;padding:.7rem .9rem;font-size:.92rem}
+.result[hidden]{display:none}
+.result.ng{background:#fdecec;border:1px solid #f1b9b9}
+.result.ok{background:#e9f5ec;border:1px solid #b6dcbf}
+.result .big{font-size:1.1rem;font-weight:700}
+.result .stars{color:var(--star);font-size:1.3rem;letter-spacing:.1rem}
+.result .acts{display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap}
+.explain{margin-top:.7rem;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.4rem .9rem .6rem}
+.explain[hidden]{display:none}
+.explain h3{font-size:.95rem;margin:.6rem 0 .2rem}
+.explain h4{font-size:.85rem;margin:.6rem 0 .2rem;color:var(--sub)}
+.explain p{margin:.15rem 0;font-size:.88rem}
+.actbar{position:fixed;left:0;right:0;bottom:0;z-index:15;background:rgba(255,255,255,.96);border-top:1px solid var(--line);
+  padding:.55rem 16px calc(.55rem + env(safe-area-inset-bottom))}
+.actbar[hidden]{display:none}
+.actbar .in{max-width:560px;margin:0 auto;display:flex;align-items:center;gap:.6rem}
+.actbar .cnt{flex:1;color:var(--sub);font-size:.88rem}
+.actbar .btn{padding:.55rem 1.4rem}
+
+/* ポートの操作枠(下から出る) */
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:30;background:#fff;border-top:1px solid var(--line);
+  box-shadow:0 -6px 20px rgba(0,0,0,.12);border-radius:14px 14px 0 0;
+  padding:.6rem 16px calc(.7rem + env(safe-area-inset-bottom))}
+.sheet[hidden]{display:none}
+.sheet .in{max-width:560px;margin:0 auto}
+.sheet .hd{display:flex;align-items:baseline;gap:.5rem}
+.sheet .hd b{font-size:1.05rem;flex:1}
+.sheet .hd button{border:0;background:none;font-size:1.4rem;line-height:1;padding:0 .2rem;color:var(--sub)}
+.sheet .sb{color:var(--sub);font-size:.82rem;margin:.1rem 0 .5rem}
+.sheet .row{display:grid;gap:.4rem;margin:.35rem 0}
+.sheet .row.r3{grid-template-columns:repeat(3,1fr)}
+.sheet .row.r2{grid-template-columns:repeat(2,1fr)}
+.sheet .row button{border:1.5px solid var(--line);background:#fff;border-radius:9px;padding:.55rem .2rem;font-weight:600;font-size:.9rem}
+.sheet .row button small{display:block;font-weight:400;font-size:.72rem;color:var(--sub)}
+.sheet .row button.on{color:#fff}
+.sheet .row button.on small{color:#fff;opacity:.85}
+.sheet .row button[data-v=Root].on{background:var(--root);border-color:var(--root)}
+.sheet .row button[data-v=Desg].on{background:var(--desg);border-color:var(--desg)}
+.sheet .row button[data-v=Altn].on{background:var(--altn);border-color:var(--altn)}
+.sheet .row button[data-v=Back].on{background:var(--back);border-color:var(--back)}
+.sheet .row button[data-v=FWD].on,.sheet .row button[data-v=BLK].on{background:var(--ink);border-color:var(--ink)}
+.sheet .nav{display:flex;align-items:center;gap:.5rem;margin-top:.4rem}
+.sheet .nav span{flex:1;text-align:center;color:var(--sub);font-size:.82rem}
+.sheet .nav button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:.35rem .9rem;font-size:1rem}
+
+/* SVG の中 */
+svg .lk{stroke:#7d848d;stroke-width:2.2;fill:none}
+svg .lk.h{stroke:#aab0b7;stroke-dasharray:4 3}
+svg .box{fill:#f7f8fa;stroke:#5f6670;stroke-width:1.3}
+svg .sw.rootmark .box{fill:#fff8de;stroke:var(--star);stroke-width:2.2}
+svg .sw.ng .box{stroke:var(--ng);stroke-width:2.6}
+svg .sw.ok .box{stroke:var(--ok);stroke-width:2.6}
+svg .nm{font-size:13px;font-weight:700;fill:var(--ink)}
+svg .pr{font-size:10.5px;fill:#3c4249}
+svg .mac{font-size:10px;fill:#5f6670;font-family:Consolas,"DejaVu Sans Mono",Menlo,monospace}
+svg .tag{font-size:8.5px;fill:#7d848d;letter-spacing:.06em}
+svg .crown{font-size:15px;fill:var(--star)}
+svg .spd{font-size:10px;fill:#5f6670;paint-order:stroke;stroke:#fff;stroke-width:3.5px;stroke-linejoin:round}
+svg .pl{font-size:9.5px;fill:#3c4249;paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round}
+svg .pl.ov{fill:#a15c00;font-weight:600}
+svg .host rect{fill:#fff;stroke:#9aa0a6}
+svg .host text{font-size:10px;fill:#5f6670}
+svg .pt{cursor:pointer}
+svg .pt .hit{fill:transparent}
+svg .pt .mk{stroke-width:2}
+svg .pt .lt{font-size:11.5px;font-weight:700;pointer-events:none}
+svg .pt.unset .mk{fill:#fff;stroke:#9aa0a6;stroke-dasharray:3 2}
+svg .pt.unset .lt{fill:#9aa0a6}
+svg .pt .ring{fill:none;stroke-width:3}
+svg .pt .ring.ok{stroke:var(--ok)} svg .pt .ring.ng{stroke:var(--ng)}
+svg .pt .sel{fill:none;stroke:var(--ink);stroke-width:1.6;stroke-dasharray:3 2}
+</style>
+</head>
+<body>
+<header class="bar">
+  <button id="b-home">‹</button>
+  <div class="ttl" id="ttl">STP Puzzle</div>
+  <button id="b-help" hidden>?</button>
+  <button id="b-lang">日本語</button>
+</header>
+<main>
+  <section class="view" id="v-home"></section>
+  <section class="view" id="v-tut" hidden></section>
+  <section class="view" id="v-play" hidden>
+    <div class="lvbar" id="lvbar"></div>
+    <div class="vtabs" id="vtabs"></div>
+    <div class="board"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+    <div class="legend" id="legend"></div>
+    <div class="facts" id="facts"></div>
+    <div class="result" id="result" hidden></div>
+    <div class="explain" id="explain" hidden></div>
+  </section>
+  <pre id="autotest" hidden></pre>
+</main>
+<div class="actbar" id="actbar" hidden><div class="in">
+  <span class="cnt" id="cnt"></span>
+  <button class="btn pri" id="b-check">Check</button>
+</div></div>
+<div class="sheet" id="sheet" hidden><div class="in">
+  <div class="hd"><b id="sh-t"></b><button id="sh-x" aria-label="close">×</button></div>
+  <div class="sb" id="sh-s"></div>
+  <div class="row r3" id="sh-roles"></div>
+  <div class="row r2" id="sh-states"></div>
+  <div class="nav"><button id="sh-p">‹</button><span id="sh-n"></span><button id="sh-nx">›</button></div>
+</div></div>
+<script src="/_games/lib/stpboard.js"></script>
+<script>
+(function(){
+'use strict';
+var store = STPB.store, el = STPB.el, sv = STPB.sv, esc = STPB.esc, inline = STPB.inline, md = STPB.md;   // 共通部品(games/_lib/stpboard.js)
+var Q = new URLSearchParams(location.search);
+var DEMO = Q.get('demo') || '', AUTOTEST = +(Q.get('autotest') || 0);   // autotest=N: 各 level を N 通りの seed で
+var UITEST = Q.get('uitest') === '1';
+var NOREC = !!DEMO || !!AUTOTEST || UITEST;                  // 試験の時はサーバへ記録しない・鍵を無視する
+var LANG = Q.get('lang') || store('stp.lang') || 'en';
+var NS = STPB.NS;
+var BW = 112, BH = 50;
+
+var T = {
+  en: {other:'日本語', portal:'Portal', stages:'Stages', intro:'Fill in the role and state of every port. Each stage opens with a short tutorial.',
+       stage:'Stage', level:'Level', tutorial:'Tutorial', start:'Start', next:'Next', back:'Back',
+       check:'Check', filled:'filled', locked:'Clear the previous stage to open this one.', soon:'Coming later',
+       resetAll:'Reset all progress', resetAllQ:'Reset all progress? Stars and cleared levels will be erased.',
+       reset:'Reset', resetQ:'Reset the progress of stage {n}?',
+       wrong1:'1 answer is wrong.', wrongN:'{n} answers are wrong.', fix:'Fix the red ones and check again.',
+       cleared:'Level cleared!', show:'Show answer', showQ:'Show the answer? The level counts as cleared, without stars.',
+       revealed:'Here is the answer.', nextLv:'Next level', toStages:'Back to stages', nextStage:'Next stage',
+       why:'Why', root:'Root', desg:'Designated', altn:'Alternate', back2:'Backup', fwd:'Forwarding', blk:'Blocking',
+       rootPort:'root port', portId:'port ID', cost:'cost', to:'to', pc:'PC', edge:'edge port (PortFast)',
+       markRoot:'Tap a switch to mark the root bridge.', rootIs:'Root bridge',
+       legRoot:'Root', legDesg:'Designated', legAltn:'Alternate', legFwd:'filled = FWD', legBlk:'hollow = BLK',
+       mode:'Rapid PVST+ on every switch.', method:'Path cost method: {m}', short:'short', long:'long',
+       costs:'Costs', cfg:'Changed from the defaults:', hosts:'PCs are on access ports with PortFast (edge ports).',
+       allLinks:'All links are full-duplex trunks. Anything not shown is at its default.',
+       prio:'prio', vlan:'VLAN', done:'all done', notReady:'This stage is not ready yet.'},
+  ja: {other:'English', portal:'ポータル', stages:'ステージ', intro:'全部のポートの役割と状態を埋めるゲームです。ステージの最初に短いチュートリアルがあります。',
+       stage:'ステージ', level:'レベル', tutorial:'チュートリアル', start:'はじめる', next:'次へ', back:'戻る',
+       check:'Check', filled:'埋めた', locked:'前のステージをクリアすると開きます。', soon:'準備中',
+       resetAll:'進み具合をすべてリセット', resetAllQ:'進み具合をすべてリセットしますか? 星とクリアの記録が消えます。',
+       reset:'リセット', resetQ:'ステージ {n} の進み具合をリセットしますか?',
+       wrong1:'1 か所が違います。', wrongN:'{n} か所が違います。', fix:'赤いところを直して、もう一度 Check してください。',
+       cleared:'クリア!', show:'答えを見る', showQ:'答えを見ますか? クリア扱いになりますが、星は付きません。',
+       revealed:'答えです。', nextLv:'次のレベル', toStages:'ステージ一覧へ', nextStage:'次のステージ',
+       why:'解説', root:'ルート', desg:'指定', altn:'代替', back2:'バックアップ', fwd:'フォワーディング', blk:'ブロッキング',
+       rootPort:'ルート ポート', portId:'ポート ID', cost:'コスト', to:'対向', pc:'PC', edge:'エッジ ポート(PortFast)',
+       markRoot:'スイッチを押して、ルート ブリッジに印を付けます。', rootIs:'ルート ブリッジ',
+       legRoot:'ルート', legDesg:'指定', legAltn:'代替', legFwd:'塗り = FWD', legBlk:'白抜き = BLK',
+       mode:'全スイッチで Rapid PVST+ を使用。', method:'パス コストの方式: {m}', short:'ショート', long:'ロング',
+       costs:'コスト', cfg:'既定値から変えた設定:', hosts:'PC はアクセス ポートにつながり、PortFast(エッジ ポート)です。',
+       allLinks:'リンクはすべて全二重のトランク。書いていない設定は既定値です。',
+       prio:'prio', vlan:'VLAN', done:'完了', notReady:'このステージは準備中です。'}
+};
+var ROLE = {Root:{c:'var(--root)', l:'R'}, Desg:{c:'var(--desg)', l:'D'}, Altn:{c:'var(--altn)', l:'A'}, Back:{c:'var(--back)', l:'B'}};
+var COLOR = {Root:'#1f63c6', Desg:'#2a7d3a', Altn:'#c96a12', Back:'#7b45a8'};
+
+function t(k, o){ var s = (T[LANG] || T.en)[k] || T.en[k] || k; if (o) for (var x in o) s = s.replace('{' + x + '}', o[x]); return s; }
+function tr(o){ return o == null ? '' : typeof o === 'string' ? o : (o[LANG] || o.en || ''); }
+function $(id){ return document.getElementById(id); }
+function api(path, body){
+  if (body !== undefined && NOREC) return Promise.resolve({ok:true});
+  var o = body === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)};
+  return fetch('/_api/stp/' + path, o).then(function(r){ return r.json(); });
+}
+
+// ------------------------------------------------------------------ 状態
+var S = {ov:null, stage:null, level:null, pz:null, vlan:null, ans:null, tries:0, revealed:false, checked:null, sel:null, card:0, done:false};
+
+function stageOf(id){ return S.ov.stages.filter(function(s){ return s.id === id; })[0]; }
+function levelOpen(st, lv){
+  if (NOREC) return true;
+  return lv === 1 || !!st.progress[String(lv)] || !!st.progress[String(lv - 1)];
+}
+
+// ------------------------------------------------------------------ 画面の切替
+function show(view){
+  ['home', 'tut', 'play'].forEach(function(v){ $('v-' + v).hidden = v !== view; });
+  // 左上の「‹」= 一段上へ。ステージ一覧ではポータルへ戻る
+  $('b-home').textContent = view === 'home' ? '‹ ' + t('portal') : '‹';
+  $('b-home').dataset.to = view === 'home' ? 'portal' : 'home';
+  $('b-help').hidden = view !== 'play';
+  $('actbar').hidden = view !== 'play';
+  closeSheet();
+  $('b-lang').textContent = t('other');
+  document.documentElement.lang = LANG;
+}
+
+function route(){
+  var h = location.hash, m;
+  if (!S.ov) return;
+  if ((m = h.match(/^#t(\d+)$/))) return openTut(+m[1]);
+  if ((m = h.match(/^#p(\d+)-(\d+)$/))) return openPlay(+m[1], +m[2]);
+  renderHome();
+}
+
+// ------------------------------------------------------------------ ホーム
+function starsOf(st){ var n = 0; for (var k in st.progress) n += st.progress[k].stars; return n; }
+function renderHome(){
+  show('home');
+  $('ttl').textContent = 'STP Puzzle';
+  var v = $('v-home'); v.innerHTML = '';
+  v.appendChild(el('p', 'intro', t('intro')));
+  S.ov.stages.forEach(function(st){
+    var b = el('button', 'stage' + (st.unlocked || NOREC && st.ready ? '' : ' locked'));
+    var top = el('div', 'top');
+    top.appendChild(el('span', 'no', st.id));
+    top.appendChild(el('span', 'nm', tr(st.title)));
+    if (st.ready) top.appendChild(el('span', 'st', '★ ' + starsOf(st) + '/' + (st.levels * 3)));
+    b.appendChild(top);
+    b.appendChild(el('div', 'sb', st.ready ? tr(st.sub) : t('soon') + ' — ' + tr(st.sub)));
+    if (st.ready){
+      var lv = el('div', 'lv');
+      for (var i = 1; i <= st.levels; i++){
+        var p = st.progress[String(i)];
+        lv.appendChild(el('i', p ? (p.revealed && !p.stars ? 'r' : 'c') : ''));
+      }
+      if (Object.keys(st.progress).length || st.seen){
+        var rs = el('button', 'rs', t('reset'));
+        rs.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          if (!confirm(t('resetQ', {n: st.id}))) return;
+          clearDrafts(st.id);
+          api('reset', {stage: st.id}).then(reload);
+        });
+        lv.appendChild(rs);
+      }
+      b.appendChild(lv);
+    }
+    b.addEventListener('click', function(){
+      if (!st.ready){ alert(t('notReady')); return; }
+      if (!st.unlocked && !NOREC){ alert(t('locked')); return; }
+      if (!st.seen) location.hash = '#t' + st.id;
+      else location.hash = '#p' + st.id + '-' + firstOpen(st);
+    });
+    v.appendChild(b);
+  });
+  var ra = el('div', 'resetall');
+  var rb = el('button', null, t('resetAll'));
+  rb.addEventListener('click', function(){
+    if (!confirm(t('resetAllQ'))) return;
+    S.ov.stages.forEach(function(st){ clearDrafts(st.id); });
+    api('reset', {}).then(reload);
+  });
+  ra.appendChild(rb); v.appendChild(ra);
+}
+function firstOpen(st){
+  for (var i = 1; i <= st.levels; i++) if (!st.progress[String(i)]) return i;
+  return 1;
+}
+function reload(){ return api('state').then(function(ov){ S.ov = ov; route(); }); }
+
+// ------------------------------------------------------------------ チュートリアル
+function openTut(id){
+  var st = stageOf(id);
+  if (!st || !st.ready) return renderHome();
+  if (S.stage !== id || !$('v-tut').dataset.on){ S.card = DEMO && Q.get('card') ? +Q.get('card') : 0; }
+  S.stage = id; $('v-tut').dataset.on = '1';
+  show('tut');
+  $('ttl').textContent = t('stage') + ' ' + id + ' · ' + tr(st.title);
+  var cards = st.cards, c = cards[S.card], v = $('v-tut');
+  v.innerHTML = '';
+  var box = el('div', 'tcard');
+  box.appendChild(el('div', 'kick', t('stage') + ' ' + id + ' · ' + t('tutorial') + ' ' + (S.card + 1) + '/' + cards.length));
+  box.appendChild(el('h2', null, tr(c.title)));
+  var body = el('div'); body.innerHTML = md(tr(c.body)); box.appendChild(body);
+  if (c.example && S.ov.examples[c.example]){
+    var ex = el('div', 'ex'), s = document.createElementNS(NS, 'svg');
+    var pz = S.ov.examples[c.example], v0 = String(pz.vlans[0]);
+    drawBoard(s, pz, v0, solvedAns(pz)[v0], {readonly:true});
+    ex.appendChild(s); box.appendChild(ex);
+  }
+  v.appendChild(box);
+  var nav = el('div', 'tnav');
+  var bk = el('button', 'btn', t('back')); bk.disabled = S.card === 0;
+  bk.addEventListener('click', function(){ S.card--; openTut(id); window.scrollTo(0, 0); });
+  var dots = el('div', 'dots');
+  dots.innerHTML = cards.map(function(_x, i){ return i === S.card ? '<b>●</b>' : '●'; }).join('');
+  var last = S.card === cards.length - 1;
+  var nx = el('button', 'btn pri', last ? t('start') : t('next'));
+  nx.addEventListener('click', function(){
+    if (!last){ S.card++; openTut(id); window.scrollTo(0, 0); return; }
+    $('v-tut').dataset.on = '';
+    var go = function(){ location.hash = '#p' + id + '-' + firstOpen(stageOf(id)); };
+    if (!st.seen) api('seen', {stage: id}).then(function(){ st.seen = true; go(); }); else go();
+  });
+  nav.appendChild(bk); nav.appendChild(dots); nav.appendChild(nx);
+  v.appendChild(nav);
+}
+
+// ------------------------------------------------------------------ 盤面を遊ぶ
+function draftKey(){ return 'stp.draft.' + S.stage + '.' + S.level; }
+function clearDrafts(id){ for (var i = 1; i <= 5; i++) store('stp.draft.' + id + '.' + i, null); }
+function emptyAns(pz){
+  var a = {};
+  pz.vlans.forEach(function(v){ a[String(v)] = {root:null, ports:{}}; });
+  return a;
+}
+function solvedAns(pz){
+  var a = {};
+  pz.vlans.forEach(function(v){
+    var s = pz.solution[String(v)], p = {};
+    for (var k in s.ports) p[k] = s.ports[k].slice();
+    a[String(v)] = {root:s.root, ports:p};
+  });
+  return a;
+}
+
+function openPlay(id, lv){
+  var st = stageOf(id);
+  if (!st || !st.ready || (!st.unlocked && !NOREC)) return renderHome();
+  if (!levelOpen(st, lv)) { location.hash = '#p' + id + '-' + firstOpen(st); return; }
+  S.stage = id; S.level = lv;
+  show('play');
+  $('ttl').textContent = t('stage') + ' ' + id + ' · ' + tr(st.title);
+  return api('puzzle?stage=' + id + '&level=' + lv).then(function(pz){
+    S.pz = pz; S.vlan = String(pz.vlans[0]); S.checked = null; S.revealed = false; S.sel = null; S.done = false;
+    $('result').hidden = true; $('explain').hidden = true;
+    var d = null; try{ d = JSON.parse(store(draftKey()) || 'null'); }catch(e){}
+    S.ans = d && d.seed === pz.seed ? d.ans : emptyAns(pz);
+    S.tries = d && d.seed === pz.seed ? d.tries || 0 : 0;
+    if (DEMO === 'fill' || DEMO === 'check' || DEMO === 'wrong') S.ans = solvedAns(pz);
+    if (DEMO === 'wrong'){
+      var k = pz.ports[0].key, a = S.ans[S.vlan].ports[k];
+      a[0] = a[0] === 'Desg' ? 'Altn' : 'Desg'; a[1] = a[0] === 'Altn' ? 'BLK' : 'FWD';
+    }
+    renderPlay();
+    if (DEMO === 'check' || DEMO === 'wrong') doCheck();
+    if (DEMO === 'sheet') openSheet(portOrder()[1]);
+  });
+}
+
+function portOrder(){
+  var names = S.pz.switches.map(function(s){ return s.name; });
+  return S.pz.ports.slice().sort(function(a, b){
+    return names.indexOf(a.sw) - names.indexOf(b.sw) || a.num - b.num;
+  }).map(function(p){ return p.key; });
+}
+function portByKey(k){ return S.pz.ports.filter(function(p){ return p.key === k; })[0]; }
+function filledCount(){
+  var n = 0, tot = 0;
+  S.pz.vlans.forEach(function(v){
+    var a = S.ans[String(v)];
+    tot += 1 + S.pz.ports.length;
+    if (a.root) n++;
+    S.pz.ports.forEach(function(p){ var x = a.ports[p.key]; if (x && x[0] && x[1]) n++; });
+  });
+  return [n, tot];
+}
+function saveDraft(){ store(draftKey(), JSON.stringify({seed:S.pz.seed, ans:S.ans, tries:S.tries})); }
+
+function renderPlay(){
+  var st = stageOf(S.stage), pz = S.pz;
+  // レベルの列
+  var lb = $('lvbar'); lb.innerHTML = '';
+  for (var i = 1; i <= st.levels; i++) (function(i){
+    var p = st.progress[String(i)];
+    var b = el('button', i === S.level ? 'on' : '');
+    b.innerHTML = 'Lv ' + i + '<small>' + (p ? '★★★'.slice(0, p.stars) || '✓' : '') + '</small>';
+    b.disabled = !levelOpen(st, i);
+    b.addEventListener('click', function(){ location.hash = '#p' + S.stage + '-' + i; });
+    lb.appendChild(b);
+  })(i);
+  // VLAN のタブ
+  var vt = $('vtabs'); vt.innerHTML = '';
+  if (pz.vlans.length > 1) pz.vlans.forEach(function(v){
+    var b = el('button', String(v) === S.vlan ? 'on' : '');
+    b.innerHTML = 'VLAN ' + v + '<span class="f">' + vlanFill(String(v)) + '</span>';
+    b.addEventListener('click', function(){ S.vlan = String(v); closeSheet(); renderPlay(); });
+    vt.appendChild(b);
+  });
+  drawBoard($('svg'), pz, S.vlan, S.ans[S.vlan], {checked:S.checked && S.checked[S.vlan], sel:S.sel});
+  renderLegend(); renderFacts();
+  var fc = filledCount();
+  $('cnt').textContent = S.done ? (S.revealed ? t('revealed') : t('cleared')) : fc[0] + '/' + fc[1] + ' ' + t('filled');
+  $('b-check').textContent = S.done ? (S.level < st.levels ? t('nextLv') : t('toStages')) : t('check');
+  $('b-check').disabled = !S.done && fc[0] < fc[1];
+}
+function vlanFill(v){
+  var a = S.ans[v], n = a.root ? 1 : 0;
+  S.pz.ports.forEach(function(p){ var x = a.ports[p.key]; if (x && x[0] && x[1]) n++; });
+  return n + '/' + (S.pz.ports.length + 1);
+}
+function renderLegend(){
+  var L = $('legend'); L.innerHTML = '';
+  function item(role, fill, txt){
+    var s = el('span'), g = sv('svg', {viewBox:'0 0 16 16'});
+    g.appendChild(sv('circle', {cx:8, cy:8, r:6.5, fill:fill ? COLOR[role] : '#fff', stroke:COLOR[role], 'stroke-width':2}));
+    s.appendChild(g); s.appendChild(document.createTextNode(txt)); L.appendChild(s);
+  }
+  item('Root', true, 'R ' + t('legRoot')); item('Desg', true, 'D ' + t('legDesg')); item('Altn', true, 'A ' + t('legAltn'));
+  item('Desg', true, t('legFwd')); item('Desg', false, t('legBlk'));
+  var s = el('span', null, '★ ' + t('markRoot')); L.appendChild(s);
+}
+function renderFacts(){
+  var pz = S.pz, f = $('facts'), h = [];
+  h.push('<p>' + esc(t('mode')) + ' ' + esc(t('method', {m: t(pz.method)})) + ' · ' + esc(t('costs')) + ': ' +
+         ['10G', '1G', '100M'].map(function(k){ return k + ' = ' + pz.cost_table[k]; }).join(', ') + '</p>');
+  h.push('<p>' + esc(t('allLinks')) + '</p>');
+  if (pz.hosts.length) h.push('<p>' + esc(t('hosts')) + '</p>');
+  var cf = pz.config.filter(function(c){ return String(c.vlan) === S.vlan; });
+  if (cf.length){
+    h.push('<p>' + esc(t('cfg')) + '</p>');
+    var by = {};
+    cf.forEach(function(c){ (by[c.sw] = by[c.sw] || []).push(c.cli.join('\n')); });
+    for (var s in by) h.push('<pre>' + esc(s + '(config)#\n' + by[s].join('\n')) + '</pre>');
+  }
+  f.innerHTML = h.join('');
+}
+
+// ------------------------------------------------------------------ 図
+function portText(p, o){
+  return p.if + (o ? (o.kind === 'cost' ? ' · ' + t('cost') + ' ' + o.val : ' · ' + t('prio') + ' ' + o.val) : '');
+}
+var txtW = STPB.txtW, hitBox = STPB.hitBox;
+
+// 図の座標(共通部品の geom)。ポート名のラベルには既定から変えた値を添える
+function geom(pz, vlan){
+  var ovr = {};
+  pz.config.forEach(function(c){ if (String(c.vlan) === String(vlan)) ovr[c.sw + '|' + c.if] = c; });
+  return STPB.geom(pz, {bw:BW, bh:BH, hw:26, hh:14,
+    label:function(p){ var c = ovr[p.key]; return {txt:portText(p, c), ov:!!c}; },
+    linkText:function(l){ return l.speed + (l.cost != null ? ' · ' + l.cost : ''); }});
+}
+
+function drawBoard(svg, pz, vlan, ans, opt){
+  opt = opt || {};
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  svg.setAttribute('viewBox', '0 0 400 ' + pz.height);
+  var G = geom(pz, vlan);
+  var gl = sv('g'), gn = sv('g'), gp = sv('g');
+  svg.appendChild(gl); svg.appendChild(gn); svg.appendChild(gp);
+  // 線
+  G.lines.forEach(function(ln){
+    gl.appendChild(sv('line', {x1:ln.x1, y1:ln.y1, x2:ln.x2, y2:ln.y2, 'class':'lk' + (ln.host ? ' h' : '')}));
+    if (ln.link){
+      var w = txtW(ln.text, 10) + 6;          // 下地を敷く(文字の間の空白から線が透けないように)
+      gl.appendChild(sv('rect', {x:ln.mx - w / 2, y:ln.my - 7, width:w, height:14, rx:3, fill:'#fff'}));
+      gl.appendChild(sv('text', {x:ln.mx, y:ln.my, 'class':'spd', 'text-anchor':'middle', 'dominant-baseline':'middle'}, ln.text));
+    }
+  });
+  // 端末
+  pz.hosts.forEach(function(h){
+    var g = sv('g', {'class':'host'});
+    g.appendChild(sv('rect', {x:h.x - 24, y:h.y - 12, width:48, height:24, rx:5}));
+    g.appendChild(sv('text', {x:h.x, y:h.y + 1, 'text-anchor':'middle', 'dominant-baseline':'middle'}, h.name));
+    gn.appendChild(g);
+  });
+  // スイッチ
+  var ck = opt.checked;
+  pz.switches.forEach(function(s){
+    var isRoot = ans && ans.root === s.name;
+    var cls = 'sw' + (isRoot ? ' rootmark' : '');
+    if (ck && isRoot) cls += ck.root ? ' ok' : ' ng';
+    var g = sv('g', {'class':cls, 'data-sw':s.name});
+    g.appendChild(sv('rect', {x:s.x - BW / 2, y:s.y - BH / 2, width:BW, height:BH, rx:8, 'class':'box'}));
+    g.appendChild(sv('text', {x:s.x, y:s.y - 9, 'text-anchor':'middle', 'class':'nm'}, s.name));
+    var pr = s.prio[vlan];
+    g.appendChild(sv('text', {x:s.x, y:s.y + 6, 'text-anchor':'middle', 'class':'pr'}, t('prio') + ' ' + pr));
+    g.appendChild(sv('text', {x:s.x, y:s.y + 19, 'text-anchor':'middle', 'class':'mac'}, s.mac));
+    if (s.role) g.appendChild(sv('text', {x:s.x - BW / 2 + 5, y:s.y - BH / 2 + 11, 'class':'tag'}, ({Core:'CORE', Distribution:'DIST', Access:'ACC'})[s.role] || s.role));
+    if (isRoot) g.appendChild(sv('text', {x:s.x + BW / 2 - 4, y:s.y - BH / 2 + 4, 'text-anchor':'middle', 'class':'crown'}, '★'));
+    if (!opt.readonly){
+      g.style.cursor = 'pointer';
+      g.addEventListener('click', function(){ toggleRoot(s.name); });
+    }
+    gn.appendChild(g);
+  });
+  // ポート
+  pz.ports.forEach(function(p){
+    var m = G.mk[p.key]; if (!m) return;
+    var a = (ans && ans.ports[p.key]) || [], role = a[0], st = a[1];
+    var g = sv('g', {'class':'pt' + (role ? '' : ' unset'), 'data-key':p.key});
+    // ラベル(ポート名・既定から変えた値)
+    var L = G.lbl[p.key];
+    gp.appendChild(sv('text', {x:L.x, y:L.y, 'text-anchor':L.anc, 'dominant-baseline':'middle', 'class':'pl' + (L.ov ? ' ov' : '')}, L.txt));
+    g.appendChild(sv('circle', {cx:m.x, cy:m.y, r:19, 'class':'hit'}));
+    if (opt.sel === p.key) g.appendChild(sv('circle', {cx:m.x, cy:m.y, r:16.5, 'class':'sel'}));
+    var col = role ? COLOR[role] : '#9aa0a6';
+    var fill = !role ? '#fff' : st === 'FWD' ? col : st === 'BLK' ? '#fff' : col + '33';
+    var c = sv('circle', {cx:m.x, cy:m.y, r:12, 'class':'mk', fill:fill, stroke:col});
+    if (role && !st) c.setAttribute('stroke-dasharray', '3 2');
+    g.appendChild(c);
+    g.appendChild(sv('text', {x:m.x, y:m.y + 0.5, 'text-anchor':'middle', 'dominant-baseline':'middle', 'class':'lt',
+                              fill: role ? (st === 'FWD' ? '#fff' : col) : '#9aa0a6'}, role ? ROLE[role].l : '?'));
+    if (ck && ck.ports[p.key] !== undefined)
+      g.appendChild(sv('circle', {cx:m.x, cy:m.y, r:16, 'class':'ring ' + (ck.ports[p.key] ? 'ok' : 'ng')}));
+    if (!opt.readonly) g.addEventListener('click', function(){ openSheet(p.key); });
+    gp.appendChild(g);
+  });
+}
+
+function toggleRoot(name){
+  var a = S.ans[S.vlan];
+  a.root = a.root === name ? null : name;
+  touched();
+}
+function touched(){
+  if (S.checked){ S.checked = null; S.done = false; $('result').hidden = true; }
+  saveDraft(); renderPlay();
+  if (S.sel) paintSheet();
+}
+
+// ------------------------------------------------------------------ ポートの操作枠
+function openSheet(key){
+  S.sel = key;
+  $('sheet').hidden = false; $('actbar').hidden = true;
+  paintSheet(); renderPlay();
+  // 選んだポートが枠の下に隠れないように
+  var g = document.querySelector('#svg .pt[data-key="' + key.replace(/"/g, '') + '"]');
+  if (g){
+    var r = g.getBoundingClientRect(), h = $('sheet').getBoundingClientRect().height;
+    var lim = window.innerHeight - h - 16;
+    if (r.bottom > lim) window.scrollBy(0, r.bottom - lim);
+    if (r.top < 60) window.scrollBy(0, r.top - 60);
+  }
+}
+function closeSheet(){
+  var was = S.sel;
+  S.sel = null; $('sheet').hidden = true;
+  if (!$('v-play').hidden) $('actbar').hidden = false;
+  if (was && S.pz && !$('v-play').hidden) renderPlay();
+}
+function paintSheet(){
+  var p = portByKey(S.sel), a = S.ans[S.vlan].ports[p.key] || [];
+  $('sh-t').textContent = p.sw + ' ' + p.if;
+  var sub = p.host ? '→ ' + p.host + ' · ' + t('edge')
+                   : '↔ ' + p.peer + ' ' + p.peer_if + ' · ' + speedOf(p) + ' · ' + t('cost') + ' ' + p.cost[S.vlan];
+  sub += ' · ' + t('portId') + ' ' + p.prio[S.vlan] + '.' + p.num;
+  if (S.pz.vlans.length > 1) sub = 'VLAN ' + S.vlan + ' · ' + sub;
+  $('sh-s').textContent = sub;
+  var R = $('sh-roles'); R.innerHTML = '';
+  S.pz.roles.forEach(function(r){
+    var b = el('button', a[0] === r ? 'on' : ''); b.dataset.v = r;
+    b.innerHTML = esc(ROLE[r].l + ' · ' + r) + '<small>' + esc(t(r === 'Root' ? 'root' : r === 'Desg' ? 'desg' : r === 'Altn' ? 'altn' : 'back2')) + '</small>';
+    b.addEventListener('click', function(){ setPort(0, r); });
+    R.appendChild(b);
+  });
+  var Z = $('sh-states'); Z.innerHTML = '';
+  S.pz.states.forEach(function(s){
+    var b = el('button', a[1] === s ? 'on' : ''); b.dataset.v = s;
+    b.innerHTML = esc(s) + '<small>' + esc(t(s === 'FWD' ? 'fwd' : 'blk')) + '</small>';
+    b.addEventListener('click', function(){ setPort(1, s); });
+    Z.appendChild(b);
+  });
+  var ord = portOrder(), i = ord.indexOf(p.key);
+  $('sh-n').textContent = (i + 1) + ' / ' + ord.length;
+}
+function speedOf(p){
+  var l = S.pz.links[p.link]; return l ? l.speed : '';
+}
+function setPort(i, v){
+  var a = S.ans[S.vlan].ports, k = S.sel, x = (a[k] || [null, null]).slice();
+  var wasDone = x[0] && x[1];
+  x[i] = x[i] === v ? null : v;
+  a[k] = x;
+  touched();
+  if (!wasDone && x[0] && x[1]) setTimeout(function(){ nextUnfilled(k); }, 220);
+}
+function nextUnfilled(from){
+  if (S.sel !== from) return;
+  var ord = portOrder(), a = S.ans[S.vlan].ports, i = ord.indexOf(from);
+  for (var j = 1; j <= ord.length; j++){
+    var k = ord[(i + j) % ord.length], x = a[k];
+    if (!x || !x[0] || !x[1]) return openSheet(k);
+  }
+  closeSheet();
+}
+function step(d){
+  var ord = portOrder(), i = ord.indexOf(S.sel);
+  openSheet(ord[(i + d + ord.length) % ord.length]);
+}
+
+// ------------------------------------------------------------------ 答え合わせ
+function grade(pz, ans){
+  var res = {}, wrong = 0;
+  pz.vlans.forEach(function(v){
+    v = String(v);
+    var sol = pz.solution[v], a = ans[v], r = {root: a.root === sol.root, ports:{}};
+    if (!r.root) wrong++;
+    for (var k in sol.ports){
+      var x = a.ports[k] || [], ok = x[0] === sol.ports[k][0] && x[1] === sol.ports[k][1];
+      r.ports[k] = ok; if (!ok) wrong++;
+    }
+    res[v] = r;
+  });
+  return {res:res, wrong:wrong};
+}
+function doCheck(){
+  closeSheet();
+  var g = grade(S.pz, S.ans);
+  S.tries++; S.checked = g.res; saveDraft();
+  var box = $('result'); box.hidden = false; box.innerHTML = '';
+  if (g.wrong){
+    box.className = 'result ng';
+    box.appendChild(el('div', 'big', g.wrong === 1 ? t('wrong1') : t('wrongN', {n:g.wrong})));
+    box.appendChild(el('div', null, t('fix')));
+    var acts = el('div', 'acts'), sb = el('button', 'btn', t('show'));
+    sb.addEventListener('click', reveal);
+    acts.appendChild(sb); box.appendChild(acts);
+    // 間違いのある VLAN を先に見せる
+    if (S.pz.vlans.length > 1 && !hasWrong(g.res[S.vlan])){
+      for (var v in g.res) if (hasWrong(g.res[v])){ S.vlan = v; break; }
+    }
+    renderPlay();
+  } else {
+    var stars = S.revealed ? 0 : S.tries === 1 ? 3 : S.tries === 2 ? 2 : 1;
+    finish(stars);
+  }
+}
+function hasWrong(r){ if (!r.root) return true; for (var k in r.ports) if (!r.ports[k]) return true; return false; }
+function reveal(){
+  if (!NOREC && !confirm(t('showQ'))) return;
+  S.revealed = true; S.ans = solvedAns(S.pz); S.checked = grade(S.pz, S.ans).res;
+  finish(0);
+}
+function finish(stars){
+  var st = stageOf(S.stage), lv = S.level;
+  S.done = true;
+  var old = st.progress[String(lv)];
+  st.progress[String(lv)] = {stars: Math.max(stars, old ? old.stars : 0), revealed: S.revealed && !old};
+  store(draftKey(), null);
+  api('result', {stage:S.stage, level:lv, stars:stars, revealed:S.revealed});
+  renderPlay();
+  var box = $('result'); box.hidden = false; box.className = 'result ok'; box.innerHTML = '';
+  box.appendChild(el('div', 'big', S.revealed ? t('revealed') : t('cleared')));
+  if (!S.revealed) box.appendChild(el('div', 'stars', '★★★'.slice(0, stars) + '☆☆☆'.slice(0, 3 - stars)));
+  var acts = el('div', 'acts');
+  if (lv < st.levels){
+    var nb = el('button', 'btn pri', t('nextLv'));
+    nb.addEventListener('click', function(){ location.hash = '#p' + S.stage + '-' + (lv + 1); window.scrollTo(0, 0); });
+    acts.appendChild(nb);
+  } else {
+    var nxt = stageOf(S.stage + 1);
+    if (nxt && nxt.ready){
+      var ns = el('button', 'btn pri', t('nextStage'));
+      ns.addEventListener('click', function(){ reload().then(function(){ location.hash = stageOf(nxt.id).seen ? '#p' + nxt.id + '-1' : '#t' + nxt.id; }); });
+      acts.appendChild(ns);
+    }
+  }
+  var hb = el('button', 'btn', t('toStages'));
+  hb.addEventListener('click', function(){ reload().then(function(){ location.hash = ''; }); });
+  acts.appendChild(hb); box.appendChild(acts);
+  renderExplain();
+}
+function renderExplain(){
+  var e = $('explain'); e.hidden = false; e.innerHTML = '';
+  e.appendChild(el('h3', null, t('why')));
+  S.pz.vlans.forEach(function(v){
+    if (S.pz.vlans.length > 1) e.appendChild(el('h3', null, 'VLAN ' + v));
+    (S.pz.explain[String(v)][LANG] || S.pz.explain[String(v)].en).forEach(function(sec){
+      e.appendChild(el('h4', null, sec.h));
+      sec.lines.forEach(function(ln){ var p = el('p'); p.innerHTML = inline(ln); e.appendChild(p); });
+    });
+  });
+}
+
+// ------------------------------------------------------------------ 試験(?autotest=1)
+function autotest(){
+  var out = [], ng = 0, jobs = [];
+  function log(s){ out.push(s); }
+  S.ov.stages.forEach(function(st){
+    if (!st.ready) return;
+    for (var lv = 1; lv <= st.levels; lv++){
+      jobs.push([st.id, lv, '']);
+      for (var k = 1; k < AUTOTEST; k++) jobs.push([st.id, lv, String(k * 104729 + lv)]);
+    }
+  });
+  function one(i){
+    if (i >= jobs.length){
+      // 例の盤面も描けること
+      for (var ex in S.ov.examples){ var s = document.createElementNS(NS, 'svg'); var pz = S.ov.examples[ex]; drawBoard(s, pz, String(pz.vlans[0]), solvedAns(pz)[String(pz.vlans[0])], {readonly:true}); }
+      log('NG ' + ng);
+      $('autotest').hidden = false; $('autotest').textContent = out.join('\n');
+      document.title = 'AUTOTEST NG ' + ng;
+      return;
+    }
+    var id = jobs[i][0], lv = jobs[i][1], sd = jobs[i][2];
+    api('puzzle?stage=' + id + '&level=' + lv + (sd ? '&seed=' + sd : '')).then(function(pz){
+      var g = grade(pz, solvedAns(pz));
+      if (g.wrong) { ng++; log('s' + id + ' l' + lv + ' 正解で不一致 ' + g.wrong); }
+      var a = solvedAns(pz), k = pz.ports[0].key, v0 = String(pz.vlans[0]);
+      a[v0].ports[k] = ['Back', 'BLK'];
+      if (grade(pz, a).wrong !== 1){ ng++; log('s' + id + ' l' + lv + ' 1 か所の誤りを数えない'); }
+      // 配置: 印どうし・印と箱・印と図の外
+      var G = geom(pz, v0), keys = Object.keys(G.mk), bad = [];
+      keys.forEach(function(k1, x){
+        var m = G.mk[k1];
+        if (m.x < 12 || m.x > 388 || m.y < 12 || m.y > pz.height - 4) bad.push(k1 + ' 図の外');
+        keys.slice(x + 1).forEach(function(k2){
+          var n = G.mk[k2]; if (Math.hypot(m.x - n.x, m.y - n.y) < 25) bad.push(k1 + ' と ' + k2 + ' が近い');
+        });
+        pz.switches.forEach(function(s){
+          if (Math.abs(m.x - s.x) < BW / 2 + 6 && Math.abs(m.y - s.y) < BH / 2 + 6) bad.push(k1 + ' が ' + s.name + ' の箱に重なる');
+        });
+      });
+      pz.switches.forEach(function(s){ if (s.x - BW / 2 < 0 || s.x + BW / 2 > 400) bad.push(s.name + ' が横にはみ出す'); });
+      var boxes = keys.map(function(k1){ return [k1, G.lbl[k1].box]; });
+      boxes.forEach(function(a, x){
+        if (a[1].x0 < 0 || a[1].x1 > 400) bad.push(a[0] + ' のラベルが横にはみ出す');
+        boxes.slice(x + 1).forEach(function(b){ if (hitBox(a[1], b[1])) bad.push(a[0] + ' と ' + b[0] + ' のラベルが重なる'); });
+        keys.forEach(function(k2){ var n = G.mk[k2]; if (hitBox(a[1], {x0:n.x - 11, x1:n.x + 11, y0:n.y - 11, y1:n.y + 11})) bad.push(a[0] + ' のラベルが ' + k2 + ' の印に重なる'); });
+        pz.switches.forEach(function(s){ if (hitBox(a[1], {x0:s.x - BW / 2, x1:s.x + BW / 2, y0:s.y - BH / 2, y1:s.y + BH / 2})) bad.push(a[0] + ' のラベルが ' + s.name + ' の箱に重なる'); });
+      });
+      var s = document.createElementNS(NS, 'svg'); drawBoard(s, pz, v0, a[v0], {});
+      if (!sd) log('s' + id + ' l' + lv + ' ' + pz.shape + ' ports ' + pz.ports.length + ' ok');
+      one(i + 1);
+    }).catch(function(e){ ng++; log('s' + id + ' l' + lv + ' 例外 ' + e); one(i + 1); });
+  }
+  one(0);
+}
+
+
+// ------------------------------------------------------------------ 操作の試験(?uitest=1): タップの流れをページの中で再生する
+function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+function click(sel){ var e = typeof sel === 'string' ? document.querySelector(sel) : sel; if (!e) throw new Error('見つからない ' + sel); e.dispatchEvent(new MouseEvent('click', {bubbles:true})); }
+async function uitest(){
+  var out = [], ng = 0;
+  function ok(c, msg){ if (!c){ ng++; out.push('NG ' + msg); } else out.push('ok ' + msg); }
+  try{
+    ok($('b-home').dataset.to === 'portal' && $('b-home').textContent.indexOf(t('portal')) >= 0, 'ステージ一覧ではポータルへ戻るボタン');
+    // チュートリアルを最後まで送ると盤面へ
+    location.hash = '#t1'; await wait(150);
+    ok(!$('v-tut').hidden, 'チュートリアルが開く');
+    ok($('b-home').dataset.to === 'home', 'チュートリアルではステージ一覧へ戻るボタン');
+    var n = stageOf(1).cards.length;
+    for (var i = 0; i < n - 1; i++){ click('#v-tut .tnav .btn.pri'); await wait(30); }
+    ok($('v-tut').textContent.indexOf(tr(stageOf(1).cards[n - 1].title)) >= 0, '最後のカードまで送れる');
+    click('#v-tut .tnav .btn.pri'); await wait(400);
+    ok(!$('v-play').hidden && S.pz && S.stage === 1, 'Start で盤面が開く');
+    // ルートを押し、全ポートを操作枠で埋める
+    var v0 = S.vlan, sol = S.pz.solution[v0];
+    click('#svg g[data-sw="' + sol.root + '"]'); await wait(20);
+    ok(S.ans[v0].root === sol.root, 'スイッチを押すとルートの印');
+    portOrder().forEach(function(k){
+      click('#svg g.pt[data-key="' + k + '"]');
+      click('#sh-roles button[data-v="' + sol.ports[k][0] + '"]');
+      click('#sh-states button[data-v="' + sol.ports[k][1] + '"]');
+    });
+    await wait(400);
+    ok($('sheet').hidden, '全部埋めると操作枠が閉じる');
+    ok(!$('b-check').disabled, 'Check が押せる');
+    // 1 か所わざと間違える → 赤 → 直す → クリア
+    var k0 = portOrder()[0], right = sol.ports[k0].slice();
+    click('#svg g.pt[data-key="' + k0 + '"]');
+    click('#sh-roles button[data-v="' + (right[0] === 'Altn' ? 'Root' : 'Altn') + '"]'); await wait(20);
+    click('#sh-x'); click('#b-check'); await wait(30);
+    ok($('result').className.indexOf('ng') >= 0 && document.querySelectorAll('#svg .ring.ng').length === 1, '間違い 1 か所が赤');
+    click('#svg g.pt[data-key="' + k0 + '"]');
+    click('#sh-roles button[data-v="' + right[0] + '"]'); await wait(20);
+    click('#sh-x'); click('#b-check'); await wait(30);
+    ok($('result').className.indexOf('ok') >= 0 && S.done, '直すとクリア');
+    ok($('result').textContent.indexOf('★★☆') >= 0, '2 回目の正解は星 2');
+    ok(!$('explain').hidden && $('explain').querySelectorAll('h4').length === 4, '解説の 4 節');
+    ok($('b-check').textContent === t('nextLv'), '下のボタンが次のレベルに');
+    click('#b-check'); await wait(400);
+    ok(S.level === 2 && !S.done && $('result').hidden, '次のレベルへ進む');
+    // 答えを見る
+    click('#svg g.pt[data-key="' + portOrder()[0] + '"]');
+    click('#sh-roles button[data-v="Root"]'); click('#sh-states button[data-v="FWD"]'); await wait(300);
+    S.pz.ports.forEach(function(p){ if (!S.ans[S.vlan].ports[p.key]) S.ans[S.vlan].ports[p.key] = ['Altn', 'BLK']; });
+    S.ans[S.vlan].root = S.pz.switches[0].name; renderPlay(); closeSheet();
+    click('#b-check'); await wait(30);
+    var sb = document.querySelector('#result .btn'); click(sb); await wait(30);
+    ok(S.done && S.revealed && grade(S.pz, S.ans).wrong === 0, '答えを見ると正解が入る');
+    // VLAN のタブ(ステージ 5)
+    location.hash = '#p5-1'; await wait(400);
+    ok(document.querySelectorAll('#vtabs button').length === 2, 'VLAN のタブが 2 つ');
+    click(document.querySelectorAll('#vtabs button')[1]); await wait(30);
+    ok(S.vlan === String(S.pz.vlans[1]), 'タブで VLAN が切り替わる');
+    // 言語の切替
+    var before = $('b-check').textContent;
+    click('#b-lang'); await wait(30);
+    ok(document.documentElement.lang !== (LANG === 'en' ? 'ja' : 'en'), '言語が切り替わる');
+    click('#b-lang'); await wait(30);
+  }catch(e){ ng++; out.push('例外 ' + e); }
+  out.push('NG ' + ng);
+  $('autotest').hidden = false; $('autotest').textContent = out.join('\n');
+  document.title = 'UITEST NG ' + ng;
+}
+
+// ------------------------------------------------------------------ 起動
+$('b-home').addEventListener('click', function(){
+  if ($('b-home').dataset.to === 'portal'){ location.href = '/'; return; }
+  reload().then(function(){ location.hash = ''; });
+});
+$('b-help').addEventListener('click', function(){ S.card = 0; $('v-tut').dataset.on = ''; location.hash = '#t' + S.stage; });
+$('b-lang').addEventListener('click', function(){
+  LANG = LANG === 'en' ? 'ja' : 'en'; store('stp.lang', LANG);
+  var keep = S.card; route(); S.card = keep;
+  if (!$('v-play').hidden && S.pz){ renderPlay(); if (!$('explain').hidden) renderExplain(); if (S.checked && !$('result').hidden) relabelResult(); }
+});
+function relabelResult(){
+  // 言語を切り替えた時は、結果の枠を作り直すだけにする(星と回数は変えない)
+  var g = grade(S.pz, S.ans);
+  if (g.wrong){ var b = $('result'); b.querySelector('.big').textContent = g.wrong === 1 ? t('wrong1') : t('wrongN', {n:g.wrong}); }
+}
+$('b-check').addEventListener('click', function(){
+  if (!S.done) return doCheck();
+  window.scrollTo(0, 0);
+  if (S.level < stageOf(S.stage).levels) location.hash = '#p' + S.stage + '-' + (S.level + 1);
+  else reload().then(function(){ location.hash = ''; });
+});
+$('sh-x').addEventListener('click', closeSheet);
+$('sh-p').addEventListener('click', function(){ step(-1); });
+$('sh-nx').addEventListener('click', function(){ step(1); });
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeSheet(); });
+window.addEventListener('hashchange', route);
+show('home');
+api('state').then(function(ov){
+  S.ov = ov;
+  if (AUTOTEST) return autotest();
+  if (UITEST) return uitest();
+  route();
+});
+})();
+</script>
+</body>
+</html>

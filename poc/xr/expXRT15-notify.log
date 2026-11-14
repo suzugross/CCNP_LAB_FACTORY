@@ -1,0 +1,141 @@
+######## 15:28:20 nv-a: notify を外す → host を消してコミット → host を入れてコミット(自動で notify が作られるか)
+configure
+Tue Nov 10 15:28:22.213 UTC
+RP/0/RP0/CPU0:XR01(config)#
+snmp-server group NMS-V3 v3 priv read NMS-VIEW
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Nov 10 15:28:23.245 UTC
+RP/0/RP0/CPU0:XR01(config)#
+no snmp-server host 10.0.50.10 traps version 3 priv nms-trap
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Nov 10 15:28:24.073 UTC
+RP/0/RP0/CPU0:XR01(config)#
+snmp-server host 10.0.50.10 traps version 3 priv nms-trap
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Nov 10 15:28:24.897 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show snmp group
+Tue Nov 10 15:28:25.740 UTC
+groupname: NMS-RO                        security model:snmpv1
+readview : v1default                     writeview: 
+notifyview: v1default
+row status: active
+
+groupname: NMS-RO                        security model:snmpv2c
+readview : v1default                     writeview: 
+notifyview: v1default
+row status: active
+
+groupname: NMS-V3                        security model:usm
+readview : NMS-VIEW                      writeview: 
+notifyview: 
+row status: active
+
+RP/0/RP0/CPU0:XR01#
+show snmp view
+Tue Nov 10 15:28:26.160 UTC
+NMS-VIEW internet  -  included nonVolatile active
+v1default iso  -  included nonVolatile active
+v1default internet.6.3.15  -  excluded nonVolatile active
+v1default internet.6.3.16  -  excluded nonVolatile active
+v1default internet.6.3.18  -  excluded nonVolatile active
+v1default ciscoMgmt.252  -  excluded nonVolatile active
+v1default ciscoMgmt.394  -  excluded nonVolatile active
+v1default ciscoMgmt.395  -  excluded nonVolatile active
+v1default ciscoMgmt.399  -  excluded nonVolatile active
+v1default ciscoMgmt.400  -  excluded nonVolatile active
+v1default ciscoMgmt.716  -  excluded nonVolatile active
+RP/0/RP0/CPU0:XR01#
+show running-config snmp-server
+Tue Nov 10 15:28:26.582 UTC
+snmp-server engineID local 00:00:00:09:03:00:00:00:0a:ff:00:01
+snmp-server host 10.0.50.10 traps version 3 priv nms-trap
+snmp-server user nms-trap NMS-V3 v3 auth sha encrypted 0330490A164200595A01545442 priv aes 128 encrypted 133105131B4134382232656260
+snmp-server view NMS-VIEW 1.3.6.1 included
+snmp-server community NMS-RO RO IPv4 NMS-ONLY
+snmp-server group NMS-V3 v3 priv read NMS-VIEW
+snmp-server traps snmp linkup
+snmp-server traps snmp linkdown
+
+RP/0/RP0/CPU0:XR01#
+== TRAPS linkDown=0 linkUp=0
+######## 15:28:47 nv-b: user も消して入れ直す(group → user → host の順に別々のコミット)
+configure
+Tue Nov 10 15:28:48.978 UTC
+RP/0/RP0/CPU0:XR01(config)#
+no snmp-server host 10.0.50.10 traps version 3 priv nms-trap
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Nov 10 15:28:49.907 UTC
+RP/0/RP0/CPU0:XR01(config)#
+no snmp-server user nms-trap
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Nov 10 15:28:50.730 UTC
+RP/0/RP0/CPU0:XR01(config)#
+snmp-server user nms-trap NMS-V3 v3 auth sha clear Trap-Auth-15 priv aes 128 clear Trap-Priv-15
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Nov 10 15:28:51.550 UTC
+RP/0/RP0/CPU0:XR01(config)#
+snmp-server host 10.0.50.10 traps version 3 priv nms-trap
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Nov 10 15:28:52.379 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show snmp group
+Tue Nov 10 15:28:53.298 UTC
+groupname: NMS-RO                        security model:snmpv1
+readview : v1default                     writeview: 
+notifyview: v1default
+row status: active
+
+groupname: NMS-RO                        security model:snmpv2c
+readview : v1default                     writeview: 
+notifyview: v1default
+row status: active
+
+groupname: NMS-V3                        security model:usm
+readview : NMS-VIEW                      writeview: 
+notifyview: 
+row status: active
+
+RP/0/RP0/CPU0:XR01#
+show snmp view
+Tue Nov 10 15:28:53.706 UTC
+NMS-VIEW internet  -  included nonVolatile active
+v1default iso  -  included nonVolatile active
+v1default internet.6.3.15  -  excluded nonVolatile active
+v1default internet.6.3.16  -  excluded nonVolatile active
+v1default internet.6.3.18  -  excluded nonVolatile active
+v1default ciscoMgmt.252  -  excluded nonVolatile active
+v1default ciscoMgmt.394  -  excluded nonVolatile active
+v1default ciscoMgmt.395  -  excluded nonVolatile active
+v1default ciscoMgmt.399  -  excluded nonVolatile active
+v1default ciscoMgmt.400  -  excluded nonVolatile active
+v1default ciscoMgmt.716  -  excluded nonVolatile active
+RP/0/RP0/CPU0:XR01#
+== TRAPS linkDown=0 linkUp=0
+show snmp | include "Trap PDUs"
+Tue Nov 10 15:29:16.464 UTC
+    0 Trap PDUs
+RP/0/RP0/CPU0:XR01#
+######## 15:29:16 nv-c: notify を戻す
+configure
+Tue Nov 10 15:29:18.150 UTC
+RP/0/RP0/CPU0:XR01(config)#
+snmp-server group NMS-V3 v3 priv read NMS-VIEW notify NMS-VIEW
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Nov 10 15:29:19.082 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+== TRAPS linkDown=1 linkUp=1

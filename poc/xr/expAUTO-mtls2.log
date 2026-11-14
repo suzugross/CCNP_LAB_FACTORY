@@ -1,0 +1,27 @@
+######## 13:26:01 mtls_ca xr02(XRd): ca.cert 差し替え → process restart emsd
+run cp /harddisk:/lab-ca.pem /misc/config/grpc/ca.cert
+Tue Nov 10 13:26:03.216 UTC
+
+RP/0/RP0/CPU0:XR02#
+process restart emsd
+Tue Nov 10 13:26:03.726 UTC
+RP/0/RP0/CPU0:XR02#
+$ timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.60.1:57400 --tls-ca /tmp/pki/xr02-ems.pem --tls-server-name ems.cisco.com --tls-cert /tmp/pki/client.pem --tls-key /tmp/pki/client.key capabilities 2>&1 | head -1
+gNMI version: 0.10.0
+[rc=0]
+######## 13:26:19 mtls: 証明書なし・他の CA の証明書(自己署名)では
+$ cd /tmp/pki && openssl req -x509 -newkey rsa:2048 -nodes -keyout rogue.key -out rogue.pem -days 30 -subj /CN=rogue 2>/dev/null; timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.50.1:57400 --tls-ca /tmp/pki/xr01-ems.pem --tls-server-name ems.cisco.com --tls-cert /tmp/pki/rogue.pem --tls-key /tmp/pki/rogue.key capabilities 2>&1 | head -1
+target "10.0.50.1:57400", capabilities request failed: "10.0.50.1:57400" CapabilitiesRequest failed: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: bad certificate"
+[rc=0]
+######## 13:26:19 再起動後もダイヤルアウトが続くか
+show telemetry model-driven subscription | include "Subscrip$subscription | include "Subscript                          ion|DG-"show telemetry model-driven subscription | include "Subscri$
+Tue Nov 10 13:26:21.057 UTC
+Subscription:  SUB-TCP  ID:  1                 State: ACTIVE
+  DG-TCP   self-describing-gpb tcp         Active  57000                                     10.0.50.10                                                     
+Subscription:  SUB-TLS  ID:  2                 State: ACTIVE
+  DG-TLS   self-describing-gpb grpc        Active  57600                                     10.0.50.10                                                     
+Subscription:  SUB-GRPC  ID:  3                 State: ACTIVE
+  DG-GRPC   self-describing-gpb grpc        Active  57500                                     10.0.50.10                                                     
+Subscription:  SUB-MTLS  ID:  4                 State: NA
+  DG-MTLS   self-describing-gpb grpc        NA      57700                                     10.0.50.10                                                     
+RP/0/RP0/CPU0:XR01#

@@ -1,0 +1,65 @@
+# POC-CLABEOS-01 採点基準(containerlab だけ・Arista cEOS × FRR)。
+# 2026-11-14 cEOS 4.37.0F で E2E 済み(CLAB-SOLO.design.md §7)。EOS の採点は enable してから(grade.yml)。
+problem: POC-CLABEOS-01
+total_points: 100
+
+checks:
+  - name: "EOS1: Ethernet1 が routed port で 10.0.14.1/30・Loopback0 に 192.168.0.4/32"
+    node: EOS1
+    exec: eos
+    command: "show running-config"
+    raw:
+      - regex: '(?ms)^interface Ethernet1\n(?:   .*\n)*?   no switchport\n(?:   .*\n)*?   ip address 10\.0\.14\.1/30'
+      - regex: '(?ms)^interface Loopback0\n(?:   .*\n)*?   ip address 192\.168\.0\.4/32'
+    points: 20
+
+  - name: "EOS1: ip routing と OSPF(router-id 192.168.0.4)"
+    node: EOS1
+    exec: eos
+    command: "show running-config"
+    raw:
+      - regex: '(?m)^ip routing$'
+      - regex: '(?ms)^router ospf \d+\n(?:   .*\n)*?   router-id 192\.168\.0\.4'
+    points: 15
+
+  - name: "EOS1: FRR1(192.168.0.3)と full 隣接 (EOS の JSON)"
+    node: EOS1
+    exec: eos
+    command: "show ip ospf neighbor | json"
+    parser: json
+    find: ["vrfs", "default", "instList", "*", "ospfNeighborEntries", "*"]
+    match:
+      routerId: "192.168.0.3"
+      interfaceAddress: "10.0.14.2"
+      adjacencyState: "full"
+    points: 15
+
+  - name: "FRR1: EOS1(192.168.0.4)と Full 隣接 (FRR の JSON)"
+    node: FRR1
+    exec: frr
+    command: "show ip ospf neighbor json"
+    parser: json
+    find: ["neighbors", "192.168.0.4", "*"]
+    match:
+      converged: "Full"
+      ifaceAddress: "10.0.14.1"
+    points: 15
+
+  - name: "FRR1: EOS1 の Loopback0(192.168.0.4/32)を OSPF で学習・採用 (FRR の JSON)"
+    node: FRR1
+    exec: frr
+    command: "show ip route 192.168.0.4/32 json"
+    parser: json
+    find: ["192.168.0.4/32", "*"]
+    match:
+      protocol: "ospf"
+      selected: true
+    points: 15
+
+  - name: "EOS1→FRR1: Loopback0 から lo への ping"
+    node: EOS1
+    exec: eos
+    command: "ping 192.168.0.3 source 192.168.0.4 repeat 5"
+    raw:
+      - regex: '5 packets transmitted, 5 received'
+    points: 20

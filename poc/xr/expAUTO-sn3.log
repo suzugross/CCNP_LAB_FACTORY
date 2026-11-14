@@ -1,0 +1,86 @@
+######## 13:38:59 sn3: snmptrapd(ポート 162 を使っていたもの)
+$ sudo ss -lunp | grep ":162 "; systemctl is-active snmptrapd snmptrapd.socket 2>&1; sudo systemctl stop snmptrapd.socket snmptrapd 2>&1; sudo pkill -x snmptrapd; sleep 1; sudo ss -lunp | grep ":162 "
+UNCONN 0      0            0.0.0.0:162       0.0.0.0:*    users:(("systemd",pid=1,fd=202))          
+UNCONN 0      0               [::]:162          [::]:*    users:(("systemd",pid=1,fd=203))          
+inactive
+active
+[rc=1]
+$ sudo snmptrapd -C -c /tmp/snmptrapd.conf -Lf /tmp/traps.log -p /tmp/snmptrapd.pid udp:162; sleep 2; pgrep -a snmptrapd; sudo truncate -s0 /tmp/traps.log
+7927 snmptrapd -C -c /tmp/snmptrapd.conf -Lf /tmp/traps.log -p /tmp/snmptrapd.pid udp:162
+[rc=0]
+XR02 engineID=000000090300525400afe3ae
+######## 13:39:03 sn3: XR01 の Loopback9 を no shutdown → shutdown / XR02 の RT01 側(Gi0/0/0/0)を shutdown → no shutdown(XR02 の engineID は未登録)
+configure
+Tue Nov 10 13:39:05.090 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface Loopback9
+RP/0/RP0/CPU0:XR01(config-if)#
+no shutdown
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Tue Nov 10 13:39:06.414 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+shutdown
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Tue Nov 10 13:39:07.732 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Tue Nov 10 13:39:10.471 UTC
+RP/0/RP0/CPU0:XR02(config)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR02(config-if)#
+shutdown
+RP/0/RP0/CPU0:XR02(config-if)#
+commit
+Tue Nov 10 13:39:11.791 UTC
+RP/0/RP0/CPU0:XR02(config-if)#
+no shutdown
+RP/0/RP0/CPU0:XR02(config-if)#
+commit
+Tue Nov 10 13:39:12.602 UTC
+RP/0/RP0/CPU0:XR02(config-if)#
+end
+RP/0/RP0/CPU0:XR02#
+$ sudo grep -vE "Cannot adopt|AgentX" /tmp/traps.log | tail -30
+[rc=0]
+show snmp | include "Trap PDUs|pkts sent|dropped"
+Tue Nov 10 13:39:24.874 UTC
+    0 Trap PDUs
+             Number of pkts sent: 0
+          Number of pkts dropped: 0
+    Number of Informs dropped: 0 
+RP/0/RP0/CPU0:XR01#
+show snmp | include "Trap PDUs|pkts sent|dropped"
+Tue Nov 10 13:39:26.593 UTC
+    0 Trap PDUs
+             Number of pkts sent: 0
+          Number of pkts dropped: 0
+    Number of Informs dropped: 0 
+RP/0/RP0/CPU0:XR02#
+######## 13:39:26 sn3: XR02 の engineID も登録して再送
+$ echo 'createUser -e 0x000000090300525400afe3ae USR-V3 SHA PocAuth123 AES PocPriv123' >> /tmp/snmptrapd.conf
+[rc=0]
+$ sudo pkill -x snmptrapd; sleep 1; sudo snmptrapd -C -c /tmp/snmptrapd.conf -Lf /tmp/traps.log -p /tmp/snmptrapd.pid udp:162; sleep 2; sudo truncate -s0 /tmp/traps.log
+[rc=0]
+configure
+Tue Nov 10 13:39:31.513 UTC
+RP/0/RP0/CPU0:XR02(config)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR02(config-if)#
+shutdown
+RP/0/RP0/CPU0:XR02(config-if)#
+commit
+Tue Nov 10 13:39:32.833 UTC
+RP/0/RP0/CPU0:XR02(config-if)#
+no shutdown
+RP/0/RP0/CPU0:XR02(config-if)#
+commit
+Tue Nov 10 13:39:33.751 UTC
+RP/0/RP0/CPU0:XR02(config-if)#
+end
+RP/0/RP0/CPU0:XR02#
+$ sudo grep -vE "Cannot adopt|AgentX" /tmp/traps.log | tail -30
+[rc=0]

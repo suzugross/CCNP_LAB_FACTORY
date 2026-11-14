@@ -1,0 +1,45 @@
+show flow monitor
+Flow Monitor FM-CUST:
+  Description:       User defined
+  Flow Record:       FR-CUST
+  Flow Exporter:     FE-NMS
+  Cache:
+    Type:                 normal (Platform cache)
+    Status:               allocated
+    Size:                 200000 entries
+    Inactive Timeout:     15 secs
+    Active Timeout:       60 secs
+
+    Trans end aging:   off
+
+
+PE2#
+show flow exporter | include Export protocol|Destination IP|Source Interface|Destination Port
+  Export protocol:          IPFIX (Version 10)
+    Destination IP address: 10.0.50.10
+    Source Interface:       Loopback0
+    Destination Port:       4739
+PE2#
+show running-config | section flow
+flow record FR-CUST
+ match ipv4 source address
+ match ipv4 destination address
+ match ipv4 protocol
+ match transport source-port
+ match transport destination-port
+ match interface input
+ collect counter bytes long
+ collect counter packets long
+ collect timestamp absolute first
+ collect timestamp absolute last
+flow exporter FE-NMS
+ destination 10.0.50.10
+ source Loopback0
+ transport udp 4739
+ export-protocol ipfix
+flow monitor FM-CUST
+ exporter FE-NMS
+ cache timeout active 60
+ record FR-CUST
+ ip flow monitor FM-CUST input
+PE2#

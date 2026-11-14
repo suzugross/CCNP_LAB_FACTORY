@@ -1,0 +1,320 @@
+
+######## 13:14:05 go: ダイヤルアウト(TCP と gRPC の TLS なし)→ telegraf で受ける
+$ cat > /tmp/telegraf.conf <<'EOF'
+[agent]
+  interval = "10s"
+  flush_interval = "5s"
+  omit_hostname = true
+[[inputs.cisco_telemetry_mdt]]
+  transport = "tcp"
+  service_address = ":57000"
+[[inputs.cisco_telemetry_mdt]]
+  transport = "grpc"
+  service_address = ":57500"
+[[outputs.file]]
+  files = ["/tmp/mdt.out"]
+  data_format = "json"
+EOF
+[rc=0]
+$ pkill -f "telegraf --config /tmp/telegraf.conf"; rm -f /tmp/mdt.out; setsid nohup telegraf --config /tmp/telegraf.conf > /tmp/telegraf.log 2>&1 < /dev/null & sleep 3; ss -ltnp | grep -E "57000|57500"
+[rc=-1]
+configure
+Tue Nov 10 13:14:07.250 UTC
+RP/0/RP0/CPU0:XR01(config)#
+telemetry model-driven
+RP/0/RP0/CPU0:XR01(config-model-driven)#
+destination-group DG-TCP
+RP/0/RP0/CPU0:XR01(config-model-driven-dest)#
+address-family ipv4 10.0.50.10 por$10 port                           57000address-family ipv4 10.0.50.10 po$
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+encoding self-describing-gpb
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+protocol tcp
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+exit
+RP/0/RP0/CPU0:XR01(config-model-driven-dest)#
+exit
+RP/0/RP0/CPU0:XR01(config-model-driven)#
+destination-group DG-GRPC
+RP/0/RP0/CPU0:XR01(config-model-driven-dest)#
+address-family ipv4 10.0.50.10 por$10 port                           57500address-family ipv4 10.0.50.10 po$
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+encoding self-describing-gpb
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+protocol grpc no-tls
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+exit
+RP/0/RP0/CPU0:XR01(config-model-driven-dest)#
+exit
+RP/0/RP0/CPU0:XR01(config-model-driven)#
+sensor-group SG-IF
+RP/0/RP0/CPU0:XR01(config-model-driven-snsr-grp)#
+sensor-path openconfig-interfa$fac                          es:interfaces/interface/st$sta                          te/counterssensor-path openconfig-interf$
+RP/0/RP0/CPU0:XR01(config-model-driven-snsr-grp)#
+sensor-path Cisco-IOS-XR-infra$ra-                          statsd-oper:infra-statisti$tic                          s/interfaces/interface/lat$ate                          st/generic-counterssensor-path Cisco-IOS-XR-infr$
+RP/0/RP0/CPU0:XR01(config-model-driven-snsr-grp)#
+exit
+RP/0/RP0/CPU0:XR01(config-model-driven)#
+subscription SUB-TCP
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+sensor-group-id SG-IF sample-inter$-interv                          al 10000sensor-group-id SG-IF sample-inte$
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+destination-id DG-TCP
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+source-interface Loopback0
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+exit
+RP/0/RP0/CPU0:XR01(config-model-driven)#
+subscription SUB-GRPC
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+sensor-group-id SG-IF sample-inter$-interv                          al 10000sensor-group-id SG-IF sample-inte$
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+destination-id DG-GRPC
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+source-interface Loopback0
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+commit
+Tue Nov 10 13:14:18.330 UTC
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+show configuration failed
+Tue Nov 10 13:14:19.251 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Tue Nov 10 13:14:22.436 UTC
+RP/0/RP0/CPU0:XR02(config)#
+telemetry model-driven
+RP/0/RP0/CPU0:XR02(config-model-driven)#
+destination-group DG-TCP
+RP/0/RP0/CPU0:XR02(config-model-driven-dest)#
+address-family ipv4 10.0.60.10 port 57000
+RP/0/RP0/CPU0:XR02(config-model-driven-dest-addr)#
+encoding self-describing-gpb
+RP/0/RP0/CPU0:XR02(config-model-driven-dest-addr)#
+protocol tcp
+RP/0/RP0/CPU0:XR02(config-model-driven-dest-addr)#
+exit
+RP/0/RP0/CPU0:XR02(config-model-driven-dest)#
+exit
+RP/0/RP0/CPU0:XR02(config-model-driven)#
+destination-group DG-GRPC
+RP/0/RP0/CPU0:XR02(config-model-driven-dest)#
+address-family ipv4 10.0.60.10 port 57500
+RP/0/RP0/CPU0:XR02(config-model-driven-dest-addr)#
+encoding self-describing-gpb
+RP/0/RP0/CPU0:XR02(config-model-driven-dest-addr)#
+protocol grpc no-tls
+RP/0/RP0/CPU0:XR02(config-model-driven-dest-addr)#
+exit
+RP/0/RP0/CPU0:XR02(config-model-driven-dest)#
+exit
+RP/0/RP0/CPU0:XR02(config-model-driven)#
+sensor-group SG-IF
+RP/0/RP0/CPU0:XR02(config-model-driven-snsr-grp)#
+sensor-path openconfig-interfaces:interfaces/interface/state/counters
+RP/0/RP0/CPU0:XR02(config-model-driven-snsr-grp)#
+sensor-path Cisco-IOS-XR-infra-statsd-oper:infra-statistics/interfaces/interface/latest/generic-counters
+RP/0/RP0/CPU0:XR02(config-model-driven-snsr-grp)#
+exit
+RP/0/RP0/CPU0:XR02(config-model-driven)#
+subscription SUB-TCP
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+sensor-group-id SG-IF sample-interval 10000
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+destination-id DG-TCP
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+source-interface Loopback0
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+exit
+RP/0/RP0/CPU0:XR02(config-model-driven)#
+subscription SUB-GRPC
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+sensor-group-id SG-IF sample-interval 10000
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+destination-id DG-GRPC
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+source-interface Loopback0
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+commit
+Tue Nov 10 13:14:33.618 UTC
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+show configuration failed
+Tue Nov 10 13:14:34.125 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+end
+RP/0/RP0/CPU0:XR02#
+$ wc -l /tmp/mdt.out
+[stderr] wc: /tmp/mdt.out: No such file or directory
+[rc=1]
+$ tail -5 /tmp/telegraf.log
+[stderr] tail: cannot open '/tmp/telegraf.log' for reading: No such file or directory
+[rc=1]
+$ jq -r '[.tags.source, .tags.subscription, .name, .tags.name] | @tsv' /tmp/mdt.out | sort | uniq -c | head -30
+[stderr] jq: error: Could not open file /tmp/mdt.out: No such file or directory
+[rc=0]
+$ head -c 900 /tmp/mdt.out
+[stderr] head: cannot open '/tmp/mdt.out' for reading: No such file or directory
+[rc=1]
+show telemetry model-driven subscription
+Tue Nov 10 13:15:17.591 UTC
+Subscription:  SUB-TCP  ID:  12                State: NA
+-------------
+  Sensor groups:
+  Id                               Interval(ms)               State     
+  SG-IF                            10000                      Partial   
+
+  Destination Groups:
+  Id       Encoding            Transport   State   Port    Vrf                               IP                                                             
+  DG-TCP   self-describing-gpb tcp         NA      57000                                     10.0.50.10                                                     
+    TLS :             False
+
+Subscription:  SUB-GRPC  ID:  13                State: NA
+-------------
+  Sensor groups:
+  Id                               Interval(ms)               State     
+  SG-IF                            10000                      Partial   
+
+  Destination Groups:
+  Id        Encoding            Transport   State   Port    Vrf                               IP                                                             
+  DG-GRPC   self-describing-gpb grpc        NA      57500                                     10.0.50.10                                                     
+    TLS :             False
+
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven destination
+Tue Nov 10 13:15:17.995 UTC
+  Group Id         Sub                          IP                                                             Port    Encoding            Transport   State       
+  -----------------------------------------------------------------------------------------------------------------------------------------------------------
+  DG-TCP           SUB-TCP                      10.0.50.10                                                     57000   self-describing-gpb tcp         NA          
+      TLS:                  False
+  Collection statistics:
+    Maximum tokens                   : 4000
+    Event tokens                     : 750
+    Cadence tokens                   : 750
+    Token processed at               : 
+    Cadence token advertised at      : 
+    Event token advertised at        : 
+    GNMI initial synchronization time: 
+    Pending queue size               : 0
+    Pending queue memory size (bytes): 0
+    Processed events                 : 0
+    Collection tokens                : 0
+    Send channel full count          : 0
+    Channel full send retries        : 0
+    Sent RIB messages                : 0
+    Received RIB messages            : 0
+
+  DG-GRPC          SUB-GRPC                     10.0.50.10                                                     57500   self-describing-gpb grpc        NA          
+      TLS:                  False
+  Collection statistics:
+    Maximum tokens                   : 4000
+    Event tokens                     : 750
+    Cadence tokens                   : 750
+    Token processed at               : 
+    Cadence token advertised at      : 
+    Event token advertised at        : 
+    GNMI initial synchronization time: 
+    Pending queue size               : 0
+    Pending queue memory size (bytes): 0
+    Processed events                 : 0
+    Collection tokens                : 0
+    Send channel full count          : 0
+    Channel full send retries        : 0
+    Sent RIB messages                : 0
+    Received RIB messages            : 0
+
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven sensor-group
+Tue Nov 10 13:15:18.398 UTC
+  Sensor Group Id:SG-IF
+    ID:                 12
+    Sensor Path:        openconfig-interfaces:interfaces/interface/state/counters
+    Sensor Path State:  Resolved
+    Sensor Path:        Cisco-IOS-XR-infra-statsd-oper:infra-statistics/interfaces/interface/latest/generic-counters
+    Sensor Path State:  Not Resolved
+      Status:           Invalid sensor path
+
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven subscription
+Tue Nov 10 13:15:20.138 UTC
+Subscription:  SUB-TCP  ID:  8                 State: NA
+-------------
+  Sensor groups:
+  Id                               Interval(ms)               State     
+  SG-IF                            10000                      Partial   
+
+  Destination Groups:
+  Id       Encoding            Transport   State   Port    Vrf                               IP                                                             
+  DG-TCP   self-describing-gpb tcp         NA      57000                                     10.0.60.10                                                     
+    TLS :             False
+
+Subscription:  SUB-GRPC  ID:  9                 State: NA
+-------------
+  Sensor groups:
+  Id                               Interval(ms)               State     
+  SG-IF                            10000                      Partial   
+
+  Destination Groups:
+  Id        Encoding            Transport   State   Port    Vrf                               IP                                                             
+  DG-GRPC   self-describing-gpb grpc        NA      57500                                     10.0.60.10                                                     
+    TLS :             False
+
+RP/0/RP0/CPU0:XR02#
+show telemetry model-driven destination
+Tue Nov 10 13:15:20.546 UTC
+  Group Id         Sub                          IP                                                             Port    Encoding            Transport   State       
+  -----------------------------------------------------------------------------------------------------------------------------------------------------------
+  DG-TCP           SUB-TCP                      10.0.60.10                                                     57000   self-describing-gpb tcp         NA          
+      TLS:                  False
+  Collection statistics:
+    Maximum tokens                   : 4000
+    Event tokens                     : 750
+    Cadence tokens                   : 750
+    Token processed at               : 
+    Cadence token advertised at      : 
+    Event token advertised at        : 
+    GNMI initial synchronization time: 
+    Pending queue size               : 0
+    Pending queue memory size (bytes): 0
+    Processed events                 : 0
+    Collection tokens                : 0
+    Send channel full count          : 0
+    Channel full send retries        : 0
+    Sent RIB messages                : 0
+    Received RIB messages            : 0
+
+  DG-GRPC          SUB-GRPC                     10.0.60.10                                                     57500   self-describing-gpb grpc        NA          
+      TLS:                  False
+  Collection statistics:
+    Maximum tokens                   : 4000
+    Event tokens                     : 750
+    Cadence tokens                   : 750
+    Token processed at               : 
+    Cadence token advertised at      : 
+    Event token advertised at        : 
+    GNMI initial synchronization time: 
+    Pending queue size               : 0
+    Pending queue memory size (bytes): 0
+    Processed events                 : 0
+    Collection tokens                : 0
+    Send channel full count          : 0
+    Channel full send retries        : 0
+    Sent RIB messages                : 0
+    Received RIB messages            : 0
+
+RP/0/RP0/CPU0:XR02#
+show telemetry model-driven sensor-group
+Tue Nov 10 13:15:20.950 UTC
+  Sensor Group Id:SG-IF
+    ID:                 8
+    Sensor Path:        openconfig-interfaces:interfaces/interface/state/counters
+    Sensor Path State:  Resolved
+    Sensor Path:        Cisco-IOS-XR-infra-statsd-oper:infra-statistics/interfaces/interface/latest/generic-counters
+    Sensor Path State:  Not Resolved
+      Status:           Invalid sensor path
+
+RP/0/RP0/CPU0:XR02#

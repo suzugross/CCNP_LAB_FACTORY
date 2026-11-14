@@ -1,0 +1,37 @@
+######## 14:17:34 mdt-h: dialout.pem を外し、telegraf を再起動して張り直させる
+run mv /misc/config/grpc/dialout/dialout.pem /harddisk:/dialout.pem.bak
+Tue Nov 10 14:17:36.369 UTC
+
+RP/0/RP0/CPU0:XR01#
+== CMD 1 rc=0: sudo -n systemctl restart telegraf; sleep 2; systemctl is-active telegraf
+active
+show telemetry model-driven subscription SUB-IF | include "State|TLS"
+Tue Nov 10 14:18:20.727 UTC
+  State:       NA
+    Sensor Path State:    Resolved
+    State:                NA
+    TLS :                 collector.nms.lab
+RP/0/RP0/CPU0:XR01#
+show grpc trace ems last 4
+Tue Nov 10 14:18:21.137 UTC
+249 wrapping entries (211648 possible, 1472 allocated, 0 filtered, 249 total)
+Nov 10 14:17:37.232 ems/grpc 0/RP0/CPU0 t4365  EMS-GRPC: [core] [Channel #15]ccBalancerWrapper: closing
+Nov 10 14:17:37.232 ems/grpc 0/RP0/CPU0 t4365  EMS-GRPC: [core] [Channel #15 SubChannel #16]Subchannel Connectivity change to SHUTDOWN
+Nov 10 14:17:37.232 ems/grpc 0/RP0/CPU0 t4365  EMS-GRPC: [core] [Channel #15 SubChannel #16]Subchannel deleted
+Nov 10 14:17:37.232 ems/grpc 0/RP0/CPU0 t4365  EMS-GRPC: [core] [Channel #15]Channel deleted
+RP/0/RP0/CPU0:XR01#
+######## 14:18:21 mdt-i: dialout.pem を戻す(XR は自分で張り直すか)
+run cp /harddisk:/dialout.pem.bak /misc/config/grpc/dialout/dialout.pem
+Tue Nov 10 14:18:23.763 UTC
+
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven subscription SUB-IF | include "State|TLS"
+Tue Nov 10 14:19:25.691 UTC
+  State:       ACTIVE
+    Sensor Path State:    Resolved
+    State:                Active
+    TLS :                 collector.nms.lab
+RP/0/RP0/CPU0:XR01#
+== MDT RECENT 33
+   openconfig-interfaces:interfaces/interface/state: 33
+== MDT IF GigabitEthernet0/0/0/0 PACKETS yes

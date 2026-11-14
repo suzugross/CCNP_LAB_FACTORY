@@ -1,0 +1,338 @@
+# STP パズル(BL-268)のステージとチュートリアル。生成の規則は topologies/stp_puzzle.py(GEN・valid)。
+# body は軽い Markdown(空行で段落・"- " で箇条書き・**太字**・`code`)。example= stp_puzzle.EXAMPLES の名前(解いた盤面を見せる)。
+# 事実の出どころ= curriculum/U-A3-stp.sources.md で「確定」の項目と poc/stp(エッジ ポートの表示は poc/stp/logs/s4.log)。
+# 7〜9 は PoC の後に足す(stp_puzzle.READY に入るまで画面では準備中)。
+stages:
+  - id: 1
+    title: {en: "Root Bridge", ja: "ルート ブリッジ"}
+    sub: {en: "Three switches, one VLAN. Find the root, then fill in every port.",
+          ja: "3 台・VLAN 1 つ。ルートを見つけて、全部のポートを埋める。"}
+    cards:
+      - title: {en: "Why spanning tree?", ja: "なぜスパニング ツリーか"}
+        body:
+          en: |
+            Switches are wired in loops on purpose, so that one broken link does not cut anyone off.
+
+            But Ethernet frames have no hop limit. In a loop, a single broadcast keeps circling and multiplying (a **broadcast storm**), and MAC address tables never settle.
+
+            STP fixes this by **blocking just enough ports** to leave a loop-free tree. If a link fails, a blocked port takes over.
+          ja: |
+            スイッチは、リンクが 1 本切れても誰も孤立しないように、わざと輪になるようにつなぎます。
+
+            ところがイーサネットのフレームには、何ホップで捨てるという上限がありません。輪の中ではブロードキャストが回り続けて増え(**ブロードキャスト ストーム**)、MAC アドレス テーブルも落ち着きません。
+
+            STP は、**必要なだけポートを止めて**輪のない木を作ります。リンクが切れたら、止めていたポートが代わりに動きます。
+      - title: {en: "Bridge ID and the root bridge", ja: "ブリッジ ID とルート ブリッジ"}
+        body:
+          en: |
+            Every switch has a **bridge ID (BID)**: the bridge priority, then the MAC address.
+
+            - Priority: default **32768**, set in steps of 4096.
+            - The **lowest BID wins**. Compare the priority first; if it ties, the lower MAC address wins (read it as one hexadecimal number from the left).
+
+            The winner is the **root bridge**, the top of the tree. In the game, tap a switch to mark it as the root (★).
+          ja: |
+            スイッチにはそれぞれ**ブリッジ ID(BID)**があります。中身はブリッジ プライオリティと MAC アドレスです。
+
+            - プライオリティ: 既定値は **32768**。4096 刻みで設定します。
+            - **BID が最も小さいスイッチが勝ちます**。先にプライオリティを比べ、同じなら MAC アドレスの小さい方です(左から 16 進数の 1 つの数として読みます)。
+
+            勝ったスイッチが**ルート ブリッジ**、木のてっぺんです。ゲームでは、スイッチを押すとルートの印(★)が付きます。
+      - title: {en: "Four steps", ja: "4 つの手順"}
+        body:
+          en: |
+            Every port gets its role in this order:
+
+            - **① Root bridge**: the lowest BID.
+            - **② Root port (Root)**: on each other switch, the one port with the cheapest path to the root.
+            - **③ Designated port (Desg)**: on each link, the one end that is closer to the root. Every port of the root bridge is designated.
+            - **④ Alternate port (Altn)**: whatever is left. It is a spare path toward the root.
+          ja: |
+            ポートの役割は、次の順に決まります。
+
+            - **① ルート ブリッジ**: BID が最も小さいスイッチ。
+            - **② ルート ポート(Root)**: ルート ブリッジ以外の各スイッチで、ルートへ最も安く行けるポートを 1 つ。
+            - **③ 指定ポート(Desg)**: 各リンクで、ルートに近い側の端を 1 つ。ルート ブリッジのポートはすべて指定ポートです。
+            - **④ 代替ポート(Altn)**: 残ったポート。ルートへの予備の道です。
+      - title: {en: "Roles and states", ja: "役割と状態"}
+        example: ex_tri
+        body:
+          en: |
+            Root and designated ports **forward** frames (**FWD**). Alternate ports **discard** them; Cisco shows this state as **BLK**.
+
+            In this stage every link is 1 Gbps (cost 4), so a direct link to the root is always the cheapest path. Here is a solved board.
+          ja: |
+            ルート ポートと指定ポートはフレームを**転送**します(**FWD**)。代替ポートはフレームを**捨てます**。Cisco の表示は **BLK** です。
+
+            このステージのリンクはすべて 1 Gbps(コスト 4)なので、ルートとの直結がいつも最も安い道です。解いた盤面の例です。
+      - title: {en: "How to play", ja: "遊び方"}
+        body:
+          en: |
+            - Tap a **switch** to mark the root bridge (★).
+            - Tap a **port** (the circle near a switch) and choose its role and state.
+            - When everything is filled in, press **Check**. Wrong answers turn red.
+            - Clear all 5 levels to open the next stage. A first-try clear earns ★★★.
+
+            Tap **?** at any time to read these cards again.
+          ja: |
+            - **スイッチ**を押すと、ルート ブリッジの印(★)が付きます。
+            - **ポート**(スイッチの近くの丸)を押して、役割と状態を選びます。
+            - 全部埋めたら **Check** を押します。間違いは赤くなります。
+            - 5 問すべてクリアすると次のステージが開きます。1 回目で正解すると ★★★。
+
+            **?** を押すと、いつでもこのカードを読み直せます。
+
+  - id: 2
+    title: {en: "Path Cost", ja: "パス コスト"}
+    sub: {en: "Mixed speeds. Add up the costs; the fewest hops is not always the cheapest.",
+          ja: "速度が混在。コストを足し合わせる。ホップ数が少ない道が安いとは限らない。"}
+    cards:
+      - title: {en: "Path cost", ja: "パス コスト"}
+        body:
+          en: |
+            Each port has a **cost** that depends on its speed (short method):
+
+            - 10 Gbps = **2**
+            - 1 Gbps = **4**
+            - 100 Mbps = **19**
+            - 10 Mbps = **100**
+
+            A switch's **root path cost** is the sum of the costs of the **receiving** ports along its path to the root.
+          ja: |
+            ポートには速度で決まる**コスト**があります(ショート方式):
+
+            - 10 Gbps = **2**
+            - 1 Gbps = **4**
+            - 100 Mbps = **19**
+            - 10 Mbps = **100**
+
+            スイッチの**ルート パス コスト**は、ルートまでの道で BPDU を**受け取る側**のポートのコストを足したものです。
+      - title: {en: "Fewest hops is not cheapest", ja: "近道が安いとは限らない"}
+        example: ex_cost
+        body:
+          en: |
+            In the example, SW3 has a direct 100 Mbps link to the root SW1: cost **19**. Going through SW2 over two 1 Gbps links costs **4 + 4 = 8**.
+
+            So SW3's root port faces SW2, and its end of the direct link becomes an alternate port. Always add up the costs instead of counting hops.
+          ja: |
+            例では、SW3 はルートの SW1 と 100 Mbps で直結しています。コストは **19**。SW2 を通って 1 Gbps を 2 本たどると **4 + 4 = 8** です。
+
+            そのため SW3 のルート ポートは SW2 側になり、直結のリンクの SW3 側は代替ポートになります。ホップ数を数えず、コストを足してください。
+      - title: {en: "Designated ports by cost", ja: "指定ポートもコストで"}
+        body:
+          en: |
+            On a link between two non-root switches, compare their root path costs. The cheaper switch's end is designated; the other end is that switch's root port or an alternate port.
+
+            Tip: write down every switch's root path cost first. The rest then falls into place.
+
+            In levels 1 and 2 the cost is printed next to the speed on each link.
+          ja: |
+            ルート ブリッジ以外のスイッチどうしのリンクでは、両端のスイッチのルート パス コストを比べます。安い方の端が指定ポートで、もう一方はそのスイッチのルート ポートか代替ポートです。
+
+            コツ: 先に全スイッチのルート パス コストを書き出すと、残りは自然に決まります。
+
+            level 1 と 2 では、リンクの速度の横にコストも書いてあります。
+
+  - id: 3
+    title: {en: "Tie-Breakers", ja: "同点の決め手"}
+    sub: {en: "Equal costs. The sender's bridge ID and port ID decide.",
+          ja: "コストが同じ。送信元のブリッジ ID とポート ID で決まる。"}
+    cards:
+      - title: {en: "When costs tie", ja: "コストが同じとき"}
+        body:
+          en: |
+            If two paths to the root cost the same, the switch compares, in order:
+
+            - **① Sender bridge ID**: the BID of the neighbor that sent the BPDU. Lower wins.
+            - **② Sender port ID**: the port ID on the neighbor's side. Lower wins.
+
+            On a link, a tie for the designated port goes to the switch with the lower BID.
+          ja: |
+            ルートへの道のコストが同じなら、次の順に比べます。
+
+            - **① 送信元のブリッジ ID**: BPDU を送ってきた隣のスイッチの BID。小さい方が勝ち。
+            - **② 送信元のポート ID**: 隣のスイッチ側のポート ID。小さい方が勝ち。
+
+            リンクの指定ポートでコストが並んだら、BID の小さいスイッチの端が指定ポートです。
+      - title: {en: "Port ID", ja: "ポート ID"}
+        body:
+          en: |
+            A **port ID** is the port priority followed by the port number, written like **128.3**.
+
+            - Port priority: default **128**, set in steps of 16.
+            - Port number: Gi1/0/3 is port 3.
+
+            Tap a port to see its port ID.
+          ja: |
+            **ポート ID** は、ポート プライオリティとポート番号を並べたものです。**128.3** のように書きます。
+
+            - ポート プライオリティ: 既定値は **128**。16 刻みで設定します。
+            - ポート番号: Gi1/0/3 なら 3。
+
+            ポートを押すと、そのポートの ID が見えます。
+      - title: {en: "Port priority works upstream", ja: "ポート プライオリティは上流で効く"}
+        example: ex_par
+        body:
+          en: |
+            The **sender's** port ID is compared, so port priority steers the root port of the switch **below** it.
+
+            In the example, SW2 has two links to the root SW1. Normally SW2 picks the link from SW1's lower port ID (Gi1/0/1 = 128.1). But SW1 has `spanning-tree vlan 10 port-priority 64` on Gi1/0/2, so 64.2 beats 128.1 and SW2's root port moves to the link from SW1 Gi1/0/2.
+
+            The same command on SW2 would not change this choice.
+          ja: |
+            比べるのは**送信元**のポート ID です。そのため、ポート プライオリティは**下流**のスイッチのルート ポートを動かします。
+
+            例では、SW2 はルートの SW1 と 2 本でつながっています。ふつうは SW1 側のポート ID が小さいリンク(Gi1/0/1 = 128.1)を選びます。ところが SW1 の Gi1/0/2 に `spanning-tree vlan 10 port-priority 64` があるので、64.2 が 128.1 に勝ち、SW2 のルート ポートは SW1 Gi1/0/2 から来るリンクへ移ります。
+
+            同じコマンドを SW2 に書いても、この選択は変わりません。
+
+  - id: 4
+    title: {en: "Tuning", ja: "手で変える"}
+    sub: {en: "Bigger boards with hand-set costs and the long method.",
+          ja: "大きめの盤面。コストの手設定とロング方式。"}
+    cards:
+      - title: {en: "Changing a port's cost", ja: "ポートのコストを変える"}
+        body:
+          en: |
+            `spanning-tree vlan 10 cost 10` on an interface sets that port's cost for VLAN 10.
+
+            The cost counts when a BPDU is **received** on that port. It changes the root path cost of **this** switch and can move its root port; switches further down then add up from the new value.
+
+            The settings are listed under the board, and the port labels show them.
+          ja: |
+            インターフェイスの `spanning-tree vlan 10 cost 10` は、VLAN 10 でのそのポートのコストを変えます。
+
+            このコストは、そのポートで BPDU を**受け取る**ときに足されます。**このスイッチ**のルート パス コストが変わり、ルート ポートが動くことがあります。その先のスイッチは、新しい値から足していきます。
+
+            設定は盤面の下に並べてあり、ポートのラベルにも出ます。
+      - title: {en: "Long path-cost method", ja: "ロング方式"}
+        body:
+          en: |
+            `spanning-tree pathcost method long` switches to larger cost values:
+
+            - 10 Gbps = **2000**
+            - 1 Gbps = **20000**
+            - 100 Mbps = **200000**
+            - 10 Mbps = **2000000**
+
+            All switches on one board use the same method; the board says which.
+          ja: |
+            `spanning-tree pathcost method long` で、大きなコストの値に切り替わります。
+
+            - 10 Gbps = **2000**
+            - 1 Gbps = **20000**
+            - 100 Mbps = **200000**
+            - 10 Mbps = **2000000**
+
+            1 つの盤面の中では、全スイッチが同じ方式です。どちらの方式かは盤面に書いてあります。
+      - title: {en: "Check your answer", ja: "検算"}
+        body:
+          en: |
+            Before pressing Check, count:
+
+            - Each non-root switch has **exactly one** root port.
+            - Each link has **exactly one** designated port.
+            - Alternate ports = links − (switches − 1).
+
+            If a count is off, something is wrong.
+          ja: |
+            Check の前に数えてみてください。
+
+            - ルート ブリッジ以外の各スイッチに、ルート ポートが**ちょうど 1 つ**。
+            - 各リンクに、指定ポートが**ちょうど 1 つ**。
+            - 代替ポートの数 = リンクの本数 −(スイッチの台数 − 1)。
+
+            数が合わなければ、どこかが違っています。
+
+  - id: 5
+    title: {en: "Per-VLAN Trees", ja: "VLAN ごとの木"}
+    sub: {en: "Two VLANs on one board, two separate trees.",
+          ja: "1 つの盤面に VLAN 2 つ。木も 2 つ。"}
+    cards:
+      - title: {en: "One tree per VLAN", ja: "VLAN ごとに 1 つの木"}
+        body:
+          en: |
+            Rapid PVST+ runs a separate spanning tree for **each VLAN**.
+
+            Give each VLAN a different root bridge and the VLANs block different links, so every link carries some traffic. This is per-VLAN load sharing.
+          ja: |
+            Rapid PVST+ は、**VLAN ごとに**別のスパニング ツリーを動かします。
+
+            VLAN ごとにルート ブリッジを変えると、VLAN ごとに止まるリンクが変わり、どのリンクも何かの VLAN を運びます。VLAN ごとの負荷分散です。
+      - title: {en: "Priority per VLAN", ja: "VLAN ごとのプライオリティ"}
+        body:
+          en: |
+            `spanning-tree vlan 10 priority 24576` sets the priority for VLAN 10 only. The value must be a multiple of 4096.
+
+            The bridge ID also carries the VLAN number (the **extended system ID**), so `show spanning-tree vlan 10` prints 24576 + 10 = **24586**. The board shows the set value, and the explanation shows both.
+          ja: |
+            `spanning-tree vlan 10 priority 24576` は、VLAN 10 だけのプライオリティを設定します。値は 4096 の倍数です。
+
+            ブリッジ ID には VLAN 番号も入る(**拡張システム ID**)ので、`show spanning-tree vlan 10` の表示は 24576 + 10 = **24586** です。盤面には設定した値を、解説には両方を出します。
+      - title: {en: "How to play", ja: "遊び方"}
+        body:
+          en: |
+            Switch VLANs with the tabs above the board. Each VLAN has its own root bridge and its own port roles; fill in both VLANs before pressing Check.
+
+            The wiring, speeds and MAC addresses are the same in both VLANs. Only the priorities (and sometimes a per-VLAN cost) differ.
+          ja: |
+            盤面の上のタブで VLAN を切り替えます。VLAN ごとにルート ブリッジもポートの役割も別です。両方の VLAN を埋めてから Check を押してください。
+
+            配線・速度・MAC アドレスはどちらの VLAN でも同じです。違うのはプライオリティ(と、ときどき VLAN ごとのコスト)だけです。
+
+  - id: 6
+    title: {en: "Campus", ja: "キャンパス"}
+    sub: {en: "Lab-sized campus boards with PCs on the access switches.",
+          ja: "ラボと同じ大きさのキャンパスの盤面。アクセスに PC。"}
+    cards:
+      - title: {en: "A campus network", ja: "キャンパス ネットワーク"}
+        body:
+          en: |
+            These boards use the same wiring as the STP labs: distribution (and core) switches on top, access switches below. The small tag in the corner of each switch shows its layer (CORE, DIST, ACC).
+
+            In a good design the root bridge and the backup root are upper-layer switches, so the alternate ports end up on access uplinks. Some levels break that design on purpose.
+          ja: |
+            ここの盤面は STP のラボと同じ配線です。上に分配(とコア)、下にアクセスのスイッチ。各スイッチの角の小さな札が層を表します(CORE= コア・DIST= 分配・ACC= アクセス)。
+
+            よい設計では、ルート ブリッジと予備のルートを上の層に置くので、代替ポートはアクセスの上りに来ます。わざと設計を崩した level もあります。
+      - title: {en: "Edge ports", ja: "エッジ ポート"}
+        body:
+          en: |
+            Ports to PCs are **edge ports** (`spanning-tree portfast`). They skip the listening and learning stages and go straight to forwarding.
+
+            An edge port is a **designated** port in the **FWD** state. A real switch shows it like this:
+
+            `Et0/2  Desg FWD 100  128.3  P2p Edge`
+
+            Fill in the PC ports too.
+          ja: |
+            PC へのポートは**エッジ ポート**です(`spanning-tree portfast`)。リスニングとラーニングを飛ばして、すぐにフォワーディングになります。
+
+            エッジ ポートの役割は**指定ポート**、状態は **FWD** です。実機ではこう表示されます。
+
+            `Et0/2  Desg FWD 100  128.3  P2p Edge`
+
+            PC へのポートも埋めてください。
+      - title: {en: "Work layer by layer", ja: "層ごとに解く"}
+        body:
+          en: |
+            Same four steps, more switches. Find the root, write down every switch's root path cost, then pick the root ports, then the designated ports.
+
+            Parallel links between the same two switches are drawn side by side; tap each one.
+          ja: |
+            手順は同じ 4 つで、スイッチが増えただけです。ルートを見つけ、全スイッチのルート パス コストを書き出し、ルート ポート、指定ポートの順に決めます。
+
+            同じ 2 台を結ぶ並行リンクは並べて描いてあります。1 本ずつ押してください。
+
+  - id: 7
+    title: {en: "MST Region", ja: "MST リージョン"}
+    sub: {en: "Coming later: instances inside one MST region.",
+          ja: "準備中: 1 つの MST リージョンとインスタンス。"}
+  - id: 8
+    title: {en: "MST Boundary", ja: "MST の境界"}
+    sub: {en: "Coming later: region boundaries and PVST+.",
+          ja: "準備中: リージョンの境界と PVST+。"}
+  - id: 9
+    title: {en: "Bonus: Backup & Guards", ja: "おまけ: バックアップとガード"}
+    sub: {en: "Coming later: backup ports and ports stopped by guards.",
+          ja: "準備中: バックアップ ポートと、ガードで止まったポート。"}

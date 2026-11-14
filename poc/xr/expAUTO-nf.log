@@ -1,0 +1,167 @@
+
+######## 13:26:27 nf: NetFlow v9 を XR01・XR02 の RT01 側の入力に付け、RT01 から SRV01 へ流す → nfcapd で受ける
+$ pkill nfcapd; rm -rf /tmp/nf; mkdir -p /tmp/nf; nfcapd -w /tmp/nf -p 2055 -t 60 -D; sleep 1; ss -lunp | grep 2055
+UNCONN 0      0            0.0.0.0:2055      0.0.0.0:*    users:(("nfcapd",pid=7074,fd=3))
+[rc=0]
+configure
+Tue Nov 10 13:26:30.254 UTC
+RP/0/RP0/CPU0:XR01(config)#
+flow exporter-map FEM
+                                  ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR01(config)#
+version v9
+                            ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR01(config)#
+options interface-table timeout 60
+                            ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR01(config)#
+template data timeout 60
+                                          ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR01(config)#
+exit
+RP/0/RP0/CPU0:XR01#
+transport udp 2055
+                      ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR01#
+source Loopback0
+                    ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR01#
+destination 10.0.50.10
+                      ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR01#
+exit
+
+!! timeout
+Traceback (most recent call last):
+  File "/home/suzuki/ansible/CCNP01/poc/xr/xrsh.py", line 40, in <module>
+    sh.send(ln + "\n")
+  File "/home/suzuki/ansible/CCNP01/.venv/lib/python3.12/site-packages/paramiko/channel.py", line 799, in send
+    return self._send(s, m)
+           ^^^^^^^^^^^^^^^^
+  File "/home/suzuki/ansible/CCNP01/.venv/lib/python3.12/site-packages/paramiko/channel.py", line 1196, in _send
+    raise socket.error("Socket is closed")
+OSError: Socket is closed
+configure
+Tue Nov 10 13:28:35.432 UTC
+RP/0/RP0/CPU0:XR02(config)#
+flow exporter-map FEM
+                                  ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR02(config)#
+version v9
+                            ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR02(config)#
+options interface-table timeout 60
+                            ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR02(config)#
+template data timeout 60
+                                          ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR02(config)#
+exit
+RP/0/RP0/CPU0:XR02#
+transport udp 2055
+                      ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR02#
+source Loopback0
+                    ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR02#
+destination 10.0.60.10
+                      ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR02#
+exit
+
+!! timeout
+Traceback (most recent call last):
+  File "/home/suzuki/ansible/CCNP01/poc/xr/xrsh.py", line 40, in <module>
+    sh.send(ln + "\n")
+  File "/home/suzuki/ansible/CCNP01/.venv/lib/python3.12/site-packages/paramiko/channel.py", line 799, in send
+    return self._send(s, m)
+           ^^^^^^^^^^^^^^^^
+  File "/home/suzuki/ansible/CCNP01/.venv/lib/python3.12/site-packages/paramiko/channel.py", line 1196, in _send
+    raise socket.error("Socket is closed")
+OSError: Socket is closed
+ping 10.0.50.10 source Loopback100 repeat 200
+Type escape sequence to abort.
+Sending 200, 100-byte ICMP Echos to 10.0.50.10, timeout is 2 seconds:
+Packet sent with a source address of 198.51.100.1 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Success rate is 100 percent (200/200), round-trip min/avg/max = 1/1/2 ms
+RT01#
+ping 10.0.60.10 source Loopback100 repeat 200
+Type escape sequence to abort.
+Sending 200, 100-byte ICMP Echos to 10.0.60.10, timeout is 2 seconds:
+Packet sent with a source address of 198.51.100.1 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Success rate is 100 percent (200/200), round-trip min/avg/max = 1/1/1 ms
+RT01#
+show flow monitor FMM cache location 0/0/CPU0
+                             ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR01#
+show flow exporter FEM location 0/0/CPU0
+                             ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR01#
+show flow platform producer statistics location 0/0/CPU0
+                             ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR01#
+show flow monitor FMM cache location 0/0/CPU0
+                             ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR02#
+show flow exporter FEM location 0/0/CPU0
+                             ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR02#
+show flow platform producer statistics location 0/0/CPU0
+                             ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR02#
+$ ls -la /tmp/nf
+total 36
+drwxrwxr-x  2 SUZUKI SUZUKI 4096 Nov 10 13:32 .
+drwxrwxrwt 15 root   root   4096 Nov 10 13:26 ..
+-rw-r--r--  1 SUZUKI SUZUKI  209 Nov 10 13:27 nfcapd.202611101326
+-rw-r--r--  1 SUZUKI SUZUKI  209 Nov 10 13:28 nfcapd.202611101327
+-rw-r--r--  1 SUZUKI SUZUKI  209 Nov 10 13:29 nfcapd.202611101328
+-rw-r--r--  1 SUZUKI SUZUKI  209 Nov 10 13:30 nfcapd.202611101329
+-rw-r--r--  1 SUZUKI SUZUKI  209 Nov 10 13:31 nfcapd.202611101330
+-rw-r--r--  1 SUZUKI SUZUKI  209 Nov 10 13:32 nfcapd.202611101331
+-rw-r--r--  1 SUZUKI SUZUKI   40 Nov 10 13:32 nfcapd.current.7071
+[rc=0]
+$ nfdump -R /tmp/nf -o extended -c 20
+Date first seen             Duration     Proto      Src IP Addr:Port          Dst IP Addr:Port     Flags Tos  Packets    Bytes      pps      bps    Bpp Flows
+No matching flows
+Summary: total flows: 0, total bytes: 0, total packets: 0, avg bps: 0, avg pps: 0, avg bpp: 0
+Time window: 2026-11-10 13:26:00 - 2026-11-10 13:32:00
+Total flows processed: 0, passed: 0, Blocks skipped: 0, Bytes read: 0
+Sys: 0.0021s User: 0.0010s Wall: 0.0003s flows/second: 0.0 Runtime: 0.0004s
+[rc=0]
+$ nfdump -R /tmp/nf -s srcip/flows
+No matching flows
+Top 10 Src IP Addr ordered by flows:
+Date first seen                 Duration Proto       Src IP Addr    Flows(%)     Packets(%)       Bytes(%)         pps      bps   bpp
+
+Summary: total flows: 0, total bytes: 0, total packets: 0, avg bps: 0, avg pps: 0, avg bpp: 0
+Time window: 2026-11-10 13:26:00 - 2026-11-10 13:32:00
+Total flows processed: 0, passed: 0, Blocks skipped: 0, Bytes read: 0
+Sys: 0.0014s User: 0.0014s Wall: 0.0002s flows/second: 0.0 Runtime: 0.0002s
+[rc=0]

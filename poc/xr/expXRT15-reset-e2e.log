@@ -1,0 +1,253 @@
+
+######## 01:48:55 1. 白紙の最終採点
+[final]     - '[FAIL] (+  6 点) M13-1 SRV01: the NMS opens a NETCONF session to XR01 on port 830
+[final]     - '        未充足(raw): {''regex'': ''== NETCONF OK capabilities=\\d+ candidate=yes''}'
+[final]     - '[FAIL] (+  9 点) M13-1 XR01: Loopback100 (NMS-MANAGED, 10.255.100.1/32) is in place,
+[final]     - '        未充足(raw): {''regex'': ''== COMMIT \\d+ line=netconf client=YANG Frame''}'
+[final]     - '        未充足(raw): {''regex'': ''interface Loopback100\\s*\\n description NMS-MANAGED\\s*\\n
+[final]     - '[FAIL] (+  6 点) M13-2 SRV01: the RESTCONF GET of the NMS script answers 200 over
+[final]     - '        未充足(raw): {''regex'': ''"Cisco-IOS-XE-native:hostname": "PE2"''}'
+[final]     - '        未充足(raw): {''regex'': ''== HTTPS 200''}'
+[final]     - '[FAIL] (+  6 点) M13-2 PE2: the service loopback from the script is in place (Loopback200,
+[final]     - '        未充足(raw): {''regex'': ''description CUSTOMER-A-SERVICE''}'
+[final]     - '        未充足(raw): {''regex'': ''ip address 10\\.255\\.200\\.2 255\\.255\\.255\\.255''}'
+[final]     - '[FAIL] (+  3 点) M13-2 PE2: plain HTTP stays closed, and nms-api is a local account'
+[final]     - '        未充足(raw): {''regex'': ''\\nusername nms-api ''}'
+[final]     - '[FAIL] (+ 14 点) M13-3 SRV01: gNMI to XR01 port 57400 works with the NMS client
+[final]     - '        未充足(raw): {''regex'': ''== GNMI tls-cert OK''}'
+[final]     - '[FAIL] (+  6 点) M13-3 XR01: the gRPC server runs on port 57400 in the global table,
+[final]     - '        未充足(raw): {''regex'': ''TLS mutual\\s+:\\s+enabled''}'
+[final]     - '[FAIL] (+  8 点) M13-4 XR01: subscription SUB-IF is active every 10 seconds, its
+[final]     - '        未充足(raw): {''regex'': ''Subscription:\\s+SUB-IF[\\s\\S]*?State:\\s+ACTIVE''}'
+[final]     - '        未充足(raw): {''not_regex'': ''Not Resolved''}'
+[final]     - '        未充足(raw): {''regex'': ''Destination Port:\\s+57500[\\s\\S]*?Transport:\\s+grpc\\s*\\n\\s+State:\\s+Active\\s*\\n\\s+TLS
+[final]     - '[FAIL] (+ 12 点) M13-4 SRV01: the collector receives the packet counters of XR01''s
+[final]     - '        未充足(raw): {''regex'': ''== MDT RECENT [1-9]\\d*''}'
+[final]     - '        未充足(raw): {''regex'': ''== MDT IF GigabitEthernet0/0/0/0 PACKETS yes''}'
+[final]     - '[FAIL] (+  9 点) M13-5 SRV01: the traffic that customer A sends in on PE2 arrives
+[final]     - '        未充足(raw): {''regex'': ''== FLOW PACKETS (?:3[7-9]|[4-9]\\d|\\d{3,})\\b''}'
+[final]     - '[FAIL] (+  6 点) M13-5 PE2: IPFIX from Loopback0 to 10.0.50.10 port 4739, on GigabitEthernet2
+[final]     - '        未充足(raw): {''regex'': ''Export protocol:\\s+IPFIX \\(Version 10\\)[\\s\\S]*?Destination
+[final]     - '        未充足(raw): {''regex'': ''Active Timeout:\\s+(?:[1-9]|[1-5]\\d|60) secs''}'
+[final]     - '        未充足(raw): {''regex'': ''Interface GigabitEthernet2\\s*\\n\\s+FNF:\\s+monitor:\\s+\\S+\\s*\\n\\s+direction:\\s+Input''}'
+[final]     - '        未充足(raw): {''regex'': ''\\| ipv4 source address ''}'
+[final]     - '        未充足(raw): {''regex'': ''\\| ipv4 destination address ''}'
+[final]     - '        未充足(raw): {''regex'': ''\\| ip protocol ''}'
+[final]     - '        未充足(raw): {''regex'': ''\\| transport source-port ''}'
+[final]     - '        未充足(raw): {''regex'': ''\\| transport destination-port ''}'
+[final]     - '        未充足(raw): {''regex'': ''\\| interface input snmp ''}'
+[final]     - '        未充足(raw): {''regex'': ''\\| counter bytes''}'
+[final]     - '        未充足(raw): {''regex'': ''\\| counter packets''}'
+[final]     - '[FAIL] (+  6 点) M13-6 SRV01: the NMS reads XR01 with SNMPv2c, community NMS-RO,
+[final]     - '        未充足(raw): {''regex'': ''\\.3\\.6\\.1\\.2\\.1\\.1\\.5\\.0 = STRING: "XR01"''}'
+[final]     - '        未充足(raw): {''regex'': ''permit ipv4 host 10\\.0\\.50\\.10 any''}'
+[final]     - '        未充足(raw): {''not_regex'': ''permit ipv4 (?!host 10\\.0\\.50\\.10 any)''}'
+[final]     - '[FAIL] (+  9 点) M13-6 SRV01: link down and link up on XR01 arrive at the trap receiver
+[final]     - '        未充足(raw): {''regex'': ''== TRAPS linkDown=[1-9]\\d* linkUp=[1-9]\\d*''}'
+[final]     - '  合計: 0 / 100 点'
+[final]     msg: ⚠ 1 回試行しても全 PASS に至らず（上の未充足を参照）
+
+######## 01:52:00 2. 模範解+学ぶ側の痕跡
+== m13t1
+show configuration failed
+[put] poc/xr/nc_fill_xrt15.py -> /tmp/nc_fill.py
+$ python3 /tmp/nc_fill.py ~/m13/nc_edit.py '***' '***' > /tmp/nc_solved.py && python3 /tmp/nc_solved.py edit | grep -c '<ok/>'
+2
+[rc=0]
+== m13t2
+$ python3 ~/m13/rc_customer_lo.py
+GET hostname -> 200 {
+  "Cisco-IOS-XE-native:hostname": "PE2"
+}
+PATCH Loopback200 -> 204 
+[rc=0]
+== m13t3
+show configuration failed
+$ ss -ltn | grep -q ":8080 " || (cd ~/pki && setsid nohup python3 -m http.server 8080 > /tmp/http.log 2>&1 < /dev/null &); sleep 1; ss -ltn | grep -c 8080
+[stderr] TimeoutError: 
+[rc=-1]
+Copy operation success
+== m13t4
+$ ss -ltn | grep -q ":8080 " || (cd ~/pki && setsid nohup python3 -m http.server 8080 > /tmp/http.log 2>&1 < /dev/null &); sleep 1; ss -ltn | grep -c 8080
+1
+[rc=0]
+Copy operation success
+show configuration failed
+== m13t5
+== m13t6
+show configuration failed
+$ true; echo "# MY-EDIT" >> ~/m13/nc_edit.py; echo note > ~/mine-notes.txt; echo "skip-verify: true" > ~/.gnmic.yml; echo t > /tmp/mine.txt
+[rc=0]
+$ true; (setsid nohup gnmic -a 10.0.50.1:57400 -u '***' -p '***' -e json_ietf --skip-verify --tls-cert ~/pki/client.pem --tls-key ~/pki/client.key subscribe --path openconfig-interfaces:interfaces/interface/state/counters --stream-mode sample --sample-interval 10s > /dev/null 2>&1 < /dev/null &); sleep 3; true
+[rc=0]
+-- SRV01 の状態
+$ true; echo "8080: $(ss -ltn | grep -c ":8080 ")"; pgrep -u "$USER" -a -f "python3|gnmic" | grep -v pgrep || echo "no python3/gnmic of $USER";
+     ls -A ~ | tr "\n" " "; echo; ls -A ~/m13 | tr "\n" " "; echo; grep -c "MY-EDIT" ~/m13/nc_edit.py;
+     ls -A /tmp | grep -E "mine|nc_" || echo "no learner files in /tmp";
+     sudo -n wc -c /var/log/telegraf/mdt.json /var/log/snmptrapd-lab.log 2>&1 | head -3; echo "nfcapd files: $(ls /var/cache/nfdump/lab | wc -l)";
+     systemctl is-active telegraf nfcapd-lab snmptrapd-lab | tr "\n" " "; echo
+8080: 1
+4662 bash -lc ss -ltn | grep -q ":8080 " || (cd ~/pki && setsid nohup python3 -m http.server 8080 > /tmp/http.log 2>&1 < /dev/null &); sleep 1; ss -ltn | grep -c 8080
+4663 python3 -m http.server 8080
+4869 gnmic -a 10.0.50.1:57400 -u SUZUKI -p *** -e json_ietf --skip-verify --tls-cert /home/SUZUKI/pki/client.pem --tls-key /home/SUZUKI/pki/client.key subscribe --path openconfig-interfaces:interfaces/interface/state/counters --stream-mode sample --sample-interval 10s
+.bash_logout .bashrc .cache .gnmic.yml .profile .ssh .sudo_as_admin_successful m13 mine-notes.txt pki 
+nc_edit.py rc_customer_lo.py 
+1
+mine.txt
+nc_fill.py
+nc_solved.py
+11167 /var/log/telegraf/mdt.json
+40004 /var/log/snmptrapd-lab.log
+51171 total
+nfcapd files: 15
+active active active 
+[rc=0]
+-- XR01 の harddisk: の PEM
+run ls /harddisk:/ | grep -iE "pem|cert" || echo none
+nms-ca.pem
+RP/0/RP0/CPU0:XR01#
+
+######## 02:00:41 3. 最終採点(100 のはず)
+[final]     - '[PASS] (+  6 点) M13-1 SRV01: the NMS opens a NETCONF session to XR01 on port 830
+[final]     - '[PASS] (+  9 点) M13-1 XR01: Loopback100 (NMS-MANAGED, 10.255.100.1/32) is in place,
+[final]     - '[PASS] (+  6 点) M13-2 SRV01: the RESTCONF GET of the NMS script answers 200 over
+[final]     - '[PASS] (+  6 点) M13-2 PE2: the service loopback from the script is in place (Loopback200,
+[final]     - '[PASS] (+  3 点) M13-2 PE2: plain HTTP stays closed, and nms-api is a local account'
+[final]     - '[PASS] (+ 14 点) M13-3 SRV01: gNMI to XR01 port 57400 works with the NMS client
+[final]     - '[PASS] (+  6 点) M13-3 XR01: the gRPC server runs on port 57400 in the global table,
+[final]     - '[PASS] (+  8 点) M13-4 XR01: subscription SUB-IF is active every 10 seconds, its
+[final]     - '[PASS] (+ 12 点) M13-4 SRV01: the collector receives the packet counters of XR01''s
+[final]     - '[PASS] (+  9 点) M13-5 SRV01: the traffic that customer A sends in on PE2 arrives
+[final]     - '[PASS] (+  6 点) M13-5 PE2: IPFIX from Loopback0 to 10.0.50.10 port 4739, on GigabitEthernet2
+[final]     - '[PASS] (+  6 点) M13-6 SRV01: the NMS reads XR01 with SNMPv2c, community NMS-RO,
+[final]     - '[PASS] (+  9 点) M13-6 SRV01: link down and link up on XR01 arrive at the trap receiver
+[final]     - '  合計: 100 / 100 点'
+
+######## 02:02:33 3b. 採点の窓: SRV01 は戻さずに XR01 の送信だけを止め、すぐに M13-4 を確認(SRV01 の側は FAIL のはず)
+[m13t4]     - '[FAIL] (+ 40 点) M13-4 XR01: subscription SUB-IF is active every 10 seconds, its
+[m13t4]     - '[FAIL] (+ 60 点) M13-4 SRV01: the collector receives the packet counters of XR01''s
+[m13t4]     - '  合計: 0 / 100 点'
+[m13t4]     msg: ⚠ 1 回試行しても全 PASS に至らず（上の未充足を参照）
+
+######## 02:03:13 3c. フローの確認の出力(読んだファイルの数)
+== SENT 37 SIZE 808 FROM 192.168.100.1 (success 37/37)
+== FLOW PACKETS 37 (filter: src ip 192.168.100.1 and dst ip 10.255.0.1 and bpp = 808; files written after the check started: 1; waited 50s)
+
+######## 02:04:05 4. lab.sh reset
+    - '[XR01] rollback to before 1000000001 (first-boot): ok'
+    - '[XR01] after rollback: run rm -f /misc/config/grpc/dialout/dialout.pem /misc/config/grpc/ems.pem
+    - '[XR01] after rollback: run for f in /harddisk:/*; do [ -f "$f" ] && head -c 10
+    - '[XR01] after rollback: process restart emsd'
+    - '[XR01] after rollback: configure'
+    - '[XR01] after rollback: no snmp-server host 10.0.50.10 traps version 3 priv nms-trap'
+    - '[XR01] after rollback: commit'
+    - '[XR01] after rollback: snmp-server host 10.0.50.10 traps version 3 priv nms-trap'
+    - '[XR01] after rollback: commit'
+    - '[XR01] after rollback: end'
+    - '[PE2] configure replace bootflash:lab-baseline.cfg: ok'
+    - '[SRV01] sudo -n /usr/local/sbin/lab-reset: ok'
+    - '[SRV01]   receivers: active active active '
+    - '[SRV01]   home m13+pki: ace084e821ae (pristine ace084e821ae)'
+localhost                  : ok=2    changed=1    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+-- SRV01 の状態
+$ true; echo "8080: $(ss -ltn | grep -c ":8080 ")"; pgrep -u "$USER" -a -f "python3|gnmic" | grep -v pgrep || echo "no python3/gnmic of $USER";
+     ls -A ~ | tr "\n" " "; echo; ls -A ~/m13 | tr "\n" " "; echo; grep -c "MY-EDIT" ~/m13/nc_edit.py;
+     ls -A /tmp | grep -E "mine|nc_" || echo "no learner files in /tmp";
+     sudo -n wc -c /var/log/telegraf/mdt.json /var/log/snmptrapd-lab.log 2>&1 | head -3; echo "nfcapd files: $(ls /var/cache/nfdump/lab | wc -l)";
+     systemctl is-active telegraf nfcapd-lab snmptrapd-lab | tr "\n" " "; echo
+8080: 0
+no python3/gnmic of SUZUKI
+.bash_logout .bashrc .cache .profile .ssh m13 pki 
+nc_edit.py rc_customer_lo.py 
+0
+no learner files in /tmp
+    0 /var/log/telegraf/mdt.json
+40004 /var/log/snmptrapd-lab.log
+40004 total
+nfcapd files: 1
+active active active 
+[rc=0]
+-- XR01 の harddisk: の PEM
+run ls /harddisk:/ | grep -iE "pem|cert" || echo none
+none
+RP/0/RP0/CPU0:XR01#
+
+######## 02:04:39 5. すぐに課題ごとの確認(すべて 0 のはず)
+[m13t4]     - '  合計: 0 / 100 点'
+[m13t5]     - '  合計: 0 / 100 点'
+[m13t1]     - '  合計: 0 / 100 点'
+[m13t2]     - '  合計: 0 / 100 点'
+[m13t3]     - '  合計: 0 / 100 点'
+[m13t6]     - '  合計: 0 / 100 点'
+
+######## 02:08:04 6. もう一度 模範解 → 最終採点(100 のはず)
+== m13t1
+show configuration failed
+[put] poc/xr/nc_fill_xrt15.py -> /tmp/nc_fill.py
+$ python3 /tmp/nc_fill.py ~/m13/nc_edit.py '***' '***' > /tmp/nc_solved.py && python3 /tmp/nc_solved.py edit | grep -c '<ok/>'
+2
+[rc=0]
+== m13t2
+$ python3 ~/m13/rc_customer_lo.py
+GET hostname -> 200 {
+  "Cisco-IOS-XE-native:hostname": "PE2"
+}
+PATCH Loopback200 -> 204 
+[rc=0]
+== m13t3
+show configuration failed
+$ ss -ltn | grep -q ":8080 " || (cd ~/pki && setsid nohup python3 -m http.server 8080 > /tmp/http.log 2>&1 < /dev/null &); sleep 1; ss -ltn | grep -c 8080
+[stderr] TimeoutError: 
+[rc=-1]
+Copy operation success
+== m13t4
+$ ss -ltn | grep -q ":8080 " || (cd ~/pki && setsid nohup python3 -m http.server 8080 > /tmp/http.log 2>&1 < /dev/null &); sleep 1; ss -ltn | grep -c 8080
+1
+[rc=0]
+Copy operation success
+show configuration failed
+== m13t5
+== m13t6
+show configuration failed
+[final]     - '[PASS] (+  6 点) M13-1 SRV01: the NMS opens a NETCONF session to XR01 on port 830
+[final]     - '[PASS] (+  9 点) M13-1 XR01: Loopback100 (NMS-MANAGED, 10.255.100.1/32) is in place,
+[final]     - '[PASS] (+  6 点) M13-2 SRV01: the RESTCONF GET of the NMS script answers 200 over
+[final]     - '[PASS] (+  6 点) M13-2 PE2: the service loopback from the script is in place (Loopback200,
+[final]     - '[PASS] (+  3 点) M13-2 PE2: plain HTTP stays closed, and nms-api is a local account'
+[final]     - '[PASS] (+ 14 点) M13-3 SRV01: gNMI to XR01 port 57400 works with the NMS client
+[final]     - '[PASS] (+  6 点) M13-3 XR01: the gRPC server runs on port 57400 in the global table,
+[final]     - '[PASS] (+  8 点) M13-4 XR01: subscription SUB-IF is active every 10 seconds, its
+[final]     - '[PASS] (+ 12 点) M13-4 SRV01: the collector receives the packet counters of XR01''s
+[final]     - '[PASS] (+  9 点) M13-5 SRV01: the traffic that customer A sends in on PE2 arrives
+[final]     - '[PASS] (+  6 点) M13-5 PE2: IPFIX from Loopback0 to 10.0.50.10 port 4739, on GigabitEthernet2
+[final]     - '[PASS] (+  6 点) M13-6 SRV01: the NMS reads XR01 with SNMPv2c, community NMS-RO,
+[final]     - '[PASS] (+  9 点) M13-6 SRV01: link down and link up on XR01 arrive at the trap receiver
+[final]     - '  合計: 100 / 100 点'
+
+######## 02:18:40 7. reset → 最終採点(0 のはず)
+    - '[SRV01] sudo -n /usr/local/sbin/lab-reset: ok'
+    - '[SRV01]   receivers: active active active '
+    - '[SRV01]   home m13+pki: ace084e821ae (pristine ace084e821ae)'
+[final]     - '  合計: 0 / 100 点'
+-- SRV01 の状態
+$ true; echo "8080: $(ss -ltn | grep -c ":8080 ")"; pgrep -u "$USER" -a -f "python3|gnmic" | grep -v pgrep || echo "no python3/gnmic of $USER";
+     ls -A ~ | tr "\n" " "; echo; ls -A ~/m13 | tr "\n" " "; echo; grep -c "MY-EDIT" ~/m13/nc_edit.py;
+     ls -A /tmp | grep -E "mine|nc_" || echo "no learner files in /tmp";
+     sudo -n wc -c /var/log/telegraf/mdt.json /var/log/snmptrapd-lab.log 2>&1 | head -3; echo "nfcapd files: $(ls /var/cache/nfdump/lab | wc -l)";
+     systemctl is-active telegraf nfcapd-lab snmptrapd-lab | tr "\n" " "; echo
+8080: 0
+no python3/gnmic of SUZUKI
+.bash_logout .bashrc .cache .profile .ssh m13 pki 
+nc_edit.py rc_customer_lo.py 
+0
+no learner files in /tmp
+    0 /var/log/telegraf/mdt.json
+40004 /var/log/snmptrapd-lab.log
+40004 total
+nfcapd files: 4
+active active active 
+[rc=0]
+-- XR01 の harddisk: の PEM
+run ls /harddisk:/ | grep -iE "pem|cert" || echo none
+none
+RP/0/RP0/CPU0:XR01#

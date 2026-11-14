@@ -1,0 +1,91 @@
+######## 14:06:19 sn-a: 白紙(前任者のまま)。v2c の読み取りとトラップ
+== CMD 1 rc=1: timeout 15 snmpget -v2c -c NMS-RO -t 2 -r 1 10.0.50.1 1.3.6.1.2.1.1.5.0
+Timeout: No Response from 10.0.50.1.
+(no new lines)
+== TRAPS linkDown=0 linkUp=0
+show snmp | include "Unknown community|Trap PDUs|pkts sent"
+Tue Nov 10 14:06:49.642 UTC
+    2 Unknown community name
+    0 Trap PDUs
+             Number of pkts sent: 0
+RP/0/RP0/CPU0:XR01#
+######## 14:06:50 sn-b: ACL を直す・グループに notify だけ足す(ホストは auth のまま)
+configure
+Tue Nov 10 14:06:51.749 UTC
+RP/0/RP0/CPU0:XR01(config)#
+ipv4 access-list NMS-ONLY
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+no 10
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+10 permit ipv4 host 10.0.50.10 any
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+exit
+RP/0/RP0/CPU0:XR01(config)#
+snmp-server group NMS-V3 v3 priv read NMS-VIEW notify NMS-VIEW
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Nov 10 14:06:54.375 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+== CMD 1 rc=0: timeout 15 snmpget -v2c -c NMS-RO -t 2 -r 1 10.0.50.1 1.3.6.1.2.1.1.5.0
+iso.3.6.1.2.1.1.5.0 = STRING: "XR01"
+(no new lines)
+== TRAPS linkDown=0 linkUp=0
+show snmp | include "Trap PDUs|pkts sent"
+Tue Nov 10 14:07:20.381 UTC
+    0 Trap PDUs
+             Number of pkts sent: 0
+RP/0/RP0/CPU0:XR01#
+== CMD 1 rc=0: sudo -n journalctl -u snmptrapd-lab --no-pager -n 5 2>&1 | tail -5
+Nov 10 13:56:49 SRV01 systemd[1]: Started snmptrapd-lab.service - XRT-15 NMS SNMP trap receiver (v3 authPriv, user nms-trap).
+######## 14:07:21 sn-c: ホストを priv に
+configure
+Tue Nov 10 14:07:22.534 UTC
+RP/0/RP0/CPU0:XR01(config)#
+no snmp-server host 10.0.50.10 traps version 3 auth nms-trap
+RP/0/RP0/CPU0:XR01(config)#
+snmp-server host 10.0.50.10 traps version 3 priv nms-trap
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Nov 10 14:07:23.940 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config snmp-server host
+Tue Nov 10 14:07:24.770 UTC
+snmp-server host 10.0.50.10 traps version 3 priv nms-trap
+
+RP/0/RP0/CPU0:XR01#
+(no new lines)
+== TRAPS linkDown=0 linkUp=0
+######## 14:07:49 sn-d: 逆に notify を外してホストは priv のまま
+configure
+Tue Nov 10 14:07:51.525 UTC
+RP/0/RP0/CPU0:XR01(config)#
+snmp-server group NMS-V3 v3 priv read NMS-VIEW
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Nov 10 14:07:52.433 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+show snmp group | include "NMS-V3|notify"
+Tue Nov 10 14:07:53.243 UTC
+notifyview: v1default
+notifyview: v1default
+groupname: NMS-V3                        security model:usm
+notifyview: 
+RP/0/RP0/CPU0:XR01#
+(no new lines)
+== TRAPS linkDown=0 linkUp=0
+configure
+Tue Nov 10 14:08:18.770 UTC
+RP/0/RP0/CPU0:XR01(config)#
+snmp-server group NMS-V3 v3 priv read NMS-VIEW notify NMS-VIEW
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Nov 10 14:08:19.669 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#

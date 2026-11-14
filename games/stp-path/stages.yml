@@ -1,0 +1,744 @@
+# STP 経路づくり(BL-270)のステージとチュートリアル。生成の規則は topologies/stp_path.py(BASE・SPEC・SHOW_FROM)。
+# body は軽い Markdown(空行で段落・"- " で箇条書き・**太字**・`code`)。example= stp_path.EXAMPLES の名前(盤面を見せる)。
+# カードの図の札(設計 §11):
+#   notes: [{at, en, ja, (検算用) role / root / rpc / blocked}]  … 図に番号の札を置き、図の下に理由を 1 行ずつ並べる。
+#          at= port:<SW>|<IF> / sw:<SW> / host:<端末> / link:<SW>-<SW>。同じ理由が複数に当てはまるなら at をリストにして全部を指す
+#          (同じ番号の札がそれぞれに付き、まとめて光る。検算もそれぞれに効く)。role(R/D/A= Root/Desg/Altn)・root(ルートか)・
+#          rpc・blocked(リンクが止まるか)を書くと、selftest が計算と照らし合わせる(書いた理由が計算と食い違わないように)。
+#   focus: [Root|Desg|Altn]  … その役割のポートだけを濃く出す(ほかは薄く)。flow: false … お題の帯と流れる点を出さない。
+# 事実の出どころ= curriculum/U-A3-stp.sources.md で「確定」の項目(#3 BID・#4 root 選出・#5 RP の比較順・#6 DP・#7 非指定は
+# blocking で BPDU は受信・#12 AP は RP のバックアップ・#17 AP が RP を即時に引き継ぐ(自側のリンク障害)・#21 VLAN ごとの負荷分散・
+# #28 root primary/secondary・#29 priority の範囲・#30 cost は自分の RP・#31 port-priority は対向の RP・#46 表示は設定値＋VLAN・
+# #47 RPC= 受信ポートのコスト＋上流の RPC)と stp_model の実測(M4・M4d)。
+# パス コストの表はショート法(#11)。「コストは実際の速度(media speed)から決まる」は Catalyst 9300 の公式ガイドで確認(設計 §6)。
+# 盤面に出すものはステージごとに増える(stp_path.SHOW_FROM・設計 §10)。新しく出るものは、そのステージの最初のカードで知らせる。
+# 2026-11-11 ユーザ指示「チュートリアルはもっと丁寧に。ポートの役割は役割ごとに 1 つずつ解説」で、1 枚 1 つの話＋図の札に書き直した(設計 §11)。
+stages:
+  - id: 1
+    title: {en: "Root Bridge", ja: "ルート ブリッジ"}
+    sub: {en: "Pick the root bridge, and the traffic takes the route on the mission.",
+          ja: "ルート ブリッジを選んで、お題の経路に通信を流す。"}
+    cards:
+      - title: {en: "Build the route", ja: "経路をつくる"}
+        example: ex_tree
+        notes:
+          - at: "host:PC1"
+            en: "**PC1 → SRV1 traffic.** The moving dots show the way it takes now."
+            ja: "**PC1 → SRV1 の通信**。流れる点が、今通っている道です。"
+          - at: "link:SW1-SW3"
+            blocked: true
+            en: "**Dashed**: a link that STP has stopped. No traffic crosses it."
+            ja: "**破線**は、STP が止めたリンク。ここは通信が通りません。"
+          - at: "sw:SW2"
+            root: true
+            en: "**★** marks the switch at the root of the tree (the root bridge). See the next cards."
+            ja: "**★** は、木の根元になるスイッチ(ルート ブリッジ)。次のカードから説明します。"
+        body:
+          en: |
+            Switches are cabled in loops on purpose, so that one broken link cuts no one off. But in a loop, frames would keep circling forever.
+
+            So **STP** (Spanning Tree Protocol) stops some links and leaves a **tree** with no loops. Traffic follows the one path left on that tree.
+
+            In this game you change switch settings to reshape the tree, until the **traffic follows the mission route (the colored band)**.
+          ja: |
+            スイッチは、1 か所壊れても誰も孤立しないよう、わざと輪になるようにつなぎます。でも輪のままだと、フレームが輪をぐるぐる回り続けてしまいます。
+
+            そこで **STP**(スパニング ツリー プロトコル)が一部のリンクを止めて、輪のない**木**の形にします。通信は、木に残った 1 本道を通ります。
+
+            このゲームでは、スイッチの設定を変えて木の形を組み替え、**お題の経路(色の帯)どおりに通信を通します**。
+      - title: {en: "Bridge ID", ja: "ブリッジ ID"}
+        example: ex_tree
+        flow: false
+        notes:
+          - at: "sw:SW1"
+            en: "`prio 32769` is the default 32768 plus the VLAN number, 1."
+            ja: "`prio 32769` は、既定の 32768 に VLAN 番号の 1 を足した表示。"
+          - at: "sw:SW2"
+            en: "The bottom line is the MAC address. SW2 has `0000.0000.0012`."
+            ja: "下の段が MAC アドレス。SW2 は `0000.0000.0012`。"
+        body:
+          en: |
+            Every switch carries a name tag called the **bridge ID**.
+
+            **Bridge ID = bridge priority + MAC address**
+
+            - **Bridge priority**: a number you can configure. 0 to 61440 in steps of 4096; the default is 32768.
+            - **MAC address**: a number fixed for each switch. The MACs in this game use only digits.
+            - The `prio` on each box is shown with the VLAN number added (in VLAN 1: 32768 + 1 = 32769).
+          ja: |
+            どのスイッチも、名札にあたる**ブリッジ ID** を持っています。
+
+            **ブリッジ ID = ブリッジ プライオリティ + MAC アドレス**
+
+            - **ブリッジ プライオリティ**: 設定で変えられる数。0〜61440 の 4096 刻みで、既定は 32768。
+            - **MAC アドレス**: スイッチごとに決まっている番号。このゲームの MAC は数字だけにしてあります。
+            - 箱の `prio` は、設定値に VLAN 番号を足して表示されます(VLAN 1 なら 32768 + 1 = 32769)。
+      - title: {en: "The root bridge", ja: "ルート ブリッジ"}
+        example: ex_tree
+        flow: false
+        notes:
+          - at: "sw:SW2"
+            root: true
+            en: "All three have priority 32769. SW2 has the lowest MAC (…0012), so SW2 is the root bridge (★)."
+            ja: "3 台ともプライオリティは 32769 で同じ。MAC が最も小さい SW2(…0012)がルート ブリッジ(★)。"
+          - at: ["sw:SW1", "sw:SW3"]
+            root: false
+            en: "SW1's MAC is …0031 and SW3's is …0027. Both are higher than SW2's."
+            ja: "SW1 の MAC は …0031、SW3 は …0027。どちらも SW2 より大きい。"
+        body:
+          en: |
+            The switch with the **lowest bridge ID** becomes the **root bridge** (★). The tree grows out from the root bridge.
+
+            The comparison goes in this order:
+
+            - first the lower **priority**,
+            - if the priorities tie, the lower **MAC address**.
+
+            Unless you change a priority, the MAC decides.
+          ja: |
+            ブリッジ ID が**最も小さいスイッチ**が、**ルート ブリッジ**(★)になります。木はルート ブリッジを根元にして広がります。
+
+            比べる順番は、
+
+            - まず**プライオリティ**の小さい方
+            - プライオリティが同じなら **MAC アドレス**の小さい方
+
+            プライオリティを変えなければ、MAC で決まります。
+      - title: {en: "The way to the root", ja: "ルートへの道"}
+        example: ex_tree
+        notes:
+          - at: "sw:SW1"
+            en: "SW1 reaches the root (SW2) over one direct link."
+            ja: "SW1 は、ルート(SW2)まで直結のリンク 1 本で行ける。"
+          - at: "sw:SW3"
+            en: "SW3 also reaches the root over one direct link."
+            ja: "SW3 も、ルートまで直結の 1 本。"
+          - at: "link:SW1-SW3"
+            blocked: true
+            en: "Neither SW1 nor SW3 uses this link, so it stops (dashed). That is why PC1 → SRV1 goes around through SW2."
+            ja: "SW1 も SW3 もこのリンクを使わない → 止まる(破線)。だから PC1 → SRV1 は SW2 を回る。"
+        body:
+          en: |
+            Every switch other than the root picks **the shortest way to the root**. All links in this stage have the same speed, so shortest means **crossing the fewest links**.
+
+            A link that no switch picks is stopped and drawn dashed. That breaks the loop and leaves a tree.
+
+            If two ways are equally short, the switch goes through the neighbor with the lower bridge ID (more in stage 2).
+          ja: |
+            ルート以外のスイッチは、**ルートへ最も近い道**を 1 つ選びます。このステージのリンクはすべて同じ速さなので、近い = **通るリンクが少ない**ことです。
+
+            どのスイッチも選ばなかったリンクは止まり、破線になります。こうして輪が切れ、木ができます。
+
+            近さが同じ道が 2 つあるときは、ブリッジ ID の小さい隣を経由します(ステージ 2 で詳しく)。
+      - title: {en: "Lowering a priority", ja: "プライオリティを下げると"}
+        example: ex_tree_low
+        notes:
+          - at: "sw:SW1"
+            root: true
+            en: "SW1 is lowered to 24576 (shown as 24577). It is now the lowest, so SW1 is the root (★)."
+            ja: "SW1 を 24576 に下げた(表示は 24577)。3 台で最も小さいので、SW1 がルート(★)。"
+          - at: "link:SW2-SW3"
+            blocked: true
+            en: "Now this link is the one that stops."
+            ja: "今度はこのリンクが止まる。"
+          - at: "link:SW1-SW3"
+            blocked: false
+            en: "PC1 → SRV1 now takes the direct link."
+            ja: "PC1 → SRV1 は直結を通るようになった。"
+        body:
+          en: |
+            Lowering a bridge priority makes that switch's bridge ID smaller. Once it is the smallest of all, the root bridge changes, and **the tree and the routes are rebuilt**.
+
+            Same board as before, with only SW1's priority lowered to 24576:
+          ja: |
+            ブリッジ プライオリティを下げると、そのスイッチのブリッジ ID が小さくなります。ほかのどのスイッチより小さくなれば、ルート ブリッジが入れ替わり、**木の形も経路も組み替わります**。
+
+            前のカードと同じ盤面で、SW1 のプライオリティだけを 24576 に下げてみます。
+      - title: {en: "How to play", ja: "遊び方"}
+        body:
+          en: |
+            - Tap a **switch** to change its bridge priority: −/+ in steps of 4096, or the buttons for common values. The tree updates at once.
+            - The mission is written at the top. When the traffic (moving dots) follows the colored band, the route is **complete**.
+            - Each setting changed from the start is **one move**. Fewer moves, more stars (★★★ = the fewest moves). There is a move limit.
+            - Stuck? **Start over**. Really stuck? **Show answer** (the level counts as cleared, without stars).
+            - **Rules** (top right) shows the rules at any time.
+          ja: |
+            - **スイッチ**を押すと、ブリッジ プライオリティを変えられます。−/+ で 4096 ずつ、またはよく使う値のボタンで選びます。木はその場で組み替わります。
+            - お題は画面の上に文で出ます。色の帯どおりに通信(流れる点)が通れば**開通**です。
+            - 最初から変えた設定 1 つが **1 手**。少ない手数ほど星が増えます(★★★ = 最少の手数)。手数には上限があります。
+            - 行き詰まったら**やり直し**。どうしても分からなければ**答えを見る**(クリア扱い・星なし)。
+            - 右上の**ルール**で、決まりをいつでも見られます。
+
+  - id: 2
+    title: {en: "Port Roles", ja: "ポートの役割"}
+    sub: {en: "Each switch picks its way to the root. Steer it without moving the root.",
+          ja: "各スイッチがルートへの道を選ぶ。ルートを動かさずに道を選ばせる。"}
+    cards:
+      - title: {en: "New: port markers and RPC", ja: "NEW: ポートの印と RPC"}
+        example: ex_tree
+        flow: false
+        notes:
+          - at: "port:SW1|Te1/0/1"
+            role: Root
+            en: "A **port marker**, one at each end of a link. The letter (R, D, A) is the **role**; filled means forwarding (**FWD**)."
+            ja: "**ポートの印**。リンクの両端に 1 つずつ。文字(R・D・A)が**役割**で、塗りつぶしは転送している(**FWD**)。"
+          - at: "port:SW1|Te1/0/2"
+            role: Altn
+            en: "**Hollow** means stopped (**BLK**). It sits at one end of a dashed link."
+            ja: "**白抜き**は止まっている(**BLK**)。破線のリンクの片端に付く。"
+          - at: "sw:SW1"
+            rpc: 4
+            en: "The **RPC**: the cost of the way to the root."
+            ja: "**RPC**。ルートまでの道のコスト。"
+        body:
+          en: |
+            From this stage the board shows two more things.
+
+            - **Port markers**: the circles at both ends of each link. Every port has a **role**, and the role decides whether it forwards or stops.
+            - **RPC**: the number at the top right of each box.
+
+            "The shortest way to the root" and "stopped links" from stage 1 are in fact decided by these roles. The next cards go through the RPC and the three roles one at a time.
+          ja: |
+            このステージから、盤面に 2 つのものが増えます。
+
+            - **ポートの印**: リンクの両端の丸。どのポートにも**役割**があり、それで転送するか止まるかが決まります。
+            - **RPC**: 箱の右上の数字。
+
+            ステージ 1 の「ルートへ最も近い道」と「止まったリンク」は、実はこの役割で決まっています。この先のカードで、RPC と 3 つの役割を 1 つずつ見ていきます。
+      - title: {en: "RPC (root path cost)", ja: "RPC(ルート パス コスト)"}
+        example: ex_tree
+        flow: false
+        focus: []
+        notes:
+          - at: "sw:SW2"
+            rpc: 0
+            en: "The root bridge has RPC 0 and sends out BPDUs from here."
+            ja: "ルート ブリッジは RPC 0。ここから BPDU を送り出す。"
+          - at: "sw:SW1"
+            rpc: 4
+            en: "SW1 receives from SW2: 0 + 4 (the cost of the receiving port) = **4**."
+            ja: "SW1 は SW2 から受信: 0 + 4(受信したポートのコスト)= **4**。"
+          - at: "sw:SW3"
+            rpc: 4
+            en: "SW3 likewise: 0 + 4 = **4**."
+            ja: "SW3 も同じく 0 + 4 = **4**。"
+        body:
+          en: |
+            The **RPC** (root path cost) is the cost of the way from the root bridge to a switch.
+
+            - The root bridge sends out STP messages called **BPDUs**, carrying its own RPC (0).
+            - A switch that receives a BPDU **adds the cost of the receiving port**, and that becomes its RPC. It then sends the new value on to its neighbors.
+            - A port's cost comes from its speed. Every link in this stage is 1G, which costs **4**.
+
+            The lower the RPC, the closer the switch is to the root.
+          ja: |
+            **RPC**(ルート パス コスト)は、ルート ブリッジからそのスイッチまでの「道のりのコスト」です。
+
+            - ルート ブリッジは、自分の RPC(0)を書いた STP の情報 **BPDU** を送り出します。
+            - BPDU を受け取ったスイッチは、**受け取ったポートのコスト**を足して、自分の RPC にします。そしてその値を書いて隣へ送ります。
+            - ポートのコストは速度で決まります。このステージのリンクはすべて 1G で、コストは **4** です。
+
+            RPC が小さいほど、ルートに近いということです。
+      - title: {en: "R: root port", ja: "R: ルート ポート"}
+        example: ex_tree
+        flow: false
+        focus: [Root]
+        notes:
+          - at: "port:SW1|Te1/0/1"
+            role: Root
+            en: "From SW2: 0 + 4 = **4**, the lowest. So this is SW1's R."
+            ja: "SW2 から: 0 + 4 = **4** ← 最小。だから SW1 の R。"
+          - at: "port:SW1|Te1/0/2"
+            role: Altn
+            en: "From SW3: 4 + 4 = 8. Higher than 4, so not chosen."
+            ja: "SW3 から: 4 + 4 = 8。R の 4 より大きいので選ばれない。"
+          - at: "port:SW3|Te1/0/2"
+            role: Root
+            en: "For the same reason, SW3's R faces SW2."
+            ja: "SW3 も同じ理由で、SW2 側が R。"
+        body:
+          en: |
+            The **root port (R)** is a switch's exit toward the root. Every switch except the root has **exactly one**.
+
+            How it is chosen: for each of its ports, the switch works out **the neighbor's RPC + the cost of that port**, and the port with **the lowest total** becomes R. That lowest total is the switch's RPC.
+
+            R forwards (**FWD**, filled). The root bridge itself has no R.
+          ja: |
+            **ルート ポート(R)**は、ルートへの出口です。ルート以外の各スイッチに **1 つだけ**あります。
+
+            選び方: 自分のポートのそれぞれについて「**隣の RPC + そのポートのコスト**」を計算し、**最も小さいポート**を R にします。この最小値が、そのスイッチの RPC です。
+
+            R は転送します(**FWD**・塗り)。ルート ブリッジ自身には R はありません。
+      - title: {en: "D: designated port", ja: "D: 指定ポート"}
+        example: ex_tree
+        flow: false
+        focus: [Desg]
+        notes:
+          - at: ["port:SW2|Te1/0/1", "port:SW2|Te1/0/2"]
+            role: Desg
+            en: "Every port of the root bridge is **D**."
+            ja: "ルート ブリッジのポートは**すべて D**。"
+          - at: "port:SW3|Te1/0/1"
+            role: Desg
+            en: "Link SW1–SW3: both ends have RPC 4, a tie. The lower bridge ID wins, so **SW3's end is D** (MAC …0027 < …0031)."
+            ja: "SW1–SW3 のリンク: 両端の RPC は 4 と 4 で同じ → ブリッジ ID の小さい **SW3 側が D**(MAC …0027 < …0031)。"
+          - at: ["port:SW1|Te1/0/12", "port:SW3|Te1/0/19"]
+            role: Desg
+            en: "Ports to PCs and servers are D too."
+            ja: "PC やサーバにつながるポートも D。"
+        body:
+          en: |
+            There is **one designated port (D) per link**. It is the end that sends BPDUs onto that link: the root-side entrance of the link.
+
+            How it is chosen:
+
+            - Every port of the root bridge is **D**.
+            - On any other link, compare **the RPCs of the two switches**; the end on the lower one is D.
+            - If the RPCs tie, the end on the switch with **the lower bridge ID**.
+
+            D forwards too (**FWD**, filled). The far end of a link with an R is always D.
+          ja: |
+            **指定ポート(D)**は、**リンク 1 本につき 1 つ**。そのリンクへ BPDU を送り出す係で、リンクのルート側の入口にあたります。
+
+            決め方:
+
+            - ルート ブリッジのポートは**すべて D**。
+            - それ以外のリンクでは、両端のスイッチの **RPC を比べて小さい側**の端が D。
+            - RPC が同じなら、**ブリッジ ID の小さい側**。
+
+            D も転送します(**FWD**・塗り)。R が付いたリンクの向かいの端は、必ず D です。
+      - title: {en: "A: alternate port", ja: "A: 代替ポート"}
+        example: ex_tree
+        flow: false
+        focus: [Altn]
+        notes:
+          - at: "port:SW1|Te1/0/2"
+            role: Altn
+            en: "Neither R nor D, so **A**. Frames stop here, and the loop is broken."
+            ja: "R でも D でもない → **A**。ここでフレームが止まり、輪が切れる。"
+          - at: "port:SW3|Te1/0/1"
+            role: Desg
+            en: "The other end of the same link stays D. Only SW1's one port is stopped."
+            ja: "同じリンクの反対の端は D のまま。止めているのは SW1 側の 1 ポートだけ。"
+        body:
+          en: |
+            A port that became neither R nor D is an **alternate port (A)**.
+
+            - A does not forward frames (**BLK**, hollow). Its link is drawn dashed and carries no traffic. **This is where the loop is broken.**
+            - A keeps receiving BPDUs. If the link of the switch's own root port goes down, the A takes over as the root port at once. That is what "alternate" means.
+
+            Of the two ends of a link, only the A end is stopped.
+          ja: |
+            R にも D にもならなかったポートが**代替ポート(A)**です。
+
+            - A はフレームを転送しません(**BLK**・白抜き)。そのリンクは破線になり、通信は通りません。**輪が切れるのはここ**です。
+            - A は BPDU を受け取り続けていて、自分のルート ポートのリンクが切れると、すぐに代わりのルート ポートになります。「代替」はこの意味です。
+
+            リンク 1 本の両端のうち、止まるのは A の側だけです。
+      - title: {en: "When two ways tie", ja: "道が同点のとき"}
+        example: ex_tie
+        notes:
+          - at: "port:SW3|Te1/0/2"
+            role: Root
+            en: "From SW4: 4 + 4 = 8."
+            ja: "SW4 から: 4 + 4 = 8。"
+          - at: "port:SW3|Te1/0/1"
+            role: Altn
+            en: "From SW2: 4 + 4 = 8. A tie."
+            ja: "SW2 から: 4 + 4 = 8。同点。"
+          - at: ["sw:SW4", "sw:SW2"]
+            en: "Compare the neighbors' bridge IDs: SW4 (…0012) < SW2 (…0027). So SW3's R faces SW4, and the SW2 side is A."
+            ja: "隣のブリッジ ID を比べる: SW4(…0012)< SW2(…0027)。だから SW3 は SW4 側を R にし、SW2 側は A。"
+        body:
+          en: |
+            When choosing R, "neighbor's RPC + cost" can **tie**. Then the switch picks the port whose **neighbor (the sender of the BPDU) has the lower bridge ID**.
+
+            Here the root is SW1. Across from it, SW3 has two ways, through SW2 and through SW4, both 8.
+
+            So **you can steer a route without moving the root**: change a neighbor's priority. Levels 1–3 of this stage are all like this.
+          ja: |
+            R を選ぶとき、「隣の RPC + コスト」が**同点**になることがあります。そのときは、**BPDU を送ってきた隣(送信元)のブリッジ ID が小さい方**を選びます。
+
+            例: ルートは SW1。向かいの SW3 には、SW2 経由と SW4 経由の 2 つの道があり、どちらも 8 です。
+
+            つまり、**ルートを動かさなくても、隣のプライオリティを変えれば道を選ばせられます**。このステージのレベル 1〜3 は、すべてこの形です。
+      - title: {en: "How to play", ja: "遊び方"}
+        body:
+          en: |
+            - You change only **bridge priorities**, as in stage 1.
+            - Levels 1–3 come with "Keep … as the root bridge" (a frame around the ★ switch). Change the route without moving the root.
+            - Tap a **port marker** to see its sum (the neighbor's RPC + the port's cost).
+            - **Rules** (top right) lists how R, D and A are decided.
+          ja: |
+            - 変えるのは、ステージ 1 と同じ**ブリッジ プライオリティ**だけです。
+            - レベル 1〜3 は「◯◯ はルート ブリッジのままにする」というお題が付きます(★のスイッチを囲む枠)。ルートを動かさずに経路を変えてください。
+            - **ポートの印**を押すと、そのポートの足し算(隣の RPC + このポートのコスト)が見られます。
+            - 右上の**ルール**に、R・D・A の決め方がいつでも出ます。
+
+  - id: 3
+    title: {en: "Cable Speed", ja: "ケーブルの速さ"}
+    sub: {en: "Faster links are cheaper. Change link speeds to steer the route.",
+          ja: "速いリンクほど安い。リンクの速度を変えて経路を動かす。"}
+    cards:
+      - title: {en: "New: link speed and cost", ja: "NEW: リンクの速度とコスト"}
+        example: ex_cost
+        flow: false
+        notes:
+          - at: "link:SW1-SW2"
+            en: "`1G · 4`: speed 1G, cost 4."
+            ja: "`1G · 4`: 速度 1G、コスト 4。"
+          - at: "link:SW3-SW4"
+            en: "`100M · 19`: speed 100M, cost 19. Slower, so more expensive."
+            ja: "`100M · 19`: 速度 100M、コスト 19。遅いぶん高い。"
+        body:
+          en: |
+            From this stage each link shows its **speed and cost** in the middle.
+
+            A port's cost comes from the link speed. This game uses the **short method** values:
+
+            - **10G = 2**
+            - **1G = 4**
+            - **100M = 19**
+
+            The faster the link, the cheaper it is, and STP picks the cheaper way.
+          ja: |
+            このステージから、リンクの真ん中に**速度とコスト**が出ます。
+
+            ポートのコストは、リンクの速度から決まります。このゲームは**ショート法**の値を使います。
+
+            - **10G = 2**
+            - **1G = 4**
+            - **100M = 19**
+
+            速いリンクほどコストが安く、STP は安い道を選びます。
+      - title: {en: "Adding up the RPC", ja: "RPC の足し算"}
+        example: ex_cost
+        notes:
+          - at: "port:SW3|Te1/0/1"
+            role: Root
+            en: "From SW2: 4 + 4 = **8**, the cheaper one, so R."
+            ja: "SW2 から: 4 + 4 = **8** ← 安い → R。"
+          - at: "port:SW3|Te1/0/2"
+            role: Altn
+            en: "From SW4: 4 + 19 = 23 (received on a 100M port)."
+            ja: "SW4 から: 4 + 19 = 23(100M のポートで受信)。"
+        body:
+          en: |
+            With mixed speeds, each way adds up differently. Remember: what gets added is **the cost of the receiving port**.
+
+            Here the root is SW1. SW3 has two ways, both two links long, but the way through SW4 includes a 100M link and costs more.
+          ja: |
+            速度が混ざると、道ごとに合計が変わります。足すのは**受信したポートのコスト**でした。
+
+            例: ルートは SW1。SW3 には 2 つの道があり、どちらもリンク 2 本ですが、SW4 経由は途中に 100M のリンクがあるぶん高くつきます。
+      - title: {en: "Traffic leans to fast links", ja: "速いリンクに寄る"}
+        example: ex_cost10
+        notes:
+          - at: "link:SW3-SW4"
+            en: "SW3–SW4 is now 10G. The ports at both ends cost 2."
+            ja: "SW3–SW4 を 10G に。両端のポートのコストが 2 になる。"
+          - at: "port:SW3|Te1/0/2"
+            role: Root
+            en: "From SW4: 4 + 2 = **6**, the lowest. This port became R."
+            ja: "SW4 から: 4 + 2 = **6** ← 最小 → R に変わった。"
+          - at: "port:SW3|Te1/0/1"
+            role: Altn
+            en: "From SW2: 4 + 4 = 8. Now this side is A."
+            ja: "SW2 から: 4 + 4 = 8。今度はこちらが A。"
+        body:
+          en: |
+            Changing a link's speed changes the cost of the ports at **both ends** of the link.
+
+            Same board as before, with SW3–SW4 set to 10G. The way through SW4 becomes cheaper, SW3's root port switches sides, and the traffic takes the new way.
+          ja: |
+            リンクの速度を変えると、そのリンクの**両端**のポートのコストが変わります。
+
+            前のカードの盤面で、SW3–SW4 を 10G にしてみます。SW4 経由のほうが安くなり、SW3 のルート ポートが入れ替わって、通信の道も変わります。
+      - title: {en: "How to play", ja: "遊び方"}
+        body:
+          en: |
+            - Tap the **speed label** on a link: 100M / 1G / 10G. The cost changes at both ends of the link.
+            - Traffic leans toward faster links and away from slower ones.
+            - The root is fixed in this stage (priorities cannot be changed).
+            - Levels 4 and 5 limit how many 10G links you can have (**stock**).
+          ja: |
+            - リンクの**速度の表示**を押すと、100M / 1G / 10G を選べます。リンクの両端のコストが変わります。
+            - 速いリンクには通信が寄り、遅いリンクからは離れます。
+            - このステージのルートは決まっています(プライオリティは変えられません)。
+            - レベル 4・5 は、10G の本数に上限(**在庫**)があります。
+
+  - id: 4
+    title: {en: "Port Cost", ja: "ポート コスト"}
+    sub: {en: "Set the cost of one port by hand. It counts only on the receiving side.",
+          ja: "ポート 1 つのコストを手で決める。効くのは受信する側だけ。"}
+    cards:
+      - title: {en: "New: setting the cost by hand", ja: "NEW: コストを手で決める"}
+        example: ex_pcost
+        notes:
+          - at: "port:SW3|Te1/0/2"
+            role: Altn
+            en: "`cost 10` is set here. From SW4: 4 + 10 = 14."
+            ja: "ここに `cost 10` を設定。SW4 から: 4 + 10 = 14。"
+          - at: "port:SW3|Te1/0/1"
+            role: Root
+            en: "From SW2: 4 + 4 = **8**, the lowest, so R."
+            ja: "SW2 から: 4 + 4 = **8** ← 最小 → R。"
+          - at: "sw:SW4"
+            rpc: 4
+            en: "SW4 at the other end does not change (RPC 4, R still faces SW1)."
+            ja: "相手の SW4 は何も変わらない(RPC 4・R は SW1 側のまま)。"
+        body:
+          en: |
+            With `spanning-tree vlan 1 cost 10` you set the cost of **one port** by hand. It is used instead of the value from the speed. A cost set by hand shows next to the port marker (`cost 10`).
+
+            It counts only when that port **receives BPDUs**. So the only thing it changes is **that switch's choice of root port**.
+
+            Here is the tie board from stage 2, with cost 10 on SW3's port toward SW4.
+          ja: |
+            `spanning-tree vlan 1 cost 10` のように、**ポート 1 つ**のコストを手で決められます。速度から決まる値の代わりに、この値が使われます。手で決めたコストは、ポートの印の横に `cost 10` と出ます。
+
+            効くのは、そのポートで **BPDU を受信するとき**だけ。だから変わるのは、**そのスイッチのルート ポート選び**だけです。
+
+            例: ステージ 2 の同点の盤面で、SW3 の SW4 側のポートに cost 10 を設定しました。
+      - title: {en: "Speed or port cost?", ja: "速度とどう違う?"}
+        body:
+          en: |
+            Both change a cost, but they reach different things.
+
+            - **Speed**: changes the cost of the ports at **both ends** of the link, in every VLAN.
+            - **Port cost**: **one port**, **one VLAN**. The other end of the link stays as it is.
+
+            To move only one switch's way, use port cost. To make a link faster (or slower) for the switches at both ends, use speed.
+          ja: |
+            どちらもコストを変えますが、効く範囲が違います。
+
+            - **速度**: リンクの**両端**のポートのコストが変わります。すべての VLAN に効きます。
+            - **ポート コスト**: **ポート 1 つ**・**VLAN 1 つ**だけ。リンクの反対の端は変わりません。
+
+            「このスイッチの道だけを変えたい」ときはポート コスト、「このリンクを、両側のスイッチにとって速く(遅く)したい」ときは速度、と使い分けます。
+      - title: {en: "How to play", ja: "遊び方"}
+        body:
+          en: |
+            - Tap a **port marker** and choose **Auto** (the value from the speed) or a number.
+            - The root and the speeds are fixed in this stage.
+            - It counts only on the receiving side, so start from "which switch's R do I want to move?".
+          ja: |
+            - **ポートの印**を押して、**自動**(速度から決まる値)か数値を選びます。
+            - このステージでは、ルートと速度は決まっています。
+            - 効くのは受信する側だけなので、「どのスイッチの R を動かしたいか」から考えると近道です。
+
+  - id: 5
+    title: {en: "Parallel Links", ja: "並行リンク"}
+    sub: {en: "Two cables between the same switches. Port priority picks the cable.",
+          ja: "同じスイッチの間に 2 本のケーブル。ポート プライオリティで線を選ぶ。"}
+    cards:
+      - title: {en: "New: port names and port IDs", ja: "NEW: ポート名とポート ID"}
+        example: ex_pprio
+        flow: false
+        notes:
+          - at: "port:SW1|Te1/0/1"
+            role: Desg
+            en: "`Te1/0/1` is the port name. Its port ID is **128.1** (priority 128, number 1)."
+            ja: "`Te1/0/1` がポート名。ポート ID は **128.1**(プライオリティ 128・番号 1)。"
+          - at: "port:SW1|Te1/0/2"
+            role: Desg
+            en: "This port's priority is set to 64, so its port ID is **64.2** (`prio 64` next to it)."
+            ja: "プライオリティを 64 にしたポート。ポート ID は **64.2**(横に `prio 64`)。"
+        body:
+          en: |
+            From this stage the board shows **port names** (`Te1/0/1` and so on). The last number is the port number.
+
+            **Port ID = port priority + port number.** It is written like `128.1`, and lower is preferred.
+
+            - Port priority: 0 to 240 in steps of 16; the default is 128.
+          ja: |
+            このステージから、盤面に**ポート名**(`Te1/0/1` など)が出ます。最後の数字がポート番号です。
+
+            **ポート ID = ポート プライオリティ + ポート番号**。`128.1` のように書き、小さいほど優先です。
+
+            - ポート プライオリティは 0〜240 の 16 刻みで、既定は 128。
+      - title: {en: "Two cables, one tie", ja: "2 本のケーブルの決着"}
+        example: ex_pprio
+        notes:
+          - at: "port:SW2|Te1/0/2"
+            role: Root
+            en: "Receives the BPDU from SW1's **64.2**, so R."
+            ja: "SW1 の **64.2** から届く BPDU を受けるポート → R。"
+          - at: "port:SW2|Te1/0/1"
+            role: Altn
+            en: "Receives from SW1's **128.1**, which loses to 64.2, so A."
+            ja: "SW1 の **128.1** から届く → 64.2 に負けて A。"
+        body:
+          en: |
+            With two cables between the same two switches (**parallel links**), both have the same RPC and the same sender (neighbor) bridge ID. Still a tie.
+
+            Then the switch picks the lower **sender port ID**.
+
+            The full order: RPC → sender bridge ID → sender port ID.
+          ja: |
+            同じ 2 台の間に 2 本のケーブル(**並行リンク**)があると、2 本は RPC も、送信元(隣)のブリッジ ID も同じで、ここまで同点です。
+
+            そのときは、**送信元のポート ID** の小さい方を選びます。
+
+            比べる順番をまとめると: RPC → 送信元のブリッジ ID → 送信元のポート ID。
+      - title: {en: "It counts on the sending side", ja: "送る側で効く"}
+        example: ex_pprio
+        notes:
+          - at: "port:SW1|Te1/0/2"
+            role: Desg
+            en: "Changing the priority here (on SW1, the sending side) changes which cable SW2 uses."
+            ja: "ここ(送る側の SW1)のプライオリティを変えると、SW2 が選ぶケーブルが変わる。"
+          - at: "port:SW2|Te1/0/1"
+            role: Altn
+            en: "Changing the priority of SW2's own port (the receiving side) does not change SW2's R."
+            ja: "受ける側(SW2)のポートのプライオリティを変えても、SW2 の R は変わらない。"
+        body:
+          en: |
+            What is compared is the **sender's** port ID: the value of the port at the other end that sends the BPDU.
+
+            So port priority works when you change it on the **sending side** (the side closer to the root). Changing it on the receiving side does not change that switch's root port.
+          ja: |
+            比べるのは**送信元のポート ID**、つまり BPDU を送ってくる**相手側**のポートの値です。
+
+            だからポート プライオリティは、**送る側(ルートに近い側)**で変えたときに効きます。受ける側で変えても、そのスイッチのルート ポートは変わりません。
+      - title: {en: "How to play", ja: "遊び方"}
+        body:
+          en: |
+            - Tap a **port marker** to change its port priority (−16 / +16).
+            - When the mission says "Use the cable …", it names which of the parallel cables to use.
+            - Levels 4 and 5 also allow bridge priority.
+          ja: |
+            - **ポートの印**を押して、ポート プライオリティを変えます(−16 / +16)。
+            - お題に「◯◯ の線を使う」と出たら、並行リンクのどちらのケーブルかまで指定です。
+            - レベル 4・5 は、ブリッジ プライオリティも使えます。
+
+  - id: 6
+    title: {en: "Engineer", ja: "エンジニア"}
+    sub: {en: "Every setting, two routes, one tree, a tight move limit.",
+          ja: "全部の設定・経路 2 本・木は 1 つ・手数の上限は厳しめ。"}
+    cards:
+      - title: {en: "Two routes, one tree", ja: "経路 2 本・木は 1 つ"}
+        body:
+          en: |
+            The missions in this stage are **two routes**. Both are in the same VLAN, so they share **one tree**.
+
+            Fixing one route can break the other. Look for a tree on which both routes hold at the same time.
+          ja: |
+            このステージのお題は**経路 2 本**です。2 つとも同じ VLAN なので、**1 つの木**を分け合います。
+
+            片方の経路を直すと、もう片方が崩れることがあります。2 本が同時に成り立つ木を探してください。
+      - title: {en: "An order to think in", ja: "考える順番"}
+        body:
+          en: |
+            Every setting is available. If you are unsure, this order keeps things tidy:
+
+            - **1. Root bridge**: where should the root be so that both routes lie on its tree?
+            - **2. Each switch's root port**: do the switches on the routes have R on the right side? Pull the way over with speed or port cost.
+            - **3. Tie-breakers**: last, fix the places decided by a neighbor's bridge ID or a parallel link's port ID.
+          ja: |
+            すべての設定を使えます。迷ったら、この順で考えると整理しやすくなります。
+
+            - **1. ルート ブリッジ**: どこを根元にすれば、2 本ともその木の上に乗るか。
+            - **2. 各スイッチのルート ポート**: 経路の上のスイッチが、正しい側を R にしているか。速度やポート コストで道を寄せる。
+            - **3. 同点の決着**: 最後に、隣のブリッジ ID や並行リンクのポート ID で決まっているところを直す。
+      - title: {en: "Moves", ja: "手数"}
+        body:
+          en: |
+            - The move limit is only **one more than the fewest moves**. There is little room for detours.
+            - Your changes appear below the board as IOS commands ("Changed configuration").
+            - **Rules** (top right) sums up what each setting does.
+          ja: |
+            - 手数の上限は**最少 + 1** だけです。寄り道の変更はほとんどできません。
+            - 変えた設定は、盤面の下の「変更した設定」に IOS のコマンドで出ます。
+            - それぞれの設定の効き方は、右上の**ルール**にまとまっています。
+
+  - id: 7
+    title: {en: "Load Sharing", ja: "負荷分散"}
+    sub: {en: "A tree per VLAN. Send VLAN 10 and VLAN 20 along different routes.",
+          ja: "VLAN ごとに木がある。VLAN 10 と VLAN 20 を別の経路に流す。"}
+    cards:
+      - title: {en: "A tree per VLAN", ja: "VLAN ごとの木"}
+        body:
+          en: |
+            So far there was only VLAN 1. This stage has two: **VLAN 10 and VLAN 20**.
+
+            **Rapid PVST+** builds a separate tree for each VLAN. The root bridge and the stopped links are decided per VLAN.
+
+            - The `prio` on each box has the VLAN number added. With the default 32768, it shows 32778 in VLAN 10 and 32788 in VLAN 20.
+          ja: |
+            これまでは VLAN 1 だけでした。このステージは **VLAN 10 と VLAN 20** の 2 つです。
+
+            **Rapid PVST+** は、VLAN ごとに別の木を作ります。ルート ブリッジも、止まるリンクも、VLAN ごとに決まります。
+
+            - 箱の `prio` は VLAN 番号を足した表示です。既定の 32768 なら、VLAN 10 では 32778、VLAN 20 では 32788。
+      - title: {en: "Sharing the load", ja: "負荷分散"}
+        body:
+          en: |
+            Put the root of VLAN 10 and the root of VLAN 20 on **different switches**, and each VLAN uses a different way. The traffic is shared across both paths (**load sharing**).
+
+            The settings are per VLAN too: `spanning-tree vlan 10 priority 24576` changes only the tree of VLAN 10.
+          ja: |
+            VLAN 10 のルートと VLAN 20 のルートを**別のスイッチ**に置くと、VLAN ごとに違う道が使われ、両方の道に通信を分けられます(**負荷分散**)。
+
+            設定も VLAN ごとです: `spanning-tree vlan 10 priority 24576` は VLAN 10 の木だけを変えます。
+      - title: {en: "How to play", ja: "遊び方"}
+        body:
+          en: |
+            - The **VLAN tabs** above the board switch which tree you see. Changes go into **the VLAN you are looking at**.
+            - PCs and servers show their VLAN. Those of the other VLAN are drawn faint.
+            - You can use bridge priority and port cost (both per VLAN). Speed is not available, because it would change every VLAN at once.
+          ja: |
+            - 盤面の上の **VLAN のタブ**で、見る木を切り替えます。変更は**見ている VLAN** に入ります。
+            - 端末(PC・サーバ)にも VLAN が書いてあります。見ていない VLAN の端末は薄く出ます。
+            - 使えるのはブリッジ プライオリティとポート コスト(どちらも VLAN ごと)。速度はすべての VLAN を一度に変えてしまうので、このステージでは使いません。
+
+  - id: 8
+    title: {en: "Campus", ja: "キャンパス"}
+    sub: {en: "A real campus layout. Put the root where it belongs, then build two routes.",
+          ja: "実際のキャンパスの配線。ルートをあるべき場所に置き、経路を 2 本つくる。"}
+    cards:
+      - title: {en: "Layers", ja: "層"}
+        body:
+          en: |
+            A real campus LAN is built in **layers** by job. The tag on top of each box names its layer.
+
+            - **ACC** (access layer): where PCs and printers connect.
+            - **DIST** (distribution layer): gathers the access switches.
+            - **CORE** (core layer): the center that links the distribution switches (3-tier only).
+
+            Levels 1–2 use a 2-tier layout, levels 3–5 a 3-tier one.
+          ja: |
+            実際のキャンパス LAN は、役割ごとに**層**に分けて組みます。箱の上の札が層の名前です。
+
+            - **ACC**(アクセス層): PC やプリンタがつながる。
+            - **DIST**(ディストリビューション層): アクセス層のスイッチを束ねる。
+            - **CORE**(コア層): ディストリビューション層どうしをつなぐ中心(3 層のときだけ)。
+
+            レベル 1〜2 は 2 層、レベル 3〜5 は 3 層の配線です。
+      - title: {en: "Do not leave the root to chance", ja: "ルートを成り行きに任せない"}
+        body:
+          en: |
+            With default priorities the lowest MAC becomes the root, which may be an access switch. Then traffic between access switches can take odd detours.
+
+            Place the root in the **distribution** layer (2-tier) or the **core** (3-tier). The command `root primary` sets 24576 (lower if needed), and `root secondary` sets 28672 for the backup root. In this game you enter the number directly.
+          ja: |
+            既定のままだと MAC の最も小さいスイッチがルートになり、アクセス スイッチがルートになることもあります。すると、通信がおかしな遠回りをすることがあります。
+
+            ルートは**ディストリビューション層**(2 層)か**コア**(3 層)に置きます。`root primary` は 24576(必要ならもっと小さく)、予備のルートに使う `root secondary` は 28672 を入れるコマンドです。このゲームでは数値を直接入れます。
+      - title: {en: "The missions", ja: "お題"}
+        body:
+          en: |
+            Each level asks for a **root bridge** (a frame around the switch) and **two routes** from the PCs to the server.
+
+            - Every setting is available.
+            - For the root, 24576 (like `root primary`) is the usual choice, and 28672 (like `root secondary`) for the second. Both are on the buttons.
+          ja: |
+            お題は、**ルート ブリッジの指定**(スイッチを囲む枠)と、PC からサーバへの**経路 2 本**です。
+
+            - すべての設定を使えます。
+            - ルートには `root primary` 相当の 24576、2 番手には `root secondary` 相当の 28672 がよく使われます(どちらもボタンにあります)。
+
+  - id: 9
+    title: {en: "MST", ja: "MST"}
+    sub: {en: "Map VLANs to instances and shape each instance's tree.",
+          ja: "VLAN をインスタンスに割り当て、インスタンスごとの木を組む。"}

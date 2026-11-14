@@ -203,7 +203,7 @@ details{margin-top:2rem;font-size:.85rem;color:#666}
 summary{cursor:pointer}
 .foot{margin-top:1.5rem;font-size:.8rem}
 /* 教材の区画(BL-247): 棚ごとの見出しと、本ごとの 1 行 */
-#materials{margin-bottom:2.2rem;padding-bottom:1.4rem;border-bottom:1px solid #d5d5d5}
+#materials,#games{margin-bottom:2.2rem;padding-bottom:1.4rem;border-bottom:1px solid #d5d5d5}
 h2{font-size:.82rem;font-weight:600;color:#666;letter-spacing:.03em;margin:1rem 0 .3rem}
 ul.books{list-style:none;margin:0;padding:0}
 ul.books li{padding:.35rem .5rem;border-top:1px solid #e3e3e3}
@@ -215,7 +215,7 @@ details.labs{display:inline-block;position:relative;margin:0 0 0 .8rem;font-size
 details.labs>summary{list-style:none;display:inline-block;padding:0 .45rem;border:1px solid #c9c9c9;
   border-radius:3px;color:#0645ad;background:#fff;user-select:none}
 details.labs>summary::-webkit-details-marker{display:none}
-details.labs>summary::after{content:" \25BE";color:#888}
+details.labs>summary::after{content:" \\25BE";color:#888}
 details.labs[open]>summary{border-color:#0645ad}
 details.labs ul{position:absolute;left:0;top:calc(100% + 3px);z-index:10;list-style:none;margin:0;padding:.25rem 0;
   min-width:22rem;max-width:calc(100vw - 2rem);background:#fff;border:1px solid #c9c9c9;border-radius:4px;box-shadow:0 4px 14px rgba(0,0,0,.12)}
@@ -337,6 +337,30 @@ def _materials(repo):
     return "".join(out)
 
 
+def _games(repo):
+    """ゲームの区画(BL-268 STP パズル・BL-270 STP 経路づくり・BL-271 ルーティング経路づくり)。進み具合はそれぞれの保存先から。
+    1 つが壊れていても、そのゲームの行だけ出さない(一覧全体は落とさない)。"""
+    rows = []
+    games = [("stp_puzzle", "/_stp/", "STP Puzzle", "ポートの役割と状態を埋める",
+              "Fill in the role and state of every port, stage by stage (root bridge → MST)."),
+             ("stp_path", "/_stp_path/", "STP Path Builder", "設定を変えてお題の経路をつくる",
+              "Change priorities, link speeds and port costs so spanning tree takes the route on the mission."),
+             ("route_path", "/_route_path/", "Route Path Builder", "経路を足して、お題のルータを通す",
+              "Set interfaces and static routes so packets travel the way the mission says (connected → static → default → …).")]
+    for mod, href, title, alt, sub in games:
+        try:
+            clear, total, stars, smax = __import__(mod).summary()
+        except Exception:                  # noqa: BLE001 — ゲームの不具合でポータルを止めない
+            continue
+        rows.append(f'<li><a class="bk" href="{href}">{title}</a><span class="alt">{alt}</span>'
+                    '<span class="tag">EN·JA</span>'
+                    f'<span class="dim">{clear}/{total} levels · ★ {stars}/{smax}</span>'
+                    f'<div class="sub">{sub}</div></li>')
+    if not rows:
+        return ""
+    return '<section id="games"><header><h1>Games</h1></header><ul class="books">' + "".join(rows) + '</ul></section>'
+
+
 def _rows(ps):
     """日が変わる行に区切り線(「採点済を隠す」時は JS が見えている先頭行へ付け直す)。"""
     out, last = [], None
@@ -368,7 +392,7 @@ def build_home(packs_root, repo=REPO):
 
     css = CSS.replace("@@PAPER@@", gen_pack.render_html.PAPER)      # 紙の色は問題ページと同じ値
     out = [f"<title>Study Portal</title><style>{css}</style>",
-           '<main>' + _materials(repo) + '<section id="packs"><header><h1>Question Packs</h1>'
+           '<main>' + _materials(repo) + _games(repo) + '<section id="packs"><header><h1>Question Packs</h1>'
            '<label><input type="checkbox" id="hide"> Hide graded</label></header>',
            "<table>"] + _rows(daily) + ["</table>"]
     for label, ps in (("Abandoned", abandoned), ("dry-run", drys), ("Tests", tests)):

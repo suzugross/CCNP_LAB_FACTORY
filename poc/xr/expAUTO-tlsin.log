@@ -1,0 +1,203 @@
+######## 13:24:00 tls_in xr01: no-tls を外す(TLS)
+configure
+Tue Nov 10 13:24:01.515 UTC
+RP/0/RP0/CPU0:XR01(config)#
+grpc
+RP/0/RP0/CPU0:XR01(config-grpc)#
+no no-tls
+RP/0/RP0/CPU0:XR01(config-grpc)#
+commit
+Tue Nov 10 13:24:02.829 UTC
+RP/0/RP0/CPU0:XR01(config-grpc)#
+end
+RP/0/RP0/CPU0:XR01#
+show grpc | include "TLS|Certificate"
+Tue Nov 10 13:24:04.253 UTC
+TLS                                     : enabled
+TLS mutual                              : disabled
+Certificate Authentication              : disabled
+Certificate common name                 : ems.cisco.com
+TLS v1.0                                : enabled
+TLS Minimum Version                     : TLS 1.0
+TLS Maximum Version                     : TLS 1.3
+TLS cipher suites
+  Default TLS1.3                        : aes_128_gcm_sha256
+RP/0/RP0/CPU0:XR01#
+run ls -la /misc/config/grpc/
+Tue Nov 10 13:24:04.758 UTC
+total 32
+drwxr-xr-x.  5 root root 4096 Nov 10 13:08 .
+drwxr-xr-x. 16 root root 4096 Nov 10 13:08 ..
+-rw-r--r--.  1 root root 1545 Nov 10 13:08 ca.cert
+drwx------.  2 root root 4096 Nov 10 13:20 dialout
+-rw-------.  1 root root 1679 Nov 10 13:08 ems.key
+-rw-r--r--.  1 root root 1545 Nov 10 13:08 ems.pem
+drwxr-xr-x.  2 root root 4096 Nov 10 12:55 gnsi
+drwxr-xr-x.  2 root root 4096 Nov 10 13:08 trustpoint
+
+RP/0/RP0/CPU0:XR01#
+run openssl x509 -in /misc/config/grpc/ems.pem -noout -subje$onfig/grpc/ems.pem -noout -subjec                          t -issuer -ext subjectAltN$subject -issuer -ext subjectAltNa                          me -datesrun openssl x509 -in /misc/config/grpc/ems.pem -noout -subj$
+Tue Nov 10 13:24:05.265 UTC
+subject=C=US, ST=CA, L=San Jose, street=3700 Cisco Way, postalCode=95134, O=Cisco Systems, Inc., OU=CSG, CN=ems.cisco.com, serialNumber=638B85D4E4A
+issuer=C=US, ST=CA, L=San Jose, street=3700 Cisco Way, postalCode=95134, O=Cisco Systems, Inc., OU=CSG, CN=ems.cisco.com, serialNumber=638B85D4E4A
+X509v3 Subject Alternative Name: 
+    DNS:ems.cisco.com
+notBefore=Nov 10 13:08:16 2026 GMT
+notAfter=Nov 10 13:08:16 2046 GMT
+
+RP/0/RP0/CPU0:XR01#
+$ timeout 10 openssl s_client -connect 10.0.50.1:57400 -showcerts < /dev/null 2>/dev/null | openssl x509 -outform PEM > /tmp/pki/xr01-ems.pem; openssl x509 -in /tmp/pki/xr01-ems.pem -noout -subject -issuer
+subject=C = US, ST = CA, L = San Jose, street = 3700 Cisco Way, postalCode = 95134, O = "Cisco Systems, Inc.", OU = CSG, CN = ems.cisco.com, serialNumber = 638B85D4E4A
+issuer=C = US, ST = CA, L = San Jose, street = 3700 Cisco Way, postalCode = 95134, O = "Cisco Systems, Inc.", OU = CSG, CN = ems.cisco.com, serialNumber = 638B85D4E4A
+[rc=0]
+$ timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.50.1:57400 --insecure capabilities 2>&1 | head -3
+target "10.0.50.1:57400", capabilities request failed: "10.0.50.1:57400" CapabilitiesRequest failed: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: EOF"
+Error: one or more requests failed
+[rc=0]
+$ timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.50.1:57400 --skip-verify capabilities 2>&1 | head -2
+gNMI version: 0.10.0
+supported models:
+[rc=0]
+$ timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.50.1:57400 --tls-ca /tmp/pki/xr01-ems.pem capabilities 2>&1 | head -2
+target "10.0.50.1:57400", capabilities request failed: "10.0.50.1:57400" CapabilitiesRequest failed: rpc error: code = Unavailable desc = connection error: desc = "transport: authentication handshake failed: tls: failed to verify certificate: x509: cannot validate certificate for 10.0.50.1 because it doesn't contain any IP SANs"
+Error: one or more requests failed
+[rc=0]
+$ timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.50.1:57400 --tls-ca /tmp/pki/xr01-ems.pem --tls-server-name ems.cisco.com capabilities 2>&1 | head -2
+gNMI version: 0.10.0
+supported models:
+[rc=0]
+######## 13:24:11 mtls_in xr01: tls-mutual(CA は XR の既定のまま)
+configure
+Tue Nov 10 13:24:12.593 UTC
+RP/0/RP0/CPU0:XR01(config)#
+grpc
+RP/0/RP0/CPU0:XR01(config-grpc)#
+tls-mutual
+RP/0/RP0/CPU0:XR01(config-grpc)#
+commit
+Tue Nov 10 13:24:13.910 UTC
+RP/0/RP0/CPU0:XR01(config-grpc)#
+end
+RP/0/RP0/CPU0:XR01#
+show grpc | include "TLS|Certificate"
+Tue Nov 10 13:24:15.237 UTC
+TLS                                     : enabled
+TLS mutual                              : enabled
+Certificate Authentication              : disabled
+Certificate common name                 : ems.cisco.com
+TLS v1.0                                : enabled
+TLS Minimum Version                     : TLS 1.0
+TLS Maximum Version                     : TLS 1.3
+TLS cipher suites
+  Default TLS1.3                        : aes_128_gcm_sha256
+RP/0/RP0/CPU0:XR01#
+$ timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.50.1:57400 --tls-ca /tmp/pki/xr01-ems.pem --tls-server-name ems.cisco.com capabilities 2>&1 | head -2
+target "10.0.50.1:57400", capabilities request failed: "10.0.50.1:57400" CapabilitiesRequest failed: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certificate required"
+Error: one or more requests failed
+[rc=0]
+$ timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.50.1:57400 --tls-ca /tmp/pki/xr01-ems.pem --tls-server-name ems.cisco.com --tls-cert /tmp/pki/client.pem --tls-key /tmp/pki/client.key capabilities 2>&1 | head -2
+target "10.0.50.1:57400", capabilities request failed: "10.0.50.1:57400" CapabilitiesRequest failed: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: bad certificate"
+Error: one or more requests failed
+[rc=0]
+######## 13:24:21 tls_in xr02: no-tls を外す(TLS)
+configure
+Tue Nov 10 13:24:22.384 UTC
+RP/0/RP0/CPU0:XR02(config)#
+grpc
+RP/0/RP0/CPU0:XR02(config-grpc)#
+no no-tls
+RP/0/RP0/CPU0:XR02(config-grpc)#
+commit
+Tue Nov 10 13:24:23.707 UTC
+RP/0/RP0/CPU0:XR02(config-grpc)#
+end
+RP/0/RP0/CPU0:XR02#
+show grpc | include "TLS|Certificate"
+Tue Nov 10 13:24:24.615 UTC
+TLS                                     : enabled
+TLS mutual                              : disabled
+Certificate Authentication              : disabled
+Certificate common name                 : ems.cisco.com
+TLS v1.0                                : enabled
+TLS Minimum Version                     : TLS 1.0
+TLS Maximum Version                     : TLS 1.3
+TLS cipher suites
+  Default TLS1.3                        : aes_128_gcm_sha256
+RP/0/RP0/CPU0:XR02#
+run ls -la /misc/config/grpc/
+Tue Nov 10 13:24:25.117 UTC
+total 36
+drwxr-xr-x  6 root iosxr 4096 Nov 10 13:03 .
+drwxr-xr-x 16 root root  4096 Nov 10 13:03 ..
+drwxr-xr-x  2 root iosxr 4096 Nov 10 13:03 bert
+-rw-r--r--  1 root iosxr 1545 Nov 10 13:03 ca.cert
+drwx------  2 root iosxr 4096 Nov 10 13:22 dialout
+-rw-------  1 root iosxr 1675 Nov 10 13:03 ems.key
+-rw-r--r--  1 root iosxr 1545 Nov 10 13:03 ems.pem
+drwxr-xr-x  2 root iosxr 4096 Nov 10 12:49 gnsi
+drwxrwxrwx  2 root iosxr 4096 Nov 10 13:03 trustpoint
+
+RP/0/RP0/CPU0:XR02#
+run openssl x509 -in /misc/config/grpc/ems.pem -noout -subject -issuer -ext subjectAltName -dates
+Tue Nov 10 13:24:25.629 UTC
+subject=C=US, ST=CA, L=San Jose, street=3700 Cisco Way, postalCode=95134, O=Cisco Systems, Inc., OU=CSG, CN=ems.cisco.com, serialNumber=VSN-ECKRVYZ
+issuer=C=US, ST=CA, L=San Jose, street=3700 Cisco Way, postalCode=95134, O=Cisco Systems, Inc., OU=CSG, CN=ems.cisco.com, serialNumber=VSN-ECKRVYZ
+X509v3 Subject Alternative Name: 
+    DNS:ems.cisco.com
+notBefore=Nov 10 13:03:20 2026 GMT
+notAfter=Nov 10 13:03:20 2046 GMT
+
+RP/0/RP0/CPU0:XR02#
+$ timeout 10 openssl s_client -connect 10.0.60.1:57400 -showcerts < /dev/null 2>/dev/null | openssl x509 -outform PEM > /tmp/pki/xr02-ems.pem; openssl x509 -in /tmp/pki/xr02-ems.pem -noout -subject -issuer
+subject=C = US, ST = CA, L = San Jose, street = 3700 Cisco Way, postalCode = 95134, O = "Cisco Systems, Inc.", OU = CSG, CN = ems.cisco.com, serialNumber = VSN-ECKRVYZ
+issuer=C = US, ST = CA, L = San Jose, street = 3700 Cisco Way, postalCode = 95134, O = "Cisco Systems, Inc.", OU = CSG, CN = ems.cisco.com, serialNumber = VSN-ECKRVYZ
+[rc=0]
+$ timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.60.1:57400 --insecure capabilities 2>&1 | head -3
+target "10.0.60.1:57400", capabilities request failed: "10.0.60.1:57400" CapabilitiesRequest failed: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: EOF"
+Error: one or more requests failed
+[rc=0]
+$ timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.60.1:57400 --skip-verify capabilities 2>&1 | head -2
+gNMI version: 0.10.0
+supported models:
+[rc=0]
+$ timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.60.1:57400 --tls-ca /tmp/pki/xr02-ems.pem capabilities 2>&1 | head -2
+target "10.0.60.1:57400", capabilities request failed: "10.0.60.1:57400" CapabilitiesRequest failed: rpc error: code = Unavailable desc = connection error: desc = "transport: authentication handshake failed: tls: failed to verify certificate: x509: cannot validate certificate for 10.0.60.1 because it doesn't contain any IP SANs"
+Error: one or more requests failed
+[rc=0]
+$ timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.60.1:57400 --tls-ca /tmp/pki/xr02-ems.pem --tls-server-name ems.cisco.com capabilities 2>&1 | head -2
+gNMI version: 0.10.0
+supported models:
+[rc=0]
+######## 13:24:31 mtls_in xr02: tls-mutual(CA は XR の既定のまま)
+configure
+Tue Nov 10 13:24:32.876 UTC
+RP/0/RP0/CPU0:XR02(config)#
+grpc
+RP/0/RP0/CPU0:XR02(config-grpc)#
+tls-mutual
+RP/0/RP0/CPU0:XR02(config-grpc)#
+commit
+Tue Nov 10 13:24:34.195 UTC
+RP/0/RP0/CPU0:XR02(config-grpc)#
+end
+RP/0/RP0/CPU0:XR02#
+show grpc | include "TLS|Certificate"
+Tue Nov 10 13:24:35.012 UTC
+TLS                                     : enabled
+TLS mutual                              : enabled
+Certificate Authentication              : disabled
+Certificate common name                 : ems.cisco.com
+TLS v1.0                                : enabled
+TLS Minimum Version                     : TLS 1.0
+TLS Maximum Version                     : TLS 1.3
+TLS cipher suites
+  Default TLS1.3                        : aes_128_gcm_sha256
+RP/0/RP0/CPU0:XR02#
+$ timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.60.1:57400 --tls-ca /tmp/pki/xr02-ems.pem --tls-server-name ems.cisco.com capabilities 2>&1 | head -2
+target "10.0.60.1:57400", capabilities request failed: "10.0.60.1:57400" CapabilitiesRequest failed: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certificate required"
+Error: one or more requests failed
+[rc=0]
+$ timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.60.1:57400 --tls-ca /tmp/pki/xr02-ems.pem --tls-server-name ems.cisco.com --tls-cert /tmp/pki/client.pem --tls-key /tmp/pki/client.key capabilities 2>&1 | head -2
+target "10.0.60.1:57400", capabilities request failed: "10.0.60.1:57400" CapabilitiesRequest failed: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: bad certificate"
+Error: one or more requests failed
+[rc=0]

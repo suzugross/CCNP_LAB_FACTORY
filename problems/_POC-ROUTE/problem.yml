@@ -1,0 +1,27 @@
+# BL-271 PoC: ルーティング経路づくりの計算器(topologies/route_model.py)を IOL の実挙動と照合する(出題用ではない)。
+# 盤面= route_model.build_net の四角＋対角線(R1–R2・R1–R3・R2–R4・R3–R4・R2–R3)。RT0N = 計算器の RN。
+# 計算器の Gi0/0(LAN)→ Ethernet0/0・Gi0/1→ Ethernet0/1・Gi0/2→ Ethernet0/2・Gi0/3→ Ethernet1/0(slot 4)。
+# LAN は 1 ポートだけの非管理スイッチ(LANn)につなぐ(インタフェースを定義するため)。
+# 検証項目= problems/_drafts/ROUTE-PATH.design.md §4 の PoC 表。手順と結果= poc/route/README.md
+id: _POC-ROUTE
+title: "[PoC] static route の実挙動確認"
+exam: POC
+topics: [poc, static]
+difficulty: 0
+topology: generated
+access: ssh
+image_family: iol
+target_nodes: [RT01, RT02, RT03, RT04]
+points: 0
+lab:
+  switches: [LAN1, LAN2, LAN3, LAN4]
+  links:
+    - { a: RT01, a_if: 1, b: RT02, b_if: 1 }   # R1–R2 172.16.12.0/30
+    - { a: RT01, a_if: 2, b: RT03, b_if: 1 }   # R1–R3 172.16.13.0/30
+    - { a: RT02, a_if: 2, b: RT04, b_if: 1 }   # R2–R4 172.16.24.0/30
+    - { a: RT03, a_if: 2, b: RT04, b_if: 2 }   # R3–R4 172.16.34.0/30
+    - { a: RT02, a_if: 4, b: RT03, b_if: 4 }   # R2–R3 172.16.23.0/30(Ethernet1/0)
+    - { a: RT01, a_if: 0, b: LAN1, b_if: 0 }
+    - { a: RT02, a_if: 0, b: LAN2, b_if: 0 }
+    - { a: RT03, a_if: 0, b: LAN3, b_if: 0 }
+    - { a: RT04, a_if: 0, b: LAN4, b_if: 0 }

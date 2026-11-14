@@ -1,0 +1,31 @@
+! _POC-XRAUTO RT01(IOL)= 試験のトラフィックの発信元。Loopback100 から SRV01 へ XR01・XR02 を通して流す。
+interface Loopback0
+ ip address 10.255.0.11 255.255.255.255
+ ip router isis CORE
+!
+interface Loopback100
+ description traffic source
+ ip address 198.51.100.1 255.255.255.0
+ ip router isis CORE
+!
+interface {{ links[0] }}
+ description to XR01
+ ip address 10.0.11.2 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ no shutdown
+!
+interface {{ links[1] }}
+ description to XR02
+ ip address 10.0.21.2 255.255.255.0
+ ip router isis CORE
+ isis network point-to-point
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0011.00
+ is-type level-2-only
+ metric-style wide
+ passive-interface Loopback0
+ passive-interface Loopback100
+!

@@ -1,0 +1,59 @@
+######## 13:39:55 sn4: XR02 のグループに notify VIEW-ALL を足す → Gi0/0/0/0 を shut/no shut
+configure
+Tue Nov 10 13:39:56.754 UTC
+RP/0/RP0/CPU0:XR02(config)#
+snmp-server group GRP-V3 v3 priv read VIEW-ALL notify VIEW-ALL
+RP/0/RP0/CPU0:XR02(config)#
+commit
+Tue Nov 10 13:39:57.770 UTC
+RP/0/RP0/CPU0:XR02(config)#
+end
+RP/0/RP0/CPU0:XR02#
+show snmp group | include "GRP|notify"
+Tue Nov 10 13:39:58.584 UTC
+notifyview: v1default
+notifyview: v1default
+groupname: GRP-V3                        security model:usm
+notifyview: VIEW-ALL
+RP/0/RP0/CPU0:XR02#
+$ sudo truncate -s0 /tmp/traps.log
+[rc=0]
+configure
+Tue Nov 10 13:40:00.533 UTC
+RP/0/RP0/CPU0:XR02(config)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR02(config-if)#
+shutdown
+RP/0/RP0/CPU0:XR02(config-if)#
+commit
+Tue Nov 10 13:40:01.859 UTC
+RP/0/RP0/CPU0:XR02(config-if)#
+no shutdown
+RP/0/RP0/CPU0:XR02(config-if)#
+commit
+Tue Nov 10 13:40:02.761 UTC
+RP/0/RP0/CPU0:XR02(config-if)#
+end
+RP/0/RP0/CPU0:XR02#
+$ sudo grep -vE "Cannot adopt|AgentX" /tmp/traps.log | tail -30
+[stderr] grep: /tmp/traps.log: binary file matches
+[rc=0]
+show snmp | include "Trap PDUs|pkts sent|dropped"
+Tue Nov 10 13:40:15.283 UTC
+    2 Trap PDUs
+             Number of pkts sent: 2
+          Number of pkts dropped: 0
+    Number of Informs dropped: 0 
+RP/0/RP0/CPU0:XR02#
+show snmp host
+Tue Nov 10 13:40:15.695 UTC
+Notification host: 10.0.60.10 udp-port: 162  type: trap
+user: USR-V3      security model: v3 priv
+
+RP/0/RP0/CPU0:XR02#
+$ sudo grep -a -vE "Cannot adopt|AgentX" /tmp/traps.log | tr -d "\000" | tail -12
+2026-11-10 13:40:02 <UNKNOWN> [UDP: [10.0.60.1]:161->[10.0.60.10]:162]:
+iso.3.6.1.2.1.1.3.0 = Timeticks: (14189) 0:02:21.89	iso.3.6.1.6.3.1.1.4.1.0 = OID: iso.3.6.1.6.3.1.1.5.3	iso.3.6.1.2.1.2.2.1.1.3 = INTEGER: 3	iso.3.6.1.2.1.2.2.1.2.3 = STRING: "GigabitEthernet0/0/0/0"	iso.3.6.1.2.1.2.2.1.3.3 = INTEGER: 6	iso.3.6.1.4.1.9.9.276.1.1.2.1.3.3 = STRING: "down"
+2026-11-10 13:40:03 <UNKNOWN> [UDP: [10.0.60.1]:161->[10.0.60.10]:162]:
+iso.3.6.1.2.1.1.3.0 = Timeticks: (14286) 0:02:22.86	iso.3.6.1.6.3.1.1.4.1.0 = OID: iso.3.6.1.6.3.1.1.5.4	iso.3.6.1.2.1.2.2.1.1.3 = INTEGER: 3	iso.3.6.1.2.1.2.2.1.2.3 = STRING: "GigabitEthernet0/0/0/0"	iso.3.6.1.2.1.2.2.1.3.3 = INTEGER: 6	iso.3.6.1.4.1.9.9.276.1.1.2.1.3.3 = STRING: "up"
+[rc=0]

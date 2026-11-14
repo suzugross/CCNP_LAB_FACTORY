@@ -1,0 +1,43 @@
+######## 13:40:29 sn5: XR01(XRv9000)に notify VIEW-ALL → Gi0/0/0/0 shut/no shut
+configure
+Tue Nov 10 13:40:30.989 UTC
+RP/0/RP0/CPU0:XR01(config)#
+snmp-server group GRP-V3 v3 priv read VIEW-ALL notif$priv read VIEW-ALL notify                           VIEW-ALLsnmp-server group GRP-V3 v3 priv read VIEW-ALL noti$
+RP/0/RP0/CPU0:XR01(config)#
+commit
+Tue Nov 10 13:40:31.899 UTC
+RP/0/RP0/CPU0:XR01(config)#
+end
+RP/0/RP0/CPU0:XR01#
+$ sudo truncate -s0 /tmp/traps.log
+[rc=0]
+configure
+Tue Nov 10 13:40:34.686 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface GigabitEthernet0/0/0/0
+RP/0/RP0/CPU0:XR01(config-if)#
+shutdown
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Tue Nov 10 13:40:35.998 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+no shutdown
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Tue Nov 10 13:40:37.311 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+$ sudo grep -a -vE "Cannot adopt|AgentX" /tmp/traps.log | tr -d "\000" | tail -6
+2026-11-10 13:40:36 <UNKNOWN> [UDP: [10.0.50.1]:161->[10.0.50.10]:162]:
+iso.3.6.1.2.1.1.3.0 = Timeticks: (18962) 0:03:09.62	iso.3.6.1.6.3.1.1.4.1.0 = OID: iso.3.6.1.6.3.1.1.5.3	iso.3.6.1.2.1.2.2.1.1.6 = INTEGER: 6	iso.3.6.1.2.1.2.2.1.2.6 = STRING: "GigabitEthernet0/0/0/0"	iso.3.6.1.2.1.2.2.1.3.6 = INTEGER: 6	iso.3.6.1.4.1.9.9.276.1.1.2.1.3.6 = STRING: "down"
+2026-11-10 13:40:37 <UNKNOWN> [UDP: [10.0.50.1]:161->[10.0.50.10]:162]:
+iso.3.6.1.2.1.1.3.0 = Timeticks: (19094) 0:03:10.94	iso.3.6.1.6.3.1.1.4.1.0 = OID: iso.3.6.1.6.3.1.1.5.4	iso.3.6.1.2.1.2.2.1.1.6 = INTEGER: 6	iso.3.6.1.2.1.2.2.1.2.6 = STRING: "GigabitEthernet0/0/0/0"	iso.3.6.1.2.1.2.2.1.3.6 = INTEGER: 6	iso.3.6.1.4.1.9.9.276.1.1.2.1.3.6 = STRING: "up"
+[rc=0]
+show snmp | include "Trap PDUs|pkts sent|dropped"
+Tue Nov 10 13:40:49.991 UTC
+    2 Trap PDUs
+             Number of pkts sent: 2
+          Number of pkts dropped: 0
+    Number of Informs dropped: 0 
+RP/0/RP0/CPU0:XR01#

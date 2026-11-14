@@ -1,0 +1,60 @@
+######## 14:08:32 sn-e: 捕獲しながら shut/no shut
+show snmp | include "Trap PDUs|pkts sent|dropped"
+Tue Nov 10 14:08:34.252 UTC
+    0 Trap PDUs
+             Number of pkts sent: 0
+          Number of pkts dropped: 0
+    Number of Informs dropped: 0 
+RP/0/RP0/CPU0:XR01#
+show snmp host
+Tue Nov 10 14:08:34.656 UTC
+Notification host: 10.0.50.10 udp-port: 162  type: trap
+user: nms-trap      security model: v3 auth
+
+RP/0/RP0/CPU0:XR01#
+show snmp user
+Tue Nov 10 14:08:35.048 UTC
+  User Name: nms-trap
+  EngineId: localSnmpID
+  storage-type: nonvolatile        active
+
+RP/0/RP0/CPU0:XR01#
+$ sudo bash -c "timeout 25 tcpdump -ni ens3 -c 6 udp port 162 -w /tmp/trap.pcap > /dev/null 2>&1 &"; sleep 1; echo started
+started
+[rc=0]
+(no new lines)
+== TRAPS linkDown=0 linkUp=0
+$ sudo tcpdump -nr /tmp/trap.pcap -v 2>/dev/null | head -20
+[rc=0]
+$ sudo -n journalctl -u snmptrapd-lab --no-pager -n 8 | tail -8
+[stderr] bash: - : invalid option
+Usage:	bash [GNU long option] [option] ...
+	bash [GNU long option] [option] script-file ...
+GNU long options:
+	--debug
+	--debugger
+	--dump-po-strings
+	--dump-strings
+	--help
+	--init-file
+	--login
+	--noediting
+	--noprofile
+	--norc
+	--posix
+	--pretty-print
+	--rcfile
+	--restricted
+	--verbose
+	--version
+Shell options:
+	-ilrsD or -c command or -O shopt_option		(invocation only)
+	-abefhkmnptuvxBCEHPT or -o option
+[rc=2]
+show snmp | include "Trap PDUs|pkts sent|dropped"
+Tue Nov 10 14:09:09.349 UTC
+    0 Trap PDUs
+             Number of pkts sent: 0
+          Number of pkts dropped: 0
+    Number of Informs dropped: 0 
+RP/0/RP0/CPU0:XR01#

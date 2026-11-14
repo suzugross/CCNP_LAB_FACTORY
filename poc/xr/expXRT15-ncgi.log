@@ -1,0 +1,112 @@
+######## 14:19:47 nc-a: NETCONF を有効にする前に雛形を埋めて実行(失敗のはず)
+== CMD 1 rc=0: cp ~/m13/nc_edit.py /tmp/nc_orig.py; ls -la ~/m13
+total 16
+drwxr-xr-x 2 SUZUKI SUZUKI 4096 Nov 10 13:56 .
+drwxr-x--- 6 SUZUKI SUZUKI 4096 Nov 10 14:07 ..
+-rw-r--r-- 1 SUZUKI SUZUKI 1329 Nov 10 13:56 nc_edit.py
+-rw-r--r-- 1 SUZUKI SUZUKI 1402 Nov 10 13:56 rc_customer_lo.py
+[put] /tmp/claude-1000/-home-suzuki-ansible-CCNP01/bda2a6e4-8e54-4f22-befc-8820280c9617/scratchpad/nc_fill.py -> /tmp/nc_fill.py
+$ python3 /tmp/nc_fill.py ~/m13/nc_edit.py '***' '***' > /tmp/nc_solved.py; python3 /tmp/nc_solved.py edit 2>&1 | tail -2
+[stderr] Traceback (most recent call last):
+  File "/tmp/nc_fill.py", line 12, in <module>
+    assert "__FILL__" not in s.split('"""', 1)[1], "unfilled"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unfilled
+[rc=0]
+######## 14:19:48 nc-b: NETCONF を有効にして get → edit → get
+configure
+Tue Nov 10 14:19:49.892 UTC
+RP/0/RP0/CPU0:XR01(config)#
+ssh server netconf vrf default
+RP/0/RP0/CPU0:XR01(config)#
+netconf-yang agent
+RP/0/RP0/CPU0:XR01(config-ncy-agent)#
+ssh
+RP/0/RP0/CPU0:XR01(config-ncy-agent)#
+commit
+Tue Nov 10 14:19:51.698 UTC
+RP/0/RP0/CPU0:XR01(config-ncy-agent)#
+end
+RP/0/RP0/CPU0:XR01#
+$ python3 /tmp/nc_solved.py get | head -5
+[rc=0]
+$ python3 /tmp/nc_solved.py edit
+[rc=0]
+$ python3 /tmp/nc_solved.py get
+[rc=0]
+show running-config interface Loopback100
+Tue Nov 10 14:20:02.061 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01#
+show configuration commit list 3
+Tue Nov 10 14:20:02.573 UTC
+SNo. Label/ID              User      Line                Client      Time Stamp
+~~~~ ~~~~~~~~              ~~~~      ~~~~                ~~~~~~      ~~~~~~~~~~
+1    1000000030            SUZUKI    vty0:node0_RP0_CPU  CLI         Tue Nov 10 14:19:51 2026
+2    1000000029            SUZUKI    vty0:node0_RP0_CPU  CLI         Tue Nov 10 14:16:05 2026
+3    1000000028            SUZUKI    vty0:node0_RP0_CPU  CLI         Tue Nov 10 14:15:27 2026
+RP/0/RP0/CPU0:XR01#
+== COMMIT NOT FOUND
+######## 14:20:21 gi-a: gNMI 白紙
+== GNMI plain FAIL: target "10.0.50.1:57400", capabilities request failed: "10.0.50.1:57400" CapabilitiesRequest failed: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial tcp 10.0.50.1:57400
+== GNMI tls-nocert FAIL: target "10.0.50.1:57400", capabilities request failed: "10.0.50.1:57400" CapabilitiesRequest failed: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial tcp 10.0.50.1:57400
+== GNMI tls-cert FAIL: target "10.0.50.1:57400", capabilities request failed: "10.0.50.1:57400" CapabilitiesRequest failed: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial tcp 10.0.50.1:57400
+######## 14:20:21 gi-b: grpc 57400 TLS + tls-mutual + CA 差し替え + emsd 再起動
+configure
+Tue Nov 10 14:20:23.370 UTC
+RP/0/RP0/CPU0:XR01(config)#
+grpc
+RP/0/RP0/CPU0:XR01(config-grpc)#
+port 57400
+RP/0/RP0/CPU0:XR01(config-grpc)#
+address-family ipv4
+RP/0/RP0/CPU0:XR01(config-grpc)#
+tls-mutual
+RP/0/RP0/CPU0:XR01(config-grpc)#
+commit
+Tue Nov 10 14:20:25.582 UTC
+RP/0/RP0/CPU0:XR01(config-grpc)#
+end
+RP/0/RP0/CPU0:XR01#
+copy http://10.0.50.10:8080/ca.pem harddisk:/nms-ca.pem
+Tue Nov 10 14:20:26.418 UTC
+Destination filename [/harddisk:/nms-ca.pem]?
+!! timeout
+
+Accessing http://10.0.50.10:8080/ca.pem
+!
+Successfully copied 1164 Bytes
+
+
+Copy operation success
+RP/0/RP0/CPU0:XR01#
+run cp /harddisk:/nms-ca.pem /misc/config/grpc/ca.cert
+Tue Nov 10 14:22:27.951 UTC
+
+RP/0/RP0/CPU0:XR01#
+process restart emsd
+Tue Nov 10 14:22:28.449 UTC
+RP/0/RP0/CPU0:XR01#
+== GNMI plain FAIL: target "10.0.50.1:57400", capabilities request failed: "10.0.50.1:57400" CapabilitiesRequest failed: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: EOF"
+== GNMI tls-nocert FAIL: target "10.0.50.1:57400", capabilities request failed: "10.0.50.1:57400" CapabilitiesRequest failed: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: certifi
+== GNMI tls-cert OK
+show grpc | include "TLS|Port|Address family|VRF"
+Tue Nov 10 14:22:50.616 UTC
+Address family                          : ipv4
+Port                                    : 57400
+VRF                                     : global-vrf
+TLS                                     : enabled
+TLS mutual                              : enabled
+TLS v1.0                                : enabled
+TLS Minimum Version                     : TLS 1.0
+TLS Maximum Version                     : TLS 1.3
+TLS cipher suites
+  Default TLS1.3                        : aes_128_gcm_sha256
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven subscription SUB-IF | include "State"
+Tue Nov 10 14:22:51.214 UTC
+  State:       ACTIVE
+    Sensor Path State:    Resolved
+    State:                Active
+RP/0/RP0/CPU0:XR01#

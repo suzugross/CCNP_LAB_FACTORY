@@ -1,0 +1,46 @@
+# XRT-15: XR トラック M13 自動化とアシュアランス(SPCOR 5.7〜5.10)。BL-246。設計= problems/_drafts/XR-TRACK.design.md §30(PoC= _POC-XRAUTO)。
+# 学習目的のラボ(パック・ノルマの対象外)。盤面= XR01(XRd)と PE2(Cat8000V)のコア。SW1(非管理スイッチ)= NMS の区画 10.0.50.0/24 に XR01・PE2・SRV01。
+#   XR01 Gi0/0/0/0 PE2 Gi1(コア 10.0.12.0/24・IS-IS L2)・Gi0/0/0/1 SW1(NMS)・Gi0/0/0/2 CE1 Et0/1(予備の線= トラップの試験用)
+#   PE2  Gi2 CE1 Et0/0(お客さま A・172.16.1.0/24)・Gi3 SW1(NMS)。CE1 Lo100 192.168.100.1/24 = 試験のトラフィックの発信元
+#   SRV01(Ubuntu)= NMS。学ぶ側はここから機器を扱う(gnmic・telegraf・nfdump・snmp・ncclient・PKI・M13 の雛形とスクリプトを据付)。
+# ★XR が NMS と話す道は SW1 の上で直に届く(XRd を通り抜ける TCP/UDP を作らない= design §14.1)。★XR に RESTCONF・NetFlow は無い → PE2 で扱う(§30.4)。
+# 仕込み= XR01 の初期設定に前任者のテレメトリ(M13-4)と SNMP(M13-6)。
+id: XRT-15
+title: "XR Track 15 — Automation and Assurance"
+exam: SP
+topics: [iosxr, iosxe, netconf, restconf, yang, grpc, gnmi, telemetry, tls, netflow, ipfix, snmp, tutorial]
+difficulty: 3
+topology: generated
+access: ssh
+target_nodes: [XR01, PE2, CE1, SRV01]
+points: 100
+image_family: iol
+node_image_families: { XR01: iosxr, PE2: cat8000v, SRV01: ubuntu }
+node_xr_platforms: { XR01: iosxrd }
+grade_attempts: 2
+# lab.sh reset で構築直後へ戻す IOS XE の機器(configure replace。xr_reset.py)
+xe_reset_nodes: [PE2]
+# lab.sh reset の後に流す行。★XR01 の証明書のファイル(gRPC の ca.cert・ems の鍵・ダイヤルアウトの dialout.pem)は設定のロールバックでは
+# 戻らない → 消して gRPC のプロセスを再起動(gRPC を次に有効にした時に自己署名を作り直す= 構築直後と同じ)。
+# ★SNMP のホストの行は、上書きや同じコミットでの入れ替えでは動作が変わらない(26.1.1 実測・design §30.9)→ 消してコミット・入れてコミット。
+# ★学ぶ側が CA を運んだ写し(harddisk: の上・名前は自由)は、PEM の形(先頭が -----BEGIN)のファイルを消す(2026-11-14)。
+xr_reset_exec:
+  XR01: ['run rm -f /misc/config/grpc/dialout/dialout.pem /misc/config/grpc/ems.pem /misc/config/grpc/ems.key /misc/config/grpc/ca.cert',
+         'run for f in /harddisk:/*; do [ -f "$f" ] && head -c 10 "$f" | grep -q -- "-----BEGIN" && rm -f "$f"; done; true',
+         'process restart emsd',
+         'configure', 'no snmp-server host 10.0.50.10 traps version 3 priv nms-trap', 'commit',
+         'snmp-server host 10.0.50.10 traps version 3 priv nms-trap', 'commit', 'end']
+# SRV01 も戻す(課題で雛形を埋め、CA を配るプログラムを動かすため。2026-11-14)= 構築の時に置いた /usr/local/sbin/lab-reset
+# (SRV01.sh.j2)を呼ぶ: ホームを構築直後の控えへ戻し・受け手のログと nfcapd のファイルを空にして受け手を再起動・学ぶ側が起動したものを止める。
+linux_reset_exec:
+  SRV01: ['sudo -n /usr/local/sbin/lab-reset']
+lab:
+  switches: [SW1]
+  positions: { XR01: [0, 0], PE2: [-400, 0], CE1: [-800, 120], SW1: [-200, 220], SRV01: [-200, 420] }
+  links:
+    - { a: XR01, a_if: 3, b: PE2, b_if: 0 }
+    - { a: PE2, a_if: 1, b: CE1, b_if: 0 }
+    - { a: XR01, a_if: 4, b: SW1, b_if: 0 }
+    - { a: PE2, a_if: 2, b: SW1, b_if: 1 }
+    - { a: SRV01, a_if: 1, b: SW1, b_if: 2 }
+    - { a: XR01, a_if: 5, b: CE1, b_if: 1 }

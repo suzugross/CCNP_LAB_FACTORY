@@ -1,0 +1,141 @@
+######## 14:14:49 mdt-e: tls-hostname を名前違いに戻して、理由の出どころを探す
+configure
+Tue Nov 10 14:14:51.638 UTC
+RP/0/RP0/CPU0:XR01(config)#
+telemetry model-driven
+RP/0/RP0/CPU0:XR01(config-model-driven)#
+destination-group NMS
+RP/0/RP0/CPU0:XR01(config-model-driven-dest)#
+address-family ipv4 10.0.50.10 port 57500
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+protocol grpc tls-hostname telemetry.nms.lab
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+commit
+Tue Nov 10 14:14:53.805 UTC
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+end
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven subscription SUB-IF | include "State|TLS"
+Tue Nov 10 14:15:21.156 UTC
+  State:       ACTIVE
+    Sensor Path State:    Resolved
+    State:                NA
+    TLS :                 telemetry.nms.lab
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven destination NMS internal
+                                                               ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:XR01#
+show logging | include -i "telemetry|emsd|mdt|tls|x509|cert" | utility tail count 12
+Tue Nov 10 14:15:21.989 UTC
+% Can't handle special action '|'. Quitting
+% Error parsing command string. Quitting. 
+RP/0/RP0/CPU0:XR01#
+show grpc trace ems last 15
+Tue Nov 10 14:15:22.378 UTC
+177 wrapping entries (211648 possible, 1216 allocated, 0 filtered, 177 total)
+Nov 10 14:14:53.838 ems/grpc 0/RP0/CPU0 t4360  EMS-GRPC: [core] [Channel #8]Channel Connectivity change to CONNECTING
+Nov 10 14:14:53.838 ems/grpc 0/RP0/CPU0 t4360  EMS-GRPC: [core] [Channel #8 SubChannel #9]Subchannel created
+Nov 10 14:14:53.838 ems/grpc 0/RP0/CPU0 t4360  EMS-GRPC: [core] [Channel #8]Channel exiting idle mode
+Nov 10 14:14:53.838 ems/grpc 0/RP0/CPU0 t4360  EMS-GRPC: [core] [Channel #8 SubChannel #9]Subchannel Connectivity change to CONNECTING
+Nov 10 14:14:53.838 ems/grpc 0/RP0/CPU0 t4360  EMS-GRPC: [core] [Channel #8 SubChannel #9]Subchannel picks a new address "10.0.50.10:57500" to connect
+Nov 10 14:14:55.312 ems/grpc 0/RP0/CPU0 t4365  EMS-GRPC: [core] Creating new client transport to "{Addr: \"10.0.50.10:57500\", ServerName: \"telemetry.nms.lab\", BalancerAttributes: {\"<%!p(pickfirstleaf.managedByPickfirstKeyType={})>\": \"<%!p(bool=true)>\" }}": connection error: desc = "transport: a
+Nov 10 14:14:55.312 ems/grpc 0/RP0/CPU0 t4365  EMS-GRPC: [core] [Channel #8 SubChannel #9]grpc: addrConn.createTransport failed to connect to {Addr: "10.0.50.10:57500", ServerName: "telemetry.nms.lab", BalancerAttributes: {"<%!p(pickfirstleaf.managedByPickfirstKeyType={})>": "<%!p(bool=true)>" }}. Err
+Nov 10 14:14:55.312 ems/grpc 0/RP0/CPU0 t4365  EMS-GRPC: [core] [Channel #8 SubChannel #9]Subchannel Connectivity change to TRANSIENT_FAILURE, last error: connection error: desc = "transport: authentication handshake failed: tls: failed to verify certificate: x509: certificate is valid for collector.n
+Nov 10 14:14:55.312 ems/grpc 0/RP0/CPU0 t4365  EMS-GRPC: [core] [Channel #8]Channel Connectivity change to TRANSIENT_FAILURE
+Nov 10 14:14:55.312 ems/grpc 0/RP0/CPU0 t4365  EMS-GRPC: [core] [Channel #8]Channel Connectivity change to SHUTDOWN
+Nov 10 14:14:55.312 ems/grpc 0/RP0/CPU0 t4365  EMS-GRPC: [core] [Channel #8]Closing the name resolver
+Nov 10 14:14:55.312 ems/grpc 0/RP0/CPU0 t4365  EMS-GRPC: [core] [Channel #8]ccBalancerWrapper: closing
+Nov 10 14:14:55.312 ems/grpc 0/RP0/CPU0 t4365  EMS-GRPC: [core] [Channel #8 SubChannel #9]Subchannel Connectivity change to SHUTDOWN
+Nov 10 14:14:55.312 ems/grpc 0/RP0/CPU0 t4365  EMS-GRPC: [core] [Channel #8 SubChannel #9]Subchannel deleted
+Nov 10 14:14:55.312 ems/grpc 0/RP0/CPU0 t4365  EMS-GRPC: [core] [Channel #8]Channel deleted
+RP/0/RP0/CPU0:XR01#
+######## 14:15:22 mdt-f: protocol grpc(tls-hostname なし)
+configure
+Tue Nov 10 14:15:24.059 UTC
+RP/0/RP0/CPU0:XR01(config)#
+telemetry model-driven
+RP/0/RP0/CPU0:XR01(config-model-driven)#
+destination-group NMS
+RP/0/RP0/CPU0:XR01(config-model-driven-dest)#
+address-family ipv4 10.0.50.10 port 57500
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+protocol grpc
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+show configuration
+Tue Nov 10 14:15:26.557 UTC
+!! Building configuration...
+!! IOS XR Configuration 26.1.1
+telemetry model-driven
+ destination-group NMS
+  address-family ipv4 10.0.50.10 port 57500
+   protocol grpc
+  !
+ !
+!
+end
+
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+commit
+Tue Nov 10 14:15:27.374 UTC
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+end
+RP/0/RP0/CPU0:XR01#
+show running-config telemetry model-driven destination-group NMS
+Tue Nov 10 14:15:28.187 UTC
+telemetry model-driven
+ destination-group NMS
+  address-family ipv4 10.0.50.10 port 57500
+   encoding self-describing-gpb
+   protocol grpc
+  !
+ !
+!
+
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven subscription SUB-IF | include "State|TLS"
+Tue Nov 10 14:16:00.453 UTC
+  State:       ACTIVE
+    Sensor Path State:    Resolved
+    State:                Active
+    TLS :                 10.0.50.10
+RP/0/RP0/CPU0:XR01#
+######## 14:16:00 mdt-g: 名前は正しく・dialout.pem を外す
+configure
+Tue Nov 10 14:16:02.902 UTC
+RP/0/RP0/CPU0:XR01(config)#
+telemetry model-driven
+RP/0/RP0/CPU0:XR01(config-model-driven)#
+destination-group NMS
+RP/0/RP0/CPU0:XR01(config-model-driven-dest)#
+address-family ipv4 10.0.50.10 port 57500
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+protocol grpc tls-hostname collector.nms.lab
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+commit
+Tue Nov 10 14:16:05.033 UTC
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+end
+RP/0/RP0/CPU0:XR01#
+run mv /misc/config/grpc/dialout/dialout.pem /harddisk:/dialout.pem.bak
+Tue Nov 10 14:16:06.088 UTC
+
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven subscription SUB-IF | include "State|TLS"
+Tue Nov 10 14:16:42.939 UTC
+  State:       ACTIVE
+    Sensor Path State:    Resolved
+    State:                Active
+    TLS :                 collector.nms.lab
+RP/0/RP0/CPU0:XR01#
+run cp /harddisk:/dialout.pem.bak /misc/config/grpc/dialout/dialout.pem
+Tue Nov 10 14:16:44.967 UTC
+
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven subscription SUB-IF | include "State|TLS"
+Tue Nov 10 14:17:21.881 UTC
+  State:       ACTIVE
+    Sensor Path State:    Resolved
+    State:                Active
+    TLS :                 collector.nms.lab
+RP/0/RP0/CPU0:XR01#

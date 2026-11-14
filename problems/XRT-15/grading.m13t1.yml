@@ -1,0 +1,21 @@
+# M13-1: NETCONF。NMS(SRV01)から XR01 の NETCONF(830・グローバル)に入れるか・Loopback100 が NETCONF のコミットで入ったか。白紙= 0 点。
+problem: XRT-15
+total_points: 100
+checks:
+  - name: 'M13-1 SRV01: the NMS opens a NETCONF session to XR01 on port 830 (hello with the candidate datastore)'
+    node: XR01
+    exec: local
+    command: .venv/bin/python topologies/nms_probe.py XRT-15 netconf SRV01 10.0.50.1
+    raw:
+      - { regex: '== NETCONF OK capabilities=\d+ candidate=yes' }
+    points: 40
+  - name: 'M13-1 XR01: Loopback100 (NMS-MANAGED, 10.255.100.1/32) is in place, committed through NETCONF'
+    node: XR01
+    exec: local
+    command: >-
+      .venv/bin/python topologies/nms_probe.py XRT-15 xr-commit XR01 'interface Loopback100';
+      .venv/bin/python topologies/login_probe.py XRT-15 ssh XR01 -- 'show running-config interface Loopback100'
+    raw:
+      - { regex: '== COMMIT \d+ line=netconf client=YANG Frame' }
+      - { regex: 'interface Loopback100\s*\n description NMS-MANAGED\s*\n ipv4 address 10\.255\.100\.1 255\.255\.255\.255' }
+    points: 60

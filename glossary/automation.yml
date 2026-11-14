@@ -1,0 +1,793 @@
+# glossary/automation.yml — 自動化とアシュアランスの語(YANG・NETCONF・RESTCONF・gRPC/gNMI・テレメトリ・TLS・NetFlow/IPFIX・SNMP・NSO・ZTP)
+# 2026-11-10 作成(XR トラック M13)。説明は本文(実機で確かめた内容)と食い違わないこと。
+# 一般語に当たる表記(subscription・collector・community・template・candidate など)は scope で M13 のページに絞る。
+
+# ---------------------------------------------------------------- モデルと運び手
+- id: yang
+  term: YANG
+  def:
+    en: >-
+      A data-modelling language (RFC 7950) that defines the names, types and nesting of a device's configuration and
+      state as a tree of modules. NETCONF, RESTCONF and gNMI all carry data shaped by YANG models.
+    ja: >-
+      機器の設定と状態の名前・型・入れ子を、モジュールごとの木として定義するデータ モデリング言語(RFC 7950)。
+      NETCONF・RESTCONF・gNMI は、どれも YANG のモデルの形をしたデータを運ぶ。
+  see: [netconf, restconf, gnmi, openconfig, unified-models]
+
+- id: yang-module
+  term: {en: YANG module, ja: YANG のモジュール}
+  aka: [YANG modules]
+  def:
+    en: >-
+      One file of YANG definitions with its own name and XML namespace (a URI). The namespace tells the device which
+      module an element in the data belongs to.
+    ja: >-
+      名前と XML の名前空間(URI)を持つ、YANG の定義の 1 つのまとまり。データの中の要素がどのモジュールのものかは、名前空間で示す。
+  see: [yang]
+
+- id: native-models
+  term: {en: native models, ja: ネイティブのモデル}
+  aka: [native model, ネイティブ モデル]
+  def:
+    en: >-
+      IOS XR's own YANG models: `Cisco-IOS-XR-…-cfg` for configuration and `Cisco-IOS-XR-…-oper` for operational
+      state. Their shape follows the software's internal schema rather than the CLI.
+    ja: >-
+      IOS XR 独自の YANG のモデル。設定は `Cisco-IOS-XR-…-cfg`、運用の状態は `Cisco-IOS-XR-…-oper`。形は CLI ではなく、
+      ソフトウェアの内部の構造に沿う。
+  see: [unified-models, openconfig]
+  scope: ["e*-m13-*"]
+
+- id: unified-models
+  term: {en: unified models, ja: 統一モデル}
+  aka: [unified model, UM models]
+  def:
+    en: >-
+      IOS XR configuration models named `Cisco-IOS-XR-um-…-cfg` (from release 7.0.1). They are generated from the CLI,
+      so their tree follows the CLI commands closely.
+    ja: >-
+      `Cisco-IOS-XR-um-…-cfg` という名前の IOS XR の設定のモデル(7.0.1 から)。CLI から作られるので、木の形が CLI のコマンドにほぼ沿う。
+  see: [native-models, openconfig, yang]
+
+- id: openconfig
+  term: OpenConfig
+  def:
+    en: >-
+      Vendor-neutral YANG models (`openconfig-…`) written by a group of network operators. Where a device does not
+      follow a model exactly, the vendor publishes the differences as deviation modules.
+    ja: >-
+      ネットワークの運用者の集まりが書いた、ベンダーに依らない YANG のモデル(`openconfig-…`)。機器がモデルどおりでない所は、
+      ベンダーが deviation のモジュールとして公開する。
+  see: [native-models, unified-models, deviation]
+
+- id: deviation
+  term: deviation
+  def:
+    en: >-
+      A YANG statement, usually in a separate module, that declares where a device does not support a model or
+      supports it differently (not supported, other type, other default).
+    ja: >-
+      機器がモデルの一部に対応しない・違う形で対応する(非対応・型違い・既定値違い)ことを宣言する YANG の文。ふつうは別のモジュールに書く。
+  see: [openconfig, yang]
+  scope: ["e*-m13-*"]
+
+- id: netconf
+  term: NETCONF
+  full: Network Configuration Protocol
+  def:
+    en: >-
+      A protocol that reads and changes configuration and state as XML-encoded RPCs over SSH (TCP 830; RFC 6241 and
+      6242). It has datastores such as running and candidate, locks, and commit with rollback on error.
+    ja: >-
+      SSH(TCP 830)の上で、XML の RPC として設定と状態を読み書きするプロトコル(RFC 6241・6242)。running や candidate などの
+      データストア、ロック、コミットと失敗時の巻き戻しを持つ。
+  see: [restconf, datastore, candidate-datastore, confirmed-commit, yang]
+
+- id: restconf
+  term: RESTCONF
+  def:
+    en: >-
+      A protocol that treats YANG data as HTTPS resources, changed with GET, POST, PUT, PATCH and DELETE, in XML or
+      JSON (RFC 8040). Each request takes effect on its own; there is no candidate or commit.
+    ja: >-
+      YANG のデータを HTTPS のリソースとして扱い、GET・POST・PUT・PATCH・DELETE で読み書きするプロトコル(RFC 8040)。形は XML か JSON。
+      要求ごとにすぐ効き、candidate もコミットも無い。
+  see: [netconf, yang]
+
+- id: datastore
+  term: {en: datastore, ja: データストア}
+  aka: [datastores]
+  def:
+    en: >-
+      A complete set of configuration that NETCONF can read or edit, such as running (in effect) and candidate
+      (being prepared).
+    ja: >-
+      NETCONF が読み書きする、設定の丸ごとの 1 揃い。running(効いている設定)や candidate(準備中の設定)がある。
+  see: [netconf, candidate-datastore]
+
+- id: candidate-datastore
+  term: {en: candidate datastore, ja: candidate データストア}
+  aka: [candidate configuration, candidate のデータストア]
+  def:
+    en: >-
+      The NETCONF datastore where changes are staged; nothing takes effect until a `<commit>` copies it to running.
+      IOS XR offers it, like its own target configuration on the CLI.
+    ja: >-
+      変更をためておく NETCONF のデータストア。`<commit>` で running に写すまで何も効かない。IOS XR は、CLI の
+      ターゲット コンフィギュレーションと同じように、これを持つ。
+  see: [datastore, confirmed-commit, netconf]
+
+- id: confirmed-commit
+  term: {en: confirmed commit, ja: 確認つきコミット}
+  aka: [confirmed-commit, confirmed commits]
+  def:
+    en: >-
+      A commit applied provisionally: it is rolled back unless it is confirmed in time, and (without the persist option)
+      also when the session that made it ends.
+    ja: >-
+      仮に効かせるコミット。時間内に確定しないと取り消され、persist を付けなければ、そのセッションが終わった時も取り消される。
+  see: [candidate-datastore, netconf]
+
+- id: subtree-filter
+  term: {en: subtree filter, ja: subtree のフィルタ}
+  aka: [subtree filters, サブツリーのフィルタ]
+  def:
+    en: >-
+      An XML fragment in the shape of the wanted data, used in a NETCONF `<get>` or `<get-config>` to choose what is
+      returned.
+    ja: >-
+      欲しいデータの形をした XML の断片。NETCONF の `<get>`・`<get-config>` で、返すものを選ぶのに使う。
+  see: [netconf]
+
+- id: nacm
+  term: NACM
+  full: {en: NETCONF Access Control Model, ja: NETCONF のアクセス制御のモデル}
+  def:
+    en: >-
+      The standard way (RFC 8341) to limit which users may read, write or run which parts of the YANG data through
+      NETCONF and RESTCONF.
+    ja: >-
+      NETCONF や RESTCONF で、どのユーザが YANG のデータのどこを読み書き・実行してよいかを絞る標準の仕組み(RFC 8341)。
+  see: [netconf, restconf]
+
+- id: screen-scraping
+  term: {en: screen scraping, ja: スクリーン スクレイピング}
+  def:
+    en: >-
+      Driving a device's CLI from a program and parsing the text it prints. It breaks when the output format changes,
+      which is why model-driven interfaces were created.
+    ja: >-
+      プログラムから CLI を操作し、出てきた文字を読み取ること。出力の形が変わると壊れるので、モデル駆動の仕組みが作られた。
+  see: [yang]
+
+# ---------------------------------------------------------------- gRPC・gNMI・テレメトリ
+- id: grpc
+  term: gRPC
+  def:
+    en: >-
+      A general RPC framework over HTTP/2 that sends Protocol Buffers messages; one TCP connection carries many
+      streams. gNMI is one service built on it.
+    ja: >-
+      HTTP/2 の上で Protocol Buffers のメッセージを送る汎用の RPC の仕組み。1 本の TCP で多数のストリームを運ぶ。
+      gNMI はその上に作られたサービスの 1 つ。
+  see: [gnmi, http2, protobuf]
+
+- id: http2
+  term: HTTP/2
+  def:
+    en: >-
+      The version of HTTP that multiplexes many request streams over one connection; it is the transport of gRPC.
+    ja: >-
+      1 本の接続に多数の要求のストリームを重ねて運ぶ HTTP の版。gRPC の運び手。
+  see: [grpc]
+
+- id: gnmi
+  term: gNMI
+  full: gRPC Network Management Interface
+  def:
+    en: >-
+      An OpenConfig service on gRPC for network devices with four RPCs: Capabilities, Get, Set and Subscribe. Its
+      Subscribe streams state from the device to the client that connected (dial-in).
+    ja: >-
+      OpenConfig が定めた、ネットワーク機器向けの gRPC のサービス。RPC は Capabilities・Get・Set・Subscribe の 4 つ。
+      Subscribe は、接続してきたクライアントへ機器から状態を流す(ダイヤルイン)。
+  see: [grpc, mdt, dial-in, json-ietf]
+
+- id: protobuf
+  term: Protocol Buffers
+  aka: [protobuf]
+  def:
+    en: >-
+      Google's binary message format whose fields are defined in `.proto` files. gRPC messages and GPB-encoded
+      telemetry use it.
+    ja: >-
+      `.proto` のファイルで項目を定義する、Google の 2 進のメッセージ形式。gRPC のメッセージと GPB のテレメトリが使う。
+  see: [grpc, gpb]
+
+- id: gpb
+  term: GPB
+  full: Google Protocol Buffers
+  def:
+    en: >-
+      Telemetry encoded with Protocol Buffers. Compact GPB carries only field numbers (the collector needs the .proto);
+      self-describing GPB carries the field names as well.
+    ja: >-
+      Protocol Buffers で符号化したテレメトリ。compact は項目の番号だけを運び(収集役に .proto が要る)、self-describing は名前も運ぶ。
+  see: [protobuf, mdt]
+
+- id: json-ietf
+  term: JSON_IETF
+  def:
+    en: >-
+      The gNMI encoding that writes YANG data as JSON by the rules of RFC 7951 (module-qualified names, 64-bit numbers
+      as strings).
+    ja: >-
+      RFC 7951 の規則(モジュール名つきの名前・64 ビットの数は文字列)で YANG のデータを JSON に書く、gNMI のエンコード。
+  see: [gnmi]
+
+- id: mdt
+  term: {en: model-driven telemetry, ja: モデル駆動テレメトリ}
+  aka: [MDT, model-driven streaming telemetry, モデル駆動型テレメトリ]
+  def:
+    en: >-
+      A device sending data named by YANG paths to collectors, at a fixed interval or when it changes, instead of
+      waiting to be polled.
+    ja: >-
+      問い合わせを待たずに、YANG のパスで指定したデータを、一定の間隔か変化の時に、機器が収集役へ送り出す仕組み。
+  see: [dial-in, dial-out, sensor-path, gnmi]
+
+- id: dial-in
+  term: {en: dial-in, ja: ダイヤルイン}
+  def:
+    en: >-
+      Telemetry in which the collector opens the connection to the device and subscribes (gNMI Subscribe); the session
+      lasts as long as that connection.
+    ja: >-
+      収集役が機器へ接続を開いて購読するテレメトリ(gNMI の Subscribe)。セッションはその接続がある間だけ続く。
+  see: [dial-out, gnmi, mdt]
+
+- id: dial-out
+  term: {en: dial-out, ja: ダイヤルアウト}
+  def:
+    en: >-
+      Telemetry in which the device opens the connection to the collector configured in a destination group (gRPC or
+      TCP), and reconnects by itself if it is lost.
+    ja: >-
+      宛先グループに書いた収集役へ、機器のほうが接続を開くテレメトリ(gRPC か TCP)。切れれば機器が自分で張り直す。
+  see: [dial-in, destination-group, mdt]
+
+- id: sensor-path
+  term: {en: sensor path, ja: センサー パス}
+  aka: [sensor paths]
+  def:
+    en: >-
+      The YANG path, written `<module>:<path>`, that names what telemetry collects. IOS XR reports whether each path
+      resolved.
+    ja: >-
+      テレメトリで集めるものを指す YANG のパス(`<モジュール>:<パス>` の形)。IOS XR は、パスごとに解決できたかを示す。
+  see: [sensor-group, mdt]
+
+- id: sensor-group
+  term: {en: sensor group, ja: センサー グループ}
+  aka: [sensor groups, sensor-group]
+  def:
+    en: >-
+      The IOS XR telemetry block that lists the sensor paths to collect.
+    ja: >-
+      集めるセンサー パスを並べる、IOS XR のテレメトリの塊。
+  see: [sensor-path, telemetry-subscription, destination-group]
+
+- id: destination-group
+  term: {en: destination group, ja: 宛先グループ}
+  aka: [destination groups, destination-group]
+  def:
+    en: >-
+      The IOS XR telemetry block that says where dial-out goes and how: address, port, encoding, and protocol (gRPC with
+      or without TLS, or TCP).
+    ja: >-
+      ダイヤルアウトの送り先と送り方(アドレス・ポート・エンコード・プロトコル= TLS ありなしの gRPC か TCP)を書く、IOS XR のテレメトリの塊。
+  see: [dial-out, sensor-group, telemetry-subscription]
+
+- id: telemetry-subscription
+  term: {en: subscription, ja: サブスクリプション}
+  aka: [subscriptions]
+  def:
+    en: >-
+      In telemetry, the part that ties what to collect (sensor groups, each with an interval) to where to send it
+      (destination groups). A gNMI Subscribe is a subscription made by the client.
+    ja: >-
+      テレメトリで、何を集めるか(センサー グループと間隔)と、どこへ送るか(宛先グループ)を結ぶ部分。gNMI の Subscribe は、
+      クライアントが作るサブスクリプション。
+  see: [sensor-group, destination-group, mdt]
+  scope: ["e*-m13-*"]
+
+- id: collector
+  term: {en: collector, ja: 収集役}
+  aka: [collectors]
+  def:
+    en: >-
+      The system on the management side that receives what devices send: telemetry, flow records or traps.
+    ja: >-
+      機器が送ってくるもの(テレメトリ・フローのレコード・トラップ)を受け取る、管理側のシステム。
+  see: [mdt, ipfix]
+  scope: ["e*-m13-*"]
+
+# ---------------------------------------------------------------- TLS と証明書
+- id: tls
+  term: TLS
+  full: Transport Layer Security
+  def:
+    en: >-
+      Encryption of a connection after the client has checked the server's certificate: issued by a CA it trusts,
+      within its validity dates, and for the name or address it dialled.
+    ja: >-
+      クライアントがサーバの証明書(信じる CA が発行したか・期間内か・接続した名前やアドレスのものか)を確かめた上で、接続を暗号化する仕組み。
+  see: [mtls, certificate-authority, san]
+
+- id: mtls
+  term: {en: mutual TLS, ja: 相互 TLS}
+  aka: [mTLS]
+  def:
+    en: >-
+      TLS in which the server also asks for a client certificate and checks it against the CA it trusts, so both ends
+      prove who they are.
+    ja: >-
+      サーバもクライアントに証明書を求め、自分が信じる CA で確かめる TLS。両端がそれぞれ身元を示す。
+  see: [tls, certificate-authority]
+
+- id: certificate-authority
+  term: {en: certificate authority, ja: 認証局}
+  full: CA
+  aka: [CA]
+  def:
+    en: >-
+      The issuer whose signature a side trusts when it checks a certificate. A side accepts a certificate only if it
+      chains to a CA certificate it holds.
+    ja: >-
+      証明書を確かめる時に、その署名を信じる発行元。手元に持つ CA の証明書にたどれる証明書だけを受け入れる。
+  see: [tls, mtls, self-signed-certificate]
+  scope: ["e*-m13-*"]
+
+- id: san
+  term: SAN
+  full: {en: subject alternative name, ja: サブジェクト代替名}
+  def:
+    en: >-
+      The list of names and IP addresses a certificate is valid for. The client compares it with the name or address
+      it connected to.
+    ja: >-
+      証明書が有効な名前と IP アドレスの一覧。クライアントは、接続した名前やアドレスとこれを照らす。
+  see: [tls]
+  scope: ["e*-m13-*"]
+
+- id: self-signed-certificate
+  term: {en: self-signed certificate, ja: 自己署名の証明書}
+  aka: [self-signed certificates, self-signed]
+  def:
+    en: >-
+      A certificate signed with its own key (issuer and subject are the same). A client can trust it only by holding
+      that certificate itself or by skipping the check.
+    ja: >-
+      自分の鍵で署名した証明書(発行者とサブジェクトが同じ)。クライアントは、その証明書そのものを持つか、確認を省くかでしか信じられない。
+  see: [certificate-authority, tls]
+
+- id: emsd
+  term: emsd
+  def:
+    en: >-
+      The IOS XR process that serves gRPC and gNMI. It reads the certificate files of the gRPC server when it starts.
+    ja: >-
+      gRPC と gNMI を受け持つ IOS XR のプロセス。gRPC のサーバの証明書のファイルは、起動する時に読む。
+  see: [grpc, gnmi]
+
+# ---------------------------------------------------------------- NetFlow・IPFIX
+- id: netflow
+  term: NetFlow
+  def:
+    en: >-
+      A router feature that groups packets with the same key fields into flow records, counts them, and exports the
+      records to a collector. Version 9 introduced templates.
+    ja: >-
+      同じキーの項目を持つパケットをフローのレコードにまとめて数え、収集役へ送るルータの機能。版 9 でテンプレートが入った。
+  see: [ipfix, flow-record, flexible-netflow]
+
+- id: ipfix
+  term: IPFIX
+  full: IP Flow Information Export
+  def:
+    en: >-
+      The IETF standard for exporting flow records (RFC 7011), built from NetFlow v9: version number 10, fields numbered
+      by IANA, and port 4739.
+    ja: >-
+      フローのレコードを送り出す IETF の標準(RFC 7011)。NetFlow v9 をもとにし、版の番号は 10、項目の番号は IANA が振り、ポートは 4739。
+  see: [netflow, flow-template, information-element]
+
+- id: flexible-netflow
+  term: Flexible NetFlow
+  full: FNF
+  aka: [FNF]
+  def:
+    en: >-
+      The IOS XE form of NetFlow in which you build the record yourself: `match` fields are the keys, `collect` fields
+      are counted or recorded.
+    ja: >-
+      レコードを自分で組む IOS XE の NetFlow。`match` の項目がキー、`collect` の項目は数えるか記録するもの。
+  see: [netflow, flow-record]
+
+- id: flow-record
+  term: {en: flow record, ja: フローのレコード}
+  aka: [flow records, フロー レコード]
+  def:
+    en: >-
+      One entry per flow: the key fields that define the flow (addresses, ports, protocol, input interface …) and the
+      non-key fields counted for it (packets, bytes, times).
+    ja: >-
+      フローごとの 1 件。フローを決めるキーの項目(アドレス・ポート・プロトコル・入力インタフェースなど)と、そのフローについて数える
+      キー以外の項目(パケット数・バイト数・時刻)を持つ。
+  see: [flow-cache, netflow]
+
+- id: flow-cache
+  term: {en: flow cache, ja: フロー キャッシュ}
+  aka: [flow caches]
+  def:
+    en: >-
+      The router's table of flows in progress. An entry leaves it, and is exported, when a timeout expires or the
+      cache is full.
+    ja: >-
+      進行中のフローの、ルータの表。タイムアウトが来るか表が一杯になると、項目は表を出て送り出される。
+  see: [flow-record, active-timeout]
+
+- id: active-timeout
+  term: {en: active timeout, ja: active タイムアウト}
+  def:
+    en: >-
+      How long a flow that is still running may stay in the cache before it is exported anyway, so that long flows
+      are reported regularly.
+    ja: >-
+      続いているフローでも、この時間が来れば送り出す、という時間。長いフローを定期的に報告させる。
+  see: [inactive-timeout, flow-cache]
+
+- id: inactive-timeout
+  term: {en: inactive timeout, ja: inactive タイムアウト}
+  def:
+    en: >-
+      How long a flow may see no packets before it is considered finished and exported.
+    ja: >-
+      パケットが来ないままこの時間が過ぎると、フローは終わったとみなされて送り出される、という時間。
+  see: [active-timeout, flow-cache]
+
+- id: flow-template
+  term: {en: template, ja: テンプレート}
+  aka: [templates, template ID]
+  def:
+    en: >-
+      In NetFlow v9 and IPFIX, the description of a record's fields and their order, sent before the data records. A
+      collector cannot decode data until it has the template.
+    ja: >-
+      NetFlow v9 と IPFIX で、レコードの項目とその並びを示すもの。データのレコードより先に送られ、収集役はこれが無いとデータを読めない。
+  see: [ipfix, information-element]
+  scope: ["e*-m13-*"]
+
+- id: information-element
+  term: {en: information element, ja: 情報要素}
+  aka: [information elements]
+  def:
+    en: >-
+      A field type of IPFIX with a number assigned by IANA (for example 8 = source IPv4 address, 2 = packet count).
+    ja: >-
+      IANA が番号を振った IPFIX の項目の種類(例: 8 = 送信元の IPv4 アドレス、2 = パケット数)。
+  see: [ipfix, flow-template]
+
+- id: flow-sampling
+  term: {en: sampling, ja: サンプリング}
+  def:
+    en: >-
+      Looking at only 1 packet in N to keep the cost of flow accounting low; the collector multiplies the counts by N.
+    ja: >-
+      フローの集計の負担を抑えるため、N 個に 1 個のパケットだけを見ること。収集役が数を N 倍する。
+  see: [netflow]
+  scope: ["e*-m13-*"]
+
+# ---------------------------------------------------------------- SNMP
+- id: snmp
+  term: SNMP
+  full: Simple Network Management Protocol
+  def:
+    en: >-
+      The classic management protocol over UDP: a manager reads (and can write) objects of an agent on port 161, and
+      agents send notifications to port 162.
+    ja: >-
+      UDP の上の、古くからある管理のプロトコル。マネージャがエージェントの項目をポート 161 で読み(書き)、エージェントはポート 162 へ通知を送る。
+  see: [mib, oid, snmp-community, usm, snmp-trap]
+
+- id: mib
+  term: MIB
+  full: Management Information Base
+  def:
+    en: >-
+      A defined set of manageable objects (for example IF-MIB for interfaces); each object has an OID.
+    ja: >-
+      問い合わせられる項目の取り決めの集まり(例: インタフェースの IF-MIB)。項目ごとに OID を持つ。
+  see: [oid, snmp]
+
+- id: oid
+  term: OID
+  full: {en: object identifier, ja: オブジェクト識別子}
+  def:
+    en: >-
+      The numeric name of an SNMP object in a world-wide tree, such as 1.3.6.1.2.1.1.5.0 (sysName).
+    ja: >-
+      世界で 1 つの木の中での、SNMP の項目の数字の名前(例: 1.3.6.1.2.1.1.5.0 = sysName)。
+  see: [mib, snmp]
+
+- id: ifindex
+  term: ifIndex
+  def:
+    en: >-
+      The number by which SNMP names an interface. IOS XR keeps it across reloads with `snmp-server ifindex persist`.
+    ja: >-
+      SNMP がインタフェースを呼ぶ番号。IOS XR では `snmp-server ifindex persist` で、再起動しても変わらないようにする。
+  see: [snmp, mib]
+
+- id: snmp-community
+  term: {en: community, ja: コミュニティ}
+  aka: [community string, communities]
+  def:
+    en: >-
+      In SNMPv1 and v2c, the shared string that acts as the password, sent in clear text. An access list on the
+      community limits which sources may use it.
+    ja: >-
+      SNMPv1・v2c で合言葉の代わりになる共有の文字列。平文で送られる。コミュニティに付けたアクセス リストで、使える送信元を絞る。
+  see: [snmp, usm]
+  scope: ["e*-m13-*"]
+
+- id: usm
+  term: USM
+  full: {en: User-based Security Model, ja: ユーザ ベースのセキュリティ モデル}
+  def:
+    en: >-
+      The SNMPv3 security of users (RFC 3414): authentication (such as SHA) and privacy (such as AES), with keys
+      localised to an engine ID.
+    ja: >-
+      SNMPv3 のユーザのセキュリティ(RFC 3414)。認証(SHA など)と暗号化(AES など)で、鍵はエンジン ID に合わせて作られる。
+  see: [vacm, snmp-security-level, snmp-engine-id]
+
+- id: vacm
+  term: VACM
+  full: {en: View-based Access Control Model, ja: ビュー ベースのアクセス制御モデル}
+  def:
+    en: >-
+      The SNMPv3 access control (RFC 3415): a user belongs to a group, and the group has read, write and notify views
+      that list which objects it may use.
+    ja: >-
+      SNMPv3 のアクセス制御(RFC 3415)。ユーザはグループに属し、グループは使ってよい項目を示す読み取り・書き込み・通知のビューを持つ。
+  see: [usm, notify-view]
+
+- id: snmp-security-level
+  term: {en: security level, ja: セキュリティの段階}
+  aka: [noAuthNoPriv, authNoPriv, authPriv]
+  def:
+    en: >-
+      The SNMPv3 level of protection: noAuthNoPriv (neither), authNoPriv (authentication only) or authPriv
+      (authentication and encryption). IOS XR writes them `noauth`, `auth` and `priv`.
+    ja: >-
+      SNMPv3 の守りの段階。noAuthNoPriv(どちらも無し)・authNoPriv(認証だけ)・authPriv(認証と暗号化)。IOS XR では `noauth`・`auth`・`priv` と書く。
+  see: [usm]
+
+- id: snmp-engine-id
+  term: {en: engine ID, ja: エンジン ID}
+  aka: [engine IDs, snmpEngineID, engineID]
+  def:
+    en: >-
+      The identifier of an SNMP engine. SNMPv3 keys are localised to it, so a trap receiver must know the engine ID of
+      each sender.
+    ja: >-
+      SNMP のエンジンの識別子。SNMPv3 の鍵はこれに合わせて作られるので、トラップの受け手は送り手ごとのエンジン ID を知っている必要がある。
+  see: [usm, snmp-trap]
+
+- id: notify-view
+  term: {en: notify view, ja: 通知のビュー}
+  aka: [notify views]
+  def:
+    en: >-
+      The view of an SNMPv3 group that limits which notifications may be sent to its users.
+    ja: >-
+      SNMPv3 のグループのビューのうち、そのユーザへ送ってよい通知を絞るもの。
+  see: [vacm, snmp-trap]
+
+- id: snmp-trap
+  term: {en: trap, ja: トラップ}
+  aka: [traps]
+  def:
+    en: >-
+      A notification that an SNMP agent sends on its own to a manager (UDP 162), without an acknowledgement.
+    ja: >-
+      SNMP のエージェントが自分からマネージャへ送る通知(UDP 162)。受け取りの確認は無い。
+  see: [snmp-inform, linkdown]
+  scope: ["e*-m13-*"]
+
+- id: snmp-inform
+  term: {en: inform, ja: インフォーム}
+  aka: [informs]
+  def:
+    en: >-
+      An SNMP notification that the receiver acknowledges; the sender retransmits until it gets the acknowledgement.
+    ja: >-
+      受け手が受け取りを返す SNMP の通知。送り手は返事が来るまで送り直す。
+  see: [snmp-trap]
+  scope: ["e*-m13-*"]
+
+- id: linkdown
+  term: linkDown
+  aka: [linkUp]
+  def:
+    en: >-
+      The standard notifications that an interface went down (1.3.6.1.6.3.1.1.5.3) or came up (…5.4), carrying the
+      interface's ifIndex and name.
+    ja: >-
+      インタフェースがダウンした(1.3.6.1.6.3.1.1.5.3)・アップした(…5.4)ことを知らせる標準の通知。インタフェースの ifIndex と名前を運ぶ。
+  see: [snmp-trap, ifindex]
+
+# ---------------------------------------------------------------- 付録(5.1・5.3・5.5・5.6)
+- id: gnoi
+  term: gNOI
+  full: gRPC Network Operations Interface
+  def:
+    en: >-
+      gRPC services from OpenConfig for operational actions rather than configuration, such as rebooting, pinging, or
+      rotating certificates.
+    ja: >-
+      設定ではなく運用の操作(再起動・ping・証明書の入れ替えなど)のための、OpenConfig の gRPC のサービス群。
+  see: [gnmi, grpc]
+
+- id: gribi
+  term: gRIBI
+  full: gRPC Routing Information Base Interface
+  def:
+    en: >-
+      A gRPC service that lets an external program add and remove entries in a router's routing information base.
+    ja: >-
+      外のプログラムが、ルータの RIB にエントリを足したり消したりするための gRPC のサービス。
+  see: [grpc]
+
+- id: p4runtime
+  term: P4Runtime
+  def:
+    en: >-
+      A gRPC protocol for programming forwarding tables whose structure is defined in the P4 language.
+    ja: >-
+      P4 の言語で構造を決めた転送のテーブルを、外から書き込むための gRPC のプロトコル。
+  see: [grpc]
+
+- id: on-box-automation
+  term: {en: on-box automation, ja: オンボックスの自動化}
+  aka: [off-box automation, オフボックスの自動化, オンボックス, オフボックス]
+  def:
+    en: >-
+      Automation that runs on the router itself (scripts, EEM), as opposed to off-box automation that runs on an
+      external machine and talks to the router through an interface such as NETCONF or gNMI.
+    ja: >-
+      ルータそのものの上で動く自動化(スクリプト・EEM)。外のマシンで動き、NETCONF や gNMI などでルータと話すオフボックスの自動化と対になる。
+  see: [netconf, gnmi]
+
+- id: nso
+  term: NSO
+  full: Network Services Orchestrator
+  def:
+    en: >-
+      Cisco's orchestrator that turns a service described by a YANG service model into configuration for every device
+      involved, across vendors, and applies it in one transaction.
+    ja: >-
+      YANG のサービス モデルで書いたサービスを、関わる各機器(ベンダーを問わない)の設定に変え、1 つのトランザクションで当てる Cisco のオーケストレータ。
+  see: [ned, cdb, fastmap, yang]
+
+- id: ned
+  term: NED
+  full: Network Element Driver
+  def:
+    en: >-
+      The part of NSO that talks to one kind of device: NETCONF NEDs use the device's YANG models, CLI NEDs turn the
+      model into CLI commands.
+    ja: >-
+      NSO のうち、1 種類の機器と話す部品。NETCONF の NED は機器の YANG のモデルを使い、CLI の NED はモデルを CLI のコマンドに変える。
+  see: [nso]
+
+- id: cdb
+  term: CDB
+  full: {en: configuration database, ja: 構成データベース}
+  def:
+    en: >-
+      NSO's YANG-defined database that holds the services, a copy of every managed device's configuration, and NSO's own
+      settings.
+    ja: >-
+      サービス・管理する各機器の設定の写し・NSO 自身の設定を持つ、YANG で定義された NSO のデータベース。
+  see: [nso]
+
+- id: fastmap
+  term: FASTMAP
+  aka: [reverse diff, 逆差分]
+  def:
+    en: >-
+      NSO's method in which a service author writes only how to create a service; NSO keeps the reverse of the device
+      changes and uses it to modify or delete the service later.
+    ja: >-
+      サービスの作り手は作り方だけを書き、NSO は機器への変更の逆(逆差分)を控えて、あとの変更や削除に使う、という NSO の仕組み。
+  see: [nso]
+
+- id: idempotent
+  term: {en: idempotent, ja: 冪等}
+  aka: [idempotence, 冪等性]
+  def:
+    en: >-
+      Running the same automation again changes nothing when the device is already in the described state.
+    ja: >-
+      機器がすでに望む状態なら、同じ自動化をもう一度動かしても何も変わらないこと。
+  see: [resource-module]
+
+- id: resource-module
+  term: {en: resource module, ja: リソース モジュール}
+  aka: [resource modules]
+  def:
+    en: >-
+      An Ansible network module that manages one part of the configuration (interfaces, VLANs, BGP …) as structured
+      data, with a `state` such as merged, replaced or deleted.
+    ja: >-
+      設定の一部分(インタフェース・VLAN・BGP など)を構造のあるデータとして扱い、merged・replaced・deleted などの `state` を取る Ansible のネットワークのモジュール。
+  see: [idempotent]
+
+- id: terraform-state
+  term: {en: state file, ja: ステート ファイル}
+  aka: [state files]
+  def:
+    en: >-
+      Terraform's record that binds each resource in the configuration to the real object it manages; `plan` compares
+      it, the configuration and the real world.
+    ja: >-
+      設定の中の各リソースと、それが管理する実物を結ぶ Terraform の記録。`plan` は、これと設定と実物を比べる。
+  scope: ["e6-m13-*"]
+
+- id: ztp
+  term: ZTP
+  full: {en: zero-touch provisioning, ja: ゼロタッチ プロビジョニング}
+  def:
+    en: >-
+      A router configuring itself at its first boot from a script or configuration file that a DHCP server points it
+      to, without anyone at the console.
+    ja: >-
+      最初の起動で、DHCP のサーバが指すスクリプトや設定のファイルから、コンソールに人がいなくてもルータが自分を設定する仕組み。
+  see: [sztp]
+
+- id: sztp
+  term: {en: secure ZTP, ja: セキュア ZTP}
+  full: SZTP
+  aka: [SZTP, Secure ZTP, secure zero-touch provisioning]
+  def:
+    en: >-
+      ZTP protected end to end (RFC 8572): the bootstrap data is signed with the owner certificate, and the device
+      trusts that certificate through an ownership voucher signed by its manufacturer.
+    ja: >-
+      端から端まで守った ZTP(RFC 8572)。渡すデータは所有者証明書で署名され、機器はメーカーが署名した所有権バウチャーでその証明書を信じる。
+  see: [ztp, ownership-voucher]
+
+- id: ownership-voucher
+  term: {en: ownership voucher, ja: 所有権バウチャー}
+  aka: [ownership vouchers, voucher, バウチャー]
+  def:
+    en: >-
+      A statement signed by the manufacturer (RFC 8366) that binds a device's serial number to its owner's certificate.
+    ja: >-
+      機器のシリアル番号と持ち主の証明書を結ぶ、メーカーが署名した言明(RFC 8366)。
+  see: [sztp]
+  scope: ["e6-m13-*"]
+
+- id: sudi
+  term: SUDI
+  full: Secure Unique Device Identifier
+  aka: [IDevID]
+  def:
+    en: >-
+      Cisco's device identity certificate, installed at manufacture and kept in protected hardware; it is the
+      802.1AR IDevID that proves which device is speaking.
+    ja: >-
+      製造時に入れて守られたハードウェアに持つ、Cisco の機器の身元の証明書。どの機器が話しているかを示す 802.1AR の IDevID にあたる。
+  see: [sztp]

@@ -1,0 +1,162 @@
+######## 14:26:25 nf-a: 白紙で流す(フローは 0 のはず。待ちは 30 秒に短縮)
+== SENT 20 SIZE 889 FROM 192.168.100.1 (success 20/20)
+== FLOW PACKETS 0 (filter: src ip 192.168.100.1 and dst ip 10.255.0.1 and bpp = 889; waited 30s)
+######## 14:26:57 nf-b: PE2 に Flexible NetFlow(IPFIX・4739・Lo0・Gi2 入力・active 60)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+PE2(config)#
+flow record FR-CUST
+PE2(config-flow-record)#
+match ipv4 source address
+PE2(config-flow-record)#
+match ipv4 destination address
+PE2(config-flow-record)#
+match ipv4 protocol
+PE2(config-flow-record)#
+match transport source-port
+PE2(config-flow-record)#
+match transport destination-port
+PE2(config-flow-record)#
+match interface input
+PE2(config-flow-record)#
+collect counter bytes long
+PE2(config-flow-record)#
+collect counter packets long
+PE2(config-flow-record)#
+collect timestamp absolute first
+PE2(config-flow-record)#
+collect timestamp absolute last
+PE2(config-flow-record)#
+exit
+PE2(config)#
+flow exporter FE-NMS
+PE2(config-flow-exporter)#
+destination 10.0.50.10
+PE2(config-flow-exporter)#
+source Loopback0
+PE2(config-flow-exporter)#
+transport udp 4739
+PE2(config-flow-exporter)#
+export-protocol ipfix
+PE2(config-flow-exporter)#
+exit
+PE2(config)#
+flow monitor FM-CUST
+PE2(config-flow-monitor)#
+exporter FE-NMS
+PE2(config-flow-monitor)#
+record FR-CUST
+PE2(config-flow-monitor)#
+cache timeout active ?
+  <1-604800>  Active timeout in seconds
+
+PE2(config-flow-monitor)#cache timeout active 
+% Incomplete command.
+
+PE2(config-flow-monitor)#
+cache timeout active 60
+PE2(config-flow-monitor)#
+cache timeout inactive ?
+  <1-604800>  Inactive timeout in seconds
+
+PE2(config-flow-monitor)#cache timeout inactive 
+% Incomplete command.
+
+PE2(config-flow-monitor)#
+exit
+PE2(config)#
+interface GigabitEthernet2
+PE2(config-if)#
+ip flow monitor FM-CUST input
+PE2(config-if)#
+end
+PE2#
+show flow interface GigabitEthernet2
+Interface GigabitEthernet2
+  FNF:  monitor:          FM-CUST
+        direction:        Input
+        traffic(ip):      on
+
+PE2#
+show flow exporter FE-NMS
+Flow Exporter FE-NMS:
+  Description:              User defined
+  Export protocol:          IPFIX (Version 10)
+  Transport Configuration:
+    Destination type:       IP
+    Destination IP address: 10.0.50.10
+    Source IP address:      10.255.0.2
+    Source Interface:       Loopback0
+    Transport Protocol:     UDP
+    Destination Port:       4739
+    Source Port:            54542
+    DSCP:                   0x0
+    TTL:                    255
+    Output Features:        Used
+
+PE2#
+== SENT 37 SIZE 748 FROM 192.168.100.1 (success 37/37)
+== FLOW PACKETS 37 (filter: src ip 192.168.100.1 and dst ip 10.255.0.1 and bpp = 748; waited 50s)
+show flow monitor FM-CUST cache format table
+  Cache type:                               Normal (Platform cache)
+  Cache size:                               200000
+  Current entries:                               0
+  High Watermark:                                1
+
+  Flows added:                                   1
+  Flows aged:                                    1
+    - Inactive timeout    (    15 secs)          1
+
+There are no cache entries to display.
+
+PE2#
+show flow exporter FE-NMS statistics
+Flow Exporter FE-NMS:
+  Packet send statistics (last cleared 00:01:01 ago):
+    Successfully sent:         2                     (104 bytes)
+
+  Client send statistics:
+    Client: Flow Monitor FM-CUST
+      Records added:           1
+        - sent:                1
+      Bytes added:             49
+        - sent:                49
+
+PE2#
+show flow exporter FE-NMS templates
+Flow Exporter FE-NMS:
+Client: Flow Monitor FM-CUST
+  Exporter Format: IPFIX (Version 10)
+  Template ID    : 258
+  Source ID      : 256
+  Record Size    : 49
+  Template layout
+  _____________________________________________________________________________
+  |                 Field                   |    ID | Ent.ID | Offset |  Size |
+  -----------------------------------------------------------------------------
+  | ipv4 source address                     |     8 |        |      0 |     4 |
+  | ipv4 destination address                |    12 |        |      4 |     4 |
+  | ip protocol                             |     4 |        |      8 |     1 |
+  | transport source-port                   |     7 |        |      9 |     2 |
+  | transport destination-port              |    11 |        |     11 |     2 |
+  | interface input snmp                    |    10 |        |     13 |     4 |
+  | counter bytes long                      |     1 |        |     17 |     8 |
+  | counter packets long                    |     2 |        |     25 |     8 |
+  | timestamp absolute first                |   152 |        |     33 |     8 |
+  | timestamp absolute last                 |   153 |        |     41 |     8 |
+  -----------------------------------------------------------------------------
+
+
+PE2#
+== CMD 1 rc=0: ls -la /var/cache/nfdump/lab | tail -4
+-rw-r--r-- 1 root root  209 Nov 10 14:26 nfcapd.202611101425
+-rw-r--r-- 1 root root  209 Nov 10 14:27 nfcapd.202611101426
+-rw-r--r-- 1 root root  389 Nov 10 14:28 nfcapd.202611101427
+-rw-r--r-- 1 root root   40 Nov 10 14:28 nfcapd.current.3394
+== CMD 2 rc=0: nfdump -R /var/cache/nfdump/lab -o extended -c 10 'src ip 192.168.100.1'
+Date first seen             Duration     Proto      Src IP Addr:Port          Dst IP Addr:Port     Flags Tos  Packets    Bytes      pps      bps    Bpp Flows
+2026-11-10 14:27:08.500     00:00:00.049 ICMP     192.168.100.1:0     ->       10.255.0.1:8.0   ........   0       37    27676      755    4.5 M    748     1
+Summary: total flows: 1, total bytes: 27676, total packets: 37, avg bps: 4.5 M, avg pps: 755, avg bpp: 748
+Time window: 2026-11-10 13:56:00 - 2026-11-10 14:27:08
+Total flows processed: 1, passed: 1, Blocks skipped: 0, Bytes read: 168
+Sys: 0.0027s User: 0.0000s Wall: 0.0005s flows/second: 2045.0 Runtime: 0.0005s

@@ -78,6 +78,12 @@ case "$cmd" in
     # ポート使用中などで即終了した時も居残らないよう、親の PID はここから渡す。
     # 起動に失敗しても(ポート使用中など)配信は続ける。VSCode 転送で開く時は ${cport} も転送する。
     if [ "$cport" != "0" ]; then
+      # 再起動の直後は、古いワークスペースがまだポートを持っている(親の終了に気づくのは 2 秒おき)。
+      # 放すまで最大 6 秒待つ(2026-11-14 実発: 待たずに起こしてポート使用中で起動できなかった)。
+      for _ in $(seq 1 12); do
+        (exec 3<>"/dev/tcp/127.0.0.1/$cport") 2>/dev/null || break
+        sleep 0.5
+      done
       "$PY" "$REPO/topologies/lab_console.py" --repo "$REPO" --port "$cport" --bind "$bind" \
             --pack-port "$port" --with-parent "$$" &
     fi

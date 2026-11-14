@@ -1,0 +1,23 @@
+# M13-3: gNMI のダイヤルイン(XR01・57400・TLS・相互認証)。NMS から 3 通り(平文・証明書なし・NMS の CA のクライアント証明書)で capabilities を試す。白紙= 0 点。
+problem: XRT-15
+total_points: 100
+checks:
+  - name: 'M13-3 SRV01: gNMI to XR01 port 57400 works with the NMS client certificate, and is refused without TLS or without a certificate'
+    node: XR01
+    exec: local
+    command: .venv/bin/python topologies/nms_probe.py XRT-15 gnmi SRV01 10.0.50.1:57400
+    raw:
+      - { regex: '== GNMI plain FAIL' }
+      - { regex: '== GNMI tls-nocert FAIL' }
+      - { regex: '== GNMI tls-cert OK' }
+    points: 70
+  - name: 'M13-3 XR01: the gRPC server runs on port 57400 in the global table, with TLS and mutual TLS'
+    node: XR01
+    exec: local
+    command: .venv/bin/python topologies/login_probe.py XRT-15 ssh XR01 -- 'show grpc'
+    raw:
+      - { regex: 'Port\s+:\s+57400\s*\n' }
+      - { regex: 'VRF\s+:\s+global-vrf' }
+      - { regex: '\nTLS\s+:\s+enabled' }
+      - { regex: 'TLS mutual\s+:\s+enabled' }
+    points: 30

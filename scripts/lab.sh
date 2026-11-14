@@ -12,6 +12,10 @@
 #   状態:   scripts/lab.sh status
 #   交換:   scripts/lab.sh rma <PROBLEM_ID> <NODE>     # 機器交換(保存済みの設定で新しい MAC の機体に入れ替える・BL-249)
 #
+#   containerlab だけの問題(problem.yml の platform: clab・BL-274)は、provision / grade / checkpoint / reset /
+#   teardown が CML を使わずに回る(reset は startup-config から作り直し。rma・learn は CML 専用)。
+#   接続:   scripts/lab.sh connect <PROBLEM_ID> <NODE>   # containerlab のノードに入る(FRR は vtysh・Junos/EOS は ssh)
+#
 #   LAB_XR_PLATFORM=xrd を付けて provision すると、XR のノードを XRv9000 ではなく XRd(コンテナ)で組む(BL-250)。
 #   LAB_TASK_ANNOTATION=off を付けて provision すると、CML キャンバスに問題の要約注釈を貼らない
 #   (全文は Lab Notes に残る)。パック(gen_pack)経由の構築は常に off。
@@ -32,15 +36,37 @@ LAB_HOME="$REPO/lab"   # リポジトリ内に作業フォルダを置く（VSCo
 PY="$REPO/.venv/bin"
 vault() { printf 'CCNP\n'; }   # vault パスワード（プロジェクト規約）
 
-usage() { sed -n '2,20p' "${BASH_SOURCE[0]}"; exit 1; }
+usage() { sed -n '2,24p' "${BASH_SOURCE[0]}"; exit 1; }
+
+# problem.yml の platform(既定 cml)。clab = containerlab だけで回す問題(BL-274・CML に触れない)
+platform_of() {
+  "$PY/python3" -c 'import sys,yaml; print((yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}).get("platform", "cml"))' \
+    "$REPO/problems/$1/problem.yml" 2>/dev/null || echo cml
+}
 
 cmd="${1:-}"; prob="${2:-}"
+plat="cml"; [ -n "$prob" ] && [ -f "$REPO/problems/$prob/problem.yml" ] && plat="$(platform_of "$prob")"
 
 case "$cmd" in
   provision)
     [ -n "$prob" ] || usage
     [ -d "$REPO/problems/$prob" ] || { echo "問題が存在しません: $prob"; exit 1; }
     variant="${3:-base}"
+    if [ "$plat" = "clab" ]; then
+      # containerlab だけの問題(BL-274): CML の build_topology・lab_up・MGMT リースを使わない
+      echo "== [1/2] containerlab deploy ($prob・CML は使いません) =="
+      "$PY/python3" "$REPO/topologies/clab_ops.py" deploy --repo "$REPO" --problem "$prob"
+      mkdir -p "$REPO/topologies/_generated/$prob"   # 採点の置き場(grading の描画・grade_input.json)
+      mkdir -p "$LAB_HOME"; dest="$LAB_HOME/$prob"; rm -rf "${dest:?}"; mkdir -p "$dest"
+      [ -f "$REPO/problems/$prob/task.md" ]    && cp "$REPO/problems/$prob/task.md" "$dest/問題.md"
+      [ -f "$REPO/problems/$prob/task.en.md" ] && cp "$REPO/problems/$prob/task.en.md" "$dest/Task.md"
+      echo "== [2/2] 作業フォルダ作成: $dest =="
+      echo "   $(ls "$dest" 2>/dev/null | tr '\n' ' ')"
+      echo "完了。機器へは次で入ります(FRR は vtysh・Junos/EOS は ssh。管理網へは ~/.ssh/config の踏み台経由):"
+      "$PY/python3" -c 'import sys,yaml; m=(yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}).get("clab_nodes") or {}; [print(f"   scripts/lab.sh connect {sys.argv[2]} {n}   ({ip})") for n, ip in m.items()]' \
+        "$REPO/problems/$prob/problem.yml" "$prob"
+      exit 0
+    fi
     echo "== [1/3] build_topology ($prob, variant=$variant) =="
     "$PY/ansible-playbook" "$REPO/playbooks/build_topology.yml" \
       -e problem="$prob" -e variant="$variant" \
@@ -95,9 +121,16 @@ case "$cmd" in
   reset)
     # 学習用ラボのやり直し(BL-254)。IOS XR の機器を構築直後のコミットへ戻す(作り直さない・数秒)。
     # problem.yml の xe_reset_nodes(IOS XE)は構築直後に控えた running-config へ configure replace(XRT-12)。
-    # 相手役の IOS・サーバは戻さない(課題で変えない約束)。学習モードの記録は退避して初期化する。
+    # 相手役の IOS は戻さない(課題で変えない約束)。サーバは problem.yml の linux_reset_exec があれば戻す(XRT-15・2026-11-14)。
+    # 学習モードの記録は退避して初期化する。
     [ -n "$prob" ] || usage
-    "$PY/ansible-playbook" "$REPO/playbooks/xr_reset.yml" -e problem="$prob" --vault-password-file <(vault)
+    if [ "$plat" = "clab" ]; then
+      # containerlab だけの問題(BL-274): 機器を startup-config から作り直す(白紙の機器は白紙に戻る・数分)
+      echo "== やり直し: containerlab のラボを startup-config から作り直します ($prob) =="
+      "$PY/python3" "$REPO/topologies/clab_ops.py" deploy --repo "$REPO" --problem "$prob" --reconfigure
+    else
+      "$PY/ansible-playbook" "$REPO/playbooks/xr_reset.yml" -e problem="$prob" --vault-password-file <(vault)
+    fi
     log="$REPO/records/learn/$prob.jsonl"
     if [ -f "$log" ]; then mv "$log" "$REPO/records/learn/$prob.$(date +%Y%m%d-%H%M%S).jsonl.bak"; echo "学習モードの記録を退避: records/learn/$prob.*.jsonl.bak"; fi
     ;;
@@ -119,6 +152,7 @@ case "$cmd" in
     # 機器交換(BL-249): 保存済みの startup-config を退避 → 停止・初期化 → MAC 差し替え → 保存済みの設定で起動。
     # 保存していない設定は戻らない(本物の交換と同じ)。初期化で VLAN データベースも消える。
     [ -n "$prob" ] || usage
+    [ "$plat" = "clab" ] && { echo "rma は CML のラボ専用です($prob は containerlab だけの問題)"; exit 2; }
     node="${3:-}"; [ -n "$node" ] || { echo "交換するノード名を指定: 例 scripts/lab.sh rma $prob SW5"; exit 2; }
     echo "== 機器交換: $prob の $node (保存済みの設定だけが新しい機体に戻ります) =="
     exec "$PY/ansible-playbook" "$REPO/playbooks/lab_rma.yml" \
@@ -127,13 +161,26 @@ case "$cmd" in
   learn)
     # 学習モードのワークスペース(BL-246)。problems/<ID>/learn.yml を持つ問題だけ。provision 済みが前提。
     [ -n "$prob" ] || usage
+    [ "$plat" = "clab" ] && { echo "学習モードのワークスペースは CML のラボ専用です(containerlab は未対応・BL-274)"; exit 2; }
     [ -f "$REPO/problems/$prob/learn.yml" ] || { echo "problems/$prob/learn.yml が無い(学習モードの対象外)"; exit 2; }
     exec "$PY/python3" "$REPO/topologies/lab_console.py" --repo "$REPO" --learn "$prob" --port "${3:-8896}"
+    ;;
+
+  connect)
+    # containerlab のノードに入る(BL-274)。FRR は szk-cl01 の docker exec で vtysh、Junos・EOS は管理アドレスへ ssh。
+    [ -n "$prob" ] || usage
+    node="${3:-}"; [ -n "$node" ] || { echo "ノード名を指定: 例 scripts/lab.sh connect $prob FRR1"; exit 2; }
+    exec "$PY/python3" "$REPO/topologies/clab_ops.py" connect --repo "$REPO" --problem "$prob" --node "$node"
     ;;
 
   teardown)
     [ -n "$prob" ] || usage
     keep=0; [ "${3:-}" = "--keep-workspace" ] && keep=1
+    if [ "$plat" = "clab" ]; then
+      # containerlab だけの問題(BL-274): CML の absent と MGMT リースの返却は無い
+      echo "== containerlab のラボを destroy: $prob =="
+      "$PY/python3" "$REPO/topologies/clab_ops.py" destroy --repo "$REPO" --problem "$prob"
+    else
     echo "== CMLラボを absent（VM実体を解放）: $prob =="
     if ! "$PY/ansible-playbook" "$REPO/playbooks/lab_up.yml" \
       -e problem="$prob" -e lab_state=absent --vault-password-file <(vault); then
@@ -154,6 +201,7 @@ case "$cmd" in
     "$PY/python3" "$REPO/topologies/mgmt_alloc.py" release --repo "$REPO" --problem "$prob" || true
     # 複合ラボ(BL-061): clab 側も destroy(clab_topology 未定義なら即スキップ)
     "$PY/python3" "$REPO/topologies/clab_ops.py" destroy --repo "$REPO" --problem "$prob" || true
+    fi
     echo "== 生成物を掃除: topologies/_generated/$prob =="
     rm -rf "${REPO:?}/topologies/_generated/$prob"
     if [ -d "$LAB_HOME/$prob" ]; then
@@ -170,6 +218,8 @@ case "$cmd" in
   status)
     echo "== MGMT リース台帳（同時稼働ラボと空きIP） =="
     "$PY/python3" "$REPO/topologies/mgmt_alloc.py" status --repo "$REPO" || true
+    echo "== containerlab（szk-cl01） =="
+    "$PY/python3" "$REPO/topologies/clab_ops.py" status --repo "$REPO" 2>/dev/null || echo "(確かめられませんでした)"
     echo "== 作業コピー (~/lab) =="; ls -1 "$LAB_HOME" 2>/dev/null || echo "(なし)"
     echo "== 生成物 (_generated) =="; ls -1 "$REPO/topologies/_generated" 2>/dev/null || echo "(なし)"
     ;;

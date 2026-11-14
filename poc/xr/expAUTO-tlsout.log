@@ -1,0 +1,355 @@
+######## 13:22:29 tls_out: telegraf に TLS(57600)と mTLS(57700)の受け口を足し、XR に DG-TLS / DG-MTLS を足す
+$ cat >> /tmp/telegraf.conf <<'EOF'
+[[inputs.cisco_telemetry_mdt]]
+  transport = "grpc"
+  service_address = ":57600"
+  tls_cert = "/tmp/pki/collector.pem"
+  tls_key = "/tmp/pki/collector.key"
+[[inputs.cisco_telemetry_mdt]]
+  transport = "grpc"
+  service_address = ":57700"
+  tls_cert = "/tmp/pki/collector.pem"
+  tls_key = "/tmp/pki/collector.key"
+  tls_allowed_cacerts = ["/tmp/pki/ca.pem"]
+EOF
+[rc=0]
+$ pkill -x telegraf; sleep 1; rm -f /tmp/mdt.out; setsid nohup telegraf --config /tmp/telegraf.conf > /tmp/telegraf.log 2>&1 < /dev/null & sleep 4; ss -ltnp | grep -E "57[0-9]00"
+LISTEN 0      4096               *:57000            *:*    users:(("telegraf",pid=6195,fd=106))
+LISTEN 0      4096               *:57700            *:*    users:(("telegraf",pid=6195,fd=109))
+LISTEN 0      4096               *:57600            *:*    users:(("telegraf",pid=6195,fd=108))
+LISTEN 0      4096               *:57500            *:*    users:(("telegraf",pid=6195,fd=107))
+[rc=0]
+configure
+Tue Nov 10 13:22:36.207 UTC
+RP/0/RP0/CPU0:XR01(config)#
+telemetry model-driven
+RP/0/RP0/CPU0:XR01(config-model-driven)#
+destination-group DG-TLS
+RP/0/RP0/CPU0:XR01(config-model-driven-dest)#
+address-family ipv4 10.0.50.10 por$10 port                           57600address-family ipv4 10.0.50.10 po$
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+encoding self-describing-gpb
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+protocol grpc tls-hostname co$ol                          lector.labprotocol grpc tls-hostname c$
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+exit
+RP/0/RP0/CPU0:XR01(config-model-driven-dest)#
+exit
+RP/0/RP0/CPU0:XR01(config-model-driven)#
+destination-group DG-MTLS
+RP/0/RP0/CPU0:XR01(config-model-driven-dest)#
+address-family ipv4 10.0.50.10 por$10 port                           57700address-family ipv4 10.0.50.10 po$
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+encoding self-describing-gpb
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+protocol grpc tls-hostname co$ol                          lector.labprotocol grpc tls-hostname c$
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+exit
+RP/0/RP0/CPU0:XR01(config-model-driven-dest)#
+exit
+RP/0/RP0/CPU0:XR01(config-model-driven)#
+subscription SUB-TLS
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+sensor-group-id SG-IF sample-inter$-interv                          al 10000sensor-group-id SG-IF sample-inte$
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+destination-id DG-TLS
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+source-interface Loopback0
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+exit
+RP/0/RP0/CPU0:XR01(config-model-driven)#
+subscription SUB-MTLS
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+sensor-group-id SG-IF sample-inter$-interv                          al 10000sensor-group-id SG-IF sample-inte$
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+destination-id DG-MTLS
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+source-interface Loopback0
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+commit
+Tue Nov 10 13:22:45.677 UTC
+RP/0/RP0/CPU0:XR01(config-model-driven-subs)#
+end
+RP/0/RP0/CPU0:XR01#
+configure
+Tue Nov 10 13:22:48.324 UTC
+RP/0/RP0/CPU0:XR02(config)#
+telemetry model-driven
+RP/0/RP0/CPU0:XR02(config-model-driven)#
+destination-group DG-TLS
+RP/0/RP0/CPU0:XR02(config-model-driven-dest)#
+address-family ipv4 10.0.60.10 port 57600
+RP/0/RP0/CPU0:XR02(config-model-driven-dest-addr)#
+encoding self-describing-gpb
+RP/0/RP0/CPU0:XR02(config-model-driven-dest-addr)#
+protocol grpc tls-hostname collector.lab
+RP/0/RP0/CPU0:XR02(config-model-driven-dest-addr)#
+exit
+RP/0/RP0/CPU0:XR02(config-model-driven-dest)#
+exit
+RP/0/RP0/CPU0:XR02(config-model-driven)#
+destination-group DG-MTLS
+RP/0/RP0/CPU0:XR02(config-model-driven-dest)#
+address-family ipv4 10.0.60.10 port 57700
+RP/0/RP0/CPU0:XR02(config-model-driven-dest-addr)#
+encoding self-describing-gpb
+RP/0/RP0/CPU0:XR02(config-model-driven-dest-addr)#
+protocol grpc tls-hostname collector.lab
+RP/0/RP0/CPU0:XR02(config-model-driven-dest-addr)#
+exit
+RP/0/RP0/CPU0:XR02(config-model-driven-dest)#
+exit
+RP/0/RP0/CPU0:XR02(config-model-driven)#
+subscription SUB-TLS
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+sensor-group-id SG-IF sample-interval 10000
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+destination-id DG-TLS
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+source-interface Loopback0
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+exit
+RP/0/RP0/CPU0:XR02(config-model-driven)#
+subscription SUB-MTLS
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+sensor-group-id SG-IF sample-interval 10000
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+destination-id DG-MTLS
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+source-interface Loopback0
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+commit
+Tue Nov 10 13:22:57.739 UTC
+RP/0/RP0/CPU0:XR02(config-model-driven-subs)#
+end
+RP/0/RP0/CPU0:XR02#
+$ jq -r '[.tags.source, .tags.subscription] | @tsv' /tmp/mdt.out | sort | uniq -c
+     40 XR01	SUB-GRPC
+     40 XR01	SUB-TCP
+     60 XR01	SUB-TLS
+     36 XR02	SUB-GRPC
+     36 XR02	SUB-TCP
+     36 XR02	SUB-TLS
+[rc=0]
+$ grep -iE "error|tls|handshake" /tmp/telegraf.log | tail -8
+2026-11-10T13:22:45Z E! [inputs.cisco_telemetry_mdt] Error in plugin: receive error during GRPC dialout: rpc error: code = Canceled desc = context canceled
+2026-11-10T13:22:58Z E! [inputs.cisco_telemetry_mdt] Error in plugin: receive error during GRPC dialout: rpc error: code = Canceled desc = context canceled
+[rc=0]
+show telemetry model-driven destination DG-TLS
+Tue Nov 10 13:23:40.218 UTC
+  Destination Group Id:  DG-TLS
+  --------------------
+    Destination IP:       10.0.50.10
+    Destination Port:     57600
+    Subscription:         SUB-TLS
+    State:                Active
+    Encoding:             self-describing-gpb
+    Transport:            grpc
+    TLS :                 collector.lab
+    Total bytes sent:     18282
+    Total packets sent:   12
+    Last Sent time:       2026-11-10 13:23:35.4233576752 +0000
+    Destination endpoint: 2019
+  Collection statistics:
+    Maximum tokens                   : 4000
+    Event tokens                     : 750
+    Cadence tokens                   : 738
+    Token processed at               : 
+    Cadence token advertised at      : 
+    Event token advertised at        : 
+    GNMI initial synchronization time: 
+    Pending queue size               : 0
+    Pending queue memory size (bytes): 0
+    Processed events                 : 0
+    Collection tokens                : 738
+    Send channel full count          : 0
+    Channel full send retries        : 0
+    Sent RIB messages                : 0
+    Received RIB messages            : 0
+
+    Collection Groups:
+    ------------------
+      Id: 11
+      Sample Interval:      10000 ms
+      Heartbeat Interval:   NA
+      Heartbeat always:     False
+      Encoding:             self-describing-gpb
+      Num of collection:    6
+      Incremental updates:  0
+      Collection time:      Min:     1 ms Max:     3 ms
+      Total time:           Min:     1 ms Max:     3 ms Avg:     2 ms
+      Total Deferred:       0
+      Total Send Errors:    0
+      Total Send Drops:     0
+      Total Other Errors:   0
+      No data Instances:    0
+      Initial updates:      2019(Y)
+      Last Collection Start:2026-11-10 13:23:35.4233567752 +0000
+      Last Collection End:  2026-11-10 13:23:35.4233570730 +0000
+      Collections:          6
+      Collection splits:    0
+      Last collection max:  2026-11-10 13:22:45.4183570577 +0000
+      Sensor Path:          openconfig-interfaces:interfaces/interface/state{counters}
+
+      Id: 12
+      Sample Interval:      10000 ms
+      Heartbeat Interval:   NA
+      Heartbeat always:     False
+      Encoding:             self-describing-gpb
+      Num of collection:    6
+      Incremental updates:  0
+      Collection time:      Min:     5 ms Max:     6 ms
+      Total time:           Min:     5 ms Max:     6 ms Avg:     5 ms
+      Total Deferred:       0
+      Total Send Errors:    0
+      Total Send Drops:     0
+      Total Other Errors:   0
+      No data Instances:    0
+      Initial updates:      2019(Y)
+      Last Collection Start:2026-11-10 13:23:35.4233570855 +0000
+      Last Collection End:  2026-11-10 13:23:35.4233576786 +0000
+      Collections:          6
+      Collection splits:    0
+      Last collection max:  2026-11-10 13:22:45.4183577428 +0000
+      Sensor Path:          openconfig-interfaces:interfaces/interface/state{counters}
+
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven destination DG-MTLS
+Tue Nov 10 13:23:40.625 UTC
+  Destination Group Id:  DG-MTLS
+  --------------------
+    Destination IP:       10.0.50.10
+    Destination Port:     57700
+    Subscription:         SUB-MTLS
+    State:                NA
+    Encoding:             self-describing-gpb
+    Transport:            grpc
+    TLS :                 collector.lab
+    Destination endpoint: 2021
+  Collection statistics:
+    Maximum tokens                   : 4000
+    Event tokens                     : 750
+    Cadence tokens                   : 750
+    Token processed at               : 
+    Cadence token advertised at      : 
+    Event token advertised at        : 
+    GNMI initial synchronization time: 
+    Pending queue size               : 0
+    Pending queue memory size (bytes): 0
+    Processed events                 : 0
+    Collection tokens                : 0
+    Send channel full count          : 0
+    Channel full send retries        : 0
+    Sent RIB messages                : 0
+    Received RIB messages            : 0
+
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven destination DG-TLS
+Tue Nov 10 13:23:42.417 UTC
+  Destination Group Id:  DG-TLS
+  --------------------
+    Destination IP:       10.0.60.10
+    Destination Port:     57600
+    Subscription:         SUB-TLS
+    State:                Active
+    Encoding:             self-describing-gpb
+    Transport:            grpc
+    TLS :                 collector.lab
+    Total bytes sent:     12970
+    Total packets sent:   10
+    Last Sent time:       2026-11-10 13:23:39.4237480820 +0000
+    Destination endpoint: 2015
+  Collection statistics:
+    Maximum tokens                   : 4000
+    Event tokens                     : 750
+    Cadence tokens                   : 740
+    Token processed at               : 
+    Cadence token advertised at      : 
+    Event token advertised at        : 
+    GNMI initial synchronization time: 
+    Pending queue size               : 0
+    Pending queue memory size (bytes): 0
+    Processed events                 : 0
+    Collection tokens                : 740
+    Send channel full count          : 0
+    Channel full send retries        : 0
+    Sent RIB messages                : 0
+    Received RIB messages            : 0
+
+    Collection Groups:
+    ------------------
+      Id: 10
+      Sample Interval:      10000 ms
+      Heartbeat Interval:   NA
+      Heartbeat always:     False
+      Encoding:             self-describing-gpb
+      Num of collection:    5
+      Incremental updates:  0
+      Collection time:      Min:     1 ms Max:     1 ms
+      Total time:           Min:     1 ms Max:     2 ms Avg:     1 ms
+      Total Deferred:       0
+      Total Send Errors:    0
+      Total Send Drops:     0
+      Total Other Errors:   0
+      No data Instances:    0
+      Initial updates:      2015(Y)
+      Last Collection Start:2026-11-10 13:23:39.4237475820 +0000
+      Last Collection End:  2026-11-10 13:23:39.4237477820 +0000
+      Collections:          5
+      Collection splits:    0
+      Last collection max:  2026-11-10 13:22:59.4197475820 +0000
+      Sensor Path:          openconfig-interfaces:interfaces/interface/state{counters}
+
+      Id: 11
+      Sample Interval:      10000 ms
+      Heartbeat Interval:   NA
+      Heartbeat always:     False
+      Encoding:             self-describing-gpb
+      Num of collection:    5
+      Incremental updates:  0
+      Collection time:      Min:     3 ms Max:     4 ms
+      Total time:           Min:     3 ms Max:     4 ms Avg:     3 ms
+      Total Deferred:       0
+      Total Send Errors:    0
+      Total Send Drops:     0
+      Total Other Errors:   0
+      No data Instances:    0
+      Initial updates:      2015(Y)
+      Last Collection Start:2026-11-10 13:23:39.4237477820 +0000
+      Last Collection End:  2026-11-10 13:23:39.4237480820 +0000
+      Collections:          5
+      Collection splits:    0
+      Last collection max:  2026-11-10 13:23:09.4207479820 +0000
+      Sensor Path:          openconfig-interfaces:interfaces/interface/state{counters}
+
+RP/0/RP0/CPU0:XR02#
+show telemetry model-driven destination DG-MTLS
+Tue Nov 10 13:23:42.823 UTC
+  Destination Group Id:  DG-MTLS
+  --------------------
+    Destination IP:       10.0.60.10
+    Destination Port:     57700
+    Subscription:         SUB-MTLS
+    State:                NA
+    Encoding:             self-describing-gpb
+    Transport:            grpc
+    TLS :                 collector.lab
+    Destination endpoint: 2017
+  Collection statistics:
+    Maximum tokens                   : 4000
+    Event tokens                     : 750
+    Cadence tokens                   : 750
+    Token processed at               : 
+    Cadence token advertised at      : 
+    Event token advertised at        : 
+    GNMI initial synchronization time: 
+    Pending queue size               : 0
+    Pending queue memory size (bytes): 0
+    Processed events                 : 0
+    Collection tokens                : 0
+    Send channel full count          : 0
+    Channel full send retries        : 0
+    Sent RIB messages                : 0
+    Received RIB messages            : 0
+
+RP/0/RP0/CPU0:XR02#

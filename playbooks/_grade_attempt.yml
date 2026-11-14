@@ -76,7 +76,8 @@
 
 # exec: junos … clab 側 Junos ノード(BL-061 複合ラボ)。network_cli 越しの CLI 実行。
 # `| display json` 付きコマンドなら grade.py の parser: json で構造化採点できる。
-- name: 各チェックのコマンドを Junos ノードで実行 (exec=junos)
+# exec: eos   … clab 側 Arista cEOS(BL-274)。同じ network_cli(`| json` 付きなら parser: json)。
+- name: 各チェックのコマンドを Junos・EOS ノードで実行 (exec=junos / eos)
   ansible.netcommon.cli_command:
     command: "{{ item.command }}"
   delegate_to: "{{ item.node }}"
@@ -85,7 +86,21 @@
   register: collected_jn
   changed_when: false
   failed_when: false
-  when: (item.exec | default('ios')) == 'junos'
+  when: (item.exec | default('ios')) in ['junos', 'eos']
+
+# exec: frr … clab 側 FRRouting(BL-274)。SSH が無いので採点機から clab_ops.py exec(szk-cl01 の
+#   docker exec)で `vtysh -c "<command>"` を打つ。`show ... json` なら parser: json で構造化採点できる。
+- name: 各チェックのコマンドを FRR ノードで実行 (exec=frr・docker exec で vtysh)
+  ansible.builtin.command:
+    argv: ["{{ repo }}/.venv/bin/python3", "{{ repo }}/topologies/clab_ops.py", "exec",
+           "--repo", "{{ repo }}", "--problem", "{{ problem }}", "--node", "{{ item.node }}",
+           "--", "vtysh", "-c", "{{ item.command }}"]
+  loop: "{{ checks | default([]) }}"
+  loop_control: { label: "{{ item.node }}: {{ item.command | truncate(60) }}" }
+  register: collected_fr
+  changed_when: false
+  failed_when: false
+  when: (item.exec | default('ios')) == 'frr'
 
 - name: 結果 JSON を組み立て（checks にこの試行の stdout を併合）
   vars:
@@ -98,9 +113,12 @@
             if not (res.skipped | default(false))
             else (((collected_jn.results[res_idx].stdout
                     | default(collected_jn.results[res_idx].msg | default('') | string)) | string)
-                  if (checks[res_idx].exec | default('ios')) == 'junos'
-                  else ((collected_sh.results[res_idx].stdout | default('')) ~ nl
-                        ~ (collected_sh.results[res_idx].stderr | default(''))))) }) ] }}
+                  if (checks[res_idx].exec | default('ios')) in ['junos', 'eos']
+                  else (((collected_fr.results[res_idx].stdout | default('')) ~ nl
+                         ~ (collected_fr.results[res_idx].stderr | default('')))
+                        if (checks[res_idx].exec | default('ios')) == 'frr'
+                        else ((collected_sh.results[res_idx].stdout | default('')) ~ nl
+                              ~ (collected_sh.results[res_idx].stderr | default('')))))) }) ] }}
   loop: "{{ collected.results }}"
   loop_control: { loop_var: res, index_var: res_idx, label: "{{ checks[res_idx].name }}" }
   when: collected.results is defined

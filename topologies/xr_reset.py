@@ -4,7 +4,8 @@
 学習用のラボ(XRT-*)を作り直さずに最初から解き直すための道具。XR のコミット履歴を使う:
 構築の最後にいまのコミット ID を戻り先として記録し、やり直す時はそこへ `rollback configuration to-exclude <ID>` する
 (★`to <ID>` は「その回も含めて取り消す」= 1 つ戻りすぎる。2026-10-18 に修正)。
-相手役の IOS・サーバは課題で変えない約束なので戻さない(戻すのは problem.yml で iosxr の機器だけ)。
+相手役の IOS は課題で変えない約束なので戻さない(戻すのは problem.yml で iosxr の機器と xe_reset_nodes だけ)。
+サーバ(Linux)は problem.yml の `linux_reset_exec` に書いたコマンドで戻す(課題でサーバの上も作業するラボ= XRT-15)。
 
   xr_reset.py --repo <リポ> --problem <ID> record [--nodes XR01,…] [--id <コミット ID>]
       いまの最新のコミット ID を topologies/_generated/<ID>/xr_baseline.yml に書く(lab_up.yml が構築の最後に呼ぶ)。
@@ -26,12 +27,17 @@
 ★IOS XE の機器(problem.yml の `xe_reset_nodes: [XE1, …]`・XRT-12 の Catalyst 8000V)も戻せる(2026-11-01)。記録= running-config を
   `bootflash:lab-baseline.cfg` に写す/戻す= `configure replace bootflash:lab-baseline.cfg force`(差分を当てる・数パス)。
   IOS XE には XR のコミット履歴が無いので、構築直後の設定を丸ごとファイルで控える形にした。
+★Linux のノード(problem.yml の `linux_reset_exec: {<NODE>: [<シェルのコマンド>, …]}`・2026-11-14)は、XR と IOS XE を
+  戻した後に管理 IF の SSH(ラボのアカウント)で順に流す(bash -lc・終了コードが 0 以外なら失敗扱い)。中身は問題ごと
+  (XRT-15= 構築の時に置いた `/usr/local/sbin/lab-reset` を sudo で呼ぶ= 配ったファイルを控えから戻し、受け手のログを空にし、
+  学ぶ側が起動したプログラムを止める)。XR を戻した後に流すのは、戻す前の XR が送ったもの(テレメトリなど)を残さないため。
 ★XR の rollback は、同じコマンドの形の置き換え(`set-overload-bit` → `set-overload-bit on-startup wait-for-bgp`)を戻さない
   (26.1.1 実測。巻き戻しの差分にその行が出ない)。そういう行は xr_reset_exec で初期の形を入れ直す。
 """
 import argparse
 import os
 import re
+import shlex
 import sys
 import time
 
@@ -114,7 +120,7 @@ def main():
     nodes = xr_nodes(a.repo, a.problem, a.nodes)
     if not nodes:
         print("no IOS XR nodes")
-        return 0
+        return 0 if a.cmd == "record" else linux_reset(a.repo, a.problem, a.nodes)
     bad = 0
     if a.cmd == "record":
         base = {}
@@ -228,7 +234,39 @@ def main():
                 print(f"[{node}] after rollback: {line}")
         finally:
             c.close()
+    bad += linux_reset(a.repo, a.problem, a.nodes)
     return 1 if bad else 0
+
+
+def linux_reset(repo, problem, only):
+    """problem.yml の linux_reset_exec を流す(Linux のノード)。失敗したノードの数を返す。"""
+    pmeta = yaml.safe_load(open(os.path.join(repo, "problems", problem, "problem.yml"), encoding="utf-8"))
+    todo = pmeta.get("linux_reset_exec") or {}
+    if only:
+        todo = {n: v for n, v in todo.items() if n in only.split(",")}
+    mgmt = yaml.safe_load(open(os.path.join(repo, "topologies/_generated", problem, "mgmt_map.yml"), encoding="utf-8"))
+    bad = 0
+    for node, cmds in todo.items():
+        try:
+            c = connect(mgmt[node], os.environ["NODE_USER"], os.environ["NODE_PASS"])
+        except Exception as e:
+            print(f"ERROR {node}: cannot log in over the management interface ({type(e).__name__}: {e})")
+            bad += 1
+            continue
+        try:
+            for cmd in cmds:
+                _, out, err = c.exec_command("bash -lc " + shlex.quote(cmd), timeout=300)
+                o = out.read().decode("utf-8", "replace") + err.read().decode("utf-8", "replace")
+                rc = out.channel.recv_exit_status()
+                print(f"[{node}] {cmd}: {'ok' if rc == 0 else f'FAILED (rc={rc})'}")
+                for ln in o.strip().splitlines()[-12:]:
+                    print(f"[{node}]   {ln}")
+                if rc != 0:
+                    bad += 1
+                    break
+        finally:
+            c.close()
+    return bad
 
 
 if __name__ == "__main__":

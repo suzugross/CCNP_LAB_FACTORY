@@ -1,0 +1,249 @@
+
+======== nh_choice: 追加 PoC(2026-11-12): next-hop の選び方(自分の IP・隣でない IP・ブロードキャスト・ネットワーク アドレス) ========
+--- 基準
+### 13:03:01 RT01: show running-config | include ^ip route
+
+### 13:03:02 RT01: show ip route static
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+### 13:03:02 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+
+--- 1. 自分の IP(Et0/1 = 172.16.12.1)を next-hop に
+### RT01: conf ['ip route 10.4.0.0 255.255.0.0 172.16.12.1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%Invalid next hop address (it's this router)
+### 13:03:07 RT01: show running-config | include ^ip route
+
+### 13:03:08 RT01: show ip route static
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+### 13:03:08 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+
+--- 1 の後始末
+### RT01: conf ['no ip route 10.4.0.0 255.255.0.0 172.16.12.1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%No matching route to delete
+### 13:03:10 RT01: show running-config | include ^ip route
+
+--- 2. 隣でない IP(R4 の 172.16.34.2。R1 はこのサブネットにつながっていない)
+### RT01: conf ['ip route 10.4.0.0 255.255.0.0 172.16.34.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 13:03:19 RT01: show running-config | include ^ip route
+ip route 10.4.0.0 255.255.0.0 172.16.34.2
+### 13:03:19 RT01: show ip route static
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+### 13:03:19 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+Static local RIB for default 
+
+M  10.4.0.0/16 [1/0] via 172.16.34.2 [N]
+### 13:03:19 RT01: show ip cef 10.4.1.1
+0.0.0.0/0
+  no route
+--- 2 の後始末
+### RT01: conf ['no ip route 10.4.0.0 255.255.0.0 172.16.34.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 13:03:21 RT01: show running-config | include ^ip route
+
+--- 3. /30 のブロードキャスト(172.16.12.3)を next-hop に
+### RT01: conf ['ip route 10.4.0.0 255.255.0.0 172.16.12.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 13:03:30 RT01: show running-config | include ^ip route
+ip route 10.4.0.0 255.255.0.0 172.16.12.3
+### 13:03:30 RT01: show ip route static
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 4 subnets, 3 masks
+S        10.4.0.0/16 [1/0] via 172.16.12.3
+### 13:03:30 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+Static local RIB for default 
+
+M  10.4.0.0/16 [1/0] via 172.16.12.3 [A]
+### 13:03:30 RT01: show ip cef 10.4.1.1
+10.4.0.0/16
+  receive for Ethernet0/1
+### 13:03:30 RT01: show ip arp 172.16.12.3
+
+--- 3 の後始末
+### RT01: conf ['no ip route 10.4.0.0 255.255.0.0 172.16.12.3']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 13:03:33 RT01: show running-config | include ^ip route
+
+--- 4. ネットワーク アドレス(172.16.12.0)を next-hop に
+### RT01: conf ['ip route 10.4.0.0 255.255.0.0 172.16.12.0']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 13:03:41 RT01: show running-config | include ^ip route
+ip route 10.4.0.0 255.255.0.0 172.16.12.0
+### 13:03:41 RT01: show ip route static
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 4 subnets, 3 masks
+S        10.4.0.0/16 [1/0] via 172.16.12.0
+### 13:03:41 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+Static local RIB for default 
+
+M  10.4.0.0/16 [1/0] via 172.16.12.0 [A]
+### 13:03:42 RT01: show ip cef 10.4.1.1
+10.4.0.0/16
+  receive for Ethernet0/1
+--- 4 の後始末
+### RT01: conf ['no ip route 10.4.0.0 255.255.0.0 172.16.12.0']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 13:03:44 RT01: show running-config | include ^ip route
+
+### 13:03:44 RT01: show ip route static
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+

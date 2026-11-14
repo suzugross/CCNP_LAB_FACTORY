@@ -1,0 +1,723 @@
+# XRT-15 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn XRT-15 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# verify= 確かめ方の例(BL-266)。いつでも開け、記録しない。結果を観る手順(入ったか → 流して数える → 届いた先 → 壊していないか)までで、
+# 落とし穴の名前や直し方は書かない(それはヒントと模範解の役目)。出力の例は実機の記録(poc/xr/expXRT15-*.log・expAUTO-*.log)から。
+# ここに書いた挙動は IOS XRd 26.1.1・Catalyst 8000V 17.15.1a(+IOL 17.15・Ubuntu 24.04 の NMS)の実機で確認した(設計= problems/_drafts/XR-TRACK.design.md §30)。
+# 模範解の「On XR01:」「On PE2:」「On SRV01:」の見出し= 機器ごとの塊。SRV01 の塊はシェルとファイルの中身(機器へ流す行ではない)。
+# 読み物(BL-252)= Reading タブに出す本(reading/<key>/)。各課題の read: はその本の「ページ#節」(節= data-sec)。
+reading: xr
+steps:
+  - id: m13t1
+    title: { en: "M13-1  Configure XR01 through NETCONF", ja: "M13-1  NETCONF で XR01 を設定する" }
+    check: m13t1
+    read: [e0-m13-netconf-yang#s2-1, e0-m13-netconf-yang#s2-2, e0-m13-netconf-yang#s2-3, e0-m13-netconf-yang#s2-4, e0-m13-netconf-yang#s3-1, e0-m13-netconf-yang#s3-2, e0-m13-netconf-yang#s3-3]
+    hints:
+      - en: "Two halves: XR01 has to listen for NETCONF (NETCONF rides on the SSH server, and the SSH server answers NETCONF only in the VRFs you name), and the change itself has to be sent from SRV01. XR01 lists the YANG models it supports in its NETCONF hello; the unified models (`Cisco-IOS-XR-um-…-cfg`) follow the CLI closely. Read the current Loopback0 first with a get, and copy its shape."
+        ja: "2 つに分かれます。XR01 が NETCONF を受け付けること(NETCONF は SSH のサーバに乗り、SSH のサーバは指定した VRF でだけ NETCONF に答えます)と、変更そのものを SRV01 から送ることです。XR01 は対応する YANG のモデルを NETCONF の hello で知らせます。統一モデル(`Cisco-IOS-XR-um-…-cfg`)は CLI とほぼ同じ形です。先に get で今の Loopback0 を読み、その形をまねてください。"
+      - en: "On XR01: `show netconf-yang clients`, `show netconf-yang statistics`, `show configuration commit list`, `show configuration commit changes <id>`. On SRV01: `python3 ~/m13/nc_edit.py get` with a subtree filter on the interfaces. Guides: Programmability Configuration Guide (ASR 9000 / Cisco 8000), 'Drive Network Automation Using Programmable YANG Data Models'; System Management Configuration Guide (ASR 9000), 'Configuring Network Configuration Protocol'."
+        ja: "XR01 で `show netconf-yang clients`・`show netconf-yang statistics`・`show configuration commit list`・`show configuration commit changes <ID>`。SRV01 で、インタフェースの subtree のフィルタを入れて `python3 ~/m13/nc_edit.py get`。ガイド: Programmability Configuration Guide(ASR 9000・Cisco 8000)の「Drive Network Automation Using Programmable YANG Data Models」、System Management Configuration Guide(ASR 9000)の「Configuring Network Configuration Protocol」。"
+      - en: "`ssh server netconf vrf default`, and `netconf-yang agent` → `ssh`. In the skeleton: port 830; the namespace `http://cisco.com/ns/yang/Cisco-IOS-XR-um-interface-cfg` with `<interface-name>` and `<description>`, and the IPv4 address under `<ipv4><addresses xmlns=\"http://cisco.com/ns/yang/Cisco-IOS-XR-um-if-ip-address-cfg\">`; `edit_config(target=\"candidate\")` and then `commit()`."
+        ja: "`ssh server netconf vrf default` と、`netconf-yang agent` → `ssh`。雛形の中は、ポート 830、名前空間 `http://cisco.com/ns/yang/Cisco-IOS-XR-um-interface-cfg` に `<interface-name>` と `<description>`、IPv4 のアドレスは `<ipv4><addresses xmlns=\"http://cisco.com/ns/yang/Cisco-IOS-XR-um-if-ip-address-cfg\">` の下。`edit_config(target=\"candidate\")` のあと `commit()`。"
+    verify:
+      en: |
+        **1. Is it in?** (XR01, then SRV01)
+
+        - `show running-config ssh` should list `ssh server netconf vrf default`, and `show running-config netconf-yang agent` the agent.
+        - On SRV01, `python3 ~/m13/nc_edit.py get` should come back with an `<rpc-reply>`. Before the loopback exists, the reply is
+          an empty `<data/>`; an error about the socket means XR01 is not listening.
+
+        **2. Send the change** (SRV01)
+
+        - `python3 ~/m13/nc_edit.py edit` prints two replies, one for the edit and one for the step that makes it take effect.
+          Both should be `<ok/>`.
+
+        **3. Look where it arrives** (XR01, then SRV01)
+
+        - `show running-config interface Loopback100` shows the description and the address.
+        - `show configuration commit list 3`: the top line says how the change came in (the Line and Client columns).
+          `show configuration commit changes <id>` with that ID shows what the commit changed.
+        - `python3 ~/m13/nc_edit.py get` now returns the loopback.
+
+        Example (XR01 after the change; the commit list):
+
+        ```
+        SNo. Label/ID              User      Line                Client      Time Stamp
+        ~~~~ ~~~~~~~~              ~~~~      ~~~~                ~~~~~~      ~~~~~~~~~~
+        1    1000000032            SUZUKI    netconf             YANG Frame  Tue Nov 10 14:23:36 2026
+        2    1000000031            SUZUKI    vty0:node0_RP0_CPU  CLI         Tue Nov 10 14:20:25 2026
+        ```
+
+        **4. Did anything else break?** (XR01)
+
+        - `show configuration sessions` should list no session left open by NETCONF.
+        - `show isis adjacency`: PE2 is still Up.
+      ja: |
+        **1. 入ったか**(XR01、次に SRV01)
+
+        - `show running-config ssh` に `ssh server netconf vrf default`、`show running-config netconf-yang agent` にエージェントが出ること。
+        - SRV01 で `python3 ~/m13/nc_edit.py get` が `<rpc-reply>` を返すこと。ループバックを作る前は空の `<data/>` です。
+          ソケットのエラーが出るなら、XR01 が受け付けていません。
+
+        **2. 変更を送る**(SRV01)
+
+        - `python3 ~/m13/nc_edit.py edit` は、変更と、変更を効かせる段の 2 つの返事を出します。どちらも `<ok/>` になること。
+
+        **3. 届いた先を見る**(XR01、次に SRV01)
+
+        - `show running-config interface Loopback100` に説明とアドレスが出ること。
+        - `show configuration commit list 3` の一番上の行の Line と Client の列で、変更がどこから入ったかが分かります。
+          その ID で `show configuration commit changes <ID>` を見ると、そのコミットで何が変わったかが出ます。
+        - `python3 ~/m13/nc_edit.py get` が、今度はループバックを返すこと。
+
+        結果の例(変更のあとの XR01 のコミットの一覧):
+
+        ```
+        SNo. Label/ID              User      Line                Client      Time Stamp
+        ~~~~ ~~~~~~~~              ~~~~      ~~~~                ~~~~~~      ~~~~~~~~~~
+        1    1000000032            SUZUKI    netconf             YANG Frame  Tue Nov 10 14:23:36 2026
+        2    1000000031            SUZUKI    vty0:node0_RP0_CPU  CLI         Tue Nov 10 14:20:25 2026
+        ```
+
+        **4. 壊していないか**(XR01)
+
+        - `show configuration sessions` に、NETCONF が開いたままのセッションが残っていないこと。
+        - `show isis adjacency` で PE2 が Up のままであること。
+    solution:
+      en: |
+        On XR01:
+        configure
+         ssh server netconf vrf default
+         netconf-yang agent
+          ssh
+         !
+        commit
+        end
+
+        On SRV01 (the filled-in parts of ~/m13/nc_edit.py):
+        HOST = "10.0.50.1"
+        PORT = 830
+        USER = "<lab user>"
+        PASS = "<lab password>"
+        FILTER = """<interfaces xmlns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-interface-cfg">
+         <interface><interface-name>Loopback100</interface-name></interface>
+        </interfaces>"""
+        CONFIG = """<config>
+        <interfaces xmlns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-interface-cfg">
+         <interface>
+          <interface-name>Loopback100</interface-name>
+          <description>NMS-MANAGED</description>
+          <ipv4>
+           <addresses xmlns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-if-ip-address-cfg">
+            <address><address>10.255.100.1</address><netmask>255.255.255.255</netmask></address>
+           </addresses>
+          </ipv4>
+         </interface>
+        </interfaces>
+        </config>"""
+            print(m.edit_config(target="candidate", config=CONFIG).xml)
+            print(m.commit().xml)
+
+        On SRV01:
+        python3 ~/m13/nc_edit.py edit
+      ja: |
+        On XR01:
+        configure
+         ssh server netconf vrf default
+         netconf-yang agent
+          ssh
+         !
+        commit
+        end
+
+        On SRV01(~/m13/nc_edit.py の埋めた所):
+        HOST = "10.0.50.1"
+        PORT = 830
+        USER = "<ラボのユーザ>"
+        PASS = "<ラボのパスワード>"
+        FILTER = """<interfaces xmlns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-interface-cfg">
+         <interface><interface-name>Loopback100</interface-name></interface>
+        </interfaces>"""
+        CONFIG = """<config>
+        <interfaces xmlns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-interface-cfg">
+         <interface>
+          <interface-name>Loopback100</interface-name>
+          <description>NMS-MANAGED</description>
+          <ipv4>
+           <addresses xmlns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-if-ip-address-cfg">
+            <address><address>10.255.100.1</address><netmask>255.255.255.255</netmask></address>
+           </addresses>
+          </ipv4>
+         </interface>
+        </interfaces>
+        </config>"""
+            print(m.edit_config(target="candidate", config=CONFIG).xml)
+            print(m.commit().xml)
+
+        On SRV01:
+        python3 ~/m13/nc_edit.py edit
+
+  - id: m13t2
+    title: { en: "M13-2  Make PE2 ready for the RESTCONF script", ja: "M13-2  PE2 を RESTCONF のスクリプトに備える" }
+    check: m13t2
+    read: [e0-m13-netconf-yang#s2-5, e0-m13-netconf-yang#s2-6, e0-m13-netconf-yang#s3-4, e0-m13-netconf-yang#s3-5]
+    hints:
+      - en: "Read the script before you touch PE2: the URL tells you the scheme and the port, AUTH the account, and the first request is a GET that must succeed before the PATCH is sent. RESTCONF on IOS XE needs a web server, the RESTCONF service on top of it, and an account allowed to change the configuration. After you enable it, it takes about a minute to start answering."
+        ja: "PE2 に触る前にスクリプトを読んでください。URL からは方式とポートが、AUTH からはアカウントが分かります。最初の要求は GET で、それが通って初めて PATCH が送られます。IOS XE の RESTCONF には、Web のサーバ、その上の RESTCONF のサービス、設定を変えてよいアカウントの 3 つが要ります。有効にしてから答え始めるまでに 1 分ほどかかります。"
+      - en: "Run the script and read the status code it prints: no connection, 401, 403 and 404 each point to a different missing piece. On PE2: `show platform software yang-management process`, `show running-config | include ip http|restconf|username`. Guide: Programmability Configuration Guide, Cisco IOS XE 17.15.x, 'RESTCONF Protocol'."
+        ja: "スクリプトを動かし、出てくる状態コードを読みます。接続できない・401・403・404 は、それぞれ別の部品が足りないことを示します。PE2 で `show platform software yang-management process`・`show running-config | include ip http|restconf|username`。ガイド: Programmability Configuration Guide(Cisco IOS XE 17.15.x)の「RESTCONF Protocol」。"
+      - en: "`ip http secure-server`, `restconf`, and `username nms-api privilege 15 secret Api-Pass-15`. Keep `no ip http server`. Then run `python3 ~/m13/rc_customer_lo.py` once."
+        ja: "`ip http secure-server`・`restconf`・`username nms-api privilege 15 secret Api-Pass-15`。`no ip http server` はそのまま。そのあと `python3 ~/m13/rc_customer_lo.py` を 1 回動かします。"
+    verify:
+      en: |
+        **1. Is it in?** (PE2)
+
+        - `show platform software yang-management process`: `nginx` and `confd` should be `Running`.
+        - `show running-config | include ^ip http|^restconf|^username nms-api` shows what the web server listens on and the account.
+
+        **2. Send a request** (SRV01)
+
+        - Before running the script, try its first request by hand:
+          `curl -sk -u nms-api:Api-Pass-15 -H "Accept: application/yang-data+json" https://10.0.50.2/restconf/data/Cisco-IOS-XE-native:native/hostname`.
+          It should return the hostname in JSON. For several tens of seconds after you enable RESTCONF, an HTML error page comes back instead.
+        - Then `python3 ~/m13/rc_customer_lo.py`.
+
+        Example (SRV01, the script):
+
+        ```
+        GET hostname -> 200 {
+          "Cisco-IOS-XE-native:hostname": "PE2"
+        }
+        PATCH Loopback200 -> 204
+        ```
+
+        **3. Look where it arrives** (PE2)
+
+        - `show running-config interface Loopback200` shows what the script wrote: the description and the address.
+
+        **4. Did anything else break?** (SRV01, PE2)
+
+        - `curl -s -o /dev/null -w "%{http_code}\n" http://10.0.50.2/` should print `000` (nothing listens on plain HTTP).
+        - `show isis neighbors` on PE2: XR01 is still UP.
+      ja: |
+        **1. 入ったか**(PE2)
+
+        - `show platform software yang-management process` で、`nginx` と `confd` が `Running` であること。
+        - `show running-config | include ^ip http|^restconf|^username nms-api` で、Web のサーバの受け口とアカウントが分かります。
+
+        **2. 要求を送る**(SRV01)
+
+        - スクリプトを動かす前に、最初の要求を手で試します。
+          `curl -sk -u nms-api:Api-Pass-15 -H "Accept: application/yang-data+json" https://10.0.50.2/restconf/data/Cisco-IOS-XE-native:native/hostname`。
+          JSON でホスト名が返ること。RESTCONF を有効にしてから数十秒は、代わりに HTML のエラー ページが返ります。
+        - そのあと `python3 ~/m13/rc_customer_lo.py`。
+
+        結果の例(SRV01・スクリプト):
+
+        ```
+        GET hostname -> 200 {
+          "Cisco-IOS-XE-native:hostname": "PE2"
+        }
+        PATCH Loopback200 -> 204
+        ```
+
+        **3. 届いた先を見る**(PE2)
+
+        - `show running-config interface Loopback200` に、スクリプトが書いた説明とアドレスが出ること。
+
+        **4. 壊していないか**(SRV01・PE2)
+
+        - `curl -s -o /dev/null -w "%{http_code}\n" http://10.0.50.2/` が `000` を出すこと(平文の HTTP には何も待っていない)。
+        - PE2 の `show isis neighbors` で XR01 が UP のままであること。
+    solution:
+      en: |
+        On PE2:
+        configure terminal
+         username nms-api privilege 15 secret Api-Pass-15
+         ip http secure-server
+         restconf
+        end
+
+        On SRV01 (about a minute later):
+        python3 ~/m13/rc_customer_lo.py
+      ja: |
+        On PE2:
+        configure terminal
+         username nms-api privilege 15 secret Api-Pass-15
+         ip http secure-server
+         restconf
+        end
+
+        On SRV01(1 分ほど待ってから):
+        python3 ~/m13/rc_customer_lo.py
+
+  - id: m13t3
+    title: { en: "M13-3  gNMI with mutual TLS", ja: "M13-3  相互 TLS の gNMI" }
+    check: m13t3
+    read: [e2-m13-gnmi-telemetry#s2-1, e2-m13-gnmi-telemetry#s2-3, e2-m13-gnmi-telemetry#s2-5, e2-m13-gnmi-telemetry#s3-1, e2-m13-gnmi-telemetry#s3-2]
+    hints:
+      - en: "The gRPC server is off until you configure it. With TLS, XR01 shows the client its own self-signed certificate. With mutual TLS, XR01 also asks the client for a certificate and checks it against the CA it trusts. That CA is a file on XR01, not a configuration line, and the gRPC process reads it when it starts."
+        ja: "gRPC のサーバは、設定するまで止まっています。TLS では、XR01 は自分で署名した証明書をクライアントに見せます。相互 TLS では、XR01 はさらにクライアントにも証明書を求め、自分が信じる CA で確かめます。その CA は設定の行ではなく XR01 の上のファイルで、gRPC のプロセスが起動するときに読みます。"
+      - en: "`show grpc`, `show grpc trace ems last 20`, `run ls -la /misc/config/grpc/`. On SRV01: `gnmic -a 10.0.50.1:57400 … -e json_ietf capabilities` with `--insecure`, `--skip-verify`, `--tls-cert`/`--tls-key`; the error text differs for each missing piece. Guide: Programmability Configuration Guide (Cisco 8000 / ASR 9000), 'Use gRPC Protocol to Define Network Operations with Data Models' → authentication methods, certificate based authentication."
+        ja: "`show grpc`・`show grpc trace ems last 20`・`run ls -la /misc/config/grpc/`。SRV01 で `gnmic -a 10.0.50.1:57400 … -e json_ietf capabilities` に `--insecure`・`--skip-verify`・`--tls-cert`/`--tls-key` を付けて試すと、足りない部品ごとにエラーの文が違います。ガイド: Programmability Configuration Guide(Cisco 8000・ASR 9000)の「Use gRPC Protocol to Define Network Operations with Data Models」の認証の方式と証明書による認証。"
+      - en: "`grpc` → `port 57400`, `address-family ipv4`, `tls-mutual` (no `no-tls`). Copy `~/pki/ca.pem` to XR01 (start a web server in ~/pki with `python3 -m http.server`, then `copy http://10.0.50.10:<port>/ca.pem harddisk:`), `run cp /harddisk:/<file> /misc/config/grpc/ca.cert`, then `process restart emsd`."
+        ja: "`grpc` → `port 57400`・`address-family ipv4`・`tls-mutual`(`no-tls` は書かない)。`~/pki/ca.pem` を XR01 へ写し(~/pki で `python3 -m http.server` を起動して `copy http://10.0.50.10:<ポート>/ca.pem harddisk:`)、`run cp /harddisk:/<ファイル> /misc/config/grpc/ca.cert`、最後に `process restart emsd`。"
+    verify:
+      en: |
+        **1. Is it in?** (XR01)
+
+        - `show grpc`: Port 57400, VRF global-vrf, `TLS : enabled`, `TLS mutual : enabled`.
+        - `run openssl x509 -in /misc/config/grpc/ca.cert -noout -subject` shows which CA XR01 trusts for client certificates.
+
+        **2. Try three clients** (SRV01)
+
+        - The same `gnmic -a 10.0.50.1:57400 -u <user> -p <password> -e json_ietf … capabilities`, three ways:
+          `--insecure` (no TLS), `--skip-verify` (TLS, no client certificate), and
+          `--skip-verify --tls-cert ~/pki/client.pem --tls-key ~/pki/client.key`.
+          Only the last one should print `gNMI version`.
+
+        Example (the reasons in the error text; excerpts):
+
+        ```
+        --insecure      : connection error: desc = "error reading server preface: EOF"
+        no client cert  : connection error: desc = "error reading server preface: remote error: tls: certificate required"
+        another CA      : connection error: desc = "error reading server preface: remote error: tls: bad certificate"
+        ```
+
+        **3. Read something through it** (SRV01)
+
+        - With the client certificate: `gnmic … get --path '/interfaces/interface[name=Loopback0]/state'` returns `oper-status` UP.
+        - To check XR01's certificate instead of skipping the check: take it with
+          `openssl s_client -connect 10.0.50.1:57400 </dev/null | openssl x509 > xr01.pem`, and use `--tls-ca xr01.pem`.
+          Read its name with `openssl x509 -in xr01.pem -noout -subject -ext subjectAltName` and compare it with the address you dial.
+
+        **4. Did anything else break?** (XR01, SRV01)
+
+        - `show telemetry model-driven subscription` shows the same states as before the restart.
+        - `python3 ~/m13/nc_edit.py get` (NETCONF, Task M13-1) still answers.
+      ja: |
+        **1. 入ったか**(XR01)
+
+        - `show grpc` で Port 57400、VRF global-vrf、`TLS : enabled`、`TLS mutual : enabled`。
+        - `run openssl x509 -in /misc/config/grpc/ca.cert -noout -subject` で、XR01 がクライアントの証明書に使う CA が分かります。
+
+        **2. 3 通りのクライアントで試す**(SRV01)
+
+        - 同じ `gnmic -a 10.0.50.1:57400 -u <ユーザ> -p <パスワード> -e json_ietf … capabilities` を 3 通りで。
+          `--insecure`(TLS なし)、`--skip-verify`(TLS・クライアント証明書なし)、
+          `--skip-verify --tls-cert ~/pki/client.pem --tls-key ~/pki/client.key`。
+          `gNMI version` が出るのは最後の 1 つだけであること。
+
+        結果の例(エラーの文に出る理由・抜粋):
+
+        ```
+        --insecure      : connection error: desc = "error reading server preface: EOF"
+        no client cert  : connection error: desc = "error reading server preface: remote error: tls: certificate required"
+        another CA      : connection error: desc = "error reading server preface: remote error: tls: bad certificate"
+        ```
+
+        **3. それを通して読む**(SRV01)
+
+        - クライアント証明書を付けて `gnmic … get --path '/interfaces/interface[name=Loopback0]/state'` で `oper-status` が UP。
+        - XR01 の証明書を確かめる側にしたいなら、`openssl s_client -connect 10.0.50.1:57400 </dev/null | openssl x509 > xr01.pem` で取り出し、
+          `--tls-ca xr01.pem` を付けます。名前は `openssl x509 -in xr01.pem -noout -subject -ext subjectAltName` で読み、接続先のアドレスと比べます。
+
+        **4. 壊していないか**(XR01・SRV01)
+
+        - `show telemetry model-driven subscription` の状態が、再起動の前と同じであること。
+        - `python3 ~/m13/nc_edit.py get`(NETCONF・課題 M13-1)が答えること。
+    solution:
+      en: |
+        On SRV01 (leave it running while you copy; stop it afterwards with Ctrl-C):
+        cd ~/pki && python3 -m http.server 8080
+
+        On XR01:
+        configure
+         grpc
+          port 57400
+          address-family ipv4
+          tls-mutual
+         !
+        commit
+        end
+        copy http://10.0.50.10:8080/ca.pem harddisk:/nms-ca.pem
+        run cp /harddisk:/nms-ca.pem /misc/config/grpc/ca.cert
+        process restart emsd
+
+        On SRV01:
+        gnmic -a 10.0.50.1:57400 -u <lab user> -p <lab password> -e json_ietf --skip-verify --tls-cert ~/pki/client.pem --tls-key ~/pki/client.key capabilities
+      ja: |
+        On SRV01(写している間は動かしたまま・終わったら Ctrl-C で止める):
+        cd ~/pki && python3 -m http.server 8080
+
+        On XR01:
+        configure
+         grpc
+          port 57400
+          address-family ipv4
+          tls-mutual
+         !
+        commit
+        end
+        copy http://10.0.50.10:8080/ca.pem harddisk:/nms-ca.pem
+        run cp /harddisk:/nms-ca.pem /misc/config/grpc/ca.cert
+        process restart emsd
+
+        On SRV01:
+        gnmic -a 10.0.50.1:57400 -u <ラボのユーザ> -p <ラボのパスワード> -e json_ietf --skip-verify --tls-cert ~/pki/client.pem --tls-key ~/pki/client.key capabilities
+
+  - id: m13t4
+    title: { en: "M13-4  The counters that never arrived", ja: "M13-4  届かないインタフェースの数" }
+    check: m13t4
+    read: [e2-m13-gnmi-telemetry#s2-2, e2-m13-gnmi-telemetry#s2-3, e2-m13-gnmi-telemetry#s2-4, e2-m13-gnmi-telemetry#s2-5, e2-m13-gnmi-telemetry#s3-3, e2-m13-gnmi-telemetry#s3-4]
+    hints:
+      - en: "More than one thing stands between XR01 and the collector. Take it one layer at a time: does XR01 understand what it is asked to collect; can XR01 check the collector's certificate at all; does the name XR01 expects match the certificate the collector shows. The collector is fine."
+        ja: "XR01 と収集役の間には、問題が 1 つではありません。層ごとに見ます。XR01 は集めるよう言われたものを理解しているか、XR01 は収集役の証明書を確かめる手段を持っているか、XR01 が期待する名前は収集役が見せる証明書と合っているか。収集役は正常です。"
+      - en: "`show telemetry model-driven subscription SUB-IF` (the sensor path state; the destination's state and TLS name), `show telemetry model-driven sensor-group`, `show grpc trace ems last 30` (why a connection failed), `run ls -la /misc/config/grpc/dialout/`. On SRV01: `openssl s_client -connect 10.0.50.10:57500 </dev/null | openssl x509 -noout -subject -issuer -ext subjectAltName`. Guide: Telemetry Configuration Guide (Cisco 8000 / NCS 5500), the dial-out and TLS sections."
+        ja: "`show telemetry model-driven subscription SUB-IF`(センサー パスの状態・宛先の状態と TLS の名前)・`show telemetry model-driven sensor-group`・`show grpc trace ems last 30`(接続が失敗した理由)・`run ls -la /misc/config/grpc/dialout/`。SRV01 で `openssl s_client -connect 10.0.50.10:57500 </dev/null | openssl x509 -noout -subject -issuer -ext subjectAltName`。ガイド: Telemetry Configuration Guide(Cisco 8000・NCS 5500)のダイヤルアウトと TLS の節。"
+      - en: "Replace the sensor path with one that this release resolves, for example `openconfig-interfaces:interfaces/interface/state/counters`. Copy `~/pki/ca.pem` to `/misc/config/grpc/dialout/dialout.pem`. Set `protocol grpc tls-hostname collector.nms.lab` (or `protocol grpc` alone, which checks the address 10.0.50.10 against the certificate)."
+        ja: "センサー パスを、この版で解決できるものに替えます(例 `openconfig-interfaces:interfaces/interface/state/counters`)。`~/pki/ca.pem` を `/misc/config/grpc/dialout/dialout.pem` に写します。`protocol grpc tls-hostname collector.nms.lab`(または `protocol grpc` だけ= 証明書をアドレス 10.0.50.10 で照らす)。"
+    verify:
+      en: |
+        **1. Is it in?** (XR01)
+
+        - `show telemetry model-driven sensor-group IF-COUNTERS`: every sensor path should be `Resolved`.
+        - `run ls -la /misc/config/grpc/dialout/` and `show telemetry model-driven subscription SUB-IF`: the destination's `TLS :`
+          line is the name XR01 will check the collector's certificate against.
+
+        **2. Count what XR01 sends** (XR01)
+
+        - Wait up to a minute (XR01 retries the connection by itself), then run `show telemetry model-driven destination NMS` twice,
+          ten seconds apart. `State` should be `Active` and `Total packets sent` should grow.
+
+        Example (XR01; excerpt):
+
+        ```
+          Destination Group Id:  NMS
+            Destination IP:       10.0.50.10
+            Destination Port:     57500
+            Subscription:         SUB-IF
+            State:                Active
+            Encoding:             self-describing-gpb
+            Transport:            grpc
+            TLS :                 collector.nms.lab
+            Total bytes sent:     451058
+            Total packets sent:   276
+        ```
+
+        **3. Look where it arrives** (SRV01)
+
+        - Each sample writes lines to `/var/log/telegraf/mdt.json`. The packet counters of one interface, the last three samples:
+          `grep '"GigabitEthernet0/0/0/0"' /var/log/telegraf/mdt.json | jq -c 'select(.fields["counters/in_pkts"]) | [.timestamp, .tags.source, .tags.subscription, .fields["counters/in_pkts"]]' | tail -3`.
+          The timestamps should be ten seconds apart, and `in_pkts` should rise.
+
+        **4. Did anything else break?** (SRV01)
+
+        - The gNMI client of Task M13-3 still works: the dial-out and the dial-in use different certificates.
+      ja: |
+        **1. 入ったか**(XR01)
+
+        - `show telemetry model-driven sensor-group IF-COUNTERS` で、センサー パスがすべて `Resolved` であること。
+        - `run ls -la /misc/config/grpc/dialout/` と `show telemetry model-driven subscription SUB-IF` を見ます。宛先の `TLS :` の行は、
+          XR01 が収集役の証明書を照らす名前です。
+
+        **2. XR01 が送った数を数える**(XR01)
+
+        - 1 分ほど待ち(XR01 は自分で接続をやり直します)、`show telemetry model-driven destination NMS` を 10 秒あけて 2 回。
+          `State` が `Active` で、`Total packets sent` が増えていること。
+
+        結果の例(XR01・抜粋):
+
+        ```
+          Destination Group Id:  NMS
+            Destination IP:       10.0.50.10
+            Destination Port:     57500
+            Subscription:         SUB-IF
+            State:                Active
+            Encoding:             self-describing-gpb
+            Transport:            grpc
+            TLS :                 collector.nms.lab
+            Total bytes sent:     451058
+            Total packets sent:   276
+        ```
+
+        **3. 届いた先を見る**(SRV01)
+
+        - 1 回の採取ごとに `/var/log/telegraf/mdt.json` に行が足されます。1 つのインタフェースのパケットの数を、最後の 3 回分:
+          `grep '"GigabitEthernet0/0/0/0"' /var/log/telegraf/mdt.json | jq -c 'select(.fields["counters/in_pkts"]) | [.timestamp, .tags.source, .tags.subscription, .fields["counters/in_pkts"]]' | tail -3`。
+          時刻が 10 秒ずつ進み、`in_pkts` が増えていること。
+
+        **4. 壊していないか**(SRV01)
+
+        - 課題 M13-3 の gNMI のクライアントがそのまま使えること(ダイヤルアウトとダイヤルインは別の証明書を使います)。
+    solution:
+      en: |
+        On SRV01 (if it is not still running from Task M13-3):
+        cd ~/pki && python3 -m http.server 8080
+
+        On XR01:
+        copy http://10.0.50.10:8080/ca.pem harddisk:/nms-ca.pem
+        run cp /harddisk:/nms-ca.pem /misc/config/grpc/dialout/dialout.pem
+        configure
+         telemetry model-driven
+          destination-group NMS
+           address-family ipv4 10.0.50.10 port 57500
+            protocol grpc tls-hostname collector.nms.lab
+           !
+          !
+          sensor-group IF-COUNTERS
+           no sensor-path Cisco-IOS-XR-infra-statsd-oper:infra-statistics/interfaces/interface/latest/generic-counters
+           sensor-path openconfig-interfaces:interfaces/interface/state/counters
+          !
+         !
+        commit
+        end
+      ja: |
+        On SRV01(課題 M13-3 から動かしたままでなければ):
+        cd ~/pki && python3 -m http.server 8080
+
+        On XR01:
+        copy http://10.0.50.10:8080/ca.pem harddisk:/nms-ca.pem
+        run cp /harddisk:/nms-ca.pem /misc/config/grpc/dialout/dialout.pem
+        configure
+         telemetry model-driven
+          destination-group NMS
+           address-family ipv4 10.0.50.10 port 57500
+            protocol grpc tls-hostname collector.nms.lab
+           !
+          !
+          sensor-group IF-COUNTERS
+           no sensor-path Cisco-IOS-XR-infra-statsd-oper:infra-statistics/interfaces/interface/latest/generic-counters
+           sensor-path openconfig-interfaces:interfaces/interface/state/counters
+          !
+         !
+        commit
+        end
+
+  - id: m13t5
+    title: { en: "M13-5  Flow records with IPFIX", ja: "M13-5  IPFIX でフローを送る" }
+    check: m13t5
+    read: [e4-m13-flow-snmp#s2-1, e4-m13-flow-snmp#s2-2, e4-m13-flow-snmp#s2-3, e4-m13-flow-snmp#s3-1, e4-m13-flow-snmp#s3-4]
+    hints:
+      - en: "Flexible NetFlow on IOS XE is built from parts that refer to each other by name: what a record holds, where the records go, and the cache that ties the two together. The cache is then attached to an interface and a direction. IPFIX is chosen on the export side, and it has a standard UDP port."
+        ja: "IOS XE の Flexible NetFlow は、名前で互いを参照する部品でできています。レコードに何を入れるか、レコードをどこへ送るか、その 2 つを結ぶキャッシュです。キャッシュはそのあとインタフェースと向きに付けます。IPFIX は送る側で選び、決まった UDP のポートがあります。"
+      - en: "`show flow record`, `show flow exporter`, `show flow exporter <name> templates`, `show flow monitor <name> cache format table`, `show flow interface GigabitEthernet2`, `show flow exporter <name> statistics`. On SRV01: `nfdump -R /var/cache/nfdump/lab -o extended`. Guide: NetFlow Configuration Guide, Cisco IOS XE 17.x, 'Flexible NetFlow' (flow records, exporters, monitors)."
+        ja: "`show flow record`・`show flow exporter`・`show flow exporter <名前> templates`・`show flow monitor <名前> cache format table`・`show flow interface GigabitEthernet2`・`show flow exporter <名前> statistics`。SRV01 で `nfdump -R /var/cache/nfdump/lab -o extended`。ガイド: NetFlow Configuration Guide(Cisco IOS XE 17.x)の「Flexible NetFlow」(レコード・エクスポータ・モニタ)。"
+      - en: "`flow record` with `match ipv4 source address`, `match ipv4 destination address`, `match ipv4 protocol`, `match transport source-port`, `match transport destination-port`, `match interface input`, `collect counter bytes long`, `collect counter packets long`. `flow exporter` with `destination 10.0.50.10`, `source Loopback0`, `transport udp 4739`, `export-protocol ipfix`. `flow monitor` with the record, the exporter and `cache timeout active 60`. `ip flow monitor <name> input` on GigabitEthernet2."
+        ja: "`flow record` に `match ipv4 source address`・`match ipv4 destination address`・`match ipv4 protocol`・`match transport source-port`・`match transport destination-port`・`match interface input`・`collect counter bytes long`・`collect counter packets long`。`flow exporter` に `destination 10.0.50.10`・`source Loopback0`・`transport udp 4739`・`export-protocol ipfix`。`flow monitor` にレコードとエクスポータと `cache timeout active 60`。GigabitEthernet2 に `ip flow monitor <名前> input`。"
+    verify:
+      en: |
+        **1. Is it in?** (PE2)
+
+        - `show flow interface GigabitEthernet2`: the monitor and `direction: Input`.
+        - `show flow exporter <name> templates`: the fields the collector will receive, one row each.
+        - `show flow monitor <name>`: the record, the exporter and the active timeout.
+
+        **2. Send traffic and count it** (CE1, then PE2)
+
+        - On CE1: `ping 10.255.0.1 source Loopback100 repeat 50 size 700`.
+        - Right after, on PE2: `show flow monitor <name> cache format table` shows one entry from 192.168.100.1 to 10.255.0.1
+          with 50 packets. After about 15 seconds without traffic it leaves the cache, and `show flow exporter <name> statistics`
+          counts what was sent.
+
+        **3. Look where it arrives** (SRV01)
+
+        - The collector writes a file every minute, so wait one to two minutes, then
+          `nfdump -R /var/cache/nfdump/lab -o extended 'src ip 192.168.100.1'`. The 50 pings should appear as one flow with
+          50 packets and 700 bytes per packet.
+
+        Example (SRV01, 37 pings of 748 bytes):
+
+        ```
+        Date first seen             Duration     Proto      Src IP Addr:Port          Dst IP Addr:Port     Flags Tos  Packets    Bytes      pps      bps    Bpp Flows
+        2026-11-10 14:27:08.500     00:00:00.049 ICMP     192.168.100.1:0     ->       10.255.0.1:8.0   ........   0       37    27676      755    4.5 M    748     1
+        ```
+
+        **4. Did anything else break?** (CE1)
+
+        - All pings succeed: the monitor only looks at the traffic.
+      ja: |
+        **1. 入ったか**(PE2)
+
+        - `show flow interface GigabitEthernet2` にモニタと `direction: Input`。
+        - `show flow exporter <名前> templates` に、収集役が受け取る項目が 1 行ずつ。
+        - `show flow monitor <名前>` に、レコード・エクスポータ・active の時間。
+
+        **2. 流して数える**(CE1、次に PE2)
+
+        - CE1 で `ping 10.255.0.1 source Loopback100 repeat 50 size 700`。
+        - 直後に PE2 で `show flow monitor <名前> cache format table`。192.168.100.1 から 10.255.0.1 への 1 件が 50 パケットで出ます。
+          流れが止まって 15 秒ほどでキャッシュから出ていき、`show flow exporter <名前> statistics` が送った数を数えます。
+
+        **3. 届いた先を見る**(SRV01)
+
+        - 収集役は 1 分ごとにファイルを書くので、1〜2 分待ってから
+          `nfdump -R /var/cache/nfdump/lab -o extended 'src ip 192.168.100.1'`。50 発の ping が、50 パケット・
+          1 パケット 700 バイトの 1 つのフローとして出ること。
+
+        結果の例(SRV01・748 バイトの ping 37 発):
+
+        ```
+        Date first seen             Duration     Proto      Src IP Addr:Port          Dst IP Addr:Port     Flags Tos  Packets    Bytes      pps      bps    Bpp Flows
+        2026-11-10 14:27:08.500     00:00:00.049 ICMP     192.168.100.1:0     ->       10.255.0.1:8.0   ........   0       37    27676      755    4.5 M    748     1
+        ```
+
+        **4. 壊していないか**(CE1)
+
+        - ping がすべて通ること(モニタは通信を見るだけです)。
+    solution:
+      en: |
+        On PE2:
+        configure terminal
+         flow record FR-CUST
+          match ipv4 source address
+          match ipv4 destination address
+          match ipv4 protocol
+          match transport source-port
+          match transport destination-port
+          match interface input
+          collect counter bytes long
+          collect counter packets long
+          collect timestamp absolute first
+          collect timestamp absolute last
+         flow exporter FE-NMS
+          destination 10.0.50.10
+          source Loopback0
+          transport udp 4739
+          export-protocol ipfix
+         flow monitor FM-CUST
+          exporter FE-NMS
+          record FR-CUST
+          cache timeout active 60
+         interface GigabitEthernet2
+          ip flow monitor FM-CUST input
+        end
+      ja: |
+        On PE2:
+        configure terminal
+         flow record FR-CUST
+          match ipv4 source address
+          match ipv4 destination address
+          match ipv4 protocol
+          match transport source-port
+          match transport destination-port
+          match interface input
+          collect counter bytes long
+          collect counter packets long
+          collect timestamp absolute first
+          collect timestamp absolute last
+         flow exporter FE-NMS
+          destination 10.0.50.10
+          source Loopback0
+          transport udp 4739
+          export-protocol ipfix
+         flow monitor FM-CUST
+          exporter FE-NMS
+          record FR-CUST
+          cache timeout active 60
+         interface GigabitEthernet2
+          ip flow monitor FM-CUST input
+        end
+
+  - id: m13t6
+    title: { en: "M13-6  The silent SNMP", ja: "M13-6  答えない SNMP" }
+    check: m13t6
+    read: [e4-m13-flow-snmp#s2-6, e4-m13-flow-snmp#s2-7, e4-m13-flow-snmp#s2-8, e4-m13-flow-snmp#s3-3, e4-m13-flow-snmp#s3-4]
+    hints:
+      - en: "Two separate problems. Polling: XR01 answers SNMPv2c only to the sources that the community's access list permits. Traps: for SNMPv3, the trap kinds and the host line are not the whole story; the user's group decides what may be sent to that user."
+        ja: "別々の問題が 2 つあります。読み取り: XR01 は、コミュニティのアクセス リストが許す送信元にだけ SNMPv2c で答えます。トラップ: SNMPv3 では、通知の種類と host の行だけでは決まりません。ユーザのグループが、そのユーザに何を送ってよいかを決めます。"
+      - en: "On XR01: `show snmp` (`Unknown community name`, `Trap PDUs`), `show access-lists ipv4 NMS-ONLY`, `show running-config snmp-server`, `show snmp host`, `show snmp group`. On SRV01: `snmpget -v2c -c NMS-RO 10.0.50.1 1.3.6.1.2.1.1.5.0`, and `tail -f /var/log/snmptrapd-lab.log` while you shut and unshut XR01's GigabitEthernet0/0/0/2. Guide: System Management Configuration Guide (NCS 5500 / Cisco 8000), 'Implementing SNMP' (SNMPv3 groups and views). Read the note in section 2.8 of the reading page as well."
+        ja: "XR01 で `show snmp`(`Unknown community name`・`Trap PDUs`)・`show access-lists ipv4 NMS-ONLY`・`show running-config snmp-server`・`show snmp host`・`show snmp group`。SRV01 で `snmpget -v2c -c NMS-RO 10.0.50.1 1.3.6.1.2.1.1.5.0`、XR01 の GigabitEthernet0/0/0/2 を shutdown・no shutdown しながら `tail -f /var/log/snmptrapd-lab.log`。ガイド: System Management Configuration Guide(NCS 5500・Cisco 8000)の「Implementing SNMP」(SNMPv3 のグループとビュー)。読み物の 2.8 節の注記も読んでください。"
+      - en: "Make `NMS-ONLY` permit `host 10.0.50.10`. Give group `NMS-V3` a notify view: `snmp-server group NMS-V3 v3 priv read NMS-VIEW notify NMS-VIEW`."
+        ja: "`NMS-ONLY` が `host 10.0.50.10` を許すようにします。グループ `NMS-V3` に通知のビューを持たせます: `snmp-server group NMS-V3 v3 priv read NMS-VIEW notify NMS-VIEW`。"
+    verify:
+      en: |
+        **1. Is it in?** (XR01)
+
+        - `show access-lists ipv4 NMS-ONLY`: who may poll, with a match count per line.
+        - `show running-config snmp-server traps`: which kinds of notification are turned on.
+        - `show snmp group`: the views (read, write, notify) of the group that nms-trap belongs to.
+        - `show snmp host`: the user and the security level XR01 sends traps with. Compare it with
+          `show running-config snmp-server host`; the two should say the same.
+
+        **2. Poll and make an event** (SRV01, then XR01)
+
+        - `snmpget -v2c -c NMS-RO 10.0.50.1 1.3.6.1.2.1.1.5.0` returns `STRING: "XR01"`, and the match count of the access list grows.
+        - In a second session on SRV01, `tail -f /var/log/snmptrapd-lab.log`. On XR01, shut GigabitEthernet0/0/0/2
+          (the backup link to CE1; customer traffic uses the primary), commit, then unshut it and commit.
+
+        **3. Look where it arrives** (SRV01, XR01)
+
+        - Two traps: `.1.3.6.1.6.3.1.1.5.3` (linkDown) and `.1.3.6.1.6.3.1.1.5.4` (linkUp), both naming GigabitEthernet0/0/0/2.
+          The receiver logs only authPriv traps from nms-trap.
+        - `show snmp | include Trap PDUs` on XR01 grows by two.
+
+        Example (SRV01; each trap is one long line, cut here):
+
+        ```
+        2026-11-10 14:43:21 <UNKNOWN> [UDP: [10.0.50.1]:161->[10.0.50.10]:162]:
+        .1.3.6.1.2.1.1.3.0 = Timeticks: (283007) 0:47:10.07	.1.3.6.1.6.3.1.1.4.1.0 = OID: .1.3.6.1.6.3.1.1.5.3	… = STRING: "GigabitEthernet0/0/0/2" … = STRING: "down"
+        2026-11-10 14:43:26 <UNKNOWN> [UDP: [10.0.50.1]:161->[10.0.50.10]:162]:
+        .1.3.6.1.2.1.1.3.0 = Timeticks: (283503) 0:47:15.03	.1.3.6.1.6.3.1.1.4.1.0 = OID: .1.3.6.1.6.3.1.1.5.4	… = STRING: "GigabitEthernet0/0/0/2" … = STRING: "up"
+        ```
+
+        **4. Did anything else break?** (SRV01, CE1)
+
+        - SNMPv3 polling with the same user still works:
+          `snmpget -v3 -l authPriv -u nms-trap -a SHA -A Trap-Auth-15 -x AES -X Trap-Priv-15 10.0.50.1 1.3.6.1.2.1.1.5.0`.
+        - CE1 still reaches XR01: `ping 10.255.0.1 source Loopback100`.
+      ja: |
+        **1. 入ったか**(XR01)
+
+        - `show access-lists ipv4 NMS-ONLY` で、読み取りを許す相手と、行ごとの一致の数。
+        - `show running-config snmp-server traps` で、有効にしてある通知の種類。
+        - `show snmp group` で、nms-trap の属するグループのビュー(読み取り・書き込み・通知)。
+        - `show snmp host` で、XR01 がトラップを送るユーザとセキュリティの段階。`show running-config snmp-server host` と比べ、
+          2 つが同じであること。
+
+        **2. 読み取りと、出来事を起こす**(SRV01、次に XR01)
+
+        - `snmpget -v2c -c NMS-RO 10.0.50.1 1.3.6.1.2.1.1.5.0` が `STRING: "XR01"` を返し、アクセス リストの一致の数が増えること。
+        - SRV01 のもう 1 つのセッションで `tail -f /var/log/snmptrapd-lab.log`。XR01 で GigabitEthernet0/0/0/2(CE1 への予備の線。
+          お客さまの通信は主の線を使います)を shutdown してコミット、no shutdown してコミット。
+
+        **3. 届いた先を見る**(SRV01・XR01)
+
+        - トラップが 2 つ。`.1.3.6.1.6.3.1.1.5.3`(linkDown)と `.1.3.6.1.6.3.1.1.5.4`(linkUp)で、どちらも GigabitEthernet0/0/0/2 の名前を含むこと。
+          受け手は nms-trap の authPriv のトラップだけを記録します。
+        - XR01 の `show snmp | include Trap PDUs` が 2 増えること。
+
+        結果の例(SRV01。トラップ 1 つが長い 1 行なので途中を省いた):
+
+        ```
+        2026-11-10 14:43:21 <UNKNOWN> [UDP: [10.0.50.1]:161->[10.0.50.10]:162]:
+        .1.3.6.1.2.1.1.3.0 = Timeticks: (283007) 0:47:10.07	.1.3.6.1.6.3.1.1.4.1.0 = OID: .1.3.6.1.6.3.1.1.5.3	… = STRING: "GigabitEthernet0/0/0/2" … = STRING: "down"
+        2026-11-10 14:43:26 <UNKNOWN> [UDP: [10.0.50.1]:161->[10.0.50.10]:162]:
+        .1.3.6.1.2.1.1.3.0 = Timeticks: (283503) 0:47:15.03	.1.3.6.1.6.3.1.1.4.1.0 = OID: .1.3.6.1.6.3.1.1.5.4	… = STRING: "GigabitEthernet0/0/0/2" … = STRING: "up"
+        ```
+
+        **4. 壊していないか**(SRV01・CE1)
+
+        - 同じユーザの SNMPv3 の読み取りが通ること:
+          `snmpget -v3 -l authPriv -u nms-trap -a SHA -A Trap-Auth-15 -x AES -X Trap-Priv-15 10.0.50.1 1.3.6.1.2.1.1.5.0`。
+        - CE1 から XR01 へ届くこと: `ping 10.255.0.1 source Loopback100`。
+    solution:
+      en: |
+        On XR01:
+        configure
+         ipv4 access-list NMS-ONLY
+          no 10
+          10 permit ipv4 host 10.0.50.10 any
+         !
+         snmp-server group NMS-V3 v3 priv read NMS-VIEW notify NMS-VIEW
+        commit
+        end
+      ja: |
+        On XR01:
+        configure
+         ipv4 access-list NMS-ONLY
+          no 10
+          10 permit ipv4 host 10.0.50.10 any
+         !
+         snmp-server group NMS-V3 v3 priv read NMS-VIEW notify NMS-VIEW
+        commit
+        end

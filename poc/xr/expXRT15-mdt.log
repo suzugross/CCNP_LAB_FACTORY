@@ -1,0 +1,111 @@
+######## 14:10:47 mdt-a: 白紙
+show telemetry model-driven subscription SUB-IF | include "State|TLS|Path"
+Tue Nov 10 14:10:48.976 UTC
+  State:       NA
+    Sensor Path:          Cisco-IOS-XR-infra-statsd-oper:infra-statistics/interfaces/interface/latest/generic-counters
+    Sensor Path State:    Not Resolved
+    State:                NA
+    TLS :                 telemetry.nms.lab
+RP/0/RP0/CPU0:XR01#
+== MDT RECENT 0
+== MDT IF GigabitEthernet0/0/0/0 PACKETS no
+######## 14:10:49 mdt-b: センサー パスだけ直す(OpenConfig の counters)
+configure
+Tue Nov 10 14:10:51.391 UTC
+RP/0/RP0/CPU0:XR01(config)#
+telemetry model-driven
+RP/0/RP0/CPU0:XR01(config-model-driven)#
+sensor-group IF-COUNTERS
+RP/0/RP0/CPU0:XR01(config-model-driven-snsr-grp)#
+no sensor-path Cisco-IOS-XR-infra-statsd-oper:infra-statistics/interfaces/interface/latest/generic-counters
+RP/0/RP0/CPU0:XR01(config-model-driven-snsr-grp)#
+sensor-path openconfig-interfaces:interfaces/interface/state/counters
+RP/0/RP0/CPU0:XR01(config-model-driven-snsr-grp)#
+commit
+Tue Nov 10 14:10:53.511 UTC
+RP/0/RP0/CPU0:XR01(config-model-driven-snsr-grp)#
+end
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven subscription SUB-IF | include "State|TLS|Path"
+Tue Nov 10 14:11:21.187 UTC
+  State:       NA
+    Sensor Path:          openconfig-interfaces:interfaces/interface/state/counters
+    Sensor Path State:    Resolved
+    State:                NA
+    TLS :                 telemetry.nms.lab
+RP/0/RP0/CPU0:XR01#
+== CMD 1 rc=0: sudo -n journalctl -u telegraf --no-pager -n 4 | tail -4
+Nov 10 13:56:46 SRV01 telegraf[3280]: 2026-11-10T13:56:46Z I! Loaded outputs: file
+Nov 10 13:56:46 SRV01 telegraf[3280]: 2026-11-10T13:56:46Z I! Tags enabled:
+Nov 10 13:56:46 SRV01 telegraf[3280]: 2026-11-10T13:56:46Z I! [agent] Config: Interval:10s, Quiet:false, Hostname:"", Flush Interval:5s
+Nov 10 13:56:46 SRV01 systemd[1]: Started telegraf.service - Telegraf.
+######## 14:11:21 mdt-c: CA を dialout.pem に置く(SRV01 の http から)
+== CMD 1 rc=0: cd ~/pki && (setsid nohup python3 -m http.server 8080 > /tmp/http.log 2>&1 < /dev/null &); sleep 1; ss -ltn | grep 8080
+LISTEN 0      5            0.0.0.0:8080       0.0.0.0:*          
+copy http://10.0.50.10:8080/ca.pem harddisk:/nms-ca.pem
+Tue Nov 10 14:11:24.459 UTC
+Destination filename [/harddisk:/nms-ca.pem]?
+!! timeout
+
+Accessing http://10.0.50.10:8080/ca.pem
+!
+Successfully copied 1164 Bytes
+
+
+Copy operation success
+RP/0/RP0/CPU0:XR01#
+run cp /harddisk:/nms-ca.pem /misc/config/grpc/dialout/dialout.pem
+Tue Nov 10 14:13:26.022 UTC
+
+RP/0/RP0/CPU0:XR01#
+run ls -la /misc/config/grpc/dialout/
+Tue Nov 10 14:13:26.527 UTC
+total 12
+drwx------ 2 root iosxr 4096 Nov 10 14:13 .
+drwxr-xr-x 5 root iosxr 4096 Nov 10 13:56 ..
+-rw-rw-rw- 1 root root  1164 Nov 10 14:13 dialout.pem
+
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven subscription SUB-IF | include "State|TLS|Path"
+Tue Nov 10 14:13:58.371 UTC
+  State:       NA
+    Sensor Path:          openconfig-interfaces:interfaces/interface/state/counters
+    Sensor Path State:    Resolved
+    State:                NA
+    TLS :                 telemetry.nms.lab
+RP/0/RP0/CPU0:XR01#
+== CMD 1 rc=0: sudo -n journalctl -u telegraf --no-pager -n 4 | tail -4
+Nov 10 13:56:46 SRV01 telegraf[3280]: 2026-11-10T13:56:46Z I! Loaded outputs: file
+Nov 10 13:56:46 SRV01 telegraf[3280]: 2026-11-10T13:56:46Z I! Tags enabled:
+Nov 10 13:56:46 SRV01 telegraf[3280]: 2026-11-10T13:56:46Z I! [agent] Config: Interval:10s, Quiet:false, Hostname:"", Flush Interval:5s
+Nov 10 13:56:46 SRV01 systemd[1]: Started telegraf.service - Telegraf.
+######## 14:13:59 mdt-d: tls-hostname を collector.nms.lab に
+configure
+Tue Nov 10 14:14:00.650 UTC
+RP/0/RP0/CPU0:XR01(config)#
+telemetry model-driven
+RP/0/RP0/CPU0:XR01(config-model-driven)#
+destination-group NMS
+RP/0/RP0/CPU0:XR01(config-model-driven-dest)#
+address-family ipv4 10.0.50.10 port 57500
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+protocol grpc tls-hostname collector.nms.lab
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+commit
+Tue Nov 10 14:14:02.800 UTC
+RP/0/RP0/CPU0:XR01(config-model-driven-dest-addr)#
+end
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven subscription SUB-IF | include "State|TLS|Path"
+Tue Nov 10 14:14:35.140 UTC
+  State:       ACTIVE
+    Sensor Path:          openconfig-interfaces:interfaces/interface/state/counters
+    Sensor Path State:    Resolved
+    State:                Active
+    TLS :                 collector.nms.lab
+    Sensor Path:          openconfig-interfaces:interfaces/interface/state{counters}
+    Sensor Path:          openconfig-interfaces:interfaces/interface/state{counters}
+RP/0/RP0/CPU0:XR01#
+== MDT RECENT 33
+   openconfig-interfaces:interfaces/interface/state: 33
+== MDT IF GigabitEthernet0/0/0/0 PACKETS yes

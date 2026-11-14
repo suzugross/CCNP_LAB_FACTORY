@@ -1,0 +1,112 @@
+######## 13:38:10 sn2: MPP の有無・LPTS
+show running-config control-plane
+Tue Nov 10 13:38:11.790 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:XR01#
+show lpts bindings brief | include "snmp|SNMP|161"
+Tue Nov 10 13:38:12.194 UTC
+ 0/RP0/CPU0 IPV6_IO    LR IPV6 ICMP6  *         any          any,T161 any
+ 0/RP0/CPU0 UDP        LR IPV4 UDP    default   any          any,161 any
+ 0/RP0/CPU0 UDP        LR IPV6 UDP    default   any          any,161 any
+ 0/RP0/CPU0 UDP        LR IPV6 UDP    MGMT      any          any,161 any
+ 0/RP0/CPU0 UDP        LR IPV4 UDP    MGMT      any          any,161 any
+ 0/RP0/CPU0 UDP        LR IPV6 UDP    **iid     any          any,161 any
+ 0/RP0/CPU0 UDP        LR IPV4 UDP    **iid     any          any,161 any
+RP/0/RP0/CPU0:XR01#
+######## 13:38:12 sn2: ACL から 10.0.50.10 を外すと v2c は? v3 は?
+configure
+Tue Nov 10 13:38:13.706 UTC
+RP/0/RP0/CPU0:XR01(config)#
+ipv4 access-list ACL-NMS
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+no 10
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+commit
+Tue Nov 10 13:38:15.027 UTC
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+end
+RP/0/RP0/CPU0:XR01#
+$ timeout 15 snmpget -v2c -c PocRO -t 2 -r 1 10.0.50.1 1.3.6.1.2.1.1.5.0
+[stderr] Timeout: No Response from 10.0.50.1.
+[rc=1]
+$ snmpget -v3 -l authPriv -u USR-V3 -a SHA -A PocAuth123 -x AES -X PocPriv123 10.0.50.1 1.3.6.1.2.1.1.5.0
+iso.3.6.1.2.1.1.5.0 = STRING: "XR01"
+[rc=0]
+show snmp | include "Unknown community|Illegal|packets input$ community|Illegal|packets input"                          show snmp | include "Unknown community|Illegal|packets inpu$
+Tue Nov 10 13:38:21.962 UTC
+15 SNMP packets input
+    2 Unknown community name
+    0 Illegal operation for community name supplied
+RP/0/RP0/CPU0:XR01#
+configure
+Tue Nov 10 13:38:22.363 UTC
+RP/0/RP0/CPU0:XR01(config)#
+ipv4 access-list ACL-NMS
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+10 permit ipv4 host 10.0.50.10 any
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+commit
+Tue Nov 10 13:38:23.675 UTC
+RP/0/RP0/CPU0:XR01(config-ipv4-acl)#
+end
+RP/0/RP0/CPU0:XR01#
+######## 13:38:25 sn2: v3 のトラップ(snmptrapd に送り手の engineID 付きでユーザを作る)
+engineID=000000090300525400f55425
+$ cat > /tmp/snmptrapd.conf <<EOF
+createUser -e 0x000000090300525400f55425 USR-V3 SHA PocAuth123 AES PocPriv123
+authUser log USR-V3 priv
+EOF
+[rc=0]
+$ sudo pkill -x snmptrapd; sleep 1; sudo snmptrapd -C -c /tmp/snmptrapd.conf -Lf /tmp/traps.log -p /tmp/snmptrapd.pid udp:162; sleep 1; pgrep -a snmptrapd
+[rc=1]
+configure
+Tue Nov 10 13:38:29.918 UTC
+RP/0/RP0/CPU0:XR01(config)#
+interface Loopback9
+RP/0/RP0/CPU0:XR01(config-if)#
+ipv4 address 10.255.9.1 255.255.255.255
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Tue Nov 10 13:38:31.237 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+shutdown
+RP/0/RP0/CPU0:XR01(config-if)#
+commit
+Tue Nov 10 13:38:32.570 UTC
+RP/0/RP0/CPU0:XR01(config-if)#
+end
+RP/0/RP0/CPU0:XR01#
+$ sudo cat /tmp/traps.log | tail -20
+Cannot adopt OID in NET-SNMP-AGENT-MIB: nsLogLevel ::= { nsLoggingEntry 1 }
+Cannot adopt OID in NET-SNMP-EXTEND-MIB: nsExtendResult ::= { nsExtendOutput1Entry 4 }
+Cannot adopt OID in NET-SNMP-EXTEND-MIB: nsExtendOutNumLines ::= { nsExtendOutput1Entry 3 }
+Cannot adopt OID in NET-SNMP-EXTEND-MIB: nsExtendOutputFull ::= { nsExtendOutput1Entry 2 }
+Cannot adopt OID in NET-SNMP-EXTEND-MIB: nsExtendOutput1Line ::= { nsExtendOutput1Entry 1 }
+Cannot adopt OID in NET-SNMP-EXTEND-MIB: nsExtendOutLine ::= { nsExtendOutput2Entry 2 }
+Cannot adopt OID in NET-SNMP-EXTEND-MIB: nsExtendLineIndex ::= { nsExtendOutput2Entry 1 }
+Cannot adopt OID in NET-SNMP-AGENT-MIB: nsNotifyStart ::= { netSnmpNotifications 1 }
+Cannot adopt OID in NET-SNMP-AGENT-MIB: nsNotifyShutdown ::= { netSnmpNotifications 2 }
+Cannot adopt OID in NET-SNMP-AGENT-MIB: nsNotifyRestart ::= { netSnmpNotifications 3 }
+Cannot adopt OID in UCD-SNMP-MIB: laErrMessage ::= { laEntry 101 }
+Cannot adopt OID in UCD-SNMP-MIB: laErrorFlag ::= { laEntry 100 }
+Cannot adopt OID in UCD-SNMP-MIB: laLoadFloat ::= { laEntry 6 }
+Cannot adopt OID in UCD-SNMP-MIB: laLoadInt ::= { laEntry 5 }
+Cannot adopt OID in UCD-SNMP-MIB: laConfig ::= { laEntry 4 }
+Cannot adopt OID in UCD-SNMP-MIB: laLoad ::= { laEntry 3 }
+Cannot adopt OID in UCD-SNMP-MIB: laNames ::= { laEntry 2 }
+Cannot adopt OID in UCD-SNMP-MIB: laIndex ::= { laEntry 1 }
+NET-SNMP version 5.9.4.pre2 AgentX subagent connected
+couldn't open udp:162 -- errno 98 ("Address already in use")
+[rc=0]
+show snmp | include "Trap|sent|dropped"
+Tue Nov 10 13:38:43.237 UTC
+    0 Trap PDUs
+    Trap Host Statistics
+    Number of pkts in Trap Queue: 0
+    Maximum length of Trap Queue: 100
+             Number of pkts sent: 0
+          Number of pkts dropped: 0
+       Number of Informs sent: 0
+    Number of Informs dropped: 0 
+RP/0/RP0/CPU0:XR01#

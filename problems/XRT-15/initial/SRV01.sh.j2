@@ -1,0 +1,242 @@
+#!/bin/bash
+# XRT-15 SRV01 — NMS(Ubuntu 24.04)。BL-246 M13。学ぶ側はここに入って機器を扱う(XR01・PE2 の設定は機器の CLI でもよい)。
+#   ens3 = 10.0.50.10/24(SW1= NMS の区画。XR01 10.0.50.1・PE2 10.0.50.2 と同じ L2)
+#   据付の受け手:
+#     telegraf      … gRPC のダイヤルアウトを TLS で 57500/tcp に受ける(cisco_telemetry_mdt)→ /var/log/telegraf/mdt.json
+#     nfcapd-lab    … IPFIX/NetFlow を 4739/udp に受ける → /var/cache/nfdump/lab(60 秒ごとに 1 ファイル)
+#     snmptrapd-lab … SNMPv3 のトラップを 162/udp に受ける(nms-trap・authPriv だけ・XR01 の engineID を登録)→ /var/log/snmptrapd-lab.log
+#   道具: gnmic・nfdump・snmpget/snmpwalk・python3(ncclient・requests)・openssl・curl・jq・tcpdump
+#   ~/pki: NMS の CA(ca.pem)と gNMI のクライアント証明書(client.pem・client.key)。CA の鍵は /root/pki(学ぶ側には渡さない)
+#   ~/m13: nc_edit.py(NETCONF の雛形= M13-1)・rc_customer_lo.py(NMS チームの RESTCONF のスクリプト= M13-2)
+#   やり直し: /usr/local/sbin/lab-reset(構築直後の控え= /var/lib/lab-pristine。problem.yml の linux_reset_exec が呼ぶ)
+# ★PoC で分かったこと(design §30.4): snmptrapd.socket が 162 を握る→ 止めて自前の unit で起動。nfcapd は止めた直後に起動すると Address already in use。
+set -e
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[$(date -Is)] $*"; }
+U={{ ansible_user }}
+H=/home/$U
+
+log "NMS の区画の NIC と経路"
+cat > /etc/netplan/61-ccnp-inband.yaml <<'EOF'
+network:
+  version: 2
+  ethernets:
+    ens3:
+      addresses: [10.0.50.10/24]
+      routes:
+        - to: 10.255.0.1/32
+          via: 10.0.50.1
+        - to: 10.255.0.2/32
+          via: 10.0.50.2
+        - to: 10.0.12.0/24
+          via: 10.0.50.2
+        - to: 192.168.100.0/24
+          via: 10.0.50.2
+EOF
+chmod 600 /etc/netplan/61-ccnp-inband.yaml
+netplan apply
+
+log "パッケージ"
+for i in 1 2 3; do
+  apt-get update -qq && apt-get install -y -qq nfdump snmp snmptrapd python3-ncclient python3-lxml python3-requests openssl tcpdump jq curl rsync && break
+  sleep 10
+done
+systemctl disable --now snmptrapd.socket snmptrapd nfdump 2>/dev/null || true
+
+log "gnmic 0.49.1"
+cd /tmp
+for i in 1 2 3; do curl -fsSL -o gnmic.deb https://github.com/openconfig/gnmic/releases/download/v0.49.1/gnmic_0.49.1_Linux_x86_64.deb && break; sleep 5; done
+dpkg -i gnmic.deb
+
+log "telegraf 1.32.3"
+for i in 1 2 3; do curl -fsSL -o telegraf.deb https://dl.influxdata.com/telegraf/releases/telegraf_1.32.3-1_amd64.deb && break; sleep 5; done
+dpkg -i telegraf.deb
+
+log "PKI(NMS の CA・telegraf のサーバ証明書・gNMI のクライアント証明書)"
+install -d -m 700 /root/pki
+cd /root/pki
+openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.pem -days 3650 -subj "/O=NMS Lab/CN=NMS-LAB-CA" 2>/dev/null
+openssl req -newkey rsa:2048 -nodes -keyout collector.key -out collector.csr -subj "/O=NMS Lab/CN=collector.nms.lab" 2>/dev/null
+printf "subjectAltName=DNS:collector.nms.lab,IP:10.0.50.10\nextendedKeyUsage=serverAuth\n" > collector.ext
+openssl x509 -req -in collector.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out collector.pem -days 3650 -extfile collector.ext 2>/dev/null
+openssl req -newkey rsa:2048 -nodes -keyout client.key -out client.csr -subj "/O=NMS Lab/CN=nms-gnmi" 2>/dev/null
+printf "extendedKeyUsage=clientAuth\n" > client.ext
+openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out client.pem -days 3650 -extfile client.ext 2>/dev/null
+install -d -m 755 -o "$U" -g "$U" "$H/pki"
+install -m 644 -o "$U" -g "$U" ca.pem client.pem "$H/pki/"
+install -m 600 -o "$U" -g "$U" client.key "$H/pki/"
+install -d -m 750 -o root -g telegraf /etc/telegraf/pki
+install -m 644 -o root -g telegraf collector.pem /etc/telegraf/pki/
+install -m 640 -o root -g telegraf collector.key /etc/telegraf/pki/
+
+log "telegraf= gRPC のダイヤルアウトを TLS で受ける"
+cat > /etc/telegraf/telegraf.conf <<'EOF'
+# XRT-15 NMS: Cisco model-driven telemetry, gRPC dial-out over TLS (server certificate = collector.nms.lab, issued by NMS-LAB-CA)
+[agent]
+  interval = "10s"
+  flush_interval = "5s"
+  omit_hostname = true
+[[inputs.cisco_telemetry_mdt]]
+  transport = "grpc"
+  service_address = ":57500"
+  tls_cert = "/etc/telegraf/pki/collector.pem"
+  tls_key = "/etc/telegraf/pki/collector.key"
+[[outputs.file]]
+  files = ["/var/log/telegraf/mdt.json"]
+  data_format = "json"
+  rotation_max_size = "20MB"
+  rotation_max_archives = 2
+EOF
+install -d -m 755 -o telegraf -g telegraf /var/log/telegraf
+systemctl enable telegraf
+systemctl restart telegraf
+
+log "nfcapd-lab= IPFIX/NetFlow を 4739/udp に受ける"
+install -d -m 755 /var/cache/nfdump/lab
+cat > /etc/systemd/system/nfcapd-lab.service <<'EOF'
+[Unit]
+Description=XRT-15 NMS flow collector (IPFIX/NetFlow on udp 4739)
+After=network-online.target
+[Service]
+ExecStart=/usr/bin/nfcapd -w /var/cache/nfdump/lab -p 4739 -t 60
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target
+EOF
+
+log "snmptrapd-lab= SNMPv3 のトラップ(nms-trap・authPriv だけ)"
+cat > /etc/snmp/snmptrapd-lab.conf <<'EOF'
+# XRT-15 NMS: SNMPv3 traps from XR01 (XR01's engineID is fixed to 00:00:00:09:03:00:00:00:0a:ff:00:01). authPriv only.
+createUser -e 0x00000009030000000aff0001 nms-trap SHA Trap-Auth-15 AES Trap-Priv-15
+authUser log nms-trap priv
+EOF
+cat > /etc/systemd/system/snmptrapd-lab.service <<'EOF'
+[Unit]
+Description=XRT-15 NMS SNMP trap receiver (v3 authPriv, user nms-trap)
+After=network-online.target
+[Service]
+ExecStart=/usr/sbin/snmptrapd -f -C -c /etc/snmp/snmptrapd-lab.conf -On -Lf /var/log/snmptrapd-lab.log udp:162
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target
+EOF
+touch /var/log/snmptrapd-lab.log; chmod 644 /var/log/snmptrapd-lab.log
+systemctl daemon-reload
+pkill -x nfcapd || true; sleep 2
+systemctl enable --now nfcapd-lab snmptrapd-lab
+
+log "M13 の雛形とスクリプト(~/m13)"
+install -d -m 755 -o "$U" -g "$U" "$H/m13"
+cat > "$H/m13/nc_edit.py" <<'EOF'
+#!/usr/bin/env python3
+"""M13-1 skeleton: read and change XR01's configuration over NETCONF (ncclient).
+Fill in every __FILL__, then run:  python3 nc_edit.py get   /   python3 nc_edit.py edit
+The YANG model and the XML for CONFIG are yours to find (the device lists its models in the NETCONF hello)."""
+import sys
+
+from ncclient import manager
+
+HOST = "__FILL__"          # where XR01 listens for NETCONF
+PORT = 0                   # __FILL__ the NETCONF port
+USER = "__FILL__"
+PASS = "__FILL__"
+
+# get: a subtree filter that selects what you want to read (for example the Loopback interfaces)
+FILTER = """
+__FILL__
+"""
+
+# edit: the configuration to merge, inside <config>
+CONFIG = """<config>
+__FILL__
+</config>"""
+
+with manager.connect(host=HOST, port=PORT, username=USER, password=PASS, hostkey_verify=False,
+                     look_for_keys=False, allow_agent=False, device_params={"name": "iosxr"}, timeout=60) as m:
+    if sys.argv[1:] == ["get"]:
+        print(m.get_config(source="running", filter=("subtree", FILTER)).xml)
+    elif sys.argv[1:] == ["edit"]:
+        print(m.edit_config(target="__FILL__", config=CONFIG).xml)   # which datastore does XR edit?
+        print(m.__FILL__().xml)                                      # and what makes it take effect?
+    else:
+        sys.exit("usage: nc_edit.py get|edit")
+EOF
+cat > "$H/m13/rc_customer_lo.py" <<'EOF'
+#!/usr/bin/env python3
+"""NMS team: adds the customer A service loopback on PE2 through RESTCONF.
+This script is the NMS team's and must stay as it is: make PE2 ready for it, then run it once.
+usage: python3 rc_customer_lo.py"""
+import sys
+
+import requests
+import urllib3
+
+urllib3.disable_warnings()
+PE2 = "https://10.0.50.2"
+AUTH = ("nms-api", "Api-Pass-15")
+HEADERS = {"Accept": "application/yang-data+json", "Content-Type": "application/yang-data+json"}
+BODY = {
+    "Cisco-IOS-XE-native:interface": {
+        "Loopback": [{
+            "name": 200,
+            "description": "CUSTOMER-A-SERVICE",
+            "ip": {"address": {"primary": {"address": "10.255.200.2", "mask": "255.255.255.255"}}},
+        }]
+    }
+}
+
+try:
+    r = requests.get(f"{PE2}/restconf/data/Cisco-IOS-XE-native:native/hostname",
+                     auth=AUTH, headers=HEADERS, verify=False, timeout=20)
+except requests.exceptions.RequestException as e:
+    sys.exit(f"cannot reach PE2: {e}")
+print("GET hostname ->", r.status_code, r.text.strip()[:200])
+if r.status_code != 200:
+    sys.exit("stopped: PE2 did not answer the RESTCONF GET")
+
+r = requests.patch(f"{PE2}/restconf/data/Cisco-IOS-XE-native:native/interface",
+                   auth=AUTH, headers=HEADERS, json=BODY, verify=False, timeout=30)
+print("PATCH Loopback200 ->", r.status_code, r.text.strip()[:300])
+sys.exit(0 if r.status_code in (200, 204) else 1)
+EOF
+chown "$U:$U" "$H/m13/nc_edit.py" "$H/m13/rc_customer_lo.py"
+
+log "やり直し(scripts/lab.sh reset)の備え: 構築直後のホームと受け手の設定の控え・戻しのスクリプト"
+P=/var/lib/lab-pristine
+rm -rf "$P"; install -d -m 700 "$P"
+rsync -a "$H/" "$P/home/"
+cp -a /etc/telegraf/telegraf.conf /etc/snmp/snmptrapd-lab.conf "$P/"
+cat > /usr/local/sbin/lab-reset <<'EOF'
+#!/bin/bash
+# SRV01 を構築直後へ戻す(scripts/lab.sh reset → problem.yml の linux_reset_exec が sudo で呼ぶ・XRT-15)。
+#  1. 学ぶ側が起動したもの(gnmic・python3・http.server・ssh)を止める。受け手の 3 つは止めない
+#  2. ホームを構築直後の控えへ戻す(雛形 ~/m13・~/pki も。シェルの履歴は残す)。/tmp の学ぶ側のファイルを消す
+#  3. 受け手の設定を控えへ戻し、ログと nfcapd のファイルを空にして受け手を再起動する
+U={{ ansible_user }}; H=/home/$U; P=/var/lib/lab-pristine
+[ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
+[ -d "$P/home" ] || { echo "no pristine copy in $P"; exit 1; }
+pkill -u "$U" -x gnmic; pkill -u "$U" -f '^(/usr/bin/)?python3'; pkill -f 'http\.server'; pkill -u "$U" -x ssh
+sleep 1
+rsync -a --delete --exclude .bash_history --exclude .python_history "$P/home/" "$H/"
+find /tmp -mindepth 1 -maxdepth 1 -user "$U" -exec rm -rf {} +
+systemctl stop telegraf nfcapd-lab snmptrapd-lab
+cp -a "$P/telegraf.conf" /etc/telegraf/telegraf.conf
+cp -a "$P/snmptrapd-lab.conf" /etc/snmp/snmptrapd-lab.conf
+rm -f /var/log/telegraf/mdt.json
+: > /var/log/snmptrapd-lab.log
+find /var/cache/nfdump/lab -mindepth 1 -delete
+sleep 2
+systemctl start telegraf nfcapd-lab snmptrapd-lab
+sleep 2
+st=$(systemctl is-active telegraf nfcapd-lab snmptrapd-lab | tr '\n' ' ')
+sum() { (cd "$1" && find m13 pki -type f | sort | xargs sha1sum | sha1sum | cut -c1-12); }
+echo "receivers: $st"
+echo "home m13+pki: $(sum "$H") (pristine $(sum "$P/home"))"
+case "$st" in *inactive*|*failed*|*activating*) exit 1 ;; esac
+EOF
+chmod 755 /usr/local/sbin/lab-reset
+
+log "完了"
+gnmic version | head -1 || true
+telegraf --version || true
+systemctl is-active telegraf nfcapd-lab snmptrapd-lab || true

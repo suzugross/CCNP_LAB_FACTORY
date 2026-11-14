@@ -1,0 +1,58 @@
+# POC-CLABSOLO-01 採点基準(containerlab だけ・CML を使わない)。
+# 主役= JUN01(白紙から)。設定監査(display set)＋状態(JSON)＋効果(据え付けの JUN02 から観測・lo0 間の ping)。
+problem: POC-CLABSOLO-01
+total_points: 100
+
+checks:
+  - name: "JUN01: et-0/0/0.0 に 10.0.12.1/30・lo0.0 に 192.168.0.1/32"
+    node: JUN01
+    exec: junos
+    command: "show configuration | display set"
+    raw:
+      - regex: 'set interfaces et-0/0/0 unit 0 family inet address 10\.0\.12\.1/30'
+      - regex: 'set interfaces lo0 unit 0 family inet address 192\.168\.0\.1/32'
+    points: 20
+
+  - name: "JUN01: OSPF area 0 に et-0/0/0.0 と lo0.0(passive)"
+    node: JUN01
+    exec: junos
+    command: "show configuration | display set"
+    raw:
+      - regex: 'set protocols ospf area 0(\.0\.0\.0)? interface et-0/0/0\.0'
+      - regex: 'set protocols ospf area 0(\.0\.0\.0)? interface lo0\.0 passive'
+    points: 15
+
+  - name: "JUN01: JUN02(10.0.12.2)と Full 隣接 (JSON)"
+    node: JUN01
+    exec: junos
+    command: "show ospf neighbor | display json"
+    parser: json
+    find: ["ospf-neighbor-information", "*", "ospf-neighbor", "*"]
+    match:
+      neighbor-address.*.data: "10.0.12.2"
+      ospf-neighbor-state.*.data: "Full"
+    points: 20
+
+  - name: "JUN01: JUN02 の lo0(192.168.0.2/32)を OSPF で学習"
+    node: JUN01
+    exec: junos
+    command: "show route 192.168.0.2/32 exact"
+    raw:
+      - regex: '192\.168\.0\.2/32\s+\*\[OSPF/'
+    points: 15
+
+  - name: "JUN02: JUN01 の lo0(192.168.0.1/32)を OSPF で学習(据え付け側から観測)"
+    node: JUN02
+    exec: junos
+    command: "show route 192.168.0.1/32 exact"
+    raw:
+      - regex: '192\.168\.0\.1/32\s+\*\[OSPF/'
+    points: 15
+
+  - name: "JUN01→JUN02: lo0 間の ping"
+    node: JUN01
+    exec: junos
+    command: "ping 192.168.0.2 source 192.168.0.1 count 5 rapid"
+    raw:
+      - regex: '!!!!!|5 packets received'
+    points: 15

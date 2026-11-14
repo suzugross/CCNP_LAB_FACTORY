@@ -658,6 +658,17 @@ def _learn_view(app):
     return out
 
 
+def _learn_reset_nodes(app):
+    """やり直しで戻す機器の名前(確認の文に出す)= IOS XR の機器・xe_reset_nodes・linux_reset_exec(topologies/xr_reset.py と同じ決め方)。"""
+    try:
+        with open(os.path.join(app["repo"], "problems", app["learn"], "problem.yml"), encoding="utf-8") as fh:
+            pm = yaml.safe_load(fh) or {}
+    except OSError:
+        return []
+    fams, xe, lx = pm.get("node_image_families") or {}, pm.get("xe_reset_nodes") or [], pm.get("linux_reset_exec") or {}
+    return [n for n in pm.get("target_nodes") or [] if fams.get(n) == "iosxr" or n in xe or n in lx]
+
+
 _TASK_HEAD = re.compile(r"^### (?:Task|課題) ((?:M\d+|[A-Z])-\d+)\b.*$", re.M)
 _UNIT_HEAD = re.compile(r"^## (M(\d+)\b.*)$", re.M)
 _ANY_HEAD = re.compile(r"^## (.+)$", re.M)
@@ -827,7 +838,7 @@ async def h_learn(request):
         m = re.match(r"(m\d+)t", v["id"])
         v["unit"] = texts["task_unit"].get(v["id"]) or (m.group(1) if m else "")
     return web.json_response({"enabled": True, "steps": steps, "reading": reading,
-                              "rules": texts["rules"], "units": texts["units"]},
+                              "rules": texts["rules"], "units": texts["units"], "reset_nodes": _learn_reset_nodes(app)},
                              headers={"Cache-Control": "no-store"})
 
 
@@ -896,7 +907,7 @@ async def h_learn_check(request):
 
 
 async def h_learn_reset(request):
-    """やり直し(BL-254)。IOS XR の機器を構築直後のコミットへ戻し(playbooks/xr_reset.yml)、学習モードの記録を退避して初期化する。
+    """やり直し(BL-254)。IOS XR の機器を構築直後のコミットへ戻し(IOS XE の xe_reset_nodes・サーバの linux_reset_exec も。playbooks/xr_reset.yml)、学習モードの記録を退避して初期化する。
     戻せなかった時は記録に触らない(機器と表示が食い違わないように)。"""
     app = _view(request)
     if not app["learn"] or not _same_origin(request):
@@ -1016,6 +1027,10 @@ body.side #ws{ grid-template-rows:minmax(0,1fr); grid-template-columns:minmax(0,
 #split{ background:#cfd4db; cursor:row-resize; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
 body.side #split{ cursor:col-resize; border:0; border-left:1px solid var(--line); border-right:1px solid var(--line); }
 #split:hover, body.dragging #split{ background:var(--accent); }
+/* コンソールだけを広げる(BL-272): 左(課題・トポロジ・読み物)と境目を隠し、コンソールに画面の全体を渡す。もう一度押すと戻る */
+body.cfull #left, body.cfull #split{ display:none; }
+body.cfull #ws, body.side.cfull #ws{ grid-template-rows:minmax(0,1fr); grid-template-columns:minmax(0,1fr); }
+#foot button.on{ color:var(--ink); background:#dfe2e7; border-color:var(--accent); }
 #dragshield{ position:fixed; inset:0; z-index:50; cursor:row-resize; }   /* ドラッグ中、枠(iframe)に操作を取られない覆い */
 body.side #dragshield{ cursor:col-resize; }
 /* 画面下端の帯: 目次・問番号(問題ページのナビ帯と同じ役目)。コンソールや Task のタブから離して置く */
@@ -1188,6 +1203,8 @@ document.documentElement.style.setProperty('--z', String(wsZoom()));
   <span class="fz">Console text
     <button type="button" id="fminus" title="Smaller console text">A−</button><span id="fsize" title="Double-click: default size"></span><button type="button" id="fplus" title="Larger console text">A+</button>
   </span>
+  <button type="button" id="fitdev" title="Tell the device in the open console tab how big this console is, so that editors (vim, the XR route-policy editor) and pagers use all of it. It types terminal length and width (IOS XR, IOS) or stty rows and cols (Linux). Press it at the prompt, not inside an editor, and again after you resize.">Fit device to console</button>
+  <button type="button" id="cfull" title="Give the whole window to the console (hide tasks, topology and reading). Press again to bring them back.">Console only</button>
   <button type="button" id="lang" hidden title="Switch the task text between English and Japanese"></button>
   <button type="button" id="layout"></button></footer>
 <script src="vendor/xterm.js"></script>
@@ -1240,7 +1257,10 @@ async function loadTopo(){
     $('#topo').replaceChildren(p); $('#empty').textContent = t.error;
   } else {
     $('#topo').innerHTML = t.svg + '<p class="hint">Click a device to open its console. Click elsewhere on the diagram to enlarge it.</p>';
-    for (const n of t.nodes) if (n.console && !sessions[n.label]) addTab(n.label);
+    for (const n of t.nodes){
+      if (n.console && !sessions[n.label]) addTab(n.label);
+      if (sessions[n.label]) sessions[n.label].def = n.def;
+    }
     markCurrent();
   }
   if (t.notes){ if ($('#topo').hidden) notesPending = true; else addNotes(); }
@@ -1345,7 +1365,7 @@ function addTab(label){
   btn.append(dot, document.createTextNode(label));
   btn.addEventListener('click', () => openConsole(label));
   $('#ctabs').appendChild(btn);
-  sessions[label] = {label, btn, dot, el:null, term:null, fit:null, ws:null};
+  sessions[label] = {label, btn, dot, el:null, term:null, fit:null, ws:null, def:''};
 }
 function setState(s, st){ s.dot.className = 'dot ' + st; }
 // コンソールの字の大きさ。既定は 10px(2026-10-07 ユーザ指示)。画面下端の A− / A+ で変えた大きさは覚えておく
@@ -1507,6 +1527,37 @@ function connect(s){
   apply();
 })();
 
+// ---- 機器に端末の大きさを伝える(BL-272) ----
+// シリアル コンソールは端末の大きさを機器へ運ばない(Linux も IOS XR も 80 桁 × 24 行のまま)。vim・XR の route-policy の
+// エディタ・ページャはその大きさで描くため、画面の上の一部にしか描かない・大きさが食い違うと崩れる。押した時に、
+// いまの端末の行数・桁数を、機器の種類に合ったコマンドで打ち込む(勝手には打たない。プロンプトで押す約束)。
+function sizeCmds(def, cols, rows){
+  const d = (def || '').toLowerCase(), r = Math.min(rows, 512), c = Math.min(cols, 512);
+  if (/^(xrd|iosxr)/.test(d) || /^(iol|ioll2|iosv|csr1000v|cat8000v|cat9000v|cat-sdwan)/.test(d))
+    return [`terminal length ${r}`, `terminal width ${c}`];
+  if (/(ubuntu|alpine|debian|centos|rocky|fedora|kali|desktop|server|linux)/.test(d)) return [`stty rows ${rows} cols ${cols}`];
+  return null;
+}
+$('#fitdev').addEventListener('click', () => {
+  const s = sessions[active];
+  if (!s || !s.term || !s.ws || s.ws.readyState !== WebSocket.OPEN){ alert('Open a console tab first.'); return; }
+  fitTerm(s);
+  const cmds = sizeCmds(s.def, s.term.cols, s.term.rows);
+  if (!cmds){ alert(`${s.label}: not supported for this kind of device (${s.def || 'unknown'}).`); s.term.focus(); return; }
+  let i = 0;
+  const next = () => { if (i < cmds.length && s.ws.readyState === WebSocket.OPEN){ s.ws.send(enc.encode(cmds[i++] + '\r')); setTimeout(next, 500); } };
+  next();
+  s.term.focus();
+});
+// ---- コンソールだけを広げる(BL-272)。覚えない(開き直すと元の並び) ----
+$('#cfull').addEventListener('click', () => {
+  const on = document.body.classList.toggle('cfull');
+  $('#cfull').classList.toggle('on', on);
+  $('#cfull').textContent = on ? 'Show tasks' : 'Console only';
+  const s = sessions[active];
+  if (s && s.fit) requestAnimationFrame(() => { fitTerm(s); s.term.focus(); });
+});
+
 // 画面下端の帯(Contents・問番号)からの移動は意図したものなので、離脱確認を出さない。別タブで開く操作は除く
 $('#foot').addEventListener('click', e => {
   if (e.target.closest('a') && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.button === 0) leaving = true;
@@ -1573,7 +1624,7 @@ window.addEventListener('message', ev => {
 //   本文はサーバが開いた分だけ返す。言語は問題文の切替に合わせる(1 版しか無ければ英語)。
 let learnSteps = null, learnBusy = null, learnReading = null, learnRead = {};
 // 課題カード(BL-255): 課題文・単元の見出し・冒頭の約束。最初の読み込みで受け取って持っておく(確認・ヒントの応答には入らない)
-let learnTask = {}, learnUnit = {}, learnUnits = {}, learnRules = null, rulesOpen = false;
+let learnTask = {}, learnUnit = {}, learnUnits = {}, learnRules = null, rulesOpen = false, learnResetNodes = [];
 let learnTries = {}, tryOpen = null;          // 課題ごとの「やってみる」・小窓に出している課題
 let learnVerify = {}, verifyOpen = new Set();  // 確かめ方の例(BL-266)・開いている課題(記録しない)
 function learnLang(){ return window.ccnpLang === 'ja' ? 'ja' : 'en'; }
@@ -1581,13 +1632,13 @@ function tr(o){ if (!o) return ''; if (typeof o === 'string') return o; return o
 const LT = {en: {check:'Check', checking:'Checking…', hint:'Hint', sol:'Reference solution', pass:'passed', fail:'not yet',
                  none:'self-check', read:'Read:', rules:'Ground rules', note:'Each Check reads the live state of the devices (about 15 seconds). Leave configuration mode before you press it. Hints open one level at a time and are logged. How to verify opens at any time and is not logged.',
                  busy:'Another check is still running.', reset:'Start over', resetting:'Resetting…',
-                 resetq:'Start the whole lab over?\n\nXR01 is rolled back to the configuration it had right after the lab was built (your changes are discarded), and every task here returns to not yet checked, with no hints opened.',
+                 resetq:'Start the whole lab over?\n\n{nodes} go back to the state they had right after the lab was built (your changes are discarded), and every task here returns to not yet checked, with no hints opened.',
                  resetdone:'The lab is back at its starting state.',
                  verify:'How to verify', tryit:'Try it', trytitle:'Try it', tryread:'Open in Reading', close:'Close', mini:'Minimise', restore:'Expand'},
             ja: {check:'確認', checking:'確認中…', hint:'ヒント', sol:'模範解', pass:'通過', fail:'未充足',
                  none:'自己確認', read:'読み物:', rules:'進め方の約束', note:'確認は機器のいまの状態を読みます(約 15 秒)。設定モードを抜けてから押してください。ヒントは 1 段ずつ開き、開いた段数は記録されます。確かめ方はいつでも開け、記録されません。',
                  busy:'別の確認がまだ実行中です。', reset:'最初からやり直す', resetting:'戻しています…',
-                 resetq:'ラボ全体を最初からやり直しますか？\n\nXR01 をラボを作った直後の設定へ戻し(あなたの変更は消えます)、ここの課題もすべて未確認・ヒント未開封に戻します。',
+                 resetq:'ラボ全体を最初からやり直しますか？\n\n{nodes} をラボを作った直後の状態へ戻し(あなたの変更は消えます)、ここの課題もすべて未確認・ヒント未開封に戻します。',
                  resetdone:'ラボを最初の状態に戻しました。',
                  verify:'確かめ方', tryit:'やってみる', trytitle:'やってみる', tryread:'読み物で開く', close:'閉じる', mini:'たたむ', restore:'広げる'}};
 function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -1735,7 +1786,9 @@ function paintSteps(){
 }
 async function learnReset(){
   const T = LT[learnLang()];
-  if (!confirm(T.resetq)) return;
+  const ns = learnResetNodes.length ? learnResetNodes : ['XR01'];
+  const names = learnLang() === 'ja' ? ns.join('・') : (ns.length < 2 ? ns.join('') : ns.slice(0, -1).join(', ') + ' and ' + ns[ns.length - 1]);
+  if (!confirm(T.resetq.replace('{nodes}', names).replace(' go back', ns.length < 2 ? ' goes back' : ' go back'))) return;
   learnBusy = '*reset'; paintSteps();
   try {
     const r = await fetch('api/learn/reset?' + Q, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
@@ -1765,7 +1818,7 @@ async function learnPost(kind, id){
     learnSteps = d.steps;
     for (const st of d.steps){ learnRead[st.id] = st.read || []; learnTask[st.id] = st.task || {}; learnUnit[st.id] = st.unit || '';
                                learnTries[st.id] = st.tries || []; learnVerify[st.id] = st.verify || {}; }
-    learnUnits = d.units || {}; learnRules = d.rules || null;
+    learnUnits = d.units || {}; learnRules = d.rules || null; learnResetNodes = d.reset_nodes || [];
     if (d.reading){ learnReading = d.reading; $('#readbtn').hidden = false; }
     // 課題カード(BL-255): 課題文はこのタブに入るので Task タブは出さない。Task の枠は読み込んだまま残す
     // (問題文の日英切替は、その枠が知らせてくる言語に合わせる作りのため)

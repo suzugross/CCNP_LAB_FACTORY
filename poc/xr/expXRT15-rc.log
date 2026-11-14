@@ -1,0 +1,62 @@
+######## 14:23:55 rc-a: 白紙でスクリプト
+== CMD 1 rc=1: python3 ~/m13/rc_customer_lo.py
+cannot reach PE2: HTTPSConnectionPool(host='10.0.50.2', port=443): Max retries exceeded with url: /restconf/data/Cisco-IOS-XE-native:native/hostname (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x72a8ed9890a0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+######## 14:23:55 rc-b: restconf + ip http secure-server + nms-api(priv 15)。ip http authentication はまだ
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+PE2(config)#
+username nms-api privilege 15 secret Api-Pass-15
+PE2(config)#
+ip http secure-server
+PE2(config)#
+restconf
+PE2(config)#
+end
+PE2#
+show running-config | include ^ip http|^restconf|^aaa|nms-api
+username nms-api privilege 15 secret 9 $9$ij43sRchjpa2Bk$PHsmxmjsZfFjkd5lKe7VW6KggNCwEbUYFKQw8xCNaj2
+ip http secure-server
+restconf
+PE2#
+== CMD 1 rc=0: python3 ~/m13/rc_customer_lo.py
+GET hostname -> 200 {
+  "Cisco-IOS-XE-native:hostname": "PE2"
+}
+PATCH Loopback200 -> 204 
+######## 14:25:15 rc-c: ip http authentication local を足す
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+PE2(config)#
+ip http authentication local
+PE2(config)#
+end
+PE2#
+== CMD 1 rc=0: python3 ~/m13/rc_customer_lo.py
+GET hostname -> 200 {
+  "Cisco-IOS-XE-native:hostname": "PE2"
+}
+PATCH Loopback200 -> 204 
+== CMD 2 rc=7: curl -s -o /dev/null -w "%{http_code}\n" -k -u nms-api:Api-Pass-15 http://10.0.50.2/restconf/data/Cisco-IOS-XE-native:native/hostname --max-time 10
+000
+show running-config interface Loopback200
+Building configuration...
+
+Current configuration : 102 bytes
+!
+interface Loopback200
+ description CUSTOMER-A-SERVICE
+ ip address 10.255.200.2 255.255.255.255
+end
+
+PE2#
+show platform software yang-management process
+confd            : Running    
+nesd             : Running    
+syncfd           : Running    
+ncsshd           : Not Running
+dmiauthd         : Running    
+nginx            : Running    
+ndbmand          : Running    
+pubd             : Running    
+
+PE2#

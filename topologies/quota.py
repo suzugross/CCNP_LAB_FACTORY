@@ -412,6 +412,15 @@ def cmd_grade_lab(a):
     """
     rc = _grade_lab_once(a)
     if rc == 1 and not getattr(a, "_retried", False):
+        # containerlab だけの問題(platform: clab・BL-274)は CML の bringup の対象外 → 再採点だけしない
+        # (得点行が読めないのは照合で止めた時か接続の失敗。同じ採点を繰り返しても変わらない)
+        try:
+            import yaml
+            with open(os.path.join(repo_root(a.repo), "problems", a.ref, "problem.yml"), encoding="utf-8") as fh:
+                if ((yaml.safe_load(fh) or {}).get("platform") or "cml") == "clab":
+                    return rc
+        except Exception:
+            pass
         print("[ノルマ] 得点行が読めず → bringup を試して再採点する", file=sys.stderr)
         try:
             sys.path.insert(0, os.path.join(repo_root(a.repo), "topologies"))

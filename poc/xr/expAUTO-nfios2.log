@@ -1,0 +1,134 @@
+######## 13:35:03 nf_ios2: 寿命の範囲を確かめて 60/10 に
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+flow monitor FM-V4
+RT01(config-flow-monitor)#
+cache timeout active ?
+% Unrecognized command
+RT01(config-flow-monitor)#cache timeout active 
+                           ^
+% Invalid input detected at '^' marker.
+
+RT01(config-flow-monitor)#
+cache timeout inactive ?
+% Unrecognized command
+RT01(config-flow-monitor)#cache timeout inactive 
+                           ^
+% Invalid input detected at '^' marker.
+
+RT01(config-flow-monitor)#
+cache timeout active 60
+                           ^
+% Invalid input detected at '^' marker.
+
+RT01(config-flow-monitor)#
+cache timeout inactive 10
+                           ^
+% Invalid input detected at '^' marker.
+
+RT01(config-flow-monitor)#
+end
+RT01#
+clear flow monitor FM-V4 cache
+RT01#
+clear flow exporter FE-IPFIX statistics
+RT01#
+$ pkill nfcapd; sleep 2; rm -rf /tmp/nf; mkdir -p /tmp/nf; nfcapd -w /tmp/nf -p 2055 -t 60 -D; sleep 1; pgrep -a nfcapd
+7437 nfcapd -w /tmp/nf -p 2055 -t 60 -D
+[rc=0]
+$ ping -c 30 -i 0.2 -q 198.51.100.1
+PING 198.51.100.1 (198.51.100.1) 56(84) bytes of data.
+
+--- 198.51.100.1 ping statistics ---
+30 packets transmitted, 30 received, 0% packet loss, time 5910ms
+rtt min/avg/max/mdev = 0.865/0.966/1.091/0.062 ms
+[rc=0]
+$ ping -c 20 -i 0.2 -q 10.255.0.11
+PING 10.255.0.11 (10.255.0.11) 56(84) bytes of data.
+
+--- 10.255.0.11 ping statistics ---
+20 packets transmitted, 20 received, 0% packet loss, time 3861ms
+rtt min/avg/max/mdev = 0.813/1.003/1.387/0.126 ms
+[rc=0]
+show flow monitor FM-V4 cache format table
+  Cache type:                               Normal
+  Cache size:                                 4096
+  Current entries:                               0
+  High Watermark:                                2
+
+  Flows added:                                  10
+  Flows aged:                                   10
+    - Active timeout      (  1800 secs)          0
+    - Inactive timeout    (    15 secs)          9
+    - Event aged                                 1
+    - Watermark aged                             0
+    - Emergency aged                             0
+
+There are no cache entries to display.
+
+RT01#
+show flow exporter FE-IPFIX statistics
+Flow Exporter FE-IPFIX:
+  Packet send statistics (last cleared 00:01:44 ago):
+    Successfully sent:         4                     (346 bytes)
+
+  Client send statistics:
+    Client: Flow Monitor FM-V4
+      Records added:           2
+        - sent:                2
+      Bytes added:             66
+        - sent:                66
+
+RT01#
+show flow exporter FE-IPFIX templates
+Flow Exporter FE-IPFIX:
+  Client: Flow Monitor FM-V4
+  Exporter Format: IPFIX (Version 10)
+  Template ID    : 256
+  Source ID      : 0
+  Record Size    : 33
+  Template layout
+  _____________________________________________________________________________
+  |                 Field                   |    ID | Ent.ID | Offset |  Size |
+  -----------------------------------------------------------------------------
+  | ipv4 source address                     |     8 |        |      0 |     4 |
+  | ipv4 destination address                |    12 |        |      4 |     4 |
+  | interface input snmp                    |    10 |        |      8 |     4 |
+  | transport source-port                   |     7 |        |     12 |     2 |
+  | transport destination-port              |    11 |        |     14 |     2 |
+  | ip protocol                             |     4 |        |     16 |     1 |
+  | counter bytes                           |     1 |        |     17 |     4 |
+  | counter packets                         |     2 |        |     21 |     4 |
+  | timestamp sys-uptime first              |    22 |        |     25 |     4 |
+  | timestamp sys-uptime last               |    21 |        |     29 |     4 |
+  -----------------------------------------------------------------------------
+
+
+RT01#
+$ ls -la /tmp/nf
+total 16
+drwxrwxr-x  2 SUZUKI SUZUKI 4096 Nov 10 13:36 .
+drwxrwxrwt 15 root   root   4096 Nov 10 13:35 ..
+-rw-r--r--  1 SUZUKI SUZUKI  493 Nov 10 13:36 nfcapd.202611101335
+-rw-r--r--  1 SUZUKI SUZUKI   40 Nov 10 13:36 nfcapd.current.7435
+[rc=0]
+$ nfdump -R /tmp/nf -o extended -c 20
+Date first seen             Duration     Proto      Src IP Addr:Port          Dst IP Addr:Port     Flags Tos  Packets    Bytes      pps      bps    Bpp Flows
+1970-01-01 00:00:00.000     00:00:00.000 ICMP        10.0.50.10:0     ->     198.51.100.1:8.0   ........   0       30     2520        0        0     84     1
+1970-01-01 00:00:00.000     00:00:00.000 ICMP        10.0.50.10:0     ->      10.255.0.11:8.0   ........   0       20     1680        0        0     84     1
+Summary: total flows: 2, total bytes: 4200, total packets: 50, avg bps: 0, avg pps: 0, avg bpp: 0
+Time window: 2026-11-10 13:35:00 - 2026-11-10 13:36:00
+Total flows processed: 2, passed: 2, Blocks skipped: 0, Bytes read: 272
+Sys: 0.0000s User: 0.0030s Wall: 0.0002s flows/second: 10267.6 Runtime: 0.0002s
+[rc=0]
+$ nfdump -R /tmp/nf -s dstip/flows -n 5 | head -8
+Top 5 Dst IP Addr ordered by flows:
+Date first seen                 Duration Proto       Dst IP Addr    Flows(%)     Packets(%)       Bytes(%)         pps      bps   bpp
+1970-01-01 00:00:00.000     00:00:00.000 any        198.51.100.1        1(50.0)       30(60.0)     2520(60.0)        0        0    84
+1970-01-01 00:00:00.000     00:00:00.000 any         10.255.0.11        1(50.0)       20(40.0)     1680(40.0)        0        0    84
+
+Summary: total flows: 2, total bytes: 4200, total packets: 50, avg bps: 0, avg pps: 0, avg bpp: 0
+Time window: 2026-11-10 13:35:00 - 2026-11-10 13:36:00
+Total flows processed: 2, passed: 2, Blocks skipped: 0, Bytes read: 272
+[rc=0]

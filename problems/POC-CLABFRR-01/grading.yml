@@ -1,0 +1,64 @@
+# POC-CLABFRR-01 採点基準(containerlab だけ・Junos × FRR)。
+# 主役= JUN01(白紙から・exec: junos)。FRR1 は据え付けの対向で、状態を exec: frr(docker exec で vtysh)から JSON で見る。
+problem: POC-CLABFRR-01
+total_points: 100
+
+checks:
+  - name: "JUN01: et-0/0/0.0 に 10.0.13.1/30・lo0.0 に 192.168.0.1/32"
+    node: JUN01
+    exec: junos
+    command: "show configuration | display set"
+    raw:
+      - regex: 'set interfaces et-0/0/0 unit 0 family inet address 10\.0\.13\.1/30'
+      - regex: 'set interfaces lo0 unit 0 family inet address 192\.168\.0\.1/32'
+    points: 20
+
+  - name: "JUN01: OSPF area 0 に et-0/0/0.0 と lo0.0(passive)"
+    node: JUN01
+    exec: junos
+    command: "show configuration | display set"
+    raw:
+      - regex: 'set protocols ospf area 0(\.0\.0\.0)? interface et-0/0/0\.0'
+      - regex: 'set protocols ospf area 0(\.0\.0\.0)? interface lo0\.0 passive'
+    points: 15
+
+  - name: "JUN01: FRR1(10.0.13.2)と Full 隣接 (JSON)"
+    node: JUN01
+    exec: junos
+    command: "show ospf neighbor | display json"
+    parser: json
+    find: ["ospf-neighbor-information", "*", "ospf-neighbor", "*"]
+    match:
+      neighbor-address.*.data: "10.0.13.2"
+      ospf-neighbor-state.*.data: "Full"
+    points: 15
+
+  - name: "FRR1: JUN01(192.168.0.1)と Full 隣接 (FRR の JSON)"
+    node: FRR1
+    exec: frr
+    command: "show ip ospf neighbor json"
+    parser: json
+    find: ["neighbors", "192.168.0.1", "*"]
+    match:
+      converged: "Full"
+      ifaceAddress: "10.0.13.1"
+    points: 15
+
+  - name: "FRR1: JUN01 の lo0(192.168.0.1/32)を OSPF で学習・採用 (FRR の JSON)"
+    node: FRR1
+    exec: frr
+    command: "show ip route 192.168.0.1/32 json"
+    parser: json
+    find: ["192.168.0.1/32", "*"]
+    match:
+      protocol: "ospf"
+      selected: true
+    points: 15
+
+  - name: "JUN01→FRR1: lo0 から lo への ping"
+    node: JUN01
+    exec: junos
+    command: "ping 192.168.0.3 source 192.168.0.1 count 5 rapid"
+    raw:
+      - regex: '!!!!!|5 packets received'
+    points: 20

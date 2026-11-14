@@ -1,0 +1,161 @@
+show isis adjacency
+Tue Nov 10 14:05:50.252 UTC
+
+IS-IS CORE Level-2 adjacencies:
+System Id      Interface                SNPA           State Hold Changed  NSF IPv4 IPv6
+                                                                               BFD  BFD 
+PE2            Gi0/0/0/0                *PtoP*         Up    25   00:08:51 Yes None None
+
+Total adjacency count: 1
+RP/0/RP0/CPU0:XR01#
+show running-config snmp-server
+Tue Nov 10 14:05:50.657 UTC
+snmp-server engineID local 00:00:00:09:03:00:00:00:0a:ff:00:01
+snmp-server host 10.0.50.10 traps version 3 auth nms-trap
+snmp-server user nms-trap NMS-V3 v3 auth sha encrypted 053F140E31016F1C0D0D5A435E priv aes 128 encrypted 06321D205C03390B0C015F5A59
+snmp-server view NMS-VIEW 1.3.6.1 included
+snmp-server community NMS-RO RO IPv4 NMS-ONLY
+snmp-server group NMS-V3 v3 priv read NMS-VIEW
+snmp-server traps snmp linkup
+snmp-server traps snmp linkdown
+
+RP/0/RP0/CPU0:XR01#
+show snmp engineid
+Tue Nov 10 14:05:51.149 UTC
+SNMP engineID 00000009030000000aff0001
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven subscription SUB-IF
+Tue Nov 10 14:05:51.556 UTC
+Subscription:  SUB-IF
+Subscription ID:  1
+-------------
+  State:       NA
+  Source Interface:       Loopback0(Up 0x60000000)
+  Sensor groups:
+  Id: IF-COUNTERS
+    Sample Interval:      10000 ms
+    Heartbeat Interval:   NA
+    Sensor Path:          Cisco-IOS-XR-infra-statsd-oper:infra-statistics/interfaces/interface/latest/generic-counters
+    Sensor Path State:    Not Resolved
+
+  Destination Groups:
+  Group Id: NMS
+    Destination IP:       10.0.50.10
+    Destination Port:     57500
+    Encoding:             self-describing-gpb
+    Transport:            grpc
+    State:                NA
+    TLS :                 telemetry.nms.lab
+    Destination endpoint: 2002
+    Initial updates:      0/0
+
+  Collection Groups:
+  ------------------
+  No active collection groups
+
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven sensor-group
+Tue Nov 10 14:05:51.977 UTC
+  Sensor Group Id:IF-COUNTERS
+    ID:                 1
+    Sensor Path:        Cisco-IOS-XR-infra-statsd-oper:infra-statistics/interfaces/interface/latest/generic-counters
+    Sensor Path State:  Not Resolved
+      Status:           Invalid sensor path
+
+RP/0/RP0/CPU0:XR01#
+show version | include Version|uptime
+Cisco IOS XE Software, Version 17.15.01a
+Cisco IOS Software [IOSXE], Virtual XE Software (X86_64_LINUX_IOSD-UNIVERSALK9-M), Version 17.15.1a, RELEASE SOFTWARE (fc1)
+licensed under the GNU General Public License ("GPL") Version 2.0.  The
+software code licensed under GPL Version 2.0 is free software that comes
+GPL code under the terms of GPL Version 2.0.  For more details, see the
+PE2 uptime is 9 minutes
+PE2#
+show isis neighbors
+
+Tag CORE:
+System Id       Type Interface     IP Address      State Holdtime Circuit Id
+XR01            L2   Gi1           10.0.12.1       UP    21       00
+PE2#
+show ip route 192.168.100.0
+Routing entry for 192.168.100.0/24
+  Known via "static", distance 1, metric 0
+  Redistributing via isis CORE
+  Advertised by isis CORE level-2
+  Routing Descriptor Blocks:
+  * 172.16.1.1
+      Route metric is 0, traffic share count is 1
+PE2#
+show running-config | include http|restconf|netconf
+no ip http server
+no ip http secure-server
+PE2#
+ping 10.255.0.1 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.255.0.1, timeout is 2 seconds:
+Packet sent with a source address of 192.168.100.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms
+CE1#
+ping 10.255.0.2 source Loopback100 repeat 5
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 10.255.0.2, timeout is 2 seconds:
+Packet sent with a source address of 192.168.100.1 
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/3/15 ms
+CE1#
+$ cat /var/tmp/ccnp-cloudinit-done
+2026-11-10T13:56:49+00:00
+[rc=0]
+$ tail -6 /var/log/ccnp-init.log
+[2026-11-10T13:56:49+00:00] 完了
+version : 0.49.1
+Telegraf 1.32.3 (git: HEAD@2fd5bf4f)
+active
+active
+active
+[rc=0]
+$ systemctl is-active telegraf nfcapd-lab snmptrapd-lab
+active
+active
+active
+[rc=0]
+$ ls -la ~/pki ~/m13
+/home/SUZUKI/m13:
+total 16
+drwxr-xr-x 2 SUZUKI SUZUKI 4096 Nov 10 13:56 .
+drwxr-x--- 6 SUZUKI SUZUKI 4096 Nov 10 14:05 ..
+-rw-r--r-- 1 SUZUKI SUZUKI 1329 Nov 10 13:56 nc_edit.py
+-rw-r--r-- 1 SUZUKI SUZUKI 1402 Nov 10 13:56 rc_customer_lo.py
+
+/home/SUZUKI/pki:
+total 20
+drwxr-xr-x 2 SUZUKI SUZUKI 4096 Nov 10 13:56 .
+drwxr-x--- 6 SUZUKI SUZUKI 4096 Nov 10 14:05 ..
+-rw-r--r-- 1 SUZUKI SUZUKI 1164 Nov 10 13:56 ca.pem
+-rw------- 1 SUZUKI SUZUKI 1708 Nov 10 13:56 client.key
+-rw-r--r-- 1 SUZUKI SUZUKI 1168 Nov 10 13:56 client.pem
+[rc=0]
+$ ping -c2 10.255.0.1
+PING 10.255.0.1 (10.255.0.1) 56(84) bytes of data.
+64 bytes from 10.255.0.1: icmp_seq=1 ttl=255 time=1.74 ms
+64 bytes from 10.255.0.1: icmp_seq=2 ttl=255 time=1.88 ms
+
+--- 10.255.0.1 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1002ms
+rtt min/avg/max/mdev = 1.743/1.809/1.875/0.066 ms
+[rc=0]
+$ ping -c2 10.255.0.2
+PING 10.255.0.2 (10.255.0.2) 56(84) bytes of data.
+64 bytes from 10.255.0.2: icmp_seq=1 ttl=255 time=4.18 ms
+64 bytes from 10.255.0.2: icmp_seq=2 ttl=255 time=1.11 ms
+
+--- 10.255.0.2 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1001ms
+rtt min/avg/max/mdev = 1.108/2.645/4.182/1.537 ms
+[rc=0]
+$ cat /etc/snmp/snmptrapd-lab.conf
+# XRT-15 NMS: SNMPv3 traps from XR01 (XR01's engineID is fixed to 00:00:00:09:03:00:00:00:0a:ff:00:01). authPriv only.
+createUser -e 0x00000009030000000aff0001 nms-trap SHA Trap-Auth-15 AES Trap-Priv-15
+authUser log nms-trap priv
+[rc=0]

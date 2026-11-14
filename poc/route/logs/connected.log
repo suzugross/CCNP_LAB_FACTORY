@@ -1,0 +1,260 @@
+
+======== connected: 5. connected の段(shutdown・IP なし・別のサブネット・重なる IP) ========
+--- 基準
+### 11:39:54 RT04: show ip route connected
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 3 subnets, 2 masks
+C        10.4.1.0/24 is directly connected, Ethernet0/0
+L        10.4.1.1/32 is directly connected, Ethernet0/0
+C        10.255.0.4/32 is directly connected, Loopback0
+      172.16.0.0/16 is variably subnetted, 4 subnets, 2 masks
+C        172.16.24.0/30 is directly connected, Ethernet0/1
+L        172.16.24.2/32 is directly connected, Ethernet0/1
+C        172.16.34.0/30 is directly connected, Ethernet0/2
+L        172.16.34.2/32 is directly connected, Ethernet0/2
+### 11:39:54 RT04: show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+Ethernet0/0            10.4.1.1        YES TFTP   up                    up      
+Ethernet0/1            172.16.24.2     YES TFTP   up                    up      
+Ethernet0/2            172.16.34.2     YES TFTP   up                    up      
+Ethernet0/3            10.1.10.18      YES TFTP   up                    up      
+Loopback0              10.255.0.4      YES TFTP   up                    up      
+--- IP 付きで shutdown
+### RT04: conf ['interface Ethernet0/0', 'shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 11:39:58 RT04: show ip route connected
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/32 is subnetted, 1 subnets
+C        10.255.0.4 is directly connected, Loopback0
+      172.16.0.0/16 is variably subnetted, 4 subnets, 2 masks
+C        172.16.24.0/30 is directly connected, Ethernet0/1
+L        172.16.24.2/32 is directly connected, Ethernet0/1
+C        172.16.34.0/30 is directly connected, Ethernet0/2
+L        172.16.34.2/32 is directly connected, Ethernet0/2
+### 11:39:58 RT04: show ip interface brief | include Ethernet0/0
+Ethernet0/0            10.4.1.1        YES TFTP   administratively down down    
+--- no shutdown
+### RT04: conf ['interface Ethernet0/0', 'no shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 11:40:03 RT04: show ip route connected
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 3 subnets, 2 masks
+C        10.4.1.0/24 is directly connected, Ethernet0/0
+L        10.4.1.1/32 is directly connected, Ethernet0/0
+C        10.255.0.4/32 is directly connected, Loopback0
+      172.16.0.0/16 is variably subnetted, 4 subnets, 2 masks
+C        172.16.24.0/30 is directly connected, Ethernet0/1
+L        172.16.24.2/32 is directly connected, Ethernet0/1
+C        172.16.34.0/30 is directly connected, Ethernet0/2
+L        172.16.34.2/32 is directly connected, Ethernet0/2
+### 11:40:04 RT04: show ip interface brief | include Ethernet0/0
+Ethernet0/0            10.4.1.1        YES TFTP   up                    up      
+--- IP を外す(no ip address)
+### RT04: conf ['interface Ethernet0/0', 'no ip address']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 11:40:07 RT04: show ip route connected
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/32 is subnetted, 1 subnets
+C        10.255.0.4 is directly connected, Loopback0
+      172.16.0.0/16 is variably subnetted, 4 subnets, 2 masks
+C        172.16.24.0/30 is directly connected, Ethernet0/1
+L        172.16.24.2/32 is directly connected, Ethernet0/1
+C        172.16.34.0/30 is directly connected, Ethernet0/2
+L        172.16.34.2/32 is directly connected, Ethernet0/2
+### 11:40:07 RT04: show ip interface brief | include Ethernet0/0
+Ethernet0/0            unassigned      YES manual up                    up      
+--- 別のサブネットの IP(10.4.2.1/24)
+### RT04: conf ['interface Ethernet0/0', 'ip address 10.4.2.1 255.255.255.0']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 11:40:10 RT04: show ip route connected
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 3 subnets, 2 masks
+C        10.4.2.0/24 is directly connected, Ethernet0/0
+L        10.4.2.1/32 is directly connected, Ethernet0/0
+C        10.255.0.4/32 is directly connected, Loopback0
+      172.16.0.0/16 is variably subnetted, 4 subnets, 2 masks
+C        172.16.24.0/30 is directly connected, Ethernet0/1
+L        172.16.24.2/32 is directly connected, Ethernet0/1
+C        172.16.34.0/30 is directly connected, Ethernet0/2
+L        172.16.34.2/32 is directly connected, Ethernet0/2
+--- 元に戻す(10.4.1.1/24)
+### RT04: conf ['interface Ethernet0/0', 'ip address 10.4.1.1 255.255.255.0']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 11:40:14 RT04: show ip route connected
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 3 subnets, 2 masks
+C        10.4.1.0/24 is directly connected, Ethernet0/0
+L        10.4.1.1/32 is directly connected, Ethernet0/0
+C        10.255.0.4/32 is directly connected, Loopback0
+      172.16.0.0/16 is variably subnetted, 4 subnets, 2 masks
+C        172.16.24.0/30 is directly connected, Ethernet0/1
+L        172.16.24.2/32 is directly connected, Ethernet0/1
+C        172.16.34.0/30 is directly connected, Ethernet0/2
+L        172.16.34.2/32 is directly connected, Ethernet0/2
+--- 重なるサブネット: up の IF(Ethernet0/0= 10.4.1.0/24)と同じサブネットを Loopback9 に
+### RT04: conf ['interface Loopback9', 'ip address 10.4.1.5 255.255.255.0']
+Enter configuration commands, one per line.  End with CNTL/Z.
+% 10.4.1.0 overlaps with Ethernet0/0
+### 11:40:14 RT04: show ip interface brief | include Loopback9
+Loopback9              unassigned      YES unset  up                    up      
+--- 重なるサブネット: リンクの IF に(Ethernet0/1 に 10.4.1.9/24)
+### RT04: conf ['interface Ethernet0/1', 'ip address 10.4.1.9 255.255.255.0']
+Enter configuration commands, one per line.  End with CNTL/Z.
+% 10.4.1.0 overlaps with Ethernet0/0
+### 11:40:15 RT04: show ip interface brief | include Ethernet0/1
+Ethernet0/1            172.16.24.2     YES TFTP   up                    up      
+--- 重なるサブネット: shutdown 中の IF に付けてから no shutdown
+### RT04: conf ['interface Loopback9', 'shutdown', 'ip address 10.4.1.5 255.255.255.0', 'no shutdown']
+Enter configuration commands, one per line.  End with CNTL/Z.
+% 10.4.1.0 overlaps with Ethernet0/0
+% 10.4.1.0 overlaps with Ethernet0/0
+Loopback9: incorrect IP address assignment
+### 11:40:20 RT04: show ip interface brief | include Loopback9|Ethernet0/0
+Ethernet0/0            10.4.1.1        YES manual up                    up      
+Loopback9              10.4.1.5        YES manual administratively down down    
+### 11:40:20 RT04: show ip route connected
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 3 subnets, 2 masks
+C        10.4.1.0/24 is directly connected, Ethernet0/0
+L        10.4.1.1/32 is directly connected, Ethernet0/0
+C        10.255.0.4/32 is directly connected, Loopback0
+      172.16.0.0/16 is variably subnetted, 4 subnets, 2 masks
+C        172.16.24.0/30 is directly connected, Ethernet0/1
+L        172.16.24.2/32 is directly connected, Ethernet0/1
+C        172.16.34.0/30 is directly connected, Ethernet0/2
+L        172.16.34.2/32 is directly connected, Ethernet0/2
+### 11:40:20 RT04: show logging | include overlap|incorrect|IP address
+
+--- 後始末
+### RT04: conf ['no interface Loopback9', 'interface Ethernet0/1', 'ip address 172.16.24.2 255.255.255.252']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 11:40:23 RT04: show ip interface brief
+Interface              IP-Address      OK? Method Status                Protocol
+Ethernet0/0            10.4.1.1        YES manual up                    up      
+Ethernet0/1            172.16.24.2     YES TFTP   up                    up      
+Ethernet0/2            172.16.34.2     YES TFTP   up                    up      
+Ethernet0/3            10.1.10.18      YES TFTP   up                    up      
+Loopback0              10.255.0.4      YES TFTP   up                    up      
+### 11:40:24 RT04: show ip route connected
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      10.0.0.0/8 is variably subnetted, 3 subnets, 2 masks
+C        10.4.1.0/24 is directly connected, Ethernet0/0
+L        10.4.1.1/32 is directly connected, Ethernet0/0
+C        10.255.0.4/32 is directly connected, Loopback0
+      172.16.0.0/16 is variably subnetted, 4 subnets, 2 masks
+C        172.16.24.0/30 is directly connected, Ethernet0/1
+L        172.16.24.2/32 is directly connected, Ethernet0/1
+C        172.16.34.0/30 is directly connected, Ethernet0/2
+L        172.16.34.2/32 is directly connected, Ethernet0/2

@@ -1,0 +1,2468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<title>Route Path Builder</title>
+<!--
+  ルーティング経路づくり(BL-271)の画面。配信は pack_server.py の /_route_path/、データは /_api/route_path/*(topologies/route_path.py)。
+  設定を変えるたびに eval を呼び、経路の計算はサーバ(route_model)だけで行う。進み具合はクリアだけをサーバへ記録する。
+  試験用の URL 引数: ?autotest=N(各 level を N 通りの seed で解き、配置も検査)・?uitest=1(タップの流れ)・
+  ?demo=1|solved|sent|form|formerr|formrng|exsend|router|ifd|rules(記録しない・鍵を無視。#p<ステージ>-<レベル> と組み合わせる。&card=N でチュートリアルの N 枚目)・?lang=ja
+  設計= problems/_drafts/ROUTE-PATH.design.md(盤面の描き方は §3)。
+-->
+<style>
+:root{
+  --paper:#eceef1; --card:#fff; --ink:#15171a; --sub:#5f6670; --line:#d6d9de; --link:#0645ad;
+  --pri:#1f63c6; --ok:#2a7d3a; --ng:#c62828; --star:#e0a400; --ov:#a15c00; --hit:#fff7e0; --win:#ffe3a8;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--paper);color:var(--ink)}
+body{font-family:"Segoe UI","Yu Gothic UI",Meiryo,"Hiragino Kaku Gothic ProN","Noto Sans CJK JP",system-ui,sans-serif;
+  font-size:15px;line-height:1.55;-webkit-text-size-adjust:100%}
+button{font:inherit;color:inherit;cursor:pointer}
+code,.mono{font-family:Menlo,Consolas,"DejaVu Sans Mono",monospace}
+code{font-size:.88em;background:#f1f3f5;border-radius:3px;padding:0 .25em}
+header.bar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:.5rem;padding:.55rem 16px;
+  background:var(--card);border-bottom:1px solid var(--line)}
+header.bar .ttl{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header.bar button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:.2rem .6rem;font-size:.85rem}
+header.bar button[hidden]{display:none}
+main{max-width:560px;margin:0 auto;padding:12px 16px 120px}
+body.formopen .actbar{background:#fff;box-shadow:0 -4px 14px rgba(0,0,0,.08)}
+.view[hidden]{display:none}
+
+/* ホーム */
+.intro{color:var(--sub);font-size:.9rem;margin:.2rem 0 1rem}
+.edh{margin:1.1rem 0 .4rem}
+.edh b{font-size:1rem}
+.edh div{color:var(--sub);font-size:.82rem}
+.stage{display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:.75rem .9rem;margin:0 0 .6rem}
+.stage .top{display:flex;align-items:baseline;gap:.5rem}
+.stage .no{font-weight:700;color:var(--sub);min-width:1.4em}
+.stage .nm{font-weight:600;flex:1}
+.stage .st{color:var(--star);font-size:.85rem;white-space:nowrap}
+.stage .sb{color:var(--sub);font-size:.85rem;margin:.15rem 0 .35rem 1.9em}
+.stage .lv{margin-left:1.9em;display:flex;gap:.3rem;align-items:center}
+.stage .lv i{width:.7rem;height:.7rem;border-radius:50%;border:1.5px solid #b9bec5;display:inline-block}
+.stage .lv i.c{background:var(--ok);border-color:var(--ok)}
+.stage .lv i.r{background:#b9bec5;border-color:#b9bec5}
+.stage .lv .rs{margin-left:auto;font-size:.78rem;color:var(--sub);border:0;background:none;padding:0;text-decoration:underline}
+.stage.locked{opacity:.55}
+.stage.locked .nm::after{content:" \1F512";font-size:.8em}
+.resetall{margin-top:1.4rem;font-size:.85rem;color:var(--sub)}
+.resetall button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:.25rem .7rem;font-size:.85rem}
+
+/* チュートリアル */
+.tcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:1rem 1rem .6rem}
+.tcard .kick{font-size:.8rem;color:var(--sub)}
+.tcard h2{font-size:1.15rem;margin:.15rem 0 .6rem}
+.tcard p{margin:.5rem 0}
+.tcard ul{margin:.4rem 0;padding-left:1.25rem}
+.tcard li{margin:.15rem 0}
+.tcard .ex{margin:.6rem -.4rem 0;border-top:1px dashed var(--line);padding-top:.4rem}
+.tcard .exb{position:relative}
+.tcard .exsend{display:block;margin:.35rem auto .2rem;border-color:var(--pri);color:var(--pri);font-size:.9rem;padding:.35rem 1rem}
+.tcard .exsend:disabled{opacity:.5}
+.tcard .nhint{font-size:.78rem;color:var(--sub);margin:.1rem .5rem .1rem}
+.tcard ol.notes{list-style:none;margin:.2rem .3rem .3rem;padding:0}
+.tcard ol.notes li{display:flex;gap:.5rem;align-items:flex-start;margin:.2rem 0;padding:.25rem .35rem;border-radius:6px;font-size:.9rem;line-height:1.45;cursor:pointer}
+.tcard ol.notes li.on{background:#fff1c9}
+.tcard ol.notes .nb{flex:none;display:inline-flex;align-items:center;justify-content:center;width:1.3rem;height:1.3rem;border-radius:50%;background:#37474f;color:#fff;font-size:.74rem;font-weight:700;margin-top:.05rem}
+.tcard ol.notes li.on .nb{background:#d84315}
+svg .note{cursor:pointer}
+svg .note .nb{fill:#37474f;stroke:#fff;stroke-width:1.5}
+svg .note .nt{fill:#fff;font-size:10.5px;font-weight:700;pointer-events:none}
+svg .note .nhl{fill:none;stroke:#d84315;stroke-width:2.6;opacity:0;pointer-events:none}
+svg .note.on .nhl{opacity:1}
+svg .note.on .nb{fill:#d84315}
+.tnav{display:flex;align-items:center;gap:.5rem;margin-top:.8rem}
+.tnav .dots{flex:1;text-align:center;letter-spacing:.25rem;color:#b9bec5}
+.tnav .dots b{color:var(--ink)}
+.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:.5rem 1rem;font-weight:600}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+.btn:disabled{opacity:.45;cursor:default}
+
+/* 盤面 */
+.lvbar{display:flex;gap:.4rem;align-items:center;margin:.1rem 0 .5rem;flex-wrap:wrap}
+.lvbar button{min-width:2.4rem;border:1px solid var(--line);background:#fff;border-radius:8px;padding:.2rem .4rem;font-size:.85rem;line-height:1.2}
+.lvbar button.on{border-color:var(--ink);font-weight:700}
+.lvbar button small{display:block;color:var(--star);font-size:.65rem;min-height:.8rem}
+.lvbar button:disabled{opacity:.4}
+.mission{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.5rem .8rem;margin:0 0 .5rem;font-size:.9rem}
+.mission .mh{font-size:.78rem;color:var(--sub);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.mission .hint{font-size:.78rem;color:var(--sub);margin:.05rem 0 .15rem}
+.mission .req{display:flex;align-items:flex-start;gap:.5rem;margin:.25rem 0}
+.mission .req i{flex:none;width:.85rem;height:.85rem;border-radius:3px;margin-top:.3rem}
+.mission .req span{flex:1}
+.mission .req small{display:block;color:var(--sub);font-size:.78rem}
+.mission .req small.now{color:#b35500}
+.mission .req b{flex:none;font-size:.95rem;min-width:1.1em;text-align:center;color:#b9bec5}
+.mission .req.ok b{color:var(--ok)}
+.mission .req.ng b{color:var(--ng)}
+.mission .mv{display:flex;flex-wrap:wrap;gap:.2rem .8rem;color:var(--sub);font-size:.8rem;margin-top:.3rem;border-top:1px dashed var(--line);padding-top:.3rem}
+.mission .mv .st{color:var(--star)}
+.board{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;touch-action:manipulation}
+/* 「送ってみる」で、ルータに着くたびに経路表を引いて見せる小窓 */
+.lk{position:absolute;z-index:5;background:#fff;border:1.5px solid #37474f;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.2);
+  padding:.35rem .55rem .4rem;font-size:12px;line-height:1.35;pointer-events:none;opacity:0;transition:opacity .15s}
+.lk.on{opacity:1}
+.lk .h{font-weight:700;font-size:12.5px;white-space:nowrap}
+.lk .d{color:var(--sub);font-size:11px;margin:.05rem 0 .25rem;white-space:nowrap}
+.lk .d b{color:var(--ink);font-family:Menlo,Consolas,"DejaVu Sans Mono",monospace;font-weight:700}
+.lk table{border-collapse:collapse;width:100%}
+.lk td{padding:1px 4px;white-space:nowrap;font-size:11px;transition:background .12s,opacity .12s}
+.lk td.p{font-family:Menlo,Consolas,"DejaVu Sans Mono",monospace}
+.lk td.c{color:var(--sub);font-weight:700}
+.lk td.n{color:var(--sub)}
+.lk tr.scan td{background:#e3ecfa}
+.lk tr.hit td{background:#fff3c4}
+.lk tr.win td{background:#ffd98a;color:var(--ink);text-shadow:.35px 0 0 currentColor}      /* 太字にすると字の幅が変わって窓がずれる */
+.lk tr.no td{opacity:.35}
+.lk td.t{color:#a05a00;font-weight:700;font-size:10.5px;min-width:1.2em;position:relative}
+.lk td.t .sz{visibility:hidden}                                       /* 列の幅だけ取る(札が変わっても窓の大きさが変わらない) */
+.lk td.t .v{position:absolute;left:4px;top:1px}
+.lk .r.wait{visibility:hidden}                                        /* 結果の行も最初から場所を取り、最後に見せる */
+.lk tr.no td.t{color:#9aa0a6;opacity:1}
+.lk tr.scan td.t{color:#1f63c6}
+.lk .r{margin-top:.3rem;font-weight:700;font-size:11.5px}
+.lk .ln{white-space:nowrap}
+.lk .r.ok{color:#2a7d3a} .lk .r.ng{color:#c62828}
+.board svg,.tcard svg{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:none}
+.stepopt{display:inline-flex;align-items:center;gap:.35rem;margin:.45rem .2rem 0;font-size:.85rem;color:var(--ink);cursor:pointer}
+.stepopt input{width:1rem;height:1rem}
+.tcard .exctl{display:flex;justify-content:center;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.35rem 0 .2rem}
+.tcard .exctl .exsend{margin:0}
+.tcard .exctl .stepopt{margin:0}
+.legend{display:flex;flex-wrap:wrap;gap:.3rem .9rem;font-size:.78rem;color:var(--sub);margin:.45rem .2rem 0}
+.facts{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.55rem .8rem;margin-top:.6rem;font-size:.88rem}
+.facts h4{margin:.1rem 0 .2rem;font-size:.82rem;color:var(--sub)}
+.facts p{margin:.2rem 0}
+pre.cli{margin:.3rem 0;font-size:.8rem;background:#f6f7f9;border-radius:6px;padding:.4rem .6rem;overflow-x:auto;
+  font-family:Menlo,Consolas,"DejaVu Sans Mono",monospace;line-height:1.45;white-space:pre-wrap}
+.result{margin-top:.7rem;border-radius:10px;padding:.7rem .9rem;font-size:.92rem}
+.result[hidden]{display:none}
+.result.ok{background:#e9f5ec;border:1px solid #b6dcbf}
+.result.ng{background:#fdecea;border:1px solid #f3c0bc}
+.result .big{font-size:1.1rem;font-weight:700}
+.result .stars{color:var(--star);font-size:1.3rem;letter-spacing:.1rem}
+.result .acts{display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap}
+.explain{margin-top:.7rem;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.5rem .9rem}
+.explain summary{cursor:pointer;font-weight:600;color:var(--link);font-size:.92rem}
+.explain[hidden]{display:none}
+.explain h4{font-size:.85rem;margin:.6rem 0 .2rem;color:var(--sub)}
+.explain p{margin:.15rem 0;font-size:.88rem}
+.actbar{position:fixed;left:0;right:0;bottom:0;z-index:15;background:rgba(255,255,255,.96);border-top:1px solid var(--line);
+  padding:.55rem 16px calc(.55rem + env(safe-area-inset-bottom))}
+.actbar[hidden]{display:none}
+.actbar .in{max-width:560px;margin:0 auto;display:flex;align-items:center;gap:.5rem}
+.actbar .cnt{flex:1;color:var(--sub);font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.actbar .btn{padding:.5rem .8rem;font-size:.9rem}
+.actbar .btn[hidden]{display:none}
+.actbar .in[hidden]{display:none}
+.actbar .pk{flex-direction:column;align-items:stretch;gap:.3rem}
+.pk .st{font-size:.92rem;line-height:1.4}
+.pk .st b{color:#d84315}
+.pk .st small{display:block;color:var(--sub);font-size:.78rem}
+.pk .row{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+.pk .row .sp{flex:1}
+.pk .chip2{border:1.5px solid #d84315;color:#d84315;background:#fff;border-radius:999px;padding:.25rem .7rem;font-size:.84rem;font-weight:700}
+.pk .chip2.on{background:#d84315;color:#fff}
+.pk .btn{padding:.4rem .8rem;font-size:.88rem}
+.pk .ftop{display:flex;align-items:center;gap:.4rem}
+.pk .ftop .fcmd{flex:1;min-width:0}
+.pk .ftop .btn{padding:.32rem .75rem}
+.pk .fcmd{font-family:Menlo,Consolas,"DejaVu Sans Mono",monospace;font-size:.86rem;color:var(--sub)}
+.pk .fcmd b{color:var(--ink)}
+.pk .fcmd small{font-family:"Segoe UI","Hiragino Kaku Gothic ProN","Noto Sans CJK JP",system-ui,sans-serif;margin-left:.4rem;color:#bf360c}
+.pk .fgrid{display:grid;grid-template-columns:1fr 1fr 1fr 4.4em;gap:.25rem .35rem}
+.pk .fgrid label{display:flex;flex-direction:column;gap:0;min-width:0}
+.pk .fgrid label span{font-size:.68rem;color:var(--sub);font-weight:700;line-height:1.3}
+.pk .fgrid input{font-family:Menlo,Consolas,"DejaVu Sans Mono",monospace;font-size:.88rem;padding:.3rem .45rem;border:1.5px solid var(--line);
+  border-radius:7px;min-width:0;width:100%;box-sizing:border-box;background:#fff;color:var(--ink)}
+.pk .fgrid input:focus{outline:none;border-color:var(--pri)}
+.pk .fgrid input.bad{border-color:var(--ng);background:#fff5f5}
+.pk .ferr{font-size:.82rem;line-height:1.45}
+.pk .ferr[hidden]{display:none}
+.pk .ferr .echo{font-family:Menlo,Consolas,"DejaVu Sans Mono",monospace;white-space:pre-wrap;word-break:break-all;color:var(--ink);font-size:.78rem}
+.pk .ferr .echo.cr{white-space:pre;word-break:normal;overflow-x:auto}
+.pk .ferr .ios{font-family:Menlo,Consolas,"DejaVu Sans Mono",monospace;color:var(--ng);font-weight:700;white-space:pre-wrap}
+@media (max-width:460px){ .pk .fgrid{grid-template-columns:1fr 1fr} }
+.pk .fgrid input.at{border-color:#d84315;box-shadow:0 0 0 2px #d8431522}
+.pk .fgrid input[readonly]{cursor:pointer}
+.pk .fcand{display:flex;flex-wrap:wrap;gap:.25rem;align-items:center}
+.pk .fcand .h{width:100%;font-size:.68rem;color:var(--sub);font-weight:700;line-height:1.2}
+.pk .fcand button{font-family:Menlo,Consolas,"DejaVu Sans Mono",monospace;font-size:.76rem;border:1.5px solid var(--line);background:#fff;color:var(--ink);
+  border-radius:999px;padding:.14rem .5rem;line-height:1.3}
+.pk .fcand button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+body.formopen main{padding-bottom:420px}
+.addroute{display:block;width:100%;margin:.2rem 0 .1rem;border:1.5px solid var(--pri);background:#fff;color:var(--pri);border-radius:10px;padding:.55rem;font-weight:700;font-size:.95rem}
+svg .pickhl{fill:none;stroke:#d84315;stroke-width:3;stroke-dasharray:7 4}
+/* 宛先の範囲の光り(ステージ 5 から): 欄の宛先とマスク、または経路表で押した宛先が覆う拠点・LAN・端末 */
+svg .rng{fill:#ffca28;fill-opacity:.2;stroke:#f9a825;stroke-width:2.4;pointer-events:none}
+svg .rngh{fill:none;stroke:#f9a825;stroke-width:3.2;pointer-events:none}
+svg .rngl{stroke:#ffca28;stroke-opacity:.55;stroke-width:9;stroke-linecap:round;pointer-events:none}
+.rt td.hlp .chip{cursor:pointer}
+.rt td.hlp .chip.on{outline:2.5px solid #f9a825;outline-offset:1px}
+svg .picksrc{fill:none;stroke:#d84315;stroke-width:3.5}
+.toast{position:fixed;left:50%;top:3.4rem;transform:translateX(-50%);z-index:40;background:#2b2f35;color:#fff;border-radius:8px;
+  padding:.45rem .8rem;font-size:.85rem;max-width:90vw;box-shadow:0 4px 14px rgba(0,0,0,.2)}
+.toast[hidden]{display:none}
+
+/* 下から出る枠 */
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:30;background:#fff;border-top:1px solid var(--line);
+  box-shadow:0 -6px 20px rgba(0,0,0,.12);border-radius:14px 14px 0 0;max-height:74vh;overflow-y:auto;
+  padding:.6rem 16px calc(.7rem + env(safe-area-inset-bottom))}
+.sheet[hidden]{display:none}
+.sheet .in{max-width:560px;margin:0 auto}
+.sheet .hd{display:flex;align-items:baseline;gap:.5rem}
+.sheet .hd b{font-size:1.05rem;flex:1}
+.sheet .hd button{border:0;background:none;font-size:1.4rem;line-height:1;padding:0 .2rem;color:var(--sub)}
+.sheet .sb{color:var(--sub);font-size:.82rem;margin:.1rem 0 .3rem}
+.sheet .sec{border-top:1px solid var(--line);margin-top:.5rem;padding-top:.45rem}
+.sheet .sec h4{margin:0 0 .3rem;font-size:.88rem}
+.sheet .note{color:var(--sub);font-size:.82rem;margin:.3rem 0}
+.sheet .chips{display:flex;flex-wrap:wrap;gap:.35rem;margin:.3rem 0 .2rem}
+.sheet .chips button{border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:.25rem .65rem;font-size:.84rem;font-weight:600}
+.sheet .chips button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.sheet .chips button:disabled{opacity:.4}
+.sheet .chips button small{font-weight:400;opacity:.8;margin-left:.25rem}
+.sheet .lbl{font-size:.78rem;color:var(--sub);margin:.4rem 0 0}
+.rt{width:100%;border-collapse:collapse;font-size:.84rem}
+.rt td{padding:.25rem .3rem;border-top:1px solid #eef0f2;vertical-align:middle}
+.rt td.c{width:1.9rem;color:var(--sub);font-weight:700;white-space:nowrap}
+.rt td.nh{color:var(--sub);font-size:.8rem}
+.rt td.nh b{color:var(--ink)}
+.rt td.x{text-align:right;white-space:nowrap}
+.rt td.x button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:.05rem .45rem;font-size:.78rem;color:var(--ng)}
+.rt tr.hit td{background:var(--hit)}
+.rt tr.win td{background:var(--win)}
+.rt td .tag{display:inline-block;font-size:.7rem;font-weight:700;color:#a05a00;margin-left:.2rem;white-space:nowrap}
+.rt tr.skip td{color:#9aa0a6}
+.rt tr.skip td .why{display:block;font-size:.72rem}
+.chip{display:inline-block;border-radius:5px;padding:0 .35rem;font-family:Menlo,Consolas,"DejaVu Sans Mono",monospace;font-size:.8rem;border:1px solid;white-space:nowrap}
+.ifrow{padding:.1rem 0}
+.ifrow .t{font-size:.9rem}
+.ifli{display:flex;align-items:baseline;gap:.5rem;width:100%;text-align:left;border:0;border-top:1px solid #eef0f2;background:none;padding:.45rem .1rem;flex-wrap:wrap}
+.ifli b{font-size:.9rem}
+.ifli .ip{font-size:.82rem}
+.ifli .st{font-size:.78rem}
+.ifli .st.up{color:var(--ok)} .ifli .st.down{color:var(--ng)}
+.ifli small{color:var(--sub);font-size:.76rem}
+.ifli .go{margin-left:auto;color:var(--sub);font-size:1.1rem}
+.backlink{border:0;background:none;color:var(--link);padding:.5rem 0 .1rem;font-size:.85rem}
+.ifrow .t{font-weight:700;font-size:.88rem}
+.ifrow .t small{font-weight:400;color:var(--sub);margin-left:.3rem}
+.ifrow .st{font-size:.8rem;margin-left:.3rem}
+.ifrow .st.up{color:var(--ok)} .ifrow .st.down{color:var(--ng)}
+.prev{font-size:.8rem;margin:.35rem 0;background:#f6f7f9;border-radius:6px;padding:.3rem .5rem;font-family:Menlo,Consolas,"DejaVu Sans Mono",monospace;word-break:break-all}
+.addbtn{border:1px solid var(--pri);background:var(--pri);color:#fff;border-radius:8px;padding:.35rem .9rem;font-weight:700}
+.addbtn:disabled{opacity:.4}
+.rules ul{margin:.2rem 0 .4rem;padding-left:1.15rem}
+.rules li{margin:.25rem 0;font-size:.86rem}
+.rules li.off{color:var(--sub)}
+.rules p{font-size:.84rem;margin:.3rem 0}
+.new{display:inline-block;font-size:.62rem;font-weight:700;color:#fff;background:var(--ng);border-radius:3px;padding:0 .25rem;margin-left:.3rem;vertical-align:1px;line-height:1.35}
+.here{display:inline-block;font-size:.7rem;font-weight:700;color:#fff;background:var(--pri);border-radius:4px;padding:0 .35rem;margin-left:.3rem}
+
+/* SVG の中 */
+svg text{font-family:"Segoe UI","Hiragino Kaku Gothic ProN","Noto Sans CJK JP",system-ui,sans-serif}
+svg .mono{font-family:Menlo,Consolas,"DejaVu Sans Mono",monospace}
+svg .clk{cursor:pointer}
+svg .band{fill:none;stroke-width:10;stroke-linecap:round;stroke-linejoin:round;opacity:.2;pointer-events:none}
+svg .band.ok{opacity:.32}
+svg .trail{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:0.1 9;opacity:.85;pointer-events:none}
+svg .pkt{pointer-events:none}
+</style>
+</head>
+<body>
+<header class="bar">
+  <button id="b-home">‹</button>
+  <div class="ttl" id="ttl">Route Path Builder</div>
+  <button id="b-help" hidden>Rules</button>
+  <button id="b-lang">日本語</button>
+</header>
+<main>
+  <section class="view" id="v-home"></section>
+  <section class="view" id="v-tut" hidden></section>
+  <section class="view" id="v-play" hidden>
+    <div class="lvbar" id="lvbar"></div>
+    <div class="mission" id="mission"></div>
+    <div class="board"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+    <label class="stepopt"><input type="checkbox" id="stepchk"> <span id="steplbl">Step by step</span></label>
+    <div class="legend" id="legend"></div>
+    <div class="result" id="result" hidden></div>
+    <div class="explain" id="explain" hidden></div>
+    <div class="facts" id="facts"></div>
+  </section>
+  <pre id="autotest" hidden></pre>
+</main>
+<div class="toast" id="toast" hidden></div>
+<div class="actbar" id="actbar" hidden><div class="in pk" id="pickbar" hidden></div><div class="in" id="actin">
+  <span class="cnt" id="cnt"></span>
+  <button class="btn" id="b-over">Start over</button>
+  <button class="btn" id="b-show">Show answer</button>
+  <button class="btn" id="b-rest" hidden>Play the rest</button>
+  <button class="btn pri" id="b-send">Send</button>
+  <button class="btn pri" id="b-next" hidden>Next</button>
+</div></div>
+<div class="sheet" id="sheet" hidden><div class="in">
+  <div class="hd"><b id="sh-t"></b><button id="sh-x" aria-label="close">×</button></div>
+  <div class="sb" id="sh-s"></div>
+  <div id="sh-b"></div>
+</div></div>
+<script src="/_games/lib/stpboard.js"></script>
+<script>
+(function(){
+'use strict';
+var store = STPB.store, el = STPB.el, sv = STPB.sv, esc = STPB.esc, inline = STPB.inline, md = STPB.md, NS = STPB.NS;
+var Q = new URLSearchParams(location.search);
+var AUTOTEST = +(Q.get('autotest') || 0), UITEST = Q.get('uitest') === '1', DEMO = Q.get('demo') || '';
+var NOREC = !!AUTOTEST || UITEST || !!DEMO;                  // 試験の時はサーバへ記録しない・鍵を無視する
+var LANG = Q.get('lang') || store('rtp.lang') || 'en';
+var W = 400;
+var HUE = {0:'#546e7a', 1:'#1f63c6', 2:'#2a7d3a', 3:'#c96a12', 4:'#8e24aa', 5:'#00838f', 6:'#ad1457'};
+var FLOW = ['#d84315', '#00838f', '#6a1b9a', '#2e7d32'];
+
+var T = {
+  en: {other:'日本語', portal:'Portal', title:'Route Path Builder',
+       intro:'Set up the routers so that packets travel along the route on the mission. Each stage opens with a short tutorial.',
+       stage:'Stage', tutorial:'Tutorial', start:'Start', next:'Next', back:'Back',
+       locked:'Clear the previous stage to open this one.', soon:'Coming later', notReady:'This stage is not ready yet.',
+       resetAll:'Reset all progress', resetAllQ:'Reset all progress? Stars and cleared levels will be erased.',
+       reset:'Reset', resetQ:'Reset the progress of stage {n}?',
+       mission:'Mission', rules:'Rules', hint:'When the settings are ready, press Send. The level clears when every packet (envelope) arrives the way the mission says.',
+       send:'Send', sending:'Sending…', ff:'Fast-forward ▶▶', exSend:'▶ Send the packet', step:'Step by step (stop at each step)', next:'Next ▶', rest:'Play the rest ▶▶',
+       lk:{title:'{r}: routing table', titleIn:'{r}: routing table (received on {i})', dst:'Destination', host:'{h}', out:'Outside its own network {p}|→ hand it to GW {g}', inside:'Inside its own network {p}|→ send it directly',
+           nogw:'No one answers as GW {g}|→ cannot send', none:'No row matches|→ drop', null0:'Null0|→ drop', fwd:'→ send to {n}', fwdIp:'→ to {ip} ({n})|out of {o}',
+           deliver:'Connected ({i})|→ deliver to {h}', nohost:'No one has {d}|→ drop', hit:'◀ matches — stop here', order:'Sorted from the longest prefix|The first match wins', split:'→ splits to {n}'}, result:'Result: {p}', wrongWay:' (not the mission\'s way)', notYet:'Not complete yet. Look at the ✗ rows of the mission, change the settings and send again.',
+       reqReach:'Deliver from {a} to {b}', sep:', ', reqBack:'The reply ({a} → {b}) arrives too', reqPath:'Send {a} → {b} through {p}',
+       reqVia:'Make {a} → {b} pass through {s}', reqSame:'The reply ({a} → {b}) takes the same way back',
+       now:'Now: {p}', arrives:'{p}, arrives', endAt:{noroute:'dropped at {r} (no route)', null0:'dropped at {r} (Null0)',
+         loop:'loops {p} until TTL runs out', nohost:'{r} finds no one at the destination', nogw:'{h} cannot reach its gateway {g}',
+         local:'ends at {r}', router:'ends at a router'},
+       split:'splits into {n} ways (equal-cost)',
+       movesLine:'Moves {n} / limit {m}', stars3:'★★★ within {a}', stars2:'★★ within {b}',
+       moves:'Moves {n} / {m}', startOver:'Start over', startOverQ:'Put every setting back to the start?', show:'Show answer',
+       showQ:'Show the answer? The level counts as cleared, without stars.',
+       cleared:'Route complete!', revealed:'Here is an answer.', movesUsed:'{n} moves (fewest: {p})',
+       nextLv:'Next level', again:'Try again', toStages:'Back to stages', nextStage:'Next stage',
+       readWhy:'Read the explanation', yourCfg:'Your configuration', bestCfg:'An answer with the fewest moves ({n})', noChange:'(No changes yet.)',
+       ansCfg:'The answer\'s configuration', changed:'Changed configuration',
+       legPkt:'✉ packet (tag = destination IP)', legDrop:'✖ dropped', legBand:'band = the mission\'s way', legLock:'🔒 not yours',
+       drop:{noroute:'no route', null0:'Null0', loop:'loop (TTL)', nohost:'no one there', nogw:'no gateway', local:'stops', router:'stops'},
+       rtable:'Routing table', viewH:'Reading the board', conn:'connected', via:'via {i}', use:'used', longest:'longest', matchT:'matches',
+       notIn:'Not in the table', why:{unresolved:'cannot reach the next hop', worse_ad:'another row for it has a lower AD', connected:'connected wins for the same destination', ad255:'a route with distance 255 never enters the table'},
+       del:'Delete', addH:'Add a route', dest:'Destination', nhop:'Next hop', adL:'AD (administrative distance)', addBtn:'Add',
+       addMap:'+ Add a route', cancel:'Cancel',
+       fDst:'Destination', fMask:'Mask', fGw:'Gateway', fAd:'Distance', fAssist:'Tapping a tag on the map fills a blank.', fCand:'Pick the {f}', fNull:'Null0',
+       fe:{empty:'Fill in the destination, the mask and the gateway.', ipFmt:'The {f} is four numbers from 0 to 255 joined by dots.',
+           slash:'ip route does not take a mask as /length. Write it as four numbers joined by dots.',
+           mask:'In a mask the 1 bits run unbroken from the left, and the rest are 0.',
+           host:'Write the destination as a network address: every bit that the mask leaves 0 must be 0.',
+           ad:'The administrative distance is a number from 1 to 255 (1 when left blank).',
+           gw0:'Write the neighbor router\'s IP as the gateway.', gwBad:'{ip} cannot be a next hop.',
+           own:'{ip} is the IP of one of {r}\'s own interfaces.',
+           notLan:'On this stage the destination must be a LAN network on the map. {p} matches no LAN tag.',
+           noDef:'On this stage the destination must be a LAN network on the map.',
+           lenRule:'On this stage a destination is /8, /16, /24 or /32 long (or 0.0.0.0/0). Other lengths come in a later stage.',
+           noHostIn:'No host on the map is inside {p}. On this stage write a range that holds hosts (a site, a LAN or one host), or 0.0.0.0/0.',
+           dup:'That route is already there.', locked:'🔒 That route cannot be changed.'},
+       ownLan:'{p} is connected to {r}. It needs no route.', added:'Added: {c}', adSet:'Changed the distance: {c}', lanOf2:'{h}\'s LAN ({p})', legRt:'▸ added route (color = destination)',
+       dup:'That route is already there.', fixedR:'This router is not yours. You can only look.', lockR:'locked',
+       ifH:'Interfaces', faces:'toward {x}', ipL:'IP address', stateL:'State', backIfs:'← All interfaces of {r}', noip:'No IP', enable:'Enable (no shutdown)', disable:'Shut down', isUp:'up', isDown:'down',
+       overlap:'overlaps {i}', overBudget:'Move limit reached ({n}). Undo another change first.',
+       dflt:'default', lanOf:'{h}\'s LAN', netOf:'network of {h}', link:'link', tapRouter:'Tap a router to see its routing table.',
+       knobsH:'What you can change', thisStage:'this stage', tutAgain:'Read the tutorial again',
+       ex:{hand:'{h} hands it to its gateway {g} ({r}).', sameNet:'{h}: the destination is in its own network.', row:'{r}: the row {p} matches → next {n}.',
+           rowIp:'{r}: the row {p} matches → next {ip} ({n}), out of {o}.', deliver:'{r}: {p} is connected ({i}) → delivered to {h}.',
+           none:'{r}: no row matches → dropped.', nullr:'{r}: the row {p} points at Null0 → dropped.', loopr:'It comes back to {r}: a loop.',
+           nogw:'{h}: no one answers as its gateway {g} → it cannot send.', nohost:'{r}: no one has {d} → dropped.'},
+       rulesTxt:{
+         items:[
+           ['', '**connected**: a router knows, from the start, the network of every interface that has an IP and is enabled (`no shutdown`). Routing table code C.'],
+           ['', '**Default gateway**: a host hands a packet for another network to its gateway (GW), the IP of the router\'s interface on its LAN.'],
+           ['', '**Next step**: a router looks for the row that matches the destination IP and sends the packet that way. If no row matches, it drops the packet.'],
+           ['ifs&!linkip', '**Overlap**: one router cannot have two interfaces in the same network (IOS refuses it).'],
+           ['linkip', '**static route**: `ip route <destination> <mask> <gateway> [<distance>]`. The gateway (next hop) is the neighbor\'s IP on the link you share. The mask is written as four numbers (/24 = 255.255.255.0).'],
+           ['linkip', '**Links** are small networks (/30: two usable addresses). The next hop is the neighbor\'s address on the link you share: read the subnet on the link and the .x at its end. Link addresses differ from board to board.'],
+           ['back', '**Round trip**: the reply\'s way is decided by each router\'s table too, separately from the way there.'],
+           ['internet', '**Default route** 0.0.0.0/0 matches every destination. If another row also matches, that row is used.'],
+           ['internet', '**Loop**: a packet bounced between routers is dropped when its TTL reaches 0.'],
+           ['internet', '**ISP** (🔒): sends 10.0.0.0/8 back to you. NAT is left out.'],
+           ['sites', '**Sites**: site n uses 10.n.0.0/16, and its LANs are /24s inside it.'],
+           ['sites', '**Longest match**: when several rows match the destination, the router uses the one with the longest prefix (/32 > /24 > /16 > /8 > /0). The distance (AD) is compared only between rows for the same prefix.'],
+           ['sites', '**Two rows for the same prefix with the same distance** both enter the table, and the traffic splits between the two ways (equal cost).'],
+           ['sites', '**A /32 row** wins even over the connected LAN (/24) its host sits on.'],
+           ['lock', '**🔒 rows** cannot be deleted (someone else put them in). To send part of their traffic another way, add a longer row.'],
+           ['range', '**Destinations on this stage** (a rule of the game): /8, /16, /24 or /32 long, or 0.0.0.0/0, and only ranges that hold hosts (a site, a LAN, one host). Fill in the destination and mask, or tap a destination in a routing table, and its range lights up on the map.']],
+         knob:{'if':'**Interfaces** (tap the router): pick the IP, enable or shut down.', add:'**Add a route** (tap a router → fill in the destination, mask, gateway and distance).',
+               del:'**Delete** a row that was there from the start.'},
+         foot:[['', 'Anything not shown is at its default.'],
+               ['', '★★★ fewest moves · ★★ one more · ★ within the limit. One changed line of configuration = one move.'],
+               ['!sites', 'Rules not listed here do not change the result on this stage\'s boards. More appear in later stages.']]}},
+  ja: {other:'English', portal:'ポータル', title:'ルーティング経路づくり',
+       intro:'ルータの設定を変えて、お題の経路どおりにパケットを届けるゲームです。ステージの最初に短いチュートリアルがあります。',
+       stage:'ステージ', tutorial:'チュートリアル', start:'はじめる', next:'次へ', back:'戻る',
+       locked:'前のステージをクリアすると開きます。', soon:'準備中', notReady:'このステージは準備中です。',
+       resetAll:'進み具合をすべてリセット', resetAllQ:'進み具合をすべてリセットしますか? 星とクリアの記録が消えます。',
+       reset:'リセット', resetQ:'ステージ {n} の進み具合をリセットしますか?',
+       mission:'お題', rules:'ルール', hint:'設定ができたら「送ってみる」を押します。すべてのパケット(封筒)がお題どおりに届けば開通です。',
+       send:'送ってみる', sending:'送っています…', ff:'早送り ▶▶', exSend:'▶ パケットを送ってみる', step:'コマ送り(1 歩ずつ止める)', next:'次へ ▶', rest:'残りを流す ▶▶',
+       lk:{title:'{r} の経路表', titleIn:'{r} の経路表({i} で受信)', dst:'宛先', host:'{h}', out:'自分のネットワーク {p} の外|→ GW {g} に渡す', inside:'自分のネットワーク {p} の中|→ 直接送る',
+           nogw:'GW {g} がいない|→ 送れない', none:'当てはまる行なし|→ 捨てる', null0:'Null0|→ 捨てる', fwd:'→ {n} へ送る', fwdIp:'→ {ip}({n})へ|{o} から出す',
+           deliver:'つながっている({i})|→ {h} に届ける', nohost:'{d} の持ち主がいない|→ 捨てる', hit:'◀ ここで決まり', order:'長い順に並べて上から照らす|最初に当てはまった行で決まる', split:'→ {n} に分かれる'}, result:'結果: {p}', wrongWay:'(お題の道と違う)', notYet:'まだ開通していません。お題の ✗ の行を見て、設定を直してからもう一度送ってください。',
+       reqReach:'{a} から {b} へ届ける', sep:'・', reqBack:'戻り({a} → {b})も届く', reqPath:'{a} → {b} の通信を {p} の順に通す',
+       reqVia:'{a} → {b} の通信が {s} を通るようにする', reqSame:'戻り({a} → {b})も同じ道を通る',
+       now:'今: {p}', arrives:'{p} で届く', endAt:{noroute:'{r} で落ちる(経路なし)', null0:'{r} で落ちる(Null0)',
+         loop:'{p} でループ(TTL が尽きて落ちる)', nohost:'{r} で落ちる(宛先に相手がいない)', nogw:'{h} がゲートウェイ {g} に渡せない',
+         local:'{r} で止まる', router:'ルータで止まる'},
+       split:'{n} つの道に分かれる(等コスト)',
+       movesLine:'手数 {n} / 上限 {m}', stars3:'★★★ {a} 手以内', stars2:'★★ {b} 手以内',
+       moves:'手数 {n} / {m}', startOver:'やり直し', startOverQ:'すべての設定を最初に戻しますか?', show:'答えを見る',
+       showQ:'答えを見ますか? クリア扱いになりますが、星は付きません。',
+       cleared:'開通!', revealed:'答えの一例です。', movesUsed:'{n} 手(最少 {p} 手)',
+       nextLv:'次のレベル', again:'もう一度', toStages:'ステージ一覧へ', nextStage:'次のステージ',
+       readWhy:'解説を読む', yourCfg:'あなたの設定', bestCfg:'最少手数({n} 手)の答えの一例', noChange:'(まだ変更していません)',
+       ansCfg:'答えの設定', changed:'変更した設定',
+       legPkt:'✉ パケット(札は宛先 IP)', legDrop:'✖ 落ちた所', legBand:'帯 = お題の道', legLock:'🔒 触れない',
+       drop:{noroute:'経路なし', null0:'Null0', loop:'ループ', nohost:'相手がいない', nogw:'GW がいない', local:'止まる', router:'止まる'},
+       rtable:'経路表', viewH:'盤面の見方', conn:'つながっている', via:'{i} の先', use:'使う', longest:'一番長い', matchT:'当てはまる',
+       notIn:'表に入っていない設定', why:{unresolved:'次の行き先に届かない', worse_ad:'同じ宛先に AD の小さい行がある', connected:'同じ宛先は connected が優先', ad255:'管理距離 255 の経路は表に入らない'},
+       del:'消す', addH:'経路を足す', dest:'宛先', nhop:'次の行き先', adL:'AD(アドミニストレーティブ ディスタンス)', addBtn:'足す',
+       addMap:'＋ 経路を足す', cancel:'やめる',
+       fDst:'宛先', fMask:'マスク', fGw:'ゲートウェイ', fAd:'管理距離', fAssist:'地図の札を押すと欄に入ります。', fCand:'{f}の候補', fNull:'Null0',
+       fe:{empty:'宛先・マスク・ゲートウェイを入れてください。', ipFmt:'{f}は、0〜255 の数 4 つをドットでつないで書きます。',
+           slash:'ip route のマスクは /長さ では書けません。ドットでつないだ 4 つの数で書きます。',
+           mask:'マスクは、2 進数で 1 が左から切れ目なく続き、残りがすべて 0 の形です。',
+           host:'宛先はネットワーク アドレスで書きます(マスクが 0 の部分のビットがすべて 0)。',
+           ad:'管理距離は 1〜255 の数です(書かなければ 1)。',
+           gw0:'ゲートウェイには、隣のルータの IP を書きます。', gwBad:'{ip} は next-hop に使えないアドレスです。',
+           own:'{ip} は {r} 自身のインターフェースの IP です。',
+           notLan:'このステージで書ける宛先は、地図の LAN のネットワークです。{p} はどの LAN の札とも合いません。',
+           noDef:'このステージで書ける宛先は、地図の LAN のネットワークです。',
+           lenRule:'このステージで書ける長さは /8・/16・/24・/32(と 0.0.0.0/0)です。ほかの長さは先のステージで使います。',
+           noHostIn:'{p} の中には地図の端末がいません。このステージで書けるのは、端末のいる範囲(拠点・LAN・端末 1 台)か 0.0.0.0/0 です。',
+           dup:'その経路はもうあります。', locked:'🔒 その経路は変えられません。'},
+       ownLan:'{p} は {r} につながっています。経路は要りません。', added:'足しました: {c}', adSet:'管理距離を変えました: {c}', lanOf2:'{h} の LAN({p})', legRt:'▸ 足した経路(色 = 宛先)',
+       dup:'その経路はもうあります。', fixedR:'自分たちのルータではありません。見るだけです。', lockR:'消せない',
+       ifH:'インターフェース', faces:'{x} 側', ipL:'IP アドレス', stateL:'状態', backIfs:'← {r} のインターフェースの一覧へ', noip:'IP なし', enable:'有効にする(no shutdown)', disable:'無効にする(shutdown)', isUp:'up', isDown:'down',
+       overlap:'{i} と重なる', overBudget:'手数の上限({n})です。ほかの変更を元に戻してから変えてください。',
+       dflt:'デフォルト', lanOf:'{h} の LAN', netOf:'{h} のネットワーク', link:'リンク', tapRouter:'ルータを押すと経路表が出ます。',
+       knobsH:'変えられる設定', thisStage:'このステージ', tutAgain:'チュートリアルを読み直す',
+       ex:{hand:'{h} は宛先が自分のネットワークの外なので、ゲートウェイ {g}({r})に渡す。', sameNet:'{h}: 宛先は自分のネットワークの中。',
+           row:'{r}: {p} の行に当てはまる → 次は {n}。', rowIp:'{r}: {p} の行に当てはまる → 次は {ip}({n})・{o} から出す。',
+           deliver:'{r}: {p} はつながっている({i})→ {h} に届ける。', none:'{r}: 当てはまる行が無い → 捨てる。',
+           nullr:'{r}: {p} の行は Null0 → 捨てる。', loopr:'{r} に戻ってきた → ループ。',
+           nogw:'{h}: ゲートウェイ {g} の持ち主がいない → 送れない。', nohost:'{r}: {d} の持ち主がいない → 捨てる。'},
+       rulesTxt:{
+         items:[
+           ['', '**connected**: IP を付けて有効(`no shutdown`)にしたインターフェースのネットワークを、ルータは最初から知っている。経路表の C。'],
+           ['', '**既定ゲートウェイ**: 端末は、自分のネットワークの外へ送るとき、GW(LAN にいるルータのインターフェースの IP)に渡す。'],
+           ['', '**次の行き先**: ルータは宛先 IP に当てはまる行を経路表から探し、その行のとおりに送る。当てはまる行が無ければ捨てる。'],
+           ['ifs&!linkip', '**重なる IP**: 1 台のルータの 2 つのインターフェースに、同じネットワークの IP は付けられない(IOS が受け付けない)。'],
+           ['linkip', '**static route**: `ip route 宛先 マスク ゲートウェイ [管理距離]`。ゲートウェイ(次の行き先)は、隣のルータの、共有するリンク上の IP。マスクはドットでつないだ 4 つの数で書く(/24 = 255.255.255.0)。'],
+           ['linkip', '**リンク**も小さなネットワーク(/30。使えるアドレスは 2 つ)。次の行き先は、共有するリンクの上の隣の IP。リンクの札(サブネット)と端の .x から読む。リンクのアドレスは盤面ごとに違う。'],
+           ['back', '**往復**: 返事の道も、各ルータの経路表で決まる(行きとは別に決まる)。'],
+           ['internet', '**デフォルト ルート** 0.0.0.0/0: すべての宛先に当てはまる。ほかにも当てはまる行があれば、そちらが使われる。'],
+           ['internet', '**ループ**: ルータどうしで行き来したパケットは、TTL が 0 になったところで捨てられる。'],
+           ['internet', '**ISP**(🔒): 10.0.0.0/8 をこちらへ返す。NAT は省く。'],
+           ['sites', '**拠点**: 拠点 n のアドレスは 10.n.0.0/16。拠点の LAN はその中の /24。'],
+           ['sites', '**ロンゲストマッチ**: 宛先に当てはまる行が複数あれば、プレフィックスの一番長い行を使う(/32 > /24 > /16 > /8 > /0)。管理距離は、同じプレフィックスの行どうしでだけ比べる。'],
+           ['sites', '**同じプレフィックス・同じ管理距離の行が 2 本**あると、両方とも表に入り、通信は 2 つの道に分かれる(等コスト)。'],
+           ['sites', '**/32 の行**は、その端末がつながっている LAN(connected の /24)にも勝つ。'],
+           ['lock', '**🔒 の行**は消せない(別の担当が入れた経路)。通信の一部を別の道へ通すには、もっと長い行を足す。'],
+           ['range', '**書ける宛先**(このステージの決まり): 長さは /8・/16・/24・/32 と 0.0.0.0/0。端末のいる範囲(拠点・LAN・端末 1 台)だけ。宛先とマスクを入れるか、経路表の宛先を押すと、その範囲が地図で光る。']],
+         knob:{'if':'**インターフェース**(ルータを押す): IP を選ぶ・有効/無効。', add:'**経路を足す**(ルータを押す → 宛先・マスク・ゲートウェイ・管理距離を書く)。',
+               del:'初めからある経路を**消す**。'},
+         foot:[['', '書いていない設定は既定値。'],
+               ['', '★★★ 最少手数 ・ ★★ 最少 + 1 ・ ★ 上限以内。変えた設定の 1 行 = 1 手。'],
+               ['!sites', 'ここに無い決まりは、このステージの盤面では結果を左右しない(先のステージで増えていく)。']]}}
+};
+function t(k, o){ var s = (T[LANG] || T.en)[k]; if (s == null) s = T.en[k]; if (s == null) s = k; if (o && typeof s === 'string') for (var x in o) s = s.split('{' + x + '}').join(o[x]); return s; }
+function tt(k1, k2, o){ var d = (T[LANG] || T.en)[k1] || T.en[k1]; var s = d && d[k2] != null ? d[k2] : (T.en[k1] || {})[k2] || k2; if (o) for (var x in o) s = s.split('{' + x + '}').join(o[x]); return s; }
+function tr(o){ return o == null ? '' : typeof o === 'string' ? o : (o[LANG] || o.en || ''); }
+function $(id){ return document.getElementById(id); }
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function apiGet(path){ return fetch('/_api/route_path/' + path).then(function(r){ return r.json(); }); }
+function apiPost(path, body){
+  return fetch('/_api/route_path/' + path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
+    .then(function(r){ return r.json().then(function(j){ if (!r.ok) throw new Error(j.error || r.status); return j; }); });
+}
+function remember(path, body){ return NOREC ? Promise.resolve({ok:true}) : apiPost(path, body); }
+var toastTimer = null;
+function toast(msg){
+  var e = $('toast'); e.textContent = msg; e.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ e.hidden = true; }, 2600);
+}
+
+// ------------------------------------------------------------------ IP の小物
+function ip2n(s){ return s.split('.').reduce(function(a, x){ return a * 256 + (+x); }, 0); }
+function inPfx(ip, p){
+  var a = p.split('/'), len = +a[1];
+  if (len === 0) return true;
+  var m = Math.pow(2, 32) - Math.pow(2, 32 - len);
+  return Math.floor(ip2n(ip) / Math.pow(2, 32 - len)) === Math.floor(ip2n(a[0]) / Math.pow(2, 32 - len)) && m > 0;
+}
+function maskOf(len){ var m = []; for (var i = 0; i < 4; i++){ var b = Math.max(0, Math.min(8, len - i * 8)); m.push(256 - Math.pow(2, 8 - b)); } return m.join('.'); }
+function routeCli(s, no){
+  var a = s.p.split('/'); var line = 'ip route ' + a[0] + ' ' + maskOf(+a[1]) + ' ' + s.nh;
+  if (!no && (s.ad || 1) !== 1) line += ' ' + s.ad;
+  return (no ? 'no ' : '') + line;
+}
+function hostPart(ip, plen){ var o = ip.split('.'); return plen >= 24 ? '.' + o[3] : ip; }
+
+// ------------------------------------------------------------------ 状態
+var S = {ov:null, stage:null, level:null, pz:null, cfg:null, ev:null, sel:null, card:0, done:false, revealed:false, seq:0,
+         lookFor:null, add:{p:null, nh:null, ad:1}, tested:null, busy:false, evalP:null, form:null};
+// 「送ってみる」の結果が今の設定のものか(設定を変えたら結果は消える)
+function testedEv(){ return S.tested && S.tested.key === JSON.stringify(S.cfg) ? S.tested.ev : null; }
+function stageOf(id){ return S.ov.stages.filter(function(s){ return s.id === id; })[0]; }
+function levelOpen(st, lv){ return NOREC || lv === 1 || !!st.progress[String(lv)] || !!st.progress[String(lv - 1)]; }
+function has(pz, k){ return !pz.show || pz.show.indexOf(k) >= 0; }
+function isNew(pz, k){ return !!pz.new && pz.new.indexOf(k) >= 0; }
+function knob(pz, k){ return pz.knobs.indexOf(k) >= 0; }
+function newTag(){ return el('span', 'new', 'NEW'); }
+function IX(pz){
+  if (pz._ix) return pz._ix;
+  var R = {}, L = {}, H = {};
+  pz.routers.forEach(function(r){ R[r.name] = r; });
+  pz.lans.forEach(function(l){ L[l.id] = l; l.hosts.forEach(function(h, i){ H[h.name] = {h:h, lan:l, i:i}; }); });
+  Object.defineProperty(pz, '_ix', {value:{R:R, L:L, H:H}, enumerable:false});
+  return pz._ix;
+}
+function hostOfIp(pz, ip){ var H = IX(pz).H; for (var k in H) if (H[k].h.ip === ip) return H[k]; return null; }
+function siteHue(pz, p){
+  var best = null;
+  pz.lans.forEach(function(l){ if (!l.cloud && inPfx(l.prefix.split('/')[0], p) && +p.split('/')[1] >= 8) best = l.site; });
+  if (+p.split('/')[1] === 0) return '#546e7a';
+  return best != null ? HUE[best % 7] : '#546e7a';
+}
+
+// 手数(サーバの route_path.cli と同じ数え方)
+function ifState(pz, cfg, r, n){
+  var o = cfg.i && cfg.i[r] && cfg.i[r][n];
+  if (o) return {ip:o.ip, shut:!!o.shut};
+  var f = IX(pz).R[r].ifs.filter(function(i){ return i.name === n; })[0];
+  return {ip:f.ip + '/' + f.plen, shut:false};
+}
+function keyOf(s){ return s.p + '|' + (s.nh || 'Null0'); }
+function movesOf(pz, cfg){
+  var n = 0;
+  pz.routers.forEach(function(r){
+    r.ifs.forEach(function(i){
+      var a = ifState(pz, pz.init, r.name, i.name), c = ifState(pz, cfg, r.name, i.name);
+      if (a.ip !== c.ip) n++;
+      if (a.shut !== c.shut) n++;
+    });
+    var A = {}, B = {};
+    ((pz.init.r || {})[r.name] || []).forEach(function(s){ A[keyOf(s)] = s.ad || 1; });
+    ((cfg.r || {})[r.name] || []).forEach(function(s){ B[keyOf(s)] = s.ad || 1; });
+    for (var k in A) if (!(k in B)) n++;
+    for (var k2 in B) if (!(k2 in A) || A[k2] !== B[k2]) n++;
+  });
+  return n;
+}
+
+// ------------------------------------------------------------------ 画面の切替
+function show(view){
+  ['home', 'tut', 'play'].forEach(function(v){ $('v-' + v).hidden = v !== view; });
+  $('b-home').textContent = view === 'home' ? '‹ ' + t('portal') : '‹';
+  $('b-home').dataset.to = view === 'home' ? 'portal' : 'home';
+  $('b-help').hidden = view !== 'play';
+  $('b-help').textContent = t('rules');
+  $('actbar').hidden = view !== 'play';
+  closeSheet();
+  $('b-lang').textContent = t('other');
+  document.documentElement.lang = LANG;
+}
+function route(){
+  var h = location.hash, m;
+  if (!S.ov) return;
+  if ((m = h.match(/^#t(\d+)$/))) return openTut(+m[1]);
+  if ((m = h.match(/^#p(\d+)-(\d+)$/))) return openPlay(+m[1], +m[2]);
+  renderHome();
+}
+
+// ------------------------------------------------------------------ ホーム
+function starsOf(st){ var n = 0; for (var k in st.progress) n += st.progress[k].stars; return n; }
+function firstOpen(st){ for (var i = 1; i <= st.levels; i++) if (!st.progress[String(i)]) return i; return 1; }
+function reload(){ return apiGet('state').then(function(ov){ S.ov = ov; route(); }); }
+function clearDrafts(id){ for (var i = 1; i <= 5; i++) store('rtp.draft.' + id + '.' + i, null); }
+function renderHome(){
+  show('home');
+  $('ttl').textContent = t('title');
+  document.title = t('title');
+  var v = $('v-home'); v.innerHTML = '';
+  v.appendChild(el('p', 'intro', t('intro')));
+  (S.ov.editions || []).forEach(function(ed){
+    var h = el('div', 'edh'); h.appendChild(el('b', null, tr(ed.title))); h.appendChild(el('div', null, tr(ed.sub)));
+    v.appendChild(h);
+    S.ov.stages.filter(function(s){ return s.ed === ed.id; }).forEach(function(st){
+      var b = el('button', 'stage' + (st.unlocked || NOREC && st.ready ? '' : ' locked'));
+      var top = el('div', 'top');
+      top.appendChild(el('span', 'no', st.id));
+      top.appendChild(el('span', 'nm', tr(st.title)));
+      if (st.ready) top.appendChild(el('span', 'st', '★ ' + starsOf(st) + '/' + (st.levels * 3)));
+      b.appendChild(top);
+      b.appendChild(el('div', 'sb', st.ready ? tr(st.sub) : t('soon') + ' — ' + tr(st.sub)));
+      if (st.ready){
+        var lv = el('div', 'lv');
+        for (var i = 1; i <= st.levels; i++){
+          var p = st.progress[String(i)];
+          lv.appendChild(el('i', p ? (p.revealed && !p.stars ? 'r' : 'c') : ''));
+        }
+        if (Object.keys(st.progress).length || st.seen){
+          var rs = el('button', 'rs', t('reset'));
+          rs.addEventListener('click', function(ev){
+            ev.stopPropagation();
+            if (!confirm(t('resetQ', {n: st.id}))) return;
+            clearDrafts(st.id);
+            remember('reset', {stage: st.id}).then(reload);
+          });
+          lv.appendChild(rs);
+        }
+        b.appendChild(lv);
+      }
+      b.addEventListener('click', function(){
+        if (!st.ready){ alert(t('notReady')); return; }
+        if (!st.unlocked && !NOREC){ alert(t('locked')); return; }
+        location.hash = st.seen ? '#p' + st.id + '-' + firstOpen(st) : '#t' + st.id;
+      });
+      v.appendChild(b);
+    });
+  });
+  var ra = el('div', 'resetall'), rb = el('button', null, t('resetAll'));
+  rb.addEventListener('click', function(){
+    if (!confirm(t('resetAllQ'))) return;
+    S.ov.stages.forEach(function(st){ clearDrafts(st.id); });
+    remember('reset', {}).then(reload);
+  });
+  ra.appendChild(rb); v.appendChild(ra);
+}
+
+// ------------------------------------------------------------------ チュートリアル
+function openTut(id){
+  if (GATE){ var g0 = GATE; GATE = null; S.rest = true; g0(); }
+  ANIM = null; [].forEach.call(document.querySelectorAll('.tcard .lk'), function(c){ c.remove(); });
+  var st = stageOf(id);
+  if (!st || !st.ready) return renderHome();
+  if (S.stage !== id || !$('v-tut').dataset.on) S.card = DEMO && Q.get('card') ? +Q.get('card') : 0;
+  S.stage = id; $('v-tut').dataset.on = '1';
+  show('tut');
+  $('ttl').textContent = t('stage') + ' ' + id + ' · ' + tr(st.title);
+  var cards = st.cards, c = cards[S.card], v = $('v-tut');
+  v.innerHTML = '';
+  var box = el('div', 'tcard');
+  box.appendChild(el('div', 'kick', t('stage') + ' ' + id + ' · ' + t('tutorial') + ' ' + (S.card + 1) + '/' + cards.length));
+  box.appendChild(el('h2', null, tr(c.title)));
+  var body = el('div'); body.innerHTML = md(tr(c.body)); box.appendChild(body);
+  if (c.example && S.ov.examples[c.example]){
+    var ex = el('div', 'ex'), pz = Object.assign({}, S.ov.examples[c.example], {show:st.show});
+    renderExample(ex, pz, c.notes);
+    box.appendChild(ex);
+  }
+  v.appendChild(box);
+  var nav = el('div', 'tnav');
+  var bk = el('button', 'btn', t('back')); bk.disabled = S.card === 0;
+  bk.addEventListener('click', function(){ S.card--; openTut(id); window.scrollTo(0, 0); });
+  var dots = el('div', 'dots');
+  dots.innerHTML = cards.map(function(_x, i){ return i === S.card ? '<b>●</b>' : '●'; }).join('');
+  var last = S.card === cards.length - 1;
+  var nx = el('button', 'btn pri', last ? t('start') : t('next'));
+  nx.addEventListener('click', function(){
+    if (!last){ S.card++; openTut(id); window.scrollTo(0, 0); return; }
+    $('v-tut').dataset.on = '';
+    var go = function(){ location.hash = '#p' + id + '-' + firstOpen(stageOf(id)); };
+    if (!st.seen) remember('seen', {stage: id}).then(function(){ st.seen = true; go(); }); else go();
+  });
+  nav.appendChild(bk); nav.appendChild(dots); nav.appendChild(nx);
+  v.appendChild(nav);
+  if (DEMO === 'exsend' || DEMO === 'exstep'){
+    if (DEMO === 'exstep'){ STEP = true; }
+    var eb = v.querySelector('.exsend'); if (eb) setTimeout(function(){ eb.click(); }, 100);
+  }
+}
+// チュートリアルの例の盤面: 結果(道・✓/✖)を描いて番号の札を置き、下に「送ってみる」。押すと封筒を 1 回流して、結果に戻す
+function renderExample(ex, pz, notes){
+  ex.innerHTML = '';
+  var wrap = el('div', 'exb'), s = document.createElementNS(NS, 'svg');
+  wrap.appendChild(s); ex.appendChild(wrap);
+  var G = drawBoard(s, pz, pz.cfg, pz.eval, {readonly:true, flows:'result'});
+  if (pz.eval && pz.eval.reqs && pz.eval.reqs.length){
+    var ctl = el('div', 'exctl'), bt = el('button', 'btn exsend', t('exSend')), rs = el('button', 'btn exrest', t('rest'));
+    rs.hidden = true;
+    var lb = el('label', 'stepopt exstep'), ck = document.createElement('input');
+    ck.type = 'checkbox'; ck.checked = STEP;
+    ck.addEventListener('change', function(){ STEP = ck.checked; store('rtp.step', STEP ? '1' : '0'); });
+    lb.appendChild(ck); lb.appendChild(document.createTextNode(' ' + t('step')));
+    bt.addEventListener('click', function(){
+      if (ANIM){ if (GATE) stepNext(); return; }
+      S.rest = false; S.ff = false; GATE = null;
+      var G2 = drawBoard(s, pz, pz.cfg, pz.eval, {readonly:true, flows:'none'});
+      ANIM = {svg:s, h:pz.height};
+      stepUi();
+      var done = function(){ ANIM = null; GATE = null; renderExample(ex, pz, notes); };
+      animateFlows(pz, G2, pz.eval).then(done, done);
+    });
+    rs.addEventListener('click', stepRest);
+    ctl.appendChild(bt); ctl.appendChild(rs); ctl.appendChild(lb);
+    ex.appendChild(ctl);
+  }
+  if (notes && notes.length) addNotes(ex, s, pz, G, notes);
+}
+// 番号の札: at の指す物のそばに置く。番号か行に触れると、図のその物と行が光る
+// 番号の札の置き場所: 指す物のまわりの候補(c)から、ほかの小さな札・ルータ・先に置いた番号と重ならない所を選ぶ。
+//   hl= 光る枠(c: 円 [x, y, r] / r: 四角 [x, y, w, h])・tb= 指す物の箱(検査用。自分とは重なってよい)
+function noteAt(pz, G, at){
+  var m = at.split(':'), k = m[0], v = m.slice(1).join(':'), X = IX(pz);
+  function ring(x, y, d){ var o = []; [-45, -135, 45, 135, -90, 90, 0, 180].forEach(function(t){ var r = t * Math.PI / 180; o.push([x + Math.cos(r) * d, y + Math.sin(r) * d]); }); return o; }
+  if (k === 'r'){ var r = X.R[v]; return {c:ring(r.x, r.y, 27), hl:{c:[r.x, r.y, 21]}, self:'r:' + v}; }
+  if (k === 'lan'){ var l = X.L[v], b = l.box; return {c:[[b[0] + b[2] - 6, b[1] + 4], [b[0] + 6, b[1] + 4], [b[0] + b[2] - 6, b[1] + b[3] - 4]], hl:{r:b}}; }
+  if (k === 'host'){ var hp = G.host[v]; return {c:[[hp.x - 18, hp.y - 12], [hp.x - 18, hp.y + 10], [hp.x + 2, hp.y - 22]], hl:{c:[hp.x, hp.y, 12]}}; }
+  if (k === 'if'){
+    var q = G.ifl[v]; if (!q) return null;
+    return {c:[[q.x + q.w + 12, q.y + 7.5], [q.x - 12, q.y + 7.5], [q.x + q.w / 2, q.y - 11], [q.x + q.w / 2, q.y + 26]],
+            hl:{r:[q.x - 3, q.y - 3, q.w + 6, 21]}, tb:{x0:q.x, y0:q.y, x1:q.x + q.w, y1:q.y + 15}};
+  }
+  if (k === 'link'){
+    var li = G.links[+v], q2 = li.box;
+    if (!q2) return {c:ring(li.mx, li.my, 16), hl:{c:[li.mx, li.my, 14]}};
+    return {c:[[li.mx, q2.y - 11], [li.mx, q2.y + 26], [q2.x + q2.w + 12, q2.y + 7.5], [q2.x - 12, q2.y + 7.5]],
+            hl:{r:[q2.x - 3, q2.y - 3, q2.w + 6, 21]}, tb:{x0:q2.x, y0:q2.y, x1:q2.x + q2.w, y1:q2.y + 15}};
+  }
+  if (k === 'end'){
+    // end:<ルータ>/<リンク番号> … そのルータ側のホスト部(.1 / .2)
+    var sp = v.split('/'), e = G.links[+sp[1]].end[sp[0]];
+    return {c:ring(e.x, e.y, 17), hl:{c:[e.x, e.y, 11]}, tb:{x0:e.x - 9, y0:e.y - 5, x1:e.x + 9, y1:e.y + 6}};
+  }
+  return null;
+}
+function notePlace(pz, a, placed){
+  var H = pz.height, R = 9;
+  function free(p){
+    if (p[0] < R || p[1] < R || p[0] > W - R || p[1] > H - R) return false;
+    var bx = {x0:p[0] - R, y0:p[1] - R, x1:p[0] + R, y1:p[1] + R};
+    var hit = (OCC || []).some(function(o){
+      if (['pill', 'ht', 'rl', 'drop', 'chk'].indexOf(o.tag) < 0 && o.tag.indexOf('r:') !== 0) return false;
+      if (o.tag === a.self) return false;
+      if (a.tb && Math.abs(o.x0 - a.tb.x0) < 1.5 && Math.abs(o.y0 - a.tb.y0) < 1.5) return false;
+      return bx.x0 < o.x1 && o.x0 < bx.x1 && bx.y0 < o.y1 && o.y0 < bx.y1;
+    });
+    return !hit && !placed.some(function(q){ return Math.hypot(q[0] - p[0], q[1] - p[1]) < 2 * R; });
+  }
+  for (var i = 0; i < a.c.length; i++) if (free(a.c[i])) return a.c[i];
+  return a.c[0];
+}
+function addNotes(wrap, svg, pz, G, notes){
+  var lay = sv('g', {});
+  svg.appendChild(lay);
+  var list = el('ol', 'notes'), placed = [];
+  function on(i){ [].forEach.call(wrap.querySelectorAll('[data-n]'), function(e){ e.classList.toggle('on', +e.getAttribute('data-n') === i); }); }
+  notes.forEach(function(n, i){
+    var a = noteAt(pz, G, n.at); if (!a) return;
+    var at = notePlace(pz, a, placed); placed.push(at); a.x = at[0]; a.y = at[1];
+    var g = sv('g', {'class':'note', 'data-n':i});
+    if (a.hl.c) g.appendChild(sv('circle', {'class':'nhl', cx:a.hl.c[0], cy:a.hl.c[1], r:a.hl.c[2]}));
+    if (a.hl.r) g.appendChild(sv('rect', {'class':'nhl', x:a.hl.r[0], y:a.hl.r[1], width:a.hl.r[2], height:a.hl.r[3], rx:8}));
+    g.appendChild(sv('circle', {'class':'nb', cx:a.x, cy:a.y, r:8.5}));
+    g.appendChild(sv('text', {'class':'nt', x:a.x, y:a.y + 3.7, 'text-anchor':'middle'}, String(i + 1)));
+    g.addEventListener('mouseenter', function(){ on(i); }); g.addEventListener('click', function(){ on(i); });
+    lay.appendChild(g);
+    var li = el('li'); li.setAttribute('data-n', i);
+    li.appendChild(el('span', 'nb', String(i + 1)));
+    var sp = el('span'); sp.innerHTML = inline(tr(n.text)); li.appendChild(sp);
+    li.addEventListener('mouseenter', function(){ on(i); }); li.addEventListener('click', function(){ on(i); });
+    list.appendChild(li);
+  });
+  wrap.appendChild(el('div', 'nhint', LANG === 'ja' ? '番号にカーソルを置くか押すと、図のその場所が光ります。' : 'Point at or tap a number to light up that spot on the board.'));
+  wrap.appendChild(list);
+}
+
+// ------------------------------------------------------------------ 盤面
+function draftKey(){ return 'rtp.draft.' + S.stage + '.' + S.level; }
+function saveDraft(){ if (!S.done) store(draftKey(), JSON.stringify({seed:S.pz.seed, cfg:S.cfg})); }
+
+function openPlay(id, lv){
+  var st = stageOf(id);
+  if (!st || !st.ready || (!st.unlocked && !NOREC)) return renderHome();
+  if (!levelOpen(st, lv)){ location.hash = '#p' + id + '-' + firstOpen(st); return; }
+  S.stage = id; S.level = lv;
+  show('play');
+  $('ttl').textContent = t('stage') + ' ' + id + ' · ' + tr(st.title);
+  var sd = Q.get('seed') ? '&seed=' + Q.get('seed') : '';
+  return apiGet('puzzle?stage=' + id + '&level=' + lv + sd).then(function(pz){
+    S.pz = pz; S.done = false; S.revealed = false; S.sel = null; S.seq++; S.lookFor = null; S.add = {p:null, nh:null, ad:1}; S.form = null;
+    S.tested = null; S.busy = false; S.evalP = null;
+    $('result').hidden = true; $('explain').hidden = true; $('explain').innerHTML = '';
+    var d = null; try{ d = JSON.parse(store(draftKey()) || 'null'); }catch(e){}
+    S.cfg = d && d.seed === pz.seed && !NOREC ? d.cfg : clone(pz.init);
+    S.ev = pz.eval;
+    renderPlay();
+    var p = movesOf(pz, S.cfg) ? evalNow() : Promise.resolve();
+    return p.then(function(){
+      if (DEMO === 'solved') return reveal(true);
+      if (DEMO === 'router') openSheet({kind:'router', r:pz.routers.filter(function(r){ return !r.fixed; })[0].name});
+      if (DEMO === 'rules') openSheet({kind:'rules'});
+      if (DEMO === 'ifd'){ var r0 = pz.routers[0]; openSheet({kind:'router', r:r0.name, focus:r0.ifs[1] ? r0.ifs[1].name : r0.ifs[0].name}); }
+      if (DEMO === 'sent') return sendTest();
+      if (DEMO === 'form' || DEMO === 'formerr' || DEMO === 'formrng'){
+        var sr = IX(pz).H.PC1.lan.router; openForm(sr);
+        if (DEMO === 'formrng'){ S.form.dst = '10.' + IX(pz).H.SRV1.lan.site + '.0.0'; S.form.mask = '255.255.0.0'; S.form.at = 'gw'; syncForm(); }
+        if (DEMO === 'formerr'){
+          var lp = IX(pz).H.SRV1.lan.prefix.split('/');
+          S.form.dst = lp[0].replace(/\.0$/, '.1'); S.form.mask = maskOf(+lp[1]); S.form.gw = pz.nh[sr][0].ip;
+          submitForm();
+        }
+      }
+    });
+  });
+}
+function change(fn){
+  if (S.done || S.busy) return false;
+  var c = clone(S.cfg); fn(c);
+  if (movesOf(S.pz, c) > S.pz.budget){ toast(t('overBudget', {n:S.pz.budget})); return false; }
+  S.cfg = c; saveDraft();
+  renderPlay(); if (S.sel) paintSheet();
+  evalNow();
+  return true;
+}
+function evalNow(){
+  var seq = ++S.seq;
+  S.evalP = apiPost('eval', {stage:S.stage, level:S.level, seed:S.pz.seed, cfg:S.cfg}).then(function(ev){
+    if (seq !== S.seq) return;
+    S.ev = ev; renderPlay(); if (S.sel) paintSheet();
+  }).catch(function(e){ if (seq === S.seq) toast(String(e.message || e)); });
+  return S.evalP;
+}
+function renderPlay(){
+  var st = stageOf(S.stage), pz = S.pz;
+  var lb = $('lvbar'); lb.innerHTML = '';
+  for (var i = 1; i <= st.levels; i++) (function(i){
+    var p = st.progress[String(i)];
+    var b = el('button', i === S.level ? 'on' : '');
+    b.innerHTML = 'Lv ' + i + '<small>' + (p ? '★★★'.slice(0, p.stars) || '✓' : '') + '</small>';
+    b.disabled = !levelOpen(st, i);
+    b.addEventListener('click', function(){ location.hash = '#p' + S.stage + '-' + i; });
+    lb.appendChild(b);
+  })(i);
+  renderMission();
+  var tev = testedEv();
+  if (!S.busy) drawBoard($('svg'), pz, S.cfg, tev || S.ev, {sel:S.sel, flows:tev ? 'result' : 'wait'});
+  renderLegend(); renderFacts();
+  if (!tev && !S.done){ var rb = $('result'); if (rb.classList.contains('ng')) rb.hidden = true; }
+  $('cnt').textContent = '';
+  $('b-over').textContent = t('startOver'); $('b-show').textContent = t('show');
+  $('b-over').hidden = S.done || S.busy; $('b-show').hidden = S.done || S.busy; $('b-send').hidden = S.done;
+  if (S.busy) stepUi(); else { $('b-send').textContent = t('send'); $('b-send').disabled = false; $('b-rest').hidden = true; }
+  $('b-rest').textContent = t('rest');
+  $('steplbl').textContent = t('step'); $('stepchk').checked = STEP;
+  $('b-next').hidden = !S.done;
+  $('b-next').textContent = S.level < st.levels ? t('nextLv') : t('toStages');
+  renderFormBar();
+}
+
+// お題の文
+function isBack(pz, i){
+  var q = pz.reqs[i];
+  for (var j = 0; j < i; j++) if (pz.reqs[j].src === q.dst && pz.reqs[j].dst === q.src) return true;
+  return false;
+}
+function reqText(pz, i){
+  var q = pz.reqs[i];
+  if (q.t === 'path') return t('reqPath', {a:q.src, b:q.dst, p:q.path.join(' → ')});
+  if (q.t === 'via') return t('reqVia', {a:q.src, b:q.dst, s:q.via});
+  if (q.t === 'same') return t('reqSame', {a:q.src, b:q.dst});
+  return isBack(pz, i) ? t('reqBack', {a:q.src, b:q.dst}) : t('reqReach', {a:q.src, b:q.dst});
+}
+function pathText(pz, q, paths){
+  if (!paths || !paths.length) return '';
+  if (paths.length > 1) return t('split', {n:paths.length});
+  var p = paths[0], hops = p.hops.join(' → ');
+  if (p.end === 'deliver') return t('arrives', {p:hops || q.src});
+  var o = {r:p.at || '', p:hops, h:q.src, g:p.gw || ''};
+  return tt('endAt', p.end, o);
+}
+function lineOf(pz, i){
+  if (!pz._line){
+    var n = -1; pz._line = pz.reqs.map(function(q, k){ if (!(q.grp && k && pz.reqs[k - 1].grp === q.grp)) n++; return n; });
+  }
+  return pz._line[i];
+}
+function reqColor(i, pz){ return FLOW[lineOf(pz || S.pz, i) % FLOW.length]; }
+function renderMission(){
+  var pz = S.pz, ev = testedEv(), m = $('mission'), h = [];
+  h.push('<div class="mh">' + esc(t('mission')) + '</div>');
+  // grp の同じお題(Internet の 3 台など)は 1 行にまとめる。✓ は全部が届いたとき
+  var lines = [];
+  pz.reqs.forEach(function(q, i){ var L = lineOf(pz, i); (lines[L] = lines[L] || []).push(i); });
+  lines.forEach(function(ix){
+    var i = ix[0], q = pz.reqs[i], cls = '', mark = '·', nows = [];
+    if (ev){
+      var all = ix.every(function(k){ return ev.reqs[k] && ev.reqs[k].ok; });
+      cls = all ? ' ok' : ' ng'; mark = all ? '✓' : '✗';
+      ix.forEach(function(k){
+        var res = ev.reqs[k] || {};
+        if (res.ok || !res.now) return;
+        var nw = pathText(pz, pz.reqs[k], res.now);
+        if (res.now.length === 1 && res.now[0].end === 'deliver') nw += t('wrongWay');
+        if (ix.length === 1) return nows.push(nw);
+        var g = nows.filter(function(x){ return x.t === nw; })[0];       // 同じ結果は宛先をまとめる(WEB・DNS・MAIL: R1 で落ちる)
+        if (g) g.d.push(pz.reqs[k].dst); else nows.push({t:nw, d:[pz.reqs[k].dst]});
+      });
+      nows = nows.map(function(x){ return typeof x === 'string' ? x : x.d.join(t('sep')) + ': ' + x.t; });
+    }
+    var txt = ix.length > 1 ? t('reqReach', {a:q.src, b:ix.map(function(k){ return pz.reqs[k].dst; }).join(t('sep'))}) : reqText(pz, i);
+    var now = nows.length ? t('result', {p:nows.join(' / ')}) : '';
+    h.push('<div class="req' + cls + '"><i style="background:' + reqColor(i, pz) + '"></i><span>' + esc(txt) +
+           (now ? '<small class="now">' + esc(now) + '</small>' : '') + '</span><b>' + mark + '</b></div>');
+  });
+  var mv = movesOf(pz, S.cfg);
+  h.push('<div class="mv"><span>' + esc(t('movesLine', {n:mv, m:pz.budget})) + '</span><span class="st">' + esc(t('stars3', {a:pz.par})) +
+         (pz.budget > pz.par ? ' ・ ' + esc(t('stars2', {b:pz.par + 1})) : '') + '</span></div>');
+  m.innerHTML = h.join('');
+}
+function renderLegend(){ $('legend').innerHTML = ''; $('legend').hidden = true; }       // 凡例はルールの枠へ(2026-11-12 ユーザ指摘: 情報量を減らす)
+function cliText(list){ return list.map(function(c){ return c.r + '(config)#\n' + c.lines.join('\n'); }).join('\n\n'); }
+function renderFacts(){
+  var f = $('facts'), h = [];
+  h.push('<h4>' + esc(t('changed')) + '</h4>');
+  h.push(S.ev.cli && S.ev.cli.length ? '<pre class="cli">' + esc(cliText(S.ev.cli)) + '</pre>' : '<p>' + esc(t('noChange')) + '</p>');
+  f.innerHTML = h.join('');
+}
+
+// ---- 描画
+var MONO = 'Menlo,Consolas,"DejaVu Sans Mono",monospace';
+function tw(s, px){ return STPB.txtW(String(s), px) * 1.05; }
+function lanAttach(l, r){
+  var b = l.box, cx = b[0] + b[2] / 2;
+  if (l.cloud) return {x:cx, y:b[1] + b[3] * .92};
+  if (r.y < b[1]) return {x:cx, y:b[1]};
+  if (r.y > b[1] + b[3]) return {x:cx, y:b[1] + b[3]};
+  return {x:r.x < b[0] ? b[0] : b[0] + b[2], y:b[1] + b[3] / 2};
+}
+function hostXY(l, i){
+  var b = l.box, n = l.hosts.length;
+  if (l.cloud){ var ns = l.nslot || 1, sl = l.slot || 0; return {x:b[0] + b[2] * (sl + .5) / ns - (ns > 1 ? 36 : 34), y:b[1] + b[3] / 2 + 10}; }
+  return {x:b[0] + b[2] * (i + .5) / n - (has(S.pz || {}, 'x') ? 0 : 26), y:b[1] + 38};
+}
+function rIcon(g, r, o){
+  var R = 16;
+  g.appendChild(sv('circle', {cx:r.x, cy:r.y, r:R + 3, fill:'#fff'}));
+  g.appendChild(sv('circle', {cx:r.x, cy:r.y, r:R, fill:r.fixed ? '#78909c' : '#263238', stroke:o.sel ? '#d84315' : '#fff', 'stroke-width':o.sel ? 3 : 1.5}));
+  [[-1, -1, 1], [1, 1, 1], [1, -1, -1], [-1, 1, -1]].forEach(function(v){
+    var ux = v[0] * .7071, uy = v[1] * .7071, out = v[2] > 0;
+    var x1 = r.x + ux * 3.5, y1 = r.y + uy * 3.5, x2 = r.x + ux * 11, y2 = r.y + uy * 11;
+    g.appendChild(sv('line', {x1:x1, y1:y1, x2:x2, y2:y2, stroke:'#fff', 'stroke-width':1.8, 'stroke-linecap':'round'}));
+    var tx = out ? x2 : x1, ty = out ? y2 : y1, dx = out ? ux : -ux, dy = out ? uy : -uy, px = -dy, py = dx;
+    g.appendChild(sv('path', {d:'M' + (tx + dx * 1.5) + ' ' + (ty + dy * 1.5) + ' L' + (tx - dx * 3 + px * 3) + ' ' + (ty - dy * 3 + py * 3) +
+                      ' L' + (tx - dx * 3 - px * 3) + ' ' + (ty - dy * 3 - py * 3) + 'Z', fill:'#fff'}));
+  });
+  var lab = r.lab || 'r', lx = r.x, ly = r.y + 4.5, anc = 'middle';
+  if (lab === 'l'){ lx = r.x - 23; anc = 'end'; }
+  if (lab === 'r'){ lx = r.x + 23; anc = 'start'; }
+  if (lab === 't'){ ly = r.y - 24; }
+  if (lab === 'b'){ ly = r.y + 34; }
+  var nm = r.name + (r.fixed ? ' 🔒' : ''), nw_ = tw(nm, 13);
+  occ(anc === 'end' ? lx - nw_ : anc === 'start' ? lx : lx - nw_ / 2, ly - 11, nw_, 14, 'rl');
+  g.appendChild(sv('text', {'class':'lbl', x:lx, y:ly, 'font-size':13, 'font-weight':800, fill:r.fixed ? '#546e7a' : '#15171a', 'text-anchor':anc}, nm));
+}
+var OCC = null;                                                       // 描いた札の箱(落ちた印の置き場所を選ぶため)
+function occ(x0, y0, w, h, tag){ if (OCC) OCC.push({x0:x0, y0:y0, x1:x0 + w, y1:y0 + h, tag:tag || ''}); }
+function pill(g, x, y, txt, o){
+  o = o || {};
+  var w = tw(txt, 9.5) + 8;
+  var x0 = o.anchor === 'start' ? x : o.anchor === 'end' ? x - w : x - w / 2;
+  occ(x0, y - 7.5, w, 15, 'pill');
+  g.appendChild(sv('rect', {'class':'lbl', x:x0, y:y - 7.5, width:w, height:15, rx:7.5, fill:o.bg || '#fff', stroke:o.stroke || '#c3c8ce', 'stroke-width':1}));
+  g.appendChild(sv('text', {x:x0 + w / 2, y:y + 3.4, 'font-size':9.5, 'class':'mono', fill:o.color || '#5f6670', 'text-anchor':'middle', 'font-weight':o.bold ? 700 : 400}, txt));
+  return {x:x0, y:y - 7.5, w:w};
+}
+function hostText(g, x, y, txt){
+  occ(x - 9, y - 5, 18, 11, 'ht');
+  g.appendChild(sv('text', {x:x, y:y + 3.5, 'font-size':9.5, 'class':'mono', 'font-weight':700, fill:'#37474f', 'text-anchor':'middle',
+                            stroke:'#fff', 'stroke-width':3, 'paint-order':'stroke'}, txt));
+}
+function cloudPath(cx, cy, w, h){
+  return 'M' + (cx - w * .38) + ' ' + (cy + h * .42) +
+    ' C' + (cx - w * .58) + ' ' + (cy + h * .42) + ' ' + (cx - w * .6) + ' ' + (cy - h * .05) + ' ' + (cx - w * .36) + ' ' + (cy - h * .08) +
+    ' C' + (cx - w * .36) + ' ' + (cy - h * .55) + ' ' + (cx - w * .05) + ' ' + (cy - h * .62) + ' ' + (cx + w * .04) + ' ' + (cy - h * .3) +
+    ' C' + (cx + w * .14) + ' ' + (cy - h * .62) + ' ' + (cx + w * .48) + ' ' + (cy - h * .5) + ' ' + (cx + w * .4) + ' ' + (cy - h * .06) +
+    ' C' + (cx + w * .62) + ' ' + (cy - h * .02) + ' ' + (cx + w * .6) + ' ' + (cy + h * .42) + ' ' + (cx + w * .38) + ' ' + (cy + h * .42) + 'Z';
+}
+function hostIcon(g, x, y, h, o){
+  if (h.kind === 'srv'){
+    g.appendChild(sv('rect', {x:x - 6, y:y - 9, width:12, height:18, rx:2, fill:'#eceff1', stroke:'#37474f', 'stroke-width':1.2}));
+    [-4, 0, 4].forEach(function(d){ g.appendChild(sv('line', {x1:x - 3.5, y1:y + d, x2:x + 3.5, y2:y + d, stroke:'#37474f', 'stroke-width':1})); });
+  } else {
+    g.appendChild(sv('rect', {x:x - 8, y:y - 8, width:16, height:11, rx:1.5, fill:'#eceff1', stroke:'#37474f', 'stroke-width':1.2}));
+    g.appendChild(sv('line', {x1:x - 4, y1:y + 6, x2:x + 4, y2:y + 6, stroke:'#37474f', 'stroke-width':1.4}));
+  }
+  if (o.ring) g.appendChild(sv('circle', {cx:x, cy:y, r:12.5, fill:'none', stroke:o.ring, 'stroke-width':2.2}));
+  g.appendChild(sv('text', {'class':'lbl', x:x + 15, y:y - 1, 'font-size':10.5, 'font-weight':700, fill:'#263238'}, h.name));
+  g.appendChild(sv('text', {x:x + 15, y:y + 10, 'font-size':9, 'class':'mono', fill:'#5f6670'}, o.ipText));
+  if (o.gw) g.appendChild(sv('text', {x:x + 15, y:y + 20, 'font-size':8.5, 'class':'mono', fill:'#8a6d00'}, o.gw));
+}
+// 道の点列: 端末 → LAN の札の縁 → ルータ … → LAN の札の縁 → 端末(落ちた道はルータで終わる)
+function pathPts(pz, G, srcName, dstName, hops, end){
+  var X = IX(pz), pts = [];
+  var s = X.H[srcName], d = X.H[dstName];
+  var sp = G.host[srcName];
+  pts.push([sp.x, sp.y]);
+  if (!hops.length){
+    var a0 = lanAttach(s.lan, X.R[s.lan.router]); pts.push([a0.x, a0.y]);
+    return pts;
+  }
+  var a = lanAttach(s.lan, X.R[hops[0]]); pts.push([a.x, a.y]);
+  hops.forEach(function(h){ pts.push([X.R[h].x, X.R[h].y]); });
+  if (end === 'deliver' && d){
+    var z = lanAttach(d.lan, X.R[hops[hops.length - 1]]); pts.push([z.x, z.y]);
+    var dp = G.host[dstName]; pts.push([dp.x, dp.y]);
+  }
+  return pts;
+}
+function polyD(pts, off){
+  off = off || 0;
+  return 'M' + pts.map(function(p){ return (p[0] + off).toFixed(1) + ' ' + (p[1] + off).toFixed(1); }).join(' L');
+}
+function polyLen(pts){ var n = 0; for (var i = 1; i < pts.length; i++) n += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); return n; }
+var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// 封筒(札= 宛先 IP)
+function envelope(col, tag){
+  var g = sv('g', {'class':'pkt'});
+  g.appendChild(sv('rect', {x:-9, y:-6.5, width:18, height:13, rx:2.5, fill:col, stroke:'#fff', 'stroke-width':1.4}));
+  g.appendChild(sv('path', {d:'M-9 -6.5 L0 1 L9 -6.5', fill:'none', stroke:'#fff', 'stroke-width':1.2}));
+  if (tag){
+    var w = tw(tag, 8.5) + 8;
+    g.appendChild(sv('rect', {x:-w / 2, y:-21, width:w, height:13, rx:3, fill:col}));
+    g.appendChild(sv('text', {x:0, y:-11.5, 'font-size':8.5, 'class':'mono', 'font-weight':700, fill:'#fff', 'text-anchor':'middle'}, tag));
+  }
+  return g;
+}
+// 送った後: 実際の道(点線)・落ちた所の ✖ と理由・届いた所の ✓
+function drawResults(pz, G, ev){
+  var X = IX(pz), drops = {};
+  pz.reqs.forEach(function(q, i){
+    var res = ev.reqs[i]; if (!res || !res.now) return;
+    var col = reqColor(i, pz), off = i % 2 ? 3.5 : -3.5;
+    res.now.forEach(function(p){
+      var pts = pathPts(pz, G, q.src, q.dst, p.hops, p.end);
+      if (pts.length < 2) pts.push([pts[0][0] + 1, pts[0][1]]);
+      G.gFlow.appendChild(sv('path', {'class':'trail', d:polyD(pts, off), stroke:col}));
+      endMark(pz, G, q, p, drops);
+    });
+  });
+}
+function endMark(pz, G, q, p, drops){
+  var X = IX(pz);
+  if (p.end === 'deliver'){
+    var hp = G.host[p.host || q.dst]; if (!hp) return;
+    var x = hp.x - 13, y = hp.y - 11;
+    occ(x - 7, y - 7, 14, 14, 'chk');
+    G.gTop.appendChild(sv('circle', {cx:x, cy:y, r:6.5, fill:'#2a7d3a', stroke:'#fff', 'stroke-width':1.3}));
+    G.gTop.appendChild(sv('path', {d:'M' + (x - 3) + ' ' + y + ' L' + (x - .8) + ' ' + (y + 2.4) + ' L' + (x + 3.2) + ' ' + (y - 2.6), fill:'none', stroke:'#fff', 'stroke-width':1.8, 'stroke-linecap':'round', 'stroke-linejoin':'round'}));
+    return;
+  }
+  var key = (p.at || q.src) + '|' + p.end;
+  if (drops[key]) return;
+  drops[key] = 1;
+  var at;
+  if (!p.hops.length){ var sl = X.H[q.src].lan; at = lanAttach(sl, X.R[sl.router]); }
+  else at = X.R[p.at];
+  dropMark(G.gTop, {x:at.x, y:at.y, end:p.end, host:!p.hops.length, at:p.at});
+}
+// 落ちた印: ほかの札と重ならない所を候補から選ぶ(右上 → 右下 → 左上 → 左下 → 上)
+function dropMark(gTop, d){
+  var why = tt('drop', d.end), w = tw(why, 9.5) + 10;
+  var cands = d.host ? [[0, d.y < 200 ? 13 : -13, 1], [0, d.y < 200 ? -13 : 13, 1]]
+                     : [[16, -21, 1], [16, 21, 1], [-16, -21, -1], [-16, 21, -1], [0, -30, 1]];
+  var pick = null;
+  cands.forEach(function(c){
+    if (pick) return;
+    var x = d.x + c[0], y = d.y + c[1], lx = c[2] > 0 ? x + 10 : x - 10 - w;
+    if (lx < 2 || lx + w > W - 2) return;
+    var bx = {x0:Math.min(x - 8, lx), y0:y - 8, x1:Math.max(x + 8, lx + w), y1:y + 8};
+    var hit = (OCC || []).some(function(o){ return o.tag !== 'r:' + d.at && bx.x0 < o.x1 && o.x0 < bx.x1 && bx.y0 < o.y1 && o.y0 < bx.y1; });
+    if (!hit) pick = [x, y, lx];
+  });
+  if (!pick){ var c0 = cands[0], x0 = d.x + c0[0], y0 = d.y + c0[1]; pick = [x0, y0, x0 + 10 + w > W - 2 ? x0 - 10 - w : x0 + 10]; }
+  var x = pick[0], y = pick[1], lx = pick[2];
+  occ(Math.min(x - 8, lx), y - 8, w + 18, 16, 'drop');
+  gTop.appendChild(sv('circle', {cx:x, cy:y, r:7.5, fill:'#c62828', stroke:'#fff', 'stroke-width':1.3}));
+  gTop.appendChild(sv('path', {d:'M' + (x - 3.2) + ' ' + (y - 3.2) + ' L' + (x + 3.2) + ' ' + (y + 3.2) + ' M' + (x + 3.2) + ' ' + (y - 3.2) + ' L' + (x - 3.2) + ' ' + (y + 3.2), stroke:'#fff', 'stroke-width':1.8}));
+  gTop.appendChild(sv('rect', {'class':'lbl drop', x:lx, y:y - 7.5, width:w, height:15, rx:7.5, fill:'#c62828'}));
+  gTop.appendChild(sv('text', {x:lx + w / 2, y:y + 3.5, 'font-size':9.5, 'font-weight':700, fill:'#fff', 'text-anchor':'middle'}, why));
+}
+// 「送ってみる」: 封筒を 1 回だけ、実際の道に沿って 1 ホップずつ動かす(お題の順に。ECMP は同時に)。
+// 端末を出る時は「GW に渡す」、ルータに着くたびに経路表を引く小窓を出す(早送りで飛ばせる)。
+var FAST = UITEST || AUTOTEST;
+var SPEED = FAST ? 900 : 75, T_SCAN = FAST ? 2 : 570, T_HOLD = UITEST ? 250 : FAST ? 5 : 1800, T_IN = FAST ? 1 : 180;   // 2026-11-12 ユーザ指示で約 5 割遅く
+function sleep(ms){ return new Promise(function(r){ setTimeout(r, S.ff ? Math.min(ms, 5) : ms); }); }
+// コマ送り: 決まった所で止まり、「次へ」を待つ。「残りを流す」で以後は止まらない(S.rest)
+var STEP = Q.get('step') === '1' || store('rtp.step') === '1', GATE = null;
+function stepping(){ return STEP && !S.ff && !S.rest && !REDUCED; }
+function stepUi(){
+  // 遊ぶ画面: 送っている間の下の帯 / チュートリアル: 例の下のボタン
+  var waiting = !!GATE;
+  if (S.busy){
+    $('b-send').textContent = waiting ? t('next') : (STEP && !S.rest ? t('sending') : t('ff'));
+    $('b-send').disabled = STEP && !S.rest ? !waiting : !!S.ff;
+    $('b-rest').hidden = !(STEP && !S.rest);
+  }
+  [].forEach.call(document.querySelectorAll('.tcard .exsend'), function(b){
+    if (!ANIM) return;
+    b.textContent = waiting ? t('next') : t('sending'); b.disabled = !waiting;
+  });
+  [].forEach.call(document.querySelectorAll('.tcard .exrest'), function(b){ b.hidden = !(ANIM && STEP && !S.rest); });
+}
+function waitStep(){
+  if (!stepping()) return null;
+  return new Promise(function(res){ GATE = res; stepUi(); });
+}
+function stepNext(){ var g = GATE; GATE = null; stepUi(); if (g) g(); }
+function stepRest(){ S.rest = true; stepNext(); stepUi(); }
+// 止まるか、決まった時間だけ待つ
+function pause(ms){ return waitStep() || sleep(ms); }
+function moveAlong(env, trail, pts, off, onVertex){
+  return new Promise(function(done){
+    if (REDUCED){ trail.setAttribute('d', polyD(pts, off)); done(); return; }
+    var seg = 1, pos = 0, last = Date.now(), drawn = [pts[0]];
+    env.setAttribute('transform', 'translate(' + (pts[0][0] + off) + ',' + (pts[0][1] + off) + ')');
+    function resume(){ last = Date.now(); setTimeout(step, 16); }
+    function step(){
+      var now = Date.now(), dt = Math.min(80, now - last) / 1000; last = now;
+      if (seg >= pts.length){ done(); return; }
+      var a = pts[seg - 1], b = pts[seg], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      pos += SPEED * (S.ff ? 5 : 1) * dt;
+      var k = Math.min(1, pos / L), x = a[0] + (b[0] - a[0]) * k, y = a[1] + (b[1] - a[1]) * k;
+      env.setAttribute('transform', 'translate(' + (x + off).toFixed(1) + ',' + (y + off).toFixed(1) + ')');
+      trail.setAttribute('d', polyD(drawn.concat([[x, y]]), off));
+      if (k >= 1){
+        drawn.push(b); pos = 0;
+        var idx = seg; seg++;
+        var pr = onVertex && onVertex(idx);
+        if (pr){ pr.then(resume); return; }
+      }
+      setTimeout(step, 16);
+    }
+    var p0 = onVertex && onVertex(0);
+    if (p0) p0.then(resume); else step();
+  });
+}
+// 小窓をルータ(端末)のそばに置く。盤面の SVG の座標から、盤面の枠の中の位置へ直す
+var ANIM = null;                                                      // {svg, h} 動かしている盤面(既定は遊ぶ画面)
+function animSvg(){ return ANIM ? ANIM.svg : $('svg'); }
+function lkPlace(card, x, y){
+  var svg = animSvg(), board = svg.parentNode, sr = svg.getBoundingClientRect(), br = board.getBoundingClientRect();
+  var sc = sr.width / W, px = sr.left - br.left + x * sc, py = sr.top - br.top + y * sc;
+  var cw = card.offsetWidth, ch = card.offsetHeight, bw = board.clientWidth, bh = board.clientHeight;
+  var left = x < W / 2 ? px + 26 * sc : px - 26 * sc - cw;
+  if (left < 4 || left + cw > bw - 4) left = Math.max(4, Math.min(bw - cw - 4, px - cw / 2));
+  var top = py - ch / 2;
+  if (left < px + 22 * sc && left + cw > px - 22 * sc) top = y < pz_h() / 2 ? py + 26 * sc : py - 26 * sc - ch;
+  top = Math.max(4, Math.min(bh - ch - 4, top));
+  card.style.left = left + 'px'; card.style.top = top + 'px';
+}
+function pz_h(){ return ANIM ? ANIM.h : S.pz ? S.pz.height : 400; }
+function lkOpen(){
+  var c = el('div', 'lk'); animSvg().parentNode.appendChild(c); return c;
+}
+function lkClose(c){ c.classList.remove('on'); return sleep(T_IN).then(function(){ c.remove(); }); }
+function lkf(k, o){ return tt('lk', k, o); }
+// 「|」で区切った文を 1 行ずつ(行の中では折り返さない)
+function setLines(e, txt){ e.innerHTML = ''; String(txt).split('|').forEach(function(x){ e.appendChild(el('div', 'ln', x)); }); }
+// 端末: 宛先が自分のネットワークの外なら GW へ
+function hostLookup(pz, G, q, p, dstIp){
+  if (S.ff || REDUCED) return null;
+  var X = IX(pz), H = X.H[q.src], hp = G.host[q.src], l = H.lan;
+  var c = lkOpen();
+  c.appendChild(el('div', 'h', q.src + ' (' + H.h.ip + ')'));
+  var d = el('div', 'd'); d.innerHTML = esc(lkf('dst')) + ' <b>' + esc(dstIp) + '</b>' + (IX(pz).H[q.dst] ? ' (' + esc(q.dst) + ')' : ''); c.appendChild(d);
+  var r = el('div', 'r');
+  if (p.end === 'nogw'){ r.className = 'r ng'; setLines(r, lkf('nogw', {g:H.h.gw})); }
+  else if (!p.hops.length){ setLines(r, lkf('inside', {d:dstIp, p:l.prefix})); }
+  else setLines(r, lkf('out', {d:dstIp, p:l.prefix, g:H.h.gw}));
+  c.appendChild(r);
+  lkPlace(c, hp.x, hp.y);
+  c.classList.add('on');
+  return pause(T_HOLD).then(function(){ return lkClose(c); });
+}
+// ルータ: 経路表の行をプレフィックスの長い順に並べ、上から 1 行ずつ照らす。最初に当てはまった行(= 一番長い行)で止まる。
+// (show ip route の並び= アドレス順のまま「上から最初に当てはまった行」にすると、0.0.0.0/0 が先頭で止まり、実際の決まりと食い違う)
+// ルータ r がどのインターフェースで受け取ったか(前のホップへ向いた IF・最初のルータは送り元の LAN 側)
+function ingressIf(pz, p, k, q){
+  var X = IX(pz), r = p.hops[k];
+  if (k === 0){ var sl = X.H[q.src].lan; return sl.router === r ? sl.if : ''; }
+  var prev = p.hops[k - 1], l = pz.links.filter(function(x){ return (x.a === prev && x.b === r) || (x.b === prev && x.a === r); })[0];
+  return l ? (l.a === r ? l.ia : l.ib) : '';
+}
+function routerLookup(pz, ev, r, k, p, q, dstIp){
+  if (S.ff || REDUCED) return null;
+  var X = IX(pz), R = X.R[r], tb = ev.tables[r]; if (!tb) return null;
+  var inIf = ingressIf(pz, p, k, q);
+  var rows = tb.rows.filter(function(x){
+    if (x.code === 'L') return has(pz, 'showip');
+    if (x.code === 'C' && !has(pz, 'linkip')) return R.ifs.some(function(i){ return i.name === x.out && i.to.indexOf('LAN:') === 0; });
+    return true;
+  }).slice().sort(function(a, b){
+    var la = +a.p.split('/')[1], lb = +b.p.split('/')[1];
+    return lb - la || ip2n(a.p.split('/')[0]) - ip2n(b.p.split('/')[0]);
+  });
+  var c = lkOpen();
+  c.appendChild(el('div', 'h', inIf ? lkf('titleIn', {r:r, i:inIf}) : lkf('title', {r:r})));
+  var d = el('div', 'd'); d.innerHTML = esc(lkf('dst')) + ' <b>' + esc(dstIp) + '</b>' + (X.H[q.dst] ? ' (' + esc(q.dst) + ')' : ''); c.appendChild(d);
+  if (rows.length > 1){ var od = el('div', 'd'); setLines(od, lkf('order')); c.appendChild(od); }
+  var tbl = el('table'), trs = [];
+  rows.forEach(function(x){
+    var tr_ = el('tr');
+    var code = x.code === 'S' && +x.p.split('/')[1] === 0 ? 'S*' : x.code;
+    tr_.appendChild(el('td', 'c', has(pz, 'codes') ? code : ''));
+    var lockd = ((pz.init.r || {})[r] || []).some(function(s){ return s.lock && s.p === x.p; });
+    tr_.appendChild(el('td', 'p', x.p + (lockd ? ' 🔒' : '')));
+    var nx = x.code === 'C' ? (has(pz, 'codes') ? x.out : t('conn') + ' ' + x.out)
+           : x.res.map(function(z){ return z.out === 'Null0' ? 'Null0' : '→ ' + (z.peer || '?'); }).join(', ');
+    tr_.appendChild(el('td', 'n', nx));
+    var tc = el('td', 't'); tc.appendChild(el('span', 'v', '')); tc.appendChild(el('span', 'sz', lkf('hit'))); tr_.appendChild(tc);
+    tbl.appendChild(tr_); trs.push(tr_);
+  });
+  c.appendChild(tbl);
+  // 結果の行は先に書いて隠しておく(最後に足すと窓の高さが変わり、置き直しで窓が跳ぶ)。当たる行は照らす前から決まっている
+  var hitAt = -1; rows.some(function(x, i){ return inPfx(dstIp, x.p) && (hitAt = i, true); });
+  var out = lkOutcome(pz, rows[hitAt], k === p.hops.length - 1, p, q, dstIp);
+  var res = el('div', 'r wait ' + (out.ok ? 'ok' : 'ng')); setLines(res, out.txt); c.appendChild(res);
+  lkPlace(c, R.x, R.y);
+  c.classList.add('on');
+  // 上から 1 行ずつ: 照らす → 外れたら × を付けて薄く → 当てはまったらそこで止まる
+  var win = -1, chain = sleep(T_IN + 250);
+  rows.forEach(function(x, i){
+    chain = chain.then(function(){
+      if (win >= 0) return;
+      trs[i].classList.add('scan');
+      trs[i].querySelector('.t .v').textContent = '…';
+      return sleep(T_SCAN).then(function(){
+        trs[i].classList.remove('scan');
+        if (inPfx(dstIp, x.p)){
+          win = i; trs[i].classList.add('win');
+          trs[i].querySelector('.t .v').textContent = lkf('hit');
+        } else {
+          trs[i].classList.add('no');
+          trs[i].querySelector('.t .v').textContent = '×';
+        }
+        return waitStep();
+      });
+    });
+  });
+  return chain.then(function(){
+    return sleep(T_SCAN / 2).then(function(){
+      res.classList.remove('wait');
+      return pause(T_HOLD);
+    });
+  }).then(function(){ return lkClose(c); });
+}
+// 当たった行 x からの結果の文(x が無ければ表に無い)
+function lkOutcome(pz, x, last, p, q, dstIp){
+  if (!x) return {ok:false, txt:lkf('none')};
+  if (x.code === 'C'){
+    if (last && p.end === 'deliver') return {ok:true, txt:lkf('deliver', {i:x.out, h:p.host || q.dst})};
+    return {ok:false, txt:lkf('nohost', {d:dstIp})};
+  }
+  if (x.res.some(function(z){ return z.out === 'Null0'; })) return {ok:false, txt:lkf('null0')};
+  if (x.res.length > 1) return {ok:true, txt:lkf('split', {n:x.res.map(function(z){ return z.peer; }).join(' / ')})};
+  return {ok:true, txt:has(pz, 'linkip') ? lkf('fwdIp', {n:x.res[0].peer, ip:x.res[0].nh, o:x.res[0].out}) : lkf('fwd', {n:x.res[0].peer})};
+}
+function animateFlows(pz, G, ev){
+  var X = IX(pz), chain = Promise.resolve(), drops = {};
+  pz.reqs.forEach(function(q, i){
+    chain = chain.then(function(){
+      var res = ev.reqs[i]; if (!res || !res.now) return;
+      var col = reqColor(i, pz), off = i % 2 ? 3.5 : -3.5, dstIp = X.H[q.dst] ? X.H[q.dst].h.ip : '';
+      return Promise.all(res.now.map(function(p, pi){
+        var pts = pathPts(pz, G, q.src, q.dst, p.hops, p.end);
+        if (pts.length < 2) pts.push([pts[0][0] + 1, pts[0][1]]);
+        // ループはもう 1 周まわして見せる
+        if (p.end === 'loop'){
+          var first = p.hops.indexOf(p.hops[p.hops.length - 1]), cyc = pts.slice(2 + first + 1, 2 + p.hops.length);
+          pts = pts.concat(cyc);
+        }
+        var seen = {};
+        // 頂点: 0= 端末(GW へ)・2〜= ルータ(経路表を引く。同じルータは 1 回だけ。ECMP の 2 本目以降は引かない)
+        var onVertex = function(idx){
+          if (pi > 0) return null;
+          if (idx === 0) return hostLookup(pz, G, q, p, dstIp);
+          var k = idx - 2;
+          if (k < 0 || k >= p.hops.length) return null;
+          var r = p.hops[k];
+          if (seen[r]) return null;
+          seen[r] = 1;
+          return routerLookup(pz, ev, r, k, p, q, dstIp);
+        };
+        var trail = sv('path', {'class':'trail', d:'', stroke:col}), env = envelope(col, '→' + dstIp);
+        G.gFlow.appendChild(trail); G.gFlow.appendChild(env);
+        return moveAlong(env, trail, pts, off, onVertex).then(function(){ env.remove(); endMark(pz, G, q, p, drops); });
+      })).then(function(){ return i < pz.reqs.length - 1 ? waitStep() : null; });
+    });
+  });
+  return chain;
+}
+function sendTest(){
+  if (S.busy || S.done || !S.pz) return Promise.resolve();
+  S.busy = true; S.ff = false; S.rest = false; GATE = null; closeSheet();
+  $('b-over').hidden = true; $('b-show').hidden = true;
+  stepUi();
+  $('result').hidden = true;
+  var pz = S.pz;
+  return (S.evalP || Promise.resolve()).then(function(){
+    var ev = S.ev, key = JSON.stringify(S.cfg);
+    renderMission();
+    var G = drawBoard($('svg'), pz, S.cfg, ev, {flows:'none'});
+    return animateFlows(pz, G, ev).then(function(){
+      if (S.pz !== pz) return;
+      S.busy = false; GATE = null; $('b-rest').hidden = true;
+      S.tested = {key:key, ev:ev};
+      renderPlay();
+      if (ev.ok) finish(S.revealed ? 0 : ev.stars);
+      else {
+        var box = $('result'); box.className = 'result ng'; box.innerHTML = ''; box.hidden = false;
+        box.appendChild(el('div', null, t('notYet')));
+      }
+    });
+  }).catch(function(e){ S.busy = false; renderPlay(); toast(String(e.message || e)); });
+}
+
+// 足した経路: ルータから次の行き先の隣へ向かう小さな矢印(色= 宛先の LAN。表に入っていない経路は白抜き)
+function drawRouteArrows(g, pz, cfg, ev){
+  var X = IX(pz);
+  pz.routers.forEach(function(r){
+    var lst = ((cfg && cfg.r) || {})[r.name] || []; if (!lst.length) return;
+    var tb = ev && ev.tables && ev.tables[r.name], inst = {};
+    if (tb) tb.rows.forEach(function(x){ (x.rid || []).forEach(function(k){ inst[k] = 1; }); });
+    var byPeer = {};
+    lst.forEach(function(s, k){
+      var nb = (pz.nh[r.name] || []).filter(function(n){ return n.ip === s.nh; })[0];
+      if (!nb) return;
+      (byPeer[nb.peer] = byPeer[nb.peer] || []).push({s:s, k:k});
+    });
+    Object.keys(byPeer).forEach(function(peer){
+      var B = X.R[peer], dx = B.x - r.x, dy = B.y - r.y, L = Math.hypot(dx, dy), ux = dx / L, uy = dy / L, nx = -uy, ny = ux;
+      if (ny > 0 || (ny === 0 && nx > 0)){ nx = -nx; ny = -ny; }
+      byPeer[peer].forEach(function(o, j){
+        var d0 = 23 + j * 12, bx = r.x + ux * d0 - nx * 8, by = r.y + uy * d0 - ny * 8;
+        var tx = bx + ux * 9, ty = by + uy * 9, c = siteHue(pz, o.s.p), on = !tb || inst[o.k];
+        g.appendChild(sv('path', {d:'M' + tx.toFixed(1) + ' ' + ty.toFixed(1) + ' L' + (bx + nx * 4.5).toFixed(1) + ' ' + (by + ny * 4.5).toFixed(1) +
+                                 ' L' + (bx - nx * 4.5).toFixed(1) + ' ' + (by - ny * 4.5).toFixed(1) + 'Z',
+                                 fill:on ? c : '#fff', stroke:c, 'stroke-width':1.4, 'stroke-linejoin':'round', 'class':'rta'}));
+        occ(Math.min(tx, bx) - 5, Math.min(ty, by) - 5, Math.abs(tx - bx) + 10, Math.abs(ty - by) + 10, 'arw');
+      });
+    });
+  });
+}
+// 経路の穴埋め(設計 §14): ip route 宛先 マスク ゲートウェイ [管理距離]。IOS が断る形は IOS の応答の文で断る(PoC input_form)。
+// 地図の札を押すと欄に入る補助は、リンクのアドレスが決まりどおりのレベル(pz.assist)だけ
+var FINE = !!(window.matchMedia && matchMedia('(pointer: fine)').matches);
+var INV = "% Invalid input detected at '^' marker.";
+var FIELDS = [['dst', 'fDst'], ['mask', 'fMask'], ['gw', 'fGw'], ['ad', 'fAd']];
+function assistOn(pz){ return !!pz.assist || !!(S.form && S.form.chips); }
+function openForm(r){ closeSheet(); S.form = {r:r, dst:'', mask:'', gw:'', ad:'', err:null, at:'dst'}; renderPlay(); focusForm('dst'); boardAbove(); }
+function closeForm(){ S.form = null; renderPlay(); }
+function focusForm(k){ if (!FINE || UITEST) return; setTimeout(function(){ var e = $('f-' + k); if (e) e.focus(); }, 0); }
+function fillDest(l){
+  var F = S.form; if (!F) return;
+  if (l.router === F.r){ toast(t('ownLan', {p:l.prefix, r:F.r})); return; }
+  var a = l.prefix.split('/');
+  F.dst = a[0]; F.mask = maskOf(+a[1]); F.err = null; F.at = 'gw';
+  syncForm(); focusForm('gw');
+}
+function fillGw(ip){ var F = S.form; if (!F) return; F.gw = ip; F.err = null; F.at = 'ad'; syncForm(); }
+// 欄の候補(2026-11-12 ユーザ選択「候補のチップ」)。盤面の値を全部並べる= 選ぶだけでは解けない(地図を読んで決める)
+var MASKS = ['0.0.0.0', '255.0.0.0', '255.255.0.0', '255.255.255.0', '255.255.255.252', '255.255.255.255'];
+function byIp(a, b){ return ip2n(a) - ip2n(b); }
+function candOf(pz, k){
+  if (k === 'dst'){
+    var o = {};
+    pz.lans.forEach(function(l){ o[l.prefix.split('/')[0]] = 1; });
+    pz.links.forEach(function(l){ o[l.prefix.split('/')[0]] = 1; });
+    if (knob(pz, 'default')) o['0.0.0.0'] = 1;
+    if (knob(pz, 'len')){
+      (pz.sites || []).forEach(function(s){ o['10.' + s.site + '.0.0'] = 1; });
+      pz.lans.forEach(function(l){ l.hosts.forEach(function(h){ o[h.ip] = 1; }); });
+    }
+    return Object.keys(o).sort(byIp);
+  }
+  if (k === 'mask') return MASKS.slice();
+  if (k === 'gw'){
+    var g = {};
+    pz.routers.forEach(function(r){ r.ifs.forEach(function(i){ if (i.ip) g[i.ip] = 1; }); });
+    var out = Object.keys(g).sort(byIp);
+    if (knob(pz, 'null0')) out.push('Null0');
+    return out;
+  }
+  return ['1', '5', '10', '200', '250', '255'];
+}
+function paintCand(F){
+  var box = $('f-cand'); if (!box) return;
+  box.innerHTML = '';
+  var k = F.at || 'dst', nm = FIELDS.filter(function(x){ return x[0] === k; })[0];
+  box.appendChild(el('span', 'h', t('fCand', {f:t(nm[1])})));
+  candOf(S.pz, k).forEach(function(v){
+    var b = el('button', (F[k] || '') === v ? 'on' : '', v);
+    b.setAttribute('data-v', v);
+    b.addEventListener('click', function(){
+      F[k] = v; F.err = null;
+      var i = FIELDS.map(function(x){ return x[0]; }).indexOf(k);
+      if (i < FIELDS.length - 1) F.at = FIELDS[i + 1][0];
+      syncForm();
+    });
+    box.appendChild(b);
+  });
+}
+// 欄を開いたら、盤面が帯の上に見えるようにずらす
+function boardAbove(){
+  if (UITEST || AUTOTEST) return;
+  setTimeout(function(){
+    var bb = $('svg').getBoundingClientRect(), bh = $('actbar').getBoundingClientRect().height;
+    var dy = bb.bottom - (window.innerHeight - bh - 8);
+    if (dy > 0) window.scrollBy(0, Math.min(dy, bb.top - 52));
+  }, 30);
+}
+function parseIp(x){
+  var m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(x);
+  if (!m) return null;
+  var o = m.slice(1).map(Number);
+  return o.some(function(v){ return v > 255; }) ? null : o.join('.');
+}
+function maskLen(mask){
+  var inv = 4294967295 - ip2n(mask);
+  if ((inv & (inv + 1)) !== 0) return -1;
+  return 32 - Math.round(Math.log2(inv + 1));
+}
+// 宛先のゲームの決まり(IOS は受け付ける・サーバの route_path.dst_rule と同じ)。長さを選べるステージ(len)より前は地図の LAN と
+// デフォルトだけ。len からは長さが /8・/16・/24・/32・/0 で、中に端末がいる範囲(設計 §17)
+var LENS = [0, 8, 16, 24, 32];
+function hostsIn(pz, p){ var out = []; pz.lans.forEach(function(l){ l.hosts.forEach(function(h){ if (inPfx(h.ip, p)) out.push(h); }); }); return out; }
+function dstRule(pz, p){
+  var len = +p.split('/')[1];
+  if (len === 0) return knob(pz, 'default') ? null : 'noDef';
+  if (!knob(pz, 'len')) return pz.chips.some(function(c){ return c.p === p; }) ? null : 'notLan';
+  if (LENS.indexOf(len) < 0) return 'lenRule';
+  return hostsIn(pz, p).length ? null : 'noHostIn';
+}
+function submitForm(){
+  var F = S.form; if (!F || S.done || S.busy) return;
+  var pz = S.pz, r = F.r, R = IX(pz).R[r];
+  var raw = {}; FIELDS.forEach(function(k){ raw[k[0]] = String(F[k[0]] || '').trim(); });
+  var head = r + '(config)#ip route ', toks = ['dst', 'mask', 'gw', 'ad'].filter(function(k){ return raw[k]; });
+  function fail(field, key, o, ios){
+    var echo = null;
+    if (ios){
+      echo = head + toks.map(function(k){ return raw[k]; }).join(' ');
+      if (ios === INV){
+        var col = head.length;
+        for (var i = 0; i < toks.length && toks[i] !== field; i++) col += raw[toks[i]].length + 1;
+        echo += '\n' + new Array(col + 1).join(' ') + '^';
+      }
+    }
+    F.err = {field:field, why:tt('fe', key, o), ios:ios || null, echo:echo};
+    syncForm(); if (field) focusForm(field);
+  }
+  if (!raw.dst || !raw.mask || !raw.gw) return fail(!raw.dst ? 'dst' : !raw.mask ? 'mask' : 'gw', 'empty');
+  var dst = parseIp(raw.dst);
+  if (!dst) return fail('dst', 'ipFmt', {f:t('fDst')}, INV);
+  if (raw.mask.indexOf('/') >= 0) return fail('mask', 'slash', null, INV);
+  var mask = parseIp(raw.mask);
+  if (!mask) return fail('mask', 'ipFmt', {f:t('fMask')}, INV);
+  var nul = raw.gw === 'Null0' && knob(pz, 'null0'), gw = nul ? 'Null0' : parseIp(raw.gw);
+  if (!gw) return fail('gw', 'ipFmt', {f:t('fGw')}, INV);
+  var ad = 1;
+  if (raw.ad){
+    if (!/^\d{1,3}$/.test(raw.ad) || +raw.ad < 1 || +raw.ad > 255) return fail('ad', 'ad', null, INV);
+    ad = +raw.ad;
+  }
+  var len = maskLen(mask);
+  if (len < 0) return fail('mask', 'mask', null, '%Inconsistent address and mask');
+  if (ip2n(dst) % Math.pow(2, 32 - len)) return fail('dst', 'host', null, '%Inconsistent address and mask');
+  var g = nul ? -1 : ip2n(gw);
+  if (g === 0) return fail('gw', 'gw0', null, '%Invalid next hop, looping back to the network');
+  if (!nul && (gw.split('.')[0] === '127' || g >= ip2n('224.0.0.0'))) return fail('gw', 'gwBad', {ip:gw}, '%Invalid next hop address');
+  if (R.ifs.some(function(i){ return i.ip === gw; })) return fail('gw', 'own', {ip:gw, r:r}, "%Invalid next hop address (it's this router)");
+  var p = dst + '/' + len, rule = dstRule(pz, p);
+  if (rule) return fail(rule === 'lenRule' ? 'mask' : 'dst', rule, {p:p});
+  var item = {p:p, nh:gw, ad:ad}, cur = (S.cfg.r || {})[r] || [];
+  var same = cur.filter(function(q){ return keyOf(q) === keyOf(item); })[0];
+  if (same && (same.ad || 1) === ad) return fail(null, 'dup');
+  if (same && same.lock) return fail(null, 'locked');
+  S.form = null;
+  // 同じ宛先・同じゲートウェイを書き直すと管理距離が置き換わる(IOS と同じ・PoC input_form #10)
+  if (change(function(c){ c.r[r] = (c.r[r] || []).filter(function(q){ return keyOf(q) !== keyOf(item); }).concat([item]); }))
+    toast(t(same ? 'adSet' : 'added', {c:r + '(config)# ' + routeCli(item)}));
+  else { S.form = F; renderPlay(); }
+}
+function renderFormBar(){
+  var pb = $('pickbar'), F = S.form;
+  $('actin').hidden = !!F; pb.hidden = !F;
+  document.body.classList.toggle('formopen', !!F);
+  if (!F){ pb._f = null; pb.innerHTML = ''; return; }
+  if (pb._f !== F){ buildForm(pb, F); pb._f = F; }
+  syncForm();
+}
+function buildForm(pb, F){
+  pb.innerHTML = '';
+  var top = el('div', 'ftop'), cmd = el('div', 'fcmd'); cmd.id = 'f-cmd';
+  var cx = el('button', 'btn', t('cancel')); cx.addEventListener('click', closeForm);
+  var ok = el('button', 'btn pri', t('addBtn')); ok.id = 'f-ok'; ok.addEventListener('click', submitForm);
+  top.appendChild(cmd); top.appendChild(cx); top.appendChild(ok);
+  var grid = el('div', 'fgrid');
+  FIELDS.forEach(function(k){
+    var lb = el('label'), inp = document.createElement('input');
+    inp.id = 'f-' + k[0]; inp.type = 'text'; inp.autocomplete = 'off'; inp.spellcheck = false;
+    inp.setAttribute('inputmode', 'decimal'); inp.setAttribute('autocapitalize', 'off'); inp.setAttribute('autocorrect', 'off');
+    if (k[0] === 'ad') inp.placeholder = '1';
+    if (!FINE){ inp.readOnly = true; inp.setAttribute('inputmode', 'none'); }   // スマホは OS のキーボードを出さない(盤面が隠れる・2026-11-12 ユーザ指摘)
+    inp.addEventListener('focus', function(){ if (F.at !== k[0]){ F.at = k[0]; syncForm(); } });
+    inp.addEventListener('click', function(){ if (F.at !== k[0]){ F.at = k[0]; syncForm(); } });
+    inp.addEventListener('input', function(){ F[k[0]] = inp.value; if (F.err){ F.err = null; syncForm(); } else syncRange(); });
+    inp.addEventListener('keydown', function(e){
+      if (e.key === 'Enter'){ e.preventDefault(); submitForm(); }
+      else if (e.key === 'Escape') closeForm();
+    });
+    lb.appendChild(el('span', null, t(k[1]))); lb.appendChild(inp);
+    grid.appendChild(lb);
+  });
+  var cand = el('div', 'fcand'); cand.id = 'f-cand';
+  var er = el('div', 'ferr'); er.id = 'f-err';
+  pb.appendChild(top); pb.appendChild(grid); pb.appendChild(er); pb.appendChild(cand);
+}
+function syncForm(){
+  var F = S.form, c = $('f-cmd');
+  if (!F || !c) return;
+  c.innerHTML = '<b>' + esc(F.r) + '(config)#</b> ip route' + (assistOn(S.pz) ? '<small>' + esc(t('fAssist')) + '</small>' : '');
+  FIELDS.forEach(function(k){
+    var e = $('f-' + k[0]), v = F[k[0]] || '';
+    if (e.value !== v) e.value = v;
+    e.classList.toggle('bad', !!F.err && F.err.field === k[0]);
+    e.classList.toggle('at', F.at === k[0]);
+  });
+  paintCand(F);
+  syncRange();
+  var er = $('f-err'); er.innerHTML = ''; er.hidden = !F.err;
+  if (!F.err) return;
+  if (F.err.echo) er.appendChild(el('div', 'echo' + (F.err.echo.indexOf('\n') >= 0 ? ' cr' : ''), F.err.echo));
+  if (F.err.ios) er.appendChild(el('div', 'ios', F.err.ios));
+  er.appendChild(el('div', 'why', F.err.why));
+}
+
+// 宛先の範囲の光り(ステージ 5 から): 欄の宛先とマスク(書きかけでも形が整っていれば)、なければ経路表で押した宛先
+function rangeNow(pz){
+  if (!has(pz, 'range')) return null;
+  var F = S.form;
+  if (!F) return S.hl || null;
+  var d = parseIp(String(F.dst || '').trim()), m = parseIp(String(F.mask || '').trim());
+  if (!d || !m) return null;
+  var len = maskLen(m);
+  if (len < 0 || ip2n(d) % Math.pow(2, 32 - len)) return null;
+  return d + '/' + len;
+}
+function drawRange(pz, G, gBg, gTop, P){
+  var len = +P.split('/')[1], X = IX(pz);
+  pz.links.forEach(function(l){
+    if (+l.prefix.split('/')[1] >= len && inPfx(l.prefix.split('/')[0], P)){
+      var A = X.R[l.a], B = X.R[l.b];
+      gBg.appendChild(sv('line', {'class':'rngl', x1:A.x, y1:A.y, x2:B.x, y2:B.y}));
+    }
+  });
+  (pz.sites || []).forEach(function(s){
+    if (len <= 16 && inPfx('10.' + s.site + '.0.0', P)){ var b = s.box; gBg.appendChild(sv('rect', {'class':'rng', x:b[0], y:b[1], width:b[2], height:b[3], rx:14})); }
+  });
+  pz.lans.forEach(function(l){
+    var a = l.prefix.split('/');
+    if (!l.cloud && +a[1] >= len && inPfx(a[0], P)){ var b = l.box; gTop.appendChild(sv('rect', {'class':'rng', x:b[0] - 2, y:b[1] - 2, width:b[2] + 4, height:b[3] + 4, rx:9})); }
+    l.hosts.forEach(function(h){
+      var q = G.host[h.name];
+      if (q && inPfx(h.ip, P)) gTop.appendChild(sv('circle', {'class':'rngh', cx:q.x, cy:q.y, r:15}));
+    });
+  });
+}
+// 欄の宛先とマスクが変わったら、光りを描き直す
+function syncRange(){
+  var F = S.form; if (!F || !S.pz || !has(S.pz, 'range') || S.busy) return;
+  var r = rangeNow(S.pz);
+  if (r === F._rng) return;
+  F._rng = r;
+  var tev = testedEv();
+  drawBoard($('svg'), S.pz, S.cfg, tev || S.ev, {sel:S.sel, flows:tev ? 'result' : 'wait'});
+}
+function drawBoard(svg, pz, cfg, ev, opt){
+  opt = opt || {};
+  var X = IX(pz), H = pz.height;
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.innerHTML = '';
+  var G = {host:{}, ifl:{}, links:[], hits:[]};
+  OCC = [];
+  var gBg = sv('g', {}), gBand = sv('g', {}), gLink = sv('g', {}), gLan = sv('g', {}), gFlow = sv('g', {}), gR = sv('g', {}), gTop = sv('g', {});
+  [gBg, gBand, gLink, gLan, gFlow, gR, gTop].forEach(function(g){ svg.appendChild(g); });
+  var effIfs = (ev && ev.ifs) || {};
+  // 拠点の領域(ステージ 5 から)
+  if (has(pz, 'sites')) (pz.sites || []).forEach(function(s){
+    var c = HUE[s.site % 7], b = s.box;
+    gBg.appendChild(sv('rect', {x:b[0], y:b[1], width:b[2], height:b[3], rx:14, fill:c, 'fill-opacity':.07, stroke:c, 'stroke-opacity':.35, 'stroke-width':1.2}));
+    var ty = s.lab === 'bottom' ? b[1] + b[3] - 8 : b[1] + 16;
+    gBg.appendChild(sv('text', {x:b[0] + 10, y:ty, 'font-size':11, 'font-weight':700, fill:c}, 'Site ' + s.site));
+    gBg.appendChild(sv('text', {x:b[0] + 58, y:ty, 'font-size':10, 'class':'mono', fill:c, 'fill-opacity':.75}, '10.' + s.site + '.0.0/16'));
+  });
+  // 雲(Internet)
+  pz.lans.forEach(function(l){
+    if (!l.cloud || l.slot) return;          // 雲は 1 つ(Internet の 3 つのネットワークが中に入る)
+    var b = l.box, cx = b[0] + b[2] / 2, cy = b[1] + b[3] / 2;
+    gBg.appendChild(sv('path', {d:cloudPath(cx, cy, b[2], b[3]), fill:'#546e7a', 'fill-opacity':.08, stroke:'#546e7a', 'stroke-opacity':.6, 'stroke-width':1.4}));
+    gBg.appendChild(sv('text', {x:cx, y:b[1] + 16, 'font-size':12, 'font-weight':800, fill:'#546e7a', 'text-anchor':'middle'}, 'Internet'));
+  });
+  // ルータ間のリンク
+  pz.links.forEach(function(l, i){
+    var A = X.R[l.a], B = X.R[l.b];
+    var dx = B.x - A.x, dy = B.y - A.y, L = Math.hypot(dx, dy), ux = dx / L, uy = dy / L, nx = -uy, ny = ux;
+    if (ny > 0 || (ny === 0 && nx > 0)){ nx = -nx; ny = -ny; }
+    var m = l.mid || .5, mx = A.x + dx * m - nx * (l.off || 0) * -1, my = A.y + dy * m + ny * (l.off || 0);
+    mx = A.x + dx * m + (l.off ? -nx * l.off : 0); my = A.y + dy * m + (l.off ? -ny * l.off : 0);
+    var down = effIfs[l.a] && effIfs[l.a][l.ia] && !effIfs[l.a][l.ia].up;
+    gLink.appendChild(sv('line', {x1:A.x, y1:A.y, x2:B.x, y2:B.y, stroke:down ? '#c3c7cc' : '#8d96a0', 'stroke-width':2, 'stroke-dasharray':down ? '6 4' : ''}));
+    var LK = {mx:mx, my:my, end:{}};
+    LK.end[l.a] = {x:A.x + ux * 31 + nx * 9, y:A.y + uy * 31 + ny * 9};
+    LK.end[l.b] = {x:B.x - ux * 31 + nx * 9, y:B.y - uy * 31 + ny * 9};
+    G.links.push(LK);
+    var PK = !opt.readonly && S.form && S.pz === pz && assistOn(pz) ? S.form : null;
+    if (has(pz, 'linkip')){
+      // 補助で IP の札を出している間は、サブネットの札を出さない(2026-11-12 ユーザ指摘)
+      if (!PK) LK.box = pill(gLink, mx, my, l.prefix);
+      if (!PK){
+        var pa = l.ipa.split('.'), pb = l.ipb.split('.');
+        hostText(gLink, LK.end[l.a].x, LK.end[l.a].y, '.' + pa[3]);
+        hostText(gLink, LK.end[l.b].x, LK.end[l.b].y, '.' + pb[3]);
+      } else {
+        // 補助: 両端の IP を札にして押せるようにする(押すとゲートウェイの欄に入る)。置き場所はほかの札を描き終えてから選ぶ(下の placeIpChips)
+        G.chips = G.chips || [];
+        G.chips.push({r:l.a, ip:l.ipa, A:A, ux:ux, uy:uy, nx:nx, ny:ny});
+        G.chips.push({r:l.b, ip:l.ipb, A:B, ux:-ux, uy:-uy, nx:nx, ny:ny});
+      }
+    }
+  });
+  drawRouteArrows(gLink, pz, cfg, ev);
+  var P = !opt.readonly && S.form && S.pz === pz ? S.form : null;
+  // LAN の札と、ルータからの線
+  pz.lans.forEach(function(l){
+    var r = X.R[l.router], c = l.cloud ? '#546e7a' : HUE[l.site % 7], a = lanAttach(l, r);
+    var st = effIfs[l.router] && effIfs[l.router][l.if];
+    var up = !st || (st.up && st.ip);
+    if (!(l.cloud && l.slot)) gLan.appendChild(sv('line', {x1:r.x, y1:r.y, x2:a.x, y2:a.y, stroke:up ? c : '#c3c7cc', 'stroke-width':2, 'stroke-dasharray':up ? '' : '5 4'}));
+    if (knob(pz, 'if')){
+      // ステージ 1: インターフェースの札(名前と IP)。止まっていれば下に赤い札。押すとルータの枠
+      var mx = (r.x + a.x) / 2, my = (r.y + a.y) / 2, ipTxt = st && st.ip ? st.ip : t('noip');
+      var txt = l.if + ' ' + ipTxt, w0 = tw(txt, 9.5) + 8;
+      var anc = a.x < r.x - 4 ? 'end' : 'start', px = anc === 'end' ? mx - 7 : mx + 7;
+      if (anc === 'start' && px + w0 > W - 4){ anc = 'end'; px = mx - 7; }
+      if (anc === 'end' && px - w0 < 4){ anc = 'start'; px = mx + 7; }
+      var bad = !up || (st && st.ip && !inPfx(st.ip.split('/')[0], l.prefix));
+      var on = opt.sel && opt.sel.r === l.router && opt.sel.focus === l.if;
+      var q = pill(gLan, px, my, txt, {anchor:anc, color:bad ? '#c62828' : '#37474f', stroke:on ? '#d84315' : bad ? '#e57373' : '#c3c8ce', bold:true});
+      if (on) gLan.appendChild(sv('rect', {x:q.x - 3, y:q.y - 3, width:q.w + 6, height:21, rx:9, fill:'none', stroke:'#d84315', 'stroke-width':2.2}));
+      if (st && st.shut) pill(gLan, anc === 'end' ? q.x + q.w : q.x, my + 17, 'shutdown', {anchor:anc, color:'#fff', bg:'#c62828', stroke:'#c62828', bold:true});
+      G.ifl[l.router + '/' + l.if] = q;
+      if (!opt.readonly){
+        var hit = sv('rect', {x:q.x - 4, y:q.y - 6, width:q.w + 8, height:(st && st.shut ? 44 : 27), fill:'transparent', 'class':'clk'});
+        hit.addEventListener('click', function(){ openSheet({kind:'router', r:l.router, focus:l.if}); });
+        gLan.appendChild(hit);
+      }
+    } else if (has(pz, 'linkip') && !l.cloud){
+      var dx = r.x - a.x, dy = r.y - a.y, L = Math.hypot(dx, dy) || 1;
+      hostText(gLan, a.x + dx / L * 12 + 11, a.y + dy / L * 12, '.1');
+    }
+    if (!l.cloud){
+      var b = l.box;
+      occ(b[0], b[1], b[2], b[3]);
+      gLan.appendChild(sv('rect', {'class':'lbl', x:b[0], y:b[1], width:b[2], height:b[3], rx:8, fill:'#fff', stroke:c, 'stroke-width':1.3}));
+      gLan.appendChild(sv('rect', {x:b[0], y:b[1], width:b[2], height:17, rx:8, fill:c, 'fill-opacity':.14}));
+      gLan.appendChild(sv('text', {x:b[0] + b[2] / 2, y:b[1] + 12.5, 'font-size':10.5, 'class':'mono', 'font-weight':700, fill:c, 'text-anchor':'middle'}, l.prefix));
+    }
+    if (P && assistOn(pz) && !l.cloud){
+      // 補助: LAN の札を押すと宛先とマスクの欄に入る(自分につながる LAN は入れない)
+      var own = l.router === P.r;
+      var bb = l.box, hit = sv('rect', {x:bb[0] - 3, y:bb[1] - 3, width:bb[2] + 6, height:bb[3] + 6, rx:10, fill:'transparent', 'class':'clk',
+                                        'data-pick-lan':l.prefix});
+      if (!own) gTop.appendChild(sv('rect', {'class':'pickhl', x:bb[0] - 3, y:bb[1] - 3, width:bb[2] + 6, height:bb[3] + 6, rx:10}));
+      hit.addEventListener('click', function(){ fillDest(l); });
+      gTop.appendChild(hit);
+    }
+    l.hosts.forEach(function(h, i){
+      var p = hostXY(l, i);
+      if (!l.cloud) p.x = l.box[0] + l.box[2] * (i + .5) / l.hosts.length - 26;
+      G.host[h.name] = p;
+      var plen = +l.prefix.split('/')[1];
+      var ipText = knob(pz, 'if') || l.cloud ? h.ip : hostPart(h.ip, plen);
+      var ring = null;
+      pz.reqs.forEach(function(q, k){ if (!ring && (q.src === h.name || q.dst === h.name)) ring = reqColor(k, pz); });
+      hostIcon(gLan, p.x, p.y, h, {ipText:ipText, gw:knob(pz, 'if') && !l.cloud ? 'GW ' + h.gw : null, ring:ring});
+    });
+  });
+  var RP = !opt.readonly && S.pz === pz ? rangeNow(pz) : null;
+  if (RP) drawRange(pz, G, gBg, gTop, RP);
+  if (S.form && !opt.readonly && S.pz === pz) S.form._rng = RP;         // 描いた光り(syncRange が変わった時だけ描き直す)
+  // お題の帯(経路が決まっているお題だけ)
+  pz.reqs.forEach(function(q, i){
+    var hops = q.t === 'path' ? q.path : q.t === 'same' && pz.reqs[q.of].t === 'path' ? pz.reqs[q.of].path.slice().reverse() : null;
+    if (!hops) return;
+    var okq = ev && ev.reqs[i] && ev.reqs[i].ok;
+    gBand.appendChild(sv('path', {'class':'band' + (okq ? ' ok' : ''), d:polyD(pathPts(pz, G, q.src, q.dst, hops, 'deliver'), i ? 4 : 0), stroke:reqColor(i, pz)}));
+  });
+  pz.reqs.forEach(function(q, i){
+    if (q.t !== 'via') return;
+    var r = X.R[q.via];
+    gBand.appendChild(sv('circle', {cx:r.x, cy:r.y, r:25, fill:'none', stroke:reqColor(i, pz), 'stroke-width':3, 'stroke-dasharray':'5 4', opacity:.7}));
+  });
+  // ルータの箱(落ちた印の置き場所を選ぶため)
+  pz.routers.forEach(function(r){ occ(r.x - 19, r.y - 19, 38, 38, 'r:' + r.name); });
+  G.gFlow = gFlow; G.gTop = gTop;
+  var mode = opt.flows || 'wait';
+  if (mode === 'result' && ev && ev.reqs) drawResults(pz, G, ev);
+  // 送る前は封筒を置かない(送る側と受ける側は端末の丸で見える・2026-11-12 ユーザ指摘)
+  // ルータ(地図で選ぶ間: 元のルータに印・② では隣に印とリンクの強調)
+  var nbs = [];
+  if (P){
+    var R0 = X.R[P.r];
+    gBand.appendChild(sv('circle', {'class':'picksrc', cx:R0.x, cy:R0.y, r:23}));
+    nbs.forEach(function(n){
+      var Rn = X.R[n.peer];
+      gBand.appendChild(sv('line', {x1:R0.x, y1:R0.y, x2:Rn.x, y2:Rn.y, stroke:'#d84315', 'stroke-width':6, 'stroke-opacity':.25, 'stroke-linecap':'round'}));
+      gBand.appendChild(sv('circle', {'class':'pickhl', cx:Rn.x, cy:Rn.y, r:23}));
+    });
+  }
+  pz.routers.forEach(function(r){
+    var g = sv('g', {'class':opt.readonly ? '' : 'clk', 'data-r':r.name});
+    rIcon(g, r, {sel:opt.sel && opt.sel.r === r.name});
+    if (!opt.readonly){
+      var nb = nbs.filter(function(n){ return n.peer === r.name; })[0];
+      var hc = sv('circle', {cx:r.x, cy:r.y, r:24, fill:'transparent'});
+      if (nb) hc.setAttribute('data-pick-nh', nb.ip);
+      g.appendChild(hc);
+      g.addEventListener('click', function(){
+        if (!S.form) return openSheet({kind:'router', r:r.name});
+        // 欄を開いている間にルータを押すと、書く先のルータが替わる(書いた値はそのまま)
+        if (r.fixed){ toast(t('fixedR')); return; }
+        if (r.name !== S.form.r){ S.form.r = r.name; S.form.err = null; renderPlay(); }
+      });
+    }
+    gR.appendChild(g);
+  });
+  if (G.chips && S.form) placeIpChips(pz, G, gTop);
+  return G;
+}
+// ② の IP の札: リンクに沿った距離 × 線の両側の候補から、ほかの札・ルータ・LAN の札・先に置いた札と重ならない所に置く
+function placeIpChips(pz, G, gTop){
+  var H = pz.height, P = S.form;
+  G.chips.forEach(function(c){
+    var w = tw(c.ip, 8.5) + 8, own = c.r === P.r, pick = null;
+    var cands = [];
+    [0, 16, 32].forEach(function(extra){ [33, 44, 55, 24, 66].forEach(function(dist){ [1, -1].forEach(function(side){ cands.push([extra, dist, side]); }); }); });
+    cands.some(function(cd){
+      var extra = cd[0], dist = cd[1], side = cd[2];
+      return (function(){
+        var ex = c.A.x + c.ux * dist, ey = c.A.y + c.uy * dist;
+        var d = Math.abs(c.nx) * (w / 2) + Math.abs(c.ny) * 7.5 + 10 + extra;
+        var cx = ex + side * c.nx * d, cy = ey + side * c.ny * d;
+        var bx = {x0:cx - w / 2 - 1, y0:cy - 8.5, x1:cx + w / 2 + 1, y1:cy + 8.5};
+        if (bx.x0 < 2 || bx.y0 < 2 || bx.x1 > W - 2 || bx.y1 > H - 2) return false;
+        var hit = OCC.some(function(o){ return o.tag !== 'arw' && bx.x0 < o.x1 && o.x0 < bx.x1 && bx.y0 < o.y1 && o.y0 < bx.y1; });
+        if (!hit){ pick = [cx, cy]; return true; }
+        return false;
+      })();
+    });
+    if (!pick){ var d0 = Math.abs(c.nx) * (w / 2) + Math.abs(c.ny) * 7.5 + 5; pick = [c.A.x + c.ux * 33 + c.nx * d0, c.A.y + c.uy * 33 + c.ny * d0]; }
+    var cx = pick[0], cy = pick[1];
+    occ(cx - w / 2, cy - 7.5, w, 15, 'pill');
+    var g = sv('g', {'class':'clk', 'data-pick-ip':c.ip});
+    g.appendChild(sv('rect', {'class':'lbl ipc', x:cx - w / 2, y:cy - 7.5, width:w, height:15, rx:4,
+                              fill:own ? '#fff3e0' : '#fff', stroke:own ? '#d84315' : '#1f63c6', 'stroke-width':own ? 1.2 : 1.6}));
+    g.appendChild(sv('text', {x:cx, y:cy + 3.2, 'font-size':8.5, 'class':'mono', 'font-weight':700, fill:own ? '#bf360c' : '#1f63c6', 'text-anchor':'middle'}, c.ip));
+    // 札と線の端を細い線で結ぶ(どのリンクのどちらの端かがわかるように)
+    var ex = c.A.x + c.ux * 26, ey = c.A.y + c.uy * 26;
+    gTop.appendChild(sv('line', {x1:ex, y1:ey, x2:cx, y2:cy, stroke:own ? '#d84315' : '#1f63c6', 'stroke-width':1, 'stroke-opacity':.6}));
+    g.addEventListener('click', function(){ fillGw(c.ip); });
+    gTop.appendChild(g);
+  });
+}
+
+// ------------------------------------------------------------------ 下から出る枠
+function openSheet(sel){
+  S.sel = sel;
+  if (sel.kind === 'router' && S.lookFor !== sel.r){ S.lookFor = sel.r; S.add = {p:null, nh:null, ad:1}; }
+  $('sheet').hidden = false;
+  paintSheet();
+  drawBoard($('svg'), S.pz, S.cfg, S.ev, {sel:S.sel});
+}
+function closeSheet(){
+  $('sheet').hidden = true; S.hl = null;
+  if (S.sel){ S.sel = null; if (S.pz && !$('v-play').hidden) drawBoard($('svg'), S.pz, S.cfg, S.ev, {}); }
+}
+function prefixChip(pz, p, note){
+  var c = siteHue(pz, p);
+  return '<span class="chip" style="color:' + c + ';border-color:' + c + '55;background:' + c + '10">' + esc(p) + '</span>' + (note ? ' ' + note : '');
+}
+function sec(title){ var d = el('div', 'sec'); if (title) d.appendChild(el('h4', null, title)); return d; }
+function paintSheet(){
+  var sel = S.sel, pz = S.pz;
+  if (!sel) return;
+  var b = $('sh-b'); b.innerHTML = '';
+  if (sel.kind === 'rules') return paintRules(b);
+  var r = sel.r, R = IX(pz).R[r];
+  if (sel.focus && knob(pz, 'if')){
+    $('sh-t').textContent = r + ' · ' + sel.focus;
+    $('sh-s').textContent = '';
+    b.appendChild(ifDetail(r, sel.focus));
+    return;
+  }
+  $('sh-t').textContent = r + (R.fixed ? ' 🔒' : '');
+  $('sh-s').textContent = R.fixed ? t('fixedR') : '';
+  // 経路表
+  var tb = S.ev.tables[r];
+  var s1 = sec(t('rtable'));
+  var table = el('table', 'rt');
+  var rows = tb.rows.filter(function(x){
+    if (x.code === 'L') return has(pz, 'showip');
+    if (x.code === 'C' && !has(pz, 'linkip')) return IX(pz).R[r].ifs.some(function(i){ return i.name === x.out && i.to.indexOf('LAN:') === 0; });
+    return true;
+  });
+  var cur = (S.cfg.r || {})[r] || [], init = (pz.init.r || {})[r] || [];
+  rows.forEach(function(x){
+    var tr_ = el('tr');
+    var code = x.code === 'S' && +x.p.split('/')[1] === 0 ? 'S*' : x.code;
+    tr_.appendChild(el('td', 'c', has(pz, 'codes') ? code : ''));
+    var tdp = el('td'); tdp.innerHTML = prefixChip(pz, x.p);
+    if (has(pz, 'range')){
+      tdp.className = 'hlp';
+      if (S.hl === x.p) tdp.querySelector('.chip').classList.add('on');
+      tdp.addEventListener('click', function(){ S.hl = S.hl === x.p ? null : x.p; paintSheet(); drawBoard($('svg'), S.pz, S.cfg, S.ev, {sel:S.sel}); });
+    }
+    tr_.appendChild(tdp);
+    var nh = el('td', 'nh');
+    if (x.code === 'C') nh.textContent = has(pz, 'linkip') ? x.out : t('conn') + ' (' + x.out + ')';
+    else nh.innerHTML = x.res.map(function(q){
+      if (q.out === 'Null0') return 'Null0';
+      return '→ <b>' + esc(q.peer || '?') + '</b> ' + esc(has(pz, 'linkip') ? q.nh : '') + (has(pz, 'ad') ? ' [' + x.ad + '/0]' : '');
+    }).join('<br>');
+    tr_.appendChild(nh);
+    var tdx = el('td', 'x');
+    if (x.code === 'S') x.rid.forEach(function(k){
+      var s = cur[k]; if (!s) return;
+      var locked = s.lock || R.fixed;
+      var fromInit = init.some(function(q){ return keyOf(q) === keyOf(s); });
+      if (locked){ tdx.appendChild(el('span', null, '🔒')); return; }
+      if (fromInit && !knob(pz, 'del')) return;
+      var bt = el('button', null, t('del'));
+      bt.addEventListener('click', function(){ change(function(c){ c.r[r] = (c.r[r] || []).filter(function(q){ return keyOf(q) !== keyOf(s); }); }); });
+      tdx.appendChild(bt);
+    });
+    tr_.appendChild(tdx);
+    table.appendChild(tr_);
+  });
+  s1.appendChild(table);
+  if (tb.skipped && tb.skipped.length){
+    s1.appendChild(el('div', 'lbl', t('notIn')));
+    var t2 = el('table', 'rt');
+    tb.skipped.forEach(function(k){
+      var s = cur[k.i]; if (!s) return;
+      var tr2 = el('tr', 'skip');
+      tr2.appendChild(el('td', 'c', 'S'));
+      var td = el('td'); td.innerHTML = prefixChip(pz, s.p) + '<span class="why">' + esc(tt('why', k.why)) + '</span>'; tr2.appendChild(td);
+      tr2.appendChild(el('td', 'nh', '→ ' + s.nh + (has(pz, 'ad') ? ' [' + (s.ad || 1) + ']' : '')));
+      var tdx2 = el('td', 'x');
+      if (!s.lock && !R.fixed){
+        var bt = el('button', null, t('del'));
+        bt.addEventListener('click', function(){ change(function(c){ c.r[r] = (c.r[r] || []).filter(function(q){ return keyOf(q) !== keyOf(s); }); }); });
+        tdx2.appendChild(bt);
+      }
+      tr2.appendChild(tdx2);
+      t2.appendChild(tr2);
+    });
+    s1.appendChild(t2);
+  }
+  b.appendChild(s1);
+  if (R.fixed) return;
+  // インターフェース(ステージ 1)
+  if (knob(pz, 'if')) b.appendChild(ifList(r));
+  // 経路を足す
+  if (knob(pz, 'add')){
+    var ab = el('button', 'addroute', t('addMap'));
+    ab.addEventListener('click', function(){ openForm(r); });
+    b.insertBefore(ab, b.firstChild);
+  }
+}
+// インターフェース: 一覧(1 行ずつ・押すとその IF の設定へ)と、1 つの IF の設定(IP の候補・有効/無効)に分ける
+function ifWho(pz, i){
+  var lan = i.to.indexOf('LAN:') === 0 ? IX(pz).L[i.to.slice(4)] : null;
+  return {lan:lan, who:lan ? (lan.hosts.map(function(h){ return h.name; }).join('・') || lan.prefix) : i.to};
+}
+function ifList(r){
+  var pz = S.pz, R = IX(pz).R[r], s = sec(t('ifH'));
+  R.ifs.forEach(function(i){
+    var effv = S.ev.ifs[r][i.name], w = ifWho(pz, i), upv = effv.up && effv.ip;
+    var row = el('button', 'ifli');
+    row.setAttribute('data-if', i.name);
+    row.appendChild(el('b', null, i.name));
+    row.appendChild(el('span', 'mono ip', effv.ip || t('noip')));
+    row.appendChild(el('span', 'st ' + (upv ? 'up' : 'down'), effv.shut ? 'shutdown' : upv ? t('isUp') : t('isDown')));
+    row.appendChild(el('small', null, t('faces', {x:w.who})));
+    row.appendChild(el('span', 'go', '›'));
+    row.addEventListener('click', function(){ openSheet({kind:'router', r:r, focus:i.name}); });
+    s.appendChild(row);
+  });
+  return s;
+}
+function ifDetail(r, name){
+  var pz = S.pz, R = IX(pz).R[r], i = R.ifs.filter(function(x){ return x.name === name; })[0];
+  var st = ifState(pz, S.cfg, r, i.name), effv = S.ev.ifs[r][i.name], w = ifWho(pz, i), upv = effv.up && effv.ip;
+  var s = el('div', 'ifrow');
+  var head = el('div', 't', t('faces', {x:w.who}) + (w.lan ? ' (' + w.lan.prefix + ')' : ''));
+  head.appendChild(el('span', 'st ' + (upv ? 'up' : 'down'), upv ? t('isUp') : t('isDown')));
+  s.appendChild(head);
+  s.appendChild(el('div', 'lbl', t('ipL')));
+  var opts = (pz.ifopt[r] || {})[i.name] || [];
+  var ch = el('div', 'chips');
+  opts.concat([{ip:null}]).forEach(function(o){
+    var bt = el('button', st.ip === o.ip ? 'on' : '', o.ip || t('noip'));
+    // 重なる IP は選べない(IOS が受け付けない)
+    var clash = null;
+    if (o.ip) R.ifs.forEach(function(j){
+      if (j.name === i.name) return;
+      var sj = ifState(pz, S.cfg, r, j.name);
+      if (sj.ip && sameNet(sj.ip, o.ip)) clash = j.name;
+    });
+    if (clash){ bt.disabled = true; bt.title = t('overlap', {i:clash}); bt.innerHTML += '<small>' + esc(t('overlap', {i:clash})) + '</small>'; }
+    bt.addEventListener('click', function(){
+      if (st.ip === o.ip) return;
+      change(function(c){ c.i[r] = c.i[r] || {}; c.i[r][i.name] = {ip:o.ip, shut:st.shut}; });
+    });
+    ch.appendChild(bt);
+  });
+  s.appendChild(ch);
+  s.appendChild(el('div', 'lbl', t('stateL')));
+  var ch2 = el('div', 'chips');
+  [[false, t('enable')], [true, t('disable')]].forEach(function(x){
+    var bt = el('button', st.shut === x[0] ? 'on' : '', x[1]);
+    bt.addEventListener('click', function(){
+      if (st.shut === x[0]) return;
+      change(function(c){ c.i[r] = c.i[r] || {}; c.i[r][i.name] = {ip:st.ip, shut:x[0]}; });
+    });
+    ch2.appendChild(bt);
+  });
+  s.appendChild(ch2);
+  var bk = el('button', 'backlink', t('backIfs', {r:r}));
+  bk.addEventListener('click', function(){ openSheet({kind:'router', r:r}); });
+  s.appendChild(bk);
+  return s;
+}
+function sameNet(a, b){
+  var A = a.split('/'), B = b.split('/'), len = Math.min(+A[1], +B[1]);
+  return inPfx(A[0], B[0] + '/' + len) || inPfx(B[0], A[0] + '/' + len) ? inPfx(A[0], netOfIf(B[0], len)) : false;
+}
+function netOfIf(ip, len){ return ip + '/' + len; }
+function cond(pz, c){ return !c || c.split('&').every(function(x){ return x[0] === '!' ? !has(pz, x.slice(1)) : has(pz, x); }); }
+function condNew(pz, c){ return !!c && c.split('&').some(function(x){ return x[0] !== '!' && isNew(pz, x); }); }
+function paintRules(b){
+  var pz = S.pz, R = (T[LANG] || T.en).rulesTxt;
+  $('sh-t').textContent = t('rules'); $('sh-s').textContent = '';
+  var box = el('div', 'rules'), ul = el('ul');
+  R.items.forEach(function(it){
+    if (!cond(pz, it[0])) return;
+    var li = el('li'); li.innerHTML = inline(it[1]); if (condNew(pz, it[0])) li.appendChild(newTag()); ul.appendChild(li);
+  });
+  box.appendChild(ul);
+  box.appendChild(el('h4', null, t('knobsH')));
+  var ul2 = el('ul');
+  ['if', 'add', 'del'].forEach(function(k){
+    if (!R.knob[k]) return;
+    var on = knob(pz, k), li = el('li', on ? '' : 'off'); li.innerHTML = inline(R.knob[k]);
+    if (on) li.appendChild(el('span', 'here', t('thisStage')));
+    ul2.appendChild(li);
+  });
+  box.appendChild(ul2);
+  box.appendChild(el('h4', null, t('viewH')));
+  var ul3 = el('ul');
+  [t('legPkt'), t('legDrop'), pz.reqs.some(function(q){ return q.t === 'path' || q.t === 'same'; }) ? t('legBand') : null,
+   knob(pz, 'add') ? t('legRt') : null, pz.routers.some(function(r){ return r.fixed; }) ? t('legLock') : null, t('tapRouter'), t('hint')]
+    .forEach(function(x){ if (x){ var li = el('li'); li.textContent = x; ul3.appendChild(li); } });
+  box.appendChild(ul3);
+  R.foot.forEach(function(it){ if (cond(pz, it[0])){ var p = el('p'); p.innerHTML = inline(it[1]); box.appendChild(p); } });
+  var ta = el('button', 'btn', t('tutAgain'));
+  ta.addEventListener('click', function(){ closeSheet(); $('v-tut').dataset.on = ''; location.hash = '#t' + S.stage; });
+  box.appendChild(ta);
+  b.appendChild(box);
+}
+
+// ------------------------------------------------------------------ 開通・解説
+function finish(stars){
+  var st = stageOf(S.stage), lv = S.level;
+  S.done = true; closeSheet();
+  var old = st.progress[String(lv)];
+  st.progress[String(lv)] = {stars:Math.max(stars, old ? old.stars : 0), revealed:S.revealed && !old};
+  store(draftKey(), null);
+  remember('result', {stage:S.stage, level:lv, stars:stars, revealed:S.revealed});
+  renderPlay();
+  var box = $('result'); box.hidden = false; box.className = 'result ok'; box.innerHTML = '';
+  box.appendChild(el('div', 'big', S.revealed ? t('revealed') : t('cleared')));
+  if (!S.revealed){
+    box.appendChild(el('div', 'stars', '★★★'.slice(0, stars) + '☆☆☆'.slice(0, 3 - stars)));
+    box.appendChild(el('div', null, t('movesUsed', {n:S.ev.moves, p:S.pz.par})));
+  }
+  var acts = el('div', 'acts');
+  if (lv < st.levels){
+    var nb = el('button', 'btn pri', t('nextLv'));
+    nb.addEventListener('click', function(){ location.hash = '#p' + S.stage + '-' + (lv + 1); window.scrollTo(0, 0); });
+    acts.appendChild(nb);
+  } else {
+    var nxt = stageOf(S.stage + 1);
+    if (nxt && nxt.ready){
+      var ns = el('button', 'btn pri', t('nextStage'));
+      ns.addEventListener('click', function(){ reload().then(function(){ location.hash = stageOf(nxt.id).seen ? '#p' + nxt.id + '-1' : '#t' + nxt.id; }); });
+      acts.appendChild(ns);
+    }
+  }
+  var ag = el('button', 'btn', t('again'));
+  ag.addEventListener('click', function(){ startOver(true); });
+  acts.appendChild(ag);
+  var hb = el('button', 'btn', t('toStages'));
+  hb.addEventListener('click', function(){ reload().then(function(){ location.hash = ''; }); });
+  acts.appendChild(hb); box.appendChild(acts);
+  renderExplain();
+}
+function explainFlow(pz, ev, q, path){
+  var X = IX(pz), E = (T[LANG] || T.en).ex, out = [];
+  function f(s, o){ for (var k in o) s = s.split('{' + k + '}').join(o[k]); return s; }
+  var src = X.H[q.src], dst = X.H[q.dst], d = dst.h.ip;
+  if (path.end === 'nogw'){ out.push(f(E.nogw, {h:q.src, g:path.gw})); return out; }
+  if (!path.hops.length){ out.push(f(E.sameNet, {h:q.src})); return out; }
+  out.push(f(E.hand, {h:q.src, g:src.h.gw, r:path.hops[0]}));
+  var seen = {};
+  path.hops.forEach(function(r, k){
+    if (seen[r]){ out.push(f(E.loopr, {r:r})); return; }
+    seen[r] = 1;
+    var tb = ev.tables[r], win = null, best = -1;
+    tb.rows.forEach(function(x){ var len = +x.p.split('/')[1]; if (inPfx(d, x.p) && len > best){ best = len; win = x; } });
+    var last = k === path.hops.length - 1;
+    if (!win){ out.push(f(E.none, {r:r})); return; }
+    if (win.code === 'C'){
+      if (last && path.end === 'deliver') out.push(f(E.deliver, {r:r, p:win.p, i:win.out, h:path.host || q.dst}));
+      else if (last) out.push(f(E.nohost, {r:r, d:d}));
+      return;
+    }
+    if (win.res.some(function(z){ return z.out === 'Null0'; })){ out.push(f(E.nullr, {r:r, p:win.p})); return; }
+    var nx = win.res.map(function(z){ return z.peer; }).join(', ');
+    out.push(has(pz, 'linkip') ? f(E.rowIp, {r:r, p:win.p, ip:win.res.map(function(z){ return z.nh; }).join(', '), n:nx, o:win.res.map(function(z){ return z.out; }).join(', ')}) : f(E.row, {r:r, p:win.p, n:nx}));
+  });
+  return out;
+}
+function renderExplain(){
+  var e = $('explain'), ev = S.ev, pz = S.pz, was = e.querySelector('details');
+  e.hidden = false; e.innerHTML = '';
+  var d = el('details'); d.open = !!(was && was.open);
+  d.appendChild(el('summary', null, t('readWhy')));
+  pz.reqs.forEach(function(q, i){
+    var res = ev.reqs[i]; if (!res || !res.now || !res.now.length) return;
+    d.appendChild(el('h4', null, reqText(pz, i)));
+    explainFlow(pz, ev, q, res.now[0]).forEach(function(ln){ var p = el('p'); p.innerHTML = inline(ln); d.appendChild(p); });
+  });
+  d.appendChild(el('h4', null, S.revealed ? t('ansCfg') : t('yourCfg')));
+  d.appendChild(el('pre', 'cli', ev.cli.length ? cliText(ev.cli) : t('noChange')));
+  if (ev.best && !S.revealed){
+    d.appendChild(el('h4', null, t('bestCfg', {n:ev.best.moves})));
+    d.appendChild(el('pre', 'cli', cliText(ev.best.cli)));
+  }
+  e.appendChild(d);
+}
+function startOver(force){
+  if (!force && movesOf(S.pz, S.cfg) && !NOREC && !confirm(t('startOverQ'))) return;
+  if (S.busy) return;
+  S.form = null;
+  S.done = false; S.revealed = false; S.cfg = clone(S.pz.init); S.ev = S.pz.eval; S.seq++; S.tested = null; S.evalP = null;
+  $('result').hidden = true; $('explain').hidden = true;
+  store(draftKey(), null);
+  renderPlay();
+}
+function reveal(skipAsk){
+  if (S.busy) return Promise.resolve();
+  if (!skipAsk && !NOREC && !confirm(t('showQ'))) return Promise.resolve();
+  var seq = ++S.seq;
+  return apiPost('eval', {stage:S.stage, level:S.level, seed:S.pz.seed, reveal:true}).then(function(ev){
+    if (seq !== S.seq) return;
+    S.revealed = true; S.cfg = ev.cfg; S.ev = ev; S.evalP = null; S.tested = null;
+    saveDraft(); renderPlay();
+    return sendTest();
+  }).catch(function(e){ toast(String(e.message || e)); });
+}
+
+// ------------------------------------------------------------------ 試験(?autotest=N): 各 level を解き、配置を検査する
+function boxesOf(svg){
+  var out = [];
+  [].forEach.call(svg.querySelectorAll('.lbl'), function(e){ var b = e.getBBox(); out.push({x0:b.x, y0:b.y, x1:b.x + b.width, y1:b.y + b.height, e:e}); });
+  return out;
+}
+function geomCheck(pz, svg, bad, tag){
+  var H = pz.height, bx = boxesOf(svg);
+  bx.forEach(function(b){
+    if (b.x0 < -1 || b.y0 < -1 || b.x1 > W + 1 || b.y1 > H + 1) bad(tag + ' はみ出し ' + (b.e.textContent || b.e.tagName) + ' ' + [b.x0, b.y0, b.x1, b.y1].map(Math.round));
+  });
+  for (var i = 0; i < bx.length; i++) for (var j = i + 1; j < bx.length; j++){
+    var a = bx[i], b = bx[j];
+    if (a.e.tagName === 'rect' && b.e.tagName === 'rect' && a.e.getAttribute('rx') === '8' && b.e.getAttribute('rx') === '8') continue;
+    if (a.x0 < b.x1 - 1 && b.x0 < a.x1 - 1 && a.y0 < b.y1 - 1 && b.y0 < a.y1 - 1){
+      // LAN の札の中の端末名は重なってよい(札の中にある)
+      var lanA = a.e.getAttribute('rx') === '8', lanB = b.e.getAttribute('rx') === '8';
+      var ipcA = a.e.classList.contains('ipc'), ipcB = b.e.classList.contains('ipc');
+      if (lanA !== lanB && !ipcA && !ipcB) continue;
+      bad(tag + ' 重なり ' + (a.e.textContent || a.e.tagName + (a.e.getAttribute('class') || '')) + [a.x0, a.y0, a.x1, a.y1].map(Math.round) + ' × ' + (b.e.textContent || b.e.tagName + (b.e.getAttribute('class') || '')) + [b.x0, b.y0, b.x1, b.y1].map(Math.round));
+    }
+  }
+}
+function autotest(){
+  var out = [], ng = 0, pre = $('autotest');
+  function log(s){ out.push(s); }
+  function bad(s){ ng++; log('NG ' + s); }
+  var jobs = [];
+  S.ov.stages.forEach(function(st){ if (!st.ready) return; for (var lv = 1; lv <= st.levels; lv++) for (var k = 0; k < AUTOTEST; k++) jobs.push([st.id, lv, k]); });
+  var n = 0;
+  function one(i){
+    if (i >= jobs.length){
+      pre.hidden = false; pre.textContent = 'autotest: ' + n + ' 盤面・NG ' + ng + '\n' + out.join('\n');
+      return;
+    }
+    var j = jobs[i], sd = j[2] ? '&seed=' + (1000 + j[2]) : '', tag = j[0] + '-' + j[1] + '#' + j[2];
+    apiGet('puzzle?stage=' + j[0] + '&level=' + j[1] + sd).then(function(pz){
+      n++;
+      S.pz = pz; S.stage = j[0]; S.level = j[1];
+      if (pz.eval.ok) bad(tag + ' 初期で ok');
+      var s = $('svg');
+      drawBoard(s, pz, pz.init, pz.eval, {flows:'result'});
+      geomCheck(pz, s, bad, tag);
+      if (pz.knobs.indexOf('add') >= 0) pz.routers.forEach(function(r){
+        if (r.fixed) return;
+        S.form = {r:r.name, chips:true, dst:'', mask:'', gw:'', ad:''};
+        drawBoard(s, pz, pz.init, pz.eval, {flows:'none'});
+        geomCheck(pz, s, bad, tag + ' ②' + r.name);
+        S.form = null;
+      });
+      return apiPost('eval', {stage:j[0], level:j[1], seed:pz.seed, reveal:true}).then(function(ev){
+        if (!ev.ok || ev.stars !== 3) bad(tag + ' 答えで ok にならない');
+        if (movesOf(pz, ev.cfg) !== ev.moves) bad(tag + ' 手数の数え方が違う ' + movesOf(pz, ev.cfg) + ' ≠ ' + ev.moves);
+        drawBoard(s, pz, ev.cfg, ev, {flows:'result'});
+        geomCheck(pz, s, bad, tag + '(解)');
+        return apiPost('eval', {stage:j[0], level:j[1], seed:pz.seed, cfg:ev.cfg}).then(function(e2){
+          if (!e2.ok) bad(tag + ' 答えを送り直して ok にならない');
+        });
+      });
+    }).catch(function(e){ bad(tag + ' ' + e); }).then(function(){ one(i + 1); });
+  }
+  show('play');
+  noteCheck(bad);
+  one(0);
+}
+function noteCheck(bad){
+  S.ov.stages.forEach(function(st){
+    (st.cards || []).forEach(function(c, ci){
+      if (!c.example || !c.notes) return;
+      var tag = 'tut ' + st.id + '-' + (ci + 1);
+      var wrap = el('div'), s = document.createElementNS(NS, 'svg');
+      wrap.appendChild(s); document.body.appendChild(wrap);
+      var pz = Object.assign({}, S.ov.examples[c.example], {show:st.show});
+      var G = drawBoard(s, pz, pz.cfg, pz.eval, {readonly:true, flows:'result'});
+      addNotes(wrap, s, pz, G, c.notes);
+      c.notes.forEach(function(n, i){
+        var g = s.querySelector('.note[data-n="' + i + '"]');
+        if (!g){ bad(tag + ' 札 ' + (i + 1) + ' が置けない ' + n.at); return; }
+        var nb = g.querySelector('.nb').getBBox();
+        if (nb.x < 0 || nb.y < 0 || nb.x + nb.width > W || nb.y + nb.height > pz.height) bad(tag + ' 札 ' + (i + 1) + ' がはみ出す');
+        var m = n.at.split(':'), a = noteAt(pz, G, n.at), hb = g.querySelector('.nhl').getBBox();
+        if (a && a.tb && !(hb.x <= a.tb.x0 + .5 && hb.y <= a.tb.y0 + .5 && hb.x + hb.width >= a.tb.x1 - .5 && hb.y + hb.height >= a.tb.y1 - .5))
+          bad(tag + ' 札 ' + (i + 1) + ' の光る枠が指す物を囲まない ' + n.at);
+        (OCC || []).forEach(function(o){
+          if (['pill', 'ht', 'rl', 'drop', 'chk'].indexOf(o.tag) < 0 && o.tag.indexOf('r:') !== 0) return;
+          if (a && o.tag === a.self) return;
+          if (a && a.tb && Math.abs(o.x0 - a.tb.x0) < 1.5 && Math.abs(o.y0 - a.tb.y0) < 1.5) return;
+          if (nb.x < o.x1 - .5 && o.x0 < nb.x + nb.width - .5 && nb.y < o.y1 - .5 && o.y0 < nb.y + nb.height - .5) bad(tag + ' 札 ' + (i + 1) + ' の番号がほかの札に重なる ' + n.at);
+        });
+        if (m[0] === 'if'){
+          var q = G.ifl[m.slice(1).join(':')], h = g.querySelector('.nhl').getBBox();
+          if (!(h.x <= q.x && h.y <= q.y && h.x + h.width >= q.x + q.w && h.y + h.height >= q.y + 15)) bad(tag + ' 札 ' + (i + 1) + ' の光る枠が札を囲まない');
+        }
+      });
+      wrap.remove();
+    });
+  });
+}
+function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+function click(sel){ var e = typeof sel === 'string' ? document.querySelector(sel) : sel; if (!e) throw new Error('見つからない ' + sel); e.dispatchEvent(new MouseEvent('click', {bubbles:true})); }
+async function until(fn, ms){ for (var i = 0; i < (ms || 3000) / 50; i++){ if (fn()) return true; await wait(50); } return false; }
+function btnText(root, txt){ return [].filter.call(root.querySelectorAll('button'), function(b){ return b.textContent.indexOf(txt) === 0; })[0]; }
+async function uitest(){
+  var out = [], ng = 0;
+  function ok(c, msg){ if (!c){ ng++; out.push('NG ' + msg); } else out.push('ok ' + msg); }
+  try{
+    // ステージ 1 level 1: インターフェースを有効にして開通
+    location.hash = '#t1'; await until(function(){ return !$('v-tut').hidden; });
+    ok(!!document.querySelector('.tcard svg'), 'チュートリアルの例の盤面');
+    ok(document.querySelectorAll('.tcard ol.notes li').length === 3, 'チュートリアルの札 3 つ');
+    ok(!!document.querySelector('.tcard .exsend'), 'チュートリアルに「送ってみる」');
+    click('.tcard .exsend');
+    ok(await until(function(){ return !!document.querySelector('.tcard .lk.on'); }, 4000), 'チュートリアルでも経路表の小窓が出る');
+    ok(await until(function(){ var b = document.querySelector('.tcard .exsend'); return b && !b.disabled && !ANIM; }, 15000), 'チュートリアルの送ってみるが終わって結果に戻る');
+    ok(document.querySelectorAll('.tcard ol.notes li').length === 3 && !!document.querySelector('.tcard svg .trail'), '終わったら番号の札と道が戻る');
+    // コマ送り(チュートリアル): 端末で止まる → 次へ → 経路表の 1 行目で止まる → 残りを流す → 終わる
+    STEP = true;
+    click('.tcard .exsend');
+    ok(await until(function(){ return !!GATE; }, 4000), 'コマ送り: 端末で止まる');
+    var lkHost = (document.querySelector('.tcard .lk.on') || {}).textContent || '';
+    ok(lkHost.indexOf('GW') >= 0, 'コマ送り: 止まっている間は端末の小窓が開いたまま');
+    click('.tcard .exsend');
+    ok(await until(function(){ return !!GATE && document.querySelectorAll('.tcard .lk tr.no, .tcard .lk tr.win').length === 1; }, 6000), 'コマ送り: 経路表の 1 行ずつ止まる');
+    click('.tcard .exrest');
+    ok(await until(function(){ return !ANIM; }, 15000), 'コマ送り: 残りを流して終わる');
+    STEP = false;
+    location.hash = '#p1-1'; await until(function(){ return S.pz && S.pz.stage === 1 && !$('v-play').hidden; });
+    ok(!S.ev.ok, 'ステージ 1 は初期で未達');
+    ok(!document.querySelector('#svg text.mono') || [].every.call(document.querySelectorAll('#svg text'), function(x){ return x.textContent.indexOf('172.16') < 0; }), 'ステージ 1 にリンクのアドレスが出ない');
+    var shutIf = null;
+    S.pz.routers[0].ifs.forEach(function(i){ if (ifState(S.pz, S.cfg, 'R1', i.name).shut) shutIf = i.name; });
+    openSheet({kind:'router', r:'R1'}); await wait(50);
+    ok(!$('sheet').hidden, 'ルータの枠が開く');
+    ok(document.querySelectorAll('#sh-b .ifli').length === S.pz.routers[0].ifs.length && !document.querySelector('#sh-b .ifrow'), 'ルータの枠は IF の一覧だけ');
+    click(document.querySelector('#sh-b .ifli[data-if="' + shutIf + '"]')); await wait(50);
+    ok($('sh-t').textContent.indexOf(shutIf) >= 0 && document.querySelectorAll('#sh-b .ifrow').length === 1, '一覧の行から、その IF の設定だけ');
+    var rows = [].slice.call(document.querySelectorAll('#sh-b .ifrow'));
+    click(btnText(rows[0], LANG === 'ja' ? '有効にする' : 'Enable'));
+    await wait(300);
+    ok(!S.done, '変えただけでは開通しない(送ってみるまで)');
+    ok(!document.querySelector('#svg .trail'), '送る前は道を描かない');
+    click('#b-send');
+    ok(S.busy, '送っている間は busy');
+    ok(await until(function(){ return !!document.querySelector('.lk.on .r'); }, 3000), '端末の小窓(GW に渡す)');
+    // 経路表の小窓は、照らし始め・当たった時・結果が出た後で位置も大きさも変わらない(当たって窓がずれるのを防ぐ)
+    var lkBox = function(){ var tb = document.querySelector('.lk.on table'); if (!tb) return ''; var b = tb.closest('.lk').getBoundingClientRect(); return [b.left, b.top, b.width, b.height].map(Math.round).join(','); };
+    ok(await until(function(){ return !!document.querySelector('.lk.on table'); }, 4000), '経路表の小窓が開く');
+    var bx0 = !document.querySelector('.lk.on tr.win') && !!document.querySelector('.lk.on .r.wait') ? lkBox() : '';   // まだ何も当たっていない時の窓
+    ok(await until(function(){ return !!document.querySelector('.lk.on tr.win'); }, 4000), '経路表の小窓で使う行が選ばれる');
+    var bx1 = lkBox();
+    ok(await until(function(){ var tb = document.querySelector('.lk.on table'); return tb && !tb.closest('.lk').querySelector('.r.wait'); }, 4000), '経路表の小窓に結果の行が出る');
+    var bx2 = lkBox();
+    ok(bx0 && bx0 === bx1 && bx1 === bx2, '小窓は当たっても結果が出ても動かない(' + [bx0, bx1, bx2].join(' / ') + ')');
+    var lkTxt = (document.querySelector('.lk.on') || {}).textContent || '';
+    ok(lkTxt.indexOf('R1') >= 0, '小窓は R1 の経路表');
+    ok(await until(function(){ return S.done; }, 8000), '送ってみて開通');
+    ok(!$('result').hidden && $('result').textContent.indexOf('★★★') >= 0, '星 3');
+    // ステージ 2 level 1: 経路を穴埋めで足して開通(Lv 1 は地図の札を押すと欄に入る)
+    location.hash = '#p2-1'; await until(function(){ return S.pz && S.pz.stage === 2 && !S.done; });
+    var src = IX(S.pz).H.PC1.lan.router, dstLan = IX(S.pz).H.SRV1.lan.prefix, srcLan = IX(S.pz).H.PC1.lan.prefix;
+    var dNet = dstLan.split('/')[0], dMask = maskOf(+dstLan.split('/')[1]), nb = S.pz.nh[src][0].ip;
+    openSheet({kind:'router', r:src}); await wait(50);
+    click('#sh-b .addroute');
+    ok(!!S.form && $('sheet').hidden && !$('pickbar').hidden && document.querySelectorAll('#pickbar input').length === 4, '穴埋めの欄 4 つ(枠が閉じ、下の帯に出る)');
+    ok(S.pz.assist && $('f-cmd').textContent.indexOf(src + '(config)#') === 0, 'Lv 1 は補助あり・コマンドの頭');
+    // 候補のチップ: 宛先 → マスク → ゲートウェイの順に選べる(候補は盤面の値を全部)
+    var cands = [].map.call(document.querySelectorAll('#f-cand button'), function(b){ return b.textContent; });
+    ok(S.form.at === 'dst' && cands.indexOf(dNet) >= 0 && cands.length === S.pz.lans.length + S.pz.links.length, '宛先の候補= 地図のネットワーク全部');
+    click('#f-cand [data-v="' + dNet + '"]');
+    ok($('f-dst').value === dNet && S.form.at === 'mask' && $('f-mask').classList.contains('at'), 'チップで宛先が入り、次はマスク');
+    click('#f-cand [data-v="255.255.0.0"]');
+    ok($('f-mask').value === '255.255.0.0' && S.form.at === 'gw', 'チップでマスクが入り、次はゲートウェイ');
+    click('#f-cand [data-v="' + nb + '"]');
+    click('#f-ok');
+    ok(!!S.form && $('f-err').textContent.indexOf('%Inconsistent address and mask') >= 0, 'チップの組み合わせでも IOS の応答(/16 と ' + dNet + ')');
+    click($('f-mask')); 
+    ok(S.form.at === 'mask' && !!document.querySelector('#f-cand [data-v="255.255.255.0"]'), '欄を押すとその欄の候補');
+    S.form.dst = ''; S.form.mask = ''; S.form.gw = ''; S.form.err = null; S.form.at = 'dst'; renderPlay();
+    click(document.querySelector('#svg [data-pick-lan="' + srcLan + '"]'));
+    ok($('f-dst').value === '' && !$('toast').hidden, '自分につながる LAN は欄に入らない');
+    click(document.querySelector('#svg [data-pick-lan="' + dstLan + '"]'));
+    ok($('f-dst').value === dNet && $('f-mask').value === dMask, 'LAN の札で宛先とマスクが入る');
+    var ownIp = IX(S.pz).R[src].ifs.filter(function(i){ return i.link != null; })[0].ip;
+    click(document.querySelector('#svg [data-pick-ip="' + ownIp + '"]'));
+    ok($('f-gw').value === ownIp, 'IP の札でゲートウェイが入る');
+    click('#f-ok');
+    ok(!!S.form && $('f-err').textContent.indexOf("(it's this router)") >= 0 && $('f-gw').classList.contains('bad'), '自分の IP は IOS の文で断る');
+    function setF(k, v){ var e = $('f-' + k); e.value = v; e.dispatchEvent(new Event('input')); }
+    setF('gw', nb);
+    ok($('f-err').hidden, '書き直すと誤りの表示が消える');
+    setF('mask', '/24'); click('#f-ok');
+    ok($('f-err').textContent.indexOf("% Invalid input detected at '^' marker.") >= 0 && $('f-err').textContent.indexOf('^') > 0 && $('f-mask').classList.contains('bad'), '/24 は Invalid input');
+    var echo = (document.querySelector('#f-err .echo') || {}).textContent || '';
+    ok(echo.split('\n').length === 2 && echo.split('\n')[1].indexOf('^') === echo.split('\n')[0].indexOf('/24'), '^ がマスクの欄の位置');
+    setF('mask', '255.0.255.0'); click('#f-ok');
+    ok($('f-err').textContent.indexOf('%Inconsistent address and mask') >= 0, '1 が続かないマスクは Inconsistent');
+    setF('mask', dMask); setF('dst', dNet.replace(/\.0$/, '.1')); click('#f-ok');
+    ok($('f-err').textContent.indexOf('%Inconsistent address and mask') >= 0 && $('f-dst').classList.contains('bad'), 'ホスト部が 0 でない宛先は Inconsistent');
+    setF('dst', dNet); setF('gw', '0.0.0.0'); click('#f-ok');
+    ok($('f-err').textContent.indexOf('%Invalid next hop, looping back to the network') >= 0, 'ゲートウェイ 0.0.0.0');
+    setF('gw', '224.0.0.1'); click('#f-ok');
+    ok($('f-err').textContent.indexOf('%Invalid next hop address') >= 0, 'ゲートウェイがマルチキャスト');
+    setF('gw', nb); setF('ad', '256'); click('#f-ok');
+    ok($('f-err').textContent.indexOf('Invalid input') >= 0 && $('f-ad').classList.contains('bad'), '管理距離 256');
+    setF('dst', '10.99.0.0'); setF('mask', '255.255.0.0'); setF('ad', ''); click('#f-ok');
+    ok(!!S.form && $('f-err').textContent.indexOf('10.99.0.0/16') >= 0 && !document.querySelector('#f-err .ios'), '地図に無い宛先はゲームの決まりで断る(IOS の文は出さない)');
+    setF('dst', '0.0.0.0'); setF('mask', '0.0.0.0'); click('#f-ok');
+    ok(!!S.form && !$('f-err').hidden, 'ステージ 2 ではデフォルトを書けない');
+    var other = S.pz.routers.filter(function(r){ return r.name !== src && !r.fixed; })[0].name;
+    click('#svg [data-r="' + other + '"]');
+    ok(S.form && S.form.r === other && $('f-dst').value === '0.0.0.0', '欄を開いたままルータを押すと書く先が替わる');
+    S.form.r = src; renderPlay();
+    setF('dst', dNet); setF('mask', dMask); setF('gw', nb);
+    click('#f-ok');
+    ok(!S.form && $('toast').textContent.indexOf('ip route ' + dNet + ' ' + dMask + ' ' + nb) >= 0, '正しく書くと足せる(コマンドを表示)');
+    ok(await until(function(){ return !!document.querySelector('#svg .rta'); }, 2000), '足した経路の矢印');
+    await wait(300); click('#b-send');
+    ok(await until(function(){ return S.done; }, 8000), '経路を足して開通');
+    // 開通しない設定で送ると ✗ と「まだ開通していません」
+    location.hash = '#p2-2'; await until(function(){ return S.pz && S.pz.stage === 2 && S.level === 2 && !S.done; });
+    STEP = true;
+    click('#b-send');
+    ok(await until(function(){ return !!GATE; }, 4000) && $('b-send').textContent === t('next') && !$('b-rest').hidden && $('b-over').hidden, 'コマ送り(遊ぶ画面): 止まって「次へ」「残りを流す」');
+    click('#b-send');
+    ok(await until(function(){ return !!GATE && !!document.querySelector('#v-play .lk.on tr.no, #v-play .lk.on tr.win'); }, 6000), 'コマ送り(遊ぶ画面): 次へで経路表の 1 行目へ');
+    click('#b-rest');
+    STEP = false;
+    ok(await until(function(){ return !S.busy && !$('result').hidden; }, 8000) && $('result').classList.contains('ng'), '未達で送ると NG の表示');
+    ok(!!document.querySelector('#mission .req.ng'), 'お題に ✗');
+    ok(!!document.querySelector('#svg .drop'), '落ちた印');
+    // 隣でない IP を次の行き先にすると、足せるが表には入らない
+    var s2 = IX(S.pz).H.PC1.lan.router, far = null, lp2 = IX(S.pz).H.SRV1.lan.prefix.split('/');
+    S.pz.links.forEach(function(l){ if (l.a !== s2 && l.b !== s2) far = l.ipa; });
+    openSheet({kind:'router', r:s2}); await wait(50); click('#sh-b .addroute');
+    setF('dst', lp2[0]); setF('mask', maskOf(+lp2[1])); setF('gw', far); click('#f-ok');
+    ok(!S.form, '隣でない IP は IOS も受け付ける');
+    await until(function(){ return S.ev && S.ev.tables[s2].skipped.length > 0; }, 3000);
+    ok(S.ev.tables[s2].skipped.some(function(k){ return k.why === 'unresolved'; }), '隣でない IP の経路は表に入らない');
+    // 管理距離 255: 設定には入るが表に入らない。同じ宛先・同じゲートウェイを書き直すと管理距離が置き換わる
+    var nb2 = S.pz.nh[s2][0].ip;
+    openSheet({kind:'router', r:s2}); await wait(50); click('#sh-b .addroute');
+    setF('dst', lp2[0]); setF('mask', maskOf(+lp2[1])); setF('gw', nb2); setF('ad', '255'); click('#f-ok');
+    await until(function(){ return S.ev && S.ev.tables[s2].skipped.some(function(k){ return k.why === 'ad255'; }); }, 3000);
+    ok(S.ev.tables[s2].skipped.some(function(k){ return k.why === 'ad255'; }), '管理距離 255 は表に入らない');
+    var nRt = S.cfg.r[s2].length;
+    openSheet({kind:'router', r:s2}); await wait(50); click('#sh-b .addroute');
+    setF('dst', lp2[0]); setF('mask', maskOf(+lp2[1])); setF('gw', nb2); click('#f-ok');
+    ok(S.cfg.r[s2].length === nRt && S.cfg.r[s2].some(function(q){ return q.nh === nb2 && (q.ad || 1) === 1; }), '書き直すと管理距離が置き換わる(行は増えない)');
+    // Lv 3 から補助なし: 地図の札は押せず、IP の札も出ない
+    location.hash = '#p2-3'; await until(function(){ return S.pz && S.pz.stage === 2 && S.level === 3 && !S.done; });
+    openSheet({kind:'router', r:IX(S.pz).H.PC1.lan.router}); await wait(50); click('#sh-b .addroute');
+    ok(!S.pz.assist && !!S.form && !document.querySelector('#svg [data-pick-lan]') && !document.querySelector('#svg [data-pick-ip]'), 'Lv 3 から地図の補助なし');
+    ok(!!document.querySelector('#svg .pill, #svg rect') && $('f-cmd').textContent.indexOf(t('fAssist')) < 0, '補助の一言も出ない');
+    click(btnText($('pickbar'), t('cancel')));
+    ok(!S.form && !$('actin').hidden, 'やめると下の帯が元に戻る');
+    // やり直しと答え
+    location.hash = '#p3-2'; await until(function(){ return S.pz && S.pz.stage === 3 && S.level === 2 && !S.done; });
+    await reveal(true);
+    ok(await until(function(){ return S.done; }, 8000) && S.revealed, '答えを見る(送ってみせて開通)');
+    click('#explain summary');
+    ok($('explain').textContent.length > 50, '解説');
+    openSheet({kind:'rules'}); await wait(30);
+    ok($('sh-b').textContent.length > 100, 'ルールの枠');
+    closeSheet();
+    // ステージ 4: Internet の 3 台は 1 行のお題。1 つずつ書くと手数の上限を超える(デフォルトで指すのが答え)
+    location.hash = '#p4-1'; await until(function(){ return S.pz && S.pz.stage === 4 && S.level === 1 && !S.done; });
+    ok(document.querySelectorAll('#mission .req').length === 2 && $('mission').textContent.indexOf('MAIL') >= 0, 'Internet の 3 台は 1 行のお題');
+    ok(S.pz.lans.filter(function(l){ return l.cloud; }).length === 3 && document.querySelectorAll('#svg path').length > 0, '雲に 3 つのネットワーク');
+    var ra = IX(S.pz).H.PC1.lan.router, nb4 = S.pz.nh[ra].filter(function(x){ return x.peer === 'R3'; })[0].ip;
+    var inet = S.pz.lans.filter(function(l){ return l.cloud; }).map(function(l){ return l.prefix; });
+    for (var ii = 0; ii < 3; ii++){
+      openSheet({kind:'router', r:ra}); await wait(50); click('#sh-b .addroute');
+      setF('dst', inet[ii].split('/')[0]); setF('mask', '255.255.255.0'); setF('gw', nb4); click('#f-ok'); await wait(50);
+    }
+    ok(!!S.form && movesOf(S.pz, S.cfg) === S.pz.budget && $('toast').textContent.indexOf(String(S.pz.budget)) >= 0, '1 つずつ書くと 3 本目で手数の上限');
+    closeForm();
+    // ステージ 4: 経路を消す
+    location.hash = '#p4-3'; await until(function(){ return S.pz && S.pz.stage === 4 && S.level === 3 && !S.done; });
+    openSheet({kind:'router', r:'R3'}); await wait(50);
+    var del = btnText($('sh-b'), LANG === 'ja' ? '消す' : 'Delete');
+    ok(!!del, '消すボタン');
+    var before = movesOf(S.pz, S.cfg);
+    click(del); await wait(300);
+    ok(movesOf(S.pz, S.cfg) === before + 1, '消すと手数 +1');
+    // ステージ 5 Lv 2: 🔒 の行・範囲の光り・書ける長さ・🔒 と同じ /24 は道が分かれる → /32 で開通
+    location.hash = '#p5-2'; await until(function(){ return S.pz && S.pz.stage === 5 && S.level === 2 && !S.done; });
+    ok(S.pz.sites.length === 2 && document.querySelectorAll('#svg rect[rx="14"]').length >= 2, 'ステージ 5 は拠点が出る');
+    var y5 = S.pz.reqs[0].path[1], gw5 = S.pz.nh.R1.filter(function(x){ return x.peer === y5; })[0].ip;
+    var srv5 = IX(S.pz).H.SRV1.h.ip, lan5 = IX(S.pz).H.SRV1.lan.prefix.split('/')[0];
+    openSheet({kind:'router', r:'R1'}); await wait(50);
+    ok($('sh-b').textContent.indexOf('🔒') >= 0, '🔒 の行');
+    click(document.querySelector('#sh-b td.hlp')); await wait(30);
+    ok(document.querySelectorAll('#svg .rngl').length === 1 && !document.querySelector('#svg .rngh'), 'リンクの行を押すとそのリンクだけ光る');
+    click([].filter.call(document.querySelectorAll('#sh-b td.hlp'), function(td){ return td.textContent.indexOf('10.4.') === 0; })[0]); await wait(30);
+    ok(document.querySelectorAll('#svg .rngh').length >= 1 && document.querySelectorAll('#sh-b td.hlp .chip.on').length === 1, '経路表の宛先を押すと範囲が光る');
+    click('#sh-b .addroute');
+    ok(candOf(S.pz, 'dst').indexOf(srv5) >= 0 && candOf(S.pz, 'dst').indexOf('10.4.0.0') >= 0, '宛先の候補に端末と拠点');
+    setF('dst', '10.4.0.0'); setF('mask', '255.255.0.0'); await wait(30);
+    var nr16 = document.querySelectorAll('#svg .rngh').length;
+    setF('dst', srv5); setF('mask', '255.255.255.255'); await wait(30);
+    var nr32 = document.querySelectorAll('#svg .rngh').length;
+    ok(nr16 === 3 && nr32 === 1, '光りは /16 で 3 台・/32 で 1 台(' + nr16 + '/' + nr32 + ')');
+    setF('dst', lan5); setF('mask', '255.255.255.128'); setF('gw', gw5); click('#f-ok');
+    ok(!!S.form && $('f-err').textContent.indexOf(tt('fe', 'lenRule')) >= 0, '/25 はこのステージでは書けない');
+    setF('dst', S.pz.links[0].prefix.split('/')[0]); setF('mask', '255.255.255.252'); click('#f-ok');
+    ok(!!S.form && $('f-err').textContent.indexOf(tt('fe', 'lenRule')) >= 0, '/30 も書けない');
+    setF('dst', '10.2.0.0'); setF('mask', '255.255.0.0'); click('#f-ok');
+    ok(!!S.form && $('f-err').textContent.indexOf(tt('fe', 'noHostIn', {p:'10.2.0.0/16'})) >= 0, '端末のいない範囲は書けない');
+    setF('dst', lan5); setF('mask', '255.255.255.0'); click('#f-ok'); await wait(300);
+    ok(!S.form, '🔒 と同じ /24 は書ける');
+    click('#b-send');
+    ok(await until(function(){ var c = document.querySelector('.lk.on table'); return c && c.closest('.lk').textContent.indexOf('🔒') >= 0; }, 6000), '経路表の小窓で 🔒 の行に印');
+    ok(await until(function(){ return !S.busy && !!testedEv(); }, 20000) && $('mission').textContent.indexOf(t('split', {n:2})) >= 0, '🔒 と同じ /24 では道が 2 つに分かれる');
+    startOver(true);
+    openSheet({kind:'router', r:'R1'}); await wait(50); click('#sh-b .addroute');
+    setF('dst', srv5); setF('mask', '255.255.255.255'); setF('gw', gw5); click('#f-ok'); await wait(300);
+    click('#b-send');
+    ok(await until(function(){ return S.done; }, 20000), '/32 を足して開通');
+    // ステージ 5 Lv 3: 残っていた /32 が connected の /24 に勝って戻りがループ → 消すと戻りが届く
+    location.hash = '#p5-3'; await until(function(){ return S.pz && S.pz.stage === 5 && S.level === 3 && !S.done; });
+    var pc5 = IX(S.pz).H.PC1.h.ip + '/32';
+    ok(S.ev.reqs[1].now[0].end === 'loop', 'Lv 3 は初めは戻りがループ');
+    openSheet({kind:'router', r:'R1'}); await wait(50);
+    var row32 = [].filter.call(document.querySelectorAll('#sh-b table.rt tr'), function(tr){ return tr.textContent.indexOf(pc5) >= 0; })[0];
+    ok(!!row32 && !!row32.querySelector('td.x button'), '/32 の行は消せる');
+    click(row32.querySelector('td.x button')); await wait(300);
+    ok(S.ev.reqs[1].now[0].end !== 'loop', '/32 を消すとループしない');
+  }catch(e){ ng++; out.push('NG 例外 ' + e); }
+  var pre = $('autotest'); pre.hidden = false; pre.textContent = 'uitest: NG ' + ng + '\n' + out.join('\n');
+}
+
+// ------------------------------------------------------------------ 起動
+$('b-home').addEventListener('click', function(){
+  if (this.dataset.to === 'portal'){ location.href = '/'; return; }
+  location.hash = '';
+});
+$('b-lang').addEventListener('click', function(){
+  LANG = LANG === 'ja' ? 'en' : 'ja'; store('rtp.lang', LANG);
+  route();
+});
+$('b-help').addEventListener('click', function(){ openSheet({kind:'rules'}); });
+$('sh-x').addEventListener('click', closeSheet);
+$('b-over').addEventListener('click', function(){ startOver(false); });
+$('b-show').addEventListener('click', function(){ reveal(false); });
+$('b-send').addEventListener('click', function(){
+  if (S.busy){
+    if (GATE) return stepNext();
+    S.ff = true; this.disabled = true; [].forEach.call(document.querySelectorAll('.lk'), function(c){ c.remove(); }); return;
+  }
+  sendTest();
+});
+$('b-rest').addEventListener('click', stepRest);
+$('stepchk').addEventListener('change', function(){ STEP = this.checked; store('rtp.step', STEP ? '1' : '0'); [].forEach.call(document.querySelectorAll('.tcard .exstep input'), function(x){ x.checked = STEP; }); stepUi(); });
+$('b-next').addEventListener('click', function(){
+  var st = stageOf(S.stage);
+  location.hash = S.level < st.levels ? '#p' + S.stage + '-' + (S.level + 1) : '';
+});
+window.addEventListener('hashchange', route);
+apiGet('state').then(function(ov){
+  S.ov = ov;
+  if (AUTOTEST) return autotest();
+  if (UITEST) return uitest();
+  route();
+});
+})();
+</script>
+</body>
+</html>

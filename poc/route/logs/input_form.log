@@ -1,0 +1,507 @@
+
+======== input_form: 追加 PoC(2026-11-12): 穴埋めで入れ間違えたときの IOS の反応(マスク・AD・next-hop) ========
+--- 基準
+### 22:23:14 RT01: show running-config | include ^ip route
+
+### 22:23:14 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+
+--- 1. ホスト部が 0 でない宛先(10.4.1.1 255.255.255.0)
+### RT01: conf ['ip route 10.4.1.1 255.255.255.0 172.16.12.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%Inconsistent address and mask
+### 22:23:19 RT01: show running-config | include ^ip route
+
+### 22:23:19 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+
+### 22:23:19 RT01: show ip route 10.4.1.0
+% Subnet not in table
+--- 1 の後始末
+### RT01: conf ['no ip route 10.4.1.1 255.255.255.0 172.16.12.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%Inconsistent address and mask
+### 22:23:22 RT01: show running-config | include ^ip route
+
+--- 2. 1 が続かないマスク(255.0.255.0)
+### RT01: conf ['ip route 10.4.0.0 255.0.255.0 172.16.12.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%Inconsistent address and mask
+### 22:23:26 RT01: show running-config | include ^ip route
+
+### 22:23:26 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+
+### 22:23:26 RT01: show ip route 10.4.1.0
+% Subnet not in table
+--- 2 の後始末
+### RT01: conf ['no ip route 10.4.0.0 255.0.255.0 172.16.12.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%Inconsistent address and mask
+### 22:23:29 RT01: show running-config | include ^ip route
+
+--- 3. マスクを /24 で書く
+### RT01: conf ['ip route 10.4.1.0 /24 172.16.12.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+                               ^
+% Invalid input detected at '^' marker.
+
+### 22:23:33 RT01: show running-config | include ^ip route
+
+### 22:23:33 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+
+### 22:23:33 RT01: show ip route 10.4.1.0
+% Subnet not in table
+--- 4. AD 0
+### RT01: conf ['ip route 10.4.1.0 255.255.255.0 172.16.12.2 0']
+Enter configuration commands, one per line.  End with CNTL/Z.
+                                                         ^
+% Invalid input detected at '^' marker.
+
+### 22:23:38 RT01: show running-config | include ^ip route
+
+### 22:23:38 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+
+### 22:23:38 RT01: show ip route 10.4.1.0
+% Subnet not in table
+--- 4 の後始末
+### RT01: conf ['no ip route 10.4.1.0 255.255.255.0 172.16.12.2 0']
+Enter configuration commands, one per line.  End with CNTL/Z.
+                                                            ^
+% Invalid input detected at '^' marker.
+
+### 22:23:40 RT01: show running-config | include ^ip route
+
+--- 5. AD 256
+### RT01: conf ['ip route 10.4.1.0 255.255.255.0 172.16.12.2 256']
+Enter configuration commands, one per line.  End with CNTL/Z.
+                                                           ^
+% Invalid input detected at '^' marker.
+
+### 22:23:45 RT01: show running-config | include ^ip route
+
+### 22:23:45 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+
+### 22:23:45 RT01: show ip route 10.4.1.0
+% Subnet not in table
+--- 6. AD 255(入るが表に出ないはず)
+### RT01: conf ['ip route 10.4.1.0 255.255.255.0 172.16.12.2 255']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 22:23:49 RT01: show running-config | include ^ip route
+ip route 10.4.1.0 255.255.255.0 172.16.12.2 255
+### 22:23:49 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+Static local RIB for default 
+
+M  10.4.1.0/24 [255/0] via 172.16.12.2 [N]
+### 22:23:50 RT01: show ip route 10.4.1.0
+% Subnet not in table
+--- 6 の後始末
+### RT01: conf ['no ip route 10.4.1.0 255.255.255.0 172.16.12.2 255']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 22:23:52 RT01: show running-config | include ^ip route
+
+--- 7. next-hop 0.0.0.0
+### RT01: conf ['ip route 10.4.1.0 255.255.255.0 0.0.0.0']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%Invalid next hop, looping back to the network
+### 22:23:56 RT01: show running-config | include ^ip route
+
+### 22:23:57 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+Static local RIB for default 
+
+### 22:23:57 RT01: show ip route 10.4.1.0
+% Subnet not in table
+--- 7 の後始末
+### RT01: conf ['no ip route 10.4.1.0 255.255.255.0 0.0.0.0']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%Invalid next hop, looping back to the network
+### 22:23:59 RT01: show running-config | include ^ip route
+
+--- 8. next-hop がマルチキャスト(224.0.0.1)
+### RT01: conf ['ip route 10.4.1.0 255.255.255.0 224.0.0.1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%Invalid next hop address
+### 22:24:03 RT01: show running-config | include ^ip route
+
+### 22:24:04 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+Static local RIB for default 
+
+### 22:24:04 RT01: show ip route 10.4.1.0
+% Subnet not in table
+--- 8 の後始末
+### RT01: conf ['no ip route 10.4.1.0 255.255.255.0 224.0.0.1']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%No matching route to delete
+### 22:24:06 RT01: show running-config | include ^ip route
+
+--- 9. next-hop 255.255.255.255
+### RT01: conf ['ip route 10.4.1.0 255.255.255.0 255.255.255.255']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%Invalid next hop address
+### 22:24:11 RT01: show running-config | include ^ip route
+
+### 22:24:11 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+Static local RIB for default 
+
+### 22:24:11 RT01: show ip route 10.4.1.0
+% Subnet not in table
+--- 9 の後始末
+### RT01: conf ['no ip route 10.4.1.0 255.255.255.0 255.255.255.255']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%No matching route to delete
+### 22:24:13 RT01: show running-config | include ^ip route
+
+--- 10. 同じ宛先・同じ next-hop で AD だけ変える(1 → 200)
+### RT01: conf ['ip route 10.4.1.0 255.255.255.0 172.16.12.2', 'ip route 10.4.1.0 255.255.255.0 172.16.12.2 200']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 22:24:18 RT01: show running-config | include ^ip route
+ip route 10.4.1.0 255.255.255.0 172.16.12.2 200
+### 22:24:18 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+Static local RIB for default 
+
+M  10.4.1.0/24 [200/0] via 172.16.12.2 [A]
+### 22:24:18 RT01: show ip route 10.4.1.0
+Routing entry for 10.4.1.0/24
+  Known via "static", distance 200, metric 0
+  Routing Descriptor Blocks:
+  * 172.16.12.2
+      Route metric is 0, traffic share count is 1
+--- 10 の続き: AD を書かずにもう一度(200 → ?)
+### RT01: conf ['ip route 10.4.1.0 255.255.255.0 172.16.12.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 22:24:22 RT01: show running-config | include ^ip route
+ip route 10.4.1.0 255.255.255.0 172.16.12.2
+### 22:24:23 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+Static local RIB for default 
+
+M  10.4.1.0/24 [1/0] via 172.16.12.2 [A]
+### 22:24:23 RT01: show ip route 10.4.1.0
+Routing entry for 10.4.1.0/24
+  Known via "static", distance 1, metric 0
+  Routing Descriptor Blocks:
+  * 172.16.12.2
+      Route metric is 0, traffic share count is 1
+--- 10 の続き: no を AD なしで
+### RT01: conf ['no ip route 10.4.1.0 255.255.255.0 172.16.12.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 22:24:27 RT01: show running-config | include ^ip route
+
+### 22:24:27 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+Static local RIB for default 
+
+### 22:24:27 RT01: show ip route 10.4.1.0
+% Subnet not in table
+--- 11. 宛先 0.0.0.0 マスク 255.255.255.0(ホスト部 0 だが 0.0.0.0/24)
+### RT01: conf ['ip route 0.0.0.0 255.255.255.0 172.16.12.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 22:24:32 RT01: show running-config | include ^ip route
+ip route 0.0.0.0 255.255.255.0 172.16.12.2
+### 22:24:32 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+Static local RIB for default 
+
+M  0.0.0.0/24 [1/0] via 172.16.12.2 [A]
+### 22:24:32 RT01: show ip route 10.4.1.0
+% Subnet not in table
+--- 11 の後始末
+### RT01: conf ['no ip route 0.0.0.0 255.255.255.0 172.16.12.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+### 22:24:35 RT01: show running-config | include ^ip route
+
+--- 12. 宛先 10.4.1.0 マスク 0.0.0.0
+### RT01: conf ['ip route 10.4.1.0 0.0.0.0 172.16.12.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%Inconsistent address and mask
+### 22:24:40 RT01: show running-config | include ^ip route
+
+### 22:24:40 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+Static local RIB for default 
+
+### 22:24:40 RT01: show ip route 10.4.1.0
+% Subnet not in table
+--- 12 の後始末
+### RT01: conf ['no ip route 10.4.1.0 0.0.0.0 172.16.12.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+%Inconsistent address and mask
+### 22:24:43 RT01: show running-config | include ^ip route
+
+--- 13. 宛先の IP が 4 つ目の数字を欠く(10.4.1)
+### RT01: conf ['ip route 10.4.1 255.255.255.0 172.16.12.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+                            ^
+% Invalid input detected at '^' marker.
+
+### 22:24:47 RT01: show running-config | include ^ip route
+
+### 22:24:47 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+Static local RIB for default 
+
+### 22:24:47 RT01: show ip route 10.4.1.0
+% Subnet not in table
+--- 14. マスク 255.255.255.256
+### RT01: conf ['ip route 10.4.1.0 255.255.255.256 172.16.12.2']
+Enter configuration commands, one per line.  End with CNTL/Z.
+                                             ^
+% Invalid input detected at '^' marker.
+
+### 22:24:52 RT01: show running-config | include ^ip route
+
+### 22:24:52 RT01: show ip static route
+Codes: M - Manual static, A - AAA download, N - IP NAT, D - DHCP,
+       G - GPRS, V - Crypto VPN, C - CASA, P - Channel interface processor,
+       B - BootP, S - Service selection gateway
+       DN - Default Network, T - Tracking object
+       L - TL1, E - OER, I - iEdge
+       D1 - Dot1x Vlan Network, K - MWAM Route
+       PP - PPP default route, MR - MRIPv6, SS - SSLVPN
+       H - IPe Host, ID - IPe Domain Broadcast
+       U - User GPRS, TE - MPLS Traffic-eng, LI - LIIN
+       IR - ICMP Redirect, Vx - VXLAN static route
+       LT - Cellular LTE, Ev - L2EVPN static route
+Codes in []: A - active, N - non-active, B - BFD-tracked, D - Not Tracked, P - permanent, -T Default Track
+
+
+Codes in (): UP - up, DN - Down, AD-DN - Admin-Down, DL - Deleted
+Static local RIB for default 
+
+### 22:24:52 RT01: show ip route 10.4.1.0
+% Subnet not in table
+--- 後始末の確認
+### 22:24:52 RT01: show running-config | include ^ip route
+

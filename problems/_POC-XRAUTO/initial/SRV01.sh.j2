@@ -1,0 +1,59 @@
+#!/bin/bash
+# _POC-XRAUTO SRV01 — 収集役(Ubuntu 24.04)。BL-246 M13 の PoC。
+#   ens3 = 10.0.50.10/24(XR01 側)・ens4 = 10.0.60.10/24(XR02 側)
+#   道具= gnmic(gNMI のクライアント)・telegraf(Cisco のテレメトリのダイヤルアウトの受け手)・nfdump(NetFlow/IPFIX の受け手)・
+#         snmp/snmptrapd・python3-ncclient(NETCONF のクライアント)・openssl・tcpdump・jq
+#   道具は入れるだけ。受け手の起動・証明書づくりは PoC の段で行う(telegraf のサービスは止めておく)。
+set -e
+export DEBIAN_FRONTEND=noninteractive
+log() { echo "[$(date -Is)] $*"; }
+
+log "盤面の NIC と経路"
+cat > /etc/netplan/61-ccnp-inband.yaml <<'EOF'
+network:
+  version: 2
+  ethernets:
+    ens3:
+      addresses: [10.0.50.10/24]
+      routes:
+        - to: 10.255.0.1/32
+          via: 10.0.50.1
+        - to: 10.255.0.11/32
+          via: 10.0.50.1
+        - to: 10.0.11.0/24
+          via: 10.0.50.1
+        - to: 198.51.100.0/24
+          via: 10.0.50.1
+    ens4:
+      addresses: [10.0.60.10/24]
+      routes:
+        - to: 10.255.0.2/32
+          via: 10.0.60.1
+        - to: 10.0.21.0/24
+          via: 10.0.60.1
+EOF
+chmod 600 /etc/netplan/61-ccnp-inband.yaml
+netplan apply
+
+log "パッケージ"
+for i in 1 2 3; do
+  apt-get update -qq && apt-get install -y -qq nfdump snmp snmptrapd python3-ncclient python3-lxml openssl tcpdump jq curl && break
+  sleep 10
+done
+systemctl disable --now snmptrapd || true
+systemctl disable --now nfdump || true
+
+log "gnmic 0.49.1"
+cd /tmp
+for i in 1 2 3; do curl -fsSL -o gnmic.deb https://github.com/openconfig/gnmic/releases/download/v0.49.1/gnmic_0.49.1_Linux_x86_64.deb && break; sleep 5; done
+dpkg -i gnmic.deb
+
+log "telegraf 1.32.3(cisco_telemetry_mdt で受ける)"
+for i in 1 2 3; do curl -fsSL -o telegraf.deb https://dl.influxdata.com/telegraf/releases/telegraf_1.32.3-1_amd64.deb && break; sleep 5; done
+dpkg -i telegraf.deb
+systemctl disable --now telegraf || true
+
+log "完了"
+gnmic version || true
+telegraf --version || true
+nfcapd -V || true

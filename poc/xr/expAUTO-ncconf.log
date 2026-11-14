@@ -1,0 +1,48 @@
+
+######## 13:03:06 nc_confirmed: confirmed-commit を出して確定しない → 60 秒で戻るか・その間の CLI の表示
+$ python3 /tmp/nc_probe.py 10.0.50.1 '***' '***' confirmed
+== session-id 2465985694
+---- confirmed
+<?xml version="1.0"?>
+<rpc-reply message-id="urn:uuid:43810ee9-0664-4fb4-bcaa-d2480690ba34" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" xmlns="urn:ietf:params:xml:ns:netconf:base:1.0">
+ <ok/>
+</rpc-reply>
+
+confirmed-commit を出した(確定しない)。60 秒で戻るはず
+[rc=0]
+show configuration commit list 3
+Tue Nov 10 13:03:13.047 UTC
+SNo. Label/ID              User      Line                Client      Time Stamp
+~~~~ ~~~~~~~~              ~~~~      ~~~~                ~~~~~~      ~~~~~~~~~~
+1    1000000007            SUZUKI    rollback            Rollback    Tue Nov 10 13:03:11 2026
+2    1000000006            SUZUKI    netconf             YANG Frame  Tue Nov 10 13:03:07 2026
+3    1000000005            SUZUKI    netconf             YANG Frame  Tue Nov 10 13:02:42 2026
+RP/0/RP0/CPU0:XR01#
+show running-config interface Loopback0
+Tue Nov 10 13:03:13.445 UTC
+interface Loopback0
+ description set-by-netconf 130241
+ ipv4 address 10.255.0.1 255.255.255.255
+!
+
+RP/0/RP0/CPU0:XR01#
+show configuration sessions
+Tue Nov 10 13:03:13.847 UTC
+RP/0/RP0/CPU0:XR01#
+show configuration commit list 4
+Tue Nov 10 13:04:30.429 UTC
+SNo. Label/ID              User      Line                Client      Time Stamp
+~~~~ ~~~~~~~~              ~~~~      ~~~~                ~~~~~~      ~~~~~~~~~~
+1    1000000007            SUZUKI    rollback            Rollback    Tue Nov 10 13:03:11 2026
+2    1000000006            SUZUKI    netconf             YANG Frame  Tue Nov 10 13:03:07 2026
+3    1000000005            SUZUKI    netconf             YANG Frame  Tue Nov 10 13:02:42 2026
+4    1000000004            SUZUKI    vty0:node0_RP0_CPU  CLI         Tue Nov 10 13:02:19 2026
+RP/0/RP0/CPU0:XR01#
+show running-config interface Loopback0
+Tue Nov 10 13:04:30.833 UTC
+interface Loopback0
+ description set-by-netconf 130241
+ ipv4 address 10.255.0.1 255.255.255.255
+!
+
+RP/0/RP0/CPU0:XR01#

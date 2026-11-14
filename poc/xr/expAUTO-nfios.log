@@ -1,0 +1,158 @@
+######## 13:32:48 nf_ios: RT01(IOL)の Flexible NetFlow で IPFIX を出す(Et0/0 の入力)
+show version | include IOS|Version
+Cisco IOS Software [IOSXE], Linux Software (X86_64BI_LINUX-ADVENTERPRISEK9-M), Version 17.15.1, RELEASE SOFTWARE (fc4)
+RT01#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RT01(config)#
+flow record FR-V4
+RT01(config-flow-record)#
+match ipv4 source address
+RT01(config-flow-record)#
+match ipv4 destination address
+RT01(config-flow-record)#
+match ipv4 protocol
+RT01(config-flow-record)#
+match transport source-port
+RT01(config-flow-record)#
+match transport destination-port
+RT01(config-flow-record)#
+match interface input
+RT01(config-flow-record)#
+collect counter packets
+RT01(config-flow-record)#
+collect counter bytes
+RT01(config-flow-record)#
+collect timestamp sys-uptime first
+RT01(config-flow-record)#
+collect timestamp sys-uptime last
+RT01(config-flow-record)#
+exit
+RT01(config)#
+flow exporter FE-IPFIX
+RT01(config-flow-exporter)#
+destination 10.0.50.10
+RT01(config-flow-exporter)#
+source Loopback0
+RT01(config-flow-exporter)#
+transport udp 2055
+RT01(config-flow-exporter)#
+export-protocol ipfix
+RT01(config-flow-exporter)#
+template data timeout 60
+RT01(config-flow-exporter)#
+exit
+RT01(config)#
+flow monitor FM-V4
+RT01(config-flow-monitor)#
+record FR-V4
+RT01(config-flow-monitor)#
+exporter FE-IPFIX
+RT01(config-flow-monitor)#
+cache timeout active 10
+                           ^
+% Invalid input detected at '^' marker.
+
+RT01(config-flow-monitor)#
+cache timeout inactive 5
+                           ^
+% Invalid input detected at '^' marker.
+
+RT01(config-flow-monitor)#
+exit
+RT01(config)#
+interface Ethernet0/0
+RT01(config-if)#
+ip flow monitor FM-V4 input
+RT01(config-if)#
+end
+RT01#
+$ pkill nfcapd; rm -rf /tmp/nf; mkdir -p /tmp/nf; nfcapd -w /tmp/nf -p 2055 -t 60 -D; sleep 1
+[rc=0]
+$ ping -c 30 -i 0.2 -q 198.51.100.1
+PING 198.51.100.1 (198.51.100.1) 56(84) bytes of data.
+
+--- 198.51.100.1 ping statistics ---
+30 packets transmitted, 30 received, 0% packet loss, time 5923ms
+rtt min/avg/max/mdev = 0.859/0.993/1.187/0.095 ms
+[rc=0]
+$ ping -c 20 -i 0.2 -q 10.255.0.11
+PING 10.255.0.11 (10.255.0.11) 56(84) bytes of data.
+
+--- 10.255.0.11 ping statistics ---
+20 packets transmitted, 20 received, 0% packet loss, time 3893ms
+rtt min/avg/max/mdev = 0.845/1.108/4.273/0.728 ms
+[rc=0]
+show flow monitor FM-V4 cache format table
+  Cache type:                               Normal
+  Cache size:                                 4096
+  Current entries:                               1
+  High Watermark:                                2
+
+  Flows added:                                   3
+  Flows aged:                                    2
+    - Active timeout      (  1800 secs)          0
+    - Inactive timeout    (    15 secs)          2
+    - Event aged                                 0
+    - Watermark aged                             0
+    - Emergency aged                             0
+
+IPV4 SRC ADDR    IPV4 DST ADDR    TRNS SRC PORT  TRNS DST PORT  INTF INPUT            IP PROT       bytes        pkts    time first     time last
+===============  ===============  =============  =============  ====================  =======  ==========  ==========  ============  ============
+10.0.50.10       10.255.0.11                  0            771  Et0/0                       1         157           1  13:33:25.209  13:33:25.209
+
+RT01#
+show flow exporter FE-IPFIX statistics
+Flow Exporter FE-IPFIX:
+  Packet send statistics (last cleared 00:00:34 ago):
+    Successfully sent:         2                     (258 bytes)
+
+  Client send statistics:
+    Client: Flow Monitor FM-V4
+      Records added:           2
+        - sent:                2
+      Bytes added:             66
+        - sent:                66
+
+RT01#
+show flow monitor FM-V4 statistics
+  Cache type:                               Normal
+  Cache size:                                 4096
+  Current entries:                               1
+  High Watermark:                                2
+
+  Flows added:                                   3
+  Flows aged:                                    2
+    - Active timeout      (  1800 secs)          0
+    - Inactive timeout    (    15 secs)          2
+    - Event aged                                 0
+    - Watermark aged                             0
+    - Emergency aged                             0
+
+
+RT01#
+$ ls -la /tmp/nf
+total 8
+drwxrwxr-x  2 SUZUKI SUZUKI 4096 Nov 10 13:33 .
+drwxrwxrwt 15 root   root   4096 Nov 10 13:33 ..
+[rc=0]
+$ nfdump -R /tmp/nf -o extended -c 20
+Date first seen             Duration     Proto      Src IP Addr:Port          Dst IP Addr:Port     Flags Tos  Packets    Bytes      pps      bps    Bpp Flows
+No matching flows
+Summary: total flows: 0, total bytes: 0, total packets: 0, avg bps: 0, avg pps: 0, avg bpp: 0
+Time window: <unknown>
+Total flows processed: 0, passed: 0, Blocks skipped: 0, Bytes read: 0
+Sys: 0.0000s User: 0.0028s Wall: 0.0001s flows/second: 0.0 Runtime: 0.0001s
+[stderr] Empty file list. No files to process
+[rc=0]
+$ nfdump -R /tmp/nf -s dstip/flows -n 5
+No matching flows
+Top 5 Dst IP Addr ordered by flows:
+Date first seen                 Duration Proto       Dst IP Addr    Flows(%)     Packets(%)       Bytes(%)         pps      bps   bpp
+
+Summary: total flows: 0, total bytes: 0, total packets: 0, avg bps: 0, avg pps: 0, avg bpp: 0
+Time window: <unknown>
+Total flows processed: 0, passed: 0, Blocks skipped: 0, Bytes read: 0
+Sys: 0.0000s User: 0.0028s Wall: 0.0001s flows/second: 0.0 Runtime: 0.0001s
+[stderr] Empty file list. No files to process
+[rc=0]

@@ -1,0 +1,27 @@
+# POC-CLABEOS-01 の containerlab トポロジ(CML を使わない・BL-274 ②)。
+# eos1 = cEOS-lab(kind: arista_ceos)。startup-config を置かない = containerlab の既定の設定(admin/admin・Management0)。
+#   eth1 → Ethernet1。★image の版は取り込んだもの(clab_ops.py import-ceos が付ける ceos:<版>)に合わせる。
+#   szk-cl01 は cgroup v2 なので 4.32.0F 以降が要る(containerlab の文書)。
+# frr1 = kind: frr(POC-CLABFRR-01 と同じ形)。
+name: ccnp-clabeos
+topology:
+  nodes:
+    eos1:
+      kind: arista_ceos
+      image: ceos:4.37.0F
+      mgmt-ipv4: 172.20.20.21
+    frr1:
+      kind: frr
+      image: quay.io/frrouting/frr:containerlab-10.7.1
+      mgmt-ipv4: 172.20.20.22
+      startup-config: frr1/frr.conf   # containerlab が clab-ccnp-clabeos/frr1/config/ に写して /etc/frr に渡す
+      daemons: [ospfd]                # 書いたものだけ動く(zebra・staticd・mgmtd・watchfrr は常に動く)
+  links:
+    # MTU を 1500 にそろえる(containerlab の veth の既定は 9500。OSPF の DBD の MTU 照合で ExStart に止まる)
+    - type: veth
+      mtu: 1500
+      endpoints:
+        - node: eos1
+          interface: eth1
+        - node: frr1
+          interface: eth1

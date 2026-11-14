@@ -1,0 +1,246 @@
+$ wc -l /tmp/mdt.out
+322 /tmp/mdt.out
+[rc=0]
+$ tail -5 /tmp/telegraf.log
+2026-11-10T13:15:32Z I! Loaded processors:
+2026-11-10T13:15:32Z I! Loaded secretstores:
+2026-11-10T13:15:32Z I! Loaded outputs: file
+2026-11-10T13:15:32Z I! Tags enabled:
+2026-11-10T13:15:32Z I! [agent] Config: Interval:10s, Quiet:false, Hostname:"", Flush Interval:5s
+[rc=0]
+$ jq -r '[.tags.source, .tags.subscription, .name, .tags.name] | @tsv' /tmp/mdt.out | sort | uniq -c | head -30
+     16 XR01	SUB-GRPC	openconfig-interfaces:interfaces/interface/state	GigabitEthernet0/0/0/0
+     16 XR01	SUB-GRPC	openconfig-interfaces:interfaces/interface/state	GigabitEthernet0/0/0/1
+      8 XR01	SUB-GRPC	openconfig-interfaces:interfaces/interface/state	Loopback0
+     16 XR01	SUB-GRPC	openconfig-interfaces:interfaces/interface/state	MgmtEth0/RP0/CPU0/0
+     16 XR01	SUB-GRPC	openconfig-interfaces:interfaces/interface/state	Null0
+      8 XR01	SUB-GRPC	openconfig-interfaces:interfaces/interface/state	SINT0/0/0
+     16 XR01	SUB-TCP	openconfig-interfaces:interfaces/interface/state	GigabitEthernet0/0/0/0
+     16 XR01	SUB-TCP	openconfig-interfaces:interfaces/interface/state	GigabitEthernet0/0/0/1
+      8 XR01	SUB-TCP	openconfig-interfaces:interfaces/interface/state	Loopback0
+     16 XR01	SUB-TCP	openconfig-interfaces:interfaces/interface/state	MgmtEth0/RP0/CPU0/0
+     16 XR01	SUB-TCP	openconfig-interfaces:interfaces/interface/state	Null0
+      8 XR01	SUB-TCP	openconfig-interfaces:interfaces/interface/state	SINT0/0/0
+     18 XR02	SUB-GRPC	openconfig-interfaces:interfaces/interface/state	GigabitEthernet0/0/0/0
+     18 XR02	SUB-GRPC	openconfig-interfaces:interfaces/interface/state	GigabitEthernet0/0/0/1
+      9 XR02	SUB-GRPC	openconfig-interfaces:interfaces/interface/state	Loopback0
+     18 XR02	SUB-GRPC	openconfig-interfaces:interfaces/interface/state	MgmtEth0/RP0/CPU0/0
+     18 XR02	SUB-GRPC	openconfig-interfaces:interfaces/interface/state	Null0
+     18 XR02	SUB-TCP	openconfig-interfaces:interfaces/interface/state	GigabitEthernet0/0/0/0
+     18 XR02	SUB-TCP	openconfig-interfaces:interfaces/interface/state	GigabitEthernet0/0/0/1
+      9 XR02	SUB-TCP	openconfig-interfaces:interfaces/interface/state	Loopback0
+     18 XR02	SUB-TCP	openconfig-interfaces:interfaces/interface/state	MgmtEth0/RP0/CPU0/0
+     18 XR02	SUB-TCP	openconfig-interfaces:interfaces/interface/state	Null0
+[rc=0]
+$ head -c 1200 /tmp/mdt.out
+{"fields":{"counters/Cisco_IOS_XR_openconfig_interfaces_stats_ext:cisco/last_read_time":0,"counters/in_broadcast_pkts":0,"counters/in_discards":0,"counters/in_errors":0,"counters/in_fcs_errors":0,"counters/in_multicast_pkts":0,"counters/in_octets":0,"counters/in_pkts":0,"counters/in_unicast_pkts":0,"counters/in_unknown_protos":0,"counters/out_broadcast_pkts":0,"counters/out_discards":0,"counters/out_errors":0,"counters/out_multicast_pkts":0,"counters/out_octets":0,"counters/out_pkts":0,"counters/out_unicast_pkts":0},"name":"openconfig-interfaces:interfaces/interface/state","tags":{"name":"Null0","path":"openconfig-interfaces:interfaces/interface/state","source":"XR02","subscription":"SUB-TCP"},"timestamp":1794316534}
+{"fields":{"counters/Cisco_IOS_XR_openconfig_interfaces_stats_ext:cisco/last_read_time":0,"counters/in_broadcast_pkts":0,"counters/in_discards":0,"counters/in_errors":0,"counters/in_fcs_errors":0,"counters/in_multicast_pkts":249,"counters/in_octets":289486,"counters/in_pkts":407,"counters/in_unicast_pkts":158,"counters/in_unknown_protos":0,"counters/out_broadcast_pkts":2,"counters/out_discards":0,"counters/out_errors":0,"counters/out_multicast_pkts":188,"counters/out_o
+[rc=0]
+show telemetry model-driven subscription
+Tue Nov 10 13:17:05.034 UTC
+Subscription:  SUB-TCP  ID:  12                State: ACTIVE
+-------------
+  Sensor groups:
+  Id                               Interval(ms)               State     
+  SG-IF                            10000                      Partial   
+
+  Destination Groups:
+  Id       Encoding            Transport   State   Port    Vrf                               IP                                                             
+  DG-TCP   self-describing-gpb tcp         Active  57000                                     10.0.50.10                                                     
+    TLS :             False
+
+Subscription:  SUB-GRPC  ID:  13                State: ACTIVE
+-------------
+  Sensor groups:
+  Id                               Interval(ms)               State     
+  SG-IF                            10000                      Partial   
+
+  Destination Groups:
+  Id        Encoding            Transport   State   Port    Vrf                               IP                                                             
+  DG-GRPC   self-describing-gpb grpc        Active  57500                                     10.0.50.10                                                     
+    TLS :             False
+
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven destination DG-TCP
+Tue Nov 10 13:17:05.436 UTC
+  Destination Group Id:  DG-TCP
+  --------------------
+    Destination IP:       10.0.50.10
+    Destination Port:     57000
+    Subscription:         SUB-TCP
+    State:                Active
+    Encoding:             self-describing-gpb
+    Transport:            tcp
+    TLS :                 False
+    Total bytes sent:     24536
+    Total packets sent:   16
+    Last Sent time:       2026-11-10 13:17:00.3838020448 +0000
+    Destination endpoint: 2013
+  Collection statistics:
+    Maximum tokens                   : 4000
+    Event tokens                     : 750
+    Cadence tokens                   : 734
+    Token processed at               : 
+    Cadence token advertised at      : 
+    Event token advertised at        : 
+    GNMI initial synchronization time: 
+    Pending queue size               : 0
+    Pending queue memory size (bytes): 0
+    Processed events                 : 0
+    Collection tokens                : 734
+    Send channel full count          : 0
+    Channel full send retries        : 0
+    Sent RIB messages                : 0
+    Received RIB messages            : 0
+
+    Collection Groups:
+    ------------------
+      Id: 7
+      Sample Interval:      10000 ms
+      Heartbeat Interval:   NA
+      Heartbeat always:     False
+      Encoding:             self-describing-gpb
+      Num of collection:    8
+      Incremental updates:  0
+      Collection time:      Min:     3 ms Max:     9 ms
+      Total time:           Min:     3 ms Max:     9 ms Avg:     6 ms
+      Total Deferred:       0
+      Total Send Errors:    0
+      Total Send Drops:     0
+      Total Other Errors:   0
+      No data Instances:    0
+      Initial updates:      2013(Y)
+      Last Collection Start:2026-11-10 13:17:00.3838006650 +0000
+      Last Collection End:  2026-11-10 13:17:00.3838011725 +0000
+      Collections:          8
+      Collection splits:    0
+      Last collection max:  2026-11-10 13:16:00.3778014044 +0000
+      Sensor Path:          openconfig-interfaces:interfaces/interface/state{counters}
+
+      Id: 8
+      Sample Interval:      10000 ms
+      Heartbeat Interval:   NA
+      Heartbeat always:     False
+      Encoding:             self-describing-gpb
+      Num of collection:    8
+      Incremental updates:  0
+      Collection time:      Min:     3 ms Max:     8 ms
+      Total time:           Min:     4 ms Max:     9 ms Avg:     5 ms
+      Total Deferred:       0
+      Total Send Errors:    0
+      Total Send Drops:     0
+      Total Other Errors:   0
+      No data Instances:    0
+      Initial updates:      2013(Y)
+      Last Collection Start:2026-11-10 13:17:00.3838015724 +0000
+      Last Collection End:  2026-11-10 13:17:00.3838020646 +0000
+      Collections:          8
+      Collection splits:    0
+      Last collection max:  2026-11-10 13:16:10.3788020633 +0000
+      Sensor Path:          openconfig-interfaces:interfaces/interface/state{counters}
+
+RP/0/RP0/CPU0:XR01#
+show telemetry model-driven subscription
+Tue Nov 10 13:17:07.130 UTC
+Subscription:  SUB-TCP  ID:  8                 State: ACTIVE
+-------------
+  Sensor groups:
+  Id                               Interval(ms)               State     
+  SG-IF                            10000                      Partial   
+
+  Destination Groups:
+  Id       Encoding            Transport   State   Port    Vrf                               IP                                                             
+  DG-TCP   self-describing-gpb tcp         Active  57000                                     10.0.60.10                                                     
+    TLS :             False
+
+Subscription:  SUB-GRPC  ID:  9                 State: ACTIVE
+-------------
+  Sensor groups:
+  Id                               Interval(ms)               State     
+  SG-IF                            10000                      Partial   
+
+  Destination Groups:
+  Id        Encoding            Transport   State   Port    Vrf                               IP                                                             
+  DG-GRPC   self-describing-gpb grpc        Active  57500                                     10.0.60.10                                                     
+    TLS :             False
+
+RP/0/RP0/CPU0:XR02#
+show telemetry model-driven destination DG-TCP
+Tue Nov 10 13:17:07.532 UTC
+  Destination Group Id:  DG-TCP
+  --------------------
+    Destination IP:       10.0.60.10
+    Destination Port:     57000
+    Subscription:         SUB-TCP
+    State:                Active
+    Encoding:             self-describing-gpb
+    Transport:            tcp
+    TLS :                 False
+    Total bytes sent:     26160
+    Total packets sent:   20
+    Last Sent time:       2026-11-10 13:17:04.3842771531 +0000
+    Destination endpoint: 2009
+  Collection statistics:
+    Maximum tokens                   : 4000
+    Event tokens                     : 750
+    Cadence tokens                   : 730
+    Token processed at               : 
+    Cadence token advertised at      : 
+    Event token advertised at        : 
+    GNMI initial synchronization time: 
+    Pending queue size               : 0
+    Pending queue memory size (bytes): 0
+    Processed events                 : 0
+    Collection tokens                : 730
+    Send channel full count          : 0
+    Channel full send retries        : 0
+    Sent RIB messages                : 0
+    Received RIB messages            : 0
+
+    Collection Groups:
+    ------------------
+      Id: 6
+      Sample Interval:      10000 ms
+      Heartbeat Interval:   NA
+      Heartbeat always:     False
+      Encoding:             self-describing-gpb
+      Num of collection:    10
+      Incremental updates:  0
+      Collection time:      Min:     1 ms Max:     2 ms
+      Total time:           Min:     1 ms Max:     2 ms Avg:     1 ms
+      Total Deferred:       0
+      Total Send Errors:    0
+      Total Send Drops:     0
+      Total Other Errors:   0
+      No data Instances:    0
+      Initial updates:      2009(Y)
+      Last Collection Start:2026-11-10 13:17:04.3842687531 +0000
+      Last Collection End:  2026-11-10 13:17:04.3842688531 +0000
+      Collections:          10
+      Collection splits:    0
+      Last collection max:  2026-11-10 13:15:34.3752685531 +0000
+      Sensor Path:          openconfig-interfaces:interfaces/interface/state{counters}
+
+      Id: 7
+      Sample Interval:      10000 ms
+      Heartbeat Interval:   NA
+      Heartbeat always:     False
+      Encoding:             self-describing-gpb
+      Num of collection:    10
+      Incremental updates:  0
+      Collection time:      Min:     1 ms Max:     7 ms
+      Total time:           Min:     1 ms Max:     7 ms Avg:     3 ms
+      Total Deferred:       0
+      Total Send Errors:    0
+      Total Send Drops:     0
+      Total Other Errors:   0
+      No data Instances:    0
+      Initial updates:      2009(Y)
+      Last Collection Start:2026-11-10 13:17:04.3842769531 +0000
+      Last Collection End:  2026-11-10 13:17:04.3842771531 +0000
+      Collections:          10
+      Collection splits:    0
+      Last collection max:  2026-11-10 13:16:24.3802774531 +0000
+      Sensor Path:          openconfig-interfaces:interfaces/interface/state{counters}
+
+RP/0/RP0/CPU0:XR02#

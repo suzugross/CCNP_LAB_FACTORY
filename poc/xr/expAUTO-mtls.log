@@ -1,0 +1,119 @@
+######## 13:24:56 mtls_ca xr01: ca.cert を自前の CA に差し替え(再起動なし)
+run cp /misc/config/grpc/ca.cert /harddisk:/ca.cert.orig
+Tue Nov 10 13:24:57.969 UTC
+
+RP/0/RP0/CPU0:XR01#
+run cp /harddisk:/lab-ca.pem /misc/config/grpc/ca.cert
+Tue Nov 10 13:24:58.381 UTC
+
+RP/0/RP0/CPU0:XR01#
+run openssl x509 -in /misc/config/grpc/ca.cert -noout -subje$onfig/grpc/ca.cert -noout -subjec                          trun openssl x509 -in /misc/config/grpc/ca.cert -noout -subj$
+Tue Nov 10 13:24:58.782 UTC
+subject=CN=LAB-CA
+
+RP/0/RP0/CPU0:XR01#
+$ timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.50.1:57400 --tls-ca /tmp/pki/xr01-ems.pem --tls-server-name ems.cisco.com --tls-cert /tmp/pki/client.pem --tls-key /tmp/pki/client.key capabilities 2>&1 | head -1
+target "10.0.50.1:57400", capabilities request failed: "10.0.50.1:57400" CapabilitiesRequest failed: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: bad certificate"
+[rc=0]
+######## 13:25:02 mtls_ca xr01: gRPC を再起動(no-tls → no no-tls)
+configure
+Tue Nov 10 13:25:03.542 UTC
+RP/0/RP0/CPU0:XR01(config)#
+grpc
+RP/0/RP0/CPU0:XR01(config-grpc)#
+no-tls
+RP/0/RP0/CPU0:XR01(config-grpc)#
+commit
+Tue Nov 10 13:25:04.868 UTC
+
+% Failed to commit one or more configuration items during a pseudo-atomic operation. All changes made have been reverted. Please issue 'show configuration failed [inheritance]' from this session to view the errors
+RP/0/RP0/CPU0:XR01(config-grpc)#
+no no-tls
+RP/0/RP0/CPU0:XR01(config-grpc)#
+commit
+Tue Nov 10 13:25:07.217 UTC
+RP/0/RP0/CPU0:XR01(config-grpc)#
+end
+RP/0/RP0/CPU0:XR01#
+show grpc | include "TLS"
+Tue Nov 10 13:25:08.446 UTC
+TLS                                     : enabled
+TLS mutual                              : enabled
+TLS v1.0                                : enabled
+TLS Minimum Version                     : TLS 1.0
+TLS Maximum Version                     : TLS 1.3
+TLS cipher suites
+  Default TLS1.3                        : aes_128_gcm_sha256
+RP/0/RP0/CPU0:XR01#
+run ls -la /misc/config/grpc/
+Tue Nov 10 13:25:08.953 UTC
+total 32
+drwxr-xr-x.  5 root root 4096 Nov 10 13:08 .
+drwxr-xr-x. 16 root root 4096 Nov 10 13:08 ..
+-rw-r--r--.  1 root root 1107 Nov 10 13:24 ca.cert
+drwx------.  2 root root 4096 Nov 10 13:20 dialout
+-rw-------.  1 root root 1679 Nov 10 13:08 ems.key
+-rw-r--r--.  1 root root 1545 Nov 10 13:08 ems.pem
+drwxr-xr-x.  2 root root 4096 Nov 10 12:55 gnsi
+drwxr-xr-x.  2 root root 4096 Nov 10 13:08 trustpoint
+
+RP/0/RP0/CPU0:XR01#
+run openssl x509 -in /misc/config/grpc/ca.cert -noout -subje$onfig/grpc/ca.cert -noout -subjec                          trun openssl x509 -in /misc/config/grpc/ca.cert -noout -subj$
+Tue Nov 10 13:25:09.358 UTC
+subject=CN=LAB-CA
+
+RP/0/RP0/CPU0:XR01#
+run openssl x509 -in /misc/config/grpc/ems.pem -noout -seria$onfig/grpc/ems.pem -noout -serial                          run openssl x509 -in /misc/config/grpc/ems.pem -noout -seri$
+Tue Nov 10 13:25:09.761 UTC
+serial=0ABE
+
+RP/0/RP0/CPU0:XR01#
+$ timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.50.1:57400 --tls-ca /tmp/pki/xr01-ems.pem --tls-server-name ems.cisco.com --tls-cert /tmp/pki/client.pem --tls-key /tmp/pki/client.key capabilities 2>&1 | head -1
+target "10.0.50.1:57400", capabilities request failed: "10.0.50.1:57400" CapabilitiesRequest failed: rpc error: code = Unavailable desc = connection error: desc = "error reading server preface: remote error: tls: bad certificate"
+[rc=0]
+$ openssl x509 -in /tmp/pki/xr01-ems.pem -noout -serial
+serial=0ABE
+[rc=0]
+######## 13:25:23 mtls_ca xr01: no-tls と tls-mutual は同時に置けない(エラー文)
+configure
+Tue Nov 10 13:25:24.682 UTC
+RP/0/RP0/CPU0:XR01(config)#
+grpc
+RP/0/RP0/CPU0:XR01(config-grpc)#
+no-tls
+RP/0/RP0/CPU0:XR01(config-grpc)#
+commit
+Tue Nov 10 13:25:25.997 UTC
+
+% Failed to commit one or more configuration items during a pseudo-atomic operation. All changes made have been reverted. Please issue 'show configuration failed [inheritance]' from this session to view the errors
+RP/0/RP0/CPU0:XR01(config-grpc)#
+show configuration failed
+Tue Nov 10 13:25:27.945 UTC
+!! SEMANTIC ERRORS: This configuration was rejected by 
+!! the system due to semantic errors. The individual 
+!! errors with each failed configuration command can be 
+!! found below.
+
+
+grpc
+ no-tls
+!!% Invalid argument: Remove grpc tls mutual first!
+!
+end
+
+RP/0/RP0/CPU0:XR01(config-grpc)#
+abort
+RP/0/RP0/CPU0:XR01#
+######## 13:25:29 mtls_ca xr01: process restart emsd
+process restart emsd
+Tue Nov 10 13:25:30.898 UTC
+RP/0/RP0/CPU0:XR01#
+show processes emsd | include "state|Restart"
+Tue Nov 10 13:25:31.309 UTC
+           Process state: Initializing (last exit due to SIGTERM)
+           Package state: Normal
+JID    TID  Stack  pri  state        NAME             rt_pri
+RP/0/RP0/CPU0:XR01#
+$ timeout 20 gnmic -u '***' -p '***' -e json_ietf -a 10.0.50.1:57400 --tls-ca /tmp/pki/xr01-ems.pem --tls-server-name ems.cisco.com --tls-cert /tmp/pki/client.pem --tls-key /tmp/pki/client.key capabilities 2>&1 | head -1
+gNMI version: 0.10.0
+[rc=0]

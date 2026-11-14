@@ -1,0 +1,50 @@
+$ timeout 32 gnmic -a 10.0.50.1:57400 -u '***' -p '***' -e json_ietf --insecure subscribe --path 'Cisco-IOS-XR-infra-statsd-oper:infra-statistics/interfaces/interface[interface-name=GigabitEthernet0/0/0/0]/latest/generic-counters' --stream-mode sample --sample-interval 10s --format event | jq -c '.[] | [.timestamp, .values["/Cisco-IOS-XR-infra-statsd-oper:infra-statistics/interfaces/interface/latest/generic-counters/packets-received"]]' 
+[stderr] jq: parse error: Invalid numeric literal at line 2, column 9
+[rc=5]
+$ timeout 22 gnmic -a 10.0.50.1:57400 -u '***' -p '***' -e json_ietf --insecure subscribe --path '/interfaces/interface[name=Loopback0]/state/oper-status' --stream-mode on-change --format event | head -c 600
+[
+  {
+    "name": "default-1794316210",
+    "timestamp": 1794316212303432383,
+    "tags": {
+      "interface_name": "Loopback0",
+      "source": "10.0.50.1:57400",
+      "subscription-name": "default-1794316210"
+    },
+    "values": {
+      "openconfig:/interfaces/interface/state/admin-status": "UP",
+      "openconfig:/interfaces/interface/state/counters/carrier-transitions": "1",
+      "openconfig:/interfaces/interface/state/cpu": true,
+      "openconfig:/interfaces/interface/state/description": "set-by-netconf 130241",
+      "openconfig:/interfaces/interface/state/enabled": true,
+      "open
+[rc=0]
+$ timeout 32 gnmic -a 10.0.60.1:57400 -u '***' -p '***' -e json_ietf --insecure subscribe --path 'Cisco-IOS-XR-infra-statsd-oper:infra-statistics/interfaces/interface[interface-name=GigabitEthernet0/0/0/0]/latest/generic-counters' --stream-mode sample --sample-interval 10s --format event | jq -c '.[] | [.timestamp, .values["/Cisco-IOS-XR-infra-statsd-oper:infra-statistics/interfaces/interface/latest/generic-counters/packets-received"]]' 
+[stderr] jq: parse error: Invalid numeric literal at line 2, column 9
+[rc=5]
+$ timeout 22 gnmic -a 10.0.60.1:57400 -u '***' -p '***' -e json_ietf --insecure subscribe --path '/interfaces/interface[name=Loopback0]/state/oper-status' --stream-mode on-change --format event | head -c 600
+[
+  {
+    "name": "default-1794316264",
+    "timestamp": 1794316266524637368,
+    "tags": {
+      "interface_name": "Loopback0",
+      "source": "10.0.60.1:57400",
+      "subscription-name": "default-1794316264"
+    },
+    "values": {
+      "openconfig:/interfaces/interface/state/admin-status": "UP",
+      "openconfig:/interfaces/interface/state/counters/carrier-transitions": "1",
+      "openconfig:/interfaces/interface/state/cpu": true,
+      "openconfig:/interfaces/interface/state/description": "set-by-netconf 130245",
+      "openconfig:/interfaces/interface/state/enabled": true,
+      "open
+[rc=0]
+$ timeout 32 gnmic -a 10.0.50.1:57400 -u '***' -p '***' -e json_ietf --insecure subscribe --path 'Cisco-IOS-XR-infra-statsd-oper:infra-statistics/interfaces/interface[interface-name=GigabitEthernet0/0/0/0]/latest/generic-counters' --stream-mode sample --sample-interval 10s --format event > /tmp/s.out 2>&1; grep -E '"timestamp"|packets-received"|^[a-z]' /tmp/s.out | head -20
+received signal 'terminated'. terminating...
+[rc=0]
+$ timeout 32 gnmic -a 10.0.60.1:57400 -u '***' -p '***' -e json_ietf --insecure subscribe --path 'Cisco-IOS-XR-infra-statsd-oper:infra-statistics/interfaces/interface[interface-name=GigabitEthernet0/0/0/0]/latest/generic-counters' --stream-mode sample --sample-interval 10s --format event > /tmp/s.out 2>&1; grep -E '"timestamp"|packets-received"|^[a-z]' /tmp/s.out | head -20
+received signal 'terminated'. terminating...
+[rc=0]
+# (追記) OpenConfig の /interfaces/interface[name=GigabitEthernet0/0/0/0]/state/counters は SAMPLE 10s で 6 通(25 秒)。
+# Cisco-IOS-XR-infra-statsd-oper:infra-statistics/.../latest/generic-counters は XRv9000 で Get が NotFound: 'generic-counters'・購読は何も来ない。
