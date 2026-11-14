@@ -1,0 +1,260 @@
+# jpoc POC-CLABLEARN-01 j0-commit.txt 2026-11-14 10:57:56
+# J0 PoC 2: commit confirmed(確かめないと戻る・確かめると残る)・commit の時に見つかる誤り・2 つのセッションの共有
+
+## [JUN01] (open)
+Last login: Sat Nov 14 10:57:01 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set interfaces et-0/0/0 unit 1 vlan-id 10
+set interfaces et-0/0/0 unit 1 vlan-id 10 
+
+[edit]
+admin@jun01# 
+## [JUN01] set interfaces et-0/0/0 unit 1 family inet address 10.0.99.1/30
+set interfaces et-0/0/0 unit 1 family inet address 10.0.99.1/30 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit check
+commit check 
+[edit interfaces et-0/0/0 unit 1 vlan-id]
+  'vlan-id 10'
+    VLAN-ID can only be specified on tagged ethernet interfaces
+error: configuration check-out failed: (validation hook evaluation failed)
+
+[edit]
+admin@jun01# 
+## [JUN01] delete interfaces et-0/0/0 unit 1
+delete interfaces et-0/0/0 unit 1 
+
+[edit]
+admin@jun01# 
+## [JUN01] show | compare
+show | compare 
+
+[edit]
+admin@jun01# # commit confirmed 1 → 確かめずに 1 分待つ
+
+## [JUN01] set system host-name jun01-test
+set system host-name jun01-test 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit confirmed 1 comment "J0 PoC: confirmed, not confirmed"
+commit confirmed 1 comment "J0 PoC: confirmed, not confirmed" 
+Hint: static hostname is already set, so the specified transient hostname will not be used.
+commit confirmed will be automatically rolled back in 1 minutes unless confirmed
+commit complete
+
+# commit confirmed will be rolled back in 1 minute
+[edit]
+admin@jun01-test# 
+## [JUN01] run show system commit
+run show system commit 
+0   2026-11-14 10:58:02 UTC by admin via cli commit confirmed, rollback in 1mins
+    J0 PoC: confirmed, not confirmed
+    rollback pending
+1   2026-11-14 10:57:22 UTC by admin via cli
+    J0 PoC: back to rollback 1
+2   2026-11-14 10:57:19 UTC by admin via cli
+    J0 PoC: remove lo0
+3   2026-11-14 10:57:11 UTC by admin via cli
+    J0 PoC: addresses
+4   2026-11-14 09:53:56 UTC by root via other
+
+# commit confirmed will be rolled back in 1 minute
+[edit]
+admin@jun01-test# 
+## (sleep 80s)
+
+## [JUN01] run show system commit
+                                                                               
+Broadcast message from root@jun01 (somewhere) (Sat Nov 14 10:59:03 2026):      
+                                                                               
+Commit was not confirmed; automatic rollback complete.                                                                               
+run show system commit 
+0   2026-11-14 10:59:03 UTC by root via other
+1   2026-11-14 10:58:02 UTC by admin via cli commit confirmed, rollback in 1mins
+    J0 PoC: confirmed, not confirmed
+2   2026-11-14 10:57:22 UTC by admin via cli
+    J0 PoC: back to rollback 1
+3   2026-11-14 10:57:19 UTC by admin via cli
+    J0 PoC: remove lo0
+4   2026-11-14 10:57:11 UTC by admin via cli
+    J0 PoC: addresses
+5   2026-11-14 09:53:56 UTC by root via other
+
+[edit]
+admin@jun01# 
+## [JUN01] run show configuration system host-name
+run show configuration system host-name 
+host-name jun01;
+
+[edit]
+admin@jun01# # commit confirmed 1 → commit で確かめる
+
+## [JUN01] set system host-name jun01-test
+set system host-name jun01-test 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit confirmed 1 comment "J0 PoC: confirmed, then confirmed"
+commit confirmed 1 comment "J0 PoC: confirmed, then confirmed" 
+Hint: static hostname is already set, so the specified transient hostname will not be used.
+commit confirmed will be automatically rolled back in 1 minutes unless confirmed
+commit complete
+
+# commit confirmed will be rolled back in 1 minute
+[edit]
+admin@jun01-test# 
+## [JUN01] commit check
+commit check 
+configuration check succeeds
+
+[edit]
+admin@jun01-test# 
+## [JUN01] run show system commit
+run show system commit 
+0   2026-11-14 10:59:25 UTC by admin via cli commit confirmed, rollback in 1mins
+    J0 PoC: confirmed, then confirmed
+1   2026-11-14 10:59:03 UTC by root via other
+2   2026-11-14 10:58:02 UTC by admin via cli commit confirmed, rollback in 1mins
+    J0 PoC: confirmed, not confirmed
+3   2026-11-14 10:57:22 UTC by admin via cli
+    J0 PoC: back to rollback 1
+4   2026-11-14 10:57:19 UTC by admin via cli
+    J0 PoC: remove lo0
+5   2026-11-14 10:57:11 UTC by admin via cli
+    J0 PoC: addresses
+6   2026-11-14 09:53:56 UTC by root via other
+
+[edit]
+admin@jun01-test# 
+## (sleep 75s)
+
+## [JUN01] run show system commit
+run show system commit 
+0   2026-11-14 10:59:25 UTC by admin via cli commit confirmed, rollback in 1mins
+    J0 PoC: confirmed, then confirmed
+1   2026-11-14 10:59:03 UTC by root via other
+2   2026-11-14 10:58:02 UTC by admin via cli commit confirmed, rollback in 1mins
+    J0 PoC: confirmed, not confirmed
+3   2026-11-14 10:57:22 UTC by admin via cli
+    J0 PoC: back to rollback 1
+4   2026-11-14 10:57:19 UTC by admin via cli
+    J0 PoC: remove lo0
+5   2026-11-14 10:57:11 UTC by admin via cli
+    J0 PoC: addresses
+6   2026-11-14 09:53:56 UTC by root via other
+
+[edit]
+admin@jun01-test# 
+## [JUN01] run show configuration system host-name
+run show configuration system host-name 
+host-name jun01-test;
+
+[edit]
+admin@jun01-test# 
+## [JUN01] delete system host-name
+delete system host-name 
+
+[edit]
+admin@jun01-test# 
+## [JUN01] show | compare
+show | compare 
+[edit system]
+-  host-name jun01-test;
+
+[edit]
+admin@jun01-test# 
+## [JUN01] rollback 0
+rollback 0 
+load complete
+
+[edit]
+admin@jun01-test# 
+## [JUN01] exit
+exit 
+Exiting configuration mode
+
+admin@jun01-test> # 2 つのセッション: 既定の configure は候補設定を共有する
+
+## [JUN01:a] (open)
+Last login: Sat Nov 14 10:57:56 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01-test> 
+## [JUN01:a] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01-test# 
+## [JUN01:a] set interfaces lo0 unit 0 description "edit by a"
+set interfaces lo0 unit 0 description "edit by a" 
+
+[edit]
+admin@jun01-test# 
+## [JUN01:b] (open)
+Last login: Sat Nov 14 11:00:46 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01-test> 
+## [JUN01:b] configure
+configure 
+Entering configuration mode
+Users currently editing the configuration:
+  admin terminal pts/2 (pid 30470) on since 2026-11-14 11:00:46 UTC
+      [edit]
+The configuration has been changed but not committed
+
+[edit]
+admin@jun01-test# 
+## [JUN01:b] show | compare
+show | compare 
+[edit interfaces lo0 unit 0]
++    description "edit by a";
+
+[edit]
+admin@jun01-test# 
+## [JUN01:b] exit
+exit 
+The configuration has been changed but not committed
+Exit with uncommitted changes? [yes,no] (yes) 
+## [JUN01:b] configure private
+configure
+                                                       ^
+'configure' is ambiguous.
+Possible completions:
+  no                   Don't leave configuration mode without committing changes
+  yes                  Leave configuration mode without committing changes
+Exit with uncommitted changes? [yes,no] (yes) configure   private
+                                                              ^
+'configureprivate' is ambiguous.
+Exit with uncommitted changes? [yes,no] (yes) 
+## [JUN01:a] rollback 0
+rollback 0 
+load complete
+
+[edit]
+admin@jun01-test# 
+## [JUN01:a] exit
+exit 
+Exiting configuration mode
+
+admin@jun01-test> 
+## [JUN01:b] configure private
+configure
+                                                       ^
+'configure' is ambiguous.
+Possible completions:
+  no                   Don't leave configuration mode without committing changes
+  yes                  Leave configuration mode without committing changes
+Exit with uncommitted changes? [yes,no] (yes) configure   private
+                                                              ^
+'configureprivate' is ambiguous.
+Exit with uncommitted changes? [yes,no] (yes) 

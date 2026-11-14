@@ -1,0 +1,56 @@
+# J0-2: OSPF area 0(リンクと lo0・lo0 は passive)・JUN02 の 2 つの隣接が Full・FRR1 が 2 台の lo0 を OSPF で採用・JUN01 の lo0 から FRR1 の lo へ。
+problem: JNT-01
+total_points: 100
+checks:
+  - name: "J0-2 JUN01 and JUN02: the links and lo0.0 are in area 0, lo0.0 passive"
+    node: JUN02
+    exec: junos
+    command: "show configuration | display set"
+    raw:
+      - regex: 'set protocols ospf area 0(\.0\.0\.0)? interface et-0/0/0\.0'
+      - regex: 'set protocols ospf area 0(\.0\.0\.0)? interface et-0/0/1\.0'
+      - regex: 'set protocols ospf area 0(\.0\.0\.0)? interface lo0\.0 passive'
+    points: 10
+  - name: "J0-2 JUN01: et-0/0/0.0 and lo0.0 (passive) are in area 0"
+    node: JUN01
+    exec: junos
+    command: "show configuration | display set"
+    raw:
+      - regex: 'set protocols ospf area 0(\.0\.0\.0)? interface et-0/0/0\.0'
+      - regex: 'set protocols ospf area 0(\.0\.0\.0)? interface lo0\.0 passive'
+    points: 10
+  - name: "J0-2 JUN02: both neighbours (JUN01 and FRR1) are Full"
+    node: JUN02
+    exec: junos
+    command: "show ospf neighbor"
+    raw:
+      - regex: '10\.0\.12\.1\s+et-0/0/0\.0\s+Full'
+      - regex: '10\.0\.23\.2\s+et-0/0/1\.0\s+Full'
+    points: 25
+  - name: "J0-2 FRR1: the loopback of JUN01 (192.168.0.1/32) is learned by OSPF and in use"
+    node: FRR1
+    exec: frr
+    command: "show ip route 192.168.0.1/32 json"
+    parser: json
+    find: ["192.168.0.1/32", "*"]
+    match:
+      protocol: "ospf"
+      selected: true
+    points: 15
+  - name: "J0-2 FRR1: the loopback of JUN02 (192.168.0.2/32) is learned by OSPF and in use"
+    node: FRR1
+    exec: frr
+    command: "show ip route 192.168.0.2/32 json"
+    parser: json
+    find: ["192.168.0.2/32", "*"]
+    match:
+      protocol: "ospf"
+      selected: true
+    points: 15
+  - name: "J0-2 JUN01: the loopback of JUN01 reaches the loopback of FRR1"
+    node: JUN01
+    exec: junos
+    command: "ping 192.168.0.3 source 192.168.0.1 count 5 rapid"
+    raw:
+      - regex: '\b5 (packets )?received'
+    points: 25

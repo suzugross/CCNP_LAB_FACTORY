@@ -1,0 +1,48 @@
+# POC-CLABLEARN-01 の本採点(中間チェック m0t1・m0t2 を合わせたもの)。試験台なのでノルマには数えない使い方をする
+# (確かめは grade.yml を直接・CLAB-SOLO.design.md §2)。
+problem: POC-CLABLEARN-01
+total_points: 100
+checks:
+  - name: "JUN01: et-0/0/0.0 has 10.0.14.1/30 and lo0.0 has 192.168.0.1/32 (committed)"
+    node: JUN01
+    exec: junos
+    command: "show configuration | display set"
+    raw:
+      - regex: 'set interfaces et-0/0/0 unit 0 family inet address 10\.0\.14\.1/30'
+      - regex: 'set interfaces lo0 unit 0 family inet address 192\.168\.0\.1/32'
+    points: 20
+  - name: "JUN01: OSPF area 0 with et-0/0/0.0 and lo0.0 (passive)"
+    node: JUN01
+    exec: junos
+    command: "show configuration | display set"
+    raw:
+      - regex: 'set protocols ospf area 0(\.0\.0\.0)? interface et-0/0/0\.0'
+      - regex: 'set protocols ospf area 0(\.0\.0\.0)? interface lo0\.0 passive'
+    points: 20
+  - name: "JUN01: FRR1 (10.0.14.2) is a Full neighbour"
+    node: JUN01
+    exec: junos
+    command: "show ospf neighbor | display json"
+    parser: json
+    find: ["ospf-neighbor-information", "*", "ospf-neighbor", "*"]
+    match:
+      neighbor-address.*.data: "10.0.14.2"
+      ospf-neighbor-state.*.data: "Full"
+    points: 20
+  - name: "FRR1: the loopback of JUN01 (192.168.0.1/32) is learned by OSPF and in use"
+    node: FRR1
+    exec: frr
+    command: "show ip route 192.168.0.1/32 json"
+    parser: json
+    find: ["192.168.0.1/32", "*"]
+    match:
+      protocol: "ospf"
+      selected: true
+    points: 20
+  - name: "JUN01: ping from lo0 to the loopback of FRR1"
+    node: JUN01
+    exec: junos
+    command: "ping 192.168.0.4 source 192.168.0.1 count 5 rapid"
+    raw:
+      - regex: '!!!!!|5 packets received'
+    points: 20

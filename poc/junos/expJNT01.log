@@ -1,0 +1,370 @@
+# jpoc JNT-01 jnt01-poc.txt 2026-11-14 11:16:37
+# JNT-01 PoC: 課題の挙動(J0-1 アドレス → J0-2 OSPF → J0-3 MTU 9000 を commit confirmed → 自動で戻る → J0-4 static の next-hop を FRR1 の lo に)
+
+## (sleep 60s)
+
+## [JUN01] (open)
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set interfaces et-0/0/0 unit 0 family inet address 10.0.12.1/30
+set interfaces et-0/0/0 unit 0 family inet address 10.0.12.1/30 
+
+[edit]
+admin@jun01# 
+## [JUN01] set interfaces lo0 unit 0 family inet address 192.168.0.1/32
+set interfaces lo0 unit 0 family inet address 192.168.0.1/32 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN02] (open)
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces et-0/0/0 unit 0 family inet address 10.0.12.2/30
+set interfaces et-0/0/0 unit 0 family inet address 10.0.12.2/30 
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces et-0/0/1 unit 0 family inet address 10.0.23.1/30
+set interfaces et-0/0/1 unit 0 family inet address 10.0.23.1/30 
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces lo0 unit 0 family inet address 192.168.0.2/32
+set interfaces lo0 unit 0 family inet address 192.168.0.2/32 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [JUN01] ping 10.0.12.2 count 3 rapid
+ping 10.0.12.2 count 3 rapid 
+PING 10.0.12.2 (10.0.12.2) 56(84) bytes of data.
+!!!
+--- 10.0.12.2 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 62ms
+rtt min/avg/max/mdev = 1.573/21.306/60.531/27.736 ms, ipg/ewma 31.227/46.739 ms
+
+admin@jun01> 
+## [JUN02] ping 10.0.23.2 count 3 rapid
+ping 10.0.23.2 count 3 rapid 
+PING 10.0.23.2 (10.0.23.2) 56(84) bytes of data.
+!!!
+--- 10.0.23.2 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 7ms
+rtt min/avg/max/mdev = 0.607/2.559/6.454/2.754 ms, ipg/ewma 3.570/5.084 ms
+
+admin@jun02> # J0-2
+
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+set protocols ospf area 0.0.0.0 interface et-0/0/0.0 
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf area 0.0.0.0 interface lo0.0 passive
+set protocols ospf area 0.0.0.0 interface lo0.0 passive 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+set protocols ospf area 0.0.0.0 interface et-0/0/0.0 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols ospf area 0.0.0.0 interface et-0/0/1.0
+set protocols ospf area 0.0.0.0 interface et-0/0/1.0 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols ospf area 0.0.0.0 interface lo0.0 passive
+set protocols ospf area 0.0.0.0 interface lo0.0 passive 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 45s)
+
+## [JUN02] show ospf neighbor
+show ospf neighbor 
+
+Warning: License key missing; requires 'OSPF' license
+
+Address          Interface              State           ID               Pri  Dead
+10.0.12.1        et-0/0/0.0             Full            192.168.0.1      128    34
+10.0.23.2        et-0/0/1.0             Full            192.168.0.3        1    38
+
+admin@jun02> 
+## [FRR1] (open)
+
+Hello, this is FRRouting (version 10.7.1_git).
+Copyright 1996-2005 Kunihiro Ishiguro, et al.
+
+frr1# 
+## [FRR1] show ip route ospf
+show ip route ospf
+Codes: K - kernel route, C - connected, L - local, S - static,
+       R - RIP, O - OSPF, I - IS-IS, B - BGP, E - EIGRP, N - NHRP,
+       T - Table, v - VNC, V - VNC-Direct, A - Babel, F - PBR,
+       f - OpenFabric, t - Table-Direct,
+       > - selected route, * - FIB route, q - queued, r - rejected, b - backup
+       t - trapped, o - offload failure
+
+IPv4 unicast VRF default:
+O>* 10.0.12.0/30 [110/11] via 10.0.23.1, eth1, weight 1, 00:00:40
+O>* 192.168.0.1/32 [110/11] via 10.0.23.1, eth1, weight 1, 00:00:02
+O>* 192.168.0.2/32 [110/10] via 10.0.23.1, eth1, weight 1, 00:00:40
+frr1# 
+## [JUN01] show route protocol ospf table inet.0
+show route protocol ospf table inet.0 
+
+Warning: License key missing; requires 'OSPF' license
+
+
+inet.0: 7 destinations, 7 routes (7 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.23.0/30       *[OSPF/10] 00:00:02, metric 2
+                    >  to 10.0.12.2 via et-0/0/0.0
+192.168.0.2/32     *[OSPF/10] 00:00:02, metric 1
+                    >  to 10.0.12.2 via et-0/0/0.0
+192.168.0.3/32     *[OSPF/10] 00:00:02, metric 2
+                    >  to 10.0.12.2 via et-0/0/0.0
+224.0.0.5/32       *[OSPF/10] 00:00:51, metric 1
+                       MultiRecv
+
+admin@jun01> # J0-3: MTU 9000 を commit confirmed 2 で
+
+## [JUN02] show interfaces et-0/0/1 | match "MTU|Link-level"
+show interfaces et-0/0/1 | match "MTU|Link-level" 
+  Link-level type: Ethernet, MTU: 1514, LAN-PHY mode, Speed: 400Gbps, BPDU Error: None, Loop Detect PDU Error: None, Ethernet-Switching Error: None, MAC-REWRITE Error: None, Loopback: Disabled,
+    MTU: 1500
+    Protocol multiservice, MTU: Unlimited
+
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces et-0/0/1 mtu 9000
+set interfaces et-0/0/1 mtu 9000 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit confirmed 2 comment "MTU 9000 toward FRR1"
+commit confirmed 2 comment "MTU 9000 toward FRR1" 
+commit confirmed will be automatically rolled back in 2 minutes unless confirmed
+commit complete
+
+# commit confirmed will be rolled back in 2 minutes
+[edit]
+admin@jun02# 
+## [JUN02] run show interfaces et-0/0/1 | match "MTU"
+run show interfaces et-0/0/1 | match "MTU" 
+  Link-level type: Ethernet, MTU: 9000, LAN-PHY mode, Speed: 400Gbps, BPDU Error: None, Loop Detect PDU Error: None, Ethernet-Switching Error: None, MAC-REWRITE Error: None, Loopback: Disabled,
+    Protocol inet, MTU: 8986
+    Protocol multiservice, MTU: Unlimited
+
+# commit confirmed will be rolled back in 2 minutes
+[edit]
+admin@jun02# 
+## (sleep 45s)
+
+## [JUN02] run show ospf neighbor
+run show ospf neighbor 
+
+Warning: License key missing; requires 'OSPF' license
+
+Address          Interface              State           ID               Pri  Dead
+10.0.12.1        et-0/0/0.0             Full            192.168.0.1      128    39
+10.0.23.2        et-0/0/1.0             Exchange        192.168.0.3        1    37
+
+# commit confirmed will be rolled back in 1 minute
+[edit]
+admin@jun02# 
+## [FRR1] show ip ospf neighbor
+show ip ospf neighbor
+
+Neighbor ID     Pri State           Up Time         Dead Time Address         Interface                        RXmtL RqstL DBsmL
+192.168.0.2     128 ExStart/Backup  33.177s           33.433s 10.0.23.1       eth1:10.0.23.2                       0     0     0
+
+frr1# 
+## (sleep 90s)
+
+## [JUN02] run show system commit
+                                                                               
+Broadcast message from root@jun02 (somewhere) (Sat Nov 14 11:20:47 2026):      
+                                                                               
+Commit was not confirmed; automatic rollback complete.                                                                               
+run show system commit 
+0   2026-11-14 11:20:47 UTC by root via other
+1   2026-11-14 11:18:43 UTC by admin via cli commit confirmed, rollback in 2mins
+    MTU 9000 toward FRR1
+2   2026-11-14 11:17:53 UTC by admin via cli
+3   2026-11-14 11:17:45 UTC by admin via cli
+4   2026-11-14 11:15:36 UTC by root via other
+
+[edit]
+admin@jun02# 
+## [JUN02] run show configuration interfaces et-0/0/1
+run show configuration interfaces et-0/0/1 
+unit 0 {
+    family inet {
+        address 10.0.23.1/30;
+    }
+}
+
+[edit]
+admin@jun02# 
+## (sleep 40s)
+
+## [JUN02] run show ospf neighbor
+run show ospf neighbor 
+
+Warning: License key missing; requires 'OSPF' license
+
+Address          Interface              State           ID               Pri  Dead
+10.0.12.1        et-0/0/0.0             Full            192.168.0.1      128    38
+10.0.23.2        et-0/0/1.0             Full            192.168.0.3        1    35
+
+[edit]
+admin@jun02# 
+## [JUN02] exit
+exit 
+Exiting configuration mode
+
+admin@jun02> # J0-4: next-hop が直接つながっていない static
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set routing-options static route 198.51.100.0/24 next-hop 192.168.0.3
+set routing-options static route 198.51.100.0/24 next-hop 192.168.0.3 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+commit complete
+
+[edit]
+admin@jun02# 
+## [JUN02] run show route 198.51.100.0/24
+run show route 198.51.100.0/24 
+
+[edit]
+admin@jun02# 
+## [JUN02] set routing-options static route 198.51.100.0/24 resolve
+set routing-options static route 198.51.100.0/24 resolve 
+
+[edit]
+admin@jun02# 
+## [JUN02] set routing-options static route 198.51.100.0/24 preference 160
+set routing-options static route 198.51.100.0/24 preference 160 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [JUN02] show route 198.51.100.0/24 exact
+show route 198.51.100.0/24 exact 
+
+inet.0: 9 destinations, 9 routes (9 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[Static/160] 00:00:01, metric2 1
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+admin@jun02> 
+## [JUN02] show route 198.51.100.0/24 exact detail | match "Preference|Next hop|Protocol next hop|State"
+show route 198.51.100.0/24 exact detail | match "Preference|Next hop|Protocol next hop|State" 
+        *Static Preference: 160
+                Next hop type: Indirect, Next hop index: 0
+                Next hop type: Router, Next hop index: 9035
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                Protocol next hop: 192.168.0.3
+                Indirect next hop: 0x5573fbe01f10 9037 INH Session ID: 4, INH non-key opaque: 0x557402752780, INH key opaque: (nil)
+                State: <Active Int Ext OpaqueData>
+                Validation State: unverified 
+
+admin@jun02> 
+## [JUN02] ping 198.51.100.1 source 192.168.0.2 count 5 rapid
+ping 198.51.100.1 source 192.168.0.2 count 5 rapid 
+PING 198.51.100.1 (198.51.100.1) from 192.168.0.2 : 56(84) bytes of data.
+!!!!!
+--- 198.51.100.1 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 3ms
+rtt min/avg/max/mdev = 0.370/0.628/1.188/0.288 ms, ipg/ewma 0.759/0.894 ms
+
+admin@jun02> 
+## [JUN01] show route 198.51.100.0/24
+show route 198.51.100.0/24 
+
+admin@jun01> 
+## [JUN01] ping 198.51.100.1 source 192.168.0.1 count 3 rapid
+ping 198.51.100.1 source 192.168.0.1 count 3 rapid 
+PING 198.51.100.1 (198.51.100.1) from 192.168.0.1 : 56(84) bytes of data.
+...
+--- 198.51.100.1 ping statistics ---
+3 packets transmitted, 0 received, 100% packet loss, time 1009ms
+
+
+admin@jun01> 

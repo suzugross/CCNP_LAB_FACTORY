@@ -1,0 +1,40 @@
+# J0 PoC 1: モードと階層・候補設定と commit・誤りの例・rollback(JUN01 は白紙から)
+JUN01 show version | match Junos
+JUN01 show configuration interfaces
+JUN01 configure
+JUN01 edit interfaces et-0/0/0 unit 0
+JUN01 set family inet address 10.0.14.1/30
+JUN01 show
+JUN01 up
+JUN01 show
+JUN01 top
+JUN01 set interfaces lo0 unit 0 family inet address 192.168.0.1/32
+JUN01 show | compare
+JUN01 show interfaces | display set
+JUN01 run show interfaces terse et-0/0/0
+JUN01 commit check
+JUN01 run show interfaces terse et-0/0/0
+JUN01 commit comment "J0 PoC: addresses"
+JUN01 run show interfaces terse et-0/0/0
+JUN01 exit
+JUN01 show configuration interfaces
+JUN01 show configuration | display set | match "interfaces (et|lo0)"
+JUN01 show system commit
+# 誤りの例: 行き先の無い static(commit check が拒む)
+JUN01 configure
+JUN01 set routing-options static route 198.51.100.0/24
+JUN01 commit check
+JUN01 delete routing-options static
+JUN01 show | compare
+# rollback: 消して commit → 1 つ前へ戻す
+JUN01 delete interfaces lo0
+JUN01 show | compare
+JUN01 commit comment "J0 PoC: remove lo0"
+JUN01 run show system commit
+JUN01 rollback 1
+JUN01 show | compare
+JUN01 commit comment "J0 PoC: back to rollback 1"
+JUN01 run show interfaces terse lo0
+JUN01 run show system commit
+JUN01 show | compare rollback 2
+JUN01 exit

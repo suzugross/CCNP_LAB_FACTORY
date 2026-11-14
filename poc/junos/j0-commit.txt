@@ -1,0 +1,48 @@
+# J0 PoC 2: commit confirmed(確かめないと戻る・確かめると残る)・commit の時に見つかる誤り・2 つのセッションの共有
+JUN01 configure
+JUN01 set interfaces et-0/0/0 unit 1 vlan-id 10
+JUN01 set interfaces et-0/0/0 unit 1 family inet address 10.0.99.1/30
+JUN01 commit check
+JUN01 delete interfaces et-0/0/0 unit 1
+JUN01 show | compare
+# commit confirmed 1 → 確かめずに 1 分待つ
+JUN01 set system host-name jun01-test
+JUN01 commit confirmed 1 comment "J0 PoC: confirmed, not confirmed"
+JUN01 run show system commit
+!sleep 80
+JUN01 run show system commit
+JUN01 run show configuration system host-name
+# commit confirmed 1 → commit で確かめる
+JUN01 set system host-name jun01-test
+JUN01 commit confirmed 1 comment "J0 PoC: confirmed, then confirmed"
+JUN01 commit check
+JUN01 run show system commit
+!sleep 75
+JUN01 run show system commit
+JUN01 run show configuration system host-name
+JUN01 delete system host-name
+JUN01 show | compare
+JUN01 rollback 0
+JUN01 exit
+# 2 つのセッション: 既定の configure は候補設定を共有する
+JUN01:a configure
+JUN01:a set interfaces lo0 unit 0 description "edit by a"
+JUN01:b configure
+JUN01:b show | compare
+JUN01:b exit
+JUN01:b configure private
+JUN01:a rollback 0
+JUN01:a exit
+JUN01:b configure private
+JUN01:b set interfaces lo0 unit 0 description "private b"
+JUN01:a configure
+JUN01:a show | compare
+JUN01:a exit
+JUN01:b rollback 0
+JUN01:b exit
+# exclusive: 他のセッションは設定を変えられない
+JUN01:a configure exclusive
+JUN01:b configure
+JUN01:b set interfaces lo0 unit 0 description "b during exclusive"
+JUN01:b exit
+JUN01:a exit

@@ -1,0 +1,42 @@
+# J0-4: JUN02 の 198.51.100.0/24 への静的経路= 次ホップは FRR1 の lo(192.168.0.3・resolve で解決)・preference は OSPF の外部経路(150)より大きい・
+# lo0 から 198.51.100.1 へ届く・OSPF は変えていない(export を書いていない・隣接は Full のまま)。
+problem: JNT-01
+total_points: 100
+checks:
+  - name: "J0-4 JUN02: the static route to 198.51.100.0/24 is active, through et-0/0/1.0, with a preference above 150"
+    node: JUN02
+    exec: junos
+    command: "show route 198.51.100.0/24 exact"
+    raw:
+      - regex: '\*\[Static/(15[1-9]|1[6-9]\d|[2-9]\d\d|\d{4,})\]'
+      - regex: 'via et-0/0/1\.0'
+    points: 25
+  - name: "J0-4 JUN02: its next hop is the loopback of FRR1 (192.168.0.3)"
+    node: JUN02
+    exec: junos
+    command: "show route 198.51.100.0/24 exact detail"
+    raw:
+      - regex: 'Protocol next hop: 192\.168\.0\.3\b'
+    points: 25
+  - name: "J0-4 JUN02: the loopback of JUN02 reaches 198.51.100.1"
+    node: JUN02
+    exec: junos
+    command: "ping 198.51.100.1 source 192.168.0.2 count 5 rapid"
+    raw:
+      - regex: '\b5 (packets )?received'
+    points: 25
+  - name: "J0-4 JUN02: OSPF is unchanged (no export policy, both neighbours Full)"
+    node: JUN02
+    exec: junos
+    command: "show ospf neighbor"
+    raw:
+      - regex: '10\.0\.12\.1\s+et-0/0/0\.0\s+Full'
+      - regex: '10\.0\.23\.2\s+et-0/0/1\.0\s+Full'
+    points: 15
+  - name: "J0-4 JUN02: no export policy on OSPF"
+    node: JUN02
+    exec: junos
+    command: "show configuration protocols ospf | display set"
+    raw:
+      - not_regex: 'export'
+    points: 10

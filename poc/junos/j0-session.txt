@@ -1,0 +1,42 @@
+# J0 PoC 3: 2 つのセッション。既定の configure は候補設定を共有する・private は自分だけ・exclusive は他を締め出す
+JUN01:a configure
+JUN01:a delete system host-name
+JUN01:a set system host-name jun01
+JUN01:a commit and-quit comment "J0 PoC: host-name back"
+JUN01:a configure
+JUN01:a set interfaces lo0 unit 0 description "edit by a"
+JUN01:b configure
+JUN01:b show | compare
+JUN01:b exit
+JUN01:b no
+JUN01:b rollback 0
+JUN01:b exit
+JUN01:a show | compare
+JUN01:a set interfaces lo0 unit 0 description "edit by a"
+JUN01:b configure private
+JUN01:a rollback 0
+JUN01:a exit
+JUN01:b configure private
+JUN01:b set interfaces lo0 unit 0 description "private b"
+JUN01:a configure
+JUN01:a show | compare
+JUN01:a set interfaces lo0 unit 0 description "shared a"
+JUN01:a commit
+JUN01:a rollback 0
+JUN01:a exit
+JUN01:b show | compare
+JUN01:b commit
+JUN01:b exit
+JUN01:a show configuration interfaces lo0 unit 0 description
+JUN01:a configure
+JUN01:a delete interfaces lo0 unit 0 description
+JUN01:a commit and-quit
+# exclusive: 他のセッションは設定を変えられない
+JUN01:a configure exclusive
+JUN01:b configure
+JUN01:b set interfaces lo0 unit 0 description "b during exclusive"
+JUN01:b commit
+JUN01:b exit
+JUN01:b yes
+JUN01:a exit
+JUN01:a show system commit

@@ -1,0 +1,36 @@
+# JNT-01 の containerlab トポロジ(Junos トラック J0・BL-275)。
+# jun01・jun02= 白紙(mgmt と admin は vrnetlab の init.conf)。eth1 → et-0/0/0・eth2 → et-0/0/1。
+# frr1= 据え付け(kind: frr)。198.51.100.0/24 はサーバの網で、OSPF には載せていない(network 文で 192.168.0.3/32 だけ広告)。
+# labels の graph-posX / graph-posY= ワークスペースの結線図の座標。
+name: ccnp-jnt01
+topology:
+  nodes:
+    jun01:
+      kind: juniper_vjunosevolved
+      image: vrnetlab/juniper_vjunosevolved:26.2R1.7-EVO
+      mgmt-ipv4: 172.20.20.41
+      labels: { graph-posX: "0", graph-posY: "0" }
+    jun02:
+      kind: juniper_vjunosevolved
+      image: vrnetlab/juniper_vjunosevolved:26.2R1.7-EVO
+      mgmt-ipv4: 172.20.20.42
+      labels: { graph-posX: "260", graph-posY: "0" }
+    frr1:
+      kind: frr
+      image: quay.io/frrouting/frr:containerlab-10.7.1
+      mgmt-ipv4: 172.20.20.43
+      startup-config: frr1/frr.conf
+      daemons: [ospfd]
+      labels: { graph-posX: "520", graph-posY: "0" }
+  links:
+    # ★MTU 1500(veth の既定 9500 だと OSPF が ExStart で止まる・CLAB-SOLO.design.md §7)
+    - type: veth
+      mtu: 1500
+      endpoints:
+        - { node: jun01, interface: eth1 }
+        - { node: jun02, interface: eth1 }
+    - type: veth
+      mtu: 1500
+      endpoints:
+        - { node: jun02, interface: eth2 }
+        - { node: frr1, interface: eth1 }

@@ -1,0 +1,245 @@
+# jpoc POC-CLABLEARN-01 j0-misc.txt 2026-11-14 11:10:40
+# J0 PoC 5: 隠れた経路・管理用のルーティング インスタンス・インターフェースは既定で有効・? の補完・help apropos
+
+## [JUN01] (open)
+Last login: Sat Nov 14 11:09:14 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set routing-options static route 203.0.113.0/24 next-hop 192.168.0.4
+set routing-options static route 203.0.113.0/24 next-hop 192.168.0.4 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01] show route 203.0.113.0/24
+show route 203.0.113.0/24 
+
+admin@jun01> 
+## [JUN01] show route hidden
+show route hidden 
+
+inet.0: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+inet.2: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+inet.3: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+inet6.0: 2 destinations, 2 routes (2 active, 0 holddown, 0 hidden)
+
+inet6.2: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+inet6.3: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet6.0: 4 destinations, 4 routes (4 active, 0 holddown, 0 hidden)
+
+admin@jun01> 
+## [JUN01] show route 203.0.113.0/24 hidden extensive
+show route 203.0.113.0/24 hidden extensive 
+
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] delete routing-options static
+delete routing-options static 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01] show configuration system | display set | match "management|services ssh|login user"
+show configuration system | display set | match "management|services ssh|login user" 
+set system login user admin uid 2000
+set system login user admin class super-user
+set system login user admin authentication encrypted-password "<redacted>"
+set system services ssh root-login allow
+set system management-instance
+
+admin@jun01> 
+## [JUN01] show interfaces terse | match "^(et-0/0/[0-3]|lo0|re0)"
+show interfaces terse | match "^(et-0/0/[0-3]|lo0|re0)" 
+et-0/0/0                up    up
+et-0/0/0.0              up    up   inet     10.0.14.1/30    
+et-0/0/1                up    up
+et-0/0/1.16386          up    up   multiservice
+et-0/0/2                up    up
+et-0/0/2.16386          up    up   multiservice
+et-0/0/3                up    up
+et-0/0/3.16386          up    up   multiservice
+et-0/0/10               up    up
+et-0/0/10.16386         up    up   multiservice
+et-0/0/11               up    up
+et-0/0/11.16386         up    up   multiservice
+re0:mgmt-0              up    up
+re0:mgmt-0.0            up    up   inet     10.0.0.15/24    
+lo0                     up    up
+lo0.0                   up    up   inet     192.168.0.1         --> 0/0
+
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set interfaces et-0/0/0 disable
+set interfaces et-0/0/0 disable 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit
+commit 
+commit complete
+
+[edit]
+admin@jun01# 
+## [JUN01] run show interfaces terse et-0/0/0
+run show interfaces terse et-0/0/0 
+Interface               Admin Link Proto    Local                 Remote
+et-0/0/0                down  down
+et-0/0/0.0              up    down inet     10.0.14.1/30    
+                                   multiservice
+
+[edit]
+admin@jun01# 
+## [JUN01] delete interfaces et-0/0/0 disable
+delete interfaces et-0/0/0 disable 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01] show interfaces terse et-0/0/0
+show interfaces terse et-0/0/0 
+Interface               Admin Link Proto    Local                 Remote
+et-0/0/0                up    up
+et-0/0/0.0              up    up   inet     10.0.14.1/30    
+                                   multiservice
+
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set interfaces et-0/0/0 ?
+set interfaces et-0/0/0 ?
+Possible completions:
+  accounting-profile   Accounting profile name
++ apply-groups         Groups from which to inherit configuration data
++ apply-groups-except  Don't inherit configuration data from these groups
+> damping              Interface damping parameters
+  description          Text description of interface
+  disable              Disable this interface
+  encapsulation        Physical link-layer encapsulation
+> esi                  ESI configuration of multi-homed interface
+> ether-options        Ethernet interface-specific options
+  flexible-vlan-tagging  Support for no tagging, or single and double 802.1q VLAN tagging
+  gratuitous-arp-reply  Enable gratuitous ARP reply
+> hold-time            Hold time for link up and link down
+> link-degrade-monitor  Enable link degrade monitoring
+  mac                  Hardware MAC address
+> management-ethernet-redundancy  Management Interface Redundancy
+  mtu                  Maximum transmit packet size (288..16000)
+  native-vlan-id       Virtual LAN identifier for untagged frames (0..4094)
+  network-isolation-profile  Attach a network isolation profile on this interface
+  no-forwarding-viable  Disable forwarding
+  no-gratuitous-arp-reply  Don't enable gratuitous ARP reply
+  no-gratuitous-arp-request  Ignore gratuitous ARP request
+  no-per-unit-scheduler  Don't enable subunit queuing on Frame Relay or VLAN IQ interface
+  no-traps             Don't enable SNMP notifications on state changes
+  number-of-sub-ports  Number of channels to create for a port (1..8)
+> optics-options       Optics options
+> otn-options          Optical Transmission Network interface-specific options
+> p4rt                 P4-runtime interfaces
+  passive-monitor-mode  Use interface to tap packets from another router
+  per-unit-scheduler   Enable subunit queuing on Frame Relay or VLAN IQ interface
+> port-extender        Tunnel binding information for the extended port
+  speed                Link speed
+  stacked-vlan-tagging  Stacked 802.1q VLAN tagging support
+  traps                Enable SNMP notifications on state changes
+> unit                 Logical interface
+  unused               Disable physical port
+  vlan-tagging         802.1q VLAN tagging support
+[edit]
+admin@jun01# set interfaces et-0/0/0    
+                                     ^
+missing argument.
+
+[edit]
+admin@jun01# 
+## [JUN01] 
+
+
+[edit]
+admin@jun01# 
+## [JUN01] exit
+exit 
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01] help apropos rollback
+help apropos rollback 
+request system scripts rollback 
+    Attempt to roll back to last jais package
+request system software delete archived 
+    Removing of all archived software versions except current and rollback
+request system software rollback 
+    Attempt to roll back to previous set of packages
+request system software rollback <package-name> 
+    Name of package version to rollback
+request system software rollback with-old-snapshot-config 
+    Rollback to given version with old snapshot config
+request system software rollback reboot 
+    Reboot system after rollback
+request system software rollback restart 
+    Rollback to specified version and restart impacted apps (JUNOS Selective Updates)
+request system software sync rollback 
+    Sync rollback sw version to other RE
+request vmhost software rollback 
+    Attempt to roll back to previous set of packages
+request vmhost software rollback reboot 
+    Reboot system after rollback
+show system configuration revision rollback-number 
+    Show corresponding rollback number for the given configuration revision
+show system rollback 
+    Show rolled back configuration
+show system rollback <rollback> 
+    Rollback number to display
+show system rollback configuration-revision 
+    Show corresponding configuration revision for this rollback number
+show system rollback compare <compare> 
+    Rollback number to compare
+
+admin@jun01> 
+## [JUN01] show system rollback compare 1 0
+show system rollback compare 1 0 
+[edit interfaces et-0/0/0]
+-   disable;
+
+admin@jun01> 

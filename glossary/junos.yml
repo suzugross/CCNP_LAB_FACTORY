@@ -1,0 +1,158 @@
+# glossary/junos.yml — Junos の語(BL-275・Junos トラック)。Junos での意味に限るものは books: [junos] で Junos の本だけで拾う。
+# 説明は本文(J0 の実機と Juniper の公式文書で確かめた内容)と食い違わないように書く。
+
+- id: junos-operational-mode
+  term: {en: operational mode, ja: 運用モード}
+  def:
+    en: >-
+      The Junos CLI mode you log in to, with the `>` prompt. You look at the router there (`show`, `ping`, `request`);
+      you do not change its configuration.
+    ja: >-
+      ログインした時の Junos の CLI のモードで、プロンプトは `>`。ここではルータの様子を見る(`show`・`ping`・`request`)。
+      設定は変えない。
+  see: [junos-configuration-mode]
+  books: [junos]
+
+- id: junos-configuration-mode
+  term: {en: configuration mode, ja: 設定モード}
+  def:
+    en: >-
+      The Junos CLI mode you enter with `configure`, with the `#` prompt. You edit the candidate configuration there, and
+      nothing changes on the router until you commit.
+    ja: >-
+      `configure` で入る Junos の CLI のモードで、プロンプトは `#`。ここで候補設定を編集する。commit するまでルータは何も変わらない。
+  see: [candidate-configuration, junos-operational-mode]
+  books: [junos]
+
+- id: candidate-configuration
+  term: {en: candidate configuration, ja: 候補設定}
+  def:
+    en: >-
+      The working copy of the configuration that you edit in configuration mode. A commit checks it and makes it the
+      active configuration. With a plain `configure`, everyone shares one candidate; `configure private` gives you your own.
+    ja: >-
+      設定モードで編集する、設定の作業用の写し。commit が検査し、動いている設定にする。ただの `configure` では全員が 1 つの
+      候補設定を共有し、`configure private` では自分だけのものになる。
+  see: [active-configuration, junos-commit-confirmed]
+  books: [junos]
+
+- id: active-configuration
+  term: {en: active configuration, ja: 動いている設定}
+  def:
+    en: >-
+      The configuration the router runs, shown by `show configuration` in operational mode. Each commit replaces it and
+      saves the previous one as rollback 1; the router keeps the 50 most recent.
+    ja: >-
+      ルータが使っている設定で、運用モードの `show configuration` で見える。commit のたびに置き換わり、それまでの設定は
+      rollback 1 として保存される。ルータは直近の 50 を持つ。
+  see: [candidate-configuration, junos-rollback]
+  books: [junos]
+
+- id: junos-rollback
+  term: rollback
+  def:
+    en: >-
+      On Junos, `rollback n` loads saved configuration n (0 to 49) into the candidate configuration. It does not change
+      the router by itself: you look at the result with `show | compare` and commit it.
+    ja: >-
+      Junos の `rollback n` は、保存された設定 n(0〜49)を候補設定へ読み込む。それだけではルータは変わらない。
+      `show | compare` で結果を見て commit する。
+  see: [active-configuration]
+  books: [junos]
+
+- id: junos-commit-confirmed
+  term: commit confirmed
+  def:
+    en: >-
+      A commit on probation. Unless you confirm it with `commit` or `commit check` within the minutes given (10 by default),
+      the router loads the previous configuration, commits it and tells every logged-in user.
+    ja: >-
+      仮の commit。指定した分数(既定は 10 分)のうちに `commit` か `commit check` で確定しなければ、ルータは 1 つ前の設定を
+      読み込んで commit し、ログインしている全員に知らせる。
+  see: [candidate-configuration]
+  books: [junos]
+
+- id: logical-unit
+  term: {en: logical unit, ja: 論理ユニット}
+  aka: [logical units, logical interface, logical interfaces, 論理インターフェース]
+  def:
+    en: >-
+      The part of a Junos interface that carries traffic and addresses, written after a dot (`et-0/0/0.0` is unit 0).
+      Untagged traffic uses unit 0; on a VLAN-tagged port each unit has one VLAN ID.
+    ja: >-
+      Junos のインターフェースのうち、通信とアドレスを持つ部分で、点の後ろに書く(`et-0/0/0.0` はユニット 0)。タグの無い
+      通信はユニット 0 を使い、VLAN タグ付きのポートではユニットごとに 1 つの VLAN ID を持つ。
+  see: [protocol-family]
+  books: [junos]
+
+- id: protocol-family
+  term: {en: protocol family, ja: プロトコル ファミリー}
+  aka: [protocol families]
+  def:
+    en: >-
+      What a Junos logical unit carries: `family inet` for IPv4, `family inet6` for IPv6, `family iso` for IS-IS and others.
+      Addresses are configured under the family.
+    ja: >-
+      Junos の論理ユニットが運ぶものの種類。IPv4 は `family inet`、IPv6 は `family inet6`、IS-IS などは `family iso`。
+      アドレスはファミリーの下に設定する。
+  see: [logical-unit]
+  books: [junos]
+
+- id: inet0
+  term: inet.0
+  def:
+    en: >-
+      The Junos routing table for IPv4 unicast, where every protocol installs its routes; `inet6.0` is its IPv6 twin.
+      Other tables appear for other purposes, such as `inet.3` for MPLS paths.
+    ja: >-
+      Junos の IPv4 ユニキャストの経路表で、どのプロトコルもここに経路を入れる。IPv6 版は `inet6.0`。MPLS の経路の `inet.3` など、
+      用途ごとにほかの表も現れる。
+  see: [route-preference]
+  books: [junos]
+
+- id: route-preference
+  term: {en: preference, ja: preference}
+  aka: [route preference]
+  def:
+    en: >-
+      The Junos value that decides which source of a route wins, the counterpart of administrative distance; lower wins.
+      The defaults differ from IOS: static 5, OSPF internal 10, OSPF external 150, BGP 170.
+    ja: >-
+      Junos で、どの出どころの経路を採るかを決める値。アドミニストレーティブ ディスタンスにあたり、小さいほうが勝つ。
+      既定は IOS と違い、静的 5、OSPF の内部経路 10、外部経路 150、BGP 170。
+  see: [inet0]
+  books: [junos]
+
+- id: default-routing-policy
+  term: {en: default policy, ja: 既定のポリシー}
+  aka: [default policies, default routing policy, default routing policies]
+  def:
+    en: >-
+      The rule each Junos protocol follows until you configure your own policy: what it takes into the routing table and what
+      it advertises. OSPF and IS-IS export nothing from the table by default, so a static route is not advertised.
+    ja: >-
+      自分でポリシーを設定するまで、Junos の各プロトコルが従う決まり。経路表に何を取り込み、何を広告するか。OSPF と IS-IS は既定では
+      表から何も出さないので、静的経路は広告されない。
+  see: [export-policy, route-preference]
+  books: [junos]
+
+- id: export-policy
+  term: {en: export policy, ja: export ポリシー}
+  def:
+    en: >-
+      A Junos routing policy that decides which routes from the routing table a protocol advertises. It is how Junos does
+      what `redistribute` does on IOS.
+    ja: >-
+      経路表のどの経路をプロトコルが広告するかを決める Junos のルーティング ポリシー。IOS の `redistribute` にあたることを、Junos はこれで行う。
+  see: [default-routing-policy]
+  books: [junos]
+
+- id: junos-evolved
+  term: Junos OS Evolved
+  def:
+    en: >-
+      The version of Junos that runs on Linux, used on ACX and PTX routers and some QFX switches. Its CLI and configuration
+      are the same as those of Junos OS, which runs on FreeBSD.
+    ja: >-
+      Linux の上で動く Junos で、ACX・PTX のルータと一部の QFX のスイッチが使う。CLI と設定は、FreeBSD の上で動く Junos OS と同じ。
+  books: [junos]

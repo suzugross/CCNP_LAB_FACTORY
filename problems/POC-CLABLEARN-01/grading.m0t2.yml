@@ -1,0 +1,41 @@
+# M0-2: JUN01 と FRR1 の OSPF 隣接(両側の JSON)・FRR1 が JUN01 の lo0 を OSPF で採用・lo0 から lo への ping。
+problem: POC-CLABLEARN-01
+total_points: 100
+checks:
+  - name: "M0-2 JUN01: FRR1 (10.0.14.2) is a Full neighbour"
+    node: JUN01
+    exec: junos
+    command: "show ospf neighbor | display json"
+    parser: json
+    find: ["ospf-neighbor-information", "*", "ospf-neighbor", "*"]
+    match:
+      neighbor-address.*.data: "10.0.14.2"
+      ospf-neighbor-state.*.data: "Full"
+    points: 25
+  - name: "M0-2 FRR1: JUN01 (192.168.0.1) is a Full neighbour"
+    node: FRR1
+    exec: frr
+    command: "show ip ospf neighbor json"
+    parser: json
+    find: ["neighbors", "192.168.0.1", "*"]
+    match:
+      converged: "Full"
+      ifaceAddress: "10.0.14.1"
+    points: 25
+  - name: "M0-2 FRR1: the loopback of JUN01 (192.168.0.1/32) is learned by OSPF and in use"
+    node: FRR1
+    exec: frr
+    command: "show ip route 192.168.0.1/32 json"
+    parser: json
+    find: ["192.168.0.1/32", "*"]
+    match:
+      protocol: "ospf"
+      selected: true
+    points: 25
+  - name: "M0-2 JUN01: ping from lo0 to the loopback of FRR1"
+    node: JUN01
+    exec: junos
+    command: "ping 192.168.0.4 source 192.168.0.1 count 5 rapid"
+    raw:
+      - regex: '!!!!!|5 packets received'
+    points: 25

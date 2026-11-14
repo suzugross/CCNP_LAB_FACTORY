@@ -13,7 +13,8 @@
 #   交換:   scripts/lab.sh rma <PROBLEM_ID> <NODE>     # 機器交換(保存済みの設定で新しい MAC の機体に入れ替える・BL-249)
 #
 #   containerlab だけの問題(problem.yml の platform: clab・BL-274)は、provision / grade / checkpoint / reset /
-#   teardown が CML を使わずに回る(reset は startup-config から作り直し。rma・learn は CML 専用)。
+#   teardown が CML を使わずに回る(reset は startup-config から作り直し。rma は CML 専用)。
+#   learn も同じ画面で開く(BL-275。盤面は clab.yml・コンソールは szk-cl01 を踏み台にした SSH)。
 #   接続:   scripts/lab.sh connect <PROBLEM_ID> <NODE>   # containerlab のノードに入る(FRR は vtysh・Junos/EOS は ssh)
 #
 #   LAB_XR_PLATFORM=xrd を付けて provision すると、XR のノードを XRv9000 ではなく XRd(コンテナ)で組む(BL-250)。
@@ -161,7 +162,7 @@ case "$cmd" in
   learn)
     # 学習モードのワークスペース(BL-246)。problems/<ID>/learn.yml を持つ問題だけ。provision 済みが前提。
     [ -n "$prob" ] || usage
-    [ "$plat" = "clab" ] && { echo "学習モードのワークスペースは CML のラボ専用です(containerlab は未対応・BL-274)"; exit 2; }
+    # containerlab だけの問題(platform: clab)も同じ画面で開く(BL-275。盤面は clab.yml・コンソールは szk-cl01 経由の SSH)
     [ -f "$REPO/problems/$prob/learn.yml" ] || { echo "problems/$prob/learn.yml が無い(学習モードの対象外)"; exit 2; }
     exec "$PY/python3" "$REPO/topologies/lab_console.py" --repo "$REPO" --learn "$prob" --port "${3:-8896}"
     ;;

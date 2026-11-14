@@ -1,0 +1,391 @@
+# jpoc POC-CLABLEARN-01 j0-route.txt 2026-11-14 11:09:14
+# J0 PoC 4: 経路表と preference・static の作法(直接つながる next-hop だけ・floating)・OSPF の既定の export(外の経路を入れない)
+
+## [JUN01] (open)
+Last login: Sat Nov 14 11:08:32 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set routing-options router-id 192.168.0.1
+set routing-options router-id 192.168.0.1 
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+set protocols ospf area 0.0.0.0 interface et-0/0/0.0 
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf area 0.0.0.0 interface lo0.0 passive
+set protocols ospf area 0.0.0.0 interface lo0.0 passive 
+
+[edit]
+admin@jun01# 
+## [JUN01] set routing-options static route 198.51.100.0/24 discard
+set routing-options static route 198.51.100.0/24 discard 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit comment "J0 PoC: OSPF and a static"
+commit and-quit comment "J0 PoC: OSPF and a static" 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## (sleep 45s)
+
+## [JUN01] show route
+show route 
+
+inet.0: 6 destinations, 6 routes (6 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.14.0/30       *[Direct/0] 00:12:53
+                    >  via et-0/0/0.0
+10.0.14.1/32       *[Local/0] 00:12:53
+                       Local via et-0/0/0.0
+192.168.0.1/32     *[Direct/0] 00:12:42
+                    >  via lo0.0
+192.168.0.4/32     *[OSPF/10] 00:00:35, metric 1
+                    >  to 10.0.14.2 via et-0/0/0.0
+198.51.100.0/24    *[Static/5] 00:00:45
+                       Discard
+224.0.0.5/32       *[OSPF/10] 00:00:45, metric 1
+                       MultiRecv
+
+inet.2: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.14.0/30       *[Direct/0] 00:12:53
+                    >  via et-0/0/0.0
+10.0.14.1/32       *[Local/0] 00:12:53
+                       Local via et-0/0/0.0
+192.168.0.1/32     *[Direct/0] 00:12:42
+                    >  via lo0.0
+
+inet.3: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.14.0/30       *[Direct/0] 00:12:53
+                    >  via et-0/0/0.0
+10.0.14.1/32       *[Local/0] 00:12:53
+                       Local via et-0/0/0.0
+192.168.0.1/32     *[Direct/0] 00:12:42
+                    >  via lo0.0
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[Static/5] 01:15:49
+                    >  to 10.0.0.2 via re0:mgmt-0.0
+10.0.0.0/24        *[Direct/0] 01:15:49
+                    >  via re0:mgmt-0.0
+10.0.0.15/32       *[Local/0] 01:15:49
+                       Local via re0:mgmt-0.0
+
+inet6.0: 2 destinations, 2 routes (2 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+fe80::e00:10f0:55:cb00/128
+                   *[Direct/0] 01:15:49
+                    >  via lo0.0
+ff02::2/128        *[INET6/0] 01:15:49
+                       MultiRecv
+
+inet6.2: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+fe80::e00:10f0:55:cb00/128
+                   *[Direct/0] 01:15:49
+                    >  via lo0.0
+
+inet6.3: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+fe80::e00:10f0:55:cb00/128
+                   *[Direct/0] 01:15:49
+                    >  via lo0.0
+
+mgmt_junos.inet6.0: 4 destinations, 4 routes (4 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+::/0               *[Static/5] 01:15:49
+                    >  to 2001:db8::1 via re0:mgmt-0.0
+2001:db8::/64      *[Direct/0] 01:15:49
+                    >  via re0:mgmt-0.0
+2001:db8::2/128    *[Local/0] 01:15:49
+                       Local via re0:mgmt-0.0
+fe80::e00:10ff:fe55:cb00/128
+                   *[Local/0] 01:15:49
+                       Local via re0:mgmt-0.0
+
+admin@jun01> 
+## [JUN01] show route summary
+show route summary 
+Router ID: 192.168.0.1
+
+Highwater Mark (All time / Time averaged watermark)
+    RIB unique destination routes: 23 at 2026-11-14 11:09:27 / 0
+    RIB routes                   : 23 at 2026-11-14 11:09:27 / 0
+    FIB routes                   : 6 at 2026-11-14 11:09:27 / 0
+    VRF type routing instances   : 0 at 2026-11-14 09:54:05
+
+inet.0: 6 destinations, 6 routes (6 active, 0 holddown, 0 hidden)
+              Direct:      2 routes,      2 active
+               Local:      1 routes,      1 active
+                OSPF:      2 routes,      2 active
+              Static:      1 routes,      1 active
+
+inet.2: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+              Direct:      2 routes,      2 active
+               Local:      1 routes,      1 active
+
+inet.3: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+              Direct:      2 routes,      2 active
+               Local:      1 routes,      1 active
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+              Direct:      1 routes,      1 active
+               Local:      1 routes,      1 active
+              Static:      1 routes,      1 active
+
+inet6.0: 2 destinations, 2 routes (2 active, 0 holddown, 0 hidden)
+              Direct:      1 routes,      1 active
+               INET6:      1 routes,      1 active
+
+inet6.2: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+              Direct:      1 routes,      1 active
+
+inet6.3: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+              Direct:      1 routes,      1 active
+
+mgmt_junos.inet6.0: 4 destinations, 4 routes (4 active, 0 holddown, 0 hidden)
+              Direct:      1 routes,      1 active
+               Local:      2 routes,      2 active
+              Static:      1 routes,      1 active
+
+admin@jun01> 
+## [JUN01] show route 192.168.0.4/32 exact detail
+show route 192.168.0.4/32 exact detail 
+
+inet.0: 6 destinations, 6 routes (6 active, 0 holddown, 0 hidden)
+192.168.0.4/32 (1 entry, 1 announced)
+        *OSPF   Preference: 10
+                Next hop type: Router, Next hop index: 3035
+                Address: 0x55fbedc1f878
+                Next-hop reference count: 2, Next-hop session id: 1
+                Kernel Table Id: 0
+                Next hop: 10.0.14.2 via et-0/0/0.0, selected
+                Session Id: 1
+                State: <Active Int>
+                Age: 36 	Metric: 1 
+                Validation State: unverified 
+                Area: 0.0.0.0
+                Task: OSPF
+                Announcement bits (1): 0-KRT 
+                AS path: I 
+                Thread: junos-main 
+
+admin@jun01> 
+## [JUN01] show route protocol static
+show route protocol static 
+
+inet.0: 6 destinations, 6 routes (6 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[Static/5] 00:00:47
+                       Discard
+
+inet.2: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+inet.3: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[Static/5] 01:15:51
+                    >  to 10.0.0.2 via re0:mgmt-0.0
+
+inet6.0: 2 destinations, 2 routes (2 active, 0 holddown, 0 hidden)
+
+inet6.2: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+inet6.3: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet6.0: 4 destinations, 4 routes (4 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+::/0               *[Static/5] 01:15:51
+                    >  to 2001:db8::1 via re0:mgmt-0.0
+
+admin@jun01> 
+## [FRR1] (open)
+
+Hello, this is FRRouting (version 10.7.1_git).
+Copyright 1996-2005 Kunihiro Ishiguro, et al.
+
+frr1# 
+## [FRR1] show ip route
+show ip route
+Codes: K - kernel route, C - connected, L - local, S - static,
+       R - RIP, O - OSPF, I - IS-IS, B - BGP, E - EIGRP, N - NHRP,
+       T - Table, v - VNC, V - VNC-Direct, A - Babel, F - PBR,
+       f - OpenFabric, t - Table-Direct,
+       > - selected route, * - FIB route, q - queued, r - rejected, b - backup
+       t - trapped, o - offload failure
+
+IPv4 unicast VRF default:
+C>* 10.0.14.0/30 is directly connected, eth1, weight 1, 01:16:58
+L>* 10.0.14.2/32 is directly connected, eth1, weight 1, 01:16:58
+C>* 172.20.20.0/24 is directly connected, eth0, weight 1, 01:16:58
+L>* 172.20.20.32/32 is directly connected, eth0, weight 1, 01:16:58
+O>* 192.168.0.1/32 [110/10] via 10.0.14.1, eth1, weight 1, 00:00:41
+L * 192.168.0.4/32 is directly connected, lo, weight 1, 01:16:58
+C>* 192.168.0.4/32 is directly connected, lo, weight 1, 01:16:58
+frr1# 
+## [FRR1] show ip ospf database external
+show ip ospf database external
+
+       OSPF Router with ID (192.168.0.4)
+
+                AS External Link States 
+
+frr1# # OSPF より static を先に使う(preference 5 と 10)→ static を floating に(preference 200)
+
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set routing-options static route 192.168.0.4/32 next-hop 10.0.14.2
+set routing-options static route 192.168.0.4/32 next-hop 10.0.14.2 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01] show route 192.168.0.4/32 exact
+show route 192.168.0.4/32 exact 
+
+inet.0: 6 destinations, 7 routes (6 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+192.168.0.4/32     *[Static/5] 00:00:01
+                    >  to 10.0.14.2 via et-0/0/0.0
+                    [OSPF/10] 00:00:42, metric 1
+                    >  to 10.0.14.2 via et-0/0/0.0
+
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set routing-options static route 192.168.0.4/32 preference 200
+set routing-options static route 192.168.0.4/32 preference 200 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01] show route 192.168.0.4/32 exact
+show route 192.168.0.4/32 exact 
+
+inet.0: 6 destinations, 7 routes (6 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+192.168.0.4/32     *[OSPF/10] 00:00:44, metric 1
+                    >  to 10.0.14.2 via et-0/0/0.0
+                    [Static/200] 00:00:00
+                    >  to 10.0.14.2 via et-0/0/0.0
+
+admin@jun01> # 直接つながっていない next-hop(IOS なら再帰で解決する)
+
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set routing-options static route 203.0.113.0/24 next-hop 192.168.0.4
+set routing-options static route 203.0.113.0/24 next-hop 192.168.0.4 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01] show route 203.0.113.0/24
+show route 203.0.113.0/24 
+
+admin@jun01> 
+## [JUN01] show route 203.0.113.0/24 hidden extensive | match "State|Next hop|Reason|Hidden|unusable"
+show route 203.0.113.0/24 hidden extensive | match "State|Next hop|Reason|Hidden|unusable" 
+
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set routing-options static route 203.0.113.0/24 resolve
+set routing-options static route 203.0.113.0/24 resolve 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01] show route 203.0.113.0/24
+show route 203.0.113.0/24 
+
+inet.0: 7 destinations, 8 routes (7 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+203.0.113.0/24     *[Static/5] 00:00:01, metric2 1
+                    >  to 10.0.14.2 via et-0/0/0.0
+
+admin@jun01> # 後片付け(OSPF とアドレスは残す)
+
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] delete routing-options static
+delete routing-options static 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit comment "J0 PoC: statics removed"
+commit and-quit comment "J0 PoC: statics removed" 
+commit complete
+Exiting configuration mode
+
+admin@jun01> 

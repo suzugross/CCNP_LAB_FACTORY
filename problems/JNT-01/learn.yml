@@ -1,0 +1,254 @@
+# JNT-01 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn JNT-01 が読む(containerlab の問題もワークスペースで開ける・BL-275)。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# verify= 確かめ方の例(BL-266)。結果を観る手順まで(入ったか → 流して数える → 届いた先 → 壊していないか)。落とし穴の名前や直し方は書かない。
+# 挙動は vJunos-Evolved 26.2R1.7(JUN01・JUN02)× FRR 10.7.1(FRR1)で確かめた(記録 poc/junos/expJNT01.log・設計 JUNOS-TRACK.design.md §7)。
+# 読み物= courses/junos(reading/junos/)。各課題の read: はその本の「ページ#節」。
+reading: junos
+steps:
+  - id: j0t1
+    title: { en: "J0-1  Address the two Junos routers", ja: "J0-1  2 台の Junos ルータにアドレスを付ける" }
+    check: j0t1
+    read: [01-j0-config-tree#s2-1, 01-j0-config-tree#s2-2, 01-j0-config-tree#s2-5, 01-j0-config-tree#s3-2]
+    hints:
+      - en: "An address belongs to a logical unit of the interface, under its protocol family. Nothing you set takes effect until you commit it, and an untagged port uses unit 0."
+        ja: "アドレスは、インターフェースの論理ユニットの下の、プロトコル ファミリーに付けます。set した内容は commit するまで効きません。タグの無いポートはユニット 0 を使います。"
+      - en: "`show | compare` before you commit, `show interfaces terse` and `ping <address> count 3 rapid` after. Page: Writing configuration, sections 2.5 and 3.2."
+        ja: "commit の前に `show | compare`、後に `show interfaces terse` と `ping <アドレス> count 3 rapid`。読み物: 設定の書き方の 2.5 節と 3.2 節。"
+      - en: "`set interfaces et-0/0/0 unit 0 family inet address <address/length>` for each link (JUN02 also has et-0/0/1), `set interfaces lo0 unit 0 family inet address <address>/32`, then `commit`, on each router."
+        ja: "リンクごとに `set interfaces et-0/0/0 unit 0 family inet address <アドレス/長さ>`(JUN02 には et-0/0/1 もある)、`set interfaces lo0 unit 0 family inet address <アドレス>/32`、最後に `commit`。各ルータで。"
+    verify:
+      en: |
+        **1. Is it in?** (JUN01, JUN02)
+
+        - `show configuration interfaces | display set` lists the link and lo0 addresses of the table (only committed lines appear here).
+        - `show interfaces terse`: each port you used has a `.0` line that is `up up` with `inet` and its address.
+
+        **2. Do the links answer?**
+
+        - On JUN01: `ping 10.0.12.2 count 3 rapid`. On JUN02: `ping 10.0.12.1 count 3 rapid` and `ping 10.0.23.2 count 3 rapid`.
+          Each prints `!!!` and `0% packet loss`.
+      ja: |
+        **1. 入ったか**(JUN01・JUN02)
+
+        - `show configuration interfaces | display set` に、表のリンクと lo0 のアドレスが並ぶ(ここに出るのは commit 済みの行だけ)。
+        - `show interfaces terse`: 使ったポートごとに `.0` の行があり、`up up` で `inet` とアドレスが付いている。
+
+        **2. リンクの先が応えるか**
+
+        - JUN01 で `ping 10.0.12.2 count 3 rapid`。JUN02 で `ping 10.0.12.1 count 3 rapid` と `ping 10.0.23.2 count 3 rapid`。
+          どれも `!!!` と `0% packet loss` が出る。
+    solution:
+      en: |
+        On JUN01:
+        configure
+        set interfaces et-0/0/0 unit 0 family inet address 10.0.12.1/30
+        set interfaces lo0 unit 0 family inet address 192.168.0.1/32
+        commit and-quit
+        On JUN02:
+        configure
+        set interfaces et-0/0/0 unit 0 family inet address 10.0.12.2/30
+        set interfaces et-0/0/1 unit 0 family inet address 10.0.23.1/30
+        set interfaces lo0 unit 0 family inet address 192.168.0.2/32
+        commit and-quit
+      ja: |
+        On JUN01:
+        configure
+        set interfaces et-0/0/0 unit 0 family inet address 10.0.12.1/30
+        set interfaces lo0 unit 0 family inet address 192.168.0.1/32
+        commit and-quit
+        On JUN02:
+        configure
+        set interfaces et-0/0/0 unit 0 family inet address 10.0.12.2/30
+        set interfaces et-0/0/1 unit 0 family inet address 10.0.23.1/30
+        set interfaces lo0 unit 0 family inet address 192.168.0.2/32
+        commit and-quit
+
+  - id: j0t2
+    title: { en: "J0-2  Run OSPF across all three", ja: "J0-2  3 台で OSPF を動かす" }
+    check: j0t2
+    read: [01-j0-config-tree#s2-5, 01-j0-config-tree#s3-2, 00-j0-map#s3]
+    hints:
+      - en: "Junos OSPF has no network statement: you put interfaces into an area, and you name the logical unit (such as et-0/0/0.0). An interface that should be advertised without forming adjacencies is passive."
+        ja: "Junos の OSPF に network 文はありません。インターフェースをエリアに入れます。名指しするのは論理ユニット(et-0/0/0.0 など)です。隣接を作らずに広告だけするインターフェースは passive にします。"
+      - en: "`show ospf interface`, `show ospf neighbor`, `show route protocol ospf`. On FRR1: `show ip ospf neighbor`, `show ip route ospf`. Page: Writing configuration, section 3.2."
+        ja: "`show ospf interface`、`show ospf neighbor`、`show route protocol ospf`。FRR1 で `show ip ospf neighbor`、`show ip route ospf`。読み物: 設定の書き方の 3.2 節。"
+      - en: "`set protocols ospf area 0.0.0.0 interface <link unit>` for each link, `set protocols ospf area 0.0.0.0 interface lo0.0 passive`, then `commit`, on each router."
+        ja: "リンクごとに `set protocols ospf area 0.0.0.0 interface <リンクのユニット>`、`set protocols ospf area 0.0.0.0 interface lo0.0 passive`、最後に `commit`。各ルータで。"
+    verify:
+      en: |
+        **1. Is it in?** (JUN01, JUN02)
+
+        - `show ospf interface`: the link units and lo0.0 are in area 0.0.0.0, and lo0.0 shows no neighbours.
+
+        **2. Do the neighbours agree?**
+
+        - `show ospf neighbor` on JUN02 lists 10.0.12.1 and 10.0.23.2, both `Full`. On FRR1, `show ip ospf neighbor` lists 192.168.0.2 as `Full`.
+          (The line `Warning: License key missing` comes from the virtual router and can be ignored.)
+
+        **3. Where does it arrive?**
+
+        - On FRR1, `show ip route ospf` has 192.168.0.1/32 and 192.168.0.2/32.
+        - On JUN01, `ping 192.168.0.3 source 192.168.0.1 count 5 rapid`: all five come back.
+      ja: |
+        **1. 入ったか**(JUN01・JUN02)
+
+        - `show ospf interface`: リンクのユニットと lo0.0 が area 0.0.0.0 にあり、lo0.0 には隣接が無い。
+
+        **2. 隣接の両側がそろうか**
+
+        - JUN02 の `show ospf neighbor` に 10.0.12.1 と 10.0.23.2 が並び、どちらも `Full`。FRR1 の `show ip ospf neighbor` で 192.168.0.2 が `Full`。
+          (`Warning: License key missing` の行は仮想ルータから来るもので、無視してよい。)
+
+        **3. 届いた先**
+
+        - FRR1 の `show ip route ospf` に 192.168.0.1/32 と 192.168.0.2/32 がある。
+        - JUN01 で `ping 192.168.0.3 source 192.168.0.1 count 5 rapid`: 5 発とも返る。
+    solution:
+      en: |
+        On JUN01:
+        configure
+        set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+        set protocols ospf area 0.0.0.0 interface lo0.0 passive
+        commit and-quit
+        On JUN02:
+        configure
+        set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+        set protocols ospf area 0.0.0.0 interface et-0/0/1.0
+        set protocols ospf area 0.0.0.0 interface lo0.0 passive
+        commit and-quit
+      ja: |
+        On JUN01:
+        configure
+        set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+        set protocols ospf area 0.0.0.0 interface lo0.0 passive
+        commit and-quit
+        On JUN02:
+        configure
+        set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+        set protocols ospf area 0.0.0.0 interface et-0/0/1.0
+        set protocols ospf area 0.0.0.0 interface lo0.0 passive
+        commit and-quit
+
+  - id: j0t3
+    title: { en: "J0-3  Try a risky change that takes itself back", ja: "J0-3  自分で元に戻る形で、危ない変更を試す" }
+    check: j0t3
+    read: [03-j0-commit#s2-3, 03-j0-commit#s2-2, 03-j0-commit#s3-1]
+    hints:
+      - en: "Junos can commit a change on probation: if you do not confirm it within the minutes you give, the router loads the previous configuration and commits it by itself. The MTU is a property of the physical port."
+        ja: "Junos は変更を仮で commit できます。指定した分数のうちに確定しなければ、ルータが 1 つ前の設定を読み込んで自分で commit します。MTU は物理ポートの性質です。"
+      - en: "`show interfaces et-0/0/1 | match MTU`, `show ospf neighbor` on JUN02, `show ip ospf neighbor` on FRR1, and `show system commit` on JUN02 to see the pending rollback and, later, the rollback itself. Page: Commit, section 2.3."
+        ja: "`show interfaces et-0/0/1 | match MTU`、JUN02 の `show ospf neighbor`、FRR1 の `show ip ospf neighbor`、予約中の巻き戻しと、後で巻き戻しそのものを見る JUN02 の `show system commit`。読み物: commit の 2.3 節。"
+      - en: "On JUN02: `configure`, `set interfaces et-0/0/1 mtu 9000`, `commit confirmed 3`. Watch OSPF with FRR1. Do not enter `commit` or `commit check` afterwards: wait until the broadcast message says the rollback is complete."
+        ja: "JUN02 で `configure`、`set interfaces et-0/0/1 mtu 9000`、`commit confirmed 3`。FRR1 との OSPF を見ます。その後は `commit` も `commit check` も打たず、巻き戻しが済んだという一斉通知が出るまで待ちます。"
+    verify:
+      en: |
+        **1. Is it in, for now?** (JUN02, right after the commit)
+
+        - `show interfaces et-0/0/1 | match MTU`: the link-level MTU is 9000 and `Protocol inet` shows 8986.
+        - `show system commit`: the newest entry says `commit confirmed, rollback in …` and `rollback pending`.
+
+        **2. What does the neighbour see?** (within a minute)
+
+        - `show ospf neighbor` on JUN02 and `show ip ospf neighbor` on FRR1: what state does the adjacency on 10.0.23.0/30 stay in?
+
+        **3. Did it come back?** (after the time you gave, plus up to a minute)
+
+        - The broadcast `Commit was not confirmed; automatic rollback complete.` appears on JUN02.
+        - `show system commit`: a new entry `by root via other` sits directly above your `commit confirmed` entry.
+        - `show configuration interfaces et-0/0/1` has no `mtu` line, and within a minute or so the adjacency with FRR1 is `Full` again.
+      ja: |
+        **1. ひとまず入ったか**(JUN02・commit の直後)
+
+        - `show interfaces et-0/0/1 | match MTU`: リンク層の MTU が 9000、`Protocol inet` が 8986。
+        - `show system commit`: いちばん新しい行に `commit confirmed, rollback in …` と `rollback pending` が出る。
+
+        **2. 隣からどう見えるか**(1 分以内)
+
+        - JUN02 の `show ospf neighbor` と FRR1 の `show ip ospf neighbor`: 10.0.23.0/30 の隣接はどの状態に留まるか。
+
+        **3. 戻ったか**(指定した時間に、最大 1 分ほど足した後)
+
+        - JUN02 に `Commit was not confirmed; automatic rollback complete.` の一斉通知が出る。
+        - `show system commit`: あなたの `commit confirmed` の行のすぐ上に、新しい `by root via other` の行がある。
+        - `show configuration interfaces et-0/0/1` に `mtu` の行が無く、1 分ほどで FRR1 との隣接が `Full` に戻る。
+    solution:
+      en: |
+        On JUN02:
+        configure
+        set interfaces et-0/0/1 mtu 9000
+        commit confirmed 3 comment "MTU 9000 toward FRR1"
+        run show ospf neighbor
+        (the adjacency with 10.0.23.2 stays in ExStart or Exchange: FRR1's MTU is 1500, and OSPF compares the MTU in its database description packets)
+        (do not confirm; wait for "Commit was not confirmed; automatic rollback complete.")
+        run show system commit
+        exit
+      ja: |
+        On JUN02:
+        configure
+        set interfaces et-0/0/1 mtu 9000
+        commit confirmed 3 comment "MTU 9000 toward FRR1"
+        run show ospf neighbor
+        (10.0.23.2 との隣接は ExStart か Exchange に留まる。FRR1 の MTU は 1500 で、OSPF はデータベース記述パケットの MTU を比べる)
+        (確定しない。"Commit was not confirmed; automatic rollback complete." が出るまで待つ)
+        run show system commit
+        exit
+
+  - id: j0t4
+    title: { en: "J0-4  Reach the server network through the loopback of FRR1", ja: "J0-4  FRR1 のループバックを経由してサーバの網へ届く" }
+    check: j0t4
+    read: [05-j0-routing-table#s2-3, 05-j0-routing-table#s2-4, 05-j0-routing-table#s2-5, 05-j0-routing-table#s3-1]
+    hints:
+      - en: "Two Junos rules meet here. A static route's next hop must be on a connected network unless you tell Junos to look it up in the routing table. And preference values are not IOS distances: compare the static route with the OSPF route it must give way to."
+        ja: "ここでは Junos の決まりが 2 つ出会います。静的経路の次ホップは、経路表で調べるよう指示しない限り、直接つながる網の上でなければなりません。そして preference の値は IOS のディスタンスとは違います。静的経路を、道を譲るべき OSPF の経路と比べてください。"
+      - en: "`show route 198.51.100.0/24 exact` and `… exact detail` (look at `Preference` and `Protocol next hop`). Page: The routing table, the preference table in section 2.3 and section 2.4."
+        ja: "`show route 198.51.100.0/24 exact` と `… exact detail`(`Preference` と `Protocol next hop` を見る)。読み物: 経路表の 2.3 節の preference の表と 2.4 節。"
+      - en: "On JUN02: `set routing-options static route 198.51.100.0/24 next-hop 192.168.0.3`, `… resolve`, and `… preference <a value above the OSPF external routes>`, then `commit`."
+        ja: "JUN02 で `set routing-options static route 198.51.100.0/24 next-hop 192.168.0.3`、`… resolve`、`… preference <OSPF の外部経路より大きい値>`、最後に `commit`。"
+    verify:
+      en: |
+        **1. Is it in?** (JUN02)
+
+        - `show route 198.51.100.0/24 exact`: one line `*[Static/…]`, with a next hop `to 10.0.23.2 via et-0/0/1.0`.
+        - `show route 198.51.100.0/24 exact detail`: `Protocol next hop: 192.168.0.3` (the address you wrote) and the preference you chose.
+          Compare it with the OSPF external preference in the table of the reading.
+
+        **2. Send traffic** (JUN02)
+
+        - `ping 198.51.100.1 source 192.168.0.2 count 5 rapid`: all five come back.
+
+        **3. Nothing else changed?**
+
+        - `show ospf neighbor` on JUN02 still lists both neighbours as `Full`.
+        - On JUN01, `show route 198.51.100.0/24` shows nothing: OSPF does not carry the static route. The task asks nothing of JUN01.
+      ja: |
+        **1. 入ったか**(JUN02)
+
+        - `show route 198.51.100.0/24 exact`: `*[Static/…]` の行が 1 つあり、次ホップは `to 10.0.23.2 via et-0/0/1.0`。
+        - `show route 198.51.100.0/24 exact detail`: `Protocol next hop: 192.168.0.3`(あなたが書いたアドレス)と、選んだ preference。
+          読み物の表の OSPF の外部経路の preference と比べる。
+
+        **2. 流してみる**(JUN02)
+
+        - `ping 198.51.100.1 source 192.168.0.2 count 5 rapid`: 5 発とも返る。
+
+        **3. ほかを壊していないか**
+
+        - JUN02 の `show ospf neighbor` に、2 つの隣接がどちらも `Full` のまま並ぶ。
+        - JUN01 の `show route 198.51.100.0/24` には何も出ない。OSPF は静的経路を運ばない。課題は JUN01 に何も求めていない。
+    solution:
+      en: |
+        On JUN02:
+        configure
+        set routing-options static route 198.51.100.0/24 next-hop 192.168.0.3
+        set routing-options static route 198.51.100.0/24 resolve
+        set routing-options static route 198.51.100.0/24 preference 160
+        commit and-quit
+        (without resolve the route does not appear at all; with a preference of 150 or less it would beat an OSPF external route)
+      ja: |
+        On JUN02:
+        configure
+        set routing-options static route 198.51.100.0/24 next-hop 192.168.0.3
+        set routing-options static route 198.51.100.0/24 resolve
+        set routing-options static route 198.51.100.0/24 preference 160
+        commit and-quit
+        (resolve が無いと経路はまったく現れない。preference が 150 以下だと OSPF の外部経路に勝ってしまう)

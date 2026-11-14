@@ -1,0 +1,76 @@
+# POC-CLABLEARN-01 の学習モード(BL-275 の確かめ・containerlab の学習ラボの雛形)。lab_console.py --learn POC-CLABLEARN-01 が読む。
+# 書式は XRT-14 の learn.yml と同じ(hints は上から 1 段ずつ・solution は確認の通過後かヒント全開後・verify はいつでも開けて記録しない)。
+# 読み物(reading:)は付けない(試験台なので Reading タブは出ない)。
+steps:
+  - id: m0t1
+    title: { en: "M0-1  Address the link and the loopback", ja: "M0-1  リンクとループバックにアドレスを付ける" }
+    check: m0t1
+    hints:
+      - en: "On Junos an address belongs to a logical unit of the interface, under an address family: interface, then unit, then family, then address. What you set is only a candidate until you commit it."
+        ja: "Junos のアドレスは、インターフェースの論理ユニットの下の、アドレス ファミリーに付けます(インターフェース → unit → family → address)。設定した内容は commit するまで候補のままです。"
+      - en: "`show configuration interfaces`, `show interfaces terse et-0/0/0`, `show interfaces terse lo0`. In configuration mode, `show | compare` lists what the next commit changes."
+        ja: "`show configuration interfaces`、`show interfaces terse et-0/0/0`、`show interfaces terse lo0`。設定モードの `show | compare` で、次の commit で変わる内容が見えます。"
+      - en: "`set interfaces et-0/0/0 unit 0 family inet address 10.0.14.1/30`, `set interfaces lo0 unit 0 family inet address 192.168.0.1/32`, then `commit`."
+        ja: "`set interfaces et-0/0/0 unit 0 family inet address 10.0.14.1/30`、`set interfaces lo0 unit 0 family inet address 192.168.0.1/32`、最後に `commit`。"
+    verify:
+      en: |
+        **1. Is it in?** (JUN01)
+
+        - `show configuration interfaces` shows both addresses (a candidate you have not committed does not appear here).
+        - `show interfaces terse et-0/0/0` and `show interfaces terse lo0`: the `.0` units are `up up` with `inet` and the address.
+
+        **2. Does the link answer?** (JUN01)
+
+        - `ping 10.0.14.2 count 5 rapid` reaches FRR1 over the link.
+      ja: |
+        **1. 入ったか**(JUN01)
+
+        - `show configuration interfaces` に 2 つのアドレスが出る(commit していない候補はここに出ない)。
+        - `show interfaces terse et-0/0/0` と `show interfaces terse lo0`: `.0` のユニットが `up up` で、`inet` とアドレスが付いている。
+
+        **2. リンクの先が応えるか**(JUN01)
+
+        - `ping 10.0.14.2 count 5 rapid` でリンクの先の FRR1 に届く。
+    solution:
+      en: "configure / set interfaces et-0/0/0 unit 0 family inet address 10.0.14.1/30 / set interfaces lo0 unit 0 family inet address 192.168.0.1/32 / commit and-quit"
+      ja: "configure / set interfaces et-0/0/0 unit 0 family inet address 10.0.14.1/30 / set interfaces lo0 unit 0 family inet address 192.168.0.1/32 / commit and-quit"
+  - id: m0t2
+    title: { en: "M0-2  Exchange routes with FRR1", ja: "M0-2  FRR1 と経路を交換する" }
+    check: m0t2
+    hints:
+      - en: "On Junos, OSPF is enabled per interface inside an area (the logical unit, such as et-0/0/0.0). An interface that should be advertised without forming adjacencies is passive."
+        ja: "Junos の OSPF は、エリアの中にインターフェース(et-0/0/0.0 のような論理ユニット)を入れて有効にします。隣接を作らずに広告だけするインターフェースは passive にします。"
+      - en: "`show ospf interface`, `show ospf neighbor`, `show route 192.168.0.4`. On FRR1: `show ip ospf neighbor`, `show ip route ospf`."
+        ja: "`show ospf interface`、`show ospf neighbor`、`show route 192.168.0.4`。FRR1 では `show ip ospf neighbor`、`show ip route ospf`。"
+      - en: "`set protocols ospf area 0.0.0.0 interface et-0/0/0.0`, `set protocols ospf area 0.0.0.0 interface lo0.0 passive`, then `commit`."
+        ja: "`set protocols ospf area 0.0.0.0 interface et-0/0/0.0`、`set protocols ospf area 0.0.0.0 interface lo0.0 passive`、最後に `commit`。"
+    verify:
+      en: |
+        **1. Is it in?** (JUN01)
+
+        - `show ospf interface`: et-0/0/0.0 and lo0.0 in area 0.0.0.0, lo0.0 passive.
+
+        **2. Do the neighbours agree?** (JUN01, FRR1)
+
+        - `show ospf neighbor` on JUN01: 10.0.14.2 is `Full`. `show ip ospf neighbor` on FRR1: 192.168.0.1 is `Full`.
+
+        **3. Where does it arrive?** (JUN01, FRR1)
+
+        - `show route 192.168.0.4` on JUN01: learned by OSPF over et-0/0/0.0. `show ip route 192.168.0.1/32` on FRR1: learned by OSPF.
+        - `ping 192.168.0.4 source 192.168.0.1 count 5 rapid` on JUN01: all five come back.
+      ja: |
+        **1. 入ったか**(JUN01)
+
+        - `show ospf interface`: et-0/0/0.0 と lo0.0 が area 0.0.0.0 にあり、lo0.0 は passive。
+
+        **2. 隣接の両側がそろうか**(JUN01・FRR1)
+
+        - JUN01 の `show ospf neighbor` で 10.0.14.2 が `Full`。FRR1 の `show ip ospf neighbor` で 192.168.0.1 が `Full`。
+
+        **3. 届いた先**(JUN01・FRR1)
+
+        - JUN01 の `show route 192.168.0.4`: et-0/0/0.0 経由で OSPF から学んでいる。FRR1 の `show ip route 192.168.0.1/32`: OSPF から学んでいる。
+        - JUN01 で `ping 192.168.0.4 source 192.168.0.1 count 5 rapid`: 5 発とも返る。
+    solution:
+      en: "configure / set routing-options router-id 192.168.0.1 / set protocols ospf area 0.0.0.0 interface et-0/0/0.0 / set protocols ospf area 0.0.0.0 interface lo0.0 passive / commit and-quit"
+      ja: "configure / set routing-options router-id 192.168.0.1 / set protocols ospf area 0.0.0.0 interface et-0/0/0.0 / set protocols ospf area 0.0.0.0 interface lo0.0 passive / commit and-quit"

@@ -166,7 +166,7 @@ FRR で余計な設定を `write memory` → reset で消えて白紙 0/100 → 
 ### 7.6 残り(ユーザ判断)
 
 - 既存の複合問(JUNOS-BUILD-01・POC-CLABHYB-01)の扱い。CML を上げた時に、新しい照合が入った複合問の実走を確かめる。
-- ポータルのワークスペース(コンソール・学習モード)は CML 専用のまま。containerlab の問題は VS Code の端末から `lab.sh connect` で解く。
+- ~~ポータルのワークスペース(コンソール・学習モード)は CML 専用のまま。~~ → **2026-11-14 対応済み(BL-275)**: `platform: clab` の問題もワークスペース・学習モードで開ける(`lab.sh learn`・ポータルの `/_learn`)。learn.yml の無い問題は `lab_console.py --clab <ID>`。詳細= `JUNOS-TRACK.design.md` §4.1。
 
 **問題の作り方の補足(② の分)**: FRR は `kind: frr`・`image: quay.io/frrouting/frr:containerlab-<版>`・`startup-config: <node>/frr.conf`・
 `daemons: [ospfd, bgpd, …]`(書いたものだけ動く)。(0.77 の形= `kind: linux` で `clab/<node>/` に `daemons`・`frr.conf`・`vtysh.conf` を置き `binds: [<node>:/etc/frr]`。)cEOS は startup-config を置かなければ containerlab の既定の設定で白紙起動(版はイメージの `ceos:<版>`)。

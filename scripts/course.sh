@@ -64,8 +64,8 @@ def task_links(problem, lang, text):
 
     def rep(m):
         tid = m.group(1)
-        mm = re.match(r"M(\d+)-(\d+)$", tid)
-        sid = f"m{mm.group(1)}t{mm.group(2)}" if mm else by_title.get(tid, "")
+        mm = re.match(r"([A-Z])(\d+)-(\d+)$", tid)          # M2-1 → m2t1・J0-1 → j0t1(BL-275)
+        sid = f"{mm.group(1).lower()}{mm.group(2)}t{mm.group(3)}" if mm else by_title.get(tid, "")
         if sid not in reads:
             return m.group(0)
         parts = [f'<a href="/_learn?id={problem}&amp;step={sid}">{WORD[lang][0]}</a>']
@@ -82,7 +82,7 @@ def task_links(problem, lang, text):
             parts.append(f"{WORD[lang][1]} " + " · ".join(refs))
         return m.group(0) + '\n<p class="tolab">' + " — ".join(parts) + "</p>\n"
 
-    return re.sub(r"(?m)^### (?:Task|課題) ((?:M\d+|[A-Z])-\d+)\b.*$", rep, text)
+    return re.sub(r"(?m)^### (?:Task|課題) ((?:[A-Z]\d+|[A-Z])-\d+)\b.*$", rep, text)
 
 
 for lang, head in spec["intro"].items():
@@ -104,7 +104,7 @@ for lang, head in spec["intro"].items():
             def pick(sec):
                 out = []
                 for chunk in re.split(r"(?m)^(?=### )", sec):
-                    m = re.match(r"### (?:Task|課題) ((?:M\d+|[A-Z])-\d+)\b", chunk)
+                    m = re.match(r"### (?:Task|課題) ((?:[A-Z]\d+|[A-Z])-\d+)\b", chunk)
                     if m and m.group(1) not in keep:
                         continue
                     if m:

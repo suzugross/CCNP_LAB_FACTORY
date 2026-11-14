@@ -1,0 +1,35 @@
+# J0-1: JUN01・JUN02 のリンクと lo0 のアドレス(commit 済み= 設定に出る)と、リンクの両端の ping。
+problem: JNT-01
+total_points: 100
+checks:
+  - name: "J0-1 JUN01: et-0/0/0.0 has 10.0.12.1/30 and lo0.0 has 192.168.0.1/32"
+    node: JUN01
+    exec: junos
+    command: "show configuration | display set"
+    raw:
+      - regex: 'set interfaces et-0/0/0 unit 0 family inet address 10\.0\.12\.1/30'
+      - regex: 'set interfaces lo0 unit 0 family inet address 192\.168\.0\.1/32'
+    points: 20
+  - name: "J0-1 JUN02: et-0/0/0.0 has 10.0.12.2/30, et-0/0/1.0 has 10.0.23.1/30 and lo0.0 has 192.168.0.2/32"
+    node: JUN02
+    exec: junos
+    command: "show configuration | display set"
+    raw:
+      - regex: 'set interfaces et-0/0/0 unit 0 family inet address 10\.0\.12\.2/30'
+      - regex: 'set interfaces et-0/0/1 unit 0 family inet address 10\.0\.23\.1/30'
+      - regex: 'set interfaces lo0 unit 0 family inet address 192\.168\.0\.2/32'
+    points: 20
+  - name: "J0-1 JUN01 reaches JUN02 over their link"
+    node: JUN01
+    exec: junos
+    command: "ping 10.0.12.2 count 3 rapid"
+    raw:
+      - regex: '\b3 (packets )?received'
+    points: 30
+  - name: "J0-1 JUN02 reaches FRR1 over their link"
+    node: JUN02
+    exec: junos
+    command: "ping 10.0.23.2 count 3 rapid"
+    raw:
+      - regex: '\b3 (packets )?received'
+    points: 30

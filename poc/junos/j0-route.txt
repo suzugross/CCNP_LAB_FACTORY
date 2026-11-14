@@ -1,0 +1,37 @@
+# J0 PoC 4: 経路表と preference・static の作法(直接つながる next-hop だけ・floating)・OSPF の既定の export(外の経路を入れない)
+JUN01 configure
+JUN01 set routing-options router-id 192.168.0.1
+JUN01 set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+JUN01 set protocols ospf area 0.0.0.0 interface lo0.0 passive
+JUN01 set routing-options static route 198.51.100.0/24 discard
+JUN01 commit and-quit comment "J0 PoC: OSPF and a static"
+!sleep 45
+JUN01 show route
+JUN01 show route summary
+JUN01 show route 192.168.0.4/32 exact detail
+JUN01 show route protocol static
+FRR1 show ip route
+FRR1 show ip ospf database external
+# OSPF より static を先に使う(preference 5 と 10)→ static を floating に(preference 200)
+JUN01 configure
+JUN01 set routing-options static route 192.168.0.4/32 next-hop 10.0.14.2
+JUN01 commit and-quit
+JUN01 show route 192.168.0.4/32 exact
+JUN01 configure
+JUN01 set routing-options static route 192.168.0.4/32 preference 200
+JUN01 commit and-quit
+JUN01 show route 192.168.0.4/32 exact
+# 直接つながっていない next-hop(IOS なら再帰で解決する)
+JUN01 configure
+JUN01 set routing-options static route 203.0.113.0/24 next-hop 192.168.0.4
+JUN01 commit and-quit
+JUN01 show route 203.0.113.0/24
+JUN01 show route 203.0.113.0/24 hidden extensive | match "State|Next hop|Reason|Hidden|unusable"
+JUN01 configure
+JUN01 set routing-options static route 203.0.113.0/24 resolve
+JUN01 commit and-quit
+JUN01 show route 203.0.113.0/24
+# 後片付け(OSPF とアドレスは残す)
+JUN01 configure
+JUN01 delete routing-options static
+JUN01 commit and-quit comment "J0 PoC: statics removed"

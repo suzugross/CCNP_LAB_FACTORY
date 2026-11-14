@@ -1,0 +1,310 @@
+# jpoc POC-CLABLEARN-01 j0-cli.txt 2026-11-14 10:57:01
+# J0 PoC 1: モードと階層・候補設定と commit・誤りの例・rollback(JUN01 は白紙から)
+
+## [JUN01] (open)
+Last login: Sat Nov 14 10:18:34 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] show version | match Junos
+show version | match Junos 
+Junos: 26.2R1.7-EVOI20260619095247-evo-builder-1
+JUNOS-EVO OS 64-bit [junos-evo-install-ptx-fixed-x86-64-26.2R1.7-EVOI20260619095247-evo-builder-1]
+
+admin@jun01> 
+## [JUN01] show configuration interfaces
+show configuration interfaces 
+re0:mgmt-0 {
+    unit 0 {
+        family inet {
+            address 10.0.0.15/24;
+        }
+        family inet6 {
+            address 2001:db8::2/64;
+        }
+    }
+}
+
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] edit interfaces et-0/0/0 unit 0
+edit interfaces et-0/0/0 unit 0 
+
+[edit interfaces et-0/0/0 unit 0]
+admin@jun01# 
+## [JUN01] set family inet address 10.0.14.1/30
+set family inet address 10.0.14.1/30 
+
+[edit interfaces et-0/0/0 unit 0]
+admin@jun01# 
+## [JUN01] show
+show 
+family inet {
+    address 10.0.14.1/30;
+}
+
+[edit interfaces et-0/0/0 unit 0]
+admin@jun01# 
+## [JUN01] up
+up 
+
+[edit interfaces et-0/0/0]
+admin@jun01# 
+## [JUN01] show
+show 
+unit 0 {
+    family inet {
+        address 10.0.14.1/30;
+    }
+}
+
+[edit interfaces et-0/0/0]
+admin@jun01# 
+## [JUN01] top
+top 
+
+[edit]
+admin@jun01# 
+## [JUN01] set interfaces lo0 unit 0 family inet address 192.168.0.1/32
+set interfaces lo0 unit 0 family inet address 192.168.0.1/32 
+
+[edit]
+admin@jun01# 
+## [JUN01] show | compare
+show | compare 
+[edit interfaces]
++   et-0/0/0 {
++       unit 0 {
++           family inet {
++               address 10.0.14.1/30;
++           }
++       }
++   }
++   lo0 {
++       unit 0 {
++           family inet {
++               address 192.168.0.1/32;
++           }
++       }
++   }
+
+[edit]
+admin@jun01# 
+## [JUN01] show interfaces | display set
+show interfaces | display set 
+set interfaces et-0/0/0 unit 0 family inet address 10.0.14.1/30
+set interfaces lo0 unit 0 family inet address 192.168.0.1/32
+set interfaces re0:mgmt-0 unit 0 family inet address 10.0.0.15/24
+set interfaces re0:mgmt-0 unit 0 family inet6 address 2001:db8::2/64
+
+[edit]
+admin@jun01# 
+## [JUN01] run show interfaces terse et-0/0/0
+run show interfaces terse et-0/0/0 
+Interface               Admin Link Proto    Local                 Remote
+et-0/0/0                up    up
+et-0/0/0.16386          up    up   multiservice
+
+[edit]
+admin@jun01# 
+## [JUN01] commit check
+commit check 
+configuration check succeeds
+
+[edit]
+admin@jun01# 
+## [JUN01] run show interfaces terse et-0/0/0
+run show interfaces terse et-0/0/0 
+Interface               Admin Link Proto    Local                 Remote
+et-0/0/0                up    up
+et-0/0/0.16386          up    up   multiservice
+
+[edit]
+admin@jun01# 
+## [JUN01] commit comment "J0 PoC: addresses"
+commit comment "J0 PoC: addresses" 
+commit complete
+
+[edit]
+admin@jun01# 
+## [JUN01] run show interfaces terse et-0/0/0
+run show interfaces terse et-0/0/0 
+Interface               Admin Link Proto    Local                 Remote
+et-0/0/0                up    up
+et-0/0/0.0              up    up   inet     10.0.14.1/30    
+                                   multiservice
+
+[edit]
+admin@jun01# 
+## [JUN01] exit
+exit 
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01] show configuration interfaces
+show configuration interfaces 
+et-0/0/0 {
+    unit 0 {
+        family inet {
+            address 10.0.14.1/30;
+        }
+    }
+}
+lo0 {
+    unit 0 {
+        family inet {
+            address 192.168.0.1/32;
+        }
+    }
+}
+re0:mgmt-0 {
+    unit 0 {
+        family inet {
+            address 10.0.0.15/24;
+        }
+        family inet6 {
+            address 2001:db8::2/64;
+        }
+    }
+}
+
+admin@jun01> 
+## [JUN01] show configuration | display set | match "interfaces (et|lo0)"
+show configuration | display set | match "interfaces (et|lo0)" 
+set interfaces et-0/0/0 unit 0 family inet address 10.0.14.1/30
+set interfaces lo0 unit 0 family inet address 192.168.0.1/32
+
+admin@jun01> 
+## [JUN01] show system commit
+show system commit 
+0   2026-11-14 10:57:11 UTC by admin via cli
+    J0 PoC: addresses
+1   2026-11-14 09:53:56 UTC by root via other
+
+admin@jun01> # 誤りの例: 行き先の無い static(commit check が拒む)
+
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set routing-options static route 198.51.100.0/24
+set routing-options static route 198.51.100.0/24 
+                                                              ^
+missing argument.
+
+[edit]
+admin@jun01# 
+## [JUN01] commit check
+commit check 
+configuration check succeeds
+
+[edit]
+admin@jun01# 
+## [JUN01] delete routing-options static
+delete routing-options static 
+warning: statement not found
+
+[edit]
+admin@jun01# 
+## [JUN01] show | compare
+show | compare 
+
+[edit]
+admin@jun01# # rollback: 消して commit → 1 つ前へ戻す
+
+## [JUN01] delete interfaces lo0
+delete interfaces lo0 
+
+[edit]
+admin@jun01# 
+## [JUN01] show | compare
+show | compare 
+[edit interfaces]
+-   lo0 {
+-       unit 0 {
+-           family inet {
+-               address 192.168.0.1/32;
+-           }
+-       }
+-   }
+
+[edit]
+admin@jun01# 
+## [JUN01] commit comment "J0 PoC: remove lo0"
+commit comment "J0 PoC: remove lo0" 
+commit complete
+
+[edit]
+admin@jun01# 
+## [JUN01] run show system commit
+run show system commit 
+0   2026-11-14 10:57:19 UTC by admin via cli
+    J0 PoC: remove lo0
+1   2026-11-14 10:57:11 UTC by admin via cli
+    J0 PoC: addresses
+2   2026-11-14 09:53:56 UTC by root via other
+
+[edit]
+admin@jun01# 
+## [JUN01] rollback 1
+rollback 1 
+load complete
+
+[edit]
+admin@jun01# 
+## [JUN01] show | compare
+show | compare 
+[edit interfaces]
++   lo0 {
++       unit 0 {
++           family inet {
++               address 192.168.0.1/32;
++           }
++       }
++   }
+
+[edit]
+admin@jun01# 
+## [JUN01] commit comment "J0 PoC: back to rollback 1"
+commit comment "J0 PoC: back to rollback 1" 
+commit complete
+
+[edit]
+admin@jun01# 
+## [JUN01] run show interfaces terse lo0
+run show interfaces terse lo0 
+Interface               Admin Link Proto    Local                 Remote
+lo0                     up    up
+lo0.0                   up    up   inet     192.168.0.1         --> 0/0
+                                   inet6    fe80::e00:10f0:55:cb00-->  
+
+[edit]
+admin@jun01# 
+## [JUN01] run show system commit
+run show system commit 
+0   2026-11-14 10:57:22 UTC by admin via cli
+    J0 PoC: back to rollback 1
+1   2026-11-14 10:57:19 UTC by admin via cli
+    J0 PoC: remove lo0
+2   2026-11-14 10:57:11 UTC by admin via cli
+    J0 PoC: addresses
+3   2026-11-14 09:53:56 UTC by root via other
+
+[edit]
+admin@jun01# 
+## [JUN01] show | compare rollback 2
+show | compare rollback 2 
+
+[edit]
+admin@jun01# 
+## [JUN01] exit
+exit 
+Exiting configuration mode
+
+admin@jun01> 

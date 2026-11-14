@@ -5,6 +5,8 @@
       画面下端に目次・問番号の帯(パック常駐の時)。境目はドラッグで動かせる。
 
   ブラウザ(xterm.js) ⇄ WebSocket ⇄ この中継 ⇄ SSH ⇄ CML コンソールサーバ ⇄ ノードのシリアル
+  containerlab だけの問題(problem.yml の platform: clab・BL-275):
+  ブラウザ ⇄ WebSocket ⇄ この中継 ⇄ SSH ⇄ szk-cl01 ⇄ (Junos・EOS) 管理アドレスへ SSH ／ (FRR・Linux) docker exec
 
 動かし方は 2 通り:
 
@@ -17,6 +19,8 @@
   学習モード         lab_console.py --learn <問題 ID>
       単発の一種。ラボと課題文は問題 ID から決まり(lab/<ID>/Task.md・問題.md)、左に Steps タブが増える。
       課題ごとに 確認(中間チェックを 1 回)・段階式ヒント・模範解(通過後かヒント全開後)。problems/<ID>/learn.yml が中身。
+  containerlab の単発  lab_console.py --clab <問題 ID> [--task <Task.md>]
+      platform: clab の問題を learn.yml なしで開く(動作確認用)。--learn でも platform: clab なら containerlab へ繋ぐ。
 
   GET /lab?pack=&no=   … 画面(パック常駐)          GET /       … 画面(単発)
   GET /api/topo        … トポロジ(CML API の座標・リンクから起こした SVG とノード一覧)
@@ -42,6 +46,10 @@
     タブで開けば接続ごとに重複し、採点が同時に走ればその出力も混ざる。打鍵にはパスワードも含まれるので
     置き場は git 管理外・ファイルは 0600。記録に失敗してもコンソールは止めない。
   - コンソールは同じノードへの全接続で共有される(CML の仕様)。採点のコンソール経路とも共有。
+    containerlab のノードは接続ごとに別の SSH セッション(共有しない)。端末の大きさも SSH が機器へ運ぶ。
+  - containerlab の盤面は problem.yml の clab_topology(clab.yml)から起こし、状態は szk-cl01 の docker から読む。
+    座標はノードの labels の graph-posX / graph-posY(containerlab の graph と同じ書き方)。無ければ円に並べる。
+    リンクの ethN は機器の名前で描く(vJunos EVO= et-0/0/<N-1>・vJunos-router/switch= ge-0/0/<N-1>・cEOS= Et<N>)。
   - 問題文の盤面の節は Task タブに出さず Topology タブへ移す(結線図と重複するため)。節には
     アドレス・AS など結線図に無い情報が載るので、消さずに置き場所だけ変える。切り分けは
     render_html.split_topology。パックでは gen_pack が書いた q<N>.ws.html / q<N>.topo.html を使う。
@@ -73,6 +81,7 @@ from aiohttp import web
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
+import clab_ops                                        # noqa: E402
 import gen_pack                                        # noqa: E402
 import render_html                                     # noqa: E402
 
@@ -92,13 +101,30 @@ IF_ABBR = (("TenGigabitEthernet", "Te"), ("GigabitEthernet", "Gi"), ("FastEthern
 
 # 繋ぐ先: CML のラボ題名・タスクの URL・画面の見出し・盤面の節のページ(パックの q<N>.topo.html。無ければ None)・
 #         画面下端の帯に出すリンク [(表示, 行き先, 今ここか)](単発では空)
-#         操作記録のフォルダ名(パックでは問題 ID・単発ではラボ題名)
-Target = namedtuple("Target", "title task_src caption notes nav rec")
+#         操作記録のフォルダ名(パックでは問題 ID・単発ではラボ題名)・
+#         containerlab だけの問題ならその問題 ID(CML の問題は None。BL-275)
+Target = namedtuple("Target", "title task_src caption notes nav rec clab", defaults=(None,))
 
 
 def lab_title(problem_id):
     """問題 ID → CML のラボ題名(gen_cml_lab.py・lab_up.yml と同じ規則)。"""
     return "CCNP-LAB-" + hashlib.md5(problem_id.encode()).hexdigest()[:8]
+
+
+def problem_meta(repo, problem_id):
+    try:
+        with open(os.path.join(repo, "problems", problem_id, "problem.yml"), encoding="utf-8") as fh:
+            return yaml.safe_load(fh) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+
+
+def target_lab(repo, problem_id):
+    """問題 ID → (繋ぐ先の名前, containerlab の問題 ID か None)。
+    containerlab だけの問題(platform: clab)は CML の題名と混ざらない名前 clab:<ID> にする。"""
+    if problem_meta(repo, problem_id).get("platform") == "clab":
+        return "clab:" + problem_id, problem_id
+    return lab_title(problem_id), None
 
 
 # --------------------------------------------------------------------------
@@ -134,6 +160,142 @@ class Cml:
                 self._get(sess, f"/labs/{lab_id}/topology", exclude_configurations="true"),
                 self._get(sess, f"/labs/{lab_id}/lab_element_state"))
             return lab_id, topo, state
+
+
+# --------------------------------------------------------------------------
+# containerlab(BL-275): 盤面は clab.yml・状態は szk-cl01 の docker・コンソールは szk-cl01 を踏み台にした SSH
+# --------------------------------------------------------------------------
+class Clab:
+    def __init__(self, repo):
+        lv = {}
+        path = os.path.join(repo, "group_vars", "all", "local.yml")
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as fh:
+                lv = yaml.safe_load(fh) or {}
+        self.repo = repo
+        self.host, self.user = lv.get("clab_host"), lv.get("clab_username")
+        # 機器のログイン: Junos= vrnetlab の既定(grade.yml・clab_ops.py connect と同じ値)・cEOS= containerlab の既定
+        self.login = {"junos": (lv.get("clab_node_username") or "admin", lv.get("clab_node_password") or "admin@123"),
+                      "eos": (lv.get("clab_eos_username") or "admin", lv.get("clab_eos_password") or "admin")}
+
+    def spec(self, problem_id):
+        """(problem.yml, clab.yml の中身)。clab_topology が無い・読めない時は RuntimeError。"""
+        pm = problem_meta(self.repo, problem_id)
+        rel = pm.get("clab_topology")
+        if not rel:
+            raise RuntimeError(f"{problem_id}: problem.yml has no clab_topology")
+        with open(os.path.join(self.repo, "problems", problem_id, rel), encoding="utf-8") as fh:
+            return pm, yaml.safe_load(fh) or {}
+
+    async def fetch(self, problem_id):
+        """(problem.yml, clab.yml, 動いているノード {名前(小文字): {ips, state}})。ラボが動いていなければ None。"""
+        if not self.host or not self.user:
+            raise RuntimeError("group_vars/all/local.yml has no clab_host / clab_username")
+        pm, spec = self.spec(problem_id)
+        live = await asyncio.to_thread(clab_ops.lab_nodes, f"{self.user}@{self.host}", spec.get("name", ""))
+        if live is None:
+            raise RuntimeError(f"cannot reach the containerlab host {self.host}")
+        return (pm, spec, live) if live else None
+
+    async def open(self, info, cols, rows):
+        """ノードの対話セッション → (閉じる順の接続の一覧, プロセス)。
+        Junos・EOS は szk-cl01 を踏み台に管理アドレスへ SSH、FRR・Linux は szk-cl01 の docker exec(パスワード不要)。"""
+        term = {"term_type": "xterm-256color", "term_size": (cols, rows), "encoding": None}
+        # config=[]: ~/.ssh/config を読まない(172.20.20.* の ProxyJump を踏み台の先でもう一度当てないように)
+        outer = await asyncssh.connect(self.host, username=self.user, known_hosts=None, config=[],
+                                       keepalive_interval=30, connect_timeout=15)
+        conns = [outer]
+        try:
+            if info["family"] in ("frr", "linux"):
+                shell = "vtysh" if info["family"] == "frr" else \
+                    "sh -c 'command -v bash >/dev/null 2>&1 && exec bash || exec sh'"
+                proc = await outer.create_process(f"docker exec -it {info['container']} {shell}", **term)
+            else:
+                user, password = self.login[info["family"]]
+                inner = await outer.connect_ssh(info["ip"], username=user, password=password, known_hosts=None,
+                                                client_keys=None, config=[], keepalive_interval=30,
+                                                connect_timeout=15)
+                conns.insert(0, inner)
+                proc = await inner.create_process(**term)
+        except BaseException:
+            for c in conns:
+                c.close()
+            raise
+        return conns, proc
+
+
+def clab_if(kind, name):
+    """clab.yml のリンクの ethN → 機器の中の名前(図に出す名前)。eth0 は管理網・ethN 以外(別名で書いたもの)はそのまま。"""
+    m = re.fullmatch(r"eth(\d+)", str(name))
+    if not m or m.group(1) == "0":
+        return str(name)
+    n, k = int(m.group(1)), str(kind).lower()
+    if "vjunosevolved" in k:
+        return f"et-0/0/{n - 1}"
+    if "vjunosrouter" in k or "vjunosswitch" in k:
+        return f"ge-0/0/{n - 1}"
+    if k in ("ceos", "arista_ceos"):
+        return f"Et{n}"
+    return str(name)
+
+
+def clab_category(nd):
+    kind = str((nd or {}).get("kind", "")).lower()
+    fam = clab_ops.node_family(nd)
+    if kind in ("bridge", "ovs-bridge"):
+        return "infra"
+    if "vjunosswitch" in kind or fam == "eos":
+        return "sw"
+    if fam in ("junos", "frr"):
+        return "rt"
+    return "host"
+
+
+def clab_model(pm, spec, live):
+    """clab.yml とノードの状態 → 画面用のモデル(build_model と同じ形)＋ラベル → 接続情報。
+    ラベルは problem.yml の clab_nodes のつづり(JUN01 など)。そこに無いノードは名前を大文字にする(ブリッジはそのまま)。"""
+    topo = spec.get("topology") or {}
+    nodes = topo.get("nodes") or {}
+    spell = {str(k).lower(): str(k) for k in (pm.get("clab_nodes") or {})}
+    addr = {str(k).lower(): str(v) for k, v in (pm.get("clab_nodes") or {}).items()}
+    label = {}
+    for name, nd in nodes.items():
+        low = str(name).lower()
+        label[name] = spell.get(low) or (str(name) if clab_category(nd) == "infra" else str(name).upper())
+    # 座標: labels の graph-posX / graph-posY。無いノードは円の上に宣言の順で(2 台なら左右)
+    missing = [n for n, nd in nodes.items()
+               if not {"graph-posX", "graph-posY"} <= set(((nd or {}).get("labels") or {}))]
+    r = max(110.0, 190 * len(missing) / (2 * math.pi))
+    auto = {n: (-r * math.cos(2 * math.pi * i / len(missing)), r * math.sin(2 * math.pi * i / len(missing)))
+            for i, n in enumerate(missing)}
+    out_nodes, info = [], {}
+    for name, nd in nodes.items():
+        nd = nd or {}
+        lab = nd.get("labels") or {}
+        x, y = auto[name] if name in auto else (float(lab["graph-posX"]), float(lab["graph-posY"]))
+        cat, fam = clab_category(nd), clab_ops.node_family(nd)
+        ent = live.get(str(name).lower()) or {}
+        console = cat != "infra" and fam in ("junos", "eos", "frr", "linux")
+        out_nodes.append({"label": label[name], "def": str(nd.get("kind", "")), "kind": cat, "x": x, "y": y,
+                          "state": ent.get("state", ""), "console": console, "pty": console})
+        if console:
+            ip = addr.get(str(name).lower()) or nd.get("mgmt-ipv4") or (ent.get("ips") or [None])[0]
+            info[label[name]] = {"family": fam, "ip": ip,
+                                 "container": f"clab-{spec.get('name', '')}-{str(name).lower()}"}
+    out_links = []
+    for lk in topo.get("links") or []:
+        ends = []
+        for ep in (lk or {}).get("endpoints") or []:
+            node, ifname = (ep.get("node"), ep.get("interface")) if isinstance(ep, dict) else \
+                (str(ep).split(":", 1) + [""])[:2]
+            ends.append((node, ifname))
+        if len(ends) != 2 or any(n not in nodes for n, _ in ends) or ends[0][0] == ends[1][0]:
+            continue                          # host:・mgmt-net: など盤面の外への口は描かない
+        (na, ia), (nb, ib) = ends
+        out_links.append({"a": label[na], "b": label[nb],
+                          "a_if": abbr_if(clab_if((nodes[na] or {}).get("kind", ""), ia)),
+                          "b_if": abbr_if(clab_if((nodes[nb] or {}).get("kind", ""), ib))})
+    return {"nodes": out_nodes, "links": out_links}, info
 
 
 # --------------------------------------------------------------------------
@@ -266,7 +428,7 @@ def topo_svg(model, gap=190):
         n = b["n"]
         cls = f'nd k-{n["kind"]}' + (" has-con" if n["console"] else "")
         attr = f' data-node="{html.escape(label)}" tabindex="0" role="button"' if n["console"] else ""
-        up = "up" if n["state"] == "BOOTED" else "down"
+        up = "up" if n["state"] in ("BOOTED", "healthy", "running") else "down"   # CML／containerlab の docker
         parts.append(
             f'<g class="{cls}"{attr}><title>{html.escape(n["def"])} — {html.escape(n["state"] or "?")}</title>'
             f'<rect x="{b["cx"] - b["w"] / 2:.1f}" y="{b["cy"] - b["h"] / 2:.1f}" width="{b["w"]}" '
@@ -309,7 +471,8 @@ def _view(request):
     if ":" in host:
         host = f"[{host}]"
     nav = [("‹ Portal", f"{request.scheme}://{host}:{app['pack_port']}/", False), (lid, "", True)]
-    tgt = Target(lab_title(lid), "task?learn=" + lid, lid, None, nav, lid)
+    title, clab = target_lab(app["repo"], lid)
+    tgt = Target(title, "task?learn=" + lid, lid, None, nav, lid, clab)
     return ChainMap({"fixed": tgt, "task": task, "learn": lid}, app)
 
 
@@ -344,18 +507,30 @@ def resolve(app, request):
         built_lab = i.get("kind") == "lab" and i.get("ref") and i.get("src")
         nav.append((f"Q{i['no']}", f"lab?pack={pack}&no={i['no']}" if built_lab else base + f"q{i['no']}.html",
                     i["no"] == n))
-    return Target(lab_title(it["ref"]), base + page, f"{pack} · Q{n}",
-                  notes if os.path.exists(notes) else None, nav, it["ref"])
+    title, clab = target_lab(app["repo"], it["ref"])
+    return Target(title, base + page, f"{pack} · Q{n}",
+                  notes if os.path.exists(notes) else None, nav, it["ref"], clab)
 
 
-async def load_topo(app, title):
-    """CML からラボを読み直し、そのラボで接続を許すノード名の集合も更新する。"""
-    got = await app["cml"].fetch(title)
-    if got is None:
-        app["nodes"].pop(title, None)
-        return None
-    _lab_id, topo, state = got
-    model = build_model(topo, state)
+async def load_topo(app, tgt):
+    """ラボを読み直し(CML か containerlab)、そのラボで接続を許すノード名の集合も更新する。
+    containerlab ではノードごとの接続情報(app["clab_info"])も更新する。"""
+    title = tgt.title
+    if tgt.clab:
+        got = await app["clab"].fetch(tgt.clab)
+        if got is None:
+            app["nodes"].pop(title, None)
+            app["clab_info"].pop(title, None)
+            return None
+        model, info = clab_model(*got)
+        app["clab_info"][title] = info
+    else:
+        got = await app["cml"].fetch(title)
+        if got is None:
+            app["nodes"].pop(title, None)
+            return None
+        _lab_id, topo, state = got
+        model = build_model(topo, state)
     app["nodes"][title] = {n["label"] for n in model["nodes"] if n["console"]}
     return model
 
@@ -458,15 +633,18 @@ async def h_topo(request):
     if tgt is None:
         return web.json_response({"error": "no such lab"}, status=404)
     notes = _has_notes(app, tgt)              # 結線図が出せない時も、問題文の盤面の節は読めるようにする
+    where = "containerlab" if tgt.clab else "CML"
     try:
-        model = await load_topo(app, tgt.title)
+        model = await load_topo(app, tgt)
     except Exception as e:
-        return web.json_response({"error": f"CML API: {e}", "notes": notes}, status=502)
+        return web.json_response({"error": f"{'containerlab' if tgt.clab else 'CML API'}: {e}", "notes": notes},
+                                 status=502)
     if model is None:
         return web.json_response(
-            {"error": "This lab is not running on CML (not deployed yet, or already torn down).",
+            {"error": f"This lab is not running on {where} (not deployed yet, or already torn down).",
              "notes": notes}, status=404)
-    nodes = [{k: n[k] for k in ("label", "def", "kind", "state", "console")} for n in model["nodes"]]
+    # pty= 端末の大きさが機器へ届く接続(containerlab の SSH・docker exec)。Fit device to console は打ち込まずに済む
+    nodes = [{k: n.get(k, False) for k in ("label", "def", "kind", "state", "console", "pty")} for n in model["nodes"]]
     return web.json_response({"nodes": nodes, "svg": topo_svg(model), "notes": notes})
 
 
@@ -523,7 +701,7 @@ async def h_console(request):
     node = request.query.get("node", "")
     if node not in app["nodes"].get(tgt.title, ()):
         try:
-            await load_topo(app, tgt.title)   # 画面より先に WS が来た時・ノードが増えた時
+            await load_topo(app, tgt)         # 画面より先に WS が来た時・ノードが増えた時
         except Exception:
             pass
     if node not in app["nodes"].get(tgt.title, ()):
@@ -536,19 +714,29 @@ async def h_console(request):
 
     ws = web.WebSocketResponse(heartbeat=30, max_msg_size=1 << 20)
     await ws.prepare(request)
-    cml = app["cml"]
-    conn = None
+    conns = []
     try:
-        conn = await asyncssh.connect(cml.host, username=cml.user, password=cml.password,
-                                      known_hosts=None, client_keys=None,
-                                      keepalive_interval=30, connect_timeout=15)
-        proc = await conn.create_process(f"open /{tgt.title}/{node}/0", encoding=None,
-                                         term_type="xterm-256color", term_size=(cols, rows))
+        if tgt.clab:
+            info = (app["clab_info"].get(tgt.title) or {}).get(node)
+            if info is None or (info["family"] in ("junos", "eos") and not info["ip"]):
+                raise RuntimeError(f"no management address for {node} (problem.yml clab_nodes)")
+            conns, proc = await app["clab"].open(info, cols, rows)
+        else:
+            cml = app["cml"]
+            conns = [await asyncssh.connect(cml.host, username=cml.user, password=cml.password,
+                                            known_hosts=None, client_keys=None,
+                                            keepalive_interval=30, connect_timeout=15)]
+            proc = await conns[0].create_process(f"open /{tgt.title}/{node}/0", encoding=None,
+                                                 term_type="xterm-256color", term_size=(cols, rows))
     except Exception as e:
-        await ws.send_str(f"[bridge] cannot reach the console server: {e}")
+        if tgt.clab:
+            await ws.send_str(f"[bridge] cannot open a session on {node}: {e or type(e).__name__}"
+                              " (if the device is still starting, wait until its dot turns green)")
+        else:
+            await ws.send_str(f"[bridge] cannot reach the console server: {e}")
         await ws.close()
-        if conn:
-            conn.close()
+        for c in conns:
+            c.close()
         return ws
 
     rec = Recorder(app["record"], tgt.rec, node)
@@ -589,7 +777,8 @@ async def h_console(request):
             t.cancel()
         rec.write("close")
         rec.close()
-        conn.close()
+        for c in conns:
+            c.close()
         if not ws.closed:
             await ws.close(message=b"console closed")
     return ws
@@ -659,7 +848,15 @@ def _learn_view(app):
 
 
 def _learn_reset_nodes(app):
-    """やり直しで戻す機器の名前(確認の文に出す)= IOS XR の機器・xe_reset_nodes・linux_reset_exec(topologies/xr_reset.py と同じ決め方)。"""
+    """やり直しで戻す機器の名前(確認の文に出す)= IOS XR の機器・xe_reset_nodes・linux_reset_exec(topologies/xr_reset.py と同じ決め方)。
+    containerlab の問題は startup-config からラボごと作り直すので、コンソールを持つ全ノード。"""
+    if app["fixed"].clab:
+        try:
+            pm, spec = app["clab"].spec(app["learn"])
+        except (OSError, RuntimeError, yaml.YAMLError):
+            return []
+        model, _info = clab_model(pm, spec, {})
+        return [n["label"] for n in model["nodes"] if n["console"]]
     try:
         with open(os.path.join(app["repo"], "problems", app["learn"], "problem.yml"), encoding="utf-8") as fh:
             pm = yaml.safe_load(fh) or {}
@@ -669,16 +866,17 @@ def _learn_reset_nodes(app):
     return [n for n in pm.get("target_nodes") or [] if fams.get(n) == "iosxr" or n in xe or n in lx]
 
 
-_TASK_HEAD = re.compile(r"^### (?:Task|課題) ((?:M\d+|[A-Z])-\d+)\b.*$", re.M)
-_UNIT_HEAD = re.compile(r"^## (M(\d+)\b.*)$", re.M)
+# 課題の番号= 英大文字 1 字＋単元の番号＋課題の番号(XR の M2-1・Junos の J0-1・BL-275)か、単元の番号の無い「S-1」(BL-261)
+_TASK_HEAD = re.compile(r"^### (?:Task|課題) ((?:[A-Z]\d+|[A-Z])-\d+)\b.*$", re.M)
+_UNIT_HEAD = re.compile(r"^## (([A-Z])(\d+)\b.*)$", re.M)
 _ANY_HEAD = re.compile(r"^## (.+)$", re.M)
 
 
 def _task_sid(tid, by_title):
-    """課題の見出しの番号 → learn.yml の課題 ID。「M2-1」は規約どおり m2t1。M 番号を持たない課題(「S-1」など・BL-261)は
-    learn.yml の title.en の頭(「S-1  …」)で引く。"""
-    m = re.match(r"M(\d+)-(\d+)$", tid)
-    return f"m{m.group(1)}t{m.group(2)}" if m else by_title.get(tid, "")
+    """課題の見出しの番号 → learn.yml の課題 ID。「M2-1」は規約どおり m2t1(Junos の「J0-1」は j0t1)。単元の番号を持たない課題
+    (「S-1」など・BL-261)は learn.yml の title.en の頭(「S-1  …」)で引く。"""
+    m = re.match(r"([A-Z])(\d+)-(\d+)$", tid)
+    return f"{m.group(1).lower()}{m.group(2)}t{m.group(3)}" if m else by_title.get(tid, "")
 
 
 def _learn_texts(app):
@@ -713,7 +911,7 @@ def _learn_texts(app):
         for part in parts[1:]:
             um = _UNIT_HEAD.match(part)
             if um:
-                uid, title = f"m{um.group(2)}", um.group(1)
+                uid, title = f"{um.group(2).lower()}{um.group(3)}", um.group(1)
             elif _TASK_HEAD.search(part) and not re.match(r"## (Topology|トポロジ)", part):
                 # M 番号を持たない単元(「## The services side by side」の下に「### Task S-1」…)も単元として扱う
                 n_other += 1
@@ -835,10 +1033,12 @@ async def h_learn(request):
         v["tries"] = tries.get(v["id"], [])
         v["task"] = texts["tasks"].get(v["id"], {})
         v["verify"] = verify.get(v["id"], {})
-        m = re.match(r"(m\d+)t", v["id"])
+        m = re.match(r"([a-z]\d+)t", v["id"])
         v["unit"] = texts["task_unit"].get(v["id"]) or (m.group(1) if m else "")
     return web.json_response({"enabled": True, "steps": steps, "reading": reading,
-                              "rules": texts["rules"], "units": texts["units"], "reset_nodes": _learn_reset_nodes(app)},
+                              "rules": texts["rules"], "units": texts["units"], "reset_nodes": _learn_reset_nodes(app),
+                              # containerlab のやり直し= 作り直し(数分かかり、開いているコンソールは切れる)
+                              "reset_rebuild": bool(app["fixed"].clab)},
                              headers={"Cache-Control": "no-store"})
 
 
@@ -856,7 +1056,33 @@ async def h_learn_hint(request):
     return web.json_response({"enabled": True, "steps": _learn_view(app)})
 
 
-_REPORT_LINE = re.compile(r"^\s*-?\s*'?\s*(\[(?:PASS|FAIL)\].*?|未充足:.*?|合計:.*?)'?\s*$")
+_REPORT_LINE = re.compile(r"^\s*(\[(?:PASS|FAIL)\].*|未充足:.*|合計:.*)$")
+
+
+def _report_items(text):
+    """ansible の YAML 出力の msg のリストを 1 項目ずつに戻す。長い項目は折り返されて次の行へ続き(字下げだけで「- 」が無い)、
+    引用符で囲まれた項目の中の ' は '' になっている。折り返しを 1 行へつなぎ、引用符を外す(2026-11-14: 課題名が途中で切れていた)。"""
+    items, cur = [], None
+    for ln in text.splitlines():
+        m = re.match(r"^\s*- (.*)$", ln)
+        if m:
+            if cur is not None:
+                items.append(cur)
+            cur = m.group(1)
+        elif cur is not None and ln.startswith(" ") and ln.strip():
+            cur += " " + ln.strip()
+        elif cur is not None:
+            items.append(cur)
+            cur = None
+    if cur is not None:
+        items.append(cur)
+    out = []
+    for it in items:
+        it = it.strip()
+        if len(it) >= 2 and it[0] == it[-1] == "'":
+            it = it[1:-1].replace("''", "'")
+        out.append(it.strip())
+    return out
 
 
 async def h_learn_check(request):
@@ -894,7 +1120,7 @@ async def h_learn_check(request):
         text = raw.decode("utf-8", "replace")
         # 最終結果の節だけを読む(途中の試行の表示と重ならないように)
         tail = text[text.rfind("TASK [最終結果]"):] if "TASK [最終結果]" in text else text
-        lines = [m.group(1).strip() for m in map(_REPORT_LINE.match, tail.splitlines()) if m]
+        lines = [m.group(1).strip() for m in map(_REPORT_LINE.match, _report_items(tail)) if m]
         # 画面は英語が基本なので、採点の表示から日本語の飾りを落とす(配点・合計は出さない= 通ったかどうかだけ)
         lines = [re.sub(r"^(\[(?:PASS|FAIL)\]) \(\+\s*\d+ 点\) ", r"\1 ", ln).replace("未充足(raw):", "unmet:").replace("未充足:", "unmet:")
                  for ln in lines if not ln.startswith("合計:")]
@@ -916,25 +1142,31 @@ async def h_learn_reset(request):
         return web.json_response({"busy": True})
     async with app["learn_lock"]:
         repo = app["repo"]
-        fd, vault = tempfile.mkstemp(prefix="ccnp-learn-")
-        os.write(fd, b"CCNP\n")
-        os.close(fd)
+        if app["fixed"].clab:
+            # containerlab の問題(BL-275)= lab.sh reset と同じく startup-config から作り直す(vJunos EVO は数分)
+            argv, timeout, vault = [os.path.join(repo, ".venv/bin/python3"), os.path.join(repo, "topologies/clab_ops.py"),
+                                    "deploy", "--repo", repo, "--problem", app["learn"], "--reconfigure"], 1200, None
+        else:
+            fd, vault = tempfile.mkstemp(prefix="ccnp-learn-")
+            os.write(fd, b"CCNP\n")
+            os.close(fd)
+            argv, timeout = [os.path.join(repo, ".venv/bin/ansible-playbook"), os.path.join(repo, "playbooks/xr_reset.yml"),
+                             "-e", f"problem={app['learn']}", "--vault-password-file", vault], 300
         proc = await asyncio.create_subprocess_exec(
-            os.path.join(repo, ".venv/bin/ansible-playbook"), os.path.join(repo, "playbooks/xr_reset.yml"),
-            "-e", f"problem={app['learn']}", "--vault-password-file", vault,
-            cwd=repo, stdin=asyncio.subprocess.DEVNULL,
+            *argv, cwd=repo, stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
         try:
-            raw, _ = await asyncio.wait_for(proc.communicate(), timeout=300)
+            raw, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except asyncio.TimeoutError:
             proc.kill()
             return web.json_response({"error": "reset timed out"})
         finally:
-            os.unlink(vault)
+            if vault:
+                os.unlink(vault)
         text = raw.decode("utf-8", "replace")
         if proc.returncode != 0:
             print(text[-2000:], flush=True)
-            msgs = re.findall(r'"(ERROR [^"]+)"', text)
+            msgs = re.findall(r'"(ERROR [^"]+)"', text) or re.findall(r"^★(.+)$", text, re.M)
             return web.json_response({"error": "The lab could not be reset. " + (" / ".join(msgs) or "See the server log.")})
         log = _learn_log_path(app)
         if os.path.exists(log):
@@ -969,13 +1201,13 @@ async def _follow_parent(app):
     app["parent_watch"] = asyncio.ensure_future(watch())
 
 
-def make_app(repo=REPO, pack_port=8899, lab=None, task=None, with_parent=None, record=True, learn=None):
-    """lab を渡すと単発(そのラボに固定)、渡さなければパック常駐。"""
+def make_app(repo=REPO, pack_port=8899, lab=None, task=None, with_parent=None, record=True, learn=None, clab=None):
+    """lab を渡すと単発(そのラボに固定)、渡さなければパック常駐。clab= containerlab だけの問題の ID(lab は clab:<ID>)。"""
     app = web.Application()
     if with_parent:
         app["with_parent"] = with_parent
         app.on_startup.append(_follow_parent)
-    app["fixed"] = Target(lab, "task", learn or lab, None, [], learn or lab) if lab else None
+    app["fixed"] = Target(lab, "task", learn or clab or lab, None, [], learn or clab or lab, clab) if lab else None
     app["task"] = task
     app["repo"] = os.path.abspath(repo)
     app["learn"] = learn                      # 学習モードの問題 ID(単発のみ)
@@ -985,7 +1217,9 @@ def make_app(repo=REPO, pack_port=8899, lab=None, task=None, with_parent=None, r
     # コンソールの操作記録の置き場(BL-243)。None = 記録しない
     app["record"] = os.path.join(os.path.abspath(repo), "records", "console") if record else None
     app["cml"] = load_cml()
+    app["clab"] = Clab(os.path.abspath(repo))
     app["nodes"] = {}                         # ラボ題名 → コンソールを開いてよいノード名の集合
+    app["clab_info"] = {}                     # clab:<ID> → {ラベル: {family, ip, container}}(containerlab の接続先)
     app.router.add_get("/", h_root)
     app.router.add_get("/lab", h_page)
     app.router.add_get("/task", h_task)
@@ -1203,7 +1437,7 @@ document.documentElement.style.setProperty('--z', String(wsZoom()));
   <span class="fz">Console text
     <button type="button" id="fminus" title="Smaller console text">A−</button><span id="fsize" title="Double-click: default size"></span><button type="button" id="fplus" title="Larger console text">A+</button>
   </span>
-  <button type="button" id="fitdev" title="Tell the device in the open console tab how big this console is, so that editors (vim, the XR route-policy editor) and pagers use all of it. It types terminal length and width (IOS XR, IOS) or stty rows and cols (Linux). Press it at the prompt, not inside an editor, and again after you resize.">Fit device to console</button>
+  <button type="button" id="fitdev" title="Tell the device in the open console tab how big this console is, so that editors (vim, the XR route-policy editor) and pagers use all of it. It types terminal length and width (IOS XR, IOS) or stty rows and cols (Linux). Press it at the prompt, not inside an editor, and again after you resize. Devices in a containerlab lab (Junos, EOS, FRR) get the size over SSH by themselves, so nothing is typed there.">Fit device to console</button>
   <button type="button" id="cfull" title="Give the whole window to the console (hide tasks, topology and reading). Press again to bring them back.">Console only</button>
   <button type="button" id="lang" hidden title="Switch the task text between English and Japanese"></button>
   <button type="button" id="layout"></button></footer>
@@ -1259,7 +1493,7 @@ async function loadTopo(){
     $('#topo').innerHTML = t.svg + '<p class="hint">Click a device to open its console. Click elsewhere on the diagram to enlarge it.</p>';
     for (const n of t.nodes){
       if (n.console && !sessions[n.label]) addTab(n.label);
-      if (sessions[n.label]) sessions[n.label].def = n.def;
+      if (sessions[n.label]){ sessions[n.label].def = n.def; sessions[n.label].pty = !!n.pty; }
     }
     markCurrent();
   }
@@ -1542,6 +1776,11 @@ $('#fitdev').addEventListener('click', () => {
   const s = sessions[active];
   if (!s || !s.term || !s.ws || s.ws.readyState !== WebSocket.OPEN){ alert('Open a console tab first.'); return; }
   fitTerm(s);
+  if (s.pty){                                 // SSH・docker exec の接続(containerlab)は端末の大きさが機器へ届く。打ち込まない
+    s.ws.send(JSON.stringify({resize:[s.term.cols, s.term.rows]}));
+    s.term.write(`\r\n\x1b[33m[${s.term.cols} × ${s.term.rows}: this console passes its size to ${s.label} by itself]\x1b[0m\r\n`);
+    s.term.focus(); return;
+  }
   const cmds = sizeCmds(s.def, s.term.cols, s.term.rows);
   if (!cmds){ alert(`${s.label}: not supported for this kind of device (${s.def || 'unknown'}).`); s.term.focus(); return; }
   let i = 0;
@@ -1624,7 +1863,7 @@ window.addEventListener('message', ev => {
 //   本文はサーバが開いた分だけ返す。言語は問題文の切替に合わせる(1 版しか無ければ英語)。
 let learnSteps = null, learnBusy = null, learnReading = null, learnRead = {};
 // 課題カード(BL-255): 課題文・単元の見出し・冒頭の約束。最初の読み込みで受け取って持っておく(確認・ヒントの応答には入らない)
-let learnTask = {}, learnUnit = {}, learnUnits = {}, learnRules = null, rulesOpen = false, learnResetNodes = [];
+let learnTask = {}, learnUnit = {}, learnUnits = {}, learnRules = null, rulesOpen = false, learnResetNodes = [], learnRebuild = false;
 let learnTries = {}, tryOpen = null;          // 課題ごとの「やってみる」・小窓に出している課題
 let learnVerify = {}, verifyOpen = new Set();  // 確かめ方の例(BL-266)・開いている課題(記録しない)
 function learnLang(){ return window.ccnpLang === 'ja' ? 'ja' : 'en'; }
@@ -1634,12 +1873,14 @@ const LT = {en: {check:'Check', checking:'Checking…', hint:'Hint', sol:'Refere
                  busy:'Another check is still running.', reset:'Start over', resetting:'Resetting…',
                  resetq:'Start the whole lab over?\n\n{nodes} go back to the state they had right after the lab was built (your changes are discarded), and every task here returns to not yet checked, with no hints opened.',
                  resetdone:'The lab is back at its starting state.',
+                 resetslow:'\n\nThe devices are rebuilt from their startup configuration. This takes a few minutes, and the open consoles disconnect (press Enter in a console to reconnect when its device is up again).',
                  verify:'How to verify', tryit:'Try it', trytitle:'Try it', tryread:'Open in Reading', close:'Close', mini:'Minimise', restore:'Expand'},
             ja: {check:'確認', checking:'確認中…', hint:'ヒント', sol:'模範解', pass:'通過', fail:'未充足',
                  none:'自己確認', read:'読み物:', rules:'進め方の約束', note:'確認は機器のいまの状態を読みます(約 15 秒)。設定モードを抜けてから押してください。ヒントは 1 段ずつ開き、開いた段数は記録されます。確かめ方はいつでも開け、記録されません。',
                  busy:'別の確認がまだ実行中です。', reset:'最初からやり直す', resetting:'戻しています…',
                  resetq:'ラボ全体を最初からやり直しますか？\n\n{nodes} をラボを作った直後の状態へ戻し(あなたの変更は消えます)、ここの課題もすべて未確認・ヒント未開封に戻します。',
                  resetdone:'ラボを最初の状態に戻しました。',
+                 resetslow:'\n\n機器は startup-config から作り直します。数分かかり、開いているコンソールは切れます(機器が起動し直したら、コンソールで Enter を押すとつながり直します)。',
                  verify:'確かめ方', tryit:'やってみる', trytitle:'やってみる', tryread:'読み物で開く', close:'閉じる', mini:'たたむ', restore:'広げる'}};
 function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 // ---- 「やってみる」の小窓 ----
@@ -1788,7 +2029,8 @@ async function learnReset(){
   const T = LT[learnLang()];
   const ns = learnResetNodes.length ? learnResetNodes : ['XR01'];
   const names = learnLang() === 'ja' ? ns.join('・') : (ns.length < 2 ? ns.join('') : ns.slice(0, -1).join(', ') + ' and ' + ns[ns.length - 1]);
-  if (!confirm(T.resetq.replace('{nodes}', names).replace(' go back', ns.length < 2 ? ' goes back' : ' go back'))) return;
+  if (!confirm(T.resetq.replace('{nodes}', names).replace(' go back', ns.length < 2 ? ' goes back' : ' go back')
+               + (learnRebuild ? T.resetslow : ''))) return;
   learnBusy = '*reset'; paintSteps();
   try {
     const r = await fetch('api/learn/reset?' + Q, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
@@ -1818,7 +2060,7 @@ async function learnPost(kind, id){
     learnSteps = d.steps;
     for (const st of d.steps){ learnRead[st.id] = st.read || []; learnTask[st.id] = st.task || {}; learnUnit[st.id] = st.unit || '';
                                learnTries[st.id] = st.tries || []; learnVerify[st.id] = st.verify || {}; }
-    learnUnits = d.units || {}; learnRules = d.rules || null; learnResetNodes = d.reset_nodes || [];
+    learnUnits = d.units || {}; learnRules = d.rules || null; learnResetNodes = d.reset_nodes || []; learnRebuild = !!d.reset_rebuild;
     if (d.reading){ learnReading = d.reading; $('#readbtn').hidden = false; }
     // 課題カード(BL-255): 課題文はこのタブに入るので Task タブは出さない。Task の枠は読み込んだまま残す
     // (問題文の日英切替は、その枠が知らせてくる言語に合わせる作りのため)
@@ -1909,19 +2151,32 @@ def main():
     ap.add_argument("--lab", help="単発: この CML ラボ題名に固定する")
     ap.add_argument("--task", help="単発: 左のタブに出すタスクの Markdown")
     ap.add_argument("--learn", metavar="問題ID",
-                    help="単発: 学習モード(Steps タブ= 課題ごとの確認・段階式ヒント)。--lab / --task を省くと問題 ID から決める")
+                    help="単発: 学習モード(Steps タブ= 課題ごとの確認・段階式ヒント)。--lab / --task を省くと問題 ID から決める"
+                         "(platform: clab の問題は containerlab へ繋ぐ)")
+    ap.add_argument("--clab", metavar="問題ID",
+                    help="単発: containerlab だけの問題(platform: clab)に固定する。learn.yml の無い問題の動作確認用")
     ap.add_argument("--with-parent", type=int, metavar="PID",
                     help="この PID の親プロセスが終わったら自分も終わる(pack.sh serve が自分の PID を渡す)")
     ap.add_argument("--no-record", action="store_true",
                     help="コンソールの操作記録(records/console/)を書かない")
     a = ap.parse_args()
-    if a.learn:
-        if not os.path.exists(os.path.join(a.repo, "problems", a.learn, "learn.yml")):
-            sys.exit(f"problems/{a.learn}/learn.yml がありません")
-        a.lab = a.lab or lab_title(a.learn)
+    clab = None
+    if a.learn and not os.path.exists(os.path.join(a.repo, "problems", a.learn, "learn.yml")):
+        sys.exit(f"problems/{a.learn}/learn.yml がありません")
+    if a.clab:
+        if a.learn and a.learn != a.clab:
+            sys.exit("--learn と --clab に別の問題を指定しています")
+        if problem_meta(a.repo, a.clab).get("platform") != "clab":
+            sys.exit(f"{a.clab} は containerlab だけの問題ではありません(problem.yml に platform: clab が無い)")
+    pid = a.learn or a.clab
+    if pid:
+        title, clab = target_lab(a.repo, pid)
+        if clab and a.lab:
+            sys.exit("--lab は CML のラボ題名です。containerlab の問題には付けません")
+        a.lab = a.lab or title
         if not a.task:                            # lab.sh provision が置く作業コピー(英語版が既定・無ければ日本語版)
             for cand in ("Task.md", "問題.md"):
-                path = os.path.join(a.repo, "lab", a.learn, cand)
+                path = os.path.join(a.repo, "lab", pid, cand)
                 if os.path.exists(path):
                     a.task = path
                     break
@@ -1930,7 +2185,7 @@ def main():
     mode = f"単発 lab={a.lab}" if a.lab else "パック常駐"
     ready = f"ラボのワークスペース({mode})を http://{a.bind}:{a.port}/ で待ち受け中"
     try:
-        web.run_app(make_app(a.repo, a.pack_port, a.lab, a.task, a.with_parent, not a.no_record, a.learn),
+        web.run_app(make_app(a.repo, a.pack_port, a.lab, a.task, a.with_parent, not a.no_record, a.learn, clab),
                     host=a.bind, port=a.port,
                     print=lambda *_: print(ready, flush=True))     # 待ち受けに成功してから出す
     except OSError as e:                          # ポート使用中など。長いトレースを出さず 1 行で終わる

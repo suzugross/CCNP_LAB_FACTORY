@@ -1,0 +1,22 @@
+# J0 PoC 6: commit confirmed の後に設定モードを抜けても予約は残るか(XR は抜けると取り消す)・別のセッションから確定できるか
+JUN01 configure
+JUN01 set interfaces lo0 unit 0 description "confirm-exit test 1"
+JUN01 commit confirmed 1 comment "exit after confirmed"
+JUN01 exit
+JUN01 show system commit | match "^ *[01] "
+!sleep 75
+JUN01 show system commit | match "^ *[0-2] "
+JUN01 show configuration interfaces lo0 unit 0 description
+JUN01 configure
+JUN01 set interfaces lo0 unit 0 description "confirm-exit test 2"
+JUN01 commit confirmed 1 comment "confirm from another session"
+JUN01 exit
+JUN01:b configure
+JUN01:b commit check
+JUN01:b exit
+!sleep 75
+JUN01 show system commit | match "^ *[0-2] "
+JUN01 show configuration interfaces lo0 unit 0 description
+JUN01 configure
+JUN01 delete interfaces lo0 unit 0 description
+JUN01 commit and-quit

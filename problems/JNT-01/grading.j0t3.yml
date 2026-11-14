@@ -1,0 +1,26 @@
+# J0-3: JUN02 で MTU 9000 を commit confirmed で入れ、確定せずに自動で巻き戻させた(履歴の「by root via other」が commit confirmed のすぐ上)・
+# MTU 9000 が残っていない・FRR1 との隣接が Full に戻った。
+problem: JNT-01
+total_points: 100
+checks:
+  - name: "J0-3 JUN02: a confirmed commit was taken back automatically (an entry by root directly above it)"
+    node: JUN02
+    exec: junos
+    command: "show system commit"
+    raw:
+      - regex: 'by root via other\s*\n\s*\d+\s+\S+ \S+ \S+ by \S+ via cli commit confirmed'
+    points: 40
+  - name: "J0-3 JUN02: the MTU of et-0/0/1 is not 9000"
+    node: JUN02
+    exec: junos
+    command: "show configuration interfaces et-0/0/1"
+    raw:
+      - not_regex: 'mtu 9000'
+    points: 20
+  - name: "J0-3 JUN02: the adjacency with FRR1 is Full again"
+    node: JUN02
+    exec: junos
+    command: "show ospf neighbor"
+    raw:
+      - regex: '10\.0\.23\.2\s+et-0/0/1\.0\s+Full'
+    points: 40

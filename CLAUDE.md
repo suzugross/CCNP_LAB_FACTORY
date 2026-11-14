@@ -173,6 +173,19 @@
 - **xrdocs.io は自動で取得しない**（2026-10-20 ユーザ決定）。robots.txt が AI（ClaudeBot・Claude-Web・ChatGPT-User 等）を
   名指しで拒否しているため。必要な時はユーザに記事を読んで該当部分を貼ってもらい、貼られた内容を資料として扱う。
   取り方の詳細（Cisco Live はカタログ検索→EMEA の PDF 直リンク等）はメモ `source-gathering-howto` にある。
+- **Junos（Juniper）の教材・問題の信頼順**（2026-11-14 ユーザ了承・BL-275）。上の表の Cisco の段の代わりに使う。
+  IOS・XR と比べる記述の Cisco 側は上の表に従う。食い違いは上位が勝つ・公式と実機の食い違いは報告する・design.md に記録する（下の 1〜3）は同じ。
+
+  | 信頼順 | ソース | 取り方 |
+  |---|---|---|
+  | 1 | **Juniper 公式文書**（User Guide・CLI リファレンス・Release Notes）と**実機**（vJunos） | ★**www.juniper.net は robots.txt で全ロボットを拒否**しているので自動で取りに行かない。ユーザが PDF を落として `private/sources/juniper/` に置き、それを読む。実機は `?`・`help apropos`・出力 |
+  | 1.5 | **Juniper の公開技術資料**（Day One 本・ホワイトペーパー）と **RFC/IETF** | Day One も juniper.net の配布なのでユーザが落とす。RFC は直接読める。断定の根拠にする時は 1 でも確かめる（Cisco の 1.5 と同じ扱い） |
+  | 2 | **Juniper Support Portal の KB**・Juniper のコミュニティ | 自動で読める範囲で（robots.txt で許可）。補足どまり |
+
+  - **仮想機の制約は Junos の挙動と分けて書く**（ライセンスの警告・vJunos で動かない機能・Junos OS と Junos OS Evolved の差）。
+    本文では「この仮想機では」と断るか付録へ。
+  - **版を記録する**: 実機の版（例 Junos OS Evolved 26.2R1.7）と、参照した文書の題名・版。
+  - 試験の範囲（JNCIA など）を参照するなら、Juniper 公式の試験目標は「範囲」の根拠にだけ使い、事実の根拠にしない。
 
 1. **食い違いは上位が勝つ**。下位ソースの記述が公式／実機と違えば、公式／実機に合わせ、
    design.md か BACKLOG の該当行に「どこがどう違ったか」を残す。

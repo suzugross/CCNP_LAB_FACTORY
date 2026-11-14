@@ -552,6 +552,8 @@ MERMAID_INIT = """
                     '). Refer to the diagram source and the link list below.';
     el.parentNode.insertBefore(d, el);
   }
+  /* mermaid の構文エラーは Error でないオブジェクトで来ることがある(String(e) が [object Object] になる) */
+  function why(e){ return (e && (e.message || e.str)) || String(e); }
   var blocks = Array.prototype.slice.call(
                  document.querySelectorAll('pre.mermaid'));
   if(!window.mermaid){
@@ -569,14 +571,14 @@ MERMAID_INIT = """
     todo.forEach(function(el){ el.dataset.ccnpRun = '1'; });
     try{
       Promise.resolve(window.mermaid.run({nodes: todo}))
-        .catch(function(e){ todo.forEach(function(el){ note(el, String(e)); }); })
+        .catch(function(e){ todo.forEach(function(el){ note(el, why(e)); }); })
         .then(function(){
           todo.forEach(function(el){
             if(!el.querySelector('svg')) note(el, 'no output');
           });
         });
     }catch(e){
-      todo.forEach(function(el){ note(el, String(e)); });
+      todo.forEach(function(el){ note(el, why(e)); });
     }
   }
   try{
@@ -585,7 +587,7 @@ MERMAID_INIT = """
       securityLevel:'loose', flowchart:{htmlLabels:true, useMaxWidth:true}
     });
   }catch(e){
-    blocks.forEach(function(el){ note(el, String(e)); });
+    blocks.forEach(function(el){ note(el, why(e)); });
     return;
   }
   window.ccnpMermaid = run;

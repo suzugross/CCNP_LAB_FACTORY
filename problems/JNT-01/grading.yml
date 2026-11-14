@@ -1,0 +1,71 @@
+# JNT-01 の本採点(J0 の 4 課題の到達点)。学習ラボなのでノルマには数えない使い方をする(確認は学習モードの確認ボタン= grading.j0t*.yml)。
+problem: JNT-01
+total_points: 100
+checks:
+  - name: "J0-1 JUN01 and JUN02: link and lo0 addresses"
+    node: JUN02
+    exec: junos
+    command: "show configuration | display set"
+    raw:
+      - regex: 'set interfaces et-0/0/0 unit 0 family inet address 10\.0\.12\.2/30'
+      - regex: 'set interfaces et-0/0/1 unit 0 family inet address 10\.0\.23\.1/30'
+      - regex: 'set interfaces lo0 unit 0 family inet address 192\.168\.0\.2/32'
+    points: 10
+  - name: "J0-1 JUN01: link and lo0 addresses"
+    node: JUN01
+    exec: junos
+    command: "show configuration | display set"
+    raw:
+      - regex: 'set interfaces et-0/0/0 unit 0 family inet address 10\.0\.12\.1/30'
+      - regex: 'set interfaces lo0 unit 0 family inet address 192\.168\.0\.1/32'
+    points: 5
+  - name: "J0-2 JUN02: both OSPF neighbours are Full"
+    node: JUN02
+    exec: junos
+    command: "show ospf neighbor"
+    raw:
+      - regex: '10\.0\.12\.1\s+et-0/0/0\.0\s+Full'
+      - regex: '10\.0\.23\.2\s+et-0/0/1\.0\s+Full'
+    points: 15
+  - name: "J0-2 JUN01: the loopback of JUN01 reaches the loopback of FRR1"
+    node: JUN01
+    exec: junos
+    command: "ping 192.168.0.3 source 192.168.0.1 count 5 rapid"
+    raw:
+      - regex: '\b5 (packets )?received'
+    points: 10
+  - name: "J0-3 JUN02: a confirmed commit was taken back automatically"
+    node: JUN02
+    exec: junos
+    command: "show system commit"
+    raw:
+      - regex: 'by root via other\s*\n\s*\d+\s+\S+ \S+ \S+ by \S+ via cli commit confirmed'
+    points: 20
+  - name: "J0-3 JUN02: the MTU of et-0/0/1 is not 9000"
+    node: JUN02
+    exec: junos
+    command: "show configuration interfaces et-0/0/1"
+    raw:
+      - not_regex: 'mtu 9000'
+    points: 5
+  - name: "J0-4 JUN02: the static route to 198.51.100.0/24 is active with a preference above 150"
+    node: JUN02
+    exec: junos
+    command: "show route 198.51.100.0/24 exact"
+    raw:
+      - regex: '\*\[Static/(15[1-9]|1[6-9]\d|[2-9]\d\d|\d{4,})\]'
+    points: 15
+  - name: "J0-4 JUN02: its next hop is the loopback of FRR1"
+    node: JUN02
+    exec: junos
+    command: "show route 198.51.100.0/24 exact detail"
+    raw:
+      - regex: 'Protocol next hop: 192\.168\.0\.3\b'
+    points: 10
+  - name: "J0-4 JUN02: the loopback of JUN02 reaches 198.51.100.1"
+    node: JUN02
+    exec: junos
+    command: "ping 198.51.100.1 source 192.168.0.2 count 5 rapid"
+    raw:
+      - regex: '\b5 (packets )?received'
+    points: 10

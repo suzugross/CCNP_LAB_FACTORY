@@ -1,0 +1,136 @@
+# jpoc POC-CLABLEARN-01 j0-confirm-exit.txt 2026-11-14 11:23:01
+# J0 PoC 6: commit confirmed の後に設定モードを抜けても予約は残るか(XR は抜けると取り消す)・別のセッションから確定できるか
+
+## [JUN01] (open)
+Last login: Sat Nov 14 11:10:40 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set interfaces lo0 unit 0 description "confirm-exit test 1"
+set interfaces lo0 unit 0 description "confirm-exit test 1" 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit confirmed 1 comment "exit after confirmed"
+commit confirmed 1 comment "exit after confirmed" 
+commit confirmed will be automatically rolled back in 1 minutes unless confirmed
+commit complete
+
+# commit confirmed will be rolled back in 1 minute
+[edit]
+admin@jun01# 
+## [JUN01] exit
+exit 
+Exiting configuration mode
+
+# commit confirmed will be rolled back in 1 minute
+admin@jun01> 
+## [JUN01] show system commit | match "^ *[01] "
+show system commit | match "^ *[01] " 
+0   2026-11-14 11:23:04 UTC by admin via cli commit confirmed, rollback in 1mins
+1   2026-11-14 11:10:52 UTC by admin via cli
+
+# commit confirmed will be rolled back in 1 minute
+admin@jun01> 
+## (sleep 75s)
+
+## [JUN01] show system commit | match "^ *[0-2] "
+show system commit | match "^ *[0-2] " 
+0   2026-11-14 11:23:04 UTC by admin via cli commit confirmed, rollback in 1mins
+1   2026-11-14 11:10:52 UTC by admin via cli
+2   2026-11-14 11:10:49 UTC by admin via cli
+
+# commit confirmed will be rolled back in less than 1 minute
+admin@jun01> 
+## [JUN01] show configuration interfaces lo0 unit 0 description
+show configuration interfaces lo0 unit 0 description 
+description "confirm-exit test 1";
+
+# commit confirmed will be rolled back in less than 1 minute
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+# commit confirmed will be rolled back in less than 1 minute
+[edit]
+admin@jun01# 
+## [JUN01] set interfaces lo0 unit 0 description "confirm-exit test 2"
+set interfaces lo0 unit 0 description "confirm-exit test 2" 
+
+# commit confirmed will be rolled back in less than 1 minute
+[edit]
+admin@jun01# 
+## [JUN01] commit confirmed 1 comment "confirm from another session"
+commit confirmed 1 comment "confirm from another session" 
+commit confirmed will be automatically rolled back in 1 minutes unless confirmed
+commit complete
+
+# commit confirmed will be rolled back in 1 minute
+[edit]
+admin@jun01# 
+## [JUN01] exit
+exit 
+Exiting configuration mode
+
+# commit confirmed will be rolled back in 1 minute
+admin@jun01> 
+## [JUN01:b] (open)
+Last login: Sat Nov 14 11:23:01 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+# commit confirmed will be rolled back in 1 minute
+admin@jun01> 
+## [JUN01:b] configure
+configure 
+Entering configuration mode
+
+# commit confirmed will be rolled back in 1 minute
+[edit]
+admin@jun01# 
+## [JUN01:b] commit check
+commit check 
+configuration check succeeds
+
+[edit]
+admin@jun01# 
+## [JUN01:b] exit
+exit 
+Exiting configuration mode
+
+admin@jun01> 
+## (sleep 75s)
+
+## [JUN01] show system commit | match "^ *[0-2] "
+show system commit | match "^ *[0-2] " 
+0   2026-11-14 11:24:23 UTC by admin via cli commit confirmed, rollback in 1mins
+1   2026-11-14 11:23:04 UTC by admin via cli commit confirmed, rollback in 1mins
+2   2026-11-14 11:10:52 UTC by admin via cli
+
+admin@jun01> 
+## [JUN01] show configuration interfaces lo0 unit 0 description
+show configuration interfaces lo0 unit 0 description 
+description "confirm-exit test 2";
+
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] delete interfaces lo0 unit 0 description
+delete interfaces lo0 unit 0 description 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun01> 

@@ -1,0 +1,271 @@
+# jpoc POC-CLABLEARN-01 j0-session.txt 2026-11-14 11:08:27
+# J0 PoC 3: 2 つのセッション。既定の configure は候補設定を共有する・private は自分だけ・exclusive は他を締め出す
+
+## [JUN01:a] (open)
+Last login: Sat Nov 14 11:00:48 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01-test> 
+## [JUN01:a] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01-test# 
+## [JUN01:a] delete system host-name
+delete system host-name 
+
+[edit]
+admin@jun01-test# 
+## [JUN01:a] set system host-name jun01
+set system host-name jun01 
+
+[edit]
+admin@jun01-test# 
+## [JUN01:a] commit and-quit comment "J0 PoC: host-name back"
+commit and-quit comment "J0 PoC: host-name back" 
+Hint: static hostname is already set, so the specified transient hostname will not be used.
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01:a] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01:a] set interfaces lo0 unit 0 description "edit by a"
+set interfaces lo0 unit 0 description "edit by a" 
+
+[edit]
+admin@jun01# 
+## [JUN01:b] (open)
+Last login: Sat Nov 14 11:08:27 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01:b] configure
+configure 
+Entering configuration mode
+Users currently editing the configuration:
+  admin terminal pts/1 (pid 31322) on since 2026-11-14 11:08:31 UTC
+      [edit]
+The configuration has been changed but not committed
+
+[edit]
+admin@jun01# 
+## [JUN01:b] show | compare
+show | compare 
+[edit interfaces lo0 unit 0]
++    description "edit by a";
+
+[edit]
+admin@jun01# 
+## [JUN01:b] exit
+exit 
+The configuration has been changed but not committed
+Exit with uncommitted changes? [yes,no] (yes) 
+## [JUN01:b] no
+no 
+
+Exit aborted
+
+[edit]
+admin@jun01# 
+## [JUN01:b] rollback 0
+rollback 0 
+load complete
+
+[edit]
+admin@jun01# 
+## [JUN01:b] exit
+exit 
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01:a] show | compare
+show | compare 
+
+[edit]
+admin@jun01# 
+## [JUN01:a] set interfaces lo0 unit 0 description "edit by a"
+set interfaces lo0 unit 0 description "edit by a" 
+
+[edit]
+admin@jun01# 
+## [JUN01:b] configure private
+configure private 
+Users currently editing the configuration:
+  admin terminal pts/1 (pid 31322) on since 2026-11-14 11:08:31 UTC
+      [edit]
+error: shared configuration database modified
+
+admin@jun01> 
+## [JUN01:a] rollback 0
+rollback 0 
+load complete
+
+[edit]
+admin@jun01# 
+## [JUN01:a] exit
+exit 
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01:b] configure private
+configure private 
+warning: uncommitted changes will be discarded on exit
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01:b] set interfaces lo0 unit 0 description "private b"
+set interfaces lo0 unit 0 description "private b" 
+
+[edit]
+admin@jun01# 
+## [JUN01:a] configure
+configure 
+Entering configuration mode
+Users currently editing the configuration:
+  admin terminal pts/2 (pid 32466) on since 2026-11-14 11:08:39 UTC
+      private [edit]
+
+[edit]
+admin@jun01# 
+## [JUN01:a] show | compare
+show | compare 
+
+[edit]
+admin@jun01# 
+## [JUN01:a] set interfaces lo0 unit 0 description "shared a"
+set interfaces lo0 unit 0 description "shared a" 
+error: private edits in use. Try 'configure private' or 'configure exclusive'.
+
+[edit]
+admin@jun01# 
+## [JUN01:a] commit
+commit 
+error: private edits in use. Try 'configure private' or 'configure exclusive'.
+
+[edit]
+admin@jun01# 
+## [JUN01:a] rollback 0
+rollback 0 
+error: private edits in use. Try 'configure private' or 'configure exclusive'.
+
+[edit]
+admin@jun01# 
+## [JUN01:a] exit
+exit 
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01:b] show | compare
+show | compare 
+[edit interfaces lo0 unit 0]
++    description "private b";
+
+[edit]
+admin@jun01# 
+## [JUN01:b] commit
+commit 
+commit complete
+
+[edit]
+admin@jun01# 
+## [JUN01:b] exit
+exit 
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01:a] show configuration interfaces lo0 unit 0 description
+show configuration interfaces lo0 unit 0 description 
+description "private b";
+
+admin@jun01> 
+## [JUN01:a] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01:a] delete interfaces lo0 unit 0 description
+delete interfaces lo0 unit 0 description 
+
+[edit]
+admin@jun01# 
+## [JUN01:a] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun01> # exclusive: 他のセッションは設定を変えられない
+
+## [JUN01:a] configure exclusive
+configure exclusive 
+warning: uncommitted changes will be discarded on exit
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01:b] configure
+configure 
+Entering configuration mode
+Users currently editing the configuration:
+  admin terminal pts/1 (pid 31322) on since 2026-11-14 11:08:48 UTC
+      exclusive [edit]
+
+[edit]
+admin@jun01# 
+## [JUN01:b] set interfaces lo0 unit 0 description "b during exclusive"
+set interfaces lo0 unit 0 description "b during exclusive" 
+error: configuration database locked by:
+  admin terminal pts/1 (pid 31322) on since 2026-11-14 11:08:48 UTC
+      exclusive [edit]
+
+[edit]
+admin@jun01# 
+## [JUN01:b] commit
+commit 
+error: configuration database locked by:
+  admin terminal pts/1 (pid 31322) on since 2026-11-14 11:08:48 UTC
+      exclusive [edit]
+
+[edit]
+admin@jun01# 
+## [JUN01:b] exit
+exit 
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01:b] yes
+yes
+             ^
+unknown command.
+
+admin@jun01> 
+## [JUN01:a] exit
+exit 
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01:a] show system commit
+show system commit 
+0   2026-11-14 11:08:48 UTC by admin via cli
+1   2026-11-14 11:08:44 UTC by admin via cli
+2   2026-11-14 11:08:30 UTC by admin via cli
+    J0 PoC: host-name back
+3   2026-11-14 10:59:25 UTC by admin via cli commit confirmed, rollback in 1mins
+    J0 PoC: confirmed, then confirmed
+4   2026-11-14 10:59:03 UTC by root via other
+5   2026-11-14 10:58:02 UTC by admin via cli commit confirmed, rollback in 1mins
+    J0 PoC: confirmed, not confirmed
+6   2026-11-14 10:57:22 UTC by admin via cli
+    J0 PoC: back to rollback 1
+7   2026-11-14 10:57:19 UTC by admin via cli
+    J0 PoC: remove lo0
+8   2026-11-14 10:57:11 UTC by admin via cli
+    J0 PoC: addresses
+9   2026-11-14 09:53:56 UTC by root via other
+
+admin@jun01> 

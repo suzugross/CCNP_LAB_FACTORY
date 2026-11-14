@@ -1,0 +1,55 @@
+# JNT-01 PoC: 課題の挙動(J0-1 アドレス → J0-2 OSPF → J0-3 MTU 9000 を commit confirmed → 自動で戻る → J0-4 static の next-hop を FRR1 の lo に)
+!sleep 60
+JUN01 configure
+JUN01 set interfaces et-0/0/0 unit 0 family inet address 10.0.12.1/30
+JUN01 set interfaces lo0 unit 0 family inet address 192.168.0.1/32
+JUN01 commit and-quit
+JUN02 configure
+JUN02 set interfaces et-0/0/0 unit 0 family inet address 10.0.12.2/30
+JUN02 set interfaces et-0/0/1 unit 0 family inet address 10.0.23.1/30
+JUN02 set interfaces lo0 unit 0 family inet address 192.168.0.2/32
+JUN02 commit and-quit
+JUN01 ping 10.0.12.2 count 3 rapid
+JUN02 ping 10.0.23.2 count 3 rapid
+# J0-2
+JUN01 configure
+JUN01 set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+JUN01 set protocols ospf area 0.0.0.0 interface lo0.0 passive
+JUN01 commit and-quit
+JUN02 configure
+JUN02 set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+JUN02 set protocols ospf area 0.0.0.0 interface et-0/0/1.0
+JUN02 set protocols ospf area 0.0.0.0 interface lo0.0 passive
+JUN02 commit and-quit
+!sleep 45
+JUN02 show ospf neighbor
+FRR1 show ip route ospf
+JUN01 show route protocol ospf table inet.0
+# J0-3: MTU 9000 を commit confirmed 2 で
+JUN02 show interfaces et-0/0/1 | match "MTU|Link-level"
+JUN02 configure
+JUN02 set interfaces et-0/0/1 mtu 9000
+JUN02 commit confirmed 2 comment "MTU 9000 toward FRR1"
+JUN02 run show interfaces et-0/0/1 | match "MTU"
+!sleep 45
+JUN02 run show ospf neighbor
+FRR1 show ip ospf neighbor
+!sleep 90
+JUN02 run show system commit
+JUN02 run show configuration interfaces et-0/0/1
+!sleep 40
+JUN02 run show ospf neighbor
+JUN02 exit
+# J0-4: next-hop が直接つながっていない static
+JUN02 configure
+JUN02 set routing-options static route 198.51.100.0/24 next-hop 192.168.0.3
+JUN02 commit
+JUN02 run show route 198.51.100.0/24
+JUN02 set routing-options static route 198.51.100.0/24 resolve
+JUN02 set routing-options static route 198.51.100.0/24 preference 160
+JUN02 commit and-quit
+JUN02 show route 198.51.100.0/24 exact
+JUN02 show route 198.51.100.0/24 exact detail | match "Preference|Next hop|Protocol next hop|State"
+JUN02 ping 198.51.100.1 source 192.168.0.2 count 5 rapid
+JUN01 show route 198.51.100.0/24
+JUN01 ping 198.51.100.1 source 192.168.0.1 count 3 rapid
