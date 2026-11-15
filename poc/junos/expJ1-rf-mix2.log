@@ -1,0 +1,95 @@
+# jpoc JNT-02 j1-rf-mix2.txt 2026-11-15 03:18:59
+# PoC の続き: MIX3(prefix-list と route-filter)が AND か 1 つの最長一致かを見分ける。
+# 192.0.2.0/24 は PL24 に無い。AND なら外れ(reject)、1 つの最長一致なら 0/0 upto /25 に当たって accept。
+# walkup が入っていないことも確かめる(入っていると最長一致の結果が変わる)
+
+## [JUN02] (open)
+Last login: Sun Nov 15 03:17:01 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] show configuration policy-options | display set | match "defaults|walkup"
+show configuration policy-options | display set | match "defaults|walkup" 
+
+admin@jun02> 
+## [JUN02] test policy MIX3 192.0.2.0/24 | no-more
+test policy MIX3 192.0.2.0/24 | no-more 
+
+inet.0: 20 destinations, 20 routes (19 active, 0 holddown, 1 hidden)
++ = Active Route, - = Last Active, * = Both
+
+192.0.2.0/24       *[BGP/170] 00:57:03, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy MIX3: 1 prefix accepted, 0 prefix rejected
+
+admin@jun02> 
+## [JUN02] test policy MIX3 10.200.0.0/16 | no-more
+test policy MIX3 10.200.0.0/16 | no-more 
+
+Policy MIX3: 0 prefix accepted, 0 prefix rejected
+
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+Users currently editing the configuration:
+  admin terminal pts/0 (pid 23027) on since 2026-11-15 02:58:01 UTC, idle 00:13:19
+      [edit]
+
+[edit]
+admin@jun02# 
+## [JUN02] delete protocols bgp group ISP import
+delete protocols bgp group ISP import 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP import MIX3
+set protocols bgp group ISP import MIX3 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 15s)
+
+## [JUN02] show route receive-protocol bgp 10.0.23.2 | no-more
+show route receive-protocol bgp 10.0.23.2 | no-more 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 20 destinations, 20 routes (19 active, 0 holddown, 1 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.0.23.2            0                  64500 I
+* 10.200.0.0/16           10.0.23.2            0                  64500 I
+* 100.64.0.0/10           10.0.23.2            0                  64500 I
+* 172.31.0.0/16           10.0.23.2            0                  64500 I
+* 192.0.2.0/24            10.0.23.2            0                  64500 I
+* 192.168.50.0/24         10.0.23.2            0                  64500 I
+* 198.18.0.0/15           10.0.23.2            0                  64500 I
+* 198.51.100.0/24         10.0.23.2            0                  64500 I
+* 203.0.113.0/24          10.0.23.2            0                  64500 I
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+inet6.0: 2 destinations, 2 routes (2 active, 0 holddown, 0 hidden)
+
+inet6.2: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+inet6.3: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet6.0: 4 destinations, 4 routes (4 active, 0 holddown, 0 hidden)
+
+admin@jun02> 

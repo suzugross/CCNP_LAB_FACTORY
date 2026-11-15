@@ -7,7 +7,7 @@
 1. 並べたポリシー(連鎖)を左から 1 つずつ。
 2. ポリシーの中は term を上から 1 つずつ。term の外の `then` は、名前の無い最後の term。
 3. term の `from` は、違う種類の条件がすべて当たり(AND)、同じ種類の値はどれか 1 つ当たれば(OR)当たる。
-   route-filter は最長一致の 1 本の型で決まる。
+   route-filter・prefix-list・prefix-list-filter は合わせて 1 つの並びとして、最長一致の 1 本の型で決まる。
 4. 当たった term の `then` を実行する。
    - `accept`・`reject`: ここで終わり。
    - `next policy`: 残りの term を飛ばして次のポリシーへ。

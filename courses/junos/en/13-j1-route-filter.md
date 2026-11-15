@@ -131,6 +131,33 @@ one, name the list with a match type, as in `from prefix-list-filter PL orlonger
 Its role differs from an IOS prefix list. In IOS the prefix list itself carries permit or deny and `ge` or `le`; a Junos prefix list is
 just a list, and the policy's `then` decides whether to allow or reject.
 
+When you list route filters, prefix lists and prefix-list filters in the same term, they are not treated as conditions of different
+kinds (AND). They are all looked up as one list by longest match, and, as in section 2.3, only the match type of the line that holds
+the route most specifically (and any action written on that line) decides.
+
+```
+term t {
+    from {
+        route-filter 0.0.0.0/0 prefix-length-range /8-/24;
+        prefix-list-filter BOGONS orlonger reject;      ← BOGONS = 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 and so on
+    }
+    then accept;
+}
+then reject;
+```
+
+Tried on the routes from the ISP, 10.200.0.0/16 was rejected and 192.0.2.0/24 was accepted. The line that holds 10.200.0.0/16 most
+specifically is 10.0.0.0/8 in BOGONS, so that line's action, reject, applies. 192.0.2.0/24 lies in no line of BOGONS, so the 0.0.0.0/0
+line decides and the term's accept applies. Were it AND, 192.0.2.0/24, which matches nothing in BOGONS, would fail.
+
+The other way round, when the match type of the longest line fails, the term fails even though a shorter line fits. With
+`route-filter 198.51.100.0/24 exact` next to `prefix-list-filter … orlonger` on a list holding only 0.0.0.0/0, 198.51.100.128/25 was
+rejected. A plain `prefix-list`, which has no match type, joins the same list.
+
+Juniper's documentation says only that a combination of route filters, prefix lists and the like is "evaluated according to a logical
+OR operation or a longest-route match lookup", without saying which applies. Tried, it was the longest match. Because it is easy to
+misread as the AND of section 2.2, this unit writes the ranges to reject and the ranges to accept in separate terms.
+
 ### 2.6 Side by side with IOS and IOS XR
 
 | What you want | IOS prefix list | IOS XR prefix-set | Junos route-filter |
@@ -198,6 +225,9 @@ Move to lab **JNT-02** and work on task J1-3.
 Sources: Juniper Networks, *Routing Policies, Firewall Filters, and Traffic Policers User Guide* (2026-06-23), the section on route
 filter match types, "How Route Filters Are Evaluated in Routing Policy Match Conditions" (the longest match; evaluation stops even if
 the match type fails; the note on walkup; the same prefix is scanned from the top), and the sections on prefix lists and prefix-list
-filters. The IOS XR prefix-set is from M5 of the IOS XR track. The output was captured on vJunos-Evolved (Junos OS Evolved 26.2R1.7)
+filters. On combining route filters, prefix lists and source address filters, the same guide's section on match conditions (p.61):
+"evaluated according to a logical OR operation or a longest-route match lookup". Which of the two applies is stated neither there nor
+in the Day One book *Configuring Junos Policy and Firewall Filters*; it was checked on the device (without walkup). The IOS XR prefix-set
+is from M5 of the IOS XR track. The output was captured on vJunos-Evolved (Junos OS Evolved 26.2R1.7)
 in containerlab.
 :::

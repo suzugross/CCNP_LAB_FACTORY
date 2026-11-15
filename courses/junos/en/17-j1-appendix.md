@@ -7,7 +7,7 @@ The order in which one route goes through import and export policies.
 1. The listed policies (the chain), one at a time from the left.
 2. Within a policy, the terms one at a time from the top. A `then` outside any term is an unnamed last term.
 3. A term's `from` matches when conditions of different kinds all match (AND) and, for values of one kind, one of them matches (OR).
-   For route filters, the match type of the one longest match decides.
+   Route filters, prefix lists and prefix-list filters together form one list, and the match type of the one longest match decides.
 4. Run the `then` of the term that matched.
    - `accept`, `reject`: evaluation ends here.
    - `next policy`: skip the remaining terms and go to the next policy.

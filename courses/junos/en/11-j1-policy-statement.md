@@ -57,7 +57,8 @@ You can look at a policy in two ways. `show policy-options policy-statement name
 ### 2.2 from: OR within a kind, AND across kinds
 
 When you list conditions under `from`, **conditions of different kinds must all match (AND)**, and **for values of the same kind,
-one match is enough (OR)**. This term matches routes whose source is static **or** aggregate **and** that lie within 172.16.0.0/12.
+one match is enough (OR)**. Route filters, prefix lists and prefix-list filters, though, are looked up together as one list by longest
+match (sections 2.3 and 2.5 on the next page). This term matches routes whose source is static **or** aggregate **and** that lie within 172.16.0.0/12.
 
 ```
 term t {

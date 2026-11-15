@@ -1,0 +1,378 @@
+# jpoc JNT-02 review-cfg.txt 2026-11-15 03:07:59
+# JNT-02 レビュー用: 設定と状態
+
+## [JUN01] (open)
+Last login: Sun Nov 15 03:07:59 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] show configuration policy-options | display set | no-more
+show configuration policy-options | display set | no-more 
+set policy-options policy-statement SRV term T1 from protocol direct
+set policy-options policy-statement SRV term T1 from route-filter 172.16.10.0/24 exact
+set policy-options policy-statement SRV term T1 then accept
+set policy-options policy-statement SRV term T2 from protocol static
+set policy-options policy-statement SRV term T2 from route-filter 172.16.20.0/24 exact
+set policy-options policy-statement SRV term T2 then metric 20
+set policy-options policy-statement SRV term T2 then accept
+set policy-options policy-statement SRV then reject
+
+admin@jun01> 
+## [JUN01] show configuration protocols | display set | no-more
+show configuration protocols | display set | no-more 
+set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+set protocols ospf area 0.0.0.0 interface lo0.0 passive
+set protocols ospf export SRV
+
+admin@jun01> 
+## [JUN01] show configuration routing-options | display set | no-more
+show configuration routing-options | display set | no-more 
+set routing-options router-id 192.168.0.1
+set routing-options autonomous-system 65000
+set routing-options static route 172.16.20.0/24 next-hop 172.16.10.10
+set routing-options static route 172.16.99.0/24 discard
+
+admin@jun01> 
+## [JUN01] show route 0.0.0.0/0 exact detail | no-more
+show route 0.0.0.0/0 exact detail | no-more 
+
+inet.0: 10 destinations, 10 routes (10 active, 0 holddown, 0 hidden)
+0.0.0.0/0 (1 entry, 1 announced)
+        *OSPF   Preference: 150
+                Next hop type: Router, Next hop index: 7036
+                Address: 0x557e41c27d78
+                Next-hop reference count: 4, Next-hop session id: 2
+                Kernel Table Id: 0
+                Next hop: 10.0.12.2 via et-0/0/0.0, selected
+                Session Id: 2
+                State: <Active Int Ext>
+                Local AS: 65000 
+                Age: 1:16:13 	Metric: 0 
+                Validation State: unverified 
+                	Tag: 0 
+                Task: OSPF
+                Announcement bits (1): 0-KRT 
+                AS path: I 
+                Thread: junos-main 
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+0.0.0.0/0 (1 entry, 1 announced)
+        *Static Preference: 5
+                Next hop type: Router, Next hop index: 7034
+                Address: 0x557e41c1ec38
+                Next-hop reference count: 3, Next-hop session id: 0
+                Kernel Table Id: 0
+                Next hop: 10.0.0.2 via re0:mgmt-0.0, selected
+                Session Id: 0
+                State: <Active Int Ext>
+                Age: 2:03:39 
+                Validation State: unverified 
+                Task: RT
+                Announcement bits (1): 0-KRT 
+                AS path: I 
+                Thread: junos-main 
+
+admin@jun01> 
+## [JUN01] show route protocol ospf | no-more
+show route protocol ospf | no-more 
+
+Warning: License key missing; requires 'OSPF' license
+
+
+inet.0: 10 destinations, 10 routes (10 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[OSPF/150] 01:16:14, metric 0, tag 0
+                    >  to 10.0.12.2 via et-0/0/0.0
+192.168.0.2/32     *[OSPF/10] 02:01:41, metric 1
+                    >  to 10.0.12.2 via et-0/0/0.0
+224.0.0.5/32       *[OSPF/10] 02:03:40, metric 1
+                       MultiRecv
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+inet6.0: 2 destinations, 2 routes (2 active, 0 holddown, 0 hidden)
+
+inet6.2: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+inet6.3: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet6.0: 4 destinations, 4 routes (4 active, 0 holddown, 0 hidden)
+
+admin@jun01> 
+## [JUN02] (open)
+Last login: Sun Nov 15 03:08:01 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] show configuration policy-options | display set | no-more
+show configuration policy-options | display set | no-more 
+set policy-options prefix-list Priv0
+set policy-options prefix-list Priv01 10.0.0.0/8
+set policy-options prefix-list Priv01 100.64.0.0/10
+set policy-options prefix-list Priv01 172.16.0.0/12
+set policy-options prefix-list Priv01 192.168.0.0/16
+set policy-options prefix-list Priv01 198.18.0.0/15
+set policy-options policy-statement EBGP01 term T01 from protocol aggregate
+set policy-options policy-statement EBGP01 term T01 from route-filter 172.16.0.0/16 exact
+set policy-options policy-statement EBGP01 term T01 then as-path-prepend "65000 65000"
+set policy-options policy-statement EBGP01 term T01 then accept
+set policy-options policy-statement EBGP01 then reject
+set policy-options policy-statement P01 term T01 from protocol bgp
+set policy-options policy-statement P01 term T01 from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement P01 term T01 then accept
+set policy-options policy-statement P02 term T01_5 from route-filter 203.0.113.0/24 exact
+set policy-options policy-statement P02 term T01_5 then local-preference 200
+set policy-options policy-statement P02 term T01_5 then community add COMM01
+set policy-options policy-statement P02 term T01 from protocol bgp
+set policy-options policy-statement P02 term T01 from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement P02 term T01 then accept
+set policy-options policy-statement P02 term T02 from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement P02 term T02 from prefix-list-filter Priv01 orlonger reject
+set policy-options policy-statement P02 term T02 then accept
+set policy-options policy-statement P02 then reject
+set policy-options community COMM01 members 65000:100
+
+admin@jun02> 
+## [JUN02] show configuration protocols | display set | no-more
+show configuration protocols | display set | no-more 
+set protocols bgp group ISP type external
+set protocols bgp group ISP import P02
+set protocols bgp group ISP peer-as 64500
+set protocols bgp group ISP neighbor 10.0.23.2 export EBGP01
+set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+set protocols ospf area 0.0.0.0 interface lo0.0 passive
+set protocols ospf export P01
+
+admin@jun02> 
+## [JUN02] show configuration routing-options | display set | no-more
+show configuration routing-options | display set | no-more 
+set routing-options router-id 192.168.0.2
+set routing-options autonomous-system 65000
+set routing-options aggregate route 172.16.0.0/16
+
+admin@jun02> 
+## [JUN02] show route receive-protocol bgp 10.0.23.2 all | no-more
+show route receive-protocol bgp 10.0.23.2 all | no-more 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.0.23.2            0                  64500 I
+  10.200.0.0/16           10.0.23.2            0                  64500 I
+  100.64.0.0/10           10.0.23.2            0                  64500 I
+  172.31.0.0/16           10.0.23.2            0                  64500 I
+* 192.0.2.0/24            10.0.23.2            0                  64500 I
+  192.168.50.0/24         10.0.23.2            0                  64500 I
+  198.18.0.0/15           10.0.23.2            0                  64500 I
+* 198.51.100.0/24         10.0.23.2            0                  64500 I
+  198.51.100.128/25       10.0.23.2            0                  64500 I
+* 203.0.113.0/24          10.0.23.2            0                  64500 I
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+inet6.0: 2 destinations, 2 routes (2 active, 0 holddown, 0 hidden)
+
+inet6.2: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+inet6.3: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet6.0: 4 destinations, 4 routes (4 active, 0 holddown, 0 hidden)
+
+admin@jun02> 
+## [JUN02] show route receive-protocol bgp 10.0.23.2 hidden | no-more
+show route receive-protocol bgp 10.0.23.2 hidden | no-more 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+  10.200.0.0/16           10.0.23.2            0                  64500 I
+  100.64.0.0/10           10.0.23.2            0                  64500 I
+  172.31.0.0/16           10.0.23.2            0                  64500 I
+  192.168.50.0/24         10.0.23.2            0                  64500 I
+  198.18.0.0/15           10.0.23.2            0                  64500 I
+  198.51.100.128/25       10.0.23.2            0                  64500 I
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+inet6.0: 2 destinations, 2 routes (2 active, 0 holddown, 0 hidden)
+
+inet6.2: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+inet6.3: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet6.0: 4 destinations, 4 routes (4 active, 0 holddown, 0 hidden)
+
+admin@jun02> 
+## [JUN02] show route advertising-protocol bgp 10.0.23.2 detail | no-more
+show route advertising-protocol bgp 10.0.23.2 detail | no-more 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+* 172.16.0.0/16 (1 entry, 1 announced)
+ BGP group ISP type External
+     Nexthop: Self
+     AS path: 65000 65000 [65000] I  (LocalAgg)
+
+admin@jun02> 
+## [JUN02] show route 172.16.0.0/16 exact detail | no-more
+show route 172.16.0.0/16 exact detail | no-more 
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+172.16.0.0/16 (1 entry, 1 announced)
+        *Aggregate Preference: 130
+                Next hop type: Reject, Next hop index: 0
+                Address: 0x55ff66013fd8
+                Next-hop reference count: 2
+                Kernel Table Id: 0
+                State: <Active Int Ext>
+                Local AS: 65000 
+                Age: 25:41 
+                Validation State: unverified 
+                Task: Aggregate
+                Announcement bits (2): 0-KRT 3-BGP_RT_Background 
+                AS path: I  (LocalAgg)
+                Flags:          	Depth: 0	Active
+                AS path list (1):
+                AS path: I Refcount: 2
+                Contributing Routes (2):
+                	172.16.10.0/24 proto OSPF
+                	172.16.20.0/24 proto OSPF
+                Thread: junos-main 
+
+admin@jun02> 
+## [JUN02] show route 0.0.0.0/0 exact detail | no-more
+show route 0.0.0.0/0 exact detail | no-more 
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+0.0.0.0/0 (1 entry, 1 announced)
+        *BGP    Preference: 170/-101
+                Next hop type: Router, Next hop index: 8035
+                Address: 0x55ff660282b8
+                Next-hop reference count: 14, Next-hop session id: 1
+                Kernel Table Id: 0
+                Source: 10.0.23.2
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                Session Id: 1
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Age: 2:02:37 	Metric: 0 
+                Validation State: unverified 
+                Task: BGP_64500.10.0.23.2
+                Announcement bits (2): 0-KRT 1-OSPF 
+                AS path: 64500 I 
+                Accepted
+                Localpref: 100
+                Router ID: 203.0.113.1
+                Thread: junos-main 
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+0.0.0.0/0 (1 entry, 1 announced)
+        *Static Preference: 5
+                Next hop type: Router, Next hop index: 8034
+                Address: 0x55ff6601eed8
+                Next-hop reference count: 3, Next-hop session id: 0
+                Kernel Table Id: 0
+                Next hop: 10.0.0.2 via re0:mgmt-0.0, selected
+                Session Id: 0
+                State: <Active Int Ext>
+                Age: 2:03:46 
+                Validation State: unverified 
+                Task: RT
+                Announcement bits (1): 0-KRT 
+                AS path: I 
+                Thread: junos-main 
+
+admin@jun02> 
+## [JUN02] show route 203.0.113.0/24 exact detail | no-more
+show route 203.0.113.0/24 exact detail | no-more 
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+203.0.113.0/24 (1 entry, 1 announced)
+        *BGP    Preference: 170/-201
+                Next hop type: Router, Next hop index: 8035
+                Address: 0x55ff660282b8
+                Next-hop reference count: 14, Next-hop session id: 1
+                Kernel Table Id: 0
+                Source: 10.0.23.2
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                Session Id: 1
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Age: 3:16 	Metric: 0 
+                Validation State: unverified 
+                Task: BGP_64500.10.0.23.2
+                Announcement bits (1): 0-KRT 
+                AS path: 64500 I 
+                Communities: 65000:100
+                Accepted
+                Localpref: 200
+                Router ID: 203.0.113.1
+                Thread: junos-main 
+
+admin@jun02> 
+## [JUN02] show ospf database external extensive | no-more
+show ospf database external extensive | no-more 
+
+Warning: License key missing; requires 'OSPF' license
+
+    OSPF AS SCOPE link state database
+ Type       ID               Adv Rtr           Seq      Age  Opt  Cksum  Len 
+Extern  *0.0.0.0          192.168.0.2      0x80000003   189  0x22 0xe460  36
+  mask 0.0.0.0
+  Topology default (ID 0)
+    Type: 2, Metric: 0, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Gen timer 00:46:50
+  Aging timer 00:56:50
+  Installed 00:03:09 ago, expires in 00:56:51, sent 00:03:07 ago
+  Last changed 01:16:21 ago, Change count: 1, Ours
+Extern   172.16.10.0      192.168.0.1      0x80000003   712  0x22 0xf688  36
+  mask 255.255.255.0
+  Topology default (ID 0)
+    Type: 2, Metric: 0, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Aging timer 00:48:08
+  Installed 00:11:49 ago, expires in 00:48:08
+  Last changed 01:35:18 ago, Change count: 1
+Extern   172.16.20.0      192.168.0.1      0x80000002  2719  0x22 0x530f  36
+  mask 255.255.255.0
+  Topology default (ID 0)
+    Type: 2, Metric: 20, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Aging timer 00:14:40
+  Installed 00:45:16 ago, expires in 00:14:41
+  Last changed 01:35:18 ago, Change count: 1
+
+admin@jun02> 
+## [JUN02] show bgp summary | no-more
+show bgp summary | no-more 
+
+Warning: License key missing; requires 'BGP' license
+
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 1 Peers: 1 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+inet.0               
+                      10          4          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.0.23.2             64500        251        275       0       0     2:02:41 Establ
+  inet.0: 4/10/4/0
+
+admin@jun02> 

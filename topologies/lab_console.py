@@ -368,19 +368,51 @@ def _overlaps(r, rects):
     return any(r[0] < q[2] and q[0] < r[2] and r[1] < q[3] and q[1] < r[3] for q in rects)
 
 
+def _label_w(text):
+    return len(text) * 6.6 + 8                 # 11px の等幅で 1 字 6.6
+
+
+def _label_half(w, ux, uy):
+    """IF 名のラベル(幅 w・高さ 16)の、線の向き (ux,uy) に沿った半分の長さ。"""
+    return abs(ux) * w / 2 + abs(uy) * 9
+
+
+def _edge_dist(w, h, ux, uy):
+    """幅 w・高さ h の箱の中心から向き (ux,uy) へ進んで、縁(＋2)を出るまでの距離。_clip と同じ。"""
+    return min((w / 2 + 2) / abs(ux) if ux else math.inf, (h / 2 + 2) / abs(uy) if uy else math.inf)
+
+
+def _scale_for_labels(model, sizes):
+    """どのリンクでも、両端の IF 名のラベルが線の上に重ならずに並ぶ縮尺(座標に掛ける倍率)の最小値。
+    ラベルは箱の縁から 7 離して置くので、線に要る長さ= 両端それぞれ 7＋ラベルの長さ、に間の余白 12。"""
+    pos = {n["label"]: (n["x"], n["y"]) for n in model["nodes"]}
+    need = 0.0
+    for lk in model["links"]:
+        (xa, ya), (xb, yb) = pos[lk["a"]], pos[lk["b"]]
+        d = math.hypot(xb - xa, yb - ya)
+        if not d:
+            continue
+        ux, uy = (xb - xa) / d, (yb - ya) / d
+        seg = 12 + sum(7 + 2 * _label_half(_label_w(t), ux, uy) for t in (lk["a_if"], lk["b_if"]) if t)
+        wa, wb = sizes[lk["a"]], sizes[lk["b"]]
+        need = max(need, (seg + _edge_dist(wa, 36, ux, uy) + _edge_dist(wb, 36, ux, uy)) / d)
+    return need
+
+
 def topo_svg(model, gap=190):
-    """最も近い 2 ノードの間隔が gap 前後になるよう CML の座標を縮尺し、SVG にする。"""
+    """最も近い 2 ノードの間隔が gap 前後になるよう CML の座標を縮尺し、SVG にする。
+    リンクの両端の IF 名が線の上に並びきらない時は、並びきるまで縮尺を広げる(上限は同じ 1.6)。"""
     ns = model["nodes"]
     if not ns:
         return "<p>(no nodes)</p>"
     dists = [math.hypot(a["x"] - b["x"], a["y"] - b["y"])
              for i, a in enumerate(ns) for b in ns[i + 1:]]
     dmin = min([d for d in dists if d > 0], default=gap)
-    s = min(1.6, max(0.4, gap / dmin))
+    sizes = {n["label"]: max(64, len(n["label"]) * 9 + 26) for n in ns}
+    s = min(1.6, max(0.4, gap / dmin, _scale_for_labels(model, sizes)))
     boxes = {}
     for n in ns:
-        boxes[n["label"]] = {"cx": n["x"] * s, "cy": n["y"] * s, "h": 36,
-                             "w": max(64, len(n["label"]) * 9 + 26), "n": n}
+        boxes[n["label"]] = {"cx": n["x"] * s, "cy": n["y"] * s, "h": 36, "w": sizes[n["label"]], "n": n}
     lines, ends = [], []
     pairs = defaultdict(list)                 # 同じ 2 ノード間の並行リンクは垂直方向へずらす
     for lk in model["links"]:
@@ -403,21 +435,28 @@ def topo_svg(model, gap=190):
                 if text:
                     ends.append((text, bx, by, ux * d, uy * d, seg))
     # IF 名のラベル: 箱の縁からラベルが出きる距離に置き、箱や他のラベルと重なるなら線に沿って先へ送る。
-    # 線の半分(自分側)は越えない。置き場が無ければ最初の位置に戻す(重なりは残るが配線は読める)
+    # 線の半分(自分側)は越えない。線の上に置き場が無ければ、線の脇(上下・左右)へずらして同じように探す。
+    # それでも無ければ最初の位置に戻す(重なりは残るが配線は読める)
     taken = [(b["cx"] - b["w"] / 2 - 2, b["cy"] - b["h"] / 2 - 2,
               b["cx"] + b["w"] / 2 + 2, b["cy"] + b["h"] / 2 + 2) for b in boxes.values()]
     labels = []
     for text, bx, by, ux, uy, seg in ends:
-        w = len(text) * 6.6 + 8
-        t0 = min(7 + abs(ux) * w / 2 + abs(uy) * 9, seg * 0.46)
-        t, rect = t0, None
-        while t <= seg * 0.46 + 0.01:
-            x, y = bx + ux * t, by + uy * t
-            r = (x - w / 2, y - 8, x + w / 2, y + 8)
-            if not _overlaps(r, taken):
-                rect = r
+        w = _label_w(text)
+        t0 = min(7 + _label_half(w, ux, uy), seg * 0.46)
+        px, py = -uy, ux                                     # 線に直交する向き(両端で逆を向く)
+        side = abs(px) * w / 2 + abs(py) * 8 + 2             # 線の脇へ、ラベルが線に掛からない距離
+        rect = None                                          # 一段目で足りなければ、線の上のラベルも避ける二段目
+        for off in (0, side, -side, side + 8, -side - 8):
+            t = t0
+            while t <= seg * 0.46 + 0.01:
+                x, y = bx + ux * t + px * off, by + uy * t + py * off
+                r = (x - w / 2, y - 8, x + w / 2, y + 8)
+                if not _overlaps(r, taken):
+                    rect = r
+                    break
+                t += 5
+            if rect is not None:
                 break
-            t += 5
         if rect is None:
             x, y = bx + ux * t0, by + uy * t0
             rect = (x - w / 2, y - 8, x + w / 2, y + 8)

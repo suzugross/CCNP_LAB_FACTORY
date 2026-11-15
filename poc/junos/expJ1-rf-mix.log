@@ -1,0 +1,476 @@
+# jpoc JNT-02 j1-rf-mix.txt 2026-11-15 03:17:01
+# PoC: route-filter と prefix-list-filter(・prefix-list)を同じ term に並べた時の判定(BL-275 J1・読み物 route-filter 2.5 節)
+# 仮説 A= 全部を 1 つの最長一致として引く(最も長い行の型と動作で決まる・型が外れたら term は外れ)
+# 仮説 B= 種類ごとに別々に照合して AND／仮説 C= 別々に照合して OR(どちらかに当たれば当たり)
+# ISP の経路をすべて受け入れる状態(import なし)にしてから、test policy と実際の import の両方で見る。
+# 各ポリシーは最後に then reject を持つ(test policy は既定を accept と数えるため、accept = term に当たった)
+
+## [JUN02] (open)
+Last login: Sun Nov 15 03:08:50 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+Users currently editing the configuration:
+  admin terminal pts/0 (pid 23027) on since 2026-11-15 02:58:01 UTC, idle 00:11:19
+      [edit]
+
+[edit]
+admin@jun02# 
+## [JUN02] delete protocols bgp group ISP import
+delete protocols bgp group ISP import 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options prefix-list PL-ALL 0.0.0.0/0
+set policy-options prefix-list PL-ALL 0.0.0.0/0 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options prefix-list PL24 198.51.100.0/24
+set policy-options prefix-list PL24 198.51.100.0/24 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options prefix-list PL-BOG 10.0.0.0/8
+set policy-options prefix-list PL-BOG 10.0.0.0/8 
+
+[edit]
+admin@jun02# # MIX1: route-filter の 198.51.100.0/24 exact が最も長い。prefix-list-filter の 0/0 orlonger は /25 にも当たる形
+
+## [JUN02] set policy-options policy-statement MIX1 term t from route-filter 198.51.100.0/24 exact
+set policy-options policy-statement MIX1 term t from route-filter 198.51.100.0/24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MIX1 term t from prefix-list-filter PL-ALL orlonger
+set policy-options policy-statement MIX1 term t from prefix-list-filter PL-ALL orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MIX1 term t then accept
+set policy-options policy-statement MIX1 term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MIX1 then reject
+set policy-options policy-statement MIX1 then reject 
+
+[edit]
+admin@jun02# # MIX2: 逆。prefix-list-filter の 198.51.100.0/24 exact が最も長い。route-filter の 0/0 upto /25 は /25 にも当たる形
+
+## [JUN02] set policy-options policy-statement MIX2 term t from prefix-list-filter PL24 exact
+set policy-options policy-statement MIX2 term t from prefix-list-filter PL24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MIX2 term t from route-filter 0.0.0.0/0 upto /25
+set policy-options policy-statement MIX2 term t from route-filter 0.0.0.0/0 upto /25 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MIX2 term t then accept
+set policy-options policy-statement MIX2 term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MIX2 then reject
+set policy-options policy-statement MIX2 then reject 
+
+[edit]
+admin@jun02# # MIX3: prefix-list(型なし= exact)と route-filter
+
+## [JUN02] set policy-options policy-statement MIX3 term t from prefix-list PL24
+set policy-options policy-statement MIX3 term t from prefix-list PL24 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MIX3 term t from route-filter 0.0.0.0/0 upto /25
+set policy-options policy-statement MIX3 term t from route-filter 0.0.0.0/0 upto /25 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MIX3 term t then accept
+set policy-options policy-statement MIX3 term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MIX3 then reject
+set policy-options policy-statement MIX3 then reject 
+
+[edit]
+admin@jun02# # MIX4: JNT-02 の解答の形(route-filter は動作なし・prefix-list-filter に reject)
+
+## [JUN02] set policy-options policy-statement MIX4 term t from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement MIX4 term t from route-filter 0.0.0.0/0 prefix-length-range /8-/24 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MIX4 term t from prefix-list-filter PL-BOG orlonger reject
+set policy-options policy-statement MIX4 term t from prefix-list-filter PL-BOG orlonger reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MIX4 term t then accept
+set policy-options policy-statement MIX4 term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MIX4 then reject
+set policy-options policy-statement MIX4 then reject 
+
+[edit]
+admin@jun02# # MIX5: 動作の側を入れ替える(route-filter に reject・prefix-list-filter は動作なし)
+
+## [JUN02] set policy-options policy-statement MIX5 term t from route-filter 10.0.0.0/8 orlonger reject
+set policy-options policy-statement MIX5 term t from route-filter 10.0.0.0/8 orlonger reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MIX5 term t from prefix-list-filter PL-ALL orlonger
+set policy-options policy-statement MIX5 term t from prefix-list-filter PL-ALL orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MIX5 term t then accept
+set policy-options policy-statement MIX5 term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MIX5 then reject
+set policy-options policy-statement MIX5 then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 20s)
+
+## [JUN02] show bgp summary | no-more
+show bgp summary | no-more 
+
+Warning: License key missing; requires 'BGP' license
+
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 1 Peers: 1 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+inet.0               
+                      10         10          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.0.23.2             64500        270        296       0       0     2:12:08 Establ
+  inet.0: 10/10/10/0
+
+admin@jun02> 
+## [JUN02] show route receive-protocol bgp 10.0.23.2 | no-more
+show route receive-protocol bgp 10.0.23.2 | no-more 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 20 destinations, 20 routes (20 active, 0 holddown, 0 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.0.23.2            0                  64500 I
+* 10.200.0.0/16           10.0.23.2            0                  64500 I
+* 100.64.0.0/10           10.0.23.2            0                  64500 I
+* 172.31.0.0/16           10.0.23.2            0                  64500 I
+* 192.0.2.0/24            10.0.23.2            0                  64500 I
+* 192.168.50.0/24         10.0.23.2            0                  64500 I
+* 198.18.0.0/15           10.0.23.2            0                  64500 I
+* 198.51.100.0/24         10.0.23.2            0                  64500 I
+* 198.51.100.128/25       10.0.23.2            0                  64500 I
+* 203.0.113.0/24          10.0.23.2            0                  64500 I
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+inet6.0: 2 destinations, 2 routes (2 active, 0 holddown, 0 hidden)
+
+inet6.2: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+inet6.3: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet6.0: 4 destinations, 4 routes (4 active, 0 holddown, 0 hidden)
+
+admin@jun02> # test policy: 198.51.100.0/24 と 198.51.100.128/25(MIX1〜3)・10.200.0.0/16 と 192.0.2.0/24(MIX4・5)
+
+## [JUN02] test policy MIX1 198.51.100.0/24 | no-more
+test policy MIX1 198.51.100.0/24 | no-more 
+
+inet.0: 20 destinations, 20 routes (20 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[BGP/170] 00:55:40, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy MIX1: 1 prefix accepted, 1 prefix rejected
+
+admin@jun02> 
+## [JUN02] test policy MIX2 198.51.100.0/24 | no-more
+test policy MIX2 198.51.100.0/24 | no-more 
+
+inet.0: 20 destinations, 20 routes (20 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[BGP/170] 00:55:41, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy MIX2: 1 prefix accepted, 1 prefix rejected
+
+admin@jun02> 
+## [JUN02] test policy MIX3 198.51.100.0/24 | no-more
+test policy MIX3 198.51.100.0/24 | no-more 
+
+inet.0: 20 destinations, 20 routes (20 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[BGP/170] 00:55:41, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy MIX3: 1 prefix accepted, 1 prefix rejected
+
+admin@jun02> 
+## [JUN02] test policy MIX4 10.200.0.0/16 | no-more
+test policy MIX4 10.200.0.0/16 | no-more 
+
+Policy MIX4: 0 prefix accepted, 1 prefix rejected
+
+admin@jun02> 
+## [JUN02] test policy MIX4 192.0.2.0/24 | no-more
+test policy MIX4 192.0.2.0/24 | no-more 
+
+inet.0: 20 destinations, 20 routes (20 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+192.0.2.0/24       *[BGP/170] 00:55:43, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy MIX4: 1 prefix accepted, 0 prefix rejected
+
+admin@jun02> 
+## [JUN02] test policy MIX5 10.200.0.0/16 | no-more
+test policy MIX5 10.200.0.0/16 | no-more 
+
+Policy MIX5: 0 prefix accepted, 1 prefix rejected
+
+admin@jun02> 
+## [JUN02] test policy MIX5 192.0.2.0/24 | no-more
+test policy MIX5 192.0.2.0/24 | no-more 
+
+inet.0: 20 destinations, 20 routes (20 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+192.0.2.0/24       *[BGP/170] 00:55:44, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy MIX5: 1 prefix accepted, 0 prefix rejected
+
+admin@jun02> # 実際の import でも確かめる(MIX1・MIX2・MIX5)。import はリストなので set の前に delete する
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+Users currently editing the configuration:
+  admin terminal pts/0 (pid 23027) on since 2026-11-15 02:58:01 UTC, idle 00:11:58
+      [edit]
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP import MIX1
+set protocols bgp group ISP import MIX1 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 15s)
+
+## [JUN02] show route receive-protocol bgp 10.0.23.2 | no-more
+show route receive-protocol bgp 10.0.23.2 | no-more 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 20 destinations, 20 routes (19 active, 0 holddown, 1 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.0.23.2            0                  64500 I
+* 10.200.0.0/16           10.0.23.2            0                  64500 I
+* 100.64.0.0/10           10.0.23.2            0                  64500 I
+* 172.31.0.0/16           10.0.23.2            0                  64500 I
+* 192.0.2.0/24            10.0.23.2            0                  64500 I
+* 192.168.50.0/24         10.0.23.2            0                  64500 I
+* 198.18.0.0/15           10.0.23.2            0                  64500 I
+* 198.51.100.0/24         10.0.23.2            0                  64500 I
+* 203.0.113.0/24          10.0.23.2            0                  64500 I
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+inet6.0: 2 destinations, 2 routes (2 active, 0 holddown, 0 hidden)
+
+inet6.2: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+inet6.3: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet6.0: 4 destinations, 4 routes (4 active, 0 holddown, 0 hidden)
+
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+Users currently editing the configuration:
+  admin terminal pts/0 (pid 23027) on since 2026-11-15 02:58:01 UTC, idle 00:12:16
+      [edit]
+
+[edit]
+admin@jun02# 
+## [JUN02] delete protocols bgp group ISP import
+delete protocols bgp group ISP import 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP import MIX2
+set protocols bgp group ISP import MIX2 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 15s)
+
+## [JUN02] show route receive-protocol bgp 10.0.23.2 | no-more
+show route receive-protocol bgp 10.0.23.2 | no-more 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 20 destinations, 20 routes (19 active, 0 holddown, 1 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.0.23.2            0                  64500 I
+* 10.200.0.0/16           10.0.23.2            0                  64500 I
+* 100.64.0.0/10           10.0.23.2            0                  64500 I
+* 172.31.0.0/16           10.0.23.2            0                  64500 I
+* 192.0.2.0/24            10.0.23.2            0                  64500 I
+* 192.168.50.0/24         10.0.23.2            0                  64500 I
+* 198.18.0.0/15           10.0.23.2            0                  64500 I
+* 198.51.100.0/24         10.0.23.2            0                  64500 I
+* 203.0.113.0/24          10.0.23.2            0                  64500 I
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+inet6.0: 2 destinations, 2 routes (2 active, 0 holddown, 0 hidden)
+
+inet6.2: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+inet6.3: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet6.0: 4 destinations, 4 routes (4 active, 0 holddown, 0 hidden)
+
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+Users currently editing the configuration:
+  admin terminal pts/0 (pid 23027) on since 2026-11-15 02:58:01 UTC, idle 00:12:35
+      [edit]
+
+[edit]
+admin@jun02# 
+## [JUN02] delete protocols bgp group ISP import
+delete protocols bgp group ISP import 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP import MIX5
+set protocols bgp group ISP import MIX5 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 15s)
+
+## [JUN02] show route receive-protocol bgp 10.0.23.2 | no-more
+show route receive-protocol bgp 10.0.23.2 | no-more 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 20 destinations, 20 routes (19 active, 0 holddown, 1 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.0.23.2            0                  64500 I
+* 100.64.0.0/10           10.0.23.2            0                  64500 I
+* 172.31.0.0/16           10.0.23.2            0                  64500 I
+* 192.0.2.0/24            10.0.23.2            0                  64500 I
+* 192.168.50.0/24         10.0.23.2            0                  64500 I
+* 198.18.0.0/15           10.0.23.2            0                  64500 I
+* 198.51.100.0/24         10.0.23.2            0                  64500 I
+* 198.51.100.128/25       10.0.23.2            0                  64500 I
+* 203.0.113.0/24          10.0.23.2            0                  64500 I
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+inet6.0: 2 destinations, 2 routes (2 active, 0 holddown, 0 hidden)
+
+inet6.2: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+inet6.3: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet6.0: 4 destinations, 4 routes (4 active, 0 holddown, 0 hidden)
+
+admin@jun02> 
+## [JUN02] show version | match "Junos|Model"
+show version | match "Junos|Model" 
+Model: ptx10001-36mr
+Junos: 26.2R1.7-EVOI20260619095247-evo-builder-1
+JUNOS-EVO OS 64-bit [junos-evo-install-ptx-fixed-x86-64-26.2R1.7-EVOI20260619095247-evo-builder-1]
+
+admin@jun02> 

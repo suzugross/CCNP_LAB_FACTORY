@@ -129,6 +129,30 @@ set policy-options prefix-list PL 198.51.100.0/24
 IOS の prefix-list とは役割が違います。IOS では prefix-list そのものに permit・deny と `ge`・`le` を書きますが、Junos の
 prefix-list はただの並びで、許すか拒むかはポリシーの `then` が決めます。
 
+route-filter と prefix-list・prefix-list-filter を同じ term に並べると、違う種類の条件(AND)としては扱われません。全部が
+1 つの並びとして最長一致で引かれ、2.3 節と同じく、経路をいちばん長く含む行の型(と、その行に書いた動作)だけで決まります。
+
+```
+term t {
+    from {
+        route-filter 0.0.0.0/0 prefix-length-range /8-/24;
+        prefix-list-filter BOGONS orlonger reject;      ← BOGONS= 10.0.0.0/8・172.16.0.0/12・192.168.0.0/16 など
+    }
+    then accept;
+}
+then reject;
+```
+
+ISP の経路で試すと、10.200.0.0/16 は拒まれ、192.0.2.0/24 は受け入れられました。10.200.0.0/16 をいちばん長く含むのは BOGONS の
+10.0.0.0/8 の行なので、その行の動作 reject になります。192.0.2.0/24 は BOGONS のどの行にも含まれず、0.0.0.0/0 の行で term の
+accept になります。AND なら、BOGONS に当たらない 192.0.2.0/24 は外れるはずです。
+
+逆に、いちばん長い行の型が外れると、短い行が合っていても term は外れます。`route-filter 198.51.100.0/24 exact` と、0.0.0.0/0 だけの
+並びの `prefix-list-filter … orlonger` を並べると、198.51.100.128/25 は拒まれました。型の無い `prefix-list` も同じ並びに入ります。
+
+Juniper の文書は、route-filter と prefix-list などを組み合わせると「OR か最長一致で評価する」とだけ書き、どちらになるかは
+書いていません。試すと最長一致でした。2.2 節の AND と読み違えやすいので、この単元では、拒む範囲と受け入れる範囲を別々の term に書きます。
+
 ### 2.6 IOS・IOS XR と並べる
 
 | 選びたいもの | IOS の prefix-list | IOS XR の prefix-set | Junos の route-filter |
@@ -194,6 +218,9 @@ inet.0: 19 destinations, 19 routes (11 active, 0 holddown, 8 hidden)
 :::note
 出典: Juniper Networks『Routing Policies, Firewall Filters, and Traffic Policers User Guide』(2026-06-23)の route-filter の
 一致の型の節、「How Route Filters Are Evaluated in Routing Policy Match Conditions」(最長一致・型が合わなくても評価をやめる・
-walkup の注記・同じプレフィックスは上から)、prefix-list と prefix-list-filter の節。IOS XR の prefix-set は IOS XR トラック M5 による。
+walkup の注記・同じプレフィックスは上から)、prefix-list と prefix-list-filter の節。route-filter・prefix-list・source-address-filter
+の組み合わせは同書の match conditions の節(p.61)の「evaluated according to a logical OR operation or a longest-route match lookup」で、
+どちらになるかの記述は同書にも Day One『Configuring Junos Policy and Firewall Filters』にも無く、実機で確かめた(walkup なし)。
+IOS XR の prefix-set は IOS XR トラック M5 による。
 出力は containerlab の vJunos-Evolved(Junos OS Evolved 26.2R1.7)で取ったものです。
 :::

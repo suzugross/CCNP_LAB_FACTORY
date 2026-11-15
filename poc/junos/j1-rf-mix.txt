@@ -1,0 +1,66 @@
+# PoC: route-filter と prefix-list-filter(・prefix-list)を同じ term に並べた時の判定(BL-275 J1・読み物 route-filter 2.5 節)
+# 仮説 A= 全部を 1 つの最長一致として引く(最も長い行の型と動作で決まる・型が外れたら term は外れ)
+# 仮説 B= 種類ごとに別々に照合して AND／仮説 C= 別々に照合して OR(どちらかに当たれば当たり)
+# ISP の経路をすべて受け入れる状態(import なし)にしてから、test policy と実際の import の両方で見る。
+# 各ポリシーは最後に then reject を持つ(test policy は既定を accept と数えるため、accept = term に当たった)
+JUN02 configure
+JUN02 delete protocols bgp group ISP import
+JUN02 set policy-options prefix-list PL-ALL 0.0.0.0/0
+JUN02 set policy-options prefix-list PL24 198.51.100.0/24
+JUN02 set policy-options prefix-list PL-BOG 10.0.0.0/8
+# MIX1: route-filter の 198.51.100.0/24 exact が最も長い。prefix-list-filter の 0/0 orlonger は /25 にも当たる形
+JUN02 set policy-options policy-statement MIX1 term t from route-filter 198.51.100.0/24 exact
+JUN02 set policy-options policy-statement MIX1 term t from prefix-list-filter PL-ALL orlonger
+JUN02 set policy-options policy-statement MIX1 term t then accept
+JUN02 set policy-options policy-statement MIX1 then reject
+# MIX2: 逆。prefix-list-filter の 198.51.100.0/24 exact が最も長い。route-filter の 0/0 upto /25 は /25 にも当たる形
+JUN02 set policy-options policy-statement MIX2 term t from prefix-list-filter PL24 exact
+JUN02 set policy-options policy-statement MIX2 term t from route-filter 0.0.0.0/0 upto /25
+JUN02 set policy-options policy-statement MIX2 term t then accept
+JUN02 set policy-options policy-statement MIX2 then reject
+# MIX3: prefix-list(型なし= exact)と route-filter
+JUN02 set policy-options policy-statement MIX3 term t from prefix-list PL24
+JUN02 set policy-options policy-statement MIX3 term t from route-filter 0.0.0.0/0 upto /25
+JUN02 set policy-options policy-statement MIX3 term t then accept
+JUN02 set policy-options policy-statement MIX3 then reject
+# MIX4: JNT-02 の解答の形(route-filter は動作なし・prefix-list-filter に reject)
+JUN02 set policy-options policy-statement MIX4 term t from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+JUN02 set policy-options policy-statement MIX4 term t from prefix-list-filter PL-BOG orlonger reject
+JUN02 set policy-options policy-statement MIX4 term t then accept
+JUN02 set policy-options policy-statement MIX4 then reject
+# MIX5: 動作の側を入れ替える(route-filter に reject・prefix-list-filter は動作なし)
+JUN02 set policy-options policy-statement MIX5 term t from route-filter 10.0.0.0/8 orlonger reject
+JUN02 set policy-options policy-statement MIX5 term t from prefix-list-filter PL-ALL orlonger
+JUN02 set policy-options policy-statement MIX5 term t then accept
+JUN02 set policy-options policy-statement MIX5 then reject
+JUN02 commit and-quit
+!sleep 20
+JUN02 show bgp summary | no-more
+JUN02 show route receive-protocol bgp 10.0.23.2 | no-more
+# test policy: 198.51.100.0/24 と 198.51.100.128/25(MIX1〜3)・10.200.0.0/16 と 192.0.2.0/24(MIX4・5)
+JUN02 test policy MIX1 198.51.100.0/24 | no-more
+JUN02 test policy MIX2 198.51.100.0/24 | no-more
+JUN02 test policy MIX3 198.51.100.0/24 | no-more
+JUN02 test policy MIX4 10.200.0.0/16 | no-more
+JUN02 test policy MIX4 192.0.2.0/24 | no-more
+JUN02 test policy MIX5 10.200.0.0/16 | no-more
+JUN02 test policy MIX5 192.0.2.0/24 | no-more
+# 実際の import でも確かめる(MIX1・MIX2・MIX5)。import はリストなので set の前に delete する
+JUN02 configure
+JUN02 set protocols bgp group ISP import MIX1
+JUN02 commit and-quit
+!sleep 15
+JUN02 show route receive-protocol bgp 10.0.23.2 | no-more
+JUN02 configure
+JUN02 delete protocols bgp group ISP import
+JUN02 set protocols bgp group ISP import MIX2
+JUN02 commit and-quit
+!sleep 15
+JUN02 show route receive-protocol bgp 10.0.23.2 | no-more
+JUN02 configure
+JUN02 delete protocols bgp group ISP import
+JUN02 set protocols bgp group ISP import MIX5
+JUN02 commit and-quit
+!sleep 15
+JUN02 show route receive-protocol bgp 10.0.23.2 | no-more
+JUN02 show version | match "Junos|Model"

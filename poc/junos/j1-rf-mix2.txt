@@ -1,0 +1,12 @@
+# PoC の続き: MIX3(prefix-list と route-filter)が AND か 1 つの最長一致かを見分ける。
+# 192.0.2.0/24 は PL24 に無い。AND なら外れ(reject)、1 つの最長一致なら 0/0 upto /25 に当たって accept。
+# walkup が入っていないことも確かめる(入っていると最長一致の結果が変わる)
+JUN02 show configuration policy-options | display set | match "defaults|walkup"
+JUN02 test policy MIX3 192.0.2.0/24 | no-more
+JUN02 test policy MIX3 10.200.0.0/16 | no-more
+JUN02 configure
+JUN02 delete protocols bgp group ISP import
+JUN02 set protocols bgp group ISP import MIX3
+JUN02 commit and-quit
+!sleep 15
+JUN02 show route receive-protocol bgp 10.0.23.2 | no-more
