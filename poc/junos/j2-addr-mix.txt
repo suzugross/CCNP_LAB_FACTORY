@@ -1,0 +1,94 @@
+# PoC(BL-275・J2 のレビュー起点): 同じ term に source-address と source-prefix-list を別々に書くと、どう組み合わさるか
+# 前提= JNT-03 のユーザの解答(et-0/0/1 input-list [ src-filter-01 input-filter-01 ]・
+#        src-filter-01 = source-address 10.0.23.0/30 except と source-prefix-list prefix-bogon-01 を同じ term に)
+# 文書(routing-policy.pdf p.796= term の条件は AND・p.1083= アドレスの並びの末尾に暗黙の 0/0 except)どおりなら、この term は何にも当たらない
+# 試験のフィルタ POC-T を並びの先頭に置き、当たった ICMP を数えて捨てる(当たらないものは次のフィルタ= ユーザの解答へ)
+JUN02 set cli screen-length 0
+JUN02 show configuration firewall family inet filter src-filter-01 | display set
+NET1 ip -4 -br addr show lo
+#
+# ケース A: except なし・別々の条件(source-address 10.200.0.0/16 と source-prefix-list {192.168.50.0/24})
+#   AND なら 10.200.0.1 も 192.168.50.1 も当たらない(BOGON の数に入る)/1 つの並びにまとまるなら両方とも A の数に入る
+JUN02 configure
+JUN02 set policy-options prefix-list POC-PL-A 192.168.50.0/24
+JUN02 set firewall family inet filter POC-T term A from source-address 10.200.0.0/16
+JUN02 set firewall family inet filter POC-T term A from source-prefix-list POC-PL-A
+JUN02 set firewall family inet filter POC-T term A from protocol icmp
+JUN02 set firewall family inet filter POC-T term A then count A
+JUN02 set firewall family inet filter POC-T term A then discard
+JUN02 delete interfaces et-0/0/1 unit 0 family inet filter input-list
+JUN02 set interfaces et-0/0/1 unit 0 family inet filter input-list [ POC-T src-filter-01 input-filter-01 ]
+JUN02 show | compare
+JUN02 commit and-quit
+!sleep 3
+JUN02 clear firewall all
+NET1 ping -c 3 -W 1 -I 10.200.0.1 172.16.20.1
+NET1 ping -c 3 -W 1 -I 192.168.50.1 172.16.20.1
+NET1 ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+!sleep 5
+JUN02 show firewall filter et-0/0/1.0-inet-i
+#
+# ケース B: except と、それより長い prefix-list(source-address 10.0.0.0/8 except と source-prefix-list {10.200.0.0/16})
+#   AND なら 10.200.0.1 は source-address の except で外れる(BOGON)/1 つの並びの最長一致なら /16 が勝って B の数に入る
+JUN02 configure
+JUN02 delete firewall family inet filter POC-T term A
+JUN02 set policy-options prefix-list POC-PL-B 10.200.0.0/16
+JUN02 set firewall family inet filter POC-T term B from source-address 10.0.0.0/8 except
+JUN02 set firewall family inet filter POC-T term B from source-prefix-list POC-PL-B
+JUN02 set firewall family inet filter POC-T term B from protocol icmp
+JUN02 set firewall family inet filter POC-T term B then count B
+JUN02 set firewall family inet filter POC-T term B then discard
+JUN02 show firewall family inet filter POC-T | display set
+JUN02 commit and-quit
+!sleep 3
+JUN02 clear firewall all
+NET1 ping -c 3 -W 1 -I 10.200.0.1 172.16.20.1
+NET1 ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+!sleep 5
+JUN02 show firewall filter et-0/0/1.0-inet-i
+#
+# ケース C: except の行しかない source-address(10.0.23.0/30 except だけ)
+#   文書どおり(暗黙の 0/0 except)なら何にも当たらない/「それ以外すべて」なら 198.51.100.10 も 10.200.0.1 も C の数に入る
+JUN02 configure
+JUN02 delete firewall family inet filter POC-T term B
+JUN02 set firewall family inet filter POC-T term C from source-address 10.0.23.0/30 except
+JUN02 set firewall family inet filter POC-T term C from protocol icmp
+JUN02 set firewall family inet filter POC-T term C then count C
+JUN02 set firewall family inet filter POC-T term C then discard
+JUN02 show firewall family inet filter POC-T | display set
+JUN02 commit and-quit
+!sleep 3
+JUN02 clear firewall all
+NET1 ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+NET1 ping -c 3 -W 1 -I 10.200.0.1 172.16.20.1
+!sleep 5
+JUN02 show firewall filter et-0/0/1.0-inet-i
+#
+# ケース D: except の行しかない source-prefix-list(prefix-list {10.0.23.0/30} except だけ)
+JUN02 configure
+JUN02 delete firewall family inet filter POC-T term C
+JUN02 set policy-options prefix-list POC-PL-D 10.0.23.0/30
+JUN02 set firewall family inet filter POC-T term D from source-prefix-list POC-PL-D except
+JUN02 set firewall family inet filter POC-T term D from protocol icmp
+JUN02 set firewall family inet filter POC-T term D then count D
+JUN02 set firewall family inet filter POC-T term D then discard
+JUN02 show firewall family inet filter POC-T | display set
+JUN02 commit and-quit
+!sleep 3
+JUN02 clear firewall all
+NET1 ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+!sleep 5
+JUN02 show firewall filter et-0/0/1.0-inet-i
+#
+# 戻す(ユーザの解答へ)
+JUN02 configure
+JUN02 delete firewall family inet filter POC-T
+JUN02 delete policy-options prefix-list POC-PL-A
+JUN02 delete policy-options prefix-list POC-PL-B
+JUN02 delete policy-options prefix-list POC-PL-D
+JUN02 delete interfaces et-0/0/1 unit 0 family inet filter input-list
+JUN02 set interfaces et-0/0/1 unit 0 family inet filter input-list [ src-filter-01 input-filter-01 ]
+JUN02 show | compare
+JUN02 commit and-quit
+JUN02 show configuration interfaces et-0/0/1 unit 0 family inet filter
+JUN02 show bgp summary

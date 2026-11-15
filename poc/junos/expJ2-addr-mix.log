@@ -1,0 +1,536 @@
+# jpoc JNT-03 j2-addr-mix.txt 2026-11-15 14:30:50
+# PoC(BL-275・J2 のレビュー起点): 同じ term に source-address と source-prefix-list を別々に書くと、どう組み合わさるか
+# 前提= JNT-03 のユーザの解答(et-0/0/1 input-list [ src-filter-01 input-filter-01 ]・
+#        src-filter-01 = source-address 10.0.23.0/30 except と source-prefix-list prefix-bogon-01 を同じ term に)
+# 文書(routing-policy.pdf p.796= term の条件は AND・p.1083= アドレスの並びの末尾に暗黙の 0/0 except)どおりなら、この term は何にも当たらない
+# 試験のフィルタ POC-T を並びの先頭に置き、当たった ICMP を数えて捨てる(当たらないものは次のフィルタ= ユーザの解答へ)
+
+## [JUN02] (open)
+Last login: Sun Nov 15 14:10:15 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] set cli screen-length 0
+set cli screen-length 0 
+Screen length set to 0
+
+admin@jun02> 
+## [JUN02] show configuration firewall family inet filter src-filter-01 | display set
+show configuration firewall family inet filter src-filter-01 | display set 
+set firewall family inet filter src-filter-01 term bogon-01 from source-address 10.0.23.0/30 except
+set firewall family inet filter src-filter-01 term bogon-01 from source-prefix-list prefix-bogon-01
+set firewall family inet filter src-filter-01 term bogon-01 then count BOGON
+set firewall family inet filter src-filter-01 term bogon-01 then discard
+
+admin@jun02> 
+## [NET1] (open)
+net1:/# 
+## [NET1] ip -4 -br addr show lo
+ip -4 -br addr show lo
+lo               UNKNOWN        127.0.0.1/8 198.51.100.10/32 203.0.113.10/32 10.200.0.1/32 192.168.50.1/32 
+net1:/# #
+# ケース A: except なし・別々の条件(source-address 10.200.0.0/16 と source-prefix-list {192.168.50.0/24})
+#   AND なら 10.200.0.1 も 192.168.50.1 も当たらない(BOGON の数に入る)/1 つの並びにまとまるなら両方とも A の数に入る
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+Users currently editing the configuration:
+  admin terminal pts/0 (pid 15703) on since 2026-11-15 12:58:05 UTC, idle 00:21:17
+      [edit]
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options prefix-list POC-PL-A 192.168.50.0/24
+set policy-options prefix-list POC-PL-A 192.168.50.0/24 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term A from source-address 10.200.0.0/16
+set firewall family inet filter POC-T term A from source-address 10.200.0.0/16 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term A from source-prefix-list POC-PL-A
+set firewall family inet filter POC-T term A from source-prefix-list POC-PL-A 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term A from protocol icmp
+set firewall family inet filter POC-T term A from protocol icmp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term A then count A
+set firewall family inet filter POC-T term A then count A 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term A then discard
+set firewall family inet filter POC-T term A then discard 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete interfaces et-0/0/1 unit 0 family inet filter input-list
+delete interfaces et-0/0/1 unit 0 family inet filter input-list 
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces et-0/0/1 unit 0 family inet filter input-list [ POC-T src-filter-01 input-filter-01 ]
+set interfaces et-0/0/1 unit 0 family inet filter input-list [ POC-T src-filter-01 input-filter-01 ] 
+
+[edit]
+admin@jun02# 
+## [JUN02] show | compare
+show | compare 
+[edit interfaces et-0/0/1 unit 0 family inet filter]
+-       input-list [ src-filter-01 input-filter-01 ];
++       input-list [ POC-T src-filter-01 input-filter-01 ];
+[edit policy-options]
++   prefix-list POC-PL-A {
++       192.168.50.0/24;
++   }
+[edit firewall family inet]
++     filter POC-T {
++         term A {
++             from {
++                 source-address {
++                     10.200.0.0/16;
++                 }
++                 source-prefix-list {
++                     POC-PL-A;
++                 }
++                 protocol icmp;
++             }
++             then {
++                 count A;
++                 discard;
++             }
++         }
++     }
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 3s)
+
+## [JUN02] clear firewall all
+clear firewall all 
+
+admin@jun02> 
+## [NET1] ping -c 3 -W 1 -I 10.200.0.1 172.16.20.1
+ping -c 3 -W 1 -I 10.200.0.1 172.16.20.1
+PING 172.16.20.1 (172.16.20.1) from 10.200.0.1: 56 data bytes
+
+--- 172.16.20.1 ping statistics ---
+3 packets transmitted, 0 packets received, 100% packet loss
+net1:/# 
+## [NET1] ping -c 3 -W 1 -I 192.168.50.1 172.16.20.1
+ping -c 3 -W 1 -I 192.168.50.1 172.16.20.1
+PING 172.16.20.1 (172.16.20.1) from 192.168.50.1: 56 data bytes
+
+--- 172.16.20.1 ping statistics ---
+3 packets transmitted, 0 packets received, 100% packet loss
+net1:/# 
+## [NET1] ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+PING 172.16.20.1 (172.16.20.1) from 198.51.100.10: 56 data bytes
+64 bytes from 172.16.20.1: seq=0 ttl=61 time=2.521 ms
+64 bytes from 172.16.20.1: seq=1 ttl=61 time=12.338 ms
+64 bytes from 172.16.20.1: seq=2 ttl=61 time=1.740 ms
+
+--- 172.16.20.1 ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max = 1.740/5.533/12.338 ms
+net1:/# 
+## (sleep 5s)
+
+## [JUN02] show firewall filter et-0/0/1.0-inet-i
+show firewall filter et-0/0/1.0-inet-i 
+
+Filter: et-0/0/1.0-inet-i                                    
+Counters:
+Name                                                                            Bytes              Packets
+A-et-0/0/1.0-inet-i                                                               504                    6
+BOGON-et-0/0/1.0-inet-i                                                             0                    0
+ISP-DENY-et-0/0/1.0-inet-i                                                          0                    0
+
+admin@jun02> #
+# ケース B: except と、それより長い prefix-list(source-address 10.0.0.0/8 except と source-prefix-list {10.200.0.0/16})
+#   AND なら 10.200.0.1 は source-address の except で外れる(BOGON)/1 つの並びの最長一致なら /16 が勝って B の数に入る
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+Users currently editing the configuration:
+  admin terminal pts/0 (pid 15703) on since 2026-11-15 12:58:05 UTC, idle 00:21:43
+      [edit]
+
+[edit]
+admin@jun02# 
+## [JUN02] delete firewall family inet filter POC-T term A
+delete firewall family inet filter POC-T term A 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options prefix-list POC-PL-B 10.200.0.0/16
+set policy-options prefix-list POC-PL-B 10.200.0.0/16 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term B from source-address 10.0.0.0/8 except
+set firewall family inet filter POC-T term B from source-address 10.0.0.0/8 except 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term B from source-prefix-list POC-PL-B
+set firewall family inet filter POC-T term B from source-prefix-list POC-PL-B 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term B from protocol icmp
+set firewall family inet filter POC-T term B from protocol icmp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term B then count B
+set firewall family inet filter POC-T term B then count B 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term B then discard
+set firewall family inet filter POC-T term B then discard 
+
+[edit]
+admin@jun02# 
+## [JUN02] show firewall family inet filter POC-T | display set
+show firewall family inet filter POC-T | display set 
+set firewall family inet filter POC-T term B from source-address 10.0.0.0/8 except
+set firewall family inet filter POC-T term B from source-prefix-list POC-PL-B
+set firewall family inet filter POC-T term B from protocol icmp
+set firewall family inet filter POC-T term B then count B
+set firewall family inet filter POC-T term B then discard
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 3s)
+
+## [JUN02] clear firewall all
+clear firewall all 
+
+admin@jun02> 
+## [NET1] ping -c 3 -W 1 -I 10.200.0.1 172.16.20.1
+ping -c 3 -W 1 -I 10.200.0.1 172.16.20.1
+PING 172.16.20.1 (172.16.20.1) from 10.200.0.1: 56 data bytes
+
+--- 172.16.20.1 ping statistics ---
+3 packets transmitted, 0 packets received, 100% packet loss
+net1:/# 
+## [NET1] ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+PING 172.16.20.1 (172.16.20.1) from 198.51.100.10: 56 data bytes
+64 bytes from 172.16.20.1: seq=0 ttl=61 time=1.883 ms
+64 bytes from 172.16.20.1: seq=1 ttl=61 time=1.957 ms
+64 bytes from 172.16.20.1: seq=2 ttl=61 time=1.845 ms
+
+--- 172.16.20.1 ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max = 1.845/1.895/1.957 ms
+net1:/# 
+## (sleep 5s)
+
+## [JUN02] show firewall filter et-0/0/1.0-inet-i
+show firewall filter et-0/0/1.0-inet-i 
+
+Filter: et-0/0/1.0-inet-i                                    
+Counters:
+Name                                                                            Bytes              Packets
+B-et-0/0/1.0-inet-i                                                               252                    3
+BOGON-et-0/0/1.0-inet-i                                                             0                    0
+ISP-DENY-et-0/0/1.0-inet-i                                                          0                    0
+
+admin@jun02> #
+# ケース C: except の行しかない source-address(10.0.23.0/30 except だけ)
+#   文書どおり(暗黙の 0/0 except)なら何にも当たらない/「それ以外すべて」なら 198.51.100.10 も 10.200.0.1 も C の数に入る
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+Users currently editing the configuration:
+  admin terminal pts/0 (pid 15703) on since 2026-11-15 12:58:05 UTC, idle 00:22:04
+      [edit]
+
+[edit]
+admin@jun02# 
+## [JUN02] delete firewall family inet filter POC-T term B
+delete firewall family inet filter POC-T term B 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term C from source-address 10.0.23.0/30 except
+set firewall family inet filter POC-T term C from source-address 10.0.23.0/30 except 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term C from protocol icmp
+set firewall family inet filter POC-T term C from protocol icmp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term C then count C
+set firewall family inet filter POC-T term C then count C 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term C then discard
+set firewall family inet filter POC-T term C then discard 
+
+[edit]
+admin@jun02# 
+## [JUN02] show firewall family inet filter POC-T | display set
+show firewall family inet filter POC-T | display set 
+set firewall family inet filter POC-T term C from source-address 10.0.23.0/30 except
+set firewall family inet filter POC-T term C from protocol icmp
+set firewall family inet filter POC-T term C then count C
+set firewall family inet filter POC-T term C then discard
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 3s)
+
+## [JUN02] clear firewall all
+clear firewall all 
+
+admin@jun02> 
+## [NET1] ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+PING 172.16.20.1 (172.16.20.1) from 198.51.100.10: 56 data bytes
+64 bytes from 172.16.20.1: seq=0 ttl=61 time=2.426 ms
+64 bytes from 172.16.20.1: seq=1 ttl=61 time=2.793 ms
+64 bytes from 172.16.20.1: seq=2 ttl=61 time=1.680 ms
+
+--- 172.16.20.1 ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max = 1.680/2.299/2.793 ms
+net1:/# 
+## [NET1] ping -c 3 -W 1 -I 10.200.0.1 172.16.20.1
+ping -c 3 -W 1 -I 10.200.0.1 172.16.20.1
+PING 172.16.20.1 (172.16.20.1) from 10.200.0.1: 56 data bytes
+
+--- 172.16.20.1 ping statistics ---
+3 packets transmitted, 0 packets received, 100% packet loss
+net1:/# 
+## (sleep 5s)
+
+## [JUN02] show firewall filter et-0/0/1.0-inet-i
+show firewall filter et-0/0/1.0-inet-i 
+
+Filter: et-0/0/1.0-inet-i                                    
+Counters:
+Name                                                                            Bytes              Packets
+BOGON-et-0/0/1.0-inet-i                                                           252                    3
+ISP-DENY-et-0/0/1.0-inet-i                                                          0                    0
+
+admin@jun02> #
+# ケース D: except の行しかない source-prefix-list(prefix-list {10.0.23.0/30} except だけ)
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+Users currently editing the configuration:
+  admin terminal pts/0 (pid 15703) on since 2026-11-15 12:58:05 UTC, idle 00:22:24
+      [edit]
+
+[edit]
+admin@jun02# 
+## [JUN02] delete firewall family inet filter POC-T term C
+delete firewall family inet filter POC-T term C 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options prefix-list POC-PL-D 10.0.23.0/30
+set policy-options prefix-list POC-PL-D 10.0.23.0/30 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term D from source-prefix-list POC-PL-D except
+set firewall family inet filter POC-T term D from source-prefix-list POC-PL-D except 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term D from protocol icmp
+set firewall family inet filter POC-T term D from protocol icmp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term D then count D
+set firewall family inet filter POC-T term D then count D 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term D then discard
+set firewall family inet filter POC-T term D then discard 
+
+[edit]
+admin@jun02# 
+## [JUN02] show firewall family inet filter POC-T | display set
+show firewall family inet filter POC-T | display set 
+set firewall family inet filter POC-T term D from source-prefix-list POC-PL-D except
+set firewall family inet filter POC-T term D from protocol icmp
+set firewall family inet filter POC-T term D then count D
+set firewall family inet filter POC-T term D then discard
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 3s)
+
+## [JUN02] clear firewall all
+clear firewall all 
+
+admin@jun02> 
+## [NET1] ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+PING 172.16.20.1 (172.16.20.1) from 198.51.100.10: 56 data bytes
+64 bytes from 172.16.20.1: seq=0 ttl=61 time=3.157 ms
+64 bytes from 172.16.20.1: seq=1 ttl=61 time=1.604 ms
+64 bytes from 172.16.20.1: seq=2 ttl=61 time=1.948 ms
+
+--- 172.16.20.1 ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max = 1.604/2.236/3.157 ms
+net1:/# 
+## (sleep 5s)
+
+## [JUN02] show firewall filter et-0/0/1.0-inet-i
+show firewall filter et-0/0/1.0-inet-i 
+
+Filter: et-0/0/1.0-inet-i                                    
+Counters:
+Name                                                                            Bytes              Packets
+BOGON-et-0/0/1.0-inet-i                                                             0                    0
+ISP-DENY-et-0/0/1.0-inet-i                                                          0                    0
+
+admin@jun02> #
+# 戻す(ユーザの解答へ)
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+Users currently editing the configuration:
+  admin terminal pts/0 (pid 15703) on since 2026-11-15 12:58:05 UTC, idle 00:22:42
+      [edit]
+
+[edit]
+admin@jun02# 
+## [JUN02] delete firewall family inet filter POC-T
+delete firewall family inet filter POC-T 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options prefix-list POC-PL-A
+delete policy-options prefix-list POC-PL-A 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options prefix-list POC-PL-B
+delete policy-options prefix-list POC-PL-B 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options prefix-list POC-PL-D
+delete policy-options prefix-list POC-PL-D 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete interfaces et-0/0/1 unit 0 family inet filter input-list
+delete interfaces et-0/0/1 unit 0 family inet filter input-list 
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces et-0/0/1 unit 0 family inet filter input-list [ src-filter-01 input-filter-01 ]
+set interfaces et-0/0/1 unit 0 family inet filter input-list [ src-filter-01 input-filter-01 ] 
+
+[edit]
+admin@jun02# 
+## [JUN02] show | compare
+show | compare 
+[edit interfaces et-0/0/1 unit 0 family inet filter]
+-       input-list [ POC-T src-filter-01 input-filter-01 ];
++       input-list [ src-filter-01 input-filter-01 ];
+[edit policy-options]
+-   prefix-list POC-PL-A {
+-       192.168.50.0/24;
+-   }
+-   prefix-list POC-PL-B {
+-       10.200.0.0/16;
+-   }
+-   prefix-list POC-PL-D {
+-       10.0.23.0/30;
+-   }
+[edit firewall family inet]
+-     filter POC-T {
+-         term D {
+-             from {
+-                 source-prefix-list {
+-                     POC-PL-D except;
+-                 }
+-                 protocol icmp;
+-             }
+-             then {
+-                 count D;
+-                 discard;
+-             }
+-         }
+-     }
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [JUN02] show configuration interfaces et-0/0/1 unit 0 family inet filter
+show configuration interfaces et-0/0/1 unit 0 family inet filter 
+input-list [ src-filter-01 input-filter-01 ];
+
+admin@jun02> 
+## [JUN02] show bgp summary
+show bgp summary 
+
+Warning: License key missing; requires 'BGP' license
+
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 1 Peers: 1 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+inet.0               
+                      10          4          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.0.23.2             64500         71         74       0       1       32:44 Establ
+  inet.0: 4/10/4/0
+
+admin@jun02> 

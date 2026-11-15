@@ -95,6 +95,31 @@ cover is 172.16.20.0/24 rather than 0.0.0.0/0, and it is `except`, so the term d
 You use this to drop a wide range while keeping a part of it, for example when the addresses of a link you use fall inside a range of
 private addresses you drop. Take that part out with `except`.
 
+When one term has both directly written addresses (`source-address`) and a prefix list (`source-prefix-list`), they are not treated
+as conditions of different kinds (AND). The two are joined into one list and looked up by longest match, the same as route filters and
+prefix lists in J1. The same goes for `destination-address` and `destination-prefix-list`. Two places to write it; one list to look up.
+
+```
+term t {
+    from {
+        source-address 10.200.0.0/16;
+        source-prefix-list PL;      ← PL = only 192.168.50.0/24
+        protocol icmp;
+    }
+    then discard;
+}
+```
+
+This term matches a packet from 10.200.0.1 and one from 192.168.50.1 alike. Were it AND, both would fail. `except` also works across
+the two. With `source-address 10.0.0.0/8 except` next to a prefix list holding only 10.200.0.0/16, 10.200.0.1 is decided by the longer
+/16 and matches. Applying the documentation's "a packet must match all the conditions in the term" to this pair as it stands leads to
+the wrong reading.
+
+On the other hand, a list of nothing but `except` lines matches nothing. A list ends with an implicit `0.0.0.0/0 except`, and addresses
+outside the excluded ranges end up as "no match" there. A term with only `source-address 10.0.23.0/30 except` matches no source at all,
+and its counter does not appear in `show firewall`. That is why SRC-CHECK lists 0.0.0.0/0. A list of nothing but exclusions contains
+nothing.
+
 ### 2.3 Counter names in a list
 
 When filters are listed, Junos builds one filter for that interface. It is named `logical-interface-inet-i` (for input; output gets `-o`),
@@ -232,6 +257,10 @@ Firewall Filters Applied as a List" (how listed filters are evaluated; the `-i` 
 (a buffer in the PFE) and how to read `show firewall log` (Filter is always pfe), and the section on policers. *Network Management and
 Monitoring Guide* (2026-07-06), the System Logging chapter (firewall in the table of facilities; the minimum configuration is
 `file name { facility severity; }`). *vJunosEvolved Deployment Guide* (2025-11-11), the limitations (vJunosEvolved-BX does not support
-firewall policers). That policers have no effect, and the output with an accept at the end of the first listed filter, were checked on
+firewall policers). The same guide's section on match conditions (a packet must match all the conditions in a term), and "Firewall
+Filter Match Conditions Based on Address Fields" (longest match in a list of addresses and the implicit 0/0 except at its end; a term of
+only except lines does not match, and its counter is missing from `show firewall`). The guide does not say how `source-address` and
+`source-prefix-list` combine in one term; that behavior in section 2.2 was checked on JUN02 in the topology of J2 (JNT-03).
+That policers have no effect, and the output with an accept at the end of the first listed filter, were checked on
 JUN02 in the topology of J1 (JNT-02). The output was captured on vJunos-Evolved (Junos OS Evolved 26.2R1.7) in containerlab.
 :::

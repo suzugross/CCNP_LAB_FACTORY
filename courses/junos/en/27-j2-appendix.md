@@ -10,6 +10,8 @@ The order in which one packet passes through firewall filters.
 3. If filters are listed, one at a time from the left. Within a filter, one term at a time from the top.
 4. A term's `from` matches when every condition of a different kind matches (AND) and one of the values of the same kind matches (OR).
    In a list of addresses, the one that covers the packet's address most specifically decides; if it is `except`, there is no match.
+   `source-address` and `source-prefix-list` count as one kind (the source address) and form one list (likewise for the destination).
+   A list of nothing but `except` lines matches nothing.
 5. Run the `then` of the matching term.
    - `accept`, `discard`, `reject`: it ends here. Listed filters after this one are not checked either.
    - Only `count`, `log`, `syslog`, `policer`: run them, then let the packet through (an implicit accept).

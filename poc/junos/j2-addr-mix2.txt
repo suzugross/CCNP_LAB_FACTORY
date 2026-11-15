@@ -1,0 +1,29 @@
+# PoC(BL-275・j2-addr-mix の続き): 宛先の側も同じか(destination-address と destination-prefix-list を別々に書く)
+# ケース E: destination-address 172.16.99.0/24(どこにも無い網)と destination-prefix-list {172.16.20.0/24}
+#   AND なら 172.16.20.1 への ping は当たらない(届く)/1 つの並びにまとまるなら E の数に入る(届かない)
+JUN02 set cli screen-length 0
+JUN02 configure
+JUN02 set policy-options prefix-list POC-PL-E 172.16.20.0/24
+JUN02 set firewall family inet filter POC-T term E from destination-address 172.16.99.0/24
+JUN02 set firewall family inet filter POC-T term E from destination-prefix-list POC-PL-E
+JUN02 set firewall family inet filter POC-T term E from protocol icmp
+JUN02 set firewall family inet filter POC-T term E then count E
+JUN02 set firewall family inet filter POC-T term E then discard
+JUN02 delete interfaces et-0/0/1 unit 0 family inet filter input-list
+JUN02 set interfaces et-0/0/1 unit 0 family inet filter input-list [ POC-T src-filter-01 input-filter-01 ]
+JUN02 show firewall family inet filter POC-T | display set
+JUN02 commit and-quit
+!sleep 3
+JUN02 clear firewall all
+NET1 ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+NET1 ping -c 3 -W 1 -I 198.51.100.10 172.16.10.10
+!sleep 5
+JUN02 show firewall filter et-0/0/1.0-inet-i
+# 戻す
+JUN02 configure
+JUN02 delete firewall family inet filter POC-T
+JUN02 delete policy-options prefix-list POC-PL-E
+JUN02 delete interfaces et-0/0/1 unit 0 family inet filter input-list
+JUN02 set interfaces et-0/0/1 unit 0 family inet filter input-list [ src-filter-01 input-filter-01 ]
+JUN02 commit and-quit
+JUN02 show configuration interfaces et-0/0/1 unit 0 family inet filter

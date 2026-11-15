@@ -1,0 +1,159 @@
+# jpoc JNT-03 j2-addr-mix2.txt 2026-11-15 14:33:03
+# PoC(BL-275・j2-addr-mix の続き): 宛先の側も同じか(destination-address と destination-prefix-list を別々に書く)
+# ケース E: destination-address 172.16.99.0/24(どこにも無い網)と destination-prefix-list {172.16.20.0/24}
+#   AND なら 172.16.20.1 への ping は当たらない(届く)/1 つの並びにまとまるなら E の数に入る(届かない)
+
+## [JUN02] (open)
+Last login: Sun Nov 15 14:30:50 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] set cli screen-length 0
+set cli screen-length 0 
+Screen length set to 0
+
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+Users currently editing the configuration:
+  admin terminal pts/0 (pid 15703) on since 2026-11-15 12:58:05 UTC, idle 00:23:27
+      [edit]
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options prefix-list POC-PL-E 172.16.20.0/24
+set policy-options prefix-list POC-PL-E 172.16.20.0/24 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term E from destination-address 172.16.99.0/24
+set firewall family inet filter POC-T term E from destination-address 172.16.99.0/24 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term E from destination-prefix-list POC-PL-E
+set firewall family inet filter POC-T term E from destination-prefix-list POC-PL-E 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term E from protocol icmp
+set firewall family inet filter POC-T term E from protocol icmp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term E then count E
+set firewall family inet filter POC-T term E then count E 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter POC-T term E then discard
+set firewall family inet filter POC-T term E then discard 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete interfaces et-0/0/1 unit 0 family inet filter input-list
+delete interfaces et-0/0/1 unit 0 family inet filter input-list 
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces et-0/0/1 unit 0 family inet filter input-list [ POC-T src-filter-01 input-filter-01 ]
+set interfaces et-0/0/1 unit 0 family inet filter input-list [ POC-T src-filter-01 input-filter-01 ] 
+
+[edit]
+admin@jun02# 
+## [JUN02] show firewall family inet filter POC-T | display set
+show firewall family inet filter POC-T | display set 
+set firewall family inet filter POC-T term E from destination-address 172.16.99.0/24
+set firewall family inet filter POC-T term E from destination-prefix-list POC-PL-E
+set firewall family inet filter POC-T term E from protocol icmp
+set firewall family inet filter POC-T term E then count E
+set firewall family inet filter POC-T term E then discard
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 3s)
+
+## [JUN02] clear firewall all
+clear firewall all 
+
+admin@jun02> 
+## [NET1] (open)
+net1:/# 
+## [NET1] ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+PING 172.16.20.1 (172.16.20.1) from 198.51.100.10: 56 data bytes
+
+--- 172.16.20.1 ping statistics ---
+3 packets transmitted, 0 packets received, 100% packet loss
+net1:/# 
+## [NET1] ping -c 3 -W 1 -I 198.51.100.10 172.16.10.10
+ping -c 3 -W 1 -I 198.51.100.10 172.16.10.10
+PING 172.16.10.10 (172.16.10.10) from 198.51.100.10: 56 data bytes
+64 bytes from 172.16.10.10: seq=0 ttl=61 time=3.052 ms
+64 bytes from 172.16.10.10: seq=1 ttl=61 time=3.227 ms
+64 bytes from 172.16.10.10: seq=2 ttl=61 time=1.674 ms
+
+--- 172.16.10.10 ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max = 1.674/2.651/3.227 ms
+net1:/# 
+## (sleep 5s)
+
+## [JUN02] show firewall filter et-0/0/1.0-inet-i
+show firewall filter et-0/0/1.0-inet-i 
+
+Filter: et-0/0/1.0-inet-i                                    
+Counters:
+Name                                                                            Bytes              Packets
+BOGON-et-0/0/1.0-inet-i                                                             0                    0
+E-et-0/0/1.0-inet-i                                                               252                    3
+ISP-DENY-et-0/0/1.0-inet-i                                                          0                    0
+
+admin@jun02> # 戻す
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+Users currently editing the configuration:
+  admin terminal pts/0 (pid 15703) on since 2026-11-15 12:58:05 UTC, idle 00:23:50
+      [edit]
+
+[edit]
+admin@jun02# 
+## [JUN02] delete firewall family inet filter POC-T
+delete firewall family inet filter POC-T 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options prefix-list POC-PL-E
+delete policy-options prefix-list POC-PL-E 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete interfaces et-0/0/1 unit 0 family inet filter input-list
+delete interfaces et-0/0/1 unit 0 family inet filter input-list 
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces et-0/0/1 unit 0 family inet filter input-list [ src-filter-01 input-filter-01 ]
+set interfaces et-0/0/1 unit 0 family inet filter input-list [ src-filter-01 input-filter-01 ] 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [JUN02] show configuration interfaces et-0/0/1 unit 0 family inet filter
+show configuration interfaces et-0/0/1 unit 0 family inet filter 
+input-list [ src-filter-01 input-filter-01 ];
+
+admin@jun02> 

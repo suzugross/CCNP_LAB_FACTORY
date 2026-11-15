@@ -34,13 +34,21 @@ Junos 中心の教材を、containerlab(szk-cl01)の上に作る。
 | イメージ | 1 台のメモリ | 状態 |
 |---|---|---|
 | vJunos EVO(PTX 相当) | 7.3GiB(docker stats 実測) | 導入済み・実績あり |
-| vJunos-router(MX 相当)／vJunos-switch(EX 相当) | 5GB(公式の最小) | 未導入(`~/vrnetlab/juniper/` に雛形)。公式は VM の中の入れ子の仮想化を非サポート→要 PoC |
+| vJunos-router(MX 相当)／vJunos-switch(EX 相当) | 5GB(公式の最小) | 未導入(`~/vrnetlab/juniper/` の雛形はイメージの無い空箱)。**szk-cl01 では動かない見込み**(下の注・2026-11-15) |
 | cJunosEvolved | 8GB 以上(公式) | 未導入。EVO と同じ重さなので優先度低 |
 | cRPD | 軽い | 試用ライセンス 90 日→常設の教材には使わない |
 | FRR／cEOS | 19MiB／1.56GiB | 導入済み(BL-274) |
 
 - szk-cl01 は CML を止めた状態で総量 51GiB と見える(2026-11-14)。VMware のバルーンで見かけの総量が動くので、実際の上限は PoC で測る。
   目安= EVO なら 5〜6 台。XRd が担っていた軽い役(RR・CE)は FRR か cEOS に任せる。
+- **vJunos-router／switch の見立て(2026-11-15)**: 2 つとも、外側の VM(VFP・PFE)が起動した後に、制御部(VCP)を中で入れ子の VM として
+  起動する作り(公式の architecture の頁・検索で確認。juniper.net は自動で開かないので頁そのものは未読)。vJunos-switch は「VM の中から起動する
+  使い方はできない」と公式の制限の頁にあり、vJunos-router も同じ作りなので同じ制限と見る。
+  - 入れ子の深さ: szk-cl01(VMware の VM)→ vJunos の外側の VM → 中の VCP = **3 段**。CML の上でも同じ 3 段で、2026-07-28 の
+    「vJunos は CML 内では 3 段ネストで起動不能」(CLAB-HYBRID.design.md・どのイメージかは未記録)と同じ形になる。
+  - vJunos-Evolved は中の VM を持たない(導入ガイド 2025-11-11 に入れ子の記述なし)ので 2 段で動いている。CML の上の EVO も 2 段だが未確認。
+  - 結論: MX・EX に固有の単元(案 C・MX だけの機能)は今の環境では扱わない。扱うなら VMware を通さない Linux の機械が要る。
+    SP の本線(IS-IS・BGP・MPLS・L3VPN)は vJunos-Evolved で進められるので影響しない。PoC は、物理の機械を用意する話になった時に行う。
 
 ## 4. どの案でも最初に要る土台
 
@@ -124,7 +132,8 @@ IOS・XR と並べて、書き方と作法の違いを解説する。中身の�
 
 - 内容(§2 のどれか・組み合わせ)と単元の並び。
 - 試験の範囲にどこまで寄せるか。
-- 新しいイメージ(vJunos-router／switch)の PoC をいつ行うか。
+- ~~新しいイメージ(vJunos-router／switch)の PoC をいつ行うか。~~ → 2026-11-15 szk-cl01 では動かない見込みと判断(§3 の注)。
+  物理の機械を用意するかどうかの話になった時に改めて決める。
 - BL-073 ①(Junos の続編問)の扱い(この教材の実践に吸収するか、別に残すか)。
 
 ## 7. J0 の実装(2026-11-14)
@@ -321,6 +330,7 @@ PoC のための下ごしらえ= `j2-prep.txt`(初めの設定には ISP から�
 | OSPF の term を外す | 40 秒ほどで JUN02 の隣接が消え、JUN01 は Init のまま。戻すと Full | — |
 | input-list | 合成されたフィルタ名 `et-0/0/1.0-inet-i` が IF に付き、カウンタはその名前の下(`BOGON-et-0/0/1.0-inet-i`)。元のフィルタの名前の下は 0 のまま。1 本目の最後の `term OTHER then accept` があると 2 本目は見られない(ICMP のカウンタが増えない)→ 外すと 2 本目へ進む | p.1439 Table 86・p.279「An input-list stops processing of packets upon accept or discard」= 文書どおり。EVO 21.4R1 からは一部の PTX に `input-chain`(accept でも次のフィルタへ)もある |
 | prefix-list の except | bogon の 10/8 に ISP との接続(10.0.23.0/30)が入る → BGP も捨てられる(Connect)。`source-prefix-list ISP-LINK except` を足すと BGP は Established・送信元 10.200.0.1 の ping は捨てたまま | — |
+| ★同じ term の source-address と source-prefix-list(§9.7) | AND でなく 1 つの並びの最長一致(宛先の destination-address と destination-prefix-list も同じ)。except の行しかない並びは何にも当たらず、その term のカウンタは `show firewall` に出ない | p.796= term の条件は AND・p.1083= 並びの末尾に暗黙の 0/0 except・p.1080「Excluding All Addresses Requires an Explicit Match on the 0/0 Address」= except だけは当たらずカウンタも出ない(文書どおり)。2 つの条件の組み合わせ方は書いていない |
 | ★policer | 64k・burst 15k の policer を中継の ICMP(並び・単独とも)と RE 行きの ICMP に付けても、1000 バイトを 100 個/秒の ping が 200〜300 個とも届き、policer の欄は 0(commit は通る) | vjunos-evolved-kvm.pdf(2025-11-11)の vJunosEvolved の制約に policer の記述は無い・同書の **vJunosEvolved-BX** は「Firewall policer … not supported」と明記 → この仮想機では効かないと判断(仮想機の制約。Junos の挙動と分けて書く) |
 
 ### 9.5 課題(2026-11-15 PoC の後に提示 → 同日ユーザ了承)
@@ -367,3 +377,25 @@ PoC のための下ごしらえ= `j2-prep.txt`(初めの設定には ISP から�
 - **用語集**(glossary/junos.yml・books: [junos]): firewall filter・暗黙の discard・tcp-established・lo0 のフィルタ・RE・PFE・apply-path・フィルタの並び・
   facility(scope J2)・mgmt_junos・ステートレス(scope J2)・CoPP・LPTS・MPP。終端の動作と prefix-list の説明をフィルタにも通じるように広げた。
 - 2026-11-15 開発コンテナの再起動(04:00)でポータルが止まっていた → 起動し直した(setsid nohup)。
+
+### 9.7 レビュー起点の PoC: 同じ term の source-address と source-prefix-list(2026-11-15)
+
+ユーザの J2-4 の解答が `source-address 10.0.23.0/30 except` と `source-prefix-list prefix-bogon-01` を**別々の条件として同じ term** に書いていた
+(模範解は 2 つの prefix-list を同じ `source-prefix-list` に並べる)。文書の一般則(p.796 の AND と p.1083 の暗黙の 0/0 except)を組み合わせると
+この term は何にも当たらない計算になるが、実機では意図どおり動いた(BOGON 129 パケット・BGP は Established)。第三者のツール(RuleHawk の PR)は
+「両方を書くと AND」としている。→ ユーザ依頼で切り分けた(記録 `poc/junos/expJ2-addr-mix.log`・`expJ2-addr-mix2.log`。盤面 JNT-03 の JUN02 の
+et-0/0/1 の並びの先頭に試験のフィルタを置き、当たった ICMP を数えて捨てる。NET1 のループバックを送信元に ping)。
+
+| ケース | term の from | 送ったもの | 結果 | 分かること |
+|---|---|---|---|---|
+| A | `source-address 10.200.0.0/16`・`source-prefix-list`{192.168.50.0/24} | 10.200.0.1・192.168.50.1・198.51.100.10 から 172.16.20.1 へ | 前の 2 つとも A に入る(6 個)・最後は届く | AND でない(OR= 1 つの並び) |
+| B | `source-address 10.0.0.0/8 except`・`source-prefix-list`{10.200.0.0/16} | 10.200.0.1・198.51.100.10 | 10.200.0.1 は B に入る(3 個) | 2 つをまたいだ最長一致(/16 が 10/8 except に勝つ) |
+| C | `source-address 10.0.23.0/30 except` だけ | 198.51.100.10・10.200.0.1 | どちらも当たらない(前者は届く・後者は BOGON)・C のカウンタが出ない | except だけは何にも当たらない= p.1080 どおり |
+| D | `source-prefix-list`{10.0.23.0/30} `except` だけ | 198.51.100.10 | 当たらない・D のカウンタが出ない | prefix-list の except だけも同じ |
+| E | `destination-address 172.16.99.0/24`・`destination-prefix-list`{172.16.20.0/24} | 198.51.100.10 から 172.16.20.1・172.16.10.10 へ | 前者は E に入る(3 個)・後者は届く | 宛先の側も 1 つの並び |
+
+- 結論= J1 の route-filter と prefix-list(§8)と同じく、同じ種類のアドレスの条件は書き方が 2 つでも 1 つの並びとして最長一致で引かれる。
+  文書はこの組み合わせ方を書いていない(KB は未確認= juniper.net は自動で取らない)。RuleHawk の記述はこの版の実機と食い違う。
+- 読み物に追記(日英・段落の数をそろえた): 25 の 2.2 節(3 段落と例の term)・27 付録の 1 の 4・25 の出典。
+- `address`・`prefix-list`(どちら向きにも当たる条件)と `source-address` の組み合わせは試していない(読み物でも触れない)。
+- ユーザの解答は撤収の前に控えた(`private/lab-saves/JNT-03-20261115-final/`)。PoC の後に解答の状態へ戻し、`display set` の全行が控えと一致することを確かめてから撤収。

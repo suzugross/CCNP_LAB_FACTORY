@@ -95,6 +95,30 @@ Junos OS Evolved には、`input-chain` という別の並べ方もあります�
 広い範囲を捨てるときに、その中の一部だけを残したい、という形によく使います。たとえば私的アドレスを捨てる並びの中に、
 自分が使っている接続のアドレスが入ってしまう時です。その部分を `except` で抜きます。
 
+直に書くアドレス(`source-address`)と prefix-list(`source-prefix-list`)を同じ term に両方書くと、違う種類の条件(AND)としては
+扱われません。2 つを合わせた 1 つの並びとして、最長一致で引かれます。J1 の route-filter と prefix-list と同じ形です。宛先の
+`destination-address` と `destination-prefix-list` も同じです。書く場所が 2 つあっても、引かれる並びは 1 つです。
+
+```
+term t {
+    from {
+        source-address 10.200.0.0/16;
+        source-prefix-list PL;      ← PL= 192.168.50.0/24 だけ
+        protocol icmp;
+    }
+    then discard;
+}
+```
+
+この term には、送信元が 10.200.0.1 のパケットも 192.168.50.1 のパケットも当たります。AND なら、どちらも外れるはずです。
+`except` も 2 つをまたいで効きます。`source-address 10.0.0.0/8 except` と、10.200.0.0/16 だけの prefix-list を並べると、10.200.0.1 は
+長いほうの /16 で決まり、当たります。文書の「term の条件はすべて当たって一致する」を、この組み合わせにそのまま当てはめると読み違えます。
+
+一方、`except` の行しかない並びは、何にも当たりません。並びの末尾には暗黙の `0.0.0.0/0 except` があり、除いた範囲の外の
+アドレスも、そこで「当たらない」になるからです。`source-address 10.0.23.0/30 except` だけの term は、どの送信元にも当たらず、
+その term のカウンタは `show firewall` に出てきません。SRC-CHECK が 0.0.0.0/0 を並べているのは、このためです。除くものしか
+書いていない並びは、何も含みません。
+
 ### 2.3 並べた時のカウンタの名前
 
 フィルタを並べると、Junos はその口のために 1 つのフィルタを組み立てます。名前は `論理インターフェース-inet-i`
@@ -232,6 +256,10 @@ Policers の欄の名前は `policer の名前-term の名前` です。数は�
 (PFE の中のバッファ)と `show firewall log` の読み方(Filter はいつも pfe)、policer の節。『Network Management and Monitoring
 Guide』(2026-07-06)の System Logging の章(facility の表に firewall・最小の設定は `file 名前 { facility severity; }`)。
 『vJunosEvolved Deployment Guide』(2025-11-11)の制約の節(vJunosEvolved-BX は firewall policer を扱わない)。
+同じ文書の Match Conditions の節(term の条件はすべて当たって一致)、「Firewall Filter Match Conditions Based on Address Fields」
+(アドレスの並びの最長一致と末尾の暗黙の 0/0 except・except だけの term は当たらずカウンタが `show firewall` に出ない)。文書は
+`source-address` と `source-prefix-list` を同じ term に書いた時の組み合わせ方を書いていません。2.2 節のその挙動は、J2 の盤面
+(JNT-03)の JUN02 で確かめたものです。
 policer が効かないことと、並べたフィルタの 1 本目の accept の出力は、J1 の盤面(JNT-02)の JUN02 で確かめたものです。
 出力は containerlab の vJunos-Evolved(Junos OS Evolved 26.2R1.7)で取ったものです。
 :::
