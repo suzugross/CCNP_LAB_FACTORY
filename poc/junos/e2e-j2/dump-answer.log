@@ -1,0 +1,488 @@
+rc=0
+admin@jun02> show configuration firewall | no-more 
+family inet {
+    filter FROM-ISP {
+        term BGP {
+            from {
+                source-address {
+                    10.0.23.2/32;
+                }
+                protocol tcp;
+                port bgp;
+            }
+            then accept;
+        }
+        term ICMP {
+            from {
+                protocol icmp;
+            }
+            then accept;
+        }
+        term WEB {
+            from {
+                destination-address {
+                    172.16.20.0/24;
+                }
+                protocol tcp;
+                destination-port [ http https ];
+            }
+            then accept;
+        }
+        term SSH {
+            from {
+                source-address {
+                    203.0.113.0/24;
+                }
+                destination-address {
+                    172.16.20.0/24;
+                }
+                protocol tcp;
+                destination-port ssh;
+            }
+            then accept;
+        }
+        term RETURN {
+            from {
+                protocol tcp;
+                tcp-established;
+            }
+            then accept;
+        }
+        term DENY {
+            then {
+                count ISP-DENY;
+                log;
+                syslog;
+                discard;
+            }
+        }
+    }
+    filter NO-BOGONS {
+        term BOGON {
+            from {
+                source-prefix-list {
+                    BOGONS;
+                    ISP-LINK except;
+                }
+            }
+            then {
+                count BOGON;
+                discard;
+            }
+        }
+    }
+    filter PROTECT-RE {
+        term BGP {
+            from {
+                source-prefix-list {
+                    BGP-PEERS;
+                }
+                protocol tcp;
+                port bgp;
+            }
+            then accept;
+        }
+        term OSPF {
+            from {
+                protocol ospf;
+            }
+            then accept;
+        }
+        term ICMP {
+            from {
+                protocol icmp;
+            }
+            then accept;
+        }
+        term SSH {
+            from {
+                source-address {
+                    172.16.0.0/16;
+                }
+                protocol tcp;
+                destination-port ssh;
+            }
+            then accept;
+        }
+        term RETURN {
+            from {
+                protocol tcp;
+                tcp-established;
+            }
+            then accept;
+        }
+        term DENY {
+            then {
+                count RE-DENY;
+                discard;
+            }
+        }
+    }
+}
+
+admin@jun02> show configuration interfaces et-0/0/1 | no-more 
+description "to ISP (FRR1)";
+unit 0 {
+    family inet {
+        filter {
+            input-list [ NO-BOGONS FROM-ISP ];
+        }
+        address 10.0.23.1/30;
+    }
+}
+
+admin@jun02> show configuration interfaces lo0 | no-more 
+unit 0 {
+    family inet {
+        filter {
+            input PROTECT-RE;
+        }
+        address 192.168.0.2/32;
+    }
+}
+
+admin@jun02> show configuration policy-options prefix-list BGP-PEERS | display inheritance | no-more 
+##
+## apply-path was expanded to:
+##     10.0.23.2/32; 
+##
+apply-path "protocols bgp group <*> neighbor <*>";
+
+admin@jun02> show configuration system syslog | no-more 
+file fw-drops {
+    firewall any;
+}
+
+admin@jun02> show firewall | no-more 
+
+Filter: FROM-ISP                                             
+Counters:
+Name                                                                            Bytes              Packets
+ISP-DENY                                                                         6840                  114
+
+Filter: NO-BOGONS                                            
+Counters:
+Name                                                                            Bytes              Packets
+BOGON                                                                               0                    0
+
+Filter: PROTECT-RE                                           
+Counters:
+Name                                                                            Bytes              Packets
+RE-DENY                                                                          6360                  102
+
+Filter: et-0/0/1.0-inet-i                                    
+Counters:
+Name                                                                            Bytes              Packets
+BOGON-et-0/0/1.0-inet-i                                                          4368                   52
+ISP-DENY-et-0/0/1.0-inet-i                                                      16020                  267
+
+admin@jun02> show firewall log | no-more 
+Log :
+Time      Filter    Action Interface           Protocol        Src Addr                                Dest Addr
+05:17:49  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:17:50  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:17:51  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:17:52  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:18:01  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:18:02  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:18:03  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:18:04  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            172.16.10.1
+05:18:05  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            172.16.10.1
+05:18:06  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            172.16.10.1
+05:18:07  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            10.0.23.1
+05:18:09  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            10.0.23.1
+05:18:10  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            10.0.23.1
+05:18:10  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:18:12  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:18:13  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:18:15  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:18:16  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:18:17  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:18:18  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:18:19  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:18:20  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:18:30  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:18:31  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:18:32  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:18:33  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:18:34  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:18:35  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:18:44  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:18:45  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:18:46  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:18:47  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            172.16.10.1
+05:18:48  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            172.16.10.1
+05:18:49  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            172.16.10.1
+05:18:50  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            10.0.23.1
+05:18:51  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            10.0.23.1
+05:18:52  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            10.0.23.1
+05:18:53  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:18:54  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:18:55  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:18:58  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:18:59  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:19:00  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:19:01  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:19:02  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:19:03  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:19:12  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:19:13  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:19:14  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:19:16  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:19:17  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:19:18  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:19:27  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:19:28  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:19:29  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:19:30  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            172.16.10.1
+05:19:31  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            172.16.10.1
+05:19:32  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            172.16.10.1
+05:19:33  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            10.0.23.1
+05:19:34  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            10.0.23.1
+05:19:35  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            10.0.23.1
+05:19:36  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:19:37  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:19:38  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:19:40  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:19:42  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:19:43  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:19:43  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:19:45  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:19:46  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:19:55  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:19:56  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:19:57  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:19:59  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:20:00  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:20:01  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:20:09  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:20:10  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:20:11  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:20:13  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            172.16.10.1
+05:20:14  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            172.16.10.1
+05:20:15  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            172.16.10.1
+05:20:16  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            10.0.23.1
+05:20:17  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            10.0.23.1
+05:20:18  pfe       D      et-0/0/1.0          TCP             203.0.113.10                            10.0.23.1
+05:20:19  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:20:20  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:20:21  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:20:23  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:20:24  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:20:25  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.20.1
+05:20:26  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:20:27  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:20:28  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:20:38  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:20:39  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:20:40  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:20:41  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:20:42  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+05:20:43  pfe       D      et-0/0/1.0          TCP             198.51.100.10                           172.16.10.1
+
+admin@jun02> show log fw-drops | no-more 
+Nov 15 05:13:14  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 34351    23 (1 packets)
+Nov 15 05:13:16  jun02 last message repeated 2 times
+Nov 15 05:13:20  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 50719    23 (1 packets)
+Nov 15 05:13:22  jun02 last message repeated 2 times
+Nov 15 05:13:25  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 39443    23 (1 packets)
+Nov 15 05:13:27  jun02 last message repeated 2 times
+Nov 15 05:13:43  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 41831    22 (1 packets)
+Nov 15 05:13:45  jun02 last message repeated 2 times
+Nov 15 05:13:47  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 53499    22 (1 packets)
+Nov 15 05:13:48  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 53499    22 (1 packets)
+Nov 15 05:13:49  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 43735    22 (1 packets)
+Nov 15 05:13:49  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 53499    22 (1 packets)
+Nov 15 05:13:51  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 43735    22 (1 packets)
+Nov 15 05:13:52  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 43735    22 (1 packets)
+Nov 15 05:13:52  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 50963  8080 (1 packets)
+Nov 15 05:13:55  jun02 last message repeated 2 times
+Nov 15 05:13:57  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 54833  8080 (1 packets)
+Nov 15 05:13:58  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 54833  8080 (1 packets)
+Nov 15 05:13:59  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 50875    22 (1 packets)
+Nov 15 05:13:59  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 54833  8080 (1 packets)
+Nov 15 05:14:01  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 50875    22 (1 packets)
+Nov 15 05:14:02  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 50875    22 (1 packets)
+Nov 15 05:14:12  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 60993    22 (1 packets)
+Nov 15 05:14:14  jun02 last message repeated 2 times
+Nov 15 05:14:15  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 52759    23 (1 packets)
+Nov 15 05:14:17  jun02 last message repeated 2 times
+Nov 15 05:14:29  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 42171    22 (1 packets)
+Nov 15 05:14:31  jun02 last message repeated 2 times
+Nov 15 05:14:32  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 50099    22 (1 packets)
+Nov 15 05:14:34  jun02 last message repeated 2 times
+Nov 15 05:14:34  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 58215    22 (1 packets)
+Nov 15 05:14:36  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 58215    22 (1 packets)
+Nov 15 05:14:37  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 48941  8080 (1 packets)
+Nov 15 05:14:37  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 58215    22 (1 packets)
+Nov 15 05:14:39  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 48941  8080 (1 packets)
+Nov 15 05:14:40  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 48941  8080 (1 packets)
+Nov 15 05:14:43  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 54193  8080 (1 packets)
+Nov 15 05:14:44  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 54193  8080 (1 packets)
+Nov 15 05:14:45  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 37579    22 (1 packets)
+Nov 15 05:14:45  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 54193  8080 (1 packets)
+Nov 15 05:14:47  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 37579    22 (1 packets)
+Nov 15 05:14:48  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 37579    22 (1 packets)
+Nov 15 05:14:57  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 35811    22 (1 packets)
+Nov 15 05:14:59  jun02 last message repeated 2 times
+Nov 15 05:15:01  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 36275    23 (1 packets)
+Nov 15 05:15:03  jun02 last message repeated 2 times
+Nov 15 05:15:11  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 42709    22 (1 packets)
+Nov 15 05:15:14  jun02 last message repeated 2 times
+Nov 15 05:15:15  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 49219    22 (1 packets)
+Nov 15 05:15:16  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 49219    22 (1 packets)
+Nov 15 05:15:17  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 33559    22 (1 packets)
+Nov 15 05:15:17  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 49219    22 (1 packets)
+Nov 15 05:15:19  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 33559    22 (1 packets)
+Nov 15 05:15:20  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 33559    22 (1 packets)
+Nov 15 05:15:20  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 53085  8080 (1 packets)
+Nov 15 05:15:22  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 53085  8080 (2 packets)
+Nov 15 05:15:25  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 58131  8080 (1 packets)
+Nov 15 05:15:27  jun02 last message repeated 2 times
+Nov 15 05:15:27  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 58519    22 (1 packets)
+Nov 15 05:15:30  jun02 last message repeated 2 times
+Nov 15 05:15:40  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 59019    22 (1 packets)
+Nov 15 05:15:42  jun02 last message repeated 2 times
+Nov 15 05:15:43  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 58055    23 (1 packets)
+Nov 15 05:15:45  jun02 last message repeated 2 times
+Nov 15 05:15:54  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 40919    22 (2 packets)
+Nov 15 05:15:56  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 40919    22 (1 packets)
+Nov 15 05:15:57  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 41671    22 (1 packets)
+Nov 15 05:15:58  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 41671    22 (1 packets)
+Nov 15 05:15:59  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 32853    22 (1 packets)
+Nov 15 05:15:59  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 41671    22 (1 packets)
+Nov 15 05:16:01  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 32853    22 (1 packets)
+Nov 15 05:16:02  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 32853    22 (1 packets)
+Nov 15 05:16:02  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 54669  8080 (1 packets)
+Nov 15 05:16:05  jun02 last message repeated 2 times
+Nov 15 05:16:07  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 56007  8080 (1 packets)
+Nov 15 05:16:08  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 56007  8080 (1 packets)
+Nov 15 05:16:10  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 44493    22 (1 packets)
+Nov 15 05:16:10  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 56007  8080 (1 packets)
+Nov 15 05:16:12  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 44493    22 (1 packets)
+Nov 15 05:16:13  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 44493    22 (1 packets)
+Nov 15 05:16:22  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 34615    22 (1 packets)
+Nov 15 05:16:24  jun02 last message repeated 2 times
+Nov 15 05:16:26  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 35841    23 (1 packets)
+Nov 15 05:16:28  jun02 last message repeated 2 times
+Nov 15 05:16:36  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 38171    22 (1 packets)
+Nov 15 05:16:39  jun02 last message repeated 2 times
+Nov 15 05:16:40  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 53391    22 (1 packets)
+Nov 15 05:16:41  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 53391    22 (1 packets)
+Nov 15 05:16:42  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 35485    22 (1 packets)
+Nov 15 05:16:42  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 53391    22 (1 packets)
+Nov 15 05:16:44  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 35485    22 (1 packets)
+Nov 15 05:16:45  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 35485    22 (1 packets)
+Nov 15 05:16:45  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 59871  8080 (1 packets)
+Nov 15 05:16:48  jun02 last message repeated 2 times
+Nov 15 05:16:50  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 47943  8080 (1 packets)
+Nov 15 05:16:52  jun02 last message repeated 2 times
+Nov 15 05:16:52  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 52563    22 (1 packets)
+Nov 15 05:16:55  jun02 last message repeated 2 times
+Nov 15 05:17:05  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 49271    22 (1 packets)
+Nov 15 05:17:07  jun02 last message repeated 2 times
+Nov 15 05:17:08  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 59157    23 (1 packets)
+Nov 15 05:17:10  jun02 last message repeated 2 times
+Nov 15 05:17:19  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 53069    22 (1 packets)
+Nov 15 05:17:21  jun02 last message repeated 2 times
+Nov 15 05:17:23  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 43249    22 (1 packets)
+Nov 15 05:17:25  jun02 last message repeated 2 times
+Nov 15 05:17:25  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 55149    22 (1 packets)
+Nov 15 05:17:27  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 55149    22 (1 packets)
+Nov 15 05:17:28  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 48225  8080 (1 packets)
+Nov 15 05:17:28  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 55149    22 (1 packets)
+Nov 15 05:17:30  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 48225  8080 (1 packets)
+Nov 15 05:17:31  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 48225  8080 (1 packets)
+Nov 15 05:17:33  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 53073  8080 (1 packets)
+Nov 15 05:17:34  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 53073  8080 (1 packets)
+Nov 15 05:17:35  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 50789    22 (1 packets)
+Nov 15 05:17:35  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 53073  8080 (1 packets)
+Nov 15 05:17:37  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 50789    22 (1 packets)
+Nov 15 05:17:38  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 50789    22 (1 packets)
+Nov 15 05:17:48  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 52775    22 (1 packets)
+Nov 15 05:17:50  jun02 last message repeated 2 times
+Nov 15 05:17:51  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 49253    23 (1 packets)
+Nov 15 05:17:53  jun02 last message repeated 2 times
+Nov 15 05:18:02  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 33241    22 (1 packets)
+Nov 15 05:18:04  jun02 last message repeated 2 times
+Nov 15 05:18:05  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 55265    22 (1 packets)
+Nov 15 05:18:06  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 55265    22 (1 packets)
+Nov 15 05:18:07  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 41773    22 (1 packets)
+Nov 15 05:18:07  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 55265    22 (1 packets)
+Nov 15 05:18:10  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 41773    22 (1 packets)
+Nov 15 05:18:11  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 41773    22 (1 packets)
+Nov 15 05:18:11  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 60973  8080 (1 packets)
+Nov 15 05:18:14  jun02 last message repeated 2 times
+Nov 15 05:18:16  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 53221  8080 (1 packets)
+Nov 15 05:18:17  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 53221  8080 (1 packets)
+Nov 15 05:18:18  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 33075    22 (1 packets)
+Nov 15 05:18:18  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 53221  8080 (1 packets)
+Nov 15 05:18:20  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 33075    22 (1 packets)
+Nov 15 05:18:21  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 33075    22 (1 packets)
+Nov 15 05:18:31  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 40833    22 (1 packets)
+Nov 15 05:18:33  jun02 last message repeated 2 times
+Nov 15 05:18:34  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 36783    23 (1 packets)
+Nov 15 05:18:36  jun02 last message repeated 2 times
+Nov 15 05:18:45  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 58401    22 (1 packets)
+Nov 15 05:18:47  jun02 last message repeated 2 times
+Nov 15 05:18:48  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 56999    22 (1 packets)
+Nov 15 05:18:49  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 56999    22 (1 packets)
+Nov 15 05:18:50  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 37827    22 (1 packets)
+Nov 15 05:18:50  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 56999    22 (1 packets)
+Nov 15 05:18:52  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 37827    22 (1 packets)
+Nov 15 05:18:53  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 37827    22 (1 packets)
+Nov 15 05:18:53  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 41147  8080 (1 packets)
+Nov 15 05:18:56  jun02 last message repeated 2 times
+Nov 15 05:18:59  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 53815  8080 (1 packets)
+Nov 15 05:19:00  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 53815  8080 (1 packets)
+Nov 15 05:19:01  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 37107    22 (1 packets)
+Nov 15 05:19:01  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 53815  8080 (1 packets)
+Nov 15 05:19:03  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 37107    22 (1 packets)
+Nov 15 05:19:04  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 37107    22 (1 packets)
+Nov 15 05:19:13  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 35099    22 (1 packets)
+Nov 15 05:19:15  jun02 last message repeated 2 times
+Nov 15 05:19:17  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 42639    23 (1 packets)
+Nov 15 05:19:19  jun02 last message repeated 2 times
+Nov 15 05:19:28  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 42507    22 (1 packets)
+Nov 15 05:19:30  jun02 last message repeated 2 times
+Nov 15 05:19:31  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 53573    22 (1 packets)
+Nov 15 05:19:33  jun02 last message repeated 2 times
+Nov 15 05:19:33  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 54031    22 (1 packets)
+Nov 15 05:19:35  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 54031    22 (2 packets)
+Nov 15 05:19:37  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 45017  8080 (1 packets)
+Nov 15 05:19:39  jun02 last message repeated 2 times
+Nov 15 05:19:41  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 57091  8080 (1 packets)
+Nov 15 05:19:44  jun02 last message repeated 2 times
+Nov 15 05:19:44  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 57433    22 (1 packets)
+Nov 15 05:19:47  jun02 last message repeated 2 times
+Nov 15 05:19:56  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 42799    22 (1 packets)
+Nov 15 05:19:58  jun02 last message repeated 2 times
+Nov 15 05:20:00  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 53753    23 (1 packets)
+Nov 15 05:20:02  jun02 last message repeated 2 times
+Nov 15 05:20:10  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 56773    22 (1 packets)
+Nov 15 05:20:12  jun02 last message repeated 2 times
+Nov 15 05:20:14  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 172.16.10.1 51661    22 (1 packets)
+Nov 15 05:20:16  jun02 last message repeated 2 times
+Nov 15 05:20:17  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 203.0.113.10 10.0.23.1 45635    22 (1 packets)
+Nov 15 05:20:19  jun02 last message repeated 2 times
+Nov 15 05:20:19  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 47233  8080 (1 packets)
+Nov 15 05:20:22  jun02 last message repeated 2 times
+Nov 15 05:20:24  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 58953  8080 (1 packets)
+Nov 15 05:20:25  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 58953  8080 (1 packets)
+Nov 15 05:20:26  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 39667    22 (1 packets)
+Nov 15 05:20:26  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.20.1 58953  8080 (1 packets)
+Nov 15 05:20:28  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 39667    22 (1 packets)
+Nov 15 05:20:29  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 39667    22 (1 packets)
+Nov 15 05:20:39  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 49105    22 (1 packets)
+Nov 15 05:20:41  jun02 last message repeated 2 times
+Nov 15 05:20:42  jun02 evo-aftmand-bt[14782]: FW: et-0/0/1.0   D  TCP 198.51.100.10 172.16.10.1 33571    23 (1 packets)
+
+admin@jun02> show interfaces et-0/0/1.0 extensive | match ilter | no-more 
+      Input Filters: et-0/0/1.0-inet-i
+
+admin@jun02> show interfaces lo0.0 extensive | match ilter | no-more 
+      Input Filters: PROTECT-RE
+
+admin@jun02> 
+
+STDERR: 

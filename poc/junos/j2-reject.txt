@@ -1,0 +1,18 @@
+# 読み物 21 ページ 2.5 節(discard と reject)の出力。JUN02 の et-0/0/1 の入力に一時的なフィルタを当てて NET1 から送る(後で reset)
+JUN02 configure
+JUN02 set firewall family inet filter T term ICMP from protocol icmp
+JUN02 set firewall family inet filter T term ICMP then accept
+JUN02 set firewall family inet filter T term LAST then discard
+JUN02 set interfaces et-0/0/1 unit 0 family inet filter input T
+JUN02 commit and-quit
+NET1 probe 172.16.10.1 22 -s 198.51.100.10
+JUN02 configure
+JUN02 delete firewall family inet filter T term LAST then discard
+JUN02 set firewall family inet filter T term LAST then reject
+JUN02 commit and-quit
+NET1 probe 172.16.10.1 22 -s 198.51.100.10
+NET1 probe 172.16.20.1 8080 -s 198.51.100.10
+JUN02 configure
+JUN02 delete interfaces et-0/0/1 unit 0 family inet filter input
+JUN02 commit and-quit
+NET1 probe 172.16.20.1 8080 -s 198.51.100.10

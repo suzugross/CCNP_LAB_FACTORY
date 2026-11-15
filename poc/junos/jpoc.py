@@ -5,6 +5,7 @@
 
 台本は 1 行 1 動作:
   NODE[:名前] コマンド     そのノードのセッション(名前ごとに別の SSH セッション。省略時は NODE)へ 1 行打ち、プロンプトを待つ
+                           名前が sh で始まる(FRR1:sh)と、FRR のノードも vtysh でなく Linux のシェルで開く
   !sleep 秒                待つ
   # …                      注釈(記録にもそのまま残す)
 セッションは最初に使った時に開く(ログインの表示も記録に入る)。プロンプトの待ちは Junos の「> 」「# 」・FRR の「# 」。
@@ -73,7 +74,9 @@ async def main(pid, script, logpath):
         key, _, cmd = line.partition(" ")
         node = key.split(":")[0]
         if key not in sessions:
-            conns, proc = await cb.open(info[node], 200, 200)
+            # 「NODE:sh…」は FRR のノードでも vtysh でなく Linux のシェルで開く(ISP 側から ping・TCP を送る PoC・J2)
+            inf = dict(info[node], host=True) if key.split(":")[-1].startswith("sh") else info[node]
+            conns, proc = await cb.open(inf, 200, 200)
             sessions[key] = Sess(conns, proc)
             banner = await sessions[key].read_until_prompt(25)
             w(f"\n## [{key}] (open)\n" + ANSI.sub("", banner.decode("utf-8", "replace")))

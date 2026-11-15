@@ -1,0 +1,12 @@
+set policy-options prefix-list BOGONS 10.0.0.0/8
+set policy-options prefix-list BOGONS 172.16.0.0/12
+set policy-options prefix-list BOGONS 192.168.0.0/16
+set policy-options prefix-list BOGONS 100.64.0.0/10
+set policy-options prefix-list BOGONS 127.0.0.0/8
+set policy-options prefix-list ISP-LINK 10.0.23.0/30
+set firewall family inet filter NO-BOGONS term BOGON from source-prefix-list BOGONS
+set firewall family inet filter NO-BOGONS term BOGON from source-prefix-list ISP-LINK except
+set firewall family inet filter NO-BOGONS term BOGON then count BOGON
+set firewall family inet filter NO-BOGONS term BOGON then discard
+delete interfaces et-0/0/1 unit 0 family inet filter input
+set interfaces et-0/0/1 unit 0 family inet filter input-list [ NO-BOGONS FROM-ISP ]

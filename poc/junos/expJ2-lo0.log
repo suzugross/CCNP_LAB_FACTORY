@@ -1,0 +1,332 @@
+# jpoc JNT-02 j2-lo0.txt 2026-11-15 04:22:52
+# PoC J2-4(BL-275): JUN02 の lo0 の入力フィルタで RE を守る。apply-path で BGP の相手を拾う・管理ポートに効かないか・OSPF の term を抜いた時
+# 前提= clab_ops.py reset の後に j2-prep.txt(戻り道の静的経路)
+
+## [FRR1:sh] (open)
+frr1:/# 
+## [FRR1:sh] tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+frr1:/# 
+## [SRV1] (open)
+srv1:/# 
+## [SRV1] tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+srv1:/# 
+## [JUN02] (open)
+Last login: Sun Nov 15 04:22:30 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set system syslog file fw-log firewall any
+set system syslog file fw-log firewall any 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options prefix-list BGP-PEERS apply-path "protocols bgp group <*> neighbor <*>"
+set policy-options prefix-list BGP-PEERS apply-path "protocols bgp group <*> neighbor <*>" 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term BGP from source-prefix-list BGP-PEERS
+set firewall family inet filter PROTECT-RE term BGP from source-prefix-list BGP-PEERS 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term BGP from protocol tcp
+set firewall family inet filter PROTECT-RE term BGP from protocol tcp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term BGP from port bgp
+set firewall family inet filter PROTECT-RE term BGP from port bgp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term BGP then accept
+set firewall family inet filter PROTECT-RE term BGP then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term OSPF from protocol ospf
+set firewall family inet filter PROTECT-RE term OSPF from protocol ospf 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term OSPF then accept
+set firewall family inet filter PROTECT-RE term OSPF then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term ICMP from protocol icmp
+set firewall family inet filter PROTECT-RE term ICMP from protocol icmp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term ICMP then accept
+set firewall family inet filter PROTECT-RE term ICMP then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term SSH from source-address 172.16.10.0/24
+set firewall family inet filter PROTECT-RE term SSH from source-address 172.16.10.0/24 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term SSH from protocol tcp
+set firewall family inet filter PROTECT-RE term SSH from protocol tcp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term SSH from destination-port ssh
+set firewall family inet filter PROTECT-RE term SSH from destination-port ssh 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term SSH then accept
+set firewall family inet filter PROTECT-RE term SSH then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term LAST then count RE-DENIED
+set firewall family inet filter PROTECT-RE term LAST then count RE-DENIED 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term LAST then syslog
+set firewall family inet filter PROTECT-RE term LAST then syslog 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term LAST then discard
+set firewall family inet filter PROTECT-RE term LAST then discard 
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces lo0 unit 0 family inet filter input PROTECT-RE
+set interfaces lo0 unit 0 family inet filter input PROTECT-RE 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [JUN02] show configuration policy-options prefix-list BGP-PEERS | display inheritance | no-more
+show configuration policy-options prefix-list BGP-PEERS | display inheritance | no-more 
+##
+## apply-path was expanded to:
+##     10.0.23.2/32; 
+##
+apply-path "protocols bgp group <*> neighbor <*>";
+
+admin@jun02> # 管理ポート(re0:mgmt-0)の SSH= 新しいセッションを開いて入れるか(lo0 のフィルタは管理ポートに効かないはず)
+
+## [JUN02:m2] (open)
+Last login: Sun Nov 15 04:22:55 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02:m2] show system users | no-more
+show system users | no-more 
+ 4:23AM  up 12 min, 2 users, load averages: 0.60, 0.72, 0.57
+USER     TTY      FROM                              LOGIN@  IDLE WHAT
+admin    pts/0    172.20.20.1                      04:22   4.00s -cli          
+admin    pts/1    172.20.20.1                      04:23   0.00s -cli          
+
+admin@jun02> # ISP から JUN02 の SSH= 捨てられる・ping= 通る・中継(JUN02 を通り抜けて JUN01 へ)= lo0 は関わらない
+
+## [FRR1:sh] tcp 10.0.23.1 22
+tcp 10.0.23.1 22
+ rc=143 t=3.00
+frr1:/# 
+## [FRR1:sh] tcp 192.168.0.2 22
+tcp 192.168.0.2 22
+ rc=143 t=3.00
+frr1:/# 
+## [FRR1:sh] ping -c 2 -W 1 10.0.23.1
+ping -c 2 -W 1 10.0.23.1
+PING 10.0.23.1 (10.0.23.1): 56 data bytes
+64 bytes from 10.0.23.1: seq=0 ttl=64 time=2.853 ms
+64 bytes from 10.0.23.1: seq=1 ttl=64 time=1.613 ms
+
+--- 10.0.23.1 ping statistics ---
+2 packets transmitted, 2 packets received, 0% packet loss
+round-trip min/avg/max = 1.613/2.233/2.853 ms
+frr1:/# 
+## [FRR1:sh] tcp 172.16.10.1 22
+tcp 172.16.10.1 22
+SSH-2.0-JSSH_5.0 rc=0 t=0.05
+frr1:/# # 中(SRV1 172.16.10.10)から JUN02 の SSH= 通る
+
+## [SRV1] tcp 10.0.12.2 22
+tcp 10.0.12.2 22
+SSH-2.0-JSSH_5.0 rc=0 t=0.04
+srv1:/# 
+## [SRV1] tcp 192.168.0.2 22
+tcp 192.168.0.2 22
+SSH-2.0-JSSH_5.0 rc=0 t=0.06
+srv1:/# 
+## (sleep 5s)
+
+## [JUN02] show firewall filter PROTECT-RE | no-more
+show firewall filter PROTECT-RE | no-more 
+
+Filter: PROTECT-RE                                           
+Counters:
+Name                                                                            Bytes              Packets
+RE-DENIED                                                                         360                    6
+
+admin@jun02> 
+## [JUN02] show log fw-log | last 6 | no-more
+show log fw-log | last 6 | no-more 
+Nov 15 04:23:10  jun02 evo-aftmand-bt[14796]: FW: et-0/0/1.0   D  TCP 10.0.23.2 10.0.23.1 49138    22 (1 packets)
+Nov 15 04:23:12  jun02 last message repeated 2 times
+Nov 15 04:23:14  jun02 evo-aftmand-bt[14796]: FW: et-0/0/1.0   D  TCP 10.0.23.2 192.168.0.2 35592    22 (1 packets)
+---(more 100%)---                                        
+admin@jun02> 
+## [JUN02] show bgp summary | match "10.0.23" | no-more
+show bgp summary | match "10.0.23" | no-more 
+10.0.23.2             64500         15         13       0       1        5:02 Establ
+
+admin@jun02> 
+## [JUN02] clear bgp neighbor 10.0.23.2
+clear bgp neighbor 10.0.23.2 
+
+Warning: License key missing; requires 'BGP' license
+
+Cleared 1 connections
+
+admin@jun02> 
+## (sleep 20s)
+
+## [JUN02] show bgp summary | match "10.0.23" | no-more
+show bgp summary | match "10.0.23" | no-more 
+10.0.23.2             64500          5          2       0       2          19 Establ
+
+admin@jun02> 
+## [JUN02] show ospf neighbor | no-more
+show ospf neighbor | no-more 
+
+Warning: License key missing; requires 'OSPF' license
+
+Address          Interface              State           ID               Pri  Dead
+10.0.12.1        et-0/0/0.0             Full            192.168.0.1      128    31
+
+admin@jun02> # JUN02 が自分から始めた TCP の戻り(SYN-ACK)= lo0 の入力で捨てられる(tcp-established の term が無い)
+
+## [FRR1:sh] pgrep -f "nc -l -p 8080" >/dev/null || ( (while :; do echo hi | nc -l -p 8080; done) >/dev/null 2>&1 & )
+pgrep -f "nc -l -p 8080" >/dev/null || ( (while :; do echo hi | nc -l -p 8080; done) >/dev/null 2>&1 & )
+frr1:/# 
+## [JUN02] start shell command "timeout 3 bash -c 'exec 3<>/dev/tcp/10.0.23.2/8080 && head -c 2 <&3'; echo rc=$?"
+start shell command "timeout 3 bash -c 'exec 3<>/dev/tcp/10.0.23.2/8080 && head -c 2 <&3'; echo rc=$?" 
+rc=124
+
+admin@jun02> 
+## [JUN02] show firewall filter PROTECT-RE | no-more
+show firewall filter PROTECT-RE | no-more 
+
+Filter: PROTECT-RE                                           
+Counters:
+Name                                                                            Bytes              Packets
+RE-DENIED                                                                         480                    8
+
+admin@jun02> # OSPF の term を外す= 隣接が dead interval(40 秒)で落ちる
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] deactivate firewall family inet filter PROTECT-RE term OSPF
+deactivate firewall family inet filter PROTECT-RE term OSPF 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 45s)
+
+## [JUN02] show ospf neighbor | no-more
+show ospf neighbor | no-more 
+
+Warning: License key missing; requires 'OSPF' license
+
+
+admin@jun02> 
+## [JUN01] (open)
+Last login: Sun Nov 15 04:22:26 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] show ospf neighbor | no-more
+show ospf neighbor | no-more 
+
+Warning: License key missing; requires 'OSPF' license
+
+Address          Interface              State           ID               Pri  Dead
+10.0.12.2        et-0/0/0.0             Init            192.168.0.2      128    33
+
+admin@jun01> 
+## [JUN01] show route 192.168.0.2 | no-more
+show route 192.168.0.2 | no-more 
+
+inet.0: 9 destinations, 9 routes (9 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[Static/5] 00:02:13
+                    >  to 10.0.12.2 via et-0/0/0.0
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[Static/5] 00:13:05
+                    >  to 10.0.0.2 via re0:mgmt-0.0
+
+admin@jun01> 
+## [JUN02] show firewall filter PROTECT-RE | no-more
+show firewall filter PROTECT-RE | no-more 
+
+Filter: PROTECT-RE                                           
+Counters:
+Name                                                                            Bytes              Packets
+RE-DENIED                                                                        1340                   20
+
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] activate firewall family inet filter PROTECT-RE term OSPF
+activate firewall family inet filter PROTECT-RE term OSPF 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 15s)
+
+## [JUN02] show ospf neighbor | no-more
+show ospf neighbor | no-more 
+
+Warning: License key missing; requires 'OSPF' license
+
+Address          Interface              State           ID               Pri  Dead
+10.0.12.1        et-0/0/0.0             Full            192.168.0.1      128    32
+
+admin@jun02> 

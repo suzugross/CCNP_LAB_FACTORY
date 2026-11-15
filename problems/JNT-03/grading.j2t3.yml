@@ -1,0 +1,76 @@
+# J2-3: JUN02 の lo0 の入力= BGP(apply-path の相手だけ)・OSPF・ICMP・172.16.0.0/16 からの SSH・自分が始めた TCP の戻りだけ。ほかは RE-DENY で数えて捨てる。
+problem: JNT-03
+total_points: 100
+checks:
+- name: 'J2-3 SRV1: SSH to JUN02 (10.0.12.2 and 192.168.0.2) opens from the server network'
+  node: SRV1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node SRV1 -- sh -c 'probe 10.0.12.2 22; probe 192.168.0.2 22 -s 172.16.20.1'
+  raw:
+  - regex: (?m)^open\s+tcp 10\.0\.12\.2:22\s
+  - regex: (?m)^open\s+tcp 192\.168\.0\.2:22 from 172\.16\.20\.1\s
+  points: 15
+- name: 'J2-3 JUN01: SSH to JUN02 from 10.0.12.1 (outside 172.16.0.0/16) is dropped'
+  node: JUN01
+  exec: junos
+  command: start shell command "timeout 3 bash -c 'exec 3<>/dev/tcp/10.0.12.2/22' && echo CONNECTED || echo FAILED"
+  raw:
+  - regex: (?m)^FAILED
+  - not_regex: (?m)^CONNECTED
+  points: 10
+- name: 'J2-3 SRV1: TCP port 179 on JUN02 is closed to a host that is not a BGP neighbor'
+  node: SRV1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node SRV1 -- sh -c 'probe 192.168.0.2 179'
+  raw:
+  - regex: (?m)^timeout\s+tcp 192\.168\.0\.2:179\s
+  points: 15
+- name: 'J2: BGP from the ISP gets through (a new TCP connection from 10.0.23.2 to port 179 on JUN02 opens)'
+  node: FRR1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node FRR1 -- probe 10.0.23.1 179 -s 10.0.23.2
+  raw:
+  - regex: (?m)^open\s+tcp 10\.0\.23\.1:179 from 10\.0\.23\.2\s
+  points: 10
+- name: 'J2 JUN02: the BGP session with the ISP is Established'
+  node: JUN02
+  exec: junos
+  command: 'show bgp neighbor 10.0.23.2 | match State:'
+  raw:
+  - regex: 'State: Established'
+  points: 5
+- name: 'J2-3 JUN02: the OSPF adjacency with JUN01 is Full and hellos keep arriving (dead timer 30-40)'
+  node: JUN02
+  exec: junos
+  command: show ospf neighbor
+  raw:
+  - regex: 10\.0\.12\.1\s+et-0/0/0\.0\s+Full\s+192\.168\.0\.1\s+\d+\s+(3\d|40)\s*$
+  points: 10
+- name: 'J2-3 JUN02: a TCP connection that JUN02 itself starts (to NET1, port 8080) gets its replies back'
+  node: JUN02
+  exec: junos
+  command: start shell command "timeout 3 bash -c 'exec 3<>/dev/tcp/198.51.100.10/8080' && echo CONNECTED || echo FAILED"
+  raw:
+  - regex: (?m)^CONNECTED
+  points: 15
+- name: 'J2-3 NET1: JUN02 answers ping (10.0.23.1)'
+  node: NET1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- ping -c 3 -W 1 -I 198.51.100.10 10.0.23.1
+  raw:
+  - regex: \b3 (packets )?received
+  points: 5
+- name: 'J2-3 JUN02: the BGP neighbors for the filter are taken from the BGP configuration (apply-path)'
+  node: JUN02
+  exec: junos
+  command: show configuration policy-options | display set | match apply-path
+  raw:
+  - regex: apply-path "protocols bgp [^"]*neighbor[^"]*"
+  points: 10
+- name: 'J2-3 JUN02: counter RE-DENY counts the dropped packets'
+  node: JUN02
+  exec: junos
+  command: show firewall | no-more
+  raw:
+  - regex: (?m)^RE-DENY(-\S+)?\s+\d+\s+[1-9]\d*\s*$
+  points: 5

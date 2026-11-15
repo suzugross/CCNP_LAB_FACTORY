@@ -1,0 +1,340 @@
+# jpoc JNT-02 j2-filter3.txt 2026-11-15 04:19:48
+# PoC J2-3(BL-275): reject の種類ごとに何が返るか(FRR1 の eth1 で観る)・syslog・tcp-established と insert(J2-2 の流し直し)
+# 前提= J2-2 の後(FROM-ISP の LAST= count DENIED・discard・log・syslog)
+
+## [FRR1:sh] (open)
+frr1:/# 
+## [FRR1:sh] tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+frr1:/# 
+## [SRV1] (open)
+srv1:/# 
+## [SRV1] tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+srv1:/# 
+## [JUN02] (open)
+Last login: Sun Nov 15 04:15:10 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] set cli screen-length 0
+set cli screen-length 0 
+Screen length set to 0
+
+admin@jun02> 
+## [JUN02] show log messages | match PFE_FW | last 3
+show log messages | match PFE_FW | last 3 
+Nov 15 04:15:28  jun02 mgd[18840]: UI_CMDLINE_READ_LINE: User 'admin', command 'show log messages | match "FW|PFE_FW|192.168.0.1" | last 5 '
+Nov 15 04:19:52  jun02 mgd[26168]: UI_CMDLINE_READ_LINE: User 'admin', command 'show log messages | match PFE_FW | last 3 '
+---(more 100%)---                                        
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] delete firewall family inet filter FROM-ISP term LAST then discard
+delete firewall family inet filter FROM-ISP term LAST then discard 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete firewall family inet filter FROM-ISP term LAST then log
+delete firewall family inet filter FROM-ISP term LAST then log 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete firewall family inet filter FROM-ISP term LAST then syslog
+delete firewall family inet filter FROM-ISP term LAST then syslog 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term LAST then reject
+set firewall family inet filter FROM-ISP term LAST then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [FRR1:sh] python3 /tmp/sniff.py eth1 6 > /tmp/s1.log 2>&1 &
+python3 /tmp/sniff.py eth1 6 > /tmp/s1.log 2>&1 &
+[1] 272
+frr1:/# 
+## [FRR1:sh] tcp 192.168.0.1 22
+tcp 192.168.0.1 22
+bash: connect: Host is unreachable
+bash: line 1: /dev/tcp/192.168.0.1/22: Host is unreachable
+ rc=1 t=0.00
+frr1:/# 
+## [FRR1:sh] tcp 10.0.23.1 22
+tcp 10.0.23.1 22
+bash: connect: Host is unreachable
+bash: line 1: /dev/tcp/10.0.23.1/22: Host is unreachable
+ rc=1 t=0.00
+frr1:/# 
+## [FRR1:sh] ping -c 1 -W 1 -I 203.0.113.1 192.168.0.1
+ping -c 1 -W 1 -I 203.0.113.1 192.168.0.1
+PING 192.168.0.1 (192.168.0.1) from 203.0.113.1: 56 data bytes
+64 bytes from 192.168.0.1: seq=0 ttl=63 time=3.727 ms
+
+--- 192.168.0.1 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max = 3.727/3.727/3.727 ms
+frr1:/# 
+## [FRR1:sh] sleep 4; cat /tmp/s1.log
+sleep 4; cat /tmp/s1.log
+[1]+  Done                    python3 /tmp/sniff.py eth1 6 > /tmp/s1.log 2>&1
+04:19:58 TCP 10.0.23.2:55196 > 192.168.0.1:22 [S]
+04:19:58 ICMP 10.0.23.1 > 10.0.23.2 type=3 code=13
+04:19:58 TCP 10.0.23.2:54138 > 10.0.23.1:22 [S]
+04:19:58 ICMP 10.0.23.1 > 10.0.23.2 type=3 code=13
+04:19:59 ICMP 203.0.113.1 > 192.168.0.1 type=8 code=0
+04:19:59 ICMP 192.168.0.1 > 203.0.113.1 type=0 code=0
+frr1:/# 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term LAST then reject tcp-reset
+set firewall family inet filter FROM-ISP term LAST then reject tcp-reset 
+
+[edit]
+admin@jun02# 
+## [JUN02] show firewall family inet filter FROM-ISP term LAST
+show firewall family inet filter FROM-ISP term LAST 
+then {
+    count DENIED;
+    reject tcp-reset;
+}
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [FRR1:sh] python3 /tmp/sniff.py eth1 6 > /tmp/s2.log 2>&1 &
+python3 /tmp/sniff.py eth1 6 > /tmp/s2.log 2>&1 &
+[1] 286
+frr1:/# 
+## [FRR1:sh] tcp 192.168.0.1 22
+tcp 192.168.0.1 22
+bash: connect: Network unreachable
+bash: line 1: /dev/tcp/192.168.0.1/22: Network unreachable
+ rc=1 t=0.00
+frr1:/# 
+## [FRR1:sh] tcp 10.0.23.1 22
+tcp 10.0.23.1 22
+bash: connect: Network unreachable
+bash: line 1: /dev/tcp/10.0.23.1/22: Network unreachable
+ rc=1 t=0.00
+frr1:/# 
+## [FRR1:sh] sleep 4; cat /tmp/s2.log
+sleep 4; cat /tmp/s2.log
+04:20:07 TCP 10.0.23.2:55208 > 192.168.0.1:22 [S]
+04:20:07 ICMP 10.0.23.1 > 10.0.23.2 type=3 code=0
+04:20:08 TCP 10.0.23.2:34426 > 10.0.23.1:22 [S]
+04:20:08 ICMP 10.0.23.1 > 10.0.23.2 type=3 code=0
+frr1:/# 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term LAST then reject administratively-prohibited
+set firewall family inet filter FROM-ISP term LAST then reject administratively-prohibited 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [FRR1:sh] python3 /tmp/sniff.py eth1 5 > /tmp/s3.log 2>&1 &
+python3 /tmp/sniff.py eth1 5 > /tmp/s3.log 2>&1 &
+[2] 299
+[1]   Done                    python3 /tmp/sniff.py eth1 6 > /tmp/s2.log 2>&1
+frr1:/# 
+## [FRR1:sh] tcp 192.168.0.1 22
+tcp 192.168.0.1 22
+bash: connect: Host is unreachable
+bash: line 1: /dev/tcp/192.168.0.1/22: Host is unreachable
+ rc=1 t=0.00
+frr1:/# 
+## [FRR1:sh] sleep 4; cat /tmp/s3.log
+sleep 4; cat /tmp/s3.log
+[2]+  Done                    python3 /tmp/sniff.py eth1 5 > /tmp/s3.log 2>&1
+04:20:15 TCP 10.0.23.2:60872 > 192.168.0.1:22 [S]
+04:20:15 ICMP 10.0.23.1 > 10.0.23.2 type=3 code=13
+frr1:/# # syslog= messages に PFE_FW_SYSLOG_IP が出るか
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] delete firewall family inet filter FROM-ISP term LAST then reject
+delete firewall family inet filter FROM-ISP term LAST then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term LAST then discard
+set firewall family inet filter FROM-ISP term LAST then discard 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term LAST then syslog
+set firewall family inet filter FROM-ISP term LAST then syslog 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [FRR1:sh] tcp 192.168.0.1 23
+tcp 192.168.0.1 23
+ rc=143 t=3.00
+frr1:/# 
+## (sleep 3s)
+
+## [JUN02] show log messages | match "PFE_FW|FW_" | last 5
+show log messages | match "PFE_FW|FW_" | last 5 
+Nov 15 04:11:30.133  jun02 hwdre[10525]: PerformEmfActions: Alarm(Location: /Chassis[0]/Re[0] Cmpnt: BOOT FPGA Module: fpga_fw_events Error: fpga_boot_from_golden_image) reported
+Nov 15 04:15:28  jun02 mgd[18840]: UI_CMDLINE_READ_LINE: User 'admin', command 'show log messages | match "FW|PFE_FW|192.168.0.1" | last 5 '
+Nov 15 04:19:52  jun02 mgd[26168]: UI_CMDLINE_READ_LINE: User 'admin', command 'show log messages | match PFE_FW | last 3 '
+Nov 15 04:20:30  jun02 mgd[26168]: UI_CMDLINE_READ_LINE: User 'admin', command 'show log messages | match "PFE_FW|FW_" | last 5 '
+---(more 100%)---                                        
+admin@jun02> # 戻りの通信: 中(SRV1)から ISP の 10.0.23.2:8080 へ。SYN-ACK は FROM-ISP に当たる
+
+## [FRR1:sh] pgrep -f "nc -l -p 8080" >/dev/null || ( (while :; do echo hi | nc -l -p 8080; done) >/dev/null 2>&1 & )
+pgrep -f "nc -l -p 8080" >/dev/null || ( (while :; do echo hi | nc -l -p 8080; done) >/dev/null 2>&1 & )
+frr1:/# 
+## [SRV1] tcp 10.0.23.2 8080
+tcp 10.0.23.2 8080
+ rc=143 t=3.00
+srv1:/# 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term RETURN from protocol tcp
+set firewall family inet filter FROM-ISP term RETURN from protocol tcp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term RETURN from tcp-established
+set firewall family inet filter FROM-ISP term RETURN from tcp-established 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term RETURN then count RETURN
+set firewall family inet filter FROM-ISP term RETURN then count RETURN 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term RETURN then accept
+set firewall family inet filter FROM-ISP term RETURN then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] show firewall family inet filter FROM-ISP | display set
+show firewall family inet filter FROM-ISP | display set 
+set firewall family inet filter FROM-ISP term BGP from source-address 10.0.23.2/32
+set firewall family inet filter FROM-ISP term BGP from protocol tcp
+set firewall family inet filter FROM-ISP term BGP from port bgp
+set firewall family inet filter FROM-ISP term BGP then accept
+set firewall family inet filter FROM-ISP term ICMP from protocol icmp
+set firewall family inet filter FROM-ISP term ICMP then count ICMP-IN
+set firewall family inet filter FROM-ISP term ICMP then accept
+set firewall family inet filter FROM-ISP term SSH-IN from destination-address 172.16.10.0/24
+set firewall family inet filter FROM-ISP term SSH-IN from protocol tcp
+set firewall family inet filter FROM-ISP term SSH-IN from destination-port ssh
+set firewall family inet filter FROM-ISP term SSH-IN then count SSH-IN
+set firewall family inet filter FROM-ISP term SSH-IN then accept
+set firewall family inet filter FROM-ISP term LAST then count DENIED
+set firewall family inet filter FROM-ISP term LAST then syslog
+set firewall family inet filter FROM-ISP term LAST then discard
+set firewall family inet filter FROM-ISP term RETURN from protocol tcp
+set firewall family inet filter FROM-ISP term RETURN from tcp-established
+set firewall family inet filter FROM-ISP term RETURN then count RETURN
+set firewall family inet filter FROM-ISP term RETURN then accept
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [SRV1] tcp 10.0.23.2 8080
+tcp 10.0.23.2 8080
+ rc=143 t=3.04
+srv1:/# 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] insert firewall family inet filter FROM-ISP term RETURN before term LAST
+insert firewall family inet filter FROM-ISP term RETURN before term LAST 
+
+[edit]
+admin@jun02# 
+## [JUN02] show firewall family inet filter FROM-ISP | display set | match "term (RETURN|LAST)"
+show firewall family inet filter FROM-ISP | display set | match "term (RETURN|LAST)" 
+set firewall family inet filter FROM-ISP term RETURN from protocol tcp
+set firewall family inet filter FROM-ISP term RETURN from tcp-established
+set firewall family inet filter FROM-ISP term RETURN then count RETURN
+set firewall family inet filter FROM-ISP term RETURN then accept
+set firewall family inet filter FROM-ISP term LAST then count DENIED
+set firewall family inet filter FROM-ISP term LAST then syslog
+set firewall family inet filter FROM-ISP term LAST then discard
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [SRV1] tcp 10.0.23.2 8080
+tcp 10.0.23.2 8080
+hi
+ rc=0 t=0.01
+srv1:/# 
+## [JUN02] show firewall filter FROM-ISP
+show firewall filter FROM-ISP 
+
+Filter: FROM-ISP                                             
+Counters:
+Name                                                                            Bytes              Packets
+DENIED                                                                           6236                  106
+ICMP-IN                                                                           252                    3
+RETURN                                                                              0                    0
+SSH-IN                                                                             52                    1
+
+admin@jun02> # tcp-established は SYN の無い TCP にも当たる(ACK か RST が立っていれば)= ISP から中の 8080 へ「つなぎ始め」は通らない
+
+## [FRR1:sh] tcp 172.16.10.10 8080
+tcp 172.16.10.10 8080
+ rc=143 t=3.00
+frr1:/# 

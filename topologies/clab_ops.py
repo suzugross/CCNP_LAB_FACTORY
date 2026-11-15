@@ -22,6 +22,9 @@ CML を使わない問題では lab.sh が CML の手順を飛ばし、これだ
   clab_ops.py exec    --repo REPO --problem ID --node FRR1 -- vtysh -c "show ip route"   # ノードの中で実行(採点の口)
   clab_ops.py connect --repo REPO --problem ID --node FRR1   # 解く時の入り口(FRR は vtysh・Junos/EOS は ssh)
   clab_ops.py status  --repo REPO
+  clab_ops.py reset   --repo REPO --problem ID [--rebuild]   # やり直し: Junos を構築直後の設定へ戻す(数秒)。だめなら作り直す
+  clab_ops.py baseline --repo REPO --problem ID   # いまの Junos の設定を戻り先として控え直す(deploy の最後に自動で行う)
+  clab_ops.py cli     --repo REPO --problem ID --node JUN02 -- "show firewall" "show log fw-drops"   # Junos の運用モードに流す(採点の口)
   clab_ops.py import-ceos --repo REPO --file ~/images/cEOS64-lab-4.xx.yF.tar.xz [--tag 4.xx.yF]
       # arista.com(利用者登録が要る)から落とした cEOS-lab を szk-cl01 に取り込む → イメージ ceos:<版>
 
@@ -266,6 +269,224 @@ def cmd_deploy(a):
         # (残っていると ansible network_cli が host key mismatch で採点不能になる)
         subprocess.run(["ssh-keygen", "-R", str(ip)], capture_output=True)
         print(f"  node {name}: mgmt {ip} ({via}・known_hosts 掃除済)")
+    # 速いやり直しの戻り先(cmd_reset)。控えられなくてもラボは使える(やり直しが作り直しになるだけ)
+    if junos_nodes(topo):
+        print("== 構築直後の設定を控える(速いやり直しの戻り先)")
+        junos_baseline(a.repo, topo)
+
+
+# --------------------------------------------------------------------------
+# 速いやり直し(BL-275・2026-11-15)。学習ラボの Junos を「構築直後の設定」へ戻す(作り直さない・数秒)。
+#   控え= deploy が healthy を確かめた直後に、Junos の機器ごとに running の設定をホーム ディレクトリへ save する
+#         (/var/tmp は `request system storage cleanup` で消えうるので避ける)。
+#   戻す= configure → rollback 0 → load override <控え> → commit and-quit → `show configuration | compare <控え>` が空。
+#   ★共有の設定モードにいる解く側のセッションは残る(未 commit の変更は消える)。configure exclusive／private のセッションが
+#     あると鍵で拒まれる(2026-11-15 実測)→ そのセッションを request system logout pid で切ってから 1 回だけやり直す。
+#   控えが無い・ログインできない・戻した後も控えと食い違う時は、作り直し(deploy --reconfigure)へ切り替える。
+#   FRR・ホストは戻さない(課題で変えない約束)。サーバの上も作業する問題は problem.yml の linux_reset_exec を docker exec で流す。
+# --------------------------------------------------------------------------
+JUNOS_BASELINE = "ccnp-baseline.conf"
+_JUNOS_RESET = ["configure", "rollback 0", f"load override {JUNOS_BASELINE}", "commit and-quit",
+                # commit が通らなかった時だけ効く(設定モードに残っている)。通っていれば運用モードの構文エラーで無害
+                "rollback 0", "exit"]
+
+
+def junos_nodes(topo):
+    """[(ノード名(clab_nodes のキー), 管理アドレス)]= Junos の機器。"""
+    ips = {str(k).lower(): (k, v) for k, v in (topo["clab_nodes"] or {}).items()}
+    out = []
+    for name, nd in topo["nodes"].items():
+        if node_family(nd) == "junos":
+            key, ip = ips.get(str(name).lower(), (str(name).upper(), (nd or {}).get("mgmt-ipv4")))
+            if ip:
+                out.append((str(key), str(ip)))
+    return out
+
+
+def _junos_cli(repo, todo):
+    """todo= {ノード名: (管理アドレス, [CLI の行])} を並べて流す → {ノード名: 出力}(ログインできなければ「★…」)。
+    pty なしのシェルに行を流すと Junos の CLI が 1 行ずつ実行する(2026-11-15 実測)。経路はワークスペースと同じ
+    (szk-cl01 を踏み台に管理アドレスへ SSH)。"""
+    import asyncio
+    import asyncssh
+    lv = load_yaml(f"{repo}/group_vars/all/local.yml") or {}
+    user, pw = lv.get("clab_node_username") or "admin", lv.get("clab_node_password") or "admin@123"
+
+    async def one(outer, ip, lines):
+        try:
+            inner = await outer.connect_ssh(ip, username=user, password=pw, known_hosts=None, client_keys=None,
+                                            config=[], connect_timeout=15)
+        except (OSError, asyncssh.Error) as e:
+            return f"★cannot log in to {ip} ({type(e).__name__}: {e})"
+        try:
+            r = await asyncio.wait_for(inner.run(input="\n".join(lines) + "\n"), 240)
+            return (r.stdout or "") + (r.stderr or "")
+        except asyncio.TimeoutError:
+            return f"★timed out on {ip}"
+        finally:
+            inner.close()
+
+    async def run():
+        outer = await asyncssh.connect(lv["clab_host"], username=lv["clab_username"], known_hosts=None, config=[],
+                                       connect_timeout=15)
+        try:
+            res = await asyncio.gather(*(one(outer, ip, lines) for ip, lines in todo.values()))
+        finally:
+            outer.close()
+        return dict(zip(todo, res))
+
+    return asyncio.run(run())
+
+
+def _same_as_baseline(out):
+    """`show configuration | compare <控え>` の出力 → 差が無ければ True(差分の行・エラーがあれば False)。"""
+    body = [ln for ln in out.splitlines() if ln.strip() and not re.match(r"^\S+@\S+[>#]", ln)]
+    return not body
+
+
+def junos_baseline(repo, topo):
+    """Junos の機器ごとに、いまの設定を控えに save する。失敗したノードの名前の一覧を返す。"""
+    nodes = junos_nodes(topo)
+    if not nodes:
+        return []
+    res = _junos_cli(repo, {n: (ip, [f"show configuration | save {JUNOS_BASELINE}"]) for n, ip in nodes})
+    bad = []
+    for n, out in res.items():
+        m = re.search(r"Wrote (\d+) lines", out)
+        print(f"  {n}: 構築直後の設定を控えた({m.group(1)} 行・{JUNOS_BASELINE})" if m else
+              f"  ★{n}: 設定を控えられません: {out.strip()[-300:]}")
+        if not m:
+            bad.append(n)
+    return bad
+
+
+def junos_restore(repo, topo):
+    """Junos の機器を控えへ戻す。戻せなかったノード {名前: 理由} を返す(空= 全部戻った)。"""
+    nodes = dict(junos_nodes(topo))
+    if not nodes:
+        return {}
+    have = _junos_cli(repo, {n: (ip, [f"file list {JUNOS_BASELINE}"]) for n, ip in nodes.items()})
+    bad = {}
+    for n, out in have.items():
+        if out.startswith("★"):
+            bad[n] = out[1:]
+        elif "No such file" in out or JUNOS_BASELINE not in out:
+            bad[n] = "no saved baseline (the lab was built before the fast reset existed)"
+    todo = {n: (ip, _JUNOS_RESET) for n, ip in nodes.items() if n not in bad}
+    res = _junos_cli(repo, todo) if todo else {}
+    # 鍵で拒まれた(configure exclusive／private のセッションがいる)→ そのセッションを切って 1 回だけやり直す
+    retry = {}
+    for n, out in res.items():
+        if "commit complete" not in out and ("locked by" in out or "private edits in use" in out):
+            pids = sorted(set(re.findall(r"\(pid (\d+)\)", out)))
+            if pids:
+                print(f"  {n}: 設定の鍵を持つセッション(pid {', '.join(pids)})を切ってからやり直します")
+                retry[n] = (nodes[n], [f"request system logout pid {p}" for p in pids] + _JUNOS_RESET)
+    if retry:
+        res.update(_junos_cli(repo, retry))
+    chk = _junos_cli(repo, {n: (nodes[n], [f"show configuration | compare {JUNOS_BASELINE}"]) for n in res})
+    for n, out in res.items():
+        if out.startswith("★"):
+            bad[n] = out[1:]
+        elif "commit complete" not in out:
+            err = re.findall(r"^error: .*$", out, re.M)
+            bad[n] = "commit failed: " + (err[0] if err else out.strip()[-300:])
+        elif not _same_as_baseline(chk.get(n, "")):
+            bad[n] = "the configuration still differs from the saved baseline after the commit"
+        else:
+            print(f"  {n}: 構築直後の設定へ戻した(load override → commit・控えと同じ)")
+    return bad
+
+
+# 設定を戻しても機器の中に残るもの(2026-11-15 JNT-03 で実測): firewall filter のカウンタ・`show firewall log` の記録・
+# syslog のファイル。前の 2 つはどの問題でも消す。ファイルなど問題ごとのものは problem.yml の
+# `junos_reset_exec: {<NODE>: [<運用モードの行>, …]}`(例 `file delete /var/log/fw-drops`)。戻した後に流す(syslog は
+# 戻した commit でそのファイルを閉じている)。
+_JUNOS_AFTER_RESET = ["clear firewall all", "clear firewall log"]
+
+
+def junos_after_reset(repo, problem, topo):
+    extra = (load_yaml(f"{repo}/problems/{problem}/problem.yml") or {}).get("junos_reset_exec") or {}
+    extra = {str(k).lower(): v for k, v in extra.items()}
+    todo = {n: (ip, _JUNOS_AFTER_RESET + list(extra.get(n.lower(), []))) for n, ip in junos_nodes(topo)}
+    for n, out in _junos_cli(repo, todo).items():
+        errs = [ln.strip() for ln in out.splitlines() if ln.startswith("error:") and "No such file" not in ln]
+        print(f"  {n}: 残り物を消した({len(todo[n][1])} 行)" + (f" ★{errs[0]}" if errs else ""))
+
+
+def cmd_cli(a):
+    """Junos の機器の運用モードに行を流して出力を返す(採点の exec: local から使う・ワークスペースと同じ経路)。"""
+    topo = pack_topology(a.repo, a.problem)
+    if topo is None:
+        sys.exit(f"{a.problem}: clab_topology 未定義")
+    nodes = {n.lower(): (n, ip) for n, ip in junos_nodes(topo)}
+    if str(a.node).lower() not in nodes:
+        sys.exit(f"{a.node} は Junos の機器ではありません: {', '.join(n for n, _ in nodes.values())}")
+    name, ip = nodes[str(a.node).lower()]
+    lines = a.command[1:] if a.command[:1] == ["--"] else a.command
+    out = _junos_cli(a.repo, {name: (ip, lines)})[name]
+    sys.stdout.write(out)
+    sys.exit(1 if out.startswith("★") else 0)
+
+
+def linux_reset(repo, problem, topo):
+    """problem.yml の linux_reset_exec を docker exec で流す(containerlab のノード)。失敗したノードの名前の一覧を返す。"""
+    todo = (load_yaml(f"{repo}/problems/{problem}/problem.yml") or {}).get("linux_reset_exec") or {}
+    if not todo:
+        return []
+    target, _ = clab_conn(repo)
+    bad = []
+    for node, cmds in todo.items():
+        for cmd in cmds:
+            r = ssh(target, f"docker exec {container_name(topo, node)} sh -lc {shlex.quote(cmd)}", check=False)
+            print(f"  [{node}] {cmd}: {'ok' if r.returncode == 0 else f'FAILED (rc={r.returncode})'}")
+            if r.returncode != 0:
+                bad.append(node)
+                break
+    return bad
+
+
+def cmd_baseline(a):
+    """いまの Junos の設定を「構築直後の設定」として控え直す(deploy の最後に自動で行う。手で控え直す時だけ使う)。"""
+    topo = pack_topology(a.repo, a.problem)
+    if topo is None:
+        sys.exit(f"{a.problem}: clab_topology 未定義")
+    if junos_baseline(a.repo, topo):
+        sys.exit(1)
+
+
+def cmd_reset(a):
+    """やり直し(lab.sh reset・ワークスペースの「最初からやり直す」)。Junos は控えへ戻し、だめなら作り直す。
+    --rebuild は最初から作り直す。最後の行に「RESET fast」か「RESET rebuilt」を出す(呼び出し側が文言を選ぶ)。"""
+    topo = pack_topology(a.repo, a.problem)
+    if topo is None:
+        sys.exit(f"{a.problem}: clab_topology 未定義")
+    target, _ = clab_conn(a.repo)
+    conts = lab_containers(target, topo["lab_name"])
+    why = "--rebuild" if a.rebuild else None
+    if not why and not conts:
+        why = "the lab is not running"
+    if not why and not junos_nodes(topo):
+        why = "no Junos devices to restore"
+    if not why:
+        unready = not_ready(target, topo, conts)
+        if unready:
+            why = "not every node is up: " + ", ".join(f"{node_of(topo, c)} ({s})" for c, s in unready.items())
+    if not why:
+        t0 = time.time()
+        print("== やり直し: Junos の機器を構築直後の設定へ戻します(load override)")
+        bad = junos_restore(a.repo, topo)
+        if not bad:
+            junos_after_reset(a.repo, a.problem, topo)
+            if linux_reset(a.repo, a.problem, topo):
+                sys.exit("★サーバを戻せませんでした(linux_reset_exec)")
+            print(f"RESET fast ({int(time.time() - t0)}s)")
+            return
+        why = "; ".join(f"{n}: {r}" for n, r in bad.items())
+    print(f"== やり直し: 作り直します({why})")
+    a.reconfigure, a.force = True, False
+    cmd_deploy(a)
+    print("RESET rebuilt")
 
 
 def cmd_destroy(a):
@@ -401,7 +622,8 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name, fn in (("deploy", cmd_deploy), ("destroy", cmd_destroy), ("verify", cmd_verify),
                      ("exec", cmd_exec), ("connect", cmd_connect), ("status", cmd_status),
-                     ("import-ceos", cmd_import_ceos)):
+                     ("import-ceos", cmd_import_ceos), ("baseline", cmd_baseline), ("reset", cmd_reset),
+                     ("cli", cmd_cli)):
         p = sub.add_parser(name)
         p.add_argument("--repo", required=True)
         if name == "import-ceos":
@@ -409,14 +631,17 @@ def main():
             p.add_argument("--tag", default="")
         elif name != "status":
             p.add_argument("--problem", required=True)
-        if name in ("exec", "connect"):
+        if name in ("exec", "connect", "cli"):
             p.add_argument("--node", required=True)
-        if name == "exec":
+        if name in ("exec", "cli"):
             p.add_argument("command", nargs=argparse.REMAINDER)
-        if name == "deploy":
+        if name in ("deploy", "reset"):
             p.add_argument("--wait", type=int, default=900)
+        if name == "deploy":
             p.add_argument("--force", action="store_true")
             p.add_argument("--reconfigure", action="store_true")
+        if name == "reset":
+            p.add_argument("--rebuild", action="store_true")
         p.set_defaults(fn=fn)
     a = ap.parse_args()
     a.fn(a)

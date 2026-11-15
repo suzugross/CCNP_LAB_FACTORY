@@ -1,0 +1,646 @@
+# jpoc JNT-03 j2-examples.txt 2026-11-15 05:35:44
+# 読み物 J2 の設定例(BL-275)。課題(JUN02)と値を変えて JUN01 の上で組む。盤面 JNT-03 の初めの設定から。
+# 例 1(21 ページ): JUN01 のサーバの網へ出る通信を絞る出力フィルタ TO-SERVERS
+
+## [JUN01] (open)
+Last login: Sun Nov 15 05:26:23 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] set cli screen-length 0
+set cli screen-length 0 
+Screen length set to 0
+
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter TO-SERVERS term ICMP from protocol icmp
+set firewall family inet filter TO-SERVERS term ICMP from protocol icmp 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter TO-SERVERS term ICMP then accept
+set firewall family inet filter TO-SERVERS term ICMP then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter TO-SERVERS term WEB from destination-address 172.16.20.0/24
+set firewall family inet filter TO-SERVERS term WEB from destination-address 172.16.20.0/24 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter TO-SERVERS term WEB from protocol tcp
+set firewall family inet filter TO-SERVERS term WEB from protocol tcp 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter TO-SERVERS term WEB from destination-port http
+set firewall family inet filter TO-SERVERS term WEB from destination-port http 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter TO-SERVERS term WEB then count WEB-IN
+set firewall family inet filter TO-SERVERS term WEB then count WEB-IN 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter TO-SERVERS term WEB then accept
+set firewall family inet filter TO-SERVERS term WEB then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter TO-SERVERS term LAST then count TO-SERVERS-DROP
+set firewall family inet filter TO-SERVERS term LAST then count TO-SERVERS-DROP 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter TO-SERVERS term LAST then discard
+set firewall family inet filter TO-SERVERS term LAST then discard 
+
+[edit]
+admin@jun01# 
+## [JUN01] set interfaces et-0/0/1 unit 0 family inet filter output TO-SERVERS
+set interfaces et-0/0/1 unit 0 family inet filter output TO-SERVERS 
+
+[edit]
+admin@jun01# 
+## [JUN01] show | compare
+show | compare 
+[edit interfaces et-0/0/1 unit 0 family inet]
++       filter {
++           output TO-SERVERS;
++       }
+[edit]
++  firewall {
++      family inet {
++          filter TO-SERVERS {
++              term ICMP {
++                  from {
++                      protocol icmp;
++                  }
++                  then accept;
++              }
++              term WEB {
++                  from {
++                      destination-address {
++                          172.16.20.0/24;
++                      }
++                      protocol tcp;
++                      destination-port http;
++                  }
++                  then {
++                      count WEB-IN;
++                      accept;
++                  }
++              }
++              term LAST {
++                  then {
++                      count TO-SERVERS-DROP;
++                      discard;
++                  }
++              }
++          }
++      }
++  }
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [NET1] (open)
+net1:/# 
+## [NET1] probe 172.16.20.1 80 -s 198.51.100.10
+probe 172.16.20.1 80 -s 198.51.100.10
+open  tcp 172.16.20.1:80 from 198.51.100.10  0.00s
+net1:/# 
+## [NET1] probe 172.16.20.1 443 -s 198.51.100.10
+probe 172.16.20.1 443 -s 198.51.100.10
+timeout  tcp 172.16.20.1:443 from 198.51.100.10  3.00s
+net1:/# 
+## [NET1] ping -c 2 -W 1 -I 198.51.100.10 172.16.20.1
+ping -c 2 -W 1 -I 198.51.100.10 172.16.20.1
+PING 172.16.20.1 (172.16.20.1) from 198.51.100.10: 56 data bytes
+64 bytes from 172.16.20.1: seq=0 ttl=61 time=1.727 ms
+64 bytes from 172.16.20.1: seq=1 ttl=61 time=1.729 ms
+
+--- 172.16.20.1 ping statistics ---
+2 packets transmitted, 2 packets received, 0% packet loss
+round-trip min/avg/max = 1.727/1.728/1.729 ms
+net1:/# 
+## [SRV1] (open)
+srv1:/# 
+## [SRV1] probe 192.168.0.1 22
+probe 192.168.0.1 22
+timeout  tcp 192.168.0.1:22  3.00s
+srv1:/# 
+## (sleep 4s)
+
+## [JUN01] show firewall filter TO-SERVERS
+show firewall filter TO-SERVERS 
+
+Filter: TO-SERVERS                                           
+Counters:
+Name                                                                            Bytes              Packets
+TO-SERVERS-DROP                                                                   480                    8
+WEB-IN                                                                            320                    6
+
+admin@jun01> 
+## [JUN01] show interfaces et-0/0/1.0 extensive | match ilter
+show interfaces et-0/0/1.0 extensive | match ilter 
+      Output Filters: TO-SERVERS
+
+admin@jun01> # 戻りの通信: SRV1 から NET1 の 8080 へ(SYN-ACK は JUN01 の et-0/0/1 から出る= TO-SERVERS に当たる)
+
+## [SRV1] probe 198.51.100.10 8080 -s 172.16.20.1
+probe 198.51.100.10 8080 -s 172.16.20.1
+timeout  tcp 198.51.100.10:8080 from 172.16.20.1  3.00s
+srv1:/# 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter TO-SERVERS term EST from protocol tcp
+set firewall family inet filter TO-SERVERS term EST from protocol tcp 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter TO-SERVERS term EST from tcp-established
+set firewall family inet filter TO-SERVERS term EST from tcp-established 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter TO-SERVERS term EST then accept
+set firewall family inet filter TO-SERVERS term EST then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] show firewall family inet filter TO-SERVERS | display set | match "term (EST|LAST)"
+show firewall family inet filter TO-SERVERS | display set | match "term (EST|LAST)" 
+set firewall family inet filter TO-SERVERS term LAST then count TO-SERVERS-DROP
+set firewall family inet filter TO-SERVERS term LAST then discard
+set firewall family inet filter TO-SERVERS term EST from protocol tcp
+set firewall family inet filter TO-SERVERS term EST from tcp-established
+set firewall family inet filter TO-SERVERS term EST then accept
+
+[edit]
+admin@jun01# 
+## [JUN01] insert firewall family inet filter TO-SERVERS term EST before term LAST
+insert firewall family inet filter TO-SERVERS term EST before term LAST 
+
+[edit]
+admin@jun01# 
+## [JUN01] show firewall family inet filter TO-SERVERS | display set | match "term (EST|LAST)"
+show firewall family inet filter TO-SERVERS | display set | match "term (EST|LAST)" 
+set firewall family inet filter TO-SERVERS term EST from protocol tcp
+set firewall family inet filter TO-SERVERS term EST from tcp-established
+set firewall family inet filter TO-SERVERS term EST then accept
+set firewall family inet filter TO-SERVERS term LAST then count TO-SERVERS-DROP
+set firewall family inet filter TO-SERVERS term LAST then discard
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [SRV1] probe 198.51.100.10 8080 -s 172.16.20.1
+probe 198.51.100.10 8080 -s 172.16.20.1
+open  tcp 198.51.100.10:8080 from 172.16.20.1  0.00s
+srv1:/# 
+## [NET1] probe 172.16.20.1 443 -s 198.51.100.10
+probe 172.16.20.1 443 -s 198.51.100.10
+timeout  tcp 172.16.20.1:443 from 198.51.100.10  3.00s
+net1:/# # 例 2(23 ページ): JUN01 の lo0 で RE を守る。NTP の相手は apply-path で拾う
+
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set system ntp server 192.168.0.2
+set system ntp server 192.168.0.2 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options prefix-list NTP-SERVERS apply-path "system ntp server <*>"
+set policy-options prefix-list NTP-SERVERS apply-path "system ntp server <*>" 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term OSPF from protocol ospf
+set firewall family inet filter RE-GUARD term OSPF from protocol ospf 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term OSPF then accept
+set firewall family inet filter RE-GUARD term OSPF then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term ICMP from protocol icmp
+set firewall family inet filter RE-GUARD term ICMP from protocol icmp 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term ICMP then accept
+set firewall family inet filter RE-GUARD term ICMP then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term SSH from source-address 172.16.10.0/24
+set firewall family inet filter RE-GUARD term SSH from source-address 172.16.10.0/24 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term SSH from protocol tcp
+set firewall family inet filter RE-GUARD term SSH from protocol tcp 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term SSH from destination-port ssh
+set firewall family inet filter RE-GUARD term SSH from destination-port ssh 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term SSH then accept
+set firewall family inet filter RE-GUARD term SSH then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term NTP from source-prefix-list NTP-SERVERS
+set firewall family inet filter RE-GUARD term NTP from source-prefix-list NTP-SERVERS 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term NTP from protocol udp
+set firewall family inet filter RE-GUARD term NTP from protocol udp 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term NTP from port ntp
+set firewall family inet filter RE-GUARD term NTP from port ntp 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term NTP then accept
+set firewall family inet filter RE-GUARD term NTP then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term EST from protocol tcp
+set firewall family inet filter RE-GUARD term EST from protocol tcp 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term EST from tcp-established
+set firewall family inet filter RE-GUARD term EST from tcp-established 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term EST then accept
+set firewall family inet filter RE-GUARD term EST then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term LAST then count RE-GUARD-DROP
+set firewall family inet filter RE-GUARD term LAST then count RE-GUARD-DROP 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term LAST then discard
+set firewall family inet filter RE-GUARD term LAST then discard 
+
+[edit]
+admin@jun01# 
+## [JUN01] set interfaces lo0 unit 0 family inet filter input RE-GUARD
+set interfaces lo0 unit 0 family inet filter input RE-GUARD 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01] show configuration policy-options prefix-list NTP-SERVERS | display inheritance
+show configuration policy-options prefix-list NTP-SERVERS | display inheritance 
+##
+## apply-path was expanded to:
+##     192.168.0.2; 
+##
+apply-path "system ntp server <*>";
+
+admin@jun01> 
+## [JUN01:m2] (open)
+Last login: Sun Nov 15 05:35:44 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01:m2] show system users
+show system users 
+ 5:36AM  up 39 min, 2 users, load averages: 0.43, 0.28, 0.34
+USER     TTY      FROM                              LOGIN@  IDLE WHAT
+admin    pts/0    172.20.20.1                      05:35   4.00s -cli          
+admin    pts/1    172.20.20.1                      05:36   0.00s -cli          
+
+admin@jun01> 
+## [SRV1] probe 172.16.10.1 22
+probe 172.16.10.1 22
+open  tcp 172.16.10.1:22  0.00s
+srv1:/# 
+## [SRV1] probe 192.168.0.1 22 -s 172.16.20.1
+probe 192.168.0.1 22 -s 172.16.20.1
+timeout  tcp 192.168.0.1:22 from 172.16.20.1  3.00s
+srv1:/# 
+## [NET1] probe 192.168.0.1 22 -s 203.0.113.10
+probe 192.168.0.1 22 -s 203.0.113.10
+unreachable (Network unreachable)  tcp 192.168.0.1:22 from 203.0.113.10  0.00s
+net1:/# 
+## [NET1] ping -c 2 -W 1 -I 198.51.100.10 192.168.0.1
+ping -c 2 -W 1 -I 198.51.100.10 192.168.0.1
+PING 192.168.0.1 (192.168.0.1) from 198.51.100.10: 56 data bytes
+
+--- 192.168.0.1 ping statistics ---
+2 packets transmitted, 0 packets received, 100% packet loss
+net1:/# 
+## (sleep 15s)
+
+## [JUN01] show ospf neighbor
+show ospf neighbor 
+
+Warning: License key missing; requires 'OSPF' license
+
+Address          Interface              State           ID               Pri  Dead
+10.0.12.2        et-0/0/0.0             Full            192.168.0.2      128    32
+
+admin@jun01> 
+## [JUN01] show firewall filter RE-GUARD
+show firewall filter RE-GUARD 
+
+Filter: RE-GUARD                                             
+Counters:
+Name                                                                            Bytes              Packets
+RE-GUARD-DROP                                                                     180                    3
+
+admin@jun01> 
+## [JUN01] show interfaces lo0.0 extensive | match ilter
+show interfaces lo0.0 extensive | match ilter 
+      Input Filters: RE-GUARD
+
+admin@jun01> # 例 3(25 ページ): JUN01 の et-0/0/1 の入力に 2 つのフィルタを並べる(送信元の検査 → 数える)＋ログ
+
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter SRC-CHECK term SPOOF from source-address 0.0.0.0/0
+set firewall family inet filter SRC-CHECK term SPOOF from source-address 0.0.0.0/0 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter SRC-CHECK term SPOOF from source-address 172.16.10.0/24 except
+set firewall family inet filter SRC-CHECK term SPOOF from source-address 172.16.10.0/24 except 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter SRC-CHECK term SPOOF from source-address 172.16.20.0/24 except
+set firewall family inet filter SRC-CHECK term SPOOF from source-address 172.16.20.0/24 except 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter SRC-CHECK term SPOOF then count SPOOF
+set firewall family inet filter SRC-CHECK term SPOOF then count SPOOF 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter SRC-CHECK term SPOOF then syslog
+set firewall family inet filter SRC-CHECK term SPOOF then syslog 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter SRC-CHECK term SPOOF then log
+set firewall family inet filter SRC-CHECK term SPOOF then log 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter SRC-CHECK term SPOOF then discard
+set firewall family inet filter SRC-CHECK term SPOOF then discard 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter FROM-SERVERS term ALL then count FROM-SERVERS
+set firewall family inet filter FROM-SERVERS term ALL then count FROM-SERVERS 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter FROM-SERVERS term ALL then accept
+set firewall family inet filter FROM-SERVERS term ALL then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] set interfaces et-0/0/1 unit 0 family inet filter input-list [ SRC-CHECK FROM-SERVERS ]
+set interfaces et-0/0/1 unit 0 family inet filter input-list [ SRC-CHECK FROM-SERVERS ] 
+
+[edit]
+admin@jun01# 
+## [JUN01] set system syslog file fw-log firewall any
+set system syslog file fw-log firewall any 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [SRV1] ip addr add 10.99.0.1/32 dev lo
+ip addr add 10.99.0.1/32 dev lo
+srv1:/# 
+## [SRV1] ping -c 2 -W 1 -I 172.16.20.1 198.51.100.10
+ping -c 2 -W 1 -I 172.16.20.1 198.51.100.10
+PING 198.51.100.10 (198.51.100.10) from 172.16.20.1: 56 data bytes
+64 bytes from 198.51.100.10: seq=0 ttl=61 time=1.776 ms
+64 bytes from 198.51.100.10: seq=1 ttl=61 time=1.779 ms
+
+--- 198.51.100.10 ping statistics ---
+2 packets transmitted, 2 packets received, 0% packet loss
+round-trip min/avg/max = 1.776/1.777/1.779 ms
+srv1:/# 
+## [SRV1] ping -c 2 -W 1 -I 10.99.0.1 198.51.100.10
+ping -c 2 -W 1 -I 10.99.0.1 198.51.100.10
+PING 198.51.100.10 (198.51.100.10) from 10.99.0.1: 56 data bytes
+
+--- 198.51.100.10 ping statistics ---
+2 packets transmitted, 0 packets received, 100% packet loss
+srv1:/# 
+## [SRV1] ip addr del 10.99.0.1/32 dev lo
+ip addr del 10.99.0.1/32 dev lo
+srv1:/# 
+## (sleep 4s)
+
+## [JUN01] show firewall
+show firewall 
+
+Filter: FROM-SERVERS                                         
+Counters:
+Name                                                                            Bytes              Packets
+FROM-SERVERS                                                                        0                    0
+
+Filter: RE-GUARD                                             
+Counters:
+Name                                                                            Bytes              Packets
+RE-GUARD-DROP                                                                     180                    3
+
+Filter: SRC-CHECK                                            
+Counters:
+Name                                                                            Bytes              Packets
+SPOOF                                                                               0                    0
+
+Filter: TO-SERVERS                                           
+Counters:
+Name                                                                            Bytes              Packets
+TO-SERVERS-DROP                                                                  1080                   18
+WEB-IN                                                                            320                    6
+
+Filter: et-0/0/1.0-inet-i                                    
+Counters:
+Name                                                                            Bytes              Packets
+FROM-SERVERS-et-0/0/1.0-inet-i                                                    168                    2
+SPOOF-et-0/0/1.0-inet-i                                                           168                    2
+
+admin@jun01> 
+## [JUN01] show firewall log
+show firewall log 
+Log :
+Time      Filter    Action Interface           Protocol        Src Addr                                Dest Addr
+05:37:11  pfe       D      et-0/0/1.0          ICMP            10.99.0.1                               198.51.100.10
+05:37:12  pfe       D      et-0/0/1.0          ICMP            10.99.0.1                               198.51.100.10
+
+admin@jun01> 
+## [JUN01] show firewall log detail
+show firewall log detail 
+Time of Log: Nov 15 05:37:11, Filter: pfe, Filter action: Discard, Name of interface: et-0/0/1.0
+Name of protocol: ICMP, Packet Length: 84, Source address: 10.99.0.1 Port: 0, Destination address: 198.51.100.10 Port: 0
+ICMP type: 0, ICMP code: 0
+Time of Log: Nov 15 05:37:12, Filter: pfe, Filter action: Discard, Name of interface: et-0/0/1.0
+Name of protocol: ICMP, Packet Length: 84, Source address: 10.99.0.1 Port: 0, Destination address: 198.51.100.10 Port: 0
+ICMP type: 0, ICMP code: 0
+
+admin@jun01> 
+## [JUN01] show log fw-log
+show log fw-log 
+Nov 15 05:37:12  jun01 evo-aftmand-bt[14680]: FW: et-0/0/1.0   D ICMP 10.99.0.1 198.51.100.10     0     0 (2 packets)
+
+admin@jun01> 
+## [JUN01] show interfaces et-0/0/1.0 extensive | match ilter
+show interfaces et-0/0/1.0 extensive | match ilter 
+      Input Filters: et-0/0/1.0-inet-i
+      Output Filters: TO-SERVERS
+
+admin@jun01> # 例 4(25 ページ): policer の設定(この仮想機では量を制限しない= 設定と表示だけ)
+
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall policer ICMP-1M if-exceeding bandwidth-limit 1m
+set firewall policer ICMP-1M if-exceeding bandwidth-limit 1m 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall policer ICMP-1M if-exceeding burst-size-limit 15k
+set firewall policer ICMP-1M if-exceeding burst-size-limit 15k 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall policer ICMP-1M then discard
+set firewall policer ICMP-1M then discard 
+
+[edit]
+admin@jun01# 
+## [JUN01] set firewall family inet filter RE-GUARD term ICMP then policer ICMP-1M
+set firewall family inet filter RE-GUARD term ICMP then policer ICMP-1M 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN01] show firewall filter RE-GUARD
+show firewall filter RE-GUARD 
+
+Filter: RE-GUARD                                             
+Counters:
+Name                                                                            Bytes              Packets
+RE-GUARD-DROP                                                                     180                    3
+Policers:
+Name                                                                            Bytes              Packets
+ICMP-1M-ICMP                                                                        0                    0
+
+admin@jun01> 
+## [JUN01] show configuration firewall | display set
+show configuration firewall | display set 
+set firewall family inet filter FROM-SERVERS term ALL then count FROM-SERVERS
+set firewall family inet filter FROM-SERVERS term ALL then accept
+set firewall family inet filter RE-GUARD term OSPF from protocol ospf
+set firewall family inet filter RE-GUARD term OSPF then accept
+set firewall family inet filter RE-GUARD term ICMP from protocol icmp
+set firewall family inet filter RE-GUARD term ICMP then policer ICMP-1M
+set firewall family inet filter RE-GUARD term ICMP then accept
+set firewall family inet filter RE-GUARD term SSH from source-address 172.16.10.0/24
+set firewall family inet filter RE-GUARD term SSH from protocol tcp
+set firewall family inet filter RE-GUARD term SSH from destination-port ssh
+set firewall family inet filter RE-GUARD term SSH then accept
+set firewall family inet filter RE-GUARD term NTP from source-prefix-list NTP-SERVERS
+set firewall family inet filter RE-GUARD term NTP from protocol udp
+set firewall family inet filter RE-GUARD term NTP from port ntp
+set firewall family inet filter RE-GUARD term NTP then accept
+set firewall family inet filter RE-GUARD term EST from protocol tcp
+set firewall family inet filter RE-GUARD term EST from tcp-established
+set firewall family inet filter RE-GUARD term EST then accept
+set firewall family inet filter RE-GUARD term LAST then count RE-GUARD-DROP
+set firewall family inet filter RE-GUARD term LAST then discard
+set firewall family inet filter SRC-CHECK term SPOOF from source-address 0.0.0.0/0
+set firewall family inet filter SRC-CHECK term SPOOF from source-address 172.16.10.0/24 except
+set firewall family inet filter SRC-CHECK term SPOOF from source-address 172.16.20.0/24 except
+set firewall family inet filter SRC-CHECK term SPOOF then count SPOOF
+set firewall family inet filter SRC-CHECK term SPOOF then log
+set firewall family inet filter SRC-CHECK term SPOOF then syslog
+set firewall family inet filter SRC-CHECK term SPOOF then discard
+set firewall family inet filter TO-SERVERS term ICMP from protocol icmp
+set firewall family inet filter TO-SERVERS term ICMP then accept
+set firewall family inet filter TO-SERVERS term WEB from destination-address 172.16.20.0/24
+set firewall family inet filter TO-SERVERS term WEB from protocol tcp
+set firewall family inet filter TO-SERVERS term WEB from destination-port http
+set firewall family inet filter TO-SERVERS term WEB then count WEB-IN
+set firewall family inet filter TO-SERVERS term WEB then accept
+set firewall family inet filter TO-SERVERS term EST from protocol tcp
+set firewall family inet filter TO-SERVERS term EST from tcp-established
+set firewall family inet filter TO-SERVERS term EST then accept
+set firewall family inet filter TO-SERVERS term LAST then count TO-SERVERS-DROP
+set firewall family inet filter TO-SERVERS term LAST then discard
+set firewall policer ICMP-1M if-exceeding bandwidth-limit 1m
+set firewall policer ICMP-1M if-exceeding burst-size-limit 15k
+set firewall policer ICMP-1M then discard
+
+admin@jun01> 

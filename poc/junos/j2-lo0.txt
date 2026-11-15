@@ -1,0 +1,61 @@
+# PoC J2-4(BL-275): JUN02 の lo0 の入力フィルタで RE を守る。apply-path で BGP の相手を拾う・管理ポートに効かないか・OSPF の term を抜いた時
+# 前提= clab_ops.py reset の後に j2-prep.txt(戻り道の静的経路)
+FRR1:sh tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+SRV1 tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+JUN02 configure
+JUN02 set system syslog file fw-log firewall any
+JUN02 set policy-options prefix-list BGP-PEERS apply-path "protocols bgp group <*> neighbor <*>"
+JUN02 set firewall family inet filter PROTECT-RE term BGP from source-prefix-list BGP-PEERS
+JUN02 set firewall family inet filter PROTECT-RE term BGP from protocol tcp
+JUN02 set firewall family inet filter PROTECT-RE term BGP from port bgp
+JUN02 set firewall family inet filter PROTECT-RE term BGP then accept
+JUN02 set firewall family inet filter PROTECT-RE term OSPF from protocol ospf
+JUN02 set firewall family inet filter PROTECT-RE term OSPF then accept
+JUN02 set firewall family inet filter PROTECT-RE term ICMP from protocol icmp
+JUN02 set firewall family inet filter PROTECT-RE term ICMP then accept
+JUN02 set firewall family inet filter PROTECT-RE term SSH from source-address 172.16.10.0/24
+JUN02 set firewall family inet filter PROTECT-RE term SSH from protocol tcp
+JUN02 set firewall family inet filter PROTECT-RE term SSH from destination-port ssh
+JUN02 set firewall family inet filter PROTECT-RE term SSH then accept
+JUN02 set firewall family inet filter PROTECT-RE term LAST then count RE-DENIED
+JUN02 set firewall family inet filter PROTECT-RE term LAST then syslog
+JUN02 set firewall family inet filter PROTECT-RE term LAST then discard
+JUN02 set interfaces lo0 unit 0 family inet filter input PROTECT-RE
+JUN02 commit and-quit
+JUN02 show configuration policy-options prefix-list BGP-PEERS | display inheritance | no-more
+# 管理ポート(re0:mgmt-0)の SSH= 新しいセッションを開いて入れるか(lo0 のフィルタは管理ポートに効かないはず)
+JUN02:m2 show system users | no-more
+# ISP から JUN02 の SSH= 捨てられる・ping= 通る・中継(JUN02 を通り抜けて JUN01 へ)= lo0 は関わらない
+FRR1:sh tcp 10.0.23.1 22
+FRR1:sh tcp 192.168.0.2 22
+FRR1:sh ping -c 2 -W 1 10.0.23.1
+FRR1:sh tcp 172.16.10.1 22
+# 中(SRV1 172.16.10.10)から JUN02 の SSH= 通る
+SRV1 tcp 10.0.12.2 22
+SRV1 tcp 192.168.0.2 22
+!sleep 5
+JUN02 show firewall filter PROTECT-RE | no-more
+JUN02 show log fw-log | last 6 | no-more
+JUN02 show bgp summary | match "10.0.23" | no-more
+JUN02 clear bgp neighbor 10.0.23.2
+!sleep 20
+JUN02 show bgp summary | match "10.0.23" | no-more
+JUN02 show ospf neighbor | no-more
+# JUN02 が自分から始めた TCP の戻り(SYN-ACK)= lo0 の入力で捨てられる(tcp-established の term が無い)
+FRR1:sh pgrep -f "nc -l -p 8080" >/dev/null || ( (while :; do echo hi | nc -l -p 8080; done) >/dev/null 2>&1 & )
+JUN02 start shell command "timeout 3 bash -c 'exec 3<>/dev/tcp/10.0.23.2/8080 && head -c 2 <&3'; echo rc=$?"
+JUN02 show firewall filter PROTECT-RE | no-more
+# OSPF の term を外す= 隣接が dead interval(40 秒)で落ちる
+JUN02 configure
+JUN02 deactivate firewall family inet filter PROTECT-RE term OSPF
+JUN02 commit and-quit
+!sleep 45
+JUN02 show ospf neighbor | no-more
+JUN01 show ospf neighbor | no-more
+JUN01 show route 192.168.0.2 | no-more
+JUN02 show firewall filter PROTECT-RE | no-more
+JUN02 configure
+JUN02 activate firewall family inet filter PROTECT-RE term OSPF
+JUN02 commit and-quit
+!sleep 15
+JUN02 show ospf neighbor | no-more

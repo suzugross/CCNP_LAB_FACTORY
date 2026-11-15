@@ -1,0 +1,448 @@
+# JNT-03 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn JNT-03 が読む(containerlab の問題・BL-275)。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# verify= 確かめ方の例(BL-266)。結果を観る手順まで(入ったか → 流して数える → 届いた先 → 壊していないか)。落とし穴の名前や直し方は書かない。
+# 挙動は vJunos-Evolved 26.2R1.7(JUN01・JUN02)× FRR 10.7.1(FRR1・SRV1・NET1)で確かめた(記録 poc/junos/expJ2-*.log・poc/junos/e2e-j2/・設計 JUNOS-TRACK.design.md §9)。
+# 読み物= courses/junos(reading/junos/)。各課題の read: はその本の「ページ#節」。
+reading: junos
+steps:
+  - id: j2t1
+    title: { en: "J2-1  Narrow the entrance from the ISP", ja: "J2-1  ISP からの入口を絞る" }
+    check: j2t1
+    read: [20-j2-map#s2-2, 21-j2-filter#s2-2, 21-j2-filter#s2-3, 21-j2-filter#s2-4, 21-j2-filter#s2-5, 21-j2-filter#s2-8]
+    hints:
+      - en: "One input filter on et-0/0/1: terms that list what may come in, then a last term that counts and drops the rest. Ask which of your terms a BGP packet from the ISP matches, in both directions of the session. Dropping without sending anything back is one particular action."
+        ja: "et-0/0/1 の入力に当てるフィルタを 1 つ書きます。入ってよいものを term に並べ、最後の term で残りを数えて捨てます。ISP からの BGP のパケットが、セッションのどちら向きでも、あなたのどの term に当たるかを考えます。送信元へ何も返さずに捨てる動作は 1 つに決まっています。"
+      - en: "On NET1: `probe 172.16.20.1 80 -s 198.51.100.10`, `probe 172.16.20.1 22 -s 203.0.113.10` and the same with `-s 198.51.100.10`, `probe 172.16.10.1 22 -s 203.0.113.10`. On JUN02: `show firewall`, `show interfaces et-0/0/1.0 extensive | match ilter`, `show bgp summary`. Page: firewall filter, sections 2.2, 2.3, 2.5 and 2.8."
+        ja: "NET1 で `probe 172.16.20.1 80 -s 198.51.100.10`、`probe 172.16.20.1 22 -s 203.0.113.10` と `-s 198.51.100.10` にした同じもの、`probe 172.16.10.1 22 -s 203.0.113.10`。JUN02 で `show firewall`、`show interfaces et-0/0/1.0 extensive | match ilter`、`show bgp summary`。読み物: firewall filter の 2.2・2.3・2.5・2.8 節。"
+      - en: "On JUN02, one filter with these terms in order: BGP (`source-address 10.0.23.2/32`, `protocol tcp`, `port bgp`, accept); ICMP (`protocol icmp`, accept); WEB (`destination-address 172.16.20.0/24`, `protocol tcp`, `destination-port [ http https ]`, accept); SSH (`source-address 203.0.113.0/24`, `destination-address 172.16.20.0/24`, `protocol tcp`, `destination-port ssh`, accept); and a last term with only `count ISP-DENY` and `discard`. Apply it with `set interfaces et-0/0/1 unit 0 family inet filter input <name>`."
+        ja: "JUN02 で、term をこの順に並べたフィルタ: BGP(`source-address 10.0.23.2/32`・`protocol tcp`・`port bgp`、accept)・ICMP(`protocol icmp`、accept)・WEB(`destination-address 172.16.20.0/24`・`protocol tcp`・`destination-port [ http https ]`、accept)・SSH(`source-address 203.0.113.0/24`・`destination-address 172.16.20.0/24`・`protocol tcp`・`destination-port ssh`、accept)・最後に `count ISP-DENY` と `discard` だけの term。`set interfaces et-0/0/1 unit 0 family inet filter input <名前>` で当てる。"
+    verify:
+      en: |
+        **1. Is it in?** (JUN02)
+
+        - `show interfaces et-0/0/1.0 extensive | match ilter`: `Input Filters:` names your filter.
+        - `show configuration firewall`: the terms appear in the order you meant, and the last term has no `from`.
+
+        **2. Send traffic and count** (NET1, then JUN02)
+
+        - `probe 172.16.20.1 80 -s 198.51.100.10` and `probe 172.16.20.1 443 -s 198.51.100.10`: which word comes back?
+        - `probe 172.16.20.1 22 -s 203.0.113.10` and `probe 172.16.20.1 22 -s 198.51.100.10`: compare the two words.
+        - `probe 172.16.10.1 22 -s 203.0.113.10`, `probe 10.0.23.1 22 -s 203.0.113.10` and `probe 172.16.20.1 8080 -s 198.51.100.10`:
+          how long does each take, and which word comes back?
+        - A few seconds later, on JUN02, `show firewall`: the `Packets` column of `ISP-DENY`.
+
+        **3. Does it reach the far end?** (NET1)
+
+        - `ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1`.
+
+        **4. Is anything else broken?** (JUN02)
+
+        - `show bgp summary`: the session with 10.0.23.2 is `Establ`.
+        - `clear bgp neighbor 10.0.23.2`, wait about 20 seconds, then `show bgp summary` again.
+      ja: |
+        **1. 入ったか**(JUN02)
+
+        - `show interfaces et-0/0/1.0 extensive | match ilter`: `Input Filters:` にあなたのフィルタの名前。
+        - `show configuration firewall`: term が意図した順に並び、最後の term に `from` が無い。
+
+        **2. 流して数える**(NET1 から、続けて JUN02)
+
+        - `probe 172.16.20.1 80 -s 198.51.100.10` と `probe 172.16.20.1 443 -s 198.51.100.10`: どの語が返るか。
+        - `probe 172.16.20.1 22 -s 203.0.113.10` と `probe 172.16.20.1 22 -s 198.51.100.10`: 2 つの語を比べる。
+        - `probe 172.16.10.1 22 -s 203.0.113.10`、`probe 10.0.23.1 22 -s 203.0.113.10`、`probe 172.16.20.1 8080 -s 198.51.100.10`:
+          それぞれ何秒かかり、どの語が返るか。
+        - 数秒後に JUN02 で `show firewall`: `ISP-DENY` の `Packets` の欄。
+
+        **3. 先まで届くか**(NET1)
+
+        - `ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1`。
+
+        **4. ほかを壊していないか**(JUN02)
+
+        - `show bgp summary`: 10.0.23.2 とのセッションが `Establ`。
+        - `clear bgp neighbor 10.0.23.2` の後、20 秒ほど待ってもう一度 `show bgp summary`。
+    solution:
+      en: |
+        On JUN02:
+        configure
+        set firewall family inet filter FROM-ISP term BGP from source-address 10.0.23.2/32
+        set firewall family inet filter FROM-ISP term BGP from protocol tcp
+        set firewall family inet filter FROM-ISP term BGP from port bgp
+        set firewall family inet filter FROM-ISP term BGP then accept
+        set firewall family inet filter FROM-ISP term ICMP from protocol icmp
+        set firewall family inet filter FROM-ISP term ICMP then accept
+        set firewall family inet filter FROM-ISP term WEB from destination-address 172.16.20.0/24
+        set firewall family inet filter FROM-ISP term WEB from protocol tcp
+        set firewall family inet filter FROM-ISP term WEB from destination-port [ http https ]
+        set firewall family inet filter FROM-ISP term WEB then accept
+        set firewall family inet filter FROM-ISP term SSH from source-address 203.0.113.0/24
+        set firewall family inet filter FROM-ISP term SSH from destination-address 172.16.20.0/24
+        set firewall family inet filter FROM-ISP term SSH from protocol tcp
+        set firewall family inet filter FROM-ISP term SSH from destination-port ssh
+        set firewall family inet filter FROM-ISP term SSH then accept
+        set firewall family inet filter FROM-ISP term DENY then count ISP-DENY
+        set firewall family inet filter FROM-ISP term DENY then discard
+        set interfaces et-0/0/1 unit 0 family inet filter input FROM-ISP
+        commit and-quit
+        (without the BGP term the session stays up until the hold time runs out, then cannot come back.
+         `port bgp` matches port 179 on either side, so both directions of the session pass.
+         `reject` instead of `discard` sends ICMP back, and probe shows `unreachable` instead of `timeout`)
+      ja: |
+        On JUN02:
+        configure
+        set firewall family inet filter FROM-ISP term BGP from source-address 10.0.23.2/32
+        set firewall family inet filter FROM-ISP term BGP from protocol tcp
+        set firewall family inet filter FROM-ISP term BGP from port bgp
+        set firewall family inet filter FROM-ISP term BGP then accept
+        set firewall family inet filter FROM-ISP term ICMP from protocol icmp
+        set firewall family inet filter FROM-ISP term ICMP then accept
+        set firewall family inet filter FROM-ISP term WEB from destination-address 172.16.20.0/24
+        set firewall family inet filter FROM-ISP term WEB from protocol tcp
+        set firewall family inet filter FROM-ISP term WEB from destination-port [ http https ]
+        set firewall family inet filter FROM-ISP term WEB then accept
+        set firewall family inet filter FROM-ISP term SSH from source-address 203.0.113.0/24
+        set firewall family inet filter FROM-ISP term SSH from destination-address 172.16.20.0/24
+        set firewall family inet filter FROM-ISP term SSH from protocol tcp
+        set firewall family inet filter FROM-ISP term SSH from destination-port ssh
+        set firewall family inet filter FROM-ISP term SSH then accept
+        set firewall family inet filter FROM-ISP term DENY then count ISP-DENY
+        set firewall family inet filter FROM-ISP term DENY then discard
+        set interfaces et-0/0/1 unit 0 family inet filter input FROM-ISP
+        commit and-quit
+        (BGP の term が無いと、セッションは hold time が切れるまで保たれ、その後は張り直せない。
+         `port bgp` はどちら側の 179 番にも当たるので、セッションのどちら向きも通る。
+         `discard` の代わりに `reject` だと ICMP が返り、probe は `timeout` でなく `unreachable` になる)
+
+  - id: j2t2
+    title: { en: "J2-2  Let the replies to connections from the inside through", ja: "J2-2  社内から始めた通信の戻りを通す" }
+    check: j2t2
+    read: [21-j2-filter#s2-7, 21-j2-filter#s2-6, 21-j2-filter#s3-1]
+    hints:
+      - en: "A reply comes in through et-0/0/1, so the filter of J2-1 judges it like any other packet. What sets a reply apart from the start of a new connection is in the TCP header. Then check where a term that you add with `set` ends up."
+        ja: "戻りのパケットも et-0/0/1 から入るので、J2-1 のフィルタがほかのパケットと同じように判断します。戻りと、新しいつなぎ始めを見分けるものは、TCP の見出しの中にあります。そのうえで、`set` で足した term がどこに入るかを確かめます。"
+      - en: "On SRV1: `probe 198.51.100.10 8080 -s 172.16.20.1`. On NET1: `probe 172.16.20.1 8080 -s 198.51.100.10`. On JUN02: `show configuration firewall family inet filter <name> | display set`. Page: firewall filter, sections 2.6 and 2.7."
+        ja: "SRV1 で `probe 198.51.100.10 8080 -s 172.16.20.1`。NET1 で `probe 172.16.20.1 8080 -s 198.51.100.10`。JUN02 で `show configuration firewall family inet filter <名前> | display set`。読み物: firewall filter の 2.6・2.7 節。"
+      - en: "On JUN02, add a term to the filter of J2-1 with `from protocol tcp`, `from tcp-established` and `then accept`. Then `insert firewall family inet filter <name> term <new term> before term <last term>`."
+        ja: "JUN02 で、J2-1 のフィルタに `from protocol tcp`・`from tcp-established`、`then accept` の term を足す。続けて `insert firewall family inet filter <名前> term <足した term> before term <最後の term>`。"
+    verify:
+      en: |
+        **1. Is it in?** (JUN02)
+
+        - `show configuration firewall family inet filter <name> | display set`: where is the new term, compared with the last term?
+
+        **2. Send traffic** (SRV1)
+
+        - `probe 198.51.100.10 8080 -s 172.16.20.1` and `probe 198.51.100.10 8080` (from 172.16.10.10): which word comes back?
+
+        **3. What still stays out?** (NET1)
+
+        - `probe 172.16.20.1 8080 -s 198.51.100.10` and `probe 172.16.10.1 22 -s 198.51.100.10`: which word, and after how long?
+
+        **4. Is anything else changed?** (NET1)
+
+        - The probes of J2-1 (80 and 443 on 172.16.20.1, SSH from the two sources) give the same words as before.
+      ja: |
+        **1. 入ったか**(JUN02)
+
+        - `show configuration firewall family inet filter <名前> | display set`: 足した term は、最後の term と比べてどこにあるか。
+
+        **2. 流してみる**(SRV1)
+
+        - `probe 198.51.100.10 8080 -s 172.16.20.1` と `probe 198.51.100.10 8080`(172.16.10.10 から): どの語が返るか。
+
+        **3. 外から入らないままか**(NET1)
+
+        - `probe 172.16.20.1 8080 -s 198.51.100.10` と `probe 172.16.10.1 22 -s 198.51.100.10`: どの語が、何秒で返るか。
+
+        **4. ほかを変えていないか**(NET1)
+
+        - J2-1 の probe(172.16.20.1 の 80 番と 443 番・2 つの送信元からの SSH)が、前と同じ語を返す。
+    solution:
+      en: |
+        On JUN02:
+        configure
+        set firewall family inet filter FROM-ISP term RETURN from protocol tcp
+        set firewall family inet filter FROM-ISP term RETURN from tcp-established
+        set firewall family inet filter FROM-ISP term RETURN then accept
+        insert firewall family inet filter FROM-ISP term RETURN before term DENY
+        commit and-quit
+        (a term added with set goes to the end, after DENY, and is never reached. tcp-established matches ACK or RST,
+         so the SYN that starts a connection from outside does not match it)
+      ja: |
+        On JUN02:
+        configure
+        set firewall family inet filter FROM-ISP term RETURN from protocol tcp
+        set firewall family inet filter FROM-ISP term RETURN from tcp-established
+        set firewall family inet filter FROM-ISP term RETURN then accept
+        insert firewall family inet filter FROM-ISP term RETURN before term DENY
+        commit and-quit
+        (set で足した term は末尾(DENY の後ろ)に入り、届かない。tcp-established は ACK か RST に当たるので、
+         外から始める SYN は当たらない)
+
+  - id: j2t3
+    title: { en: "J2-3  Protect the RE of JUN02", ja: "J2-3  JUN02 の RE を守る" }
+    check: j2t3
+    read: [23-j2-protect-re#s2-1, 23-j2-protect-re#s2-2, 23-j2-protect-re#s2-3, 23-j2-protect-re#s2-4, 23-j2-protect-re#s2-6]
+    hints:
+      - en: "A filter on lo0 sees every packet addressed to JUN02 itself, from every interface, and it too ends with an implicit discard. List everything the RE of JUN02 has to receive, including what comes back to connections it starts. Some protocols do not break at the moment you commit. The BGP peers can be read from the configuration itself."
+        ja: "lo0 のフィルタは、どのインターフェースから来たものでも、JUN02 自身宛てのパケットをすべて見ます。末尾は、やはり暗黙の discard です。JUN02 の RE が受け取る必要のあるものを、自分が始めた通信に返ってくるものまで含めて数え上げます。プロトコルの中には、commit した瞬間には壊れないものがあります。BGP の相手は、設定そのものから読み取れます。"
+      - en: "On JUN02: `show configuration policy-options prefix-list <name> | display inheritance`, `show interfaces lo0.0 extensive | match ilter`, `show ospf neighbor` (watch `Dead` for a minute), `show bgp summary`, `start shell command \"timeout 3 bash -c 'exec 3<>/dev/tcp/198.51.100.10/8080' && echo CONNECTED || echo FAILED\"`. On SRV1: `probe 10.0.12.2 22`, `probe 192.168.0.2 179`. Page: protecting the RE, sections 2.2, 2.3 and 2.4."
+        ja: "JUN02 で `show configuration policy-options prefix-list <名前> | display inheritance`、`show interfaces lo0.0 extensive | match ilter`、`show ospf neighbor`(1 分ほど `Dead` を見る)、`show bgp summary`、`start shell command \"timeout 3 bash -c 'exec 3<>/dev/tcp/198.51.100.10/8080' && echo CONNECTED || echo FAILED\"`。SRV1 で `probe 10.0.12.2 22`、`probe 192.168.0.2 179`。読み物: RE を守るの 2.2・2.3・2.4 節。"
+      - en: "On JUN02: a prefix list with `apply-path \"protocols bgp group <*> neighbor <*>\"`. A filter with terms BGP (`source-prefix-list <list>`, `protocol tcp`, `port bgp`), OSPF (`protocol ospf`), ICMP (`protocol icmp`), SSH (`source-address 172.16.0.0/16`, `protocol tcp`, `destination-port ssh`) and RETURN (`protocol tcp`, `tcp-established`), each with accept, then a last term with `count RE-DENY` and `discard`. Apply it with `set interfaces lo0 unit 0 family inet filter input <name>`."
+        ja: "JUN02 で `apply-path \"protocols bgp group <*> neighbor <*>\"` の prefix-list。term が BGP(`source-prefix-list <並び>`・`protocol tcp`・`port bgp`)・OSPF(`protocol ospf`)・ICMP(`protocol icmp`)・SSH(`source-address 172.16.0.0/16`・`protocol tcp`・`destination-port ssh`)・RETURN(`protocol tcp`・`tcp-established`)で、それぞれ accept、最後に `count RE-DENY` と `discard` の term を置いたフィルタ。`set interfaces lo0 unit 0 family inet filter input <名前>` で当てる。"
+    verify:
+      en: |
+        **1. Is it in?** (JUN02)
+
+        - `show interfaces lo0.0 extensive | match ilter`: `Input Filters:` names your filter.
+        - `show configuration policy-options prefix-list <name> | display inheritance`: which addresses did the list expand to?
+
+        **2. Send traffic and count** (SRV1 and JUN01, then JUN02)
+
+        - On SRV1: `probe 10.0.12.2 22`, `probe 192.168.0.2 22 -s 172.16.20.1` and `probe 192.168.0.2 179`: which words come back?
+        - On JUN01: `start shell command "timeout 3 bash -c 'exec 3<>/dev/tcp/10.0.12.2/22' && echo CONNECTED || echo FAILED"`.
+        - On JUN02, a few seconds later: `show firewall` and the `Packets` column of `RE-DENY`.
+
+        **3. Does what JUN02 starts get its answer?** (JUN02 and NET1)
+
+        - On JUN02: `start shell command "timeout 3 bash -c 'exec 3<>/dev/tcp/198.51.100.10/8080' && echo CONNECTED || echo FAILED"`.
+        - On NET1: `ping -c 3 -W 1 -I 198.51.100.10 10.0.23.1`.
+
+        **4. Is anything else broken?** (JUN02)
+
+        - Wait one minute after the commit, then `show ospf neighbor`: the neighbor 10.0.12.1 is `Full`, and `Dead` keeps going back to the 30s.
+        - `show bgp summary`: `Establ`. Then `clear bgp neighbor 10.0.23.2`, wait about 20 seconds, and look again.
+        - Open a new console to JUN02 from the Topology tab: does it log in?
+      ja: |
+        **1. 入ったか**(JUN02)
+
+        - `show interfaces lo0.0 extensive | match ilter`: `Input Filters:` にあなたのフィルタの名前。
+        - `show configuration policy-options prefix-list <名前> | display inheritance`: 並びはどのアドレスに展開されたか。
+
+        **2. 流して数える**(SRV1 と JUN01 から、続けて JUN02)
+
+        - SRV1 で `probe 10.0.12.2 22`、`probe 192.168.0.2 22 -s 172.16.20.1`、`probe 192.168.0.2 179`: どの語が返るか。
+        - JUN01 で `start shell command "timeout 3 bash -c 'exec 3<>/dev/tcp/10.0.12.2/22' && echo CONNECTED || echo FAILED"`。
+        - 数秒後に JUN02 で `show firewall`: `RE-DENY` の `Packets` の欄。
+
+        **3. JUN02 が始めた通信に答えが返るか**(JUN02 と NET1)
+
+        - JUN02 で `start shell command "timeout 3 bash -c 'exec 3<>/dev/tcp/198.51.100.10/8080' && echo CONNECTED || echo FAILED"`。
+        - NET1 で `ping -c 3 -W 1 -I 198.51.100.10 10.0.23.1`。
+
+        **4. ほかを壊していないか**(JUN02)
+
+        - commit から 1 分待って `show ospf neighbor`: 隣 10.0.12.1 が `Full` で、`Dead` が 30 秒台に戻り続ける。
+        - `show bgp summary`: `Establ`。続けて `clear bgp neighbor 10.0.23.2` の後、20 秒ほど待ってもう一度見る。
+        - Topology タブから JUN02 のコンソールを新しく開く: ログインできるか。
+    solution:
+      en: |
+        On JUN02:
+        configure
+        set policy-options prefix-list BGP-PEERS apply-path "protocols bgp group <*> neighbor <*>"
+        set firewall family inet filter PROTECT-RE term BGP from source-prefix-list BGP-PEERS
+        set firewall family inet filter PROTECT-RE term BGP from protocol tcp
+        set firewall family inet filter PROTECT-RE term BGP from port bgp
+        set firewall family inet filter PROTECT-RE term BGP then accept
+        set firewall family inet filter PROTECT-RE term OSPF from protocol ospf
+        set firewall family inet filter PROTECT-RE term OSPF then accept
+        set firewall family inet filter PROTECT-RE term ICMP from protocol icmp
+        set firewall family inet filter PROTECT-RE term ICMP then accept
+        set firewall family inet filter PROTECT-RE term SSH from source-address 172.16.0.0/16
+        set firewall family inet filter PROTECT-RE term SSH from protocol tcp
+        set firewall family inet filter PROTECT-RE term SSH from destination-port ssh
+        set firewall family inet filter PROTECT-RE term SSH then accept
+        set firewall family inet filter PROTECT-RE term RETURN from protocol tcp
+        set firewall family inet filter PROTECT-RE term RETURN from tcp-established
+        set firewall family inet filter PROTECT-RE term RETURN then accept
+        set firewall family inet filter PROTECT-RE term DENY then count RE-DENY
+        set firewall family inet filter PROTECT-RE term DENY then discard
+        set interfaces lo0 unit 0 family inet filter input PROTECT-RE
+        commit and-quit
+        (without the OSPF term the adjacency survives until the dead interval runs out; without RETURN, connections that JUN02 starts
+         get no answer. The console of the workspace uses the management port, which the lo0 filter does not cover on Junos OS Evolved)
+      ja: |
+        On JUN02:
+        configure
+        set policy-options prefix-list BGP-PEERS apply-path "protocols bgp group <*> neighbor <*>"
+        set firewall family inet filter PROTECT-RE term BGP from source-prefix-list BGP-PEERS
+        set firewall family inet filter PROTECT-RE term BGP from protocol tcp
+        set firewall family inet filter PROTECT-RE term BGP from port bgp
+        set firewall family inet filter PROTECT-RE term BGP then accept
+        set firewall family inet filter PROTECT-RE term OSPF from protocol ospf
+        set firewall family inet filter PROTECT-RE term OSPF then accept
+        set firewall family inet filter PROTECT-RE term ICMP from protocol icmp
+        set firewall family inet filter PROTECT-RE term ICMP then accept
+        set firewall family inet filter PROTECT-RE term SSH from source-address 172.16.0.0/16
+        set firewall family inet filter PROTECT-RE term SSH from protocol tcp
+        set firewall family inet filter PROTECT-RE term SSH from destination-port ssh
+        set firewall family inet filter PROTECT-RE term SSH then accept
+        set firewall family inet filter PROTECT-RE term RETURN from protocol tcp
+        set firewall family inet filter PROTECT-RE term RETURN from tcp-established
+        set firewall family inet filter PROTECT-RE term RETURN then accept
+        set firewall family inet filter PROTECT-RE term DENY then count RE-DENY
+        set firewall family inet filter PROTECT-RE term DENY then discard
+        set interfaces lo0 unit 0 family inet filter input PROTECT-RE
+        commit and-quit
+        (OSPF の term が無いと、隣接は dead interval が切れるまで保たれる。RETURN が無いと、JUN02 が始めた通信に答えが返らない。
+         ワークスペースのコンソールは管理ポートを使い、Junos OS Evolved では lo0 のフィルタは管理ポートに効かない)
+
+  - id: j2t4
+    title: { en: "J2-4  Drop packets with spoofed sources at the entrance", ja: "J2-4  送信元をかたるパケットを入口で捨てる" }
+    check: j2t4
+    read: [25-j2-lists-logging#s2-1, 25-j2-lists-logging#s2-2, 25-j2-lists-logging#s2-3]
+    hints:
+      - en: "A packet from the ISP has to meet the new filter first and still meet the filter of J2-1 afterwards. Whether it moves on from one filter of a list to the next depends on how the first filter ends. And one of the ranges contains the link to the ISP."
+        ja: "ISP からのパケットは、まず新しいフィルタに会い、その後も J2-1 のフィルタに会う必要があります。並べたフィルタの次へ進むかどうかは、1 本目の終わり方で決まります。そして、範囲の 1 つが ISP との接続を含んでいます。"
+      - en: "On NET1: `ping -c 2 -W 1 -I 10.200.0.1 172.16.20.1`, the same with `-I 192.168.50.1` and `-I 198.51.100.10`, `probe 172.16.10.1 22 -s 198.51.100.10`. On JUN02: `show interfaces et-0/0/1.0 extensive | match ilter`, `show firewall`, `show bgp summary`. Page: lists and logging, sections 2.1, 2.2 and 2.3."
+        ja: "NET1 で `ping -c 2 -W 1 -I 10.200.0.1 172.16.20.1`、`-I 192.168.50.1` と `-I 198.51.100.10` にした同じもの、`probe 172.16.10.1 22 -s 198.51.100.10`。JUN02 で `show interfaces et-0/0/1.0 extensive | match ilter`、`show firewall`、`show bgp summary`。読み物: 並べる・記録するの 2.1・2.2・2.3 節。"
+      - en: "On JUN02: a prefix list with the five ranges and another with 10.0.23.0/30. A new filter with a single term: `from source-prefix-list <ranges>` and `from source-prefix-list <link> except`, then `count BOGON` and `discard`, and no other term. Delete the `input` of et-0/0/1 and set `input-list [ <new filter> <filter of J2-1> ]`."
+        ja: "JUN02 で、5 つの範囲の prefix-list と、10.0.23.0/30 の prefix-list。term 1 つだけの新しいフィルタ: `from source-prefix-list <範囲>` と `from source-prefix-list <接続> except`、then `count BOGON` と `discard`。ほかの term は置かない。et-0/0/1 の `input` を消して `input-list [ <新しいフィルタ> <J2-1 のフィルタ> ]`。"
+    verify:
+      en: |
+        **1. Is it in?** (JUN02)
+
+        - `show interfaces et-0/0/1.0 extensive | match ilter`: what name does `Input Filters:` show now?
+        - `show configuration interfaces et-0/0/1 unit 0 family inet`: the order of the filters in the list.
+
+        **2. Send traffic and count** (NET1, then JUN02)
+
+        - `ping -c 2 -W 1 -I 10.200.0.1 172.16.20.1` and the same with `-I 192.168.50.1`: how many replies?
+        - A few seconds later, on JUN02, `show firewall`: under which filter name does the `BOGON` counter count?
+
+        **3. Does the rest still reach the far end?** (NET1)
+
+        - `ping -c 2 -W 1 -I 198.51.100.10 172.16.20.1` and `probe 172.16.20.1 80 -s 198.51.100.10`.
+
+        **4. Is anything else broken?** (NET1, SRV1 and JUN02)
+
+        - On NET1: `probe 172.16.10.1 22 -s 198.51.100.10`: the same word as in J2-1?
+        - On SRV1: `probe 10.0.12.2 22`: the same word as in J2-3?
+        - On JUN02: `show bgp summary`, then `clear bgp neighbor 10.0.23.2` and look again about 20 seconds later.
+      ja: |
+        **1. 入ったか**(JUN02)
+
+        - `show interfaces et-0/0/1.0 extensive | match ilter`: `Input Filters:` には今どの名前が出るか。
+        - `show configuration interfaces et-0/0/1 unit 0 family inet`: 並びの中のフィルタの順。
+
+        **2. 流して数える**(NET1 から、続けて JUN02)
+
+        - `ping -c 2 -W 1 -I 10.200.0.1 172.16.20.1` と、`-I 192.168.50.1` にした同じもの: 応答はいくつ返るか。
+        - 数秒後に JUN02 で `show firewall`: `BOGON` のカウンタは、どのフィルタの名前の下で数えているか。
+
+        **3. ほかは先まで届くか**(NET1)
+
+        - `ping -c 2 -W 1 -I 198.51.100.10 172.16.20.1` と `probe 172.16.20.1 80 -s 198.51.100.10`。
+
+        **4. ほかを壊していないか**(NET1・SRV1・JUN02)
+
+        - NET1 で `probe 172.16.10.1 22 -s 198.51.100.10`: J2-1 の時と同じ語か。
+        - SRV1 で `probe 10.0.12.2 22`: J2-3 の時と同じ語か。
+        - JUN02 で `show bgp summary`、続けて `clear bgp neighbor 10.0.23.2` の 20 秒ほど後にもう一度。
+    solution:
+      en: |
+        On JUN02:
+        configure
+        set policy-options prefix-list BOGONS 10.0.0.0/8
+        set policy-options prefix-list BOGONS 172.16.0.0/12
+        set policy-options prefix-list BOGONS 192.168.0.0/16
+        set policy-options prefix-list BOGONS 100.64.0.0/10
+        set policy-options prefix-list BOGONS 127.0.0.0/8
+        set policy-options prefix-list ISP-LINK 10.0.23.0/30
+        set firewall family inet filter NO-BOGONS term BOGON from source-prefix-list BOGONS
+        set firewall family inet filter NO-BOGONS term BOGON from source-prefix-list ISP-LINK except
+        set firewall family inet filter NO-BOGONS term BOGON then count BOGON
+        set firewall family inet filter NO-BOGONS term BOGON then discard
+        delete interfaces et-0/0/1 unit 0 family inet filter input
+        set interfaces et-0/0/1 unit 0 family inet filter input-list [ NO-BOGONS FROM-ISP ]
+        commit and-quit
+        (a last term with accept in NO-BOGONS would end the list there, and FROM-ISP would never be seen.
+         With FROM-ISP first, its ICMP term accepts the spoofed pings. Without the except, BGP from 10.0.23.2 is dropped too)
+      ja: |
+        On JUN02:
+        configure
+        set policy-options prefix-list BOGONS 10.0.0.0/8
+        set policy-options prefix-list BOGONS 172.16.0.0/12
+        set policy-options prefix-list BOGONS 192.168.0.0/16
+        set policy-options prefix-list BOGONS 100.64.0.0/10
+        set policy-options prefix-list BOGONS 127.0.0.0/8
+        set policy-options prefix-list ISP-LINK 10.0.23.0/30
+        set firewall family inet filter NO-BOGONS term BOGON from source-prefix-list BOGONS
+        set firewall family inet filter NO-BOGONS term BOGON from source-prefix-list ISP-LINK except
+        set firewall family inet filter NO-BOGONS term BOGON then count BOGON
+        set firewall family inet filter NO-BOGONS term BOGON then discard
+        delete interfaces et-0/0/1 unit 0 family inet filter input
+        set interfaces et-0/0/1 unit 0 family inet filter input-list [ NO-BOGONS FROM-ISP ]
+        commit and-quit
+        (NO-BOGONS の最後に accept の term を置くと、並びはそこで終わり、FROM-ISP は見られない。
+         FROM-ISP を先に置くと、その ICMP の term が、送信元をかたる ping を受け入れる。except が無いと、10.0.23.2 からの BGP も捨てる)
+
+  - id: j2t5
+    title: { en: "J2-5  Record the dropped traffic", ja: "J2-5  捨てた通信を記録する" }
+    check: j2t5
+    read: [25-j2-lists-logging#s2-4, 25-j2-lists-logging#s2-3]
+    hints:
+      - en: "Two different actions write to two different places. One of those places needs configuration outside the firewall hierarchy before anything appears there."
+        ja: "2 つの違う動作が、2 つの違う場所に書きます。そのうち 1 つの場所は、firewall の階層の外にも設定が無いと、何も現れません。"
+      - en: "On NET1: `probe 172.16.10.1 23 -s 198.51.100.10`. On JUN02: `show firewall log`, `show firewall log detail`, `show log fw-drops`, `show configuration system syslog`. Page: lists and logging, section 2.4."
+        ja: "NET1 で `probe 172.16.10.1 23 -s 198.51.100.10`。JUN02 で `show firewall log`、`show firewall log detail`、`show log fw-drops`、`show configuration system syslog`。読み物: 並べる・記録するの 2.4 節。"
+      - en: "On JUN02: add `then log` and `then syslog` to the last term of the filter of J2-1, and `set system syslog file fw-drops firewall any`."
+        ja: "JUN02 で、J2-1 のフィルタの最後の term に `then log` と `then syslog` を足し、`set system syslog file fw-drops firewall any`。"
+    verify:
+      en: |
+        **1. Is it in?** (JUN02)
+
+        - `show configuration firewall family inet filter <filter of J2-1> | display set | match <last term>`: the actions of the last term.
+        - `show configuration system syslog`: the file `fw-drops` and what it records.
+
+        **2. Send traffic** (NET1)
+
+        - `probe 172.16.10.1 23 -s 198.51.100.10` (pick another port each time, so you can find your own packet).
+
+        **3. Where does it show up?** (JUN02, right after sending)
+
+        - `show firewall log` and `show firewall log detail`: the source, the destination and the destination port.
+        - `show log fw-drops`: the line that starts with `FW:` for your packet.
+
+        **4. Is anything else changed?** (JUN02)
+
+        - `show firewall`: the counter of J2-1 still counts the dropped packets.
+        - The probes of J2-1 and the pings of J2-4 give the same results as before.
+      ja: |
+        **1. 入ったか**(JUN02)
+
+        - `show configuration firewall family inet filter <J2-1 のフィルタ> | display set | match <最後の term>`: 最後の term の動作。
+        - `show configuration system syslog`: ファイル `fw-drops` と、そこに何を書くか。
+
+        **2. 流してみる**(NET1)
+
+        - `probe 172.16.10.1 23 -s 198.51.100.10`(毎回ポートを変えると、自分のパケットを見つけやすい)。
+
+        **3. どこに現れるか**(JUN02、送った直後に)
+
+        - `show firewall log` と `show firewall log detail`: 送信元・宛先・宛先のポート。
+        - `show log fw-drops`: 自分のパケットの `FW:` で始まる行。
+
+        **4. ほかを変えていないか**(JUN02)
+
+        - `show firewall`: J2-1 のカウンタが、捨てたパケットを数え続けている。
+        - J2-1 の probe と J2-4 の ping が、前と同じ結果になる。
+    solution:
+      en: |
+        On JUN02:
+        configure
+        set firewall family inet filter FROM-ISP term DENY then log
+        set firewall family inet filter FROM-ISP term DENY then syslog
+        set system syslog file fw-drops firewall any
+        commit and-quit
+        (log keeps the packet in a buffer for show firewall log; syslog only produces a message of facility firewall,
+         which appears nowhere until a syslog file takes that facility)
+      ja: |
+        On JUN02:
+        configure
+        set firewall family inet filter FROM-ISP term DENY then log
+        set firewall family inet filter FROM-ISP term DENY then syslog
+        set system syslog file fw-drops firewall any
+        commit and-quit
+        (log は show firewall log のバッファに残す。syslog は facility が firewall のメッセージを出すだけで、
+         その facility を受け取る syslog のファイルが無ければ、どこにも現れない)

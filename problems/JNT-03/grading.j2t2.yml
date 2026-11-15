@@ -1,0 +1,20 @@
+# J2-2: 社内から始めた TCP の戻りを通す(tcp-established・term の順)。外から始める TCP は J2-1 のとおり。
+problem: JNT-03
+total_points: 100
+checks:
+- name: 'J2-2 SRV1: TCP that the server network starts toward the Internet (NET1, port 8080) gets its replies back'
+  node: SRV1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node SRV1 -- sh -c 'probe 198.51.100.10 8080 -s 172.16.20.1; probe 198.51.100.10 8080'
+  raw:
+  - regex: (?m)^open\s+tcp 198\.51\.100\.10:8080 from 172\.16\.20\.1\s
+  - regex: (?m)^open\s+tcp 198\.51\.100\.10:8080\s+\d
+  points: 50
+- name: 'J2-2 NET1: TCP that the Internet starts toward the inside is still dropped (8080 on SRV1, SSH on JUN01)'
+  node: NET1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- sh -c 'probe 172.16.20.1 8080 -s 198.51.100.10; probe 172.16.10.1 22 -s 198.51.100.10'
+  raw:
+  - regex: (?m)^timeout\s+tcp 172\.16\.20\.1:8080 from 198\.51\.100\.10\s
+  - regex: (?m)^timeout\s+tcp 172\.16\.10\.1:22 from 198\.51\.100\.10\s
+  points: 50

@@ -1,0 +1,65 @@
+# jpoc JNT-02 j2-policer3.txt 2026-11-15 04:29:14
+# PoC J2-7(BL-275): RE 行き(lo0 の PROTECT-RE の ICMP の term)に policer を付けると効くか(中継では 1 個も落ちなかった= j2-policer2)
+
+## [JUN02] (open)
+Last login: Sun Nov 15 04:27:55 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term ICMP then policer ICMP-64K
+set firewall family inet filter PROTECT-RE term ICMP then policer ICMP-64K 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter PROTECT-RE term ICMP then count RE-ICMP
+set firewall family inet filter PROTECT-RE term ICMP then count RE-ICMP 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [JUN02] clear firewall all
+clear firewall all 
+
+admin@jun02> 
+## [FRR1:sh] (open)
+frr1:/# 
+## [FRR1:sh] ping -q -c 200 -i 0.01 -s 1000 10.0.23.1
+ping -q -c 200 -i 0.01 -s 1000 10.0.23.1
+PING 10.0.23.1 (10.0.23.1): 1000 data bytes
+
+--- 10.0.23.1 ping statistics ---
+200 packets transmitted, 200 packets received, 0% packet loss
+round-trip min/avg/max = 0.710/0.952/5.813 ms
+frr1:/# 
+## (sleep 5s)
+
+## [JUN02] show firewall filter PROTECT-RE | no-more
+show firewall filter PROTECT-RE | no-more 
+
+Filter: PROTECT-RE                                           
+Counters:
+Name                                                                            Bytes              Packets
+RE-DENIED                                                                           0                    0
+RE-ICMP                                                                        205600                  200
+Policers:
+Name                                                                            Bytes              Packets
+ICMP-64K-ICMP                                                                       0                    0
+
+admin@jun02> 
+## [JUN02] show policer | no-more
+show policer | no-more 
+Policers:
+Name                                                                            Bytes              Packets
+__default_arp_policer__                                                             0                    0
+
+admin@jun02> 

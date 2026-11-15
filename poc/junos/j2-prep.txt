@@ -1,0 +1,21 @@
+# PoC J2 の下ごしらえ(BL-275): 初めの設定のままでは ISP から中の網へ戻り道が無いので、PoC のためだけに静的経路を足す
+# (JUN01= 既定経路を JUN02 へ・JUN02= 172.16/16 を JUN01 へ・FRR1= 中の網を JUN02 へ)。フィルタはまだ無い。
+JUN01 show version | match Junos
+JUN01 configure
+JUN01 set routing-options static route 0.0.0.0/0 next-hop 10.0.12.2
+JUN01 commit and-quit
+JUN02 configure
+JUN02 set routing-options static route 172.16.0.0/16 next-hop 10.0.12.1
+JUN02 commit and-quit
+FRR1 configure terminal
+FRR1 ip route 172.16.0.0/16 10.0.23.1
+FRR1 ip route 192.168.0.0/24 10.0.23.1
+FRR1 ip route 10.0.12.0/30 10.0.23.1
+FRR1 end
+FRR1:sh command -v bash nc timeout ping hping3 nping; ping -V 2>&1 | head -1; busybox 2>&1 | head -1
+FRR1:sh ping -c 3 -W 1 172.16.10.10
+FRR1:sh ping -c 3 -W 1 -I 203.0.113.1 172.16.20.1
+FRR1:sh timeout 3 bash -c 'exec 3<>/dev/tcp/172.16.10.1/22; head -c 40 <&3'; echo rc=$?
+FRR1:sh timeout 3 bash -c 'exec 3<>/dev/tcp/10.0.23.1/22; head -c 40 <&3'; echo rc=$?
+JUN02 show interfaces terse | match "mgmt|et-0/0/[01] |lo0"
+JUN02 show bgp summary

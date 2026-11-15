@@ -1,0 +1,190 @@
+# jpoc JNT-02 j2-policer2.txt 2026-11-15 04:27:55
+# PoC J2-6(BL-275): j2-policer.txt の続き。input-list は終端の動作(accept)で止まる(文書 Table 86)→ 1 本目の term OTHER accept を外す。
+# カウンタは合成されたフィルタ名(et-0/0/1.0-inet-i)の下に出る(文書「Interface-Specific Names for Filter Lists」)
+
+## [JUN02] (open)
+Last login: Sun Nov 15 04:25:41 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] show firewall filter et-0/0/1.0-inet-i | no-more
+show firewall filter et-0/0/1.0-inet-i | no-more 
+
+Filter: et-0/0/1.0-inet-i                                    
+Counters:
+Name                                                                            Bytes              Packets
+BOGON-et-0/0/1.0-inet-i                                                             0                    0
+
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] delete firewall family inet filter NO-BOGONS term OTHER
+delete firewall family inet filter NO-BOGONS term OTHER 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [JUN02] clear firewall all
+clear firewall all 
+
+admin@jun02> 
+## [FRR1:sh] (open)
+frr1:/# 
+## [FRR1:sh] ping -c 3 -W 1 -I 10.200.0.1 172.16.10.10
+ping -c 3 -W 1 -I 10.200.0.1 172.16.10.10
+PING 172.16.10.10 (172.16.10.10) from 10.200.0.1: 56 data bytes
+
+--- 172.16.10.10 ping statistics ---
+3 packets transmitted, 0 packets received, 100% packet loss
+frr1:/# 
+## [FRR1:sh] ping -q -c 200 -i 0.01 -s 1000 172.16.10.10
+ping -q -c 200 -i 0.01 -s 1000 172.16.10.10
+PING 172.16.10.10 (172.16.10.10): 1000 data bytes
+
+--- 172.16.10.10 ping statistics ---
+200 packets transmitted, 200 packets received, 0% packet loss
+round-trip min/avg/max = 1.007/1.747/36.314 ms
+frr1:/# 
+## (sleep 5s)
+
+## [JUN02] show firewall filter et-0/0/1.0-inet-i | no-more
+show firewall filter et-0/0/1.0-inet-i | no-more 
+
+Filter: et-0/0/1.0-inet-i                                    
+Counters:
+Name                                                                            Bytes              Packets
+BOGON-et-0/0/1.0-inet-i                                                           252                    3
+ICMP-IN-et-0/0/1.0-inet-i                                                      205600                  200
+Policers:
+Name                                                                            Bytes              Packets
+ICMP-64K-LIMIT-ICMP-ICMP-et-0/0/1.0-inet-i                                          0                    0
+
+admin@jun02> 
+## [JUN02] show firewall filter LIMIT-ICMP | no-more
+show firewall filter LIMIT-ICMP | no-more 
+
+Filter: LIMIT-ICMP                                           
+Counters:
+Name                                                                            Bytes              Packets
+ICMP-IN                                                                             0                    0
+Policers:
+Name                                                                            Bytes              Packets
+ICMP-64K-ICMP                                                                       0                    0
+
+admin@jun02> 
+## [JUN02] show bgp summary | match "10.0.23" | no-more
+show bgp summary | match "10.0.23" | no-more 
+10.0.23.2             64500          8          5       0       3        1:51 Establ
+
+admin@jun02> # 遅い ping は落ちない
+
+## [JUN02] clear firewall all
+clear firewall all 
+
+admin@jun02> 
+## [FRR1:sh] ping -q -c 20 -i 0.2 172.16.10.10
+ping -q -c 20 -i 0.2 172.16.10.10
+PING 172.16.10.10 (172.16.10.10): 56 data bytes
+
+--- 172.16.10.10 ping statistics ---
+20 packets transmitted, 20 packets received, 0% packet loss
+round-trip min/avg/max = 1.453/1.638/2.128 ms
+frr1:/# 
+## (sleep 5s)
+
+## [JUN02] show firewall filter et-0/0/1.0-inet-i | no-more
+show firewall filter et-0/0/1.0-inet-i | no-more 
+
+Filter: et-0/0/1.0-inet-i                                    
+Counters:
+Name                                                                            Bytes              Packets
+BOGON-et-0/0/1.0-inet-i                                                             0                    0
+ICMP-IN-et-0/0/1.0-inet-i                                                        1680                   20
+Policers:
+Name                                                                            Bytes              Packets
+ICMP-64K-LIMIT-ICMP-ICMP-et-0/0/1.0-inet-i                                          0                    0
+
+admin@jun02> # 単独のフィルタ(並びにしない)で policer の量: 64k・burst 15k で 1000 バイトを 100 個/秒 × 2 秒
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] delete interfaces et-0/0/1 unit 0 family inet filter input-list
+delete interfaces et-0/0/1 unit 0 family inet filter input-list 
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces et-0/0/1 unit 0 family inet filter input LIMIT-ICMP
+set interfaces et-0/0/1 unit 0 family inet filter input LIMIT-ICMP 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [JUN02] clear firewall all
+clear firewall all 
+
+admin@jun02> 
+## [FRR1:sh] ping -q -c 200 -i 0.01 -s 1000 172.16.10.10
+ping -q -c 200 -i 0.01 -s 1000 172.16.10.10
+PING 172.16.10.10 (172.16.10.10): 1000 data bytes
+
+--- 172.16.10.10 ping statistics ---
+200 packets transmitted, 200 packets received, 0% packet loss
+round-trip min/avg/max = 1.089/1.653/30.131 ms
+frr1:/# 
+## (sleep 5s)
+
+## [JUN02] show firewall filter LIMIT-ICMP | no-more
+show firewall filter LIMIT-ICMP | no-more 
+
+Filter: LIMIT-ICMP                                           
+Counters:
+Name                                                                            Bytes              Packets
+ICMP-IN                                                                        205600                  200
+Policers:
+Name                                                                            Bytes              Packets
+ICMP-64K-ICMP                                                                       0                    0
+
+admin@jun02> 
+## [JUN02] clear firewall all
+clear firewall all 
+
+admin@jun02> 
+## [FRR1:sh] ping -q -c 300 -i 0.01 -s 1000 172.16.10.10
+ping -q -c 300 -i 0.01 -s 1000 172.16.10.10
+PING 172.16.10.10 (172.16.10.10): 1000 data bytes
+
+--- 172.16.10.10 ping statistics ---
+300 packets transmitted, 300 packets received, 0% packet loss
+round-trip min/avg/max = 1.101/1.446/7.001 ms
+frr1:/# 
+## (sleep 5s)
+
+## [JUN02] show firewall filter LIMIT-ICMP | no-more
+show firewall filter LIMIT-ICMP | no-more 
+
+Filter: LIMIT-ICMP                                           
+Counters:
+Name                                                                            Bytes              Packets
+ICMP-IN                                                                        308400                  300
+Policers:
+Name                                                                            Bytes              Packets
+ICMP-64K-ICMP                                                                       0                    0
+
+admin@jun02> 

@@ -28,7 +28,7 @@
   GET /ws/console?node=<ラベル>   … そのノードのコンソール(バイト列をそのまま流す)
   GET /task            … タスク(単発のみ。--task の Markdown を問題用紙と同じ体裁で HTML 化)
   GET /api/learn       … 学習モード(単発に --learn <問題 ID>。BL-246)= Steps タブの中身。POST /api/learn/hint・/api/learn/check
-                         POST /api/learn/reset= やり直し(XR を構築直後のコミットへ戻し、記録を退避・BL-254)
+                         POST /api/learn/reset= やり直し(XR を構築直後のコミットへ・containerlab の Junos は構築直後の設定へ戻し、記録を退避・BL-254/275)
 
 設計上の約束:
   - **繋げるラボはサーバ側でしか決まらない**。パック常駐ではパックの manifest のラボ項目から
@@ -891,14 +891,16 @@ def _learn_view(app):
 
 def _learn_reset_nodes(app):
     """やり直しで戻す機器の名前(確認の文に出す)= IOS XR の機器・xe_reset_nodes・linux_reset_exec(topologies/xr_reset.py と同じ決め方)。
-    containerlab の問題は startup-config からラボごと作り直すので、コンソールを持つ全ノード。"""
+    containerlab の問題は Junos の機器(構築直後の設定へ load override で戻す・clab_ops.py reset)と linux_reset_exec のノード。"""
     if app["fixed"].clab:
         try:
             pm, spec = app["clab"].spec(app["learn"])
         except (OSError, RuntimeError, yaml.YAMLError):
             return []
-        model, _info = clab_model(pm, spec, {})
-        return [n["label"] for n in model["nodes"] if n["console"]]
+        keys = {str(k).lower(): str(k) for k in pm.get("clab_nodes") or {}}
+        out = [keys.get(str(n).lower(), str(n).upper()) for n, nd in ((spec.get("topology") or {}).get("nodes") or {}).items()
+               if clab_ops.node_family(nd) == "junos"]
+        return out + [n for n in pm.get("linux_reset_exec") or {} if n not in out]
     try:
         with open(os.path.join(app["repo"], "problems", app["learn"], "problem.yml"), encoding="utf-8") as fh:
             pm = yaml.safe_load(fh) or {}
@@ -1079,8 +1081,8 @@ async def h_learn(request):
         v["unit"] = texts["task_unit"].get(v["id"]) or (m.group(1) if m else "")
     return web.json_response({"enabled": True, "steps": steps, "reading": reading,
                               "rules": texts["rules"], "units": texts["units"], "reset_nodes": _learn_reset_nodes(app),
-                              # containerlab のやり直し= 作り直し(数分かかり、開いているコンソールは切れる)
-                              "reset_rebuild": bool(app["fixed"].clab)},
+                              # containerlab のやり直し= Junos を控えへ load override(数秒)。戻せなければ作り直し(数分)
+                              "reset_clab": bool(app["fixed"].clab)},
                              headers={"Cache-Control": "no-store"})
 
 
@@ -1185,9 +1187,10 @@ async def h_learn_reset(request):
     async with app["learn_lock"]:
         repo = app["repo"]
         if app["fixed"].clab:
-            # containerlab の問題(BL-275)= lab.sh reset と同じく startup-config から作り直す(vJunos EVO は数分)
+            # containerlab の問題(BL-275)= lab.sh reset と同じ。Junos を構築直後の設定へ load override で戻す(数秒)。
+            # 戻せない時は clab_ops.py が startup-config からの作り直し(数分)へ切り替え、最後の行に「RESET rebuilt」を出す
             argv, timeout, vault = [os.path.join(repo, ".venv/bin/python3"), os.path.join(repo, "topologies/clab_ops.py"),
-                                    "deploy", "--repo", repo, "--problem", app["learn"], "--reconfigure"], 1200, None
+                                    "reset", "--repo", repo, "--problem", app["learn"]], 1200, None
         else:
             fd, vault = tempfile.mkstemp(prefix="ccnp-learn-")
             os.write(fd, b"CCNP\n")
@@ -1213,7 +1216,8 @@ async def h_learn_reset(request):
         log = _learn_log_path(app)
         if os.path.exists(log):
             os.replace(log, log[:-len(".jsonl")] + time.strftime(".%Y%m%d-%H%M%S") + ".jsonl.bak")
-    return web.json_response({"enabled": True, "steps": _learn_view(app), "reset": True})
+    return web.json_response({"enabled": True, "steps": _learn_view(app), "reset": True,
+                              "rebuilt": bool(app["fixed"].clab and "RESET rebuilt" in text)})
 
 
 def load_cml():
@@ -1905,7 +1909,7 @@ window.addEventListener('message', ev => {
 //   本文はサーバが開いた分だけ返す。言語は問題文の切替に合わせる(1 版しか無ければ英語)。
 let learnSteps = null, learnBusy = null, learnReading = null, learnRead = {};
 // 課題カード(BL-255): 課題文・単元の見出し・冒頭の約束。最初の読み込みで受け取って持っておく(確認・ヒントの応答には入らない)
-let learnTask = {}, learnUnit = {}, learnUnits = {}, learnRules = null, rulesOpen = false, learnResetNodes = [], learnRebuild = false;
+let learnTask = {}, learnUnit = {}, learnUnits = {}, learnRules = null, rulesOpen = false, learnResetNodes = [], learnClab = false;
 let learnTries = {}, tryOpen = null;          // 課題ごとの「やってみる」・小窓に出している課題
 let learnVerify = {}, verifyOpen = new Set();  // 確かめ方の例(BL-266)・開いている課題(記録しない)
 function learnLang(){ return window.ccnpLang === 'ja' ? 'ja' : 'en'; }
@@ -1915,14 +1919,16 @@ const LT = {en: {check:'Check', checking:'Checking…', hint:'Hint', sol:'Refere
                  busy:'Another check is still running.', reset:'Start over', resetting:'Resetting…',
                  resetq:'Start the whole lab over?\n\n{nodes} go back to the state they had right after the lab was built (your changes are discarded), and every task here returns to not yet checked, with no hints opened.',
                  resetdone:'The lab is back at its starting state.',
-                 resetslow:'\n\nThe devices are rebuilt from their startup configuration. This takes a few minutes, and the open consoles disconnect (press Enter in a console to reconnect when its device is up again).',
+                 resetclab:'\n\nThe Junos devices load the configuration saved right after the lab was built and commit it (usually well under a minute). Open consoles stay connected, but a console left in configure exclusive or configure private is logged out. If a device cannot be restored this way, the lab is rebuilt from its startup configuration instead, which takes a few minutes and disconnects the consoles.',
+                 resetrebuilt:' It could not be restored from the saved configuration, so it was rebuilt from its startup configuration: press Enter in each console to reconnect.',
                  verify:'How to verify', tryit:'Try it', trytitle:'Try it', tryread:'Open in Reading', close:'Close', mini:'Minimise', restore:'Expand'},
             ja: {check:'確認', checking:'確認中…', hint:'ヒント', sol:'模範解', pass:'通過', fail:'未充足',
                  none:'自己確認', read:'読み物:', rules:'進め方の約束', note:'確認は機器のいまの状態を読みます(約 15 秒)。設定モードを抜けてから押してください。ヒントは 1 段ずつ開き、開いた段数は記録されます。確かめ方はいつでも開け、記録されません。',
                  busy:'別の確認がまだ実行中です。', reset:'最初からやり直す', resetting:'戻しています…',
                  resetq:'ラボ全体を最初からやり直しますか？\n\n{nodes} をラボを作った直後の状態へ戻し(あなたの変更は消えます)、ここの課題もすべて未確認・ヒント未開封に戻します。',
                  resetdone:'ラボを最初の状態に戻しました。',
-                 resetslow:'\n\n機器は startup-config から作り直します。数分かかり、開いているコンソールは切れます(機器が起動し直したら、コンソールで Enter を押すとつながり直します)。',
+                 resetclab:'\n\nJunos の機器は、ラボを作った直後に控えた設定を読み込んで commit します(ふつうは 1 分もかかりません)。開いているコンソールはつながったままですが、configure exclusive か configure private のままのコンソールはログアウトされます。この方法で戻せない機器があれば、startup-config から作り直します(数分かかり、開いているコンソールは切れます)。',
+                 resetrebuilt:'控えた設定から戻せなかったため、startup-config から作り直しました。コンソールで Enter を押してつなぎ直してください。',
                  verify:'確かめ方', tryit:'やってみる', trytitle:'やってみる', tryread:'読み物で開く', close:'閉じる', mini:'たたむ', restore:'広げる'}};
 function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 // ---- 「やってみる」の小窓 ----
@@ -2072,7 +2078,7 @@ async function learnReset(){
   const ns = learnResetNodes.length ? learnResetNodes : ['XR01'];
   const names = learnLang() === 'ja' ? ns.join('・') : (ns.length < 2 ? ns.join('') : ns.slice(0, -1).join(', ') + ' and ' + ns[ns.length - 1]);
   if (!confirm(T.resetq.replace('{nodes}', names).replace(' go back', ns.length < 2 ? ' goes back' : ' go back')
-               + (learnRebuild ? T.resetslow : ''))) return;
+               + (learnClab ? T.resetclab : ''))) return;
   learnBusy = '*reset'; paintSteps();
   try {
     const r = await fetch('api/learn/reset?' + Q, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
@@ -2080,7 +2086,7 @@ async function learnReset(){
     if (d.busy) alert(T.busy);
     if (d.error) alert(d.error);
     if (d.steps) learnSteps = d.steps;
-    if (d.reset){ learnBusy = null; paintSteps(); $('#steps').scrollTop = 0; alert(T.resetdone); return; }
+    if (d.reset){ learnBusy = null; paintSteps(); $('#steps').scrollTop = 0; alert(T.resetdone + (d.rebuilt ? T.resetrebuilt : '')); return; }
   } catch (e) { alert(String(e)); }
   learnBusy = null; paintSteps();
 }
@@ -2102,7 +2108,7 @@ async function learnPost(kind, id){
     learnSteps = d.steps;
     for (const st of d.steps){ learnRead[st.id] = st.read || []; learnTask[st.id] = st.task || {}; learnUnit[st.id] = st.unit || '';
                                learnTries[st.id] = st.tries || []; learnVerify[st.id] = st.verify || {}; }
-    learnUnits = d.units || {}; learnRules = d.rules || null; learnResetNodes = d.reset_nodes || []; learnRebuild = !!d.reset_rebuild;
+    learnUnits = d.units || {}; learnRules = d.rules || null; learnResetNodes = d.reset_nodes || []; learnClab = !!d.reset_clab;
     if (d.reading){ learnReading = d.reading; $('#readbtn').hidden = false; }
     // 課題カード(BL-255): 課題文はこのタブに入るので Task タブは出さない。Task の枠は読み込んだまま残す
     // (問題文の日英切替は、その枠が知らせてくる言語に合わせる作りのため)

@@ -1,0 +1,59 @@
+# PoC J2-3(BL-275): reject の種類ごとに何が返るか(FRR1 の eth1 で観る)・syslog・tcp-established と insert(J2-2 の流し直し)
+# 前提= J2-2 の後(FROM-ISP の LAST= count DENIED・discard・log・syslog)
+FRR1:sh tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+SRV1 tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+JUN02 set cli screen-length 0
+JUN02 show log messages | match PFE_FW | last 3
+JUN02 configure
+JUN02 delete firewall family inet filter FROM-ISP term LAST then discard
+JUN02 delete firewall family inet filter FROM-ISP term LAST then log
+JUN02 delete firewall family inet filter FROM-ISP term LAST then syslog
+JUN02 set firewall family inet filter FROM-ISP term LAST then reject
+JUN02 commit and-quit
+FRR1:sh python3 /tmp/sniff.py eth1 6 > /tmp/s1.log 2>&1 &
+FRR1:sh tcp 192.168.0.1 22
+FRR1:sh tcp 10.0.23.1 22
+FRR1:sh ping -c 1 -W 1 -I 203.0.113.1 192.168.0.1
+FRR1:sh sleep 4; cat /tmp/s1.log
+JUN02 configure
+JUN02 set firewall family inet filter FROM-ISP term LAST then reject tcp-reset
+JUN02 show firewall family inet filter FROM-ISP term LAST
+JUN02 commit and-quit
+FRR1:sh python3 /tmp/sniff.py eth1 6 > /tmp/s2.log 2>&1 &
+FRR1:sh tcp 192.168.0.1 22
+FRR1:sh tcp 10.0.23.1 22
+FRR1:sh sleep 4; cat /tmp/s2.log
+JUN02 configure
+JUN02 set firewall family inet filter FROM-ISP term LAST then reject administratively-prohibited
+JUN02 commit and-quit
+FRR1:sh python3 /tmp/sniff.py eth1 5 > /tmp/s3.log 2>&1 &
+FRR1:sh tcp 192.168.0.1 22
+FRR1:sh sleep 4; cat /tmp/s3.log
+# syslog= messages に PFE_FW_SYSLOG_IP が出るか
+JUN02 configure
+JUN02 delete firewall family inet filter FROM-ISP term LAST then reject
+JUN02 set firewall family inet filter FROM-ISP term LAST then discard
+JUN02 set firewall family inet filter FROM-ISP term LAST then syslog
+JUN02 commit and-quit
+FRR1:sh tcp 192.168.0.1 23
+!sleep 3
+JUN02 show log messages | match "PFE_FW|FW_" | last 5
+# 戻りの通信: 中(SRV1)から ISP の 10.0.23.2:8080 へ。SYN-ACK は FROM-ISP に当たる
+FRR1:sh pgrep -f "nc -l -p 8080" >/dev/null || ( (while :; do echo hi | nc -l -p 8080; done) >/dev/null 2>&1 & )
+SRV1 tcp 10.0.23.2 8080
+JUN02 configure
+JUN02 set firewall family inet filter FROM-ISP term RETURN from protocol tcp
+JUN02 set firewall family inet filter FROM-ISP term RETURN from tcp-established
+JUN02 set firewall family inet filter FROM-ISP term RETURN then count RETURN
+JUN02 set firewall family inet filter FROM-ISP term RETURN then accept
+JUN02 show firewall family inet filter FROM-ISP | display set
+JUN02 commit and-quit
+SRV1 tcp 10.0.23.2 8080
+JUN02 configure
+JUN02 insert firewall family inet filter FROM-ISP term RETURN before term LAST
+JUN02 show firewall family inet filter FROM-ISP | display set | match "term (RETURN|LAST)"
+JUN02 commit and-quit
+SRV1 tcp 10.0.23.2 8080
+JUN02 show firewall filter FROM-ISP
+# tcp-established は SYN の無い TCP にも当たる(ACK か RST が立っていれば)= ISP から中の 8080 へ「つなぎ始め」は通らない
+FRR1:sh tcp 172.16.10.10 8080

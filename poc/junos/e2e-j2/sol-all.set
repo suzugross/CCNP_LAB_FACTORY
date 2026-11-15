@@ -1,0 +1,56 @@
+set firewall family inet filter FROM-ISP term BGP from source-address 10.0.23.2/32
+set firewall family inet filter FROM-ISP term BGP from protocol tcp
+set firewall family inet filter FROM-ISP term BGP from port bgp
+set firewall family inet filter FROM-ISP term BGP then accept
+set firewall family inet filter FROM-ISP term ICMP from protocol icmp
+set firewall family inet filter FROM-ISP term ICMP then accept
+set firewall family inet filter FROM-ISP term WEB from destination-address 172.16.20.0/24
+set firewall family inet filter FROM-ISP term WEB from protocol tcp
+set firewall family inet filter FROM-ISP term WEB from destination-port [ http https ]
+set firewall family inet filter FROM-ISP term WEB then accept
+set firewall family inet filter FROM-ISP term SSH from source-address 203.0.113.0/24
+set firewall family inet filter FROM-ISP term SSH from destination-address 172.16.20.0/24
+set firewall family inet filter FROM-ISP term SSH from protocol tcp
+set firewall family inet filter FROM-ISP term SSH from destination-port ssh
+set firewall family inet filter FROM-ISP term SSH then accept
+set firewall family inet filter FROM-ISP term DENY then count ISP-DENY
+set firewall family inet filter FROM-ISP term DENY then discard
+set interfaces et-0/0/1 unit 0 family inet filter input FROM-ISP
+set firewall family inet filter FROM-ISP term RETURN from protocol tcp
+set firewall family inet filter FROM-ISP term RETURN from tcp-established
+set firewall family inet filter FROM-ISP term RETURN then accept
+insert firewall family inet filter FROM-ISP term RETURN before term DENY
+set policy-options prefix-list BGP-PEERS apply-path "protocols bgp group <*> neighbor <*>"
+set firewall family inet filter PROTECT-RE term BGP from source-prefix-list BGP-PEERS
+set firewall family inet filter PROTECT-RE term BGP from protocol tcp
+set firewall family inet filter PROTECT-RE term BGP from port bgp
+set firewall family inet filter PROTECT-RE term BGP then accept
+set firewall family inet filter PROTECT-RE term OSPF from protocol ospf
+set firewall family inet filter PROTECT-RE term OSPF then accept
+set firewall family inet filter PROTECT-RE term ICMP from protocol icmp
+set firewall family inet filter PROTECT-RE term ICMP then accept
+set firewall family inet filter PROTECT-RE term SSH from source-address 172.16.0.0/16
+set firewall family inet filter PROTECT-RE term SSH from protocol tcp
+set firewall family inet filter PROTECT-RE term SSH from destination-port ssh
+set firewall family inet filter PROTECT-RE term SSH then accept
+set firewall family inet filter PROTECT-RE term RETURN from protocol tcp
+set firewall family inet filter PROTECT-RE term RETURN from tcp-established
+set firewall family inet filter PROTECT-RE term RETURN then accept
+set firewall family inet filter PROTECT-RE term DENY then count RE-DENY
+set firewall family inet filter PROTECT-RE term DENY then discard
+set interfaces lo0 unit 0 family inet filter input PROTECT-RE
+set policy-options prefix-list BOGONS 10.0.0.0/8
+set policy-options prefix-list BOGONS 172.16.0.0/12
+set policy-options prefix-list BOGONS 192.168.0.0/16
+set policy-options prefix-list BOGONS 100.64.0.0/10
+set policy-options prefix-list BOGONS 127.0.0.0/8
+set policy-options prefix-list ISP-LINK 10.0.23.0/30
+set firewall family inet filter NO-BOGONS term BOGON from source-prefix-list BOGONS
+set firewall family inet filter NO-BOGONS term BOGON from source-prefix-list ISP-LINK except
+set firewall family inet filter NO-BOGONS term BOGON then count BOGON
+set firewall family inet filter NO-BOGONS term BOGON then discard
+delete interfaces et-0/0/1 unit 0 family inet filter input
+set interfaces et-0/0/1 unit 0 family inet filter input-list [ NO-BOGONS FROM-ISP ]
+set firewall family inet filter FROM-ISP term DENY then log
+set firewall family inet filter FROM-ISP term DENY then syslog
+set system syslog file fw-drops firewall any

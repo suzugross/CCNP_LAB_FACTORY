@@ -1,0 +1,30 @@
+# Junos トラック J2(firewall filter)の学習ラボ(BL-275)。containerlab だけで回す(CML と同時に起動しない)。
+# 設計= problems/_drafts/JUNOS-TRACK.design.md §9。初めの設定= J1 を解き終えた状態(フィルタは無い)。
+id: JNT-03
+title: "Junos トラック J2 — firewall filter"
+exam: JUNOS
+topics: [junos, junos-track, firewall-filter, ospf, bgp, containerlab]
+difficulty: 3
+platform: clab
+target_nodes: [JUN01, JUN02]
+points: 100
+access: ssh
+
+clab_nodes:
+  SRV1: 172.20.20.61
+  JUN01: 172.20.20.62
+  JUN02: 172.20.20.63
+  FRR1: 172.20.20.64
+  NET1: 172.20.20.65
+clab_topology: clab/ccnp-jnt03.clab.yml
+
+# === トポロジ =============================================
+#   SRV1 eth1 ── et-0/0/1 JUN01 et-0/0/0 ── et-0/0/0 JUN02 et-0/0/1 ── eth1 FRR1 eth2 ── eth1 NET1
+#     172.16.10.0/24            10.0.12.0/30            10.0.23.0/30(eBGP)     192.0.2.0/30
+#   SRV1 lo 172.16.20.1/24   lo0 192.168.0.1   lo0 192.168.0.2   lo 203.0.113.1   lo 198.51.100.10・203.0.113.10・
+#                                                                                     10.200.0.1・192.168.50.1
+#   AS 65000 = JUN01・JUN02(OSPF area 0)・FRR1 = ISP(AS 64500)・NET1 = インターネットの端末
+
+# やり直し(clab_ops.py reset)の後片付け。カウンタと `show firewall log` はどの問題でも消す。J2-5 の syslog のファイルはここで消す
+junos_reset_exec:
+  JUN02: ["file delete /var/log/fw-drops"]

@@ -1,0 +1,142 @@
+# jpoc JNT-02 j2-prep.txt 2026-11-15 04:12:52
+# PoC J2 の下ごしらえ(BL-275): 初めの設定のままでは ISP から中の網へ戻り道が無いので、PoC のためだけに静的経路を足す
+# (JUN01= 既定経路を JUN02 へ・JUN02= 172.16/16 を JUN01 へ・FRR1= 中の網を JUN02 へ)。フィルタはまだ無い。
+
+## [JUN01] (open)
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] show version | match Junos
+show version | match Junos 
+Junos: 26.2R1.7-EVOI20260619095247-evo-builder-1
+JUNOS-EVO OS 64-bit [junos-evo-install-ptx-fixed-x86-64-26.2R1.7-EVOI20260619095247-evo-builder-1]
+
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set routing-options static route 0.0.0.0/0 next-hop 10.0.12.2
+set routing-options static route 0.0.0.0/0 next-hop 10.0.12.2 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN02] (open)
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set routing-options static route 172.16.0.0/16 next-hop 10.0.12.1
+set routing-options static route 172.16.0.0/16 next-hop 10.0.12.1 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [FRR1] (open)
+
+Hello, this is FRRouting (version 10.7.1_git).
+Copyright 1996-2005 Kunihiro Ishiguro, et al.
+
+frr1# 
+## [FRR1] configure terminal
+configure terminal
+frr1(config)# 
+## [FRR1] ip route 172.16.0.0/16 10.0.23.1
+ip route 172.16.0.0/16 10.0.23.1
+frr1(config)# 
+## [FRR1] ip route 192.168.0.0/24 10.0.23.1
+ip route 192.168.0.0/24 10.0.23.1
+frr1(config)# 
+## [FRR1] ip route 10.0.12.0/30 10.0.23.1
+ip route 10.0.12.0/30 10.0.23.1
+frr1(config)# 
+## [FRR1] end
+end
+frr1# 
+## [FRR1:sh] (open)
+frr1:/# 
+## [FRR1:sh] command -v bash nc timeout ping hping3 nping; ping -V 2>&1 | head -1; busybox 2>&1 | head -1
+command -v bash nc timeout ping hping3 nping; ping -V 2>&1 | head -1; busybox 2>&1 | head -1
+/bin/bash
+/usr/bin/nc
+/usr/bin/timeout
+/bin/ping
+ping: unrecognized option: V
+BusyBox v1.37.0 (2025-11-21 22:40:56 UTC) multi-call binary.
+frr1:/# 
+## [FRR1:sh] ping -c 3 -W 1 172.16.10.10
+ping -c 3 -W 1 172.16.10.10
+PING 172.16.10.10 (172.16.10.10): 56 data bytes
+64 bytes from 172.16.10.10: seq=0 ttl=62 time=1.940 ms
+64 bytes from 172.16.10.10: seq=1 ttl=62 time=1.868 ms
+64 bytes from 172.16.10.10: seq=2 ttl=62 time=1.727 ms
+
+--- 172.16.10.10 ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max = 1.727/1.845/1.940 ms
+frr1:/# 
+## [FRR1:sh] ping -c 3 -W 1 -I 203.0.113.1 172.16.20.1
+ping -c 3 -W 1 -I 203.0.113.1 172.16.20.1
+PING 172.16.20.1 (172.16.20.1) from 203.0.113.1: 56 data bytes
+64 bytes from 172.16.20.1: seq=0 ttl=62 time=1.899 ms
+64 bytes from 172.16.20.1: seq=1 ttl=62 time=1.936 ms
+64 bytes from 172.16.20.1: seq=2 ttl=62 time=1.636 ms
+
+--- 172.16.20.1 ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max = 1.636/1.823/1.936 ms
+frr1:/# 
+## [FRR1:sh] timeout 3 bash -c 'exec 3<>/dev/tcp/172.16.10.1/22; head -c 40 <&3'; echo rc=$?
+timeout 3 bash -c 'exec 3<>/dev/tcp/172.16.10.1/22; head -c 40 <&3'; echo rc=$?
+SSH-2.0-JSSH_5.0
+Terminated
+rc=143
+frr1:/# 
+## [FRR1:sh] timeout 3 bash -c 'exec 3<>/dev/tcp/10.0.23.1/22; head -c 40 <&3'; echo rc=$?
+timeout 3 bash -c 'exec 3<>/dev/tcp/10.0.23.1/22; head -c 40 <&3'; echo rc=$?
+SSH-2.0-JSSH_5.0
+Terminated
+rc=143
+frr1:/# 
+## [JUN02] show interfaces terse | match "mgmt|et-0/0/[01] |lo0"
+show interfaces terse | match "mgmt|et-0/0/[01] |lo0" 
+et-0/0/0                up    up
+et-0/0/1                up    up
+re0:mgmt-0              up    up
+re0:mgmt-0.0            up    up   inet     10.0.0.15/24    
+lo0                     up    up
+lo0.0                   up    up   inet     192.168.0.2         --> 0/0
+
+admin@jun02> 
+## [JUN02] show bgp summary
+show bgp summary 
+
+Warning: License key missing; requires 'BGP' license
+
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 1 Peers: 1 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+inet.0               
+                      10         10          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.0.23.2             64500          6          3       0       0          30 Establ
+  inet.0: 10/10/10/0
+
+admin@jun02> 

@@ -1,0 +1,139 @@
+# JNT-03 の本採点(J2 の 5 課題の到達点)。学習ラボなのでノルマには数えない使い方をする(確認は学習モードの確認ボタン= grading.j2t*.yml)。
+problem: JNT-03
+total_points: 100
+checks:
+- name: 'J2-1 NET1: the web server (TCP 80 and 443 on 172.16.20.1) is reachable from the Internet'
+  node: NET1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- sh -c 'probe 172.16.20.1 80 -s 198.51.100.10; probe 172.16.20.1 443 -s 198.51.100.10'
+  raw:
+  - regex: (?m)^open\s+tcp 172\.16\.20\.1:80 from 198\.51\.100\.10\s
+  - regex: (?m)^open\s+tcp 172\.16\.20\.1:443 from 198\.51\.100\.10\s
+  points: 5
+- name: 'J2-1 NET1: SSH to 172.16.20.1 passes from 203.0.113.10 (the ISP''s operations network) but not from 198.51.100.10'
+  node: NET1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- sh -c 'probe 172.16.20.1 22 -s 203.0.113.10; probe 172.16.20.1 22 -s 198.51.100.10'
+  raw:
+  - regex: (?m)^open\s+tcp 172\.16\.20\.1:22 from 203\.0\.113\.10\s
+  - regex: (?m)^timeout\s+tcp 172\.16\.20\.1:22 from 198\.51\.100\.10\s
+  points: 5
+- name: 'J2-1 NET1: other traffic from the Internet is dropped without a reply (SSH to JUN01 and to JUN02, TCP 8080 on SRV1)'
+  node: NET1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- sh -c 'probe 172.16.10.1 22 -s 203.0.113.10; probe 10.0.23.1 22 -s 203.0.113.10; probe 172.16.20.1 8080 -s 198.51.100.10'
+  raw:
+  - regex: (?m)^timeout\s+tcp 172\.16\.10\.1:22 from 203\.0\.113\.10\s
+  - regex: (?m)^timeout\s+tcp 10\.0\.23\.1:22 from 203\.0\.113\.10\s
+  - regex: (?m)^timeout\s+tcp 172\.16\.20\.1:8080 from 198\.51\.100\.10\s
+  points: 5
+- name: 'J2: BGP from the ISP gets through (a new TCP connection from 10.0.23.2 to port 179 on JUN02 opens)'
+  node: FRR1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node FRR1 -- probe 10.0.23.1 179 -s 10.0.23.2
+  raw:
+  - regex: (?m)^open\s+tcp 10\.0\.23\.1:179 from 10\.0\.23\.2\s
+  points: 5
+- name: 'J2-1 JUN02: counter ISP-DENY counts the dropped packets'
+  node: JUN02
+  exec: junos
+  command: show firewall | no-more
+  raw:
+  - regex: (?m)^ISP-DENY(-\S+)?\s+\d+\s+[1-9]\d*\s*$
+  points: 5
+- name: 'J2-2 SRV1: TCP that the server network starts toward the Internet (NET1, port 8080) gets its replies back'
+  node: SRV1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node SRV1 -- sh -c 'probe 198.51.100.10 8080 -s 172.16.20.1; probe 198.51.100.10 8080'
+  raw:
+  - regex: (?m)^open\s+tcp 198\.51\.100\.10:8080 from 172\.16\.20\.1\s
+  - regex: (?m)^open\s+tcp 198\.51\.100\.10:8080\s+\d
+  points: 10
+- name: 'J2-2 NET1: TCP that the Internet starts toward the inside is still dropped (8080 on SRV1, SSH on JUN01)'
+  node: NET1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- sh -c 'probe 172.16.20.1 8080 -s 198.51.100.10; probe 172.16.10.1 22 -s 198.51.100.10'
+  raw:
+  - regex: (?m)^timeout\s+tcp 172\.16\.20\.1:8080 from 198\.51\.100\.10\s
+  - regex: (?m)^timeout\s+tcp 172\.16\.10\.1:22 from 198\.51\.100\.10\s
+  points: 5
+- name: 'J2-3 SRV1: SSH to JUN02 (10.0.12.2 and 192.168.0.2) opens from the server network'
+  node: SRV1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node SRV1 -- sh -c 'probe 10.0.12.2 22; probe 192.168.0.2 22 -s 172.16.20.1'
+  raw:
+  - regex: (?m)^open\s+tcp 10\.0\.12\.2:22\s
+  - regex: (?m)^open\s+tcp 192\.168\.0\.2:22 from 172\.16\.20\.1\s
+  points: 5
+- name: 'J2-3 JUN01: SSH to JUN02 from 10.0.12.1 (outside 172.16.0.0/16) is dropped'
+  node: JUN01
+  exec: junos
+  command: start shell command "timeout 3 bash -c 'exec 3<>/dev/tcp/10.0.12.2/22' && echo CONNECTED || echo FAILED"
+  raw:
+  - regex: (?m)^FAILED
+  - not_regex: (?m)^CONNECTED
+  points: 5
+- name: 'J2-3 SRV1: TCP port 179 on JUN02 is closed to a host that is not a BGP neighbor'
+  node: SRV1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node SRV1 -- sh -c 'probe 192.168.0.2 179'
+  raw:
+  - regex: (?m)^timeout\s+tcp 192\.168\.0\.2:179\s
+  points: 5
+- name: 'J2-3 JUN02: the OSPF adjacency with JUN01 is Full and hellos keep arriving (dead timer 30-40)'
+  node: JUN02
+  exec: junos
+  command: show ospf neighbor
+  raw:
+  - regex: 10\.0\.12\.1\s+et-0/0/0\.0\s+Full\s+192\.168\.0\.1\s+\d+\s+(3\d|40)\s*$
+  points: 5
+- name: 'J2-3 JUN02: a TCP connection that JUN02 itself starts (to NET1, port 8080) gets its replies back'
+  node: JUN02
+  exec: junos
+  command: start shell command "timeout 3 bash -c 'exec 3<>/dev/tcp/198.51.100.10/8080' && echo CONNECTED || echo FAILED"
+  raw:
+  - regex: (?m)^CONNECTED
+  points: 5
+- name: 'J2-3 JUN02: the BGP neighbors for the filter are taken from the BGP configuration (apply-path)'
+  node: JUN02
+  exec: junos
+  command: show configuration policy-options | display set | match apply-path
+  raw:
+  - regex: apply-path "protocols bgp [^"]*neighbor[^"]*"
+  points: 5
+- name: 'J2-4 NET1: ping with a spoofed private source (10.200.0.1, 192.168.50.1) is dropped'
+  node: NET1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- sh -c 'ping -c 2 -W 1 -I 10.200.0.1 172.16.20.1 | tail -1; ping -c 2 -W 1 -I 192.168.50.1 172.16.20.1 | tail -1'
+  raw:
+  - regex: (?m)^2 packets transmitted, 0 packets received[^\n]*\n2 packets transmitted, 0 packets received
+  points: 10
+- name: 'J2-4 NET1: the filter of J2-1 still applies (SSH to JUN01 is dropped, the web server answers)'
+  node: NET1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- sh -c 'probe 172.16.10.1 22 -s 198.51.100.10; probe 172.16.20.1 80 -s 198.51.100.10'
+  raw:
+  - regex: (?m)^timeout\s+tcp 172\.16\.10\.1:22 from 198\.51\.100\.10\s
+  - regex: (?m)^open\s+tcp 172\.16\.20\.1:80 from 198\.51\.100\.10\s
+  points: 5
+- name: 'J2-4 JUN02: et-0/0/1 takes two filters on input, as a list'
+  node: JUN02
+  exec: junos
+  command: show configuration interfaces et-0/0/1 unit 0 family inet
+  raw:
+  - regex: input-(list|chain) \[ \S+ \S+ \];
+  points: 5
+- name: 'J2-5 JUN02: show firewall log lists a packet that the filter of J2-1 has just dropped (NET1 sends TCP to JUN01 on a new port each time)'
+  node: JUN02
+  exec: local
+  command: P=$((30000 + $(date +%s) % 10000)); echo "PORT=$P"; .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- probe 172.16.10.1 $P -s 198.51.100.10; sleep 3; .venv/bin/python3 topologies/clab_ops.py cli --repo . --problem JNT-03 --node JUN02 -- 'show firewall log detail | no-more'
+  raw:
+  - regex: 'PORT=(\d+)[\s\S]*Filter action: Discard, Name of interface: et-0/0/1\.0\s+Name of protocol: TCP, [^\n]*Source address: 198\.51\.100\.10 Port: \d+, Destination address: 172\.16\.10\.1 Port: \1\b'
+  points: 5
+- name: 'J2-5 JUN02: the syslog file fw-drops records a packet that the filter of J2-1 has just dropped'
+  node: JUN02
+  exec: local
+  command: P=$((30000 + $(date +%s) % 10000)); echo "PORT=$P"; .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- probe 172.16.10.1 $P -s 198.51.100.10; sleep 3; .venv/bin/python3 topologies/clab_ops.py cli --repo . --problem JNT-03 --node JUN02 -- 'show log fw-drops | match 198.51.100.10 | no-more'
+  raw:
+  - regex: 'PORT=(\d+)[\s\S]*FW: et-0/0/1\.0\s+D\s+TCP 198\.51\.100\.10 172\.16\.10\.1\s+\d+\s+\1\b'
+  points: 5

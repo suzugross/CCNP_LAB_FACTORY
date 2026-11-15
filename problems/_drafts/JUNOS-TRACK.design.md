@@ -254,3 +254,116 @@ SRV1 eth1 ── et-0/0/1 JUN01 et-0/0/0 ── et-0/0/0 JUN02 et-0/0/1 ── e
   サードパーティのイメージ(network-multitool)の取り込みは自動モードの判定で止められたので使わない。
 - 実機の注意: 作り直し(deploy --reconfigure)で JUN01 が vrnetlab の `starting` のまま 10 分以上 unhealthy になったことが 1 回(同じ初めの設定で前後は 95 秒で上がる)→ 作り直しで回復。
 - 実機の注意(2026-11-15): ホストの再起動の後に作り直した JNT-02 で、JUN02 だけが起動から約 50 分、仮想機ごと詰まった(ホストの qemu が 3〜4 コア分を使い続け・中の負荷平均 128・その間 messages に何も出ない・BGP は 00:20 に Hold Timer Expired で落ち Connect のまま・コンソールは使い物にならない遅さ)。JUN01 は同じ像・同じ時刻の起動で平常。何もせず 00:55 ごろに収まり、負荷・応答とも JUN01 並みに戻った(BGP も張り直し)。原因は不明。再発したら、まず中から `request system reboot`(JUN01 と結線はそのまま)、だめなら作り直し。続いて 00:58 に szk-cl01 の VM ごと止まった(VMware Workstation の vmx が記録なしで終了)。vmware.log では VMware は自前の VMM で動作(VBS 0・Monitor Mode CPL0)= Hyper-V 経由の遅さではない。ゲストの記録には OOM・I/O エラー・lockup は無く、`workqueue … hogged CPU` の警告だけ(vCPU が回されない時間があった)。ホスト側の原因は未確定(Windows のイベント ログ待ち)。
+
+## 9. J2 firewall filter(2026-11-15 完了)
+
+2026-11-15 ユーザ了承(「次なる一手」の提案どおり)。J1 の続きで、JNCIA-Junos の「Routing policy and firewall filters」のうちフィルタの側。
+比べる相手= IOS の ACL と XR の ACL(XR トラック M2 の管理プレーン・M12 の保護で扱い済み)。盤面は JNT-02 をそのまま使う見込み(JNT-03 として複製)。
+
+### 9.1 資料で分かっていること(routing-policy.pdf 2026-06-23)
+
+- Junos OS Evolved の lo0 のフィルタは**管理ポートの通信に効かない**(従来の Junos と違う)。管理 IF には `re0:mgmt-0` に別に掛ける
+  (p.781 付近「Junos OS Evolved Local Packet Flow Control」・NOTE)。→ ワークスペースのコンソール(管理アドレスへの SSH)は、RE を守る課題で
+  締め出されない見込み。PoC で確かめる。
+- Junos OS Evolved では `next term` を最後の term に置けない(各所の NOTE)。
+- lo0 の出力方向のフィルタは Linux の netfilter で処理される(ハードウェアは関わらない・同所)。
+- 仮想機の制約(vjunos-evolved-kvm.pdf 2025-11-11 の Limitations)= 転送は 2 kpps・3〜5 Mbps まで(COSIM)。フィルタ・policer の
+  制約は書かれていない → policer の量を測れるかは PoC。
+
+### 9.2 PoC で確かめること(vJunos EVO 26.2R1.7・盤面 JNT-02)
+
+1. 中継の通信(et の入力・出力)を term で落とせるか・カウンタ(`count`・`show firewall`)が増えるか。末尾の暗黙の discard。
+2. `discard` と `reject`(ICMP の到達不能が返るか)の違い・`then log`/`syslog`(`show firewall log`)。
+3. lo0 の入力フィルタ= OSPF・BGP・ICMP・SSH(機器どうし)に効く/管理ポートの SSH に効かない。`apply-path` で BGP の相手を拾う prefix-list。
+4. `tcp-established`・`source-prefix-list`・`prefix-list` の `except`・filter の list(`input-list`)。
+5. policer(`then policer`・`if-exceeding bandwidth-limit … burst-size-limit …`)を 2 kpps の上限の中で測れるか(ping の速さを変えて落ちる数)。
+6. IPv6(`family inet6`)を入れるかは 1〜5 の結果で決める。
+
+### 9.3 速いやり直し(2026-11-15 ユーザ依頼・§4 の 2)
+
+containerlab の学習ラボのやり直しを、作り直し(数分・コンソールが切れる)から、Junos の機器だけ設定を戻す形(数十秒の見込み)へ。
+- 構築の最後(`clab_ops.py deploy` が healthy を確かめた直後)に、Junos の機器ごとに running の設定をホーム ディレクトリの
+  `ccnp-baseline.conf` に控える(`/var/tmp` は J3 で扱う `request system storage cleanup` で消えうるので避ける)。
+- やり直し= `configure` → `rollback 0` → `load override ccnp-baseline.conf` → `commit and-quit` → `show configuration | compare` で
+  控えと同じことを確かめる。控えが無い・ログインできない・食い違う時は、従来の作り直しへ自動で切り替える。
+- FRR・ホストは戻さない(課題で変えない約束。戻す必要がある問題は `linux_reset_exec` を docker exec で流す)。
+- **実装(2026-11-15)**: `clab_ops.py reset`(と `baseline`)・deploy の最後に控える・`lab.sh reset <ID> [--rebuild]`・ワークスペースの
+  「最初からやり直す」(`/api/learn/reset` が clab_ops.py reset を呼ぶ。確認の文= 数十秒・exclusive／private のコンソールはログアウト・
+  戻せなければ作り直し。作り直した時は終わりの知らせに「コンソールで Enter」を足す)。戻す機器の名前= Junos の機器＋linux_reset_exec のノード。
+- **実測(JNT-02・26.2R1.7-EVO)**:
+  - pty なしのシェルに行を流すと CLI が 1 行ずつ実行する(`inner.run(input=…)`)。`show configuration | save <名前>` はホーム(/var/home/admin)へ。
+    `show configuration | compare <ファイル>` は差が無ければ空・ファイルが無ければ `error: problem checking file`。
+  - 共有の `configure` で未 commit の変更を持つ別のセッションがいても、`rollback 0` → `load override` → commit が通る(相手は設定モードのまま・変更は消える)。
+  - 別のセッションが `configure exclusive` だと `error: configuration database locked by: … (pid N)`、`configure private` だと
+    `error: private edits in use`(どちらも `configure` 自体には入れて、その後の行がすべて拒まれる)→ `request system logout pid N` で切ってからやり直すと通る。
+  - 所要= commit 済みの変更 2 台(ワークスペースから)5 秒・exclusive のセッションを切る場合 16 秒・控えを消した機器があると作り直しへ切り替わり 1 分 45 秒
+    (作り直しの最後に 2 台とも控え直す)。戻した後に OSPF は Full のまま。
+
+### 9.4 実機で確かめたこと(26.2R1.7-EVO・盤面 JNT-02・記録 `poc/junos/expJ2-*.log`・2026-11-15)
+
+PoC のための下ごしらえ= `j2-prep.txt`(初めの設定には ISP から中への戻り道が無いので、静的経路を 3 台に足した)。
+
+| 論点 | 実測 | 文書(routing-policy.pdf 2026-06-23 ほか) |
+|---|---|---|
+| 中継の通信を落とす | ISP 側の入力フィルタ(BGP・ICMP・中の網への SSH だけ)で、JUN01 の lo0 への SSH は黙って捨てられ(3 秒で時間切れ)、中の網への SSH と ping は通る。カウンタも増える(`show firewall`)。COSIM でも効く | 末尾の暗黙の discard |
+| IF の入力フィルタは RE 行きにも効く | 同じフィルタで JUN02 自身のアドレス(10.0.23.1)への SSH も捨てられる | — |
+| 末尾に明示の term | `term LAST then count DENIED; discard` で暗黙に捨てていた数が見える | — |
+| BGP の term を外す | 張り直し(`clear bgp neighbor`)の後 Connect のまま・DENIED が増える。term を戻すと Established | — |
+| reject の返り方(FRR1 の eth1 で観測・`poc/junos/sniff.py`) | 既定の `reject`= ICMP type 3 code 13(administratively prohibited)・`reject administratively-prohibited` も同じ。★`reject tcp-reset` は commit が通るが、RST でなく ICMP type 3 **code 0**(network unreachable)が返る | PTX の表(Table 125・p.1931)= 既定は administratively-prohibited・**「The tcp-reset message type is not supported」**。一般の表(p.1032 付近)は RST を返すと書く= PTX では非対応。→ 課題に使わない |
+| log | `then log` → `show firewall log`(Filter 欄は `pfe`・Action D・IF・送信元・宛先) | — |
+| syslog | `then syslog` だけでは messages に出ない。`set system syslog file fw-log firewall any` を足すと `FW: et-0/0/1.0 D TCP 10.0.23.2 10.0.23.1 49138 22 (1 packets)` が出る | p.1394 付近の例も firewall の facility のファイルを作る |
+| tcp-established | 中(SRV1)から ISP の 8080 番への TCP は、SYN-ACK が ISP 側の入力フィルタに捨てられる → `from protocol tcp; tcp-established` の term で通る。ISP から中への「つなぎ始め」(SYN)は通らない | — |
+| term の順 | 後から足した term は末尾(LAST の後ろ)に入って当たらない → `insert … before term LAST` で当たる(J1 の policy-statement と同じ) | — |
+| カウンタの遅れ | commit の直後・通信の直後に読むと 0 のことがある(数秒後に増える。RETURN が 0 → 4) | — |
+| lo0 で RE を守る | `apply-path "protocols bgp group <*> neighbor <*>"` は 10.0.23.2/32 に展開(`| display inheritance`)。BGP は張り直せる・OSPF は Full・ISP から JUN02 への SSH は捨てられ(IF のアドレスも lo0 のアドレスも)・中(172.16.10.0/24)からは通る・中継(JUN02 を通り抜ける SSH)は lo0 に関わらない | — |
+| ★管理ポート | lo0 のフィルタを入れた後も、管理アドレスへの SSH で新しいセッションを開ける(ワークスペースのコンソールは締め出されない)。管理は `mgmt_junos` の経路表(re0:mgmt-0) | p.781「Junos OS Evolved … the lo0 filter no longer applies on the management traffic」= 文書どおり |
+| RE が始めた通信の戻り | JUN02 から ISP の 8080 番への TCP は、戻りの SYN-ACK が lo0 の入力で捨てられる(tcp-established の term が無い) | — |
+| OSPF の term を外す | 40 秒ほどで JUN02 の隣接が消え、JUN01 は Init のまま。戻すと Full | — |
+| input-list | 合成されたフィルタ名 `et-0/0/1.0-inet-i` が IF に付き、カウンタはその名前の下(`BOGON-et-0/0/1.0-inet-i`)。元のフィルタの名前の下は 0 のまま。1 本目の最後の `term OTHER then accept` があると 2 本目は見られない(ICMP のカウンタが増えない)→ 外すと 2 本目へ進む | p.1439 Table 86・p.279「An input-list stops processing of packets upon accept or discard」= 文書どおり。EVO 21.4R1 からは一部の PTX に `input-chain`(accept でも次のフィルタへ)もある |
+| prefix-list の except | bogon の 10/8 に ISP との接続(10.0.23.0/30)が入る → BGP も捨てられる(Connect)。`source-prefix-list ISP-LINK except` を足すと BGP は Established・送信元 10.200.0.1 の ping は捨てたまま | — |
+| ★policer | 64k・burst 15k の policer を中継の ICMP(並び・単独とも)と RE 行きの ICMP に付けても、1000 バイトを 100 個/秒の ping が 200〜300 個とも届き、policer の欄は 0(commit は通る) | vjunos-evolved-kvm.pdf(2025-11-11)の vJunosEvolved の制約に policer の記述は無い・同書の **vJunosEvolved-BX** は「Firewall policer … not supported」と明記 → この仮想機では効かないと判断(仮想機の制約。Junos の挙動と分けて書く) |
+
+### 9.5 課題(2026-11-15 PoC の後に提示 → 同日ユーザ了承)
+
+盤面= JNT-02 と同じ 4 台(JNT-03)。初めの設定= J1 の模範解を入れた状態(ISP へ中の網を広告・既定経路を OSPF へ)＝通信が端から端まで流れる状態から始める。
+
+| 課題 | 中身 | 落とし穴(課題文には書かない) |
+|---|---|---|
+| J2-1 | JUN02 の ISP 側の入力フィルタ: BGP・ICMP・中のサーバへの指定のサービスだけを通し、残りは捨てて数える | BGP の term 抜け(すぐには落ちず張り直しで露見)・末尾の暗黙の discard |
+| J2-2 | 中から ISP への TCP を通す(戻りの通信) | tcp-established・後から足した term が末尾に入る(insert) |
+| J2-3 | JUN02 の lo0 で RE を守る: BGP の相手は設定から拾う(apply-path)・OSPF・ICMP・中からの SSH だけ | OSPF の term 抜け・RE が始めた通信の戻り・IF のフィルタと lo0 の両方を通る RE 行き |
+| J2-4 | ISP から来る送信元が bogon のパケットを捨てる(J2-1 のフィルタの前に並べる) | ISP との接続も bogon に入る(except)・並びの 1 本目の accept で 2 本目が見られない |
+| J2-5 | 捨てたパケットを記録する(log・syslog のファイル)・数を読む | syslog は firewall の facility のファイルが要る・並びのカウンタは合成名の下 |
+
+- 読み物だけにするもの: policer(この仮想機では効かない → 仕組みと設定例を文書から・付録に注記)・reject の種類(tcp-reset は PTX で非対応)・input-chain・IPv6(family inet6)。
+- 確かめ方の例(BL-266)は課題ごとに `show firewall`・`show firewall log`・FRR1／SRV1 からの tcp と ping で書ける(PoC の記録がそのまま出力の例になる)。
+
+### 9.6 実装(2026-11-15)
+
+- **盤面 JNT-03**(`problems/JNT-03/`・lab 名 ccnp-jnt03・管理 172.20.20.61〜65): JNT-02 の 4 台＋NET1(FRR のイメージのホスト役・ccnp-role: host)。
+  FRR1 eth2 192.0.2.1/30 ─ NET1 eth1 192.0.2.2/30。NET1 の lo= 198.51.100.10・203.0.113.10・10.200.0.1・192.168.50.1(FRR1 に /32 の静的経路)。
+  初めの設定= JNT-02 の初めの設定＋J1 の模範解(JNT-02 に流して `show configuration` から起こした)。
+  `clab/probe.py`= TCP の到達を 1 語(open・refused・timeout・unreachable)で出す道具。SRV1・NET1・FRR1 に bind(/usr/local/bin/probe)。
+  Web= clab の `exec:` で python3 -m http.server(SRV1 80・443、NET1 8080)。SRV1 は FRR の containerlab のイメージの sshd を 22 番で持つ。
+- **採点**: 通信は exec: local(clab_ops.py exec で NET1・SRV1・FRR1 から probe・ping)。_grade_attempt.yml は local を Junos の読み取りより先に回すので、
+  「流してから数える」が 1 回の試行で組める。BGP の term は張り直しでなく、FRR1 の 10.0.23.2 から 10.0.23.1:179 へ新しい TCP を開いて確かめる
+  (既存のセッションは落ちない= 実測)。OSPF は `Dead` が 30〜40(hello が届き続けている)を見る。JUN01・JUN02 の中からの TCP は
+  `start shell command "timeout 3 bash -c 'exec 3<>/dev/tcp/…' && echo CONNECTED || echo FAILED"`。
+  ★J2-5 は、やり直しの後も `show firewall log` と `/var/log/fw-drops` が残って初めの状態で通ってしまった(実測)→ 確認のたびに 30000〜39999 の新しいポートへ送り、
+  そのポートの記録だけを後方参照の正規表現で数える(`clab_ops.py cli` を新設= Junos の運用モードに流す口)。あわせて clab_ops.py reset が戻した後に
+  `clear firewall all`・`clear firewall log`＋problem.yml の `junos_reset_exec`(JNT-03= `file delete /var/log/fw-drops`)を流す。
+- **E2E**(記録 `poc/junos/e2e-j2/`): 初めの状態 35/100(フィルタが無くても成り立つ「通る」確認だけ)。誤答= J2-2 term を足すだけ(insert しない)・
+  J2-3 OSPF・戻り・BGP の送信元の絞りを抜く・J2-4 1 本目の最後に accept／並びの順が逆・J2-5 syslog のファイル無し → それぞれねらいの確認で FAIL。
+  模範解 → 課題ごと全 PASS・本採点 100/100。ワークスペース(`lab.sh learn JNT-03`)で課題文・確かめ方の例・確認ボタン(19 秒)を確認。
+- **読み物**(日英・各ページ 見出しと段落の数をそろえた): 20 見取り図(:::walk= JUN01 の出力フィルタ TO-SERVERS)・21 term と動作(discard と reject・
+  insert・tcp-established・出力フィルタが RE の送るパケットにも効く)・23 lo0(:::walk= JUN01 の RE-GUARD・apply-path は NTP の相手で例示)・
+  25 並びと記録(:::walk= JUN01 の input-list [ SRC-CHECK FROM-SERVERS ]・log・syslog・policer は設定と表示だけ)・27 付録(この仮想ルータの事情 5 つ)。
+  設定例はすべて JNT-03 の JUN01 で入れたもの(`poc/junos/expJ2-examples.log`・discard と reject の出力は `expJ2-reject.log`)。
+  OSPF を外した時・RE が始めた TCP の戻り・並びの 1 本目の accept・policer が効かないことの出力は JNT-02 の盤面の PoC の記録。
+- **実測の追加**: 出力フィルタは RE の送るパケットにも効く(JUN01 に TO-SERVERS を当てると SRV1 → JUN01 の SSH が timeout・戻りの term で回復)。
+  文書(routing-policy.pdf)の EX シリーズの章(p.1640 付近)には「Egress firewall filters do not affect the flow of locally generated control packets from the
+  Routing Engine」= スイッチの章の注記で機種が違う → 付録 3.3 に「機種で違う」と注記(課題は依らない)。`show firewall log` の記録は数分で消えることがある
+  (6 分後に空・2 分後は残っていた)。syslog の行は短い間の同じものを `(N packets)` にまとめる。
+- **用語集**(glossary/junos.yml・books: [junos]): firewall filter・暗黙の discard・tcp-established・lo0 のフィルタ・RE・PFE・apply-path・フィルタの並び・
+  facility(scope J2)・mgmt_junos・ステートレス(scope J2)・CoPP・LPTS・MPP。終端の動作と prefix-list の説明をフィルタにも通じるように広げた。
+- 2026-11-15 開発コンテナの再起動(04:00)でポータルが止まっていた → 起動し直した(setsid nohup)。

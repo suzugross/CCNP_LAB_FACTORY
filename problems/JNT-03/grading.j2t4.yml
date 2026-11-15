@@ -1,0 +1,62 @@
+# J2-4: 送信元が bogon のパケットを J2-1 の前の別のフィルタで捨てて BOGON で数える(ISP との接続は除く)。J2-1〜3 は保つ。
+problem: JNT-03
+total_points: 100
+checks:
+- name: 'J2-4 NET1: ping with a spoofed private source (10.200.0.1, 192.168.50.1) is dropped'
+  node: NET1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- sh -c 'ping -c 2 -W 1 -I 10.200.0.1 172.16.20.1 | tail -1; ping -c 2 -W 1 -I 192.168.50.1 172.16.20.1 | tail -1'
+  raw:
+  - regex: (?m)^2 packets transmitted, 0 packets received[^\n]*\n2 packets transmitted, 0 packets received
+  points: 25
+- name: 'J2-4 NET1: ping from 198.51.100.10 still reaches the server network'
+  node: NET1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+  raw:
+  - regex: \b3 (packets )?received
+  points: 10
+- name: 'J2: BGP from the ISP gets through (a new TCP connection from 10.0.23.2 to port 179 on JUN02 opens)'
+  node: FRR1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node FRR1 -- probe 10.0.23.1 179 -s 10.0.23.2
+  raw:
+  - regex: (?m)^open\s+tcp 10\.0\.23\.1:179 from 10\.0\.23\.2\s
+  points: 15
+- name: 'J2 JUN02: the BGP session with the ISP is Established'
+  node: JUN02
+  exec: junos
+  command: 'show bgp neighbor 10.0.23.2 | match State:'
+  raw:
+  - regex: 'State: Established'
+  points: 5
+- name: 'J2-4 NET1: the filter of J2-1 still applies (SSH to JUN01 is dropped, the web server answers)'
+  node: NET1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- sh -c 'probe 172.16.10.1 22 -s 198.51.100.10; probe 172.16.20.1 80 -s 198.51.100.10'
+  raw:
+  - regex: (?m)^timeout\s+tcp 172\.16\.10\.1:22 from 198\.51\.100\.10\s
+  - regex: (?m)^open\s+tcp 172\.16\.20\.1:80 from 198\.51\.100\.10\s
+  points: 15
+- name: 'J2-4 JUN02: et-0/0/1 takes two filters on input, as a list'
+  node: JUN02
+  exec: junos
+  command: show configuration interfaces et-0/0/1 unit 0 family inet
+  raw:
+  - regex: input-(list|chain) \[ \S+ \S+ \];
+  points: 10
+- name: 'J2-4 JUN02: counter BOGON counts the dropped packets'
+  node: JUN02
+  exec: junos
+  command: show firewall | no-more
+  raw:
+  - regex: (?m)^BOGON(-\S+)?\s+\d+\s+[1-9]\d*\s*$
+  points: 15
+- name: 'J2-4 SRV1: SSH to JUN02 from the server network still opens (J2-3)'
+  node: SRV1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node SRV1 -- sh -c 'probe 10.0.12.2 22; probe 192.168.0.2 22 -s 172.16.20.1'
+  raw:
+  - regex: (?m)^open\s+tcp 10\.0\.12\.2:22\s
+  - regex: (?m)^open\s+tcp 192\.168\.0\.2:22 from 172\.16\.20\.1\s
+  points: 5

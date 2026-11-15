@@ -1,0 +1,57 @@
+# J2-1: JUN02 の ISP 側の入力= BGP・ICMP・サーバの網への Web(80・443)・運用の網(203.0.113.0/24)からサーバの網への SSH だけを通し、ほかは黙って捨てて ISP-DENY で数える。
+problem: JNT-03
+total_points: 100
+checks:
+- name: 'J2-1 NET1: the web server (TCP 80 and 443 on 172.16.20.1) is reachable from the Internet'
+  node: NET1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- sh -c 'probe 172.16.20.1 80 -s 198.51.100.10; probe 172.16.20.1 443 -s 198.51.100.10'
+  raw:
+  - regex: (?m)^open\s+tcp 172\.16\.20\.1:80 from 198\.51\.100\.10\s
+  - regex: (?m)^open\s+tcp 172\.16\.20\.1:443 from 198\.51\.100\.10\s
+  points: 15
+- name: 'J2-1 NET1: SSH to 172.16.20.1 passes from 203.0.113.10 (the ISP''s operations network) but not from 198.51.100.10'
+  node: NET1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- sh -c 'probe 172.16.20.1 22 -s 203.0.113.10; probe 172.16.20.1 22 -s 198.51.100.10'
+  raw:
+  - regex: (?m)^open\s+tcp 172\.16\.20\.1:22 from 203\.0\.113\.10\s
+  - regex: (?m)^timeout\s+tcp 172\.16\.20\.1:22 from 198\.51\.100\.10\s
+  points: 15
+- name: 'J2-1 NET1: other traffic from the Internet is dropped without a reply (SSH to JUN01 and to JUN02, TCP 8080 on SRV1)'
+  node: NET1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- sh -c 'probe 172.16.10.1 22 -s 203.0.113.10; probe 10.0.23.1 22 -s 203.0.113.10; probe 172.16.20.1 8080 -s 198.51.100.10'
+  raw:
+  - regex: (?m)^timeout\s+tcp 172\.16\.10\.1:22 from 203\.0\.113\.10\s
+  - regex: (?m)^timeout\s+tcp 10\.0\.23\.1:22 from 203\.0\.113\.10\s
+  - regex: (?m)^timeout\s+tcp 172\.16\.20\.1:8080 from 198\.51\.100\.10\s
+  points: 20
+- name: 'J2-1 NET1: ping from 198.51.100.10 reaches the server network (172.16.20.1)'
+  node: NET1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- ping -c 3 -W 1 -I 198.51.100.10 172.16.20.1
+  raw:
+  - regex: \b3 (packets )?received
+  points: 10
+- name: 'J2: BGP from the ISP gets through (a new TCP connection from 10.0.23.2 to port 179 on JUN02 opens)'
+  node: FRR1
+  exec: local
+  command: .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node FRR1 -- probe 10.0.23.1 179 -s 10.0.23.2
+  raw:
+  - regex: (?m)^open\s+tcp 10\.0\.23\.1:179 from 10\.0\.23\.2\s
+  points: 15
+- name: 'J2 JUN02: the BGP session with the ISP is Established'
+  node: JUN02
+  exec: junos
+  command: 'show bgp neighbor 10.0.23.2 | match State:'
+  raw:
+  - regex: 'State: Established'
+  points: 10
+- name: 'J2-1 JUN02: counter ISP-DENY counts the dropped packets'
+  node: JUN02
+  exec: junos
+  command: show firewall | no-more
+  raw:
+  - regex: (?m)^ISP-DENY(-\S+)?\s+\d+\s+[1-9]\d*\s*$
+  points: 15

@@ -1,0 +1,268 @@
+# jpoc JNT-02 j2-filter1.txt 2026-11-15 04:14:03
+# PoC J2-1(BL-275): JUN02 の ISP 側(et-0/0/1)の入力フィルタ。BGP・ICMP・中の網への SSH だけを通し、残りは末尾の暗黙の discard。
+# tcp= FRR1 から TCP でつなぐ(rc=0 つながった・rc=124 3 秒で時間切れ= 黙って捨てられた・rc=1 すぐ拒まれた)
+
+## [FRR1:sh] (open)
+frr1:/# 
+## [FRR1:sh] tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+frr1:/# 
+## [FRR1:sh] nc -h 2>&1 | head -2
+nc -h 2>&1 | head -2
+nc: unrecognized option: h
+BusyBox v1.37.0 (2025-11-21 22:40:56 UTC) multi-call binary.
+frr1:/# 
+## [JUN02] (open)
+Last login: Sun Nov 15 04:12:57 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term BGP from source-address 10.0.23.2/32
+set firewall family inet filter FROM-ISP term BGP from source-address 10.0.23.2/32 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term BGP from protocol tcp
+set firewall family inet filter FROM-ISP term BGP from protocol tcp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term BGP from port bgp
+set firewall family inet filter FROM-ISP term BGP from port bgp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term BGP then accept
+set firewall family inet filter FROM-ISP term BGP then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term ICMP from protocol icmp
+set firewall family inet filter FROM-ISP term ICMP from protocol icmp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term ICMP then count ICMP-IN
+set firewall family inet filter FROM-ISP term ICMP then count ICMP-IN 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term ICMP then accept
+set firewall family inet filter FROM-ISP term ICMP then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term SSH-IN from destination-address 172.16.10.0/24
+set firewall family inet filter FROM-ISP term SSH-IN from destination-address 172.16.10.0/24 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term SSH-IN from protocol tcp
+set firewall family inet filter FROM-ISP term SSH-IN from protocol tcp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term SSH-IN from destination-port ssh
+set firewall family inet filter FROM-ISP term SSH-IN from destination-port ssh 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term SSH-IN then count SSH-IN
+set firewall family inet filter FROM-ISP term SSH-IN then count SSH-IN 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term SSH-IN then accept
+set firewall family inet filter FROM-ISP term SSH-IN then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces et-0/0/1 unit 0 family inet filter input FROM-ISP
+set interfaces et-0/0/1 unit 0 family inet filter input FROM-ISP 
+
+[edit]
+admin@jun02# 
+## [JUN02] show | compare
+show | compare 
+[edit interfaces et-0/0/1 unit 0 family inet]
++       filter {
++           input FROM-ISP;
++       }
+[edit]
++  firewall {
++      family inet {
++          filter FROM-ISP {
++              term BGP {
++                  from {
++                      source-address {
++                          10.0.23.2/32;
++                      }
++                      protocol tcp;
++                      port bgp;
++                  }
++                  then accept;
++              }
++              term ICMP {
++                  from {
++                      protocol icmp;
++                  }
++                  then {
++                      count ICMP-IN;
++                      accept;
++                  }
++              }
++              term SSH-IN {
++                  from {
++                      destination-address {
++                          172.16.10.0/24;
++                      }
++                      protocol tcp;
++                      destination-port ssh;
++                  }
++                  then {
++                      count SSH-IN;
++                      accept;
++                  }
++              }
++          }
++      }
++  }
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [JUN02] show firewall
+show firewall 
+
+Filter: FROM-ISP                                             
+Counters:
+Name                                                                            Bytes              Packets
+ICMP-IN                                                                             0                    0
+SSH-IN                                                                              0                    0
+
+admin@jun02> # 通る: 中の網(172.16.10.1= JUN01)への SSH・ping
+
+## [FRR1:sh] tcp 172.16.10.1 22
+tcp 172.16.10.1 22
+SSH-2.0-JSSH_5.0 rc=0 t=0.04
+frr1:/# 
+## [FRR1:sh] ping -c 5 -W 1 172.16.10.10
+ping -c 5 -W 1 172.16.10.10
+PING 172.16.10.10 (172.16.10.10): 56 data bytes
+64 bytes from 172.16.10.10: seq=0 ttl=62 time=1.843 ms
+64 bytes from 172.16.10.10: seq=1 ttl=62 time=2.112 ms
+64 bytes from 172.16.10.10: seq=2 ttl=62 time=1.785 ms
+64 bytes from 172.16.10.10: seq=3 ttl=62 time=1.896 ms
+64 bytes from 172.16.10.10: seq=4 ttl=62 time=1.856 ms
+
+--- 172.16.10.10 ping statistics ---
+5 packets transmitted, 5 packets received, 0% packet loss
+round-trip min/avg/max = 1.785/1.898/2.112 ms
+frr1:/# # 落ちる(暗黙の discard): JUN01 の lo0 への SSH(中継)・JUN02 自身のアドレスへの SSH(RE 行き。IF の入力フィルタは RE 行きにも効くか)
+
+## [FRR1:sh] tcp 192.168.0.1 22
+tcp 192.168.0.1 22
+ rc=143 t=3.00
+frr1:/# 
+## [FRR1:sh] tcp 10.0.23.1 22
+tcp 10.0.23.1 22
+ rc=143 t=3.01
+frr1:/# 
+## [JUN02] show firewall filter FROM-ISP
+show firewall filter FROM-ISP 
+
+Filter: FROM-ISP                                             
+Counters:
+Name                                                                            Bytes              Packets
+ICMP-IN                                                                           420                    5
+SSH-IN                                                                            268                    5
+
+admin@jun02> 
+## [JUN02] show bgp summary | match "Establ|Peer"
+show bgp summary | match "Establ|Peer" 
+Groups: 1 Peers: 1 Down peers: 0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.0.23.2             64500          8          5       0       0        1:41 Establ
+
+admin@jun02> 
+## [JUN02] show interfaces et-0/0/1.0 extensive | match "Filter|filter"
+show interfaces et-0/0/1.0 extensive | match "Filter|filter" 
+      Input Filters: FROM-ISP
+
+admin@jun02> # 末尾に明示の term(count＋discard)を置くと、暗黙に捨てていた数が見える
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term LAST then count DENIED
+set firewall family inet filter FROM-ISP term LAST then count DENIED 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term LAST then discard
+set firewall family inet filter FROM-ISP term LAST then discard 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [FRR1:sh] tcp 192.168.0.1 22
+tcp 192.168.0.1 22
+ rc=143 t=3.01
+frr1:/# 
+## [FRR1:sh] tcp 10.0.23.1 22
+tcp 10.0.23.1 22
+ rc=143 t=3.00
+frr1:/# 
+## [JUN02] show firewall filter FROM-ISP
+show firewall filter FROM-ISP 
+
+Filter: FROM-ISP                                             
+Counters:
+Name                                                                            Bytes              Packets
+DENIED                                                                            360                    6
+ICMP-IN                                                                           420                    5
+SSH-IN                                                                            268                    5
+
+admin@jun02> 
+## [JUN02] show firewall counter DENIED filter FROM-ISP
+show firewall counter DENIED filter FROM-ISP 
+
+Filter: FROM-ISP                                             
+Counters:
+Name                                                                            Bytes              Packets
+DENIED                                                                            360                    6
+
+admin@jun02> 
+## [JUN02] clear firewall filter FROM-ISP
+clear firewall filter FROM-ISP 
+
+admin@jun02> 
+## [JUN02] show firewall filter FROM-ISP
+show firewall filter FROM-ISP 
+
+Filter: FROM-ISP                                             
+Counters:
+Name                                                                            Bytes              Packets
+DENIED                                                                              0                    0
+ICMP-IN                                                                             0                    0
+SSH-IN                                                                              0                    0
+
+admin@jun02> 

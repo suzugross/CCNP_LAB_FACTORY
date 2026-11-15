@@ -8,12 +8,13 @@
 #   中間:   scripts/lab.sh checkpoint <PROBLEM_ID> <名前>   # grading.<名前>.yml で途中の状態を確認(ノルマ記録なし)
 #   片付け: scripts/lab.sh teardown  <PROBLEM_ID> [--keep-workspace]
 #   やり直し: scripts/lab.sh reset   <PROBLEM_ID>          # IOS XR を構築直後のコミットへ戻す(xe_reset_nodes の IOS XE は configure replace)＋学習モードの記録を初期化(BL-254)
+#             containerlab の問題は Junos を構築直後の設定へ load override で戻す(数秒・だめなら作り直し)。[--rebuild] で作り直し
 #   学習:   scripts/lab.sh learn     <PROBLEM_ID> [PORT]   # 学習モードのワークスペース(Steps タブ= 確認・ヒント)。既定 8896
 #   状態:   scripts/lab.sh status
 #   交換:   scripts/lab.sh rma <PROBLEM_ID> <NODE>     # 機器交換(保存済みの設定で新しい MAC の機体に入れ替える・BL-249)
 #
 #   containerlab だけの問題(problem.yml の platform: clab・BL-274)は、provision / grade / checkpoint / reset /
-#   teardown が CML を使わずに回る(reset は startup-config から作り直し。rma は CML 専用)。
+#   teardown が CML を使わずに回る(rma は CML 専用)。
 #   learn も同じ画面で開く(BL-275。盤面は clab.yml・コンソールは szk-cl01 を踏み台にした SSH)。
 #   接続:   scripts/lab.sh connect <PROBLEM_ID> <NODE>   # containerlab のノードに入る(FRR は vtysh・Junos/EOS は ssh)
 #
@@ -126,9 +127,11 @@ case "$cmd" in
     # 学習モードの記録は退避して初期化する。
     [ -n "$prob" ] || usage
     if [ "$plat" = "clab" ]; then
-      # containerlab だけの問題(BL-274): 機器を startup-config から作り直す(白紙の機器は白紙に戻る・数分)
-      echo "== やり直し: containerlab のラボを startup-config から作り直します ($prob) =="
-      "$PY/python3" "$REPO/topologies/clab_ops.py" deploy --repo "$REPO" --problem "$prob" --reconfigure
+      # containerlab だけの問題(BL-274): Junos を構築直後に控えた設定へ load override で戻す(数秒・BL-275 2026-11-15)。
+      # 控えが無い・戻せない時と --rebuild の時は startup-config から作り直す(数分)
+      echo "== やり直し: containerlab のラボ ($prob) =="
+      rb=""; [ "${3:-}" = "--rebuild" ] && rb="--rebuild"
+      "$PY/python3" "$REPO/topologies/clab_ops.py" reset --repo "$REPO" --problem "$prob" $rb
     else
       "$PY/ansible-playbook" "$REPO/playbooks/xr_reset.yml" -e problem="$prob" --vault-password-file <(vault)
     fi

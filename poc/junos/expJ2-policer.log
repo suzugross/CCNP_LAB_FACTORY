@@ -1,0 +1,286 @@
+# jpoc JNT-02 j2-policer.txt 2026-11-15 04:25:38
+# PoC J2-5(BL-275): policer(2 kpps の仮想機の上で量が測れるか)・input-list(フィルタの並び)・送信元の bogon の prefix-list と except
+# 前提= j2-lo0.txt の後(lo0 の PROTECT-RE は残す。ここは中継の通信だけを見る)
+
+## [FRR1:sh] (open)
+frr1:/# 
+## [FRR1:sh] ping --help 2>&1 | grep -E '^\s+-(i|q|s|I) '
+ping --help 2>&1 | grep -E '^\s+-(i|q|s|I) '
+	-s SIZE		Send SIZE data bytes in packets (default 56)
+	-i SECS		Interval
+	-I IFACE/IP	Source interface or IP address
+frr1:/# 
+## [FRR1:sh] ip addr add 10.200.0.1/32 dev lo 2>/dev/null; ip -4 addr show lo | grep inet
+ip addr add 10.200.0.1/32 dev lo 2>/dev/null; ip -4 addr show lo | grep inet
+    inet 127.0.0.1/8 scope host lo
+    inet 203.0.113.1/32 brd 203.0.113.1 scope global lo
+    inet 10.200.0.1/32 scope global lo
+frr1:/# 
+## [JUN02] (open)
+Last login: Sun Nov 15 04:23:08 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall policer ICMP-64K if-exceeding bandwidth-limit 64k
+set firewall policer ICMP-64K if-exceeding bandwidth-limit 64k 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall policer ICMP-64K if-exceeding burst-size-limit 15k
+set firewall policer ICMP-64K if-exceeding burst-size-limit 15k 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall policer ICMP-64K then discard
+set firewall policer ICMP-64K then discard 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options prefix-list BOGONS 10.0.0.0/8
+set policy-options prefix-list BOGONS 10.0.0.0/8 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options prefix-list BOGONS 100.64.0.0/10
+set policy-options prefix-list BOGONS 100.64.0.0/10 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options prefix-list BOGONS 172.16.0.0/12
+set policy-options prefix-list BOGONS 172.16.0.0/12 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options prefix-list BOGONS 192.168.0.0/16
+set policy-options prefix-list BOGONS 192.168.0.0/16 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter NO-BOGONS term BOGON from source-prefix-list BOGONS
+set firewall family inet filter NO-BOGONS term BOGON from source-prefix-list BOGONS 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter NO-BOGONS term BOGON then count BOGON
+set firewall family inet filter NO-BOGONS term BOGON then count BOGON 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter NO-BOGONS term BOGON then discard
+set firewall family inet filter NO-BOGONS term BOGON then discard 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter NO-BOGONS term OTHER then accept
+set firewall family inet filter NO-BOGONS term OTHER then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter LIMIT-ICMP term ICMP from protocol icmp
+set firewall family inet filter LIMIT-ICMP term ICMP from protocol icmp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter LIMIT-ICMP term ICMP then policer ICMP-64K
+set firewall family inet filter LIMIT-ICMP term ICMP then policer ICMP-64K 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter LIMIT-ICMP term ICMP then count ICMP-IN
+set firewall family inet filter LIMIT-ICMP term ICMP then count ICMP-IN 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter LIMIT-ICMP term OTHER then accept
+set firewall family inet filter LIMIT-ICMP term OTHER then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces et-0/0/1 unit 0 family inet filter input-list [ NO-BOGONS LIMIT-ICMP ]
+set interfaces et-0/0/1 unit 0 family inet filter input-list [ NO-BOGONS LIMIT-ICMP ] 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [JUN02] show interfaces et-0/0/1.0 extensive | match "ilter" | no-more
+show interfaces et-0/0/1.0 extensive | match "ilter" | no-more 
+      Input Filters: et-0/0/1.0-inet-i
+
+admin@jun02> # 送信元 10.200.0.1(私的アドレス)の ping= 捨てられる。ISP との接続(10.0.23.2)も 10/8 に入る → BGP も捨てられる(張り直しで確かめる)
+
+## [FRR1:sh] ping -c 3 -W 1 -I 10.200.0.1 172.16.10.10
+ping -c 3 -W 1 -I 10.200.0.1 172.16.10.10
+PING 172.16.10.10 (172.16.10.10) from 10.200.0.1: 56 data bytes
+
+--- 172.16.10.10 ping statistics ---
+3 packets transmitted, 0 packets received, 100% packet loss
+frr1:/# 
+## [JUN02] clear bgp neighbor 10.0.23.2
+clear bgp neighbor 10.0.23.2 
+
+Warning: License key missing; requires 'BGP' license
+
+Cleared 1 connections
+
+admin@jun02> 
+## (sleep 20s)
+
+## [JUN02] show bgp summary | match "10.0.23" | no-more
+show bgp summary | match "10.0.23" | no-more 
+10.0.23.2             64500          0          0       0       3          21 Connect
+
+admin@jun02> 
+## [JUN02] show firewall filter NO-BOGONS | no-more
+show firewall filter NO-BOGONS | no-more 
+
+Filter: NO-BOGONS                                            
+Counters:
+Name                                                                            Bytes              Packets
+BOGON                                                                               0                    0
+
+admin@jun02> # except= 接続の /30 を除く
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options prefix-list ISP-LINK 10.0.23.0/30
+set policy-options prefix-list ISP-LINK 10.0.23.0/30 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter NO-BOGONS term BOGON from source-prefix-list ISP-LINK except
+set firewall family inet filter NO-BOGONS term BOGON from source-prefix-list ISP-LINK except 
+
+[edit]
+admin@jun02# 
+## [JUN02] show firewall family inet filter NO-BOGONS term BOGON
+show firewall family inet filter NO-BOGONS term BOGON 
+from {
+    source-prefix-list {
+        BOGONS;
+        ISP-LINK except;
+    }
+}
+then {
+    count BOGON;
+    discard;
+}
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 20s)
+
+## [JUN02] show bgp summary | match "10.0.23" | no-more
+show bgp summary | match "10.0.23" | no-more 
+10.0.23.2             64500          5          2       0       3          20 Establ
+
+admin@jun02> 
+## [FRR1:sh] ping -c 3 -W 1 -I 10.200.0.1 172.16.10.10
+ping -c 3 -W 1 -I 10.200.0.1 172.16.10.10
+PING 172.16.10.10 (172.16.10.10) from 10.200.0.1: 56 data bytes
+
+--- 172.16.10.10 ping statistics ---
+3 packets transmitted, 0 packets received, 100% packet loss
+frr1:/# 
+## [FRR1:sh] ping -c 3 -W 1 172.16.10.10
+ping -c 3 -W 1 172.16.10.10
+PING 172.16.10.10 (172.16.10.10): 56 data bytes
+64 bytes from 172.16.10.10: seq=0 ttl=62 time=2.754 ms
+64 bytes from 172.16.10.10: seq=1 ttl=62 time=1.570 ms
+64 bytes from 172.16.10.10: seq=2 ttl=62 time=1.451 ms
+
+--- 172.16.10.10 ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max = 1.451/1.925/2.754 ms
+frr1:/# 
+## (sleep 3s)
+
+## [JUN02] show firewall filter NO-BOGONS | no-more
+show firewall filter NO-BOGONS | no-more 
+
+Filter: NO-BOGONS                                            
+Counters:
+Name                                                                            Bytes              Packets
+BOGON                                                                               0                    0
+
+admin@jun02> # policer: 1000 バイトの ping を 100 個/秒で 200 個(≈ 0.8 Mbps)→ 64k を超えた分が捨てられる
+
+## [JUN02] clear firewall all
+clear firewall all 
+
+admin@jun02> 
+## [FRR1:sh] ping -q -c 200 -i 0.01 -s 1000 172.16.10.10
+ping -q -c 200 -i 0.01 -s 1000 172.16.10.10
+PING 172.16.10.10 (172.16.10.10): 1000 data bytes
+
+--- 172.16.10.10 ping statistics ---
+200 packets transmitted, 200 packets received, 0% packet loss
+round-trip min/avg/max = 1.035/1.417/5.412 ms
+frr1:/# 
+## (sleep 5s)
+
+## [JUN02] show firewall filter LIMIT-ICMP | no-more
+show firewall filter LIMIT-ICMP | no-more 
+
+Filter: LIMIT-ICMP                                           
+Counters:
+Name                                                                            Bytes              Packets
+ICMP-IN                                                                             0                    0
+Policers:
+Name                                                                            Bytes              Packets
+ICMP-64K-ICMP                                                                       0                    0
+
+admin@jun02> # 遅い ping(5 個/秒・56 バイト)は落ちない
+
+## [JUN02] clear firewall all
+clear firewall all 
+
+admin@jun02> 
+## [FRR1:sh] ping -q -c 20 -i 0.2 172.16.10.10
+ping -q -c 20 -i 0.2 172.16.10.10
+PING 172.16.10.10 (172.16.10.10): 56 data bytes
+
+--- 172.16.10.10 ping statistics ---
+20 packets transmitted, 20 packets received, 0% packet loss
+round-trip min/avg/max = 1.547/1.826/2.582 ms
+frr1:/# 
+## (sleep 5s)
+
+## [JUN02] show firewall filter LIMIT-ICMP | no-more
+show firewall filter LIMIT-ICMP | no-more 
+
+Filter: LIMIT-ICMP                                           
+Counters:
+Name                                                                            Bytes              Packets
+ICMP-IN                                                                             0                    0
+Policers:
+Name                                                                            Bytes              Packets
+ICMP-64K-ICMP                                                                       0                    0
+
+admin@jun02> 
+## [JUN02] show policer | no-more
+show policer | no-more 
+Policers:
+Name                                                                            Bytes              Packets
+__default_arp_policer__                                                             0                    0
+
+admin@jun02> 

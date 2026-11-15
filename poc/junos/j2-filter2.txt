@@ -1,0 +1,59 @@
+# PoC J2-2(BL-275): discard と reject の違い・log／syslog・tcp-established(戻りの通信)・BGP の term を抜いた時(J2-1 の続き)
+FRR1:sh tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+SRV1 tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+# reject(既定= ICMP の到達不能)
+JUN02 configure
+JUN02 delete firewall family inet filter FROM-ISP term LAST then discard
+JUN02 set firewall family inet filter FROM-ISP term LAST then reject
+JUN02 commit and-quit
+FRR1:sh tcp 192.168.0.1 22
+FRR1:sh tcp 10.0.23.1 22
+FRR1:sh timeout 5 traceroute -n -w 1 -q 1 -T -p 22 192.168.0.1 2>&1 | tail -3
+# reject tcp-reset
+JUN02 configure
+JUN02 set firewall family inet filter FROM-ISP term LAST then reject tcp-reset
+JUN02 commit and-quit
+FRR1:sh tcp 192.168.0.1 22
+JUN02 show firewall filter FROM-ISP
+# log と syslog
+JUN02 configure
+JUN02 delete firewall family inet filter FROM-ISP term LAST then reject
+JUN02 set firewall family inet filter FROM-ISP term LAST then discard
+JUN02 set firewall family inet filter FROM-ISP term LAST then log
+JUN02 set firewall family inet filter FROM-ISP term LAST then syslog
+JUN02 commit and-quit
+FRR1:sh tcp 192.168.0.1 23
+FRR1:sh ping -c 2 -W 1 -I 203.0.113.1 192.168.0.1
+JUN02 show firewall log
+JUN02 show log messages | match "FW|PFE_FW|192.168.0.1" | last 5
+# 戻りの通信: 中(SRV1)から ISP(FRR1 の 8080)へ TCP。SYN-ACK は FROM-ISP に当たる → まだ捨てられる
+FRR1:sh (while :; do echo hi | nc -l -p 8080; done) >/dev/null 2>&1 &
+SRV1 tcp 203.0.113.1 8080
+SRV1 tcp 10.0.23.2 8080
+JUN02 configure
+JUN02 set firewall family inet filter FROM-ISP term RETURN from protocol tcp
+JUN02 set firewall family inet filter FROM-ISP term RETURN from tcp-established
+JUN02 set firewall family inet filter FROM-ISP term RETURN then count RETURN
+JUN02 set firewall family inet filter FROM-ISP term RETURN then accept
+JUN02 show firewall family inet filter FROM-ISP | display set
+JUN02 commit and-quit
+SRV1 tcp 10.0.23.2 8080
+# term の順= RETURN は LAST の後ろに入っている → 当たらない。insert で LAST の前へ
+JUN02 configure
+JUN02 insert firewall family inet filter FROM-ISP term RETURN before term LAST
+JUN02 commit and-quit
+SRV1 tcp 10.0.23.2 8080
+JUN02 show firewall filter FROM-ISP
+# BGP の term を抜く: 張り直し(clear)で戻れなくなるか
+JUN02 configure
+JUN02 deactivate firewall family inet filter FROM-ISP term BGP
+JUN02 commit and-quit
+JUN02 clear bgp neighbor 10.0.23.2
+!sleep 25
+JUN02 show bgp summary | match "Establ|Active|Connect|Idle|10.0.23"
+JUN02 show firewall filter FROM-ISP
+JUN02 configure
+JUN02 activate firewall family inet filter FROM-ISP term BGP
+JUN02 commit and-quit
+!sleep 20
+JUN02 show bgp summary | match "10.0.23"

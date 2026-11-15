@@ -1,0 +1,96 @@
+# jpoc JNT-03 j2-reject.txt 2026-11-15 05:42:18
+# 読み物 21 ページ 2.5 節(discard と reject)の出力。JUN02 の et-0/0/1 の入力に一時的なフィルタを当てて NET1 から送る(後で reset)
+
+## [JUN02] (open)
+Last login: Sun Nov 15 05:26:21 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter T term ICMP from protocol icmp
+set firewall family inet filter T term ICMP from protocol icmp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter T term ICMP then accept
+set firewall family inet filter T term ICMP then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter T term LAST then discard
+set firewall family inet filter T term LAST then discard 
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces et-0/0/1 unit 0 family inet filter input T
+set interfaces et-0/0/1 unit 0 family inet filter input T 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [NET1] (open)
+net1:/# 
+## [NET1] probe 172.16.10.1 22 -s 198.51.100.10
+probe 172.16.10.1 22 -s 198.51.100.10
+timeout  tcp 172.16.10.1:22 from 198.51.100.10  3.00s
+net1:/# 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] delete firewall family inet filter T term LAST then discard
+delete firewall family inet filter T term LAST then discard 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter T term LAST then reject
+set firewall family inet filter T term LAST then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [NET1] probe 172.16.10.1 22 -s 198.51.100.10
+probe 172.16.10.1 22 -s 198.51.100.10
+unreachable (Host is unreachable)  tcp 172.16.10.1:22 from 198.51.100.10  0.00s
+net1:/# 
+## [NET1] probe 172.16.20.1 8080 -s 198.51.100.10
+probe 172.16.20.1 8080 -s 198.51.100.10
+unreachable (Host is unreachable)  tcp 172.16.20.1:8080 from 198.51.100.10  0.00s
+net1:/# 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] delete interfaces et-0/0/1 unit 0 family inet filter input
+delete interfaces et-0/0/1 unit 0 family inet filter input 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [NET1] probe 172.16.20.1 8080 -s 198.51.100.10
+probe 172.16.20.1 8080 -s 198.51.100.10
+refused  tcp 172.16.20.1:8080 from 198.51.100.10  0.00s
+net1:/# 

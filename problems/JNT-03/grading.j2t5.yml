@@ -1,0 +1,25 @@
+# J2-5: J2-1 で捨てるパケットを show firewall log と syslog のファイル fw-drops に残す。確認のたびに NET1 から新しいポートへ送り、そのポートの記録だけを数える(やり直しの後に残った古い記録で通らないように・2026-11-15)。
+problem: JNT-03
+total_points: 100
+checks:
+- name: 'J2-5 JUN02: show firewall log lists a packet that the filter of J2-1 has just dropped (NET1 sends TCP to JUN01 on a new port each time)'
+  node: JUN02
+  exec: local
+  command: P=$((30000 + $(date +%s) % 10000)); echo "PORT=$P"; .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- probe 172.16.10.1 $P -s 198.51.100.10; sleep 3; .venv/bin/python3 topologies/clab_ops.py cli --repo . --problem JNT-03 --node JUN02 -- 'show firewall log detail | no-more'
+  raw:
+  - regex: 'PORT=(\d+)[\s\S]*Filter action: Discard, Name of interface: et-0/0/1\.0\s+Name of protocol: TCP, [^\n]*Source address: 198\.51\.100\.10 Port: \d+, Destination address: 172\.16\.10\.1 Port: \1\b'
+  points: 40
+- name: 'J2-5 JUN02: the syslog file fw-drops records a packet that the filter of J2-1 has just dropped'
+  node: JUN02
+  exec: local
+  command: P=$((30000 + $(date +%s) % 10000)); echo "PORT=$P"; .venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-03 --node NET1 -- probe 172.16.10.1 $P -s 198.51.100.10; sleep 3; .venv/bin/python3 topologies/clab_ops.py cli --repo . --problem JNT-03 --node JUN02 -- 'show log fw-drops | match 198.51.100.10 | no-more'
+  raw:
+  - regex: 'PORT=(\d+)[\s\S]*FW: et-0/0/1\.0\s+D\s+TCP 198\.51\.100\.10 172\.16\.10\.1\s+\d+\s+\1\b'
+  points: 45
+- name: 'J2-5 JUN02: counter ISP-DENY still counts the dropped packets'
+  node: JUN02
+  exec: junos
+  command: show firewall | no-more
+  raw:
+  - regex: (?m)^ISP-DENY(-\S+)?\s+\d+\s+[1-9]\d*\s*$
+  points: 15

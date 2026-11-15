@@ -1,0 +1,645 @@
+# jpoc JNT-02 j2-filter2.txt 2026-11-15 04:15:07
+# PoC J2-2(BL-275): discard と reject の違い・log／syslog・tcp-established(戻りの通信)・BGP の term を抜いた時(J2-1 の続き)
+
+## [FRR1:sh] (open)
+frr1:/# 
+## [FRR1:sh] tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+frr1:/# 
+## [SRV1] (open)
+srv1:/# 
+## [SRV1] tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+tcp(){ local s=$EPOCHREALTIME; timeout 3 bash -c "exec 3<>/dev/tcp/$1/$2 && head -c 16 <&3" 2>&1 | head -2; echo " rc=${PIPESTATUS[0]} t=$(awk "BEGIN{printf \"%.2f\", $EPOCHREALTIME-$s}")"; }
+srv1:/# # reject(既定= ICMP の到達不能)
+
+## [JUN02] (open)
+Last login: Sun Nov 15 04:14:06 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] delete firewall family inet filter FROM-ISP term LAST then discard
+delete firewall family inet filter FROM-ISP term LAST then discard 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term LAST then reject
+set firewall family inet filter FROM-ISP term LAST then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [FRR1:sh] tcp 192.168.0.1 22
+tcp 192.168.0.1 22
+bash: connect: Host is unreachable
+bash: line 1: /dev/tcp/192.168.0.1/22: Host is unreachable
+ rc=1 t=0.00
+frr1:/# 
+## [FRR1:sh] tcp 10.0.23.1 22
+tcp 10.0.23.1 22
+bash: connect: Host is unreachable
+bash: line 1: /dev/tcp/10.0.23.1/22: Host is unreachable
+ rc=1 t=0.00
+frr1:/# 
+## [FRR1:sh] timeout 5 traceroute -n -w 1 -q 1 -T -p 22 192.168.0.1 2>&1 | tail -3
+timeout 5 traceroute -n -w 1 -q 1 -T -p 22 192.168.0.1 2>&1 | tail -3
+	-t N	Type-of-service in probe packets (default 0)
+	-w SEC	Wait for a response (default 3)
+	-z MSEC	Wait before each send
+frr1:/# # reject tcp-reset
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term LAST then reject tcp-reset
+set firewall family inet filter FROM-ISP term LAST then reject tcp-reset 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [FRR1:sh] tcp 192.168.0.1 22
+tcp 192.168.0.1 22
+bash: connect: Network unreachable
+bash: line 1: /dev/tcp/192.168.0.1/22: Network unreachable
+ rc=1 t=0.00
+frr1:/# 
+## [JUN02] show firewall filter FROM-ISP
+show firewall filter FROM-ISP 
+
+Filter: FROM-ISP                                             
+Counters:
+Name                                                                            Bytes              Packets
+DENIED                                                                            636                   11
+ICMP-IN                                                                             0                    0
+SSH-IN                                                                             52                    1
+
+admin@jun02> # log と syslog
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] delete firewall family inet filter FROM-ISP term LAST then reject
+delete firewall family inet filter FROM-ISP term LAST then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term LAST then discard
+set firewall family inet filter FROM-ISP term LAST then discard 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term LAST then log
+set firewall family inet filter FROM-ISP term LAST then log 
+
+[edit]
+admin@jun02# 
+## [JUN02] set firewall family inet filter FROM-ISP term LAST then syslog
+set firewall family inet filter FROM-ISP term LAST then syslog 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [FRR1:sh] tcp 192.168.0.1 23
+tcp 192.168.0.1 23
+ rc=143 t=3.00
+frr1:/# 
+## [FRR1:sh] ping -c 2 -W 1 -I 203.0.113.1 192.168.0.1
+ping -c 2 -W 1 -I 203.0.113.1 192.168.0.1
+PING 192.168.0.1 (192.168.0.1) from 203.0.113.1: 56 data bytes
+64 bytes from 192.168.0.1: seq=0 ttl=63 time=4.365 ms
+64 bytes from 192.168.0.1: seq=1 ttl=63 time=3.355 ms
+
+--- 192.168.0.1 ping statistics ---
+2 packets transmitted, 2 packets received, 0% packet loss
+round-trip min/avg/max = 3.355/3.860/4.365 ms
+frr1:/# 
+## [JUN02] show firewall log
+show firewall log 
+Log :
+Time      Filter    Action Interface           Protocol        Src Addr                                Dest Addr
+04:15:22  pfe       D      et-0/0/1.0          TCP             10.0.23.2                               10.0.23.1
+04:15:22  pfe       D      et-0/0/1.0          TCP             10.0.23.2                               192.168.0.1
+04:15:23  pfe       D      et-0/0/1.0          TCP             10.0.23.2                               192.168.0.1
+04:15:24  pfe       D      et-0/0/1.0          TCP             10.0.23.2                               192.168.0.1
+04:15:25  pfe       D      et-0/0/1.0          TCP             10.0.23.2                               10.0.23.1
+04:15:27  pfe       D      et-0/0/1.0          TCP             10.0.23.2                               10.0.23.1
+
+admin@jun02> 
+## [JUN02] show log messages | match "FW|PFE_FW|192.168.0.1" | last 5
+show log messages | match "FW|PFE_FW|192.168.0.1" | last 5 
+Nov 15 04:15:17  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress:  notifying dfwd(17)
+Nov 15 04:15:18  jun02 mgd[18840]: UI_CHILD_START: Starting child '/usr/sbin/dfwinfo'
+Nov 15 04:15:18  jun02 mgd[18840]: UI_CHILD_STATUS: Cleanup child '/usr/sbin/dfwinfo', PID 20813, status 0
+Nov 15 04:15:22  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress:  notifying dfwd(17)
+Nov 15 04:15:28  jun02 mgd[18840]: UI_CMDLINE_READ_LINE: User 'admin', command 'show log messages | match "FW|PFE_FW|192.168.0.1" | last 5 '
+---(more 100%)---# 戻りの通信: 中(SRV1)から ISP(FRR1 の 8080)へ TCP。SYN-ACK は FROM-ISP に当たる → まだ捨てられる
+
+## [FRR1:sh] (while :; do echo hi | nc -l -p 8080; done) >/dev/null 2>&1 &
+(while :; do echo hi | nc -l -p 8080; done) >/dev/null 2>&1 &
+[1] 243
+frr1:/# 
+## [SRV1] tcp 203.0.113.1 8080
+tcp 203.0.113.1 8080
+ rc=143 t=3.00
+srv1:/# 
+## [SRV1] tcp 10.0.23.2 8080
+tcp 10.0.23.2 8080
+ rc=143 t=3.00
+srv1:/# 
+## [JUN02] configure
+                                        Nov 15 04:15:16  jun02 ffp: UI_CHILD_START: Starting child '/usr/share/ffp/interface-alias-ffp'
+Nov 15 04:15:16  jun02 ffp: UI_CHILD_STATUS: Cleanup child '/usr/share/ffp/interface-alias-ffp', PID 19938, status 0
+Nov 15 04:15:16  jun02 ffp: UI_CHILD_START: Starting child '/usr/share/ffp/stp-portid-ffp'
+Nov 15 04:15:16  jun02 ffp: UI_CHILD_STATUS: Cleanup child '/usr/share/ffp/stp-portid-ffp', PID 19942, status 0
+Nov 15 04:15:16  jun02 mgd[18840]: UI_CHILD_STATUS: Cleanup child '/usr/sbin/ffp', PID 19897, status 0
+Nov 15 04:15:16  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: finish ffp activate
+Nov 15 04:15:16  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/config-apps.txt'
+Nov 15 04:15:16  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: db_groups_info_clear start
+Nov 15 04:15:16  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: db_groups_info_clear done
+Nov 15 04:15:16  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/rundb/juniper.data'
+Nov 15 04:15:16  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: Rotate backup configs
+Nov 15 04:15:16  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating /config/juniper.conf.gz
+Nov 15 04:15:17  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: ssync begins
+Nov 15 04:15:17  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: ssync ends
+Nov 15 04:15:17  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: notifying daemons of new configuration
+Nov 15 04:15:17  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress:  notifying dfwd(17)
+Nov 15 04:15:17  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: cannot signal 'Firewall process', signal 1, no pid
+Nov 15 04:15:17  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: ssync begins
+Nov 15 04:15:17  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: ssync ends
+Nov 15 04:15:17  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: mgd tracing: disabled
+Nov 15 04:15:17  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: New database revision 're0-1794716116-6' and old database revision 're0-1794716112-5'
+Nov 15 04:15:17  jun02 mgd[18840]: UI_CONFIGURATION_REVISION_UPDATED: New database revision 're0-1794716116-6' and old database revision 're0-1794716112-5'
+Nov 15 04:15:17  jun02 mgd[18840]: UI_COMMIT_COMMENT:  : none
+Nov 15 04:15:17  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: commit complete
+Nov 15 04:15:17  jun02 mgd[18840]: UI_COMMIT_COMPLETED:  : commit complete
+Nov 15 04:15:17  jun02 mgd[18840]: UI_DBASE_LOGOUT_EVENT: User 'admin' exiting configuration mode
+Nov 15 04:15:18  jun02 mgd[18840]: UI_CHILD_START: Starting child '/usr/sbin/dfwinfo'
+Nov 15 04:15:18  jun02 mgd[18840]: UI_CHILD_STATUS: Cleanup child '/usr/sbin/dfwinfo', PID 20813, status 0
+Nov 15 04:15:18  jun02 mgd[18840]: UI_CMDLINE_READ_LINE: User 'admin', command 'show firewall filter FROM-ISP '
+Nov 15 04:15:18  jun02 mgd[18840]: UI_CMDLINE_READ_LINE: User 'admin', command 'configure '
+Nov 15 04:15:18  jun02 mgd[18840]: UI_DBASE_LOGIN_EVENT: User 'admin' entering configuration mode
+Nov 15 04:15:19  jun02 mgd[18840]: UI_CMDLINE_READ_LINE: User 'admin', command 'delete firewall family inet filter FROM-ISP term LAST then reject '
+Nov 15 04:15:19  jun02 mgd[18840]: UI_CMDLINE_READ_LINE: User 'admin', command 'set firewall family inet filter FROM-ISP term LAST then discard '
+Nov 15 04:15:20  jun02 mgd[18840]: UI_CMDLINE_READ_LINE: User 'admin', command 'set firewall family inet filter FROM-ISP term LAST then log '
+Nov 15 04:15:20  jun02 mgd[18840]: UI_CMDLINE_READ_LINE: User 'admin', command 'set firewall family inet filter FROM-ISP term LAST then syslog '
+Nov 15 04:15:21  jun02 mgd[18840]: UI_CMDLINE_READ_LINE: User 'admin', command 'commit and-quit '
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT: User 'admin' requested 'commit' operation (comment: none)
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: Obtaining lock for commit
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: updating commit revision
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: UI extensions feature is not configured
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: UI change-notification feature is not configured
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: UI gNMI config publish feature is not configured
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: Started running translation script
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: No delta input for translation
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: Finished running translation script
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: start loading commit script changes
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: no commit script changes
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: no transient commit script changes
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: finished loading commit script changes
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: No translation output from the scripts
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: building groups inheritance path proportional in candidate db
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: finished groups inheritance path
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: copying juniper.db to juniper.data+
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: finished copying juniper.db to juniper.data+
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: exporting juniper.conf+
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: expanding interface-ranges
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: finished expanding interface-ranges
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: Sending constraint check command to evaluate constraints
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: constraints passed in mustd - not checking constraints in propagation
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: setup foreign files
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: finish setup foreign files
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: start ffp propagate
+Nov 15 04:15:21  jun02 mgd[18840]: UI_CHILD_START: Starting child '/usr/sbin/ffp'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: propagating foreign files
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: complete foreign files
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: Collecting the result of ffp propagate(pid: 20955)
+Nov 15 04:15:21  jun02 ffp: UI_CHILD_START: Starting child '/usr/share/ffp/interface-alias-ffp'
+Nov 15 04:15:21  jun02 ffp: UI_CHILD_STATUS: Cleanup child '/usr/share/ffp/interface-alias-ffp', PID 20956, status 0
+Nov 15 04:15:21  jun02 ffp: UI_CHILD_START: Starting child '/usr/share/ffp/stp-portid-ffp'
+Nov 15 04:15:21  jun02 ffp: UI_CHILD_STATUS: Cleanup child '/usr/share/ffp/stp-portid-ffp', PID 20957, status 0
+Nov 15 04:15:21  jun02 mgd[18840]: UI_CHILD_STATUS: Cleanup child '/usr/sbin/ffp', PID 20955, status 0
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: finish ffp propagate
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: Forking child for configd-streamer operation
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: dropping unchanged foreign files
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: Sending command to evaluate validation hooks
+Nov 15 04:15:21  jun02 mgd[20962]: UI_CHILD_START: Starting child '/usr/sbin/configd-diff.sh'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: daemons checking new configuration
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: Collecting status of mustd hooks validation, status 0
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: commit wrapup...
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: Checking status of configd-streamer child before ffp activate
+Nov 15 04:15:21  jun02 mgd[20962]: UI_CHILD_STATUS: Cleanup child '/usr/sbin/configd-diff.sh', PID 20964, status 0
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: ev.ops+ file generated successfully
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: start ffp activate
+Nov 15 04:15:21  jun02 mgd[18840]: UI_CHILD_START: Starting child '/usr/sbin/ffp'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: start static foreign file activation
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/cosd.conf'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/pam.conf'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/pam_radius.conf'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/pam_tacplus.conf'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/accounting_radius_servers.conf'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/accounting_tacplus_servers.conf'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/accounting_tacplus_options.conf'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/accounting_events.conf'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/etc/issue'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/certs'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/motd'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/max-db-size-cfg'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/subs-mgmt-cfg'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/vmm.conf'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/db_ext-cfg'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/nc_notification'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/ephinst.conf'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/max-cli-sessions'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/config/db_optimize-cfg'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/live_core.conf'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: executing foreign_commands
+Nov 15 04:15:21  jun02 ffp: UI_CHILD_START: Starting child '/usr/share/ffp/mp-ffp'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: not executing commit in cli_sysctl
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: finish static foreign file activation
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: Collecting the result of ffp activate (pid: 20972)
+Nov 15 04:15:21  jun02 ffp: UI_CHILD_STATUS: Cleanup child '/usr/share/ffp/mp-ffp', PID 20975, status 0
+Nov 15 04:15:21  jun02 ffp: UI_CHILD_START: Starting child '/usr/share/ffp/hostname-ffp'
+Nov 15 04:15:21  jun02 ffp: UI_CHILD_STATUS: Cleanup child '/usr/share/ffp/hostname-ffp', PID 20979, status 0
+Nov 15 04:15:21  jun02 ffp: UI_CHILD_START: Starting child '/usr/share/ffp/configd-ffp'
+Nov 15 04:15:21  jun02 ffp: UI_CHILD_STATUS: Cleanup child '/usr/share/ffp/configd-ffp', PID 20981, status 0
+Nov 15 04:15:21  jun02 ffp: UI_CHILD_START: Starting child '/usr/share/ffp/interface-alias-ffp'
+Nov 15 04:15:21  jun02 ffp: UI_CHILD_STATUS: Cleanup child '/usr/share/ffp/interface-alias-ffp', PID 21023, status 0
+Nov 15 04:15:21  jun02 ffp: UI_CHILD_START: Starting child '/usr/share/ffp/stp-portid-ffp'
+Nov 15 04:15:21  jun02 ffp: UI_CHILD_STATUS: Cleanup child '/usr/share/ffp/stp-portid-ffp', PID 21024, status 0
+Nov 15 04:15:21  jun02 mgd[18840]: UI_CHILD_STATUS: Cleanup child '/usr/sbin/ffp', PID 20972, status 0
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: finish ffp activate
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/etc/config-apps.txt'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: db_groups_info_clear start
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: db_groups_info_clear done
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating '/var/rundb/juniper.data'
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: Rotate backup configs
+Nov 15 04:15:21  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: activating /config/juniper.conf.gz
+Nov 15 04:15:22  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: ssync begins
+Nov 15 04:15:22  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: ssync ends
+Nov 15 04:15:22  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: notifying daemons of new configuration
+Nov 15 04:15:22  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress:  notifying dfwd(17)
+Nov 15 04:15:22  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: cannot signal 'Firewall process', signal 1, no pid
+Nov 15 04:15:22  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: ssync begins
+Nov 15 04:15:22  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: ssync ends
+Nov 15 04:15:22  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: mgd tracing: disabled
+Nov 15 04:15:22  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: New database revision 're0-1794716121-7' and old database revision 're0-1794716116-6'
+Nov 15 04:15:22  jun02 mgd[18840]: UI_CONFIGURATION_REVISION_UPDATED: New database revision 're0-1794716121-7' and old database revision 're0-1794716116-6'
+Nov 15 04:15:22  jun02 mgd[18840]: UI_COMMIT_COMMENT:  : none
+Nov 15 04:15:22  jun02 mgd[18840]: UI_COMMIT_PROGRESS: Commit operation in progress: commit complete
+Nov 15 04:15:22  jun02 mgd[18840]: UI_COMMIT_COMPLETED:  : commit complete
+Nov 15 04:15:22  jun02 mgd[18840]: UI_DBASE_LOGOUT_EVENT: User 'admin' exiting configuration mode
+Nov 15 04:15:24  jun02 mgd[22099]: UI_AUTH_EVENT: Authenticated user 'root' assigned to class 'super-user'
+Nov 15 04:15:24  jun02 mgd[22099]: UI_LOGIN_EVENT: User 'root' login, class 'super-user' [22099], ssh-connection '', client-mode 'cli'
+Nov 15 04:15:24  jun02 mgd[22098]: UI_AUTH_EVENT: Authenticated user 'root' assigned to class 'super-user'
+Nov 15 04:15:24  jun02 mgd[22098]: UI_LOGIN_EVENT: User 'root' login, class 'super-user' [22098], ssh-connection '', client-mode 'cli'
+Nov 15 04:15:24  jun02 mgd[22099]: UI_CMDLINE_READ_LINE: User 'root', command 'show chassis fpc '
+Nov 15 04:15:24  jun02 mgd[22098]: UI_CMDLINE_READ_LINE: User 'root', command 'show chassis hardware | match VIRTUAL '
+Nov 15 04:15:24  jun02 mgd[22099]: UI_LOGOUT_EVENT: User 'root' logout
+Nov 15 04:15:24  jun02 mgd[22100]: UI_AUTH_EVENT: Authenticated user 'root' assigned to class 'super-user'
+Nov 15 04:15:24  jun02 mgd[22100]: UI_LOGIN_EVENT: User 'root' login, class 'super-user' [22100], ssh-connection '', client-mode 'cli'
+Nov 15 04:15:24  jun02 mgd[22100]: UI_CMDLINE_READ_LINE: User 'root', command 'show chassis hardware '
+Nov 15 04:15:24  jun02 mgd[22101]: UI_AUTH_EVENT: Authenticated user 'root' assigned to class 'super-user'
+Nov 15 04:15:24  jun02 mgd[22101]: UI_LOGIN_EVENT: User 'root' login, class 'super-user' [22101], ssh-connection '', client-mode 'cli'
+Nov 15 04:15:24  jun02 mgd[22101]: UI_CMDLINE_READ_LINE: User 'root', command 'show version '
+Nov 15 04:15:24  jun02 mgd[22098]: UI_LOGOUT_EVENT: User 'root' logout
+Nov 15 04:15:24  jun02 mgd[22108]: UI_AUTH_EVENT: Authenticated user 'root' assigned to class 'super-user'
+Nov 15 04:15:24  jun02 mgd[22108]: UI_LOGIN_EVENT: User 'root' login, class 'super-user' [22108], ssh-connection '', client-mode 'cli'
+Nov 15 04:15:24  jun02 mgd[22108]: UI_CMDLINE_READ_LINE: User 'root', command 'show version '
+Nov 15 04:15:24  jun02 mgd[22100]: UI_LOGOUT_EVENT: User 'root' logout
+Nov 15 04:15:24  jun02 mgd[22101]: UI_LOGOUT_EVENT: User 'root' logout
+Nov 15 04:15:24  jun02 mgd[22108]: UI_LOGOUT_EVENT: User 'root' logout
+Nov 15 04:15:24  jun02 mgd[22121]: UI_AUTH_EVENT: Authenticated user 'root' assigned to class 'super-user'
+Nov 15 04:15:24  jun02 mgd[22121]: UI_LOGIN_EVENT: User 'root' login, class 'super-user' [22121], ssh-connection '', client-mode 'cli'
+Nov 15 04:15:24  jun02 mgd[22121]: UI_CMDLINE_READ_LINE: User 'root', command 'show chassis zfchip asics '
+Nov 15 04:15:24  jun02 mgd[22121]: UI_LOGOUT_EVENT: User 'root' logout
+Nov 15 04:15:24  jun02 mgd[22135]: UI_AUTH_EVENT: Authenticated user 'root' assigned to class 'super-user'
+Nov 15 04:15:24  jun02 mgd[22135]: UI_LOGIN_EVENT: User 'root' login, class 'super-user' [22135], ssh-connection '', client-mode 'cli'
+Nov 15 04:15:24  jun02 mgd[22135]: UI_CMDLINE_READ_LINE: User 'root', command 'show chassis fpc pic-status 0 '
+Nov 15 04:15:24  jun02 mgd[22135]: UI_LOGOUT_EVENT: User 'root' logout
+Nov 15 04:15:24  jun02 mgd[22137]: UI_AUTH_EVENT: Authenticated user 'root' assigned to class 'super-user'
+Nov 15 04:15:24  jun02 mgd[22137]: UI_LOGIN_EVENT: User 'root' login, class 'super-user' [22137], ssh-connection '', client-mode 'cli'
+Nov 15 04:15:24  jun02 mgd[22137]: UI_CMDLINE_READ_LINE: User 'root', command 'show chassis pic pic-slot 0 fpc-slot 0 '
+Nov 15 04:15:24  jun02 mgd[22137]: UI_LOGOUT_EVENT: User 'root' logout
+Nov 15 04:15:24  jun02 mgd[22139]: UI_AUTH_EVENT: Authenticated user 'root' assigned to class 'super-user'
+Nov 15 04:15:24  jun02 mgd[22139]: UI_LOGIN_EVENT: User 'root' login, class 'super-user' [22139], ssh-connection '', client-mode 'cli'
+Nov 15 04:15:24  jun02 mgd[22139]: UI_CMDLINE_READ_LINE: User 'root', command 'show interfaces terse | no-more '
+Nov 15 04:15:24  jun02 mgd[22139]: UI_LOGOUT_EVENT: User 'root' logout
+Nov 15 04:15:24  jun02 mgd[22146]: UI_AUTH_EVENT: Authenticated user 'root' assigned to class 'super-user'
+Nov 15 04:15:24  jun02 mgd[22146]: UI_LOGIN_EVENT: User 'root' login, class 'super-user' [22146], ssh-connection '', client-mode 'cli'
+Nov 15 04:15:24  jun02 mgd[22146]: UI_CMDLINE_READ_LINE: User 'root', command 'show chassis hardware detail | match "fpc 0" '
+Nov 15 04:15:24  jun02 mgd[22146]: UI_LOGOUT_EVENT: User 'root' logout
+Nov 15 04:15:24  jun02 mgd[22168]: UI_AUTH_EVENT: Authenticated user 'root' assigned to class 'super-user'
+Nov 15 04:15:24  jun02 mgd[22168]: UI_LOGIN_EVENT: User 'root' login, class 'super-user' [22168], ssh-connection '', client-mode 'cli'
+Nov 15 04:15:24  jun02 mgd[22168]: UI_CMDLINE_READ_LINE: User 'root', command 'show configuration | display translation-scripts translated-config '
+Nov 15 04:15:24  jun02 mgd[22170]: UI_AUTH_EVENT: Authenticated user 'root' assigned to class 'super-user'
+Nov 15 04:15:24  jun02 mgd[22170]: UI_LOGIN_EVENT: User 'root' login, class 'super-user' [22170], ssh-connection '', client-mode 'cli'
+Nov 15 04:15:24  jun02 mgd[22170]: UI_CMDLINE_READ_LINE: User 'root', command 'show system uptime '
+Nov 15 04:15:24  jun02 mgd[22169]: UI_AUTH_EVENT: Authenticated user 'root' assigned to class 'super-user'
+Nov 15 04:15:24  jun02 mgd[22169]: UI_LOGIN_EVENT: User 'root' login, class 'super-user' [22169], ssh-connection '', client-mode 'cli'
+Nov 15 04:15:24  jun02 mgd[22171]: UI_AUTH_EVENT: Authenticated user 'root' assigned to class 'super-user'
+Nov 15 04:15:24  jun02 mgd[22171]: UI_LOGIN_EVENT: User 'root' login, class 'super-user' [22171], ssh-connection '', client-mode 'cli'
+Nov 15 04:15:24  jun02 mgd[22169]: UI_CMDLINE_READ_LINE: User 'root', command 'show configuration | display set '
+Nov 15 04:15:24  jun02 mgd[22171]: UI_CMDLINE_READ_LINE: User 'root', command 'show version '
+Nov 15 04:15:24  jun02 mgd[22169]: UI_LOGOUT_EVENT: User 'root' logout
+Nov 15 04:15:24  jun02 mgd[22168]: UI_LOGOUT_EVENT: User 'root' logout
+Nov 15 04:15:25  jun02 mgd[22171]: UI_LOGOUT_EVENT: User 'root' logout
+Nov 15 04:15:25  jun02 mgd[22170]: UI_LOGOUT_EVENT: User 'root' logout
+Nov 15 04:15:27  jun02 mgd[18840]: UI_CMDLINE_READ_LINE: User 'admin', command 'show firewall log '
+Nov 15 04:15:28  jun02 mgd[18840]: UI_CMDLINE_READ_LINE: User 'admin', command 'show log messages | match "FW|PFE_FW|192.168.0.1" | last 5 '
+---(more 100%)---                                        ---(more 100%)---                                        ---(more 100%)---                                        
+admin@jun02> igure
+             ^
+unknown command.
+
+admin@jun02> 
+## [JUN02] set firewall family inet filter FROM-ISP term RETURN from protocol tcp
+set firewall
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewall   family
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamily   inet
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinet   filter
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilter   FROM-ISP
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISP   term
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISPterm   RETURN
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISPtermRETURN   from
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISPtermRETURNfrom   protocol
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISPtermRETURNfromprotocol   tcp
+                 ^
+syntax error, expecting <command>.
+
+admin@jun02> 
+## [JUN02] set firewall family inet filter FROM-ISP term RETURN from tcp-established
+set firewall
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewall   family
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamily   inet
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinet   filter
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilter   FROM-ISP
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISP   term
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISPterm   RETURN
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISPtermRETURN   from
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISPtermRETURNfrom   tcp-established
+                 ^
+syntax error, expecting <command>.
+
+admin@jun02> 
+## [JUN02] set firewall family inet filter FROM-ISP term RETURN then count RETURN
+set firewall
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewall   family
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamily   inet
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinet   filter
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilter   FROM-ISP
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISP   term
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISPterm   RETURN
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISPtermRETURN   then
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISPtermRETURNthen   count
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISPtermRETURNthencount   RETURN
+                 ^
+syntax error, expecting <command>.
+
+admin@jun02> 
+## [JUN02] set firewall family inet filter FROM-ISP term RETURN then accept
+set firewall
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewall   family
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamily   inet
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinet   filter
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilter   FROM-ISP
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISP   term
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISPterm   RETURN
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISPtermRETURN   then
+                 ^
+syntax error, expecting <command>.
+admin@jun02> set firewallfamilyinetfilterFROM-ISPtermRETURNthen   accept
+                 ^
+syntax error, expecting <command>.
+
+admin@jun02> 
+## [JUN02] show firewall family inet filter FROM-ISP | display set
+show firewall family
+                           ^
+syntax error, expecting <command>.
+admin@jun02> show firewall family   inet
+                           ^
+syntax error, expecting <command>.
+admin@jun02> show firewall familyinet   filter
+                           ^
+syntax error, expecting <command>.
+admin@jun02> show firewall familyinetfilter   FROM-ISP
+                           ^
+syntax error, expecting <command>.
+admin@jun02> show firewall familyinetfilterFROM-ISP   |
+                           ^
+syntax error, expecting <command>.
+admin@jun02> show firewall familyinetfilterFROM-ISP|   display
+                           ^
+syntax error, expecting <command>.
+admin@jun02> show firewall familyinetfilterFROM-ISP|display   set
+                           ^
+syntax error, expecting <command>.
+
+admin@jun02> 
+## [JUN02] commit and-quit
+commit
+             ^
+unknown command.
+admin@jun02> commit   and-quit
+             ^
+unknown command.
+
+admin@jun02> 
+## [SRV1] tcp 10.0.23.2 8080
+tcp 10.0.23.2 8080
+ rc=143 t=3.01
+srv1:/# # term の順= RETURN は LAST の後ろに入っている → 当たらない。insert で LAST の前へ
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] insert firewall family inet filter FROM-ISP term RETURN before term LAST
+insert firewall family inet filter FROM-ISP term RETURN before term LAST 
+error: statement 'RETURN' not found
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [SRV1] tcp 10.0.23.2 8080
+tcp 10.0.23.2 8080
+ rc=143 t=3.00
+srv1:/# 
+## [JUN02] show firewall filter FROM-ISP
+show firewall filter FROM-ISP 
+
+Filter: FROM-ISP                                             
+Counters:
+Name                                                                            Bytes              Packets
+DENIED                                                                           2752                   47
+ICMP-IN                                                                           168                    2
+SSH-IN                                                                             52                    1
+
+admin@jun02> # BGP の term を抜く: 張り直し(clear)で戻れなくなるか
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] deactivate firewall family inet filter FROM-ISP term BGP
+deactivate firewall family inet filter FROM-ISP term BGP 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [JUN02] clear bgp neighbor 10.0.23.2
+clear bgp neighbor 10.0.23.2 
+
+Warning: License key missing; requires 'BGP' license
+
+Cleared 1 connections
+
+admin@jun02> 
+## (sleep 25s)
+
+## [JUN02] show bgp summary | match "Establ|Active|Connect|Idle|10.0.23"
+show bgp summary | match "Establ|Active|Connect|Idle|10.0.23" 
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.0.23.2             64500          0          0       0       1          25 Connect
+
+admin@jun02> 
+## [JUN02] show firewall filter FROM-ISP
+show firewall filter FROM-ISP 
+
+Filter: FROM-ISP                                             
+Counters:
+Name                                                                            Bytes              Packets
+DENIED                                                                           4920                   84
+ICMP-IN                                                                           168                    2
+SSH-IN                                                                             52                    1
+
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] activate firewall family inet filter FROM-ISP term BGP
+activate firewall family inet filter FROM-ISP term BGP 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 20s)
+
+## [JUN02] show bgp summary | match "10.0.23"
+show bgp summary | match "10.0.23" 
+10.0.23.2             64500          5          2       0       1          17 Establ
+
+admin@jun02> 

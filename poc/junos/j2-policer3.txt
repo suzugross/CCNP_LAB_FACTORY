@@ -1,0 +1,10 @@
+# PoC J2-7(BL-275): RE 行き(lo0 の PROTECT-RE の ICMP の term)に policer を付けると効くか(中継では 1 個も落ちなかった= j2-policer2)
+JUN02 configure
+JUN02 set firewall family inet filter PROTECT-RE term ICMP then policer ICMP-64K
+JUN02 set firewall family inet filter PROTECT-RE term ICMP then count RE-ICMP
+JUN02 commit and-quit
+JUN02 clear firewall all
+FRR1:sh ping -q -c 200 -i 0.01 -s 1000 10.0.23.1
+!sleep 5
+JUN02 show firewall filter PROTECT-RE | no-more
+JUN02 show policer | no-more

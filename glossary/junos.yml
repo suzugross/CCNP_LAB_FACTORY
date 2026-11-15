@@ -177,12 +177,13 @@
   aka: [terminating actions]
   def:
     en: >-
-      `accept` or `reject` in a Junos policy: the actions that end the evaluation, for the rest of the policy chain too.
-      Actions that only change attributes (metric, local preference, community) do not end it.
+      An action that ends the evaluation in Junos, for the rest of a chain or list too: `accept` or `reject` in a policy, and
+      `accept`, `discard` or `reject` in a firewall filter. Actions that only change attributes in a policy, or only count or
+      record in a filter, do not end it.
     ja: >-
-      Junos のポリシーの `accept` と `reject`。評価を終わらせる動作で、連鎖の後ろのポリシーも見なくなる。属性を変えるだけの動作
-      (metric・local-preference・community)は評価を終わらせない。
-  see: [policy-statement, policy-chain]
+      Junos で評価を終わらせる動作。連鎖や並びの後ろも見なくなる。ポリシーでは `accept` と `reject`、firewall filter では
+      `accept`・`discard`・`reject`。ポリシーで属性を変えるだけの動作や、フィルタで数える・記録するだけの動作は、評価を終わらせない。
+  see: [policy-statement, policy-chain, firewall-filter]
   books: [junos]
 
 - id: policy-chain
@@ -242,11 +243,13 @@
   def:
     en: >-
       In Junos, a named list of prefixes under `policy-options`, with no permit, deny or length range. `from prefix-list`
-      matches the prefixes themselves; `from prefix-list-filter` adds a match type.
+      matches the prefixes themselves; `from prefix-list-filter` adds a match type. Firewall filters use the same lists
+      (`source-prefix-list` and others), and `apply-path` can fill one from the configuration.
     ja: >-
       Junos では、`policy-options` の下に作る、名前を付けたプレフィックスの並び。permit・deny も長さの範囲も持たない。
       `from prefix-list` は並びのプレフィックスそのものに、`from prefix-list-filter` は一致の型を付けて当たる。
-  see: [route-filter]
+      firewall filter も同じ並びを使い(`source-prefix-list` など)、`apply-path` で設定から中身を拾える。
+  see: [route-filter, apply-path]
   books: [junos]
 
 - id: hidden-route
@@ -335,4 +338,183 @@
       are the same as those of Junos OS, which runs on FreeBSD.
     ja: >-
       Linux の上で動く Junos で、ACX・PTX のルータと一部の QFX のスイッチが使う。CLI と設定は、FreeBSD の上で動く Junos OS と同じ。
+  books: [junos]
+
+# ---------------------------------------------------------------- J2 firewall filter(2026-11-15)
+- id: firewall-filter
+  term: firewall filter
+  aka: [firewall filters, stateless firewall filter, stateless firewall filters]
+  def:
+    en: >-
+      A named set of packet rules in Junos, written under `firewall family inet` (or another family) as a list of terms with
+      `from` and `then`. It is applied to an interface's logical unit as input or output, or to lo0 to protect the RE. It is
+      stateless: every packet is judged on its own contents.
+    ja: >-
+      Junos のパケットの規則の集まりで、名前を付けて `firewall family inet`(ほかのファミリーも)の下に、`from` と `then` を持つ
+      term を並べて書く。インターフェースの論理ユニットに input・output として当てるか、RE を守るために lo0 に当てる。
+      ステートレスで、1 つずつのパケットをその中身だけで判断する。
+  see: [implicit-discard, terminating-action, lo0-filter, acl]
+  books: [junos]
+
+- id: implicit-discard
+  term: {en: implicit discard, ja: 暗黙の discard}
+  def:
+    en: >-
+      The rule at the end of a Junos firewall filter (or of the last filter in a list): a packet that matches no term is dropped.
+      It counts nothing; to count, write a last term with `count` and `discard`.
+    ja: >-
+      Junos の firewall filter の末尾(並べたときは最後のフィルタの末尾)の決まり。どの term にも当たらなかったパケットは捨てる。
+      何も数えないので、数えるなら最後に `count` と `discard` の term を書く。
+  see: [firewall-filter, filter-list]
+  books: [junos]
+
+- id: tcp-established
+  term: tcp-established
+  def:
+    en: >-
+      A Junos firewall filter condition that matches TCP packets with the ACK or RST bit set, that is, everything but the SYN that
+      starts a connection. It is an alias for `tcp-flags "(ack | rst)"` and does not check the protocol, so pair it with `protocol tcp`.
+    ja: >-
+      TCP の ACK か RST のビットが立ったパケット(つなぎ始めの SYN 以外)に当たる、Junos の firewall filter の条件。
+      `tcp-flags "(ack | rst)"` の別名で、プロトコルは確かめないので `protocol tcp` と組にする。
+  see: [firewall-filter]
+  books: [junos]
+
+- id: lo0-filter
+  term: {en: lo0 filter, ja: lo0 のフィルタ}
+  aka: [lo0 filters, loopback filter]
+  def:
+    en: >-
+      A firewall filter applied to the input of lo0. Every packet for the RE passes it, whichever interface the packet came in on,
+      after that interface's own input filter. On Junos OS Evolved it does not act on traffic to the management port.
+    ja: >-
+      lo0 の入力に当てた firewall filter。RE 行きのパケットは、どのインターフェースから来ても、そのインターフェースの入力フィルタの
+      後でここを通る。Junos OS Evolved では、管理ポートへの通信には効かない。
+  see: [routing-engine, apply-path, mgmt-junos]
+  books: [junos]
+
+- id: routing-engine
+  term: RE
+  full: {en: Routing Engine, ja: Routing Engine}
+  def:
+    en: >-
+      The part of a Juniper router that runs the routing protocols, the CLI and management, and computes the routing table.
+      Packets are forwarded by the PFE; packets for the router itself go up to the RE.
+    ja: >-
+      Juniper のルータのうち、ルーティング プロトコル・CLI・管理を動かし、経路表を計算する部分。パケットの中継は PFE が行い、
+      ルータ自身宛てのパケットが RE へ上がる。
+  see: [pfe, lo0-filter]
+  books: [junos]
+
+- id: pfe
+  term: PFE
+  full: {en: Packet Forwarding Engine, ja: Packet Forwarding Engine}
+  def:
+    en: >-
+      The part of a Juniper router that forwards packets at high speed and applies firewall filters to them. It handles far more
+      traffic than the RE. The `log` action of a firewall filter keeps its records in a buffer here.
+    ja: >-
+      Juniper のルータのうち、パケットを高速に中継し、firewall filter を当てる部分。RE よりずっと多くの量を扱う。
+      firewall filter の `log` の動作は、ここのバッファに記録を残す。
+  see: [routing-engine]
+  books: [junos]
+
+- id: apply-path
+  term: apply-path
+  def:
+    en: >-
+      A way to fill a Junos prefix list from the configuration: write a path through the hierarchy with `<*>` where it varies,
+      such as `system ntp server <*>`. `| display inheritance` shows what it expanded to.
+    ja: >-
+      Junos の prefix-list の中身を設定から拾う書き方。設定の階層の道筋を、変わる部分を `<*>` にして書く(`system ntp server <*>` など)。
+      何に展開されたかは `| display inheritance` で見る。
+  see: [junos-prefix-list, lo0-filter]
+  books: [junos]
+
+- id: filter-list
+  term: {en: filter list, ja: フィルタの並び}
+  aka: [filter lists, input-list, output-list]
+  def:
+    en: >-
+      Several Junos firewall filters applied in one direction, such as `input-list [ A B ]`. They are checked in order, a packet that
+      matches no term of one filter goes on to the next, and a terminating action ends the list. Junos builds one filter named
+      after the interface, such as `et-0/0/1.0-inet-i`, and counts under that name.
+    ja: >-
+      1 つの向きに並べて当てた複数の Junos の firewall filter(`input-list [ A B ]` など)。順に調べ、1 つのフィルタのどの term にも
+      当たらなかったパケットは次へ進み、終端の動作で終わる。Junos はインターフェースの名前を付けた 1 つのフィルタ
+      (`et-0/0/1.0-inet-i` など)を組み立て、その名前で数える。
+  see: [firewall-filter, implicit-discard, terminating-action]
+  books: [junos]
+
+- id: syslog-facility
+  term: facility
+  aka: [facilities]
+  def:
+    en: >-
+      The class of where a syslog message comes from, such as `firewall`, `daemon` or `authorization`. A Junos syslog file names the
+      facilities and the severity it records, as in `file fw-log firewall any`.
+    ja: >-
+      syslog のメッセージの出どころの分類(`firewall`・`daemon`・`authorization` など)。Junos の syslog のファイルは、
+      記録する facility と重さ(severity)を `file fw-log firewall any` のように指定する。
+  books: [junos]
+  scope: ["2*-j2-*"]
+
+- id: mgmt-junos
+  term: mgmt_junos
+  def:
+    en: >-
+      The routing instance of the management port on Junos OS Evolved. Management traffic uses it, and the lo0 filter does not
+      act on it; a filter for management traffic goes on the management port itself.
+    ja: >-
+      Junos OS Evolved の管理ポートの経路表(routing instance)。管理の通信はこちらを使い、lo0 のフィルタはそこへは効かない。
+      管理の通信を絞るフィルタは、管理ポートそのものに当てる。
+  see: [lo0-filter, junos-evolved]
+  books: [junos]
+
+- id: stateless-filter
+  term: {en: stateless, ja: ステートレス}
+  def:
+    en: >-
+      Judging each packet on its own contents, without remembering connections. A stateless filter does not let a reply back in
+      because the request went out; replies need their own rule.
+    ja: >-
+      つないだ相手を覚えず、1 つずつのパケットをその中身だけで判断すること。ステートレスなフィルタは、行きを通したからといって
+      戻りを通さない。戻りには、それを通す規則が別に要る。
+  see: [firewall-filter, tcp-established]
+  books: [junos]
+  scope: ["2*-j2-*"]
+
+- id: copp
+  term: CoPP
+  full: {en: Control Plane Policing, ja: Control Plane Policing}
+  def:
+    en: >-
+      In IOS, a QoS policy (a policy-map) applied to the control plane, which classifies the traffic for the router itself and
+      limits its rate.
+    ja: >-
+      IOS で control plane に当てる QoS のポリシー(policy-map)。ルータ自身へ来る通信を分類し、量を制限する。
+  see: [lo0-filter]
+  books: [junos]
+
+- id: lpts
+  term: LPTS
+  full: {en: Local Packet Transport Services, ja: Local Packet Transport Services}
+  def:
+    en: >-
+      In IOS XR, the mechanism that delivers packets for the router itself to the right process and limits their rate per kind of
+      traffic, without configuration.
+    ja: >-
+      IOS XR で、ルータ自身へ来るパケットを正しいプロセスへ渡し、種類ごとに量を制限する仕組み。設定しなくても働く。
+  see: [mpp]
+  books: [junos]
+
+- id: mpp
+  term: MPP
+  full: {en: Management Plane Protection, ja: Management Plane Protection}
+  def:
+    en: >-
+      In IOS XR, the feature that decides through which interfaces, and from which peers, management protocols such as SSH may come in.
+    ja: >-
+      IOS XR で、SSH などの管理のプロトコルが、どのインターフェースから・どの相手から入ってよいかを決める機能。
+  see: [lpts]
   books: [junos]

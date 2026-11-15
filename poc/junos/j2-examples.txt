@@ -1,0 +1,101 @@
+# 読み物 J2 の設定例(BL-275)。課題(JUN02)と値を変えて JUN01 の上で組む。盤面 JNT-03 の初めの設定から。
+# 例 1(21 ページ): JUN01 のサーバの網へ出る通信を絞る出力フィルタ TO-SERVERS
+JUN01 set cli screen-length 0
+JUN01 configure
+JUN01 set firewall family inet filter TO-SERVERS term ICMP from protocol icmp
+JUN01 set firewall family inet filter TO-SERVERS term ICMP then accept
+JUN01 set firewall family inet filter TO-SERVERS term WEB from destination-address 172.16.20.0/24
+JUN01 set firewall family inet filter TO-SERVERS term WEB from protocol tcp
+JUN01 set firewall family inet filter TO-SERVERS term WEB from destination-port http
+JUN01 set firewall family inet filter TO-SERVERS term WEB then count WEB-IN
+JUN01 set firewall family inet filter TO-SERVERS term WEB then accept
+JUN01 set firewall family inet filter TO-SERVERS term LAST then count TO-SERVERS-DROP
+JUN01 set firewall family inet filter TO-SERVERS term LAST then discard
+JUN01 set interfaces et-0/0/1 unit 0 family inet filter output TO-SERVERS
+JUN01 show | compare
+JUN01 commit and-quit
+NET1 probe 172.16.20.1 80 -s 198.51.100.10
+NET1 probe 172.16.20.1 443 -s 198.51.100.10
+NET1 ping -c 2 -W 1 -I 198.51.100.10 172.16.20.1
+SRV1 probe 192.168.0.1 22
+!sleep 4
+JUN01 show firewall filter TO-SERVERS
+JUN01 show interfaces et-0/0/1.0 extensive | match ilter
+# 戻りの通信: SRV1 から NET1 の 8080 へ(SYN-ACK は JUN01 の et-0/0/1 から出る= TO-SERVERS に当たる)
+SRV1 probe 198.51.100.10 8080 -s 172.16.20.1
+JUN01 configure
+JUN01 set firewall family inet filter TO-SERVERS term EST from protocol tcp
+JUN01 set firewall family inet filter TO-SERVERS term EST from tcp-established
+JUN01 set firewall family inet filter TO-SERVERS term EST then accept
+JUN01 show firewall family inet filter TO-SERVERS | display set | match "term (EST|LAST)"
+JUN01 insert firewall family inet filter TO-SERVERS term EST before term LAST
+JUN01 show firewall family inet filter TO-SERVERS | display set | match "term (EST|LAST)"
+JUN01 commit and-quit
+SRV1 probe 198.51.100.10 8080 -s 172.16.20.1
+NET1 probe 172.16.20.1 443 -s 198.51.100.10
+# 例 2(23 ページ): JUN01 の lo0 で RE を守る。NTP の相手は apply-path で拾う
+JUN01 configure
+JUN01 set system ntp server 192.168.0.2
+JUN01 set policy-options prefix-list NTP-SERVERS apply-path "system ntp server <*>"
+JUN01 set firewall family inet filter RE-GUARD term OSPF from protocol ospf
+JUN01 set firewall family inet filter RE-GUARD term OSPF then accept
+JUN01 set firewall family inet filter RE-GUARD term ICMP from protocol icmp
+JUN01 set firewall family inet filter RE-GUARD term ICMP then accept
+JUN01 set firewall family inet filter RE-GUARD term SSH from source-address 172.16.10.0/24
+JUN01 set firewall family inet filter RE-GUARD term SSH from protocol tcp
+JUN01 set firewall family inet filter RE-GUARD term SSH from destination-port ssh
+JUN01 set firewall family inet filter RE-GUARD term SSH then accept
+JUN01 set firewall family inet filter RE-GUARD term NTP from source-prefix-list NTP-SERVERS
+JUN01 set firewall family inet filter RE-GUARD term NTP from protocol udp
+JUN01 set firewall family inet filter RE-GUARD term NTP from port ntp
+JUN01 set firewall family inet filter RE-GUARD term NTP then accept
+JUN01 set firewall family inet filter RE-GUARD term EST from protocol tcp
+JUN01 set firewall family inet filter RE-GUARD term EST from tcp-established
+JUN01 set firewall family inet filter RE-GUARD term EST then accept
+JUN01 set firewall family inet filter RE-GUARD term LAST then count RE-GUARD-DROP
+JUN01 set firewall family inet filter RE-GUARD term LAST then discard
+JUN01 set interfaces lo0 unit 0 family inet filter input RE-GUARD
+JUN01 commit and-quit
+JUN01 show configuration policy-options prefix-list NTP-SERVERS | display inheritance
+JUN01:m2 show system users
+SRV1 probe 172.16.10.1 22
+SRV1 probe 192.168.0.1 22 -s 172.16.20.1
+NET1 probe 192.168.0.1 22 -s 203.0.113.10
+NET1 ping -c 2 -W 1 -I 198.51.100.10 192.168.0.1
+!sleep 15
+JUN01 show ospf neighbor
+JUN01 show firewall filter RE-GUARD
+JUN01 show interfaces lo0.0 extensive | match ilter
+# 例 3(25 ページ): JUN01 の et-0/0/1 の入力に 2 つのフィルタを並べる(送信元の検査 → 数える)＋ログ
+JUN01 configure
+JUN01 set firewall family inet filter SRC-CHECK term SPOOF from source-address 0.0.0.0/0
+JUN01 set firewall family inet filter SRC-CHECK term SPOOF from source-address 172.16.10.0/24 except
+JUN01 set firewall family inet filter SRC-CHECK term SPOOF from source-address 172.16.20.0/24 except
+JUN01 set firewall family inet filter SRC-CHECK term SPOOF then count SPOOF
+JUN01 set firewall family inet filter SRC-CHECK term SPOOF then syslog
+JUN01 set firewall family inet filter SRC-CHECK term SPOOF then log
+JUN01 set firewall family inet filter SRC-CHECK term SPOOF then discard
+JUN01 set firewall family inet filter FROM-SERVERS term ALL then count FROM-SERVERS
+JUN01 set firewall family inet filter FROM-SERVERS term ALL then accept
+JUN01 set interfaces et-0/0/1 unit 0 family inet filter input-list [ SRC-CHECK FROM-SERVERS ]
+JUN01 set system syslog file fw-log firewall any
+JUN01 commit and-quit
+SRV1 ip addr add 10.99.0.1/32 dev lo
+SRV1 ping -c 2 -W 1 -I 172.16.20.1 198.51.100.10
+SRV1 ping -c 2 -W 1 -I 10.99.0.1 198.51.100.10
+SRV1 ip addr del 10.99.0.1/32 dev lo
+!sleep 4
+JUN01 show firewall
+JUN01 show firewall log
+JUN01 show firewall log detail
+JUN01 show log fw-log
+JUN01 show interfaces et-0/0/1.0 extensive | match ilter
+# 例 4(25 ページ): policer の設定(この仮想機では量を制限しない= 設定と表示だけ)
+JUN01 configure
+JUN01 set firewall policer ICMP-1M if-exceeding bandwidth-limit 1m
+JUN01 set firewall policer ICMP-1M if-exceeding burst-size-limit 15k
+JUN01 set firewall policer ICMP-1M then discard
+JUN01 set firewall family inet filter RE-GUARD term ICMP then policer ICMP-1M
+JUN01 commit and-quit
+JUN01 show firewall filter RE-GUARD
+JUN01 show configuration firewall | display set
