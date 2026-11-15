@@ -1,0 +1,18 @@
+# J1-1 模範解
+JUN01 configure
+JUN01 delete protocols ospf export
+JUN01 delete policy-options policy-statement WIDE
+JUN01 set policy-options policy-statement SERVERS-TO-OSPF term LAN from protocol direct
+JUN01 set policy-options policy-statement SERVERS-TO-OSPF term LAN from route-filter 172.16.10.0/24 exact
+JUN01 set policy-options policy-statement SERVERS-TO-OSPF term LAN then accept
+JUN01 set policy-options policy-statement SERVERS-TO-OSPF term SRV from protocol static
+JUN01 set policy-options policy-statement SERVERS-TO-OSPF term SRV from route-filter 172.16.20.0/24 exact
+JUN01 set policy-options policy-statement SERVERS-TO-OSPF term SRV then metric 20
+JUN01 set policy-options policy-statement SERVERS-TO-OSPF term SRV then accept
+JUN01 set protocols ospf export SERVERS-TO-OSPF
+JUN01 show | compare
+JUN01 commit and-quit
+!sleep 8
+JUN02 show ospf database external extensive
+JUN02 show route 172.16.0.0/16 table inet.0
+JUN02 ping 172.16.20.1 source 192.168.0.2 count 3 rapid

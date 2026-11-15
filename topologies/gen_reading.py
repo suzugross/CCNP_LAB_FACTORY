@@ -11,6 +11,7 @@
 ソース(Markdown)側の追加記法:
 
   {{sic:原文どおりの語|訳注}}   … 誤植・誤りをそのまま残し、上付き番号＋節末の訳注に落とす
+                                  (語・訳注の中も 1 行の Markdown として描く。**太字**・`コード` が使える)
   :::note ... :::               … 訳注ブロック（青）
   :::sic  ... :::               … 誤り・不整合の指摘ブロック（黄）
   :::orig ... :::               … 原文併記（既定は折りたたみ）
@@ -24,6 +25,8 @@
   ```mermaid ... ```            … 図（render_html の機構をそのまま使う）
                                    ★sequenceDiagram のメッセージ・Note の `;` は文の区切りになり構文エラー →
                                    文字コード `#59;` で書く（flowchart は `"…"` で囲んだラベルの中なら `;` を書ける）
+  **太字**                      … 日本語の句読点・かっこに接していても太字になる（`**…限らない。**次の文`。
+                                   render_html の _scan_star_cjk。CommonMark のままだと記号が出る）
 
 :::topo — ネットワーク図を **座標で** 置く（YAML）:
 
@@ -981,12 +984,22 @@ def expand_sic(md_text, offset=0):
     return SIC_RE.sub(rep, md_text), notes
 
 
+_NOTE_MD = RH.make_md(False)
+
+
+def _note_inline(s):
+    """訳注の語・注を 1 行の Markdown として描画する(太字・コード。HTML の文字はエスケープ)。
+    節末の訳注は生の HTML ブロックの中に置くので、外側の描画では Markdown にならない(2026-11-15 まで
+    `**…**` が記号のまま出ていた)。"""
+    return _NOTE_MD.renderInline(s)
+
+
 def notes_section(notes, offset=0):
     if not notes:
         return ""
     items = "\n".join(
         f'<li><a href="#sic{i}">[{i}]</a> '
-        f'<span class="q">{html.escape(w)}</span> — {html.escape(n)}</li>'
+        f'<span class="q">{_note_inline(w)}</span> — {_note_inline(n)}</li>'
         for i, (w, n) in enumerate(notes, offset + 1))
     return ('\n\n<section class="notes">\n<h2>訳注（原典の記述をそのまま残した箇所）</h2>\n'
             f"<ol>\n{items}\n</ol>\n</section>\n")

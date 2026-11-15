@@ -1,0 +1,289 @@
+# jpoc JNT-02 j1-rf2.txt 2026-11-14 15:35:03
+# J1 PoC 6b: import を一時的に外して(全部 active)、route-filter ごとの動作・through・最長一致・walkup を test policy で測る。最後に戻す
+
+## [JUN02] (open)
+Last login: Sat Nov 14 15:34:27 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] deactivate protocols bgp group ISP import
+deactivate protocols bgp group ISP import 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement RF-ACT term t from route-filter 198.51.100.0/24 exact accept
+set policy-options policy-statement RF-ACT term t from route-filter 198.51.100.0/24 exact accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement RF-ACT term t from route-filter 198.51.100.0/24 longer reject
+set policy-options policy-statement RF-ACT term t from route-filter 198.51.100.0/24 longer reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement RF-ACT term t from route-filter 192.0.2.0/24 exact
+set policy-options policy-statement RF-ACT term t from route-filter 192.0.2.0/24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement RF-ACT term t then local-preference 300
+set policy-options policy-statement RF-ACT term t then local-preference 300 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement RF-ACT term t then accept
+set policy-options policy-statement RF-ACT term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement RF-ACT then reject
+set policy-options policy-statement RF-ACT then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-THROUGH term t from route-filter 198.51.100.0/24 through 198.51.100.128/25
+set policy-options policy-statement T-THROUGH term t from route-filter 198.51.100.0/24 through 198.51.100.128/25 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-THROUGH term t then accept
+set policy-options policy-statement T-THROUGH term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-THROUGH then reject
+set policy-options policy-statement T-THROUGH then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement LM2 term t from route-filter 198.51.100.0/24 exact
+set policy-options policy-statement LM2 term t from route-filter 198.51.100.0/24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement LM2 term t from route-filter 0.0.0.0/0 upto /25
+set policy-options policy-statement LM2 term t from route-filter 0.0.0.0/0 upto /25 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement LM2 term t then accept
+set policy-options policy-statement LM2 term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement LM2 then reject
+set policy-options policy-statement LM2 then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+
+[edit]
+admin@jun02# 
+## (sleep 5s)
+
+## [JUN02] run show route protocol bgp table inet.0 terse
+run show route protocol bgp table inet.0 terse 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 20 destinations, 20 routes (20 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+A V Destination        P Prf   Metric 1   Metric 2  Next hop        AS path
+* ? 0.0.0.0/0          B 170        100          0 >10.0.23.2       64500 I
+* ? 10.200.0.0/16      B 170        100          0 >10.0.23.2       64500 I
+* ? 100.64.0.0/10      B 170        100          0 >10.0.23.2       64500 I
+* ? 172.31.0.0/16      B 170        100          0 >10.0.23.2       64500 I
+* ? 192.0.2.0/24       B 170        100          0 >10.0.23.2       64500 I
+* ? 192.168.50.0/24    B 170        100          0 >10.0.23.2       64500 I
+* ? 198.18.0.0/15      B 170        100          0 >10.0.23.2       64500 I
+* ? 198.51.100.0/24    B 170        100          0 >10.0.23.2       64500 I
+* ? 198.51.100.128/25  B 170        100          0 >10.0.23.2       64500 I
+* ? 203.0.113.0/24     B 170        100          0 >10.0.23.2       64500 I
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy RF-ACT 198.51.100.0/24
+run test policy RF-ACT 198.51.100.0/24 
+
+inet.0: 20 destinations, 20 routes (20 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[BGP/170] 00:04:29, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy RF-ACT: 1 prefix accepted, 1 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy T-THROUGH 0.0.0.0/0
+run test policy T-THROUGH 0.0.0.0/0 
+
+inet.0: 20 destinations, 20 routes (20 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[BGP/170] 00:04:30, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+198.51.100.128/25  *[BGP/170] 00:00:07, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy T-THROUGH: 2 prefix accepted, 31 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy LM2 198.51.100.0/24
+run test policy LM2 198.51.100.0/24 
+
+inet.0: 20 destinations, 20 routes (20 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[BGP/170] 00:04:30, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+198.51.100.128/25  *[BGP/170] 00:00:07, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy LM2: 2 prefix accepted, 0 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options defaults route-filter walkup
+set policy-options defaults route-filter walkup 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+commit complete
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy LM2 198.51.100.0/24
+run test policy LM2 198.51.100.0/24 
+
+inet.0: 20 destinations, 20 routes (20 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[BGP/170] 00:04:33, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+198.51.100.128/25  *[BGP/170] 00:00:10, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy LM2: 2 prefix accepted, 0 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options defaults
+delete policy-options defaults 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options policy-statement RF-ACT
+delete policy-options policy-statement RF-ACT 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options policy-statement T-THROUGH
+delete policy-options policy-statement T-THROUGH 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options policy-statement LM2
+delete policy-options policy-statement LM2 
+
+[edit]
+admin@jun02# 
+## [JUN02] activate protocols bgp group ISP import
+activate protocols bgp group ISP import 
+
+[edit]
+admin@jun02# 
+## [JUN02] show | compare
+show | compare 
+[edit policy-options]
+-   policy-statement LM2 {
+-       term t {
+-           from {
+-               route-filter 198.51.100.0/24 exact;
+-               route-filter 0.0.0.0/0 upto /25;
+-           }
+-           then accept;
+-       }
+-       then reject;
+-   }
+-   policy-statement RF-ACT {
+-       term t {
+-           from {
+-               route-filter 198.51.100.0/24 exact accept;
+-               route-filter 198.51.100.0/24 longer reject;
+-               route-filter 192.0.2.0/24 exact;
+-           }
+-           then {
+-               local-preference 300;
+-               accept;
+-           }
+-       }
+-       then reject;
+-   }
+-   policy-statement T-THROUGH {
+-       term t {
+-           from {
+-               route-filter 198.51.100.0/24 through 198.51.100.128/25;
+-           }
+-           then accept;
+-       }
+-       then reject;
+-   }
+[edit policy-options]
+-   defaults {
+-       route-filter walkup;
+-   }
+[edit protocols bgp group ISP]
+-    inactive: import [ MARK ISP-IN ];
++    import [ MARK ISP-IN ];
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 5s)
+
+## [JUN02] show route receive-protocol bgp 10.0.23.2 table inet.0
+show route receive-protocol bgp 10.0.23.2 table inet.0 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.0.23.2            0                  64500 I
+* 192.0.2.0/24            10.0.23.2            0                  64500 I
+* 198.51.100.0/24         10.0.23.2            0                  64500 I
+* 203.0.113.0/24          10.0.23.2            0                  64500 I
+
+admin@jun02> 

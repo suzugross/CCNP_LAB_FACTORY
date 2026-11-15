@@ -207,7 +207,8 @@ class Clab:
         conns = [outer]
         try:
             if info["family"] in ("frr", "linux"):
-                shell = "vtysh" if info["family"] == "frr" else \
+                # FRR は vtysh。ただしサーバ役(ラベル ccnp-role: host)は FRR のイメージでも Linux のシェルで開く
+                shell = "vtysh" if info["family"] == "frr" and not info.get("host") else \
                     "sh -c 'command -v bash >/dev/null 2>&1 && exec bash || exec sh'"
                 proc = await outer.create_process(f"docker exec -it {info['container']} {shell}", **term)
             else:
@@ -242,6 +243,8 @@ def clab_if(kind, name):
 def clab_category(nd):
     kind = str((nd or {}).get("kind", "")).lower()
     fam = clab_ops.node_family(nd)
+    if clab_ops.node_is_host(nd):            # ラベル ccnp-role: host(FRR のイメージで作ったサーバ役など)
+        return "host"
     if kind in ("bridge", "ovs-bridge"):
         return "infra"
     if "vjunosswitch" in kind or fam == "eos":
@@ -280,7 +283,7 @@ def clab_model(pm, spec, live):
                           "state": ent.get("state", ""), "console": console, "pty": console})
         if console:
             ip = addr.get(str(name).lower()) or nd.get("mgmt-ipv4") or (ent.get("ips") or [None])[0]
-            info[label[name]] = {"family": fam, "ip": ip,
+            info[label[name]] = {"family": fam, "ip": ip, "host": clab_ops.node_is_host(nd),
                                  "container": f"clab-{spec.get('name', '')}-{str(name).lower()}"}
     out_links = []
     for lk in topo.get("links") or []:

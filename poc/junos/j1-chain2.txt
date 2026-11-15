@@ -1,0 +1,18 @@
+# J1 PoC 4b: 連鎖の前のポリシーが accept すると、後ろのポリシーは見られない(B が 10.200.0.0/16 を拒んでも、A の最後の then accept が先に受け入れる)
+JUN02 configure
+JUN02 set policy-options policy-statement B2 term t from route-filter 10.200.0.0/16 exact
+JUN02 set policy-options policy-statement B2 term t then reject
+JUN02 delete protocols bgp group ISP import
+JUN02 set policy-options policy-statement A then accept
+JUN02 set protocols bgp group ISP import [ A B2 ]
+JUN02 show policy-options policy-statement A
+JUN02 commit
+!sleep 5
+JUN02 run show route 10.200.0.0/16 table inet.0
+JUN02 run show route hidden table inet.0 terse
+JUN02 delete policy-options policy-statement A then
+JUN02 commit
+!sleep 5
+JUN02 run show route 10.200.0.0/16 table inet.0
+JUN02 run show route hidden table inet.0 terse
+JUN02 exit

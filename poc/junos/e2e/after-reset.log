@@ -1,0 +1,48 @@
+# jpoc JNT-02 after-reset.txt 2026-11-14 16:18:58
+# やり直しの後: 1 分待ってから、初めの状態(OSPF の隣接・BGP のセッション・ポリシー無し)にそろうか
+
+## (sleep 60s)
+
+## [JUN01] (open)
+Last login: Sat Nov 14 16:18:22 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] show ospf interface
+show ospf interface 
+
+Warning: License key missing; requires 'OSPF' license
+
+Interface           State   Area            DR ID           BDR ID          Nbrs
+et-0/0/0.0          BDR     0.0.0.0         192.168.0.2     192.168.0.1        1
+lo0.0               DRother 0.0.0.0         0.0.0.0         0.0.0.0            0
+
+admin@jun01> 
+## [JUN02] (open)
+Last login: Sat Nov 14 16:18:45 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] show ospf neighbor
+show ospf neighbor 
+
+Warning: License key missing; requires 'OSPF' license
+
+Address          Interface              State           ID               Pri  Dead
+10.0.12.1        et-0/0/0.0             Full            192.168.0.1      128    37
+
+admin@jun02> 
+## [JUN02] show bgp summary | match "inet.0|Establ|Default"
+show bgp summary | match "inet.0|Establ|Default" 
+Default eBGP mode: advertise - accept, receive - accept
+inet.0               
+10.0.23.2             64500          7          4       0       0        1:00 Establ
+  inet.0: 10/10/10/0
+
+admin@jun02> 
+## [JUN02] show configuration policy-options
+show configuration policy-options 
+
+admin@jun02> 
+## [JUN01] show configuration policy-options
+show configuration policy-options 
+
+admin@jun01> 

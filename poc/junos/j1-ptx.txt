@@ -1,0 +1,23 @@
+# J1 PoC 5: PTX の既定の BGP ポリシー(junos-ptx-series-default= BGP の経路を FIB に入れない)がこの vJunos-Evolved にあるか(BGP User Guide p.500 と実機の食い違いの確かめ)
+JUN02 show policy junos-ptx-series-default
+JUN02 show configuration routing-options forwarding-table | display inheritance defaults no-comments | no-more
+JUN02 show configuration policy-options | display inheritance defaults no-comments | no-more
+JUN02 show configuration | display inheritance defaults no-comments | match "ptx|default-export|install|load-balance" | no-more
+JUN02 configure
+JUN02 set interfaces et-0/0/1 unit 0 family inet address 10.0.23.1/30
+JUN02 set interfaces lo0 unit 0 family inet address 192.168.0.2/32
+JUN02 set routing-options router-id 192.168.0.2
+JUN02 set routing-options autonomous-system 65000
+JUN02 set protocols bgp group ISP type external
+JUN02 set protocols bgp group ISP peer-as 64500
+JUN02 set protocols bgp group ISP neighbor 10.0.23.2
+JUN02 commit and-quit
+!sleep 60
+JUN02 show bgp summary
+JUN02 show route forwarding-table destination 203.0.113.0/24 table default extensive
+JUN02 show route 203.0.113.0/24 extensive | match "State|Announcement|KRT|Flags"
+JUN02 show route forwarding-table table default | match "user|Destination" | no-more
+JUN02 ping 203.0.113.1 count 3 rapid
+JUN02 show policy | no-more
+JUN02 show route forwarding-table summary
+JUN02 show version | match "Model|Junos"

@@ -1,0 +1,257 @@
+# jpoc JNT-02 j1-examples2.txt 2026-11-14 15:44:02
+# J1 読み物の例 2: BGP の経路(ISP の網 203.0.113.0/24)を OSPF へ・寄与する経路の無い集約経路は hidden か
+
+## [JUN02] (open)
+Last login: Sat Nov 14 15:40:32 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISPNET-TO-OSPF term t from protocol bgp
+set policy-options policy-statement ISPNET-TO-OSPF term t from protocol bgp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISPNET-TO-OSPF term t from route-filter 203.0.113.0/24 exact
+set policy-options policy-statement ISPNET-TO-OSPF term t from route-filter 203.0.113.0/24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISPNET-TO-OSPF term t then accept
+set policy-options policy-statement ISPNET-TO-OSPF term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols ospf export ISPNET-TO-OSPF
+set protocols ospf export ISPNET-TO-OSPF 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 8s)
+
+## [JUN01] (open)
+Last login: Sat Nov 14 15:40:28 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] show route 203.0.113.0/24
+show route 203.0.113.0/24 
+
+inet.0: 10 destinations, 10 routes (10 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+203.0.113.0/24     *[OSPF/150] 00:00:09, metric 0, tag 0
+                    >  to 10.0.12.2 via et-0/0/0.0
+
+admin@jun01> 
+## [JUN01] show ospf database external
+show ospf database external 
+
+Warning: License key missing; requires 'OSPF' license
+
+    OSPF AS SCOPE link state database
+ Type       ID               Adv Rtr           Seq      Age  Opt  Cksum  Len 
+Extern  *172.16.20.0      192.168.0.1      0x80000001   203  0x22 0xfec6  36
+Extern   203.0.113.0      192.168.0.2      0x80000001    12  0x22 0xaf5a  36
+
+admin@jun01> 
+## [JUN02] deactivate protocols bgp group ISP
+deactivate
+             ^
+unknown command.
+admin@jun02> deactivate   protocols
+             ^
+unknown command.
+admin@jun02> deactivateprotocols   bgp
+             ^
+unknown command.
+admin@jun02> deactivateprotocolsbgp   group
+             ^
+unknown command.
+admin@jun02> deactivateprotocolsbgpgroup   ISP
+             ^
+unknown command.
+
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] deactivate protocols bgp group ISP
+deactivate protocols bgp group ISP 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 8s)
+
+## [JUN01] show route 203.0.113.0/24
+show route 203.0.113.0/24 
+
+admin@jun01> 
+## [JUN01] show ospf database external
+show ospf database external 
+
+Warning: License key missing; requires 'OSPF' license
+
+    OSPF AS SCOPE link state database
+ Type       ID               Adv Rtr           Seq      Age  Opt  Cksum  Len 
+Extern  *172.16.20.0      192.168.0.1      0x80000001   215  0x22 0xfec6  36
+Extern   203.0.113.0      192.168.0.2      0x80000001  3600  0x22 0xaf5a  36
+
+admin@jun01> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] activate protocols bgp group ISP
+activate protocols bgp group ISP 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> # 寄与する経路の無い集約経路
+
+## [JUN02] show route 172.16.0.0/16 exact detail
+show route 172.16.0.0/16 exact detail 
+
+inet.0: 9 destinations, 9 routes (9 active, 0 holddown, 0 hidden)
+172.16.0.0/16 (1 entry, 1 announced)
+        *Aggregate Preference: 130
+                Next hop type: Reject, Next hop index: 0
+                Address: 0x5559af013fd8
+                Next-hop reference count: 2
+                Kernel Table Id: 0
+                State: <Active Int Ext>
+                Local AS: 65000 
+                Age: 3:38 
+                Validation State: unverified 
+                Task: Aggregate
+                Announcement bits (1): 0-KRT 
+                AS path: I  (LocalAgg)
+                Flags:          	Depth: 0	Active
+                AS path list (1):
+                AS path: I Refcount: 1
+                Contributing Routes (1):
+                	172.16.20.0/24 proto OSPF
+                Thread: junos-main 
+
+admin@jun02> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] delete protocols ospf export
+delete protocols ospf export 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## (sleep 8s)
+
+## [JUN02] show route 172.16.0.0/16 exact
+show route 172.16.0.0/16 exact 
+
+inet.0: 18 destinations, 18 routes (11 active, 0 holddown, 7 hidden)
+
+admin@jun02> 
+## [JUN02] show route 172.16.0.0/16 exact hidden detail
+show route 172.16.0.0/16 exact hidden detail 
+
+inet.0: 18 destinations, 18 routes (11 active, 0 holddown, 7 hidden)
+172.16.0.0/16 (1 entry, 0 announced)
+         Aggregate
+                Next hop type: Reject, Next hop index: 0
+                Address: 0x5559af013fd8
+                Next-hop reference count: 1
+                Kernel Table Id: 0
+                State: <Hidden Int Ext>
+                Local AS: 65000 
+                Age: 9 
+                Validation State: unverified 
+                Task: Aggregate
+                AS path: I 
+                                Flags: ASPathChanged	Depth: 0	Inactive
+                Thread: junos-main 
+
+admin@jun02> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf export SRV-TO-OSPF
+set protocols ospf export SRV-TO-OSPF 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## (sleep 50s)
+
+## [JUN01] show route 203.0.113.0/24
+show route 203.0.113.0/24 
+
+inet.0: 10 destinations, 10 routes (10 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+203.0.113.0/24     *[OSPF/150] 00:01:01, metric 0, tag 0
+                    >  to 10.0.12.2 via et-0/0/0.0
+
+admin@jun01> 
+## [JUN02] show route 172.16.0.0/16 exact
+show route 172.16.0.0/16 exact 
+
+inet.0: 19 destinations, 19 routes (13 active, 0 holddown, 6 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.0.0/16      *[Aggregate/130] 00:00:51
+                       Reject
+
+admin@jun02> 

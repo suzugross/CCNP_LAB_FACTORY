@@ -77,6 +77,13 @@ def node_family(nd):
         return "linux"
     return None
 
+def node_is_host(nd):
+    """ラベル ccnp-role: host のノード= サーバ役(FRR のイメージで作ったホストなど)。ワークスペースの図ではホストとして描き、
+    コンソール(ワークスペース・connect)は vtysh でなく Linux のシェルで開く。採点の exec と起動の判定は種類(node_family)どおり。"""
+    lab = (nd or {}).get("labels") or {} if isinstance(nd, dict) else {}
+    return str(lab.get("ccnp-role", "")).lower() == "host"
+
+
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
             "-o", "StrictHostKeyChecking=accept-new"]
 
@@ -341,7 +348,7 @@ def cmd_connect(a):
     fam = node_family(nd)
     target, _ = clab_conn(a.repo)
     if fam in ("frr", "linux"):
-        shell = "vtysh" if fam == "frr" else "bash"
+        shell = "vtysh" if fam == "frr" and not node_is_host(nd) else "bash"
         os.execvp("ssh", ["ssh", "-t", *SSH_OPTS, target, f"docker exec -it {container_name(topo, a.node)} {shell}"])
     ips = {str(k).lower(): v for k, v in (topo["clab_nodes"] or {}).items()}
     ip = ips.get(str(a.node).lower()) or nd.get("mgmt-ipv4")

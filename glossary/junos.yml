@@ -144,7 +144,187 @@
       what `redistribute` does on IOS.
     ja: >-
       経路表のどの経路をプロトコルが広告するかを決める Junos のルーティング ポリシー。IOS の `redistribute` にあたることを、Junos はこれで行う。
-  see: [default-routing-policy]
+  see: [default-routing-policy, import-policy, policy-statement]
+  books: [junos]
+
+- id: import-policy
+  term: {en: import policy, ja: import ポリシー}
+  def:
+    en: >-
+      A Junos routing policy that decides which routes a protocol puts into the routing table, and with which attributes.
+      With BGP it acts on the routes received from neighbours; a route it rejects stays in the table as hidden.
+    ja: >-
+      プロトコルが受け取った経路のどれを、どの属性で経路表に入れるかを決める Junos のルーティング ポリシー。BGP では隣から受け取った
+      経路に効き、拒んだ経路は hidden として表に残る。
+  see: [export-policy, policy-chain, hidden-route]
+  books: [junos]
+
+- id: policy-statement
+  term: policy-statement
+  aka: [policy statement, policy statements]
+  def:
+    en: >-
+      A named Junos routing policy, written under `policy-options`. It is a list of terms, each a pair of `from` (the
+      conditions) and `then` (the actions), checked from the top. It plays the part of a route map on IOS.
+    ja: >-
+      `policy-options` の下に書く、名前を付けた Junos のルーティング ポリシー。`from`(条件)と `then`(動作)の組の term を並べ、
+      上から調べる。IOS の route-map にあたる。
+  see: [terminating-action, policy-chain, route-filter]
+  books: [junos]
+
+- id: terminating-action
+  term: {en: terminating action, ja: 終端の動作}
+  aka: [terminating actions]
+  def:
+    en: >-
+      `accept` or `reject` in a Junos policy: the actions that end the evaluation, for the rest of the policy chain too.
+      Actions that only change attributes (metric, local preference, community) do not end it.
+    ja: >-
+      Junos のポリシーの `accept` と `reject`。評価を終わらせる動作で、連鎖の後ろのポリシーも見なくなる。属性を変えるだけの動作
+      (metric・local-preference・community)は評価を終わらせない。
+  see: [policy-statement, policy-chain]
+  books: [junos]
+
+- id: policy-chain
+  term: {en: policy chain, ja: ポリシーの連鎖}
+  aka: [policy chains]
+  def:
+    en: >-
+      Several policies listed in one Junos import or export, such as `import [ A B ]`. They are evaluated in order until an
+      `accept` or a `reject`; whatever none of them decides goes to the protocol's default policy.
+    ja: >-
+      Junos の 1 つの import・export に並べた複数のポリシー(`import [ A B ]` など)。`accept` か `reject` が出るまで順に評価し、
+      どれも決めなかった経路はプロトコルの既定のポリシーへ渡る。
+  see: [terminating-action, default-routing-policy]
+  books: [junos]
+
+- id: route-filter
+  term: route-filter
+  aka: [route filter, route filters, route-filters]
+  def:
+    en: >-
+      A Junos policy condition on prefix and length: a prefix with a match type such as `exact`, `orlonger` or
+      `prefix-length-range /16-/24`. Within one term, the one route filter that covers the route most specifically decides.
+    ja: >-
+      プレフィックスと長さの Junos のポリシーの条件。プレフィックスに `exact`・`orlonger`・`prefix-length-range /16-/24` などの
+      一致の型を付けて書く。1 つの term の中では、経路をいちばん長く含む 1 本が決める。
+  see: [match-type, junos-prefix-list, walkup]
+  books: [junos]
+
+- id: match-type
+  term: {en: match type, ja: 一致の型}
+  aka: [match types]
+  def:
+    en: >-
+      The part of a Junos route filter that says which lengths match: `exact`, `orlonger`, `longer`, `upto`,
+      `prefix-length-range`, `through` and others. It does the work of `ge` and `le` in an IOS prefix list.
+    ja: >-
+      Junos の route-filter のうち、どの長さに当たるかを決める部分。`exact`・`orlonger`・`longer`・`upto`・`prefix-length-range`・
+      `through` など。IOS の prefix-list の `ge`・`le` の役をする。
+  see: [route-filter]
+  books: [junos]
+
+- id: walkup
+  term: walkup
+  def:
+    en: >-
+      A Junos option (`set policy-options defaults route-filter walkup`) that lets a term with several route filters fall
+      back to the shorter ones when the longest match does not fit its match type. It changes every policy on the router.
+    ja: >-
+      複数の route-filter を持つ term で、最長一致の 1 本の型が合わない時に、もっと短い route-filter も見るようにする Junos の設定
+      (`set policy-options defaults route-filter walkup`)。ルータのすべてのポリシーの振る舞いが変わる。
+  see: [route-filter]
+  books: [junos]
+
+- id: junos-prefix-list
+  term: {en: prefix list, ja: prefix-list}
+  aka: [prefix lists, prefix-list, prefix-lists]
+  def:
+    en: >-
+      In Junos, a named list of prefixes under `policy-options`, with no permit, deny or length range. `from prefix-list`
+      matches the prefixes themselves; `from prefix-list-filter` adds a match type.
+    ja: >-
+      Junos では、`policy-options` の下に作る、名前を付けたプレフィックスの並び。permit・deny も長さの範囲も持たない。
+      `from prefix-list` は並びのプレフィックスそのものに、`from prefix-list-filter` は一致の型を付けて当たる。
+  see: [route-filter]
+  books: [junos]
+
+- id: hidden-route
+  term: {en: hidden route, ja: hidden の経路}
+  aka: [hidden routes, hidden]
+  def:
+    en: >-
+      A route that Junos keeps in the routing table but does not use, for example one rejected by an import policy. List them
+      with `hidden`, as in `show route receive-protocol bgp neighbour hidden`; `extensive` shows the `Hidden reason`.
+    ja: >-
+      Junos が経路表に持っているが使っていない経路。import ポリシーが拒んだ経路など。`show route receive-protocol bgp 隣 hidden` のように
+      `hidden` を付けて一覧し、`extensive` で `Hidden reason` が見える。
+  see: [import-policy]
+  books: [junos]
+
+- id: aggregate-route
+  term: {en: aggregate route, ja: 集約経路}
+  aka: [aggregate routes]
+  def:
+    en: >-
+      A summary route that Junos creates with `routing-options aggregate`. It is active (preference 130, next hop Reject)
+      only while a contributing route exists within it, and goes out only when an export policy chooses it.
+    ja: >-
+      Junos が `routing-options aggregate` で作るまとめの経路。中に寄与する経路がある間だけ使われ(preference 130・次ホップ Reject)、
+      export ポリシーが選んだ時だけ広告される。
+  see: [contributing-route, export-policy]
+  books: [junos]
+
+- id: contributing-route
+  term: {en: contributing route, ja: 寄与する経路}
+  aka: [contributing routes]
+  def:
+    en: >-
+      A more specific route within an aggregate route's range that keeps the aggregate active. With none left, the
+      aggregate becomes hidden.
+    ja: >-
+      集約経路の範囲の中にあって、集約経路を使える状態に保つ、より細かい経路。1 本も無くなると集約経路は hidden になる。
+  see: [aggregate-route]
+  books: [junos]
+
+- id: local-preference
+  term: local-preference
+  aka: [local preference, LOCAL_PREF]
+  def:
+    en: >-
+      A BGP attribute used inside one AS to choose among routes to the same prefix: higher is preferred, and the default
+      is 100. It is usually set by an import policy.
+    ja: >-
+      1 つの AS の中で、同じプレフィックスへの経路から選ぶための BGP の属性。大きいほど好まれ、既定は 100。たいてい import ポリシーで付ける。
+  see: [bgp-community]
+  books: [junos]
+
+- id: bgp-community
+  term: {en: community, ja: community}
+  aka: [communities, コミュニティ]
+  def:
+    en: >-
+      A tag carried with a BGP route, written as two numbers such as `65000:200`. Policies add it to mark routes and match
+      it later. In Junos you name it first, with `set policy-options community name members 65000:200`.
+    ja: >-
+      BGP の経路に付けて運ぶ印で、`65000:200` のように 2 つの数で書く。ポリシーで付けて経路に印を付け、後で条件に使う。Junos では
+      `set policy-options community 名前 members 65000:200` で先に名前を付ける。
+  see: [local-preference]
+  books: [junos]
+  # 「community」は SNMP の語(automation.yml の snmp-community・XR の M13 のページ)と同じ表記なので、ページでも分ける。
+  # BGP の community が出る Junos の単元を足したら、ここに足す。
+  scope: ["1*-j1-*"]
+
+- id: as-path-prepend
+  term: {en: AS path prepending, ja: AS パスのプリペンド}
+  aka: [as-path-prepend, prepend]
+  def:
+    en: >-
+      Adding your own AS number to the front of a route's AS path more than once on export, so that the path looks longer to
+      the neighbour and is less preferred. In Junos, `then as-path-prepend "65000 65000"`.
+    ja: >-
+      export の時に、経路の AS パスの先頭へ自分の AS 番号を重ねて足し、相手から見た道を長く見せて選ばれにくくすること。Junos では
+      `then as-path-prepend "65000 65000"`。
   books: [junos]
 
 - id: junos-evolved

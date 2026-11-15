@@ -1,0 +1,51 @@
+# JNT-02 の containerlab トポロジ(Junos トラック J1・BL-275)。
+# jun01・jun02= vJunos-Evolved。初めの設定= J0 の範囲(アドレス・OSPF・静的経路)＋JUN02 と FRR1 の eBGP のセッション(ポリシーは無い)。
+# mgmt と admin は vrnetlab の init.conf(startup-config はそこへ連結される)。eth1 → et-0/0/0・eth2 → et-0/0/1。
+# frr1= ISP 役(kind: frr・AS 64500)。srv1= サーバの網の役(kind: frr・静的経路だけ・ラベル ccnp-role: host でコンソールは bash)。
+# labels の graph-posX / graph-posY= ワークスペースの結線図の座標。
+name: ccnp-jnt02
+topology:
+  nodes:
+    srv1:
+      kind: frr
+      image: quay.io/frrouting/frr:containerlab-10.7.1
+      mgmt-ipv4: 172.20.20.54
+      startup-config: srv1/frr.conf
+      # ccnp-role: host= ワークスペースではホストとして描き、コンソールは bash(ping・traceroute を送信元つきで打てる)
+      labels: { graph-posX: "0", graph-posY: "0", ccnp-role: host }
+    jun01:
+      kind: juniper_vjunosevolved
+      image: vrnetlab/juniper_vjunosevolved:26.2R1.7-EVO
+      mgmt-ipv4: 172.20.20.51
+      startup-config: jun01.startup.cfg
+      labels: { graph-posX: "240", graph-posY: "0" }
+    jun02:
+      kind: juniper_vjunosevolved
+      image: vrnetlab/juniper_vjunosevolved:26.2R1.7-EVO
+      mgmt-ipv4: 172.20.20.52
+      startup-config: jun02.startup.cfg
+      labels: { graph-posX: "480", graph-posY: "0" }
+    frr1:
+      kind: frr
+      image: quay.io/frrouting/frr:containerlab-10.7.1
+      mgmt-ipv4: 172.20.20.53
+      startup-config: frr1/frr.conf
+      daemons: [bgpd]
+      labels: { graph-posX: "720", graph-posY: "0" }
+  links:
+    # ★MTU 1500(veth の既定 9500 だと OSPF が ExStart で止まる・CLAB-SOLO.design.md §7)
+    - type: veth
+      mtu: 1500
+      endpoints:
+        - { node: srv1, interface: eth1 }
+        - { node: jun01, interface: eth2 }
+    - type: veth
+      mtu: 1500
+      endpoints:
+        - { node: jun01, interface: eth1 }
+        - { node: jun02, interface: eth1 }
+    - type: veth
+      mtu: 1500
+      endpoints:
+        - { node: jun02, interface: eth2 }
+        - { node: frr1, interface: eth1 }

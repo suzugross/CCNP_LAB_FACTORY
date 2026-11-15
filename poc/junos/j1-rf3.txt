@@ -1,0 +1,51 @@
+# J1 PoC 6c: 今の盤面(ISP の経路 10 本)で一致の型を test policy で並べ直す(import を一時的に外し、最後に戻す)。walkup なし
+JUN02 configure
+JUN02 deactivate protocols bgp group ISP import
+JUN02 set policy-options policy-statement T-EXACT term t from route-filter 198.51.100.0/24 exact
+JUN02 set policy-options policy-statement T-EXACT term t then accept
+JUN02 set policy-options policy-statement T-EXACT then reject
+JUN02 set policy-options policy-statement T-ORLONGER term t from route-filter 198.51.100.0/24 orlonger
+JUN02 set policy-options policy-statement T-ORLONGER term t then accept
+JUN02 set policy-options policy-statement T-ORLONGER then reject
+JUN02 set policy-options policy-statement T-LONGER term t from route-filter 198.51.100.0/24 longer
+JUN02 set policy-options policy-statement T-LONGER term t then accept
+JUN02 set policy-options policy-statement T-LONGER then reject
+JUN02 set policy-options policy-statement T-UPTO term t from route-filter 0.0.0.0/0 upto /16
+JUN02 set policy-options policy-statement T-UPTO term t then accept
+JUN02 set policy-options policy-statement T-UPTO then reject
+JUN02 set policy-options policy-statement T-RANGE term t from route-filter 0.0.0.0/0 prefix-length-range /16-/24
+JUN02 set policy-options policy-statement T-RANGE term t then accept
+JUN02 set policy-options policy-statement T-RANGE then reject
+JUN02 set policy-options policy-statement T-THROUGH term t from route-filter 198.51.100.0/24 through 198.51.100.128/25
+JUN02 set policy-options policy-statement T-THROUGH term t then accept
+JUN02 set policy-options policy-statement T-THROUGH then reject
+JUN02 set policy-options policy-statement LM term t from route-filter 198.51.100.0/24 exact
+JUN02 set policy-options policy-statement LM term t from route-filter 0.0.0.0/0 upto /25
+JUN02 set policy-options policy-statement LM term t then accept
+JUN02 set policy-options policy-statement LM then reject
+JUN02 set policy-options prefix-list PL 198.51.100.0/24
+JUN02 set policy-options policy-statement T-PL term t from prefix-list PL
+JUN02 set policy-options policy-statement T-PL term t then accept
+JUN02 set policy-options policy-statement T-PL then reject
+JUN02 set policy-options policy-statement T-PLF term t from prefix-list-filter PL orlonger
+JUN02 set policy-options policy-statement T-PLF term t then accept
+JUN02 set policy-options policy-statement T-PLF then reject
+JUN02 commit
+!sleep 5
+JUN02 run test policy T-EXACT 0.0.0.0/0 | match "^[0-9]|Policy"
+JUN02 run test policy T-ORLONGER 0.0.0.0/0 | match "^[0-9]|Policy"
+JUN02 run test policy T-LONGER 0.0.0.0/0 | match "^[0-9]|Policy"
+JUN02 run test policy T-UPTO 0.0.0.0/0 | match "^[0-9]|Policy"
+JUN02 run test policy T-RANGE 0.0.0.0/0 | match "^[0-9]|Policy"
+JUN02 run test policy T-THROUGH 0.0.0.0/0 | match "^[0-9]|Policy"
+JUN02 run test policy LM 0.0.0.0/0 | match "^[0-9]|Policy"
+JUN02 run test policy LM 198.51.100.0/24
+JUN02 run test policy T-PL 0.0.0.0/0 | match "^[0-9]|Policy"
+JUN02 run test policy T-PLF 0.0.0.0/0 | match "^[0-9]|Policy"
+JUN02 set policy-options defaults route-filter walkup
+JUN02 commit
+JUN02 run test policy LM 198.51.100.0/24 | match "^[0-9]|Policy"
+JUN02 rollback 1
+JUN02 commit
+JUN02 show | compare rollback 3
+JUN02 exit

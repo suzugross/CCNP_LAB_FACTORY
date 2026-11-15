@@ -1,0 +1,1163 @@
+# jpoc JNT-02 j1-ospf-export.txt 2026-11-14 14:39:17
+# J1 PoC 2: OSPF への export(何が出るか・外部経路の型と metric)・term の順と流れ落ち・ポリシーの連鎖・未定義のポリシー・BGP の既定経路を OSPF へ
+
+## [JUN01] (open)
+Last login: Sat Nov 14 14:36:05 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement LAN-TO-OSPF term LAN from protocol direct
+set policy-options policy-statement LAN-TO-OSPF term LAN from protocol direct 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement LAN-TO-OSPF term LAN from route-filter 172.16.10.0/24 exact
+set policy-options policy-statement LAN-TO-OSPF term LAN from route-filter 172.16.10.0/24 exact 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement LAN-TO-OSPF term LAN then accept
+set policy-options policy-statement LAN-TO-OSPF term LAN then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf export LAN-TO-OSPF
+set protocols ospf export LAN-TO-OSPF 
+
+[edit]
+admin@jun01# 
+## [JUN01] show | compare
+show | compare 
+[edit]
++  policy-options {
++      policy-statement LAN-TO-OSPF {
++          term LAN {
++              from {
++                  protocol direct;
++                  route-filter 172.16.10.0/24 exact;
++              }
++              then accept;
++          }
++      }
++  }
+[edit protocols ospf]
++   export LAN-TO-OSPF;
+
+[edit]
+admin@jun01# 
+## [JUN01] commit
+commit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+
+[edit]
+admin@jun01# 
+## (sleep 8s)
+
+## [JUN02] (open)
+Last login: Sat Nov 14 14:36:14 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] show ospf database external extensive
+show ospf database external extensive 
+
+Warning: License key missing; requires 'OSPF' license
+
+    OSPF AS SCOPE link state database
+ Type       ID               Adv Rtr           Seq      Age  Opt  Cksum  Len 
+Extern   172.16.10.0      192.168.0.1      0x80000001    11  0x22 0xfa86  36
+  mask 255.255.255.0
+  Topology default (ID 0)
+    Type: 2, Metric: 0, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Aging timer 00:59:49
+  Installed 00:00:08 ago, expires in 00:59:49
+  Last changed 00:00:08 ago, Change count: 1
+
+admin@jun02> 
+## [JUN02] show route 172.16.10.0/24 extensive
+show route 172.16.10.0/24 extensive 
+
+inet.0: 17 destinations, 17 routes (17 active, 0 holddown, 0 hidden)
+172.16.10.0/24 (1 entry, 1 announced)
+TSI:
+KRT in-kernel 172.16.10.0/24 -> {10.0.12.1}
+        *OSPF   Preference: 150
+                Next hop type: Router, Next hop index: 9036
+                Address: 0x55a680426958
+                Next-hop reference count: 4, Next-hop session id: 2
+                Kernel Table Id: 0
+                Next hop: 10.0.12.1 via et-0/0/0.0, selected
+                Session Id: 2
+                State: <Active Int Ext>
+                Local AS: 65000 
+                Age: 8 	Metric: 0 
+                Validation State: unverified 
+                	Tag: 0 
+                Task: OSPF
+                Announcement bits (1): 0-KRT 
+                AS path: I 
+                Thread: junos-main 
+
+admin@jun02> # 静的経路の term を足す
+
+## [JUN01] set policy-options policy-statement LAN-TO-OSPF term SRV from protocol static
+set policy-options policy-statement LAN-TO-OSPF term SRV from protocol static 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement LAN-TO-OSPF term SRV from route-filter 172.16.20.0/24 exact
+set policy-options policy-statement LAN-TO-OSPF term SRV from route-filter 172.16.20.0/24 exact 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement LAN-TO-OSPF term SRV then accept
+set policy-options policy-statement LAN-TO-OSPF term SRV then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] show policy-options policy-statement LAN-TO-OSPF
+show policy-options policy-statement LAN-TO-OSPF 
+term LAN {
+    from {
+        protocol direct;
+        route-filter 172.16.10.0/24 exact;
+    }
+    then accept;
+}
+term SRV {
+    from {
+        protocol static;
+        route-filter 172.16.20.0/24 exact;
+    }
+    then accept;
+}
+
+[edit]
+admin@jun01# 
+## [JUN01] commit
+commit 
+commit complete
+
+[edit]
+admin@jun01# 
+## [JUN01] run test policy LAN-TO-OSPF 172.16.0.0/16
+run test policy LAN-TO-OSPF 172.16.0.0/16 
+
+inet.0: 9 destinations, 9 routes (9 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:03:23
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:03:23
+                       Local via et-0/0/1.0
+172.16.20.0/24     *[Static/5] 00:03:23
+                    >  to 172.16.10.10 via et-0/0/1.0
+172.16.99.0/24     *[Static/5] 00:03:23
+                       Discard
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:03:23
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:03:23
+                       Local via et-0/0/1.0
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:03:23
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:03:23
+                       Local via et-0/0/1.0
+
+Policy LAN-TO-OSPF: 8 prefix accepted, 0 prefix rejected
+
+[edit]
+admin@jun01# 
+## [JUN01] run test policy LAN-TO-OSPF 0.0.0.0/0
+run test policy LAN-TO-OSPF 0.0.0.0/0 
+
+inet.0: 9 destinations, 9 routes (9 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.12.0/30       *[Direct/0] 00:03:24
+                    >  via et-0/0/0.0
+10.0.12.1/32       *[Local/0] 00:03:24
+                       Local via et-0/0/0.0
+172.16.10.0/24     *[Direct/0] 00:03:24
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:03:24
+                       Local via et-0/0/1.0
+172.16.20.0/24     *[Static/5] 00:03:24
+                    >  to 172.16.10.10 via et-0/0/1.0
+172.16.99.0/24     *[Static/5] 00:03:24
+                       Discard
+192.168.0.1/32     *[Direct/0] 00:03:24
+                    >  via lo0.0
+192.168.0.2/32     *[OSPF/10] 00:02:30, metric 1
+                    >  to 10.0.12.2 via et-0/0/0.0
+224.0.0.5/32       *[OSPF/10] 00:03:24, metric 1
+                       MultiRecv
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.12.0/30       *[Direct/0] 00:03:24
+                    >  via et-0/0/0.0
+10.0.12.1/32       *[Local/0] 00:03:24
+                       Local via et-0/0/0.0
+172.16.10.0/24     *[Direct/0] 00:03:24
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:03:24
+                       Local via et-0/0/1.0
+192.168.0.1/32     *[Direct/0] 00:03:24
+                    >  via lo0.0
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.12.0/30       *[Direct/0] 00:03:24
+                    >  via et-0/0/0.0
+10.0.12.1/32       *[Local/0] 00:03:24
+                       Local via et-0/0/0.0
+172.16.10.0/24     *[Direct/0] 00:03:24
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:03:24
+                       Local via et-0/0/1.0
+192.168.0.1/32     *[Direct/0] 00:03:24
+                    >  via lo0.0
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[Static/5] 00:05:17
+                    >  to 10.0.0.2 via re0:mgmt-0.0
+10.0.0.0/24        *[Direct/0] 00:05:17
+                    >  via re0:mgmt-0.0
+10.0.0.15/32       *[Local/0] 00:05:17
+                       Local via re0:mgmt-0.0
+
+Policy LAN-TO-OSPF: 22 prefix accepted, 0 prefix rejected
+
+[edit]
+admin@jun01# 
+## (sleep 8s)
+
+## [JUN02] show ospf database external
+show ospf database external 
+
+Warning: License key missing; requires 'OSPF' license
+
+    OSPF AS SCOPE link state database
+ Type       ID               Adv Rtr           Seq      Age  Opt  Cksum  Len 
+Extern   172.16.10.0      192.168.0.1      0x80000001    24  0x22 0xfa86  36
+Extern   172.16.20.0      192.168.0.1      0x80000001    10  0x22 0x8cea  36
+
+admin@jun02> # from protocol を書かず orlonger 1 本のポリシーを連鎖の 2 つ目に足す(set は並びの後ろに足す)
+
+## [JUN01] set policy-options policy-statement WIDE term ALL from route-filter 172.16.0.0/16 orlonger
+set policy-options policy-statement WIDE term ALL from route-filter 172.16.0.0/16 orlonger 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement WIDE term ALL then accept
+set policy-options policy-statement WIDE term ALL then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf export WIDE
+set protocols ospf export WIDE 
+
+[edit]
+admin@jun01# 
+## [JUN01] show protocols ospf
+show protocols ospf 
+area 0.0.0.0 {
+    interface et-0/0/0.0;
+    interface lo0.0 {
+        passive;
+    }
+}
+export [ LAN-TO-OSPF WIDE ];
+
+[edit]
+admin@jun01# 
+## [JUN01] commit
+commit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+
+[edit]
+admin@jun01# 
+## [JUN01] run test policy WIDE 172.16.0.0/16
+run test policy WIDE 172.16.0.0/16 
+
+inet.0: 9 destinations, 9 routes (9 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:03:36
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:03:36
+                       Local via et-0/0/1.0
+172.16.20.0/24     *[Static/5] 00:03:36
+                    >  to 172.16.10.10 via et-0/0/1.0
+172.16.99.0/24     *[Static/5] 00:03:36
+                       Discard
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:03:36
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:03:36
+                       Local via et-0/0/1.0
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:03:36
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:03:36
+                       Local via et-0/0/1.0
+
+Policy WIDE: 8 prefix accepted, 0 prefix rejected
+
+[edit]
+admin@jun01# 
+## (sleep 8s)
+
+## [JUN02] show ospf database external
+show ospf database external 
+
+Warning: License key missing; requires 'OSPF' license
+
+    OSPF AS SCOPE link state database
+ Type       ID               Adv Rtr           Seq      Age  Opt  Cksum  Len 
+Extern   172.16.10.0      192.168.0.1      0x80000001    37  0x22 0xfa86  36
+Extern   172.16.20.0      192.168.0.1      0x80000001    23  0x22 0x8cea  36
+Extern   172.16.99.0      192.168.0.1      0x80000001    10  0x22 0x2404  36
+
+admin@jun02> 
+## [JUN02] show route 172.16.99.0/24
+show route 172.16.99.0/24 
+
+inet.0: 19 destinations, 19 routes (19 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.99.0/24     *[OSPF/150] 00:00:08, metric 0, tag 0
+                    >  to 10.0.12.1 via et-0/0/0.0
+
+admin@jun02> # from の無い then accept だけ
+
+## [JUN01] delete protocols ospf export
+delete protocols ospf export 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement ALL then accept
+set policy-options policy-statement ALL then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf export ALL
+set protocols ospf export ALL 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit
+commit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+
+[edit]
+admin@jun01# 
+## [JUN01] run test policy ALL 0.0.0.0/0
+run test policy ALL 0.0.0.0/0 
+
+inet.0: 9 destinations, 9 routes (9 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.12.0/30       *[Direct/0] 00:03:49
+                    >  via et-0/0/0.0
+10.0.12.1/32       *[Local/0] 00:03:49
+                       Local via et-0/0/0.0
+172.16.10.0/24     *[Direct/0] 00:03:49
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:03:49
+                       Local via et-0/0/1.0
+172.16.20.0/24     *[Static/5] 00:03:49
+                    >  to 172.16.10.10 via et-0/0/1.0
+172.16.99.0/24     *[Static/5] 00:03:49
+                       Discard
+192.168.0.1/32     *[Direct/0] 00:03:49
+                    >  via lo0.0
+192.168.0.2/32     *[OSPF/10] 00:02:55, metric 1
+                    >  to 10.0.12.2 via et-0/0/0.0
+224.0.0.5/32       *[OSPF/10] 00:03:49, metric 1
+                       MultiRecv
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.12.0/30       *[Direct/0] 00:03:49
+                    >  via et-0/0/0.0
+10.0.12.1/32       *[Local/0] 00:03:49
+                       Local via et-0/0/0.0
+172.16.10.0/24     *[Direct/0] 00:03:49
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:03:49
+                       Local via et-0/0/1.0
+192.168.0.1/32     *[Direct/0] 00:03:49
+                    >  via lo0.0
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.12.0/30       *[Direct/0] 00:03:49
+                    >  via et-0/0/0.0
+10.0.12.1/32       *[Local/0] 00:03:49
+                       Local via et-0/0/0.0
+172.16.10.0/24     *[Direct/0] 00:03:49
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:03:49
+                       Local via et-0/0/1.0
+192.168.0.1/32     *[Direct/0] 00:03:49
+                    >  via lo0.0
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[Static/5] 00:05:42
+                    >  to 10.0.0.2 via re0:mgmt-0.0
+10.0.0.0/24        *[Direct/0] 00:05:42
+                    >  via re0:mgmt-0.0
+10.0.0.15/32       *[Local/0] 00:05:42
+                       Local via re0:mgmt-0.0
+
+Policy ALL: 22 prefix accepted, 0 prefix rejected
+
+[edit]
+admin@jun01# 
+## (sleep 8s)
+
+## [JUN02] show ospf database external
+show ospf database external 
+
+Warning: License key missing; requires 'OSPF' license
+
+    OSPF AS SCOPE link state database
+ Type       ID               Adv Rtr           Seq      Age  Opt  Cksum  Len 
+Extern   172.16.10.0      192.168.0.1      0x80000001    50  0x22 0xfa86  36
+Extern   172.16.20.0      192.168.0.1      0x80000001    36  0x22 0x8cea  36
+Extern   172.16.99.0      192.168.0.1      0x80000001    23  0x22 0x2404  36
+
+admin@jun02> 
+## [JUN02] show route protocol ospf table inet.0
+show route protocol ospf table inet.0 
+
+Warning: License key missing; requires 'OSPF' license
+
+
+inet.0: 19 destinations, 19 routes (19 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[OSPF/150] 00:00:47, metric 0, tag 0
+                    >  to 10.0.12.1 via et-0/0/0.0
+172.16.20.0/24     *[OSPF/150] 00:00:33, metric 0, tag 0
+                    >  to 10.0.12.1 via et-0/0/0.0
+172.16.99.0/24     *[OSPF/150] 00:00:20, metric 0, tag 0
+                    >  to 10.0.12.1 via et-0/0/0.0
+192.168.0.1/32     *[OSPF/10] 00:03:04, metric 1
+                    >  to 10.0.12.1 via et-0/0/0.0
+224.0.0.5/32       *[OSPF/10] 00:03:49, metric 1
+                       MultiRecv
+
+admin@jun02> # metric と type 1
+
+## [JUN01] delete protocols ospf export
+delete protocols ospf export 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement LAN-TO-OSPF term SRV then metric 20
+set policy-options policy-statement LAN-TO-OSPF term SRV then metric 20 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement LAN-TO-OSPF term SRV then external type 1
+set policy-options policy-statement LAN-TO-OSPF term SRV then external type 1 
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf export LAN-TO-OSPF
+set protocols ospf export LAN-TO-OSPF 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit
+commit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+
+[edit]
+admin@jun01# 
+## (sleep 8s)
+
+## [JUN02] show ospf database external extensive
+show ospf database external extensive 
+
+Warning: License key missing; requires 'OSPF' license
+
+    OSPF AS SCOPE link state database
+ Type       ID               Adv Rtr           Seq      Age  Opt  Cksum  Len 
+Extern   172.16.10.0      192.168.0.1      0x80000001    62  0x22 0xfa86  36
+  mask 255.255.255.0
+  Topology default (ID 0)
+    Type: 2, Metric: 0, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Aging timer 00:58:57
+  Installed 00:00:59 ago, expires in 00:58:58
+  Last changed 00:00:59 ago, Change count: 1
+Extern   172.16.20.0      192.168.0.1      0x80000002     9  0x22 0xcf13  36
+  mask 255.255.255.0
+  Topology default (ID 0)
+    Type: 1, Metric: 20, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Aging timer 00:59:50
+  Installed 00:00:06 ago, expires in 00:59:51
+  Last changed 00:00:06 ago, Change count: 2
+Extern   172.16.99.0      192.168.0.1      0x80000001  3600  0x22 0x2404  36
+  mask 255.255.255.0
+  Topology default (ID 0)
+    Type: 2, Metric: 0, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Aging timer 00:00:03
+  Installed 00:00:06 ago, expires in 00:59:25
+  Last changed 00:00:06 ago, Change count: 2, Purged
+Purge pend
+
+admin@jun02> 
+## [JUN02] show route 172.16.20.0/24
+show route 172.16.20.0/24 
+
+inet.0: 18 destinations, 18 routes (18 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.20.0/24     *[OSPF/150] 00:00:07, metric 21, tag 0
+                    >  to 10.0.12.1 via et-0/0/0.0
+
+admin@jun02> 
+## [JUN02] show route 172.16.10.0/24
+show route 172.16.10.0/24 
+
+inet.0: 18 destinations, 18 routes (18 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[OSPF/150] 00:01:00, metric 0, tag 0
+                    >  to 10.0.12.1 via et-0/0/0.0
+
+admin@jun02> # 終端の動作の無い term は流れ落ちる(SET は metric だけ・accept なし → 次の term へ)
+
+## [JUN01] set policy-options policy-statement FALL term SET from route-filter 172.16.20.0/24 exact
+set policy-options policy-statement FALL term SET from route-filter 172.16.20.0/24 exact 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement FALL term SET then metric 77
+set policy-options policy-statement FALL term SET then metric 77 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement FALL term ACCEPT from protocol static
+set policy-options policy-statement FALL term ACCEPT from protocol static 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement FALL term ACCEPT then accept
+set policy-options policy-statement FALL term ACCEPT then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] delete protocols ospf export
+delete protocols ospf export 
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf export FALL
+set protocols ospf export FALL 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit
+commit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+
+[edit]
+admin@jun01# 
+## [JUN01] run test policy FALL 172.16.0.0/16
+run test policy FALL 172.16.0.0/16 
+
+inet.0: 9 destinations, 9 routes (9 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:04:16
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:04:16
+                       Local via et-0/0/1.0
+172.16.20.0/24     *[Static/5] 00:04:16
+                    >  to 172.16.10.10 via et-0/0/1.0
+172.16.99.0/24     *[Static/5] 00:04:16
+                       Discard
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:04:16
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:04:16
+                       Local via et-0/0/1.0
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:04:16
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:04:16
+                       Local via et-0/0/1.0
+
+Policy FALL: 8 prefix accepted, 0 prefix rejected
+
+[edit]
+admin@jun01# 
+## (sleep 8s)
+
+## [JUN02] show ospf database external extensive
+show ospf database external extensive 
+
+Warning: License key missing; requires 'OSPF' license
+
+    OSPF AS SCOPE link state database
+ Type       ID               Adv Rtr           Seq      Age  Opt  Cksum  Len 
+Extern   172.16.10.0      192.168.0.1      0x80000001  3600  0x22 0xfa86  36
+  mask 255.255.255.0
+  Topology default (ID 0)
+    Type: 2, Metric: 0, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Aging timer 00:00:02
+  Installed 00:00:07 ago, expires in 00:58:43
+  Last changed 00:00:07 ago, Change count: 2, Purged
+Purge pend
+Extern   172.16.20.0      192.168.0.1      0x80000003    10  0x22 0x8d9a  36
+  mask 255.255.255.0
+  Topology default (ID 0)
+    Type: 2, Metric: 77, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Aging timer 00:59:49
+  Installed 00:00:07 ago, expires in 00:59:50
+  Last changed 00:00:07 ago, Change count: 3
+Extern   172.16.99.0      192.168.0.1      0x80000001    10  0x22 0x2404  36
+  mask 255.255.255.0
+  Topology default (ID 0)
+    Type: 2, Metric: 0, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Aging timer 00:59:49
+  Installed 00:00:07 ago, expires in 00:59:50
+  Last changed 00:00:07 ago, Change count: 1
+
+admin@jun02> # term の順: 後から足した term は末尾に付く(先に reject の term があると届かない)
+
+## [JUN01] set policy-options policy-statement ORDER term REST then reject
+set policy-options policy-statement ORDER term REST then reject 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement ORDER term LAN from route-filter 172.16.10.0/24 exact
+set policy-options policy-statement ORDER term LAN from route-filter 172.16.10.0/24 exact 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement ORDER term LAN then accept
+set policy-options policy-statement ORDER term LAN then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] show policy-options policy-statement ORDER
+show policy-options policy-statement ORDER 
+term REST {
+    then reject;
+}
+term LAN {
+    from {
+        route-filter 172.16.10.0/24 exact;
+    }
+    then accept;
+}
+
+[edit]
+admin@jun01# 
+## [JUN01] delete protocols ospf export
+delete protocols ospf export 
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf export ORDER
+set protocols ospf export ORDER 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit
+commit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+
+[edit]
+admin@jun01# 
+## [JUN01] run test policy ORDER 172.16.0.0/16
+run test policy ORDER 172.16.0.0/16 
+
+Policy ORDER: 0 prefix accepted, 8 prefix rejected
+
+[edit]
+admin@jun01# 
+## [JUN01] insert policy-options policy-statement ORDER term LAN before term REST
+insert policy-options policy-statement ORDER term LAN before term REST 
+
+[edit]
+admin@jun01# 
+## [JUN01] show policy-options policy-statement ORDER
+show policy-options policy-statement ORDER 
+term LAN {
+    from {
+        route-filter 172.16.10.0/24 exact;
+    }
+    then accept;
+}
+term REST {
+    then reject;
+}
+
+[edit]
+admin@jun01# 
+## [JUN01] commit
+commit 
+commit complete
+
+[edit]
+admin@jun01# 
+## [JUN01] run test policy ORDER 172.16.0.0/16
+run test policy ORDER 172.16.0.0/16 
+
+inet.0: 9 destinations, 9 routes (9 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:04:32
+                    >  via et-0/0/1.0
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:04:32
+                    >  via et-0/0/1.0
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:04:32
+                    >  via et-0/0/1.0
+
+Policy ORDER: 3 prefix accepted, 5 prefix rejected
+
+[edit]
+admin@jun01# # 未定義のポリシー・未定義の prefix-list
+
+## [JUN01] set protocols ospf export NO-SUCH-POLICY
+set protocols ospf export NO-SUCH-POLICY 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit check
+commit check 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+[edit]
+  'policy-options'
+    Policy error: Policy NO-SUCH-POLICY referenced but not defined
+error: configuration check-out failed
+
+[edit]
+admin@jun01# 
+## [JUN01] rollback 0
+rollback 0 
+load complete
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement BADPL term t from prefix-list NO-SUCH-LIST
+set policy-options policy-statement BADPL term t from prefix-list NO-SUCH-LIST 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement BADPL term t then accept
+set policy-options policy-statement BADPL term t then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf export BADPL
+set protocols ospf export BADPL 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit check
+commit check 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+[edit]
+  'policy-options'
+    Policy error: NO-SUCH-LIST prefix-list referenced (in term t) but not defined
+error: configuration check-out failed
+
+[edit]
+admin@jun01# 
+## [JUN01] rollback 0
+rollback 0 
+load complete
+
+[edit]
+admin@jun01# 
+## [JUN01] show | compare
+show | compare 
+
+[edit]
+admin@jun01# # 片付け: LAN と SRV だけ出す形(metric と type は既定)に戻す
+
+## [JUN01] delete policy-options policy-statement LAN-TO-OSPF term SRV then metric
+delete policy-options policy-statement LAN-TO-OSPF term SRV then metric 
+
+[edit]
+admin@jun01# 
+## [JUN01] delete policy-options policy-statement LAN-TO-OSPF term SRV then external
+delete policy-options policy-statement LAN-TO-OSPF term SRV then external 
+
+[edit]
+admin@jun01# 
+## [JUN01] delete protocols ospf export
+delete protocols ospf export 
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf export LAN-TO-OSPF
+set protocols ospf export LAN-TO-OSPF 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+Exiting configuration mode
+
+admin@jun01> # BGP の既定経路を OSPF へ(JUN02)・ISP が落ちると消えるか
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement DEFAULT-TO-OSPF term DEF from protocol bgp
+set policy-options policy-statement DEFAULT-TO-OSPF term DEF from protocol bgp 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement DEFAULT-TO-OSPF term DEF from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement DEFAULT-TO-OSPF term DEF from route-filter 0.0.0.0/0 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement DEFAULT-TO-OSPF term DEF then accept
+set policy-options policy-statement DEFAULT-TO-OSPF term DEF then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols ospf export DEFAULT-TO-OSPF
+set protocols ospf export DEFAULT-TO-OSPF 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+
+[edit]
+admin@jun02# 
+## (sleep 8s)
+
+## [JUN01] show route 0.0.0.0/0
+show route 0.0.0.0/0 
+
+inet.0: 10 destinations, 10 routes (10 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[OSPF/150] 00:00:06, metric 0, tag 0
+                    >  to 10.0.12.2 via et-0/0/0.0
+10.0.12.0/30       *[Direct/0] 00:04:54
+                    >  via et-0/0/0.0
+10.0.12.1/32       *[Local/0] 00:04:54
+                       Local via et-0/0/0.0
+172.16.10.0/24     *[Direct/0] 00:04:54
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:04:54
+                       Local via et-0/0/1.0
+172.16.20.0/24     *[Static/5] 00:04:54
+                    >  to 172.16.10.10 via et-0/0/1.0
+172.16.99.0/24     *[Static/5] 00:04:54
+                       Discard
+192.168.0.1/32     *[Direct/0] 00:04:54
+                    >  via lo0.0
+192.168.0.2/32     *[OSPF/10] 00:04:00, metric 1
+                    >  to 10.0.12.2 via et-0/0/0.0
+224.0.0.5/32       *[OSPF/10] 00:04:54, metric 1
+                       MultiRecv
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.12.0/30       *[Direct/0] 00:04:54
+                    >  via et-0/0/0.0
+10.0.12.1/32       *[Local/0] 00:04:54
+                       Local via et-0/0/0.0
+172.16.10.0/24     *[Direct/0] 00:04:54
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:04:54
+                       Local via et-0/0/1.0
+192.168.0.1/32     *[Direct/0] 00:04:54
+                    >  via lo0.0
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.12.0/30       *[Direct/0] 00:04:54
+                    >  via et-0/0/0.0
+10.0.12.1/32       *[Local/0] 00:04:54
+                       Local via et-0/0/0.0
+172.16.10.0/24     *[Direct/0] 00:04:54
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:04:54
+                       Local via et-0/0/1.0
+192.168.0.1/32     *[Direct/0] 00:04:54
+                    >  via lo0.0
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[Static/5] 00:06:47
+                    >  to 10.0.0.2 via re0:mgmt-0.0
+10.0.0.0/24        *[Direct/0] 00:06:47
+                    >  via re0:mgmt-0.0
+10.0.0.15/32       *[Local/0] 00:06:47
+                       Local via re0:mgmt-0.0
+
+admin@jun01> 
+## [JUN01] show ospf database external
+show ospf database external 
+
+Warning: License key missing; requires 'OSPF' license
+
+    OSPF AS SCOPE link state database
+ Type       ID               Adv Rtr           Seq      Age  Opt  Cksum  Len 
+Extern   0.0.0.0          192.168.0.2      0x80000001    10  0x22 0xe85e  36
+Extern  *172.16.10.0      192.168.0.1      0x80000001    23  0x22 0xfa86  36
+Extern  *172.16.20.0      192.168.0.1      0x80000001    14  0x22 0x8cea  36
+
+admin@jun01> 
+## [JUN02] deactivate protocols bgp group ISP
+deactivate protocols bgp group ISP 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+commit complete
+
+[edit]
+admin@jun02# 
+## (sleep 8s)
+
+## [JUN01] show route 0.0.0.0/0
+show route 0.0.0.0/0 
+
+inet.0: 9 destinations, 9 routes (9 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.12.0/30       *[Direct/0] 00:05:05
+                    >  via et-0/0/0.0
+10.0.12.1/32       *[Local/0] 00:05:05
+                       Local via et-0/0/0.0
+172.16.10.0/24     *[Direct/0] 00:05:05
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:05:05
+                       Local via et-0/0/1.0
+172.16.20.0/24     *[Static/5] 00:05:05
+                    >  to 172.16.10.10 via et-0/0/1.0
+172.16.99.0/24     *[Static/5] 00:05:05
+                       Discard
+192.168.0.1/32     *[Direct/0] 00:05:05
+                    >  via lo0.0
+192.168.0.2/32     *[OSPF/10] 00:04:11, metric 1
+                    >  to 10.0.12.2 via et-0/0/0.0
+224.0.0.5/32       *[OSPF/10] 00:05:05, metric 1
+                       MultiRecv
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.12.0/30       *[Direct/0] 00:05:05
+                    >  via et-0/0/0.0
+10.0.12.1/32       *[Local/0] 00:05:05
+                       Local via et-0/0/0.0
+172.16.10.0/24     *[Direct/0] 00:05:05
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:05:05
+                       Local via et-0/0/1.0
+192.168.0.1/32     *[Direct/0] 00:05:05
+                    >  via lo0.0
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.12.0/30       *[Direct/0] 00:05:05
+                    >  via et-0/0/0.0
+10.0.12.1/32       *[Local/0] 00:05:05
+                       Local via et-0/0/0.0
+172.16.10.0/24     *[Direct/0] 00:05:05
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:05:05
+                       Local via et-0/0/1.0
+192.168.0.1/32     *[Direct/0] 00:05:05
+                    >  via lo0.0
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[Static/5] 00:06:58
+                    >  to 10.0.0.2 via re0:mgmt-0.0
+10.0.0.0/24        *[Direct/0] 00:06:58
+                    >  via re0:mgmt-0.0
+10.0.0.15/32       *[Local/0] 00:06:58
+                       Local via re0:mgmt-0.0
+
+admin@jun01> 
+## [JUN01] show ospf database external
+show ospf database external 
+
+Warning: License key missing; requires 'OSPF' license
+
+    OSPF AS SCOPE link state database
+ Type       ID               Adv Rtr           Seq      Age  Opt  Cksum  Len 
+Extern   0.0.0.0          192.168.0.2      0x80000001  3600  0x22 0xe85e  36
+Extern  *172.16.10.0      192.168.0.1      0x80000001    34  0x22 0xfa86  36
+Extern  *172.16.20.0      192.168.0.1      0x80000001    25  0x22 0x8cea  36
+
+admin@jun01> 
+## [JUN02] activate protocols bgp group ISP
+activate protocols bgp group ISP 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 40s)
+
+## [JUN01] show route 0.0.0.0/0
+show route 0.0.0.0/0 
+
+inet.0: 10 destinations, 10 routes (10 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[OSPF/150] 00:00:37, metric 0, tag 0
+                    >  to 10.0.12.2 via et-0/0/0.0
+10.0.12.0/30       *[Direct/0] 00:05:48
+                    >  via et-0/0/0.0
+10.0.12.1/32       *[Local/0] 00:05:48
+                       Local via et-0/0/0.0
+172.16.10.0/24     *[Direct/0] 00:05:48
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:05:48
+                       Local via et-0/0/1.0
+172.16.20.0/24     *[Static/5] 00:05:48
+                    >  to 172.16.10.10 via et-0/0/1.0
+172.16.99.0/24     *[Static/5] 00:05:48
+                       Discard
+192.168.0.1/32     *[Direct/0] 00:05:48
+                    >  via lo0.0
+192.168.0.2/32     *[OSPF/10] 00:04:54, metric 1
+                    >  to 10.0.12.2 via et-0/0/0.0
+224.0.0.5/32       *[OSPF/10] 00:05:48, metric 1
+                       MultiRecv
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.12.0/30       *[Direct/0] 00:05:48
+                    >  via et-0/0/0.0
+10.0.12.1/32       *[Local/0] 00:05:48
+                       Local via et-0/0/0.0
+172.16.10.0/24     *[Direct/0] 00:05:48
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:05:48
+                       Local via et-0/0/1.0
+192.168.0.1/32     *[Direct/0] 00:05:48
+                    >  via lo0.0
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.12.0/30       *[Direct/0] 00:05:48
+                    >  via et-0/0/0.0
+10.0.12.1/32       *[Local/0] 00:05:48
+                       Local via et-0/0/0.0
+172.16.10.0/24     *[Direct/0] 00:05:48
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:05:48
+                       Local via et-0/0/1.0
+192.168.0.1/32     *[Direct/0] 00:05:48
+                    >  via lo0.0
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[Static/5] 00:07:41
+                    >  to 10.0.0.2 via re0:mgmt-0.0
+10.0.0.0/24        *[Direct/0] 00:07:41
+                    >  via re0:mgmt-0.0
+10.0.0.15/32       *[Local/0] 00:07:41
+                       Local via re0:mgmt-0.0
+
+admin@jun01> 

@@ -1,0 +1,13 @@
+# J1-3 模範解(既定経路の term を先頭へ戻す)
+JUN02 configure
+JUN02 set policy-options policy-statement ISP-IN term DEFAULT from route-filter 0.0.0.0/0 exact
+JUN02 set policy-options policy-statement ISP-IN term DEFAULT then accept
+JUN02 insert policy-options policy-statement ISP-IN term DEFAULT before term BOGONS
+JUN02 show policy-options policy-statement ISP-IN
+JUN02 show | compare
+JUN02 commit and-quit
+!sleep 8
+JUN02 show route receive-protocol bgp 10.0.23.2 table inet.0
+JUN02 show route receive-protocol bgp 10.0.23.2 hidden table inet.0
+JUN02 show route 10.200.0.0/16 hidden extensive | match "reason"
+JUN01 show route 0.0.0.0/0 exact table inet.0

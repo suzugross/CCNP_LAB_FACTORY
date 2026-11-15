@@ -1,0 +1,54 @@
+# J1 PoC 1: 土台(アドレス・OSPF・eBGP)をポリシーなしで入れ、既定のポリシーの振る舞いを見る(BGP は PTX の既定が他機種と違う)
+!sleep 50
+JUN01 configure
+JUN01 set interfaces et-0/0/0 unit 0 family inet address 10.0.12.1/30
+JUN01 set interfaces et-0/0/1 unit 0 family inet address 172.16.10.1/24
+JUN01 set interfaces lo0 unit 0 family inet address 192.168.0.1/32
+JUN01 set routing-options router-id 192.168.0.1
+JUN01 set routing-options autonomous-system 65000
+JUN01 set routing-options static route 172.16.20.0/24 next-hop 172.16.10.10
+JUN01 set routing-options static route 172.16.99.0/24 discard
+JUN01 set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+JUN01 set protocols ospf area 0.0.0.0 interface lo0.0 passive
+JUN01 commit and-quit
+JUN02 configure
+JUN02 set interfaces et-0/0/0 unit 0 family inet address 10.0.12.2/30
+JUN02 set interfaces et-0/0/1 unit 0 family inet address 10.0.23.1/30
+JUN02 set interfaces lo0 unit 0 family inet address 192.168.0.2/32
+JUN02 set routing-options router-id 192.168.0.2
+JUN02 set routing-options autonomous-system 65000
+JUN02 set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+JUN02 set protocols ospf area 0.0.0.0 interface lo0.0 passive
+JUN02 set protocols bgp group ISP type external
+JUN02 set protocols bgp group ISP peer-as 64500
+JUN02 set protocols bgp group ISP neighbor 10.0.23.2
+JUN02 commit and-quit
+!sleep 60
+JUN02 show bgp summary
+JUN02 show bgp neighbor 10.0.23.2
+JUN02 show route receive-protocol bgp 10.0.23.2
+JUN02 show route protocol bgp table inet.0
+JUN02 show route protocol bgp table inet.0 extensive | match "^[0-9]|State|Installed|Inactive|Active|Hidden|reason|Next hop|Local AS"
+JUN02 show route hidden table inet.0
+JUN02 show route forwarding-table destination 198.51.100.0/24 table default
+JUN02 show route forwarding-table destination 0.0.0.0/0 table default
+JUN02 show route advertising-protocol bgp 10.0.23.2
+JUN02 ping 203.0.113.1 count 3 rapid
+JUN02 ping 203.0.113.1 source 192.168.0.2 count 3 rapid
+FRR1 show bgp ipv4 unicast summary
+FRR1 show bgp ipv4 unicast
+JUN01 show route table inet.0
+JUN01 show ospf database
+JUN02 show route table inet.0 terse
+# 既定の BGP の口(?)
+JUN02 configure
+JUN02 set protocols bgp ?
+JUN02 
+JUN02 set protocols bgp defaults ?
+JUN02 
+JUN02 set protocols bgp group ISP ?
+JUN02 
+JUN02 exit
+JUN02 help apropos install-to-fib
+JUN02 help apropos "no-policy"
+JUN02 show version | match "Model|Junos"

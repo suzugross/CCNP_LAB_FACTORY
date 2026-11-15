@@ -1,0 +1,43 @@
+# J1 PoC 4: ポリシーの連鎖(import [ A B ])・A の最後の then accept で B に届かない・連鎖の終わりの既定の受け入れ・from の中の OR と AND・walkup の口
+JUN02 configure
+JUN02 delete protocols bgp group ISP import
+JUN02 set protocols bgp group ISP import [ A B ]
+JUN02 show policy-options policy-statement A
+JUN02 show policy-options policy-statement B
+JUN02 show protocols bgp group ISP
+JUN02 commit
+!sleep 5
+JUN02 run show route protocol bgp table inet.0 terse
+JUN02 run show route hidden table inet.0 terse
+# A の最後の then accept を消す → A の term に当たらない経路は B へ。B にも当たらなければ BGP の既定(受け入れ)
+JUN02 delete policy-options policy-statement A then
+JUN02 show policy-options policy-statement A
+JUN02 commit
+!sleep 5
+JUN02 run show route protocol bgp table inet.0 terse
+JUN02 run show route hidden table inet.0 terse
+# 受け入れるものだけを書き、最後に拒むだけのポリシーを置く
+JUN02 set policy-options policy-statement REJECT-ALL then reject
+JUN02 set policy-options policy-statement ALLOW-TESTNET term t from route-filter 203.0.113.0/24 exact
+JUN02 set policy-options policy-statement ALLOW-TESTNET term t from route-filter 0.0.0.0/0 exact
+JUN02 set policy-options policy-statement ALLOW-TESTNET term t then accept
+JUN02 delete protocols bgp group ISP import
+JUN02 set protocols bgp group ISP import [ ALLOW-TESTNET REJECT-ALL ]
+JUN02 commit
+!sleep 5
+JUN02 run show route protocol bgp table inet.0 terse
+JUN02 run show route receive-protocol bgp 10.0.23.2 hidden table inet.0
+# from の中: 同じ種類の値は OR、違う種類は AND
+JUN02 set policy-options policy-statement OR-AND term t from protocol [ static aggregate ]
+JUN02 set policy-options policy-statement OR-AND term t from route-filter 172.16.0.0/12 orlonger
+JUN02 set policy-options policy-statement OR-AND term t then accept
+JUN02 set policy-options policy-statement OR-AND then reject
+JUN02 show policy-options policy-statement OR-AND
+JUN02 commit
+JUN02 run test policy OR-AND 0.0.0.0/0
+JUN02 set policy-options ?
+JUN02 
+JUN02 set policy-options defaults ?
+JUN02 
+JUN02 rollback 0
+JUN02 exit

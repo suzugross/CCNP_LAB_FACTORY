@@ -1,0 +1,121 @@
+# J1 PoC 3: route-filter の一致の型(test policy で並べる)・最長一致の罠・prefix-list と prefix-list-filter・BGP の import(既定の受け入れへ流れ落ちる・拒んだ経路は hidden)・隣ごとの import は group の import を置き換える・属性の変更・export と term の順・集約
+JUN02 configure
+JUN02 set policy-options policy-statement T-EXACT term t from route-filter 198.51.100.0/24 exact
+JUN02 set policy-options policy-statement T-EXACT term t then accept
+JUN02 set policy-options policy-statement T-EXACT then reject
+JUN02 set policy-options policy-statement T-ORLONGER term t from route-filter 198.51.100.0/24 orlonger
+JUN02 set policy-options policy-statement T-ORLONGER term t then accept
+JUN02 set policy-options policy-statement T-ORLONGER then reject
+JUN02 set policy-options policy-statement T-LONGER term t from route-filter 198.51.100.0/24 longer
+JUN02 set policy-options policy-statement T-LONGER term t then accept
+JUN02 set policy-options policy-statement T-LONGER then reject
+JUN02 set policy-options policy-statement T-UPTO term t from route-filter 0.0.0.0/0 upto /16
+JUN02 set policy-options policy-statement T-UPTO term t then accept
+JUN02 set policy-options policy-statement T-UPTO then reject
+JUN02 set policy-options policy-statement T-RANGE term t from route-filter 0.0.0.0/0 prefix-length-range /16-/24
+JUN02 set policy-options policy-statement T-RANGE term t then accept
+JUN02 set policy-options policy-statement T-RANGE then reject
+JUN02 set policy-options policy-statement LM term t from route-filter 198.51.100.0/24 exact
+JUN02 set policy-options policy-statement LM term t from route-filter 0.0.0.0/0 upto /25
+JUN02 set policy-options policy-statement LM term t then accept
+JUN02 set policy-options policy-statement LM then reject
+JUN02 set policy-options prefix-list PL 198.51.100.0/24
+JUN02 set policy-options policy-statement T-PL term t from prefix-list PL
+JUN02 set policy-options policy-statement T-PL term t then accept
+JUN02 set policy-options policy-statement T-PL then reject
+JUN02 set policy-options policy-statement T-PLF term t from prefix-list-filter PL orlonger
+JUN02 set policy-options policy-statement T-PLF term t then accept
+JUN02 set policy-options policy-statement T-PLF then reject
+JUN02 show policy-options policy-statement T-EXACT
+JUN02 commit
+JUN02 run test policy T-EXACT 0.0.0.0/0
+JUN02 run test policy T-ORLONGER 0.0.0.0/0
+JUN02 run test policy T-LONGER 0.0.0.0/0
+JUN02 run test policy T-UPTO 0.0.0.0/0
+JUN02 run test policy T-RANGE 0.0.0.0/0
+JUN02 run test policy LM 198.51.100.0/24
+JUN02 run test policy LM 192.0.2.0/24
+JUN02 run test policy T-PL 0.0.0.0/0
+JUN02 run test policy T-PLF 0.0.0.0/0
+# import: 拒む term だけを書く(私的・長すぎる)→ 残りは既定の受け入れ
+JUN02 set policy-options policy-statement ISP-IN term BOGONS from route-filter 10.0.0.0/8 orlonger
+JUN02 set policy-options policy-statement ISP-IN term BOGONS from route-filter 172.16.0.0/12 orlonger
+JUN02 set policy-options policy-statement ISP-IN term BOGONS from route-filter 192.168.0.0/16 orlonger
+JUN02 set policy-options policy-statement ISP-IN term BOGONS from route-filter 100.64.0.0/10 orlonger
+JUN02 set policy-options policy-statement ISP-IN term BOGONS from route-filter 198.18.0.0/15 orlonger
+JUN02 set policy-options policy-statement ISP-IN term BOGONS then reject
+JUN02 set policy-options policy-statement ISP-IN term TOO-LONG from route-filter 0.0.0.0/0 prefix-length-range /25-/32
+JUN02 set policy-options policy-statement ISP-IN term TOO-LONG then reject
+JUN02 set protocols bgp group ISP import ISP-IN
+JUN02 commit
+!sleep 5
+JUN02 run show bgp summary
+JUN02 run show route receive-protocol bgp 10.0.23.2 table inet.0
+JUN02 run show route protocol bgp table inet.0 terse
+JUN02 run show route hidden table inet.0
+JUN02 run show route 10.200.0.0/16 hidden extensive
+JUN02 run show route receive-protocol bgp 10.0.23.2 hidden table inet.0
+# 受け入れる term だけを書く → 当たらない経路は既定の受け入れに流れ落ちる
+JUN02 set policy-options policy-statement ONLY-DOC term t from route-filter 192.0.2.0/24 exact
+JUN02 set policy-options policy-statement ONLY-DOC term t then accept
+JUN02 set protocols bgp group ISP neighbor 10.0.23.2 import ONLY-DOC
+JUN02 show protocols bgp
+JUN02 commit
+!sleep 5
+JUN02 run show route protocol bgp table inet.0 terse
+JUN02 run show bgp neighbor 10.0.23.2 | match "Import|Export"
+JUN02 delete protocols bgp group ISP neighbor 10.0.23.2 import
+JUN02 commit
+!sleep 5
+JUN02 run show route protocol bgp table inet.0 terse
+# 属性の変更(from の無い term・終端の動作なし → 既定の受け入れへ)
+JUN02 set policy-options community FROM-ISP members 65000:100
+JUN02 set policy-options policy-statement ISP-IN term TAG then community add FROM-ISP
+JUN02 set policy-options policy-statement ISP-IN term TAG then local-preference 200
+JUN02 commit
+!sleep 5
+JUN02 run show route 203.0.113.0/24 detail
+JUN02 run show route community 65000:100 terse
+# export: 自社の網を ISP へ。後から足した term は reject の term の後ろに付く
+JUN02 set policy-options policy-statement TO-ISP term LAN from protocol ospf
+JUN02 set policy-options policy-statement TO-ISP term LAN from route-filter 172.16.0.0/16 orlonger
+JUN02 set policy-options policy-statement TO-ISP term LAN then accept
+JUN02 set policy-options policy-statement TO-ISP term REST then reject
+JUN02 set protocols bgp group ISP export TO-ISP
+JUN02 commit
+!sleep 5
+JUN02 run show route advertising-protocol bgp 10.0.23.2
+FRR1 show bgp ipv4 unicast
+JUN02 set routing-options aggregate route 172.16.0.0/16
+JUN02 set policy-options policy-statement TO-ISP term AGG from protocol aggregate
+JUN02 set policy-options policy-statement TO-ISP term AGG from route-filter 172.16.0.0/16 exact
+JUN02 set policy-options policy-statement TO-ISP term AGG then as-path-prepend "65000 65000"
+JUN02 set policy-options policy-statement TO-ISP term AGG then accept
+JUN02 show policy-options policy-statement TO-ISP
+JUN02 commit
+!sleep 5
+JUN02 run show route 172.16.0.0/16 exact extensive
+JUN02 run show route advertising-protocol bgp 10.0.23.2
+JUN02 insert policy-options policy-statement TO-ISP term AGG before term REST
+JUN02 commit
+!sleep 5
+JUN02 run show route advertising-protocol bgp 10.0.23.2
+FRR1 show bgp ipv4 unicast
+FRR1 show bgp ipv4 unicast 172.16.0.0/16
+# ISP へは集約だけ: LAN の term を外す
+JUN02 delete policy-options policy-statement TO-ISP term LAN
+JUN02 commit
+!sleep 5
+JUN02 run show route advertising-protocol bgp 10.0.23.2
+FRR1 show bgp ipv4 unicast
+# 終端の動作: next policy と、連鎖の中の accept で後ろのポリシーが見られない
+JUN02 set policy-options policy-statement A term t from route-filter 192.0.2.0/24 exact
+JUN02 set policy-options policy-statement A term t then next policy
+JUN02 set policy-options policy-statement A then accept
+JUN02 set policy-options policy-statement B term t from route-filter 192.0.2.0/24 exact
+JUN02 set policy-options policy-statement B term t then reject
+JUN02 commit
+JUN02 run test policy A 192.0.2.0/24
+JUN02 exit
+JUN02 show route forwarding-table destination 203.0.113.0/24 table default
+JUN02 show route 0.0.0.0/0 exact

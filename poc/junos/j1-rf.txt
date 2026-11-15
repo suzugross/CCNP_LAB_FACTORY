@@ -1,0 +1,33 @@
+# J1 PoC 6: route-filter ごとの動作・through・walkup(最長一致で型が外れたら同じ term の短いほうも見る)
+JUN02 configure
+JUN02 set policy-options policy-statement RF-ACT term t from route-filter 198.51.100.0/24 exact accept
+JUN02 set policy-options policy-statement RF-ACT term t from route-filter 198.51.100.0/24 longer reject
+JUN02 set policy-options policy-statement RF-ACT term t from route-filter 192.0.2.0/24 exact
+JUN02 set policy-options policy-statement RF-ACT term t then local-preference 300
+JUN02 set policy-options policy-statement RF-ACT term t then accept
+JUN02 set policy-options policy-statement RF-ACT then reject
+JUN02 set policy-options policy-statement T-THROUGH term t from route-filter 198.51.100.0/24 through 198.51.100.128/25
+JUN02 set policy-options policy-statement T-THROUGH term t then accept
+JUN02 set policy-options policy-statement T-THROUGH then reject
+JUN02 set policy-options policy-statement LM2 term t from route-filter 198.51.100.0/24 exact
+JUN02 set policy-options policy-statement LM2 term t from route-filter 0.0.0.0/0 upto /25
+JUN02 set policy-options policy-statement LM2 term t then accept
+JUN02 set policy-options policy-statement LM2 then reject
+JUN02 show policy-options policy-statement RF-ACT
+JUN02 commit
+JUN02 run test policy RF-ACT 198.51.100.0/24
+JUN02 run test policy RF-ACT 192.0.2.0/24
+JUN02 run show route receive-protocol bgp 10.0.23.2 all table inet.0
+JUN02 run test policy T-THROUGH 0.0.0.0/0
+JUN02 run test policy LM2 198.51.100.0/24
+JUN02 set policy-options defaults route-filter ?
+JUN02 
+JUN02 set policy-options defaults route-filter walkup
+JUN02 commit
+JUN02 run test policy LM2 198.51.100.0/24
+JUN02 delete policy-options defaults
+JUN02 set policy-options policy-statement LM2 term t from route-filter 198.51.100.0/24 exact
+JUN02 set policy-options policy-statement LM2 ?
+JUN02 
+JUN02 rollback 0
+JUN02 exit

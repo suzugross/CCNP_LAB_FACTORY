@@ -1,0 +1,34 @@
+# J1 読み物の例 2: BGP の経路(ISP の網 203.0.113.0/24)を OSPF へ・寄与する経路の無い集約経路は hidden か
+JUN02 configure
+JUN02 set policy-options policy-statement ISPNET-TO-OSPF term t from protocol bgp
+JUN02 set policy-options policy-statement ISPNET-TO-OSPF term t from route-filter 203.0.113.0/24 exact
+JUN02 set policy-options policy-statement ISPNET-TO-OSPF term t then accept
+JUN02 set protocols ospf export ISPNET-TO-OSPF
+JUN02 commit and-quit
+!sleep 8
+JUN01 show route 203.0.113.0/24
+JUN01 show ospf database external
+JUN02 deactivate protocols bgp group ISP
+JUN02 configure
+JUN02 deactivate protocols bgp group ISP
+JUN02 commit and-quit
+!sleep 8
+JUN01 show route 203.0.113.0/24
+JUN01 show ospf database external
+JUN02 configure
+JUN02 activate protocols bgp group ISP
+JUN02 commit and-quit
+# 寄与する経路の無い集約経路
+JUN02 show route 172.16.0.0/16 exact detail
+JUN01 configure
+JUN01 delete protocols ospf export
+JUN01 commit and-quit
+!sleep 8
+JUN02 show route 172.16.0.0/16 exact
+JUN02 show route 172.16.0.0/16 exact hidden detail
+JUN01 configure
+JUN01 set protocols ospf export SRV-TO-OSPF
+JUN01 commit and-quit
+!sleep 50
+JUN01 show route 203.0.113.0/24
+JUN02 show route 172.16.0.0/16 exact

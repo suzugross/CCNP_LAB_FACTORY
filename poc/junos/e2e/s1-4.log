@@ -1,0 +1,123 @@
+# jpoc JNT-02 s1-4.txt 2026-11-14 15:28:13
+# J1-4 模範解(集約の term を reject の前へ)
+
+## [JUN02] (open)
+Last login: Sat Nov 14 15:27:54 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] insert policy-options policy-statement TO-ISP term SUMMARY before term REST
+insert policy-options policy-statement TO-ISP term SUMMARY before term REST 
+
+[edit]
+admin@jun02# 
+## [JUN02] show policy-options policy-statement TO-ISP
+show policy-options policy-statement TO-ISP 
+term SUMMARY {
+    from {
+        protocol aggregate;
+        route-filter 172.16.0.0/16 exact;
+    }
+    then {
+        as-path-prepend "65000 65000";
+        accept;
+    }
+}
+term REST {
+    then reject;
+}
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 8s)
+
+## [JUN02] show route 172.16.0.0/16 exact extensive
+show route 172.16.0.0/16 exact extensive 
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+172.16.0.0/16 (1 entry, 1 announced)
+TSI:
+KRT in-kernel 172.16.0.0/16 -> {}
+Page 0 idx 0, (group ISP type External) Type 1 val 0x5559af7ce250 (adv_entry)
+   Advertised metrics:
+     Nexthop: Self
+     AS path: 65000 65000 [65000] I (LocalAgg)
+     Communities:
+    Advertise: 00000001
+Path 172.16.0.0
+Vector len 4.  Val: 0
+        *Aggregate Preference: 130
+                Next hop type: Reject, Next hop index: 0
+                Address: 0x5559af013fd8
+                Next-hop reference count: 2
+                Kernel Table Id: 0
+                State: <Active Int Ext>
+                Local AS: 65000 
+                Age: 57 
+                Validation State: unverified 
+                Task: Aggregate
+                Announcement bits (2): 0-KRT 3-BGP_RT_Background 
+                AS path: I  (LocalAgg)
+                Flags:          	Depth: 0	Active
+                AS path list (1):
+                AS path: I Refcount: 2
+                Contributing Routes (2):
+                	172.16.10.0/24 proto OSPF
+                	172.16.20.0/24 proto OSPF
+                Thread: junos-main 
+
+admin@jun02> 
+## [JUN02] show route advertising-protocol bgp 10.0.23.2
+show route advertising-protocol bgp 10.0.23.2 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 172.16.0.0/16           Self                                    65000 65000 [65000] I
+
+admin@jun02> 
+## [FRR1] (open)
+
+Hello, this is FRRouting (version 10.7.1_git).
+Copyright 1996-2005 Kunihiro Ishiguro, et al.
+
+frr1# 
+## [FRR1] show bgp ipv4 unicast 172.16.0.0/16
+show bgp ipv4 unicast 172.16.0.0/16
+BGP routing table entry for 172.16.0.0/16, version 10
+Paths: (1 available, best #1, table default)
+  Advertised to peers:
+  10.0.23.1
+  65000 65000 65000, (aggregated by 65000 192.168.0.2)
+    10.0.23.1 from 10.0.23.1 (192.168.0.2)
+      Origin IGP, valid, external, best (First path received)
+      Last update: Sat Nov 14 15:28:17 2026
+frr1# 
+## [FRR1] show bgp ipv4 unicast neighbors 10.0.23.1 routes
+show bgp ipv4 unicast neighbors 10.0.23.1 routes
+BGP table version is 10, local router ID is 203.0.113.1, vrf id 0
+Default local pref 100, local AS 64500
+Status codes:  s suppressed, d damped, h history, u unsorted, * valid, > best, = multipath,
+               i internal, r RIB-failure, S Stale, R Removed
+Nexthop codes: @NNN nexthop's vrf id, < announce-nh-self
+Origin codes:  i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>  172.16.0.0/16    10.0.23.1                              0 65000 65000 65000 i
+
+Displayed 1 routes and 10 total paths
+frr1# 

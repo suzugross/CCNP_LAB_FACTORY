@@ -1,0 +1,263 @@
+# jpoc JNT-02 j1-rf.txt 2026-11-14 15:34:27
+# J1 PoC 6: route-filter ごとの動作・through・walkup(最長一致で型が外れたら同じ term の短いほうも見る)
+
+## [JUN02] (open)
+Last login: Sat Nov 14 15:33:07 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement RF-ACT term t from route-filter 198.51.100.0/24 exact accept
+set policy-options policy-statement RF-ACT term t from route-filter 198.51.100.0/24 exact accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement RF-ACT term t from route-filter 198.51.100.0/24 longer reject
+set policy-options policy-statement RF-ACT term t from route-filter 198.51.100.0/24 longer reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement RF-ACT term t from route-filter 192.0.2.0/24 exact
+set policy-options policy-statement RF-ACT term t from route-filter 192.0.2.0/24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement RF-ACT term t then local-preference 300
+set policy-options policy-statement RF-ACT term t then local-preference 300 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement RF-ACT term t then accept
+set policy-options policy-statement RF-ACT term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement RF-ACT then reject
+set policy-options policy-statement RF-ACT then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-THROUGH term t from route-filter 198.51.100.0/24 through 198.51.100.128/25
+set policy-options policy-statement T-THROUGH term t from route-filter 198.51.100.0/24 through 198.51.100.128/25 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-THROUGH term t then accept
+set policy-options policy-statement T-THROUGH term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-THROUGH then reject
+set policy-options policy-statement T-THROUGH then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement LM2 term t from route-filter 198.51.100.0/24 exact
+set policy-options policy-statement LM2 term t from route-filter 198.51.100.0/24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement LM2 term t from route-filter 0.0.0.0/0 upto /25
+set policy-options policy-statement LM2 term t from route-filter 0.0.0.0/0 upto /25 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement LM2 term t then accept
+set policy-options policy-statement LM2 term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement LM2 then reject
+set policy-options policy-statement LM2 then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] show policy-options policy-statement RF-ACT
+show policy-options policy-statement RF-ACT 
+term t {
+    from {
+        route-filter 198.51.100.0/24 exact accept;
+        route-filter 198.51.100.0/24 longer reject;
+        route-filter 192.0.2.0/24 exact;
+    }
+    then {
+        local-preference 300;
+        accept;
+    }
+}
+then reject;
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+commit complete
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy RF-ACT 198.51.100.0/24
+run test policy RF-ACT 198.51.100.0/24 
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[BGP/170] 00:03:47, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy RF-ACT: 1 prefix accepted, 0 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy RF-ACT 192.0.2.0/24
+run test policy RF-ACT 192.0.2.0/24 
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
++ = Active Route, - = Last Active, * = Both
+
+192.0.2.0/24       *[BGP/170] 00:03:48, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy RF-ACT: 1 prefix accepted, 0 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] run show route receive-protocol bgp 10.0.23.2 all table inet.0
+run show route receive-protocol bgp 10.0.23.2 all table inet.0 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.0.23.2            0                  64500 I
+  10.200.0.0/16           10.0.23.2            0                  64500 I
+  100.64.0.0/10           10.0.23.2            0                  64500 I
+  172.31.0.0/16           10.0.23.2            0                  64500 I
+* 192.0.2.0/24            10.0.23.2            0                  64500 I
+  192.168.50.0/24         10.0.23.2            0                  64500 I
+  198.18.0.0/15           10.0.23.2            0                  64500 I
+* 198.51.100.0/24         10.0.23.2            0                  64500 I
+  198.51.100.128/25       10.0.23.2            0                  64500 I
+* 203.0.113.0/24          10.0.23.2            0                  64500 I
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy T-THROUGH 0.0.0.0/0
+run test policy T-THROUGH 0.0.0.0/0 
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[BGP/170] 00:03:49, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy T-THROUGH: 1 prefix accepted, 26 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy LM2 198.51.100.0/24
+run test policy LM2 198.51.100.0/24 
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[BGP/170] 00:03:49, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy LM2: 1 prefix accepted, 0 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options defaults route-filter ?
+set policy-options defaults route-filter ?
+Possible completions:
+  walkup               Route filter walk up enable
+[edit]
+admin@jun02# set policy-options defaults route-filter    
+                                                      ^
+missing argument.
+
+[edit]
+admin@jun02# 
+## [JUN02] 
+
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options defaults route-filter walkup
+set policy-options defaults route-filter walkup 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+commit complete
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy LM2 198.51.100.0/24
+run test policy LM2 198.51.100.0/24 
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[BGP/170] 00:03:53, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy LM2: 1 prefix accepted, 0 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options defaults
+delete policy-options defaults 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement LM2 term t from route-filter 198.51.100.0/24 exact
+set policy-options policy-statement LM2 term t from route-filter 198.51.100.0/24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement LM2 ?
+set policy-options policy-statement LM2 ?
+Possible completions:
++ apply-groups         Groups from which to inherit configuration data
++ apply-groups-except  Don't inherit configuration data from these groups
+> defaults             Policy default behaviour
+  dynamic-db           Object may exist in dynamic database
+> from                 Conditions to match the source of a route
+> term                 Policy term
+> then                 Actions to take if 'from' and 'to' conditions match
+> to                   Conditions to match the destination of a route
+[edit]
+admin@jun02# set policy-options policy-statement LM2    
+                                                     ^
+missing argument.
+
+[edit]
+admin@jun02# 
+## [JUN02] 
+
+
+[edit]
+admin@jun02# 
+## [JUN02] rollback 0
+rollback 0 
+load complete
+
+[edit]
+admin@jun02# 
+## [JUN02] exit
+exit 
+Exiting configuration mode
+
+admin@jun02> 

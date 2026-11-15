@@ -1,0 +1,128 @@
+# jpoc JNT-02 s1-3.txt 2026-11-14 15:26:40
+# J1-3 模範解(既定経路の term を先頭へ戻す)
+
+## [JUN02] (open)
+Last login: Sat Nov 14 15:26:23 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term DEFAULT from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement ISP-IN term DEFAULT from route-filter 0.0.0.0/0 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term DEFAULT then accept
+set policy-options policy-statement ISP-IN term DEFAULT then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] insert policy-options policy-statement ISP-IN term DEFAULT before term BOGONS
+insert policy-options policy-statement ISP-IN term DEFAULT before term BOGONS 
+
+[edit]
+admin@jun02# 
+## [JUN02] show policy-options policy-statement ISP-IN
+show policy-options policy-statement ISP-IN 
+term DEFAULT {
+    from {
+        route-filter 0.0.0.0/0 exact;
+    }
+    then accept;
+}
+term BOGONS {
+    from {
+        route-filter 10.0.0.0/8 orlonger;
+        route-filter 172.16.0.0/12 orlonger;
+        route-filter 192.168.0.0/16 orlonger;
+        route-filter 100.64.0.0/10 orlonger;
+        route-filter 198.18.0.0/15 orlonger;
+    }
+    then reject;
+}
+term PUBLIC {
+    from {
+        route-filter 0.0.0.0/0 prefix-length-range /8-/24;
+    }
+    then accept;
+}
+term REST {
+    then reject;
+}
+
+[edit]
+admin@jun02# 
+## [JUN02] show | compare
+show | compare 
+[edit policy-options policy-statement ISP-IN]
++    term DEFAULT {
++        from {
++            route-filter 0.0.0.0/0 exact;
++        }
++        then accept;
++    }
+     term BOGONS { ... }
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 8s)
+
+## [JUN02] show route receive-protocol bgp 10.0.23.2 table inet.0
+show route receive-protocol bgp 10.0.23.2 table inet.0 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 19 destinations, 19 routes (13 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.0.23.2            0                  64500 I
+* 192.0.2.0/24            10.0.23.2            0                  64500 I
+* 198.51.100.0/24         10.0.23.2            0                  64500 I
+* 203.0.113.0/24          10.0.23.2            0                  64500 I
+
+admin@jun02> 
+## [JUN02] show route receive-protocol bgp 10.0.23.2 hidden table inet.0
+show route receive-protocol bgp 10.0.23.2 hidden table inet.0 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 19 destinations, 19 routes (13 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+  10.200.0.0/16           10.0.23.2            0                  64500 I
+  100.64.0.0/10           10.0.23.2            0                  64500 I
+  172.31.0.0/16           10.0.23.2            0                  64500 I
+  192.168.50.0/24         10.0.23.2            0                  64500 I
+  198.18.0.0/15           10.0.23.2            0                  64500 I
+  198.51.100.128/25       10.0.23.2            0                  64500 I
+
+admin@jun02> 
+## [JUN02] show route 10.200.0.0/16 hidden extensive | match "reason"
+show route 10.200.0.0/16 hidden extensive | match "reason" 
+                Hidden reason: Rejected by import policy
+
+admin@jun02> 
+## [JUN01] (open)
+Last login: Sat Nov 14 15:26:26 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] show route 0.0.0.0/0 exact table inet.0
+show route 0.0.0.0/0 exact table inet.0 
+
+inet.0: 10 destinations, 10 routes (10 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[OSPF/150] 00:00:12, metric 0, tag 0
+                    >  to 10.0.12.2 via et-0/0/0.0
+
+admin@jun01> 

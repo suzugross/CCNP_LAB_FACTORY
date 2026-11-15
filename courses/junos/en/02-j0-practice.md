@@ -2,7 +2,7 @@
 
 These are the tasks of lab **JNT-01**, shown here so that you can read them away from the lab.
 Do them in the lab workspace: the **Tasks** tab there has a Check button, staged hints and,
-once a task passes, a reference solution for each task. No command examples are given on purpose.
+once a task passes, a reference solution for each task.
 
 ## Ground rules
 

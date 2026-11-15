@@ -81,6 +81,50 @@ def _fence_rule(self, tokens, idx, options, env):
     return f'<pre class="code"><code{cls}>{html.escape(tok.content)}</code></pre>\n'
 
 
+# 日本語の隣の `*`・`**`(強調)を開き・閉じとして読ませる(2026-11-15)。
+#   CommonMark の規則では、閉じの `**` の内側が句読点(。」など)で外側に文字が続くと閉じにならず
+#   (`**…限らない。**連鎖` が記号のまま出た)、開きの `**` の内側が句読点(「 など)で外側が文字でも開きにならない。
+#   英文は句読点の後に空白を置くので困らないが、日本語は空白を置かない。そこで 2 つ以上並んだ `**`(太字)に限り、
+#   内側が日本語の句読点か外側が日本語の文字(①② の丸数字を含む)なら、空白に挟まれていない限り開き・閉じを認める。
+#   1 つの `*` は緩めない(IOS のログの時刻の印 `：*Aug  2 …` が 2 つ並ぶと斜体の組になるため)。
+#   日本語が隣にない所の判定は CommonMark のまま(英文・記号だけの行は変わらない)。
+_CJK_PUNCT = re.compile(r"[、-〿・！-／：-＠［-｀｛-･]")
+_CJK_CHAR = re.compile(r"[①-⓿、-〿぀-ヿ㈀-㏿㐀-䶿一-鿿"
+                       r"豈-﫿！-ﾟ]")
+
+
+def _scan_star_cjk(state, start):
+    """state.scanDelims(start, True) と同じ結果に、上の日本語の緩めを足したもの。"""
+    from markdown_it.rules_inline.state_inline import Scanned
+    base = state.scanDelims(start, True)
+    if base.length < 2:
+        return base
+    src, end = state.src, start + base.length
+    last = src[start - 1] if start > 0 else " "
+    nxt = src[end] if end < state.posMax else " "
+    can_open = base.can_open or (not nxt.isspace() and bool(_CJK_PUNCT.match(nxt) or _CJK_CHAR.match(last)))
+    can_close = base.can_close or (not last.isspace() and bool(_CJK_PUNCT.match(last) or _CJK_CHAR.match(nxt)))
+    return Scanned(can_open, can_close, base.length)
+
+
+def _emphasis_cjk(state, silent):
+    """markdown_it.rules_inline.emphasis.tokenize の写し。`*` の判定だけ _scan_star_cjk に替える。"""
+    from markdown_it.rules_inline.state_inline import Delimiter
+    start = state.pos
+    marker = state.src[start]
+    if silent or marker not in ("_", "*"):
+        return False
+    scanned = _scan_star_cjk(state, start) if marker == "*" else state.scanDelims(start, False)
+    for _ in range(scanned.length):
+        token = state.push("text", "", 0)
+        token.content = marker
+        state.delimiters.append(Delimiter(marker=ord(marker), length=scanned.length,
+                                          token=len(state.tokens) - 1, end=-1,
+                                          open=scanned.can_open, close=scanned.can_close))
+    state.pos += scanned.length
+    return True
+
+
 def make_md(allow_html=False):
     """allow_html= 生の HTML ブロックを通す(解説ページのカード組みで使う)。
 
@@ -88,6 +132,7 @@ def make_md(allow_html=False):
     """
     md = MarkdownIt("default", {"html": True} if allow_html else {})
     md.add_render_rule("fence", _fence_rule)
+    md.inline.ruler.at("emphasis", _emphasis_cjk)
     return md
 
 

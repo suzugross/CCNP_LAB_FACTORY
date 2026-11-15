@@ -1,0 +1,193 @@
+# jpoc JNT-02 s1-5.txt 2026-11-14 15:29:48
+# J1-5 模範解: 連鎖の前に MARK(終端の動作なし → ISP-IN へ流れる)
+
+## [JUN02] (open)
+Last login: Sat Nov 14 15:29:34 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] delete protocols bgp group ISP neighbor 10.0.23.2 import
+delete protocols bgp group ISP neighbor 10.0.23.2 import 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete protocols bgp group ISP import
+delete protocols bgp group ISP import 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP import [ MARK ISP-IN ]
+set protocols bgp group ISP import [ MARK ISP-IN ] 
+
+[edit]
+admin@jun02# 
+## [JUN02] show protocols bgp group ISP
+show protocols bgp group ISP 
+type external;
+import [ MARK ISP-IN ];
+export TO-ISP;
+peer-as 64500;
+neighbor 10.0.23.2;
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 5s)
+
+## [JUN02] show route 203.0.113.0/24 exact detail table inet.0
+show route 203.0.113.0/24 exact detail table inet.0 
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+203.0.113.0/24 (1 entry, 1 announced)
+        *BGP    Preference: 170/-201
+                Next hop type: Router, Next hop index: 8035
+                Address: 0x5559af0264f8
+                Next-hop reference count: 14, Next-hop session id: 1
+                Kernel Table Id: 0
+                Source: 10.0.23.2
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                Session Id: 1
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Age: 32 	Metric: 0 
+                Validation State: unverified 
+                Task: BGP_64500.10.0.23.2
+                Announcement bits (1): 0-KRT 
+                AS path: 64500 I 
+                Communities: 65000:100
+                Accepted
+                Localpref: 200
+                Router ID: 203.0.113.1
+                Thread: junos-main 
+
+admin@jun02> 
+## [JUN02] show route protocol bgp table inet.0 detail
+show route protocol bgp table inet.0 detail 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+0.0.0.0/0 (1 entry, 1 announced)
+        *BGP    Preference: 170/-101
+                Next hop type: Router, Next hop index: 8035
+                Address: 0x5559af0264f8
+                Next-hop reference count: 14, Next-hop session id: 1
+                Kernel Table Id: 0
+                Source: 10.0.23.2
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                Session Id: 1
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Age: 3:14 	Metric: 0 
+                Validation State: unverified 
+                Task: BGP_64500.10.0.23.2
+                Announcement bits (2): 0-KRT 1-OSPF 
+                AS path: 64500 I 
+                Accepted
+                Localpref: 100
+                Router ID: 203.0.113.1
+                Thread: junos-main 
+
+192.0.2.0/24 (1 entry, 1 announced)
+        *BGP    Preference: 170/-101
+                Next hop type: Router, Next hop index: 8035
+                Address: 0x5559af0264f8
+                Next-hop reference count: 14, Next-hop session id: 1
+                Kernel Table Id: 0
+                Source: 10.0.23.2
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                Session Id: 1
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Age: 8:51 	Metric: 0 
+                Validation State: unverified 
+                Task: BGP_64500.10.0.23.2
+                Announcement bits (1): 0-KRT 
+                AS path: 64500 I 
+                Accepted
+                Localpref: 100
+                Router ID: 203.0.113.1
+                Thread: junos-main 
+
+198.51.100.0/24 (1 entry, 1 announced)
+        *BGP    Preference: 170/-101
+                Next hop type: Router, Next hop index: 8035
+                Address: 0x5559af0264f8
+                Next-hop reference count: 14, Next-hop session id: 1
+                Kernel Table Id: 0
+                Source: 10.0.23.2
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                Session Id: 1
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Age: 8:51 	Metric: 0 
+                Validation State: unverified 
+                Task: BGP_64500.10.0.23.2
+                Announcement bits (1): 0-KRT 
+                AS path: 64500 I 
+                Accepted
+                Localpref: 100
+                Router ID: 203.0.113.1
+                Thread: junos-main 
+
+203.0.113.0/24 (1 entry, 1 announced)
+        *BGP    Preference: 170/-201
+                Next hop type: Router, Next hop index: 8035
+                Address: 0x5559af0264f8
+                Next-hop reference count: 14, Next-hop session id: 1
+                Kernel Table Id: 0
+                Source: 10.0.23.2
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                Session Id: 1
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Age: 33 	Metric: 0 
+                Validation State: unverified 
+                Task: BGP_64500.10.0.23.2
+                Announcement bits (1): 0-KRT 
+                AS path: 64500 I 
+                Communities: 65000:100
+                Accepted
+                Localpref: 200
+                Router ID: 203.0.113.1
+                Thread: junos-main 
+
+admin@jun02> 
+## [JUN02] show route community 65000:100 terse
+show route community 65000:100 terse 
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
++ = Active Route, - = Last Active, * = Both
+
+A V Destination        P Prf   Metric 1   Metric 2  Next hop        AS path
+* ? 203.0.113.0/24     B 170        200          0 >10.0.23.2       64500 I
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+inet6.0: 2 destinations, 2 routes (2 active, 0 holddown, 0 hidden)
+
+inet6.2: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+inet6.3: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet6.0: 4 destinations, 4 routes (4 active, 0 holddown, 0 hidden)
+
+admin@jun02> 

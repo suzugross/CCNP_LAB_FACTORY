@@ -25,7 +25,8 @@ Junos 中心の教材を、containerlab(szk-cl01)の上に作る。
 | D | マルチベンダ相互接続(Junos 主役・FRR／cEOS が対向) | EVO ×1〜2+軽量コンテナ | 台数を稼げる。版差が多く裏どりしにくい |
 
 - 「Cisco の設定を渡して Junos で同じ挙動にする(移植)」はどの案にも混ぜられる課題の型。
-- 提示時のおすすめ= B を A の先頭として作り A へ進む(D は各単元の 1 課題として混ぜる・C は後回し)。**ユーザは未決**。
+- 提示時のおすすめ= B を A の先頭として作り A へ進む(D は各単元の 1 課題として混ぜる・C は後回し)。
+  **2026-11-14 ユーザ決定= おすすめどおり**。並び= J0 作法 → J1 ルーティング ポリシー → J2 firewall filter → J3 運用と保守 → SP の本線(IS-IS → BGP → MPLS → L3VPN)。
 - 試験の現行の版と番号は着手時に公式で確認する(2026-11-14 の検索では JNCIS-SP の番号が資料によって食い違っていた)。
 
 ## 3. 台数の見積もり(条件 2 を前提に)
@@ -162,3 +163,92 @@ Exchange/ExStart に留まる → 確定しなければ一斉通知と `by root 
 白紙で 4 課題とも FAIL → ワークスペースのコンソールから J0-1・J0-2 を入れて PASS → J0-3 は commit confirmed 2 の直後 FAIL・巻き戻しの後 PASS →
 J0-4 は「resolve 無し＋preference 120」で 3 項目 FAIL、「resolve 有り＋120」で preference だけ FAIL、160 で PASS → 本採点 100/100 →
 ワークスペースの「やり直し」98 秒で白紙(j0t1 が FAIL)。
+
+## 8. J1 ルーティング ポリシー(2026-11-14 着手・PoC・執筆・E2E)
+
+2026-11-14 ユーザ決定。J0 の 2.5 節(既定のポリシー)の続き。JNCIA-Junos の「Routing policy and firewall filters」のうちポリシーの側。
+firewall filter は J2。比べる相手= IOS の route-map／prefix-list と XR の RPL(M5・済み)。
+
+### 8.1 盤面 JNT-02(PoC の盤面をそのまま使う・`problems/JNT-02/`)
+
+```
+SRV1 eth1 ── et-0/0/1 JUN01 et-0/0/0 ── et-0/0/0 JUN02 et-0/0/1 ── eth1 FRR1(ISP・AS 64500)
+  172.16.10.0/24(.10)    (.1)  10.0.12.0/30            10.0.23.0/30(eBGP)
+  lo 172.16.20.1/24      lo0 192.168.0.1  lo0 192.168.0.2       lo 203.0.113.1
+                         AS 65000(JUN01・JUN02・OSPF area 0)
+```
+
+- JUN01: 静的経路 172.16.20.0/24 → 172.16.10.10(SRV1 の奥のサーバの網)・172.16.99.0/24 discard(検証用・外へ出さない)。
+  サーバの網のインターフェース(et-0/0/1)は OSPF に入れない(direct の経路を export する理由を作る)。
+- FRR1(ISP)が送る経路= 0/0(default-originate)・203.0.113.0/24・198.51.100.0/24・198.51.100.128/25・192.0.2.0/24・
+  198.18.0.0/15・10.200.0.0/16・192.168.50.0/24・100.64.0.0/10・172.31.0.0/16(172.16/12 の内側。PoC の後に足した)。
+- RAM= vJunos EVO ×2+FRR ×2 ≈ 15.2GB。
+
+### 8.2 課題(案)
+
+初めの状態= J0 の範囲は組んである(アドレス・OSPF・静的経路・JUN02 と FRR1 の eBGP のセッション。ポリシーは何も無い)。
+
+| 課題 | 求めること | 学ぶ要 | 罠(書かない・ヒントの 3 段目まで) | 確かめ |
+|---|---|---|---|---|
+| J1-1 | JUN01 から OSPF へサーバの網 2 つ(direct の 172.16.10.0/24・静的の 172.16.20.0/24)だけ。後者は metric 20。172.16.99.0/24 は出さない | export・from の AND・term・metric | from の無い orlonger 1 本だと 172.16.99.0/24 が漏れる | JUN02 の外部 LSA が 2 つちょうど・metric |
+| J1-2 | JUN02 から OSPF へ既定経路を、ISP から受け取っている間だけ。ほかの BGP の経路は入れない | from protocol bgp・既定経路の exact | `from protocol bgp` だけだと全部入る・静的の 0/0 では条件にならない | JUN01 の 0/0(OSPF/150・JUN02 から)・JUN02 の外部 LSA は 0/0 だけ・JUN02 の inet.0 の 0/0 は BGP だけ |
+| J1-3 | JUN02 の ISP からの受け入れ= 既定経路と、/8〜/24 の公のアドレスだけ(私的・共有・検査用・/24 より長いものは拒む) | route-filter の型・最長一致・連鎖の終わりの既定(BGP は受け入れ) | 受け入れる term だけでは全部入る・/8-/24 の範囲は /0 を含まない(J1-2 が壊れる)・同じ term の route-filter は最長一致の 1 本で決まる | 受け入れ 4 つちょうど・残りは hidden(Rejected by import policy)・J1-2 が保たれる |
+| J1-4 | JUN02 から ISP へは集約 172.16.0.0/16 だけを、自分の AS を 2 回足して(FRR1 で 65000 65000 65000) | aggregate・export・as-path-prepend・term の順 | 既定の export は BGP の経路しか出さない・後から足した term は reject の後ろ(insert)・寄与する経路が無いと集約は出ない | FRR1 が 10.0.23.1 から 172.16.0.0/16 だけ・AS パス・SRV1(172.16.20.1)から 203.0.113.1 へ ping |
+| J1-5 | ISP からの 203.0.113.0/24 にだけ community 65000:100 と local-preference 200。ほかは今のまま | 属性を変える term・終端の動作なし・連鎖 | 連鎖の後ろに置くと前の accept で止まって届かない・隣の階層に書くと group の import が置き換わる | 203.0.113.0/24 だけ LP 200・community・J1-3 の結果が保たれる |
+
+### 8.3 読み物(案。ファイル名の頭は 1x)
+
+| ファイル | 中身 |
+|---|---|
+| 10-j1-map | 見取り図: ポリシーの効く場所(import= プロトコル → 経路表・export= 経路表 → プロトコル)・既定のポリシー(J0 の表＋BGP)・部品(policy-statement・term・from・then・終端の動作・流れの制御・属性の変更)・1 つの経路が連鎖 [A B] → 既定へ流れる :::walk・用語の表とたとえ・取り違えやすい点・盤面の分担 |
+| 11-j1-policy-statement | 評価の順(term は上から・from の中は同じ種類 OR・違う種類 AND・終端の動作で止まる・終端が無ければ次の term → 次のポリシー → 既定)・policy の then(名前の無い最後の term)・insert・`test policy`(既定は accept と数える)・commit check の誤り・IOS の route-map(暗黙の deny)と XR の RPL(pass/drop・既定で drop)との対照・OSPF への export の設定例 |
+| 12 実践 | J1-1・J1-2 |
+| 13-j1-route-filter | 一致の型(exact・orlonger・longer・upto・prefix-length-range・through)・最長一致で 1 本に決まる(型が外れても他を見ない・walkup)・route-filter ごとの動作・prefix-list(exact だけ)と prefix-list-filter・IOS の ge/le と XR の prefix-set との対照 |
+| 14 実践 | J1-3 |
+| 15-j1-ospf-bgp | OSPF へ(外部 type 2・metric 0 が既定・type 1・BGP の既定経路を条件つきで)・BGP の最小の設定(autonomous-system・group・type external・peer-as・neighbor。BGP の単元の前なので行の意味だけ)・BGP の既定(`Default eBGP mode`・PTX の注記)・拒んだ経路は hidden・group と neighbor の階層(下が置き換える)・属性の変更・集約(preference 130・次ホップ Reject・寄与する経路)と prepend |
+| 16 実践 | J1-4・J1-5 |
+| 17-j1-appendix | 一致の型の早見表・test policy の注意・walkup・確かめのコマンドの早見表・調べる場所 |
+
+### 8.4 実機で確かめたこと(26.2R1.7-EVO・記録 `poc/junos/expJ1-*.log`・2026-11-14)
+
+| 論点 | 結果 | 公式 |
+|---|---|---|
+| ポリシーなしの eBGP | 受け取り 9 本すべて active・FIB にも入る(forwarding-table)・広告 0。`show bgp summary` に `Default eBGP mode: advertise - accept, receive - accept` | 表 4(BGP の既定)＝一致。★PTX の既定(BGP User Guide 2026-07 版 p.500〜502= 旧い頁と同文)= `junos-ptx-series-default`(term t1/t2= BGP の inet.0・inet6.0 に `no-install-to-fib`・t3= `load-balance per-packet`)を `routing-options forwarding-table default-export` で当て、BGP の経路を FIB に入れない。**実機(26.2R1.7-EVO・ptx10001-36mr)では食い違う**: 同じ名前のポリシーは `default-export` で当たっているが中身は `term t1 then load-balance per-flow` だけ・BGP の経路 10 本が forwarding table に user で入る・JUN02 から ping も通る(記録 expJ1-ptx.log)。文書が旧い PTX(Junos OS)の記述のままか、Evolved／仮想機の差かは文書から決められない → 2026-11-14 ユーザに報告 → **同日ユーザ決定= 注記だけ**(出題に使わない・読み物の付録に文書と実機を並べ、版を書く。手で文書どおりの状態を作る「やってみる」も載せない。J1 の課題は FIB の入り方に依らない) |
+| BGP のライセンス | commit と show で `requires 'BGP' license` の警告・動く | (OSPF と同じ扱い) |
+| OSPF への export の既定 | 外部 LSA type 2・metric 0・tag 0。JUN02 で OSPF/150 | OSPF User Guide(未入手) |
+| `then metric 20`＋`external type 1` | type 1・metric 20 | 同上 |
+| from の無い `then accept` を OSPF へ | direct・static の 3 本が外部に(OSPF の IF の経路・Local・別の表の経路は出ない) | — |
+| export の並び | `set protocols ospf export X` は並びの後ろへ足す(`export [ A X ]`) | — |
+| 終端の動作が無い term | 次の term へ(metric 77 を付けて次の term で accept) | p.318〜319 |
+| term の順 | 後から足した term は末尾。`insert … before` で前へ | — |
+| 未定義のポリシー・prefix-list | commit check で `Policy NO-SUCH-POLICY referenced but not defined`・`… prefix-list referenced (in term t) but not defined` | — |
+| BGP の既定経路を OSPF へ | ISP の group を deactivate すると JUN01 の 0/0 が消える(LSA の age 3600)・戻すと 40 秒以内に戻る | 「Example: Configuring a Conditional Default Route Policy」(p.43) |
+| `test policy` | どの term にも当たらない経路も accepted に数える・inet.2・inet.3・mgmt_junos の表まで数える | p.764「always uses accept as the default policy」 |
+| 一致の型 | exact・orlonger・longer・upto /16・prefix-length-range /16-/24・prefix-list・prefix-list-filter orlonger を受け取った経路で照合(期待どおり) | p.318 前後 |
+| 最長一致 | `198.51.100.0/24 exact`＋`0.0.0.0/0 upto /25` で 198.51.100.128/25 は拒まれる(型が外れても 0/0 を見ない)・192.0.2.0/24 は受け入れ | p.318〜319「stops evaluating other prefixes, even if the match type fails」・walkup |
+| import で拒んだ経路 | hidden・`Hidden reason: Rejected by import policy`・`receive-protocol bgp … hidden` で見える | — |
+| 隣の階層の import | group の import を置き換える(足し算でない)。ONLY-DOC(受け入れ 1 term だけ)で 9 本すべて active に戻った | p.28「A peer-level import or export statement overrides a group import or export statement」(global → group → peer の順に下が置き換える)＝一致 |
+| 属性の変更 | from の無い term で community add・local-preference 200 → 既定で受け入れ(Preference 170/-201) | — |
+| export と term の順 | REST(reject)の後ろに足した AGG は効かない → insert で前へ → 出る | — |
+| 集約 | Aggregate/130・次ホップ Reject・寄与する経路(OSPF の 2 本)・広告の AS パス `65000 65000 [65000] I`・FRR1 で `65000 65000 65000`・aggregated by | — |
+| 連鎖 | `import [ A B2 ]` で A の最後の `then accept` があると B2 の reject は効かない・消すと効く。`next policy` は次のポリシーへ | — |
+| from の中 | `protocol [ static aggregate ]`(OR)と route-filter(AND) | — |
+| route-filter ごとの動作 | `198.51.100.0/24 exact accept`＋`198.51.100.0/24 longer reject` で /24 を受け入れ /25 を拒む(同じプレフィックスは上から) | p.319「the action specified with the prefix is taken」 |
+| through | `198.51.100.0/24 through 198.51.100.128/25` で /24 と /25 の 2 本 | — |
+| walkup | `set policy-options defaults route-filter walkup` を入れると、最長一致の罠の例(LM)で 198.51.100.128/25 も受け入れる(入れないと拒む・PoC 3) | p.319 の注記・p.333 |
+| test policy の範囲 | 経路表で使われている経路だけを評価する。import で拒んだ(hidden の)経路は評価しない → 試すときは import を外す(`deactivate`)| — |
+| 模範解の E2E(2026-11-14) | 初めの設定(startup-config)から 5 課題とも誤答で FAIL → 模範解で PASS・本採点 100/100。誤答= J1-1 from の無い orlonger・J1-2 from protocol bgp だけ・J1-3 受け入れる term だけ／既定経路の term 抜け・J1-4 reject の後ろの term・J1-5 連鎖の後ろ／隣の階層／from 抜け(記録 `poc/junos/e2e/`) | — |
+| 端から端 | SRV1 の 172.16.20.1 から 203.0.113.1 へ ping 3/3 | — |
+
+### 8.5 残り
+
+- 資料: 2026-11-14 受領(bgp.pdf 2026-07・ospf.pdf 2026-06・PTX の例の頁・Day One の policy/filter 本)。裏どり= OSPF の既定の export は reject(ospf p.596)・連鎖は accept/reject で終わる(同)・export で from を省くと思わぬ結果(同 p.597)・RFC 8212 の振る舞いは既定で入れない(bgp p.536 付近・`defaults ebgp no-policy`)・受け取った経路を同じ AS の eBGP へ返さない(advertise-peer-as)。
+- PTX の既定の食い違い(8.4)= 2026-11-14 ユーザ決定で注記(付録)。
+- 盤面の資材= 初めの設定 jun01/jun02.startup.cfg・task.md/task.en.md・grading.j1t1〜5.yml(下書き・E2E 前)。
+- 2026-11-14 執筆済み= 読み物 10〜17(日英・見取り図に :::walk・設定例はすべて課題と値を変えて実機で入れたもの= `poc/junos/expJ1-examples*.log`)・
+  learn.yml(5 課題・ヒント 3 段・確かめ方の例・模範解)・用語集 junos.yml に 14 語(community は SNMP の語と表記が重なるので scope を J1 のページに)。
+  実践ページの前置きから「コマンド例は意図して示していません」を外した(CLAUDE.md の規定・J0 の実践ページにも効く)。
+- SRV1 は FRR のイメージのサーバ役 → ワークスペースのコンソールが vtysh になり、送信元つきの ping が打てない →
+  clab のノードのラベル `ccnp-role: host` を足した(lab_console.py・clab_ops.py の node_is_host。図ではホスト・コンソールは bash。採点の exec と起動の判定は FRR のまま)。
+  サードパーティのイメージ(network-multitool)の取り込みは自動モードの判定で止められたので使わない。
+- 実機の注意: 作り直し(deploy --reconfigure)で JUN01 が vrnetlab の `starting` のまま 10 分以上 unhealthy になったことが 1 回(同じ初めの設定で前後は 95 秒で上がる)→ 作り直しで回復。

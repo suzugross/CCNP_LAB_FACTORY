@@ -1,0 +1,166 @@
+# jpoc JNT-02 s1-1.txt 2026-11-14 15:23:55
+# J1-1 模範解
+
+## [JUN01] (open)
+Last login: Sat Nov 14 15:23:41 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] delete protocols ospf export
+delete protocols ospf export 
+
+[edit]
+admin@jun01# 
+## [JUN01] delete policy-options policy-statement WIDE
+delete policy-options policy-statement WIDE 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement SERVERS-TO-OSPF term LAN from protocol direct
+set policy-options policy-statement SERVERS-TO-OSPF term LAN from protocol direct 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement SERVERS-TO-OSPF term LAN from route-filter 172.16.10.0/24 exact
+set policy-options policy-statement SERVERS-TO-OSPF term LAN from route-filter 172.16.10.0/24 exact 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement SERVERS-TO-OSPF term LAN then accept
+set policy-options policy-statement SERVERS-TO-OSPF term LAN then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement SERVERS-TO-OSPF term SRV from protocol static
+set policy-options policy-statement SERVERS-TO-OSPF term SRV from protocol static 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement SERVERS-TO-OSPF term SRV from route-filter 172.16.20.0/24 exact
+set policy-options policy-statement SERVERS-TO-OSPF term SRV from route-filter 172.16.20.0/24 exact 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement SERVERS-TO-OSPF term SRV then metric 20
+set policy-options policy-statement SERVERS-TO-OSPF term SRV then metric 20 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement SERVERS-TO-OSPF term SRV then accept
+set policy-options policy-statement SERVERS-TO-OSPF term SRV then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf export SERVERS-TO-OSPF
+set protocols ospf export SERVERS-TO-OSPF 
+
+[edit]
+admin@jun01# 
+## [JUN01] show | compare
+show | compare 
+[edit policy-options]
++   policy-statement SERVERS-TO-OSPF {
++       term LAN {
++           from {
++               protocol direct;
++               route-filter 172.16.10.0/24 exact;
++           }
++           then accept;
++       }
++       term SRV {
++           from {
++               protocol static;
++               route-filter 172.16.20.0/24 exact;
++           }
++           then {
++               metric 20;
++               accept;
++           }
++       }
++   }
+-   policy-statement WIDE {
+-       term ALL {
+-           from {
+-               route-filter 172.16.0.0/16 orlonger;
+-           }
+-           then accept;
+-       }
+-   }
+[edit protocols ospf]
+-   export WIDE;
++   export SERVERS-TO-OSPF;
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## (sleep 8s)
+
+## [JUN02] (open)
+Last login: Sat Nov 14 15:23:39 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] show ospf database external extensive
+show ospf database external extensive 
+
+Warning: License key missing; requires 'OSPF' license
+
+    OSPF AS SCOPE link state database
+ Type       ID               Adv Rtr           Seq      Age  Opt  Cksum  Len 
+Extern   172.16.10.0      192.168.0.1      0x80000001    46  0x22 0xfa86  36
+  mask 255.255.255.0
+  Topology default (ID 0)
+    Type: 2, Metric: 0, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Aging timer 00:59:14
+  Installed 00:00:43 ago, expires in 00:59:14
+  Last changed 00:00:43 ago, Change count: 1
+Extern   172.16.20.0      192.168.0.1      0x80000002    10  0x22 0x530f  36
+  mask 255.255.255.0
+  Topology default (ID 0)
+    Type: 2, Metric: 20, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Aging timer 00:59:50
+  Installed 00:00:08 ago, expires in 00:59:50
+  Last changed 00:00:08 ago, Change count: 2
+Extern   172.16.99.0      192.168.0.1      0x80000001  3600  0x22 0x2404  36
+  mask 255.255.255.0
+  Topology default (ID 0)
+    Type: 2, Metric: 0, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Aging timer 00:00:02
+  Installed 00:00:08 ago, expires in 00:59:14
+  Last changed 00:00:08 ago, Change count: 2, Purged
+Purge pend
+
+admin@jun02> 
+## [JUN02] show route 172.16.0.0/16 table inet.0
+show route 172.16.0.0/16 table inet.0 
+
+inet.0: 19 destinations, 19 routes (19 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[OSPF/150] 00:00:43, metric 0, tag 0
+                    >  to 10.0.12.1 via et-0/0/0.0
+172.16.20.0/24     *[OSPF/150] 00:00:08, metric 20, tag 0
+                    >  to 10.0.12.1 via et-0/0/0.0
+
+admin@jun02> 
+## [JUN02] ping 172.16.20.1 source 192.168.0.2 count 3 rapid
+ping 172.16.20.1 source 192.168.0.2 count 3 rapid 
+PING 172.16.20.1 (172.16.20.1) from 192.168.0.2 : 56(84) bytes of data.
+!!!
+--- 172.16.20.1 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 4ms
+rtt min/avg/max/mdev = 1.275/1.546/1.987/0.314 ms, ipg/ewma 1.766/1.831 ms
+
+admin@jun02> 

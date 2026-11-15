@@ -1,0 +1,102 @@
+# jpoc JNT-02 j1-restore.txt 2026-11-14 15:49:14
+# PoC 6c の後片付け(import を戻し、試しのポリシーを消す)
+
+## [JUN02] (open)
+Last login: Sat Nov 14 15:48:27 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] activate protocols bgp group ISP import
+activate protocols bgp group ISP import 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options policy-statement T-EXACT
+delete policy-options policy-statement T-EXACT 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options policy-statement T-ORLONGER
+delete policy-options policy-statement T-ORLONGER 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options policy-statement T-LONGER
+delete policy-options policy-statement T-LONGER 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options policy-statement T-UPTO
+delete policy-options policy-statement T-UPTO 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options policy-statement T-RANGE
+delete policy-options policy-statement T-RANGE 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options policy-statement T-THROUGH
+delete policy-options policy-statement T-THROUGH 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options policy-statement LM
+delete policy-options policy-statement LM 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options policy-statement T-PL
+delete policy-options policy-statement T-PL 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options policy-statement T-PLF
+delete policy-options policy-statement T-PLF 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options prefix-list PL
+delete policy-options prefix-list PL 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options defaults
+delete policy-options defaults 
+warning: statement not found
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## [JUN02] show configuration protocols bgp | display set
+show configuration protocols bgp | display set 
+set protocols bgp group ISP type external
+set protocols bgp group ISP import FILTER-IN
+set protocols bgp group ISP export SERVERS-OUT
+set protocols bgp group ISP peer-as 64500
+set protocols bgp group ISP neighbor 10.0.23.2
+
+admin@jun02> 
+## [JUN02] show configuration policy-options | display set | match "defaults|T-|LM|PL"
+show configuration policy-options | display set | match "defaults|T-|LM|PL" 
+set policy-options policy-statement DEFAULT-TO-OSPF term DEF from protocol bgp
+set policy-options policy-statement DEFAULT-TO-OSPF term DEF from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement DEFAULT-TO-OSPF term DEF then accept
+set policy-options policy-statement ISPNET-TO-OSPF term t from protocol bgp
+set policy-options policy-statement ISPNET-TO-OSPF term t from route-filter 203.0.113.0/24 exact
+set policy-options policy-statement ISPNET-TO-OSPF term t then accept
+
+admin@jun02> 

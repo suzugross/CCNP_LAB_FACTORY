@@ -1,0 +1,109 @@
+# J1 PoC 2: OSPF への export(何が出るか・外部経路の型と metric)・term の順と流れ落ち・ポリシーの連鎖・未定義のポリシー・BGP の既定経路を OSPF へ
+JUN01 configure
+JUN01 set policy-options policy-statement LAN-TO-OSPF term LAN from protocol direct
+JUN01 set policy-options policy-statement LAN-TO-OSPF term LAN from route-filter 172.16.10.0/24 exact
+JUN01 set policy-options policy-statement LAN-TO-OSPF term LAN then accept
+JUN01 set protocols ospf export LAN-TO-OSPF
+JUN01 show | compare
+JUN01 commit
+!sleep 8
+JUN02 show ospf database external extensive
+JUN02 show route 172.16.10.0/24 extensive
+# 静的経路の term を足す
+JUN01 set policy-options policy-statement LAN-TO-OSPF term SRV from protocol static
+JUN01 set policy-options policy-statement LAN-TO-OSPF term SRV from route-filter 172.16.20.0/24 exact
+JUN01 set policy-options policy-statement LAN-TO-OSPF term SRV then accept
+JUN01 show policy-options policy-statement LAN-TO-OSPF
+JUN01 commit
+JUN01 run test policy LAN-TO-OSPF 172.16.0.0/16
+JUN01 run test policy LAN-TO-OSPF 0.0.0.0/0
+!sleep 8
+JUN02 show ospf database external
+# from protocol を書かず orlonger 1 本のポリシーを連鎖の 2 つ目に足す(set は並びの後ろに足す)
+JUN01 set policy-options policy-statement WIDE term ALL from route-filter 172.16.0.0/16 orlonger
+JUN01 set policy-options policy-statement WIDE term ALL then accept
+JUN01 set protocols ospf export WIDE
+JUN01 show protocols ospf
+JUN01 commit
+JUN01 run test policy WIDE 172.16.0.0/16
+!sleep 8
+JUN02 show ospf database external
+JUN02 show route 172.16.99.0/24
+# from の無い then accept だけ
+JUN01 delete protocols ospf export
+JUN01 set policy-options policy-statement ALL then accept
+JUN01 set protocols ospf export ALL
+JUN01 commit
+JUN01 run test policy ALL 0.0.0.0/0
+!sleep 8
+JUN02 show ospf database external
+JUN02 show route protocol ospf table inet.0
+# metric と type 1
+JUN01 delete protocols ospf export
+JUN01 set policy-options policy-statement LAN-TO-OSPF term SRV then metric 20
+JUN01 set policy-options policy-statement LAN-TO-OSPF term SRV then external type 1
+JUN01 set protocols ospf export LAN-TO-OSPF
+JUN01 commit
+!sleep 8
+JUN02 show ospf database external extensive
+JUN02 show route 172.16.20.0/24
+JUN02 show route 172.16.10.0/24
+# 終端の動作の無い term は流れ落ちる(SET は metric だけ・accept なし → 次の term へ)
+JUN01 set policy-options policy-statement FALL term SET from route-filter 172.16.20.0/24 exact
+JUN01 set policy-options policy-statement FALL term SET then metric 77
+JUN01 set policy-options policy-statement FALL term ACCEPT from protocol static
+JUN01 set policy-options policy-statement FALL term ACCEPT then accept
+JUN01 delete protocols ospf export
+JUN01 set protocols ospf export FALL
+JUN01 commit
+JUN01 run test policy FALL 172.16.0.0/16
+!sleep 8
+JUN02 show ospf database external extensive
+# term の順: 後から足した term は末尾に付く(先に reject の term があると届かない)
+JUN01 set policy-options policy-statement ORDER term REST then reject
+JUN01 set policy-options policy-statement ORDER term LAN from route-filter 172.16.10.0/24 exact
+JUN01 set policy-options policy-statement ORDER term LAN then accept
+JUN01 show policy-options policy-statement ORDER
+JUN01 delete protocols ospf export
+JUN01 set protocols ospf export ORDER
+JUN01 commit
+JUN01 run test policy ORDER 172.16.0.0/16
+JUN01 insert policy-options policy-statement ORDER term LAN before term REST
+JUN01 show policy-options policy-statement ORDER
+JUN01 commit
+JUN01 run test policy ORDER 172.16.0.0/16
+# 未定義のポリシー・未定義の prefix-list
+JUN01 set protocols ospf export NO-SUCH-POLICY
+JUN01 commit check
+JUN01 rollback 0
+JUN01 set policy-options policy-statement BADPL term t from prefix-list NO-SUCH-LIST
+JUN01 set policy-options policy-statement BADPL term t then accept
+JUN01 set protocols ospf export BADPL
+JUN01 commit check
+JUN01 rollback 0
+JUN01 show | compare
+# 片付け: LAN と SRV だけ出す形(metric と type は既定)に戻す
+JUN01 delete policy-options policy-statement LAN-TO-OSPF term SRV then metric
+JUN01 delete policy-options policy-statement LAN-TO-OSPF term SRV then external
+JUN01 delete protocols ospf export
+JUN01 set protocols ospf export LAN-TO-OSPF
+JUN01 commit and-quit
+# BGP の既定経路を OSPF へ(JUN02)・ISP が落ちると消えるか
+JUN02 configure
+JUN02 set policy-options policy-statement DEFAULT-TO-OSPF term DEF from protocol bgp
+JUN02 set policy-options policy-statement DEFAULT-TO-OSPF term DEF from route-filter 0.0.0.0/0 exact
+JUN02 set policy-options policy-statement DEFAULT-TO-OSPF term DEF then accept
+JUN02 set protocols ospf export DEFAULT-TO-OSPF
+JUN02 commit
+!sleep 8
+JUN01 show route 0.0.0.0/0
+JUN01 show ospf database external
+JUN02 deactivate protocols bgp group ISP
+JUN02 commit
+!sleep 8
+JUN01 show route 0.0.0.0/0
+JUN01 show ospf database external
+JUN02 activate protocols bgp group ISP
+JUN02 commit and-quit
+!sleep 40
+JUN01 show route 0.0.0.0/0

@@ -1,0 +1,357 @@
+# jpoc JNT-02 j1-chain.txt 2026-11-14 14:45:49
+# J1 PoC 4: ポリシーの連鎖(import [ A B ])・A の最後の then accept で B に届かない・連鎖の終わりの既定の受け入れ・from の中の OR と AND・walkup の口
+
+## [JUN02] (open)
+Last login: Sat Nov 14 14:42:57 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] delete protocols bgp group ISP import
+delete protocols bgp group ISP import 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP import [ A B ]
+set protocols bgp group ISP import [ A B ] 
+
+[edit]
+admin@jun02# 
+## [JUN02] show policy-options policy-statement A
+show policy-options policy-statement A 
+term t {
+    from {
+        route-filter 192.0.2.0/24 exact;
+    }
+    then next policy;
+}
+then accept;
+
+[edit]
+admin@jun02# 
+## [JUN02] show policy-options policy-statement B
+show policy-options policy-statement B 
+term t {
+    from {
+        route-filter 192.0.2.0/24 exact;
+    }
+    then reject;
+}
+
+[edit]
+admin@jun02# 
+## [JUN02] show protocols bgp group ISP
+show protocols bgp group ISP 
+type external;
+import [ A B ];
+export TO-ISP;
+peer-as 64500;
+neighbor 10.0.23.2;
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+
+[edit]
+admin@jun02# 
+## (sleep 5s)
+
+## [JUN02] run show route protocol bgp table inet.0 terse
+run show route protocol bgp table inet.0 terse 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 19 destinations, 19 routes (18 active, 0 holddown, 1 hidden)
++ = Active Route, - = Last Active, * = Both
+
+A V Destination        P Prf   Metric 1   Metric 2  Next hop        AS path
+* ? 0.0.0.0/0          B 170        100          0 >10.0.23.2       64500 I
+* ? 10.200.0.0/16      B 170        100          0 >10.0.23.2       64500 I
+* ? 100.64.0.0/10      B 170        100          0 >10.0.23.2       64500 I
+* ? 192.168.50.0/24    B 170        100          0 >10.0.23.2       64500 I
+* ? 198.18.0.0/15      B 170        100          0 >10.0.23.2       64500 I
+* ? 198.51.100.0/24    B 170        100          0 >10.0.23.2       64500 I
+* ? 198.51.100.128/25  B 170        100          0 >10.0.23.2       64500 I
+* ? 203.0.113.0/24     B 170        100          0 >10.0.23.2       64500 I
+
+[edit]
+admin@jun02# 
+## [JUN02] run show route hidden table inet.0 terse
+run show route hidden table inet.0 terse 
+
+inet.0: 19 destinations, 19 routes (18 active, 0 holddown, 1 hidden)
++ = Active Route, - = Last Active, * = Both
+
+A V Destination        P Prf   Metric 1   Metric 2  Next hop        AS path
+  ? 192.0.2.0/24       B            100          0 >10.0.23.2       64500 I
+
+[edit]
+admin@jun02# # A の最後の then accept を消す → A の term に当たらない経路は B へ。B にも当たらなければ BGP の既定(受け入れ)
+
+## [JUN02] delete policy-options policy-statement A then
+delete policy-options policy-statement A then 
+
+[edit]
+admin@jun02# 
+## [JUN02] show policy-options policy-statement A
+show policy-options policy-statement A 
+term t {
+    from {
+        route-filter 192.0.2.0/24 exact;
+    }
+    then next policy;
+}
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+commit complete
+
+[edit]
+admin@jun02# 
+## (sleep 5s)
+
+## [JUN02] run show route protocol bgp table inet.0 terse
+run show route protocol bgp table inet.0 terse 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 19 destinations, 19 routes (18 active, 0 holddown, 1 hidden)
++ = Active Route, - = Last Active, * = Both
+
+A V Destination        P Prf   Metric 1   Metric 2  Next hop        AS path
+* ? 0.0.0.0/0          B 170        100          0 >10.0.23.2       64500 I
+* ? 10.200.0.0/16      B 170        100          0 >10.0.23.2       64500 I
+* ? 100.64.0.0/10      B 170        100          0 >10.0.23.2       64500 I
+* ? 192.168.50.0/24    B 170        100          0 >10.0.23.2       64500 I
+* ? 198.18.0.0/15      B 170        100          0 >10.0.23.2       64500 I
+* ? 198.51.100.0/24    B 170        100          0 >10.0.23.2       64500 I
+* ? 198.51.100.128/25  B 170        100          0 >10.0.23.2       64500 I
+* ? 203.0.113.0/24     B 170        100          0 >10.0.23.2       64500 I
+
+[edit]
+admin@jun02# 
+## [JUN02] run show route hidden table inet.0 terse
+run show route hidden table inet.0 terse 
+
+inet.0: 19 destinations, 19 routes (18 active, 0 holddown, 1 hidden)
++ = Active Route, - = Last Active, * = Both
+
+A V Destination        P Prf   Metric 1   Metric 2  Next hop        AS path
+  ? 192.0.2.0/24       B            100          0 >10.0.23.2       64500 I
+
+[edit]
+admin@jun02# # 受け入れるものだけを書き、最後に拒むだけのポリシーを置く
+
+## [JUN02] set policy-options policy-statement REJECT-ALL then reject
+set policy-options policy-statement REJECT-ALL then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ALLOW-TESTNET term t from route-filter 203.0.113.0/24 exact
+set policy-options policy-statement ALLOW-TESTNET term t from route-filter 203.0.113.0/24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ALLOW-TESTNET term t from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement ALLOW-TESTNET term t from route-filter 0.0.0.0/0 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ALLOW-TESTNET term t then accept
+set policy-options policy-statement ALLOW-TESTNET term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete protocols bgp group ISP import
+delete protocols bgp group ISP import 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP import [ ALLOW-TESTNET REJECT-ALL ]
+set protocols bgp group ISP import [ ALLOW-TESTNET REJECT-ALL ] 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+
+[edit]
+admin@jun02# 
+## (sleep 5s)
+
+## [JUN02] run show route protocol bgp table inet.0 terse
+run show route protocol bgp table inet.0 terse 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 19 destinations, 19 routes (12 active, 0 holddown, 7 hidden)
++ = Active Route, - = Last Active, * = Both
+
+A V Destination        P Prf   Metric 1   Metric 2  Next hop        AS path
+* ? 0.0.0.0/0          B 170        100          0 >10.0.23.2       64500 I
+* ? 203.0.113.0/24     B 170        100          0 >10.0.23.2       64500 I
+
+[edit]
+admin@jun02# 
+## [JUN02] run show route receive-protocol bgp 10.0.23.2 hidden table inet.0
+run show route receive-protocol bgp 10.0.23.2 hidden table inet.0 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 19 destinations, 19 routes (12 active, 0 holddown, 7 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+  10.200.0.0/16           10.0.23.2            0                  64500 I
+  100.64.0.0/10           10.0.23.2            0                  64500 I
+  192.0.2.0/24            10.0.23.2            0                  64500 I
+  192.168.50.0/24         10.0.23.2            0                  64500 I
+  198.18.0.0/15           10.0.23.2            0                  64500 I
+  198.51.100.0/24         10.0.23.2            0                  64500 I
+  198.51.100.128/25       10.0.23.2            0                  64500 I
+
+[edit]
+admin@jun02# # from の中: 同じ種類の値は OR、違う種類は AND
+
+## [JUN02] set policy-options policy-statement OR-AND term t from protocol [ static aggregate ]
+set policy-options policy-statement OR-AND term t from protocol [ static aggregate ] 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement OR-AND term t from route-filter 172.16.0.0/12 orlonger
+set policy-options policy-statement OR-AND term t from route-filter 172.16.0.0/12 orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement OR-AND term t then accept
+set policy-options policy-statement OR-AND term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement OR-AND then reject
+set policy-options policy-statement OR-AND then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] show policy-options policy-statement OR-AND
+show policy-options policy-statement OR-AND 
+term t {
+    from {
+        protocol [ static aggregate ];
+        route-filter 172.16.0.0/12 orlonger;
+    }
+    then accept;
+}
+then reject;
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+commit complete
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy OR-AND 0.0.0.0/0
+run test policy OR-AND 0.0.0.0/0 
+
+inet.0: 19 destinations, 19 routes (12 active, 0 holddown, 7 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.0.0/16      *[Aggregate/130] 00:02:10
+                       Reject
+
+Policy OR-AND: 1 prefix accepted, 24 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options ?
+set policy-options ?
+Possible completions:
+> application-maps     Define application maps
++ apply-groups         Groups from which to inherit configuration data
++ apply-groups-except  Don't inherit configuration data from these groups
+> as-list              BGP as range list information
+> as-list-group        Group a set of as-list
+> as-path              BGP autonomous system path regular expression
+> as-path-group        Group a set of AS paths
+> community            BGP community information
+> condition            Define a route advertisement condition
+> damping              BGP route flap damping properties
+> defaults             Policy default behaviour
+> fast-lookup-tuple-list  Define a named set of address prefixes
+> flowspec-attribute   Define flowspec attributes
+> mac-list             Define a named set of mac addresses
+> policy-statement     Routing policy
+> prefix-list          Define a named set of address prefixes
+> redundancy-policy    
+> resolution-map       Define a set of PNH resolution modes
+> rib-list             Define a named set of RIB names or wildcards
+> route-distinguisher  Route-distinguisher information
+> route-filter-list    Define a named set of route-filter address prefixes
+> rtf-prefix-list      Define a named set of family route target prefixes
+> satellite-policies   Satellite Policy configuration
+  skip-then-actions    Skip 'then' actions and allow route actions in 'from'
+> source-address-filter-list  Define a named set of source address filter address prefixes
+> tunnel-attribute     BGP tunnel attributes definition
+> tunnel-termination-profile  Tunnel termination profile definition
+> vsi-policy           Define a named set of VSI policies
+[edit]
+admin@jun02# set policy-options    
+                                ^
+missing argument.
+
+[edit]
+admin@jun02# 
+## [JUN02] 
+
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options defaults ?
+set policy-options defaults ?
+Possible completions:
++ apply-groups         Groups from which to inherit configuration data
++ apply-groups-except  Don't inherit configuration data from these groups
+> asregex-optimize     Set AS-PATH regular expression engine optimizer
+> route-filter         Set route filter behaviour
+[edit]
+admin@jun02# set policy-options defaults    
+                                         ^
+missing argument.
+
+[edit]
+admin@jun02# 
+## [JUN02] 
+
+
+[edit]
+admin@jun02# 
+## [JUN02] rollback 0
+rollback 0 
+load complete
+
+[edit]
+admin@jun02# 
+## [JUN02] exit
+exit 
+Exiting configuration mode
+
+admin@jun02> 

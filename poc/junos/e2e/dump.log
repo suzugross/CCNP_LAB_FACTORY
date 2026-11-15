@@ -1,0 +1,534 @@
+# jpoc JNT-02 dump.txt 2026-11-14 15:33:03
+# J1 の模範解を入れた後の設定と出力(読み物の設定例・出力の元)
+
+## [JUN01] (open)
+Last login: Sat Nov 14 15:32:47 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] show configuration policy-options | display set | no-more
+show configuration policy-options | display set | no-more 
+set policy-options policy-statement SERVERS-TO-OSPF term LAN from protocol direct
+set policy-options policy-statement SERVERS-TO-OSPF term LAN from route-filter 172.16.10.0/24 exact
+set policy-options policy-statement SERVERS-TO-OSPF term LAN then accept
+set policy-options policy-statement SERVERS-TO-OSPF term SRV from protocol static
+set policy-options policy-statement SERVERS-TO-OSPF term SRV from route-filter 172.16.20.0/24 exact
+set policy-options policy-statement SERVERS-TO-OSPF term SRV then metric 20
+set policy-options policy-statement SERVERS-TO-OSPF term SRV then accept
+
+admin@jun01> 
+## [JUN01] show configuration protocols ospf | display set | no-more
+show configuration protocols ospf | display set | no-more 
+set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+set protocols ospf area 0.0.0.0 interface lo0.0 passive
+set protocols ospf export SERVERS-TO-OSPF
+
+admin@jun01> 
+## [JUN01] show configuration policy-options
+show configuration policy-options 
+policy-statement SERVERS-TO-OSPF {
+    term LAN {
+        from {
+            protocol direct;
+            route-filter 172.16.10.0/24 exact;
+        }
+        then accept;
+    }
+    term SRV {
+        from {
+            protocol static;
+            route-filter 172.16.20.0/24 exact;
+        }
+        then {
+            metric 20;
+            accept;
+        }
+    }
+}
+
+admin@jun01> 
+## [JUN01] test policy SERVERS-TO-OSPF 172.16.0.0/16
+test policy SERVERS-TO-OSPF 172.16.0.0/16 
+
+inet.0: 10 destinations, 10 routes (10 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:12:09
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:12:09
+                       Local via et-0/0/1.0
+172.16.20.0/24     *[Static/5] 00:12:09
+                    >  to 172.16.10.10 via et-0/0/1.0
+172.16.99.0/24     *[Static/5] 00:13:15
+                       Discard
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:12:09
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:12:09
+                       Local via et-0/0/1.0
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:12:09
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:12:09
+                       Local via et-0/0/1.0
+
+Policy SERVERS-TO-OSPF: 8 prefix accepted, 0 prefix rejected
+
+admin@jun01> 
+## [JUN01] show ospf database external extensive | no-more
+show ospf database external extensive | no-more 
+
+Warning: License key missing; requires 'OSPF' license
+
+    OSPF AS SCOPE link state database
+ Type       ID               Adv Rtr           Seq      Age  Opt  Cksum  Len 
+Extern   0.0.0.0          192.168.0.2      0x80000001   382  0x22 0xe85e  36
+  mask 0.0.0.0
+  Topology default (ID 0)
+    Type: 2, Metric: 0, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Aging timer 00:53:37
+  Installed 00:06:21 ago, expires in 00:53:38
+  Last changed 00:06:21 ago, Change count: 1
+Extern  *172.16.10.0      192.168.0.1      0x80000001   578  0x22 0xfa86  36
+  mask 255.255.255.0
+  Topology default (ID 0)
+    Type: 2, Metric: 0, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Gen timer 00:24:32
+  Aging timer 00:50:21
+  Installed 00:09:38 ago, expires in 00:50:22, sent 00:09:36 ago
+  Last changed 00:09:38 ago, Change count: 1, Ours
+Extern  *172.16.20.0      192.168.0.1      0x80000002   542  0x22 0x530f  36
+  mask 255.255.255.0
+  Topology default (ID 0)
+    Type: 2, Metric: 20, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Gen timer 00:40:57
+  Aging timer 00:50:57
+  Installed 00:09:02 ago, expires in 00:50:58, sent 00:09:01 ago
+  Last changed 00:09:02 ago, Change count: 2, Ours
+
+admin@jun01> 
+## [JUN01] show route 0.0.0.0/0 exact table inet.0
+show route 0.0.0.0/0 exact table inet.0 
+
+inet.0: 10 destinations, 10 routes (10 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[OSPF/150] 00:06:22, metric 0, tag 0
+                    >  to 10.0.12.2 via et-0/0/0.0
+
+admin@jun01> 
+## [JUN02] (open)
+Last login: Sat Nov 14 15:32:45 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] show configuration policy-options | display set | no-more
+show configuration policy-options | display set | no-more 
+set policy-options policy-statement DEFAULT-TO-OSPF term DEF from protocol bgp
+set policy-options policy-statement DEFAULT-TO-OSPF term DEF from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement DEFAULT-TO-OSPF term DEF then accept
+set policy-options policy-statement ISP-IN term DEFAULT from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement ISP-IN term DEFAULT then accept
+set policy-options policy-statement ISP-IN term BOGONS from route-filter 10.0.0.0/8 orlonger
+set policy-options policy-statement ISP-IN term BOGONS from route-filter 172.16.0.0/12 orlonger
+set policy-options policy-statement ISP-IN term BOGONS from route-filter 192.168.0.0/16 orlonger
+set policy-options policy-statement ISP-IN term BOGONS from route-filter 100.64.0.0/10 orlonger
+set policy-options policy-statement ISP-IN term BOGONS from route-filter 198.18.0.0/15 orlonger
+set policy-options policy-statement ISP-IN term BOGONS then reject
+set policy-options policy-statement ISP-IN term PUBLIC from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+set policy-options policy-statement ISP-IN term PUBLIC then accept
+set policy-options policy-statement ISP-IN term REST then reject
+set policy-options policy-statement MARK term t from route-filter 203.0.113.0/24 exact
+set policy-options policy-statement MARK term t then local-preference 200
+set policy-options policy-statement MARK term t then community add FROM-ISP
+set policy-options policy-statement TO-ISP term SUMMARY from protocol aggregate
+set policy-options policy-statement TO-ISP term SUMMARY from route-filter 172.16.0.0/16 exact
+set policy-options policy-statement TO-ISP term SUMMARY then as-path-prepend "65000 65000"
+set policy-options policy-statement TO-ISP term SUMMARY then accept
+set policy-options policy-statement TO-ISP term REST then reject
+set policy-options community FROM-ISP members 65000:100
+
+admin@jun02> 
+## [JUN02] show configuration protocols bgp | display set | no-more
+show configuration protocols bgp | display set | no-more 
+set protocols bgp group ISP type external
+set protocols bgp group ISP import MARK
+set protocols bgp group ISP import ISP-IN
+set protocols bgp group ISP export TO-ISP
+set protocols bgp group ISP peer-as 64500
+set protocols bgp group ISP neighbor 10.0.23.2
+
+admin@jun02> 
+## [JUN02] show configuration routing-options | display set | no-more
+show configuration routing-options | display set | no-more 
+set routing-options router-id 192.168.0.2
+set routing-options autonomous-system 65000
+set routing-options aggregate route 172.16.0.0/16
+
+admin@jun02> 
+## [JUN02] show configuration policy-options | no-more
+show configuration policy-options | no-more 
+policy-statement DEFAULT-TO-OSPF {
+    term DEF {
+        from {
+            protocol bgp;
+            route-filter 0.0.0.0/0 exact;
+        }
+        then accept;
+    }
+}
+policy-statement ISP-IN {
+    term DEFAULT {
+        from {
+            route-filter 0.0.0.0/0 exact;
+        }
+        then accept;
+    }
+    term BOGONS {
+        from {
+            route-filter 10.0.0.0/8 orlonger;
+            route-filter 172.16.0.0/12 orlonger;
+            route-filter 192.168.0.0/16 orlonger;
+            route-filter 100.64.0.0/10 orlonger;
+            route-filter 198.18.0.0/15 orlonger;
+        }
+        then reject;
+    }
+    term PUBLIC {
+        from {
+            route-filter 0.0.0.0/0 prefix-length-range /8-/24;
+        }
+        then accept;
+    }
+    term REST {
+        then reject;
+    }
+}
+policy-statement MARK {
+    term t {
+        from {
+            route-filter 203.0.113.0/24 exact;
+        }
+        then {
+            local-preference 200;
+            community add FROM-ISP;
+        }
+    }
+}
+policy-statement TO-ISP {
+    term SUMMARY {
+        from {
+            protocol aggregate;
+            route-filter 172.16.0.0/16 exact;
+        }
+        then {
+            as-path-prepend "65000 65000";
+            accept;
+        }
+    }
+    term REST {
+        then reject;
+    }
+}
+community FROM-ISP members 65000:100;
+
+admin@jun02> 
+## [JUN02] show configuration protocols bgp
+show configuration protocols bgp 
+group ISP {
+    type external;
+    import [ MARK ISP-IN ];
+    export TO-ISP;
+    peer-as 64500;
+    neighbor 10.0.23.2;
+}
+
+admin@jun02> 
+## [JUN02] show bgp summary
+show bgp summary 
+
+Warning: License key missing; requires 'BGP' license
+
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 1 Peers: 1 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+inet.0               
+                      10          4          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.0.23.2             64500         30         29       0       0       12:04 Establ
+  inet.0: 4/10/4/0
+
+admin@jun02> 
+## [JUN02] show bgp neighbor 10.0.23.2 | match "Import|Export|Group|Type|Peer:"
+show bgp neighbor 10.0.23.2 | match "Import|Export|Group|Type|Peer:" 
+Peer: 10.0.23.2+179 AS 64500   Local: 10.0.23.1+33180 AS 65000
+  Group: ISP                   Routing-Instance: master
+  Type: External    State: Established    Flags: <Sync>
+  Export: [ TO-ISP ] Import: [ MARK ISP-IN ]
+  Keepalive Interval: 30         Group index: 0    Peer index: 0    SNMP index: 0     
+  NLRI for restart configured on peer: inet-unicast
+  NLRI advertised by peer: inet-unicast
+  Restart flag received from the peer: Notification
+
+admin@jun02> 
+## [JUN02] show route receive-protocol bgp 10.0.23.2 table inet.0
+show route receive-protocol bgp 10.0.23.2 table inet.0 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.0.23.2            0                  64500 I
+* 192.0.2.0/24            10.0.23.2            0                  64500 I
+* 198.51.100.0/24         10.0.23.2            0                  64500 I
+* 203.0.113.0/24          10.0.23.2            0                  64500 I
+
+admin@jun02> 
+## [JUN02] show route receive-protocol bgp 10.0.23.2 hidden table inet.0
+show route receive-protocol bgp 10.0.23.2 hidden table inet.0 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+  10.200.0.0/16           10.0.23.2            0                  64500 I
+  100.64.0.0/10           10.0.23.2            0                  64500 I
+  172.31.0.0/16           10.0.23.2            0                  64500 I
+  192.168.50.0/24         10.0.23.2            0                  64500 I
+  198.18.0.0/15           10.0.23.2            0                  64500 I
+  198.51.100.128/25       10.0.23.2            0                  64500 I
+
+admin@jun02> 
+## [JUN02] show route 198.51.100.128/25 hidden extensive | match "BGP|State|reason|AS path"
+show route 198.51.100.128/25 hidden extensive | match "BGP|State|reason|AS path" 
+         BGP                 /-101
+                State: <Hidden Ext Changed>
+                Validation State: unverified 
+                Task: BGP_64500.10.0.23.2
+                AS path: 64500 I 
+                Hidden reason: Rejected by import policy
+
+admin@jun02> 
+## [JUN02] show route advertising-protocol bgp 10.0.23.2
+show route advertising-protocol bgp 10.0.23.2 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 172.16.0.0/16           Self                                    65000 65000 [65000] I
+
+admin@jun02> 
+## [JUN02] show route 172.16.0.0/16 exact detail | no-more
+show route 172.16.0.0/16 exact detail | no-more 
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+172.16.0.0/16 (1 entry, 1 announced)
+        *Aggregate Preference: 130
+                Next hop type: Reject, Next hop index: 0
+                Address: 0x5559af013fd8
+                Next-hop reference count: 2
+                Kernel Table Id: 0
+                State: <Active Int Ext>
+                Local AS: 65000 
+                Age: 5:46 
+                Validation State: unverified 
+                Task: Aggregate
+                Announcement bits (2): 0-KRT 3-BGP_RT_Background 
+                AS path: I  (LocalAgg)
+                Flags:          	Depth: 0	Active
+                AS path list (1):
+                AS path: I Refcount: 2
+                Contributing Routes (2):
+                	172.16.10.0/24 proto OSPF
+                	172.16.20.0/24 proto OSPF
+                Thread: junos-main 
+
+admin@jun02> 
+## [JUN02] show route 203.0.113.0/24 exact detail table inet.0 | no-more
+show route 203.0.113.0/24 exact detail table inet.0 | no-more 
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
+203.0.113.0/24 (1 entry, 1 announced)
+        *BGP    Preference: 170/-201
+                Next hop type: Router, Next hop index: 8035
+                Address: 0x5559af0264f8
+                Next-hop reference count: 14, Next-hop session id: 1
+                Kernel Table Id: 0
+                Source: 10.0.23.2
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                Session Id: 1
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Age: 3:49 	Metric: 0 
+                Validation State: unverified 
+                Task: BGP_64500.10.0.23.2
+                Announcement bits (1): 0-KRT 
+                AS path: 64500 I 
+                Communities: 65000:100
+                Accepted
+                Localpref: 200
+                Router ID: 203.0.113.1
+                Thread: junos-main 
+
+admin@jun02> 
+## [JUN02] show route table inet.0 | no-more
+show route table inet.0 | no-more 
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[BGP/170] 00:02:26, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+10.0.12.0/30       *[Direct/0] 00:12:11
+                    >  via et-0/0/0.0
+10.0.12.2/32       *[Local/0] 00:12:11
+                       Local via et-0/0/0.0
+10.0.23.0/30       *[Direct/0] 00:12:11
+                    >  via et-0/0/1.0
+10.0.23.1/32       *[Local/0] 00:12:11
+                       Local via et-0/0/1.0
+172.16.0.0/16      *[Aggregate/130] 00:05:48
+                       Reject
+172.16.10.0/24     *[OSPF/150] 00:09:45, metric 0, tag 0
+                    >  to 10.0.12.1 via et-0/0/0.0
+172.16.20.0/24     *[OSPF/150] 00:09:10, metric 20, tag 0
+                    >  to 10.0.12.1 via et-0/0/0.0
+192.0.2.0/24       *[BGP/170] 00:02:26, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+192.168.0.1/32     *[OSPF/10] 00:11:26, metric 1
+                    >  to 10.0.12.1 via et-0/0/0.0
+192.168.0.2/32     *[Direct/0] 00:13:25
+                    >  via lo0.0
+198.51.100.0/24    *[BGP/170] 00:02:26, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+203.0.113.0/24     *[BGP/170] 00:03:50, MED 0, localpref 200
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+224.0.0.5/32       *[OSPF/10] 00:13:25, metric 1
+                       MultiRecv
+
+admin@jun02> 
+## [JUN02] show ospf database external | no-more
+show ospf database external | no-more 
+
+Warning: License key missing; requires 'OSPF' license
+
+    OSPF AS SCOPE link state database
+ Type       ID               Adv Rtr           Seq      Age  Opt  Cksum  Len 
+Extern  *0.0.0.0          192.168.0.2      0x80000001   391  0x22 0xe85e  36
+Extern   172.16.10.0      192.168.0.1      0x80000001   589  0x22 0xfa86  36
+Extern   172.16.20.0      192.168.0.1      0x80000002   553  0x22 0x530f  36
+
+admin@jun02> 
+## [JUN02] test policy ISP-IN 0.0.0.0/0
+test policy ISP-IN 0.0.0.0/0 
+
+inet.0: 20 destinations, 20 routes (14 active, 0 holddown, 6 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[BGP/170] 00:02:27, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+192.0.2.0/24       *[BGP/170] 00:02:27, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+198.51.100.0/24    *[BGP/170] 00:02:27, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+203.0.113.0/24     *[BGP/170] 00:03:51, MED 0, localpref 200
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[Static/5] 00:13:26
+                    >  to 10.0.0.2 via re0:mgmt-0.0
+
+Policy ISP-IN: 5 prefix accepted, 22 prefix rejected
+
+admin@jun02> 
+## [JUN02] show policy ISP-IN
+show policy ISP-IN 
+Policy ISP-IN: [RESOLVED]
+    Term DEFAULT:
+        from
+             route filter:
+                  0.0.0.0/0 exact
+        then
+               accept
+    Term BOGONS:
+        from
+             route filter:
+                  10.0.0.0/8 orlonger
+                  172.16.0.0/12 orlonger
+                  192.168.0.0/16 orlonger
+                  100.64.0.0/10 orlonger
+                  198.18.0.0/15 orlonger
+        then
+               reject
+    Term PUBLIC:
+        from
+             route filter:
+                  0.0.0.0/0 prefix-length-range /8-/24
+        then
+               accept
+    Term REST:
+        then
+               reject
+
+admin@jun02> 
+## [FRR1] (open)
+
+Hello, this is FRRouting (version 10.7.1_git).
+Copyright 1996-2005 Kunihiro Ishiguro, et al.
+
+frr1# 
+## [FRR1] show bgp ipv4 unicast
+show bgp ipv4 unicast
+BGP table version is 10, local router ID is 203.0.113.1, vrf id 0
+Default local pref 100, local AS 64500
+Status codes:  s suppressed, d damped, h history, u unsorted, * valid, > best, = multipath,
+               i internal, r RIB-failure, S Stale, R Removed
+Nexthop codes: @NNN nexthop's vrf id, < announce-nh-self
+Origin codes:  i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>  10.200.0.0/16    0.0.0.0                  0         32768 i
+ *>  100.64.0.0/10    0.0.0.0                  0         32768 i
+ *>  172.16.0.0/16    10.0.23.1                              0 65000 65000 65000 i
+ *>  172.31.0.0/16    0.0.0.0                  0         32768 i
+ *>  192.0.2.0/24     0.0.0.0                  0         32768 i
+ *>  192.168.50.0/24  0.0.0.0                  0         32768 i
+ *>  198.18.0.0/15    0.0.0.0                  0         32768 i
+ *>  198.51.100.0/24  0.0.0.0                  0         32768 i
+ *>  198.51.100.128/25
+                    0.0.0.0                  0         32768 i
+ *>  203.0.113.0/24   0.0.0.0                  0         32768 i
+
+Displayed 10 routes and 10 total paths
+frr1# 
+## [FRR1] show bgp ipv4 unicast 172.16.0.0/16
+show bgp ipv4 unicast 172.16.0.0/16
+BGP routing table entry for 172.16.0.0/16, version 10
+Paths: (1 available, best #1, table default)
+  Advertised to peers:
+  10.0.23.1
+  65000 65000 65000, (aggregated by 65000 192.168.0.2)
+    10.0.23.1 from 10.0.23.1 (192.168.0.2)
+      Origin IGP, valid, external, best (First path received)
+      Last update: Sat Nov 14 15:28:17 2026
+frr1# 

@@ -1,0 +1,89 @@
+# jpoc JNT-02 w1-3b.txt 2026-11-14 15:26:05
+# J1-3 誤答 b: 私的を拒み /8-/24 を受け、最後に reject。既定経路の term を消す(/8-/24 は /0 を含まない → J1-2 が壊れる)
+
+## [JUN02] (open)
+Last login: Sat Nov 14 15:25:48 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options policy-statement ISP-IN term DEFAULT
+delete policy-options policy-statement ISP-IN term DEFAULT 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term BOGONS from route-filter 10.0.0.0/8 orlonger
+set policy-options policy-statement ISP-IN term BOGONS from route-filter 10.0.0.0/8 orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term BOGONS from route-filter 172.16.0.0/12 orlonger
+set policy-options policy-statement ISP-IN term BOGONS from route-filter 172.16.0.0/12 orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term BOGONS from route-filter 192.168.0.0/16 orlonger
+set policy-options policy-statement ISP-IN term BOGONS from route-filter 192.168.0.0/16 orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term BOGONS from route-filter 100.64.0.0/10 orlonger
+set policy-options policy-statement ISP-IN term BOGONS from route-filter 100.64.0.0/10 orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term BOGONS from route-filter 198.18.0.0/15 orlonger
+set policy-options policy-statement ISP-IN term BOGONS from route-filter 198.18.0.0/15 orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term BOGONS then reject
+set policy-options policy-statement ISP-IN term BOGONS then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] insert policy-options policy-statement ISP-IN term BOGONS before term PUBLIC
+insert policy-options policy-statement ISP-IN term BOGONS before term PUBLIC 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term REST then reject
+set policy-options policy-statement ISP-IN term REST then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] show policy-options policy-statement ISP-IN
+show policy-options policy-statement ISP-IN 
+term BOGONS {
+    from {
+        route-filter 10.0.0.0/8 orlonger;
+        route-filter 172.16.0.0/12 orlonger;
+        route-filter 192.168.0.0/16 orlonger;
+        route-filter 100.64.0.0/10 orlonger;
+        route-filter 198.18.0.0/15 orlonger;
+    }
+    then reject;
+}
+term PUBLIC {
+    from {
+        route-filter 0.0.0.0/0 prefix-length-range /8-/24;
+    }
+    then accept;
+}
+term REST {
+    then reject;
+}
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 8s)

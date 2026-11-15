@@ -1,0 +1,58 @@
+# jpoc JNT-02 w1-5a.txt 2026-11-14 15:28:54
+# J1-5 誤答 a: 印を付けるポリシーを連鎖の後ろに置く(ISP-IN の accept で止まり届かない)
+
+## [JUN02] (open)
+Last login: Sat Nov 14 15:28:45 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options community FROM-ISP members 65000:100
+set policy-options community FROM-ISP members 65000:100 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MARK term t from route-filter 203.0.113.0/24 exact
+set policy-options policy-statement MARK term t from route-filter 203.0.113.0/24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MARK term t then community add FROM-ISP
+set policy-options policy-statement MARK term t then community add FROM-ISP 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement MARK term t then local-preference 200
+set policy-options policy-statement MARK term t then local-preference 200 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP import MARK
+set protocols bgp group ISP import MARK 
+
+[edit]
+admin@jun02# 
+## [JUN02] show protocols bgp group ISP
+show protocols bgp group ISP 
+type external;
+import [ ISP-IN MARK ];
+export TO-ISP;
+peer-as 64500;
+neighbor 10.0.23.2;
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 5s)

@@ -1,0 +1,107 @@
+# J1 読み物の設定例と出力の元(2026-11-14)。模範解のポリシーを外し(ポリシーを書く前の状態)、例を 1 つずつ入れて出力を取る
+JUN01 configure
+JUN01 delete protocols ospf export
+JUN01 commit and-quit
+JUN02 configure
+JUN02 delete protocols ospf export
+JUN02 delete protocols bgp group ISP import
+JUN02 delete protocols bgp group ISP export
+JUN02 commit and-quit
+!sleep 10
+# ポリシーを書く前
+JUN02 show bgp summary
+JUN02 show route receive-protocol bgp 10.0.23.2 table inet.0
+JUN02 show route advertising-protocol bgp 10.0.23.2
+JUN01 show ospf database external
+# 例 11-3.1: JUN01 の静的経路 172.16.20.0/24 だけを type 1・metric 50 で OSPF へ
+JUN01 configure
+JUN01 set policy-options policy-statement SRV-TO-OSPF term SRV from protocol static
+JUN01 set policy-options policy-statement SRV-TO-OSPF term SRV from route-filter 172.16.20.0/24 exact
+JUN01 set policy-options policy-statement SRV-TO-OSPF term SRV then metric 50
+JUN01 set policy-options policy-statement SRV-TO-OSPF term SRV then external type 1
+JUN01 set policy-options policy-statement SRV-TO-OSPF term SRV then accept
+JUN01 set protocols ospf export SRV-TO-OSPF
+JUN01 commit and-quit
+!sleep 8
+JUN02 show ospf database external extensive
+JUN02 show route 172.16.20.0/24
+JUN01 test policy SRV-TO-OSPF 172.16.0.0/16
+# 例 10-2.2(流れの図): import [ TAG-198 FILTER-IN ]
+JUN02 configure
+JUN02 set policy-options community CUST members 65000:200
+JUN02 set policy-options policy-statement TAG-198 term t from route-filter 198.51.100.0/24 exact
+JUN02 set policy-options policy-statement TAG-198 term t then local-preference 150
+JUN02 set policy-options policy-statement TAG-198 term t then community add CUST
+JUN02 set policy-options policy-statement FILTER-IN term PRIVATE from route-filter 10.0.0.0/8 orlonger
+JUN02 set policy-options policy-statement FILTER-IN term PRIVATE from route-filter 192.168.0.0/16 orlonger
+JUN02 set policy-options policy-statement FILTER-IN term PRIVATE then reject
+JUN02 set policy-options policy-statement FILTER-IN term LEN from route-filter 0.0.0.0/0 prefix-length-range /16-/24
+JUN02 set policy-options policy-statement FILTER-IN term LEN then accept
+JUN02 set policy-options policy-statement FILTER-IN term REST then reject
+JUN02 set protocols bgp group ISP import [ TAG-198 FILTER-IN ]
+JUN02 show | compare
+JUN02 commit and-quit
+!sleep 5
+JUN02 show route receive-protocol bgp 10.0.23.2 table inet.0
+JUN02 show route receive-protocol bgp 10.0.23.2 hidden table inet.0
+JUN02 show route 198.51.100.0/24 exact detail table inet.0
+JUN02 show route 198.51.100.128/25 hidden extensive | match "reason"
+JUN02 show bgp summary
+# 流れの図の別の場合: REST を外すと /25 が既定の受け入れへ
+JUN02 configure
+JUN02 deactivate policy-options policy-statement FILTER-IN term REST
+JUN02 commit and-quit
+!sleep 5
+JUN02 show route receive-protocol bgp 10.0.23.2 table inet.0
+JUN02 configure
+JUN02 activate policy-options policy-statement FILTER-IN term REST
+JUN02 commit and-quit
+# 例 13-3.1: ISP 自身の網(203.0.113.0/24 とその中の /25 まで)と既定経路だけ
+JUN02 configure
+JUN02 set policy-options policy-statement ISP-OWN term OWN from route-filter 203.0.113.0/24 upto /25
+JUN02 set policy-options policy-statement ISP-OWN term OWN then accept
+JUN02 set policy-options policy-statement ISP-OWN term DEFAULT from route-filter 0.0.0.0/0 exact
+JUN02 set policy-options policy-statement ISP-OWN term DEFAULT then accept
+JUN02 set policy-options policy-statement ISP-OWN term REST then reject
+JUN02 delete protocols bgp group ISP import
+JUN02 set protocols bgp group ISP import ISP-OWN
+JUN02 commit and-quit
+!sleep 5
+JUN02 show route receive-protocol bgp 10.0.23.2 table inet.0
+JUN02 show route receive-protocol bgp 10.0.23.2 hidden table inet.0
+# 例 15-3.2: ポリシーの中に term を差し込んで印を付ける(FILTER-IN に戻し、192.0.2.0/24 に LP 120)
+JUN02 configure
+JUN02 set policy-options policy-statement FILTER-IN term MARK from route-filter 192.0.2.0/24 exact
+JUN02 set policy-options policy-statement FILTER-IN term MARK then local-preference 120
+JUN02 set policy-options policy-statement FILTER-IN term MARK then community add CUST
+JUN02 insert policy-options policy-statement FILTER-IN term MARK before term LEN
+JUN02 delete protocols bgp group ISP import
+JUN02 set protocols bgp group ISP import FILTER-IN
+JUN02 show policy-options policy-statement FILTER-IN
+JUN02 commit and-quit
+!sleep 5
+JUN02 show route community 65000:200 detail | match "^[0-9]|Localpref|Communities"
+JUN02 show route protocol bgp table inet.0 terse
+# 例 15-3.1: JUN01 の網を /24 のまま MED 50 で ISP へ(JUN01 に OSPF への export が要る: SRV-TO-OSPF は 172.16.20.0/24 だけ)
+JUN02 configure
+JUN02 set policy-options policy-statement SERVERS-OUT term SERVERS from protocol ospf
+JUN02 set policy-options policy-statement SERVERS-OUT term SERVERS from route-filter 172.16.0.0/16 longer
+JUN02 set policy-options policy-statement SERVERS-OUT term SERVERS then metric 50
+JUN02 set policy-options policy-statement SERVERS-OUT term SERVERS then accept
+JUN02 set policy-options policy-statement SERVERS-OUT term REST then reject
+JUN02 set protocols bgp group ISP export SERVERS-OUT
+JUN02 commit and-quit
+!sleep 5
+JUN02 show route advertising-protocol bgp 10.0.23.2
+FRR1 show bgp ipv4 unicast neighbors 10.0.23.1 routes
+FRR1 show bgp ipv4 unicast 172.16.20.0/24
+# BGP の階層: neighbor の下に書くと group を置き換える
+JUN02 configure
+JUN02 set protocols bgp group ISP neighbor 10.0.23.2 import TAG-198
+JUN02 commit and-quit
+!sleep 5
+JUN02 show bgp neighbor 10.0.23.2 | match "Import|Export"
+JUN02 show bgp summary
+JUN02 configure
+JUN02 delete protocols bgp group ISP neighbor 10.0.23.2 import
+JUN02 commit and-quit

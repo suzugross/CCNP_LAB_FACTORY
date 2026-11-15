@@ -1,0 +1,34 @@
+# J1-1: JUN01 が OSPF へ 172.16.10.0/24(direct)と 172.16.20.0/24(静的・metric 20)だけを export・172.16.99.0/24 は出さない・et-0/0/1 で OSPF を動かさない。
+problem: JNT-02
+total_points: 100
+checks:
+  - name: "J1-1 JUN02: JUN01 advertises 172.16.10.0/24 and 172.16.20.0/24 (metric 20) as OSPF external routes"
+    node: JUN02
+    exec: junos
+    command: "show ospf database external extensive"
+    raw:
+      - regex: 'Extern\s+172\.16\.10\.0\s+192\.168\.0\.1\s'
+      - regex: 'Extern\s+172\.16\.20\.0\s+192\.168\.0\.1\s[^\n]*\n[^\n]*\n[^\n]*\n\s+Type: \d, Metric: 20,'
+    points: 30
+  - name: "J1-1 JUN02: the test network 172.16.99.0/24 is not advertised"
+    node: JUN02
+    exec: junos
+    command: "show route 172.16.99.0/24 table inet.0"
+    raw:
+      - not_regex: '172\.16\.99\.0/24'
+    points: 20
+  - name: "J1-1 JUN01: OSPF does not run on et-0/0/1"
+    node: JUN01
+    exec: junos
+    command: "show ospf interface"
+    raw:
+      - regex: 'et-0/0/0\.0'
+      - not_regex: 'et-0/0/1'
+    points: 20
+  - name: "J1-1 JUN02: the loopback of JUN02 reaches the server network (172.16.20.1)"
+    node: JUN02
+    exec: junos
+    command: "ping 172.16.20.1 source 192.168.0.2 count 5 rapid"
+    raw:
+      - regex: '\b5 (packets )?received'
+    points: 30

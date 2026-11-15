@@ -1,0 +1,26 @@
+# J1-4: JUN02 が ISP へ出すのは集約 172.16.0.0/16 だけ(AS パス 65000 65000 65000)・SRV1 のサーバの網から ISP のループバックへ届く。
+problem: JNT-02
+total_points: 100
+checks:
+  - name: "J1-4 JUN02: only 172.16.0.0/16 is advertised to the ISP"
+    node: JUN02
+    exec: junos
+    command: "show route advertising-protocol bgp 10.0.23.2"
+    raw:
+      - regex: '172\.16\.0\.0/16\s+Self'
+      - not_regex: '172\.16\.\d+\.0/24|192\.168\.0\.\d+/32|10\.0\.(12|23)\.\d+/\d+|0\.0\.0\.0/0'
+    points: 30
+  - name: "J1-4 FRR1: the AS path of 172.16.0.0/16 is 65000 65000 65000"
+    node: FRR1
+    exec: frr
+    command: "show bgp ipv4 unicast 172.16.0.0/16"
+    raw:
+      - regex: '(?m)^\s+65000 65000 65000(,|\s*$)'
+    points: 30
+  - name: "J1-4 SRV1: the server network (172.16.20.1) reaches the ISP's loopback (203.0.113.1)"
+    node: SRV1
+    exec: local
+    command: ".venv/bin/python3 topologies/clab_ops.py exec --repo . --problem JNT-02 --node SRV1 -- ping -c 5 -W 1 -I 172.16.20.1 203.0.113.1"
+    raw:
+      - regex: '\b5 (packets )?received'
+    points: 40

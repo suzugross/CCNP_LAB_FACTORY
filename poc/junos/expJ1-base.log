@@ -1,0 +1,760 @@
+# jpoc JNT-02 j1-base.txt 2026-11-14 14:35:15
+# J1 PoC 1: 土台(アドレス・OSPF・eBGP)をポリシーなしで入れ、既定のポリシーの振る舞いを見る(BGP は PTX の既定が他機種と違う)
+
+## (sleep 50s)
+
+## [JUN01] (open)
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set interfaces et-0/0/0 unit 0 family inet address 10.0.12.1/30
+set interfaces et-0/0/0 unit 0 family inet address 10.0.12.1/30 
+
+[edit]
+admin@jun01# 
+## [JUN01] set interfaces et-0/0/1 unit 0 family inet address 172.16.10.1/24
+set interfaces et-0/0/1 unit 0 family inet address 172.16.10.1/24 
+
+[edit]
+admin@jun01# 
+## [JUN01] set interfaces lo0 unit 0 family inet address 192.168.0.1/32
+set interfaces lo0 unit 0 family inet address 192.168.0.1/32 
+
+[edit]
+admin@jun01# 
+## [JUN01] set routing-options router-id 192.168.0.1
+set routing-options router-id 192.168.0.1 
+
+[edit]
+admin@jun01# 
+## [JUN01] set routing-options autonomous-system 65000
+set routing-options autonomous-system 65000 
+
+[edit]
+admin@jun01# 
+## [JUN01] set routing-options static route 172.16.20.0/24 next-hop 172.16.10.10
+set routing-options static route 172.16.20.0/24 next-hop 172.16.10.10 
+
+[edit]
+admin@jun01# 
+## [JUN01] set routing-options static route 172.16.99.0/24 discard
+set routing-options static route 172.16.99.0/24 discard 
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+set protocols ospf area 0.0.0.0 interface et-0/0/0.0 
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf area 0.0.0.0 interface lo0.0 passive
+set protocols ospf area 0.0.0.0 interface lo0.0 passive 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN02] (open)
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces et-0/0/0 unit 0 family inet address 10.0.12.2/30
+set interfaces et-0/0/0 unit 0 family inet address 10.0.12.2/30 
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces et-0/0/1 unit 0 family inet address 10.0.23.1/30
+set interfaces et-0/0/1 unit 0 family inet address 10.0.23.1/30 
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces lo0 unit 0 family inet address 192.168.0.2/32
+set interfaces lo0 unit 0 family inet address 192.168.0.2/32 
+
+[edit]
+admin@jun02# 
+## [JUN02] set routing-options router-id 192.168.0.2
+set routing-options router-id 192.168.0.2 
+
+[edit]
+admin@jun02# 
+## [JUN02] set routing-options autonomous-system 65000
+set routing-options autonomous-system 65000 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols ospf area 0.0.0.0 interface et-0/0/0.0
+set protocols ospf area 0.0.0.0 interface et-0/0/0.0 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols ospf area 0.0.0.0 interface lo0.0 passive
+set protocols ospf area 0.0.0.0 interface lo0.0 passive 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP type external
+set protocols bgp group ISP type external 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP peer-as 64500
+set protocols bgp group ISP peer-as 64500 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP neighbor 10.0.23.2
+set protocols bgp group ISP neighbor 10.0.23.2 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 60s)
+
+## [JUN02] show bgp summary
+show bgp summary 
+
+Warning: License key missing; requires 'BGP' license
+
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 1 Peers: 1 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+inet.0               
+                       9          9          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.0.23.2             64500          6          3       0       0          58 Establ
+  inet.0: 9/9/9/0
+
+admin@jun02> 
+## [JUN02] show bgp neighbor 10.0.23.2
+show bgp neighbor 10.0.23.2 
+
+Warning: License key missing; requires 'BGP' license
+
+Peer: 10.0.23.2+179 AS 64500   Local: 10.0.23.1+52886 AS 65000
+  Group: ISP                   Routing-Instance: master
+  Forwarding routing-instance: master
+  Type: External    State: Established    Flags: <Sync>
+  Last State: OpenConfirm   Last Event: RecvKeepAlive
+  Last Error: None
+  Options: <PeerAS Refresh>
+  Options: <GracefulShutdownRcv>
+  Holdtime: 90 Preference: 170
+  Graceful Shutdown Receiver local-preference: 0
+  Number of flaps: 0
+  Up/Down Time : 59
+  Receive eBGP Origin Validation community: Reject
+  Malformed attributes    log interval: 300  route limit: 1000
+  Peer ID: 203.0.113.1     Local ID: 192.168.0.2       Active Holdtime: 90
+  Keepalive Interval: 30         Group index: 0    Peer index: 0    SNMP index: 0     
+  I/O Session Thread: bgpio-0 State: Enabled
+  BFD: disabled, down
+  Local Interface: et-0/0/1.0                       
+  NLRI for restart configured on peer: inet-unicast
+  NLRI advertised by peer: inet-unicast
+  NLRI for this session: inet-unicast
+  AS loop check: Domain Scoped
+  Peer supports Refresh capability (2)
+  Peer supports 4 byte AS extension (peer-as 64500)
+  NLRI's for which peer can receive multiple paths: inet-unicast
+  Addpath 'send' not negotiated for NLRI: inet-unicast
+  Table inet.0 Bit: 20000
+    RIB State: BGP restart is complete
+    Send state: in sync
+    Active prefixes:              9
+    Received prefixes:            9
+    Accepted prefixes:            9
+    Suppressed due to damping:    0
+    Advertised prefixes:          0
+  Stale routes from peer are kept for: 300
+  Peer does not support Restarter functionality
+  Restart flag received from the peer: Notification
+  NLRI that restart is negotiated for: inet-unicast
+  NLRI of received end-of-rib markers: inet-unicast
+  NLRI of all end-of-rib markers sent: inet-unicast
+  NLRI and times that peer supports LLGR Restarter for: inet-unicast 00:00:00
+  NLRI that peer saved LLGR forwarding for: inet-unicast
+  Inbound convergence status: Complete
+    Time taken: 2
+    Reason: Received end-of-rib for all NLRI
+  Family inet-unicast
+    Initial send time: 0
+    Initial recv time: 1
+  Last traffic (seconds): Received 29   Sent 5    Checked 59  
+  Input messages:  Total 6	Updates 3 	Refreshes 0 	Octets 295
+  Output messages: Total 3	Updates 0 	Refreshes 0 	Octets 61
+  Output Queue[1]: 0            (inet.0, inet-unicast)
+
+admin@jun02> 
+## [JUN02] show route receive-protocol bgp 10.0.23.2
+show route receive-protocol bgp 10.0.23.2 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 16 destinations, 16 routes (16 active, 0 holddown, 0 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.0.23.2            0                  64500 I
+* 10.200.0.0/16           10.0.23.2            0                  64500 I
+* 100.64.0.0/10           10.0.23.2            0                  64500 I
+* 192.0.2.0/24            10.0.23.2            0                  64500 I
+* 192.168.50.0/24         10.0.23.2            0                  64500 I
+* 198.18.0.0/15           10.0.23.2            0                  64500 I
+* 198.51.100.0/24         10.0.23.2            0                  64500 I
+* 198.51.100.128/25       10.0.23.2            0                  64500 I
+* 203.0.113.0/24          10.0.23.2            0                  64500 I
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+inet6.0: 2 destinations, 2 routes (2 active, 0 holddown, 0 hidden)
+
+inet6.2: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+inet6.3: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet6.0: 4 destinations, 4 routes (4 active, 0 holddown, 0 hidden)
+
+admin@jun02> 
+## [JUN02] show route protocol bgp table inet.0
+show route protocol bgp table inet.0 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 16 destinations, 16 routes (16 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[BGP/170] 00:00:59, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+10.200.0.0/16      *[BGP/170] 00:00:59, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+100.64.0.0/10      *[BGP/170] 00:00:59, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+192.0.2.0/24       *[BGP/170] 00:00:59, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+192.168.50.0/24    *[BGP/170] 00:00:59, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+198.18.0.0/15      *[BGP/170] 00:00:59, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+198.51.100.0/24    *[BGP/170] 00:00:59, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+198.51.100.128/25  *[BGP/170] 00:00:59, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+203.0.113.0/24     *[BGP/170] 00:00:59, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+admin@jun02> 
+## [JUN02] show route protocol bgp table inet.0 extensive | match "^[0-9]|State|Installed|Inactive|Active|Hidden|reason|Next hop|Local AS"
+show route protocol bgp table inet.0 extensive | match "^[0-9]|State|Installed|Inactive|Active|Hidden|reason|Next hop|Local AS" 
+inet.0: 16 destinations, 16 routes (16 active, 0 holddown, 0 hidden)
+0.0.0.0/0 (1 entry, 1 announced)
+                Next hop type: Router, Next hop index: 9035
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Validation State: unverified 
+10.200.0.0/16 (1 entry, 1 announced)
+                Next hop type: Router, Next hop index: 9035
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Validation State: unverified 
+100.64.0.0/10 (1 entry, 1 announced)
+                Next hop type: Router, Next hop index: 9035
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Validation State: unverified 
+192.0.2.0/24 (1 entry, 1 announced)
+                Next hop type: Router, Next hop index: 9035
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Validation State: unverified 
+192.168.50.0/24 (1 entry, 1 announced)
+                Next hop type: Router, Next hop index: 9035
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Validation State: unverified 
+198.18.0.0/15 (1 entry, 1 announced)
+                Next hop type: Router, Next hop index: 9035
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Validation State: unverified 
+198.51.100.0/24 (1 entry, 1 announced)
+                Next hop type: Router, Next hop index: 9035
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Validation State: unverified 
+198.51.100.128/25 (1 entry, 1 announced)
+                Next hop type: Router, Next hop index: 9035
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Validation State: unverified 
+203.0.113.0/24 (1 entry, 1 announced)
+                Next hop type: Router, Next hop index: 9035
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Validation State: unverified 
+
+admin@jun02> 
+## [JUN02] show route hidden table inet.0
+show route hidden table inet.0 
+
+inet.0: 16 destinations, 16 routes (16 active, 0 holddown, 0 hidden)
+
+admin@jun02> 
+## [JUN02] show route forwarding-table destination 198.51.100.0/24 table default
+show route forwarding-table destination 198.51.100.0/24 table default 
+Routing table: default.inet
+Internet:
+Destination        Type RtRef Next hop           Type Index    NhRef Netif
+198.51.100.0/24    user     0                    sftw     9035     1 et-0/0/1.0
+                              10.0.23.2          ucst     1000     1 et-0/0/1.0
+
+admin@jun02> 
+## [JUN02] show route forwarding-table destination 0.0.0.0/0 table default
+show route forwarding-table destination 0.0.0.0/0 table default 
+Routing table: default.inet
+Internet:
+Destination        Type RtRef Next hop           Type Index    NhRef Netif
+default            user     0                    sftw     9035     1 et-0/0/1.0
+                              10.0.23.2          ucst     1000     1 et-0/0/1.0
+default            perm     0                    rjct       36     1
+0.0.0.0/32         perm     0                    dscd       34     1
+
+admin@jun02> 
+## [JUN02] show route advertising-protocol bgp 10.0.23.2
+show route advertising-protocol bgp 10.0.23.2 
+
+Warning: License key missing; requires 'BGP' license
+
+
+admin@jun02> 
+## [JUN02] ping 203.0.113.1 count 3 rapid
+ping 203.0.113.1 count 3 rapid 
+PING 203.0.113.1 (203.0.113.1) 56(84) bytes of data.
+!!!
+--- 203.0.113.1 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2ms
+rtt min/avg/max/mdev = 0.820/0.906/1.039/0.095 ms, ipg/ewma 0.986/0.992 ms
+
+admin@jun02> 
+## [JUN02] ping 203.0.113.1 source 192.168.0.2 count 3 rapid
+ping 203.0.113.1 source 192.168.0.2 count 3 rapid 
+PING 203.0.113.1 (203.0.113.1) from 192.168.0.2 : 56(84) bytes of data.
+...
+--- 203.0.113.1 ping statistics ---
+3 packets transmitted, 0 received, 100% packet loss, time 1010ms
+
+
+admin@jun02> 
+## [FRR1] (open)
+
+Hello, this is FRRouting (version 10.7.1_git).
+Copyright 1996-2005 Kunihiro Ishiguro, et al.
+
+frr1# 
+## [FRR1] show bgp ipv4 unicast summary
+show bgp ipv4 unicast summary
+BGP router identifier 203.0.113.1, local AS number 64500 VRF default vrf-id 0
+BGP table version 8
+RIB entries 8, using 1280 bytes of memory
+Peers 1, using 23 KiB of memory
+
+Neighbor        V         AS   MsgRcvd   MsgSent   TblVer  InQ OutQ  Up/Down State/PfxRcd   PfxSnt Desc
+10.0.23.1       4      65000         5         7        8    0    0 00:01:07            0        9 N/A
+
+Total number of neighbors 1
+frr1# 
+## [FRR1] show bgp ipv4 unicast
+show bgp ipv4 unicast
+BGP table version is 8, local router ID is 203.0.113.1, vrf id 0
+Default local pref 100, local AS 64500
+Status codes:  s suppressed, d damped, h history, u unsorted, * valid, > best, = multipath,
+               i internal, r RIB-failure, S Stale, R Removed
+Nexthop codes: @NNN nexthop's vrf id, < announce-nh-self
+Origin codes:  i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>  10.200.0.0/16    0.0.0.0                  0         32768 i
+ *>  100.64.0.0/10    0.0.0.0                  0         32768 i
+ *>  192.0.2.0/24     0.0.0.0                  0         32768 i
+ *>  192.168.50.0/24  0.0.0.0                  0         32768 i
+ *>  198.18.0.0/15    0.0.0.0                  0         32768 i
+ *>  198.51.100.0/24  0.0.0.0                  0         32768 i
+ *>  198.51.100.128/25
+                    0.0.0.0                  0         32768 i
+ *>  203.0.113.0/24   0.0.0.0                  0         32768 i
+
+Displayed 8 routes and 8 total paths
+frr1# 
+## [JUN01] show route table inet.0
+show route table inet.0 
+
+inet.0: 9 destinations, 9 routes (9 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.12.0/30       *[Direct/0] 00:01:19
+                    >  via et-0/0/0.0
+10.0.12.1/32       *[Local/0] 00:01:19
+                       Local via et-0/0/0.0
+172.16.10.0/24     *[Direct/0] 00:01:19
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:01:19
+                       Local via et-0/0/1.0
+172.16.20.0/24     *[Static/5] 00:01:19
+                    >  to 172.16.10.10 via et-0/0/1.0
+172.16.99.0/24     *[Static/5] 00:01:19
+                       Discard
+192.168.0.1/32     *[Direct/0] 00:01:19
+                    >  via lo0.0
+192.168.0.2/32     *[OSPF/10] 00:00:25, metric 1
+                    >  to 10.0.12.2 via et-0/0/0.0
+224.0.0.5/32       *[OSPF/10] 00:01:19, metric 1
+                       MultiRecv
+
+admin@jun01> 
+## [JUN01] show ospf database
+show ospf database 
+
+Warning: License key missing; requires 'OSPF' license
+
+
+    OSPF database, Area 0.0.0.0
+ Type       ID               Adv Rtr           Seq      Age  Opt  Cksum  Len 
+Router  *192.168.0.1      192.168.0.1      0x80000002    30  0x22 0xfcb6  48
+Router   192.168.0.2      192.168.0.2      0x80000002    31  0x22 0x119e  48
+Network  10.0.12.2        192.168.0.2      0x80000001    31  0x22 0x37ac  32
+
+admin@jun01> 
+## [JUN02] show route table inet.0 terse
+show route table inet.0 terse 
+
+inet.0: 16 destinations, 16 routes (16 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+A V Destination        P Prf   Metric 1   Metric 2  Next hop        AS path
+* ? 0.0.0.0/0          B 170        100          0 >10.0.23.2       64500 I
+* ? 10.0.12.0/30       D   0                       >et-0/0/0.0  
+* ? 10.0.12.2/32       L   0                        Local
+* ? 10.0.23.0/30       D   0                       >et-0/0/1.0  
+* ? 10.0.23.1/32       L   0                        Local
+* ? 10.200.0.0/16      B 170        100          0 >10.0.23.2       64500 I
+* ? 100.64.0.0/10      B 170        100          0 >10.0.23.2       64500 I
+* ? 192.0.2.0/24       B 170        100          0 >10.0.23.2       64500 I
+* ? 192.168.0.1/32     O  10          1            >10.0.12.1
+* ? 192.168.0.2/32     D   0                       >lo0.0       
+* ? 192.168.50.0/24    B 170        100          0 >10.0.23.2       64500 I
+* ? 198.18.0.0/15      B 170        100          0 >10.0.23.2       64500 I
+* ? 198.51.100.0/24    B 170        100          0 >10.0.23.2       64500 I
+* ? 198.51.100.128/25  B 170        100          0 >10.0.23.2       64500 I
+* ? 203.0.113.0/24     B 170        100          0 >10.0.23.2       64500 I
+* ? 224.0.0.5/32       O  10          1             MultiRecv
+
+admin@jun02> # 既定の BGP の口(?)
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp ?
+set protocols bgp ?
+Possible completions:
+  accept-prefix-sid    Accept prefix sid from E-BGP peers
+> accept-prpd-connection  Enable BGP to accept PRPD connections
+  accept-remote-nexthop  Allow import policy to specify a non-directly connected next-hop
+  add-path-display-ipv4-address  Display add-path path-id in IPv4 address format
+> advertise-bgp-static  Advertise bgp-static routes
+> advertise-external   Advertise best external routes
+  advertise-from-main-vpn-tables  Advertise VPN routes from bgp.Xvpn.0 tables in master instance
+  advertise-inactive   Advertise inactive routes
+  advertise-peer-as    Advertise routes received from the same autonomous system
+  advertise-prefix-sid  Advertise prefix sid to E-BGP peers
+  advertise-srgb       Advertise SRGB TLV
++ apply-groups         Groups from which to inherit configuration data
++ apply-groups-except  Don't inherit configuration data from these groups
+  authentication-algorithm  Authentication algorithm name
+  authentication-key   MD5 authentication key
+  authentication-key-chain  Key chain name
+> bfd-liveness-detection  Bidirectional Forwarding Detection (BFD) options
+> bgp-error-tolerance  Handle BGP malformed updates softly, enabled by default. Configure logging parameters
+  bgp-identifier       BGP Identifier
+> bmp                  Specific settings to override the routing-options settings
+  cluster              Cluster identifier
+  damping              Enable route flap damping
+> defaults             
+  description          Text description
+  disable              Disable BGP
+  disable-4byte-as     Disable 4 byte AS capability advertisement
+> domain-path-id       Domain path id attribute
+> ebgp-community-cleanup  Community specific cleanup for eBGP peers
+> egress-te            Use Egress Peering traffic engineering
+> egress-te-backup-paths  Backup-path for Egress-TE peer interface failure
+> egress-te-set-segment  Configure BGP-Peer-Set segment
+  egress-te-sid-stats  Create BGP-Peer-SID sensor
+  enforce-first-as     Enforce first AS in AS-path is the neighbor's AS
++ export               Export policy
+> fabric-advertise     Advertise routes over BGP fabrics based on color matching
+  fabric-color         Color community used to color BGP neighbors
+> family               Protocol family for NLRIs in updates
+  forwarding-context   Routing-instance used for data-forwarding and transport-session
+> graceful-restart     BGP graceful restart options
+> graceful-shutdown    BGP peer graceful shutdown option
+> group                Define a peer group
+  hold-time            Hold time used when negotiating with a peer
+  holddown-all-stale-labels  Hold all BGP stale-labels, facilitating make-before-break for new label advertisements
+> idle-after-switch-over  Stop peer session from coming up after nonstop-routing switch-over
+  ignore-med           Ignore received MED
++ import               Import policy
+  include-mp-next-hop  Include NEXT-HOP attribute in multiprotocol updates
+  ipsec-sa             IPSec SA name
+  keep                 How to retain routes in the routing table
+  keepalive-time       Override BGP keepalive time derived from hold-time (1..21845)
+  local-address        Address of local end of BGP session
+> local-as             Local autonomous system number
+  local-interface      Local interface for IPv6 link local EBGP peering
+  local-preference     Value of LOCAL_PREF path attribute
+  log-updown           Log a message for peer state transitions
+> metric-out           Route metric sent in MED
+  minimum-hold-time    Minimum hold time accepted from the peer (3..65535)
+  mtu-discovery        Enable TCP path MTU discovery
+> multihop             Configure an EBGP multihop session
+> multipath            Allow load sharing among multiple BGP paths
+> multipath-build-priority  Configure the multipath build priority
+  no-advertise-peer-as  Don't advertise routes received from the same autonomous system
+  no-aggregator-id     Set router ID in aggregator path attribute to 0
+  no-client-reflect    Disable intracluster route redistribution
+  no-precision-timers  Don't use precision timers for scheduling keepalives
+  nonstop-routing-multipath  Enable processing of bgp multipath on standby
+> otc-local-role       Bgp role capability used to detect and prevent route leak
+  out-delay            How long before exporting routes from routing table (0..65535)
+> outbound-route-filter  Dynamically negotiated cooperative route filtering
+> output-queue-priority  BGP output queue priority scheduler for updates
+  passive              Do not send open messages to a peer
+> path-attributes      Handle path-attributes in inbound updates
+> path-selection       Configure path selection strategy
+  peer-as               Autonomous system number in plain number or 'higher 16bits'.'Lower 16 bits' (asdot notation) format
+  precision-timers     Use precision timers for scheduling keepalives
+  preference           Preference value
+  prioritize-route-queueing  Let route-queue building happen without getting throttled
+> remove-private       Remove well-known private AS numbers
+  rfc6514-compliant-safi129  Compliant with RFC6514 SAFI129 format
+  rfc8950-compliant    Enable RFC8950 compliant
+  route-age-bgp-view   Maintain BGP route's age based on Update messages only
+  route-server-client  Enable route server client behavior
+  send-addpath-optimization  Enable BGP addpath advertisement optimization
+> send-community-type  Configure community types to be sent
+> shutdown             Shutdown
+> snmp-options         Customize SNMP behaviors specifically for BGP MIBs
+> source-packet-routing  Enable Source Packet Routing (SPRING)
+  sr-preference-override  Replace received segment routing traffic engineering preference value with override value
+  stale-labels-holddown-period  Duration (sec) MPLS labels allocated by BGP are kept after they go stale (1..600)
+  tcp-aggressive-transmission  Enable aggressive transmission of pure TCP ACKs and retransmissions
+  tcp-mss              Maximum TCP segment size (1..4096)
+  tcpao-auth-mismatch  Continue without TCP-AO if any one TCP endpoint does not have TCP-AO configured
+> traceoptions         Trace options for BGP
+> traffic-statistics-labeled-path  Collect periodic ingress labeled statistics for BGP label-switched paths 
+  ttl                  TTL value for the single-hop peer
+  unconfigured-peer-graceful-restart  BGP unconfigured peer graceful restart options
+  vpn-apply-export     Apply BGP export policy when exporting VPN routes
+[edit]
+admin@jun02# set protocols bgp    
+                               ^
+missing argument.
+
+[edit]
+admin@jun02# 
+## [JUN02] 
+
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp defaults ?
+set protocols bgp defaults ?
+Possible completions:
++ apply-groups         Groups from which to inherit configuration data
++ apply-groups-except  Don't inherit configuration data from these groups
+> ebgp                 Options impacting external BGP default behaviors
+> ibgp                 Options impacting internal BGP default behaviors
+  no-send-community    Do not send communities in advertisements
+[edit]
+admin@jun02# set protocols bgp defaults    
+                                        ^
+missing argument.
+
+[edit]
+admin@jun02# 
+## [JUN02] 
+
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP ?
+set protocols bgp group ISP ?
+Possible completions:
+  accept-prefix-sid    Accept prefix sid from E-BGP peers
+  accept-remote-nexthop  Allow import policy to specify a non-directly connected next-hop
+  add-path-display-ipv4-address  Display add-path path-id in IPv4 address format
+> advertise-bgp-static  Advertise bgp-static routes
+> advertise-external   Advertise best external routes
+  advertise-inactive   Advertise inactive routes
+  advertise-peer-as    Advertise routes received from the same autonomous system
+  advertise-prefix-sid  Advertise prefix sid to E-BGP peers
+  advertise-srgb       Advertise SRGB TLV
++ allow                Configure peer connections for specific networks
++ apply-groups         Groups from which to inherit configuration data
++ apply-groups-except  Don't inherit configuration data from these groups
+  as-override          Replace neighbor AS number with our AS number
+  authentication-algorithm  Authentication algorithm name
+  authentication-key   MD5 authentication key
+  authentication-key-chain  Key chain name
+> bfd-liveness-detection  Bidirectional Forwarding Detection (BFD) options
+> bgp-error-tolerance  Handle BGP malformed updates softly, enabled by default. Configure logging parameters
+  bgp-identifier       BGP Identifier
+> bmp                  Specific settings to override the routing-options settings
+  cluster              Cluster identifier
+  damping              Enable route flap damping
+  description          Text description
+  disable-4byte-as     Disable 4 byte AS capability advertisement
+> domain-path-id       Domain path id attribute
+> dynamic-neighbor     Configure peer options for specific networks
+> ebgp-community-cleanup  Community specific cleanup for eBGP peers
+> egress-te            Use Egress Peering traffic engineering
+  enforce-first-as     Enforce first AS in AS-path is the neighbor's AS
++ export               Export policy
+  fabric-color         Color community used to color BGP neighbors
+> family               Protocol family for NLRIs in updates
+  forwarding-context   Routing-instance used for data-forwarding and transport-session
+> graceful-restart     BGP graceful restart options
+> graceful-shutdown    BGP peer graceful shutdown option
+  hold-time            Hold time used when negotiating with a peer
+> idle-after-switch-over  Stop peer session from coming up after nonstop-routing switch-over
+  ignore-med           Ignore received MED
++ import               Import policy
+  include-mp-next-hop  Include NEXT-HOP attribute in multiprotocol updates
+  ipsec-sa             IPSec SA name
+  keep                 How to retain routes in the routing table
+  keepalive-time       Override BGP keepalive time derived from hold-time (1..21845)
+> link-bandwidth       Configure link-bandwidth options
+  local-address        Address of local end of BGP session
+> local-as             Local autonomous system number
+  local-interface      Local interface for IPv6 link local EBGP peering
+  local-preference     Value of LOCAL_PREF path attribute
+  log-updown           Log a message for peer state transitions
+> metric-out           Route metric sent in MED
+  minimum-hold-time    Minimum hold time accepted from the peer (3..65535)
+  mtu-discovery        Enable TCP path MTU discovery
+> multihop             Configure an EBGP multihop session
+> multipath            Allow load sharing among multiple BGP paths
+> neighbor             Configure a neighbor
+  no-advertise-peer-as  Don't advertise routes received from the same autonomous system
+  no-aggregator-id     Set router ID in aggregator path attribute to 0
+  no-client-reflect    Disable intracluster route redistribution
+> optimal-route-reflection  Enable optimal route reflection for this client group
+> otc-local-role       Bgp role capability used to detect and prevent route leak
+  out-delay            How long before exporting routes from routing table (0..65535)
+> outbound-route-filter  Dynamically negotiated cooperative route filtering
+  passive              Do not send open messages to a peer
+> path-attributes      Handle path-attributes in inbound updates
+  peer-as               Autonomous system number in plain number or 'higher 16bits'.'Lower 16 bits' (asdot notation) format
+  peer-as-list         Configure list of peer autonomous systems for unconfigured neighbors
+  preference           Preference value
+> remove-private       Remove well-known private AS numbers
+  rfc6514-compliant-safi129  Compliant with RFC6514 SAFI129 format
+  route-server-client  Enable route server client behavior
+> send-community-type  Configure community types to be sent
+  send-non-transitive-link-bandwidth  Allow sending non transitive link-bandwidth to EBGP peers
+> shutdown             Shutdown
+  tcp-aggressive-transmission  Enable aggressive transmission of pure TCP ACKs and retransmissions
+  tcp-mss              Maximum TCP segment size (1..4096)
+  tcpao-auth-mismatch  Continue without TCP-AO if any one TCP endpoint does not have TCP-AO configured
+> traceoptions         Trace options for BGP
+  ttl                  TTL value for the single-hop peer
+  type                 Type of peer group
+  unconfigured-peer-graceful-restart  BGP unconfigured peer graceful restart options
+  vpn-apply-export     Apply BGP export policy when exporting VPN routes
+[edit]
+admin@jun02# set protocols bgp group ISP    
+                                         ^
+missing argument.
+
+[edit]
+admin@jun02# 
+## [JUN02] 
+
+
+[edit]
+admin@jun02# 
+## [JUN02] exit
+exit 
+Exiting configuration mode
+
+admin@jun02> 
+## [JUN02] help apropos install-to-fib
+help apropos install-to-fib 
+error: nothing matches 'install-to-fib'
+
+admin@jun02> 
+## [JUN02] help apropos "no-policy"
+help apropos "no-policy" 
+error: nothing matches 'no-policy'
+
+admin@jun02> 
+## [JUN02] show version | match "Model|Junos"
+show version | match "Model|Junos" 
+Model: ptx10001-36mr
+Junos: 26.2R1.7-EVOI20260619095247-evo-builder-1
+JUNOS-EVO OS 64-bit [junos-evo-install-ptx-fixed-x86-64-26.2R1.7-EVOI20260619095247-evo-builder-1]
+
+admin@jun02> 

@@ -1,0 +1,380 @@
+# JNT-02 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn JNT-02 が読む(containerlab の問題・BL-275)。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# verify= 確かめ方の例(BL-266)。結果を観る手順まで(入ったか → 流して数える → 届いた先 → 壊していないか)。落とし穴の名前や直し方は書かない。
+# 挙動は vJunos-Evolved 26.2R1.7(JUN01・JUN02)× FRR 10.7.1(FRR1・SRV1)で確かめた(記録 poc/junos/expJ1-*.log・poc/junos/e2e/・設計 JUNOS-TRACK.design.md §8)。
+# 読み物= courses/junos(reading/junos/)。各課題の read: はその本の「ページ#節」。
+reading: junos
+steps:
+  - id: j1t1
+    title: { en: "J1-1  Advertise the server networks into OSPF", ja: "J1-1  サーバの網を OSPF で広告する" }
+    check: j1t1
+    read: [11-j1-policy-statement#s2-1, 11-j1-policy-statement#s2-2, 11-j1-policy-statement#s2-3, 11-j1-policy-statement#s2-6, 11-j1-policy-statement#s3-1]
+    hints:
+      - en: "OSPF exports nothing from the routing table by default. An export policy decides which routes become external routes, and a term matches only when every kind of condition in its `from` matches. The two networks come from two different sources."
+        ja: "OSPF は既定では経路表から何も export しません。どの経路を外部経路にするかは export ポリシーが決めます。term が当たるのは、`from` の中の種類の違う条件がすべて当たった時です。2 つの網は、出どころが違います。"
+      - en: "On JUN01: `show route 172.16.0.0/16` (which protocol each route comes from), `test policy <name> 172.16.0.0/16` (but read section 2.8 first). On JUN02: `show ospf database external extensive` and `show route 172.16.0.0/16`. Page: policy-statement, sections 2.2, 2.3 and 2.6."
+        ja: "JUN01 で `show route 172.16.0.0/16`(それぞれの経路の出どころ)、`test policy <名前> 172.16.0.0/16`(ただし先に 2.8 節を読む)。JUN02 で `show ospf database external extensive` と `show route 172.16.0.0/16`。読み物: policy-statement の 2.2・2.3・2.6 節。"
+      - en: "On JUN01, a policy with two terms: one with `from protocol direct` and `from route-filter 172.16.10.0/24 exact`, then `accept`; one with `from protocol static`, `from route-filter 172.16.20.0/24 exact`, then `metric 20` and `accept`. Apply it with `set protocols ospf export <name>` and commit."
+        ja: "JUN01 で term を 2 つ持つポリシー: 1 つは `from protocol direct` と `from route-filter 172.16.10.0/24 exact`、then `accept`。もう 1 つは `from protocol static`・`from route-filter 172.16.20.0/24 exact`、then `metric 20` と `accept`。`set protocols ospf export <名前>` で当てて commit。"
+    verify:
+      en: |
+        **1. Is it in?** (JUN01)
+
+        - `show configuration protocols ospf`: an `export` line names your policy, and `area 0.0.0.0` still lists only `et-0/0/0.0` and `lo0.0`.
+        - `show policy <name>`: the terms appear in the order you meant.
+
+        **2. What does OSPF carry now?** (JUN02)
+
+        - `show ospf database external extensive`: an `Extern` entry from `192.168.0.1` for 172.16.10.0 and one for 172.16.20.0.
+          Read the `Type:` and `Metric:` line under each. Is there an entry for 172.16.99.0?
+        - `show route 172.16.0.0/16`: which prefixes are there, as `OSPF/150`?
+
+        **3. Does traffic reach the far end?** (JUN02)
+
+        - `ping 172.16.20.1 source 192.168.0.2 count 3 rapid` and `ping 172.16.10.10 source 192.168.0.2 count 3 rapid`.
+
+        **4. Is anything else changed?** (JUN01)
+
+        - `show ospf neighbor`: the adjacency with JUN02 is still `Full`.
+      ja: |
+        **1. 入ったか**(JUN01)
+
+        - `show configuration protocols ospf`: `export` の行があなたのポリシーを名指しし、`area 0.0.0.0` に並ぶのは今も `et-0/0/0.0` と `lo0.0` だけ。
+        - `show policy <名前>`: term が意図した順に並ぶ。
+
+        **2. OSPF は今何を運んでいるか**(JUN02)
+
+        - `show ospf database external extensive`: `192.168.0.1` からの `Extern` が 172.16.10.0 と 172.16.20.0 に 1 つずつ。
+          それぞれの下の `Type:` と `Metric:` の行を読む。172.16.99.0 の項はあるか。
+        - `show route 172.16.0.0/16`: `OSPF/150` で並ぶのはどのプレフィックスか。
+
+        **3. 先まで届くか**(JUN02)
+
+        - `ping 172.16.20.1 source 192.168.0.2 count 3 rapid` と `ping 172.16.10.10 source 192.168.0.2 count 3 rapid`。
+
+        **4. ほかを変えていないか**(JUN01)
+
+        - `show ospf neighbor`: JUN02 との隣接は今も `Full`。
+    solution:
+      en: |
+        On JUN01:
+        configure
+        set policy-options policy-statement SERVERS-TO-OSPF term LAN from protocol direct
+        set policy-options policy-statement SERVERS-TO-OSPF term LAN from route-filter 172.16.10.0/24 exact
+        set policy-options policy-statement SERVERS-TO-OSPF term LAN then accept
+        set policy-options policy-statement SERVERS-TO-OSPF term SRV from protocol static
+        set policy-options policy-statement SERVERS-TO-OSPF term SRV from route-filter 172.16.20.0/24 exact
+        set policy-options policy-statement SERVERS-TO-OSPF term SRV then metric 20
+        set policy-options policy-statement SERVERS-TO-OSPF term SRV then accept
+        set protocols ospf export SERVERS-TO-OSPF
+        commit and-quit
+        (172.16.99.0/24 matches neither term, so OSPF's default export policy rejects it)
+      ja: |
+        On JUN01:
+        configure
+        set policy-options policy-statement SERVERS-TO-OSPF term LAN from protocol direct
+        set policy-options policy-statement SERVERS-TO-OSPF term LAN from route-filter 172.16.10.0/24 exact
+        set policy-options policy-statement SERVERS-TO-OSPF term LAN then accept
+        set policy-options policy-statement SERVERS-TO-OSPF term SRV from protocol static
+        set policy-options policy-statement SERVERS-TO-OSPF term SRV from route-filter 172.16.20.0/24 exact
+        set policy-options policy-statement SERVERS-TO-OSPF term SRV then metric 20
+        set policy-options policy-statement SERVERS-TO-OSPF term SRV then accept
+        set protocols ospf export SERVERS-TO-OSPF
+        commit and-quit
+        (172.16.99.0/24 はどちらの term にも当たらないので、OSPF の既定の export ポリシーが拒む)
+
+  - id: j1t2
+    title: { en: "J1-2  Hand the ISP's default route to the inside", ja: "J1-2  ISP の既定経路を社内へ配る" }
+    check: j1t2
+    read: [11-j1-policy-statement#s2-4, 11-j1-policy-statement#s2-7, 11-j1-policy-statement#s2-6]
+    hints:
+      - en: "If JUN01's default route is the BGP route that JUN02 already has, it lives and dies with the session. OSPF exports from the routing table, so it can export a BGP route, too. Narrow it down by protocol and by prefix."
+        ja: "JUN01 の既定経路が、JUN02 が既に持っている BGP の経路そのものなら、セッションと一緒に現れて消えます。OSPF は経路表から export するので、BGP の経路も export できます。出どころとプレフィックスの両方で絞ります。"
+      - en: "On JUN02: `show route 0.0.0.0/0 exact` (where the default route comes from). On JUN01: `show route 0.0.0.0/0 exact` and `show ospf database external`. Page: policy-statement, section 2.7."
+        ja: "JUN02 で `show route 0.0.0.0/0 exact`(既定経路の出どころ)。JUN01 で `show route 0.0.0.0/0 exact` と `show ospf database external`。読み物: policy-statement の 2.7 節。"
+      - en: "On JUN02, a policy with one term: `from protocol bgp`, `from route-filter 0.0.0.0/0 exact`, then `accept`. Apply it with `set protocols ospf export <name>` and commit."
+        ja: "JUN02 で term 1 つのポリシー: `from protocol bgp`・`from route-filter 0.0.0.0/0 exact`、then `accept`。`set protocols ospf export <名前>` で当てて commit。"
+    verify:
+      en: |
+        **1. Is it in?** (JUN02)
+
+        - `show configuration protocols ospf`: an `export` line names your policy.
+        - `show route 0.0.0.0/0 exact`: the active route (`*`) is `BGP/170` from 10.0.23.2.
+
+        **2. What does JUN01 learn?** (JUN01)
+
+        - `show route 0.0.0.0/0 exact`: `OSPF/150` via 10.0.12.2.
+        - `show ospf database external`: which `Extern` entries have `192.168.0.2` as the advertising router?
+
+        **3. Does traffic go out?** (JUN01)
+
+        - `ping 203.0.113.1 source 192.168.0.1 count 3 rapid`. (The ISP has no route back to the inside yet, so no reply is the
+          expected result here. `traceroute 203.0.113.1 source 192.168.0.1` shows the first hop is JUN02.)
+
+        **4. Does it follow the session?** (optional)
+
+        - On JUN02, `deactivate protocols bgp group ISP` and commit. On JUN01, `show route 0.0.0.0/0 exact` a few seconds later.
+          Then `activate protocols bgp group ISP`, commit, and check JUN01 again after about a minute.
+      ja: |
+        **1. 入ったか**(JUN02)
+
+        - `show configuration protocols ospf`: `export` の行があなたのポリシーを名指ししている。
+        - `show route 0.0.0.0/0 exact`: 使われている経路(`*`)が 10.0.23.2 からの `BGP/170`。
+
+        **2. JUN01 は何を学んだか**(JUN01)
+
+        - `show route 0.0.0.0/0 exact`: 10.0.12.2 経由の `OSPF/150`。
+        - `show ospf database external`: 広告したルータが `192.168.0.2` の `Extern` はどれか。
+
+        **3. 外へ出ていくか**(JUN01)
+
+        - `ping 203.0.113.1 source 192.168.0.1 count 3 rapid`(ISP はまだ社内への戻りの経路を持たないので、ここでは応答が無いのが
+          期待どおり。`traceroute 203.0.113.1 source 192.168.0.1` で最初のホップが JUN02 だと分かる)。
+
+        **4. セッションに付いてくるか**(任意)
+
+        - JUN02 で `deactivate protocols bgp group ISP` して commit。数秒後に JUN01 で `show route 0.0.0.0/0 exact`。
+          そのあと `activate protocols bgp group ISP` して commit し、1 分ほどしてから JUN01 をもう一度見る。
+    solution:
+      en: |
+        On JUN02:
+        configure
+        set policy-options policy-statement DEFAULT-TO-OSPF term DEF from protocol bgp
+        set policy-options policy-statement DEFAULT-TO-OSPF term DEF from route-filter 0.0.0.0/0 exact
+        set policy-options policy-statement DEFAULT-TO-OSPF term DEF then accept
+        set protocols ospf export DEFAULT-TO-OSPF
+        commit and-quit
+        (the other BGP routes match no term, and OSPF's default export policy rejects them)
+      ja: |
+        On JUN02:
+        configure
+        set policy-options policy-statement DEFAULT-TO-OSPF term DEF from protocol bgp
+        set policy-options policy-statement DEFAULT-TO-OSPF term DEF from route-filter 0.0.0.0/0 exact
+        set policy-options policy-statement DEFAULT-TO-OSPF term DEF then accept
+        set protocols ospf export DEFAULT-TO-OSPF
+        commit and-quit
+        (ほかの BGP の経路はどの term にも当たらず、OSPF の既定の export ポリシーが拒む)
+
+  - id: j1t3
+    title: { en: "J1-3  Accept fewer routes from the ISP", ja: "J1-3  ISP から受け入れる経路を絞る" }
+    check: j1t3
+    read: [13-j1-route-filter#s2-2, 13-j1-route-filter#s2-3, 11-j1-policy-statement#s2-4, 10-j1-map#s2-1, 13-j1-route-filter#s3-1]
+    hints:
+      - en: "Write an import policy for the BGP group. Think about where a route ends up when it matches none of your terms: for BGP import, that place accepts. And check that a length range really covers every route you want to keep."
+        ja: "BGP の group に import ポリシーを書きます。どの term にも当たらなかった経路がどこへ行くかを考えます。BGP の import では、そこは受け入れです。そして、長さの範囲が、残したい経路を本当にすべて含むかを確かめます。"
+      - en: "On JUN02: `show route receive-protocol bgp 10.0.23.2` (what is used) and the same with `hidden` (what is not), `show route 10.200.0.0/16 hidden extensive` (the reason), `show policy <name>`. On JUN01: `show route 0.0.0.0/0 exact`. Page: route-filter, sections 2.2 and 2.3."
+        ja: "JUN02 で `show route receive-protocol bgp 10.0.23.2`(使われているもの)と、`hidden` を付けた同じもの(使われていないもの)、`show route 10.200.0.0/16 hidden extensive`(理由)、`show policy <名前>`。JUN01 で `show route 0.0.0.0/0 exact`。読み物: route-filter の 2.2・2.3 節。"
+      - en: "On JUN02, one policy with four terms in this order: accept `route-filter 0.0.0.0/0 exact`; reject the five ranges, each with `orlonger`; accept `route-filter 0.0.0.0/0 prefix-length-range /8-/24`; and a last term with only `then reject`. Apply it with `set protocols bgp group ISP import <name>`."
+        ja: "JUN02 で term 4 つのポリシーを、この順に: `route-filter 0.0.0.0/0 exact` を accept・5 つの範囲をそれぞれ `orlonger` で reject・`route-filter 0.0.0.0/0 prefix-length-range /8-/24` を accept・最後に `then reject` だけの term。`set protocols bgp group ISP import <名前>` で当てる。"
+    verify:
+      en: |
+        **1. Is it in?** (JUN02)
+
+        - `show bgp neighbor 10.0.23.2 | match Import`: your policy is listed.
+        - `show policy <name>`: the terms, and the route filters under each, in the order you meant.
+
+        **2. Count what is used and what is not** (JUN02)
+
+        - `show bgp summary`: the `inet.0` line under the peer reads `active/received/accepted`. How many of the 10 received are accepted?
+        - `show route receive-protocol bgp 10.0.23.2`: the routes with `*` are in use. `show route receive-protocol bgp 10.0.23.2 hidden`:
+          the routes kept but not used.
+        - `show route 198.51.100.128/25 hidden extensive | match reason`: why it is hidden.
+
+        **3. Did the earlier task survive?** (JUN01)
+
+        - `show route 0.0.0.0/0 exact`: still `OSPF/150` via 10.0.12.2.
+      ja: |
+        **1. 入ったか**(JUN02)
+
+        - `show bgp neighbor 10.0.23.2 | match Import`: あなたのポリシーが並ぶ。
+        - `show policy <名前>`: term と、各 term の下の route-filter が意図した順に並ぶ。
+
+        **2. 使われるものと使われないものを数える**(JUN02)
+
+        - `show bgp summary`: ピアの下の `inet.0` の行は `active/received/accepted`。受け取った 10 本のうち、受け入れたのは何本か。
+        - `show route receive-protocol bgp 10.0.23.2`: `*` の付いた経路が使われている。`show route receive-protocol bgp 10.0.23.2 hidden`:
+          残っているが使われていない経路。
+        - `show route 198.51.100.128/25 hidden extensive | match reason`: hidden になっている理由。
+
+        **3. 前の課題は残っているか**(JUN01)
+
+        - `show route 0.0.0.0/0 exact`: 今も 10.0.12.2 経由の `OSPF/150`。
+    solution:
+      en: |
+        On JUN02:
+        configure
+        set policy-options policy-statement ISP-IN term DEFAULT from route-filter 0.0.0.0/0 exact
+        set policy-options policy-statement ISP-IN term DEFAULT then accept
+        set policy-options policy-statement ISP-IN term BOGONS from route-filter 10.0.0.0/8 orlonger
+        set policy-options policy-statement ISP-IN term BOGONS from route-filter 172.16.0.0/12 orlonger
+        set policy-options policy-statement ISP-IN term BOGONS from route-filter 192.168.0.0/16 orlonger
+        set policy-options policy-statement ISP-IN term BOGONS from route-filter 100.64.0.0/10 orlonger
+        set policy-options policy-statement ISP-IN term BOGONS from route-filter 198.18.0.0/15 orlonger
+        set policy-options policy-statement ISP-IN term BOGONS then reject
+        set policy-options policy-statement ISP-IN term PUBLIC from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+        set policy-options policy-statement ISP-IN term PUBLIC then accept
+        set policy-options policy-statement ISP-IN term REST then reject
+        set protocols bgp group ISP import ISP-IN
+        commit and-quit
+        (without the DEFAULT term, /8-/24 does not cover the /0 route; without REST, BGP's default import policy accepts the /25)
+      ja: |
+        On JUN02:
+        configure
+        set policy-options policy-statement ISP-IN term DEFAULT from route-filter 0.0.0.0/0 exact
+        set policy-options policy-statement ISP-IN term DEFAULT then accept
+        set policy-options policy-statement ISP-IN term BOGONS from route-filter 10.0.0.0/8 orlonger
+        set policy-options policy-statement ISP-IN term BOGONS from route-filter 172.16.0.0/12 orlonger
+        set policy-options policy-statement ISP-IN term BOGONS from route-filter 192.168.0.0/16 orlonger
+        set policy-options policy-statement ISP-IN term BOGONS from route-filter 100.64.0.0/10 orlonger
+        set policy-options policy-statement ISP-IN term BOGONS from route-filter 198.18.0.0/15 orlonger
+        set policy-options policy-statement ISP-IN term BOGONS then reject
+        set policy-options policy-statement ISP-IN term PUBLIC from route-filter 0.0.0.0/0 prefix-length-range /8-/24
+        set policy-options policy-statement ISP-IN term PUBLIC then accept
+        set policy-options policy-statement ISP-IN term REST then reject
+        set protocols bgp group ISP import ISP-IN
+        commit and-quit
+        (DEFAULT の term が無いと、/8-/24 は /0 の経路を含まない。REST が無いと、BGP の既定の import ポリシーが /25 を受け入れる)
+
+  - id: j1t4
+    title: { en: "J1-4  Advertise only the summary to the ISP", ja: "J1-4  ISP へは集約だけを広告する" }
+    check: j1t4
+    read: [15-j1-bgp#s2-6, 15-j1-bgp#s2-5, 15-j1-bgp#s2-2, 11-j1-policy-statement#s2-5, 15-j1-bgp#s3-1]
+    hints:
+      - en: "The summary has to exist as a route before it can be advertised, and BGP's default export policy advertises only BGP routes. A route that you build on the router needs its own term, and the order of terms decides whether that term is ever reached."
+        ja: "集約は、広告する前に経路として存在している必要があります。BGP の既定の export ポリシーが広告するのは BGP の経路だけです。ルータの上で作った経路には専用の term が要り、term の順で、その term に届くかどうかが決まります。"
+      - en: "On JUN02: `show route 172.16.0.0/16 exact detail` (the summary and its contributing routes), `show route advertising-protocol bgp 10.0.23.2`, `show policy <name>`. On FRR1: `show bgp ipv4 unicast 172.16.0.0/16`. Page: BGP, sections 2.5 and 2.6."
+        ja: "JUN02 で `show route 172.16.0.0/16 exact detail`(集約と、寄与する経路)、`show route advertising-protocol bgp 10.0.23.2`、`show policy <名前>`。FRR1 で `show bgp ipv4 unicast 172.16.0.0/16`。読み物: BGP の 2.5・2.6 節。"
+      - en: "On JUN02: `set routing-options aggregate route 172.16.0.0/16`. A policy whose first term has `from protocol aggregate` and `from route-filter 172.16.0.0/16 exact`, then `as-path-prepend \"65000 65000\"` and `accept`, followed by a term with only `then reject`. Apply it with `set protocols bgp group ISP export <name>`."
+        ja: "JUN02 で `set routing-options aggregate route 172.16.0.0/16`。最初の term が `from protocol aggregate` と `from route-filter 172.16.0.0/16 exact`、then `as-path-prepend \"65000 65000\"` と `accept`、その後ろに `then reject` だけの term を置いたポリシー。`set protocols bgp group ISP export <名前>` で当てる。"
+    verify:
+      en: |
+        **1. Is it in?** (JUN02)
+
+        - `show route 172.16.0.0/16 exact detail`: an `Aggregate` route that is active, with its `Contributing Routes`.
+        - `show bgp neighbor 10.0.23.2 | match Export`: your policy is listed.
+
+        **2. Count what goes out** (JUN02, then FRR1)
+
+        - `show route advertising-protocol bgp 10.0.23.2`: how many prefixes, and which?
+        - On FRR1: `show bgp ipv4 unicast neighbors 10.0.23.1 routes` and `show bgp ipv4 unicast 172.16.0.0/16` (the AS path line).
+
+        **3. Does traffic reach the far end and come back?** (SRV1)
+
+        - `ping -c 3 -I 172.16.20.1 203.0.113.1` and `traceroute -s 172.16.20.1 203.0.113.1` from SRV1's console.
+
+        **4. Is anything else changed?** (JUN02)
+
+        - `show route receive-protocol bgp 10.0.23.2`: the four routes of J1-3 are still the ones in use.
+      ja: |
+        **1. 入ったか**(JUN02)
+
+        - `show route 172.16.0.0/16 exact detail`: 使われている `Aggregate` の経路があり、`Contributing Routes` が並ぶ。
+        - `show bgp neighbor 10.0.23.2 | match Export`: あなたのポリシーが並ぶ。
+
+        **2. 出ていくものを数える**(JUN02、続けて FRR1)
+
+        - `show route advertising-protocol bgp 10.0.23.2`: プレフィックスは何本で、どれか。
+        - FRR1 で `show bgp ipv4 unicast neighbors 10.0.23.1 routes` と `show bgp ipv4 unicast 172.16.0.0/16`(AS パスの行)。
+
+        **3. 先まで届いて戻ってくるか**(SRV1)
+
+        - SRV1 のコンソールで `ping -c 3 -I 172.16.20.1 203.0.113.1` と `traceroute -s 172.16.20.1 203.0.113.1`。
+
+        **4. ほかを変えていないか**(JUN02)
+
+        - `show route receive-protocol bgp 10.0.23.2`: 使われているのは今も J1-3 の 4 本。
+    solution:
+      en: |
+        On JUN02:
+        configure
+        set routing-options aggregate route 172.16.0.0/16
+        set policy-options policy-statement TO-ISP term SUMMARY from protocol aggregate
+        set policy-options policy-statement TO-ISP term SUMMARY from route-filter 172.16.0.0/16 exact
+        set policy-options policy-statement TO-ISP term SUMMARY then as-path-prepend "65000 65000"
+        set policy-options policy-statement TO-ISP term SUMMARY then accept
+        set policy-options policy-statement TO-ISP term REST then reject
+        set protocols bgp group ISP export TO-ISP
+        commit and-quit
+        (the summary is active only while a contributing route exists: here the two OSPF routes from J1-1.
+         If REST was written first, `insert policy-options policy-statement TO-ISP term SUMMARY before term REST`)
+      ja: |
+        On JUN02:
+        configure
+        set routing-options aggregate route 172.16.0.0/16
+        set policy-options policy-statement TO-ISP term SUMMARY from protocol aggregate
+        set policy-options policy-statement TO-ISP term SUMMARY from route-filter 172.16.0.0/16 exact
+        set policy-options policy-statement TO-ISP term SUMMARY then as-path-prepend "65000 65000"
+        set policy-options policy-statement TO-ISP term SUMMARY then accept
+        set policy-options policy-statement TO-ISP term REST then reject
+        set protocols bgp group ISP export TO-ISP
+        commit and-quit
+        (集約が使われるのは、寄与する経路がある間だけ。ここでは J1-1 の OSPF の 2 本。
+         REST を先に書いた時は `insert policy-options policy-statement TO-ISP term SUMMARY before term REST`)
+
+  - id: j1t5
+    title: { en: "J1-5  Mark a single route from the ISP", ja: "J1-5  ISP の 1 つの経路にだけ印を付ける" }
+    check: j1t5
+    read: [15-j1-bgp#s2-5, 11-j1-policy-statement#s2-4, 15-j1-bgp#s2-4, 15-j1-bgp#s3-2]
+    hints:
+      - en: "Changing attributes is an action that does not end the evaluation. Where the marking happens matters: before or after the action that accepts the route, and at which level of the BGP configuration."
+        ja: "属性を変える動作は、評価を終わらせません。印を付ける場所が効きます。経路を受け入れる動作の前か後か、そして BGP の設定のどの階層か。"
+      - en: "On JUN02: `show route 203.0.113.0/24 exact detail` (`Localpref`, `Communities`), `show route community 65000:100`, `show bgp neighbor 10.0.23.2 | match Import`, `show route receive-protocol bgp 10.0.23.2`. Page: BGP, sections 2.4 and 2.5; policy-statement, section 2.4."
+        ja: "JUN02 で `show route 203.0.113.0/24 exact detail`(`Localpref`・`Communities`)、`show route community 65000:100`、`show bgp neighbor 10.0.23.2 | match Import`、`show route receive-protocol bgp 10.0.23.2`。読み物: BGP の 2.4・2.5 節、policy-statement の 2.4 節。"
+      - en: "On JUN02: `set policy-options community FROM-ISP members 65000:100`. A policy MARK with one term: `from route-filter 203.0.113.0/24 exact`, then `community add FROM-ISP` and `local-preference 200`, and no accept. Make the group's import `[ MARK ISP-IN ]`, in that order."
+        ja: "JUN02 で `set policy-options community FROM-ISP members 65000:100`。term 1 つのポリシー MARK: `from route-filter 203.0.113.0/24 exact`、then `community add FROM-ISP` と `local-preference 200`、accept は書かない。group の import を `[ MARK ISP-IN ]` の順にする。"
+    verify:
+      en: |
+        **1. Is it in?** (JUN02)
+
+        - `show bgp neighbor 10.0.23.2 | match Import`: the policies, in the order they are evaluated.
+
+        **2. Which routes carry the mark?** (JUN02)
+
+        - `show route community 65000:100`: how many routes, and which?
+        - `show route 203.0.113.0/24 exact detail`: the `Communities:` and `Localpref:` lines.
+        - `show route 192.0.2.0/24 exact detail`: the same lines for a route that should stay as it was.
+
+        **3. Did the earlier tasks survive?** (JUN02, SRV1)
+
+        - `show bgp summary` and `show route receive-protocol bgp 10.0.23.2`: still the four routes of J1-3.
+        - On SRV1: `ping -c 3 -I 172.16.20.1 203.0.113.1`.
+      ja: |
+        **1. 入ったか**(JUN02)
+
+        - `show bgp neighbor 10.0.23.2 | match Import`: ポリシーが、評価される順に並ぶ。
+
+        **2. 印はどの経路に付いたか**(JUN02)
+
+        - `show route community 65000:100`: 何本で、どれか。
+        - `show route 203.0.113.0/24 exact detail`: `Communities:` と `Localpref:` の行。
+        - `show route 192.0.2.0/24 exact detail`: そのままであるべき経路の、同じ行。
+
+        **3. 前の課題は残っているか**(JUN02・SRV1)
+
+        - `show bgp summary` と `show route receive-protocol bgp 10.0.23.2`: 今も J1-3 の 4 本。
+        - SRV1 で `ping -c 3 -I 172.16.20.1 203.0.113.1`。
+    solution:
+      en: |
+        On JUN02:
+        configure
+        set policy-options community FROM-ISP members 65000:100
+        set policy-options policy-statement MARK term t from route-filter 203.0.113.0/24 exact
+        set policy-options policy-statement MARK term t then community add FROM-ISP
+        set policy-options policy-statement MARK term t then local-preference 200
+        delete protocols bgp group ISP import
+        set protocols bgp group ISP import [ MARK ISP-IN ]
+        commit and-quit
+        (MARK has no accept, so every route goes on to ISP-IN. Placed after ISP-IN, MARK is never reached: ISP-IN accepts or rejects first.
+         Placed under the neighbor, it replaces the group's import, and the routes of J1-3 come back)
+      ja: |
+        On JUN02:
+        configure
+        set policy-options community FROM-ISP members 65000:100
+        set policy-options policy-statement MARK term t from route-filter 203.0.113.0/24 exact
+        set policy-options policy-statement MARK term t then community add FROM-ISP
+        set policy-options policy-statement MARK term t then local-preference 200
+        delete protocols bgp group ISP import
+        set protocols bgp group ISP import [ MARK ISP-IN ]
+        commit and-quit
+        (MARK に accept が無いので、すべての経路が ISP-IN へ進む。ISP-IN の後ろに置くと、ISP-IN が先に受け入れるか拒むので MARK に届かない。
+         neighbor の下に置くと group の import を置き換え、J1-3 で拒んだ経路が戻ってくる)

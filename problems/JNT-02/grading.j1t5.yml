@@ -1,0 +1,31 @@
+# J1-5: 203.0.113.0/24 にだけ community 65000:100 と local-preference 200・ほかは LP 100 で community なし・J1-3 の受け入れは変わらない。
+problem: JNT-02
+total_points: 100
+checks:
+  - name: "J1-5 JUN02: 203.0.113.0/24 carries community 65000:100 and local preference 200"
+    node: JUN02
+    exec: junos
+    command: "show route 203.0.113.0/24 exact detail table inet.0"
+    raw:
+      - regex: 'Communities: 65000:100'
+      - regex: 'Localpref: 200'
+    points: 30
+  - name: "J1-5 JUN02: the other accepted routes keep local preference 100 and carry no community"
+    node: JUN02
+    exec: junos
+    command: "show route protocol bgp table inet.0 detail"
+    raw:
+      - not_regex: '(?s)(0\.0\.0\.0/0|192\.0\.2\.0/24|198\.51\.100\.0/24) \(\d+ entr[^)]*\)(?:(?!\n\S).)*?(Communities:|Localpref: (?!100\b))'
+      - regex: '(?s)192\.0\.2\.0/24 \(\d+ entr(?:(?!\n\S).)*?Localpref: 100\b'
+    points: 30
+  - name: "J1-5 JUN02: J1-3 still holds (the same four routes accepted, the rest hidden)"
+    node: JUN02
+    exec: junos
+    command: "show route receive-protocol bgp 10.0.23.2 table inet.0"
+    raw:
+      - regex: '\*\s+0\.0\.0\.0/0\s'
+      - regex: '\*\s+192\.0\.2\.0/24\s'
+      - regex: '\*\s+198\.51\.100\.0/24\s'
+      - regex: '\*\s+203\.0\.113\.0/24\s'
+      - not_regex: '\*\s+(10\.200\.0\.0/16|172\.31\.0\.0/16|192\.168\.50\.0/24|100\.64\.0\.0/10|198\.18\.0\.0/15|198\.51\.100\.128/25)\s'
+    points: 40

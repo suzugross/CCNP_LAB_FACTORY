@@ -1,0 +1,116 @@
+# jpoc JNT-02 j1-chain2.txt 2026-11-14 14:46:39
+# J1 PoC 4b: 連鎖の前のポリシーが accept すると、後ろのポリシーは見られない(B が 10.200.0.0/16 を拒んでも、A の最後の then accept が先に受け入れる)
+
+## [JUN02] (open)
+Last login: Sat Nov 14 14:45:49 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement B2 term t from route-filter 10.200.0.0/16 exact
+set policy-options policy-statement B2 term t from route-filter 10.200.0.0/16 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement B2 term t then reject
+set policy-options policy-statement B2 term t then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete protocols bgp group ISP import
+delete protocols bgp group ISP import 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement A then accept
+set policy-options policy-statement A then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP import [ A B2 ]
+set protocols bgp group ISP import [ A B2 ] 
+
+[edit]
+admin@jun02# 
+## [JUN02] show policy-options policy-statement A
+show policy-options policy-statement A 
+term t {
+    from {
+        route-filter 192.0.2.0/24 exact;
+    }
+    then next policy;
+}
+then accept;
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+
+[edit]
+admin@jun02# 
+## (sleep 5s)
+
+## [JUN02] run show route 10.200.0.0/16 table inet.0
+run show route 10.200.0.0/16 table inet.0 
+
+inet.0: 19 destinations, 19 routes (19 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.200.0.0/16      *[BGP/170] 00:00:06, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+[edit]
+admin@jun02# 
+## [JUN02] run show route hidden table inet.0 terse
+run show route hidden table inet.0 terse 
+
+inet.0: 19 destinations, 19 routes (19 active, 0 holddown, 0 hidden)
+
+[edit]
+admin@jun02# 
+## [JUN02] delete policy-options policy-statement A then
+delete policy-options policy-statement A then 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+commit complete
+
+[edit]
+admin@jun02# 
+## (sleep 5s)
+
+## [JUN02] run show route 10.200.0.0/16 table inet.0
+run show route 10.200.0.0/16 table inet.0 
+
+inet.0: 19 destinations, 19 routes (18 active, 0 holddown, 1 hidden)
+
+[edit]
+admin@jun02# 
+## [JUN02] run show route hidden table inet.0 terse
+run show route hidden table inet.0 terse 
+
+inet.0: 19 destinations, 19 routes (18 active, 0 holddown, 1 hidden)
++ = Active Route, - = Last Active, * = Both
+
+A V Destination        P Prf   Metric 1   Metric 2  Next hop        AS path
+  ? 10.200.0.0/16      B            100          0 >10.0.23.2       64500 I
+
+[edit]
+admin@jun02# 
+## [JUN02] exit
+exit 
+Exiting configuration mode
+
+admin@jun02> 

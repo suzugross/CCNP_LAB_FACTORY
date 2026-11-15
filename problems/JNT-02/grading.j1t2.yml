@@ -1,0 +1,26 @@
+# J1-2: JUN01 が OSPF で既定経路を学ぶ(JUN02 が ISP から受け取った BGP の既定経路を export)・ほかの BGP の経路は OSPF に入れない。
+problem: JNT-02
+total_points: 100
+checks:
+  - name: "J1-2 JUN01: a default route is learned through OSPF from JUN02"
+    node: JUN01
+    exec: junos
+    command: "show route 0.0.0.0/0 exact table inet.0"
+    raw:
+      - regex: '0\.0\.0\.0/0\s+\*\[OSPF/150\][^\n]*\n\s+>\s+to 10\.0\.12\.2 via et-0/0/0\.0'
+    points: 30
+  - name: "J1-2 JUN02: the default route in use is the one from the ISP (BGP)"
+    node: JUN02
+    exec: junos
+    command: "show route 0.0.0.0/0 exact table inet.0"
+    raw:
+      - regex: '0\.0\.0\.0/0\s+\*\[BGP/170\]'
+    points: 30
+  - name: "J1-2 JUN01: no other route from the ISP is in OSPF"
+    node: JUN01
+    exec: junos
+    command: "show ospf database external"
+    raw:
+      - regex: 'Extern\s+0\.0\.0\.0\s+192\.168\.0\.2\s'
+      - not_regex: 'Extern\s+(203\.0\.113|198\.51\.100|192\.0\.2|198\.18|10\.200|100\.64|192\.168\.50|172\.31)\.\S*\s+192\.168\.0\.2\s+\S+\s+(?!3600\s)\d+'
+    points: 40

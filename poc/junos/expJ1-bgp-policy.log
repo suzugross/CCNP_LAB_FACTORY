@@ -1,0 +1,1055 @@
+# jpoc JNT-02 j1-bgp-policy.txt 2026-11-14 14:42:56
+# J1 PoC 3: route-filter の一致の型(test policy で並べる)・最長一致の罠・prefix-list と prefix-list-filter・BGP の import(既定の受け入れへ流れ落ちる・拒んだ経路は hidden)・隣ごとの import は group の import を置き換える・属性の変更・export と term の順・集約
+
+## [JUN02] (open)
+Last login: Sat Nov 14 14:39:31 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-EXACT term t from route-filter 198.51.100.0/24 exact
+set policy-options policy-statement T-EXACT term t from route-filter 198.51.100.0/24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-EXACT term t then accept
+set policy-options policy-statement T-EXACT term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-EXACT then reject
+set policy-options policy-statement T-EXACT then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-ORLONGER term t from route-filter 198.51.100.0/24 orlonger
+set policy-options policy-statement T-ORLONGER term t from route-filter 198.51.100.0/24 orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-ORLONGER term t then accept
+set policy-options policy-statement T-ORLONGER term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-ORLONGER then reject
+set policy-options policy-statement T-ORLONGER then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-LONGER term t from route-filter 198.51.100.0/24 longer
+set policy-options policy-statement T-LONGER term t from route-filter 198.51.100.0/24 longer 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-LONGER term t then accept
+set policy-options policy-statement T-LONGER term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-LONGER then reject
+set policy-options policy-statement T-LONGER then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-UPTO term t from route-filter 0.0.0.0/0 upto /16
+set policy-options policy-statement T-UPTO term t from route-filter 0.0.0.0/0 upto /16 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-UPTO term t then accept
+set policy-options policy-statement T-UPTO term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-UPTO then reject
+set policy-options policy-statement T-UPTO then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-RANGE term t from route-filter 0.0.0.0/0 prefix-length-range /16-/24
+set policy-options policy-statement T-RANGE term t from route-filter 0.0.0.0/0 prefix-length-range /16-/24 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-RANGE term t then accept
+set policy-options policy-statement T-RANGE term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-RANGE then reject
+set policy-options policy-statement T-RANGE then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement LM term t from route-filter 198.51.100.0/24 exact
+set policy-options policy-statement LM term t from route-filter 198.51.100.0/24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement LM term t from route-filter 0.0.0.0/0 upto /25
+set policy-options policy-statement LM term t from route-filter 0.0.0.0/0 upto /25 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement LM term t then accept
+set policy-options policy-statement LM term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement LM then reject
+set policy-options policy-statement LM then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options prefix-list PL 198.51.100.0/24
+set policy-options prefix-list PL 198.51.100.0/24 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-PL term t from prefix-list PL
+set policy-options policy-statement T-PL term t from prefix-list PL 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-PL term t then accept
+set policy-options policy-statement T-PL term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-PL then reject
+set policy-options policy-statement T-PL then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-PLF term t from prefix-list-filter PL orlonger
+set policy-options policy-statement T-PLF term t from prefix-list-filter PL orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-PLF term t then accept
+set policy-options policy-statement T-PLF term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement T-PLF then reject
+set policy-options policy-statement T-PLF then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] show policy-options policy-statement T-EXACT
+show policy-options policy-statement T-EXACT 
+term t {
+    from {
+        route-filter 198.51.100.0/24 exact;
+    }
+    then accept;
+}
+then reject;
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+commit complete
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy T-EXACT 0.0.0.0/0
+run test policy T-EXACT 0.0.0.0/0 
+
+inet.0: 18 destinations, 18 routes (18 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[BGP/170] 00:01:50, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy T-EXACT: 1 prefix accepted, 30 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy T-ORLONGER 0.0.0.0/0
+run test policy T-ORLONGER 0.0.0.0/0 
+
+inet.0: 18 destinations, 18 routes (18 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[BGP/170] 00:01:50, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+198.51.100.128/25  *[BGP/170] 00:01:50, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy T-ORLONGER: 2 prefix accepted, 29 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy T-LONGER 0.0.0.0/0
+run test policy T-LONGER 0.0.0.0/0 
+
+inet.0: 18 destinations, 18 routes (18 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.128/25  *[BGP/170] 00:01:51, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy T-LONGER: 1 prefix accepted, 30 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy T-UPTO 0.0.0.0/0
+run test policy T-UPTO 0.0.0.0/0 
+
+inet.0: 18 destinations, 18 routes (18 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[BGP/170] 00:01:52, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+10.200.0.0/16      *[BGP/170] 00:01:52, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+100.64.0.0/10      *[BGP/170] 00:01:52, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+198.18.0.0/15      *[BGP/170] 00:01:52, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[Static/5] 00:08:56
+                    >  to 10.0.0.2 via re0:mgmt-0.0
+
+Policy T-UPTO: 5 prefix accepted, 26 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy T-RANGE 0.0.0.0/0
+run test policy T-RANGE 0.0.0.0/0 
+
+inet.0: 18 destinations, 18 routes (18 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.200.0.0/16      *[BGP/170] 00:01:52, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+172.16.10.0/24     *[OSPF/150] 00:02:27, metric 0, tag 0
+                    >  to 10.0.12.1 via et-0/0/0.0
+172.16.20.0/24     *[OSPF/150] 00:02:19, metric 0, tag 0
+                    >  to 10.0.12.1 via et-0/0/0.0
+192.0.2.0/24       *[BGP/170] 00:01:52, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+192.168.50.0/24    *[BGP/170] 00:01:52, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+198.51.100.0/24    *[BGP/170] 00:01:52, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+203.0.113.0/24     *[BGP/170] 00:01:52, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.0.0.0/24        *[Direct/0] 00:08:56
+                    >  via re0:mgmt-0.0
+
+Policy T-RANGE: 8 prefix accepted, 23 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy LM 198.51.100.0/24
+run test policy LM 198.51.100.0/24 
+
+inet.0: 18 destinations, 18 routes (18 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[BGP/170] 00:01:53, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy LM: 1 prefix accepted, 1 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy LM 192.0.2.0/24
+run test policy LM 192.0.2.0/24 
+
+inet.0: 18 destinations, 18 routes (18 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+192.0.2.0/24       *[BGP/170] 00:01:53, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy LM: 1 prefix accepted, 0 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy T-PL 0.0.0.0/0
+run test policy T-PL 0.0.0.0/0 
+
+inet.0: 18 destinations, 18 routes (18 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[BGP/170] 00:01:54, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy T-PL: 1 prefix accepted, 30 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy T-PLF 0.0.0.0/0
+run test policy T-PLF 0.0.0.0/0 
+
+inet.0: 18 destinations, 18 routes (18 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+198.51.100.0/24    *[BGP/170] 00:01:54, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+198.51.100.128/25  *[BGP/170] 00:01:54, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy T-PLF: 2 prefix accepted, 29 prefix rejected
+
+[edit]
+admin@jun02# # import: 拒む term だけを書く(私的・長すぎる)→ 残りは既定の受け入れ
+
+## [JUN02] set policy-options policy-statement ISP-IN term BOGONS from route-filter 10.0.0.0/8 orlonger
+set policy-options policy-statement ISP-IN term BOGONS from route-filter 10.0.0.0/8 orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term BOGONS from route-filter 172.16.0.0/12 orlonger
+set policy-options policy-statement ISP-IN term BOGONS from route-filter 172.16.0.0/12 orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term BOGONS from route-filter 192.168.0.0/16 orlonger
+set policy-options policy-statement ISP-IN term BOGONS from route-filter 192.168.0.0/16 orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term BOGONS from route-filter 100.64.0.0/10 orlonger
+set policy-options policy-statement ISP-IN term BOGONS from route-filter 100.64.0.0/10 orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term BOGONS from route-filter 198.18.0.0/15 orlonger
+set policy-options policy-statement ISP-IN term BOGONS from route-filter 198.18.0.0/15 orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term BOGONS then reject
+set policy-options policy-statement ISP-IN term BOGONS then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term TOO-LONG from route-filter 0.0.0.0/0 prefix-length-range /25-/32
+set policy-options policy-statement ISP-IN term TOO-LONG from route-filter 0.0.0.0/0 prefix-length-range /25-/32 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term TOO-LONG then reject
+set policy-options policy-statement ISP-IN term TOO-LONG then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP import ISP-IN
+set protocols bgp group ISP import ISP-IN 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+
+[edit]
+admin@jun02# 
+## (sleep 5s)
+
+## [JUN02] run show bgp summary
+run show bgp summary 
+
+Warning: License key missing; requires 'BGP' license
+
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 1 Peers: 1 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+inet.0               
+                       9          4          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.0.23.2             64500          9          6       0       0        2:07 Establ
+  inet.0: 4/9/4/0
+
+[edit]
+admin@jun02# 
+## [JUN02] run show route receive-protocol bgp 10.0.23.2 table inet.0
+run show route receive-protocol bgp 10.0.23.2 table inet.0 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 18 destinations, 18 routes (13 active, 0 holddown, 5 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.0.23.2            0                  64500 I
+* 192.0.2.0/24            10.0.23.2            0                  64500 I
+* 198.51.100.0/24         10.0.23.2            0                  64500 I
+* 203.0.113.0/24          10.0.23.2            0                  64500 I
+
+[edit]
+admin@jun02# 
+## [JUN02] run show route protocol bgp table inet.0 terse
+run show route protocol bgp table inet.0 terse 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 18 destinations, 18 routes (13 active, 0 holddown, 5 hidden)
++ = Active Route, - = Last Active, * = Both
+
+A V Destination        P Prf   Metric 1   Metric 2  Next hop        AS path
+* ? 0.0.0.0/0          B 170        100          0 >10.0.23.2       64500 I
+* ? 192.0.2.0/24       B 170        100          0 >10.0.23.2       64500 I
+* ? 198.51.100.0/24    B 170        100          0 >10.0.23.2       64500 I
+* ? 203.0.113.0/24     B 170        100          0 >10.0.23.2       64500 I
+
+[edit]
+admin@jun02# 
+## [JUN02] run show route hidden table inet.0
+run show route hidden table inet.0 
+
+inet.0: 18 destinations, 18 routes (13 active, 0 holddown, 5 hidden)
++ = Active Route, - = Last Active, * = Both
+
+10.200.0.0/16       [BGP ] 00:00:08, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+100.64.0.0/10       [BGP ] 00:00:08, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+192.168.50.0/24     [BGP ] 00:00:08, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+198.18.0.0/15       [BGP ] 00:00:08, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+198.51.100.128/25   [BGP ] 00:00:08, MED 0, localpref 100
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+[edit]
+admin@jun02# 
+## [JUN02] run show route 10.200.0.0/16 hidden extensive
+run show route 10.200.0.0/16 hidden extensive 
+
+inet.0: 18 destinations, 18 routes (13 active, 0 holddown, 5 hidden)
+10.200.0.0/16 (1 entry, 0 announced)
+         BGP                 /-101
+                Next hop type: Router, Next hop index: 9037
+                Address: 0x55a68041fbf8
+                Next-hop reference count: 13, Next-hop session id: 3
+                Kernel Table Id: 0
+                Source: 10.0.23.2
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                Session Id: 3
+                State: <Hidden Ext>
+                Local AS: 65000 Peer AS: 64500
+                Age: 8 	Metric: 0 
+                Validation State: unverified 
+                Task: BGP_64500.10.0.23.2
+                AS path: 64500 I 
+                Localpref: 100
+                Router ID: 203.0.113.1
+                Hidden reason: Rejected by import policy
+                Thread: junos-main 
+
+[edit]
+admin@jun02# 
+## [JUN02] run show route receive-protocol bgp 10.0.23.2 hidden table inet.0
+run show route receive-protocol bgp 10.0.23.2 hidden table inet.0 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 18 destinations, 18 routes (13 active, 0 holddown, 5 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+  10.200.0.0/16           10.0.23.2            0                  64500 I
+  100.64.0.0/10           10.0.23.2            0                  64500 I
+  192.168.50.0/24         10.0.23.2            0                  64500 I
+  198.18.0.0/15           10.0.23.2            0                  64500 I
+  198.51.100.128/25       10.0.23.2            0                  64500 I
+
+[edit]
+admin@jun02# # 受け入れる term だけを書く → 当たらない経路は既定の受け入れに流れ落ちる
+
+## [JUN02] set policy-options policy-statement ONLY-DOC term t from route-filter 192.0.2.0/24 exact
+set policy-options policy-statement ONLY-DOC term t from route-filter 192.0.2.0/24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ONLY-DOC term t then accept
+set policy-options policy-statement ONLY-DOC term t then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP neighbor 10.0.23.2 import ONLY-DOC
+set protocols bgp group ISP neighbor 10.0.23.2 import ONLY-DOC 
+
+[edit]
+admin@jun02# 
+## [JUN02] show protocols bgp
+show protocols bgp 
+group ISP {
+    type external;
+    import ISP-IN;
+    peer-as 64500;
+    neighbor 10.0.23.2 {
+        import ONLY-DOC;
+    }
+}
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+
+[edit]
+admin@jun02# 
+## (sleep 5s)
+
+## [JUN02] run show route protocol bgp table inet.0 terse
+run show route protocol bgp table inet.0 terse 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 18 destinations, 18 routes (18 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+A V Destination        P Prf   Metric 1   Metric 2  Next hop        AS path
+* ? 0.0.0.0/0          B 170        100          0 >10.0.23.2       64500 I
+* ? 10.200.0.0/16      B 170        100          0 >10.0.23.2       64500 I
+* ? 100.64.0.0/10      B 170        100          0 >10.0.23.2       64500 I
+* ? 192.0.2.0/24       B 170        100          0 >10.0.23.2       64500 I
+* ? 192.168.50.0/24    B 170        100          0 >10.0.23.2       64500 I
+* ? 198.18.0.0/15      B 170        100          0 >10.0.23.2       64500 I
+* ? 198.51.100.0/24    B 170        100          0 >10.0.23.2       64500 I
+* ? 198.51.100.128/25  B 170        100          0 >10.0.23.2       64500 I
+* ? 203.0.113.0/24     B 170        100          0 >10.0.23.2       64500 I
+
+[edit]
+admin@jun02# 
+## [JUN02] run show bgp neighbor 10.0.23.2 | match "Import|Export"
+run show bgp neighbor 10.0.23.2 | match "Import|Export" 
+  Import: [ ONLY-DOC ]
+
+[edit]
+admin@jun02# 
+## [JUN02] delete protocols bgp group ISP neighbor 10.0.23.2 import
+delete protocols bgp group ISP neighbor 10.0.23.2 import 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+
+[edit]
+admin@jun02# 
+## (sleep 5s)
+
+## [JUN02] run show route protocol bgp table inet.0 terse
+run show route protocol bgp table inet.0 terse 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 18 destinations, 18 routes (13 active, 0 holddown, 5 hidden)
++ = Active Route, - = Last Active, * = Both
+
+A V Destination        P Prf   Metric 1   Metric 2  Next hop        AS path
+* ? 0.0.0.0/0          B 170        100          0 >10.0.23.2       64500 I
+* ? 192.0.2.0/24       B 170        100          0 >10.0.23.2       64500 I
+* ? 198.51.100.0/24    B 170        100          0 >10.0.23.2       64500 I
+* ? 203.0.113.0/24     B 170        100          0 >10.0.23.2       64500 I
+
+[edit]
+admin@jun02# # 属性の変更(from の無い term・終端の動作なし → 既定の受け入れへ)
+
+## [JUN02] set policy-options community FROM-ISP members 65000:100
+set policy-options community FROM-ISP members 65000:100 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term TAG then community add FROM-ISP
+set policy-options policy-statement ISP-IN term TAG then community add FROM-ISP 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-IN term TAG then local-preference 200
+set policy-options policy-statement ISP-IN term TAG then local-preference 200 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+commit complete
+
+[edit]
+admin@jun02# 
+## (sleep 5s)
+
+## [JUN02] run show route 203.0.113.0/24 detail
+run show route 203.0.113.0/24 detail 
+
+inet.0: 18 destinations, 18 routes (13 active, 0 holddown, 5 hidden)
+203.0.113.0/24 (1 entry, 1 announced)
+        *BGP    Preference: 170/-201
+                Next hop type: Router, Next hop index: 9037
+                Address: 0x55a68041fbf8
+                Next-hop reference count: 13, Next-hop session id: 3
+                Kernel Table Id: 0
+                Source: 10.0.23.2
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                Session Id: 3
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Age: 5 	Metric: 0 
+                Validation State: unverified 
+                Task: BGP_64500.10.0.23.2
+                Announcement bits (1): 0-KRT 
+                AS path: 64500 I 
+                Communities: 65000:100
+                Accepted
+                Localpref: 200
+                Router ID: 203.0.113.1
+                Thread: junos-main 
+
+[edit]
+admin@jun02# 
+## [JUN02] run show route community 65000:100 terse
+run show route community 65000:100 terse 
+
+inet.0: 18 destinations, 18 routes (13 active, 0 holddown, 5 hidden)
++ = Active Route, - = Last Active, * = Both
+
+A V Destination        P Prf   Metric 1   Metric 2  Next hop        AS path
+* ? 0.0.0.0/0          B 170        200          0 >10.0.23.2       64500 I
+* ? 192.0.2.0/24       B 170        200          0 >10.0.23.2       64500 I
+* ? 198.51.100.0/24    B 170        200          0 >10.0.23.2       64500 I
+* ? 203.0.113.0/24     B 170        200          0 >10.0.23.2       64500 I
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
+
+inet6.0: 2 destinations, 2 routes (2 active, 0 holddown, 0 hidden)
+
+inet6.2: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+inet6.3: 1 destinations, 1 routes (1 active, 0 holddown, 0 hidden)
+
+mgmt_junos.inet6.0: 4 destinations, 4 routes (4 active, 0 holddown, 0 hidden)
+
+[edit]
+admin@jun02# # export: 自社の網を ISP へ。後から足した term は reject の term の後ろに付く
+
+## [JUN02] set policy-options policy-statement TO-ISP term LAN from protocol ospf
+set policy-options policy-statement TO-ISP term LAN from protocol ospf 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement TO-ISP term LAN from route-filter 172.16.0.0/16 orlonger
+set policy-options policy-statement TO-ISP term LAN from route-filter 172.16.0.0/16 orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement TO-ISP term LAN then accept
+set policy-options policy-statement TO-ISP term LAN then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement TO-ISP term REST then reject
+set policy-options policy-statement TO-ISP term REST then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP export TO-ISP
+set protocols bgp group ISP export TO-ISP 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+
+[edit]
+admin@jun02# 
+## (sleep 5s)
+
+## [JUN02] run show route advertising-protocol bgp 10.0.23.2
+run show route advertising-protocol bgp 10.0.23.2 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 18 destinations, 18 routes (13 active, 0 holddown, 5 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 172.16.10.0/24          Self                 0                  I
+* 172.16.20.0/24          Self                 0                  I
+
+[edit]
+admin@jun02# 
+## [FRR1] (open)
+
+Hello, this is FRRouting (version 10.7.1_git).
+Copyright 1996-2005 Kunihiro Ishiguro, et al.
+
+frr1# 
+## [FRR1] show bgp ipv4 unicast
+show bgp ipv4 unicast
+BGP table version is 10, local router ID is 203.0.113.1, vrf id 0
+Default local pref 100, local AS 64500
+Status codes:  s suppressed, d damped, h history, u unsorted, * valid, > best, = multipath,
+               i internal, r RIB-failure, S Stale, R Removed
+Nexthop codes: @NNN nexthop's vrf id, < announce-nh-self
+Origin codes:  i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>  10.200.0.0/16    0.0.0.0                  0         32768 i
+ *>  100.64.0.0/10    0.0.0.0                  0         32768 i
+ *>  172.16.10.0/24   10.0.23.1                0             0 65000 i
+ *>  172.16.20.0/24   10.0.23.1                0             0 65000 i
+ *>  192.0.2.0/24     0.0.0.0                  0         32768 i
+ *>  192.168.50.0/24  0.0.0.0                  0         32768 i
+ *>  198.18.0.0/15    0.0.0.0                  0         32768 i
+ *>  198.51.100.0/24  0.0.0.0                  0         32768 i
+ *>  198.51.100.128/25
+                    0.0.0.0                  0         32768 i
+ *>  203.0.113.0/24   0.0.0.0                  0         32768 i
+
+Displayed 10 routes and 10 total paths
+frr1# 
+## [JUN02] set routing-options aggregate route 172.16.0.0/16
+set routing-options aggregate route 172.16.0.0/16 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement TO-ISP term AGG from protocol aggregate
+set policy-options policy-statement TO-ISP term AGG from protocol aggregate 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement TO-ISP term AGG from route-filter 172.16.0.0/16 exact
+set policy-options policy-statement TO-ISP term AGG from route-filter 172.16.0.0/16 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement TO-ISP term AGG then as-path-prepend "65000 65000"
+set policy-options policy-statement TO-ISP term AGG then as-path-prepend "65000 65000" 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement TO-ISP term AGG then accept
+set policy-options policy-statement TO-ISP term AGG then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] show policy-options policy-statement TO-ISP
+show policy-options policy-statement TO-ISP 
+term LAN {
+    from {
+        protocol ospf;
+        route-filter 172.16.0.0/16 orlonger;
+    }
+    then accept;
+}
+term REST {
+    then reject;
+}
+term AGG {
+    from {
+        protocol aggregate;
+        route-filter 172.16.0.0/16 exact;
+    }
+    then {
+        as-path-prepend "65000 65000";
+        accept;
+    }
+}
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+commit complete
+
+[edit]
+admin@jun02# 
+## (sleep 5s)
+
+## [JUN02] run show route 172.16.0.0/16 exact extensive
+run show route 172.16.0.0/16 exact extensive 
+
+inet.0: 19 destinations, 19 routes (14 active, 0 holddown, 5 hidden)
+172.16.0.0/16 (1 entry, 1 announced)
+TSI:
+KRT in-kernel 172.16.0.0/16 -> {}
+        *Aggregate Preference: 130
+                Next hop type: Reject, Next hop index: 0
+                Address: 0x55a680413fd8
+                Next-hop reference count: 2
+                Kernel Table Id: 0
+                State: <Active Int Ext>
+                Local AS: 65000 
+                Age: 6 
+                Validation State: unverified 
+                Task: Aggregate
+                Announcement bits (1): 0-KRT 
+                AS path: I  (LocalAgg)
+                Flags:          	Depth: 0	Active
+                AS path list (1):
+                AS path: I Refcount: 2
+                Contributing Routes (2):
+                	172.16.10.0/24 proto OSPF
+                	172.16.20.0/24 proto OSPF
+                Thread: junos-main 
+
+[edit]
+admin@jun02# 
+## [JUN02] run show route advertising-protocol bgp 10.0.23.2
+run show route advertising-protocol bgp 10.0.23.2 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 19 destinations, 19 routes (14 active, 0 holddown, 5 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 172.16.10.0/24          Self                 0                  I
+* 172.16.20.0/24          Self                 0                  I
+
+[edit]
+admin@jun02# 
+## [JUN02] insert policy-options policy-statement TO-ISP term AGG before term REST
+insert policy-options policy-statement TO-ISP term AGG before term REST 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+commit complete
+
+[edit]
+admin@jun02# 
+## (sleep 5s)
+
+## [JUN02] run show route advertising-protocol bgp 10.0.23.2
+run show route advertising-protocol bgp 10.0.23.2 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 19 destinations, 19 routes (14 active, 0 holddown, 5 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 172.16.0.0/16           Self                                    65000 65000 [65000] I
+* 172.16.10.0/24          Self                 0                  I
+* 172.16.20.0/24          Self                 0                  I
+
+[edit]
+admin@jun02# 
+## [FRR1] show bgp ipv4 unicast
+show bgp ipv4 unicast
+BGP table version is 11, local router ID is 203.0.113.1, vrf id 0
+Default local pref 100, local AS 64500
+Status codes:  s suppressed, d damped, h history, u unsorted, * valid, > best, = multipath,
+               i internal, r RIB-failure, S Stale, R Removed
+Nexthop codes: @NNN nexthop's vrf id, < announce-nh-self
+Origin codes:  i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>  10.200.0.0/16    0.0.0.0                  0         32768 i
+ *>  100.64.0.0/10    0.0.0.0                  0         32768 i
+ *>  172.16.0.0/16    10.0.23.1                              0 65000 65000 65000 i
+ *>  172.16.10.0/24   10.0.23.1                0             0 65000 i
+ *>  172.16.20.0/24   10.0.23.1                0             0 65000 i
+ *>  192.0.2.0/24     0.0.0.0                  0         32768 i
+ *>  192.168.50.0/24  0.0.0.0                  0         32768 i
+ *>  198.18.0.0/15    0.0.0.0                  0         32768 i
+ *>  198.51.100.0/24  0.0.0.0                  0         32768 i
+ *>  198.51.100.128/25
+                    0.0.0.0                  0         32768 i
+ *>  203.0.113.0/24   0.0.0.0                  0         32768 i
+
+Displayed 11 routes and 11 total paths
+frr1# 
+## [FRR1] show bgp ipv4 unicast 172.16.0.0/16
+show bgp ipv4 unicast 172.16.0.0/16
+BGP routing table entry for 172.16.0.0/16, version 11
+Paths: (1 available, best #1, table default)
+  Advertised to peers:
+  10.0.23.1
+  65000 65000 65000, (aggregated by 65000 192.168.0.2)
+    10.0.23.1 from 10.0.23.1 (192.168.0.2)
+      Origin IGP, valid, external, best (First path received)
+      Last update: Sat Nov 14 14:44:23 2026
+frr1# # ISP へは集約だけ: LAN の term を外す
+
+## [JUN02] delete policy-options policy-statement TO-ISP term LAN
+delete policy-options policy-statement TO-ISP term LAN 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+commit complete
+
+[edit]
+admin@jun02# 
+## (sleep 5s)
+
+## [JUN02] run show route advertising-protocol bgp 10.0.23.2
+run show route advertising-protocol bgp 10.0.23.2 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 19 destinations, 19 routes (14 active, 0 holddown, 5 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 172.16.0.0/16           Self                                    65000 65000 [65000] I
+
+[edit]
+admin@jun02# 
+## [FRR1] show bgp ipv4 unicast
+show bgp ipv4 unicast
+BGP table version is 13, local router ID is 203.0.113.1, vrf id 0
+Default local pref 100, local AS 64500
+Status codes:  s suppressed, d damped, h history, u unsorted, * valid, > best, = multipath,
+               i internal, r RIB-failure, S Stale, R Removed
+Nexthop codes: @NNN nexthop's vrf id, < announce-nh-self
+Origin codes:  i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>  10.200.0.0/16    0.0.0.0                  0         32768 i
+ *>  100.64.0.0/10    0.0.0.0                  0         32768 i
+ *>  172.16.0.0/16    10.0.23.1                              0 65000 65000 65000 i
+ *>  192.0.2.0/24     0.0.0.0                  0         32768 i
+ *>  192.168.50.0/24  0.0.0.0                  0         32768 i
+ *>  198.18.0.0/15    0.0.0.0                  0         32768 i
+ *>  198.51.100.0/24  0.0.0.0                  0         32768 i
+ *>  198.51.100.128/25
+                    0.0.0.0                  0         32768 i
+ *>  203.0.113.0/24   0.0.0.0                  0         32768 i
+
+Displayed 9 routes and 9 total paths
+frr1# # 終端の動作: next policy と、連鎖の中の accept で後ろのポリシーが見られない
+
+## [JUN02] set policy-options policy-statement A term t from route-filter 192.0.2.0/24 exact
+set policy-options policy-statement A term t from route-filter 192.0.2.0/24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement A term t then next policy
+set policy-options policy-statement A term t then next policy 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement A then accept
+set policy-options policy-statement A then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement B term t from route-filter 192.0.2.0/24 exact
+set policy-options policy-statement B term t from route-filter 192.0.2.0/24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement B term t then reject
+set policy-options policy-statement B term t then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit
+commit 
+commit complete
+
+[edit]
+admin@jun02# 
+## [JUN02] run test policy A 192.0.2.0/24
+run test policy A 192.0.2.0/24 
+
+inet.0: 19 destinations, 19 routes (14 active, 0 holddown, 5 hidden)
++ = Active Route, - = Last Active, * = Both
+
+192.0.2.0/24       *[BGP/170] 00:00:48, MED 0, localpref 200
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+Policy A : 1 prefix accepted, 0 prefix rejected
+
+[edit]
+admin@jun02# 
+## [JUN02] exit
+exit 
+Exiting configuration mode
+
+admin@jun02> 
+## [JUN02] show route forwarding-table destination 203.0.113.0/24 table default
+show route forwarding-table destination 203.0.113.0/24 table default 
+Routing table: default.inet
+Internet:
+Destination        Type RtRef Next hop           Type Index    NhRef Netif
+203.0.113.0/24     user     0                    sftw     9037     1 et-0/0/1.0
+                              10.0.23.2          ucst     1000     1 et-0/0/1.0
+
+admin@jun02> 
+## [JUN02] show route 0.0.0.0/0 exact
+show route 0.0.0.0/0 exact 
+
+inet.0: 19 destinations, 19 routes (14 active, 0 holddown, 5 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[BGP/170] 00:00:50, MED 0, localpref 200
+                      AS path: 64500 I, validation-state: unverified
+                    >  to 10.0.23.2 via et-0/0/1.0
+
+mgmt_junos.inet.0: 3 destinations, 3 routes (3 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+0.0.0.0/0          *[Static/5] 00:10:23
+                    >  to 10.0.0.2 via re0:mgmt-0.0
+
+admin@jun02> 

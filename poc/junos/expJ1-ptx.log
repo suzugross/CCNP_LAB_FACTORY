@@ -1,0 +1,285 @@
+# jpoc JNT-02 j1-ptx.txt 2026-11-14 15:11:48
+# J1 PoC 5: PTX の既定の BGP ポリシー(junos-ptx-series-default= BGP の経路を FIB に入れない)がこの vJunos-Evolved にあるか(BGP User Guide p.500 と実機の食い違いの確かめ)
+
+## [JUN02] (open)
+Last login: Sat Nov 14 15:09:01 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] show policy junos-ptx-series-default
+show policy junos-ptx-series-default 
+Policy junos-ptx-series-default: [CHANGED/RESOLVED]
+    Term t1:
+        then
+               load-balance per-flow
+
+admin@jun02> 
+## [JUN02] show configuration routing-options forwarding-table | display inheritance defaults no-comments | no-more
+show configuration routing-options forwarding-table | display inheritance defaults no-comments | no-more 
+chain-composite-max-label-count 8;
+default-export junos-ptx-series-default;
+egress-chaining {
+    no-downstream-chain-resolution;
+}
+evpn-aliasing-optimize;
+#
+# The policy applied at default-export should not have flow
+# control actions (accept/reject).
+# This is so that a user export policy gets a chance to
+# override any actions specified by a default-export policy.
+#
+ecmp-fast-reroute;
+indirect-next-hop;
+indirect-next-hop-change-acknowledgements;
+transit-lsp-statistics-from-route;
+chained-composite-next-hop {
+    ingress {
+        l2vpn;
+        l2ckt;
+        fec129-vpws;
+        evpn;
+        l3vpn;
+        ipip;
+    }
+    transit {
+        l2vpn;
+        l3vpn;
+        labeled-bgp;
+        static;
+        rsvp;
+        ldp;
+        labeled-isis;
+    }
+}
+
+admin@jun02> 
+## [JUN02] show configuration policy-options | display inheritance defaults no-comments | no-more
+show configuration policy-options | display inheritance defaults no-comments | no-more 
+policy-statement junos-ptx-series-default {
+    term t1 {
+        then {
+            load-balance per-flow;
+        }
+    }
+}
+
+admin@jun02> 
+## [JUN02] show configuration | display inheritance defaults no-comments | match "ptx|default-export|install|load-balance" | no-more
+show configuration | display inheritance defaults no-comments | match "ptx|default-export|install|load-balance" | no-more 
+    # PTX pre-defined profiles for EAPOL ethertypes
+    ## Warning: configuration block ignored: unsupported platform (ptx10001-36mr)
+    load-balance-label-capability;
+    no-load-balance-label-stitching-capability;
+    policy-statement junos-ptx-series-default {
+                load-balance per-flow;
+        load-balance-unilist-create;
+    # Enable the sensors for Jvision supported platforms i.e PTX/MX
+        default-export junos-ptx-series-default;
+        # The policy applied at default-export should not have flow
+        # override any actions specified by a default-export policy.
+
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces et-0/0/1 unit 0 family inet address 10.0.23.1/30
+set interfaces et-0/0/1 unit 0 family inet address 10.0.23.1/30 
+
+[edit]
+admin@jun02# 
+## [JUN02] set interfaces lo0 unit 0 family inet address 192.168.0.2/32
+set interfaces lo0 unit 0 family inet address 192.168.0.2/32 
+
+[edit]
+admin@jun02# 
+## [JUN02] set routing-options router-id 192.168.0.2
+set routing-options router-id 192.168.0.2 
+
+[edit]
+admin@jun02# 
+## [JUN02] set routing-options autonomous-system 65000
+set routing-options autonomous-system 65000 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP type external
+set protocols bgp group ISP type external 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP peer-as 64500
+set protocols bgp group ISP peer-as 64500 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP neighbor 10.0.23.2
+set protocols bgp group ISP neighbor 10.0.23.2 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 60s)
+
+## [JUN02] show bgp summary
+show bgp summary 
+
+Warning: License key missing; requires 'BGP' license
+
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 1 Peers: 1 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+inet.0               
+                      10         10          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.0.23.2             64500          6          3       0       0          58 Establ
+  inet.0: 10/10/10/0
+
+admin@jun02> 
+## [JUN02] show route forwarding-table destination 203.0.113.0/24 table default extensive
+show route forwarding-table destination 203.0.113.0/24 table default extensive 
+Routing table: default.inet [Index: 0]
+Internet:
+    
+Destination:  203.0.113.0/24
+  Route type: user                  
+  Route reference: 0                   Route interface-index: 0   
+  Multicast RPF nh index: 0             
+  P2mpidx: 0              
+  Flags: rt nh decoupled 
+  Next-hop type: software              Index: 9035     Reference: 1    
+  Next-hop interface: et-0/0/1.0   
+                                       Index: 1000     Reference: 1    
+  Nexthop: 10.0.23.2
+  Next-hop type: unicast           
+  Next-hop interface: et-0/0/1.0   
+
+admin@jun02> 
+## [JUN02] show route 203.0.113.0/24 extensive | match "State|Announcement|KRT|Flags"
+show route 203.0.113.0/24 extensive | match "State|Announcement|KRT|Flags" 
+KRT in-kernel 203.0.113.0/24 -> {10.0.23.2}
+                State: <Active Ext>
+                Validation State: unverified 
+                Announcement bits (1): 0-KRT 
+
+admin@jun02> 
+## [JUN02] show route forwarding-table table default | match "user|Destination" | no-more
+show route forwarding-table table default | match "user|Destination" | no-more 
+Destination        Type RtRef Next hop           Type Index    NhRef Netif
+default            user     0                    sftw     9035     1 et-0/0/1.0
+10.200.0.0/16      user     0                    sftw     9035     1 et-0/0/1.0
+100.64.0.0/10      user     0                    sftw     9035     1 et-0/0/1.0
+172.31.0.0/16      user     0                    sftw     9035     1 et-0/0/1.0
+192.0.2.0/24       user     0                    sftw     9035     1 et-0/0/1.0
+192.168.50.0/24    user     0                    sftw     9035     1 et-0/0/1.0
+198.18.0.0/15      user     0                    sftw     9035     1 et-0/0/1.0
+198.51.100.0/24    user     0                    sftw     9035     1 et-0/0/1.0
+198.51.100.128/25  user     0                    sftw     9035     1 et-0/0/1.0
+203.0.113.0/24     user     0                    sftw     9035     1 et-0/0/1.0
+Destination        Type RtRef Next hop           Type Index    NhRef Netif
+Destination        Type RtRef Next hop           Type Index    NhRef Netif
+ff02::2/128        user     0                    mcst       39     1
+Destination        Type RtRef Next hop           Type Index    NhRef Netif
+Destination        Type RtRef Next hop           Type Index    NhRef Netif
+
+admin@jun02> 
+## [JUN02] ping 203.0.113.1 count 3 rapid
+ping 203.0.113.1 count 3 rapid 
+PING 203.0.113.1 (203.0.113.1) 56(84) bytes of data.
+!!!
+--- 203.0.113.1 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2ms
+rtt min/avg/max/mdev = 0.504/0.940/1.589/0.467 ms, ipg/ewma 1.216/1.359 ms
+
+admin@jun02> 
+## [JUN02] show policy | no-more
+show policy | no-more 
+Configured policies: 
+junos-ptx-series-default   
+
+admin@jun02> 
+## [JUN02] show route forwarding-table summary
+show route forwarding-table summary 
+Routing table: default.inet
+Internet:
+         user:         10 routes
+         perm:          5 routes
+         intf:          1 routes
+         dest:          5 routes
+
+Routing table: __juniper_private1__.inet
+Internet:
+
+Routing table: __master.anon__.inet
+Internet:
+         perm:          5 routes
+
+Routing table: mgmt_junos.inet
+Internet:
+         user:          1 routes
+         perm:          5 routes
+         intf:          1 routes
+         dest:          3 routes
+
+Routing table: default.iso
+ISO:
+         perm:          1 routes
+
+Routing table: __master.anon__.iso
+ISO:
+         perm:          1 routes
+
+Routing table: default.inet6
+Internet6:
+         user:          1 routes
+         perm:          6 routes
+         dest:          1 routes
+
+Routing table: __juniper_private1__.inet6
+Internet6:
+
+Routing table: __master.anon__.inet6
+Internet6:
+         perm:          6 routes
+
+Routing table: :gribi.inet6
+Internet6:
+         perm:          6 routes
+
+Routing table: mgmt_junos.inet6
+Internet6:
+         user:          1 routes
+         perm:          6 routes
+         intf:          4 routes
+         dest:          4 routes
+
+Routing table: default.mpls
+MPLS:
+         perm:          1 routes
+
+Routing table: __mpls-oam__.mpls
+MPLS:
+         perm:          1 routes
+
+Routing table: default.l2xc
+L2XC:
+         perm:          1 routes
+
+admin@jun02> 
+## [JUN02] show version | match "Model|Junos"
+show version | match "Model|Junos" 
+Model: ptx10001-36mr
+Junos: 26.2R1.7-EVOI20260619095247-evo-builder-1
+JUNOS-EVO OS 64-bit [junos-evo-install-ptx-fixed-x86-64-26.2R1.7-EVOI20260619095247-evo-builder-1]
+
+admin@jun02> 

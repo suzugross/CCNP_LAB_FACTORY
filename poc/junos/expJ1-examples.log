@@ -1,0 +1,809 @@
+# jpoc JNT-02 j1-examples.txt 2026-11-14 15:40:28
+# J1 読み物の設定例と出力の元(2026-11-14)。模範解のポリシーを外し(ポリシーを書く前の状態)、例を 1 つずつ入れて出力を取る
+
+## [JUN01] (open)
+Last login: Sat Nov 14 15:33:03 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun01> 
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] delete protocols ospf export
+delete protocols ospf export 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## [JUN02] (open)
+Last login: Sat Nov 14 15:35:03 2026 from 172.20.20.1
+--- JUNOS 26.2R1.7-EVOI20260619095247-evo-builder-1 Linux (none) 5.15.164-10.22.33.18-yocto-standard-juniper-19183-g14666b62b00b #1 SMP PREEMPT Thu May 14 16:03:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] delete protocols ospf export
+delete protocols ospf export 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete protocols bgp group ISP import
+delete protocols bgp group ISP import 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete protocols bgp group ISP export
+delete protocols bgp group ISP export 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 10s)
+# ポリシーを書く前
+
+## [JUN02] show bgp summary
+show bgp summary 
+
+Warning: License key missing; requires 'BGP' license
+
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 1 Peers: 1 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+inet.0               
+                      10         10          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.0.23.2             64500         46         46       0       0       19:40 Establ
+  inet.0: 10/10/10/0
+
+admin@jun02> 
+## [JUN02] show route receive-protocol bgp 10.0.23.2 table inet.0
+show route receive-protocol bgp 10.0.23.2 table inet.0 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 18 destinations, 18 routes (17 active, 0 holddown, 1 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.0.23.2            0                  64500 I
+* 10.200.0.0/16           10.0.23.2            0                  64500 I
+* 100.64.0.0/10           10.0.23.2            0                  64500 I
+* 172.31.0.0/16           10.0.23.2            0                  64500 I
+* 192.0.2.0/24            10.0.23.2            0                  64500 I
+* 192.168.50.0/24         10.0.23.2            0                  64500 I
+* 198.18.0.0/15           10.0.23.2            0                  64500 I
+* 198.51.100.0/24         10.0.23.2            0                  64500 I
+* 198.51.100.128/25       10.0.23.2            0                  64500 I
+* 203.0.113.0/24          10.0.23.2            0                  64500 I
+
+admin@jun02> 
+## [JUN02] show route advertising-protocol bgp 10.0.23.2
+show route advertising-protocol bgp 10.0.23.2 
+
+Warning: License key missing; requires 'BGP' license
+
+
+admin@jun02> 
+## [JUN01] show ospf database external
+show ospf database external 
+
+Warning: License key missing; requires 'OSPF' license
+
+
+admin@jun01> # 例 11-3.1: JUN01 の静的経路 172.16.20.0/24 だけを type 1・metric 50 で OSPF へ
+
+## [JUN01] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement SRV-TO-OSPF term SRV from protocol static
+set policy-options policy-statement SRV-TO-OSPF term SRV from protocol static 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement SRV-TO-OSPF term SRV from route-filter 172.16.20.0/24 exact
+set policy-options policy-statement SRV-TO-OSPF term SRV from route-filter 172.16.20.0/24 exact 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement SRV-TO-OSPF term SRV then metric 50
+set policy-options policy-statement SRV-TO-OSPF term SRV then metric 50 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement SRV-TO-OSPF term SRV then external type 1
+set policy-options policy-statement SRV-TO-OSPF term SRV then external type 1 
+
+[edit]
+admin@jun01# 
+## [JUN01] set policy-options policy-statement SRV-TO-OSPF term SRV then accept
+set policy-options policy-statement SRV-TO-OSPF term SRV then accept 
+
+[edit]
+admin@jun01# 
+## [JUN01] set protocols ospf export SRV-TO-OSPF
+set protocols ospf export SRV-TO-OSPF 
+
+[edit]
+admin@jun01# 
+## [JUN01] commit and-quit
+commit and-quit 
+[edit protocols]
+  'ospf'
+    warning: requires 'OSPF' license
+commit complete
+Exiting configuration mode
+
+admin@jun01> 
+## (sleep 8s)
+
+## [JUN02] show ospf database external extensive
+show ospf database external extensive 
+
+Warning: License key missing; requires 'OSPF' license
+
+    OSPF AS SCOPE link state database
+ Type       ID               Adv Rtr           Seq      Age  Opt  Cksum  Len 
+Extern   172.16.20.0      192.168.0.1      0x80000001     9  0x22 0xfec6  36
+  mask 255.255.255.0
+  Topology default (ID 0)
+    Type: 1, Metric: 50, Fwd addr: 0.0.0.0, Tag: 0.0.0.0
+  Aging timer 00:59:50
+  Installed 00:00:08 ago, expires in 00:59:51
+  Last changed 00:00:08 ago, Change count: 1
+
+admin@jun02> 
+## [JUN02] show route 172.16.20.0/24
+show route 172.16.20.0/24 
+
+inet.0: 19 destinations, 19 routes (19 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.20.0/24     *[OSPF/150] 00:00:09, metric 51, tag 0
+                    >  to 10.0.12.1 via et-0/0/0.0
+
+admin@jun02> 
+## [JUN01] test policy SRV-TO-OSPF 172.16.0.0/16
+test policy SRV-TO-OSPF 172.16.0.0/16 
+
+inet.0: 9 destinations, 9 routes (9 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:20:06
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:20:06
+                       Local via et-0/0/1.0
+172.16.20.0/24     *[Static/5] 00:20:06
+                    >  to 172.16.10.10 via et-0/0/1.0
+172.16.99.0/24     *[Static/5] 00:21:12
+                       Discard
+
+inet.2: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:20:06
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:20:06
+                       Local via et-0/0/1.0
+
+inet.3: 5 destinations, 5 routes (5 active, 0 holddown, 0 hidden)
++ = Active Route, - = Last Active, * = Both
+
+172.16.10.0/24     *[Direct/0] 00:20:06
+                    >  via et-0/0/1.0
+172.16.10.1/32     *[Local/0] 00:20:06
+                       Local via et-0/0/1.0
+
+Policy SRV-TO-OSPF: 8 prefix accepted, 0 prefix rejected
+
+admin@jun01> # 例 10-2.2(流れの図): import [ TAG-198 FILTER-IN ]
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options community CUST members 65000:200
+set policy-options community CUST members 65000:200 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement TAG-198 term t from route-filter 198.51.100.0/24 exact
+set policy-options policy-statement TAG-198 term t from route-filter 198.51.100.0/24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement TAG-198 term t then local-preference 150
+set policy-options policy-statement TAG-198 term t then local-preference 150 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement TAG-198 term t then community add CUST
+set policy-options policy-statement TAG-198 term t then community add CUST 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement FILTER-IN term PRIVATE from route-filter 10.0.0.0/8 orlonger
+set policy-options policy-statement FILTER-IN term PRIVATE from route-filter 10.0.0.0/8 orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement FILTER-IN term PRIVATE from route-filter 192.168.0.0/16 orlonger
+set policy-options policy-statement FILTER-IN term PRIVATE from route-filter 192.168.0.0/16 orlonger 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement FILTER-IN term PRIVATE then reject
+set policy-options policy-statement FILTER-IN term PRIVATE then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement FILTER-IN term LEN from route-filter 0.0.0.0/0 prefix-length-range /16-/24
+set policy-options policy-statement FILTER-IN term LEN from route-filter 0.0.0.0/0 prefix-length-range /16-/24 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement FILTER-IN term LEN then accept
+set policy-options policy-statement FILTER-IN term LEN then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement FILTER-IN term REST then reject
+set policy-options policy-statement FILTER-IN term REST then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP import [ TAG-198 FILTER-IN ]
+set protocols bgp group ISP import [ TAG-198 FILTER-IN ] 
+
+[edit]
+admin@jun02# 
+## [JUN02] show | compare
+show | compare 
+[edit policy-options]
++   policy-statement FILTER-IN {
++       term PRIVATE {
++           from {
++               route-filter 10.0.0.0/8 orlonger;
++               route-filter 192.168.0.0/16 orlonger;
++           }
++           then reject;
++       }
++       term LEN {
++           from {
++               route-filter 0.0.0.0/0 prefix-length-range /16-/24;
++           }
++           then accept;
++       }
++       term REST {
++           then reject;
++       }
++   }
++   policy-statement TAG-198 {
++       term t {
++           from {
++               route-filter 198.51.100.0/24 exact;
++           }
++           then {
++               local-preference 150;
++               community add CUST;
++           }
++       }
++   }
+[edit policy-options]
++   community CUST members 65000:200;
+[edit protocols bgp group ISP]
++    import [ TAG-198 FILTER-IN ];
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 5s)
+
+## [JUN02] show route receive-protocol bgp 10.0.23.2 table inet.0
+show route receive-protocol bgp 10.0.23.2 table inet.0 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 19 destinations, 19 routes (13 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 172.31.0.0/16           10.0.23.2            0                  64500 I
+* 192.0.2.0/24            10.0.23.2            0                  64500 I
+* 198.51.100.0/24         10.0.23.2            0                  64500 I
+* 203.0.113.0/24          10.0.23.2            0                  64500 I
+
+admin@jun02> 
+## [JUN02] show route receive-protocol bgp 10.0.23.2 hidden table inet.0
+show route receive-protocol bgp 10.0.23.2 hidden table inet.0 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 19 destinations, 19 routes (13 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+  0.0.0.0/0               10.0.23.2            0                  64500 I
+  10.200.0.0/16           10.0.23.2            0                  64500 I
+  100.64.0.0/10           10.0.23.2            0                  64500 I
+  192.168.50.0/24         10.0.23.2            0                  64500 I
+  198.18.0.0/15           10.0.23.2            0                  64500 I
+  198.51.100.128/25       10.0.23.2            0                  64500 I
+
+admin@jun02> 
+## [JUN02] show route 198.51.100.0/24 exact detail table inet.0
+show route 198.51.100.0/24 exact detail table inet.0 
+
+inet.0: 19 destinations, 19 routes (13 active, 0 holddown, 6 hidden)
+198.51.100.0/24 (1 entry, 1 announced)
+        *BGP    Preference: 170/-151
+                Next hop type: Router, Next hop index: 8035
+                Address: 0x5559af0264f8
+                Next-hop reference count: 14, Next-hop session id: 1
+                Kernel Table Id: 0
+                Source: 10.0.23.2
+                Next hop: 10.0.23.2 via et-0/0/1.0, selected
+                Session Id: 1
+                State: <Active Ext>
+                Local AS: 65000 Peer AS: 64500
+                Age: 7 	Metric: 0 
+                Validation State: unverified 
+                Task: BGP_64500.10.0.23.2
+                Announcement bits (1): 0-KRT 
+                AS path: 64500 I 
+                Communities: 65000:200
+                Accepted
+                Localpref: 150
+                Router ID: 203.0.113.1
+                Thread: junos-main 
+
+admin@jun02> 
+## [JUN02] show route 198.51.100.128/25 hidden extensive | match "reason"
+show route 198.51.100.128/25 hidden extensive | match "reason" 
+                Hidden reason: Rejected by import policy
+
+admin@jun02> 
+## [JUN02] show bgp summary
+show bgp summary 
+
+Warning: License key missing; requires 'BGP' license
+
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 1 Peers: 1 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+inet.0               
+                      10          4          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.0.23.2             64500         47         47       0       0       20:12 Establ
+  inet.0: 4/10/4/0
+
+admin@jun02> # 流れの図の別の場合: REST を外すと /25 が既定の受け入れへ
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] deactivate policy-options policy-statement FILTER-IN term REST
+deactivate policy-options policy-statement FILTER-IN term REST 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 5s)
+
+## [JUN02] show route receive-protocol bgp 10.0.23.2 table inet.0
+show route receive-protocol bgp 10.0.23.2 table inet.0 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 19 destinations, 19 routes (17 active, 0 holddown, 2 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.0.23.2            0                  64500 I
+* 100.64.0.0/10           10.0.23.2            0                  64500 I
+* 172.31.0.0/16           10.0.23.2            0                  64500 I
+* 192.0.2.0/24            10.0.23.2            0                  64500 I
+* 198.18.0.0/15           10.0.23.2            0                  64500 I
+* 198.51.100.0/24         10.0.23.2            0                  64500 I
+* 198.51.100.128/25       10.0.23.2            0                  64500 I
+* 203.0.113.0/24          10.0.23.2            0                  64500 I
+
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] activate policy-options policy-statement FILTER-IN term REST
+activate policy-options policy-statement FILTER-IN term REST 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+commit complete
+Exiting configuration mode
+
+admin@jun02> # 例 13-3.1: ISP 自身の網(203.0.113.0/24 とその中の /25 まで)と既定経路だけ
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-OWN term OWN from route-filter 203.0.113.0/24 upto /25
+set policy-options policy-statement ISP-OWN term OWN from route-filter 203.0.113.0/24 upto /25 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-OWN term OWN then accept
+set policy-options policy-statement ISP-OWN term OWN then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-OWN term DEFAULT from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement ISP-OWN term DEFAULT from route-filter 0.0.0.0/0 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-OWN term DEFAULT then accept
+set policy-options policy-statement ISP-OWN term DEFAULT then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement ISP-OWN term REST then reject
+set policy-options policy-statement ISP-OWN term REST then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete protocols bgp group ISP import
+delete protocols bgp group ISP import 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP import ISP-OWN
+set protocols bgp group ISP import ISP-OWN 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 5s)
+
+## [JUN02] show route receive-protocol bgp 10.0.23.2 table inet.0
+show route receive-protocol bgp 10.0.23.2 table inet.0 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 19 destinations, 19 routes (11 active, 0 holddown, 8 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 0.0.0.0/0               10.0.23.2            0                  64500 I
+* 203.0.113.0/24          10.0.23.2            0                  64500 I
+
+admin@jun02> 
+## [JUN02] show route receive-protocol bgp 10.0.23.2 hidden table inet.0
+show route receive-protocol bgp 10.0.23.2 hidden table inet.0 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 19 destinations, 19 routes (11 active, 0 holddown, 8 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+  10.200.0.0/16           10.0.23.2            0                  64500 I
+  100.64.0.0/10           10.0.23.2            0                  64500 I
+  172.31.0.0/16           10.0.23.2            0                  64500 I
+  192.0.2.0/24            10.0.23.2            0                  64500 I
+  192.168.50.0/24         10.0.23.2            0                  64500 I
+  198.18.0.0/15           10.0.23.2            0                  64500 I
+  198.51.100.0/24         10.0.23.2            0                  64500 I
+  198.51.100.128/25       10.0.23.2            0                  64500 I
+
+admin@jun02> # 例 15-3.2: ポリシーの中に term を差し込んで印を付ける(FILTER-IN に戻し、192.0.2.0/24 に LP 120)
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement FILTER-IN term MARK from route-filter 192.0.2.0/24 exact
+set policy-options policy-statement FILTER-IN term MARK from route-filter 192.0.2.0/24 exact 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement FILTER-IN term MARK then local-preference 120
+set policy-options policy-statement FILTER-IN term MARK then local-preference 120 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement FILTER-IN term MARK then community add CUST
+set policy-options policy-statement FILTER-IN term MARK then community add CUST 
+
+[edit]
+admin@jun02# 
+## [JUN02] insert policy-options policy-statement FILTER-IN term MARK before term LEN
+insert policy-options policy-statement FILTER-IN term MARK before term LEN 
+
+[edit]
+admin@jun02# 
+## [JUN02] delete protocols bgp group ISP import
+delete protocols bgp group ISP import 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP import FILTER-IN
+set protocols bgp group ISP import FILTER-IN 
+
+[edit]
+admin@jun02# 
+## [JUN02] show policy-options policy-statement FILTER-IN
+show policy-options policy-statement FILTER-IN 
+term PRIVATE {
+    from {
+        route-filter 10.0.0.0/8 orlonger;
+        route-filter 192.168.0.0/16 orlonger;
+    }
+    then reject;
+}
+term MARK {
+    from {
+        route-filter 192.0.2.0/24 exact;
+    }
+    then {
+        local-preference 120;
+        community add CUST;
+    }
+}
+term LEN {
+    from {
+        route-filter 0.0.0.0/0 prefix-length-range /16-/24;
+    }
+    then accept;
+}
+term REST {
+    then reject;
+}
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 5s)
+
+## [JUN02] show route community 65000:200 detail | match "^[0-9]|Localpref|Communities"
+show route community 65000:200 detail | match "^[0-9]|Localpref|Communities" 
+192.0.2.0/24 (1 entry, 1 announced)
+                Communities: 65000:200
+                Localpref: 120
+
+admin@jun02> 
+## [JUN02] show route protocol bgp table inet.0 terse
+show route protocol bgp table inet.0 terse 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 19 destinations, 19 routes (13 active, 0 holddown, 6 hidden)
++ = Active Route, - = Last Active, * = Both
+
+A V Destination        P Prf   Metric 1   Metric 2  Next hop        AS path
+* ? 172.31.0.0/16      B 170        100          0 >10.0.23.2       64500 I
+* ? 192.0.2.0/24       B 170        120          0 >10.0.23.2       64500 I
+* ? 198.51.100.0/24    B 170        100          0 >10.0.23.2       64500 I
+* ? 203.0.113.0/24     B 170        100          0 >10.0.23.2       64500 I
+
+admin@jun02> # 例 15-3.1: JUN01 の網を /24 のまま MED 50 で ISP へ(JUN01 に OSPF への export が要る: SRV-TO-OSPF は 172.16.20.0/24 だけ)
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement SERVERS-OUT term SERVERS from protocol ospf
+set policy-options policy-statement SERVERS-OUT term SERVERS from protocol ospf 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement SERVERS-OUT term SERVERS from route-filter 172.16.0.0/16 longer
+set policy-options policy-statement SERVERS-OUT term SERVERS from route-filter 172.16.0.0/16 longer 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement SERVERS-OUT term SERVERS then metric 50
+set policy-options policy-statement SERVERS-OUT term SERVERS then metric 50 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement SERVERS-OUT term SERVERS then accept
+set policy-options policy-statement SERVERS-OUT term SERVERS then accept 
+
+[edit]
+admin@jun02# 
+## [JUN02] set policy-options policy-statement SERVERS-OUT term REST then reject
+set policy-options policy-statement SERVERS-OUT term REST then reject 
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP export SERVERS-OUT
+set protocols bgp group ISP export SERVERS-OUT 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 5s)
+
+## [JUN02] show route advertising-protocol bgp 10.0.23.2
+show route advertising-protocol bgp 10.0.23.2 
+
+Warning: License key missing; requires 'BGP' license
+
+
+inet.0: 19 destinations, 19 routes (13 active, 0 holddown, 6 hidden)
+  Prefix                  Nexthop              MED     Lclpref    AS path
+* 172.16.20.0/24          Self                 50                 I
+
+admin@jun02> 
+## [FRR1] (open)
+
+Hello, this is FRRouting (version 10.7.1_git).
+Copyright 1996-2005 Kunihiro Ishiguro, et al.
+
+frr1# 
+## [FRR1] show bgp ipv4 unicast neighbors 10.0.23.1 routes
+show bgp ipv4 unicast neighbors 10.0.23.1 routes
+BGP table version is 12, local router ID is 203.0.113.1, vrf id 0
+Default local pref 100, local AS 64500
+Status codes:  s suppressed, d damped, h history, u unsorted, * valid, > best, = multipath,
+               i internal, r RIB-failure, S Stale, R Removed
+Nexthop codes: @NNN nexthop's vrf id, < announce-nh-self
+Origin codes:  i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>  172.16.20.0/24   10.0.23.1               50             0 65000 i
+
+Displayed 1 routes and 10 total paths
+frr1# 
+## [FRR1] show bgp ipv4 unicast 172.16.20.0/24
+show bgp ipv4 unicast 172.16.20.0/24
+BGP routing table entry for 172.16.20.0/24, version 12
+Paths: (1 available, best #1, table default)
+  Advertised to peers:
+  10.0.23.1
+  65000
+    10.0.23.1 from 10.0.23.1 (192.168.0.2)
+      Origin IGP, metric 50, valid, external, best (First path received)
+      Last update: Sat Nov 14 15:41:59 2026
+frr1# # BGP の階層: neighbor の下に書くと group を置き換える
+
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] set protocols bgp group ISP neighbor 10.0.23.2 import TAG-198
+set protocols bgp group ISP neighbor 10.0.23.2 import TAG-198 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
+## (sleep 5s)
+
+## [JUN02] show bgp neighbor 10.0.23.2 | match "Import|Export"
+show bgp neighbor 10.0.23.2 | match "Import|Export" 
+  Export: [ SERVERS-OUT ] Import: [ TAG-198 ]
+
+admin@jun02> 
+## [JUN02] show bgp summary
+show bgp summary 
+
+Warning: License key missing; requires 'BGP' license
+
+Threading mode: BGP I/O
+Default eBGP mode: advertise - accept, receive - accept
+Groups: 1 Peers: 1 Down peers: 0
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+inet.0               
+                      10         10          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.0.23.2             64500         50         50       0       0       21:07 Establ
+  inet.0: 10/10/10/0
+
+admin@jun02> 
+## [JUN02] configure
+configure 
+Entering configuration mode
+
+[edit]
+admin@jun02# 
+## [JUN02] delete protocols bgp group ISP neighbor 10.0.23.2 import
+delete protocols bgp group ISP neighbor 10.0.23.2 import 
+
+[edit]
+admin@jun02# 
+## [JUN02] commit and-quit
+commit and-quit 
+[edit protocols]
+  'bgp'
+    warning: requires 'BGP' license
+commit complete
+Exiting configuration mode
+
+admin@jun02> 
