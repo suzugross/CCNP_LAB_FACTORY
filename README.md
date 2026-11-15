@@ -26,8 +26,7 @@
         └─ 教材:  course.sh build ──→ ポータルで読む ──→ lab.sh learn（課題ごとの確認・ヒント）
 ```
 
-<img width="949" height="654" alt="Image" src="https://github.com/user-attachments/assets/ac9b24c9-702e-4e60-be59-5adf3a563fc6" />
-<img width="1485" height="721" alt="Image" src="https://github.com/user-attachments/assets/caa82c17-aed6-4300-9346-2d59c8320208" />
+![学習モードのワークスペース。左に課題と確認・ヒントのボタン、右に IOS XR のコンソール](docs/img/workspace-learn.png)
 
 ---
 
@@ -49,6 +48,8 @@
 ### ラボ（`scripts/lab.sh`）
 
 1 問ずつ CML / containerlab に組んで解きます。解くのはブラウザのワークスペース（左に課題とトポロジ、右に機器のコンソール）か、CML のコンソール・SSH。
+
+![ワークスペースの Topology タブ。結線図の機器を押すとそのコンソールが開く（containerlab の Junos）](docs/img/workspace-topology.png)
 
 | コマンド | 内容 |
 |---|---|
@@ -74,6 +75,10 @@
 - `pack.sh grade` が採点して、解説ページ `report.html` を作る（解答の並置・なぜこの答えか・選択肢ごとの理由・実機での確かめ方）。
 - 英訳は `questions/en/<ID>.md` に置く。原文との照合（`pack.sh en`）を通った訳だけが使われる。
 
+![紙面の問題用紙。図と表で盤面を示し、機器に触らずに答える](docs/img/paper.png)
+
+![採点後の解説ページ。「一行でいうと」と「なぜこの答えになるか」](docs/img/report.png)
+
 ### 教材コース（`courses/`・`scripts/course.sh`）
 
 公開文書と実機での確認をもとに書き下ろした教材です。英語が原文で、1 冊の中のボタンで日本語に切り替わります。単元を読んでから、その単元の学習ラボで手を動かします。
@@ -84,9 +89,14 @@
 | Junos トラック（`courses/junos/`） | J0 IOS・IOS XR から Junos へ、J1 ルーティング ポリシー | `JNT-01`〜（containerlab の vJunos-Evolved） |
 
 - **学習モード**（`lab.sh learn`）は、ワークスペースに Steps タブが増える。課題ごとに確認（途中の採点）・段階式のヒント・確かめ方の例が見られる。
+- 入り組んだ設定は、パケットを 1 ホップずつ追う流れの図で解説する。図の番号にカーソルを置くと、その段で効く設定が小窓に出る。
 - 本文の専門用語は [`glossary/`](glossary/) の辞書から拾い、カーソルを置くと説明が出る。
 - `course.sh <名前> sync` で言語ごとに 1 枚の HTML へ束ね、rclone でクラウドに置く（スマホで通信なしに読める）。
 - 同じ基盤（`topologies/gen_reading.py`・`scripts/read.sh`）で、技術文書の訳文を読み物にすることもできる（訳文そのものはリポに含めていない）。
+
+![コースの目次。単元ごとに読み物と実践（学習ラボ）が並ぶ](docs/img/course-toc.png)
+
+![流れの図。番号にカーソルを置くと、その段の設定が小窓に出る](docs/img/course-walk.png)
 
 ### 学習ゲーム（`games/`）
 
@@ -99,6 +109,8 @@
 | ルーティング経路づくり（`/_route_path/`） | インターフェースと static route を変えて、お題の道にパケットを通す |
 
 計算はサーバ側のモデル（`stp_model.py`・`route_model.py`）が行い、実機と照らし合わせてあります。
+
+![ルーティング経路づくり。static route を足して、お題の宛先までパケットを通す](docs/img/game.png)
 
 ### ポータルとワークスペース
 
@@ -277,6 +289,7 @@ CCNP01/
 ├── records/                     # 学習の記録（attempts.jsonl・学習モードの記録）
 ├── poc/<テーマ>/                # 作問前の PoC（実機検証のログ・試行スクリプト）
 ├── scripts/                     # lab.sh / pack.sh / course.sh / read.sh / quota.sh
+├── docs/img/                    # この README の画像
 ├── BACKLOG.md / CURRICULUM.md   # 課題の台帳 / 単元ごとの到達度の台帳
 └── lab/ packs/ reading/         # provision・パック・読み物の出力（gitignore）
 ```
