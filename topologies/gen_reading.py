@@ -72,6 +72,9 @@
   ★番号(ref と文中の①〜⑨)は、図の後ろの :::config(同じ章= 次の h2 か次の :::walk まで。設定例が節をまたいでよい)の、
     注記の頭に同じ番号を付けた行と結ぶ。同じ番号の塊を図に 2 回置いてもよい(親のポリシーの入口と出口など)。
     カーソルを置く(スマホは押す)と、その行と親の階層の行(塊の頭に付ければ塊ごと)を小窓に出し、設定例の行にも色を付ける。
+  幅に収まらない文は図が折り返す(凡例・say・then・aside。小箱を含む行は折り返さない)。match の結果が term の右に並ばない
+  時は、全部の結果を term の下の行へ下ろす。term そのものが枠より長いと字を縮めるので、長い term は「…」で略してよい。
+  機器と枠を wire なしで続けても、間に矢印の分を空ける(2026-11-15)。
 
 ★Mermaid(dagre)の自動配置は、環状・メッシュのトポロジだと線が交差して読めなくなる
   （実例: 正方形＋対角線の 4 台メッシュが縦一列に潰れた・2026-09-29 ユーザ指摘）。
@@ -634,6 +637,64 @@ def _wk_lines(v):
     return [] if v is None else ([str(v)] if not isinstance(v, list) else [str(s) for s in v])
 
 
+def _wk_wrap(s, size, maxw):
+    """1 行を幅 maxw に折り返す。文の切れ目(。/ ". ")で先に分け、それでも長い文は読点(、/ ", ")か空白で、
+    どちらも無ければ全角の字の後で切る。`コード` の中では切らない。2026-11-15 凡例や補足が図の右端で切れていた。"""
+    import unicodedata
+    if _wk_w(s, size) <= maxw:
+        return [s]
+    sents = [t for t in re.split(r"(?<=。)|(?<=\.) (?=\S)", s) if t and t.strip()]
+    lines, cur = [], ""
+    for t in sents:
+        t = t.strip()
+        cand = (cur + ("" if not cur or cur.endswith("。") else " ") + t) if cur else t
+        if _wk_w(cand, size) <= maxw:
+            cur = cand
+            continue
+        if cur:
+            lines.append(cur)
+        cur = t
+        while _wk_w(cur, size) > maxw:         # 1 文が長い時だけ、文の中で切る
+            best = {}
+            for i, c in enumerate(cur):
+                if _wk_w(cur[:i + 1], size) > maxw:
+                    break
+                nxt = cur[i + 1:i + 2]
+                if cur[:i + 1].count("`") % 2:     # `コード` の中では切らない
+                    continue
+                if c == "、" or (c == "," and nxt == " "):
+                    best[2] = i + 1
+                elif c == " ":
+                    best[1] = i + 1
+                elif unicodedata.east_asian_width(c) in ("W", "F") and nxt not in "。、)）」・":
+                    best[0] = i + 1
+            pos = next((best[p] for p in (2, 1, 0)
+                        if p in best and _wk_w(cur[:best[p]], size) >= maxw * 0.45), max(best.values(), default=0))
+            if pos <= 0:
+                break
+            lines.append(cur[:pos].rstrip())
+            cur = cur[pos:].lstrip()
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def _wk_fit(lines, size, maxw):
+    """文の行の並びを、幅 maxw に収まるよう折り返す。[(行, 折り返しの続きか)]。小箱([[…]])を含む行と
+    収まる行はそのまま。行頭の調子の印(~ _ ^ + -)は続きの行にも付ける。"""
+    out = []
+    for ln in lines:
+        body = ln.lstrip(" ")
+        tone = body[0] if body and body[0] in WK_TONE else ""
+        body = body[1:].lstrip(" ") if tone else body
+        sz = WK_TONE.get(tone, {}).get("size", size)
+        if WK_CHIP_RE.search(ln) or _wk_w(body, sz) <= maxw:
+            out.append((ln, False))
+            continue
+        out += [(tone + piece, i > 0) for i, piece in enumerate(_wk_wrap(body, sz, maxw))]
+    return out
+
+
 def _wk_badge(cx, cy, n, r=10):
     return (f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r}" fill="{WK_BLUE}"/>'
             f'<text x="{cx:.1f}" y="{cy + r * 0.45:.1f}" font-size="{r * 1.25:.1f}" font-family=\'{WK_SANS}\' '
@@ -661,8 +722,9 @@ def render_walk(src_yaml):
     out, nodes, arrows = [], {}, []
     y = 12
     if spec.get("legend"):
-        out += _wk_line(RX, 18, "_" + str(spec["legend"]))[0]
-        y = 30
+        for i, ln in enumerate(_wk_wrap(str(spec["legend"]), 11.5, W - RX - 10)):
+            out += _wk_line(RX, 18 + 16 * i, "_" + ln)[0]
+            y = 30 + 16 * i
     prev = None                                  # 道筋の線の始点(直前の機器・枠の下端)
 
     def flow_to(top):
@@ -670,9 +732,11 @@ def render_walk(src_yaml):
             out.append(_wk_arrow(SX, prev, top))
 
     for row in spec.get("rows") or []:
+        if ("node" in row or "panel" in row) and prev is not None and y - prev < 26:
+            y = prev + 26                        # 機器・枠が wire を挟まず続く時も矢印の分だけ空ける(2026-11-15 くっついていた)
         if "node" in row:                        # 機器
             host = row.get("kind") == "host"
-            say = _wk_lines(row.get("say"))
+            say = [ln for ln, _ in _wk_fit(_wk_lines(row.get("say")), 13, W - 14 - RX)]
             lh = [26 if WK_CHIP_RE.search(ln) else 18 for ln in say]
             h = max(34, sum(lh) + 4)
             flow_to(y)
@@ -705,7 +769,7 @@ def render_walk(src_yaml):
             for it in items:
                 if it.get("to"):                 # 制御の塊(枠の見出しの右・破線で機器へ)
                     ux, uy = 118, top + 10
-                    say = _wk_lines(it.get("say"))
+                    say = [ln for ln, _ in _wk_fit(_wk_lines(it.get("say")), 11.5, W - 34 - ux - 36)]
                     uh = 30 + 19 * len(say)
                     g = [_wk_rect(ux, uy, W - 26 - ux, uh, "#f2f7fc", WK_BLUE, dash="5 4", cls="wk-box")]
                     if it.get("ref"):
@@ -723,9 +787,20 @@ def render_walk(src_yaml):
                     cy += 26
                 g = []
                 if it.get("ref"):                # 番号つきの塊
-                    say, match, then = _wk_lines(it.get("say")), it.get("match") or [], _wk_lines(it.get("then"))
+                    R = W - 34
+                    say = [ln for ln, _ in _wk_fit(_wk_lines(it.get("say")), 11.5, R - 72)]
+                    then = [ln for ln, _ in _wk_fit(_wk_lines(it.get("then")), 12, R - 72)]
+                    match = it.get("match") or []
                     gap = lambda ln: 26 if WK_CHIP_RE.search(ln) else 18
-                    h = 30 + sum(gap(ln) for ln in say + then) + 20 * len(match) + (6 if match else 0)
+                    # 判定(✓/✗ の文)が右へ並べて枠に収まらない時は、term の下の行へ下ろして折り返す(2026-11-15
+                    # Junos の term が長く、判定が図の外へ出て見えていなかった)。term そのものが枠より長ければ字を縮める
+                    rx_ = max(300, 72 + max([_wk_w(str(m[0]), 12, True) for m in match] or [0]) + 24)
+                    mark = lambda hit: "✓ " if hit else "✗ "
+                    below = any(rx_ + _wk_w(mark(m[1]) + str(m[2]), 12) > R for m in match)
+                    rlines = ([_wk_wrap(str(m[2]), 12, R - 90 - _wk_w("✓ ", 12)) for m in match] if below
+                              else [[str(m[2])] for m in match])
+                    mh = [20 + (17 * len(rl) + 3 if below else 0) for rl in rlines]
+                    h = 30 + sum(gap(ln) for ln in say + then) + sum(mh) + (6 if match else 0)
                     h += 8 if any(WK_CHIP_RE.search(ln) for ln in say + then) else 0   # 小箱の行の下に余白
                     h += 4 if then and match else 0
                     g.append(_wk_rect(36, cy, W - 62, h, "#ffffff", "#c9d2dd", cls="wk-box"))
@@ -735,21 +810,31 @@ def render_walk(src_yaml):
                     for ln in say:
                         yy += gap(ln)
                         g += _wk_line(72, yy, ln, 11.5, {"fill": WK_MUTED})[0]
-                    rx_ = max(300, 72 + max([_wk_w(str(m[0]), 12, True) for m in match] or [0]) + 24)
-                    for code, hit, res in match:
+                    for (code, hit, res), rl, hh in zip(match, rlines, mh):
                         yy += 20
                         if hit:
-                            g.append(_wk_rect(66, yy - 14, W - 102, 20, "#eaf5ec", "#eaf5ec", rx=3, sw=0))
-                        g.append(_wk_text(72, yy, "`" + str(code) + "`", 12,
+                            g.append(_wk_rect(66, yy - 14, W - 102, hh, "#eaf5ec", "#eaf5ec", rx=3, sw=0))
+                        cw = _wk_w(str(code), 12, True)
+                        g.append(_wk_text(72, yy, "`" + str(code) + "`", 12 if 72 + cw <= R else round(12 * (R - 72) / cw, 2),
                                           None if hit else {"fill": "#9aa3ad"})[0])
-                        g += _wk_line(rx_, yy, ("+✓ " if hit else "-✗ ") + str(res), 12)[0]
+                        tone = "+" if hit else "-"
+                        if not below:
+                            g += _wk_line(rx_, yy, tone + mark(hit) + str(res), 12)[0]
+                            continue
+                        for i, ln in enumerate(rl):
+                            yy += 17
+                            g += _wk_line(90 if i == 0 else 90 + _wk_w("✓ ", 12), yy,
+                                          tone + (mark(hit) if i == 0 else "") + ln, 12)[0]
+                        yy += 3
                     for ln in then:
                         yy += gap(ln) + (4 if ln is then[0] and match else 0)
                         g += _wk_line(72, yy, ln, 12)[0]
                     out.append(f'<g class="wk-ref" data-ref="{it["ref"]}">' + "".join(g) + "</g>")
                 else:                            # 番号なしの段(QoS ではない処理など)
-                    say = _wk_lines(it.get("say"))
-                    lh = [26 if WK_CHIP_RE.search(ln) or i else 22 for i, ln in enumerate(say)]
+                    fit = _wk_fit(_wk_lines(it.get("say")), 12.5, W - 34 - 54)
+                    say = [ln for ln, _ in fit]
+                    lh = [26 if WK_CHIP_RE.search(ln) or (i and not cont) else (18 if cont else 22)
+                          for i, (ln, cont) in enumerate(fit)]
                     h = 14 + sum(lh)
                     out.append(_wk_rect(36, cy, W - 62, h, "#fbfbfb", "#b8c0ca", dash="5 4"))
                     yy = cy - 1
@@ -764,12 +849,14 @@ def render_walk(src_yaml):
             prev = y
         elif "aside" in row:                     # 図の下の別の場合
             y += 22
-            say = _wk_lines(row.get("say"))
-            h = 42 + 26 * len(say)
+            fit = _wk_fit(_wk_lines(row.get("say")), 12, W - 44 - 34)   # 続きの行は詰める(折り返し)
+            base = [53 + sum(0 if i == 0 else (18 if c else 26) for i, (_, c) in enumerate(fit[:k + 1]))
+                    for k in range(len(fit))]
+            h = (base[-1] + 15) if fit else 42
             out.append(_wk_rect(20, y, W - 30, h, "#f4f4f2", "#c9c4b4", rx=8, dash="6 4"))
             out += _wk_line(34, y + 23, str(row["aside"]), 12.5, {"fill": "#5f5a4a", "weight": 600})[0]
-            for i, ln in enumerate(say):
-                out += _wk_line(34, y + 53 + 26 * i, ln, 12)[0]
+            for (ln, _), b in zip(fit, base):
+                out += _wk_line(34, y + b, ln, 12)[0]
             y += h
             prev = None
         if row.get("gap"):
