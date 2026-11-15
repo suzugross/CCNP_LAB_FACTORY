@@ -1,14 +1,29 @@
 # CCNP 演習シミュレータ (CCNP01)
 
-**Cisco CML（Cisco Modeling Labs）上に実機ネットワークを自動構築し、CCNP 相当の課題を出題 → 受験者が実コマンドで解答 → 自動採点する**、Ansible + pyATS/Genie ベースの学習システムです。
+**Cisco CML（Cisco Modeling Labs）と containerlab の上に本物のネットワーク OS を自動で組み、課題を出題 → 実コマンドで解答 → 自動採点する**学習システムです。土台は Ansible と pyATS/Genie。出題から採点・撤収までを Claude Code で回す前提で作っています（手順は [CLAUDE.md](CLAUDE.md) と [`/quiz` スキル](.claude/skills/quiz/SKILL.md)）。
 
-対象は Cisco 認定 **CCNP ENCOR (350-401)** / **ENARSI (300-410)** の技術領域。「問題を作る・投入する・採点する」を一気通貫で自動化しているので、**同じ技術を何度でも・少しずつ値を変えて**練習できます。
+学び方は 4 つあります。
 
-> 個人の学習・作問用に育てたリポジトリです。特定のCML環境で実機検証しながら作っていますが、環境依存の値（CML接続情報・管理IP）は差し替え可能にしてあります（後述の[セットアップ](#セットアップ)参照）。
+| 学び方 | 中身 |
+|---|---|
+| **ラボ** | CML / containerlab の実機で構築・トラブルシュート。`show` 出力を構造化して自動採点 |
+| **紙面パック** | 選択式・穴埋めの問題用紙（HTML）。1 日 3 パック。採点と同時に解説ページが出る |
+| **教材コース** | 日英を 1 冊で切り替える読み物と、課題ごとに確認・ヒントが付く学習ラボ（IOS XR トラック・Junos トラック） |
+| **学習ゲーム** | STP とルーティングの盤面をブラウザで解く |
+
+範囲は CCNP ENCOR (350-401)・ENARSI (300-410) を中心に、CCNA の基礎、SP 系（IOS XR・SPCOR 350-501 寄り）、マルチベンダ（FortiGate・Junos・Arista EOS・FRRouting）まで広げています。
+
+> 個人の学習・作問用に育てたリポジトリです。特定のラボ環境で実機検証しながら作っていますが、環境に依存する値（CML と containerlab ホストの接続情報・管理 IP）は `group_vars/all/local.yml` に分けてあります（[セットアップ](#セットアップ)参照）。
 
 ```
-  問題生成/作問 ──→ 初期投入 ──→ 受験者が CML で実コマンド解答 ──→ 自動採点
-  (生成器 gen_*.py)  (Ansible)      (CML コンソール / SSH)          (pyATS Genie で構造化して判定)
+  生成器 gen_*.py（seed で再現可能）／固定の問題 problems/<ID>/
+        │
+        ├─ ラボ:  build_topology → lab_up ─────→ 実機で解答 ─────────→ grade
+        │          (Ansible)       (CML / containerlab)  (ワークスペース / SSH)    (pyATS Genie で判定)
+        │
+        ├─ 紙面:  pack.sh new ──→ HTML の問題用紙 ──→ ブラウザで解答 ──→ pack.sh grade → 解説ページ
+        │
+        └─ 教材:  course.sh build ──→ ポータルで読む ──→ lab.sh learn（課題ごとの確認・ヒント）
 ```
 
 <img width="949" height="654" alt="Image" src="https://github.com/user-attachments/assets/ac9b24c9-702e-4e60-be59-5adf3a563fc6" />
@@ -18,18 +33,85 @@
 
 ## 特徴
 
-- **実機で学べる** — シミュレータの近似ではなく、本物の Cisco IOS-XE / IOSv / IOS-L2 を CML 上で動かして解く。
-- **完全自動の採点** — `show` 出力を pyATS Genie で構造化し、フィールド単位でアサート。「隣接が FULL か」「この経路だけ消えているか」「ping が通るか」まで機械判定。合否は収束するまでリトライ。
-- **問題の量産** — seed を渡すと生成器がトポロジ・故障・パラメータをランダム化して問題を丸ごと生成。**同じ seed なら同じ問題**（再現可能）。
-- **自己完結の問題パック** — 1問 = 1ディレクトリ。問題文・初期config・採点基準・模範解答が揃っている。
-- **トラブルシュート対応** — 正常構成に故障を注入して「直す」問題や、複数レイヤにまたがる連鎖故障も生成できる。
-- **Ansible 自動化ラボ** — Cisco 機器を題材に Ansible そのものを学ぶ「道場」コースも同梱。
+- **実機で学べる** — シミュレータの近似ではなく、本物の OS を動かして解く。IOL（IOS XE / L2）・IOSv / IOSvL2・Catalyst 8000V・IOS XRv 9000・IOS XRd・NX-OS・ASAv・FortiGate-VM（CML）、vJunos-Evolved・Arista cEOS・FRRouting（containerlab）、Ubuntu（サーバ・監視）。
+- **完全自動の採点** — `show` 出力を pyATS Genie で構造化し、フィールド単位で判定する。「隣接が FULL か」「この経路だけ消えているか」「ping が通るか」まで機械で判定し、設定が収束するまでリトライする。
+- **問題の量産** — seed を渡すと生成器がトポロジ・故障・パラメータをランダムに決めて問題を丸ごと作る。**同じ seed なら同じ問題**（再現できる）。
+- **紙面にも実機の裏づけ** — `gen_paper_mcq.py` の一部の shape は、使い捨てのラボを CML に組んで `show` を集めてから問題用紙にする。ほかのファミリも、正誤の根拠を公式文書と実機で確かめてから出す。
+- **英語で出題** — 問題文は英語が基本。英訳がある問はページの中のボタンで日本語に切り替えられる（解説は日本語）。
+- **1 問 = 1 ディレクトリ** — 問題文・初期 config・採点基準・模範解答が揃っている。
+- **単元で管理** — [`CURRICULUM.md`](CURRICULUM.md) が単元ごとの紙面とラボの到達度の台帳。毎日のパックは単元を順に回して出す。
+- **Ansible 自動化ラボ** — Cisco 機器を題材に Ansible そのものを学ぶコースも同梱。
+
+---
+
+## 4 つの学び方
+
+### ラボ（`scripts/lab.sh`）
+
+1 問ずつ CML / containerlab に組んで解きます。解くのはブラウザのワークスペース（左に課題とトポロジ、右に機器のコンソール）か、CML のコンソール・SSH。
+
+| コマンド | 内容 |
+|---|---|
+| `lab.sh provision <ID> [variant]` | 構築して起動し、`lab/<ID>/` に課題文と作業コピーを置く |
+| `lab.sh grade <ID> [variant]` | 採点（得点を学習記録 `records/` にも残す） |
+| `lab.sh checkpoint <ID> <名前>` | 途中の状態を `grading.<名前>.yml` で確認（記録に残さない） |
+| `lab.sh reset <ID> [--rebuild]` | 構築直後へ戻してやり直す（IOS XR はコミットの巻き戻し、Junos は `load override`） |
+| `lab.sh learn <ID> [PORT]` | 学習モードのワークスペースを開く（`learn.yml` を持つ問題） |
+| `lab.sh connect <ID> <NODE>` | containerlab のノードに入る（FRR は vtysh、Junos・EOS は SSH） |
+| `lab.sh rma <ID> <NODE>` | 機器交換の演習（保存した設定で MAC の違う機体に入れ替える。CML のみ） |
+| `lab.sh teardown <ID>` | ラボを消して管理 IP を返す（`problems/<ID>` は残る） |
+| `lab.sh status` | 稼働中のラボ・管理 IP の空き・作業コピーの一覧 |
+
+出題可の問題の一覧は [`problems/CATALOG.md`](problems/CATALOG.md)（実機で通しの検証が済んだものだけ）。
+
+### 紙面パック（`scripts/pack.sh`）
+
+1 回の `pack.sh new` で、その日の 3 パックを `packs/<PACK-ID>/` に作ります。
+
+- 1 パック = 思考系 2 問・瞬発力 3 問・解説の穴埋め 2 問。ラボ 3 本は 1 本目のパックに付く。
+- 出す単元は、最後に出した日が古い順に回す（`topologies/units.yml`・`paper_rotation.py`・`lab_rotation.py`）。`--profile ccna|encor|enarsi|ccie|sp|vendor` や単元 ID で範囲を絞れる。
+- `pack.sh serve` で配信すると、ページの解答欄がそのまま `解答.md` に保存される。
+- `pack.sh grade` が採点して、解説ページ `report.html` を作る（解答の並置・なぜこの答えか・選択肢ごとの理由・実機での確かめ方）。
+- 英訳は `questions/en/<ID>.md` に置く。原文との照合（`pack.sh en`）を通った訳だけが使われる。
+
+### 教材コース（`courses/`・`scripts/course.sh`）
+
+公開文書と実機での確認をもとに書き下ろした教材です。英語が原文で、1 冊の中のボタンで日本語に切り替わります。単元を読んでから、その単元の学習ラボで手を動かします。
+
+| コース | 単元 | 学習ラボ |
+|---|---|---|
+| IOS XR トラック（`courses/xr/`） | M0 入り方と調べ方 〜 M13 自動化とアシュアランス（設定の管理・OSPF・IS-IS・RPL・BGP・MPLS/LDP・L3VPN・SR・L2VPN・QoS など） | `XRT-01`〜`XRT-15`（XRv 9000 / XRd・一部 Catalyst 8000V） |
+| Junos トラック（`courses/junos/`） | J0 IOS・IOS XR から Junos へ、J1 ルーティング ポリシー | `JNT-01`〜（containerlab の vJunos-Evolved） |
+
+- **学習モード**（`lab.sh learn`）は、ワークスペースに Steps タブが増える。課題ごとに確認（途中の採点）・段階式のヒント・確かめ方の例が見られる。
+- 本文の専門用語は [`glossary/`](glossary/) の辞書から拾い、カーソルを置くと説明が出る。
+- `course.sh <名前> sync` で言語ごとに 1 枚の HTML へ束ね、rclone でクラウドに置く（スマホで通信なしに読める）。
+- 同じ基盤（`topologies/gen_reading.py`・`scripts/read.sh`）で、技術文書の訳文を読み物にすることもできる（訳文そのものはリポに含めていない）。
+
+### 学習ゲーム（`games/`）
+
+ポータルから遊べる、盤面を読み解くゲームです。進み具合はサーバに残ります。
+
+| ゲーム | 内容 |
+|---|---|
+| STP パズル（`/_stp/`） | 図のポートに役割と状態を書き込む |
+| STP 経路づくり（`/_stp_path/`） | priority・速度・cost・port-priority を変えて、お題の経路にする |
+| ルーティング経路づくり（`/_route_path/`） | インターフェースと static route を変えて、お題の道にパケットを通す |
+
+計算はサーバ側のモデル（`stp_model.py`・`route_model.py`）が行い、実機と照らし合わせてあります。
+
+### ポータルとワークスペース
+
+`scripts/pack.sh serve` で次の 2 つが上がります。
+
+- **ポータル**（既定 8899）: 教材の棚・パックの一覧（採点状態つき）・ゲーム。
+- **ワークスペース**（既定 8897・`topologies/lab_console.py`）: ラボを 1 画面で解く。ブラウザ（xterm.js）から WebSocket で中継し、CML のコンソールサーバか containerlab のノードへつなぐ。
 
 ---
 
 ## 仕組み
 
-4つの Ansible playbook が「描画 → 起動 → 解答 → 採点」を担います。
+4 つの Ansible playbook が「描画 → 起動 → 解答 → 採点」を担います。
 
 ```
  build_topology.yml ──→ lab_up.yml ──────→ (受験者が解答) ──→ grade.yml
@@ -38,104 +120,68 @@
    ラボ YAML を生成                                                     して点数を返す
 ```
 
-1. **build_topology.yml** — 問題定義（`problem.yml`）から day0 の「穴あき」config を描画し、`gen_cml_lab.py` が CML 用ラボ YAML（ノード・配線・管理IP）を生成する。
-2. **lab_up.yml** — そのラボを CML に import して起動する。管理IPは共有プールから動的に貸与（`mgmt_alloc.py` の台帳が管理）。
-3. **受験者の解答** — CML のコンソール、または管理IP経由の SSH で機器にログインし、実コマンドで設定する。自動化ラボの場合は付属の作業ディレクトリで Ansible を書く。
-4. **grade.yml** — 各ノードへ `show` を送って出力を Genie で構造化し、採点基準（`grading.yml`）のチェックを1つずつ判定。全PASS になるまで一定間隔でリトライ（設定の収束待ち）。
+1. **build_topology.yml** — 問題定義（`problem.yml`）から day0 の「穴あき」config を描画し、`gen_cml_lab.py` が CML 用ラボ YAML（ノード・配線・管理 IP）を作る。
+2. **lab_up.yml** — そのラボを CML に import して起動する。管理 IP は共有プールから動的に貸す（`mgmt_alloc.py` の台帳が管理）。
+3. **受験者の解答** — ワークスペース・CML のコンソール・管理 IP への SSH で機器に入り、実コマンドで設定する。自動化ラボは付属の作業ディレクトリで Ansible を書く。
+4. **grade.yml** — 各ノードへ `show` を送って出力を Genie で構造化し、採点基準（`grading.yml`）のチェックを 1 つずつ判定する。全 PASS になるまで一定間隔でリトライ（設定の収束待ち）。
+
+**containerlab の問題**（`problem.yml` に `platform: clab`）は CML を使いません。`topologies/clab_ops.py` が `problems/<ID>/clab/` の資材を containerlab ホストへ送って deploy / destroy し、採点は Junos・EOS へ SSH、FRR へは `docker exec` で `show` を集めます。CML と containerlab をまたぐ複合ラボも組めます。
 
 採点の詳細は [採点の仕組み](#採点の仕組みgradepy--pyats-genie) を参照。
 
 ---
 
-## 何ができる / どんな問題が出せるか
+## 扱う範囲
 
-現在 **problems/ に 165 問**（ENCOR 系 46・ENARSI 系 35・生成問題 GEN 系 67・Ansible 自動化 5・FortiGate 4・大型シナリオほか 8）。難易度は 1〜6 で、3〜4 が中心。加えて **生成器から無限にバリエーション**を作れます。出題可能な問題の正準台帳は [`problems/CATALOG.md`](problems/CATALOG.md)。
+単元の区分は [`CURRICULUM.md`](CURRICULUM.md) に合わせています。各単元の紙面・ラボの有無と問題 ID はそちらと [`problems/CATALOG.md`](problems/CATALOG.md) が正本です。
 
-### ENCOR（350-401）系
+| 区分 | 主な題材 |
+|---|---|
+| A. L2 / キャンパス | VLAN・STP（PVST+ / MST・3 層盤面）・EtherChannel・FHRP・SPAN / RSPAN・VACL |
+| B. ルーティング基礎・経路制御 | static・PBR・IP SLA + track・WAN 冗長・VRF-Lite とルートリーク・再配送（相互・ループと抑止・仕様書駆動の選択的再配送） |
+| C〜E. IGP / BGP | EIGRP（variance・SIA・VRF）・OSPF（マルチエリア・stub / NSSA・認証・OSPFv3）・BGP（属性・フィルタ・集約・RR・IPv6・レガシー synchronization） |
+| F. マルチキャスト | IGMP・PIM・RP（紙面の穴埋めのみ） |
+| G. VPN / オーバーレイ | GRE・DMVPN（Phase 2 / 3・IPsec）・IPsec（sVTI・crypto map）・MPLS L3VPN・SD-Access の土台（LISP / VXLAN）・EVPN-VXLAN |
+| H. セキュリティ | ACL・CoPP・uRPF・AAA（RADIUS）・IPv6 FHS・エッジ機器のハードニング |
+| I. インフラサービス / 運用 | DHCP / DHCPv6・NAT・Flexible NetFlow・EEM・SNMPv3 と Zabbix・DNS / DHCP / FreeRADIUS サーバ |
+| J. IPv6 基礎 | アドレッシング・SLAAC・RA |
+| K. 自動化 | Ansible 自動化ラボ・RESTCONF |
+| L. 基礎概念 | CCNA 範囲の知識（紙面のみ） |
+| M. IOS XR | XR トラックの単元（上の教材コース） |
+| マルチベンダ | FortiGate（SD-WAN・FW ポリシー・Cisco との IPsec・ASA からの置き換え）・Junos トラック |
 
-| 分野 | 主な問題 |
-|------|---------|
-| **OSPF** | 単一エリア / マルチエリア / stub / NSSA / インターフェイスモード / 認証 / OSPFv3 |
-| **EIGRP** | 基本構築 / variance による不等コストロードバランス / SIA トラブルシュート |
-| **再配送** | OSPF ⇄ EIGRP など IGP 相互再配送 |
-| **First-Hop 冗長** | HSRP（FHRP） |
-| **トンネル / VPN** | GRE、DMVPN（Phase2 / Phase3）、IPsec sVTI（IKEv1 / IKEv2） |
-| **経路制御** | PBR、IP SLA + Object Tracking、WAN 冗長・フェイルオーバ |
-| **セグメンテーション** | VRF-Lite、VRF ルートリーク、VRF + NAT |
-| **セキュリティ / L2** | 標準/拡張/名前付き ACL、VACL、SPAN / RSPAN、CoPP、エッジ機器ハードニング |
-| **可視化 / 運用** | Flexible NetFlow、EEM |
-| **QoS** | 分類・マーキング / ポリシング / 階層シェーピング + LLQ（効果を iperf3/ping で実測採点する体感シリーズ3問） |
-| **DHCP** | DHCPv4 一気通貫（プール配布 / MAC 固定割当 / リレー / DHCP-only ACL。採点は release/renew の実効確認込み） |
-| **その他** | LAG（EtherChannel）、IPv6 静的 / SLAAC、NAT/PAT 複合 |
+規模（2026-11 時点）: `problems/` に 441 個（固定の問題 117・生成済みの GEN インスタンス 319・containerlab の試験台 5）、ラボの生成器 約 50 本、紙面の生成器 27 本、紙面の問題 約 1,000 問。
 
-### ENARSI（300-410）系
+### 生成器（`topologies/gen_*.py`）
 
-| 分野 | 主な問題 |
-|------|---------|
-| **BGP 属性 / 経路制御** | weight / local-preference / MED / community / AS-path / origin / next-hop-self |
-| **BGP フィルタ / 集約** | prefix-list、route-map、AS-path 正規表現、経路集約、ルートリフレクタ |
-| **BGP 複合 / 特殊** | 複数属性の総合ポリシー、IPv6 AF、レガシー synchronization 残骸×非BGP中継ブラックホールの2段TS |
-| **再配送** | 相互再配送、再配送ループの発生と抑止、3ドメインリング一周ループ（`distance bgp` 解法）、仕様書駆動の選択的再配送（遮断 / E1 / seed metric / 出自タグ / 監査） |
-| **MPLS** | MPLS L3VPN 6問（基礎構築 / マルチカスタマー / PE-CE eBGP + as-override / フルメッシュ×Hub&Spoke 組み分け / Extranet 共有サービス VRF） |
-| **オーバーレイ複合** | DMVPN + BGP 再配送、DMVPN + IPsec 完全版、GRE over IPsec（sVTI IKEv1/IKEv2・crypto map 版） |
-| **アドレッシング / セキュリティ** | DHCPv6（stateful/リレー）、uRPF anti-spoofing、VRF-Lite DN ビット |
+seed で問題を量産します。主な系統は次のとおりです（全体の一覧は [`problems/CATALOG.md`](problems/CATALOG.md) の「生成器一覧」）。
 
-### 大型シナリオ / ファブリック
-
-| ID | 内容 |
-|----|------|
-| `CAMPUS-TS-01` | 12台・3層キャンパス（ASA 含む）の複数レイヤ連鎖トラブルシュート超大作 |
-| `SDA-LISP-01` | SD-Access の土台を素の LISP/VXLAN で組むガイド付き教育ラボ（9台・LISP編→VXLAN編） |
-| `EVPN-VXLAN-01` | EVPN-VXLAN ファブリック（IOL RR + NX-OS leaf×3・SDA-LISP-01 の続編） |
-| `UM2-BUILD-01/02` | 中規模企業網の総合構築。02 はワンアーム LB 変種（IP SLA トラッキング対比） |
-| `DMVPN-PHASE3-01` ほか | DMVPN 単体の構築問（Phase2 / Phase3） |
-| `NETAUTO-03-RESTCONF` | RESTCONF によるネットワーク自動化道場（cat8000v） |
-
-### FortiGate（マルチベンダ）
-
-FortiGate-VM（eval ライセンス）を Cisco 網に混ぜた4問: `FGT-SDWAN-01`（SD-WAN）/ `FGT-FW-BASIC-01`（FWポリシー基礎）/ `FGT-IPSEC-01`（Cisco との IPsec 相互接続・管理IF自己設定の Phase 0 付き）/ `FGT-REPLACE-01`（ASA 設定読替の卒業試験）。eval 制約（IF 3個・ポリシー3本・route 3本・DES 限定）を前提に設計。
-
-### 生成問題（`GEN-*`）— seed で量産
-
-| 種別 | 生成器 | 内容 |
-|------|--------|------|
-| 到達性 | `gen_topology.py` | ランダムなツリー型 OSPF。BFS で一意な next-hop を計算し採点 |
-| ひねり | `gen_twist.py` / `gen_aggregate.py` / `gen_pathctrl.py` | ルートフィルタ / 経路集約・マルチエリア / 経路制御・冗長 |
-| トラブルシュート | `gen_troubleshoot.py` | OSPF に故障を注入（多重故障・おとり・段差故障に対応） |
-| BGP TS | `gen_bgp_troubleshoot.py` / `gen_bgp_pathts.py` / `gen_bgp_rrts.py` / `gen_bgp_complex_ts.py` | 到達性 / 経路選択 / RR 伝播 / 複合故障 |
-| IGP 複合 TS | `gen_eigrp_complex_ts.py` / `gen_ospf_complex_ts.py` / `gen_ospfv3_complex_ts.py` / `gen_eigrpv6_complex_ts.py` | EIGRP / OSPF / OSPFv3 / EIGRPv6 の複合故障 |
-| 再配送 TS | `gen_redist_mutual_ts.py` / `gen_redist_ripospf_ts.py` | 相互再配送 / RIP⇄OSPF 再配送ループ |
-| 再配送ループ TS | `gen_redist_loop_ts.py` / `gen_redist_mp_ts.py` | BGP→EIGRP→OSPF リングを出自が一周する定常ループ（3変種） / 多点相互再配送ループ（解法4モードを seed 抽選し監査ポリシーで強制） |
-| 連鎖故障 | `gen_chain_ts.py` | 12台規模でレイヤをまたぐ連鎖故障を生成 |
-| MPLS L3VPN TS | `gen_mpls_ts.py` | 12台 (3PE×Pリング×2顧客) の L3VPN に L1〜L5 の故障を注入。`--pece ebgp` 軸で PE-CE eBGP 化 |
-| L2 TS | `gen_l2_troubleshoot.py` | EtherChannel など L2 の故障 |
-| DMVPN TS | `gen_dmvpn_ts.py` | DMVPN + IPsec に14種の故障を注入 |
-| DHCP TS | `gen_dhcp_ts.py` | DHCPv4（配布/リレー/ACL）に8故障×3レイヤを注入 |
-| FNF TS | `gen_fnf_ts.py` | 仕様書突き合わせ型 Flexible NetFlow TS（10故障4レイヤ・`--faults` で複合化） |
-| セキュリティ TS | `gen_urpf_ts.py` | uRPF anti-spoofing の故障（strict過剰/ACL例外誤り/未設定/loose過緩の4種・非対称ルーティング題材） |
-| フィルタ道場 | `gen_list_dojo.py` | prefix-list / AS-path / ACL の基本形ドリル3部作（`acl_model.py` = ACL 意味評価器で採点） |
-| S2S VPN 設計構築 | `gen_s2svpn.py` | 要件書形式・技術選定自由の設計構築問。`--day2` で運用チケット3本（支店追加/split化/重複NAT）を追加出題 |
-| サーバ / 監視 | `gen_dnsdhcp_*.py` / `gen_radius_build.py` / `gen_snmpv3_ts.py` / `zbx_setup.py` | Linux サーバ（BIND/DHCP/FreeRADIUS）構築・TS、SNMPv3/Zabbix 監視 |
-
-### Ansible 自動化ラボ（`ANSIBLE-01〜05`）
-
-Cisco 機器を題材に **Ansible 自体**を段階学習するコース。トポロジは固定で「変わるのは Ansible 技術だけ」。
-インベントリ → アドホック → Playbook → 変数優先順位 → 冪等性 の順に進む。ENCOR/ENARSI 側にも「OSPF/BGP を Ansible で自動構築する」自動化問題（`*-AUTO-*`）がある。
-
-問題一覧は `ls problems/`、各問題の詳細は `problems/<ID>/task.md(.j2)` と `solution.md` を参照。
+| 系統 | 例 |
+|---|---|
+| IGP・経路制御 | `gen_topology.py`（ランダムなツリー型 OSPF）・`gen_troubleshoot.py`・`gen_ospf_complex_ts.py`・`gen_eigrp_complex_ts.py`・`gen_route_ctrl.py` |
+| BGP | `gen_bgp_troubleshoot.py`・`gen_bgp_pathts.py`・`gen_bgp_rrts.py`・`gen_bgp_complex_ts.py`・`gen_bgp_ring_ts.py` |
+| 再配送 | `gen_redist_field.py`・`gen_redist_mutual_ts.py`・`gen_redist_loop_ts.py`・`gen_redist_mp_ts.py` |
+| 複数レイヤの連鎖故障 | `gen_chain_ts.py`（12 台規模）・`gen_enterprise.py`（拠点構築） |
+| VPN・MPLS | `gen_dmvpn_ts.py`・`gen_dmvpn_wreck.py`・`gen_mpls_ts.py`・`gen_s2svpn.py`（要件書から設計して組む） |
+| L2 | `gen_stp.py`・`gen_stp_3tier.py`・`gen_stp_mst.py`・`gen_l2_troubleshoot.py` |
+| サービス・セキュリティ | `gen_dhcp_ts.py`・`gen_fnf_ts.py`・`gen_ipsla_ts.py`・`gen_urpf_ts.py`・`gen_v6addr_ts.py`・`gen_snmpv3_ts.py` |
+| フィルタの道場 | `gen_list_dojo.py`（prefix-list / AS-path / ACL）・`gen_dojo_dlist.py`（distribute-list） |
+| 紙面 | `gen_paper_mcq.py`（多くの shape の入口）・`gen_paper_cloze.py`（解説の穴埋め）ほか `gen_paper_*.py` |
 
 ---
 
 ## 動作要件
 
 | 必要なもの | 用途 |
-|-----------|------|
-| **Cisco CML 2.x** | ネットワーク機器を動かす基盤（API 有効・ログイン可能なこと） |
-| CML ノードイメージ | ルータ/スイッチ用に IOL(iol-xe / ioll2-xe)、または IOSv/IOSvL2。Linux 問題用に Ubuntu クラウドイメージ |
-| **Linux コントローラ**（Ubuntu 想定） | Ansible + pyATS を動かすホスト。CML と管理ネットワークで疎通できること |
-| Python 仮想環境 | `.venv` に ansible-core、pyATS/Genie、`cisco.ios` / `cisco.cml` コレクション、`virl2_client` |
+|---|---|
+| **Cisco CML 2.x**（2.10 で検証） | ネットワーク機器を動かす基盤（API が有効でログインできること） |
+| CML のノードイメージ | IOL（iol-xe / ioll2-xe）・IOSv / IOSvL2・Catalyst 8000V・IOS XRv 9000・IOS XRd・Ubuntu など。問題ごとに要るものが違う |
+| containerlab ホスト（任意） | `platform: clab` の問題用。Linux + Docker + containerlab（0.83 で検証）。vJunos-Evolved・cEOS・FRR のイメージを入れておく |
+| **制御ホスト** | Ansible と pyATS を動かすホスト（Linux・Python 3.12 で検証）。CML・containerlab ホストと管理ネットワークで通じること |
+| Python と Ansible の依存 | [`.devcontainer/requirements.txt`](.devcontainer/requirements.txt)（ansible-core・pyATS/Genie・virl2_client ほか）と [`.devcontainer/requirements.yml`](.devcontainer/requirements.yml)（cisco.cml・juniper.device・junipernetworks.junos） |
+| rclone（任意） | 教材をクラウドへ持ち出す時だけ |
 
-> 使用する CML イメージ ID は `group_vars/all/main.yml` の `device_profiles` で定義。手元の CML に登録済みの正確な ID に合わせて調整してください。
+> 使う CML のイメージ ID は `group_vars/all/main.yml` の `device_profiles` で定義しています。手元の CML に登録済みの ID に合わせてください。
 
 ---
 
@@ -144,45 +190,43 @@ Cisco 機器を題材に **Ansible 自体**を段階学習するコース。ト�
 ```bash
 git clone <this-repo> && cd CCNP01
 
-# 1) Python 仮想環境（ansible-core / pyATS / cisco.ios / cisco.cml / virl2_client を導入）
+# 1) Python の仮想環境と Ansible のコレクション
 python3 -m venv .venv && . .venv/bin/activate
-pip install ansible-core pyats[full] && ansible-galaxy collection install cisco.ios cisco.cml
+pip install -r .devcontainer/requirements.txt
+ansible-galaxy collection install -r .devcontainer/requirements.yml
 
-# 2) ★ローカル環境設定（CML接続情報・管理IPプール）を自分の値で作成
+# 2) ★ローカルの環境設定（CML・管理 IP のプール・containerlab ホスト）を自分の値で作る
 cp group_vars/all/local.yml.example group_vars/all/local.yml
-$EDITOR group_vars/all/local.yml     # cml_host / cml_username / cml_password と mgmt_* を編集
+$EDITOR group_vars/all/local.yml
 ```
 
-`group_vars/all/local.yml` は **`.gitignore` 済み**（コミットされない）。CML の場所・ログイン・管理ネットワークといった各自の環境依存値はここだけに置きます。雛形は [`group_vars/all/local.yml.example`](group_vars/all/local.yml.example)。
-
-**機器のログイン認証**は Ansible Vault（`group_vars/all/vault.yml`）に格納。学習用の固定値なので **vault パスワードは `CCNP`**、playbook 実行時に `--vault-password-file <(printf 'CCNP\n')` を付けます（各ノードの config テンプレートが同じ user/secret を焼き込む前提。変える場合はテンプレート側も合わせて変更）。
+- `group_vars/all/local.yml` は **`.gitignore` 済み**（コミットされない）。環境に依存する値はここだけに置きます。雛形は [`group_vars/all/local.yml.example`](group_vars/all/local.yml.example)。containerlab の項目は、`platform: clab` の問題を使う時だけ要ります。
+- **機器のログイン認証**は Ansible Vault（`group_vars/all/vault.yml`）に入っています。学習用の固定値なので **vault パスワードは `CCNP`**。playbook を直接流す時は `--vault-password-file <(printf 'CCNP\n')` を付けます（`lab.sh`・`pack.sh` は自分で付ける）。各ノードの config テンプレートが同じ user / secret を焼き込む前提なので、変える時はテンプレートも合わせます。
+- 制御ホストを VS Code の開発コンテナで作る定義も [`.devcontainer/`](.devcontainer/) にあります。ユーザ名・パス・公開するポートは作者の環境に合わせてあるので、使う時は書き換えてください。
 
 ---
 
 ## クイックスタート
 
-`scripts/lab.sh` がライフサイクル（build → up → 作業コピー配布 → 撤去）を一括管理します。
-
 ```bash
-# 出題（build_topology → lab_up → lab/<ID>/ に問題.md と作業コピーを配置）
-scripts/lab.sh provision ENCOR-OSPF-01           # variant 指定は第2引数: provision <ID> <variant>
+# ラボを 1 問
+scripts/lab.sh provision ENCOR-OSPF-01      # 構築・起動・lab/ENCOR-OSPF-01/ に課題文
+#   → ワークスペース / CML コンソール / SSH で解く
+scripts/lab.sh grade ENCOR-OSPF-01          # 採点
+scripts/lab.sh teardown ENCOR-OSPF-01       # 片付け
 
-# 受験者は CML コンソール / SSH で機器にログインして解答
-#   - SSH 例: ssh <user>@<割当てられた管理IP>
-#   - 自動化ラボ(ANSIBLE-*/AUTO-*)は lab/<ID>/ を編集して playbook を流す
+# 紙面パック
+scripts/pack.sh new                         # 今日の 3 パックを作る（ラボの構築も含むので時間がかかる）
+scripts/pack.sh serve                       # http://<制御ホスト>:8899/ で解く
+scripts/pack.sh grade --today --no-lab      # 紙面を採点して解説ページを出す
+scripts/pack.sh close --today               # ラボを片付ける
 
-# 採点
-ansible-playbook playbooks/grade.yml -e problem=ENCOR-OSPF-01 \
-  --vault-password-file <(printf 'CCNP\n')
-# パラメータ化問題は -e variant=sXXXX も付ける
-
-# 片付け（CMLラボを削除して管理IPを解放。problems/<ID> 自体は残る）
-scripts/lab.sh teardown ENCOR-OSPF-01
-
-scripts/lab.sh status                            # 稼働ラボ・管理IPの空き・作業コピー一覧
+# 教材コース
+scripts/course.sh xr build                  # ポータルの棚に載せる
+scripts/lab.sh provision XRT-01 && scripts/lab.sh learn XRT-01   # 学習ラボ
 ```
 
-`lab.sh` を使わず手で回す場合:
+`lab.sh` を使わずに手で回す場合:
 
 ```bash
 V="--vault-password-file <(printf 'CCNP\n')"
@@ -191,11 +235,11 @@ ansible-playbook playbooks/lab_up.yml         -e problem=<ID> $V          # 停�
 ansible-playbook playbooks/grade.yml          -e problem=<ID> $V          # -e max_attempts= -e settle_delay= で収束調整
 ```
 
-> **複数ラボの同時稼働に対応**。管理IPは `topologies/mgmt_alloc.py` のリース台帳（`_state/mgmt_leases.json`）が first-fit で調停するため、旧ラボを撤去せずに新ラボを起動しても管理IP衝突は起きません。teardown 漏れは `mgmt_alloc.py gc` で回収できます。
+> **複数ラボの同時稼働に対応**しています。管理 IP は `topologies/mgmt_alloc.py` のリース台帳（`_state/mgmt_leases.json`）が first-fit で割り当てるので、旧ラボを撤去せずに新ラボを起動しても管理 IP は衝突しません。teardown 漏れは `mgmt_alloc.py gc` で回収できます。
 >
-> 同時稼働の上限は**環境依存**で、コードにハードコードした定数はありません。実質的には次の2つで決まります。
-> 1. **管理IPプールのサイズ** = `group_vars/all/local.yml` の `mgmt_pool` の要素数（環境ごとに各自が設定・`.gitignore` 済。天井は管理セグメントのサブネット幅）。`mgmt_alloc.py` はプール不足のときだけ割当を停止する（要求ノード数 > 空きIP数 → rc=2、CML には触らない）。
-> 2. **CML の同時起動ノード数** = CML ライセンスグレードの制約（例: Personal は 20 ノード）。プロジェクト側はこれを関知せず、超過分は CML が拒否する。Enterprise 等では実質プールサイズが律速。
+> 同時稼働の上限は**環境に依存**し、コードに定数はありません。実質は次の 2 つで決まります。
+> 1. **管理 IP プールの大きさ** = `local.yml` の `mgmt_pool` の要素数。足りない時だけ割り当てを止める（要求ノード数 > 空き IP 数 → rc=2、CML には触らない）。
+> 2. **CML の同時起動ノード数** = CML のライセンスの制約（例: Personal は 20 ノード）。超えた分は CML が拒否する。
 
 ---
 
@@ -203,71 +247,83 @@ ansible-playbook playbooks/grade.yml          -e problem=<ID> $V          # -e m
 
 ```
 CCNP01/
-├── ansible.cfg                  # network device 向け接続設定
-├── inventory.yml                # 名前/グループのみ（管理IPは動的割当）
-├── group_vars/ host_vars/       # 接続変数・device_profiles・vault(機器認証) / local.yml(環境依存・gitignore)
-├── roles/baseline/              # day0 baseline テンプレート（baseline_router/switch/server.cfg.j2）
-├── playbooks/
-│   ├── build_topology.yml       # day0 描画 + gen_cml_lab.py → _generated/<ID>/lab.yaml
-│   ├── lab_up.yml               # CML へ import + 起動（管理IP割当・プリフライト）
-│   ├── grade.yml + _grade_attempt*.yml   # 採点（ssh / telnet / console の3収集パス）
-│   ├── solve_generated.yml / fix_generated.yml   # 生成問題の模範解答/故障修正の自動投入
-│   └── verify_failover*.yml     # フェイルオーバ（shut→疎通→復旧）の能動検証
+├── CLAUDE.md                    # Claude Code で回す時の運用ルール
+├── .claude/skills/quiz/         # 出題フロー（/quiz スキル）
+├── .devcontainer/               # 制御ホストの開発コンテナと依存の一覧
+├── ansible.cfg / inventory.yml  # 接続設定・名前とグループだけ（管理 IP は動的に割り当て）
+├── group_vars/ host_vars/       # 接続変数・device_profiles・vault / local.yml（環境依存・gitignore）
+├── roles/baseline/              # day0 の baseline テンプレート
+├── playbooks/                   # build_topology / lab_up / grade（+ _grade_attempt*）ほか
 ├── topologies/
-│   ├── conventions.md           # 採番・配線・命名規約
 │   ├── gen_cml_lab.py           # problem.yml → CML ラボ YAML
-│   ├── grade.py + netmodel.py   # 採点エンジン（Genie 構造化 / 大域不変条件）
-│   ├── mgmt_alloc.py            # 管理IPリース台帳（複数ラボ同時稼働の調停）
-│   ├── gen_*.py                 # 各種生成器（34本）
-│   ├── *_ops.py                 # 大型シナリオの構築/運用ヘルパ（campus/sda/evpn/um2/fgt*/sdwan/s2svpn）
-│   └── _generated/<ID>/         # build で出る中間物（mgmt_map / lab.yaml / 描画済 task.md 等・gitignore）
-├── problems/<ID>/               # 問題パック（自己完結）
-│   ├── CATALOG.md               # 出題可問題の正準台帳（実機検証済のみ掲載）
-│   └── _drafts/                 # 未着手課題の詳細設計メモ（BACKLOG.md からリンク）
-├── poc/<テーマ>/                # 作問前の PoC 置き場（実機検証ログ・試行スクリプト）
-├── um2/                         # UM2 シリーズの設計書・構成図
-├── scripts/lab.sh               # 出題/片付けラッパ
-└── lab/<ID>/                    # provision が作る使い捨て作業コピー（gitignore）
+│   ├── grade.py + netmodel.py   # 採点エンジン（Genie で構造化 / ネット全体の不変条件）
+│   ├── gen_*.py                 # 生成器（ラボ・紙面・パック・読み物）
+│   ├── *_model.py               # 意味の評価器（ACL・BGP 最良経路・STP・経路表など。採点・紙面・ゲームが使う）
+│   ├── clab_ops.py              # containerlab の deploy / destroy / exec
+│   ├── lab_console.py           # ラボのワークスペース
+│   ├── pack_server.py           # ポータルと配信サーバ
+│   ├── units.yml / lab_modes.yml   # 単元とローテーションの定義
+│   ├── *_ops.py                 # 大型シナリオの構築・運用ヘルパ
+│   ├── conventions.md           # 採番・配線・命名の規約
+│   └── _generated/ _state/      # build の中間物・台帳（gitignore）
+├── problems/<ID>/               # 1 問 = 1 ディレクトリ
+│   ├── CATALOG.md / _history.md # 出題可の一覧 / 出題の記録
+│   └── _drafts/                 # 設計メモ（BACKLOG.md からリンク）
+├── questions/ answers/          # 紙面の問題と答え（questions/en/ は英訳）
+├── courses/                     # 書き下ろしの教材（xr/・junos/）
+├── glossary/                    # 教材の用語集の辞書
+├── games/                       # 学習ゲームの画面とステージ定義
+├── curriculum/                  # 単元の補足と参照ソース
+├── records/                     # 学習の記録（attempts.jsonl・学習モードの記録）
+├── poc/<テーマ>/                # 作問前の PoC（実機検証のログ・試行スクリプト）
+├── scripts/                     # lab.sh / pack.sh / course.sh / read.sh / quota.sh
+├── BACKLOG.md / CURRICULUM.md   # 課題の台帳 / 単元ごとの到達度の台帳
+└── lab/ packs/ reading/         # provision・パック・読み物の出力（gitignore）
 ```
 
 ---
 
-## 問題パック仕様
+## 問題ディレクトリの仕様
 
-1問 = `problems/<ID>/` の自己完結ディレクトリ。
+1 問 = `problems/<ID>/` の自己完結したディレクトリです。
 
 | ファイル | 役割 |
-|---------|------|
-| `problem.yml` | メタ（id/exam/topics/difficulty/target_nodes/points）＋ `lab.links`（配線。a_if/b_if は slot 番号） |
-| `task.md` または `task.md.j2` | 受験者向け問題文（日本語）。`.j2` は params で数値が変わる |
+|---|---|
+| `problem.yml` | メタ（id / exam / topics / difficulty / target_nodes / points）＋ `lab.links`（配線。a_if / b_if は slot 番号） |
+| `task.md` または `task.md.j2` | 受験者向けの問題文（日本語）。`.j2` は params で数値が変わる |
+| `task.en.md` | 英語の問題文（教材コースの学習ラボなど） |
 | `initial/<NODE>.cfg.j2` | 出題時に重ねる「穴あき」config |
-| `grading.yml` または `grading.yml.j2` | 採点基準（フィールドアサート型スキーマ） |
+| `grading.yml` または `grading.yml.j2` | 採点基準（フィールドを判定する形式） |
+| `grading.<名前>.yml` | 途中の確認用の採点基準（`lab.sh checkpoint`・学習モードの「確認」） |
+| `learn.yml` | 学習モードの中身（課題ごとの確認・段階式ヒント・確かめ方の例） |
 | `solution.md` | 模範解答 |
 | `params/` | パラメータ化（`base.yml` 既定値 + `_gen.yml` ランダム化スキーマ） |
 | `controller/` `controller_solution/` `blanks.yml` | 自動化ラボ用の穴あき workspace と完成形 |
+| `clab/` | containerlab のトポロジ（`*.clab.yml`）と初期設定。`problem.yml` の `platform: clab`・`clab_nodes`・`clab_topology` と組で使う |
 
-### パラメータ化（値違い問題の量産）
-`initial/grading/task` を `.j2` 化し `{{ params.xxx }}` を参照。`-e variant=<name>`（既定 `base`）で値を切替。
-ランダム生成は `gen_params.py --problem <ID> --seed N` → `params/sN.yml`（同 seed = 同値 = 再現可能）。
+### パラメータ化（値違いの問題の量産）
+
+`initial/grading/task` を `.j2` にして `{{ params.xxx }}` を参照します。`-e variant=<name>`（既定 `base`）で値を切り替えます。
+ランダムな生成は `gen_params.py --problem <ID> --seed N` → `params/sN.yml`（同じ seed = 同じ値 = 再現できる）。
 
 ---
 
 ## 採点の仕組み（`grade.py` / pyATS Genie）
 
-- `show` 出力を Genie で**構造化** → `find`（glob でオブジェクト選択）+ `match`（同一オブジェクト上でフィールド相関）で判定。配点は all-or-nothing。
-- `grade.yml` が **全PASS or max_attempts まで settle_delay 秒間隔でリトライ**（収束待ち）。
-- Genie パーサが無い/壊れる箇所は **`raw:` 正規表現**（contains / not_contains / regex …）で判定。「特定経路だけ不在」「単一経路化（ECMP排除）」「能動 ping の成否」もこれで表現。
-- `netmodel.py` = ネット全体の**大域不変条件**（ループ不在 / 最適性 / 到達性）を採点する別系統。
-- 収集パスは `problem.yml` の `access:` で分岐: `ssh`（既定）/ `telnet`（IOL L2スイッチ）/ `console`（IOSv）。
+- `show` 出力を Genie で**構造化** → `find`（glob でオブジェクトを選ぶ）+ `match`（同じオブジェクトの上でフィールドを照合）で判定。配点は all-or-nothing。
+- `grade.yml` が **全 PASS か max_attempts まで、settle_delay 秒おきにリトライ**（収束待ち）。
+- Genie のパーサが無い・壊れる箇所は **`raw:` の正規表現**（contains / not_contains / regex …）で判定。「特定の経路だけ無い」「単一経路化（ECMP の排除）」「能動 ping の成否」もこれで表す。
+- `netmodel.py` = ネット全体の**大域不変条件**（ループが無い / 最適 / 到達できる）を採点する別系統。
+- 集め方は `problem.yml` の `access:` で分かれる: `ssh`（既定）/ `telnet`（IOL の L2 スイッチ）/ `console`（IOSv など）。containerlab のノードは SSH（Junos・EOS）か `docker exec`（FRR）。
 
-`grading.yml` スキーマ例:
+`grading.yml` の例:
 ```yaml
 defaults: { genie_os: iosxe }
 checks:
   - name: "RT01-RT02 OSPF 隣接 FULL"
     node: RT01
     command: show ip ospf neighbor
-    parser:  show ip ospf neighbor        # command=実機へ送る文字列 / parser=Genieキー（別物）
+    parser:  show ip ospf neighbor        # command=実機へ送る文字列 / parser=Genie のキー（別物）
     find:    "interfaces.*.neighbors.*"
     match:   { state: { startswith: "FULL" } }
     points:  30
@@ -280,25 +336,25 @@ checks:
 
 ---
 
-## 規約（要点 / 詳細は [conventions.md](topologies/conventions.md)）
+## 規約（要点。詳細は [conventions.md](topologies/conventions.md)）
 
-- **命名**: `RTxx`=router / `SWxx`=switch（接頭辞でロール自動判定）。CMLラボ名は `CCNP-LAB-<md5(id)[:8]>` で**不透明化**（画面に技術名が出て解法バレを防ぐ）。
-- **採番**: Loopback0 = `x.x.x.x/32`（RT01→1.1.1.1）。ルータ間 = `10.1.<a><b>.0/30`（小番号側が .1）。
-- **イメージ**: トポロジ単位で統一。優先 `CLI -e node_image` > `problem.yml` > group既定。物理IF名は device_profiles で論理↔物理を吸収。
+- **命名**: `RTxx` = router / `SWxx` = switch（接頭辞で役割を判定）。CML のラボ名は `CCNP-LAB-<md5(id)[:8]>` で**中身が分からない名前**にする（画面に技術名が出て解き方が割れるのを防ぐ）。
+- **採番**: Loopback0 = `x.x.x.x/32`（RT01 → 1.1.1.1）。ルータ間 = `10.1.<a><b>.0/30`（小さい番号の側が .1）。
+- **イメージ**: トポロジ単位でそろえる。優先は `CLI -e node_image` > `problem.yml` > グループの既定。物理 IF 名は device_profiles で論理と物理の違いを吸収する。
 
 ---
 
 ## 運用上の落とし穴
 
-- **複数ラボ同時稼働可**（管理IPは `mgmt_alloc.py` のリース台帳が調停）。上限は**環境依存**でコード定数はない：`mgmt_pool`（`local.yml`）の要素数と、CML グレードの同時起動ノード数（例: Personal 20）で決まる。teardown 漏れは `mgmt_alloc.py gc` で回収し、不要ラボは `scripts/lab.sh teardown <ID>` で撤去する。
-- **baseline 末尾に `end` を置かない**（day0 は baseline+initial を連結。中間 `end` 以降が無視される）。
-- **IOL はリンクダウンを対向に伝播しない**（片端 shutdown でも対向 line protocol は up）。フェイルオーバ設計は remote link-down 検知に依存しないこと。
-- `raw` 採点は IOS のコマンド省略形・別表記に脆い → 各語を `<最短プレフィクス>[\w-]*` で緩める。
-- `task.md.j2` にリテラル `{{ ____ }}` を書くと描画器が変数解釈して失敗 → `{% raw %}…{% endraw %}` で囲む。
-- 採点チェックが多く**2分超**になる問題は、実行ツールの timeout を上げる。
+- **baseline の末尾に `end` を置かない**（day0 は baseline と initial をつなげたもの。途中の `end` から後ろが無視される）。
+- **IOL はリンクダウンを対向に伝えない**（片端を shutdown しても対向の line protocol は up のまま）。フェイルオーバの設計は、対向のリンクダウンの検知に頼らないこと。
+- **VLAN の多い L2 の盤面は IOSvL2 で組む**（ioll2 では BPDU が欠けることがある）。
+- `raw` の採点は IOS のコマンドの省略形・別表記に弱い → 各語を `<最短プレフィクス>[\w-]*` で緩める。
+- `task.md.j2` にリテラルの `{{ ____ }}` を書くと、描画器が変数とみなして失敗する → `{% raw %}…{% endraw %}` で囲む。
+- 採点のチェックが多く **2 分を超える**問題は、実行ツールの timeout を上げる。
 
 ---
 
 ## ライセンス / 免責
 
-学習・作問目的の個人プロジェクトです。Cisco IOS 等のイメージは各自が正規に入手・ライセンスした CML 環境で使用してください（本リポジトリにイメージは含みません）。
+学習・作問目的の個人プロジェクトです。Cisco・Juniper・Arista・Fortinet などのイメージは、各自が正規に入手し、ライセンスに従って使ってください（本リポジトリにイメージは含みません）。
