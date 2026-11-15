@@ -171,3 +171,34 @@ FRR で余計な設定を `write memory` → reset で消えて白紙 0/100 → 
 **問題の作り方の補足(② の分)**: FRR は `kind: frr`・`image: quay.io/frrouting/frr:containerlab-<版>`・`startup-config: <node>/frr.conf`・
 `daemons: [ospfd, bgpd, …]`(書いたものだけ動く)。(0.77 の形= `kind: linux` で `clab/<node>/` に `daemons`・`frr.conf`・`vtysh.conf` を置き `binds: [<node>:/etc/frr]`。)cEOS は startup-config を置かなければ containerlab の既定の設定で白紙起動(版はイメージの `ceos:<版>`)。
 Junos・EOS と FRR をつなぐリンクは拡張形式で `mtu: 1500`。採点は `exec: junos`・`exec: eos`・`exec: frr`(`show … json` / `| json` / `| display json` なら `parser: json`)。
+
+## 8. 起こし直し(BL-279・2026-11-15)
+
+**きっかけ**: szk-cl01 の載るホスト(VMware Workstation)ごと落ちた(同日 3 回)。JNT-03 はユーザが解いている途中だった。
+
+**落ちた後の状態**(実測): コンテナは消えずに `Exited (255)` で残る。vJunos の設定とコミット履歴はコンテナの書き込み層の
+overlay(`/vJunosEvolved-…-overlay.qcow2`)に残る。docker の止まったコンテナは自動では起きず、veth のリンクは相手が止まった時点で消えている。
+★それまでの道具では、provision(deploy)は `docker ps`(動いているものだけ)を見て「ラボ無し」と判断し、`--reconfigure` で作り直す
+→ overlay ごと消え、解いた設定が失われていた(同日朝の JNT-02 は初めの状態だったので実害なし)。
+
+**作り**(`clab_ops.py revive`・`lab.sh revive <ID>`): ①動いているノードがあれば止める ②vJunos の起動用の設定を整える
+③`docker start` ④リンクを `containerlab tools veth create`(拡張形式の `mtu` も)で張り直す ⑤ノードの `exec:` を docker exec で流し直す ⑥起動を待つ。
+リンクは deploy が szk-cl01 に送ったトポロジの写しから取る。veth 以外のリンク・ethN でない名前・トポロジに無いノードがあれば、何も触らずに止める。
+deploy は、止まったコンテナが残っていれば作り直さずに起こし直す(作り直しは `--reconfigure`。reset の作り直しも `--reconfigure` を付けるので従来どおり)。
+
+**vrnetlab の罠**(実測): launch.py は起動のたびに `init.conf` を読む。startup-config があると `init.conf` を残し、`juniper.conf` に
+「init.conf＋startup-config」を `>>` で足す。無いと `init.conf` を `juniper.conf` へ名前を変える → 2 回目の起動が `FileNotFoundError: init.conf` で落ち、
+`tools veth create` は止まった相手を待ち続ける。→ ②で `init.conf` があれば `juniper.conf` を空にし、無ければ `juniper.conf`(置き換え済みの init.conf)を `init.conf` に写す。
+起動の 5 秒後に止まったコンテナがあれば、ログを出して止める。`tools veth create` には上限 120 秒。起動用のディスクは既にあるディスクの設定を変えない。
+
+**確かめ**:
+
+| 試験台 | 中身 | 結果 |
+|---|---|---|
+| JNT-03(手で・実際に落ちた後) | vJunos×2(startup-config あり)・FRR×3・exec あり | JUN02 は落ちる 1 分前のコミットまで残っていた・OSPF Full・BGP Established・Web 応答 |
+| POC-CLABFRR-01 | 白紙の vJunos(startup-config なし)× FRR | 片方だけ動いている状態から復旧・全台 `docker kill` から deploy で復旧・コミットした設定が残る・OSPF Full・MTU 1500・その後の速いやり直し 4 秒 |
+| 使い捨て(FRR×2・ブリッジ) | exec(Web)・`bridge:br-cml` への端 | exec が流れ直して Web 応答・br-cml の端が戻る・MTU 1500 |
+| POC-CLABEOS-01 | cEOS × FRR | `write memory` した設定が残る・Et1 connected(cEOS も CLAB_INTFS 本を待つ) |
+
+healthy までの時間は作り直しと同じ(vJunos 約 93 秒・cEOS 約 23 秒・FRR 即時)。Junos の et- は起動から約 1 分後に現れ、OSPF・BGP はさらに 1〜2 分後。
+起こし直しで消えるのは、落ちる前にコミット(cEOS は `write memory`)していなかった変更だけ。ワークスペースは「ラボが動いていない」と出るだけで、起こし直しのボタンは無い(provision か `lab.sh revive`)。

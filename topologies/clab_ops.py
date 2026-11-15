@@ -25,6 +25,8 @@ CML を使わない問題では lab.sh が CML の手順を飛ばし、これだ
   clab_ops.py reset   --repo REPO --problem ID [--rebuild]   # やり直し: Junos を構築直後の設定へ戻す(数秒)。だめなら作り直す
   clab_ops.py baseline --repo REPO --problem ID   # いまの Junos の設定を戻り先として控え直す(deploy の最後に自動で行う)
   clab_ops.py cli     --repo REPO --problem ID --node JUN02 -- "show firewall" "show log fw-drops"   # Junos の運用モードに流す(採点の口)
+  clab_ops.py revive  --repo REPO --problem ID [--wait 900] [--force]   # ホストごと落ちた後: 止まったコンテナを設定を残したまま起こす
+      # deploy も、止まったコンテナが残っていれば作り直さずにこれを行う(作り直しは --reconfigure)
   clab_ops.py import-ceos --repo REPO --file ~/images/cEOS64-lab-4.xx.yF.tar.xz [--tag 4.xx.yF]
       # arista.com(利用者登録が要る)から落とした cEOS-lab を szk-cl01 に取り込む → イメージ ceos:<版>
 
@@ -207,6 +209,23 @@ def preflight_ram(target, topo, force):
                  f"(強行は --force)。ヒント: clab_ops.py status")
 
 
+def wait_ready(target, topo, wait, expect=0):
+    """ラボの全ノードが起動を終えるまで待つ(expect= 動いているべきコンテナの数。0 なら数は見ない)。"""
+    print(f"== healthy 待ち (最大 {wait}s・vJunos EVO は 2 分前後)")
+    t0 = time.time()
+    while True:
+        conts = lab_containers(target, topo["lab_name"])
+        unhealthy = not_ready(target, topo, conts)
+        if conts and not unhealthy and len(conts) >= expect:
+            print(f"全 {len(conts)} ノード healthy ({int(time.time()-t0)}s)")
+            return
+        if time.time() - t0 > wait:
+            if len(conts) < expect:
+                unhealthy["(動いているコンテナ)"] = f"{len(conts)}/{expect}"
+            sys.exit(f"★healthy 待ちタイムアウト: {json.dumps(unhealthy, ensure_ascii=False)}")
+        time.sleep(15)
+
+
 def cmd_deploy(a):
     topo = pack_topology(a.repo, a.problem)
     if topo is None:
@@ -214,6 +233,13 @@ def cmd_deploy(a):
         return
     target, labs_dir = clab_conn(a.repo)
     rdir = f"{labs_dir}/ccnp/{a.problem}"
+
+    # 止まったコンテナが残っている(ホストごと落ちた後など・BL-279)→ 作り直さずに起こし直す。作り直すと vJunos の
+    # ディスクごと消え、解いた設定が失われる(provision を打ち直した時の事故の防止)。作り直しは --reconfigure で明示。
+    if not a.reconfigure and stopped_containers(target, topo["lab_name"]):
+        print("== 止まったコンテナが残っています → 作り直さずに起こし直します(解いた設定を残すため・作り直しは --reconfigure)")
+        revive(a.repo, topo, target, rdir, a.wait, a.force)
+        return
 
     # 冪等ガード: 既に全ノード healthy なら再デプロイしない(provision の再実行で
     # 起動済み vJunos を壊さないため)。作り直しは --reconfigure で明示。
@@ -251,18 +277,8 @@ def cmd_deploy(a):
     if r.returncode != 0:
         sys.exit(f"containerlab deploy 失敗 rc={r.returncode}")
 
-    print(f"== healthy 待ち (最大 {a.wait}s・vJunos EVO は 2 分前後)")
-    t0 = time.time()
-    while True:
-        conts = lab_containers(target, topo["lab_name"])
-        unhealthy = not_ready(target, topo, conts)
-        if conts and not unhealthy:
-            print(f"全 {len(conts)} ノード healthy ({int(time.time()-t0)}s)")
-            break
-        if time.time() - t0 > a.wait:
-            sys.exit(f"★healthy 待ちタイムアウト: {json.dumps(unhealthy, ensure_ascii=False)}")
-        time.sleep(15)
-    jump = (load_yaml(f"{a.repo}/group_vars/all/local.yml") or {}).get("clab_mgmt_jump") or ""
+    wait_ready(target, topo, a.wait)
+    jump =(load_yaml(f"{a.repo}/group_vars/all/local.yml") or {}).get("clab_mgmt_jump") or ""
     via = f"踏み台 {jump} 経由" if jump else "制御ホストから直達"
     for name, ip in (topo["clab_nodes"] or {}).items():
         # 再デプロイでノードのホスト鍵が変わる → 制御ホストの古い known_hosts を掃除
@@ -489,6 +505,156 @@ def cmd_reset(a):
     print("RESET rebuilt")
 
 
+# --------------------------------------------------------------------------
+# 起こし直し(BL-279・2026-11-15)。ホスト(szk-cl01 の載る VMware Workstation)ごと落ちると、ラボのコンテナは消えずに
+# 止まった状態(Exited (255))で残り、vJunos の設定もコンテナの中のディスク(vrnetlab の overlay)に残る。
+# ★作り直す(deploy --reconfigure)とこのディスクごと消える。起こし直しは消さずに次の順で戻す(JNT-03 で手で実証):
+#   ① 動いているノードがあれば止める(相手が止まった時点で、その間のリンクの veth は消えている。全部そろえて起こす)
+#   ② vJunos の起動用の設定(vrnetlab の init.conf・juniper.conf)を、launch.py がもう一度読める形に整える(revive の中の注)。
+#      起動用のディスクは既にあるディスクの設定を変えない(コミット済みの設定がそのまま残る・JNT-03 で確認)
+#   ③ docker start → ④ リンクを `containerlab tools veth create` で張り直す(vrnetlab は CLAB_INTFS 本がそろうまで VM を
+#      起こさずに待ち、既にある overlay をそのまま使う) → ⑤ ノードの exec:(サーバ役の Web など)を流し直す → ⑥ 起動を待つ
+# 張り直すリンクは、コンテナを作ったときのトポロジ(deploy が szk-cl01 に送った写し)から取る。リポの版が後で変わっても合う。
+# 扱えないもの(veth 以外のリンク・ethN でない名前のインターフェース)があれば、何も触らずに止める(作り直しは reset --rebuild)。
+# Junos の et- は起動から 1 分ほど後に現れ、OSPF・BGP が上がるのはさらに 1〜2 分後(JNT-03 の実測)。
+# --------------------------------------------------------------------------
+CONTAINERLESS_KINDS = {"bridge", "ovs-bridge"}   # コンテナを作らないノード(リンクの端は bridge:<名前>:<IF>)
+
+
+def lab_all_containers(target, lab_name):
+    """該当ラボのコンテナ {name: (State, Status)}。止まっているものも含む(docker ps -a)。"""
+    r = ssh(target, f"docker ps -a --filter label=containerlab={lab_name} "
+                    "--format '{{.Names}}\t{{.State}}\t{{.Status}}'", check=False)
+    out = {}
+    for line in (r.stdout or "").strip().splitlines():
+        name, state, status = (line.split("\t") + ["", ""])[:3]
+        out[name] = (state, status)
+    return out
+
+
+def stopped_containers(target, lab_name):
+    """該当ラボの、動いていないコンテナ {name: Status}。"""
+    return {c: s for c, (st, s) in lab_all_containers(target, lab_name).items() if st != "running"}
+
+
+def _revive_plan(topo, spec):
+    """コンテナを作ったときのトポロジ spec → (コンテナのノード [名前], リンク [(端 A, 端 B, mtu)], exec {名前: [行]})。
+    張り直せないものがあれば ValueError。"""
+    nodes = (spec.get("topology") or {}).get("nodes") or {}
+    kinds = {str(n): str((nd or {}).get("kind", "")).lower() for n, nd in nodes.items()}
+
+    def end(n, i):
+        n, i = str(n), str(i)
+        if n not in kinds:
+            raise ValueError(f"リンクの端 {n}:{i} のノードがトポロジにありません")
+        if kinds[n] in CONTAINERLESS_KINDS:
+            return f"{kinds[n]}:{n}:{i}"
+        if not re.fullmatch(r"eth\d+", i):
+            raise ValueError(f"{n}:{i} は ethN でない名前(インターフェースの別名)なので張り直せません")
+        return f"{container_name(topo, n)}:{i}"
+
+    links = []
+    for ln in (spec.get("topology") or {}).get("links") or []:
+        typ, eps = ln.get("type", "veth"), ln.get("endpoints") or []
+        if typ != "veth" or len(eps) != 2:
+            raise ValueError(f"veth 以外のリンク(type: {typ})は張り直せません")
+        ends = []
+        for e in eps:
+            n, i = (e.partition(":")[::2] if isinstance(e, str) else
+                    (e.get("node"), e.get("interface")) if isinstance(e, dict) else (None, None))
+            if not n or not i:
+                raise ValueError(f"リンクの端が読めません: {e}")
+            ends.append(end(n, i))
+        links.append((ends[0], ends[1], ln.get("mtu")))
+    conts = [n for n, k in kinds.items() if k not in CONTAINERLESS_KINDS]
+    execs = {n: [str(c) for c in (nodes[n] or {}).get("exec") or []] for n in conts if (nodes[n] or {}).get("exec")}
+    return conts, links, execs
+
+
+def revive(repo, topo, target, rdir, wait, force):
+    """止まったコンテナを、中の設定を残したまま起こしてリンクを張り直す。全部動いていれば何もしない。"""
+    allc = lab_all_containers(target, topo["lab_name"])
+    if not allc:
+        sys.exit(f"★ラボ {topo['lab_name']} のコンテナが残っていません → 起こし直せません。provision で作り直してください")
+    stopped = {c: s for c, (st, s) in allc.items() if st != "running"}
+    if not stopped:
+        print(f"ラボ {topo['lab_name']} は全 {len(allc)} ノード動いています → 起こし直しは不要")
+        return
+    r = ssh(target, f"cat {rdir}/{topo['file']}", check=False)
+    if r.returncode == 0 and (r.stdout or "").strip():
+        spec, src = yaml.safe_load(r.stdout) or {}, f"{rdir}/{topo['file']}"
+    else:
+        spec, src = load_yaml(os.path.join(topo["local_dir"], topo["file"])) or {}, "リポの版(szk-cl01 の写しが無い)"
+    try:
+        nodes, links, execs = _revive_plan(topo, spec)
+    except ValueError as e:
+        sys.exit(f"★起こし直せません: {e}\n  作り直すなら scripts/lab.sh reset <ID> --rebuild(解いた設定は消えます)")
+    if not nodes:
+        sys.exit(f"★トポロジ({src})にノードがありません → 起こし直せません")
+    want = {container_name(topo, n): n for n in nodes}
+    missing = sorted(set(want) - set(allc))
+    if missing:
+        sys.exit(f"★コンテナが欠けています({', '.join(missing)}) → 起こし直せません。"
+                 f"作り直すなら scripts/lab.sh reset <ID> --rebuild(解いた設定は消えます)")
+    print(f"== 起こし直し: {topo['lab_name']}(止まっている {len(stopped)}/{len(allc)} ノード・リンク {len(links)} 本"
+          f"・トポロジ= {src})")
+    preflight_ram(target, topo, force)
+    running = [c for c in want if c not in stopped]
+    if running:
+        print(f"  動いているノードも止めます(リンクを全部張り直すため): {', '.join(want[c] for c in running)}")
+        ssh(target, "docker stop -t 30 " + " ".join(running))
+    vj = [c for c, n in want.items() if "vjunos" in str((spec["topology"]["nodes"].get(n) or {}).get("kind", "")).lower()]
+    for c in vj:
+        # vrnetlab の launch.py は起動のたびに init.conf を読む。startup-config があると init.conf を残して
+        # juniper.conf に「init.conf＋startup-config」を >> で足し、無いと init.conf を juniper.conf へ名前を変える
+        # (2 回目の起動が init.conf 無しで落ちる・2026-11-15 実測)。→ init.conf があれば juniper.conf を空に、
+        # 無ければ juniper.conf(置き換え済みの init.conf そのもの)を init.conf に写す。
+        r = ssh(target, f"d=$(mktemp -d); if docker cp {c}:/init.conf \"$d/i\" 2>/dev/null; then : > \"$d/e\" && "
+                        f"docker cp \"$d/e\" {c}:/juniper.conf && echo emptied; else docker cp {c}:/juniper.conf \"$d/j\" && "
+                        f"docker cp \"$d/j\" {c}:/init.conf && echo restored; fi; rc=$?; rm -rf \"$d\"; exit $rc", check=False)
+        if r.returncode != 0:
+            sys.exit(f"★{want[c]}: vrnetlab の起動用の設定を整えられません: {(r.stderr or r.stdout or '').strip()[-400:]}")
+        how = "juniper.conf を空に(二重に足されないように)" if "emptied" in r.stdout else "init.conf を juniper.conf から戻した"
+        print(f"  {want[c]}: vJunos の起動用の設定を整えた({how})")
+    ssh(target, "docker start " + " ".join(want) + " >/dev/null")
+    print(f"  docker start: {', '.join(nodes)}")
+    # 起動の直後に落ちるもの(vrnetlab の launch.py の例外など)を見逃さない。落ちていればリンクは張れない
+    time.sleep(5)
+    dead = stopped_containers(target, topo["lab_name"])
+    if dead:
+        logs = ssh(target, f"docker logs --tail 6 {next(iter(dead))} 2>&1", check=False).stdout or ""
+        sys.exit(f"★起こした直後に止まりました: {json.dumps(dead, ensure_ascii=False)}\n{logs.strip()[-800:]}")
+    for a_end, b_end, mtu in links:
+        m = f"-m {int(mtu)} " if mtu else ""
+        r = ssh(target, f"NO_COLOR=1 timeout 120 containerlab tools veth create {m}-a {shlex.quote(a_end)} "
+                        f"-b {shlex.quote(b_end)} 2>&1", check=False)
+        if r.returncode != 0:
+            sys.exit(f"★リンクを張れません: {a_end} -- {b_end}\n{(r.stdout or '').strip()[-600:]}")
+        print(f"  link: {a_end} -- {b_end}" + (f"(mtu {mtu})" if mtu else ""))
+    bad = []
+    for n, cmds in execs.items():
+        for cmd in cmds:
+            r = ssh(target, f"timeout 60 docker exec {container_name(topo, n)} {shlex.join(shlex.split(cmd))}", check=False)
+            print(f"  [{n}] exec {cmd}: {'ok' if r.returncode == 0 else f'FAILED (rc={r.returncode})'}")
+            if r.returncode != 0:
+                bad.append(n)
+    wait_ready(target, topo, wait, expect=len(want))
+    if junos_nodes(topo):
+        print("  (Junos の et- は起動から 1 分ほど後に現れます。OSPF・BGP が上がるのはさらに 1〜2 分後)")
+    if bad:
+        sys.exit(f"★exec に失敗したノードがあります: {', '.join(sorted(set(bad)))}")
+    print("REVIVE ok")
+
+
+def cmd_revive(a):
+    """起こし直し(lab.sh revive)。ホストごと落ちた後に、止まったコンテナを解いた設定を残したまま起こす。"""
+    topo = pack_topology(a.repo, a.problem)
+    if topo is None:
+        sys.exit(f"{a.problem}: clab_topology 未定義")
+    target, labs_dir = clab_conn(a.repo)
+    revive(a.repo, topo, target, f"{labs_dir}/ccnp/{a.problem}", a.wait, a.force)
+
+
 def cmd_destroy(a):
     topo = pack_topology(a.repo, a.problem)
     if topo is None:
@@ -623,7 +789,7 @@ def main():
     for name, fn in (("deploy", cmd_deploy), ("destroy", cmd_destroy), ("verify", cmd_verify),
                      ("exec", cmd_exec), ("connect", cmd_connect), ("status", cmd_status),
                      ("import-ceos", cmd_import_ceos), ("baseline", cmd_baseline), ("reset", cmd_reset),
-                     ("cli", cmd_cli)):
+                     ("cli", cmd_cli), ("revive", cmd_revive)):
         p = sub.add_parser(name)
         p.add_argument("--repo", required=True)
         if name == "import-ceos":
@@ -635,10 +801,11 @@ def main():
             p.add_argument("--node", required=True)
         if name in ("exec", "cli"):
             p.add_argument("command", nargs=argparse.REMAINDER)
-        if name in ("deploy", "reset"):
+        if name in ("deploy", "reset", "revive"):
             p.add_argument("--wait", type=int, default=900)
-        if name == "deploy":
+        if name in ("deploy", "revive"):
             p.add_argument("--force", action="store_true")
+        if name == "deploy":
             p.add_argument("--reconfigure", action="store_true")
         if name == "reset":
             p.add_argument("--rebuild", action="store_true")

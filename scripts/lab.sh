@@ -17,6 +17,7 @@
 #   teardown が CML を使わずに回る(rma は CML 専用)。
 #   learn も同じ画面で開く(BL-275。盤面は clab.yml・コンソールは szk-cl01 を踏み台にした SSH)。
 #   接続:   scripts/lab.sh connect <PROBLEM_ID> <NODE>   # containerlab のノードに入る(FRR は vtysh・Junos/EOS は ssh)
+#   起こし直し: scripts/lab.sh revive <PROBLEM_ID>     # ホストごと落ちた後: 止まった containerlab のコンテナを、解いた設定を残したまま起こす(BL-279)
 #
 #   LAB_XR_PLATFORM=xrd を付けて provision すると、XR のノードを XRv9000 ではなく XRd(コンテナ)で組む(BL-250)。
 #   LAB_TASK_ANNOTATION=off を付けて provision すると、CML キャンバスに問題の要約注釈を貼らない
@@ -38,7 +39,7 @@ LAB_HOME="$REPO/lab"   # リポジトリ内に作業フォルダを置く（VSCo
 PY="$REPO/.venv/bin"
 vault() { printf 'CCNP\n'; }   # vault パスワード（プロジェクト規約）
 
-usage() { sed -n '2,24p' "${BASH_SOURCE[0]}"; exit 1; }
+usage() { sed -n '2,25p' "${BASH_SOURCE[0]}"; exit 1; }
 
 # problem.yml の platform(既定 cml)。clab = containerlab だけで回す問題(BL-274・CML に触れない)
 platform_of() {
@@ -168,6 +169,14 @@ case "$cmd" in
     # containerlab だけの問題(platform: clab)も同じ画面で開く(BL-275。盤面は clab.yml・コンソールは szk-cl01 経由の SSH)
     [ -f "$REPO/problems/$prob/learn.yml" ] || { echo "problems/$prob/learn.yml が無い(学習モードの対象外)"; exit 2; }
     exec "$PY/python3" "$REPO/topologies/lab_console.py" --repo "$REPO" --learn "$prob" --port "${3:-8896}"
+    ;;
+
+  revive)
+    # ホストごと落ちた後の起こし直し(BL-279)。containerlab のコンテナは消えずに止まって残り、vJunos の設定も中のディスクに残る。
+    # それを消さずに起こし、リンクを張り直して exec を流し直す(作り直しは reset --rebuild)。provision も止まったコンテナが
+    # 残っていれば作り直さずにこれを行う。複合ラボ(CML×clab)は containerlab の側だけ。
+    [ -n "$prob" ] || usage
+    exec "$PY/python3" "$REPO/topologies/clab_ops.py" revive --repo "$REPO" --problem "$prob"
     ;;
 
   connect)
