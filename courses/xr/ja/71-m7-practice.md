@@ -90,7 +90,7 @@ IS-IS が気づくまでトラフィックが失われます。
   いくつ失われるかを数えます。
 
 ### 課題 M7-5
-<p class="tolab"><a href="/_learn?id=XRT-06&amp;step=m7t5">ワークスペースで開く</a> — 読み物: <a href="70-m7-high-availability.html#s4-1">4.1 IOS XR のプロセス</a> · <a href="70-m7-high-availability.html#s4-2">4.2 IS-IS の NSF</a> · <a href="70-m7-high-availability.html#s4-3">4.3 BGP のグレースフル リスタート</a> · <a href="70-m7-high-availability.html#s4-4">4.4 NSR</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-06&amp;step=m7t5">ワークスペースで開く</a> — 読み物: <a href="70-m7-high-availability.html#s4-1">4.1 IOS XR のプロセス</a> · <a href="70-m7-high-availability.html#s4-2">4.2 IS-IS の NSF</a> · <a href="70-m7-high-availability.html#s4-3">4.3 BGP グレースフル リスタート</a> · <a href="70-m7-high-availability.html#s4-4">4.4 NSR</a></p>
 
 
 XR01 には、ルーティング プロセスを再起動するソフトウェア パッチが適用される予定です。サービスの責任者は次の条件を定めました。

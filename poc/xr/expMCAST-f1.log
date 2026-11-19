@@ -1,0 +1,183 @@
+
+######## 05:20:05 f1(RP へ向く IF の PIM を止める): PE2 の Gi0/0/0/1(P1 へ・RP への RPF)で router pim の interface … disable
+configure
+Wed Nov 18 05:20:06.768 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router pim
+RP/0/RP0/CPU0:PE2(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:PE2(config-pim-ipv4-if)#
+disable
+RP/0/RP0/CPU0:PE2(config-pim-ipv4-if)#
+commit
+Wed Nov 18 05:20:09.157 UTC
+RP/0/RP0/CPU0:PE2(config-pim-ipv4-if)#
+show configuration failed
+Wed Nov 18 05:20:10.344 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-pim-ipv4-if)#
+end
+RP/0/RP0/CPU0:PE2#
+clear pim topology 239.1.1.1
+Wed Nov 18 05:20:14.133 UTC
+RP/0/RP0/CPU0:PE2#
+show pim interface
+Wed Nov 18 05:20:35.784 UTC
+
+PIM interfaces in VRF default
+Address               Interface                     PIM  Nbr   Hello  DR    DR
+                                                         Count Intvl  Prior
+
+10.255.0.2            Loopback0                     on   1     30     1     this system
+10.0.12.2             GigabitEthernet0/0/0/0        on   2     30     1     this system
+10.0.2.2              GigabitEthernet0/0/0/1        off  0     30     1     not elected
+10.0.4.2              GigabitEthernet0/0/0/2        on   2     30     1     10.0.4.5
+192.168.2.254         GigabitEthernet0/0/0/3        on   1     30     1     this system
+RP/0/RP0/CPU0:PE2#
+show pim neighbor GigabitEthernet0/0/0/1
+Wed Nov 18 05:20:36.196 UTC
+No neighbors found for VRF default.
+RP/0/RP0/CPU0:PE2#
+show pim rpf
+Wed Nov 18 05:20:36.614 UTC
+
+Table: IPv4-Unicast-default
+* 10.255.1.11/32 [115/10] 
+    via Null with rpf neighbor 0.0.0.0
+* 192.168.1.1/32 [115/10] 
+    via GigabitEthernet0/0/0/0 with rpf neighbor 10.0.12.1
+* 10.255.0.11/32 [115/10] 
+    via Null with rpf neighbor 0.0.0.0
+RP/0/RP0/CPU0:PE2#
+show pim topology 239.1.1.1
+Wed Nov 18 05:20:37.010 UTC
+
+IP PIM Multicast Topology Table
+Entry state: (*/S,G)[RPT/SPT] Protocol Uptime Info
+Entry flags: KAT - Keep Alive Timer, AA - Assume Alive, PA - Probe Alive
+    RA - Really Alive, IA - Inherit Alive, LH - Last Hop
+    DSS - Don't Signal Sources,  RR - Register Received
+    SR - Sending Registers, SNR - Sending Null Registers
+    E - MSDP External, EX - Extranet
+    MFA - Mofrr Active, MFP - Mofrr Primary, MFB - Mofrr Backup
+    DCC - Don't Check Connected, ME - MDT Encap, MD - MDT Decap
+    MT - Crossed Data MDT threshold, MA - Data MDT Assigned
+    SAJ - BGP Source Active Joined, SAR - BGP Source Active Received,
+    SAS - BGP Source Active Sent, IM - Inband mLDP, X - VxLAN
+Interface state: Name, Uptime, Fwd, Info
+Interface flags: LI - Local Interest, LD - Local Dissinterest,
+    II - Internal Interest, ID - Internal Dissinterest,
+    LH - Last Hop, AS - Assert, AB - Admin Boundary, EX - Extranet,
+    BGP - BGP C-Multicast Join, BP - BGP Source Active Prune,
+    MVS - MVPN Safi Learned, MV6S - MVPN IPv6 Safi Learned
+
+(*,239.1.1.1) SM Up: 00:52:07 RP: 10.255.0.11 
+JP: Join(00:00:27) RPF: Null,0.0.0.0 Flags: LH 
+  GigabitEthernet0/0/0/2      00:00:16  fwd Join(00:03:13) 
+  GigabitEthernet0/0/0/3      00:52:07  fwd LI LH 
+RP/0/RP0/CPU0:PE2#
+show mrib route 239.1.1.1
+Wed Nov 18 05:20:37.438 UTC
+
+IP Multicast Routing Information Base
+Entry flags: L - Domain-Local Source, E - External Source to the Domain,
+    C - Directly-Connected Check, S - Signal, IA - Inherit Accept,
+    IF - Inherit From, D - Drop, ME - MDT Encap, EID - Encap ID,
+    MD - MDT Decap, MT - MDT Threshold Crossed, MH - MDT interface handle
+    CD - Conditional Decap, MPLS - MPLS Decap, EX - Extranet
+    MoFE - MoFRR Enabled, MoFS - MoFRR State, MoFP - MoFRR Primary
+    MoFB - MoFRR Backup, RPFID - RPF ID Set, X - VXLAN, RPF - RPF neighbor present
+Interface flags: F - Forward, A - Accept, IC - Internal Copy,
+    NS - Negate Signal, DP - Don't Preserve, SP - Signal Present,
+    II - Internal Interest, ID - Internal Disinterest, LI - Local Interest,
+    LD - Local Disinterest, DI - Decapsulation Interface
+    EI - Encapsulation Interface, MI - MDT Interface, LVIF - MPLS Encap,
+    EX - Extranet, A2 - Secondary Accept, MT - MDT Threshold Crossed,
+    MA - Data MDT Assigned, LMI - mLDP MDT Interface, TMI - P2MP-TE MDT Interface
+    IRMI - IR MDT Interface, TRMI - TREE SID MDT Interface, MH - Multihome Interface
+
+(*,239.1.1.1) RPF nbr: 0.0.0.0 Flags: C RPF
+  Up: 00:52:07
+  Outgoing Interface List
+    GigabitEthernet0/0/0/2 Flags: F NS, Up: 00:00:17
+    GigabitEthernet0/0/0/3 Flags: F NS LI, Up: 00:52:07
+RP/0/RP0/CPU0:PE2#
+.
+Reply to request 1 from 192.168.3.1, 8 ms.
+Reply to request 3 from 192.168.2.1, 2 ms
+Reply to request 3 from 192.168.3.1, 3 ms
+Reply to request 4 from 192.168.2.1, 2 ms
+Reply to request 4 from 192.168.3.1, 3 ms
+Reply to request 5 from 192.168.2.1, 2 ms
+Reply to request 5 from 192.168.3.1, 3 ms
+== 239.1.1.1 を 10 発: RCV2 が受けた 7・RCV3 が受けた 8
+show pim topology 239.1.1.1
+Wed Nov 18 05:20:58.050 UTC
+
+IP PIM Multicast Topology Table
+Entry state: (*/S,G)[RPT/SPT] Protocol Uptime Info
+Entry flags: KAT - Keep Alive Timer, AA - Assume Alive, PA - Probe Alive
+    RA - Really Alive, IA - Inherit Alive, LH - Last Hop
+    DSS - Don't Signal Sources,  RR - Register Received
+    SR - Sending Registers, SNR - Sending Null Registers
+    E - MSDP External, EX - Extranet
+    MFA - Mofrr Active, MFP - Mofrr Primary, MFB - Mofrr Backup
+    DCC - Don't Check Connected, ME - MDT Encap, MD - MDT Decap
+    MT - Crossed Data MDT threshold, MA - Data MDT Assigned
+    SAJ - BGP Source Active Joined, SAR - BGP Source Active Received,
+    SAS - BGP Source Active Sent, IM - Inband mLDP, X - VxLAN
+Interface state: Name, Uptime, Fwd, Info
+Interface flags: LI - Local Interest, LD - Local Dissinterest,
+    II - Internal Interest, ID - Internal Dissinterest,
+    LH - Last Hop, AS - Assert, AB - Admin Boundary, EX - Extranet,
+    BGP - BGP C-Multicast Join, BP - BGP Source Active Prune,
+    MVS - MVPN Safi Learned, MV6S - MVPN IPv6 Safi Learned
+
+(*,239.1.1.1) SM Up: 00:43:12 RP: 10.255.0.11* 
+JP: Join(never) RPF: Decapstunnel2,10.255.0.11 Flags: 
+  GigabitEthernet0/0/0/1      00:13:37  fwd Join(00:01:57) 
+  GigabitEthernet0/0/0/2      00:38:11  fwd Join(00:03:19) 
+
+(192.168.1.1,239.1.1.1)RPT SM Up: 00:00:10 RP: 10.255.0.11* 
+JP: Prune(never) RPF: Decapstunnel2,10.255.0.11 Flags: KAT(00:03:16) RA RR (00:04:19) 
+  GigabitEthernet0/0/0/2      00:00:10  off Prune(00:03:19) 
+
+(192.168.1.1,239.1.1.1)SPT SM Up: 00:00:16 
+JP: Join(00:00:33) RPF: GigabitEthernet0/0/0/0,10.0.1.1 Flags: KAT(00:03:16) RA RR (00:04:19) 
+  No interfaces in immediate olist
+RP/0/RP0/CPU0:P1#
+
+######## 05:20:58 f1 戻す
+configure
+Wed Nov 18 05:20:59.573 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router pim
+RP/0/RP0/CPU0:PE2(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:PE2(config-pim-ipv4-if)#
+no disable
+RP/0/RP0/CPU0:PE2(config-pim-ipv4-if)#
+commit
+Wed Nov 18 05:21:01.915 UTC
+RP/0/RP0/CPU0:PE2(config-pim-ipv4-if)#
+show configuration failed
+Wed Nov 18 05:21:02.943 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-pim-ipv4-if)#
+end
+RP/0/RP0/CPU0:PE2#
+Reply to request 0 from 192.168.2.1, 3 ms
+Reply to request 0 from 192.168.3.1, 3 ms
+Reply to request 1 from 192.168.2.1, 3 ms
+Reply to request 1 from 192.168.3.1, 3 ms
+Reply to request 2 from 192.168.2.1, 2 ms
+Reply to request 2 from 192.168.3.1, 2 ms
+Reply to request 3 from 192.168.2.1, 2 ms
+Reply to request 3 from 192.168.3.1, 3 ms
+== 239.1.1.1 を 10 発: RCV2 が受けた 10・RCV3 が受けた 10

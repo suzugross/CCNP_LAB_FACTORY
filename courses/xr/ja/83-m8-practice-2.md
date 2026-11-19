@@ -50,7 +50,7 @@
 ## M8 — Unified MPLS
 
 ### 課題 M8-6
-<p class="tolab"><a href="/_learn?id=XRT-08&amp;step=m8t6">ワークスペースで開く</a> — 読み物: <a href="84-m8-appendix.html#s2">2. 道の作り方は 3 通り</a> · <a href="82-m8-unified-mpls.html#s1-1">1.1 IGP を分ける理由</a> · <a href="82-m8-unified-mpls.html#s2-1">2.1 2 つの IS-IS インスタンス</a> · <a href="82-m8-unified-mpls.html#s2-2">2.2 境界自身のループバック</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-08&amp;step=m8t6">ワークスペースで開く</a> — 読み物: <a href="84-m8-appendix.html#s2">2. パスの作り方は 3 通り</a> · <a href="82-m8-unified-mpls.html#s1-1">1.1 IGP を分ける理由</a> · <a href="82-m8-unified-mpls.html#s2-1">2.1 2 つの IS-IS インスタンス</a> · <a href="82-m8-unified-mpls.html#s2-2">2.2 境界自身のループバック</a></p>
 
 
 新しいアクセス網(RT04 と RT05)が、ACCESS-1 で XR01 に接続されます。XR01 は、コアとアクセス網の境界になります。

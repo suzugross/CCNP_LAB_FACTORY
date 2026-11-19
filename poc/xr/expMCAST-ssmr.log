@@ -1,0 +1,172 @@
+
+######## 05:56:57 ssmr1: SSM の範囲を変える置き場。PE2 の router pim の address-family ipv4 に ssm range SSM-ALT(232/8 と 239.100.0.0/16)
+configure
+Wed Nov 18 05:56:58.140 UTC
+RP/0/RP0/CPU0:PE2(config)#
+ipv4 access-list SSM-ALT
+RP/0/RP0/CPU0:PE2(config-ipv4-acl)#
+10 permit ipv4 232.0.0.0 0.255.255.255 any
+RP/0/RP0/CPU0:PE2(config-ipv4-acl)#
+20 permit ipv4 239.100.0.0 0.0.255.255 any
+RP/0/RP0/CPU0:PE2(config-ipv4-acl)#
+router pim
+RP/0/RP0/CPU0:PE2(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+ssm range SSM-ALT
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+commit
+Wed Nov 18 05:57:01.193 UTC
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+show configuration failed
+Wed Nov 18 05:57:02.342 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+end
+RP/0/RP0/CPU0:PE2#
+show running-config router pim
+Wed Nov 18 05:57:11.540 UTC
+router pim
+ address-family ipv4
+  rp-address 10.255.0.11
+  rp-address 10.255.1.11 BIDIR-G bidir
+  interface GigabitEthernet0/0/0/1
+  !
+  ssm range SSM-ALT
+ !
+ address-family ipv6
+  rp-address 2001:db8:255::11
+ !
+!
+
+RP/0/RP0/CPU0:PE2#
+show pim group-map
+Wed Nov 18 05:57:12.048 UTC
+
+IP PIM Group Mapping Table 
+(* indicates group mappings being used) 
+(+ indicates BSR group mappings active in MRIB) 
+
+Group Range         Proto Client   Groups RP address      Info
+
+224.0.1.39/32*      DM    perm     0      0.0.0.0         
+224.0.1.40/32*      DM    perm     1      0.0.0.0         
+224.0.0.0/24*       NO    perm     0      0.0.0.0         
+239.100.0.0/16*     SSM   config   0      0.0.0.0         
+232.0.0.0/8*        SSM   config   1      0.0.0.0         
+239.2.0.0/16*       BD    config   1      10.255.1.11     RPF: Gi0/0/0/1,10.0.2.11
+224.0.0.0/4*        SM    config   8      10.255.0.11     RPF: Gi0/0/0/1,10.0.2.11
+224.0.0.0/4         SM    static   0      0.0.0.0         RPF: Null,0.0.0.0
+RP/0/RP0/CPU0:PE2#
+configure
+Wed Nov 18 05:57:13.761 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router pim
+RP/0/RP0/CPU0:PE2(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+no ssm range SSM-ALT
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+commit
+Wed Nov 18 05:57:15.604 UTC
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+show configuration failed
+Wed Nov 18 05:57:16.775 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+end
+RP/0/RP0/CPU0:PE2#
+
+######## 05:57:19 ssmr2: 同じことを multicast-routing の address-family ipv4 の下で(文書の置き場・26.1.1 の ? では cisco-support)
+configure
+Wed Nov 18 05:57:20.927 UTC
+RP/0/RP0/CPU0:PE2(config)#
+multicast-routing
+RP/0/RP0/CPU0:PE2(config-mcast)#
+address-family ipv4
+RP/0/RP0/CPU0:PE2(config-mcast-default-ipv4)#
+ssm range SSM-ALT
+RP/0/RP0/CPU0:PE2(config-mcast-default-ipv4)#
+commit
+Wed Nov 18 05:57:22.753 UTC
+RP/0/RP0/CPU0:PE2(config-mcast-default-ipv4)#
+show configuration failed
+Wed Nov 18 05:57:23.883 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-mcast-default-ipv4)#
+end
+RP/0/RP0/CPU0:PE2#
+show running-config multicast-routing
+Wed Nov 18 05:57:32.928 UTC
+multicast-routing
+ address-family ipv4
+  ssm range SSM-ALT
+  interface all enable
+ !
+ address-family ipv6
+  interface all enable
+ !
+!
+
+RP/0/RP0/CPU0:PE2#
+show pim group-map
+Wed Nov 18 05:57:33.449 UTC
+
+IP PIM Group Mapping Table 
+(* indicates group mappings being used) 
+(+ indicates BSR group mappings active in MRIB) 
+
+Group Range         Proto Client   Groups RP address      Info
+
+224.0.1.39/32*      DM    perm     0      0.0.0.0         
+224.0.1.40/32*      DM    perm     1      0.0.0.0         
+224.0.0.0/24*       NO    perm     0      0.0.0.0         
+239.100.0.0/16*     SSM   config   0      0.0.0.0         
+232.0.0.0/8*        SSM   config   1      0.0.0.0         
+239.2.0.0/16*       BD    config   1      10.255.1.11     RPF: Gi0/0/0/1,10.0.2.11
+224.0.0.0/4*        SM    config   8      10.255.0.11     RPF: Gi0/0/0/1,10.0.2.11
+224.0.0.0/4         SM    static   0      0.0.0.0         RPF: Null,0.0.0.0
+RP/0/RP0/CPU0:PE2#
+configure
+Wed Nov 18 05:57:35.171 UTC
+RP/0/RP0/CPU0:PE2(config)#
+multicast-routing
+RP/0/RP0/CPU0:PE2(config-mcast)#
+address-family ipv4
+RP/0/RP0/CPU0:PE2(config-mcast-default-ipv4)#
+no ssm range SSM-ALT
+RP/0/RP0/CPU0:PE2(config-mcast-default-ipv4)#
+root
+RP/0/RP0/CPU0:PE2(config)#
+no ipv4 access-list SSM-ALT
+RP/0/RP0/CPU0:PE2(config)#
+commit
+Wed Nov 18 05:57:37.854 UTC
+RP/0/RP0/CPU0:PE2(config)#
+show configuration failed
+Wed Nov 18 05:57:39.195 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config)#
+end
+RP/0/RP0/CPU0:PE2#
+show pim group-map
+Wed Nov 18 05:57:48.257 UTC
+
+IP PIM Group Mapping Table 
+(* indicates group mappings being used) 
+(+ indicates BSR group mappings active in MRIB) 
+
+Group Range         Proto Client   Groups RP address      Info
+
+224.0.1.39/32*      DM    perm     0      0.0.0.0         
+224.0.1.40/32*      DM    perm     1      0.0.0.0         
+224.0.0.0/24*       NO    perm     0      0.0.0.0         
+232.0.0.0/8*        SSM   config   1      0.0.0.0         
+239.2.0.0/16*       BD    config   1      10.255.1.11     RPF: Gi0/0/0/1,10.0.2.11
+224.0.0.0/4*        SM    config   8      10.255.0.11     RPF: Gi0/0/0/1,10.0.2.11
+224.0.0.0/4         SM    static   0      0.0.0.0         RPF: Null,0.0.0.0
+RP/0/RP0/CPU0:PE2#

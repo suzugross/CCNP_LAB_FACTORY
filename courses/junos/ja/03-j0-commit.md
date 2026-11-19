@@ -2,7 +2,7 @@
 
 ## 1. なぜ commit なのか
 
-### 1.1 困りごと: 網がすべての段階を見る
+### 1.1 困りごと: ネットワークがすべての段階を見る
 
 IOS で何行かの変更を入れると、1 行ずつ効いていきます。リンクのアドレスの付け直しの途中では、両端の言い分が食い違います。
 貼り付けたまとまりは、一部だけ受け付けられることがあります。そして変更で自分の接続が切れたら、戻る道は前もって仕込んだ
@@ -23,7 +23,7 @@ Junos の commit の仕組みは IOS XR と同じです。部品の名前と、�
 
 ### 2.1 候補設定・検査・commit
 
-`set` や `delete` した内容は、すべて**候補設定**に入ります。`show | compare` で、候補設定が動いている設定とどう違うかが
+`set` や `delete` した内容は、すべて**候補設定**に入ります。`show | compare` で、候補設定がアクティブな設定とどう違うかが
 差分の形で見えます。
 
 ```console
@@ -50,7 +50,7 @@ et-0/0/0                up    up
 et-0/0/0.16386          up    up   multiservice
 ```
 
-`commit` はもう一度検査して、候補設定を動いている設定にします。`commit comment "…"` は commit にメモを残し、
+`commit` はもう一度検査して、候補設定をアクティブな設定にします。`commit comment "…"` は commit にメモを残し、
 `commit and-quit` は commit の後に設定モードを出ます。
 
 ```console
@@ -68,7 +68,7 @@ et-0/0/0.0              up    up   inet     10.0.14.1/30
 
 ### 2.2 保存される 50 の設定
 
-commit のたびに、それまで動いていた設定が一覧を 1 つ下がります。ルータは直近の 50 を持っています。0 番が動いている設定、
+commit のたびに、それまで動いていた設定が一覧を 1 つ下がります。ルータは直近の 50 を持っています。0 番がアクティブな設定、
 1〜49 番がそれより前の設定です。`show system commit` は、誰がどの経路で commit したかと一緒に一覧を出します。
 
 ```console
@@ -102,7 +102,7 @@ commit complete
 ```
 
 巻き戻しは、一覧のいちばん上に乗る新しい commit です。履歴から消えるものはありません。`rollback 0`(または `rollback` だけ)は、
-動いている設定を候補設定へ読み戻すので、commit していない変更を捨てることになります。
+アクティブな設定を候補設定へ読み戻すので、commit していない変更を捨てることになります。
 
 候補設定に触れずに 2 つの保存された設定を比べるには、運用モードで `show system rollback compare 1 0` を使います。
 
@@ -154,7 +154,7 @@ run show system commit
     J0 PoC: back to rollback 1
 ```
 
-確定するには、時間切れの前に `commit` か `commit check` を打ちます。IOS XR と違う習慣が 2 つあります。
+確定するには、タイムアウトの前に `commit` か `commit check` を打ちます。IOS XR と違う習慣が 2 つあります。
 
 - **設定モードを出てもよい。** 巻き戻しの予約は残り、その知らせは運用モードのプロンプトにもついてきます
   (`# commit confirmed will be rolled back in 1 minute`)。IOS XR では、設定モードを出ると仮の commit はその場で取り消されます。
@@ -189,7 +189,7 @@ admin@jun01# show | compare
 |---|---|---|
 | `configure` | 共有の候補設定 | あなたの変更が見え、それを commit できる |
 | `configure private` | 自分だけの候補設定。commit せずに出ると捨てられる | ただの `configure` からは、あなたが編集している間は何も変えられない(`error: private edits in use`) |
-| `configure exclusive` | 共有の候補設定を、あなたが錠をかけて使う | 入れはするが、変更も commit もできない(`error: configuration database locked by: …`) |
+| `configure exclusive` | 共有の候補設定を、あなたがロックして使う | 入れはするが、変更も commit もできない(`error: configuration database locked by: …`) |
 
 共有の候補設定に未確定の変更がある間は、`configure private` は断られます。
 
@@ -251,7 +251,7 @@ configuration check succeeds
 | 仮で入れる | `reload in 10` | `commit confirmed 30`(秒) | `commit confirmed 2`(分) |
 | 過去の変更を並べる | — | `show configuration commit list` | `show system commit` |
 | 戻す | 保存したファイルへ `configure replace` | `rollback configuration last 1` | `rollback 1` のあと `commit` |
-| 1 人で触る | — | どのセッションも自分専用。錠は `configure exclusive` | `configure private`。錠は `configure exclusive` |
+| 1 人で触る | — | どのセッションも自分専用。ロックは `configure exclusive` | `configure private`。ロックは `configure exclusive` |
 
 ## 実践
 

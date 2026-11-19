@@ -1,0 +1,142 @@
+
+######## 05:06:49 prec1: Auto-RP(P1 10.255.0.11・224/4)が動いている所に、PE2 だけ静的 RP 10.255.0.12(P2)を足す(override なし)→ どちらを使うか
+configure
+Wed Nov 18 05:06:50.798 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router pim
+RP/0/RP0/CPU0:PE2(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+rp-address 10.255.0.12
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+commit
+Wed Nov 18 05:06:52.667 UTC
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+show configuration failed
+Wed Nov 18 05:06:53.802 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+end
+RP/0/RP0/CPU0:PE2#
+show pim group-map
+Wed Nov 18 05:07:02.855 UTC
+
+IP PIM Group Mapping Table 
+(* indicates group mappings being used) 
+(+ indicates BSR group mappings active in MRIB) 
+
+Group Range         Proto Client   Groups RP address      Info
+
+224.0.1.39/32*      DM    perm     1      0.0.0.0         
+224.0.1.40/32*      DM    perm     1      0.0.0.0         
+224.0.0.0/24*       NO    perm     0      0.0.0.0         
+232.0.0.0/8*        SSM   config   0      0.0.0.0         
+239.2.0.0/16*       BD    config   1      10.255.1.11     RPF: Gi0/0/0/1,10.0.2.11
+224.0.0.0/4*        SM    autorp   2      10.255.0.11     RPF: Gi0/0/0/1,10.0.2.11
+224.0.0.0/4         SM    config   0      10.255.0.12     RPF: Null,0.0.0.0
+224.0.0.0/4         SM    static   0      0.0.0.0         RPF: Null,0.0.0.0
+RP/0/RP0/CPU0:PE2#
+show pim topology 239.1.1.1
+Wed Nov 18 05:07:03.262 UTC
+
+IP PIM Multicast Topology Table
+Entry state: (*/S,G)[RPT/SPT] Protocol Uptime Info
+Entry flags: KAT - Keep Alive Timer, AA - Assume Alive, PA - Probe Alive
+    RA - Really Alive, IA - Inherit Alive, LH - Last Hop
+    DSS - Don't Signal Sources,  RR - Register Received
+    SR - Sending Registers, SNR - Sending Null Registers
+    E - MSDP External, EX - Extranet
+    MFA - Mofrr Active, MFP - Mofrr Primary, MFB - Mofrr Backup
+    DCC - Don't Check Connected, ME - MDT Encap, MD - MDT Decap
+    MT - Crossed Data MDT threshold, MA - Data MDT Assigned
+    SAJ - BGP Source Active Joined, SAR - BGP Source Active Received,
+    SAS - BGP Source Active Sent, IM - Inband mLDP, X - VxLAN
+Interface state: Name, Uptime, Fwd, Info
+Interface flags: LI - Local Interest, LD - Local Dissinterest,
+    II - Internal Interest, ID - Internal Dissinterest,
+    LH - Last Hop, AS - Assert, AB - Admin Boundary, EX - Extranet,
+    BGP - BGP C-Multicast Join, BP - BGP Source Active Prune,
+    MVS - MVPN Safi Learned, MV6S - MVPN IPv6 Safi Learned
+
+(*,239.1.1.1) SM Up: 00:38:33 RP: 10.255.0.11 
+JP: Join(00:00:42) RPF: GigabitEthernet0/0/0/1,10.0.2.11 Flags: LH 
+  GigabitEthernet0/0/0/3      00:38:33  fwd LI LH 
+RP/0/RP0/CPU0:PE2#
+
+######## 05:07:03 prec2: override を付ける
+configure
+Wed Nov 18 05:07:04.878 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router pim
+RP/0/RP0/CPU0:PE2(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+rp-address 10.255.0.12 override
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+commit
+Wed Nov 18 05:07:06.634 UTC
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+show configuration failed
+Wed Nov 18 05:07:07.796 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+end
+RP/0/RP0/CPU0:PE2#
+show pim group-map
+Wed Nov 18 05:07:16.998 UTC
+
+IP PIM Group Mapping Table 
+(* indicates group mappings being used) 
+(+ indicates BSR group mappings active in MRIB) 
+
+Group Range         Proto Client   Groups RP address      Info
+
+224.0.1.39/32*      DM    perm     1      0.0.0.0         
+224.0.1.40/32*      DM    perm     1      0.0.0.0         
+224.0.0.0/24*       NO    perm     0      0.0.0.0         
+232.0.0.0/8*        SSM   config   0      0.0.0.0         
+224.0.0.0/4*        SM    config   3      10.255.0.12     RPF: Gi0/0/0/1,10.0.2.11
+239.2.0.0/16*       BD    config   0      10.255.1.11     RPF: Gi0/0/0/1,10.0.2.11
+224.0.0.0/4         SM    autorp   0      10.255.0.11     RPF: Null,0.0.0.0
+224.0.0.0/4         SM    static   0      0.0.0.0         RPF: Null,0.0.0.0
+RP/0/RP0/CPU0:PE2#
+
+######## 05:07:17 prec3: 片付け(PE2 の静的を外す)
+configure
+Wed Nov 18 05:07:18.694 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router pim
+RP/0/RP0/CPU0:PE2(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+no rp-address 10.255.0.12
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+commit
+Wed Nov 18 05:07:20.443 UTC
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+show configuration failed
+Wed Nov 18 05:07:21.616 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+end
+RP/0/RP0/CPU0:PE2#
+show pim group-map
+Wed Nov 18 05:07:30.522 UTC
+
+IP PIM Group Mapping Table 
+(* indicates group mappings being used) 
+(+ indicates BSR group mappings active in MRIB) 
+
+Group Range         Proto Client   Groups RP address      Info
+
+224.0.1.39/32*      DM    perm     1      0.0.0.0         
+224.0.1.40/32*      DM    perm     1      0.0.0.0         
+224.0.0.0/24*       NO    perm     0      0.0.0.0         
+232.0.0.0/8*        SSM   config   0      0.0.0.0         
+239.2.0.0/16*       BD    config   1      10.255.1.11     RPF: Gi0/0/0/1,10.0.2.11
+224.0.0.0/4*        SM    autorp   2      10.255.0.11     RPF: Gi0/0/0/1,10.0.2.11
+224.0.0.0/4         SM    static   0      0.0.0.0         RPF: Null,0.0.0.0
+RP/0/RP0/CPU0:PE2#

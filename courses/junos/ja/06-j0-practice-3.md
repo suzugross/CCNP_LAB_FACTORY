@@ -29,7 +29,7 @@ FRR1 は eth1 で OSPF を area 0 で動かし、192.168.0.3/32 を広告して�
 単元 J0 に沿った課題です。IOS で身につけたこと(アドレス・OSPF・静的経路)を使い、Junos の作法で組んでください。
 
 ### 課題 J0-4  FRR1 のループバックを経由してサーバの網へ届く
-<p class="tolab"><a href="/_learn?id=JNT-01&amp;step=j0t4">ワークスペースで開く</a> — 読み物: <a href="05-j0-routing-table.html#s2-3">2.3 preference</a> · <a href="05-j0-routing-table.html#s2-4">2.4 静的経路: 次ホップは直接つながっている必要がある</a> · <a href="05-j0-routing-table.html#s2-5">2.5 既定のポリシー: OSPF が静的経路を広告しない理由</a> · <a href="05-j0-routing-table.html#s3-1">3.1 予備の静的経路と、再帰の静的経路</a></p>
+<p class="tolab"><a href="/_learn?id=JNT-01&amp;step=j0t4">ワークスペースで開く</a> — 読み物: <a href="05-j0-routing-table.html#s2-3">2.3 preference</a> · <a href="05-j0-routing-table.html#s2-4">2.4 スタティック ルート: ネクスト ホップは直接つながっている必要がある</a> · <a href="05-j0-routing-table.html#s2-5">2.5 デフォルト ポリシー: OSPF がスタティック ルートを広告しない理由</a> · <a href="05-j0-routing-table.html#s3-1">3.1 予備のスタティック ルートと、再帰のスタティック ルート</a></p>
 
 
 198.51.100.0/24 のサーバは FRR1 の後ろにあり、FRR1 はこの網を OSPF で広告していません。

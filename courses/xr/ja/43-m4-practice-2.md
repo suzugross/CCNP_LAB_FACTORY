@@ -65,7 +65,7 @@ RT03 を対象としており、XR01 は漏れていました。今朝、XR01 �
   届き続ける必要があります。
 
 ### 課題 M4-6
-<p class="tolab"><a href="/_learn?id=XRT-05&amp;step=m4t6">ワークスペースで開く</a> — 読み物: <a href="42-m4-isis-deeper.html#s2-1">2.1 擬似ノード</a> · <a href="42-m4-isis-deeper.html#s2-2">2.2 選出</a> · <a href="42-m4-isis-deeper.html#s2-3">2.3 ポイントツーポイントとブロードキャスト</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-05&amp;step=m4t6">ワークスペースで開く</a> — 読み物: <a href="42-m4-isis-deeper.html#s2-1">2.1 疑似ノード</a> · <a href="42-m4-isis-deeper.html#s2-2">2.2 選出</a> · <a href="42-m4-isis-deeper.html#s2-3">2.3 ポイントツーポイントとブロードキャスト</a></p>
 
 
 サービス基盤用の共有セグメント SVC-LAN が XR01 に配線されました。RT02 と RT03 はすでにそこで IS-IS を実行しています。

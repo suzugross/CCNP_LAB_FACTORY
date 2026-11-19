@@ -1,0 +1,263 @@
+
+######## 05:12:27 f7b: R5 の LAN 側(Et0/1)が IGMPv2(IOS の既定)だと RCV3 の v3 の (S,G) の報告を表に載せない → ip igmp version 3 に。ssm default あり
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+R5(config)#
+interface Ethernet0/1
+R5(config-if)#
+ip igmp version 3
+R5(config-if)#
+end
+R5#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RCV3(config)#
+interface Ethernet0/0
+RCV3(config-if)#
+no ip igmp join-group 232.1.1.1 source 192.168.1.1
+RCV3(config-if)#
+ip igmp join-group 232.1.1.1 source 192.168.1.1
+RCV3(config-if)#
+end
+RCV3#
+show ip igmp interface Ethernet0/1
+Ethernet0/1 is up, line protocol is up
+  Internet address is 192.168.3.253/24
+  IGMP is enabled on interface
+  Current IGMP host version is 3
+  Current IGMP router version is 3
+  IGMP query interval is 60 seconds
+  IGMP configured query interval is 60 seconds
+  IGMP robustness-variable is 2
+  IGMP querier timeout is 120 seconds
+  IGMP configured querier timeout is 120 seconds
+  IGMP max query response time is 10 seconds
+  Last member query count is 2
+  Last member query response interval is 1000 ms
+  Inbound IGMP access group is not set
+  IGMP activity: 5 joins, 1 leaves
+  Multicast routing is enabled on interface
+  Multicast TTL threshold is 0
+  Multicast designated router (DR) is 192.168.3.253 (this system)
+  IGMP querying router is 192.168.3.252  
+  No multicast groups joined by this system
+R5#
+show ip igmp groups 232.1.1.1 detail
+
+Flags: L - Local, U - User, SG - Static Group, VG - Virtual Group,
+       SS - Static Source, VS - Virtual Source,
+       Ac - Group accounted towards access control limit
+
+Interface:	Ethernet0/1
+Group:		232.1.1.1
+Flags:		SSM 
+Uptime:		00:00:19
+Group mode:	INCLUDE
+Last reporter:	192.168.3.1
+Group source list: (C - Cisco Src Report, U - URD, R - Remote, S - Static,
+                    V - Virtual, M - SSM Mapping, L - Local,
+                    Ac - Channel accounted towards access control limit)
+  Source Address   Uptime    v3 Exp   CSR Exp   Fwd  Flags
+  192.168.1.1      00:00:19  00:02:43  stopped   Yes  R
+R5#
+show ip mroute 232.1.1.1
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(192.168.1.1, 232.1.1.1), 00:00:20/00:02:43, flags: sTI
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.4.2
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse, 00:00:20/00:02:43, flags: 
+
+R5#
+Reply to request 0 from 192.168.2.1, 2 ms
+Reply to request 0 from 192.168.3.1, 3 ms
+Reply to request 1 from 192.168.2.1, 2 ms
+Reply to request 1 from 192.168.3.1, 3 ms
+Reply to request 2 from 192.168.2.1, 2 ms
+Reply to request 2 from 192.168.3.1, 3 ms
+Reply to request 3 from 192.168.2.1, 5 ms
+Reply to request 3 from 192.168.3.1, 5 ms
+== 232.1.1.1 を 10 発: RCV2 が受けた 10・RCV3 が受けた 10
+
+######## 05:13:08 f7c(SSM の範囲の不一致そのもの): R5 の ip pim ssm default を外す(R5 の IGMP は v3 のまま)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+R5(config)#
+no ip pim ssm default
+R5(config)#
+end
+R5#
+clear ip mroute 232.1.1.1
+R5#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RCV3(config)#
+interface Ethernet0/0
+RCV3(config-if)#
+no ip igmp join-group 232.1.1.1 source 192.168.1.1
+RCV3(config-if)#
+ip igmp join-group 232.1.1.1 source 192.168.1.1
+RCV3(config-if)#
+end
+RCV3#
+show ip igmp groups 232.1.1.1 detail
+
+Flags: L - Local, U - User, SG - Static Group, VG - Virtual Group,
+       SS - Static Source, VS - Virtual Source,
+       Ac - Group accounted towards access control limit
+
+Interface:	Ethernet0/1
+Group:		232.1.1.1
+Flags:		
+Uptime:		00:01:01
+Group mode:	INCLUDE
+Last reporter:	192.168.3.1
+Group source list: (C - Cisco Src Report, U - URD, R - Remote, S - Static,
+                    V - Virtual, M - SSM Mapping, L - Local,
+                    Ac - Channel accounted towards access control limit)
+  Source Address   Uptime    v3 Exp   CSR Exp   Fwd  Flags
+  192.168.1.1      00:01:01  00:02:44  stopped   Yes  R
+R5#
+show ip mroute 232.1.1.1
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 232.1.1.1), 00:00:17/00:02:43, RP 10.255.0.11, flags: SJC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.4.2
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse, 00:00:17/00:02:43, flags: 
+
+R5#
+Reply to request 0 from 192.168.2.1, 2 ms
+Reply to request 0 from 192.168.3.1, 5 ms
+Reply to request 1 from 192.168.2.1, 3 ms
+Reply to request 1 from 192.168.3.1, 3 ms
+Reply to request 2 from 192.168.2.1, 3 ms
+Reply to request 2 from 192.168.3.1, 4 ms
+Reply to request 3 from 192.168.2.1, 3 ms
+Reply to request 3 from 192.168.3.1, 3 ms
+== 232.1.1.1 を 10 発: RCV2 が受けた 10・RCV3 が受けた 10
+show pim topology 232.1.1.1
+Wed Nov 18 05:13:52.440 UTC
+No PIM topology table entries found.
+RP/0/RP0/CPU0:P1#
+show pim topology 232.1.1.1
+Wed Nov 18 05:13:54.061 UTC
+
+IP PIM Multicast Topology Table
+Entry state: (*/S,G)[RPT/SPT] Protocol Uptime Info
+Entry flags: KAT - Keep Alive Timer, AA - Assume Alive, PA - Probe Alive
+    RA - Really Alive, IA - Inherit Alive, LH - Last Hop
+    DSS - Don't Signal Sources,  RR - Register Received
+    SR - Sending Registers, SNR - Sending Null Registers
+    E - MSDP External, EX - Extranet
+    MFA - Mofrr Active, MFP - Mofrr Primary, MFB - Mofrr Backup
+    DCC - Don't Check Connected, ME - MDT Encap, MD - MDT Decap
+    MT - Crossed Data MDT threshold, MA - Data MDT Assigned
+    SAJ - BGP Source Active Joined, SAR - BGP Source Active Received,
+    SAS - BGP Source Active Sent, IM - Inband mLDP, X - VxLAN
+Interface state: Name, Uptime, Fwd, Info
+Interface flags: LI - Local Interest, LD - Local Dissinterest,
+    II - Internal Interest, ID - Internal Dissinterest,
+    LH - Last Hop, AS - Assert, AB - Admin Boundary, EX - Extranet,
+    BGP - BGP C-Multicast Join, BP - BGP Source Active Prune,
+    MVS - MVPN Safi Learned, MV6S - MVPN IPv6 Safi Learned
+
+(192.168.1.1,232.1.1.1)SPT SSM Up: 00:05:27 
+JP: Join(00:00:21) RPF: GigabitEthernet0/0/0/0,10.0.12.1 Flags: 
+  GigabitEthernet0/0/0/2      00:01:24  fwd Join(00:03:11) 
+  GigabitEthernet0/0/0/3      00:05:27  fwd LI LH 
+RP/0/RP0/CPU0:PE2#
+
+######## 05:13:54 f7c 戻す: ip pim ssm default
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+R5(config)#
+ip pim ssm default
+R5(config)#
+end
+R5#
+clear ip mroute 232.1.1.1
+R5#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RCV3(config)#
+interface Ethernet0/0
+RCV3(config-if)#
+no ip igmp join-group 232.1.1.1 source 192.168.1.1
+RCV3(config-if)#
+ip igmp join-group 232.1.1.1 source 192.168.1.1
+RCV3(config-if)#
+end
+RCV3#
+show ip mroute 232.1.1.1
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(192.168.1.1, 232.1.1.1), 00:00:16/00:02:49, flags: sTI
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.4.2
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse, 00:00:16/00:02:49, flags: 
+
+R5#
+Reply to request 0 from 192.168.2.1, 2 ms
+Reply to request 0 from 192.168.3.1, 3 ms
+Reply to request 1 from 192.168.2.1, 3 ms
+Reply to request 1 from 192.168.3.1, 3 ms
+Reply to request 2 from 192.168.2.1, 3 ms
+Reply to request 2 from 192.168.3.1, 4 ms
+Reply to request 3 from 192.168.2.1, 2 ms
+Reply to request 3 from 192.168.3.1, 2 ms
+== 232.1.1.1 を 10 発: RCV2 が受けた 10・RCV3 が受けた 10

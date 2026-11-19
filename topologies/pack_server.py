@@ -21,6 +21,8 @@
   GET|POST /_api/route_path/<名前>         … ルーティング経路づくりの API(route_path.api: state/puzzle/eval/result/seen/reset)。
                                               進み具合は topologies/_state/route_path.json(git 除外)。
   GET  /_games/lib/<名前>.js               … ゲームの共通部品(games/_lib/*.js)
+  ★HTML は全部 theme.inject を通して返す(BL-280 ダークモード)= 暗色の CSS と切替のボタンを差し込む。
+    切替の状態は Cookie(ポートを区別しない)なので、ワークスペース(lab_console.py)と共有される。
   GET  /_learn?id=<問題 ID>                … 学習モードのワークスペース(lab_console.py の /lab?learn=…)へ転送。
                                               ワークスペースが無効・未起動なら案内を返す。
   GET  /_lab?pack=<PACK-ID>&no=<N>         … ラボのワークスペース(lab_console.py・別ポート)へ転送(BL-234)。
@@ -61,6 +63,7 @@ from urllib.parse import urlparse, parse_qs, urlencode
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_pack                                        # noqa: E402
 import pack_home                                       # noqa: E402
+import theme                                           # noqa: E402
 import route_path                                      # noqa: E402
 import stp_path                                        # noqa: E402
 import stp_puzzle                                      # noqa: E402
@@ -167,7 +170,7 @@ class Handler(SimpleHTTPRequestHandler):
         u = urlparse(self.path)
         # トップ = パック一覧(採点状態つき・2026-09-27)。素の一覧は /?raw=1
         if u.path in ("/", "/index.html") and "raw" not in parse_qs(u.query):
-            body = pack_home.build_home(self.packs_root, self.repo).encode("utf-8")
+            body = theme.inject(pack_home.build_home(self.packs_root, self.repo)).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -225,6 +228,12 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Location", "/")
             self.send_header("Content-Length", "0")
             return self.end_headers()
+        # 静的な HTML(packs/ の問題用紙・解説・/_read/ の読み物)はダークモードを差し込んで返す
+        fs = self.translate_path(self.path)
+        if os.path.isdir(fs) and u.path.endswith("/") and os.path.isfile(os.path.join(fs, "index.html")):
+            fs = os.path.join(fs, "index.html")
+        if fs.lower().endswith((".html", ".htm")) and os.path.isfile(fs):
+            return self._file(fs, "text/html; charset=utf-8")
         return SimpleHTTPRequestHandler.do_GET(self)
 
     def _file(self, path, ctype):
@@ -233,6 +242,8 @@ class Handler(SimpleHTTPRequestHandler):
                 body = fh.read()
         except OSError:
             return self._json(404, "not found")
+        if ctype.startswith("text/html"):
+            body = theme.inject(body.decode("utf-8", "surrogateescape")).encode("utf-8", "surrogateescape")
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))

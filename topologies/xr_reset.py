@@ -26,6 +26,7 @@
   BGP セッションが保持時間の 180 秒だけ残り、確認が古い状態を読むので `clear ip bgp …` で消す)。
 ★IOS XE の機器(problem.yml の `xe_reset_nodes: [XE1, …]`・XRT-12 の Catalyst 8000V)も戻せる(2026-11-01)。記録= running-config を
   `bootflash:lab-baseline.cfg` に写す/戻す= `configure replace bootflash:lab-baseline.cfg force`(差分を当てる・数パス)。
+  IOL(XRT-16 の PE4 とホスト役)は bootflash: が無いので `unix:lab-baseline.cfg`(2026-11-18)。
   IOS XE には XR のコミット履歴が無いので、構築直後の設定を丸ごとファイルで控える形にした。
 ★Linux のノード(problem.yml の `linux_reset_exec: {<NODE>: [<シェルのコマンド>, …]}`・2026-11-14)は、XR と IOS XE を
   戻した後に管理 IF の SSH(ラボのアカウント)で順に流す(bash -lc・終了コードが 0 以外なら失敗扱い)。中身は問題ごと
@@ -50,6 +51,7 @@ from login_probe import Shell, connect  # noqa: E402
 
 FIRST_BOOT = "first-boot"   # 構築直後の履歴が空(XRd)= 戻り先は最古のコミットの手前
 XE_FILE = "bootflash:lab-baseline.cfg"   # IOS XE の戻り先(構築直後の running-config の写し)
+IOL_FILE = "unix:lab-baseline.cfg"      # IOL には bootflash: が無い → unix: に置く(configure replace も効く・2026-11-18 XRT-16 で確認)
 
 
 def xr_nodes(repo, problem, only):
@@ -66,9 +68,16 @@ def is_xe(repo, problem, node):
     return node in (pmeta.get("xe_reset_nodes") or [])
 
 
-def xe_record(sh):
+def xe_file(repo, problem, node):
+    """IOS XE の控えの置き場。IOL(image_family が iol の機器)は unix:、それ以外(Cat8000V)は bootflash:。"""
+    pmeta = yaml.safe_load(open(os.path.join(repo, "problems", problem, "problem.yml"), encoding="utf-8"))
+    fam = (pmeta.get("node_image_families") or {}).get(node, pmeta.get("image_family"))
+    return IOL_FILE if fam == "iol" else XE_FILE
+
+
+def xe_record(sh, path=XE_FILE):
     ask = r"(\?|\[confirm\])\s*$"   # Destination filename [lab-baseline.cfg]? / Do you want to over write? [confirm]
-    out = sh.send(f"copy running-config {XE_FILE}", timeout=60, until=ask)
+    out = sh.send(f"copy running-config {path}", timeout=60, until=ask)
     for _ in range(3):
         if re.search(ask, out):
             more = sh.send("", timeout=60, until=ask)
@@ -80,8 +89,8 @@ def xe_record(sh):
     return bool(re.search(r"bytes copied|\[OK\]", out)), out
 
 
-def xe_reset(sh):
-    out = sh.send(f"configure replace {XE_FILE} force", timeout=600,
+def xe_reset(sh, path=XE_FILE):
+    out = sh.send(f"configure replace {path} force", timeout=600,
                   until=r"(Rollback Done|[Aa]bort|[Ff]ailed|not found).*\n.*[#>]\s*$")
     ok = "Rollback Done" in out and not re.search(r"[Aa]borted|[Ff]ailed", out)
     return ok, out
@@ -128,19 +137,20 @@ def main():
             if is_xe(a.repo, a.problem, node):
                 try:
                     c, sh = shell(a.repo, a.problem, node, wait=300)
-                    ok, out = xe_record(sh)
+                    xpath = xe_file(a.repo, a.problem, node)
+                    ok, out = xe_record(sh, xpath)
                     c.close()
                 except Exception as e:
                     print(f"ERROR {node}: {type(e).__name__}: {e}")
                     bad += 1
                     continue
                 if not ok:
-                    print(f"ERROR {node}: could not copy the running-config to {XE_FILE}")
+                    print(f"ERROR {node}: could not copy the running-config to {xpath}")
                     print(out.strip()[-800:])
                     bad += 1
                     continue
-                base[node] = XE_FILE
-                print(f"[{node}] baseline config {XE_FILE}")
+                base[node] = xpath
+                print(f"[{node}] baseline config {xpath}")
                 continue
             try:
                 c, sh = shell(a.repo, a.problem, node, wait=300)
@@ -180,9 +190,9 @@ def main():
             bad += 1
             continue
         try:
-            if want == XE_FILE:
-                ok, out = xe_reset(sh)
-                print(f"[{node}] configure replace {XE_FILE}: {'ok' if ok else 'FAILED'}")
+            if want in (XE_FILE, IOL_FILE):
+                ok, out = xe_reset(sh, want)
+                print(f"[{node}] configure replace {want}: {'ok' if ok else 'FAILED'}")
                 if not ok:
                     print(out.strip()[-1500:])
                     bad += 1

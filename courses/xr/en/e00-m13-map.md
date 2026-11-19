@@ -5,12 +5,13 @@ the CCNP Service Provider blueprint it is section 5.0, automation and assurance.
 the lab: 5.7, gRPC and gNMI (dial-in and dial-out, TCP, TLS and mTLS certificates); 5.8, NetFlow and IPFIX; 5.9,
 NETCONF and RESTCONF; and 5.10, SNMP v2c and v3. The pages also explain 5.1, the programmable APIs; 5.2, reading an
 external script that configures a device through a REST API; and 5.4, YANG. 5.3 (NSO), 5.5 (Ansible and Terraform) and
-5.6 (secure ZTP) are in the appendix, which also goes further into 5.1 and 5.4. The unit has four pages and an appendix.
+5.6 (secure ZTP) are in the appendix, which also goes further into 5.1 and 5.4. The unit has five pages and an appendix.
 
 | Page | Contents | Tasks |
 |---|---|---|
-| This page | The jobs between an NMS and a router (configure, watch state, count traffic, hear of events), the model, the encoding and the protocol, who starts the connection, who proves what in TLS | — |
+| This page | The seven lines between SRV01 and the routers, and the three things to look at on each (who calls, what the line is for, whether it is locked); the model, the encoding and the protocol | — |
 | Configuring through models: YANG, NETCONF and RESTCONF | What a data model is good for, the families of YANG models in IOS XR, NETCONF's candidate and commit, RESTCONF on IOS XE, reading a script | M13-1, M13-2 |
+| Certificates and TLS from the ground up | Key pairs, signatures, certificates and CAs; the four checks in TLS; mutual TLS and who plays which part on each line | — |
 | Streaming state: gNMI, telemetry and TLS | Reading state with gNMI, the router sending state by itself (dial-out), certificates and mutual TLS | M13-3, M13-4 |
 | Counting flows and polling: NetFlow/IPFIX and SNMP | Flow records and their export, SNMPv2c and v3, traps | M13-5, M13-6 |
 | Appendix | The programmable interfaces side by side, YANG in more depth, NSO, Ansible and Terraform, secure ZTP | — |
@@ -38,9 +39,9 @@ links:
 On IOS XR in this lab (XRd, and XRv 9000 as well), RESTCONF and NetFlow are not available, so those two jobs are done on
 PE2. Everything else is done on XR01.
 
-Automation brings in many words at once: YANG, NETCONF, gNMI, telemetry, dial-out, TLS. Several of them name different
-layers of the same thing, and some appear in more than one job. Before the details on the next pages, this page puts
-them in order: which job each belongs to, which layer it is, and which side starts.
+Automation brings in many words at once: YANG, NETCONF, gNMI, telemetry, dial-out, TLS. What happens on this board,
+though, is only seven lines between SRV01 and the routers. This page lays out the lines first (section 2.1), answers the
+three questions worth asking of every line (sections 2.2 to 2.4), and only then puts the words and the layers in order.
 
 ## 1. What it is good for
 
@@ -83,9 +84,90 @@ On the configure and watch roads, the data is described by models written in YAN
 typed data instead of screen text, and the same model can be carried by different protocols. The rest of this page
 puts the parts in order.
 
-## 2. How it works: the roads between the NMS and a router
+## 2. How it works: the lines between SRV01 and the routers
 
-### 2.1 Four jobs and their roads
+### 2.1 Seven lines
+
+M13 is about the lines between SRV01 and the routers. In the figure, each arrow points from the side that starts the
+connection to the side that listens. SRV01 appears twice: on the left, the tools that connect; on the right, the
+receivers that listen. The label on each arrow gives the task that uses the line, and what the line is for.
+
+```mermaid
+flowchart LR
+  subgraph IN["SRV01 calls"]
+    c1["ncclient"]
+    c2["Python requests"]
+    c3["gnmic"]
+    c4["snmpget, snmpwalk"]
+  end
+  subgraph DEV["The routers"]
+    s1["XR01: NETCONF<br/>SSH, TCP 830"]
+    s2["PE2: RESTCONF<br/>HTTPS, TCP 443"]
+    s3["XR01: gNMI<br/>TLS, TCP 57400"]
+    s4["XR01: SNMP agent<br/>UDP 161"]
+    o1["XR01: telemetry<br/>dial-out"]
+    o2["PE2: flow exporter"]
+    o3["XR01: SNMP traps"]
+  end
+  subgraph OUT["SRV01 listens"]
+    r1["telegraf<br/>TLS, TCP 57500"]
+    r2["nfcapd<br/>UDP 4739"]
+    r3["snmptrapd<br/>UDP 162"]
+  end
+  c1 -->|"M13-1 configure"| s1
+  c2 -->|"M13-2 configure"| s2
+  c3 -->|"M13-3 read state"| s3
+  c4 -->|"M13-6 read state"| s4
+  c4 ~~~ o1
+  c4 ~~~ o2
+  c4 ~~~ o3
+  o1 -->|"M13-4 send state"| r1
+  o2 -->|"M13-5 send flows"| r2
+  o3 -->|"M13-6 report events"| r3
+```
+
+| Line (task) | Calls → listens | For | Lock |
+|---|---|---|---|
+| NETCONF (M13-1) | SRV01 (ncclient) → TCP 830 on XR01 | Configure | SSH |
+| RESTCONF (M13-2) | SRV01 (Python requests) → TCP 443 on PE2 | Configure | TLS (HTTPS) |
+| gNMI (M13-3) | SRV01 (gnmic) → TCP 57400 on XR01 | Read state | TLS (mutual TLS too) |
+| SNMP polling (M13-6) | SRV01 (snmpget, snmpwalk) → UDP 161 on XR01 | Read state | None (v2c) |
+| Telemetry dial-out (M13-4) | XR01 → TCP 57500 on SRV01 (telegraf) | Send state | TLS |
+| Flow export (IPFIX) (M13-5) | PE2 → UDP 4739 on SRV01 (nfcapd) | Count traffic | None |
+| SNMP traps (M13-6) | XR01 → UDP 162 on SRV01 (snmptrapd) | Report events | SNMPv3 authentication and encryption |
+
+On every line, three things are worth looking at: who calls (section 2.2), what the line is for (section 2.3), and
+whether it is locked (section 2.4). YANG, XML, JSON and GPB are how the contents of a line are written, laid out in
+section 2.5. To begin with, it is enough to remember that YANG is the layout of a form, and XML, JSON and GPB are ways
+of filling it in. Seven lines, and still only three questions.
+
+### 2.2 Who calls: dial-in and dial-out, poll and push
+
+Two questions are often mixed up. The first is **who opens the connection**. In dial-in, the NMS connects to a port
+that the router listens on. In dial-out, the router connects to a port that the NMS listens on, or, over UDP, simply
+sends. The second is **who decides when data flows**. In a poll, the NMS asks each time; in a push, the router sends
+on a timer or when a value changes.
+
+| | Poll: the NMS asks each time | Push: the router sends by itself |
+|---|---|---|
+| **Dial-in**: the NMS opens the connection | SNMP get and walk; NETCONF `<get>`; RESTCONF GET; gNMI Get, and Subscribe in ONCE or POLL mode | gNMI Subscribe in STREAM mode (SAMPLE every n seconds, or ON_CHANGE) |
+| **Dial-out**: the router opens it, or just sends | — | Telemetry dial-out; IPFIX export; SNMP traps; syslog |
+
+The two directions put the work in different places. In dial-in, the router's configuration is small: it opens a
+listener and decides who may use it. What to read, and how often, is in each request the NMS sends. In dial-out, the
+router's configuration holds everything: what to send, how often, to which address and port, in which encoding and
+over which protocol. The router keeps the connection up by itself, and tries again when the collector is away. This is why the
+configuration of each dial-out sender comes in blocks: what to send, where and how, and what joins the two (section
+3.3).
+
+The directions also decide which side needs an open port. In dial-in, the router listens: XR01 on TCP 830 and 57400
+and UDP 161, PE2 on TCP 443. In dial-out, the NMS listens: SRV01 on TCP 57500, UDP 4739 and UDP 162. Access lists and
+firewalls on the way must let the connection through in the direction it is opened.
+
+### 2.3 What the line is for: four jobs
+
+Each line serves one of the four jobs of section 1.3. The "roads" in the table are the ways a job can be done in
+general; the right-hand column gives the lines that do it on this board.
 
 | Job | Roads | On this board |
 |---|---|---|
@@ -97,7 +179,24 @@ puts the parts in order.
 On IOS XR, every road for configuration ends in the same place: the commit (M1). A change made through NETCONF or gNMI
 is checked and committed like a CLI change, and the commit history shows which road it came by (section 3.4).
 
-### 2.2 Three layers: the model, the encoding, the protocol
+### 2.4 Whether it is locked: SSH, TLS, nothing
+
+What protects a line depends on the line. NETCONF uses SSH; RESTCONF, gNMI and the telemetry dial-out use TLS. SNMPv2c
+polling and the flow export use nothing, and SNMPv3 has authentication and encryption of its own.
+
+In TLS, the side that listens (the server) shows a certificate, and the side that connects (the client) checks it. In
+mutual TLS, the client shows a certificate too, and the server checks it. What a certificate is, who holds what, and
+what is checked are on page *Certificates and TLS from the ground up*, starting from key pairs.
+
+That page has two rules. Which end is the TLS server depends on who calls. The checking side holds the CA certificate.
+So the same XR01 is the server on gNMI (the side that shows a certificate; with mutual TLS, also the side that checks
+the client), and the client on the telemetry dial-out (the side that checks the collector's certificate).
+
+The gNMI specification requires TLS and forbids falling back to an unencrypted session. IOS XR still offers `no-tls` on
+its gRPC server. Where XR01 keeps its certificates and its trusted CAs, and how to change them, is on page
+*Streaming state*.
+
+### 2.5 What travels on a line: the model, the encoding, the protocol
 
 The most common confusion is between words that sit on different layers. YANG is not a protocol, and NETCONF is not a
 data format. Every piece of data on the configure and watch roads passes through three layers.
@@ -176,7 +275,7 @@ CLI and replace the native configuration models, so they read almost like the CL
 does differently is listed in its deviation modules. In its NETCONF hello, IOS XRd 26.1.1 lists 857 capabilities, among
 them 220 unified models and 54 OpenConfig models.
 
-### 2.3 The words side by side
+### 2.6 The words side by side
 
 A chain of shops works much the same way, and the right-hand column uses it as a picture: the NMS is the head office,
 and the routers are the shops.
@@ -198,65 +297,7 @@ and the routers are the shops.
 | Certificate, CA | A signed statement of a name; the authority that signs them | An ID card; the office that issues ID cards |
 | TLS, mutual TLS | The client checks the server's certificate; with mutual TLS, the server checks the client's too | Checking the courier's ID card; both checking each other's |
 
-### 2.4 Who starts: dial-in and dial-out, poll and push
-
-Two questions are often mixed up. The first is **who opens the connection**. In dial-in, the NMS connects to a port
-that the router listens on. In dial-out, the router connects to a port that the NMS listens on, or, over UDP, simply
-sends. The second is **who decides when data flows**. In a poll, the NMS asks each time; in a push, the router sends
-on a timer or when a value changes.
-
-The figure shows every road on this board. The arrows point from the side that starts to the side that listens:
-SRV01 appears twice, as the client on the left and as the receiver on the right.
-
-```mermaid
-flowchart LR
-  subgraph IN["SRV01 starts (dial-in)"]
-    c1["ncclient"]
-    c2["Python requests"]
-    c3["gnmic"]
-    c4["snmpget, snmpwalk"]
-  end
-  subgraph DEV["The routers"]
-    s1["XR01: NETCONF<br/>TCP 830"]
-    s2["PE2: RESTCONF<br/>TCP 443"]
-    s3["XR01: gRPC (gNMI)<br/>TCP 57400"]
-    s4["XR01: SNMP agent<br/>UDP 161"]
-    o1["XR01: telemetry dial-out"]
-    o2["PE2: flow exporter"]
-    o3["XR01: SNMP traps"]
-  end
-  subgraph OUT["SRV01 listens (dial-out)"]
-    r1["telegraf<br/>TCP 57500"]
-    r2["nfcapd<br/>UDP 4739"]
-    r3["snmptrapd<br/>UDP 162"]
-  end
-  c1 --> s1
-  c2 --> s2
-  c3 --> s3
-  c4 --> s4
-  c4 ~~~ o1
-  c4 ~~~ o2
-  c4 ~~~ o3
-  o1 --> r1
-  o2 --> r2
-  o3 --> r3
-```
-
-| | Poll: the NMS asks each time | Push: the router sends by itself |
-|---|---|---|
-| **Dial-in**: the NMS opens the connection | SNMP get and walk; NETCONF `<get>`; RESTCONF GET; gNMI Get, and Subscribe in ONCE or POLL mode | gNMI Subscribe in STREAM mode (SAMPLE every n seconds, or ON_CHANGE) |
-| **Dial-out**: the router opens it, or just sends | — | Telemetry dial-out; IPFIX export; SNMP traps; syslog |
-
-The two directions put the work in different places. In dial-in, the router's configuration is small: it opens a
-listener and decides who may use it. What to read, and how often, is in each request the NMS sends. In dial-out, the
-router's configuration holds everything: what to send, how often, to which address and port, in which encoding and
-over which protocol. The router keeps the connection up by itself, and tries again when the collector is away.
-
-The directions also decide which side needs an open port. In dial-in, the router listens: XR01 on TCP 830 and 57400
-and UDP 161, PE2 on TCP 443. In dial-out, the NMS listens: SRV01 on TCP 57500, UDP 4739 and UDP 162. Access lists and
-firewalls on the way must let the connection through in the direction it is opened.
-
-### 2.5 gRPC, gNMI and telemetry are three different words
+### 2.7 gRPC, gNMI and telemetry are three different words
 
 **gRPC** is a general way for programs to call each other over HTTP/2, with messages written in protobuf. **gNMI** is
 one service defined on gRPC, with four calls: Capabilities, Get, Set and Subscribe. **Model-driven telemetry** is the
@@ -266,43 +307,7 @@ connecting to a collector (dial-out); the dial-out rides on gRPC, on plain TCP o
 On XR01 these are configured in different places. The `grpc` configuration is the server that answers gNMI (dial-in).
 The dial-out is configured under `telemetry model-driven`, with its own destination, port and protocol.
 
-### 2.6 Who proves what: TLS and mutual TLS
-
-TLS protects gNMI, RESTCONF and the gRPC dial-out of telemetry; NETCONF gets the same protection from SSH. In TLS,
-the side that listens (the server) shows a certificate: a signed statement of its name. The side that connects (the
-client) checks two things: that the certificate was signed by a certificate authority (CA) that the client trusts, and that the name in it
-is the name the client meant to reach. In mutual TLS, the client shows a certificate too, and the server checks it
-against a CA that the server trusts.
-
-So each side keeps the CA that signed the **other** side's certificate. On this board:
-
-| Connection | The server shows | The client checks it against | The client shows | The server checks it against |
-|---|---|---|---|---|
-| gNMI with TLS (SRV01 → XR01) | XR01's own certificate: self-signed, for the name `ems.cisco.com`, made when gRPC is enabled | that certificate itself (or the check is skipped) | a user name and password | XR01's users |
-| gNMI with mutual TLS | the same | the same | a certificate from NMS-LAB-CA (`nms-gnmi`), and the user name and password | a CA that XR01 trusts, and XR01's users |
-| Telemetry dial-out with TLS (XR01 → SRV01) | the collector's certificate, from NMS-LAB-CA, for `collector.nms.lab` and 10.0.50.10 | NMS-LAB-CA, and the name XR01 expects | nothing: XR01 shows no client certificate on a dial-out | — |
-| RESTCONF (SRV01 → PE2) | PE2's HTTPS certificate | nothing: the script turns the check off (`verify=False`) | a user name and password | PE2's local accounts |
-
-The two certificates can be read from SRV01 with `openssl s_client`. The collector's names a CA and a name; XR01's is
-signed by itself, and names only `ems.cisco.com`:
-
-```console
-$ openssl s_client -connect 10.0.50.10:57500 </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer -ext subjectAltName
-subject=O = NMS Lab, CN = collector.nms.lab
-issuer=O = NMS Lab, CN = NMS-LAB-CA
-X509v3 Subject Alternative Name: 
-    DNS:collector.nms.lab, IP Address:10.0.50.10
-$ openssl s_client -connect 10.0.50.1:57400 </dev/null 2>/dev/null | openssl x509 -noout -subject -ext subjectAltName
-subject=C = US, ST = CA, L = San Jose, street = 3700 Cisco Way, postalCode = 95134, O = "Cisco Systems, Inc.", OU = CSG, CN = ems.cisco.com, serialNumber = VSN-PR6OPEC
-X509v3 Subject Alternative Name: 
-    DNS:ems.cisco.com
-```
-
-The gNMI specification requires TLS and forbids falling back to an unencrypted session. IOS XR still offers `no-tls` on
-its gRPC server. Where XR01 keeps its certificates and its trusted CAs, and how to change them, is on page
-*Streaming state*.
-
-### 2.7 Counters and flow records are different things
+### 2.8 Counters and flow records are different things
 
 An interface counter is one number per interface: how many packets and bytes went through. It says how much, but not
 who. A flow record is one line per conversation: the source and destination addresses, the protocol and the ports, the
@@ -322,21 +327,9 @@ Date first seen             Duration     Proto      Src IP Addr:Port          Ds
 2026-11-10 14:27:08.500     00:00:00.049 ICMP     192.168.100.1:0     ->       10.255.0.1:8.0   ........   0       37    27676      755    4.5 M    748     1
 ```
 
-### 2.8 Across the network: XRT-15
+### 2.9 One value, several lines
 
-Each service listens or sends in one place:
-
-| Device | Service | Port | Who starts | Task |
-|---|---|---|---|---|
-| XR01 | NETCONF (over SSH) | TCP 830 on XR01 | SRV01 | M13-1 |
-| PE2 | RESTCONF (over HTTPS) | TCP 443 on PE2 | SRV01 | M13-2 |
-| XR01 | gRPC server (gNMI) | TCP 57400 on XR01 | SRV01 | M13-3 |
-| XR01 | Telemetry dial-out (gRPC with TLS) | TCP 57500 on SRV01 (telegraf) | XR01 | M13-4 |
-| PE2 | Flow export (IPFIX) | UDP 4739 on SRV01 (nfcapd) | PE2 | M13-5 |
-| XR01 | SNMP agent (v2c, v3) | UDP 161 on XR01 | SRV01 | M13-6 |
-| XR01 | SNMP traps (v3) | UDP 162 on SRV01 (snmptrapd) | XR01 | M13-6 |
-
-One value can reach SRV01 by several of these roads. Take the bytes received on XR01's GigabitEthernet0/0/0/0, the
+One value can reach SRV01 by several lines. Take the bytes received on XR01's GigabitEthernet0/0/0/0, the
 core link:
 
 | Road | How the value is named | Who starts; how it is written; port |
@@ -351,16 +344,17 @@ core link:
 SNMP names an interface by a number, its ifIndex, which has to be found first (in `ifDescr`, `1.3.6.1.2.1.2.2.1.2`).
 YANG names it by a key, its name: the `…` in the gNMI path is `GigabitEthernet0/0/0/0`.
 
-### 2.9 Key points
+### 2.10 Key points
 
-- Four jobs: configure, watch state, count traffic, hear of events. Each has its own roads, and on IOS XR every
-  configure road ends in the same commit.
-- Three layers: the model says what the data is (YANG, or a MIB), the encoding how it is written (XML, JSON, GPB, BER),
-  the protocol how it travels (NETCONF, RESTCONF, gNMI, dial-out, SNMP). One model can travel by several roads.
+- Seven lines. On each, look at three things: who calls, what the line is for, and whether it is locked.
 - Who opens the connection (dial-in, dial-out) and who decides when data flows (poll, push) are two separate questions.
   In dial-out, the whole subscription is in the router's configuration.
-- In TLS the server proves its name; in mutual TLS the client proves its own as well. Each side keeps the CA of the
-  other side's certificate.
+- Four jobs: configure, watch state, count traffic, hear of events. On IOS XR every configure road ends in the same
+  commit.
+- The TLS server is the side that listens. The checking side holds the CA certificate. The same XR01 is a server on
+  one line and a client on another.
+- Three layers: the model says what the data is (YANG, or a MIB), the encoding how it is written (XML, JSON, GPB, BER),
+  the protocol how it travels (NETCONF, RESTCONF, gNMI, dial-out, SNMP). One model can travel by several roads.
 - An interface counter says how much; a flow record says who talked to whom.
 
 ## 3. Building it: where each part is configured
@@ -479,7 +473,8 @@ Certificate common name                 : ems.cisco.com
 
 ## Practice
 
-The six tasks are in lab **XRT-15**, two after each of the next three pages. Much of the work is done on SRV01: log in
+The six tasks are in lab **XRT-15**, two after each of the pages *Configuring through models*, *Streaming state* and
+*Counting flows and polling*. Much of the work is done on SRV01: log in
 to it from the workspace console with the lab account.
 
 <p class="tolab"><a href="/_learn?id=XRT-15">Open lab XRT-15 in the workspace</a> — <a href="e1-m13-practice.html">Tasks M13-1 and M13-2</a></p>
@@ -495,6 +490,6 @@ RESTCONF or NetFlow. Sources: RFC 3535 (sections 2.1, 2.4 and 5), RFC 6241, RFC 
 Management Configuration Guide (ASR 9000 26.x: NETCONF; NCS 5500 26.x: SNMP), the Telemetry Configuration Guide (Cisco
 8000 cumulative and NCS 5500 26.x: dial-in and dial-out, encodings, TLS) and the NetFlow Configuration Guides (ASR 9000
 26.x; IOS XE 17.x). All checked in November 2026. The following were measured on the PoC board and on XRT-15: the commit
-history, the two answers for Loopback0, the hello counts, the encodings gNMI offers, the certificates, the error
+history, the two answers for Loopback0, the hello counts, the encodings gNMI offers, the error
 messages, the flow record, RESTCONF's start-up delay and its answer to a privilege-1 user.
 :::

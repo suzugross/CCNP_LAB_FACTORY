@@ -1,0 +1,90 @@
+# M1 の挙動: ラベルとコメント・ラベルの重複・失敗するコミット・確認つきコミット・ロールバック・編集中の表示(最後に履歴の前の状態へ戻す)
+terminal length 0
+terminal width 250
+configure
+interface Loopback81
+ipv4 address 10.81.81.81 255.255.255.255
+show configuration
+commit label DRILL-A comment first drill commit
+show configuration
+exit
+interface Loopback82
+ipv4 address 10.82.82.82 255.255.255.255
+root
+commit label DRILL-A
+show configuration
+commit label DRILL-B
+show configuration commit list
+show configuration commit changes DRILL-A
+show configuration rollback changes DRILL-A
+# 消す・値を変える時の編集中の表示
+no interface Loopback82
+router ospf 1 area 0 interface GigabitEthernet0/0/0/2 cost 60
+router ospf 1 area 0 interface GigabitEthernet0/0/0/2 no cost
+show configuration
+show commit changes diff
+no router ospf 1 area 0 interface GigabitEthernet0/0/0/2 network point-to-point
+show configuration
+show commit changes diff
+abort
+configure
+show configuration
+# 失敗するコミット(定義の無いポリシー)
+router bgp 65001
+bgp router-id 1.1.1.1
+address-family ipv4 unicast
+exit
+neighbor 10.0.12.2
+remote-as 65002
+address-family ipv4 unicast
+route-policy RP-DRILL in
+root
+interface Loopback83
+ipv4 address 10.83.83.83 255.255.255.255
+root
+commit label DRILL-C
+show configuration failed
+show configuration
+show running-config interface Loopback83
+abort
+# load rollback changes(1 回ぶんの逆)
+configure
+load rollback changes DRILL-A
+show configuration
+show commit changes diff
+commit label DRILL-D
+end
+show running-config interface Loopback81
+# rollback configuration
+rollback configuration last 1
+show configuration commit list
+show running-config interface Loopback81
+# end で抜ける時の問い
+configure
+interface Loopback84
+ipv4 address 10.84.84.84 255.255.255.255
+end
+cancel
+end
+no
+show running-config interface Loopback84
+configure
+interface Loopback84
+ipv4 address 10.84.84.84 255.255.255.255
+end
+yes
+show running-config interface Loopback84
+show configuration commit list
+# 確認つきコミット(期限内に確定)
+configure
+interface Loopback85
+ipv4 address 10.85.85.85 255.255.255.255
+commit confirmed 60
+show configuration commit list
+commit
+show configuration commit list
+end
+# 盤面へ戻す(CHG2001 の後の状態へ)
+rollback configuration to-exclude CHG2001
+show configuration commit list
+show running-config interface Loopback81

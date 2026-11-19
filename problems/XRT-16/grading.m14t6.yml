@@ -1,0 +1,25 @@
+# M14-6: IPv6 の TS(前任者の試行)。故障= P1 の accept-register の一覧の並び順・PE4 の RP の取り違え。
+# 確認は poc/xr/gen_grading_xrt16.py で組んだ(中身を直したら組み直す)。確認ごとに範囲の中から乱数でグループを選ぶ(topologies/mcast_probe.py)。
+problem: XRT-16
+total_points: 100
+checks:
+- name: M14-6 RCV2 receives an IPv6 channel in FF0E::16:0/112 from SRC1, and the RP still filters Register messages (accept-register, ending in a deny)
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=FF0E::16:0/112 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ipv6 mld join-group {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ipv6 mld join-group
+    {G};;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 2001:db8:100:2::1 --from 2001:db8:100:3::1 --show 'P1:show running-config router pim address-family ipv6' --show 'P1:show running-config
+    ipv6 access-list' --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ipv6 mld join-group {G};;end' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ipv6 mld join-group {G};;end'
+  raw:
+  - regex: == REPLY SRC1 2001:db8:100:2::1 (?:8|9|10)\n
+  - regex: address-family ipv6[\s\S]*?accept-register \S+
+  - regex: '== SHOW P1: show running-config ipv6 access-list[\s\S]*?\bdeny ipv6 any any'
+  points: 50
+- name: M14-6 RCV3 receives an IPv6 channel in FF0E::16:0/112 from SRC1
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=FF0E::16:0/112 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ipv6 mld join-group {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ipv6 mld join-group
+    {G};;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 2001:db8:100:2::1 --from 2001:db8:100:3::1 --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ipv6 mld join-group {G};;end'
+    --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ipv6 mld join-group {G};;end'
+  raw:
+  - regex: == REPLY SRC1 2001:db8:100:3::1 (?:8|9|10)\n
+  points: 50

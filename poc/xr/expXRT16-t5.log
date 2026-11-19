@@ -1,0 +1,88 @@
+
+######## 09:11:00 t5: BSR= 239.16.0.0/15 の候補 RP は P1(10)・PE3(20)・PE4(200)・候補 BSR は PE1(100)と P1(既定)
+configure
+Wed Nov 18 09:11:02.041 UTC
+RP/0/RP0/CPU0:P1(config)#
+ipv4 access-list TV-GROUPS
+RP/0/RP0/CPU0:P1(config-ipv4-acl)#
+10 permit ipv4 239.16.0.0 0.1.255.255 any
+RP/0/RP0/CPU0:P1(config-ipv4-acl)#
+exit
+RP/0/RP0/CPU0:P1(config)#
+router pim
+RP/0/RP0/CPU0:P1(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:P1(config-pim-default-ipv4)#
+bsr candidate-rp 10.255.0.11 group-list TV-GROUPS priority 10 interval 30
+RP/0/RP0/CPU0:P1(config-pim-default-ipv4)#
+bsr candidate-bsr 10.255.0.11 hash-mask-len 30
+RP/0/RP0/CPU0:P1(config-pim-default-ipv4)#
+commit
+Wed Nov 18 09:11:05.444 UTC
+RP/0/RP0/CPU0:P1(config-pim-default-ipv4)#
+show configuration failed
+Wed Nov 18 09:11:05.860 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:P1(config-pim-default-ipv4)#
+end
+RP/0/RP0/CPU0:P1#
+configure
+Wed Nov 18 09:11:08.868 UTC
+RP/0/RP0/CPU0:PE3(config)#
+ipv4 access-list TV-GROUPS
+RP/0/RP0/CPU0:PE3(config-ipv4-acl)#
+10 permit ipv4 239.16.0.0 0.1.255.255 any
+RP/0/RP0/CPU0:PE3(config-ipv4-acl)#
+exit
+RP/0/RP0/CPU0:PE3(config)#
+router pim
+RP/0/RP0/CPU0:PE3(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:PE3(config-pim-default-ipv4)#
+bsr candidate-rp 10.255.0.3 group-list TV-GROUPS priority 20 interval 30
+RP/0/RP0/CPU0:PE3(config-pim-default-ipv4)#
+commit
+Wed Nov 18 09:11:11.808 UTC
+RP/0/RP0/CPU0:PE3(config-pim-default-ipv4)#
+show configuration failed
+Wed Nov 18 09:11:12.233 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE3(config-pim-default-ipv4)#
+end
+RP/0/RP0/CPU0:PE3#
+configure
+Wed Nov 18 09:11:15.136 UTC
+RP/0/RP0/CPU0:PE1(config)#
+router pim
+RP/0/RP0/CPU0:PE1(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:PE1(config-pim-default-ipv4)#
+bsr candidate-bsr 10.255.0.1 hash-mask-len 30 priority 100
+RP/0/RP0/CPU0:PE1(config-pim-default-ipv4)#
+commit
+Wed Nov 18 09:11:16.891 UTC
+RP/0/RP0/CPU0:PE1(config-pim-default-ipv4)#
+show configuration failed
+Wed Nov 18 09:11:17.307 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-pim-default-ipv4)#
+end
+RP/0/RP0/CPU0:PE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+PE4(config)#
+access-list 16 permit 239.16.0.0 0.1.255.255
+PE4(config)#
+interface Loopback0
+PE4(config-if)#
+ip pim sparse-mode
+PE4(config-if)#
+exit
+PE4(config)#
+ip pim rp-candidate Loopback0 group-list 16 priority 200
+PE4(config)#
+end
+PE4#

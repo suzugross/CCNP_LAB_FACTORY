@@ -1,0 +1,37 @@
+# BL-257 PoC: マルチキャスト(SPCOR 4.4= PIM-SM・PIM-SSM・PIM-BIDIR・PIMv6・IGMP v1/v2/v3・MLD)を IOS XR で。
+# 記録= problems/_drafts/XR-TRACK.design.md §31。手順= poc/xr/mcast_poc.sh
+# 盤面(IS-IS CORE レベル 2・IPv4/IPv6。マルチキャストの設定は PoC の段で足す):
+#   SRC1 ─ PE1(XRv9000)──────────── PE2(XRv9000)─ RCV2
+#             └── P1(XRd・RP の候補)──┘    └ R5(IOL)┐
+#                    └ P2(XRd)───────── SW1(LAN 192.168.3.0/24)─ RCV3
+# - PE2 から SRC1 への最短は PE1 との直結(10)、RP(P1)へは P1 経由 → 共有木と最短経路木の道が分かれる(切り替えが見える)。
+# - SW1 の LAN に P2(.252・XRd)と R5(.253・IOL)が並ぶ(DR= IP 最大= R5・querier= IP 最小= P2 の見込み)。LAN は両者とも IS-IS で passive。
+# - XRd と XRv9000 の両方をデータの道に置く(XRd がマルチキャストを転送するかを見る。だめでも PE1─PE2 の直結は XRv9000 だけで通る)。
+id: _POC-XRMCAST
+title: "[PoC] XR multicast"
+exam: POC
+topics: [iosxr, multicast, poc]
+difficulty: 0
+topology: generated
+access: ssh
+target_nodes: [PE1, PE2, P1, P2, R5, SRC1, RCV2, RCV3]
+points: 0
+image_family: iol
+node_image_families: { PE1: iosxr, PE2: iosxr, P1: iosxr, P2: iosxr }
+node_xr_platforms: { P1: iosxrd, P2: iosxrd }
+node_images: { PE1: iosxrv9000-26-1-1, PE2: iosxrv9000-26-1-1 }
+lab:
+  switches: [SW1]
+  positions: { SRC1: [-800, 0], PE1: [-400, 0], PE2: [400, 0], RCV2: [800, 0],
+               P1: [0, 240], P2: [0, 480], R5: [400, 300], SW1: [400, 560], RCV3: [800, 560] }
+  links:
+    - { a: PE1, a_if: 3, b: PE2, b_if: 3 }
+    - { a: PE1, a_if: 4, b: P1, b_if: 3 }
+    - { a: P1, a_if: 4, b: PE2, b_if: 4 }
+    - { a: P1, a_if: 5, b: P2, b_if: 3 }
+    - { a: PE2, a_if: 5, b: R5, b_if: 0 }
+    - { a: PE1, a_if: 5, b: SRC1, b_if: 0 }
+    - { a: PE2, a_if: 6, b: RCV2, b_if: 0 }
+    - { a: P2, a_if: 4, b: SW1, b_if: 0 }
+    - { a: R5, a_if: 1, b: SW1, b_if: 1 }
+    - { a: RCV3, a_if: 0, b: SW1, b_if: 2 }

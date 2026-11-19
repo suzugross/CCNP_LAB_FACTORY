@@ -14,7 +14,9 @@ import yaml
 pid, host, *want = sys.argv[1:]
 repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 learn = yaml.safe_load(open(f"{repo}/problems/{pid}/learn.yml", encoding="utf-8"))
-HEAD = re.compile(r"^On ([A-Z][A-Z0-9]*\d+):\s*$")   # On XR01: / On XE1:(XRT-12= IOS XE の機器も)
+DEV = r"[A-Z][A-Z0-9]*\d+"
+# On XR01: / On XE1:(XRT-12= IOS XE の機器も)/ On PE1, PE2, P1 and PE3:(XRT-16= 同じ塊を何台かへ)
+HEAD = re.compile(rf"^On ({DEV}(?:(?:, | and |, and ){DEV})*):\s*$")
 
 
 def mgmt(dev):
@@ -37,7 +39,7 @@ def blocks(sol):
         if cur is None:
             m = HEAD.match(ln)
             if m:
-                dev = m.group(1)
+                dev = re.findall(DEV, m.group(1))
             elif ln.strip() in ("configure", "configure terminal"):
                 cur = [ln]
             continue
@@ -51,9 +53,10 @@ def blocks(sol):
 for st in learn["steps"]:
     if want and st["id"] not in want:
         continue
-    for dev, lines in blocks(st["solution"]["en"]):
-        target = mgmt(dev) if dev else host
-        out = subprocess.run([f"{repo}/.venv/bin/python", f"{repo}/poc/xr/xrsh.py", target, *lines],
-                             capture_output=True, text=True).stdout
-        bad = [l for l in out.splitlines() if l.startswith("%") or "Invalid input" in l or "failed" in l.lower()]
-        print(st["id"] + (f"@{dev}" if dev else ""), len(lines), "lines problems:", bad)
+    for devs, lines in blocks(st["solution"]["en"]):
+        for dev in (devs or [None]):
+            target = mgmt(dev) if dev else host
+            out = subprocess.run([f"{repo}/.venv/bin/python", f"{repo}/poc/xr/xrsh.py", target, *lines],
+                                 capture_output=True, text=True).stdout
+            bad = [l for l in out.splitlines() if l.startswith("%") or "Invalid input" in l or "failed" in l.lower()]
+            print(st["id"] + (f"@{dev}" if dev else ""), len(lines), "lines problems:", bad)

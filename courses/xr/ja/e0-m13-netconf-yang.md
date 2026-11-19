@@ -1,11 +1,11 @@
 # M13 — モデルで設定する: YANG・NETCONF・RESTCONF
 
-前のページでは、NMS とルータの間の仕事と、モデル・符号化・プロトコルの層を並べました。このページは、その最初の仕事である
+前のページでは、NMS とルータの間の仕事と、モデル・エンコード・プロトコルの層を並べました。このページは、その最初の仕事である
 設定を扱います。モデルが設定をどう表すか、NETCONF が変更を IOS XR のコミットまでどう運ぶか、RESTCONF が IOS XE で同じことを
 HTTPS でどう行うか、です。ブループリントの 5.9(NETCONF と RESTCONF の設定と確認)と 5.2(REST API で機器を設定する外部の
 スクリプトの解釈)にあたり、5.4(YANG)と 5.1(プログラマブルな API)の要点にも触れます。YANG の続きは付録にあります。
 
-盤面は前のページの XRT-15 です。このページでは、NMS の SRV01(10.0.50.10)が、NMS の区画を通して XR01(10.0.50.1)と
+盤面は前のページの XRT-15 です。このページでは、NMS の SRV01(10.0.50.10)が、NMS のセグメントを通して XR01(10.0.50.1)と
 PE2(10.0.50.2)を扱います。
 
 ## 1. 何が嬉しいのか
@@ -16,10 +16,10 @@ NMS のチームは、SRV01 のプログラムから XR01 と PE2 を管理し�
 説明を変える、設定されている内容を読み戻す、といったことを、人がキーボードの前にいなくても、毎回同じやり方で行うためです。
 
 2 台のルータは OS が違います。IOS XR は打った行をためておき、`commit` でまとめて適用します(M1)。IOS XE は 1 行ごとに、
-打った時点で適用します。`show` の出力も、エラーのメッセージも違います。
+打った時点で適用します。`show` の出力も、エラー メッセージも違います。
 
 CLI を操作するプログラムは、人と同じようにコマンドを打ち、返ってきた文字を読まなければなりません。これをスクリーン
-スクレイピングと呼びます。プログラムは、プロンプト、エラーのメッセージ、`show` の出力ごとの並び方を見分ける必要があります。
+スクレイピングと呼びます。プログラムは、プロンプト、エラー メッセージ、`show` の出力ごとの並び方を見分ける必要があります。
 新しいリリースで列がずれたり、メッセージの言い回しが変わったりすると、動かなくなります。さらに困るのは、変更が全部入ったのか、
 一部だけ入ったのか、まったく入らなかったのかを、確実には判断できないことです。
 
@@ -32,26 +32,26 @@ CLI を操作するプログラムは、人と同じようにコマンドを打�
   カバーしていません。トランザクションもありません。2002 年の IAB のワークショップは、SNMP は機器の設定にはあまり使われて
   いないと記録しています。代わりに運用者が求めたものとして、設定と運用状態を分けること、複数の機器にまたがるトランザクション、
   設定を丸ごと取り出して戻す手段、`diff` などの道具で比べられる文字を挙げています(RFC 3535)。
-- **ベンダーごとの XML のインターフェイス**: セッションの上で XML の文書を受け付けるルータもありました(IOS XR にも独自の XML
+- **ベンダーごとの XML のインターフェイス**: セッションの上で XML 文書を受け付けるルータもありました(IOS XR にも独自の XML
   エージェントがありました)。ただ、ベンダーごとにスキーマもプロトコルも別々でした。
 
 ### 1.3 モデル駆動の答え
 
 モデル駆動の管理は、仕事を 3 つに分けます。
 
-- **モデル**が、機器で何を設定でき、何を読めるかを、値ごとに名前と型を持つ木として表します。モデルを書く言語が YANG です。
+- **モデル**が、機器で何を設定でき、何を読めるかを、値ごとに名前と型を持つツリーとして表します。モデルを書く言語が YANG です。
 - **プロトコル**が、モデルの形をしたデータを運びます。NETCONF(SSH の上の XML)、RESTCONF(HTTPS の上の JSON か XML)、
   gNMI(gRPC の上。次のページ)です。
-- **答えが構造化されています。** 要求は、成功する(`<ok/>`、または HTTP の成功のコード)か、種類と木の中の場所を示すエラーで
+- **答えが構造化されています。** 要求は、成功する(`<ok/>`、または HTTP の成功のコード)か、種類とツリーの中の場所を示すエラーで
   失敗するかのどちらかです。NETCONF にはトランザクションもあります。変更の組をためておいて 1 つとして適用でき、自分で元に戻る
   ように指定することもできます。
 
 これらがルータのプログラマブルな API です(5.1)。OS によって、そろっているものが違います。
 
-| API | 運び方 | 符号化 | この盤面では |
+| API | 運び方 | エンコード | この盤面では |
 |---|---|---|---|
 | NETCONF | SSH、TCP 830 | XML | XR01(課題 M13-1)。IOS XE にも NETCONF はあるが、このラボでは使わない |
-| RESTCONF | HTTPS、TCP 443 | JSON か XML | PE2 だけ(課題 M13-2)。IOS XR には RESTCONF のサーバが無い |
+| RESTCONF | HTTPS、TCP 443 | JSON か XML | PE2 だけ(課題 M13-2)。IOS XR には RESTCONF サーバが無い |
 | gNMI | gRPC(HTTP/2。ふつうは TLS) | JSON(XR01 では JSON_IETF) | XR01(次のページ) |
 
 NSO のようなコントローラも、ルータに向かっては同じ API を使います(付録)。
@@ -60,7 +60,7 @@ NSO のようなコントローラも、ルータに向かっては同じ API �
 
 ### 2.1 YANG: 設定と状態のモデル
 
-YANG(RFC 7950)は、データを木として表す言語です。1 つのモデルは 1 つの**モジュール**として書きます。モジュールには名前と
+YANG(RFC 7950)は、データをツリーとして表す言語です。1 つのモデルは 1 つの**モジュール**として書きます。モジュールには名前と
 **名前空間**(URI)があり、データの要素はそれぞれ、名前空間でどのモジュールに属するかを示します。
 
 SRV01 が NETCONF で Loopback0 の設定を尋ねたとき、XR01 は次のように答えました。CLI で書くと
@@ -84,7 +84,7 @@ SRV01 が NETCONF で Loopback0 の設定を尋ねたとき、XR01 は次のよ�
 </data>
 ```
 
-この木を作っている YANG の部品は次のとおりです。
+このツリーを作っている YANG の部品は次のとおりです。
 
 | 部品 | 何か | 上の答えでは |
 |---|---|---|
@@ -94,13 +94,13 @@ SRV01 が NETCONF で Loopback0 の設定を尋ねたとき、XR01 は次のよ�
 | リーフ | 型を持つ 1 つの値 | `interface-name`、`address`、`netmask` |
 | リーフ リスト | 同じ型の値の並び | (ここには無い) |
 | config true / false | 設定(書ける)か、状態(読むだけ)か | すべて設定。`-cfg` のモデルは状態を持たない |
-| augment | あるモジュールが、別のモジュールの木にノードを足す | `ipv4/addresses` は `Cisco-IOS-XR-um-if-ip-address-cfg` から来る |
+| augment | あるモジュールが、別のモジュールのツリーにノードを足す | `ipv4/addresses` は `Cisco-IOS-XR-um-if-ip-address-cfg` から来る |
 
 答えの途中で `xmlns` の属性が変わっています。アドレスはインターフェイスのモジュールの持ち物ではなく、2 つ目のモジュールが
 インターフェイスの下に足しています(augment)。要求の側も同じ 2 つの名前空間を使わないと、機器は要素を見分けられません。
 
 YANG はデータを説明するもので、データそのものではありません。線の上では、データは XML(NETCONF)か JSON(RESTCONF と
-gNMI。RFC 7951)で運ばれます。同じモデルから、どちらの符号化も決まります。
+gNMI。RFC 7951)で運ばれます。同じモデルから、どちらのエンコードも決まります。
 
 ### 2.2 IOS XR の 3 つのモデルの系統
 
@@ -108,17 +108,17 @@ IOS XR には、3 つの系統のモデルが入っています。名前で見�
 
 | 系統 | モジュールの名前 | どんなものか |
 |---|---|---|
-| ネイティブ | `Cisco-IOS-XR-<機能>-cfg`、`Cisco-IOS-XR-<機能>-oper`(例: `Cisco-IOS-XR-ifmgr-cfg`、`Cisco-IOS-XR-ifmgr-oper`) | いちばん古い系統。木は XR の内部のスキーマに沿う。状態は `-oper` のモデルが持つ |
-| 統一モデル(UM) | `Cisco-IOS-XR-um-<機能>-cfg`(例: `Cisco-IOS-XR-um-interface-cfg`) | 設定だけ。CLI から生成されているので、木は CLI によく似る。ネイティブの設定のモデルに代わるものとして 7.0.1 で入った |
-| OpenConfig | `openconfig-<機能>`(例: `openconfig-interfaces`) | 運用者のグループが書いた、ベンダーに依らないモデル。設定と状態が並ぶ(`config` と `state` のコンテナ)。XR との違いは逸脱(deviation)のモジュールで公開されている(`cisco-xr-openconfig-…-deviations`) |
+| ネイティブ | `Cisco-IOS-XR-<機能>-cfg`、`Cisco-IOS-XR-<機能>-oper`(例: `Cisco-IOS-XR-ifmgr-cfg`、`Cisco-IOS-XR-ifmgr-oper`) | いちばん古い系統。ツリーは XR の内部のスキーマに沿う。状態は `-oper` のモデルが持つ |
+| ユニファイド モデル(UM) | `Cisco-IOS-XR-um-<機能>-cfg`(例: `Cisco-IOS-XR-um-interface-cfg`) | 設定だけ。CLI から生成されているので、ツリーは CLI によく似る。ネイティブの設定のモデルに代わるものとして 7.0.1 で入った |
+| OpenConfig | `openconfig-<機能>`(例: `openconfig-interfaces`) | 運用者のグループが書いた、ベンダーに依らないモデル。設定と状態が並ぶ(`config` と `state` のコンテナ)。XR との違いは deviation モジュールで公開されている(`cisco-xr-openconfig-…-deviations`) |
 
 名前空間も同じ決まりです。Cisco のモデルは `http://cisco.com/ns/yang/<モジュール>`、OpenConfig は
 `http://openconfig.net/yang/<名前>` です。
 
 ルータがどのモデルを持つかは、3 か所で分かります。
 
-- **hello**: NETCONF のセッションが開くと、ルータは対応するものの一覧を送ってきます(2.3 節)。ncclient では
-  `m.server_capabilities` です。XR01 は 857 項目を挙げました。統一モデルが約 220、OpenConfig が 54、残りのおよそ 420 が
+- **hello**: NETCONF セッションが開くと、ルータは対応するものの一覧を送ってきます(2.3 節)。ncclient では
+  `m.server_capabilities` です。XR01 は 857 項目を挙げました。ユニファイド モデルが約 220、OpenConfig が 54、残りのおよそ 420 が
   ほかの Cisco-IOS-XR のモデル(ネイティブ)です。同じリリースの IOS XRv 9000 は 1093 項目でした。
 - **ルータそのもの**: `show netconf-yang capabilities` が同じ一覧を出します。
 - **Cisco の目録**: Cisco Feature Navigator(YANG Data Models)と GitHub の YangModels のリポジトリで、機種とリリースごとに
@@ -146,14 +146,14 @@ IOS XR には、3 つの系統のモデルが入っています。名前で見�
 
 (出力は一部を省いています。)
 
-使い分け: XR をその CLI と同じ考え方で設定するなら統一モデル、1 つのプログラムで複数のベンダーを設定するなら OpenConfig、
+使い分け: XR をその CLI と同じ考え方で設定するならユニファイド モデル、1 つのプログラムで複数のベンダーを設定するなら OpenConfig、
 OpenConfig に無い XR の状態はネイティブの `-oper` のモデルです。
 
 ### 2.3 NETCONF: SSH の上のセッション、RPC、データストア
 
-NETCONF(RFC 6241)は SSH の中で動きます(RFC 6242)。クライアントは TCP の 830 番に SSH で接続し、SSH のサブシステム
+NETCONF(RFC 6241)は SSH の中で動きます(RFC 6242)。クライアントは TCP の 830 番に SSH で接続し、SSH サブシステム
 `netconf` を求めます。ログインは SSH の仕事なので、誰が接続できるかはルータのユーザ(または AAA)が決めます。セッションが
-開くと、両端が自分の能力(capabilities)を並べた `<hello>` を送ります。その後は、クライアントが RPC を送り、サーバが 1 つずつ
+開くと、両端が自分のケイパビリティ(capabilities)を並べた `<hello>` を送ります。その後は、クライアントが RPC を送り、サーバが 1 つずつ
 答えます。
 
 ```mermaid
@@ -163,7 +163,7 @@ sequenceDiagram
   S->>X: 10.0.50.1 の 830 番へ SSH。サブシステム "netconf"
   X-->>S: hello: base 1.1、candidate、confirmed-commit、約 850 のモデル
   S->>X: hello: base 1.0 と 1.1
-  S->>X: rpc get-config(running、subtree のフィルタ)
+  S->>X: rpc get-config(running、subtree フィルタ)
   X-->>S: rpc-reply(データ)
   S->>X: rpc edit-config(宛先 candidate)
   X-->>S: rpc-reply ok
@@ -174,8 +174,8 @@ sequenceDiagram
 ```
 
 RPC はどれも `message-id` を持ち、答えは同じ ID を付けて返ります。`<rpc message-id="101">` には
-`<rpc-reply message-id="101">` が答えます。答えの中身は、`<ok/>`、`<data>…</data>`、またはエラーのタグ(場合によっては、
-問題の要素の位置も)を持つ `<rpc-error>` です。両端が base 1.1 を名乗ると、メッセージは長さを付けた塊で送られます。base 1.0
+`<rpc-reply message-id="101">` が答えます。答えの中身は、`<ok/>`、`<data>…</data>`、またはエラー タグ(場合によっては、
+問題の要素の位置も)を持つ `<rpc-error>` です。両端が base 1.1 を名乗ると、メッセージは長さを付けたチャンクで送られます。base 1.0
 では、メッセージの終わりに `]]>]]>` の印を付けます。IOS XR は同じポートでどちらにも答えます。
 
 ここで要る操作は次のとおりです。
@@ -196,8 +196,8 @@ RPC はどれも `message-id` を持ち、答えは同じ ID を付けて返り�
 設定を足します。XR01 の hello には `:candidate` と `:confirmed-commit:1.1` があり、`:writable-running` と `:startup` はありません
 でした。そのため IOS XR では、変更はすべて candidate に入り、コミットで有効になります。
 
-`<get-config>` のフィルタは subtree のフィルタです(RFC 6241 の 6 節)。欲しいものの形をした XML の切れ端です。子を持つ要素
-(`<interfaces>`、`<interface>`)は木のその部分を選び、値を持つリーフ(`<interface-name>Loopback0</interface-name>`)は、その値を
+`<get-config>` のフィルタは subtree フィルタです(RFC 6241 の 6 節)。欲しいものの形をした XML の切れ端です。子を持つ要素
+(`<interfaces>`、`<interface>`)はツリーのその部分を選び、値を持つリーフ(`<interface-name>Loopback0</interface-name>`)は、その値を
 持つリストの項目だけを残します。2.1 節の答えは、このようなフィルタで得たものです(3.2 節)。
 
 ### 2.4 candidate・commit・confirmed commit
@@ -208,14 +208,14 @@ IOS XR の CLI は、もともと 2 つのコンフィギュレーションで�
 クライアントに属する candidate データストア」と書いています)。CLI のセッションがそれぞれ自分のターゲット コンフィギュレーション
 を持つのと同じです。
 
-NETCONF のコミットは、ふつうのコミットです。コミット ID が付き、CLI からのコミットと同じようにコミットの履歴に書かれます。
+NETCONF のコミットは、ふつうのコミットです。コミット ID が付き、CLI からのコミットと同じようにコミット履歴に書かれます。
 履歴には、どこから来たかも残ります。Line が `netconf`、Client が `YANG Frame` です(3.3 節)。`show configuration commit
 changes` も、ほかのコミットと同じようにその行を見せます。
 
 **confirmed commit**(確認つきコミット。RFC 6241 の 8.4 節)は、プロトコルの `commit confirmed` です。クライアントは
 `<commit><confirmed/><confirm-timeout>120</confirm-timeout></commit>` を送ります。変更はすぐに、仮のものとして適用されます。
 
-- 時間切れの前に、ふつうの `<commit/>` を送ると恒久的になります。`<cancel-commit/>` を送ると、すぐに取り消されます。
+- タイムアウトの前に、ふつうの `<commit/>` を送ると恒久的になります。`<cancel-commit/>` を送ると、すぐに取り消されます。
 - 時間内に何も来なければ(時間を指定しなければ 600 秒)、サーバは設定を元に戻します。
 - 求めたセッションが、確定する前に終わった場合も、サーバは設定を元に戻します。セッションの後まで残るのは、`<persist>` を
   付けて送った確認つきコミットだけです。
@@ -238,7 +238,7 @@ had a lock on the running configuration.
 
 ### 2.5 RESTCONF: 同じモデルを HTTPS で
 
-RESTCONF(RFC 8040)は、同じ YANG のデータを、Web サーバのリソースとして運びます。データにはそれぞれ URL があり、HTTP の
+RESTCONF(RFC 8040)は、同じ YANG データを、Web サーバのリソースとして運びます。データにはそれぞれ URL があり、HTTP
 メソッドが何をするかを表します。TLS の上で動かさなければなりません(RFC 8040 の 2.1 節)。
 
 URL はモデルから組み立てます。PE2 のホスト名を読む URL は次のとおりです。
@@ -251,7 +251,7 @@ https://10.0.50.2/restconf/data/Cisco-IOS-XE-native:native/hostname
 
 - `/restconf` がルートです。知らないクライアントは `/.well-known/host-meta` を尋ねれば、ルートの場所を教えてもらえます。
 - `/data` は、設定と状態をまとめて持ちます。
-- `/data` の次のノードは、モジュール名を付けて書きます(`Cisco-IOS-XE-native:native`)。その下は木のとおりにたどります。
+- `/data` の次のノードは、モジュール名を付けて書きます(`Cisco-IOS-XE-native:native`)。その下はツリーのとおりにたどります。
   リストの項目はキーで選びます(`…/interface/Loopback=210`)。
 
 メソッドは次のとおりです。
@@ -264,9 +264,9 @@ https://10.0.50.2/restconf/data/Cisco-IOS-XE-native:native/hostname
 | PATCH | 本文をリソースにマージする。本文に無いものはそのまま残る | 204 No Content(本文を返すなら 200) |
 | DELETE | リソースを消す。存在していなければならない | 204 No Content |
 
-本文と答えは、JSON(`application/yang-data+json`)か XML(`application/yang-data+xml`)の YANG のデータです。クライアントは、
-自分の本文の形式を `Content-Type` で、返してほしい形式を `Accept` で伝えます。エラーは、HTTP の状態コードと、NETCONF と同じ
-エラーのタグを持つ `ietf-restconf:errors` の本文で返ります。次は、権限の無いユーザに PE2 が返した状態コードと本文を、
+本文と答えは、JSON(`application/yang-data+json`)か XML(`application/yang-data+xml`)の YANG データです。クライアントは、
+自分の本文の形式を `Content-Type` で、返してほしい形式を `Accept` で伝えます。エラーは、HTTP ステータス コードと、NETCONF と同じ
+エラー タグを持つ `ietf-restconf:errors` の本文で返ります。次は、権限の無いユーザに PE2 が返したステータス コードと本文を、
 スクリプトが出力したものです。
 
 ```console
@@ -286,7 +286,7 @@ GET hostname -> 403 {
 RESTCONF には candidate もコミットもありません。要求は、成功した時点でそれぞれ有効になります(RFC 8040 の 1.3 節・1.4 節)。
 確定するものも、ひとまとまりで戻すものもありません。いくつもの要求でできた変更は、途中で止まることがあります。
 
-この盤面で RESTCONF があるのは PE2(IOS XE)だけです。**IOS XR には RESTCONF のサーバがありません**。IOS XRd にも
+この盤面で RESTCONF があるのは PE2(IOS XE)だけです。**IOS XR には RESTCONF サーバがありません**。IOS XRd にも
 IOS XRv 9000 にも(26.1.1)`restconf` のコマンドは無く、IOS XR のプログラマビリティのガイドも、YANG のプロトコルとして
 NETCONF と gRPC を挙げています。ブループリントは NETCONF と RESTCONF を 1 つの項目にまとめているので、このページでは 2 台の
 ルータを使い分けます。
@@ -315,14 +315,14 @@ BASE = "https://10.0.50.2/restconf/data"             ## https= PE2 の TCP 443�
 AUTH = ("noc-auto", "Noc-Auto-15")                   ## HTTP の Basic 認証。PE2 が知っていなければならないアカウント
 HDRS = {"Accept": "application/yang-data+json",      ## 答えは RESTCONF の JSON で
         "Content-Type": "application/yang-data+json"}   ## 本文は RESTCONF の JSON
-BODY = {"Cisco-IOS-XE-native:interface": {           ## いちばん外のキー= モジュール名とノード(IOS XE のネイティブのモデル)
+BODY = {"Cisco-IOS-XE-native:interface": {           ## いちばん外のキー= モジュール名とノード(IOS XE のネイティブ モデル)
             "Loopback": [{                           ## リスト。項目は JSON の配列に入る
                 "name": 0,                           ## 項目のキー= Loopback0
                 "description": "ROUTER-ID"}]}}       ## 送るリーフはこれだけ。Loopback0 のほかの部分には触らない
 r = requests.patch(f"{BASE}/Cisco-IOS-XE-native:native/interface",   ## PATCH= 本文をこのリソースにマージする
                    auth=AUTH, headers=HDRS, json=BODY,   ## json= が BODY を JSON の文字にする
                    verify=False, timeout=30)         ## verify=False= PE2 の証明書(自己署名)を確かめない
-print(r.status_code, r.text)                         ## 状態コードと答えの本文を出す
+print(r.status_code, r.text)                         ## ステータス コードと答えの本文を出す
 if r.status_code not in (200, 204):                  ## PATCH の成功のコード
     raise SystemExit("PE2 refused the change")      ## それ以外なら、エラーでスクリプトを止める
 :::
@@ -331,8 +331,8 @@ if r.status_code not in (200, 204):                  ## PATCH の成功のコー
 
 | 返ってきたもの | 意味 | 確かめるもの |
 |---|---|---|
-| 接続できない(`Connection refused`) | そのポートで誰も待っていない | 機器の HTTPS のサーバ |
-| JSON の代わりに HTML のエラー ページ | Web のサーバは答えるが、後ろの RESTCONF の用意ができていない | IOS XE では、RESTCONF を有効にしてから 1 分ほどかかる |
+| 接続できない(`Connection refused`) | そのポートで誰も待っていない | 機器の HTTPS サーバ |
+| JSON の代わりに HTML のエラー ページ | Web サーバは答えるが、後ろの RESTCONF の用意ができていない | IOS XE では、RESTCONF を有効にしてから 1 分ほどかかる |
 | 401 Unauthorized | 資格情報が受け付けられなかった | ユーザ名とパスワード |
 | 403 Forbidden、`access-denied` | ユーザは分かったが、許されていない | ユーザの権限(IOS XE では特権レベル 15) |
 | 404 Not Found | その URL には何も無い | パスの中のモジュール名・ノード名・キー |
@@ -344,17 +344,17 @@ if r.status_code not in (200, 204):                  ## PATCH の成功のコー
 
 - YANG はデータを説明する(モジュール・コンテナ・キーを持つリスト・リーフ。設定か状態か)。NETCONF と RESTCONF は、その形の
   データを XML か JSON で運ぶ。要素がどのモデルのものかは `xmlns`(または `モジュール:` の接頭辞)で分かる。
-- IOS XR のモデルは 3 系統。ネイティブ(`-cfg`・`-oper`)、統一モデル(`-um-…-cfg`。CLI に近い)、OpenConfig。NETCONF の
+- IOS XR のモデルは 3 系統。ネイティブ(`-cfg`・`-oper`)、ユニファイド モデル(`-um-…-cfg`。CLI に近い)、OpenConfig。NETCONF
   セッションの hello に一覧が出る。
-- NETCONF: 830 番へ SSH、能力を並べた hello、その後は RPC。IOS XR は candidate を編集し、`<commit>` で適用する。それは
+- NETCONF: 830 番へ SSH、ケイパビリティを並べた hello、その後は RPC。IOS XR は candidate を編集し、`<commit>` で適用する。それは
   ふつうのコミットで、履歴の Line は `netconf`。確認つきコミットは、確定する前にセッションが終わると取り消される。
 - RESTCONF: 同じモデルを HTTPS の URL として、GET・POST・PUT・PATCH・DELETE で扱う。candidate もコミットも無く、要求は
   すぐに有効になる。IOS XE にはあり、IOS XR には無い。
-- REST のスクリプトは URL・資格情報・ヘッダ・本文・メソッドで読み、失敗は状態コードで読む。
+- REST のスクリプトは URL・資格情報・ヘッダ・本文・メソッドで読み、失敗はステータス コードで読む。
 
 ## 3. 組む
 
-NETCONF の設定は 3 か所にあります。XR01 の SSH のサーバと NETCONF のエージェント、そして SRV01 のスクリプトです。図は、
+NETCONF の設定は 3 か所にあります。XR01 の SSH サーバと NETCONF エージェント、そして SRV01 のスクリプトです。図は、
 1 つの変更を SRV01 から XR01 の実行コンフィギュレーションまで追います。図の番号は、3.1 節と 3.2 節の設定例の注記の番号と
 同じです。図の番号にカーソルを置くと(スマホでは押すと)、その部分の設定が出ます。
 
@@ -366,25 +366,25 @@ rows:
     items:
       - ref: 3
         head: "**セッションを開く** `manager.connect(host=\"10.0.50.1\", port=830, …)`"
-        say: ["NMS の区画で XR01 へ SSH。サブシステム netconf を求める"]
-  - {wire: "[[SSH  10.0.50.10 → 10.0.50.1  TCP 830]] _NMS の区画(グローバル)"}
+        say: ["NMS のセグメントで XR01 へ SSH。サブシステム netconf を求める"]
+  - {wire: "[[SSH  10.0.50.10 → 10.0.50.1  TCP 830]] _NMS のセグメント(グローバル)"}
   - panel: XR01
     sub: 管理されるルータ
     items:
       - ref: 1
-        head: "**SSH のサーバ** `ssh server netconf vrf default`"
+        head: "**SSH サーバ** `ssh server netconf vrf default`"
         say: ["ここで名前を挙げた VRF で、830 番の NETCONF を待つ"]
       - ref: 2
-        head: "**NETCONF のエージェント** `netconf-yang agent` → `ssh`"
+        head: "**NETCONF エージェント** `netconf-yang agent` → `ssh`"
         say: ["セッションを引き継ぎ、hello を送る"]
       - say: ["~hello: base 1.1、:candidate、:confirmed-commit、約 850 のモデル", "~:writable-running は無い → 変更は candidate へ"]
       - ref: 4
-        head: "**candidate を編集** `<edit-config>`  統一モデルの XML"
+        head: "**candidate を編集** `<edit-config>`  ユニファイド モデルの XML"
         say: ["このクライアントの candidate にマージ。ルータはまだ変わらない"]
       - ref: 5
         head: "**コミット** `<commit/>`"
         say: ["candidate が実行コンフィギュレーションになる。1 つのコミットとして"]
-      - say: ["~実行コンフィギュレーション: Gi0/0/0/2 に説明が付く", "~コミットの履歴: Line `netconf`、Client `YANG Frame`"]
+      - say: ["~実行コンフィギュレーション: Gi0/0/0/2 に説明が付く", "~コミット履歴: Line `netconf`、Client `YANG Frame`"]
   - aside: "①が無いと(エージェントだけ)"
     say: ["~XR01 はその VRF の 830 番で NETCONF に答えない", "~→ スクリプトは接続できず、hello も来ない"]
   - aside: "④だけで⑤が無いと(編集してコミットしない)"
@@ -393,15 +393,15 @@ rows:
 
 ### 3.1 IOS XR で NETCONF を有効にする
 
-:::config fold XR01 — NMS の区画で、SSH の上の NETCONF を受け付ける
-ssh server netconf vrf default                ## ① NMS の区画がある default の VRF で、NETCONF(TCP 830)を待つ
-netconf-yang agent                            ## ② NETCONF のエージェント
- ssh                                          ## ② SSH のサーバから渡された NETCONF のセッションを受け持つ
+:::config fold XR01 — NMS のセグメントで、SSH の上の NETCONF を受け付ける
+ssh server netconf vrf default                ## ① NMS のセグメントがある default の VRF で、NETCONF(TCP 830)を待つ
+netconf-yang agent                            ## ② NETCONF エージェント
+ ssh                                          ## ② SSH サーバから渡された NETCONF セッションを受け持つ
 :::
 
-両方が要ります。`netconf-yang agent ssh` がエージェントを起こし、`ssh server netconf vrf <名前>` が、その VRF で SSH のサーバに
+両方が要ります。`netconf-yang agent ssh` がエージェントを起こし、`ssh server netconf vrf <名前>` が、その VRF で SSH サーバに
 NETCONF を受け付けさせます。VRF は少なくとも 1 つ挙げなければなりません。NMS が管理用の VRF にいるなら、その VRF を挙げます
-(例: `ssh server netconf vrf MGMT`)。CLI 用の SSH のサーバ(`ssh server vrf …`)は別の行で、NETCONF には NETCONF の行が要ります。
+(例: `ssh server netconf vrf MGMT`)。CLI 用の SSH サーバ(`ssh server vrf …`)は別の行で、NETCONF には NETCONF の行が要ります。
 
 ```console
 RP/0/RP0/CPU0:XR01#show running-config netconf-yang agent
@@ -416,14 +416,14 @@ ssh server vrf MGMT
 ssh server netconf vrf default
 ```
 
-### 3.2 Python(ncclient)から NETCONF のセッションを張る
+### 3.2 Python(ncclient)から NETCONF セッションを張る
 
-ncclient は Python 用の NETCONF のクライアントのライブラリです。`manager.connect()` が SSH のセッションを開き、hello を
+ncclient は Python 用の NETCONF クライアントのライブラリです。`manager.connect()` が SSH セッションを開き、hello を
 交わします。その後は、NETCONF の操作がそれぞれメソッドになっています。`get_config()`・`get()`・`edit_config()`・`commit()`・
 `discard_changes()`・`locked()`(`with` の間だけロックを持つ)・`close_session()` です。どれも答えを返し、`.xml` でその文字が
 取れます。
 
-先に読み、それから変えます。読むにはフィルタだけがあれば足ります。次のフィルタは、統一モデルの Loopback0 の項目を選びます。
+先に読み、それから変えます。読むにはフィルタだけがあれば足ります。次のフィルタは、ユニファイド モデルの Loopback0 の項目を選びます。
 
 ```console
 FILTER = """<interfaces xmlns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-interface-cfg">
@@ -434,12 +434,12 @@ print(m.get_config(source="running", filter=("subtree", FILTER)).xml)
 答えは 2.1 節のものが `<rpc-reply>` に包まれて返ります。まだ無い項目を尋ねると、エラーではなく空の `<data/>` が返ります。
 変更に要る XML の形を知るには、まねしたい項目を読んでみるのがいちばん早い方法です。
 
-次の変更は、CE1 への予備の線である GigabitEthernet0/0/0/2 に説明を付けます。
+次の変更は、CE1 への予備のリンクである GigabitEthernet0/0/0/2 に説明を付けます。
 
 :::config fold SRV01 — NETCONF(ncclient)で XR01 のインターフェイスに説明を付ける
-from ncclient import manager                         ## NETCONF のクライアントのライブラリ(python3-ncclient)
+from ncclient import manager                         ## NETCONF クライアントのライブラリ(python3-ncclient)
 USER, PASS = "<user>", "<password>"                  ## XR01 のアカウント。CLI と同じもの
-CONFIG = """<config>                                 ## ④ マージするもの。統一モデルの形をした <config> の要素
+CONFIG = """<config>                                 ## ④ マージするもの。ユニファイド モデルの形をした <config> の要素
  <interfaces xmlns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-interface-cfg">   ## モジュールを名前空間で示す
   <interface>                                        ## インターフェイスのリストの 1 項目を…
    <interface-name>GigabitEthernet0/0/0/2</interface-name>   ## …キーで選ぶ
@@ -447,14 +447,14 @@ CONFIG = """<config>                                 ## ④ マージするも�
   </interface>
  </interfaces>
  </config>"""
-m = manager.connect(host="10.0.50.1", port=830,      ## ③ NMS の区画で XR01 の NETCONF のポートへ SSH
+m = manager.connect(host="10.0.50.1", port=830,      ## ③ NMS のセグメントで XR01 の NETCONF のポートへ SSH
                     username=USER, password=PASS,    ## パスワードでログインし…
                     look_for_keys=False, allow_agent=False,   ## …SRV01 にある SSH の鍵は使わない
                     hostkey_verify=False,            ## ラボでは XR01 の SSH のホスト鍵を確かめない
                     device_params={"name": "iosxr"})  ## ncclient の IOS XR 向けの設定
 print(m.edit_config(target="candidate", config=CONFIG).xml)   ## ④ このクライアントの candidate へ
 print(m.commit().xml)                                ## ⑤ candidate が実行コンフィギュレーションになる
-m.close_session()                                    ## NETCONF のセッションを終える
+m.close_session()                                    ## NETCONF セッションを終える
 :::
 
 結果の例(どちらの RPC にも `<ok/>` が返る):
@@ -528,7 +528,7 @@ end
 変更も、CLI の行で表示されます。User の列は、スクリプトがログインに使ったアカウントです。「YANG Frame」は XR の YANG の
 フレームワーク(モデルのデータを設定に変える層)で、下の統計の `YFW` の行がそれです。
 
-NETCONF のエージェントにも、自分の表示があります。
+NETCONF エージェントにも、自分の表示があります。
 
 ```console
 RP/0/RP0/CPU0:XR01#show netconf-yang clients
@@ -552,12 +552,12 @@ YFW                               5|       0h  0m  0s 561ms|       0h  0m  0s   
 - `show netconf-yang statistics` は、要求を操作ごとに数えます。`edit-config` が増えたのに `commit` が増えていなければ、
   変更をためたままコミットしていません。
 - `show configuration sessions` は開いている設定のセッションを、`show configuration lock` はロックを持っている者を示します。
-  誰も作業していないときは、どちらも空のはずです。止まったままの NETCONF のセッションは、
+  誰も作業していないときは、どちらも空のはずです。止まったままの NETCONF セッションは、
   `clear netconf-yang agent session <ID>` で終えられます。
 
 ### 3.4 IOS XE で RESTCONF を有効にする
 
-IOS XE の RESTCONF には 3 つの部品があり、1 つの要求は 3 つを順に通ります。HTTPS のサーバ、その後ろの RESTCONF のサービス、
+IOS XE の RESTCONF には 3 つの部品があり、1 つの要求は 3 つを順に通ります。HTTPS サーバ、その後ろの RESTCONF のサービス、
 ユーザの確認です。図は SRV01 からの要求を 1 つ追います。番号にカーソルを置くと(スマホでは押すと)、下の設定例のその行が
 出ます。
 
@@ -570,11 +570,11 @@ rows:
     sub: IOS XE(Catalyst 8000V)
     items:
       - ref: 1
-        head: "**Web のサーバ** `ip http secure-server`"
+        head: "**Web サーバ** `ip http secure-server`"
         say: ["TCP 443 で TLS を受ける(nginx のプロセス)"]
       - ref: 2
         head: "**RESTCONF** `restconf`"
-        say: ["/restconf を受け持ち、URL と JSON を YANG のモデルに当てはめる"]
+        say: ["/restconf を受け持ち、URL と JSON を YANG モデルに当てはめる"]
       - ref: 3
         head: "**ユーザ** `username … privilege 15`"
         say: ["ユーザとパスワードを確かめる。RESTCONF を使えるのは特権レベル 15 だけ"]
@@ -584,18 +584,18 @@ rows:
   - aside: "②の直後"
     say: ["~1 分ほどは、JSON の代わりに HTML のエラー ページが返る"]
   - aside: "③が特権レベル 1 だと"
-    say: ["~403 Forbidden、エラーのタグは access-denied"]
+    say: ["~403 Forbidden、エラー タグは access-denied"]
 :::
 
 :::config fold PE2(IOS XE)— 自動化用のアカウントに RESTCONF を開く
-username noc-auto privilege 15 secret Noc-Auto-15   ## ③ 自動化用のローカルのアカウント。RESTCONF には特権レベル 15 が要る
-ip http secure-server                         ## ① HTTPS のサーバ(TCP 443)
-restconf                                      ## ② HTTPS のサーバの後ろの RESTCONF のサービス
+username noc-auto privilege 15 secret Noc-Auto-15   ## ③ 自動化用のローカル アカウント。RESTCONF には特権レベル 15 が要る
+ip http secure-server                         ## ① HTTPS サーバ(TCP 443)
+restconf                                      ## ② HTTPS サーバの後ろの RESTCONF のサービス
 no ip http server                             ## 平文の HTTP(TCP 80)は止めたまま。RESTCONF には HTTPS だけで足りる
 :::
 
-- `restconf` の後、試す前に 1 分ほど待ちます。それまでは Web のサーバが HTML のエラー ページで答えます。
-- ローカルのアカウントを使うのに、`ip http authentication local` は要りませんでした。設定ガイドの例には、RADIUS や
+- `restconf` の後、試す前に 1 分ほど待ちます。それまでは Web サーバが HTML のエラー ページで答えます。
+- ローカル アカウントを使うのに、`ip http authentication local` は要りませんでした。設定ガイドの例には、RADIUS や
   TACACS+ のユーザ向けの AAA(`aaa new-model` と `aaa authorization exec …`)もあります。そうしたユーザにも特権レベル 15 が
   要ります。
 - TCP 443 に届く人は誰でもログインを試せます。SSH と同じように、届く相手を絞ります(M2)。
@@ -624,11 +624,11 @@ ndbmand          : Running
 pubd             : Running
 ```
 
-`nginx` が Web のサーバ、`confd` がモデルを持つ仕組みです。`ncsshd` は IOS XE の NETCONF のサーバで、PE2 では RESTCONF だけを
+`nginx` が Web サーバ、`confd` がモデルを持つ仕組みです。`ncsshd` は IOS XE の NETCONF サーバで、PE2 では RESTCONF だけを
 有効にしたので動いていません。
 
 SRV01 では、curl でスクリプトと同じ要求を送り、答えをそのまま見られます。`-k` は PE2 の証明書を確かめない、`-u` はユーザを
-送る、`-H` はヘッダ、`-X` はメソッド、`-d` は本文、`-w "%{http_code}"` は状態コードを出す、です。
+送る、`-H` はヘッダ、`-X` はメソッド、`-d` は本文、`-w "%{http_code}"` はステータス コードを出す、です。
 
 ```console
 $ curl -sk -u noc-auto:Noc-Auto-15 -H "Accept: application/yang-data+json" \
@@ -679,17 +679,17 @@ $ curl -sk -u noc-auto:Noc-Auto-15 -X DELETE -o /dev/null -w "%{http_code}\n" \
   読み書きできてしまうと警告しています。NETCONF を開く前に AAA の認可(または NACM)を設定し、TCP 830 に届く相手を絞ります。
 - **RESTCONF は `restconf` の後 1 分ほどかかります。** それまで IOS XE は JSON ではなく HTML のエラー ページで答えます。
   その 1 分の間に、何かを「直そう」としないでください。
-- **特権レベル 1 では 403 です。** 特権レベル 1 のローカルのアカウントはログインでき(401 にはならない)、その後 403
+- **特権レベル 1 では 403 です。** 特権レベル 1 のローカル アカウントはログインでき(401 にはならない)、その後 403
   `access-denied` で断られます。
 - **開いたままのセッションが、ロックを持ち続けることがあります。** 保留中の確認つきコミットは実行コンフィギュレーションをロックし、CLI の
   コミットが「Another configuration session had a lock on the running configuration」で失敗します。
-  `show configuration sessions` と `show configuration lock` で見て、止まったままの NETCONF のセッションは
+  `show configuration sessions` と `show configuration lock` で見て、止まったままの NETCONF セッションは
   `clear netconf-yang agent session <ID>` で終えます。
-- **統一モデルとネイティブは別の木です。** `Cisco-IOS-XR-um-interface-cfg` も `Cisco-IOS-XR-ifmgr-cfg` もインターフェイスを
+- **ユニファイド モデルとネイティブは別のツリーです。** `Cisco-IOS-XR-um-interface-cfg` も `Cisco-IOS-XR-ifmgr-cfg` もインターフェイスを
   設定しますが、名前空間も形も違います。片方のために書いた XML は、もう片方には合いません。1 つの変更の中でも、要素ごとに
   属するモデルの `xmlns` を守ります(インターフェイスの下のアドレスは `Cisco-IOS-XR-um-if-ip-address-cfg` のもの)。
-- **1 つの機能には 1 つの系統で。** IOS XR のガイドは、機能ごとに、OpenConfig・ネイティブのモデル・CLI のどれか 1 つで
-  設定しきるよう求めています。ネイティブのモデルで設定したものは OpenConfig の見え方には出ず、OpenConfig のリーフを含む
+- **1 つの機能には 1 つの系統で。** IOS XR のガイドは、機能ごとに、OpenConfig・ネイティブ モデル・CLI のどれか 1 つで
+  設定しきるよう求めています。ネイティブ モデルで設定したものは OpenConfig の見え方には出ず、OpenConfig のリーフを含む
   コミットには `load rollback changes` が使えません。
 - **XR の hello の `ietf-restconf` はモデルで、サーバではありません。** IOS XR はこのモジュールをモデルの一覧に挙げますが、
   有効にできる RESTCONF のサービスはありません。
@@ -707,7 +707,7 @@ $ curl -sk -u noc-auto:Noc-Auto-15 -X DELETE -o /dev/null -w "%{http_code}\n" \
 このページの出力は、IOS XRd 26.1.1 と IOS XRv 9000 26.1.1(XR01。NETCONF では 2 つの動きは同じでした)、IOS XE 17.15.1a の
 Catalyst 8000V(PE2)、python3-ncclient を入れた Ubuntu 24.04(SRV01)で取得しました。
 出典: RFC 3535(2.1・3・5・6 節)、RFC 7950、RFC 7951、RFC 6241(5・6・7.2・7.5 節、8.3〜8.4 節)、RFC 6242、RFC 8040(1.3・1.4・
-2.1・3.1・4・7 節)。Cisco 8000 の Programmability Configuration Guide(累積版、2025〜2026 年: YANG のプロトコル、統一モデル、
+2.1・3.1・4・7 節)。Cisco 8000 の Programmability Configuration Guide(累積版、2025〜2026 年: YANG のプロトコル、ユニファイド モデル、
 `show netconf-yang capabilities`、OpenConfig の使い方の指針)と ASR 9000 の同ガイド(26.x)、ASR 9000 の System Management
 Configuration Guide(26.x:「Configuring Network Configuration Protocol」)、Cisco のセキュリティ アドバイザリ「Cisco IOS XR
 Software Model-Driven Programmability Behavior with AAA Authorization」(2023 年 9 月)、Cisco IOS XE 17.15.x の

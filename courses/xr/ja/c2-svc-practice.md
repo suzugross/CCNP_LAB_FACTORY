@@ -63,7 +63,7 @@
 ## サービスを並べて見る
 
 ### 課題 S-1
-<p class="tolab"><a href="/_learn?id=XRT-13&amp;step=svc1">ワークスペースで開く</a> — 読み物: <a href="c0-svc-map.html#s2-1">2.1 お客さまから見ると: ルータか、ケーブルか、スイッチか</a> · <a href="c0-svc-map.html#s2-3">2.3 相手の PE の見つけ方: 名指しするか、BGP で見つけ合うか</a> · <a href="c1-svc-assembly.html#s1-2">1.2 この答え: 下から順に 5 つの段</a> · <a href="c1-svc-assembly.html#s3">3. 段 1: PE 同士(BGP を使うサービスだけ)</a> · <a href="c1-svc-assembly.html#s4-1">4.1 L3VPN</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-13&amp;step=svc1">ワークスペースで開く</a> — 読み物: <a href="c0-svc-map.html#s2-1">2.1 お客さまから見ると: ルータか、ケーブルか、スイッチか</a> · <a href="c0-svc-map.html#s2-3">2.3 相手の PE の見つけ方: 指定するか、BGP で見つけ合うか</a> · <a href="c1-svc-assembly.html#s1-2">1.2 この答え: 下から順に 5 つの段</a> · <a href="c1-svc-assembly.html#s3">3. 段 1: PE 同士(BGP を使うサービスだけ)</a> · <a href="c1-svc-assembly.html#s4-1">4.1 L3VPN</a></p>
 
 
 顧客 D の IP VPN は、VLAN 310 でサイト 2、3、4 を接続します。
@@ -78,7 +78,7 @@
 - 各サイトは、ほかの 2 つのサイトの LAN に到達できます。
 
 ### 課題 S-2
-<p class="tolab"><a href="/_learn?id=XRT-13&amp;step=svc2">ワークスペースで開く</a> — 読み物: <a href="c0-svc-map.html#s2-3">2.3 相手の PE の見つけ方: 名指しするか、BGP で見つけ合うか</a> · <a href="c0-svc-map.html#s3-3">3.3 VPWS: 線を 1 本</a> · <a href="c1-svc-assembly.html#s4-2">4.2 VPWS(LDP の疑似回線)</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-13&amp;step=svc2">ワークスペースで開く</a> — 読み物: <a href="c0-svc-map.html#s2-3">2.3 相手の PE の見つけ方: 指定するか、BGP で見つけ合うか</a> · <a href="c0-svc-map.html#s3-3">3.3 VPWS: 疑似回線を 1 本</a> · <a href="c1-svc-assembly.html#s4-2">4.2 VPWS(LDP の疑似回線)</a></p>
 
 
 - 顧客 D のフレームを、サイト 3(VLAN 320)とサイト 4(VLAN 321)の間で 1 本のポイントツーポイントの回線
@@ -86,7 +86,7 @@
 - この回線は BGP を使いません。
 
 ### 課題 S-3
-<p class="tolab"><a href="/_learn?id=XRT-13&amp;step=svc3">ワークスペースで開く</a> — 読み物: <a href="c0-svc-map.html#s2-2">2.2 PE が覚えるもの</a> · <a href="c0-svc-map.html#s2-3">2.3 相手の PE の見つけ方: 名指しするか、BGP で見つけ合うか</a> · <a href="c1-svc-assembly.html#s4-3">4.3 VPLS</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-13&amp;step=svc3">ワークスペースで開く</a> — 読み物: <a href="c0-svc-map.html#s2-2">2.2 PE が覚えるもの</a> · <a href="c0-svc-map.html#s2-3">2.3 相手の PE の見つけ方: 指定するか、BGP で見つけ合うか</a> · <a href="c1-svc-assembly.html#s4-3">4.3 VPLS</a></p>
 
 
 - 顧客 D のフレームを、サイト 1、2、3(VLAN 330)の間で 1 つの LAN(172.31.33.0/24)として運んでください。VPN ID **330**、
@@ -94,7 +94,7 @@
 - どのサイトも、ほかの 2 つのサイトに到達できます。
 
 ### 課題 S-4
-<p class="tolab"><a href="/_learn?id=XRT-13&amp;step=svc4">ワークスペースで開く</a> — 読み物: <a href="c0-svc-map.html#s2-2">2.2 PE が覚えるもの</a> · <a href="c0-svc-map.html#s2-3">2.3 相手の PE の見つけ方: 名指しするか、BGP で見つけ合うか</a> · <a href="c1-svc-assembly.html#s3">3. 段 1: PE 同士(BGP を使うサービスだけ)</a> · <a href="c1-svc-assembly.html#s4-4">4.4 EVPN の E-LAN</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-13&amp;step=svc4">ワークスペースで開く</a> — 読み物: <a href="c0-svc-map.html#s2-2">2.2 PE が覚えるもの</a> · <a href="c0-svc-map.html#s2-3">2.3 相手の PE の見つけ方: 指定するか、BGP で見つけ合うか</a> · <a href="c1-svc-assembly.html#s3">3. 段 1: PE 同士(BGP を使うサービスだけ)</a> · <a href="c1-svc-assembly.html#s4-4">4.4 EVPN の E-LAN</a></p>
 
 
 - 顧客 D のフレームを、サイト 1、2、3(VLAN 340)の間で 1 つの LAN(172.31.34.0/24)として運んでください。EVPN インスタンス
@@ -107,7 +107,7 @@
   エッジのそれぞれへ 1 つずつコピーを送ります。
 
 ### 課題 S-5
-<p class="tolab"><a href="/_learn?id=XRT-13&amp;step=svc5">ワークスペースで開く</a> — 読み物: <a href="c0-svc-map.html#s2-3">2.3 相手の PE の見つけ方: 名指しするか、BGP で見つけ合うか</a> · <a href="c1-svc-assembly.html#s4-5">4.5 EVPN-VPWS</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-13&amp;step=svc5">ワークスペースで開く</a> — 読み物: <a href="c0-svc-map.html#s2-3">2.3 相手の PE の見つけ方: 指定するか、BGP で見つけ合うか</a> · <a href="c1-svc-assembly.html#s4-5">4.5 EVPN-VPWS</a></p>
 
 
 - 顧客 D のフレームを、サイト 1(VLAN 350)とサイト 2(VLAN 350)の間で 1 本のポイントツーポイントの回線

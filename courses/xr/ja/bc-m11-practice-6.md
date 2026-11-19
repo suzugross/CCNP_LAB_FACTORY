@@ -7,7 +7,7 @@
 ## M11 追補 — E-LAN、マルチホーム、イーサネット OAM
 
 ### 課題 M11-9
-<p class="tolab"><a href="/_learn?id=XRT-12&amp;step=m11t9">ワークスペースで開く</a> — 読み物: <a href="bb-m11-ethernet-oam.html#s2-1">2.1 メンテナンス ドメインとレベル</a> · <a href="bb-m11-ethernet-oam.html#s2-2">2.2 メンテナンス アソシエーションと MEP</a> · <a href="bb-m11-ethernet-oam.html#s2-3">2.3 連続性チェック: CCM と寿命</a> · <a href="bb-m11-ethernet-oam.html#s2-5">2.5 Y.1731: 遅延を測る</a> · <a href="bb-m11-ethernet-oam.html#s3-1">3.1 設定</a> · <a href="bb-m11-ethernet-oam.html#s3-3">3.3 うまくいかないとき</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-12&amp;step=m11t9">ワークスペースで開く</a> — 読み物: <a href="bb-m11-ethernet-oam.html#s2-1">2.1 メンテナンス ドメインとレベル</a> · <a href="bb-m11-ethernet-oam.html#s2-2">2.2 メンテナンス アソシエーションと MEP</a> · <a href="bb-m11-ethernet-oam.html#s2-3">2.3 連続性チェック: CCM とライフタイム</a> · <a href="bb-m11-ethernet-oam.html#s2-5">2.5 Y.1731: 遅延を測る</a> · <a href="bb-m11-ethernet-oam.html#s3-1">3.1 設定</a> · <a href="bb-m11-ethernet-oam.html#s3-3">3.3 うまくいかないとき</a></p>
 
 
 プロバイダーは、顧客のトラフィックとは別に、E-Line 130(サイト 1 ⇔ サイト 3)そのものを CFM で監視したいと考えています。

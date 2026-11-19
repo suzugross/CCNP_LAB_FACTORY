@@ -1,0 +1,80 @@
+
+######## 09:59:41 base: 構築直後(IPv4 のマルチキャストなし)。router pim だけを P1 に入れても IF は有効にならない
+show pim interface
+Wed Nov 18 09:59:42.432 UTC
+No interfaces found for VRF default.
+RP/0/RP0/CPU0:PE2#
+show igmp interface
+Wed Nov 18 09:59:42.833 UTC
+
+Loopback0 is up, line protocol is up
+  Internet address is 10.255.0.2/32
+  IGMP_AFD is disabled on interface
+  Multihoming is disabled on interface [Stale : False]
+  Location is 0xe
+GigabitEthernet0/0/0/0 is up, line protocol is up
+  Internet address is 10.0.12.2/24
+  IGMP_AFD is disabled on interface
+  Multihoming is disabled on interface [Stale : False]
+  Location is 0x6
+GigabitEthernet0/0/0/1 is up, line protocol is up
+  Internet address is 10.0.2.2/24
+  IGMP_AFD is disabled on interface
+  Multihoming is disabled on interface [Stale : False]
+  Location is 0xe
+GigabitEthernet0/0/0/2 is up, line protocol is up
+  Internet address is 10.0.4.2/24
+  IGMP_AFD is disabled on interface
+  Multihoming is disabled on interface [Stale : False]
+  Location is 0xe
+GigabitEthernet0/0/0/3 is up, line protocol is up
+  Internet address is 192.168.2.254/24
+  IGMP_AFD is disabled on interface
+  Multihoming is disabled on interface [Stale : False]
+  Location is 0xe
+RP/0/RP0/CPU0:PE2#
+show running-config multicast-routing
+Wed Nov 18 09:59:43.238 UTC
+multicast-routing
+ address-family ipv6
+  interface all enable
+ !
+!
+
+RP/0/RP0/CPU0:PE2#
+configure
+Wed Nov 18 09:59:44.985 UTC
+RP/0/RP0/CPU0:P1(config)#
+router pim
+RP/0/RP0/CPU0:P1(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:P1(config-pim-default-ipv4)#
+rp-address 10.255.0.11
+RP/0/RP0/CPU0:P1(config-pim-default-ipv4)#
+commit
+Wed Nov 18 09:59:46.835 UTC
+RP/0/RP0/CPU0:P1(config-pim-default-ipv4)#
+show configuration failed
+Wed Nov 18 09:59:47.254 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:P1(config-pim-default-ipv4)#
+end
+RP/0/RP0/CPU0:P1#
+show pim interface
+Wed Nov 18 09:59:50.313 UTC
+No interfaces found for VRF default.
+RP/0/RP0/CPU0:P1#
+show running-config router pim
+Wed Nov 18 09:59:50.718 UTC
+router pim
+ address-family ipv4
+  rp-address 10.255.0.11
+ !
+ address-family ipv6
+  rp-address 2001:db8:255::11
+  accept-register HEADEND-SOURCES
+ !
+!
+
+RP/0/RP0/CPU0:P1#

@@ -1,4 +1,4 @@
-# M12 — 実践(1) 印をどこまで信じるか
+# M12 — 実践(1) マーキングをどこまで信じるか
 
 ラボ **XRT-14** の課題です。ラボから離れた場所でも読めるように、ここに載せています。
 取り組むのはラボのワークスペースです。**Tasks** タブに、課題ごとの確認ボタン、段階式のヒント、
@@ -69,7 +69,7 @@
 ## M12 — データプレーンの保護と QoS
 
 ### 課題 M12-1
-<p class="tolab"><a href="/_learn?id=XRT-14&amp;step=m12t1">ワークスペースで開く</a> — 読み物: <a href="d0-m12-marking.html#s2-2">2.2 信頼の境界</a> · <a href="d0-m12-marking.html#s2-3">2.3 ラベルの上の印: EXP</a> · <a href="d0-m12-marking.html#s2-4">2.4 線の上で追う: 方策が何も無いとき</a> · <a href="d0-m12-marking.html#s3-1">3.1 MQC の部品</a> · <a href="d0-m12-marking.html#s3-2">3.2 入口の PE: 分類して EXP を付ける</a> · <a href="d0-m12-marking.html#s3-5">3.5 落とし穴</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-14&amp;step=m12t1">ワークスペースで開く</a> — 読み物: <a href="d0-m12-marking.html#s2-2">2.2 信頼境界</a> · <a href="d0-m12-marking.html#s2-3">2.3 ラベルの上のマーキング: EXP</a> · <a href="d0-m12-marking.html#s2-4">2.4 リンクの上で追う: ポリシーが何も無いとき</a> · <a href="d0-m12-marking.html#s3-1">3.1 MQC の部品</a> · <a href="d0-m12-marking.html#s3-2">3.2 入口の PE: 分類して EXP を付ける</a> · <a href="d0-m12-marking.html#s3-5">3.5 落とし穴</a></p>
 
 
 顧客 A との契約では、EF を付けてよいのは音声網(10.46.0.0/16)宛ての通信だけです。サイト 1 の PC は、LAN 宛ての通信にも

@@ -78,7 +78,7 @@ show コマンドも名前に従います。`show ospfv3 neighbor`、`show ospfv
 
 - M0 のネットワーク タイプの罠は同じように働きます。XR01 が既定のブロードキャスト、RT01 がポイントツーポイントだと、
   隣接関係は FULL/DR になり、ルートは入りません。
-- IPv6 のルーティング テーブルでは、OSPFv3 のルートはプロセス名 `ospf` で表示されます。
+- IPv6 ルーティング テーブルでは、OSPFv3 のルートはプロセス名 `ospf` で表示されます。
 
 ```console
 RP/0/RP0/CPU0:XR01#show route ipv6 2001:db8::2/128

@@ -1,0 +1,37 @@
+# M14-5: BSR= 239.16/15。候補 RP の並び= P1・PE3・PE4、BSR= PE1。
+# 確認は poc/xr/gen_grading_xrt16.py で組んだ(中身を直したら組み直す)。確認ごとに範囲の中から乱数でグループを選ぶ(topologies/mcast_probe.py)。
+problem: XRT-16
+total_points: 100
+checks:
+- name: M14-5 PE1 is the BSR on PE2 and PE4, and P1 is a candidate BSR that is not elected
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --settle 0 --show 'PE2:show pim bsr election' --show 'PE4:show ip pim bsr-router' --show 'P1:show pim bsr election'
+  raw:
+  - regex: == SHOW PE2:[\s\S]*?Accept-Pref\s+\S+\s+\S+\s+10\.255\.0\.1 \[\d+, \d+\]
+  - regex: 'BSR address: 10\.255\.0\.1 '
+  - regex: == SHOW P1:[\s\S]*?Not-Elected/\S+\s+\S+\s+\S+\s+10\.255\.0\.1 \[\d+, \d+\]\s+10\.255\.0\.11 \[\d+, \d+\]
+  points: 30
+- name: M14-5 PE2 and PE4 learn three candidate RPs for 239.16.0.0/15 through BSR, ranked P1, PE3, PE4
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --settle 0 --rporder 'PE2:239.16.0.0/15' --rporder 'PE4:239.16.0.0/15'
+  raw:
+  - regex: == RPORDER PE2 239\.16\.0\.0/15 10\.255\.0\.11,10\.255\.0\.3,10\.255\.0\.4\n
+  - regex: == RPORDER PE4 239\.16\.0\.0/15 10\.255\.0\.11,10\.255\.0\.3,10\.255\.0\.4\n
+  points: 40
+- name: M14-5 A TV channel reaches RCV2 and RCV3 with P1 as the RP learned through BSR (PE1, PE2, PE3, PE4)
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=239.16.0.0/16 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ip igmp join-group
+    {G};;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 192.168.2.1 --from 192.168.3.1 --show 'PE1:show pim group-map {G}' --show 'PE2:show pim group-map {G}' --show 'PE3:show pim group-map
+    {G}' --show 'PE4:show ip mroute {G} | include RP' --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no
+    ip igmp version;;end'
+  raw:
+  - regex: == REPLY SRC1 192\.168\.2\.1 (?:8|9|10)\n
+  - regex: == REPLY SRC1 192\.168\.3\.1 (?:8|9|10)\n
+  - regex: == SHOW PE1:[\s\S]*?239\.16\.0\.0/15\*\s+SM\s+bsr\+?\s+\d+\s+10\.255\.0\.11\s[\s\S]*== SHOW PE2
+  - regex: == SHOW PE2:[\s\S]*?239\.16\.0\.0/15\*\s+SM\s+bsr\+?\s+\d+\s+10\.255\.0\.11\s[\s\S]*== SHOW PE3
+  - regex: == SHOW PE3:[\s\S]*?239\.16\.0\.0/15\*\s+SM\s+bsr\+?\s+\d+\s+10\.255\.0\.11\s[\s\S]*== SHOW PE4
+  - regex: \(\*, 239\.16\.\d+\.\d+\), [^\n]*RP 10\.255\.0\.11
+  points: 30

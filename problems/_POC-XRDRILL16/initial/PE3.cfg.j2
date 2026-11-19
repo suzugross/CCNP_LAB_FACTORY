@@ -1,0 +1,61 @@
+!! XRT-16 PE3(XRd 26.1.1)= 共用の受信 LAN(SW1)の XR 側の PE。ユニキャストの土台＋前任者の IPv6 の試行。LAN のリンクローカルは固定。
+interface Loopback0
+ ipv4 address 10.255.0.3 255.255.255.255
+ ipv6 address 2001:db8:255::3/128
+!
+interface {{ links[3] }}
+ description to P1
+ ipv4 address 10.0.3.3 255.255.255.0
+ ipv6 address 2001:db8:3::3/64
+ no shutdown
+!
+interface {{ links[4] }}
+ description shared receiver LAN (SW1)
+ ipv4 address 192.168.3.252 255.255.255.0
+ ipv6 address 2001:db8:100:3::252/64
+ ipv6 address fe80::252 link-local
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0003.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ address-family ipv6 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[4] }}
+  passive
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+!
+!! --- 前任者の作業(M14-6)= IPv6 のマルチキャストの試行。届いていない。IPv4 のマルチキャストは何もない ---
+multicast-routing
+ address-family ipv6
+  interface all enable
+ !
+!
+router pim
+ address-family ipv6
+  rp-address 2001:db8:255::11
+ !
+!

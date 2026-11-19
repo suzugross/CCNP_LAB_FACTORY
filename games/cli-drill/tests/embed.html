@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>CLI drill embed test</title>
+<!--
+  読み物の区切り(:::drill)から素振り台を開く試験(BL-278)。cli_drill.py embedtest が見えないブラウザで開く。
+  ?p=<reading/ からの道>(例 xr/10-m1-managing-configuration.html)&lang=en|ja
+  同じオリジンで読み物のページを枠に開き、その言語の版の区切りのボタンを 1 つずつ押して、枠の中の素振り台を操作する:
+    枠が開く・埋め込みの形・枠の URL の言語・お題の言語(英語なら日本語が無い)・枠の高さ= 中身の高さ・
+    答えの例を打って「確かめる」が通る・結果が出た分だけ枠が伸びる・同じボタンで閉じて開き直すと中身が残る・
+    2 版の子の数がそろう(言語の切替の位置合わせ)・区切りの中に用語集の札が無い。
+  結果は #selftest(末尾の行が NG <数>)。
+-->
+<style>body{margin:0}iframe{border:0;width:1000px;height:1250px}</style>
+</head>
+<body>
+<iframe id="f"></iframe>
+<pre id="selftest" hidden></pre>
+<script>
+(async function () {
+  const Q = new URLSearchParams(location.search), want = Q.get('lang') || 'ja', page = Q.get('p');
+  const out = []; let ng = 0;
+  const say = (ok, n, d) => { if (!ok) ng++; out.push((ok ? 'OK ' : 'NG ') + n + (d !== undefined && d !== '' ? ': ' + d : '')); };
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, ms) => { for (let t = 0; t < (ms || 10000); t += 100) { try { if (fn()) return true; } catch (e) {} await wait(100); } return false; };
+  const CJK = /[぀-ヿ一-鿿]/;
+  const done = () => { const el = $('selftest'); el.textContent = out.concat([`NG ${ng}`]).join('\n'); el.hidden = false; };
+  function $(id) { return document.getElementById(id); }
+  try { localStorage.setItem('ccnp-lang', want); } catch (e) {}
+  const f = $('f');
+  await new Promise(r => { f.onload = r; f.src = '/_read/' + page; });
+  try {
+    const D = f.contentDocument;
+    const lang = D.body.dataset.lang || D.documentElement.lang || 'ja';
+    const two = !!D.querySelector('.lv[data-l]');
+    const root = two ? D.querySelector(`.lv[data-l="${lang}"]`) : D.body;
+    say(lang === want || !two, 'ページの言語', lang);
+    const boxes = [...root.querySelectorAll('.drillbreak')];
+    say(boxes.length > 0, '区切りがある', boxes.length);
+    for (const box of boxes) {
+      say(box.dataset.dl === lang, '区切りの言語', box.dataset.dl);
+      const fr = box.querySelector('iframe');
+      for (const b of box.querySelectorAll('button[data-drill]')) {
+        const id = b.dataset.drill;
+        b.click();
+        const ok = await until(() => !fr.hidden && fr.contentDocument.location.search.includes('drill=' + id)
+          && fr.contentDocument.getElementById('ttx').textContent);
+        say(ok, `${id} 枠が開く`);
+        if (!ok) continue;
+        const W = fr.contentWindow, DD = fr.contentDocument;
+        say(fr.src.includes(`drill=${id}&embed=1&lang=${lang}`) && DD.body.classList.contains('embed'), `${id} 埋め込みの形と言語`, fr.src);
+        const task = DD.getElementById('ttx').textContent;
+        say(lang !== 'en' || !CJK.test(task), `${id} お題の言語`, task.slice(0, 50));
+        await until(() => Math.abs(parseInt(fr.style.height) - DD.querySelector('main').getBoundingClientRect().height) < 12, 3000);
+        const h0 = parseInt(fr.style.height), main = DD.querySelector('main').getBoundingClientRect().height;
+        say(Math.abs(h0 - main) < 12, `${id} 枠の高さ= 中身の高さ`, `${h0} / ${Math.round(main)}`);
+        const inp = DD.getElementById('in');
+        for (const l of DD.getElementById('anstx').textContent.split('\n')) {
+          inp.value = l;
+          inp.dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        }
+        DD.getElementById('check').click();
+        say(!!DD.querySelector('#res .head.ok'), `${id} 答えの例で確かめが通る`, DD.getElementById('res').textContent.slice(0, 100));
+        if (lang === 'en') {
+          const bad = (DD.getElementById('out').textContent + DD.getElementById('res').textContent).match(/.*[぀-ヿ一-鿿].*/);
+          say(!bad, `${id} 端末と結果に日本語が無い`, bad ? bad[0] : '');
+        }
+        const grew = await until(() => parseInt(fr.style.height) > h0, 3000);
+        say(grew, `${id} 結果が出た分だけ枠が伸びる`, `${h0} → ${fr.style.height}`);
+      }
+      // 開いているお題をもう一度押すと閉じ、もう一度押すと同じ中身で開く
+      const last = [...box.querySelectorAll('button[data-drill]')].pop();
+      const doc = fr.contentDocument, res = doc.getElementById('res').textContent;
+      last.click();
+      say(fr.hidden && last.getAttribute('aria-pressed') === 'false', '同じボタンで閉じる');
+      last.click();
+      say(!fr.hidden && fr.contentDocument === doc && doc.getElementById('res').textContent === res, '開き直すと中身は残る');
+      last.click();
+    }
+    if (two) {
+      const nA = D.querySelector('.lv[data-l="en"]').children.length, nB = D.querySelector('.lv[data-l="ja"]').children.length;
+      say(nA === nB, '2 版の子の数がそろう', `${nA} / ${nB}`);
+      say(D.querySelectorAll('.lv[data-l="en"] .drillbreak').length === D.querySelectorAll('.lv[data-l="ja"] .drillbreak').length, '2 版の区切りの数がそろう');
+    }
+    say(!D.querySelector('.drillbreak .gl'), '区切りの中に用語集の札が無い');
+  } catch (e) { say(false, '例外', String(e && e.stack || e)); }
+  done();
+})();
+</script>
+</body>
+</html>

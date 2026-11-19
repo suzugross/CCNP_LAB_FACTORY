@@ -4,7 +4,8 @@ The previous page changed the router's configuration through data models. This p
 router's state out, as a stream. The router reads its own counters at a set interval and pushes them to a collector,
 or a collector subscribes to them with gNMI. Both run over gRPC and are protected with TLS. It covers 5.7 of the
 blueprint (configuring dial-in and dial-out with gRPC and gNMI, TCP, TLS and mutual TLS certificates). The board is
-XRT-15; the part this page uses is drawn at the start of section 2.
+XRT-15; the part this page uses is drawn at the start of section 2. Certificates and TLS from the ground up are on
+the previous page.
 
 ## 1. What it is good for
 

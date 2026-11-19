@@ -1,0 +1,29 @@
+# M14-2: 239.17 を共有ツリーに留める(PE2 と PE4)・239.16 は切り替える。
+# 確認は poc/xr/gen_grading_xrt16.py で組んだ(中身を直したら組み直す)。確認ごとに範囲の中から乱数でグループを選ぶ(topologies/mcast_probe.py)。
+problem: XRT-16
+total_points: 100
+checks:
+- name: M14-2 An ultra-HD channel (239.17.0.0/16) reaches RCV2 and RCV3 and stays on the shared tree (no source state on PE2 and PE4)
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=239.17.0.0/16 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ip igmp join-group
+    {G};;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 192.168.2.1 --from 192.168.3.1 --show 'PE2:show pim topology {G} | include ,239' --show 'PE4:show ip mroute {G} | begin \(' --post-cli
+    'RCV2:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end'
+  raw:
+  - regex: == REPLY SRC1 192\.168\.2\.1 (?:8|9|10)\n
+  - regex: == REPLY SRC1 192\.168\.3\.1 (?:8|9|10)\n
+  - regex: '== SHOW PE2: [\s\S]*\(\*,239\.17\.\d+\.\d+\) SM'
+  - regex: \(\*, 239\.17\.\d+\.\d+\), [^\n]*RP 10\.255\.0\.11
+  - not_regex: \(192\.168\.1\.1, ?239\.17\.
+  points: 60
+- name: M14-2 A TV channel (239.16.0.0/16) still switches to the shortest-path tree on PE2, over the direct link to PE1
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=239.16.0.0/16 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ip igmp join-group
+    {G};;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 192.168.2.1 --from 192.168.3.1 --show 'PE2:show pim topology {G}' --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ip igmp
+    join-group {G};;no ip igmp version;;end' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end'
+  raw:
+  - regex: == REPLY SRC1 192\.168\.2\.1 (?:8|9|10)\n
+  - regex: == REPLY SRC1 192\.168\.3\.1 (?:8|9|10)\n
+  - regex: '\(192\.168\.1\.1,239\.16\.\d+\.\d+\)SPT SM[^\n]*\n[^\n]*RPF: GigabitEthernet0/0/0/0,10\.0\.12\.1'
+  points: 40

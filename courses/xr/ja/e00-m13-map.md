@@ -4,20 +4,21 @@
 Service Provider のブループリントでは 5.0 の自動化とアシュアランスにあたります。ラボで設定するのは、5.7 の gRPC と gNMI
 (ダイヤルイン/ダイヤルアウト、TCP、TLS と mTLS の証明書)、5.8 の NetFlow と IPFIX、5.9 の NETCONF と RESTCONF、5.10 の
 SNMP v2c と v3 の 4 つです。5.1 のプログラマブルな API、5.2 の REST API で機器を設定する外部スクリプトの読み方、5.4 の YANG も
-ページの中で説明します。5.3(NSO)、5.5(Ansible と Terraform)、5.6(セキュア ZTP)は付録で扱い、付録では 5.1 と 5.4 も掘り下げます。単元は 4 つのページと付録に
+ページの中で説明します。5.3(NSO)、5.5(Ansible と Terraform)、5.6(セキュア ZTP)は付録で扱い、付録では 5.1 と 5.4 も掘り下げます。単元は 5 つのページと付録に
 分かれています。
 
 | ページ | 中身 | 課題 |
 |---|---|---|
-| このページ | NMS とルータの間の仕事(設定する・状態を見る・流れを数える・出来事を知る)、モデル・エンコード・プロトコル、接続をどちらが始めるか、TLS で誰が何を証明するか | — |
-| モデルで設定する: YANG・NETCONF・RESTCONF | データ モデルで何が嬉しいか、IOS XR の YANG のモデルの種類、NETCONF の candidate と commit、IOS XE の RESTCONF、スクリプトの読み方 | M13-1、M13-2 |
+| このページ | SRV01 とルータの間の 7 本の線と、どの線でも見る 3 つ(どちらがかけるか・何のための線か・鍵をかけるか)、モデル・エンコード・プロトコル | — |
+| モデルで設定する: YANG・NETCONF・RESTCONF | データ モデルで何が嬉しいか、IOS XR の YANG モデルの種類、NETCONF の candidate と commit、IOS XE の RESTCONF、スクリプトの読み方 | M13-1、M13-2 |
+| 証明書と TLS を土台から | 鍵ペア・署名・証明書・CA、TLS で確かめる 4 つ、相互 TLS と線ごとの役 | — |
 | 状態を流す: gNMI・テレメトリ・TLS | gNMI で状態を読む、ルータが自分から状態を送る(ダイヤルアウト)、証明書と相互 TLS | M13-3、M13-4 |
-| フローを数え、問い合わせる: NetFlow/IPFIX と SNMP | フローのレコードとそのエクスポート、SNMPv2c と v3、トラップ | M13-5、M13-6 |
+| フローを数え、問い合わせる: NetFlow/IPFIX と SNMP | フロー レコードとそのエクスポート、SNMPv2c と v3、トラップ | M13-5、M13-6 |
 | 付録 | プログラマブルなインタフェースの比較、YANG の掘り下げ、NSO、Ansible と Terraform、セキュア ZTP | — |
 
-ラボは XRT-15 です。XR01(IOS XRd)と PE2(Catalyst 8000V、IOS XE)がプロバイダー エッジで、コアのリンクでつながり、IS-IS を
+ラボは XRT-15 です。XR01(IOS XRd)と PE2(Catalyst 8000V、IOS XE)がプロバイダー エッジで、コア リンクでつながり、IS-IS を
 動かしています。CE1 は顧客 A で、PE2 を通って送ります。SRV01 はネットワーク管理ステーション(NMS)で、道具と受け手を持つ
-Linux のサーバです。3 台は、ただのスイッチである SW1 を介して、NMS の区画でつながっています。
+Linux のサーバです。3 台は、ただのスイッチである SW1 を介して、NMS のセグメントでつながっています。
 
 :::topo
 nodes:
@@ -38,9 +39,9 @@ links:
 このラボの IOS XR(XRd。XRv 9000 も同じ)では RESTCONF と NetFlow を使えないので、その 2 つの仕事は PE2 で行います。
 ほかはすべて XR01 で行います。
 
-自動化では、YANG・NETCONF・gNMI・テレメトリ・ダイヤルアウト・TLS と、用語が一度にたくさん出てきます。いくつかは同じものの
-別の層を指し、いくつかは 2 つ以上の仕事に出てきます。次のページから細部に入る前に、このページでは、それぞれがどの仕事に
-属し、どの層にあたり、どちらの側が始めるのかを並べます。
+自動化では、YANG・NETCONF・gNMI・テレメトリ・ダイヤルアウト・TLS と、用語が一度にたくさん出てきます。ただ、この盤面で
+起きていることは、SRV01 とルータの間に線が 7 本あるだけです。このページでは、まず線を並べ(2.1 節)、どの線でも見る 3 つの
+問いに答え(2.2〜2.4 節)、そのあとで用語と層を並べます。
 
 ## 1. 何が嬉しいのか
 
@@ -49,7 +50,7 @@ links:
 この盤面では、SRV01 にいる NMS のチームが、XR01 と PE2 に 4 つのことを求めています。
 
 - 設定を変える: たとえば、顧客のサービス用のループバックを、毎回同じやり方で追加する。
-- 状態を知る: コアのリンクは上がっているか、直近の 10 秒でパケットをいくつ運んだか。
+- 状態を知る: コア リンクは上がっているか、直近の 10 秒でパケットをいくつ運んだか。
 - 誰が何を送っているかを知る: 顧客 A のどのホストが、PE2 を通って誰と、どれだけ通信しているか。
 - 何かが起きたら、すぐに知る: たとえばリンクが落ちたとき、次に見に行くのを待たずに。
 
@@ -73,43 +74,137 @@ CLI は人が読むために書かれています。ログインしてコマン�
 
 - **設定する**: 設定のモデルを通して、トランザクションとして。NETCONF・RESTCONF・gNMI の Set。ルータは変更をまとめて
   確かめ、まとめてコミットするか、まとめて拒否します。
-- **状態を見る**: ルータに送らせる。テレメトリで、時間ごとに、または値が変わったときに。単純な用途には SNMP のポーリングが
+- **状態を見る**: ルータに送らせる。テレメトリで、時間ごとに、または値が変わったときに。単純な用途には SNMP ポーリングが
   残ります。
-- **流れを数える**: ルータがエクスポートするフローのレコードで。NetFlow v9 と IPFIX。
-- **出来事を知る**: ルータがすぐに送ってくる知らせで。SNMP のトラップと syslog。
+- **流れを数える**: ルータがエクスポートするフロー レコードで。NetFlow v9 と IPFIX。
+- **出来事を知る**: ルータがすぐに送ってくる知らせで。SNMP トラップと syslog。
 
 設定する道と状態を見る道では、データは YANG で書かれたモデルで定義されます。プログラムは画面のテキストでなく、名前と型の
 あるデータを扱えるようになり、同じモデルを別々のプロトコルで運べます。このページの残りでは、部品を順に並べます。
 
-## 2. 仕組み: NMS とルータの間の道
+## 2. 仕組み: SRV01 とルータの間の線
 
-### 2.1 4 つの仕事と、その道
+### 2.1 線は 7 本
+
+M13 で扱うのは、SRV01 とルータの間の線です。図の矢印は、接続を始める側から待ち受ける側へ向いています。SRV01 は 2 回
+出てきます。左はつなぎに行く道具、右は待ち受ける受け手です。矢印の札は、その線を使う課題と、何のための線かです。
+
+```mermaid
+flowchart LR
+  subgraph IN["SRV01 がかける"]
+    c1["ncclient"]
+    c2["Python の requests"]
+    c3["gnmic"]
+    c4["snmpget、snmpwalk"]
+  end
+  subgraph DEV["ルータ"]
+    s1["XR01: NETCONF<br/>SSH、TCP 830"]
+    s2["PE2: RESTCONF<br/>HTTPS、TCP 443"]
+    s3["XR01: gNMI<br/>TLS、TCP 57400"]
+    s4["XR01: SNMP エージェント<br/>UDP 161"]
+    o1["XR01: テレメトリの<br/>ダイヤルアウト"]
+    o2["PE2: フロー<br/>エクスポータ"]
+    o3["XR01: SNMP トラップ"]
+  end
+  subgraph OUT["SRV01 が待ち受ける"]
+    r1["telegraf<br/>TLS、TCP 57500"]
+    r2["nfcapd<br/>UDP 4739"]
+    r3["snmptrapd<br/>UDP 162"]
+  end
+  c1 -->|"M13-1 設定を変える"| s1
+  c2 -->|"M13-2 設定を変える"| s2
+  c3 -->|"M13-3 状態を読む"| s3
+  c4 -->|"M13-6 状態を読む"| s4
+  c4 ~~~ o1
+  c4 ~~~ o2
+  c4 ~~~ o3
+  o1 -->|"M13-4 状態を送る"| r1
+  o2 -->|"M13-5 フローを送る"| r2
+  o3 -->|"M13-6 イベントを知らせる"| r3
+```
+
+| 線(課題) | かける側 → 待ち受ける側 | 何のため | 鍵 |
+|---|---|---|---|
+| NETCONF(M13-1) | SRV01(ncclient)→ XR01 の TCP 830 | 設定を変える | SSH |
+| RESTCONF(M13-2) | SRV01(Python の requests)→ PE2 の TCP 443 | 設定を変える | TLS(HTTPS) |
+| gNMI(M13-3) | SRV01(gnmic)→ XR01 の TCP 57400 | 状態を読む | TLS(相互 TLS も) |
+| SNMP ポーリング(M13-6) | SRV01(snmpget・snmpwalk)→ XR01 の UDP 161 | 状態を読む | なし(v2c) |
+| テレメトリのダイヤルアウト(M13-4) | XR01 → SRV01 の TCP 57500(telegraf) | 状態を送る | TLS |
+| フロー エクスポート(M13-5) | PE2 → SRV01 の UDP 4739(nfcapd) | 流れを数える | なし |
+| SNMP トラップ(M13-6) | XR01 → SRV01 の UDP 162(snmptrapd) | 出来事を知らせる | SNMPv3 の認証と暗号化 |
+
+どの線でも、見るところは 3 つです。どちらがかけるか(2.2 節)、何のための線か(2.3 節)、鍵をかけるか(2.4 節)です。YANG・XML・
+JSON・GPB は、線の上を流れる中身の書き方で、2.5 節で並べます。最初は、YANG が帳票の様式、XML・JSON・GPB がその帳票の
+書き方、とだけ覚えておけば足ります。線が 7 本あっても、問いは 3 つのままです。
+
+### 2.2 どちらがかけるか: ダイヤルインとダイヤルアウト、ポーリングとプッシュ
+
+2 つの問いがよく混ざります。1 つ目は**接続を開くのはどちらか**です。ダイヤルインでは、NMS がルータの待ち受けるポートへ
+つなぎます。ダイヤルアウトでは、ルータが NMS の待ち受けるポートへつなぐか、UDP ならただ送ります。
+2 つ目は**データが流れる時を決めるのはどちらか**です。ポーリングでは NMS が毎回問い合わせ、プッシュではルータが
+時間ごとに、または値が変わったときに送ります。
+
+| | ポーリング: NMS が毎回問い合わせる | プッシュ: ルータが自分から送る |
+|---|---|---|
+| **ダイヤルイン**: NMS が接続を開く | SNMP の get と walk、NETCONF の `<get>`、RESTCONF の GET、gNMI の Get、ONCE か POLL の Subscribe | STREAM の gNMI Subscribe(n 秒ごとの SAMPLE か、ON_CHANGE) |
+| **ダイヤルアウト**: ルータが開く、またはただ送る | — | テレメトリのダイヤルアウト、IPFIX のエクスポート、SNMP トラップ、syslog |
+
+向きが違うと、仕事を置く場所が変わります。ダイヤルインでは、ルータの設定は小さく、待ち受けを開いて、誰が使ってよいかを
+決めるだけです。何をどれだけの頻度で読むかは、NMS が送る要求のほうに入っています。ダイヤルアウトでは、ルータの設定が
+すべてを持ちます。何を送るか、どれだけの頻度で、どのアドレスとポートへ、どのエンコードで、どのプロトコルで。ルータは
+自分で接続を保ち、コレクタがいなければやり直します。ダイヤルアウトの送り手の設定が、何を送るか、どこへどう送るか、その 2 つを
+結ぶもの、のブロックに分かれるのはこのためです(3.3 節)。
+
+向きは、どちらの側がポートを開けておくかも決めます。ダイヤルインではルータが待ち受けます。XR01 は TCP 830 と 57400 と
+UDP 161、PE2 は TCP 443 です。ダイヤルアウトでは NMS が待ち受けます。SRV01 は TCP 57500、UDP 4739、UDP 162 です。途中の
+アクセス リストやファイアウォールは、接続が開かれる向きに通す必要があります。
+
+### 2.3 何のための線か: 4 つの仕事
+
+線の目的は、1.3 節の 4 つの仕事のどれかです。表の「道」はその仕事に使える方式で、右の列は、この盤面でそれを受け持つ
+線です。
 
 | 仕事 | 道 | この盤面では |
 |---|---|---|
 | 設定する | SSH の上の CLI、NETCONF、RESTCONF、gNMI の Set | XR01: NETCONF(M13-1)。PE2: RESTCONF(M13-2) |
-| 状態を見る | SNMP のポーリング、NETCONF と RESTCONF での読み取り、gNMI の Get と Subscribe、テレメトリのダイヤルアウト | XR01: gNMI(M13-3)、テレメトリのダイヤルアウト(M13-4)、SNMPv2c(M13-6) |
+| 状態を見る | SNMP ポーリング、NETCONF と RESTCONF での読み取り、gNMI の Get と Subscribe、テレメトリのダイヤルアウト | XR01: gNMI(M13-3)、テレメトリのダイヤルアウト(M13-4)、SNMPv2c(M13-6) |
 | 流れを数える | NetFlow v9、IPFIX | PE2: IPFIX(M13-5) |
-| 出来事を知る | SNMP のトラップとインフォーム、syslog | XR01: SNMPv3 のトラップ(M13-6) |
+| 出来事を知る | SNMP トラップとインフォーム、syslog | XR01: SNMPv3 トラップ(M13-6) |
 
 IOS XR では、設定するどの道も、同じ場所に行き着きます。コミットです(M1)。NETCONF や gNMI での変更も、CLI での変更と同じく
 確かめられてコミットされ、どの道から来たかはコミット履歴に残ります(3.4 節)。
 
-### 2.2 3 つの層: モデル、エンコード、プロトコル
+### 2.4 鍵をかけるか: SSH、TLS、なし
+
+線を守るものは、線によって違います。NETCONF は SSH、RESTCONF・gNMI・テレメトリのダイヤルアウトは TLS です。SNMPv2c
+ポーリングとフロー エクスポートは何もかけず、SNMPv3 は自分で認証と暗号化を持ちます。
+
+TLS では、待ち受ける側(サーバ)が証明書を見せ、つないだ側(クライアント)がそれを確かめます。相互 TLS では、クライアントも
+証明書を見せ、サーバが確かめます。証明書が何で、誰が何を持ち、何を確かめるかは、ページ「証明書と TLS を土台から」で、
+鍵ペアから順に扱います。
+
+そのページの決まりは 2 つです。TLS サーバとクライアントは、どちらがかけたかで決まります。CA 証明書を持つのは、確かめる
+側です。そのため同じ XR01 が、gNMI ではサーバ(証明書を見せる側。相互 TLS では、クライアントを確かめる側も兼ねる)になり、
+テレメトリのダイヤルアウトではクライアント(コレクタの証明書を確かめる側)になります。
+
+gNMI の仕様は TLS を必須とし、暗号化しないセッションへの切り替えを禁じています。IOS XR は、gRPC サーバで `no-tls` も
+受け付けます。XR01 が自分の証明書と信頼する CA をどこに置き、どう変えるかは、ページ「状態を流す」で扱います。
+
+### 2.5 線の中身: モデル、エンコード、プロトコル
 
 いちばん多い取り違えは、別々の層にある用語どうしの取り違えです。YANG はプロトコルではなく、NETCONF はデータの書式では
 ありません。設定する道と状態を見る道のデータは、どれも 3 つの層を通ります。
 
 | 層 | 答える問い | 例 |
 |---|---|---|
-| ① モデル | どんなデータがあるか。名前、型、入れ子の形、設定できるものと読むだけのもの | YANG のモジュール(ネイティブ、統一モデル、OpenConfig)。SNMP では MIB |
+| ① モデル | どんなデータがあるか。名前、型、入れ子の形、設定できるものと読むだけのもの | YANG モジュール(ネイティブ、ユニファイド モデル、OpenConfig)。SNMP では MIB |
 | ② エンコード | データをバイトの並びとしてどう書くか | XML、JSON(JSON_IETF)、GPB(protobuf)。SNMP では BER |
 | ③ プロトコルとトランスポート | どんな要求を出せるか、どちらが始めるか、どの接続が運んで守るか | SSH の上の NETCONF、HTTPS の上の RESTCONF、gRPC(TLS 付きの HTTP/2)の上の gNMI、gRPC・TCP・UDP の上のテレメトリのダイヤルアウト、UDP の上の SNMP |
 
 ```mermaid
 flowchart TB
   subgraph L1["① モデル: データが何か"]
-    Y["YANG のモジュール<br/>例: openconfig-interfaces:<br/>interface / state / counters / in-octets"]
+    Y["YANG モジュール<br/>例: openconfig-interfaces:<br/>interface / state / counters / in-octets"]
     M["MIB<br/>例: IF-MIB の ifHCInOctets"]
   end
   subgraph L2["② エンコード: どう書くか"]
@@ -122,7 +217,7 @@ flowchart TB
     NC["NETCONF<br/>SSH、TCP 830"]
     RC["RESTCONF<br/>HTTPS、TCP 443"]
     GN["gNMI<br/>HTTP/2 の上の gRPC、TLS<br/>XR01 では TCP 57400"]
-    DO["テレメトリの<br/>ダイヤルアウト<br/>gRPC・TCP・UDP<br/>収集役のポートへ"]
+    DO["テレメトリの<br/>ダイヤルアウト<br/>gRPC・TCP・UDP<br/>コレクタのポートへ"]
     SN["SNMP<br/>UDP 161、トラップは UDP 162 へ"]
   end
   Y --> X & J & G
@@ -136,7 +231,7 @@ flowchart TB
   B --> SN
 ```
 
-1 つのモデルは、いくつもの道で運べます。例として、XR01 の Loopback0 の状態を OpenConfig のモデルで、NETCONF と gNMI で
+1 つのモデルは、いくつもの道で運べます。例として、XR01 の Loopback0 の状態を OpenConfig モデルで、NETCONF と gNMI で
 1 回ずつ読みました。どちらの答えにも、同じリーフ `counters/carrier-transitions` が値 1 で入っています。NETCONF はそれを XML で
 書きます(`<get>` への返事の抜粋)。
 
@@ -167,148 +262,56 @@ gNMI は JSON_IETF で書きます(Get への返事の抜粋)。
 JSON_IETF では、64 ビットのカウンタは文字列で書かれます(`"1"` と引用符付き)。RFC 7951 が 64 ビットの整数をそう書くと
 定めているためです。読むプログラムは、先に数へ直す必要があります。
 
-IOS XR には YANG のモデルが 3 種類あります。**ネイティブ**のモデル(設定は `Cisco-IOS-XR-…-cfg`、状態は `-oper`)は XR
-独自のものです。**統一モデル**(`Cisco-IOS-XR-um-…-cfg`、IOS XR 7.0.1 から)は CLI から生成され、ネイティブの設定のモデルに
-置き換わるもので、CLI とほぼ同じ形に読めます。**OpenConfig** のモデル(`openconfig-…`)はネットワークの運用者の集まりが
-作り、どのベンダーのルータでも同じになることを目指しています。IOS XR での違いは、偏差(deviation)のモジュールに書かれて
-います。IOS XRd 26.1.1 は NETCONF の hello で 857 個の能力を知らせ、その中に統一モデルが 220 個、OpenConfig のモデルが
+IOS XR には YANG モデルが 3 種類あります。**ネイティブ** モデル(設定は `Cisco-IOS-XR-…-cfg`、状態は `-oper`)は XR
+独自のものです。**ユニファイド モデル**(`Cisco-IOS-XR-um-…-cfg`、IOS XR 7.0.1 から)は CLI から生成され、ネイティブの設定のモデルに
+置き換わるもので、CLI とほぼ同じ形に読めます。**OpenConfig** モデル(`openconfig-…`)はネットワークの運用者の集まりが
+作り、どのベンダーのルータでも同じになることを目指しています。IOS XR での違いは、deviation モジュールに書かれて
+います。IOS XRd 26.1.1 は NETCONF の hello で 857 個のケイパビリティを知らせ、その中にユニファイド モデルが 220 個、OpenConfig モデルが
 54 個あります。
 
-### 2.3 用語を並べる
+### 2.6 用語を並べる
 
 チェーン店がほぼ同じ仕組みなので、右の列でたとえます。NMS が本部、ルータが店舗です。
 
 | 用語 | 何か | チェーン店なら |
 |---|---|---|
-| NMS | ルータを設定し、見守るサーバ。この盤面では SRV01 | 本部 |
+| NMS | ルータを設定し、監視するサーバ。この盤面では SRV01 | 本部 |
 | データ モデル(YANG) | データの定義。名前、型、入れ子の形、設定できるものと読むだけのもの | 報告用の印刷された用紙。どんな欄があり、それぞれに何を書くか |
-| ネイティブ、統一モデル、OpenConfig | XR 独自のモデル、XR の CLI と同じ形に並べたモデル、ベンダーの間で共通のモデル | 会社の古い用紙、店舗の帳簿と同じ並びの新しい用紙、業界団体の共通の用紙 |
+| ネイティブ、ユニファイド モデル、OpenConfig | XR 独自のモデル、XR の CLI と同じ形に並べたモデル、ベンダーの間で共通のモデル | 会社の古い用紙、店舗の帳簿と同じ並びの新しい用紙、業界団体の共通の用紙 |
 | エンコード(XML・JSON・GPB) | データをバイトの並びとしてどう書くか | 用紙を言葉で書き込むか、短い符号で書き込むか |
 | プロトコル(NETCONF・RESTCONF・gNMI・SNMP) | 一方が出せる要求と、それを運ぶセッション | 配送の業者と、頼める仕事 |
 | トランスポート(SSH・HTTPS・HTTP/2 の上の gRPC・UDP) | その下の接続と、それが与える守り | 配送の車と、鍵がかかるかどうか |
-| MIB、OID | SNMP 独自のモデル。番号で名付けたオブジェクトの木 | 欄に名前でなく番号が振ってある古い用紙 |
+| MIB、OID | SNMP 独自のモデル。番号で名付けたオブジェクトのツリー | 欄に名前でなく番号が振ってある古い用紙 |
 | ポーリング | NMS が、欲しいときに毎回値を問い合わせる | 本部が電話で「今日の売上は?」と聞く |
 | プッシュ(テレメトリ) | ルータが、時間ごとに、または値が変わったときに送る | 店舗が、聞かれなくても 1 時間ごとに数字を送る |
 | ダイヤルイン、ダイヤルアウト | 接続を開くのが NMS か、ルータか | どちらが電話をかけるか |
 | トラップ | 何かが起きたときに、ルータがすぐ送る知らせ | シャッターが壊れたら、店舗から電話がある |
-| フローのレコード(NetFlow・IPFIX) | 会話ごとに 1 行。誰が、誰へ、どのポートで、どれだけ | レシート。インターフェイスのカウンタはレジの合計 |
+| フロー レコード(NetFlow・IPFIX) | 会話ごとに 1 行。誰が、誰へ、どのポートで、どれだけ | レシート。インターフェイスのカウンタはレジの合計 |
 | 証明書、CA | 名前を署名付きで述べたもの。それに署名する機関 | 身分証と、身分証を発行する役所 |
 | TLS、相互 TLS | クライアントがサーバの証明書を確かめる。相互 TLS では、サーバもクライアントの証明書を確かめる | 配達員の身分証を確かめる。互いに確かめ合う |
 
-### 2.4 どちらが始めるか: ダイヤルインとダイヤルアウト、ポーリングとプッシュ
-
-2 つの問いがよく混ざります。1 つ目は**接続を開くのはどちらか**です。ダイヤルインでは、NMS がルータの待ち受けるポートへ
-つなぎます。ダイヤルアウトでは、ルータが NMS の待ち受けるポートへつなぐか、UDP ならただ送ります。
-2 つ目は**データが流れる時を決めるのはどちらか**です。ポーリングでは NMS が毎回問い合わせ、プッシュではルータが
-時間ごとに、または値が変わったときに送ります。
-
-図は、この盤面のすべての道です。矢印は、始める側から待ち受ける側へ向いています。SRV01 は 2 回出てきます。左のクライアントと、
-右の受け手です。
-
-```mermaid
-flowchart LR
-  subgraph IN["SRV01 が始める (ダイヤルイン)"]
-    c1["ncclient"]
-    c2["Python の requests"]
-    c3["gnmic"]
-    c4["snmpget、snmpwalk"]
-  end
-  subgraph DEV["ルータ"]
-    s1["XR01: NETCONF<br/>TCP 830"]
-    s2["PE2: RESTCONF<br/>TCP 443"]
-    s3["XR01: gRPC (gNMI)<br/>TCP 57400"]
-    s4["XR01: SNMP エージェント<br/>UDP 161"]
-    o1["XR01: テレメトリの<br/>ダイヤルアウト"]
-    o2["PE2: フローの<br/>エクスポータ"]
-    o3["XR01: SNMP のトラップ"]
-  end
-  subgraph OUT["SRV01 が待ち受ける (ダイヤルアウト)"]
-    r1["telegraf<br/>TCP 57500"]
-    r2["nfcapd<br/>UDP 4739"]
-    r3["snmptrapd<br/>UDP 162"]
-  end
-  c1 --> s1
-  c2 --> s2
-  c3 --> s3
-  c4 --> s4
-  c4 ~~~ o1
-  c4 ~~~ o2
-  c4 ~~~ o3
-  o1 --> r1
-  o2 --> r2
-  o3 --> r3
-```
-
-| | ポーリング: NMS が毎回問い合わせる | プッシュ: ルータが自分から送る |
-|---|---|---|
-| **ダイヤルイン**: NMS が接続を開く | SNMP の get と walk、NETCONF の `<get>`、RESTCONF の GET、gNMI の Get、ONCE か POLL の Subscribe | STREAM の gNMI Subscribe(n 秒ごとの SAMPLE か、ON_CHANGE) |
-| **ダイヤルアウト**: ルータが開く、またはただ送る | — | テレメトリのダイヤルアウト、IPFIX のエクスポート、SNMP のトラップ、syslog |
-
-向きが違うと、仕事を置く場所が変わります。ダイヤルインでは、ルータの設定は小さく、待ち受けを開いて、誰が使ってよいかを
-決めるだけです。何をどれだけの頻度で読むかは、NMS が送る要求のほうに入っています。ダイヤルアウトでは、ルータの設定が
-すべてを持ちます。何を送るか、どれだけの頻度で、どのアドレスとポートへ、どのエンコードで、どのプロトコルで。ルータは
-自分で接続を保ち、収集役がいなければやり直します。
-
-向きは、どちらの側がポートを開けておくかも決めます。ダイヤルインではルータが待ち受けます。XR01 は TCP 830 と 57400 と
-UDP 161、PE2 は TCP 443 です。ダイヤルアウトでは NMS が待ち受けます。SRV01 は TCP 57500、UDP 4739、UDP 162 です。途中の
-アクセス リストやファイアウォールは、接続が開かれる向きに通す必要があります。
-
-### 2.5 gRPC、gNMI、テレメトリは別々の言葉
+### 2.7 gRPC、gNMI、テレメトリは別々の言葉
 
 **gRPC** は、プログラムどうしが HTTP/2 の上で呼び合うための汎用の仕組みで、メッセージは protobuf で書きます。**gNMI** は
 gRPC の上に定義されたサービスの 1 つで、呼び出しは Capabilities・Get・Set・Subscribe の 4 つです。**モデル駆動型テレメトリ**は、
-ルータが状態を時間ごとに、または変化のたびに送ることです。gNMI の Subscribe(ダイヤルイン)でも、ルータが収集役へつなぐ
+ルータが状態を時間ごとに、または変化のたびに送ることです。gNMI の Subscribe(ダイヤルイン)でも、ルータがコレクタへつなぐ
 形(ダイヤルアウト)でも行えます。ダイヤルアウトは gRPC、ただの TCP、UDP のどれかに乗ります。
 
 XR01 では、これらを別々の場所で設定します。`grpc` の設定は、gNMI に答えるサーバ(ダイヤルイン)です。ダイヤルアウトは
 `telemetry model-driven` の下で、宛先・ポート・プロトコルを自分で持って設定します。
 
-### 2.6 誰が何を証明するか: TLS と相互 TLS
-
-TLS は gNMI・RESTCONF・テレメトリの gRPC のダイヤルアウトを守ります。NETCONF は同じ守りを SSH から得ます。TLS では、
-待ち受ける側(サーバ)が証明書を見せます。証明書は、自分の名前を署名付きで述べたものです。つなぐ側(クライアント)は 2 つを
-確かめます。証明書に、クライアントが信頼する認証局(CA)の署名があること。そして、その中の名前が、つなごうとした相手の
-名前であることです。相互 TLS では、クライアントも証明書を見せ、サーバはそれを、サーバが信頼する CA で確かめます。
-
-つまり、それぞれの側は、**相手側**の証明書に署名した CA を持っておきます。この盤面では次のとおりです。
-
-| 接続 | サーバが見せるもの | クライアントの確かめ方 | クライアントが見せるもの | サーバの確かめ方 |
-|---|---|---|---|---|
-| TLS の gNMI(SRV01 → XR01) | XR01 自身の証明書。自己署名で、名前は `ems.cisco.com`。gRPC を有効にしたときに作られる | その証明書そのもの(または確かめずに進む) | ユーザ名とパスワード | XR01 のユーザ |
-| 相互 TLS の gNMI | 同じ | 同じ | NMS-LAB-CA が発行した証明書(`nms-gnmi`)と、ユーザ名とパスワード | XR01 が信頼する CA と、XR01 のユーザ |
-| TLS のテレメトリのダイヤルアウト(XR01 → SRV01) | 収集役の証明書。NMS-LAB-CA が `collector.nms.lab` と 10.0.50.10 に対して発行 | NMS-LAB-CA と、XR01 が期待する名前 | なし。XR01 はダイヤルアウトでクライアント証明書を見せない | — |
-| RESTCONF(SRV01 → PE2) | PE2 の HTTPS の証明書 | なし。スクリプトが確認を切っている(`verify=False`) | ユーザ名とパスワード | PE2 のローカル アカウント |
-
-2 つの証明書は、SRV01 から `openssl s_client` で読めます。収集役の証明書は CA と名前を示し、XR01 の証明書は自分で署名して
-あって、名前は `ems.cisco.com` だけです。
-
-```console
-$ openssl s_client -connect 10.0.50.10:57500 </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer -ext subjectAltName
-subject=O = NMS Lab, CN = collector.nms.lab
-issuer=O = NMS Lab, CN = NMS-LAB-CA
-X509v3 Subject Alternative Name: 
-    DNS:collector.nms.lab, IP Address:10.0.50.10
-$ openssl s_client -connect 10.0.50.1:57400 </dev/null 2>/dev/null | openssl x509 -noout -subject -ext subjectAltName
-subject=C = US, ST = CA, L = San Jose, street = 3700 Cisco Way, postalCode = 95134, O = "Cisco Systems, Inc.", OU = CSG, CN = ems.cisco.com, serialNumber = VSN-PR6OPEC
-X509v3 Subject Alternative Name: 
-    DNS:ems.cisco.com
-```
-
-gNMI の仕様は TLS を必須とし、暗号化しないセッションへの切り替えを禁じています。IOS XR は、gRPC のサーバで `no-tls` も
-受け付けます。XR01 が自分の証明書と信頼する CA をどこに置き、どう変えるかは、ページ「状態を流す」で扱います。
-
-### 2.7 カウンタとフローのレコードは別のもの
+### 2.8 カウンタとフロー レコードは別のもの
 
 インターフェイスのカウンタは、インターフェイスごとに 1 つの数です。パケットとバイトがどれだけ通ったか。量はわかっても、
-誰かはわかりません。フローのレコードは、会話ごとに 1 行です。送信元と宛先のアドレス、プロトコルとポート、入ってきた
+誰かはわかりません。フロー レコードは、会話ごとに 1 行です。送信元と宛先のアドレス、プロトコルとポート、入ってきた
 インターフェイス、パケット数とバイト数。誰が誰と、どれだけ話したかがわかります。
 
-ルータはインターフェイスのキャッシュでフローのレコードを作り、フローがしばらく途切れたとき、長く続くフローならときどき、
-レコードをエクスポートします。レコードは UDP で収集役へ送られます。NetFlow v9 か IPFIX で、どちらもテンプレートで項目を
+ルータはインターフェイスのキャッシュでフロー レコードを作り、フローがしばらく途切れたとき、長く続くフローならときどき、
+レコードをエクスポートします。レコードは UDP でコレクタへ送られます。NetFlow v9 か IPFIX で、どちらもテンプレートで項目を
 説明します(ページ「フローを数え、問い合わせる」)。
 
-たとえば、CE1 が 192.168.100.1 から XR01 の Loopback0 へ、748 バイトの ping を 37 発、PE2 を通して送りました。収集役では、
-それが 1 つのフローのレコードになりました。ICMP では、宛先のポートの位置にタイプとコードが入ります(`8.0`: エコー要求)。
+たとえば、CE1 が 192.168.100.1 から XR01 の Loopback0 へ、748 バイトの ping を 37 発、PE2 を通して送りました。コレクタでは、
+それが 1 つのフロー レコードになりました。ICMP では、宛先ポートの位置にタイプとコードが入ります(`8.0`: エコー要求)。
 
 ```console
 $ nfdump -R /var/cache/nfdump/lab -o extended -c 10 'src ip 192.168.100.1'
@@ -316,46 +319,33 @@ Date first seen             Duration     Proto      Src IP Addr:Port          Ds
 2026-11-10 14:27:08.500     00:00:00.049 ICMP     192.168.100.1:0     ->       10.255.0.1:8.0   ........   0       37    27676      755    4.5 M    748     1
 ```
 
-### 2.8 網の中で: XRT-15
+### 2.9 1 つの値を、いくつもの線で
 
-サービスはそれぞれ、1 か所で待ち受けるか送ります。
-
-| 機器 | サービス | ポート | 始める側 | 課題 |
-|---|---|---|---|---|
-| XR01 | NETCONF(SSH の上) | XR01 の TCP 830 | SRV01 | M13-1 |
-| PE2 | RESTCONF(HTTPS の上) | PE2 の TCP 443 | SRV01 | M13-2 |
-| XR01 | gRPC のサーバ(gNMI) | XR01 の TCP 57400 | SRV01 | M13-3 |
-| XR01 | テレメトリのダイヤルアウト(TLS 付きの gRPC) | SRV01 の TCP 57500(telegraf) | XR01 | M13-4 |
-| PE2 | フローのエクスポート(IPFIX) | SRV01 の UDP 4739(nfcapd) | PE2 | M13-5 |
-| XR01 | SNMP のエージェント(v2c・v3) | XR01 の UDP 161 | SRV01 | M13-6 |
-| XR01 | SNMP のトラップ(v3) | SRV01 の UDP 162(snmptrapd) | XR01 | M13-6 |
-
-1 つの値が、これらのうちいくつもの道で SRV01 に届きます。コアのリンクである XR01 の GigabitEthernet0/0/0/0 の、受信した
+1 つの値が、いくつもの線で SRV01 に届きます。コア リンクである XR01 の GigabitEthernet0/0/0/0 の、受信した
 バイト数で見てみます。
 
 | 道 | 値の呼び方 | 始める側・書き方・ポート |
 |---|---|---|
 | CLI | `show interfaces GigabitEthernet0/0/0/0` の `… packets input, … bytes` の行 | 人が SSH で。人が読むテキスト。TCP 22 |
 | SNMP | IF-MIB の `ifHCInOctets`: `1.3.6.1.2.1.31.1.1.1.6.<ifIndex>` | SRV01 が問い合わせる。BER。UDP 161 |
-| NETCONF | OpenConfig の `interfaces` の木への `<get>`: `…/state/counters/in-octets` | SRV01 が問い合わせる。XML。TCP 830 |
+| NETCONF | OpenConfig の `interfaces` のツリーへの `<get>`: `…/state/counters/in-octets` | SRV01 が問い合わせる。XML。TCP 830 |
 | gNMI | `/interfaces/interface[name=…]/state/counters/in-octets`。1 回読む(Get)か、送り続けてもらう(Subscribe) | SRV01 が開く。JSON_IETF。TCP 57400 |
-| テレメトリのダイヤルアウト | 同じ種類の YANG のパスを、XR01 の設定にセンサー パスとして書く | XR01 が開いて送る。GPB。SRV01 の TCP 57500 |
+| テレメトリのダイヤルアウト | 同じ種類の YANG パスを、XR01 の設定にセンサー パスとして書く | XR01 が開いて送る。GPB。SRV01 の TCP 57500 |
 | IPFIX | このカウンタではない。CE1 から PE2 に入る、フローごとのバイト数 | PE2 が送る。IPFIX のレコード。SRV01 の UDP 4739 |
 
 SNMP はインターフェイスを番号(ifIndex)で呼ぶので、先にその番号を調べる必要があります(`ifDescr`、
 `1.3.6.1.2.1.2.2.1.2`)。YANG はキー、つまり名前で呼びます。gNMI のパスの `…` には `GigabitEthernet0/0/0/0` が入ります。
 
-### 2.9 押さえどころ
+### 2.10 押さえどころ
 
-- 仕事は 4 つ。設定する、状態を見る、流れを数える、出来事を知る。仕事ごとに道があり、IOS XR では設定するどの道も同じ
-  コミットに行き着く。
-- 層は 3 つ。モデルはデータが何か(YANG か MIB)、エンコードはどう書くか(XML・JSON・GPB・BER)、プロトコルはどう運ぶか
-  (NETCONF・RESTCONF・gNMI・ダイヤルアウト・SNMP)。1 つのモデルを、いくつもの道で運べる。
+- 線は 7 本。どの線でも見るのは 3 つ。どちらがかけるか、何のための線か、鍵をかけるか。
 - 接続を開くのはどちらか(ダイヤルイン・ダイヤルアウト)と、データが流れる時を決めるのはどちらか(ポーリング・プッシュ)は
   別の問い。ダイヤルアウトでは、サブスクリプションのすべてがルータの設定にある。
-- TLS ではサーバが自分の名前を証明し、相互 TLS ではクライアントも自分の名前を証明する。それぞれの側は、相手の証明書の CA を
-  持つ。
-- インターフェイスのカウンタは量を、フローのレコードは誰が誰と話したかを示す。
+- 仕事は 4 つ。設定する、状態を見る、流れを数える、出来事を知る。IOS XR では、設定するどの道も同じコミットに行き着く。
+- TLS サーバは待ち受ける側。CA 証明書を持つのは確かめる側。同じ XR01 が、線によってサーバにもクライアントにもなる。
+- 層は 3 つ。モデルはデータが何か(YANG か MIB)、エンコードはどう書くか(XML・JSON・GPB・BER)、プロトコルはどう運ぶか
+  (NETCONF・RESTCONF・gNMI・ダイヤルアウト・SNMP)。1 つのモデルを、いくつもの道で運べる。
+- インターフェイスのカウンタは量を、フロー レコードは誰が誰と話したかを示す。
 
 ## 3. 組む: 部品ごとの設定の場所
 
@@ -367,33 +357,33 @@ SNMP はインターフェイスを番号(ifIndex)で呼ぶので、先にその
 | RESTCONF | —(XRd と XRv 9000 には無い) | `ip http secure-server`、`restconf`、権限 15 のローカル ユーザ | Python の requests、curl |
 | gNMI(ダイヤルイン) | `grpc`: `port`、`address-family`、TLS か `no-tls`、`tls-mutual` | — | gnmic |
 | テレメトリのダイヤルアウト | `telemetry model-driven`: `sensor-group`、`destination-group`、`subscription` | — | telegraf |
-| フローのレコード | —(`flow exporter-map`・`flow monitor-map`・`sampler-map` はハードウェアの機種にあり、XRd と XRv 9000 には無い) | `flow record`、`flow exporter`、`flow monitor`。インターフェイスに `ip flow monitor … input` | nfcapd、nfdump |
-| SNMP のポーリング | `snmp-server community`、`view`、`group`、`user` | — | snmpget、snmpwalk |
-| SNMP のトラップ | `snmp-server host`、`snmp-server traps …` | — | snmptrapd |
+| フロー レコード | —(`flow exporter-map`・`flow monitor-map`・`sampler-map` はハードウェアの機種にあり、XRd と XRv 9000 には無い) | `flow record`、`flow exporter`、`flow monitor`。インターフェイスに `ip flow monitor … input` | nfcapd、nfdump |
+| SNMP ポーリング | `snmp-server community`、`view`、`group`、`user` | — | snmpget、snmpwalk |
+| SNMP トラップ | `snmp-server host`、`snmp-server traps …` | — | snmptrapd |
 
 ### 3.2 NMS が始める道: ルータは待ち受けるだけ
 
-ダイヤルインでのルータの側は、待ち受けと、誰が使ってよいかの決まりです。例では、XR01 で NETCONF と gRPC のサーバを開きます。
+ダイヤルインでのルータの側は、待ち受けと、誰が使ってよいかの決まりです。例では、XR01 で NETCONF サーバと gRPC サーバを開きます。
 課題 M13-1 と M13-3 の始めの部分と同じ形なので、折りたたんであります。
 
 :::config fold XR01 — NMS からの NETCONF と gNMI を受け付ける
-ssh server netconf vrf default                ## NETCONF は SSH のサーバに乗る。この VRF(グローバルのテーブル)で答える
+ssh server netconf vrf default                ## NETCONF は SSH サーバに乗る。この VRF(グローバル テーブル)で答える
 netconf-yang agent
- ssh                                          ## NETCONF のエージェント。SSH で TCP 830(既定のポート)に来る
+ ssh                                          ## NETCONF エージェント。SSH で TCP 830(既定のポート)に来る
 !
-grpc                                          ## gNMI に答える gRPC のサーバ。no-tls を書かなければ TLS が有効
+grpc                                          ## gNMI に答える gRPC サーバ。no-tls を書かなければ TLS が有効
  port 57400                                   ## 既定は 57400(57344〜57999 を使える)
  address-family ipv4                          ## IPv4 で待ち受ける
 !
 :::
 
-PE2 には、Web のサーバと、その上の RESTCONF のサービスと、設定を変えてよいアカウントが要ります。例のアカウントは課題 M13-2 の
+PE2 には、Web サーバと、その上の RESTCONF のサービスと、設定を変えてよいアカウントが要ります。例のアカウントは課題 M13-2 の
 ものではありませんが、形が同じなので折りたたんであります。
 
 :::config fold PE2(IOS XE)— NMS からの RESTCONF を受け付ける
-username nms-ops privilege 15 secret Ops-Pass-15   ## ローカルのアカウント。権限 1 だと RESTCONF は 403(access denied)を返す
+username nms-ops privilege 15 secret Ops-Pass-15   ## ローカル アカウント。権限 1 だと RESTCONF は 403(access denied)を返す
 no ip http server                                  ## 平文の HTTP は閉じたまま
-ip http secure-server                              ## RESTCONF が乗る HTTPS のサーバ(TCP 443)
+ip http secure-server                              ## RESTCONF が乗る HTTPS サーバ(TCP 443)
 restconf                                           ## RESTCONF のサービス。答え始めるのは約 1 分後
 :::
 
@@ -407,11 +397,11 @@ XML、RESTCONF の要求の URL と本文、gNMI の Get のパスです。
 
 | 送り手 | 何を送るか | どこへ、どう送るか | 2 つを結んで動かすもの |
 |---|---|---|---|
-| テレメトリのダイヤルアウト(XR01) | `sensor-group`: センサー パス(YANG のパス) | `destination-group`: アドレス、ポート、エンコード、プロトコル、TLS | `subscription`: センサー グループと間隔、宛先グループ、送信元のインターフェイス |
-| フローのエクスポート(PE2) | `flow record`: `match`(フローを分ける項目)と `collect`(数えるもの) | `flow exporter`: 宛先、送信元、UDP のポート、NetFlow v9 か IPFIX | `flow monitor`: レコード、エクスポータ、キャッシュのタイマー。それをインターフェイスと向きに `ip flow monitor` で当てる |
-| SNMP のトラップ(XR01) | `snmp-server traps …`: どの出来事か | `snmp-server host`: アドレス、版、ユーザ | `snmp-server user`・`group`・`view`: トラップを送るときの SNMPv3 のセキュリティ |
+| テレメトリのダイヤルアウト(XR01) | `sensor-group`: センサー パス(YANG パス) | `destination-group`: アドレス、ポート、エンコード、プロトコル、TLS | `subscription`: センサー グループと間隔、宛先グループ、送信元インターフェイス |
+| フロー エクスポート(PE2) | `flow record`: `match`(フローを分ける項目)と `collect`(数えるもの) | `flow exporter`: 宛先、送信元、UDP ポート、NetFlow v9 か IPFIX | `flow monitor`: レコード、エクスポータ、キャッシュのタイマー。それをインターフェイスと向きに `ip flow monitor` で当てる |
+| SNMP トラップ(XR01) | `snmp-server traps …`: どの出来事か | `snmp-server host`: アドレス、バージョン、ユーザ | `snmp-server user`・`group`・`view`: トラップを送るときの SNMPv3 のセキュリティ |
 
-それぞれの送り手を部品ごとにどう組むかは、テレメトリはページ「状態を流す」で、フローのエクスポートとトラップはページ
+それぞれの送り手を部品ごとにどう組むかは、テレメトリはページ「状態を流す」で、フロー エクスポートとトラップはページ
 「フローを数え、問い合わせる」で扱います。
 
 ### 3.4 出力の読み方: どの道で設定が変わったか
@@ -429,23 +419,23 @@ SNo. Label/ID              User      Line                Client      Time Stamp
 ```
 
 - `vty…` と `CLI`: CLI で打ち込んだ変更。
-- `netconf` と `YANG Frame`: NETCONF で送った変更。gNMI の Set で送った変更は `ems`(gRPC のサーバのプロセス)と `YANG Frame`
+- `netconf` と `YANG Frame`: NETCONF で送った変更。gNMI の Set で送った変更は `ems`(gRPC サーバのプロセス)と `YANG Frame`
   になる。
-- `rollback` と `Rollback`: XR01 が自分で変更を取り消した。2 番は NETCONF で送った確認付きのコミット(confirmed commit)で、
+- `rollback` と `Rollback`: XR01 が自分で変更を取り消した。2 番は NETCONF で送った確認つきコミット(confirmed commit)で、
   確認されないままセッションが閉じ、その 4 秒後に XR01 が取り消した。
 
 道が開いているかどうかは、両端で読めます。
 
 | 道 | ルータで | SRV01 で |
 |---|---|---|
-| NETCONF | `show netconf-yang clients`、`show netconf-yang statistics` | NETCONF のセッションの hello(ncclient) |
-| RESTCONF(PE2) | `show platform software yang-management process`(`nginx` と `confd` が Running) | 要求の HTTP のステータス コード |
+| NETCONF | `show netconf-yang clients`、`show netconf-yang statistics` | NETCONF セッションの hello(ncclient) |
+| RESTCONF(PE2) | `show platform software yang-management process`(`nginx` と `confd` が Running) | 要求の HTTP ステータス コード |
 | gNMI | `show grpc` | `gnmic … capabilities` |
-| テレメトリのダイヤルアウト | `show telemetry model-driven subscription`、`show telemetry model-driven destination` | 収集役のファイル |
-| フローのエクスポート(PE2) | `show flow exporter`、`show flow monitor … cache` | `nfdump` |
+| テレメトリのダイヤルアウト | `show telemetry model-driven subscription`、`show telemetry model-driven destination` | コレクタのファイル |
+| フロー エクスポート(PE2) | `show flow exporter`、`show flow monitor … cache` | `nfdump` |
 | SNMP | `show snmp` | `snmpget`、トラップの受け手のログ |
 
-`show grpc` は、gRPC のサーバが TLS を使っているか、どの証明書を使うかを示します。
+`show grpc` は、gRPC サーバが TLS を使っているか、どの証明書を使うかを示します。
 
 ```console
 RP/0/RP0/CPU0:XR01#show grpc | include "TLS|Certificate"
@@ -463,7 +453,7 @@ Certificate common name                 : ems.cisco.com
 - **TLS の相手には TLS で。名前はクライアントが確かめる**: TLS を使わない gNMI のクライアントには
   `error reading server preface: EOF` しか返りません。10.0.50.1 へつないで名前を確かめるクライアントは、XR01 の証明書に
   `ems.cisco.com` しか見つけられず、`doesn't contain any IP SANs` で止まります(ページ「状態を流す」)。
-- **どの道も 1 つの設定を変える**: NETCONF のセッションが確認付きのコミットを握っている間、CLI でのコミットは
+- **どの道も 1 つの設定を変える**: NETCONF セッションが確認つきコミットを握っている間、CLI でのコミットは
   `Another configuration session had a lock on the running configuration` で失敗します。
 - **NETCONF は CLI より多く書けることがある**: Programmability Configuration Guide は、NETCONF でのアクセスは既定で書き込みの
   権限を与え、CLI では読み取りだけのユーザでもそうなる、と注意しています。NETCONF に届く人を絞ってください。
@@ -472,7 +462,8 @@ Certificate common name                 : ems.cisco.com
 
 ## 実践
 
-課題は 6 つで、ラボ **XRT-15** にあり、次の 3 つのページのそれぞれの後に 2 つずつ取り組みます。作業の多くは SRV01 の上で
+課題は 6 つで、ラボ **XRT-15** にあり、「モデルで設定する」「状態を流す」「フローを数え、問い合わせる」の 3 つのページの後に、
+2 つずつ取り組みます。作業の多くは SRV01 の上で
 行います。ワークスペースのコンソールから、ラボのアカウントでログインしてください。
 
 <p class="tolab"><a href="/_learn?id=XRT-15">ワークスペースでラボ XRT-15 を開く</a> — <a href="e1-m13-practice.html">課題 M13-1、M13-2</a></p>
@@ -486,6 +477,6 @@ RFC 3417(3.2 節・8 節)、RFC 2863(IF-MIB)、RFC 1901、RFC 7011、RFC 3954。
 (Cisco 8000 の累積版と ASR 9000 26.x。モデルの種類、gRPC のサーバとその認証の方式、NETCONF の権限についての注意)、System
 Management Configuration Guide(ASR 9000 26.x の NETCONF、NCS 5500 26.x の SNMP)、Telemetry Configuration Guide(Cisco 8000 の
 累積版と NCS 5500 26.x。ダイヤルインとダイヤルアウト、エンコード、TLS)、NetFlow の設定ガイド(ASR 9000 26.x、IOS XE 17.x)。
-いずれも 2026 年 11 月に確認。コミット履歴、Loopback0 の 2 つの答え、hello の数、gNMI が対応するエンコード、証明書、エラーの
-文、フローのレコード、RESTCONF が答え始めるまでの遅れと権限 1 のユーザへの答えは、PoC の盤面と XRT-15 での実測です。
+いずれも 2026 年 11 月に確認。コミット履歴、Loopback0 の 2 つの答え、hello の数、gNMI が対応するエンコード、エラーの
+文、フロー レコード、RESTCONF が答え始めるまでの遅れと権限 1 のユーザへの答えは、PoC の盤面と XRT-15 での実測です。
 :::

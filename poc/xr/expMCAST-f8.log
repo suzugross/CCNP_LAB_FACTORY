@@ -1,0 +1,176 @@
+
+######## 05:36:34 f8(IGMP の版の不一致で SSM が届かない): PE2 の Gi0/0/0/3 を version 2 に。RCV2(v3)の (192.168.1.1, 232.1.1.1) の参加
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RCV2(config)#
+interface Ethernet0/0
+RCV2(config-if)#
+ip igmp join-group 232.1.1.1 source 192.168.1.1
+RCV2(config-if)#
+end
+RCV2#
+Reply to request 0 from 192.168.2.1, 2 ms
+Reply to request 0 from 192.168.3.1, 3 ms
+Reply to request 1 from 192.168.2.1, 2 ms
+Reply to request 1 from 192.168.3.1, 3 ms
+Reply to request 2 from 192.168.2.1, 2 ms
+Reply to request 2 from 192.168.3.1, 2 ms
+Reply to request 3 from 192.168.2.1, 2 ms
+Reply to request 3 from 192.168.3.1, 3 ms
+== 232.1.1.1 を 5 発: RCV2 が受けた 5・RCV3 が受けた 5
+configure
+Wed Nov 18 05:37:02.419 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router igmp
+RP/0/RP0/CPU0:PE2(config-igmp)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:PE2(config-igmp-default-if)#
+version 2
+RP/0/RP0/CPU0:PE2(config-igmp-default-if)#
+commit
+Wed Nov 18 05:37:04.285 UTC
+RP/0/RP0/CPU0:PE2(config-igmp-default-if)#
+show configuration failed
+Wed Nov 18 05:37:05.441 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-igmp-default-if)#
+end
+RP/0/RP0/CPU0:PE2#
+clear igmp groups GigabitEthernet0/0/0/3
+                                  ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:PE2#
+show igmp interface GigabitEthernet0/0/0/3
+Wed Nov 18 05:38:21.380 UTC
+
+GigabitEthernet0/0/0/3 is up, line protocol is up
+  Internet address is 192.168.2.254/24
+  IGMP_AFD is enabled on interface
+  Multihoming is disabled on interface [Stale : False]
+  Location is 0xe
+  Current IGMP version is 2
+  IGMP query interval is 60 seconds
+  IGMP querier timeout is 125 seconds
+  IGMP max query response time is 10 seconds
+  Last member query response interval is 1 seconds
+  IGMP activity: 13 joins, 5 leaves
+  Time elapsed since last query sent 00:00:04
+  Time elapsed since IGMP router enabled 01:12:09
+  Time elapsed since last report received 00:00:00
+
+RP/0/RP0/CPU0:PE2#
+show igmp groups GigabitEthernet0/0/0/3
+Wed Nov 18 05:38:21.772 UTC
+IGMP Connected Group Membership
+Group Address   Interface                     Uptime    Expires   Last Reporter
+224.0.0.2       GigabitEthernet0/0/0/3        01:12:09  never     192.168.2.254
+224.0.0.13      GigabitEthernet0/0/0/3        01:12:09  never     192.168.2.254
+224.0.0.22      GigabitEthernet0/0/0/3        00:53:32  00:00:23  192.168.2.254
+232.1.1.1       GigabitEthernet0/0/0/3        00:15:00  not used  192.168.2.1
+239.1.1.1       GigabitEthernet0/0/0/3        00:15:00  00:01:11  192.168.2.1
+239.1.1.5       GigabitEthernet0/0/0/3        00:04:05  00:02:09  192.168.2.1
+239.2.2.2       GigabitEthernet0/0/0/3        00:15:00  00:01:06  192.168.2.1
+239.8.8.8       GigabitEthernet0/0/0/3        00:53:20  never     192.168.2.254
+RP/0/RP0/CPU0:PE2#
+show pim topology 232.1.1.1
+Wed Nov 18 05:38:22.179 UTC
+
+IP PIM Multicast Topology Table
+Entry state: (*/S,G)[RPT/SPT] Protocol Uptime Info
+Entry flags: KAT - Keep Alive Timer, AA - Assume Alive, PA - Probe Alive
+    RA - Really Alive, IA - Inherit Alive, LH - Last Hop
+    DSS - Don't Signal Sources,  RR - Register Received
+    SR - Sending Registers, SNR - Sending Null Registers
+    E - MSDP External, EX - Extranet
+    MFA - Mofrr Active, MFP - Mofrr Primary, MFB - Mofrr Backup
+    DCC - Don't Check Connected, ME - MDT Encap, MD - MDT Decap
+    MT - Crossed Data MDT threshold, MA - Data MDT Assigned
+    SAJ - BGP Source Active Joined, SAR - BGP Source Active Received,
+    SAS - BGP Source Active Sent, IM - Inband mLDP, X - VxLAN
+Interface state: Name, Uptime, Fwd, Info
+Interface flags: LI - Local Interest, LD - Local Dissinterest,
+    II - Internal Interest, ID - Internal Dissinterest,
+    LH - Last Hop, AS - Assert, AB - Admin Boundary, EX - Extranet,
+    BGP - BGP C-Multicast Join, BP - BGP Source Active Prune,
+    MVS - MVPN Safi Learned, MV6S - MVPN IPv6 Safi Learned
+
+(192.168.1.1,232.1.1.1)SPT SSM Up: 00:29:55 
+JP: Join(now) RPF: GigabitEthernet0/0/0/0,10.0.12.1 Flags: 
+  GigabitEthernet0/0/0/2      00:19:04  fwd Join(00:03:10) 
+  GigabitEthernet0/0/0/3      00:15:01  fwd LI LH 
+RP/0/RP0/CPU0:PE2#
+show ip igmp interface Ethernet0/0
+Ethernet0/0 is up, line protocol is up
+  Internet address is 192.168.2.1/24
+  IGMP is enabled on interface
+  Current IGMP host version is 2
+  Current IGMP router version is 3
+  IGMP query interval is 60 seconds
+  IGMP configured query interval is 60 seconds
+  IGMP robustness-variable is 2
+  IGMP querier timeout is 120 seconds
+  IGMP configured querier timeout is 120 seconds
+  IGMP max query response time is 10 seconds
+  Last member query count is 2
+  Last member query response interval is 1000 ms
+  Inbound IGMP access group is not set
+  IGMP activity: 7 joins, 3 leaves
+  Multicast routing is disabled on interface
+  Multicast TTL threshold is 0
+  Multicast groups joined by this system (number of users):
+      232.1.1.1(1)  239.2.2.2(1)  239.1.1.1(1)
+      239.1.1.5(1)
+RCV2#
+show ip igmp groups
+IGMP Connected Group Membership
+Group Address    Interface                Uptime    Expires   Last Reporter   Group Accounted
+239.1.1.1        Ethernet0/0              00:04:46  never     192.168.2.1     
+239.1.1.5        Ethernet0/0              00:04:07  never     192.168.2.1     
+239.2.2.2        Ethernet0/0              00:49:38  stopped   192.168.2.1     
+232.1.1.1        Ethernet0/0              00:52:33  stopped   192.168.2.1     
+RCV2#
+Reply to request 0 from 192.168.3.1, 3 ms
+Reply to request 0 from 192.168.2.1, 3 ms
+Reply to request 1 from 192.168.2.1, 2 ms
+Reply to request 1 from 192.168.3.1, 2 ms
+Reply to request 2 from 192.168.2.1, 3 ms
+Reply to request 2 from 192.168.3.1, 3 ms
+Reply to request 3 from 192.168.3.1, 3 ms
+Reply to request 3 from 192.168.2.1, 3 ms
+== 232.1.1.1 を 10 発: RCV2 が受けた 10・RCV3 が受けた 10
+
+######## 05:38:43 f8 戻す
+configure
+Wed Nov 18 05:38:44.745 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router igmp
+RP/0/RP0/CPU0:PE2(config-igmp)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:PE2(config-igmp-default-if)#
+no version
+RP/0/RP0/CPU0:PE2(config-igmp-default-if)#
+commit
+Wed Nov 18 05:38:46.617 UTC
+RP/0/RP0/CPU0:PE2(config-igmp-default-if)#
+show configuration failed
+Wed Nov 18 05:38:47.762 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-igmp-default-if)#
+end
+RP/0/RP0/CPU0:PE2#
+show igmp groups 232.1.1.1 detail
+Wed Nov 18 05:40:02.056 UTC
+No matching entries in IGMP
+
+RP/0/RP0/CPU0:PE2#
+Reply to request 0 from 192.168.3.1, 3 ms
+Reply to request 1 from 192.168.3.1, 3 ms
+Reply to request 2 from 192.168.3.1, 3 ms
+Reply to request 3 from 192.168.3.1, 3 ms
+Reply to request 4 from 192.168.3.1, 3 ms
+Reply to request 5 from 192.168.3.1, 3 ms
+Reply to request 6 from 192.168.3.1, 3 ms
+Reply to request 7 from 192.168.3.1, 3 ms
+== 232.1.1.1 を 10 発: RCV2 が受けた 0・RCV3 が受けた 10

@@ -1,0 +1,166 @@
+
+######## 10:11:32 v6: IPv6 の土台(静的 RP= P1)。PIMv6 の IF・隣接・MLD の既定・LAN の DR(リンクローカルの大きい方)
+show running-config multicast-routing
+Wed Nov 18 10:11:33.503 UTC
+multicast-routing
+ address-family ipv4
+  interface all enable
+ !
+ address-family ipv6
+  interface all enable
+ !
+!
+
+RP/0/RP0/CPU0:PE2#
+show pim ipv6 interface
+Wed Nov 18 10:11:34.114 UTC
+
+PIM interfaces in VRF default
+Interface                  PIM  Nbr   Hello  DR
+                                Count Intvl  Prior
+
+Loopback0                   on   1     30     1     
+    Primary Address : fe80::9da8:acff:fe90:c81d
+                 DR : this system
+
+GigabitEthernet0/0/0/0      on   2     30     1     
+    Primary Address : fe80::5054:ff:fecc:6563
+                 DR : this system
+
+GigabitEthernet0/0/0/1      on   2     30     1     
+    Primary Address : fe80::5054:ff:fea0:1f74
+                 DR : this system
+
+GigabitEthernet0/0/0/2      on   2     30     1     
+    Primary Address : fe80::5054:ff:fe4d:3474
+                 DR : fe80::a8bb:ccff:fe00:d00
+
+GigabitEthernet0/0/0/3      on   1     30     1     
+    Primary Address : fe80::5054:ff:fe9d:9a52
+                 DR : this system
+
+RP/0/RP0/CPU0:PE2#
+show pim ipv6 neighbor
+Wed Nov 18 10:11:34.523 UTC
+
+PIM neighbors in VRF default
+Flag: B - Bidir capable, P - Proxy capable, DR - Designated Router,
+      S - Sticky DR Neighbor
+      * indicates the neighbor created for this router
+
+GigabitEthernet0/0/0/0
+
+Neighbor Address                          Uptime    Expires  DR pri  DR  Flags
+fe80::5054:ff:feba:1786                   01:24:16  00:01:31 1           B
+fe80::5054:ff:fecc:6563*                  01:24:27  00:01:15 1      (DR) B
+
+GigabitEthernet0/0/0/1
+
+Neighbor Address                          Uptime    Expires  DR pri  DR  Flags
+fe80::5054:ff:fe18:c53f                   01:24:10  00:01:15 1           B
+fe80::5054:ff:fea0:1f74*                  01:24:27  00:01:35 1      (DR) B
+
+Loopback0
+
+Neighbor Address                          Uptime    Expires  DR pri  DR  Flags
+fe80::9da8:acff:fe90:c81d*                01:24:28  00:01:41 1      (DR) B
+
+GigabitEthernet0/0/0/2
+
+Neighbor Address                          Uptime    Expires  DR pri  DR  Flags
+fe80::5054:ff:fe4d:3474*                  01:24:27  00:01:29 1           B
+fe80::a8bb:ccff:fe00:d00                  01:24:25  00:01:17 1      (DR) B
+
+GigabitEthernet0/0/0/3
+
+Neighbor Address                          Uptime    Expires  DR pri  DR  Flags
+fe80::5054:ff:fe9d:9a52*                  01:24:27  00:01:42 1      (DR) B
+RP/0/RP0/CPU0:PE2#
+show mld interface GigabitEthernet0/0/0/3
+Wed Nov 18 10:11:34.951 UTC
+
+GigabitEthernet0/0/0/3 is up, line protocol is up
+  Internet address is fe80::5054:ff:fe9d:9a52
+  IGMP_AFD is enabled on interface
+  Multihoming is disabled on interface [Stale : False]
+  Location is 0xe
+  Current MLD version is 2
+  MLD query interval is 125 seconds
+  MLD querier timeout is 255 seconds
+  MLD max query response time is 10 seconds
+  Last member query response interval is 1 seconds
+  MLD activity: 19 joins, 10 leaves
+  MLD querying router is fe80::5054:ff:fe9d:9a52 (this system)
+  Time elapsed since last query sent 00:00:49
+  Time elapsed since IGMP router enabled 01:24:27
+  Time elapsed since last report received 00:00:40
+
+RP/0/RP0/CPU0:PE2#
+show pim ipv6 group-map ff0e::1:1
+Wed Nov 18 10:11:35.349 UTC
+
+IP PIM Group Mapping Table 
+(* indicates group mappings being used) 
+(+ indicates BSR group mappings active in MRIB) 
+
+Group Range                                            Proto Client   Groups
+ff00::/8*                                              SM    config   0
+  RP: 2001:db8:255::11
+  RPF: Gi0/0/0/1,fe80::5054:ff:fe18:c53f
+
+RP/0/RP0/CPU0:PE2#
+show pim ipv6 interface GigabitEthernet0/0/0/1
+Wed Nov 18 10:11:37.323 UTC
+
+PIM interfaces in VRF default
+Interface                  PIM  Nbr   Hello  DR
+                                Count Intvl  Prior
+
+GigabitEthernet0/0/0/1      on   2     30     1     
+    Primary Address : fe80::252
+                 DR : fe80::253
+
+RP/0/RP0/CPU0:PE3#
+show mld interface GigabitEthernet0/0/0/1
+Wed Nov 18 10:11:37.740 UTC
+
+GigabitEthernet0/0/0/1 is up, line protocol is up
+  Internet address is fe80::252
+  IGMP_AFD is enabled on interface
+  Multihoming is disabled on interface [Stale : False]
+  Location is 0xe
+  Current MLD version is 2
+  MLD query interval is 125 seconds
+  MLD querier timeout is 255 seconds
+  MLD max query response time is 10 seconds
+  Last member query response interval is 1 seconds
+  MLD activity: 19 joins, 10 leaves
+  MLD querying router is fe80::252 (this system)
+  Time elapsed since last query sent 00:00:45
+  Time elapsed since IGMP router enabled 01:24:34
+  Time elapsed since last report received 00:00:39
+
+RP/0/RP0/CPU0:PE3#
+show ipv6 pim interface Ethernet0/1
+Interface          PIM   Nbr   Hello  DR
+                         Count Intvl  Prior
+
+Ethernet0/1        on    1     30     1     
+    Address: FE80::253
+    DR     : this system
+
+PE4#
+show ipv6 mld interface Ethernet0/1
+Ethernet0/1 is up, line protocol is up
+  Internet address is FE80::253/10
+  MLD is enabled on interface
+  Current MLD version is 2
+  MLD query robustness value is 2
+  MLD query interval is 125 seconds
+  MLD querier timeout is 255 seconds
+  MLD max query response time is 10 seconds
+  Last member query response interval is 1 seconds
+  MLD activity: 14 joins, 10 leaves
+  MLD querying router is FE80::252 
+
+PE4#

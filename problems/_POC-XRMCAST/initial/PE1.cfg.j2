@@ -1,0 +1,62 @@
+!! _POC-XRMCAST PE1(XRv9000 26.1.1)= 送信元 SRC1 の側の PE(送信元側の DR)。ユニキャストの土台(IS-IS の IPv4/IPv6)まで。マルチキャストは PoC の段で足す。
+interface Loopback0
+ ipv4 address 10.255.0.1 255.255.255.255
+ ipv6 address 2001:db8:255::1/128
+!
+interface {{ links[3] }}
+ description to PE2 (direct)
+ ipv4 address 10.0.12.1 255.255.255.0
+ ipv6 address 2001:db8:12::1/64
+ no shutdown
+!
+interface {{ links[4] }}
+ description to P1
+ ipv4 address 10.0.1.1 255.255.255.0
+ ipv6 address 2001:db8:1::1/64
+ no shutdown
+!
+interface {{ links[5] }}
+ description to SRC1 (source LAN)
+ ipv4 address 192.168.1.254 255.255.255.0
+ ipv6 address 2001:db8:100:1::254/64
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0001.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ address-family ipv6 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[4] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[5] }}
+  passive
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+!

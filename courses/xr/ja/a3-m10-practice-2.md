@@ -7,7 +7,7 @@
 ## M10 — セグメント ルーティング
 
 ### 課題 M10-3
-<p class="tolab"><a href="/_learn?id=XRT-10&amp;step=m10t3">ワークスペースで開く</a> — 読み物: <a href="a2-m10-ti-lfa.html#s1-1">1.1 リンクが切れてから直るまで</a> · <a href="a2-m10-ti-lfa.html#s2-2">2.2 経由地を 1 つ足す</a> · <a href="a2-m10-ti-lfa.html#s2-3">2.3 経由地の選び方: P 空間と Q 空間</a> · <a href="a2-m10-ti-lfa.html#s2-5">2.5 設定</a> · <a href="a2-m10-ti-lfa.html#s4">4. マイクロループ</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-10&amp;step=m10t3">ワークスペースで開く</a> — 読み物: <a href="a2-m10-ti-lfa.html#s1-1">1.1 リンクが切れてから直るまで</a> · <a href="a2-m10-ti-lfa.html#s2-2">2.2 経由ノードを 1 つ足す</a> · <a href="a2-m10-ti-lfa.html#s2-3">2.3 経由ノードの選び方: P 空間と Q 空間</a> · <a href="a2-m10-ti-lfa.html#s2-5">2.5 設定</a> · <a href="a2-m10-ti-lfa.html#s4">4. マイクロループ</a></p>
 
 
 PRIMARY または BACKUP を失ったときに、IS-IS が新しいパスを計算するのを待ってはなりません。

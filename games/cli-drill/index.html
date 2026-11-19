@@ -1,0 +1,974 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<title>CLI Drill</title>
+<!--
+  コマンドの素振り台(BL-278)の画面。CLI の動きは junos.js、データは bundle.json(topologies/cli_drill.py build が作る)。
+  URL 引数: ?drill=<お題の ID>(そのお題から開く)・&embed=1(読み物の枠に埋め込む形= 家の画面と戻るを出さない)
+           &lang=en|ja(画面とお題と注記の言語。無ければポータル共通の記憶 localStorage ccnp-lang、それも無ければ日本語)
+           埋め込みの時は中身の高さを親へ知らせる(postMessage {ccnpDrillH})。読み物の :::drill(gen_reading)が枠の高さを合わせる
+           ?demo=reading(読み物の区切りから入る形の見本)・?selftest=1(試験。結果は #selftest に書く)
+  記録は端末(この閲覧者のブラウザ)の localStorage に「解いたお題」だけ。
+-->
+<style>
+:root{
+  --paper:#eceef1; --card:#fff; --ink:#15171a; --sub:#5f6670; --line:#d6d9de; --pri:#1f63c6; --ok:#2a7d3a; --ng:#c62828;
+  --tbg:#14171c; --tink:#e6e8eb; --tdoc:#a9c4e6; --tsim:#f2c25c; --tdim:#7c838c; --techo:#ffffff; --tcaret:#ff8a80;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --paper:#16181c; --card:#1f2228; --ink:#e6e8eb; --sub:#9aa1aa; --line:#33373e; --pri:#6ea2ef; --ok:#5fbf6e; --ng:#ef6b6b; }
+}
+:root[data-theme="dark"]{ --paper:#16181c; --card:#1f2228; --ink:#e6e8eb; --sub:#9aa1aa; --line:#33373e; --pri:#6ea2ef; --ok:#5fbf6e; --ng:#ef6b6b; }
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--paper);color:var(--ink)}
+body{font-family:"Segoe UI","Yu Gothic UI",Meiryo,"Hiragino Kaku Gothic ProN","Noto Sans CJK JP",system-ui,sans-serif;
+  font-size:15px;line-height:1.55;-webkit-text-size-adjust:100%}
+@media (min-width:1000px) and (min-resolution:2dppx){ html{font-size:clamp(100%, calc(4vw - 24px), 150%)} body{font-size:.94rem} }
+button{font:inherit;color:inherit;cursor:pointer}
+.mono,code,pre{font-family:Menlo,Consolas,"DejaVu Sans Mono",monospace}
+code{font-size:.88em;background:color-mix(in srgb,var(--line) 45%,transparent);border-radius:3px;padding:0 .25em}
+header.bar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:.5rem;padding:.55rem 16px;background:var(--card);border-bottom:1px solid var(--line)}
+header.bar .ttl{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header.bar button{border:1px solid var(--line);background:var(--card);border-radius:6px;padding:.2rem .6rem;font-size:.85rem}
+header.bar button[hidden]{display:none}
+main{max-width:62rem;margin:0 auto;padding:12px 16px 40px}
+#home{max-width:760px;margin:0 auto}
+.view[hidden]{display:none}
+.intro{color:var(--sub);font-size:.9rem;margin:.2rem 0 1rem}
+.unit{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.8rem 1rem;margin:0 0 1rem}
+.unit h2{font-size:1.05rem;margin:0 0 .4rem}
+.unit h2 .osl{font-size:.75rem;font-weight:600;color:var(--pri);border:1px solid var(--pri);border-radius:5px;padding:0 .35rem;vertical-align:.1em}
+.sec{margin:.7rem 0 .2rem}
+.sec .st{font-weight:600;font-size:.92rem}
+.sec .sp{color:var(--sub);font-size:.8rem}
+.dr{display:flex;align-items:center;gap:.5rem;width:100%;text-align:left;background:none;border:1px solid var(--line);border-radius:8px;padding:.45rem .7rem;margin:.3rem 0}
+.dr .no{color:var(--sub);font-size:.8rem;min-width:4.6em}
+.dr .nm{flex:1}
+.dr .mk{color:var(--ok);font-weight:700}
+.task{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.7rem .9rem;margin:0 0 .6rem}
+.task .dev{font-size:.8rem;color:var(--sub)}
+.task .tx{white-space:pre-wrap;margin:.2rem 0 0}
+.term{font-family:Menlo,Consolas,"DejaVu Sans Mono",monospace;background:var(--tbg);color:var(--tink);border-radius:10px;padding:.6rem .7rem;font-size:.82rem;line-height:1.4;
+  height:min(52vh,30rem);overflow:auto;cursor:text}
+.term pre{margin:0;white-space:pre-wrap;word-break:break-all;font-size:inherit}
+.term .dev{color:var(--tink)} .term .doc{color:var(--tdoc)} .term .sim{color:var(--tsim)} .term .dim{color:var(--tdim)}
+.term .echo{color:var(--techo)}
+.term .inl{display:flex;align-items:baseline;white-space:pre}
+.term .inl input{flex:1;min-width:2rem;background:transparent;border:0;outline:0;color:var(--techo);font:inherit;padding:0;margin:0;caret-color:#7fd1ff}
+.keys{display:flex;flex-wrap:wrap;gap:.35rem;margin:.45rem 0}
+.keys button{border:1px solid var(--line);background:var(--card);border-radius:6px;padding:.2rem .6rem;font-size:.82rem}
+.keys .gap{flex:1}
+.keys .pri{background:var(--pri);border-color:var(--pri);color:#fff}
+.res{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.55rem .8rem;margin:.4rem 0;font-size:.9rem}
+.res[hidden]{display:none}
+.res .ok{color:var(--ok)} .res .ng{color:var(--ng)}
+.res .head{font-weight:700;margin-bottom:.2rem}
+.ans{background:var(--card);border:1px dashed var(--line);border-radius:10px;padding:.5rem .8rem;margin:.4rem 0}
+.ans[hidden]{display:none}
+.ans pre{margin:.3rem 0 0;font-size:.8rem;white-space:pre-wrap}
+/* 盤面の図(トポロジファイル＋初めの設定から起こしたもの) */
+.topo{background:var(--card);border:1px solid var(--line);border-radius:10px;margin:0 0 .6rem;padding:.35rem .7rem .45rem}
+.topo .th{display:flex;align-items:center;gap:.5rem;font-size:.85rem}
+.topo .th .sp{flex:1;color:var(--sub);font-size:.76rem;min-width:0}
+.topo .th button{border:1px solid var(--line);background:var(--card);border-radius:6px;padding:.05rem .55rem;font-size:.8rem}
+.topo .fig[hidden],.topo .det[hidden]{display:none}
+.topo .fig{overflow-x:auto}
+.topo svg{display:block;margin:.25rem auto 0;height:auto;max-width:none}
+.topo .tl{stroke:var(--sub);stroke-width:1.6}
+.topo .nb{fill:var(--card);stroke:var(--sub);stroke-width:1.3}
+.topo .nd{cursor:pointer;outline:none}
+.topo .nd:hover .nb,.topo .nd:focus-visible .nb{stroke:var(--ink)}
+.topo .nd.here .nb{stroke:var(--pri);stroke-width:2.6}
+.topo .nd.sel .nb{fill:color-mix(in srgb,var(--pri) 10%,var(--card))}
+.topo .nm{font:600 13.5px "Segoe UI",system-ui,sans-serif;fill:var(--ink);text-anchor:middle}
+.topo .nd.here .nm{fill:var(--pri)}
+.topo .ns{font:10.5px Menlo,Consolas,"DejaVu Sans Mono",monospace;fill:var(--sub);text-anchor:middle}
+.topo .il{font:11px Menlo,Consolas,"DejaVu Sans Mono",monospace;fill:var(--ink)}
+.topo .ih{font:11px Menlo,Consolas,"DejaVu Sans Mono",monospace;fill:var(--sub)}
+.topo .sn{font:10.5px Menlo,Consolas,"DejaVu Sans Mono",monospace;fill:var(--sub)}
+.topo .tg rect{fill:color-mix(in srgb,var(--pri) 12%,var(--card));stroke:color-mix(in srgb,var(--pri) 45%,transparent)}
+.topo .tg text{font:10.5px "Segoe UI",system-ui,sans-serif;fill:var(--pri);text-anchor:middle}
+.topo .hint{color:var(--sub);font-size:.74rem;margin:.1rem 0 0;text-align:center}
+.topo .det{border-top:1px solid var(--line);margin:.4rem 0 0;padding:.4rem 0 0;font-size:.84rem}
+.topo .det .dh{display:flex;align-items:baseline;gap:.5rem}
+.topo .det .dh b{font-size:.92rem}
+.topo .det .dh .sp{flex:1;color:var(--sub);font-size:.78rem}
+.topo .det .dh button{border:0;background:none;color:var(--sub);font-size:1rem;padding:0 .2rem}
+.topo .det table{border-collapse:collapse;margin:.2rem 0 0}
+.topo .det td{padding:.12rem .5rem .12rem 0;vertical-align:top}
+.topo .det td:first-child{color:var(--sub);white-space:nowrap;font-size:.78rem;padding-top:.2rem}
+.topo .det .v{font-family:Menlo,Consolas,"DejaVu Sans Mono",monospace;font-size:.8rem}
+.topo .det .q{color:var(--sub)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;z-index:50;padding:5vh 12px}
+.modal[hidden]{display:none}
+.modal .box{background:var(--card);color:var(--ink);border-radius:12px;max-width:600px;width:100%;max-height:88vh;overflow:auto;padding:.9rem 1rem}
+.modal h3{margin:.2rem 0 .5rem;font-size:1rem}
+.modal table{border-collapse:collapse;width:100%;font-size:.86rem}
+.modal td{border-top:1px solid var(--line);padding:.3rem .35rem;vertical-align:top}
+.modal td:first-child{white-space:nowrap;font-family:Menlo,Consolas,monospace}
+.sw{display:inline-block;width:.8em;height:.8em;border-radius:2px;vertical-align:-.05em;margin-right:.25em}
+.note{color:var(--sub);font-size:.8rem;margin:.6rem 0 0}
+body.embed header.bar,body.embed .homeonly{display:none}
+body.embed main{padding:8px 10px 12px;max-width:none}
+/* 埋め込みの枠の高さは中身に合わせる(親が合わせる)ので、端末の高さを枠の高さ(vh)から決めない */
+body.embed .term{height:20rem}
+/* 枠の中では縦のスクロールバーを出さない(枠の高さ= 中身の高さ。バーの出入りで幅が変わり、折り返しと高さが揺れるのを防ぐ) */
+html.framed{overflow-y:hidden}
+.ebar{display:none;justify-content:flex-end;align-items:center;gap:.8rem;font-size:.8rem;margin:0 0 .35rem}
+body.embed .ebar{display:flex}
+.ebar button{border:1px solid var(--line);background:var(--card);border-radius:6px;padding:.05rem .55rem;font-size:.8rem}
+.ebar a{color:var(--pri);text-decoration:none}
+/* 読み物の区切りの見本 */
+.rd{max-width:760px;margin:0 auto;padding:16px;line-height:1.75}
+.rd h2{font-size:1.15rem;border-bottom:1px solid var(--line);padding-bottom:.2rem}
+.rd .cfg{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.5rem .7rem;font-size:.82rem;overflow:auto}
+.drillbreak{border:1px solid var(--pri);border-radius:12px;margin:1.2rem 0;overflow:hidden;background:var(--card)}
+.drillbreak .bh{display:flex;align-items:center;gap:.6rem;padding:.6rem .8rem}
+.drillbreak .bh b{flex:1}
+.drillbreak .bh button{border:1px solid var(--pri);background:var(--pri);color:#fff;border-radius:6px;padding:.2rem .7rem;font-size:.85rem}
+.drillbreak iframe{display:block;width:100%;height:31rem;border:0;border-top:1px solid var(--line)}
+.drillbreak iframe[hidden]{display:none}
+</style>
+</head>
+<body>
+<header class="bar">
+  <button id="back" hidden data-w="back"></button>
+  <div class="ttl" id="ttl"></div>
+  <button id="langsw"></button>
+  <button id="rules" data-w="rules"></button>
+</header>
+<main>
+  <section class="view" id="home">
+    <p class="intro" data-wh="intro"></p>
+    <div id="units"></div>
+    <p class="note homeonly" data-wh="homeNote"></p>
+  </section>
+  <section class="view" id="drill" hidden>
+    <div class="ebar"><button id="erules" data-w="rules"></button><a id="etab" target="_blank" rel="noopener" data-w="openTab"></a></div>
+    <div class="task"><div class="dev" id="tdev"></div><div class="tx" id="ttx"></div></div>
+    <div class="topo" id="topo" hidden>
+      <div class="th"><b data-w="board"></b><span class="sp" id="topocap"></span><button id="topotg"></button></div>
+      <div class="fig" id="topofig"></div>
+      <div class="det" id="topodet" hidden></div>
+    </div>
+    <div class="term" id="term"><pre id="out"></pre><div class="inl"><span id="pr"></span><input id="in" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send"></div></div>
+    <div class="keys">
+      <button data-k="tab">Tab</button><button data-k="?">?</button><button data-k="up">↑</button><button data-k="down">↓</button><button data-k="clr" data-w="clr"></button>
+      <span class="gap"></span>
+      <button id="reset" data-w="reset"></button><button id="showans" data-w="showans"></button><button id="check" class="pri" data-w="check"></button>
+    </div>
+    <div class="res" id="res" hidden></div>
+    <div class="ans" id="ans" hidden><span data-wh="ansHead"></span><pre id="anstx"></pre></div>
+  </section>
+  <section class="view" id="reading" hidden></section>
+  <pre id="selftest" hidden></pre>
+</main>
+
+<div class="modal" id="modal" hidden><div class="box">
+  <div data-lang="ja">
+  <div data-os="junos">
+  <h3>ルール(Junos)</h3>
+  <table>
+    <tr><td>?</td><td>次に置ける語の一覧。語の途中で押すと、その字で始まる語だけ</td></tr>
+    <tr><td>Tab・空白</td><td>語の続きを補う(候補が 1 つの時)。候補が複数なら Tab で一覧が出ます</td></tr>
+    <tr><td>↑ ↓</td><td>打ったコマンドの履歴</td></tr>
+    <tr><td>configure</td><td>設定モードへ。プロンプトが <code>#</code> になり、上に <code>[edit …]</code> が出ます</td></tr>
+    <tr><td>set・delete</td><td>候補の設定を変える(まだ効かない)</td></tr>
+    <tr><td>edit・up・top</td><td>階層の中へ入る・1 つ上へ・一番上へ。<code>[edit …]</code> が今いる階層</td></tr>
+    <tr><td>show</td><td>今の階層の候補の設定。<code>| display set</code> で set の形、<code>| compare</code> で commit 済みとの差</td></tr>
+    <tr><td>insert</td><td>term など並びの項目を動かす(<code>insert … term A before term B</code>)</td></tr>
+    <tr><td>commit</td><td>候補を確定。<code>commit check</code> は確かめるだけ。<code>rollback 0</code> で候補を commit 済みに戻す</td></tr>
+    <tr><td>exit</td><td>階層を 1 つ戻る。一番上なら設定モードを出る</td></tr>
+  </table>
+  </div>
+  <div data-os="iosxr">
+  <h3>ルール(IOS XR)</h3>
+  <table>
+    <tr><td>?</td><td>次に置ける語の一覧。語の途中で押すと、その字で始まる語だけ</td></tr>
+    <tr><td>Tab・空白</td><td>語の続きを補う(候補が 1 つの時)。候補が複数なら Tab で一覧が出ます</td></tr>
+    <tr><td>↑ ↓</td><td>打ったコマンドの履歴</td></tr>
+    <tr><td>configure</td><td>設定モードへ。プロンプトが <code>(config)#</code> になり、<code>interface …</code> などで下位モード(<code>(config-if)#</code> など)へ入ります。下位モードで通らない文は上のモードで試されます</td></tr>
+    <tr><td>exit・root・end</td><td>1 つ上へ・設定モードの一番上へ・設定モードを出る(コミットしていない変更があると聞かれます)</td></tr>
+    <tr><td>no …</td><td>文を消す(まだ効かない)</td></tr>
+    <tr><td>show configuration</td><td>編集中の変更(まだ効いていない分)。<code>show commit changes diff</code> で稼働中との差、<code>show running-config</code> で稼働中の設定</td></tr>
+    <tr><td>commit</td><td>編集中の変更を確定。<code>label</code>・<code>comment</code>・<code>confirmed &lt;秒&gt;</code> を付けられます。<code>abort</code> は変更を捨てて出る</td></tr>
+    <tr><td>履歴</td><td><code>show configuration commit list</code>・<code>… commit changes &lt;回&gt;</code>。<code>load rollback changes &lt;回&gt;</code> でその 1 回の逆を編集中に入れる。運用モードの <code>rollback configuration last &lt;N&gt;</code> でまとめて戻す</td></tr>
+  </table>
+  </div>
+  <h3 style="margin-top:.9rem">端末の色</h3>
+  <table>
+    <tr><td><span class="sw" style="background:#e6e8eb"></span>白</td><td>実機の記録にある文言(エラー・commit の結果・? の一覧)</td></tr>
+    <tr><td><span class="sw" style="background:#a9c4e6"></span>青</td><td>公式文書(CLI User Guide)にある文言(Junos)</td></tr>
+    <tr><td><span class="sw" style="background:#7c838c"></span>薄い</td><td>語と形は骨組みから。実機の説明の文はまだ採っていない</td></tr>
+    <tr><td><span class="sw" style="background:#f2c25c"></span>黄</td><td>素振り台の注記。実機の文言を採っていない場面と、扱わないこと</td></tr>
+  </table>
+  <p class="note" data-os="junos">盤面はラボ JNT-02 の初めの設定です。ライセンスの warning は、ラボの仮想ルータ(vJunos-Evolved)が commit のたびに出すもので、動きには関係しません。</p>
+  <p class="note" data-os="iosxr">盤面はラボ XRT-01 の XR01 の初めの状態(稼働中の設定とコミットの履歴)を、実機で採った記録から作ったものです。
+    時刻は今の時刻で出ます。ルーティング テーブル・隣接などの状態は作りません。</p>
+  <p class="note">盤面の図はラボの定義と初めの設定から起こしたもので、お題で設定を変えても図は変わりません。お題の「確かめる」は commit 済みの設定を見ます。</p>
+  </div>
+  <div data-lang="en">
+  <div data-os="junos">
+  <h3>Rules (Junos)</h3>
+  <table>
+    <tr><td>?</td><td>Lists the words that can come next. In the middle of a word, only the words that start with those letters</td></tr>
+    <tr><td>Tab, Space</td><td>Completes the word (when there is one candidate). With several candidates, Tab lists them</td></tr>
+    <tr><td>↑ ↓</td><td>Command history</td></tr>
+    <tr><td>configure</td><td>Enters configuration mode. The prompt ends in <code>#</code> and <code>[edit …]</code> appears above it</td></tr>
+    <tr><td>set, delete</td><td>Change the candidate configuration (not in effect yet)</td></tr>
+    <tr><td>edit, up, top</td><td>Go into a level, one level up, to the top. <code>[edit …]</code> shows where you are</td></tr>
+    <tr><td>show</td><td>The candidate configuration at this level. <code>| display set</code> for the set form, <code>| compare</code> for the difference from the committed configuration</td></tr>
+    <tr><td>insert</td><td>Moves an ordered item such as a term (<code>insert … term A before term B</code>)</td></tr>
+    <tr><td>commit</td><td>Commits the candidate. <code>commit check</code> only checks it. <code>rollback 0</code> resets the candidate to the committed configuration</td></tr>
+    <tr><td>exit</td><td>Up one level. At the top, leaves configuration mode</td></tr>
+  </table>
+  </div>
+  <div data-os="iosxr">
+  <h3>Rules (IOS XR)</h3>
+  <table>
+    <tr><td>?</td><td>Lists the words that can come next. In the middle of a word, only the words that start with those letters</td></tr>
+    <tr><td>Tab, Space</td><td>Completes the word (when there is one candidate). With several candidates, Tab lists them</td></tr>
+    <tr><td>↑ ↓</td><td>Command history</td></tr>
+    <tr><td>configure</td><td>Enters configuration mode. The prompt becomes <code>(config)#</code>; <code>interface …</code> and the like enter submodes (<code>(config-if)#</code> and so on). A statement that a submode does not accept is tried in the modes above it</td></tr>
+    <tr><td>exit, root, end</td><td>Up one level, to the top of configuration mode, out of configuration mode (you are asked first if there are uncommitted changes)</td></tr>
+    <tr><td>no …</td><td>Removes a statement (not in effect yet)</td></tr>
+    <tr><td>show configuration</td><td>Your uncommitted changes. <code>show commit changes diff</code> for the difference from the running configuration, <code>show running-config</code> for the running configuration</td></tr>
+    <tr><td>commit</td><td>Commits your changes. You can add <code>label</code>, <code>comment</code> and <code>confirmed &lt;seconds&gt;</code>. <code>abort</code> discards the changes and leaves</td></tr>
+    <tr><td>History</td><td><code>show configuration commit list</code>, <code>… commit changes &lt;commit&gt;</code>. <code>load rollback changes &lt;commit&gt;</code> puts the reverse of that one commit into your changes. <code>rollback configuration last &lt;N&gt;</code> in EXEC mode rolls back several commits at once</td></tr>
+  </table>
+  </div>
+  <h3 style="margin-top:.9rem">Terminal colours</h3>
+  <table>
+    <tr><td><span class="sw" style="background:#e6e8eb"></span>White</td><td>Text from captures of the real device (errors, commit results, <code>?</code> lists)</td></tr>
+    <tr><td><span class="sw" style="background:#a9c4e6"></span>Blue</td><td>Text from the official documentation (CLI User Guide) (Junos)</td></tr>
+    <tr><td><span class="sw" style="background:#7c838c"></span>Dim</td><td>Words and forms from the drill's schema. The real device's descriptions have not been captured yet</td></tr>
+    <tr><td><span class="sw" style="background:#f2c25c"></span>Yellow</td><td>Notes from the drill: places where the real device's text has not been captured, and things the drill does not handle</td></tr>
+  </table>
+  <p class="note" data-os="junos">The board is the initial configuration of lab JNT-02. The license warning is printed at every commit by the lab's virtual router (vJunos-Evolved) and does not affect the behaviour.</p>
+  <p class="note" data-os="iosxr">The board is the initial state of XR01 in lab XRT-01 (running configuration and commit history), built from captures of the real device.
+    Times are shown in the current time. Routing tables, neighbors and other state are not built.</p>
+  <p class="note">The topology diagram is drawn from the lab definition and the initial configurations. It does not change when you change the configuration in a task. Check looks at the committed configuration.</p>
+  </div>
+  <p style="text-align:right;margin:.6rem 0 0"><button id="mclose" style="border:1px solid var(--line);background:var(--card);border-radius:6px;padding:.2rem .8rem" data-w="close"></button></p>
+</div></div>
+
+<script src="junos.js"></script>
+<script src="iosxr.js" onerror="void 0"></script>
+<script>
+(function () {
+'use strict';
+const $ = id => document.getElementById(id);
+const Q = new URLSearchParams(location.search);
+const EMBED = Q.get('embed') === '1';
+if (EMBED) document.body.classList.add('embed');
+
+/* ---------- 言語(画面の文言・お題・素振り台の注記。実機の文言は言語に依らない) ----------
+   ?lang= → ポータル共通の記憶(localStorage ccnp-lang。読み物・問題の切替と同じ鍵)→ 日本語 */
+const LANG = (() => {
+  const q = Q.get('lang');
+  if (q === 'en' || q === 'ja') return q;
+  try { const l = localStorage.getItem('ccnp-lang'); if (l === 'en' || l === 'ja') return l; } catch (e) {}
+  return 'ja';
+})();
+document.documentElement.lang = LANG;
+const W = {
+  ja: {
+    appTitle: 'コマンドの素振り台(試作)', back: '← 一覧', rules: 'ルール', close: '閉じる', langName: 'English',
+    intro: '機器を起動せずに、Junos・IOS XR のコマンドを打つ練習をする所です。<code>?</code> で次に置ける語を見て、Tab で補い、'
+      + '設定モードに入る → 変える → 差分を確かめる → commit の型で打ちます。ルーティング テーブルなどの状態は作らないので、結果はラボで確かめます。'
+      + '出す文言・一覧・表示は実機で採った記録に合わせてあります。',
+    homeNote: '試作: Junos の J1 と IOS XR の M0・M1。<a href="?demo=reading">読み物の区切りから入る形の見本</a>',
+    openTab: '別のタブで開く ↗',
+    board: '盤面', show: '出す', hide: '隠す',
+    topoCap: (lab, dev) => `${lab} の初めの設定・太枠= 打つ機器(${dev})`,
+    topoHint: '機器を押すと、その機器の初めの設定の要点が出ます。', topoAria: '盤面の図', nodeAria: lb => `${lb} の初めの設定`,
+    detIf: 'インターフェース', noAddr: '(アドレスなし)', detRid: 'router-id・AS', detStatic: 'スタティック ルート', detBgpNet: 'BGP で送る経路',
+    server: '・サーバ役', sep: '・',
+    clr: '行を消す', reset: 'やり直す', showans: '答えの例', check: '確かめる',
+    ansHead: '<b>答えの例</b>(ほかの書き方でも、お題を満たせば通ります)',
+    okHead: '✓ お題を満たしています', ngHead: '✗ まだです',
+    resetConfirm: '盤面を初めの状態に戻します。',
+    baseErr: '素振り台: 盤面の初めの設定に、骨組みで読めない行がありました: ',
+    startLine: (dev, lab, xr, extra) => `--- ${dev}(盤面= ${lab} の初めの${xr ? '状態' : '設定'}${extra ? '＋このお題の前置き' : ''})---`,
+    bundleErr: 'bundle.json を読めません: ',
+  },
+  en: {
+    appTitle: 'CLI drill (preview)', back: '← List', rules: 'Rules', close: 'Close', langName: '日本語',
+    intro: 'Practise typing Junos and IOS XR commands without starting a device. Use <code>?</code> to see the words that can come next and Tab to complete them, '
+      + 'and type in the order: enter configuration mode → change → check the difference → commit. Routing tables and other state are not built; check the results in the lab. '
+      + 'The messages, lists and displays follow captures from the real devices.',
+    homeNote: 'Preview: Junos J1 and IOS XR M0/M1. <a href="?demo=reading">Sample of a drill inside a reading page</a> (in Japanese)',
+    openTab: 'Open in a new tab ↗',
+    board: 'Topology', show: 'Show', hide: 'Hide',
+    topoCap: (lab, dev) => `${lab} initial configuration · bold box = the device you type on (${dev})`,
+    topoHint: 'Select a device to see the main points of its initial configuration.', topoAria: 'Topology diagram', nodeAria: lb => `${lb}: initial configuration`,
+    detIf: 'Interfaces', noAddr: '(no address)', detRid: 'Router ID · AS', detStatic: 'Static routes', detBgpNet: 'Routes sent by BGP',
+    server: ' · server role', sep: ' · ',
+    clr: 'Clear line', reset: 'Reset', showans: 'Example answer', check: 'Check',
+    ansHead: '<b>Example answer</b> (any other way that meets the task also passes)',
+    okHead: '✓ The task is met', ngHead: '✗ Not yet',
+    resetConfirm: 'Reset the board to its initial state?',
+    baseErr: 'Drill: the initial configuration of the board has lines the schema cannot read: ',
+    startLine: (dev, lab, xr, extra) => `--- ${dev} (board: ${lab} initial ${xr ? 'state' : 'configuration'}${extra ? ' + the setup of this task' : ''}) ---`,
+    bundleErr: 'Cannot read bundle.json: ',
+  },
+};
+function t(k, ...a) { const v = W[LANG][k]; return typeof v === 'function' ? v(...a) : v; }
+/* お題の文言は {ja, en} か 1 つの文字列(Junos のお題はまだ日本語だけ) */
+function pick(v) { return v == null || typeof v === 'string' ? v : (v[LANG] || v.ja || v.en || ''); }
+function paintStatic() {
+  for (const el of document.querySelectorAll('[data-w]')) el.textContent = t(el.dataset.w);
+  for (const el of document.querySelectorAll('[data-wh]')) el.innerHTML = t(el.dataset.wh);
+  for (const el of document.querySelectorAll('#modal [data-lang]')) el.hidden = el.dataset.lang !== LANG;
+  $('ttl').textContent = t('appTitle');
+  $('langsw').textContent = t('langName');
+  $('langsw').hidden = EMBED;
+}
+$('langsw').onclick = () => {
+  const l = LANG === 'en' ? 'ja' : 'en';
+  try { localStorage.setItem('ccnp-lang', l); } catch (e) {}
+  const u = new URL(location.href);
+  u.searchParams.set('lang', l);
+  location.href = u.toString();
+};
+/* 埋め込み: 中身の高さを親(読み物の :::drill)へ知らせる。親が枠の高さを合わせる */
+if (EMBED && window.parent !== window) {
+  document.documentElement.classList.add('framed');
+  let lastH = 0;
+  const post = () => {
+    const h = Math.ceil(document.querySelector('main').getBoundingClientRect().height);
+    if (h && h !== lastH) { lastH = h; try { window.parent.postMessage({ ccnpDrillH: h }, '*'); } catch (e) {} }
+  };
+  // 大きさの変化(ResizeObserver)に加えて、中身の変化(結果・答えの例・図の開閉)でも測り直す(枠が見えていない間は大きさの通知が来ないことがある)
+  if (window.ResizeObserver) new ResizeObserver(post).observe(document.querySelector('main'));
+  new MutationObserver(post).observe(document.querySelector('main'), { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
+  window.addEventListener('load', post);
+  window.addEventListener('resize', post);
+}
+let B = null, DRILLS = [], cur = null, sim = null, hist = [], hpos = 0;
+
+const store = {
+  get() { try { return JSON.parse(localStorage.getItem('cli-drill:solved') || '{}'); } catch (e) { return {}; } },
+  set(id) { try { const s = store.get(); s[id] = Date.now(); localStorage.setItem('cli-drill:solved', JSON.stringify(s)); } catch (e) {} },
+};
+
+function esc(s) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]); }
+function show(id) { for (const v of ['home', 'drill', 'reading']) $(v).hidden = v !== id; $('back').hidden = id === 'home' || EMBED; }
+
+/* ---------- 家の画面 ---------- */
+function renderHome() {
+  const solved = store.get();
+  let h = '';
+  for (const u of B.units) {
+    h += `<div class="unit"><h2><span class="osl">${osOf(u) === 'iosxr' ? 'IOS XR' : 'Junos'}</span> ${esc(pick(u.unit))} ${esc(pick(u.title))}</h2>`;
+    for (const s of u.sections) {
+      h += `<div class="sec"><div class="st">${esc(pick(s.title))}</div>`;
+      s.drills.forEach((d, i) => {
+        h += `<button class="dr" data-id="${d.id}"><span class="no">${osOf(u) === 'iosxr' ? s.id.toUpperCase() : esc(pick(u.unit)) + '-' + s.id}-${i + 1}</span><span class="nm">${esc(pick(d.title))}</span><span class="mk">${solved[d.id] ? '✓' : ''}</span></button>`;
+      });
+      h += `</div>`;
+    }
+    h += `</div>`;
+  }
+  $('units').innerHTML = h;
+  for (const b of document.querySelectorAll('.dr')) b.onclick = () => openDrill(b.dataset.id);
+  $('ttl').textContent = t('appTitle');
+  show('home');
+}
+
+/* ---------- OS ごとの CLI の動き(junos.js・iosxr.js)。単元の os: で選ぶ(既定 junos) ---------- */
+function osOf(u) { return u.os || 'junos'; }
+function ENG(u) { return { junos: window.JunosSim, iosxr: window.XrSim }[osOf(u)]; }
+function hostOf(u, dev) { return osOf(u) === 'junos' ? dev.toLowerCase() : dev; }   // Junos の host-name は小文字(盤面の init.conf)
+
+/* ---------- 盤面の図 ----------
+   データ= bundle の units[].topo(cli_drill.py の topo_model がトポロジファイルと各ノードの初めの設定から起こす)。
+   横並びの図が幅に収まらない時(スマホなど)は縦並びにする。機器を押すと、その機器の初めの設定の要点を図の下に出す。 */
+const TOPO = { open: null, sel: null, unit: null };
+const topoPref = {
+  get() { try { const v = localStorage.getItem('cli-drill:topo'); return v == null ? null : v === '1'; } catch (e) { return null; } },
+  set(v) { try { localStorage.setItem('cli-drill:topo', v ? '1' : '0'); } catch (e) {} },
+};
+const BW = 124, BH = 56, CW = 6.6, SW = 6.2;     // 箱の幅・高さ・等幅 11px の 1 字・10.5px の 1 字(図の外枠の見積もり)
+function hostPart(addr, net) {
+  if (!addr) return '';
+  const ip = addr.split('/')[0];
+  return net && +net.split('/')[1] >= 24 ? '.' + ip.split('.').pop() : ip;
+}
+// 図に出す口の名前は短い名前(XR・IOS の ? の一覧の「short name is Gi」など)。機器を押した時の要点は正式な名前のまま
+const IFABBR = [['GigabitEthernet', 'Gi'], ['TenGigE', 'Te'], ['HundredGigE', 'Hu'], ['Bundle-Ether', 'BE'], ['Loopback', 'Lo'], ['MgmtEth', 'Mg'], ['Ethernet', 'Et']];
+function ifShort(s) { for (const [a, b] of IFABBR) if (s && s.startsWith(a)) return b + s.slice(a.length); return s; }
+function loOf(n) { return (n.ifs || []).find(i => /^(lo0?|Loopback0)$/.test(i.n) && i.a.length); }
+function topoSvg(T, here, vertical) {
+  const P = T.nodes.map(n => vertical ? [n.y, n.x] : [n.x, n.y]);
+  let dmin = Infinity;
+  for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) {
+    const d = Math.hypot(P[i][0] - P[j][0], P[i][1] - P[j][1]);
+    if (d > 0 && d < dmin) dmin = d;
+  }
+  const k = isFinite(dmin) ? (vertical ? 150 : 262) / dmin : 1;   // 隣どうしの間隔をそろえる
+  const B = {};
+  T.nodes.forEach((n, i) => { B[n.label] = { n, cx: P[i][0] * k, cy: P[i][1] * k, w: BW, h: BH }; });
+  // 同じ 2 台の間に並ぶリンク: 線をずらし、箱をその分だけ高く(横の線)・広く(縦の線)する
+  const SPH = 80, SPV = 104;
+  const orient = l => Math.abs(B[l.b].cx - B[l.a].cx) >= Math.abs(B[l.b].cy - B[l.a].cy) ? 'h' : 'v';
+  const groups = {};
+  for (const l of T.links) { const key = [l.a, l.b].sort().join('|'); (groups[key] = groups[key] || []).push(l); }
+  const off = new Map();
+  for (const g of Object.values(groups)) {
+    const o = orient(g[0]), sp = o === 'h' ? SPH : SPV;
+    const first = [g[0].a, g[0].b].sort()[0];
+    g.sort((x, y) => { const ix = x.a === first ? x.a_if : x.b_if, iy = y.a === first ? y.a_if : y.b_if; return ix < iy ? -1 : ix > iy ? 1 : 0; });
+    g.forEach((l, i) => off.set(l, (i - (g.length - 1) / 2) * sp));
+    if (g.length > 1) for (const lb of [g[0].a, g[0].b]) {
+      if (o === 'h') B[lb].h = Math.max(B[lb].h, (g.length - 1) * SPH + 40);
+      else B[lb].w = Math.max(B[lb].w, (g.length - 1) * SPV + 60);
+    }
+  }
+  // 箱が大きくなった分、近い 2 台が重ならないよう全体を広げる(リンクのある 2 台は線と札の分も空ける)
+  const linked = new Set(Object.keys(groups));
+  let gx = 1, gy = 1;          // 縦と横は別々に広げる(線が無駄に長くならないように)
+  const labs = Object.keys(B);
+  for (let i = 0; i < labs.length; i++) for (let j = i + 1; j < labs.length; j++) {
+    const a = B[labs[i]], c = B[labs[j]];
+    const dx = Math.abs(a.cx - c.cx), dy = Math.abs(a.cy - c.cy);
+    const gap = linked.has([labs[i], labs[j]].sort().join('|')) ? 130 : 40;
+    if (dx >= dy && dx > 0) gx = Math.max(gx, ((a.w + c.w) / 2 + gap) / dx);
+    else if (dy > 0) gy = Math.max(gy, ((a.h + c.h) / 2 + gap) / dy);
+  }
+  for (const lb of labs) { B[lb].cx *= gx; B[lb].cy *= gy; }
+  const ext = [Infinity, Infinity, -Infinity, -Infinity];
+  const grow = (x1, y1, x2, y2) => { ext[0] = Math.min(ext[0], x1); ext[1] = Math.min(ext[1], y1); ext[2] = Math.max(ext[2], x2); ext[3] = Math.max(ext[3], y2); };
+  const f = v => v.toFixed(1);
+  const parts = [];
+  const txt = (cls, x, y, s, anchor) => {
+    if (!s) return 0;
+    const w = s.length * (cls === 'sn' ? SW : CW);
+    const x1 = anchor === 'end' ? x - w : anchor === 'middle' ? x - w / 2 : x;
+    grow(x1, y - 11, x1 + w, y + 3);
+    parts.push(`<text class="${cls}" x="${f(x)}" y="${f(y)}"${anchor ? ` text-anchor="${anchor}"` : ''}>${esc(s)}</text>`);
+    return w;
+  };
+  const pill = (x, y, s, anchor) => {       // y= 札の上端
+    const w = s.length * SW + 12;
+    const x1 = anchor === 'middle' ? x - w / 2 : x;
+    grow(x1, y, x1 + w, y + 16);
+    parts.push(`<g class="tg"><rect x="${f(x1)}" y="${f(y)}" width="${f(w)}" height="16" rx="8"/><text x="${f(x1 + w / 2)}" y="${f(y + 12)}">${esc(s)}</text></g>`);
+    return w;
+  };
+  for (const l of T.links) {
+    let A = B[l.a], C = B[l.b];
+    let ea = { i: ifShort(l.a_if), h: hostPart(l.a_addr, l.net) }, ec = { i: ifShort(l.b_if), h: hostPart(l.b_addr, l.net) };
+    const horiz = orient(l) === 'h';
+    const o = off.get(l) || 0;
+    if ((horiz && C.cx < A.cx) || (!horiz && C.cy < A.cy)) { [A, C] = [C, A]; [ea, ec] = [ec, ea]; }
+    if (horiz) {   // 線の上に口の名前、下にアドレスの末尾・網・プロトコル
+      const x1 = A.cx + A.w / 2, x2 = C.cx - C.w / 2, y1 = A.cy + o, y2 = C.cy + o, mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      parts.push(`<line class="tl" x1="${f(x1)}" y1="${f(y1)}" x2="${f(x2)}" y2="${f(y2)}"/>`);
+      txt('il', x1 + 5, y1 - 6, ea.i); txt('il', x2 - 5, y2 - 6, ec.i, 'end');
+      txt('ih', x1 + 5, y1 + 15, ea.h); txt('ih', x2 - 5, y2 + 15, ec.h, 'end');
+      txt('sn', mx, my + 31, l.net || '', 'middle');
+      l.tags.forEach((t, i) => pill(mx, my + 38 + i * 19, t, 'middle'));
+    } else {       // 線の右に、上の端の口・網とプロトコル・下の端の口
+      const x1 = A.cx + o, x2 = C.cx + o, y1 = A.cy + A.h / 2, y2 = C.cy - C.h / 2, mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      parts.push(`<line class="tl" x1="${f(x1)}" y1="${f(y1)}" x2="${f(x2)}" y2="${f(y2)}"/>`);
+      const end = (x, y, e) => { const w = txt('il', x, y, e.i); txt('ih', x + w + CW, y, e.h); };
+      end(x1 + 7, y1 + 14, ea); end(x2 + 7, y2 - 6, ec);
+      txt('sn', mx + 7, my - 2, l.net || '');
+      let px = mx + 7;
+      for (const t of l.tags) px += pill(px, my + 4, t) + 4;
+    }
+  }
+  for (const lb in B) {
+    const { n, cx, cy, w: bw, h: bh } = B[lb];
+    const lo = loOf(n);
+    const all = [lb, lo ? `${ifShort(lo.n)} ${lo.a[0]}` : null, n.as ? `AS ${n.as}` : null].filter(Boolean);
+    const offs = all.map((_, i) => i ? 16 + (i - 1) * 14 : 0);
+    const y0 = cy - offs[offs.length - 1] / 2 + 4.5;
+    grow(cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2);
+    parts.push(`<g class="nd${lb === here ? ' here' : ''}${TOPO.sel === lb ? ' sel' : ''}" data-node="${esc(lb)}" tabindex="0" role="button" aria-label="${esc(t('nodeAria', lb))}">`
+      + `<title>${esc(lb)} — ${esc(n.os)}${n.ver ? ' ' + esc(n.ver) : ''}</title>`
+      + `<rect class="nb" x="${f(cx - bw / 2)}" y="${f(cy - bh / 2)}" width="${bw}" height="${bh}" rx="${n.host ? 14 : 5}"/>`
+      + all.map((t, i) => `<text class="${i ? 'ns' : 'nm'}" x="${f(cx)}" y="${f(y0 + offs[i])}">${esc(t)}</text>`).join('')
+      + '</g>');
+  }
+  const m = 6, x0 = ext[0] - m, yy = ext[1] - m, w = ext[2] - ext[0] + 2 * m, h = ext[3] - ext[1] + 2 * m;
+  return { w, svg: `<svg viewBox="${f(x0)} ${f(yy)} ${f(w)} ${f(h)}" style="width:@W@" role="img" aria-label="${esc(t('topoAria'))}">${parts.join('')}</svg>` };
+}
+function renderTopo() {
+  const T = TOPO.unit && TOPO.unit.topo;
+  if (!T || !cur) { $('topo').hidden = true; return; }
+  $('topo').hidden = false;
+  $('topofig').hidden = !TOPO.open;
+  $('topotg').textContent = TOPO.open ? t('hide') : t('show');
+  $('topocap').textContent = t('topoCap', T.lab, cur.device);
+  if (!TOPO.open) { $('topodet').hidden = true; return; }
+  const fs = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const avail = $('topofig').clientWidth;
+  // 横並びが幅に収まらなければ縦並びも描き、幅の小さい方を使う。それでも収まらない時は、字を 0.85 倍より小さくせず横へずらして見る
+  let g = topoSvg(T, cur.device, false);
+  if (g.w * fs / 16 > avail) { const gv = topoSvg(T, cur.device, true); if (gv.w < g.w) g = gv; }
+  const px = Math.min(g.w * fs / 16, Math.max(avail, 0.85 * g.w * fs / 16));
+  $('topofig').innerHTML = g.svg.replace('@W@', px.toFixed(0) + 'px') + `<p class="hint">${esc(t('topoHint'))}</p>`;
+  for (const el of $('topofig').querySelectorAll('[data-node]')) {
+    el.onclick = () => selectNode(el.dataset.node);
+    el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectNode(el.dataset.node); } };
+  }
+  renderDet();
+}
+function selectNode(lb) {
+  TOPO.sel = TOPO.sel === lb ? null : lb;
+  for (const el of $('topofig').querySelectorAll('[data-node]')) el.classList.toggle('sel', el.dataset.node === TOPO.sel);
+  renderDet();
+}
+function renderDet() {
+  const T = TOPO.unit.topo, n = TOPO.sel && T.nodes.find(x => x.label === TOPO.sel);
+  if (!n) { $('topodet').hidden = true; return; }
+  const v = s => `<span class="v">${esc(s)}</span>`;
+  const rows = [];
+  rows.push([t('detIf'), n.ifs.map(i => v(i.n) + ' ' + (i.a.length ? i.a.map(v).join(' ') : `<span class="q">${t('noAddr')}</span>`)
+    + (i.vrf ? ` <span class="q">vrf</span> ${v(i.vrf)}` : '') + (i.d ? ` <span class="q">"${esc(i.d)}"</span>` : '')).join('<br>')]);
+  if (n.rid || n.as) rows.push([t('detRid'), [n.rid && v(n.rid), n.as && 'AS ' + v(n.as)].filter(Boolean).join(t('sep'))]);
+  const own = new Set(n.net || []);       // network で出す経路のための Null0 は「BGP で送る経路」の欄に含める
+  const st = n.static.filter(r => !(own.has(r.p) && /^null0$/i.test(r.nh)));
+  if (st.length) rows.push([t('detStatic'), st.map(r => v(/^(discard|reject)$/.test(r.nh) ? `${r.p} ${r.nh}` : `${r.p} → ${r.nh}`)).join('<br>')]);
+  const areas = {};
+  for (const o of n.ospf) (areas[o.area] = areas[o.area] || []).push(v(o.i) + (o.passive ? ' <span class="q">(passive)</span>' : ''));
+  for (const a in areas) rows.push([`OSPF area ${esc(a)}`, areas[a].join('<br>')]);
+  if (n.bgp.length) rows.push(['BGP', n.bgp.map(b => b.group
+    ? `group ${v(b.group)}${b.type ? ' (' + esc(b.type) + ')' : ''}: neighbor ${v(b.peer)} peer-as ${v(b.as)}`
+    : `neighbor ${v(b.peer)} remote-as ${v(b.as)}`).join('<br>')]);
+  if ((n.net || []).length || n.dflt) rows.push([t('detBgpNet'), (n.net || []).map(v).join('<br>')
+    + (n.dflt ? (n.net.length ? '<br>' : '') + v('0.0.0.0/0') + ' <span class="q">(default-originate)</span>' : '')]);
+  $('topodet').innerHTML = `<div class="dh"><b>${esc(n.label)}</b><span class="sp">${esc(n.os)}${n.ver ? ' ' + esc(n.ver) : ''}${n.host ? t('server') : ''}</span>`
+    + `<button id="topox" aria-label="${esc(t('close'))}">×</button></div><table>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table>`;
+  $('topodet').hidden = false;
+  $('topox').onclick = () => selectNode(n.label);
+}
+let topoTimer = 0;
+window.addEventListener('resize', () => { clearTimeout(topoTimer); topoTimer = setTimeout(() => { if (!$('drill').hidden) renderTopo(); }, 150); });
+
+/* ---------- お題の画面 ---------- */
+function makeSim(d) {
+  const u = DRILLS.find(x => x.d.id === d.id).u;
+  if (osOf(u) === 'iosxr') return ENG(u).create(B.os.iosxr, { host: d.device, base: u.devices[d.device], setupCommits: d.setupCommits || [], lang: LANG });
+  return ENG(u).create(B.os[osOf(u)], {
+    host: hostOf(u, d.device), user: 'admin',
+    base: (u.devices[d.device] || []).concat(d.setup || []),
+    candidate: d.candidate || [],
+  });
+}
+function openDrill(id) {
+  const ent = DRILLS.find(x => x.d.id === id);
+  if (!ent) { renderHome(); return; }
+  cur = ent.d;
+  $('ttl').textContent = pick(cur.title);
+  $('tdev').textContent = [pick(ent.u.unit), pick(ent.s.title), cur.device].join(LANG === 'en' ? ' · ' : ' ・ ');
+  $('ttx').textContent = pick(cur.task);
+  $('etab').href = '?drill=' + encodeURIComponent(id) + '&lang=' + LANG;
+  $('anstx').textContent = cur.answer || '';
+  $('ans').hidden = true; $('res').hidden = true;
+  startSim();
+  show('drill');
+  TOPO.unit = ent.u; TOPO.sel = null;
+  if (TOPO.open == null) { const p = topoPref.get(); TOPO.open = p == null ? !EMBED : p; }
+  renderTopo();
+  if (!EMBED) history.replaceState(null, '', '?drill=' + encodeURIComponent(id) + (Q.get('lang') ? '&lang=' + LANG : ''));
+  setTimeout(() => $('in').focus(), 0);
+}
+function startSim() {
+  sim = makeSim(cur);
+  hist = []; hpos = 0;
+  $('out').textContent = '';
+  if (sim.baseErr.length || sim.candErr.length) print([{ c: 'sim', s: t('baseErr') + sim.baseErr.concat(sim.candErr).join(' / ') }]);
+  const u = DRILLS.find(x => x.d === cur).u;
+  const lab = (u.topo && u.topo.lab) || '';
+  print([{ c: 'dim', s: t('startLine', cur.device, lab, osOf(u) === 'iosxr', !!(cur.setup || cur.setupCommits)) }]);
+  sim.onAsync = lines => { print(lines); };
+  setPrompt();
+  $('in').value = '';
+}
+function print(lines) {
+  const o = $('out');
+  for (const l of lines) {
+    const sp = document.createElement('span');
+    sp.className = l.c;
+    sp.textContent = (l.c === 'sim' ? '‣ ' : '') + l.s + '\n';
+    o.appendChild(sp);
+  }
+  $('term').scrollTop = $('term').scrollHeight;
+}
+function setPrompt() { $('pr').textContent = sim.prompt().text; }
+function echo(s) { print([{ c: 'echo', s: sim.prompt().text + s }]); }
+function bannerLine() { const p = sim.prompt(); if (p.banner) print([{ c: 'dev', s: p.banner }]); }
+
+function runLine(line) {
+  echo(line);
+  if (line.trim()) { hist.push(line); }
+  hpos = hist.length;
+  const wasOp = sim.S.mode === 'op';
+  const r = sim.exec(line);
+  print(r.out);
+  if (sim.S.mode === 'cfg' && !r.ask) { print([{ c: 'dev', s: '' }]); bannerLine(); }
+  else if (r.gap || (wasOp && sim.S.mode === 'op' && r.out.length)) print([{ c: 'dev', s: '' }]);
+  setPrompt();
+  $('res').hidden = true;
+}
+function doHelp() {
+  const v = $('in').value;
+  echo(v + '?');
+  print(sim.help(v).out);
+  bannerLine();
+}
+function doTab(bySpace) {
+  const v = $('in').value;
+  const r = sim.complete(v, bySpace);
+  if (r.out) { echo(v); print(r.out); bannerLine(); }
+  $('in').value = r.line;
+}
+
+const inp = $('in');
+inp.addEventListener('keydown', e => {
+  if (e.isComposing) return;
+  if (e.key === '?') { e.preventDefault(); doHelp(); return; }
+  if (e.key === 'Tab') { e.preventDefault(); doTab(false); return; }
+  if (e.key === ' ' && inp.selectionStart === inp.value.length) {
+    const quotes = (inp.value.match(/"/g) || []).length;
+    if (quotes % 2 === 0 && sim.S.mode !== 'ask') {
+      const r = sim.complete(inp.value, true);
+      if (r.line !== inp.value + ' ') { e.preventDefault(); inp.value = r.line; }
+    }
+    return;
+  }
+  if (e.key === 'Enter') { e.preventDefault(); const v = inp.value; inp.value = ''; runLine(v); return; }
+  if (e.key === 'ArrowUp') { e.preventDefault(); if (hpos > 0) { hpos--; inp.value = hist[hpos]; } return; }
+  if (e.key === 'ArrowDown') { e.preventDefault(); if (hpos < hist.length - 1) { hpos++; inp.value = hist[hpos]; } else { hpos = hist.length; inp.value = ''; } return; }
+  if (e.ctrlKey && (e.key === 'u' || e.key === 'U')) { e.preventDefault(); inp.value = ''; return; }
+  if (e.ctrlKey && (e.key === 'c' || e.key === 'C') && !inp.value.slice(inp.selectionStart, inp.selectionEnd)) {
+    e.preventDefault(); echo(inp.value + '^C'); inp.value = ''; return;
+  }
+});
+$('term').addEventListener('click', () => { if (!window.getSelection().toString()) inp.focus(); });
+for (const b of document.querySelectorAll('.keys [data-k]')) {
+  b.addEventListener('mousedown', e => e.preventDefault());
+  b.onclick = () => {
+    const k = b.dataset.k;
+    if (k === 'tab') doTab(false);
+    else if (k === '?') doHelp();
+    else if (k === 'up') inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+    else if (k === 'down') inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    else if (k === 'clr') inp.value = '';
+    inp.focus();
+  };
+}
+$('check').onclick = () => {
+  const r = ENG(DRILLS.find(x => x.d === cur).u).checkDrill(sim, cur);
+  const h = [`<div class="head ${r.ok ? 'ok' : 'ng'}">${r.ok ? t('okHead') : t('ngHead')}</div>`];
+  for (const it of r.items) h.push(`<div class="${it.ok ? 'ok' : 'ng'}">${it.ok ? '✓' : '✗'} ${esc(it.s)}</div>`);
+  $('res').innerHTML = h.join('');
+  $('res').hidden = false;
+  if (r.ok) store.set(cur.id);
+};
+$('reset').onclick = () => { if (confirm(t('resetConfirm'))) { startSim(); $('res').hidden = true; inp.focus(); } };
+$('showans').onclick = () => { $('ans').hidden = !$('ans').hidden; };
+$('topotg').onclick = () => { TOPO.open = !TOPO.open; topoPref.set(TOPO.open); renderTopo(); };
+$('back').onclick = () => { history.replaceState(null, '', location.pathname); renderHome(); };
+$('erules').onclick = () => $('rules').onclick();
+$('rules').onclick = () => {
+  const os = !$('drill').hidden && cur ? osOf(DRILLS.find(x => x.d === cur).u) : null;
+  for (const el of $('modal').querySelectorAll('[data-os]')) el.hidden = !!os && el.dataset.os !== os;
+  $('modal').hidden = false;
+};
+$('mclose').onclick = () => { $('modal').hidden = true; };
+$('modal').onclick = e => { if (e.target === $('modal')) $('modal').hidden = true; };
+
+/* ---------- 読み物の区切りから入る形(見本) ---------- */
+function renderReading() {
+  $('ttl').textContent = '見本: 読み物の区切り';
+  const d = DRILLS[0].d;
+  $('reading').innerHTML = `<div class="rd">
+    <p class="note">この枠は見本です。実際の読み物では、単元のページの途中に下の青い枠(区切り)を置き、その単元の練習へ入ります。</p>
+    <h2>3. JUN01 のスタティック ルートを OSPF へ</h2>
+    <p>(読み物の本文…)ポリシーは <code>policy-options</code> の下に 1 度書き、OSPF の <code>export</code> に当てます。</p>
+    <div class="cfg mono">set policy-options policy-statement SRV-TO-OSPF term SRV from protocol static<br>set policy-options policy-statement SRV-TO-OSPF term SRV from route-filter 172.16.20.0/24 exact<br>…</div>
+    <div class="drillbreak"><div class="bh"><b>ここでコマンドを確かめて、打ってみましょう</b><button id="openbreak">開く</button></div>
+      <iframe id="breakframe" hidden title="素振り台"></iframe></div>
+    <p>(読み物の続き…)</p></div>`;
+  $('openbreak').onclick = () => {
+    const f = $('breakframe');
+    if (f.hidden) { f.src = '?drill=' + encodeURIComponent(d.id) + '&embed=1'; f.hidden = false; $('openbreak').textContent = '閉じる'; }
+    else { f.hidden = true; $('openbreak').textContent = '開く'; }
+  };
+  show('reading');
+  if (Q.get('open') === '1') $('openbreak').click();
+}
+
+/* ---------- 試験 ---------- */
+function selftest() {
+  const res = [];
+  let ng = 0;
+  const say = (ok, name, detail) => { if (!ok) ng++; res.push(`${ok ? 'OK' : 'NG'} ${name}${detail ? ': ' + detail : ''}`); };
+  // 1) お題: 盤面が骨組みで読める・初めは満たさない・答えの例で満たす・答えの例で素振り台の注記が出ない
+  for (const { d } of DRILLS) {
+    const s = makeSim(d);
+    say(!s.baseErr.length && !s.candErr.length, `${d.id} 盤面`, s.baseErr.concat(s.candErr).join(' / '));
+    const E = ENG(DRILLS.find(x => x.d === d).u);
+    say(!E.checkDrill(s, d).ok, `${d.id} 初めは満たさない`);
+    const notes = [];
+    for (const ln of (d.answer || '').split('\n')) {
+      const r = s.exec(ln);
+      for (const o of r.out) if (o.c === 'sim' && !o.soft) notes.push(`${ln} → ${o.s}`);
+    }
+    const c = E.checkDrill(s, d);
+    say(c.ok, `${d.id} 答えの例で満たす`, c.ok ? '' : c.items.filter(x => !x.ok).map(x => x.s).join(' / '));
+    say(!notes.length, `${d.id} 答えの例に注記なし`, notes.join(' / '));
+  }
+  // 1b) 英語(XR): お題の文言が両方の言語にある・英語の素振り台で答えの例を打つと、注記と確かめの結果に日本語が混ざらない
+  const CJK = /[\u3040-\u30ff\u4e00-\u9fff]/;
+  const both = v => !!v && typeof v === 'object' && !!v.ja && !!v.en && !CJK.test(v.en);
+  say(JSON.stringify(Object.keys(W.ja).sort()) === JSON.stringify(Object.keys(W.en).sort()), '画面の文言の鍵が日英でそろう');
+  say(!Object.entries(W.en).some(([k, v]) => k !== 'langName' && CJK.test(typeof v === 'function' ? v('A', 'B', true, true) : v)), '英語の画面の文言に日本語が無い(切替のボタンの「日本語」は除く)');
+  for (const { u, s: sec, d } of DRILLS.filter(x => osOf(x.u) === 'iosxr')) {
+    const miss = [['unit', u.unit], ['title(単元)', u.title], ['title(節)', sec.title], ['title', d.title], ['task', d.task]]
+      .concat((d.cmd || []).flatMap((c, i) => [[`cmd[${i}].say`, c.say], [`cmd[${i}].sayNg`, c.sayNg]]))
+      .filter(([, v]) => !both(v)).map(([k]) => k);
+    say(!miss.length, `${d.id} お題の文言が日英にある`, miss.join(' '));
+    const s = XrSim.create(B.os.iosxr, { host: d.device, base: u.devices[d.device], setupCommits: d.setupCommits || [], lang: 'en' });
+    const bad = [];
+    for (const ln of ['show ip route', 'configure exclusive'].concat((d.answer || '').split('\n'))) {
+      for (const o of s.exec(ln).out) if (CJK.test(o.s)) bad.push(o.s);
+    }
+    for (const it of XrSim.checkDrill(s, d).items) if (CJK.test(it.s)) bad.push(it.s);
+    say(!bad.length, `${d.id} 英語の素振り台の注記と結果`, bad.slice(0, 3).join(' / '));
+  }
+  // 2) 盤面の図: お題の機器がすべて図にある・どの口にもアドレスと網がある・横並びと縦並びの両方で描ける
+  for (const u of B.units) {
+    const T = u.topo;
+    say(!!T, `${u.unit} 盤面の図がある`);
+    if (!T) continue;
+    const labels = T.nodes.map(n => n.label);
+    const miss = DRILLS.filter(x => x.u === u && !labels.includes(x.d.device)).map(x => x.d.id);
+    say(!miss.length, `${u.unit} お題の機器が図にある`, miss.join(' '));
+    const bad = T.links.filter(l => !l.a_addr || !l.b_addr || !l.net).map(l => `${l.a} ${l.a_if}–${l.b} ${l.b_if}`);
+    say(!bad.length, `${u.unit} 口のアドレスと網`, bad.join(' / '));
+    for (const vert of [false, true]) {
+      const g = topoSvg(T, labels[0], vert);
+      const nn = (g.svg.match(/data-node=/g) || []).length, nl = (g.svg.match(/<line /g) || []).length;
+      say(!/NaN|Infinity/.test(g.svg) && nn === T.nodes.length && nl === T.links.length,
+        `${u.unit} 図を${vert ? '縦' : '横'}並びで描く`, `機器 ${nn}/${T.nodes.length}・線 ${nl}/${T.links.length}`);
+    }
+  }
+  // 3) 実機の記録の再現(tests/*.yml)
+  for (const t of (B.os.iosxr && B.os.iosxr.tests) || []) replayXr(t, say);
+  for (const [os, OB] of Object.entries(B.os)) for (const t of (os === 'iosxr' ? [] : OB.tests || [])) {
+    const u = B.units.find(x => osOf(x) === os && x.devices[t.device]) || B.units.find(x => osOf(x) === os);
+    const s = ENG(u).create(OB, { host: hostOf(u, t.device), user: 'admin', base: (u.devices[t.device] || []).concat(t.setup || []) });
+    let out = null;
+    for (const ln of t.run) {
+      if (ln.endsWith('?')) out = s.help(ln.slice(0, -1)).out;
+      else out = s.exec(ln).out;
+    }
+    let want = t.expect != null ? t.expect.split('\n') : null;
+    if (t.help_ctx) want = ['Possible completions:'].concat((OB.help[t.help_ctx] || []).map(h => h.raw));
+    const got = out.filter(o => o.c === 'dev' || o.c === 'doc').map(o => o.s);
+    const same = JSON.stringify(got) === JSON.stringify(want);
+    let detail = '';
+    if (!same) {
+      const i = got.findIndex((g, j) => g !== want[j]);
+      detail = `行 ${i + 1}: 期待 ${JSON.stringify(want[i])} / 実際 ${JSON.stringify(got[i])}(実際 ${got.length} 行・期待 ${want.length} 行)`;
+    }
+    say(same, `記録 ${t.name}`, detail);
+    if (t.prompt) say(s.prompt().text === t.prompt, `記録 ${t.name} のプロンプト`, s.prompt().text);
+    if (t.banner !== undefined) say(s.prompt().banner === t.banner, `記録 ${t.name} の [edit]`, s.prompt().banner);
+  }
+  // 4) XR の確認つきコミットの期限切れ(記録 gaps2.log): 30 秒後に画面へ何も出さずに戻り、履歴に Rollback が 1 件増える。
+  //    その後に同じセッションでコミットすると「他のセッションでコミットがあった」と聞かれる。仮想時間で進める
+  const done = () => { res.push(`NG ${ng}`); const el = $('selftest'); el.textContent = res.join('\n'); el.hidden = false; };
+  const xu = B.units.find(x => osOf(x) === 'iosxr');
+  if (!xu) { done(); return; }
+  const xs = XrSim.create(B.os.iosxr, { host: 'XR01', base: xu.devices.XR01 });
+  let asyncOut = [];
+  xs.onAsync = l => { asyncOut = asyncOut.concat(l); };
+  for (const l of ['configure', 'interface Loopback87', 'ipv4 address 10.87.87.87 255.255.255.255', 'commit confirmed 30']) xs.exec(l);
+  const n0 = xs.history().length;
+  setTimeout(() => {
+    const h = xs.history();
+    const last = h[h.length - 1];
+    say(h.length === n0 + 1 && last.client === 'Rollback' && last.line === 'vty0:node0_RP0_CPU0', 'XR 確認つきコミットの期限切れ: 履歴に Rollback', JSON.stringify(last && [last.client, last.line]));
+    say(!xs.runningLines().some(l => /Loopback87/.test(l)), 'XR 確認つきコミットの期限切れ: 稼働中の設定から消える');
+    say(asyncOut.every(o => o.c === 'sim'), 'XR 確認つきコミットの期限切れ: 実機の文言は出さない(注記だけ)');
+    for (const l of ['interface Loopback88', 'ipv4 address 10.88.88.88 255.255.255.255']) xs.exec(l);
+    const r = xs.exec('commit confirmed 60');
+    const got = r.out.filter(o => o.c === 'dev').map(o => o.s).slice(1);
+    say(JSON.stringify(got) === JSON.stringify(['', 'One or more commits have occurred from other', 'configuration sessions since this session started',
+      'or since the last commit was made from this session.', "You can use the 'show configuration commit changes'", 'command to browse the changes.'])
+      && xs.prompt().text === 'Do you wish to proceed with this commit anyway? [no]: ', 'XR 期限切れの後のコミットは他のセッションのコミットを問う', JSON.stringify(got));
+    const r2 = xs.exec('end');
+    say(r2.out.some(o => o.s === "% Please answer 'yes' or 'no'."), 'XR 問いに yes/no 以外で答えると言い直しを求める');
+    done();
+  }, 31000);
+}
+
+/* XR: 実機の記録を同じ順に打ち直し、手ごとの出力(時刻は伏せる)とプロンプトを突き合わせる */
+function replayXr(t, say) {
+  if (!t.steps) { say(false, `記録 ${t.name}`, `記録のファイルが無い: ${t.log}`); return; }
+  const u = B.units.find(x => osOf(x) === 'iosxr' && x.devices[t.device]);
+  const s = XrSim.create(B.os.iosxr, { host: t.device, base: u.devices[t.device], lang: 'en' });
+  const CJK = /[\u3040-\u30ff\u4e00-\u9fff]/;
+  const T2 = /\w{3} \w{3} +\d+ \d\d:\d\d:\d\d \d{4}/g;
+  const norm = x => x.replace(T2, '<T>').replace(/^\w{3} \w{3} +\d+ \d\d:\d\d:\d\d\.\d+ UTC$/, '<TS>')
+    .replace(/^\d\d:\d\d:\d\d\.\d+ UTC \w{3} \w{3} \d+ \d{4}$/, '<CLK>');
+  const drops = (t.drop || []).map(r => new RegExp(r));
+  let bad = 0, n = 0;
+  const det = [];
+  t.steps.forEach((st, i) => {
+    const cmd = st.cmd;
+    if (cmd.startsWith('#SLEEP')) return;
+    let out, pr;
+    if (cmd.endsWith('?')) { out = s.help(cmd.slice(0, -1)).out; pr = s.prompt().text + cmd.slice(0, -1); }
+    else if (cmd.endsWith('<TAB>')) {
+      const typed = cmd.slice(0, -5), r = s.complete(typed, false);
+      pr = s.prompt().text + r.line;
+      out = r.out ? r.out : [{ c: 'dev', s: typed + pr }];
+    } else { out = s.exec(cmd).out; pr = s.prompt().text; }
+    for (const o of out) if (CJK.test(o.s)) { bad++; det.push(`#${i + 1} ${JSON.stringify(cmd)} 英語の素振り台に日本語: ${o.s}`); }
+    if (t.skip && t.skip[i + 1]) return;
+    n++;
+    const got = out.filter(o => o.c === 'dev' || o.c === 'doc').map(o => norm(o.s));
+    let want = st.out === '' ? [] : st.out.split('\n').map(norm).filter(l => !drops.some(r => r.test(l)));
+    if (cmd.endsWith('<TAB>') && !got.length) want = [];
+    if (JSON.stringify(got) !== JSON.stringify(want)) {
+      bad++;
+      const k = got.findIndex((g, j) => g !== want[j]);
+      det.push(`#${i + 1} ${JSON.stringify(cmd)} 行 ${k + 1}: 期待 ${JSON.stringify(want[k])} / 実際 ${JSON.stringify(got[k])}(実際 ${got.length}・期待 ${want.length})`);
+    }
+    const np = (t.steps[i + 1] || {}).prompt;
+    if (np != null && np.trimEnd() !== pr.trimEnd() && !cmd.endsWith('<TAB>')) { bad++; det.push(`#${i + 1} ${JSON.stringify(cmd)} プロンプト 期待 ${JSON.stringify(np)} / 実際 ${JSON.stringify(pr)}`); }
+  });
+  say(!bad, `記録 ${t.name}(${n} 手)`, det.slice(0, 40).join(' ‖ '));
+}
+
+/* ---------- 画面の試験(キーの流れ)。?drill=<ID>&uitest=1(j1-ps-1 と xr-m0-1 の 2 つ) ---------- */
+function uitestXr() {
+  const res = []; let ng = 0;
+  const say = (ok, name, d) => { if (!ok) ng++; res.push(`${ok ? 'OK' : 'NG'} ${name}${d ? ': ' + d : ''}`); };
+  const key = k => inp.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+  const type = s => { for (const ch of s) { const ev = new KeyboardEvent('keydown', { key: ch, bubbles: true, cancelable: true }); if (inp.dispatchEvent(ev)) inp.value += ch; } };
+  const outText = () => $('out').textContent;
+  const P = 'RP/0/RP0/CPU0:XR01';
+  type('conf'); key('Tab');
+  say(inp.value === 'configur', 'Tab は configure と configuration の分かれる所まで伸ばす', JSON.stringify(inp.value));
+  key('Tab');
+  say(/\nconfiguration  configure  \n$/.test(outText()) && inp.value === 'configur', 'もう一度 Tab で候補を並べる', JSON.stringify(outText().slice(-60)));
+  inp.value = '';
+  type('conf'); key('Enter');
+  say($('pr').textContent === P + '(config)#', 'プロンプトが (config)#', $('pr').textContent);
+  type('interface Loopback40'); key('Enter');
+  say($('pr').textContent === P + '(config-if)#', '下位モード (config-if)#', $('pr').textContent);
+  type('?');
+  say(/\n  ipv4 +IPv4 interface subcommands\n/.test(outText()) && inp.value === '', '? で (config-if) の一覧(実機の行)', JSON.stringify(outText().slice(-120)));
+  type('ipv4 address 10.40.40.40 255.255.255.255'); key('Enter');
+  type('description TEST-LO'); key('Enter');
+  type('show configuration'); key('Enter');
+  say(/interface Loopback40\n description TEST-LO\n ipv4 address 10.40.40.40 255.255.255.255\n!\nend\n/.test(outText()), 'show configuration に編集中の分', JSON.stringify(outText().slice(-160)));
+  type('commit'); key('Enter');
+  type('end'); key('Enter');
+  say($('pr').textContent === P + '#', 'end で運用モード', $('pr').textContent);
+  $('check').click();
+  say($('res').textContent.includes(t('okHead')), '確かめる', $('res').textContent);
+  // 2026-11-16 ユーザ指摘の打ち方(記録 ifnames.log・ifnames6.log): Tab の後の空白を残したまま番号・小文字の Tab・空白では補わない
+  inp.value = '';
+  for (const l of ['configure', 'router ospf 1', 'area 0']) { type(l); key('Enter'); }
+  type('interface Lo'); key('Tab');
+  say(inp.value === 'interface Loopback ', 'OSPF の中で interface Lo + Tab → Loopback と空白', JSON.stringify(inp.value));
+  type('40'); key('Enter');
+  say($('pr').textContent === P + '(config-ospf-ar-if)#', 'Loopback 40(空白を挟んだ番号)で下位モードへ', $('pr').textContent);
+  type('root'); key('Enter'); inp.value = '';
+  type('interface loo'); key('Tab');
+  say(inp.value === 'interface loopback ', '小文字の loo + Tab → loopback と空白(打った字のまま)', JSON.stringify(inp.value));
+  inp.value = '';
+  type('int '); type('Lo'); key('Tab');
+  say(inp.value === 'int Loopback ', '空白では語を補わない(int のまま)', JSON.stringify(inp.value));
+  inp.value = '';
+  type('INTERFACE LOOPBACK 41'); key('Enter');
+  say($('pr').textContent === P + '(config-if)#', '大文字のキーワード', $('pr').textContent);
+  type('abort'); key('Enter');
+  say($('pr').textContent === P + '#', '下位モードの abort', $('pr').textContent);
+  say(!!$('topofig').querySelector('.nd.here[data-node="XR01"]'), '打つ機器(XR01)が太枠');
+  $('topofig').querySelector('[data-node="RT01"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  say(/Ethernet0\/0 10\.0\.12\.2\/24/.test($('topodet').textContent), '機器を押すと要点(RT01 の口)', $('topodet').textContent.slice(0, 120));
+  res.push(`NG ${ng}`);
+  $('selftest').textContent = res.join('\n'); $('selftest').hidden = false;
+}
+function uitest() {
+  if (cur && cur.id.startsWith('xr-')) { uitestXr(); return; }
+  const res = []; let ng = 0;
+  const say = (ok, name, d) => { if (!ok) ng++; res.push(`${ok ? 'OK' : 'NG'} ${name}${d ? ': ' + d : ''}`); };
+  const key = (k, extra) => inp.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key: k, bubbles: true, cancelable: true }, extra || {})));
+  const type = s => { for (const ch of s) { const ev = new KeyboardEvent('keydown', { key: ch, bubbles: true, cancelable: true }); if (inp.dispatchEvent(ev)) inp.value += ch; } };
+  const outText = () => $('out').textContent;
+  type('conf'); key('Tab');
+  say(inp.value === 'configure ', 'Tab で configure を補う', JSON.stringify(inp.value));
+  key('Enter');
+  say(/Entering configuration mode\n\n\[edit\]\n$/.test(outText()), 'configure の後に [edit]', JSON.stringify(outText().slice(-60)));
+  say($('pr').textContent === 'admin@jun01# ', 'プロンプトが #', $('pr').textContent);
+  type('set prot ');
+  say(inp.value === 'set protocols ', '空白で protocols を補う', JSON.stringify(inp.value));
+  type('o'); key('Tab');
+  say(inp.value === 'set protocols ospf ', 'Tab で ospf', JSON.stringify(inp.value));
+  type('?');
+  say(/set protocols ospf \?\nPossible completions:\n/.test(outText()) && inp.value === 'set protocols ospf ', '? で一覧を出し、打った行は残る', JSON.stringify(outText().slice(-200)));
+  type('ex'); key('Tab');
+  say(inp.value === 'set protocols ospf export ', 'Tab で export', JSON.stringify(inp.value));
+  type('SRV-OUT'); key('Enter');
+  // 空白は名前を補わない(既にある名前に化けない)
+  sim.exec('set policy-options policy-statement SRV-OUT-OLD then reject');
+  inp.value = ''; type('set policy-options policy-statement SRV-OUT ');
+  say(inp.value === 'set policy-options policy-statement SRV-OUT ', '空白は名前を補わない', JSON.stringify(inp.value));
+  sim.exec('delete policy-options policy-statement SRV-OUT-OLD'); inp.value = '';
+  type('show | compare'); key('Enter');
+  say(/\[edit protocols ospf\]\n\+   export SRV-OUT;\n\n\[edit\]\n$/.test(outText()), 'show | compare', JSON.stringify(outText().slice(-90)));
+  type('commit'); key('Enter');
+  say(/Policy error: Policy SRV-OUT referenced but not defined\nerror: configuration check-out failed\n\n\[edit\]\n$/.test(outText()), 'commit が断られる', JSON.stringify(outText().slice(-120)));
+  key('ArrowUp'); key('ArrowUp');
+  say(inp.value === 'show | compare', '↑ で履歴', JSON.stringify(inp.value));
+  inp.value = '';
+  type('edit policy-options policy-statement SRV-OUT term SRV'); key('Enter');
+  say(/\[edit policy-options policy-statement SRV-OUT term SRV\]\n$/.test(outText()), 'edit で [edit …] が変わる');
+  for (const l of ['set from protocol static', 'set from route-filter 172.16.20.0/24 exact', 'set then metric 20', 'set then accept', 'top', 'commit']) { type(l); key('Enter'); }
+  say(/commit complete\n\n\[edit\]\n$/.test(outText()), 'commit complete', JSON.stringify(outText().slice(-80)));
+  $('check').click();
+  say($('res').textContent.includes(t('okHead')), '確かめる', $('res').textContent);
+  type('exit'); key('Enter');
+  say($('pr').textContent === 'admin@jun01> ', 'exit で運用モード', $('pr').textContent);
+  // 盤面の図
+  say(!!$('topofig').querySelector('svg') && !$('topofig').hidden, '盤面の図が出ている');
+  say(!!$('topofig').querySelector('.nd.here[data-node="JUN01"]'), '打つ機器(JUN01)が太枠');
+  $('topofig').querySelector('[data-node="JUN01"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  say(!$('topodet').hidden && /172\.16\.20\.0\/24 → 172\.16\.10\.10/.test($('topodet').textContent), '機器を押すと要点(静的経路)', $('topodet').textContent.slice(0, 120));
+  $('topofig').querySelector('[data-node="FRR1"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  say($('topodet').textContent.includes(t('detBgpNet')) && /default-originate/.test($('topodet').textContent), '別の機器に切り替わる(FRR1)', $('topodet').textContent.slice(0, 120));
+  $('topotg').click();
+  say($('topofig').hidden && $('topotg').textContent === t('show'), '隠す');
+  $('topotg').click();
+  say(!$('topofig').hidden, '出す');
+  res.push(`NG ${ng}`);
+  $('selftest').textContent = res.join('\n'); $('selftest').hidden = false;
+}
+
+/* ---------- 起動 ---------- */
+paintStatic();
+fetch('bundle.json', { cache: 'no-store' }).then(r => r.json()).then(b => {
+  B = b;
+  for (const u of B.units) for (const s of u.sections) for (const d of s.drills) DRILLS.push({ u, s, d });
+  if (Q.get('selftest') === '1') { selftest(); return; }
+  if (Q.get('demo') === 'reading') { renderReading(); return; }
+  if (Q.get('drill')) { openDrill(Q.get('drill')); if (Q.get('uitest') === '1') uitest(); }
+  else renderHome();
+}).catch(e => { document.body.insertAdjacentHTML('beforeend', `<pre>${esc(t('bundleErr') + String(e))}</pre>`); });
+})();
+</script>
+</body>
+</html>

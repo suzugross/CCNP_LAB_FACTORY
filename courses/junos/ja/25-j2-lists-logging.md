@@ -1,51 +1,51 @@
-# J2 — 並べる・記録する: フィルタの並びとログ
+# J2 — 並べる・記録する: フィルタ リストとログ
 
 ## 1. フィルタを並べ、記録すると何が嬉しいか
 
-### 1.1 困りごと: 1 つの口に、目的の違う判断が 2 つある
+### 1.1 困りごと: 1 つのインターフェースに、目的の違う判断が 2 つある
 
 ISP からの入口では、「送信元のアドレスがおかしいパケットを捨てる」判断と、「通してよいサービスだけを通す」判断の
-2 つが要ります。前者はどの口でも同じ中身になり、後者は口ごとに違います。1 つのフィルタに混ぜて書くと、
-同じ送信元の検査を口ごとに書き写すことになります。
+2 つが要ります。前者はどのインターフェースでも同じ中身になり、後者はインターフェースごとに違います。1 つのフィルタに混ぜて書くと、
+同じ送信元の検査をインターフェースごとに書き写すことになります。
 
 捨てたものを数えるだけでなく、何を捨てたのか(どこから、どこへ、どのポートへ)を後から見たいこともあります。
 
 ### 1.2 それ以前の手
 
 IOS の ACL は、1 つのインターフェースの 1 つの向きに 1 つだけ当てられます。目的の違う行も 1 つの ACL に書き混ぜます。
-捨てたものを記録するには、行の末尾に `log` を付け、syslog に出します。IOS XR も、1 つの口の 1 つの向きに 1 つの ACL です。
+捨てたものを記録するには、行の末尾に `log` を付け、syslog に出します。IOS XR も、1 つのインターフェースの 1 つの向きに 1 つの ACL です。
 
 ### 1.3 Junos の答え
 
 Junos は、1 つの向きに**フィルタを並べて**当てられます(`input-list`・`output-list`)。送信元の検査のフィルタを 1 つ作れば、
-口ごとのフィルタの前に並べて使い回せます。記録には `log`(ルータの中のバッファ)と `syslog`(syslog のメッセージ)の
-2 つの動作があり、数える `count` と組み合わせて使います。
+インターフェースごとのフィルタの前に並べて使い回せます。記録には `log`(ルータの中のバッファ)と `syslog`(syslog メッセージ)の
+2 つのアクションがあり、数える `count` と組み合わせて使います。
 
 ## 2. 仕組み
 
-### 2.1 フィルタの並び
+### 2.1 フィルタ リスト
 
-`input-list [ A B ]` と書くと、入ってきたパケットは A、B の順に調べられます。どこかで終端の動作(`accept`・`discard`・`reject`)が
+`input-list [ A B ]` と書くと、入ってきたパケットは A、B の順に調べられます。どこかで終端アクション(`accept`・`discard`・`reject`)が
 出れば、そこで終わりです。A のどの term にも当たらなかったパケットは、A の末尾で捨てられずに B へ進みます。
 最後のフィルタのどの term にも当たらなければ、そこで暗黙の discard です。
 
-JUN01 のサーバの網からの入口に、送信元を検査する SRC-CHECK と、数える FROM-SERVERS を並べた例です。SRV1 から、
-サーバの網に無いアドレス(10.99.0.1)を送信元にしたパケットを追います。図の番号にカーソルを置く(スマホは押す)と、
-その塊の設定が小窓に出て、下の設定例の行に色が付きます。
+JUN01 のサーバのネットワークからの入口に、送信元を検査する SRC-CHECK と、数える FROM-SERVERS を並べた例です。SRV1 から、
+サーバのネットワークに無いアドレス(10.99.0.1)を送信元にしたパケットを追います。図の番号にカーソルを置く(スマホは押す)と、
+そのブロックの設定が小窓に出て、下の設定例の行に色が付きます。
 
 :::walk
-legend: 線の上は IP のパケット。並べたフィルタは左から順に調べ、終端の動作が出たところで終わる。
+legend: 線の上は IP パケット。並べたフィルタは左から順に調べ、終端アクションが出たところで終わる。
 rows:
   - {node: SRV1, say: ["~送信元を 10.99.0.1 にして NET1(198.51.100.10)へ ping を送る"]}
   - {wire: "[[ICMP 10.99.0.1 → 198.51.100.10]] _echo-request"}
   - panel: JUN01
-    sub: サーバの網からの入口
+    sub: サーバのネットワークからの入口
     items:
       - ref: 1
         head: "**et-0/0/1 の入力** `filter input-list [ SRC-CHECK FROM-SERVERS ]`"
         say: ["並べた順に調べる。まず SRC-CHECK"]
       - ref: 2
-        head: "**SRC-CHECK** 送信元がサーバの網か"
+        head: "**SRC-CHECK** 送信元がサーバのネットワークか"
         match:
           - ["term SPOOF  from source-address 0.0.0.0/0・172.16.10.0/24 except・172.16.20.0/24 except", true, "当たる(10.99.0.1 は 0/0 に入り、除いた 2 つに入らない) → `count SPOOF`・`syslog`・`log`・`discard`"]
       - {say: ["~ここで終わり。FROM-SERVERS は調べない"]}
@@ -53,12 +53,12 @@ rows:
   - {aside: "②の最後に `then accept` の term を足すと", say: ["~172.16.20.1 のパケットはそこで受け入れられて終わる → ③は調べられず、FROM-SERVERS は数えない"]}
 :::
 
-:::config JUN01 — 送信元を検査してから数える(フィルタの並び)
+:::config JUN01 — 送信元を検査してから数える(フィルタ リスト)
 set firewall family inet filter SRC-CHECK term SPOOF from source-address 0.0.0.0/0              ## ② どの送信元でも
-set firewall family inet filter SRC-CHECK term SPOOF from source-address 172.16.10.0/24 except  ## ② ただしサーバの網の 2 つは除く
+set firewall family inet filter SRC-CHECK term SPOOF from source-address 172.16.10.0/24 except  ## ② ただしサーバのネットワークの 2 つは除く
 set firewall family inet filter SRC-CHECK term SPOOF from source-address 172.16.20.0/24 except  ## ② 
 set firewall family inet filter SRC-CHECK term SPOOF then count SPOOF                           ## ② 数える
-set firewall family inet filter SRC-CHECK term SPOOF then syslog                                ## ② syslog のメッセージにする
+set firewall family inet filter SRC-CHECK term SPOOF then syslog                                ## ② syslog メッセージにする
 set firewall family inet filter SRC-CHECK term SPOOF then log                                   ## ② show firewall log に残す
 set firewall family inet filter SRC-CHECK term SPOOF then discard                               ## ② 捨てる
 set firewall family inet filter FROM-SERVERS term ALL then count FROM-SERVERS                   ## ③ 残ったものをすべて数えて
@@ -92,7 +92,7 @@ Junos OS Evolved には、`input-chain` という別の並べ方もあります�
 含むもの**で決まり、それが `except` なら「当たらない」になります。SRC-CHECK の 172.16.20.1 は、0.0.0.0/0 より長い
 172.16.20.0/24 に含まれ、それが `except` なので、term に当たりません。
 
-広い範囲を捨てるときに、その中の一部だけを残したい、という形によく使います。たとえば私的アドレスを捨てる並びの中に、
+広い範囲を捨てるときに、その中の一部だけを残したい、という形によく使います。たとえばプライベート アドレスを捨てる並びの中に、
 自分が使っている接続のアドレスが入ってしまう時です。その部分を `except` で抜きます。
 
 直に書くアドレス(`source-address`)と prefix-list(`source-prefix-list`)を同じ term に両方書くと、違う種類の条件(AND)としては
@@ -121,7 +121,7 @@ term t {
 
 ### 2.3 並べた時のカウンタの名前
 
-フィルタを並べると、Junos はその口のために 1 つのフィルタを組み立てます。名前は `論理インターフェース-inet-i`
+フィルタを並べると、Junos はそのインターフェースのために 1 つのフィルタを組み立てます。名前は `論理インターフェース-inet-i`
 (入力の時。出力は `-o`)で、カウンタもその名前を付けて数えられます。元のフィルタの名前で読むと、0 のままです。
 
 ```console
@@ -151,7 +151,7 @@ SPOOF-et-0/0/1.0-inet-i                                                         
 
 ### 2.4 log と syslog
 
-**`log`** は、パケットの見出し(時刻・動作・インターフェース・プロトコル・アドレス)を、パケットを中継する部分(PFE)の中の
+**`log`** は、パケットのヘッダ(時刻・アクション・インターフェース・プロトコル・アドレス)を、パケットを中継する部分(PFE)の中の
 バッファに残します。`show firewall log` で読みます。`Filter` の欄はいつも `pfe`、`Action` の欄は A(accept)・D(discard)・
 R(reject)です。ポートまで見たいときは `detail` を付けます。
 
@@ -171,16 +171,16 @@ ICMP type: 0, ICMP code: 0
 バッファは大きくなく、古いものから消えていきます。この盤面では、数分前の記録が見えなくなっていることがありました。
 残しておきたい記録には向きません。
 
-**`syslog`** は、同じ情報を syslog のメッセージにします。メッセージは **firewall** という facility(メッセージの出どころの分類)で
+**`syslog`** は、同じ情報を syslog メッセージにします。メッセージは **firewall** という facility(メッセージの出どころの分類)で
 出るので、受け取る側の設定が要ります。`set system syslog file 名前 firewall any` と書くと、firewall の facility のメッセージを
-すべての重さ(severity)の分だけ、`/var/log/名前` のファイルに書きます。`show log 名前` で読みます。
+すべての重大度(severity)の分だけ、`/var/log/名前` のファイルに書きます。`show log 名前` で読みます。
 
 ```console
 admin@jun01> show log fw-log
 Nov 15 05:37:12  jun01 evo-aftmand-bt[14680]: FW: et-0/0/1.0   D ICMP 10.99.0.1 198.51.100.10     0     0 (2 packets)
 ```
 
-`FW:` の後ろは、インターフェース・動作・プロトコル・送信元・宛先・送信元のポート・宛先のポートの順です。
+`FW:` の後ろは、インターフェース・アクション・プロトコル・送信元・宛先・送信元のポート・宛先のポートの順です。
 短い間に続いたものは、末尾の `(2 packets)` のようにまとめて 1 行になります。
 
 `then syslog` を書いても、受け取るファイルの設定が無ければ、どこにも残りません。この盤面のルータでは、既定のメッセージの
@@ -188,8 +188,8 @@ Nov 15 05:37:12  jun01 evo-aftmand-bt[14680]: FW: et-0/0/1.0   D ICMP 10.99.0.1 
 
 ### 2.5 policer: 量を制限する
 
-**policer** は、パケットの量に上限を付ける部品です。上限を超えた分を捨てる(または印を付ける)ことで、
-たとえば RE へ届く ICMP の量を抑えます。firewall filter の term の動作に `policer 名前` と書いて使います。
+**policer** は、パケットの量に上限を付ける部品です。上限を超えた分を捨てる(またはマーキングする)ことで、
+たとえば RE へ届く ICMP の量を抑えます。firewall filter の term のアクションに `policer 名前` と書いて使います。
 
 ```
 set firewall policer 名前 if-exceeding bandwidth-limit 1m      ← 平均の速さの上限(ビット毎秒)
@@ -197,7 +197,7 @@ set firewall policer 名前 if-exceeding burst-size-limit 15k    ← 一度に�
 set firewall policer 名前 then discard                         ← 超えた分を捨てる
 ```
 
-`policer` は終端の動作ではありません。上限の内側のパケットは、同じ term の終端の動作(書いていなければ暗黙の accept)に従います。
+`policer` は終端アクションではありません。上限の内側のパケットは、同じ term の終端アクション(書いていなければ暗黙の accept)に従います。
 
 **この仮想ルータ(vJunos-Evolved)では、policer は量を制限しません。**設定は commit でき、`show firewall` に Policers の欄も
 出ますが、上限を大きく超える ping を送っても 1 つも捨てず、捨てた数は 0 のままでした。仕組みと設定の形だけを覚え、
@@ -237,7 +237,7 @@ Policers の欄の名前は `policer の名前-term の名前` です。数は�
 
 | IOS では | IOS XR では | Junos では |
 |---|---|---|
-| 1 つの口の 1 つの向きに ACL は 1 つ | 同じ | `input-list [ A B ]` で並べられる |
+| 1 つのインターフェースの 1 つの向きに ACL は 1 つ | 同じ | `input-list [ A B ]` で並べられる |
 | `deny ip 10.0.0.0 0.255.255.255 any`(範囲を並べる) | 同じ | `source-address`・`source-prefix-list`。一部を残すなら `except` |
 | 行の末尾の `log` → syslog | 同じ | `then log`(バッファ)・`then syslog`(＋ firewall の facility のファイル) |
 | `show logging` | `show logging` | `show firewall log`・`show log 名前` |

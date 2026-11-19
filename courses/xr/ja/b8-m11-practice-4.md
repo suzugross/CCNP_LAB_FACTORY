@@ -67,7 +67,7 @@
 - XE2 の E-LAN の部分は正しく設定されています。変更しないでください。
 
 ### 課題 M11-7
-<p class="tolab"><a href="/_learn?id=XRT-12&amp;step=m11t7">ワークスペースで開く</a> — 読み物: <a href="b7-m11-e-lan.html#s3-1">3.1 MAC アドレスを BGP で: 経路の種類 2</a> · <a href="b7-m11-e-lan.html#s3-2">3.2 ブロードキャスト: 経路の種類 3 と入口での複製</a> · <a href="b7-m11-e-lan.html#s3-3">3.3 1 つのフレームを追う: CE1 から CE3 へ</a> · <a href="b7-m11-e-lan.html#s3-4">3.4 IOS XE での EVPN の E-LAN の設定</a> · <a href="b7-m11-e-lan.html#s3-5">3.5 出力の読み方</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-12&amp;step=m11t7">ワークスペースで開く</a> — 読み物: <a href="b7-m11-e-lan.html#s3-1">3.1 MAC アドレスを BGP で: ルート タイプ 2</a> · <a href="b7-m11-e-lan.html#s3-2">3.2 ブロードキャスト: ルート タイプ 3 とイングレス レプリケーション</a> · <a href="b7-m11-e-lan.html#s3-3">3.3 1 つのフレームを追う: CE1 から CE3 へ</a> · <a href="b7-m11-e-lan.html#s3-4">3.4 IOS XE での EVPN の E-LAN の設定</a> · <a href="b7-m11-e-lan.html#s3-5">3.5 出力の読み方</a></p>
 
 
 顧客 C の新しい E-LAN は、EVPN の EVPN インスタンス **200** で、サイト 1、2、3 の間に作ります。

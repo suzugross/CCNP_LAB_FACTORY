@@ -1,8 +1,8 @@
 # M5 — ルーティング ポリシー言語
 
-IOS では、プレフィックス リスト、AS パス アクセス リスト、コミュニティ リスト、ルート マップでルートを濾過し、書き換えます。
+IOS では、プレフィックス リスト、AS パス アクセス リスト、コミュニティ リスト、ルート マップでルートをフィルタし、書き換えます。
 IOS XR は、これらをすべて 1 つの言語、ルーティング ポリシー言語(RPL)で置き換えます。IOS XR で BGP を少し触るとすぐに出会います。
-ポリシーが無いと、eBGP のネイバーは何も交換しないからです。
+ポリシーが無いと、eBGP ネイバーは何も交換しないからです。
 
 ## 1. ポリシーが必要な理由
 
@@ -34,7 +34,7 @@ RP/0/RP0/CPU0:XR01#show bgp neighbor 10.0.11.2 | include "olic|denied|No policy|
 ```
 
 「No policy」は、ポリシーがまったく無いために拒否したルートの数です。「By policy」は、ポリシーが破棄したルートの数です。
-この 2 つのカウンタを覚えておいてください。2 種類の失敗を見分けられます。iBGP のネイバーは影響を受けません。
+この 2 つのカウンタを覚えておいてください。2 種類の失敗を見分けられます。iBGP ネイバーは影響を受けません。
 
 ## 2. set
 
@@ -129,7 +129,7 @@ end-policy
 `set community` は、ルートが持つコミュニティを置き換えます。`additive` を付けると追加します。`delete community in
 <set>` は、set に一致するものだけを取り除き、ほかは残します。
 
-## 5. 付け所と確認
+## 5. アタッチ ポイントと確認
 
 ポリシーは、付けるまで何もしません。BGP でふつう付ける場所は、ネイバーのアドレス ファミリの下です。
 
@@ -141,8 +141,8 @@ router bgp 65000
    route-policy ISP-OUT out
 ```
 
-ほかの付け所には、再配送(`redistribute … route-policy`)、`network`、`aggregate-address`、`default-originate`、
-OSPF と IS-IS の同様の場所があります。すべての属性がすべての付け所にあるわけではありません。コミュニティを設定するポリシーは
+ほかのアタッチ ポイントには、再配送(`redistribute … route-policy`)、`network`、`aggregate-address`、`default-originate`、
+OSPF と IS-IS の同様の場所があります。すべての属性がすべてのアタッチ ポイントにあるわけではありません。コミュニティを設定するポリシーは
 OSPF への再配送には付けられず、コミットは
 `Policy [RP-IN] uses the 'community' attribute. There is no 'community' attribute at the ospf redistribution attach point.` で失敗します。
 
@@ -196,7 +196,7 @@ RP/0/RP0/CPU0:XR01#show bgp ipv4 unicast 11.0.0.0/8
 | パラメータなしで付いているポリシーにパラメータを足す | `Mismatch in number of parameters passed to policy at an attachpoint.` |
 
 どの場合も、直し方は 2 つの変更を同じコミットで行うことです。定義と付け外しを一緒に、取り外しと削除を一緒に、
-定義の変更と付け所の変更を一緒に行います。失敗したコミットの後は、`show configuration failed` がメッセージを表示します(M1)。
+定義の変更とアタッチ ポイントの変更を一緒に行います。失敗したコミットの後は、`show configuration failed` がメッセージを表示します(M1)。
 
 ## 7. ルート マップから RPL へ
 

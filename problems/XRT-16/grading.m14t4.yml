@@ -1,0 +1,31 @@
+# M14-4: BIDIR= 239.48/16・RP= PE3。PE4 は静的 RP の一覧の重なり(IOS は大きい RP アドレスを選ぶ)に注意。
+# 確認は poc/xr/gen_grading_xrt16.py で組んだ(中身を直したら組み直す)。確認ごとに範囲の中から乱数でグループを選ぶ(topologies/mcast_probe.py)。
+problem: XRT-16
+total_points: 100
+checks:
+- name: 'M14-4 In 239.48.0.0/16 any host can send: RCV3''s packets reach SRC1 and RCV2, and SRC1''s reach RCV2 and RCV3'
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=239.48.0.0/16 --pre-cli 'SRC1:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp join-group
+    {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --settle 10 --warm 'RCV3:ping {G} repeat 3 timeout 1' --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'RCV3:ping {G} repeat 10 timeout 1' --send 'SRC1:ping
+    {G} repeat 10 timeout 1' --from 192.168.1.1 --from 192.168.2.1 --from 192.168.3.1 --post-cli 'SRC1:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end' --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no
+    ip igmp join-group {G};;no ip igmp version;;end' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end'
+  raw:
+  - regex: == REPLY RCV3 192\.168\.1\.1 (?:8|9|10)\n
+  - regex: == REPLY RCV3 192\.168\.2\.1 (?:8|9|10)\n
+  - regex: == REPLY SRC1 192\.168\.2\.1 (?:8|9|10)\n
+  - regex: == REPLY SRC1 192\.168\.3\.1 (?:8|9|10)\n
+  points: 60
+- name: M14-4 239.48.0.0/16 is bidirectional with RP 10.255.0.3 on PE2 and PE4, and no router keeps per-source state after traffic from two sources
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=239.48.0.0/16 --pre-cli 'SRC1:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp join-group
+    {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --settle 10 --send 'RCV3:ping {G} repeat 5 timeout 1' --send 'SRC1:ping {G} repeat 5 timeout 1' --show 'PE2:show pim group-map {G}' --show 'PE2:show pim
+    topology {G} | include ,239' --show 'P1:show pim topology {G} | include ,239' --show 'PE1:show pim topology {G} | include ,239' --show 'PE4:show ip mroute {G} | begin \(' --post-cli 'SRC1:configure terminal;;interface Ethernet0/0;;no ip igmp join-group
+    {G};;no ip igmp version;;end' --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end'
+  raw:
+  - regex: 239\.48\.0\.0/16\*\s+BD\s+config\s+\d+\s+10\.255\.0\.3\s
+  - regex: \(\*,239\.48\.\d+\.\d+\) BD Up
+  - regex: '\(\*, 239\.48\.\d+\.\d+\), [^\n]*RP 10\.255\.0\.3, flags: B'
+  - not_regex: \(192\.168\.\d\.1, ?239\.48\.
+  points: 40

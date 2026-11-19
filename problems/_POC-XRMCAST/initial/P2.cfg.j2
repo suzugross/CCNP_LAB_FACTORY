@@ -1,0 +1,49 @@
+!! _POC-XRMCAST P2(XRd 26.1.1)= 受信 LAN(SW1)の XR 側のルータ。ユニキャストの土台(IS-IS の IPv4/IPv6)まで。マルチキャストは PoC の段で足す。
+interface Loopback0
+ ipv4 address 10.255.0.12 255.255.255.255
+ ipv6 address 2001:db8:255::12/128
+!
+interface {{ links[3] }}
+ description to P1
+ ipv4 address 10.0.3.12 255.255.255.0
+ ipv6 address 2001:db8:3::12/64
+ no shutdown
+!
+interface {{ links[4] }}
+ description receiver LAN (SW1)
+ ipv4 address 192.168.3.252 255.255.255.0
+ ipv6 address 2001:db8:100:3::252/64
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0012.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ address-family ipv6 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[4] }}
+  passive
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+!

@@ -1,4 +1,4 @@
-# M9 — 実践(2) ルート リフレクタと AS のオーバーライド
+# M9 — 実践(2) ルート リフレクタと AS オーバーライド
 
 ラボ **XRT-09** の課題です。ラボから離れた場所でも読めるように、ここに載せています。
 取り組むのはラボのワークスペースです。**Tasks** タブに、課題ごとの確認ボタン、段階式のヒント、
@@ -7,7 +7,7 @@
 ## M9 — L3VPN
 
 ### 課題 M9-2
-<p class="tolab"><a href="/_learn?id=XRT-09&amp;step=m9t2">ワークスペースで開く</a> — 読み物: <a href="90-m9-l3vpn.html#s3-4">3.4 ルート ターゲットによるふるい</a> · <a href="92-m9-rr-same-as.html#s2-1">2.1 VPNv4 のルート リフレクタは、すべてを持つ</a> · <a href="92-m9-rr-same-as.html#s2-2">2.2 クライアントは、アドレス ファミリーごと</a> · <a href="92-m9-rr-same-as.html#s2-4">2.4 AS パスの検査と、AS のオーバーライド</a> · <a href="92-m9-rr-same-as.html#s3-1">3.1 ルート リフレクタ</a> · <a href="92-m9-rr-same-as.html#s3-2">3.2 AS のオーバーライド</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-09&amp;step=m9t2">ワークスペースで開く</a> — 読み物: <a href="90-m9-l3vpn.html#s3-4">3.4 ルート ターゲットによるフィルタリング</a> · <a href="92-m9-rr-same-as.html#s2-1">2.1 VPNv4 のルート リフレクタは、すべてを持つ</a> · <a href="92-m9-rr-same-as.html#s2-2">2.2 クライアントは、アドレス ファミリーごと</a> · <a href="92-m9-rr-same-as.html#s2-4">2.4 AS パスの検査と、AS オーバーライド</a> · <a href="92-m9-rr-same-as.html#s3-1">3.1 ルート リフレクタ</a> · <a href="92-m9-rr-same-as.html#s3-2">3.2 AS オーバーライド</a></p>
 
 
 課題 M9-1 の後も、同じ顧客のサイトどうしが互いに到達できません。同僚が変更 CHG-1201 で、XR02 を XR01 と RT02 の

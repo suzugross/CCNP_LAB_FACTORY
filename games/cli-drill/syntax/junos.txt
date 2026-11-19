@@ -1,0 +1,83 @@
+# Junos の素振り台(BL-278)の構文の骨組み。範囲は J1(ルーティング ポリシー)＋その盤面の初めの設定。
+#
+# ここに書くのは「どの語がどこに置け、値はどんな形か」と show の並びだけ。? の説明の文言は書かない
+# (実機から採ったものを private/cli-drill/ に置き、組み立ての時に合わせる。BL-278 の取り決め)。
+#
+# 1 行 1 文。字下げ 2 つで 1 階層。並びは show(と display set)の並び。
+#   C <語>                 入れ物(> の印)
+#   N <語> <型> [<札>]     名前で区別する並び(group ISP {…})。語が - なら語なし(interfaces の下の IF 名など)
+#   L <語> <型> [<札>]     値を 1 つ持つ文
+#   M <語> <型> [<札>]     値をいくつも持つ文(+ の印。import [ A B ];)
+#   F <語>                 値のない文(passive;)
+#   X <語>|<語>            どれか 1 つだけ置ける値のない文(then accept|reject)
+#   T <語> <型> <型>…      値の組で区別する並び(route-filter 10.0.0.0/8 orlonger;)。型の頭に ? で省略可
+# 末尾の印:
+#   @1       子が 1 つだけの時は 1 行にまとめる(route X next-hop Y; community C members M; then accept; family inet {)。
+#            from はまとめない(記録 expJ1-examples.log の from { route-filter …; })
+#   @e       子を持てる並びだが、名前だけで終わってよい(neighbor 10.0.23.2; interface lo0.0;)
+#   &名前    この入れ物の中身に名前を付ける。*名前 で同じ中身を使う
+#   !確認    並びや形が実機の記録で確かめられていない(実機から木を採る時に照合する)
+# 型: word text uint int:A-B asn ipv4 prefix area plen plrange rfmatch enum:a|b ref:policy ref:prefix-list ref:community
+#
+# 確かめた出どころ: poc/junos/*.log(J0〜J2 の PoC の記録)と problems/JNT-02/clab/*.startup.cfg。
+
+C interfaces
+  N - word <interface_name>
+    L description text
+    L mtu int:256-16000
+    F disable
+    N unit uint <logical_unit_number>
+      L description text
+      C family @1
+        C inet
+          N address prefix <address>
+C routing-options
+  L router-id ipv4
+  L autonomous-system asn
+  C static
+    N route prefix <destination> @1
+      M next-hop ipv4
+      F discard
+C policy-options !確認 (protocols より前に置いたのは show | compare の記録 3 例の並びから。show の並びは未採取)
+  N prefix-list word <name>
+    N - prefix <prefix>
+  N policy-statement word <policy_name>
+    N term word <term_name>
+      C from &FROM
+        M protocol enum:aggregate|bgp|direct|local|ospf|static
+        T route-filter prefix rfmatch ?enum:accept|reject
+        N prefix-list ref:prefix-list !確認
+        T prefix-list-filter ref:prefix-list enum:exact|longer|orlonger
+        M community ref:community !確認
+      C then &THEN @1
+        L metric uint
+        C external !確認
+          L type enum:1|2
+        L local-preference uint
+        L as-path-prepend text
+        T community enum:add|delete|set ref:community
+        L next enum:term|policy
+        X accept|reject
+    C from *FROM
+    C then *THEN @1
+  N community word <community_name> @1
+    M members word
+C protocols
+  C bgp
+    M import ref:policy !確認
+    M export ref:policy !確認
+    N group word <group_name>
+      L type enum:internal|external
+      M import ref:policy
+      M export ref:policy
+      L peer-as asn
+      N neighbor ipv4 <address> @e
+        M import ref:policy
+        M export ref:policy
+  C ospf
+    M export ref:policy !確認
+    M import ref:policy !確認
+    N area area <area_id>
+      N interface word <interface_name> @e
+        F passive
+        L metric int:1-65535

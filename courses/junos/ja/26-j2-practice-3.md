@@ -37,7 +37,7 @@ SRV1 eth1 ──── et-0/0/1 JUN01 et-0/0/0 ──── et-0/0/0 JUN02 et-0/
 単元 J2 に沿った課題です。JUN02 を通る通信と、JUN02 自身が受け取る通信を、Junos の firewall filter で制御してください。
 
 ### 課題 J2-4  送信元をかたるパケットを入口で捨てる
-<p class="tolab"><a href="/_learn?id=JNT-03&amp;step=j2t4">ワークスペースで開く</a> — 読み物: <a href="25-j2-lists-logging.html#s2-1">2.1 フィルタの並び</a> · <a href="25-j2-lists-logging.html#s2-2">2.2 アドレスの並びと except</a> · <a href="25-j2-lists-logging.html#s2-3">2.3 並べた時のカウンタの名前</a></p>
+<p class="tolab"><a href="/_learn?id=JNT-03&amp;step=j2t4">ワークスペースで開く</a> — 読み物: <a href="25-j2-lists-logging.html#s2-1">2.1 フィルタ リスト</a> · <a href="25-j2-lists-logging.html#s2-2">2.2 アドレスの並びと except</a> · <a href="25-j2-lists-logging.html#s2-3">2.3 並べた時のカウンタの名前</a></p>
 
 
 JUN02 は、ISP から受け取るパケットのうち、送信元が次の範囲に入るものを捨てて、数をカウンタ `BOGON` で数えること。

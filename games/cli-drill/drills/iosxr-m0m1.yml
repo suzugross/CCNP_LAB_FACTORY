@@ -1,0 +1,291 @@
+# IOS XR の素振り台(BL-278)の練習: XR トラック M0(入り方と調べ方)・M1(設定の管理)。
+# 練習の中身はここ 1 か所に持ち、素振り台の画面と読み物の区切り(:::drill <ID>。gen_reading が ?drill=<ID>&embed=1 の枠にする)の両方から使う。
+# ★お題の並び= 読み物の節の並び(番号 M0-1… は並びから振る)。読み物の :::drill は courses/xr/{en,ja}/00-…・10-… にある。
+#
+# 盤面は XRT-01 の XR01 の初めの状態(実機の記録から作った JSON= 稼働中の設定・コミットの履歴と各回の中身。
+# cli_drill.py xr-board が private/cli-drill/iosxr/raw/board.log から作る)。値はラボの課題からずらしてある。
+# 文言(unit・title・task・say・sayNg)は {ja, en}。教材は英語が既定の版なので、XR のお題は両方を書く(自己試験が確かめる)。
+# 確かめ方:
+#   want/forbid: commit 済みの設定を「道を全部つないだ 1 行 1 文」の形にして照合する
+#                (例: router ospf 1 area 0 interface Loopback40 passive enable)。$X・*・** は Junos の練習と同じ
+#   commits:     コミットの履歴に求める記録がある({label, comment, client(CLI|Rollback), after: <この後のラベル>})
+#   cmd:         その形のコマンドを打った記録がある({line: 正規表現, mode: 打った時のモードの正規表現, say, sayNg})
+#   trialDone:   確認待ちのコミットが残っていない
+# setupCommits: 盤面の上で済ませておくコミット(お題の前置き)
+# answer: 答えの例(画面で「答えの例」を押した時だけ見せる)
+
+unit: { ja: M0・M1, en: M0/M1 }
+title: { ja: 入り方と設定の管理, en: Finding your way and managing configuration }
+os: iosxr
+course: xr
+devices:
+  XR01: private/cli-drill/iosxr/boards/XRT-01-XR01.json
+# 盤面の図= 構築時に生成された CML のラボ定義の控え(配線・座標・機種)＋機器の設定から機械的に起こす(cli_drill.py の topo_model_cml)
+topology: private/cli-drill/iosxr/boards/XRT-01.lab.yaml
+
+sections:
+  - id: m0
+    title: { ja: 設定はツリー構造・コミットするまで何も起きない, en: The configuration is a tree; nothing happens until you commit }
+    page: 00-m0-finding-your-way
+    drills:
+      # 読み物 M0 §5(コミットするまで何も起きない)の後
+      - id: xr-m0-1
+        title: { ja: Loopback を作ってコミットする, en: Create a loopback and commit it }
+        device: XR01
+        task:
+          ja: |-
+            XR01 に Loopback40 を作り、IPv4 アドレス 10.40.40.40/32 と description TEST-LO を設定して commit します。
+            commit する前に、編集中の設定(まだ効いていない分)を表示して確かめてください。
+          en: |-
+            On XR01, create Loopback40 with IPv4 address 10.40.40.40/32 and description TEST-LO, and commit it.
+            Before you commit, display the configuration you are editing (the part that is not in effect yet) and check it.
+        want:
+          - interface Loopback40 description TEST-LO
+          - interface Loopback40 ipv4 address 10.40.40.40 255.255.255.255
+        cmd:
+          - line: '^\s*show\s+conf\w*\s*$'
+            mode: '^config'
+            say: { ja: commit の前に編集中の設定を表示した, en: You displayed the configuration you were editing before the commit }
+            sayNg: { ja: commit の前に編集中の設定(show configuration)を表示していない, en: You did not display the configuration you were editing (show configuration) before the commit }
+        answer: |-
+          configure
+          interface Loopback40
+           description TEST-LO
+           ipv4 address 10.40.40.40 255.255.255.255
+           show configuration
+           commit
+           end
+
+      # 読み物 M0 §8(最初の読み替え)の後= §3 の木構造の 3 つ(OSPF・VRF・静的経路)
+      - id: xr-m0-2
+        title: { ja: プロトコルが自分のインターフェイスを持つ, en: A protocol owns its interfaces }
+        device: XR01
+        setupCommits:
+          - lines: |-
+              interface Loopback40
+              ipv4 address 10.40.40.40 255.255.255.255
+        task:
+          ja: |-
+            Loopback40 を OSPF プロセス 1 のエリア 0 に入れ、hello を送らない(passive)インターフェイスにして commit します。
+            XR では OSPF の設定はインターフェイスの下ではなく、OSPF のツリーの中のインターフェイスに書きます。
+          en: |-
+            Put Loopback40 into area 0 of OSPF process 1 as a passive interface (one that sends no hellos), and commit.
+            In IOS XR, the OSPF settings of an interface are not written under the interface; they go under that interface inside the OSPF tree.
+        want:
+          - router ospf 1 area 0 interface Loopback40 passive enable
+        answer: |-
+          configure
+          router ospf 1
+           area 0
+            interface Loopback40
+             passive enable
+             commit
+             end
+
+      - id: xr-m0-3
+        title: { ja: VRF に入れる, en: Put an interface into a VRF }
+        device: XR01
+        task:
+          ja: |-
+            VRF CUST-B(IPv4 のアドレス ファミリーを持つ)を作り、Loopback41(10.41.41.41/32)を CUST-B に入れて commit します。
+          en: |-
+            Create VRF CUST-B (with the IPv4 address family), put Loopback41 (10.41.41.41/32) into CUST-B, and commit.
+        want:
+          - vrf CUST-B address-family ipv4 unicast
+          - interface Loopback41 vrf CUST-B
+          - interface Loopback41 ipv4 address 10.41.41.41 255.255.255.255
+        answer: |-
+          configure
+          vrf CUST-B
+           address-family ipv4 unicast
+           root
+          interface Loopback41
+           vrf CUST-B
+           ipv4 address 10.41.41.41 255.255.255.255
+           commit
+           end
+
+      - id: xr-m0-4
+        title: { ja: スタティック ルートはアドレス ファミリーの中, en: Static routes live in an address family }
+        device: XR01
+        task:
+          ja: |-
+            XR01 に、デフォルト ルート(0.0.0.0/0)を LINK2 の向こう(10.0.21.2)へ向けるスタティック ルートを設定して commit します。
+          en: |-
+            On XR01, configure a static default route (0.0.0.0/0) that points to the far end of LINK2 (10.0.21.2), and commit.
+        want:
+          - router static address-family ipv4 unicast 0.0.0.0/0 10.0.21.2
+        answer: |-
+          configure
+          router static
+           address-family ipv4 unicast
+            0.0.0.0/0 10.0.21.2
+            commit
+            end
+
+  - id: m1
+    title: { ja: 設定の管理(履歴・取り消し・確認つき), en: "Managing configuration (history, undo, confirmed commits)" }
+    page: 10-m1-managing-configuration
+    drills:
+      # 読み物 M1 §2(コミットは全か無か)の後
+      - id: xr-m1-1
+        title: { ja: 拒否されたコミットの理由を読む, en: Read why a commit was rejected }
+        device: XR01
+        task:
+          ja: |-
+            1 回の commit で、BGP(AS 65001・ルータ ID 1.1.1.1)のネイバー 10.0.12.2(AS 65002)と Loopback43(10.43.43.43/32)を入れます。
+            ネイバーの IPv4 ユニキャストには着信ポリシー RP-NONE を付けます(RP-NONE はまだ定義されていません)。
+            commit が拒否されたら、理由を XR01 に表示させて読み、ポリシーの行だけを外して残りを commit してください。
+          en: |-
+            In one commit, add BGP (AS 65001, router ID 1.1.1.1) with neighbor 10.0.12.2 (AS 65002), and Loopback43 (10.43.43.43/32).
+            Apply inbound policy RP-NONE to the IPv4 unicast address family of the neighbor (RP-NONE is not defined yet).
+            When the commit is rejected, have XR01 display the reason and read it. Then remove only the policy line and commit the rest.
+        want:
+          - router bgp 65001 bgp router-id 1.1.1.1
+          - router bgp 65001 neighbor 10.0.12.2 remote-as 65002
+          - interface Loopback43 ipv4 address 10.43.43.43 255.255.255.255
+        forbid:
+          - router bgp 65001 ** route-policy **
+        cmd:
+          - line: '^\s*(do\s+)?show\s+conf\w*\s+fa\w*\s*$'
+            mode: '^config'
+            say: { ja: 拒否の理由を表示した, en: You displayed the reason for the rejection }
+            sayNg: { ja: 拒否の理由(show configuration failed)を表示していない, en: You did not display the reason for the rejection (show configuration failed) }
+        answer: |-
+          configure
+          router bgp 65001
+           bgp router-id 1.1.1.1
+           address-family ipv4 unicast
+           exit
+           neighbor 10.0.12.2
+            remote-as 65002
+            address-family ipv4 unicast
+             route-policy RP-NONE in
+             root
+          interface Loopback43
+           ipv4 address 10.43.43.43 255.255.255.255
+           root
+          commit
+          show configuration failed
+          no router bgp 65001 neighbor 10.0.12.2 address-family ipv4 unicast route-policy RP-NONE in
+          commit
+          end
+
+      # 読み物 M1 §3(すべてのコミットが記録される)の後
+      - id: xr-m1-2
+        title: { ja: ラベルとコメントを付けて残す, en: Leave a label and a comment }
+        device: XR01
+        task:
+          ja: |-
+            Loopback42(10.42.42.42/32)を追加し、ラベル DRILL-1、コメント add lo42 を付けて commit します。
+            その後、コミットの一覧と、その回で変わった中身を表示して確かめてください。
+          en: |-
+            Add Loopback42 (10.42.42.42/32) and commit it with label DRILL-1 and comment add lo42.
+            Then display the list of commits and what changed in that commit, and check them.
+        want:
+          - interface Loopback42 ipv4 address 10.42.42.42 255.255.255.255
+        commits:
+          - { label: DRILL-1, comment: add lo42 }
+        cmd:
+          - line: '^\s*(do\s+)?show\s+conf\w*\s+com\w*\s+ch\w*\s+(DRILL-1|last\s+1|\d{10})\s*$'
+            say: { ja: その回の中身を表示した, en: You displayed what changed in that commit }
+            sayNg: { ja: その回で変わった中身(show configuration commit changes …)を表示していない, en: You did not display what changed in that commit (show configuration commit changes …) }
+        answer: |-
+          configure
+          interface Loopback42
+           ipv4 address 10.42.42.42 255.255.255.255
+           commit label DRILL-1 comment add lo42
+           end
+          show configuration commit list
+          show configuration commit changes DRILL-1
+
+      # 読み物 M1 §4(元に戻す)の後= 1 回だけ取り消す・まとめて戻す
+      - id: xr-m1-3
+        title: { ja: 1 回ぶんの変更だけを取り消す, en: Undo one commit only }
+        device: XR01
+        task:
+          ja: |-
+            CHG1002 で入った変更だけを取り消して commit します。後の変更(CHG1003 以降)は残します。
+            逆の設定を自分で打たず、XR01 に CHG1002 の逆の変更を作らせてください。
+          en: |-
+            Undo only the changes made by CHG1002, and commit. Keep the later changes (CHG1003 onwards).
+            Do not type the reverse configuration yourself; have XR01 build the reverse of CHG1002.
+        want:
+          - router ospf 1 area 0 interface GigabitEthernet0/0/0/2 authentication message-digest
+          - interface Loopback201 ipv4 address 192.0.2.201 255.255.255.255
+        forbid:
+          - router ospf 1 area 0 interface GigabitEthernet0/0/0/2 cost **
+        cmd:
+          - line: '^\s*load\s+rol\w*\s+ch\w*\s+(CHG1002|1000000005)\s*$'
+            mode: '^config'
+            say: { ja: 逆の変更を XR01 に作らせた, en: You had XR01 build the reverse changes }
+            sayNg: { ja: 逆の変更を XR01 に作らせるコマンド(load rollback changes …)を打っていない, en: You did not use the command that has XR01 build the reverse changes (load rollback changes …) }
+        answer: |-
+          show configuration commit changes CHG1002
+          configure
+          load rollback changes CHG1002
+          show configuration
+          commit
+          end
+
+      - id: xr-m1-4
+        title: { ja: まとめて元に戻す, en: Roll back several commits at once }
+        device: XR01
+        setupCommits:
+          - label: WORK-1
+            lines: |-
+              interface Loopback44
+              ipv4 address 10.44.44.44 255.255.255.255
+          - label: WORK-2
+            lines: |-
+              router ospf 1 area 0 interface Loopback44 passive enable
+        task:
+          ja: |-
+            作業 WORK-1・WORK-2 の 2 回のコミットを、まとめて取り消します(作業前の状態へ戻す)。
+            設定モードに入らずに、1 つのコマンドで戻してください。
+          en: |-
+            Undo the two commits of the work, WORK-1 and WORK-2, together (return to the state before the work).
+            Do it with a single command, without entering configuration mode.
+        want:
+          - interface Loopback101 description MONITORING-NEW
+        forbid:
+          - interface Loopback44 **
+          - router ospf 1 area 0 interface Loopback44 **
+        commits:
+          - { client: Rollback, after: WORK-2 }
+        cmd:
+          - line: '^\s*rol\w*\s+conf\w*\s+(last\s+2|to-ex\w*\s+(CHG2001|1000000008)|to\s+(WORK-1|1000000009))\s*$'
+            mode: '^exec$'
+            say: { ja: 運用モードのコマンド 1 つで戻した, en: You rolled back with one command in EXEC mode }
+            sayNg: { ja: 運用モードの rollback configuration … で戻していない, en: You did not roll back with rollback configuration … in EXEC mode }
+        answer: |-
+          show configuration commit list 3
+          rollback configuration last 2
+
+      # 読み物 M1 §5(自分で元に戻るコミット)の後
+      - id: xr-m1-5
+        title: { ja: 自分で元に戻るコミット, en: A commit that takes itself back }
+        device: XR01
+        task:
+          ja: |-
+            Loopback45(10.45.45.45/32)を、期限 120 秒の確認つきコミットで入れます。期限が来る前に確定させ、設定モードを抜けてください。
+            (確定させずに設定モードを抜けると、その場で元に戻ります。)
+          en: |-
+            Add Loopback45 (10.45.45.45/32) with a confirmed commit that expires in 120 seconds. Confirm it before it expires, then leave configuration mode.
+            (If you leave configuration mode without confirming, the change is rolled back at once.)
+        want:
+          - interface Loopback45 ipv4 address 10.45.45.45 255.255.255.255
+        trialDone: true
+        exec: true
+        cmd:
+          - line: '^\s*commit\s+.*conf\w*\s+120\b|^\s*commit\s+conf\w*\s+120\b'
+            mode: '^config'
+            say: { ja: 確認つきコミット(120 秒)で入れた, en: You added it with a confirmed commit (120 seconds) }
+            sayNg: { ja: 確認つきコミット(commit confirmed 120)で入れていない, en: You did not add it with a confirmed commit (commit confirmed 120) }
+        answer: |-
+          configure
+          interface Loopback45
+           ipv4 address 10.45.45.45 255.255.255.255
+           commit confirmed 120
+           commit
+           end

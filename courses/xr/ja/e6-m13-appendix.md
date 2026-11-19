@@ -10,7 +10,7 @@
 ### 1.1 プログラムがルータに求めるもの
 
 CLI は人のために作られました。人は `show interfaces` を読んで欲しい行を見つけますが、プログラムは、目で読むために
-並べられたテキストから同じ数字を切り出さなければなりません。その並びは版で変わることがあり、ベンダーごとにも違います。
+並べられたテキストから同じ数字を切り出さなければなりません。その並びはリリースで変わることがあり、ベンダーごとにも違います。
 
 設定を CLI の行で送るのにも同じ弱さがあり、ルータが何を受け付けたかは、エラーの文を読んで初めて分かります。ASR 9000 の
 プログラマビリティのガイドは、はっきり「the general mechanism of CLI scraping is not flexible and optimal」と書いています。
@@ -25,30 +25,30 @@ CLI は人のために作られました。人は `show interfaces` を読んで
 | インターフェイス | 運ぶもの | データの書き方 | モデル | 接続を開く側 | 主な用途 | XRT-15 では |
 |---|---|---|---|---|---|---|
 | CLI | SSH(TCP 22) | 人のためのテキスト | なし(CLI 自身の文法) | クライアント | 人。コマンドを送ってテキストを読むスクリプト | どこでも |
-| SNMP | UDP 161(要求)、UDP 162(トラップ) | BER | MIB | 要求は NMS、トラップは機器 | カウンタ、状態、出来事 | XR01(M13-6) |
+| SNMP | UDP 161(要求)、UDP 162(トラップ) | BER | MIB | 要求は NMS、トラップは機器 | カウンタ、状態、イベント | XR01(M13-6) |
 | NETCONF(RFC 6241) | SSH、TCP 830(RFC 6242) | XML | YANG | クライアント | データストア・ロック・candidate と commit による設定。状態の読み取り | XR01(M13-1) |
-| RESTCONF(RFC 8040) | HTTPS、TCP 443 | XML か JSON | YANG | クライアント | 同じ YANG のデータを Web のリソースとして扱う。GET・POST・PUT・PATCH・DELETE | PE2(M13-2) |
+| RESTCONF(RFC 8040) | HTTPS、TCP 443 | XML か JSON | YANG | クライアント | 同じ YANG データを Web のリソースとして扱う。GET・POST・PUT・PATCH・DELETE | PE2(M13-2) |
 | gNMI | HTTP/2 の上の gRPC、TLS 付き | protobuf のメッセージ。値は JSON_IETF などのエンコード | YANG(OpenConfig とネイティブのパス) | クライアント(ダイヤルイン) | Capabilities・Get・Set・Subscribe | XR01(M13-3) |
-| テレメトリのダイヤルアウト | gRPC、TCP か UDP | GPB(compact か self-describing)か JSON | YANG(センサー パス) | 機器 | 状態を、時間ごとか変化のたびに収集役へ送る | XR01(M13-4) |
+| テレメトリのダイヤルアウト | gRPC、TCP か UDP | GPB(compact か self-describing)か JSON | YANG(センサー パス) | 機器 | 状態を、時間ごとか変化のたびにコレクタへ送る | XR01(M13-4) |
 | gNOI | gRPC | protobuf | サービスごとの `.proto` の定義 | クライアント | 運用の操作。ping、traceroute、再起動、ファイル、証明書、ソフトウェア | — |
 | gRIBI | gRPC | protobuf | OpenConfig の AFT(転送のエントリ) | クライアント | コントローラが経路のエントリを足し引きする | — |
-| P4Runtime | gRPC | protobuf | P4 のプログラムのテーブル | クライアント(コントローラ) | P4 のプログラムが定める転送のテーブルを、コントローラが埋める | — |
+| P4Runtime | gRPC | protobuf | P4 プログラムのテーブル | クライアント(コントローラ) | P4 プログラムが定める転送テーブルを、コントローラが埋める | — |
 
-上の 2 行は古くからの道です。NETCONF、RESTCONF、gNMI、テレメトリは YANG のデータを運び、本文で扱いました。
+上の 2 行は古くからの道です。NETCONF、RESTCONF、gNMI、テレメトリは YANG データを運び、本文で扱いました。
 gNMI の仕様は、どのセッションにも TLS を求めています(「a target or client MUST NOT fall back to unencrypted sessions」)。
 IOS XR の `no-tls` は、仕様の外の選択肢です。
 
-下の 3 行は、同じ gRPC のサーバの上のほかのサービスです。この単元では、どれも使いません。
+下の 3 行は、同じ gRPC サーバの上のほかのサービスです。この単元では、どれも使いません。
 
 - **gNOI**(gRPC Network Operations Interface)は「defines a set of gRPC-based microservices for executing operational
-  commands on network devices」。たとえば ping・traceroute・時刻・再起動(`system` のサービス)、ファイルの転送(`file`)、
+  commands on network devices」。たとえば ping・traceroute・時刻・再起動(`system` のサービス)、ファイル転送(`file`)、
   証明書の管理(`cert`)、ソフトウェアの導入(`os`)です。
-- **gRIBI**(gRPC Routing Information Base Interface)は、外のプログラムが、ルータの経路表にエントリを足したり消したり
+- **gRIBI**(gRPC Routing Information Base Interface)は、外のプログラムが、ルータのルーティング テーブルにエントリを足したり消したり
   できるようにします。エントリは、OpenConfig の AFT のモデルを protobuf にした形で書きます。
 - **P4Runtime** は「a control plane protocol for controlling the data plane elements of a device or program defined by a
-  P4 program」。P4 のプログラムが宣言したテーブルのエントリを、コントローラが書き込みます。
+  P4 program」。P4 プログラムが宣言したテーブルのエントリを、コントローラが書き込みます。
 
-IOS XR では、どれも gRPC のサーバ(`grpc`)の上で動きます。Cisco 8000 のプログラマビリティのガイドには gRIBI と P4Runtime の
+IOS XR では、どれも gRPC サーバ(`grpc`)の上で動きます。Cisco 8000 のプログラマビリティのガイドには gRIBI と P4Runtime の
 設定の章があり、NCS 5500 と ASR 9000 のガイドは名前を挙げるだけです。リリース 24.1.1 からは、gNMI・gRIBI・P4Runtime が、
 IANA が割り当てたそれぞれのポート(9339・9340・9559)でも待ち受けられます。どれを使えるかは、機種とリリースで決まります。
 
@@ -56,22 +56,22 @@ IANA が割り当てたそれぞれのポート(9339・9340・9559)でも待ち�
 
 | | CLI 駆動 | モデル駆動 |
 |---|---|---|
-| プログラムが送るもの | 人が打つのと同じコマンドの行 | YANG のモデルが定める木の形のデータ(XML・JSON・protobuf) |
-| 返ってくるもの | 人のために並べたテキスト | 同じ木の形のデータ。名前と型付き |
+| プログラムが送るもの | 人が打つのと同じコマンドの行 | YANG モデルが定めるツリー構造のデータ(XML・JSON・protobuf) |
+| 返ってくるもの | 人のために並べたテキスト | 同じツリー構造のデータ。名前と型付き |
 | 何が正しいかをどう知るか | 試すか、ガイドを読む | モデル。型・範囲・キー・必須のノード。ルータはデータをモデルと照らし合わせる |
-| 受け付けられなかったとき | 読み解くべきエラーの文 | 要素を名指しするエラー(NETCONF の `error-path`) |
+| 受け付けられなかったとき | 読み解くべきエラーの文 | 要素を指定するエラー(NETCONF の `error-path`) |
 | いくつもの変更を一度に | 1 行ずつ(IOS XR では CLI のコミットがまとめる) | NETCONF のコミット 1 回、gNMI の SetRequest 1 つ。全部か無しか |
-| ベンダーが違うとき | ベンダーごとに違うコマンド | OpenConfig のモデルは共通。各ベンダー独自のモデルは独自のまま |
+| ベンダーが違うとき | ベンダーごとに違うコマンド | OpenConfig モデルは共通。各ベンダー独自のモデルは独自のまま |
 | 状態 | ポーリングして読み解く | パスで読むか、流してもらう(テレメトリ) |
 
-モデルは、CLI から見た設定を置き換えるわけではありません。IOS XR の統一モデルは CLI から生成されているので、両者は
+モデルは、CLI から見た設定を置き換えるわけではありません。IOS XR のユニファイド モデルは CLI から生成されているので、両者は
 同じ設定を表しています。NETCONF や gNMI で入れた変更も、ほかの変更と同じように `show running-config` とコミットの一覧に
 出ます(本文「モデルで設定する」)。
 
 ### 1.4 オンボックスとオフボックス
 
 オフボックスの自動化は、別のマシンで動きます。NMS、NSO のようなオーケストレータ、Ansible のコントロール ノードです。
-上のインターフェイスでルータに届き、多くのルータを一度に見渡せますが、それぞれへの道が生きている必要があります。
+上のインターフェイスでルータに届き、多くのルータを一度に見渡せますが、それぞれへの経路が生きている必要があります。
 
 オンボックスの自動化は、ルータそのものの上で動きます。IOS XR のプログラマビリティのガイドには、Python で書く 4 種類の
 自動化スクリプトがあります。
@@ -83,7 +83,7 @@ IANA が割り当てたそれぞれのポート(9339・9340・9559)でも待ち�
 - **EEM スクリプト**:「Respond to a predefined set of events.」
 
 IOS XR は、ほかのベンダーのアプリケーションをコンテナで動かすこともできます(アプリケーション ホスティング)。オンボックスの
-スクリプトは、NMS への道が落ちていても動き続け、自分のルータで起きたことにすぐ反応しますが、見えるのはそのルータだけです。
+スクリプトは、NMS への経路が落ちていても動き続け、自分のルータで起きたことにすぐ反応しますが、見えるのはそのルータだけです。
 ガイドは、オンボックスのスクリプトはオフボックスのものと似ていて、外のコントローラで動くはずの管理のソフトウェアが
 ルータの中へ移ったものだと説明しています。
 
@@ -96,8 +96,8 @@ NETCONF の hello と gNMI の Capabilities で一覧にします。RFC 7950 は
 import と include するものと合わせれば、それだけで読めるということです。
 
 大きなモジュールは**サブモジュール**に分けられます。サブモジュールは部分的な定義です。自分のモジュールを `belongs-to` で
-名指しし、それを include できるのは、そのモジュールか、同じモジュールのほかのサブモジュールだけです。IOS XR 向けの Cisco の
-モデルの中に例があります。統一モデルが import する `tailf-common` は、2 つのサブモジュールでできています。
+指定し、それを include できるのは、そのモジュールか、同じモジュールのほかのサブモジュールだけです。IOS XR 向けの Cisco の
+モデルの中に例があります。ユニファイド モデルが import する `tailf-common` は、2 つのサブモジュールでできています。
 
 ```text
 module tailf-common {
@@ -114,14 +114,14 @@ submodule tailf-cli-extensions {
   ...
 ```
 
-モジュールどうしの参照は 2 通りです。`import` は、ほかのモジュールの型やグルーピングを借り、ほかのモジュールの木を指せる
-ようにします(augment と deviation。2.4 節)。`include` は、自分のサブモジュールを取り込みます。統一モデルは、インターフェイス名の
+モジュールどうしの参照は 2 通りです。`import` は、ほかのモジュールの型やグルーピングを借り、ほかのモジュールのツリーを指せる
+ようにします(augment と deviation。2.4 節)。`include` は、自分のサブモジュールを取り込みます。ユニファイド モデルは、インターフェイス名の
 型のような XR 独自の型のために `Cisco-IOS-XR-types` を import しています。
 
 ### 2.2 ツリー図を読む
 
 モデルをテキストのまま読むのは大変です。**ツリー図**(RFC 8340)は形だけを、1 つのノードを 1 行で表し、`pyang -f tree` が
-モジュールのファイルから書き出します。次は、IOS XR 26.1.1 の名前解決の統一モデル `Cisco-IOS-XR-um-domain-cfg` の一部です
+モジュールのファイルから書き出します。次は、IOS XR 26.1.1 の名前解決のユニファイド モデル `Cisco-IOS-XR-um-domain-cfg` の一部です
 (畳んだ枝は `...` と書いています)。
 
 ```text
@@ -145,7 +145,7 @@ module: Cisco-IOS-XR-um-domain-cfg
      ...
 ```
 
-| 記号 | 意味 | 上の木では |
+| 記号 | 意味 | 上のツリーでは |
 |---|---|---|
 | `rw` | 設定(`config true`) | すべてのノード。`-cfg` のモデルなので |
 | `ro` | 状態(`config false`)と、操作の出力 | 2.3 節 |
@@ -163,9 +163,9 @@ module: Cisco-IOS-XR-um-domain-cfg
 
 設定を表すリストには、キーが必須です(RFC 7950 の 7.8.2 節)。
 
-次の CLI の行が、上の木のノードを埋めます。ラボの一部ではなく、モデルと CLI の対応を見せるためだけのものです。
+次の CLI の行が、上のツリーのノードを埋めます。ラボの一部ではなく、モデルと CLI の対応を見せるためだけのものです。
 
-:::config XR01 — 名前解決のエントリ(上の木のノード)
+:::config XR01 — 名前解決のエントリ(上のツリーのノード)
 domain name nms.lab                      ## リーフ name。値は 1 つ
 domain ipv4 host srv01 10.0.50.10        ## リスト host のエントリ(キー host-name = srv01)。アドレスはリーフリスト ip-address へ
 domain lookup disable                    ## プレゼンス コンテナ lookup/disable。行が在るか無いか
@@ -218,16 +218,16 @@ module: openconfig-interfaces
 ```
 
 要求への影響: NETCONF の `<get-config>` は設定だけを返し、`<get>` は設定と状態を返します(RFC 6241 の 7.1 節と 7.7 節)。
-IOS XR のネイティブのモデルは、2 つを 1 つのモジュールに混ぜず、`-cfg` と `-oper` のモジュールに分けています(本文「モデルで
+IOS XR のネイティブ モデルは、2 つを 1 つのモジュールに混ぜず、`-cfg` と `-oper` のモジュールに分けています(本文「モデルで
 設定する」)。
 
-この木は、あるエラーの理由も示しています。キーの `name` は `config/name` を指し(`->` は参照)、`config` の `type` には
+このツリーは、あるエラーの理由も示しています。キーの `name` は `config/name` を指し(`->` は参照)、`config` の `type` には
 `?` がありません。必須だということです。IOS XR 26.1.1 では、`config/description` だけを送った
 OpenConfig の gNMI の Set は、`config/name` と `config/type` も送るまで拒まれました。
 
 ### 2.4 augment と deviation
 
-`augment` は、ほかのモジュールの木にノードを足します。足される側のモジュールは変わらず、両方を実装したルータには 1 本の木に
+`augment` は、ほかのモジュールのツリーにノードを足します。足される側のモジュールは変わらず、両方を実装したルータには 1 つのツリーに
 見えます。ツリー図では、足したノードに、足したモジュールのプレフィックスが付きます。26.1.1 では、NTP のモデルが、SNMP の
 モデルの `traps` のコンテナにトラップのスイッチを足しています。
 
@@ -265,20 +265,20 @@ deviation /oc-sys:system/oc-sys-grpc:grpc-servers/oc-sys-grpc:grpc-server/oc-sys
 }
 ```
 
-OpenConfig の gRPC のサーバのモデルには、今の接続の一覧がありますが、IOS XR はそれを報告しません。deviation を読む
+OpenConfig の gRPC サーバのモデルには、今の接続の一覧がありますが、IOS XR はそれを報告しません。deviation を読む
 プログラムは、問い合わせる前にそれを知ることができます。
 
-### 2.5 操作と出来事: rpc・action・notification
+### 2.5 操作とイベント: rpc・action・notification
 
-モデルは、データだけでなく、操作と出来事も表します。
+モデルは、データだけでなく、操作とイベントも表します。
 
 - **rpc**: モジュール全体の操作で、`input` と `output` を持ちます。NETCONF 自身の操作(`get-config`、`edit-config`、
-  `commit`)も、RFC 6241 の YANG のモジュールでこの形で定義されています。IOS XR の操作のモデルは名前が `-act` で終わり、
-  `Cisco-IOS-XR-ping-act` は `ping` を定義しています(下の木)。
-- **action**(YANG 1.1 で追加): データの木の 1 つのノードに結び付いた操作で、1 つのエントリに対して呼びます。RFC 7950 の
+  `commit`)も、RFC 6241 の YANG モジュールでこの形で定義されています。IOS XR の操作のモデルは名前が `-act` で終わり、
+  `Cisco-IOS-XR-ping-act` は `ping` を定義しています(下のツリー)。
+- **action**(YANG 1.1 で追加): データ ツリーの 1 つのノードに結び付いた操作で、1 つのエントリに対して呼びます。RFC 7950 の
   例は、サーバの一覧のうち 1 台をリセットするものです。
-- **notification**: ルータが、問い合わせを待たずに送る出来事です。NETCONF は、購読したクライアントに通知を届けます。XR01 の
-  hello には、`notification` と `interleave` の能力が載っていました。
+- **notification**: ルータが、問い合わせを待たずに送るイベントです。NETCONF は、サブスクライブしたクライアントに通知を届けます。XR01 の
+  hello には、`notification` と `interleave` のケイパビリティが載っていました。
 
 ```text
 module: Cisco-IOS-XR-ping-act
@@ -297,12 +297,12 @@ module: Cisco-IOS-XR-ping-act
 ### 2.6 モデルで得られるもの
 
 - **当てる前に確かめられる。** 型・範囲・キー・必須のノードはモデルにあり、ルータは要求をモデルと照らし合わせて、合わない
-  ものを、要素を名指しして拒みます。NETCONF の `validate` は、当てずにデータストアを確かめます(RFC 6241 の 8.6 節)。
+  ものを、要素を指定して拒みます。NETCONF の `validate` は、当てずにデータストアを確かめます(RFC 6241 の 8.6 節)。
 - **調べられる。** hello が、すべてのモジュール・改訂・deviation を挙げるので、クライアントは何も送る前に、何を送って
   よいかが分かります。
-- **プログラムが読める。** 道具が、モジュールのファイルから木やコードや文書を作ります(上の `pyang`)。
-- **ベンダーの間で共通。** OpenConfig のモデルは、それを実装したどのルータでも同じで、deviation が違いを示します。
-- **1 つのモデルで、いくつもの道。** 同じ木が、NETCONF では XML で、RESTCONF と gNMI では JSON で運ばれます(RFC 7951)。
+- **プログラムが読める。** 道具が、モジュールのファイルからツリーやコードや文書を作ります(上の `pyang`)。
+- **ベンダーの間で共通。** OpenConfig モデルは、それを実装したどのルータでも同じで、deviation が違いを示します。
+- **1 つのモデルで、いくつもの道。** 同じツリーが、NETCONF では XML で、RESTCONF と gNMI では JSON で運ばれます(RFC 7951)。
 - **まとめて変えられる。** NETCONF の candidate と commit、また gNMI の SetRequest 1 つは、変更の全部を当てるか、何も
   当てないかです(RFC 6241 の 8.3 節、gNMI の仕様の 3.4.3 節)。
 
@@ -318,7 +318,7 @@ Cisco Network Services Orchestrator(NSO)は、その層を受け持ちます。�
 software that want to configure the network and the devices in the network」と説明しています。
 
 運用者がサービス(顧客 A、
-サイト 2、VLAN、アドレス)を書くと、NSO が、YANG で書いたサービスのモデルを通して、それを各機器の設定に変えます。
+サイト 2、VLAN、アドレス)を書くと、NSO が、YANG で書いたサービス モデルを通して、それを各機器の設定に変えます。
 ベンダーの違う機器にもです。
 
 ### 3.2 部品
@@ -329,10 +329,10 @@ NSO がこの盤面を管理するとしたら、次の形になります(NED �
 flowchart TD
   N["OSS・BSS・ポータル・人"] -->|"NETCONF、RESTCONF、JSON-RPC、CLI、Web UI"| S
   subgraph NSO["NSO"]
-    S["サービスのパッケージ: YANG のサービス モデルと、その対応付け(XML のテンプレート、Python か Java)"] --> C["CDB: サービスのインスタンス、各機器の設定の写し、NSO 自身の設定"]
+    S["サービス パッケージ: YANG のサービス モデルと、その対応付け(XML テンプレート、Python か Java)"] --> C["CDB: サービスのインスタンス、各機器の設定の写し、NSO 自身の設定"]
     C --> D["デバイス マネージャ: 機器をまたぐ 1 つのトランザクション。check-sync、sync-from、sync-to"]
-    D --> E1["NETCONF の NED"]
-    D --> E2["CLI の NED"]
+    D --> E1["NETCONF NED"]
+    D --> E2["CLI NED"]
   end
   E1 -->|"SSH の上の NETCONF"| X["XR01(IOS XR)"]
   E2 -->|"SSH の上の CLI"| P["PE2(IOS XE)"]
@@ -341,22 +341,22 @@ flowchart TD
 | 部品 | すること |
 |---|---|
 | CDB | NSO のデータベースで、YANG で定義されています。サービスのインスタンス、管理するすべての機器の設定の写し、NSO 自身の動作の設定を持ちます。入れるものはスキーマと照らし合わせます。どのサービスのインスタンスが、どの機器の設定を生んだかも記録します |
-| NED(Network Element Driver) | 1 種類の機器へのつなぎ役で、パッケージとして入れます。機器のインターフェイスで 4 種類: NETCONF(YANG のモデルだけでコードは不要)、CLI(NSO が YANG のモデルから機器の CLI を組み立て、読み解く。SSH か Telnet)、generic(REST・RESTCONF・gNMI などほかのインターフェイス)、SNMP |
-| サービスのパッケージ | YANG のサービス モデルと、それを機器のモデルへ対応付けるもの。XML のテンプレート、Python か Java のコード、またはその両方 |
+| NED(Network Element Driver) | 1 種類の機器へのつなぎ役で、パッケージとして入れます。機器のインターフェイスで 4 種類: NETCONF(YANG モデルだけでコードは不要)、CLI(NSO が YANG モデルから機器の CLI を組み立て、読み解く。SSH か Telnet)、generic(REST・RESTCONF・gNMI などほかのインターフェイス)、SNMP |
+| サービス パッケージ | YANG のサービス モデルと、それを機器のモデルへ対応付けるもの。XML テンプレート、Python か Java のコード、またはその両方 |
 | デバイス マネージャ | NED を通して機器と話し、NSO の外で行われた変更を見つけて直します。`check-sync`、`compare-config`、`sync-from`、`sync-to` |
-| ノースバウンドのインターフェイス | 人向けに CLI(Cisco 風か Juniper 風)と Web UI。プログラム向けに NETCONF、RESTCONF、JSON-RPC、Python・Java・Erlang の API。NSO そのものを見守るための SNMP のエージェント |
+| ノースバウンド インターフェイス | 人向けに CLI(Cisco 風か Juniper 風)と Web UI。プログラム向けに NETCONF、RESTCONF、JSON-RPC、Python・Java・Erlang の API。NSO そのものを監視するための SNMP エージェント |
 
 ### 3.3 FASTMAP: 作成を書けば、変更と削除が付いてくる
 
 サービスは「何を作るか」として書きます。NSO の文書は「NSO reduces this problem to a single data-mapping definition for the
-'create' scenario.」と書いています。サービスのインスタンスを作ると、NSO は、機器に加えた変更の逆(**逆差分**、reverse diff)を、
+'create' scenario.」と書いています。サービスのインスタンスを作ると、NSO は、機器に加えた変更の逆(**リバース diff**、reverse diff)を、
 インスタンスと一緒にしまっておきます。
 
 | 運用者が | NSO がすること |
 |---|---|
-| サービスのインスタンスを作る | 入力で対応付け(create)を動かし、機器への変更を送り、その逆差分をインスタンスと一緒にしまう |
-| 入力を変える | 切り離したトランザクションで逆差分を当て(前の create を取り消し)、新しい入力で create をもう一度動かし、差し引きの違いだけを機器へ送る |
-| インスタンスを消す | 逆差分を当てる。サービスが足したものだけを、正確に消す |
+| サービスのインスタンスを作る | 入力で対応付け(create)を動かし、機器への変更を送り、そのリバース diff をインスタンスと一緒にしまう |
+| 入力を変える | 切り離したトランザクションでリバース diff を当て(前の create を取り消し)、新しい入力で create をもう一度動かし、差し引きの違いだけを機器へ送る |
+| インスタンスを消す | リバース diff を当てる。サービスが足したものだけを、正確に消す |
 | `re-deploy` | 対応付けをもう一度動かし、今の設定との違いを当てる(誰かが機器を手で変えた後など) |
 | `un-deploy` | サービスが入れた機器の設定は消すが、サービスそのものは残し、後でまた当てられるようにする |
 
@@ -368,9 +368,9 @@ NSO のコミットは、触れるすべての機器を 1 つのトランザク�
 and atomic transaction across all devices in parallel.」1 台でも失敗すると、すべてを元に戻し、CDB も更新しません。CLI で設定
 する機器のように、自分ではトランザクションを持たない機器でも同じです。
 
-NSO はコミットごとにロールバックのファイルを残すので、トランザクション全体を後から取り消すこともできます(`ncs.conf` で
+NSO はコミットごとにロールバック ファイルを残すので、トランザクション全体を後から取り消すこともできます(`ncs.conf` で
 ロールバックを有効にしていれば `rollback-files apply-rollback-file`)。`commit dry-run outformat native` は、各機器が受け取る
-はずのコマンドを、送らずに見せます。大きなネットワークでは、コミットのキューが、データベースのロックを外した後で機器へ
+はずのコマンドを、送らずに見せます。大きなネットワークでは、コミット キューが、データベースのロックを外した後で機器へ
 変更を送ります。
 
 NSO は、自分の写しを信じる前に、機器が裏で変えられていないかを確かめられます。`check-sync`(手軽。機器が対応していれば、
@@ -382,20 +382,20 @@ NSO は、自分の写しを信じる前に、機器が裏で変えられてい�
 この盤面では SRV01 が NMS です。状態(テレメトリ、IPFIX、トラップ)を受け、SNMP で問い合わせ、課題では XR01 と PE2 を直接
 設定します。
 
-NSO は収集役の代わりにはなりません。SRV01 の隣で、設定の層として座ります。ポータルや OSS が NSO に「顧客 A、
+NSO はコレクタの代わりにはなりません。SRV01 の隣で、設定の層として座ります。ポータルや OSS が NSO に「顧客 A、
 サイト 2」と頼み、NSO が NED を通して XR01 と PE2 を 1 つのトランザクションで設定し、telegraf・nfcapd・snmptrapd はルータが
-送るものを受け続けます。NSO の SNMP のエージェントは NSO を見守るためのもので、ネットワークを見るものではありません。
+送るものを受け続けます。NSO の SNMP エージェントは NSO を監視するためのもので、ネットワークを見るものではありません。
 
-## 4. 設定管理の道具: Ansible と Terraform
+## 4. 構成管理ツール: Ansible と Terraform
 
 ### 4.1 Ansible: コントロール ノードから押し出す、順番のあるタスク
 
 Ansible は 1 台のマシン、**コントロール ノード**の上で動き、**インベントリ**に並べた**管理対象ノード**に働きかけます。相手には
 何も入れません(「Agent-less architecture」)。仕事は YAML の**プレイブック**に書きます。プレイブックはプレイを持ち、プレイは
-ホストの組に順番のあるタスクの並びを当て、各タスクが**モジュール**を呼びます。モジュールは**コレクション**にまとまっていて、
+ホストのグループに順番のあるタスクの並びを当て、各タスクが**モジュール**を呼びます。モジュールは**コレクション**にまとまっていて、
 Cisco のものは `cisco.iosxr` と `cisco.ios` です。
 
-ネットワーク機器では 1 つ違う点があります。モジュールは機器でなくコントロール ノードで動き、接続のプラグインを通して機器と
+ネットワーク機器では 1 つ違う点があります。モジュールは機器でなくコントロール ノードで動き、接続プラグインを通して機器と
 話します。`ansible_network_os` で機種を指定します(`cisco.iosxr.iosxr`、`cisco.ios.ios`)。
 
 | `ansible_connection` | プロトコル | Cisco のコレクションでは |
@@ -410,7 +410,7 @@ Cisco のものは `cisco.iosxr` と `cisco.ios` です。
 | `state` | すること |
 |---|---|
 | `merged` | 書いた設定を機器の設定に混ぜる(既定) |
-| `replaced` | 名指しした物の設定を、書いた設定に置き換える |
+| `replaced` | 指定した物の設定を、書いた設定に置き換える |
 | `overridden` | その部分の設定全体を、書いた設定と同じにする。自分の接続まで消すことがある |
 | `deleted` | 設定を消し、既定に戻す |
 | `gathered` | 機器の設定をデータとして読む |
@@ -430,11 +430,11 @@ SRV01 に Ansible は入っていないので、この例は読むためのも�
 SSH の上の CLI を使います。
 
 :::config SRV01 — inventory.ini: 管理対象ノードと、その届き方
-[xr]                                              ## ホストの組
-XR01 ansible_host=10.0.50.1                       ## NMS の区画の XR01
+[xr]                                              ## ホストのグループ
+XR01 ansible_host=10.0.50.1                       ## NMS のセグメントの XR01
 [xe]
-PE2 ansible_host=10.0.50.2                        ## NMS の区画の PE2
-[xr:vars]                                         ## 組のすべてのホストへの設定
+PE2 ansible_host=10.0.50.2                        ## NMS のセグメントの PE2
+[xr:vars]                                         ## グループのすべてのホストへの設定
 ansible_connection=ansible.netcommon.network_cli  ## SSH の上の CLI
 ansible_network_os=cisco.iosxr.iosxr              ## 機種: IOS XR
 [xe:vars]
@@ -514,9 +514,9 @@ Cisco の DevNet が、この盤面の両方の機種のプロバイダーを公
 - **`CiscoDevNet/iosxr`** は **gNMI** で話します(リリース 0.7.1、2026 年 4 月)。ルータには `grpc` が要ります。既定のポートは
   57400 で、TLS は既定で有効ですが、`verify_certificate = true` にしない限り、ルータの証明書は確かめません。リソースは YANG の
   モデルに沿っていて(`iosxr_interface_loopback`、`iosxr_hostname` ほか多数)、`iosxr_gnmi` は任意の 1 つのパスを設定します。
-  NETCONF への対応は開発中の枝にはありますが、リリースにはまだありません。
+  NETCONF への対応は開発中のブランチにはありますが、リリースにはまだありません。
 - **`CiscoDevNet/iosxe`** は SSH の上の **NETCONF** で話します(リリース 1.2.0、2026 年 11 月)。機器には `netconf-yang` が
-  要ります。以前の版は RESTCONF を使っていました。0.15.0 で NETCONF が既定になり、1.0.0 で RESTCONF が外されました。
+  要ります。以前のバージョンは RESTCONF を使っていました。0.15.0 で NETCONF が既定になり、1.0.0 で RESTCONF が外されました。
 
 どちらのプロバイダーも、ソフトウェアの最低のリリースは書いておらず、試したリリースを挙げています(IOS XR 24.4.2、
 IOS XE 17.15)。
@@ -530,16 +530,16 @@ terraform {
   required_providers {
     iosxr = {
       source  = "CiscoDevNet/iosxr"              ## プロバイダー。Terraform Registry から
-      version = "0.7.1"                          ## 版を固定する。リソースは版で変わる
+      version = "0.7.1"                          ## バージョンを固定する。リソースはバージョンで変わる
     }
   }
 }
 
 provider "iosxr" {
-  host = "10.0.50.1"                             ## XR01 の gRPC のサーバ。既定のポート 57400 が付く
+  host = "10.0.50.1"                             ## XR01 の gRPC サーバ。既定のポート 57400 が付く
 }                                                ## ユーザ名とパスワードは IOSXR_USERNAME と IOSXR_PASSWORD から
 
-resource "iosxr_interface_loopback" "nms_lo211" {  ## リソースの種類と、手元での名前
+resource "iosxr_interface_loopback" "nms_lo211" {  ## リソース タイプと、手元での名前
   name         = "211"                           ## Loopback211(番号だけを書く)
   description  = "TERRAFORM-DEMO"
   ipv4_address = "10.255.211.1"
@@ -554,8 +554,8 @@ nms@SRV01:~$ terraform apply                    # do it, after approval
 nms@SRV01:~$ terraform plan -refresh-only       # has someone changed XR01 by hand?
 ```
 
-`resource` の塊を消してもう一度 apply すると、Loopback211 が消えます。Terraform が作ったことを、ステート ファイルが覚えて
-いるからです。gRPC のサーバがクライアントの証明書を求めるとき(相互 TLS)は、プロバイダーに `certificate` と `key` を渡し、
+`resource` ブロックを消してもう一度 apply すると、Loopback211 が消えます。Terraform が作ったことを、ステート ファイルが覚えて
+いるからです。gRPC サーバがクライアント証明書を求めるとき(相互 TLS)は、プロバイダーに `certificate` と `key` を渡し、
 ルータを確かめるために `ca_certificate` を渡します。
 
 ### 4.5 並べる
@@ -563,29 +563,29 @@ nms@SRV01:~$ terraform plan -refresh-only       # has someone changed XR01 by ha
 | | Ansible | Terraform |
 |---|---|---|
 | 仕事の書き方 | YAML で、順番のあるタスク(リソース モジュールは自分の部分については宣言的) | HCL で、最終の形の全体 |
-| 機器と話す手段 | 接続のプラグイン: `network_cli`(SSH の上の CLI)、`netconf`、`httpapi` | プロバイダー: `CiscoDevNet/iosxr`(gNMI)、`CiscoDevNet/iosxe`(NETCONF) |
+| 機器と話す手段 | 接続プラグイン: `network_cli`(SSH の上の CLI)、`netconf`、`httpapi` | プロバイダー: `CiscoDevNet/iosxr`(gNMI)、`CiscoDevNet/iosxe`(NETCONF) |
 | 作ったものを覚えるか | ステート ファイルは無い。毎回機器を読み、違う所だけを変える | ステート ファイルが、各リソースをその物に結び付ける |
 | 事前の確認 | `--check`、`--diff`、`state: rendered` | `terraform plan` |
 | 要らなくなったものを消す | そのためのタスクを書く(`state: deleted` か `overridden`) | ファイルから消す。plan が壊すことを提案する |
 | 手で変えられたとき | 次の実行で、プレイブックの形に戻す | 次の plan に出る。`-refresh-only` でステートに取り込む |
 | 機器に入れるソフトウェア | なし | なし |
-| ほかに得意なこと | 手順のある作業。コマンド、確認、アップグレード | 多くの物の一生の管理。クラウドの基盤 |
+| ほかに得意なこと | 手順のある作業。コマンド、確認、アップグレード | 多くの物のライフサイクル管理。クラウドの基盤 |
 
 ## 5. セキュア ZTP
 
 ### 5.1 従来の ZTP: DHCP がファイルを指す
 
 ゼロタッチ プロビジョニング(ZTP)は、ルータが最初の起動で自分を設定する仕組みです。IOS XR では「the ZTP process initiates
-automatically if the device does not have a prior configuration」。DHCP の要求を、まず管理のポートで、次にデータのポートで、
+automatically if the device does not have a prior configuration」。DHCP の要求を、まず管理ポートで、次にデータ ポートで、
 IPv4 を先に、IPv6 を後に送ります。
 
 要求はルータを名乗り(シリアル番号をクライアント識別子のオプション 61 に、ベンダー・機種・
-シリアル番号をオプション 60 と 124 に)、ユーザ クラス `xr-config` を付けます(リリース 7.3.1 までは `exr-config`)。DHCP のサーバは、
+シリアル番号をオプション 60 と 124 に)、ユーザ クラス `xr-config` を付けます(リリース 7.3.1 までは `exr-config`)。DHCP サーバは、
 ファイルの URL をオプション 67(DHCPv6 ではオプション 59)で返します。
 
 :::config SRV01 — XR01 に ZTP のファイルを渡す ISC DHCP サーバのエントリ(従来の ZTP)
 host XR01 {                                                  ## ルータ 1 台
-  hardware ethernet 52:54:00:13:00:01;                       ## NMS の区画のポート(例のアドレス)
+  hardware ethernet 52:54:00:13:00:01;                       ## NMS のセグメントのポート(例のアドレス)
   fixed-address 10.0.50.1;                                   ## 渡すアドレス
   if exists user-class and option user-class = "xr-config" { ## このユーザ クラスを送るのは IOS XR の ZTP だけ
     filename = "http://10.0.50.10/ztp/xr01.cfg";             ## オプション 67: ファイルの在りか
@@ -595,7 +595,7 @@ host XR01 {                                                  ## ルータ 1 台
 
 ルータはファイルを取ってきて、1 行目を見ます。`!! IOS XR` で始まるファイルは設定で、当てます。`#! /bin/bash`・`#! /bin/sh`・
 `#! /usr/bin/python` で始まるファイルはスクリプトで、実行します。スクリプトは、先にソフトウェアを入れてから設定することも
-でき、IOS XR が用意する補助の関数(`/pkg/bin/ztp_helper.sh` と Python のライブラリ)を使えます。
+でき、IOS XR が用意するヘルパー関数(`/pkg/bin/ztp_helper.sh` と Python のライブラリ)を使えます。
 
 :::config SRV01 — /ztp/xr01.cfg: 1 行目のおかげで設定のファイル
 !! IOS XR                                    ## こう始まるファイルを、ZTP は設定として当てる
@@ -617,13 +617,13 @@ ZTP の DHCP のセッションを手で始め、`ztp terminate` が進行中の
 
 従来の ZTP は、起動したネットワークを信じます。
 
-- ルータは、答えた DHCP のサーバからファイルを受け取ります。そのサーバがルータの持ち主のものだという証明はありません。
+- ルータは、答えた DHCP サーバからファイルを受け取ります。そのサーバがルータの持ち主のものだという証明はありません。
 - ファイルには署名がありません。TFTP・FTP・HTTP では途中で書き換えられることがあります。Cisco の TAC の ZTP の文書は、
   iPXE が HTTPS に対応しない理由を「as it cannot predict which signature to verify」と書いています。
 - サーバも、どのルータが尋ねているのか確かめられません。DHCP の要求の中のシリアル番号は、どのクライアントでも送れる
   文字列です。
 
-RFC 8572 は、DHCP のサーバ・DNS のサーバ・取り外せるドライブを、ブートストラップのデータの*信頼できない出どころ*と呼んで
+RFC 8572 は、DHCP サーバ・DNS サーバ・取り外せるドライブを、ブートストラップ データの*信頼できない出どころ*と呼んで
 います。プロバイダー自身の準備室の中なら許せるかもしれません。遠くの拠点へ送り、プロバイダーが管理しないネットワークを
 通してつなぐルータでは、許せません。
 
@@ -634,10 +634,10 @@ and connecting network and power cables」)はそのままに、両方向の証�
 
 | 部品 | 何か | 作る人 |
 |---|---|---|
-| ブートストラップ サーバ | ブートストラップのデータを渡す RESTCONF のサーバ。Cisco は ZTP サーバと呼ぶ(「a RESTCONF or HTTPs server」) | 持ち主(リダイレクトのサーバならメーカー) |
+| ブートストラップ サーバ | ブートストラップ データを渡す RESTCONF サーバ。Cisco は ZTP サーバと呼ぶ(「a RESTCONF or HTTPs server」) | 持ち主(リダイレクト サーバならメーカー) |
 | 伝達情報(conveyed information) | **リダイレクト情報**(ブートストラップ サーバの一覧。それぞれに任意のトラスト アンカー)か、**オンボーディング情報**(ブート イメージ、最初の設定、スクリプト)のどちらか | 持ち主。信頼させる必要があるときは持ち主の鍵で署名する |
-| 所有者証明書 | 持ち主の身元を公開鍵に結び付ける X.509 の証明書。ルータは、伝達情報の署名をこれで確かめる | 持ち主 |
-| 所有権バウチャー(RFC 8366) | メーカーが署名した、この機器(シリアル番号)はこの持ち主のもの、という言明。持ち主は証明書(pinned-domain-cert)で示され、所有者証明書はそこへつながらなければならない | メーカーの署名機関(MASA)。Cisco は依頼に応じて発行する |
+| オーナー証明書 | 持ち主の身元を公開鍵に結び付ける X.509 の証明書。ルータは、伝達情報の署名をこれで確かめる | 持ち主 |
+| 所有権バウチャー(RFC 8366) | メーカーが署名した、この機器(シリアル番号)はこの持ち主のもの、という言明。持ち主は証明書(pinned-domain-cert)で示され、オーナー証明書はそこへつながらなければならない | メーカーの署名機関(MASA)。Cisco は依頼に応じて発行する |
 | 機器の身元 | 製造時に入れる証明書と秘密鍵(IDevID、IEEE 802.1AR。RFC 8572 が推奨)。Cisco では、ハードウェアの Trust Anchor module(TAm)にある SUDI | メーカー |
 | 機器の中のトラスト アンカー | 所有権バウチャー(とよく知られたブートストラップ サーバ)を確かめるための証明書 | メーカー |
 
@@ -649,13 +649,13 @@ and connecting network and power cables」)はそのままに、両方向の証�
 ```mermaid
 sequenceDiagram
   participant R as ルータ(TAm に SUDI)
-  participant D as DHCP のサーバ
+  participant D as DHCP サーバ
   participant B as ブートストラップ サーバ(HTTPS)
   R->>D: DHCP の要求
   D-->>R: オプション 143(DHCPv6 は 136): ブートストラップ サーバの https の URI(署名なしのリダイレクト)
   R->>B: TLS。ルータは SUDI を見せ、サーバの証明書は仮に受け入れる
-  Note over B: サーバは SUDI を Cisco の CA の連なりで確かめる
-  B-->>R: 署名付きのオンボーディング情報、所有者証明書、所有権バウチャー
+  Note over B: サーバは SUDI を Cisco の CA チェーンで確かめる
+  B-->>R: 署名付きのオンボーディング情報、オーナー証明書、所有権バウチャー
   Note over R: 3 つの確認(下)
   R->>R: ブート イメージ、設定前のスクリプト、最初の設定、設定後のスクリプト
 ```
@@ -666,8 +666,8 @@ DHCP は署名付きのデータを運べないので(DHCPv4 のオプション�
 
 1. **バウチャー**: 署名を、ルータの中のメーカーのトラスト アンカーで確かめ、このルータのシリアル番号を挙げているか、期限が
    切れていないかを見ます。そこから pinned-domain-cert を取り出します。
-2. **所有者証明書**: pinned-domain-cert へつながらなければなりません。
-3. **伝達情報**: その署名が、所有者証明書のものでなければなりません。
+2. **オーナー証明書**: pinned-domain-cert へつながらなければなりません。
+3. **伝達情報**: その署名が、オーナー証明書のものでなければなりません。
 
 どれかが失敗すれば、ルータはデータを捨てます。すべて通れば、オンボーディング情報を決まった順に処理します。ブート イメージ、
 設定前のスクリプト、最初の設定、設定後のスクリプトの順です(RFC 8572 の 5.6 節)。
@@ -677,25 +677,25 @@ DHCP は署名付きのデータを運べないので(DHCPv4 のオプション�
 - 「The Cisco IOS XR software implements the secure zero touch provisioning capabilities as described in RFC 8572.」
   リリース 7.3.1 で `ztp secure-mode enable` とともに入り(その後ルータを再起動)、7.3.2 で、取り外せる記憶装置の上の署名付きの
   データが加わりました。
-- 出どころ: DHCP のサーバ(`OPTION_V4_SZTP_REDIRECT (143)`、`OPTION_V6_SZTP_REDIRECT (136)`。URI は `https://`)と、
-  USB のドライブ(署名付きのオンボーディング情報だけで、リダイレクトは置かない)。セキュアのモードの ZTP は「accepts only the
+- 出どころ: DHCP サーバ(`OPTION_V4_SZTP_REDIRECT (143)`、`OPTION_V6_SZTP_REDIRECT (136)`。URI は `https://`)と、
+  USB ドライブ(署名付きのオンボーディング情報だけで、リダイレクトは置かない)。セキュア モードの ZTP は「accepts only the
   secure-redirect-URL and ignores the presence of boot file name option」。
 - 「Secure ZTP is supported only on platforms that have Hardware TAM support. Routers with HW TAM have the SUDI embedded in
   TAM.」
-- ZTP サーバは、SUDI の証明書を確かめるために、Cisco の CA の連なり(ACT2 SUDI CA、Cisco Root CA 2048、High Assurance SUDI CA、
+- ZTP サーバは、SUDI の証明書を確かめるために、Cisco の CA チェーン(ACT2 SUDI CA、Cisco Root CA 2048、High Assurance SUDI CA、
   Cisco Root CA 2099)を持つ必要があります。
 - バウチャーは「Contact Cisco Support to obtain a voucher」。pinned domain certificate とシリアル番号を伝えます。`.vcj` の
   ファイルで届きます。
-- セキュアのモードを切るには、consent token が要ります(`request consent-token generate-challenge secure-ztp …` の後に
+- セキュア モードを切るには、consent token が要ります(`request consent-token generate-challenge secure-ztp …` の後に
   `accept-challenge`)。
 
-セキュア ZTP は、このラボでは試していません。ZTP の処理そのものは仮想のルータでも動いていて、M1 のコミットの一覧には、
+セキュア ZTP は、このラボでは試していません。ZTP の処理そのものは仮想ルータでも動いていて、M1 のコミットの一覧には、
 最初の起動のときに `ZTP` が行ったコミットが 2 つ出ていました(何を当てたかは調べていません)。
 
 | | 従来の ZTP | セキュア ZTP |
 |---|---|---|
-| 在りかを知る手段 | DHCP のオプション 67(DHCPv6 は 59) | DHCP のオプション 143(DHCPv6 は 136)。または USB のドライブ |
-| 取ってくるもの | 設定のファイルかスクリプト | 伝達情報、所有者証明書、所有権バウチャー |
+| 在りかを知る手段 | DHCP のオプション 67(DHCPv6 は 59) | DHCP のオプション 143(DHCPv6 は 136)。または USB ドライブ |
+| 取ってくるもの | 設定のファイルかスクリプト | 伝達情報、オーナー証明書、所有権バウチャー |
 | 運び方 | TFTP、FTP、HTTP | HTTPS(RESTCONF) |
 | ルータを誰が証明するか | 誰も(シリアル番号はただの文字列) | SUDI(ルータのメーカーの証明書) |
 | データを誰が証明するか | 誰も | 持ち主の署名。メーカーのバウチャーでルータと結び付く |
@@ -710,16 +710,16 @@ DHCP は署名付きのデータを運べないので(DHCPv4 のオプション�
 | RESTCONF | 無い(`restconf` を知らない) | 無い | 動く。`ip http secure-server`、`restconf`、権限 15 のユーザ。有効にしてから約 1 分で答える。権限 1 は 403 | 無い |
 | gNMI(ダイヤルイン) | 動く。JSON_IETF だけ。Get、Subscribe(ONCE・SAMPLE・ON_CHANGE)、Set。TLS と相互 TLS | 同じ | (試していない) | (試していない) |
 | テレメトリのダイヤルアウト: TCP、gRPC、TLS 付きの gRPC | 動く | 動く | (試していない) | (試していない) |
-| クライアント証明書を求める収集役へのダイヤルアウト | つながらない(クライアント証明書を見せない) | 同じ | (試していない) | (試していない) |
+| クライアント証明書を求めるコレクタへのダイヤルアウト | つながらない(クライアント証明書を見せない) | 同じ | (試していない) | (試していない) |
 | NetFlow、IPFIX | 無い(`flow exporter-map` が無い。`flow` は FlowSpec) | 無い | 動く。nfcapd への IPFIX。`cache timeout` は 1〜604800 秒 | 動くが、`cache timeout` が無く、絶対時刻も無い(nfdump では 1970 年) |
 | ACL 付きの SNMPv2c | 動く。拒んだ相手には答えず、「Unknown community name」で数える | 同じ | (試していない) | (試していない) |
 | SNMPv3 の authPriv(SHA、AES 128) | 動く。コミュニティの ACL は効かない | 同じ | (試していない) | 動く(このコースの別のラボ) |
-| SNMPv3 のトラップ | グループに notify のビューが要る。受け手には XR の engine ID が要る | 同じ | (試していない) | (試していない) |
+| SNMPv3 のトラップ | グループに通知ビューが要る。受け手には XR の engine ID が要る | 同じ | (試していない) | (試していない) |
 | SNMP が答える所 | MPP を設定しなくても、帯域内のインターフェイスで答える | 同じ | (試していない) | — |
 | トラップの宛先を `auth` から `priv` へ変える | running-config は変わるが `show snmp host` は `v3 auth` のまま。消してコミット、入れてコミット | (試していない) | — | — |
 
-2 つの結果は、文書と食い違うか、文書に無いものです。NCS 5500(26.x)の SNMP の章は、SNMP は既定で管理のインターフェイスで
-答えると書いていますが、2 つの仮想のルータはどちらも帯域内のインターフェイスで答えました。既定に頼らず、MPP とコミュニティの
+2 つの結果は、文書と食い違うか、文書に無いものです。NCS 5500(26.x)の SNMP の章は、SNMP は既定で管理インターフェイスで
+答えると書いていますが、2 つの仮想ルータはどちらも帯域内のインターフェイスで答えました。既定に頼らず、MPP とコミュニティの
 ACL で答える所を絞ります。トラップの宛先の振る舞いは文書に無く、このリリースのものかもしれません。`show snmp host` と
 running-config を見比べます。どちらも、課題の正しさの根拠には使っていません。
 
@@ -728,21 +728,21 @@ running-config を見比べます。どちらも、課題の正しさの根拠�
 | すること | IOS XE(Catalyst 8000V 17.15) | IOS XR(26.1.1) |
 |---|---|---|
 | NETCONF を有効にする | `netconf-yang` | `netconf-yang agent ssh` と `ssh server netconf vrf <vrf>` |
-| NETCONF の candidate のデータストア | `netconf-yang feature candidate-datastore` | 設定しなくても提供される |
+| NETCONF の candidate データストア | `netconf-yang feature candidate-datastore` | 設定しなくても提供される |
 | NETCONF を使えるユーザ | 権限 15 のユーザ | ローカルか AAA のユーザ。AAA の認可を設定しない限り、CLI が読むだけのユーザにも既定で書き込みを許す |
-| NETCONF のセッションを見る | `show netconf-yang sessions` | `show netconf-yang clients` |
+| NETCONF セッションを見る | `show netconf-yang sessions` | `show netconf-yang clients` |
 | NETCONF の数 | `show netconf-yang statistics` | `show netconf-yang statistics` |
 | RESTCONF を有効にする | `ip http secure-server` と `restconf` | 無い |
 | RESTCONF のプロセス | `show platform software yang-management process` | — |
-| TLS 付きの gNMI のサーバ | `gnxi`、`gnxi secure-trustpoint <tp>`、`gnxi secure-server`(ポート 9339) | `grpc` に `port 57400`(TLS が既定) |
+| TLS 付きの gNMI サーバ | `gnxi`、`gnxi secure-trustpoint <tp>`、`gnxi secure-server`(ポート 9339) | `grpc` に `port 57400`(TLS が既定) |
 | TLS なしの gNMI | `gnxi server`(ポート 50052) | `grpc` に `no-tls` |
 | クライアントに証明書を求める | `gnxi secure-client-auth` | `grpc` に `tls-mutual` |
 | gNMI の状態 | `show gnxi state` | `show grpc` |
 | テレメトリのダイヤルアウト | `telemetry ietf subscription <id>` に `encoding encode-kvgpb`、`filter xpath …`、`stream yang-push`、`update-policy periodic <センチ秒>`、`receiver ip address <ip> <port> protocol grpc-tcp` | `telemetry model-driven` に `destination-group`、`sensor-group`、`subscription`(`sample-interval` はミリ秒) |
 | テレメトリの状態 | `show telemetry ietf subscription all` | `show telemetry model-driven subscription` |
-| フローのエクスポート | `flow record`、`flow exporter`(`export-protocol ipfix`)、`flow monitor` | `flow exporter-map`、`flow monitor-map`、`sampler-map`(XRd と XRv 9000 には無い) |
+| フロー エクスポート | `flow record`、`flow exporter`(`export-protocol ipfix`)、`flow monitor` | `flow exporter-map`、`flow monitor-map`、`sampler-map`(XRd と XRv 9000 には無い) |
 | インターフェイスに当てる | `ip flow monitor <M> input` | `flow ipv4 monitor <M> sampler <S> ingress` |
-| フローのキャッシュとテンプレート | `show flow monitor <M> cache`、`show flow exporter <E> templates` | `show flow monitor <M> cache location <loc>`、`show flow exporter-map` |
+| フロー キャッシュとテンプレート | `show flow monitor <M> cache`、`show flow exporter <E> templates` | `show flow monitor <M> cache location <loc>`、`show flow exporter-map` |
 | ACL 付きのコミュニティ | `snmp-server community <c> RO <acl>` | `snmp-server community <c> RO IPv4 <acl>` |
 | v3 のグループ | `snmp-server group <g> v3 priv read <v> notify <v>` | 同じ |
 | v3 のユーザ | `snmp-server user <u> <g> v3 auth sha <pw> priv aes 128 <pw>` | `snmp-server user <u> <g> v3 auth sha clear <pw> priv aes 128 clear <pw>`(後で `encrypted` と表示) |
@@ -754,9 +754,9 @@ running-config を見比べます。どちらも、課題の正しさの根拠�
 :::note
 出典: RFC 6020(5.6.4 節)、RFC 6241(4.3 節・7.1 節・7.7 節・8.3 節・8.4 節・8.6 節・付録 C)、RFC 6242、RFC 7950(1 節・3 節・5.6.3 節・7.2.2 節・
 7.8.2 節・7.15 節・7.17 節・7.20.3 節・7.21.1 節)、RFC 7951、RFC 8040(2.2 節・4 節)、RFC 8340(2.6 節)、RFC 8366、RFC 8572
-(1 節・3 節・4 節・5.1 節・5.3〜5.6 節・8 節・9.2 節)、RFC 3417(3.2 節・8 節)、IANA のポート番号と IPFIX の情報要素の登録表。gNMI の仕様 0.10.0(3 節・3.1 節・3.4.3 節・3.5 節)、
-GitHub の openconfig/gnoi・openconfig/gribi・p4lang/p4runtime のリポジトリ。IOS XR 26.1.1 の Cisco の YANG のモデル
-(github.com/YangModels/yang の vendor/cisco/xr/2611。XRd の能力の一覧を含む)。2 節の木は、これらのファイルから pyang 2.7.1 で
+(1 節・3 節・4 節・5.1 節・5.3〜5.6 節・8 節・9.2 節)、RFC 3417(3.2 節・8 節)、IANA のポート番号と IPFIX 情報要素のレジストリ。gNMI の仕様 0.10.0(3 節・3.1 節・3.4.3 節・3.5 節)、
+GitHub の openconfig/gnoi・openconfig/gribi・p4lang/p4runtime のリポジトリ。IOS XR 26.1.1 の Cisco の YANG モデル
+(github.com/YangModels/yang の vendor/cisco/xr/2611。XRd の能力の一覧を含む)。2 節のツリーは、これらのファイルから pyang 2.7.1 で
 書き出しました。Cisco: ASR 9000 の Programmability Configuration Guide(IOS XR 26.1.x〜26.3.x。データ モデル、自動化スクリプト、
 config スクリプト)と Cisco 8000 のもの(gRPC のサービス、IANA のポート)、NCS 540 の System Setup and Software Installation Guide
 (25.x の「Zero Touch Provisioning」)と NCS 5500 のもの(25.x と 7.3.x の「Deploy Router Using Secure ZTP」)、TAC の文書 217224

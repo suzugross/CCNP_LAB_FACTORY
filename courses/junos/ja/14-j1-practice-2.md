@@ -35,7 +35,7 @@ SRV1 eth1 ──── et-0/0/1 JUN01 et-0/0/0 ──── et-0/0/0 JUN02 et-0/
 単元 J1 に沿った課題です。経路の出入りを、Junos のルーティング ポリシーで制御してください。
 
 ### 課題 J1-3  ISP から受け入れる経路を絞る
-<p class="tolab"><a href="/_learn?id=JNT-02&amp;step=j1t3">ワークスペースで開く</a> — 読み物: <a href="13-j1-route-filter.html#s2-2">2.2 一致の型</a> · <a href="13-j1-route-filter.html#s2-3">2.3 同じ term に複数の route-filter: 最長一致の 1 本で決まる</a> · <a href="11-j1-policy-statement.html#s2-4">2.4 評価の順: term → 次のポリシー → 既定のポリシー</a> · <a href="10-j1-map.html#s2-1">2.1 ポリシーが効く 2 つの場所と、既定のポリシー</a> · <a href="13-j1-route-filter.html#s3-1">3.1 ISP 自身の網と既定経路だけを受け入れる</a></p>
+<p class="tolab"><a href="/_learn?id=JNT-02&amp;step=j1t3">ワークスペースで開く</a> — 読み物: <a href="13-j1-route-filter.html#s2-2">2.2 マッチ タイプ</a> · <a href="13-j1-route-filter.html#s2-3">2.3 同じ term に複数の route-filter: 最長一致の 1 本で決まる</a> · <a href="11-j1-policy-statement.html#s2-4">2.4 評価の順: term → 次のポリシー → デフォルト ポリシー</a> · <a href="10-j1-map.html#s2-1">2.1 ポリシーが効く 2 つの場所と、デフォルト ポリシー</a> · <a href="13-j1-route-filter.html#s3-1">3.1 ISP 自身のネットワークとデフォルト ルートだけを受け入れる</a></p>
 
 
 JUN02 は、ISP から受け取る経路のうち、次のものだけを受け入れること。

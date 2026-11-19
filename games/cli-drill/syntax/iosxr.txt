@@ -1,0 +1,111 @@
+# IOS XR の素振り台(BL-278)の構文の骨組み。範囲は XR トラック M0・M1 ＋その盤面(XRT-01 の XR01)。
+#
+# ここに書くのは「どの語がどこに置けるか・値の形・running-config の並び」だけ。? の説明の文言は書かない
+# (実機から採ったものを private/cli-drill/iosxr/ に置き、組み立ての時に合わせる。BL-278 の取り決め)。
+#
+# 1 行 1 文。字下げ 2 つで 1 階層(下位モード)。並び= running-config の並び。
+#   M <語と値…> %<モード名>   下位モードに入る文。値を持てば値で区別する並び
+#   L <語と値…>               値を持つ文。同じ文は 1 つ(打ち直すと置き換え)
+#   K <語と値…> [| <語と値…>] 値ごとに別の文になる並び。| より前の値で区別し、後ろは中身(打ち直すと置き換え)
+#   F <語…>                   値のない文(shutdown)
+#   O <語…>                   盤面にあるが素振り台では書き換えない文(並びの位置だけ決める。中身は盤面の記録のまま)。
+#                             語がいくつかあれば、頭の語がすべて合う行だけ(O router isis)
+# 値は {型}。型: word line uint:A-B ipv4 mask v4pfx v6pfx ifname area asn nexthop md5key enum:a|b ref:<並び>
+#   ref:vrf= 一番上の vrf の名前(? では今ある名前を並べる。記録 modes.log の interface の下の vrf ?)
+#   {型?…}     省略できる値。省略した時の表示は =既定 で書く({enum?:enable|disable=enable})。既定が無ければ語だけを表示
+#   {line!}    消す時の表示の末尾に空白が 1 つ付く(description。記録 orders.log の「no description DRILL 」)
+#   [語] [語 {型}]            選べる語(値の後ろ)。表示は書いた順。=既定 のある値は打たなくても表示に出る。
+#                             語の後ろの $= これで文が終わる・*= 文の区別に使う([bidir*]= bidir の有無で別の文)
+# 値の型(M14 で足したもの): acla= ACL の番地(any・host A.B.C.D・A.B.C.D/長さ・A.B.C.D ワイルドカード。打った形のまま持つ)・ipv6= IPv6 アドレス・
+#   acl6a= IPv6 の ACL の番地(any・X:X::X/長さ。host X は扱わない)・ipn= IPv4 アドレス(? の札は IP name or address。誤りの印は、アドレスの頭として読めなくなった字= 記録 m14cfg.log の 10.255.0.300)
+# 印:
+#   sort:if    IF の種類(Loopback → MgmtEth → GigabitEthernet)と番号の順(記録 orders.log)
+#   sort:len   名前の長さ → 字の順(VRF。記録 orders.log の AAA・MGMT・CUST-A・CUST-B)
+#   sort:num   数の順
+#   @nest      丸ごと消す時も「no <文>」でなく中の文を 1 つずつ消す形で表示する(router static。記録 gaps1.log の 1 例)
+#   !確認      記録で確かめていない(並びの位置など)
+#   @any       選べる語の順は自由(表示は書いた順に直る。記録 m14cfg.log の bsr candidate-rp … interval 30 priority 80 group-list)
+#   sort:rp    override の RP → 印なし → bidir の RP、それぞれアドレスの順(記録 m14cfg2・m14cfg3・m14cfg4.log)
+#   @seq       番号を打たない行は、今の最大の番号＋10(記録 m14cfg2.log の permit … → 10・20・30)
+#   @delkey    編集中の表示で消した行は区別の値まで(no 20・no rp-address 10.255.0.4。記録 m14cfg2.log)
+#   @deldef    編集中と差分の表示で消した行は、区別の値＋既定のある語を既定の値で(no bsr candidate-rp 10.255.0.2 priority 192 interval 60)
+#   @stub:keep|no  入ると空の塊も別にできる(running-config・編集中・コミットの中身では本体の後ろに「名前 / !」。差分には出ない。
+#              戻しでは keep= 「名前 / !」・no= 「no 名前」。記録 m14cfg.log・m14cfg2.log・m14cfg4.log の multicast-routing・router igmp)
+#   @nestfull  コミットの中身と戻しでは、塊を丸ごと消す時も中の文を 1 つずつ消す形(ACL・router pim の address-family。記録 m14cfg.log の戻し)。
+#              編集中の表示は「no <塊>」のまま(記録 m14cfg2.log の no ipv4 access-list MC-SM)
+#   @dkeep     差分の表示で、中を消すだけの塊の行に - を付けない(記録 m14cfg2.log。orders.log の router ospf は - が付く)
+#   @gone      中身が無くなると塊ごと消える(入っただけでは表示に出ない。記録 m14cfg2.log・m14cfg3.log の router pim の address-family)
+#
+# 確かめた出どころ: private/cli-drill/iosxr/raw/*.log(XRT-01 の XR01・IOS XRv 9000 24.3.1。台本は capture/iosxr/)。
+#   M14(マルチキャスト)の文と並び: private/cli-drill/iosxr/raw/xrd-26.1.1/*.log(XRT-16 と同じ盤面の PE2・IOS XRd 26.1.1。台本は capture/iosxr/m14*.txt)。
+
+L hostname {word}
+L domain name {word}
+O logging !確認             # domain との前後は未確認(XRd の盤面の XRD-FREEZE の 2 つの塊)
+O username
+M vrf {word} %config-vrf sort:len
+  M address-family ipv4 unicast %config-vrf-af
+O line
+O vty-pool
+O alias                     # 記録 board-pe2.log(vty-pool の後)
+M ipv4 access-list {word} %config-ipv4-acl sort:len @nestfull @dkeep   # alias の後・interface の前(記録 m14cfg.log)。ntp との前後は未確認
+  K {uint:1-2147483643} | {enum:permit|deny} ipv4 {acla} {acla} sort:num @seq @delkey
+M ipv6 access-list {word} %config-ipv6-acl sort:len @nestfull @dkeep !確認   # 並びの位置は未確認(ipv4 access-list の後と仮に置く)
+  K {uint:1-2147483643} | {enum:permit|deny} ipv6 {acl6a} {acl6a} sort:num @seq @delkey !確認
+M ntp %config-ntp
+  K server {ipv4}
+M interface {ifname} %config-if sort:if
+  L description {line!}
+  L vrf {ref:vrf}
+  L ipv4 address {ipv4} {mask}
+  K ipv6 address {v6pfx}
+  F shutdown
+M router static %config-static @nest
+  M address-family ipv4 unicast %config-static-afi @nest
+    K {v4pfx} {nexthop}
+O router isis !確認         # static・ospf との前後は未確認(XRT-16 の盤面は interface の後・multicast-routing の前)
+M router ospf {word} %config-ospf
+  L router-id {ipv4}
+  M area {area} %config-ospf-ar sort:num
+    M interface {ifname} %config-ospf-ar-if sort:if
+      L cost {uint:1-65535}
+      L authentication {enum?:message-digest|null}
+      K message-digest-key {uint:1-255} | md5 {md5key}
+      L network {enum:broadcast|non-broadcast|point-to-multipoint|point-to-point}
+      L passive {enum?:enable|disable=enable}
+      L dead-interval {uint:1-65535}
+      L hello-interval {uint:1-65535}
+M router bgp {asn} %config-bgp
+  L bgp router-id {ipv4}
+  M address-family ipv4 unicast %config-bgp-af
+  M neighbor {ipv4} %config-bgp-nbr
+    L remote-as {asn}
+    M address-family ipv4 unicast %config-bgp-nbr-af
+      L route-policy {word} in
+      L route-policy {word} out
+# M14 マルチキャスト(router bgp との前後は未確認。並び= router isis → multicast-routing → router igmp → router pim → ssh。記録 m14cfg.log)
+M multicast-routing %config-mcast @stub:keep @dkeep
+  M address-family ipv4 %config-mcast-default-ipv4 @dkeep
+    L ssm range {word}
+    F interface all enable
+  M address-family ipv6 %config-mcast-default-ipv6 @dkeep
+    F interface all enable
+M router igmp %config-igmp @stub:no @dkeep
+  M interface {ifname} %config-igmp-default-if sort:if @dkeep
+    K join-group {ipv4} sort:num
+    K static-group {ipv4} sort:num
+    L version {uint:1-3}
+  L version {uint:1-3}       # 口の塊の後ろ(記録 m14cfg3.log)
+M router mld %config-mld !確認   # 中の文は扱わない(? の一覧だけ。記録 m14explore.log)。並びの位置は未確認
+M router pim %config-pim @dkeep
+  M address-family ipv4 %config-pim-default-ipv4 @gone @nestfull @dkeep
+    K rp-address {ipn} | {word?} [override] [bidir*] sort:rp @delkey
+    L spt-threshold infinity [group-list {word}]
+    L bsr candidate-bsr {ipv4} [hash-mask-len {uint:0-32=30}] [priority {uint:1-255=1}] @any
+    K bsr candidate-rp {ipv4} | [group-list {word}] [priority {uint:1-255=192}] [interval {uint:30-600=60}] [bidir$*] @any @deldef
+    L ssm range {word}
+    M interface {ifname} %config-pim-ipv4-if sort:if   # 口ごとの PIM の設定(中の文は扱わない。? の一覧は実機の記録 m14explore.log)
+  M address-family ipv6 %config-pim-default-ipv6 @gone @nestfull @dkeep
+    K rp-address {ipv6} | {word?} [override] [bidir*] @delkey
+O ssh
+O telnet

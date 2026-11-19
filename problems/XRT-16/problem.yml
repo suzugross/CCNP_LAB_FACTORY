@@ -1,0 +1,44 @@
+# XRT-16: XR トラック M14 マルチキャスト(SPCOR 4.4= PIM-SM・SSM・BIDIR・PIMv6・IGMP/MLD)。BL-257。設計= problems/_drafts/XR-TRACK.design.md §31(PoC= _POC-XRMCAST)。
+# 学習目的のラボ(パック・ノルマの対象外)。盤面= PoC の盤面を XRd だけにしたもの:
+#   SRC1 ─ PE1 ───────────── PE2 ─ RCV2
+#            └── P1(RP)───┘   └ PE4(IOL)┐
+#                  └ PE3 ───── SW1(LAN)─┴─ RCV3
+#   PE1  Gi0/0/0/0 PE2・/1 P1・/2 SRC1 の LAN      PE2  /0 PE1・/1 P1・/2 PE4・/3 RCV2 の LAN
+#   P1   /0 PE1・/1 PE2・/2 PE3                    PE3  /0 P1・/1 SW1 の LAN(.252)      PE4(IOL) Et0/0 PE2・Et0/1 SW1 の LAN(.253)
+# 学ぶ側が設定するのは XR 4 台と PE4。ホスト役(SRC1・RCV2・RCV3)は確認(採点)が参加の行を入れて外す(mcast_probe.py)。
+# 仕込み(M14-6= 前任者の IPv6 の試行)= ① P1 の accept-register の ACL の並び順= 10 deny 2001:db8:100::/48(受信者の LAN を断るつもり)が
+#     20 permit 2001:db8:100:1::/64(見出し)より先(30 deny any any で閉じる)→ 全員 0。★XR の accept-register は「どの行にも一致しない Register を通す」
+#     (IPv4・IPv6 とも・XRd 26.1.1 実測 2026-11-18・文書に記述なし)→ 範囲違いの permit だけの一覧は故障にならないので、明示の deny に当たる形にし、末尾も明示の deny で閉じた(design §31.8)
+#   ② PE4 の ipv6 pim rp-address が PE3(2001:db8:255::3)→ RCV3 だけ 0。LAN のリンクローカルは固定(PE3 FE80::252・PE4 FE80::253= PIMv6 の DR は PE4)。
+# ★XRd もマルチキャストを転送する(design §31.3 #1。文書に記述なし= 実機だけが根拠)。
+id: XRT-16
+title: "XR Track 16 — Multicast"
+exam: SP
+topics: [iosxr, multicast, pim, igmp, mld, ssm, bidir, bsr, ipv6, tutorial]
+difficulty: 3
+topology: generated
+access: ssh
+target_nodes: [PE1, PE2, P1, PE3, PE4, SRC1, RCV2, RCV3]
+points: 100
+image_family: iol
+node_image_families: { PE1: iosxr, PE2: iosxr, P1: iosxr, PE3: iosxr }
+node_xr_platforms: { PE1: iosxrd, PE2: iosxrd, P1: iosxrd, PE3: iosxrd }
+grade_attempts: 2
+# lab.sh reset で構築直後へ戻す IOS の機器(configure replace。IOL は unix:lab-baseline.cfg・xr_reset.py)。PE4 は課題で設定し、
+# ホスト役は学ぶ側が試験の参加を足す(課題文で認めている)ので、どちらも戻す。
+xe_reset_nodes: [PE4, SRC1, RCV2, RCV3]
+lab:
+  switches: [SW1]
+  positions: { SRC1: [-800, 0], PE1: [-400, 0], PE2: [400, 0], RCV2: [800, 0],
+               P1: [0, 240], PE3: [0, 480], PE4: [400, 300], SW1: [400, 560], RCV3: [800, 560] }
+  links:
+    - { a: PE1, a_if: 3, b: PE2, b_if: 3 }
+    - { a: PE1, a_if: 4, b: P1, b_if: 3 }
+    - { a: P1, a_if: 4, b: PE2, b_if: 4 }
+    - { a: P1, a_if: 5, b: PE3, b_if: 3 }
+    - { a: PE2, a_if: 5, b: PE4, b_if: 0 }
+    - { a: PE1, a_if: 5, b: SRC1, b_if: 0 }
+    - { a: PE2, a_if: 6, b: RCV2, b_if: 0 }
+    - { a: PE3, a_if: 4, b: SW1, b_if: 0 }
+    - { a: PE4, a_if: 1, b: SW1, b_if: 1 }
+    - { a: RCV3, a_if: 0, b: SW1, b_if: 2 }

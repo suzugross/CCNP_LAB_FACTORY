@@ -1,0 +1,35 @@
+! _POC-XRMCAST R5(IOL 17.15)= 受信 LAN(SW1)の IOS 側のルータ。PE2 から 1 本。ユニキャストの土台(IS-IS の IPv4/IPv6・MT)まで。
+no ip domain lookup
+ipv6 unicast-routing
+!
+interface Loopback0
+ ip address 10.255.0.5 255.255.255.255
+ ipv6 address 2001:db8:255::5/128
+!
+interface {{ links[0] }}
+ description to PE2
+ ip address 10.0.4.5 255.255.255.0
+ ipv6 address 2001:db8:4::5/64
+ ip router isis CORE
+ ipv6 router isis CORE
+ isis network point-to-point
+ no shutdown
+!
+interface {{ links[1] }}
+ description receiver LAN (SW1)
+ ip address 192.168.3.253 255.255.255.0
+ ipv6 address 2001:db8:100:3::253/64
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0005.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+ passive-interface Loopback0
+ passive-interface {{ links[1] }}
+ !
+ address-family ipv6
+  multi-topology
+ exit-address-family
+!

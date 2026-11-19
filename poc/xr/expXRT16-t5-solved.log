@@ -1,0 +1,124 @@
+== GROUP G 239.16.90.90
+== PRE RCV2: 4 lines
+== PRE RCV3: 4 lines
+== WARM SRC1: ping 239.16.90.90 repeat 3 timeout 1
+== SEND SRC1: ping 239.16.90.90 repeat 10 timeout 1 => ['SRC1#']
+== REPLY SRC1 192.168.2.1 10
+== REPLY SRC1 192.168.3.1 10
+== SHOW PE2: show pim bsr election
+show pim bsr election
+PIM BSR Election State 
+
+Cand/Elect-State        Uptime   BS-Timer BSR                      C-BSR
+
+No-Info/Accept-Pref     00:01:40 00:01:44 10.255.0.1 [100, 30]     0.0.0.0 [0, 0]          
+RP/0/RP0/CPU0:PE2#
+== SHOW PE4: show ip pim bsr-router
+show ip pim bsr-router
+PIMv2 Bootstrap information
+  BSR address: 10.255.0.1 (?)
+  Uptime:      00:01:42, BSR Priority: 100, Hash mask length: 30
+  Expires:     00:01:42
+  Candidate RP: 10.255.0.4(Loopback0)
+    Holdtime 150 seconds
+    Advertisement interval 60 seconds
+    Next advertisement in 00:00:18
+    Group acl: 16
+    Candidate RP priority : 200
+PE4#
+== SHOW PE2: show pim group-map 239.16.90.90
+show pim group-map 239.16.90.90
+
+IP PIM Group Mapping Table 
+(* indicates group mappings being used) 
+(+ indicates BSR group mappings active in MRIB) 
+
+Group Range         Proto Client   Groups RP address      Info
+
+239.16.0.0/15*      SM    bsr+     1      10.255.0.11     RPF: Gi0/0/0/1,10.0.2.11
+RP/0/RP0/CPU0:PE2#
+== SHOW PE4: show ip mroute 239.16.90.90 | begin \(
+show ip mroute 239.16.90.90 | begin \(
+(*, 239.16.90.90), 00:00:35/stopped, RP 10.255.0.11, flags: SJC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.4.2
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse, 00:00:35/00:02:24, flags: 
+
+(192.168.1.1, 239.16.90.90), 00:00:21/00:02:38, flags: JT
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.4.2
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse, 00:00:21/00:02:38, flags: 
+
+PE4#
+== SHOW PE2: show pim rp mapping
+show pim rp mapping
+PIM Group-to-RP Mappings
+Group(s) 239.48.0.0/16
+  RP 10.255.0.3 (?), v2, bidir
+    Info source: 0.0.0.0 (?), elected via config
+      Uptime: 00:06:45, expires: never
+Group(s) 239.16.0.0/15
+  RP 10.255.0.11 (?), v2
+    Info source: 10.0.12.1 (?), elected via bsr, priority 10, holdtime 75
+      Uptime: 00:01:46, expires: 00:01:13
+Group(s) 239.16.0.0/15
+  RP 10.255.0.3 (?), v2
+    Info source: 10.0.12.1 (?), elected via bsr, priority 20, holdtime 75
+      Uptime: 00:01:58, expires: 00:01:13
+Group(s) 239.16.0.0/15
+  RP 10.255.0.4 (?), v2
+    Info source: 10.0.12.1 (?), elected via bsr, priority 200, holdtime 150
+      Uptime: 00:01:56, expires: 00:02:28
+Group(s) 239.0.0.0/8
+  RP 10.255.0.11 (?), v2
+    Info source: 0.0.0.0 (?), elected via config
+      Uptime: 00:17:18, expires: never
+RP/0/RP0/CPU0:PE2#
+== SHOW PE4: show ip pim rp mapping
+show ip pim rp mapping
+PIM Group-to-RP Mappings
+This system is a candidate RP (v2)
+
+Group(s) 239.16.0.0/15
+  RP 10.255.0.11 (?), v2
+    Info source: 10.255.0.1 (?), via bootstrap, priority 10, holdtime 75
+         Uptime: 00:01:47, expires: 00:01:11
+  RP 10.255.0.3 (?), v2
+    Info source: 10.255.0.1 (?), via bootstrap, priority 20, holdtime 75
+         Uptime: 00:01:59, expires: 00:01:10
+  RP 10.255.0.4 (?), v2
+    Info source: 10.255.0.1 (?), via bootstrap, priority 200, holdtime 150
+         Uptime: 00:01:57, expires: 00:02:25
+Acl: 10, Static
+    RP: 10.255.0.11 (?)
+Acl: 48, Static, Bidir Mode
+    RP: 10.255.0.3 (?)
+PE4#
+== SHOW P1: show pim bsr candidate-rp
+show pim bsr candidate-rp
+PIM BSR Candidate RP Info 
+
+Cand-RP          mode  scope priority uptime    group-list
+10.255.0.11      SM    16    10       00:01:49  TV-GROUPS
+RP/0/RP0/CPU0:P1#
+== SHOW PE1: show pim bsr election
+show pim bsr election
+PIM BSR Election State 
+
+Cand/Elect-State        Uptime   BS-Timer BSR                      C-BSR
+
+Elected/Accept-Pref     00:01:50 00:00:24 10.255.0.1 [100, 30]     10.255.0.1 [100, 30]    
+RP/0/RP0/CPU0:PE1#
+== SHOW P1: show pim bsr election
+show pim bsr election
+PIM BSR Election State 
+
+Cand/Elect-State        Uptime   BS-Timer BSR                      C-BSR
+
+Not-Elected/Accept-Pref 00:01:52 00:02:02 10.255.0.1 [100, 30]     10.255.0.11 [1, 30]     
+RP/0/RP0/CPU0:P1#
+== RPORDER PE2 239.16.0.0/15 10.255.0.11,10.255.0.3,10.255.0.4
+== RPORDER PE4 239.16.0.0/15 10.255.0.11,10.255.0.3,10.255.0.4
+== RPORDER PE3 239.16.0.0/15 10.255.0.11,10.255.0.3,10.255.0.4
+== POST RCV2: 5 lines
+== POST RCV3: 5 lines

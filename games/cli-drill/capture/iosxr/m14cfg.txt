@@ -1,0 +1,100 @@
+# M14 の設定の形: 入れてコミットし、running-config の並び・値の表示の形・編集中の表示・誤りを見る(最後に戻す)
+terminal length 0
+terminal width 250
+configure
+ipv4 access-list MC-SM
+10 permit ipv4 any 238.0.0.0/8
+20 permit ipv4 any 238.5.0.0 0.0.255.255
+30 permit ipv4 any host 238.9.9.9
+?
+exit
+ipv4 access-list MC-BIDIR
+10 permit ipv4 any 238.48.0.0/16
+exit
+ipv4 access-list MC-SSM
+10 permit ipv4 any 232.0.0.0/8
+20 permit ipv4 any 238.232.0.0/16
+exit
+multicast-routing
+address-family ipv4
+interface all enable
+ssm range MC-SSM
+exit
+exit
+router pim
+address-family ipv4
+rp-address 10.255.0.3
+rp-address 10.255.0.4 MC-SM
+rp-address 10.255.1.11 MC-BIDIR bidir
+spt-threshold infinity group-list MC-SM
+bsr candidate-bsr 10.255.0.2
+bsr candidate-rp 10.255.0.2 priority 100 group-list MC-SM
+exit
+exit
+router igmp
+interface GigabitEthernet0/0/0/3
+version 2
+join-group 239.6.6.6
+static-group 239.7.7.7
+exit
+exit
+show configuration
+commit
+show running-config
+show configuration commit list
+show configuration commit changes last 1
+show configuration rollback changes last 1
+show running-config router pim
+show running-config router pim address-family ipv4
+show running-config ipv4 access-list
+show running-config ipv4 access-list MC-SM
+show running-config multicast-routing
+show running-config multicast-routing address-family ipv4
+show running-config router igmp
+show running-config router igmp interface GigabitEthernet0/0/0/3
+# 選べる語の順(候補 RP・候補 BSR・RP)と、打ち直した時の表示
+router pim address-family ipv4
+bsr candidate-rp 10.255.0.2 priority 100 ?
+bsr candidate-rp 10.255.0.2 group-list MC-SM ?
+bsr candidate-rp 10.255.0.2 group-list MC-SM priority 50 ?
+bsr candidate-rp 10.255.0.2 interval 30 ?
+bsr candidate-bsr 10.255.0.2 priority 5 ?
+rp-address 10.255.0.3 override ?
+rp-address 10.255.0.3 bidir ?
+rp-address 10.255.0.3 MC-SM override ?
+spt-threshold infinity group-list MC-SM ?
+bsr candidate-rp 10.255.0.2 interval 30 priority 80 group-list MC-SM
+bsr candidate-bsr 10.255.0.2 priority 5 hash-mask-len 24
+show configuration
+show commit changes diff
+# 誤り
+bsr candidate-rp 10.255.0.2 priority 0
+bsr candidate-rp 10.255.0.2 interval 20
+bsr candidate-bsr 10.255.0.2 hash-mask-len 40
+rp-address 10.255.0.300
+rp-address 10.255.0.3 MC-SM bidir override
+spt-threshold 5
+spt-threshold infinity group-list
+exit
+exit
+router igmp interface GigabitEthernet0/0/0/3 version 4
+router igmp interface GigabitEthernet0/0/0/3 join-group 10.1.1.1
+ipv4 access-list MC-SM 40 permit ipv4 any 300.0.0.0/8
+ipv4 access-list MC-SM 10 deny ipv4 any any
+show configuration
+abort
+# 消す時の編集中の表示
+configure
+router pim address-family ipv4 no rp-address 10.255.0.3
+router pim address-family ipv4 no spt-threshold infinity
+router pim address-family ipv4 no bsr candidate-bsr
+multicast-routing address-family ipv4 no interface all enable
+router igmp interface GigabitEthernet0/0/0/3 no version
+ipv4 access-list MC-SM no 20
+show configuration
+show commit changes diff
+abort
+# 戻す
+rollback configuration last 1
+show running-config multicast-routing
+show configuration commit list

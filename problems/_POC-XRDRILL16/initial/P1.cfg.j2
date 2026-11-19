@@ -1,0 +1,79 @@
+!! XRT-16 P1(XRd 26.1.1)= P(PE1・PE2・PE3 をつなぐ)。ユニキャストの土台＋前任者の IPv6 の試行(RP)。
+interface Loopback0
+ ipv4 address 10.255.0.11 255.255.255.255
+ ipv6 address 2001:db8:255::11/128
+!
+interface {{ links[3] }}
+ description to PE1
+ ipv4 address 10.0.1.11 255.255.255.0
+ ipv6 address 2001:db8:1::11/64
+ no shutdown
+!
+interface {{ links[4] }}
+ description to PE2
+ ipv4 address 10.0.2.11 255.255.255.0
+ ipv6 address 2001:db8:2::11/64
+ no shutdown
+!
+interface {{ links[5] }}
+ description to PE3
+ ipv4 address 10.0.3.11 255.255.255.0
+ ipv6 address 2001:db8:3::11/64
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0011.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ address-family ipv6 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[4] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[5] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+!
+!! --- 前任者の作業(M14-6)= IPv6 のマルチキャストの試行。RP= 自分。Register は見出しの送信元からだけ受ける。届いていない ---
+ipv6 access-list HEADEND-SOURCES
+ 10 deny ipv6 2001:db8:100::/48 any
+ 20 permit ipv6 2001:db8:100:1::/64 any
+ 30 deny ipv6 any any
+!
+multicast-routing
+ address-family ipv6
+  interface all enable
+ !
+!
+router pim
+ address-family ipv6
+  rp-address 2001:db8:255::11
+  accept-register HEADEND-SOURCES
+ !
+!

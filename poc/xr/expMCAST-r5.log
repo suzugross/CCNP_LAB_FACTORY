@@ -1,0 +1,129 @@
+
+######## 05:50:17 r5(= f5 の測り直し): PE2 の Gi0/0/0/3 の入力に deny igmp を入れてから、RCV2 が 239.1.1.9 に参加
+configure
+Wed Nov 18 05:50:18.874 UTC
+RP/0/RP0/CPU0:PE2(config)#
+ipv4 access-list NO-IGMP
+RP/0/RP0/CPU0:PE2(config-ipv4-acl)#
+10 deny igmp any any
+RP/0/RP0/CPU0:PE2(config-ipv4-acl)#
+20 permit ipv4 any any
+RP/0/RP0/CPU0:PE2(config-ipv4-acl)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:PE2(config-if)#
+ipv4 access-group NO-IGMP ingress
+RP/0/RP0/CPU0:PE2(config-if)#
+commit
+Wed Nov 18 05:50:21.454 UTC
+RP/0/RP0/CPU0:PE2(config-if)#
+show configuration failed
+Wed Nov 18 05:50:22.594 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-if)#
+end
+RP/0/RP0/CPU0:PE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RCV2(config)#
+interface Ethernet0/0
+RCV2(config-if)#
+ip igmp join-group 239.1.1.9
+RCV2(config-if)#
+end
+RCV2#
+show igmp groups 239.1.1.9 detail
+Wed Nov 18 05:50:48.913 UTC
+No matching entries in IGMP
+
+RP/0/RP0/CPU0:PE2#
+show pim topology 239.1.1.9
+Wed Nov 18 05:50:49.341 UTC
+No PIM topology table entries found.
+RP/0/RP0/CPU0:PE2#
+show igmp traffic
+Wed Nov 18 05:50:49.730 UTC
+
+IGMP Traffic Counters
+Elapsed time since counters cleared: 01:29:59
+
+                                  Received        Sent
+Valid IGMP Packets                     463        1060
+Queries                                 87         363
+Reports                                375         696
+Leaves                                   1           1
+Mtrace packets                           0           0
+DVMRP packets                            0           0
+PIM packets                              0           0
+
+Errors:
+Malformed Packets                        0
+Bad Checksums                            0
+Socket Errors                            0           0
+Bad Scope Errors                         0
+Auxiliary Data Len Errors                0
+Packets dropped due to invalid socket                0
+Packets which couldn't be accessed (in)              0
+Packets which couldn't be accessed (out)             0
+Packet allocation failure                            0
+Packets needed 2nd ifhandle                          0
+Packets without interface state          0
+Packets in invalid context               0
+Packets on disabled interface            8
+Packets with martian address             0
+Mtrace packets not in valid vrf          0
+Unsupported mtrace packets               0
+Other packets drops                      0
+
+Packet Allocation Counters
+Packets allocated      2446
+Packets freed          2446
+
+RP/0/RP0/CPU0:PE2#
+..........
+== 239.1.1.9 を 10 発: RCV2 が受けた 0・RCV3 が受けた 0
+
+######## 05:51:09 r5 戻す(次の問い合わせまで待つ)
+configure
+Wed Nov 18 05:51:10.152 UTC
+RP/0/RP0/CPU0:PE2(config)#
+interface GigabitEthernet0/0/0/3
+RP/0/RP0/CPU0:PE2(config-if)#
+no ipv4 access-group NO-IGMP ingress
+RP/0/RP0/CPU0:PE2(config-if)#
+root
+RP/0/RP0/CPU0:PE2(config)#
+no ipv4 access-list NO-IGMP
+RP/0/RP0/CPU0:PE2(config)#
+commit
+Wed Nov 18 05:51:12.412 UTC
+RP/0/RP0/CPU0:PE2(config)#
+show configuration failed
+Wed Nov 18 05:51:13.453 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config)#
+end
+RP/0/RP0/CPU0:PE2#
+show igmp groups 239.1.1.9 detail
+Wed Nov 18 05:52:27.342 UTC
+
+Interface:	GigabitEthernet0/0/0/3
+Group:		239.1.1.9
+Uptime:		00:00:27
+Router mode:	EXCLUDE (Expires: 00:01:42)
+Host mode:	INCLUDE
+Last reporter:	192.168.2.1
+Suppress:	0
+EVPN Remote group: False (Stale: False)
+Source list is empty
+RP/0/RP0/CPU0:PE2#
+Reply to request 0 from 192.168.2.1, 6 ms
+Reply to request 1 from 192.168.2.1, 6 ms
+Reply to request 2 from 192.168.2.1, 2 ms
+Reply to request 3 from 192.168.2.1, 3 ms
+Reply to request 4 from 192.168.2.1, 2 ms
+Reply to request 5 from 192.168.2.1, 2 ms
+Reply to request 6 from 192.168.2.1, 3 ms
+Reply to request 7 from 192.168.2.1, 3 ms
+== 239.1.1.9 を 10 発: RCV2 が受けた 10・RCV3 が受けた 0

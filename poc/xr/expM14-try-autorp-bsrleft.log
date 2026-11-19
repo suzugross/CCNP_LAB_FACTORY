@@ -1,0 +1,197 @@
+
+######## 10:09:37 autorp: BSR を外す。P1 を Auto-RP の候補 RP・PE1 を mapping agent に(PE4 は何もしない)
+configure
+Wed Nov 18 10:09:38.751 UTC
+RP/0/RP0/CPU0:PE3(config)#
+router pim
+RP/0/RP0/CPU0:PE3(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:PE3(config-pim-default-ipv4)#
+no bsr candidate-rp 10.255.0.3
+RP/0/RP0/CPU0:PE3(config-pim-default-ipv4)#
+commit
+Wed Nov 18 10:09:40.456 UTC
+RP/0/RP0/CPU0:PE3(config-pim-default-ipv4)#
+show configuration failed
+Wed Nov 18 10:09:40.996 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE3(config-pim-default-ipv4)#
+end
+RP/0/RP0/CPU0:PE3#
+configure
+Wed Nov 18 10:09:44.122 UTC
+RP/0/RP0/CPU0:P1(config)#
+router pim
+RP/0/RP0/CPU0:P1(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:P1(config-pim-default-ipv4)#
+no bsr candidate-rp 10.255.0.11
+RP/0/RP0/CPU0:P1(config-pim-default-ipv4)#
+auto-rp candidate-rp Loopback0 scope 16 interval 30
+RP/0/RP0/CPU0:P1(config-pim-default-ipv4)#
+commit
+Wed Nov 18 10:09:46.284 UTC
+RP/0/RP0/CPU0:P1(config-pim-default-ipv4)#
+show configuration failed
+Wed Nov 18 10:09:47.016 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:P1(config-pim-default-ipv4)#
+end
+RP/0/RP0/CPU0:P1#
+configure
+Wed Nov 18 10:09:49.878 UTC
+RP/0/RP0/CPU0:PE1(config)#
+router pim
+RP/0/RP0/CPU0:PE1(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:PE1(config-pim-default-ipv4)#
+no bsr candidate-bsr 10.255.0.1
+RP/0/RP0/CPU0:PE1(config-pim-default-ipv4)#
+auto-rp mapping-agent Loopback0 scope 16 interval 30
+RP/0/RP0/CPU0:PE1(config-pim-default-ipv4)#
+commit
+Wed Nov 18 10:09:52.043 UTC
+RP/0/RP0/CPU0:PE1(config-pim-default-ipv4)#
+show configuration failed
+Wed Nov 18 10:09:52.564 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-pim-default-ipv4)#
+end
+RP/0/RP0/CPU0:PE1#
+show auto-rp mapping-agent
+Wed Nov 18 10:11:25.663 UTC
+Mapping Agent Table
+  Maximum number of mapping cache entries 500
+  Current number of mapping cache entries 1
+10.255.0.11 (expire : 86 secs)
+  224.0.0.0/4  SM  *
+
+RP/0/RP0/CPU0:PE1#
+show auto-rp candidate-rp
+Wed Nov 18 10:11:27.352 UTC
+ACL Name        Group Range        Mode   Candidate RP    TTL   Interval
+                224.0.0.0/4        SM     10.255.0.11     16    30
+
+RP/0/RP0/CPU0:P1#
+show pim rp mapping
+Wed Nov 18 10:11:29.140 UTC
+PIM Group-to-RP Mappings
+Group(s) 239.2.0.0/16
+  RP 10.255.1.11 (?), v2, bidir
+    Info source: 0.0.0.0 (?), elected via config
+      Uptime: 00:06:46, expires: never
+Group(s) 224.0.0.0/4
+  RP 10.255.0.11 (?), v2
+    Info source: 10.255.0.1 (?), elected via autorp
+      Uptime: 00:01:36, expires: 00:01:29
+Group(s) 224.0.0.0/4
+  RP 10.255.0.3 (?), v2
+    Info source: 10.0.12.1 (?), elected via bsr, priority 50, holdtime 150
+      Uptime: 00:03:13, expires: 00:00:52
+Group(s) 224.0.0.0/4
+  RP 10.255.0.11 (?), v2
+    Info source: 10.0.12.1 (?), elected via bsr, priority 192, holdtime 150
+      Uptime: 00:04:27, expires: 00:00:52
+RP/0/RP0/CPU0:PE2#
+show pim group-map
+Wed Nov 18 10:11:29.563 UTC
+
+IP PIM Group Mapping Table 
+(* indicates group mappings being used) 
+(+ indicates BSR group mappings active in MRIB) 
+
+Group Range         Proto Client   Groups RP address      Info
+
+224.0.1.39/32*      DM    perm     1      0.0.0.0         
+224.0.1.40/32*      DM    perm     1      0.0.0.0         
+224.0.0.0/24*       NO    perm     0      0.0.0.0         
+239.100.0.0/16*     SSM   config   0      0.0.0.0         
+232.0.0.0/8*        SSM   config   0      0.0.0.0         
+239.2.0.0/16*       BD    config   0      10.255.1.11     RPF: Gi0/0/0/1,10.0.2.11
+224.0.0.0/4*        SM    autorp   2      10.255.0.11     RPF: Gi0/0/0/1,10.0.2.11
+224.0.0.0/4         SM    bsr      0      10.255.0.3      RPF: Null,0.0.0.0
+224.0.0.0/4         SM    bsr      0      10.255.0.11     RPF: Gi0/0/0/1,10.0.2.11
+224.0.0.0/4         SM    static   0      0.0.0.0         RPF: Null,0.0.0.0
+RP/0/RP0/CPU0:PE2#
+show pim topology 224.0.1.40
+Wed Nov 18 10:11:29.979 UTC
+
+IP PIM Multicast Topology Table
+Entry state: (*/S,G)[RPT/SPT] Protocol Uptime Info
+Entry flags: KAT - Keep Alive Timer, AA - Assume Alive, PA - Probe Alive
+    RA - Really Alive, IA - Inherit Alive, LH - Last Hop
+    DSS - Don't Signal Sources,  RR - Register Received
+    SR - Sending Registers, SNR - Sending Null Registers
+    E - MSDP External, EX - Extranet
+    MFA - Mofrr Active, MFP - Mofrr Primary, MFB - Mofrr Backup
+    DCC - Don't Check Connected, ME - MDT Encap, MD - MDT Decap
+    MT - Crossed Data MDT threshold, MA - Data MDT Assigned
+    SAJ - BGP Source Active Joined, SAR - BGP Source Active Received,
+    SAS - BGP Source Active Sent, IM - Inband mLDP, X - VxLAN
+Interface state: Name, Uptime, Fwd, Info
+Interface flags: LI - Local Interest, LD - Local Dissinterest,
+    II - Internal Interest, ID - Internal Dissinterest,
+    LH - Last Hop, AS - Assert, AB - Admin Boundary, EX - Extranet,
+    BGP - BGP C-Multicast Join, BP - BGP Source Active Prune,
+    MVS - MVPN Safi Learned, MV6S - MVPN IPv6 Safi Learned
+
+(*,224.0.1.40) DM Up: 00:11:25 RP: 0.0.0.0 
+JP: Null(never) RPF: Null,0.0.0.0 Flags: LH DSS 
+  Loopback0                   00:11:25  off LI II LH 
+  GigabitEthernet0/0/0/2      00:11:06  off LI 
+
+(10.255.0.1,224.0.1.40)SPT DM Up: 00:01:37 
+JP: Null(never) RPF: GigabitEthernet0/0/0/0,10.0.12.1 Flags: KAT(00:01:52) 
+  Loopback0                   00:01:37  fwd 
+  GigabitEthernet0/0/0/0      00:01:37  fwd 
+  GigabitEthernet0/0/0/1      00:01:37  fwd 
+  GigabitEthernet0/0/0/2      00:01:37  fwd 
+  GigabitEthernet0/0/0/3      00:01:37  fwd 
+RP/0/RP0/CPU0:PE2#
+show ip pim rp mapping
+PIM Group-to-RP Mappings
+
+Group(s) 224.0.0.0/4
+  RP 10.255.0.11 (?), v2
+    Info source: 10.255.0.1 (?), elected via Auto-RP, via bootstrap, priority 192, holdtime 90
+         Uptime: 00:04:29, expires: 00:01:26
+  RP 10.255.0.3 (?), v2
+    Info source: 10.255.0.1 (?), via bootstrap, priority 50, holdtime 150
+         Uptime: 00:03:15, expires: 00:00:46
+Acl: 20, Static, Bidir Mode
+    RP: 10.255.1.11 (?)
+PE4#
+show ip mroute 224.0.1.40
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 224.0.1.40), 00:04:54/stopped, RP 0.0.0.0, flags: DCL
+  Incoming interface: Null, RPF nbr 0.0.0.0
+  Outgoing interface list:
+    Ethernet0/0, Forward/Sparse, 00:04:54/00:02:40, flags: 
+
+(10.255.0.1, 224.0.1.40), 00:01:39/00:02:56, flags: PLTX
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.4.2
+  Outgoing interface list: Null
+
+PE4#

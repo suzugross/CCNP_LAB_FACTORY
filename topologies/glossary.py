@@ -246,7 +246,7 @@ class Matcher:
 # 本文を拾わない要素
 SKIP_TAGS = {"pre", "code", "kbd", "samp", "a", "h1", "h2", "h3", "h4", "h5", "h6", "button", "svg", "script",
              "style", "title", "textarea", "select", "nav", "summary", "figcaption", "input"}
-SKIP_CLASSES = {"tag", "tolab", "portal", "pager", "langsw", "rnav", "gl", "glossary-sec"}
+SKIP_CLASSES = {"tag", "tolab", "drillbreak", "portal", "pager", "langsw", "rnav", "gl", "glossary-sec"}
 VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
 _TOKEN = re.compile(r"<!--.*?-->|<(script|style)\b[^>]*>.*?</\1\s*>|<[^>]+>", re.S | re.I)
 _TAG = re.compile(r"<(/?)([a-zA-Z][\w-]*)")
@@ -528,7 +528,7 @@ GLOSS_PAGE_CSS = """
 .glp .gf{ color:#5b6676; font-size:.86rem; margin-left:.3rem; }
 .glp .gs, .glp .gr{ font-size:.86rem; color:#5b6676; }
 .glp .glbl{ font-weight:600; margin-right:.3rem; }
-.glp .gr a{ white-space:nowrap; }
+.glp .gr a{ display:inline-block; max-width:100%; }   /* ページ名は割らずに次の行へ送る。画面より長い時だけ中で折る(nowrap だとスマホで横にはみ出す・2026-11-17) */
 .glp .gr .gsec{ font-size:.8rem; }
 .glp .gr .gsec a{ color:#5b6676; margin-left:.15rem; }
 .glp .gl-grp[hidden], .glp .gle[hidden]{ display:none; }

@@ -7,9 +7,9 @@ term を並べ、`from` で当て、`then` で決めます。単元は 3 つの�
 | ページ | 中身 | 課題 |
 |---|---|---|
 | このページ | フィルタが効く場所、1 つのパケットがフィルタを通る道、用語 | — |
-| firewall filter: term と動作 | 照合の条件、動作、末尾の暗黙の discard、discard と reject、term の順、戻りの通信、インターフェースへの当て方 | J2-1、J2-2 |
-| RE を守る: lo0 のフィルタ | RE が受け取る通信、lo0 に当てる、apply-path、自分が始めた通信の戻り、管理ポート | J2-3 |
-| 並べる・記録する | フィルタの並び、prefix-list と except、カウンタ・log・syslog、policer | J2-4、J2-5 |
+| firewall filter: term とアクション | 照合の条件、アクション、末尾の暗黙の discard、discard と reject、term の順、戻りの通信、インターフェースへの当て方 | J2-1、J2-2 |
+| RE を守る: lo0 フィルタ | RE が受け取る通信、lo0 に当てる、apply-path、自分が始めた通信の戻り、管理ポート | J2-3 |
+| 並べる・記録する | フィルタ リスト、prefix-list と except、カウンタ・log・syslog、policer | J2-4、J2-5 |
 | 付録 | 早見表、この仮想ルータの事情 | — |
 
 ラボは JNT-03 です。JUN01 と JUN02 は Junos のルータ(vJunos-Evolved)で、J1 を解き終えた状態から始まります。
@@ -55,7 +55,7 @@ IOS では ACL を使います。拡張 ACL に permit と deny の行を並べ�
 vty の `access-class` や CoPP(control plane に当てる policy-map)で別に絞ります。
 
 IOS XR でも ACL(`ipv4 access-list`)を `ipv4 access-group` でインターフェースに当てます。ルータ自身へ来る通信は、
-IOS XR トラックの M2 で見た LPTS と管理プレーンの保護(MPP)が受け持ちます。
+IOS XR トラックの M2 で見た LPTS と管理プレーン保護(MPP)が受け持ちます。
 
 ### 1.3 Junos の答え
 
@@ -76,7 +76,7 @@ firewall filter は**ステートレス**です。1 つずつのパケットを�
 ```mermaid
 flowchart LR
   IN["パケットが入る<br>et-0/0/1"] --> IF_IN{{"入力フィルタ<br>(input)"}}
-  IF_IN --> RT["経路表を引く"]
+  IF_IN --> RT["ルーティング テーブルを引く"]
   RT -- "ほかへ送る(中継)" --> IF_OUT{{"出力フィルタ<br>(output)"}}
   IF_OUT --> OUT["パケットが出る<br>et-0/0/0"]
   RT -- "自分宛て" --> LO{{"lo0 の入力フィルタ"}}
@@ -84,29 +84,29 @@ flowchart LR
   RE -- "RE が送る" --> IF_OUT
 ```
 
-インターフェースに入ったパケットは、まずそのインターフェースの入力フィルタを通ります。経路表を引いて中継するなら、
+インターフェースに入ったパケットは、まずそのインターフェースの入力フィルタを通ります。ルーティング テーブルを引いて中継するなら、
 出ていくインターフェースの出力フィルタを通ります。自分宛てなら、lo0 の入力フィルタを通って RE に届きます。
 
-ですから、RE 行きのパケットは、入ってきたインターフェースの入力フィルタと lo0 のフィルタの**両方**を通ります。
-中継するパケットは lo0 のフィルタを通りません。RE が送るパケットも、出ていくインターフェースの出力フィルタを通ります。
+ですから、RE 行きのパケットは、入ってきたインターフェースの入力フィルタと lo0 フィルタの**両方**を通ります。
+中継するパケットは lo0 フィルタを通りません。RE が送るパケットも、出ていくインターフェースの出力フィルタを通ります。
 
 ### 2.2 1 つのパケットを追う
 
-JUN01 のサーバの網へ出る向きに、フィルタ TO-SERVERS を当てた例です。NET1 から SRV1 の 443 番へ来たパケットを追います。
-図の番号にカーソルを置く(スマホは押す)と、その塊の設定が小窓に出て、下の設定例の行に色が付きます。
+JUN01 のサーバのネットワークへ出る向きに、フィルタ TO-SERVERS を当てた例です。NET1 から SRV1 の 443 番へ来たパケットを追います。
+図の番号にカーソルを置く(スマホは押す)と、そのブロックの設定が小窓に出て、下の設定例の行に色が付きます。
 
 :::walk
-legend: 線の上は IP のパケット。フィルタの term は上から順に調べ、終端の動作(accept・discard など)が出たところで終わる。
+legend: 線の上は IP パケット。フィルタの term は上から順に調べ、終端アクション(accept・discard など)が出たところで終わる。
 rows:
   - {node: NET1, say: ["~198.51.100.10 から SRV1 の Web へ TCP の SYN を送る"]}
   - {wire: "[[TCP 198.51.100.10 → 172.16.20.1:443]] _SYN"}
-  - {node: JUN02, say: ["~フィルタは無い。経路表を引いて JUN01 へ送る"]}
+  - {node: JUN02, say: ["~フィルタは無い。ルーティング テーブルを引いて JUN01 へ送る"]}
   - panel: JUN01
-    sub: サーバの網へ出る口
+    sub: サーバのネットワークへ出るインターフェース
     items:
       - ref: 1
         head: "**et-0/0/1 の出力** `filter output TO-SERVERS`"
-        say: ["経路表を引いた結果、et-0/0/1 から出す。出る前に TO-SERVERS を通す"]
+        say: ["ルーティング テーブルを引いた結果、et-0/0/1 から出す。出る前に TO-SERVERS を通す"]
       - ref: 2
         head: "**TO-SERVERS** term を上から"
         match:
@@ -118,10 +118,10 @@ rows:
   - {aside: "③の LAST を書かないと", say: ["~どの term にも当たらないまま終わる → 末尾の暗黙の discard。結果は同じだが、数えられない"]}
 :::
 
-:::config JUN01 — サーバの網へ出る通信を絞る(出力フィルタ)
+:::config JUN01 — サーバのネットワークへ出る通信を絞る(出力フィルタ)
 set firewall family inet filter TO-SERVERS term ICMP from protocol icmp                       ## ② ICMP はすべて通す
 set firewall family inet filter TO-SERVERS term ICMP then accept                              ## ② 
-set firewall family inet filter TO-SERVERS term WEB from destination-address 172.16.20.0/24   ## ② サーバの網の
+set firewall family inet filter TO-SERVERS term WEB from destination-address 172.16.20.0/24   ## ② サーバのネットワークの
 set firewall family inet filter TO-SERVERS term WEB from protocol tcp                         ## ② TCP の
 set firewall family inet filter TO-SERVERS term WEB from destination-port http                ## ② 80 番だけ(違う種類の条件は AND)
 set firewall family inet filter TO-SERVERS term WEB then count WEB-IN                         ## ② 数えてから
@@ -157,23 +157,23 @@ WEB-IN                                                                          
 | firewall filter | 名前を付けたパケットの規則の集まり。`firewall family inet` の下に書く | 門の通行規則 | 拡張 ACL | ACL(`ipv4 access-list`) |
 | term | フィルタの中の 1 つの規則。上から順に調べる | 規則の 1 項目 | ACL の 1 行 | ACL の 1 行 |
 | from | 当たる条件(アドレス・プロトコル・ポートなど) | 「次のパケットは」 | 行の中の条件 | 行の中の条件 |
-| then | 当たった時の動作 | 「こうする」 | permit・deny | permit・deny |
-| accept・discard・reject | 評価を終わらせる動作(終端の動作)。通す・黙って捨てる・捨てて ICMP を返す | 通す・止める・止めて伝える | permit・deny | permit・deny |
-| count・log・syslog | 数える・記録する動作。評価は終わらない | 通行の記録をつける | ACL の行ごとのカウンタ・`log` | 同じ |
+| then | 当たった時のアクション | 「こうする」 | permit・deny | permit・deny |
+| accept・discard・reject | 評価を終わらせるアクション(終端アクション)。通す・黙って捨てる・捨てて ICMP を返す | 通す・止める・止めて伝える | permit・deny | permit・deny |
+| count・log・syslog | 数える・記録するアクション。評価は終わらない | 通行の記録をつける | ACL の行ごとのカウンタ・`log` | 同じ |
 | 末尾の暗黙の discard | どの term にも当たらなかったパケットを捨てる決まり | 規則に無ければ通さない | 暗黙の deny | 暗黙の deny |
 | input・output | フィルタを当てる向き | 入口の門・出口の門 | `ip access-group … in`・`out` | `ipv4 access-group … ingress`・`egress` |
-| lo0 のフィルタ | RE へ届くパケットを絞るフィルタ | 本部の受付 | CoPP・vty の `access-class` | LPTS・MPP |
-| フィルタの並び | 1 つの向きに並べた複数のフィルタ(`input-list`) | 門を 2 つ続けて置く | —(1 か所に 1 つ) | —(1 か所に 1 つ) |
+| lo0 フィルタ | RE へ届くパケットを絞るフィルタ | 本部の受付 | CoPP・vty の `access-class` | LPTS・MPP |
+| フィルタ リスト | 1 つの向きに並べた複数のフィルタ(`input-list`) | 門を 2 つ続けて置く | —(1 か所に 1 つ) | —(1 か所に 1 つ) |
 
 ### 2.4 取り違えやすい点
 
 - **ルーティング ポリシーと firewall filter は別のもの。**ポリシーは経路を選び、フィルタはパケットを選ぶ。どちらにも
   term・from・then があるが、書く場所(`policy-options` と `firewall`)も当てる場所も違う。同じ `reject` も、ポリシーでは
   「経路を受け入れない」、フィルタでは「捨てて ICMP を返す」。
-- **当たらなかったパケットは捨てられる。**J1 の既定のポリシーと違い、フィルタの末尾はプロトコルに関係なく暗黙の discard。
+- **当たらなかったパケットは捨てられる。**J1 のデフォルト ポリシーと違い、フィルタの末尾はプロトコルに関係なく暗黙の discard。
   捨てた数を数えたいなら、最後に `count` と `discard` の term を自分で書く。
 - **戻りは自動で通らない。**ステートレスなので、外へ始めた TCP の戻り(SYN と ACK)も、入る向きのフィルタで判断される。
-- **RE 行きは、インターフェースのフィルタと lo0 のフィルタの両方を通る。**片方で通しても、もう片方で捨てれば届かない。
+- **RE 行きは、インターフェース フィルタと lo0 フィルタの両方を通る。**片方で通しても、もう片方で捨てれば届かない。
 - **`set` で足した term は末尾に付く。**先に「残りすべてを捨てる」term があれば、後から足した term には届かない。並べ替えは
   `insert`(J1 のポリシーと同じ)。
 
@@ -181,7 +181,7 @@ WEB-IN                                                                          
 
 | 機器 | JNT-03 での役 | 練習すること |
 |---|---|---|
-| JUN01 | 社内のルータ。サーバの網(172.16.10.0/24)につながる | 読み物の設定例をここで組む |
+| JUN01 | 社内のルータ。サーバのネットワーク(172.16.10.0/24)につながる | 読み物の設定例をここで組む |
 | JUN02 | ISP との境界 | ISP からの入口(J2-1・J2-2・J2-4)・RE を守る(J2-3)・記録(J2-5) |
 | FRR1 | ISP。変えられない | JUN02 と BGP を張る。NET1 へ中継する |
 | NET1 | インターネットの端末。変えられない | 送信元を 4 つ使い分けて、外からの通信を送る。8080 番で Web を待つ |
@@ -190,7 +190,7 @@ WEB-IN                                                                          
 ### 2.6 押さえどころ
 
 - フィルタは 1 度書いて、インターフェースの input か output に当てる。RE を守るなら lo0 に当てる。
-- term は上から調べ、終端の動作で止まる。どれにも当たらなければ捨てる。
+- term は上から調べ、終端アクションで止まる。どれにも当たらなければ捨てる。
 - ステートレス。戻りの通信も、ルータ自身へ来る通信も、通したいものはすべて自分で書く。
 
 ## 実践

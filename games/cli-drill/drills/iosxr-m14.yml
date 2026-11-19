@@ -1,0 +1,204 @@
+# IOS XR の素振り台(BL-278・BL-283)の練習: XR トラック M14(マルチキャスト)。
+# 練習の中身はここ 1 か所に持ち、素振り台の画面と読み物の区切り(:::drill <ID>)の両方から使う。
+# ★お題の並び= 読み物の節の並び。読み物の :::drill は courses/xr/{en,ja}/f0-…・f2-…・f4-… にある。
+#
+# 盤面は XRT-16 と同じ盤面の PE2 の初めの状態(IOS XRd 26.1.1。実機の記録から作った JSON。cli_drill.py xr-board が
+# private/cli-drill/iosxr/raw/xrd-26.1.1/board-pe2.log から作る。XRd は day0 の設定なのでコミットの履歴は空)。
+# ? の一覧は XRd 26.1.1 の組(raw/xrd-26.1.1/。盤面の helpset)。値はラボの課題(239.x)と読み物の設定例からずらしてある(238.x)。
+# 確かめ方は iosxr-m0m1.yml の頭の注記と同じ(want は「道を全部つないだ 1 行 1 文」。並べた候補はどれか 1 つ)。
+
+unit: { ja: M14, en: M14 }
+title: { ja: マルチキャスト, en: Multicast }
+os: iosxr
+course: xr
+devices:
+  PE2: private/cli-drill/iosxr/boards/XRT-16-PE2.json
+topology: private/cli-drill/iosxr/boards/XRT-16.lab.yaml
+
+sections:
+  - id: f0
+    title: { ja: IGMP と PIM スパース モード, en: IGMP and PIM sparse mode }
+    page: f0-m14-igmp-pim-sm
+    drills:
+      # 読み物 F0 §3.2(スタティック RP)の後
+      - id: xr-m14-1
+        title: { ja: マルチキャストを有効にして RP を決める, en: Turn multicast on and set the RP }
+        device: PE2
+        task:
+          ja: |-
+            PE2 で、IPv4 のマルチキャストをすべてのインターフェイスで有効にし、PE3 の Loopback0(10.255.0.3)を
+            すべてのグループの RP にして commit します。commit の後、running-config の multicast-routing と router pim の部分を表示して確かめてください。
+          en: |-
+            On PE2, turn on IPv4 multicast on every interface, make PE3's Loopback0 (10.255.0.3) the RP for all groups, and commit.
+            After the commit, display the multicast-routing and router pim parts of the running configuration and check them.
+        want:
+          - multicast-routing address-family ipv4 interface all enable
+          - router pim address-family ipv4 rp-address 10.255.0.3
+        cmd:
+          - line: '^\s*(do\s+)?sh\S*\s+ru\S*\s+mu\S*'
+            say: { ja: running-config の multicast-routing を表示した, en: You displayed the multicast-routing part of the running configuration }
+            sayNg: { ja: running-config の multicast-routing(show running-config multicast-routing)を表示していない, en: You did not display the multicast-routing part (show running-config multicast-routing) }
+          - line: '^\s*(do\s+)?sh\S*\s+ru\S*\s+rou\S*\s+pim'
+            say: { ja: running-config の router pim を表示した, en: You displayed the router pim part of the running configuration }
+            sayNg: { ja: running-config の router pim(show running-config router pim)を表示していない, en: You did not display the router pim part (show running-config router pim) }
+        answer: |-
+          configure
+          multicast-routing
+           address-family ipv4
+            interface all enable
+            root
+          router pim
+           address-family ipv4
+            rp-address 10.255.0.3
+            commit
+            end
+          show running-config multicast-routing
+          show running-config router pim
+
+      # 読み物 F0 §3.3(IGMP の設定)の後
+      - id: xr-m14-2
+        title: { ja: IGMP のバージョンと join-group, en: IGMP version and join-group }
+        device: PE2
+        task:
+          ja: |-
+            PE2 の ACCESS-2(GigabitEthernet0/0/0/3)で IGMP をバージョン 2 にし、PE2 自身を 238.1.1.1 の受信者にして(join-group)commit します。
+          en: |-
+            On PE2's ACCESS-2 (GigabitEthernet0/0/0/3), set IGMP to version 2, make PE2 itself a receiver of 238.1.1.1 (join-group), and commit.
+        want:
+          - router igmp interface GigabitEthernet0/0/0/3 version 2
+          - router igmp interface GigabitEthernet0/0/0/3 join-group 238.1.1.1
+        answer: |-
+          configure
+          router igmp
+           interface GigabitEthernet0/0/0/3
+            version 2
+            join-group 238.1.1.1
+            commit
+            end
+
+      # 読み物 F0 §3.4(共有ツリーに留める)の後
+      - id: xr-m14-3
+        title: { ja: 一部のグループだけ共有ツリーに留める, en: Keep some groups on the shared tree }
+        device: PE2
+        task:
+          ja: |-
+            PE2 で、238.5.0.0/16 のグループだけを共有ツリーに留め(送信元のツリーへ切り替えない)、ほかのグループは既定どおり切り替えるようにして commit します。
+            グループの範囲は IPv4 のアクセス リスト SPT-HOLD に書きます(グループは送信元の欄に。宛先は any)。
+          en: |-
+            On PE2, keep only the groups in 238.5.0.0/16 on the shared tree (never switch them to the source tree), let every other group switch as by default, and commit.
+            Write the group range in the IPv4 access list SPT-HOLD (the group goes in the source field, and the destination is any).
+        want:
+          - - ipv4 access-list SPT-HOLD * permit ipv4 238.5.0.0 0.0.255.255 any
+            - ipv4 access-list SPT-HOLD * permit ipv4 238.5.0.0/16 any
+          - router pim address-family ipv4 spt-threshold infinity group-list SPT-HOLD
+        forbid:
+          - router pim address-family ipv4 spt-threshold infinity
+        answer: |-
+          configure
+          ipv4 access-list SPT-HOLD
+           10 permit ipv4 238.5.0.0 0.0.255.255 any
+           exit
+          router pim
+           address-family ipv4
+            spt-threshold infinity group-list SPT-HOLD
+            commit
+            end
+
+  - id: f2
+    title: { ja: SSM と双方向 PIM, en: SSM and bidirectional PIM }
+    page: f2-m14-ssm-bidir
+    drills:
+      # 読み物 F2 §3.1(SSM の範囲)の後
+      - id: xr-m14-4
+        title: { ja: SSM の範囲を広げる, en: Widen the SSM range }
+        device: PE2
+        task:
+          ja: |-
+            PE2 で、232.0.0.0/8 と 238.232.0.0/16 を SSM のグループにして commit します。範囲は IPv4 のアクセス リスト SSM-238 に書き
+            (グループは送信元の欄に。宛先は any)、読み物と同じく router pim の IPv4 のアドレス ファミリーで ssm range に指定します。
+          en: |-
+            On PE2, make 232.0.0.0/8 and 238.232.0.0/16 SSM groups, and commit. Write the ranges in the IPv4 access list SSM-238
+            (the group goes in the source field, and the destination is any), and give the list to ssm range in the IPv4 address family of router pim, as on the reading page.
+        want:
+          - - ipv4 access-list SSM-238 * permit ipv4 232.0.0.0 0.255.255.255 any
+            - ipv4 access-list SSM-238 * permit ipv4 232.0.0.0/8 any
+          - - ipv4 access-list SSM-238 * permit ipv4 238.232.0.0 0.0.255.255 any
+            - ipv4 access-list SSM-238 * permit ipv4 238.232.0.0/16 any
+          - - router pim address-family ipv4 ssm range SSM-238
+            - multicast-routing address-family ipv4 ssm range SSM-238
+        answer: |-
+          configure
+          ipv4 access-list SSM-238
+           10 permit ipv4 232.0.0.0 0.255.255.255 any
+           20 permit ipv4 238.232.0.0 0.0.255.255 any
+           exit
+          router pim
+           address-family ipv4
+            ssm range SSM-238
+            commit
+            end
+
+      # 読み物 F2 §3.3(双方向 PIM)の後
+      - id: xr-m14-5
+        title: { ja: 双方向のグループと RP, en: Bidirectional groups and their RP }
+        device: PE2
+        task:
+          ja: |-
+            PE2 で、238.48.0.0/16 を双方向 PIM のグループにし、その RP のアドレスを 10.255.1.11 にして commit します。
+            グループは IPv4 のアクセス リスト BIDIR-238 に書きます(グループは送信元の欄に。宛先は any)。
+          en: |-
+            On PE2, make 238.48.0.0/16 bidirectional PIM groups with 10.255.1.11 as their RP address, and commit.
+            Write the groups in the IPv4 access list BIDIR-238 (the group goes in the source field, and the destination is any).
+        want:
+          - - ipv4 access-list BIDIR-238 * permit ipv4 238.48.0.0 0.0.255.255 any
+            - ipv4 access-list BIDIR-238 * permit ipv4 238.48.0.0/16 any
+          - router pim address-family ipv4 rp-address 10.255.1.11 BIDIR-238 bidir
+        answer: |-
+          configure
+          ipv4 access-list BIDIR-238
+           10 permit ipv4 238.48.0.0 0.0.255.255 any
+           exit
+          router pim
+           address-family ipv4
+            rp-address 10.255.1.11 BIDIR-238 bidir
+            commit
+            end
+
+  - id: f4
+    title: { ja: RP の見つけ方, en: Finding the RP }
+    page: f4-m14-rp-ipv6-ts
+    drills:
+      # 読み物 F4 §3.1(BSR)の後
+      - id: xr-m14-6
+        title: { ja: 候補 BSR と候補 RP, en: Candidate BSR and candidate RP }
+        device: PE2
+        task:
+          ja: |-
+            PE2 の Loopback0(10.255.0.2)を、priority 10 の候補 BSR と、238.0.0.0/8 だけを受け持つ priority 20 の候補 RP にして commit します。
+            グループは IPv4 のアクセス リスト CRP-238 に書きます(グループは送信元の欄に。宛先は any)。
+            commit の後、running-config の router pim を表示し、打っていない値が既定の値で書き足されていることを確かめてください。
+          en: |-
+            Make PE2's Loopback0 (10.255.0.2) a candidate BSR with priority 10 and a candidate RP with priority 20 for 238.0.0.0/8 only, and commit.
+            Write the groups in the IPv4 access list CRP-238 (the group goes in the source field, and the destination is any).
+            After the commit, display the router pim part of the running configuration and check that the values you did not type have been filled in with their defaults.
+        want:
+          - router pim address-family ipv4 bsr candidate-bsr 10.255.0.2 hash-mask-len 30 priority 10
+          - router pim address-family ipv4 bsr candidate-rp 10.255.0.2 group-list CRP-238 priority 20 interval 60
+          - - ipv4 access-list CRP-238 * permit ipv4 238.0.0.0 0.255.255.255 any
+            - ipv4 access-list CRP-238 * permit ipv4 238.0.0.0/8 any
+        cmd:
+          - line: '^\s*(do\s+)?sh\S*\s+ru\S*\s+rou\S*\s+pim'
+            say: { ja: running-config の router pim を表示した, en: You displayed the router pim part of the running configuration }
+            sayNg: { ja: running-config の router pim(show running-config router pim)を表示していない, en: You did not display the router pim part (show running-config router pim) }
+        answer: |-
+          configure
+          ipv4 access-list CRP-238
+           10 permit ipv4 238.0.0.0 0.255.255.255 any
+           exit
+          router pim
+           address-family ipv4
+            bsr candidate-bsr 10.255.0.2 priority 10
+            bsr candidate-rp 10.255.0.2 group-list CRP-238 priority 20
+            commit
+            end
+          show running-config router pim

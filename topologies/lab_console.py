@@ -50,6 +50,8 @@
   - containerlab の盤面は problem.yml の clab_topology(clab.yml)から起こし、状態は szk-cl01 の docker から読む。
     座標はノードの labels の graph-posX / graph-posY(containerlab の graph と同じ書き方)。無ければ円に並べる。
     リンクの ethN は機器の名前で描く(vJunos EVO= et-0/0/<N-1>・vJunos-router/switch= ge-0/0/<N-1>・cEOS= Et<N>)。
+  - HTML の応答は全部 theme.inject を通す(BL-280 ダークモード・_theme_mw)。切替のボタンは画面下端の帯。状態は Cookie で
+    配信サーバ(別ポート)と共有され、枠の中のページ(Task・Reading)にも postMessage ですぐ伝わる。
   - 問題文の盤面の節は Task タブに出さず Topology タブへ移す(結線図と重複するため)。節には
     アドレス・AS など結線図に無い情報が載るので、消さずに置き場所だけ変える。切り分けは
     render_html.split_topology。パックでは gen_pack が書いた q<N>.ws.html / q<N>.topo.html を使う。
@@ -84,6 +86,7 @@ sys.path.insert(0, HERE)
 import clab_ops                                        # noqa: E402
 import gen_pack                                        # noqa: E402
 import render_html                                     # noqa: E402
+import theme                                           # noqa: E402
 
 ASSETS = os.path.join(HERE, "assets")
 PACK_RE = re.compile(r"^PACK-[A-Za-z0-9_.-]{1,64}$")
@@ -1247,9 +1250,18 @@ async def _follow_parent(app):
     app["parent_watch"] = asyncio.ensure_future(watch())
 
 
+@web.middleware
+async def _theme_mw(request, handler):
+    """HTML の応答に暗色の CSS と切替のボタンを差し込む(BL-280・theme.py)。状態は配信サーバと同じ Cookie。"""
+    resp = await handler(request)
+    if type(resp) is web.Response and resp.content_type == "text/html" and resp.body:
+        resp.text = theme.inject(resp.text)
+    return resp
+
+
 def make_app(repo=REPO, pack_port=8899, lab=None, task=None, with_parent=None, record=True, learn=None, clab=None):
     """lab を渡すと単発(そのラボに固定)、渡さなければパック常駐。clab= containerlab だけの問題の ID(lab は clab:<ID>)。"""
-    app = web.Application()
+    app = web.Application(middlewares=[_theme_mw])
     if with_parent:
         app["with_parent"] = with_parent
         app.on_startup.append(_follow_parent)
@@ -1486,7 +1498,7 @@ document.documentElement.style.setProperty('--z', String(wsZoom()));
   <button type="button" id="fitdev" title="Tell the device in the open console tab how big this console is, so that editors (vim, the XR route-policy editor) and pagers use all of it. It types terminal length and width (IOS XR, IOS) or stty rows and cols (Linux). Press it at the prompt, not inside an editor, and again after you resize. Devices in a containerlab lab (Junos, EOS, FRR) get the size over SSH by themselves, so nothing is typed there.">Fit device to console</button>
   <button type="button" id="cfull" title="Give the whole window to the console (hide tasks, topology and reading). Press again to bring them back.">Console only</button>
   <button type="button" id="lang" hidden title="Switch the task text between English and Japanese"></button>
-  <button type="button" id="layout"></button></footer>
+  <button type="button" id="layout"></button><span data-theme-slot></span></footer>
 <script src="vendor/xterm.js"></script>
 <script src="vendor/addon-fit.js"></script>
 <script>

@@ -1,0 +1,299 @@
+
+######## 04:36:37 spt1: PE2 に spt-threshold infinity → PE2 が共有木(P1 経由)に留まるか。★R5(IOS)が既定で (S,G) の Join を PE2 へ送ると PE2 に (S,G) ができるので R5 にも ip pim spt-threshold infinity
+configure
+Wed Nov 18 04:36:38.557 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router pim
+RP/0/RP0/CPU0:PE2(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+spt-threshold infinity
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+commit
+Wed Nov 18 04:36:40.396 UTC
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+show configuration failed
+Wed Nov 18 04:36:41.542 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+end
+RP/0/RP0/CPU0:PE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+R5(config)#
+ip pim spt-threshold infinity
+R5(config)#
+end
+R5#
+clear ip mroute 239.1.1.1
+R5#
+clear pim topology 239.1.1.1
+Wed Nov 18 04:36:49.151 UTC
+RP/0/RP0/CPU0:PE2#
+clear pim topology 239.1.1.1
+Wed Nov 18 04:36:51.106 UTC
+RP/0/RP0/CPU0:P1#
+....................
+== 239.1.1.1 を 20 発: RCV2 が受けた 0・RCV3 が受けた 0
+==== PE1
+show pim topology 239.1.1.1
+Wed Nov 18 04:37:37.212 UTC
+
+IP PIM Multicast Topology Table
+Entry state: (*/S,G)[RPT/SPT] Protocol Uptime Info
+Entry flags: KAT - Keep Alive Timer, AA - Assume Alive, PA - Probe Alive
+    RA - Really Alive, IA - Inherit Alive, LH - Last Hop
+    DSS - Don't Signal Sources,  RR - Register Received
+    SR - Sending Registers, SNR - Sending Null Registers
+    E - MSDP External, EX - Extranet
+    MFA - Mofrr Active, MFP - Mofrr Primary, MFB - Mofrr Backup
+    DCC - Don't Check Connected, ME - MDT Encap, MD - MDT Decap
+    MT - Crossed Data MDT threshold, MA - Data MDT Assigned
+    SAJ - BGP Source Active Joined, SAR - BGP Source Active Received,
+    SAS - BGP Source Active Sent, IM - Inband mLDP, X - VxLAN
+Interface state: Name, Uptime, Fwd, Info
+Interface flags: LI - Local Interest, LD - Local Dissinterest,
+    II - Internal Interest, ID - Internal Dissinterest,
+    LH - Last Hop, AS - Assert, AB - Admin Boundary, EX - Extranet,
+    BGP - BGP C-Multicast Join, BP - BGP Source Active Prune,
+    MVS - MVPN Safi Learned, MV6S - MVPN IPv6 Safi Learned
+
+(192.168.1.1,239.1.1.1)SPT SM Up: 00:08:33 
+JP: Join(never) RPF: GigabitEthernet0/0/0/2,192.168.1.1* Flags: KAT(00:02:03) RA 
+  GigabitEthernet0/0/0/0      00:08:31  fwd Join(00:01:51) 
+  GigabitEthernet0/0/0/1      00:00:47  fwd Join(00:02:42) 
+RP/0/RP0/CPU0:PE1#
+show mrib route 239.1.1.1
+Wed Nov 18 04:37:37.617 UTC
+
+IP Multicast Routing Information Base
+Entry flags: L - Domain-Local Source, E - External Source to the Domain,
+    C - Directly-Connected Check, S - Signal, IA - Inherit Accept,
+    IF - Inherit From, D - Drop, ME - MDT Encap, EID - Encap ID,
+    MD - MDT Decap, MT - MDT Threshold Crossed, MH - MDT interface handle
+    CD - Conditional Decap, MPLS - MPLS Decap, EX - Extranet
+    MoFE - MoFRR Enabled, MoFS - MoFRR State, MoFP - MoFRR Primary
+    MoFB - MoFRR Backup, RPFID - RPF ID Set, X - VXLAN, RPF - RPF neighbor present
+Interface flags: F - Forward, A - Accept, IC - Internal Copy,
+    NS - Negate Signal, DP - Don't Preserve, SP - Signal Present,
+    II - Internal Interest, ID - Internal Disinterest, LI - Local Interest,
+    LD - Local Disinterest, DI - Decapsulation Interface
+    EI - Encapsulation Interface, MI - MDT Interface, LVIF - MPLS Encap,
+    EX - Extranet, A2 - Secondary Accept, MT - MDT Threshold Crossed,
+    MA - Data MDT Assigned, LMI - mLDP MDT Interface, TMI - P2MP-TE MDT Interface
+    IRMI - IR MDT Interface, TRMI - TREE SID MDT Interface, MH - Multihome Interface
+
+(192.168.1.1,239.1.1.1) RPF nbr: 192.168.1.1 Flags: RPF
+  Up: 00:08:33
+  Incoming Interface List
+    GigabitEthernet0/0/0/2 Flags: A, Up: 00:08:33
+  Outgoing Interface List
+    GigabitEthernet0/0/0/0 Flags: F NS, Up: 00:08:31
+    GigabitEthernet0/0/0/1 Flags: F NS, Up: 00:00:47
+RP/0/RP0/CPU0:PE1#
+==== P1
+show pim topology 239.1.1.1
+Wed Nov 18 04:37:38.968 UTC
+
+IP PIM Multicast Topology Table
+Entry state: (*/S,G)[RPT/SPT] Protocol Uptime Info
+Entry flags: KAT - Keep Alive Timer, AA - Assume Alive, PA - Probe Alive
+    RA - Really Alive, IA - Inherit Alive, LH - Last Hop
+    DSS - Don't Signal Sources,  RR - Register Received
+    SR - Sending Registers, SNR - Sending Null Registers
+    E - MSDP External, EX - Extranet
+    MFA - Mofrr Active, MFP - Mofrr Primary, MFB - Mofrr Backup
+    DCC - Don't Check Connected, ME - MDT Encap, MD - MDT Decap
+    MT - Crossed Data MDT threshold, MA - Data MDT Assigned
+    SAJ - BGP Source Active Joined, SAR - BGP Source Active Received,
+    SAS - BGP Source Active Sent, IM - Inband mLDP, X - VxLAN
+Interface state: Name, Uptime, Fwd, Info
+Interface flags: LI - Local Interest, LD - Local Dissinterest,
+    II - Internal Interest, ID - Internal Dissinterest,
+    LH - Last Hop, AS - Assert, AB - Admin Boundary, EX - Extranet,
+    BGP - BGP C-Multicast Join, BP - BGP Source Active Prune,
+    MVS - MVPN Safi Learned, MV6S - MVPN IPv6 Safi Learned
+
+(192.168.1.1,239.1.1.1) SM Up: 00:00:20 
+JP: Null(never) RPF: GigabitEthernet0/0/0/0,10.0.1.1 Flags: KAT(00:03:11) RA RR (00:04:14) 
+  No interfaces in immediate olist
+RP/0/RP0/CPU0:P1#
+show mrib route 239.1.1.1
+Wed Nov 18 04:37:39.376 UTC
+
+IP Multicast Routing Information Base
+Entry flags: L - Domain-Local Source, E - External Source to the Domain,
+    C - Directly-Connected Check, S - Signal, IA - Inherit Accept,
+    IF - Inherit From, D - Drop, ME - MDT Encap, EID - Encap ID,
+    MD - MDT Decap, MT - MDT Threshold Crossed, MH - MDT interface handle
+    CD - Conditional Decap, MPLS - MPLS Decap, EX - Extranet
+    MoFE - MoFRR Enabled, MoFS - MoFRR State, MoFP - MoFRR Primary
+    MoFB - MoFRR Backup, RPFID - RPF ID Set, X - VXLAN, RPF - RPF neighbor present
+Interface flags: F - Forward, A - Accept, IC - Internal Copy,
+    NS - Negate Signal, DP - Don't Preserve, SP - Signal Present,
+    II - Internal Interest, ID - Internal Disinterest, LI - Local Interest,
+    LD - Local Disinterest, DI - Decapsulation Interface
+    EI - Encapsulation Interface, MI - MDT Interface, LVIF - MPLS Encap,
+    EX - Extranet, A2 - Secondary Accept, MT - MDT Threshold Crossed,
+    MA - Data MDT Assigned, LMI - mLDP MDT Interface, TMI - P2MP-TE MDT Interface
+    IRMI - IR MDT Interface, TRMI - TREE SID MDT Interface, MH - Multihome Interface
+
+(192.168.1.1,239.1.1.1) RPF nbr: 10.0.1.1 Flags: L C RPF
+  Up: 00:00:21
+  Incoming Interface List
+    Decapstunnel0 Flags: A, Up: 00:00:21
+RP/0/RP0/CPU0:P1#
+==== PE2
+show pim topology 239.1.1.1
+Wed Nov 18 04:37:41.068 UTC
+
+IP PIM Multicast Topology Table
+Entry state: (*/S,G)[RPT/SPT] Protocol Uptime Info
+Entry flags: KAT - Keep Alive Timer, AA - Assume Alive, PA - Probe Alive
+    RA - Really Alive, IA - Inherit Alive, LH - Last Hop
+    DSS - Don't Signal Sources,  RR - Register Received
+    SR - Sending Registers, SNR - Sending Null Registers
+    E - MSDP External, EX - Extranet
+    MFA - Mofrr Active, MFP - Mofrr Primary, MFB - Mofrr Backup
+    DCC - Don't Check Connected, ME - MDT Encap, MD - MDT Decap
+    MT - Crossed Data MDT threshold, MA - Data MDT Assigned
+    SAJ - BGP Source Active Joined, SAR - BGP Source Active Received,
+    SAS - BGP Source Active Sent, IM - Inband mLDP, X - VxLAN
+Interface state: Name, Uptime, Fwd, Info
+Interface flags: LI - Local Interest, LD - Local Dissinterest,
+    II - Internal Interest, ID - Internal Dissinterest,
+    LH - Last Hop, AS - Assert, AB - Admin Boundary, EX - Extranet,
+    BGP - BGP C-Multicast Join, BP - BGP Source Active Prune,
+    MVS - MVPN Safi Learned, MV6S - MVPN IPv6 Safi Learned
+
+(*,239.1.1.1) SM Up: 00:09:11 RP: 10.255.0.11 
+JP: Join(now) RPF: GigabitEthernet0/0/0/1,10.0.2.11 Flags: LH DSS 
+  GigabitEthernet0/0/0/3      00:09:11  fwd LI LH 
+RP/0/RP0/CPU0:PE2#
+show mrib route 239.1.1.1
+Wed Nov 18 04:37:41.481 UTC
+
+IP Multicast Routing Information Base
+Entry flags: L - Domain-Local Source, E - External Source to the Domain,
+    C - Directly-Connected Check, S - Signal, IA - Inherit Accept,
+    IF - Inherit From, D - Drop, ME - MDT Encap, EID - Encap ID,
+    MD - MDT Decap, MT - MDT Threshold Crossed, MH - MDT interface handle
+    CD - Conditional Decap, MPLS - MPLS Decap, EX - Extranet
+    MoFE - MoFRR Enabled, MoFS - MoFRR State, MoFP - MoFRR Primary
+    MoFB - MoFRR Backup, RPFID - RPF ID Set, X - VXLAN, RPF - RPF neighbor present
+Interface flags: F - Forward, A - Accept, IC - Internal Copy,
+    NS - Negate Signal, DP - Don't Preserve, SP - Signal Present,
+    II - Internal Interest, ID - Internal Disinterest, LI - Local Interest,
+    LD - Local Disinterest, DI - Decapsulation Interface
+    EI - Encapsulation Interface, MI - MDT Interface, LVIF - MPLS Encap,
+    EX - Extranet, A2 - Secondary Accept, MT - MDT Threshold Crossed,
+    MA - Data MDT Assigned, LMI - mLDP MDT Interface, TMI - P2MP-TE MDT Interface
+    IRMI - IR MDT Interface, TRMI - TREE SID MDT Interface, MH - Multihome Interface
+
+(*,239.1.1.1) RPF nbr: 10.0.2.11 Flags: C RPF
+  Up: 00:09:11
+  Incoming Interface List
+    GigabitEthernet0/0/0/1 Flags: A, Up: 00:09:11
+  Outgoing Interface List
+    GigabitEthernet0/0/0/3 Flags: F NS LI, Up: 00:09:11
+RP/0/RP0/CPU0:PE2#
+show ip mroute 239.1.1.1
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.1.1.1), 00:00:01/00:02:58, RP 10.255.0.11, flags: SC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.4.2
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse, 00:00:01/00:02:58, flags: 
+
+R5#
+
+######## 04:37:43 spt2: 戻す(PE2 と R5 の spt-threshold infinity を外す)
+configure
+Wed Nov 18 04:37:44.404 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router pim
+RP/0/RP0/CPU0:PE2(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+no spt-threshold infinity
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+commit
+Wed Nov 18 04:37:46.260 UTC
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+show configuration failed
+Wed Nov 18 04:37:47.420 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+end
+RP/0/RP0/CPU0:PE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+R5(config)#
+no ip pim spt-threshold infinity
+R5(config)#
+end
+R5#
+clear ip mroute 239.1.1.1
+R5#
+clear pim topology 239.1.1.1
+Wed Nov 18 04:37:54.697 UTC
+RP/0/RP0/CPU0:PE2#
+Reply to request 0 from 192.168.2.1, 5 ms
+Reply to request 1 from 192.168.2.1, 3 ms
+Reply to request 2 from 192.168.2.1, 2 ms
+Reply to request 3 from 192.168.2.1, 5 ms
+Reply to request 4 from 192.168.2.1, 6 ms
+Reply to request 5 from 192.168.2.1, 3 ms
+Reply to request 6 from 192.168.2.1, 3 ms
+Reply to request 7 from 192.168.2.1, 3 ms
+== 239.1.1.1 を 10 発: RCV2 が受けた 10・RCV3 が受けた 0
+show pim topology 239.1.1.1
+Wed Nov 18 04:38:30.611 UTC
+
+IP PIM Multicast Topology Table
+Entry state: (*/S,G)[RPT/SPT] Protocol Uptime Info
+Entry flags: KAT - Keep Alive Timer, AA - Assume Alive, PA - Probe Alive
+    RA - Really Alive, IA - Inherit Alive, LH - Last Hop
+    DSS - Don't Signal Sources,  RR - Register Received
+    SR - Sending Registers, SNR - Sending Null Registers
+    E - MSDP External, EX - Extranet
+    MFA - Mofrr Active, MFP - Mofrr Primary, MFB - Mofrr Backup
+    DCC - Don't Check Connected, ME - MDT Encap, MD - MDT Decap
+    MT - Crossed Data MDT threshold, MA - Data MDT Assigned
+    SAJ - BGP Source Active Joined, SAR - BGP Source Active Received,
+    SAS - BGP Source Active Sent, IM - Inband mLDP, X - VxLAN
+Interface state: Name, Uptime, Fwd, Info
+Interface flags: LI - Local Interest, LD - Local Dissinterest,
+    II - Internal Interest, ID - Internal Dissinterest,
+    LH - Last Hop, AS - Assert, AB - Admin Boundary, EX - Extranet,
+    BGP - BGP C-Multicast Join, BP - BGP Source Active Prune,
+    MVS - MVPN Safi Learned, MV6S - MVPN IPv6 Safi Learned
+
+(*,239.1.1.1) SM Up: 00:10:01 RP: 10.255.0.11 
+JP: Join(00:00:14) RPF: GigabitEthernet0/0/0/1,10.0.2.11 Flags: LH 
+  GigabitEthernet0/0/0/3      00:10:01  fwd LI LH 
+
+(192.168.1.1,239.1.1.1)SPT SM Up: 00:00:16 
+JP: Join(00:00:33) RPF: GigabitEthernet0/0/0/0,10.0.12.1 Flags: KAT(00:03:16) RA 
+  No interfaces in immediate olist
+RP/0/RP0/CPU0:PE2#

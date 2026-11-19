@@ -37,7 +37,7 @@ FRR1 は eth1 で OSPF を area 0 で動かし、192.168.0.3/32 を広告して�
 単元 J0 に沿った課題です。IOS で身につけたこと(アドレス・OSPF・静的経路)を使い、Junos の作法で組んでください。
 
 ### 課題 J0-1  2 台の Junos ルータにアドレスを付ける
-<p class="tolab"><a href="/_learn?id=JNT-01&amp;step=j0t1">ワークスペースで開く</a> — 読み物: <a href="01-j0-config-tree.html#s2-1">2.1 木の中の今いる場所</a> · <a href="01-j0-config-tree.html#s2-2">2.2 set・delete と、CLI がはじくもの</a> · <a href="01-j0-config-tree.html#s2-5">2.5 インターフェース: 物理ポート、論理ユニット、ファミリー</a> · <a href="01-j0-config-tree.html#s3-2">3.2 IOS から Junos へ</a></p>
+<p class="tolab"><a href="/_learn?id=JNT-01&amp;step=j0t1">ワークスペースで開く</a> — 読み物: <a href="01-j0-config-tree.html#s2-1">2.1 ツリーの中の今いる場所</a> · <a href="01-j0-config-tree.html#s2-2">2.2 set・delete と、CLI がはじくもの</a> · <a href="01-j0-config-tree.html#s2-5">2.5 インターフェース: 物理ポート、論理ユニット、ファミリー</a> · <a href="01-j0-config-tree.html#s3-2">3.2 IOS から Junos へ</a></p>
 
 
 表のアドレスを JUN01 と JUN02 のリンクと lo0 に設定し、有効にしてください。

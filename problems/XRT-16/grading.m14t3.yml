@@ -1,0 +1,47 @@
+# M14-3: SSM= 232/8 と 239.232/16・PE4 の IGMPv3。
+# 確認は poc/xr/gen_grading_xrt16.py で組んだ(中身を直したら組み直す)。確認ごとに範囲の中から乱数でグループを選ぶ(topologies/mcast_probe.py)。
+problem: XRT-16
+total_points: 100
+checks:
+- name: 'M14-3 A receiver naming SRC1 gets a channel in 239.232.0.0/16 as SSM: RCV2 and RCV3 receive it and the RP holds no state'
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=239.232.0.0/16 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp version 3;;ip igmp join-group {G} source 192.168.1.1;;end' --pre-cli 'RCV3:configure terminal;;interface
+    Ethernet0/0;;ip igmp version 3;;ip igmp join-group {G} source 192.168.1.1;;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 192.168.2.1 --from 192.168.3.1 --show 'P1:show pim topology {G}
+    | include ,239' --show 'PE2:show pim topology {G} | include ,239' --show 'PE4:show ip mroute {G} | begin \(' --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G} source 192.168.1.1;;no ip igmp version;;end' --post-cli
+    'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G} source 192.168.1.1;;no ip igmp version;;end'
+  raw:
+  - regex: == REPLY SRC1 192\.168\.2\.1 (?:8|9|10)\n
+  - regex: == REPLY SRC1 192\.168\.3\.1 (?:8|9|10)\n
+  - regex: '== SHOW PE2: [\s\S]*\(192\.168\.1\.1,239\.232\.\d+\.\d+\)SPT SSM'
+  - regex: '\(192\.168\.1\.1, 239\.232\.\d+\.\d+\), [^\n]*flags: s'
+  - regex: '== SHOW P1: show pim topology[^\n]*\n(?:(?!\(192\.168\.1\.1)[^\n]*\n)*?== SHOW PE2'
+  points: 40
+- name: 'M14-3 232.0.0.0/8 is still SSM: RCV2 and RCV3 receive a channel in it from SRC1'
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=232.0.0.0/8 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp version 3;;ip igmp join-group {G} source 192.168.1.1;;end' --pre-cli 'RCV3:configure terminal;;interface
+    Ethernet0/0;;ip igmp version 3;;ip igmp join-group {G} source 192.168.1.1;;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 192.168.2.1 --from 192.168.3.1 --show 'PE1:show pim topology {G}
+    | include ,232' --show 'PE4:show ip mroute {G} | begin \(' --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G} source 192.168.1.1;;no ip igmp version;;end' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no
+    ip igmp join-group {G} source 192.168.1.1;;no ip igmp version;;end'
+  raw:
+  - regex: == REPLY SRC1 192\.168\.2\.1 (?:8|9|10)\n
+  - regex: == REPLY SRC1 192\.168\.3\.1 (?:8|9|10)\n
+  - regex: \(192\.168\.1\.1,232\.\d+\.\d+\.\d+\)SPT SSM
+  - regex: '\(192\.168\.1\.1, 232\.\d+\.\d+\.\d+\), [^\n]*flags: s'
+  points: 30
+- name: M14-3 A receiver that names no source gets nothing in 239.232.0.0/16, and P1 and PE3 treat both ranges as SSM
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=239.232.0.0/16 --group B=232.0.0.0/8 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ip
+    igmp join-group {G};;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 192.168.2.1 --from 192.168.3.1 --show 'P1:show pim group-map {G}' --show 'PE3:show pim group-map {G}' --show 'P1:show
+    pim group-map {B}' --show 'PE3:show pim group-map {B}' --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group
+    {G};;no ip igmp version;;end'
+  raw:
+  - regex: == REPLY SRC1 192\.168\.2\.1 0\n
+  - regex: == REPLY SRC1 192\.168\.3\.1 0\n
+  - regex: '== SHOW P1: show pim group-map 239[\s\S]*?239\.232\.0\.0/16\*\s+SSM'
+  - regex: '== SHOW PE3: show pim group-map 239[\s\S]*?239\.232\.0\.0/16\*\s+SSM'
+  - regex: '== SHOW P1: show pim group-map 232[\s\S]*?232\.0\.0\.0/8\*\s+SSM'
+  - regex: '== SHOW PE3: show pim group-map 232[\s\S]*?232\.0\.0\.0/8\*\s+SSM'
+  points: 30

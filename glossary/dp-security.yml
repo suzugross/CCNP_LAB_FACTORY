@@ -10,13 +10,13 @@
       plausible (RFC 3704). Strict mode needs the route to the source to point out of the receiving interface; loose
       mode needs only some route. The default route does not count unless `allow-default` is configured.
     ja: >-
-      入ってきたパケットの送信元のアドレスを FIB で引き、ありえない送信元なら落とす確認(RFC 3704)。厳格モードは
-      送信元へのルートが受けたインターフェイスを向くことを、緩いモードはどこかにルートがあることを求める。既定ルートは、
+      入ってきたパケットの送信元のアドレスを FIB で引き、ありえない送信元なら落とす確認(RFC 3704)。strict モードは
+      送信元へのルートが受けたインターフェイスを向くことを、loose モードはどこかにルートがあることを求める。デフォルト ルートは、
       `allow-default` を付けない限り数えない。
   see: [urpf-strict, urpf-loose, rtbh-source]
 
 - id: urpf-strict
-  term: {en: strict uRPF, ja: 厳格な uRPF}
+  term: {en: strict uRPF, ja: strict モード}
   def:
     en: >-
       uRPF that passes a packet only if the route to its source points out of the interface it arrived on
@@ -28,7 +28,7 @@
   see: [urpf, urpf-loose]
 
 - id: urpf-loose
-  term: {en: loose uRPF, ja: 緩い uRPF}
+  term: {en: loose uRPF, ja: loose モード}
   def:
     en: >-
       uRPF that passes a packet if there is any route to its source, whatever the interface (`reachable-via any`).
@@ -36,7 +36,7 @@
       source-based RTBH relies on.
     ja: >-
       送信元へのルートがどこかにあれば、インターフェイスを問わず通す uRPF(`reachable-via any`)。経路が非対称に
-      なりうる境界で使う。どこにもルートの無い送信元を落とし、送信元で捨てる RTBH もこれを使う。
+      なりうる境界で使う。どこにもルートの無い送信元を落とし、送信元 RTBH もこれを使う。
   see: [urpf, urpf-strict, rtbh-source]
 
 - id: infrastructure-acl
@@ -49,9 +49,9 @@
       infrastructure needs (such as BGP with the neighbour), deny everything else to the infrastructure, and permit
       transit traffic.
     ja: >-
-      外から届く必要の無い、プロバイダー自身のアドレス(ループバック・コアのリンク)を、網の入口で守る ACL。Cisco は
-      4 つの部分で組むことを勧めている。①送信元を偽ったものを捨てる、②基盤宛てでも必要なもの(相手との BGP など)を
-      許す、③それ以外の基盤宛てを捨てる、④通過するパケットを許す。
+      外から届く必要の無い、プロバイダー自身のアドレス(ループバック・コアのリンク)を、ネットワークの入口で守る ACL。Cisco は
+      4 つの部分で組むことを勧めている。①送信元を偽ったものを捨てる、②インフラ宛てでも必要なもの(相手との BGP など)を
+      許す、③それ以外のインフラ宛てを捨てる、④通過するパケットを許す。
   see: [urpf]
 
 - id: rtbh
@@ -64,13 +64,13 @@
       routes to Null0, plus a community and `no-export`. Dropping by destination stops the attack but also cuts the
       target off from everyone.
     ja: >-
-      1 か所で登録したアドレスへのパケットを、縁のルータ全部で捨てる仕組み(RFC 5635)。起点のルータがそのアドレスを、
-      ネクスト ホップを捨て先(縁のルータ全部が Null0 に向けているアドレス)に書き換え、コミュニティと `no-export` を
+      1 か所で登録したアドレスへのパケットを、エッジ ルータ全部で捨てる仕組み(RFC 5635)。トリガー ルータがそのアドレスを、
+      ネクスト ホップを破棄用アドレス(エッジ ルータ全部が Null0 に向けているアドレス)に書き換え、コミュニティと `no-export` を
       付けて BGP で配る。宛先で捨てると攻撃は止まるが、その宛先は誰からも届かなくなる。
   see: [rtbh-source, discard-address, rtbh-trigger, blackhole-community]
 
 - id: rtbh-source
-  term: {en: source-based RTBH, ja: 送信元の RTBH}
+  term: {en: source-based RTBH, ja: 送信元 RTBH}
   def:
     en: >-
       RTBH against an attacker's source address (RFC 5635): the route to the source is pointed at the discard, and
@@ -78,25 +78,25 @@
       sources. IOS XR uRPF does not follow a recursive next hop to Null0, so the edge needs RPL `set next-hop
       discard`.
     ja: >-
-      攻撃元の送信元のアドレスに使う RTBH(RFC 5635)。送信元へのルートを捨て先に向け、縁のルータの緩い uRPF で、
+      攻撃元の送信元のアドレスに使う RTBH(RFC 5635)。送信元へのルートを破棄用アドレスに向け、エッジ ルータの loose モードの uRPF で、
       そこから来たパケットを落とす。攻撃を受けた宛先は、ほかの送信元からは届いたまま。IOS XR の uRPF は Null0 への
-      再帰的な参照をしないので、縁で RPL の `set next-hop discard` が要る。
+      再帰的な参照をしないので、エッジで RPL の `set next-hop discard` が要る。
   see: [rtbh, urpf-loose]
 
 - id: discard-address
-  term: {en: discard address, ja: 捨て先}
+  term: {en: discard address, ja: 破棄用アドレス}
   def:
     en: >-
       In RTBH, an unused address (192.0.2.1/32 is common) that every edge router routes to Null0 with a static route.
       Traffic to a route whose next hop is rewritten to it is dropped at the edge.
     ja: >-
-      RTBH で、縁のルータ全部がスタティック ルートで Null0 に向けておく、使っていないアドレス(192.0.2.1/32 が
-      よく使われる)。ネクスト ホップをこれに書き換えたルートの宛先へのパケットは、縁で捨てられる。
+      RTBH で、エッジ ルータ全部がスタティック ルートで Null0 に向けておく、使っていないアドレス(192.0.2.1/32 が
+      よく使われる)。ネクスト ホップをこれに書き換えたルートの宛先へのパケットは、エッジで捨てられる。
   see: [rtbh]
 
 - id: rtbh-trigger
-  term: {en: trigger router, ja: 起点のルータ}
-  aka: [RTBH trigger, trigger, 起点]
+  term: {en: trigger router, ja: トリガー ルータ}
+  aka: [RTBH trigger, trigger]
   scope: ["d*-m12-*"]                  # 「trigger」「起点」は一般語
   def:
     en: >-
@@ -122,7 +122,7 @@
 
 - id: scrubbing-centre
   term: {en: scrubbing centre, ja: スクラビング センター}
-  aka: [scrubbing center, 洗浄の装置]
+  aka: [scrubbing center]
   def:
     en: >-
       A facility that receives the traffic for a destination under attack, removes the attack traffic and passes the
@@ -143,7 +143,7 @@
       before the normal route lookup.
     ja: >-
       ACL の行にネクスト ホップ(`nexthop1`)を書き、一致したパケットをルーティング テーブルと関係なくそこへ送る
-      IOS XR の機能。攻撃のパケットを洗浄の装置へ寄せる、といった使い方をする。ふつうのルートの引き当てより先に効く。
+      IOS XR の機能。攻撃のパケットをスクラビングの装置へ寄せる、といった使い方をする。ふつうのルートの引き当てより先に効く。
   see: [scrubbing-centre, flowspec]
 
 - id: flowspec

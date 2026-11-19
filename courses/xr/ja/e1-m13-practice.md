@@ -67,7 +67,7 @@ SRV01 が提供するもの:
 ## M13 — 自動化とアシュアランス
 
 ### 課題 M13-1
-<p class="tolab"><a href="/_learn?id=XRT-15&amp;step=m13t1">ワークスペースで開く</a> — 読み物: <a href="e0-m13-netconf-yang.html#s2-1">2.1 YANG: 設定と状態のモデル</a> · <a href="e0-m13-netconf-yang.html#s2-2">2.2 IOS XR の 3 つのモデルの系統</a> · <a href="e0-m13-netconf-yang.html#s2-3">2.3 NETCONF: SSH の上のセッション、RPC、データストア</a> · <a href="e0-m13-netconf-yang.html#s2-4">2.4 candidate・commit・confirmed commit</a> · <a href="e0-m13-netconf-yang.html#s3-1">3.1 IOS XR で NETCONF を有効にする</a> · <a href="e0-m13-netconf-yang.html#s3-2">3.2 Python(ncclient)から NETCONF のセッションを張る</a> · <a href="e0-m13-netconf-yang.html#s3-3">3.3 NETCONF の変更はどこに出るか</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-15&amp;step=m13t1">ワークスペースで開く</a> — 読み物: <a href="e0-m13-netconf-yang.html#s2-1">2.1 YANG: 設定と状態のモデル</a> · <a href="e0-m13-netconf-yang.html#s2-2">2.2 IOS XR の 3 つのモデルの系統</a> · <a href="e0-m13-netconf-yang.html#s2-3">2.3 NETCONF: SSH の上のセッション、RPC、データストア</a> · <a href="e0-m13-netconf-yang.html#s2-4">2.4 candidate・commit・confirmed commit</a> · <a href="e0-m13-netconf-yang.html#s3-1">3.1 IOS XR で NETCONF を有効にする</a> · <a href="e0-m13-netconf-yang.html#s3-2">3.2 Python(ncclient)から NETCONF セッションを張る</a> · <a href="e0-m13-netconf-yang.html#s3-3">3.3 NETCONF の変更はどこに出るか</a></p>
 
 
 NMS チームは、XR01 を NETCONF で管理します。

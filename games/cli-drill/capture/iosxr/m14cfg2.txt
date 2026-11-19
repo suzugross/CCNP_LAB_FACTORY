@@ -1,0 +1,90 @@
+# M14 の設定の形 2: 既定の値の表示・消し方・1 行で打った時の空の塊(multicast-routing・router igmp)・番号なしの ACL の行・Tab
+terminal length 0
+terminal width 250
+show running-config
+configure
+multicast-routing address-family ipv4 interface all enable
+show configuration
+abort
+configure
+multicast-routing
+address-family ipv4
+interface all enable
+root
+show configuration
+abort
+configure
+router pim address-family ipv4
+bsr candidate-rp 10.255.0.2
+bsr candidate-bsr 10.255.0.2 priority 5
+spt-threshold infinity
+rp-address 10.255.0.3 override
+rp-address 10.255.0.4 bidir
+ssm range MC-X
+show configuration
+root
+router pim address-family ipv4 bsr candidate-rp 10.255.0.2 bidir
+show configuration
+abort
+configure
+ipv4 access-list MC-NOSEQ
+permit ipv4 any 238.1.0.0/16
+permit ipv4 any 238.2.0.0/16
+deny ipv4 any any
+show configuration
+abort
+configure
+router igmp version 2
+show configuration
+abort
+# Tab
+configure
+mul<TAB>
+router pi<TAB>
+router pim add<TAB>
+router pim address-family ipv4 sp<TAB>
+router pim address-family ipv4 bsr cand<TAB>
+router pim address-family ipv4 bsr candidate-r<TAB>
+router igmp int<TAB>
+multicast-routing address-family ipv4 int<TAB>
+ipv4 acc<TAB>
+abort
+# 消す(モードの中で no・設定モードの頭から no)
+configure
+ipv4 access-list MC-SM
+10 permit ipv4 any 238.0.0.0/8
+20 permit ipv4 any 238.5.0.0/16
+exit
+multicast-routing address-family ipv4 interface all enable
+router pim address-family ipv4 rp-address 10.255.0.3
+router pim address-family ipv4 rp-address 10.255.0.4 MC-SM
+router pim address-family ipv4 spt-threshold infinity group-list MC-SM
+router pim address-family ipv4 bsr candidate-bsr 10.255.0.2
+router pim address-family ipv4 bsr candidate-rp 10.255.0.2 group-list MC-SM priority 100
+router igmp interface GigabitEthernet0/0/0/3 version 2
+commit
+show running-config
+configure
+router pim address-family ipv4
+no rp-address 10.255.0.3
+no spt-threshold infinity
+no bsr candidate-bsr
+no bsr candidate-rp 10.255.0.2
+root
+no multicast-routing address-family ipv4 interface all enable
+no router igmp interface GigabitEthernet0/0/0/3 version
+ipv4 access-list MC-SM
+no 20
+root
+show configuration
+show commit changes diff
+commit
+show running-config
+show configuration commit changes last 1
+configure
+no router pim address-family ipv4 rp-address 10.255.0.4
+no ipv4 access-list MC-SM
+show configuration
+commit
+show running-config
+show configuration commit list

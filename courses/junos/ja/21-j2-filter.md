@@ -1,11 +1,11 @@
-# J2 — firewall filter: term と動作
+# J2 — firewall filter: term とアクション
 
 ## 1. なぜ term に分けて書くのか
 
-### 1.1 困りごと: 1 つの口で、通信ごとに扱いを変えたい
+### 1.1 困りごと: 1 つのインターフェースで、通信ごとに扱いを変えたい
 
-JUN01 のサーバの網へ出る口では、Web は通したい、ping も通したい、それ以外は止めたい、止めた数も知りたい、と
-扱いが通信ごとに違います。1 つの口に、条件と扱いの組をいくつも並べる書き方が要ります。
+JUN01 のサーバのネットワークへ出るインターフェースでは、Web は通したい、ping も通したい、それ以外は止めたい、止めた数も知りたい、と
+扱いが通信ごとに違います。1 つのインターフェースに、条件と扱いの組をいくつも並べる書き方が要ります。
 
 ### 1.2 それ以前の手
 
@@ -15,7 +15,7 @@ IOS XR の ACL も同じ考え方で、行に番号を付けて並べます。
 
 ### 1.3 Junos の答え
 
-Junos の firewall filter は、行の代わりに term を並べます。1 つの term に条件(`from`)をいくつも書け、動作(`then`)も
+Junos の firewall filter は、行の代わりに term を並べます。1 つの term に条件(`from`)をいくつも書け、アクション(`then`)も
 「数えてから通す」「数えて記録して捨てる」のように組み合わせられます。term の書き方は J1 のポリシーと同じなので、
 `from` の AND と OR、term の順、`insert` は J1 の知識がそのまま使えます。
 
@@ -60,33 +60,33 @@ firewall {
 | `source-port`・`destination-port` | TCP・UDP のポート。`http`(80)・`https`(443)・`ssh`(22)・`bgp`(179)などの名前でも書ける |
 | `port` | 送信元か宛先のどちらかのポート |
 | `tcp-established` | TCP の ACK か RST のビットが立ったパケット(つなぎ始めの SYN 以外) |
-| `icmp-type` | ICMP の種類(`echo-request` など) |
+| `icmp-type` | ICMP タイプ(`echo-request` など) |
 
 組み合わせ方は J1 の `from` と同じです。**同じ種類の値はどれか 1 つに当たればよく(OR)、違う種類の条件はすべてに
 当たる必要があります(AND)。**`destination-port [ http https ]` は 80 番か 443 番、`protocol tcp` と
 `destination-port http` を並べれば「TCP で、かつ 80 番」です。
 
-ポートの条件は TCP にも UDP にもある欄を見るので、`protocol tcp` か `protocol udp` も同じ term に書きます。
+ポートの条件は TCP にも UDP にもあるフィールドを見るので、`protocol tcp` か `protocol udp` も同じ term に書きます。
 `tcp-established` も TCP かどうかは確かめないので、`protocol tcp` と組にします。
 
-### 2.3 then: 動作
+### 2.3 then: アクション
 
-動作は 2 つに分かれます。
+アクションは 2 つに分かれます。
 
-| 種類 | 動作 | 何をするか |
+| 種類 | アクション | 何をするか |
 |---|---|---|
-| 終端の動作(評価を終わらせる) | `accept` | 通す |
+| 終端アクション(評価を終わらせる) | `accept` | 通す |
 | | `discard` | 黙って捨てる。送信元へは何も返さない |
 | | `reject` | 捨てて、送信元へ ICMP の到達不能を返す |
-| 評価を終わらせない動作 | `count 名前` | 名前を付けたカウンタで数える |
+| 評価を終わらせないアクション | `count 名前` | 名前を付けたカウンタで数える |
 | | `log` | `show firewall log` で見られるように残す |
-| | `syslog` | syslog のメッセージにする |
+| | `syslog` | syslog メッセージにする |
 | | `policer 名前` | 量を制限する(4 ページ目) |
 | 流れの制御 | `next term` | 次の term へ進む |
 
-1 つの term に、終端の動作は 1 つだけ書けます。数える・記録する動作は、終端の動作と並べて書きます。
+1 つの term に、終端アクションは 1 つだけ書けます。数える・記録するアクションは、終端アクションと並べて書きます。
 
-**終端の動作を書かなかった term に当たったパケットは、通されます(暗黙の accept)。**`then count X` だけの term に当たると、
+**終端アクションを書かなかった term に当たったパケットは、通されます(暗黙の accept)。**`then count X` だけの term に当たると、
 数えられたうえで通ります。捨てたいなら `discard` を書き添えます。Junos OS Evolved では、`next term` を最後の term に
 置くことはできません。
 
@@ -101,7 +101,7 @@ J1 のポリシーのように、プロトコルの既定に委ねられるこ�
 ### 2.5 discard と reject
 
 `discard` は何も返さず、`reject` は ICMP を返します。外から見ると、待たされるか、すぐに断られるかの違いになります。
-JUN02 の ISP 側の入力に、ICMP だけを通して残りを捨てるフィルタを当て、最後の term の動作を変えて NET1 から送った結果の例です。
+JUN02 の ISP 側の入力に、ICMP だけを通して残りを捨てるフィルタを当て、最後の term のアクションを変えて NET1 から送った結果の例です。
 
 ```console
 net1:/# probe 172.16.10.1 22 -s 198.51.100.10
@@ -217,14 +217,14 @@ WEB-IN                                                                          
 
 ## 3. 設定例
 
-### 3.1 サーバの網へ出る通信を絞り、戻りの通信を通す
+### 3.1 サーバのネットワークへ出る通信を絞り、戻りの通信を通す
 
 前のページの TO-SERVERS に、戻りの term を入れた形です。
 
-:::config JUN01 — サーバの網へ出る通信を絞る(戻りの通信も通す)
+:::config JUN01 — サーバのネットワークへ出る通信を絞る(戻りの通信も通す)
 set firewall family inet filter TO-SERVERS term ICMP from protocol icmp                       ## ICMP はすべて通す
 set firewall family inet filter TO-SERVERS term ICMP then accept                              ## 
-set firewall family inet filter TO-SERVERS term WEB from destination-address 172.16.20.0/24   ## サーバの網の TCP の 80 番だけ
+set firewall family inet filter TO-SERVERS term WEB from destination-address 172.16.20.0/24   ## サーバのネットワークの TCP の 80 番だけ
 set firewall family inet filter TO-SERVERS term WEB from protocol tcp                         ## 
 set firewall family inet filter TO-SERVERS term WEB from destination-port http                ## 
 set firewall family inet filter TO-SERVERS term WEB then count WEB-IN                         ## 数えて通す
@@ -261,7 +261,7 @@ set interfaces et-0/0/1 unit 0 family inet filter output TO-SERVERS             
 :::note
 出典: Juniper Networks『Routing Policies, Firewall Filters, and Traffic Policers User Guide』(2026-06-23)の
 「Firewall Filter Match Conditions for IPv4 Traffic」(ポートの条件は protocol と組にする・`tcp-established` は
-`tcp-flags "(ack | rst)"` の別名で TCP かどうかは確かめない)、終端の動作と動作の修飾、term に動作が無いときの暗黙の accept、
+`tcp-flags "(ack | rst)"` の別名で TCP かどうかは確かめない)、終端アクションと動作の修飾、term に動作が無いときの暗黙の accept、
 PTX の動作の表(`reject` の既定は administratively prohibited)。IOS XR の ACL は IOS XR トラック M2 による。
 出力は containerlab の vJunos-Evolved(Junos OS Evolved 26.2R1.7)で取ったものです。
 :::

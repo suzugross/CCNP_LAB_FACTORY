@@ -439,7 +439,7 @@ def explain(b, t, v):
     # ② ルート ポート
     le = ["Each other switch picks the port with the lowest root path cost (its own receiving port's cost + the neighbor's root path cost). "
           "On a tie: lower sender bridge ID, then lower sender port ID."]
-    lj = ["ルート ブリッジ以外の各スイッチは、ルート パス コスト(自分の受信ポートのコスト + 隣のルート パス コスト)が最小のポートを選びます。"
+    lj = ["ルート ブリッジ以外の各スイッチは、ルート パス コスト(自分の受信ポートのコスト + 隣接スイッチのルート パス コスト)が最小のポートを選びます。"
           "同じなら送信元のブリッジ ID、次に送信元のポート ID が小さい方です。"]
     for s in b["names"]:
         if s == t.root:

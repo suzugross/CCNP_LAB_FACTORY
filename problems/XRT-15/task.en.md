@@ -108,9 +108,9 @@ dial-out over TLS, every 10 seconds, in subscription `SUB-IF`. Nothing has ever 
 
 The NMS collects flow records with IPFIX.
 
-- On PE2, record the IPv4 traffic that enters from customer A (GigabitEthernet2). Each flow record holds the source and
-  destination addresses, the protocol, the source and destination ports and the input interface, with the packet and
-  byte counts.
+- On PE2, record the IPv4 traffic that enters from customer A (GigabitEthernet2). Distinguish the flows by the source
+  and destination addresses, the protocol, the source and destination ports and the input interface. Each flow record
+  also holds the packet and byte counts.
 - Export the records to the flow collector on SRV01 with IPFIX, from Loopback0.
 - Report a long flow at least every 60 seconds.
 

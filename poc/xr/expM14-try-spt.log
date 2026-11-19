@@ -1,0 +1,261 @@
+
+######## 10:02:13 spt: PE2 と PE4 に spt-threshold infinity(全グループ)。新しいグループ 239.1.1.2 で共有ツリーに留まるか
+configure
+Wed Nov 18 10:02:14.599 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router pim
+RP/0/RP0/CPU0:PE2(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+spt-threshold infinity
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+commit
+Wed Nov 18 10:02:16.412 UTC
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+show configuration failed
+Wed Nov 18 10:02:16.826 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+end
+RP/0/RP0/CPU0:PE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+PE4(config)#
+ip pim spt-threshold infinity
+PE4(config)#
+end
+PE4#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RCV2(config)#
+interface Ethernet0/0
+RCV2(config-if)#
+ip igmp join-group 239.1.1.2
+RCV2(config-if)#
+end
+RCV2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+RCV3(config)#
+interface Ethernet0/0
+RCV3(config-if)#
+ip igmp join-group 239.1.1.2
+RCV3(config-if)#
+end
+RCV3#
+==== SRC1: ping 239.1.1.2
+Sending 10, 100-byte ICMP Echos to 239.1.1.2, timeout is 1 seconds:
+Reply to request 0 from 192.168.2.1, 2 ms
+Reply to request 0 from 192.168.3.1, 2 ms
+Reply to request 1 from 192.168.2.1, 3 ms
+Reply to request 1 from 192.168.3.1, 4 ms
+Reply to request 2 from 192.168.2.1, 24 ms
+Reply to request 2 from 192.168.3.1, 24 ms
+Reply to request 3 from 192.168.2.1, 4 ms
+Reply to request 3 from 192.168.3.1, 4 ms
+Reply to request 4 from 192.168.2.1, 4 ms
+Reply to request 4 from 192.168.3.1, 8 ms
+Reply to request 5 from 192.168.2.1, 6 ms
+Reply to request 5 from 192.168.3.1, 7 ms
+Reply to request 6 from 192.168.2.1, 26 ms
+Reply to request 6 from 192.168.3.1, 27 ms
+Reply to request 7 from 192.168.2.1, 3 ms
+Reply to request 7 from 192.168.3.1, 3 ms
+Reply to request 8 from 192.168.2.1, 21 ms
+Reply to request 8 from 192.168.3.1, 22 ms
+Reply to request 9 from 192.168.2.1, 4 ms
+Reply to request 9 from 192.168.3.1, 5 ms
+show pim topology 239.1.1.2
+Wed Nov 18 10:03:01.249 UTC
+
+IP PIM Multicast Topology Table
+Entry state: (*/S,G)[RPT/SPT] Protocol Uptime Info
+Entry flags: KAT - Keep Alive Timer, AA - Assume Alive, PA - Probe Alive
+    RA - Really Alive, IA - Inherit Alive, LH - Last Hop
+    DSS - Don't Signal Sources,  RR - Register Received
+    SR - Sending Registers, SNR - Sending Null Registers
+    E - MSDP External, EX - Extranet
+    MFA - Mofrr Active, MFP - Mofrr Primary, MFB - Mofrr Backup
+    DCC - Don't Check Connected, ME - MDT Encap, MD - MDT Decap
+    MT - Crossed Data MDT threshold, MA - Data MDT Assigned
+    SAJ - BGP Source Active Joined, SAR - BGP Source Active Received,
+    SAS - BGP Source Active Sent, IM - Inband mLDP, X - VxLAN
+Interface state: Name, Uptime, Fwd, Info
+Interface flags: LI - Local Interest, LD - Local Dissinterest,
+    II - Internal Interest, ID - Internal Dissinterest,
+    LH - Last Hop, AS - Assert, AB - Admin Boundary, EX - Extranet,
+    BGP - BGP C-Multicast Join, BP - BGP Source Active Prune,
+    MVS - MVPN Safi Learned, MV6S - MVPN IPv6 Safi Learned
+
+(*,239.1.1.2) SM Up: 00:00:38 RP: 10.255.0.11 
+JP: Join(00:00:11) RPF: GigabitEthernet0/0/0/1,10.0.2.11 Flags: LH DSS 
+  GigabitEthernet0/0/0/2      00:00:36  fwd Join(00:02:53) 
+  GigabitEthernet0/0/0/3      00:00:38  fwd LI LH 
+RP/0/RP0/CPU0:PE2#
+show mrib route 239.1.1.2
+Wed Nov 18 10:03:01.652 UTC
+
+IP Multicast Routing Information Base
+Entry flags: L - Domain-Local Source, E - External Source to the Domain,
+    C - Directly-Connected Check, S - Signal, IA - Inherit Accept,
+    IF - Inherit From, D - Drop, ME - MDT Encap, EID - Encap ID,
+    MD - MDT Decap, MT - MDT Threshold Crossed, MH - MDT interface handle
+    CD - Conditional Decap, MPLS - MPLS Decap, EX - Extranet
+    MoFE - MoFRR Enabled, MoFS - MoFRR State, MoFP - MoFRR Primary
+    MoFB - MoFRR Backup, RPFID - RPF ID Set, X - VXLAN, RPF - RPF neighbor present
+Interface flags: F - Forward, A - Accept, IC - Internal Copy,
+    NS - Negate Signal, DP - Don't Preserve, SP - Signal Present,
+    II - Internal Interest, ID - Internal Disinterest, LI - Local Interest,
+    LD - Local Disinterest, DI - Decapsulation Interface
+    EI - Encapsulation Interface, MI - MDT Interface, LVIF - MPLS Encap,
+    EX - Extranet, A2 - Secondary Accept, MT - MDT Threshold Crossed,
+    MA - Data MDT Assigned, LMI - mLDP MDT Interface, TMI - P2MP-TE MDT Interface
+    IRMI - IR MDT Interface, TRMI - TREE SID MDT Interface, MH - Multihome Interface
+
+(*,239.1.1.2) RPF nbr: 10.0.2.11 Flags: C RPF
+  Up: 00:00:38
+  Incoming Interface List
+    GigabitEthernet0/0/0/1 Flags: A, Up: 00:00:38
+  Outgoing Interface List
+    GigabitEthernet0/0/0/2 Flags: F NS, Up: 00:00:36
+    GigabitEthernet0/0/0/3 Flags: F NS LI, Up: 00:00:38
+RP/0/RP0/CPU0:PE2#
+show pim topology 239.1.1.2
+Wed Nov 18 10:03:03.389 UTC
+
+IP PIM Multicast Topology Table
+Entry state: (*/S,G)[RPT/SPT] Protocol Uptime Info
+Entry flags: KAT - Keep Alive Timer, AA - Assume Alive, PA - Probe Alive
+    RA - Really Alive, IA - Inherit Alive, LH - Last Hop
+    DSS - Don't Signal Sources,  RR - Register Received
+    SR - Sending Registers, SNR - Sending Null Registers
+    E - MSDP External, EX - Extranet
+    MFA - Mofrr Active, MFP - Mofrr Primary, MFB - Mofrr Backup
+    DCC - Don't Check Connected, ME - MDT Encap, MD - MDT Decap
+    MT - Crossed Data MDT threshold, MA - Data MDT Assigned
+    SAJ - BGP Source Active Joined, SAR - BGP Source Active Received,
+    SAS - BGP Source Active Sent, IM - Inband mLDP, X - VxLAN
+Interface state: Name, Uptime, Fwd, Info
+Interface flags: LI - Local Interest, LD - Local Dissinterest,
+    II - Internal Interest, ID - Internal Dissinterest,
+    LH - Last Hop, AS - Assert, AB - Admin Boundary, EX - Extranet,
+    BGP - BGP C-Multicast Join, BP - BGP Source Active Prune,
+    MVS - MVPN Safi Learned, MV6S - MVPN IPv6 Safi Learned
+
+(*,239.1.1.2) SM Up: 00:00:40 RP: 10.255.0.11* 
+JP: Join(never) RPF: Decapstunnel1,10.255.0.11 Flags: 
+  GigabitEthernet0/0/0/1      00:00:40  fwd Join(00:02:49) 
+
+(192.168.1.1,239.1.1.2)SPT SM Up: 00:00:21 
+JP: Join(00:00:28) RPF: GigabitEthernet0/0/0/0,10.0.1.1 Flags: KAT(00:03:10) RA RR (00:04:15) 
+  No interfaces in immediate olist
+RP/0/RP0/CPU0:P1#
+show mfib route 239.1.1.2 detail
+Wed Nov 18 10:03:03.809 UTC
+
+IP Multicast Forwarding Information Base
+Entry flags: C - Directly-Connected Check, S - Signal, D - Drop,
+  IA - Inherit Accept, IF - Inherit From, EID - Encap ID,
+  ME - MDT Encap, MD - MDT Decap, MT - MDT Threshold Crossed,
+  MH - MDT interface handle, CD - Conditional Decap,
+  DT - MDT Decap True, EX - Extranet, RPFID - RPF ID Set,
+  MoFE - MoFRR Enabled, MoFS - MoFRR State, X - VXLAN
+Interface flags: F - Forward, A - Accept, IC - Internal Copy,
+  NS - Negate Signal, DP - Don't Preserve, SP - Signal Present,
+  EG - Egress, EI - Encapsulation Interface, MI - MDT Interface,
+  EX - Extranet, A2 - Secondary Accept
+Forwarding/Replication Counts: Packets in/Packets out/Bytes out
+Failure Counts: RPF / TTL / Empty Olist / Encap RL / Other
+
+(*,239.1.1.2),  Flags:  C , FMA: 0x10000 ,
+  Object-ID: 0xfffffffffffffffe 18446744073709551614
+  Up: 00:00:41
+  Last Used: never
+  SW Forwarding Counts: 0/0/0
+  SW Replication Counts: 0/0/0
+  SW Failure Counts: 0/0/0/0/0
+  GID ENTRY: NA 
+  Route ver: 0xb873
+  MVPN Info :- 
+    MDT Handle: 0x0, MDT Probe:N [N], Rate:N, Acc:N
+    MDT SW Ingress Encap V4/V6, Egress decap: 0 / 0, 0
+    EG count: 1
+    Encap ID: 0, RPF ID: 0
+    Local Receiver: True, Turnaround: False
+  Decapstunnel1 Flags:  A, Up:00:00:41 [Object-ID: 0xfffffffffffffffe 18446744073709551614] 
+  GigabitEthernet0/0/0/1 Flags:  NS EG, Up:00:00:41 [Object-ID: 0xfffffffffffffffe 18446744073709551614] 
+
+(192.168.1.1,239.1.1.2),  Flags:  , FMA: 0x10000 ,
+  Object-ID: 0xfffffffffffffffe 18446744073709551614
+  Up: 00:00:21
+  Last Used: 00:00:05
+  SW Forwarding Counts: 13/12/1200
+  SW Replication Counts: 13/12/1200
+  SW Failure Counts: 0/0/0/0/0
+  GID ENTRY: NA 
+  Route ver: 0x9b63
+  MVPN Info :- 
+    MDT Handle: 0x0, MDT Probe:N [N], Rate:N, Acc:N
+    MDT SW Ingress Encap V4/V6, Egress decap: 0 / 0, 0
+    EG count: 1
+    Encap ID: 0, RPF ID: 0
+    Local Receiver: True, Turnaround: False
+  GigabitEthernet0/0/0/0 Flags:  A, Up:00:00:21 [Object-ID: 0xfffffffffffffffe 18446744073709551614] 
+  GigabitEthernet0/0/0/1 Flags:  NS EG, Up:00:00:21 [Object-ID: 0xfffffffffffffffe 18446744073709551614] 
+RP/0/RP0/CPU0:P1#
+show ip mroute 239.1.1.2
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.1.1.2), 00:00:39/00:02:30, RP 10.255.0.11, flags: SC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.4.2
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse, 00:00:39/00:02:30, flags: 
+
+PE4#
+
+######## 10:03:05 spt2: 片付け(PE2 と PE4 の spt-threshold を外す)
+configure
+Wed Nov 18 10:03:06.878 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router pim
+RP/0/RP0/CPU0:PE2(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+no spt-threshold infinity
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+commit
+Wed Nov 18 10:03:08.627 UTC
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+show configuration failed
+Wed Nov 18 10:03:09.053 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-pim-default-ipv4)#
+end
+RP/0/RP0/CPU0:PE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+PE4(config)#
+no ip pim spt-threshold infinity
+PE4(config)#
+end
+PE4#

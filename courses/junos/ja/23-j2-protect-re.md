@@ -1,4 +1,4 @@
-# J2 — RE を守る: lo0 のフィルタ
+# J2 — RE を守る: lo0 フィルタ
 
 ## 1. RE を守ると何が嬉しいか
 
@@ -6,7 +6,7 @@
 
 ルータの中で BGP・OSPF・SSH を動かしているのは RE(Routing Engine)です。経路を計算し、設定を受け付ける、ルータの頭脳です。
 初めの盤面の JUN02 は、この RE への通信を誰からでも受け付けています。NET1 から JUN02 の SSH にもつながりますし、
-BGP の相手でもない SRV1 から、JUN02 の 179 番(BGP)にも TCP でつながります。
+BGP ピアでもない SRV1 から、JUN02 の 179 番(BGP)にも TCP でつながります。
 
 ```console
 srv1:/# probe 192.168.0.2 179
@@ -21,7 +21,7 @@ RE は、パケットを高速に中継する部分(PFE)より、ずっと少な
 IOS では、SSH の入口は vty の `access-class` で、そのほかの RE 行きの通信は CoPP(control-plane に当てる policy-map)で絞ります。
 道具が 2 つに分かれ、CoPP は量の制限が中心です。
 
-IOS XR では、RE 行きの通信は LPTS が種類ごとに量を制限し、管理の入口は MPP(管理プレーンの保護)で絞ります
+IOS XR では、RE 行きの通信は LPTS が種類ごとに量を制限し、管理の入口は MPP(管理プレーン保護)で絞ります
 (IOS XR トラックの M2)。こちらも、仕組みが目的ごとに分かれています。
 
 ### 1.3 Junos の答え
@@ -34,21 +34,21 @@ RE が受け取ってよい通信を 1 つのフィルタに書き並べ、残�
 
 ### 2.1 RE 行きのパケットが通る順
 
-JUN01 の lo0 に、フィルタ RE-GUARD を当てた例です。SRV1 のサーバの網(172.16.20.1)から JUN01 の SSH へ来たパケットを追います。
-図の番号にカーソルを置く(スマホは押す)と、その塊の設定が小窓に出て、下の設定例の行に色が付きます。
+JUN01 の lo0 に、フィルタ RE-GUARD を当てた例です。SRV1 のサーバのネットワーク(172.16.20.1)から JUN01 の SSH へ来たパケットを追います。
+図の番号にカーソルを置く(スマホは押す)と、そのブロックの設定が小窓に出て、下の設定例の行に色が付きます。
 
 :::walk
-legend: 線の上は IP のパケット。RE 行きのパケットは、入ってきたインターフェースの入力フィルタを通った後、lo0 の入力フィルタを通る。
+legend: 線の上は IP パケット。RE 行きのパケットは、入ってきたインターフェースの入力フィルタを通った後、lo0 の入力フィルタを通る。
 rows:
   - {node: SRV1, say: ["~172.16.20.1 から JUN01 の lo0(192.168.0.1)の SSH へ TCP の SYN を送る"]}
   - {wire: "[[TCP 172.16.20.1 → 192.168.0.1:22]] _SYN"}
   - panel: JUN01
     sub: RE の手前
     items:
-      - {head: "**et-0/0/1 の入力** この例ではフィルタなし", say: ["インターフェースのフィルタがあれば、中継でも RE 行きでも先にここで判断される"]}
+      - {head: "**et-0/0/1 の入力** この例ではフィルタなし", say: ["インターフェース フィルタがあれば、中継でも RE 行きでも先にここで判断される"]}
       - ref: 1
         head: "**lo0 の入力** `filter input RE-GUARD`"
-        say: ["経路表を引いた結果、宛先は自分(192.168.0.1)。RE へ渡す前に RE-GUARD を通す"]
+        say: ["ルーティング テーブルを引いた結果、宛先は自分(192.168.0.1)。RE へ渡す前に RE-GUARD を通す"]
       - ref: 2
         head: "**RE-GUARD** term を上から"
         match:
@@ -60,17 +60,17 @@ rows:
           - ["term LAST  (from なし)", true, "当たる → `count RE-GUARD-DROP`・`discard`"]
       - {say: ["~RE には届かず、SRV1 には何も返らない(timeout)"]}
   - {aside: "送信元が 172.16.10.10 なら", say: ["②の SSH に当たる → `accept` → RE の SSH が受け付ける"]}
-  - {aside: "JUN01 を通り抜けるパケットは", say: ["~NET1 から 172.16.20.1 へのパケットなどは宛先が自分ではないので、lo0 のフィルタを通らない"]}
+  - {aside: "JUN01 を通り抜けるパケットは", say: ["~NET1 から 172.16.20.1 へのパケットなどは宛先が自分ではないので、lo0 フィルタを通らない"]}
 :::
 
-:::config JUN01 — RE が受け取る通信を絞る(lo0 のフィルタ)
+:::config JUN01 — RE が受け取る通信を絞る(lo0 フィルタ)
 set system ntp server 192.168.0.2                                                         ## 時刻を合わせる相手(NTP のクライアントとして)
 set policy-options prefix-list NTP-SERVERS apply-path "system ntp server <*>"             ## ② NTP の相手のアドレスを設定から拾う
 set firewall family inet filter RE-GUARD term OSPF from protocol ospf                     ## ② OSPF の隣接
 set firewall family inet filter RE-GUARD term OSPF then accept                            ## ② 
 set firewall family inet filter RE-GUARD term ICMP from protocol icmp                     ## ② ping・traceroute
 set firewall family inet filter RE-GUARD term ICMP then accept                            ## ② 
-set firewall family inet filter RE-GUARD term SSH from source-address 172.16.10.0/24      ## ② サーバの網の 172.16.10.0/24 からの
+set firewall family inet filter RE-GUARD term SSH from source-address 172.16.10.0/24      ## ② サーバのネットワークの 172.16.10.0/24 からの
 set firewall family inet filter RE-GUARD term SSH from protocol tcp                       ## ② SSH だけ
 set firewall family inet filter RE-GUARD term SSH from destination-port ssh               ## ② 
 set firewall family inet filter RE-GUARD term SSH then accept                             ## ② 
@@ -105,26 +105,26 @@ RE-GUARD-DROP                                                                   
 ```
 
 1 本目は、172.16.10.1(et-0/0/1 のアドレス)へ送っています。宛先がどのインターフェースのアドレスでも、自分宛てなら
-lo0 のフィルタを通ります。
+lo0 フィルタを通ります。
 
 ### 2.2 RE が受け取る通信を数え上げる
 
-lo0 のフィルタは「要るものを並べ、残りを捨てる」形にするので、RE が受け取っている通信を漏れなく数え上げるのが仕事の中心です。
+lo0 フィルタは「要るものを並べ、残りを捨てる」形にするので、RE が受け取っている通信を漏れなく数え上げるのが仕事の中心です。
 
 | 種類 | 例 | term の書き方の例 |
 |---|---|---|
 | ルーティング プロトコル | OSPF の hello と LSA | `protocol ospf` |
 | | BGP | `protocol tcp`・`port bgp`。相手のアドレスで絞る |
-| 管理 | SSH | `protocol tcp`・`destination-port ssh`。管理する網で絞る |
+| 管理 | SSH | `protocol tcp`・`destination-port ssh`。管理するネットワークで絞る |
 | 診断 | ping・traceroute の応答 | `protocol icmp` |
 | RE がクライアントになる通信の応答 | NTP・DNS・syslog の相手からの応答 | `protocol udp`・`port ntp` など。相手で絞る |
 | RE が始めた TCP の戻り | ルータから他の機器への SSH・ファイルの転送 | `protocol tcp`・`tcp-established` |
 
-数え漏れたプロトコルは、すぐには壊れません。OSPF は隣からの hello が届かなくなっても、dead interval(既定 40 秒)の間は
+数え漏れたプロトコルは、すぐには壊れません。OSPF はネイバーからの hello が届かなくなっても、dead interval(既定 40 秒)の間は
 隣接を保ちます。BGP は hold time(この盤面では 90 秒)の間はセッションを保ちます。commit の直後には何も起きず、
 しばらくして壊れるので、原因に気づきにくいのです。
 
-JUN02 の lo0 のフィルタから OSPF の term を外して 45 秒待ったときの結果の例です。JUN02 は隣を失い、JUN01 は JUN02 の hello を
+JUN02 の lo0 フィルタから OSPF の term を外して 45 秒待ったときの結果の例です。JUN02 はネイバーを失い、JUN01 は JUN02 の hello を
 受け取れても自分の hello が届かないので、`Init` のまま止まります。
 
 ```console
@@ -140,10 +140,10 @@ OSPF の隣接が保たれているかは、`show ospf neighbor` の `Dead` の�
 
 ### 2.3 apply-path: 相手のアドレスを設定から拾う
 
-BGP の相手や NTP の相手で絞るとき、アドレスをフィルタに直に書くと、相手を足すたびにフィルタも直すことになります。
+BGP ピアや NTP の相手で絞るとき、アドレスをフィルタに直に書くと、相手を足すたびにフィルタも直すことになります。
 直し忘れると、新しい相手とはつながりません。
 
-`apply-path` を使うと、prefix-list の中身を設定の中から拾えます。設定の階層の道筋を書き、変わる部分を `<*>` にします。
+`apply-path` を使うと、prefix-list の中身を設定の中から拾えます。設定の階層のパスを書き、変わる部分を `<*>` にします。
 `system ntp server <*>` なら、NTP の相手として書いたアドレスがすべて並びに入ります。何が入ったかは `display inheritance` で見ます。
 
 ```console
@@ -155,20 +155,20 @@ admin@jun01> show configuration policy-options prefix-list NTP-SERVERS | display
 apply-path "system ntp server <*>";
 ```
 
-BGP の neighbor のアドレスも、`protocols bgp` の下の階層を道筋に書けば同じように拾えます。group が増えても neighbor が増えても、
+BGP の neighbor のアドレスも、`protocols bgp` の下の階層をパスに書けば同じように拾えます。group が増えても neighbor が増えても、
 フィルタを書き直す必要がありません。
 
 ### 2.4 自分が始めた通信の戻り
 
-lo0 のフィルタは、RE が受け取るものすべてを見ます。RE 自身が外へ始めた通信の戻りも、その中に入ります。
+lo0 フィルタは、RE が受け取るものすべてを見ます。RE 自身が外へ始めた通信の戻りも、その中に入ります。
 TCP の戻りには ACK が立っているので、前のページの `tcp-established` の term で通せます。
 
 BGP は、相手からつないでくる時も、自分からつなぐ時も、片方のポートが 179 番です。`port bgp`(送信元か宛先のどちらかが 179 番)で
 書けば、どちら向きのセッションも通ります。`destination-port bgp` だけにすると、自分からつないだセッションの戻り
 (送信元が 179 番)は、この term に当たりません。
 
-JUN02 の lo0 のフィルタに戻りの term が無いとき、JUN02 から ISP の 8080 番へつないだ結果の例です。行きは出ていきますが、
-戻りの SYN と ACK が lo0 のフィルタで捨てられ、3 秒で時間切れになります(`rc=124` は時間切れの印)。
+JUN02 の lo0 フィルタに戻りの term が無いとき、JUN02 から ISP の 8080 番へつないだ結果の例です。行きは出ていきますが、
+戻りの SYN と ACK が lo0 フィルタで捨てられ、3 秒でタイムアウトになります(`rc=124` はタイムアウトの印)。
 
 ```console
 admin@jun02> start shell command "timeout 3 bash -c 'exec 3<>/dev/tcp/10.0.23.2/8080 && head -c 2 <&3'; echo rc=$?"
@@ -177,10 +177,10 @@ rc=124
 
 ### 2.5 管理ポートは別(Junos OS Evolved)
 
-このルータ(Junos OS Evolved)では、lo0 のフィルタは**管理ポートの通信には効きません**。管理ポート `re0:mgmt-0` は、
-経路表 `mgmt_junos` を使う別の口として扱われます。管理ポートの通信を絞るときは、`re0:mgmt-0` の論理ユニットに別のフィルタを当てます。
+このルータ(Junos OS Evolved)では、lo0 フィルタは**管理ポートの通信には効きません**。管理ポート `re0:mgmt-0` は、
+ルーティング テーブル `mgmt_junos` を使う別のインターフェースとして扱われます。管理ポートの通信を絞るときは、`re0:mgmt-0` の論理ユニットに別のフィルタを当てます。
 
-この盤面のコンソールは、管理ポートへの SSH で開いています。RE-GUARD には管理の網の term が無いのに、RE-GUARD を当てた後も、
+この盤面のコンソールは、管理ポートへの SSH で開いています。RE-GUARD には管理ネットワークの term が無いのに、RE-GUARD を当てた後も、
 新しいコンソールを開くことができました。
 
 ```console
@@ -191,8 +191,8 @@ admin    pts/0    172.20.20.1                      05:35   4.00s -cli
 admin    pts/1    172.20.20.1                      05:36   0.00s -cli
 ```
 
-Junos OS(Evolved でない方)では、lo0 のフィルタは管理ポートの通信にも効きます。管理の網の term を書き忘れると、
-自分のログインも締め出されます。そういう機器で lo0 のフィルタを試すときは、J0 の `commit confirmed` を使います。
+Junos OS(Evolved でない方)では、lo0 フィルタは管理ポートの通信にも効きます。管理ネットワークの term を書き忘れると、
+自分のログインも締め出されます。そういう機器で lo0 フィルタを試すときは、J0 の `commit confirmed` を使います。
 
 ### 2.6 確かめ方
 
@@ -220,10 +220,10 @@ Address          Interface              State           ID               Pri  De
 
 | IOS では | IOS XR では | Junos では |
 |---|---|---|
-| `line vty 0 4` の `access-class 名前 in` | MPP(`control-plane management-plane`)で SSH の入口を絞る | lo0 のフィルタの SSH の term |
-| CoPP(`control-plane` に `service-policy input`) | LPTS(種類ごとに自動で量を制限) | lo0 のフィルタ(量の制限は policer。4 ページ目) |
+| `line vty 0 4` の `access-class 名前 in` | MPP(`control-plane management-plane`)で SSH の入口を絞る | lo0 フィルタの SSH の term |
+| CoPP(`control-plane` に `service-policy input`) | LPTS(種類ごとに自動で量を制限) | lo0 フィルタ(量の制限は policer。4 ページ目) |
 | 相手ごとの ACL を手で直す | prefix-set を手で直す | `apply-path` で設定から拾う |
-| 管理インターフェースも同じ制御の対象 | MPP で管理の口を決める | Junos OS Evolved は管理ポートが別(`re0:mgmt-0` に別のフィルタ) |
+| 管理インターフェースも同じ制御の対象 | MPP で管理用のインターフェースを決める | Junos OS Evolved は管理ポートが別(`re0:mgmt-0` に別のフィルタ) |
 
 ## 実践
 

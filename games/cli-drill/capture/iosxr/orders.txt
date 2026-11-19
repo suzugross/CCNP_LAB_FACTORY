@@ -1,0 +1,61 @@
+# 並びと消し方の表示(コミットして見る。最後に CHG2001 の後へ戻す)
+terminal length 0
+terminal width 250
+configure
+interface Loopback20
+description DRILL
+ipv4 address 10.20.20.20 255.255.255.255
+ipv6 address 2001:db8:20::20/128
+exit
+interface Loopback3
+ipv4 address 10.3.3.3 255.255.255.255
+exit
+vrf CUST-B
+address-family ipv4 unicast
+root
+vrf AAA
+root
+interface Loopback30
+vrf CUST-B
+ipv4 address 10.30.30.30 255.255.255.255
+root
+router static
+address-family ipv4 unicast
+0.0.0.0/0 10.0.12.2
+192.0.2.0/24 Null0
+root
+router ospf 1
+area 0
+interface Loopback20
+passive enable
+cost 7
+hello-interval 5
+dead-interval 20
+network point-to-point
+root
+show configuration
+commit label DRILL-ORDER comment order check
+show running-config
+show running-config interface
+show running-config router static
+show running-config vrf
+show running-config router ospf 1 area 0 interface Loopback20
+# 消し方の表示
+interface Loopback20
+no description
+no ipv6 address 2001:db8:20::20/128
+shutdown
+root
+no router ospf 1 area 0 interface Loopback20 cost
+router ospf 1 area 0 interface Loopback20 no passive
+show configuration
+show commit changes diff
+commit
+show configuration commit changes last 1
+show configuration rollback changes last 1
+show running-config interface Loopback20
+show running-config router ospf 1 area 0 interface Loopback20
+commit
+end
+rollback configuration to-exclude CHG2001
+show configuration commit list

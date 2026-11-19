@@ -1,0 +1,881 @@
+# XRT-16 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn XRT-16 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# verify= 確かめ方の例(BL-266)。いつでも開け、記録しない。結果を観る手順(入ったか → 流して数える → 届いた先 → 壊していないか)までで、
+# 落とし穴の名前や直し方は書かない(それはヒントと模範解の役目)。出力の例は実機の記録(poc/xr/expXRT16-*.log・expMCAST-*.log)から。
+# ここに書いた挙動は IOS XRd 26.1.1(+IOL 17.15)の実機で確認した(設計= problems/_drafts/XR-TRACK.design.md §31)。
+# 模範解の「On PE1, PE2, P1 and PE3:」「On PE4:」の見出し= 機器ごとの塊(poc/xr/verbatim.py が見出しの機器へ同じ塊を送る)。
+# 読み物(BL-252)= Reading タブに出す本(reading/<key>/)。各課題の read: はその本の「ページ#節」(節= data-sec)。
+reading: xr
+steps:
+  - id: m14t1
+    title: { en: "M14-1  PIM sparse mode with a static RP", ja: "M14-1  PIM スパース モードとスタティック RP" }
+    check: m14t1
+    read: [f0-m14-igmp-pim-sm#s2-2, f0-m14-igmp-pim-sm#s2-4, f0-m14-igmp-pim-sm#s2-5, f0-m14-igmp-pim-sm#s3-1, f0-m14-igmp-pim-sm#s3-2, f0-m14-igmp-pim-sm#s3-5]
+    hints:
+      - en: "Three things on every router: multicast routing on the interfaces, the address of the RP, and an access list that limits that RP to 239.0.0.0/8. On IOS XR the interfaces are turned on in one place, the `multicast-routing` configuration; `router pim` on its own turns nothing on. IOS XE turns PIM on per interface."
+        ja: "どのルータにも 3 つ要ります。インタフェースのマルチキャスト ルーティング、RP のアドレス、その RP を 239.0.0.0/8 に限るアクセス リストです。IOS XR では、インタフェースを有効にする場所は `multicast-routing` の設定の 1 か所です。`router pim` だけでは何も有効になりません。IOS XE はインタフェースごとに PIM を有効にします。"
+      - en: "`show pim interface`, `show pim neighbor`, `show pim group-map`, `show igmp groups`, `show pim topology <group>`. On PE4: `show ip pim interface`, `show ip pim rp mapping`, `show ip mroute <group>`. Guide: Multicast Configuration Guide for Cisco 8000 Series Routers, 'Implementing Layer-3 Multicast Routing' (enabling multicast routing, static RP)."
+        ja: "`show pim interface`・`show pim neighbor`・`show pim group-map`・`show igmp groups`・`show pim topology <グループ>`。PE4 で `show ip pim interface`・`show ip pim rp mapping`・`show ip mroute <グループ>`。ガイド: Multicast Configuration Guide for Cisco 8000 Series Routers の「Implementing Layer-3 Multicast Routing」(マルチキャスト ルーティングの有効化・スタティック RP)。"
+      - en: "On the XR routers: `ipv4 access-list <name>` with `permit ipv4 239.0.0.0 0.255.255.255 any`; `multicast-routing` → `address-family ipv4` → `interface all enable`; `router pim` → `address-family ipv4` → `rp-address 10.255.0.11 <name>`. On PE4: `ip multicast-routing`, `ip pim sparse-mode` on Ethernet0/0 and Ethernet0/1, `access-list <n> permit 239.0.0.0 0.255.255.255` and `ip pim rp-address 10.255.0.11 <n>`."
+        ja: "XR では、`permit ipv4 239.0.0.0 0.255.255.255 any` の `ipv4 access-list <名前>`、`multicast-routing` → `address-family ipv4` → `interface all enable`、`router pim` → `address-family ipv4` → `rp-address 10.255.0.11 <名前>`。PE4 では `ip multicast-routing`、Ethernet0/0 と Ethernet0/1 に `ip pim sparse-mode`、`access-list <番号> permit 239.0.0.0 0.255.255.255` と `ip pim rp-address 10.255.0.11 <番号>`。"
+    verify:
+      en: |
+        **1. Is it in?** (each XR router, then PE4)
+
+        - `show pim interface` lists every interface, Loopback0 included, with PIM `on`, and `show pim neighbor` shows the
+          router at the other end of each core link (the lines marked `*` are the router itself).
+        - `show pim group-map` should have a line `239.0.0.0/8*  SM  config … 10.255.0.11` whose RPF points toward P1
+          (on P1 itself: `Decapstunnel0`).
+        - On PE4: `show ip pim interface` lists Ethernet0/0 and Ethernet0/1 as `v2/S`, and `show ip pim rp mapping` shows
+          the access list and 10.255.0.11.
+
+        **2. Send and count** (RCV2 and RCV3, then SRC1)
+
+        - Join a group on the receivers: `interface Ethernet0/0` → `ip igmp join-group 239.16.1.1`.
+        - On SRC1: `ping 239.16.1.1 repeat 10 timeout 1`. Each `Reply to request n from 192.168.2.1` is one packet that RCV2
+          received; the same for 192.168.3.1 and RCV3. While the tree is being built the first one or two may be missing:
+          send again and count the second run.
+
+        **3. Look where it arrives** (PE2, PE4, P1)
+
+        - PE2: `show igmp groups 239.16.1.1` shows RCV2's report. `show pim topology 239.16.1.1` shows a (*,G) entry toward
+          the RP and, once packets have flowed, an (S,G) entry for 192.168.1.1.
+        - PE4: `show ip mroute 239.16.1.1`. P1: `show pim topology 239.16.1.1` (the RP saw the source through a Register).
+
+        Example (PE2 after ten packets; excerpt):
+
+        ```
+        (*,239.16.170.49) SM Up: 00:00:36 RP: 10.255.0.11
+        JP: Join(00:00:13) RPF: GigabitEthernet0/0/0/1,10.0.2.11 Flags: LH
+          GigabitEthernet0/0/0/2      00:00:34  fwd Join(00:02:55)
+          GigabitEthernet0/0/0/3      00:00:36  fwd LI LH
+
+        (192.168.1.1,239.16.170.49)SPT SM Up: 00:00:19
+        JP: Join(00:00:30) RPF: GigabitEthernet0/0/0/0,10.0.12.1 Flags: KAT(00:03:17) RA
+          GigabitEthernet0/0/0/2      00:00:19  fwd Join(00:03:10)
+        ```
+
+        **4. Did anything else break?** (RCV3, PE4, PE2)
+
+        - Join RCV3 to a group outside 239.0.0.0/8, such as 225.1.1.1. `show ip mroute 225.1.1.1` on PE4 should show
+          `RP 0.0.0.0`, and the line marked `*` in `show pim group-map 225.1.1.1` on PE2 should have the RP address 0.0.0.0.
+        - Remove your joins when you are done (`no ip igmp join-group …`).
+      ja: |
+        **1. 入ったか**(XR の各ルータ、次に PE4)
+
+        - `show pim interface` に、Loopback0 を含むすべてのインタフェースが PIM `on` で並び、`show pim neighbor` に各コアの
+          リンクの相手が載ること(`*` の付いた行は自分自身です)。
+        - `show pim group-map` に `239.0.0.0/8*  SM  config … 10.255.0.11` の行があり、その RPF が P1 の方を向くこと
+          (P1 自身では `Decapstunnel0`)。
+        - PE4 で `show ip pim interface` に Ethernet0/0 と Ethernet0/1 が `v2/S` で並び、`show ip pim rp mapping` に
+          アクセス リストと 10.255.0.11 が出ること。
+
+        **2. 送って数える**(RCV2 と RCV3、次に SRC1)
+
+        - 受信者でグループに参加します。`interface Ethernet0/0` → `ip igmp join-group 239.16.1.1`。
+        - SRC1 で `ping 239.16.1.1 repeat 10 timeout 1`。`Reply to request n from 192.168.2.1` の 1 行が、RCV2 が受けた
+          1 発です。192.168.3.1 と RCV3 も同じです。ツリーを作っている間は最初の 1〜2 発が欠けることがあります。もう一度送り、
+          2 回目を数えてください。
+
+        **3. 届いた先を見る**(PE2・PE4・P1)
+
+        - PE2 の `show igmp groups 239.16.1.1` に RCV2 の報告が出ます。`show pim topology 239.16.1.1` には、RP へ向かう
+          (*,G) のエントリと、パケットが流れた後は 192.168.1.1 の (S,G) のエントリが出ます。
+        - PE4 で `show ip mroute 239.16.1.1`。P1 で `show pim topology 239.16.1.1`(RP は Register で送信元を知りました)。
+
+        例(10 発を送った後の PE2。抜粋):
+
+        ```
+        (*,239.16.170.49) SM Up: 00:00:36 RP: 10.255.0.11
+        JP: Join(00:00:13) RPF: GigabitEthernet0/0/0/1,10.0.2.11 Flags: LH
+          GigabitEthernet0/0/0/2      00:00:34  fwd Join(00:02:55)
+          GigabitEthernet0/0/0/3      00:00:36  fwd LI LH
+
+        (192.168.1.1,239.16.170.49)SPT SM Up: 00:00:19
+        JP: Join(00:00:30) RPF: GigabitEthernet0/0/0/0,10.0.12.1 Flags: KAT(00:03:17) RA
+          GigabitEthernet0/0/0/2      00:00:19  fwd Join(00:03:10)
+        ```
+
+        **4. 壊していないか**(RCV3・PE4・PE2)
+
+        - RCV3 を 239.0.0.0/8 の外のグループ(たとえば 225.1.1.1)に参加させます。PE4 の `show ip mroute 225.1.1.1` が
+          `RP 0.0.0.0` になり、PE2 の `show pim group-map 225.1.1.1` の `*` の付いた行の RP のアドレスが 0.0.0.0 になること。
+        - 終わったら参加を削除します(`no ip igmp join-group …`)。
+    solution:
+      en: |
+        On PE1, PE2, P1 and PE3:
+        configure
+         ipv4 access-list RP-P1-GROUPS
+          10 permit ipv4 239.0.0.0 0.255.255.255 any
+         !
+         multicast-routing
+          address-family ipv4
+           interface all enable
+          !
+         !
+         router pim
+          address-family ipv4
+           rp-address 10.255.0.11 RP-P1-GROUPS
+         commit
+        end
+        On PE4:
+        configure terminal
+         ip multicast-routing
+         access-list 10 permit 239.0.0.0 0.255.255.255
+         interface Ethernet0/0
+          ip pim sparse-mode
+         interface Ethernet0/1
+          ip pim sparse-mode
+         exit
+         ip pim rp-address 10.255.0.11 10
+        end
+        On IOS XR, `interface all enable` under `multicast-routing` turns on PIM and IGMP (version 3) on every interface,
+        Loopback0 included. `router pim` holds the PIM settings but enables no interface. The access list in `rp-address`
+        lists the groups that the RP serves: the group goes in the source field, as in `permit ipv4 239.0.0.0 0.255.255.255
+        any`. Every router needs the same mapping, because a last-hop router sends its (*,G) Join toward the RP it knows, and
+        a router that maps the group to another RP ignores that Join. With the access list, `show pim group-map` uses the
+        `224.0.0.0/4 … static … 0.0.0.0` line for any other group: no RP. On IOS XE, `ip pim sparse-mode` on an interface
+        turns on PIM and IGMP (version 2 by default) there.
+      ja: |
+        On PE1, PE2, P1 and PE3:
+        configure
+         ipv4 access-list RP-P1-GROUPS
+          10 permit ipv4 239.0.0.0 0.255.255.255 any
+         !
+         multicast-routing
+          address-family ipv4
+           interface all enable
+          !
+         !
+         router pim
+          address-family ipv4
+           rp-address 10.255.0.11 RP-P1-GROUPS
+         commit
+        end
+        On PE4:
+        configure terminal
+         ip multicast-routing
+         access-list 10 permit 239.0.0.0 0.255.255.255
+         interface Ethernet0/0
+          ip pim sparse-mode
+         interface Ethernet0/1
+          ip pim sparse-mode
+         exit
+         ip pim rp-address 10.255.0.11 10
+        end
+        IOS XR では、`multicast-routing` の下の `interface all enable` が、Loopback0 を含むすべてのインタフェースで PIM と
+        IGMP(バージョン 3)を有効にします。`router pim` は PIM の設定を持ちますが、インタフェースは有効にしません。
+        `rp-address` のアクセス リストは、その RP が受け持つグループの一覧です。グループは送信元の欄に書きます
+        (`permit ipv4 239.0.0.0 0.255.255.255 any`)。対応はすべてのルータで同じにする必要があります。最終ホップのルータは、
+        自分が知っている RP へ向けて (*,G) の Join を送り、別の RP に対応付けているルータはその Join を無視するからです。
+        アクセス リストを付けると、ほかのグループには `show pim group-map` の `224.0.0.0/4 … static … 0.0.0.0` の行、
+        つまり RP なしが使われます。IOS XE では、インタフェースの `ip pim sparse-mode` が、そこで PIM と IGMP
+        (既定はバージョン 2)を有効にします。
+  - id: m14t2
+    title: { en: "M14-2  Keep the ultra-HD channels on the shared tree", ja: "M14-2  超高精細のチャネルを共有ツリーに留める" }
+    check: m14t2
+    read: [f0-m14-igmp-pim-sm#s2-6, f0-m14-igmp-pim-sm#s3-4, f0-m14-igmp-pim-sm#s3-5]
+    hints:
+      - en: "The router that switches to the shortest-path tree is the last-hop router: it learns the source from the first packets on the shared tree and then sends an (S,G) Join toward the source. The setting that stops it can be limited to a list of groups. Count the last-hop routers for RCV2 and RCV3, and think about what a downstream router's (S,G) Join does to the router above it."
+        ja: "最短パス ツリーへ切り替えるのは最終ホップのルータです。共有ツリーで届いた最初のパケットから送信元を知り、送信元へ向けて (S,G) の Join を送ります。それを止める設定は、グループの一覧に限ることができます。RCV2 と RCV3 の最終ホップのルータがどれかを数え、下流のルータの (S,G) の Join が上のルータに何をさせるかを考えてください。"
+      - en: "`show pim topology <group>` (the `DSS` flag and whether an (S,G) entry exists), `show mrib route <group>`, `show mfib route <group> detail` on P1 (the SW Forwarding Counts of the (S,G) entry). On PE4: `show ip mroute <group>` (the `T` and `J` flags). Guide: Multicast Configuration Guide for Cisco 8000 Series Routers, the `spt-threshold infinity` command in the Multicast Command Reference."
+        ja: "`show pim topology <グループ>`(`DSS` の印と (S,G) のエントリの有無)・`show mrib route <グループ>`・P1 の `show mfib route <グループ> detail`((S,G) のエントリの SW Forwarding Counts)。PE4 で `show ip mroute <グループ>`(`T` と `J` の印)。ガイド: Multicast Configuration Guide for Cisco 8000 Series Routers と、Multicast Command Reference の `spt-threshold infinity` の項。"
+      - en: "An access list for 239.17.0.0/16, then `router pim` → `address-family ipv4` → `spt-threshold infinity group-list <name>` on the XR routers. PE2 alone is not enough: PE4 sits below PE2, and IOS XE switches by default. On PE4: `ip pim spt-threshold infinity group-list <acl>`."
+        ja: "239.17.0.0/16 のアクセス リストを作り、XR で `router pim` → `address-family ipv4` → `spt-threshold infinity group-list <名前>`。PE2 だけでは足りません。PE4 は PE2 の下にあり、IOS XE は既定で切り替えます。PE4 では `ip pim spt-threshold infinity group-list <ACL>`。"
+    verify:
+      en: |
+        **1. Is it in?** (each router)
+
+        - `show running-config router pim` on the XR routers, and `show running-config | include spt-threshold` on PE4.
+
+        **2. Send and count** (RCV2 and RCV3, then SRC1)
+
+        - Join both receivers to one ultra-HD group and one TV group, such as 239.17.1.1 and 239.16.2.2, and send ten pings
+          to each from SRC1 (send each twice: the first run builds the trees). Both receivers should answer every ping.
+
+        **3. Look where it arrives** (PE2, PE4, P1)
+
+        - PE2: `show pim topology 239.17.1.1` should show only the (*,G) entry, with the `DSS` flag (don't signal sources).
+          For 239.16.2.2 there is also an (S,G) entry for 192.168.1.1 whose RPF is GigabitEthernet0/0/0/0, the direct link
+          to PE1.
+        - PE4: `show ip mroute 239.17.1.1` should show only the (*,G) entry; with the default behaviour there is also an
+          (S,G) entry with the `J` and `T` flags.
+        - P1: `show mfib route 239.17.1.1 detail`: the (S,G) entry's `SW Forwarding Counts` keep growing as you send,
+          because the packets for PE2 still go through P1.
+
+        Example (PE2, ultra-HD and TV groups; excerpt):
+
+        ```
+        (*,239.17.57.226) SM Up: 00:00:49 RP: 10.255.0.11
+        JP: Join(now) RPF: GigabitEthernet0/0/0/1,10.0.2.11 Flags: LH DSS
+
+        (*,239.16.29.21) SM Up: 00:00:52 RP: 10.255.0.11
+        JP: Join(now) RPF: GigabitEthernet0/0/0/1,10.0.2.11 Flags: LH
+        (192.168.1.1,239.16.29.21)SPT SM Up: 00:00:32
+        JP: Join(00:00:17) RPF: GigabitEthernet0/0/0/0,10.0.12.1 Flags: KAT(00:03:00) RA
+        ```
+
+        **4. Did anything else break?**
+
+        - A channel in 239.16.0.0/16 still reaches both receivers, and a group outside 239.0.0.0/8 still has no RP (Task M14-1).
+      ja: |
+        **1. 入ったか**(各ルータ)
+
+        - XR で `show running-config router pim`、PE4 で `show running-config | include spt-threshold`。
+
+        **2. 送って数える**(RCV2 と RCV3、次に SRC1)
+
+        - 両方の受信者を、超高精細のグループとテレビのグループに 1 つずつ参加させます(たとえば 239.17.1.1 と 239.16.2.2)。
+          SRC1 からそれぞれへ 10 発ずつ送ります(それぞれ 2 回。1 回目はツリーを作ります)。どちらの受信者もすべての ping に
+          応答すること。
+
+        **3. 届いた先を見る**(PE2・PE4・P1)
+
+        - PE2 の `show pim topology 239.17.1.1` には (*,G) のエントリだけがあり、`DSS`(don't signal sources)の印が付くこと。
+          239.16.2.2 には、192.168.1.1 の (S,G) のエントリもあり、その RPF は PE1 への直結の GigabitEthernet0/0/0/0 であること。
+        - PE4 の `show ip mroute 239.17.1.1` には (*,G) のエントリだけがあること。既定の動作では、`J` と `T` の印の付いた
+          (S,G) のエントリもできます。
+        - P1 の `show mfib route 239.17.1.1 detail` で、(S,G) のエントリの `SW Forwarding Counts` が送るたびに増えること。
+          PE2 へのパケットが、まだ P1 を通っているからです。
+
+        例(PE2・超高精細とテレビのグループ。抜粋):
+
+        ```
+        (*,239.17.57.226) SM Up: 00:00:49 RP: 10.255.0.11
+        JP: Join(now) RPF: GigabitEthernet0/0/0/1,10.0.2.11 Flags: LH DSS
+
+        (*,239.16.29.21) SM Up: 00:00:52 RP: 10.255.0.11
+        JP: Join(now) RPF: GigabitEthernet0/0/0/1,10.0.2.11 Flags: LH
+        (192.168.1.1,239.16.29.21)SPT SM Up: 00:00:32
+        JP: Join(00:00:17) RPF: GigabitEthernet0/0/0/0,10.0.12.1 Flags: KAT(00:03:00) RA
+        ```
+
+        **4. 壊していないか**
+
+        - 239.16.0.0/16 のチャネルが引き続き両方の受信者に届き、239.0.0.0/8 の外のグループには引き続き RP が無いこと(課題 M14-1)。
+    solution:
+      en: |
+        On PE1, PE2, P1 and PE3:
+        configure
+         ipv4 access-list UHD-GROUPS
+          10 permit ipv4 239.17.0.0 0.0.255.255 any
+         !
+         router pim
+          address-family ipv4
+           spt-threshold infinity group-list UHD-GROUPS
+         commit
+        end
+        On PE4:
+        configure terminal
+         access-list 17 permit 239.17.0.0 0.0.255.255
+         ip pim spt-threshold infinity group-list 17
+        end
+        A last-hop router switches to the shortest-path tree as soon as the first packet arrives on the shared tree (the
+        default on both IOS XR and IOS XE). `spt-threshold infinity` stops that; with `group-list` it applies only to the
+        listed groups, so the TV range keeps switching. The setting acts where the switch is decided: on the last-hop
+        routers PE2 and PE4. PE2 alone is not enough. PE4 is a last-hop router below PE2, and its (S,G) Join makes PE2
+        build an (S,G) entry toward PE1 for PE4's interface, so the ultra-HD packets would cross the direct link again.
+        The other routers never act as last hop for these receivers, but the task asks for every router, and the same line
+        everywhere keeps the behaviour stable if a receiver moves.
+      ja: |
+        On PE1, PE2, P1 and PE3:
+        configure
+         ipv4 access-list UHD-GROUPS
+          10 permit ipv4 239.17.0.0 0.0.255.255 any
+         !
+         router pim
+          address-family ipv4
+           spt-threshold infinity group-list UHD-GROUPS
+         commit
+        end
+        On PE4:
+        configure terminal
+         access-list 17 permit 239.17.0.0 0.0.255.255
+         ip pim spt-threshold infinity group-list 17
+        end
+        最終ホップのルータは、共有ツリーで最初のパケットが届くとすぐに最短パス ツリーへ切り替えます(IOS XR も IOS XE も既定)。
+        `spt-threshold infinity` がそれを止めます。`group-list` を付けると一覧のグループだけに効くので、テレビの範囲は切り替わり
+        続けます。この設定が効くのは切り替えを決める場所、つまり最終ホップのルータ PE2 と PE4 です。PE2 だけでは足りません。
+        PE4 は PE2 の下にある最終ホップのルータで、PE4 の (S,G) の Join を受けた PE2 は、PE4 へのインタフェースのために PE1
+        へ向かう (S,G) のエントリを作ります。そのため、超高精細のパケットがまた直結のリンクを通ります。ほかのルータはこの受信者
+        たちの最終ホップにはなりませんが、課題はすべてのルータを求めています。どこでも同じ行にしておけば、受信者が移っても
+        動作が変わりません。
+  - id: m14t3
+    title: { en: "M14-3  Source-specific multicast in two ranges", ja: "M14-3  2 つの範囲の送信元特定マルチキャスト" }
+    check: m14t3
+    read: [f2-m14-ssm-bidir#s2-1, f2-m14-ssm-bidir#s2-2, f2-m14-ssm-bidir#s2-3, f2-m14-ssm-bidir#s3-1, f2-m14-ssm-bidir#s3-2]
+    hints:
+      - en: "SSM has no RP: the receiver names the source in an IGMPv3 report, and its router joins toward that source straight away. Every router must agree on which groups are SSM, because the first-hop router decides whether to register a source, and a last-hop router decides whether to send a (*,G) Join toward the RP. A custom SSM range replaces the default one. An IGMP report that names a source is version 3."
+        ja: "SSM には RP がありません。受信者は IGMPv3 の報告で送信元を指定し、そのルータはすぐに送信元へ向けて Join を送ります。どのグループが SSM かは、すべてのルータでそろえる必要があります。送信元を Register するかは最初のホップのルータが、RP へ (*,G) の Join を送るかは最終ホップのルータが決めるからです。独自の SSM の範囲は、既定の範囲を置き換えます。送信元を指定する IGMP の報告はバージョン 3 です。"
+      - en: "`show pim group-map` (the `SSM` lines), `show pim topology <group>` (`SPT SSM` on an SSM entry), `show igmp groups <group> detail`, `show igmp interface <interface>`. On PE4: `show ip igmp interface Ethernet0/1`, `show ip mroute <group>` (the `s` flag), `show ip igmp groups <group> detail`. Guide: Multicast Configuration Guide for Cisco 8000 Series Routers, the SSM sections, and the `ssm` command in the Multicast Command Reference."
+        ja: "`show pim group-map`(`SSM` の行)・`show pim topology <グループ>`(SSM のエントリには `SPT SSM`)・`show igmp groups <グループ> detail`・`show igmp interface <IF>`。PE4 で `show ip igmp interface Ethernet0/1`・`show ip mroute <グループ>`(`s` の印)・`show ip igmp groups <グループ> detail`。ガイド: Multicast Configuration Guide for Cisco 8000 Series Routers の SSM の節と、Multicast Command Reference の `ssm` の項。"
+      - en: "On the XR routers: an access list with both 232.0.0.0/8 and 239.232.0.0/16, then `router pim` → `address-family ipv4` → `ssm range <name>`. On PE4: a standard access list with both ranges, `ip pim ssm range <acl>`, and `ip igmp version 3` on Ethernet0/1 (IOS XE uses version 2 by default and ignores the version 3 reports)."
+        ja: "XR では、232.0.0.0/8 と 239.232.0.0/16 の両方を書いたアクセス リストを作り、`router pim` → `address-family ipv4` → `ssm range <名前>`。PE4 では、両方の範囲の標準アクセス リストと `ip pim ssm range <ACL>`、Ethernet0/1 に `ip igmp version 3`(IOS XE の既定はバージョン 2 で、バージョン 3 の報告を無視します)。"
+    verify:
+      en: |
+        **1. Is it in?** (each router)
+
+        - XR: `show pim group-map` should list `232.0.0.0/8*` and `239.232.0.0/16*` as `SSM`.
+        - PE4: `show ip igmp interface Ethernet0/1` should say `IGMP version is 3`.
+
+        **2. Send and count** (RCV2 and RCV3, then SRC1)
+
+        - On each receiver: `interface Ethernet0/0` → `ip igmp version 3` → `ip igmp join-group 239.232.1.1 source 192.168.1.1`
+          (and one in 232.0.0.0/8 the same way). Ping each group ten times from SRC1: both receivers answer.
+        - Then join a third group in 239.232.0.0/16 without `source` (and, to be sure, with `ip igmp version 2`). Pings to it
+          should get no answer.
+
+        **3. Look where it arrives** (PE2, PE4, P1)
+
+        - PE2: `show pim topology 239.232.1.1` shows one entry, `(192.168.1.1,239.232.1.1)SPT SSM`, and no (*,G) entry.
+        - PE4: `show ip mroute 239.232.1.1` shows the (S,G) entry with the `s` flag (SSM group).
+        - P1, the RP: `show pim topology 239.232.1.1` should find nothing. If it shows an entry for 192.168.1.1, a first-hop
+          router registered the source: it treats the group as sparse mode.
+
+        Example (PE2 and PE4; excerpt):
+
+        ```
+        (192.168.1.1,239.232.31.170)SPT SSM Up: 00:00:54
+
+        (192.168.1.1, 239.232.31.170), 00:00:51/00:02:25, flags: sTI
+        ```
+
+        **4. Did anything else break?**
+
+        - Channels in 239.16.0.0/16 and 239.17.0.0/16 still reach both receivers (Tasks M14-1 and M14-2).
+        - Put the receivers back when you are done: `no ip igmp join-group … source 192.168.1.1` and `no ip igmp version`.
+      ja: |
+        **1. 入ったか**(各ルータ)
+
+        - XR の `show pim group-map` に、`232.0.0.0/8*` と `239.232.0.0/16*` が `SSM` で並ぶこと。
+        - PE4 の `show ip igmp interface Ethernet0/1` が `IGMP version is 3` であること。
+
+        **2. 送って数える**(RCV2 と RCV3、次に SRC1)
+
+        - 各受信者で `interface Ethernet0/0` → `ip igmp version 3` → `ip igmp join-group 239.232.1.1 source 192.168.1.1`
+          (232.0.0.0/8 のグループにも同じように 1 つ)。SRC1 からそれぞれへ 10 発ずつ送ると、両方の受信者が応答すること。
+        - 次に、239.232.0.0/16 の 3 つ目のグループに `source` なしで参加します(念のため `ip igmp version 2` でも)。そこへの
+          ping には応答が無いこと。
+
+        **3. 届いた先を見る**(PE2・PE4・P1)
+
+        - PE2 の `show pim topology 239.232.1.1` には、`(192.168.1.1,239.232.1.1)SPT SSM` のエントリが 1 つだけあり、(*,G) の
+          エントリは無いこと。
+        - PE4 の `show ip mroute 239.232.1.1` の (S,G) のエントリに `s`(SSM のグループ)の印があること。
+        - RP の P1 の `show pim topology 239.232.1.1` には何も無いこと。192.168.1.1 のエントリがあれば、最初のホップのルータが
+          送信元を Register しています。そのグループをスパース モードとして扱っています。
+
+        例(PE2 と PE4。抜粋):
+
+        ```
+        (192.168.1.1,239.232.31.170)SPT SSM Up: 00:00:54
+
+        (192.168.1.1, 239.232.31.170), 00:00:51/00:02:25, flags: sTI
+        ```
+
+        **4. 壊していないか**
+
+        - 239.16.0.0/16 と 239.17.0.0/16 のチャネルが、引き続き両方の受信者に届くこと(課題 M14-1・M14-2)。
+        - 終わったら受信者を元に戻します(`no ip igmp join-group … source 192.168.1.1` と `no ip igmp version`)。
+    solution:
+      en: |
+        On PE1, PE2, P1 and PE3:
+        configure
+         ipv4 access-list SSM-GROUPS
+          10 permit ipv4 232.0.0.0 0.255.255.255 any
+          20 permit ipv4 239.232.0.0 0.0.255.255 any
+         !
+         router pim
+          address-family ipv4
+           ssm range SSM-GROUPS
+         commit
+        end
+        On PE4:
+        configure terminal
+         access-list 32 permit 232.0.0.0 0.255.255.255
+         access-list 32 permit 239.232.0.0 0.0.255.255
+         ip pim ssm range 32
+         interface Ethernet0/1
+          ip igmp version 3
+        end
+        IOS XR treats 232.0.0.0/8 as SSM by default; `ssm range` replaces that default, so the list has to name 232.0.0.0/8
+        again. In an SSM range a router never sends a (*,G) Join and a first-hop router never registers, so the RP P1 holds
+        no state, and a receiver that names no source gets nothing. PE4 is the DR of ACCESS-3 (the higher address). With the
+        IOS XE default, IGMP version 2, it ignored RCV3's version 3 report, so RCV3 got nothing even though PE3, the querier,
+        speaks version 3. Without the SSM range, PE4 sent a (*,G) Join toward the RP, and PE2, which treats the group as SSM,
+        did not pass it on. Both mistakes look healthy on the XR routers. The documents place `ssm range` under
+        `multicast-routing` → `address-family ipv4`; on 26.1.1 the same line under `router pim` → `address-family ipv4`
+        works the same way.
+      ja: |
+        On PE1, PE2, P1 and PE3:
+        configure
+         ipv4 access-list SSM-GROUPS
+          10 permit ipv4 232.0.0.0 0.255.255.255 any
+          20 permit ipv4 239.232.0.0 0.0.255.255 any
+         !
+         router pim
+          address-family ipv4
+           ssm range SSM-GROUPS
+         commit
+        end
+        On PE4:
+        configure terminal
+         access-list 32 permit 232.0.0.0 0.255.255.255
+         access-list 32 permit 239.232.0.0 0.0.255.255
+         ip pim ssm range 32
+         interface Ethernet0/1
+          ip igmp version 3
+        end
+        IOS XR は既定で 232.0.0.0/8 を SSM として扱います。`ssm range` はその既定を置き換えるので、一覧には 232.0.0.0/8 も
+        書き直す必要があります。SSM の範囲では、ルータは (*,G) の Join を送らず、最初のホップのルータも Register しません。
+        そのため RP の P1 は状態を持たず、送信元を指定しない受信者には何も届きません。PE4 は ACCESS-3 の DR です(アドレスが
+        大きい方)。IOS XE の既定の IGMP バージョン 2 のままだと、querier の PE3 がバージョン 3 で話していても、PE4 は RCV3 の
+        バージョン 3 の報告を無視し、RCV3 には何も届きませんでした。SSM の範囲が無いと、PE4 は RP へ (*,G) の Join を送り、
+        そのグループを SSM として扱う PE2 は先へ送りませんでした。どちらの誤りも、XR の側では正常に見えます。文書は `ssm range`
+        を `multicast-routing` → `address-family ipv4` の下に置いています。26.1.1 では、`router pim` → `address-family ipv4` の下の
+        同じ行も同じように働きます。
+  - id: m14t4
+    title: { en: "M14-4  Bidirectional PIM for the conferencing service", ja: "M14-4  会議のサービスに双方向 PIM" }
+    check: m14t4
+    read: [f2-m14-ssm-bidir#s2-4, f2-m14-ssm-bidir#s2-5, f2-m14-ssm-bidir#s3-3, f2-m14-ssm-bidir#s3-4, f2-m14-ssm-bidir#s3-5]
+    hints:
+      - en: "Bidirectional PIM keeps one (*,G) tree rooted at the RP address and never builds (S,G) state: on every link one router, the designated forwarder (DF), carries packets toward the RP and onto the link. Each router needs the range mapped to the RP in bidirectional mode; IOS XE also has to allow bidirectional mode at all (on PE4 the `bidir` keyword is refused until it is allowed). Then look at how each router chooses between two static RPs that both cover 239.48.0.0/16."
+        ja: "双方向 PIM は、RP のアドレスを根とする (*,G) のツリーを 1 本だけ持ち、(S,G) の状態を作りません。どのリンクでも、指定フォワーダ(DF)という 1 台のルータが、RP への向きとリンクへの向きのパケットを運びます。各ルータで、その範囲を双方向のモードで RP に対応付ける必要があります。IOS XE では、双方向のモードそのものの許可も要ります(PE4 では、許可するまで `bidir` のキーワードが拒否されます)。そのうえで、239.48.0.0/16 を両方とも含む 2 つのスタティック RP の間で、各ルータがどちらを選ぶかを見てください。"
+      - en: "`show pim group-map` (`BD`), `show pim df winner`, `show pim topology <group>` (`BD`). On PE4: `show ip pim rp mapping`, `show ip mroute <group>` (the `B` flag, and any (S,G) entry), `show ip pim interface df`. Guide: Multicast Configuration Guide for Cisco 8000 Series Routers (PIM bidirectional) and the IOS XE IP Multicast: PIM Configuration Guide (`ip pim rp-address`, `ip pim bidir-enable`)."
+        ja: "`show pim group-map`(`BD`)・`show pim df winner`・`show pim topology <グループ>`(`BD`)。PE4 で `show ip pim rp mapping`・`show ip mroute <グループ>`(`B` の印と、(S,G) のエントリの有無)・`show ip pim interface df`。ガイド: Multicast Configuration Guide for Cisco 8000 Series Routers(双方向 PIM)と、IOS XE の IP Multicast: PIM Configuration Guide(`ip pim rp-address`・`ip pim bidir-enable`)。"
+      - en: "On the XR routers: an access list for 239.48.0.0/16, then `rp-address 10.255.0.3 <name> bidir` under `router pim` → `address-family ipv4`. On PE4: `ip pim bidir-enable`, a standard access list for 239.48.0.0/16 and `ip pim rp-address 10.255.0.3 <acl> bidir`. PE4 still maps 239.48.0.0/16 to P1 in sparse mode through the list of Task M14-1 (IOS XE picks the higher RP address when two static lists overlap): add a `deny 239.48.0.0 0.0.255.255` line above its permit."
+        ja: "XR では、239.48.0.0/16 のアクセス リストを作り、`router pim` → `address-family ipv4` の下に `rp-address 10.255.0.3 <名前> bidir`。PE4 では `ip pim bidir-enable`、239.48.0.0/16 の標準アクセス リストと `ip pim rp-address 10.255.0.3 <ACL> bidir`。それでも PE4 は、課題 M14-1 のリストで 239.48.0.0/16 を P1 にスパース モードで対応付けたままです(IOS XE は、2 つのスタティックのリストが重なると大きい RP のアドレスを選びます)。そのリストの permit の上に `deny 239.48.0.0 0.0.255.255` の行を足してください。"
+    verify:
+      en: |
+        **1. Is it in?** (each router)
+
+        - XR: `show pim group-map` should have `239.48.0.0/16*  BD  config … 10.255.0.3`. `show pim df winner` lists, for RP
+          10.255.0.3, the DF of each interface.
+        - PE4: `show ip pim rp mapping` lists the bidirectional mapping (`Bidir Mode`) for 10.255.0.3.
+
+        **2. Send and count** (all three hosts)
+
+        - Join SRC1, RCV2 and RCV3 to the same group, such as 239.48.1.1. Ping it ten times from RCV3, then from SRC1. Every
+          other host should answer every ping, whoever sends.
+
+        **3. Look where it arrives** (PE2, P1, PE4, PE3)
+
+        - PE2 and P1: `show pim topology 239.48.1.1` shows only `(*,239.48.1.1) BD … RP: 10.255.0.3`, even after two
+          sources have sent.
+        - PE4: `show ip mroute 239.48.1.1` shows only the (*,G) entry with `RP 10.255.0.3` and the `B` flag. An entry such as
+          `(192.168.3.1, 239.48.1.1)` means PE4 handled the group in sparse mode: as the DR of ACCESS-3 it registered RCV3.
+        - PE3: `show pim df winner`: on ACCESS-3 the DF is PE3 itself, the router closest to the RP address.
+
+        Example (PE2 and PE4 after both hosts sent; excerpt):
+
+        ```
+        (*,239.48.233.116) BD Up: 00:00:50 RP: 10.255.0.3
+
+        (*, 239.48.233.116), 00:00:49/00:02:10, RP 10.255.0.3, flags: BP
+        ```
+
+        **4. Did anything else break?**
+
+        - Channels in 239.16.0.0/16 and the SSM ranges still arrive (Tasks M14-1 to M14-3).
+      ja: |
+        **1. 入ったか**(各ルータ)
+
+        - XR の `show pim group-map` に `239.48.0.0/16*  BD  config … 10.255.0.3` があること。`show pim df winner` には、
+          RP 10.255.0.3 について、各インタフェースの DF が並びます。
+        - PE4 の `show ip pim rp mapping` に、10.255.0.3 の双方向の対応(`Bidir Mode`)が出ること。
+
+        **2. 送って数える**(3 台のホスト)
+
+        - SRC1・RCV2・RCV3 を同じグループ(たとえば 239.48.1.1)に参加させます。RCV3 から 10 発、次に SRC1 から 10 発送ります。
+          誰が送っても、ほかのホストがすべての ping に応答すること。
+
+        **3. 届いた先を見る**(PE2・P1・PE4・PE3)
+
+        - PE2 と P1 の `show pim topology 239.48.1.1` には、2 つの送信元が送った後でも `(*,239.48.1.1) BD … RP: 10.255.0.3`
+          だけがあること。
+        - PE4 の `show ip mroute 239.48.1.1` には、`RP 10.255.0.3` と `B` の印の (*,G) のエントリだけがあること。
+          `(192.168.3.1, 239.48.1.1)` のようなエントリがあれば、PE4 はそのグループをスパース モードで扱っています。ACCESS-3 の
+          DR として RCV3 を Register しました。
+        - PE3 の `show pim df winner` で、ACCESS-3 の DF が PE3 自身(RP のアドレスに最も近いルータ)であること。
+
+        例(両方のホストが送った後の PE2 と PE4。抜粋):
+
+        ```
+        (*,239.48.233.116) BD Up: 00:00:50 RP: 10.255.0.3
+
+        (*, 239.48.233.116), 00:00:49/00:02:10, RP 10.255.0.3, flags: BP
+        ```
+
+        **4. 壊していないか**
+
+        - 239.16.0.0/16 のチャネルと SSM の範囲が引き続き届くこと(課題 M14-1〜M14-3)。
+    solution:
+      en: |
+        On PE1, PE2, P1 and PE3:
+        configure
+         ipv4 access-list CONF-GROUPS
+          10 permit ipv4 239.48.0.0 0.0.255.255 any
+         !
+         router pim
+          address-family ipv4
+           rp-address 10.255.0.3 CONF-GROUPS bidir
+         commit
+        end
+        On PE4:
+        configure terminal
+         ip pim bidir-enable
+         access-list 48 permit 239.48.0.0 0.0.255.255
+         ip pim rp-address 10.255.0.3 48 bidir
+         ip access-list standard 10
+          5 deny 239.48.0.0 0.0.255.255
+        end
+        A bidirectional group has one shared tree rooted at the RP address. Packets from any sender travel up the tree to the
+        RP and down every branch with receivers; on each link the DF, the router with the best route to the RP address,
+        forwards in both directions. No router registers a sender and no router builds (S,G) state. On IOS XR the longer
+        range wins: `239.48.0.0/16 BD` is used for these groups, while `239.0.0.0/8 SM` stays in place for the rest. IOS XE
+        does not look at the length: when the lists of two static RPs both permit a group, it uses the RP with the highest
+        address. PE4 therefore kept 239.48.0.0/16 on P1 (10.255.0.11) in sparse mode, and as the DR of ACCESS-3 it
+        registered RCV3 and built (S,G) entries. RCV3 still received the packets,
+        because PE3 is the DF on ACCESS-3; only PE4's (S,G) entries show the problem. Taking 239.48.0.0/16 out of list 10
+        leaves PE4 one mapping for these groups.
+      ja: |
+        On PE1, PE2, P1 and PE3:
+        configure
+         ipv4 access-list CONF-GROUPS
+          10 permit ipv4 239.48.0.0 0.0.255.255 any
+         !
+         router pim
+          address-family ipv4
+           rp-address 10.255.0.3 CONF-GROUPS bidir
+         commit
+        end
+        On PE4:
+        configure terminal
+         ip pim bidir-enable
+         access-list 48 permit 239.48.0.0 0.0.255.255
+         ip pim rp-address 10.255.0.3 48 bidir
+         ip access-list standard 10
+          5 deny 239.48.0.0 0.0.255.255
+        end
+        双方向のグループは、RP のアドレスを根とする共有ツリーを 1 本だけ持ちます。どの送信者のパケットも、ツリーを上って RP へ
+        向かい、受信者のいる枝へ下ります。各リンクでは、RP のアドレスへの最良のルートを持つルータである DF が、両方の向きに
+        転送します。どのルータも送信者を Register せず、(S,G) の状態も作りません。IOS XR では長い範囲が勝ちます。これらの
+        グループには `239.48.0.0/16 BD` が使われ、残りのグループには `239.0.0.0/8 SM` がそのまま使われます。IOS XE は長さを
+        見ません。2 つのスタティック RP のリストがどちらもグループを許可していると、アドレスの最も大きい RP を使います。
+        そのため PE4 は 239.48.0.0/16 を P1(10.255.0.11)のスパース モードのまま扱い、ACCESS-3 の DR として RCV3 を
+        Register し、(S,G) のエントリを作りました。ACCESS-3 の
+        DF は PE3 なので、RCV3 にはそれでも届きました。問題が見えるのは PE4 の (S,G) のエントリだけです。リスト 10 から
+        239.48.0.0/16 を外せば、PE4 がこれらのグループに持つ対応は 1 つになります。
+  - id: m14t5
+    title: { en: "M14-5  Let BSR announce the RP", ja: "M14-5  RP を BSR で知らせる" }
+    check: m14t5
+    read: [f4-m14-rp-ipv6-ts#s2-1, f4-m14-rp-ipv6-ts#s2-3, f4-m14-rp-ipv6-ts#s3-1]
+    hints:
+      - en: "Two elections. The candidate BSRs elect one BSR: the higher priority wins, and a tie goes to the higher address. The BSR collects the candidate RPs and floods the whole set to every router; each router then picks the RP for a group itself: the lower priority value wins, then a hash, then the higher address. Know the default priorities on each platform before you trust them, and remember that a candidate announces only the groups in its list. A mapping learned through BSR is preferred to a static one for the same groups."
+        ja: "選出は 2 つあります。BSR の候補が BSR を 1 台選びます。priority の大きい方が勝ち、同じなら大きいアドレスが勝ちます。BSR は RP の候補を集め、その一式をすべてのルータへ配ります。各ルータは、グループの RP を自分で選びます。priority の値の小さい方が勝ち、次にハッシュ、次に大きいアドレスです。プラットフォームごとの既定の priority を知ってから頼ってください。また、候補が通知するのは自分の一覧のグループだけです。同じグループについては、BSR で学習した対応がスタティックの対応より優先されます。"
+      - en: "`show pim bsr election`, `show pim bsr candidate-rp`, `show pim rp mapping`, `show pim group-map` (`bsr+`). On PE4: `show ip pim bsr-router`, `show ip pim rp mapping`, `show ip pim rp-hash <group>`. Guide: Multicast Configuration Guide for Cisco 8000 Series Routers (PIM bootstrap router); the `bsr candidate-bsr` and `bsr candidate-rp` commands in the Multicast Command Reference; IOS XE `ip pim rp-candidate` and `ip pim bsr-candidate`."
+        ja: "`show pim bsr election`・`show pim bsr candidate-rp`・`show pim rp mapping`・`show pim group-map`(`bsr+`)。PE4 で `show ip pim bsr-router`・`show ip pim rp mapping`・`show ip pim rp-hash <グループ>`。ガイド: Multicast Configuration Guide for Cisco 8000 Series Routers(PIM のブートストラップ ルータ)、Multicast Command Reference の `bsr candidate-bsr`・`bsr candidate-rp` の項、IOS XE の `ip pim rp-candidate`・`ip pim bsr-candidate`。"
+      - en: "On P1 and PE3: an access list for 239.16.0.0/15 and `bsr candidate-rp <own Loopback0 address> group-list <name> priority <n>` (P1 lower than PE3). On PE4: a standard access list for 239.16.0.0/15, `ip pim sparse-mode` on Loopback0 and `ip pim rp-candidate Loopback0 group-list <acl> priority <n>` with the highest value of the three: the IOS XE default is 0, which would beat both XR routers (their default is 192). On PE1: `bsr candidate-bsr 10.255.0.1 priority <n>` above P1's; on P1: `bsr candidate-bsr 10.255.0.11` (the default priority, 1, loses to PE1's)."
+        ja: "P1 と PE3 では、239.16.0.0/15 のアクセス リストと `bsr candidate-rp <自分の Loopback0 のアドレス> group-list <名前> priority <値>`(P1 を PE3 より小さく)。PE4 では、239.16.0.0/15 の標準アクセス リスト、Loopback0 に `ip pim sparse-mode`、`ip pim rp-candidate Loopback0 group-list <ACL> priority <値>`(3 台で最も大きい値)。IOS XE の既定は 0 で、XR の 2 台(既定は 192)の両方に勝ってしまいます。PE1 では P1 より大きい priority で `bsr candidate-bsr 10.255.0.1 priority <値>`。P1 では `bsr candidate-bsr 10.255.0.11`(既定の priority 1 は PE1 に負けます)。"
+    verify:
+      en: |
+        **1. Is it in?** (P1, PE3, PE4, PE1)
+
+        - P1 and PE3: `show pim bsr candidate-rp` shows the address, the priority and the group list.
+        - PE1: `show pim bsr election` should say `Elected` with its own address as the BSR. P1 should say `Not-Elected` and
+          name 10.255.0.1 as the BSR.
+
+        **2. Wait, then read the result** (PE2 and PE4)
+
+        - Candidates announce every 30 seconds by default on IOS XR and every 60 on IOS XE, and the BSR floods its message about
+          every minute: give it a minute or two.
+        - PE2: `show pim rp mapping` lists three `Group(s) 239.16.0.0/15` entries learned via `bsr`, with their priorities.
+          `show pim group-map 239.16.1.1` uses the line `239.16.0.0/15*  SM  bsr+ … 10.255.0.11`.
+        - PE4: `show ip pim bsr-router` names 10.255.0.1; `show ip pim rp mapping` lists the same three candidates, and
+          `show ip pim rp-hash 239.16.1.1` picks 10.255.0.11.
+
+        Example (PE4; excerpt):
+
+        ```
+        Group(s) 239.16.0.0/15
+          RP 10.255.0.11 (?), v2
+            Info source: 10.255.0.1 (?), via bootstrap, priority 10, holdtime 75
+          RP 10.255.0.3 (?), v2
+            Info source: 10.255.0.1 (?), via bootstrap, priority 20, holdtime 75
+          RP 10.255.0.4 (?), v2
+            Info source: 10.255.0.1 (?), via bootstrap, priority 200, holdtime 150
+        ```
+
+        **3. Send and count** (RCV2 and RCV3, then SRC1)
+
+        - A group in 239.16.0.0/16 and one in 239.17.0.0/16 still reach both receivers; `show pim topology <group>` on PE2
+          shows `RP: 10.255.0.11`.
+
+        **4. Did anything else break?**
+
+        - A group outside 239.0.0.0/8 still has no RP, and 239.48.0.0/16 still maps to 10.255.0.3 in bidirectional mode: a
+          candidate that announces more than 239.16.0.0/15 changes both.
+      ja: |
+        **1. 入ったか**(P1・PE3・PE4・PE1)
+
+        - P1 と PE3 の `show pim bsr candidate-rp` に、アドレス、priority、グループの一覧が出ること。
+        - PE1 の `show pim bsr election` が `Elected` で、BSR が自分のアドレスであること。P1 は `Not-Elected` で、BSR に
+          10.255.0.1 を挙げること。
+
+        **2. 待ってから結果を読む**(PE2 と PE4)
+
+        - 候補が通知する間隔は、既定で IOS XR が 30 秒、IOS XE が 60 秒です。BSR は約 1 分ごとにメッセージを配ります。1〜2 分
+          待ってください。
+        - PE2 の `show pim rp mapping` に、`bsr` で学習した `Group(s) 239.16.0.0/15` のエントリが priority 付きで 3 つ並ぶこと。
+          `show pim group-map 239.16.1.1` では `239.16.0.0/15*  SM  bsr+ … 10.255.0.11` の行が使われること。
+        - PE4 の `show ip pim bsr-router` が 10.255.0.1 を挙げ、`show ip pim rp mapping` に同じ 3 つの候補が並び、
+          `show ip pim rp-hash 239.16.1.1` が 10.255.0.11 を選ぶこと。
+
+        例(PE4。抜粋):
+
+        ```
+        Group(s) 239.16.0.0/15
+          RP 10.255.0.11 (?), v2
+            Info source: 10.255.0.1 (?), via bootstrap, priority 10, holdtime 75
+          RP 10.255.0.3 (?), v2
+            Info source: 10.255.0.1 (?), via bootstrap, priority 20, holdtime 75
+          RP 10.255.0.4 (?), v2
+            Info source: 10.255.0.1 (?), via bootstrap, priority 200, holdtime 150
+        ```
+
+        **3. 送って数える**(RCV2 と RCV3、次に SRC1)
+
+        - 239.16.0.0/16 のグループと 239.17.0.0/16 のグループが、引き続き両方の受信者に届くこと。PE2 の
+          `show pim topology <グループ>` に `RP: 10.255.0.11` が出ること。
+
+        **4. 壊していないか**
+
+        - 239.0.0.0/8 の外のグループに引き続き RP が無く、239.48.0.0/16 が引き続き双方向のモードで 10.255.0.3 に対応すること。
+          239.16.0.0/15 より広い範囲を通知する候補があると、両方が変わります。
+    solution:
+      en: |
+        On P1:
+        configure
+         ipv4 access-list TV-GROUPS
+          10 permit ipv4 239.16.0.0 0.1.255.255 any
+         !
+         router pim
+          address-family ipv4
+           bsr candidate-rp 10.255.0.11 group-list TV-GROUPS priority 10 interval 30
+           bsr candidate-bsr 10.255.0.11 hash-mask-len 30
+         commit
+        end
+        On PE3:
+        configure
+         ipv4 access-list TV-GROUPS
+          10 permit ipv4 239.16.0.0 0.1.255.255 any
+         !
+         router pim
+          address-family ipv4
+           bsr candidate-rp 10.255.0.3 group-list TV-GROUPS priority 20 interval 30
+         commit
+        end
+        On PE1:
+        configure
+         router pim
+          address-family ipv4
+           bsr candidate-bsr 10.255.0.1 hash-mask-len 30 priority 100
+         commit
+        end
+        On PE4:
+        configure terminal
+         access-list 16 permit 239.16.0.0 0.1.255.255
+         interface Loopback0
+          ip pim sparse-mode
+         exit
+         ip pim rp-candidate Loopback0 group-list 16 priority 200
+        end
+        For the candidate RPs the lower priority value wins, so P1 (10), PE3 (20) and PE4 (200) rank in that order. The
+        defaults would not: IOS XR announces 192 and IOS XE 0, so PE4 left at its default would become the RP. For the
+        candidate BSRs the higher priority wins and a tie goes to the higher address; with the default priority on both,
+        P1 (10.255.0.11) would beat PE1 (10.255.0.1), so PE1 gets a higher value. Every router, PE4 included, learns the set
+        from the BSR's flooded messages without any configuration of its own; a mapping learned through BSR is preferred over
+        the static `rp-address` for the same groups, and here it is also the longer range (239.16.0.0/15 against
+        239.0.0.0/8). Limiting each candidate to 239.16.0.0/15 keeps the groups outside 239.0.0.0/8 without an RP and leaves
+        239.48.0.0/16 to its bidirectional RP.
+      ja: |
+        On P1:
+        configure
+         ipv4 access-list TV-GROUPS
+          10 permit ipv4 239.16.0.0 0.1.255.255 any
+         !
+         router pim
+          address-family ipv4
+           bsr candidate-rp 10.255.0.11 group-list TV-GROUPS priority 10 interval 30
+           bsr candidate-bsr 10.255.0.11 hash-mask-len 30
+         commit
+        end
+        On PE3:
+        configure
+         ipv4 access-list TV-GROUPS
+          10 permit ipv4 239.16.0.0 0.1.255.255 any
+         !
+         router pim
+          address-family ipv4
+           bsr candidate-rp 10.255.0.3 group-list TV-GROUPS priority 20 interval 30
+         commit
+        end
+        On PE1:
+        configure
+         router pim
+          address-family ipv4
+           bsr candidate-bsr 10.255.0.1 hash-mask-len 30 priority 100
+         commit
+        end
+        On PE4:
+        configure terminal
+         access-list 16 permit 239.16.0.0 0.1.255.255
+         interface Loopback0
+          ip pim sparse-mode
+         exit
+         ip pim rp-candidate Loopback0 group-list 16 priority 200
+        end
+        RP の候補は priority の値の小さい方が勝つので、P1(10)・PE3(20)・PE4(200)の順に並びます。既定のままでは
+        この順になりません。IOS XR は 192、IOS XE は 0 を通知するので、既定のままの PE4 が RP になります。BSR の候補は
+        priority の大きい方が勝ち、同じなら大きいアドレスが勝ちます。両方とも既定の priority だと P1(10.255.0.11)が
+        PE1(10.255.0.1)に勝つので、PE1 に大きい値を付けます。PE4 を含むすべてのルータは、自分では何も設定せずに、BSR が
+        配るメッセージから一式を学習します。同じグループについては BSR で学習した対応がスタティックの `rp-address` より優先され、
+        ここでは範囲も長くなっています(239.16.0.0/15 と 239.0.0.0/8)。各候補を 239.16.0.0/15 に限ることで、239.0.0.0/8 の外の
+        グループは RP なしのまま、239.48.0.0/16 は双方向の RP のままになります。
+  - id: m14t6
+    title: { en: "M14-6  Troubleshoot the IPv6 multicast trial", ja: "M14-6  IPv6 のマルチキャストの試行を切り分ける" }
+    check: m14t6
+    read: [f4-m14-rp-ipv6-ts#s2-4, f4-m14-rp-ipv6-ts#s2-5, f4-m14-rp-ipv6-ts#s3-3, f4-m14-rp-ipv6-ts#s3-4]
+    hints:
+      - en: "Split the path into its pieces and find where the packets stop: the source's first-hop router (does it have an (S,G) entry and does it register?), the RP (does it accept the Register and hold (*,G) toward the receivers?), and each receiver's last-hop router (which RP does it join toward?). The two receivers may fail for different reasons. An access list is read from the top, and the first line that matches decides."
+        ja: "経路を部品に分け、パケットがどこで止まるかを探します。送信元の最初のホップのルータ((S,G) のエントリがあるか、Register しているか)、RP(Register を受け入れ、受信者へ向けて (*,G) を持っているか)、各受信者の最終ホップのルータ(どの RP へ向けて Join しているか)です。2 つの受信者が、別々の理由で届かないこともあります。アクセス リストは上から読まれ、最初に一致した行で決まります。"
+      - en: "`show pim ipv6 topology <group>` on PE1, P1 and PE2 (the `RR` flag on the RP means a Register was accepted), `show pim ipv6 group-map <group>`, `show running-config router pim`, `show access-lists ipv6`. On PE4: `show ipv6 mroute <group>` (the RP address of the (*,G) entry), `show ipv6 pim group-map <group>`, `show ipv6 pim interface`. Guide: Multicast Configuration Guide for Cisco 8000 Series Routers (PIM for IPv6, `accept-register`)."
+        ja: "PE1・P1・PE2 で `show pim ipv6 topology <グループ>`(RP の `RR` の印は Register を受け入れた印)・`show pim ipv6 group-map <グループ>`・`show running-config router pim`・`show access-lists ipv6`。PE4 で `show ipv6 mroute <グループ>`((*,G) のエントリの RP のアドレス)・`show ipv6 pim group-map <グループ>`・`show ipv6 pim interface`。ガイド: Multicast Configuration Guide for Cisco 8000 Series Routers(IPv6 の PIM・`accept-register`)。"
+      - en: "On P1, the list `HEADEND-SOURCES` denies 2001:db8:100::/48 on line 10, before line 20 permits the head-end LAN: the head-end matches line 10. Put the permit first (for example `5 permit ipv6 2001:db8:100:1::/64 any` and remove line 20) and keep the deny lines. On PE4, the IPv6 RP is 2001:db8:255::3 (PE3): replace it with `ipv6 pim rp-address 2001:db8:255::11`."
+        ja: "P1 の一覧 `HEADEND-SOURCES` は、10 行目で 2001:db8:100::/48 を拒否し、そのあと 20 行目でヘッドエンドの LAN を許可しています。ヘッドエンドは 10 行目に一致します。permit を先頭に置き(たとえば `5 permit ipv6 2001:db8:100:1::/64 any` を足して 20 行目を消す)、deny の行は残します。PE4 は IPv6 の RP が 2001:db8:255::3(PE3)です。`ipv6 pim rp-address 2001:db8:255::11` に置き換えます。"
+    verify:
+      en: |
+        **1. Look before you change anything** (PE1, P1, PE2, PE4)
+
+        - On RCV2 and RCV3: `interface Ethernet0/0` → `ipv6 mld join-group FF0E::16:1`. On SRC1: `ping FF0E::16:1 repeat 10
+          timeout 1`. IOS XE asks for the output interface of an IPv6 multicast ping: answer `Ethernet0/0`. Each `Reply to
+          request n received from 2001:DB8:100:2::1` is a packet that RCV2 received.
+        - Then read the state along the path. PE1 (first hop) should have an (S,G) entry for 2001:db8:100:1::1. P1 (the RP)
+          shows the (*,G) entry toward PE2; an (S,G) entry with the `RR` flag appears only when it accepted the Register.
+          PE4's `show ipv6 mroute FF0E::16:1` shows which RP its (*,G) entry points to.
+
+        Example (P1 and PE1 when the RP does not accept the Register; excerpt):
+
+        ```
+        (*,ff0e::16:5dd8)
+        SM Up: 00:00:36 JP: Join(never) Flags:
+        RP: 2001:db8:255::11*
+        RPF: Decaps6tunnel0,2001:db8:255::11
+          GigabitEthernet0/0/0/1      00:00:36  fwd Join(00:02:53)
+
+        (2001:db8:100:1::1,ff0e::16:5dd8) SPT
+        SM Up: 00:00:23 JP: Null(never) Flags: KAT(00:03:09) RA
+        RPF: GigabitEthernet0/0/0/2,2001:db8:100:1::1*
+          No interfaces in immediate olist
+        ```
+
+        **2. After each change, send and count again**
+
+        - Use a new group each time (FF0E::16:2, FF0E::16:3 …): a group you joined earlier may still be held for a few minutes
+          by state built before the change, and then it tells you nothing about the change.
+
+        **3. Look where it arrives**
+
+        - P1: `show pim ipv6 topology <group>` now has `RR` on the (S,G) entry. PE2: an (S,G) entry for 2001:db8:100:1::1.
+          PE4: `show ipv6 mroute <group>` shows `RP 2001:DB8:255::11`.
+
+        **4. Did anything else break?**
+
+        - `show running-config router pim` on P1 still has `accept-register`, and the list still ends in a deny.
+        - The IPv4 channels still arrive (Tasks M14-1 to M14-5). Remove your joins when you are done
+          (`no ipv6 mld join-group …`).
+      ja: |
+        **1. 変える前に見る**(PE1・P1・PE2・PE4)
+
+        - RCV2 と RCV3 で `interface Ethernet0/0` → `ipv6 mld join-group FF0E::16:1`。SRC1 で `ping FF0E::16:1 repeat 10
+          timeout 1`。IOS XE は IPv6 のマルチキャストの ping の出力インタフェースを聞くので、`Ethernet0/0` と答えます。
+          `Reply to request n received from 2001:DB8:100:2::1` の 1 行が、RCV2 が受けた 1 発です。
+        - そのうえで経路に沿って状態を読みます。PE1(最初のホップ)には 2001:db8:100:1::1 の (S,G) のエントリがあるはずです。
+          P1(RP)には PE2 へ向かう (*,G) のエントリが出ます。`RR` の印の付いた (S,G) のエントリは、Register を受け入れた
+          ときだけ現れます。PE4 の `show ipv6 mroute FF0E::16:1` で、その (*,G) のエントリがどの RP を向いているかが分かります。
+
+        例(RP が Register を受け入れないときの P1 と PE1。抜粋):
+
+        ```
+        (*,ff0e::16:5dd8)
+        SM Up: 00:00:36 JP: Join(never) Flags:
+        RP: 2001:db8:255::11*
+        RPF: Decaps6tunnel0,2001:db8:255::11
+          GigabitEthernet0/0/0/1      00:00:36  fwd Join(00:02:53)
+
+        (2001:db8:100:1::1,ff0e::16:5dd8) SPT
+        SM Up: 00:00:23 JP: Null(never) Flags: KAT(00:03:09) RA
+        RPF: GigabitEthernet0/0/0/2,2001:db8:100:1::1*
+          No interfaces in immediate olist
+        ```
+
+        **2. 変えるたびに、送って数え直す**
+
+        - 毎回新しいグループを使います(FF0E::16:2、FF0E::16:3 …)。前に参加したグループは、変更の前にできた状態が数分残る
+          ことがあり、その変更について何も教えてくれません。
+
+        **3. 届いた先を見る**
+
+        - P1 の `show pim ipv6 topology <グループ>` の (S,G) のエントリに `RR` が付くこと。PE2 に 2001:db8:100:1::1 の (S,G)
+          のエントリがあること。PE4 の `show ipv6 mroute <グループ>` が `RP 2001:DB8:255::11` になること。
+
+        **4. 壊していないか**
+
+        - P1 の `show running-config router pim` に `accept-register` が残り、一覧が deny で終わっていること。
+        - IPv4 のチャネルが引き続き届くこと(課題 M14-1〜M14-5)。終わったら参加を削除します(`no ipv6 mld join-group …`)。
+    solution:
+      en: |
+        On P1:
+        configure
+         ipv6 access-list HEADEND-SOURCES
+          no 20
+          5 permit ipv6 2001:db8:100:1::/64 any
+         commit
+        end
+        On PE4:
+        configure terminal
+         no ipv6 pim rp-address 2001:DB8:255::3
+         ipv6 pim rp-address 2001:DB8:255::11
+        end
+        Two faults, one on the common part of the path and one on RCV3's branch. The RP's `accept-register` list read
+        `10 deny ipv6 2001:db8:100::/48 any`, `20 permit ipv6 2001:db8:100:1::/64 any`, `30 deny ipv6 any any`. An access list
+        stops at the first line that matches, and the head-end LAN lies inside 2001:db8:100::/48, so line 10 refused SRC1's
+        Register: P1 answered with Register-Stop, held no (S,G) entry, and no last-hop router ever learned the source.
+        Putting the permit first lets the head-end register and keeps every other source refused. The second fault showed
+        only after the first was fixed: PE4, the DR of ACCESS-3 for IPv6 (its link-local address FE80::253 is the higher one),
+        mapped the groups to PE3's address and sent its (*,G) Join toward it; PE2, which maps them to P1, ignored that Join.
+        IPv6 multicast is configured apart from IPv4 on both platforms (`address-family ipv6` on IOS XR; `ipv6
+        multicast-routing` and the `ipv6 pim` commands on IOS XE), so none of the IPv4 tasks touched it.
+      ja: |
+        On P1:
+        configure
+         ipv6 access-list HEADEND-SOURCES
+          no 20
+          5 permit ipv6 2001:db8:100:1::/64 any
+         commit
+        end
+        On PE4:
+        configure terminal
+         no ipv6 pim rp-address 2001:DB8:255::3
+         ipv6 pim rp-address 2001:DB8:255::11
+        end
+        故障は 2 つで、1 つは経路の共通の部分に、もう 1 つは RCV3 の枝にありました。RP の `accept-register` の一覧は
+        `10 deny ipv6 2001:db8:100::/48 any`・`20 permit ipv6 2001:db8:100:1::/64 any`・`30 deny ipv6 any any` でした。
+        アクセス リストは最初に一致した行で止まり、ヘッドエンドの LAN は 2001:db8:100::/48 の中にあるので、10 行目が SRC1 の
+        Register を拒否していました。P1 は Register-Stop を返し、(S,G) のエントリを持たず、どの最終ホップのルータも送信元を
+        知りませんでした。permit を先頭に置けば、ヘッドエンドは Register でき、ほかの送信元は引き続き拒否されます。2 つ目の故障は、
+        1 つ目を直した後で見えました。IPv6 で ACCESS-3 の DR である PE4(リンクローカル アドレス FE80::253 が大きい方)は、
+        グループを PE3 のアドレスに対応付け、そこへ向けて (*,G) の Join を送っていました。グループを P1 に対応付けている PE2 は、
+        その Join を無視しました。IPv6 のマルチキャストは、どちらのプラットフォームでも IPv4 とは別に設定します(IOS XR は
+        `address-family ipv6`、IOS XE は `ipv6 multicast-routing` と `ipv6 pim` のコマンド)。そのため、IPv4 の課題はどれも
+        これに触れていません。

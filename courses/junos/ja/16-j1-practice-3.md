@@ -35,7 +35,7 @@ SRV1 eth1 ──── et-0/0/1 JUN01 et-0/0/0 ──── et-0/0/0 JUN02 et-0/
 単元 J1 に沿った課題です。経路の出入りを、Junos のルーティング ポリシーで制御してください。
 
 ### 課題 J1-4  ISP へは集約だけを広告する
-<p class="tolab"><a href="/_learn?id=JNT-02&amp;step=j1t4">ワークスペースで開く</a> — 読み物: <a href="15-j1-bgp.html#s2-6">2.6 集約経路を出す</a> · <a href="15-j1-bgp.html#s2-5">2.5 属性を変える: local-preference・community・AS パス・MED</a> · <a href="15-j1-bgp.html#s2-2">2.2 BGP の既定のポリシー</a> · <a href="11-j1-policy-statement.html#s2-5">2.5 term の順と insert</a> · <a href="15-j1-bgp.html#s3-1">3.1 ISP へ自社の網を /24 のまま、MED を付けて出す</a></p>
+<p class="tolab"><a href="/_learn?id=JNT-02&amp;step=j1t4">ワークスペースで開く</a> — 読み物: <a href="15-j1-bgp.html#s2-6">2.6 集約経路を出す</a> · <a href="15-j1-bgp.html#s2-5">2.5 属性を変える: local-preference・community・AS パス・MED</a> · <a href="15-j1-bgp.html#s2-2">2.2 BGP のデフォルト ポリシー</a> · <a href="11-j1-policy-statement.html#s2-5">2.5 term の順と insert</a> · <a href="15-j1-bgp.html#s3-1">3.1 ISP へ自社のネットワークを /24 のまま、MED を付けて出す</a></p>
 
 
 JUN02 は、社内のサーバの網をまとめた 172.16.0.0/16 だけを ISP へ広告すること。/24 の経路、リンク、ループバックは
@@ -44,7 +44,7 @@ JUN02 は、社内のサーバの網をまとめた 172.16.0.0/16 だけを ISP 
 SRV1 のサーバの網(172.16.20.1)から ISP のループバック(203.0.113.1)へ届くこと。
 
 ### 課題 J1-5  ISP の 1 つの経路にだけ印を付ける
-<p class="tolab"><a href="/_learn?id=JNT-02&amp;step=j1t5">ワークスペースで開く</a> — 読み物: <a href="15-j1-bgp.html#s2-5">2.5 属性を変える: local-preference・community・AS パス・MED</a> · <a href="11-j1-policy-statement.html#s2-4">2.4 評価の順: term → 次のポリシー → 既定のポリシー</a> · <a href="15-j1-bgp.html#s2-4">2.4 ポリシーを書く階層: global・group・neighbor</a> · <a href="15-j1-bgp.html#s3-2">3.2 受け取る経路に印を付ける: ポリシーの中に term を差し込む</a></p>
+<p class="tolab"><a href="/_learn?id=JNT-02&amp;step=j1t5">ワークスペースで開く</a> — 読み物: <a href="15-j1-bgp.html#s2-5">2.5 属性を変える: local-preference・community・AS パス・MED</a> · <a href="11-j1-policy-statement.html#s2-4">2.4 評価の順: term → 次のポリシー → デフォルト ポリシー</a> · <a href="15-j1-bgp.html#s2-4">2.4 ポリシーを書く階層: global・group・neighbor</a> · <a href="15-j1-bgp.html#s3-2">3.2 受け取る経路にタグを付ける: ポリシーの中に term を差し込む</a></p>
 
 
 JUN02 は、ISP から受け取る 203.0.113.0/24 にだけ、community `65000:100` を付け、local-preference を 200 にすること。

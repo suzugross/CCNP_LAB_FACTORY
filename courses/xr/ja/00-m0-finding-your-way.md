@@ -68,7 +68,7 @@ interface GigabitEthernet0/0/0/2
 アドレスはアドレス ファミリを先に書きます。`ipv4 address 10.0.21.1 255.255.255.0`(`10.0.21.1/24` でも可)、
 `ipv6 address 2001:db8:12::1/64` です。
 
-## 3. 設定は木構造で、プロトコルが自分のインターフェイスを持つ
+## 3. 設定はツリー構造で、プロトコルが自分のインターフェイスを持つ
 
 IOS では、多くのものがインターフェイスの下に集まります。`ip ospf 1 area 0`、`ip ospf cost`、`vrf forwarding` などは
 すべて `interface` の下です。IOS XR では、インターフェイスのブロックに書くのはインターフェイス自身に属するものだけです
@@ -142,7 +142,7 @@ IOS XR のリリース 24.3.1 では、アドレスを持つインターフェ�
 
 ## 4. 設定の一部だけを見る
 
-設定は木構造なので、枝を指定して表示できます。既に 2 つの例を見ました。
+設定はツリー構造なので、枝を指定して表示できます。既に 2 つの例を見ました。
 形は、`show running-config` の後に、コンフィギュレーション モードでそこへ行くときと同じ語を続けるだけです。
 
 ```console
@@ -172,9 +172,9 @@ Cisco IOS XR Software, Version 24.3.1
 System uptime is 18 minutes
 ```
 
-`| utility` は UNIX の道具(`egrep`、`wc`、`head`、`tail` など)を使え、`| file` は出力を保存します。
+`| utility` は UNIX のツール(`egrep`、`wc`、`head`、`tail` など)を使え、`| file` は出力を保存します。
 
-コンフィギュレーション モードの中では、`show running-config …` はいま動いている設定を、単なる `show configuration` は
+コンフィギュレーション モードの中では、`show running-config …` はいまアクティブな設定を、単なる `show configuration` は
 入力したがまだ適用していない設定を表示します。大事なのは後者です。理由は次の節にあります。
 
 ## 5. コミットするまで何も起きない
@@ -212,6 +212,8 @@ Uncommitted changes found, commit them before exiting(yes/no/cancel)? [cancel]:
 `do` は、IOS と同じく、コンフィギュレーション モードから EXEC コマンドを実行します。
 
 この仕組みで何ができるかは、単元 M1 で扱います。いまは `show configuration` と `commit` の 2 つを覚えておきます。
+
+:::drill xr-m0-1
 
 ## 6. ルーティング テーブル
 
@@ -267,7 +269,7 @@ Gi0/0/0/2          1     0               10.0.21.1/24       50    P2P   1/1
 
 実践の課題では、コマンドは示されません。探し方は次のとおりです。
 
-**CLI に聞く。** `?` はどの階層でも使え、**木構造のその位置で**有効なものを一覧します。
+**CLI に聞く。** `?` はどの階層でも使え、**ツリーのその位置で**有効なものを一覧します。
 期待したキーワードが無いときは、たいてい階層を間違えています。3 節の内容からして、これがいちばん多い誤りです。
 `show running-config ?` は、指定できる枝を一覧します。
 
@@ -303,6 +305,8 @@ Interface and Hardware Component Configuration Guide の「Configuring Ethernet 
 | `vrf definition X` + `vrf forwarding X` | `vrf X` + インターフェイスの下で `vrf X` |
 | (各行がその場で有効になる) | `commit` |
 | `write memory` | なし(コミットは保存済み) |
+
+:::drill xr-m0-2 xr-m0-3 xr-m0-4
 
 ## 実践
 

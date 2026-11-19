@@ -1,16 +1,16 @@
 # M13 — 状態を流す: gNMI・テレメトリ・TLS
 
 前のページでは、データ モデルを通してルータの設定を変えました。このページは逆向きで、ルータの状態を、流れとして外へ
-出します。ルータが自分のカウンタを決まった間隔で読んで収集役へ送り出すか、収集役が gNMI でそれを購読します。どちらも
+出します。ルータが自分のカウンタを決まった間隔で読んでコレクタへ送り出すか、コレクタが gNMI でそれをサブスクライブします。どちらも
 gRPC の上で動き、TLS で守ります。ブループリントの 5.7(gRPC と gNMI、TCP、TLS と相互 TLS の証明書を使ったダイヤルインと
-ダイヤルアウトの設定)にあたります。盤面は XRT-15 で、このページで使う部分は 2 節の初めに描きます。
+ダイヤルアウトの設定)にあたります。盤面は XRT-15 で、このページで使う部分は 2 節の初めに描きます。証明書と TLS の土台は、前のページで扱いました。
 
 ## 1. 何が嬉しいのか
 
-### 1.1 困りごと: 5 分ごとの問い合わせでは、20 秒の混雑が見えない
+### 1.1 困りごと: 5 分ごとの問い合わせでは、20 秒の輻輳が見えない
 
 NMS チームは、XR01 のインターフェイスがどれだけ混んでいるかを知りたいと考えています。平均で 30% しか流れていない回線でも、
-20 秒ずつ満杯になることがあり、顧客のパケットが落ちるのはその 20 秒の間です。そうした瞬間の混雑を見るには、全部のルータの
+20 秒ずつ満杯になることがあり、顧客のパケットが落ちるのはその 20 秒の間です。そうした瞬間の輻輳を見るには、全部のルータの
 全部のインターフェイスで、10 秒ほどおきにカウンタを読む必要があります。
 
 それだけの頻度で、尋ねて読むのは重い作業です。1 回読むごとに要求と応答が往復し、ルータは値を 1 つずつ引き、NMS は
@@ -18,8 +18,8 @@ NMS チームは、XR01 のインターフェイスがどれだけ混んでい�
 
 ### 1.2 それ以前の手: SNMP の問い合わせと CLI の読み取り
 
-- **SNMP の問い合わせ**(ポーリング): NMS がルータに MIB のオブジェクト(インターフェイスごとの入出力のオクテット数など)を
-  GET や GETBULK で尋ねます。間隔は 5 分がふつうです。数百のインターフェイスの表をたどるには、何往復もかかります。値には
+- **SNMP の問い合わせ**(ポーリング): NMS がルータに MIB オブジェクト(インターフェイスごとの入出力のオクテット数など)を
+  GET や GETBULK で尋ねます。間隔は 5 分がふつうです。数百のインターフェイスのテーブルをたどるには、何往復もかかります。値には
   読んだ時刻が付かず、NMS が応答を受けた時刻を付けます。SNMP そのものは「フローを数え、問い合わせる」のページで扱います。
 - **CLI の読み取り**(スクレイピング): スクリプトが SSH でログインし、`show interfaces` を実行して、文字の中から数字を
   切り出します。その文字は人が読むためのものです。リリースや機種で変わり、スクリプトは黙って壊れます。
@@ -30,20 +30,20 @@ NMS チームは、XR01 のインターフェイスがどれだけ混んでい�
 ### 1.3 流す、という答え
 
 - **尋ねる代わりに送る**: ルータが、決まった間隔で(または値が変わったときに)自分のカウンタを読み、張ったままの接続で
-  送ります。収集役は受け取るだけです。
-- **データ モデルで名前を付ける**: 何を送るかは YANG のパスで指定します。NETCONF と同じモデルです(前のページ)。値は、
+  送ります。コレクタは受け取るだけです。
+- **データ モデルで名前を付ける**: 何を送るかは YANG パスで指定します。NETCONF と同じモデルです(前のページ)。値は、
   名前、キー(どのインターフェイスか)、読んだ時刻と一緒に届きます。
-- **線の上では小さく**: データは 2 進の形(GPB、Google Protocol Buffers)に符号化され、gRPC で運ばれます。全インターフェイス
-  の 1 回分の採取が、1 つのメッセージで届きます。
+- **回線上では小さく**: データはバイナリ形式(GPB、Google Protocol Buffers)にエンコードされ、gRPC で運ばれます。全インターフェイス
+  の 1 回分のサンプルが、1 つのメッセージで届きます。
 - **守られている**: TLS が接続を暗号化し、両端が相手の証明書を確かめられます。
 
-Cisco はこれをモデル駆動テレメトリ(MDT)と呼びます。始め方は 2 つあります。XR01 が収集役へ接続する(ダイヤルアウト)か、
-収集役が XR01 へ接続して gNMI で購読する(ダイヤルイン)かです。2.3 節で比べます。
+Cisco はこれをモデル駆動テレメトリ(MDT)と呼びます。始め方は 2 つあります。XR01 がコレクタへ接続する(ダイヤルアウト)か、
+コレクタが XR01 へ接続して gNMI でサブスクライブする(ダイヤルイン)かです。2.3 節で比べます。
 
-## 2. 仕組み: 1 つのカウンタを XR01 から収集役まで
+## 2. 仕組み: 1 つのカウンタを XR01 からコレクタまで
 
-XRT-15 では、XR01 と SRV01(NMS)が NMS の区画 10.0.50.0/24 を共有します。SRV01 では、テレメトリの収集役 telegraf
-(TCP 57500 で待ち受け、TLS の gRPC だけを受け付ける)と、gNMI のクライアント gnmic が動いています。XR01 の gRPC の
+XRT-15 では、XR01 と SRV01(NMS)が NMS のセグメント 10.0.50.0/24 を共有します。SRV01 では、テレメトリ コレクタ telegraf
+(TCP 57500 で待ち受け、TLS の gRPC だけを受け付ける)と、gNMI クライアント gnmic が動いています。XR01 の gRPC
 サーバは、設定すると TCP 57400 で待ち受けます。
 
 :::topo
@@ -58,33 +58,33 @@ links:
   - {a: PE2, b: SW1, la: "Gi3 .2"}
   - {a: SW1, b: SRV01, lb: "ens3 .10"}
 frames:
-  - {label: "NMS の区画 10.0.50.0/24", nodes: [SW1, SRV01]}
+  - {label: "NMS のセグメント 10.0.50.0/24", nodes: [SW1, SRV01]}
 :::
 
 ### 2.1 gRPC と gNMI
 
 **gRPC** は、別の機械の上の関数を呼び出すための仕組み(リモート プロシージャ コール)で、Google が作りました。HTTP/2 の
-上で動きます。1 本の TCP の接続で、たくさんの呼び出しを別々のストリームとして同時に運び、どちらの側も 1 本のストリームで
-好きなだけ送り続けられます。終わりのない採取の流れを送れるのは、このためです。メッセージは protocol buffers(protobuf)
-で決めます。メッセージの形を `.proto` のファイルに書き、小さな 2 進の形で送ります。
+上で動きます。1 本の TCP 接続で、たくさんの呼び出しを別々のストリームとして同時に運び、どちらの側も 1 本のストリームで
+好きなだけ送り続けられます。終わりのないサンプルの流れを送れるのは、このためです。メッセージは protocol buffers(protobuf)
+で決めます。メッセージの形を `.proto` ファイルに書き、小さなバイナリ形式で送ります。
 
-**gNMI**(gRPC Network Management Interface)は、OpenConfig がネットワーク機器の管理のために決めた、gRPC のサービスです。
+**gNMI**(gRPC Network Management Interface)は、OpenConfig がネットワーク機器の管理のために決めた、gRPC サービスです。
 呼び出し(RPC)は 4 つです。
 
 | RPC | すること |
 |---|---|
 | Capabilities | 機器が、対応するモデルとエンコードを知らせる |
-| Get | パスの下のデータを、その時点の写しとして読む |
+| Get | パスの下のデータを、その時点のスナップショットとして読む |
 | Set | 設定を変える(更新・置き換え・削除) |
 | Subscribe | パスの下のデータを、今もこの先も送るよう頼む(2.2 節) |
 
-gNMI のパスは、YANG の木の中の場所を 1 段ずつ指し、リストのキーを角かっこに書きます。例えば
-`/interfaces/interface[name=Loopback0]/state` です。パスがどの木に属するかを、**オリジン**(origin)と呼びます。オリジンが
+gNMI のパスは、YANG ツリーの中の場所を 1 段ずつ指し、リストのキーを角かっこに書きます。例えば
+`/interfaces/interface[name=Loopback0]/state` です。パスがどのツリーに属するかを、**オリジン**(origin)と呼びます。オリジンが
 無ければ OpenConfig だと、gNMI の仕様は決めています。IOS XR 独自のモデルは、`Cisco-IOS-XR-shellutil-oper:system-time/uptime`
 のように、先頭にモジュールの名前を付けて指します。XR は、応答のパスにオリジンを書き入れます(`openconfig:/…`、
 `Cisco-IOS-XR-shellutil-oper:/…`)。
 
-gNMI のメッセージの中の値は、要求が指定した形で符号化されます。IOS XR 26.1.1 は、Capabilities で **JSON_IETF**(YANG の
+gNMI のメッセージの中の値は、要求が指定した形でエンコードされます。IOS XR 26.1.1 は、Capabilities で **JSON_IETF**(YANG の
 データの規則で書く JSON。RFC 7951)だけを知らせ、gnmic の既定の素の JSON を拒みます。Get は
 `unsupported get-request encoding: JSON` で失敗します。gnmic には `-e json_ietf` を付けます。
 
@@ -144,13 +144,13 @@ Subscribe の要求は、パスを並べ、それをどう受け取りたいか�
 
 STREAM では、パスごとのサブモードで、いつ値を送るかが決まります。
 
-- **SAMPLE**: 採取の間隔ごとに、値が変わっていてもいなくても送ります。いつも変わり続けるカウンタに向きます。
+- **SAMPLE**: サンプル間隔ごとに、値が変わっていてもいなくても送ります。いつも変わり続けるカウンタに向きます。
 - **ON_CHANGE**: 最初に全部の値を 1 回送り、その後は値が変わったときだけ送ります。インターフェイスの oper-status のように、
-  めったに変わらない状態に向きます。Telemetry のガイドは、状態の葉(リーフ)に限るとしています。
-- **TARGET_DEFINED**: 葉ごとに SAMPLE か ON_CHANGE かを、機器が選びます。
+  めったに変わらない状態に向きます。Telemetry のガイドは、状態のリーフに限るとしています。
+- **TARGET_DEFINED**: リーフごとに SAMPLE か ON_CHANGE かを、機器が選びます。
 
 STREAM は、最初に全部の値を 1 回送り、続けて `sync_response` を送ります。これで、クライアントは完全な写しを持ったと
-分かります。その後は、採取か変化の分だけが続きます。
+分かります。その後は、サンプルか変化の分だけが続きます。
 
 XR01 では、OpenConfig のパスで、ONCE、STREAM の SAMPLE(10 秒ごと)、STREAM の ON_CHANGE の Subscribe が動きました。
 次は Loopback0 のカウンタを ONCE で受けた例です(ループバックには、そこにカウンタが 1 つしかありません)。
@@ -181,7 +181,7 @@ $ gnmic -a 10.0.50.1:57400 -u <user> -p <password> -e json_ietf … subscribe --
 }
 ```
 
-ルータに設定するテレメトリも、同じ選択を 1 つの数で表します。`sample-interval` をミリ秒で書けば採取、0 にすれば
+ルータに設定するテレメトリも、同じ選択を 1 つの数で表します。`sample-interval` をミリ秒で書けばサンプリング、0 にすれば
 イベント駆動(値が変わったときに送る)です。
 
 ### 2.3 ダイヤルインとダイヤルアウト
@@ -190,38 +190,38 @@ $ gnmic -a 10.0.50.1:57400 -u <user> -p <password> -e json_ietf … subscribe --
 
 | | ダイヤルイン | ダイヤルアウト |
 |---|---|---|
-| 接続する側 | 収集役が、XR01 の gRPC のサーバ(57400)へ | XR01 が、収集役(XRT-15 では 57500)へ |
-| 何を送るかを決める側 | 収集役の要求(gNMI の Subscribe: パス・モード・間隔) | XR01 の設定(センサー グループ・サブスクリプション・宛先グループ) |
+| 接続する側 | コレクタが、XR01 の gRPC サーバ(57400)へ | XR01 が、コレクタ(XRT-15 では 57500)へ |
+| 何を送るかを決める側 | コレクタの要求(gNMI の Subscribe: パス・モード・間隔) | XR01 の設定(センサー グループ・サブスクリプション・宛先グループ) |
 | 運び方 | gRPC だけ | gRPC・TCP・UDP |
 | XR01 に要るもの | `grpc` | `telemetry model-driven`、TLS なら CA のファイル |
-| 切れた後 | 収集役が接続し直し、購読し直す | XR01 が自分で試し続ける |
-| ファイアウォールで通す向き | 収集役 → ルータ | ルータ → 収集役 |
+| 切れた後 | コレクタが接続し直し、サブスクライブし直す | XR01 が自分で試し続ける |
+| ファイアウォールで通す向き | コレクタ → ルータ | ルータ → コレクタ |
 
-**ダイヤルイン。** 収集役がルータへ接続して頼みます。gNMI の Subscribe はダイヤルインです。gnmic が要求の中でパスを
-指定するので、XR01 には gRPC のサーバのほかに設定が要りません。IOS XR 独自のテレメトリも、ダイヤルインで動かせます。
-宛先グループを持たないサブスクリプションをルータに設定しておくと、gRPC のサーバへ接続してきた収集役がそれを受け取ります。
+**ダイヤルイン。** コレクタがルータへ接続して頼みます。gNMI の Subscribe はダイヤルインです。gnmic が要求の中でパスを
+指定するので、XR01 には gRPC サーバのほかに設定が要りません。IOS XR 独自のテレメトリも、ダイヤルインで動かせます。
+宛先グループを持たないサブスクリプションをルータに設定しておくと、gRPC サーバへ接続してきたコレクタがそれを受け取ります。
 
-**ダイヤルアウト。** ルータが収集役へ接続し、設定に書いたものを送ります。収集役は待ち受けるだけです。収集役が再起動すると、
+**ダイヤルアウト。** ルータがコレクタへ接続し、設定に書いたものを送ります。コレクタは待ち受けるだけです。コレクタが再起動すると、
 XR01 は切れたことに気づいて自分で接続し直します。ラボでは 1 分以内に戻りました。
 
-ダイヤルアウトは、gRPC・TCP・UDP を使えます。TCP は、同じ符号化のメッセージを、gRPC も TLS も使わずに運びます。UDP には
+ダイヤルアウトは、gRPC・TCP・UDP を使えます。TCP は、同じエンコードのメッセージを、gRPC も TLS も使わずに運びます。UDP には
 セッションがありません。XR01 は、誰かが待ち受けていてもいなくても宛先を Active と表示し、メッセージは 1 つのデータグラムに
 収まる必要があります(最大 65,507 バイト)。Telemetry のガイドは、本番に UDP を勧めていません。
 
-ダイヤルアウトは、決まったデータを決まった収集役へ送るのに向きます。何をどこへ送るかはルータの設定にあり、収集役はルータの
+ダイヤルアウトは、決まったデータを決まったコレクタへ送るのに向きます。何をどこへ送るかはルータの設定にあり、コレクタはルータの
 一覧を持たなくて済みます。ダイヤルインは、障害対応で使う道具のように、何を読むかをクライアントが自分で決める場合に向きます。
 
 ### 2.4 エンコードとセンサー パス
 
-ダイヤルアウトでは、採取の符号化の形を宛先グループで決めます。
+ダイヤルアウトでは、サンプルのエンコード形式を宛先グループで決めます。
 
-| エンコード | 何が運ばれるか | 収集役に要るもの |
+| エンコード | 何が運ばれるか | コレクタに要るもの |
 |---|---|---|
-| `gpb`(compact GPB) | 値に、フィールドの番号だけが付く。いちばん小さい | どの番号が何かを知るための、パスごとの `.proto` のファイル |
-| `self-describing-gpb`(キーと値の GPB) | 値ごとに名前が付く | パスごとのものは要らない。telegraf はそのまま解ける |
-| `json` | 文字 | パスごとのものは要らない |
+| `gpb`(compact GPB) | 値に、フィールドの番号だけが付く。いちばん小さい | どの番号が何かを知るための、パスごとの `.proto` ファイル |
+| `self-describing-gpb`(キーと値の GPB) | 値ごとに名前が付く | パスごとのものは要らない。telegraf はそのままデコードできる |
+| `json` | テキスト | パスごとのものは要らない |
 
-**センサー パス**は、`<モジュール>:<パス>` と書く YANG のパスです。コロンの後ろにスラッシュは付けません。例えば
+**センサー パス**は、`<モジュール>:<パス>` と書く YANG パスです。コロンの後ろにスラッシュは付けません。例えば
 `openconfig-interfaces:interfaces/interface/state/counters` です。XR は、自分の持つモデルでパスを引きます。見つかれば
 **Resolved** で、XR は最も近いコンテナから集めます。表示は `openconfig-interfaces:interfaces/interface/state{counters}`
 で、コンテナ `state` を `counters` に絞った、という意味です。
@@ -232,13 +232,13 @@ XR01 は切れたことに気づいて自分で接続し直します。ラボで
 
 | パス | gNMI の Get | センサー パスとして |
 |---|---|---|
-| `openconfig-interfaces:interfaces/interface/state/counters` | カウンタが返る | Resolved。採取が届く |
+| `openconfig-interfaces:interfaces/interface/state/counters` | カウンタが返る | Resolved。サンプルが届く |
 | `Cisco-IOS-XR-infra-statsd-oper:infra-statistics/interfaces/interface/latest/generic-counters` | NotFound | Not Resolved、`Invalid sensor path`。何も送られない |
 
 解決できないパスを 1 つ含むセンサー グループは **Partial** と表示され、解決できたパスはそのまま送られます。パスが欠けている
-ことは収集役に知らされないので、ルータの側で状態を確かめます(3.4 節)。
+ことはコレクタに知らされないので、ルータの側で状態を確かめます(3.4 節)。
 
-SRV01 では、telegraf が採取を JSON の行に直します。1 行に 1 つのオブジェクトです。インターフェイスごとに、1 回の採取で
+SRV01 では、telegraf がサンプルを JSON の行に直します。1 行に 1 つのオブジェクトです。インターフェイスごとに、1 回のサンプルで
 2 行になります。17 個のフィールド(`counters/in_pkts`・`counters/out_pkts`・`counters/in_octets` など)の行と、
 `counters/carrier_transitions` の行です。タグには、送ったルータ(`source`)、サブスクリプション、インターフェイス(`name`)、
 パスが入ります。
@@ -273,27 +273,27 @@ TLS が証明するのは、どの機械どうしが話しているかです。�
 ユーザ名とパスワードを載せ、XR はそれを SSH のログインと同じように AAA で確かめます。`tls-mutual` に
 `certificate-authentication` を足すと、XR はユーザ名をクライアント証明書の CN から取ります。
 
-ダイヤルアウトでは役が入れ替わります。XR01 が TLS のクライアントで、収集役がサーバです。XR01 は、収集役の証明書を
+ダイヤルアウトでは役が入れ替わります。XR01 が TLS のクライアントで、コレクタがサーバです。XR01 は、コレクタの証明書を
 `dialout.pem` の CA で確かめ、名前も確かめます。`tls-hostname` を設定していればその名前、無ければ宛先のアドレスです。
-Telemetry のガイドは、名前が証明書の CN と合う必要があると書いています。ラボの収集役の証明書は、`collector.nms.lab` を CN と
+Telemetry のガイドは、名前が証明書の CN と合う必要があると書いています。ラボのコレクタの証明書は、`collector.nms.lab` を CN と
 SAN の両方に持ち、アドレス 10.0.50.10 も SAN に持つので、アドレスで確かめても通ります。XR01 は、ダイヤルアウトで自分の
-証明書を見せません。証明書を求める収集役は、接続を受け付けないままです。
+証明書を見せません。証明書を求めるコレクタは、接続を受け付けないままです。
 
 ### 2.6 押さえどころ
 
-- テレメトリは、YANG のパスで名前を付けたデータを、GPB に符号化し、張ったままの接続で送り出す。gNMI は Capabilities・Get・
-  Set・Subscribe の 4 つの呼び出しを持つ gRPC のサービス。
-- Subscribe は STREAM(SAMPLE・ON_CHANGE・TARGET_DEFINED)・ONCE・POLL。ルータの設定では、採取の間隔をミリ秒で、0 なら変化時。
-- ダイヤルインは収集役が接続する(gNMI。gRPC だけ)。ダイヤルアウトは XR が接続する(3 つの塊。gRPC・TCP・UDP)。
+- テレメトリは、YANG パスで名前を付けたデータを、GPB にエンコードし、張ったままの接続で送り出す。gNMI は Capabilities・Get・
+  Set・Subscribe の 4 つの呼び出しを持つ gRPC サービス。
+- Subscribe は STREAM(SAMPLE・ON_CHANGE・TARGET_DEFINED)・ONCE・POLL。ルータの設定では、サンプル間隔をミリ秒で、0 なら変化時。
+- ダイヤルインはコレクタが接続する(gNMI。gRPC だけ)。ダイヤルアウトは XR が接続する(3 つのブロック。gRPC・TCP・UDP)。
 - 26.1.1 の XR の gNMI は JSON_IETF だけ。古いネイティブのインターフェイスのパスは無い。センサー パスがすべて Resolved か確かめる。
 - TLS では、サーバが証明書を見せ、クライアントが CA・日付・名前を確かめる。相互 TLS では、サーバもクライアントを確かめる。
-  XR では、`ems.pem` をクライアントに見せ、`ca.cert` でクライアントを、`dialout/dialout.pem` で収集役を確かめる。
+  XR では、`ems.pem` をクライアントに見せ、`ca.cert` でクライアントを、`dialout/dialout.pem` でコレクタを確かめる。
 
 ## 3. IOS XR で組む
 
-### 3.1 gRPC のサーバ: TLS と相互 TLS
+### 3.1 gRPC サーバ: TLS と相互 TLS
 
-gRPC のサーバは、`grpc` を設定するまで止まっています。`no-tls` を書かなければ TLS で話し、`tls-mutual` を書くと、すべての
+gRPC サーバは、`grpc` を設定するまで止まっています。`no-tls` を書かなければ TLS で話し、`tls-mutual` を書くと、すべての
 クライアントに証明書を求めます。`vrf` の行が無ければ、グローバルのルーティング テーブルで、XR01 のすべてのアドレスで待ち
 受けます。gNMI も同じポートで受けます。
 
@@ -306,7 +306,7 @@ rows:
   - {node: SRV01, kind: host, say: ["gnmic に `--tls-cert client.pem --tls-key client.key`", "~ラボのアカウントを `-u` と `-p` に"]}
   - {wire: "[[TCP 10.0.50.10 → 10.0.50.1:57400]] [[=TLS hello]]"}
   - panel: XR01
-    sub: gRPC のサーバ(プロセス emsd)
+    sub: gRPC サーバ(プロセス emsd)
     items:
       - ref: 1
         head: "**待ち受ける** `grpc`  `port 57400`  `address-family ipv4`"
@@ -329,8 +329,8 @@ rows:
     say: ["~`cannot validate certificate for 10.0.50.1 because it doesn't contain any IP SANs`", "~→ 証明書の名前で確かめる: `--tls-server-name ems.cisco.com`"]
 :::
 
-:::config fold XR01 — 証明書を見せるクライアントだけを受け付ける、ポート 57400 の gRPC のサーバ
-grpc                                          ## ① gRPC のサーバ(プロセス emsd)を動かす。gNMI もこれを使う
+:::config fold XR01 — 証明書を見せるクライアントだけを受け付ける、ポート 57400 の gRPC サーバ
+grpc                                          ## ① gRPC サーバ(プロセス emsd)を動かす。gNMI もこれを使う
  port 57400                                   ## ① 既定のポート。範囲は 57344〜57999
  address-family ipv4                          ## ① IPv4 で待ち受ける。vrf の行が無いので、グローバルのテーブルで
  tls-mutual                                   ## ② すべてのクライアントに証明書を求め、ca.cert で確かめる
@@ -340,7 +340,7 @@ grpc                                          ## ① gRPC のサーバ(プロセ
 ラボで初めて gNMI を試すときは、次のように TLS なしでサーバを動かせます。本番向けではありません。ユーザ名とパスワードが、
 暗号化されずにネットワークを流れます。ポートは、範囲の中の空いているものなら何でもかまいません。
 
-:::config XR01 — TLS を使わない gRPC のサーバ(ラボでの試験だけ)
+:::config XR01 — TLS を使わない gRPC サーバ(ラボでの試験だけ)
 grpc
  port 57401                                   ## 57344〜57999 の別のポート
  no-tls                                       ## 素の gRPC。クライアントは gnmic --insecure で接続する
@@ -348,7 +348,7 @@ grpc
 !
 :::
 
-`grpc` の塊が持つサーバは 1 つなので、これは 2 台目のサーバを足すのではなく、上の設定を置き換えます。`tls-mutual` が
+`grpc` ブロックが持つサーバは 1 つなので、これは 2 台目のサーバを足すのではなく、上の設定を置き換えます。`tls-mutual` が
 設定されている間は、XR は `no-tls` を拒みます。先に `tls-mutual` を外します。
 
 ```console
@@ -398,13 +398,13 @@ http・tftp・ftp・sftp・scp を使えます。XRT-15 では、SRV01 で `~/pk
 使い続け、新しい CA の証明書を持つクライアントにも `tls: bad certificate` を返します。テレメトリのダイヤルアウトは、
 再起動の間も続きました。
 
-`dialout.pem` は、再起動が要りません。XR は、次に収集役へ接続するときにこれを読み、接続は自分で試し直します。
+`dialout.pem` は、再起動が要りません。XR は、次にコレクタへ接続するときにこれを読み、接続は自分で試し直します。
 
-:::config fold XR01 — NMS の CA を、gRPC のサーバとダイヤルアウトが探す場所に置く(EXEC モード)
+:::config fold XR01 — NMS の CA を、gRPC サーバとダイヤルアウトが探す場所に置く(EXEC モード)
 copy http://10.0.50.10:8000/ca.pem harddisk:/nms-lab-ca.pem   ## SRV01 から CA の証明書(公開のもの。鍵ではない)を取ってくる
 run cp /harddisk:/nms-lab-ca.pem /misc/config/grpc/ca.cert   ## ③ ダイヤルイン: クライアント証明書の署名元であるべき CA
 process restart emsd                          ## ③ emsd は ca.cert を起動時にだけ読む
-run cp /harddisk:/nms-lab-ca.pem /misc/config/grpc/dialout/dialout.pem   ## ダイヤルアウト: 収集役の証明書を確かめる CA
+run cp /harddisk:/nms-lab-ca.pem /misc/config/grpc/dialout/dialout.pem   ## ダイヤルアウト: コレクタの証明書を確かめる CA
 :::
 
 XR の上で証明書を読むには、`run` で `openssl` を使います。サブジェクト・発行者・SAN を、相手が期待するものと比べます。
@@ -420,30 +420,30 @@ notAfter=Nov 10 13:08:16 2046 GMT
 ```
 
 サブジェクトと発行者が同じなので、自分で署名した証明書です。SRV01 では、`openssl s_client -connect <アドレス>:<ポート>
-</dev/null | openssl x509 -noout -subject -issuer -ext subjectAltName` で、サーバが見せる証明書を読めます。XR01 の gRPC の
-サーバでも、収集役でも同じです。
+</dev/null | openssl x509 -noout -subject -issuer -ext subjectAltName` で、サーバが見せる証明書を読めます。XR01 の gRPC
+サーバでも、コレクタでも同じです。
 
 新しいリリースでは、gRPC の証明書を gNSI で管理する SSL プロファイルへ移しつつあり、ガイドは `/misc/config/grpc` の証明書を
-将来のリリースで非推奨にすると書いています。26.1.1 では、gRPC のサーバとダイヤルアウトが使うのは、これらのファイルです。
+将来のリリースで非推奨にすると書いています。26.1.1 では、gRPC サーバとダイヤルアウトが使うのは、これらのファイルです。
 
 ### 3.3 ダイヤルアウト: センサー グループ・宛先グループ・サブスクリプション
 
-ダイヤルアウトは、`telemetry model-driven` の下の 3 つの塊で組みます。**センサー グループ**は何を読むか、**宛先グループ**は
+ダイヤルアウトは、`telemetry model-driven` の下の 3 つのブロックで組みます。**センサー グループ**は何を読むか、**宛先グループ**は
 どこへどう送るかを決め、**サブスクリプション**が、間隔と送信元のインターフェイスを添えて、2 つを名前で結び付けます。
 
 例は、XR01 の稼働時間とインターフェイスのカウンタを 30 秒ごとに送るものです。図は、GigabitEthernet0/0/0/0 のカウンタの
-1 回分の採取が、TLS の gRPC で SRV01 の telegraf に届くまでの順です。図の番号にカーソルを置くと(スマホでは押すと)、
-その塊が出ます。
+1 回分のサンプルが、TLS の gRPC で SRV01 の telegraf に届くまでの順です。図の番号にカーソルを置くと(スマホでは押すと)、
+そのブロックが出ます。
 
 :::walk
-legend: "1 回分の採取が収集役へ向かう。青い番号は telemetry model-driven の下の塊。"
+legend: "1 回分のサンプルがコレクタへ向かう。青い番号は telemetry model-driven の下のブロック。"
 rows:
   - panel: XR01
     sub: telemetry model-driven
     items:
       - ref: 1
         head: "**何を読むか** `sensor-group SG-HEALTH`"
-        say: ["パスごとに、このリリースの YANG のモデルで引く"]
+        say: ["パスごとに、このリリースの YANG モデルで引く"]
         match:
           - ["openconfig-interfaces:interfaces/interface/state/counters", true, "Resolved"]
         then: ["→ 全インターフェイスのカウンタ: in-pkts・out-pkts・in-octets …"]
@@ -455,32 +455,32 @@ rows:
         head: "**どこへ・どう** `destination-group DG-NMS-TLS`"
         say: ["10.0.50.10 のポート 57500、`encoding self-describing-gpb`"]
       - ref: 4
-        head: "**収集役を確かめる** `protocol grpc tls-hostname collector.nms.lab`"
+        head: "**コレクタを確かめる** `protocol grpc tls-hostname collector.nms.lab`"
         say: ["XR01 が TLS のクライアント。telegraf が証明書を見せる"]
         match:
           - ["dialout/dialout.pem の CA の署名", true, "NMS-LAB-CA"]
           - ["collector.nms.lab が証明書の名前にある", true, "合う"]
   - {wire: "[[TCP 10.255.0.1 → 10.0.50.10:57500]] [[=TLS]] [[=gRPC]] [[GPB: in-pkts …]]"}
-  - {node: SRV01, kind: host, say: ["telegraf が採取を解く", "_/var/log/telegraf/mdt.json にインターフェイスごとに JSON を 2 行"]}
+  - {node: SRV01, kind: host, say: ["telegraf がサンプルをデコードする", "_/var/log/telegraf/mdt.json にインターフェイスごとに JSON を 2 行"]}
   - aside: "CA のファイルが無い、または tls-hostname が証明書に無い名前"
     say: ["~④で落ちる。TLS のハンドシェイクが失敗 → 宛先は NA のまま。SRV01 には何も届かない", "~サブスクリプションは ACTIVE のこともある。理由は `show grpc trace ems` に"]
   - aside: "解決できないセンサー パス"
     say: ["~① `Cisco-IOS-XR-infra-statsd-oper:…/latest/generic-counters` → Not Resolved", "~グループは Partial。解決できたパスは送られる"]
 :::
 
-まず、素の TCP で 3 つの塊を見ます。証明書なしで形が分かります。ラボの収集役は 57500 で TLS の gRPC しか受け付けないので、
-TCP の宛先には別の収集役が要ります(telegraf は TCP でも待ち受けられます。ここではポート 57000)。
+まず、素の TCP で 3 つのブロックを見ます。証明書なしで形が分かります。ラボのコレクタは 57500 で TLS の gRPC しか受け付けないので、
+TCP の宛先には別のコレクタが要ります(telegraf は TCP でも待ち受けられます。ここではポート 57000)。
 
-:::config XR01 — 稼働時間とインターフェイスのカウンタを、30 秒ごとに TCP の収集役へ送る
+:::config XR01 — 稼働時間とインターフェイスのカウンタを、30 秒ごとに TCP のコレクタへ送る
 telemetry model-driven
  destination-group DG-NMS-TCP                 ## ③ どこへ、どう送るか
-  address-family ipv4 10.0.50.10 port 57000   ## 収集役のアドレスとポート
+  address-family ipv4 10.0.50.10 port 57000   ## コレクタのアドレスとポート
    encoding self-describing-gpb               ## 値ごとに名前を付けて運ぶ
    protocol tcp                               ## 素の TCP。gRPC も TLS も使わない
   !
  !
  sensor-group SG-HEALTH                       ## ① 何を読むか
-  sensor-path Cisco-IOS-XR-shellutil-oper:system-time/uptime   ## ネイティブのモデル: XR01 の稼働時間
+  sensor-path Cisco-IOS-XR-shellutil-oper:system-time/uptime   ## ネイティブ モデル: XR01 の稼働時間
   sensor-path openconfig-interfaces:interfaces/interface/state/counters   ## OpenConfig: 全インターフェイスのカウンタ
  !
  subscription SUB-NMS-TCP                     ## ② 2 つを結び付ける
@@ -494,12 +494,12 @@ telemetry model-driven
 TLS の gRPC にするときに変わるのは、宛先だけです。`protocol grpc` と、確かめる名前です。確かめに使う CA は、3.2 節の
 `dialout.pem` のファイルです。
 
-:::config fold XR01 — 同じデータを TLS の gRPC の収集役へ送り、その証明書を確かめる
+:::config fold XR01 — 同じデータを TLS の gRPC のコレクタへ送り、その証明書を確かめる
 telemetry model-driven
  destination-group DG-NMS-TLS                 ## ③
   address-family ipv4 10.0.50.10 port 57500   ## SRV01 の telegraf(TLS の gRPC)
    encoding self-describing-gpb
-   protocol grpc tls-hostname collector.nms.lab   ## ④ TLS。収集役の証明書がこの名前を持つこと
+   protocol grpc tls-hostname collector.nms.lab   ## ④ TLS。コレクタの証明書がこの名前を持つこと
   !
  !
  subscription SUB-NMS-TLS                     ## ②
@@ -515,8 +515,8 @@ telemetry model-driven
 
 ### 3.4 確かめ方
 
-**gRPC のサーバ。** `show grpc` で、ポート・VRF・TLS の設定が分かります(`show grpc status` はありません)。全体の出力の
-`Service ports gNMI : none` は、gNMI が自分のポートを持たず、主のポートを使うという意味です。
+**gRPC サーバ。** `show grpc` で、ポート・VRF・TLS の設定が分かります(`show grpc status` はありません)。全体の出力の
+`Service ports gNMI : none` は、gNMI が自分のポートを持たず、メインのポートを使うという意味です。
 
 ```console
 RP/0/RP0/CPU0:XR01#show grpc | include "TLS|Port|Address family|VRF"
@@ -532,7 +532,7 @@ TLS cipher suites
   Default TLS1.3                        : aes_128_gcm_sha256
 ```
 
-**gNMI のクライアントが失敗するとき。** gnmic のエラーの文が、足りない部品を教えてくれます。パスの要らない `capabilities` で
+**gNMI クライアントが失敗するとき。** gnmic のエラーの文が、足りない部品を教えてくれます。パスの要らない `capabilities` で
 先に試します。
 
 | gnmic の表示(抜粋) | 意味 |
@@ -547,8 +547,8 @@ TLS cipher suites
 **テレメトリ。** 要約から細部へ、3 つのコマンドがあります。`show telemetry model-driven subscription [名前]`、
 `show telemetry model-driven sensor-group [名前]`、`show telemetry model-driven destination [名前]` です。下の出力は、別の名前で
 試したときのものです。センサー グループ SG-IF に OpenConfig のカウンタのパスと infra-statsd のパスを入れ、SUB-TCP は 57000 の
-TCP の収集役へ、SUB-TLS は 57600 の TLS の gRPC の収集役へ(名前 collector.lab で確かめる)、SUB-MTLS はクライアント証明書を
-求める 57700 の収集役へ送りました。まず、どの収集役も待ち受けていないとき:
+TCP のコレクタへ、SUB-TLS は 57600 の TLS の gRPC のコレクタへ(名前 collector.lab で確かめる)、SUB-MTLS はクライアント証明書を
+求める 57700 のコレクタへ送りました。まず、どのコレクタも待ち受けていないとき:
 
 ```console
 RP/0/RP0/CPU0:XR01#show telemetry model-driven subscription
@@ -573,7 +573,7 @@ RP/0/RP0/CPU0:XR01#show telemetry model-driven sensor-group
       Status:           Invalid sensor path
 ```
 
-収集役が待ち受けてから:
+コレクタが待ち受けてから:
 
 ```console
 RP/0/RP0/CPU0:XR01#show telemetry model-driven subscription
@@ -627,15 +627,15 @@ RP/0/RP0/CPU0:XR01#show telemetry model-driven destination DG-MTLS
   という意味です。XR01 から何かが出ているかは、この行で分かります。
 - **サブスクリプションの State**: これだけで判断しないでください。証明書に無い名前を `tls-hostname` にしたとき、
   サブスクリプションは `ACTIVE` で、その宛先は `NA` でした。
-- **TLS**: TLS なしは `False`。TLS なら、XR01 が収集役の証明書を照らす名前(またはアドレス)です。
-- **Total packets sent**: 宛先が Active の間、採取のたびに増えます。
+- **TLS**: TLS なしは `False`。TLS なら、XR01 がコレクタの証明書と照合する名前(またはアドレス)です。
+- **Total packets sent**: 宛先が Active の間、サンプルのたびに増えます。
 
 **宛先が NA の理由。** show のコマンドは理由を出しません。TLS のハンドシェイクの失敗と、そのとき XR01 が確かめたサーバ名のような、
 接続が失敗した理由は、`show grpc trace ems` にあります(`last 20` を付けると最後の行だけを見られます)。ファイルは
-`run ls -la /misc/config/grpc/dialout/` で、収集役の証明書は SRV01 から `openssl s_client` で確かめます(3.2 節)。
+`run ls -la /misc/config/grpc/dialout/` で、コレクタの証明書は SRV01 から `openssl s_client` で確かめます(3.2 節)。
 
-**収集役の側。** telegraf は、1 行に 1 つの JSON のオブジェクトを書きます。`jq` で、1 つのインターフェイスの行と、欲しい
-フィールドを取り出します。ここではサブスクリプションが 10 秒ごとに採取しています。1 回の採取で 2 行(`timestamp` が同じ)、
+**コレクタの側。** telegraf は、1 行に 1 つの JSON オブジェクトを書きます。`jq` で、1 つのインターフェイスの行と、欲しい
+フィールドを取り出します。ここではサブスクリプションが 10 秒ごとにサンプリングしています。1 回のサンプルで 2 行(`timestamp` が同じ)、
 1 行目は 17 個のフィールドで、カウンタが増えていき、2 行目は `carrier_transitions` だけです。
 
 ```console
@@ -673,9 +673,9 @@ certificate is valid for collector.n…`(行はそこで切れている)があ�
 - **`copy` で `/misc/config` へ直接**: 拒まれる(`path outside filesystem`)。先に `harddisk:` へ写し、`run cp`。
 - **サブスクリプションの State だけを見る**: 何も届いていなくても `ACTIVE` のことがある。宛先の State が `Active` で、
   `Total packets sent` が増えていること。
-- **証明書に無い名前の tls-hostname**: 収集役の証明書の名前を `openssl s_client` で読んで、そのどれかを使う。証明書が
+- **証明書に無い名前の tls-hostname**: コレクタの証明書の名前を `openssl s_client` で読んで、そのどれかを使う。証明書が
   アドレスを持つなら、`tls-hostname` を省いてもよい。
-- **クライアント証明書を求める収集役**: XR はダイヤルアウトで証明書を見せないので、宛先は `NA` のまま。
+- **クライアント証明書を求めるコレクタ**: XR はダイヤルアウトで証明書を見せないので、宛先は `NA` のまま。
 - **`tls-mutual` と `no-tls`**: 拒まれる(`Remove grpc tls mutual first!`)。
 - **ems.pem をアドレスで確かめる**: 名前は `ems.cisco.com` しか持たない。その名前で確かめるか、ラボでは確かめを省く。
 
@@ -692,8 +692,8 @@ certificate is valid for collector.n…`(行はそこで切れている)があ�
 Cisco 8000(累積版)と ASR 9000(IOS XR 26.x)の Programmability Configuration Guide(`grpc` のキーワード、ポートの範囲と既定、
 認証の方式〔TLS ありのメタデータ・TLS なし・相互 TLS・証明書による認証〕、自己署名の証明書のファイル、25.4.1 からの SSL
 プロファイルへの移行)。Cisco 8000(累積版、2026 年)と NCS 5500(IOS XR 26.x)の Telemetry Configuration Guide(ダイヤルインと
-ダイヤルアウト、3 つの塊、運び方とエンコード、UDP、ダイヤルアウトの TLS と `tls-hostname`、ダイヤルアウトの CA の置き場、
-採取の間隔、gNMI の購読のモード、show のコマンド、`Cisco-IOS-XR-shellutil-oper:system-time/uptime` を使うセンサー グループの例)。
+ダイヤルアウト、3 つのブロック、運び方とエンコード、UDP、ダイヤルアウトの TLS と `tls-hostname`、ダイヤルアウトの CA の置き場、
+サンプル間隔、gNMI のサブスクリプションのモード、show のコマンド、`Cisco-IOS-XR-shellutil-oper:system-time/uptime` を使うセンサー グループの例)。
 いずれも 2026 年 11 月に確認。
 次の項目は実測によるものです。エンコードが JSON_IETF だけであること、Get と Subscribe の結果、エラーの文、`/misc/config/grpc`
 の下のファイルと emsd の再起動、`copy` が `/misc/config` を拒むこと、解決できるパスとできないパス、サブスクリプションと宛先の

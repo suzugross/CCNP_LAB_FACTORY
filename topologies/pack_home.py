@@ -318,7 +318,7 @@ def _materials(repo):
     shelves = load_materials(repo)
     if not shelves:
         return ""
-    out = ['<section id="materials"><header><h1>Study Materials</h1></header>']
+    out = ['<section id="materials"><header><h1>Study Materials</h1><span data-theme-slot></span></header>']
     for name, books in shelves:
         out.append(f'<h2>{_esc(name)}</h2><ul class="books">')
         for b in books:

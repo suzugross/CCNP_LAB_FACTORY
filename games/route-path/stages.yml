@@ -42,21 +42,21 @@ stages:
             A row of the routing table says "destination → where to send". The connected row says "10.1.1.0/24 is right behind Gi0/0". Nothing else needs to be set.
           ja: |
             ルータは、ネットワークごとに**インターフェース**(差し込み口。`Gi0/0` など)でつながります。
-            インターフェースに、そのネットワークの IP アドレス(`10.1.1.1/24`)を付けて**有効にする**(`no shutdown`)と、ルータはそのネットワークを**経路表**に載せます。これを **connected**(直接つながっている)と呼びます。
-            経路表の行は「宛先 → どこへ送るか」。connected の行は「10.1.1.0/24 は Gi0/0 の先にいる」です。ほかの設定は要りません。
+            インターフェースに、そのネットワークの IP アドレス(`10.1.1.1/24`)を付けて**有効にする**(`no shutdown`)と、ルータはそのネットワークを**ルーティング テーブル**に載せます。これを **connected**(直接つながっている)と呼びます。
+            ルーティング テーブルの行は「宛先 → どこへ送るか」。connected の行は「10.1.1.0/24 は Gi0/0 の先にいる」です。ほかの設定は要りません。
         example: ex_one
         notes:
           - at: if:R1/Gi0/0
             text: {en: "Gi0/0 has 10.1.1.1/24, so R1 knows 10.1.1.0/24", ja: "Gi0/0 に 10.1.1.1/24 → R1 は 10.1.1.0/24 を知る"}
           - at: if:R1/Gi0/1
             text: {en: "Gi0/1 has 10.1.2.1/24, so R1 knows 10.1.2.0/24", ja: "Gi0/1 に 10.1.2.1/24 → R1 は 10.1.2.0/24 を知る"}
-      - title: {en: Hosts hand packets to the default gateway, ja: 端末は既定ゲートウェイに渡す}
+      - title: {en: Hosts hand packets to the default gateway, ja: 端末はデフォルト ゲートウェイに渡す}
         body:
           en: |
             When PC1 sends to a host outside its own network (SRV1), it hands the packet to its **default gateway** (GW). PC1's GW is `10.1.1.1` = the IP of R1's Gi0/0.
             If the router's interface does not have that IP (for example `10.1.1.254`), PC1 finds no one to hand the packet to, and it stops at the first step.
           ja: |
-            PC1 は、自分のネットワークの外(SRV1)へ送るとき、**既定ゲートウェイ**(GW)に渡します。PC1 の GW は `10.1.1.1` = R1 の Gi0/0 の IP です。
+            PC1 は、自分のネットワークの外(SRV1)へ送るとき、**デフォルト ゲートウェイ**(GW)に渡します。PC1 の GW は `10.1.1.1` = R1 の Gi0/0 の IP です。
             ルータのインターフェースの IP が GW と違うと(例: `10.1.1.254`)、PC1 はパケットを渡す相手を見つけられず、最初の 1 歩で止まります。
         example: ex_one_gw
         notes:
@@ -73,15 +73,15 @@ stages:
             - When every packet arrives the way the mission says, the route is complete. Each changed line of configuration is one **move**; fewer moves, more stars.
             - **Rules** at the top right opens a one-page summary at any time.
           ja: |
-            - **ルータを押す**と、経路表とインターフェースが出ます。インターフェースの IP を選び直したり、有効/無効を切り替えたりできます。
-            - 設定ができたら**「送ってみる」**を押します。封筒(**パケット**。札は宛先の IP)が進み、ルータでは経路表を引く様子が見えます。止まった所に ✖ と理由が出ます。
+            - **ルータを押す**と、ルーティング テーブルとインターフェースが出ます。インターフェースの IP を選び直したり、有効/無効を切り替えたりできます。
+            - 設定ができたら**「送ってみる」**を押します。封筒(**パケット**。札は宛先の IP)が進み、ルータではルーティング テーブルを引く様子が見えます。止まった所に ✖ と理由が出ます。
             - 盤面の下の**「コマ送り」**をオンにすると、1 歩ずつ止まり、「次へ」で進みます。
             - すべてのパケットがお題どおりに届けば開通です。変えた設定の 1 行が **1 手**。少ないほど星が増えます。
             - 右上の「ルール」で、決まりの一覧をいつでも開けます。
 
   - id: 2
     ed: static
-    title: {en: Show the way, ja: 道をつなぐ}
+    title: {en: Show the way, ja: 経路をつなぐ}
     sub: {en: "Two to four routers. Add static routes so the packet reaches the server.", ja: "ルータ 2〜4 台。static route を足して、サーバまで届ける"}
     cards:
       - title: {en: A router drops what it does not know, ja: 知らないネットワークへは送れない}
@@ -91,7 +91,7 @@ stages:
             SRV1's network `10.2.1.0/24` is not in R1's routing table. A router **drops** a packet whose destination matches no row (no route).
           ja: |
             ルータが 2 台になりました。R1 が知っているのは、自分につながるネットワーク(PC1 の LAN と、R2 との間のリンク)だけです。
-            SRV1 のネットワーク `10.2.1.0/24` は R1 の経路表にありません。当てはまる行が無い宛先のパケットを、ルータは**捨てます**(経路なし)。
+            SRV1 のネットワーク `10.2.1.0/24` は R1 のルーティング テーブルにありません。当てはまる行が無い宛先のパケットを、ルータは**捨てます**(経路なし)。
         example: ex_line2_drop
         notes:
           - at: r:R1
@@ -104,7 +104,7 @@ stages:
             The cable between R1 and R2 is a small network too: `172.16.12.0/30`, which has two usable addresses, .1 and .2. R1's end is `.1` (172.16.12.1) and R2's end is `.2` (172.16.12.2).
             Which addresses a link gets is decided by whoever builds the network; there is no fixed rule. Read the neighbor's address on the map: the subnet on the link, and the `.x` at each end. Link addresses differ from board to board.
           ja: |
-            R1 と R2 をつなぐ線も小さなネットワークです(`172.16.12.0/30`。使えるアドレスは .1 と .2 の 2 つ)。R1 側が `.1`(172.16.12.1)、R2 側が `.2`(172.16.12.2)です。
+            R1 と R2 をつなぐリンクも小さなネットワークです(`172.16.12.0/30`。使えるアドレスは .1 と .2 の 2 つ)。R1 側が `.1`(172.16.12.1)、R2 側が `.2`(172.16.12.2)です。
             リンクにどのアドレスを使うかは、ネットワークを作る人が決めます(決まった番号があるわけではありません)。相手のアドレスは地図で読みます(リンクの札のサブネットと、両端の `.x`)。リンクのアドレスは盤面ごとに違います。
         example: ex_line2_drop
         notes:
@@ -114,7 +114,7 @@ stages:
             text: {en: "R1's end is .1 = 172.16.12.1", ja: "R1 側は .1 = 172.16.12.1"}
           - at: end:R2/0
             text: {en: "R2's end is .2 = 172.16.12.2", ja: "R2 側は .2 = 172.16.12.2"}
-      - title: {en: Show the way with a static route, ja: static route で道を教える}
+      - title: {en: Show the way with a static route, ja: static route で経路を教える}
         body:
           en: |
             You tell a router the way to a network it does not know: a **static route**.
@@ -122,9 +122,9 @@ stages:
             = "for destination 10.2.1.0/24, hand the packet next to 172.16.12.2 (R2)". The **next hop** is written as the neighbor's IP on the link you share.
             R2 is connected to SRV1's network, so R2 delivers it from there.
           ja: |
-            知らないネットワークへの道は、手で教えます(**static route**)。
+            知らないネットワークへの経路は、手で教えます(**static route**)。
             `ip route 10.2.1.0 255.255.255.0 172.16.12.2`
-            =「宛先 10.2.1.0/24 は、次に 172.16.12.2(R2)へ渡す」。次の行き先(**next-hop**)は、隣のルータの、共有するリンク上の IP で書きます。
+            =「宛先 10.2.1.0/24 は、次に 172.16.12.2(R2)へ渡す」。次の行き先(**next-hop**)は、隣接ルータの、共有するリンク上の IP で書きます。
             R2 は SRV1 のネットワークにつながっている(connected)ので、そこから先は R2 が届けます。
         example: ex_line2_go
         notes:
@@ -145,8 +145,8 @@ stages:
             経路を足すときは、`ip route` に続く 4 つの欄を埋めます。
             - **宛先**: LAN の札のネットワーク アドレス(`10.2.1.0`)。
             - **マスク**: 札の `/24` を、ドットでつないだ 4 つの数で書きます。/24 は 1 が 24 個 = `255.255.255.0`(/16 なら `255.255.0.0`)。
-            - **ゲートウェイ**: 次に渡す隣のルータの IP(共有するリンクの上の、相手側のアドレス)。
-            - **管理距離**: 書かなければ 1。今は空けておけば十分です(効いてくるのはステージ 7 から)。
+            - **ゲートウェイ**: 次に渡す隣接ルータの IP(共有するリンクの上の、相手側のアドレス)。
+            - **アドミニストレーティブ ディスタンス(AD)**: 書かなければ 1。今は空けておけば十分です(効いてくるのはステージ 7 から)。
             欄の候補には盤面の値がすべて並ぶので、選ぶだけでは解けません(地図を読んで決めます)。IOS が受け付けない組み合わせ(宛先とマスクが合わない、自分の IP をゲートウェイにする、など)は、IOS と同じ応答で断られます。
         example: ex_line2_go
         notes:
@@ -163,25 +163,25 @@ stages:
             - If the mission says "through R2", make every router pass the packet in that order.
             - This stage checks only the way there (one way).
           ja: |
-            - ルータを押して「経路を足す」: 下に出る 4 つの欄(宛先・マスク・ゲートウェイ・管理距離)を埋めて「足す」を押します。欄を押すとその欄の候補が下に並ぶので、押して入れます(PC はキーボードでも書けます)。
+            - ルータを押して「経路を足す」: 下に出る 4 つの欄(宛先・マスク・ゲートウェイ・AD)を埋めて「足す」を押します。欄を押すとその欄の候補が下に並ぶので、押して入れます(PC はキーボードでも書けます)。
             - Lv 1・2 は、地図の LAN の札や IP の札を押すと欄に入ります。Lv 3 からは地図を読んで自分で書きます。
-            - ルータは自分の経路表だけで次を決めます。道の途中の**どのルータにも**行が要ります。
+            - ルータは自分のルーティング テーブルだけで次を決めます。経路の途中の**どのルータにも**行が要ります。
             - お題に「R2 を通って」とあれば、その順に通るように各ルータの行を決めます。
             - このステージは行き(片道)だけを見ます。
 
   - id: 3
     ed: static
     title: {en: There and back, ja: 行きと帰り}
-    sub: {en: "A ping needs the reply's way too.", ja: "ping は返事の道も要る"}
+    sub: {en: "A ping needs the reply's way too.", ja: "ping は返事の経路も要る"}
     cards:
-      - title: {en: The reply needs a way too, ja: 返事にも道が要る}
+      - title: {en: The reply needs a way too, ja: 返事にも経路が要る}
         body:
           en: |
             A ping is a round trip: the request and the reply. The reply is a packet from SRV1 to PC1, so every router on the way back needs a **row for PC1's network**.
             Building only the way there is not enough: if the reply cannot come back, the communication fails. From this stage the reply (a second color) travels too.
           ja: |
-            ping は行き(要求)と帰り(返事)の往復です。返事は SRV1 から PC1 へ向かうパケットなので、帰り道の各ルータにも **PC1 のネットワーク宛ての行**が要ります。
-            行きの道だけを作っても、返事が戻れなければ通信は成り立ちません。このステージから、帰りのパケット(2 色目)も流れます。
+            ping は行き(要求)と帰り(返事)の往復です。返事は SRV1 から PC1 へ向かうパケットなので、帰りの経路の各ルータにも **PC1 のネットワーク宛ての行**が要ります。
+            行きの経路だけを作っても、返事が戻れなければ通信は成り立ちません。このステージから、帰りのパケット(2 色目)も流れます。
         example: ex_line2_oneway
         notes:
           - at: r:R2
@@ -192,8 +192,8 @@ stages:
             The way back is also decided by each router's table alone, without regard to the way there. So the two directions can take different routes (asymmetric routing).
             If the mission says "the reply takes the same way", make the reply pass the same routers in reverse order.
           ja: |
-            帰りの道も、各ルータの経路表だけで決まります。行きとは関係なく決まるので、行きと帰りで違う道を通ることもあります(非対称)。
-            お題に「戻りも同じ道」とあれば、帰りも行きと同じルータを逆の順に通るようにします。
+            帰りの経路も、各ルータのルーティング テーブルだけで決まります。行きとは関係なく決まるので、行きと帰りで違う経路を通ることもあります(非対称)。
+            お題に「戻りも同じ経路」とあれば、帰りも行きと同じルータを逆の順に通るようにします。
         example: ex_line2_both
 
   - id: 4
@@ -208,7 +208,7 @@ stages:
             You can add a row for each network, but every router on the way needs all of them, and the move limit runs out. Use `0.0.0.0/0` instead. It matches every destination and is called the **default route**: `ip route 0.0.0.0 0.0.0.0 <next hop>`. One row covers all three. The routing table shows it as `S*`, and `Gateway of last resort` shows its next hop.
           ja: |
             この盤面のインターネットには、別々のネットワークにサーバが 3 台あります(WEB `198.51.100.0/24`・DNS `192.0.2.0/24`・MAIL `203.0.113.0/24`。本物のインターネットのネットワークは数えきれません)。
-            ネットワークごとに行を足すこともできますが、道の途中のどのルータにも全部が要り、手数の上限を超えます。そこで `0.0.0.0/0` を使います。どの宛先にも当てはまる行で、**デフォルト ルート**と呼びます。`ip route 0.0.0.0 0.0.0.0 <次の行き先>`。1 行で 3 台すべてに届きます。経路表では `S*` と表示され、`Gateway of last resort` に次の行き先が出ます。
+            ネットワークごとに行を足すこともできますが、経路の途中のどのルータにも全部が要り、手数の上限を超えます。そこで `0.0.0.0/0` を使います。どの宛先にも当てはまる行で、**デフォルト ルート**と呼びます。`ip route 0.0.0.0 0.0.0.0 <次の行き先>`。1 行で 3 台すべてに届きます。ルーティング テーブルでは `S*` と表示され、`Gateway of last resort` に次の行き先が出ます。
         example: ex_house_ok
         notes:
           - at: r:R1
@@ -264,7 +264,7 @@ stages:
           ja: |
             このステージから、地図に**拠点**が出ます。拠点 4 のアドレスは `10.4.0.0/16` で、その中に LAN `10.4.1.0/24` と `10.4.2.0/24` があります。
             R1 には `10.4.0.0/16`(R2 へ)と `10.4.1.0/24`(R3 へ)の行があります。宛先 `10.4.1.100`(SRV1)はどちらにも当てはまりますが、使うのは**プレフィックスの長い** `/24` の行です。`10.4.2.100`(SRV2)は `/16` にしか当てはまらないので、今までどおり R2 へ送られます。
-            これを**ロンゲストマッチ**と呼びます。`/32` > `/24` > `/16` > `/8` > `/0` の順に勝ちます。管理距離はここでは比べません(同じプレフィックスの行どうしでだけ比べます)。
+            これを**ロンゲストマッチ**と呼びます。`/32` > `/24` > `/16` > `/8` > `/0` の順に勝ちます。アドミニストレーティブ ディスタンス(AD)はここでは比べません(同じプレフィックスの行どうしでだけ比べます)。
         example: ex_dia_lpm
         notes:
           - at: r:R1
@@ -278,13 +278,13 @@ stages:
             A row for the **same prefix** does not override it. If the distance is the same too, both rows enter the table and the traffic **splits** between two ways (equal cost). In the example R1 has 🔒 `10.4.1.0/24 → R2`, and `10.4.1.0/24 → R3` was added.
             To send only SRV1 another way, add a row for that one host: a `/32` (mask `255.255.255.255`). Build its address from the LAN's network and the host's number on the map: `10.4.1.0/24` and `.100` give `10.4.1.100`.
           ja: |
-            🔒 の付いた行は消せません(別の担当が入れた経路です)。その通信の一部を別の道へ通すには、**もっと長い**行を足します。
-            **同じプレフィックス**の行を足しても上書きにはなりません。管理距離も同じなら両方とも表に入り、通信は 2 つの道に**分かれます**(等コスト)。例では R1 に 🔒 `10.4.1.0/24 → R2` があり、`10.4.1.0/24 → R3` を足しました。
-            SRV1 だけを別の道にするなら、その 1 台の行 `/32`(マスク `255.255.255.255`)を足します。アドレスは LAN のネットワークと地図の端末の数字から作ります(`10.4.1.0/24` と `.100` で `10.4.1.100`)。
+            🔒 の付いた行は消せません(別の担当が入れた経路です)。その通信の一部を別の経路へ通すには、**もっと長い**行を足します。
+            **同じプレフィックス**の行を足しても上書きにはなりません。AD も同じなら両方とも表に入り、通信は 2 つの経路に**分かれます**(等コスト)。例では R1 に 🔒 `10.4.1.0/24 → R2` があり、`10.4.1.0/24 → R3` を足しました。
+            SRV1 だけを別の経路にするなら、その 1 台の行 `/32`(マスク `255.255.255.255`)を足します。アドレスは LAN のネットワークと地図の端末の数字から作ります(`10.4.1.0/24` と `.100` で `10.4.1.100`)。
         example: ex_dia_ecmp
         notes:
           - at: r:R1
-            text: {en: "🔒 10.4.1.0/24 → R2 and 10.4.1.0/24 → R3: same length, same AD → both are used", ja: "🔒 10.4.1.0/24 → R2 と 10.4.1.0/24 → R3: 長さも管理距離も同じ → 両方使う"}
+            text: {en: "🔒 10.4.1.0/24 → R2 and 10.4.1.0/24 → R3: same length, same AD → both are used", ja: "🔒 10.4.1.0/24 → R2 と 10.4.1.0/24 → R3: 長さも AD も同じ → 両方使う"}
       - title: {en: A /32 beats your own LAN, ja: /32 は自分の LAN にも勝つ}
         body:
           en: |
@@ -307,7 +307,7 @@ stages:
           ja: |
             - 宛先の長さは `/8`・`/16`・`/24`・`/32`(マスク `255.0.0.0`・`255.255.0.0`・`255.255.255.0`・`255.255.255.255`)と `0.0.0.0/0` です。ほかの長さは先のステージで使います。
             - 中に地図の端末がいる範囲だけを書けます(拠点・LAN・端末 1 台)。
-            - 宛先とマスクを入れると、その範囲が地図で**光ります**。経路表の宛先を押しても光ります。
+            - 宛先とマスクを入れると、その範囲が地図で**光ります**。ルーティング テーブルの宛先を押しても光ります。
             - 欄の下の候補には、拠点(`10.4.0.0`)や端末のアドレスも含めて、盤面の値が全部並びます。
   - id: 6
     ed: static
@@ -320,7 +320,7 @@ stages:
   - id: 8
     ed: static
     title: {en: Recursion and Null0, ja: 再帰と Null0}
-    sub: {en: "Next hops that are not neighbors, and stopping loops with Null0.", ja: "隣でない next-hop と、Null0 でループを止める"}
+    sub: {en: "Next hops that are not neighbors, and stopping loops with Null0.", ja: "隣接していない next-hop と、Null0 でループを止める"}
   - id: 9
     ed: static
     title: {en: Static wrap-up, ja: Static 総合}

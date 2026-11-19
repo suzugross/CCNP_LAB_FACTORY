@@ -1,0 +1,37 @@
+# IOS XR の実機の記録の再現の試験(M14 マルチキャスト・XRT-16 と同じ盤面の PE2・IOS XRd 26.1.1)。書き方は tests/iosxr.yml の頭の注記。
+# 記録= private/cli-drill/iosxr/raw/xrd-26.1.1/(台本は capture/iosxr/m14*.txt)。盤面= private/cli-drill/iosxr/boards/XRT-16-PE2.json
+- name: M14 盤面(PE2 の初めの状態)
+  log: private/cli-drill/iosxr/raw/xrd-26.1.1/board-pe2.log
+  device: PE2
+  skip:
+    3: show version(素振り台は扱わない)
+- name: M14 木の 1 周目(multicast-routing・router pim・router igmp・ACL の ?)
+  log: private/cli-drill/iosxr/raw/xrd-26.1.1/m14explore.log
+  device: PE2
+  skip:
+    3: show version(素振り台は扱わない)
+- name: M14 設定の形(コミット・並び・既定の値・誤り)
+  log: private/cli-drill/iosxr/raw/xrd-26.1.1/m14cfg.log
+  device: PE2
+  drop: ['^\d+ items committed in 1 sec']
+- name: M14 設定の形 2(既定の値・消し方・空の塊・Tab)
+  log: private/cli-drill/iosxr/raw/xrd-26.1.1/m14cfg2.log
+  device: PE2
+  skip:   # 記録の時点では、前の採取(m14cfg)のコミットと戻しが履歴に増えていた
+    3: 履歴に依る(Last configuration change の行)
+    87: 履歴に依る
+- name: M14 設定の形 3(略した語・入っただけの塊・並び)
+  log: private/cli-drill/iosxr/raw/xrd-26.1.1/m14cfg3.log
+  device: PE2
+  drop: ['^\d+ items committed in 1 sec']
+  skip:   # 記録の時点では、前の採取(m14cfg2)の名残(空の address-family・口の塊・空の塊)と履歴があった
+    36: 前の採取の名残に依る(router igmp の口の塊)
+    43: 入っただけの router pim のコミット(実機はコミットを 1 つ作った。素振り台は変化なしとする= design §10)
+    44: 履歴に依る
+    48: 43 の違いに依る(素振り台では router pim が編集中に残る)
+    51: 履歴に依る
+- name: M14 設定の形 4(差分・RP の打ち直し・ACL の送信元側・1 行の ?)
+  log: private/cli-drill/iosxr/raw/xrd-26.1.1/m14cfg4.log
+  device: PE2
+  skip:
+    8: 前の採取の名残に依る(multicast-routing の空の address-family ipv4 が既にあった)

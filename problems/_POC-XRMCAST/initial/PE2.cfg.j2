@@ -1,0 +1,75 @@
+!! _POC-XRMCAST PE2(XRv9000 26.1.1)= 受信者 RCV2 の側の PE(R5 も収容)。ユニキャストの土台(IS-IS の IPv4/IPv6)まで。マルチキャストは PoC の段で足す。
+interface Loopback0
+ ipv4 address 10.255.0.2 255.255.255.255
+ ipv6 address 2001:db8:255::2/128
+!
+interface {{ links[3] }}
+ description to PE1 (direct)
+ ipv4 address 10.0.12.2 255.255.255.0
+ ipv6 address 2001:db8:12::2/64
+ no shutdown
+!
+interface {{ links[4] }}
+ description to P1
+ ipv4 address 10.0.2.2 255.255.255.0
+ ipv6 address 2001:db8:2::2/64
+ no shutdown
+!
+interface {{ links[5] }}
+ description to R5
+ ipv4 address 10.0.4.2 255.255.255.0
+ ipv6 address 2001:db8:4::2/64
+ no shutdown
+!
+interface {{ links[6] }}
+ description to RCV2 (receiver LAN)
+ ipv4 address 192.168.2.254 255.255.255.0
+ ipv6 address 2001:db8:100:2::254/64
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0002.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ address-family ipv6 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[4] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[5] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+ interface {{ links[6] }}
+  passive
+  address-family ipv4 unicast
+  !
+  address-family ipv6 unicast
+  !
+ !
+!

@@ -52,7 +52,7 @@ SRV1 eth1 ──── et-0/0/1 JUN01 et-0/0/0 ──── et-0/0/0 JUN02 et-0/
 単元 J2 に沿った課題です。JUN02 を通る通信と、JUN02 自身が受け取る通信を、Junos の firewall filter で制御してください。
 
 ### 課題 J2-1  ISP からの入口を絞る
-<p class="tolab"><a href="/_learn?id=JNT-03&amp;step=j2t1">ワークスペースで開く</a> — 読み物: <a href="20-j2-map.html#s2-2">2.2 1 つのパケットを追う</a> · <a href="21-j2-filter.html#s2-2">2.2 from: 照合の条件</a> · <a href="21-j2-filter.html#s2-3">2.3 then: 動作</a> · <a href="21-j2-filter.html#s2-4">2.4 末尾の暗黙の discard</a> · <a href="21-j2-filter.html#s2-5">2.5 discard と reject</a> · <a href="21-j2-filter.html#s2-8">2.8 インターフェースに当てる</a></p>
+<p class="tolab"><a href="/_learn?id=JNT-03&amp;step=j2t1">ワークスペースで開く</a> — 読み物: <a href="20-j2-map.html#s2-2">2.2 1 つのパケットを追う</a> · <a href="21-j2-filter.html#s2-2">2.2 from: 照合の条件</a> · <a href="21-j2-filter.html#s2-3">2.3 then: アクション</a> · <a href="21-j2-filter.html#s2-4">2.4 末尾の暗黙の discard</a> · <a href="21-j2-filter.html#s2-5">2.5 discard と reject</a> · <a href="21-j2-filter.html#s2-8">2.8 インターフェースに当てる</a></p>
 
 
 JUN02 は、ISP 側のインターフェース(et-0/0/1)で受け取る通信のうち、次のものだけを通すこと。
@@ -65,7 +65,7 @@ JUN02 は、ISP 側のインターフェース(et-0/0/1)で受け取る通信の
 ほかの通信は、送信元へ何も返さずに捨てること。捨てたパケットの数を、カウンタ `ISP-DENY` で数えること。
 
 ### 課題 J2-2  社内から始めた通信の戻りを通す
-<p class="tolab"><a href="/_learn?id=JNT-03&amp;step=j2t2">ワークスペースで開く</a> — 読み物: <a href="21-j2-filter.html#s2-7">2.7 ステートレス: 戻りの通信と tcp-established</a> · <a href="21-j2-filter.html#s2-6">2.6 term の順と insert</a> · <a href="21-j2-filter.html#s3-1">3.1 サーバの網へ出る通信を絞り、戻りの通信を通す</a></p>
+<p class="tolab"><a href="/_learn?id=JNT-03&amp;step=j2t2">ワークスペースで開く</a> — 読み物: <a href="21-j2-filter.html#s2-7">2.7 ステートレス: 戻りの通信と tcp-established</a> · <a href="21-j2-filter.html#s2-6">2.6 term の順と insert</a> · <a href="21-j2-filter.html#s3-1">3.1 サーバのネットワークへ出る通信を絞り、戻りの通信を通す</a></p>
 
 
 社内から ISP の先へ始めた TCP の通信が、戻ってこられるようにすること(たとえば SRV1 のサーバの網から NET1 の Web)。

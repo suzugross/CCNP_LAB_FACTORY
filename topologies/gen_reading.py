@@ -20,6 +20,7 @@
   :::walk ... :::               … 1 ホップずつ追う図（設定の塊がパケットにどの順で効くか・下記。番号の所で設定例の行が出る）
   :::config <見出し> ... :::     … 設定例（左に設定の行・右に注記。行末の `  ## 注記` が注記の列へ。コピーは設定の行だけ）
   :::config fold <見出し> ... ::: … 同じく折りたたみ（課題の答えそのものになる例。見出しに「課題 … の答え」と書く）
+  :::drill <お題の ID> [<ID> …]  … コマンドの素振り台(BL-278)の区切り(1 行。閉じの ::: は無い)。下記
   ```console ... ```            … 端末風（プロンプト行を強調）
   ![説明](img/ファイル名)        … 図版（画面キャプチャ等の画像・下記）
   ```mermaid ... ```            … 図（render_html の機構をそのまま使う）
@@ -71,6 +72,8 @@
   文の頭の ~ 薄く・_ 小さく薄く・^ 橙の太字・+ 緑の太字。`コード`・**太字**。①〜⑨ は青い番号。
   ★番号(ref と文中の①〜⑨)は、図の後ろの :::config(同じ章= 次の h2 か次の :::walk まで。設定例が節をまたいでよい)の、
     注記の頭に同じ番号を付けた行と結ぶ。同じ番号の塊を図に 2 回置いてもよい(親のポリシーの入口と出口など)。
+    同じ番号の行を持つ設定例が 2 つ以上ある時(TCP 版の例と TLS 版の例など)は、図のその番号の塊が head の `コード`(と
+    code:)で引く行に番号を付けた設定例だけを出す(「…」は何文字でも。どれも合わなければ全部。2026-11-16)。
     カーソルを置く(スマホは押す)と、その行と親の階層の行(塊の頭に付ければ塊ごと)を小窓に出し、設定例の行にも色を付ける。
   幅に収まらない文は図が折り返す(凡例・say・then・aside。小箱を含む行は折り返さない)。match の結果が term の右に並ばない
   時は、全部の結果を term の下の行へ下ろす。term そのものが枠より長いと字を縮めるので、長い term は「…」で略してよい。
@@ -104,6 +107,28 @@
   ★節の目印(BL-252): h2/h3 に言語に依らない data-sec="s<n>" / "s<n>-<m>" を振る。`<ページ>.html#s2` で表示中の版の節へ飛ぶ。
     ラボのワークスペースの Reading タブ(learn.yml の read:)と実践ページのリンクが使う。2 版の見出しの並びがずれると警告する
   `<p class="tolab">…</p>`(行頭) … 配信時だけのリンク(ワークスペース・他ページの節)。持ち出しの 1 枚では落とす
+
+:::drill — 読み物の区切りから素振り台(games/cli-drill/)の練習へ入る枠(BL-278)。
+    :::drill xr-m0-2 xr-m0-3
+  ・お題の ID は games/cli-drill/drills/*.yml のもの。題名と番号(M0-2 …)はそこから引く(書いたページの言語の題名。
+    {ja, en} の片方しか無ければある方)。知らない ID はビルドを止める。
+  ・枠には お題ごとのボタンが並び、押すとその下に素振り台が開く(../_cli-drill/?drill=<ID>&embed=1&lang=<ページの言語>。
+    高さは素振り台が知らせる中身の高さに合わせる)。素振り台の置き場= reading/_cli-drill/(cli_drill.py build が写す)。
+    置き場が無い・お題が素振り台の束に無い時は警告する(cli_drill.py build で作り直す)。
+  ・置く所は節の終わり(その節のコマンドを打ち終えた所)。2 言語の本は両方の版の同じ位置に置く(切替の位置合わせ= 子の数をそろえる)。
+  ・持ち出しの 1 枚(Drive)では落とす(素振り台は配信している時だけ動く)。file:// で開いた時も隠す。
+
+盤面の小窓(BL-284) — ナビ帯の「盤面を見る」(英語版は Topology)ボタンで、そのページのラボの盤面をページの中の小窓に開く。
+  ・中身= 結線図(problems/<ID>/problem.yml・containerlab は clab.yml から機械的に起こす。ワークスペースの Topology タブと
+    同じ図)と、課題文(task.en.md / task.md)のトポロジの節(アドレス・役割の表)。小窓の見出しのタブで切り替える。
+  ・どのラボか: pages の `board: <問題 ID>`(`board: false` でそのページには出さない)→ 実践ページはその課題のラボ →
+    同じ単元で後に来る実践ページのラボ(読み終えて解きに行く先)→ 無ければ同じ単元の前の実践ページのラボ。
+    book.yml の `board: false` で本ごと出さない。実践ページ(practice.yml)の無い本(訳文の読み物)は board: を書いたページだけ。
+  ・小窓は見出しをつかんで動かし、右下の角で大きさを変える(見出しのダブルクリックで既定の位置)。図はドラッグで移動・
+    ピンチか Ctrl+ホイールで拡大・ダブルクリックで全体・⤢ で画面いっぱい(FIG_JS)。位置・大きさ・図の見ていた所(盤面ごと)・
+    開いているかは localStorage(ccnp-board-win)に残り、次のページでも同じ所に開く。
+  ・束ねた 1 枚(持ち出し)では右下に浮かぶボタンになり、読んでいる所のページの盤面を出す(スクロールで追う)。
+    スクリプトが動かない閲覧アプリではボタンごと出ない。
   <src>/NN-*.md      … 1 ファイル = 1 ページ
   <src>/img/         … 図版（任意）
   → <repo>/reading/<key>/NN-*.html ＋ index.html
@@ -198,10 +223,91 @@ body.reading code{ padding:0 .22em; }
 .rn-step{ font-size:1.05rem; padding:.1rem .45rem; border-radius:4px; }
 .rn-step:hover{ background:#eef2f7; } .rn-step.off{ color:#c3c7cd; }
 
+/* ---- 盤面の小窓(BL-284)= ナビ帯のボタンで開く・見出しをつかんで動かす・右下の角で大きさを変える ---- */
+.rn-board, .bd-fab{ font:inherit; display:flex; align-items:center; gap:.4rem; flex:none; cursor:pointer; white-space:nowrap;
+  background:#f3f4f6; border:1px solid #c9ced6; border-radius:5px; padding:.28rem .7rem; color:#111; }
+.rn-board:hover, .bd-fab:hover{ background:#e9ecf0; }
+.rn-board[aria-pressed="true"], .bd-fab[aria-pressed="true"]{ background:#e3e8ef; border-color:#8796ab; }
+.rn-bic{ width:1.1em; height:1.1em; flex:none; }
+.rn-bic line{ stroke:#555; stroke-width:1.4; }
+.rn-bic rect{ fill:#fff; stroke:#555; stroke-width:1.4; }
+@media (max-width:520px){ .rn-board .rn-bl{ display:none; } .rn-board{ padding:.28rem .5rem; } }
+.bd-fab{ position:fixed; right:1rem; bottom:1rem; z-index:25; box-shadow:0 2px 8px rgba(20,30,45,.18); font-size:.88rem; }
+.bd-fab[hidden]{ display:none; }
+#bdwin{ position:fixed; z-index:40; display:flex; flex-direction:column; box-sizing:border-box; overflow:hidden;
+  background:#fff; color:#111; border:1px solid #8796ab; border-radius:8px; box-shadow:0 8px 28px rgba(20,30,45,.26);
+  line-height:1.5; letter-spacing:0; text-align:left; }
+#bdwin[hidden]{ display:none; }
+#bdwin.moving{ opacity:.93; }
+#bdwin button{ font:inherit; cursor:pointer; color:#111; background:#fff; border:1px solid #c9ced6; border-radius:4px; }
+#bdwin button:hover{ background:#e9ecf0; }
+#bdwin .bd-bar{ flex:none; display:flex; align-items:center; gap:.5rem; padding:.3rem .4rem .3rem .75rem;
+  background:#e9edf2; border-bottom:1px solid #c9ced6; cursor:move; touch-action:none; user-select:none;
+  -webkit-user-select:none; font-size:.85rem; }
+#bdwin .bd-t{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; color:#1d2733; }
+#bdwin .bd-id{ margin-left:.45rem; font:600 .8rem/1 "Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace; color:#3f6286; }
+#bdwin .bd-tabs{ flex:none; display:flex; }
+#bdwin .bd-tabs[hidden]{ display:none; }
+#bdwin .bd-tabs button{ padding:.05rem .6rem; font-size:.8rem; border-radius:0; margin-left:-1px; }
+#bdwin .bd-tabs button:first-child{ border-radius:4px 0 0 4px; margin-left:0; }
+#bdwin .bd-tabs button:last-child{ border-radius:0 4px 4px 0; }
+#bdwin .bd-tabs button[aria-pressed="true"]{ background:#1f63c6; border-color:#1f63c6; color:#fff; }
+#bdwin .bd-x{ flex:none; min-width:2em; padding:.05rem .45rem; }
+#bdwin .bd-body{ flex:1; min-height:0; display:flex; }
+#bdwin .bd-pane{ flex:1; min-width:0; min-height:0; }
+#bdwin[data-tab="fig"] .bd-tblpane, #bdwin[data-tab="tbl"] .bd-figpane{ display:none; }
+/*  結線図の枠: 中の図を viewBox で拡大・移動する(BOARD_JS) */
+#bdwin .bd-figpane{ position:relative; overflow:hidden; cursor:grab; touch-action:none; background:#fff; }
+#bdwin .bd-figpane.drag{ cursor:grabbing; }
+#bdwin .bd-fig svg{ position:absolute; inset:0; width:100%; height:100%; max-width:none; }
+#bdwin .bd-tools{ position:absolute; top:.4rem; right:.4rem; z-index:1; display:flex; gap:.25rem; }
+#bdwin .bd-tools button{ min-width:1.9em; padding:.02rem .4rem; font-size:.8rem; line-height:1.5; background:#ffffffe6; }
+#bdwin .bd-hint{ position:absolute; left:.6rem; bottom:.35rem; right:1.6rem; font-size:.7rem; color:#7a8594;
+  pointer-events:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#bdwin .bd-tblpane{ overflow:auto; padding:.4rem .8rem 1.2rem; font-size:.84rem; line-height:1.65; }
+#bdwin .bd-tbl p, #bdwin .bd-tbl ul, #bdwin .bd-tbl ol{ margin:.55rem 0; }
+#bdwin .bd-tbl li{ margin:.2rem 0; }
+#bdwin .bd-tbl h3, #bdwin .bd-tbl h4{ font-size:.9rem; margin:1rem 0 .4rem; padding:0; border:0; }
+#bdwin .bd-tbl .tw{ margin:.7rem 0; }
+#bdwin .bd-tbl table{ margin:0; font-size:.78rem; line-height:1.5; }
+#bdwin .bd-tbl th, #bdwin .bd-tbl td{ padding:.22rem .5rem; }
+#bdwin .bd-tbl pre{ font-size:.76rem; }
+#bdwin .bd-grip{ position:absolute; right:0; bottom:0; z-index:2; width:1.2rem; height:1.2rem; cursor:nwse-resize;
+  touch-action:none;
+  background:linear-gradient(135deg, transparent 0 45%, #9aa4b2 45% 52%, transparent 52% 64%, #9aa4b2 64% 71%, transparent 71%); }
+@media (max-width:640px){ #bdwin .bd-hint{ display:none; } }
+@media print{ .rn-board, .bd-fab, #bdwin{ display:none !important; } }
+/*  ラボの盤面の図(lab_console.topo_svg と同じ部品)。小窓(.bd-fig)と拡大表示の写し(.topo)の両方に効かせる */
+.bd-fig .tl{ stroke:#44506080; stroke-width:1.7; }
+.bd-fig .tn{ font-family:"Segoe UI",system-ui,sans-serif; font-size:14px; font-weight:600; fill:#1b2430; text-anchor:middle; }
+.bd-fig .tlt{ font-family:"Cascadia Mono",Consolas,monospace; font-size:11.5px; fill:#3a4756; text-anchor:middle; }
+.bd-fig .tlb{ fill:#ffffff; stroke:#dfe3e8; stroke-width:1; }
+.topo .nd rect, .bd-fig .nd rect{ fill:#f7f8fa; stroke:#2f3b4a; stroke-width:1.6; }
+.topo .nd.k-sw rect, .bd-fig .nd.k-sw rect{ fill:#e9f3ed; } .topo .nd.k-fw rect, .bd-fig .nd.k-fw rect{ fill:#f7ebe6; }
+.topo .nd.k-host rect, .bd-fig .nd.k-host rect{ fill:#ffffff; stroke:#5a6472; }
+.topo .nd.k-infra rect, .bd-fig .nd.k-infra rect{ fill:#f1efe8; stroke:#9a8e6c; stroke-dasharray:4 3; }
+
 /* ---- 実践へのリンク(BL-252)= ワークスペースで開く・課題の背景の節 ---- */
 body.reading .tolab{ font-size:.86rem; line-height:1.7; margin:.5rem 0 1rem; padding:.35rem .7rem;
   background:#f3f6fa; border-left:3px solid #3f7fbf; border-radius:3px; }
 body.reading .tolab a{ text-decoration:none; } body.reading .tolab a:hover{ text-decoration:underline; }
+
+/* ---- コマンドの素振り台の区切り(:::drill・BL-278)= お題のボタン → その下に素振り台の枠 ---- */
+body.reading .drillbreak{ margin:1.4rem 0; border:1px solid #9bb8de; border-radius:8px; background:#f5f8fc; }
+body.reading .drillbreak .dbh{ display:flex; flex-wrap:wrap; align-items:baseline; gap:.15rem .7rem; padding:.55rem .85rem .15rem; }
+body.reading .drillbreak .dbt{ font-weight:600; color:#1d3f6e; }
+body.reading .drillbreak .dbs{ color:#5f6670; font-size:.82rem; line-height:1.5; }
+body.reading .drillbreak .dbl{ display:flex; flex-wrap:wrap; gap:.4rem; padding:.35rem .85rem .7rem; }
+body.reading .drillbreak button{ font:inherit; font-size:.88rem; line-height:1.4; text-align:left; cursor:pointer;
+  border:1px solid #9bb8de; background:#fff; color:#15171a; border-radius:6px; padding:.25rem .65rem; }
+body.reading .drillbreak button:hover{ border-color:#3f7fbf; }
+body.reading .drillbreak .dbn{ color:#3f7fbf; font-weight:600; margin-right:.4rem; }
+body.reading .drillbreak button[aria-pressed="true"]{ background:#1f63c6; border-color:#1f63c6; color:#fff; }
+body.reading .drillbreak button[aria-pressed="true"] .dbn{ color:#fff; }
+body.reading .drillbreak iframe{ display:block; width:100%; height:34rem; border:0; border-top:1px solid #d6d9de;
+  border-radius:0 0 8px 8px; background:#eceef1; }
+body.reading .drillbreak iframe[hidden]{ display:none; }
+@media print{ body.reading .drillbreak{ display:none; } }
 
 /* ---- 端末風のコンソール出力 ---- */
 .term{ margin:1.9rem 0; border-radius:7px; overflow:hidden;
@@ -695,6 +801,14 @@ def _wk_fit(lines, size, maxw):
     return out
 
 
+def _wk_codes(it):
+    """番号の塊が指す設定の行(head の `コード` と code:)。同じ番号の行を持つ設定例が 2 つ以上ある時に、WALK_JS が
+    この行を持つ設定例だけに絞る(2026-11-16 M13 の TCP 版と TLS 版の ③ が両方出ていた)。"""
+    import json
+    cs = re.findall(r"`([^`]+)`", str(it.get("head", ""))) + ([str(it["code"])] if it.get("code") else [])
+    return f' data-code="{html.escape(json.dumps(cs, ensure_ascii=False))}"' if cs else ""
+
+
 def _wk_badge(cx, cy, n, r=10):
     return (f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r}" fill="{WK_BLUE}"/>'
             f'<text x="{cx:.1f}" y="{cy + r * 0.45:.1f}" font-size="{r * 1.25:.1f}" font-family=\'{WK_SANS}\' '
@@ -777,7 +891,7 @@ def render_walk(src_yaml):
                     g += _wk_line(ux + 36, uy + 20, "`" + str(it.get("code", "")) + "`", 12)[0] if it.get("code") else []
                     for i, ln in enumerate(say):
                         g += _wk_line(ux + 36, uy + 39 + 19 * i, ln, 11.5, {"fill": WK_BLUE})[0]
-                    out.append(f'<g class="wk-ref" data-ref="{it["ref"]}">' + "".join(g) + "</g>" if it.get("ref")
+                    out.append(f'<g class="wk-ref" data-ref="{it["ref"]}"{_wk_codes(it)}>' + "".join(g) + "</g>" if it.get("ref")
                                else "".join(g))
                     arrows.append((ux, uy + 24, str(it["to"])))
                     cy = max(cy, uy + uh + 14)
@@ -796,7 +910,9 @@ def render_walk(src_yaml):
                     # Junos の term が長く、判定が図の外へ出て見えていなかった)。term そのものが枠より長ければ字を縮める
                     rx_ = max(300, 72 + max([_wk_w(str(m[0]), 12, True) for m in match] or [0]) + 24)
                     mark = lambda hit: "✓ " if hit else "✗ "
-                    below = any(rx_ + _wk_w(mark(m[1]) + str(m[2]), 12) > R for m in match)
+                    # 判定の幅は `コード` を等幅で見積もり、太字の分も見て広めに取る(2026-11-17 `19 (… chain)` と
+                    # 太字の英文が、収まる見積もりのまま枠の外へ出ていた)
+                    below = any(rx_ + _wk_text(0, 0, mark(m[1]) + str(m[2]), 12)[1] * 1.08 > R for m in match)
                     rlines = ([_wk_wrap(str(m[2]), 12, R - 90 - _wk_w("✓ ", 12)) for m in match] if below
                               else [[str(m[2])] for m in match])
                     mh = [20 + (17 * len(rl) + 3 if below else 0) for rl in rlines]
@@ -829,7 +945,7 @@ def render_walk(src_yaml):
                     for ln in then:
                         yy += gap(ln) + (4 if ln is then[0] and match else 0)
                         g += _wk_line(72, yy, ln, 12)[0]
-                    out.append(f'<g class="wk-ref" data-ref="{it["ref"]}">' + "".join(g) + "</g>")
+                    out.append(f'<g class="wk-ref" data-ref="{it["ref"]}"{_wk_codes(it)}>' + "".join(g) + "</g>")
                 else:                            # 番号なしの段(QoS ではない処理など)
                     fit = _wk_fit(_wk_lines(it.get("say")), 12.5, W - 34 - 54)
                     say = [ln for ln, _ in fit]
@@ -949,9 +1065,120 @@ def expand_config(md_text):
     return CONFIG_RE.sub(lambda m: "\n" + render_config(bool(m.group(1)), m.group(2), m.group(3)) + "\n", md_text)
 
 
+# --------------------------------------------------------------------------
+# コマンドの素振り台の区切り(:::drill → お題のボタン＋素振り台の枠)。書き方は冒頭の docstring
+# --------------------------------------------------------------------------
+DRILL_RE = re.compile(r"^:::drill[ \t]+([^\n]+?)[ \t]*$")
+DRILL_SITE = os.path.join(OUT_ROOT, "_cli-drill")
+DRILL_TEXT = {"ja": ("コマンドの素振り台", "ここまでのコマンドを、機器を起動せずに打ってみます。出る文言と ? の一覧は実機の記録に合わせてあります。"),
+              "en": ("CLI drill", "Type the commands so far without starting a device. The messages and the ? lists follow captures from a real device.")}
+_DRILLS = None
+
+
+def drill_catalog():
+    """お題の ID → {title: {ja?, en?}, no: 番号}。番号の振り方は素振り台の画面(index.html の renderHome)と同じ。"""
+    global _DRILLS
+    if _DRILLS is None:
+        import glob
+        import yaml
+        _DRILLS = {}
+        for f in sorted(glob.glob(os.path.join(REPO, "games", "cli-drill", "drills", "*.yml"))):
+            d = yaml.safe_load(open(f, encoding="utf-8")) or {}
+            unit = d.get("unit")
+            unit = unit.get("ja") if isinstance(unit, dict) else unit
+            for sec in d.get("sections") or []:
+                for i, x in enumerate(sec.get("drills") or []):
+                    no = (f"{sec['id'].upper()}-{i + 1}" if d.get("os") == "iosxr" else f"{unit}-{sec['id']}-{i + 1}")
+                    t = x.get("title")
+                    _DRILLS[x["id"]] = {"no": no, "title": t if isinstance(t, dict) else {"ja": t}}
+    return _DRILLS
+
+
+_DRILL_WARNED = set()
+
+
+def _drill_site_ids():
+    """素振り台の置き場(reading/_cli-drill/bundle.json)にあるお題の ID。置き場が無ければ None。"""
+    p = os.path.join(DRILL_SITE, "bundle.json")
+    if not os.path.exists(p):
+        return None
+    import json
+    b = json.load(open(p, encoding="utf-8"))
+    return {d["id"] for u in b.get("units") or [] for s in u.get("sections") or [] for d in s.get("drills") or []}
+
+
+def expand_drill(md_text):
+    """:::drill <ID> … → 1 行の HTML ブロック(前後に空行)。コードブロックの中は触らない。持ち出しの 1 枚では行ごと落とす。"""
+    cat, out, fence, site = None, [], False, None
+    for line in md_text.split("\n"):
+        if FENCE_RE.match(line.strip()):
+            fence = not fence
+        m = None if fence else DRILL_RE.match(line)
+        if not m:
+            out.append(line)
+            continue
+        if cat is None:
+            cat, site = drill_catalog(), _drill_site_ids()
+        ids = m.group(1).split()
+        bad = [i for i in ids if i not in cat]
+        if bad:
+            sys.exit(f":::drill に知らないお題: {' '.join(bad)}(games/cli-drill/drills/*.yml)")
+        miss = sorted(set(ids) - (site or set()))
+        if miss and tuple(miss) not in _DRILL_WARNED:
+            _DRILL_WARNED.add(tuple(miss))
+            why = "素振り台の置き場が無い" if site is None else "素振り台の束に無いお題: " + " ".join(miss)
+            print(f"警告: {why}(python3 topologies/cli_drill.py build で作り直す)", file=sys.stderr)
+        nolang = [i for i in ids if not cat[i]["title"].get(_LANG)]
+        if nolang and (_LANG, tuple(nolang)) not in _DRILL_WARNED:
+            _DRILL_WARNED.add((_LANG, tuple(nolang)))
+            print(f"警告: :::drill のお題に {_LANG} の題名が無い(もう一方の言語で出す): {' '.join(nolang)}", file=sys.stderr)
+        head, sub = DRILL_TEXT[_LANG]
+        btns = "".join(
+            f'<button type="button" data-drill="{html.escape(i)}" aria-pressed="false"><span class="dbn">{html.escape(cat[i]["no"])}</span>'
+            f'{html.escape(cat[i]["title"].get(_LANG) or next(iter(cat[i]["title"].values())))}</button>' for i in ids)
+        out += ["", f'<div class="drillbreak" data-dl="{_LANG}"><div class="dbh"><span class="dbt">{head}</span>'
+                    f'<span class="dbs">{html.escape(sub)}</span></div><div class="dbl">{btns}</div>'
+                    f'<iframe hidden title="{head}"></iframe></div>', ""]
+    return "\n".join(out)
+
+
+# 素振り台の枠を開く(お題のボタン)・高さを中身に合わせる(素振り台が postMessage {ccnpDrillH} で知らせる)。
+# 同じお題を押し直すと閉じる(打った中身は残る)。別のお題を押すとその枠で開き直す
+DRILL_JS = r"""
+(function(){
+  var boxes = document.querySelectorAll('.drillbreak');
+  if(!boxes.length) return;
+  if(location.protocol === 'file:'){ boxes.forEach(function(b){ b.style.display = 'none'; }); return; }
+  var BASE = '../_cli-drill/';
+  boxes.forEach(function(box){
+    var fr = box.querySelector('iframe'), btns = box.querySelectorAll('button[data-drill]'), cur = '';
+    btns.forEach(function(b){
+      b.addEventListener('click', function(){
+        var id = b.dataset.drill, open = !(cur === id && !fr.hidden);
+        btns.forEach(function(x){ x.setAttribute('aria-pressed', open && x === b ? 'true' : 'false'); });
+        if(!open){ fr.hidden = true; return; }
+        if(cur !== id){
+          cur = id; fr.style.height = '';
+          fr.src = BASE + '?drill=' + encodeURIComponent(id) + '&embed=1&lang=' + (box.dataset.dl || 'ja');
+        }
+        fr.hidden = false;
+      });
+    });
+  });
+  window.addEventListener('message', function(ev){
+    var d = ev.data;
+    if(!d || typeof d.ccnpDrillH !== 'number') return;
+    document.querySelectorAll('.drillbreak iframe').forEach(function(fr){
+      if(fr.contentWindow === ev.source) fr.style.height = Math.max(240, Math.ceil(d.ccnpDrillH) + 4) + 'px';
+    });
+  });
+})();
+"""
+
+
 def expand_blocks(md_text):
-    """ソースの独自記法(図・設定例・囲み)を開く。設定例は囲みより先(:::try の中の設定例の閉じを囲みの閉じと取り違えない)。"""
-    return expand_containers(expand_config(expand_walk(expand_topo(md_text))))
+    """ソースの独自記法(図・設定例・囲み・素振り台の区切り)を開く。設定例は囲みより先(:::try の中の設定例の閉じを囲みの閉じと取り違えない)。"""
+    return expand_containers(expand_config(expand_walk(expand_topo(expand_drill(md_text)))))
 
 
 # 設定例のコピー(配信のページは http= 安全でない文脈なので clipboard API が無い→ textarea で写す)
@@ -992,11 +1219,11 @@ _LANG = "ja"
 _WORDS = {"ja": {"toc": "目次", "back": "↑ 目次へ", "note": "訳注", "sic": "原典の誤り", "orig": "原文", "try": "やってみる", "portal": "‹ ポータル",
                  "prev": "前のページ", "next": "次のページ", "reading": "読み物",
                  "config": "設定例", "copy": "コピー", "copied": "コピーしました", "open": "(クリックで開く)",
-                 "glossary": "用語集"},
+                 "glossary": "用語集", "board": "盤面を見る"},
           "en": {"toc": "Contents", "back": "↑ Contents", "note": "Note", "sic": "Error in the source", "orig": "Original", "try": "Try it",
                  "portal": "‹ Portal", "prev": "Previous page", "next": "Next page", "reading": "Reading",
                  "config": "Configuration", "copy": "Copy", "copied": "Copied", "open": "(click to open)",
-                 "glossary": "Glossary"}}
+                 "glossary": "Glossary", "board": "Topology"}}
 
 
 def set_lang(meta, lang=None):
@@ -1220,6 +1447,7 @@ def load_book(src):
                                  else p["_titles"][lang])
         p["title"] = p["_titles"][meta["_langs"][0]]
         p["html"] = os.path.splitext(p["file"])[0] + ".html"
+    page_boards(meta)              # 盤面の小窓(BL-284)= ページごとのラボ
     return meta
 
 
@@ -1431,7 +1659,7 @@ FIG_JS = r"""
     view.addEventListener('dblclick', function(){ set(home.slice()); });
     document.body.appendChild(o);
   }
-  function open(src){
+  function open(src, topo){
     var s;
     if(src.tagName.toLowerCase() === 'img'){  /* 画像は SVG の <image> に包む */
       var w = src.naturalWidth || src.width, h = src.naturalHeight || src.height;
@@ -1451,7 +1679,7 @@ FIG_JS = r"""
     ['zout', 'zin', 'fit', 'close'].forEach(function(k){
       btns[k].textContent = btns[k].dataset.label || t[k]; btns[k].title = t[k];
     });
-    view.className = 'fb-view' + (src.closest('.topo') ? ' topo' : '');   /* :::topo の線や箱の色は .topo の下で効く */
+    view.className = 'fb-view' + (topo || src.closest('.topo') ? ' topo' : '');   /* :::topo の線や箱の色は .topo の下で効く */
     while(view.firstChild) view.removeChild(view.firstChild);
     view.appendChild(s); svg = s;
     home = s.getAttribute('viewBox').trim().split(/[\s,]+/).map(Number);
@@ -1465,6 +1693,7 @@ FIG_JS = r"""
     var fig = t.closest('.topo svg') || t.closest('pre.mermaid svg') || (t.tagName === 'IMG' && t.closest('main') ? t : null);
     if(fig) open(fig);
   });
+  window.ccnpFigOpen = function(svg){ open(svg, true); };   /* 盤面の小窓(BOARD_JS)の ⤢ */
 })();
 """
 
@@ -1494,9 +1723,36 @@ WALK_JS = r"""
     pop.addEventListener('mouseenter', function(){ clearTimeout(tHide); });
     pop.addEventListener('mouseleave', function(){ if(!pinned) hideSoon(); });
   }
+  function norm(s){ return s.replace(/\s+/g, ' ').trim(); }
+  function codeHit(w, c){                       /* 図の `コード` と設定の行。「…」は何文字でも */
+    w = norm(w); c = norm(c);
+    if(w.indexOf('…') < 0) return w === c;
+    return new RegExp('^' + w.split('…').map(function(p){ return p.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('.*') + '$').test(c);
+  }
+  /* その番号の行を持つ設定例。2 つ以上ある時は、図のその番号の塊が見出しで引く行(data-code)に、番号を付けた
+     設定例だけにする(どれも合わなければ全部)。M13 の TCP 版と TLS 版のように、同じ番号の例が続く時のため */
+  function cfgsFor(svg, n){
+    var all = svg ? document.querySelectorAll('.cfg[data-walk="' + svg.getAttribute('data-walk') + '"]') : [];
+    var has = [].filter.call(all, function(c){ return c.querySelector('.cr[data-ref~="' + n + '"]'); });
+    if(has.length < 2) return has;
+    var codes = [], mark = G.charAt(n - 1);
+    [].forEach.call(svg.querySelectorAll('.wk-ref[data-code]'), function(g){
+      if(g.getAttribute('data-ref') !== n) return;
+      try { codes = codes.concat(JSON.parse(g.getAttribute('data-code'))); } catch(e){}
+    });
+    var hit = has.filter(function(c){
+      return [].some.call(c.querySelectorAll('.cr'), function(r){
+        var cr = r.querySelector('.cref');
+        if(!cr || cr.textContent !== mark) return false;
+        var code = r.querySelector('.cc').textContent;
+        return codes.some(function(w){ return codeHit(w, code); });
+      });
+    });
+    return hit.length ? hit : has;
+  }
   function fill(el){
     var svg = el.closest('svg.wk'), n = el.getAttribute('data-ref');
-    var cfgs = svg ? document.querySelectorAll('.cfg[data-walk="' + svg.getAttribute('data-walk') + '"]') : [];
+    var cfgs = cfgsFor(svg, n);
     var box = document.createDocumentFragment(), found = false;
     [].forEach.call(cfgs, function(c){
       var rows = [].slice.call(c.querySelectorAll('.cr')), last = -1, lines = [];
@@ -1595,6 +1851,397 @@ WALK_JS = r"""
 """
 
 
+# --------------------------------------------------------------------------
+# 盤面の小窓(BL-284・2026-11-18 ユーザ要望「盤面を意識しないとダメな箇所で、その場でさっと確認したい。
+#   ページ内で別窓を開いて自由に動かし、読み物を確認しながら見られるように」)。
+#   ナビ帯に「盤面を見る」ボタンを常に出し、押すとそのページのラボの盤面をページの中の小窓で開く。中身は 2 つ:
+#     ・結線図= problem.yml(containerlab は clab.yml)から機械的に起こす。ワークスペースの Topology タブと同じ図
+#       (lab_console.topo_svg)。ラボは起こさない(座標と IF 名は gen_cml_lab.py と同じ決め方)
+#     ・課題文のトポロジの節= task.en.md / task.md の「## Topology」「## トポロジ」(アドレス・役割の表。
+#       render_html.split_topology で切り出す= ワークスペースの Topology タブの下の枠と同じ)
+#   見出しをつかんで動かす・右下の角で大きさを変える・見出しのダブルクリックで既定の位置へ戻す・図をクリックで拡大(FIG_JS)。
+#   位置・大きさ・開いているかは localStorage(ccnp-board-win)に残し、次のページでも同じ所に開く。
+#   束ねた 1 枚(持ち出し)では右下に浮かぶボタンにし、読んでいる所のページの盤面を出す(スクロールで追う)。
+# --------------------------------------------------------------------------
+BOARD_TASK = {"en": "task.en.md", "ja": "task.md"}
+BOARD_ICON = ('<svg class="rn-bic" viewBox="0 0 18 18" aria-hidden="true">'
+              '<line x1="4.5" y1="4.5" x2="13.5" y2="4.5"/><line x1="4.5" y1="4.5" x2="9" y2="13.5"/>'
+              '<line x1="13.5" y1="4.5" x2="9" y2="13.5"/><rect x="1.5" y="1.5" width="6" height="6" rx="1.2"/>'
+              '<rect x="10.5" y="1.5" width="6" height="6" rx="1.2"/><rect x="6" y="10.5" width="6" height="6" rx="1.2"/></svg>')
+
+
+def page_boards(meta):
+    """各ページの盤面(ラボの問題 ID)を p["_board"] に決める(無ければ None)。
+    決め方: pages の `board:`(問題 ID か false)→ 実践ページはその課題のラボ → 同じ単元の中で後に来る実践ページのラボ
+    (読み終えて解きに行く先)→ 無ければ同じ単元の前の実践ページのラボ。book.yml の `board: false` で本ごと出さない。"""
+    pages = meta["pages"]
+    labs = [(j, q["lab"]) for j, q in enumerate(pages) if q.get("lab")]
+    for i, p in enumerate(pages):
+        b = None if meta.get("board") is False else p.get("board")
+        if b is None and meta.get("board") is not False:
+            ch = _chapter_of(p)
+            same = [(j, lab) for j, lab in labs if _chapter_of(pages[j]) == ch]
+            after = [lab for j, lab in same if j >= i]
+            before = [lab for j, lab in same if j < i]
+            b = after[0] if after else (before[-1] if before else None)
+        if b and not os.path.exists(os.path.join(REPO, "problems", str(b), "problem.yml")):
+            print(f"[reading] 警告: {p['file']} の盤面 {b} に problems/{b}/problem.yml が無い", file=sys.stderr)
+            b = None
+        p["_board"] = str(b) if b else None
+
+
+def board_model(pid):
+    """ラボの盤面 → 結線図のモデル(lab_console.build_model と同じ形)。ラボを起こさずに problem.yml(と clab.yml)から作る。
+    CML のラボは gen_cml_lab.py と同じ決め方= 座標は lab.positions(無い所は layout で補う)、IF 名は機種の device_profiles の
+    links[slot](XRd は slot_map で読み替え)。非管理スイッチのポート名(port0 …)は出さない。"""
+    import yaml
+    import lab_console as LC
+    import gen_cml_lab as CL
+    pdir = os.path.join(REPO, "problems", pid)
+    with open(os.path.join(pdir, "problem.yml"), encoding="utf-8") as fh:
+        pm = yaml.safe_load(fh) or {}
+    if pm.get("platform") == "clab":
+        with open(os.path.join(pdir, pm["clab_topology"]), encoding="utf-8") as fh:
+            model, _info = LC.clab_model(pm, yaml.safe_load(fh) or {}, {})
+    else:
+        with open(os.path.join(REPO, "group_vars", "all", "main.yml"), encoding="utf-8") as fh:
+            gv = yaml.safe_load(fh) or {}
+        fam0 = pm.get("image_family") or gv.get("image_family") or "iol"
+        fams = dict(pm.get("node_image_families") or {})
+        fams.update(pm.get("node_xr_platforms") or {})
+        lab = pm.get("lab") or {}
+        switches = list(lab.get("switches") or [])
+        nodes_in = list(pm.get("target_nodes") or [])
+
+        def prof(n):
+            return gv["device_profiles"][fams.get(n, fam0)][CL.role_of(n)]
+
+        def slot(n, s):
+            return s if n in switches else (prof(n).get("slot_map") or {}).get(s, s)
+
+        def ifname(n, s):
+            if n in switches:
+                return ""
+            names = prof(n)["links"]
+            return LC.abbr_if(names[s]) if s < len(names) else f"slot{s}"
+
+        links = [dict(lk, a_if=slot(lk["a"], lk["a_if"]), b_if=slot(lk["b"], lk["b_if"]))
+                 for lk in lab.get("links") or []]
+        pos = lab.get("positions") or {}
+        coords = CL.layout(nodes_in, pos, links)
+        for s in switches:                    # gen_cml_lab と同じ: 座標が無ければ繋がる先の重心
+            near = [coords[lk["b"]] for lk in links if lk["a"] == s and lk["b"] in nodes_in] + \
+                   [coords[lk["a"]] for lk in links if lk["b"] == s and lk["a"] in nodes_in]
+            coords[s] = ((int(pos[s][0]), int(pos[s][1])) if s in pos else
+                         (sum(c[0] for c in near) // len(near), sum(c[1] for c in near) // len(near)) if near else (0, 0))
+        nodes = []
+        for n in nodes_in + switches:
+            ndef = "unmanaged_switch" if n in switches else prof(n)["node_definition"]
+            nodes.append({"label": n, "def": ndef, "kind": LC.kind_of(ndef), "x": coords[n][0], "y": coords[n][1]})
+        model = {"nodes": nodes,
+                 "links": [{"a": lk["a"], "b": lk["b"], "a_if": ifname(lk["a"], lk["a_if"]),
+                            "b_if": ifname(lk["b"], lk["b_if"])} for lk in links]}
+    for n in model["nodes"]:
+        n.update(state="", console=False)     # 眺めるだけの図(状態の点・コンソールの口は付けない)
+    return model
+
+
+def board_notes(pid, lang):
+    """課題文(task.en.md / task.md)のトポロジの節 → HTML。節の見出しは小窓の見出しと重なるので落とす。無ければ ""。"""
+    pdir = os.path.join(REPO, "problems", pid)
+    path = os.path.join(pdir, BOARD_TASK.get(lang, "task.md"))
+    if not os.path.exists(path):
+        return ""
+    other = os.path.join(pdir, BOARD_TASK["ja" if lang == "en" else "en"])
+    with open(path, encoding="utf-8") as fh:
+        full = fh.read()
+    like = None
+    if os.path.exists(other):
+        with open(other, encoding="utf-8") as fh:
+            like = fh.read()
+    _rest, topo = RH.split_topology(full, like=like)
+    lines = topo.strip("\n").split("\n") if topo.strip() else []
+    if lines and re.match(r"^#{1,2}\s", lines[0]):
+        lines = lines[1:]
+    md = "\n".join(re.sub(r"^##(\s)", r"###\1", ln) for ln in lines).strip()   # 2 つ目からの節は小見出しに
+    return RH.make_md(allow_html=True).render(md) if md else ""
+
+
+def board_template(pid, langs):
+    """盤面の小窓の中身(<template class="bd-src">)。図は言語に依らず 1 つ、トポロジの節は言語ごと
+    (2 言語の本は data-l を付け、ページの切替で片方だけ見せる)。図も節も無ければ ""。"""
+    import lab_console as LC
+    fig = ""
+    try:
+        svg = re.sub(r'\sstyle="[^"]*"', "", LC.topo_svg(board_model(pid)), count=1)   # 大きさは小窓が決める
+        fig = f'<div class="bd-fig">{svg}</div>'
+    except Exception as e:  # noqa: BLE001  図が起こせなくても節は出す
+        print(f"[reading] 警告: 盤面 {pid} の結線図を起こせない({type(e).__name__}: {e})", file=sys.stderr)
+    by_lang = {l: board_notes(pid, l) for l in langs}
+    have = [l for l in langs if by_lang[l]]
+    if len(have) == 2:
+        notes = "".join(f'<div class="bd-notes" data-l="{l}">{by_lang[l]}</div>' for l in have)
+    else:                                     # 片方の版にしか節が無ければ、それを両方の版で出す
+        notes = f'<div class="bd-notes">{by_lang[have[0]]}</div>' if have else ""
+    if not fig and not notes:
+        return ""
+    tbl = f'<div class="bd-tbl">{notes}</div>' if notes else ""
+    return f'<template class="bd-src" data-board="{html.escape(pid)}">{fig}{tbl}</template>'
+
+
+def board_for(meta, pid, langs):
+    """board_template の写し(同じ盤面は本の中で 1 回だけ作る)。"""
+    if not pid:
+        return ""
+    cache = meta.setdefault("_board_cache", {})
+    key = (pid, tuple(langs))
+    if key not in cache:
+        cache[key] = board_template(pid, langs)
+    return cache[key]
+
+
+BOARD_JS = r"""
+(function(){
+  var srcs = document.querySelectorAll('template.bd-src');
+  if(!srcs.length) return;
+  var KEY = 'ccnp-board-win', byId = {};
+  [].forEach.call(srcs, function(t){ byId[t.getAttribute('data-board')] = t; });
+  var WORDS = {
+    ja: {title: '盤面', fig: '結線図', tbl: '表', close: '閉じる', zout: '縮小', zin: '拡大', fit: '全体', big: '画面いっぱいに',
+         hint: 'ドラッグで移動 · ピンチか Ctrl+ホイールで拡大 · ダブルクリックで全体'},
+    en: {title: 'Topology', fig: 'Diagram', tbl: 'Tables', close: 'Close', zout: 'Zoom out', zin: 'Zoom in', fit: 'Fit',
+         big: 'Full screen', hint: 'Drag to move · pinch or Ctrl+wheel to zoom · double-click to fit'}};
+  var two = !!document.body.dataset.lang;
+  function words(){
+    var l = (document.body.dataset.lang || document.documentElement.lang || 'ja').slice(0, 2);
+    return WORDS[l] || WORDS.en;
+  }
+  /* 決まり文句: 2 言語のページは 2 つの span を置き、切替(body の data-lang)で片方だけ見せる */
+  function label(el, k){
+    if(!two){ el.textContent = words()[k]; return; }
+    ['en', 'ja'].forEach(function(l){
+      var s = document.createElement('span'); s.setAttribute('data-l', l); s.textContent = WORDS[l][k]; el.appendChild(s);
+    });
+  }
+  function el(tag, cls, parent){
+    var e = document.createElement(tag); if(cls) e.className = cls; if(parent) parent.appendChild(e); return e;
+  }
+  var marks = [].slice.call(document.querySelectorAll('[data-board-at]'));   /* 束ねた 1 枚: 盤面のあるページの頭 */
+  var btn = document.querySelector('.rn-board') || document.querySelector('.bd-fab');
+  if(!btn) return;
+  btn.hidden = false;
+  var st = {}, tSave = null;
+  try{ st = JSON.parse(localStorage.getItem(KEY)) || {}; }catch(_e){}
+  function save(){ clearTimeout(tSave); try{ localStorage.setItem(KEY, JSON.stringify(st)); }catch(_e){} }
+  function saveSoon(){ clearTimeout(tSave); tSave = setTimeout(save, 300); }
+  var win = null, bar, idEl, tabs, figPane, tblPane, cur = null;
+  var svg = null, vb = null, home = null, ptrs = {}, pinch = null;
+  function rem(){ return parseFloat(getComputedStyle(document.documentElement).fontSize) || 16; }
+  /* 既定の置き場: 広い画面は右上(言語の切替ボタンの下)、狭い画面は上の幅いっぱい。高さは盤面の縦横比に合わせる
+     (図の上下に空きを作らない)。動かした・大きさを変えた後は、その値(st)が勝つ */
+  function homeRect(){
+    var vw = document.documentElement.clientWidth, vh = window.innerHeight, r = rem();
+    var asp = home ? home[3] / home[2] : 0.6, head = (bar && bar.offsetHeight) || 2.4 * r;
+    var narrow = vw < 700, w = narrow ? vw - 16 : Math.round(Math.min(56 * r, Math.max(24 * r, vw * 0.55)));
+    var h = Math.round(Math.max(12 * r, Math.min(vh * (narrow ? 0.55 : 0.7), head + w * asp + 8)));
+    return narrow ? {x: 8, y: 8, w: w, h: h} : {x: vw - w - 16, y: Math.round(2.8 * r), w: w, h: h};
+  }
+  function place(){
+    if(!win || win.hidden) return;
+    var vw = document.documentElement.clientWidth, vh = window.innerHeight, d = homeRect();
+    var w = Math.max(220, Math.min(st.w || d.w, vw - 8)), h = Math.max(160, Math.min(st.h || d.h, vh - 8));
+    var x = st.x === undefined ? d.x : st.x, y = st.y === undefined ? d.y : st.y;
+    x = Math.max(80 - w, Math.min(x, vw - 80));            /* 見出しの端は必ず画面に残す(見失わない) */
+    y = Math.max(0, Math.min(y, vh - bar.offsetHeight - 4));
+    win.style.left = x + 'px'; win.style.top = y + 'px';
+    win.style.width = w + 'px'; win.style.height = h + 'px';
+  }
+  /* いま読んでいる所の盤面。束ねた 1 枚は、画面の上から 4 割の線を最後に越えたページの頭の盤面 */
+  function want(){
+    if(!marks.length) return btn.getAttribute('data-board') || srcs[0].getAttribute('data-board');
+    var id = marks[0].getAttribute('data-board-at'), lim = window.innerHeight * 0.4;
+    for(var i = 0; i < marks.length; i++){
+      if(marks[i].getBoundingClientRect().top > lim) break;
+      id = marks[i].getAttribute('data-board-at');
+    }
+    return id;
+  }
+  /* ---- 結線図: 拡大・移動は viewBox を書き換える(拡大表示 FIG_JS と同じ操作)。見ていた所は盤面ごとに覚える ---- */
+  function setVB(v){ vb = v; svg.setAttribute('viewBox', v.map(function(n){ return n.toFixed(1); }).join(' ')); }
+  function keep(){
+    if(!svg) return;
+    (st.vb = st.vb || {})[cur] = vb.map(function(n){ return Math.round(n * 10) / 10; });
+    saveSoon();
+  }
+  function pan(dx, dy){
+    var m = svg.getScreenCTM(); if(!m) return;
+    setVB([vb[0] + dx / m.a, vb[1] + dy / m.a, vb[2], vb[3]]);
+  }
+  function zoom(f, cx, cy){
+    var m = svg.getScreenCTM(); if(!m) return;
+    if(cx === undefined){ var r = figPane.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2; }
+    var w = Math.min(home[2] * 1.5, Math.max(home[2] / 12, vb[2] / f)), k = w / vb[2];
+    var pt = svg.createSVGPoint(); pt.x = cx; pt.y = cy;
+    var p = pt.matrixTransform(m.inverse());
+    setVB([p.x - (p.x - vb[0]) * k, p.y - (p.y - vb[1]) * k, w, vb[3] * k]);
+  }
+  function fit(){ if(svg){ setVB(home.slice()); keep(); } }
+  function tab(k){
+    if(k === 'fig' && !svg) k = 'tbl';
+    if(k === 'tbl' && !tblPane.firstChild) k = 'fig';
+    win.setAttribute('data-tab', k);
+    [].forEach.call(tabs.children, function(b){ b.setAttribute('aria-pressed', b.getAttribute('data-tab') === k ? 'true' : 'false'); });
+    st.tab = k; saveSoon();
+  }
+  function fill(id){
+    if(!byId[id] || id === cur) return;
+    cur = id;
+    var c = byId[id].content.cloneNode(true), f = c.querySelector('.bd-fig'), t = c.querySelector('.bd-tbl');
+    var old = figPane.querySelector('.bd-fig'); if(old) figPane.removeChild(old);
+    while(tblPane.firstChild) tblPane.removeChild(tblPane.firstChild);
+    svg = f ? f.querySelector('svg') : null;
+    if(f) figPane.insertBefore(f, figPane.firstChild);
+    if(t) tblPane.appendChild(t);
+    if(svg){
+      home = svg.getAttribute('viewBox').trim().split(/[\s,]+/).map(Number);
+      var v = (st.vb || {})[id];
+      setVB(v && v.length === 4 && v.every(isFinite) ? v.slice() : home.slice());
+    }
+    tabs.hidden = !(svg && t);
+    idEl.textContent = id;
+    tblPane.scrollTop = 0;
+    tab(st.tab || 'fig');
+  }
+  /* つかんで動かす(見出し)・大きさを変える(右下の角)。指でも同じ(pointer events) */
+  function grab(e, h, kind){
+    if((e.pointerType === 'mouse' && e.button !== 0) || e.target.closest('button')) return;
+    e.preventDefault();
+    try{ h.setPointerCapture(e.pointerId); }catch(_e){}
+    var r = win.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY;
+    st.x = r.left; st.y = r.top; st.w = r.width; st.h = r.height;
+    win.classList.add('moving');
+    function mv(ev){
+      if(kind === 'move'){ st.x = r.left + ev.clientX - x0; st.y = r.top + ev.clientY - y0; }
+      else { st.w = Math.max(220, r.width + ev.clientX - x0); st.h = Math.max(160, r.height + ev.clientY - y0); }
+      place();
+    }
+    function up(){
+      h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up);
+      h.removeEventListener('pointercancel', up);
+      win.classList.remove('moving');
+      var q = win.getBoundingClientRect();
+      st.x = q.left; st.y = q.top; st.w = q.width; st.h = q.height;
+      save();
+    }
+    h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+  }
+  function tool(parent, k, glyph, fn){
+    var b = el('button', '', parent); b.type = 'button'; b.title = words()[k]; b.setAttribute('aria-label', words()[k]);
+    if(glyph) b.textContent = glyph; else label(b, k);
+    b.addEventListener('click', fn);
+    return b;
+  }
+  function build(){
+    win = el('div'); win.id = 'bdwin'; win.hidden = true;
+    win.setAttribute('role', 'dialog');
+    bar = el('div', 'bd-bar', win);
+    var t = el('span', 'bd-t', bar);
+    label(el('span', '', t), 'title');
+    idEl = el('span', 'bd-id', t);
+    tabs = el('span', 'bd-tabs', bar);
+    ['fig', 'tbl'].forEach(function(k){
+      var b = el('button', '', tabs); b.type = 'button'; b.setAttribute('data-tab', k); label(b, k);
+      b.addEventListener('click', function(){ tab(k); });
+    });
+    tool(bar, 'close', '✕', function(){ close(); btn.focus(); }).className = 'bd-x';
+    var body = el('div', 'bd-body', win);
+    figPane = el('div', 'bd-pane bd-figpane', body);
+    var tools = el('div', 'bd-tools', figPane);
+    tool(tools, 'zout', '−', function(){ zoom(1 / 1.25); keep(); });
+    tool(tools, 'zin', '+', function(){ zoom(1.25); keep(); });
+    tool(tools, 'fit', '', fit);
+    tool(tools, 'big', '⤢', function(){
+      if(!svg || !window.ccnpFigOpen) return;
+      var c = svg.cloneNode(true); c.setAttribute('viewBox', home.join(' '));
+      window.ccnpFigOpen(c);
+    });
+    label(el('div', 'bd-hint', figPane), 'hint');
+    tblPane = el('div', 'bd-pane bd-tblpane', body);
+    var grip = el('div', 'bd-grip', win);
+    document.body.appendChild(win);
+    bar.addEventListener('pointerdown', function(e){ grab(e, bar, 'move'); });
+    grip.addEventListener('pointerdown', function(e){ grab(e, grip, 'size'); });
+    bar.addEventListener('dblclick', function(e){       /* 既定の置き場へ戻す */
+      if(e.target.closest('button')) return;
+      delete st.x; delete st.y; delete st.w; delete st.h; save(); place();
+    });
+    win.addEventListener('keydown', function(e){ if(e.key === 'Escape'){ close(); btn.focus(); } });
+    /* 図の上: 指 1 本(またはマウス)= 移動、指 2 本= ピンチで拡大縮小、ホイール= 移動(Ctrl か ピンチ= 拡大縮小) */
+    figPane.addEventListener('wheel', function(e){
+      if(!svg) return;
+      e.preventDefault();
+      if(e.ctrlKey) zoom(Math.exp(-Math.max(-50, Math.min(50, e.deltaY)) * 0.01), e.clientX, e.clientY);
+      else pan(e.deltaX, e.deltaY);
+      keep();
+    }, {passive: false});
+    figPane.addEventListener('pointerdown', function(e){
+      if(!svg || e.target.closest('button') || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      ptrs[e.pointerId] = {x: e.clientX, y: e.clientY};
+      try{ figPane.setPointerCapture(e.pointerId); }catch(_e){}
+      var ids = Object.keys(ptrs);
+      if(ids.length === 2){ var a = ptrs[ids[0]], b = ptrs[ids[1]]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
+    });
+    figPane.addEventListener('pointermove', function(e){
+      var prev = ptrs[e.pointerId];
+      if(!prev) return;
+      ptrs[e.pointerId] = {x: e.clientX, y: e.clientY};
+      var ids = Object.keys(ptrs);
+      if(ids.length >= 2){
+        var a = ptrs[ids[0]], b = ptrs[ids[1]], d = Math.hypot(a.x - b.x, a.y - b.y);
+        if(pinch) zoom(d / pinch, (a.x + b.x) / 2, (a.y + b.y) / 2);
+        pinch = d; return;
+      }
+      figPane.classList.add('drag');
+      pan(prev.x - e.clientX, prev.y - e.clientY);
+    });
+    function up(e){
+      if(!ptrs[e.pointerId]) return;
+      delete ptrs[e.pointerId];
+      var n = Object.keys(ptrs).length;
+      if(n < 2) pinch = null;
+      if(!n){ figPane.classList.remove('drag'); keep(); }
+    }
+    figPane.addEventListener('pointerup', up); figPane.addEventListener('pointercancel', up);
+    figPane.addEventListener('dblclick', function(e){ if(!e.target.closest('button')) fit(); });
+  }
+  function sync(){ btn.setAttribute('aria-pressed', win && !win.hidden ? 'true' : 'false'); }
+  function open(){
+    if(!win) build();
+    win.hidden = false;
+    fill(want());
+    place(); sync();
+    st.open = true; save();
+  }
+  function close(){
+    if(!win || win.hidden) return;
+    win.hidden = true; sync();
+    st.open = false; save();
+  }
+  btn.addEventListener('click', function(){ if(win && !win.hidden) close(); else open(); });
+  window.addEventListener('resize', place);
+  if(marks.length){
+    var busy = false;
+    window.addEventListener('scroll', function(){
+      if(busy || !win || win.hidden) return;
+      busy = true;
+      setTimeout(function(){ busy = false; fill(want()); }, 60);
+    }, {passive: true});
+  }
+  if(st.open) open();                                   /* 開いたまま次のページへ来たら、同じ所に開く */
+})();
+"""
+
+
 # 読み物のナビ帯(BL-253・2026-10-18 ユーザ要望「ただ並べてあるだけで見づらい」)。画面の下端に固定:
 #   ‹ ポータル | ☰ いまのページ名 ▴ | ← →
 #   ☰ を押すと上に向かってメニューが開く= 目次・ページの一覧(いまのページに印)。単元(章)ごとのまとまりを線で区切り、
@@ -1618,7 +2265,7 @@ READ_NAV_JS = r"""
 """
 
 
-def reading_nav(meta, i):
+def reading_nav(meta, i, board=None):
     pages, langs = meta["pages"], meta["_langs"]
     both = lambda by_lang: _both(meta, {l: html.escape(by_lang.get(l) or next(iter(by_lang.values()), "")) for l in langs})
     word = lambda k: both({l: _WORDS[l][k] for l in langs})
@@ -1640,10 +2287,14 @@ def reading_nav(meta, i):
              if i else '<span class="rn-step off">←</span>')
     next_ = (f'<a class="rn-step" href="{pages[i+1]["html"]}" title="{html.escape(_WORDS[langs[0]]["next"])}">→</a>'
              if i + 1 < len(pages) else '<span class="rn-step off">→</span>')
+    # 盤面の小窓(BL-284)のボタン。そのページに盤面がある時だけ(押した後の動きは BOARD_JS)
+    board_ = (f'<button type="button" class="rn-board" aria-pressed="false" data-board="{html.escape(board)}" '
+              f'title="{html.escape(_WORDS[langs[0]]["board"])}">{BOARD_ICON}<span class="rn-bl">{word("board")}</span></button>'
+              if board else "")
     return (f'<nav class="rnav"><a class="rn-portal" href="/">{word("portal")}</a>'
             f'<div class="rn-menu"><button type="button" class="rn-btn" aria-expanded="false" aria-haspopup="true">'
             f'<span class="rn-ic">☰</span><span class="rn-cur">{both(p["_titles"])}</span><span class="rn-car">▴</span></button>'
-            f'<div class="rn-panel" hidden>{"".join(rows)}</div></div>'
+            f'<div class="rn-panel" hidden>{"".join(rows)}</div></div>{board_}'
             f'<span class="rn-sp"></span>{prev_}{next_}</nav>\n<script>{READ_NAV_JS}</script>')
 
 
@@ -1670,7 +2321,10 @@ def build_page(src, meta, i, out_dir, mermaid_mode):
         if p["_gl_hits"]:
             gl_tail = (GL.popup_data(meta["_gl"], {h[0] for h in p["_gl_hits"]}, "glossary.html")
                        + f"\n<script>{GL.GLOSS_JS}</script>\n")
-    out = out.replace("</body>", f"{reading_nav(meta, i)}\n<script>{READ_JS}</script>\n<script>{CFG_JS}</script>\n<script>{FIG_JS}</script>\n<script>{WALK_JS}</script>\n{gl_tail}</body>", 1)
+    drill_js = f"<script>{DRILL_JS}</script>\n" if 'class="drillbreak"' in out else ""
+    board = board_for(meta, p.get("_board"), langs)      # 盤面の小窓(BL-284)。用語集の拾い出しの後に足す
+    board_js = f"{board}\n<script>{BOARD_JS}</script>\n" if board else ""
+    out = out.replace("</body>", f"{reading_nav(meta, i, p['_board'] if board else None)}\n{board_js}<script>{READ_JS}</script>\n<script>{CFG_JS}</script>\n<script>{FIG_JS}</script>\n<script>{WALK_JS}</script>\n{drill_js}{gl_tail}</body>", 1)
     out = _finish_lang(lazy_images(wrap_tables(termify(out))))
     dst = os.path.join(out_dir, p["html"])
     with open(dst, "w", encoding="utf-8") as fh:
@@ -1939,11 +2593,14 @@ def _assemble(meta, pages, title, dst):
         text = expand_blocks(text)
         # ワークスペース・他ページの節へのリンク(BL-252)は配信している時だけのもの。持ち出しの 1 枚には行き先が無い
         text = re.sub(r'(?m)^<p class="tolab">.*</p>\n?', "", text)
+        text = re.sub(r'(?m)^<div class="drillbreak".*</div>\n?', "", text)   # 素振り台(:::drill)は配信している時だけ動く
         text, notes = expand_sic(text, offset)
         text += notes_section(notes, offset)
         offset += len(notes)
         sep = '<hr class="bsep">\n\n' if i else ""
-        chunks.append(f'{sep}<a id="pg{i}"></a>\n\n{text}\n\n'
+        bd = p.get("_board") if board_for(meta, p.get("_board"), [_LANG]) else None
+        at = f' data-board-at="{html.escape(bd)}"' if bd else ""
+        chunks.append(f'{sep}<a id="pg{i}"{at}></a>\n\n{text}\n\n'
                       f'<a class="bhome" href="#top">{_w("back")}</a>')
 
     md = "\n\n".join(chunks)
@@ -1972,7 +2629,15 @@ def _assemble(meta, pages, title, dst):
             sec = GL.bundle_section(gl, ids, refs, _LANG, _gl_page_ref(meta, _LANG, pages))
             out = out.replace("</main>", sec + "</main>", 1)
             gl_tail = GL.popup_data(gl, set(refs), "") + f"\n<script>{GL.GLOSS_JS}</script>\n"
-    out = out.replace("<body", '<body id="top"', 1).replace("</body>", f"<script>{CFG_JS}</script>\n<script>{FIG_JS}</script>\n<script>{WALK_JS}</script>\n{gl_tail}</body>", 1)
+    # 盤面の小窓(BL-284): 1 枚の中の盤面の中身(同じ盤面は 1 つ)＋右下に浮かぶボタン。スクリプトが動かない閲覧アプリでは
+    # ボタンは隠れたまま(hidden を外すのは BOARD_JS)
+    bds = list(dict.fromkeys(p["_board"] for p in pages if p.get("_board") and board_for(meta, p["_board"], [_LANG])))
+    board_tail = ""
+    if bds:
+        board_tail = ("".join(board_for(meta, b, [_LANG]) for b in bds)
+                      + f'\n<button type="button" class="bd-fab" aria-pressed="false" hidden>{BOARD_ICON}'
+                      f'<span class="rn-bl">{_w("board")}</span></button>\n<script>{BOARD_JS}</script>\n')
+    out = out.replace("<body", '<body id="top"', 1).replace("</body>", f"{board_tail}<script>{CFG_JS}</script>\n<script>{FIG_JS}</script>\n<script>{WALK_JS}</script>\n{gl_tail}</body>", 1)
     out = _finish_lang(inline_images(wrap_tables(termify(out)), os.path.dirname(pages[0]["_path"])))
     os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
     with open(dst, "w", encoding="utf-8") as fh:

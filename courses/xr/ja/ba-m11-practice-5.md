@@ -1,4 +1,4 @@
-# M11 追補 — 実践(5) EVPN のマルチホーム
+# M11 追補 — 実践(5) EVPN マルチホーム
 
 ラボ **XRT-12** の課題です。ラボから離れた場所でも読めるように、ここに載せています。
 取り組むのはラボのワークスペースです。**Tasks** タブに、課題ごとの確認ボタン、段階式のヒント、
@@ -7,7 +7,7 @@
 ## M11 追補 — E-LAN、マルチホーム、イーサネット OAM
 
 ### 課題 M11-8
-<p class="tolab"><a href="/_learn?id=XRT-12&amp;step=m11t8">ワークスペースで開く</a> — 読み物: <a href="b9-m11-multihoming.html#s2-1">2.1 イーサネット セグメントの識別子</a> · <a href="b9-m11-multihoming.html#s2-2">2.2 経路の種類 4: PE どうしが見つけ合い、転送役を選ぶ</a> · <a href="b9-m11-multihoming.html#s2-3">2.3 経路の種類 1: エイリアシング</a> · <a href="b9-m11-multihoming.html#s3-1">3.1 設定</a> · <a href="b9-m11-multihoming.html#s3-2">3.2 LACP: 2 台の PE、1 つの相手</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-12&amp;step=m11t8">ワークスペースで開く</a> — 読み物: <a href="b9-m11-multihoming.html#s2-1">2.1 イーサネット セグメント識別子</a> · <a href="b9-m11-multihoming.html#s2-2">2.2 ルート タイプ 4: PE どうしが見つけ合い、フォワーダーを選ぶ</a> · <a href="b9-m11-multihoming.html#s2-3">2.3 ルート タイプ 1: エイリアシング</a> · <a href="b9-m11-multihoming.html#s3-1">3.1 設定</a> · <a href="b9-m11-multihoming.html#s3-2">3.2 LACP: 2 台の PE、1 つの相手</a></p>
 
 
 サイト 4 はスイッチの SW1 で、冗長性のために XE1 と XE2 の両方に接続しています。SW1 は 2 本のリンクを LACP(active)で

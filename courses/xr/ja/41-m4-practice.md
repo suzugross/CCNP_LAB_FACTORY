@@ -54,7 +54,7 @@
 - XR01 は、IOS ルータと同様に、Loopback0 と 3 本のリンクで IPv4 と IPv6 の IS-IS を実行する必要があります。
 
 ### 課題 M4-2
-<p class="tolab"><a href="/_learn?id=XRT-04&amp;step=m4t2">ワークスペースで開く</a> — 読み物: <a href="40-m4-isis.html#s7">7. メトリック: ナローとワイド</a> · <a href="40-m4-isis.html#s6">6. レベルのあいだ: ATT ビットと経路の漏らし</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-04&amp;step=m4t2">ワークスペースで開く</a> — 読み物: <a href="40-m4-isis.html#s7">7. メトリック: ナローとワイド</a> · <a href="40-m4-isis.html#s6">6. レベルのあいだ: ATT ビットとルート リーク</a></p>
 
 
 レベル 2 の隣接は確立しています。それでも XR01 はバックボーンへのルートを持たず、バックボーンもエリア 49.0001 への
@@ -79,7 +79,7 @@
   あります。CORE-B は IPv6 でもバックアップ リンクのままです。
 
 ### 課題 M4-4
-<p class="tolab"><a href="/_learn?id=XRT-04&amp;step=m4t4">ワークスペースで開く</a> — 読み物: <a href="40-m4-isis.html#s10">10. ルート ポリシーで漏らす</a> · <a href="40-m4-isis.html#s6">6. レベルのあいだ: ATT ビットと経路の漏らし</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-04&amp;step=m4t4">ワークスペースで開く</a> — 読み物: <a href="40-m4-isis.html#s10">10. ルート ポリシーでリークする</a> · <a href="40-m4-isis.html#s6">6. レベルのあいだ: ATT ビットとルート リーク</a></p>
 
 
 RT01 は MPLS のエッジ ルータになる予定です。各バックボーン ルータのループバックへの個別のルートが必要になり、

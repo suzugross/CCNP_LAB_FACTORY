@@ -1,0 +1,400 @@
+# glossary/multicast.yml — マルチキャストの語(グループ アドレス・IGMP/MLD・PIM-SM・SSM・BIDIR・RP の見つけ方・転送の表)
+# 2026-11-18 作成(XR トラック M14・BL-257)。説明は本文(実機で確かめた内容・design §31)と食い違わないこと。
+# 別の単元で別の意味になる表記(RP・DR・DF・Assert・scope・Register など)は scope で M14 のページ(f*-m14-*)に絞る。
+
+# ---------------------------------------------------------------- 全体
+- id: multicast
+  term: {en: multicast, ja: マルチキャスト}
+  def:
+    en: >-
+      Sending one stream to a group of receivers so that each link carries one copy, however many receivers sit behind
+      it. The network copies the packet only where the paths to the receivers split.
+    ja: >-
+      1 本の流れをグループの受信者へ送り、受信者が何台いても各リンクには 1 部だけ流す方式。パケットを複製するのは、受信者への
+      道が分かれる所だけ。
+  see: [group-address, igmp, pim-sm]
+  scope: ["f*-m14-*"]
+
+- id: group-address
+  term: {en: group address, ja: グループ アドレス}
+  aka: [multicast group, マルチキャスト グループ, group addresses]
+  def:
+    en: >-
+      The destination address of a multicast packet: it names a group, not a host. IPv4 uses 224.0.0.0/4 (239.0.0.0/8 is
+      administratively scoped, 232.0.0.0/8 is for SSM); IPv6 uses FF00::/8, with the scope in the fourth hex digit.
+    ja: >-
+      マルチキャストのパケットの宛先アドレス。ホストではなくグループを指す。IPv4 は 224.0.0.0/4(239.0.0.0/8 は組織の中で使う範囲、
+      232.0.0.0/8 は SSM 用)、IPv6 は FF00::/8 で、4 桁目の 16 進数がスコープを表す。
+  see: [multicast, ssm]
+  scope: ["f*-m14-*"]
+
+# ---------------------------------------------------------------- 受信者とルータの間
+- id: igmp
+  term: IGMP
+  full: {en: Internet Group Management Protocol, ja: Internet Group Management Protocol}
+  aka: [IGMPv1, IGMPv2, IGMPv3, IGMP レポート, IGMP report, IGMP reports]
+  def:
+    en: >-
+      The protocol between IPv4 hosts and their router: the router asks which groups are wanted (query) and hosts answer
+      (report). Version 2 adds a leave message; version 3 lets a host name the sources it wants (or does not want).
+    ja: >-
+      IPv4 のホストとそのルータの間のプロトコル。ルータがどのグループが要るかを尋ね(クエリ)、ホストが答える(レポート)。
+      バージョン 2 で離脱のメッセージが加わり、バージョン 3 ではホストが欲しい(または要らない)送信元を指定できる。
+  see: [mld, querier, ssm]
+
+- id: mld
+  term: MLD
+  full: {en: Multicast Listener Discovery, ja: Multicast Listener Discovery}
+  aka: [MLDv1, MLDv2]
+  def:
+    en: >-
+      The IPv6 counterpart of IGMP, carried in ICMPv6. MLDv1 matches IGMPv2 and MLDv2 matches IGMPv3 (sources can be
+      named). IOS XR runs MLDv2 by default.
+    ja: >-
+      IGMP の IPv6 版で、ICMPv6 で運ばれる。MLDv1 が IGMPv2 に、MLDv2 が IGMPv3(送信元を指定できる)に当たる。IOS XR の既定は MLDv2。
+  see: [igmp, pimv6]
+
+- id: querier
+  term: {en: querier, ja: クエリア}
+  aka: [IGMP querier, queriers]
+  def:
+    en: >-
+      The one router on a LAN that sends the IGMP (or MLD) queries: the one with the lowest address. It is chosen apart
+      from the PIM DR, so on a LAN with two routers the querier and the DR can be different routers.
+    ja: >-
+      LAN の上で IGMP(または MLD)のクエリを送る 1 台のルータ。アドレスの最も小さいものが選ばれる。PIM の DR とは別に選ぶので、
+      ルータが 2 台の LAN ではクエリアと DR が別の機器になることがある。
+  see: [igmp, pim-dr]
+  scope: ["f*-m14-*"]
+
+# ---------------------------------------------------------------- PIM の部品
+- id: pim
+  term: PIM
+  full: {en: Protocol Independent Multicast, ja: Protocol Independent Multicast}
+  aka: [PIM Hello, PIM hellos]
+  def:
+    en: >-
+      The multicast routing protocol between routers. "Protocol independent" because it uses whatever unicast routing
+      table the router has (IS-IS here) for its RPF checks instead of building its own.
+    ja: >-
+      ルータどうしのマルチキャスト ルーティング プロトコル。RPF チェックに自前の経路表を作らず、ルータが持つユニキャストの経路表
+      (ここでは IS-IS)をそのまま使うので「プロトコル非依存」と呼ぶ。
+  see: [pim-sm, rpf-check]
+
+- id: pim-sm
+  term: {en: PIM sparse mode, ja: PIM スパース モード}
+  aka: [PIM-SM, sparse mode, スパース モード]
+  def:
+    en: >-
+      PIM in which nothing is forwarded until a receiver asks: last-hop routers send Joins toward the RP to build a
+      shared tree, and the first-hop router registers the source with the RP.
+    ja: >-
+      受信者が求めるまで何も転送しない PIM。最終ホップのルータが RP へ向けて Join を送って共有ツリーを作り、最初のホップの
+      ルータが送信元を RP へ Register する。
+  see: [rp, shared-tree, register, spt]
+
+- id: pim-dm
+  term: {en: PIM dense mode, ja: PIM デンス モード}
+  aka: [PIM-DM, dense mode, デンス モード]
+  def:
+    en: >-
+      PIM that first floods a group everywhere and then prunes the branches without receivers. IOS XR uses dense mode
+      only for the two Auto-RP groups (shown as `DM perm`).
+    ja: >-
+      まずグループをすべての所へあふれさせ、受信者のいない枝を刈り込む PIM。IOS XR がデンス モードを使うのは Auto-RP の
+      2 つのグループだけ(`DM perm` と表示)。
+  see: [auto-rp, pim-sm]
+
+- id: pim-dr
+  term: DR
+  full: {en: designated router, ja: 指定ルータ}
+  aka: [PIM DR]
+  def:
+    en: >-
+      On a LAN with several PIM routers, the one that joins toward the RP for the LAN's receivers and registers the
+      LAN's sources: the highest DR priority, then the highest address.
+    ja: >-
+      PIM のルータが何台もいる LAN で、LAN の受信者のために RP へ向けて Join を送り、LAN の送信元を Register する 1 台。
+      DR priority の最も大きいもの、同じならアドレスの最も大きいものが選ばれる。
+  see: [querier, pim-df]
+  scope: ["f*-m14-*"]
+
+- id: rp
+  term: RP
+  full: {en: rendezvous point, ja: ランデブー ポイント}
+  aka: [RP address, RP のアドレス, rendezvous points]
+  def:
+    en: >-
+      In sparse mode, the router where receivers' Joins and sources' Registers meet. Every router must map a group to the
+      same RP; it learns that mapping statically, through BSR or through Auto-RP.
+    ja: >-
+      スパース モードで、受信者からの Join と送信元からの Register が出会うルータ。どのルータも、グループを同じ RP に対応付ける
+      必要がある。対応は、スタティック・BSR・Auto-RP のどれかで知る。
+  see: [shared-tree, register, bsr, auto-rp]
+  scope: ["f*-m14-*"]
+
+- id: shared-tree
+  term: {en: shared tree, ja: 共有ツリー}
+  aka: [RP tree, RPT, shared trees]
+  def:
+    en: >-
+      The (*,G) tree rooted at the RP. Every source of the group reaches the receivers through it, so it is shared by
+      all the sources.
+    ja: >-
+      RP を根とする (*,G) のツリー。グループのどの送信元も、これを通って受信者へ届くので、すべての送信元が共有する。
+  see: [rp, spt, star-g]
+  scope: ["f*-m14-*"]
+
+- id: spt
+  term: {en: shortest-path tree, ja: 最短パス ツリー}
+  aka: [SPT, source tree, 送信元ツリー, shortest-path trees]
+  def:
+    en: >-
+      The (S,G) tree rooted at the source, following the unicast shortest path back to it. A last-hop router switches to
+      it on the first packet by default (`spt-threshold infinity` stops that).
+    ja: >-
+      送信元を根とし、送信元へのユニキャストの最短パスに沿う (S,G) のツリー。最終ホップのルータは、既定では最初のパケットで
+      これへ切り替える(`spt-threshold infinity` で止まる)。
+  see: [shared-tree, s-g]
+  scope: ["f*-m14-*"]
+
+- id: star-g
+  term: "(*,G)"
+  aka: ["(*,G) entry", "(*,G) のエントリ"]
+  def:
+    en: >-
+      State for a group from any source: the shared tree toward the RP (or, in bidirectional PIM, the only state there is).
+    ja: >-
+      どの送信元でもよいグループの状態。RP へ向かう共有ツリーを表す(双方向 PIM では、これが唯一の状態)。
+  see: [s-g, shared-tree]
+
+- id: s-g
+  term: "(S,G)"
+  aka: ["(S,G) entry", "(S,G) のエントリ"]
+  def:
+    en: >-
+      State for one source S sending to group G: the shortest-path tree, or in SSM the only kind of state.
+    ja: >-
+      送信元 S からグループ G への状態。最短パス ツリーを表す。SSM では、これが唯一の種類の状態。
+  see: [star-g, spt]
+
+- id: rpf-check
+  term: {en: RPF check, ja: RPF チェック}
+  aka: [RPF, reverse path forwarding, RPF interface, RPF インタフェース, RPF neighbor]
+  def:
+    en: >-
+      A multicast packet is accepted only on the interface the router would use to send unicast back to its source (or,
+      on the shared tree, toward the RP). Joins are sent the same way.
+    ja: >-
+      マルチキャストのパケットは、送信元へ(共有ツリーなら RP へ)ユニキャストで返すときに使うインタフェースで受けたものだけを
+      受け入れる、という確認。Join も同じ向きに送る。
+  see: [pim]
+  scope: ["f*-m14-*"]
+
+- id: join-prune
+  term: Join/Prune
+  aka: [PIM Join, PIM Joins, (*,G) Join, (S,G) Join, Prune]
+  def:
+    en: >-
+      The PIM message a router sends to its upstream neighbour to add itself to a tree (Join) or to leave it (Prune),
+      hop by hop toward the RP or the source. Joins are repeated every 60 seconds.
+    ja: >-
+      ルータが上流の隣へ送り、ツリーに加わる(Join)か外れる(Prune)ための PIM のメッセージ。RP か送信元へ向けて 1 ホップずつ
+      送る。Join は 60 秒ごとに送り直す。
+  see: [shared-tree, spt]
+  scope: ["f*-m14-*"]
+
+- id: register
+  term: Register
+  aka: [Register message, Register messages, Register-Stop, register-stop]
+  def:
+    en: >-
+      How the first-hop router tells the RP about a new source: it wraps the source's packets in unicast PIM Register
+      messages to the RP. The RP unwraps them, joins toward the source and then answers Register-Stop.
+    ja: >-
+      最初のホップのルータが、新しい送信元を RP に知らせるしくみ。送信元のパケットをユニキャストの PIM の Register メッセージに
+      包んで RP へ送る。RP は中身を取り出して送信元へ向けて Join を送り、そのあと Register-Stop を返す。
+  see: [rp, pim-sm]
+  scope: ["f*-m14-*"]
+
+- id: fhr
+  term: {en: first-hop router, ja: 最初のホップのルータ}
+  aka: [FHR, first-hop routers]
+  def:
+    en: >-
+      The router (the DR) on the source's LAN. In sparse mode it registers the source with the RP.
+    ja: >-
+      送信元の LAN にいるルータ(DR)。スパース モードでは、送信元を RP へ Register する。
+  see: [register, lhr]
+  scope: ["f*-m14-*"]
+
+- id: lhr
+  term: {en: last-hop router, ja: 最終ホップのルータ}
+  aka: [LHR, last-hop routers]
+  def:
+    en: >-
+      The router (the DR) on a receivers' LAN. It turns IGMP reports into PIM Joins and decides the switch to the
+      shortest-path tree.
+    ja: >-
+      受信者の LAN にいるルータ(DR)。IGMP のレポートを PIM の Join に変え、最短パス ツリーへの切り替えを決める。
+  see: [fhr, spt]
+  scope: ["f*-m14-*"]
+
+# ---------------------------------------------------------------- SSM と双方向 PIM
+- id: ssm
+  term: SSM
+  full: {en: source-specific multicast, ja: 送信元特定マルチキャスト}
+  aka: [PIM-SSM, SSM range, SSM の範囲]
+  def:
+    en: >-
+      Multicast in which the receiver names the source as well as the group (IGMPv3/MLDv2), so routers join straight
+      toward the source and no RP is needed. 232.0.0.0/8 is the default range; a configured range replaces it.
+    ja: >-
+      受信者がグループと一緒に送信元も指定する(IGMPv3・MLDv2)マルチキャスト。ルータは送信元へまっすぐ Join を送るので、RP が
+      要らない。既定の範囲は 232.0.0.0/8 で、範囲を設定するとそれに置き換わる。
+  see: [igmp, s-g]
+
+- id: bidir-pim
+  term: {en: bidirectional PIM, ja: 双方向 PIM}
+  aka: [BIDIR, PIM-BIDIR, Bidir, bidir]
+  def:
+    en: >-
+      PIM with one shared tree per group rooted at the RP address, on which packets travel both up toward the RP and down
+      to receivers. There is no Register and no (S,G) state, which suits groups with many senders.
+    ja: >-
+      グループごとに RP のアドレスを根とする共有ツリーを 1 本だけ持ち、パケットが RP への上りと受信者への下りの両方に流れる PIM。
+      Register も (S,G) の状態も無いので、送信者の多いグループに向く。
+  see: [pim-df, rp, star-g]
+
+- id: pim-df
+  term: DF
+  full: {en: designated forwarder, ja: 指定フォワーダー}
+  aka: [DF election, DF winner]
+  def:
+    en: >-
+      In bidirectional PIM, the one router per link that forwards toward the RP address and onto the link: the router
+      with the best route to the RP address. It, not the DR, serves the link's receivers.
+    ja: >-
+      双方向 PIM で、リンクごとに 1 台だけ、RP のアドレスへの向きとリンクへの向きに転送するルータ。RP のアドレスへの最良の
+      ルートを持つものが選ばれる。リンクの受信者を受け持つのも、DR ではなくこれ。
+  see: [bidir-pim, pim-dr]
+  scope: ["f*-m14-*"]
+
+# ---------------------------------------------------------------- RP の見つけ方
+- id: bsr
+  term: BSR
+  full: {en: bootstrap router, ja: ブートストラップ ルータ}
+  aka: [candidate BSR, C-BSR, 候補 BSR, BSR message]
+  def:
+    en: >-
+      The router that collects the candidate RPs' announcements and floods the whole RP set hop by hop to every PIM
+      router. Candidate BSRs elect it: the higher priority wins, then the higher address.
+    ja: >-
+      候補 RP の通知を集め、RP の一式を 1 ホップずつすべての PIM のルータへ配るルータ。候補 BSR の中から選ばれる。priority の
+      大きい方が勝ち、同じならアドレスの大きい方が勝つ。
+  see: [candidate-rp, rp-set]
+
+- id: candidate-rp
+  term: {en: candidate RP, ja: 候補 RP}
+  aka: [C-RP, candidate RPs, RP の候補]
+  def:
+    en: >-
+      A router that offers itself as RP for a list of groups by announcing to the BSR. Each router picks among the
+      candidates: the longest group match, then the lower priority value, then a hash, then the higher address. The
+      default priority is 192 on IOS XR and 0 on IOS XE.
+    ja: >-
+      グループの一覧について RP を引き受けると BSR へ通知するルータ。各ルータは候補の中から選ぶ。グループの最長一致、次に priority
+      の値の小さい方、次にハッシュ、次に大きいアドレス。既定の priority は IOS XR が 192、IOS XE が 0。
+  see: [bsr, rp-set]
+  scope: ["f*-m14-*"]
+
+- id: rp-set
+  term: {en: RP set, ja: RP の一式}
+  def:
+    en: >-
+      The list of candidate RPs and their group ranges that the BSR floods; every router applies the same selection
+      rules to it, so all of them pick the same RP.
+    ja: >-
+      BSR が配る、候補 RP とそのグループの範囲の一覧。どのルータも同じ選び方を当てはめるので、同じ RP を選ぶ。
+  see: [bsr, candidate-rp]
+
+- id: auto-rp
+  term: Auto-RP
+  aka: [mapping agent, mapping agents, マッピング エージェント]
+  def:
+    en: >-
+      Cisco's way of announcing the RP: candidate RPs announce on 224.0.1.39, a mapping agent picks an RP per range and
+      announces the result on 224.0.1.40. IOS XR forwards these two groups in dense mode.
+    ja: >-
+      Cisco の RP の知らせ方。候補 RP が 224.0.1.39 で名乗り、マッピング エージェントが範囲ごとに RP を選んで 224.0.1.40 で
+      知らせる。IOS XR はこの 2 つのグループをデンス モードで転送する。
+  see: [bsr, pim-dm]
+
+- id: embedded-rp
+  term: {en: embedded RP, ja: 埋め込み RP}
+  def:
+    en: >-
+      An IPv6 method that writes the RP's address into the group address itself (FF7x::/12), so routers need no RP
+      configuration for those groups.
+    ja: >-
+      IPv6 で、RP のアドレスをグループ アドレスの中に書き込むしくみ(FF7x::/12)。そのグループについては、ルータに RP の設定が要らない。
+  see: [rp, pimv6]
+
+- id: pimv6
+  term: PIMv6
+  aka: [IPv6 PIM, PIM for IPv6]
+  def:
+    en: >-
+      PIM for IPv6. It works like PIM for IPv4 but uses link-local addresses for its neighbours and for the DR election,
+      and MLD toward hosts.
+    ja: >-
+      IPv6 の PIM。IPv4 の PIM と同じように動くが、隣接と DR の選出にはリンクローカル アドレスを使い、ホストとは MLD で話す。
+  see: [mld, pim]
+
+# ---------------------------------------------------------------- その他
+- id: pim-assert
+  term: Assert
+  aka: [PIM Assert, Assert message]
+  def:
+    en: >-
+      When two routers would both forward the same packets onto a LAN, they exchange Assert messages and only the winner
+      keeps forwarding (route preference, then metric, then the higher address).
+    ja: >-
+      2 台のルータが同じパケットを LAN へ流しそうなとき、Assert のメッセージを交わし、勝った方だけが転送を続ける(経路の優先度、
+      メトリック、大きいアドレスの順)。
+  see: [pim-dr]
+  scope: ["f*-m14-*"]
+
+- id: msdp
+  term: MSDP
+  full: {en: Multicast Source Discovery Protocol, ja: Multicast Source Discovery Protocol}
+  def:
+    en: >-
+      A protocol between RPs (over TCP) that tells other RPs about active sources, used between domains and for Anycast RP.
+    ja: >-
+      RP どうしが(TCP で)動いている送信元を知らせ合うプロトコル。ドメインの間や、Anycast RP で使う。
+  see: [anycast-rp]
+
+- id: anycast-rp
+  term: Anycast RP
+  def:
+    en: >-
+      Several RPs share one address; each router reaches the nearest. The RPs tell each other about sources (with MSDP or
+      PIM) so that every source is known at every RP.
+    ja: >-
+      複数の RP が 1 つのアドレスを共有し、各ルータは最も近いものへ届く。どの RP でもすべての送信元が分かるように、RP どうしが
+      送信元を知らせ合う(MSDP か PIM で)。
+  see: [msdp, rp]
+
+- id: mrib
+  term: MRIB
+  full: {en: multicast routing information base, ja: multicast routing information base}
+  aka: [MFIB]
+  def:
+    en: >-
+      The multicast routing table (MRIB) built from PIM and IGMP state, and the forwarding table (MFIB) programmed from it.
+      On IOS XR, `show mrib route` shows the interfaces and flags, `show mfib route … detail` the packet counts.
+    ja: >-
+      PIM と IGMP の状態から作るマルチキャストの経路表(MRIB)と、そこから組む転送の表(MFIB)。IOS XR では、`show mrib route` が
+      インタフェースと印を、`show mfib route … detail` がパケットの数を示す。
+  see: [pim]

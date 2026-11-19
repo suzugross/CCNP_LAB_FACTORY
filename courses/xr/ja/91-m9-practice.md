@@ -64,7 +64,7 @@
 ## M9 — L3VPN
 
 ### 課題 M9-1
-<p class="tolab"><a href="/_learn?id=XRT-09&amp;step=m9t1">ワークスペースで開く</a> — 読み物: <a href="90-m9-l3vpn.html#s2-1">2.1 PE の中の別のテーブル: VRF</a> · <a href="90-m9-l3vpn.html#s2-2">2.2 経路に番号を付ける: RD</a> · <a href="90-m9-l3vpn.html#s2-3">2.3 経路に荷札を付ける: RT</a> · <a href="90-m9-l3vpn.html#s2-4">2.4 PE どうしで配る: VPNv4 と VPN のラベル</a> · <a href="90-m9-l3vpn.html#s3-1">3.1 部品の置き場</a> · <a href="90-m9-l3vpn.html#s3-3">3.3 CE とのセッション</a> · <a href="90-m9-l3vpn.html#s3-5">3.5 確かめる順番</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-09&amp;step=m9t1">ワークスペースで開く</a> — 読み物: <a href="90-m9-l3vpn.html#s2-1">2.1 PE の中の別のテーブル: VRF</a> · <a href="90-m9-l3vpn.html#s2-2">2.2 経路に番号を付ける: RD</a> · <a href="90-m9-l3vpn.html#s2-3">2.3 経路に RT を付ける</a> · <a href="90-m9-l3vpn.html#s2-4">2.4 PE どうしで配る: VPNv4 と VPN ラベル</a> · <a href="90-m9-l3vpn.html#s3-1">3.1 部品の置き場</a> · <a href="90-m9-l3vpn.html#s3-3">3.3 CE とのセッション</a> · <a href="90-m9-l3vpn.html#s3-5">3.5 確かめる順番</a></p>
 
 
 顧客 A と顧客 B は、新しい VPN の顧客です。2 つ目のサイトは RT02 で既にサービスを開始しており、1 つ目のサイトは XR01 に

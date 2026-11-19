@@ -7,7 +7,7 @@
 ## M10 — セグメント ルーティング
 
 ### 課題 M10-4
-<p class="tolab"><a href="/_learn?id=XRT-10&amp;step=m10t4">ワークスペースで開く</a> — 読み物: <a href="a4-m10-sr-policy-pce.html#s1-1">1.1 同じネクスト ホップ、違う道</a> · <a href="a4-m10-sr-policy-pce.html#s2-1">2.1 カラー、エンドポイント、候補パス</a> · <a href="a4-m10-sr-policy-pce.html#s2-2">2.2 カラーで誘導する</a> · <a href="a4-m10-sr-policy-pce.html#s2-3">2.3 オンデマンドのポリシー</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-10&amp;step=m10t4">ワークスペースで開く</a> — 読み物: <a href="a4-m10-sr-policy-pce.html#s1-1">1.1 同じネクスト ホップ、違うパス</a> · <a href="a4-m10-sr-policy-pce.html#s2-1">2.1 カラー、エンドポイント、候補パス</a> · <a href="a4-m10-sr-policy-pce.html#s2-2">2.2 カラーでステアリングする</a> · <a href="a4-m10-sr-policy-pce.html#s2-3">2.3 オンデマンドのポリシー</a></p>
 
 
 RT01 の保守が予定されています。顧客 A から、サイト 1 からサイト 2 へのトラフィックが XR01 と RT01 の間のリンクを
@@ -20,7 +20,7 @@ RT01 の保守が予定されています。顧客 A から、サイト 1 から
 - RT02 とルート リフレクタは変更しないでください。
 
 ### 課題 M10-5
-<p class="tolab"><a href="/_learn?id=XRT-10&amp;step=m10t5">ワークスペースで開く</a> — 読み物: <a href="a4-m10-sr-policy-pce.html#s3-1">3.1 PCE と PCC</a> · <a href="a4-m10-sr-policy-pce.html#s3-2">3.2 交わってはならない道</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-10&amp;step=m10t5">ワークスペースで開く</a> — 読み物: <a href="a4-m10-sr-policy-pce.html#s3-1">3.1 PCE と PCC</a> · <a href="a4-m10-sr-policy-pce.html#s3-2">3.2 交わってはならないパス</a></p>
 
 
 プロバイダーは、XR01 から RT02 への、リンクを決して共有しない 2 本のパスを必要とする冗長なサービスを計画しています。

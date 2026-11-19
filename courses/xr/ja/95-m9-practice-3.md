@@ -7,7 +7,7 @@
 ## M9 — L3VPN
 
 ### 課題 M9-3
-<p class="tolab"><a href="/_learn?id=XRT-09&amp;step=m9t3">ワークスペースで開く</a> — 読み物: <a href="94-m9-shared-internet.html#s2-1">2.1 RT の組み合わせで、つながり方を決める</a> · <a href="94-m9-shared-internet.html#s2-2">2.2 取り込みは、つながっていかない</a> · <a href="94-m9-shared-internet.html#s2-3">2.3 1 つのルートにだけ荷札を足す</a> · <a href="94-m9-shared-internet.html#s2-4">2.4 1 つの PE の複数の VRF</a> · <a href="94-m9-shared-internet.html#s3-1">3.1 共有サービス</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-09&amp;step=m9t3">ワークスペースで開く</a> — 読み物: <a href="94-m9-shared-internet.html#s2-1">2.1 RT の組み合わせで、つながり方を決める</a> · <a href="94-m9-shared-internet.html#s2-2">2.2 インポートは、つながっていかない</a> · <a href="94-m9-shared-internet.html#s2-3">2.3 1 つのルートにだけ RT を足す</a> · <a href="94-m9-shared-internet.html#s2-4">2.4 1 つの PE の複数の VRF</a> · <a href="94-m9-shared-internet.html#s3-1">3.1 共有サービス</a></p>
 
 
 プロバイダーは、XR01 の背後の SVC から共有サービスを提供します。サーバは 10.99.1.0/24 にあり、10.99.2.0/24 は

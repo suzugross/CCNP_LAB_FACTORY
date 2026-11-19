@@ -1,0 +1,495 @@
+
+######## 04:42:36 dr1: SW1 の LAN の DR と querier(P2 .252= XRd・R5 .253= IOS)
+show pim interface GigabitEthernet0/0/0/1 detail
+Wed Nov 18 04:42:38.190 UTC
+
+PIM interfaces in VRF default
+IP PIM Multicast Interface State
+Flag: B - Bidir enabled, NB - Bidir disabled
+      P - PIM Proxy enabled, NP - PIM Proxy disabled
+      V - Virtual Interface, S - Sticky DR enabled
+BFD State - State/Interval/Multiplier
+
+Interface                  PIM  Nbr   Hello  DR
+                                Count Intvl  Prior
+
+GigabitEthernet0/0/0/1      on   2     30     1     
+    Primary Address : 192.168.3.252
+              Flags : NB NP  
+                BFD : Off/150 ms/3
+                 DR : 192.168.3.253
+  Propagation delay : 500
+  Override Interval : 2500
+        Hello Timer : now
+    Neighbor Filter : -
+
+RP/0/RP0/CPU0:P2#
+show pim neighbor GigabitEthernet0/0/0/1
+Wed Nov 18 04:42:38.608 UTC
+
+PIM neighbors in VRF default
+Flag: B - Bidir capable, P - Proxy capable, DR - Designated Router,
+      E - ECMP Redirect capable, S - Sticky DR Neighbor
+      * indicates the neighbor created for this router
+
+Neighbor Address             Interface              Uptime    Expires  DR pri      Flags
+
+192.168.3.252*               GigabitEthernet0/0/0/1 00:16:12  00:01:15 1           B E
+192.168.3.253                GigabitEthernet0/0/0/1 00:16:05  00:01:22 1           (DR) P
+RP/0/RP0/CPU0:P2#
+show igmp interface GigabitEthernet0/0/0/1
+Wed Nov 18 04:42:39.015 UTC
+
+GigabitEthernet0/0/0/1 is up, line protocol is up
+  Internet address is 192.168.3.252/24
+  IGMP_AFD is enabled on interface
+  Multihoming is disabled on interface [Stale : False]
+  Location is 0xe
+  Current IGMP version is 3
+  IGMP query interval is 60 seconds
+  IGMP querier timeout is 125 seconds
+  IGMP max query response time is 10 seconds
+  Last member query response interval is 1 seconds
+  IGMP activity: 4 joins, 0 leaves
+  IGMP querying router is 192.168.3.252 (this system)
+  Time elapsed since last query sent 00:00:05
+  Time elapsed since IGMP router enabled 00:16:12
+  Time elapsed since last report received 00:00:00
+
+RP/0/RP0/CPU0:P2#
+show igmp groups GigabitEthernet0/0/0/1
+Wed Nov 18 04:42:39.418 UTC
+IGMP Connected Group Membership
+Group Address   Interface                     Uptime    Expires   Last Reporter
+224.0.0.2       GigabitEthernet0/0/0/1        00:16:13  never     192.168.3.252
+224.0.0.13      GigabitEthernet0/0/0/1        00:16:13  never     192.168.3.252
+224.0.0.22      GigabitEthernet0/0/0/1        00:16:13  never     192.168.3.252
+239.1.1.1       GigabitEthernet0/0/0/1        00:14:07  00:01:10  192.168.3.1
+RP/0/RP0/CPU0:P2#
+show ip pim interface Ethernet0/1 detail
+Ethernet0/1 is up, line protocol is up
+  Internet address is 192.168.3.253/24
+  Multicast switching: fast
+  Multicast packets in/out: 0/94
+  Multicast TTL threshold: 0
+  PIM: enabled
+    PIM version: 2, mode: sparse
+    PIM DR: 192.168.3.253 (this system)
+    PIM neighbor count: 1
+    PIM Hello/Query interval: 30 seconds
+    PIM Hello packets in/out: 34/34
+    PIM J/P interval: 60 seconds
+    PIM State-Refresh processing: enabled
+    PIM State-Refresh origination: disabled
+    PIM State-Refresh: 1 non-capable neighbor
+    PIM NBMA mode: disabled
+    PIM ATM multipoint signalling: disabled
+    PIM domain border: disabled
+    PIM neighbors rpf proxy capable: FALSE
+    PIM BFD: disabled
+    PIM Non-DR-Join: FALSE
+  Multicast Tagswitching: disabled
+R5#
+show ip igmp interface Ethernet0/1
+Ethernet0/1 is up, line protocol is up
+  Internet address is 192.168.3.253/24
+  IGMP is enabled on interface
+  Current IGMP host version is 2
+  Current IGMP router version is 2
+  IGMP query interval is 60 seconds
+  IGMP configured query interval is 60 seconds
+  IGMP robustness-variable is 2
+  IGMP querier timeout is 120 seconds
+  IGMP configured querier timeout is 120 seconds
+  IGMP max query response time is 10 seconds
+  Last member query count is 2
+  Last member query response interval is 1000 ms
+  Inbound IGMP access group is not set
+  IGMP activity: 1 joins, 0 leaves
+  Multicast routing is enabled on interface
+  Multicast TTL threshold is 0
+  Multicast designated router (DR) is 192.168.3.253 (this system)
+  IGMP querying router is 192.168.3.252  
+  No multicast groups joined by this system
+R5#
+show ip igmp groups
+IGMP Connected Group Membership
+Group Address    Interface                Uptime    Expires   Last Reporter   Group Accounted
+239.1.1.1        Ethernet0/1              00:14:09  00:01:58  192.168.3.1     
+224.0.1.40       Loopback0                00:16:10  00:02:53  10.255.0.5      
+R5#
+
+######## 04:42:41 dr2: P2 の LAN 側に dr-priority 10 → P2 が DR に。RCV3 へは P1 → P2(XRd)で届くか
+configure
+Wed Nov 18 04:42:43.407 UTC
+RP/0/RP0/CPU0:P2(config)#
+router pim
+RP/0/RP0/CPU0:P2(config-pim)#
+address-family ipv4
+RP/0/RP0/CPU0:P2(config-pim-default-ipv4)#
+interface GigabitEthernet0/0/0/1
+RP/0/RP0/CPU0:P2(config-pim-ipv4-if)#
+dr-priority 10
+RP/0/RP0/CPU0:P2(config-pim-ipv4-if)#
+commit
+Wed Nov 18 04:42:45.669 UTC
+RP/0/RP0/CPU0:P2(config-pim-ipv4-if)#
+show configuration failed
+Wed Nov 18 04:42:46.296 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:P2(config-pim-ipv4-if)#
+end
+RP/0/RP0/CPU0:P2#
+show pim interface GigabitEthernet0/0/0/1 detail
+Wed Nov 18 04:42:59.945 UTC
+
+PIM interfaces in VRF default
+IP PIM Multicast Interface State
+Flag: B - Bidir enabled, NB - Bidir disabled
+      P - PIM Proxy enabled, NP - PIM Proxy disabled
+      V - Virtual Interface, S - Sticky DR enabled
+BFD State - State/Interval/Multiplier
+
+Interface                  PIM  Nbr   Hello  DR
+                                Count Intvl  Prior
+
+GigabitEthernet0/0/0/1      on   2     30     10    
+    Primary Address : 192.168.3.252
+              Flags : NB NP  
+                BFD : Off/150 ms/3
+                 DR : this system
+  Propagation delay : 500
+  Override Interval : 2500
+        Hello Timer : 00:00:15
+    Neighbor Filter : -
+
+RP/0/RP0/CPU0:P2#
+show pim topology 239.1.1.1
+Wed Nov 18 04:43:00.357 UTC
+
+IP PIM Multicast Topology Table
+Entry state: (*/S,G)[RPT/SPT] Protocol Uptime Info
+Entry flags: KAT - Keep Alive Timer, AA - Assume Alive, PA - Probe Alive
+    RA - Really Alive, IA - Inherit Alive, LH - Last Hop
+    DSS - Don't Signal Sources,  RR - Register Received
+    SR - Sending Registers, SNR - Sending Null Registers
+    E - MSDP External, EX - Extranet
+    MFA - Mofrr Active, MFP - Mofrr Primary, MFB - Mofrr Backup
+    DCC - Don't Check Connected, ME - MDT Encap, MD - MDT Decap
+    MT - Crossed Data MDT threshold, MA - Data MDT Assigned
+    SAJ - BGP Source Active Joined, SAR - BGP Source Active Received,
+    SAS - BGP Source Active Sent, IM - Inband mLDP, X - VxLAN
+Interface state: Name, Uptime, Fwd, Info
+Interface flags: LI - Local Interest, LD - Local Dissinterest,
+    II - Internal Interest, ID - Internal Dissinterest,
+    LH - Last Hop, AS - Assert, AB - Admin Boundary, EX - Extranet,
+    BGP - BGP C-Multicast Join, BP - BGP Source Active Prune,
+    MVS - MVPN Safi Learned, MV6S - MVPN IPv6 Safi Learned
+
+(*,239.1.1.1) SM Up: 00:14:28 RP: 10.255.0.11 
+JP: Join(00:00:35) RPF: GigabitEthernet0/0/0/0,10.0.3.11 Flags: LH 
+  GigabitEthernet0/0/0/1      00:14:28  fwd LI LH 
+RP/0/RP0/CPU0:P2#
+show ip pim interface Ethernet0/1 detail
+Ethernet0/1 is up, line protocol is up
+  Internet address is 192.168.3.253/24
+  Multicast switching: fast
+  Multicast packets in/out: 0/94
+  Multicast TTL threshold: 0
+  PIM: enabled
+    PIM version: 2, mode: sparse
+    PIM DR: 192.168.3.252
+    PIM neighbor count: 1
+    PIM Hello/Query interval: 30 seconds
+    PIM Hello packets in/out: 35/35
+    PIM J/P interval: 60 seconds
+    PIM State-Refresh processing: enabled
+    PIM State-Refresh origination: disabled
+    PIM State-Refresh: 1 non-capable neighbor
+    PIM NBMA mode: disabled
+    PIM ATM multipoint signalling: disabled
+    PIM domain border: disabled
+    PIM neighbors rpf proxy capable: FALSE
+    PIM BFD: disabled
+    PIM Non-DR-Join: FALSE
+  Multicast Tagswitching: disabled
+R5#
+show ip mroute 239.1.1.1
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.1.1.1), 00:01:21/stopped, RP 10.255.0.11, flags: SJC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.4.2
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse, 00:01:21/00:02:39, flags: 
+
+(192.168.1.1, 239.1.1.1), 00:00:52/00:02:07, flags: JT
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.4.2
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse, 00:00:52/00:02:39, flags: 
+
+R5#
+Reply to request 0 from 192.168.2.1, 3 ms
+Reply to request 0 from 192.168.3.1, 5 ms
+Reply to request 0 from 192.168.3.1, 4 ms
+Reply to request 1 from 192.168.2.1, 4 ms
+Reply to request 1 from 192.168.3.1, 5 ms
+Reply to request 2 from 192.168.2.1, 3 ms
+Reply to request 2 from 192.168.3.1, 4 ms
+Reply to request 3 from 192.168.2.1, 3 ms
+== 239.1.1.1 を 20 発: RCV2 が受けた 20・RCV3 が受けた 21
+show pim topology 239.1.1.1
+Wed Nov 18 04:43:32.687 UTC
+
+IP PIM Multicast Topology Table
+Entry state: (*/S,G)[RPT/SPT] Protocol Uptime Info
+Entry flags: KAT - Keep Alive Timer, AA - Assume Alive, PA - Probe Alive
+    RA - Really Alive, IA - Inherit Alive, LH - Last Hop
+    DSS - Don't Signal Sources,  RR - Register Received
+    SR - Sending Registers, SNR - Sending Null Registers
+    E - MSDP External, EX - Extranet
+    MFA - Mofrr Active, MFP - Mofrr Primary, MFB - Mofrr Backup
+    DCC - Don't Check Connected, ME - MDT Encap, MD - MDT Decap
+    MT - Crossed Data MDT threshold, MA - Data MDT Assigned
+    SAJ - BGP Source Active Joined, SAR - BGP Source Active Received,
+    SAS - BGP Source Active Sent, IM - Inband mLDP, X - VxLAN
+Interface state: Name, Uptime, Fwd, Info
+Interface flags: LI - Local Interest, LD - Local Dissinterest,
+    II - Internal Interest, ID - Internal Dissinterest,
+    LH - Last Hop, AS - Assert, AB - Admin Boundary, EX - Extranet,
+    BGP - BGP C-Multicast Join, BP - BGP Source Active Prune,
+    MVS - MVPN Safi Learned, MV6S - MVPN IPv6 Safi Learned
+
+(*,239.1.1.1) SM Up: 00:15:00 RP: 10.255.0.11 
+JP: Join(00:00:03) RPF: GigabitEthernet0/0/0/0,10.0.3.11 Flags: LH 
+  GigabitEthernet0/0/0/1      00:15:00  fwd LI AS(self,00:02:28) LH 
+
+(192.168.1.1,239.1.1.1)SPT SM Up: 00:00:26 
+JP: Join(00:00:23) RPF: GigabitEthernet0/0/0/0,10.0.3.11 Flags: KAT(00:03:05) RA 
+  No interfaces in immediate olist
+RP/0/RP0/CPU0:P2#
+show mrib route 239.1.1.1
+Wed Nov 18 04:43:33.110 UTC
+
+IP Multicast Routing Information Base
+Entry flags: L - Domain-Local Source, E - External Source to the Domain,
+    C - Directly-Connected Check, S - Signal, IA - Inherit Accept,
+    IF - Inherit From, D - Drop, ME - MDT Encap, EID - Encap ID,
+    MD - MDT Decap, MT - MDT Threshold Crossed, MH - MDT interface handle
+    CD - Conditional Decap, MPLS - MPLS Decap, EX - Extranet
+    MoFE - MoFRR Enabled, MoFS - MoFRR State, MoFP - MoFRR Primary
+    MoFB - MoFRR Backup, RPFID - RPF ID Set, X - VXLAN, RPF - RPF neighbor present
+Interface flags: F - Forward, A - Accept, IC - Internal Copy,
+    NS - Negate Signal, DP - Don't Preserve, SP - Signal Present,
+    II - Internal Interest, ID - Internal Disinterest, LI - Local Interest,
+    LD - Local Disinterest, DI - Decapsulation Interface
+    EI - Encapsulation Interface, MI - MDT Interface, LVIF - MPLS Encap,
+    EX - Extranet, A2 - Secondary Accept, MT - MDT Threshold Crossed,
+    MA - Data MDT Assigned, LMI - mLDP MDT Interface, TMI - P2MP-TE MDT Interface
+    IRMI - IR MDT Interface, TRMI - TREE SID MDT Interface, MH - Multihome Interface
+
+(*,239.1.1.1) RPF nbr: 10.0.3.11 Flags: C RPF
+  Up: 00:15:00
+  Incoming Interface List
+    GigabitEthernet0/0/0/0 Flags: A NS, Up: 00:15:00
+  Outgoing Interface List
+    GigabitEthernet0/0/0/1 Flags: F NS LI, Up: 00:15:00
+
+(192.168.1.1,239.1.1.1) RPF nbr: 10.0.3.11 Flags: RPF
+  Up: 00:00:27
+  Incoming Interface List
+    GigabitEthernet0/0/0/0 Flags: A, Up: 00:00:27
+  Outgoing Interface List
+    GigabitEthernet0/0/0/1 Flags: F NS, Up: 00:00:27
+RP/0/RP0/CPU0:P2#
+show mfib route 239.1.1.1 detail
+Wed Nov 18 04:43:33.527 UTC
+
+IP Multicast Forwarding Information Base
+Entry flags: C - Directly-Connected Check, S - Signal, D - Drop,
+  IA - Inherit Accept, IF - Inherit From, EID - Encap ID,
+  ME - MDT Encap, MD - MDT Decap, MT - MDT Threshold Crossed,
+  MH - MDT interface handle, CD - Conditional Decap,
+  DT - MDT Decap True, EX - Extranet, RPFID - RPF ID Set,
+  MoFE - MoFRR Enabled, MoFS - MoFRR State, X - VXLAN
+Interface flags: F - Forward, A - Accept, IC - Internal Copy,
+  NS - Negate Signal, DP - Don't Preserve, SP - Signal Present,
+  EG - Egress, EI - Encapsulation Interface, MI - MDT Interface,
+  EX - Extranet, A2 - Secondary Accept
+Forwarding/Replication Counts: Packets in/Packets out/Bytes out
+Failure Counts: RPF / TTL / Empty Olist / Encap RL / Other
+
+(*,239.1.1.1),  Flags:  C , FMA: 0x10000 ,
+  Object-ID: 0xfffffffffffffffe 18446744073709551614
+  Up: 00:15:01
+  Last Used: 00:00:27
+  SW Forwarding Counts: 96/1/100
+  SW Replication Counts: 96/1/100
+  SW Failure Counts: 94/0/0/0/0
+  GID ENTRY: NA 
+  Route ver: 0xf977
+  MVPN Info :- 
+    MDT Handle: 0x0, MDT Probe:N [N], Rate:N, Acc:N
+    MDT SW Ingress Encap V4/V6, Egress decap: 0 / 0, 0
+    EG count: 1
+    Encap ID: 0, RPF ID: 0
+    Local Receiver: True, Turnaround: False
+  GigabitEthernet0/0/0/0 Flags:  A NS, Up:00:15:01 [Object-ID: 0xfffffffffffffffe 18446744073709551614] 
+  GigabitEthernet0/0/0/1 Flags:  NS EG, Up:00:00:47 [Object-ID: 0xfffffffffffffffe 18446744073709551614] 
+
+(192.168.1.1,239.1.1.1),  Flags:  , FMA: 0x10000 ,
+  Object-ID: 0xfffffffffffffffe 18446744073709551614
+  Up: 00:00:27
+  Last Used: 00:00:08
+  SW Forwarding Counts: 19/19/1900
+  SW Replication Counts: 19/19/1900
+  SW Failure Counts: 0/0/0/0/0
+  GID ENTRY: NA 
+  Route ver: 0x190b
+  MVPN Info :- 
+    MDT Handle: 0x0, MDT Probe:N [N], Rate:N, Acc:N
+    MDT SW Ingress Encap V4/V6, Egress decap: 0 / 0, 0
+    EG count: 1
+    Encap ID: 0, RPF ID: 0
+    Local Receiver: True, Turnaround: False
+  GigabitEthernet0/0/0/0 Flags:  A, Up:00:00:27 [Object-ID: 0xfffffffffffffffe 18446744073709551614] 
+  GigabitEthernet0/0/0/1 Flags:  NS EG, Up:00:00:27 [Object-ID: 0xfffffffffffffffe 18446744073709551614] 
+RP/0/RP0/CPU0:P2#
+show pim topology 239.1.1.1
+Wed Nov 18 04:43:35.283 UTC
+
+IP PIM Multicast Topology Table
+Entry state: (*/S,G)[RPT/SPT] Protocol Uptime Info
+Entry flags: KAT - Keep Alive Timer, AA - Assume Alive, PA - Probe Alive
+    RA - Really Alive, IA - Inherit Alive, LH - Last Hop
+    DSS - Don't Signal Sources,  RR - Register Received
+    SR - Sending Registers, SNR - Sending Null Registers
+    E - MSDP External, EX - Extranet
+    MFA - Mofrr Active, MFP - Mofrr Primary, MFB - Mofrr Backup
+    DCC - Don't Check Connected, ME - MDT Encap, MD - MDT Decap
+    MT - Crossed Data MDT threshold, MA - Data MDT Assigned
+    SAJ - BGP Source Active Joined, SAR - BGP Source Active Received,
+    SAS - BGP Source Active Sent, IM - Inband mLDP, X - VxLAN
+Interface state: Name, Uptime, Fwd, Info
+Interface flags: LI - Local Interest, LD - Local Dissinterest,
+    II - Internal Interest, ID - Internal Dissinterest,
+    LH - Last Hop, AS - Assert, AB - Admin Boundary, EX - Extranet,
+    BGP - BGP C-Multicast Join, BP - BGP Source Active Prune,
+    MVS - MVPN Safi Learned, MV6S - MVPN IPv6 Safi Learned
+
+(*,239.1.1.1) SM Up: 00:05:49 RP: 10.255.0.11* 
+JP: Join(never) RPF: Decapstunnel0,10.255.0.11 Flags: 
+  GigabitEthernet0/0/0/1      00:05:49  fwd Join(00:02:50) 
+  GigabitEthernet0/0/0/2      00:00:49  fwd Join(00:02:40) 
+
+(192.168.1.1,239.1.1.1)RPT SM Up: 00:01:24 RP: 10.255.0.11* 
+JP: Prune(never) RPF: Decapstunnel0,10.255.0.11 Flags: KAT(00:02:47) RA RR (00:03:49) 
+  GigabitEthernet0/0/0/1      00:01:24  off Prune(00:02:50) 
+
+(192.168.1.1,239.1.1.1)SPT SM Up: 00:06:17 
+JP: Join(now) RPF: GigabitEthernet0/0/0/0,10.0.1.1 Flags: KAT(00:02:47) RA RR (00:03:49) 
+  GigabitEthernet0/0/0/2      00:00:29  fwd Join(00:03:00) 
+RP/0/RP0/CPU0:P1#
+show mfib route 239.1.1.1 detail
+Wed Nov 18 04:43:35.708 UTC
+
+IP Multicast Forwarding Information Base
+Entry flags: C - Directly-Connected Check, S - Signal, D - Drop,
+  IA - Inherit Accept, IF - Inherit From, EID - Encap ID,
+  ME - MDT Encap, MD - MDT Decap, MT - MDT Threshold Crossed,
+  MH - MDT interface handle, CD - Conditional Decap,
+  DT - MDT Decap True, EX - Extranet, RPFID - RPF ID Set,
+  MoFE - MoFRR Enabled, MoFS - MoFRR State, X - VXLAN
+Interface flags: F - Forward, A - Accept, IC - Internal Copy,
+  NS - Negate Signal, DP - Don't Preserve, SP - Signal Present,
+  EG - Egress, EI - Encapsulation Interface, MI - MDT Interface,
+  EX - Extranet, A2 - Secondary Accept
+Forwarding/Replication Counts: Packets in/Packets out/Bytes out
+Failure Counts: RPF / TTL / Empty Olist / Encap RL / Other
+
+(*,239.1.1.1),  Flags:  C , FMA: 0x10000 ,
+  Object-ID: 0xfffffffffffffffe 18446744073709551614
+  Up: 00:05:50
+  Last Used: never
+  SW Forwarding Counts: 0/0/0
+  SW Replication Counts: 0/0/0
+  SW Failure Counts: 0/0/0/0/0
+  GID ENTRY: NA 
+  Route ver: 0x35f6
+  MVPN Info :- 
+    MDT Handle: 0x0, MDT Probe:N [N], Rate:N, Acc:N
+    MDT SW Ingress Encap V4/V6, Egress decap: 0 / 0, 0
+    EG count: 2
+    Encap ID: 0, RPF ID: 0
+    Local Receiver: True, Turnaround: False
+  Decapstunnel0 Flags:  A, Up:00:05:50 [Object-ID: 0xfffffffffffffffe 18446744073709551614] 
+  GigabitEthernet0/0/0/1 Flags:  NS EG, Up:00:05:50 [Object-ID: 0xfffffffffffffffe 18446744073709551614] 
+  GigabitEthernet0/0/0/2 Flags:  NS EG, Up:00:00:49 [Object-ID: 0xfffffffffffffffe 18446744073709551614] 
+
+(192.168.1.1,239.1.1.1),  Flags:  , FMA: 0x10000 ,
+  Object-ID: 0xfffffffffffffffe 18446744073709551614
+  Up: 00:06:17
+  Last Used: 00:00:10
+  SW Forwarding Counts: 57/44/4400
+  SW Replication Counts: 57/44/4400
+  SW Failure Counts: 12/0/0/0/0
+  GID ENTRY: NA 
+  Route ver: 0xd9f8
+  MVPN Info :- 
+    MDT Handle: 0x0, MDT Probe:N [N], Rate:N, Acc:N
+    MDT SW Ingress Encap V4/V6, Egress decap: 0 / 0, 0
+    EG count: 1
+    Encap ID: 0, RPF ID: 0
+    Local Receiver: True, Turnaround: False
+  GigabitEthernet0/0/0/0 Flags:  A, Up:00:00:49 [Object-ID: 0xfffffffffffffffe 18446744073709551614] 
+  GigabitEthernet0/0/0/2 Flags:  NS EG, Up:00:00:49 [Object-ID: 0xfffffffffffffffe 18446744073709551614] 
+RP/0/RP0/CPU0:P1#
+show ip mroute 239.1.1.1
+IP Multicast Routing Table
+Flags: D - Dense, S - Sparse, B - Bidir Group, s - SSM Group, C - Connected,
+       L - Local, P - Pruned, R - RP-bit set, F - Register flag,
+       T - SPT-bit set, J - Join SPT, M - MSDP created entry, E - Extranet,
+       X - Proxy Join Timer Running, A - Candidate for MSDP Advertisement,
+       U - URD, I - Received Source Specific Host Report, 
+       Z - Multicast Tunnel, z - MDT-data group sender, 
+       Y - Joined MDT-data group, y - Sending to MDT-data group, 
+       G - Received BGP C-Mroute, g - Sent BGP C-Mroute, 
+       N - Received BGP Shared-Tree Prune, n - BGP C-Mroute suppressed, 
+       Q - Received BGP S-A Route, q - Sent BGP S-A Route, 
+       V - RD & Vector, v - Vector, p - PIM Joins on route, 
+       x - VxLAN group, c - PFP-SA cache created entry, 
+       * - determined by Assert, # - iif-starg configured on rpf intf, 
+       e - encap-helper tunnel flag, l - LISP decap ref count contributor
+Outgoing interface flags: H - Hardware switched, A - Assert winner, p - PIM Join
+                          t - LISP transit group
+ Timers: Uptime/Expires
+ Interface state: Interface, Next-Hop or VCD, State/Mode
+
+(*, 239.1.1.1), 00:01:56/stopped, RP 10.255.0.11, flags: SJC
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.4.2
+  Outgoing interface list:
+    Ethernet0/1, Forward/Sparse, 00:01:56/00:02:04, flags: 
+
+(192.168.1.1, 239.1.1.1), 00:01:27/00:01:32, flags: PJT
+  Incoming interface: Ethernet0/0, RPF nbr 10.0.4.2
+  Outgoing interface list: Null
+
+R5#

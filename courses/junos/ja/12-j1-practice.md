@@ -44,7 +44,7 @@ SRV1 eth1 ──── et-0/0/1 JUN01 et-0/0/0 ──── et-0/0/0 JUN02 et-0/
 単元 J1 に沿った課題です。経路の出入りを、Junos のルーティング ポリシーで制御してください。
 
 ### 課題 J1-1  サーバの網を OSPF で広告する
-<p class="tolab"><a href="/_learn?id=JNT-02&amp;step=j1t1">ワークスペースで開く</a> — 読み物: <a href="11-j1-policy-statement.html#s2-1">2.1 policy-statement の形</a> · <a href="11-j1-policy-statement.html#s2-2">2.2 from: 同じ種類は OR、違う種類は AND</a> · <a href="11-j1-policy-statement.html#s2-3">2.3 then: 3 種類の動作</a> · <a href="11-j1-policy-statement.html#s2-6">2.6 OSPF へ export する: 外部経路の型と metric</a> · <a href="11-j1-policy-statement.html#s3-1">3.1 OSPF へ静的経路を 1 つ、type 1 で</a></p>
+<p class="tolab"><a href="/_learn?id=JNT-02&amp;step=j1t1">ワークスペースで開く</a> — 読み物: <a href="11-j1-policy-statement.html#s2-1">2.1 policy-statement の形</a> · <a href="11-j1-policy-statement.html#s2-2">2.2 from: 同じ種類は OR、違う種類は AND</a> · <a href="11-j1-policy-statement.html#s2-3">2.3 then: 3 種類のアクション</a> · <a href="11-j1-policy-statement.html#s2-6">2.6 OSPF へ export する: 外部経路のタイプと metric</a> · <a href="11-j1-policy-statement.html#s3-1">3.1 OSPF へスタティック ルートを 1 つ、type 1 で</a></p>
 
 
 JUN02 が、JUN01 の後ろの 2 つのサーバの網に届くようにしてください。
@@ -53,7 +53,7 @@ JUN01 は、172.16.10.0/24 と 172.16.20.0/24 を OSPF で広告すること。1
 検証用の 172.16.99.0/24 は広告しないこと。JUN01 のサーバの網のインターフェース(et-0/0/1)では OSPF を動かさないこと。
 
 ### 課題 J1-2  ISP の既定経路を社内へ配る
-<p class="tolab"><a href="/_learn?id=JNT-02&amp;step=j1t2">ワークスペースで開く</a> — 読み物: <a href="11-j1-policy-statement.html#s2-4">2.4 評価の順: term → 次のポリシー → 既定のポリシー</a> · <a href="11-j1-policy-statement.html#s2-7">2.7 BGP の経路を OSPF へ</a> · <a href="11-j1-policy-statement.html#s2-6">2.6 OSPF へ export する: 外部経路の型と metric</a></p>
+<p class="tolab"><a href="/_learn?id=JNT-02&amp;step=j1t2">ワークスペースで開く</a> — 読み物: <a href="11-j1-policy-statement.html#s2-4">2.4 評価の順: term → 次のポリシー → デフォルト ポリシー</a> · <a href="11-j1-policy-statement.html#s2-7">2.7 BGP の経路を OSPF へ</a> · <a href="11-j1-policy-statement.html#s2-6">2.6 OSPF へ export する: 外部経路のタイプと metric</a></p>
 
 
 JUN01 は、OSPF で既定経路を学ぶこと。この既定経路は、JUN02 が ISP から既定経路を受け取っている間だけ存在すること。

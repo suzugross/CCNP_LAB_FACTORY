@@ -1,0 +1,71 @@
+# IOS XR の実機の記録の再現の試験(cli_drill.py selftest が見えないブラウザで回す)。
+# 実機と台本どおりに対話した記録(private/cli-drill/iosxr/raw/*.log)を、素振り台で同じ順に打ち直し、
+# 手ごとの出力(時刻は伏せる)とプロンプトを突き合わせる。記録は非公開なので、組み立ての時に束にだけ入れる。
+#   skip: 突き合わせない手の番号(1 から)と理由。drop: 実機の出力から除く行の正規表現(素振り台が注記に置き換えた行)
+- name: 観察(ヘルプの形・誤り・モードの出入り)
+  log: private/cli-drill/iosxr/raw/explore1.log
+  device: XR01
+  skip:
+    3: 運用モードの ? の一覧(実機の一覧をそのまま出す・別の試験で見る)
+- name: M1 の挙動(ラベル・失敗するコミット・ロールバック・end の問い・確認つきコミット)
+  log: private/cli-drill/iosxr/raw/m1.log
+  device: XR01
+  drop: ['^\d+ items committed in 1 sec', '^\d+ bytes parsed in 1 sec']
+- name: モードごとの ? の一覧・誤り・上位のモードへの戻り方
+  log: private/cli-drill/iosxr/raw/modes.log
+  device: XR01
+  skip:   # 記録の時点では直前の採取(m1)のコミットが履歴に増えていた。履歴の一覧の形は観察・M1 の記録で突き合わせている
+    6: 履歴に依る
+    8: 履歴に依る
+    20: 履歴に依る
+- name: 表示の並びと消し方の表示
+  log: private/cli-drill/iosxr/raw/orders.log
+  device: XR01
+  drop: ['^\d+ items committed in 1 sec']
+  skip:
+    59: 履歴に依る(記録の時点で前の採取のコミットが増えていた)
+- name: Enter での曖昧な語・値なしの文・router bgp の並び
+  log: private/cli-drill/iosxr/raw/gaps1.log
+  device: XR01
+  drop: ['^\d+ items committed in 1 sec']
+  skip:
+    25: 履歴に依る(コミットの ID)
+    26: 履歴に依る(コミットの ID)
+    28: 複数回をまとめた中身(last 2)は扱わない(素振り台は注記を出す)
+    30: 履歴に依る(コミットの ID)
+- name: 略した語(conf は configure・co は曖昧・cisco-support の語)
+  log: private/cli-drill/iosxr/raw/gaps5.log
+  device: XR01
+  skip:
+    4: 設定モードの conf は cisco-support の configuration に当たり、素振り台はその語を扱わない(注記を出す)
+- name: 運用モードの略した語の Tab
+  log: private/cli-drill/iosxr/raw/gaps6.log
+  device: XR01
+- name: 確認つきコミットの途中で end(no は設定モードの一番上へ・yes はその場で戻して出る)
+  log: private/cli-drill/iosxr/raw/gaps4b.log
+  device: XR01
+  drop: ['^\d+ items committed in 1 sec']
+  skip:
+    3: 履歴に依る(前の採取のコミットが増えていた)
+    13: 履歴に依る(コミットの ID)
+    15: 記録の時点の稼働中の設定が盤面と違う(前の採取の残り)ので、戻す変化の有無が違う
+    16: 履歴に依る(コミットの ID)
+# 2026-11-16 ユーザ指摘(Lo の Tab の後に空白を挟んだ番号・小文字の Tab)で採った記録(ifnames*.log)
+- name: 口の名前の打ち方(Tab・型と番号の間の空白・大小文字)・語の大小文字
+  log: private/cli-drill/iosxr/raw/ifnames.log
+  device: XR01
+- name: 全体のコマンドの大文字・語の Tab の大小・型ごとの番号の ?
+  log: private/cli-drill/iosxr/raw/ifnames2.log
+  device: XR01
+- name: 値の途中の ? と Tab(番号・口の番号・アドレス)
+  log: private/cli-drill/iosxr/raw/ifnames3.log
+  device: XR01
+- name: 口の型ごとの一覧(GigabitEthernet の下位モード・OSPF の中)
+  log: private/cli-drill/iosxr/raw/ifnames4.log
+  device: XR01
+- name: 型だけ・番号の誤り・続けて打った口の番号の Tab
+  log: private/cli-drill/iosxr/raw/ifnames5.log
+  device: XR01
+- name: 空白では語を補わない・前の語が曖昧な行の Tab
+  log: private/cli-drill/iosxr/raw/ifnames6.log
+  device: XR01

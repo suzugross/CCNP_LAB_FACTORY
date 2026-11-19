@@ -1,0 +1,40 @@
+! XRT-16 PE4(IOL 17.15)= 共用の受信 LAN(SW1)の IOS 側の PE。PE2 から 1 本。ユニキャストの土台(IS-IS の IPv4/IPv6・MT)＋前任者の IPv6 の試行。
+no ip domain lookup
+ipv6 unicast-routing
+ipv6 multicast-routing
+!
+interface Loopback0
+ ip address 10.255.0.4 255.255.255.255
+ ipv6 address 2001:DB8:255::4/128
+!
+interface {{ links[0] }}
+ description to PE2
+ ip address 10.0.4.4 255.255.255.0
+ ipv6 address 2001:DB8:4::4/64
+ ip router isis CORE
+ ipv6 router isis CORE
+ isis network point-to-point
+ no shutdown
+!
+interface {{ links[1] }}
+ description shared receiver LAN (SW1)
+ ip address 192.168.3.253 255.255.255.0
+ ipv6 address FE80::253 link-local
+ ipv6 address 2001:DB8:100:3::253/64
+ no shutdown
+!
+router isis CORE
+ net 49.0001.0100.0000.0004.00
+ is-type level-2-only
+ metric-style wide
+ log-adjacency-changes
+ passive-interface Loopback0
+ passive-interface {{ links[1] }}
+ !
+ address-family ipv6
+  multi-topology
+ exit-address-family
+!
+! --- 前任者の作業(M14-6)= IPv6 のマルチキャストの試行 ---
+ipv6 pim rp-address 2001:DB8:255::3
+!

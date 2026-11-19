@@ -1,0 +1,276 @@
+# Junos の素振り台(BL-278)の練習: J1 ルーティング ポリシー。
+# 練習の中身はここ 1 か所に持ち、素振り台の画面(単元 → 区切り → お題)と読み物の区切り(?drill=<id>&embed=1)の両方から使う。
+#
+# 盤面は JNT-02 の初めの設定(devices: の startup.cfg)。お題の値は読み物の設定例から少しずらしてある(写すだけで終わらないように)。
+# 確かめ方(want/forbid/order/cmd)は display set の形の行で書く:
+#   $X  = 同じお題の中で同じ値(term の名前など、解く人が決める所)   * = 何でも 1 語   ** = 何語でも
+#   want の 1 項目を [行, 行] の並びにすると「どれか 1 つ」
+# order: [前の行, 後の行] = display set で前の行が先に出る(term の順・import の並び)
+# cmd:   {line: 正規表現, edit: 正規表現} = その形のコマンドを打った記録がある(edit は打った時の階層)
+# setup:     commit 済みの設定として盤面に足す行
+# candidate: commit していない書きかけとして候補の設定に入れる行
+# answer: 答えの例(画面で「答えの例」を押した時だけ見せる)
+
+unit: J1
+title: ルーティング ポリシー
+course: junos
+devices:
+  JUN01: problems/JNT-02/clab/jun01.startup.cfg
+  JUN02: problems/JNT-02/clab/jun02.startup.cfg
+# 盤面の図= このトポロジファイルと各ノードの startup-config から機械的に起こす(cli_drill.py の topo_model)
+topology: problems/JNT-02/clab/ccnp-jnt02.clab.yml
+
+sections:
+  - id: ps
+    title: "policy-statement: term と評価の順"
+    page: 11-j1-policy-statement
+    drills:
+      - id: j1-ps-1
+        title: スタティック ルートを 1 本だけ OSPF へ出す
+        device: JUN01
+        task: |-
+          JUN01 のスタティック ルートのうち 172.16.20.0/24 だけを、metric 20 で OSPF へ広告します。
+          ポリシーの名前は SRV-OUT(term の名前は自由)。OSPF の export に当てて commit してください。
+        want:
+          - set policy-options policy-statement SRV-OUT term $T from protocol static
+          - set policy-options policy-statement SRV-OUT term $T from route-filter 172.16.20.0/24 exact
+          - set policy-options policy-statement SRV-OUT term $T then metric 20
+          - set policy-options policy-statement SRV-OUT term $T then accept
+          - set protocols ospf export SRV-OUT
+        forbid:
+          - set policy-options policy-statement SRV-OUT ** 172.16.99.0/24 **
+        answer: |-
+          configure
+          set policy-options policy-statement SRV-OUT term SRV from protocol static
+          set policy-options policy-statement SRV-OUT term SRV from route-filter 172.16.20.0/24 exact
+          set policy-options policy-statement SRV-OUT term SRV then metric 20
+          set policy-options policy-statement SRV-OUT term SRV then accept
+          set protocols ospf export SRV-OUT
+          show | compare
+          commit
+
+      - id: j1-ps-2
+        title: edit で中に入って term を 2 つ書く
+        device: JUN01
+        task: |-
+          edit で policy-statement LAN-OUT の中に入り、次の 2 つの term をこの順に書きます。
+          ・term LAN: 直接接続の経路 172.16.10.0/24 だけを受け入れる
+          ・term REST: 残りを拒む
+          書いたら top で一番上に戻り、LAN-OUT を OSPF の export に当てて commit してください。
+        want:
+          - set policy-options policy-statement LAN-OUT term LAN from protocol direct
+          - set policy-options policy-statement LAN-OUT term LAN from route-filter 172.16.10.0/24 exact
+          - set policy-options policy-statement LAN-OUT term LAN then accept
+          - set policy-options policy-statement LAN-OUT term REST then reject
+          - set protocols ospf export LAN-OUT
+        forbid:
+          - set policy-options policy-statement LAN-OUT term REST from **
+        order:
+          - [set policy-options policy-statement LAN-OUT term LAN then accept, set policy-options policy-statement LAN-OUT term REST then reject]
+        order_ja: term LAN が term REST より前にある
+        cmd:
+          - {line: '^set\s', edit: 'policy-statement LAN-OUT'}
+        cmd_ja:
+          - policy-statement LAN-OUT の中に edit で入って set した
+        answer: |-
+          configure
+          edit policy-options policy-statement LAN-OUT
+          set term LAN from protocol direct
+          set term LAN from route-filter 172.16.10.0/24 exact
+          set term LAN then accept
+          set term REST then reject
+          show
+          top
+          set protocols ospf export LAN-OUT
+          commit
+
+      - id: j1-ps-3
+        title: 後から足した term を前へ動かす
+        device: JUN01
+        setup:
+          - set policy-options policy-statement ORDER term REST then reject
+          - set protocols ospf export ORDER
+        task: |-
+          JUN01 の OSPF の export には、term REST(すべてを拒む)だけのポリシー ORDER が当たっています。
+          ORDER に term SRV(スタティック ルート 172.16.20.0/24 だけを受け入れる)を足し、term REST より前に置いて commit してください。
+        want:
+          - set policy-options policy-statement ORDER term SRV from protocol static
+          - set policy-options policy-statement ORDER term SRV from route-filter 172.16.20.0/24 exact
+          - set policy-options policy-statement ORDER term SRV then accept
+          - set policy-options policy-statement ORDER term REST then reject
+          - set protocols ospf export ORDER
+        order:
+          - [set policy-options policy-statement ORDER term SRV then accept, set policy-options policy-statement ORDER term REST then reject]
+        order_ja: term SRV が term REST より前にある
+        answer: |-
+          configure
+          set policy-options policy-statement ORDER term SRV from protocol static
+          set policy-options policy-statement ORDER term SRV from route-filter 172.16.20.0/24 exact
+          set policy-options policy-statement ORDER term SRV then accept
+          show policy-options policy-statement ORDER
+          insert policy-options policy-statement ORDER term SRV before term REST
+          show policy-options policy-statement ORDER
+          commit
+
+      - id: j1-ps-4
+        title: 書きかけの設定を compare と commit check で確かめる
+        device: JUN01
+        candidate:
+          - set policy-options policy-statement SRV-TO-OSPF term SRV from protocol static
+          - set policy-options policy-statement SRV-TO-OSPF term SRV from route-filter 172.16.20.0/24 exact
+          - set policy-options policy-statement SRV-TO-OSPF term SRV then accept
+          - set protocols ospf export SRV-OSPF
+        task: |-
+          JUN01 の候補設定に、誰かの書きかけが残っています(まだ commit されていません)。
+          configure で入り、show | compare で中身を、commit check で通るかを確かめてください。
+          断られた理由を直し、書きかけのポリシーが OSPF の export に当たる形で commit します。
+        want:
+          - set policy-options policy-statement SRV-TO-OSPF term SRV from protocol static
+          - set policy-options policy-statement SRV-TO-OSPF term SRV from route-filter 172.16.20.0/24 exact
+          - set policy-options policy-statement SRV-TO-OSPF term SRV then accept
+          - set protocols ospf export SRV-TO-OSPF
+        forbid:
+          - set protocols ospf export SRV-OSPF
+        cmd:
+          - {line: '^sh\S*\s*\|\s*comp'}
+          - {line: '^commit\s+ch'}
+        cmd_ja:
+          - show | compare で書きかけを見た
+          - commit check で確かめた
+        answer: |-
+          configure
+          show | compare
+          commit check
+          delete protocols ospf export SRV-OSPF
+          set protocols ospf export SRV-TO-OSPF
+          commit check
+          commit
+
+  - id: rf
+    title: "route-filter: プレフィックスと長さで選ぶ"
+    page: 13-j1-route-filter
+    drills:
+      - id: j1-rf-1
+        title: ISP から受け取る経路を長さで選ぶ
+        device: JUN02
+        task: |-
+          JUN02 で、ISP から受け取る経路のうち次の 2 つだけを受け入れ、残りは拒むポリシー ISP-IN を書きます。
+          ・198.51.100.0/24 と、その中の /26 までの経路
+          ・デフォルト ルート(0.0.0.0/0)そのもの
+          ISP の group の import に当てて commit してください。term の名前と数は自由です。
+        want:
+          - - set policy-options policy-statement ISP-IN term $A from route-filter 198.51.100.0/24 upto /26
+            - set policy-options policy-statement ISP-IN term $A from route-filter 198.51.100.0/24 prefix-length-range /24-/26
+          - set policy-options policy-statement ISP-IN term $A then accept
+          - set policy-options policy-statement ISP-IN term $B from route-filter 0.0.0.0/0 exact
+          - set policy-options policy-statement ISP-IN term $B then accept
+          - set policy-options policy-statement ISP-IN term $C then reject
+          - set protocols bgp group ISP import ISP-IN
+        forbid:
+          - set policy-options policy-statement ISP-IN term $C from **
+        order:
+          - [set policy-options policy-statement ISP-IN term $A then accept, set policy-options policy-statement ISP-IN term $C then reject]
+          - [set policy-options policy-statement ISP-IN term $B then accept, set policy-options policy-statement ISP-IN term $C then reject]
+        order_ja: 受け入れる term が、拒む term より前にある
+        answer: |-
+          configure
+          edit policy-options policy-statement ISP-IN
+          set term DOC from route-filter 198.51.100.0/24 upto /26
+          set term DOC then accept
+          set term DEFAULT from route-filter 0.0.0.0/0 exact
+          set term DEFAULT then accept
+          set term REST then reject
+          top
+          set protocols bgp group ISP import ISP-IN
+          commit
+
+      - id: j1-rf-2
+        title: prefix-list に名前を付けて使う
+        device: JUN02
+        task: |-
+          JUN02 に prefix-list CUST-NETS を作り、192.0.2.0/24 と 198.51.100.0/24 を入れます。
+          ポリシー CUST-IN の term CUST で、CUST-NETS のプレフィックスそのものと、その中の細かい経路を受け入れてください
+          (prefix-list-filter を使います)。この素振りでは、どこにも当てずに commit します。
+        want:
+          - set policy-options prefix-list CUST-NETS 192.0.2.0/24
+          - set policy-options prefix-list CUST-NETS 198.51.100.0/24
+          - set policy-options policy-statement CUST-IN term CUST from prefix-list-filter CUST-NETS orlonger
+          - set policy-options policy-statement CUST-IN term CUST then accept
+        answer: |-
+          configure
+          set policy-options prefix-list CUST-NETS 192.0.2.0/24
+          set policy-options prefix-list CUST-NETS 198.51.100.0/24
+          set policy-options policy-statement CUST-IN term CUST from prefix-list-filter CUST-NETS orlonger
+          set policy-options policy-statement CUST-IN term CUST then accept
+          commit
+
+  - id: bgp
+    title: BGP にポリシーを当てる
+    page: 15-j1-bgp
+    drills:
+      - id: j1-bgp-1
+        title: サーバのネットワークだけを MED 付きで ISP へ出す
+        device: JUN02
+        task: |-
+          JUN02 から ISP へは、OSPF で学んだ経路のうち 172.16.0.0/16 の中の細かい経路だけを、MED 30 で広告します
+          (172.16.0.0/16 そのものは含めません)。ほかは広告しません。
+          ポリシーの名前は TO-ISP。ISP の group の export に当てて commit してください。
+        want:
+          - set policy-options policy-statement TO-ISP term $A from protocol ospf
+          - - set policy-options policy-statement TO-ISP term $A from route-filter 172.16.0.0/16 longer
+            - set policy-options policy-statement TO-ISP term $A from route-filter 172.16.0.0/16 prefix-length-range /17-/32
+          - set policy-options policy-statement TO-ISP term $A then metric 30
+          - set policy-options policy-statement TO-ISP term $A then accept
+          - set policy-options policy-statement TO-ISP term $B then reject
+          - set protocols bgp group ISP export TO-ISP
+        forbid:
+          - set policy-options policy-statement TO-ISP term $B from **
+        order:
+          - [set policy-options policy-statement TO-ISP term $A then accept, set policy-options policy-statement TO-ISP term $B then reject]
+        order_ja: 出す term が、拒む term より前にある
+        answer: |-
+          configure
+          set policy-options policy-statement TO-ISP term SERVERS from protocol ospf
+          set policy-options policy-statement TO-ISP term SERVERS from route-filter 172.16.0.0/16 longer
+          set policy-options policy-statement TO-ISP term SERVERS then metric 30
+          set policy-options policy-statement TO-ISP term SERVERS then accept
+          set policy-options policy-statement TO-ISP term REST then reject
+          set protocols bgp group ISP export TO-ISP
+          commit
+
+      - id: j1-bgp-2
+        title: 属性を変えるだけのポリシーを import の先頭に足す
+        device: JUN02
+        setup:
+          - set policy-options policy-statement ISP-IN term OK from route-filter 198.51.100.0/24 orlonger
+          - set policy-options policy-statement ISP-IN term OK from route-filter 0.0.0.0/0 exact
+          - set policy-options policy-statement ISP-IN term OK then accept
+          - set policy-options policy-statement ISP-IN term REST then reject
+          - set protocols bgp group ISP import ISP-IN
+        task: |-
+          JUN02 の ISP の group には import ISP-IN が当たっています。その前に、198.51.100.0/24 そのものに
+          local-preference 150 と community TAG(65000:300)を付けるだけのポリシー MARK を当てます(MARK では accept も reject もしません)。
+          import の並びが MARK → ISP-IN になるようにして commit してください。
+        want:
+          - set policy-options community TAG members 65000:300
+          - set policy-options policy-statement MARK term $T from route-filter 198.51.100.0/24 exact
+          - set policy-options policy-statement MARK term $T then local-preference 150
+          - set policy-options policy-statement MARK term $T then community add TAG
+          - set protocols bgp group ISP import MARK
+          - set protocols bgp group ISP import ISP-IN
+        forbid:
+          - set policy-options policy-statement MARK ** accept
+          - set policy-options policy-statement MARK ** reject
+        order:
+          - [set protocols bgp group ISP import MARK, set protocols bgp group ISP import ISP-IN]
+        order_ja: import の並びが MARK → ISP-IN
+        answer: |-
+          configure
+          set policy-options community TAG members 65000:300
+          set policy-options policy-statement MARK term T from route-filter 198.51.100.0/24 exact
+          set policy-options policy-statement MARK term T then local-preference 150
+          set policy-options policy-statement MARK term T then community add TAG
+          delete protocols bgp group ISP import
+          set protocols bgp group ISP import [ MARK ISP-IN ]
+          show protocols bgp group ISP
+          commit

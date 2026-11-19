@@ -7,7 +7,7 @@
 ## M11 — L2VPN とキャリア イーサネット
 
 ### 課題 M11-3
-<p class="tolab"><a href="/_learn?id=XRT-11&amp;step=m11t3">ワークスペースで開く</a> — 読み物: <a href="b2-m11-evpn-vpws.html#s2-1">2.1 EVI と AC の識別子</a> · <a href="b2-m11-evpn-vpws.html#s2-2">2.2 運ぶ経路: 種類 1</a> · <a href="b2-m11-evpn-vpws.html#s2-4">2.4 ルート リフレクタが運ぶ</a> · <a href="b2-m11-evpn-vpws.html#s3-1">3.1 設定の置き場</a> · <a href="b2-m11-evpn-vpws.html#s3-2">3.2 状態の読み方</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-11&amp;step=m11t3">ワークスペースで開く</a> — 読み物: <a href="b2-m11-evpn-vpws.html#s2-1">2.1 EVI と AC 識別子</a> · <a href="b2-m11-evpn-vpws.html#s2-2">2.2 運ぶ経路: タイプ 1</a> · <a href="b2-m11-evpn-vpws.html#s2-4">2.4 ルート リフレクタが運ぶ</a> · <a href="b2-m11-evpn-vpws.html#s3-1">3.1 設定の置き場</a> · <a href="b2-m11-evpn-vpws.html#s3-2">3.2 状態の読み方</a></p>
 
 
 顧客 B はサイト 3 を開設し、新しいプロバイダー エッジの XR03 に接続しました。XR03 はコアに参加済みで、ほかの設定は
@@ -19,7 +19,7 @@
   あってはなりません。XR03 の BGP のルータ ID は、その Loopback0 のアドレスです。
 
 ### 課題 M11-4
-<p class="tolab"><a href="/_learn?id=XRT-11&amp;step=m11t4">ワークスペースで開く</a> — 読み物: <a href="b2-m11-evpn-vpws.html#s2-1">2.1 EVI と AC の識別子</a> · <a href="b2-m11-evpn-vpws.html#s2-5">2.5 MTU とコントロール ワード</a> · <a href="b2-m11-evpn-vpws.html#s3-3">3.3 上がらないとき、上がっているのに通らないとき</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-11&amp;step=m11t4">ワークスペースで開く</a> — 読み物: <a href="b2-m11-evpn-vpws.html#s2-1">2.1 EVI と AC 識別子</a> · <a href="b2-m11-evpn-vpws.html#s2-5">2.5 MTU とコントロール ワード</a> · <a href="b2-m11-evpn-vpws.html#s3-3">3.3 上がらないとき、上がっているのに通らないとき</a></p>
 
 
 同僚は変更 CHG-1411 で、サイト 1 とサイト 3 の間にさらに 2 本の E-Line を EVPN-VPWS で、EVPN インスタンス 410 と 420 に

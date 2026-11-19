@@ -2708,3 +2708,178 @@ CUST1 ─┘ │              └─ CUST2       グローバル(インターネ
 - ★**E2E の後は reset でなく組み直す**: XR のコミット履歴は reset(ロールバック)で消えず、E2E の模範解のコミット(NETCONF の 2 件など 27 件)が
   残っていた= `show configuration commit changes` で答えが読める(M13-1 は履歴を見に行く課題)。2026-11-14 に撤収して組み直し、履歴が空の白紙で
   渡した(採点は走らせていない= トラップの確認は IF を落とすコミットを作るため)。
+
+## 31. マルチキャスト(SPCOR 4.4)(2026-11-18 着手・PoC 中・BL-257 の最初の一手)
+
+- きっかけ: ユーザが XRT-15(M13)を全課題通過(2026-11-18)= 1 周目(BL-246)完了 → 「次の一手」の相談で、XR トラックに丸ごと無い SPCOR の範囲が
+  **4.4 マルチキャスト サービスの実装**(4.4.a PIM= PIM-SM・PIM-SSM・PIM-BIDIR・PIMv6/4.4.b IGMP v1/v2/v3 と MLD)だけと分かり、ユーザ了承「マルチキャストの PoC お願いします」
+  (XRT-15 は撤収してよい・控え= `private/lab-saves/XRT-15-20261118-final/`)。SP-PAPER.design.md §1.3 の「2 周目はマルチキャストを先に PoC」とも一致。
+- 4.1 の mVPN(説明の項目)は今回の対象外。SPRI(BL-256)へ進む時に PoC する。
+- IOS(IOL 17.15)の挙動は BL-217 の PoC(`poc/mcast/README.md`)で測ってある。今回は **XR の挙動・XR と IOS の相互運用・IPv6(MLD/PIMv6)・XRd と XRv9000 の差**を測る。
+
+### 31.1 PoC の盤面(`problems/_POC-XRMCAST`・手順 `poc/xr/mcast_poc.sh`・記録 `poc/xr/expMCAST-*.log`)
+
+```
+ SRC1 ─ PE1(XRv9000)────────────── PE2(XRv9000)─ RCV2
+          └── P1(XRd・RP の候補)──┘   └ R5(IOL)┐
+                └ P2(XRd)────────── SW1(LAN)─┴─ RCV3
+```
+- Lo0= PE1 10.255.0.1・PE2 .2・P1 .11・P2 .12・R5 .5(IPv6 は 2001:db8:255::<同じ数>)。線= PE1–PE2 10.0.12.0/24・PE1–P1 10.0.1.0/24・P1–PE2 10.0.2.0/24・
+  P1–P2 10.0.3.0/24・PE2–R5 10.0.4.0/24(IPv6 は 2001:db8:<3 つ目のオクテット>::/64)。LAN= SRC1 192.168.1.0/24(PE1 .254)・RCV2 192.168.2.0/24(PE2 .254)・
+  SW1 192.168.3.0/24(P2 .252・R5 .253・RCV3 .1)(IPv6 は 2001:db8:100:<N>::/64)。IGP= IS-IS CORE レベル 2・IPv4 と IPv6(XR は MT・R5 は `multi-topology`)。
+- PE2 から SRC1 への最短は PE1 との直結、RP 候補の P1 へは P1 経由 → 共有木と最短経路木の道が分かれる。
+- SW1 の LAN に P2(XRd・.252)と R5(IOL・.253)。どちらも LAN を IS-IS で passive にした(LAN を経路の通り道にしない)。
+- 受信者・送信元は IOL のホスト役(`ip igmp join-group` のホストは echo に答える= 受けた数を `show ip traffic` で数える)。
+
+### 31.2 PoC で確かめること
+
+1. **XRd と XRv9000 のどちらがマルチキャストのデータを転送するか**(ラボの機種を決める。XRd は起動 80 秒・XRv9000 は約 9 分で同時 2 台まで)。
+2. **有効にする手順**: `multicast-routing` の `address-family ipv4` の `interface all enable` と IF ごとの `enable`・`router pim` が無くても PIM が動くか・IGMP は自動で有効か・既定の版。
+3. **PIM-SM と静的 RP**: 共有木・Register・最短経路木への切り替え(既定は即時か)と `spt-threshold infinity`・`show pim topology`・`show mrib route` のフラグの読み方。
+4. **DR と querier**(XR と IOS が並ぶ LAN): DR= IP 最大・`dr-priority`・querier= IP 最小・XR の既定 v3 と IOS の既定 v2 が並んだ時。
+5. **IGMP v1/v2/v3**: 版の設定・v2 のホストを v3 のルータが受けた時・`join-group`/`static-group`(XR 自身を受信者にできるか)。
+6. **SSM**: XR の既定の SSM の範囲(232/8 が既定で有効か)・IGMPv3 の (S,G)・RP なしで届くか・v2 のホストが 232/8 に参加した時。
+7. **BIDIR**: `rp-address … bidir`・DF の選出と表示・XRd/XRv9000 で動くか。
+8. **動的な RP**: BSR(XR が候補 BSR/候補 RP・IOS が受ける)・Auto-RP(XR の mapping agent/候補 RP・IOS の listener)・静的と動的の優先(override)。
+9. **PIMv6 と MLD**: `address-family ipv6`・MLD の既定の版・静的 RP・(余力があれば)embedded RP・IOS の受信者(`ipv6 mld join-group`)。
+10. **RPF**: `show pim rpf`・RPF の向く IF に PIM が無い時の表示。
+11. **TS の材料**: IF の有効化漏れ・RP の不一致・SSM の範囲の不一致・IGMP の版の不一致・PIM/IGMP を止める ACL・RP の Lo0 が IGP に無い・`accept-register` で、どの show にどう出るか。
+
+### 31.3 PoC の結果(2026-11-18・PE1/PE2= XRv9000 26.1.1・P1/P2= XRd 26.1.1・R5 と ホスト役= IOL 17.15。手順 `poc/xr/mcast_poc.sh`・記録 `poc/xr/expMCAST-*.log`)
+
+| # | 論点 | 実測 |
+|---|---|---|
+| 1 | **XRd の転送** | **XRd もマルチキャストのデータを転送する**。RP の P1 は Register を取り出して共有木へ流す(MFIB の SW カウンタが増える)。PE2 と R5 を共有木に留めると PE1 → P1(XRd)→ PE2 で 20/20、LAN の DR を P2 にすると P1 → P2(XRd 2 台)を通って RCV3 に 20/20。SSM・BIDIR・IPv6 も XRd を通って届いた → **ラボは XRd で組める見込み**(XRv9000 は要らない)。XRv9000 では `show mfib route … detail` の `SW Forwarding Counts` が 0 のまま(届いているのに数えない)・XRd では増える(採点に MFIB の数を使うなら XRd) |
+| 2 | 有効にする手順 | 既定では何も動かない(`show pim interface`= No interfaces)。`router pim`(rp-address)だけでは PIM の IF ができない。**`multicast-routing` → `address-family ipv4` → `interface all enable` だけで全 IF(Loopback0 も)に PIM と IGMPv3**(`router pim`・`router igmp` なしで)。IGMP の既定= v3・query 60 秒・querier timeout 125 秒・max response 10 秒・LMQ 1 秒。MLD の既定= v2。PIM の隣接の表に自分(`*`)も載る。旗= XR どうし `B`(bidir capable)・XR から見た IOS は `P`・IOS から見た XR は `G` |
+| 3 | PIM-SM・静的 RP | `router pim` → `address-family ipv4` → `rp-address 10.255.0.11`。RP の (*,G) の RPF は `Decapstunnel0`(自分が RP)。最後のルータ(PE2)は最初の数発を共有木で受けたあと即座に (S,G) の最短経路木へ(PE1 との直結・`SPT`)。RP の (S,G)RPT は `Prune`。MRIB の旗= (*,G) に `C`・入口に `A`・出口に `F NS`・ローカルの受信者に `LI`。XR は Loopback0 で 224.0.1.40 に参加する |
+| 4 | `spt-threshold infinity` | PE2 だけに入れても、下流の R5(IOS・既定で切り替える)が (S,G) の Join を送ると PE2 に (S,G) ができて直結を使う。R5 にも入れると PE2 は (*,G) だけ(旗 `DSS`)・データは PE1 → P1 → PE2。★RP の状態を `clear` すると次の Join(60 秒)まで 0 発 |
+| 5 | DR と querier | LAN(P2 .252= XRd/v3・R5 .253= IOS/v2): **DR= R5(IP 最大)・querier= P2(IP 最小)**。版の違う 2 台でも R5 は P2 を querier と表示。DR でない P2 は R5 が LAN に流すデータを RPF の失敗として数える(`SW Failure Counts: 8/…`)。P2 に `dr-priority 10`(`router pim` の `interface` の下)→ P2 が DR。切り替わる瞬間に 1 発が二重(Assert・P2 の出口に `AS(self)`。R5 は共有木の状態から流していた見込みで、同点の決め方そのものは切り分けていない) |
+| 6 | IGMP の版・join/static | XR の版を 2・1 にすると IOS のホストも合わせる(v1 で `host version 1`)。**`join-group`= XR 自身が受信者**(ping に答える・旗 `II`)。**`static-group`= ホストなしで (*,G) と (S,G) を作る**(Expires never) |
+| 7 | SSM | **XR は既定で 232/8 を SSM**(group-map `232.0.0.0/8 SSM config`)。IGMPv3 の (S,G) の参加 → `(S,G)SPT SSM`・RP に状態なし・20/20。v2 のホストの 232.2.2.2 は IGMP の表にも載らない。**IOS の R5 が LAN の DR の時**= ① IOS の既定 IGMPv2 では RCV3 の v3 の報告を表に載せず 0 発(`ip igmp version 3` で直る) ② `ip pim ssm default` なしでは R5 が (*,232.1.1.1) を RP へ送るが、XR の PE2 は先へ送らず(P1 に状態なし)0 発。どちらも XR の側の表示は正常に見える |
+| 8 | BIDIR | `ipv4 access-list BIDIR-G` `10 permit ipv4 239.2.0.0 0.0.255.255 any` ＋ `rp-address 10.255.1.11 BIDIR-G bidir`(RP 用に P1 の Loopback1)。group-map に `BD`・`show pim df winner` で IF ごとの DF(RP では `[0/0]`)。(S,G) を作らない・送信元側の PE1 には個別のグループの経路もない(範囲で流す)・どこから送っても届く(RCV3 → RCV2 10/10)。IOS は `ip pim bidir-enable` が要る |
+| 9 | BSR | `bsr candidate-bsr 10.255.0.1 hash-mask-len 30`・`bsr candidate-rp 10.255.0.11 interval 30`。**XR の候補 RP の既定の priority= 192・候補 BSR の既定= 1**(IOS の候補 RP の既定は 0= BL-217)。priority 50 の候補 RP が 192 に勝つ(小さい方)。IOS の R5 も同じ RP を選ぶ |
+| 10 | Auto-RP | `auto-rp candidate-rp Loopback0 scope 16 interval 30`・`auto-rp mapping-agent Loopback0 scope 16 interval 30`。**XR は 224.0.1.39/40 を dense で全 IF へ流す**(group-map `DM perm`)→ listener の無い IOS の R5 も XR の隣なら RP を覚える(BL-217 の IOS だけの盤面では MA の先に届かなかった)。表示= `show auto-rp mapping-agent`・`show auto-rp candidate-rp`(`show pim auto-rp …` は無い) |
+| 11 | 静的と動的の優先 | 同じ範囲なら Auto-RP が静的に勝つ。`rp-address … override` で静的が勝つ(IOS と同じ) |
+| 12 | IPv6 | `multicast-routing` → `address-family ipv6` → `interface all enable`・`router pim` → `address-family ipv6` → `rp-address 2001:db8:255::11`。PIMv6 の隣接はリンクローカル・MLDv2。IOS のホストは `ipv6 mld join-group FF0E::1:1`(XR の表の Last reporter は `::`)。Register は `Decaps6tunnel0`・最短経路木へ即時。IOS の IPv6 マルチキャストの ping は出力 IF を対話で聞く |
+| 13 | 道具 | IOS のホスト役は `no ip domain lookup` が要る(無いと返答元の名前を引いて 1 発に十数秒)→ 盤面の初めの設定に入れた。受けた数= ホスト役の `show ip traffic` の echo |
+
+### 31.4 公式文書での裏どり(2026-11-18・サブエージェント。cisco.com と RFC だけ・xrdocs.io は使っていない。作業用の PDF は scratchpad にだけ置いた)
+
+出典の略称= [C8K-CR] Multicast Command Reference for Cisco 8000(2026-09-11)・[A9K-CR] 同 ASR 9000(2026-09-11)・[C8K-CG26] Multicast Configuration Guide for Cisco 8000, IOS XR 26.1.x–26.3.x・
+[A9K-CG25] 同 ASR 9000, 25.1.x–25.4.x・[CRS-CR] Multicast Command Reference for CRS(2020)・RFC 3376/4604/5015/5059/7761。
+
+| §31.3 の # | 判定 | 要点 |
+|---|---|---|
+| 2 有効化 | 一致 | [C8K-CG26]「by default, no interfaces are enabled」「it must be enabled specifically … in multicast routing configuration mode」。[C8K-CR]「enable/disable … under the IGMP and PIM interface configuration modes have no effect unless the interface is enabled in multicast routing configuration mode」。既定は sparse mode |
+| 2 IGMP の既定 | ほぼ一致 | v3・query 60 秒・max response 10 秒は [C8K-CR] どおり。**querier timeout は CR の本文が 120 秒・出力例と実機は 125 秒**(RFC 3376 §8.5 の式 2×60+10/2)→ 数値を問題の正誤に使わない。MLD の既定 v2 は [C8K-CG26]「MLDv2 is enabled … by default」(古い CRS 4.0 の文書は v1) |
+| 7 SSM | 一致(置き場に注意) | [C8K-CR]「the default is PIM-SSM enabled on the default SSM range, 232/8」。v1/v2 の報告は捨てる([A9K-CR] ssm map・RFC 4604 §3.5)。★**文書の `ssm range` の置き場は `multicast-routing` の下**。26.1.1 の CLI は `router pim` の `address-family ipv4` の下にも `ssm`(range/allow-override/disable)があり、`multicast-routing` の下の `ssm` は `(cisco-support)` と出る → 置き場は PoC で確かめる(§31.5) |
+| 3・4 SPT | 一致 | [C8K-CR]「switches to the shortest-path source tree by default」・[C8K-CG26]「when it receives the first data packet from a source」 |
+| 9 BSR | 実機と RFC は一致・CR の本文は誤り | 候補 RP の既定 192 は [C8K-CG26] の出力例(priority 192)と RFC 5059 §3.2 が一致。**[C8K-CR]/[A9K-CR] の candidate-rp の Command Default「value : 1」は写し間違いに見える**→ CR を根拠に引かない。候補 BSR の既定 1 は CR と一致(RFC の推奨は 64)。IOS/IOS XE の候補 RP・候補 BSR の既定は 0 → **混在の BSR では既定のままだと IOS の候補 RP(0)が XR(192)に勝つ** |
+| 10 Auto-RP | 一致 | [CRS-CR] auto-rp listen disable の既定「learned through Auto-RP」・[C8K-CR] group-map の出力例「224.0.1.39/32* DM perm」 |
+| 11 優先 | 一致 | [A9K-CG25]「the Auto-RP or PIM BSR range is preferred … use the rp-address override keyword」 |
+| 5 DR と querier | 一致 | DR= priority の高い方→ IP の大きい方([A9K-CG25]・RFC 7761 §4.3.2)。querier= IP の小さい方。★版の混在は RFC 3376 §7.3.1 で「管理者が最も古い版にそろえる(MUST)」・XR の文書も「all routers on the subnet must be configured with the same version」→ 今回の P2(v3)と R5(v2)の並びは規格外の構成として扱う |
+| 8 BIDIR | 機種で違う | 構文と (S,G) を作らないことは文書どおり。**[C8K-CG26] は Cisco 8000 で PIM Bidir を非対応と書く**。XRv9000・XRd では動いた(文書に記述なし)。`show pim df winner` は現行の CR に無く CRS の CR だけ → **BIDIR は紙面の正誤に機種の対応を使わない**。仕組み(DF・(*,G) だけ)は RFC 5015 で問える |
+| 12 IPv6 | 一致 | embedded-RP は [CRS-CR] で既定有効(現行の CR には項目なし) |
+| 6 join/static | 一致 | [C8K-CR]「join-group … draw traffic to … the route processor」・static-group は RPF が正しければ IF へ流す・両方なら join-group が優先 |
+| f6 accept-register | 一致 | [C8K-CR]「the rendezvous point immediately sends back a register-stop message」。ACL の形は例から(送信元= マルチキャストの送信元・宛先= グループ) |
+| 5 Assert | 規格どおり | RFC 7761 §4.6.3= rpt ビット→ metric preference → metric → IP の大きい方。(S,G) の Assert が (*,G) に勝つ |
+| 1 XRd | 文書なし | XRd の Data Sheet・Release Notes 26.1.1 などにマルチキャストの記述なし → **XRd の転送は実機だけが根拠**(読み物では「この仮想機では」と断る) |
+
+### 31.5 故障の材料と追加の確認(2026-11-18・記録 `poc/xr/expMCAST-{f*,r*,restore,prec,ssmr}.log`)
+
+★測り方の教訓: 健全な状態で参加させてから故障を入れると、**前の Join の名残(最大 210 秒)**や、**下流の R5 が正しい側から送る (S,G) の Join**にまぎれて届いてしまう(f1・f3・f4 の初回)。
+→ **故障を先に入れ、RCV2 だけが参加する新しいグループで測る**(r1〜r5)。ラボの採点も同じ形にする(確認の後に参加・送る・数える)。
+
+| 故障 | 入れ方 | 表示 | 届いた数 |
+|---|---|---|---|
+| r1 RP へ向く IF の PIM を止める | PE2 の `router pim` → `interface Gi0/0/0/1` → `disable` | `show pim interface` で `off`・`not elected`、(*,G) の `RPF: Null,0.0.0.0` | RCV2 0 → 戻して 10 |
+| f2 受信者の LAN でマルチキャストを止める | PE2 の `multicast-routing` → `interface Gi0/0/0/3` → `disable` | その IF の IGMP の版の行が消える・PIM `off`・(*,G) に LI なし | RCV2 0・RCV3 10 → 戻して 10 |
+| r3 RP の取り違え | PE2 だけ `rp-address 10.255.0.12` | PE2 の (*,G) は `RP: 10.255.0.12`・Join を P1 へ送るが **P1(対応表は .11)は状態を作らない**・P2 も無い。送信元側は Register を P1 へ(`RR`) | 0 → 戻して 10 |
+| r4 PIM を止める ACL(入力だけ) | PE2 の Gi0/0/0/1 に `deny pim` を ingress | PE2 の隣接の表から P1 が消える。**P1 側は PE2 を隣接のまま持ち、PE2 の Join も届く** | 9(片側だけの ACL では配信は止まらない) |
+| r5 IGMP を止める ACL | PE2 の Gi0/0/0/3 に `deny igmp` を ingress | IGMP の表に載らない・PIM の状態もない | 0 → 戻して 10 |
+| f6 RP の accept-register | P1 に `accept-register REG-OK`(`deny ipv4 host 192.168.1.1 any`) | 送信元側の (S,G) は `JP: Null`・RP は (*,G) だけ | 0・0 → 戻して 10 |
+| f7 IOS の DR の IGMPv2 | R5 の LAN 側が IOS の既定 v2 | RCV3 の v3 の (S,G) の報告が R5 の表に載らない(P2 は v3 の querier) | RCV3 0 → `ip igmp version 3` で 10 |
+| f7d SSM の範囲の不一致 | R5 に `ip pim ssm default` なし(IGMP は v3) | R5 は (*,232.1.1.1) を RP へ。**XR の PE2 は SSM の範囲の (*,G) を先へ送らず**、P1 に状態なし | RCV3 0 → 入れて 10(名残 210 秒を待って測った) |
+| f8/r8 IGMP の版の不一致と SSM | PE2 の Gi0/0/0/3 を `version 2` | RCV2(IOS のホスト)が v2 互換に落ち、232.1.1.1 を v2 で報告 → XR は捨てる。**PE2 を v3 に戻しても、ホストが v3 に戻るまで 103〜136 秒届かない**(RFC 3376 の 2×60+10= 130 秒) | 戻した直後 0 → 約 2 分後に 10 |
+| prec 静的と動的 | Auto-RP の中で PE2 に静的 `rp-address 10.255.0.12` | override なし= Auto-RP(.11)を使う・`override` 付き= 静的(.12) | — |
+| ssmr SSM の範囲の置き場 | `ssm range SSM-ALT`(232/8 と 239.100/16) | `router pim` の `address-family ipv4` の下でも、`multicast-routing` の `address-family ipv4` の下(26.1.1 の `?` では `cisco-support`・文書の置き場)でも効く。group-map に `239.100.0.0/16* SSM` | — |
+
+- XR の `clear igmp group`(単数形)。`clear igmp groups` は Invalid。
+- 測り終えた状態: 全ルータ静的 RP 10.255.0.11・BIDIR 239.2.0.0/16(RP 10.255.1.11)・IPv6 静的 RP 2001:db8:255::11・R5 は `ip pim ssm default` と LAN 側 IGMPv3。
+
+### 31.6 単元とラボの形(案 → 2026-11-18 ユーザ了承「それでお願いします」= §31.7)
+
+- 単元 **M14 マルチキャスト**(読み物 章 F0・日英)。見取り図(1 枚の図= 送信元 → FHR → RP → LHR → 受信者の上に IGMP・PIM の Join・Register・最短経路木を載せる＋3 つの問い)
+  → 何が嬉しいか(ユニキャストで受信者の数だけ送る → 1 本の線に 1 部) → IGMP/MLD → PIM-SM(RP・共有木・Register・切り替え)→ SSM → RP の見つけ方(静的・BSR・Auto-RP)
+  → BIDIR → IPv6 → XR の設定(`:::walk`= multicast-routing → router pim → router igmp → 経路の上の Join)・`:::config`・出力の読み方・落とし穴(§31.5)→ 付録(Assert・MSDP/Anycast RP・mVPN は SPRI で)。
+- ラボ **XRT-16**(案): **XRd だけ**(+ IOL のホスト役・IOS の DR)。XRd の転送は実機だけが根拠なので、読み物では「この仮想機では」と断る。課題の案= PIM-SM の構築(値・範囲を設定例から変える)/SSM と IGMPv3/BSR の候補の優先(IOS の既定 0 と XR の 192 の混在)/BIDIR/IPv6/前任者の設定の TS(§31.5 から 2〜3 個)。
+  採点= 確認の後に参加させ、送信元のホスト役から送って受信者の echo を数える(PoC の `send` と同じ形・XRd なら MFIB の数も使える)。
+
+### 31.7 ラボ XRT-16 と読み物 章 F0 の確定案(2026-11-18・ユーザ了承を受けて)
+
+**盤面**(PoC の盤面を XRd だけにし、名前を SP の役割にそろえた。値の土台は PoC と同じ):
+
+```
+ SRC1 ─ PE1 ───────────── PE2 ─ RCV2
+          └── P1(RP)───┘   └ PE4(IOL)┐
+                └ PE3 ───── SW1(LAN)─┴─ RCV3
+```
+- XRd 26.1.1= PE1・PE2・P1・PE3。IOL 17.15= PE4(IOS の PE・受信 LAN の DR= IP 最大)・ホスト役 SRC1・RCV2・RCV3。SW1= 非管理スイッチ。
+- Lo0= PE1 10.255.0.1・PE2 .2・PE3 .3・PE4 .4・P1 .11(IPv6 は 2001:db8:255::<同じ数>)。線= PE1–PE2 10.0.12.0/24・PE1–P1 10.0.1.0/24・P1–PE2 10.0.2.0/24・
+  P1–PE3 10.0.3.0/24・PE2–PE4 10.0.4.0/24(IPv6 は 2001:db8:<3 つ目のオクテット>::/64)。LAN= SRC1 192.168.1.0/24(PE1 .254)・RCV2 192.168.2.0/24(PE2 .254)・
+  SW1 192.168.3.0/24(PE3 .252・PE4 .253・RCV3 .1・RCV3 の出口は PE4)。IPv6 は 2001:db8:100:<N>::/64。IGP= IS-IS CORE レベル 2(IPv4/IPv6・LAN は passive)。
+- 初めの状態= ユニキャストの土台＋**前任者の IPv6 の試行**(M14-6 の故障入り)。IPv4 のマルチキャストは何もない。
+
+**課題**(値は課題文で渡す。読み物の設定例とは値を変える= 設定例は RP= PE3 の Lo0 で全グループ・BIDIR は P1 の Loopback1 で 239.2.0.0/16 など):
+
+| 課題 | 中身 | 確認(採点) | 配点 |
+|---|---|---|---|
+| M14-1 | PIM-SM と静的 RP。XR 4 台と PE4 で IPv4 のマルチキャストを有効にし、RP= P1 の Lo0 を **239.0.0.0/8 だけ**に | 確認の後に RCV2・RCV3 が 239.16/16 の乱数のグループに参加 → SRC1 から 10 発 → 両方 8 以上/範囲外(225.x)に RP なし(PE2・PE4) | 15 |
+| M14-2 | UHD の 239.17.0.0/16 は**どのルータでも**共有木に留める・TV の 239.16.0.0/16 はふつうに切り替える | 239.17 の乱数= 届く・PE2 と PE4 に (S,G) なし/239.16 の乱数= PE2 に (S,G) で RPF が PE1 との直結。★PE2 だけでは下流の PE4 の (S,G) の Join で崩れる(PoC #4) | 15 |
+| M14-3 | SSM= 232.0.0.0/8 と 239.232.0.0/16 を全ルータで・受信 LAN の IGMP は v3 | v3 の (S,G) の参加= 届く・P1 に状態なし(239.232 と 232 の両方)/v2(送信元を言わない)の参加= 0。★PE4 の IGMPv2 と SSM の範囲(PoC f7・f7d) | 20 |
+| M14-4 | BIDIR= 239.48.0.0/16・RP= PE3 の Lo0 | RCV3 が送る → SRC1・RCV2 に届く/SRC1 が送る → RCV2・RCV3/PE2・PE4 に (S,G) なし/PE2 の group-map が BD で RP 10.255.0.3 | 15 |
+| M14-5 | BSR= 239.16.0.0/15 の候補 RP は P1(第 1)・PE3(第 2)・PE4(最後)・候補 BSR は PE1(第 1)と P1(予備) | PE2・PE4 の BSR が 10.255.0.1/候補の並び(priority の小さい順)が P1・PE3・PE4(PE2 と PE4)/239.16 の乱数が RP 10.255.0.11 で届く。★XR の候補 RP の既定 192・IOS の 0・候補 BSR は同点なら IP の大きい P1 | 20 |
+| M14-6 | IPv6 の TS(前任者の試行)。FF0E::16:0/112 を SRC1 から RCV2・RCV3 へ。RP の Register の絞り込みは残す | RCV2 が 8 以上(＋P1 に accept-register が残る)/RCV3 が 8 以上 | 15 |
+
+- M14-6 の故障= ① P1 の `accept-register` の ACL が見出しの LAN の範囲を取り違え(2001:db8:100:10::/64)→ 全員 0 ② PE4 の `ipv6 pim rp-address` が PE3(::3)→ RCV3 だけ 0。
+- 採点の道具= `topologies/mcast_probe.py`(新規。login_probe の部品)。確認ごとに範囲の中から乱数のグループを選び(名残の Join にまぎれない= §31.5 の教訓)、
+  ホスト役に参加の行を入れる → 待つ → 3 発の慣らし → 10 発 → 送信元の ping の出力から返事を返したホストごとに数える(`== REPLY <送信元> <アドレス> <n>`)→ show → 参加の行を外す。
+  IPv6 の ping の「Output Interface:」に答える。BSR の候補の並びは `== RPORDER`(priority の小さい順・同点は `=`)。
+- 読み物 章 F0(日英)= `f00` 見取り図/`f0` 何が嬉しいか・IGMP・PIM-SM(課題 1・2)/`f2` SSM と BIDIR(課題 3・4)/`f4` RP の見つけ方・IPv6・切り分け(課題 5・6)/`f6` 付録。
+  実践ページ f1・f3・f5 は task から切り出す。部「マルチキャスト」を book.yml の parts の末尾に足す。
+
+### 31.8 XRT-16 を組んで分かったこと(2026-11-18・盤面= `problems/XRT-16`・記録 `poc/xr/expXRT16-*.log`・模範解 `poc/xr/solve_xrt16.sh`)
+
+- **XRd だけで全部届いた**: XRd の PE1 は最初のホップとして Register を作り(PoC では XRv9000 だった役)、RP の P1・最終ホップの PE2・PE3 も XRd。PIM-SM・SPT の切り替えの止め・SSM・BIDIR・BSR・IPv6 のどれも 10/10。
+- **IOS の静的 RP の一覧の重なり**: PE4 で `ip pim rp-address 10.255.0.11 10`(239/8)と `ip pim rp-address 10.255.0.3 48 bidir`(239.48/16)を並べると、
+  PE4 は 239.48 を 10.255.0.11(SM)に当てた。**IOS XE は「アドレスの最も大きい RP」を選ぶ**(Cat9600 17.13 の Command Reference の `ip pim rp-address`=
+  "the RP for the group is determined by the RP with the highest RP address configured")。**XR は長い範囲**(239.48.0.0/16 BD が使われる。XR の文書に記述はなく、
+  RFC 7761 §4.7.1 の longest match と一致)。→ M14-4 の PE4 は一覧 10 に `deny 239.48.0.0 0.0.255.255` を足す。足さないと PE4 は ACCESS-3 の DR として RCV3 を
+  Register し (S,G) を作る(RCV3 には PE3= DF 経由で届くので、配信だけ見ても分からない= 確認は PE4 の (S,G) を見る)。
+- **IOS の `ip pim bidir-enable`(IOL 17.15)**: 既定では無効。無いと `ip pim rp-address … bidir` が `% Invalid input`。`no ip pim bidir-enable` で bidir の rp-address の行も消える。
+  ★Cat9600 17.13 の Command Reference は Command Default を「enabled」と書く(機種で違う見込み)→ 読み物では「この機器(PE4)では」と断る・採点には使わない。
+- **XR の `accept-register` は、一覧のどの行にも一致しない Register を通した**(IPv4 も IPv6 も・XRd 26.1.1)。permit(別の送信元)だけの一覧= 届く 10/10、
+  末尾に `deny … any any` を足す= 0。明示の deny に一致すれば止まる。文書(Cisco 8000/ASR 9000 の CR)は「unauthorized source には register-stop」とだけ書き、
+  一致しない場合を書いていない。→ **M14-6 の故障は「範囲違いの permit だけ」から「deny が permit より先」の並び順に替えた**(一覧は 30 deny any any で閉じる=
+  一致しない場合の扱いに頼らない)。この挙動は文書で確かめられないので、問題の正誤・読み物の断定には使わない(ユーザへ報告)。
+  → **ユーザ判断(2026-11-18)= 注記だけ**。f4 §3.4 に 1 段落(この盤面の IOS XR では通る・文書に記述が無い・リストは末尾の明示の deny で閉じる)、出典の :::note に版と試し方(別の送信元の permit だけ= 届く・末尾の deny any any= 止まる)。問題の正誤・採点には使わない。
+- **PIMv6 の LAN の DR**: リンクローカルの大きい方。初めの設定で PE3 FE80::252・PE4 FE80::253 に固定(既定の EUI-64 のままだと乱数で決まる)。
+- **IOS の C-RP**: 既定の間隔 60 秒(holdtime 150 で表示)。XR は `interval 30` で holdtime 75。
+- 文書の裏どり(サブエージェント・cisco.com と RFC だけ): `spt-threshold infinity [group-list]` は Cisco 8000 の CR どおり(既定は即時に切り替え)/`ssm range` の置き場は
+  CR が `multicast-routing`(ガイドの Submodes の節は `router pim`)・独自の範囲を書くと 232/8 は一覧に書かない限り外れる(CR)/IOS XE の候補 RP・候補 BSR の既定の priority は 0
+  (IOS XE 17.x のガイドの Note)・XR の候補 RP は 192(ガイドの例)・候補 BSR は 1/BIDIR で LAN の受信者へ流すのは DF(IOS XE ガイド・RFC 5015 §2.1)/
+  ガイドの章= Cisco 8000 26.x「Implementing Layer-3 Multicast Routing」(IGMP・PIM・BSR は節)・ASR 9000 26.x「Implementing Layer-3 Multicast Routing on Cisco IOS XR Software」。
+
+### 31.9 実装の結果(2026-11-18・ラボ XRT-16)
+
+- 成果物= `problems/XRT-16/`(problem.yml・initial 8 台・task.md/task.en.md・learn.yml(課題 6 本・ヒント 3 段・模範解・確かめ方)・grading.yml と grading.m14t1〜6.yml)。
+  採点の定義は `poc/xr/gen_grading_xrt16.py` が 1 か所から組む(配点= 課題ごと 100・最終 15/15/20/15/20/15)。採点の道具= `topologies/mcast_probe.py`。
+  やり直し= `xe_reset_nodes: [PE4, SRC1, RCV2, RCV3]`(IOL は bootflash: が無い → `topologies/xr_reset.py` に unix:lab-baseline.cfg を足した)。模範解の「On PE1, PE2, P1 and PE3:」の見出しに
+  `poc/xr/verbatim.py` を対応させた(同じ塊を何台にも送る)。
+- 実機 E2E(`poc/xr/e2e_xrt16.sh`・`e2e_wrong_xrt16.sh`・`solve_xrt16.sh`・記録 `poc/xr/expXRT16-e2e-*.log`): 模範解= 6 本とも 100(課題ごと)/誤答= w1 RP の一覧なし 60・w2 PE4 に SPT の止めなし 40・
+  w3 PE4 に SSM の範囲も IGMPv3 もなし 30・w4 PE4 の一覧 10 から 239.48 を外さない 60・w5 PE4 の候補 RP を既定の priority のまま 30・w6 PE4 の IPv6 の RP を直し忘れ 50/`lab.sh reset`(26 秒)の後の白紙= 6 本とも 0/
+  逐語の模範解(verbatim.py・26 塊)= どの行も通る → 最終 92(M14-6 の「一覧が deny で終わる」だけ落ちた= この盤面は故障を作り替える前の初めの設定で組んだため。作り替えた後の形(5 permit・10 deny /48・30 deny any)は
+  課題ごとの確認で 100 を確認済み)。★ユーザに渡すラボは組み直す(XR のコミット履歴に模範解が残るため・§30.12)。
+- 確認の 1 つ目の失敗= XR の `| include ,239|RPF`(`|` が次のパイプと解釈されて Invalid)。素の show に直した。
+- 読み物の設定例の値は課題からずらし、同じ盤面で読み物の値のまま測った(`poc/xr/try_xrt16.sh`・記録 `poc/xr/expM14-try-*.log`)。Auto-RP の段は、外した BSR の候補が保持時間(150 秒)の間だけ残るので採り直した
+  (残っていた時の記録= `expM14-try-autorp-bsrleft.log`)。

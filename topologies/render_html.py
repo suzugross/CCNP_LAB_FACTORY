@@ -410,7 +410,8 @@ PANEL = "#f4f5f7"
 
 CSS = ":root{ --paper:%s; --panel:%s; }" % (PAPER, PANEL) + """
 /* 試験画面風テーマ: 白基調の単色・装飾なし・罫線だけで区切る。
-   ダークモードには追随しない(常に明るい地。本番の試験シムに合わせる)。 */
+   OS のダークモードには追随しない(既定は明るい地。本番の試験シムに合わせる)。暗色はページの切替ボタンで選んだ時だけ、
+   配信サーバが theme.py でこの CSS から作って差し込む(BL-280)。色はここに CSS で書く(style 属性や JS の色は暗色にならない)。 */
 :root{ color-scheme: light; }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:var(--paper);color:#000000}
@@ -432,6 +433,11 @@ a:visited{color:#0645ad}
 .nav .cur{color:#555555}
 .nav .sp{flex:1}
 main{max-width:1000px; margin:0 auto; padding:1rem 1.2rem 7rem}
+/* 本文中の長い字句(インラインのコマンド・URL)は画面の端で折る(2026-11-17 ユーザ指摘= スマホで本文が左半分に縮む)。
+   折らないと 1 行だけ画面からはみ出し、スマホのブラウザがその行に合わせてページ全体を縮めて表示する。
+   break-word は表の列の幅の計算には効かないので、表は今までどおり .tw/.tablewrap の中で横に流れる。
+   pre(show の出力・設定例)は折り返さないので影響しない */
+main{overflow-wrap:break-word}
 body.nonav main{padding-bottom:2rem}      /* ナビ帯の無いページ(ワークスペースの中に出す版)は下余白を取らない */
 h1{font-size:1.4rem; font-weight:600; border-bottom:1px solid #000000;
    padding-bottom:.35rem; margin:1rem 0 .8rem}

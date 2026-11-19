@@ -1,0 +1,28 @@
+# M14-1: PIM-SM と静的 RP。白紙= マルチキャストなし → 0 点。
+# 確認は poc/xr/gen_grading_xrt16.py で組んだ(中身を直したら組み直す)。確認ごとに範囲の中から乱数でグループを選ぶ(topologies/mcast_probe.py)。
+problem: XRT-16
+total_points: 100
+checks:
+- name: M14-1 RCV2 and RCV3 receive a channel in 239.16.0.0/16 from SRC1
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=239.16.0.0/16 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ip igmp join-group
+    {G};;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 192.168.2.1 --from 192.168.3.1 --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end'
+    --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end'
+  raw:
+  - regex: == REPLY SRC1 192\.168\.2\.1 (?:8|9|10)\n
+  - regex: == REPLY SRC1 192\.168\.3\.1 (?:8|9|10)\n
+  points: 60
+- name: M14-1 Multicast runs on both of PE4's links and on PE3, and a group outside 239.0.0.0/8 has no RP (PE2, PE4)
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group H=225.0.0.0/8 --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ip igmp join-group {H};;end' --settle 10 --show 'PE4:show ip pim interface' --show 'PE3:show pim interface'
+    --show 'PE2:show pim group-map {H}' --show 'PE4:show ip mroute {H} | begin \(' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {H};;no ip igmp version;;end'
+  raw:
+  - regex: Ethernet0/0\s+v2/S
+  - regex: Ethernet0/1\s+v2/S
+  - regex: GigabitEthernet0/0/0/0\s+on\s
+  - regex: GigabitEthernet0/0/0/1\s+on\s
+  - regex: '== SHOW PE2: show pim group-map[\s\S]*?\n\S+\*\s+SM\s+static\s+\d+\s+0\.0\.0\.0\s'
+  - regex: \(\*, 225\.\d+\.\d+\.\d+\), [^\n]*RP 0\.0\.0\.0,
+  points: 40

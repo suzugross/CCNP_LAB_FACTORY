@@ -17,11 +17,11 @@ stages:
 
             STP fixes this by **blocking just enough ports** to leave a loop-free tree. If a link fails, a blocked port takes over.
           ja: |
-            スイッチは、リンクが 1 本切れても誰も孤立しないように、わざと輪になるようにつなぎます。
+            スイッチは、リンクが 1 本切れても誰も孤立しないように、わざとループになるようにつなぎます。
 
-            ところがイーサネットのフレームには、何ホップで捨てるという上限がありません。輪の中ではブロードキャストが回り続けて増え(**ブロードキャスト ストーム**)、MAC アドレス テーブルも落ち着きません。
+            ところがイーサネットのフレームには、何ホップで捨てるという上限がありません。ループの中ではブロードキャストが回り続けて増え(**ブロードキャスト ストーム**)、MAC アドレス テーブルも落ち着きません。
 
-            STP は、**必要なだけポートを止めて**輪のない木を作ります。リンクが切れたら、止めていたポートが代わりに動きます。
+            STP は、**必要なだけポートを止めて**ループのないツリーを作ります。リンクが切れたら、止めていたポートが代わりに動きます。
       - title: {en: "Bridge ID and the root bridge", ja: "ブリッジ ID とルート ブリッジ"}
         body:
           en: |
@@ -37,7 +37,7 @@ stages:
             - プライオリティ: 既定値は **32768**。4096 刻みで設定します。
             - **BID が最も小さいスイッチが勝ちます**。先にプライオリティを比べ、同じなら MAC アドレスの小さい方です(左から 16 進数の 1 つの数として読みます)。
 
-            勝ったスイッチが**ルート ブリッジ**、木のてっぺんです。ゲームでは、スイッチを押すとルートの印(★)が付きます。
+            勝ったスイッチが**ルート ブリッジ**、ツリーのてっぺんです。ゲームでは、スイッチを押すとルートの印(★)が付きます。
       - title: {en: "Four steps", ja: "4 つの手順"}
         body:
           en: |
@@ -53,7 +53,7 @@ stages:
             - **① ルート ブリッジ**: BID が最も小さいスイッチ。
             - **② ルート ポート(Root)**: ルート ブリッジ以外の各スイッチで、ルートへ最も安く行けるポートを 1 つ。
             - **③ 指定ポート(Desg)**: 各リンクで、ルートに近い側の端を 1 つ。ルート ブリッジのポートはすべて指定ポートです。
-            - **④ 代替ポート(Altn)**: 残ったポート。ルートへの予備の道です。
+            - **④ 代替ポート(Altn)**: 残ったポート。ルートへの予備の経路です。
       - title: {en: "Roles and states", ja: "役割と状態"}
         example: ex_tri
         body:
@@ -64,7 +64,7 @@ stages:
           ja: |
             ルート ポートと指定ポートはフレームを**転送**します(**FWD**)。代替ポートはフレームを**捨てます**。Cisco の表示は **BLK** です。
 
-            このステージのリンクはすべて 1 Gbps(コスト 4)なので、ルートとの直結がいつも最も安い道です。解いた盤面の例です。
+            このステージのリンクはすべて 1 Gbps(コスト 4)なので、ルートとの直結がいつも最も安い経路です。解いた盤面の例です。
       - title: {en: "How to play", ja: "遊び方"}
         body:
           en: |
@@ -85,7 +85,7 @@ stages:
   - id: 2
     title: {en: "Path Cost", ja: "パス コスト"}
     sub: {en: "Mixed speeds. Add up the costs; the fewest hops is not always the cheapest.",
-          ja: "速度が混在。コストを足し合わせる。ホップ数が少ない道が安いとは限らない。"}
+          ja: "速度が混在。コストを足し合わせる。ホップ数が少ない経路が安いとは限らない。"}
     cards:
       - title: {en: "Path cost", ja: "パス コスト"}
         body:
@@ -106,7 +106,7 @@ stages:
             - 100 Mbps = **19**
             - 10 Mbps = **100**
 
-            スイッチの**ルート パス コスト**は、ルートまでの道で BPDU を**受け取る側**のポートのコストを足したものです。
+            スイッチの**ルート パス コスト**は、ルートまでの経路で BPDU を**受け取る側**のポートのコストを足したものです。
       - title: {en: "Fewest hops is not cheapest", ja: "近道が安いとは限らない"}
         example: ex_cost
         body:
@@ -148,10 +148,10 @@ stages:
 
             On a link, a tie for the designated port goes to the switch with the lower BID.
           ja: |
-            ルートへの道のコストが同じなら、次の順に比べます。
+            ルートへの経路のコストが同じなら、次の順に比べます。
 
-            - **① 送信元のブリッジ ID**: BPDU を送ってきた隣のスイッチの BID。小さい方が勝ち。
-            - **② 送信元のポート ID**: 隣のスイッチ側のポート ID。小さい方が勝ち。
+            - **① 送信元のブリッジ ID**: BPDU を送ってきた隣接スイッチの BID。小さい方が勝ち。
+            - **② 送信元のポート ID**: 隣接スイッチ側のポート ID。小さい方が勝ち。
 
             リンクの指定ポートでコストが並んだら、BID の小さいスイッチの端が指定ポートです。
       - title: {en: "Port ID", ja: "ポート ID"}
@@ -191,7 +191,7 @@ stages:
     sub: {en: "Bigger boards with hand-set costs and the long method.",
           ja: "大きめの盤面。コストの手設定とロング方式。"}
     cards:
-      - title: {en: "Changing a port's cost", ja: "ポートのコストを変える"}
+      - title: {en: "Changing a port's cost", ja: "ポート コストを変える"}
         body:
           en: |
             `spanning-tree vlan 10 cost 10` on an interface sets that port's cost for VLAN 10.
@@ -245,11 +245,11 @@ stages:
             数が合わなければ、どこかが違っています。
 
   - id: 5
-    title: {en: "Per-VLAN Trees", ja: "VLAN ごとの木"}
+    title: {en: "Per-VLAN Trees", ja: "VLAN ごとのツリー"}
     sub: {en: "Two VLANs on one board, two separate trees.",
-          ja: "1 つの盤面に VLAN 2 つ。木も 2 つ。"}
+          ja: "1 つの盤面に VLAN 2 つ。ツリーも 2 つ。"}
     cards:
-      - title: {en: "One tree per VLAN", ja: "VLAN ごとに 1 つの木"}
+      - title: {en: "One tree per VLAN", ja: "VLAN ごとに 1 つのツリー"}
         body:
           en: |
             Rapid PVST+ runs a separate spanning tree for **each VLAN**.
@@ -292,7 +292,7 @@ stages:
 
             In a good design the root bridge and the backup root are upper-layer switches, so the alternate ports end up on access uplinks. Some levels break that design on purpose.
           ja: |
-            ここの盤面は STP のラボと同じ配線です。上に分配(とコア)、下にアクセスのスイッチ。各スイッチの角の小さな札が層を表します(CORE= コア・DIST= 分配・ACC= アクセス)。
+            ここの盤面は STP のラボと同じ配線です。上にディストリビューション(とコア)、下にアクセスのスイッチ。各スイッチの角の小さな札が層を表します(CORE= コア・DIST= ディストリビューション・ACC= アクセス)。
 
             よい設計では、ルート ブリッジと予備のルートを上の層に置くので、代替ポートはアクセスの上りに来ます。わざと設計を崩した level もあります。
       - title: {en: "Edge ports", ja: "エッジ ポート"}

@@ -7,7 +7,7 @@
 ## M13 — 自動化とアシュアランス
 
 ### 課題 M13-3
-<p class="tolab"><a href="/_learn?id=XRT-15&amp;step=m13t3">ワークスペースで開く</a> — 読み物: <a href="e2-m13-gnmi-telemetry.html#s2-1">2.1 gRPC と gNMI</a> · <a href="e2-m13-gnmi-telemetry.html#s2-3">2.3 ダイヤルインとダイヤルアウト</a> · <a href="e2-m13-gnmi-telemetry.html#s2-5">2.5 TLS と相互 TLS: 誰が何を証明するか</a> · <a href="e2-m13-gnmi-telemetry.html#s3-1">3.1 gRPC のサーバ: TLS と相互 TLS</a> · <a href="e2-m13-gnmi-telemetry.html#s3-2">3.2 IOS XR に証明書を置く</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-15&amp;step=m13t3">ワークスペースで開く</a> — 読み物: <a href="e15-m13-certificates.html#s2-4">2.4 CA: 署名を信じる起点</a> · <a href="e15-m13-certificates.html#s2-5">2.5 確かめる 4 つ</a> · <a href="e15-m13-certificates.html#s2-6">2.6 相互 TLS と、線ごとの役</a> · <a href="e15-m13-certificates.html#s3-3">3.3 自己署名の証明書と、中間 CA を挟んだ証明書チェーン</a> · <a href="e2-m13-gnmi-telemetry.html#s2-1">2.1 gRPC と gNMI</a> · <a href="e2-m13-gnmi-telemetry.html#s2-3">2.3 ダイヤルインとダイヤルアウト</a> · <a href="e2-m13-gnmi-telemetry.html#s2-5">2.5 TLS と相互 TLS: 誰が何を証明するか</a> · <a href="e2-m13-gnmi-telemetry.html#s3-1">3.1 gRPC サーバ: TLS と相互 TLS</a> · <a href="e2-m13-gnmi-telemetry.html#s3-2">3.2 IOS XR に証明書を置く</a></p>
 
 
 NMS は gNMI で XR01 を読み取ります。
@@ -18,7 +18,7 @@ NMS は gNMI で XR01 を読み取ります。
 - TLS を使わない gRPC は拒否してください。
 
 ### 課題 M13-4
-<p class="tolab"><a href="/_learn?id=XRT-15&amp;step=m13t4">ワークスペースで開く</a> — 読み物: <a href="e2-m13-gnmi-telemetry.html#s2-2">2.2 Subscribe: STREAM・ONCE・POLL</a> · <a href="e2-m13-gnmi-telemetry.html#s2-3">2.3 ダイヤルインとダイヤルアウト</a> · <a href="e2-m13-gnmi-telemetry.html#s2-4">2.4 エンコードとセンサー パス</a> · <a href="e2-m13-gnmi-telemetry.html#s2-5">2.5 TLS と相互 TLS: 誰が何を証明するか</a> · <a href="e2-m13-gnmi-telemetry.html#s3-3">3.3 ダイヤルアウト: センサー グループ・宛先グループ・サブスクリプション</a> · <a href="e2-m13-gnmi-telemetry.html#s3-4">3.4 確かめ方</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-15&amp;step=m13t4">ワークスペースで開く</a> — 読み物: <a href="e15-m13-certificates.html#s2-5">2.5 確かめる 4 つ</a> · <a href="e15-m13-certificates.html#s2-6">2.6 相互 TLS と、線ごとの役</a> · <a href="e15-m13-certificates.html#s3-2">3.2 確かめる: openssl s_client</a> · <a href="e2-m13-gnmi-telemetry.html#s2-2">2.2 Subscribe: STREAM・ONCE・POLL</a> · <a href="e2-m13-gnmi-telemetry.html#s2-3">2.3 ダイヤルインとダイヤルアウト</a> · <a href="e2-m13-gnmi-telemetry.html#s2-4">2.4 エンコードとセンサー パス</a> · <a href="e2-m13-gnmi-telemetry.html#s2-5">2.5 TLS と相互 TLS: 誰が何を証明するか</a> · <a href="e2-m13-gnmi-telemetry.html#s3-3">3.3 ダイヤルアウト: センサー グループ・宛先グループ・サブスクリプション</a> · <a href="e2-m13-gnmi-telemetry.html#s3-4">3.4 確かめ方</a></p>
 
 
 前任者は、XR01 のインタフェースのカウンタを、SRV01 のテレメトリの収集役へ、TLS を使った gRPC のダイヤルアウトで、10 秒ごとに、

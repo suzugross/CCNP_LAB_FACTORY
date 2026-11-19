@@ -1,4 +1,4 @@
-# M12 — 実践(3) データプレーンの保護
+# M12 — 実践(3) データ プレーンの保護
 
 ラボ **XRT-14** の課題です。ラボから離れた場所でも読めるように、ここに載せています。
 取り組むのはラボのワークスペースです。**Tasks** タブに、課題ごとの確認ボタン、段階式のヒント、
@@ -20,7 +20,7 @@
   ハードウェアで数えてください。
 
 ### 課題 M12-5
-<p class="tolab"><a href="/_learn?id=XRT-14&amp;step=m12t5">ワークスペースで開く</a> — 読み物: <a href="d4-m12-protect.html#s2-3">2.3 RTBH: 宛先で捨てる</a> · <a href="d4-m12-protect.html#s2-4">2.4 RTBH: 送信元で捨てる</a> · <a href="d4-m12-protect.html#s3-3">3.3 RTBH の起点</a> · <a href="d4-m12-protect.html#s3-4">3.4 境界のルータ: set next-hop discard</a> · <a href="d4-m12-protect.html#s3-5">3.5 確かめ方</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-14&amp;step=m12t5">ワークスペースで開く</a> — 読み物: <a href="d4-m12-protect.html#s2-3">2.3 RTBH: 宛先で捨てる</a> · <a href="d4-m12-protect.html#s2-4">2.4 RTBH: 送信元で捨てる</a> · <a href="d4-m12-protect.html#s3-3">3.3 RTBH のトリガー ルータ</a> · <a href="d4-m12-protect.html#s3-4">3.4 境界のルータ: set next-hop discard</a> · <a href="d4-m12-protect.html#s3-5">3.5 確かめ方</a></p>
 
 
 前任者が RR1 に、RTBH の起点を作りました。RR1 でスタティック ルートにタグ 666 を付けると、そのルートが PE に配られ、

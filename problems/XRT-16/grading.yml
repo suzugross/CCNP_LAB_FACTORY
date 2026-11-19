@@ -1,0 +1,172 @@
+# XRT-16 最終確認(M14-1〜6 を終えた状態。配点= 15/15/20/15/20/15)。学習目的のラボ= パック・ノルマの対象外。
+# 中身は課題ごとの確認(grading.m14t<n>.yml)と同じもの(poc/xr/gen_grading_xrt16.py が両方を組む)。試験のトラフィックを流して数えるので 15 分ほどかかる。
+problem: XRT-16
+total_points: 100
+checks:
+- name: M14-1 RCV2 and RCV3 receive a channel in 239.16.0.0/16 from SRC1
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=239.16.0.0/16 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ip igmp join-group
+    {G};;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 192.168.2.1 --from 192.168.3.1 --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end'
+    --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end'
+  raw:
+  - regex: == REPLY SRC1 192\.168\.2\.1 (?:8|9|10)\n
+  - regex: == REPLY SRC1 192\.168\.3\.1 (?:8|9|10)\n
+  points: 9
+- name: M14-1 Multicast runs on both of PE4's links and on PE3, and a group outside 239.0.0.0/8 has no RP (PE2, PE4)
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group H=225.0.0.0/8 --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ip igmp join-group {H};;end' --settle 10 --show 'PE4:show ip pim interface' --show 'PE3:show pim interface'
+    --show 'PE2:show pim group-map {H}' --show 'PE4:show ip mroute {H} | begin \(' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {H};;no ip igmp version;;end'
+  raw:
+  - regex: Ethernet0/0\s+v2/S
+  - regex: Ethernet0/1\s+v2/S
+  - regex: GigabitEthernet0/0/0/0\s+on\s
+  - regex: GigabitEthernet0/0/0/1\s+on\s
+  - regex: '== SHOW PE2: show pim group-map[\s\S]*?\n\S+\*\s+SM\s+static\s+\d+\s+0\.0\.0\.0\s'
+  - regex: \(\*, 225\.\d+\.\d+\.\d+\), [^\n]*RP 0\.0\.0\.0,
+  points: 6
+- name: M14-2 An ultra-HD channel (239.17.0.0/16) reaches RCV2 and RCV3 and stays on the shared tree (no source state on PE2 and PE4)
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=239.17.0.0/16 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ip igmp join-group
+    {G};;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 192.168.2.1 --from 192.168.3.1 --show 'PE2:show pim topology {G} | include ,239' --show 'PE4:show ip mroute {G} | begin \(' --post-cli
+    'RCV2:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end'
+  raw:
+  - regex: == REPLY SRC1 192\.168\.2\.1 (?:8|9|10)\n
+  - regex: == REPLY SRC1 192\.168\.3\.1 (?:8|9|10)\n
+  - regex: '== SHOW PE2: [\s\S]*\(\*,239\.17\.\d+\.\d+\) SM'
+  - regex: \(\*, 239\.17\.\d+\.\d+\), [^\n]*RP 10\.255\.0\.11
+  - not_regex: \(192\.168\.1\.1, ?239\.17\.
+  points: 9
+- name: M14-2 A TV channel (239.16.0.0/16) still switches to the shortest-path tree on PE2, over the direct link to PE1
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=239.16.0.0/16 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ip igmp join-group
+    {G};;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 192.168.2.1 --from 192.168.3.1 --show 'PE2:show pim topology {G}' --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ip igmp
+    join-group {G};;no ip igmp version;;end' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end'
+  raw:
+  - regex: == REPLY SRC1 192\.168\.2\.1 (?:8|9|10)\n
+  - regex: == REPLY SRC1 192\.168\.3\.1 (?:8|9|10)\n
+  - regex: '\(192\.168\.1\.1,239\.16\.\d+\.\d+\)SPT SM[^\n]*\n[^\n]*RPF: GigabitEthernet0/0/0/0,10\.0\.12\.1'
+  points: 6
+- name: 'M14-3 A receiver naming SRC1 gets a channel in 239.232.0.0/16 as SSM: RCV2 and RCV3 receive it and the RP holds no state'
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=239.232.0.0/16 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp version 3;;ip igmp join-group {G} source 192.168.1.1;;end' --pre-cli 'RCV3:configure terminal;;interface
+    Ethernet0/0;;ip igmp version 3;;ip igmp join-group {G} source 192.168.1.1;;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 192.168.2.1 --from 192.168.3.1 --show 'P1:show pim topology {G}
+    | include ,239' --show 'PE2:show pim topology {G} | include ,239' --show 'PE4:show ip mroute {G} | begin \(' --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G} source 192.168.1.1;;no ip igmp version;;end' --post-cli
+    'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G} source 192.168.1.1;;no ip igmp version;;end'
+  raw:
+  - regex: == REPLY SRC1 192\.168\.2\.1 (?:8|9|10)\n
+  - regex: == REPLY SRC1 192\.168\.3\.1 (?:8|9|10)\n
+  - regex: '== SHOW PE2: [\s\S]*\(192\.168\.1\.1,239\.232\.\d+\.\d+\)SPT SSM'
+  - regex: '\(192\.168\.1\.1, 239\.232\.\d+\.\d+\), [^\n]*flags: s'
+  - regex: '== SHOW P1: show pim topology[^\n]*\n(?:(?!\(192\.168\.1\.1)[^\n]*\n)*?== SHOW PE2'
+  points: 8
+- name: 'M14-3 232.0.0.0/8 is still SSM: RCV2 and RCV3 receive a channel in it from SRC1'
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=232.0.0.0/8 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp version 3;;ip igmp join-group {G} source 192.168.1.1;;end' --pre-cli 'RCV3:configure terminal;;interface
+    Ethernet0/0;;ip igmp version 3;;ip igmp join-group {G} source 192.168.1.1;;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 192.168.2.1 --from 192.168.3.1 --show 'PE1:show pim topology {G}
+    | include ,232' --show 'PE4:show ip mroute {G} | begin \(' --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G} source 192.168.1.1;;no ip igmp version;;end' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no
+    ip igmp join-group {G} source 192.168.1.1;;no ip igmp version;;end'
+  raw:
+  - regex: == REPLY SRC1 192\.168\.2\.1 (?:8|9|10)\n
+  - regex: == REPLY SRC1 192\.168\.3\.1 (?:8|9|10)\n
+  - regex: \(192\.168\.1\.1,232\.\d+\.\d+\.\d+\)SPT SSM
+  - regex: '\(192\.168\.1\.1, 232\.\d+\.\d+\.\d+\), [^\n]*flags: s'
+  points: 6
+- name: M14-3 A receiver that names no source gets nothing in 239.232.0.0/16, and P1 and PE3 treat both ranges as SSM
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=239.232.0.0/16 --group B=232.0.0.0/8 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ip
+    igmp join-group {G};;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 192.168.2.1 --from 192.168.3.1 --show 'P1:show pim group-map {G}' --show 'PE3:show pim group-map {G}' --show 'P1:show
+    pim group-map {B}' --show 'PE3:show pim group-map {B}' --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group
+    {G};;no ip igmp version;;end'
+  raw:
+  - regex: == REPLY SRC1 192\.168\.2\.1 0\n
+  - regex: == REPLY SRC1 192\.168\.3\.1 0\n
+  - regex: '== SHOW P1: show pim group-map 239[\s\S]*?239\.232\.0\.0/16\*\s+SSM'
+  - regex: '== SHOW PE3: show pim group-map 239[\s\S]*?239\.232\.0\.0/16\*\s+SSM'
+  - regex: '== SHOW P1: show pim group-map 232[\s\S]*?232\.0\.0\.0/8\*\s+SSM'
+  - regex: '== SHOW PE3: show pim group-map 232[\s\S]*?232\.0\.0\.0/8\*\s+SSM'
+  points: 6
+- name: 'M14-4 In 239.48.0.0/16 any host can send: RCV3''s packets reach SRC1 and RCV2, and SRC1''s reach RCV2 and RCV3'
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=239.48.0.0/16 --pre-cli 'SRC1:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp join-group
+    {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --settle 10 --warm 'RCV3:ping {G} repeat 3 timeout 1' --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'RCV3:ping {G} repeat 10 timeout 1' --send 'SRC1:ping
+    {G} repeat 10 timeout 1' --from 192.168.1.1 --from 192.168.2.1 --from 192.168.3.1 --post-cli 'SRC1:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end' --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no
+    ip igmp join-group {G};;no ip igmp version;;end' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end'
+  raw:
+  - regex: == REPLY RCV3 192\.168\.1\.1 (?:8|9|10)\n
+  - regex: == REPLY RCV3 192\.168\.2\.1 (?:8|9|10)\n
+  - regex: == REPLY SRC1 192\.168\.2\.1 (?:8|9|10)\n
+  - regex: == REPLY SRC1 192\.168\.3\.1 (?:8|9|10)\n
+  points: 9
+- name: M14-4 239.48.0.0/16 is bidirectional with RP 10.255.0.3 on PE2 and PE4, and no router keeps per-source state after traffic from two sources
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=239.48.0.0/16 --pre-cli 'SRC1:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp join-group
+    {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --settle 10 --send 'RCV3:ping {G} repeat 5 timeout 1' --send 'SRC1:ping {G} repeat 5 timeout 1' --show 'PE2:show pim group-map {G}' --show 'PE2:show pim
+    topology {G} | include ,239' --show 'P1:show pim topology {G} | include ,239' --show 'PE1:show pim topology {G} | include ,239' --show 'PE4:show ip mroute {G} | begin \(' --post-cli 'SRC1:configure terminal;;interface Ethernet0/0;;no ip igmp join-group
+    {G};;no ip igmp version;;end' --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end'
+  raw:
+  - regex: 239\.48\.0\.0/16\*\s+BD\s+config\s+\d+\s+10\.255\.0\.3\s
+  - regex: \(\*,239\.48\.\d+\.\d+\) BD Up
+  - regex: '\(\*, 239\.48\.\d+\.\d+\), [^\n]*RP 10\.255\.0\.3, flags: B'
+  - not_regex: \(192\.168\.\d\.1, ?239\.48\.
+  points: 6
+- name: M14-5 PE1 is the BSR on PE2 and PE4, and P1 is a candidate BSR that is not elected
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --settle 0 --show 'PE2:show pim bsr election' --show 'PE4:show ip pim bsr-router' --show 'P1:show pim bsr election'
+  raw:
+  - regex: == SHOW PE2:[\s\S]*?Accept-Pref\s+\S+\s+\S+\s+10\.255\.0\.1 \[\d+, \d+\]
+  - regex: 'BSR address: 10\.255\.0\.1 '
+  - regex: == SHOW P1:[\s\S]*?Not-Elected/\S+\s+\S+\s+\S+\s+10\.255\.0\.1 \[\d+, \d+\]\s+10\.255\.0\.11 \[\d+, \d+\]
+  points: 6
+- name: M14-5 PE2 and PE4 learn three candidate RPs for 239.16.0.0/15 through BSR, ranked P1, PE3, PE4
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --settle 0 --rporder 'PE2:239.16.0.0/15' --rporder 'PE4:239.16.0.0/15'
+  raw:
+  - regex: == RPORDER PE2 239\.16\.0\.0/15 10\.255\.0\.11,10\.255\.0\.3,10\.255\.0\.4\n
+  - regex: == RPORDER PE4 239\.16\.0\.0/15 10\.255\.0\.11,10\.255\.0\.3,10\.255\.0\.4\n
+  points: 8
+- name: M14-5 A TV channel reaches RCV2 and RCV3 with P1 as the RP learned through BSR (PE1, PE2, PE3, PE4)
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=239.16.0.0/16 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ip igmp join-group {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ip igmp join-group
+    {G};;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 192.168.2.1 --from 192.168.3.1 --show 'PE1:show pim group-map {G}' --show 'PE2:show pim group-map {G}' --show 'PE3:show pim group-map
+    {G}' --show 'PE4:show ip mroute {G} | include RP' --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no ip igmp version;;end' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ip igmp join-group {G};;no
+    ip igmp version;;end'
+  raw:
+  - regex: == REPLY SRC1 192\.168\.2\.1 (?:8|9|10)\n
+  - regex: == REPLY SRC1 192\.168\.3\.1 (?:8|9|10)\n
+  - regex: == SHOW PE1:[\s\S]*?239\.16\.0\.0/15\*\s+SM\s+bsr\+?\s+\d+\s+10\.255\.0\.11\s[\s\S]*== SHOW PE2
+  - regex: == SHOW PE2:[\s\S]*?239\.16\.0\.0/15\*\s+SM\s+bsr\+?\s+\d+\s+10\.255\.0\.11\s[\s\S]*== SHOW PE3
+  - regex: == SHOW PE3:[\s\S]*?239\.16\.0\.0/15\*\s+SM\s+bsr\+?\s+\d+\s+10\.255\.0\.11\s[\s\S]*== SHOW PE4
+  - regex: \(\*, 239\.16\.\d+\.\d+\), [^\n]*RP 10\.255\.0\.11
+  points: 6
+- name: M14-6 RCV2 receives an IPv6 channel in FF0E::16:0/112 from SRC1, and the RP still filters Register messages (accept-register, ending in a deny)
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=FF0E::16:0/112 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ipv6 mld join-group {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ipv6 mld join-group
+    {G};;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 2001:db8:100:2::1 --from 2001:db8:100:3::1 --show 'P1:show running-config router pim address-family ipv6' --show 'P1:show running-config
+    ipv6 access-list' --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ipv6 mld join-group {G};;end' --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ipv6 mld join-group {G};;end'
+  raw:
+  - regex: == REPLY SRC1 2001:db8:100:2::1 (?:8|9|10)\n
+  - regex: address-family ipv6[\s\S]*?accept-register \S+
+  - regex: '== SHOW P1: show running-config ipv6 access-list[\s\S]*?\bdeny ipv6 any any'
+  points: 8
+- name: M14-6 RCV3 receives an IPv6 channel in FF0E::16:0/112 from SRC1
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/mcast_probe.py XRT-16 run --group G=FF0E::16:0/112 --pre-cli 'RCV2:configure terminal;;interface Ethernet0/0;;ipv6 mld join-group {G};;end' --pre-cli 'RCV3:configure terminal;;interface Ethernet0/0;;ipv6 mld join-group
+    {G};;end' --settle 10 --warm 'SRC1:ping {G} repeat 3 timeout 1' --send 'SRC1:ping {G} repeat 10 timeout 1' --from 2001:db8:100:2::1 --from 2001:db8:100:3::1 --post-cli 'RCV2:configure terminal;;interface Ethernet0/0;;no ipv6 mld join-group {G};;end'
+    --post-cli 'RCV3:configure terminal;;interface Ethernet0/0;;no ipv6 mld join-group {G};;end'
+  raw:
+  - regex: == REPLY SRC1 2001:db8:100:3::1 (?:8|9|10)\n
+  points: 7

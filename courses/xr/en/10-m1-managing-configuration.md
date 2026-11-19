@@ -68,6 +68,8 @@ After a refused commit:
 `commit best-effort` is the alternative: it applies every line that can be applied and drops only the failing ones.
 Use it deliberately. It gives you a configuration that nobody typed as a whole.
 
+:::drill xr-m1-1
+
 ## 3. Every commit is recorded
 
 ```console
@@ -104,6 +106,8 @@ with the user and the command that displays it.
 This turns a familiar question around. On IOS, "what changed?" means comparing configurations and hoping someone
 kept an archive. On IOS XR you ask the router, and it tells you who, when, from which line, and exactly which lines.
 
+:::drill xr-m1-2
+
 ## 4. Going back
 
 There are two different operations, and the difference matters.
@@ -139,6 +143,8 @@ You can preview it from EXEC mode with `show configuration rollback changes <id>
 
 A rollback is itself recorded as a commit. Nothing is erased from the history.
 
+:::drill xr-m1-3 xr-m1-4
+
 ## 5. A commit that takes itself back
 
 The change that worries you most is the one that might cut off your own access. For that there is
@@ -161,6 +167,8 @@ Two details decide whether this works for you.
   The router does not wait for the timer. If your plan is "commit confirmed, drop out to EXEC, test, come back
   and confirm", the change is already gone by the time you test.
 - After an automatic rollback your target configuration is empty. The change is not kept for a second attempt.
+
+:::drill xr-m1-5
 
 ## 6. Replacing everything
 

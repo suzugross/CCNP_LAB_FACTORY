@@ -1,0 +1,201 @@
+# 実機の記録の再現の試験(cli_drill.py selftest が見えないブラウザで回す)。
+# run の最後のコマンドの出力のうち、実機の文言(dev)と公式文書の文言(doc)の行が expect と一致すること。
+# 末尾が ? の行は ? を押した時の一覧。help_ctx を書くと、期待は採った ? の一覧そのもの。
+# 盤面は J1 の単元の devices(JNT-02 の初めの設定)＋setup。出どころは name の括弧の中の記録。
+
+- name: show | compare の形(poc/junos/e2e/s1-1.log)
+  device: JUN01
+  setup:
+    - set policy-options policy-statement WIDE term ALL from route-filter 172.16.0.0/16 orlonger
+    - set policy-options policy-statement WIDE term ALL then accept
+    - set protocols ospf export WIDE
+  run:
+    - configure
+    - delete protocols ospf export
+    - delete policy-options policy-statement WIDE
+    - set policy-options policy-statement SERVERS-TO-OSPF term LAN from protocol direct
+    - set policy-options policy-statement SERVERS-TO-OSPF term LAN from route-filter 172.16.10.0/24 exact
+    - set policy-options policy-statement SERVERS-TO-OSPF term LAN then accept
+    - set policy-options policy-statement SERVERS-TO-OSPF term SRV from protocol static
+    - set policy-options policy-statement SERVERS-TO-OSPF term SRV from route-filter 172.16.20.0/24 exact
+    - set policy-options policy-statement SERVERS-TO-OSPF term SRV then metric 20
+    - set policy-options policy-statement SERVERS-TO-OSPF term SRV then accept
+    - set protocols ospf export SERVERS-TO-OSPF
+    - show | compare
+  expect: |-
+    [edit policy-options]
+    +   policy-statement SERVERS-TO-OSPF {
+    +       term LAN {
+    +           from {
+    +               protocol direct;
+    +               route-filter 172.16.10.0/24 exact;
+    +           }
+    +           then accept;
+    +       }
+    +       term SRV {
+    +           from {
+    +               protocol static;
+    +               route-filter 172.16.20.0/24 exact;
+    +           }
+    +           then {
+    +               metric 20;
+    +               accept;
+    +           }
+    +       }
+    +   }
+    -   policy-statement WIDE {
+    -       term ALL {
+    -           from {
+    -               route-filter 172.16.0.0/16 orlonger;
+    -           }
+    -           then accept;
+    -       }
+    -   }
+    [edit protocols ospf]
+    -   export WIDE;
+    +   export SERVERS-TO-OSPF;
+
+- name: 入れ物で終わる set(poc/junos/expJ1-chain.log)
+  device: JUN02
+  run: [configure, "set policy-options"]
+  expect: |2-
+                                    ^
+    missing argument.
+
+- name: 名前の並びの項目で終わる set(poc/junos/expJ1-rf.log)
+  device: JUN02
+  run: [configure, "set policy-options policy-statement LM2"]
+  expect: |2-
+                                                         ^
+    missing argument.
+
+- name: set protocols bgp ?(poc/junos/expJ1-base.log)
+  device: JUN02
+  run: [configure, "set protocols bgp ?"]
+  help_ctx: protocols bgp
+
+- name: set protocols bgp group ISP ?(poc/junos/expJ1-base.log)
+  device: JUN02
+  run: [configure, "set protocols bgp group ISP ?"]
+  help_ctx: protocols bgp group *
+
+- name: set policy-options ?(poc/junos/expJ1-chain.log)
+  device: JUN02
+  run: [configure, "set policy-options ?"]
+  help_ctx: policy-options
+
+- name: set policy-options policy-statement LM2 ?(poc/junos/expJ1-rf.log)
+  device: JUN02
+  run: [configure, "set policy-options policy-statement LM2 ?"]
+  help_ctx: policy-options policy-statement *
+
+- name: set interfaces et-0/0/0 ?(poc/junos/expJ0-misc.log)
+  device: JUN01
+  run: [configure, "set interfaces et-0/0/0 ?"]
+  help_ctx: interfaces *
+
+- name: commit のライセンスの warning(poc/junos/expJ1-examples.log)
+  device: JUN02
+  run: [configure, "set interfaces lo0 unit 0 description test", commit]
+  expect: |-
+    [edit protocols]
+      'bgp'
+        warning: requires 'BGP' license
+    [edit protocols]
+      'ospf'
+        warning: requires 'OSPF' license
+    commit complete
+
+- name: commit check と定義のないポリシー(poc/junos/expJ1-*.log)
+  device: JUN01
+  run: [configure, "set protocols ospf export NO-SUCH-POLICY", "commit check"]
+  expect: |-
+    [edit protocols]
+      'ospf'
+        warning: requires 'OSPF' license
+    [edit]
+      'policy-options'
+        Policy error: Policy NO-SUCH-POLICY referenced but not defined
+    error: configuration check-out failed
+
+- name: commit check と定義のない prefix-list(poc/junos/expJ1-*.log)
+  device: JUN01
+  run:
+    - configure
+    - set policy-options policy-statement P term t from prefix-list NO-SUCH-LIST
+    - set policy-options policy-statement P term t then accept
+    - commit check
+  expect: |-
+    [edit protocols]
+      'ospf'
+        warning: requires 'OSPF' license
+    [edit]
+      'policy-options'
+        Policy error: NO-SUCH-LIST prefix-list referenced (in term t) but not defined
+    error: configuration check-out failed
+
+- name: edit と show(poc/junos/expJ0-cli.log の形)
+  device: JUN01
+  run: [configure, "edit interfaces et-0/0/0 unit 0", show]
+  banner: "[edit interfaces et-0/0/0 unit 0]"
+  expect: |-
+    family inet {
+        address 10.0.12.1/30;
+    }
+
+- name: up と show(poc/junos/expJ0-cli.log の形)
+  device: JUN01
+  run: [configure, "edit interfaces et-0/0/0 unit 0", up, show]
+  banner: "[edit interfaces et-0/0/0]"
+  expect: |-
+    description "to JUN02";
+    unit 0 {
+        family inet {
+            address 10.0.12.1/30;
+        }
+    }
+
+- name: 書きかけを残して exit(poc/junos/expJ0-exit-yes.log)
+  device: JUN01
+  run: [configure, "set interfaces lo0 unit 0 description \"left behind by a\"", exit]
+  prompt: "Exit with uncommitted changes? [yes,no] (yes) "
+  expect: The configuration has been changed but not committed
+
+- name: yes で出る(poc/junos/expJ0-exit-yes.log)
+  device: JUN01
+  run: [configure, "set interfaces lo0 unit 0 description \"left behind by a\"", exit, "yes"]
+  prompt: "admin@jun01> "
+  expect: |-
+
+    Exiting configuration mode
+
+- name: 書きかけが残ったまま入り直す(poc/junos/expJ0-exit-yes.log)
+  device: JUN01
+  run: [configure, "set interfaces lo0 unit 0 description \"left behind by a\"", exit, "yes", configure]
+  expect: |-
+    Entering configuration mode
+    The configuration has been changed but not committed
+
+- name: rollback 0(poc/junos/expJ0-exit-yes.log)
+  device: JUN01
+  run: [configure, "set interfaces lo0 unit 0 description x", "rollback 0"]
+  expect: load complete
+
+- name: 無いものを delete(poc/junos/expJ1-*.log)
+  device: JUN02
+  run: [configure, "delete routing-options static"]
+  expect: "warning: statement not found"
+
+- name: 設定モードに入らずに set(poc/junos/expJ2-*.log)
+  device: JUN02
+  run: ["set firewall family inet filter FROM-ISP term RETURN from protocol tcp"]
+  expect: |2-
+                     ^
+    syntax error, expecting <command>.
+
+- name: 運用モードの知らないコマンド(poc/junos/expJ1-*.log)
+  device: JUN02
+  run: ["deactivate protocols bgp group ISP"]
+  expect: |2-
+                 ^
+    unknown command.

@@ -58,7 +58,7 @@
 ## M11 — L2VPN とキャリア イーサネット
 
 ### 課題 M11-1
-<p class="tolab"><a href="/_learn?id=XRT-11&amp;step=m11t1">ワークスペースで開く</a> — 読み物: <a href="b0-m11-e-line.html#s2-1">2.1 アタッチメント回線と疑似回線</a> · <a href="b0-m11-e-line.html#s2-2">2.2 1 ホップずつ: CEA1 から CEA2 へ</a> · <a href="b0-m11-e-line.html#s2-3">2.3 疑似回線のラベルを配る: targeted LDP</a> · <a href="b0-m11-e-line.html#s2-4">2.4 タグの扱い: rewrite と PW タイプ</a> · <a href="b0-m11-e-line.html#s3-1">3.1 設定の置き場</a></p>
+<p class="tolab"><a href="/_learn?id=XRT-11&amp;step=m11t1">ワークスペースで開く</a> — 読み物: <a href="b0-m11-e-line.html#s2-1">2.1 アタッチメント回線と疑似回線</a> · <a href="b0-m11-e-line.html#s2-2">2.2 1 ホップずつ: CEA1 から CEA2 へ</a> · <a href="b0-m11-e-line.html#s2-3">2.3 疑似回線ラベルを配る: targeted LDP</a> · <a href="b0-m11-e-line.html#s2-4">2.4 タグの扱い: rewrite と PW タイプ</a> · <a href="b0-m11-e-line.html#s3-1">3.1 設定の置き場</a></p>
 
 
 顧客 A は、レイヤ 3 VPN とは別に、サイト 1 とサイト 2 の間の E-Line を契約しました。サイト 2 側(RT02)は据え付け済みです。

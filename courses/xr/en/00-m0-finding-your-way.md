@@ -214,6 +214,8 @@ Uncommitted changes found, commit them before exiting(yes/no/cancel)? [cancel]:
 
 Unit M1 is about what this model lets you do. For now, remember two commands: `show configuration` and `commit`.
 
+:::drill xr-m0-1
+
 ## 6. The routing table
 
 ```console
@@ -304,6 +306,8 @@ Chapters you will want in this unit: *Implementing OSPF* and *Implementing Stati
 | `vrf definition X` + `vrf forwarding X` | `vrf X` + `vrf X` under the interface |
 | *(each line applies immediately)* | `commit` |
 | `write memory` | nothing — a commit is saved |
+
+:::drill xr-m0-2 xr-m0-3 xr-m0-4
 
 ## Practice
 
