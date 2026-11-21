@@ -9,7 +9,7 @@
 
 ## 候補1: サマリ化解法軸の追加 → BL-137
 
-- 元ネタ: [INE Advanced Route Redistribution Scenario (IEWB-RS Vol.II Lab2 Task 4.11)](https://ine.com/blog/2008-07-19-advanced-route-redistribution-scenario-iewb-rs-v41-vol-ii-lab-2-task-411)(無料記事・全文読解済)
+- 元ネタ: 再配送の定番題材を解説した公開記事(無料記事・全文読解済)
 - シナリオ: 外部EIGRP→OSPF→外部EIGRPの還流(AD 170→110→170)でループ。R3-R5がFR(プライマリ)、R4-R5がシリアル(バックアップ)。
 - **3解法の比較**が核:
   1. AD微調整 — OSPF側の該当経路をAD 171にして外部EIGRP(170)に負けさせる(最も細粒度)
@@ -52,6 +52,6 @@
 
 ## 参照素材の入手性まとめ
 
-- **無料**: INEブログ全記事(Part [I](https://blog.ine.com/2008/02/09/understanding-redistribution-part-i)/[II](https://ine.com/blog/2008-02-19-understanding-redistribution-part-ii)/[III](https://blog.ine.com/2008/03/17/understanding-redistribution-part-iii)・Advanced Scenario)、学術論文2本、Cisco TechNote([8606](https://www.cisco.com/c/en/us/support/docs/ip/enhanced-interior-gateway-routing-protocol-eigrp/8606-redist.html)/[49111](https://www.cisco.com/c/en/us/support/docs/ip/border-gateway-protocol-bgp/49111-route-map-bestp.html))、[Daniels blog](https://lostintransit.se/2012/01/30/route-redistribution-filtering-and-mitigating-loops/)
+- **無料**: 再配送を解説した公開ブログの連載(3 回)と応用シナリオの記事、学術論文2本、Cisco TechNote([8606](https://www.cisco.com/c/en/us/support/docs/ip/enhanced-interior-gateway-routing-protocol-eigrp/8606-redist.html)/[49111](https://www.cisco.com/c/en/us/support/docs/ip/border-gateway-protocol-bgp/49111-route-map-bestp.html))、[Daniels blog](https://lostintransit.se/2012/01/30/route-redistribution-filtering-and-mitigating-loops/)
 - **購入要**: CCIE EI 向けの市販の書籍(有料)。内容は上記無料素材+既存生成器で概ね代替可のため優先度低。有料のワークブック/ビデオはサブスク要だが、核心はブログで足りる。
 - Cisco Live: 再配送専門セッションは**実在せず**(BRKRST-2336/2337/2338はEIGRP/OSPF/IS-IS Deployment)。期待薄と確認済み。
