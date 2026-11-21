@@ -141,7 +141,7 @@ provision し、ホスト(10.1.10.6)を SSH/SNMP/syslog/FTP/SCP の相手にし�
 | RSA 鍵を消して **EC 鍵(`crypto key generate ec keysize 256`)だけ** | `show ip ssh`= Enabled(`ecdsa-sha2-nistp256` の hostkey)・ホストから SSH ログイン成功 |
 - 文書: Field Notice **FN-72511**= 「IOS XE **17.11.1 以降**、2048 ビット未満の RSA 鍵は SSH で拒否される(17.6.1 から警告)。アップグレード時に SSH サーバが無効化される。回避= 2048 鍵の再生成、または `crypto engine compliance shield disable`(非推奨)」。
   Catalyst 9300/9600 の 17.6/17.12/17.15 リリースノート= 「**Use SSH Version 2. SSH Version 1 is not supported.**」、17.10 から group14-sha1/hmac-sha1 等が既定リストから除外。
-- 結論: **「SSHv2 は 768 ビット以上」は旧 IOS/古い OCG の記述**。17.11 以降の実機では 2048 が下限で、しかも RSA 必須ですらない(EC 鍵で可)。
+- 結論: **「SSHv2 は 768 ビット以上」は旧 IOS/古い参考書の記述**。17.11 以降の実機では 2048 が下限で、しかも RSA 必須ですらない(EC 鍵で可)。
   出題は「鍵が要る」「v2 の既定」「dh min 2048」までを事実とし、**768/2048 の数値は版依存として裏話**に置く。
   「機器の画面に書いてある要件を読む」形(`%Please create EC or RSA keys ... (and of atleast 2048 bits for SSH v2 in case of RSA)`)なら版依存なしに出題できる。
 

@@ -53,5 +53,5 @@
 ## 参照素材の入手性まとめ
 
 - **無料**: INEブログ全記事(Part [I](https://blog.ine.com/2008/02/09/understanding-redistribution-part-i)/[II](https://ine.com/blog/2008-02-19-understanding-redistribution-part-ii)/[III](https://blog.ine.com/2008/03/17/understanding-redistribution-part-iii)・Advanced Scenario)、学術論文2本、Cisco TechNote([8606](https://www.cisco.com/c/en/us/support/docs/ip/enhanced-interior-gateway-routing-protocol-eigrp/8606-redist.html)/[49111](https://www.cisco.com/c/en/us/support/docs/ip/border-gateway-protocol-bgp/49111-route-map-bestp.html))、[Daniels blog](https://lostintransit.se/2012/01/30/route-redistribution-filtering-and-mitigating-loops/)
-- **購入要**: Narbik [CCIE EI Foundation](https://www.ciscopress.com/store/ccie-enterprise-infrastructure-foundation-9780137374243)(Cisco Press書籍・$60前後)。内容は上記無料素材+既存生成器で概ね代替可のため優先度低。INEワークブック/ビデオはサブスク要だが、核心はブログで足りる。
+- **購入要**: CCIE EI 向けの市販の書籍(有料)。内容は上記無料素材+既存生成器で概ね代替可のため優先度低。有料のワークブック/ビデオはサブスク要だが、核心はブログで足りる。
 - Cisco Live: 再配送専門セッションは**実在せず**(BRKRST-2336/2337/2338はEIGRP/OSPF/IS-IS Deployment)。期待薄と確認済み。

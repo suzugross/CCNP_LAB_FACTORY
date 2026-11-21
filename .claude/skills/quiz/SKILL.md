@@ -181,7 +181,7 @@ scripts/pack.sh close  --today                            # 全ラボ撤収
 
 ### 翻訳規約
 
-- **文体は Cisco 公式に寄せる**: Config Guide / ENARSI・ENCOR OCG / 試験シム問の言い回し。
+- **文体は Cisco 公式に寄せる**: Config Guide / ENARSI・ENCOR の定番の参考書 / 試験シム問の言い回し。
   「〜を設定しなさい」→ "Configure ...", 「〜を確認」→ "Verify that ...", 「〜禁止」→ "Do not use ... / ... is not allowed"。
 - **見出しはシム問体裁**: シナリオ→ "Scenario" / 要件→ "Requirements" / 制約・禁止事項→ "Restrictions" / 採点→ "Scoring" / 構成情報→ "Topology"。
   ★盤面の節(トポロジ／構成図)の見出しには必ず **Topology** を入れる("Topology" / "Topology (Physical)" 等)。

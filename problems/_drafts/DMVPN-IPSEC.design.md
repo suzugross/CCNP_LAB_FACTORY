@@ -20,7 +20,7 @@ PoC 結果詳細: [poc/dmvpn-ipsec/README.md](../../poc/dmvpn-ipsec/README.md)
   **2.3 Configure and verify DMVPN (single hub)** — 2.3.a GRE/mGRE / 2.3.b NHRP /
   **2.3.c IPsec** / 2.3.d Dynamic neighbor / 2.3.e Spoke-to-spoke。
   **IKE のバージョン指定は無い**（ブループリント全文に IKEv1/IKEv2 の語は登場しない）。
-- ENARSI 公式教科書（OCG）**Ch.20 "Securing DMVPN Tunnels"** は
+- ENARSI の定番の参考書の **DMVPN の暗号化の章**は
   `crypto ikev2 keyring → ikev2 profile → transform-set(mode transport) →
   ipsec profile → tunnel protection` の **IKEv2 構成**で解説 = 試験対策上の標準。
 - リポ住み分け: IKEv1 は ENARSI-IPSEC-VTI-01 / ENARSI-GREIPSEC-MAP-01 で既カバー。

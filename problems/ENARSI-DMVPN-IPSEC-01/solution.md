@@ -109,7 +109,7 @@ traceroute 3.3.3.3 source Lo0       ! 直結成立後は 1 ホップ
   **wildcard keyring (`address 0.0.0.0 0.0.0.0`) + `match identity remote address 0.0.0.0`**
   が必須。
 - **transport mode の意味**: GRE で既に外側 IP が付くため tunnel mode の外側 IP 20B は
-  純粋な無駄（OCG も transport を推奨）。なお **両端で mode が食い違っても不通には
+  純粋な無駄（定番の参考書も transport を推奨）。なお **両端で mode が食い違っても不通には
   ならず Tunnel mode に合意して上がる**（実機確認済）— 「動くから OK」ではなく
   `show crypto ipsec sa` の `in use settings ={Transport, }` で仕様適合を確認する癖を。
 - **tunnel protection は 3 拠点全部に**。片側だけ欠けると hub が平文 GRE を破棄し
