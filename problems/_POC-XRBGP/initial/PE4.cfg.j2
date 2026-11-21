@@ -1,0 +1,61 @@
+!! _POC-XRBGP PE4(XRv9000 26.1.1)= 入口の PE(XRv9000)。PIC のデータプレーンを XRd と比べる。
+interface Loopback0
+ ipv4 address 10.255.0.4 255.255.255.255
+!
+interface {{ links[3] }}
+ description to P1
+ ipv4 address 10.0.4.4 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description to CE4 (AS 65004)
+ ipv4 address 172.16.4.254 255.255.255.0
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0004.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+!
+mpls ldp
+ router-id 10.255.0.4
+ interface {{ links[3] }}
+ !
+!
+route-policy PASS
+  pass
+end-policy
+!
+router bgp 65000
+ bgp router-id 10.255.0.4
+ address-family ipv4 unicast
+ !
+ neighbor 10.255.0.21
+  remote-as 65000
+  description RR1
+  update-source Loopback0
+  address-family ipv4 unicast
+   next-hop-self
+  !
+ !
+ neighbor 172.16.4.1
+  remote-as 65004
+  address-family ipv4 unicast
+   route-policy PASS in
+   route-policy PASS out
+  !
+ !
+!

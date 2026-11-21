@@ -1,0 +1,180 @@
+
+######## 08:35:38 ttl1: XR(PE2)だけに ttl-security → clear → 状態(公式= OpenSent/OpenConfirm で止まる・RFC は片側を書いていない)。PE2─X1 のパケットを捕まえて TTL を見る
+SSL Verification disabled
+{'config': {'maxpackets': 2000, 'maxtime': 600, 'bpfilter': 'tcp port 179', 'encap': 'ethernet', 'link_capture_key': 'caf60e35-1c34-4f17-a0b5-f9fa2e3d4518'}, 'starttime': '2026-11-21T08:35:39Z', 'packetscaptured': 0}
+configure
+Sat Nov 21 08:35:40.524 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE2(config-bgp)#
+neighbor 172.16.2.1
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+ttl-security
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+commit
+Sat Nov 21 08:35:42.265 UTC
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+show configuration failed
+Sat Nov 21 08:35:42.677 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+end
+RP/0/RP0/CPU0:PE2#
+clear bgp 172.16.2.1
+Sat Nov 21 08:35:45.700 UTC
+RP/0/RP0/CPU0:PE2#
+show bgp neighbor 172.16.2.1 | include BGP state|TTL|ttl|hop|Last reset|password|authentication|Connections
+                                                                   ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:PE2#
+show ip bgp summary | include 172.16.2.254
+172.16.2.254    4        65000       0       0        1    0    0 00:00:43 Idle
+X1#
+show ip bgp neighbors 172.16.2.254 | include BGP state|hops|TTL|Last reset|password|Option
+  BGP state = Idle, down for 00:00:43
+  Last reset 00:00:43, due to Active open failed
+X1#
+
+######## 08:36:29 ttl2: X1 にも neighbor ttl-security hops 1 → clear → 確立するか
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+X1(config)#
+router bgp 65100
+X1(config-router)#
+neighbor 172.16.2.254 ttl-security hops 1
+X1(config-router)#
+end
+X1#
+clear ip bgp 172.16.2.254
+X1#
+show bgp neighbor 172.16.2.1 | include BGP state|TTL|ttl|hop|Last reset|password|authentication|Connections
+                                                                   ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:PE2#
+show ip bgp summary | include 172.16.2.254
+172.16.2.254    4        65000       5       9      106    0    0 00:00:35        2
+X1#
+show ip bgp neighbors 172.16.2.254 | include BGP state|hops|TTL|Last reset|password|Option
+  BGP state = Established, up for 00:00:35
+  Last reset 00:01:31, due to Active open failed
+Connection is ECN Disabled, Mininum incoming TTL 254, Outgoing TTL 255
+Option Flags: nagle, path mtu capable, win-scale
+X1#
+SSL Verification disabled
+saved poc/xr/expBGPOPS-ttl.pcap 200 5204
+   14       172.16.2.1 -> 172.16.2.254    ttl 1
+   16       172.16.2.1 -> 172.16.2.254    ttl 255
+    1     172.16.2.254 -> 172.16.2.1      ttl 1
+   19     172.16.2.254 -> 172.16.2.1      ttl 255
+
+######## 08:37:20 ttl3: XR で ttl-security と ebgp-multihop を同居させる(公式= 許す・ttl-security が勝つ)/IOS で同居させる(公式= 排他でエラー)
+configure
+Sat Nov 21 08:37:21.377 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE2(config-bgp)#
+neighbor 172.16.2.1
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+ebgp-multihop 2
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+commit
+Sat Nov 21 08:37:23.111 UTC
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+show configuration failed
+Sat Nov 21 08:37:23.510 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+end
+RP/0/RP0/CPU0:PE2#
+show running-config router bgp 65000 neighbor 172.16.2.1
+Sat Nov 21 08:37:26.319 UTC
+router bgp 65000
+ neighbor 172.16.2.1
+  remote-as 65100
+  ebgp-multihop 2
+  ttl-security
+  address-family ipv4 unicast
+   route-policy FROM-X1 in
+   route-policy PASS out
+  !
+ !
+!
+
+RP/0/RP0/CPU0:PE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+X1(config)#
+router bgp 65100
+X1(config-router)#
+neighbor 172.16.2.254 ebgp-multihop 2
+Remove ttl-security before configuring ebgp-multihop
+X1(config-router)#
+end
+X1#
+show running-config | section router bgp
+router bgp 65100
+ bgp router-id 10.100.255.1
+ bgp log-neighbor-changes
+ neighbor 10.100.255.2 remote-as 65100
+ neighbor 10.100.255.2 update-source Loopback0
+ neighbor 172.16.2.254 remote-as 65000
+ neighbor 172.16.2.254 ttl-security hops 1
+ !
+ address-family ipv4
+  network 203.0.113.0
+  neighbor 10.100.255.2 activate
+  neighbor 10.100.255.2 next-hop-self
+  neighbor 172.16.2.254 activate
+ exit-address-family
+X1#
+
+######## 08:37:30 ttl4: 片付け(両側から外す)
+configure
+Sat Nov 21 08:37:32.000 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE2(config-bgp)#
+neighbor 172.16.2.1
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+no ebgp-multihop
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+no ttl-security
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+commit
+Sat Nov 21 08:37:34.131 UTC
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+show configuration failed
+Sat Nov 21 08:37:34.637 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+end
+RP/0/RP0/CPU0:PE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+X1(config)#
+router bgp 65100
+X1(config-router)#
+no neighbor 172.16.2.254 ebgp-multihop
+X1(config-router)#
+no neighbor 172.16.2.254 ttl-security hops 1
+X1(config-router)#
+end
+X1#
+clear ip bgp 172.16.2.254
+X1#
+show bgp neighbor 172.16.2.1 | include BGP state|TTL|ttl|hop|Last reset|password|authentication|Connections
+                                                                   ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:PE2#
+show ip bgp summary | include 172.16.2.254
+172.16.2.254    4        65000       0       0        1    0    0 00:00:42 Idle
+X1#
+show ip bgp neighbors 172.16.2.254 | include BGP state|hops|TTL|Last reset|password|Option
+  BGP state = Idle, down for 00:00:43
+  Last reset 00:00:43, due to Peer closed the session
+X1#
+poc/xr/bgpops_poc.sh: line 238: syntax error near unexpected token `('
+poc/xr/bgpops_poc.sh: line 238: `  H "auth2: X1 にも neighbor password LAB-MD5 → 確立するか(XR と IOS の MD5)"'

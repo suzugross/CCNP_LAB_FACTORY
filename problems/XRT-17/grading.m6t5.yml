@@ -1,0 +1,23 @@
+# M6-5: 追加パス。白紙= PE3 は X2 の経路を出さない → 0 点(2 つ目も PE1 が 2 本を持つことを条件にした)。
+# 確認は poc/xr/gen_grading_xrt17.py で組んだ(中身を直したら組み直す)。道具= topologies/bgpops_probe.py。
+problem: XRT-17
+total_points: 100
+checks:
+- name: M6-5 RR1 receives PE3's path through X2 as an additional path, and PE1 learns it as a second path
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --show 'RR1:show bgp 203.0.113.0/24' --show 'PE1:show bgp 203.0.113.0/24'
+  raw:
+  - regex: '== SHOW RR1: show\ bgp\ 203\.0\.113\.0/24\n(?:(?!== )[\s\S])*?from 10\.255\.0\.3 \(10\.255\.0\.3\)\n\s+Origin[^\n]*add-path\n\s+Received Path ID [1-9]'
+  - regex: '== SHOW PE1: show\ bgp\ 203\.0\.113\.0/24\n(?:(?!== )[\s\S])*?from 10\.255\.0\.21 \(10\.255\.0\.3\)\n\s+Origin[^\n]*\n\s+Received Path ID [1-9]'
+  points: 60
+- name: M6-5 The path through PE2 is still the best on PE1 and PE3, and PE3 does not use best-external
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --show 'PE1:show bgp 203.0.113.0/24' --show 'PE3:show bgp 203.0.113.0/24' --show 'PE3:show running-config router bgp'
+  raw:
+  - regex: '== SHOW PE1: show\ bgp\ 203\.0\.113\.0/24\n(?:(?!== )[\s\S])*?Paths: \(2 available, best #1\)'
+  - regex: '== SHOW PE1: show\ bgp\ 203\.0\.113\.0/24\n(?:(?!== )[\s\S])*?from 10\.255\.0\.21 \(10\.255\.0\.2\)\n\s+Origin[^\n]*localpref 200, valid, internal, best'
+  - regex: '== SHOW PE3: show\ bgp\ 203\.0\.113\.0/24\n(?:(?!== )[\s\S])*?from 10\.255\.0\.21 \(10\.255\.0\.2\)\n\s+Origin[^\n]*localpref 200, valid, internal, best'
+  - not_regex: best-external
+  points: 40

@@ -1,0 +1,21 @@
+# M6-10: ダンプニングと集約。白紙= なし → 0 点。確認は X1 から PE2 への 198.51.100.0/24 を 3 回揺らし、PE2 のダンプニングを消す。
+# 確認は poc/xr/gen_grading_xrt17.py で組んだ(中身を直したら組み直す)。道具= topologies/bgpops_probe.py。
+problem: XRT-17
+total_points: 100
+checks:
+- name: M6-10 After three flaps of 198.51.100.0/24 from X1, PE2 suppresses it (half-life 10 minutes)
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --flap 'X1:172.16.2.254:198.51.100.0/24:3:5' --wait 5 --after 'PE2:show bgp 198.51.100.0/24' --post 'PE2:@clear bgp ipv4 unicast dampening'
+  raw:
+  - regex: \(suppressed due to dampening\)\n\s+172\.16\.2\.1 from 172\.16\.2\.1[\s\S]*?half life 00:10:00
+  points: 50
+- name: M6-10 X1 and X2 receive 192.168.0.0/22 from PE2 and PE3, and none of the /24 routes inside it
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --show 'X1:show ip bgp neighbors 172.16.2.254 routes' --show 'X2:show ip bgp neighbors 172.16.3.254 routes'
+  raw:
+  - regex: '== SHOW X1: show\ ip\ bgp\ neighbors\ 172\.16\.2\.254\ routes\n(?:(?!== )[\s\S])*?192\.168\.0\.0/22\s+172\.16\.2\.254'
+  - regex: '== SHOW X2: show\ ip\ bgp\ neighbors\ 172\.16\.3\.254\ routes\n(?:(?!== )[\s\S])*?192\.168\.0\.0/22\s+172\.16\.3\.254'
+  - not_regex: \n\s*\S*\s+192\.168\.[12]\.0(?:/24)?\s+172\.16\.[23]\.254
+  points: 50

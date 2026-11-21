@@ -1,0 +1,999 @@
+
+######## 09:53:52 s6: PIC(PE1= backup 1 install・PE3= 予備の自分の eBGP も install)
+configure
+Sat Nov 21 09:53:52.526 UTC
+RP/0/RP0/CPU0:PE1(config)#
+route-policy PIC
+RP/0/RP0/CPU0:PE1(config-rpl)#
+  set path-selection backup 1 install
+RP/0/RP0/CPU0:PE1(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:PE1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE1(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+additional-paths selection route-policy PIC
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+commit
+Sat Nov 21 09:53:55.461 UTC
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+show configuration failed
+Sat Nov 21 09:53:56.387 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+end
+RP/0/RP0/CPU0:PE1#
+configure
+Sat Nov 21 09:54:00.489 UTC
+RP/0/RP0/CPU0:PE3(config)#
+route-policy ADDPATH-OUT
+Sat Nov 21 09:54:01.106 UTC
+% WARNING: Policy object route-policy ADDPATH-OUT exists! Reconfiguring it via CLI will replace current definition. Use abort to cancel.
+RP/0/RP0/CPU0:PE3(config-rpl)#
+  set path-selection backup 1 advertise install
+RP/0/RP0/CPU0:PE3(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:PE3(config)#
+commit
+Sat Nov 21 09:54:02.329 UTC
+RP/0/RP0/CPU0:PE3(config)#
+show configuration failed
+Sat Nov 21 09:54:02.739 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE3(config)#
+end
+RP/0/RP0/CPU0:PE3#
+show bgp 203.0.113.0/24
+Sat Nov 21 09:54:19.748 UTC
+BGP routing table entry for 203.0.113.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 12           12
+Last Modified: Nov 21 09:53:57.541 for 00:00:22
+Paths: (2 available, best #1)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    172.16.1.1      
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    172.16.1.1      
+  65100
+    10.255.0.2 (metric 20) from 10.255.0.21 (10.255.0.2)
+      Origin IGP, metric 11, localpref 200, valid, internal, best, group-best
+      Received Path ID 1, Local Path ID 1, version 9
+      Originator: 10.255.0.2, Cluster list: 10.255.0.21
+  Path #2: Received by speaker 0
+  Not advertised to any peer
+  65100
+    10.255.0.3 (metric 20) from 10.255.0.21 (10.255.0.3)
+      Origin IGP, metric 11, localpref 100, valid, internal, backup, add-path
+      Received Path ID 2, Local Path ID 2, version 12
+      Originator: 10.255.0.3, Cluster list: 10.255.0.21
+RP/0/RP0/CPU0:PE1#
+show route 203.0.113.0/24 detail
+Sat Nov 21 09:54:20.158 UTC
+
+Routing entry for 203.0.113.0/24
+  Known via "bgp 65000", distance 200, metric 11
+  Tag 65100
+  Number of pic paths 1 , type internal
+  Installed Nov 21 09:53:57.531 for 00:00:22
+  Routing Descriptor Blocks
+    10.255.0.2, from 10.255.0.21
+      Route metric is 11, Wt is 1
+      Label: None
+      Tunnel ID: None
+      Binding Label: None
+      Extended communities count: 0
+      NHID: 0x0 (Ref: 0)
+      Path Grouping ID: 65000
+    10.255.0.3, from 10.255.0.21, BGP backup path
+      Route metric is 11, Wt is 1
+      Label: None
+      Tunnel ID: None
+      Binding Label: None
+      Extended communities count: 0
+      NHID: 0x0 (Ref: 0)
+      Path Grouping ID: 65000
+  Route version is 0x6 (6)
+  No local label
+  IP Precedence: Not Set
+  QoS Group ID: Not Set
+  Flow-tag: Not Set
+  Fwd-class: Not Set
+  Route Priority: RIB_PRIORITY_RECURSIVE_SVD_REM (16) SVD Type RIB_SVD_TYPE_LOCAL
+  Download Priority 4, Download Version 29
+  No advertising protos. 
+RP/0/RP0/CPU0:PE1#
+show cef 203.0.113.0/24 detail
+Sat Nov 21 09:54:20.557 UTC
+203.0.113.0/24, version 29, internal 0x5000001 0x40 (ptr 0xf79d270) [1], 0x400 (0xf92ee58), 0x0 (0x0)
+ Updated Nov 21 09:53:57.545
+ Prefix Len 24, traffic index 0, precedence n/a, priority 4
+  gateway array (0xf7c7be8) reference count 2, flags 0x100010, source rib (7), 0 backups
+                [3 type 3 flags 0x8441 (0xf86ad50) ext 0x0 (0x0)]
+  LW-LDI[type=3, refc=1, ptr=0xf92ee58, sh-ldi=0xf86ad50]
+  gateway array update type-time 1 Nov 21 09:53:57.534
+ LDI Update time Nov 21 09:53:57.545
+ LW-LDI-TS Nov 21 09:53:57.545
+
+    Weight distribution:
+    slot 0, weight 1, normalized_weight 1
+
+  Level 1 - Load distribution: 0
+  [0] via 10.255.0.2/32, recursive
+
+   via 10.255.0.2/32, 3 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xf79e080 0x0], Internal 0x110e10a0
+    next hop 10.255.0.2/32 via 10.255.0.2/32
+
+    Load distribution: 0 (refcount 3)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    remote         
+
+   via 10.255.0.3/32, 2 dependencies, recursive, backup [flags 0x6100]
+    path-idx 1 NHID 0x0 [0xf79e140 0x0]
+    next hop 10.255.0.3/32 via 10.255.0.3/32
+
+
+RP/0/RP0/CPU0:PE1#
+show cef 203.0.113.0/24 detail
+Sat Nov 21 09:54:23.134 UTC
+203.0.113.0/24, version 45, internal 0x5000001 0x40 (ptr 0x8852af00) [1], 0x0 (0x0), 0x0 (0x0)
+ Updated Nov 21 09:54:02.387 
+ local adjacency to GigabitEthernet0/0/0/0
+
+ Prefix Len 24, traffic index 0, precedence n/a, priority 4
+  gateway array (0x89725df8) reference count 2, flags 0x102010, source rib (7), 0 backups
+                [1 type 3 flags 0x68501 (0x897c8e58) ext 0x218 (0x8a548218) (collapsed)]
+  LW-LDI[type=0, refc=0, ptr=0x0, sh-ldi=0x0]
+  gateway array update type-time 1 Nov 21 09:54:02.377
+ LDI Update time Nov 21 09:54:02.387
+   via 10.255.0.2/32, 2 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0x88531068 0x0], Internal 0x8aad50a0
+    next hop 10.255.0.2/32 via 10.255.0.2/32
+   via 172.16.3.1/32, 2 dependencies, recursive, bgp-ext, backup [flags 0x6120]
+    path-idx 1 NHID 0x0 [0x88539800 0x0]
+    next hop 172.16.3.1/32 via 172.16.3.1/32
+
+    Weight distribution:
+    slot 0, weight 1, normalized_weight 1, class 0
+    Load distribution: 0 (refcount 1)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    10.0.3.11      
+RP/0/RP0/CPU0:PE3#
+
+######## 09:54:23 s7: GTSM(PE2= ttl-security・X1= ttl-security hops 1)
+configure
+Sat Nov 21 09:54:24.941 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE2(config-bgp)#
+neighbor 172.16.2.1
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+ttl-security
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+commit
+Sat Nov 21 09:54:26.773 UTC
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+show configuration failed
+Sat Nov 21 09:54:27.173 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+end
+RP/0/RP0/CPU0:PE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+X1(config)#
+router bgp 65100
+X1(config-router)#
+neighbor 172.16.2.254 ttl-security hops 1
+X1(config-router)#
+end
+X1#
+clear bgp 172.16.2.1
+Sat Nov 21 09:54:32.914 UTC
+RP/0/RP0/CPU0:PE2#
+show bgp neighbor 172.16.2.1
+Sat Nov 21 09:55:14.620 UTC
+
+BGP neighbor is 172.16.2.1
+ Remote AS 65100, local AS 65000, external link
+ Remote router ID 10.100.255.1
+  BGP state = Established, up for 00:00:40
+  Previous State: Idle
+  Last Received Message: Update
+  NSR State: None
+  Last read 00:00:10, Last read before reset 00:01:25
+  Hold time is 180, keepalive interval is 60 seconds
+  Configured hold time: 180, keepalive: 60, min acceptable hold time: 3
+  Last write 00:00:40, attempted 78, written 78
+  Second last write 00:00:40, attempted 19, written 19
+  Last write before reset 00:00:55, attempted 19, written 19
+  Second last write before reset 00:01:55, attempted 55, written 55
+  Last write pulse rcvd  Nov 21 09:55:04.511 last full not set pulse count 30
+  Last write pulse rcvd before reset 00:01:25
+  Last insert into reset queue: Nov 21 09:54:32.968, removed at Nov 21 09:54:32.968
+  Socket not armed for io, armed for read, armed for write
+  Last write thread event before reset 00:00:55, second last 00:00:55
+  Last KA expiry before reset 00:00:55, second last 00:03:10
+  Last KA error before reset 00:00:00, KA not sent 00:00:00
+  Last KA start before reset 00:00:55, second last 00:01:55
+  Precedence: internet
+  Non-stop routing is enabled
+  Enforcing first AS is enabled
+  Multi-protocol capability received
+  Neighbor capabilities:
+    Route refresh: advertised (old + new) and received (old + new)
+    4-byte AS: advertised and received
+    Address family IPv4 Unicast: advertised and received
+  Received 25 messages, 0 notifications, 0 in queue
+  Sent 21 messages, 1 notifications, 0 in queue
+  Minimum time between advertisement runs is 30 secs
+  Inbound message logging enabled, 4 messages buffered
+  Outbound message logging enabled, 4 messages buffered
+  Fast fallover is enabled
+    Neighbor is directly connected
+    Neighbor fast-fallover is not configured
+    Neighbor is external and fast-external-fallover is not disabled
+
+ For Address Family: IPv4 Unicast
+  BGP neighbor version 19
+  BGP neighbor quick-withdraw version 19
+  Update group: 0.3 Filter-group: 0.3  No Refresh request being processed
+  AF-dependent capabilities:
+    Extended Nexthop Encoding: advertised
+  Route refresh request: received 0, sent 0
+  Policy for incoming advertisements is FROM-X1
+  Policy for outgoing advertisements is PASS
+  2 accepted prefixes, 2 are bestpaths
+  Exact no. of prefixes denied: 0
+  Cumulative no. of prefixes denied: 0
+  Prefix advertised 2, suppressed 0, withdrawn 0
+  An EoR was received during read-only mode
+  Last ack version 0, Last synced ack version 0
+  Outstanding version objects: current 1, max 2, refresh 0
+  Additional-paths operation: None
+  Advertise routes with local-label via Unicast SAFI
+  Slow Peer State: Detection-only
+    Detected state: FALSE, Detection threshold: 300
+    Detection Count: 0, Recovery Count: 0
+
+  Connections established 2; dropped 1
+  Local host: 172.16.2.254, Local port: 19873, IF Handle: 0x00000030
+  Foreign host: 172.16.2.1, Foreign port: 179
+  Last reset 00:00:41, due to User clear requested (CEASE notification sent - administrative reset)
+  Time since last notification sent to neighbor: 00:00:41
+  Error Code: administrative reset
+  Notification data sent:
+    None
+  TTL security is configured
+RP/0/RP0/CPU0:PE2#
+show running-config router bgp 65000 neighbor 172.16.2.1
+Sat Nov 21 09:55:15.035 UTC
+router bgp 65000
+ neighbor 172.16.2.1
+  remote-as 65100
+  ttl-security
+  address-family ipv4 unicast
+   route-policy FROM-X1 in
+   route-policy PASS out
+  !
+ !
+!
+
+RP/0/RP0/CPU0:PE2#
+show ip bgp neighbors 172.16.2.254
+BGP neighbor is 172.16.2.254,  remote AS 65000, external link
+  BGP version 4, remote router ID 10.255.0.2
+  BGP state = Established, up for 00:00:42
+  Last read 00:00:42, last write 00:00:12, hold time is 180, keepalive interval is 60 seconds
+  Last update received: 00:00:42
+  Neighbor sessions:
+    1 active, is not multisession capable (disabled)
+  Neighbor capabilities:
+    Route refresh: advertised and received(new)
+    Four-octets ASN Capability: advertised and received
+    Address family IPv4 Unicast: advertised and received
+    Enhanced Refresh Capability: advertised
+    Extended Next Hop Encoding Capability:
+        IPv4 Unicast: received
+        VPNv4 Unicast: received
+        IPv4 Multicast: received
+    Multisession Capability: 
+    Stateful switchover support enabled: NO for session 1
+  Message statistics:
+    InQ depth is 0
+    OutQ depth is 0
+    
+                         Sent       Rcvd
+    Opens:                  1          1
+    Notifications:          0          0
+    Updates:                5          2
+    Keepalives:             2          1
+    Route Refresh:          0          0
+    Total:                  8          4
+  Do log neighbor state changes (via global configuration)
+  Default minimum time between advertisement runs is 30 seconds
+
+ For address family: IPv4 Unicast
+  Session: 172.16.2.254
+  BGP table version 13, neighbor version 13/0
+  Output queue size : 0
+  Index 3, Advertise bit 1
+  3 update-group member
+  Slow-peer detection is disabled
+  Slow-peer split-update-group dynamic is disabled
+                                 Sent       Rcvd
+  Prefix activity:               ----       ----
+    Prefixes Current:               2          2 (Consumes 272 bytes)
+    Prefixes Total:                 4          2
+    Implicit Withdraw:              0          0
+    Explicit Withdraw:              2          0
+    Used as bestpath:             n/a          2
+    Used as multipath:            n/a          0
+    Used as secondary:            n/a          0
+
+                                   Outbound    Inbound
+  Local Policy Denied Prefixes:    --------    -------
+    Bestpath from this peer:              2        n/a
+    Total:                                2          0
+  Number of NLRIs in the update sent: max 2, min 0
+  Current session network count peaked at 2 entries at 09:54:33 Nov 21 2026 UTC (00:00:43.516 ago)
+  Highest network count observed at 2 entries at 09:51:03 Nov 21 2026 UTC (00:04:13.516 ago)
+  Last detected as dynamic slow peer: never
+  Dynamic slow peer recovered: never
+  Refresh Epoch: 1
+  Last Sent Refresh Start-of-rib: never
+  Last Sent Refresh End-of-rib: never
+  Last Received Refresh Start-of-rib: never
+  Last Received Refresh End-of-rib: never
+				       Sent	  Rcvd
+	Refresh activity:	       ----	  ----
+	  Refresh Start-of-RIB          0          0
+	  Refresh End-of-RIB            0          0
+
+  Address tracking is enabled, the RIB does have a route to 172.16.2.254
+  Route to peer address reachability Up: 1; Down: 0
+    Last notification 00:13:23
+  Connections established 2; dropped 1
+  Last reset 00:00:43, due to BGP Notification received of session 1, Administrative Reset
+  External BGP neighbor may be up to 1 hop away.
+  External BGP neighbor configured for connected checks (single-hop no-disable-connected-check)
+  Interface associated: Ethernet0/0 (peering address in same link)
+  Transport(tcp) path-mtu-discovery is enabled
+  Graceful-Restart is disabled
+  SSO is disabled
+Connection state is ESTAB, I/O status: 1, unread input bytes: 0            
+Connection is ECN Disabled, Mininum incoming TTL 254, Outgoing TTL 255
+Local host: 172.16.2.1, Local port: 179
+Foreign host: 172.16.2.254, Foreign port: 19873
+Connection tableid (VRF): 0
+Maximum output segment queue size: 50
+
+Enqueued packets for retransmit: 0, input: 0  mis-ordered: 0 (0 bytes)
+
+Event Timers (current time is 0xC4D54):
+Timer          Starts    Wakeups            Next
+Retrans             4          0             0x0
+TimeWait            0          0             0x0
+AckHold             3          1             0x0
+SendWnd             0          0             0x0
+KeepAlive           0          0             0x0
+GiveUp              0          0             0x0
+PmtuAger            0          0             0x0
+DeadWait            0          0             0x0
+Linger              0          0             0x0
+ProcessQ            0          0             0x0
+
+iss: 2444295804  snduna: 2444296121  sndnxt: 2444296121
+irs: 4289068408  rcvnxt: 4289068581
+
+sndwnd:  32452  scale:      0  maxrcvwnd:  16384
+rcvwnd:  16212  scale:      0  delrcvwnd:    172
+
+SRTT: 413 ms, RTTO: 3205 ms, RTV: 2792 ms, KRTT: 0 ms
+minRTT: 1 ms, maxRTT: 1000 ms, ACK hold: 120 ms
+uptime: 42697 ms, Sent idletime: 12007 ms, Receive idletime: 11805 ms 
+Status Flags: passive open, gen tcbs
+Option Flags: nagle, path mtu capable, win-scale
+IP Precedence value : 6
+Window update Optimisation : Enabled
+ACK Optimisation : Dynamic ACK Tuning Enabled
+
+Datagrams (max data segment is 1460 bytes):
+Peer MSS:       1460
+Rcvd: 12 (out of order: 0), with data: 3, total data bytes: 172
+Sent: 14 (retransmit: 0, fastretransmit: 0, partialack: 0, Second Congestion: 0), with data: 5, total data bytes: 316
+
+ Packets received in fast path: 0, fast processed: 0, slow path: 0
+ fast lock acquisition failures: 0, slow path: 0
+TCP Semaphore      0x761012E6AAE0  FREE 
+X1#
+show ip bgp summary
+BGP router identifier 10.100.255.1, local AS number 65100
+BGP table version is 13, main routing table version 13
+4 network entries using 992 bytes of memory
+7 path entries using 952 bytes of memory
+5/3 BGP path/bestpath attribute entries using 1480 bytes of memory
+1 BGP AS-PATH entries using 40 bytes of memory
+0 BGP route-map cache entries using 0 bytes of memory
+0 BGP filter-list cache entries using 0 bytes of memory
+BGP using 3464 total bytes of memory
+BGP activity 4/0 prefixes, 13/6 paths, scan interval 60 secs
+4 networks peaked at 09:51:03 Nov 21 2026 UTC (00:04:13.988 ago)
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.100.255.2    4        65100      20      21       13    0    0 00:12:39        3
+172.16.2.254    4        65000       4       8       13    0    0 00:00:43        2
+X1#
+
+######## 09:55:17 s8: TCP-AO(PE3 と X2)
+configure
+Sat Nov 21 09:55:18.647 UTC
+RP/0/RP0/CPU0:PE3(config)#
+key chain AS65100-AO
+RP/0/RP0/CPU0:PE3(config-AS65100-AO)#
+key 7
+RP/0/RP0/CPU0:PE3(config-AS65100-AO-7)#
+key-string clear 5A3C9E107B2D4F6681A0C3E5F7092B4D
+RP/0/RP0/CPU0:PE3(config-AS65100-AO-7)#
+cryptographic-algorithm AES-128-CMAC-96
+RP/0/RP0/CPU0:PE3(config-AS65100-AO-7)#
+accept-lifetime 00:00:00 january 01 2026 infinite
+RP/0/RP0/CPU0:PE3(config-AS65100-AO-7)#
+send-lifetime 00:00:00 january 01 2026 infinite
+RP/0/RP0/CPU0:PE3(config-AS65100-AO-7)#
+exit
+RP/0/RP0/CPU0:PE3(config-AS65100-AO)#
+exit
+RP/0/RP0/CPU0:PE3(config)#
+tcp ao
+RP/0/RP0/CPU0:PE3(config-tcp-ao)#
+keychain AS65100-AO
+RP/0/RP0/CPU0:PE3(config-tcp-ao-AS65100-AO)#
+key 7 SendID 37 ReceiveID 73
+RP/0/RP0/CPU0:PE3(config-tcp-ao-AS65100-AO)#
+exit
+RP/0/RP0/CPU0:PE3(config-tcp-ao)#
+exit
+RP/0/RP0/CPU0:PE3(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE3(config-bgp)#
+neighbor 172.16.3.1
+RP/0/RP0/CPU0:PE3(config-bgp-nbr)#
+ao AS65100-AO include-tcp-options enable
+RP/0/RP0/CPU0:PE3(config-bgp-nbr)#
+commit
+Sat Nov 21 09:55:25.654 UTC
+RP/0/RP0/CPU0:PE3(config-bgp-nbr)#
+show configuration failed
+Sat Nov 21 09:55:26.452 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE3(config-bgp-nbr)#
+end
+RP/0/RP0/CPU0:PE3#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+X2(config)#
+key chain AS65100-AO tcp
+X2(config-keychain-tcp)#
+key 7
+X2(config-keychain-tcp-key)#
+send-id 73
+X2(config-keychain-tcp-key)#
+recv-id 37
+X2(config-keychain-tcp-key)#
+key-string 5A3C9E107B2D4F6681A0C3E5F7092B4D
+X2(config-keychain-tcp-key)#
+cryptographic-algorithm aes-128-cmac
+X2(config-keychain-tcp-key)#
+exit
+X2(config-keychain-tcp)#
+exit
+X2(config)#
+router bgp 65100
+X2(config-router)#
+neighbor 172.16.3.254 ao AS65100-AO include-tcp-options
+X2(config-router)#
+end
+X2#
+clear bgp 172.16.3.1
+Sat Nov 21 09:55:35.552 UTC
+RP/0/RP0/CPU0:PE3#
+show bgp neighbor 172.16.3.1
+Sat Nov 21 09:56:22.289 UTC
+
+BGP neighbor is 172.16.3.1
+ Remote AS 65100, local AS 65000, external link
+ Remote router ID 10.100.255.2
+  BGP state = Established, up for 00:00:45
+  Previous State: Idle
+  Last Received Message: Update
+  NSR State: None
+  Last read 00:00:15, Last read before reset 00:01:02
+  Hold time is 180, keepalive interval is 60 seconds
+  Configured hold time: 180, keepalive: 60, min acceptable hold time: 3
+  Last write 00:00:45, attempted 78, written 78
+  Second last write 00:00:45, attempted 19, written 19
+  Last write before reset 00:01:00, attempted 19, written 19
+  Second last write before reset 00:02:00, attempted 19, written 19
+  Last write pulse rcvd  Nov 21 09:56:06.964 last full not set pulse count 37
+  Last write pulse rcvd before reset 00:01:02
+  Last insert into reset queue: Nov 21 09:55:35.573, removed at Nov 21 09:55:35.573
+  Socket not armed for io, armed for read, armed for write
+  Last write thread event before reset 00:00:48, second last 00:00:48
+  Last KA expiry before reset 00:01:00, second last 00:02:00
+  Last KA error before reset 00:00:00, KA not sent 00:00:00
+  Last KA start before reset 00:01:00, second last 00:02:00
+  Precedence: internet
+  Non-stop routing is enabled
+  Enforcing first AS is enabled
+  Multi-protocol capability received
+  Neighbor capabilities:
+    Route refresh: advertised (old + new) and received (old + new)
+    4-byte AS: advertised and received
+    Address family IPv4 Unicast: advertised and received
+  Received 29 messages, 0 notifications, 0 in queue
+  Sent 23 messages, 1 notifications, 0 in queue
+  Minimum time between advertisement runs is 30 secs
+  Inbound message logging enabled, 4 messages buffered
+  Outbound message logging enabled, 4 messages buffered
+  Fast fallover is enabled
+    Neighbor is directly connected
+    Neighbor fast-fallover is not configured
+    Neighbor is external and fast-external-fallover is not disabled
+
+ For Address Family: IPv4 Unicast
+  BGP neighbor version 31
+  BGP neighbor quick-withdraw version 31
+  Update group: 0.3 Filter-group: 0.2  No Refresh request being processed
+  AF-dependent capabilities:
+    Extended Nexthop Encoding: advertised
+  Route refresh request: received 0, sent 0
+  Policy for incoming advertisements is PASS
+  Policy for outgoing advertisements is PASS
+  2 accepted prefixes, 0 are bestpaths
+  Exact no. of prefixes denied: 0
+  Cumulative no. of prefixes denied: 0
+  Prefix advertised 2, suppressed 0, withdrawn 0
+  An EoR was received during read-only mode
+  Last ack version 0, Last synced ack version 0
+  Outstanding version objects: current 1, max 2, refresh 0
+  Additional-paths operation: None
+  Advertise routes with local-label via Unicast SAFI
+  Slow Peer State: Detection-only
+    Detected state: FALSE, Detection threshold: 300
+    Detection Count: 0, Recovery Count: 0
+
+  Connections established 2; dropped 1
+  Local host: 172.16.3.254, Local port: 42078, IF Handle: 0x00000018
+  Foreign host: 172.16.3.1, Foreign port: 179
+  Last reset 00:00:46, due to User clear requested (CEASE notification sent - administrative reset)
+  Time since last notification sent to neighbor: 00:00:46
+  Error Code: administrative reset
+  Notification data sent:
+    None
+RP/0/RP0/CPU0:PE3#
+show tcp authentication keychain AS65100-AO
+Sat Nov 21 09:56:22.698 UTC
+
+Keychain name: AS65100-AO, configured for tcp-ao
+Desired key: 7
+Total number of keys: 1
+Key details:
+    Key ID: 7, Active, Valid
+Total number of usable (Active & Valid) keys: 1
+    Keys: 7, 
+
+
+RP/0/RP0/CPU0:PE3#
+show ip bgp neighbors 172.16.3.254
+BGP neighbor is 172.16.3.254,  remote AS 65000, external link
+  BGP version 4, remote router ID 10.255.0.3
+  BGP state = Established, up for 00:00:47
+  Last read 00:00:47, last write 00:00:17, hold time is 180, keepalive interval is 60 seconds
+  Last update received: 00:00:47
+  Neighbor sessions:
+    1 active, is not multisession capable (disabled)
+  Neighbor capabilities:
+    Route refresh: advertised and received(new)
+    Four-octets ASN Capability: advertised and received
+    Address family IPv4 Unicast: advertised and received
+    Enhanced Refresh Capability: advertised
+    Extended Next Hop Encoding Capability:
+        IPv4 Unicast: received
+        VPNv4 Unicast: received
+        IPv4 Multicast: received
+    Multisession Capability: 
+    Stateful switchover support enabled: NO for session 1
+  Message statistics:
+    InQ depth is 0
+    OutQ depth is 0
+    
+                         Sent       Rcvd
+    Opens:                  1          1
+    Notifications:          0          0
+    Updates:                5          2
+    Keepalives:             2          1
+    Route Refresh:          0          0
+    Total:                  8          4
+  Do log neighbor state changes (via global configuration)
+  Default minimum time between advertisement runs is 30 seconds
+
+ For address family: IPv4 Unicast
+  Session: 172.16.3.254
+  BGP table version 19, neighbor version 19/0
+  Output queue size : 0
+  Index 3, Advertise bit 1
+  3 update-group member
+  Slow-peer detection is disabled
+  Slow-peer split-update-group dynamic is disabled
+                                 Sent       Rcvd
+  Prefix activity:               ----       ----
+    Prefixes Current:               2          2 (Consumes 272 bytes)
+    Prefixes Total:                 4          2
+    Implicit Withdraw:              0          0
+    Explicit Withdraw:              2          0
+    Used as bestpath:             n/a          2
+    Used as multipath:            n/a          0
+    Used as secondary:            n/a          0
+
+                                   Outbound    Inbound
+  Local Policy Denied Prefixes:    --------    -------
+    Bestpath from this peer:              2        n/a
+    Total:                                2          0
+  Number of NLRIs in the update sent: max 2, min 0
+  Current session network count peaked at 2 entries at 09:55:36 Nov 21 2026 UTC (00:00:48.073 ago)
+  Highest network count observed at 2 entries at 09:51:03 Nov 21 2026 UTC (00:05:21.073 ago)
+  Last detected as dynamic slow peer: never
+  Dynamic slow peer recovered: never
+  Refresh Epoch: 1
+  Last Sent Refresh Start-of-rib: never
+  Last Sent Refresh End-of-rib: never
+  Last Received Refresh Start-of-rib: never
+  Last Received Refresh End-of-rib: never
+				       Sent	  Rcvd
+	Refresh activity:	       ----	  ----
+	  Refresh Start-of-RIB          0          0
+	  Refresh End-of-RIB            0          0
+
+  Address tracking is enabled, the RIB does have a route to 172.16.3.254
+  Route to peer address reachability Up: 1; Down: 0
+    Last notification 00:14:27
+  Connections established 2; dropped 1
+  Last reset 00:00:50, due to Active open failed
+  External BGP neighbor configured for connected checks (single-hop no-disable-connected-check)
+  Interface associated: Ethernet0/0 (peering address in same link)
+  AO keychain AS65100-AO include-tcp-options
+  Transport(tcp) path-mtu-discovery is enabled
+  Graceful-Restart is disabled
+  SSO is disabled
+Connection state is ESTAB, I/O status: 1, unread input bytes: 0            
+Connection is ECN Disabled, Mininum incoming TTL 0, Outgoing TTL 1
+Local host: 172.16.3.1, Local port: 179
+Foreign host: 172.16.3.254, Foreign port: 42078
+Connection tableid (VRF): 0
+Maximum output segment queue size: 50
+
+Enqueued packets for retransmit: 0, input: 0  mis-ordered: 0 (0 bytes)
+
+Event Timers (current time is 0xD482A):
+Timer          Starts    Wakeups            Next
+Retrans             4          0             0x0
+TimeWait            0          0             0x0
+AckHold             3          1             0x0
+SendWnd             0          0             0x0
+KeepAlive           0          0             0x0
+GiveUp              0          0             0x0
+PmtuAger            0          0             0x0
+DeadWait            0          0             0x0
+Linger              0          0             0x0
+ProcessQ            0          0             0x0
+
+iss: 2901994781  snduna: 2901995091  sndnxt: 2901995091
+irs: 3477852149  rcvnxt: 3477852322
+
+sndwnd:  32459  scale:      0  maxrcvwnd:  16384
+rcvwnd:  16212  scale:      0  delrcvwnd:    172
+
+SRTT: 413 ms, RTTO: 3205 ms, RTV: 2792 ms, KRTT: 0 ms
+minRTT: 1 ms, maxRTT: 1000 ms, ACK hold: 120 ms
+uptime: 47740 ms, Sent idletime: 17110 ms, Receive idletime: 16908 ms 
+Status Flags: passive open, gen tcbs
+Option Flags: nagle, path mtu capable, win-scale, Retrans timeout, TCP AO
+IP Precedence value : 6
+Window update Optimisation : Enabled
+ACK Optimisation : Dynamic ACK Tuning Enabled
+
+TCP AO Key chain: AS65100-AO
+
+TCP AO Current Key:
+ Id: 7, Send-Id: 73, Recv-Id: 37
+ Include TCP Options: Yes
+ Accept AO Mismatch: No
+
+TCP AO Next Key:
+ Id: 7, Send-Id: 73, Recv-Id: 37
+ Include TCP Options: Yes
+ Accept AO Mismatch: No
+
+Datagrams (max data segment is 1216 bytes):
+Peer MSS:       1216
+Rcvd: 6 (out of order: 0), with data: 3, total data bytes: 172
+Sent: 8 (retransmit: 0, fastretransmit: 0, partialack: 0, Second Congestion: 0), with data: 5, total data bytes: 309
+
+ Packets received in fast path: 0, fast processed: 0, slow path: 0
+ fast lock acquisition failures: 0, slow path: 0
+TCP Semaphore      0x73A4088BBA18  FREE 
+
+* - Derived from Key
+
+X2#
+show ip bgp summary
+BGP router identifier 10.100.255.2, local AS number 65100
+BGP table version is 19, main routing table version 19
+4 network entries using 992 bytes of memory
+7 path entries using 952 bytes of memory
+5/3 BGP path/bestpath attribute entries using 1480 bytes of memory
+1 BGP AS-PATH entries using 40 bytes of memory
+0 BGP route-map cache entries using 0 bytes of memory
+0 BGP filter-list cache entries using 0 bytes of memory
+BGP using 3464 total bytes of memory
+BGP activity 4/0 prefixes, 15/8 paths, scan interval 60 secs
+4 networks peaked at 09:51:03 Nov 21 2026 UTC (00:05:21.466 ago)
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.100.255.1    4        65100      23      22       19    0    0 00:13:46        4
+172.16.3.254    4        65000       4       8       19    0    0 00:00:48        2
+X2#
+
+######## 09:56:24 s9: maximum-prefix(PE1 ← CE1・4 本・75%・restart 2)
+configure
+Sat Nov 21 09:56:25.055 UTC
+RP/0/RP0/CPU0:PE1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE1(config-bgp)#
+neighbor 172.16.1.1
+RP/0/RP0/CPU0:PE1(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+maximum-prefix 4 75 restart 2
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+commit
+Sat Nov 21 09:56:27.188 UTC
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+show configuration failed
+Sat Nov 21 09:56:28.016 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:PE1#
+show bgp neighbor 172.16.1.1
+Sat Nov 21 09:56:41.152 UTC
+
+BGP neighbor is 172.16.1.1
+ Remote AS 65001, local AS 65000, external link
+ Remote router ID 192.168.1.1
+  BGP state = Established, up for 00:05:54
+  Previous State: Idle
+  Last Received Message: KeepAlive
+  NSR State: None
+  Last read 00:00:30, Last read before reset 00:00:00
+  Hold time is 180, keepalive interval is 60 seconds
+  Configured hold time: 180, keepalive: 60, min acceptable hold time: 3
+  Last write 00:00:08, attempted 19, written 19
+  Second last write 00:01:08, attempted 19, written 19
+  Last write before reset 00:00:00, attempted 0, written 0
+  Second last write before reset 00:00:00, attempted 0, written 0
+  Last write pulse rcvd  Nov 21 09:56:32.376 last full not set pulse count 19
+  Last write pulse rcvd before reset 00:00:00
+  Last insert into reset queue: not set, removed at not set
+  Socket not armed for io, armed for read, armed for write
+  Last write thread event before reset 00:00:00, second last 00:00:00
+  Last KA expiry before reset 00:00:00, second last 00:00:00
+  Last KA error before reset 00:00:00, KA not sent 00:00:00
+  Last KA start before reset 00:00:00, second last 00:00:00
+  Precedence: internet
+  Non-stop routing is enabled
+  Enforcing first AS is enabled
+  Multi-protocol capability received
+  Neighbor capabilities:
+    Route refresh: advertised (old + new) and received (old + new)
+    4-byte AS: advertised and received
+    Address family IPv4 Unicast: advertised and received
+  Received 11 messages, 0 notifications, 0 in queue
+  Sent 15 messages, 0 notifications, 0 in queue
+  Minimum time between advertisement runs is 30 secs
+  Inbound message logging enabled, 4 messages buffered
+  Outbound message logging enabled, 4 messages buffered
+  Fast fallover is enabled
+    Neighbor is directly connected
+    Neighbor fast-fallover is not configured
+    Neighbor is external and fast-external-fallover is not disabled
+
+ For Address Family: IPv4 Unicast
+  BGP neighbor version 24
+  BGP neighbor quick-withdraw version 24
+  Update group: 0.3 Filter-group: 0.1  No Refresh request being processed
+  AF-dependent capabilities:
+    Extended Nexthop Encoding: advertised
+  Route refresh request: received 0, sent 0
+  Policy for incoming advertisements is PASS
+  Policy for outgoing advertisements is PASS
+  2 accepted prefixes, 2 are bestpaths
+  Exact no. of prefixes denied: 0
+  Cumulative no. of prefixes denied: 0
+  Prefix advertised 6, suppressed 2, withdrawn 2
+  Maximum prefixes allowed 4
+  Threshold for warning message 75%, restart interval 2 min
+  An EoR was received during read-only mode
+  Last ack version 24, Last synced ack version 0
+  Outstanding version objects: current 0, max 2, refresh 0
+  Additional-paths operation: None
+  Advertise routes with local-label via Unicast SAFI
+  Slow Peer State: Detection-only
+    Detected state: FALSE, Detection threshold: 300
+    Detection Count: 0, Recovery Count: 0
+
+  Connections established 1; dropped 0
+  Local host: 172.16.1.254, Local port: 51514, IF Handle: 0x01000020
+  Foreign host: 172.16.1.1, Foreign port: 179
+  Last reset 00:00:00
+RP/0/RP0/CPU0:PE1#
+show bgp summary
+Sat Nov 21 09:56:41.557 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 24
+BGP main routing table version 24
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker           24            24            24            24            24             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000      33      15           24    0    0 00:03:23          4
+172.16.1.1        0 65001      11      15           24    0    0 00:05:55          2
+
+RP/0/RP0/CPU0:PE1#
+
+######## 09:56:42 s10: ダンプニング(PE2・半減期 10 分)・集約(PE2 と PE3・192.168.0.0/22 summary-only)
+configure
+Sat Nov 21 09:56:44.114 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE2(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE2(config-bgp-af)#
+bgp dampening 10
+RP/0/RP0/CPU0:PE2(config-bgp-af)#
+aggregate-address 192.168.0.0/22 summary-only
+RP/0/RP0/CPU0:PE2(config-bgp-af)#
+commit
+Sat Nov 21 09:56:46.357 UTC
+RP/0/RP0/CPU0:PE2(config-bgp-af)#
+show configuration failed
+Sat Nov 21 09:56:46.767 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-bgp-af)#
+end
+RP/0/RP0/CPU0:PE2#
+configure
+Sat Nov 21 09:56:49.891 UTC
+RP/0/RP0/CPU0:PE3(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE3(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+aggregate-address 192.168.0.0/22 summary-only
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+commit
+Sat Nov 21 09:56:51.737 UTC
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+show configuration failed
+Sat Nov 21 09:56:52.144 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+end
+RP/0/RP0/CPU0:PE3#
+show bgp
+Sat Nov 21 09:57:15.197 UTC
+BGP router identifier 10.255.0.2, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 23
+BGP main routing table version 23
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+Dampening enabled
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*> 192.168.0.0/22     0.0.0.0                            32768 i
+s>i192.168.1.0/24     10.255.0.1               0    100      0 65001 i
+s>i192.168.2.0/24     10.255.0.1               0    100      0 65001 i
+*> 198.51.100.0/24    172.16.2.1               0    200      0 65100 i
+*> 203.0.113.0/24     172.16.2.1              11    200      0 65100 i
+
+Processed 5 prefixes, 5 paths
+RP/0/RP0/CPU0:PE2#
+show bgp 192.168.0.0/22
+Sat Nov 21 09:57:15.610 UTC
+BGP routing table entry for 192.168.0.0/22
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 21           21
+Last Modified: Nov 21 09:56:48.351 for 00:00:27
+Paths: (1 available, best #1)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.255.0.21     172.16.2.1      
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.255.0.21     172.16.2.1      
+  Local, (aggregated by 65000 10.255.0.2)
+    0.0.0.0 from 0.0.0.0 (10.255.0.2)
+      Origin IGP, localpref 100, weight 32768, valid, aggregated, atomic-aggregate, best, group-best
+      Received Path ID 0, Local Path ID 1, version 21
+RP/0/RP0/CPU0:PE2#
+show running-config router bgp 65000 address-family ipv4 unicast
+Sat Nov 21 09:57:16.009 UTC
+router bgp 65000
+ address-family ipv4 unicast
+  bgp dampening 10
+  aggregate-address 192.168.0.0/22 summary-only
+ !
+!
+
+RP/0/RP0/CPU0:PE2#
+show bgp dampened-paths
+Sat Nov 21 09:57:16.513 UTC
+RP/0/RP0/CPU0:PE2#
+show ip bgp neighbors 172.16.2.254 routes
+BGP table version is 17, local router ID is 10.100.255.1
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   192.168.0.0/22   172.16.2.254                           0 65000 i
+
+Total number of prefixes 1 
+X1#
+show ip bgp neighbors 172.16.3.254 routes
+BGP table version is 23, local router ID is 10.100.255.2
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ *>   192.168.0.0/22   172.16.3.254                           0 65000 i
+
+Total number of prefixes 1 
+X2#

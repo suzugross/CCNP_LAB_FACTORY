@@ -1,0 +1,729 @@
+# XRT-17 の学習モード(ワークスペースの Tasks タブ)。lab_console.py --learn XRT-17 が読む。
+# hints は上から 1 段ずつ開く(キーワード → 参照先 → コマンド)。solution は 確認の通過後 か ヒント全開後 に出る。
+# verify= 確かめ方の例(BL-266)。いつでも開け、記録しない。結果を観る手順(入ったか → 流して数える → 届いた先 → 壊していないか)までで、
+# 落とし穴の名前や直し方は書かない(それはヒントと模範解の役目)。出力の例は実機の記録(poc/xr/expXRT17-*.log・expBGPOPS-*.log)から。
+# ここに書いた挙動は IOS XRv 9000 / IOS XRd 26.1.1(+IOL 17.15)の実機で確認した(設計= problems/_drafts/XR-TRACK.design.md §32)。
+# 模範解の「On PE1:」などの見出し= 機器ごとの塊(poc/xr/verbatim.py が見出しの機器へ同じ塊を送る)。
+# 読み物(BL-252)= Reading タブに出す本(reading/<key>/)。各課題の read: はその本の「ページ#節」(節= data-sec)。
+reading: xr
+steps:
+  - id: m6t5
+    title: { en: "M6-5  Hand the backup exit's path to RR1 and PE1", ja: "M6-5  予備の出口の経路を RR1 と PE1 に届ける" }
+    check: m6t5
+    read: [63-m6-add-path-pic#s2-1, 63-m6-add-path-pic#s2-2, 63-m6-add-path-pic#s2-3, 63-m6-add-path-pic#s3-1, 63-m6-add-path-pic#s3-3]
+    hints:
+      - en: "Three routers take part, each in one direction: PE3 must send more than its best path, RR1 must accept and send more than its best path, and PE1 must accept more than one path. On IOS XR the capability is configured in the address family, and the paths to send are chosen by a route policy attached with `additional-paths selection`. The capability is exchanged in the OPEN message."
+        ja: "関わるのは 3 台で、それぞれ向きが決まっています。PE3 は最良でない経路も送り、RR1 は最良でない経路を受けて送り、PE1 は 2 本目以上を受けます。IOS XR では能力をアドレス ファミリで設定し、送る経路は `additional-paths selection` で付けるルート ポリシーで選びます。能力は OPEN メッセージで交換します。"
+      - en: "`show bgp 203.0.113.0/24` on PE3, RR1 and PE1 (look for `add-path` and `Received Path ID`), `show bgp neighbor 10.255.0.21` (the lines `Additional-paths Send` and `Additional-paths Receive`). Guide: Routing Configuration Guide for Cisco ASR 9000 Series Routers, 'Implementing BGP' (BGP Additional Paths)."
+        ja: "PE3・RR1・PE1 で `show bgp 203.0.113.0/24`(`add-path` と `Received Path ID` を見る)、`show bgp neighbor 10.255.0.21`(`Additional-paths Send` と `Additional-paths Receive` の行)。ガイド: Routing Configuration Guide for Cisco ASR 9000 Series Routers の「Implementing BGP」(BGP Additional Paths)。"
+      - en: "PE3: `route-policy <name>` with `set path-selection backup 1 advertise`, then under `router bgp 65000` → `address-family ipv4 unicast`: `additional-paths send` and `additional-paths selection route-policy <name>`. RR1: the same policy, plus `additional-paths send` and `additional-paths receive`. PE1: `additional-paths receive`. Then `clear bgp 10.255.0.21` on PE3 and PE1 (not `clear bgp ipv4 unicast …`, which only takes `soft`)."
+        ja: "PE3 では `set path-selection backup 1 advertise` の `route-policy <名前>` を作り、`router bgp 65000` → `address-family ipv4 unicast` で `additional-paths send` と `additional-paths selection route-policy <名前>`。RR1 も同じポリシーに `additional-paths send` と `additional-paths receive`。PE1 は `additional-paths receive`。そのあと PE3 と PE1 で `clear bgp 10.255.0.21`(`clear bgp ipv4 unicast …` の後ろは `soft` しか取れません)。"
+    verify:
+      en: |
+        **1. Is it in?** (PE3, RR1, PE1)
+
+        - `show bgp neighbor 10.255.0.21` on PE3 and PE1: the capability lines should read `Additional-paths Send: advertised and
+          received` on PE3 and `Additional-paths Receive: advertised and received` on PE1, and the address-family part should show
+          `Additional-paths operation:` with something other than `None`.
+
+        **2. Count the paths** (RR1, PE1)
+
+        - `show bgp 203.0.113.0/24` on RR1 and on PE1: `Paths: (2 available, best #1)`.
+
+        **3. Look where they come from** (RR1, PE1)
+
+        - The second path is the one from 10.255.0.3. On RR1 it carries a non-zero `Received Path ID`, which means PE3 sent it as an
+          additional path. Example (RR1; excerpt):
+
+        ```
+          65100, (Received from a RR-client)
+            10.255.0.3 (metric 20) from 10.255.0.3 (10.255.0.3)
+              Origin IGP, metric 11, localpref 100, valid, internal, backup, add-path
+              Received Path ID 3, Local Path ID 2, version 14
+        ```
+
+        **4. Did anything else break?** (PE1, CE1)
+
+        - The best path is still `10.255.0.2 … localpref 200 … best` on PE1 and RR1.
+        - `ping 203.0.113.1 source 192.168.1.1` on CE1 still answers.
+      ja: |
+        **1. 入ったか**(PE3・RR1・PE1)
+
+        - PE3 と PE1 で `show bgp neighbor 10.255.0.21`。能力の行が、PE3 では `Additional-paths Send: advertised and received`、
+          PE1 では `Additional-paths Receive: advertised and received` になり、アドレス ファミリの部分の
+          `Additional-paths operation:` が `None` 以外になること。
+
+        **2. 経路を数える**(RR1・PE1)
+
+        - RR1 と PE1 で `show bgp 203.0.113.0/24` が `Paths: (2 available, best #1)` になること。
+
+        **3. 出どころを見る**(RR1・PE1)
+
+        - 2 本目は 10.255.0.3 からの経路です。RR1 ではこの経路の `Received Path ID` が 0 以外になります。PE3 が追加パスとして
+          送ったという意味です。例(RR1・抜粋):
+
+        ```
+          65100, (Received from a RR-client)
+            10.255.0.3 (metric 20) from 10.255.0.3 (10.255.0.3)
+              Origin IGP, metric 11, localpref 100, valid, internal, backup, add-path
+              Received Path ID 3, Local Path ID 2, version 14
+        ```
+
+        **4. 壊していないか**(PE1・CE1)
+
+        - PE1 と RR1 の最良は、引き続き `10.255.0.2 … localpref 200 … best` であること。
+        - CE1 で `ping 203.0.113.1 source 192.168.1.1` が引き続き応答すること。
+    solution:
+      en: |
+        On PE3:
+        configure
+         route-policy ADDPATH-OUT
+           set path-selection backup 1 advertise
+         end-policy
+         router bgp 65000
+          address-family ipv4 unicast
+           additional-paths send
+           additional-paths selection route-policy ADDPATH-OUT
+         commit
+        end
+        clear bgp 10.255.0.21
+        On RR1:
+        configure
+         route-policy RR-ADDPATH
+           set path-selection backup 1 advertise
+         end-policy
+         router bgp 65000
+          address-family ipv4 unicast
+           additional-paths send
+           additional-paths receive
+           additional-paths selection route-policy RR-ADDPATH
+         commit
+        end
+        On PE1:
+        configure
+         router bgp 65000
+          address-family ipv4 unicast
+           additional-paths receive
+         commit
+        end
+        clear bgp 10.255.0.21
+        A route reflector reflects only its best path, and PE3 advertises only its best path, which is the iBGP path through PE2.
+        ADD-PATH lets a speaker send more than one path for a prefix, each with a path identifier. `additional-paths send` and
+        `receive` in the address family announce the capability to the iBGP neighbors; the policy in `additional-paths selection`
+        decides which paths go out. `set path-selection backup 1 advertise` computes a backup path (the best path left after
+        removing every path with the same next hop as the best) and advertises it. On PE3 the backup is its own eBGP path through
+        X2; on RR1 it is the path from PE3. The capability is negotiated in the OPEN message, so the sessions must be reset:
+        `clear bgp <neighbor>` does that, while `clear bgp ipv4 unicast <neighbor>` only accepts `soft`. `advertise best-external`
+        would also make PE3 send the X2 path, but Cisco documents it only for VPN, VRF and labeled unicast address families.
+      ja: |
+        On PE3:
+        configure
+         route-policy ADDPATH-OUT
+           set path-selection backup 1 advertise
+         end-policy
+         router bgp 65000
+          address-family ipv4 unicast
+           additional-paths send
+           additional-paths selection route-policy ADDPATH-OUT
+         commit
+        end
+        clear bgp 10.255.0.21
+        On RR1:
+        configure
+         route-policy RR-ADDPATH
+           set path-selection backup 1 advertise
+         end-policy
+         router bgp 65000
+          address-family ipv4 unicast
+           additional-paths send
+           additional-paths receive
+           additional-paths selection route-policy RR-ADDPATH
+         commit
+        end
+        On PE1:
+        configure
+         router bgp 65000
+          address-family ipv4 unicast
+           additional-paths receive
+         commit
+        end
+        clear bgp 10.255.0.21
+        ルート リフレクタは最良の経路しか反射せず、PE3 も最良の経路(PE2 を経由する iBGP の経路)しか広告しません。追加パスを使うと、
+        1 つのプレフィックスについて複数の経路を、経路ごとの識別子(パス ID)を付けて送れます。アドレス ファミリの
+        `additional-paths send` と `receive` は iBGP の相手へ能力を告げ、`additional-paths selection` のポリシーが送る経路を決めます。
+        `set path-selection backup 1 advertise` は予備の経路(最良と同じ next-hop の経路をすべて除いた残りの最良)を計算して広告します。
+        PE3 の予備は X2 を経由する自分の eBGP の経路、RR1 の予備は PE3 からの経路です。能力は OPEN メッセージで交渉するので、
+        セッションを張り直す必要があります。張り直しは `clear bgp <近隣>` で、`clear bgp ipv4 unicast <近隣>` の後ろは `soft` しか
+        取れません。`advertise best-external` でも PE3 は X2 の経路を送りますが、Cisco の文書が載せているのは VPN・VRF・ラベル付き
+        ユニキャストのアドレス ファミリだけです。
+
+  - id: m6t6
+    title: { en: "M6-6  Less than one second when the primary exit fails", ja: "M6-6  主の出口が落ちても途切れを 1 秒未満に" }
+    check: m6t6
+    read: [63-m6-add-path-pic#s2-4, 63-m6-add-path-pic#s2-5, 63-m6-add-path-pic#s3-2, 63-m6-add-path-pic#s3-3, 63-m6-add-path-pic#s3-4]
+    hints:
+      - en: "Without a backup in the forwarding table, PE1 waits for BGP to choose a new best path, and BGP waits for the next-hop tracking delay. With PIC the backup is already in CEF, so the switch happens as soon as the IGP removes PE2's loopback. Then follow a packet one more hop: in this network the packets reach PE3 without a VPN label, so PE3 looks up the destination again in its own table."
+        ja: "フォワーディング テーブルに予備が無いと、PE1 は BGP が新しい最良を選ぶのを待ち、BGP は next-hop の追跡の遅延を待ちます。PIC では予備が CEF に入っているので、IGP が PE2 のループバックを消した時点で切り替わります。そのうえで、パケットをもう 1 ホップ追ってください。この網ではパケットは VPN のラベルなしで PE3 に届くので、PE3 は自分の表で宛先を引き直します。"
+      - en: "`show route 203.0.113.0/24 detail` (`Number of pic paths`, `BGP backup path`) and `show cef 203.0.113.0/24 detail` (`recursive, backup`) on PE1 and on PE3. `show bgp nexthops` shows the trigger delays. Guide: Routing Configuration Guide for Cisco ASR 9000 Series Routers, 'Implementing BGP' (BGP Prefix Independent Convergence, additional-paths selection)."
+        ja: "PE1 と PE3 で `show route 203.0.113.0/24 detail`(`Number of pic paths`・`BGP backup path`)と `show cef 203.0.113.0/24 detail`(`recursive, backup`)。`show bgp nexthops` で追跡の遅延が見えます。ガイド: Routing Configuration Guide for Cisco ASR 9000 Series Routers の「Implementing BGP」(BGP Prefix Independent Convergence・additional-paths selection)。"
+      - en: "PE1: `route-policy <name>` with `set path-selection backup 1 install`, attached with `additional-paths selection route-policy <name>` in `address-family ipv4 unicast`. PE3: change its selection policy to `set path-selection backup 1 advertise install`, so that its own eBGP path through X2 is also installed as a backup."
+        ja: "PE1 では `set path-selection backup 1 install` の `route-policy <名前>` を、`address-family ipv4 unicast` の `additional-paths selection route-policy <名前>` で付けます。PE3 では selection のポリシーを `set path-selection backup 1 advertise install` に変え、X2 を経由する自分の eBGP の経路も予備としてインストールします。"
+    verify:
+      en: |
+        **1. Is it in?** (PE1, then PE3)
+
+        - `show route 203.0.113.0/24 detail` on PE1 shows `Number of pic paths 1` and the line
+          `10.255.0.3, from 10.255.0.21, BGP backup path`.
+        - `show cef 203.0.113.0/24 detail` on PE1 lists two paths. Example (PE1; excerpt):
+
+        ```
+           via 10.255.0.2/32, 3 dependencies, recursive [flags 0x6000]
+            next hop 10.255.0.2/32 via 10.255.0.2/32
+           via 10.255.0.3/32, 2 dependencies, recursive, backup [flags 0x6100]
+            next hop 10.255.0.3/32 via 10.255.0.3/32
+        ```
+
+        - Do the same on PE3 for the path through X2 (172.16.3.1).
+
+        **2. Send and count** (CE1, P1)
+
+        - On CE1, send a long run of pings with a short timeout: `ping 203.0.113.1 source 192.168.1.1 repeat 2000 timeout 0`
+          (or an IP SLA `udp-jitter` toward T; T runs `ip sla responder`).
+        - While it runs, on P1: `configure` → `interface GigabitEthernet0/0/0/1` → `shutdown` → `commit`. Count the `.` in the
+          ping output, then `no shutdown` and `commit`.
+
+        **3. Look where it goes** (PE1, PE3)
+
+        - During the failure, `show cef 203.0.113.0/24 detail` on PE1 shows the path through 10.255.0.2 as `unresolved`.
+        - `traceroute 203.0.113.1 source 192.168.1.1` on CE1 goes through 10.0.3.3 (PE3) and 172.16.3.1 (X2).
+
+        **4. Did anything else break?** (P1, PE1)
+
+        - After `no shutdown`, `show isis adjacency` on P1 lists PE2 again and `show bgp 203.0.113.0/24` on PE1 is back to the
+          path through PE2 as the best.
+      ja: |
+        **1. 入ったか**(PE1、次に PE3)
+
+        - PE1 で `show route 203.0.113.0/24 detail` に `Number of pic paths 1` と `10.255.0.3, from 10.255.0.21, BGP backup path`
+          の行が出ること。
+        - PE1 で `show cef 203.0.113.0/24 detail` に 2 つの経路が並ぶこと。例(PE1・抜粋):
+
+        ```
+           via 10.255.0.2/32, 3 dependencies, recursive [flags 0x6000]
+            next hop 10.255.0.2/32 via 10.255.0.2/32
+           via 10.255.0.3/32, 2 dependencies, recursive, backup [flags 0x6100]
+            next hop 10.255.0.3/32 via 10.255.0.3/32
+        ```
+
+        - PE3 でも、X2(172.16.3.1)を経由する経路について同じように見ること。
+
+        **2. 流して数える**(CE1・P1)
+
+        - CE1 で、タイムアウトの短い ping を長く流します。`ping 203.0.113.1 source 192.168.1.1 repeat 2000 timeout 0`
+          (または T へ向けた IP SLA の `udp-jitter`。T は `ip sla responder` を動かしています)。
+        - 流している間に P1 で `configure` → `interface GigabitEthernet0/0/0/1` → `shutdown` → `commit`。ping の出力の `.` を
+          数え、そのあと `no shutdown` と `commit`。
+
+        **3. 届いた先を見る**(PE1・PE3)
+
+        - 故障の間、PE1 の `show cef 203.0.113.0/24 detail` で、10.255.0.2 を経由する経路が `unresolved` になること。
+        - CE1 の `traceroute 203.0.113.1 source 192.168.1.1` が 10.0.3.3(PE3)と 172.16.3.1(X2)を通ること。
+
+        **4. 壊していないか**(P1・PE1)
+
+        - `no shutdown` のあと、P1 の `show isis adjacency` に PE2 が戻り、PE1 の `show bgp 203.0.113.0/24` の最良が PE2 を経由する
+          経路に戻ること。
+    solution:
+      en: |
+        On PE1:
+        configure
+         route-policy PIC
+           set path-selection backup 1 install
+         end-policy
+         router bgp 65000
+          address-family ipv4 unicast
+           additional-paths selection route-policy PIC
+         commit
+        end
+        On PE3:
+        configure
+         route-policy ADDPATH-OUT
+           set path-selection backup 1 advertise install
+         end-policy
+         commit
+        end
+        `install` puts the backup path into the RIB and CEF next to the best path (`BGP backup path`, `recursive, backup`). When
+        the IGP removes PE2's loopback, CEF finds the primary path unresolved and uses the backup at once, before BGP has chosen
+        a new best path; on IPv4 unicast, BGP waits for the critical next-hop trigger delay (3 seconds by default) first. PIC on
+        PE1 alone is not enough here: the packets arrive at PE3 as plain IP, PE3 looks up 203.0.113.0/24, and its best path is
+        still the iBGP path through PE2, so it sends them back toward PE2 and they are dropped until PE3's own BGP gives up on
+        PE2 (about 3 seconds). Installing PE3's own eBGP path as a backup lets PE3 switch in the same moment. In a VPN, the
+        egress PE forwards by the VPN label instead of an IP lookup, so the backup exit does not have this problem. The test
+        measured about 0.2 seconds with an IOS XRv 9000 as PE1. On this virtual platform an IOS XRd ingress, although it showed
+        the same backup in CEF, did not use it when a remote PE disappeared from the IGP and waited for BGP instead, so PE1 here
+        is an IOS XRv 9000.
+      ja: |
+        On PE1:
+        configure
+         route-policy PIC
+           set path-selection backup 1 install
+         end-policy
+         router bgp 65000
+          address-family ipv4 unicast
+           additional-paths selection route-policy PIC
+         commit
+        end
+        On PE3:
+        configure
+         route-policy ADDPATH-OUT
+           set path-selection backup 1 advertise install
+         end-policy
+         commit
+        end
+        `install` は予備の経路を最良の隣に RIB と CEF へ入れます(`BGP backup path`・`recursive, backup`)。IGP が PE2 のループバックを
+        消すと、CEF は主の経路を解決できなくなったと判断し、BGP が新しい最良を選ぶ前に予備を使います(IPv4 ユニキャストでは、BGP は
+        先に next-hop の追跡の critical の遅延= 既定 3 秒を待ちます)。ここでは PE1 の PIC だけでは足りません。パケットは素の IP で PE3 に
+        届き、PE3 は 203.0.113.0/24 を引きますが、PE3 の最良はまだ PE2 を経由する iBGP の経路なので、PE2 の方へ送り返し、PE3 自身の
+        BGP が PE2 を諦めるまで(約 3 秒)捨てられます。PE3 の自分の eBGP の経路も予備としてインストールすると、PE3 も同じ瞬間に
+        切り替わります。VPN では出口の PE は IP を引き直さず VPN のラベルで送るので、予備の出口にこの問題はありません。PE1 が
+        IOS XRv 9000 のとき、測定は約 0.2 秒です。この仮想機では、IOS XRd の入口は CEF に同じ予備を持っていても、遠くの PE が IGP から
+        消えたときにはそれを使わず BGP を待ったため、このラボの PE1 は IOS XRv 9000 にしています。
+
+  - id: m6t7
+    title: { en: "M6-7  GTSM between PE2 and X1", ja: "M6-7  PE2 と X1 の間に GTSM" }
+    check: m6t7
+    read: [65-m6-protect-session#s2-1, 65-m6-protect-session#s3-1, 65-m6-protect-session#s3-4]
+    hints:
+      - en: "GTSM works because a packet sent with a TTL of 255 arrives from a directly connected neighbor with 255 and from anywhere further away with less. Both ends must send with 255 and check what arrives. The two systems express the same idea differently: one has no hop count at all, the other asks for the number of hops."
+        ja: "GTSM は、TTL 255 で送ったパケットが、直接接続の相手からなら 255 のまま、それより遠くからなら 255 未満で届くことを使います。両端が 255 で送り、届いたものを確かめる必要があります。2 つの OS は同じ考えを別の形で表します。片方には hop の数が無く、もう片方は hop の数を聞きます。"
+      - en: "`show bgp neighbor 172.16.2.1` on PE2 (`TTL security is configured`) and `show ip bgp neighbors 172.16.2.254` on X1 (`Mininum incoming TTL … Outgoing TTL …`). Guides: Routing Configuration Guide for Cisco ASR 9000 Series Routers, 'Implementing BGP' (BGP TTL security); IP Routing: BGP Configuration Guide (IOS XE), 'Configuring BGP Neighbor Session Options'."
+        ja: "PE2 で `show bgp neighbor 172.16.2.1`(`TTL security is configured`)、X1 で `show ip bgp neighbors 172.16.2.254`(`Mininum incoming TTL … Outgoing TTL …`)。ガイド: Routing Configuration Guide for Cisco ASR 9000 Series Routers の「Implementing BGP」(BGP TTL security)、IP Routing: BGP Configuration Guide(IOS XE)の「Configuring BGP Neighbor Session Options」。"
+      - en: "PE2: `router bgp 65000` → `neighbor 172.16.2.1` → `ttl-security`. X1: `router bgp 65100` → `neighbor 172.16.2.254 ttl-security hops 1`. Then `clear bgp 172.16.2.1` on PE2."
+        ja: "PE2 で `router bgp 65000` → `neighbor 172.16.2.1` → `ttl-security`。X1 で `router bgp 65100` → `neighbor 172.16.2.254 ttl-security hops 1`。そのあと PE2 で `clear bgp 172.16.2.1`。"
+    verify:
+      en: |
+        **1. Is it in?** (PE2, X1)
+
+        - `show bgp neighbor 172.16.2.1` on PE2 ends with `TTL security is configured`.
+        - `show ip bgp neighbors 172.16.2.254` on X1 shows `External BGP neighbor may be up to 1 hop away.` and
+          `Connection is ECN Disabled, Mininum incoming TTL 254, Outgoing TTL 255`.
+
+        **2. Count** (PE2, X1)
+
+        - `show bgp summary` on PE2: the line for 172.16.2.1 has an up time and a number of prefixes (2), not a state such as
+          `Idle` or `Active`.
+
+        **3. Look where it arrives** (PE2, PE1)
+
+        - `show bgp neighbor 172.16.2.1 routes` on PE2 lists 198.51.100.0/24 and 203.0.113.0/24 from 172.16.2.1.
+
+        **4. Did anything else break?** (PE1)
+
+        - `show bgp 203.0.113.0/24` on PE1 still has the path through 10.255.0.2 as the best.
+      ja: |
+        **1. 入ったか**(PE2・X1)
+
+        - PE2 の `show bgp neighbor 172.16.2.1` の最後に `TTL security is configured` が出ること。
+        - X1 の `show ip bgp neighbors 172.16.2.254` に `External BGP neighbor may be up to 1 hop away.` と
+          `Connection is ECN Disabled, Mininum incoming TTL 254, Outgoing TTL 255` が出ること。
+
+        **2. 数える**(PE2・X1)
+
+        - PE2 の `show bgp summary` で、172.16.2.1 の行が `Idle` や `Active` のような状態でなく、経過時間と経路の数(2)になること。
+
+        **3. 届いた先を見る**(PE2・PE1)
+
+        - PE2 の `show bgp neighbor 172.16.2.1 routes` に、172.16.2.1 からの 198.51.100.0/24 と 203.0.113.0/24 が載ること。
+
+        **4. 壊していないか**(PE1)
+
+        - PE1 の `show bgp 203.0.113.0/24` の最良が、引き続き 10.255.0.2 を経由する経路であること。
+    solution:
+      en: |
+        On PE2:
+        configure
+         router bgp 65000
+          neighbor 172.16.2.1
+           ttl-security
+         commit
+        end
+        On X1:
+        configure terminal
+         router bgp 65100
+          neighbor 172.16.2.254 ttl-security hops 1
+        end
+        On PE2:
+        clear bgp 172.16.2.1
+        On IOS XR, `ttl-security` takes no hop count: the router sends with TTL 255 and accepts only 255, which is the directly
+        connected case. On IOS XE, `ttl-security hops 1` accepts TTL 254 and above (255 minus the hop count) and, as the
+        capture on this lab shows, sends with 255 as RFC 5082 requires. If only PE2 uses GTSM, X1 still sends eBGP with TTL 1,
+        PE2 drops those packets and the TCP connection is never set up (X1 stays `Idle` or `Active`). IOS XR accepts `ttl-security` together with `ebgp-multihop` (`ttl-security` wins); IOS XE rejects the
+        combination.
+      ja: |
+        On PE2:
+        configure
+         router bgp 65000
+          neighbor 172.16.2.1
+           ttl-security
+         commit
+        end
+        On X1:
+        configure terminal
+         router bgp 65100
+          neighbor 172.16.2.254 ttl-security hops 1
+        end
+        On PE2:
+        clear bgp 172.16.2.1
+        IOS XR の `ttl-security` は hop の数を取りません。TTL 255 で送り、255 だけを受け付けます。直接接続の場合です。IOS XE の
+        `ttl-security hops 1` は TTL 254 以上(255 から hop の数を引いた値)を受け付け、このラボのキャプチャのとおり RFC 5082 に従って
+        255 で送ります。PE2 だけが GTSM を使うと、X1 は eBGP を TTL 1 で送り続け、PE2 がそれを捨てるので、TCP の接続が
+        張られません(X1 は `Idle` か `Active` のまま)。IOS XR は `ttl-security` と `ebgp-multihop` の同居を受け付け
+        (`ttl-security` が優先)、IOS XE はこの組み合わせを拒否します。
+
+  - id: m6t8
+    title: { en: "M6-8  TCP-AO between PE3 and X2", ja: "M6-8  PE3 と X2 の間に TCP-AO" }
+    check: m6t8
+    read: [65-m6-protect-session#s2-2, 65-m6-protect-session#s2-3, 65-m6-protect-session#s3-3, 65-m6-protect-session#s3-4]
+    hints:
+      - en: "TCP-AO on IOS XR is built in three places: a key chain that holds the key string, the algorithm and the lifetimes; the `tcp ao` configuration that gives each key its SendID and ReceiveID; and the BGP neighbor, which names the key chain. On IOS XE the key chain itself is a TCP key chain and holds the IDs. Your SendID must be the other end's ReceiveID."
+        ja: "IOS XR の TCP-AO は 3 か所で組みます。キー文字列・アルゴリズム・有効期間を持つキー チェーン、キーごとに SendID と ReceiveID を与える `tcp ao` の設定、キー チェーンを指定する BGP のネイバーです。IOS XE では、キー チェーンそのものが TCP 用のキー チェーンで、ID も持ちます。自分の SendID は相手の ReceiveID と一致させます。"
+      - en: "`show tcp authentication keychain AS65100-AO` and `show bgp neighbor 172.16.3.1` on PE3; `show ip bgp neighbors 172.16.3.254` on X2 (`Option Flags: … TCP AO`, `Include TCP Options`). Guides: Routing Configuration Guide for Cisco ASR 9000 Series Routers, 'Implementing BGP' (TCP Authentication Option); IP Routing: BGP Configuration Guide (IOS XE), 'BGP Support for TCP-AO'."
+        ja: "PE3 で `show tcp authentication keychain AS65100-AO` と `show bgp neighbor 172.16.3.1`、X2 で `show ip bgp neighbors 172.16.3.254`(`Option Flags: … TCP AO`・`Include TCP Options`)。ガイド: Routing Configuration Guide for Cisco ASR 9000 Series Routers の「Implementing BGP」(TCP Authentication Option)、IP Routing: BGP Configuration Guide(IOS XE)の「BGP Support for TCP-AO」。"
+      - en: "PE3: `key chain AS65100-AO` → `key 7` → `key-string clear …`, `cryptographic-algorithm AES-128-CMAC-96`, `accept-lifetime …` and `send-lifetime …` ending in `infinite`; `tcp ao` → `keychain AS65100-AO` → `key 7 SendID 37 ReceiveID 73`; `router bgp 65000` → `neighbor 172.16.3.1` → `ao AS65100-AO include-tcp-options enable`. X2: `key chain AS65100-AO tcp` → `key 7` → `send-id 73`, `recv-id 37`, `key-string …`, `cryptographic-algorithm aes-128-cmac`; `neighbor 172.16.3.254 ao AS65100-AO include-tcp-options`."
+        ja: "PE3 では `key chain AS65100-AO` → `key 7` → `key-string clear …`・`cryptographic-algorithm AES-128-CMAC-96`・`infinite` で終わる `accept-lifetime …` と `send-lifetime …`。`tcp ao` → `keychain AS65100-AO` → `key 7 SendID 37 ReceiveID 73`。`router bgp 65000` → `neighbor 172.16.3.1` → `ao AS65100-AO include-tcp-options enable`。X2 では `key chain AS65100-AO tcp` → `key 7` → `send-id 73`・`recv-id 37`・`key-string …`・`cryptographic-algorithm aes-128-cmac`。`neighbor 172.16.3.254 ao AS65100-AO include-tcp-options`。"
+    verify:
+      en: |
+        **1. Is it in?** (PE3, X2)
+
+        - `show tcp authentication keychain AS65100-AO` on PE3 shows `Key ID: 7, Active, Valid` and
+          `Total number of usable (Active & Valid) keys: 1`.
+        - `show ip bgp neighbors 172.16.3.254` on X2 has `TCP AO` at the end of `Option Flags:` and
+          `Include TCP Options: Yes`.
+
+        **2. Count** (PE3)
+
+        - `show bgp summary` on PE3: the line for 172.16.3.1 has an up time and a number of prefixes, not `Idle` or `Active`.
+
+        **3. Look where it arrives** (PE3, RR1)
+
+        - `show bgp neighbor 172.16.3.1 routes` on PE3 lists 203.0.113.0/24 from 172.16.3.1, and `show bgp 203.0.113.0/24` on RR1
+          still has the path from 10.255.0.3.
+
+        **4. Did anything else break?** (PE1)
+
+        - `show route 203.0.113.0/24 detail` on PE1 still shows `10.255.0.3, from 10.255.0.21, BGP backup path`.
+      ja: |
+        **1. 入ったか**(PE3・X2)
+
+        - PE3 の `show tcp authentication keychain AS65100-AO` に `Key ID: 7, Active, Valid` と
+          `Total number of usable (Active & Valid) keys: 1` が出ること。
+        - X2 の `show ip bgp neighbors 172.16.3.254` で、`Option Flags:` の最後に `TCP AO` があり、`Include TCP Options: Yes` が
+          出ること。
+
+        **2. 数える**(PE3)
+
+        - PE3 の `show bgp summary` で、172.16.3.1 の行が `Idle` や `Active` でなく、経過時間と経路の数になること。
+
+        **3. 届いた先を見る**(PE3・RR1)
+
+        - PE3 の `show bgp neighbor 172.16.3.1 routes` に 172.16.3.1 からの 203.0.113.0/24 が載り、RR1 の
+          `show bgp 203.0.113.0/24` に引き続き 10.255.0.3 からの経路があること。
+
+        **4. 壊していないか**(PE1)
+
+        - PE1 の `show route 203.0.113.0/24 detail` に、引き続き `10.255.0.3, from 10.255.0.21, BGP backup path` が出ること。
+    solution:
+      en: |
+        On PE3:
+        configure
+         key chain AS65100-AO
+          key 7
+           accept-lifetime 00:00:00 january 01 2026 infinite
+           key-string clear 5A3C9E107B2D4F6681A0C3E5F7092B4D
+           send-lifetime 00:00:00 january 01 2026 infinite
+           cryptographic-algorithm AES-128-CMAC-96
+          !
+         !
+         tcp ao
+          keychain AS65100-AO
+           key 7 SendID 37 ReceiveID 73
+          !
+         !
+         router bgp 65000
+          neighbor 172.16.3.1
+           ao AS65100-AO include-tcp-options enable
+         commit
+        end
+        On X2:
+        configure terminal
+         key chain AS65100-AO tcp
+          key 7
+           send-id 73
+           recv-id 37
+           key-string 5A3C9E107B2D4F6681A0C3E5F7092B4D
+           cryptographic-algorithm aes-128-cmac
+          exit
+         exit
+         router bgp 65100
+          neighbor 172.16.3.254 ao AS65100-AO include-tcp-options
+        end
+        On PE3:
+        clear bgp 172.16.3.1
+        TCP-AO (RFC 5925) signs every TCP segment with a MAC computed from the key; the KeyID in each segment tells the receiver
+        which key to use. The sender puts its SendID there and the receiver looks it up as its ReceiveID, so the pairs cross
+        (PE3 37/73, X2 73/37). On IOS XR the IDs live in `tcp ao`, separate from the key chain; on IOS XE they live in the TCP
+        key chain. IOS XE wants the key string as 32 or 64 hex digits, and its `aes-128-cmac` matches IOS XR's
+        `AES-128-CMAC-96`. Both ends must agree on including the TCP options in the MAC. On IOS XR, a neighbor uses only one of
+        `password` (MD5), `keychain` and `ao`; the commit rejects a second one. An IOS XR `keychain` on the neighbor is not the
+        RFC 2385 MD5 that IOS XE's `neighbor … password` uses, so those two never connect.
+      ja: |
+        On PE3:
+        configure
+         key chain AS65100-AO
+          key 7
+           accept-lifetime 00:00:00 january 01 2026 infinite
+           key-string clear 5A3C9E107B2D4F6681A0C3E5F7092B4D
+           send-lifetime 00:00:00 january 01 2026 infinite
+           cryptographic-algorithm AES-128-CMAC-96
+          !
+         !
+         tcp ao
+          keychain AS65100-AO
+           key 7 SendID 37 ReceiveID 73
+          !
+         !
+         router bgp 65000
+          neighbor 172.16.3.1
+           ao AS65100-AO include-tcp-options enable
+         commit
+        end
+        On X2:
+        configure terminal
+         key chain AS65100-AO tcp
+          key 7
+           send-id 73
+           recv-id 37
+           key-string 5A3C9E107B2D4F6681A0C3E5F7092B4D
+           cryptographic-algorithm aes-128-cmac
+          exit
+         exit
+         router bgp 65100
+          neighbor 172.16.3.254 ao AS65100-AO include-tcp-options
+        end
+        On PE3:
+        clear bgp 172.16.3.1
+        TCP-AO(RFC 5925)は、鍵から計算した MAC で TCP のセグメントごとに署名します。セグメントの KeyID が、受け手にどの鍵を使うかを
+        伝えます。送り手はそこに自分の SendID を入れ、受け手はそれを自分の ReceiveID として探すので、組は交差します(PE3 は 37/73、
+        X2 は 73/37)。IOS XR では ID はキー チェーンと別の `tcp ao` に、IOS XE では TCP 用のキー チェーンの中にあります。IOS XE は
+        キー文字列を 16 進 32 桁か 64 桁で求め、`aes-128-cmac` が IOS XR の `AES-128-CMAC-96` に当たります。TCP のオプションを MAC に
+        含めるかどうかは両端でそろえます。IOS XR のネイバーで使えるのは `password`(MD5)・`keychain`・`ao` のどれか 1 つで、2 つ目は
+        コミットで拒否されます。IOS XR のネイバーの `keychain` は、IOS XE の `neighbor … password` が使う RFC 2385 の MD5 とは別の方式で、
+        この 2 つはつながりません。
+
+  - id: m6t9
+    title: { en: "M6-9  A ceiling on the customer's routes", ja: "M6-9  顧客から受ける経路に上限を" }
+    check: m6t9
+    read: [67-m6-limit-damp-agg#s2-1, 67-m6-limit-damp-agg#s3-1, 67-m6-limit-damp-agg#s3-4]
+    hints:
+      - en: "The limit, the warning threshold and what to do when the limit is exceeded are all options of one command in the neighbor's address family. Without an extra keyword the session stays down until somebody clears it."
+        ja: "上限・警告のしきい値・上限を超えたときの動作は、ネイバーのアドレス ファミリの 1 つのコマンドのオプションです。追加のキーワードが無いと、セッションは誰かが clear するまで落ちたままです。"
+      - en: "`show bgp neighbor 172.16.1.1` on PE1 (`Maximum prefixes allowed`, `Threshold for warning message`), `show bgp summary` (`Idle (PfxCt)`), `show logging | include MAXPFX`. Guide: Routing Configuration Guide for Cisco ASR 9000 Series Routers, 'Implementing BGP' (maximum-prefix)."
+        ja: "PE1 で `show bgp neighbor 172.16.1.1`(`Maximum prefixes allowed`・`Threshold for warning message`)、`show bgp summary`(`Idle (PfxCt)`)、`show logging | include MAXPFX`。ガイド: Routing Configuration Guide for Cisco ASR 9000 Series Routers の「Implementing BGP」(maximum-prefix)。"
+      - en: "PE1: `router bgp 65000` → `neighbor 172.16.1.1` → `address-family ipv4 unicast` → `maximum-prefix 4 75 restart 2`."
+        ja: "PE1 で `router bgp 65000` → `neighbor 172.16.1.1` → `address-family ipv4 unicast` → `maximum-prefix 4 75 restart 2`。"
+    verify:
+      en: |
+        **1. Is it in?** (PE1)
+
+        - `show bgp neighbor 172.16.1.1` on PE1 has, in the IPv4 unicast part:
+
+        ```
+          Maximum prefixes allowed 4
+          Threshold for warning message 75%, restart interval 2 min
+        ```
+
+        **2. Count** (PE1)
+
+        - `show bgp summary` on PE1: the line for 172.16.1.1 shows 2 prefixes (CE1's two LANs).
+
+        **3. Look what happens above the limit** (CE1, PE1)
+
+        - On CE1, add loopbacks with three more /24 addresses and `network` statements for them (five routes in all). IOS sends new eBGP
+          routes in batches, so within about 30 seconds `show bgp summary` on PE1 shows `Idle (PfxCt)` for 172.16.1.1, and
+          `show logging | include MAXPFX`
+          shows `%ROUTING-BGP-5-MAXPFX` (the warning) and `%ROUTING-BGP-4-MAXPFXEXCEED`.
+        - Remove what you added on CE1, then `clear bgp 172.16.1.1` on PE1 (or wait two minutes).
+
+        **4. Did anything else break?** (CE1)
+
+        - After the session is back, `ping 203.0.113.1 source 192.168.1.1` on CE1 answers again.
+      ja: |
+        **1. 入ったか**(PE1)
+
+        - PE1 の `show bgp neighbor 172.16.1.1` の IPv4 ユニキャストの部分に次の行があること。
+
+        ```
+          Maximum prefixes allowed 4
+          Threshold for warning message 75%, restart interval 2 min
+        ```
+
+        **2. 数える**(PE1)
+
+        - PE1 の `show bgp summary` で、172.16.1.1 の行の経路の数が 2(CE1 の 2 つの LAN)であること。
+
+        **3. 上限を超えたらどうなるか見る**(CE1・PE1)
+
+        - CE1 に、/24 のアドレスを持つループバックと、その `network` の文を 3 つ足します(合わせて 5 本)。IOS は新しい eBGP の経路をまとめて送るので、30 秒ほどのうちに、PE1 の
+          `show bgp summary` で 172.16.1.1 が `Idle (PfxCt)` になり、`show logging | include MAXPFX` に `%ROUTING-BGP-5-MAXPFX`
+          (警告)と `%ROUTING-BGP-4-MAXPFXEXCEED` が出ること。
+        - CE1 で足したものを消し、PE1 で `clear bgp 172.16.1.1`(または 2 分待つ)。
+
+        **4. 壊していないか**(CE1)
+
+        - セッションが戻ったあと、CE1 の `ping 203.0.113.1 source 192.168.1.1` が再び応答すること。
+    solution:
+      en: |
+        On PE1:
+        configure
+         router bgp 65000
+          neighbor 172.16.1.1
+           address-family ipv4 unicast
+            maximum-prefix 4 75 restart 2
+         commit
+        end
+        `maximum-prefix <limit> <threshold %>` logs `%ROUTING-BGP-5-MAXPFX` when the count reaches the threshold (75% of 4 is 3)
+        and, when the count goes above the limit, sends a Cease notification (`6/1 Maximum Number of Prefixes Reached` on the
+        IOS side) and leaves the session `Idle (PfxCt)`. Without `restart`, it stays down until `clear bgp <neighbor>`;
+        `restart 2` tries again after two minutes (and goes down again if the customer still sends too many). `warning-only`
+        only logs, and `discard-extra-paths` keeps the session and drops the routes above the limit. IOS XR 26.1.1 shows no
+        default limit for a neighbor that has no `maximum-prefix`.
+      ja: |
+        On PE1:
+        configure
+         router bgp 65000
+          neighbor 172.16.1.1
+           address-family ipv4 unicast
+            maximum-prefix 4 75 restart 2
+         commit
+        end
+        `maximum-prefix <上限> <しきい値 %>` は、経路の数がしきい値(4 の 75% = 3)に達すると `%ROUTING-BGP-5-MAXPFX` を記録し、上限を
+        超えると Cease の通知(IOS 側では `6/1 Maximum Number of Prefixes Reached`)を送って、セッションを `Idle (PfxCt)` にします。
+        `restart` が無いと `clear bgp <近隣>` まで落ちたままです。`restart 2` は 2 分後に張り直します(顧客がまだ多く送れば、また落ちます)。
+        `warning-only` は記録だけ、`discard-extra-paths` はセッションを保ったまま上限を超えた分を捨てます。IOS XR 26.1.1 は、
+        `maximum-prefix` の無いネイバーに既定の上限を表示しません。
+
+  - id: m6t10
+    title: { en: "M6-10  Dampen the flapping, aggregate the customer", ja: "M6-10  フラップする経路を抑え、顧客のアドレスを束ねる" }
+    check: m6t10
+    read: [67-m6-limit-damp-agg#s2-2, 67-m6-limit-damp-agg#s2-3, 67-m6-limit-damp-agg#s3-2, 67-m6-limit-damp-agg#s3-3, 67-m6-limit-damp-agg#s3-4]
+    hints:
+      - en: "Dampening is an address-family setting and applies to the routes learned over eBGP; the half-life is its first value. Aggregation is also in the address family; one keyword decides whether the more specific routes are still advertised. Both PE2 and PE3 have eBGP neighbors in AS 65100, so both need the aggregate."
+        ja: "ダンプニングはアドレス ファミリの設定で、eBGP で学習した経路に効きます。半減期は最初の値です。集約もアドレス ファミリの設定で、1 つのキーワードで、より詳細な経路を広告し続けるかどうかが決まります。AS 65100 の eBGP の相手は PE2 にも PE3 にもいるので、集約は両方に要ります。"
+      - en: "`show bgp 198.51.100.0/24` (`Dampinfo`, `half life`), `show bgp dampened-paths`, `show bgp flap-statistics`, `clear bgp ipv4 unicast dampening` on PE2; `show bgp` (`s` in front of the suppressed routes) and `show bgp 192.168.0.0/22` (`aggregated`) on PE2 and PE3; `show ip bgp neighbors 172.16.2.254 routes` on X1. Guide: Routing Configuration Guide for Cisco ASR 9000 Series Routers, 'Implementing BGP' (BGP route dampening, aggregate-address)."
+        ja: "PE2 で `show bgp 198.51.100.0/24`(`Dampinfo`・`half life`)・`show bgp dampened-paths`・`show bgp flap-statistics`・`clear bgp ipv4 unicast dampening`。PE2 と PE3 で `show bgp`(抑制した経路の前の `s`)と `show bgp 192.168.0.0/22`(`aggregated`)。X1 で `show ip bgp neighbors 172.16.2.254 routes`。ガイド: Routing Configuration Guide for Cisco ASR 9000 Series Routers の「Implementing BGP」(BGP route dampening・aggregate-address)。"
+      - en: "PE2: `router bgp 65000` → `address-family ipv4 unicast` → `bgp dampening 10` and `aggregate-address 192.168.0.0/22 summary-only`. PE3: `aggregate-address 192.168.0.0/22 summary-only` in the same place."
+        ja: "PE2 で `router bgp 65000` → `address-family ipv4 unicast` → `bgp dampening 10` と `aggregate-address 192.168.0.0/22 summary-only`。PE3 でも同じ場所に `aggregate-address 192.168.0.0/22 summary-only`。"
+    verify:
+      en: |
+        **1. Is it in?** (PE2, PE3)
+
+        - `show bgp` on PE2 starts with `Dampening enabled`. On PE2 and PE3 the table has `192.168.0.0/22  0.0.0.0` and the two
+          customer routes with `s` in front:
+
+        ```
+        *> 192.168.0.0/22     0.0.0.0                            32768 i
+        s>i192.168.1.0/24     10.255.0.1               0    100      0 65001 i
+        s>i192.168.2.0/24     10.255.0.1               0    100      0 65001 i
+        ```
+
+        **2. Count the flaps** (X1, PE2)
+
+        - On X1, withdraw and restore 198.51.100.0/24 toward PE2 a few times (for example, an outbound prefix list that denies it,
+          applied and removed, each followed by `clear ip bgp 172.16.2.254 soft out`). After each one, `show bgp flap-statistics`
+          on PE2 counts one more flap.
+        - After the third, `show bgp 198.51.100.0/24` on PE2 shows `(suppressed due to dampening)` and a `Dampinfo:` line with
+          the penalty and `half life 00:10:00`. `clear bgp ipv4 unicast dampening` lets it back in.
+
+        **3. Look where it arrives** (X1, X2)
+
+        - `show ip bgp neighbors 172.16.2.254 routes` on X1 (and `… 172.16.3.254 routes` on X2) lists 192.168.0.0/22 and no
+          192.168.1.0 or 192.168.2.0.
+
+        **4. Did anything else break?** (CE1)
+
+        - `ping 203.0.113.1 source 192.168.1.1` on CE1 still answers (the return traffic toward 192.168.1.0/24 now follows the
+          aggregate).
+      ja: |
+        **1. 入ったか**(PE2・PE3)
+
+        - PE2 の `show bgp` の先頭に `Dampening enabled` が出ること。PE2 と PE3 の表に `192.168.0.0/22  0.0.0.0` があり、顧客の 2 本の
+          前に `s` が付くこと。
+
+        ```
+        *> 192.168.0.0/22     0.0.0.0                            32768 i
+        s>i192.168.1.0/24     10.255.0.1               0    100      0 65001 i
+        s>i192.168.2.0/24     10.255.0.1               0    100      0 65001 i
+        ```
+
+        **2. フラップを数える**(X1・PE2)
+
+        - X1 で、PE2 へ出す 198.51.100.0/24 を何回か取り下げて戻します(たとえば、それを断る出口の prefix-list を付けて外し、そのたびに
+          `clear ip bgp 172.16.2.254 soft out`)。1 回ごとに、PE2 の `show bgp flap-statistics` のフラップの数が 1 つ増えること。
+        - 3 回目のあと、PE2 の `show bgp 198.51.100.0/24` に `(suppressed due to dampening)` と、ペナルティと `half life 00:10:00` の
+          `Dampinfo:` の行が出ること。`clear bgp ipv4 unicast dampening` で戻ります。
+
+        **3. 届いた先を見る**(X1・X2)
+
+        - X1 の `show ip bgp neighbors 172.16.2.254 routes`(X2 では `… 172.16.3.254 routes`)に 192.168.0.0/22 があり、192.168.1.0 と
+          192.168.2.0 が無いこと。
+
+        **4. 壊していないか**(CE1)
+
+        - CE1 の `ping 203.0.113.1 source 192.168.1.1` が引き続き応答すること(192.168.1.0/24 への戻りは集約の経路をたどります)。
+    solution:
+      en: |
+        On PE2:
+        configure
+         router bgp 65000
+          address-family ipv4 unicast
+           bgp dampening 10
+           aggregate-address 192.168.0.0/22 summary-only
+         commit
+        end
+        On PE3:
+        configure
+         router bgp 65000
+          address-family ipv4 unicast
+           aggregate-address 192.168.0.0/22 summary-only
+         commit
+        end
+        Dampening gives an eBGP path a penalty of 1000 each time it flaps; the penalty halves every half-life, the path is
+        suppressed (`d`) when the penalty passes the suppress value (2000) and is reused when it falls below the reuse value
+        (750), but never stays suppressed longer than the maximum suppress time. `bgp dampening 10` sets only the half-life; the
+        other values stay at their defaults. A peer reset does not count as a flap. `aggregate-address 192.168.0.0/22` creates
+        the aggregate once a route inside it is in the table (`aggregated, atomic-aggregate`), and `summary-only` stops the
+        more specific routes from being advertised (`s`, `Advertisements of this net are suppressed by an aggregate.`). To
+        suppress only some of them, use `aggregate-address … route-policy <name>` with `suppress-route`; IOS XR has no
+        suppress map.
+      ja: |
+        On PE2:
+        configure
+         router bgp 65000
+          address-family ipv4 unicast
+           bgp dampening 10
+           aggregate-address 192.168.0.0/22 summary-only
+         commit
+        end
+        On PE3:
+        configure
+         router bgp 65000
+          address-family ipv4 unicast
+           aggregate-address 192.168.0.0/22 summary-only
+         commit
+        end
+        ダンプニングは、eBGP の経路がフラップするたびにペナルティ 1000 を与えます。ペナルティは半減期ごとに半分になり、suppress の値(2000)を
+        超えると経路を抑制し(`d`)、reuse の値(750)を下回ると戻します。ただし最大抑制時間より長くは抑制しません。`bgp dampening 10` は半減期だけを
+        設定し、ほかの値は既定のままです。ピアのリセットはフラップに数えません。`aggregate-address 192.168.0.0/22` は、その中の経路が表に
+        あると集約の経路を作り(`aggregated, atomic-aggregate`)、`summary-only` はより詳細な経路の広告を止めます(`s`・
+        `Advertisements of this net are suppressed by an aggregate.`)。一部だけを抑制するには `aggregate-address … route-policy <名前>`
+        と `suppress-route` を使います。IOS XR に suppress-map はありません。

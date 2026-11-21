@@ -1,0 +1,304 @@
+
+######## 10:39:18 s5: 追加パス(PE3= send と backup advertise・RR1= send/receive と backup advertise・PE1= receive)→ 張り直し
+configure
+Sat Nov 21 10:39:19.915 UTC
+RP/0/RP0/CPU0:PE3(config)#
+route-policy ADDPATH-OUT
+RP/0/RP0/CPU0:PE3(config-rpl)#
+  set path-selection backup 1 advertise
+RP/0/RP0/CPU0:PE3(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:PE3(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE3(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+additional-paths send
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+additional-paths selection route-policy ADDPATH-OUT
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+commit
+Sat Nov 21 10:39:23.277 UTC
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+show configuration failed
+Sat Nov 21 10:39:23.785 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+end
+RP/0/RP0/CPU0:PE3#
+configure
+Sat Nov 21 10:39:26.730 UTC
+RP/0/RP0/CPU0:RR1(config)#
+route-policy RR-ADDPATH
+RP/0/RP0/CPU0:RR1(config-rpl)#
+  set path-selection backup 1 advertise
+RP/0/RP0/CPU0:RR1(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:RR1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:RR1(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:RR1(config-bgp-af)#
+additional-paths send
+RP/0/RP0/CPU0:RR1(config-bgp-af)#
+additional-paths receive
+RP/0/RP0/CPU0:RR1(config-bgp-af)#
+additional-paths selection route-policy RR-ADDPATH
+RP/0/RP0/CPU0:RR1(config-bgp-af)#
+commit
+Sat Nov 21 10:39:30.481 UTC
+RP/0/RP0/CPU0:RR1(config-bgp-af)#
+show configuration failed
+Sat Nov 21 10:39:30.887 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:RR1(config-bgp-af)#
+end
+RP/0/RP0/CPU0:RR1#
+configure
+Sat Nov 21 10:39:32.769 UTC
+RP/0/RP0/CPU0:PE1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE1(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+additional-paths receive
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+commit
+Sat Nov 21 10:39:34.503 UTC
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+show configuration failed
+Sat Nov 21 10:39:35.319 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+end
+RP/0/RP0/CPU0:PE1#
+clear bgp 10.255.0.21
+Sat Nov 21 10:39:39.192 UTC
+RP/0/RP0/CPU0:PE3#
+clear bgp 10.255.0.21
+Sat Nov 21 10:39:39.847 UTC
+RP/0/RP0/CPU0:PE1#
+
+######## 10:40:11 s6: PIC(PE1= backup 1 install・PE3= 予備の自分の eBGP も install)
+configure
+Sat Nov 21 10:40:11.370 UTC
+RP/0/RP0/CPU0:PE1(config)#
+route-policy PIC
+RP/0/RP0/CPU0:PE1(config-rpl)#
+  set path-selection backup 1 install
+RP/0/RP0/CPU0:PE1(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:PE1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE1(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+additional-paths selection route-policy PIC
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+commit
+Sat Nov 21 10:40:14.323 UTC
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+show configuration failed
+Sat Nov 21 10:40:15.251 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+end
+RP/0/RP0/CPU0:PE1#
+configure
+Sat Nov 21 10:40:19.457 UTC
+RP/0/RP0/CPU0:PE3(config)#
+route-policy ADDPATH-OUT
+Sat Nov 21 10:40:19.965 UTC
+% WARNING: Policy object route-policy ADDPATH-OUT exists! Reconfiguring it via CLI will replace current definition. Use abort to cancel.
+RP/0/RP0/CPU0:PE3(config-rpl)#
+  set path-selection backup 1 advertise install
+RP/0/RP0/CPU0:PE3(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:PE3(config)#
+commit
+Sat Nov 21 10:40:21.177 UTC
+RP/0/RP0/CPU0:PE3(config)#
+show configuration failed
+Sat Nov 21 10:40:21.687 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE3(config)#
+end
+RP/0/RP0/CPU0:PE3#
+
+######## 10:40:23 s7: GTSM(PE2= ttl-security・X1= ttl-security hops 1)
+configure
+Sat Nov 21 10:40:24.901 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE2(config-bgp)#
+neighbor 172.16.2.1
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+ttl-security
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+commit
+Sat Nov 21 10:40:26.630 UTC
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+show configuration failed
+Sat Nov 21 10:40:27.136 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+end
+RP/0/RP0/CPU0:PE2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+X1(config)#
+router bgp 65100
+X1(config-router)#
+neighbor 172.16.2.254 ttl-security hops 1
+X1(config-router)#
+end
+X1#
+clear bgp 172.16.2.1
+Sat Nov 21 10:40:32.771 UTC
+RP/0/RP0/CPU0:PE2#
+
+######## 10:40:33 s8: TCP-AO(PE3 と X2)
+configure
+Sat Nov 21 10:40:34.461 UTC
+RP/0/RP0/CPU0:PE3(config)#
+key chain AS65100-AO
+RP/0/RP0/CPU0:PE3(config-AS65100-AO)#
+key 7
+RP/0/RP0/CPU0:PE3(config-AS65100-AO-7)#
+key-string clear 5A3C9E107B2D4F6681A0C3E5F7092B4D
+RP/0/RP0/CPU0:PE3(config-AS65100-AO-7)#
+cryptographic-algorithm AES-128-CMAC-96
+RP/0/RP0/CPU0:PE3(config-AS65100-AO-7)#
+accept-lifetime 00:00:00 january 01 2026 infinite
+RP/0/RP0/CPU0:PE3(config-AS65100-AO-7)#
+send-lifetime 00:00:00 january 01 2026 infinite
+RP/0/RP0/CPU0:PE3(config-AS65100-AO-7)#
+exit
+RP/0/RP0/CPU0:PE3(config-AS65100-AO)#
+exit
+RP/0/RP0/CPU0:PE3(config)#
+tcp ao
+RP/0/RP0/CPU0:PE3(config-tcp-ao)#
+keychain AS65100-AO
+RP/0/RP0/CPU0:PE3(config-tcp-ao-AS65100-AO)#
+key 7 SendID 37 ReceiveID 73
+RP/0/RP0/CPU0:PE3(config-tcp-ao-AS65100-AO)#
+exit
+RP/0/RP0/CPU0:PE3(config-tcp-ao)#
+exit
+RP/0/RP0/CPU0:PE3(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE3(config-bgp)#
+neighbor 172.16.3.1
+RP/0/RP0/CPU0:PE3(config-bgp-nbr)#
+ao AS65100-AO include-tcp-options enable
+RP/0/RP0/CPU0:PE3(config-bgp-nbr)#
+commit
+Sat Nov 21 10:40:41.684 UTC
+RP/0/RP0/CPU0:PE3(config-bgp-nbr)#
+show configuration failed
+Sat Nov 21 10:40:42.201 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE3(config-bgp-nbr)#
+end
+RP/0/RP0/CPU0:PE3#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+X2(config)#
+key chain AS65100-AO tcp
+X2(config-keychain-tcp)#
+key 7
+X2(config-keychain-tcp-key)#
+send-id 73
+X2(config-keychain-tcp-key)#
+recv-id 37
+X2(config-keychain-tcp-key)#
+key-string 5A3C9E107B2D4F6681A0C3E5F7092B4D
+X2(config-keychain-tcp-key)#
+cryptographic-algorithm aes-128-cmac
+X2(config-keychain-tcp-key)#
+exit
+X2(config-keychain-tcp)#
+exit
+X2(config)#
+router bgp 65100
+X2(config-router)#
+neighbor 172.16.3.254 ao AS65100-AO include-tcp-options
+X2(config-router)#
+end
+X2#
+clear bgp 172.16.3.1
+Sat Nov 21 10:40:51.316 UTC
+RP/0/RP0/CPU0:PE3#
+
+######## 10:40:51 s9: maximum-prefix(PE1 ← CE1・4 本・75%・restart 2)
+configure
+Sat Nov 21 10:40:51.982 UTC
+RP/0/RP0/CPU0:PE1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE1(config-bgp)#
+neighbor 172.16.1.1
+RP/0/RP0/CPU0:PE1(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+maximum-prefix 4 75 restart 2
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+commit
+Sat Nov 21 10:40:54.116 UTC
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+show configuration failed
+Sat Nov 21 10:40:55.041 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:PE1#
+
+######## 10:40:57 s10: ダンプニング(PE2・半減期 10 分)・集約(PE2 と PE3・192.168.0.0/22 summary-only)
+configure
+Sat Nov 21 10:40:59.206 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE2(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE2(config-bgp-af)#
+bgp dampening 10
+RP/0/RP0/CPU0:PE2(config-bgp-af)#
+aggregate-address 192.168.0.0/22 summary-only
+RP/0/RP0/CPU0:PE2(config-bgp-af)#
+commit
+Sat Nov 21 10:41:01.435 UTC
+RP/0/RP0/CPU0:PE2(config-bgp-af)#
+show configuration failed
+Sat Nov 21 10:41:01.972 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-bgp-af)#
+end
+RP/0/RP0/CPU0:PE2#
+configure
+Sat Nov 21 10:41:05.204 UTC
+RP/0/RP0/CPU0:PE3(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE3(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+aggregate-address 192.168.0.0/22 summary-only
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+commit
+Sat Nov 21 10:41:07.055 UTC
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+show configuration failed
+Sat Nov 21 10:41:07.570 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+end
+RP/0/RP0/CPU0:PE3#

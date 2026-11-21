@@ -1,0 +1,40 @@
+# BL-257 PoC: M6 追補「BGP の運用機能」(SPCOR 2.4.g 追加パス・2.4.h PIC・1.5.b TTL セキュリティと認証・1.5.c プレフィックスの抑制)。
+# 記録= problems/_drafts/XR-TRACK.design.md §32。手順= poc/xr/bgpops_poc.sh
+# 盤面(AS 65000= IS-IS CORE レベル 2+LDP・P1 は BGP なし・RR1 は道の外の専用 RR):
+#   CE1(65001)─ PE1(XRd) ─┐                 ┌─ PE2(XRd)─ X1 ─┐
+#                          ├── P1(XRd) ──────┤      (65100)    ├─ T(宛先 203.0.113.1・IP SLA の responder)
+#   CE4(65004)─ PE4(XRv) ─┘     │           └─ PE3(XRd)─ X2 ─┘   X1 ─ X2 も直結(iBGP・OSPF)
+#                              RR1(XRd)
+# - PE2 は X1 からの経路に local-preference 200 → PE3 の最良は PE2 経由の iBGP になり、PE3 は自分の eBGP の経路(X2)を広告しない
+#   (best-external なし)→ RR1 も PE1 も道を 1 本しか知らない。ここから best-external・追加パス・PIC(予備の経路の install)を足していく。
+# - 入口の PE を XRd(PE1)と XRv9000(PE4)の 2 台にして、PIC の切り替えのデータプレーンを両方で測る(sla_loss.py で CE→T の片道の欠け)。
+id: _POC-XRBGP
+title: "[PoC] XR BGP operations"
+exam: POC
+topics: [iosxr, bgp, add-path, pic, gtsm, poc]
+difficulty: 0
+topology: generated
+access: ssh
+target_nodes: [PE1, PE2, PE3, PE4, P1, RR1, CE1, CE4, X1, X2, T]
+points: 0
+image_family: iol
+node_image_families: { PE1: iosxr, PE2: iosxr, PE3: iosxr, PE4: iosxr, P1: iosxr, RR1: iosxr }
+node_xr_platforms: { PE1: iosxrd, PE2: iosxrd, PE3: iosxrd, P1: iosxrd, RR1: iosxrd }
+node_images: { PE4: iosxrv9000-26-1-1 }
+lab:
+  positions: { CE1: [-800, -120], PE1: [-400, -120], CE4: [-800, 120], PE4: [-400, 120],
+               P1: [0, 0], RR1: [0, 280], PE2: [400, -120], PE3: [400, 120],
+               X1: [800, -120], X2: [800, 120], T: [1150, 0] }
+  links:
+    - { a: PE1, a_if: 3, b: P1, b_if: 3 }
+    - { a: PE2, a_if: 3, b: P1, b_if: 4 }
+    - { a: PE3, a_if: 3, b: P1, b_if: 5 }
+    - { a: PE4, a_if: 3, b: P1, b_if: 6 }
+    - { a: RR1, a_if: 3, b: P1, b_if: 7 }
+    - { a: PE1, a_if: 4, b: CE1, b_if: 0 }
+    - { a: PE4, a_if: 4, b: CE4, b_if: 0 }
+    - { a: PE2, a_if: 4, b: X1, b_if: 0 }
+    - { a: PE3, a_if: 4, b: X2, b_if: 0 }
+    - { a: X1, a_if: 1, b: T, b_if: 0 }
+    - { a: X2, a_if: 1, b: T, b_if: 1 }
+    - { a: X1, a_if: 2, b: X2, b_if: 2 }

@@ -1,0 +1,20 @@
+# M6-6: PIC。白紙= 予備なし・途切れ 2〜3 秒 → 0 点。確認は P1 の PE2 向けの IF を落として IP SLA で測る(2 分ほど)。
+# 確認は poc/xr/gen_grading_xrt17.py で組んだ(中身を直したら組み直す)。道具= topologies/bgpops_probe.py。
+problem: XRT-17
+total_points: 100
+checks:
+- name: M6-6 PE1 holds the path through PE3 as a backup path in the RIB and in CEF
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --show 'PE1:show route 203.0.113.0/24 detail' --show 'PE1:show cef 203.0.113.0/24 detail'
+  raw:
+  - regex: 10\.255\.0\.3, from 10\.255\.0\.21, BGP backup path
+  - regex: via 10\.255\.0\.3/32, \d+ dependencies, recursive, backup
+  points: 40
+- name: M6-6 When the link between PE2 and P1 goes down, traffic from CE1 to T stops for less than one second
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --failover 'CE1:192.168.1.1:203.0.113.1:P1:GigabitEthernet0/0/0/1' --recover 60 --after 'PE1:show bgp summary'
+  raw:
+  - regex: == FAILOVER PERIODS \d+ MAXLEN (?:\d|[1-9]\d) TAIL 0 VALID 1
+  points: 60

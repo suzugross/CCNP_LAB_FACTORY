@@ -1,0 +1,29 @@
+! _POC-XRBGP T(IOL 17.15)= AS 65100 の中の宛先。Loopback1 203.0.113.1 が IP SLA(udp-jitter)の宛先。X1 と X2 の両方に 1 本ずつ。
+no ip domain lookup
+!
+interface Loopback0
+ ip address 10.100.255.3 255.255.255.255
+ ip ospf 1 area 0
+!
+interface Loopback1
+ ip address 203.0.113.1 255.255.255.0
+ ip ospf network point-to-point
+ ip ospf 1 area 0
+!
+interface {{ links[0] }}
+ description to X1
+ ip address 10.100.13.3 255.255.255.0
+ ip ospf 1 area 0
+ no shutdown
+!
+interface {{ links[1] }}
+ description to X2
+ ip address 10.100.23.3 255.255.255.0
+ ip ospf 1 area 0
+ no shutdown
+!
+router ospf 1
+ router-id 10.100.255.3
+!
+ip sla responder
+!

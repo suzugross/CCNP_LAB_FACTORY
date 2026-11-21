@@ -1,0 +1,51 @@
+!! XRT-17 RR1(XRd 26.1.1)= 道の外の専用 RR(P1 に 1 本・LDP なし)。PE1〜PE3 がクライアント。
+interface Loopback0
+ ipv4 address 10.255.0.21 255.255.255.255
+!
+interface {{ links[3] }}
+ description to P1
+ ipv4 address 10.0.21.21 255.255.255.0
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0021.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+!
+router bgp 65000
+ bgp router-id 10.255.0.21
+ address-family ipv4 unicast
+ !
+ neighbor-group CLIENTS
+  remote-as 65000
+  update-source Loopback0
+  address-family ipv4 unicast
+   route-reflector-client
+  !
+ !
+ neighbor 10.255.0.1
+  use neighbor-group CLIENTS
+  description PE1
+ !
+ neighbor 10.255.0.2
+  use neighbor-group CLIENTS
+  description PE2
+ !
+ neighbor 10.255.0.3
+  use neighbor-group CLIENTS
+  description PE3
+ !
+!

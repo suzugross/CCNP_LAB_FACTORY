@@ -1,0 +1,65 @@
+!! _POC-XRBGP PE2(XRd 26.1.1)= 主の出口(X1 からの経路に local-preference 200)。
+interface Loopback0
+ ipv4 address 10.255.0.2 255.255.255.255
+!
+interface {{ links[3] }}
+ description to P1
+ ipv4 address 10.0.2.2 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description to X1 (AS 65100)
+ ipv4 address 172.16.2.254 255.255.255.0
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0002.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+!
+mpls ldp
+ router-id 10.255.0.2
+ interface {{ links[3] }}
+ !
+!
+route-policy PASS
+  pass
+end-policy
+!
+route-policy FROM-X1
+  set local-preference 200
+end-policy
+!
+router bgp 65000
+ bgp router-id 10.255.0.2
+ address-family ipv4 unicast
+ !
+ neighbor 10.255.0.21
+  remote-as 65000
+  description RR1
+  update-source Loopback0
+  address-family ipv4 unicast
+   next-hop-self
+  !
+ !
+ neighbor 172.16.2.1
+  remote-as 65100
+  address-family ipv4 unicast
+   route-policy FROM-X1 in
+   route-policy PASS out
+  !
+ !
+!

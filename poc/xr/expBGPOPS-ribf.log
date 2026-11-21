@@ -1,0 +1,358 @@
+
+######## 08:45:41 ribf1: RIB に入らない BGP の経路を XR は広告するか(IOS の bgp suppress-inactive の対照)。PE2 に 10.199.9.0/24 の static(Null0・AD 1)→ BGP の経路は RIB で負ける
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+X1(config)#
+interface Loopback9
+X1(config-if)#
+ip address 10.199.9.1 255.255.255.0
+X1(config-if)#
+router bgp 65100
+X1(config-router)#
+address-family ipv4
+X1(config-router-af)#
+network 10.199.9.0 mask 255.255.255.0
+X1(config-router-af)#
+end
+X1#
+configure
+Sat Nov 21 08:45:57.028 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router static
+RP/0/RP0/CPU0:PE2(config-static)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE2(config-static-afi)#
+10.199.9.0/24 Null0
+RP/0/RP0/CPU0:PE2(config-static-afi)#
+commit
+Sat Nov 21 08:45:58.772 UTC
+RP/0/RP0/CPU0:PE2(config-static-afi)#
+show configuration failed
+Sat Nov 21 08:45:59.286 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-static-afi)#
+end
+RP/0/RP0/CPU0:PE2#
+show route 10.199.9.0/24
+Sat Nov 21 08:46:17.332 UTC
+
+Routing entry for 10.199.9.0/24
+  Known via "static", distance 1, metric 0 (connected)
+  Installed Nov 21 08:45:59.825 for 00:00:17
+  Routing Descriptor Blocks
+    directly connected, via Null0
+      Route metric is 0
+  No advertising protos. 
+RP/0/RP0/CPU0:PE2#
+show bgp 10.199.9.0/24
+Sat Nov 21 08:46:17.738 UTC
+BGP routing table entry for 10.199.9.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                151          151
+Last Modified: Nov 21 08:44:38.351 for 00:01:39
+Paths: (2 available, best #2)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.255.0.21     
+  Path #1: Received by speaker 0
+  Not advertised to any peer
+  65100
+    10.255.0.3 (metric 20) from 10.255.0.21 (10.255.0.3)
+      Origin IGP, localpref 100, valid, internal, backup, add-path
+      Received Path ID 2, Local Path ID 3, version 151
+      Originator: 10.255.0.3, Cluster list: 10.255.0.21
+  Path #2: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.255.0.21     
+  65100
+    172.16.2.1 from 172.16.2.1 (10.100.255.1)
+      Origin IGP, metric 0, localpref 200, valid, external, best, group-best
+      Received Path ID 0, Local Path ID 1, version 150
+      Origin-AS validity: (disabled)
+RP/0/RP0/CPU0:PE2#
+show bgp
+Sat Nov 21 08:46:18.143 UTC
+BGP router identifier 10.255.0.2, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 163
+BGP main routing table version 163
+BGP NSR Initial initsync version 5 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+* i10.199.9.0/24      10.255.0.3                    100      0 65100 i
+*>                    172.16.2.1               0    200      0 65100 i
+*>i192.168.1.0/24     10.255.0.1               0    100      0 65001 i
+*>i192.168.4.0/24     10.255.0.4               0    100      0 65004 i
+* i203.0.113.0/24     10.255.0.3              11    100      0 65100 i
+*>                    172.16.2.1              11    200      0 65100 i
+
+Processed 4 prefixes, 6 paths
+RP/0/RP0/CPU0:PE2#
+show bgp neighbor 10.255.0.21 advertised-routes
+Sat Nov 21 08:46:18.552 UTC
+Network            Next Hop        From            AS Path
+10.199.9.0/24      10.255.0.2      172.16.2.1      65100i
+203.0.113.0/24     10.255.0.2      172.16.2.1      65100i
+
+Processed 2 prefixes, 2 paths
+RP/0/RP0/CPU0:PE2#
+show bgp 10.199.9.0/24
+Sat Nov 21 08:46:20.337 UTC
+BGP routing table entry for 10.199.9.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                111          111
+Last Modified: Nov 21 08:44:38.351 for 00:01:42
+Paths: (2 available, best #1)
+  Advertised IPv4 Unicast paths to update-groups (with more than one peer):
+    0.1 
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.255.0.3      
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to update-groups (with more than one peer):
+    0.1 
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.255.0.3      
+  65100, (Received from a RR-client)
+    10.255.0.2 (metric 20) from 10.255.0.2 (10.255.0.2)
+      Origin IGP, metric 0, localpref 200, valid, internal, best, group-best
+      Received Path ID 0, Local Path ID 1, version 111
+  Path #2: Received by speaker 0
+  Advertised IPv4 Unicast paths to update-groups (with more than one peer):
+    0.1 
+  65100, (Received from a RR-client)
+    10.255.0.3 (metric 20) from 10.255.0.3 (10.255.0.3)
+      Origin IGP, localpref 100, valid, internal, backup, add-path
+      Received Path ID 0, Local Path ID 2, version 111
+RP/0/RP0/CPU0:RR1#
+show bgp 10.199.9.0/24
+Sat Nov 21 08:46:21.906 UTC
+BGP routing table entry for 10.199.9.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                150          150
+Last Modified: Nov 21 08:44:38.351 for 00:01:43
+Paths: (2 available, best #1)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    172.16.1.1      
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    172.16.1.1      
+  65100
+    10.255.0.2 (metric 20) from 10.255.0.21 (10.255.0.2)
+      Origin IGP, metric 0, localpref 200, valid, internal, best, group-best
+      Received Path ID 1, Local Path ID 1, version 150
+      Originator: 10.255.0.2, Cluster list: 10.255.0.21
+  Path #2: Received by speaker 0
+  Not advertised to any peer
+  65100
+    10.255.0.3 (metric 20) from 10.255.0.21 (10.255.0.3)
+      Origin IGP, localpref 100, valid, internal, backup, add-path
+      Received Path ID 2, Local Path ID 2, version 150
+      Originator: 10.255.0.3, Cluster list: 10.255.0.21
+RP/0/RP0/CPU0:PE1#
+
+######## 08:46:22 ribf2: ? で suppress-inactive に当たるものがあるか(XR)
+# session tmp.JNm3JnWD7F → 10.1.10.12
+Last login: Sat Nov 21 08:46:16 2026 from 10.1.10.3
+
+
+
+RP/0/RP0/CPU0:PE2#
+### >>> configure
+configure
+Sat Nov 21 08:46:23.800 UTC
+RP/0/RP0/CPU0:PE2(config)#
+### >>> router bgp 65000
+router bgp 65000
+RP/0/RP0/CPU0:PE2(config-bgp)#
+### >>> bgp ?
+bgp ?
+  as-path-loopcheck       Enable AS-path loop checking for iBGP peers
+  auto-policy-soft-reset  Enable automatic soft peer reset on policy reconfiguration
+  bestpath                Change default route selection criteria
+  cluster-id              Configure Route-Reflector Cluster-id
+  confederation           AS confederation parameters
+  default                 Configure default value
+  enforce-first-as        Enforce the first AS for EBGP routes
+  fast-external-fallover  Immediately reset session if a link to a directly connected external peer goes down
+  graceful-restart        Enable Graceful Restart support
+  install                 Install diversion path to RIB/CEF
+  log                     Log bgp info
+  lpts-secure-binding     LPTS to install filter by interface for directly connected EBGP session packets
+  maximum                 Maximum number that can be configured
+  multipath               Change multipath selection criteria
+  neighbor-down           BGP neighbor down event configuration
+  origin-as               BGP origin-AS knobs
+  read-only               Allow duplicate table config and disable update generation
+  redistribute-internal   Allow redistribution of iBGP into IGPs (dangerous)
+  router-id               Configure Router-id
+  scan-time               Configure background scanner interval for generic scanner
+  unsafe-ebgp-policy      Make eBGP neighbors with no policy pass all routes(cisco-support)
+  update-delay            Set the max initial delay for sending updates
+RP/0/RP0/CPU0:PE2(config-bgp)#bgp 
+### >>> address-family ipv4 unicast
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE2(config-bgp-af)#
+### >>> bgp ?
+bgp ?
+  attribute-download  Configure attribute download for this address-family
+  bestpath            Change default route selection criteria
+  client-to-client    Configure client to client route reflection
+  dampening           Enable route-flap dampening
+  label-delay         Specify delay for batching label processing
+  origin-as           BGP origin-AS knobs
+  scan-time           Configure background scanner interval for this address-family
+RP/0/RP0/CPU0:PE2(config-bgp-af)#bgp 
+### >>> abort
+abort
+RP/0/RP0/CPU0:PE2#
+
+######## 08:46:38 ribf3: 対照= IOS(X2)でも同じ形を作る(X2 に static 10.199.9.0/24 Null0 → X2 が PE3 へ広告するか)。続いて bgp suppress-inactive
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+X2(config)#
+ip route 10.199.9.0 255.255.255.0 Null0
+X2(config)#
+end
+X2#
+show ip bgp 10.199.9.0
+BGP routing table entry for 10.199.9.0/24, version 57
+Paths: (1 available, best #1, table default, RIB-failure(17))
+  Advertised to update-groups:
+     2         
+  Refresh Epoch 1
+  Local
+    10.100.255.1 (metric 11) from 10.100.255.1 (10.100.255.1)
+      Origin IGP, metric 0, localpref 100, valid, internal, best
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 21 2026 08:44:16 UTC
+X2#
+show ip bgp rib-failure
+  Network            Next Hop                      RIB-failure   RIB-NH Matches
+10.199.9.0/24      10.100.255.1        Higher admin distance              n/a
+X2#
+show ip bgp neighbors 172.16.3.254 advertised-routes
+BGP table version is 57, local router ID is 10.100.255.2
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ r>i  10.199.9.0/24    10.100.255.1             0    100      0 i
+ *>   203.0.113.0      10.100.23.3             11         32768 i
+
+Total number of prefixes 2 
+X2#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+X2(config)#
+router bgp 65100
+X2(config-router)#
+address-family ipv4
+X2(config-router-af)#
+bgp suppress-inactive
+X2(config-router-af)#
+end
+X2#
+show ip bgp 10.199.9.0
+BGP routing table entry for 10.199.9.0/24, version 57
+Paths: (1 available, best #1, table default, RIB-failure(17))
+  Advertised to update-groups:
+     2         
+  Refresh Epoch 1
+  Local
+    10.100.255.1 (metric 11) from 10.100.255.1 (10.100.255.1)
+      Origin IGP, metric 0, localpref 100, valid, internal, best
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 21 2026 08:44:16 UTC
+X2#
+show ip bgp neighbors 172.16.3.254 advertised-routes
+BGP table version is 58, local router ID is 10.100.255.2
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ r>i  10.199.9.0/24    10.100.255.1             0    100      0 i
+ *>   203.0.113.0      10.100.23.3             11         32768 i
+
+Total number of prefixes 2 
+X2#
+show bgp 10.199.9.0/24
+Sat Nov 21 08:47:13.939 UTC
+BGP routing table entry for 10.199.9.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                107          107
+Last Modified: Nov 21 08:44:38.351 for 00:02:35
+Paths: (2 available, best #1)
+  Not advertised to any peer
+  Path #1: Received by speaker 0
+  Not advertised to any peer
+  65100
+    10.255.0.2 (metric 20) from 10.255.0.21 (10.255.0.2)
+      Origin IGP, metric 0, localpref 200, valid, internal, best, group-best
+      Received Path ID 0, Local Path ID 1, version 107
+      Originator: 10.255.0.2, Cluster list: 10.255.0.21
+  Path #2: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.255.0.21     
+  65100
+    172.16.3.1 from 172.16.3.1 (10.100.255.2)
+      Origin IGP, localpref 100, valid, external, best-external, backup, add-path
+      Received Path ID 0, Local Path ID 2, version 107
+      Origin-AS validity: (disabled)
+RP/0/RP0/CPU0:PE3#
+
+######## 08:47:14 ribf4: 片付け
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+X2(config)#
+router bgp 65100
+X2(config-router)#
+address-family ipv4
+X2(config-router-af)#
+no bgp suppress-inactive
+X2(config-router-af)#
+exit
+X2(config-router)#
+exit
+X2(config)#
+no ip route 10.199.9.0 255.255.255.0 Null0
+X2(config)#
+end
+X2#
+configure
+Sat Nov 21 08:47:19.805 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router static
+RP/0/RP0/CPU0:PE2(config-static)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE2(config-static-afi)#
+no 10.199.9.0/24 Null0
+RP/0/RP0/CPU0:PE2(config-static-afi)#
+commit
+Sat Nov 21 08:47:21.531 UTC
+RP/0/RP0/CPU0:PE2(config-static-afi)#
+show configuration failed
+Sat Nov 21 08:47:21.940 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-static-afi)#
+end
+RP/0/RP0/CPU0:PE2#

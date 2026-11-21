@@ -1,0 +1,24 @@
+# M6-9: maximum-prefix。白紙= 上限なし → 0 点。確認は CE1 に 3 本足して外し、PE1 で張り直す。
+# 確認は poc/xr/gen_grading_xrt17.py で組んだ(中身を直したら組み直す)。道具= topologies/bgpops_probe.py。
+problem: XRT-17
+total_points: 100
+checks:
+- name: M6-9 PE1 limits CE1 to four prefixes with a warning at 75% and a restart after two minutes; the session is up with CE1's two routes
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --waitfor 'PE1|show bgp summary|^172\.16\.1\.1\s+\d+\s+65001(?:\s+\d+){5}\s+\S+\s+\d+\s*$|120' --show 'PE1:show bgp neighbor 172.16.1.1'
+    --show 'PE1:show bgp summary'
+  raw:
+  - regex: Maximum prefixes allowed 4\n\s+Threshold for warning message 75%, restart interval 2 min
+  - regex: '== SHOW PE1: show\ bgp\ summary\n(?:(?!== )[\s\S])*?172\.16\.1\.1\s+\d+\s+65001(?:\s+\d+){5}\s+\S+\s+2\n'
+  points: 40
+- name: M6-9 When CE1 sends five routes, PE1 tears the session down (Idle, PfxCt)
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --pre 'CE1:interface Loopback11;;ip address 192.168.11.1 255.255.255.0;;interface Loopback12;;ip address 192.168.12.1 255.255.255.0;;interface
+    Loopback13;;ip address 192.168.13.1 255.255.255.0;;router bgp 65001;;address-family ipv4;;network 192.168.11.0;;network 192.168.12.0;;network 192.168.13.0' --settle 5 --waitfor 'PE1|show bgp summary|^172\.16\.1\.1\s+\d+\s+65001.*Idle
+    \(PfxCt\)|60' --show 'PE1:show bgp summary' --post 'CE1:router bgp 65001;;address-family ipv4;;no network 192.168.11.0;;no network 192.168.12.0;;no network 192.168.13.0;;exit;;exit;;no interface Loopback11;;no
+    interface Loopback12;;no interface Loopback13' --post 'PE1:@clear bgp 172.16.1.1' --postwait 'PE1|show bgp summary|^172\.16\.1\.1\s+\d+\s+65001(?:\s+\d+){5}\s+\S+\s+\d+\s*$|120'
+  raw:
+  - regex: '== SHOW PE1: show\ bgp\ summary\n(?:(?!== )[\s\S])*?172\.16\.1\.1\s+\d+\s+65001[^\n]*Idle \(PfxCt\)'
+  points: 60

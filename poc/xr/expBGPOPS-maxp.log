@@ -1,0 +1,446 @@
+
+######## 08:38:24 maxp0: CE1 が 4 本を広告(Loopback11〜13 を足す)。何も設定しない PE1 の表示
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE1(config)#
+interface Loopback11
+CE1(config-if)#
+ip address 192.168.11.1 255.255.255.0
+CE1(config-if)#
+interface Loopback12
+CE1(config-if)#
+ip address 192.168.12.1 255.255.255.0
+CE1(config-if)#
+interface Loopback13
+CE1(config-if)#
+ip address 192.168.13.1 255.255.255.0
+CE1(config-if)#
+router bgp 65001
+CE1(config-router)#
+address-family ipv4
+CE1(config-router-af)#
+network 192.168.11.0
+CE1(config-router-af)#
+network 192.168.12.0
+CE1(config-router-af)#
+network 192.168.13.0
+CE1(config-router-af)#
+end
+CE1#
+show bgp summary
+Sat Nov 21 08:38:41.640 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 108
+BGP main routing table version 108
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker          108           108           108           108           108             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000     210     149          108    0    0 01:27:53          3
+172.16.1.1        0 65001     155     170          108    0    0 02:17:50          2
+
+RP/0/RP0/CPU0:PE1#
+show bgp neighbor 172.16.1.1 | include accepted|Maximum|maximum|Threshold|limit
+                                                                  ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:PE1#
+
+######## 08:38:42 maxp1: maximum-prefix 3 75(上限 3・警告 75%)= 4 本で超える
+configure
+Sat Nov 21 08:38:43.634 UTC
+RP/0/RP0/CPU0:PE1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE1(config-bgp)#
+neighbor 172.16.1.1
+RP/0/RP0/CPU0:PE1(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+maximum-prefix 3 75
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+commit
+Sat Nov 21 08:38:45.928 UTC
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+show configuration failed
+Sat Nov 21 08:38:46.349 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:PE1#
+show bgp summary
+Sat Nov 21 08:39:04.370 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 112
+BGP main routing table version 112
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker          112           112           112           112           112             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000     212     151          112    0    0 01:28:16          3
+172.16.1.1        0 65001     156     172            0    0    0 00:00:05  Idle (PfxCt)
+
+RP/0/RP0/CPU0:PE1#
+show bgp neighbor 172.16.1.1 | include BGP state|accepted|Maximum|maximum|Threshold|limit|Last reset|Cease
+                                                                   ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:PE1#
+show logging last 20
+Sat Nov 21 08:39:05.203 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 9 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 160 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Nov 21 07:22:04.805 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[12056]: Accepted authentication for SUZUKI from 10.1.10.3 port 61664 ssh2 
+RP/0/RP0/CPU0:Nov 21 07:22:06.458 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[12060]: Connection closed by 10.1.10.3 port 61664 
+RP/0/RP0/CPU0:Nov 21 07:22:10.266 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[12114]: Accepted authentication for SUZUKI from 10.1.10.3 port 61666 ssh2 
+RP/0/RP0/CPU0:Nov 21 07:22:13.016 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[12118]: Connection closed by 10.1.10.3 port 61666 
+RP/0/RP0/CPU0:Nov 21 07:34:09.342 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[13111]: Accepted authentication for SUZUKI from 10.1.10.3 port 61710 ssh2 
+RP/0/RP0/CPU0:Nov 21 07:34:12.280 UTC: config[66412]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000004' to view the changes. 
+RP/0/RP0/CPU0:Nov 21 07:34:12.628 UTC: config[66412]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.3) 
+RP/0/RP0/CPU0:Nov 21 07:34:13.076 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[13115]: Connection closed by 10.1.10.3 port 61710 
+RP/0/RP0/CPU0:Nov 21 07:34:13.279 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[13182]: Accepted authentication for SUZUKI from 10.1.10.3 port 61712 ssh2 
+RP/0/RP0/CPU0:Nov 21 07:34:14.796 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[13187]: Connection closed by 10.1.10.3 port 61712 
+RP/0/RP0/CPU0:Nov 21 08:38:40.672 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[18269]: Accepted authentication for SUZUKI from 10.1.10.3 port 61919 ssh2 
+RP/0/RP0/CPU0:Nov 21 08:38:42.490 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[18273]: Connection closed by 10.1.10.3 port 61919 
+RP/0/RP0/CPU0:Nov 21 08:38:42.674 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[18341]: Accepted authentication for SUZUKI from 10.1.10.3 port 61920 ssh2 
+RP/0/RP0/CPU0:Nov 21 08:38:45.993 UTC: config[67546]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000005' to view the changes. 
+RP/0/RP0/CPU0:Nov 21 08:38:47.638 UTC: config[67546]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.3) 
+RP/0/RP0/CPU0:Nov 21 08:38:48.055 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[18345]: Connection closed by 10.1.10.3 port 61920 
+RP/0/RP0/CPU0:Nov 21 08:38:59.128 UTC: bgp[1084]: %ROUTING-BGP-5-MAXPFX : No. of IPv4 Unicast prefixes received from 172.16.1.1 has reached 3, max 3 
+RP/0/RP0/CPU0:Nov 21 08:38:59.128 UTC: bgp[1084]: %ROUTING-BGP-4-MAXPFXEXCEED : No. of IPv4 Unicast prefixes received from 172.16.1.1: 4 exceed limit 3 
+RP/0/RP0/CPU0:Nov 21 08:38:59.128 UTC: bgp[1084]: %ROUTING-BGP-5-ADJCHANGE : neighbor 172.16.1.1 Down - Peer exceeding maximum prefix limit (CEASE notification sent - maximum number of prefixes reached) (VRF: default) (AS: 65001) 
+RP/0/RP0/CPU0:Nov 21 08:39:03.281 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[18427]: Accepted authentication for SUZUKI from 10.1.10.3 port 61922 ssh2 
+RP/0/RP0/CPU0:PE1#
+show ip bgp summary | begin Neighbor
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+172.16.1.254    4        65000       0       0        1    0    0 00:00:07 Idle
+CE1#
+show logging | include BGP|MAXPFX|NOTIFICATION
+*Nov 21 08:38:59.129: %BGP-3-NOTIFICATION: received from neighbor 172.16.1.254 6/1 (Maximum Number of Prefixes Reached) 6 bytes 01010000 0003
+*Nov 21 08:38:59.129: %BGP-5-NBR_RESET: Neighbor 172.16.1.254 reset (BGP Notification received)
+*Nov 21 08:38:59.129: %BGP-5-ADJCHANGE: neighbor 172.16.1.254 Down BGP Notification received
+*Nov 21 08:38:59.129: %BGP_SESSION-5-ADJCHANGE: neighbor 172.16.1.254 IPv4 Unicast topology base removed from session  BGP Notification received
+CE1#
+
+######## 08:39:07 maxp2: warning-only に替えて clear
+configure
+Sat Nov 21 08:39:08.664 UTC
+RP/0/RP0/CPU0:PE1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE1(config-bgp)#
+neighbor 172.16.1.1
+RP/0/RP0/CPU0:PE1(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+maximum-prefix 3 75 warning-only
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+commit
+Sat Nov 21 08:39:10.819 UTC
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+show configuration failed
+Sat Nov 21 08:39:11.228 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:PE1#
+clear bgp 172.16.1.1
+Sat Nov 21 08:39:14.509 UTC
+RP/0/RP0/CPU0:PE1#
+show bgp summary
+Sat Nov 21 08:39:46.123 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 116
+BGP main routing table version 116
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker          116           116           116           116           116             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000     213     152          116    0    0 01:28:58          3
+172.16.1.1        0 65001     161     177          116    0    0 00:00:22          4
+
+RP/0/RP0/CPU0:PE1#
+show bgp neighbor 172.16.1.1 | include BGP state|accepted|Maximum|maximum|Threshold|limit
+                                                                   ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:PE1#
+show logging last 10
+Sat Nov 21 08:39:46.941 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 10 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 171 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Nov 21 08:39:07.554 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[18486]: Accepted authentication for SUZUKI from 10.1.10.3 port 61925 ssh2 
+RP/0/RP0/CPU0:Nov 21 08:39:10.879 UTC: config[67695]: %MGBL-CONFIG-6-DB_COMMIT : Configuration committed by user 'SUZUKI'. Use 'show configuration commit changes 1000000006' to view the changes. 
+RP/0/RP0/CPU0:Nov 21 08:39:12.494 UTC: config[67695]: %MGBL-SYS-5-CONFIG_I : Configured from console by SUZUKI on vty0 (10.1.10.3) 
+RP/0/RP0/CPU0:Nov 21 08:39:12.958 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[18490]: Connection closed by 10.1.10.3 port 61925 
+RP/0/RP0/CPU0:Nov 21 08:39:13.360 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[18567]: Accepted authentication for SUZUKI from 10.1.10.3 port 61926 ssh2 
+RP/0/RP0/CPU0:Nov 21 08:39:14.964 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[18571]: Connection closed by 10.1.10.3 port 61926 
+RP/0/RP0/CPU0:Nov 21 08:39:23.263 UTC: bgp[1084]: %ROUTING-BGP-5-ADJCHANGE : neighbor 172.16.1.1 Up (VRF: default) (AS: 65001) 
+RP/0/RP0/CPU0:Nov 21 08:39:23.265 UTC: bgp[1084]: %ROUTING-BGP-5-MAXPFX : No. of IPv4 Unicast prefixes received from 172.16.1.1 has reached 3, max 3 
+RP/0/RP0/CPU0:Nov 21 08:39:23.265 UTC: bgp[1084]: %ROUTING-BGP-4-MAXPFXEXCEED : No. of IPv4 Unicast prefixes received from 172.16.1.1: 4 exceed limit 3 
+RP/0/RP0/CPU0:Nov 21 08:39:45.173 UTC: ssh_syslog_proxy[1188]: %SECURITY-SSHD_SYSLOG_PRX-6-INFO_GENERAL : sshd[18675]: Accepted authentication for SUZUKI from 10.1.10.3 port 61940 ssh2 
+RP/0/RP0/CPU0:PE1#
+
+######## 08:39:47 maxp3: discard-extra-paths に替えて clear(超えた分を捨ててセッションは保つ)
+configure
+Sat Nov 21 08:39:48.603 UTC
+RP/0/RP0/CPU0:PE1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE1(config-bgp)#
+neighbor 172.16.1.1
+RP/0/RP0/CPU0:PE1(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+maximum-prefix 3 75 discard-extra-paths
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+commit
+Sat Nov 21 08:39:50.732 UTC
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+show configuration failed
+Sat Nov 21 08:39:51.143 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:PE1#
+clear bgp 172.16.1.1
+Sat Nov 21 08:39:54.058 UTC
+RP/0/RP0/CPU0:PE1#
+show bgp summary
+Sat Nov 21 08:40:25.777 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 127
+BGP main routing table version 127
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker          127           127           127           127           127             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000     219     154          127    0    0 01:29:38          3
+172.16.1.1        0 65001     166     186          127    0    0 00:00:30          3
+
+RP/0/RP0/CPU0:PE1#
+show bgp neighbor 172.16.1.1 | include BGP state|accepted|Maximum|maximum|Threshold|limit|discard
+                                                                   ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:PE1#
+show bgp neighbor 172.16.1.1 routes
+Sat Nov 21 08:40:26.697 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 127
+BGP main routing table version 127
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*> 192.168.1.0/24     172.16.1.1               0             0 65001 i
+*> 192.168.11.0/24    172.16.1.1               0             0 65001 i
+*> 192.168.12.0/24    172.16.1.1               0             0 65001 i
+
+Processed 3 prefixes, 3 paths
+RP/0/RP0/CPU0:PE1#
+
+######## 08:40:27 maxp4: restart 1(1 分後に張り直す)= 上限超えで切れたあと 1 分で戻るか
+configure
+Sat Nov 21 08:40:28.574 UTC
+RP/0/RP0/CPU0:PE1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE1(config-bgp)#
+neighbor 172.16.1.1
+RP/0/RP0/CPU0:PE1(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+maximum-prefix 3 75 restart 1
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+commit
+Sat Nov 21 08:40:30.700 UTC
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+show configuration failed
+Sat Nov 21 08:40:31.109 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:PE1#
+clear bgp 172.16.1.1
+Sat Nov 21 08:40:34.021 UTC
+RP/0/RP0/CPU0:PE1#
+show bgp summary
+Sat Nov 21 08:40:55.838 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 136
+BGP main routing table version 136
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker          136           136           136           136           136             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000     222     157          136    0    0 01:30:08          3
+172.16.1.1        0 65001     171     191            0    0    0 00:00:12  Idle (PfxCt)
+
+RP/0/RP0/CPU0:PE1#
+show bgp neighbor 172.16.1.1 | include BGP state|Maximum|restart|Restart|Last reset
+                                                                   ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:PE1#
+show bgp summary
+Sat Nov 21 08:42:08.072 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 142
+BGP main routing table version 142
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker          142           142           142           142           142             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000     225     160          142    0    0 01:31:20          3
+172.16.1.1        0 65001     175     194            0    0    0 00:00:22  Idle (PfxCt)
+
+RP/0/RP0/CPU0:PE1#
+show bgp neighbor 172.16.1.1 | include BGP state|Maximum|restart|Restart|Last reset
+                                                                   ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:PE1#
+
+######## 08:42:08 maxp5: 片付け(上限を外し CE1 の 3 本も消す)
+configure
+Sat Nov 21 08:42:10.056 UTC
+RP/0/RP0/CPU0:PE1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE1(config-bgp)#
+neighbor 172.16.1.1
+RP/0/RP0/CPU0:PE1(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+no maximum-prefix
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+commit
+Sat Nov 21 08:42:12.189 UTC
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+show configuration failed
+Sat Nov 21 08:42:12.699 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:PE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE1(config)#
+router bgp 65001
+CE1(config-router)#
+address-family ipv4
+CE1(config-router-af)#
+no network 192.168.11.0
+CE1(config-router-af)#
+no network 192.168.12.0
+CE1(config-router-af)#
+no network 192.168.13.0
+CE1(config-router-af)#
+no interface Loopback11
+CE1(config)#
+no interface Loopback12
+CE1(config)#
+no interface Loopback13
+CE1(config)#
+end
+CE1#
+clear bgp 172.16.1.1
+Sat Nov 21 08:42:21.426 UTC
+RP/0/RP0/CPU0:PE1#
+show bgp summary
+Sat Nov 21 08:42:53.262 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 143
+BGP main routing table version 143
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker          143           143           143           143           143             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000     226     161          143    0    0 01:32:05          3
+172.16.1.1        0 65001     180     199          143    0    0 00:00:16          1
+
+RP/0/RP0/CPU0:PE1#

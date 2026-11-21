@@ -1,0 +1,41 @@
+# XRT-17: XR トラック M6 追補「BGP の運用機能」(SPCOR 2.4.g 追加パス・2.4.h PIC・1.5.b TTL セキュリティと認証・1.5.c プレフィックスの抑制)。BL-257。
+# 設計= problems/_drafts/XR-TRACK.design.md §32(PoC= _POC-XRBGP・ユーザ判断= §32.5 の推奨・2026-11-21)。学習目的のラボ(パック・ノルマの対象外)。
+# 盤面(AS 65000= IS-IS CORE レベル 2+LDP・P1 は BGP なし・RR1 は道の外の専用 RR):
+#   CE1(65001)─ PE1(XRv9000)── P1(XRd)─┬─ PE2(XRd)─ X1 ─┐
+#                                │      └─ PE3(XRd)─ X2 ─┴─ T(203.0.113.1・IP SLA の responder)  X1 ─ X2 直結
+#                               RR1(XRd)
+#   PE1 Gi0/0/0/0 P1・/1 CE1   PE2 /0 P1・/1 X1   PE3 /0 P1・/1 X2   P1 /0 PE1・/1 PE2・/2 PE3・/3 RR1   RR1 /0 P1
+# - PE2 は X1 からの経路に local-preference 200 → PE3 の最良は PE2 経由の iBGP(PE3 は X2 の経路を出さない)。
+# - ★入口の PE1 だけ XRv9000= XRd の入口は、遠くの PE が IGP から消えた時に入れておいた予備を使わず BGP を待った(PIC の確認は通信を測る・design §32.3 #10)。
+# - ★CML のリンク停止は XR が検知せず(XRv9000 も同じ・M10)、XRd は IS-IS の BFD のセッションも作らない → PIC の確認は P1 の PE2 向けの IF を shutdown して測る(bgpops_probe.py)。
+# - T の既定経路は X2(metric 10)が X1(20)より優先= 帰りは X2 → PE3 を通り、PE2 の故障に左右されない(片道を測るため)。
+id: XRT-17
+title: "XR Track 17 — BGP operations"
+exam: SP
+topics: [iosxr, bgp, add-path, pic, gtsm, tcp-ao, maximum-prefix, dampening, aggregation, tutorial]
+difficulty: 3
+topology: generated
+access: ssh
+target_nodes: [PE1, PE2, PE3, P1, RR1, CE1, X1, X2, T]
+points: 100
+image_family: iol
+node_image_families: { PE1: iosxr, PE2: iosxr, PE3: iosxr, P1: iosxr, RR1: iosxr }
+node_xr_platforms: { PE2: iosxrd, PE3: iosxrd, P1: iosxrd, RR1: iosxrd }
+node_images: { PE1: iosxrv9000-26-1-1 }
+grade_attempts: 2
+# lab.sh reset で構築直後へ戻す IOS の機器(configure replace)。X1・X2 は課題で設定し、CE1 は確認が一時的に経路を足す。
+xe_reset_nodes: [CE1, X1, X2]
+lab:
+  positions: { CE1: [-800, 0], PE1: [-400, 0], P1: [0, 0], RR1: [0, 280],
+               PE2: [400, -140], PE3: [400, 140], X1: [800, -140], X2: [800, 140], T: [1150, 0] }
+  links:
+    - { a: PE1, a_if: 3, b: P1, b_if: 3 }
+    - { a: PE2, a_if: 3, b: P1, b_if: 4 }
+    - { a: PE3, a_if: 3, b: P1, b_if: 5 }
+    - { a: RR1, a_if: 3, b: P1, b_if: 6 }
+    - { a: PE1, a_if: 4, b: CE1, b_if: 0 }
+    - { a: PE2, a_if: 4, b: X1, b_if: 0 }
+    - { a: PE3, a_if: 4, b: X2, b_if: 0 }
+    - { a: X1, a_if: 1, b: T, b_if: 0 }
+    - { a: X2, a_if: 1, b: T, b_if: 1 }
+    - { a: X1, a_if: 2, b: X2, b_if: 2 }

@@ -1,0 +1,190 @@
+
+######## 07:03:09 pic: PE1/PE4 に selection(backup 1 install)= PIC。予備の経路の表示
+configure
+Sat Nov 21 07:03:10.977 UTC
+RP/0/RP0/CPU0:PE1(config)#
+route-policy PIC
+RP/0/RP0/CPU0:PE1(config-rpl)#
+  set path-selection backup 1 install
+RP/0/RP0/CPU0:PE1(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:PE1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE1(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+additional-paths selection route-policy PIC
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+commit
+Sat Nov 21 07:03:14.039 UTC
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+show configuration failed
+Sat Nov 21 07:03:14.444 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+end
+RP/0/RP0/CPU0:PE1#
+configure
+Sat Nov 21 07:03:17.953 UTC
+RP/0/RP0/CPU0:PE4(config)#
+route-policy PIC
+RP/0/RP0/CPU0:PE4(config-rpl)#
+  set path-selection backup 1 install
+RP/0/RP0/CPU0:PE4(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:PE4(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE4(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE4(config-bgp-af)#
+additional-paths selection route-policy PIC
+RP/0/RP0/CPU0:PE4(config-bgp-af)#
+commit
+Sat Nov 21 07:03:20.913 UTC
+RP/0/RP0/CPU0:PE4(config-bgp-af)#
+show configuration failed
+Sat Nov 21 07:03:21.949 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE4(config-bgp-af)#
+end
+RP/0/RP0/CPU0:PE4#
+==== PE1
+show bgp 203.0.113.0/24
+Sat Nov 21 07:03:39.615 UTC
+BGP routing table entry for 203.0.113.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 36           36
+Last Modified: Nov 21 07:01:53.351 for 00:01:46
+Paths: (1 available, best #1)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    172.16.1.1      
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    172.16.1.1      
+  65100
+    10.255.0.2 (metric 20) from 10.255.0.21 (10.255.0.2)
+      Origin IGP, metric 11, localpref 200, valid, internal, best, group-best
+      Received Path ID 0, Local Path ID 1, version 36
+      Originator: 10.255.0.2, Cluster list: 10.255.0.21
+RP/0/RP0/CPU0:PE1#
+show route 203.0.113.0/24 detail
+Sat Nov 21 07:03:40.028 UTC
+
+Routing entry for 203.0.113.0/24
+  Known via "bgp 65000", distance 200, metric 11
+  Tag 65100, type internal
+  Installed Nov 21 07:01:52.919 for 00:01:47
+  Routing Descriptor Blocks
+    10.255.0.2, from 10.255.0.21
+      Route metric is 11, Wt is 1
+      Label: None
+      Tunnel ID: None
+      Binding Label: None
+      Extended communities count: 0
+      NHID: 0x0 (Ref: 0)
+      Path Grouping ID: 65000
+  Route version is 0x25 (37)
+  No local label
+  IP Precedence: Not Set
+  QoS Group ID: Not Set
+  Flow-tag: Not Set
+  Fwd-class: Not Set
+  Route Priority: RIB_PRIORITY_RECURSIVE_SVD_REM (16) SVD Type RIB_SVD_TYPE_LOCAL
+  Download Priority 4, Download Version 90
+  No advertising protos. 
+RP/0/RP0/CPU0:PE1#
+show cef 203.0.113.0/24 detail
+Sat Nov 21 07:03:40.439 UTC
+203.0.113.0/24, version 90, internal 0x5000001 0x40 (ptr 0x8852acb0) [1], 0x0 (0x0), 0x0 (0x0)
+ Updated Nov 21 07:01:52.921 
+ local adjacency to GigabitEthernet0/0/0/0
+
+ Prefix Len 24, traffic index 0, precedence n/a, priority 4
+  gateway array (0x89726218) reference count 1, flags 0x2010, source rib (7), 0 backups
+                [1 type 3 flags 0x68501 (0x897c8f60) ext 0x218 (0x88ac05d8) (collapsed)]
+  LW-LDI[type=0, refc=0, ptr=0x0, sh-ldi=0x0]
+  gateway array update type-time 1 Nov 21 07:01:52.921
+ LDI Update time Nov 21 07:01:52.921
+   via 10.255.0.2/32, 2 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0x8852a770 0x0]
+    next hop 10.255.0.2/32 via 10.255.0.2/32
+
+    Load distribution: 0 (refcount 1)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    10.0.1.11      
+RP/0/RP0/CPU0:PE1#
+==== PE4
+show bgp 203.0.113.0/24
+Sat Nov 21 07:03:42.623 UTC
+BGP routing table entry for 203.0.113.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 32           32
+Last Modified: Nov 21 07:01:53.691 for 00:01:48
+Paths: (1 available, best #1)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    172.16.4.1      
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    172.16.4.1      
+  65100
+    10.255.0.2 (metric 20) from 10.255.0.21 (10.255.0.2)
+      Origin IGP, metric 11, localpref 200, valid, internal, best, group-best
+      Received Path ID 0, Local Path ID 1, version 32
+      Originator: 10.255.0.2, Cluster list: 10.255.0.21
+RP/0/RP0/CPU0:PE4#
+show route 203.0.113.0/24 detail
+Sat Nov 21 07:03:43.023 UTC
+
+Routing entry for 203.0.113.0/24
+  Known via "bgp 65000", distance 200, metric 11
+  Tag 65100, type internal
+  Installed Nov 21 07:01:53.542 for 00:01:49
+  Routing Descriptor Blocks
+    10.255.0.2, from 10.255.0.21
+      Route metric is 11, Wt is 1
+      Label: None
+      Tunnel ID: None
+      Binding Label: None
+      Extended communities count: 0
+      NHID: 0x0 (Ref: 0)
+      Path Grouping ID: 65000
+  Route version is 0x25 (37)
+  No local label
+  IP Precedence: Not Set
+  QoS Group ID: Not Set
+  Flow-tag: Not Set
+  Fwd-class: Not Set
+  Route Priority: RIB_PRIORITY_RECURSIVE_SVD_REM (16) SVD Type RIB_SVD_TYPE_LOCAL
+  Download Priority 4, Download Version 90
+  No advertising protos. 
+RP/0/RP0/CPU0:PE4#
+show cef 203.0.113.0/24 detail
+Sat Nov 21 07:03:43.431 UTC
+203.0.113.0/24, version 90, internal 0x5000001 0x40 (ptr 0xf79e1e8) [1], 0x400 (0xf92f098), 0x0 (0x0)
+ Updated Nov 21 07:01:53.545
+ Prefix Len 24, traffic index 0, precedence n/a, priority 4
+  gateway array (0xf7c8008) reference count 1, flags 0x10, source rib (7), 0 backups
+                [2 type 3 flags 0x8441 (0xf86ad50) ext 0x0 (0x0)]
+  LW-LDI[type=3, refc=1, ptr=0xf92f098, sh-ldi=0xf86ad50]
+  gateway array update type-time 1 Nov 21 07:01:53.545
+ LDI Update time Nov 21 07:01:53.545
+ LW-LDI-TS Nov 21 07:01:53.545
+
+  Level 1 - Load distribution: 0
+  [0] via 10.255.0.2/32, recursive
+
+   via 10.255.0.2/32, 3 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xf79cf40 0x0]
+    next hop 10.255.0.2/32 via 10.255.0.2/32
+
+    Load distribution: 0 (refcount 2)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    remote         
+
+RP/0/RP0/CPU0:PE4#

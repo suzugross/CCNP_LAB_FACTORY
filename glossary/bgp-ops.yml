@@ -1,0 +1,251 @@
+# glossary/bgp-ops.yml — BGP の運用機能の語(追加パス・PIC・GTSM・MD5/TCP-AO・経路数の上限・ダンプニング・集約)
+# 2026-11-21 作成(XR トラック M6 追補・BL-257)。説明は本文(実機で確かめた内容・design §32)と食い違わないこと。
+# 単元をまたぐと別の意味になる表記(集約・予備の経路・抑制など)は scope で M6 追補のページ(6[2-9]-m6-*)に絞る。
+
+# ---------------------------------------------------------------- 予備の道
+- id: add-path
+  term: {en: ADD-PATH, ja: 追加パス}
+  full: {en: BGP additional paths, ja: BGP の追加パス}
+  aka: [additional paths, additional-paths, Add-Path, add-path, ADD-PATH capability]
+  def:
+    en: >-
+      A BGP extension (RFC 7911) that lets a speaker advertise more than one path for the same prefix, each tagged with a
+      path identifier. Both ends announce the capability (send, receive or both) per address family in the OPEN message,
+      so it takes effect only after the session is re-established.
+    ja: >-
+      1 つのプレフィックスについて複数の経路を、経路ごとの識別子を付けて広告できるようにする BGP の拡張(RFC 7911)。能力(送信・受信・
+      両方)はアドレス ファミリごとに OPEN メッセージで告げ合うので、セッションを張り直すまで効かない。
+  see: [path-id, backup-path, route-reflector]
+
+- id: path-id
+  term: {en: path ID, ja: パス ID}
+  aka: [path identifier, Path ID, Received Path ID, Local Path ID]
+  def:
+    en: >-
+      The identifier that ADD-PATH puts in front of each prefix so that several paths for one prefix can be told apart.
+      IOS XR shows it as Received Path ID (the value from the neighbor) and Local Path ID.
+    ja: >-
+      複数の経路を区別するために、追加パスがプレフィックスごとに付ける識別子。IOS XR は Received Path ID(相手が付けた値)と
+      Local Path ID として表示する。
+  see: [add-path]
+
+- id: backup-path
+  term: {en: backup path, ja: 予備の経路}
+  aka: [backup paths, バックアップ パス, BGP backup path]
+  def:
+    en: >-
+      On IOS XR, the path chosen by `set path-selection backup 1`: the best path left after removing every path with the
+      same next hop as the best. It can be advertised with ADD-PATH and installed in the RIB and CEF for PIC; at most one
+      backup is installed.
+    ja: >-
+      IOS XR で `set path-selection backup 1` が選ぶ経路。最良と同じ next-hop の経路をすべて除いた残りの中の最良。追加パスで広告でき、
+      PIC のために RIB と CEF にインストールできる(インストールできる予備は 1 本まで)。
+  see: [add-path, bgp-pic]
+  scope: ["6[2-9]-m6-*"]
+
+- id: best-external
+  term: best-external
+  aka: [advertise best-external, best external]
+  def:
+    en: >-
+      An option that makes a router advertise its best eBGP-learned path to iBGP and route-reflector peers even when its
+      overall best path is an iBGP path. Cisco documents it for VPN, VRF and labeled-unicast address families; without
+      labels the backup exit would look the destination up again and could loop.
+    ja: >-
+      全体の最良が iBGP の経路でも、eBGP で学習した中の最良を iBGP とルート リフレクタの相手へ広告させるオプション。Cisco は VPN・
+      VRF・ラベル付きユニキャストのアドレス ファミリで文書化している。ラベルが無いと、予備の出口が宛先を引き直してループし得る。
+  see: [add-path, bgp-pic]
+
+- id: bgp-pic
+  term: PIC
+  full: {en: BGP Prefix Independent Convergence, ja: BGP Prefix Independent Convergence}
+  aka: [BGP PIC, PIC Edge, PIC Core, prefix independent convergence]
+  def:
+    en: >-
+      Installing a backup path in the forwarding table in advance, so that when the primary next hop disappears (for
+      example when the IGP removes the egress PE's loopback) the forwarding plane switches at once, for all prefixes
+      together, before BGP has chosen a new best path.
+    ja: >-
+      予備の経路をあらかじめフォワーディング テーブルに入れておき、主の next-hop が消えたとき(たとえば IGP が出口の PE のループバックを
+      消したとき)に、BGP が新しい最良を選ぶ前に、すべてのプレフィックスをまとめて転送の側で切り替える仕組み。
+  see: [backup-path, next-hop-tracking, cef]
+
+- id: next-hop-tracking
+  term: {en: next-hop tracking, ja: next-hop の追跡}
+  aka: [nexthop trigger-delay, trigger delay, Critical Trigger Delay, BGP next-hop tracking]
+  def:
+    en: >-
+      BGP's reaction to changes in the route to a next hop: it re-runs the best-path selection after a trigger delay.
+      On IOS XR the IPv4 unicast defaults are 3000 ms for critical events (such as the next hop becoming unreachable) and
+      10000 ms for non-critical ones.
+    ja: >-
+      next-hop への経路の変化に対する BGP の反応。遅延(trigger delay)の後に最良の選び直しをする。IOS XR の IPv4 ユニキャストの既定は、
+      critical な変化(next-hop に届かなくなった等)で 3000 ms、non-critical で 10000 ms。
+  see: [bgp-pic]
+
+- id: fast-external-fallover
+  term: fast-external-fallover
+  aka: [fast external fallover, Fast fallover]
+  def:
+    en: >-
+      Resetting the BGP session with a directly connected eBGP neighbor as soon as the link to it goes down, instead of
+      waiting for the hold time. It is on by default on IOS XR.
+    ja: >-
+      直接接続の eBGP の相手へのリンクが落ちたら、hold time を待たずにすぐセッションを切る動作。IOS XR では既定で有効。
+  see: [next-hop-tracking]
+
+# ---------------------------------------------------------------- セッションを守る
+- id: gtsm
+  term: GTSM
+  full: {en: Generalized TTL Security Mechanism, ja: Generalized TTL Security Mechanism}
+  aka: [TTL security, ttl-security, BGP TTL security, TTL セキュリティ]
+  def:
+    en: >-
+      A check (RFC 5082) based on the fact that a packet sent with TTL 255 arrives from a directly connected neighbor
+      with 255 and from anywhere further away with less. Both ends send with 255 and drop what arrives below the expected
+      value; IOS XR's `ttl-security` accepts only 255, IOS XE's `ttl-security hops N` accepts 255 minus N and above.
+    ja: >-
+      TTL 255 で送ったパケットが、直接接続の相手からなら 255 のまま、それより遠くからなら 255 未満で届くことを使う確認(RFC 5082)。
+      両端が 255 で送り、期待より小さい TTL で届いたものを捨てる。IOS XR の `ttl-security` は 255 だけ、IOS XE の
+      `ttl-security hops N` は 255−N 以上を受け付ける。
+  see: [ttl, tcp-md5, tcp-ao]
+
+- id: tcp-md5
+  term: {en: MD5 authentication, ja: MD5 認証}
+  aka: [TCP MD5, TCP MD5 signature, MD5 password, BGP password]
+  def:
+    en: >-
+      The TCP MD5 signature option (RFC 2385): every TCP segment of the BGP session carries an MD5 digest computed with a
+      shared password. On IOS XR it is `password` under the neighbor and works with IOS XE's `neighbor … password`.
+    ja: >-
+      TCP MD5 署名オプション(RFC 2385)。BGP のセッションの TCP セグメントごとに、共有のパスワードで計算した MD5 のダイジェストを付ける。
+      IOS XR ではネイバーの `password` で、IOS XE の `neighbor … password` とつながる。
+  see: [tcp-ao, gtsm]
+
+- id: tcp-ao
+  term: TCP-AO
+  full: {en: TCP Authentication Option, ja: TCP Authentication Option}
+  aka: [TCP AO, tcp ao]
+  def:
+    en: >-
+      The successor of TCP MD5 (RFC 5925): each segment carries a MAC computed with a key from a key chain and a KeyID
+      that tells the receiver which key to use, so keys can be changed without resetting the session. Stronger algorithms
+      such as AES-128-CMAC-96 are used.
+    ja: >-
+      TCP MD5 の後継(RFC 5925)。セグメントごとに、キー チェーンの鍵で計算した MAC と、受け手にどの鍵を使うかを伝える KeyID を付ける。
+      セッションを切らずに鍵を替えられる。AES-128-CMAC-96 などの強いアルゴリズムを使う。
+  see: [key-chain, send-id, tcp-md5]
+
+- id: key-chain
+  term: {en: key chain, ja: キー チェーン}
+  aka: [keychain, key chains]
+  def:
+    en: >-
+      A named list of keys, each with a key string, an algorithm and send and accept lifetimes. Routing protocols and
+      TCP-AO refer to it by name. On IOS XR a BGP neighbor's `keychain` is not RFC 2385 MD5 and does not connect to a
+      `neighbor … password` peer.
+    ja: >-
+      鍵の名前付きの一覧。鍵ごとにキー文字列・アルゴリズム・送信と受信の有効期間を持ち、ルーティング プロトコルや TCP-AO が名前で
+      参照する。IOS XR の BGP のネイバーの `keychain` は RFC 2385 の MD5 ではなく、`neighbor … password` の相手とはつながらない。
+  see: [tcp-ao, tcp-md5]
+
+- id: send-id
+  term: {en: SendID and ReceiveID, ja: SendID と ReceiveID}
+  aka: [SendID, ReceiveID, send-id, recv-id, KeyID]
+  def:
+    en: >-
+      The TCP-AO key identifiers. The sender puts its SendID in the KeyID field and the receiver looks it up as its
+      ReceiveID, so one end's SendID must equal the other end's ReceiveID.
+    ja: >-
+      TCP-AO の鍵の識別子。送り手は自分の SendID を KeyID の欄に入れ、受け手はそれを自分の ReceiveID として探す。そのため、片方の
+      SendID は相手の ReceiveID と一致させる。
+  see: [tcp-ao, key-chain]
+
+# ---------------------------------------------------------------- 受け取りすぎない
+- id: maximum-prefix
+  term: maximum-prefix
+  aka: [maximum prefix, prefix limit, Maximum prefixes allowed, PfxCt]
+  def:
+    en: >-
+      A per-neighbor limit on the number of prefixes accepted. At the threshold percentage the router logs a warning;
+      above the limit it tears the session down (Idle (PfxCt) on IOS XR) unless warning-only or discard-extra-paths is
+      set, and with restart it re-establishes the session after the given minutes.
+    ja: >-
+      ネイバーごとの、受け付ける経路の数の上限。しきい値(%)で警告を記録し、上限を超えるとセッションを切る(IOS XR の表示は Idle (PfxCt))。
+      warning-only なら記録だけ、discard-extra-paths なら超えた分を捨てる。restart を付けると指定の分数の後に張り直す。
+  see: [route-flap-dampening]
+
+- id: route-flap-dampening
+  term: {en: route flap dampening, ja: ダンプニング}
+  aka: [dampening, BGP dampening, route dampening, ルート フラップ ダンプニング, damped]
+  def:
+    en: >-
+      Suppressing an eBGP path that keeps flapping. Each flap adds a penalty of 1000 that decays with the half-life; the
+      path is suppressed above the suppress value (2000 by default) and reused below the reuse value (750), but for no
+      longer than the maximum suppress time. A peer reset is not counted as a flap.
+    ja: >-
+      フラップを繰り返す eBGP の経路を抑制する仕組み。フラップのたびにペナルティ 1000 が加わり、半減期で減っていく。suppress の値
+      (既定 2000)を超えると抑制し、reuse の値(750)を下回ると戻すが、最大抑制時間より長くは抑制しない。ピアのリセットはフラップに数えない。
+  see: [penalty, half-life]
+
+- id: penalty
+  term: {en: penalty, ja: ペナルティ}
+  aka: [Dampinfo, ペナルティ値]
+  def:
+    en: >-
+      The number that dampening keeps per path: 1000 is added per flap and it halves every half-life. IOS XR shows it
+      in the Dampinfo line of show bgp together with the time until reuse.
+    ja: >-
+      ダンプニングが経路ごとに持つ数。フラップのたびに 1000 が加わり、半減期ごとに半分になる。IOS XR は show bgp の Dampinfo の行に、
+      再使用までの時間と一緒に表示する。
+  see: [route-flap-dampening, half-life]
+  scope: ["6[2-9]-m6-*"]
+
+- id: half-life
+  term: {en: half-life, ja: 半減期}
+  aka: [half life]
+  def:
+    en: >-
+      The time in which the dampening penalty falls to half (15 minutes by default). It is the first value of
+      `bgp dampening` on IOS XR; the maximum suppress time defaults to four half-lives.
+    ja: >-
+      ダンプニングのペナルティが半分になるまでの時間(既定 15 分)。IOS XR の `bgp dampening` の最初の値。最大抑制時間の既定は半減期の 4 倍。
+  see: [route-flap-dampening, penalty]
+
+- id: bgp-aggregate
+  term: {en: aggregate, ja: 集約}
+  aka: [aggregate-address, aggregated]
+  def:
+    en: >-
+      A shorter prefix that BGP creates from the more specific routes inside it (aggregate-address). With summary-only
+      the more specific routes are no longer advertised; with a route policy, suppress-route stops only the ones it
+      matches. Without as-set the aggregate carries the atomic-aggregate attribute.
+    ja: >-
+      BGP が、その中のより詳細な経路から作る短いプレフィックス(aggregate-address)。summary-only で、より詳細な経路を広告しなくなる。
+      ルート ポリシーを使うと、suppress-route は一致したものだけを止める。as-set が無いと集約の経路に atomic-aggregate が付く。
+  see: [atomic-aggregate]
+  scope: ["6[2-9]-m6-*"]
+
+- id: atomic-aggregate
+  term: atomic-aggregate
+  aka: [ATOMIC_AGGREGATE]
+  def:
+    en: >-
+      A BGP attribute that marks a route made by aggregation that lost AS path information (no as-set), telling other
+      routers that the path is not the full one.
+    ja: >-
+      集約で AS パスの情報が失われた(as-set を使わない)経路に付く BGP の属性。ほかのルータに、AS パスが完全ではないことを知らせる。
+  see: [bgp-aggregate]
+
+- id: rib-failure
+  term: RIB-failure
+  aka: [RIB failure, rib-failure, suppress-inactive, bgp suppress-inactive]
+  def:
+    en: >-
+      IOS XE's state for a BGP best path that was not installed in the RIB, typically because a route with a lower
+      administrative distance won. IOS XE marks it with r; bgp suppress-inactive is documented to stop advertising such
+      paths. IOS XR advertises them and has no such command.
+    ja: >-
+      BGP の最良の経路が RIB に入らなかった状態(IOS XE)。多くは管理距離の小さい経路に負けた場合で、r の印が付く。IOS XE の
+      bgp suppress-inactive は、文書ではそうした経路を広告しなくする。IOS XR はこうした経路も広告し、同じコマンドを持たない。
+  see: [bgp-aggregate]

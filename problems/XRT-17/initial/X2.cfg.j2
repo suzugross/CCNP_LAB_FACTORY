@@ -1,0 +1,42 @@
+! XRT-17 X2(IOL 17.15)= AS 65100 の境界。PE3 と eBGP・X1 と iBGP(Loopback0)・AS の中は OSPF。T へ既定経路を metric 10 で配る。
+no ip domain lookup
+!
+interface Loopback0
+ ip address 10.100.255.2 255.255.255.255
+ ip ospf 1 area 0
+!
+interface {{ links[0] }}
+ description to PE3 (AS 65000)
+ ip address 172.16.3.1 255.255.255.0
+ no shutdown
+!
+interface {{ links[1] }}
+ description to T
+ ip address 10.100.23.2 255.255.255.0
+ ip ospf 1 area 0
+ no shutdown
+!
+interface {{ links[2] }}
+ description to X1
+ ip address 10.100.12.2 255.255.255.0
+ ip ospf 1 area 0
+ no shutdown
+!
+router ospf 1
+ router-id 10.100.255.2
+ default-information originate always metric 10
+!
+router bgp 65100
+ bgp router-id 10.100.255.2
+ bgp log-neighbor-changes
+ neighbor 172.16.3.254 remote-as 65000
+ neighbor 10.100.255.1 remote-as 65100
+ neighbor 10.100.255.1 update-source Loopback0
+ !
+ address-family ipv4
+  network 203.0.113.0 mask 255.255.255.0
+  neighbor 172.16.3.254 activate
+  neighbor 10.100.255.1 activate
+  neighbor 10.100.255.1 next-hop-self
+ exit-address-family
+!

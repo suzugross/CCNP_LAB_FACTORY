@@ -1,0 +1,175 @@
+######## ribf5: IOS の bgp suppress-inactive に soft out を足す(更新を出し直さないと効かないか)
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+X2(config)#
+ip route 10.199.9.0 255.255.255.0 Null0
+X2(config)#
+router bgp 65100
+X2(config-router)#
+address-family ipv4
+X2(config-router-af)#
+bgp suppress-inactive
+X2(config-router-af)#
+end
+X2#
+show ip bgp neighbors 172.16.3.254 advertised-routes
+BGP table version is 61, local router ID is 10.100.255.2
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ r>i  10.199.9.0/24    10.100.255.1             0    100      0 i
+ *>   203.0.113.0      10.100.23.3             11         32768 i
+
+Total number of prefixes 2 
+X2#
+clear ip bgp 172.16.3.254 soft out
+X2#
+show ip bgp neighbors 172.16.3.254 advertised-routes
+BGP table version is 61, local router ID is 10.100.255.2
+Status codes: s suppressed, d damped, h history, * valid, > best, i - internal, 
+              r RIB-failure, S Stale, m multipath, b backup-path, f RT-Filter, 
+              x best-external, a additional-path, c RIB-compressed, 
+              t secondary path, L long-lived-stale,
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI validation codes: V valid, I invalid, N Not found
+
+     Network          Next Hop            Metric LocPrf Weight Path
+ r>i  10.199.9.0/24    10.100.255.1             0    100      0 i
+ *>   203.0.113.0      10.100.23.3             11         32768 i
+
+Total number of prefixes 2 
+X2#
+show ip bgp 10.199.9.0
+BGP routing table entry for 10.199.9.0/24, version 60
+Paths: (1 available, best #1, table default, RIB-failure(17))
+  Advertised to update-groups:
+     2         
+  Refresh Epoch 1
+  Local
+    10.100.255.1 (metric 11) from 10.100.255.1 (10.100.255.1)
+      Origin IGP, metric 0, localpref 100, valid, internal, best
+      rx pathid: 0, tx pathid: 0x0
+      Updated on Nov 21 2026 08:44:16 UTC
+X2#
+show bgp neighbor 172.16.3.1 routes
+Sat Nov 21 08:49:10.235 UTC
+BGP router identifier 10.255.0.3, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 113
+BGP main routing table version 113
+BGP NSR Initial initsync version 5 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*  10.199.9.0/24      172.16.3.1                             0 65100 i
+*  203.0.113.0/24     172.16.3.1              11             0 65100 i
+
+Processed 2 prefixes, 2 paths
+RP/0/RP0/CPU0:PE3#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+X2(config)#
+router bgp 65100
+X2(config-router)#
+address-family ipv4
+X2(config-router-af)#
+no bgp suppress-inactive
+X2(config-router-af)#
+exit
+X2(config-router)#
+exit
+X2(config)#
+no ip route 10.199.9.0 255.255.255.0 Null0
+X2(config)#
+end
+X2#
+######## ribf6: XR の PE2 で同じ形をもう一度作り、経路の詳細と RIB の表示を見る
+configure
+Sat Nov 21 08:49:16.078 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router static
+RP/0/RP0/CPU0:PE2(config-static)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE2(config-static-afi)#
+10.199.9.0/24 Null0
+RP/0/RP0/CPU0:PE2(config-static-afi)#
+commit
+Sat Nov 21 08:49:17.804 UTC
+RP/0/RP0/CPU0:PE2(config-static-afi)#
+end
+RP/0/RP0/CPU0:PE2#
+show bgp 10.199.9.0/24
+Sat Nov 21 08:49:29.922 UTC
+BGP routing table entry for 10.199.9.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                174          174
+Last Modified: Nov 21 08:49:12.351 for 00:00:17
+Paths: (1 available, best #1)
+  Not advertised to any peer
+  Path #1: Received by speaker 0
+  Not advertised to any peer
+  65100
+    10.255.0.3 (metric 20) from 10.255.0.21 (10.255.0.3)
+      Origin IGP, localpref 100, valid, internal, best, group-best
+      Received Path ID 1, Local Path ID 1, version 174
+      Originator: 10.255.0.3, Cluster list: 10.255.0.21
+RP/0/RP0/CPU0:PE2#
+show bgp ipv4 unicast summary
+Sat Nov 21 08:49:30.326 UTC
+BGP router identifier 10.255.0.2, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 175
+BGP main routing table version 175
+BGP NSR Initial initsync version 5 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker          175           175           175           175           175             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000     221     168          175    0    0 01:12:26          4
+172.16.2.1        0 65100     267     250            0    0    0 00:00:18  Active
+
+RP/0/RP0/CPU0:PE2#
+show route ipv4 bgp
+Sat Nov 21 08:49:30.732 UTC
+
+B    192.168.1.0/24 [200/0] via 10.255.0.1, 00:03:50
+B    192.168.4.0/24 [200/0] via 10.255.0.4, 00:03:51
+B    203.0.113.0/24 [200/11] via 10.255.0.3, 00:00:18
+RP/0/RP0/CPU0:PE2#
+show bgp neighbor 10.255.0.21 advertised-routes
+Sat Nov 21 08:49:31.146 UTC
+RP/0/RP0/CPU0:PE2#
+configure
+Sat Nov 21 08:49:32.818 UTC
+RP/0/RP0/CPU0:PE2(config)#
+router static
+RP/0/RP0/CPU0:PE2(config-static)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE2(config-static-afi)#
+no 10.199.9.0/24 Null0
+RP/0/RP0/CPU0:PE2(config-static-afi)#
+commit
+Sat Nov 21 08:49:34.564 UTC
+RP/0/RP0/CPU0:PE2(config-static-afi)#
+end
+RP/0/RP0/CPU0:PE2#

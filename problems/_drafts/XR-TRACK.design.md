@@ -2883,3 +2883,117 @@ CUST1 ─┘ │              └─ CUST2       グローバル(インターネ
 - 確認の 1 つ目の失敗= XR の `| include ,239|RPF`(`|` が次のパイプと解釈されて Invalid)。素の show に直した。
 - 読み物の設定例の値は課題からずらし、同じ盤面で読み物の値のまま測った(`poc/xr/try_xrt16.sh`・記録 `poc/xr/expM14-try-*.log`)。Auto-RP の段は、外した BSR の候補が保持時間(150 秒)の間だけ残るので採り直した
   (残っていた時の記録= `expM14-try-autorp-bsrleft.log`)。
+
+## 32. M6 追補「BGP の運用機能」(SPCOR 2.4.g・2.4.h・1.5.b・1.5.c)(2026-11-21 着手・同日 PoC 完了・ラボの形はユーザ判断待ち= §32.5・§32.6・BL-257 の 2 つ目の一手)
+
+- きっかけ: ユーザが XRT-16(M14)を全課題通過(2026-11-21)→ 撤収(控え= `private/lab-saves/XRT-16-20261121-final/`)。「次の一手」の相談で、
+  SPCOR の「実装」「設定と確認」なのに読み物のどのページにも出てこない項目= **2.4.g 追加パス・2.4.h PIC・1.5.b BGP の TTL セキュリティとプロトコル認証・
+  1.5.c BGP プレフィックスの抑制**(英日の読み物を grep して add-path・PIC・ttl-security は 0 件・maximum-prefix/dampening は M6・M7・M10 に数件)を挙げ、
+  ユーザ了承「撤収して、M6 追補の PoC からお願いします」。
+- 説明だけの空白(3.2 RSVP-TE・2.7 IPv6 移行・1.1/1.3・1.5.e BGPsec)と SP の紙面(BL-264)は次点として保留。
+
+### 32.1 PoC の盤面(`problems/_POC-XRBGP`・手順 `poc/xr/bgpops_poc.sh`・記録 `poc/xr/expBGPOPS-*.log`)
+
+```
+ CE1(65001)─ PE1(XRd) ─┐                ┌─ PE2(XRd)─ X1 ─┐
+                        ├── P1(XRd) ─────┤      (65100)    ├─ T 203.0.113.1(IP SLA の responder)
+ CE4(65004)─ PE4(XRv)  ─┘     │          └─ PE3(XRd)─ X2 ─┘   X1 ─ X2 も直結(iBGP・OSPF)
+                             RR1(XRd)
+```
+- AS 65000= IS-IS CORE レベル 2+LDP。P1 は BGP なし(BGP フリー コア)。RR1 は道の外の専用 RR(P1 に 1 本・LDP なし)。PE1〜PE4 がクライアント(next-hop-self)。
+- Lo0= PE1 10.255.0.1・PE2 .2・PE3 .3・PE4 .4・P1 .11・RR1 .21。線= PE<n>─P1 10.0.<n>.0/24・RR1─P1 10.0.21.0/24・PE1─CE1 172.16.1.0/24・PE4─CE4 172.16.4.0/24・
+  PE2─X1 172.16.2.0/24・PE3─X2 172.16.3.0/24(PE 側 .254)。AS 65100= X1・X2・T(OSPF・X1/X2 が 203.0.113.0/24 を network で広告・T へ既定経路 X1 metric 20/X2 10= T からの帰りは X2 → PE3 を通り、PE2 の故障に左右されない。§32.3 #3)。
+- **PE2 は X1 からの経路に local-preference 200**(PE3 は 100)→ PE3 の最良は PE2 経由の iBGP になり、PE3 は X2 の経路を広告しない(best-external なし)。
+  ここから best-external → 追加パス → PIC(予備の install)を順に足し、主の出口 PE2 を切ったときの欠けを測る。
+- 入口の PE を 2 台(PE1= XRd・PE4= XRv9000)にして、PIC の切り替えのデータプレーンを両方で測る。欠けは CE → T の片道(`sla_loss.py`= IP SLA の udp-jitter・10 ms 単位・
+  CML のリンクを止める= キャリア断)。
+
+### 32.2 PoC で確かめること
+
+1. **既定**: XR の next-hop の追跡の遅延(critical/non-critical)・fast-external-fallover・何も設定しない時の受ける経路数の上限(AF ごとの値と超えた時の動き)・追加パスの能力の初期値。
+2. **何も足さない時の切り替え**(PE2 を P1 から切る): RR1 が PE2 の next-hop を失う → PE3 の経路が無いので、PE3 が best-external なしでは道が無くなる時間。
+3. **best-external**: PE3 が X2 の経路を RR1 へ出すようになるか・RR1 は最良の 1 本しか反射しない(PE1 は 1 本のまま)・この時の切り替え。
+4. **追加パス**: RR1 の send/receive と selection(`set path-selection backup 1 advertise` など)・PE の receive・能力の交渉(セッションの張り直しが要るか)・表示。
+5. **PIC(予備を install)**: `set path-selection backup 1 install`・`show bgp`/`show route … detail`/`show cef … detail` での予備の表示・切り替えの欠け(XRd と XRv9000)。
+6. **出口の PE と相手の間のリンクが切れた時**(PE2─X1): PE2 に予備が無い時/PE2 も PIC で PE3 経由の予備を持つ時(ローカルの切り替え)。
+7. **TTL セキュリティ(GTSM)**: XR の `ttl-security`・片側だけの時・`ebgp-multihop` との同居・IOS の `ttl-security hops`。
+8. **認証**: MD5(`password`)・キー チェーン・TCP-AO(XR と IOS の相互運用)・食い違いの時の表示。
+9. **プレフィックスの抑制**(1.5.c の解釈は公式で確認中): `maximum-prefix`(しきい値・restart・warning-only・discard-extra-paths)・ダンプニング・集約の summary-only。
+10. **`?` の一覧**(素振り台の材料)と XRd/XRv9000 の差。
+
+### 32.3 PoC の結果 その 1(2026-11-21・PE1/PE2/PE3/P1/RR1= XRd 26.1.1・PE4= XRv9000 26.1.1・CE と AS 65100= IOL 17.15。手順 `poc/xr/bgpops_poc.sh`・記録 `poc/xr/expBGPOPS-*.log`)
+
+| # | 論点 | 実測 |
+|---|---|---|
+| 1 | 既定 | next-hop の追跡の遅延= **critical 3000 ms・non-critical 10000 ms**(IPv4 unicast・`show bgp nexthops`)。eBGP は `Fast fallover is enabled`(fast-external-fallover 既定で有効)・iBGP は not enabled。近隣の詳細に**既定の maximum-prefix の行が出ない**(公式の CR は「7.3.1 で既定を廃止」と書く一方、別の版のガイドに既定値の例が残る= #12)。`Additional-paths operation: None`。XRd と XRv9000 で同じ |
+| 2 | 故障の起こし方(道具の制約) | **CML のリンクの停止をキャリア断として検知しない**(★XRv9000 も同じ= M10 §3。2026-11-21 付録の担当の指摘で訂正)(IS-IS は hold time 30 秒まで隣接を保ち、15 秒で戻すと隣接は一度も落ちない)。**XRd では IS-IS の BFD のセッションが作られない**(`show bfd session` が空・隣接の表の BFD 欄は Init のまま)。→ 故障は「隣の XR の IF を shutdown」で起こす(`sla_loss.py --how cmd`)。測れるのは IGP の伝わりと各 PE の反応 |
+| 3 | 帰りの道(測り方) | T の既定経路を X1 にすると、孤立した PE2 は IS-IS の hold time まで孤立に気づかず X1 へ経路を出し続け、帰りが 30 秒止まる → IP SLA は向きを決められず **Tail Drop** に数える。帰りを X2 → PE3 にして片道(行き)だけを測る |
+| 4 | IP SLA の数え方(IOL 17.15) | `Loss Source to Destination` が途切れの後に届いた数を出すことがある(641 届く+246 途切れ+2113 届く= 3000 で「2113」)→ `Loss Period Length` を正とする(`sla_loss.py` の `SD PERIODS` 行) |
+| 5 | 保護なし(PE2 を P1 から切る) | 行きの途切れ= **PE1(XRd)2.46 秒・PE4(XRv9000)3.26 秒**。PE3 は PE2 の経路を失うと自分の eBGP が最良になって RR1 へ広告し、RR1 → PE1 へ(4 秒の時点で収束済み) |
+| 6 | **best-external(素の IPv4 unicast)** | **XRd・XRv9000 ともコミットが通り、効く**(PE3 の経路に `best-external`・RR1 が 2 本を持つ・PE1 は 1 本のまま)。★公式の CR「Unlabelled best-external is not supported as it may create routing loop」(入れられるのは VPNv4/v6・VRF・ラベル付き unicast)と**食い違う**→ ユーザ判断待ち(§32.4)。この状態の途切れ= PE1 3.02 秒(RR1 は最良の 1 本しか反射しないので変わらない) |
+| 7 | 追加パスの能力の交渉 | 入れただけでは交渉されない(OPEN で交渉・公式どおり)。★**XR の `clear bgp ipv4 unicast <近隣>` は後ろに soft か long-lived-stale しか取らず `% Incomplete command.`**。張り直しは `clear bgp <近隣>`。交渉後= `Additional-paths Send: received`・`Receive: advertised and received`・`Additional-paths operation: Receive`。RR1 の `set path-selection backup 1 advertise` で PE は best と予備の 2 本(予備の行に `backup, add-path`) |
+| 8 | PIC の表示(公式の例と一致) | `show bgp`= 予備の行に `backup, add-path`/`show route … detail`= `Number of pic paths 1 , type internal`・`10.255.0.3, from 10.255.0.21, BGP backup path`/`show cef … detail`= `via 10.255.0.3/32, 2 dependencies, recursive, backup [flags 0x6100]`。予備が eBGP の時(PE3)は `recursive, bgp-ext, bgp-best-ext, backup [flags 0x6160]`。故障の直後の CEF= 主が `unresolved`・予備は解決済み |
+| 9 | **PIC を入口だけに入れた時** | 速くならない(PE1 3.54 秒・PE4 3.01 秒)。入口の `nexthop trigger-delay critical 10000` にしても 3 秒 → 入口の CEF は予備へ切り替わっている。落ちていたのは**予備の出口 PE3**= ラベルなしなので届いたパケットを IP で引き直し、PE3 の最良(PE2 経由の iBGP・LP 200)へ送り返す → PE3 自身の追跡の遅延(3 秒)まで捨てる(= 公式の「ラベルなしの best-external はループを作りうる」の中身) |
+| 10 | **PE3 にも PIC**(PE3 の予備= 自分の eBGP) | **PE4(XRv9000)0.18 秒・0.15 秒**(入口の BGP は 10 秒待つ設定のまま= 転送表だけで切り替わった)/**PE1(XRd)2.96・3.02・3.01 秒**(再現 3 回)。PE3(XRd)自身の切り替え(予備= 直結の eBGP)は効いている。★訂正(同日): XRd の PE2 が自分の eBGP の線を失った時は、PE3 経由(ラベルを積む予備)へ 0.05 秒で切り替わった(#13 の edge2)→ 効かなかったのは「遠くの PE が IGP から消えた時の入口の XRd」に限る(BGP の更新を待った)。CEF の `LW-LDI` は XRv9000 の PE1 が `type=3`・XRd の PE1/PE3 が `type=0` だが、PE3 は `type=0` でも直結の予備へ切り替わるので原因とは言えない(見えた違いとしてだけ扱う)。PIC を通信で見せるなら入口は XRv9000 |
+| 11 | 名残(要再現) | 追加パスが交渉されていない(予備なし)まま入口に PIC の selection を入れた状態で、PE1(XRd)が 24 秒たっても戻らなかった(`expBGPOPS-pic2-noneg.log`)。同じ状態の PE4 は 3.13 秒。再現して確かめる |
+| 12 | 公式文書の食い違い(サブエージェントの裏どり・全文は private/sources/xr/bgpops-docs-20261121.md) | maximum-prefix の既定値(CR の 1048576 の一覧と「7.3.1 で廃止」・NCS 5500 ガイドの 512K/128K)・BGP の keychain の暗号(Routing CR= MD5 と SHA1-12・Security CR= +AES-128-CMAC-96/SHA1-96)・`set path-selection multipath` が CR の構文に無い(ガイド・TAC には有る)・TCP-AO の綴り(`accept-ao-mismatch-connection(s)`)・IOS の ttl-security の送る TTL(XE の文書= 送りには効かない/RFC 5082= 255)。1.5.c「BGP プレフィックスの抑制」の語は Cisco 公式文書に見当たらず、出版社の公開サンプル(試験の公式ガイドの目次)では maximum-prefix と別の見出しで、索引から RIB-failure の経路を広告しない `bgp suppress-inactive`(IOS XE・TAC 213286)を指すと読める |
+
+### 32.4 PoC の結果 その 2(2026-11-21・同じ盤面。記録 `poc/xr/expBGPOPS-{edge,ttl,maxp,agg,auth}.log`・パケット `expBGPOPS-ttl.pcap`)
+
+| # | 論点 | 実測 |
+|---|---|---|
+| 13 | 出口の PE2 と X1 の間が切れる(PE2 の IF を shutdown) | PE2 に予備なし= **0.14 秒**/PE2 にも追加パスの receive と PIC(予備= PE3 経由)= **0.05 秒**。どちらも速い= 相手との線が切れると eBGP はすぐ落ち(fast-external-fallover)、取り下げには追跡の遅延がかからない。PE2 の予備の表示= `Number of pic paths 1 , type internal and external` |
+| 14 | TTL セキュリティ: XR(PE2)だけ | **TCP が張れない**(X1= `Idle`・`Active open failed`)。★公式の CR「OpenSent/OpenConfirm で hold time まで止まる」と違う(サブエージェントの見立てどおり)。キャプチャ= X1 は TTL 1 で送る(XR は 255 未満を捨てる) |
+| 15 | TTL セキュリティ: IOS にも `neighbor … ttl-security hops 1` | 確立。IOS の表示= `Mininum incoming TTL 254, Outgoing TTL 255`。**キャプチャでも X1 の送る TTL が 1 → 255 に変わった**(★IOS XE の文書「送りには効かない」と違い、RFC 5082 どおり)。XR は `ttl-security` に hop の引数なし(`?`= `inheritance-disable`・`<cr>` だけ)・受けるのは 255 だけ |
+| 16 | ebgp-multihop との同居 | XR= 通る(running-config に `ebgp-multihop 2` と `ttl-security` が並ぶ・公式どおり)/IOS= `Remove ttl-security before configuring ebgp-multihop` で拒む(公式どおり) |
+| 17 | maximum-prefix(PE1 ← CE1 の 4 本・上限 3) | 超えると `Idle (PfxCt)`・`%ROUTING-BGP-5-MAXPFX`(3 に達した)・`-4-MAXPFXEXCEED`(4 が 3 を超えた)・`-5-ADJCHANGE … Down - Peer exceeding maximum prefix limit (CEASE notification sent …)`。CE1(IOS)は `received … 6/1 (Maximum Number of Prefixes Reached)`。`warning-only`= 4 本のまま確立・ログだけ/`discard-extra-paths`= 3 本だけ受け 4 本目(192.168.13.0/24)を捨ててセッションは保つ/`restart 1`= 1 分後に張り直し、また超えて Idle (PfxCt) |
+| 18 | 集約(PE2・192.168.0.0/16) | `summary-only`= /16 に `aggregated, atomic-aggregate`(AS パスは空)・束ねた /24 に `s` と `Advertisements of this net are suppressed by an aggregate.`・X1 は PE2 から /16 だけ。`aggregate-address … route-policy` の中の `suppress-route`= 192.168.1.0/24 だけ `s`・192.168.4.0/24 は出る(公式どおり。XR に suppress-map は無い) |
+| 19 | 認証: MD5 | XR だけ `password`= TCP が張れない(IOS は Active・IOS に password が無いので BADAUTH のログも出ない)/両側= 確立(**XR と IOS の MD5 はつながる**・IOS の `Option Flags` に `md5`)。XR の password と keychain の同居= コミットで拒む(`!!% Change would result in neighbor (172.16.2.1) with Password and Keychain/AO based authentication together`) |
+| 20 | 認証: TCP-AO | XR= `key chain AO-KC`(`cryptographic-algorithm AES-128-CMAC-96`・鍵は 16 進 32 桁・lifetime)+`tcp ao` → `keychain AO-KC` → `key 1 SendID 1 ReceiveID 1`+neighbor `ao AO-KC include-tcp-options enable`/IOS= `key chain AO-KC tcp` → `key 1`・`send-id 1`・`recv-id 1`・`key-string <16 進 32 桁>`・`cryptographic-algorithm aes-128-cmac`+`neighbor … ao AO-KC include-tcp-options` → **確立**(IOS= `Option Flags: … TCP AO`・`Include TCP Options: Yes`/XR= `show tcp authentication keychain AO-KC` の `Key ID: 1, Active, Valid`)。★IOS の片付けは設定どおりの行(`no neighbor … ao AO-KC include-tcp-options`)でないと `%BGP: No match`・使用中のキー チェーンは消せない |
+| 21 | 片側だけ切れたセッション(道具の注意) | TCP-AO を XR から外した後、IOS は閉じたが XR は `Established` のまま(最後に受けたのは 2 分 40 秒前= hold time まで気づかない)。`clear bgp <近隣>` で戻る |
+| 22 | 認証: XR の keychain と IOS の password | **つながらない**(暗号 MD5・HMAC-MD5 とも Active/Idle のまま)。HMAC-MD5 の時 IOS に `%TCP-6-BADAUTH: No MD5 digest from 172.16.2.254(…) to 172.16.2.1(179)`= XR は RFC 2385 の MD5 の欄を付けずに送る(公式どおり= keychain は別の方式)。記録 `expBGPOPS-redo-kc*.log` |
+| 23 | RIB に入らない BGP の経路(XR) | PE2 に static 10.199.9.0/24 Null0(AD 1)→ BGP の最良(X1 から)は RIB で負けるが、表では `*>` のまま(凡例に `r RIB-failure` はあるが付かない)で **RR1 へ広告する**。XR の `bgp ?`(router・AF)に suppress-inactive に当たるものは無い。記録 `expBGPOPS-redo-ribx.log` |
+| 24 | RIB に入らない BGP の経路(IOS・対照) | X2 で `RIB-failure(17)`・`show ip bgp rib-failure` に `Higher admin distance`・広告に `r>i`。**`bgp suppress-inactive`(AF の下)を入れて soft out・hard reset しても広告し続けた**(IOL 17.15)。設定後に `RIB-NH Matches` が n/a → `Yes` に変わった。★TAC 213286 は「BGP と RIB で next-hop が違う経路だけ抑止」と注記しているので、食い違いでなく注記どおりの可能性がある(RIB の経路は Null0 なのに Yes になる理由は確かめていない・付録の担当の指摘)→ 未確定として出題に使わない(§32.5)。記録 `expBGPOPS-ribf.log`・`expBGPOPS-redo-supi.log` |
+| 25 | ダンプニング(PE2・既定値) | 揺らし方= X1 の出口の prefix-list の付け外し+soft out(`network` の消し入れや Loopback の shut は IOS がすぐ反映せず、揺れの数がそろわない)。**3 回で抑止**= `*d`・`(suppressed due to dampening)`・`Dampinfo: penalty 2940, flapped 3 times in 00:00:54, reuse in 00:29:30`・`half life 00:15:00, suppress value 2000, reuse value 750`・`Maximum suppress time 01:00:00`(既定値は公式どおり)。4 回目= penalty 3897。`show bgp dampened-paths`/`flap-statistics`。`clear bgp ipv4 unicast dampening` で戻り、最良に復帰して広告。記録 `expBGPOPS-redo-dmp3.log` |
+| 26 | #11 の再現 | 再現せず(同じ形で 2.91 秒で戻った・1 回目は IP SLA が No connection で不成立)→ 名残として扱う。`sla_loss.py` に不成立の警告を足した |
+| 27 | **best-external を使わない形** | PE3 の best-external を外し、追加パスの `additional-paths send`+selection `set path-selection backup 1 advertise install` → 張り直し → PE3 は自分の X2 の経路を `backup, add-path` として RR1 へ広告(`Additional-paths operation: Send and Receive`)・RR1 と PE1 も 2 本。**素の IPv4 unicast で公式文書に載る手段だけで予備の道を配れる**(§32.5 の (a) の代わり) |
+| 28 | #27 の形での切り替え | PE4(XRv9000)**0.18 秒**・PE1(XRd)3.01 秒(#10 と同じ)。記録 `expBGPOPS-alt3.log` |
+
+### 32.5 公式文書と実機の食い違い・ユーザ判断が要る点(2026-11-21)
+
+| 記号 | 論点 | 公式 | 実機 | 案 |
+|---|---|---|---|---|
+| (a) | 素の IPv4 unicast の `advertise best-external` | 非対応(CR「Unlabelled best-external is not supported as it may create routing loop」) | XRd・XRv9000 ともコミットが通り、効く(#6) | **使わない**。予備の道は追加パスで配る(#27・公式に載る手段だけ)。読み物では「VPN・ラベル付きで使う機能・ラベルなしではループの恐れ(#9 の送り返しがその中身)」と説明し、この版で通ることは注記だけ |
+| (b) | 1.5.c「BGP プレフィックスの抑制」の範囲 | 語そのものは Cisco 公式文書に無い。出版社の公開サンプル(公式ガイドの目次)では `bgp suppress-inactive`(IOS XE)を指すと読める | XR に相当なし(RIB に入らない経路も広告・#23)・IOL 17.15 の suppress-inactive は止めなかった(#24= TAC の注記どおりの可能性があり未確定) | **maximum-prefix・ダンプニング・集約(summary-only/suppress-route)を「抑制」として扱う**。suppress-inactive は読み物で IOS の機能として触れるだけ(実機の挙動は出題・採点に使わない) |
+| (c) | TTL セキュリティを片側だけ | XR の CR= OpenSent/OpenConfirm で止まる | TCP が張れない(Idle/Active・#14) | ラボの故障には使う(表示は実機の記録)。紙面の正誤には使わない |
+| (d) | IOS の `ttl-security hops` の送る TTL | IOS XE の文書= 送りには効かない | 255 で送る(キャプチャ・#15。RFC 5082 どおり) | 読み物は RFC と実機で書き、XE の文書の記述は注記。紙面の正誤には使わない |
+| (e) | XRd の PIC | (仮想機の記述なし) | 遠くの PE が IGP から消えた時、入口の XRd は入れておいた予備を使わず BGP を待った(#10・#28)。ローカルの故障(#13 edge2)では切り替わった。表示は正しい | **入口の PE だけ XRv9000**(PIC の切り替えを通信で測る)。ほかは XRd |
+
+### 32.6 単元とラボの形(案 → ユーザ判断待ち)
+
+- **ラボ `XRT-17`(M6 追補・学習モード・課題 M6-5〜M6-10)**。盤面= PoC から PE4/CE4 を除いたもの。PE1= XRv9000(入口)・PE2/PE3/P1/RR1= XRd・CE1/X1/X2/T= IOL
+  (XRv9000 1 台+XRd 4 台+IOL 4 台)。初めの状態= 土台(IS-IS・LDP・RR1 経由の iBGP・eBGP・PE2 の local-preference 200)まで。運用の機能は何も入っていない。
+- 課題の案(採点は効果で見る。PIC だけは採点で P1 の IF を落として IP SLA で測る):
+
+| 課題 | ねらい(SPCOR) | 主な落とし穴 |
+|---|---|---|
+| M6-5 予備の出口の経路を RR1 と PE1 に届ける | 2.4.g 追加パス(PE3 の send と backup advertise・RR1 の send/receive と selection・PE1 の receive) | 能力は張り直すまで交渉されない(`clear bgp <近隣>`)・RR の selection が無いと最良だけ |
+| M6-6 主の出口 PE2 が落ちた時の途切れを 1 秒未満にする | 2.4.h PIC(PE1 の backup install) | ラベルなしなので予備の出口 PE3 も PIC が要る(無いと PE2 へ送り返して 3 秒・#9) |
+| M6-7 PE2 と X1 の eBGP を TTL セキュリティで守る(★実装では両側を学ぶ側が設定する形にした= 初めから X1 だけ入れると M6-5・M6-6 の主の出口が落ちるため) | 1.5.b GTSM | XR は hop の引数なし・片側だけだと TCP が張れない |
+| M6-8 PE3 と X2 の eBGP を TCP-AO で守る(相手の値は課題文で渡す) | 1.5.b 認証(key chain・`tcp ao` の SendID/ReceiveID・neighbor の `ao`) | 鍵は 16 進 32 桁・SendID と相手の ReceiveID の対応・include-tcp-options をそろえる |
+| M6-9 顧客 CE1 から受ける経路の数に上限を付ける(超えたら切って一定時間後に戻す) | 1.5.c maximum-prefix(restart) | `clear bgp ipv4 unicast <近隣>` では張り直せない |
+| M6-10 X1 からの揺れる経路を抑え、顧客のアドレスは束ねて出す | 1.5.c ダンプニング・集約(summary-only か suppress-route) | 揺れの数え方(peer のリセットは数えない)・集約で細かい経路が `s` に |
+
+- 読み物: M6 の追補の章(日英)= 見取り図(予備の道が届くまで・切り替えの順の 1 枚の図)→ 追加パスと PIC(盤面で 1 ホップずつ・#9 の送り返しを `:::walk` で)→ セッションを守る(GTSM・MD5/TCP-AO・上限・ダンプニング・集約)→ 付録(best-external と VPN・suppress-inactive・食い違いの注記)。素振り台のお題(`clear bgp` の 2 つの形・`ttl-security ?`・`set path-selection backup 1 ?` など)。用語集。
+- M6 本体の書き直し(§6 の丁寧さへ)は BL-257 の残り。追補と同時にやるかはユーザ判断。
+
+### 32.7 ラボ XRT-17 を組んで分かったこと(2026-11-21・盤面= `problems/XRT-17`・記録 `poc/xr/expXRT17-*.log`・読み物の値 `poc/xr/expM6X-try-*.log`・模範解 `poc/xr/solve_xrt17.sh`)
+
+| # | 論点 | 実測 |
+|---|---|---|
+| 29 | PIC の途切れ(入口 PE1= XRv9000) | PE3 にも install= **0.21 秒・0.15 秒**(2 回)/入口だけ= **2.98 秒**(`expM6X-try-pic.log`)。故障の直後の PE1 の CEF= `via 10.255.0.2/32, 0 dependencies, recursive` → `unresolved`・`via 10.255.0.3/32, 3 dependencies, recursive, backup`・CE1 の traceroute は PE3 → X2 を通る(`expM6X-try-extra.log`) |
+| 30 | 追加パスの表示(ラボ) | PE1 は selection を持たないと 2 本目に `add-path` の印が付かず `Received Path ID 2` だけ(`expXRT17-s5.log`)。能力の行= PE3 `Send: advertised and received`・`Receive: received`・`operation: Send`/PE1 `Send: received`・`Receive: advertised and received`・`operation: Receive`。`clear bgp ipv4 unicast 10.255.0.21` → `% Incomplete command.` |
+| 31 | TCP-AO の失敗の見え方 | ID を交差させない= XR `%IP-TCP-3-BADAUTH : Invalid AO digest from 172.16.2.1:… to 172.16.2.254:179`・XR は Active/IOS `%BGP-4-AO_KEYCHAIN: Failed to set TCB AO properties`。**IOS は使用中の鍵の send-id/recv-id を直せない**(`% Key 3 on key-chain UPLINK-AO is in use and cannot be modified`)→ ネイバーの ao を外してから直す。AO を足しても XR は張り直さず古いセッションを `Established` のまま持つ(#21 と同じ)→ `clear bgp <近隣>` |
+| 32 | maximum-prefix の表示 | `restart` なし= `Threshold for warning message 80%, restart interval 0 min`/`discard-extra-paths`= `Maximum prefixes allowed 3 (discard-extra-paths)`。IOS の CE1 は eBGP の更新をまとめて送る(足した経路が PE1 に届くまで 20 秒以上)→ 確認は決めた秒数でなく `Idle (PfxCt)` になるまで待つ(`bgpops_probe.py --waitfor`) |
+| 33 | 確認の道具 | 確認の直後に次の確認が走ると PE1─CE1 は `Connect`/`Closing` の途中だった → `--waitfor`・`--postwait`(確立・PfxCt を待つ)を足した。白紙= 全課題 0 点(M6-5・7・8 の「壊していないか」に本体の設定の有無も条件に足した)/模範解= 各課題 100・最終 100(12 項目)。最終の採点はノルマの記録に 1 行書くので消した |
+| 34 | XR の eBGP の既定 | `Minimum time between advertisement runs is 30 secs`(eBGP)・`Fast fallover is enabled` |

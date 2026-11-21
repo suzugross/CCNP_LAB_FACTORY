@@ -1,0 +1,23 @@
+# M6-8: TCP-AO。白紙= 認証なし → 0 点。
+# 確認は poc/xr/gen_grading_xrt17.py で組んだ(中身を直したら組み直す)。道具= topologies/bgpops_probe.py。
+problem: XRT-17
+total_points: 100
+checks:
+- name: M6-8 The PE3–X2 session is established with TCP-AO (key 7 of AS65100-AO active on PE3)
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --show 'X2:show ip bgp neighbors 172.16.3.254' --show 'PE3:show tcp authentication keychain AS65100-AO'
+  raw:
+  - regex: '== SHOW X2: show\ ip\ bgp\ neighbors\ 172\.16\.3\.254\n(?:(?!== )[\s\S])*?BGP state = Established'
+  - regex: Option Flags:[^\n]*TCP AO
+  - regex: 'Key ID: 7, Active, Valid'
+  points: 60
+- name: M6-8 PE3 still learns 203.0.113.0/24 from X2, and RR1 still has PE3's path
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --show 'PE3:show bgp neighbor 172.16.3.1 routes' --show 'RR1:show bgp 203.0.113.0/24' --show 'PE3:show tcp authentication keychain AS65100-AO'
+  raw:
+  - regex: 'Key ID: 7, Active, Valid'
+  - regex: '== SHOW PE3: show\ bgp\ neighbor\ 172\.16\.3\.1\ routes\n(?:(?!== )[\s\S])*?203\.0\.113\.0/24\s+172\.16\.3\.1'
+  - regex: '== SHOW RR1: show\ bgp\ 203\.0\.113\.0/24\n(?:(?!== )[\s\S])*?from 10\.255\.0\.3 \(10\.255\.0\.3\)'
+  points: 40

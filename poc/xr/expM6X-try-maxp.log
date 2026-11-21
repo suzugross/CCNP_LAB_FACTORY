@@ -1,0 +1,463 @@
+
+######## 10:59:30 maxp0: 読み物の値= PE1 ← CE1 に maximum-prefix 3 80(CE1 は 2 本)。表示
+configure
+Sat Nov 21 10:59:30.823 UTC
+RP/0/RP0/CPU0:PE1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE1(config-bgp)#
+neighbor 172.16.1.1
+RP/0/RP0/CPU0:PE1(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+maximum-prefix 3 80
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+commit
+Sat Nov 21 10:59:32.968 UTC
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+show configuration failed
+Sat Nov 21 10:59:33.887 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:PE1#
+show bgp neighbor 172.16.1.1
+Sat Nov 21 10:59:42.087 UTC
+
+BGP neighbor is 172.16.1.1
+ Remote AS 65001, local AS 65000, external link
+ Remote router ID 192.168.1.1
+  BGP state = Established, up for 00:03:02
+  Previous State: Active
+  Last Received Message: KeepAlive
+  NSR State: None
+  Last read 00:00:24, Last read before reset 00:04:15
+  Hold time is 180, keepalive interval is 60 seconds
+  Configured hold time: 180, keepalive: 60, min acceptable hold time: 3
+  Last write 00:00:01, attempted 102, written 102
+  Second last write 00:00:01, attempted 50, written 50
+  Last write before reset 00:04:36, attempted 102, written 102
+  Second last write before reset 00:04:36, attempted 31, written 31
+  Last write pulse rcvd  Nov 21 10:59:40.688 last full not set pulse count 260
+  Last write pulse rcvd before reset 00:04:15
+  Last insert into reset queue: Nov 21 10:55:46.745, removed at Nov 21 10:55:46.746
+  Socket not armed for io, armed for read, armed for write
+  Last write thread event before reset 00:04:15, second last 00:04:29
+  Last KA expiry before reset 00:05:35, second last 00:06:35
+  Last KA error before reset 00:00:00, KA not sent 00:00:00
+  Last KA start before reset 00:04:36, second last 00:04:36
+  Precedence: internet
+  Non-stop routing is enabled
+  Enforcing first AS is enabled
+  Multi-protocol capability received
+  Neighbor capabilities:
+    Route refresh: advertised (old + new) and received (old + new)
+    4-byte AS: advertised and received
+    Address family IPv4 Unicast: advertised and received
+  Received 160 messages, 0 notifications, 0 in queue
+  Sent 222 messages, 15 notifications, 0 in queue
+  Minimum time between advertisement runs is 30 secs
+  Inbound message logging enabled, 4 messages buffered
+  Outbound message logging enabled, 4 messages buffered
+  Fast fallover is enabled
+    Neighbor is directly connected
+    Neighbor fast-fallover is not configured
+    Neighbor is external and fast-external-fallover is not disabled
+
+ For Address Family: IPv4 Unicast
+  BGP neighbor version 399
+  BGP neighbor quick-withdraw version 399
+  Update group: 0.3 Filter-group: 0.3  No Refresh request being processed
+  AF-dependent capabilities:
+    Extended Nexthop Encoding: advertised
+  Route refresh request: received 0, sent 0
+  Policy for incoming advertisements is PASS
+  Policy for outgoing advertisements is PASS
+  2 accepted prefixes, 2 are bestpaths
+  Exact no. of prefixes denied: 0
+  Cumulative no. of prefixes denied: 0
+  Prefix advertised 4, suppressed 0, withdrawn 2
+  Maximum prefixes allowed 3
+  Threshold for warning message 80%, restart interval 0 min
+  An EoR was received during read-only mode
+  Last ack version 395, Last synced ack version 0
+  Outstanding version objects: current 1, max 2, refresh 0
+  Additional-paths operation: None
+  Advertise routes with local-label via Unicast SAFI
+  Slow Peer State: Detection-only
+    Detected state: FALSE, Detection threshold: 300
+    Detection Count: 0, Recovery Count: 0
+
+  Connections established 16; dropped 15
+  Local host: 172.16.1.254, Local port: 179, IF Handle: 0x01000020
+  Foreign host: 172.16.1.1, Foreign port: 55915
+  Last reset 00:03:55, due to User clear requested (CEASE notification sent - administrative reset)
+  Time since last notification sent to neighbor: 00:03:55
+  Error Code: administrative reset
+  Notification data sent:
+    None
+RP/0/RP0/CPU0:PE1#
+show bgp summary
+Sat Nov 21 10:59:42.494 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 399
+BGP main routing table version 399
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker          399           399           399           399           399             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000     358     123          399    0    0 00:19:31          2
+172.16.1.1        0 65001     160     222          399    0    0 00:03:02          2
+
+RP/0/RP0/CPU0:PE1#
+
+######## 10:59:43 maxp1: CE1 に 2 本足す(4 本 > 3)→ 切れる・ログ
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE1(config)#
+interface Loopback21
+CE1(config-if)#
+ip address 192.168.21.1 255.255.255.0
+CE1(config-if)#
+interface Loopback22
+CE1(config-if)#
+ip address 192.168.22.1 255.255.255.0
+CE1(config-if)#
+router bgp 65001
+CE1(config-router)#
+address-family ipv4
+CE1(config-router-af)#
+network 192.168.21.0
+CE1(config-router-af)#
+network 192.168.22.0
+CE1(config-router-af)#
+end
+CE1#
+show bgp summary
+Sat Nov 21 11:00:09.013 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 399
+BGP main routing table version 399
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker          399           399           399           399           399             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000     358     123          399    0    0 00:19:58          2
+172.16.1.1        0 65001     160     222          399    0    0 00:03:29          2
+
+RP/0/RP0/CPU0:PE1#
+show logging | include MAXPFX|ADJCHANGE
+                                                ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:PE1#
+show logging | include NOTIFICATION|ADJCHANGE
+*Nov 21 10:56:40.697: %BGP-5-ADJCHANGE: neighbor 172.16.1.254 Up 
+*Nov 21 11:00:11.130: %BGP-3-NOTIFICATION: received from neighbor 172.16.1.254 6/1 (Maximum Number of Prefixes Reached) 6 bytes 01010000 0003
+CE1#
+
+######## 11:00:11 maxp2: warning-only → clear
+configure
+Sat Nov 21 11:00:12.187 UTC
+RP/0/RP0/CPU0:PE1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE1(config-bgp)#
+neighbor 172.16.1.1
+RP/0/RP0/CPU0:PE1(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+maximum-prefix 3 80 warning-only
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+commit
+Sat Nov 21 11:00:14.307 UTC
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+show configuration failed
+Sat Nov 21 11:00:15.220 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:PE1#
+clear bgp 172.16.1.1
+Sat Nov 21 11:00:18.348 UTC
+RP/0/RP0/CPU0:PE1#
+show bgp summary
+Sat Nov 21 11:00:54.899 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 407
+BGP main routing table version 407
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker          407           407           407           407           407             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000     359     126          407    0    0 00:20:44          2
+172.16.1.1        0 65001     167     228          407    0    0 00:00:32          4
+
+RP/0/RP0/CPU0:PE1#
+show bgp neighbor 172.16.1.1 routes
+Sat Nov 21 11:00:55.301 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 407
+BGP main routing table version 407
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*> 192.168.1.0/24     172.16.1.1               0             0 65001 i
+*> 192.168.2.0/24     172.16.1.1               0             0 65001 i
+*> 192.168.21.0/24    172.16.1.1               0             0 65001 i
+*> 192.168.22.0/24    172.16.1.1               0             0 65001 i
+
+Processed 4 prefixes, 4 paths
+RP/0/RP0/CPU0:PE1#
+show logging last 6
+Sat Nov 21 11:00:55.705 UTC
+Syslog logging: enabled (0 messages dropped, 0 flushes, 0 overruns)
+    Console logging: level warnings, 31 messages logged
+    Monitor logging: level debugging, 0 messages logged
+    Trap logging: level informational, 0 messages logged
+    Buffer logging: level debugging, 1136 messages logged
+
+Log Buffer (2097152 bytes):
+
+RP/0/RP0/CPU0:Nov 21 11:00:18.801 UTC: SSHD_[66606]: %SECURITY-SSHD-6-INFO_USER_LOGOUT : User 'SUZUKI' from '10.1.10.3' logged out on 'vty0' 
+RP/0/RP0/CPU0:Nov 21 11:00:22.115 UTC: bgp[1089]: %ROUTING-BGP-5-ADJCHANGE : neighbor 172.16.1.1 Up (VRF: default) (AS: 65001) 
+RP/0/RP0/CPU0:Nov 21 11:00:22.116 UTC: bgp[1089]: %ROUTING-BGP-5-MAXPFX : No. of IPv4 Unicast prefixes received from 172.16.1.1 has reached 3, max 3 
+RP/0/RP0/CPU0:Nov 21 11:00:22.116 UTC: bgp[1089]: %ROUTING-BGP-4-MAXPFXEXCEED : No. of IPv4 Unicast prefixes received from 172.16.1.1: 4 exceed limit 3 
+RP/0/RP0/CPU0:Nov 21 11:00:54.075 UTC: SSHD_[66681]: %SECURITY-SSHD-6-INFO_WINDOW_SIZE : Failed to set window size row: 1000, column: 250. Error: 'tty-infra' detected the 'fatal' condition 'An invalid operation has been requested' 
+RP/0/RP0/CPU0:Nov 21 11:00:54.083 UTC: SSHD_[66681]: %SECURITY-SSHD-6-INFO_SUCCESS : Successfully authenticated user 'SUZUKI' from '10.1.10.3' on 'vty0'(cipher 'aes128-ctr', mac 'hmac-sha2-256') 
+RP/0/RP0/CPU0:PE1#
+
+######## 11:00:56 maxp3: discard-extra-paths → clear
+configure
+Sat Nov 21 11:00:57.240 UTC
+RP/0/RP0/CPU0:PE1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE1(config-bgp)#
+neighbor 172.16.1.1
+RP/0/RP0/CPU0:PE1(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+maximum-prefix 3 80 discard-extra-paths
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+commit
+Sat Nov 21 11:00:59.357 UTC
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+show configuration failed
+Sat Nov 21 11:01:00.273 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:PE1#
+clear bgp 172.16.1.1
+Sat Nov 21 11:01:03.335 UTC
+RP/0/RP0/CPU0:PE1#
+show bgp summary
+Sat Nov 21 11:01:39.923 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 414
+BGP main routing table version 414
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker          414           414           414           414           414             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000     359     129          414    0    0 00:21:29          2
+172.16.1.1        0 65001     173     235          414    0    0 00:00:35          3
+
+RP/0/RP0/CPU0:PE1#
+show bgp neighbor 172.16.1.1 routes
+Sat Nov 21 11:01:40.327 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 414
+BGP main routing table version 414
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+Status codes: s suppressed, d damped, h history, * valid, > best
+              i - internal, r RIB-failure, S stale, N Nexthop-discard
+Origin codes: i - IGP, e - EGP, ? - incomplete
+   Network            Next Hop            Metric LocPrf Weight Path
+*> 192.168.1.0/24     172.16.1.1               0             0 65001 i
+*> 192.168.2.0/24     172.16.1.1               0             0 65001 i
+*> 192.168.21.0/24    172.16.1.1               0             0 65001 i
+
+Processed 3 prefixes, 3 paths
+RP/0/RP0/CPU0:PE1#
+show bgp neighbor 172.16.1.1
+Sat Nov 21 11:01:40.730 UTC
+
+BGP neighbor is 172.16.1.1
+ Remote AS 65001, local AS 65000, external link
+ Remote router ID 192.168.1.1
+  BGP state = Established, up for 00:00:36
+  Previous State: Idle
+  Last Received Message: Update
+  NSR State: None
+  Last read 00:00:36, Last read before reset 00:00:39
+  Hold time is 180, keepalive interval is 60 seconds
+  Configured hold time: 180, keepalive: 60, min acceptable hold time: 3
+  Last write 00:00:36, attempted 125, written 125
+  Second last write 00:00:36, attempted 19, written 19
+  Last write before reset 00:00:39, attempted 23, written 23
+  Second last write before reset 00:01:18, attempted 125, written 125
+  Last write pulse rcvd  Nov 21 11:01:04.487 last full not set pulse count 272
+  Last write pulse rcvd before reset 00:00:39
+  Last insert into reset queue: Nov 21 11:01:03.363, removed at Nov 21 11:01:03.364
+  Socket not armed for io, armed for read, armed for write
+  Last write thread event before reset 00:00:39, second last 00:00:39
+  Last KA expiry before reset 00:00:00, second last 00:00:00
+  Last KA error before reset 00:00:00, KA not sent 00:00:00
+  Last KA start before reset 00:01:18, second last 00:00:00
+  Precedence: internet
+  Non-stop routing is enabled
+  Enforcing first AS is enabled
+  Multi-protocol capability received
+  Neighbor capabilities:
+    Route refresh: advertised (old + new) and received (old + new)
+    4-byte AS: advertised and received
+    Address family IPv4 Unicast: advertised and received
+  Received 173 messages, 0 notifications, 0 in queue
+  Sent 235 messages, 17 notifications, 0 in queue
+  Minimum time between advertisement runs is 30 secs
+  Inbound message logging enabled, 4 messages buffered
+  Outbound message logging enabled, 4 messages buffered
+  Fast fallover is enabled
+    Neighbor is directly connected
+    Neighbor fast-fallover is not configured
+    Neighbor is external and fast-external-fallover is not disabled
+
+ For Address Family: IPv4 Unicast
+  BGP neighbor version 414
+  BGP neighbor quick-withdraw version 414
+  Update group: 0.3 Filter-group: 0.4  No Refresh request being processed
+  AF-dependent capabilities:
+    Extended Nexthop Encoding: advertised
+  Route refresh request: received 0, sent 1
+  Policy for incoming advertisements is PASS
+  Policy for outgoing advertisements is PASS
+  3 accepted prefixes, 3 are bestpaths
+  Exact no. of prefixes denied: 0
+  Cumulative no. of prefixes denied: 1
+    No policy: 0, Failed RT match: 0
+    By ORF policy: 0, By policy: 0
+  Prefix advertised 2, suppressed 0, withdrawn 0
+  Maximum prefixes allowed 3 (discard-extra-paths)
+  Threshold for warning message 80%, restart interval 0 min
+  1 prefixes dropped after exceeding user configured limit
+  An EoR was received during read-only mode
+  Last ack version 0, Last synced ack version 0
+  Outstanding version objects: current 1, max 2, refresh 0
+  Additional-paths operation: None
+  Advertise routes with local-label via Unicast SAFI
+  Slow Peer State: Detection-only
+    Detected state: FALSE, Detection threshold: 300
+    Detection Count: 0, Recovery Count: 0
+
+  Connections established 18; dropped 17
+  Local host: 172.16.1.254, Local port: 37414, IF Handle: 0x01000020
+  Foreign host: 172.16.1.1, Foreign port: 179
+  Last reset 00:00:37, due to User clear requested (CEASE notification sent - administrative reset)
+  Time since last notification sent to neighbor: 00:00:37
+  Error Code: administrative reset
+  Notification data sent:
+    None
+RP/0/RP0/CPU0:PE1#
+
+######## 11:01:41 maxp4: 片付け(上限を外し CE1 の 2 本も消す)
+configure
+Sat Nov 21 11:01:42.281 UTC
+RP/0/RP0/CPU0:PE1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE1(config-bgp)#
+neighbor 172.16.1.1
+RP/0/RP0/CPU0:PE1(config-bgp-nbr)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+no maximum-prefix
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+commit
+Sat Nov 21 11:01:44.407 UTC
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+show configuration failed
+Sat Nov 21 11:01:45.342 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-bgp-nbr-af)#
+end
+RP/0/RP0/CPU0:PE1#
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+CE1(config)#
+router bgp 65001
+CE1(config-router)#
+address-family ipv4
+CE1(config-router-af)#
+no network 192.168.21.0
+CE1(config-router-af)#
+no network 192.168.22.0
+CE1(config-router-af)#
+exit
+CE1(config-router)#
+exit
+CE1(config)#
+no interface Loopback21
+CE1(config)#
+no interface Loopback22
+CE1(config)#
+end
+CE1#
+clear bgp 172.16.1.1
+Sat Nov 21 11:01:53.495 UTC
+RP/0/RP0/CPU0:PE1#
+172.16.1.1        0 65001     179     242          421    0    0 00:00:35          2

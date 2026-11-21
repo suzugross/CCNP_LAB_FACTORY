@@ -1,0 +1,252 @@
+
+######## 07:34:20 edge: 出口の PE2 と X1 の間のリンクを切る(PE2 は X1 を失う)。PE2 に予備が無い時
+==== PE2
+show bgp 203.0.113.0/24
+Sat Nov 21 07:34:22.012 UTC
+BGP routing table entry for 203.0.113.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                  5            5
+Last Modified: Nov 21 06:22:11.351 for 01:12:10
+Paths: (1 available, best #1)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.255.0.21     
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.255.0.21     
+  65100
+    172.16.2.1 from 172.16.2.1 (10.100.255.1)
+      Origin IGP, metric 11, localpref 200, valid, external, best, group-best
+      Received Path ID 0, Local Path ID 1, version 5
+      Origin-AS validity: (disabled)
+RP/0/RP0/CPU0:PE2#
+show cef 203.0.113.0/24 detail
+Sat Nov 21 07:34:22.419 UTC
+203.0.113.0/24, version 17, internal 0x5000001 0x40 (ptr 0x88028f00) [1], 0x0 (0x0), 0x0 (0x0)
+ Updated Nov 21 06:22:11.258 
+ local adjacency to GigabitEthernet0/0/0/1
+
+ Prefix Len 24, traffic index 0, precedence n/a, priority 4
+  gateway array (0x896cc958) reference count 1, flags 0x2010, source rib (7), 0 backups
+                [1 type 3 flags 0x48501 (0x89786c48) ext 0x0 (0x0) (collapsed)]
+  LW-LDI[type=0, refc=0, ptr=0x0, sh-ldi=0x0]
+  gateway array update type-time 1 Nov 21 06:22:11.258
+ LDI Update time Nov 21 06:22:11.258
+   via 172.16.2.1/32, 2 dependencies, recursive, bgp-ext [flags 0x6020]
+    path-idx 0 NHID 0x0 [0x8802f228 0x0]
+    next hop 172.16.2.1/32 via 172.16.2.1/32
+
+    Load distribution: 0 (refcount 1)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/1    172.16.2.1     
+RP/0/RP0/CPU0:PE2#
+== SLA CE1(192.168.1.1)→ T 203.0.113.1・故障= PE2:X1
+== CMD applied (PE2-X1)
+IPSLAs Latest Operation Statistics
+	Latest RTT: 3 milliseconds
+Latest operation start time: 07:34:25 UTC Sat Nov 21 2026
+Latest operation return code: OK
+RTT Values:
+Latency one-way time:
+	Number of Latency one-way Samples: 2986
+	Source to Destination Latency one way Min/Avg/Max: 1/1/27 milliseconds
+	Destination to Source Latency one way Min/Avg/Max: 1/1/14 milliseconds
+	Source to Destination Latency one way Sum/Sum2: 4909/10649
+	Destination to Source Latency one way Sum/Sum2: 4733/8779
+	Number of SD Jitter Samples: 2984
+	Number of DS Jitter Samples: 2985
+Packet Loss Values:
+	Loss Source to Destination: 14
+	Source to Destination Loss Periods Number: 1
+	Source to Destination Loss Period Length Min/Max: 14/14
+	Source to Destination Inter Loss Period Length Min/Max: 617/2369
+	Loss Destination to Source: 0
+	Destination to Source Loss Periods Number: 0
+	Destination to Source Loss Period Length Min/Max: 0/0
+	Destination to Source Inter Loss Period Length Min/Max: 0/0
+	Out Of Sequence: 0	Tail Drop: 0	Packet Late Arrival: 0
+Packet Skipped: 0
+Number of successes: 1
+Number of failures: 0
+== CMD undone (PE2-X1)
+== FAULT APPLIED at +6.6s (run 30.0s)
+== SD PERIODS 1 LEN min/max 14/14 (max ~140 ms)
+== LOSS SD 14 DS 0 TAIL 0 (x10 ms: SD ~140 ms, DS ~0 ms)
+RR1            Gi0/0/0/4                *PtoP*         Up    29   01:15:35 Yes None None
+PE1            Gi0/0/0/0                *PtoP*         Up    21   01:15:42 Yes None None
+PE2            Gi0/0/0/1                *PtoP*         Up    26   00:03:50 Yes None None
+PE3            Gi0/0/0/2                *PtoP*         Up    28   01:15:39 Yes None None
+PE4            Gi0/0/0/3                *PtoP*         Up    23   01:07:22 Yes None None
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+10.255.0.1:0       N   N    01:15:30    1     0     3     0     12     0    
+10.255.0.3:0       N   N    01:15:19    1     0     3     0     12     0    
+10.255.0.4:0       N   N    01:07:13    1     0     3     0     12     0    
+10.255.0.2:0       N   N    00:03:50    1     0     3     0     12     0    
+10.255.0.1        0 65000      83     137           65    0    0 00:25:40          1
+10.255.0.2        0 65000      81     110           65    0    0 01:15:17          1
+10.255.0.3        0 65000     103     110           65    0    0 01:15:23          1
+10.255.0.4        0 65000      75     131           65    0    0 00:25:39          1
+
+######## 07:36:28 edge2: PE2 にも追加パスの receive と PIC(backup 1 install)→ PE2 自身が PE3 経由の予備を持ち、ローカルに切り替えるか(ラベルなしなので PE3 が PE2 へ送り返すループになる見込み)
+configure
+Sat Nov 21 07:36:30.202 UTC
+RP/0/RP0/CPU0:PE2(config)#
+route-policy PIC
+RP/0/RP0/CPU0:PE2(config-rpl)#
+  set path-selection backup 1 install
+RP/0/RP0/CPU0:PE2(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:PE2(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE2(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE2(config-bgp-af)#
+additional-paths receive
+RP/0/RP0/CPU0:PE2(config-bgp-af)#
+additional-paths selection route-policy PIC
+RP/0/RP0/CPU0:PE2(config-bgp-af)#
+commit
+Sat Nov 21 07:36:33.555 UTC
+RP/0/RP0/CPU0:PE2(config-bgp-af)#
+show configuration failed
+Sat Nov 21 07:36:34.067 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-bgp-af)#
+end
+RP/0/RP0/CPU0:PE2#
+==== PE2
+show bgp 203.0.113.0/24
+Sat Nov 21 07:37:09.028 UTC
+BGP routing table entry for 203.0.113.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                100          100
+Last Modified: Nov 21 07:37:06.351 for 00:00:02
+Paths: (2 available, best #2)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.255.0.21     
+  Path #1: Received by speaker 0
+  Not advertised to any peer
+  65100
+    10.255.0.3 (metric 20) from 10.255.0.21 (10.255.0.3)
+      Origin IGP, metric 11, localpref 100, valid, internal, backup, add-path
+      Received Path ID 12, Local Path ID 2, version 100
+      Originator: 10.255.0.3, Cluster list: 10.255.0.21
+  Path #2: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.255.0.21     
+  65100
+    172.16.2.1 from 172.16.2.1 (10.100.255.1)
+      Origin IGP, metric 11, localpref 200, valid, external, best, group-best
+      Received Path ID 0, Local Path ID 1, version 95
+      Origin-AS validity: (disabled)
+RP/0/RP0/CPU0:PE2#
+show route 203.0.113.0/24 detail
+Sat Nov 21 07:37:09.431 UTC
+
+Routing entry for 203.0.113.0/24
+  Known via "bgp 65000", distance 20, metric 11
+  Tag 65100
+  Number of pic paths 1 , type internal and external
+  Installed Nov 21 07:37:06.037 for 00:00:03
+  Routing Descriptor Blocks
+    10.255.0.3, from 10.255.0.21, BGP backup path
+      Route metric is 11, Wt is 1
+      Label: None
+      Tunnel ID: None
+      Binding Label: None
+      Extended communities count: 0
+      NHID: 0x0 (Ref: 0)
+      Path Grouping ID: 65000
+    172.16.2.1, from 172.16.2.1, BGP external
+      Route metric is 11, Wt is 1
+      Label: None
+      Tunnel ID: None
+      Binding Label: None
+      Extended communities count: 0
+      NHID: 0x0 (Ref: 0)
+      Path Grouping ID: 65100
+  Route version is 0x8 (8)
+  No local label
+  IP Precedence: Not Set
+  QoS Group ID: Not Set
+  Flow-tag: Not Set
+  Fwd-class: Not Set
+  Route Priority: RIB_PRIORITY_RECURSIVE_SVD_REM (16) SVD Type RIB_SVD_TYPE_LOCAL
+  Download Priority 4, Download Version 538
+  No advertising protos. 
+RP/0/RP0/CPU0:PE2#
+show cef 203.0.113.0/24 detail
+Sat Nov 21 07:37:09.837 UTC
+203.0.113.0/24, version 538, internal 0x5000001 0x40 (ptr 0x880283e0) [1], 0x0 (0x0), 0x0 (0x0)
+ Updated Nov 21 07:37:06.041 
+ local adjacency to GigabitEthernet0/0/0/1
+
+ Prefix Len 24, traffic index 0, precedence n/a, priority 4
+  gateway array (0x896ce218) reference count 1, flags 0x102010, source rib (7), 0 backups
+                [1 type 3 flags 0x48501 (0x89786f60) ext 0x0 (0x0) (collapsed)]
+  LW-LDI[type=0, refc=0, ptr=0x0, sh-ldi=0x0]
+  gateway array update type-time 1 Nov 21 07:37:06.041
+ LDI Update time Nov 21 07:37:06.048
+   via 10.255.0.3/32, 2 dependencies, recursive, backup [flags 0x6100]
+    path-idx 0 NHID 0x0 [0x8802ece8 0x0]
+    next hop 10.255.0.3/32 via 10.255.0.3/32
+   via 172.16.2.1/32, 2 dependencies, recursive, bgp-ext [flags 0x6020]
+    path-idx 1 NHID 0x0 [0x88037850 0x0], Internal 0x8ab050a0
+    next hop 172.16.2.1/32 via 172.16.2.1/32
+
+    Weight distribution:
+    slot 0, weight 1, normalized_weight 1, class 0
+    Load distribution: 0 (refcount 1)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/1    172.16.2.1     
+RP/0/RP0/CPU0:PE2#
+== SLA CE1(192.168.1.1)→ T 203.0.113.1・故障= PE2:X1
+== CMD applied (PE2-X1)
+IPSLAs Latest Operation Statistics
+	Latest RTT: 3 milliseconds
+Latest operation start time: 07:37:13 UTC Sat Nov 21 2026
+Latest operation return code: OK
+RTT Values:
+Latency one-way time:
+	Number of Latency one-way Samples: 2987
+	Source to Destination Latency one way Min/Avg/Max: 1/1/69 milliseconds
+	Destination to Source Latency one way Min/Avg/Max: 1/1/61 milliseconds
+	Source to Destination Latency one way Sum/Sum2: 4938/23484
+	Destination to Source Latency one way Sum/Sum2: 4860/22214
+	Number of SD Jitter Samples: 2982
+	Number of DS Jitter Samples: 2983
+Packet Loss Values:
+	Loss Source to Destination: 5
+	Source to Destination Loss Periods Number: 1
+	Source to Destination Loss Period Length Min/Max: 5/5
+	Source to Destination Inter Loss Period Length Min/Max: 613/2382
+	Loss Destination to Source: 0
+	Destination to Source Loss Periods Number: 0
+	Destination to Source Loss Period Length Min/Max: 0/0
+	Destination to Source Inter Loss Period Length Min/Max: 0/0
+	Out Of Sequence: 8	Tail Drop: 0	Packet Late Arrival: 0
+Packet Skipped: 0
+Number of successes: 1
+Number of failures: 0
+== CMD undone (PE2-X1)
+== FAULT APPLIED at +6.5s (run 30.0s)
+== SD PERIODS 1 LEN min/max 5/5 (max ~50 ms)
+== LOSS SD 5 DS 0 TAIL 0 (x10 ms: SD ~50 ms, DS ~0 ms)
+RR1            Gi0/0/0/4                *PtoP*         Up    28   01:18:22 Yes None None
+PE1            Gi0/0/0/0                *PtoP*         Up    21   01:18:30 Yes None None
+PE2            Gi0/0/0/1                *PtoP*         Up    23   00:06:37 Yes None None
+PE3            Gi0/0/0/2                *PtoP*         Up    28   01:18:26 Yes None None
+PE4            Gi0/0/0/3                *PtoP*         Up    23   01:10:09 Yes None None
+Peer               GR  NSR  Up Time     Discovery   Addresses     Labels    
+10.255.0.1:0       N   N    01:18:17    1     0     3     0     12     0    
+10.255.0.3:0       N   N    01:18:06    1     0     3     0     12     0    
+10.255.0.4:0       N   N    01:10:00    1     0     3     0     12     0    
+10.255.0.2:0       N   N    00:06:37    1     0     3     0     12     0    
+10.255.0.1        0 65000      86     147           69    0    0 00:28:28          1
+10.255.0.2        0 65000      90     123           69    0    0 00:02:11          1
+10.255.0.3        0 65000     108     115           69    0    0 01:18:11          1
+10.255.0.4        0 65000      78     141           69    0    0 00:28:26          1

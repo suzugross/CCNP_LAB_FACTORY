@@ -1,0 +1,146 @@
+
+######## 06:55:07 be: PE3 に advertise best-external → RR1 が PE3 の経路を知るか・PE1 にはまだ 1 本か
+configure
+Sat Nov 21 06:55:09.236 UTC
+RP/0/RP0/CPU0:PE3(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE3(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+advertise best-external
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+commit
+Sat Nov 21 06:55:11.073 UTC
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+show configuration failed
+Sat Nov 21 06:55:11.590 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE3(config-bgp-af)#
+end
+RP/0/RP0/CPU0:PE3#
+==== PE3
+show bgp 203.0.113.0/24
+Sat Nov 21 06:55:29.766 UTC
+BGP routing table entry for 203.0.113.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 22           22
+Last Modified: Nov 21 06:55:13.351 for 00:00:16
+Paths: (2 available, best #1)
+  Not advertised to any peer
+  Path #1: Received by speaker 0
+  Not advertised to any peer
+  65100
+    10.255.0.2 (metric 20) from 10.255.0.21 (10.255.0.2)
+      Origin IGP, metric 11, localpref 200, valid, internal, best, group-best
+      Received Path ID 0, Local Path ID 1, version 21
+      Originator: 10.255.0.2, Cluster list: 10.255.0.21
+  Path #2: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    10.255.0.21     
+  65100
+    172.16.3.1 from 172.16.3.1 (10.100.255.2)
+      Origin IGP, metric 11, localpref 100, valid, external, best-external
+      Received Path ID 0, Local Path ID 2, version 22
+      Origin-AS validity: (disabled)
+RP/0/RP0/CPU0:PE3#
+show bgp neighbor 10.255.0.21 advertised-routes
+Sat Nov 21 06:55:30.175 UTC
+Network            Next Hop        From            AS Path
+203.0.113.0/24     10.255.0.3      172.16.3.1      65100i
+
+Processed 1 prefixes, 1 paths
+RP/0/RP0/CPU0:PE3#
+==== RR1
+show bgp 203.0.113.0/24
+Sat Nov 21 06:55:31.864 UTC
+BGP routing table entry for 203.0.113.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 26           26
+Last Modified: Nov 21 06:53:20.351 for 00:02:11
+Paths: (2 available, best #1)
+  Advertised IPv4 Unicast paths to update-groups (with more than one peer):
+    0.2 
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to update-groups (with more than one peer):
+    0.2 
+  65100, (Received from a RR-client)
+    10.255.0.2 (metric 20) from 10.255.0.2 (10.255.0.2)
+      Origin IGP, metric 11, localpref 200, valid, internal, best, group-best
+      Received Path ID 0, Local Path ID 1, version 26
+  Path #2: Received by speaker 0
+  Not advertised to any peer
+  65100, (Received from a RR-client)
+    10.255.0.3 (metric 20) from 10.255.0.3 (10.255.0.3)
+      Origin IGP, metric 11, localpref 100, valid, internal
+      Received Path ID 0, Local Path ID 0, version 0
+RP/0/RP0/CPU0:RR1#
+==== PE1
+show bgp 203.0.113.0/24
+Sat Nov 21 06:55:33.613 UTC
+BGP routing table entry for 203.0.113.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 27           27
+Last Modified: Nov 21 06:53:20.351 for 00:02:13
+Paths: (1 available, best #1)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    172.16.1.1      
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    172.16.1.1      
+  65100
+    10.255.0.2 (metric 20) from 10.255.0.21 (10.255.0.2)
+      Origin IGP, metric 11, localpref 200, valid, internal, best, group-best
+      Received Path ID 0, Local Path ID 1, version 27
+      Originator: 10.255.0.2, Cluster list: 10.255.0.21
+RP/0/RP0/CPU0:PE1#
+show route 203.0.113.0/24 detail
+Sat Nov 21 06:55:34.019 UTC
+
+Routing entry for 203.0.113.0/24
+  Known via "bgp 65000", distance 200, metric 11
+  Tag 65100, type internal
+  Installed Nov 21 06:53:20.795 for 00:02:13
+  Routing Descriptor Blocks
+    10.255.0.2, from 10.255.0.21
+      Route metric is 11, Wt is 1
+      Label: None
+      Tunnel ID: None
+      Binding Label: None
+      Extended communities count: 0
+      NHID: 0x0 (Ref: 0)
+      Path Grouping ID: 65000
+  Route version is 0x19 (25)
+  No local label
+  IP Precedence: Not Set
+  QoS Group ID: Not Set
+  Flow-tag: Not Set
+  Fwd-class: Not Set
+  Route Priority: RIB_PRIORITY_RECURSIVE_SVD_REM (16) SVD Type RIB_SVD_TYPE_LOCAL
+  Download Priority 4, Download Version 66
+  No advertising protos. 
+RP/0/RP0/CPU0:PE1#
+show cef 203.0.113.0/24 detail
+Sat Nov 21 06:55:34.421 UTC
+203.0.113.0/24, version 66, internal 0x5000001 0x40 (ptr 0x88539770) [1], 0x0 (0x0), 0x0 (0x0)
+ Updated Nov 21 06:53:20.798 
+ local adjacency to GigabitEthernet0/0/0/0
+
+ Prefix Len 24, traffic index 0, precedence n/a, priority 4
+  gateway array (0x89726218) reference count 1, flags 0x2010, source rib (7), 0 backups
+                [1 type 3 flags 0x68501 (0x897c8f60) ext 0x218 (0x88ac03f8) (collapsed)]
+  LW-LDI[type=0, refc=0, ptr=0x0, sh-ldi=0x0]
+  gateway array update type-time 1 Nov 21 06:53:20.798
+ LDI Update time Nov 21 06:53:20.798
+   via 10.255.0.2/32, 2 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0x8852a770 0x0]
+    next hop 10.255.0.2/32 via 10.255.0.2/32
+
+    Load distribution: 0 (refcount 1)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    10.0.1.11      
+RP/0/RP0/CPU0:PE1#

@@ -1,0 +1,328 @@
+
+######## 06:58:07 ap: 追加パス。RR1= send/receive と selection(backup 1 advertise)・PE1/PE4= receive。能力の交渉と、PE1 が 2 本を知るか(まだ install しない)
+configure
+Sat Nov 21 06:58:08.992 UTC
+RP/0/RP0/CPU0:RR1(config)#
+route-policy AP-RR
+RP/0/RP0/CPU0:RR1(config-rpl)#
+  set path-selection backup 1 advertise
+RP/0/RP0/CPU0:RR1(config-rpl)#
+end-policy
+RP/0/RP0/CPU0:RR1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:RR1(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:RR1(config-bgp-af)#
+additional-paths send
+RP/0/RP0/CPU0:RR1(config-bgp-af)#
+additional-paths receive
+RP/0/RP0/CPU0:RR1(config-bgp-af)#
+additional-paths selection route-policy AP-RR
+RP/0/RP0/CPU0:RR1(config-bgp-af)#
+commit
+Sat Nov 21 06:58:12.752 UTC
+RP/0/RP0/CPU0:RR1(config-bgp-af)#
+show configuration failed
+Sat Nov 21 06:58:13.269 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:RR1(config-bgp-af)#
+end
+RP/0/RP0/CPU0:RR1#
+configure
+Sat Nov 21 06:58:16.300 UTC
+RP/0/RP0/CPU0:PE1(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE1(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+additional-paths receive
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+commit
+Sat Nov 21 06:58:18.028 UTC
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+show configuration failed
+Sat Nov 21 06:58:18.440 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE1(config-bgp-af)#
+end
+RP/0/RP0/CPU0:PE1#
+configure
+Sat Nov 21 06:58:21.875 UTC
+RP/0/RP0/CPU0:PE4(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE4(config-bgp)#
+address-family ipv4 unicast
+RP/0/RP0/CPU0:PE4(config-bgp-af)#
+additional-paths receive
+RP/0/RP0/CPU0:PE4(config-bgp-af)#
+commit
+Sat Nov 21 06:58:23.603 UTC
+RP/0/RP0/CPU0:PE4(config-bgp-af)#
+show configuration failed
+Sat Nov 21 06:58:24.521 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE4(config-bgp-af)#
+end
+RP/0/RP0/CPU0:PE4#
+==== RR1
+show bgp summary
+Sat Nov 21 06:58:47.115 UTC
+BGP router identifier 10.255.0.21, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 29
+BGP main routing table version 29
+BGP NSR Initial initsync version 5 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker           29            29            29            29            29             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.1        0 65000      41      55           29    0    0 00:37:38          1
+10.255.0.2        0 65000      41      56           29    0    0 00:37:35          1
+10.255.0.3        0 65000      50      56           29    0    0 00:37:42          1
+10.255.0.4        0 65000      33      48           29    0    0 00:29:29          1
+
+RP/0/RP0/CPU0:RR1#
+show bgp 203.0.113.0/24
+Sat Nov 21 06:58:47.522 UTC
+BGP routing table entry for 203.0.113.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 29           29
+Last Modified: Nov 21 06:58:14.351 for 00:00:33
+Paths: (2 available, best #1)
+  Advertised IPv4 Unicast paths to update-groups (with more than one peer):
+    0.2 
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to update-groups (with more than one peer):
+    0.2 
+  65100, (Received from a RR-client)
+    10.255.0.2 (metric 20) from 10.255.0.2 (10.255.0.2)
+      Origin IGP, metric 11, localpref 200, valid, internal, best, group-best
+      Received Path ID 0, Local Path ID 1, version 28
+  Path #2: Received by speaker 0
+  Not advertised to any peer
+  65100, (Received from a RR-client)
+    10.255.0.3 (metric 20) from 10.255.0.3 (10.255.0.3)
+      Origin IGP, metric 11, localpref 100, valid, internal, backup, add-path
+      Received Path ID 0, Local Path ID 2, version 29
+RP/0/RP0/CPU0:RR1#
+show bgp neighbor 10.255.0.1 | include Additional|additional|Add|path
+                                                                    ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:RR1#
+show bgp neighbor 10.255.0.1 advertised-routes
+Sat Nov 21 06:58:48.338 UTC
+Network            Next Hop        From            AS Path
+192.168.1.0/24     10.255.0.21     10.255.0.1      65001i
+192.168.4.0/24     10.255.0.4      10.255.0.4      65004i
+203.0.113.0/24     10.255.0.2      10.255.0.2      65100i
+
+Processed 3 prefixes, 3 paths
+RP/0/RP0/CPU0:RR1#
+==== PE1
+show bgp summary
+Sat Nov 21 06:58:50.010 UTC
+BGP router identifier 10.255.0.1, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 30
+BGP main routing table version 30
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker           30            30            30            30            30             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000      55      42           30    0    0 00:37:41          2
+172.16.1.1        0 65001      45      53           30    0    0 00:37:58          1
+
+RP/0/RP0/CPU0:PE1#
+show bgp neighbor 10.255.0.21 | include Additional|additional|Add|path
+                                                                     ^
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:PE1#
+==== PE4
+show bgp summary
+Sat Nov 21 06:58:52.539 UTC
+BGP router identifier 10.255.0.4, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 26
+BGP main routing table version 26
+BGP NSR Initial initsync version 5 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker           26            26            26            26            26             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000      49      33           26    0    0 00:29:34          2
+172.16.4.1        0 65004      37      46           26    0    0 00:29:43          1
+
+RP/0/RP0/CPU0:PE4#
+show bgp neighbor 10.255.0.21 | include Additional|additional$1 | include Additional|additional|                          Add|pathshow bgp neighbor 10.255.0.21 | include Additional|additiona$
+show bgp neighbor 10.255.0.21 | include Additional|additional|Add|path
+                                                   ^                           
+
+% Invalid input detected at '^' marker.
+RP/0/RP0/CPU0:PE4#
+==== PE1
+show bgp 203.0.113.0/24
+Sat Nov 21 06:58:53.898 UTC
+BGP routing table entry for 203.0.113.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 30           30
+Last Modified: Nov 21 06:56:51.351 for 00:02:02
+Paths: (1 available, best #1)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    172.16.1.1      
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    172.16.1.1      
+  65100
+    10.255.0.2 (metric 20) from 10.255.0.21 (10.255.0.2)
+      Origin IGP, metric 11, localpref 200, valid, internal, best, group-best
+      Received Path ID 0, Local Path ID 1, version 30
+      Originator: 10.255.0.2, Cluster list: 10.255.0.21
+RP/0/RP0/CPU0:PE1#
+show route 203.0.113.0/24 detail
+Sat Nov 21 06:58:54.301 UTC
+
+Routing entry for 203.0.113.0/24
+  Known via "bgp 65000", distance 200, metric 11
+  Tag 65100, type internal
+  Installed Nov 21 06:56:51.191 for 00:02:03
+  Routing Descriptor Blocks
+    10.255.0.2, from 10.255.0.21
+      Route metric is 11, Wt is 1
+      Label: None
+      Tunnel ID: None
+      Binding Label: None
+      Extended communities count: 0
+      NHID: 0x0 (Ref: 0)
+      Path Grouping ID: 65000
+  Route version is 0x1d (29)
+  No local label
+  IP Precedence: Not Set
+  QoS Group ID: Not Set
+  Flow-tag: Not Set
+  Fwd-class: Not Set
+  Route Priority: RIB_PRIORITY_RECURSIVE_SVD_REM (16) SVD Type RIB_SVD_TYPE_LOCAL
+  Download Priority 4, Download Version 74
+  No advertising protos. 
+RP/0/RP0/CPU0:PE1#
+show cef 203.0.113.0/24 detail
+Sat Nov 21 06:58:54.709 UTC
+203.0.113.0/24, version 74, internal 0x5000001 0x40 (ptr 0x8852acb0) [1], 0x0 (0x0), 0x0 (0x0)
+ Updated Nov 21 06:56:51.193 
+ local adjacency to GigabitEthernet0/0/0/0
+
+ Prefix Len 24, traffic index 0, precedence n/a, priority 4
+  gateway array (0x89726218) reference count 1, flags 0x2010, source rib (7), 0 backups
+                [1 type 3 flags 0x68501 (0x897c8f60) ext 0x218 (0x88ac0518) (collapsed)]
+  LW-LDI[type=0, refc=0, ptr=0x0, sh-ldi=0x0]
+  gateway array update type-time 1 Nov 21 06:56:51.193
+ LDI Update time Nov 21 06:56:51.193
+   via 10.255.0.2/32, 2 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0x8852a770 0x0]
+    next hop 10.255.0.2/32 via 10.255.0.2/32
+
+    Load distribution: 0 (refcount 1)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    10.0.1.11      
+RP/0/RP0/CPU0:PE1#
+==== PE4
+show bgp 203.0.113.0/24
+Sat Nov 21 06:58:56.822 UTC
+BGP routing table entry for 203.0.113.0/24
+Versions:
+  Process           bRIB/RIB   SendTblVer
+  Speaker                 26           26
+Last Modified: Nov 21 06:56:51.691 for 00:02:05
+Paths: (1 available, best #1)
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    172.16.4.1      
+  Path #1: Received by speaker 0
+  Advertised IPv4 Unicast paths to peers (in unique update groups):
+    172.16.4.1      
+  65100
+    10.255.0.2 (metric 20) from 10.255.0.21 (10.255.0.2)
+      Origin IGP, metric 11, localpref 200, valid, internal, best, group-best
+      Received Path ID 0, Local Path ID 1, version 26
+      Originator: 10.255.0.2, Cluster list: 10.255.0.21
+RP/0/RP0/CPU0:PE4#
+show route 203.0.113.0/24 detail
+Sat Nov 21 06:58:57.227 UTC
+
+Routing entry for 203.0.113.0/24
+  Known via "bgp 65000", distance 200, metric 11
+  Tag 65100, type internal
+  Installed Nov 21 06:56:51.814 for 00:02:05
+  Routing Descriptor Blocks
+    10.255.0.2, from 10.255.0.21
+      Route metric is 11, Wt is 1
+      Label: None
+      Tunnel ID: None
+      Binding Label: None
+      Extended communities count: 0
+      NHID: 0x0 (Ref: 0)
+      Path Grouping ID: 65000
+  Route version is 0x1d (29)
+  No local label
+  IP Precedence: Not Set
+  QoS Group ID: Not Set
+  Flow-tag: Not Set
+  Fwd-class: Not Set
+  Route Priority: RIB_PRIORITY_RECURSIVE_SVD_REM (16) SVD Type RIB_SVD_TYPE_LOCAL
+  Download Priority 4, Download Version 74
+  No advertising protos. 
+RP/0/RP0/CPU0:PE4#
+show cef 203.0.113.0/24 detail
+Sat Nov 21 06:58:57.638 UTC
+203.0.113.0/24, version 74, internal 0x5000001 0x40 (ptr 0xf79e1e8) [1], 0x400 (0xf92e9d8), 0x0 (0x0)
+ Updated Nov 21 06:56:51.817
+ Prefix Len 24, traffic index 0, precedence n/a, priority 4
+  gateway array (0xf7c8008) reference count 1, flags 0x10, source rib (7), 0 backups
+                [2 type 3 flags 0x8441 (0xf86ad50) ext 0x0 (0x0)]
+  LW-LDI[type=3, refc=1, ptr=0xf92e9d8, sh-ldi=0xf86ad50]
+  gateway array update type-time 1 Nov 21 06:56:51.817
+ LDI Update time Nov 21 06:56:51.817
+ LW-LDI-TS Nov 21 06:56:51.817
+
+  Level 1 - Load distribution: 0
+  [0] via 10.255.0.2/32, recursive
+
+   via 10.255.0.2/32, 3 dependencies, recursive [flags 0x6000]
+    path-idx 0 NHID 0x0 [0xf79cf40 0x0]
+    next hop 10.255.0.2/32 via 10.255.0.2/32
+
+    Load distribution: 0 (refcount 2)
+
+    Hash  OK  Interface                 Address
+    0     Y   GigabitEthernet0/0/0/0    remote         
+
+RP/0/RP0/CPU0:PE4#

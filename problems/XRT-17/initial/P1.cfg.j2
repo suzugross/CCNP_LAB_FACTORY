@@ -1,0 +1,66 @@
+!! XRT-17 P1(XRd 26.1.1)= コア(BGP なし)。PE1〜PE3 と RR1 に 1 本ずつ。
+interface Loopback0
+ ipv4 address 10.255.0.11 255.255.255.255
+!
+interface {{ links[3] }}
+ description to PE1
+ ipv4 address 10.0.1.11 255.255.255.0
+ no shutdown
+!
+interface {{ links[4] }}
+ description to PE2
+ ipv4 address 10.0.2.11 255.255.255.0
+ no shutdown
+!
+interface {{ links[5] }}
+ description to PE3
+ ipv4 address 10.0.3.11 255.255.255.0
+ no shutdown
+!
+interface {{ links[6] }}
+ description to RR1
+ ipv4 address 10.0.21.11 255.255.255.0
+ no shutdown
+!
+router isis CORE
+ is-type level-2-only
+ net 49.0001.0100.0000.0011.00
+ log adjacency changes
+ address-family ipv4 unicast
+  metric-style wide
+ !
+ interface Loopback0
+  passive
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[3] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[4] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[5] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+ interface {{ links[6] }}
+  point-to-point
+  address-family ipv4 unicast
+  !
+ !
+!
+mpls ldp
+ router-id 10.255.0.11
+ interface {{ links[3] }}
+ !
+ interface {{ links[4] }}
+ !
+ interface {{ links[5] }}
+ !
+!

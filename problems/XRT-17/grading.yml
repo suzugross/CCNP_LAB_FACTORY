@@ -1,0 +1,108 @@
+# XRT-17 の最終の確認(M6-5〜M6-10)。poc/xr/gen_grading_xrt17.py で組んだ。
+problem: XRT-17
+total_points: 100
+checks:
+- name: M6-5 RR1 receives PE3's path through X2 as an additional path, and PE1 learns it as a second path
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --show 'RR1:show bgp 203.0.113.0/24' --show 'PE1:show bgp 203.0.113.0/24'
+  raw:
+  - regex: '== SHOW RR1: show\ bgp\ 203\.0\.113\.0/24\n(?:(?!== )[\s\S])*?from 10\.255\.0\.3 \(10\.255\.0\.3\)\n\s+Origin[^\n]*add-path\n\s+Received Path ID [1-9]'
+  - regex: '== SHOW PE1: show\ bgp\ 203\.0\.113\.0/24\n(?:(?!== )[\s\S])*?from 10\.255\.0\.21 \(10\.255\.0\.3\)\n\s+Origin[^\n]*\n\s+Received Path ID [1-9]'
+  points: 12
+- name: M6-5 The path through PE2 is still the best on PE1 and PE3, and PE3 does not use best-external
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --show 'PE1:show bgp 203.0.113.0/24' --show 'PE3:show bgp 203.0.113.0/24' --show 'PE3:show running-config router bgp'
+  raw:
+  - regex: '== SHOW PE1: show\ bgp\ 203\.0\.113\.0/24\n(?:(?!== )[\s\S])*?Paths: \(2 available, best #1\)'
+  - regex: '== SHOW PE1: show\ bgp\ 203\.0\.113\.0/24\n(?:(?!== )[\s\S])*?from 10\.255\.0\.21 \(10\.255\.0\.2\)\n\s+Origin[^\n]*localpref 200, valid, internal, best'
+  - regex: '== SHOW PE3: show\ bgp\ 203\.0\.113\.0/24\n(?:(?!== )[\s\S])*?from 10\.255\.0\.21 \(10\.255\.0\.2\)\n\s+Origin[^\n]*localpref 200, valid, internal, best'
+  - not_regex: best-external
+  points: 8
+- name: M6-6 PE1 holds the path through PE3 as a backup path in the RIB and in CEF
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --show 'PE1:show route 203.0.113.0/24 detail' --show 'PE1:show cef 203.0.113.0/24 detail'
+  raw:
+  - regex: 10\.255\.0\.3, from 10\.255\.0\.21, BGP backup path
+  - regex: via 10\.255\.0\.3/32, \d+ dependencies, recursive, backup
+  points: 8
+- name: M6-6 When the link between PE2 and P1 goes down, traffic from CE1 to T stops for less than one second
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --failover 'CE1:192.168.1.1:203.0.113.1:P1:GigabitEthernet0/0/0/1' --recover 60 --after 'PE1:show bgp summary'
+  raw:
+  - regex: == FAILOVER PERIODS \d+ MAXLEN (?:\d|[1-9]\d) TAIL 0 VALID 1
+  points: 12
+- name: M6-7 The PE2–X1 session is established with GTSM on both ends (X1 accepts TTL 254 and above for one hop, sends 255)
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --show 'X1:show ip bgp neighbors 172.16.2.254' --show 'PE2:show bgp neighbor 172.16.2.1'
+  raw:
+  - regex: '== SHOW X1: show\ ip\ bgp\ neighbors\ 172\.16\.2\.254\n(?:(?!== )[\s\S])*?BGP state = Established'
+  - regex: Mininum incoming TTL 254, Outgoing TTL 255
+  - regex: '== SHOW PE2: show\ bgp\ neighbor\ 172\.16\.2\.1\n(?:(?!== )[\s\S])*?TTL security is configured'
+  points: 9
+- name: M6-7 PE2 still learns 203.0.113.0/24 from X1, and PE1 still uses the path through PE2
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --show 'PE2:show bgp neighbor 172.16.2.1 routes' --show 'PE1:show bgp 203.0.113.0/24' --show 'PE2:show bgp neighbor 172.16.2.1'
+  raw:
+  - regex: '== SHOW PE2: show\ bgp\ neighbor\ 172\.16\.2\.1\n(?:(?!== )[\s\S])*?TTL security is configured'
+  - regex: '== SHOW PE2: show\ bgp\ neighbor\ 172\.16\.2\.1\ routes\n(?:(?!== )[\s\S])*?203\.0\.113\.0/24\s+172\.16\.2\.1'
+  - regex: '== SHOW PE1: show\ bgp\ 203\.0\.113\.0/24\n(?:(?!== )[\s\S])*?from 10\.255\.0\.21 \(10\.255\.0\.2\)\n\s+Origin[^\n]*valid, internal, best'
+  points: 6
+- name: M6-8 The PE3–X2 session is established with TCP-AO (key 7 of AS65100-AO active on PE3)
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --show 'X2:show ip bgp neighbors 172.16.3.254' --show 'PE3:show tcp authentication keychain AS65100-AO'
+  raw:
+  - regex: '== SHOW X2: show\ ip\ bgp\ neighbors\ 172\.16\.3\.254\n(?:(?!== )[\s\S])*?BGP state = Established'
+  - regex: Option Flags:[^\n]*TCP AO
+  - regex: 'Key ID: 7, Active, Valid'
+  points: 9
+- name: M6-8 PE3 still learns 203.0.113.0/24 from X2, and RR1 still has PE3's path
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --show 'PE3:show bgp neighbor 172.16.3.1 routes' --show 'RR1:show bgp 203.0.113.0/24' --show 'PE3:show tcp authentication keychain AS65100-AO'
+  raw:
+  - regex: 'Key ID: 7, Active, Valid'
+  - regex: '== SHOW PE3: show\ bgp\ neighbor\ 172\.16\.3\.1\ routes\n(?:(?!== )[\s\S])*?203\.0\.113\.0/24\s+172\.16\.3\.1'
+  - regex: '== SHOW RR1: show\ bgp\ 203\.0\.113\.0/24\n(?:(?!== )[\s\S])*?from 10\.255\.0\.3 \(10\.255\.0\.3\)'
+  points: 6
+- name: M6-9 PE1 limits CE1 to four prefixes with a warning at 75% and a restart after two minutes; the session is up with CE1's two routes
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --waitfor 'PE1|show bgp summary|^172\.16\.1\.1\s+\d+\s+65001(?:\s+\d+){5}\s+\S+\s+\d+\s*$|120' --show 'PE1:show bgp neighbor 172.16.1.1'
+    --show 'PE1:show bgp summary'
+  raw:
+  - regex: Maximum prefixes allowed 4\n\s+Threshold for warning message 75%, restart interval 2 min
+  - regex: '== SHOW PE1: show\ bgp\ summary\n(?:(?!== )[\s\S])*?172\.16\.1\.1\s+\d+\s+65001(?:\s+\d+){5}\s+\S+\s+2\n'
+  points: 6
+- name: M6-9 When CE1 sends five routes, PE1 tears the session down (Idle, PfxCt)
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --pre 'CE1:interface Loopback11;;ip address 192.168.11.1 255.255.255.0;;interface Loopback12;;ip address 192.168.12.1 255.255.255.0;;interface
+    Loopback13;;ip address 192.168.13.1 255.255.255.0;;router bgp 65001;;address-family ipv4;;network 192.168.11.0;;network 192.168.12.0;;network 192.168.13.0' --settle 5 --waitfor 'PE1|show bgp summary|^172\.16\.1\.1\s+\d+\s+65001.*Idle
+    \(PfxCt\)|60' --show 'PE1:show bgp summary' --post 'CE1:router bgp 65001;;address-family ipv4;;no network 192.168.11.0;;no network 192.168.12.0;;no network 192.168.13.0;;exit;;exit;;no interface Loopback11;;no
+    interface Loopback12;;no interface Loopback13' --post 'PE1:@clear bgp 172.16.1.1' --postwait 'PE1|show bgp summary|^172\.16\.1\.1\s+\d+\s+65001(?:\s+\d+){5}\s+\S+\s+\d+\s*$|120'
+  raw:
+  - regex: '== SHOW PE1: show\ bgp\ summary\n(?:(?!== )[\s\S])*?172\.16\.1\.1\s+\d+\s+65001[^\n]*Idle \(PfxCt\)'
+  points: 9
+- name: M6-10 After three flaps of 198.51.100.0/24 from X1, PE2 suppresses it (half-life 10 minutes)
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --flap 'X1:172.16.2.254:198.51.100.0/24:3:5' --wait 5 --after 'PE2:show bgp 198.51.100.0/24' --post 'PE2:@clear bgp ipv4 unicast dampening'
+  raw:
+  - regex: \(suppressed due to dampening\)\n\s+172\.16\.2\.1 from 172\.16\.2\.1[\s\S]*?half life 00:10:00
+  points: 8
+- name: M6-10 X1 and X2 receive 192.168.0.0/22 from PE2 and PE3, and none of the /24 routes inside it
+  node: PE1
+  exec: local
+  command: .venv/bin/python topologies/bgpops_probe.py XRT-17 run --show 'X1:show ip bgp neighbors 172.16.2.254 routes' --show 'X2:show ip bgp neighbors 172.16.3.254 routes'
+  raw:
+  - regex: '== SHOW X1: show\ ip\ bgp\ neighbors\ 172\.16\.2\.254\ routes\n(?:(?!== )[\s\S])*?192\.168\.0\.0/22\s+172\.16\.2\.254'
+  - regex: '== SHOW X2: show\ ip\ bgp\ neighbors\ 172\.16\.3\.254\ routes\n(?:(?!== )[\s\S])*?192\.168\.0\.0/22\s+172\.16\.3\.254'
+  - not_regex: \n\s*\S*\s+192\.168\.[12]\.0(?:/24)?\s+172\.16\.[23]\.254
+  points: 7

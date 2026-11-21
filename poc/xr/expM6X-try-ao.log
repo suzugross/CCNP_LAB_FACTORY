@@ -1,0 +1,449 @@
+
+######## 10:57:25 ao: PE2─X1 に TCP-AO(UPLINK-AO・key 3・SendID 12/ReceiveID 21・X1 は 21/12・AES-128-CMAC-96)
+configure
+Sat Nov 21 10:57:26.751 UTC
+RP/0/RP0/CPU0:PE2(config)#
+key chain UPLINK-AO
+RP/0/RP0/CPU0:PE2(config-UPLINK-AO)#
+key 3
+RP/0/RP0/CPU0:PE2(config-UPLINK-AO-3)#
+key-string clear 0F1E2D3C4B5A69788796A5B4C3D2E1F0
+RP/0/RP0/CPU0:PE2(config-UPLINK-AO-3)#
+cryptographic-algorithm AES-128-CMAC-96
+RP/0/RP0/CPU0:PE2(config-UPLINK-AO-3)#
+accept-lifetime 00:00:00 january 01 2026 infinite
+RP/0/RP0/CPU0:PE2(config-UPLINK-AO-3)#
+send-lifetime 00:00:00 january 01 2026 infinite
+RP/0/RP0/CPU0:PE2(config-UPLINK-AO-3)#
+exit
+RP/0/RP0/CPU0:PE2(config-UPLINK-AO)#
+exit
+RP/0/RP0/CPU0:PE2(config)#
+tcp ao
+RP/0/RP0/CPU0:PE2(config-tcp-ao)#
+keychain UPLINK-AO
+RP/0/RP0/CPU0:PE2(config-tcp-ao-UPLINK-AO)#
+key 3 SendID 12 ReceiveID 21
+RP/0/RP0/CPU0:PE2(config-tcp-ao-UPLINK-AO)#
+exit
+RP/0/RP0/CPU0:PE2(config-tcp-ao)#
+exit
+RP/0/RP0/CPU0:PE2(config)#
+router bgp 65000
+RP/0/RP0/CPU0:PE2(config-bgp)#
+neighbor 172.16.2.1
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+ao UPLINK-AO include-tcp-options enable
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+commit
+Sat Nov 21 10:57:33.827 UTC
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+show configuration failed
+Sat Nov 21 10:57:34.541 UTC
+% No such configuration item(s)
+
+RP/0/RP0/CPU0:PE2(config-bgp-nbr)#
+end
+RP/0/RP0/CPU0:PE2#
+
+######## 10:57:36 ao1: X1 の ID を交差させずに入れる(send-id 12・recv-id 21= PE2 と同じ)→ 失敗の見え方
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+X1(config)#
+key chain UPLINK-AO tcp
+X1(config-keychain-tcp)#
+key 3
+X1(config-keychain-tcp-key)#
+send-id 12
+X1(config-keychain-tcp-key)#
+recv-id 21
+X1(config-keychain-tcp-key)#
+key-string 0F1E2D3C4B5A69788796A5B4C3D2E1F0
+X1(config-keychain-tcp-key)#
+cryptographic-algorithm aes-128-cmac
+X1(config-keychain-tcp-key)#
+exit
+X1(config-keychain-tcp)#
+exit
+X1(config)#
+router bgp 65100
+X1(config-router)#
+neighbor 172.16.2.254 ao UPLINK-AO include-tcp-options
+X1(config-router)#
+end
+X1#
+clear ip bgp 172.16.2.254
+X1#
+show bgp summary
+Sat Nov 21 10:58:31.152 UTC
+BGP router identifier 10.255.0.2, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 353
+BGP main routing table version 353
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker          353           353           353           353           353             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000     276     148          353    0    0 01:15:27          2
+172.16.2.1        0 65100     284     152          353    0    0 00:03:17          2
+
+RP/0/RP0/CPU0:PE2#
+show tcp authentication keychain UPLINK-AO
+Sat Nov 21 10:58:31.556 UTC
+
+Keychain name: UPLINK-AO, configured for tcp-ao
+Desired key: 3
+Total number of keys: 1
+Key details:
+    Key ID: 3, Active, Valid
+Total number of usable (Active & Valid) keys: 1
+    Keys: 3, 
+
+
+RP/0/RP0/CPU0:PE2#
+show bgp neighbor 172.16.2.1
+Sat Nov 21 10:58:31.958 UTC
+
+BGP neighbor is 172.16.2.1
+ Remote AS 65100, local AS 65000, external link
+ Remote router ID 10.100.255.1
+  BGP state = Established, up for 00:03:18
+  Previous State: Idle
+  Last Received Message: KeepAlive
+  NSR State: None
+  Last read 00:01:52, Last read before reset 00:06:27
+  Hold time is 180, keepalive interval is 60 seconds
+  Configured hold time: 180, keepalive: 60, min acceptable hold time: 3
+  Last write 00:00:51, attempted 19, written 19
+  Second last write 00:01:51, attempted 55, written 55
+  Last write before reset 00:04:24, attempted 19, written 19
+  Second last write before reset 00:05:24, attempted 19, written 19
+  Last write pulse rcvd  Nov 21 10:56:39.084 last full not set pulse count 213
+  Last write pulse rcvd before reset 00:06:27
+  Last insert into reset queue: Nov 21 10:55:04.441, removed at Nov 21 10:55:04.441
+  Socket not armed for io, armed for read, armed for write
+  Last write thread event before reset 00:04:24, second last 00:04:24
+  Last KA expiry before reset 00:04:24, second last 00:05:24
+  Last KA error before reset 00:00:00, KA not sent 00:00:00
+  Last KA start before reset 00:04:24, second last 00:05:24
+  Precedence: internet
+  Non-stop routing is enabled
+  Enforcing first AS is enabled
+  Multi-protocol capability received
+  Neighbor capabilities:
+    Route refresh: advertised (old + new) and received (old + new)
+    4-byte AS: advertised and received
+    Address family IPv4 Unicast: advertised and received
+  Received 284 messages, 0 notifications, 0 in queue
+  Sent 152 messages, 4 notifications, 0 in queue
+  Minimum time between advertisement runs is 30 secs
+  Inbound message logging enabled, 4 messages buffered
+  Outbound message logging enabled, 4 messages buffered
+  Fast fallover is enabled
+    Neighbor is directly connected
+    Neighbor fast-fallover is not configured
+    Neighbor is external and fast-external-fallover is not disabled
+
+ For Address Family: IPv4 Unicast
+  BGP neighbor version 353
+  BGP neighbor quick-withdraw version 353
+  Update group: 0.3 Filter-group: 0.1  No Refresh request being processed
+  AF-dependent capabilities:
+    Extended Nexthop Encoding: advertised
+  Route refresh request: received 0, sent 0
+  Policy for incoming advertisements is FROM-X1
+  Policy for outgoing advertisements is PASS
+  2 accepted prefixes, 2 are bestpaths
+  Exact no. of prefixes denied: 0
+  Cumulative no. of prefixes denied: 0
+  Prefix advertised 4, suppressed 0, withdrawn 2
+  An EoR was received during read-only mode
+  Last ack version 349, Last synced ack version 0
+  Outstanding version objects: current 1, max 5, refresh 0
+  Additional-paths operation: None
+  Advertise routes with local-label via Unicast SAFI
+  Slow Peer State: Detection-only
+    Detected state: FALSE, Detection threshold: 300
+    Detection Count: 0, Recovery Count: 0
+
+  Connections established 5; dropped 4
+  Local host: 172.16.2.254, Local port: 179, IF Handle: 0x00000030
+  Foreign host: 172.16.2.1, Foreign port: 30929
+  Last reset 00:03:27, due to BGP Notification sent: hold time expired
+  Time since last notification sent to neighbor: 00:03:27
+  Error Code: hold time expired
+  Notification data sent:
+    None
+RP/0/RP0/CPU0:PE2#
+show ip bgp summary
+BGP router identifier 10.100.255.1, local AS number 65100
+BGP table version is 199, main routing table version 199
+4 network entries using 992 bytes of memory
+5 path entries using 680 bytes of memory
+4/3 BGP path/bestpath attribute entries using 1184 bytes of memory
+1 BGP AS-PATH entries using 40 bytes of memory
+0 BGP route-map cache entries using 0 bytes of memory
+0 BGP filter-list cache entries using 0 bytes of memory
+BGP using 2896 total bytes of memory
+BGP activity 35/31 prefixes, 136/131 paths, scan interval 60 secs
+7 networks peaked at 10:30:49 Nov 21 2026 UTC (00:27:44.267 ago)
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.100.255.2    4        65100     140     143      199    0    0 01:15:55        3
+172.16.2.254    4        65000       0       0        1    0    0 00:00:51 Idle
+X1#
+show logging | include AO|TCP-
+*Nov 21 10:57:41.542: %BGP-4-AO_KEYCHAIN: Failed to set TCB AO properties
+*Nov 21 10:57:41.542: %BGP-5-NBR_RESET: Neighbor 172.16.2.254 reset (TCP AO config change)
+X1#
+show tcp ao key-chain UPLINK-AO
+             ^
+% Invalid input detected at '^' marker.
+
+X1#
+
+######## 10:58:34 ao2: X1 の ID を交差させる(send-id 21・recv-id 12)→ 確立
+configure terminal
+Enter configuration commands, one per line.  End with CNTL/Z.
+X1(config)#
+key chain UPLINK-AO tcp
+X1(config-keychain-tcp)#
+key 3
+X1(config-keychain-tcp-key)#
+send-id 21
+% Key 3 on key-chain UPLINK-AO is in use and cannot be modified
+X1(config-keychain-tcp-key)#
+recv-id 12
+% Key 3 on key-chain UPLINK-AO is in use and cannot be modified
+X1(config-keychain-tcp-key)#
+end
+X1#
+clear ip bgp 172.16.2.254
+X1#
+show bgp summary
+Sat Nov 21 10:59:25.603 UTC
+BGP router identifier 10.255.0.2, local AS number 65000
+BGP generic scan interval 60 secs
+Non-stop routing is enabled
+BGP table state: Active
+Table ID: 0xe0000000   RD version: 353
+BGP main routing table version 353
+BGP NSR Initial initsync version 6 (Reached)
+BGP NSR/ISSU Sync-Group versions 0/0
+BGP scan interval 60 secs
+
+BGP is operating in STANDALONE mode.
+
+
+Process    RcvTblVer     bRIB/RIB     LabelVer    ImportVer    SendTblVer   StandbyVer
+Speaker          353           353           353           353           353             0
+
+Neighbor        Spk    AS MsgRcvd MsgSent       TblVer  InQ OutQ  Up/Down  St/PfxRcd
+10.255.0.21       0 65000     277     149          353    0    0 01:16:21          2
+172.16.2.1        0 65100     284     153          353    0    0 00:04:12          2
+
+RP/0/RP0/CPU0:PE2#
+show tcp authentication keychain UPLINK-AO
+Sat Nov 21 10:59:26.015 UTC
+
+Keychain name: UPLINK-AO, configured for tcp-ao
+Desired key: 3
+Total number of keys: 1
+Key details:
+    Key ID: 3, Active, Valid
+Total number of usable (Active & Valid) keys: 1
+    Keys: 3, 
+
+
+RP/0/RP0/CPU0:PE2#
+show bgp neighbor 172.16.2.1
+Sat Nov 21 10:59:26.419 UTC
+
+BGP neighbor is 172.16.2.1
+ Remote AS 65100, local AS 65000, external link
+ Remote router ID 10.100.255.1
+  BGP state = Established, up for 00:04:12
+  Previous State: Idle
+  Last Received Message: KeepAlive
+  NSR State: None
+  Last read 00:02:47, Last read before reset 00:07:21
+  Hold time is 180, keepalive interval is 60 seconds
+  Configured hold time: 180, keepalive: 60, min acceptable hold time: 3
+  Last write 00:00:45, attempted 19, written 19
+  Second last write 00:01:45, attempted 19, written 19
+  Last write before reset 00:05:19, attempted 19, written 19
+  Second last write before reset 00:06:19, attempted 19, written 19
+  Last write pulse rcvd  Nov 21 10:56:39.084 last full not set pulse count 213
+  Last write pulse rcvd before reset 00:07:21
+  Last insert into reset queue: Nov 21 10:55:04.441, removed at Nov 21 10:55:04.441
+  Socket not armed for io, armed for read, armed for write
+  Last write thread event before reset 00:05:19, second last 00:05:19
+  Last KA expiry before reset 00:05:19, second last 00:06:19
+  Last KA error before reset 00:00:00, KA not sent 00:00:00
+  Last KA start before reset 00:05:19, second last 00:06:19
+  Precedence: internet
+  Non-stop routing is enabled
+  Enforcing first AS is enabled
+  Multi-protocol capability received
+  Neighbor capabilities:
+    Route refresh: advertised (old + new) and received (old + new)
+    4-byte AS: advertised and received
+    Address family IPv4 Unicast: advertised and received
+  Received 284 messages, 0 notifications, 0 in queue
+  Sent 153 messages, 4 notifications, 0 in queue
+  Minimum time between advertisement runs is 30 secs
+  Inbound message logging enabled, 4 messages buffered
+  Outbound message logging enabled, 4 messages buffered
+  Fast fallover is enabled
+    Neighbor is directly connected
+    Neighbor fast-fallover is not configured
+    Neighbor is external and fast-external-fallover is not disabled
+
+ For Address Family: IPv4 Unicast
+  BGP neighbor version 353
+  BGP neighbor quick-withdraw version 353
+  Update group: 0.3 Filter-group: 0.1  No Refresh request being processed
+  AF-dependent capabilities:
+    Extended Nexthop Encoding: advertised
+  Route refresh request: received 0, sent 0
+  Policy for incoming advertisements is FROM-X1
+  Policy for outgoing advertisements is PASS
+  2 accepted prefixes, 2 are bestpaths
+  Exact no. of prefixes denied: 0
+  Cumulative no. of prefixes denied: 0
+  Prefix advertised 4, suppressed 0, withdrawn 2
+  An EoR was received during read-only mode
+  Last ack version 349, Last synced ack version 0
+  Outstanding version objects: current 1, max 5, refresh 0
+  Additional-paths operation: None
+  Advertise routes with local-label via Unicast SAFI
+  Slow Peer State: Detection-only
+    Detected state: FALSE, Detection threshold: 300
+    Detection Count: 0, Recovery Count: 0
+
+  Connections established 5; dropped 4
+  Local host: 172.16.2.254, Local port: 179, IF Handle: 0x00000030
+  Foreign host: 172.16.2.1, Foreign port: 30929
+  Last reset 00:04:21, due to BGP Notification sent: hold time expired
+  Time since last notification sent to neighbor: 00:04:21
+  Error Code: hold time expired
+  Notification data sent:
+    None
+RP/0/RP0/CPU0:PE2#
+show running-config key chain UPLINK-AO
+Sat Nov 21 10:59:26.825 UTC
+key chain UPLINK-AO
+ key 3
+  accept-lifetime 00:00:00 january 01 2026 infinite
+  key-string password 040B2D572A73681D2A4D2742335D5553727373716514773153355025047C097504
+  send-lifetime 00:00:00 january 01 2026 infinite
+  cryptographic-algorithm AES-128-CMAC-96
+ !
+!
+
+RP/0/RP0/CPU0:PE2#
+show running-config tcp ao
+Sat Nov 21 10:59:27.441 UTC
+tcp ao
+ keychain UPLINK-AO
+  key 3 SendID 12 ReceiveID 21
+ !
+!
+
+RP/0/RP0/CPU0:PE2#
+show ip bgp summary
+BGP router identifier 10.100.255.1, local AS number 65100
+BGP table version is 199, main routing table version 199
+4 network entries using 992 bytes of memory
+5 path entries using 680 bytes of memory
+4/3 BGP path/bestpath attribute entries using 1184 bytes of memory
+1 BGP AS-PATH entries using 40 bytes of memory
+0 BGP route-map cache entries using 0 bytes of memory
+0 BGP filter-list cache entries using 0 bytes of memory
+BGP using 2896 total bytes of memory
+BGP activity 35/31 prefixes, 136/131 paths, scan interval 60 secs
+7 networks peaked at 10:30:49 Nov 21 2026 UTC (00:28:39.873 ago)
+
+Neighbor        V           AS MsgRcvd MsgSent   TblVer  InQ OutQ Up/Down  State/PfxRcd
+10.100.255.2    4        65100     141     144      199    0    0 01:16:51        3
+172.16.2.254    4        65000       0       0        1    0    0 00:01:47 Idle
+X1#
+show ip bgp neighbors 172.16.2.254
+BGP neighbor is 172.16.2.254,  remote AS 65000, external link
+  BGP version 4, remote router ID 0.0.0.0
+  BGP state = Idle, down for 00:01:47
+  Last update received: n/a
+  Neighbor sessions:
+    0 active, is not multisession capable (disabled)
+    Stateful switchover support enabled: NO
+  Do log neighbor state changes (via global configuration)
+  Default minimum time between advertisement runs is 30 seconds
+
+ For address family: IPv4 Unicast
+  BGP table version 199, neighbor version 1/199
+  Output queue size : 0
+  Index 0, Advertise bit 0
+  Slow-peer detection is disabled
+  Slow-peer split-update-group dynamic is disabled
+                                 Sent       Rcvd
+  Prefix activity:               ----       ----
+    Prefixes Current:               0          0
+    Prefixes Total:                 0          0
+    Implicit Withdraw:              0          0
+    Explicit Withdraw:              0          0
+    Used as bestpath:             n/a          0
+    Used as multipath:            n/a          0
+    Used as secondary:            n/a          0
+
+                                   Outbound    Inbound
+  Local Policy Denied Prefixes:    --------    -------
+    Total:                                0          0
+  Number of NLRIs in the update sent: max 3, min 0
+  Highest network count observed at 5 entries at 10:30:49 Nov 21 2026 UTC (00:28:40.298 ago)
+  Last detected as dynamic slow peer: never
+  Dynamic slow peer recovered: never
+  Refresh Epoch: 1
+  Last Sent Refresh Start-of-rib: never
+  Last Sent Refresh End-of-rib: never
+  Last Received Refresh Start-of-rib: never
+  Last Received Refresh End-of-rib: never
+				       Sent	  Rcvd
+	Refresh activity:	       ----	  ----
+	  Refresh Start-of-RIB          0          0
+	  Refresh End-of-RIB            0          0
+
+  Address tracking is enabled, the RIB does have a route to 172.16.2.254
+  Route to peer address reachability Up: 1; Down: 0
+    Last notification 01:17:35
+  Connections established 5; dropped 5
+  Last reset 00:01:47, due to Active open failed
+  External BGP neighbor configured for connected checks (single-hop no-disable-connected-check)
+  Interface associated: Ethernet0/0 (peering address NOT in same link)
+  AO keychain UPLINK-AO include-tcp-options
+  Transport(tcp) path-mtu-discovery is enabled
+  Graceful-Restart is disabled
+  SSO is disabled
+  No active TCP connection
+X1#
+show tcp ao key-chain UPLINK-AO
+             ^
+% Invalid input detected at '^' marker.
+
+X1#
+show running-config | section key chain
+key chain UPLINK-AO tcp
+ key 3
+  send-id 12
+  recv-id 21
+  cryptographic-algorithm aes-128-cmac
+  key-string 0F1E2D3C4B5A69788796A5B4C3D2E1F0
+X1#
